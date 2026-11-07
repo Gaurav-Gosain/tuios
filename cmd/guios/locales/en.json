@@ -1198,6 +1198,7 @@
   },
   "cockpitAllowAlways": "Always allow",
   "cockpitAllowOnce": "Allow once",
+  "cockpitAllowSession": "Allow for this session",
   "cockpitAlwaysAllows": "Always allows: {scope}",
   "cockpitAnswered": "{name}: {answer}",
   "cockpitAsks": "Asks",
@@ -1302,6 +1303,13 @@
   },
   "cockpitUnnamed": "unnamed",
   "cockpitWaits": "{name} waits {age}",
+  "cockpitWaitsFor": "waits {age}",
+  "cockpitRunEdited": "{count, plural, one {edited # file} other {edited # files}}",
+  "cockpitRunRan": "{count, plural, one {ran # command} other {ran # commands}}",
+  "cockpitRunRead": "{count, plural, one {read or searched # time} other {read or searched # times}}",
+  "cockpitRunUsed": "{count, plural, one {used # tool} other {used # tools}}",
+  "cockpitRunAnd": " and ",
+  "cockpitWorkedFor": "Worked for {time}",
   "cockpitWorkspace": "workspace {n}",
   "@cockpitWorkspace": {
     "placeholders": {

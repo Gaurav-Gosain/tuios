@@ -6414,6 +6414,16 @@ func (msgs Messages) CockpitAllowOnce() string {
 	return Catalog.Format(msgs.locale, "cockpitAllowOnce", nil)
 }
 
+// CockpitAllowSession says "Allow for this session"
+// in the language the app shows.
+func CockpitAllowSession() string { return In(i18n.Locale()).CockpitAllowSession() }
+
+// CockpitAllowSession says "Allow for this session"
+// in the language of msgs.
+func (msgs Messages) CockpitAllowSession() string {
+	return Catalog.Format(msgs.locale, "cockpitAllowSession", nil)
+}
+
 // CockpitAlwaysAllows says "Always allows: {scope}"
 // in the language the app shows.
 func CockpitAlwaysAllows(scope string) string { return In(i18n.Locale()).CockpitAlwaysAllows(scope) }
@@ -7218,6 +7228,76 @@ func CockpitWaits(name string, age string) string { return In(i18n.Locale()).Coc
 // in the language of msgs.
 func (msgs Messages) CockpitWaits(name string, age string) string {
 	return Catalog.Format(msgs.locale, "cockpitWaits", map[string]any{"name": name, "age": age})
+}
+
+// CockpitWaitsFor says "waits {age}"
+// in the language the app shows.
+func CockpitWaitsFor(age string) string { return In(i18n.Locale()).CockpitWaitsFor(age) }
+
+// CockpitWaitsFor says "waits {age}"
+// in the language of msgs.
+func (msgs Messages) CockpitWaitsFor(age string) string {
+	return Catalog.Format(msgs.locale, "cockpitWaitsFor", map[string]any{"age": age})
+}
+
+// CockpitRunEdited says "{count, plural, one {edited # file} other {edited # files}}"
+// in the language the app shows.
+func CockpitRunEdited(count int) string { return In(i18n.Locale()).CockpitRunEdited(count) }
+
+// CockpitRunEdited says "{count, plural, one {edited # file} other {edited # files}}"
+// in the language of msgs.
+func (msgs Messages) CockpitRunEdited(count int) string {
+	return Catalog.Format(msgs.locale, "cockpitRunEdited", map[string]any{"count": count})
+}
+
+// CockpitRunRan says "{count, plural, one {ran # command} other {ran # commands}}"
+// in the language the app shows.
+func CockpitRunRan(count int) string { return In(i18n.Locale()).CockpitRunRan(count) }
+
+// CockpitRunRan says "{count, plural, one {ran # command} other {ran # commands}}"
+// in the language of msgs.
+func (msgs Messages) CockpitRunRan(count int) string {
+	return Catalog.Format(msgs.locale, "cockpitRunRan", map[string]any{"count": count})
+}
+
+// CockpitRunRead says "{count, plural, one {read or searched # time} other {read or searched # times}}"
+// in the language the app shows.
+func CockpitRunRead(count int) string { return In(i18n.Locale()).CockpitRunRead(count) }
+
+// CockpitRunRead says "{count, plural, one {read or searched # time} other {read or searched # times}}"
+// in the language of msgs.
+func (msgs Messages) CockpitRunRead(count int) string {
+	return Catalog.Format(msgs.locale, "cockpitRunRead", map[string]any{"count": count})
+}
+
+// CockpitRunUsed says "{count, plural, one {used # tool} other {used # tools}}"
+// in the language the app shows.
+func CockpitRunUsed(count int) string { return In(i18n.Locale()).CockpitRunUsed(count) }
+
+// CockpitRunUsed says "{count, plural, one {used # tool} other {used # tools}}"
+// in the language of msgs.
+func (msgs Messages) CockpitRunUsed(count int) string {
+	return Catalog.Format(msgs.locale, "cockpitRunUsed", map[string]any{"count": count})
+}
+
+// CockpitRunAnd says " and "
+// in the language the app shows.
+func CockpitRunAnd() string { return In(i18n.Locale()).CockpitRunAnd() }
+
+// CockpitRunAnd says " and "
+// in the language of msgs.
+func (msgs Messages) CockpitRunAnd() string {
+	return Catalog.Format(msgs.locale, "cockpitRunAnd", nil)
+}
+
+// CockpitWorkedFor says "Worked for {time}"
+// in the language the app shows.
+func CockpitWorkedFor(time_ string) string { return In(i18n.Locale()).CockpitWorkedFor(time_) }
+
+// CockpitWorkedFor says "Worked for {time}"
+// in the language of msgs.
+func (msgs Messages) CockpitWorkedFor(time_ string) string {
+	return Catalog.Format(msgs.locale, "cockpitWorkedFor", map[string]any{"time": time_})
 }
 
 // CockpitWorkspace says "workspace {n}"

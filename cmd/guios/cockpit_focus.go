@@ -11,6 +11,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
+	"github.com/Gaurav-Gosain/tuios/internal/guios/roles"
 	"github.com/Gaurav-Gosain/tuios/internal/risk"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 
@@ -218,6 +219,7 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 		})
 	})
 	ui.Box(c).Height(1).Shrink(0).Background(pal.divider)
+	ck.cardShown = r.item != nil && ckAnswerable(*r.item)
 	ui.Column(c.Key("tab-" + ck.tab)).Grow(1).MinHeight(ckTabMinH).ClipY().AlignItems(ui.Stretch).Children(func() {
 		switch ck.tab {
 		case tabChanges:
@@ -358,6 +360,13 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 				// "{name} asks", and how long it waits.
 				oneLine(c, locales.CockpitNameAsks(ag.Name), fsBody, wSemibold).TextColor(pal.text)
 				ui.Text(c, ago(it.Since/int64(time.Millisecond), now)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Shrink(0)
+			} else if tool, target, ok := ckAsk(it.Summary); ok {
+				// The tool and what it acts on, as the call names them:
+				// "Bash  go test ./retry/...", "Read  internal/auth/token.go".
+				// The whole call is in the code block under it.
+				ui.Text(c, tool).FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text).SingleLine().Shrink(0)
+				ckTargetLine(c, pal, a.termFamily(), tool, target)
+				oneLine(c, locales.CockpitWaitsFor(ago(it.Since/int64(time.Millisecond), now)), fsSmall, 0).TextColor(pal.textFaint).Shrink(0)
 			} else {
 				oneLine(c, verb+"?", fsBody, wSemibold).TextColor(pal.text)
 				oneLine(c, locales.CockpitWaits(ag.Name, ago(it.Since/int64(time.Millisecond), now)), fsSmall, 0).TextColor(pal.textMuted).Shrink(2)
@@ -411,8 +420,23 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 			ui.Text(c, locales.CockpitClickAgain()).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.attnText)
 			c.After(ck.armed.at.Add(ckRiskWindow).Sub(now))
 		}
-		if len(it.AlwaysScope) > 0 {
-			ui.Text(c, locales.CockpitAlwaysAllows(strings.Join(it.AlwaysScope, ", "))).FontSize(fsSmall).TextColor(pal.textMuted)
+		// Reject and say why is a quiet button on the line of what always
+		// allows, at its right: the card keeps one row of answers, and fits
+		// over the reply box at 1100x700.
+		reason := !question && slices.Contains(a.ckOptions(it, pk), "reason")
+		if len(it.AlwaysScope) > 0 || reason {
+			ui.Row(c).Gap(sp2).AlignItems(ui.Center).Children(func() {
+				if len(it.AlwaysScope) > 0 {
+					ui.Text(c, locales.CockpitAlwaysAllows(strings.Join(it.AlwaysScope, ", "))).FontSize(fsSmall).TextColor(pal.textMuted).
+						Grow(1).MinWidth(0).MaxLines(2)
+				} else {
+					ui.Spacer(c)
+				}
+				if reason && ghostButton(c, "ans-reason", ckDecisionWords("reason"), pal) {
+					a.ckAnswer("reason")
+					ck.fleetFocus.Focus()
+				}
+			})
 		}
 		if ck.reasonFor == it.ID {
 			in := textField(c, "reason", &ck.reason, locales.CockpitReasonPlaceholder(), 0, pal).AutoFocus()
@@ -450,7 +474,11 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 			if q := ck.question; q != nil && q.item == key {
 				asked = q.decision
 			}
-			for _, o := range opts {
+			for _, o := range ckButtonOrder(opts) {
+				if o == "reason" {
+					// On the line above (reason).
+					continue
+				}
 				primary, keys := o == "once" && !risky, a.ckDecisionKey(o)
 				fade := float32(1)
 				switch {
@@ -462,7 +490,11 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 				ui.Row(c).Opacity(fade).Children(func() {
 					// A risky command gets no primary button to allow it,
 					// until the confirm step asks about it.
-					if sizedButton(c, "ans-"+o, ckDecisionWords(o), keys, primary, hControl, rControl, pal) {
+					words := ckDecisionWords(o)
+					if o == "always" && ckSessionScope(it.AlwaysScope) {
+						words = locales.CockpitAllowSession()
+					}
+					if capButton(c, "ans-"+o, words, keys, primary, pal) {
 						a.ckAnswer(o)
 						ck.fleetFocus.Focus()
 					}
@@ -765,4 +797,99 @@ func ckSource(src string) string {
 		return locales.CockpitSourceProgram()
 	}
 	return src
+}
+
+// ckButtonOrder is the card's answers in the order they are read: reject
+// first, then allow, then allow from now on, so the safe answer is the
+// first and the primary one sits between them. Reject and say why is
+// drawn apart, as a quiet button by the scope line.
+func ckButtonOrder(opts []string) []string {
+	rank := map[string]int{"deny": 0, "once": 1, "always": 2, "reason": 3}
+	out := slices.Clone(opts)
+	slices.SortStableFunc(out, func(x, y string) int { return rank[x] - rank[y] })
+	return out
+}
+
+// ckSessionScope reports whether every rule always adds lasts for this
+// session only, so its button may say so.
+func ckSessionScope(scope []string) bool {
+	if len(scope) == 0 {
+		return false
+	}
+	for _, l := range scope {
+		if !strings.HasSuffix(l, " for this session") {
+			return false
+		}
+	}
+	return true
+}
+
+// ckTargetLine is what a call acts on, in the code font, in the header:
+// a path cut at its start so its file stays, a command cut at its end.
+func ckTargetLine(c *ui.Context, pal *palette, mono, tool, target string) {
+	target = flat(target)
+	box := ui.Box(c.Key("target")).Shrink(1).MinWidth(0).Clip()
+	w := box.Bounds().W
+	box.Children(func() {
+		t := target
+		if strings.Contains(target, "/") && !strings.Contains(target, " ") {
+			t = startCut(c, target, fsCode, w)
+		}
+		ui.Text(c, t).Font(mono).FontSize(fsCode).TextColor(pal.textMuted).SingleLine().Ellipsis("…").Tooltip(target)
+	})
+	_ = tool
+}
+
+// capButton is a card's answer: a button with its chord as key caps, so the
+// keys read as keys (DESIGN.md section 6). The caps take the label's colour
+// on a faint ground of it, so they read on the accent fill and on a
+// control's.
+func capButton(c *ui.Context, key, label, keys string, primary bool, pal *palette) bool {
+	b := ui.ButtonBase(c.Key(key)).Height(hControl).Padding(0, sp3, 0, sp3).Gap(sp2).Radius(rControl).AlignItems(ui.Center).Shrink(0).Label(label)
+	if keys != "" {
+		b.Tooltip(label + " (" + keys + ")")
+	}
+	bg, fg := pal.control, pal.text
+	if primary {
+		bg, fg = pal.accentFill, pal.accentInk
+	}
+	switch {
+	case b.Pressed() && primary:
+		bg = awayFrom(bg, fg, roles.PressStep)
+	case b.Pressed():
+		bg = pressedQuiet(pal).Over(bg)
+	case b.Hovered() && primary:
+		bg = awayFrom(bg, fg, roles.HoverStep)
+	case b.Hovered():
+		bg = pal.controlHover
+	}
+	face(b, pal, b.AnimateColor("bg", bg, ui.Animation{Duration: dPress})).TextColor(fg)
+	b.Children(func() {
+		ui.Text(c, label).FontSize(fsBody).FontWeight(wMedium).SingleLine()
+		if keys != "" {
+			// One cap for the chord, as the key line under the view draws it.
+			ui.Row(c).Height(hKbd).MinWidth(hKbd).Padding(0, 5).Radius(rChip).Background(fg.Alpha(0.12)).Shrink(0).
+				AlignItems(ui.Center).Justify(ui.Center).Children(func() {
+				ui.Text(c, keys).FontSize(fsCaption).FontWeight(wMedium).TextColor(hintOn(fg, bg)).SingleLine()
+			})
+		}
+	})
+	return b.Clicked()
+}
+
+// ghostButton is a quiet button: no fill, text2, the hover ground under the
+// pointer (DESIGN.md section 6, ghost), at the small height.
+func ghostButton(c *ui.Context, key, label string, pal *palette) bool {
+	b := ui.ButtonBase(c.Key(key)).Height(hControlSm).Padding(0, sp2).Radius(rControl).AlignItems(ui.Center).Shrink(0).Label(label)
+	fg, bg := pal.textMuted, ui.Transparent
+	switch {
+	case b.Pressed():
+		bg, fg = pressedQuiet(pal), pal.text
+	case b.Hovered():
+		bg, fg = pal.rowHover, pal.text
+	}
+	b.Background(bg).TextColor(fg).Children(func() {
+		ui.Text(c, label).FontSize(fsBody).FontWeight(wMedium).SingleLine()
+	})
+	return b.Clicked()
 }

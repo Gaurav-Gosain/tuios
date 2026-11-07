@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -81,7 +82,9 @@ const (
 	ckItemPlan
 	ckItemError
 	ckItemOlder
-	ckItemImage // an image in a prompt or an answer
+	ckItemImage  // an image in a prompt or an answer
+	ckItemRun    // a run of tool calls between two answers, folded into one line
+	ckItemWorked // how long a finished turn worked, under its last answer
 )
 
 // ckItem is one item of the chat: an entry, or several joined.
@@ -93,7 +96,8 @@ type ckItem struct {
 	calls []transcriptview.Entry // the joined reads and searches
 	res   *transcriptview.Entry  // a call's result
 	md    []markdown.Block
-	label bool // the first of a turn's answers, which carries the agent's name
+	label bool     // the first of a turn's answers, which carries the agent's name
+	run   []ckItem // a run's calls, as their own items
 }
 
 // threadKey names an agent's thread.
@@ -164,7 +168,7 @@ func (a *App) fetchThread(ag client.Agent, fresh bool) {
 			if page.Cursor != "" {
 				th.cursor = page.Cursor
 			}
-			th.items = buildItems(th.entries, th.more, th.md)
+			th.items = buildItems(th.entries, th.more, th.md, th.agent.State == "working")
 		})
 	}()
 }
@@ -192,7 +196,7 @@ func (a *App) fetchOlder(th *ckThread) {
 			}
 			th.entries = append(page.Entries, th.entries...)
 			th.older, th.more = page.Older, page.More
-			th.items = buildItems(th.entries, th.more, th.md)
+			th.items = buildItems(th.entries, th.more, th.md, th.agent.State == "working")
 		})
 	}()
 }
@@ -249,8 +253,10 @@ func ckFold(tool string) bool {
 }
 
 // buildItems turns entries into the chat's items: results join their calls,
-// reads and searches in a row join one item.
-func buildItems(entries []transcriptview.Entry, more bool, mdc map[string][]markdown.Block) []ckItem {
+// reads and searches in a row join one item, two or more calls in a row
+// fold into one run (ckRuns), and a finished turn ends with how long it
+// worked. working says the agent's last turn has not finished.
+func buildItems(entries []transcriptview.Entry, more bool, mdc map[string][]markdown.Block, working bool) []ckItem {
 	parse := func(id, src string) []markdown.Block {
 		if b, ok := mdc[id]; ok && id != "" {
 			return b
@@ -339,7 +345,127 @@ func buildItems(entries []transcriptview.Entry, more bool, mdc map[string][]mark
 		}
 		items = append(items, it)
 	}
-	return items
+	return ckWorked(ckRuns(items), working)
+}
+
+// ckTooly reports whether an item is a tool call, which a run may hold.
+func ckTooly(it ckItem) bool {
+	return it.kind == ckItemTool || it.kind == ckItemTools || it.kind == ckItemEdit
+}
+
+// ckRuns folds two or more tool calls in a row into one run item, so a turn
+// reads as its answers with one line of work between them.
+func ckRuns(items []ckItem) []ckItem {
+	out := make([]ckItem, 0, len(items))
+	for i := 0; i < len(items); {
+		j := i
+		for j < len(items) && ckTooly(items[j]) {
+			j++
+		}
+		if j-i >= 2 {
+			run := slices.Clone(items[i:j])
+			out = append(out, ckItem{kind: ckItemRun, key: "run-" + items[i].key, at: items[i].at, run: run})
+			i = j
+			continue
+		}
+		out = append(out, items[i])
+		i++
+	}
+	return out
+}
+
+// ckWorked adds, under the last answer of each finished turn, how long the
+// turn worked: from the person's prompt to the turn's last entry. The last
+// turn counts as finished once the agent is no longer working.
+func ckWorked(items []ckItem, working bool) []ckItem {
+	out := make([]ckItem, 0, len(items)+4)
+	start, last := int64(0), int64(0)
+	flush := func() {
+		if start > 0 && last-start >= 1000 {
+			out = append(out, ckItem{kind: ckItemWorked, key: fmt.Sprint("worked-", start), at: last, e: transcriptview.Entry{At: last - start}})
+		}
+		start, last = 0, 0
+	}
+	for _, it := range items {
+		if it.kind == ckItemUser {
+			flush()
+			start = it.at
+		} else if it.at > last {
+			last = it.at
+		}
+		out = append(out, it)
+	}
+	if !working {
+		flush()
+	}
+	return out
+}
+
+// ckRunSummary is a run in words: "Edited 1 file and ran 2 commands".
+func ckRunSummary(run []ckItem) (string, bool) {
+	edits, commands, reads, others := 0, 0, 0, 0
+	failed := false
+	for _, it := range run {
+		if callStatus(&it) == transcriptview.StatusError {
+			failed = true
+		}
+		switch {
+		case it.kind == ckItemEdit:
+			edits++
+		case it.kind == ckItemTools:
+			reads += len(it.calls)
+		case ckCommand(it.e.Tool):
+			commands++
+		default:
+			others++
+		}
+	}
+	var parts []string
+	if edits > 0 {
+		parts = append(parts, locales.CockpitRunEdited(edits))
+	}
+	if commands > 0 {
+		parts = append(parts, locales.CockpitRunRan(commands))
+	}
+	if reads > 0 {
+		parts = append(parts, locales.CockpitRunRead(reads))
+	}
+	if others > 0 {
+		parts = append(parts, locales.CockpitRunUsed(others))
+	}
+	s := ""
+	switch len(parts) {
+	case 1:
+		s = parts[0]
+	default:
+		s = strings.Join(parts[:len(parts)-1], ", ") + locales.CockpitRunAnd() + parts[len(parts)-1]
+	}
+	if s != "" && s[0] >= 'a' && s[0] <= 'z' {
+		s = strings.ToUpper(s[:1]) + s[1:]
+	}
+	return s, failed
+}
+
+// ckCommand reports whether a tool runs a shell command.
+func ckCommand(tool string) bool {
+	switch tool {
+	case "Bash", "shell", "run_shell_command", "bash", "exec_command", "local_shell":
+		return true
+	}
+	return false
+}
+
+// workedFor is a turn's length as "2m 42s", "48s", "1h 5m".
+func workedFor(ms int64) string {
+	d := time.Duration(ms) * time.Millisecond
+	h, m, s := int(d.Hours()), int(d.Minutes())%60, int(d.Seconds())%60
+	switch {
+	case h > 0:
+		return fmt.Sprintf("%dh %dm", h, m)
+	case m > 0:
+		return fmt.Sprintf("%dm %ds", m, s)
+	}
+	return fmt.Sprintf("%ds", s)
 }
 
 // threadView draws the selected agent's thread.
@@ -398,7 +524,13 @@ var threadIcon = icon(`<path d="M3 3.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H8l-3 2.5
 // ckEmptyThread is a thread's empty state: it fills the tab's room, so
 // that a thread with nothing to show is never a blank column.
 func (a *App) ckEmptyThread(c *ui.Context, pal *palette, title, detail string) {
-	ui.Column(c.Key("thread-empty")).Grow(1).MinHeight(0).Children(func() {
+	// Over an approval card the card says what the agent waits for: the
+	// block would only be cut by the tab's least height (ckTabMinH).
+	if a.ck.cardShown {
+		return
+	}
+	col := ui.Column(c.Key("thread-empty")).Grow(1).MinHeight(0)
+	col.Children(func() {
 		emptyBlock(c, pal, threadIcon, title, detail, false, nil)
 	})
 }
@@ -441,6 +573,27 @@ func (a *App) itemView(c *ui.Context, pal *palette, th *ckThread, it *ckItem, mo
 		}, func() {
 			ui.Text(c, it.e.Text).FontSize(fsSmall).Italic().LineHeight(1.5).TextColor(pal.textMuted)
 		})
+	case ckItemRun:
+		// One line for the run, which opens on a click to its calls, each
+		// as it is drawn alone. A run with a failed call opens by itself.
+		summary, failed := ckRunSummary(it.run)
+		if failed && !th.shut[it.key] && !th.open[it.key] {
+			th.open[it.key] = true
+		}
+		a.foldItem(c, pal, th, it, func() {
+			ui.Text(c, summary).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0)
+			if failed {
+				statusMark(c, pal, transcriptview.StatusError)
+			}
+		}, func() {
+			ui.Column(c).Gap(6).Children(func() {
+				for i := range it.run {
+					ui.Box(c.Key(it.run[i].key)).Children(func() { a.itemView(c, pal, th, &it.run[i], mono) })
+				}
+			})
+		})
+	case ckItemWorked:
+		ui.Text(c, locales.CockpitWorkedFor(workedFor(it.e.At))).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum")
 	case ckItemTools:
 		a.toolsItem(c, pal, th, it, mono)
 	case ckItemTool:
