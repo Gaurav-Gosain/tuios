@@ -103,14 +103,17 @@ func TestScreenshotOverTheInbox(t *testing.T) {
 	}
 	waitScreen(t, term, "the Inbox closed when the capture was taken", "No agents yet.")
 
-	// The positive half: a leader followed by an ordinary key still reaches
-	// the Inbox. f cycles its filter, which retitles it.
-	sendKeys(t, term, tuitest.Ctrl('b'), "f")
+	// The positive half: the capture takes the leader and C only. Another
+	// chord reaches the prefix table over the view, as it does over a
+	// pane: ctrl+b ? opens help on top of it.
+	sendKeys(t, term, tuitest.Ctrl('b'), "?")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "items only")
+		return strings.Contains(s.Text(), helpTitle) && strings.Contains(s.Text(), "New agent")
 	}, uiTimeout); err != nil {
-		t.Fatalf("f after the leader never reached the Inbox: %v\n%s", err, term.Snapshot())
+		t.Fatalf("ctrl+b ? did not open help over the Inbox: %v\n%s", err, term.Snapshot())
 	}
+	sendKeys(t, term, tuitest.Esc)
+	waitScreen(t, term, "esc in help did not go back to the Inbox", "No agents yet.")
 	sendKeys(t, term, tuitest.Esc)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return !strings.Contains(s.Text(), "New agent")
