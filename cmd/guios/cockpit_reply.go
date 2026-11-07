@@ -194,13 +194,17 @@ func (a *App) replyBoxBody(c *ui.Context, pal *palette, ag client.Agent, d *ckDr
 			})
 			ui.Spacer(c)
 			note, tip := locales.CockpitNextTurn(), ""
-			if r, ok := a.ckSelected(); ok && r.item != nil && !ckHeld(*r.item) && !a.ckCanReject() &&
+			if r, ok := a.ckSelected(); ok && r.item != nil &&
 				(r.item.Kind == session.AttentionApproval || r.item.Kind == session.AttentionPlan) {
-				// An approval this app cannot answer: what is sent
-				// waits for the prompt on the agent's screen.
-				// Short, so that it fits beside Send as; the whole
-				// sentence is its tooltip (Mac round 1, visual S7).
-				note, tip = locales.CockpitWaitsAtPromptShort(), locales.CockpitWaitsAtPrompt()
+				// At an approval, held or not, what is sent waits for its
+				// answer: one note for one queue (Mac round 2, workflow
+				// S3). Short, so that it fits beside Send as; for a prompt
+				// this app cannot answer the whole sentence is its tooltip
+				// (Mac round 1, visual S7).
+				note = locales.CockpitWaitsAtPromptShort()
+				if !ckHeld(*r.item) && !a.ckCanReject() {
+					tip = locales.CockpitWaitsAtPrompt()
+				}
 			}
 			if mail {
 				note = locales.CockpitMailInbox(ag.Name)
