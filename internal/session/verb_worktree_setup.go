@@ -502,9 +502,9 @@ func (d *Daemon) undoFailedSetup(l setupLaunch) (removed, branchRemoved bool, no
 }
 
 // followSetupTail keeps the record's last lines current while the setup
-// runs. It wakes on the pane's output events only, and reads the screen at
-// most once per worktreeSetupTailEvery: the timer exists only between an
-// event and the read it schedules.
+// runs. It reads the screen once when it starts, then wakes on the pane's
+// output events, and reads at most once per worktreeSetupTailEvery: the
+// timer runs only between an event and the read it schedules.
 func (d *Daemon) followSetupTail(sess *Session, run *setupRun, ptyID string) {
 	sub := d.events.subscribe(eventFilter{
 		session: sess.Name(),
@@ -513,10 +513,11 @@ func (d *Daemon) followSetupTail(sess *Session, run *setupRun, ptyID string) {
 		types:   map[string]bool{EventOutput: true},
 	}, defaultEventQueue)
 	defer d.events.unsubscribe(sub)
-	var (
-		timer *time.Timer
-		due   <-chan time.Time
-	)
+	// The first read is due at once. The setup starts before this
+	// subscribes, so the lines it printed in between brought no event, and
+	// a setup that then waits quietly would bring none at all.
+	timer := time.NewTimer(worktreeSetupTailEvery)
+	due := timer.C
 	defer func() {
 		if timer != nil {
 			timer.Stop()

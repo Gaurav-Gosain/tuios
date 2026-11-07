@@ -13843,3 +13843,22 @@ Run on 2026-11-07 on Linux. Main (52fd515a9) is the control for the first two.
 
 The frames are `quick-look-wrap-wide`, `quick-look-wrap-marks` and `quick-look-wrap-colours` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestQuickLookWrap' -v .`.
+## The setup tail before the first output event
+
+`TestWorktreeSetupSyncHoldsAgent` waits for the setup record to show the
+setup's last lines while the setup waits on a gate. The setup prints its
+lines and then prints nothing until the gate opens. On CI the record showed no
+lines at all for 30 s, now and then: `followSetupTail` read the screen only
+after an output event, and it subscribed after the setup had started. Lines
+printed before the subscription brought no event, and the quiet wait brought
+none either. The fix reads the screen once when the follower starts.
+
+Run on 2026-11-07 on Linux (amd64). To make the race certain, both builds wait
+one second at the top of `followSetupTail` before they subscribe.
+
+| Control | Test | Failure | Verdict |
+| --- | --- | --- | --- |
+| The read on start removed (main), subscribe delayed 1 s | `TestWorktreeSetupSyncHoldsAgent` | `running with its last lines: the setup of repo-feat-sync never got there` | **caught** |
+
+The fixed build with the same delay passes. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorktreeSetupSyncHoldsAgent$' -v .`.
