@@ -1544,6 +1544,16 @@ copy_mode_line_end = ["end", "ctrl+e"]
 tuios cannot put two actions on one key. `tuios send-keys` cannot do it either,
 because a key from `send-keys` does not go to copy mode.
 
+### Hints in copy mode
+
+`s` in copy mode puts hint labels on the text in view, so you can copy text
+that you scrolled back to. See [docs/HINTS.md](HINTS.md#from-copy-mode).
+
+| Key | Where | Action |
+| --- | --- | --- |
+| `s` | Copy mode | `hints` |
+| `Ctrl+B F` | Window and terminal mode | `hints` |
+
 ### Open the scrollback in the editor
 
 `Ctrl+G` in copy mode opens the scrollback of the pane in your editor. The

@@ -872,3 +872,69 @@ func TestHintsAllPanesLabelOnlyWhatShows(t *testing.T) {
 	waitHintsGone(t, term, "after esc")
 	alive(t, term, "after hints over overlapping panes")
 }
+
+// TestHintsFromCopyMode scrolls back in copy mode until a URL that has left
+// the screen is in view, opens hints there with s, and copies
+// the URL by its label. The labels go on the scrolled-back view, the one the
+// person is reading, and the copy leaves copy mode as a yank does. Esc from
+// hints keeps copy mode. Against a daemon session, which is how tuios ships.
+func TestHintsFromCopyMode(t *testing.T) {
+	// The copy cursor's ground is set so waitCopyCursor can find it.
+	term, out := startWhitespaceClient(t, true)
+	runInShell(t, term, "printf '%s\\n' '"+hintsURL+"'; seq 1 80; echo SCROLLED\"\"-PAST", "SCROLLED-PAST", shellTimeout)
+	if strings.Contains(term.Screen().Text(), hintsURL) {
+		t.Fatalf("the URL is still on the screen, so the test would not scroll back:\n%s", term.Snapshot())
+	}
+
+	if err := term.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
+		t.Fatalf("send prefix+[: %v", err)
+	}
+	waitCopyCursor(t, term, "prefix+[")
+	// gg goes to the top of the scrollback, where the URL is.
+	if err := term.SendKeys("g", "g"); err != nil {
+		t.Fatalf("send gg: %v", err)
+	}
+	var col, row int
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		var ok bool
+		col, row, ok = findLastOnGrid(s, hintsURL)
+		return ok
+	}, uiTimeout); err != nil {
+		t.Fatalf("gg in copy mode never showed the URL: %v\n%s", err, term.Snapshot())
+	}
+
+	// Esc closes hints and leaves copy mode as it was.
+	sendEach(t, term, "s")
+	waitHintLabel(t, term, col, row, hintsURL)
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("send esc: %v", err)
+	}
+	// The copy cursor and the copy-mode key legend draw like labels, so the
+	// check is on the URL's own first cell.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return hintLabelAt(s, col, row) == "" && gridMatchesAt(s, col, row, hintsURL)
+	}, uiTimeout); err != nil {
+		t.Fatalf("the label stayed on the URL after esc: %v\n%s", err, term.Snapshot())
+	}
+	waitCopyCursor(t, term, "after esc from hints")
+	if _, _, ok := findLastOnGrid(term.Screen(), hintsURL); !ok {
+		t.Fatalf("esc from hints left the scrolled-back view:\n%s", term.Snapshot())
+	}
+
+	sendEach(t, term, "s")
+	label := waitHintLabel(t, term, col, row, hintsURL)
+	saveArtifact(t, term, artifactDir(t), "hints-in-copy-mode")
+	from := len(clipboardWrites(out))
+	if err := term.SendKeys(label); err != nil {
+		t.Fatalf("type label %q: %v", label, err)
+	}
+	waitClipboardSequence(t, term, out, from, hintsURL)
+	// The copy left copy mode: the live screen is back, with the marker.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		_, _, scrolled := findLastOnGrid(s, hintsURL)
+		return hintsNoLabels(s) && !scrolled && strings.Contains(s.Text(), "SCROLLED-PAST")
+	}, uiTimeout); err != nil {
+		t.Fatalf("copying from hints did not leave copy mode: %v\n%s", err, term.Snapshot())
+	}
+	alive(t, term, "after hints from copy mode")
+}

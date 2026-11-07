@@ -548,6 +548,12 @@ func (m *OS) HintsPress(letter rune, action HintAction) tea.Cmd {
 	// hintsFocused has checked every pane in hints mode is still there.
 	source := m.windowByID(h.panes[match.pane].windowID)
 	m.CloseHints()
+	// Hints opened from copy mode end it, as a yank there does: the person
+	// scrolled back to find the text, and now has it.
+	if focused.InCopyMode() {
+		focused.ExitCopyMode()
+		focused.InvalidateCache()
+	}
 	return m.runHint(focused, source, match, act)
 }
 

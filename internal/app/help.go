@@ -662,6 +662,9 @@ func generateCopyModeBindings(registry *config.KeybindRegistry, s *config.Settin
 	if keys := registry.GetCopyModeKeys(config.ActionEditScrollback); len(keys) > 0 {
 		out = append(out, HelpBinding{Action: config.ActionEditScrollback, Keys: keys, Description: "Open the scrollback in the editor", Category: HelpCategoryCopyMode})
 	}
+	if keys := registry.GetCopyModeKeys(config.ActionHints); len(keys) > 0 {
+		out = append(out, HelpBinding{Action: config.ActionHints, Keys: keys, Description: "Label the text in view to copy it", Category: HelpCategoryCopyMode})
+	}
 	return out
 }
 

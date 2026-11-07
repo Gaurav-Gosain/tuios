@@ -142,6 +142,13 @@ func runCopyModeAction(action string, cm *terminal.CopyMode, window *terminal.Wi
 	if cm.State == terminal.CopyModeSearch || cm.PendingCharSearch {
 		return false
 	}
+	if action == config.ActionHints {
+		// The labels go on the view as it is scrolled now. A label that
+		// copies ends copy mode; esc from hints keeps it.
+		fx.openHints = true
+		fx.action = action
+		return true
+	}
 	if action == config.ActionEditScrollback {
 		// The editor opens at the cursor, so the count and the selection
 		// stay as they are for when it closes.

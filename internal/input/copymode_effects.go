@@ -42,6 +42,8 @@ type copyModeEffects struct {
 	// editScrollback opens the scrollback in the editor. It reads the
 	// window and writes a file, so it runs after the lock is dropped.
 	editScrollback bool
+	// openHints opens hints mode on the pane, over the copy-mode view.
+	openHints bool
 }
 
 type copyModeNotification struct {
@@ -139,6 +141,9 @@ func (fx *copyModeEffects) apply(o *app.OS, window *terminal.Window) (*app.OS, t
 	}
 	if fx.editScrollback && o != nil {
 		cmd = tea.Batch(cmd, o.EditScrollbackInEditor())
+	}
+	if fx.openHints && o != nil {
+		o.OpenHints()
 	}
 	return o, cmd
 }
