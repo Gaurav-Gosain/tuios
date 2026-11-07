@@ -209,9 +209,6 @@ type cockpit struct {
 	// fleetFocus is the fleet's focus binding: the keys act while it holds
 	// the focus.
 	fleetFocus ui.Handle
-	// keysHad tells that the list had the focus in the last frame
-	// (cockpitKeys).
-	keysHad bool
 
 	threads map[string]*ckThread
 	reply   ckReply

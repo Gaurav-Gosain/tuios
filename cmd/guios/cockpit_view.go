@@ -108,7 +108,10 @@ func (a *App) cockpitCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown fl
 		// With no agent, the empty state takes the whole card: no column
 		// says "Select an agent", no hint names a key that does nothing.
 		empty := ck.loaded && len(ck.rows) == 0
-		body := ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch)
+		// Keyed: the header's elements come and go as the counts change,
+		// and an unkeyed body became another element with them, with the
+		// reply box in it, which lost the keyboard focus as a key came.
+		body := ui.Row(c.Key("ck-body")).Grow(1).MinHeight(0).AlignItems(ui.Stretch)
 		body.Children(func() {
 			// The board and the mail for the person take the whole card.
 			// The agents column stays, zero wide: it holds the keys that
@@ -598,19 +601,15 @@ func (a *App) ckRowMenu(m *ui.Menu, r ckRow) {
 	}
 }
 
-// cockpitKeys are the fleet's keys while it holds the focus. A printable
+// cockpitKeys are the keys typed in the fleet's list. A printable
 // key goes to the reply box (cockpit_guard.go). The rest are the list's
 // moves, Enter and Escape, and the chords of ckChords.
 func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 	ck := &a.ck
-	// A key typed in the list before a frame that moved the focus (as the
-	// key before it moved it to the reply box) comes in the frame after:
-	// the list still reads it then.
-	had := ck.keysHad
-	ck.keysHad = ck.fleetFocus.FocusWithin(c)
-	if !ck.keysHad && !had {
-		return
-	}
+	// No check that the list has the focus: MyGo gives the list only keys
+	// typed while the focus was in it, and one that waited for a later
+	// frame comes after the focus moved on (as the key before it moved it
+	// to the reply box), which the list must still read.
 	key := func(mods ui.Modifiers, k ui.Key) bool { return col.Shortcut(mods, k) }
 	if ck.lightbox != nil {
 		if key(0, ui.KeyEscape) {
