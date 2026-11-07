@@ -85,6 +85,18 @@ func TestEditIsHeldAndAnsweredByDigest(t *testing.T) {
 		t.Fatalf("the held edit is %v, want once and deny with no scope and no risk", it)
 	}
 
+	// A report from the pane while the hold runs keeps what the hold put on
+	// the item: a client must not lose edit_sha and show an allow.
+	setAgentState(t, c, "work", a, "needs_input", "approval", riskyLine)
+	for _, x := range waitAttention(t, c, "the item after a new report", func(items []map[string]any) bool { return len(items) > 0 }) {
+		if x["window"] == a {
+			it = x
+		}
+	}
+	if it["edit_sha"] != sha || it["edit_lines"] != float64(2) || it["request_id"] != id {
+		t.Fatalf("ASSERTION: after a report the held edit is %v", it)
+	}
+
 	got := result(t, callP(c, t, "get-approval", map[string]any{"request_id": id}))
 	edit, _ := got["edit"].(map[string]any)
 	hunks, _ := edit["hunks"].([]any)

@@ -488,6 +488,7 @@ func (a *attentionStore) upsertLocked(next AttentionItem) {
 				// the risk is the held call's, not the newer line's.
 				next.Kind, next.Risk, next.DenyMessage = cur.Kind, cur.Risk, cur.DenyMessage
 				next.PlanLines, next.PlanSHA = cur.PlanLines, cur.PlanSHA
+				next.EditLines, next.EditSHA = cur.EditLines, cur.EditSHA
 			} else {
 				a.endHoldLocked(cur.RequestID, approvalOutcome{Reason: approvalEndResolved}, false)
 			}
@@ -540,7 +541,8 @@ func attentionSame(a, b AttentionItem) bool {
 		slices.Equal(a.Options, b.Options) && slices.Equal(a.AlwaysScope, b.AlwaysScope) &&
 		a.SnoozedUntil == b.SnoozedUntil && a.MarkedUnread == b.MarkedUnread &&
 		slices.Equal(a.Risk, b.Risk) && a.DenyMessage == b.DenyMessage &&
-		a.PlanLines == b.PlanLines && a.PlanSHA == b.PlanSHA
+		a.PlanLines == b.PlanLines && a.PlanSHA == b.PlanSHA &&
+		a.EditLines == b.EditLines && a.EditSHA == b.EditSHA
 }
 
 // closeLocked closes the item with this id, if it is open. The caller holds mu.

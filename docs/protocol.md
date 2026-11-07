@@ -1400,10 +1400,10 @@ The older verbs change as follows, and a
 caller that sends nothing new is answered as before:
 
 - `request-approval` takes `kind` (`approval` or `plan`), `plan`, `tool`,
-  `target`, `cwd` and `deny_message` (see [Risky approvals and
+  `target`, `cwd`, `deny_message` and `edit` (see [Risky approvals and
   plans](#risky-approvals-and-plans)). An unknown `kind` is `invalid_params`.
-- `reply-approval` takes `risk_ack` and `plan_sha`, and `respond` takes
-  `risk_ack`. What changes for a caller that sends neither is under [Risky
+- `reply-approval` takes `risk_ack`, `plan_sha` and `edit_sha`, and
+  `respond` takes `risk_ack`. What changes for a caller that sends neither is under [Risky
   approvals and plans](#risky-approvals-and-plans).
 - `set-agent-state` takes `activity`, one hook event for the pane's activity
   ring. Its `event` must be one of `prompt`, `tool`, `tool_done`,
@@ -1414,7 +1414,8 @@ caller that sends nothing new is answered as before:
   lists what the plain call lists. `kinds` accepts the new kind `plan`, which
   sorts right after `approval`.
 - Attention items gain `snoozed_until`, `marked_unread`, `risk`,
-  `deny_message`, `plan_lines` and `plan_sha`, each omitted when unset, and a
+  `deny_message`, `plan_lines`, `plan_sha`, `edit_lines` and `edit_sha`,
+  each omitted when unset, and a
   close may carry the new reason `snoozed`. An item mirrored from a linked
   host keeps that host's `risk` and `plan_lines`, display only.
 - `get-agent-state` and every `list-agents` entry gain `queued`, the length of
@@ -1618,7 +1619,8 @@ caller of the older verbs and for a subscriber:
   `mark-attention` `restore`, which reopens it with its id and `since`. A
   held approval or plan comes back without `request_id`, since the dismiss
   ended its hold, and a plan comes back as kind `approval`, without
-  `plan_sha`, `plan_lines` or `deny_message`.
+  `plan_sha`, `plan_lines` or `deny_message`, and an edit without
+  `edit_sha` or `edit_lines`.
 - A hold that `request-approval` starts on a pane whose approval the person
   snoozed wakes the approval first, so the Inbox can answer it.
 - The saved queue holds snoozed `finished` and `errored` items with
@@ -1793,6 +1795,7 @@ catalog.
 | `gh_unavailable` | `ship-pr` or `ship-status` with `refresh` needs the gh CLI, and it is not installed or not logged in. Nothing was pushed or opened. |
 | `queue_full` | The pane's delivery queue holds `[agents.queue] max` messages. Nothing was queued. |
 | `no_buffer` | No paste buffer has the name given, or there are no buffers when none was named. Nothing was read, pasted or deleted. |
+| `edit_unreviewed` | An allow for a held edit came without `edit_sha` naming the digest of the body the hold serves. Nothing was answered and the hold runs on. |
 | `risk_unacknowledged` | An allow for an approval that matched risk rules came without `risk_ack` naming exactly those rules. Nothing was answered. |
 | `agents_disabled` | The verb is an agent feature, and `[agents] enabled = false` turned the agent features off. Nothing was done. |
 | `no_file` | A file verb was given a path that does not exist on that machine. Nothing was read or changed. |
@@ -6501,6 +6504,60 @@ While the hold runs the pane's item is of kind `plan`, with `plan_lines` and
   `message` reaches the model.
 - `get-approval` serves the text while the hold runs.
 
+**Edits.** An Edit, MultiEdit or Write is decided by what it writes, not by
+its path, so `request-approval` holds one only with its whole body in `edit`:
+
+```json
+{"tool": "Edit", "path": "notes.txt", "hunks": [{"old": "retries = 3\n", "new": "retries = 5\n", "replace_all": false}]}
+```
+
+A MultiEdit has one hunk per edit, in order. A Write is one hunk whose `old`
+is empty and whose `new` is the whole content. `kind` stays `approval`. The
+daemon refuses the request with `invalid_params`, and holds nothing, when:
+
+- the body is over 32 KiB, counted over `path` and every `old` and `new`;
+- a string is not valid UTF-8, or has a character other than a printable one,
+  a tab or a newline (a carriage return, an escape, a bidi override, a zero
+  width space and U+FFFD are all refused), or `path` has a tab or newline;
+- `tool` is not Edit, MultiEdit or Write, it has no hunk, an Edit or a Write
+  has more than one, or a Write's hunk has `old` text or `replace_all`;
+- `tool` and `target` are not the body's `tool` and `path`, or `summary` is
+  not `approve <tool>: <path>`;
+- it comes with `kind: plan`;
+- or the request is for a file tool, by `tool` or by the tool its `summary`
+  names, and carries no `edit`. A file tool is never held to be allowed from
+  its path.
+
+`always` is never offered for an edit: it is dropped from `options`, with
+`always_scope`. While the hold runs the item carries `edit_sha` and
+`edit_lines` (the lines of every `old` and `new` together, each without a
+final newline), and `get-approval` serves `edit` and `edit_sha`. The hold
+keeps its own copy of the body. A newer request for the pane ends the hold as
+`superseded`, and its item has the new body's `edit_sha`.
+
+`edit_sha` is the SHA-256, in lower-case hex, of this encoding of the body:
+the bytes `tuios-edit-v1` and a newline, then each field as a netstring,
+`<decimal byte length>:<bytes>,`, in this order: `tool`, `path`, the number
+of hunks in decimal, then for each hunk `old`, `new`, and `replace_all` as
+`1` or `0`. For the body above:
+
+```
+printf 'tuios-edit-v1\n4:Edit,9:notes.txt,1:1,12:retries = 3\n,12:retries = 5\n,1:0,' | shasum -a 256
+9538f37b607471f0a27f1c7bca931d9b18b113d0abf8d5fd29687cfc526da6f5  -
+```
+
+- `reply-approval` with `once` on an edit must carry `edit_sha`, the digest
+  of the body that was shown. Without it, or with another body's, the call is
+  refused with `edit_unreviewed` (the hint's `accepted` holds the hold's
+  `edit_sha`), nothing is answered and the hold runs on. A deny needs none.
+  A risky path still needs `risk_ack` as well: the risk rules read the edit's
+  `path` as they read any file tool's.
+- A client that draws no diff offers no allow on an item with `edit_sha`. The
+  TUI says "Review this edit in the pane" and offers reject and the pane.
+- The Claude Code hook keeps an edit in the pane, as before, when its body
+  would be refused above, when `tool_input` has a field the body does not
+  show, and for NotebookEdit always.
+
 **Deny reasons.** `deny_message: true` on `request-approval` says the harness
 passes a deny's reason to its model (Claude Code, opencode, Kilo), and the item
 carries it so the Inbox offers to type one. The reason itself is
@@ -6510,13 +6567,18 @@ carries it so the Inbox offers to type one. The reason itself is
 names the call as; longer is `invalid_params`.
 
 Wire compatibility: every field is additive. A hook sends `kind`, `plan`,
-`tool`, `target`, `cwd` and `deny_message` only to a daemon whose
+`tool`, `target`, `cwd`, `deny_message` and `edit` only to a daemon whose
 `request-approval` lists them, and does not hold a plan at all with a daemon that does not list
-`plan`, which would hold it as a plain approval.
+`plan`, or an edit at all with one that does not list `edit`, which would
+hold either as a plain approval. A daemon older than edits never holds one,
+so an older client sees nothing new from it. An older client attached to a
+newer daemon sees an edit as an approval with allow; its allow carries no
+`edit_sha` and is refused with `edit_unreviewed`, so the edit is answered in
+the pane.
 
 ### get-approval
 
-Read a held approval or plan whole.
+Read a held approval, plan or edit whole.
 
 Params: `request_id` (required), `session` (optional: when given, a hold in
 another session is not found; from a pane without `admin` it is the pane's own
@@ -6526,6 +6588,13 @@ Response:
 
 ```json
 {"result": {"type": "approval", "request_id": "9f86d081884c7d65", "kind": "plan", "session": "web", "window": "3f2a9c1e", "summary": "plan: Refactor the retry loop", "tool": "", "target": "", "options": ["once", "always", "deny"], "always_scope": ["Mode accept edits, for this session"], "plan": "# Refactor the retry loop\n1. ...", "plan_sha": "5d41402abc4b2a76b9719d911017c592...", "risk": [], "deny_message": true, "untrusted": true}}
+```
+
+For a held edit the result also has `edit` (the body, as `request-approval`
+took it) and `edit_sha`; both are absent for any other hold:
+
+```json
+{"result": {"type": "approval", "request_id": "4e07408562bedb8b", "kind": "approval", "session": "web", "window": "3f2a9c1e", "summary": "approve Edit: notes.txt", "tool": "Edit", "target": "notes.txt", "options": ["once", "deny"], "always_scope": [], "plan": "", "plan_sha": "", "edit": {"tool": "Edit", "path": "notes.txt", "hunks": [{"old": "retries = 3\n", "new": "retries = 5\n"}]}, "edit_sha": "9538f37b607471f0a27f1c7bca931d9b18b113d0abf8d5fd29687cfc526da6f5", "risk": [], "deny_message": true, "untrusted": true}}
 ```
 
 `risk` is `[{"rule": "...", "why": "..."}]` for each rule the call matched. The
