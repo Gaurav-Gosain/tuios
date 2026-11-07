@@ -1197,7 +1197,20 @@ func (a *App) workSession() *proto.Session {
 // cost nothing while the agents view shows.
 func (a *App) card(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32) {
 	on := a.ck.open && a.loaded
-	stack := ui.Box(c.Key("card-stack")).Grow(1).MinHeight(0)
+	stack := ui.Box(c.Key("card-stack")).Grow(1).MinHeight(0).Bind(a.paneRef("card-stack"))
+	// The display's scale, for the cell of the grid (displayScale).
+	stack.Draw(func(p *ui.Painter, _ ui.Rect) {
+		if s := p.Scale(); s > 0 && s != a.paintScale {
+			a.paintScale = s
+			a.win.Invalidate()
+		}
+	})
+	if a.workSession() == nil {
+		// No panes shown: the grid goes to the local host all the same,
+		// from the area panes would take, so the first panes a script
+		// opens go in by the window's size (QM-009).
+		a.reportGrid(c, a.local(), a.paneRef("card-stack").Bounds(c))
+	}
 	move := motionQuick
 	if on {
 		move = motionBase

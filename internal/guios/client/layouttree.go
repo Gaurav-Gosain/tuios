@@ -213,28 +213,8 @@ func (k *stateKeeper) layoutOf(sid, name string, wins []windowRow, focus string,
 		}
 	}
 	bounds, gap := ti.bounds(), ti.ls.Gap
-	// Before guios measured its grid, bounds is a guess, and placeNew
-	// decided by it. Once the grid came, the panes placed under the guess
-	// go in again, in their order, by the same rule, while the tree is
-	// still the one guios built: the layout no longer depends on whether
-	// the grid came before the panes or after them (QM-009).
-	guess := !ti.tui && (ti.grid.W < 4 || ti.grid.H < 2)
-	k.mu.Lock()
-	g, wasGuess := k.guessed[sid]
-	if !guess {
-		delete(k.guessed, sid)
-	}
-	k.mu.Unlock()
 	restored := false
-	if wasGuess && !guess && !ti.tui && g.ws == ti.ws && treeKey(tree, leaves) == g.key {
-		fresh := layout.NewBSPTree()
-		fresh.AutoScheme, fresh.DefaultRatio = tree.AutoScheme, tree.DefaultRatio
-		for _, n := range ids {
-			placeNew(fresh, n, nums[g.target], bounds, gap)
-		}
-		tree, restored, changed = fresh, true, true
-	}
-	if !restored && len(missing) == 1 && !tree.IsEmpty() {
+	if len(missing) == 1 && !tree.IsEmpty() {
 		// A pane tiled again after it floated goes back where it tiled.
 		// Split off as a new pane, it split itself: a leaf the tree lacks,
 		// so the last leaf, and the person lost the layout they had
@@ -245,7 +225,8 @@ func (k *stateKeeper) layoutOf(sid, name string, wins []windowRow, focus string,
 		delete(k.floated, id)
 		k.mu.Unlock()
 		if ok {
-			if t, ok := slot.restore(tree, leaves, missing[0]); ok {
+			t, ok := slot.restore(tree, leaves, missing[0])
+			if ok {
 				tree, restored, changed = t, true, true
 			}
 		}
@@ -272,14 +253,6 @@ func (k *stateKeeper) layoutOf(sid, name string, wins []windowRow, focus string,
 			placeNew(tree, n, nums[target], bounds, gap)
 		}
 		changed = true
-		if guess {
-			k.mu.Lock()
-			if old, ok := k.guessed[sid]; ok && old.ws == ti.ws {
-				target = old.target
-			}
-			k.guessed[sid] = guessedTree{ws: ti.ws, target: target, key: treeKey(tree, leaves)}
-			k.mu.Unlock()
-		}
 	}
 	if len(missing) > 0 {
 		k.mu.Lock()
@@ -419,24 +392,6 @@ func evenRun(t *layout.BSPTree, num int, dir layout.SplitType) *layout.BSPTree {
 	}
 	shares(path[top])
 	return st.Deserialize()
-}
-
-// guessedTree is a tree guios placed new panes in before it measured its
-// grid: its workspace, the pane they split, and the tree as guios wrote it.
-type guessedTree struct {
-	ws     int
-	target string
-	key    string
-}
-
-// treeKey is t's shape, panes and ratios, to tell whether it changed. It
-// names the panes, not the leaf numbers, which the daemon renumbers.
-func treeKey(t *layout.BSPTree, leaves map[int]string) string {
-	st := sessionTree(t)
-	if st == nil {
-		return ""
-	}
-	return session.TreeKey(st, func(n int) string { return leaves[n] })
 }
 
 // floatSlot is where a pane tiled as it floated out of the split tree:

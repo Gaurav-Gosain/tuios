@@ -470,6 +470,11 @@ func (a *App) connected(h *host, gen int, cl *client.Client, err error) {
 	h.viewSent = nil
 	a.reportView()
 	if !h.remote() {
+		// The panes a script opens go in by the window's grid from the
+		// first (QM-009).
+		a.sendGrid(h, [2]int{})
+	}
+	if !h.remote() {
 		a.watchHosts(cl)
 		a.watchTransfers(cl)
 		// The badge and the keys to what needs you read the agents and
