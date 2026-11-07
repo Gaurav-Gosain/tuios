@@ -1206,13 +1206,20 @@ func ckHarness(h string) string {
 	return printableTitle(h)
 }
 
-// ckPlace is where an agent runs, as its row says it: the machine, with its
-// mark ("󰒋 build"), when there is more than one machine, else the session.
+// ckPlace is where an agent runs, as its row says it: the session, after
+// the machine's chip ("󰒋 build  api") when the agent runs on another
+// machine. A row of this machine carries no chip, which would say the same
+// name on every row.
 func (m *OS) ckPlace(e sidebarAgentEntry) string {
-	if !m.ckManyMachines() {
-		return printableTitle(firstNonEmptyStr(e.SessionLabel, e.SessionID))
+	sess := printableTitle(firstNonEmptyStr(e.SessionLabel, e.SessionID))
+	if e.Host == "" || !m.ckManyMachines() {
+		return sess
 	}
-	return m.cockpitLook().g(ckGlyphHost) + " " + m.ckMachine(e.Host)
+	chip := m.cockpitLook().g(ckGlyphHost) + " " + m.ckMachine(e.Host)
+	if sess == "" {
+		return chip
+	}
+	return chip + "  " + sess
 }
 
 // ckManyMachines reports whether a host other than this machine is

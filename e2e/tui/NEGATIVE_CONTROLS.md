@@ -14441,3 +14441,19 @@ Run on 2026-11-07 on macOS (arm64):
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitHeaderChipsFilter$' -v .`.
+
+## TestCockpitMachineChip
+
+With a host configured, every row of the agents view named a machine, this
+machine's too, in place of the session. The test opens the frame A fleet
+(this machine, build and gpu) and checks the remote rows carry the machine's
+chip and the local rows, fan attempts included, carry none.
+
+Run on 2026-11-07 on macOS (arm64):
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The `e.Host == ""` rule in `ckPlace` (the header-chips binary, before the change) | "ASSERTION: the row of api-auth, on this machine, carries a machine chip", and the same for docs-cli, scratch, migrate-cfg and cache-1 | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitMachineChip$' -v .`.
