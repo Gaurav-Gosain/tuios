@@ -189,6 +189,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// guestenv.TermProgram). Without this the daemon's own environment decides,
 	// and image tools inside a window fall back to block art.
 	session.SetGraphicsCapabilities(cs.kittyGraphics, cs.sixelGraphics)
+	d.manager.noteHostGraphics(cs.kittyGraphics, cs.sixelGraphics)
 
 	// Record the new client's dimensions from the attach payload. Previously
 	// these were zeroed out on the theory that 80x24 might be a bubbletea

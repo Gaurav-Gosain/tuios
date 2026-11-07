@@ -636,6 +636,15 @@ type SessionState struct {
 	// used last. Only the save and the restore read it. Zero in state written
 	// before it existed, and for a session nobody has used.
 	LastUsed int64 `json:"last_used,omitempty"`
+	// KittyGraphics and SixelGraphics are the graphics the session's last
+	// attached client draws (Session.GraphicsCapabilities), as they were when
+	// the state was saved. ResurrectionState stamps them and a restore sets
+	// them again before it spawns a shell. The restore runs before any client
+	// attaches, so without them every restored shell was told
+	// TERM_PROGRAM=TUIOS where it had been told ghostty, and Claude Code
+	// resumed in it lost Shift+Enter (see guestenv.TermProgram).
+	KittyGraphics bool `json:"kitty_graphics,omitempty"`
+	SixelGraphics bool `json:"sixel_graphics,omitempty"`
 	// Worktree is the daemon's record of the git worktree this session's
 	// directory is, or nil for a session that is not in one. Daemon-owned and
 	// omitted when nil, which is what every older client and state file reads.
@@ -1839,6 +1848,9 @@ type Session struct {
 	graphicsMu    sync.RWMutex
 	kittyGraphics bool
 	sixelGraphics bool
+	// graphicsKnown says SetGraphicsCapabilities was called. Until then
+	// GraphicsCapabilities answers with the daemon's most recent client.
+	graphicsKnown bool
 	// linkedViewer says a client attached over a link, from another machine,
 	// is drawing this session. Read from the VT callback, so it is atomic
 	// rather than behind a lock that callback could wait on. See
@@ -1882,6 +1894,7 @@ func (s *Session) SetGraphicsCapabilities(kitty, sixel bool) {
 	defer s.graphicsMu.Unlock()
 	s.kittyGraphics = kitty
 	s.sixelGraphics = sixel
+	s.graphicsKnown = true
 }
 
 // SetKittyAnimation records whether the hosts of the session's attached
@@ -1924,11 +1937,16 @@ func (s *Session) SetKittyAdvertised(ok bool) { s.kittyAdvertised.Store(ok) }
 // SixelAdvertised reports what SetSixelAdvertised last recorded.
 func (s *Session) SixelAdvertised() bool { return s.sixelAdvertised.Load() }
 
-// GraphicsCapabilities returns the recorded kitty and sixel support.
+// GraphicsCapabilities returns the recorded kitty and sixel support, or the
+// daemon's most recent client's while no client has attached to the session.
 func (s *Session) GraphicsCapabilities() (kitty, sixel bool) {
 	s.graphicsMu.RLock()
-	defer s.graphicsMu.RUnlock()
-	return s.kittyGraphics, s.sixelGraphics
+	kitty, sixel, known := s.kittyGraphics, s.sixelGraphics, s.graphicsKnown
+	s.graphicsMu.RUnlock()
+	if !known && s.config != nil && s.config.HostGraphics != nil {
+		return s.config.HostGraphics()
+	}
+	return kitty, sixel
 }
 
 // SessionConfig holds configuration for a session.
@@ -1980,6 +1998,10 @@ type SessionConfig struct {
 	// session's newest local client while [daemon] display follows, nil
 	// otherwise. The manager stamps it. See display_follow.go.
 	DisplayEnv func(sessionID string) []string
+	// HostGraphics returns the graphics of the daemon's most recent client,
+	// which a session no client has attached to tells its shells. The
+	// manager stamps it. See Manager.noteHostGraphics.
+	HostGraphics func() (kitty, sixel bool)
 	// CellSize returns the cell, in pixels, a new pane of the session takes,
 	// ok false when no client has measured one. The manager stamps it. See
 	// Daemon.newPaneCellSize.
@@ -3620,6 +3642,7 @@ func (s *Session) ResurrectionState() *SessionState {
 	}
 	state.SessionID = s.ID
 	state.StartDir = s.StartDir()
+	state.KittyGraphics, state.SixelGraphics = s.GraphicsCapabilities()
 	state.LastUsed = 0
 	if used := s.LastUsed(); !used.IsZero() {
 		state.LastUsed = used.UnixNano()
