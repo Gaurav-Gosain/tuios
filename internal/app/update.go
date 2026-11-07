@@ -972,11 +972,17 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // update is Update's body for every message but flushMsg.
 func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.applyScrollAnchors()
-	// ProcessingRemoteKeys stays set from the first key of a send-keys or
-	// tape run to its last, across messages. A key or click from the
-	// person's own terminal can arrive between two of them, and it is the
-	// person's: it must not be refused as one send-keys typed.
-	if m.ProcessingRemoteKeys && isPersonInput(msg) {
+	// The origin of a key is on its message. A RemoteKeyMsg is a key that
+	// send-keys typed, so it is never the person's, whatever another chain
+	// did to the flag. A key or click from the person's own terminal can
+	// arrive between two keys of a chain, and it is the person's: it must not
+	// be refused as one send-keys typed.
+	switch {
+	case isRemoteKey(msg):
+		prev := m.ProcessingRemoteKeys
+		m.ProcessingRemoteKeys = true
+		defer func() { m.ProcessingRemoteKeys = prev }()
+	case m.ProcessingRemoteKeys && isPersonInput(msg):
 		m.ProcessingRemoteKeys = false
 		defer func() { m.ProcessingRemoteKeys = true }()
 	}
@@ -3522,10 +3528,13 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, doneCmd
 
 	case RemoteKeysDoneMsg:
-		// All remote keys have been processed: do final cleanup
-		// Re-enable animations
-		m.ProcessingRemoteKeys = false
-		m.Settings.AnimationsSuppressed = false
+		// This chain's keys have all been processed. Another chain may still
+		// run: its keys stay marked, and animations stay off, until it ends.
+		m.remoteKeyChains = max(m.remoteKeyChains-1, 0)
+		if m.remoteKeyChains == 0 {
+			m.ProcessingRemoteKeys = false
+			m.Settings.AnimationsSuppressed = false
+		}
 
 		// No retile here. Each key has already done what the same key does
 		// when a person presses it, layout included. This used to drop the
@@ -3619,6 +3628,12 @@ func isActivityInput(msg tea.Msg) bool {
 		return msg.Button != tea.MouseNone
 	}
 	return false
+}
+
+// isRemoteKey reports whether msg is a key that send-keys typed.
+func isRemoteKey(msg tea.Msg) bool {
+	_, ok := msg.(RemoteKeyMsg)
+	return ok
 }
 
 // isPersonInput reports whether msg came from the terminal the client runs

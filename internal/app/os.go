@@ -1234,8 +1234,17 @@ type OS struct {
 	MouseOff bool
 	// MarkedPaneID is the pane mark_pane marked, for join_marked_*.
 	MarkedPaneID string
-	// Remote command processing
-	ProcessingRemoteKeys bool // True when processing remote send-keys (disables animations)
+	// ProcessingRemoteKeys is true while the client handles a key that
+	// send-keys typed, and between the keys of a send-keys chain that is
+	// still running. Every gate that asks "did the person press this" reads
+	// it. A RemoteKeyMsg sets it for its own handler call, whatever other
+	// chains do, and a key from the person's terminal clears it for its call.
+	// Between messages it follows remoteKeyChains.
+	ProcessingRemoteKeys bool
+	// remoteKeyChains counts the send-keys chains started and not yet done.
+	// Two send-keys can overlap, and the first one to end must not mark the
+	// other one's keys as the person's.
+	remoteKeyChains int
 	// ScriptWait is the WaitFor playback is holding for, nil when none is.
 	ScriptWait *scriptWait
 	// ScriptFailure says where and why the last tape stopped, empty when it

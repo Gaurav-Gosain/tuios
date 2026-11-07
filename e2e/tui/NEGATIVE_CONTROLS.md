@@ -14099,3 +14099,35 @@ Run on 2026-11-07 on macOS (arm64):
 Frames `capture-filled`, `capture-plan` and `capture-cards.txt` are under the
 test's artifact folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskCaptureFromAnywhere$' -v .`.
+
+## Overlapping send-keys
+
+`TestOverlappingSendKeysDoNotAnswerAnApproval` holds a plugin approval dialog
+open on an attached client. Three rounds each start one long send-keys chain
+(400 ctrl+u, then allow and Enter) and eight one-key chains while it runs. The
+plugin must not run and the dialog must stay open. The person then types allow
+and Enter, and the plugin must run. Before the fix the first chain to end
+cleared `ProcessingRemoteKeys` while the long chain still ran, so its allow
+and Enter answered the dialog as the person.
+
+The kept race regression tests in `internal/app` (`remote_keys_overlap_test.go`)
+drive the real `Update` with the chains interleaved one message at a time:
+`TestOverlappingSendKeysDoNotAllowAPlugin` (two chains, plugin approval) and
+`TestOverlappingSendKeysDoNotAnswerAHeldApproval` (three chains, a held Inbox
+approval, then a stray end).
+
+Run on 2026-11-07 on macOS (arm64):
+
+| Removed | Test | Failure | Result |
+|---------|------|---------|--------|
+| The whole fix: `RemoteKeysDoneMsg` clears the flag for every chain, `RemoteKeyMsg` does not mark its own call, no chain count | `TestOverlappingSendKeysDoNotAnswerAnApproval`, 4 runs | "overlapping send-keys allowed the plugin: ran.code is \"0\"" in 4 of 4; the frame shows the dialog gone and the later chains' allow typed into the shell | **caught** |
+| The same | `TestOverlappingSendKeysDoNotAllowAPlugin` | "keys from the second send-keys allowed the plugin (typed \"allow\")" | **caught** |
+| The same | `TestOverlappingSendKeysDoNotAnswerAHeldApproval` | "keys from the third send-keys answered a held approval", the reply signed with the client's `human_nonce` | **caught** |
+
+The fixed build passes the e2e test 4 of 4. The fix has two parts, and each
+one alone holds the two unit tests (run with only the count, and with only the
+mark): the per-message mark covers every key a chain types, and the count
+keeps the messages between those keys (the results of the commands a key
+starts) marked until the last chain ends. Repeat from
+`e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=4 -run '^TestOverlappingSendKeysDoNotAnswerAnApproval$' -v .`.

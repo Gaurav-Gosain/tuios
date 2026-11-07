@@ -1276,6 +1276,7 @@ func (m *OS) startRemoteSendKeys(keys string, literal bool, raw bool, windowTarg
 
 	// Disable animations during remote key processing
 	// This ensures immediate layout updates instead of animations that might not complete
+	m.remoteKeyChains++
 	m.ProcessingRemoteKeys = true
 	m.Settings.AnimationsSuppressed = true
 
