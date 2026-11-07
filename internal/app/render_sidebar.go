@@ -1615,8 +1615,18 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	emptyPeek := peeking && len(terminals) == 0
 	// A peek is a request to see that session's panes, so it lists them all.
 	compactAgents := sidebarCompactAgents(w, height, len(agents), &m.Settings)
+	// movedToAgents counts the panes the compact rule took out of terminals
+	// when it took them all. The section then keeps its header, with its "+",
+	// and one row that says where the panes are. Without it a session whose
+	// panes all run agents had no terminals section and no way to open a
+	// plain terminal from the rail.
+	movedToAgents := 0
 	if !peeking && compactAgents {
+		listed := len(terminals)
 		terminals = sidebarTerminalsWithoutAgents(terminals, allAgents)
+		if len(terminals) == 0 {
+			movedToAgents = listed
+		}
 	}
 
 	nS := len(sessionRows)
@@ -1625,7 +1635,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	if emptyFilter {
 		nA = 1
 	}
-	if emptyPeek {
+	if emptyPeek || movedToAgents > 0 {
 		nT = 1
 	}
 	// The layout: which sections are stacked, in what order, and the share each
@@ -2019,7 +2029,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// pane out of it, a short rail may scroll the row away, and a peek shows
 	// another session's panes in its place.
 	focusDrawn := false
-	if !peeking && !emptyPeek {
+	if !peeking && !emptyPeek && movedToAgents == 0 {
 		for i := range count[sidebarSectionTerminals] {
 			if terminals[start[sidebarSectionTerminals]+i].Focused {
 				focusDrawn = true
@@ -2295,6 +2305,15 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				lines = append(lines, compose(sidebarFit(
 					sidebarStyle(nil, nil).Render(" ")+sidebarQuietDot(nil, pal, &m.Settings)+
 						sidebarStyle(nil, nil).Render(" ")+
+						sidebarStyle(nil, pal.FgMute).Render(overlay.Truncate(hint, sidebarNameAvail(cw, 0))), cw, nil)))
+			}
+			return
+		}
+		if movedToAgents > 0 {
+			if count[sidebarSectionTerminals] > 0 {
+				hint := strconv.Itoa(movedToAgents) + " in agents"
+				lines = append(lines, compose(sidebarFit(
+					strings.Repeat(" ", sidebarNameCol())+
 						sidebarStyle(nil, pal.FgMute).Render(overlay.Truncate(hint, sidebarNameAvail(cw, 0))), cw, nil)))
 			}
 			return

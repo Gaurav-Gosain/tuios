@@ -13889,3 +13889,25 @@ one second at the top of `followSetupTail` before they subscribe.
 
 The fixed build with the same delay passes. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorktreeSetupSyncHoldsAgent$' -v .`.
+
+## The terminals section stays when every pane is an agent
+
+`TestRailTerminalsKeepsItsHeaderWhenAllPanesAreAgents` uses the layout
+`sessions:20,terminals,agents` on a rail 28 columns wide. At 30 columns or less
+the rail lists an agent pane under agents and not under terminals. Before the
+fix, a session whose panes all ran agents had no terminals rows, so the section
+was dropped with its header and its "+", and the rail had no way to open a
+plain terminal. The test makes two panes, sets one as an agent and reads the
+other under terminals with no note. It then sets the second as an agent and
+waits for the terminals header with its "+" and the row "2 in agents" under it.
+A click on the "+" must open a pane and take the note away.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| `movedToAgents` in `sidebarPanelLinesForTree` left at 0, as before the fix | "with every pane an agent, the terminals header, its + or the \"2 in agents\" row is missing"; the rail shows sessions and agents only | **caught** |
+
+The frame is `terminals-all-agents` under the test's artifact folder. Repeat from
+`e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRailTerminalsKeepsItsHeaderWhenAllPanesAreAgents$' -v .`.
