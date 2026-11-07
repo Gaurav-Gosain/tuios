@@ -1367,7 +1367,11 @@ func ckItemVerb(it session.AttentionItem) (verb, rest string) {
 	case session.AttentionApproval:
 		if tool, text := risk.ParseSummary(it.Summary); tool != "" {
 			// The row names the program. The card under it shows the
-			// command whole, which is what an allow runs.
+			// command whole, which is what an allow runs. This client
+			// does not allow an edit, so the row does not ask it to.
+			if inboxIsEdit(it) {
+				return "Review " + printableTitle(tool), printableTitle(ckToolTarget(tool, text))
+			}
 			return "Allow " + printableTitle(tool), printableTitle(ckToolTarget(tool, text))
 		}
 		return "Allow", sum
@@ -1785,9 +1789,6 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 			words := [4]string{"allow", "always", "reject", "say why"}
 			if it.Kind == session.AttentionPlan {
 				words = [4]string{"approve", "accept edits", "keep planning", "say why"}
-			}
-			if inboxIsEdit(it) {
-				hints = append(hints, m.keyHints(config.ActionInboxGo, "open pane")...)
 			}
 			if slices.Contains(inboxOptions(it), session.ApprovalOnce) {
 				hints = append(hints, m.keyHints(config.ActionInboxAllow, words[0])...)
@@ -2478,6 +2479,8 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 	switch {
 	case held && it.Kind == session.AttentionPlan:
 		title = "Approve the plan?"
+	case held && inboxIsEdit(it):
+		title = "Review this edit in the pane"
 	case held && it.Kind != session.AttentionAsk:
 		title += "?"
 	}

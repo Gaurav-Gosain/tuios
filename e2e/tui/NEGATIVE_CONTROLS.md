@@ -13413,6 +13413,16 @@ hook's answer are saved as `edit-approval.json` under `TUIOS_E2E_FRAMES`.
 | --- | --- | --- | --- |
 | An allow of a held edit needs its `edit_sha` | the `hold.edit` check in `attentionStore.answer` made false | `ASSERTION: an allow with no edit_sha: ok=true code=""` | **caught** |
 
+`TestCockpitHeldEditIsReviewedInThePane` (`cockpit_edit_approval_test.go`)
+holds the same Edit through the real hook and opens the agents view. The row
+reads "Review Edit", the card "Review this edit in the pane" with Open the
+pane, Reject and Reject and say why, and no allow; `a` and `1` leave the edit
+held. The frame is saved as `cockpit-held-edit` (PNG and text).
+
+| Claim | Control | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| The TUI offers no allow on a held edit | `inboxIsEdit` made false | "the edit's card does not send the person to the pane" | **caught** |
+
 A first version of the test sent no `risk_ack` on the refused allows. Under
 the same control it still failed, but with `risk_unacknowledged`: the risk
 rule, not the digest, refused the allow. That run proved nothing about
