@@ -86,7 +86,9 @@ func Lines(e integration.EditBody, width int) []Line {
 		}
 	}
 	for i, h := range e.Hunks {
-		add(i, KindHead, "", head(e, i))
+		if t := head(e, i); t != "" {
+			add(i, KindHead, "", t)
+		}
 		if e.Tool != "Write" {
 			side(add, i, KindOld, "- ", h.Old)
 		}
@@ -95,18 +97,30 @@ func Lines(e integration.EditBody, width int) []Line {
 	return out
 }
 
-// head is what a hunk's head line says.
+// head is what a hunk's head line says, or "" for an Edit's one plain hunk.
+// The card's title names the file, so the head says only what the title
+// does not: which change this is, and how it acts.
 func head(e integration.EditBody, i int) string {
 	if e.Tool == "Write" {
-		return "Writes the whole file " + e.Path + ". It replaces the file if the file exists."
+		return "Writes the whole file. It replaces the file if the file exists."
 	}
 	h := e.Hunks[i]
-	s := "Change " + strconv.Itoa(i+1) + " of " + strconv.Itoa(len(e.Hunks)) + " in " + e.Path
+	var s string
+	if len(e.Hunks) > 1 {
+		s = "Change " + strconv.Itoa(i+1) + " of " + strconv.Itoa(len(e.Hunks))
+	}
+	var notes []string
 	if h.ReplaceAll {
-		s += ". It replaces every match, not only the first."
+		notes = append(notes, "It replaces every match, not only the first.")
 	}
 	if h.Old == "" {
-		s += ". The old text is empty."
+		notes = append(notes, "The old text is empty.")
+	}
+	if len(notes) > 0 {
+		if s != "" {
+			s += ". "
+		}
+		s += strings.Join(notes, " ")
 	}
 	return s
 }

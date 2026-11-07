@@ -3,11 +3,15 @@ package main
 import (
 	"log"
 	"math"
+	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/Gaurav-Gosain/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/editreview"
+	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -299,4 +303,63 @@ func ckEditRow(c *ui.Context, pal *palette, mono string, rowH float32, l editrev
 			t.Font("").FontSize(fsSmall).FontWeight(wSemibold)
 		}
 	})
+}
+
+// ckEditTitle is what the card's title says about a held edit: the verb and
+// the file's name ("Edit backoff.go"), the folder it is in, shown relative
+// to the agent's folder when it is inside it and from home otherwise, and
+// the size of the change once the body is read: "+3 −1" for an Edit,
+// "3 edits · +5 −2" for a MultiEdit, "40 lines" for a Write. path is the
+// path the item names; the body's path wins once it is read.
+func (a *App) ckEditTitle(it session.AttentionItem, tool, path, cwd string) (title, folder, size string) {
+	var body *integration.EditBody
+	if e := a.ck.edit; e != nil && e.requestID == it.RequestID && e.body != nil {
+		body = e.body
+		tool, path = body.Tool, body.Path
+	}
+	dir, file := filepath.Split(filepath.Clean(path))
+	if file == "" || file == "." {
+		file, dir = path, ""
+	}
+	if tool == "Write" {
+		title = locales.CockpitWriteFile(file)
+	} else {
+		title = locales.CockpitEditFile(file)
+	}
+	dir = strings.TrimSuffix(dir, "/")
+	if cwd = strings.TrimSuffix(cwd, "/"); cwd != "" && (dir == cwd || strings.HasPrefix(dir, cwd+"/")) {
+		dir = strings.TrimPrefix(strings.TrimPrefix(dir, cwd), "/")
+	} else if dir != "" {
+		dir = proto.ShortDir(dir)
+	}
+	if dir != "" {
+		// "retry/", so the folder does not read as a second name.
+		folder = dir + "/"
+	}
+	if body == nil {
+		return title, folder, ""
+	}
+	lines := func(s string) int {
+		if s == "" {
+			return 0
+		}
+		return strings.Count(strings.TrimSuffix(s, "\n"), "\n") + 1
+	}
+	if tool == "Write" {
+		n := 0
+		for _, h := range body.Hunks {
+			n += lines(h.New)
+		}
+		return title, folder, locales.CockpitEditLines(n)
+	}
+	added, removed := 0, 0
+	for _, h := range body.Hunks {
+		added += lines(h.New)
+		removed += lines(h.Old)
+	}
+	size = "+" + strconv.Itoa(added) + " −" + strconv.Itoa(removed)
+	if len(body.Hunks) > 1 {
+		size = locales.CockpitEditCount(len(body.Hunks)) + " · " + size
+	}
+	return title, folder, size
 }

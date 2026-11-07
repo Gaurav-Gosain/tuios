@@ -313,7 +313,7 @@
   "setScrolling": "スクロール",
   "setWheelScroll": "マウスホイール",
   "setWheelScrollDetail": "ホイール 1 ノッチでスクロールする量。",
-  "setScrollRows": "{count} 行",
+  "setScrollRows": "{count, plural, other {# 行}}",
   "setTrackpadScroll": "トラックパッド",
   "setTrackpadScrollDetail": "2 本指でスクロールする速さ。",
   "setAsk": "確認",
@@ -1317,6 +1317,10 @@
   "cockpitQuestionTypeReply": "これは質問です。答えを選ぶか、入力して返信してください。",
   "paneZoomedHides": "ズーム中 · {count, plural, other {# 個のペインを非表示}}",
   "paneZoomedEnd": "すべてのペインを表示",
+  "cockpitEditFile": "{file} を編集",
+  "cockpitWriteFile": "{file} を書き込み",
+  "cockpitEditCount": "{count, plural, other {# 件の編集}}",
+  "cockpitEditLines": "{count, plural, other {# 行}}",
   "cockpitEditReading": "編集を読み込み中…",
   "cockpitEditLeft": "{count, plural, other {許可するには編集を最後までスクロールしてください。あと # 行あります。}}"
 }

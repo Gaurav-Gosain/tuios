@@ -2346,6 +2346,10 @@
   "cockpitQuestionTypeReply": "This is a question. Pick an answer, or type to reply.",
   "paneZoomedHides": "Zoomed · {count, plural, one {# pane hidden} other {# panes hidden}}",
   "paneZoomedEnd": "Show all panes",
+  "cockpitEditFile": "Edit {file}",
+  "cockpitWriteFile": "Write {file}",
+  "cockpitEditCount": "{count, plural, one {# edit} other {# edits}}",
+  "cockpitEditLines": "{count, plural, one {# line} other {# lines}}",
   "cockpitEditReading": "Reading the edit…",
   "cockpitEditLeft": "{count, plural, one {Scroll through the edit to allow it: # line is not shown yet.} other {Scroll through the edit to allow it: # lines are not shown yet.}}"
 }

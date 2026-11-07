@@ -381,6 +381,20 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 				// "{name} asks", and how long it waits.
 				oneLine(c, locales.CockpitNameAsks(ag.Name), fsBody, wSemibold).TextColor(pal.text)
 				ui.Text(c, ago(it.Since/int64(time.Millisecond), now)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Shrink(0)
+			} else if tool, path, ok := ckAsk(it.Summary); ok && ckIsEdit(it) {
+				// The file is the title: "Edit backoff.go", its folder in
+				// text3, and how big the change is once it is read. The
+				// full path is in the folder's tooltip.
+				title, folder, size := a.ckEditTitle(it, tool, path, ag.Cwd)
+				oneLine(c, title, fsBody, wSemibold).TextColor(pal.text).Shrink(1)
+				if folder != "" {
+					oneLine(c, folder, fsSmall, 0).TextColor(pal.textFaint).Shrink(3).Tooltip(path)
+				}
+				if size != "" {
+					ui.Text(c, size).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Shrink(0)
+				}
+				ui.Text(c, "·").FontSize(fsSmall).TextColor(pal.textFaint).Shrink(0)
+				oneLine(c, locales.CockpitWaits(ag.Name, ago(it.Since/int64(time.Millisecond), now)), fsSmall, 0).TextColor(pal.textMuted).Shrink(4)
 			} else if tool, _, ok := ckAsk(it.Summary); ok {
 				// The tool and who waits: "Bash · review waits now". What
 				// the call acts on is in the code box under it, once.

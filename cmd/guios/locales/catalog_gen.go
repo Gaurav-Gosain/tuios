@@ -13344,6 +13344,46 @@ func (msgs Messages) PaneZoomedEnd() string {
 	return Catalog.Format(msgs.locale, "paneZoomedEnd", nil)
 }
 
+// CockpitEditFile says "Edit {file}"
+// in the language the app shows.
+func CockpitEditFile(file string) string { return In(i18n.Locale()).CockpitEditFile(file) }
+
+// CockpitEditFile says "Edit {file}"
+// in the language of msgs.
+func (msgs Messages) CockpitEditFile(file string) string {
+	return Catalog.Format(msgs.locale, "cockpitEditFile", map[string]any{"file": file})
+}
+
+// CockpitWriteFile says "Write {file}"
+// in the language the app shows.
+func CockpitWriteFile(file string) string { return In(i18n.Locale()).CockpitWriteFile(file) }
+
+// CockpitWriteFile says "Write {file}"
+// in the language of msgs.
+func (msgs Messages) CockpitWriteFile(file string) string {
+	return Catalog.Format(msgs.locale, "cockpitWriteFile", map[string]any{"file": file})
+}
+
+// CockpitEditCount says "{count, plural, one {# edit} other {# edits}}"
+// in the language the app shows.
+func CockpitEditCount(count int) string { return In(i18n.Locale()).CockpitEditCount(count) }
+
+// CockpitEditCount says "{count, plural, one {# edit} other {# edits}}"
+// in the language of msgs.
+func (msgs Messages) CockpitEditCount(count int) string {
+	return Catalog.Format(msgs.locale, "cockpitEditCount", map[string]any{"count": count})
+}
+
+// CockpitEditLines says "{count, plural, one {# line} other {# lines}}"
+// in the language the app shows.
+func CockpitEditLines(count int) string { return In(i18n.Locale()).CockpitEditLines(count) }
+
+// CockpitEditLines says "{count, plural, one {# line} other {# lines}}"
+// in the language of msgs.
+func (msgs Messages) CockpitEditLines(count int) string {
+	return Catalog.Format(msgs.locale, "cockpitEditLines", map[string]any{"count": count})
+}
+
 // CockpitEditReading says "Reading the edit…"
 // in the language the app shows.
 func CockpitEditReading() string { return In(i18n.Locale()).CockpitEditReading() }

@@ -313,7 +313,7 @@
   "setScrolling": "滚动",
   "setWheelScroll": "鼠标滚轮",
   "setWheelScrollDetail": "滚轮每滚一格滚动的距离。",
-  "setScrollRows": "{count} 行",
+  "setScrollRows": "{count, plural, other {# 行}}",
   "setTrackpadScroll": "触控板",
   "setTrackpadScrollDetail": "双指滚动的速度。",
   "setAsk": "询问",
@@ -1317,6 +1317,10 @@
   "cockpitQuestionTypeReply": "这是一个问题。请选择一个回答，或输入回复。",
   "paneZoomedHides": "已缩放 · {count, plural, other {隐藏了 # 个窗格}}",
   "paneZoomedEnd": "显示所有窗格",
+  "cockpitEditFile": "编辑 {file}",
+  "cockpitWriteFile": "写入 {file}",
+  "cockpitEditCount": "{count, plural, other {# 处编辑}}",
+  "cockpitEditLines": "{count, plural, other {# 行}}",
   "cockpitEditReading": "正在读取编辑…",
   "cockpitEditLeft": "{count, plural, other {请滚动查看完整编辑后再允许：还有 # 行未显示。}}"
 }
