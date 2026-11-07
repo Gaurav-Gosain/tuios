@@ -12,6 +12,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
 // The task capture sheet: a task card written from anywhere, in one key
@@ -26,9 +27,11 @@ import (
 // An image goes to the card's session's file store, which lives as long as
 // the session does.
 //
-// Cards belong to a session today, not to a repository, so the first pill is
-// the session, the focused pane's by default. The design's project scope and
-// its "Any machine" pill come with the board that is shared across sessions.
+// The card goes to the current session. The first pill is its project: the
+// repository of the focused pane's folder, by its origin URL, so the card
+// shows on that repository's board in every session and on linked machines;
+// or none, for a card of the session only. The design's "Any machine" pill
+// comes with pool placement.
 
 // overlayKindTaskCapture is the sheet's overlay kind.
 const overlayKindTaskCapture = "taskcapture"
@@ -38,7 +41,7 @@ type tcField uint8
 
 const (
 	tcTask tcField = iota
-	tcSession
+	tcProject
 	tcStage
 	tcAgent
 	tcFields
@@ -59,11 +62,12 @@ type taskCapture struct {
 	ed    *composer.Model
 	wires draftWires
 	field tcField
-	// sessions are the ones a card can go to, the current one first, and
-	// sess the picked one.
-	sessions []string
-	sess     int
-	stage    int
+	// project is the origin URL of the focused pane's repository, empty
+	// when it has none or it is not read yet, and noProject the person's
+	// pick of a card of the session only.
+	project   string
+	noProject bool
+	stage     int
 	// agents are the harnesses installed on this machine, and agent the
 	// one ctrl+enter starts.
 	agents []spawnAgent
@@ -91,12 +95,6 @@ func (m *OS) OpenTaskCapture() tea.Cmd {
 	}
 	m.taskCapture, m.taskCaptureClosed = s, false
 	s.field, s.notice, s.busy = tcTask, "", false
-	cur := ""
-	if s.sess < len(s.sessions) {
-		cur = s.sessions[s.sess]
-	}
-	s.sessions = append([]string{m.SessionName}, m.otherSessionNames()...)
-	s.sess = max(slices.Index(s.sessions, cur), 0)
 	s.ed.SetPreviewer(m.replyPreviewer())
 	c := m.newReplyMentions("", "")
 	if !m.BrowserClient && (!m.RemoteClient || m.SSHIsLoopback) {
@@ -104,7 +102,47 @@ func (m *OS) OpenTaskCapture() tea.Cmd {
 	}
 	s.ed.SetCompleter(c)
 	s.wires = draftWires{mentions: c}
-	return tcAgentsCmd()
+	s.project = ""
+	return tea.Batch(tcAgentsCmd(), tcProjectCmd(c.dir))
+}
+
+// tcProjectMsg carries the origin URL of the folder the sheet opened in,
+// read off the update loop.
+type tcProjectMsg struct{ url string }
+
+// tcProjectCmd reads dir's origin URL. A folder on no machine this client
+// can read (a remote client) has none.
+func tcProjectCmd(dir string) tea.Cmd {
+	if dir == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		url, err := worktree.OriginURL(dir)
+		if err != nil || worktree.NormalizeRemote(url) == "" || strings.HasPrefix(worktree.NormalizeRemote(url), "file:") {
+			return tcProjectMsg{}
+		}
+		return tcProjectMsg{url: url}
+	}
+}
+
+// applyTCProject takes the folder's project.
+func (m *OS) applyTCProject(msg tcProjectMsg) {
+	if s := m.taskCapture; s != nil {
+		s.project = msg.url
+	}
+}
+
+// projectLabel is the project pill's value: the repository as host and
+// path without the host, or none.
+func (s *taskCapture) projectLabel() string {
+	if s.project == "" || s.noProject {
+		return "None, this session"
+	}
+	p := worktree.NormalizeRemote(s.project)
+	if _, path, ok := strings.Cut(p, "/"); ok {
+		return path
+	}
+	return p
 }
 
 // tcAgentsMsg carries the installed harnesses, read off the update loop.
@@ -206,8 +244,10 @@ func (m *OS) TaskCaptureKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	step := func(i, n int) int { return (i + d + n) % max(n, 1) }
 	switch s.field {
-	case tcSession:
-		s.sess = step(s.sess, len(s.sessions))
+	case tcProject:
+		if s.project != "" && d != 0 {
+			s.noProject = !s.noProject
+		}
 	case tcStage:
 		s.stage = step(s.stage, len(tcStages))
 	case tcAgent:
@@ -265,7 +305,15 @@ func (m *OS) taskCaptureFile(start bool) tea.Cmd {
 		s.notice, s.field = "No agent is installed on this machine to start.", tcAgent
 		return nil
 	}
-	sess := s.sessions[s.sess]
+	sess := m.SessionName
+	project := ""
+	if !s.noProject {
+		project = s.project
+	}
+	where := sess
+	if project != "" {
+		where = s.projectLabel()
+	}
 	stage := tcStages[s.stage]
 	var agent spawnAgent
 	if start {
@@ -289,6 +337,9 @@ func (m *OS) taskCaptureFile(start bool) tea.Cmd {
 		if prompt != "" {
 			params["prompt"] = prompt
 		}
+		if project != "" {
+			params["project"] = project
+		}
 		raw, err := call("add-task", params, 10*time.Second)
 		if err != nil {
 			return tcFiledMsg{err: err}
@@ -297,7 +348,7 @@ func (m *OS) taskCaptureFile(start bool) tea.Cmd {
 		if err := jsonx.Unmarshal(raw, &row); err != nil || row.ID == "" {
 			return tcFiledMsg{err: errfmt.Errorf("read the add-task answer: no card id")}
 		}
-		filed := "Added " + row.ID + " to " + sess + "."
+		filed := "Added " + row.ID + " to " + where + "."
 		if !start {
 			return tcFiledMsg{text: filed}
 		}

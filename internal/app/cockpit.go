@@ -291,9 +291,12 @@ type cockpitState struct {
 	// board, and boardErr why it refused to list the cards otherwise.
 	// boardFolded flips a stage's fold (Done starts folded), and boardOpened
 	// shows every row of a long one, by stage. card is the Card tab's
-	// detail, and cardWant says a frame drew it stale. See cockpit_board.go.
+	// detail, and cardWant says a frame drew it stale. farCards are the
+	// project cards of the linked machines, read when the board opens, and
+	// a part of cards too. See cockpit_board.go.
 	board                    bool
 	cards                    []session.TaskRow
+	farCards                 []session.TaskRow
 	cardsGen                 uint64
 	noBoard                  bool
 	boardErr                 string
@@ -1355,7 +1358,7 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		m.cockpitOpenGroupMenu()
 		return nil
 	case "board":
-		m.CockpitToggleBoard()
+		return m.CockpitToggleBoard()
 	case "search":
 		m.InboxStartSelect()
 	case "scope":
@@ -1711,8 +1714,7 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		}
 		return m.CockpitNewAgent(), true
 	case config.ActionInboxBoard:
-		m.CockpitToggleBoard()
-		return nil, true
+		return m.CockpitToggleBoard(), true
 	case config.ActionInboxViewList:
 		m.CockpitToggleList()
 		return nil, true

@@ -520,9 +520,12 @@ See [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-list-windows).
 
 `Ctrl+B +` opens the task capture sheet from any mode. Write the task: the
 first line is the card's title, and the rest, with any image you paste (its
-path, or `ctrl+v`), is its prompt. Under it, `Session` picks the session the
-card goes to, `Stage` is Todo or Plan first, and `Agent to start` is the agent
-`ctrl+enter` starts. `tab` steps through them and the arrows change one.
+path, or `ctrl+v`), is its prompt. The card goes to the current session.
+Under it, `Project` is the repository of the focused pane's folder, by its
+origin URL, so the card shows on that repository's board in every session and
+on linked machines; the arrows turn it to `None, this session` for a card of
+the session only. `Stage` is Todo or Plan first, and `Agent to start` is the
+agent `ctrl+enter` starts. `tab` steps through them and the arrows change one.
 `enter` adds the card and closes. `ctrl+enter` adds it and starts the agent on
 it, which holds the card from the start; with Plan first it starts in the
 agent's own plan mode where it has one. `esc` closes and keeps the draft for
@@ -1938,6 +1941,13 @@ draft, as `esc` does. In the `@` list `tab` still puts the entry in.
 On the board's columns, `h` `l` go between the columns, `j` `k` between the
 cards, `n` adds a card, and `enter` on a free card opens the New agent sheet
 on it. See [AGENT_STATE.md](AGENT_STATE.md#the-agents-view).
+
+When the board opens, it also reads the project cards of each linked machine
+(`tuios task ls --hosts`). Such a card says `on HOST`, and its holder, if it
+has one, is a pane on another machine. The view does not change it: `t` and
+`n` on it show the command to run in the agent's pane,
+`tuios task claim ID -s HOST:SESSION`, and its Card tab names
+`tuios task get`, which reads it from its machine.
 
 A bulk key acts only on the marked agents the list shows. An agent in a
 folded group, or one a search hides, is left out, and closing the view clears

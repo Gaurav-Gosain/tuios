@@ -14559,3 +14559,30 @@ this branch with one change:
 The steps are in `task-project-hosts.txt` under the test's artifact folder.
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestProjectCardsAreClaimedFromAnotherMachine$' -v .`.
+
+## TestTheBoardShowsTheLinkedMachinesProjectCards
+
+home links to build. build owns two project cards, one held by a pane on
+home, and a session card; home owns a project card. The board on home must
+show build's project cards as "on build", never build's session card, and
+`t` and `L` on a far card must change no card on either machine.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes. Two controls:
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The daemon commit alone (d11eaf85a, no board change) | "waiting for the far cards on the board: timed out" | **caught** |
+| `L` on a far card calls set-task-stage on this machine (the `Host` guard in `kanbanSetStage` dropped) | "waiting for the toast for a far move: timed out" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTheBoardShowsTheLinkedMachinesProjectCards$' -v .`.
+
+## TestTaskCaptureFromAnywhere (Project pill)
+
+The sheet opens in a pane whose folder is a clone of acme/api. The first card
+must carry project example.com/acme/api, and the second, with the pill turned
+to "None, this session", none.
+
+Run on 2026-11-08 on macOS (arm64) on the daemon commit alone (d11eaf85a,
+the sheet still has a Session pill): "waiting for the capture sheet from
+terminal mode: timed out". **caught**

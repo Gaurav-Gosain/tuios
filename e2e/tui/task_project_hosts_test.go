@@ -95,43 +95,7 @@ func TestProjectCardsAreClaimedFromAnotherMachine(t *testing.T) {
 		fmt.Fprintf(&report, format+"\n", args...)
 	}
 
-	// Each machine links to the other.
-	writeHosts := func(root, name, peer string) []string {
-		ssh := writeFakeSSHTo(t, root, peer)
-		dir := filepath.Join(xdgDir(root, "XDG_CONFIG_HOME"), "tuios")
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			t.Fatal(err)
-		}
-		cfg := "[hosts." + name + "]\naddr = \"someone@" + name + "box\"\ncommand = \"" + tuiosBin + "\"\nconnect_timeout = 5\n"
-		if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(cfg), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		return []string{"TUIOS_SSH=" + ssh}
-	}
-	homeEnv := writeHosts(base, "build", remote)
-	buildEnv := writeHosts(remote, "home", base)
-	// home's daemon runs before build dials it: a link to a machine with no
-	// daemon reports no_daemon, and does not start one.
-	if out, err := tuiosCLIEnv(t, base, homeEnv, "new", "home", "--detach"); err != nil {
-		t.Fatalf("start home's daemon: %v\n%s", err, out)
-	}
-	for _, s := range []string{"far", "far2"} {
-		if out, err := tuiosCLIEnv(t, remote, buildEnv, "new", s, "--detach"); err != nil {
-			t.Fatalf("start build's session %s: %v\n%s", s, err, out)
-		}
-	}
-	// "up" alone also matches "the host is up and no tuios daemon is
-	// running", so wait for each machine to answer the other's listing. A
-	// link that first found no daemon dials again on its own.
-	for _, root := range []string{base, remote} {
-		deadline := time.Now().Add(45 * time.Second)
-		for len(listProject(t, root, "https://example.com/x/y", true).HostsDown) > 0 {
-			if time.Now().After(deadline) {
-				t.Fatalf("ASSERTION: the links never came up: %s", mustCLI(t, root, "hosts"))
-			}
-			time.Sleep(250 * time.Millisecond)
-		}
-	}
+	startLinkedPair(t, base, remote, "far", "far2")
 
 	// Two sessions of one repository on build, under two spellings of its
 	// URL, a card of a session only, and a card on home.
@@ -281,4 +245,49 @@ func TestProjectCardsAreClaimedFromAnotherMachine(t *testing.T) {
 		t.Errorf("ASSERTION: far t1's history holds %d claims, want %d (a retry by the holder adds none):\n%s", got, wantClaims, hist)
 	}
 	saveText(t, "task-project-hosts", report.String())
+}
+
+// startLinkedPair starts home's daemon at base with session home, and
+// build's at remote with sessions, each machine linked to the other through
+// the ssh stand-in, and waits until each answers the other's listing.
+func startLinkedPair(t *testing.T, base, remote string, sessions ...string) {
+	t.Helper()
+	// Each machine links to the other.
+	writeHosts := func(root, name, peer string) []string {
+		ssh := writeFakeSSHTo(t, root, peer)
+		dir := filepath.Join(xdgDir(root, "XDG_CONFIG_HOME"), "tuios")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		cfg := "[hosts." + name + "]\naddr = \"someone@" + name + "box\"\ncommand = \"" + tuiosBin + "\"\nconnect_timeout = 5\n"
+		if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(cfg), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return []string{"TUIOS_SSH=" + ssh}
+	}
+	homeEnv := writeHosts(base, "build", remote)
+	buildEnv := writeHosts(remote, "home", base)
+	// home's daemon runs before build dials it: a link to a machine with no
+	// daemon reports no_daemon, and does not start one.
+	if out, err := tuiosCLIEnv(t, base, homeEnv, "new", "home", "--detach"); err != nil {
+		t.Fatalf("start home's daemon: %v\n%s", err, out)
+	}
+	for _, s := range sessions {
+		if out, err := tuiosCLIEnv(t, remote, buildEnv, "new", s, "--detach"); err != nil {
+			t.Fatalf("start build's session %s: %v\n%s", s, err, out)
+		}
+	}
+	// "up" alone also matches "the host is up and no tuios daemon is
+	// running", so wait for each machine to answer the other's listing. A
+	// link that first found no daemon dials again on its own.
+	for _, root := range []string{base, remote} {
+		deadline := time.Now().Add(45 * time.Second)
+		for len(listProject(t, root, "https://example.com/x/y", true).HostsDown) > 0 {
+			if time.Now().After(deadline) {
+				t.Fatalf("ASSERTION: the links never came up: %s", mustCLI(t, root, "hosts"))
+			}
+			time.Sleep(250 * time.Millisecond)
+		}
+	}
+
 }

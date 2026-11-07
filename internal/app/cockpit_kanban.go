@@ -249,6 +249,12 @@ func (m *OS) kanbanSetStage(c session.TaskRow, stage string) tea.Cmd {
 	if c.Stage == stage {
 		return nil
 	}
+	if c.Host != "" {
+		// set-task-stage names a session of this machine, which may hold a
+		// card of the same id.
+		m.ShowNotification(c.ID+" is on "+printableTitle(c.Host)+". Move it on that machine.", "info", m.Settings.NotificationDuration)
+		return nil
+	}
 	nonce, ok := m.signedNonce()
 	if !ok {
 		return nil
@@ -547,12 +553,14 @@ func (m *OS) kanbanHints() []overlay.Hint {
 	case ok && r.kind == ckRowCard:
 		c := ck.cards[r.card]
 		switch {
+		case c.Host != "":
+			// A card of another machine is changed there.
 		case c.Holder != nil:
 			hints = append(hints, m.keyHints(config.ActionInboxGo, "open pane")...)
 		case c.Stage != session.TaskStageDone && c.Blocked == nil:
 			hints = append(hints, m.keyHints(config.ActionInboxGo, "start agent")...)
 		}
-		if prev, next := m.inboxKey(config.ActionInboxStagePrev), m.inboxKey(config.ActionInboxStageNext); prev != "" && next != "" {
+		if prev, next := m.inboxKey(config.ActionInboxStagePrev), m.inboxKey(config.ActionInboxStageNext); prev != "" && next != "" && c.Host == "" {
 			hints = append(hints, overlay.Hint{Key: prev + " " + next, Label: "move card"})
 		}
 		if win := m.ckTakeWindow(c); win != "" && (c.Holder == nil || c.Holder.Window != win) && c.Stage != session.TaskStageDone {
@@ -917,6 +925,10 @@ func (m *OS) drawKanbanCard(c *ckCanvas, l ckLook, r ckRow, title []string, x, y
 			holder = t
 		}
 	}
+	free := "free"
+	if card.Host != "" {
+		free += " on " + printableTitle(card.Host)
+	}
 	lx := x + 2
 	switch {
 	case card.Blocked != nil:
@@ -925,14 +937,17 @@ func (m *OS) drawKanbanCard(c *ckCanvas, l ckLook, r ckRow, title []string, x, y
 	case card.Holder != nil:
 		g, gInk := l.ckMark(state, e.DoneSeen)
 		lx = c.text(lx, my, rx, ckSeg{t: g + " ", fg: ink(gInk)})
-		if card.Session != m.SessionName {
+		switch {
+		case card.Host != "":
+			holder += " on " + printableTitle(card.Host)
+		case card.Session != m.SessionName:
 			holder += " in " + printableTitle(card.Session)
 		}
 		c.text(lx, my, rx, ckSeg{t: ckTrunc(holder, rx-lx), fg: ink(pal.Fg)})
 	case card.Stage == session.TaskStageDone:
 		c.text(lx, my, rx, ckSeg{t: l.ckStateMark("done", ckGlyphReview) + " ", fg: ink(pal.Success)}, ckSeg{t: "done", fg: ink(pal.FgMute)})
 	default:
-		c.text(lx, my, rx, ckSeg{t: l.ckStateMark("idle", ckGlyphIdle) + " ", fg: ink(pal.FgMute)}, ckSeg{t: "free", fg: ink(pal.FgMute)})
+		c.text(lx, my, rx, ckSeg{t: l.ckStateMark("idle", ckGlyphIdle) + " ", fg: ink(pal.FgMute)}, ckSeg{t: ckTrunc(free, max(rx-lx-2, 0)), fg: ink(pal.FgMute)})
 	}
 	c.mark(pal, x+1, y, w-1, h, overlay.RowState{Cursor: cursor, Focused: cursor, Hover: hover})
 	ck.hits = append(ck.hits, ckHit{x0: x, y0: top + y, x1: x + w, y1: top + y + h, kind: ckHitRow, key: r.key})

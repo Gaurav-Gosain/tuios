@@ -68,7 +68,7 @@ func (m *OS) renderTaskCapture() (string, overlay.Geometry) {
 	}
 	y += box + 1
 
-	// The pills: where the card goes, its stage, and the agent ctrl+enter
+	// The pills: the card's project, its stage, and the agent ctrl+enter
 	// starts. Each steps with the arrows.
 	px := x
 	stage := "Todo"
@@ -79,14 +79,10 @@ func (m *OS) renderTaskCapture() (string, overlay.Geometry) {
 	if s.agent < len(s.agents) {
 		agent = s.agents[s.agent].cmd
 	}
-	sess := ""
-	if s.sess < len(s.sessions) {
-		sess = s.sessions[s.sess]
-	}
 	for _, p := range []struct {
 		f            tcField
 		label, value string
-	}{{tcSession, "Session", sess}, {tcStage, "Stage", stage}, {tcAgent, "Agent to start", agent}} {
+	}{{tcProject, "Project", s.projectLabel()}, {tcStage, "Stage", stage}, {tcAgent, "Agent to start", agent}} {
 		ink := pal.FgDim
 		if s.field == p.f {
 			ink = t.key
