@@ -14727,3 +14727,24 @@ a build that hands back nothing passes every test here, as does
 `TestHoldThenRailHandsBackTerminalMode`. Enter on a terminal row, the
 relocating action a test can reach, keeps the mode it began in. This is
 written down so the guard is not read as coverage of the hand-back.
+
+## The scratch pane beneath a hold
+
+`TestScratchShownDuringAHoldHandsBackTerminalMode` (`scratch_lease_mode_test.go`)
+binds the hold key to left Option. In terminal mode it holds the key, shows
+the scratch pane with the leader and g, lets go, runs a line in the scratch
+shell, hides the scratch pane, and asks the pane's shell to answer. The
+scratch pane saved the mode in effect when shown, which was the hold's
+borrowed window management, and hiding it handed that back. It now saves
+`chosenMode`.
+
+Run on 2026-11-08 on macOS (arm64):
+
+| Removed | Test | Failure | Result |
+|---------|------|---------|--------|
+| The fix (main at c4e977d25) | `TestScratchShownDuringAHoldHandsBackTerminalMode` | "command \"echo back-$((3+4))\" never produced \"back-7\"" | **caught** |
+| The fix (its parent, "make the rail a lease on the keyboard") | the same | the same | **caught** |
+
+The fixed build passes 3 of 3. On that Mac `TestScratchTerminalShowsOneShell`
+fails on main and on the branch alike, at its check of the new shell's
+folder.

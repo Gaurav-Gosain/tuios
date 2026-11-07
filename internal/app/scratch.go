@@ -273,9 +273,15 @@ func (m *OS) toggleScratch(spec scratchSpec) tea.Cmd {
 }
 
 // rememberScratchReturn records the pane and the mode to go back to when the
-// scratch group hides.
+// scratch group hides. The mode is the one chosen beneath any borrow: shown
+// while the hold key is down, the mode in effect is the hold's window
+// management, and hiding the group handed that back to a person who had been
+// typing in a pane.
+//
+// The scratch view is not a lease (mode.go): it lasts across any number of
+// actions and choices, and showing it is itself a choice of terminal mode.
 func (m *OS) rememberScratchReturn() {
-	m.scratchReturnMode = m.Mode
+	m.scratchReturnMode = m.chosenMode()
 	m.scratchReturnID = ""
 	if w := m.GetFocusedWindow(); w != nil && !isScratch(w) {
 		m.scratchReturnID = w.ID
