@@ -2263,6 +2263,10 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 			room--
 			base--
 		}
+		// Copy mode draws the thread as it holds it.
+		if m.drawThreadCopy(c, t, x, w, base-room, room) {
+			return
+		}
 		lines := m.threadBody(e, w, room+up, now)
 		var hits []string
 		if t != nil && len(t.hits) == len(lines) {
