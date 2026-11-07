@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -464,16 +465,29 @@ func run(dir string, args ...string) (string, error) {
 }
 
 // runEnv is run with extra environment entries.
+//
+//go:noinline
 func runEnv(dir string, env []string, args ...string) (string, error) {
-	// Git sets nothing interactive: a git that waits on a terminal for a
-	// credential or an editor would hang the daemon.
-	cmd := childproc.Git(context.Background(), dir, args...)
+	return runGit(context.Background(), dir, env, nil, args...)
+}
+
+// runGit runs git in dir with the repository's environment, env and stdin
+// added, bounded by ctx, and returns its stdout. Git sets nothing
+// interactive: a git that waits on a terminal for a credential or an editor
+// would hang the daemon. A failure carries git's own stderr, which is the
+// message a person needs, or the context's error when ctx ended the run.
+func runGit(ctx context.Context, dir string, env []string, stdin io.Reader, args ...string) (string, error) {
+	cmd := childproc.Git(ctx, dir, args...)
 	cmd.Env = append(cmd.Env, gitstate.Find(dir).GitEnv()...)
 	cmd.Env = append(cmd.Env, env...)
+	cmd.Stdin = stdin
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return "", errfmt.Errorf("git %s: %w", args[0], ctx.Err())
+		}
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
 			msg = err.Error()

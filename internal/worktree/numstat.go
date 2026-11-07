@@ -1,14 +1,12 @@
 package worktree
 
 import (
-	"bytes"
 	"context"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
-	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 )
@@ -362,22 +360,8 @@ func ChangesCtx(ctx context.Context, path string) (int, error) {
 
 // runCtx is runEnv bounded by ctx: a git that takes longer than the caller
 // can wait is killed.
+//
+//go:noinline
 func runCtx(ctx context.Context, dir string, env []string, args ...string) (string, error) {
-	cmd := childproc.Git(ctx, dir, args...)
-	cmd.Env = append(cmd.Env, gitstate.Find(dir).GitEnv()...)
-	cmd.Env = append(cmd.Env, env...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		if ctx.Err() != nil {
-			return "", errfmt.Errorf("git %s: %w", args[0], ctx.Err())
-		}
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			msg = err.Error()
-		}
-		return "", errfmt.Errorf("git %s: %s", args[0], msg)
-	}
-	return stdout.String(), nil
+	return runGit(ctx, dir, env, nil, args...)
 }
