@@ -54,6 +54,9 @@ func writeFakeSSHMulti(t *testing.T, dir string, bases map[string]string) string
 			b.WriteString(xdgDir(base, key))
 			b.WriteString("\n")
 		}
+		// farProxies finds this machine's link proxy under the pid.
+		b.WriteString("    ")
+		b.WriteString(recordFakeSSHPid(base))
 		b.WriteString("    ;;\n")
 	}
 	b.WriteString("  *) echo \"ssh: Could not resolve hostname $addr\" >&2; exit 255 ;;\nesac\n")
