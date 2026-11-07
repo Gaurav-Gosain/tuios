@@ -1163,7 +1163,7 @@ func (m *OS) reviewKey(action string) string {
 	if reg == nil {
 		reg = defaultInboxKeys()
 	}
-	for _, k := range reg.GetReviewKeys(action) {
+	for _, k := range reg.Keys(config.TableReview, action) {
 		if k = strings.TrimSpace(k); k != "" {
 			return k
 		}

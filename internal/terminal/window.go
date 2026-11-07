@@ -466,6 +466,10 @@ type Window struct {
 	// this one, as the daemon recorded it. Both are empty when no pane did.
 	StartedBySession string
 	StartedByWindow  string
+	// AgentChild marks an agent pane another agent started: the StartedBy
+	// pane is its parent agent, and the rail draws its row under the
+	// parent's.
+	AgentChild bool
 	// AgentMeta is what the pane reported about its agent through
 	// set-agent-meta, as the daemon synced it. The rail draws it. Replaced
 	// whole on every sync and never edited in place.
@@ -855,7 +859,7 @@ func NewWindowIn(dir, id, title string, x, y, width, height, z int, exitChan cha
 	termType, colorTerm := getTerminalEnv()
 
 	// Debug logging for terminal environment
-	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+	if debuglog.Enabled() {
 		debugMsg := fmt.Sprintf("[%s] NewWindow TERM=%s COLORTERM=%s (envTERM=%s envCOLORTERM=%s)\n",
 			time.Now().Format("15:04:05.000"), termType, colorTerm, os.Getenv("TERM"), os.Getenv("COLORTERM"))
 		if f, err := debuglog.Open(debuglog.Path); err == nil {

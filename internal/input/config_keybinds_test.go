@@ -72,7 +72,7 @@ func TestRebindingAPrefixKeyTakesEffect(t *testing.T) {
 			override: func(k *config.KeybindingsConfig) {
 				k.WindowPrefix["window_prefix_tiling"] = []string{"g"}
 			},
-			arm:    func(o *app.OS) { o.TilingPrefixActive = true },
+			arm:    func(o *app.OS) { o.SubMenu = app.SubMenuTiling },
 			route:  HandleTilingPrefixCommand,
 			newKey: "g", oldKey: "t",
 			done: func(o *app.OS) bool { return o.AutoTiling },
@@ -82,7 +82,7 @@ func TestRebindingAPrefixKeyTakesEffect(t *testing.T) {
 			override: func(k *config.KeybindingsConfig) {
 				k.WorkspacePrefix["workspace_prefix_switch_3"] = []string{"g"}
 			},
-			arm:    func(o *app.OS) { o.WorkspacePrefixActive = true },
+			arm:    func(o *app.OS) { o.SubMenu = app.SubMenuWorkspace },
 			route:  HandleWorkspacePrefixCommand,
 			newKey: "g", oldKey: "3",
 			done: func(o *app.OS) bool { return o.CurrentWorkspace == 3 },
@@ -92,7 +92,7 @@ func TestRebindingAPrefixKeyTakesEffect(t *testing.T) {
 			override: func(k *config.KeybindingsConfig) {
 				k.DebugPrefix["debug_prefix_logs"] = []string{"g"}
 			},
-			arm:    func(o *app.OS) { o.DebugPrefixActive = true },
+			arm:    func(o *app.OS) { o.SubMenu = app.SubMenuDebug },
 			route:  HandleDebugPrefixCommand,
 			newKey: "g", oldKey: "l",
 			done: func(o *app.OS) bool { return o.ShowLogs },
@@ -102,7 +102,7 @@ func TestRebindingAPrefixKeyTakesEffect(t *testing.T) {
 			override: func(k *config.KeybindingsConfig) {
 				k.TapePrefix["tape_prefix_manager"] = []string{"g"}
 			},
-			arm:    func(o *app.OS) { o.TapePrefixActive = true },
+			arm:    func(o *app.OS) { o.SubMenu = app.SubMenuTape },
 			route:  HandleTapePrefixCommand,
 			newKey: "g", oldKey: "m",
 			done: func(o *app.OS) bool { return o.ShowTapeManager },
@@ -137,7 +137,7 @@ func TestRebindingAMinimizePrefixKeyTakesEffect(t *testing.T) {
 		})
 		o.Windows = append(o.Windows, &terminal.Window{ID: "w1", Workspace: o.CurrentWorkspace})
 		o.FocusedWindow = 0
-		o.MinimizePrefixActive = true
+		o.SubMenu = app.SubMenuMinimize
 		return o
 	}
 

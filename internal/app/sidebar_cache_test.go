@@ -126,23 +126,23 @@ func TestSidebarCacheServesAndInvalidates(t *testing.T) {
 	}
 	m.SidebarHoverActive = false
 
-	m.SidebarScrollS = 2
+	m.SidebarScroll[sidebarSectionSessions] = 2
 	if m.sidebarSignature() == base {
 		t.Fatal("sessions scroll did not change the signature")
 	}
-	m.SidebarScrollS = 0
+	m.SidebarScroll[sidebarSectionSessions] = 0
 
-	m.SidebarScrollT = 2
+	m.SidebarScroll[sidebarSectionTerminals] = 2
 	if m.sidebarSignature() == base {
 		t.Fatal("terminals scroll did not change the signature")
 	}
-	m.SidebarScrollT = 0
+	m.SidebarScroll[sidebarSectionTerminals] = 0
 
-	m.SidebarScrollA = 2
+	m.SidebarScroll[sidebarSectionAgents] = 2
 	if m.sidebarSignature() == base {
 		t.Fatal("agents scroll did not change the signature")
 	}
-	m.SidebarScrollA = 0
+	m.SidebarScroll[sidebarSectionAgents] = 0
 
 	// MarkAllDirty drops the cache so a theme or config change restyles.
 	sidebarText(t, m)

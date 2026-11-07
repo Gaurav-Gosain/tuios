@@ -101,6 +101,31 @@ type agentRow struct {
 	Seen       int    `json:"seen"`
 	Ready      bool   `json:"ready"`
 	BlockedBy  string `json:"blocked_by"`
+	// Parent and Root are set on an agent another agent started.
+	Parent *agentLinkRef `json:"parent"`
+	Root   *agentLinkRef `json:"root"`
+	// Role is set on a child agent delegate started.
+	Role string `json:"role"`
+}
+
+// agentLinkRef is a pane of an agent's parent chain, as list-agents gives it.
+type agentLinkRef struct {
+	Session string `json:"session"`
+	Window  string `json:"window"`
+	Gone    bool   `json:"gone"`
+}
+
+// agentLinkCell is a parent or root column cell: the pane's short id, and
+// gone once it has closed.
+func agentLinkCell(ref *agentLinkRef) string {
+	if ref == nil {
+		return ""
+	}
+	cell := shortWindowID(ref.Window)
+	if ref.Gone {
+		cell += " (gone)"
+	}
+	return cell
 }
 
 // runListAgents prints the agent panes in a session: the board an orchestrating
@@ -163,6 +188,12 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error
 		return nil
 	}
 
+	// The parent and root columns show only when an agent here has a parent.
+	linked, roles := false, false
+	for _, a := range res.Agents {
+		linked = linked || a.Parent != nil
+		roles = roles || a.Role != ""
+	}
 	rows := make([][]string, 0, len(res.Agents))
 	for _, a := range res.Agents {
 		marker := ""
@@ -186,31 +217,44 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error
 			// session/window form -w and -s take.
 			name = plainLine(a.Session) + "/" + name
 		}
-		rows = append(rows, []string{
+		row := []string{
 			marker + shortWindowID(a.WindowID),
 			name,
 			state,
 			orNone(plainLine(a.HarnessID)),
 			orNone(a.Source),
-			unread,
-			plainLine(a.Message),
-		})
+		}
+		if linked {
+			row = append(row, agentLinkCell(a.Parent), agentLinkCell(a.Root))
+		}
+		if roles {
+			row = append(row, plainLine(a.Role))
+		}
+		rows = append(rows, append(row, unread, plainLine(a.Message)))
 	}
+	headers := []string{"ID", "NAME", "STATE", "HARNESS", "SOURCE"}
+	if linked {
+		headers = append(headers, "PARENT", "ROOT")
+	}
+	if roles {
+		headers = append(headers, "ROLE")
+	}
+	headers = append(headers, "MAIL", "NOTE")
 
 	t := table.New().
 		Border(lipgloss.RoundedBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))).
-		Headers("ID", "NAME", "STATE", "HARNESS", "SOURCE", "MAIL", "NOTE").
+		Headers(headers...).
 		Rows(rows...).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			base := lipgloss.NewStyle().Padding(0, 1)
 			if row == table.HeaderRow {
 				return base.Bold(true).Foreground(lipgloss.Color("12"))
 			}
-			switch col {
-			case 1:
+			switch {
+			case col == 1:
 				return base.Foreground(lipgloss.Color("3")).Bold(true)
-			case 0, 3, 4:
+			case col == 0, col == 3, col == 4, linked && (col == 5 || col == 6):
 				return base.Foreground(lipgloss.Color("8"))
 			default:
 				return base

@@ -23,21 +23,16 @@ func dispatchAction(action string, msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 	return m, cmd, true
 }
 
-// sectionLookup is one of the registry's per-section lookups, named as a method
-// expression at the call site. Each prefix reads its own section, so the same
-// key can mean different things under different prefixes.
-type sectionLookup func(*config.KeybindRegistry, string) string
-
 // runPrefix closes the open sub-prefix and dispatches the key through its
 // section. An unbound key is simply dropped, which is what dismissing a prefix
 // chord should do. In lock mode a repeatable action keeps the sub-prefix open
 // until esc (see lock_mode.go).
-func runPrefix(msg tea.KeyPressMsg, o *app.OS, lookup sectionLookup) (*app.OS, tea.Cmd) {
+func runPrefix(msg tea.KeyPressMsg, o *app.OS, table config.Table) (*app.OS, tea.Cmd) {
 	k := startMenuKey(o)
 	if o.KeybindRegistry == nil || k.leaves(msg) {
 		return o, nil
 	}
-	action := lookupAction(o, msg, func(key string) string { return lookup(o.KeybindRegistry, key) })
+	action := tableAction(o, msg, o.KeybindRegistry, table)
 	if k.refuses(o, action) {
 		k.unbound(msg, o)
 		return o, nil
@@ -62,7 +57,7 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	if o.KeybindRegistry != nil {
-		action := lookupAction(o, msg, o.KeybindRegistry.GetPrefixAction)
+		action := tableAction(o, msg, o.KeybindRegistry, config.TablePrefixMode)
 		if k.refuses(o, action) {
 			k.unbound(msg, o)
 			return o, nil
@@ -125,34 +120,34 @@ func runPrefixWork(action string, o *app.OS) (tea.Cmd, bool) {
 
 // HandleWorkspacePrefixCommand handles the key after leader+w.
 func HandleWorkspacePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	return runPrefix(msg, o, (*config.KeybindRegistry).GetWorkspacePrefixAction)
+	return runPrefix(msg, o, config.TableWorkspacePrefix)
 }
 
 // HandleMinimizePrefixCommand handles the key after leader+m.
 func HandleMinimizePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	return runPrefix(msg, o, (*config.KeybindRegistry).GetMinimizePrefixAction)
+	return runPrefix(msg, o, config.TableMinimizePrefix)
 }
 
 // HandleTilingPrefixCommand handles the key after leader+t (the window prefix).
 func HandleTilingPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	return runPrefix(msg, o, (*config.KeybindRegistry).GetWindowPrefixAction)
+	return runPrefix(msg, o, config.TableWindowPrefix)
 }
 
 // HandleDebugPrefixCommand handles the key after leader+D.
 func HandleDebugPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	return runPrefix(msg, o, (*config.KeybindRegistry).GetDebugPrefixAction)
+	return runPrefix(msg, o, config.TableDebugPrefix)
 }
 
 // HandleTapePrefixCommand handles the key after leader+T.
 func HandleTapePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	return runPrefix(msg, o, (*config.KeybindRegistry).GetTapePrefixAction)
+	return runPrefix(msg, o, config.TableTapePrefix)
 }
 
 // HandleTuiosPrefixCommand handles the key in the tuios menu. A key there may
 // open another menu (leader ctrl+t m is the minimize menu under the tmux
 // preset): the action sets that menu's flag as it does from the leader.
 func HandleTuiosPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	return runPrefix(msg, o, (*config.KeybindRegistry).GetTuiosPrefixAction)
+	return runPrefix(msg, o, config.TableTuiosPrefix)
 }
 
 // handleTerminalModeBinds dispatches the direct (prefix-less) binds from the
@@ -171,7 +166,7 @@ func runTerminalModeBinds(msg tea.KeyPressMsg, o *app.OS) (tea.Cmd, bool) {
 	if o.KeybindRegistry == nil {
 		return nil, false
 	}
-	action := lookupAction(o, msg, o.KeybindRegistry.GetTerminalModeAction)
+	action := tableAction(o, msg, o.KeybindRegistry, config.TableTerminalMode)
 	if o.Mode == app.TerminalMode && isTerminalFocusAction(action) && o.ArmNvimNavigation(nvimNavigationDirection(action)) {
 		return nil, false
 	}
@@ -188,7 +183,7 @@ func runTerminalModeBinds(msg tea.KeyPressMsg, o *app.OS) (tea.Cmd, bool) {
 		return nil, false
 	}
 	action = lookupAction(o, msg, o.KeybindRegistry.GetAction)
-	if !isTerminalSafeAction(action) {
+	if !config.TerminalSafeAction(action) {
 		return nil, false
 	}
 	_, cmd, ok := dispatchAction(action, msg, o)
@@ -215,22 +210,6 @@ func isReservedTerminalChord(msg tea.KeyPressMsg) bool {
 	// only applies on darwin (macOptionChord enforces that).
 	_, ok := macOptionChord(msg)
 	return ok
-}
-
-// isTerminalSafeAction reports whether a main-section action may be triggered
-// from terminal mode. Only navigation between workspaces, sessions and agent
-// panes qualifies:
-// everything else in that section is a window-management verb whose keys must
-// reach the shell.
-func isTerminalSafeAction(action string) bool {
-	return strings.HasPrefix(action, "switch_workspace_") ||
-		strings.HasPrefix(action, "move_and_follow_") ||
-		strings.HasPrefix(action, "send_to_workspace_") ||
-		strings.HasPrefix(action, "switch_session_") ||
-		action == "next_workspace" || action == "prev_workspace" ||
-		action == "next_session" || action == "prev_session" ||
-		action == "next_host" || action == "prev_host" ||
-		action == "next_agent" || action == "prev_agent"
 }
 
 // forwardKeyToFocusedWindow sends a key to the focused window's PTY, using CSI u

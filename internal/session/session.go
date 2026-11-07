@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"io"
 
+	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	"github.com/Gaurav-Gosain/tuios/internal/dnd"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 
@@ -40,7 +41,7 @@ import (
 
 // debugEnabled returns true if debug logging is enabled via TUIOS_DEBUG_INTERNAL env var
 func debugEnabled() bool {
-	return os.Getenv("TUIOS_DEBUG_INTERNAL") == "1"
+	return debuglog.Enabled()
 }
 
 // debugLog logs a message only if debug mode is enabled
@@ -408,6 +409,76 @@ type WindowState struct {
 	// it, and it is saved so a restored pane keeps it. Older peers and older
 	// state read it as absent.
 	StartedBy *PaneRef `json:"started_by,omitempty"`
+	// AgentLink is set on an agent pane another agent started: StartedBy is
+	// then its parent, and this is the rest of the chain. Nil for every other
+	// pane. Daemon-owned like StartedBy, and saved, so a restored or handed
+	// over pane keeps it. See agent_parent.go.
+	AgentLink *AgentLink `json:"agent_link,omitempty"`
+	// Delegation is set on an agent pane the delegate verb started: the
+	// task's role, how it runs, and where it is. Nil for every other pane.
+	// Daemon-owned like AgentLink, and saved, so a handed over pane keeps
+	// it. See verb_delegate.go.
+	Delegation *Delegation `json:"delegation,omitempty"`
+}
+
+// Delegation is the record of a task one agent handed to a child agent with
+// delegate. It is written when the child gets its prompt and changed only by
+// the daemon: when the child asks a question, and once when it finishes.
+// The record is replaced on every change, never written in place, because
+// older copies of the state share it.
+type Delegation struct {
+	// Role names the job: implementation, research, review, design, test
+	// or general.
+	Role string `json:"role"`
+	// Isolation is shared, the parent's checkout, or worktree, a worktree
+	// made from the parent's commit.
+	Isolation string `json:"isolation"`
+	// Mode is async, the call returned at once, or wait, the call waited
+	// for the outcome.
+	Mode string `json:"mode"`
+	// By is the pane whose call delegated the task, empty for a call from
+	// outside every pane. A wake of the parent is typed with its authority.
+	By string `json:"by,omitempty"`
+	// Parent is the pane the result is mailed to, nil when there is none: a
+	// delegate with wait from outside every pane.
+	Parent *PaneRef `json:"parent,omitempty"`
+	// Worktree is the worktree the child works in, and Base the commit it
+	// was made from, for worktree isolation.
+	Worktree string `json:"worktree,omitempty"`
+	Base     string `json:"base,omitempty"`
+	// StartedAt is the unix-milli time the prompt was typed. A state the
+	// child reaches after it is the child's answer to the task.
+	StartedAt int64 `json:"started_at"`
+	// State is working, asking, done, errored, closed or stopped.
+	// FinishedAt is the unix-milli time it became done, errored or stopped,
+	// zero before.
+	State      string `json:"state"`
+	FinishedAt int64  `json:"finished_at,omitempty"`
+	// AskedAt is the unix-milli time the child came to a question, zero
+	// while it asks none. QuestionMail is the message that told the parent,
+	// zero when no message was sent (an approval, or a call that waited).
+	AskedAt      int64  `json:"asked_at,omitempty"`
+	QuestionMail uint64 `json:"question_mail,omitempty"`
+	// ResultMail is the message that carried the answer to the parent, zero
+	// when none was sent.
+	ResultMail uint64 `json:"result_mail,omitempty"`
+}
+
+// AgentLink is what a child agent pane knows of the agent that started it,
+// beyond the parent pane itself (WindowState.StartedBy).
+type AgentLink struct {
+	// Harness is the parent's harness id when the child started, empty when
+	// nothing named one.
+	Harness string `json:"harness,omitempty"`
+	// AgentSessionID is the parent harness's own conversation id when the
+	// child started, empty until a hook reported one.
+	AgentSessionID string `json:"agent_session_id,omitempty"`
+	// Root is the first agent of the chain: the parent's root, or the parent
+	// when it has none.
+	Root PaneRef `json:"root"`
+	// Depth is how many links lead from the root to this pane: 1 for a child
+	// of the root. It is at most agentLinkMaxDepth.
+	Depth int `json:"depth"`
 }
 
 // PaneRef names a pane by its session and window id.
@@ -4180,8 +4251,9 @@ func (s *Session) windowSummaries() []WindowSummary {
 			Workspace:     w.Workspace,
 			// The rail pane is left out of a rail's rows as the scratch
 			// terminal is, and an older reader knows only this mark.
-			Scratch: w.Scratch || w.Rail != "",
-			Note:    w.Note,
+			Scratch:     w.Scratch || w.Rail != "",
+			Note:        w.Note,
+			AgentParent: agentParentRef(*w),
 		})
 	}
 	return out

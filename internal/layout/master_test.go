@@ -3,8 +3,6 @@ package layout
 import (
 	"fmt"
 	"testing"
-
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // The ways the master layout can fail, written down before the code:
@@ -31,7 +29,7 @@ func legacyMasterStack(n, screenWidth, usableHeight, topMargin int, masterRatio,
 	}
 	layouts := make([]TileLayout, 0, n)
 	if masterRatio <= 0 {
-		masterRatio = float64(config.MasterRatioDefault) / 100
+		masterRatio = float64(MasterRatioDefault) / 100
 	}
 	masterRatio = clampSplitRatio(masterRatio)
 	switch n {
@@ -99,7 +97,7 @@ func checkMasterLayout(t *testing.T, n, w, h, top int, p MasterParams) {
 	}
 
 	// 1
-	if (p.Position == "" || p.Position == config.MasterPositionLeft) && p.Count <= 1 && p.Grid {
+	if (p.Position == "" || p.Position == MasterPositionLeft) && p.Count <= 1 && p.Grid {
 		want := legacyMasterStack(n, w, h, top, p.Ratio, p.StackRatio, p.Gap)
 		for i := range want {
 			if got[i] != want[i] {
@@ -119,15 +117,15 @@ func checkMasterLayout(t *testing.T, n, w, h, top int, p MasterParams) {
 		for i, sr := range stack {
 			var ok bool
 			switch shape.position {
-			case config.MasterPositionLeft:
+			case MasterPositionLeft:
 				ok = mr.X+mr.Width <= sr.X
-			case config.MasterPositionRight:
+			case MasterPositionRight:
 				ok = sr.X+sr.Width <= mr.X
-			case config.MasterPositionTop:
+			case MasterPositionTop:
 				ok = mr.Y+mr.Height <= sr.Y
-			case config.MasterPositionBottom:
+			case MasterPositionBottom:
 				ok = sr.Y+sr.Height <= mr.Y
-			case config.MasterPositionCenter:
+			case MasterPositionCenter:
 				// Alternating: the first stack pane right, the next left.
 				if i%2 == 0 {
 					ok = mr.X+mr.Width <= sr.X
@@ -165,7 +163,7 @@ func checkMasterLayout(t *testing.T, n, w, h, top int, p MasterParams) {
 }
 
 func FuzzMasterLayout(f *testing.F) {
-	positions := config.MasterPositions
+	positions := MasterPositions
 	for _, pos := range positions {
 		for n := 1; n <= 7; n++ {
 			f.Add(n, 160, 46, 1, 1, uint8(50), uint8(0), uint8(0), true, pos)
@@ -199,7 +197,7 @@ func FuzzMasterLayout(f *testing.F) {
 // Neighbour focus in every master position and with more than one master: a
 // step always lands on a pane that touches the one it left.
 func TestNeighbourOnMasterPositions(t *testing.T) {
-	for _, pos := range config.MasterPositions {
+	for _, pos := range MasterPositions {
 		for _, count := range []int{1, 2} {
 			for n := 2; n <= 7; n++ {
 				t.Run(fmt.Sprintf("%s/%d masters/%d panes", pos, count, n), func(t *testing.T) {

@@ -425,9 +425,16 @@ var targets = []*Target{
 		},
 	},
 	{
-		// Version 3 reports the selected transcript leaf, including tree
-		// navigation with no file append, and serializes report delivery.
-		ID: Pi, Name: "Pi", Binary: "pi", Version: 3, Reports: ReportsState,
+		// Version 3 reported the selected transcript leaf, including tree
+		// navigation with no file append, and serialized report delivery.
+		// Version 4 adds Pi's subagent events, so the cockpit and rail can
+		// name the runs a pi pane handed work to. A management call of the
+		// subagent tool reports nothing, a background workflow's tool result
+		// reports nothing (its rows ride the async and child-status events),
+		// a foreground run's id keeps to the daemon's id alphabet, and a
+		// subagent report does not suppress the parent transcript_update
+		// behind it.
+		ID: Pi, Name: "Pi", Binary: "pi", Version: 4, Reports: ReportsState,
 		Source:    "herdr src/integration/assets/pi (TypeScript extensions load from ~/.pi/agent/extensions, or PI_CODING_AGENT_DIR/extensions)",
 		ConfigDir: func(e Env) string { return e.dirFromEnv("PI_CODING_AGENT_DIR", ".pi", "agent") },
 		File:      filepath.Join("extensions", "tuios-agent-state.ts"),

@@ -270,6 +270,9 @@ type Daemon struct {
 	// fanVerifies holds the verify-fan checks running now, one per fan
 	// session. See verb_fan_compare.go.
 	fanVerifies fanVerifyRuns
+	// setups holds the worktree setups running now, one per session, and
+	// the setup config in force. See verb_worktree_setup.go.
+	setups worktreeSetups
 	// respondFromShell is the [daemon] respond_from_shell grant: a caller
 	// outside every pane may call respond without an attach nonce.
 	respondFromShell bool
@@ -342,6 +345,9 @@ type Daemon struct {
 	// mail. Its zero value is ready, and off until SetMailWake. See
 	// mail_wake.go.
 	mailWake mailWaker
+	// delegates are the delegated children the daemon waits on, for their
+	// answer or their question. See verb_delegate.go.
+	delegates delegates
 	// askTurns keeps one ask-agent typing at a pane at a time. See
 	// ask_turns.go.
 	askTurns askTurns
@@ -926,6 +932,11 @@ type DaemonConfig struct {
 	// and fan make are placed by. Empty is the default layout. See
 	// worktree.PathFor.
 	WorktreePath string
+	// WorktreeSetup and WorktreeSetupAsync are [worktree] setup and
+	// setup_async: the command every new worktree runs before its agent, and
+	// whether the agent waits for it. See verb_worktree_setup.go.
+	WorktreeSetup      string
+	WorktreeSetupAsync bool
 	// AgentStallTimeout overrides how long a pane may report working with no
 	// output before the stall heuristic demotes it to idle. Zero falls back to
 	// the TUIOS_AGENT_STALL_SECONDS environment override, then to the default; a
@@ -1022,6 +1033,10 @@ type DaemonConfig struct {
 	// MailWakeOff is [agents.mail] wake = false: an agent at rest is not
 	// told about its mail by a typed prompt. See mail_wake.go.
 	MailWakeOff bool
+	// ChildQuestionsToPerson is [agents.mail] questions_to_parent = false:
+	// a delegated child's question goes to the person's Inbox at once, and
+	// not to its parent agent first. See attention_children.go.
+	ChildQuestionsToPerson bool
 	// TaskAutoStageOff is [tasks] auto_stage = false: the daemon moves no
 	// card on its own. See task_auto.go.
 	TaskAutoStageOff bool
@@ -1091,6 +1106,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	// Stored, not set: the wake latches are made below.
 	d.silent.ns.Store(int64(resolveSilentAfter(cfg.AgentSilentAfter)))
 	d.SetMailWake(!cfg.MailWakeOff)
+	d.SetChildQuestionsToParent(!cfg.ChildQuestionsToPerson)
 	d.taskAutoOff.Store(cfg.TaskAutoStageOff)
 	d.openedKeep = cfg.OpenedCopyKeep
 	d.SetCheckpoints(cfg.Checkpoints)
@@ -1110,6 +1126,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.manager.SetReturnWhenEmpty(!cfg.StayOnEmptyWorkspace)
 	d.manager.SetDragAndDrop(cfg.DragAndDrop)
 	d.SetWorktreePath(cfg.WorktreePath)
+	d.setups.setConfig(cfg.WorktreeSetup, cfg.WorktreeSetupAsync)
 	d.agentDetectInterval = resolveAgentDetectInterval(cfg.AgentAutoDetect, cfg.AgentDetectInterval)
 	d.agentsOff.Store(cfg.AgentsOff)
 	d.machineOfferOff.Store(cfg.MachineOfferOff)
@@ -1421,6 +1438,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 			d.agents.forgetInbox(name, ev.Window)
 		}
 		d.noteMailWakeEvent(ev)
+		d.noteDelegateEvent(ev)
 		d.events.publish(streamEvent{
 			Type:       ev.Type,
 			Session:    name,
@@ -2735,10 +2753,13 @@ func (d *Daemon) paneAgentIdentifier(sess *Session) func(ptyID string) agentIden
 		// The agent's own process, not the wrapper above it: a transcript is
 		// checked against the agent's directory and build, and a shell that
 		// launched it has neither.
-		if det, ok := d.agentMatcher.identifyDetail(info); ok {
+		det, ok := d.agentMatcher.identifyDetail(info)
+		if ok {
 			info = det.proc
 		}
-		return paneAgentIdentity(info)
+		id := paneAgentIdentity(info)
+		id.agent = ok
+		return id
 	}
 }
 

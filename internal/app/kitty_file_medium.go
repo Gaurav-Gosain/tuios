@@ -1,12 +1,53 @@
 package app
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/kittyshm"
 	"tuios.dev/vt"
 )
+
+// kittyShmObjectPrefix marks what kittyMediumPath returns for a shared memory
+// object that has no path, as on macOS. Every real path is absolute, so the two
+// cannot be confused. openKittyObject and releaseKittyMedium read it.
+const kittyShmObjectPrefix = "shm-object:"
+
+// kittyShmObject returns the name of the object a path from kittyMediumPath
+// marks, and false for a real path.
+func kittyShmObject(path string) (string, bool) {
+	return strings.CutPrefix(path, kittyShmObjectPrefix)
+}
+
+// kittyObject is an open file medium.
+type kittyObject interface {
+	io.ReadSeekCloser
+	Stat() (os.FileInfo, error)
+}
+
+// shmKittyObject gives kittyshm.Object the shape of an *os.File.
+type shmKittyObject struct{ *kittyshm.Object }
+
+func (o shmKittyObject) Stat() (os.FileInfo, error) { return o.Object.Stat(), nil }
+
+// openKittyObject opens what a path from kittyMediumPath names. flags apply to
+// a file: an object takes none.
+func openKittyObject(path string, flags int) (kittyObject, error) {
+	if name, ok := kittyShmObject(path); ok {
+		o, err := kittyshm.Open(name, maxPassthroughTransmitBytes)
+		if err != nil {
+			return nil, err
+		}
+		return shmKittyObject{o}, nil
+	}
+	return os.OpenFile(path, os.O_RDONLY|flags, 0) // #nosec G304 - checked by kittyMediumPath
+}
+
+// kittyShmReadable reports whether tuios can read a shared memory object on
+// this machine, so a guest may be told it can use one.
+func kittyShmReadable() bool { return kittyShmHasPath() || kittyshm.Available() }
 
 // A kitty graphics command can name a file instead of carrying the image:
 // t=f a file, t=t a temporary file, t=s a POSIX shared memory object. The name
@@ -30,7 +71,8 @@ import (
 // tuios and the programs in its panes run as the same user, so a file tuios
 // can open is one the pane could read itself.
 //
-// A t=s name is a path only on Linux; see kittyMediumPath.
+// A t=s name is a path only on Linux. See kittyMediumPath for macOS, where tuios
+// reaches the object by name.
 
 // kittyMediumPath returns the path on this machine that cmd's file medium
 // names, or false when it must not be read or forwarded.
@@ -50,10 +92,19 @@ func (kp *KittyPassthrough) kittyMediumPath(cmd *vt.KittyCommand) (string, bool)
 			return "", false
 		}
 		// On macOS shared memory has no path: it is opened by name with
-		// shm_open. A local host opens the name itself, so it is forwarded
-		// and the empty path says there is nothing for tuios to read. A
-		// remote host needs the bytes, which tuios cannot read, so the
-		// frame is refused.
+		// shm_open, which tuios can do. The checks below are the ones an open
+		// object can answer.
+		if kittyshm.Available() {
+			info, err := kittyshm.Stat(name)
+			if err != nil || !info.Mode().IsRegular() {
+				return "", false
+			}
+			return kittyShmObjectPrefix + name, true
+		}
+		// Anywhere else without /dev/shm, tuios cannot read the object. A local
+		// host opens the name itself, so it is forwarded and the empty path
+		// says there is nothing for tuios to read. A remote host needs the
+		// bytes, so the frame is refused.
 		if !kittyShmHasPath() {
 			return "", kp.hostReadsFiles()
 		}

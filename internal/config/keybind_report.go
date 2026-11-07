@@ -258,7 +258,7 @@ func (r *KeybindRegistry) Fate(key string, facts PaneFacts) KeyFate {
 
 	if !fate.SwallowedInTerminal && reservedTerminalChord(key) {
 		for _, a := range fate.USLayoutActs {
-			if a.Scope == ScopeWindowMode && terminalSafeAction(a.Action) {
+			if a.Scope == ScopeWindowMode && TerminalSafeAction(a.Action) {
 				fate.SwallowedInTerminal = true
 				fate.SwallowReason = a.Desc + " (on a US layout)"
 				break

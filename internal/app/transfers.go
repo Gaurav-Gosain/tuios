@@ -196,8 +196,7 @@ func runTransfersWatch(ctx context.Context, dial inboxDial, out chan<- tea.Msg) 
 		if ctx.Err() != nil {
 			return
 		}
-		var callErr *session.VerbCallError
-		if errors.As(err, &callErr) && (callErr.Code == session.ErrVerbUnknownVerb || callErr.Code == session.ErrVerbInvalidParams) {
+		if code := session.VerbErrCode(err); code == session.ErrVerbUnknownVerb || code == session.ErrVerbInvalidParams {
 			inboxSend(ctx, out, transfersDownMsg{Err: err, Unsupported: true})
 			return
 		}

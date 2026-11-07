@@ -69,7 +69,7 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg.ScrollbackLines = uc.Appearance.ScrollbackLines
 	// The daemon spawns every pane, so where a new one starts is its decision
 	// to make. Absent from the file means the default, which is to inherit.
-	cfg.NewWindowInheritCwd = uc.Appearance.NewWindowInheritCwd == nil || *uc.Appearance.NewWindowInheritCwd
+	cfg.NewWindowInheritCwd = newWindowInheritCwd(uc)
 	// The daemon spawns every pane, so the shell the user asked for has to
 	// reach it, not only standalone panes.
 	cfg.PreferredShell = uc.Appearance.PreferredShell
@@ -86,6 +86,7 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	// The daemon makes every worktree, whichever client asked for it, so the
 	// path is the same for all of them.
 	cfg.WorktreePath = uc.Worktree.Path
+	cfg.WorktreeSetup, cfg.WorktreeSetupAsync = uc.Worktree.Setup, uc.Worktree.SetupAsync
 	// The daemon runs the hooks for the facts it owns, so a session with
 	// nobody attached still runs them. The client keeps the hooks that need a
 	// terminal.
@@ -105,6 +106,8 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg.AgentSilentAfter = silentAfterFromConfig(uc.Agents)
 	// The daemon types the wake prompt for mail, so it reads whether to.
 	cfg.MailWakeOff = !uc.Agents.Mail.WakeOn()
+	// The daemon routes a delegated child's question, so it reads where to.
+	cfg.ChildQuestionsToPerson = !uc.Agents.Mail.QuestionsToParentOn()
 	// The daemon moves the task cards, so it reads whether to.
 	cfg.TaskAutoStageOff = !uc.Tasks.AutoStageOn()
 	// The daemon removes the old copies of far files at its start.
@@ -147,4 +150,11 @@ func HostsFromConfig(cfg *config.UserConfig) []federation.Host {
 		})
 	}
 	return out
+}
+
+// newWindowInheritCwd is appearance.new_window_inherit_cwd as the daemon reads
+// it, at start and at reload: absent from the file means the default, which is
+// to inherit.
+func newWindowInheritCwd(uc *config.UserConfig) bool {
+	return uc.Appearance.NewWindowInheritCwd == nil || *uc.Appearance.NewWindowInheritCwd
 }

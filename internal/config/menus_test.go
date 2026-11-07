@@ -38,7 +38,7 @@ func TestDeclaredMenusReadFromConfig(t *testing.T) {
 	if got := r.GetMenuAction("resize", "y"); got != "" {
 		t.Errorf("resize y = %q, want unbound", got)
 	}
-	if got := r.GetWindowPrefixAction("s"); got != "open_menu:split" {
+	if got := r.Action(TableWindowPrefix, "s"); got != "open_menu:split" {
 		t.Errorf("window prefix s = %q, want open_menu:split", got)
 	}
 	if !cfg.Keybindings.Menus["resize"].Sticky {

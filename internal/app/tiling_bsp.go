@@ -433,7 +433,7 @@ func (m *OS) AddWindowToBSPTree(window *terminal.Window) {
 	tree := m.GetOrCreateBSPTree()
 	windowIntID := m.GetWindowIntID(window.ID)
 
-	if verboseLog {
+	if verboseLog() {
 		m.LogInfo("BSP: AddWindowToBSPTree for window %s (int ID %d)", shortID(window.ID), windowIntID)
 	}
 
@@ -447,7 +447,7 @@ func (m *OS) AddWindowToBSPTree(window *terminal.Window) {
 		}
 	}
 	targetIntID := m.bspSplitTarget(tree, targetID)
-	if verboseLog {
+	if verboseLog() {
 		m.LogInfo("BSP: Splitting int ID %d", targetIntID)
 	}
 

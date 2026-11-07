@@ -1,7 +1,6 @@
 package app
 
 import (
-	"errors"
 	"os"
 	"slices"
 	"sync"
@@ -145,8 +144,7 @@ func (m *OS) applySessionOrderResult(msg SessionOrderAppliedMsg) tea.Cmd {
 	next := push.next
 	push.sending, push.next = false, nil
 	if msg.Err != nil {
-		var call *session.VerbCallError
-		if errors.As(msg.Err, &call) && (call.Code == session.ErrVerbUnknownVerb || call.Code == session.ErrVerbForbidden) {
+		if code := session.VerbErrCode(msg.Err); code == session.ErrVerbUnknownVerb || code == session.ErrVerbForbidden {
 			// An older daemon, or a link that does not allow the verb: the
 			// order stays this client's, as it was before the daemon kept one.
 			if m.sessionOrderLocal == nil {

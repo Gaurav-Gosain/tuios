@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/oneline"
 )
 
 // The Codex event map. Sources: the Codex hooks guide
@@ -130,7 +131,7 @@ func translateCodex(in Input, p fields) Decision {
 // Every Codex hook event has one; an event with no activity carries none.
 func withModel(r Report, p fields) Report {
 	if r.Activity != nil {
-		r.Activity.Model = Clip(p.str("model"))
+		r.Activity.Model = oneline.Clip(p.str("model"))
 	}
 	return r
 }

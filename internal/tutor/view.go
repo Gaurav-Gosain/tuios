@@ -12,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/learn/lessons"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -417,7 +418,7 @@ func (m *Model) finishView() tea.View {
 	if m.ascii {
 		tick = "[x]"
 	}
-	summary := tick + " " + plural(len(f.results), "step") + " in " + clock(f.seconds) + ": " + itoa(clean) + " on your own"
+	summary := tick + " " + plural.Count(len(f.results), "step") + " in " + clock(f.seconds) + ": " + itoa(clean) + " on your own"
 	if hinted > 0 {
 		summary += ", " + itoa(hinted) + " with a hint"
 	}
@@ -511,14 +512,6 @@ func (m *Model) full(text []string, rows []row, keys string) tea.View {
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
-
-// plural is "1 step" or "9 steps".
-func plural(n int, word string) string {
-	if n == 1 {
-		return "1 " + word
-	}
-	return itoa(n) + " " + word + "s"
-}
 
 // clock is a time in seconds as m:ss.
 func clock(seconds int) string {

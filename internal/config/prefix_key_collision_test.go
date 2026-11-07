@@ -43,13 +43,13 @@ func TestSettingsKeyReclaimedFromLegacyRename(t *testing.T) {
 			r := config.NewKeybindRegistry(cfg)
 
 			for range 50 {
-				if got := r.GetPrefixAction(","); got != "prefix_settings" {
-					t.Fatalf("GetPrefixAction(\",\") = %q, want prefix_settings", got)
+				if got := r.Action(config.TablePrefixMode, ","); got != "prefix_settings" {
+					t.Fatalf("Action(TablePrefixMode, \",\") = %q, want prefix_settings", got)
 				}
 			}
 			// The rename chord keeps the key it was re-homed onto.
-			if got := r.GetPrefixAction("r"); got != "prefix_rename_window" {
-				t.Fatalf("GetPrefixAction(\"r\") = %q, want prefix_rename_window", got)
+			if got := r.Action(config.TablePrefixMode, "r"); got != "prefix_rename_window" {
+				t.Fatalf("Action(TablePrefixMode, \"r\") = %q, want prefix_rename_window", got)
 			}
 			if keys := cfg.Keybindings.PrefixMode["prefix_rename_window"]; slices.Contains(keys, ",") {
 				t.Fatalf("prefix_rename_window kept the stale \",\": %v", keys)
@@ -72,13 +72,13 @@ func TestUserOwnedDuplicateKeyIsLeftAlone(t *testing.T) {
 	}
 
 	r := config.NewKeybindRegistry(cfg)
-	first := r.GetPrefixAction("g")
+	first := r.Action(config.TablePrefixMode, "g")
 	if first == "" {
-		t.Fatal("GetPrefixAction(\"g\") resolved to nothing")
+		t.Fatal("Action(TablePrefixMode, \"g\") resolved to nothing")
 	}
 	for range 50 {
-		if got := r.GetPrefixAction("g"); got != first {
-			t.Fatalf("GetPrefixAction(\"g\") = %q then %q; a duplicate must resolve the same way every press", first, got)
+		if got := r.Action(config.TablePrefixMode, "g"); got != first {
+			t.Fatalf("Action(TablePrefixMode, \"g\") = %q then %q; a duplicate must resolve the same way every press", first, got)
 		}
 	}
 }

@@ -34,10 +34,10 @@ import (
 //
 // How each limit is enforced:
 //
-//   - Every JSON verb has an entry in verbCapabilities, and a test holds the
-//     table to the registry, so a verb added without one fails the build's
-//     tests rather than being reachable from a link unchecked. A verb missing
-//     from the table at run time is refused, never allowed.
+//   - Every JSON verb names its link policy on its verb entry, and a test
+//     fails on an entry that names none, so a verb added without one fails
+//     the build's tests rather than being reachable from a link unchecked. A
+//     verb with no policy at run time is refused, never allowed.
 //   - Every binary message type has an entry in msgCapabilities, with the same
 //     refuse-when-missing rule. An attach needs list and write, because an
 //     attached client reads every pane and types into them.
@@ -58,6 +58,65 @@ const linkPolicyVerb = "link-peer"
 // machine's own links: they need config.LinkRelayCapabilities.
 const capRelay = "*"
 
+// linkNeed is what a verb needs on a link connection, as a set of bits, so
+// the verb registry holds it as a number rather than building strings for
+// every verb. needDeclared is in every value a verb entry names, so an entry
+// with no link policy at all, the zero linkNeed, is told apart and refused
+// over every link. needNothing is a policy that needs no capability.
+type linkNeed uint16
+
+const (
+	needDeclared linkNeed = 1 << iota
+	needRelayBit
+	needListBit
+	needMailBit
+	needOpenBit
+	needWriteBit
+	needRespondBit
+	needFilesBit
+	needTranscriptsBit
+)
+
+// The policies a verb entry names. Each carries needDeclared.
+const (
+	needNothing     = needDeclared
+	needRelay       = needDeclared | needRelayBit
+	needList        = needDeclared | needListBit
+	needMail        = needDeclared | needMailBit
+	needOpen        = needDeclared | needOpenBit
+	needWrite       = needDeclared | needWriteBit
+	needRespond     = needDeclared | needRespondBit
+	needFiles       = needDeclared | needFilesBit
+	needTranscripts = needDeclared | needTranscriptsBit
+)
+
+// linkNeedNames pairs each bit with the capability it stands for, in the
+// order a refusal names them.
+var linkNeedNames = [...]struct {
+	bit  linkNeed
+	name string
+}{
+	{needRelayBit, capRelay},
+	{needListBit, config.LinkAllowList},
+	{needMailBit, config.LinkAllowMail},
+	{needOpenBit, config.LinkAllowOpen},
+	{needWriteBit, config.LinkAllowWrite},
+	{needRespondBit, config.LinkAllowRespond},
+	{needFilesBit, config.LinkAllowFiles},
+	{needTranscriptsBit, config.LinkAllowTranscripts},
+}
+
+// list is the capabilities n needs, by name.
+func (n linkNeed) list() []string {
+	var out []string
+	for _, b := range linkNeedNames {
+		if n&b.bit != 0 {
+			out = append(out, b.name)
+		}
+	}
+	return out
+}
+
 // linkCaps is what a verb or a message needs on a link connection. An array
 // rather than a slice, because the compiler lays a map of arrays of constants
 // out as data. A map of slices is about 28 KB of code that runs at every start
@@ -72,309 +131,6 @@ func (c linkCaps) list() []string {
 		}
 	}
 	return c[:]
-}
-
-// verbCapabilities is what each verb needs on a link connection. An empty list
-// needs nothing.
-var verbCapabilities = map[string]linkCaps{
-	"hello":      {},
-	"list-verbs": {},
-	"list-keys":  {},
-	"link-peer":  {},
-	// restrict-connection only gives up authority on the calling
-	// connection, so it needs nothing.
-	"restrict-connection": {},
-	// pane-grants only reports; over a link it says no pane grants apply.
-	// set-pane-grants is refused over a link by its handler whatever the
-	// policy, and needs every capability here as well.
-	"pane-grants":     {},
-	"set-pane-grants": {capRelay},
-	// apply-config is refused over a link by its handler as well.
-	"apply-config": {capRelay},
-	// daemon-upgrade replaces the daemon's image. Its handler refuses it over
-	// a link too: an upgrade is run on the machine whose daemon it is.
-	"daemon-upgrade": {capRelay},
-
-	"list-hooks":           {config.LinkAllowList},
-	"list-dock-components": {config.LinkAllowList},
-	"list-sessions":        {config.LinkAllowList},
-	"list-clients":         {config.LinkAllowList},
-	"list-worktrees":       {config.LinkAllowList},
-	"list-hosts":           {config.LinkAllowList},
-	"list-routes":          {config.LinkAllowList},
-	"list-host-sessions":   {config.LinkAllowList},
-	"list-host-agents":     {config.LinkAllowList},
-	"session-info":         {config.LinkAllowList},
-	"ssh-agent-path":       {config.LinkAllowList},
-	"display-env":          {config.LinkAllowList},
-	"get-keep-awake":       {config.LinkAllowList},
-	"set-keep-awake":       {config.LinkAllowWrite},
-	"list-windows":         {config.LinkAllowList},
-	"search-panes":         {config.LinkAllowList},
-	"command-history":      {config.LinkAllowList},
-	"list-ports":           {config.LinkAllowList},
-	"pane-usage":           {config.LinkAllowList},
-	"get-window":           {config.LinkAllowList},
-	"list-workspaces":      {config.LinkAllowList},
-	"layout-tree":          {config.LinkAllowList},
-	"list-conversations":   {config.LinkAllowList},
-	"capture-pane":         {config.LinkAllowList},
-	// stream-pane reads a pane. Its input and lease frames are checked
-	// as send-text and resize, frame by frame, so they need write.
-	"stream-pane": {config.LinkAllowList},
-	// pane-history reads rows of a pane's history, as capture-pane.
-	"pane-history": {config.LinkAllowList},
-	// attach-presence only names the person on this connection. What it
-	// lets the connection answer is checked by those verbs (respond).
-	"attach-presence":      {config.LinkAllowList},
-	"list-buffers":         {config.LinkAllowList},
-	"show-buffer":          {config.LinkAllowList},
-	"screenshot":           {config.LinkAllowList},
-	"list-options":         {config.LinkAllowList},
-	"list-themes":          {config.LinkAllowList},
-	"list-glyphs":          {config.LinkAllowList},
-	"get-option":           {config.LinkAllowList},
-	"subscribe":            {config.LinkAllowList},
-	"unsubscribe":          {config.LinkAllowList},
-	"get-agent-state":      {config.LinkAllowList},
-	"resolve-pane":         {config.LinkAllowList},
-	"explain-agent-detect": {config.LinkAllowList},
-	"explain-agent-screen": {config.LinkAllowList},
-	"wait-for":             {config.LinkAllowList},
-	"list-agents":          {config.LinkAllowList},
-	"list-attention":       {config.LinkAllowList},
-	"peek-prompt":          {config.LinkAllowList},
-	"read-dir":             {config.LinkAllowList},
-	"wait-dir":             {config.LinkAllowList},
-	// The file verbs. A listing is a listing. Reading a file's bytes out and
-	// changing a file are files, a capability apart from write, so a person
-	// can stop one machine's copies without stopping its typing. Every write
-	// that arrives over a link is also confined to the home folder and kept
-	// out of the deny list (verb_files_confine.go). See verb_files.go.
-	"file-stat":        {config.LinkAllowList},
-	"file-list":        {config.LinkAllowList},
-	"file-read":        {config.LinkAllowFiles},
-	"file-hash":        {config.LinkAllowFiles},
-	"file-walk":        {config.LinkAllowFiles},
-	"file-preview":     {config.LinkAllowFiles},
-	"open-file-stream": {config.LinkAllowFiles},
-	"file-mkdir":       {config.LinkAllowFiles},
-	"file-rename":      {config.LinkAllowFiles},
-	"file-remove":      {config.LinkAllowFiles},
-	"file-commit":      {config.LinkAllowFiles},
-	"file-abort":       {config.LinkAllowFiles},
-	"file-drop-dir":    {config.LinkAllowFiles},
-	"file-check":       {config.LinkAllowFiles},
-	"open-tree-stream": {config.LinkAllowFiles},
-	// A speed test moves bytes that are no file's, and it is how a person
-	// learns what a copy would get.
-	"speed-test": {config.LinkAllowFiles},
-	// A transfer and a drop make this daemon open connections on its own
-	// links, as open-host-connection does, so they need what a relay needs,
-	// and files, because they move file bytes.
-	"transfer-start":  {capRelay, config.LinkAllowFiles},
-	"transfer-list":   {capRelay, config.LinkAllowFiles},
-	"transfer-cancel": {capRelay, config.LinkAllowFiles},
-	"transfer-pause":  {capRelay, config.LinkAllowFiles},
-	"transfer-resume": {capRelay, config.LinkAllowFiles},
-	"transfer-answer": {capRelay, config.LinkAllowFiles},
-	"transfer-clear":  {capRelay, config.LinkAllowFiles},
-	"host-speed-test": {capRelay, config.LinkAllowFiles},
-	"drop-files":      {capRelay, config.LinkAllowFiles},
-
-	"send-agent-message":  {config.LinkAllowMail},
-	"read-agent-messages": {config.LinkAllowMail},
-	"agent-mail-notice":   {config.LinkAllowMail},
-	"stash-put":           {config.LinkAllowMail},
-	"stash-list":          {config.LinkAllowMail},
-	"stash-get":           {config.LinkAllowMail},
-
-	"new-session":  {config.LinkAllowOpen},
-	"new-worktree": {config.LinkAllowOpen},
-	"fan":          {config.LinkAllowOpen},
-	"start-agent":  {config.LinkAllowOpen},
-	"new-window":   {config.LinkAllowOpen},
-	"split-window": {config.LinkAllowOpen},
-	"popup":        {config.LinkAllowOpen},
-	// A link needs every relay capability to open or change a surface,
-	// which the default policy does not give: a surface names its owner on
-	// its frame, and a surface opened from another machine would need that
-	// machine's name there.
-	"tml-open":    {capRelay},
-	"tml-close":   {capRelay},
-	"tml-patch":   {capRelay},
-	"tml-replace": {capRelay},
-	// A client attached over a link draws this machine's surfaces (see
-	// tml_surface.go, "Surfaces over a link"). Reading one is reading a
-	// screen. What the person does on one, and where it sits, is what the
-	// attach already does to a pane: tml-input and tml-place also need the
-	// attach nonce of a client on the link-human socket. A pane() action a
-	// tml-input carries is held to the verb it runs as well.
-	"tml-input":     {config.LinkAllowWrite},
-	"tml-place":     {config.LinkAllowWrite},
-	"tml-get":       {config.LinkAllowList},
-	"tml-list":      {config.LinkAllowList},
-	"artifact-list": {capRelay},
-	"tml-validate":  {},
-	"open-pane":     {config.LinkAllowOpen},
-	"resize-pane":   {config.LinkAllowOpen},
-	"close-pane":    {config.LinkAllowOpen},
-	"pane-cwd":      {config.LinkAllowOpen},
-	"pane-agent":    {config.LinkAllowOpen},
-	"pane-calls":    {config.LinkAllowOpen},
-	// pane-kitty-medium carries the bytes of a file a hosted pane named in a
-	// kitty graphics command: a file read, so it needs files.
-	"pane-kitty-medium": {config.LinkAllowFiles},
-
-	// paste-pane-image writes a file for a hosted pane, which the peer
-	// opened, and needs the pane's token as well. paste-image writes a file
-	// and has its path typed into a pane, which is what write already
-	// reaches. Its handler also wants the person. Both put a file from the
-	// other machine on this one, so both need files too: a person who took
-	// files away from a machine expects nothing it sends to land on disk.
-	"paste-pane-image": {config.LinkAllowOpen, config.LinkAllowFiles},
-	"paste-image":      {config.LinkAllowWrite, config.LinkAllowFiles},
-
-	"refresh-dock":    {config.LinkAllowWrite},
-	"plugin-cell":     {config.LinkAllowWrite},
-	"plugin-notify":   {config.LinkAllowWrite},
-	"pip":             {config.LinkAllowWrite},
-	"rail-pane":       {config.LinkAllowOpen},
-	"remove-worktree": {config.LinkAllowWrite},
-	// bundle-worktree reads a worktree's files out, which write already
-	// reaches through a shell, and list must not.
-	"bundle-worktree": {config.LinkAllowWrite},
-	"focus-window":    {config.LinkAllowWrite},
-	"move-window":     {config.LinkAllowWrite},
-	"set-window":      {config.LinkAllowWrite},
-	// It closes Inbox items, so it needs what dismiss-attention needs too.
-	"set-agent-quiet":  {config.LinkAllowWrite, config.LinkAllowRespond},
-	"select-workspace": {config.LinkAllowWrite},
-	"set-layout":       {config.LinkAllowWrite},
-	"set-layout-tree":  {config.LinkAllowWrite},
-	"set-layout-state": {config.LinkAllowWrite},
-	"zoom-window":      {config.LinkAllowWrite},
-	"swap-window":      {config.LinkAllowWrite},
-	"resize-window":    {config.LinkAllowWrite},
-	"run-command":      {config.LinkAllowWrite},
-	"switch-session":   {config.LinkAllowWrite},
-	"detach-client":    {config.LinkAllowWrite},
-	"close-window":     {config.LinkAllowWrite},
-	"close-workspace":  {config.LinkAllowWrite},
-	"send-keys":        {config.LinkAllowWrite},
-	"send-text":        {config.LinkAllowWrite},
-	"clear-history":    {config.LinkAllowWrite},
-	// The paste buffers hold what the person copied on this machine. A
-	// link reads them only where it may also capture a pane, and changes
-	// or pastes them only where it may type.
-	"paste-buffer":        {config.LinkAllowWrite},
-	"set-buffer":          {config.LinkAllowWrite},
-	"delete-buffer":       {config.LinkAllowWrite},
-	"ask-agent":           {config.LinkAllowWrite},
-	"resize":              {config.LinkAllowWrite},
-	"kill-session":        {config.LinkAllowWrite},
-	"set-option":          {config.LinkAllowWrite},
-	"set-session-name":    {config.LinkAllowWrite},
-	"rename-session":      {config.LinkAllowWrite},
-	"set-session-accent":  {config.LinkAllowWrite},
-	"set-session-space":   {config.LinkAllowWrite},
-	"set-session-order":   {config.LinkAllowWrite},
-	"set-workspace-name":  {config.LinkAllowWrite},
-	"set-workspace-order": {config.LinkAllowWrite},
-	"set-agent-state":     {config.LinkAllowWrite},
-	"set-agent-session":   {config.LinkAllowWrite},
-	"set-agent-meta":      {config.LinkAllowWrite},
-	"resume-agent":        {config.LinkAllowWrite},
-	"forget-conversation": {config.LinkAllowWrite},
-	"request-approval":    {config.LinkAllowWrite},
-	"run":                 {config.LinkAllowWrite},
-	// set-agent-state's activity with no state, so the same capability.
-	"report-agent-activity": {config.LinkAllowWrite},
-	// An OSC 7501 report, which sets the pane's agent state as set-agent-state does.
-	"report-program-status": {config.LinkAllowWrite},
-	// ask-human's own handler refuses every link caller as well.
-	"ask-human": {config.LinkAllowWrite},
-
-	"respond":        {config.LinkAllowRespond},
-	"reply-approval": {config.LinkAllowRespond},
-	// The conversation holds the prompts, file contents and command output.
-	// Only the person reads it: the handler needs the nonce of a person's
-	// attach (human_sender.go). transcripts is in the default policy and
-	// respond includes it. See config.LinkAllowTranscripts.
-	"agent-transcript":      {config.LinkAllowTranscripts},
-	"reply-history":         {config.LinkAllowRespond},
-	"add-reply-history":     {config.LinkAllowRespond},
-	"dismiss-attention":     {config.LinkAllowRespond},
-	"release-agent-message": {config.LinkAllowRespond},
-	"answer-ask":            {config.LinkAllowRespond},
-	// A phone registered for Web Push gets what waits for the person, so
-	// the push verbs need what answering it needs.
-	"register-push": {config.LinkAllowRespond},
-	"list-push":     {config.LinkAllowRespond},
-	"remove-push":   {config.LinkAllowRespond},
-
-	"open-host-connection": {capRelay},
-	// Another machine has no reason to make this one's links dial.
-	"retry-host": {capRelay},
-
-	// The agent review, triage, queue and approval work. compare-fan,
-	// agent-activity, list-queued and get-approval return states, counts and
-	// text an agent wrote, which list reaches. review-diff returns file
-	// contents, which write already reaches through a shell and list must
-	// not, as bundle-worktree does. compare-fan's detail carries changed
-	// lines, so its handler asks write for it. verify-fan opens a window and runs a
-	// command in it, so it needs open and write. mark-attention is the
-	// person's act, like dismiss-attention.
-	"compare-fan":     {config.LinkAllowList},
-	"agent-activity":  {config.LinkAllowList},
-	"list-queued":     {config.LinkAllowList},
-	"get-approval":    {config.LinkAllowList},
-	"review-diff":     {config.LinkAllowWrite},
-	"review-note":     {config.LinkAllowWrite},
-	"set-fan-verdict": {config.LinkAllowWrite},
-	"judge-fan":       {config.LinkAllowOpen, config.LinkAllowWrite},
-	"send-review":     {config.LinkAllowWrite},
-	// review-stage writes the index, as a commit does.
-	"review-stage":   {config.LinkAllowWrite},
-	"queue-prompt":   {config.LinkAllowWrite},
-	"cancel-queued":  {config.LinkAllowWrite},
-	"keep-fan":       {config.LinkAllowWrite},
-	"verify-fan":     {config.LinkAllowOpen, config.LinkAllowWrite},
-	"mark-attention": {config.LinkAllowRespond},
-
-	// The task cards. The listing carries titles and holders, which list
-	// reaches; a card's prompt is what a pane will be told to do, so a
-	// change needs write.
-	"list-tasks":     {config.LinkAllowList},
-	"get-task":       {config.LinkAllowList},
-	"add-task":       {config.LinkAllowWrite},
-	"claim-task":     {config.LinkAllowWrite},
-	"finish-task":    {config.LinkAllowWrite},
-	"set-task-stage": {config.LinkAllowWrite},
-	"block-task":     {config.LinkAllowWrite},
-	"release-task":   {config.LinkAllowWrite},
-	"remove-task":    {config.LinkAllowWrite},
-
-	// The checkpoints. The listing carries states and the agent's prompts,
-	// which list reaches. The diff carries file contents, and a restore
-	// writes files, so both need write, as review-diff does.
-	"list-checkpoints":   {config.LinkAllowList},
-	"checkpoint-diff":    {config.LinkAllowWrite},
-	"restore-checkpoint": {config.LinkAllowWrite},
-
-	// The ship verbs. A commit and a merge write files, so they need write.
-	// A push and a pull request are refused over any link by their handler:
-	// the person on the machine the repository is on allows those. The
-	// status carries a state and a URL, which list reaches.
-	"ship-commit": {config.LinkAllowWrite},
-	"ship-merge":  {config.LinkAllowWrite},
-	"ship-push":   {config.LinkAllowWrite},
-	"ship-pr":     {config.LinkAllowWrite},
-	"ship-status": {config.LinkAllowList},
-
-	// The return notes (verb_note.go).
-	"set-note": {config.LinkAllowWrite},
-	"get-note": {config.LinkAllowList},
 }
 
 // msgCapabilities is what each binary message needs on a link connection.
@@ -449,7 +205,7 @@ func (d *Daemon) checkLinkVerb(cs *connState, verb string) *verbError {
 	if verr := d.linkFromPane(cs); verr != nil {
 		return verr
 	}
-	caps, known := verbCapabilities[verb]
+	caps, known := verbLinkCaps(verb)
 	if !known {
 		return linkForbidden(d, cs, verb, nil, "this verb has no link policy, so it is refused over a link")
 	}
@@ -667,4 +423,15 @@ func markLinkServed(cs *connState) {
 	cs.mu.Lock()
 	cs.linkServed = true
 	cs.mu.Unlock()
+}
+
+// verbLinkCaps is what verb needs on a link connection, from its entry in the
+// verb registry. known is false for a name that is not a verb, and for a verb
+// whose entry names no link policy, so both are refused over a link.
+func verbLinkCaps(verb string) (need linkNeed, known bool) {
+	e, ok := verbRegistry()[verb]
+	if !ok || e.link&needDeclared == 0 {
+		return 0, false
+	}
+	return e.link, true
 }

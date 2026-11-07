@@ -17,6 +17,7 @@ func TestNamedThemeDetails(t *testing.T) {
 			{"catppuccin-mocha", 6},
 			{"pele", 0},
 			{"flexoki", 6},
+			{"flexoki-dark", 6},
 		} {
 			th, ok := ThemeNamed(tc.name)
 			if !ok {

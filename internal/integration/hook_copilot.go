@@ -1,5 +1,7 @@
 package integration
 
+import "github.com/Gaurav-Gosain/tuios/internal/oneline"
+
 // The GitHub Copilot CLI event map. Source: the hooks reference
 // (https://docs.github.com/en/copilot/reference/hooks-reference, the
 // content/copilot/reference/hooks-reference.md page of github/docs), read for
@@ -53,7 +55,7 @@ func translateCopilot(in Input, p fields) Decision {
 			if len(input) == 0 {
 				input = p.obj("toolArgs")
 			}
-			msg := Clip(input.first("question", "prompt", "message"))
+			msg := oneline.Clip(input.first("question", "prompt", "message"))
 			if msg == "" {
 				msg = "a question"
 			}
@@ -65,13 +67,13 @@ func translateCopilot(in Input, p fields) Decision {
 	case "Notification", "notification":
 		switch p.str("notification_type") {
 		case "permission_prompt":
-			msg := Clip(p.str("message"))
+			msg := oneline.Clip(p.str("message"))
 			if msg == "" {
 				msg = "approve a tool call"
 			}
 			return send(Copilot, event, id(Report{State: "needs_input", Kind: "approval", Message: msg}))
 		case "elicitation_dialog":
-			msg := Clip(p.str("message"))
+			msg := oneline.Clip(p.str("message"))
 			if msg == "" {
 				msg = "a question"
 			}
@@ -86,7 +88,7 @@ func translateCopilot(in Input, p fields) Decision {
 			return skip(Copilot, event, "a recoverable error does not end the turn")
 		}
 		msg := "stopped on an error"
-		if m := Clip(p.obj("error").str("message")); m != "" {
+		if m := oneline.Clip(p.obj("error").str("message")); m != "" {
 			msg = m
 		}
 		return send(Copilot, event, id(Report{State: "errored", Message: msg}))

@@ -215,6 +215,17 @@ func (d *Daemon) addWindowFor(cs *connState, verb string, sess *Session, opts Ne
 			return WindowState{}, verr, nil
 		}
 		opts.Bounded, opts.Bound = bounded, bound
+		// A child is never wider than its parent (child_clamp.go).
+		if opts.Grants == nil {
+			opts.Grants = d.childDefaultGrants(cs)
+		}
+		if !opts.modeChecked {
+			argv, verr := d.clampChildMode(cs, verb, "", opts.Command, opts.Env, false)
+			if verr != nil {
+				return WindowState{}, verr, nil
+			}
+			opts.Command = argv
+		}
 	}
 	win, err := sess.AddDaemonWindowWith(opts, onExit)
 	return win, nil, err

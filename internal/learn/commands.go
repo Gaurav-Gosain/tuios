@@ -205,13 +205,7 @@ func (m *Model) reset() {
 		o.ToggleSidebar()
 	}
 	o.PrefixActive = false
-	o.WorkspacePrefixActive = false
-	o.TilingPrefixActive = false
-	o.MinimizePrefixActive = false
-	o.LayoutPrefixActive = false
-	o.DebugPrefixActive = false
-	o.TapePrefixActive = false
-	o.TuiosPrefixActive = false
+	o.SubMenu = app.SubMenuNone
 	o.Menu = ""
 	_ = o.SwitchWorkspace(1)
 	if o.LayoutModeName() != config.LayoutModeBSP {

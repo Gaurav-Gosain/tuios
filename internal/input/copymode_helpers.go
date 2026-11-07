@@ -7,8 +7,8 @@ import (
 )
 
 // getAbsoluteY calculates the absolute Y position in the entire scrollback+screen
-func getAbsoluteY(cm *terminal.CopyMode, window *terminal.Window) int {
-	scrollbackLen := window.ScrollbackLen()
+func getAbsoluteY(cm *terminal.CopyMode, grid terminal.CopyGrid) int {
+	scrollbackLen := grid.ScrollbackLen()
 	if cm.ScrollOffset > 0 {
 		return scrollbackLen - cm.ScrollOffset + cm.CursorY
 	}
@@ -36,17 +36,17 @@ func getCharType(content string) int {
 }
 
 // getCellAtCursor returns the cell at the current cursor position
-func getCellAtCursor(cm *terminal.CopyMode, window *terminal.Window) *uv.Cell {
-	return getCellAtCol(cm, window, cm.CursorX)
+func getCellAtCursor(cm *terminal.CopyMode, grid terminal.CopyGrid) *uv.Cell {
+	return getCellAtCol(cm, grid, cm.CursorX)
 }
 
 // getCellAtCol returns the cell at column x of the cursor's row
-func getCellAtCol(cm *terminal.CopyMode, window *terminal.Window, x int) *uv.Cell {
-	absY := getAbsoluteY(cm, window)
-	scrollbackLen := window.ScrollbackLen()
+func getCellAtCol(cm *terminal.CopyMode, grid terminal.CopyGrid, x int) *uv.Cell {
+	absY := getAbsoluteY(cm, grid)
+	scrollbackLen := grid.ScrollbackLen()
 
 	if absY < scrollbackLen {
-		line := window.ScrollbackLine(absY)
+		line := grid.ScrollbackLine(absY)
 		if line != nil && x < len(line) {
 			return &line[x]
 		}
@@ -54,14 +54,14 @@ func getCellAtCol(cm *terminal.CopyMode, window *terminal.Window, x int) *uv.Cel
 	}
 
 	screenY := absY - scrollbackLen
-	return window.Terminal.CellAt(x, screenY)
+	return grid.Text().CellAt(x, screenY)
 }
 
 // firstNonBlankCol returns the column of the first nonblank character on the
 // cursor's row, the target of ^. A blank row gives column 0.
-func firstNonBlankCol(cm *terminal.CopyMode, window *terminal.Window) int {
-	for x := 0; x <= window.LastContentCol(); x++ {
-		if cell := getCellAtCol(cm, window, x); cell != nil && cell.Width > 0 && getCharType(cell.Content) != 0 {
+func firstNonBlankCol(cm *terminal.CopyMode, grid terminal.CopyGrid) int {
+	for x := 0; x <= grid.LastContentCol(); x++ {
+		if cell := getCellAtCol(cm, grid, x); cell != nil && cell.Width > 0 && getCharType(cell.Content) != 0 {
 			return x
 		}
 	}
@@ -72,9 +72,9 @@ func firstNonBlankCol(cm *terminal.CopyMode, window *terminal.Window) int {
 // cursor's row, the target of $, rather than the blank padding up to the pane
 // edge. A wide character answers with its first cell. A blank row gives
 // column 0.
-func lastTextCol(cm *terminal.CopyMode, window *terminal.Window) int {
-	for x := window.LastContentCol(); x > 0; x-- {
-		if cell := getCellAtCol(cm, window, x); cell != nil && cell.Width > 0 && getCharType(cell.Content) != 0 {
+func lastTextCol(cm *terminal.CopyMode, grid terminal.CopyGrid) int {
+	for x := grid.LastContentCol(); x > 0; x-- {
+		if cell := getCellAtCol(cm, grid, x); cell != nil && cell.Width > 0 && getCharType(cell.Content) != 0 {
 			return x
 		}
 	}
@@ -102,7 +102,7 @@ func extractLineTextFromCells(cells []uv.Cell) string {
 }
 
 // extractScreenLineText builds text string from terminal screen line
-func extractScreenLineText(term vt.Terminal, y int) string {
+func extractScreenLineText(term terminal.CopyText, y int) string {
 	var result []rune
 	width := term.Width()
 	for x := range width {
@@ -124,7 +124,7 @@ func extractScreenLineText(term vt.Terminal, y int) string {
 }
 
 // getScreenLineCells returns all cells for a screen line
-func getScreenLineCells(term vt.Terminal, y int) []uv.Cell {
+func getScreenLineCells(term terminal.CopyText, y int) []uv.Cell {
 	width := term.Width()
 	cells := make([]uv.Cell, width)
 

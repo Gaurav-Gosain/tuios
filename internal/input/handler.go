@@ -708,7 +708,7 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// script finishes ScriptMode is left (see maybeExitFinishedScript) and the
 	// palette has the key back.
 	if o.ScriptMode &&
-		sectionAction(msg, o, (*config.KeybindRegistry).GetScriptAction) == "script_pause" {
+		sectionAction(msg, o, config.TableScript) == "script_pause" {
 		// Recorded here for the same reason the global binds record theirs: this
 		// route does not go through Dispatch, and an unrecorded route is one the
 		// reachability table cannot see. See NoteAction.
@@ -750,32 +750,32 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// Handle workspace prefix commands (Ctrl+B, w, ...)
-	if o.WorkspacePrefixActive {
+	if o.SubMenu == app.SubMenuWorkspace {
 		return HandleWorkspacePrefixCommand(msg, o)
 	}
 
 	// Handle minimize prefix commands (Ctrl+B, m, ...)
-	if o.MinimizePrefixActive {
+	if o.SubMenu == app.SubMenuMinimize {
 		return HandleMinimizePrefixCommand(msg, o)
 	}
 
 	// Handle tiling prefix commands (Ctrl+B, t, ...)
-	if o.TilingPrefixActive {
+	if o.SubMenu == app.SubMenuTiling {
 		return HandleTilingPrefixCommand(msg, o)
 	}
 
 	// Handle debug prefix commands (Ctrl+B, D, ...)
-	if o.DebugPrefixActive {
+	if o.SubMenu == app.SubMenuDebug {
 		return HandleDebugPrefixCommand(msg, o)
 	}
 
 	// Handle layout prefix commands (Ctrl+B, L, ...)
-	if o.LayoutPrefixActive {
+	if o.SubMenu == app.SubMenuLayout {
 		return handleTerminalLayoutPrefix(msg, o)
 	}
 
 	// The tuios menu: the tuios keys a preset moved.
-	if o.TuiosPrefixActive {
+	if o.SubMenu == app.SubMenuTuios {
 		return HandleTuiosPrefixCommand(msg, o)
 	}
 
@@ -785,7 +785,7 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// Handle tape prefix commands (Ctrl+B, T, ...)
-	if o.TapePrefixActive {
+	if o.SubMenu == app.SubMenuTape {
 		return HandleTapePrefixCommand(msg, o)
 	}
 
@@ -898,7 +898,7 @@ func isConfiguredKey(msg tea.KeyPressMsg, s *config.Settings, base rune, is func
 // without one the leader pressed two times keeps its leader_twice meaning.
 func leaderBoundInPrefix(msg tea.KeyPressMsg, o *app.OS) bool {
 	return o.PrefixActive && o.KeybindRegistry != nil &&
-		lookupAction(o, msg, o.KeybindRegistry.GetPrefixAction) != ""
+		tableAction(o, msg, o.KeybindRegistry, config.TablePrefixMode) != ""
 }
 
 // handlePrefixKey handles Ctrl+B prefix key activation
@@ -954,9 +954,7 @@ func handleLogViewerKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // key. The leader and the chord after it are let through, so a prefix command
 // works over the viewer the way it does over the rail.
 func viewerTakesKey(msg tea.KeyPressMsg, o *app.OS) bool {
-	return !isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) && !o.PrefixActive && !o.WorkspacePrefixActive &&
-		!o.MinimizePrefixActive && !o.TilingPrefixActive && !o.DebugPrefixActive &&
-		!o.TapePrefixActive && !o.LayoutPrefixActive && !o.TuiosPrefixActive && o.Menu == ""
+	return !isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) && !o.PrefixActive && o.SubMenu == app.SubMenuNone && o.Menu == ""
 }
 
 // handleMessageViewKey handles a key while the message view is open. Every key

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
 const (
@@ -77,7 +78,7 @@ func (m *OS) gotoPickerRow(r gotoRow, selected bool, rowBg color.Color, pal over
 			right += overlay.Style(rowBg).Foreground(glyphColor).Bold(r.needsYou()).Render(" " + glyph)
 		}
 	case gotoSession, gotoWorkspace:
-		right = overlay.Style(rowBg).Foreground(pal.FgMute).Render(panePlural(r.panes))
+		right = overlay.Style(rowBg).Foreground(pal.FgMute).Render(plural.Count(r.panes, "pane"))
 	}
 	if r.current {
 		right = overlay.Style(rowBg).Foreground(pal.Success).Render("current  ") + right

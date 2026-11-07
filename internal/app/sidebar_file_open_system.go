@@ -108,7 +108,7 @@ func (m *OS) fileOpenNextStep(far bool) string {
 		return ""
 	}
 	key := func(action string) string {
-		if keys := m.KeybindRegistry.GetSidebarFilesKeys(action); len(keys) > 0 {
+		if keys := m.KeybindRegistry.Keys(config.TableSidebarFiles, action); len(keys) > 0 {
 			return keys[0]
 		}
 		return ""

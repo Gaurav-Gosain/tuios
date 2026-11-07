@@ -15,7 +15,7 @@ import (
 // switcher and the rail reach.
 //
 // It acts on a client, not on a session, so it is an admin action for a pane
-// (scopeDeny in verbScopes) and a write over a link.
+// (scopeDeny on its verb entry) and a write over a link.
 //
 // Which client: the one named by client, else the one showing session, else
 // the one showing the caller's own session when the caller runs in a pane,

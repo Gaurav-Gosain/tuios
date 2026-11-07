@@ -247,6 +247,31 @@ func (m *OS) sidebarFilesHeaderCd(cw int, pal overlay.Palette, hoverX int, curso
 	return sidebarStyle(nil, ink).Render(fileTokenCd), span, true
 }
 
+// fileTokenClose is the header control that takes the section off the rail.
+const fileTokenClose = "x"
+
+// sidebarFilesHeaderClose places the header's close control one cell in from
+// the rail's edge. It is drawn only while the section is on because of this
+// client's switch and the layout leaves it out: then the footer control is the
+// only other way off, and it sits at the far end of the rail. A layout that
+// names the section keeps it, and offers no close here.
+func (m *OS) sidebarFilesHeaderClose(cw int, pal overlay.Palette, hoverX int, cursor bool) (string, sidebarTokenSpan, bool) {
+	if m.filesView.Show <= 0 || sidebarLayoutHas(sidebarSectionFiles, &m.Settings) {
+		return "", sidebarTokenSpan{}, false
+	}
+	tw := lipgloss.Width(fileTokenClose)
+	x0 := cw - 1 - tw
+	if x0 < sidebarHeaderLabelW(sidebarFilesLabel, &m.Settings)+sidebarHeaderGap {
+		return "", sidebarTokenSpan{}, false
+	}
+	span := sidebarTokenSpan{Kind: sidebarRowFileClose, X0: x0, X1: x0 + tw}
+	ink := pal.FgMute
+	if cursor || (hoverX >= span.X0 && hoverX < span.X1) {
+		ink = pal.Fg
+	}
+	return sidebarStyle(nil, ink).Render(fileTokenClose), span, true
+}
+
 // sidebarFilesHeaderRow is the section's one line of chrome: the label, the
 // directory being listed, and the cd control.
 //
@@ -263,10 +288,13 @@ func (m *OS) sidebarFilesHeaderCd(cw int, pal overlay.Palette, hoverX int, curso
 // filesystem. That is the right answer to "what is in the pane's directory" and
 // there is nothing to correct, but a remote viewer is not looking at their own
 // disk.
-func (m *OS) sidebarFilesHeaderRow(cdTok string, hasCd bool, cw int, pal overlay.Palette) string {
+func (m *OS) sidebarFilesHeaderRow(cdTok string, hasCd bool, closeTok string, hasClose bool, cw int, pal overlay.Palette) string {
 	room := sidebarHeaderRightRoom(cw, sidebarHeaderLabelW(sidebarFilesLabel, &m.Settings))
 	if hasCd {
 		room -= lipgloss.Width(fileTokenCd) + 1
+	}
+	if hasClose {
+		room -= lipgloss.Width(fileTokenClose) + 1
 	}
 	right := ""
 	if room > 0 {
@@ -279,6 +307,12 @@ func (m *OS) sidebarFilesHeaderRow(cdTok string, hasCd bool, cw int, pal overlay
 			right += sidebarStyle(nil, nil).Render(" ")
 		}
 		right += cdTok
+	}
+	if hasClose {
+		if right != "" {
+			right += sidebarStyle(nil, nil).Render(" ")
+		}
+		right += closeTok
 	}
 	return sidebarHeaderRowRuled(sidebarFilesLabel, right, cw, pal, &m.Settings)
 }
@@ -474,7 +508,10 @@ func truncPathLeft(path string, w int) string {
 	ell := overlay.Ellipsis()
 	room := w - lipgloss.Width(ell)
 	if room <= 0 {
-		return lipgloss.NewStyle().MaxWidth(w).Render(path)
+		// No room for a character after the ellipsis. The path's head is the
+		// wrong thing to show here: on a narrow rail it was a lone "/", which
+		// reads as the root folder.
+		return lipgloss.NewStyle().MaxWidth(w).Render(ell)
 	}
 	runes := []rune(path)
 	for i := range runes {

@@ -2,7 +2,6 @@ package app
 
 import (
 	"encoding/json"
-	"errors"
 	"slices"
 	"sort"
 	"strconv"
@@ -169,7 +168,7 @@ func (m *OS) applyCockpitArtifacts(msg ckArtifactsMsg) {
 	l.loading = false
 	l.err = ""
 	if msg.err != nil {
-		if verr, ok := errors.AsType[*session.VerbCallError](msg.err); ok && verr.Code == session.ErrVerbUnknownVerb {
+		if session.VerbErrCode(msg.err) == session.ErrVerbUnknownVerb {
 			l.err = "This daemon keeps no artifacts. " + m.restartHint()
 		} else {
 			l.err = "tuios cannot read the artifacts now: " + printableTitle(msg.err.Error())

@@ -25,12 +25,12 @@ func layoutPrefixOS(t *testing.T) *app.OS {
 func TestLayoutChordClearsThePrefix(t *testing.T) {
 	o := layoutPrefixOS(t)
 	o.AutoTiling = true
-	o.LayoutPrefixActive = true
+	o.SubMenu = app.SubMenuLayout
 	o.PrefixActive = true
 
 	o, _ = handleTerminalLayoutPrefix(press("1"), o)
 
-	if o.LayoutPrefixActive || o.PrefixActive {
-		t.Errorf("the chord stayed armed: layout=%v prefix=%v", o.LayoutPrefixActive, o.PrefixActive)
+	if o.SubMenu == app.SubMenuLayout || o.PrefixActive {
+		t.Errorf("the chord stayed armed: layout=%v prefix=%v", o.SubMenu == app.SubMenuLayout, o.PrefixActive)
 	}
 }

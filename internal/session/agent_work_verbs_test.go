@@ -56,13 +56,13 @@ func TestAgentWorkVerbsAreClassifiedAsThePlanSays(t *testing.T) {
 			t.Errorf("%s is not registered", row.verb)
 			continue
 		}
-		if got, ok := verbScopes[row.verb]; !ok || got != row.scope {
+		if got, ok := verbScope(row.verb); !ok || got != row.scope {
 			t.Errorf("%s has scope %v (listed %v), want %v", row.verb, got, ok, row.scope)
 		}
 		if got := grantKind(row.verb); got != row.scope {
 			t.Errorf("%s needs %v from a pane, want %v", row.verb, got, row.scope)
 		}
-		if got := verbCapabilities[row.verb].list(); !slices.Equal(got, row.link) {
+		if got, _ := verbLinkCaps(row.verb); !slices.Equal(got.list(), row.link) {
 			t.Errorf("%s needs %v over a link, want %v", row.verb, got, row.link)
 		}
 		if typingVerbs[row.verb] != row.typing {

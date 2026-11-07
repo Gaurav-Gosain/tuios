@@ -41,6 +41,16 @@ type paneBareSpan struct {
 	Link   uv.Link
 }
 
+// linkScan is the scratch space appendBareSpans reuses for every line of one
+// frame. Link rules scan every line rather than only those holding "://", and
+// without it each line cost its text twice over in allocations.
+type linkScan struct {
+	buf    []byte        // the line's text
+	rowAt  []int         // one row's column-to-byte map
+	refs   []linkCellRef // the cell of each glyph in buf
+	byteAt []int         // the byte offset in buf of each glyph
+}
+
 // appendBareSpans reads rows top..bottom as one line, finds the URLs in it with
 // the shared detector, and records each one's cells per row. rows must have
 // maxY entries. The caller holds the window's I/O read lock.
@@ -50,7 +60,7 @@ type paneBareSpan struct {
 // back to the middle of a long URL. The line is followed past both edges in
 // the emulator (up to linkWrapRows rows each way), so a cut URL keeps its
 // whole address. Spans are recorded only for the rows on screen.
-func appendBareSpans(rows [][]paneBareSpan, window *terminal.Window, top, bottom, maxX, maxY int) [][]paneBareSpan {
+func appendBareSpans(rows [][]paneBareSpan, window *terminal.Window, top, bottom, maxX, maxY int, rules *hints.LinkRules, scan *linkScan) [][]paneBareSpan {
 	if top == 0 {
 		for limit := top - linkWrapRows; top > limit && paneRowWraps(window, top-1); {
 			top--
@@ -61,26 +71,36 @@ func appendBareSpans(rows [][]paneBareSpan, window *terminal.Window, top, bottom
 			bottom++
 		}
 	}
-	var b strings.Builder
-	var refs []linkCellRef
-	var byteAt []int
+	if scan == nil {
+		scan = &linkScan{}
+	}
+	if cap(scan.rowAt) < maxX {
+		scan.rowAt = make([]int, maxX)
+	}
+	scan.buf, scan.refs, scan.byteAt = scan.buf[:0], scan.refs[:0], scan.byteAt[:0]
 	for row := top; row <= bottom; row++ {
-		text, rowBytes := paneRowText(window, row, maxX)
-		base := b.Len()
-		b.WriteString(text)
-		for col, off := range rowBytes {
+		base := len(scan.buf)
+		scan.buf, scan.rowAt = appendPaneRowText(scan.buf, scan.rowAt, window, row, maxX)
+		for col, off := range scan.rowAt {
 			if off < 0 {
 				continue
 			}
-			refs = append(refs, linkCellRef{X: col, Y: row})
-			byteAt = append(byteAt, base+off)
+			scan.refs = append(scan.refs, linkCellRef{X: col, Y: row})
+			scan.byteAt = append(scan.byteAt, base+off)
 		}
 	}
-	line := b.String()
-	for _, r := range hints.URLs(line) {
+	// Most lines hold no link. Telling them apart on the bytes, before the
+	// line becomes a string, is what keeps a screen of ordinary output from
+	// allocating with rules on.
+	if !hints.MayHoldLink(scan.buf, rules) {
+		return rows
+	}
+	line := string(scan.buf)
+	refs, byteAt := scan.refs, scan.byteAt
+	for _, l := range hints.Links(line, rules) {
 		first, last := -1, -1
 		for i, off := range byteAt {
-			if off >= r[0] && off < r[1] {
+			if off >= l.Start && off < l.End {
 				if first < 0 {
 					first = i
 				}
@@ -90,7 +110,7 @@ func appendBareSpans(rows [][]paneBareSpan, window *terminal.Window, top, bottom
 		if first < 0 {
 			continue
 		}
-		url := line[r[0]:r[1]]
+		url := l.Target
 		link := uv.Link{URL: url, Params: "id=" + bareLinkID(window.ID, url, refs[first])}
 		for i := first; i <= last; {
 			y := refs[i].Y
@@ -117,6 +137,15 @@ func bareLinkID(windowID, url string, at linkCellRef) string {
 	h.Write([]byte(url))
 	h.Write([]byte{0, byte(at.X), byte(at.X >> 8), byte(at.Y), byte(at.Y >> 8)})
 	return "tuios-" + strconv.FormatUint(h.Sum64(), 36)
+}
+
+// bareSpanCount counts the spans recorded for viewport rows top..bottom.
+func bareSpanCount(rows [][]paneBareSpan, top, bottom int) int {
+	n := 0
+	for y := max(top, 0); y <= bottom && y < len(rows); y++ {
+		n += len(rows[y])
+	}
+	return n
 }
 
 // bareLinkFor returns the detected link covering column x of a row's spans.

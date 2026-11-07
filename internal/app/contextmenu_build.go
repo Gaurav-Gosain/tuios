@@ -146,7 +146,7 @@ func (m *OS) WindowAt(x, y int) int {
 		if x < win.X || x >= win.X+win.Width || y < win.Y || y >= win.Y+win.Height {
 			continue
 		}
-		if z := HitZ(win); z > topZ {
+		if z := HitZ(win); z >= topZ {
 			top, topZ = i, z
 		}
 	}

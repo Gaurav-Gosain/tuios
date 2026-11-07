@@ -387,8 +387,8 @@ func contextMenuHint(registry *config.KeybindRegistry, action string, s *config.
 func firstKey(registry *config.KeybindRegistry, action string) string {
 	for _, keys := range [][]string{
 		registry.GetKeys(action),
-		registry.GetSidebarFilesKeys(action),
-		registry.GetSidebarKeys(action),
+		registry.Keys(config.TableSidebarFiles, action),
+		registry.Keys(config.TableSidebar, action),
 	} {
 		if len(keys) > 0 {
 			return keys[0]

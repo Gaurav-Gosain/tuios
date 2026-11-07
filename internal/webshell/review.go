@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/linediff"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
@@ -110,16 +111,16 @@ func ReviewDiff(dir, base string, uncommitted bool) (Review, error) {
 // reviewHunks turns a line diff into review hunks with three lines of
 // context, and counts the lines added and removed.
 func reviewHunks(ops []diffOp) (hunks []review.Hunk, added, removed int) {
-	for _, h := range groupHunks(ops, 3) {
-		rh := review.Hunk{Header: h.header(), OldStart: h.aStart, OldLines: h.aCount, NewStart: h.bStart, NewLines: h.bCount}
-		if h.aCount == 0 {
+	for _, h := range linediff.Hunks(ops, 3) {
+		rh := review.Hunk{Header: h.Header(), OldStart: h.AStart, OldLines: h.ACount, NewStart: h.BStart, NewLines: h.BCount}
+		if h.ACount == 0 {
 			rh.OldStart--
 		}
-		if h.bCount == 0 {
+		if h.BCount == 0 {
 			rh.NewStart--
 		}
-		a, b := h.aStart, h.bStart
-		for _, op := range h.ops {
+		a, b := h.AStart, h.BStart
+		for _, op := range h.Ops {
 			switch op.Op {
 			case '-':
 				rh.Lines = append(rh.Lines, review.Line{Op: review.OpDelete, Old: a, Text: op.Line})

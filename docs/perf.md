@@ -4985,6 +4985,39 @@ the machine, so neither test reads a clock.
   `math.Hypot` can differ in the last bit and move a route.
 - The tuios binary grows by 20 KB (see "Binary size budget").
 
+## 2026-11 the drag label parses its URI list once per list
+
+While a file drag is in flight, every composed frame drew the drag label,
+and the label read the whole URI list the source had sent ahead again to
+name the first three files. The cost grew with the list and was paid on
+every frame of the drag. The label text is now kept for that list and made
+again only when a new list arrives, so a frame's cost no longer grows with
+the list's length. The text is the same.
+
+Measured with a scratch benchmark (`newTestOS(nil)` at 200x60, the pointer
+at 100,30, a started drag whose `text/uri-list` holds `file:///t/f%d.txt`
+lines, one `renderDnDLabel` per iteration), base and branch test binaries
+built with `go test -c` (`go version` checked on both: go1.27.3), alternated
+for 10 rounds under `nice -n 10 taskset -c 0-5`, 0.3 s per run, compared with
+`benchstat`. The machine was busy with other work, so the times carry a
+spread of 20 to 40%; the allocation and memory rows do not move between runs:
+
+| files | time base | time branch | allocs base | allocs branch |
+|---|---:|---:|---:|---:|
+| 60 | 38.5 us | 6.9 us | 277 | 21 |
+| 900 (raw URIs) | 229.7 us | 16.1 us | 2,759 | 30 |
+| 100,000 (raw URIs) | 10.90 ms | 17.0 us | 92 | 30 |
+
+The 900 and 100,000 rows are labelled from the raw URIs: the drop splits a
+list into paths only up to 64 words, so a longer list never reaches the
+paths branch. The 60-file row is the usual drag and takes that branch. The
+branch's cost per frame is the label's drawing; the list is read once, when
+the label first draws, and again only for another list.
+
+The kept text is keyed on the identity of the slice it was made from (first
+byte and length). The source's data is decoded into a fresh slice for every
+list it sends, and the list is not rewritten in place during a drag.
+
 ## 2026-10 the pane read path in live handoff part 1
 
 Part 1 of the live handoff (`docs/design/live-handoff.md`) changes a pane's
@@ -5281,6 +5314,71 @@ pane stays scrolled.
 The libghostty backend's `scrollCache` (`vt/ghostty_scrollback.go`) holds the
 same kind of cache and is not covered.
 
+## 2026-11 a screen's tail text is built in one buffer
+
+`Emulator.TailText` and `PTY.tailShown` read the last rows of a pane's screen on
+every agent look, about four times a second for a streaming pane. Both reset a
+`strings.Builder` for each row, which drops its buffer, so every row allocated
+its own text and the builder's growth steps. They now make one pass and read
+each cell once. The rows go to one byte buffer, in the order they are visited
+(bottom up). A row's trailing blanks and tabs are cut by moving the length back,
+so a blank row rewinds to its start and costs nothing. Each row's end offset
+goes in a `[64]int` array on the stack (a heap slice only past 64 rows), and the
+buffer is regrown between rows in sized steps from the widest row seen so far.
+After the last row the rows are cut from the buffer with `unsafe.String`, which
+does not copy, and handed back top-down. That is safe because the buffer is
+never written after the cut and is never kept: the rows hold it alive, as the
+base's `strings.Builder.String` did for its own. `tailShown` does this with two
+buffers, the plain text and the text with faint cells blanked. The out slices
+have the capacity of the rows kept, not of the `n` asked for: `n` can come from
+a client and can exceed the screen, and the base sized its slice by it. The row
+strings are byte for byte the base's. The libghostty backend's `TailText` has
+its own copy of the loop and is not built on this host. A row now keeps the
+whole buffer alive, at most the widest raw row times the rows kept; no caller
+keeps the rows beyond the call.
+
+A form that reads the visited rows twice (once to size, once to write) was
+measured and is 2.5 to 4 times slower than the base, because the second read of
+every cell costs more than the allocations it saves.
+
+Method: the base and the change compiled into one test binary per package on Go
+1.27.3 and run interleaved per row, ten alternating passes of 0.5 s on one core,
+compared with `benchstat`. One `Emulator` per case, the rows below at 120x40
+unless named, `ASCII` rows of 100 characters, `box` rows of 100 U+2500 cells,
+`padded` ten text rows, four box rows and blank rows below, `4 cols` 4x40.
+
+| `TailText` case | time before | time after | B/op before | B/op after | allocs before | allocs after |
+|---|---|---|---|---|---|---|
+| ASCII, n=10 | 10.87 us | 9.21 us | 2,640 | 1,440 | 51 | 2 |
+| ASCII, n=40 | 41.98 us | 36.28 us | 10,624 | 5,568 | 201 | 2 |
+| ASCII, n=200 | 41.86 us | 36.85 us | 13,376 | 5,568 | 201 | 2 |
+| 120x20 ASCII, n=10 | 11.33 us | 9.68 us | 2,640 | 1,440 | 51 | 2 |
+| 120x20 ASCII, n=40 | 23.21 us | 19.46 us | 5,664 | 3,008 | 101 | 2 |
+| 120x20 ASCII, n=200 | 24.68 us | 19.55 us | 8,416 | 3,008 | 101 | 2 |
+| box, n=10 | 9.51 us | 6.49 us | 10,320 | 4,640 | 71 | 3 |
+| box, n=40 | 39.34 us | 27.85 us | 41,344 | 19,136 | 281 | 3 |
+| box, n=200 | 40.18 us | 26.70 us | 44,096 | 19,136 | 281 | 3 |
+| padded, n=10 | 29.93 us | 22.03 us | 10,112 | 2,720 | 185 | 3 |
+| padded, n=40 | 33.81 us | 24.75 us | 11,648 | 5,088 | 205 | 2 |
+| padded, n=200 | 34.24 us | 28.87 us | 14,400 | 5,088 | 205 | 2 |
+| 4 cols, n=10 | 728 ns | 484 ns | 240 | 208 | - | - |
+| 4 cols, n=40 | 2.79 us | 1.70 us | 1,024 | 864 | - | - |
+| 4 cols, n=200 | 3.29 us | 1.55 us | 3,776 | 864 | - | - |
+
+| `tailShown` case | time before | time after | B/op before | B/op after | allocs before | allocs after |
+|---|---|---|---|---|---|---|
+| ASCII, n=10 | 18.52 us | 13.22 us | 5,856 | 2,880 | 106 | 4 |
+| ASCII, n=40 | 77.72 us | 52.02 us | 24,064 | 11,136 | 410 | 4 |
+| box, n=10 | 20.49 us | 14.80 us | 21,216 | 9,280 | 146 | 6 |
+| box, n=40 | 93.68 us | 55.21 us | 85,504 | 38,272 | 570 | 6 |
+| padded, n=10 | 55.53 us | 45.66 us | 20,800 | 5,440 | 374 | 6 |
+
+Over the `TailText` rows the geometric mean is 26% less time, 54% fewer bytes
+and 98% fewer allocations; over the `tailShown` rows 30% less time and 59%
+fewer bytes. No row is slower or allocates more bytes. The base's time varies by
+up to 72% from run to run on the shortest rows (box, n=10), and the gains on the
+ASCII and 120x20 rows (12% to 21%) are the smallest.
+
 ## 2026-10 an ended session's timers
 
 An SSH or web session that ends is let go at once, not when its timers fire.
@@ -5349,6 +5447,58 @@ timer (#787).
   opened.
 - The `time.AfterFunc` closures (`cockpit.go`, `sixel_symbols.go`), which hold
   no goroutine while they wait.
+
+## 2026-11 prompt gates look only at their own pane
+
+A prompt gate (the wait after a prompt is typed into an agent pane) and the ask
+wait both ran their look at the pane, `GetState` plus the screen verdict, on
+every agent-state event of the whole session, including events about other
+panes. With many agents working in one session, each state change anywhere
+cost every waiting gate a full look. Before the pane has taken the question, an
+event about another pane is now skipped: the gate still reads it, each wait's
+poll and the deadlines are unchanged, and the next tick or an event about its
+own pane looks as before. One consequence: `watchStalledQueue`'s late watch
+(1 s poll) now finds a working screen on its next tick instead of on a foreign
+event, at most 1 s later.
+
+Measured in `internal/session`: N panes with a claude-code report and the
+idle-typed screen, one waiter per pane (a gate with a 1 h poll and stall, or an
+ask wait with a 1 h settle, stall and timeout), a burst of 200 agent-state
+events about another pane published straight to the event bus, waited until
+every subscriber queue was empty (no drops, no waiter returned). The
+same-length quiet window was subtracted, and the least of 3 repeats is shown.
+`nice -n 10 taskset -c 6-11`, Go 1.27.3, base 9bffac8f2 against the branch.
+
+| waiters | allocations per foreign event per waiter, base | after |
+|---|---|---|
+| 1 gate | 136.1 | 0 |
+| 20 gates | 138.0 | 0 |
+| 50 gates | 138.0 | 0 |
+| 1 ask wait | 136.0 | 0 |
+| 20 ask waits | 137.3 | 0 |
+| 50 ask waits | 137.6 | 0 |
+
+Per foreign event the whole session therefore paid about 138 allocations times
+the number of waiters, for example about 6,900 allocations at 50 gates, and now
+pays none beyond reading the event. `TestPromptGateSkipsForeignEvents` (under 2
+per gate) and `TestAskWaitSkipsForeignEvents` (under 20 per ask wait) hold this
+in the package, with `TestPromptGateStillSeesItsPane` and
+`TestAskWaitStillSeesItsPane` as their positive halves.
+
+### Measured and deliberately not changed
+
+- The phase after the pane has taken the question. `waitAgentSettled` still
+  calls `GetState` for an event stamped after the question was sent, whichever
+  pane it is about. It is the rescue when the pane's own rest event was dropped
+  on queue overflow: a later event about any pane ends the wait with
+  `agent-state` instead of waiting for the timeout. Guarding it would change
+  that case, which works today. Cost, same method with panes at working: 12
+  allocations and 11 to 19 us of CPU per foreign event per waiter (it moves
+  from run to run).
+- `waitAgentStart` and `waitAgentRest` read `GetState` on every agent-state
+  event of the session. Same method, 20 waiters on working panes: 12
+  allocations and 14 to 22 us of CPU per foreign event per waiter, each (it
+  moves from run to run). They are open to a follow-up if the cost shows up.
 
 ## 2026-10 the escape-string buffer is given back when a pane is idle
 
@@ -5492,6 +5642,29 @@ both encoders.
   against 31.3 ms bare (+7.8%) and 33.4 ms against 36.4 ms framed (+8.8%).
   Sub makes the file larger and the encode slower, so unfiltered rows stay.
 
+## 2026-11 quick look lights search matches in one walk
+
+With wrap on and a search active, every drawn row lit its matches by measuring
+the whole line before each one, so a long line cost the square of its matches
+on every redraw (a scroll step or a typed character). The walk now resumes
+where the last match stopped, one grapheme cluster at a time, so the line is
+measured once. The lit cells are the same.
+
+Measured with a scratch benchmark (`keystrokeOS(b, 1, 200, 60)`, a keybind
+registry, quick look open on a text result whose target is the shown one, wrap
+on, the kept panel cleared before each iteration, one `renderQuickLook` per
+iteration), base and branch test binaries built with `go test -c` (`go version`
+checked on both: go1.27.3), alternated for 10 rounds, benchstat. Each input is
+one held line:
+
+| line | search | base | branch |
+|---|---|---|---|
+| 2 KiB of English prose | e | 31.7 ms ± 26% | 3.0 ms ± 54% |
+| 8 KiB of English prose | e | 257 ms ± 16% | 10.3 ms ± 49% |
+| 64 KiB of English prose | e | 308 ms ± 17% | 69.1 ms ± 31% |
+| 64 KiB of `a` | a | 2.62 s ± 11% | 67.7 ms ± 43% |
+| 64 KiB of CJK | 字 | 653 ms ± 23% | 162 ms ± 24% |
+
 ## 2026-11 quick look keeps its drawn panel
 
 While quick look is open, every overlay compose drew the whole panel again,
@@ -5523,3 +5696,98 @@ mouse box are worked out on every frame, so a resize moves the
 panel even when its size stays the same. A picture is never kept, nor is a
 result still being read or a stale one. Closing the panel drops the kept
 frame, so a large file is not held after it.
+
+## 2026-11 preview search lowers into one buffer
+
+A search in a previewed file (quick look's `/`, `file-preview` find) with no
+capital ignores case, and it did so by `bytes.ToLower` of every 1 MiB chunk: a
+fresh copy per chunk, so a search allocated about as many bytes as it read (51
+MiB on a 50 MiB file), and a query of digits or an address was lowered too. The
+search now lowers an ASCII chunk into one buffer kept for the call, 8 bytes at a
+time, and a query of ASCII digits, punctuation or spaces searches the raw bytes
+with no buffer at all. A chunk with a byte past ASCII still takes
+`bytes.ToLower`, so a caseless non-ASCII query still allocates per chunk and, with
+the lower buffer, about one chunk more than before (the Arabic row). A query
+with a capital is unchanged. A raw search also reports where it stopped
+exactly: after a character whose lowercase has another length (U+2C6F), the old
+offset of a digits query landed 10 bytes early for ten of them.
+
+Method: a scratch benchmark (not committed) calls `PreviewLocalSeek` once per
+iteration over a generated 50 MiB file with one absent query, so the search
+reads every 1 MiB chunk. Files: an ASCII log (the line `2026-11-04T10:11:12Z INFO
+worker 17 handled request id=48213 from host-a status ok in 12ms` repeated),
+an `x` file with `NeEdLe` 100 bytes before the end, and Arabic text (one
+sentence repeated). Base and branch test binaries built with `go test -c`
+(`go version` checked on both: go1.27.3), alternated for 10 rounds,
+`taskset -c 2`, `-test.cpu 1`, `-test.benchtime 10x`, `-test.benchmem`, then
+`benchstat base branch`. The queries were `zebra`, `99999`, `10.99.99.99`,
+`needle` and a three-letter Arabic string.
+
+| 50 MiB file, query | time base | time branch | memory base | memory branch |
+|---|---|---|---|---|
+| ASCII log, absent word | 112 ms ± 25% | 26.3 ms ± 14% | 51.0 MiB | 2.0 MiB |
+| ASCII log, absent digits | 106 ms ± 36% | 10.4 ms ± 19% | 51.0 MiB | 1.0 MiB |
+| ASCII log, an IP | 128 ms ± 28% | 35.9 ms ± 14% | 51.0 MiB | 1.0 MiB |
+| 'x' file, mixed-case hit at the end | 75.9 ms ± 36% | 20.6 ms ± 20% | 52.0 MiB | 3.0 MiB |
+| Arabic text, caseless query | 595 ms ± 23% | 521 ms ± 17% (no change, p=0.105) | 90.0 MiB | 91.0 MiB |
+
+## 2026-10 a browser in a pane on macOS
+
+terminal-browser sends a whole frame per paint when it does not recognise its terminal, which is what it finds in a pane. Each frame is in its own synchronized update. On macOS tuios refused shared memory (`t=s`), so the browser used a ring of 8 files (`t=f`) that it overwrites in place.
+
+### What changed
+
+- `internal/kittyshm` opens and deletes an object by name on macOS, without cgo. The daemon and the client offer `t=s` there.
+- A shared memory frame that is first in its synchronized update travels as one `a=T`. The next frame replaces it if the render loop has not sent it, and tuios deletes the replaced object.
+
+### Numbers
+
+macOS 27.0.1, arm64, 11 cores, terminal-browser v0.15.3, one pane in a daemon session. The window is 120x40 at 16x34 pixels, and the page is 1504x1224 pixels with a ground that changes every frame. The browser paints about 107 frames a second. The host is a stand-in that answers as kitty 0.49.2, keeps kitty's rules for images and placements, and reads each file or object when it parses the command. 26 s runs. The stand-in has no display, so tuios renders at 60 frames a second.
+
+| | before | after |
+|---|---|---|
+| Medium | `t=f`, 8 reused files | `t=s`, one object per frame |
+| Frames the host read, per second | 107 | 60 |
+| Frames on screen, per second | 60 | 60 |
+| Bytes the host read | 17.5 GB | 9.9 GB |
+| Bytes on the host's tty | 496 KB | 153 KB |
+| Longest gap between frames | 24.3 ms | 22.0 ms |
+| Client CPU | 1.90 s | 2.11 s |
+| Daemon CPU | 0.71 s | 0.47 s |
+
+The torn frames depend on how late the host reads. The stand-in waits this long before it parses each read:
+
+| Wait | before: torn, out of order | after: torn, out of order |
+|---|---|---|
+| 0 ms | 0, 0 | 0, 0 |
+| 3 ms | 0, 0 | not run |
+| 6 ms | 0, 0 | not run |
+| 12 ms | 28, 139 | 0, 0 |
+
+The binary grows by 55 KB on macOS and 29 KB on Linux.
+
+### Measured and deliberately not changed
+
+- A real kitty 0.49.2 on Linux, with software GL on a headless stage and `/tmp` in memory, showed 0 torn frames in 400 screenshots before and 400 after. The same check finds the tears in the stand-in's frames. kitty's own CPU did not move beyond run-to-run noise: 402% and 398% before, 307% and 394% after.
+
+## 2026-10 tiles through tuios
+
+The browser draws a page from a base image and patches when its terminal says it can. tuios answers yes to `kitty-graphics-patches` over XTGETTCAP. It places such an image at its own pixels: no cell box, and any crop counted in the host's cells.
+
+### Numbers
+
+macOS 27.0.1, arm64, terminal-browser v0.15.3 with the native module from its pull request, one pane in a daemon session, and the stand-in host described above. 26 s runs.
+
+A page where one small square turns:
+
+| | v0.12.0 | shared memory only | tiles | kitty directly |
+|---|---|---|---|---|
+| Presenter | whole frames | whole frames | patches | patches |
+| Bytes the host read | 17.3 GB | 10.1 GB | 182 MB | 205 MB |
+| Bytes on the host's tty | 491 KB | 156 KB | 302 KB | 295 KB |
+| Client CPU | 1.89 s | 2.72 s | 3.34 s | none |
+| Daemon CPU | 0.70 s | 0.47 s | 0.79 s | none |
+
+The page where every pixel changes each frame is the case that costs more. The host reads 16.8 GB and draws 58 frames a second, against 9.9 GB and 60 with whole frames, because tuios replaces a waiting frame only when it is one image. Kitty directly reads about 26 GB there, at 107 frames a second.
+
+The client pays for hashing each patch and for a compose on each write that holds an update: 1.4 s more per 26 s than v0.12.0 on the small page.

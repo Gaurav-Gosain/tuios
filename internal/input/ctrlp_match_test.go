@@ -67,7 +67,7 @@ func TestGlobalBindsAcrossEncodings(t *testing.T) {
 		{"kitty ctrl+alt+p", []byte("\x1b[112;7u"), ""},
 	} {
 		msg := decodeKey(t, tc.raw)
-		if got := sectionAction(msg, o, (*config.KeybindRegistry).GetGlobalAction); got != tc.want {
+		if got := sectionAction(msg, o, config.TableGlobal); got != tc.want {
 			t.Errorf("%s: action = %q (String()=%q, Keystroke()=%q, Mod=%v), want %q",
 				tc.name, got, msg.String(), msg.Keystroke(), msg.Mod, tc.want)
 		}
@@ -81,12 +81,12 @@ func TestGlobalBindRebound(t *testing.T) {
 	o := osWithGlobalBinds(t, map[string][]string{"command_palette": {"ctrl+g"}})
 	for name, raw := range ctrlPEncodings {
 		msg := decodeKey(t, raw)
-		if got := sectionAction(msg, o, (*config.KeybindRegistry).GetGlobalAction); got != "" {
+		if got := sectionAction(msg, o, config.TableGlobal); got != "" {
 			t.Errorf("%s: ctrl+p still resolves to %q after rebinding to ctrl+g", name, got)
 		}
 	}
 	ctrlG := decodeKey(t, []byte{0x07})
-	if got := sectionAction(ctrlG, o, (*config.KeybindRegistry).GetGlobalAction); got != "command_palette" {
+	if got := sectionAction(ctrlG, o, config.TableGlobal); got != "command_palette" {
 		t.Errorf("ctrl+g resolves to %q, want command_palette", got)
 	}
 }
@@ -98,7 +98,7 @@ func TestGlobalBindUnbound(t *testing.T) {
 	o := osWithGlobalBinds(t, map[string][]string{"command_palette": {}})
 	for name, raw := range ctrlPEncodings {
 		msg := decodeKey(t, raw)
-		if got := sectionAction(msg, o, (*config.KeybindRegistry).GetGlobalAction); got != "" {
+		if got := sectionAction(msg, o, config.TableGlobal); got != "" {
 			t.Errorf("%s: unbound command_palette still resolves to %q", name, got)
 		}
 	}

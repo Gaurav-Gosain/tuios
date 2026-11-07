@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -16,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
@@ -176,14 +179,117 @@ func worktreePathFor(template, root, branch string) (string, *verbError) {
 // it away because a session failed to start would be removing something the
 // caller asked for and can still use. The session gets the caller's terminal
 // from its hello, as one made by new-session does.
-func (d *Daemon) createWorktreeSession(cs *connState, root, branch, base, sessionName string, command, env []string, grants *Grants, record func(*WorktreeInfo)) (map[string]any, *verbError) {
+//
+// A setup (see verb_worktree_setup.go) runs in a window of its own first. A
+// sync one holds the agent's window until it passes, so the result then has
+// no window_id and says agent_pending. onAgent runs once the agent's window
+// is open, now or after the setup.
+func (d *Daemon) createWorktreeSession(cs *connState, root, branch, base, sessionName string, command, env []string, grants *Grants, setup setupSpec, record func(*WorktreeInfo), onAgent func(*Session, WindowState)) (map[string]any, *verbError) {
 	template := d.worktreeTemplate()
 	path, verr := worktreePathFor(template, root, branch)
 	if verr != nil {
 		return nil, verr
 	}
+	// The setup's record goes on with the rest, before the record is set on
+	// the session, so a client that adopts it sees the setup from the start.
+	withSetup := func(info *WorktreeInfo) {
+		if record != nil {
+			record(info)
+		}
+		if setup.Command != "" {
+			info.Setup = &WorktreeSetup{Command: setup.Command, Async: setup.Async, State: SetupPending, Agent: SetupAgentWaiting, Shell: len(command) == 0}
+		}
+	}
+	sess, info, created, hookErr, verr := d.makeWorktreeSession(cs, root, path, branch, base, sessionName, withSetup)
+	if verr != nil {
+		return nil, verr
+	}
+	sessionName = sess.Name()
+
+	sessionID := sess.ID
+	onExit := func(ptyID string) { d.notifyPTYClosed(sessionID, ptyID) }
+	startAgent := func() (WindowState, error) {
+		return sess.AddDaemonWindowWith(NewWindowOptions{
+			Cwd:     path,
+			Focus:   true,
+			Command: command,
+			Env:     env,
+			Grants:  grants,
+		}, onExit)
+	}
+	agentFailed := func(err error) *verbError {
+		return hintedVerbError(ErrVerbInternal, "the worktree and session were created but the first window could not start: "+err.Error(), &VerbHint{
+			Detail: "Both are kept. Open a window in the session with: tuios new-window -s " + sessionName + " --cwd " + path,
+		})
+	}
+	out := map[string]any{
+		"session":        sess.Name(),
+		"session_id":     sess.ID,
+		"repo":           info.Repo,
+		"repo_root":      root,
+		"branch":         branch,
+		"created_branch": created,
+		"path":           path,
+	}
+	var win WindowState
+	var err error
+	if setup.Command == "" {
+		if win, err = startAgent(); err != nil {
+			return nil, agentFailed(err)
+		}
+	} else {
+		// An async setup's agent opens first, so it has the focus and the
+		// first place in the session.
+		if setup.Async {
+			if win, err = startAgent(); err != nil {
+				return nil, agentFailed(err)
+			}
+		}
+		setupWin, err := d.startWorktreeSetup(setupLaunch{
+			sess: sess, info: info, created: created, spec: setup, env: env,
+			agent: startAgent, onAgent: onAgent,
+		})
+		if err != nil {
+			// The setup never ran, so nothing is undone. An async setup's
+			// agent runs, and a sync one's can be started by hand.
+			agent := SetupAgentNotStarted
+			if setup.Async {
+				agent = SetupAgentStarted
+			} else {
+				sess.setPromptIfWaiting(PromptNotSent, "The setup window could not start, so the agent did not start.")
+			}
+			sess.setWorktreeSetup(&WorktreeSetup{Command: setup.Command, Async: setup.Async, State: SetupFailed, Agent: agent, Shell: len(command) == 0, Note: "The setup window could not start: " + err.Error()})
+			out["setup_error"] = err.Error()
+		} else {
+			out["setup_window_id"] = setupWin.ID
+			if setup.Async {
+				sess.setWorktreeSetupAgent(SetupAgentStarted)
+			}
+		}
+		out["setup"] = sess.worktreeSetupOrEmpty()
+	}
+	if win.ID != "" {
+		out["window_id"] = win.ID
+		out["pty_id"] = win.PTYID
+		if onAgent != nil {
+			onAgent(sess, win)
+		}
+	} else {
+		out["agent_pending"] = true
+	}
+	if hookErr != "" {
+		out["hook_error"] = hookErr
+	}
+	if warning := unignoredWorktreeWarning(template, root, path); warning != "" {
+		out["warning"] = warning
+	}
+	return out, nil
+}
+
+func (d *Daemon) makeWorktreeSession(cs *connState, root, path, branch, base, sessionName string, record func(*WorktreeInfo)) (sess *Session, info *WorktreeInfo, created bool, hookErr string, verr *verbError) {
+	var err error
 	if _, err := os.Lstat(path); err == nil {
-		return nil, hintedVerbError(ErrVerbGitFailed, path+" already exists", &VerbHint{
+		return nil, nil, false, "", hintedVerbError(ErrVerbGitFailed, path+" already exists", &VerbHint{
 			Param:  "branch",
 			Detail: "A worktree for this branch is already there. Attach to its session, or remove it with remove-worktree first.",
 		})
@@ -192,10 +298,10 @@ func (d *Daemon) createWorktreeSession(cs *connState, root, branch, base, sessio
 		sessionName = worktree.SessionName(filepath.Base(root), branch)
 	}
 	if err := ValidateSessionName(sessionName); err != nil {
-		return nil, invalidParam("name", err.Error())
+		return nil, nil, false, "", invalidParam("name", err.Error())
 	}
 	if d.manager.GetSession(sessionName) != nil {
-		return nil, hintedVerbError(ErrVerbSessionExists, "session "+sessionName+" already exists", &VerbHint{
+		return nil, nil, false, "", hintedVerbError(ErrVerbSessionExists, "session "+sessionName+" already exists", &VerbHint{
 			Param:     "name",
 			Command:   "tuios ls",
 			Available: d.sessionNames(),
@@ -203,21 +309,21 @@ func (d *Daemon) createWorktreeSession(cs *connState, root, branch, base, sessio
 		})
 	}
 
-	created, err := worktree.Add(root, path, branch, base)
+	created, err = worktree.Add(root, path, branch, base)
 	if err != nil {
-		return nil, hintedVerbError(ErrVerbGitFailed, err.Error(), &VerbHint{
+		return nil, nil, false, "", hintedVerbError(ErrVerbGitFailed, err.Error(), &VerbHint{
 			Param:  "branch",
 			Detail: "git refused to add the worktree. The repository is as it was.",
 		})
 	}
 
-	sess, err := d.manager.CreateSession(sessionName, callerSessionConfig(cs), defaultVerbSessionWidth, defaultVerbSessionHeight)
+	sess, err = d.manager.CreateSession(sessionName, callerSessionConfig(cs), defaultVerbSessionWidth, defaultVerbSessionHeight)
 	if err != nil {
-		return nil, hintedVerbError(ErrVerbInternal, "the worktree was created at "+path+" but its session could not: "+err.Error(), &VerbHint{
+		return nil, nil, false, "", hintedVerbError(ErrVerbInternal, "the worktree was created at "+path+" but its session could not: "+err.Error(), &VerbHint{
 			Detail: "The worktree is kept. Start a session in it with: tuios new-window --cwd " + path,
 		})
 	}
-	info := &WorktreeInfo{
+	info = &WorktreeInfo{
 		Info: worktree.Info{
 			Repo:     filepath.Base(root),
 			RepoRoot: root,
@@ -246,40 +352,8 @@ func (d *Daemon) createWorktreeSession(cs *connState, root, branch, base, sessio
 	// returned, and a fan's reservation is a name, not a mutex, so other
 	// clients and verbs go on while the hook runs. A hook that fails keeps the
 	// worktree and the session, and its error goes back with the result.
-	hookErr := d.runWorktreeHook(sess.Name(), info, created)
-
-	sessionID := sess.ID
-	onExit := func(ptyID string) { d.notifyPTYClosed(sessionID, ptyID) }
-	win, err := sess.AddDaemonWindowWith(NewWindowOptions{
-		Cwd:     path,
-		Focus:   true,
-		Command: command,
-		Env:     env,
-		Grants:  grants,
-	}, onExit)
-	if err != nil {
-		return nil, hintedVerbError(ErrVerbInternal, "the worktree and session were created but the first window could not start: "+err.Error(), &VerbHint{
-			Detail: "Both are kept. Open a window in the session with: tuios new-window -s " + sessionName + " --cwd " + path,
-		})
-	}
-	out := map[string]any{
-		"session":        sess.Name(),
-		"session_id":     sess.ID,
-		"repo":           info.Repo,
-		"repo_root":      root,
-		"branch":         branch,
-		"created_branch": created,
-		"path":           path,
-		"window_id":      win.ID,
-		"pty_id":         win.PTYID,
-	}
-	if hookErr != "" {
-		out["hook_error"] = hookErr
-	}
-	if warning := unignoredWorktreeWarning(template, root, path); warning != "" {
-		out["warning"] = warning
-	}
-	return out, nil
+	hookErr = d.runWorktreeHook(sess.Name(), info, created)
+	return sess, info, created, hookErr, nil
 }
 
 // unignoredWorktreeWarning says so when a worktree was put inside its own
@@ -345,8 +419,13 @@ func (d *Daemon) verbNewWorktree(cs *connState, params json.RawMessage) (any, *v
 		Base    string   `json:"base"`
 		Name    string   `json:"name"`
 		Command []string `json:"command"`
+		setupParam
 	}
 	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	setup, verr := d.resolveSetup(p.setupParam)
+	if verr != nil {
 		return nil, verr
 	}
 	branch := strings.TrimSpace(p.Branch)
@@ -356,16 +435,21 @@ func (d *Daemon) verbNewWorktree(cs *connState, params json.RawMessage) (any, *v
 	if len(p.Command) > 0 && p.Command[0] == "" {
 		return nil, invalidParam("command", "command[0] is the program to exec and cannot be empty")
 	}
+	// A child is never wider than its parent (child_clamp.go).
+	command, verr := d.clampChildMode(cs, "new-worktree", "", p.Command, nil, false)
+	if verr != nil {
+		return nil, verr
+	}
 	root, cloned, verr := d.resolveRepoSource(cs, "new-worktree", p.repoSource, nil)
 	if verr != nil {
 		return nil, verr
 	}
-	out, verr := d.createWorktreeSession(cs, root, branch, strings.TrimSpace(p.Base), strings.TrimSpace(p.Name), p.Command, nil, nil, nil)
+	startedBy := d.startedByLater(cs)
+	out, verr := d.createWorktreeSession(cs, root, branch, strings.TrimSpace(p.Base), strings.TrimSpace(p.Name), command, nil, d.childDefaultGrants(cs), setup, nil, func(_ *Session, win WindowState) {
+		startedBy(win.ID)
+	})
 	if verr != nil {
 		return nil, verr
-	}
-	if id, _ := out["window_id"].(string); id != "" {
-		d.noteStartedBy(cs, id)
 	}
 	out["type"] = "worktree_created"
 	if cloned {
@@ -385,6 +469,7 @@ func (d *Daemon) verbListWorktrees(_ *connState, params json.RawMessage) (any, *
 		return nil, verr
 	}
 	rows := make([]map[string]any, 0)
+	withChanges := make([]worktreeChanges, 0)
 	for _, s := range d.listSessions() {
 		wt := s.Worktree
 		if wt == nil {
@@ -443,50 +528,96 @@ func (d *Daemon) verbListWorktrees(_ *connState, params json.RawMessage) (any, *
 		if wt.PR != nil {
 			row["pr"] = wt.PR
 		}
-		if p.Changes && !wt.Gone {
-			// A git status per worktree, only when asked for: the rail never
-			// asks, and a listing an agent polls should not run git it did not
-			// want.
-			if n, err := worktree.Changes(wt.Path); err == nil {
-				row["changes"] = n
+		if wt.Setup != nil {
+			if sess := d.manager.GetSession(s.Name); sess != nil {
+				row["setup"] = d.setupReport(sess, wt.Setup)
 			} else {
-				row["changes"] = -1
-			}
-			// What the close dialog says the delete row will take. Ignored is
-			// the part nothing saves, counted in files, not in the entries git
-			// lists; own_commits is the part the delete refuses. -1 is a
-			// failed read, not a count.
-			if n, err := worktree.Ignored(wt.Path); err == nil {
-				row["ignored"] = n
-			} else {
-				row["ignored"] = -1
-			}
-			if n, err := worktree.OwnCommits(wt.Path); err == nil {
-				row["own_commits"] = n
-			} else {
-				row["own_commits"] = -1
-			}
-			if wt.Base != "" {
-				if n, err := worktree.Ahead(wt.Path, wt.Base); err == nil {
-					row["ahead"] = n
-				}
-			}
-			// Merged into its base, or into the base's upstream. Cached per
-			// tip in the worktree package, so a polled listing runs git
-			// again only when a branch moves.
-			into, _ := worktree.Merged(wt.Path, wt.RepoRoot, wt.StartCommit, wt.Base)
-			row["merged"] = into != ""
-			if into != "" {
-				row["merged_into"] = into
+				row["setup"] = wt.Setup
 			}
 		}
+		if p.Changes && !wt.Gone {
+			withChanges = append(withChanges, worktreeChanges{row: row, wt: wt})
+		}
 		rows = append(rows, row)
+	}
+	// The change columns run one heavy git walk each, and a listing of many
+	// worktrees would pay for them serially. Each worker writes only the row
+	// it was given; the one thing shared is the merged cache, which takes
+	// its own lock.
+	if len(withChanges) > 0 {
+		group, ctx := errgroup.WithContext(context.Background())
+		group.SetLimit(worktreeListWorkers)
+		for _, c := range withChanges {
+			c := c
+			group.Go(func() error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				default:
+				}
+				c.fill()
+				return nil
+			})
+		}
+		_ = group.Wait()
 	}
 	return map[string]any{
 		"type":      "worktree_list",
 		"worktrees": rows,
 		"total":     len(rows),
 	}, nil
+}
+
+// worktreeChanges carries one worktree row's git reads. The row map is the
+// worker's only write target.
+type worktreeChanges struct {
+	row map[string]any
+	wt  *WorktreeInfo
+}
+
+// worktreeListWorkers bounds how many worktrees' git reads run at once. Git
+// walks are I/O and stat bound, so a handful saturate a disk and more only
+// add scheduler noise.
+const worktreeListWorkers = 8
+
+// fill adds the change columns to one worktree row. Every column is set even
+// when its git read fails: -1 is a failed read, not a count, and a listing
+// that dropped a column because one worktree's walk broke would read as if
+// the worktree had none.
+func (c worktreeChanges) fill() {
+	row, wt := c.row, c.wt
+	// A git status per worktree, only when asked for: the rail never
+	// asks, and a listing an agent polls should not run git it did not
+	// want. One walk serves the two status columns: the heavy walk is the
+	// ignored one.
+	if changes, ignored, err := worktree.ChangeCounts(wt.Path); err == nil {
+		row["changes"] = changes
+		row["ignored"] = ignored
+	} else {
+		row["changes"] = -1
+		row["ignored"] = -1
+	}
+	// What the close dialog says the delete row will take. Ignored is
+	// the part nothing saves, counted in files, not in the entries git
+	// lists; own_commits is the part the delete refuses.
+	if n, err := worktree.OwnCommits(wt.Path); err == nil {
+		row["own_commits"] = n
+	} else {
+		row["own_commits"] = -1
+	}
+	if wt.Base != "" {
+		if n, err := worktree.Ahead(wt.Path, wt.Base); err == nil {
+			row["ahead"] = n
+		}
+	}
+	// Merged into its base, or into the base's upstream. Cached per
+	// tip in the worktree package, so a polled listing runs git
+	// again only when a branch moves.
+	into, _ := worktree.Merged(wt.Path, wt.RepoRoot, wt.StartCommit, wt.Base)
+	row["merged"] = into != ""
+	if into != "" {
+		row["merged_into"] = into
+	}
 }
 
 func (d *Daemon) verbRemoveWorktree(cs *connState, params json.RawMessage) (any, *verbError) {
@@ -508,6 +639,9 @@ func (d *Daemon) verbRemoveWorktree(cs *connState, params json.RawMessage) (any,
 	if verr != nil {
 		return nil, verr
 	}
+	// A setup still running here stops being watched, so its undo does not
+	// race this removal.
+	d.setups.halt(sess.ID)
 	// Resolved now, while the directory is there to resolve.
 	notesRoot := canonRoot(info.Path)
 	killed := false
@@ -722,8 +856,13 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 		Task         string            `json:"task"`
 		TaskSession  string            `json:"task_session"`
 		HumanNonce   string            `json:"human_nonce"`
+		setupParam
 	}
 	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	setup, verr := d.resolveSetup(p.setupParam)
+	if verr != nil {
 		return nil, verr
 	}
 	// What every new pane may do through tuios, decided before anything is
@@ -801,6 +940,11 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 			if launches[i], verr = d.resolveAgentLaunch(param, spec, pathList); verr != nil {
 				return verr
 			}
+			// Each agent's permission mode is held to the calling agent's
+			// (child_clamp.go).
+			if launches[i].argv, verr = d.clampChildMode(cs, "fan", launches[i].harness, launches[i].argv, env, false); verr != nil {
+				return verr
+			}
 		}
 		return nil
 	}
@@ -874,9 +1018,16 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 		out["task_note"] = note
 		return note
 	}
+	startedBy := d.startedByLater(cs)
 	for i, branch := range branches {
 		launch, prompt := launches[i%len(launches)], promptFor(i)
-		out, verr := d.createWorktreeSession(cs, root, branch, strings.TrimSpace(p.Base), "", launch.argv, env, grants, func(info *WorktreeInfo) {
+		// The prompt is typed once the agent's window is open: at once, or
+		// after a sync setup passes.
+		onAgent := func(sess *Session, win WindowState) {
+			startedBy(win.ID)
+			go d.deliverFanPrompt(sess, win.ID, launch.harness, prompt, readyTimeout)
+		}
+		out, verr := d.createWorktreeSession(cs, root, branch, strings.TrimSpace(p.Base), "", launch.argv, env, grants, setup, func(info *WorktreeInfo) {
 			info.Group = stem
 			info.FanID = fanID
 			info.LaunchedFrom = launchedFrom
@@ -884,7 +1035,7 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 			info.Prompt = prompt
 			info.PromptStatus = PromptPending
 			info.Agent = launch.spec
-		})
+		}, onAgent)
 		if verr != nil {
 			if len(sessions) > 0 {
 				names := make([]string, 0, len(sessions))
@@ -902,10 +1053,7 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 			}
 			return nil, verr
 		}
-		sess := d.manager.GetSession(out["session"].(string))
-		windowID := out["window_id"].(string)
-		d.noteStartedBy(cs, windowID)
-		go d.deliverFanPrompt(sess, windowID, launch.harness, prompt, readyTimeout)
+		windowID, _ := out["window_id"].(string)
 		if w, ok := out["warning"].(string); ok && !slices.Contains(warnings, w) {
 			warnings = append(warnings, w)
 		}
@@ -916,6 +1064,12 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 			"window_id": windowID,
 			"agent":     launch.harness,
 			"command":   launch.command(),
+		}
+		if rec, ok := out["setup"]; ok {
+			row["setup"] = rec
+		}
+		if pending, ok := out["agent_pending"]; ok {
+			row["agent_pending"] = pending
 		}
 		if hookErr, ok := out["hook_error"]; ok {
 			row["hook_error"] = hookErr

@@ -31,7 +31,7 @@ snap_corner_4 = ["4"]
 		t.Errorf("an old config still has %d conflict(s) after loading: %+v", len(got), got)
 	}
 	// And the feature came back under the chord.
-	if got := NewKeybindRegistry(cfg).GetLayoutPrefixAction("1"); got != "snap_corner_1" {
+	if got := NewKeybindRegistry(cfg).Action(TableLayoutPrefix, "1"); got != "snap_corner_1" {
 		t.Errorf("the layout chord then 1 runs %q after the migration", got)
 	}
 }

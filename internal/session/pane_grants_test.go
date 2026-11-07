@@ -582,7 +582,7 @@ func TestAHostedPaneReachesNoSessionHereUnderStrict(t *testing.T) {
 func TestGrantKindCoversEveryVerb(t *testing.T) {
 	for name := range verbRegistry() {
 		kind := grantKind(name)
-		if _, ok := verbScopes[name]; !ok && kind != scopeOpen {
+		if _, ok := verbScope(name); !ok && kind != scopeOpen {
 			t.Errorf("verb %q has no class for pane grants", name)
 		}
 	}

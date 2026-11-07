@@ -91,7 +91,7 @@ func runPaletteCommandForTest(t *testing.T, o *app.OS, name string) *app.OS {
 	t.Helper()
 	for _, c := range app.GetCommandPaletteItems(&o.Settings) {
 		if c.Name == name {
-			out, _ := c.Action(o)
+			out, _ := c.Run(o)
 			return out
 		}
 	}

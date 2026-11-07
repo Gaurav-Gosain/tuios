@@ -29,6 +29,16 @@ const (
 // opens it in the editor. It is bound after the leader and in copy mode.
 const ActionEditScrollback = "edit_scrollback"
 
+// ActionHints labels the text on the pane for copying, as the leader and F
+// do. It is bound in copy mode too, where the labels go on the scrolled-back
+// view the person is reading.
+const ActionHints = "hints"
+
+// ActionCopyMode starts copy mode over the text in the quick look preview,
+// inside the file. It is the quick_look_inside binding for what the leader
+// and [ do for a pane.
+const ActionCopyMode = "copy_mode"
+
 // ActionClearScrollback clears the focused pane's scrollback and the rows
 // above its prompt, as cmd+k does in Ghostty and iTerm2. It has no default
 // key: the host terminal takes cmd+k for itself unless told not to. Bind it
@@ -116,10 +126,14 @@ func validateCopyModeKeys(cfg *UserConfig, result *ValidationResult) {
 // motion here, and E (WORD end) and ctrl+e (scroll a line in tmux and vim)
 // are taken the same way. ctrl+g is the key that opens a reply draft in the
 // editor, so one key means "this text in my editor" in both places.
+//
+// Hints are on s, which copy mode does not read. F opens them after the
+// leader, but F is the backward character search here.
 func getDefaultCopyModeKeybinds() map[string][]string {
 	return map[string][]string{
 		ActionCopyModeLineStart: {"home"},
 		ActionCopyModeLineEnd:   {"end"},
 		ActionEditScrollback:    {"ctrl+g"},
+		ActionHints:             {"s"},
 	}
 }

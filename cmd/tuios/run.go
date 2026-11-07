@@ -71,7 +71,7 @@ func runLocal() error {
 	}
 
 	if debugMode {
-		_ = os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
+		debuglog.Enable()
 		fmt.Println("Debug mode enabled")
 	}
 
@@ -80,7 +80,7 @@ func runLocal() error {
 	// rendered UI and corrupt it. When internal debugging is on, divert the log
 	// stream to a file so the screen stays clean; the external daemon subprocess
 	// already discards its own output, so this covers the in-process client.
-	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+	if debuglog.Enabled() {
 		if lf, lerr := debuglog.Open(debuglog.Path); lerr == nil {
 			log.SetOutput(lf)
 		}
@@ -230,7 +230,7 @@ func (f sshServerFlags) checkLimits() error {
 
 func runSSHServer(f sshServerFlags) error {
 	if debugMode {
-		_ = os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
+		debuglog.Enable()
 		fmt.Println("Debug mode enabled")
 	}
 

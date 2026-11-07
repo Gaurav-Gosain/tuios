@@ -44,9 +44,9 @@ func TestAllKeysAreAskedForWhileBindingsReadKeys(t *testing.T) {
 	check("terminal mode, prefix pending", true)
 	o.PrefixActive = false
 
-	o.TilingPrefixActive = true
+	o.SubMenu = SubMenuTiling
 	check("terminal mode, window prefix pending", true)
-	o.TilingPrefixActive = false
+	o.SubMenu = SubMenuNone
 
 	o.ShowInbox = true
 	check("terminal mode, Inbox open", true)

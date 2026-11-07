@@ -84,6 +84,11 @@ type WorktreeInfo struct {
 	// it. Replaced whole, never edited in place, so a copy of the info can
 	// share it. See verb_fan_compare.go.
 	Verify *FanVerify `json:"verify,omitempty"`
+	// Setup is the setup the worktree ran before its agent, nil when it ran
+	// none. Saved with the session. Additive: an older client drops it.
+	// Replaced whole, never edited in place, like Verify. See
+	// verb_worktree_setup.go.
+	Setup *WorktreeSetup `json:"setup,omitempty"`
 	// PR is the pull request of the branch, nil when tuios knows of none. It
 	// is set when ship-pr opens one or ship-status finds one, and kept fresh
 	// by the poll in pr_poll.go. Saved with the session. Additive: an older

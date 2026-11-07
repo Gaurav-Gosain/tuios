@@ -11,6 +11,8 @@ import (
 
 	"github.com/Gaurav-Gosain/mygo/ui"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
 
@@ -55,7 +57,7 @@ func (a *App) sidebarKey(k string) {
 	i := max(slices.Index(ids, a.sb.cursor), 0)
 	action := ""
 	if a.tk.reg != nil {
-		action = a.tk.reg.GetSidebarAction(k)
+		action = a.tk.reg.Action(config.TableSidebar, k)
 	}
 	if k == "esc" {
 		action = "exit"

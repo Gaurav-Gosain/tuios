@@ -687,9 +687,7 @@ type ModeInfo struct {
 
 // prefixArmed reports whether the leader, or one of its menus, waits for a key.
 func (m *OS) prefixArmed() bool {
-	return m.PrefixActive || m.WorkspacePrefixActive || m.MinimizePrefixActive ||
-		m.TilingPrefixActive || m.DebugPrefixActive || m.TapePrefixActive ||
-		m.LayoutPrefixActive || m.TuiosPrefixActive || m.Menu != ""
+	return m.PrefixActive || m.SubMenu != SubMenuNone || m.Menu != ""
 }
 
 // tiledModeLabel is the mode pill's label in terminal or window mode. With

@@ -321,9 +321,9 @@ func (m *OS) railAgentOrder() []sidebarAgentEntry {
 	now := time.Now()
 	folded := m.sidebarFoldAgents(agents, now)
 	if n := len(folded); n == 0 || folded[n-1].Fold == 0 {
-		return agents
+		return sidebarNestAgents(agents)
 	}
-	awake := append([]sidebarAgentEntry(nil), folded[:len(folded)-1]...)
+	awake := sidebarNestAgents(append([]sidebarAgentEntry(nil), folded[:len(folded)-1]...))
 	for _, e := range agents {
 		if sidebarAgentRests(e, m.Settings.SidebarAgentRestFold, now) {
 			awake = append(awake, e)

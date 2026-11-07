@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Moving a worktree's work to another machine: the commits as a git bundle,
@@ -61,6 +63,20 @@ func DeleteBranch(dir, branch string) error {
 		return err
 	}
 	_, err := run(dir, "branch", "-D", branch)
+	return err
+}
+
+// DeleteBranchAt removes branch from the repository at dir only while it
+// still points at sha. git update-ref checks the old value and deletes in one
+// step, so a branch that gained a commit after the caller looked is kept.
+func DeleteBranchAt(dir, branch, sha string) error {
+	if err := ValidBranch(branch); err != nil {
+		return err
+	}
+	if sha == "" {
+		return errfmt.Errorf("no commit to check %s against", branch)
+	}
+	_, err := run(dir, "update-ref", "-d", "refs/heads/"+branch, sha)
 	return err
 }
 

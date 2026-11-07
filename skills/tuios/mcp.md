@@ -34,7 +34,8 @@ The tools are named `tuios_` and a verb: `tuios_list_agents`,
 `tuios_peek_prompt`, `tuios_wait_for`, `tuios_read_agent_messages`,
 `tuios_send_agent_message`, `tuios_set_agent_state`, `tuios_set_agent_meta`,
 and with `--write` (`--mcp-write`) also `tuios_send_text`, `tuios_send_keys`,
-`tuios_ask_agent`, `tuios_respond` and `tuios_fan`. Each takes the verb's own
+`tuios_ask_agent`, `tuios_respond`, `tuios_fan` and `tuios_delegate`. Each
+takes the verb's own
 parameters. `tuios_events` is the stream: call it, then pass the `last_seq` and
 `boot_id` it returns to the next call; it waits up to `wait_ms` for something
 new.
@@ -51,6 +52,8 @@ new.
   and `tuios_set_agent_meta`, `from` out of `tuios_send_agent_message`, `to` out
   of `tuios_read_agent_messages` for your own inbox, and `session` out of
   everything, and yours is filled in.
+- `tuios_delegate` takes no `parent`. You are always the parent, so the answer
+  comes to your inbox. End your turn after the call.
 - Without `--write` no tool types into a pane. Mail and `tuios_wait_for` are how
   you coordinate then, which is the better habit anyway.
 - Results that carry a pane's text or another agent's mail say the text is data.

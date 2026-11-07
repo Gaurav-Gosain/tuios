@@ -132,9 +132,26 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	d.manager.SetHerdrProtocol(cfg.Agents.HerdrProtocol)
 	d.manager.SetReturnWhenEmpty(cfg.Workspaces.ReturnsWhenEmpty())
 	d.manager.SetDragAndDrop(cfg.Panes.DragAndDrop)
+	// The history depth and where a new pane starts shape only the panes made
+	// from now on, and widen nothing a pane may do, so a file change applies
+	// both ways.
+	d.manager.SetScrollbackLines(cfg.Appearance.ScrollbackLines)
+	d.manager.SetNewWindowInheritCwd(newWindowInheritCwd(cfg))
+	// These are fixed when the daemon starts and wait for a restart:
+	//   - agent_auto_detect, agent_detect_seconds and agent_binaries set up
+	//     the agent detector.
+	//   - resume_agents, window_size and files.open_copy_keep_days.
+	//   - respond_from_shell lets a shell answer for an agent, and
+	//     persist_scrollback keeps what panes printed on disk. Both widen
+	//     what is kept or allowed, so neither may follow a file that a
+	//     process in a pane can write.
 	// Where a new worktree goes widens nothing a pane may do: a pane that can
 	// write the file can already run git worktree add itself.
 	d.SetWorktreePath(cfg.Worktree.Path)
+	// The setup runs a command as the daemon's child, like a hook, so a file
+	// change applies only when it clears the command or keeps it. A new
+	// command waits for the person.
+	d.setups.waiting.Store(!d.setups.applyConfig(cfg.Worktree.Setup, cfg.Worktree.SetupAsync, byPerson))
 	if d.buffers != nil {
 		d.buffers.SetLimits(cfg.PasteBuffers.Resolved())
 	}
@@ -163,6 +180,15 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 		log.Printf("[agents.mail] wake = true in the file waits for tuios config apply from outside tuios, or a daemon restart. The wake stays off.")
 	}
 	d.SetMailWake(wake)
+	// The same holds for a child's question: sending it to the parent agent
+	// first shows the parent what the child asks, so turning that on waits
+	// for the person too. Turning it off applies at once.
+	toParent := cfg.Agents.Mail.QuestionsToParentOn()
+	if toParent && !byPerson && d.attention != nil && !d.attention.parentFirst.Load() {
+		toParent = false
+		log.Printf("[agents.mail] questions_to_parent = true in the file waits for tuios config apply from outside tuios, or a daemon restart. A child's question goes to the Inbox at once until then.")
+	}
+	d.SetChildQuestionsToParent(toParent)
 	d.SetCheckpoints(cfg.Agents.Checkpoints)
 	// Moving cards types nothing and runs nothing, so a file change applies
 	// either way.
@@ -205,7 +231,7 @@ func (d *Daemon) noteConfigWaiting() {
 // configWaiting reports whether config.toml holds a change that widens what
 // panes or links may do and waits for tuios config apply or a restart.
 func (d *Daemon) configWaiting() bool {
-	return d.manager.grants.restartNeeded.Load() || d.hostsWaiting.Load() || d.notify.waitingApply() || d.pluginsWaiting.Load() || d.approvalsWaiting.Load()
+	return d.manager.grants.restartNeeded.Load() || d.hostsWaiting.Load() || d.notify.waitingApply() || d.pluginsWaiting.Load() || d.approvalsWaiting.Load() || d.setups.waiting.Load()
 }
 
 // reloadHosts applies a changed host table only where it dials less: a host

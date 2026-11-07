@@ -274,6 +274,11 @@ var optionSpecs = []Option{
 		Accepted:    FocusFollowsMousePauseKeys, Default: FocusFollowsMousePauseOff,
 	},
 	{
+		Path: "appearance.paste_preview", Type: OptionBool, Section: "appearance",
+		Description: "Show a pasted image in a card at the cursor for a few seconds",
+		Default:     "true",
+	},
+	{
 		Path: "appearance.alt_drag", Type: OptionBool, Section: "appearance",
 		Description: "Alt plus left-drag moves a pane",
 		Default:     "true",
@@ -1752,6 +1757,19 @@ var optionSpecs = []Option{
 		Path: "worktree.path", Type: OptionString, Section: "worktree",
 		Description: "Where new worktrees go, as a template of {{ repo_path }}, {{ repo }} and {{ branch }}, with | slug to make one folder name. A relative path starts at repo_path. Empty puts them under $XDG_DATA_HOME/tuios/worktrees",
 		Default:     "", Check: worktree.ValidatePathTemplate,
+	},
+	// The setup runs a command, so a file change applies only when it
+	// clears the setup or leaves it as it is. A new command waits for tuios
+	// config apply from outside tuios, or a daemon restart.
+	{
+		Path: "worktree.setup", Type: OptionString, Section: "worktree",
+		Description: "A shell command to run in every new worktree before the agent starts, such as pnpm i. Empty runs nothing",
+		Default:     "",
+	},
+	{
+		Path: "worktree.setup_async", Type: OptionBool, Section: "worktree",
+		Description: "Start the agent at once while the setup runs. A failed setup then keeps the worktree and the branch",
+		Default:     "false",
 	},
 	// [review]. Read each time a review opens.
 	{

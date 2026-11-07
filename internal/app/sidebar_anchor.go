@@ -45,12 +45,12 @@ type sidebarScrollAnchor struct {
 // top of the section.
 func (m *OS) sidebarReanchorAgents(agents []sidebarAgentEntry) {
 	a := m.sidebarAgentAnchor
-	if !a.Valid || a.Offset != m.SidebarScrollA {
+	if !a.Valid || a.Offset != m.SidebarScroll[sidebarSectionAgents] {
 		return
 	}
 	for i, e := range agents {
 		if e.WindowID == a.WindowID && e.SessionID == a.SessionID {
-			m.SidebarScrollA = i
+			m.SidebarScroll[sidebarSectionAgents] = i
 			return
 		}
 	}

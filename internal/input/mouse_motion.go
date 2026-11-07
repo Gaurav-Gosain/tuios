@@ -131,7 +131,13 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		// The sidebar band tracks hover the same way the overlays do, and
 		// consumes motion over it so the pane it sits in front of never sees it.
+		// The consumed motion also never reaches the pointer-shape pass below,
+		// so a shape set over pane chrome (grab, resize) would ride across the
+		// whole rail and stick: a pointer crossing from a title bar to the rail
+		// stays a grab for as long as the rail owns the motion. The rail offers
+		// no pointer shape of its own, so the default is right while it does.
 		if o.SidebarActive() && o.SidebarMotion(mouse.X, mouse.Y) {
+			o.ResetPointerShape()
 			return o, nil
 		}
 	}

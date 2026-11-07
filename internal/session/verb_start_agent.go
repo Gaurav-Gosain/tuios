@@ -57,6 +57,7 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		Grants       []string          `json:"grants"`
 		Task         string            `json:"task"`
 		HumanNonce   string            `json:"human_nonce"`
+		Parent       string            `json:"parent"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -69,6 +70,13 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	// What the new pane may do through tuios, decided before anything is
 	// made. See pane_grants.go.
 	grants, verr := d.launchGrants(cs, p.Grants)
+	if verr != nil {
+		return nil, verr
+	}
+	// The agent the new one reports to, also decided before anything is
+	// made: a parent the caller may not name, or a chain too deep, starts
+	// nothing. See agent_parent.go.
+	parent, verr := d.resolveAgentParent(cs, "start-agent", p.Parent)
 	if verr != nil {
 		return nil, verr
 	}
@@ -117,11 +125,18 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		}
 	}
 	argv := append(append([]string{}, launch.argv...), p.Args...)
+	if p.Protocol != "" {
+		argv = protocolAgentArgv(p.Protocol, launch.argv, p.Args)
+	}
+	// The agent's permission mode is held to the calling agent's, before
+	// anything is made (child_clamp.go).
+	if argv, verr = d.clampChildMode(cs, "start-agent", launch.harness, argv, env, p.Protocol != ""); verr != nil {
+		return nil, verr
+	}
 	// A protocol pane runs the pane program with the agent's argv after it.
 	// The agent is still exec'd directly, by the pane program, with no shell.
 	command := argv
 	if p.Protocol != "" {
-		argv = protocolAgentArgv(p.Protocol, launch.argv, p.Args)
 		var verr *verbError
 		if command, verr = d.protocolArgv(p.Protocol, launch.harness, argv); verr != nil {
 			return nil, verr
@@ -194,6 +209,8 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		Command: command,
 		Env:     env,
 		Grants:  grants,
+		// Checked above, on the agent's own argv.
+		modeChecked: true,
 	}, onExit)
 	if bverr != nil {
 		return nil, bverr
@@ -201,7 +218,11 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	if err != nil {
 		return nil, newWindowErr(err, sess, p.Workspace)
 	}
-	d.noteStartedBy(cs, win.ID)
+	if parent != nil {
+		sess.setAgentParent(win.ID, parent)
+	} else {
+		d.noteStartedBy(cs, win.ID)
+	}
 	// The card is the new pane's from the start, before the wait, so the
 	// board shows who works on it while the agent loads.
 	var taskRow *TaskRow
@@ -244,6 +265,10 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	}
 	if cloned {
 		out["cloned"] = true
+	}
+	if parent != nil {
+		out["parent"] = parent.ref
+		out["root"] = parent.link.Root
 	}
 	if p.Protocol != "" {
 		out["protocol"] = p.Protocol

@@ -12,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
+	"github.com/Gaurav-Gosain/tuios/internal/oneline"
 	"github.com/Gaurav-Gosain/tuios/internal/risk"
 )
 
@@ -83,7 +84,7 @@ func (a *attentionStore) riskOfCall(tool, target, line, root, runDir string) []r
 // riskOfLine matches the rules against the line a pane reported for its
 // approval. A plan's line is its title, which is not a command.
 //
-// The hooks clip that line to integration.MaxMessage and redact what looks
+// The hooks clip that line to oneline.MaxMessage and redact what looks
 // like a secret to "***", so a risky part past the cut or behind the stars is
 // not there to match. Such a line is marked cut short on top of
 // whatever the rules found, which holds the allow to two presses and keeps a
@@ -99,7 +100,7 @@ func (a *attentionStore) riskOfLine(line, root, runDir string) []risk.Hit {
 	// that stop as where the path ends: a worktree path longer than the line
 	// read as outside it. A "..." the line did not get from a clip is part
 	// of the path, so Clipped is set only for a line Clip cut.
-	clipped := integration.Clipped(line)
+	clipped := oneline.Clipped(line)
 	hits := risk.Match(set.rules, risk.Call{Tool: tool, Text: text, Root: root, RunDir: runDir, Home: set.home, Shown: true, Clipped: clipped, Resolve: realPath})
 	// A line cut to length, a run redacted from it, or a dialog that shows
 	// only part of the call (harness.PartialSuffix) may hide what a rule

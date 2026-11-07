@@ -39,8 +39,8 @@ func ListenForDaemonExit(ch chan tea.Msg) tea.Cmd {
 	return listenDaemonExitUntil(nil, ch)
 }
 
-// listenDaemonExitUntil is ListenForDaemonExit for a session that ends: the
-// command returns nil once stop is closed.
+// listenDaemonExitUntil waits for the next message on its channel and returns nil once
+// stop is closed, so a session that ends leaves no listener parked.
 func listenDaemonExitUntil(stop <-chan struct{}, ch chan tea.Msg) tea.Cmd {
 	return listenOnce(stop, ch, func(msg tea.Msg) tea.Msg { return msg })
 }

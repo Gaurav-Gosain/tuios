@@ -65,14 +65,8 @@ type tapeDetectState struct {
 	indicator tapeIndicator
 }
 
-// ListenForCwdChange waits for the next working-directory change and delivers it
-// to the Update loop as a CwdChangedMsg.
-func ListenForCwdChange(ch chan CwdChangedMsg) tea.Cmd {
-	return listenCwdChangeUntil(nil, ch)
-}
-
-// listenCwdChangeUntil is ListenForCwdChange for a session that ends: the
-// command returns nil once stop is closed.
+// listenCwdChangeUntil waits for the next message on its channel and returns nil once
+// stop is closed, so a session that ends leaves no listener parked.
 func listenCwdChangeUntil(stop <-chan struct{}, ch chan CwdChangedMsg) tea.Cmd {
 	return listenOnce(stop, ch, func(msg CwdChangedMsg) tea.Msg { return msg })
 }

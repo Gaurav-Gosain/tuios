@@ -429,7 +429,8 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 	// A pane the person gave the respond grant may answer for them in the
 	// sessions it may write to. See pane_grants.go.
 	byPane := ""
-	if !d.mayRespond(cs, p.HumanNonce, sess.ID) {
+	asPerson := d.mayRespond(cs, p.HumanNonce, sess.ID)
+	if !asPerson {
 		if !d.paneMayRespond(cs, sess.Name()) {
 			return nil, hintedVerbError(ErrVerbNotHuman, "respond is for the person at an attached client", &VerbHint{
 				Param:  "human_nonce",
@@ -438,6 +439,11 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 		}
 		if pa := d.paneAuthority(cs); pa != nil {
 			byPane = pa.window
+		}
+	}
+	if !asPerson {
+		if why := d.childApprovalRefusal(byPane, w); why != "" {
+			return nil, childApprovalForbidden(why)
 		}
 	}
 	wait := respondDefaultWait
@@ -461,6 +467,12 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 		return nil, promptChangedError(look.window, "the prompt on the pane is not the one prompt_id names")
 	case slot.answered != "" && slot.answered == look.id:
 		return nil, promptChangedError(look.window, "this prompt was already answered, by this client or another")
+	}
+	// A child agent's approval is the person's alone, whatever the caller's
+	// grants: by what the pane reports, and by what its screen shows. See
+	// attention_children.go.
+	if !asPerson && look.window.AgentLink != nil && look.window.ID != byPane && look.prompt.Kind == harness.PromptKindApproval {
+		return nil, childApprovalForbidden("window " + shortWindowID(look.window.ID) + " is a child agent, and its screen shows an approval. Only the person answers it")
 	}
 	reply, err := look.prompt.Resolve(p.Action, p.Value)
 	if err != nil {
@@ -567,4 +579,11 @@ func (d *Daemon) waitPromptAnswered(sess *Session, windowID, answered string, wa
 // isAnswerAction reports whether a is one of the answer actions.
 func isAnswerAction(a string) bool {
 	return slices.Contains(harness.AnswerActions, a)
+}
+
+// childApprovalForbidden is respond's refusal for a child agent's approval.
+func childApprovalForbidden(why string) *verbError {
+	return hintedVerbError(ErrVerbForbidden, "respond is refused: "+why, &VerbHint{
+		Detail: "Nothing was pressed. The approval is in the person's Inbox. Ask the person with send-agent-message -w human.",
+	})
 }

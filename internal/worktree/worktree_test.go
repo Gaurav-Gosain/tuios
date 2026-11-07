@@ -151,3 +151,61 @@ func TestIgnoredReadsAPathWithASpace(t *testing.T) {
 		t.Errorf("Ignored counted %d files, want the 1 in \"cache dir\"", n)
 	}
 }
+
+// TestChangeCountsAgreesWithTheSeparateWalks pins the one-walk read against
+// the two walks it replaced: the changes count and the ignored count a
+// listing shows must be the numbers Changes and Ignored report, since the
+// close dialog stakes its warning on them.
+func TestChangeCountsAgreesWithTheSeparateWalks(t *testing.T) {
+	repo := testutil.GitRepo(t)
+	wt := filepath.Join(t.TempDir(), "wt")
+	if out, err := run(repo, "worktree", "add", "-b", "feat/counts", "--", wt); err != nil {
+		t.Fatalf("worktree add: %v: %s", err, out)
+	}
+	if err := os.WriteFile(filepath.Join(wt, "tracked.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := run(wt, "add", "tracked.txt"); err != nil {
+		t.Fatalf("add: %v: %s", err, out)
+	}
+	if err := os.WriteFile(filepath.Join(wt, "tracked.txt"), []byte("changed"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wt, "untracked.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wt, ".gitignore"), []byte("cache/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ignored := filepath.Join(wt, "cache")
+	if err := os.MkdirAll(ignored, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"a.txt", "b.txt", "c.txt"} {
+		if err := os.WriteFile(filepath.Join(ignored, name), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out, err := run(repo, "config", "status.showUntrackedFiles", "all"); err != nil {
+		t.Fatalf("config: %v: %s", err, out)
+	}
+
+	wantChanges, err := Changes(wt)
+	if err != nil {
+		t.Fatalf("Changes: %v", err)
+	}
+	wantIgnored, err := Ignored(wt)
+	if err != nil {
+		t.Fatalf("Ignored: %v", err)
+	}
+	gotChanges, gotIgnored, err := ChangeCounts(wt)
+	if err != nil {
+		t.Fatalf("ChangeCounts: %v", err)
+	}
+	if gotChanges != wantChanges || gotIgnored != wantIgnored {
+		t.Errorf("ChangeCounts = (%d, %d), want (%d, %d) from the separate walks", gotChanges, gotIgnored, wantChanges, wantIgnored)
+	}
+	if wantIgnored != 3 {
+		t.Errorf("fixture drifted: ChangeCounts = (%d, %d), Ignored = %d", gotChanges, gotIgnored, wantIgnored)
+	}
+}

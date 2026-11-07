@@ -47,6 +47,20 @@ OSC 52, and on a local client also with the system clipboard tool.
 
 You can also open hints mode from the command palette: search for `hints`.
 
+## From copy mode
+
+Press `s` in copy mode to put labels on the text you see. Scroll back to the
+text first, then press `s`. A label copies the text and closes copy mode.
+`Esc` closes hints and keeps copy mode where it was.
+
+`Ctrl+B F` does not work in copy mode, because `Ctrl+B` is page up there. To
+use another key, set `hints` in the `copy_mode` section:
+
+```toml
+[keybindings.copy_mode]
+hints = ["x"]
+```
+
 ## All panes
 
 The `hints_all_panes` action puts labels on all panes that the workspace
@@ -171,6 +185,11 @@ all_panes = false
 Your own patterns come before the built-in patterns. tuios warns about a
 pattern that does not compile when it reads the config, and hints mode skips
 that pattern.
+
+A match of a link rule (`[[links.rules]]`, see
+[CONFIGURATION.md](CONFIGURATION.md#link-rules)) is labelled as a URL. The
+label copies the text on screen, and `Ctrl` and the label opens the address
+the rule builds.
 
 `hints.builtins`, `hints.alphabet`, `hints.open`, `hints.dim` and
 `hints.all_panes` are also on the settings page (Selection tab) and work with

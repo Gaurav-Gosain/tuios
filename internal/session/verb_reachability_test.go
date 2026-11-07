@@ -232,6 +232,8 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"start-agent#1":     {errCode: ErrVerbInvalidParams, why: "/src/api does not exist here"},
 	"start-agent#2":     {errCode: ErrVerbInvalidParams, why: "the fixture's home has no ~/src"},
 	"start-agent#3":     {errCode: ErrVerbInvalidParams, why: "/src/api does not exist here"},
+	"delegate#0":        {errCode: ErrVerbInvalidParams, why: "the fixture's caller is in no agent pane, so the answer has no parent to go to"},
+	"delegate#1":        {errCode: ErrVerbInvalidParams, why: "the fixture has no agent pane whose folder is a git checkout"},
 	"bundle-worktree#0": {errCode: ErrVerbSessionNotFound, why: "api-fan-add-retry-2 does not exist here"},
 	"bundle-worktree#1": {errCode: ErrVerbInvalidParams, why: "the token is a placeholder, and only the connection that made a transfer can read it"},
 

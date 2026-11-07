@@ -15,6 +15,7 @@ import (
 	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
@@ -23,6 +24,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/charmbracelet/x/ansi"
 	"golang.org/x/term"
 )
 
@@ -333,7 +335,7 @@ func generateUniqueSessionName(existingNames []string) string {
 // and an attach the daemon refuses leaves the terminal to the refusal, so
 // these steps are logged only when debugging is on.
 func clientLogf(format string, args ...any) {
-	if debugMode || os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+	if debugMode || debuglog.Enabled() {
 		log.Printf(format, args...)
 	}
 }
@@ -418,7 +420,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	defer stopCPUProfile()
 
 	if debugMode {
-		_ = os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
+		debuglog.Enable()
 		fmt.Println("Debug mode enabled")
 	}
 
@@ -736,6 +738,23 @@ type lsEntry struct {
 	session.SessionInfo
 	Saved  bool   `json:"saved,omitempty"`
 	Server string `json:"server,omitempty"`
+	// AgentTitle is the title the session's first agent pane set, for a
+	// session whose name tuios made up and that has no display name. It is a
+	// label only; the session is still addressed by Name.
+	AgentTitle string `json:"agent_title,omitempty"`
+}
+
+// lsAgentTitleCells bounds the agent title in the text listing, so one long
+// title does not widen the name column for every row.
+const lsAgentTitleCells = 40
+
+// lsAgentTitle is the agent title tuios ls shows beside a session's name. A
+// display name a person set wins, and so does any name tuios did not make up.
+func lsAgentTitle(s session.SessionInfo) string {
+	if s.DisplayName != "" || !session.IsGeneratedSessionName(s.Name) {
+		return ""
+	}
+	return session.SessionAgentTitle(s.Windows)
 }
 
 // printServerLine says which named server a command reached. The default
@@ -818,7 +837,7 @@ func runListSessions(jsonOutput bool) error {
 	if jsonOutput {
 		entries := make([]lsEntry, 0, len(sessions))
 		for _, s := range sessions {
-			entries = append(entries, lsEntry{SessionInfo: s, Server: serverscope.Name()})
+			entries = append(entries, lsEntry{SessionInfo: s, Server: serverscope.Name(), AgentTitle: lsAgentTitle(s)})
 		}
 		return printJSON(entries)
 	}
@@ -845,9 +864,12 @@ func runListSessions(jsonOutput bool) error {
 
 		// A display label set by set-session-name is shown beside the name,
 		// so ls and the UI never show a session by two unrelated names.
+		// An agent's title is shown the same way, for a session nobody named.
 		name := s.Name
 		if s.DisplayName != "" && s.DisplayName != s.Name {
 			name = fmt.Sprintf("%s (%s)", s.Name, s.DisplayName)
+		} else if t := lsAgentTitle(s); t != "" {
+			name = fmt.Sprintf("%s (%s)", s.Name, ansi.Truncate(t, lsAgentTitleCells, "..."))
 		}
 		rowsBySpace[s.Space] = append(rowsBySpace[s.Space], []string{
 			name,

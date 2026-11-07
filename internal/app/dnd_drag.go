@@ -54,6 +54,10 @@ type dndDrag struct {
 	mimes []string
 	// presented is data the source sent ahead, decoded, by MIME index.
 	presented map[int][]byte
+	// names is the label text for the URI list in namesOf, kept so a frame
+	// does not split the list again. See dndLabelWhat.
+	names   string
+	namesOf []byte
 	// icon is the text drag image the source gave, cleaned for the label.
 	icon string
 	// x and y are where the pointer is, in layout cells; sx and sy the same
@@ -1012,23 +1016,18 @@ func (m *OS) dndLabelWhat() string {
 	what := ""
 	if idx := dndMimeIndex(d.mimes, "text/uri-list"); idx >= 0 {
 		if data, ok := d.presented[idx]; ok {
-			names := dndURILines(string(data))
-			if paths, ok := dndURIPaths(string(data)); ok {
-				// A line with a space splits into more than one path, and the drop
-				// splits the same way, so the label names the paths.
-				names = make([]string, len(paths))
-				for i, p := range paths {
-					names[i] = path.Base(p)
-				}
+			// The label is drawn on every frame, and a long list costs a split
+			// per frame, so the text is kept against the identity of the slice
+			// it was made from. A stream's completion stores a fresh slice
+			// (DecodePayload returns one) and presented is not rewritten in
+			// place during a drag; the identity key is a defence for that. namesOf
+			// keeps the previous slice alive until the next label or the end of
+			// the drag, so a new decode cannot reuse its address.
+			if !sameBytes(data, d.namesOf) {
+				d.names = dndNamesText(data)
+				d.namesOf = data
 			}
-			switch {
-			case len(names) == 0:
-				what = "no files"
-			case len(names) <= 3:
-				what = strings.Join(names, ", ")
-			default:
-				what = strings.Join(names[:3], ", ") + " +" + strconv.Itoa(len(names)-3)
-			}
+			what = d.names
 		} else {
 			what = "files"
 		}
@@ -1036,6 +1035,33 @@ func (m *OS) dndLabelWhat() string {
 		what = d.mimes[0]
 	}
 	return dndLabelText(what, 48)
+}
+
+// sameBytes says whether a and b are the same slice: the same first byte and
+// length, not equal contents.
+func sameBytes(a, b []byte) bool {
+	return len(a) > 0 && len(a) == len(b) && &a[0] == &b[0]
+}
+
+// dndNamesText is the label text for a URI list: the first three file names
+// and how many more follow.
+func dndNamesText(data []byte) string {
+	names := dndURILines(string(data))
+	if paths, ok := dndURIPaths(string(data)); ok {
+		// A line with a space splits into more than one path, and the drop
+		// splits the same way, so the label names the paths.
+		names = make([]string, len(paths))
+		for i, p := range paths {
+			names[i] = path.Base(p)
+		}
+	}
+	switch {
+	case len(names) == 0:
+		return "no files"
+	case len(names) <= 3:
+		return strings.Join(names, ", ")
+	}
+	return strings.Join(names[:3], ", ") + " +" + strconv.Itoa(len(names)-3)
 }
 
 // dndLabelFrom names where the drag comes from: its pane, or the desktop

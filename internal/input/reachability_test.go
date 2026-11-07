@@ -372,7 +372,7 @@ func TestPendingActionsStillDoNothing(t *testing.T) {
 					// On an agent row the rail's own binding for the key runs,
 					// as it did before the agent rows had keys of their own.
 					if sec.name == "sidebar_agents" {
-						if rail := o.KeybindRegistry.GetSidebarAction(key); rail != "" && (len(got) == before || got[len(got)-1] != rail) {
+						if rail := o.KeybindRegistry.Action(config.TableSidebar, key); rail != "" && (len(got) == before || got[len(got)-1] != rail) {
 							t.Errorf("%s on an agent row did not fall through to the rail's %s (actions run: %v)", key, rail, got[before:])
 						}
 					}

@@ -2,10 +2,10 @@ package app
 
 import (
 	"image/color"
-	"strconv"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
@@ -94,7 +94,7 @@ func (m *OS) sessionSwitcherRow(item sessiontree.Node, selected bool, rowBg colo
 	// not a session you can reach, so it is muted and wears no agent glyph,
 	// the way the rail draws it.
 	down := item.Host != "" && !m.hostIsUp(item.Host)
-	right := overlay.Style(rowBg).Foreground(pal.FgMute).Render(panePlural(item.WindowCount))
+	right := overlay.Style(rowBg).Foreground(pal.FgMute).Render(plural.Count(item.WindowCount, "pane"))
 	if glyph, glyphColor := agentMark(item.AgentState, item.DoneSeen, item.Subagents, pal); glyph != "" && !down {
 		right += overlay.Style(rowBg).Foreground(glyphColor).
 			Bold(sidebarAttention(item.AgentState)).Render(" " + agentMarkCellRight(glyph))
@@ -152,12 +152,4 @@ func (m *OS) sessionSwitcherRow(item sessiontree.Node, selected bool, rowBg colo
 		}
 	}
 	return listRowSpans(width, listRowMarker(selected), left, right, rowBg, pal)
-}
-
-// panePlural renders a pane count for a switcher row.
-func panePlural(n int) string {
-	if n == 1 {
-		return "1 pane"
-	}
-	return strconv.Itoa(n) + " panes"
 }

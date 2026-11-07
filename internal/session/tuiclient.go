@@ -2481,6 +2481,20 @@ func (c *TUIClient) SessionPlace(name string) (dir, branch string) {
 	return "", ""
 }
 
+// SessionAgentTitle returns the title of the named session's first agent pane
+// (see SessionAgentTitle in session_agent_title.go), empty when there is none.
+// Read from the cached listing, so it costs no round trip.
+func (c *TUIClient) SessionAgentTitle(name string) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, s := range c.availableSessions {
+		if s.Name == name {
+			return SessionAgentTitle(s.Windows)
+		}
+	}
+	return ""
+}
+
 // SessionRestored reports whether the named session came back from saved state
 // and has not been attached to since, from the cached listing. False for an
 // unknown session and for an older daemon that does not send the field, which
@@ -3044,7 +3058,8 @@ func windowSummariesAgree(a, b WindowSummary) bool {
 		slices.Equal(a.SubagentList, b.SubagentList) &&
 		slices.Equal(a.ProgramStatus, b.ProgramStatus) &&
 		a.ForegroundCmd == b.ForegroundCmd && a.Workspace == b.Workspace &&
-		a.Scratch == b.Scratch && a.Note == b.Note
+		a.Scratch == b.Scratch && a.Note == b.Note &&
+		(a.AgentParent == nil) == (b.AgentParent == nil) && (a.AgentParent == nil || *a.AgentParent == *b.AgentParent)
 }
 
 // UpgradedTo is the version a live upgrade said the daemon was becoming as

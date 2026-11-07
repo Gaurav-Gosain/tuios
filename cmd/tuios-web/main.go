@@ -20,6 +20,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/cliflags"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	"github.com/Gaurav-Gosain/tuios/internal/fang"
 	"github.com/Gaurav-Gosain/tuios/internal/netutil"
 	"github.com/Gaurav-Gosain/tuios/internal/release"
@@ -28,6 +29,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/spf13/cobra"
+	"tuios.dev/vt"
 )
 
 // Version information (set by goreleaser)
@@ -182,13 +184,9 @@ Client features:
 }
 
 func main() {
-	// A `go install ...@vX` build has no ldflags; its module version stands in
-	// for them before anything below reads the stamps.
-	applyModuleVersion()
-
-	// See cmd/tuios/main.go: a crash report names the build it came from, and
-	// internal/app cannot read these vars itself.
-	app.SetBuildStamp(version, commit)
+	// The build identity, the same call cmd/tuios makes: crash reports, and the
+	// in-process panes of --ephemeral, name this build.
+	applyBuildIdentity()
 
 	// The server TUIOS_SERVER names, as tuios applies it, so tuios-web started
 	// from a pane of a named server serves that server's daemon.
@@ -288,7 +286,7 @@ func runWebServer() error {
 	pinGuestTerminalEnv()
 
 	if debugMode {
-		_ = os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
+		debuglog.Enable()
 	}
 
 	// Store server config for handler
@@ -773,8 +771,8 @@ func webHostCaps(cellWidth, cellHeight int) *app.HostCapabilities {
 // older client does. They are a guess at a typical monospace cell and nothing
 // more; every connection that reports its canvas gets its real measurement.
 const (
-	webFallbackCellWidth  = 10
-	webFallbackCellHeight = 20
+	webFallbackCellWidth  = vt.FallbackCellWidth
+	webFallbackCellHeight = vt.FallbackCellHeight
 )
 
 // cellSize works out what one cell measures in the browser's pixels, from the
@@ -808,9 +806,10 @@ func webAppearanceOverrides() config.Overrides {
 	return interfaceFlags.Overrides()
 }
 
-// applyModuleVersion replaces the placeholder stamps of a `go install` build
-// with its module version. See release.Stamps.WithModuleVersion.
-func applyModuleVersion() {
-	s := release.Stamps{Version: version, Commit: commit, Date: date, BuiltBy: builtBy}.WithModuleVersion()
+// applyBuildIdentity settles the build stamps (a `go install` build takes its
+// module version) and hands them to every package that reports them. See
+// app.SetBuildIdentity.
+func applyBuildIdentity() {
+	s := app.SetBuildIdentity(release.Stamps{Version: version, Commit: commit, Date: date, BuiltBy: builtBy})
 	version, commit, date, builtBy = s.Version, s.Commit, s.Date, s.BuiltBy
 }

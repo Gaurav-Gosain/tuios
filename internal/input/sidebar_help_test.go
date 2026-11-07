@@ -67,7 +67,7 @@ func TestRailHelpListsWhatTheRailBinds(t *testing.T) {
 		if b.Action == "" {
 			continue
 		}
-		if want := o.KeybindRegistry.GetSidebarKeys(b.Action); want != nil {
+		if want := o.KeybindRegistry.Keys(config.TableSidebar, b.Action); want != nil {
 			if !slices.Equal(b.Keys, want) {
 				t.Errorf("help lists %s as %v, the rail binds %v", b.Action, b.Keys, want)
 			}

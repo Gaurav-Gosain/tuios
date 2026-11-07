@@ -650,6 +650,11 @@ func reportHookEvent(out agentHookOutcome, client verbCaller, hio agentHookIO) a
 			return out
 		default:
 			out.Applied, out.State, out.Reason = &res.Applied, res.State, res.Reason
+			if res.Window != "" {
+				// The rest of the event, and the start hint, are about the
+				// pane the report reached.
+				out.Session, out.Window = cmp.Or(res.Session, out.Session), res.Window
+			}
 			out.ActivityRecorded = res.ActivityRecorded
 			out.TranscriptRefused = res.TranscriptRefused
 			out.StatusLineFlushed = flushAtTurnEnd(out, res, client, hio)
@@ -790,6 +795,11 @@ type hookReportResult struct {
 	// TranscriptRefused is why the daemon did not join the pane to the
 	// transcript_path the report named, "" when it did or none was named.
 	TranscriptRefused string `json:"transcript_refused"`
+	// Session and Window name the pane the daemon placed the report on, when
+	// the pane the hook named is gone: a shared server's hook, whose
+	// TUIOS_PANE_ID is the pane that started the server. Empty otherwise.
+	Session string `json:"session"`
+	Window  string `json:"window"`
 }
 
 // hookFields are the set-agent-state params a hook report may carry beyond

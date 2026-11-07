@@ -51,14 +51,8 @@ func (m *OS) QueueRemoteCommand(payload *session.RemoteCommandPayload) bool {
 	}
 }
 
-// ListenForRemoteCommands blocks on the routed-command channel. Re-armed by the
-// RemoteCommandMsg handler like every other listener here.
-func ListenForRemoteCommands(ch <-chan RemoteCommandMsg) tea.Cmd {
-	return listenRemoteCommandsUntil(nil, ch)
-}
-
-// listenRemoteCommandsUntil is ListenForRemoteCommands for a session that ends:
-// the command returns nil once stop is closed.
+// listenRemoteCommandsUntil waits for the next message on its channel and returns nil once
+// stop is closed, so a session that ends leaves no listener parked.
 func listenRemoteCommandsUntil(stop <-chan struct{}, ch <-chan RemoteCommandMsg) tea.Cmd {
 	return listenOnce(stop, ch, func(msg RemoteCommandMsg) tea.Msg { return msg })
 }

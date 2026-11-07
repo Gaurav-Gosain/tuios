@@ -81,7 +81,7 @@ func TestForwardQueryAllowsFileMediaOnCapableHost(t *testing.T) {
 		want := "\x1b_Gi=7;OK\x1b\\"
 		// Shared memory without a filesystem path cannot be read by tuios,
 		// even when the host shares our ordinary files (for example macOS).
-		if medium == vt.KittyMediumSharedMemory && !kittyShmHasPath() {
+		if medium == vt.KittyMediumSharedMemory && !kittyShmReadable() {
 			want = "\x1b_Gi=7;ENOTSUPPORTED:shared memory is not supported here\x1b\\"
 		}
 		if got := queryResponse(kp, &vt.KittyCommand{ImageID: 7, Medium: medium}); got != want {

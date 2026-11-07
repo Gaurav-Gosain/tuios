@@ -105,7 +105,7 @@ func resolvePaneLink(window *terminal.Window, x, y int, s *config.Settings) (Pan
 	if s.Links != config.LinksAll {
 		return PaneLink{}, false
 	}
-	return bareLinkAt(window, x, y, maxX)
+	return bareLinkAt(window, x, y, maxX, s.LinkRules)
 }
 
 // markedLinkAt finds the OSC 8 run covering (x, y).
@@ -192,7 +192,7 @@ type linkCellRef struct{ X, Y int }
 // past the top or the bottom of what is shown, as one does in a pane scrolled
 // back to the middle of it, still opens its whole address. Only the run that
 // gets underlined stops at the viewport's edge.
-func bareLinkAt(window *terminal.Window, x, y, maxX int) (PaneLink, bool) {
+func bareLinkAt(window *terminal.Window, x, y, maxX int, rules *hints.LinkRules) (PaneLink, bool) {
 	h := window.ContentHeight()
 
 	// Walk up to the first row of the wrapped line, then collect it and every
@@ -229,10 +229,11 @@ func bareLinkAt(window *terminal.Window, x, y, maxX int) (PaneLink, bool) {
 		return PaneLink{}, false
 	}
 
-	s, e, ok := hints.URLAt(b.String(), cursor)
+	found, ok := hints.LinkAt(b.String(), cursor, rules)
 	if !ok {
 		return PaneLink{}, false
 	}
+	s, e := found.Start, found.End
 
 	// Map the byte range back to the cells that drew it.
 	first, last := -1, -1
@@ -250,7 +251,7 @@ func bareLinkAt(window *terminal.Window, x, y, maxX int) (PaneLink, bool) {
 
 	link := PaneLink{
 		WindowID: window.ID,
-		URL:      b.String()[s:e],
+		URL:      found.Target,
 		Y0:       refs[first].Y, X0: refs[first].X,
 		Y1: refs[last].Y, X1: refs[last].X,
 		Row: y, Col: x,
@@ -356,13 +357,21 @@ func paneCellAt(window *terminal.Window, x, y int) *uv.Cell {
 //
 // The caller must hold the window's I/O read lock.
 func paneRowText(window *terminal.Window, y, maxX int) (string, []int) {
-	var b strings.Builder
-	b.Grow(maxX)
-	byteAt := make([]int, maxX)
+	text, byteAt := appendPaneRowText(make([]byte, 0, maxX), make([]int, maxX), window, y, maxX)
+	return string(text), byteAt
+}
+
+// appendPaneRowText is paneRowText into buffers the caller keeps. It appends
+// the row's text to buf and fills byteAt, which must have maxX entries, with
+// offsets relative to the start of what it appended. The frame reuses the two
+// buffers across every line it scans, which is what keeps link rules, which
+// scan every line, from allocating a line's worth of text per line.
+func appendPaneRowText(buf []byte, byteAt []int, window *terminal.Window, y, maxX int) ([]byte, []int) {
+	byteAt = byteAt[:maxX]
 	for i := range byteAt {
 		byteAt[i] = -1
 	}
-
+	base := len(buf)
 	for x := 0; x < maxX; {
 		cell := paneCellAt(window, x, y)
 		content := " "
@@ -375,9 +384,9 @@ func paneRowText(window *terminal.Window, y, maxX int) (string, []int) {
 				content = cell.Content
 			}
 		}
-		byteAt[x] = b.Len()
-		b.WriteString(content)
+		byteAt[x] = len(buf) - base
+		buf = append(buf, content...)
 		x += width
 	}
-	return b.String(), byteAt
+	return buf, byteAt
 }

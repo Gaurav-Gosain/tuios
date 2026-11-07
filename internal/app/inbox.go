@@ -96,6 +96,10 @@ type InboxState struct {
 	// paneKeyAt is when the person last typed into a pane. A question does
 	// not pop within inboxPopQuiet of it.
 	paneKeyAt time.Time
+	// released are the questions the daemon released from their parent
+	// agent while open here. They alert in the attached session too, since
+	// no agent state moved at the release. See inbox_children.go.
+	released map[string]bool
 
 	// lastJumpID and lastJumpAt let the next-attention key cycle.
 	lastJumpID string
@@ -286,8 +290,7 @@ func runInboxWatch(ctx context.Context, dial inboxDial, out chan<- tea.Msg) {
 		if ctx.Err() != nil {
 			return
 		}
-		var callErr *session.VerbCallError
-		if errors.As(err, &callErr) && callErr.Code == session.ErrVerbUnknownVerb {
+		if session.VerbErrCode(err) == session.ErrVerbUnknownVerb {
 			inboxSend(ctx, out, InboxDownMsg{Err: err, Unsupported: true})
 			return
 		}
@@ -333,8 +336,7 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 	// Snoozed group. A daemon from before snoozing refuses the parameter,
 	// and has nothing snoozed, so it is asked without it.
 	raw, err := client.CallWithTimeout("list-attention", map[string]any{"include_snoozed": true}, 5*time.Second)
-	var callErr *session.VerbCallError
-	if errors.As(err, &callErr) && callErr.Code == session.ErrVerbInvalidParams {
+	if session.VerbErrCode(err) == session.ErrVerbInvalidParams {
 		raw, err = client.CallWithTimeout("list-attention", map[string]any{}, 5*time.Second)
 	}
 	if err != nil {
@@ -656,18 +658,31 @@ func (m *OS) applyInboxEvents(msg InboxEventsMsg) tea.Cmd {
 				m.noteAnsweredElsewhere(st.Items[idx], *it)
 				st.Items = append(st.Items[:idx], st.Items[idx+1:]...)
 			}
+			delete(st.released, it.ID)
 		case session.AttentionOpened, session.AttentionUpdated:
 			var prev *session.AttentionItem
 			if idx >= 0 {
 				prev = &st.Items[idx]
 			}
 			m.noteInboxArrival(prev, *it, time.Now())
-			more := false
+			more, released := false, false
 			if idx >= 0 {
 				more = it.Kind == session.AttentionMail && it.Count > st.Items[idx].Count
+				released = inboxWithParent(st.Items[idx]) && !inboxWithParent(*it)
 				st.Items[idx] = *it
 			} else {
 				st.Items = append(st.Items, *it)
+			}
+			// A question with the parent agent is not the person's yet: it
+			// alerts when it is released.
+			if inboxWithParent(*it) {
+				continue
+			}
+			if released {
+				if st.released == nil {
+					st.released = map[string]bool{}
+				}
+				st.released[it.ID] = true
 			}
 			// An upgrade's confirm is its own dialog (syncUpgradeConfirm),
 			// which is alert enough.
@@ -681,7 +696,7 @@ func (m *OS) applyInboxEvents(msg InboxEventsMsg) tea.Cmd {
 			}
 			// An item the person just woke, restored or marked unread here
 			// opens because they asked: it is not news to them.
-			if (ev.Action == session.AttentionOpened || more) && !m.inboxAskedFor(*it) {
+			if (ev.Action == session.AttentionOpened || more || released) && !m.inboxAskedFor(*it) {
 				alert = append(alert, it.ID)
 			}
 			cmds = append(cmds, m.inboxSeenUnderEyes(*it))
@@ -824,7 +839,7 @@ func (m *OS) inboxAlertable(it session.AttentionItem, policy config.AgentAlertPo
 	}
 	// No agent state moves when a question is asked, so the state sync says
 	// nothing about it even in the attached session: the Inbox does.
-	if it.Kind == session.AttentionAsk {
+	if it.Kind == session.AttentionAsk || m.Inbox.released[it.ID] {
 		return policy.Alerts(inboxAlertState(it.Kind))
 	}
 	if m.inboxAttached(it) {
@@ -870,7 +885,7 @@ func (m *OS) fireInboxAlerts(ids []string) {
 	}
 	var items []session.AttentionItem
 	for _, id := range ids {
-		if it, ok := m.inboxItem(id); ok && (it.Kind == session.AttentionAsk || !m.inboxAttached(it)) {
+		if it, ok := m.inboxItem(id); ok && (it.Kind == session.AttentionAsk || m.Inbox.released[id] || !m.inboxAttached(it)) {
 			items = append(items, it)
 		}
 	}
@@ -1027,7 +1042,7 @@ func (m *OS) inboxCounts(sessionName string) sidebarAgentCountInfo {
 	var c sidebarAgentCountInfo
 	rank := 0
 	for _, it := range m.Inbox.Items {
-		if it.Stale || (sessionName != "" && (it.Host != "" || it.Session != sessionName)) {
+		if it.Stale || inboxWithParent(it) || (sessionName != "" && (it.Host != "" || it.Session != sessionName)) {
 			continue
 		}
 		switch it.Kind {

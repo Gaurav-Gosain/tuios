@@ -124,6 +124,20 @@ func (d *Daemon) harnessLeftPane(cs *connState, sess *Session, target string, ha
 	if in, known := processInPane(cs.peerPID, root); !known || !in {
 		return false
 	}
+	// A caller whose parent is the pane's own process is that program
+	// reporting for itself: a script that is the pane's command, or a person
+	// at the pane's shell. That process still runs the pane, so nothing has
+	// left it. A late hook is never in this position: its harness ran it,
+	// and once the harness quits it belongs to init or a subreaper.
+	//
+	// Without this, a script agent that reported with a conversation id and
+	// then ran a command read as gone: a shell with no job control runs the
+	// command in its own process group, so the pane looked to be at its
+	// shell, and the claim lapsed under it. Its next start-agent then found
+	// no agent in the pane and linked no parent.
+	if parent, _, ok := readProcLineage(cs.peerPID); ok && parent == root {
+		return false
+	}
 	if harnessPID > 1 && callerRunsHarness(cs, harnessPID) {
 		if in, known := processInPane(harnessPID, root); !known || in {
 			return false

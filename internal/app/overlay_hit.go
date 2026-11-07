@@ -148,6 +148,15 @@ func (m *OS) reconcileOverlayZOrder() {
 	}
 }
 
+// OverlayStack is the open overlays, bottom first, in the order the mouse
+// and the frame stack them. It brings the order up to date first, so an
+// overlay opened since the last frame is on top. Keys go to the top one that
+// takes keys.
+func (m *OS) OverlayStack() []string {
+	m.reconcileOverlayZOrder()
+	return m.OverlayZOrder
+}
+
 // overlayZ returns the z-index for an overlay kind from its position in the
 // stacking order.
 func (m *OS) overlayZ(kind string) int {

@@ -6,36 +6,34 @@ package app
 // swapSecondaryRail is used only on the UI goroutine, around a synchronous
 // draw or input gesture; it never spans an asynchronous command.
 type secondaryRailView struct {
-	hits             []sidebarRowHit
-	nav              []sidebarNavRow
-	sessionIDs       []string
-	hostIDs          []string
-	sectionY         [sidebarSectionCount][2]int
-	stripRows        []sidebarStripRow
-	scrollS, scrollT int
-	scrollA, scrollF int
-	scrollG, scrollC int
-	agentAnchor      sidebarScrollAnchor
-	agentsUnfolded   bool
-	subagentFold     map[string]bool
-	reveal           sidebarRevealState
-	sectionSplit     int
-	split            sidebarSplitState
-	splitGeom        sidebarSplitGeom
-	filesShow        int8
-	peek             string
-	agentFilter      string
-	agentSort        string
-	hover            bool
-	hoverX, hoverY   int
-	marqueeKey       string
-	marqueeSeen      bool
-	cursor           int
-	cursorWant       sidebarNavRow
-	cursorWantSet    bool
-	drag             sidebarDragState
-	edge             sidebarEdgeState
-	shimmer          []shimmerSpan
+	hits           []sidebarRowHit
+	nav            []sidebarNavRow
+	sessionIDs     []string
+	hostIDs        []string
+	sectionY       [sidebarSectionCount][2]int
+	stripRows      []sidebarStripRow
+	scroll         [sidebarSectionCount]int
+	agentAnchor    sidebarScrollAnchor
+	agentsUnfolded bool
+	subagentFold   map[string]bool
+	reveal         sidebarRevealState
+	sectionSplit   int
+	split          sidebarSplitState
+	splitGeom      sidebarSplitGeom
+	filesShow      int8
+	peek           string
+	agentFilter    string
+	agentSort      string
+	hover          bool
+	hoverX, hoverY int
+	marqueeKey     string
+	marqueeSeen    bool
+	cursor         int
+	cursorWant     sidebarNavRow
+	cursorWantSet  bool
+	drag           sidebarDragState
+	edge           sidebarEdgeState
+	shimmer        []shimmerSpan
 }
 
 func (m *OS) swapSecondaryRail() {
@@ -46,12 +44,7 @@ func (m *OS) swapSecondaryRail() {
 	m.SidebarHostIDs, s.hostIDs = s.hostIDs, m.SidebarHostIDs
 	m.sidebarSectionY, s.sectionY = s.sectionY, m.sidebarSectionY
 	m.sidebarStripRows, s.stripRows = s.stripRows, m.sidebarStripRows
-	m.SidebarScrollS, s.scrollS = s.scrollS, m.SidebarScrollS
-	m.SidebarScrollT, s.scrollT = s.scrollT, m.SidebarScrollT
-	m.SidebarScrollA, s.scrollA = s.scrollA, m.SidebarScrollA
-	m.SidebarScrollF, s.scrollF = s.scrollF, m.SidebarScrollF
-	m.SidebarScrollG, s.scrollG = s.scrollG, m.SidebarScrollG
-	m.SidebarScrollC, s.scrollC = s.scrollC, m.SidebarScrollC
+	m.SidebarScroll, s.scroll = s.scroll, m.SidebarScroll
 	m.sidebarAgentAnchor, s.agentAnchor = s.agentAnchor, m.sidebarAgentAnchor
 	m.sidebarAgentsUnfolded, s.agentsUnfolded = s.agentsUnfolded, m.sidebarAgentsUnfolded
 	m.sidebarSubagentFold, s.subagentFold = s.subagentFold, m.sidebarSubagentFold

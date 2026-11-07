@@ -1252,6 +1252,15 @@ func ckDiffSegs(l ckLook, e sidebarAgentEntry) []ckSeg {
 func (m *OS) ckRowLine2(l ckLook, r ckRow, e sidebarAgentEntry) (verb, rest string, ink color.Color, right []ckSeg) {
 	pal := l.pal
 	ink = pal.Attention
+	if r.hasItem && inboxWithParent(r.item) {
+		return ckWithParentVerb, printableTitle(r.item.Summary), pal.FgDim, nil
+	}
+	if r.agent >= 0 {
+		// A root agent says what waits for the person in its chain.
+		if words := childrenWaitingWords(m.childrenWaiting(e)); words != "" {
+			defer func() { right = append([]ckSeg{{t: words, fg: pal.Attention}}, right...) }()
+		}
+	}
 	if r.hasItem && r.group != ckReview {
 		verb, rest = ckItemVerb(r.item)
 		if r.item.Kind == session.AttentionErrored {
@@ -1528,6 +1537,8 @@ func (m *OS) ckBranches() map[string]ckWorktree {
 // with nothing to say there is one line.
 func (m *OS) ckHasLine2(r ckRow, e sidebarAgentEntry) bool {
 	switch {
+	case r.agent >= 0 && m.childrenWaiting(e) > 0:
+		return true
 	case r.hasItem && r.group != ckReview:
 		return true
 	case r.agent < 0:
@@ -1815,6 +1826,9 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 		if r.hasItem && r.item.Kind == session.AttentionMail {
 			goLabel = "open"
 		}
+		if t := m.cockpitThread(); t != nil && t.pill != "" {
+			goLabel = "open agent"
+		}
 		hints = append(hints, m.keyHints(config.ActionInboxGo, goLabel)...)
 		if label := m.settleLabel(r); label != "" {
 			hints = append(hints, m.keyHints(config.ActionInboxSettle, label)...)
@@ -1847,6 +1861,7 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 		if m.ckFanSession() != "" {
 			hints = append(hints, m.keyHints(config.ActionInboxCompare, "compare")...)
 		}
+		hints = append(hints, m.ckChildHints()...)
 	}
 	board := "board"
 	if st.ck.board {

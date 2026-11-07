@@ -44,6 +44,7 @@ func (m *OS) RefreshSessionList() []sessiontree.Node {
 			DisplayName: s.DisplayName,
 			Dir:         dir,
 			Branch:      branch,
+			AgentTitle:  m.sessionAgentTitle(s.Name),
 			IsCurrent:   s.Name == currentSession,
 			WindowCount: s.WindowCount,
 			Restored:    s.Restored,

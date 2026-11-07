@@ -4,6 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // The screenshot chord over an open overlay.
@@ -31,7 +32,7 @@ func isScreenshotKey(msg tea.KeyPressMsg, o *app.OS) bool {
 	if o.KeybindRegistry == nil {
 		return false
 	}
-	return lookupAction(o, msg, o.KeybindRegistry.GetPrefixAction) == "prefix_screenshot"
+	return tableAction(o, msg, o.KeybindRegistry, config.TablePrefixMode) == "prefix_screenshot"
 }
 
 // routeOverlayScreenshot runs the screenshot chord over an open overlay. It

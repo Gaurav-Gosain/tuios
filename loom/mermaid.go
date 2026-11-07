@@ -53,22 +53,28 @@ type parsedDiagram struct {
 	missing string
 }
 
-// MissingDiagram, when set, hears of a diagram type sketch knows and this
-// build does not draw, once each time a surface parses such a source. A
-// surface parses a source once and keeps it, so this does not run per frame.
-// It runs where the surface draws, so it must not block.
-var MissingDiagram func(typ string)
+// Hooks are what a surface tells its host about the diagrams it draws. Each
+// may be nil. A host sets them on each surface with SetHooks, so one process
+// can draw for many clients, each with its own.
+type Hooks struct {
+	// Missing hears of a diagram type sketch knows and this build does not
+	// draw, once each time the surface parses such a source. A surface
+	// parses a source once and keeps it, so this does not run per frame. It
+	// runs where the surface draws, so it must not block.
+	Missing func(typ string)
+	// External draws a diagram this build does not, outside loom: tuios
+	// runs the sketch plugin's program. It runs in a goroutine of its own,
+	// once per source and width, and its answer is kept, so no frame waits
+	// for it and no frame runs it again. An error leaves the source under
+	// its note.
+	External func(src string, cols int) (rows [][]sketchtext.Cell, cut bool, err error)
+	// Drawn hears that an External answer came in, so the host draws a
+	// frame.
+	Drawn func()
+}
 
-// ExternalDiagram, when set, draws a diagram this build does not, outside
-// loom: tuios runs the sketch plugin's program. It runs in a goroutine of its
-// own, once per source and width, and its answer is kept, so no frame waits
-// for it and no frame runs it again. ExternalDrawn, when set, hears that an
-// answer came in, so the host draws a frame. An error leaves the source under
-// its note.
-var (
-	ExternalDiagram func(src string, cols int) (rows [][]sketchtext.Cell, cut bool, err error)
-	ExternalDrawn   func()
-)
+// SetHooks sets what the surface tells its host about its diagrams.
+func (s *Surface) SetHooks(h Hooks) { s.hooks = h }
 
 // The states of an external drawing.
 const (
@@ -77,7 +83,7 @@ const (
 	externalFailed
 )
 
-// externalDrawing is one answer of ExternalDiagram, or the wait for it.
+// externalDrawing is one answer of Hooks.External, or the wait for it.
 type externalDrawing struct {
 	state int
 	rows  [][]sketchtext.Cell
@@ -92,7 +98,7 @@ var externals = struct {
 }{m: map[sketchKey]*externalDrawing{}}
 
 // external is the drawing of src at width w, and starts it when nothing has.
-func external(src string, w int) ([][]sketchtext.Cell, bool, int) {
+func external(src string, w int, h Hooks) ([][]sketchtext.Cell, bool, int) {
 	k := sketchKey{src, w}
 	externals.Lock()
 	defer externals.Unlock()
@@ -104,7 +110,7 @@ func external(src string, w int) ([][]sketchtext.Cell, bool, int) {
 	}
 	d := &externalDrawing{state: externalPending}
 	externals.m[k] = d
-	draw, drawn := ExternalDiagram, ExternalDrawn
+	draw, drawn := h.External, h.Drawn
 	go func() {
 		rows, cut, err := draw(src, w)
 		externals.Lock()
@@ -147,16 +153,16 @@ func (s *Surface) drawMermaid(src string, w int) *mermaidDrawing {
 		p.d, p.err = sketch.Parse(src, sketch.ParseOptions{})
 		if typ, known := sketch.Detect(src); p.err != nil && known && !sketch.Supports(src) {
 			p.missing = string(typ)
-			if MissingDiagram != nil {
-				MissingDiagram(p.missing)
+			if s.hooks.Missing != nil {
+				s.hooks.Missing(p.missing)
 			}
 		}
 		c.parsed[src] = p
 	}
 	out := &mermaidDrawing{width: w}
 	switch {
-	case p.missing != "" && ExternalDiagram != nil:
-		rows, cut, state := external(src, w)
+	case p.missing != "" && s.hooks.External != nil:
+		rows, cut, state := external(src, w, s.hooks)
 		switch state {
 		case externalPending:
 			// Not kept: the next frame after the drawing comes in asks again.

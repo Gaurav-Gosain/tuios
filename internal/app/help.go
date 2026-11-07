@@ -217,7 +217,7 @@ func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings)
 	}
 	railKey := func(action string) []string {
 		var out []string
-		for _, k := range registry.GetSidebarKeys(action) {
+		for _, k := range registry.Keys(config.TableSidebar, action) {
 			out = append(out, "rail "+k)
 		}
 		return out
@@ -227,7 +227,7 @@ func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings)
 	add(railKey("mail"), "Rail: the mailbox of the pane under the cursor")
 	agentRowKey := func(action string) []string {
 		var out []string
-		for _, k := range registry.GetSidebarAgentsKeys(action) {
+		for _, k := range registry.Keys(config.TableSidebarAgents, action) {
 			out = append(out, "rail "+k)
 		}
 		return out
@@ -253,7 +253,7 @@ func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings)
 		config.ActionInboxSettle, config.ActionInboxUndo, config.ActionInboxShowSnoozed, config.ActionInboxMark, config.ActionInboxMarkAll,
 		config.ActionInboxViewPane, config.ActionInboxOpen, config.ActionInboxBack,
 		config.ActionInboxTabPrev, config.ActionInboxTabNext, config.ActionInboxExpand, config.ActionInboxFold,
-		config.ActionInboxPromptPrev, config.ActionInboxPromptNext,
+		config.ActionInboxPromptPrev, config.ActionInboxPromptNext, config.ActionInboxChild,
 		config.ActionInboxDetailDown, config.ActionInboxDetailUp,
 	} {
 		inbox(action, config.ActionDescriptions[action])
@@ -267,7 +267,7 @@ func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings)
 	inbox(config.ActionMailNew, "Mailbox: write a new message to an agent")
 	// The review overlay's hunk and file motions, read from
 	// [keybindings.review], so a rebound key shows as it is bound.
-	review := func(action, desc string) { add(registry.GetReviewKeys(action), desc) }
+	review := func(action, desc string) { add(registry.Keys(config.TableReview, action), desc) }
 	review(config.ActionReviewNextHunk, "Review: next hunk")
 	review(config.ActionReviewPrevHunk, "Review: previous hunk")
 	review(config.ActionReviewNextFile, "Review: next file")
@@ -457,7 +457,7 @@ func generateMouseBindings() []HelpBinding {
 // generateSidebarBindings lists the rail: how to reach its keyboard scope, the
 // keys inside it, and the gestures that do the same jobs with the pointer. The
 // keys come from the [keybindings.sidebar] section, which the global keymap
-// deliberately does not carry, so they are read through GetSidebarKeys.
+// deliberately does not carry, so they are read through Keys(TableSidebar).
 func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
 	const cat = "Sidebar"
 	// The descriptions are read from config.ScopedDescription, which `tuios
@@ -465,7 +465,7 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 	row := func(action string) HelpBinding {
 		return HelpBinding{
 			Action:      action,
-			Keys:        registry.GetSidebarKeys(action),
+			Keys:        registry.Keys(config.TableSidebar, action),
 			Description: config.ScopedDescription(config.ScopeSidebar, action),
 			Category:    cat,
 		}
@@ -497,7 +497,7 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 		row("expand"),
 		row("activate"),
 	)
-	if first, last := registry.GetSidebarKeys("jump_1"), registry.GetSidebarKeys("jump_9"); len(first) > 0 && len(last) > 0 {
+	if first, last := registry.Keys(config.TableSidebar, "jump_1"), registry.Keys(config.TableSidebar, "jump_9"); len(first) > 0 && len(last) > 0 {
 		bindings = append(bindings, HelpBinding{
 			Keys:        []string{first[0] + "-" + last[0]},
 			Description: "Jump to a session by its position in the rail",
@@ -532,13 +532,13 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 	fileRow := func(action, desc string) HelpBinding {
 		return HelpBinding{
 			Action:      action,
-			Keys:        registry.GetSidebarFilesKeys(action),
+			Keys:        registry.Keys(config.TableSidebarFiles, action),
 			Description: desc,
 			Category:    cat,
 		}
 	}
 	quickLookRow := func(action, desc string) HelpBinding {
-		return HelpBinding{Action: action, Keys: registry.GetQuickLookKeys(action), Description: desc, Category: cat}
+		return HelpBinding{Action: action, Keys: registry.Keys(config.TableQuickLook, action), Description: desc, Category: cat}
 	}
 	bindings = append(bindings,
 		fileRow("file_create", "Files: make a file, or a folder with a / at the end"),
@@ -566,7 +566,7 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 	copyRow := func(action, desc string) HelpBinding {
 		return HelpBinding{
 			Action:      action,
-			Keys:        registry.GetTransfersKeys(action),
+			Keys:        registry.Keys(config.TableTransfers, action),
 			Description: desc,
 			Category:    cat,
 		}
@@ -630,17 +630,23 @@ func generateListBindings() []HelpBinding {
 // generateCopyModeBindings lists copy mode's fixed keys, then the keys the
 // [keybindings.copy_mode] section binds, read from the config.
 func generateCopyModeBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
-	fixed := copyModeKeys(s.LeaderKey)
 	if registry == nil {
-		return fixed
+		return copyModeKeys(s.LeaderKey + ", [")
 	}
+	// The row that enters copy mode shows the keys prefix_selection is bound
+	// to now, not the default "[", and goes when nothing binds it.
+	var enter []string
+	for _, key := range registry.GetConfig().Keybindings.PrefixMode["prefix_selection"] {
+		enter = append(enter, s.LeaderKey+", "+key)
+	}
+	fixed := copyModeKeys(enter...)
 	var bound []HelpBinding
 	for _, row := range []struct{ action, desc string }{
 		{config.ActionCopyModeLineStart, "Line start"},
 		{config.ActionCopyModeFirstNonBlank, "First nonblank"},
 		{config.ActionCopyModeLineEnd, "Line end"},
 	} {
-		if keys := registry.GetCopyModeKeys(row.action); len(keys) > 0 {
+		if keys := registry.Keys(config.TableCopyMode, row.action); len(keys) > 0 {
 			bound = append(bound, HelpBinding{Action: row.action, Keys: keys, Description: row.desc, Category: HelpCategoryCopyMode})
 		}
 	}
@@ -653,8 +659,11 @@ func generateCopyModeBindings(registry *config.KeybindRegistry, s *config.Settin
 		}
 	}
 	out := slices.Insert(fixed, at, bound...)
-	if keys := registry.GetCopyModeKeys(config.ActionEditScrollback); len(keys) > 0 {
+	if keys := registry.Keys(config.TableCopyMode, config.ActionEditScrollback); len(keys) > 0 {
 		out = append(out, HelpBinding{Action: config.ActionEditScrollback, Keys: keys, Description: "Open the scrollback in the editor", Category: HelpCategoryCopyMode})
+	}
+	if keys := registry.Keys(config.TableCopyMode, config.ActionHints); len(keys) > 0 {
+		out = append(out, HelpBinding{Action: config.ActionHints, Keys: keys, Description: "Label the text in view to copy it", Category: HelpCategoryCopyMode})
 	}
 	return out
 }
@@ -662,11 +671,15 @@ func generateCopyModeBindings(registry *config.KeybindRegistry, s *config.Settin
 // copyModeLineKeys is the row of copy mode's fixed line motions.
 const copyModeLineKeys = "0, ^, $"
 
-// copyModeKeys are copy mode's keys. They are not bindings: copy mode reads
-// them itself (see internal/input/copymode_handlers.go).
-func copyModeKeys(leader string) []HelpBinding {
-	return []HelpBinding{
-		{Keys: []string{leader + ", ["}, Description: "Enter copy mode", Category: "Copy Mode"},
+// copyModeKeys are copy mode's keys. When enter names the keys that open copy
+// mode, a row for them comes first. The others are not bindings: copy mode
+// reads them itself (see internal/input/copymode_handlers.go).
+func copyModeKeys(enter ...string) []HelpBinding {
+	var out []HelpBinding
+	if len(enter) > 0 {
+		out = append(out, HelpBinding{Keys: enter, Description: "Enter copy mode", Category: "Copy Mode"})
+	}
+	return append(out, []HelpBinding{
 		{Keys: []string{"h, j, k, l"}, Description: "Move cursor", Category: "Copy Mode"},
 		{Keys: []string{"w, b, e"}, Description: "Word fwd/back/end", Category: "Copy Mode"},
 		{Keys: []string{"f, F, t, T"}, Description: "Jump to a character on the line", Category: "Copy Mode"},
@@ -682,7 +695,7 @@ func copyModeKeys(leader string) []HelpBinding {
 		{Keys: []string{"y, c"}, Description: "Yank to clipboard", Category: "Copy Mode"},
 		{Keys: []string{"i, q, Esc"}, Description: "Exit copy mode", Category: "Copy Mode"},
 		{Keys: []string{"ctrl+c"}, Description: "Exit copy mode from any state. Nothing is copied", Category: "Copy Mode"},
-	}
+	}...)
 }
 
 // HelpCategoryCopyMode is the section listing copy mode's keys and hints
@@ -820,7 +833,7 @@ func FixedKeyGroups(leader string) []FixedKeyGroup {
 		leader = config.DefaultLeaderKey
 	}
 	return []FixedKeyGroup{
-		{ID: "copy_mode", Name: "Copy mode", Bindings: copyModeKeys(leader)},
+		{ID: "copy_mode", Name: "Copy mode", Bindings: copyModeKeys(leader + ", [")},
 		{ID: "hints_mode", Name: "Hints mode", Bindings: hintsModeKeys(leader)},
 		{ID: "message_view", Name: "Message view", Bindings: messageViewKeys()},
 		{ID: "spotlight", Name: "Spotlight", Bindings: spotlightOffKeys()},

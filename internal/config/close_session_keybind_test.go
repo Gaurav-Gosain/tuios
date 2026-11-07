@@ -34,14 +34,14 @@ func TestOlderConfigStillResolvesTheCloseSessionKey(t *testing.T) {
 	// And the registry the prefix handler asks resolves the key to the action.
 	r := NewKeybindRegistry(cfg)
 	for _, k := range keys {
-		if got := r.GetPrefixAction(k); got != "prefix_close_session" {
+		if got := r.Action(TablePrefixMode, k); got != "prefix_close_session" {
 			t.Errorf("the prefix key %q resolved to %q, want prefix_close_session", k, got)
 		}
 	}
 
 	// The key is one shift away from the key that closes a single pane, and the
 	// two must never be the same key: only one of them can be undone.
-	if r.GetPrefixAction("x") == "prefix_close_session" {
+	if r.Action(TablePrefixMode, "x") == "prefix_close_session" {
 		t.Error("closing a pane and closing the session resolve to the same key")
 	}
 }

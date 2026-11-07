@@ -1,6 +1,6 @@
 //go:build unix
 
-package review
+package childproc
 
 import (
 	"context"
@@ -17,7 +17,10 @@ import (
 
 // TestGitTimeoutHoldsWithAHungChild is a regression test for the review of
 // #956: a git whose child keeps the output open, as git-remote-https does on
-// a remote that stopped answering, must not hold Git past its context.
+// a remote that stopped answering, must not hold a git past its context. It
+// runs through Git, which every git tuios starts goes through, so the guard
+// holds for every caller. The fake git answers the config read Git makes
+// first, so the hang is in the command itself.
 func TestGitTimeoutHoldsWithAHungChild(t *testing.T) {
 	bin := t.TempDir()
 	sleep, err := exec.LookPath("sleep")
@@ -25,7 +28,7 @@ func TestGitTimeoutHoldsWithAHungChild(t *testing.T) {
 		t.Skip("needs sleep")
 	}
 	pidFile := filepath.Join(t.TempDir(), "child")
-	fake := "#!/bin/sh\n" + sleep + " 20 &\necho $! >" + pidFile + "\n" + sleep + " 20\n"
+	fake := "#!/bin/sh\n[ \"$1\" = config ] && exit 0\n" + sleep + " 20 &\necho $! >" + pidFile + "\n" + sleep + " 20\n"
 	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(fake), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +39,10 @@ func TestGitTimeoutHoldsWithAHungChild(t *testing.T) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	_, err = Git(ctx, t.TempDir(), nil, "fetch")
+	cmd := Git(ctx, t.TempDir(), "fetch")
+	var out strings.Builder
+	cmd.Stdout = &out
+	err = cmd.Run()
 	if took := time.Since(start); err == nil || took < 500*time.Millisecond || took > 500*time.Millisecond+gitWaitDelay+2*time.Second {
 		t.Fatalf("Git returned after %v with %v, want an error within the timeout and the wait delay", took, err)
 	}

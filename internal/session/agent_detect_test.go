@@ -264,6 +264,38 @@ func TestAgentDetectionYieldsToExplicitWhileOwned(t *testing.T) {
 	}
 }
 
+// TestAgentDetectionRestoresHarnessAfterProgramReset checks that a detector-owned
+// pane regains its harness after program status clears (OSC 7501) and then returns
+// to idle. Codex does this when opening and closing an external editor while its
+// process stays alive.
+func TestAgentDetectionRestoresHarnessAfterProgramReset(t *testing.T) {
+	sess, id := bareSessionWithWindow(t)
+	ptyID := ptyIDOfWindow(t, sess, id)
+	agent := newAgentMatcher(nil)
+	running := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "codex", argv: []string{"codex"}}, true}})
+	sess.applyAgentDetection(running, agent.identifyDetail)
+	// Codex open $EDITOR (Ctrl+G), state becomes "none", harness ""
+	if _, applied, err := sess.ApplyAgentReport(id, AgentReport{State: AgentStateNone, Source: AgentSourceProgram}); err != nil || !applied {
+		t.Fatalf("program report none: applied=%v, err=%v", applied, err)
+	}
+	if got := agentHarnessIDOf(t, sess, id); got != "" {
+		t.Fatalf("harness after none = %q, want empty", got)
+	}
+	// External editor exits, state becomes "idle", harness "codex"
+	if _, applied, err := sess.ApplyAgentReport(id, AgentReport{State: AgentStateIdle, Source: AgentSourceProgram}); err != nil || !applied {
+		t.Fatalf("program report idle: applied=%v, err=%v", applied, err)
+	}
+	if n := sess.applyAgentDetection(running, agent.identifyDetail); n != 1 {
+		t.Fatalf("restoring harness changed %d windows, want 1", n)
+	}
+	if got := agentHarnessIDOf(t, sess, id); got != "codex" {
+		t.Fatalf("harness = %q, want codex", got)
+	}
+	if got := agentStateOf(t, sess, id); got != AgentStateIdle {
+		t.Fatalf("state = %q, want idle", got)
+	}
+}
+
 // TestClearExitedAgent proves the output-driven clear removes an auto-detected
 // glyph the moment the foreground returns to the shell, with no poll in between,
 // while leaving an unowned window, a still-running agent, and a manual state

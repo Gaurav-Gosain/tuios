@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/oneline"
 )
 
 // hookCase is one fixture: a payload a harness hands its hooks, and the
@@ -130,13 +132,13 @@ func TestClipAndRedact(t *testing.T) {
 		{"line one\n  line two\ttabbed", "line one line two tabbed"},
 	}
 	for _, tc := range cases {
-		if got := Clip(tc.in); got != tc.want {
-			t.Errorf("Clip(%q) = %q, want %q", tc.in, got, tc.want)
+		if got := oneline.Clip(tc.in); got != tc.want {
+			t.Errorf("oneline.Clip(%q) = %q, want %q", tc.in, got, tc.want)
 		}
 	}
 	long := strings.Repeat("word ", 60)
-	got := Clip(long)
-	if len([]rune(got)) > MaxMessage || !strings.HasSuffix(got, "...") {
-		t.Errorf("a long message was not cut to %d runes: %q", MaxMessage, got)
+	got := oneline.Clip(long)
+	if len([]rune(got)) > oneline.MaxMessage || !strings.HasSuffix(got, "...") {
+		t.Errorf("a long message was not cut to %d runes: %q", oneline.MaxMessage, got)
 	}
 }

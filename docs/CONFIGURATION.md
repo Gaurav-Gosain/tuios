@@ -283,6 +283,45 @@ WSL, and `xdg-open` on other systems. tuios runs no shell. It gives the URL to
 the opener as one argument. If the opener fails, tuios shows a message and
 puts the URL on your clipboard.
 
+### Link rules
+
+A link rule turns plain text that is not a URL into a link, such as a ticket
+ID that opens its page in an issue tracker. It works like
+[WezTerm's implicit hyperlinks](https://wezterm.org/hyperlinks.html#implicit-hyperlinks).
+
+```toml
+[[links.rules]]
+regex = '\b([A-Z][A-Z0-9_]+-[1-9][0-9]*)\b'
+url = "https://jira.example.com/browse/$1"
+```
+
+- `regex` is a regular expression in Go syntax.
+- `url` is the address a match opens. `$0` is the whole match, and `$1`, `$2`
+  and so on are its groups. A named group is `${name}`. A group followed by a
+  letter, a digit or `_` needs braces: write `${1}_x`, because `$1_x` names a
+  group called `1_x`. tuios warns about a url that names a group the regex
+  does not have.
+- Keep the scheme and the host fixed in `url`, and put groups in the path or
+  the query only, as in the example. A group before the path, such as
+  `https://example.com$1`, lets the text on screen choose the host.
+- A match is a link like a bare URL: the hover underline and label (which
+  shows the address), the click in `link_click`, `link_opener`, the OSC 8
+  output to your terminal, and `Ctrl` and a label in hints mode. A label
+  without `Ctrl` copies the text on screen.
+- Rules apply when `links` is `all`, as bare URLs do.
+- A real URL wins when a rule matches text inside it. An earlier rule wins
+  over a later one.
+- The address a rule builds goes through the same check as every link. A rule
+  whose address is not `http`, `https`, `mailto`, `ftp` or `ftps`, or that
+  holds a byte a bare URL cannot hold (a space, a quote, a backtick, an angle
+  bracket, `|`, `^`, `{`, `}`, `\` or a control character), makes no link.
+- A rule that does not compile, or that matches empty text, is skipped, and
+  tuios shows a warning when it reads the config.
+- With rules, tuios reads every line of a pane for them, not only the lines
+  that hold `://`. With no rules, nothing changes.
+- As with bare URLs, the OSC 8 output carries the rule links of the focused
+  pane only. In another pane they are found on hover and click.
+
 ### Which machine opens the link
 
 - A local client opens the link on your machine.
@@ -1180,6 +1219,27 @@ Each client reads the setting from its config file, and a change applies at
 once. The settings page has it under Daemon, and
 `tuios set-config workspaces.new_window_when_empty true` changes it while
 tuios runs.
+
+## Paste preview
+
+An image paste (`Ctrl+B V`, the paste key when the clipboard holds only an
+image, or the empty paste some terminals send for an image) writes the image
+to a file and pastes the file's path. tuios then shows
+the image in a small card at the pane's cursor, so you can see what the path
+holds:
+
+- The picture is drawn with kitty graphics when your terminal has them, and
+  with block glyphs when it does not.
+- The line under it names the size, the type and the file.
+- The card takes no input. The next key or click takes it down and still goes
+  where it was going, and so does a key sent with `tuios send-keys`. A panel
+  opened over it, or the pane leaving the screen, takes it down too.
+  Otherwise it goes after six seconds.
+
+```toml
+[appearance]
+paste_preview = false   # paste the path alone; the default is true
+```
 
 ## Paste buffers
 
@@ -2151,6 +2211,45 @@ Empty is the default. While it is empty, `TUIOS_WORKTREE_DIR` in the daemon's
 environment still moves the default folder (see
 [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios_worktree_dir)).
 
+## Setup before the agent
+
+`[worktree] setup` is a shell command that runs in every new worktree before
+its agent or shell starts. Use it to install dependencies:
+
+```toml
+[worktree]
+setup = "pnpm i"
+setup_async = false
+```
+
+| Key | What it does | Default |
+|---|---|---|
+| `setup` | The command. It runs with `sh -c` in the worktree, in a window named `setup`, with no grants. Empty runs nothing. | `""` |
+| `setup_async` | Start the agent at once, while the setup runs. | `false` |
+
+The new session shows a card at the top right with three stages: the
+checkout, the setup with its last four lines, and the agent. The rail row
+shows `setup` while it runs and `setup failed` after a failure. A key hides
+the card of a finished setup.
+
+Without `setup_async`, the agent starts when the setup passes. When the setup
+fails, tuios removes the new worktree and the branch it made. It keeps a
+worktree with an uncommitted change or a nested repository, and a branch with
+a commit or a branch that was there before. The note on the card says what it
+kept. The agent does not start. The session stays, and the setup window stays
+open on its output until you press Enter.
+
+With `setup_async = true`, a failed setup keeps the worktree and the branch,
+because the agent may already have work in them.
+
+`tuios worktree new --setup` and `tuios fan --setup` set the command for one
+call, and `--setup-async` the mode. `--setup ''` runs no setup.
+
+The daemon reads both keys when it starts. A change in the file applies at once
+when it clears the command or keeps it. A new command waits for
+`tuios config apply` in a terminal outside tuios, or a daemon restart. A
+process in a pane can write the file, and the daemon runs the command.
+
 ## Where a review opens
 
 The review overlay (`ctrl+b v`) opens with the keys on the diff. `tab` moves
@@ -2924,6 +3023,7 @@ max = 8
 
 [agents.mail]
 wake = true
+questions_to_parent = true
 
 [agents.checkpoints]
 enabled = true
@@ -2977,6 +3077,14 @@ max_untracked_mb = 50
   change turns it off at once. Turning it on again waits for `tuios config
   apply` from outside tuios, or a restart. See
   [AGENT_STATE.md](AGENT_STATE.md#mail-that-wakes-an-agent-at-rest).
+- `[agents.mail]` `questions_to_parent` sends a question from a child agent
+  that `tuios delegate` started to its parent agent by mail first. The Inbox
+  shows the question as "With the parent agent" for 10 minutes, and does not
+  count it or alert on it. After that, it is a normal Inbox item. It is true by
+  default. Set it to false to send every such question to the Inbox at once.
+  A file change turns it off at once. Turning it on again waits for `tuios
+  config apply` from outside tuios, or a restart. An approval of a child agent
+  always goes to the person, and no pane can answer it.
 - `[agents.checkpoints]` saves the git work tree of an agent's pane each time
   the agent finishes a turn that changed a file (`tuios checkpoint`).
   `enabled` is true by default. `keep` is how many checkpoints one pane keeps:

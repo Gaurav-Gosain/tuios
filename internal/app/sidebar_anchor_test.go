@@ -63,7 +63,7 @@ func TestRailAgentsViewportHoldsItsRowWhenTheSortReorders(t *testing.T) {
 
 	calm := agentsScrollTree(panes, nil)
 	m.sidebarPanelLinesForTree(calm)
-	m.SidebarScrollA = 2
+	m.SidebarScroll[sidebarSectionAgents] = 2
 	m.sidebarPanelLinesForTree(calm)
 
 	before := railAgentRowIDs(m)
@@ -107,13 +107,13 @@ func TestRailAgentsViewportHoldsItsRowWhenTheSortReorders(t *testing.T) {
 func TestRailAgentsAnchorSurvivesItsRowVanishing(t *testing.T) {
 	m, _ := sectionsTestOS(t, 120, 30)
 	m.sidebarPanelLinesForTree(agentsScrollTree(12, nil))
-	m.SidebarScrollA = 3
+	m.SidebarScroll[sidebarSectionAgents] = 3
 	m.sidebarPanelLinesForTree(agentsScrollTree(12, nil))
 
 	// Every pane the anchor could name goes at once.
 	m.sidebarPanelLinesForTree(agentsScrollTree(2, nil))
-	if m.SidebarScrollA != 0 {
-		t.Errorf("the agents scroll clamped to %d over a 2-row section, want 0", m.SidebarScrollA)
+	if m.SidebarScroll[sidebarSectionAgents] != 0 {
+		t.Errorf("the agents scroll clamped to %d over a 2-row section, want 0", m.SidebarScroll[sidebarSectionAgents])
 	}
 	assertHitsFollowNav(t, m)
 	assertHitsStayInTheBand(t, m)

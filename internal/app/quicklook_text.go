@@ -623,17 +623,33 @@ func quickLookWrapsByDefault(name string) bool {
 
 // quickLookWrapRows is how many rows a line takes when it wraps.
 func quickLookWrapRows(line string, width int) int {
-	return max((ansi.StringWidth(line)+width-1)/max(width, 1), 1)
+	width = max(width, 1)
+	plain := true
+	for i := 0; i < len(line); i++ {
+		if line[i] < 0x20 || line[i] >= 0x7f {
+			plain = false
+			break
+		}
+	}
+	if plain {
+		return max((len(line)+width-1)/width, 1)
+	}
+	rows := 0
+	for at := 0; at < len(line); rows++ {
+		at, _ = quickLookWrapNext(line, at, width)
+	}
+	return max(rows, 1)
 }
 
 // quickLookLastWrapped is the last top line that still fills the rows, walking up
-// from the end of the held text, so the end of a file comes wholly into view.
+// from the end of the held text, so the end of a file comes wholly into view. A
+// last line taller than the rows cannot fit: it stays the top line, never past it.
 func quickLookLastWrapped(lines []string, rows, width int) int {
 	used := 0
 	for i := len(lines) - 1; i >= 0; i-- {
 		used += quickLookWrapRows(lines[i], width)
 		if used > rows {
-			return i + 1
+			return min(i+1, len(lines)-1)
 		}
 	}
 	return 0
@@ -666,6 +682,11 @@ func quickLookLightMatches(c *ckCanvas, pal overlay.Palette, q, line string, x, 
 		cell.Style.Bg = pal.Accent
 		cell.Style.Fg = pal.PillFg
 	}
+	// p is the start of a grapheme cluster at or before the match and w the
+	// width of line[:p]. Matches come in order, so the walk resumes where the
+	// last one stopped, as ansi.StringWidth steps a string, and a long line is
+	// measured once instead of once per match.
+	p, w := 0, 0
 	for at := 0; ; {
 		i := strings.Index(hay[at:], q)
 		if i < 0 {
@@ -676,7 +697,24 @@ func quickLookLightMatches(c *ckCanvas, pal overlay.Palette, q, line string, x, 
 		if i >= len(line) {
 			return
 		}
-		col := ansi.StringWidth(line[:i]) - xOff
+		var col int
+		if utf8.RuneStart(line[i]) {
+			for p < i {
+				g, gw := ansi.FirstGraphemeCluster(line[p:], ansi.GraphemeWidth)
+				if g == "" || p+len(g) > i {
+					break
+				}
+				p += len(g)
+				w += gw
+			}
+			col = w + ansi.StringWidth(line[p:i]) - xOff
+		} else {
+			// The match starts inside a rune. That happens only on a line
+			// whose lower-cased copy has another length than the line, so
+			// the offset found in the copy is not a boundary of the line;
+			// measure the text before it as a whole.
+			col = ansi.StringWidth(line[:i]) - xOff
+		}
 		cols := ansi.StringWidth(line[i:end])
 		if col >= width {
 			return

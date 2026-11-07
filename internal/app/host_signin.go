@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -214,7 +215,9 @@ func retryHostCmd(host string) tea.Cmd {
 			ApprovalURL     string `json:"approval_url"`
 			ApprovalRefused bool   `json:"approval_refused"`
 		}
-		_ = jsonx.Unmarshal(raw, &res)
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
+			return hostRetryMsg{Host: host, Err: errfmt.Errorf("read the retry-host answer: %w", err)}
+		}
 		return hostRetryMsg{Host: host, URL: res.ApprovalURL, Refused: res.ApprovalRefused}
 	}
 }

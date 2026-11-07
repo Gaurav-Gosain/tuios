@@ -54,6 +54,36 @@ type worktreeRow struct {
 	Merged       bool     `json:"merged"`
 	MergedInto   string   `json:"merged_into,omitempty"`
 	PR           *ghpr.PR `json:"pr,omitempty"`
+	// Setup is the worktree's setup record, nil when it ran none.
+	Setup *session.WorktreeSetup `json:"setup,omitempty"`
+}
+
+// setupFlags are --setup and --setup-async, which new and fan share. A flag
+// left out sends nothing, so the daemon's [worktree] setup applies.
+type setupFlags struct {
+	command string
+	async   bool
+	set     func(name string) bool
+}
+
+// add puts the flags on cmd.
+func (f *setupFlags) add(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&f.command, "setup", "", "Run this shell command in each new worktree before the agent starts. An empty value runs none (default: [worktree] setup)")
+	cmd.Flags().BoolVar(&f.async, "setup-async", false, "Start the agent at once while the setup runs (default: [worktree] setup_async)")
+	f.set = func(name string) bool { return cmd.Flags().Changed(name) }
+}
+
+// params adds what was passed to the call's params.
+func (f *setupFlags) params(params map[string]any) {
+	if f.set == nil {
+		return
+	}
+	if f.set("setup") {
+		params["setup"] = f.command
+	}
+	if f.set("setup-async") {
+		params["setup_async"] = f.async
+	}
 }
 
 // newWorktreeCommand builds `tuios worktree` and its subcommands.
@@ -83,6 +113,7 @@ Worktrees go under $XDG_DATA_HOME/tuios/worktrees/<repo>/<branch>, unless
 
 	var newRepo, newBase, newName, newAgent, newHost string
 	var newDetach, newJSON, newClone bool
+	var newSetup setupFlags
 	newCmd := &cobra.Command{
 		Use:   "new <branch>",
 		Short: "Create a worktree and a session in it",
@@ -99,6 +130,13 @@ stays headless with --detach.
 way you type it: claude, codex, gemini. tuios recognises the agents its
 harness manifests describe.
 
+--setup runs a shell command in the worktree first, in a window named setup,
+such as 'pnpm i'. [worktree] setup in config.toml sets one for every worktree.
+The agent starts when the setup passes. When it fails, tuios removes the new
+worktree and branch if nothing in them is anyone's work. --setup-async starts
+the agent at once, and a failed setup then keeps both. 'tuios worktree ls'
+shows the setup state.
+
 --host makes the worktree on another machine from the [hosts] table. The
 repository is the one the current directory is in, found there by its
 origin URL, under the host's repos_root when [hosts.NAME] sets one. --clone
@@ -113,11 +151,14 @@ directory on the host instead.`,
   # A worktree of another repository
   tuios worktree new fix/typo --repo /src/api
 
+  # Install the dependencies before Claude Code starts
+  tuios worktree new feat/retry --agent claude --setup 'pnpm i'
+
   # The same repository on host build, cloned there if it is missing
   tuios worktree new feat/retry --host build --clone --detach`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runWorktreeNew(args[0], newRepo, newBase, newName, newAgent, newHost, newClone, newDetach, newJSON)
+			return runWorktreeNew(args[0], newRepo, newBase, newName, newAgent, newHost, newClone, newDetach, newJSON, &newSetup)
 		},
 	}
 	newCmd.Flags().StringVar(&newRepo, "repo", "", "A directory inside the repository (default: the current directory)")
@@ -128,10 +169,11 @@ directory on the host instead.`,
 	newCmd.Flags().BoolVar(&newJSON, "json", false, "Output result as JSON")
 	newCmd.Flags().StringVar(&newHost, "host", "", "Make the worktree on this machine from the [hosts] table")
 	newCmd.Flags().BoolVar(&newClone, "clone", false, "With --host, clone the repository there when the host has no checkout")
+	newSetup.add(newCmd)
 	_ = newCmd.RegisterFlagCompletionFunc("host", completeConfiguredHosts)
 
 	var lsRepo, lsGroup, lsHost string
-	var lsJSON bool
+	var lsJSON, lsFast bool
 	lsCmd := &cobra.Command{
 		Use:   "ls",
 		Short: "List worktree sessions",
@@ -143,18 +185,24 @@ became of a fan prompt. A branch is merged when it has commits of its own and
 its base, or the upstream of its base, already holds all of them. A merge
 commit, a fast-forward, a rebase and a squash all count. No fetch is run. A row
 marked gone is a session whose worktree directory was removed under it. The
-session is kept, so what the agent printed can still be read.`,
+session is kept, so what the agent printed can still be read.
+
+The change columns walk each worktree with git, which is the slow part of the
+listing. --fast skips them: the rows keep everything but CHANGES, MERGED and
+the delete toll, and a listing of many worktrees comes back at the speed of
+the daemon's answer alone.`,
 		Example: `  tuios worktree ls
   tuios worktree ls --repo api
   tuios worktree ls --group fan/add-retry --json
   tuios worktree ls --host build`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runWorktreeList(lsHost, lsRepo, lsGroup, lsJSON)
+			return runWorktreeList(lsHost, lsRepo, lsGroup, lsJSON, !lsFast)
 		},
 	}
 	lsCmd.Flags().StringVar(&lsRepo, "repo", "", "Only worktrees of this repository, by name")
 	lsCmd.Flags().StringVar(&lsGroup, "group", "", "Only the sessions of one fan-out, by its branch stem")
 	lsCmd.Flags().BoolVar(&lsJSON, "json", false, "Output as JSON")
+	lsCmd.Flags().BoolVar(&lsFast, "fast", false, "Skip the git walk behind the change columns, which is the slow part of the listing")
 	lsCmd.Flags().StringVar(&lsHost, "host", "", "List the worktree sessions on this machine from the [hosts] table")
 	_ = lsCmd.RegisterFlagCompletionFunc("host", completeConfiguredHosts)
 
@@ -256,6 +304,7 @@ func newFanCommand() *cobra.Command {
 	var fanAgents, fanEnv, fanPrompts, fanGrants []string
 	var fanRepo, fanBase, fanName, fanHost, fanJoin, fanTask, fanTaskSession string
 	var fanWait, fanJSON, fanClone bool
+	var fanSetup setupFlags
 	fanCmd := &cobra.Command{
 		Use:   "fan <count> <prompt>",
 		Short: "Fan a prompt out across several agents, each in its own worktree",
@@ -362,7 +411,7 @@ pull HOST:SESSION' brings its work here.`,
 			return runFan(fanOptions{
 				host: fanHost, count: count, agents: fanAgents, prompt: prompt, prompts: fanPrompts, env: env,
 				explicitEnv: len(fanEnv) > 0, repo: fanRepo, base: fanBase, name: fanName, join: fanJoin, clone: fanClone,
-				grants: fanGrants, task: fanTask, taskSession: fanTaskSession,
+				grants: fanGrants, task: fanTask, taskSession: fanTaskSession, setup: &fanSetup,
 			}, fanWait, fanJSON)
 		},
 	}
@@ -382,6 +431,7 @@ pull HOST:SESSION' brings its work here.`,
 	fanCmd.Flags().StringSliceVar(&fanGrants, "grants", nil, "What every agent may do through tuios, comma separated: read, write, fan, files, task, respond, admin, or none (default: [agents.permissions], or the calling pane's own)")
 	_ = fanCmd.RegisterFlagCompletionFunc("host", completeConfiguredHosts)
 	_ = fanCmd.RegisterFlagCompletionFunc("grants", completeGrantNames)
+	fanSetup.add(fanCmd)
 	_ = fanCmd.MarkFlagRequired("agent")
 
 	var keepStash, keepForce, keepJSON, keepMerge, keepSquash, keepFFOnly bool
@@ -456,7 +506,7 @@ func resolveAgentCommand(agent string) (string, error) {
 	return command, nil
 }
 
-func runWorktreeNew(branch, repo, base, name, agent, host string, clone, detach, jsonOutput bool) error {
+func runWorktreeNew(branch, repo, base, name, agent, host string, clone, detach, jsonOutput bool, setup *setupFlags) error {
 	if err := ensureDaemon(); err != nil {
 		return err
 	}
@@ -478,6 +528,7 @@ func runWorktreeNew(branch, repo, base, name, agent, host string, clone, detach,
 		}
 		params["command"] = []string{command}
 	}
+	setup.params(params)
 
 	t, err := dialHost(host)
 	if err != nil {
@@ -494,14 +545,16 @@ func runWorktreeNew(branch, repo, base, name, agent, host string, clone, detach,
 		return printVerbResultOn(t, raw, true)
 	}
 	var res struct {
-		Session       string `json:"session"`
-		Branch        string `json:"branch"`
-		Path          string `json:"path"`
-		RepoRoot      string `json:"repo_root"`
-		CreatedBranch bool   `json:"created_branch"`
-		Cloned        bool   `json:"cloned"`
-		Warning       string `json:"warning"`
-		HookError     string `json:"hook_error"`
+		Session       string                 `json:"session"`
+		Branch        string                 `json:"branch"`
+		Path          string                 `json:"path"`
+		RepoRoot      string                 `json:"repo_root"`
+		CreatedBranch bool                   `json:"created_branch"`
+		Cloned        bool                   `json:"cloned"`
+		Warning       string                 `json:"warning"`
+		HookError     string                 `json:"hook_error"`
+		Setup         *session.WorktreeSetup `json:"setup"`
+		SetupError    string                 `json:"setup_error"`
 	}
 	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return errfmt.Errorf("failed to parse response: %w", err)
@@ -520,6 +573,9 @@ func runWorktreeNew(branch, repo, base, name, agent, host string, clone, detach,
 	}
 	if res.HookError != "" {
 		fmt.Fprintf(os.Stderr, "Warning: %s. The worktree and the session are kept.\n", res.HookError)
+	}
+	if line := setupStartedLine(res.Setup, res.SetupError); line != "" {
+		fmt.Println(line)
 	}
 	if detach {
 		if host != "" {
@@ -564,8 +620,8 @@ func listWorktreesOn(host, repo, group string, changes bool) ([]worktreeRow, err
 	return res.Worktrees, nil
 }
 
-func runWorktreeList(host, repo, group string, jsonOutput bool) error {
-	rows, err := listWorktreesOn(host, repo, group, true)
+func runWorktreeList(host, repo, group string, jsonOutput bool, changes bool) error {
+	rows, err := listWorktreesOn(host, repo, group, changes)
 	if err != nil {
 		return reportVerbError(err, jsonOutput)
 	}
@@ -625,9 +681,36 @@ func renderWorktreeTable(rows []worktreeRow) string {
 		if r.Merged {
 			merged = "into " + r.MergedInto
 		}
-		cells = append(cells, []string{r.Session, r.Repo, r.Branch, orNone(r.State), changes, merged, prompt, pr, status})
+		cells = append(cells, []string{r.Session, r.Repo, r.Branch, orNone(r.State), changes, merged, prompt, setupCell(r.Setup), pr, status})
 	}
-	return renderTable([]string{"SESSION", "REPO", "BRANCH", "AGENT", "CHANGES", "MERGED", "PROMPT", "PR", "STATUS"}, cells)
+	return renderTable([]string{"SESSION", "REPO", "BRANCH", "AGENT", "CHANGES", "MERGED", "PROMPT", "SETUP", "PR", "STATUS"}, cells)
+}
+
+// setupCell is the SETUP column: the state, with the exit status of a
+// setup that failed.
+func setupCell(s *session.WorktreeSetup) string {
+	if s == nil {
+		return "-"
+	}
+	if s.State == session.SetupFailed && s.Exit != nil {
+		return fmt.Sprintf("failed, exit %d", *s.Exit)
+	}
+	return s.State
+}
+
+// setupStartedLine says what a new worktree's setup does next, "" when it
+// runs none.
+func setupStartedLine(s *session.WorktreeSetup, setupErr string) string {
+	switch {
+	case setupErr != "":
+		return "The setup did not start: " + plainLine(setupErr) + "."
+	case s == nil:
+		return ""
+	case s.Async:
+		return fmt.Sprintf("Setup '%s' runs in the window setup. The agent starts now.", plainLine(s.Command))
+	default:
+		return fmt.Sprintf("Setup '%s' runs in the window setup. The agent starts when it passes.", plainLine(s.Command))
+	}
 }
 
 // renderTable draws a listing with the border and colours of the session
@@ -795,6 +878,8 @@ type fanOptions struct {
 	// task and taskSession are --task and --task-session: the card the fan
 	// works on.
 	task, taskSession string
+	// setup is --setup and --setup-async, nil from a caller with neither.
+	setup *setupFlags
 }
 
 // fanCallerEnv builds the environment fan sends: PATH always, so the daemon
@@ -877,6 +962,9 @@ func runFan(o fanOptions, wait, jsonOutput bool) error {
 	if o.taskSession != "" {
 		params["task_session"] = o.taskSession
 	}
+	if o.setup != nil {
+		o.setup.params(params)
+	}
 	t, err := dialHost(o.host)
 	if err != nil {
 		return err
@@ -901,11 +989,12 @@ func runFan(o fanOptions, wait, jsonOutput bool) error {
 		Agent    string `json:"agent"`
 		Command  string `json:"command"`
 		Sessions []struct {
-			Session   string `json:"session"`
-			Branch    string `json:"branch"`
-			Path      string `json:"path"`
-			Command   string `json:"command"`
-			HookError string `json:"hook_error"`
+			Session   string                 `json:"session"`
+			Branch    string                 `json:"branch"`
+			Path      string                 `json:"path"`
+			Command   string                 `json:"command"`
+			HookError string                 `json:"hook_error"`
+			Setup     *session.WorktreeSetup `json:"setup"`
 		} `json:"sessions"`
 		Warning string `json:"warning"`
 		Task    *struct {
@@ -927,6 +1016,11 @@ func runFan(o fanOptions, wait, jsonOutput bool) error {
 		}
 		if res.Warning != "" {
 			fmt.Fprintln(os.Stderr, "Warning: "+plainLine(res.Warning))
+		}
+		if len(res.Sessions) > 0 {
+			if line := setupStartedLine(res.Sessions[0].Setup, ""); line != "" {
+				fmt.Println(strings.Replace(line, "The agent starts", "Each agent starts", 1))
+			}
 		}
 		for _, s := range res.Sessions {
 			if s.HookError != "" {

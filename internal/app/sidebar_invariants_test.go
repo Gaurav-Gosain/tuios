@@ -31,9 +31,9 @@ func TestRailSignatureMovesForDrawnStateAndNotForTheRest(t *testing.T) {
 		{"agents sort", func() { m.SidebarAgentSort = sidebarAgentsRecent }, true},
 		{"collapsed", func() { m.SidebarCollapsed = true }, true},
 		{"a workspace name", func() { m.WorkspaceNames = map[int]string{2: "review"} }, true},
-		{"sessions scroll", func() { m.SidebarScrollS = 2 }, true},
-		{"terminals scroll", func() { m.SidebarScrollT = 2 }, true},
-		{"agents scroll", func() { m.SidebarScrollA = 2 }, true},
+		{"sessions scroll", func() { m.SidebarScroll[sidebarSectionSessions] = 2 }, true},
+		{"terminals scroll", func() { m.SidebarScroll[sidebarSectionTerminals] = 2 }, true},
+		{"agents scroll", func() { m.SidebarScroll[sidebarSectionAgents] = 2 }, true},
 		{"the attached session's accent", func() { m.SessionAccent = "cyan" }, true},
 
 		// State the rail carries but never draws. Folding any of it in would

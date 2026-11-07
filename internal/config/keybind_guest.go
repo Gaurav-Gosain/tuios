@@ -100,7 +100,7 @@ func (r *KeybindRegistry) TerminalModeSwallowed() []Swallow {
 		}
 	}
 
-	// The main sections reach terminal mode only through isTerminalSafeAction,
+	// The main sections reach terminal mode only through TerminalSafeAction,
 	// and only on a chord the shell would never want as literal input. Applying
 	// both filters here is what keeps the report from claiming tuios eats the
 	// plain letters window mode binds.
@@ -116,7 +116,7 @@ func (r *KeybindRegistry) TerminalModeSwallowed() []Swallow {
 		}
 		sort.Strings(actions)
 		for _, action := range actions {
-			if !terminalSafeAction(action) {
+			if !TerminalSafeAction(action) {
 				continue
 			}
 			for _, key := range section[action] {
@@ -142,14 +142,17 @@ func (r *KeybindRegistry) TerminalModeSwallowed() []Swallow {
 	return out
 }
 
-// terminalSafeAction mirrors input.isTerminalSafeAction. The two are separate
-// because this package cannot import the input path, and they are checked
-// against each other by TestSwallowSetMatchesTheInputPath.
-func terminalSafeAction(action string) bool {
+// TerminalSafeAction reports whether a window-mode action may also run from
+// terminal mode, on a chord the shell would never want as literal input:
+// moving between workspaces, sessions, hosts and agents. The input path and
+// the keybind report both read it, so the report says exactly which keys the
+// pane loses.
+func TerminalSafeAction(action string) bool {
 	return strings.HasPrefix(action, "switch_workspace_") ||
 		strings.HasPrefix(action, "move_and_follow_") ||
 		strings.HasPrefix(action, "send_to_workspace_") ||
 		strings.HasPrefix(action, "switch_session_") ||
+		action == "next_workspace" || action == "prev_workspace" ||
 		action == "next_session" || action == "prev_session" ||
 		action == "next_host" || action == "prev_host" ||
 		action == "next_agent" || action == "prev_agent"

@@ -215,6 +215,18 @@ The herdr stream also sends `workspace_focused`, `tab_focused` and
 order, as herdr does when its active workspace changes. A window focused in a
 session no client shows sends no `pane_focused`.
 
+**`set-session-name` raises the new event `session-labelled`.** Before, a
+display name changed with no event, so a subscriber, and herdr's
+`workspace.renamed` through it, never heard of it. A subscriber that names no
+types gets it.
+
+**The herdr socket sends `workspace_renamed` for a rename.** `rename-session`
+sent `workspace_created` for the new name, for a workspace the herdr client
+already had, and `workspace.rename` sent nothing. Each now sends one
+`workspace_renamed` with the label `session.snapshot` then shows, as herdr's
+`workspace.rename` does. See
+[AGENT_STATE.md](AGENT_STATE.md#herdr-compatibility).
+
 **The new event `agent-seen`** says a finished pane was looked at, or marked
 unread again. A subscriber that names no types gets it.
 
@@ -231,6 +243,18 @@ changes for a herdr client:
 
 **The new verb [report-program-status](#report-program-status)** applies an
 OSC 7501 report to a pane. `tuios status` sends it when it has no terminal.
+
+**The herdr socket sends `tab_renamed` when a workspace is named.** A herdr
+tab is a tuios workspace, and naming one with `set-workspace-name` or herdr's
+`tab.rename` sent nothing to a `tab.renamed` subscriber. See
+[AGENT_STATE.md](AGENT_STATE.md#herdr-compatibility). What changes for a herdr
+client:
+
+- `tab_renamed` carries the tab's `tab_id`, its `workspace_id` and the new
+  `label`, the label `tab.get` reads next.
+- Clearing a name sends the label the tab falls back to, its workspace number.
+- An empty workspace in the background sends nothing when named: its name
+  comes with the `tab_created` of its first pane.
 
 **The new verb [list-routes](#list-routes)** lists this machine's addresses.
 
@@ -2607,7 +2631,8 @@ Response:
 Create a new window in a session.
 
 Params, all optional: `session`, `name` (window name; omit to use the shell's
-title), `workspace` (workspace number; omit for the current one), `cwd`
+title), `workspace` (workspace number; omit for the calling pane's workspace,
+else the one the session shows), `cwd`
 (directory to start in; omit for the caller's directory when the caller runs
 in a pane, else the focused pane's), `focus` (default true;
 pass false to leave the focus where it is), `command` (argv to exec instead of a
@@ -5585,6 +5610,16 @@ not refused either. The daemon forgets both when the pane is back at
 its shell. Until a `session_start` arrives, the window is open to any report.
 `set-agent-session` is not guarded this way, and it clears the guard.
 
+The server keeps the `TUIOS_PANE_ID` of the pane that started it, so its hooks
+can name a window that is gone. Such a report, from a caller outside every pane,
+goes to the one live pane of that harness that runs its conversation: the pane
+that holds `agent_session_id`, the pane joined to `transcript_path`, or the pane
+whose agent started in the transcript's folder near the transcript's start. The
+answer then names that pane in `session` and `window`. With no such pane, or
+with two, the report fails with `window_not_found` as before. The daemon records
+the pane's agent process as the harness, not the server.
+`report-agent-activity` is placed the same way, by `agent_session_id` only.
+
 `reason`, `activity_recorded` and the hook fields are additive. A client that
 sends none of the fields is handled exactly as before. A daemon older than them does not
 reject them: params are decoded leniently, so it ignores the fields and applies
@@ -7944,6 +7979,7 @@ Event types:
 | `mode-changed` | A terminal mode toggled (for example alt-screen). | `session`, `window`, `mode`, `enabled` |
 | `session-created` | A session was created. | `session` |
 | `session-closed` | A session was terminated. | `session` |
+| `session-labelled` | A session's display name was set, changed or cleared, by `set-session-name` or any other route. `title` is the new display name, absent when it was cleared. A rename (`rename-session`) raises `session-closed` and `session-created` instead. | `session`, `title` |
 | `client-session-changed` | A daemon connection attached, detached or switched sessions. `session` is the session entered or left. `attached` is `true` when entering and `false` when leaving, including a disconnect while attached. A rename sends `attached: true` with the new name to each client in the session. | `client_id`, `pid`, `session`, `attached` |
 | `gap` | Some events were not delivered to this connection. `reason` says why (see below). A gap has no `seq`. | `reason`, `dropped`, `boot_id` |
 | `attention` | An Inbox item opened, changed or closed. `action` is `open`, `update` or `close`, and `attention` is the item as `list-attention` returns it. On `close` the item carries `closed`: `resolved`, `seen`, `read`, `dismissed`, `answered`, `superseded`, `window_closed`, `session_closed`, `evicted`, `host_removed`, `agents_disabled` (the person turned the agent features off) or `snoozed` (the person snoozed it; it opens again with the same id). An `answered` item also carries `answer` and `answered_by`; the close of a linked host's item never reads `answered` here. `session` and `window` are the item's, so the usual filters apply. An item of a linked host also sets `host`, and a subscriber that filters on a session, window or pane does not get it unless it subscribed with `hosts`. | `session`, `window`, `host`, `action`, `attention` |
@@ -7987,7 +8023,7 @@ it, so:
 Ordering within a single mutation is stable: closes, then creates, then
 per-window changes (`window-retitled`, `window-moved`,
 `window-minimized`/`window-restored`), then `workspace-renamed`, then
-`workspace-switched`, then `window-focused`. Focus comes last because it is usually a consequence of an
+`session-labelled`, then `workspace-switched`, then `window-focused`. Focus comes last because it is usually a consequence of an
 earlier event in the same batch, so a consumer building a model from the stream
 already knows about the window being focused by the time it is told to focus it.
 

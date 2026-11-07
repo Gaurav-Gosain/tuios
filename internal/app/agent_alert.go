@@ -113,6 +113,12 @@ func (m *OS) considerAgentAlert(w *terminal.Window, from, to string) {
 	if agentAlertQuiet(w, to) {
 		return
 	}
+	// A question with the parent agent alerts from the Inbox, when it is
+	// released. The item can come after the state, and the settle below
+	// looks again.
+	if to == "needs_input" && m.paneWithParent(w.ID) {
+		return
+	}
 	if !policy.Alerts(to) {
 		return
 	}
@@ -178,8 +184,9 @@ func (m *OS) windowByID(id string) *terminal.Window {
 
 // fireAgentAlert writes the alert to every sink the policy leaves on.
 func (m *OS) fireAgentAlert(w *terminal.Window, from, to string, policy config.AgentAlertPolicy) {
-	// The pane went quiet during the settle.
-	if agentAlertQuiet(w, to) {
+	// The pane went quiet during the settle, or its question went to the
+	// parent agent.
+	if agentAlertQuiet(w, to) || to == "needs_input" && m.paneWithParent(w.ID) {
 		return
 	}
 	word, sev := agentTransitionNotice(to)

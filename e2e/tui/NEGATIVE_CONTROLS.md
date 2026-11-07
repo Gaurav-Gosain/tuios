@@ -86,6 +86,48 @@ was a flake on CI. Run on 2026-11-05: with the pane command changed to
 `(sleep 1; exec setsid sleep 600) &`, the test without the wait failed 3 of 3
 runs with that message, and the test with the wait passed 3 of 3. With the
 wait in place, `KillMode=control-group` still fails it.
+## The herdr socket sends workspace_renamed for a rename
+
+`TestHerdrWorkspaceRenamed` holds the herdr event stream to herdr 0.9.5's
+`workspace.renamed`: a workspace whose label changes sends one
+`workspace_renamed` with its id and the label `session.snapshot` then shows.
+`rename-session` and herdr's `workspace.rename` must each send exactly that,
+read as the stream's next event, and a new session afterwards must arrive as
+the next event, a `workspace_created`.
+
+Run on 2026-11-04 on macOS (darwin/arm64). The test passes on the fixed build,
+and a binary of main (46c9a434e) fails it. Each control was built into its own
+## The herdr socket sends tab_renamed when a workspace is named
+
+`TestHerdrTabRenamed` holds the herdr socket to herdr 0.9.5's `tab.renamed`.
+Naming a workspace that holds a pane, with `set-workspace-name` or with
+herdr's `tab.rename`, must send `tab_renamed` with the tab's id, its
+workspace's id and the label `tab.get` reads next. Clearing the name must send
+the workspace number as the label. Naming an empty workspace in the background
+must send nothing, and its first pane's `tab_created` must carry the name.
+After each rename the test opens a pane on a new workspace, so a rename that
+sent nothing shows as that `tab_created` arriving first.
+
+Run on 2026-11-04 on macOS (darwin/arm64). The test passes on the fixed build,
+and a binary of main (f75ac3943) fails. Each control was built into its own
+binary.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| Main without the fix | "rename-session sends workspace_renamed: got workspace_created for the workspace labelled herdr-ren-two" | **caught** |
+| The old name forgotten in the `session-closed` case of `herdrTranslator.translate` again | The same failure as on main | **caught** |
+| The `session-labelled` case cut from `herdrTranslator.translate` | "workspace.rename sends workspace_renamed: no event arrived", after the rename-session one | **caught** |
+
+The event stream is `herdr-workspace-renamed-stream` under
+`TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHerdrWorkspaceRenamed$' -v .`.
+| Main without the fix | "set-workspace-name names workspace 1: got `tab_created` (t4), want tab_renamed" | **caught** |
+| The `t.renamed` call cut from `herdrTranslator.translate` | The same place, the same `tab_created` | **caught** |
+| The empty-workspace check cut from `renamed` | "naming an empty workspace in the background: got `tab_renamed` (t3, `named-empty`), want tab_created" | **caught** |
+
+The event stream is `herdr-tab-renamed-stream` under `TUIOS_E2E_FRAMES`, in
+the test's folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHerdrTabRenamed$' -v .`.
 
 ## A pasted path reads back in fish behind tmux
 
@@ -238,6 +280,19 @@ Run on 2026-11-02 on Linux. The test passes on the change. Each control was buil
 
 The frames are `quick-look-log-start`, `-far`, `-inside`, `-end`, `-full` and `quick-look-far-log-end` under `TUIOS_E2E_FRAMES`.
 
+### The end of a wrapped file whose last line is taller than the panel
+
+`TestQuickLookEndShowsALongLastLine` goes to the end of two `.txt` files with wrap on. One has 80 short rows, and `G` must show `row 080` and `row 070`. The other has three short lines and a last line of about 20 KB, and `G` must show that line's number and first characters, `4  W00000`, and not `alpha one`. `j` past the end must keep it, and `k` must show `charlie three` and not `bravo two`. With wrap off (`w`) all four lines show, the last one cut, before and after `G`.
+
+Run on 2026-11-05 on Linux. The test passes on the change. Each control was built into its own binary. The control is main's `quickLookLastWrapped`, which returns one past the last line when that line alone is taller than the panel.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `quickLookLastWrapped` returns `i + 1` (main) | "G did not show the long last line: want ["4  W00000"] on screen and ["alpha one"] off it". The panel's body is empty under its header | **caught** |
+
+The frames are `quick-look-wrap-rows-end` and `quick-look-wrap-long-end` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestQuickLookEndShowsALongLastLine$' -v .`.
+
 ## Quick look searches a file
 
 `TestQuickLookMovesInsideAFile` searches in a log of 6000 rows, past what is held in both directions, goes to a line, goes past the last line, and wraps. `TestQuickLookLightsAMatchAtEachDepth` checks every cell of a match at truecolor, 256 and 16 colours. `TestQuickLookOnAFarFile` searches and goes to a line over the link. `TestQuickLookSearchGoesOnFromWhereItStopped` is a kept unit test, since the suite has no way to run a search out of its 5 seconds.
@@ -340,6 +395,26 @@ passes.
 | `noteSharedServerHook` is not called | `reports for a closed pane raised no notice` |
 | `goneHookWait` is 0 | `two quick reports for a closed pane raised the notice` |
 | `closeConfigNotice` is not called | `a report that reached a pane left the notice open` |
+
+The same test now covers the rest of issue 1391. A hook that names the closed pane
+goes to the live pane that runs its conversation. A hook for a conversation no
+pane runs still raises the notice. The panes may report for each other here
+(strict mode with `respond`), so only the route's own rule keeps a pane's process
+from placing a report.
+
+Run on 2026-11-04 on Linux. The fixed build passes 3 runs of 3. Each control is one
+edit, and each fails at the step named.
+
+| Control | Failure |
+| --- | --- |
+| `routeSharedServerReport` places nothing | `a hook for the pane's conversation did not reach the pane` |
+| The route skips its `paneAuthority` check | `a process in another pane placed a report on the second pane` |
+| The route skips the rollout start rule | `the second pane's SessionStart did not reach it` |
+| `agent-hook` ignores the pane in the answer | `the start hint does not name the pane the report reached` |
+
+Recording the pane's codex as the harness, not the server, has no control. The
+detector clears a pane it found codex in when the shell comes back, whatever
+harness the report named, and the route takes only such panes.
 ## A quiet pane keeps out of the Inbox
 
 `TestQuietPaneKeepsOutOfTheInbox` types state reports into a real pane's shell,
@@ -1987,8 +2062,9 @@ picked the top. `paste-buffer` with no `-b` then typed the older buffer.
 `TestHostsSync` syncs four fake hosts: one with no tuios, one with the new
 version, one with the old version and a daemon that runs `sleep` in a pane,
 and one with no machine behind its address. `TestHostsSyncRestartWithYes`
-restarts the daemon of an old host. Each control changed one line, built the
-binary, and ran the named test.
+moves the daemon of an old host, which upgrades it live (see "Live handoff"
+for the controls of that). Each control changed one line, built the binary,
+and ran the named test.
 
 | Wiring | Cut | Tests that fail | Verdict |
 | --- | --- | --- | --- |
@@ -9667,6 +9743,74 @@ The wait control is caught only by the exit status, which the test checks on mac
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -run '^(TestDaemonUpgradeKeeperStandsDown|TestDaemonUpgradeSurvivesACrashOfTheNewImage|TestDaemonUpgradeFallsBackToPreviousBinary)$' .
 ```
+
+### The paths that install tuios and move the daemon
+
+`e2e/tui/upgrade_paths_test.go` and `TestHostsSyncRestartWithYes` drive `tuios daemon upgrade --or-restart`, the one helper every install path uses, through those paths. The hosts are the fake hosts of `hosts_sync_test.go`: a real isolation root and daemon each, behind an ssh stand-in, where the install and upgrade scripts run in a real `sh`. The new version is a build of the checkout stamped `e2e-sync-next`, so the `daemon upgrade` that runs on a host is the checkout's own: a control in the helper is applied to the source for the run, not only to `TUIOS_E2E_BIN`.
+
+- `TestHostsSyncRestartWithYes`: `hosts sync --restart --yes` on a host whose daemon has live upgrades. The row says `daemon upgraded live`; the daemon keeps its pid, gets a new image of `e2e-sync-next`, keeps the session and both pane pids, one of them `sleep 600`.
+- `TestHostsSyncLocalUpgradesTheNamedServerLive`: `tuios --server e2e-lhsync hosts sync --local --restart --yes`, the shape of `just deploy`, with a default daemon and a named one, each running `sleep 600`. The PATH holds only a copy of the old tuios under the isolation root, so the local probe installs there. The named daemon is upgraded live with its pid and panes; the default daemon keeps its image, version and panes.
+- `TestHostsSyncRestartsADaemonThatPredatesLiveUpgrades`: the host's daemon is `TUIOS_E2E_BASELINE_BIN`, upstream main at 72c1c367. It answers `unknown_verb`, so sync restarts it with the new binary; the row says `daemon restarted` with the note "The daemon could not be upgraded live, so it was restarted: the daemon (e2e-baseline-72c1c367, pid N) predates live upgrades.", and the session comes back on a new daemon of `e2e-sync-next`. Skipped without the variable.
+- `TestHostsSyncInAPaneLeavesADaemonItCannotUpgrade`: the same baseline daemon on this machine, with `hosts sync --local --restart --yes` run as if from one of its panes (`TUIOS_PANE_ID` set), so sync may only upgrade it live. The baseline has no live upgrades and no dialog to ask the person in, and answers `unknown_verb`. The binary is installed, the daemon is neither upgraded nor restarted, its image and panes are unchanged, and the row's note says it predates live upgrades and was not restarted. A daemon with live upgrades, asked from a real pane, is covered by "hosts sync from a pane, confirmed at a client" below. Skipped without the variable.
+- `TestHostsSyncReportsAFallbackAndDoesNotRestart`: the host's daemon runs with `TUIOS_TEST_HANDOFF_FAIL=error`, so the new image cannot adopt the panes and the daemon goes back to `tuios.prev`. sync fails the host with "the new binary could not take the panes over", exits 1, and the daemon keeps its pid, the old version and both pane pids.
+- `TestDaemonUpgradeOrRestartStartsTheNamedServer`: `tuios --server e2e-lhstart daemon upgrade --binary <copy> --or-restart --json` with no daemon reports `started` with the reason "no daemon is running", the named server runs the copy as the reported pid, and `kill-server` on the default server finds nothing running.
+- `TestInstallScriptUpgradesTheDaemonLive`: `scripts/install.sh --prefix <root>/prefix --upgrade-server`, with the isolation root's XDG folders (the test refuses to run when its runtime folder is not the root's own) and the real Go caches. The script builds the checkout, installs it, prints `==> upgrading the daemon live` and the command's report, and the daemon keeps its pid and panes on a new image of the installed `dev+COMMIT-dirty`.
+
+Run on 2026-10-17 on macOS arm64 (Darwin 27, Go 1.26.9) against feat/live-handoff-upgrade-paths, one build per control, with the source patched for the run where the control is in the helper.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| The helper always restarts | `upgradeLive` in `upgradeDaemon` replaced by a `notLiveError` | `TestHostsSyncRestartWithYes`: "old was not installed and upgraded live: ... Action:installed, daemon restarted", "the daemon on old is {PID:52397 ...} after the sync, from {PID:52242 ...}", "window ... had pid 52245, and 52398 after the sync"; `TestHostsSyncLocalUpgradesTheNamedServerLive`: "the panes of server e2e-lhsync were ... and are ..."; `TestInstallScriptUpgradesTheDaemonLive`: "install.sh did not report a live upgrade", the same image after the install | **caught** |
+| A refusal is not restarted | `return o, err` at the top of the `daemon-upgrade` error branch | `TestHostsSyncRestartsADaemonThatPredatesLiveUpgrades`: "sync --restart --yes failed: exit status 1" | **caught** |
+| The daemon from before live upgrades is a plain refusal | the `ErrVerbUnknownVerb` branch made `if false` | `TestHostsSyncRestartsADaemonThatPredatesLiveUpgrades`: "the row does not say the daemon was restarted because it predates live upgrades: [... restarted: the daemon refused: unknown verb daemon-upgrade.]" | **caught** |
+| No daemon is a failure | the `!session.IsDaemonRunning()` branch in `upgradeLive` made `if false` | `TestDaemonUpgradeOrRestartStartsTheNamedServer`: "daemon upgrade --or-restart with no daemon did not start one: exit status 3" | **caught** |
+| A fallback is restarted | a fallback outcome turned into a `notLiveError` in `upgradeDaemon` | `TestHostsSyncReportsAFallbackAndDoesNotRestart`: "sync did not fail the host with the fallback, or moved the daemon: <nil> ... daemon restarted", "the daemon is {PID:55120 ... Version:e2e-sync-next} after the fallback, from {PID:55022 ...}", the pane pids changed | **caught** |
+| The upgrade drops the server | `TUIOS_SERVER=` before `"$a" daemon upgrade` in `syncUpgradeStep` | `TestHostsSyncLocalUpgradesTheNamedServerLive`: "server e2e-lhsync is {... Version:dev} after the sync", "the default daemon changed when server e2e-lhsync was synced: {... Version:dev} then {... Version:e2e-sync-next}" | **caught** |
+| A pane restarts like anywhere else | the `t.liveOnly` case cut from `restartMode` | `TestHostsSyncInAPaneLeavesADaemonItCannotUpgrade`: "the row says the daemon moved ... daemon restarted", "the daemon changed: {PID:55450 ...} then {PID:55516 ...}". Run again on 2026-10-29 against `pr/live-handoff-6` with the dialog in place: the same failures ("Action:installed, daemon restarted", "the daemon changed: {PID:49520 ...} then {PID:49702 ...}"), while `TestHostsSyncInAPaneLeavesTheDaemonWithoutYes` passes, because `--or-restart` itself does not restart a daemon that refused its pane (see below) | **caught** |
+| install.sh ignores the upgrade answer | the `upgrade)` case of the daemon action renamed | `TestInstallScriptUpgradesTheDaemonLive`: "install.sh did not report a live upgrade", "the daemon is {PID:55994 Instance:7f2b0b83... Version:dev} after the install, from the same" | **caught** |
+
+The "The restart" control of "tuios hosts sync" (`t.restart = true` made `false` in `planSyncTarget`) was run again on this branch: `TestHostsSyncRestartWithYes` fails with "old was not installed and upgraded live" and "after the sync, old still plans \"up to date, daemon restart needed\"". **caught**.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_BASELINE_BIN=/path/to/older/tuios \
+  go test -count=1 -run '^(TestHostsSyncRestartWithYes|TestHostsSyncLocalUpgradesTheNamedServerLive|TestHostsSyncRestartsADaemonThatPredatesLiveUpgrades|TestHostsSyncInAPaneLeavesADaemonItCannotUpgrade|TestHostsSyncReportsAFallbackAndDoesNotRestart|TestDaemonUpgradeOrRestartStartsTheNamedServer|TestInstallScriptUpgradesTheDaemonLive)$' .
+```
+
+### The paths that install tuios and move the daemon
+
+`e2e/tui/upgrade_paths_test.go` and `TestHostsSyncRestartWithYes` drive `tuios daemon upgrade --or-restart`, the one helper every install path uses, through those paths. The hosts are the fake hosts of `hosts_sync_test.go`: a real isolation root and daemon each, behind an ssh stand-in, where the install and upgrade scripts run in a real `sh`. The new version is a build of the checkout stamped `e2e-sync-next`, so the `daemon upgrade` that runs on a host is the checkout's own: a control in the helper is applied to the source for the run, not only to `TUIOS_E2E_BIN`.
+
+- `TestHostsSyncRestartWithYes`: `hosts sync --restart --yes` on a host whose daemon has live upgrades. The row says `daemon upgraded live`; the daemon keeps its pid, gets a new image of `e2e-sync-next`, keeps the session and both pane pids, one of them `sleep 600`.
+- `TestHostsSyncLocalUpgradesTheNamedServerLive`: `tuios --server e2e-lhsync hosts sync --local --restart --yes`, the shape of `just deploy`, with a default daemon and a named one, each running `sleep 600`. The PATH holds only a copy of the old tuios under the isolation root, so the local probe installs there. The named daemon is upgraded live with its pid and panes; the default daemon keeps its image, version and panes.
+- `TestHostsSyncRestartsADaemonThatPredatesLiveUpgrades`: the host's daemon is `TUIOS_E2E_BASELINE_BIN`, upstream main at 72c1c367. It answers `unknown_verb`, so sync restarts it with the new binary; the row says `daemon restarted` with the note "The daemon could not be upgraded live, so it was restarted: the daemon (e2e-baseline-72c1c367, pid N) predates live upgrades.", and the session comes back on a new daemon of `e2e-sync-next`. Skipped without the variable.
+- `TestHostsSyncInAPaneLeavesADaemonItCannotUpgrade`: the same baseline daemon on this machine, with `hosts sync --local --restart --yes` run as if from one of its panes (`TUIOS_PANE_ID` set), so sync may only upgrade it live. The baseline has no live upgrades and no dialog to ask the person in, and answers `unknown_verb`. The binary is installed, the daemon is neither upgraded nor restarted, its image and panes are unchanged, and the row's note says it predates live upgrades and was not restarted. A daemon with live upgrades, asked from a real pane, is covered by "hosts sync from a pane, confirmed at a client" below. Skipped without the variable.
+- `TestHostsSyncReportsAFallbackAndDoesNotRestart`: the host's daemon runs with `TUIOS_TEST_HANDOFF_FAIL=error`, so the new image cannot adopt the panes and the daemon goes back to `tuios.prev`. sync fails the host with "the new binary could not take the panes over", exits 1, and the daemon keeps its pid, the old version and both pane pids.
+- `TestDaemonUpgradeOrRestartStartsTheNamedServer`: `tuios --server e2e-lhstart daemon upgrade --binary <copy> --or-restart --json` with no daemon reports `started` with the reason "no daemon is running", the named server runs the copy as the reported pid, and `kill-server` on the default server finds nothing running.
+- `TestInstallScriptUpgradesTheDaemonLive`: `scripts/install.sh --prefix <root>/prefix --upgrade-server`, with the isolation root's XDG folders (the test refuses to run when its runtime folder is not the root's own) and the real Go caches. The script builds the checkout, installs it, prints `==> upgrading the daemon live` and the command's report, and the daemon keeps its pid and panes on a new image of the installed `dev+COMMIT-dirty`.
+
+Run on 2026-10-17 on macOS arm64 (Darwin 27, Go 1.26.9) against feat/live-handoff-upgrade-paths, one build per control, with the source patched for the run where the control is in the helper.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| The helper always restarts | `upgradeLive` in `upgradeDaemon` replaced by a `notLiveError` | `TestHostsSyncRestartWithYes`: "old was not installed and upgraded live: ... Action:installed, daemon restarted", "the daemon on old is {PID:52397 ...} after the sync, from {PID:52242 ...}", "window ... had pid 52245, and 52398 after the sync"; `TestHostsSyncLocalUpgradesTheNamedServerLive`: "the panes of server e2e-lhsync were ... and are ..."; `TestInstallScriptUpgradesTheDaemonLive`: "install.sh did not report a live upgrade", the same image after the install | **caught** |
+| A refusal is not restarted | `return o, err` at the top of the `daemon-upgrade` error branch | `TestHostsSyncRestartsADaemonThatPredatesLiveUpgrades`: "sync --restart --yes failed: exit status 1" | **caught** |
+| The daemon from before live upgrades is a plain refusal | the `ErrVerbUnknownVerb` branch made `if false` | `TestHostsSyncRestartsADaemonThatPredatesLiveUpgrades`: "the row does not say the daemon was restarted because it predates live upgrades: [... restarted: the daemon refused: unknown verb daemon-upgrade.]" | **caught** |
+| No daemon is a failure | the `!session.IsDaemonRunning()` branch in `upgradeLive` made `if false` | `TestDaemonUpgradeOrRestartStartsTheNamedServer`: "daemon upgrade --or-restart with no daemon did not start one: exit status 3" | **caught** |
+| A fallback is restarted | a fallback outcome turned into a `notLiveError` in `upgradeDaemon` | `TestHostsSyncReportsAFallbackAndDoesNotRestart`: "sync did not fail the host with the fallback, or moved the daemon: <nil> ... daemon restarted", "the daemon is {PID:55120 ... Version:e2e-sync-next} after the fallback, from {PID:55022 ...}", the pane pids changed | **caught** |
+| The upgrade drops the server | `TUIOS_SERVER=` before `"$a" daemon upgrade` in `syncUpgradeStep` | `TestHostsSyncLocalUpgradesTheNamedServerLive`: "server e2e-lhsync is {... Version:dev} after the sync", "the default daemon changed when server e2e-lhsync was synced: {... Version:dev} then {... Version:e2e-sync-next}" | **caught** |
+| A pane restarts like anywhere else | the `t.liveOnly` case cut from `restartMode` | `TestHostsSyncInAPaneLeavesADaemonItCannotUpgrade`: "the row says the daemon moved ... daemon restarted", "the daemon changed: {PID:55450 ...} then {PID:55516 ...}". Run again on 2026-10-29 against `pr/live-handoff-6` with the dialog in place: the same failures ("Action:installed, daemon restarted", "the daemon changed: {PID:49520 ...} then {PID:49702 ...}"), while `TestHostsSyncInAPaneLeavesTheDaemonWithoutYes` passes, because `--or-restart` itself does not restart a daemon that refused its pane (see below) | **caught** |
+| install.sh ignores the upgrade answer | the `upgrade)` case of the daemon action renamed | `TestInstallScriptUpgradesTheDaemonLive`: "install.sh did not report a live upgrade", "the daemon is {PID:55994 Instance:7f2b0b83... Version:dev} after the install, from the same" | **caught** |
+| A binary others can write is never run by `--or-restart` | the owner and mode check moved back after the daemon is dialled, where `daemon upgrade` alone had it, still returning a plain error (run on 2026-11-05 after the rebase onto main) | `TestOrRestartNeverRunsABinaryOthersCanWrite`: "with no daemon running, --or-restart to a script anyone can write was not refused", "the action was started, not \"refused\"", "--or-restart ran the script anyone can write". With a daemon running it still passes, since the check comes before the refusal that would restart | **caught** |
+| `--or-restart` from a pane restarts for a binary that cannot take the state | the pane test in `upgradeDaemon` cut back to the dialog's refusal (`if notLive.unconfirmed`) (run on 2026-11-05) | `TestOrRestartFromAPaneNeverRestartsForABinaryItCannotUpgradeTo`: "pane ... never showed OR_EXIT=(\d+)" after 150 s. The kill-server of the restart ended the pane and the command in it | **caught** |
+| A restart that reached no new daemon is reported as restarted | the `reachDaemon` check after start-server cut from `restartDaemonWith` (run on 2026-11-05) | `TestOrRestartSaysRestartedOnlyWhenANewDaemonAnswers`: "no daemon after the restart, --or-restart did not fail ... (action restarted, error <nil>)", and the same for "the old daemon still answers" | **caught** |
+| The restart runs a file swapped in between its runs | both `pin.Unchanged()` checks in `restartDaemonWith` made no-ops (run on 2026-11-05) | `TestOrRestartNeverRunsAFileSwappedInBetweenItsRuns`: "--or-restart did not refuse the file swapped in after its check (action failed, error exit status 1)", "--or-restart ran the file swapped in after its check" | **caught** |
+
+The "The restart" control of "tuios hosts sync" (`t.restart = true` made `false` in `planSyncTarget`) was run again on this branch: `TestHostsSyncRestartWithYes` fails with "old was not installed and upgraded live" and "after the sync, old still plans \"up to date, daemon restart needed\"". **caught**.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_BASELINE_BIN=/path/to/older/tuios \
+  go test -count=1 -run '^(TestHostsSyncRestartWithYes|TestHostsSyncLocalUpgradesTheNamedServerLive|TestHostsSyncRestartsADaemonThatPredatesLiveUpgrades|TestHostsSyncInAPaneLeavesADaemonItCannotUpgrade|TestHostsSyncReportsAFallbackAndDoesNotRestart|TestDaemonUpgradeOrRestartStartsTheNamedServer|TestInstallScriptUpgradesTheDaemonLive)$' .
+```
 #### Third review: only a client that shows the dialog counts, and the bridge cannot upgrade
 
 Run on 2026-10-31 on macOS arm64 (Darwin 27, Go 1.27.3) against `pr/live-handoff-4`, one build per control, one run each. The old client is v0.12.0 built from its tag:
@@ -9781,6 +9925,28 @@ Run on 2026-11-02 on macOS arm64 (Darwin 27, Go 1.27.3) against `fix/upgrade-red
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestUpgradeReattachLeavesAltScreenPaneAlone$' .
+### hosts sync from a pane, confirmed at a client
+
+`e2e/tui/upgrade_paths_pane_test.go`. `tuios hosts sync --local --binary <e2e-sync-next> --restart --yes --json`, the shape of `just deploy`, runs in a real shell pane of this machine's daemon, a scratch daemon with live upgrades and a second pane running `sleep 600`. The PATH of the command holds only a copy of the daemon's tuios under the isolation root, so sync installs there and runs `daemon upgrade` with it, without `--or-restart`. Each run keeps its JSON and stderr, and each test writes `handoff.json` and the client's screens under `artifactDir`.
+
+- `TestHostsSyncInAPaneUpgradesLiveAfterYes`: with a client attached, sync prints that the upgrade waits for a Yes in the tuios dialog, the dialog opens, and Down then Enter at the client says Yes. sync exits 0, the row says `installed, daemon upgraded live`, and the daemon keeps its pid, runs `e2e-sync-next` from the installed path, and keeps both pane pids.
+- `TestHostsSyncInAPaneLeavesTheDaemonWithoutYes`: sync with no client attached, then, with the binary already installed, sync again on its restart-only path with a client whose person presses Enter on No. Each run exits 0 with `daemon restart needed`, neither upgraded nor restarted, and the note "The new binary is installed. The daemon was not upgraded live. It needs a Yes in the tuios dialog on an attached client, and none came. This command runs in a pane of that daemon, so it was not restarted. It still runs dev. Run the sync again with a client attached and answer Yes, or run tuios daemon upgrade from a terminal outside tuios." The daemon's pid, image and both pane pids are unchanged.
+- `TestOrRestartFromAPaneNeverRestarts`: `tuios daemon upgrade --binary <copy> --or-restart`, what `just restart` runs outside a pane, from a pane with no client attached. It exits 1 and prints "The daemon was not restarted, because a restart would end the pane this command runs in.", and the daemon and its panes are as they were.
+
+Run on 2026-10-29 on macOS arm64 (Darwin 27, Go 1.26.10) against `pr/live-handoff-6`, one build per control with the source patched (the new version is built from the checkout too), one run each:
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| `--or-restart` restarts a pane's refused upgrade | `if !orRestart \|\| notLive.unconfirmed` made `if !orRestart` in `upgradeDaemon` | `TestOrRestartFromAPaneNeverRestarts`: "pane ... never showed OR_EXIT=(\d+)" after 150 s: the restart ended the pane the command ran in | **caught** |
+| A pane's sync restarts its own daemon | the control above, plus the `TUIOS_PANE_ID` case cut from `planSyncTarget`, so sync runs `--or-restart` | `TestHostsSyncInAPaneLeavesTheDaemonWithoutYes`: "pane ... never showed SYNC1_EXIT=(\d+)" after 240 s. sync had listed the agent pane's `tuios` as a program a restart ends, and the restart ended it before it wrote its JSON | **caught** |
+| A refusal for want of a Yes reads like any other | the `o.Unconfirmed` branch of `upgradeResult` made `if false` | `TestHostsSyncInAPaneLeavesTheDaemonWithoutYes`: "with no client the row does not say what happened and what to do: [... The daemon could not be upgraded live: the daemon refused: daemon-upgrade is for the person. ... Run the restart from a terminal outside tuios.]", and the same for No | **caught** |
+| sync leaves a pane's daemon without asking | `t.restart, t.liveOnly = true, true` in the `TUIOS_PANE_ID` case replaced by a note | `TestHostsSyncInAPaneUpgradesLiveAfterYes`: "no upgrade dialog on the client (yes): tuitest: WaitForText timed out after 1m30s waiting for text Upgrade the daemon?" | **caught** |
+
+The `TUIOS_PANE_ID` case alone (without the first control) is not caught by these tests: sync then runs `--or-restart`, whose own guard keeps the daemon, and the note is the same. It is what keeps a daemon from before live upgrades from being restarted from a pane, which `TestHostsSyncInAPaneLeavesADaemonItCannotUpgrade` catches (above). The restart budget of `hosts sync`, which adds the dialog's minute (`syncRestartTimeout`), has no control: showing it would need a run that waits out the full minute and then a slow handoff on top. `scripts/install.sh --upgrade-server` and `just restart` from a pane are not run end to end. Their pane branches only drop `--or-restart` and change the message, and the guard under them is `TestOrRestartFromAPaneNeverRestarts`.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^(TestHostsSyncInAPaneUpgradesLiveAfterYes|TestHostsSyncInAPaneLeavesTheDaemonWithoutYes|TestOrRestartFromAPaneNeverRestarts)$' .
 ```
 
 ## Deleting a worktree from the close-confirmation dialog
@@ -12067,6 +12233,33 @@ rules has no test.
 The frames are `files-shut`, `files-open`, `files-open-short`, `files-search` and
 `files-no-terminals` under `TUIOS_E2E_FRAMES`, in the test's folder.
 
+Since the files control shows its state (below), a section the control opened
+has a close control in its header that a section the layout names does not. The
+line-for-line comparison leaves the header out, and the test checks the close
+control on its own: there on the opened section, absent on the named one.
+
+## The files control shows that it is on
+
+`TestRailFilesSwitchShowsItsState` uses the layout `sessions:20,terminals,agents`
+on a rail 28 columns wide. Before the fix the footer's `files` control drew the
+same muted word whether the section was on or off, so one stray click put the
+files section on the rail with no sign of why. The test clicks the control and
+waits for three things: the files header, every cell of the footer's `files`
+underlined, and an `x` at the right end of the header. A second click must take
+the section off and the underline away. A third click turns it on again, and a
+click on the header's `x` must take it off.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The whole fix (a build of `284853b80`) | "after the first click on the footer control: the section, the on control or the close control is missing" | **caught** |
+| Only the on state in `sidebarFooter` (`filesOn` forced false), the close control kept | The same line | **caught** |
+
+The frames are `rail-files-switch-off` and `rail-files-switch-on` under
+`TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRailFilesSwitchShowsItsState$' -v .`.
+
 ## The files menu's Preview from any focus
 
 `TestRailQuickLook` now starts with the keyboard in a pane, before the rail has had it. It right-clicks `main.go` and picks Preview. The preview must show `main.go` and stay open, `j` must move it to `notes.md`, and after `esc` the keys must reach the shell. Later in the test, Preview runs from the focused rail, where `esc` must leave the keyboard with the rail. This replaces the check in "The files menu previews the row it was opened on", where `j` went on from the old cursor row. Each control was built into its own binary. Run on 2026-10-30 on Linux.
@@ -12811,6 +13004,8 @@ colocated and not, and folds it. Run on 2026-11-02 on macOS with jj 0.46.0:
 | `gitstate.Branch` as on main: git's HEAD only | `TestRailJJRepoRow/plain`, `/colocated` | the same: the main workspace's row shows nothing when not colocated and a bare hash when colocated | **caught** |
 | Run on 2026-11-03: jj's `*` marker kept in the bookmark name, as before the review of #1470 | `TestRailGitJJ` | "the git section never showed repo, and feat with +2 above it and ↑3 ahead of trunk()": the row shows `feat*` | **caught** |
 | Run on 2026-11-03: `childproc.OwnGroup` and `WaitDelay` cut from `readJJ` | `TestJJTimeoutHoldsWithAHungChild` (unit, `internal/gitstate`) | readJJ returned after about 20 s, the fake jj's child, not within `countTimeout` | **caught** |
+| Run on 2026-11-04: jj's `??` marker kept in the bookmark name | `TestRailGitJJProblems` | "the git section never showed the divergent commit (◇) with the branch row named feat": the row shows `feat??` | **caught** |
+| Run on 2026-11-05: `GitEnv` with `GIT_DIR` alone, no `GIT_WORK_TREE` | `TestReviewJJConflict`, `TestCheckpointJJRestore` | "git update-index: fatal: this operation must be run in a work tree" in the review, and "git checkout-index: ..." in the restore | **caught** |
 
 The frames are `rail-jj-repo-row-*` under the test's artifact folder.
 
@@ -13430,6 +13625,396 @@ rule, not the digest, refused the allow. That run proved nothing about
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestGUIBridgeEditApprovalNeedsItsDigest$' -v .`.
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestAttachedClientFollowsDaemonUpgrade|TestAttachedClientIsToldToReattach)$' -v .`.
+## The paste preview
+
+`paste_preview_test.go` pastes an image through a fake clipboard (the
+`wl-paste` stand-in of `paste_image_test.go`, holding a real PNG). On a host
+with kitty graphics the card comes up, its picture is placed on the host in
+the card's first row, and the next key takes both down and still reaches the
+pane. Without graphics the picture is block glyphs in the card's cells. In one
+client, a paste with the card on puts it up, and a paste after
+`set-config appearance.paste_preview false` pastes the path alone.
+
+Run on 2026-11-06 on macOS (arm64). The branch passes all three tests. Four
+controls, each this branch with one change.
+
+| Control | Test | Failure | Verdict |
+| --- | --- | --- | --- |
+| `applyImagePasted` returns without `showPastePreview` | `TestAnImagePasteShowsTheImageInACard` | `no card, or no picture placed in it` | **caught** |
+| The card's clause in the fullscreen fast path (`fullscreenFastWindow`) removed | `TestAnImagePasteShowsTheImageInACard` | `no card, or no picture placed in it` | **caught** |
+| The key's `hidePastePreview` in `Update` removed | `TestAnImagePasteShowsTheImageInACard` | `the card or its picture outlived the next key, or the key did not reach the pane` (3 s, inside the card's own 6 s) | **caught** |
+| `showPastePreview` ignores `Settings.PastePreview` | `TestPastePreviewCanBeTurnedOff` | `paste_preview = false still put a card up` | **caught** |
+
+The second control is the bug the first test found: a paste into the only
+pane on screen took the fast path, which draws no overlay, so the card was up
+and never drawn.
+
+The frames, with the host's picture drawn in, are under `TUIOS_E2E_FRAMES`, in
+each test's folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'Paste(Preview|ShowsTheImage|WithoutGraphics)' -v .`.
+
+
+## Quick look wraps a row at whole characters
+
+`TestQuickLookWrapsWideCharactersWhole` and `TestQuickLookWrapsSoundMarksWhole` open `zzwrap.txt` with wrap on, at 140x40, where the code column is 81 cells. Line 1 is 321 wide characters: its rows must hold each of them once and in order, 40 to a row, and no row may end in "…". With `w` the line is cut to one row that does end in "…". Line 2 is sixty Latin letters, each with a halfwidth sound mark, then 140 ASCII characters: its rows must hold all of its ASCII in order, none may end in "…" or be empty, and each row but the last fills the code column. Line 3, ASCII alone, must show whole, and does on main. `TestQuickLookWrapKeepsColours` wraps a Go line with `w`: the `return` on its third row must have the colour of the `return` on line 1, which differs from the identifier `s`.
+
+Run on 2026-11-07 on Linux. Main (52fd515a9) is the control for the first two.
+
+| Control: what was cut | Test | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| Main's draw: the whole line handed to each row, cut at `k*codeW` | `TestQuickLookWrapsWideCharactersWhole` | "line 1 does not wrap whole: 8 rows holding [41 41 41 41 41 41 41 38] characters, rows [0 1 2 3 4 5 6] end in "…", characters [80 161 242] of 321 are on no row" | **caught** |
+| Main's draw: the whole line handed to each row, cut at `k*codeW` | `TestQuickLookWrapsSoundMarksWhole` | "line 2 does not wrap whole: its rows hold 183 of its 200 ASCII characters (...k028k029k03), rows [0 1] end in "…", rows [] are empty, rows [0 1] stop before the last cell" | **caught** |
+| The branch with the row given the whole line's spans (`sp` for `ql.rowSpans`) | `TestQuickLookWrapKeepsColours` | "cell 0 of the return on row 2 of line 2 is {Kind:1 Index:105 R:0 G:0 B:0}, want the keyword's {Kind:1 Index:171 R:0 G:0 B:0} (the identifier s is {Kind:1 Index:255 R:0 G:0 B:0})" | **caught** |
+
+`TestQuickLookWrapKeepsColours` passes on main, which keeps the whole line's colours when it cuts a row. Its control is the branch with one change: the row given the whole line's spans.
+
+The frames are `quick-look-wrap-wide`, `quick-look-wrap-marks` and `quick-look-wrap-colours` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestQuickLookWrap' -v .`.
+## The setup tail before the first output event
+
+`TestWorktreeSetupSyncHoldsAgent` waits for the setup record to show the
+setup's last lines while the setup waits on a gate. The setup prints its
+lines and then prints nothing until the gate opens. On CI the record showed no
+lines at all for 30 s, now and then: `followSetupTail` read the screen only
+after an output event, and it subscribed after the setup had started. Lines
+printed before the subscription brought no event, and the quiet wait brought
+none either. The fix reads the screen once when the follower starts.
+
+Run on 2026-11-07 on Linux (amd64). To make the race certain, both builds wait
+one second at the top of `followSetupTail` before they subscribe.
+
+| Control | Test | Failure | Verdict |
+| --- | --- | --- | --- |
+| The read on start removed (main), subscribe delayed 1 s | `TestWorktreeSetupSyncHoldsAgent` | `running with its last lines: the setup of repo-feat-sync never got there` | **caught** |
+
+The fixed build with the same delay passes. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorktreeSetupSyncHoldsAgent$' -v .`.
+
+## The terminals section stays when every pane is an agent
+
+`TestRailTerminalsKeepsItsHeaderWhenAllPanesAreAgents` uses the layout
+`sessions:20,terminals,agents` on a rail 28 columns wide. At 30 columns or less
+the rail lists an agent pane under agents and not under terminals. Before the
+fix, a session whose panes all ran agents had no terminals rows, so the section
+was dropped with its header and its "+", and the rail had no way to open a
+plain terminal. The test makes two panes, sets one as an agent and reads the
+other under terminals with no note. It then sets the second as an agent and
+waits for the terminals header with its "+" and the row "2 in agents" under it.
+A click on the "+" must open a pane and take the note away.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| `movedToAgents` in `sidebarPanelLinesForTree` left at 0, as before the fix | "with every pane an agent, the terminals header, its + or the \"2 in agents\" row is missing"; the rail shows sessions and agents only | **caught** |
+
+The frame is `terminals-all-agents` under the test's artifact folder. Repeat from
+`e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRailTerminalsKeepsItsHeaderWhenAllPanesAreAgents$' -v .`.
+
+## TestMailFromAPaneOfAnotherSession
+
+The test makes two sessions on one daemon and mails between their first panes
+with `--from` set to the sender's full window id, both ways. Before the fix the
+sender had to be a window of the recipient's session, so a lead in one session
+and its workers in another could not mail each other. It also checks that a
+window name from another session is still refused.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| `true` passed to `sendAgentMessage` in `verbSendAgentMessage`, back to `false` | "a worker in team could not mail the lead in lead: exit status 1" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestMailFromAPaneOfAnotherSession$' -v .`.
+## Pi subagent rows through the real hook
+
+`TestPiSubagentRowsThroughTheRealHook` drives the managed pi extension's v4
+subagent events through the real `tuios agent-hook pi`, against a real daemon
+and client. Run on 2026-11-03 on macOS arm64. Against a build of the base
+commit (`b74fde8ac`), whose pi mapping skips these events ("event not
+mapped"), the test fails at the waitMeta assertion `the pane's metadata is
+map[], want map[subagents:2 subagents]`: the metadata stays empty because no
+hook report ever named a subagent. The branch's build passes.
+
+
+## Pi subagent events through the extension in a node harness
+
+`TestPiExtensionSubagentEventsInANodeHarness` (internal/integration) loads the
+managed pi extension (assets/pi/tuios-agent-state.ts) in node under a fake pi
+harness, whose recorder stands in for the `tuios` command the extension
+spawns. The e2e feeds `tuios agent-hook pi` by hand and so never exercises
+the TypeScript; this one does. It pins five behaviours against pi-subagents
+0.84.0 event shapes: a management call ('status') starts and fails nothing, a
+good background run starts and stops its own row, a good background workflow
+reports no row for its tool call and ends its child with the parent's
+result, a foreground id keeps to the daemon's alphabet with the tool result
+ending the same row, and a subagent report wedged between a leaf advance and
+the folder watcher's callback does not suppress the parent's
+transcript_update. The test skips itself where node is missing or older than
+22.6. Run on 2026-11-04 on macOS arm64 (node 26.13.0, which strips the
+template's types with no flag), against the pre-fix asset of the base commit,
+taken with `git show HEAD:internal/integration/assets/pi/tuios-agent-state.ts`
+and passed through `TUIOS_TEST_PI_EXTENSION_SOURCE`. Each control run fails
+on all four of the fixed behaviours it can reach (the good background run
+behaves the same in both, by design):
+
+| Claim | Control (the pre-fix asset) | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| A management call draws no row | no 'action' skip in tool_call | "a subagent management call drew 1 start reports, want none", plus its failed update | **caught** |
+| No sequence fails a run | a successful workflow's tool result ends the stash | "report 12 is a subagent_update with outcome failed: no sequence fails a run" | **caught** |
+| A workflow's tool call draws no row | the result reports a start and a failure for fg:c3 | "the workflow's tool call drew a subagent_start report for \"fg:c3\", want none" | **caught** |
+| Foreground ids keep to the daemon's alphabet | 'fg:' + the raw call id | "the foreground id \"fg:call_abc|item_def\" does not keep to the daemon's alphabet" | **caught** |
+| A wedged subagent report does not suppress the transcript_update | subagent reports count as a selection | "no transcript_update for leaf1 followed the wedged subagent reports: the watcher's report was suppressed" | **caught** |
+
+The fixed asset passes five runs out of five; the pre-fix asset fails five
+out of five, each with the messages above.
+## A child agent never runs wider than its parent
+
+`TestAChildAgentNeverRunsWiderThanItsParent` runs a parent agent in a pane: a
+script named claude, started with `--permission-mode plan`, that calls
+`tuios start-agent`. A child with `--dangerously-skip-permissions` must be
+refused with no window made. A child that names no mode must start with
+`--permission-mode plan` added. The same bypass child started by the test
+process, outside every pane, must start as asked.
+
+Run on 2026-11-04 on Linux. The control is the branch build with
+`clampChildMode` returning its argv unchanged (a `go build -overlay` of
+`internal/session/child_clamp.go`):
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| `clampChildMode` returns argv unchanged | "a child in bypass mode from a parent in plan mode was not refused" (`WIDE_EXIT=0`), "a child that names no mode did not start in the parent's plan mode", and "the refused child has a window" | **caught** |
+
+The record is `child-mode-clamp.txt` under `TUIOS_E2E_FRAMES`. The unit tests
+`TestAChildNeverHoldsGrantsItsParentLacks` and
+`TestAChildAgentNeverRunsWiderThanItsParent` in `internal/session` fail on
+main (2c03bb3c0) for every refusal and step down they check.
+
+## Child agents link to their parent (D1)
+
+`TestAgentParentLinkSurvivesUpgradeAndRestart` starts a chain of three fake
+agents, each from the pane of the one before, with `tuios start-agent`. Each
+child must show `parent` and `root` in `list-agents`, the selector terms
+`parent:` and `root:` must find the children and the chain, `--parent` from
+outside every pane must link, and a start at depth 9 must be refused with no
+pane opened. The links must hold across `tuios daemon upgrade`, a closed
+parent must read `gone`, and the links must hold across `kill-server` and a
+restart that restores the session. `TestChildAgentRowsNestUnderTheirParent`
+reads the rail: each child's row must be on the row under its parent's, with
+its name stepped in further. Run on 2026-11-04 on Linux. Both tests pass on
+the branch head. Each control was built into its own binary.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `setAgentParent` in `verbStartAgent`: start-agent records `StartedBy` alone, as on main | "after start: gen1 has parent <nil> and root <nil>", the selector finds nothing, and the start at depth 9 is not refused | **caught** |
+| `AgentLink` tagged `json:"-"`, so the handoff manifest and the saved state leave it out | "after the upgrade: gen1 has parent <nil> and root <nil>", and the same after the restart | **caught** |
+| The resurrect step that puts `AgentLink` back on a restored window | "after the restart: gen0 has parent <nil> and root <nil>" | **caught** |
+| Follow-up, run the same day: `harnessLeftPane` without its check for a caller whose parent is the pane's process. The test now has the root start a second child, sib1, right after gen1, and gen1 takes 3 s to come up, so the root waits across a detection tick | "after start: sib1 has parent <nil> and root <nil>", and gen2 is no longer listed: its claim lapsed while it ran start-agent | **caught** |
+| A build of main without this branch, for the rail | "the agent rows are gen2 at 26:3, gen1 at 27:3, gen0 at 28:3; want each child on the next row, stepped in further than its parent" | **caught** |
+
+The frame is `agent-child-rows` under `TUIOS_E2E_FRAMES`. The upgrade test
+writes its answers to `handoff.json` in its artifact folder.
+## A child agent never runs wider than its parent
+
+`TestAChildAgentNeverRunsWiderThanItsParent` runs a parent agent in a pane: a
+script named claude, started with `--permission-mode plan`, that calls
+`tuios start-agent`. A child with `--dangerously-skip-permissions` must be
+refused with no window made. A child that names no mode must start with
+`--permission-mode plan` added. The same bypass child started by the test
+process, outside every pane, must start as asked.
+
+Run on 2026-11-04 on Linux. The control is the branch build with
+`clampChildMode` returning its argv unchanged (a `go build -overlay` of
+`internal/session/child_clamp.go`):
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| `clampChildMode` returns argv unchanged | "a child in bypass mode from a parent in plan mode was not refused" (`WIDE_EXIT=0`), "a child that names no mode did not start in the parent's plan mode", and "the refused child has a window" | **caught** |
+
+The record is `child-mode-clamp.txt` under `TUIOS_E2E_FRAMES`. The unit tests
+`TestAChildNeverHoldsGrantsItsParentLacks` and
+`TestAChildAgentNeverRunsWiderThanItsParent` in `internal/session` fail on
+main (2c03bb3c0) for every refusal and step down they check.
+
+## A delegated task's answer comes back by mail, or to a call that waits
+
+`TestDelegateMailsTheAnswerAndWakesTheParentOnce` delegates a task from
+outside every pane to a stand-in child agent, for a stand-in parent agent at
+rest. The call must return before the child answers. The parent must then
+hold one message from the child with the answer, and show one typed wake line
+that holds no text of the child. `TestDelegateWaitReturnsTheOutcome` waits
+for a child that finishes and for one that asks a question, and must get the
+answer and the question back. A wait that times out must leave the child
+running, and its answer must reach the parent by mail.
+
+Run on 2026-11-04 on Linux. Each control is the branch build with one
+function changed (a `go build -overlay` of
+`internal/session/verb_delegate.go`):
+
+| Control | Test | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| `delegateMail` returns 0 and sends nothing | `TestDelegateMailsTheAnswerAndWakesTheParentOnce` | "the parent has 0 messages, want the one answer" | **caught** |
+| `delegates.deliver` hands nothing to a waiting call | `TestDelegateWaitReturnsTheOutcome` | "--wait did not return the answer": outcome `timeout` after the whole 60 s wait | **caught** |
+
+The records are `delegate-async.log` and `delegate-wait.log` in each test's
+artifact folder, and `delegate-worktree-clamp.txt` under `TUIOS_E2E_FRAMES`.
+
+## A parent's children headline and the child pills (D15, T13)
+
+`TestChildAgentRowsNestUnderTheirParent` now also reads the headline under
+each parent row. In the chain, each parent's headline ("2 agents · 2 idle",
+"1 agent · 1 idle") must sit on the row under it, with the child after it. A
+lead with four children in mixed states must read "4 agents · 1 needs you · 2
+working · 1 done", and a click on the headline must fold the children's rows
+away and open them again. In the cockpit, the lead's thread must draw a pill
+per child, its name and then its state, under the Task card and under the
+shell command that started the four. "." must select a pill, and enter must
+open that child's thread. The same runs in a 16 colour client.
+
+Run on 2026-11-04 on Linux. The test passes on the branch head. Each control
+was built into its own binary:
+
+| Control | Failure | Result |
+| --- | --- | --- |
+| `sidebarKinHeads` returns the rows as they are | `ASSERTION: the rail never listed gen0 under its headline` | **caught** |
+| The thread draws no pill lines (`ckPillLines` cut from the tool card) | `ASSERTION: the lead's thread has no child pills` | **caught** |
+
+The frames are `agent-child-rows`, `agent-kin-rows`, `agent-kin-folded`,
+`agent-kin-rows-16` under `TUIOS_E2E_FRAMES`, and `agent-kin-pills`,
+`agent-kin-pill-selected`, `agent-kin-child-thread` and their `agent-kin-16-`
+forms under both. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestChildAgentRowsNestUnderTheirParent$' -v .`.
+## A child's question goes to its parent first, and children that finish together wake the parent once
+
+`TestDelegatedChildrenRouteTheirAttention` delegates two tasks from a stand-in
+parent agent: one child stops on an approval, the other asks a question. Both
+Inbox items must name the parent as parent and root. The question must reach
+the parent as one mail. It must be listed with `with_parent_until` set and left
+out of the counts, and the agents view must show it as "With the parent agent".
+After the test's hold it must be released, counted and moved to Needs you. A
+pane that holds `respond` must be refused when it types into the child's
+approval or calls `respond` on it. `TestChildrenThatFinishTogetherWakeTheParentOnce`
+lets three delegated children finish together. The parent must show one wake
+line that counts them: `Child agents finished: 3 done.`
+
+Run on 2026-11-04 on Linux. Each control is the branch build with one change:
+
+| Control | Test | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| The question gets no `WithParentUntil` (`parentHoldUntilLocked` result dropped) | `TestDelegatedChildrenRouteTheirAttention` | "the child's question is not held for the parent, or it is counted": `with_parent_until` 0, `question` count 1 | **caught** |
+| The release timer returns without releasing (`parentFired`) | `TestDelegatedChildrenRouteTheirAttention` | "the question was never released to the person", still held 30 s after a 20 s hold | **caught** |
+| The wake's grace, its gap and a queued wake's cover of later mail are all cut (`mail_wake.go`) | `TestChildrenThatFinishTogetherWakeTheParentOnce` | "the parent was typed 3 lines for three children, want 1" | **caught** |
+| `childTally` returns nothing | `TestChildrenThatFinishTogetherWakeTheParentOnce` | "the wake line does not count the three finished children" | **caught** |
+
+The grace alone cut is not enough to fail it: a wake already queued still
+covers the mail that comes after it, so the parent still gets one line.
+
+The unit test `TestNoPaneAnswersAChildAgentsApproval` in `internal/session`
+fails at its first send-keys when `childApprovalRefusal` refuses nothing.
+
+The records are `child-route.log`, the frames `child-question-held` and
+`child-question-released`, and `children-wake.txt` in each test's artifact
+folder.
+## Worktree setup holds, releases and undoes
+
+`TestWorktreeSetupSyncFailureRemoves` makes worktrees whose sync setup fails.
+The worktree and the branch the call made must go. A branch that was there
+before, and a worktree with a change in it, must stay. The agent must never
+start. `TestWorktreeSetupAsync` runs an async setup that waits on a gate file.
+The agent must start while the setup still runs. A failed async setup must
+keep the worktree and the branch.
+
+Run on 2026-11-04 on Linux. The tests pass on the branch head. Each control is
+the branch head with one change, built with `go build -overlay`:
+
+| Control | Test | Where it fails | Verdict |
+|---|---|---|---|
+| `undoFailedSetup` returns before it removes anything | `TestWorktreeSetupSyncFailureRemoves` | "the failed sync setup's record is ... want removed, branch_removed and agent not_started", "the worktree folder is still there after the sync setup failed", "the branch feat/broken is still there after the sync setup failed" | **caught** |
+| `createWorktreeSession` does not start the agent of an async setup at once | `TestWorktreeSetupAsync` | "the agent did not start while the async setup ran" | **caught** |
+
+The frames are `setup-running`, `setup-passed` and `setup-failed` under
+`TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorktreeSetup' -v .`.
+## Quick look reads rich Markdown
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| Tags go | "the document did not read as Markdown" | **caught** |
+| Scripts go with their text | "the document did not read as Markdown" | **caught** |
+| Comments go | "the document did not read as Markdown" | **caught** |
+| Alerts | "the document did not read as Markdown" | **caught** |
+| Mermaid | "the document did not read as Markdown" | **caught** |
+| Sections start closed | "the document did not read as Markdown" | **caught** |
+| Enter opens them | "enter did not open the section" | **caught** |
+| Arrow heads swapped for kept glyphs | "the diagram lost its arrow head" | **caught** |
+## Frames in synchronized updates, and shared memory on macOS
+
+A guest that wraps each shared memory frame in a synchronized update, as terminal-browser does, sent the host a whole frame per guest frame, and the host drew about half of them. On macOS tuios also refused shared memory, so the same guest wrote its frames into a ring of files it reuses, and a host that read a slot late drew a torn frame.
+
+`TestKittySharedMemoryFramesAreReleased/superseded` and `/superseded-daemon` run a stand-in that sends 400 frames at 200 a second, each in its own update. Run on 2026-10-31 on Linux, against linux/amd64 builds of this branch. The fixed build hands the host 120 of the 400 frames, as `a=T`, and leaves no object behind.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The whole change: main, `b51d765cb` | "the host was handed 400 of 400 frames, and it reads each one whole" (`a=t`: 402, `a=p`: 126) in both cases | **caught** |
+| The `replaceHeldStreamFrame` call in `forwardFileTransmit` | "the host was handed 400 of 400 frames" | **caught** |
+| The `releaseKittyMedium` call in `replaceHeldStreamFrame` | "278 shared memory objects were never sent to the host and never deleted" | **caught** |
+| `firstInUpdate` is always false, so a frame in an update goes back to `a=t` and `a=p` | "283 frames went out as a transmit to be placed later" | **caught** |
+
+`/joined-updates` runs a stand-in that closes one update and opens the next in the same write, so an update is open at every render pass. `/reused-name` sends every frame under one object name. Run on the same day against the same build:
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The `rec.passes != kp.renderPasses` test in `replaceHeldStreamFrame` | `/joined-updates`: "the host was handed 1 of 150 frames: the stream froze" | **caught**; the fixed build hands over 148 of 150 |
+| The `rec.cmd.FilePath != next.FilePath` test in `replaceHeldStreamFrame` | `/reused-name`: "tuios deleted the object the next frame names: the host cannot read it" | **caught**; its positive half requires that frames were replaced |
+
+`TestKittenIcatDrawsInAPane` asks kitten which medium it would pick, then sends an object in memory mode. Run on 2026-10-31 on macOS 27.0.1 (arm64) with kitty 0.49.2: main fails with "tuios can read shared memory here: true. It offered it: false" and `MEDIUM-FILES` in the pane. The fixed build passes in both modes. The test's shared memory half does not run on a machine with neither `/dev/shm` nor macOS's `shm_open`.
+
+The macOS paths have no test in this package, because `shmstream` writes its objects under `/dev/shm`. They were checked by hand on the same Mac, under a stand-in host, with a guest that streams 80 objects and then opens each name to see what is left:
+
+| Case | fixed | the call in `releaseUnreadKittyMedium` cut | the call in `releaseKittyMedium` cut | `IsFrame` without page rounding |
+| --- | --- | --- | --- | --- |
+| Detached pane, frames differ | 0 left | 80 left | not run | 80 left |
+| Attached, frames repeat | 0 left | 2 left, sent before the client attached | 77 left | 79 left |
+| Attached, frames differ, the host reads and deletes | 0 left | 2 left, the same 2 | 0 left, which is the positive half: the host is the reader | 1 left |
+
+On main a guest sees shared memory refused and never makes these objects.
+
+`internal/kittyshm` has a unit test of the delete rule on every platform, and of the real calls on macOS: the object reads through its mapping, an object of another size stays, and the frame goes.
+
+`TestProbeSaysNoWhenTheCallsAreGone`, on the same Mac, sets each system call number to one the kernel does not have. Without the `SIGSYS` handling a process dies of that signal. With it, the call returns an error and `Available` says no, so the query refuses `t=s` and a guest falls back as it does on main.
+
+A forced tear does not have a control in this package, since it needs a host that reads late. The measurement is in `docs/perf.md`.
+
+## Patches drawn at their own pixels
+
+`TestKittyPatchesDrawAtTheirOwnPixels` runs a stand-in that sends two images of 107x63 pixels per frame, each frame in one update: one changes in place at a fixed offset, and one has the same pixels at a new offset and layer each time. Run on 2026-10-31 on Linux. The fixed build passes with 60 draw commands for 30 frames, and none has a cell box.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The whole change: the branch before it | "31 of 31 patches were told a cell box, which scales them" | **caught** |
+| `nativeScale` always false | "60 of 60 patches were told a cell box" | **caught** |
+| The `DataDirty` line in the repeat branch of `forwardFileTransmit` | "the last frame's offset and layer never reached the host (X=2, z=32)" | **caught** |
+
+The first version of the fix failed this test by itself: the dimension check in `forwardFileTransmit` deleted a placement whose offset took it into one more cell, and the repeat branch then placed nothing. So that case is covered.
+
+Unit `TestNativePlacementCrop` pins the pixel numbers of a crop off each side.
+
+Measured by hand on macOS 27.0.1 with the browser's native module from the branch, in a pane: a tuios with this change gets patches, 137 MB read in 22 s. tuios v0.12.0 answers no and gets whole frames, 13.9 GB, as before. No variable was set.
+
+## A live upgrade says its clients reattach by themselves
+
+`TestAttachedClientFollowsDaemonUpgrade` and `TestAttachedClientIsToldToReattach` hold `tuios daemon upgrade` to saying an attached client was dropped and that tuios clients on this machine reattach by themselves, such as ` 1 attached client was dropped; tuios clients on this machine reattach by themselves.` The old line said the client was told to attach again, which read as work left for the person.
+
+Run on 2026-11-06 on macOS (darwin/arm64). The fixed build passes both in about 16 s.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| A build that prints the old line (integ-2026-11-05a, `034aa1cff`) | "the upgrade did not count the attached client", in both tests | **caught** |
+
+Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestAttachedClientFollowsDaemonUpgrade|TestAttachedClientIsToldToReattach)$' -v .`.
 ## The paste preview
 

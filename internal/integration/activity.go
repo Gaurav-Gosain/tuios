@@ -3,6 +3,8 @@ package integration
 import (
 	"slices"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/oneline"
 )
 
 // Hook activity: what a hook event says the agent did, beyond the state it
@@ -44,7 +46,7 @@ func FirstLine(s string) string {
 // activityText is agent text as an activity entry carries it: the first
 // line, redacted and clipped.
 func activityText(s string) string {
-	return Clip(FirstLine(s))
+	return oneline.Clip(FirstLine(s))
 }
 
 // ToolTarget is what a tool call acts on, the argument ToolSummary names:
@@ -54,13 +56,13 @@ func activityText(s string) string {
 func ToolTarget(tool string, input fields) string {
 	if tool == applyPatchTool {
 		if files := patchFiles(patchText(input)); len(files) > 0 {
-			return Clip(files[0])
+			return oneline.Clip(files[0])
 		}
 		return ""
 	}
 	for _, key := range toolTargetKeys {
 		if v := input.str(key); v != "" {
-			return Clip(v)
+			return oneline.Clip(v)
 		}
 	}
 	return ""

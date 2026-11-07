@@ -46,7 +46,7 @@ const (
 
 // checkLinkPolicy holds a call from another machine to that machine's link
 // policy for one capability. A call that did not come over a link passes.
-// The verbs that reach it are also in verbCapabilities, so the check before
+// The verbs that reach it also name a link policy on their entry, so the check before
 // the handler already covers them; this one stays at the point of the action,
 // so a verb that gains a path to it later cannot skip it.
 func (d *Daemon) checkLinkPolicy(cs *connState, capability, verb string) *verbError {

@@ -163,6 +163,13 @@ func lookupAction(o *app.OS, msg tea.KeyPressMsg, get func(string) string) strin
 	return ""
 }
 
+// tableAction is lookupAction over one of the registry's tables. Each prefix
+// and overlay reads its own table, so the same key can mean different things
+// in each.
+func tableAction(o *app.OS, msg tea.KeyPressMsg, reg *config.KeybindRegistry, table config.Table) string {
+	return lookupAction(o, msg, func(key string) string { return reg.Action(table, key) })
+}
+
 // macOptionChord returns the alt+ chord a macOS Option press stands for when the
 // OS composed a character out of it on a US layout, and whether msg is such a
 // press.

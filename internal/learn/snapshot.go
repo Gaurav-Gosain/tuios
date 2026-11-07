@@ -243,21 +243,21 @@ func take(o *app.OS) Snapshot {
 		s.Mode = "terminal"
 	}
 	switch {
-	case o.WorkspacePrefixActive:
+	case o.SubMenu == app.SubMenuWorkspace:
 		s.Prefix = "workspace"
-	case o.TilingPrefixActive:
+	case o.SubMenu == app.SubMenuTiling:
 		s.Prefix = "window"
-	case o.MinimizePrefixActive:
+	case o.SubMenu == app.SubMenuMinimize:
 		s.Prefix = "minimize"
-	case o.LayoutPrefixActive:
+	case o.SubMenu == app.SubMenuLayout:
 		s.Prefix = "layout"
-	case o.DebugPrefixActive:
+	case o.SubMenu == app.SubMenuDebug:
 		s.Prefix = "debug"
-	case o.TapePrefixActive:
+	case o.SubMenu == app.SubMenuTape:
 		s.Prefix = "tape"
 	case o.Menu != "":
 		s.Prefix = "menu"
-	case o.TuiosPrefixActive:
+	case o.SubMenu == app.SubMenuTuios:
 		s.Prefix = "tuios"
 	case o.PrefixActive:
 		s.Prefix = "prefix"

@@ -32,6 +32,8 @@ import (
 //     transmit released without the placement shows an empty pane.
 //     Closed updates are released at the start of the refresh pass for the
 //     same reason: the placements it computes then follow them.
+//     A shared memory frame already placed whole travels as one a=T instead,
+//     and the next frame replaces it if it has not gone out yet.
 //   - When tuios hides a placement of a held window, the hide goes out at
 //     once and the held placements of that image are taken out, so a release
 //     cannot show it again.
@@ -195,6 +197,7 @@ func (kp *KittyPassthrough) unholdWindow(windowID string) {
 // it from a drain that follows the pass would send the frame a tick ahead of
 // its placement.
 func (kp *KittyPassthrough) releaseDueHeld(refreshing bool) {
+	kp.renderPasses++
 	now := kp.now()
 	for id, h := range kp.held {
 		open, serial := false, uint64(0)
@@ -243,6 +246,56 @@ func (kp *KittyPassthrough) holdTail(windowID string, hostID uint32, start int, 
 	kp.pendingOutput = kp.pendingOutput[:start]
 }
 
+// heldStreamFrame is a shared memory frame that is the whole of a window's held
+// update. See replaceHeldStreamFrame.
+type heldStreamFrame struct {
+	hostID uint32
+	serial uint64
+	size   int
+	cmd    vt.KittyCommand
+	path   string
+	// passes is kp.renderPasses when the frame was held.
+	passes uint64
+}
+
+// noteHeldStreamFrame records the frame just queued for an update, so the next
+// frame of the same image can replace it. Callers hold kp.mu.
+func (kp *KittyPassthrough) noteHeldStreamFrame(windowID string, hostID uint32, serial uint64, size int, cmd *vt.KittyCommand, path string) {
+	if kp.heldFrames == nil {
+		kp.heldFrames = make(map[string]heldStreamFrame)
+	}
+	kp.heldFrames[windowID] = heldStreamFrame{hostID: hostID, serial: serial, size: size, cmd: *cmd, path: path, passes: kp.renderPasses}
+}
+
+// replaceHeldStreamFrame drops the frame a window holds when the next frame of
+// the same image has arrived and that frame is all the window holds. A guest
+// can draw faster than the render loop sends, and every frame the host is sent
+// is a whole bitmap it reads and stores, then replaces before it draws it. The
+// host will not read the dropped object, so tuios deletes it, unless the next
+// frame names the same object.
+//
+// A frame a render pass has already seen is not replaced. A guest that closes
+// one update and opens the next in the same write has an update open at every
+// pass, and each frame would replace the last one for as long as it runs. That
+// frame goes out as a finished update. Callers hold kp.mu.
+func (kp *KittyPassthrough) replaceHeldStreamFrame(windowID string, hostID uint32, next *vt.KittyCommand) {
+	rec, ok := kp.heldFrames[windowID]
+	if !ok {
+		return
+	}
+	delete(kp.heldFrames, windowID)
+	h := kp.held[windowID]
+	if h == nil || h.bypass || rec.hostID != hostID || h.serial != rec.serial ||
+		len(h.buf) != rec.size || rec.passes != kp.renderPasses {
+		return
+	}
+	kp.heldBytes -= len(h.buf)
+	delete(kp.held, windowID)
+	if rec.cmd.FilePath != next.FilePath {
+		releaseKittyMedium(&rec.cmd, rec.path)
+	}
+}
+
 // names reports whether any kitty command the frame holds names host image
 // id. The ids are collected as the frame grows, so each held byte is scanned
 // once however many images the refresh pass asks about.
@@ -279,7 +332,8 @@ func (h *heldUpdate) names(hostID uint32) bool {
 // dropHeldPlacements takes every placement of a host image out of what the
 // windows hold. tuios calls it when it hides that image itself, so a later
 // release does not show the image again. A placement taken out is undone by
-// the hide anyway, whichever order the host saw them in. Callers hold kp.mu.
+// the hide anyway, whichever order the host saw them in. A held a=T keeps its
+// bitmap and loses its placement. Callers hold kp.mu.
 func (kp *KittyPassthrough) dropHeldPlacements(hostID uint32) {
 	kp.dropHeldPlacementRange(hostID, 0, 0)
 }
@@ -300,7 +354,8 @@ func (kp *KittyPassthrough) dropHeldPlacementRange(hostID, first, n uint32) {
 
 // stripKittyPlacements removes the a=p commands naming a host image from buf,
 // in place: all of them when n is 0, or those with p= one of the n ids from
-// first up.
+// first up. An a=T that matches stays as a=t: it may name a shared memory object
+// the host has to read and delete.
 func stripKittyPlacements(buf []byte, hostID, first, n uint32) []byte {
 	var id [16]byte
 	want := strconv.AppendUint(append(id[:0], "i="...), uint64(hostID), 10)
@@ -325,7 +380,14 @@ func stripKittyPlacements(buf []byte, hostID, first, n uint32) []byte {
 			ctl = ctl[:len(ctl)-2]
 		}
 		out = append(out, buf[:i]...)
-		if !(hasKittyKey(ctl, []byte("a=p")) && hasKittyKey(ctl, want) && inPlacementRange(ctl, first, n)) {
+		match := hasKittyKey(ctl, want) && inPlacementRange(ctl, first, n)
+		if !(match && hasKittyKey(ctl, []byte("a=p"))) {
+			if match && hasKittyKey(ctl, []byte("a=T")) {
+				// In the control string, which ctl is part of: same length.
+				if at := bytes.Index(seq, []byte("a=T")); at >= 0 {
+					seq[at+2] = 't'
+				}
+			}
 			out = append(out, seq...)
 		}
 		buf = buf[end:]

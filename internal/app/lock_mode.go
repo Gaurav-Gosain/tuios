@@ -24,36 +24,37 @@ import "github.com/Gaurav-Gosain/tuios/internal/config"
 // MenuState is which leader menu waits for a key: the leader itself, one of
 // its sub-prefixes, or a declared menu.
 type MenuState struct {
-	Prefix, Workspace, Minimize, Tiling, Debug, Tape, Layout, Tuios bool
-	Menu                                                            string
+	Prefix bool
+	Sub    SubMenu
+	Menu   string
 }
+
+// SubMenu names a leader sub-menu. At most one is open at a time, so one value
+// holds which, where seven flags could say two were open.
+type SubMenu uint8
+
+// The leader sub-menus.
+const (
+	SubMenuNone SubMenu = iota
+	SubMenuWorkspace
+	SubMenuMinimize
+	SubMenuTiling
+	SubMenuDebug
+	SubMenuTape
+	SubMenuTuios
+	SubMenuLayout
+)
 
 // MenuState returns the leader menu that waits for a key now.
 func (m *OS) MenuState() MenuState {
-	return MenuState{
-		Prefix:    m.PrefixActive,
-		Workspace: m.WorkspacePrefixActive,
-		Minimize:  m.MinimizePrefixActive,
-		Tiling:    m.TilingPrefixActive,
-		Debug:     m.DebugPrefixActive,
-		Tape:      m.TapePrefixActive,
-		Layout:    m.LayoutPrefixActive,
-		Tuios:     m.TuiosPrefixActive,
-		Menu:      m.Menu,
-	}
+	return MenuState{Prefix: m.PrefixActive, Sub: m.SubMenu, Menu: m.Menu}
 }
 
 // SetMenuState opens the menu s names, and closes every other. The zero
 // MenuState closes them all.
 func (m *OS) SetMenuState(s MenuState) {
 	m.PrefixActive = s.Prefix
-	m.WorkspacePrefixActive = s.Workspace
-	m.MinimizePrefixActive = s.Minimize
-	m.TilingPrefixActive = s.Tiling
-	m.DebugPrefixActive = s.Debug
-	m.TapePrefixActive = s.Tape
-	m.LayoutPrefixActive = s.Layout
-	m.TuiosPrefixActive = s.Tuios
+	m.SubMenu = s.Sub
 	m.Menu = s.Menu
 }
 

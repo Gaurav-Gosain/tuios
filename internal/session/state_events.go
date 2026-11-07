@@ -65,6 +65,9 @@ type lifecycleWindow struct {
 	// conversations: what a resume of agentSession needs (conversations.go).
 	convHarness, cwd string
 	convFlags        []string
+	// link rides along for the Inbox: the window's parent and root in a
+	// chain of agents. See attention_children.go.
+	link childLink
 	// The rectangle and how the pane sits in it, for layout-changed only.
 	// They change while a person drags a split, so they raise no event of
 	// their own and only mark the workspace's layout as changed.
@@ -82,6 +85,8 @@ type lifecycleSnapshot struct {
 	workspace int
 	// wsNames is a copy of the workspace names, for workspace-renamed.
 	wsNames map[int]string
+	// displayName is the session's display name, for session-labelled.
+	displayName string
 	// width and height are the session's size in cells, the box the
 	// windows' rectangles are laid out in. For layout-changed.
 	width, height int
@@ -95,6 +100,7 @@ func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 		return snap
 	}
 	snap.focused = state.FocusedWindowID
+	snap.displayName = state.DisplayName
 	snap.workspace = state.CurrentWorkspace
 	snap.width, snap.height = state.Width, state.Height
 	if len(state.WorkspaceNames) > 0 {
@@ -132,6 +138,7 @@ func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 			convHarness:   resumeHarnessOf(*w),
 			convFlags:     resumeFlagsOf(*w, resumeHarnessOf(*w)),
 			cwd:           w.Cwd,
+			link:          childLinkOf(w),
 			x:             w.X,
 			y:             w.Y,
 			w:             w.Width,
@@ -251,6 +258,7 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 				hookKind:          w.agentKind,
 				hookWorktree:      w.worktree,
 				hookAgentSession:  w.agentSession,
+				link:              w.link,
 				hookProgram:       w.program,
 				agentQuiet:        w.agentQuiet,
 				completionSeq:     w.completionSeq,
@@ -274,6 +282,7 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 				hookKind:          w.agentKind,
 				hookWorktree:      w.worktree,
 				hookAgentSession:  w.agentSession,
+				link:              w.link,
 				hookProgram:       w.program,
 				agentQuiet:        w.agentQuiet,
 				completionSeq:     w.completionSeq,
@@ -298,6 +307,10 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 	slices.Sort(renamed)
 	for _, ws := range renamed {
 		events = append(events, SessionEvent{Type: EventWorkspaceRenamed, Workspace: ws, Title: after.wsNames[ws]})
+	}
+
+	if after.displayName != before.displayName {
+		events = append(events, SessionEvent{Type: EventSessionLabelled, Title: after.displayName})
 	}
 
 	events = append(events, layoutChanges(before, after)...)

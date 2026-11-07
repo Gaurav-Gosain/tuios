@@ -2,8 +2,6 @@ package layout
 
 import (
 	"slices"
-
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // MasterParams is everything the master-stack tiler reads besides the region
@@ -15,7 +13,7 @@ import (
 // side the masters take. Ratio is the masters' share of the region along the
 // axis that separates them from the stack.
 type MasterParams struct {
-	// Position is one of the config.MasterPosition* values. Anything else,
+	// Position is one of the MasterPosition* values. Anything else,
 	// the empty string included, is left.
 	Position string
 	// Count is how many panes are masters. Zero and below mean one, and a
@@ -108,22 +106,22 @@ type masterShape struct {
 //     one above the other: left becomes top and right becomes bottom. That is
 //     what two panes always did on a tall screen.
 func resolveMasterShape(n, w, h int, p MasterParams) masterShape {
-	pos := config.ValidMasterPosition(p.Position)
+	pos := ValidMasterPosition(p.Position)
 	k := min(max(p.Count, 1), max(n, 1))
 	s := masterShape{position: pos, masters: k, stack: max(n-k, 0)}
-	if p.Grid && pos == config.MasterPositionLeft && k == 1 && n >= 4 {
+	if p.Grid && pos == MasterPositionLeft && k == 1 && n >= 4 {
 		s.grid = true
 		return s
 	}
-	if pos == config.MasterPositionCenter && s.stack < 2 {
-		s.position = config.MasterPositionLeft
+	if pos == MasterPositionCenter && s.stack < 2 {
+		s.position = MasterPositionLeft
 	}
 	if n == 2 && k == 1 && !MasterStackSideBySide(w, h) {
 		switch s.position {
-		case config.MasterPositionLeft:
-			s.position = config.MasterPositionTop
-		case config.MasterPositionRight:
-			s.position = config.MasterPositionBottom
+		case MasterPositionLeft:
+			s.position = MasterPositionTop
+		case MasterPositionRight:
+			s.position = MasterPositionBottom
 		}
 	}
 	return s
@@ -132,7 +130,7 @@ func resolveMasterShape(n, w, h int, p MasterParams) masterShape {
 // along reports whether a position separates the masters from the stack along
 // the X axis.
 func alongX(pos string) bool {
-	return pos != config.MasterPositionTop && pos != config.MasterPositionBottom
+	return pos != MasterPositionTop && pos != MasterPositionBottom
 }
 
 // CalculateMasterLayout returns the master-stack rectangles for n panes in the
@@ -151,7 +149,7 @@ func CalculateMasterLayout(n, w, h, top int, p MasterParams) []TileLayout {
 	}
 	ratio := p.Ratio
 	if ratio <= 0 {
-		ratio = float64(config.MasterRatioDefault) / 100
+		ratio = float64(MasterRatioDefault) / 100
 	}
 	ratio = clampSplitRatio(ratio)
 
@@ -192,7 +190,7 @@ func CalculateMasterLayout(n, w, h, top int, p MasterParams) []TileLayout {
 		return weightedSpans(acrossOrigin, acrossLen, count, p.Splits.Stack, p.Gap)
 	}
 
-	if shape.position == config.MasterPositionCenter {
+	if shape.position == MasterPositionCenter {
 		left, master, right := splitThree(alongOrigin, alongLen, ratio, p.Gap)
 		for _, c := range masterCells {
 			out = append(out, place(master, c))
@@ -226,7 +224,7 @@ func CalculateMasterLayout(n, w, h, top int, p MasterParams) []TileLayout {
 
 	near, far := splitByRatio(alongOrigin, alongLen, ratio, p.Gap)
 	master, stack := near, far
-	if shape.position == config.MasterPositionRight || shape.position == config.MasterPositionBottom {
+	if shape.position == MasterPositionRight || shape.position == MasterPositionBottom {
 		// The masters keep the size the ratio gives them and move to the far
 		// end, so the ratio means the same share on either side.
 		stack = span{Pos: alongOrigin, Size: far.Size}
@@ -332,7 +330,7 @@ func MasterRatiosFrom(rects []Rect, region Rect, p MasterParams) (ratio, stackRa
 	before := func(a, b seg) bool { return a.pos+a.size <= b.pos }
 
 	switch shape.position {
-	case config.MasterPositionLeft, config.MasterPositionTop:
+	case MasterPositionLeft, MasterPositionTop:
 		if master.pos != alongOrigin {
 			return 0, 0, false
 		}
@@ -342,7 +340,7 @@ func MasterRatiosFrom(rects []Rect, region Rect, p MasterParams) (ratio, stackRa
 			}
 		}
 		ratio = SplitRatioFor(master.size, alongLen, gap)
-	case config.MasterPositionRight, config.MasterPositionBottom:
+	case MasterPositionRight, MasterPositionBottom:
 		if master.pos+master.size != alongOrigin+alongLen {
 			return 0, 0, false
 		}
@@ -352,7 +350,7 @@ func MasterRatiosFrom(rects []Rect, region Rect, p MasterParams) (ratio, stackRa
 			}
 		}
 		ratio = SplitRatioFor(master.size, alongLen, gap)
-	case config.MasterPositionCenter:
+	case MasterPositionCenter:
 		for i, s := range stack {
 			if (i%2 == 0 && !before(master, s)) || (i%2 == 1 && !before(s, master)) {
 				return 0, 0, false
@@ -451,7 +449,7 @@ func MasterSplitsFrom(rects []Rect, region Rect, p MasterParams) (MasterSplits, 
 	}
 	out.Masters = masters
 	stack := rects[shape.masters:]
-	if shape.position == config.MasterPositionCenter && len(stack) >= 2 {
+	if shape.position == MasterPositionCenter && len(stack) >= 2 {
 		// Each side is a column of its own, dealt right, left, right, left.
 		var right, left []Rect
 		for i, r := range stack {

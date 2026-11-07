@@ -8,7 +8,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 )
 
@@ -222,7 +221,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("focus_sidebar", handleFocusSidebar)
 
 	// Session navigation. Bound to chords, and allowed from terminal mode by
-	// isTerminalSafeAction, so walking sessions does not first cost an Esc.
+	// config.TerminalSafeAction, so walking sessions does not first cost an Esc.
 	// The palette and the launcher. They are reachable from the global
 	// section, from a prefix and from window mode, so they are ordinary
 	// dispatcher actions rather than cases of a switch; see global_binds.go.
@@ -421,19 +420,6 @@ func handleNewWindowSSH(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 	o.NewWindowSSH()
-	return o, nil
-}
-
-func handleCloseWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
-		w := o.Windows[o.FocusedWindow]
-		if w.IsScratch {
-			o.CloseWindowByHand(o.FocusedWindow)
-			return o, nil
-		}
-		o.FireHook(hooks.AfterCloseWindow, w.ID, w.Title())
-		o.DeleteWindow(o.FocusedWindow)
-	}
 	return o, nil
 }
 

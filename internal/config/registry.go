@@ -34,7 +34,10 @@ type KeybindRegistry struct {
 	// commands, and each of those calls Reload when it is done. A section
 	// changed without a Reload is not seen by any lookup, which was already
 	// true of the seven flattened sections.
-	sections sectionMaps
+	sections [tableCount]map[string]string
+	// menus holds each declared menu (see MenuConfig), resolved the same
+	// way, by name.
+	menus map[string]map[string]string
 
 	// presses is PressesByAction's answer, kept until the next buildMappings.
 	// The help overlay asks for it four times a frame while it is open, and
@@ -46,19 +49,6 @@ type KeybindRegistry struct {
 	// live is each scope's keys that run, for the which-key menus, kept
 	// under pressesMu and dropped with presses. See liveScope.
 	live map[string]*liveScope
-}
-
-// sectionMaps is the resolved form of every section the registry reads on its
-// own. One field per section, so a lookup is a field read and a map access.
-type sectionMaps struct {
-	prefix, windowPrefix, minimizePrefix, workspacePrefix map[string]string
-	debugPrefix, tapePrefix, layoutPrefix, tuiosPrefix    map[string]string
-	terminalMode, global, script, sidebar, sidebarFiles   map[string]string
-	sidebarAgents, inbox, inboxPeek, mail, copyMode       map[string]string
-	transfers, lists, review                              map[string]string
-	quickLook, quickLookInside                            map[string]string
-	// menus holds each declared menu (see MenuConfig), by name.
-	menus map[string]map[string]string
 }
 
 // NewKeybindRegistry creates a new keybind registry from config
@@ -106,34 +96,17 @@ func (r *KeybindRegistry) buildMappings() {
 	// - WorkspacePrefix (used after Ctrl+B, w)
 	// They are resolved here all the same, once, into their own maps.
 	kb := &r.config.Keybindings
-	r.sections = sectionMaps{
-		prefix:          r.withCommands(r.sectionKeyMap(kb.PrefixMode), SectionPrefixMode),
-		windowPrefix:    r.sectionKeyMap(kb.WindowPrefix),
-		minimizePrefix:  r.sectionKeyMap(kb.MinimizePrefix),
-		workspacePrefix: r.sectionKeyMap(kb.WorkspacePrefix),
-		debugPrefix:     r.sectionKeyMap(kb.DebugPrefix),
-		tapePrefix:      r.sectionKeyMap(kb.TapePrefix),
-		layoutPrefix:    r.sectionKeyMap(kb.LayoutPrefix),
-		tuiosPrefix:     r.sectionKeyMap(kb.TuiosPrefix),
-		terminalMode:    r.sectionKeyMap(kb.TerminalMode),
-		global:          r.withCommands(r.sectionKeyMap(kb.Global), SectionGlobal),
-		script:          r.sectionKeyMap(kb.Script),
-		lists:           r.sectionKeyMap(kb.Lists),
-		sidebar:         r.sectionKeyMap(kb.Sidebar),
-		sidebarFiles:    r.sectionKeyMap(kb.SidebarFiles),
-		sidebarAgents:   r.sectionKeyMap(kb.SidebarAgents),
-		quickLook:       r.sectionKeyMap(kb.QuickLook),
-		quickLookInside: r.sectionKeyMap(kb.QuickLookInside),
-		inbox:           r.sectionKeyMap(kb.Inbox),
-		inboxPeek:       r.sectionKeyMap(kb.InboxPeek),
-		mail:            r.sectionKeyMap(kb.Mail),
-		transfers:       r.sectionKeyMap(kb.Transfers),
-		copyMode:        r.sectionKeyMap(kb.CopyMode),
-		review:          r.sectionKeyMap(kb.Review),
-		menus:           make(map[string]map[string]string, len(kb.Menus)),
+	for t := range keybindTables {
+		tbl := &keybindTables[t]
+		keys := r.sectionKeyMap(*tbl.field(kb))
+		if Table(t) == TablePrefixMode || Table(t) == TableGlobal {
+			keys = r.withCommands(keys, tbl.name)
+		}
+		r.sections[t] = keys
 	}
+	r.menus = make(map[string]map[string]string, len(kb.Menus))
 	for _, name := range kb.MenuNames() {
-		r.sections.menus[name] = r.sectionKeyMap(kb.Menus[name].Keys)
+		r.menus[name] = r.sectionKeyMap(kb.Menus[name].Keys)
 	}
 }
 
@@ -251,150 +224,10 @@ func (r *KeybindRegistry) PrefixRepeats(action string) bool {
 	return r.repeat[action]
 }
 
-// GetPrefixAction returns the action name for a given key in the main prefix mode (Ctrl+B)
-func (r *KeybindRegistry) GetPrefixAction(key string) string {
-	return r.lookupKey(key, r.sections.prefix)
-}
-
-// GetWindowPrefixAction returns the action name for a given key in window prefix mode (Ctrl+B, t)
-func (r *KeybindRegistry) GetWindowPrefixAction(key string) string {
-	return r.lookupKey(key, r.sections.windowPrefix)
-}
-
-// GetMinimizePrefixAction returns the action name for a given key in minimize prefix mode (Ctrl+B, m)
-func (r *KeybindRegistry) GetMinimizePrefixAction(key string) string {
-	return r.lookupKey(key, r.sections.minimizePrefix)
-}
-
-// GetWorkspacePrefixAction returns the action name for a given key in workspace prefix mode (Ctrl+B, w)
-func (r *KeybindRegistry) GetWorkspacePrefixAction(key string) string {
-	return r.lookupKey(key, r.sections.workspacePrefix)
-}
-
-// GetDebugPrefixAction returns the action name for a given key in debug prefix mode (Ctrl+B, D)
-func (r *KeybindRegistry) GetDebugPrefixAction(key string) string {
-	return r.lookupKey(key, r.sections.debugPrefix)
-}
-
-// GetTapePrefixAction returns the action name for a given key in tape prefix mode (Ctrl+B, T)
-func (r *KeybindRegistry) GetTapePrefixAction(key string) string {
-	return r.lookupKey(key, r.sections.tapePrefix)
-}
-
-// GetGlobalAction returns the action name for a key in the global scope, the
-// binds that act in window mode and terminal mode alike. Kept out of
-// buildMappings so a global bind cannot be overwritten by a same-key bind in one
-// of the seven flattened window-mode sections.
-func (r *KeybindRegistry) GetGlobalAction(key string) string {
-	return r.lookupKey(key, r.sections.global)
-}
-
-// GetScriptAction returns the action name for a key while a tape script is
-// playing back.
-func (r *KeybindRegistry) GetScriptAction(key string) string {
-	return r.lookupKey(key, r.sections.script)
-}
-
-// GetTuiosPrefixAction returns the action name for a given key in the tuios
-// menu (the leader, then prefix_tuios's key).
-func (r *KeybindRegistry) GetTuiosPrefixAction(key string) string {
-	return r.lookupKey(key, r.sections.tuiosPrefix)
-}
-
 // GetMenuAction returns the action name for a given key in the declared menu
 // with the given name (see MenuConfig).
 func (r *KeybindRegistry) GetMenuAction(name, key string) string {
-	return r.lookupKey(key, r.sections.menus[name])
-}
-
-// GetLayoutPrefixAction returns the action name for a given key in layout prefix
-// mode (Ctrl+B, L).
-func (r *KeybindRegistry) GetLayoutPrefixAction(key string) string {
-	return r.lookupKey(key, r.sections.layoutPrefix)
-}
-
-// GetTerminalModeAction returns the action name for a given key among the
-// direct terminal-mode binds (no prefix required).
-func (r *KeybindRegistry) GetTerminalModeAction(key string) string {
-	return r.lookupKey(key, r.sections.terminalMode)
-}
-
-// GetSidebarAction returns the action name for a given key in the rail's
-// keyboard scope. Looked up in its own section rather than through the global
-// keymap so rail keys (j/k/h/l/enter) never fire on a pane; only consulted while
-// SidebarFocused.
-func (r *KeybindRegistry) GetSidebarAction(key string) string {
-	return r.lookupKey(key, r.sections.sidebar)
-}
-
-// GetSidebarFilesAction returns the action name for a key among the files
-// section's own binds. Consulted before GetSidebarAction, and only while the
-// rail's cursor is on a row of the listing, so the three keys the two sections
-// share each mean the thing the row under the cursor is.
-func (r *KeybindRegistry) GetSidebarFilesAction(key string) string {
-	return r.lookupKey(key, r.sections.sidebarFiles)
-}
-
-// GetQuickLookAction returns the action name for a key while the file preview
-// is open and the keyboard is on the list.
-func (r *KeybindRegistry) GetQuickLookAction(key string) string {
-	return r.lookupKey(key, r.sections.quickLook)
-}
-
-// GetQuickLookInsideAction returns the action name for a key while the keyboard
-// is inside the previewed file.
-func (r *KeybindRegistry) GetQuickLookInsideAction(key string) string {
-	return r.lookupKey(key, r.sections.quickLookInside)
-}
-
-// GetQuickLookKeys is GetKeys for the file preview's binds, for its hints.
-func (r *KeybindRegistry) GetQuickLookKeys(action string) []string {
-	return r.config.Keybindings.QuickLook[action]
-}
-
-// GetQuickLookInsideKeys is GetKeys for the binds inside the previewed file.
-func (r *KeybindRegistry) GetQuickLookInsideKeys(action string) []string {
-	return r.config.Keybindings.QuickLookInside[action]
-}
-
-// GetSidebarAgentsAction returns the action name for a key among the agent
-// rows' own binds. Consulted before GetSidebarAction, and only while the
-// rail's cursor is on an agent row.
-func (r *KeybindRegistry) GetSidebarAgentsAction(key string) string {
-	return r.lookupKey(key, r.sections.sidebarAgents)
-}
-
-// GetSidebarAgentsKeys is GetKeys for the agent rows' binds, for the help
-// overlay.
-func (r *KeybindRegistry) GetSidebarAgentsKeys(action string) []string {
-	return r.config.Keybindings.SidebarAgents[action]
-}
-
-// GetInboxAction returns the action a key runs in the Inbox's list.
-func (r *KeybindRegistry) GetInboxAction(key string) string {
-	return r.lookupKey(key, r.sections.inbox)
-}
-
-// GetInboxPeekAction returns the action a key runs in the prompt open over
-// the Inbox.
-func (r *KeybindRegistry) GetInboxPeekAction(key string) string {
-	return r.lookupKey(key, r.sections.inboxPeek)
-}
-
-// GetMailAction returns the action a key runs in the mailbox.
-func (r *KeybindRegistry) GetMailAction(key string) string {
-	return r.lookupKey(key, r.sections.mail)
-}
-
-// GetCopyModeAction returns the action a key runs in copy mode, or "" for a
-// key the section does not bind. Copy mode reads its vim motions itself.
-func (r *KeybindRegistry) GetCopyModeAction(key string) string {
-	return r.lookupKey(key, r.sections.copyMode)
-}
-
-// GetCopyModeKeys is GetKeys for the copy_mode section, for the help overlay.
-func (r *KeybindRegistry) GetCopyModeKeys(action string) []string {
-	return r.config.Keybindings.CopyMode[action]
+	return r.lookupKey(key, r.menus[name])
 }
 
 // GetInboxKeys is GetKeys for the Inbox, its peek and the mailbox, whose
@@ -410,40 +243,17 @@ func (r *KeybindRegistry) GetInboxKeys(action string) []string {
 	return nil
 }
 
-// GetTransfersAction returns the action a key runs in the Copies panel.
-func (r *KeybindRegistry) GetTransfersAction(key string) string {
-	return r.lookupKey(key, r.sections.transfers)
+// Action returns the action a key runs in table t, or "" when the table does
+// not bind the key. Prefix and global include their command binds.
+func (r *KeybindRegistry) Action(t Table, key string) string {
+	return r.lookupKey(key, r.sections[t])
 }
 
-// GetReviewAction returns the action a key runs in the review overlay, or ""
-// for a key the section does not bind. The overlay reads its other keys itself.
-func (r *KeybindRegistry) GetReviewAction(key string) string {
-	return r.lookupKey(key, r.sections.review)
-}
-
-// GetReviewKeys is GetKeys for the review overlay, for its key hints and the
-// help overlay.
-func (r *KeybindRegistry) GetReviewKeys(action string) []string {
-	return r.config.Keybindings.Review[action]
-}
-
-// GetTransfersKeys is GetKeys for the Copies panel, for its key hints and the
-// help overlay.
-func (r *KeybindRegistry) GetTransfersKeys(action string) []string {
-	return r.config.Keybindings.Transfers[action]
-}
-
-// GetSidebarFilesKeys is GetKeys for the files section's binds, for the help
-// overlay.
-func (r *KeybindRegistry) GetSidebarFilesKeys(action string) []string {
-	return r.config.Keybindings.SidebarFiles[action]
-}
-
-// GetSidebarKeys is GetKeys for the rail's scope. GetKeys deliberately does not
-// search the sidebar section (its action names collide with the global ones),
-// so the help overlay needs its own way to read what the rail is bound to.
-func (r *KeybindRegistry) GetSidebarKeys(action string) []string {
-	return r.config.Keybindings.Sidebar[action]
+// Keys returns the keys table t binds to action, as the config writes them.
+// GetKeys searches the window-mode tables only; this reads one table, for the
+// key hints and the help overlay of a scope with its own action names.
+func (r *KeybindRegistry) Keys(t Table, action string) []string {
+	return (*keybindTables[t].field(&r.config.Keybindings))[action]
 }
 
 // lookupKey performs the actual key lookup with case handling
@@ -651,7 +461,9 @@ var ActionDescriptions = map[string]string{
 	"find_next":           "Preview: go to the next match",
 	"find_prev":           "Preview: go to the match before",
 	"filmstrip":           "Preview: show the filmstrip of a film, or hide it",
+	"copy_mode":           "Preview: copy mode on the text, to select and copy it",
 	"next_view":           "Preview: show the next view of the file",
+	"open_details":        "Preview: open the closed sections of a Markdown file",
 	"column_left":         "Preview: move a column left, or 1 second back in a film",
 	"column_right":        "Preview: move a column right, or 1 second on in a film",
 	"go_to":               "Preview: go to a line",
@@ -721,6 +533,7 @@ var ActionDescriptions = map[string]string{
 	"inbox_fold":         "Agents view: fold or open the group of the row under the cursor",
 	"inbox_prompt_prev":  "Agents view: show the thread's previous prompt at the top",
 	"inbox_prompt_next":  "Agents view: show the thread's next prompt at the top",
+	"inbox_child":        "Agents view: select the next agent a card in the thread started. Enter opens its thread",
 	"inbox_compare":      "Agents view: compare the attempts of the fan under the cursor, ask a judge, keep one",
 	"inbox_board":        "Agents view: show the task board, or the agents again",
 	"inbox_take":         "Agents view: take the card for the focused pane",

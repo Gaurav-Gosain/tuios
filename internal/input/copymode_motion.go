@@ -17,13 +17,13 @@ func cellContent(cell *uv.Cell) string {
 
 // Internal movement functions
 
-func moveLeft(cm *terminal.CopyMode, window *terminal.Window) {
+func moveLeft(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	if cm.CursorX > 0 {
 		cm.CursorX--
 		// Skip continuation cells (Width=0) of wide characters
 		// Move left until we find a cell with Width > 0
 		for cm.CursorX > 0 {
-			cell := getCellAtCursor(cm, window)
+			cell := getCellAtCursor(cm, grid)
 			if cell == nil || cell.Width > 0 {
 				break
 			}
@@ -32,14 +32,14 @@ func moveLeft(cm *terminal.CopyMode, window *terminal.Window) {
 	}
 }
 
-func moveRight(cm *terminal.CopyMode, window *terminal.Window) {
-	maxX := window.LastContentCol()
+func moveRight(cm *terminal.CopyMode, grid terminal.CopyGrid) {
+	maxX := grid.LastContentCol()
 	if cm.CursorX < maxX {
 		cm.CursorX++
 		// Skip continuation cells (Width=0) of wide characters
 		// Move right until we find a cell with Width > 0
 		for cm.CursorX < maxX {
-			cell := getCellAtCursor(cm, window)
+			cell := getCellAtCursor(cm, grid)
 			if cell == nil || cell.Width > 0 {
 				break
 			}
@@ -49,16 +49,16 @@ func moveRight(cm *terminal.CopyMode, window *terminal.Window) {
 }
 
 // moveUp moves cursor up (k key). It keeps cursor in middle of viewport when possible
-func moveUp(cm *terminal.CopyMode, window *terminal.Window) {
-	midPoint := window.Height / 2
+func moveUp(cm *terminal.CopyMode, grid terminal.CopyGrid) {
+	midPoint := grid.ViewHeight() / 2
 
 	if cm.CursorY > midPoint {
 		// Cursor below middle: just move it up
 		cm.CursorY--
-	} else if cm.ScrollOffset < window.ScrollbackLen() {
+	} else if cm.ScrollOffset < grid.ScrollbackLen() {
 		// Cursor at/above middle: scroll content instead (cursor stays in place)
 		cm.ScrollOffset++
-		window.ScrollbackOffset = cm.ScrollOffset
+		grid.SetScrollOffset(cm.ScrollOffset)
 	} else if cm.CursorY > 0 {
 		// At top of scrollback, cursor can still move
 		cm.CursorY--
@@ -66,8 +66,8 @@ func moveUp(cm *terminal.CopyMode, window *terminal.Window) {
 }
 
 // moveDown moves cursor down (j key). It keeps cursor in middle of viewport when possible
-func moveDown(cm *terminal.CopyMode, window *terminal.Window) {
-	midPoint := window.Height / 2
+func moveDown(cm *terminal.CopyMode, grid terminal.CopyGrid) {
+	midPoint := grid.ViewHeight() / 2
 
 	if cm.CursorY < midPoint {
 		// Cursor above middle: just move it down
@@ -75,25 +75,25 @@ func moveDown(cm *terminal.CopyMode, window *terminal.Window) {
 	} else if cm.ScrollOffset > 0 {
 		// Cursor at/below middle: scroll content instead (cursor stays in place)
 		cm.ScrollOffset--
-		window.ScrollbackOffset = cm.ScrollOffset
-	} else if cm.CursorY < window.LastContentRow() {
+		grid.SetScrollOffset(cm.ScrollOffset)
+	} else if cm.CursorY < grid.LastContentRow() {
 		// At live content, cursor can move to bottom
 		cm.CursorY++
 	}
 }
 
 // moveWordForward moves cursor to next word
-func moveWordForward(cm *terminal.CopyMode, window *terminal.Window) {
-	maxWidth := window.LastContentCol()
+func moveWordForward(cm *terminal.CopyMode, grid terminal.CopyGrid) {
+	maxWidth := grid.LastContentCol()
 	maxIterations := 1000 // Prevent infinite loops
 
 	// Get current character type
-	cell := getCellAtCursor(cm, window)
+	cell := getCellAtCursor(cm, grid)
 	currentType := getCharType(cellContent(cell))
 
 	// Phase 1: Skip current word/punctuation group
 	for range maxIterations {
-		cell := getCellAtCursor(cm, window)
+		cell := getCellAtCursor(cm, grid)
 		charType := getCharType(cellContent(cell))
 
 		// Stop if we hit a different type (but continue through same type)
@@ -105,7 +105,7 @@ func moveWordForward(cm *terminal.CopyMode, window *terminal.Window) {
 		if cm.CursorX >= maxWidth {
 			// Wrap to next line
 			cm.CursorX = 0
-			moveDown(cm, window)
+			moveDown(cm, grid)
 		} else {
 			cm.CursorX++
 		}
@@ -113,7 +113,7 @@ func moveWordForward(cm *terminal.CopyMode, window *terminal.Window) {
 
 	// Phase 2: Skip whitespace to next word/punctuation
 	for range maxIterations {
-		cell := getCellAtCursor(cm, window)
+		cell := getCellAtCursor(cm, grid)
 		charType := getCharType(cellContent(cell))
 
 		// Found a non-whitespace character: we're at start of next word
@@ -125,7 +125,7 @@ func moveWordForward(cm *terminal.CopyMode, window *terminal.Window) {
 		if cm.CursorX >= maxWidth {
 			// Wrap to next line
 			cm.CursorX = 0
-			moveDown(cm, window)
+			moveDown(cm, grid)
 		} else {
 			cm.CursorX++
 		}
@@ -133,8 +133,8 @@ func moveWordForward(cm *terminal.CopyMode, window *terminal.Window) {
 }
 
 // moveWordBackward moves cursor to previous word
-func moveWordBackward(cm *terminal.CopyMode, window *terminal.Window) {
-	maxWidth := window.LastContentCol()
+func moveWordBackward(cm *terminal.CopyMode, grid terminal.CopyGrid) {
+	maxWidth := grid.LastContentCol()
 	maxIterations := 1000
 
 	// Move left at least once to leave current position
@@ -142,7 +142,7 @@ func moveWordBackward(cm *terminal.CopyMode, window *terminal.Window) {
 		cm.CursorX--
 	} else if cm.CursorY > 0 || cm.ScrollOffset > 0 {
 		// Wrap to end of previous line
-		moveUp(cm, window)
+		moveUp(cm, grid)
 		cm.CursorX = maxWidth
 	} else {
 		return // Already at top-left
@@ -150,7 +150,7 @@ func moveWordBackward(cm *terminal.CopyMode, window *terminal.Window) {
 
 	// Phase 1: Skip whitespace backward
 	for range maxIterations {
-		cell := getCellAtCursor(cm, window)
+		cell := getCellAtCursor(cm, grid)
 		charType := getCharType(cellContent(cell))
 
 		// Found non-whitespace: move to phase 2
@@ -162,7 +162,7 @@ func moveWordBackward(cm *terminal.CopyMode, window *terminal.Window) {
 		if cm.CursorX > 0 {
 			cm.CursorX--
 		} else if cm.CursorY > 0 || cm.ScrollOffset > 0 {
-			moveUp(cm, window)
+			moveUp(cm, grid)
 			cm.CursorX = maxWidth
 		} else {
 			return // At top-left
@@ -171,7 +171,7 @@ func moveWordBackward(cm *terminal.CopyMode, window *terminal.Window) {
 
 	// Phase 2: Move to start of current word/punctuation group
 	// Get the type of the current (non-whitespace) character
-	cell := getCellAtCursor(cm, window)
+	cell := getCellAtCursor(cm, grid)
 	var currentContent string
 	if cell != nil {
 		currentContent = cell.Content
@@ -186,18 +186,18 @@ func moveWordBackward(cm *terminal.CopyMode, window *terminal.Window) {
 
 		// Peek at previous character
 		prevX := cm.CursorX - 1
-		absY := getAbsoluteY(cm, window)
+		absY := getAbsoluteY(cm, grid)
 		var prevCell *uv.Cell
 
-		scrollbackLen := window.ScrollbackLen()
+		scrollbackLen := grid.ScrollbackLen()
 		if absY < scrollbackLen {
-			line := window.ScrollbackLine(absY)
+			line := grid.ScrollbackLine(absY)
 			if line != nil && prevX < len(line) {
 				prevCell = &line[prevX]
 			}
 		} else {
 			screenY := absY - scrollbackLen
-			prevCell = window.Terminal.CellAt(prevX, screenY)
+			prevCell = grid.Text().CellAt(prevX, screenY)
 		}
 
 		// Get previous character type
@@ -218,8 +218,8 @@ func moveWordBackward(cm *terminal.CopyMode, window *terminal.Window) {
 }
 
 // moveWordEnd moves cursor to end of current word
-func moveWordEnd(cm *terminal.CopyMode, window *terminal.Window) {
-	maxWidth := window.LastContentCol()
+func moveWordEnd(cm *terminal.CopyMode, grid terminal.CopyGrid) {
+	maxWidth := grid.LastContentCol()
 	maxIterations := 1000
 
 	// Move right at least once to leave current position
@@ -228,13 +228,13 @@ func moveWordEnd(cm *terminal.CopyMode, window *terminal.Window) {
 	} else {
 		// Wrap to next line
 		cm.CursorX = 0
-		moveDown(cm, window)
+		moveDown(cm, grid)
 		return
 	}
 
 	// Phase 1: Skip whitespace
 	for range maxIterations {
-		cell := getCellAtCursor(cm, window)
+		cell := getCellAtCursor(cm, grid)
 
 		// Found non-whitespace: move to phase 2
 		if cell != nil && cell.Content != "" && cell.Content != " " && cell.Content != "\t" {
@@ -244,7 +244,7 @@ func moveWordEnd(cm *terminal.CopyMode, window *terminal.Window) {
 		// Move right, potentially wrapping
 		if cm.CursorX >= maxWidth {
 			cm.CursorX = 0
-			moveDown(cm, window)
+			moveDown(cm, grid)
 		} else {
 			cm.CursorX++
 		}
@@ -259,18 +259,18 @@ func moveWordEnd(cm *terminal.CopyMode, window *terminal.Window) {
 			break
 		}
 
-		absY := getAbsoluteY(cm, window)
+		absY := getAbsoluteY(cm, grid)
 		var nextCell *uv.Cell
 
-		scrollbackLen := window.ScrollbackLen()
+		scrollbackLen := grid.ScrollbackLen()
 		if absY < scrollbackLen {
-			line := window.ScrollbackLine(absY)
+			line := grid.ScrollbackLine(absY)
 			if line != nil && nextX < len(line) {
 				nextCell = &line[nextX]
 			}
 		} else {
 			screenY := absY - scrollbackLen
-			nextCell = window.Terminal.CellAt(nextX, screenY)
+			nextCell = grid.Text().CellAt(nextX, screenY)
 		}
 
 		// If next char is whitespace/empty, we're at word end
@@ -284,21 +284,21 @@ func moveWordEnd(cm *terminal.CopyMode, window *terminal.Window) {
 }
 
 // moveWordForwardBig moves cursor to next WORD (whitespace-delimited)
-func moveWordForwardBig(cm *terminal.CopyMode, window *terminal.Window) {
+func moveWordForwardBig(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	// Like 'w' but treats any whitespace-delimited sequence as a word
-	maxWidth := window.LastContentCol()
+	maxWidth := grid.LastContentCol()
 	maxIterations := 1000
 
 	// Phase 1: Skip current WORD (any non-whitespace)
 	for range maxIterations {
-		cell := getCellAtCursor(cm, window)
+		cell := getCellAtCursor(cm, grid)
 		if cell == nil || cell.Content == " " || cell.Content == "\t" {
 			break
 		}
 
 		if cm.CursorX >= maxWidth {
 			cm.CursorX = 0
-			moveDown(cm, window)
+			moveDown(cm, grid)
 		} else {
 			cm.CursorX++
 		}
@@ -306,7 +306,7 @@ func moveWordForwardBig(cm *terminal.CopyMode, window *terminal.Window) {
 
 	// Phase 2: Skip whitespace to next WORD
 	for range maxIterations {
-		cell := getCellAtCursor(cm, window)
+		cell := getCellAtCursor(cm, grid)
 
 		if cell != nil && cell.Content != " " && cell.Content != "\t" {
 			break
@@ -314,7 +314,7 @@ func moveWordForwardBig(cm *terminal.CopyMode, window *terminal.Window) {
 
 		if cm.CursorX >= maxWidth {
 			cm.CursorX = 0
-			moveDown(cm, window)
+			moveDown(cm, grid)
 		} else {
 			cm.CursorX++
 		}
@@ -322,16 +322,16 @@ func moveWordForwardBig(cm *terminal.CopyMode, window *terminal.Window) {
 }
 
 // moveWordBackwardBig moves cursor to previous WORD (whitespace-delimited)
-func moveWordBackwardBig(cm *terminal.CopyMode, window *terminal.Window) {
+func moveWordBackwardBig(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	// Like 'b' but for WORDs
-	maxWidth := window.LastContentCol()
+	maxWidth := grid.LastContentCol()
 	maxIterations := 1000
 
 	// Move left at least once
 	if cm.CursorX > 0 {
 		cm.CursorX--
 	} else if cm.CursorY > 0 || cm.ScrollOffset > 0 {
-		moveUp(cm, window)
+		moveUp(cm, grid)
 		cm.CursorX = maxWidth
 	} else {
 		return
@@ -339,7 +339,7 @@ func moveWordBackwardBig(cm *terminal.CopyMode, window *terminal.Window) {
 
 	// Phase 1: Skip whitespace backward
 	for range maxIterations {
-		cell := getCellAtCursor(cm, window)
+		cell := getCellAtCursor(cm, grid)
 
 		if cell != nil && cell.Content != " " && cell.Content != "\t" {
 			break
@@ -348,7 +348,7 @@ func moveWordBackwardBig(cm *terminal.CopyMode, window *terminal.Window) {
 		if cm.CursorX > 0 {
 			cm.CursorX--
 		} else if cm.CursorY > 0 || cm.ScrollOffset > 0 {
-			moveUp(cm, window)
+			moveUp(cm, grid)
 			cm.CursorX = maxWidth
 		} else {
 			return
@@ -363,18 +363,18 @@ func moveWordBackwardBig(cm *terminal.CopyMode, window *terminal.Window) {
 
 		// Peek at previous character
 		prevX := cm.CursorX - 1
-		absY := getAbsoluteY(cm, window)
+		absY := getAbsoluteY(cm, grid)
 		var prevCell *uv.Cell
 
-		scrollbackLen := window.ScrollbackLen()
+		scrollbackLen := grid.ScrollbackLen()
 		if absY < scrollbackLen {
-			line := window.ScrollbackLine(absY)
+			line := grid.ScrollbackLine(absY)
 			if line != nil && prevX < len(line) {
 				prevCell = &line[prevX]
 			}
 		} else {
 			screenY := absY - scrollbackLen
-			prevCell = window.Terminal.CellAt(prevX, screenY)
+			prevCell = grid.Text().CellAt(prevX, screenY)
 		}
 
 		if prevCell == nil || prevCell.Content == " " || prevCell.Content == "\t" {
@@ -386,9 +386,9 @@ func moveWordBackwardBig(cm *terminal.CopyMode, window *terminal.Window) {
 }
 
 // moveWordEndBig moves cursor to end of current WORD
-func moveWordEndBig(cm *terminal.CopyMode, window *terminal.Window) {
+func moveWordEndBig(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	// Like 'e' but for WORDs
-	maxWidth := window.LastContentCol()
+	maxWidth := grid.LastContentCol()
 	maxIterations := 1000
 
 	// Move right at least once
@@ -396,13 +396,13 @@ func moveWordEndBig(cm *terminal.CopyMode, window *terminal.Window) {
 		cm.CursorX++
 	} else {
 		cm.CursorX = 0
-		moveDown(cm, window)
+		moveDown(cm, grid)
 		return
 	}
 
 	// Phase 1: Skip whitespace
 	for range maxIterations {
-		cell := getCellAtCursor(cm, window)
+		cell := getCellAtCursor(cm, grid)
 
 		if cell != nil && cell.Content != " " && cell.Content != "\t" {
 			break
@@ -410,7 +410,7 @@ func moveWordEndBig(cm *terminal.CopyMode, window *terminal.Window) {
 
 		if cm.CursorX >= maxWidth {
 			cm.CursorX = 0
-			moveDown(cm, window)
+			moveDown(cm, grid)
 		} else {
 			cm.CursorX++
 		}
@@ -423,18 +423,18 @@ func moveWordEndBig(cm *terminal.CopyMode, window *terminal.Window) {
 			break
 		}
 
-		absY := getAbsoluteY(cm, window)
+		absY := getAbsoluteY(cm, grid)
 		var nextCell *uv.Cell
 
-		scrollbackLen := window.ScrollbackLen()
+		scrollbackLen := grid.ScrollbackLen()
 		if absY < scrollbackLen {
-			line := window.ScrollbackLine(absY)
+			line := grid.ScrollbackLine(absY)
 			if line != nil && nextX < len(line) {
 				nextCell = &line[nextX]
 			}
 		} else {
 			screenY := absY - scrollbackLen
-			nextCell = window.Terminal.CellAt(nextX, screenY)
+			nextCell = grid.Text().CellAt(nextX, screenY)
 		}
 
 		if nextCell == nil || nextCell.Content == " " || nextCell.Content == "\t" {
@@ -446,63 +446,63 @@ func moveWordEndBig(cm *terminal.CopyMode, window *terminal.Window) {
 }
 
 // moveHalfPageUp moves cursor half page up
-func moveHalfPageUp(cm *terminal.CopyMode, window *terminal.Window) {
-	lines := max(1, window.Height/2)
+func moveHalfPageUp(cm *terminal.CopyMode, grid terminal.CopyGrid) {
+	lines := max(1, grid.ViewHeight()/2)
 	for range lines {
-		moveUp(cm, window)
+		moveUp(cm, grid)
 	}
 }
 
 // moveHalfPageDown moves cursor half page down
-func moveHalfPageDown(cm *terminal.CopyMode, window *terminal.Window) {
-	lines := max(1, window.Height/2)
+func moveHalfPageDown(cm *terminal.CopyMode, grid terminal.CopyGrid) {
+	lines := max(1, grid.ViewHeight()/2)
 	for range lines {
-		moveDown(cm, window)
+		moveDown(cm, grid)
 	}
 }
 
 // movePageUp moves cursor full page up
-func movePageUp(cm *terminal.CopyMode, window *terminal.Window) {
-	lines := max(1, window.ContentHeight())
+func movePageUp(cm *terminal.CopyMode, grid terminal.CopyGrid) {
+	lines := max(1, grid.ContentHeight())
 	for range lines {
-		moveUp(cm, window)
+		moveUp(cm, grid)
 	}
 }
 
 // movePageDown moves cursor full page down
-func movePageDown(cm *terminal.CopyMode, window *terminal.Window) {
-	lines := max(1, window.ContentHeight())
+func movePageDown(cm *terminal.CopyMode, grid terminal.CopyGrid) {
+	lines := max(1, grid.ContentHeight())
 	for range lines {
-		moveDown(cm, window)
+		moveDown(cm, grid)
 	}
 }
 
 // moveToTop moves cursor to beginning of scrollback
-func moveToTop(cm *terminal.CopyMode, window *terminal.Window) {
-	cm.ScrollOffset = window.ScrollbackLen()
-	window.ScrollbackOffset = cm.ScrollOffset // Sync for rendering
+func moveToTop(cm *terminal.CopyMode, grid terminal.CopyGrid) {
+	cm.ScrollOffset = grid.ScrollbackLen()
+	grid.SetScrollOffset(cm.ScrollOffset) // Sync for rendering
 	cm.CursorY = 0
 	cm.CursorX = 0
 }
 
 // moveToBottom moves cursor to end of live content
-func moveToBottom(cm *terminal.CopyMode, window *terminal.Window) {
+func moveToBottom(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	cm.ScrollOffset = 0
-	window.ScrollbackOffset = cm.ScrollOffset // Sync for rendering
-	cm.CursorY = window.LastContentRow()
+	grid.SetScrollOffset(cm.ScrollOffset) // Sync for rendering
+	cm.CursorY = grid.LastContentRow()
 	cm.CursorX = 0
 }
 
 // moveParagraphUp moves cursor to start of previous paragraph
-func moveParagraphUp(cm *terminal.CopyMode, window *terminal.Window) {
+func moveParagraphUp(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	// Move up until we find a blank line, then skip blank lines
 	maxIterations := 1000
 	foundNonBlank := false
 
 	for range maxIterations {
 		// Check if current line is blank
-		absY := getAbsoluteY(cm, window)
-		lineText := getLineText(cm, window, absY)
+		absY := getAbsoluteY(cm, grid)
+		lineText := getLineText(cm, grid, absY)
 		isBlank := len([]rune(lineText)) == 0 || isBlankLine(lineText)
 
 		if foundNonBlank && isBlank {
@@ -516,9 +516,9 @@ func moveParagraphUp(cm *terminal.CopyMode, window *terminal.Window) {
 		// Move up
 		if cm.CursorY > 0 {
 			cm.CursorY--
-		} else if cm.ScrollOffset < window.ScrollbackLen() {
+		} else if cm.ScrollOffset < grid.ScrollbackLen() {
 			cm.ScrollOffset++
-			window.ScrollbackOffset = cm.ScrollOffset
+			grid.SetScrollOffset(cm.ScrollOffset)
 		} else {
 			break // At top
 		}
@@ -526,8 +526,8 @@ func moveParagraphUp(cm *terminal.CopyMode, window *terminal.Window) {
 
 	// Skip any additional blank lines
 	for range maxIterations {
-		absY := getAbsoluteY(cm, window)
-		lineText := getLineText(cm, window, absY)
+		absY := getAbsoluteY(cm, grid)
+		lineText := getLineText(cm, grid, absY)
 		if !isBlankLine(lineText) {
 			break
 		}
@@ -535,9 +535,9 @@ func moveParagraphUp(cm *terminal.CopyMode, window *terminal.Window) {
 		// Move up
 		if cm.CursorY > 0 {
 			cm.CursorY--
-		} else if cm.ScrollOffset < window.ScrollbackLen() {
+		} else if cm.ScrollOffset < grid.ScrollbackLen() {
 			cm.ScrollOffset++
-			window.ScrollbackOffset = cm.ScrollOffset
+			grid.SetScrollOffset(cm.ScrollOffset)
 		} else {
 			break
 		}
@@ -545,15 +545,15 @@ func moveParagraphUp(cm *terminal.CopyMode, window *terminal.Window) {
 }
 
 // moveParagraphDown moves cursor to end of next paragraph
-func moveParagraphDown(cm *terminal.CopyMode, window *terminal.Window) {
+func moveParagraphDown(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	// Move down until we find a blank line, then skip blank lines
 	maxIterations := 1000
 	foundNonBlank := false
 
 	for range maxIterations {
 		// Check if current line is blank
-		absY := getAbsoluteY(cm, window)
-		lineText := getLineText(cm, window, absY)
+		absY := getAbsoluteY(cm, grid)
+		lineText := getLineText(cm, grid, absY)
 		isBlank := len([]rune(lineText)) == 0 || isBlankLine(lineText)
 
 		if foundNonBlank && isBlank {
@@ -565,11 +565,11 @@ func moveParagraphDown(cm *terminal.CopyMode, window *terminal.Window) {
 		}
 
 		// Move down
-		if cm.CursorY < window.LastContentRow() {
+		if cm.CursorY < grid.LastContentRow() {
 			cm.CursorY++
 		} else if cm.ScrollOffset > 0 {
 			cm.ScrollOffset--
-			window.ScrollbackOffset = cm.ScrollOffset
+			grid.SetScrollOffset(cm.ScrollOffset)
 		} else {
 			break // At bottom
 		}
@@ -577,18 +577,18 @@ func moveParagraphDown(cm *terminal.CopyMode, window *terminal.Window) {
 
 	// Skip any additional blank lines
 	for range maxIterations {
-		absY := getAbsoluteY(cm, window)
-		lineText := getLineText(cm, window, absY)
+		absY := getAbsoluteY(cm, grid)
+		lineText := getLineText(cm, grid, absY)
 		if !isBlankLine(lineText) {
 			break
 		}
 
 		// Move down
-		if cm.CursorY < window.LastContentRow() {
+		if cm.CursorY < grid.LastContentRow() {
 			cm.CursorY++
 		} else if cm.ScrollOffset > 0 {
 			cm.ScrollOffset--
-			window.ScrollbackOffset = cm.ScrollOffset
+			grid.SetScrollOffset(cm.ScrollOffset)
 		} else {
 			break
 		}
@@ -596,9 +596,9 @@ func moveParagraphDown(cm *terminal.CopyMode, window *terminal.Window) {
 }
 
 // moveToMatchingBracket moves cursor to matching bracket
-func moveToMatchingBracket(cm *terminal.CopyMode, window *terminal.Window) {
+func moveToMatchingBracket(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	// Get character at cursor
-	cell := getCellAtCursor(cm, window)
+	cell := getCellAtCursor(cm, grid)
 	if cell == nil || cell.Content == "" {
 		return
 	}
@@ -645,16 +645,16 @@ func moveToMatchingBracket(cm *terminal.CopyMode, window *terminal.Window) {
 		// Move in search direction
 		if direction > 0 {
 			// Moving forward
-			if cm.CursorX < window.LastContentCol() {
+			if cm.CursorX < grid.LastContentCol() {
 				cm.CursorX++
 			} else {
 				// Wrap to next line
 				cm.CursorX = 0
-				if cm.CursorY < window.LastContentRow() {
+				if cm.CursorY < grid.LastContentRow() {
 					cm.CursorY++
 				} else if cm.ScrollOffset > 0 {
 					cm.ScrollOffset--
-					window.ScrollbackOffset = cm.ScrollOffset
+					grid.SetScrollOffset(cm.ScrollOffset)
 				} else {
 					break // At end
 				}
@@ -665,12 +665,12 @@ func moveToMatchingBracket(cm *terminal.CopyMode, window *terminal.Window) {
 				cm.CursorX--
 			} else {
 				// Wrap to previous line
-				cm.CursorX = window.LastContentCol()
+				cm.CursorX = grid.LastContentCol()
 				if cm.CursorY > 0 {
 					cm.CursorY--
-				} else if cm.ScrollOffset < window.ScrollbackLen() {
+				} else if cm.ScrollOffset < grid.ScrollbackLen() {
 					cm.ScrollOffset++
-					window.ScrollbackOffset = cm.ScrollOffset
+					grid.SetScrollOffset(cm.ScrollOffset)
 				} else {
 					break // At start
 				}
@@ -678,7 +678,7 @@ func moveToMatchingBracket(cm *terminal.CopyMode, window *terminal.Window) {
 		}
 
 		// Check current character
-		currentCell := getCellAtCursor(cm, window)
+		currentCell := getCellAtCursor(cm, grid)
 		if currentCell != nil && currentCell.Content != "" {
 			currentChar := currentCell.Content
 			switch currentChar {

@@ -70,13 +70,13 @@ func TestCommandEntriesReachTheKeyMap(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := NewKeybindRegistry(cfg)
-	if got := r.GetPrefixAction("alt+g"); got != "command:lazygit" {
+	if got := r.Action(TablePrefixMode, "alt+g"); got != "command:lazygit" {
 		t.Errorf("prefix alt+g = %q", got)
 	}
-	if got := r.GetGlobalAction("alt+t"); got != "command:htop-cat" {
+	if got := r.Action(TableGlobal, "alt+t"); got != "command:htop-cat" {
 		t.Errorf("global alt+t = %q", got)
 	}
-	if got := r.GetGlobalAction("alt+g"); got == "command:lazygit" {
+	if got := r.Action(TableGlobal, "alt+g"); got == "command:lazygit" {
 		t.Error("a prefix entry answers without the leader")
 	}
 	if _, ok := cfg.Keybindings.CommandFor("command:tests"); !ok {
@@ -92,7 +92,7 @@ func TestCommandEntryLosesABuiltinKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := NewKeybindRegistry(cfg)
-	if got := r.GetPrefixAction("g"); got != "toggle_scratch" {
+	if got := r.Action(TablePrefixMode, "g"); got != "toggle_scratch" {
 		t.Fatalf("prefix g = %q, want toggle_scratch", got)
 	}
 	found := false
@@ -168,7 +168,7 @@ func TestCommandEntriesOnOneKeyFollowTheFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := NewKeybindRegistry(cfg)
-	if got := r.GetGlobalAction("alt+x"); got != "command:zeta" {
+	if got := r.Action(TableGlobal, "alt+x"); got != "command:zeta" {
 		t.Fatalf("alt+x runs %q, want command:zeta", got)
 	}
 	for _, b := range r.Bindings() {
@@ -201,7 +201,7 @@ func TestCommandEntryOnTheLeaderIsDead(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := NewKeybindRegistry(cfg)
-	if got := r.GetGlobalAction("ctrl+b"); got == "command:lead" {
+	if got := r.Action(TableGlobal, "ctrl+b"); got == "command:lead" {
 		t.Fatal("the leader runs the entry")
 	}
 	for _, b := range r.Bindings() {

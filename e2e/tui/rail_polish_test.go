@@ -297,20 +297,20 @@ func TestDividerDragMovesTheSplitAndPersists(t *testing.T) {
 	const grip = "───"
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		r := railRowOf(s, grip)
-		agents := screenRowOf(s, "agents")
+		agents := railHeaderRow(s, "agents")
 		return r >= 0 && agents == r+1 && railRowAfter(s, "A6", agents) > agents
 	}, uiTimeout); err != nil {
 		t.Fatalf("the divider never appeared above a full agents block: %v\n%s", err, term.Snapshot())
 	}
 	row := railRowOf(term.Screen(), grip)
 	col := strings.Index(railLine(term.Screen(), row), grip)
-	agentsBefore := screenRowOf(term.Screen(), "agents")
+	agentsBefore := railHeaderRow(term.Screen(), "agents")
 	saveFrame(t, term, "178-before")
 
 	// Down four rows: the block gives up lines and its header moves down.
 	mouseDrag(t, term, col+1, row, col+1, row+4, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenRowOf(s, "agents") > agentsBefore
+		return railHeaderRow(s, "agents") > agentsBefore
 	}, uiTimeout); err != nil {
 		t.Fatalf("dragging the divider down did not move the agents block: %v\n%s", err, term.Snapshot())
 	}
@@ -336,7 +336,7 @@ func TestDividerDragMovesTheSplitAndPersists(t *testing.T) {
 	mousePress(t, term, col+1, row, tuitest.MouseLeft, 0)
 	mouseRelease(t, term, col+1, row, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenRowOf(s, "agents") == agentsBefore
+		return railHeaderRow(s, "agents") == agentsBefore
 	}, uiTimeout); err != nil {
 		t.Fatalf("a double-click on the divider did not reset the split: %v\n%s", err, term.Snapshot())
 	}

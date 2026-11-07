@@ -16,8 +16,10 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/restartplan"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // The plan and apply steps of an install on one machine: what tuios hosts
@@ -40,7 +42,10 @@ const (
 // Budgets for an install and a restart on one machine.
 const (
 	InstallTimeout = 15 * time.Minute
-	RestartTimeout = 90 * time.Second
+	// A restart may be a live upgrade, which waits up to a minute for the
+	// new image, then a restart if the upgrade could not start. Asked for
+	// from a pane, the upgrade first waits for a Yes in the tuios dialog.
+	RestartTimeout = 150*time.Second + session.UpgradeConfirmWait
 )
 
 // Daemon is the daemon on a host.
@@ -54,6 +59,9 @@ type Daemon struct {
 	// not known.
 	Unread    bool `json:"unread,omitzero"`
 	Restarted bool `json:"restarted"`
+	// Upgraded says --restart upgraded the daemon live: it kept its pid and
+	// every program in its panes.
+	Upgraded bool `json:"upgraded"`
 	// Started says --start started a daemon that was not running.
 	Started bool `json:"started"`
 }
@@ -112,10 +120,13 @@ type Target struct {
 	SHA         string
 
 	// The plan.
-	Platform   string
-	Install    bool
-	TargetArg  string
-	Restart    bool
+	Platform  string
+	Install   bool
+	TargetArg string
+	Restart   bool
+	// LiveOnly says a restart may only be a live upgrade: one that cannot
+	// be live leaves the daemon as it is.
+	LiveOnly   bool
 	Start      bool
 	Service    bool
 	OldArg     string
@@ -191,7 +202,9 @@ func Plan(t *Target, src *Source, opts PlanOptions) {
 		if opts.Restart {
 			switch {
 			case t.Local && os.Getenv("TUIOS_PANE_ID") != "":
-				t.Note("This command runs in a pane of the daemon on this machine, so it does not restart that daemon. Run the restart from a terminal outside tuios.")
+				// A live upgrade keeps this command's pane and this command;
+				// a restart would end both halfway.
+				t.Restart, t.LiveOnly = true, true
 			case d.Unread && d.SessionCount != 0:
 				t.Note("The sessions of the daemon could not be read, so it is not restarted. Restart it by hand on the host.")
 			default:
@@ -283,10 +296,7 @@ func Apply(t *Target, src *Source) {
 		if t.NewVersion == "" {
 			t.NewVersion = b.Version
 		}
-		restart := "0"
-		if t.Restart {
-			restart = "1"
-		}
+		restart := t.restartMode()
 		ctx, cancel := context.WithTimeout(context.Background(), InstallTimeout)
 		defer cancel()
 		var body io.Reader = bytes.NewReader(b.Data)
@@ -334,7 +344,7 @@ func Apply(t *Target, src *Source) {
 		if arg == "-" {
 			arg = t.TargetArg
 		}
-		out, stderr, err := t.Runner.Run(ctx, RestartScript(), []string{arg}, nil)
+		out, stderr, err := t.Runner.Run(ctx, RestartScript(), []string{arg, t.restartMode()}, nil)
 		f := ParseFacts(out)
 		if err != nil && !f.Has("stopfail") && !f.Has("startfail") {
 			t.Fail(RemoteRunError("the restart failed", stderr, err))
@@ -418,10 +428,27 @@ func startDaemon(t *Target) {
 	t.Res.RestartCommand = ""
 }
 
+// restartMode is the daemon mode of the install and restart scripts.
+func (t *Target) restartMode() string {
+	switch {
+	case !t.Restart:
+		return "0"
+	case t.LiveOnly:
+		return "2"
+	}
+	return "1"
+}
+
 // restartResult reads what the install or restart script said about the
 // daemon.
 func restartResult(t *Target, f Facts) {
+	if lines := f["upgrade"]; len(lines) > 0 {
+		upgradeResult(t, lines[len(lines)-1])
+		return
+	}
 	switch {
+	case f.Has("nolive"):
+		t.Note(fmt.Sprintf("The new binary cannot upgrade a daemon live. This command runs in a pane of that daemon, so it was not restarted. It still runs %s. Run the restart from a terminal outside tuios.", cmp.Or(t.Res.Daemon.Version, "the old version")))
 	case f.Has("stopfail"):
 		t.Fail(errors.New("the old daemon did not stop. It still runs the old version"))
 	case f.Has("startfail"):
@@ -430,6 +457,69 @@ func restartResult(t *Target, f Facts) {
 		t.Res.Daemon.Restarted = true
 		t.Res.RestartNeeded = false
 		t.Res.RestartCommand = ""
+	}
+}
+
+// The actions of `tuios daemon upgrade --json`, as the host's tuios writes them.
+const (
+	upgradeActionUpgraded  = "upgraded"
+	upgradeActionRestarted = "restarted"
+	upgradeActionStarted   = "started"
+	upgradeActionFallback  = "fallback"
+	upgradeActionRefused   = "refused"
+)
+
+// upgradeResult reads the JSON outcome of `tuios daemon upgrade` on the host.
+func upgradeResult(t *Target, line string) {
+	var o struct {
+		Action string `json:"action"`
+		PID    int    `json:"pid"`
+		To     string `json:"to"`
+		Panes  int    `json:"panes"`
+		Reason string `json:"reason"`
+		Error  string `json:"error"`
+		// Unconfirmed is a refusal of the caller: the daemon asked the
+		// person in its dialog, and no Yes came.
+		Unconfirmed bool `json:"unconfirmed"`
+	}
+	if err := jsonx.Unmarshal([]byte(line), &o); err != nil {
+		t.Fail(errfmt.Errorf("the daemon upgrade answered with something that is not its answer: %s", plainLine(line)))
+		return
+	}
+	d := &t.Res.Daemon
+	moved := func() {
+		d.State = DaemonRunning
+		d.Version = cmp.Or(plainLine(o.To), d.Version)
+		if o.PID > 0 {
+			d.PID = o.PID
+		}
+		t.Res.RestartNeeded = false
+		t.Res.RestartCommand = ""
+	}
+	reason := plainLine(o.Reason)
+	switch o.Action {
+	case upgradeActionUpgraded:
+		moved()
+		d.Upgraded = true
+		t.Note(fmt.Sprintf("The daemon was upgraded live, with its pid. %s and their programs kept.", plural.Count(o.Panes, "pane")))
+	case upgradeActionRestarted:
+		moved()
+		d.Restarted = true
+		t.Note("The daemon could not be upgraded live, so it was restarted: " + reason + ".")
+	case upgradeActionStarted:
+		moved()
+		d.Started = true
+		t.Note("No daemon was running when the binary was in place, so one was started.")
+	case upgradeActionFallback:
+		t.Fail(errfmt.Errorf("the new binary could not take the panes over, so the daemon went back to %s with every program still running. Run 'tuios logs' on the host to see why", cmp.Or(plainLine(o.To), "the old version")))
+	case upgradeActionRefused:
+		if o.Unconfirmed {
+			t.Note(fmt.Sprintf("The new binary is installed. The daemon was not upgraded live. It needs a Yes in the tuios dialog on an attached client, and none came. This command runs in a pane of that daemon, so it was not restarted. It still runs %s. Run the sync again with a client attached and answer Yes, or run tuios daemon upgrade from a terminal outside tuios.", cmp.Or(d.Version, "the old version")))
+			return
+		}
+		t.Note(fmt.Sprintf("The new binary is installed. The daemon could not be upgraded live: %s. This command runs in a pane of that daemon, so it was not restarted. It still runs %s. Run the restart from a terminal outside tuios.", reason, cmp.Or(d.Version, "the old version")))
+	default:
+		t.Fail(errfmt.Errorf("the daemon was not moved to the new version: %s", plainLine(cmp.Or(o.Error, "the upgrade did not say why"))))
 	}
 }
 
@@ -490,13 +580,18 @@ func Finish(t *Target, src *Source, opts PlanOptions) {
 		parts = append(parts, "would start daemon")
 	case d.State == DaemonStopped && !opts.Start && !t.Local:
 		t.Note(fmt.Sprintf("The daemon does not run. To start it, run: tuios hosts sync %s --start", t.Name))
+	case d.Upgraded:
+		parts = append(parts, "daemon upgraded live")
 	case d.Restarted:
 		parts = append(parts, "daemon restarted")
 		if d.SessionCount == 0 {
 			t.Note("The daemon held no sessions, so it restarted without a question.")
 		}
+	case opts.DryRun && t.LiveOnly:
+		parts = append(parts, "would upgrade daemon live")
+		t.Note("This command runs in a pane of that daemon. The upgrade waits for a Yes in the tuios dialog. Without one the daemon keeps the old version. It is never restarted.")
 	case opts.DryRun && t.Restart:
-		parts = append(parts, "would restart daemon")
+		parts = append(parts, "would upgrade or restart daemon")
 	case r.RestartNeeded:
 		parts = append(parts, "daemon restart needed")
 		if !t.Restart {

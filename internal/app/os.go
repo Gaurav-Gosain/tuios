@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"os"
 	"regexp"
 	"sync"
 	"sync/atomic"
@@ -15,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/agentseen"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
@@ -386,22 +386,21 @@ type OS struct {
 	// new pane is not built locally; it arrives later through a state sync. These
 	// remember which side of which pane the split was meant for so the sync path
 	// can honor the direction instead of falling back to the spiral scheme.
-	pendingSplitDir       layout.PreselectionDir
-	pendingSplitTarget    string
-	WindowToBSPID         map[string]int // Maps window UUID to stable BSP integer ID
-	BSPIDToWindowID       map[int]string // Reverse of WindowToBSPID: BSP integer ID to window UUID (speed-up for GetWindowByIntID)
-	NextBSPWindowID       int            // Next BSP window ID to assign (starts at 1)
-	RenameKind            RenameKind     // What the open rename editor targets (RenameNone when closed)
-	RenameBuffer          string         // Buffer for new window name
-	RenameTargetID        string         // Window the rename in flight applies to
-	renameHit             overlay.Rect   // Where the dialog was drawn, in screen cells
-	renameClearHit        overlay.Rect   // Where its clear hint was drawn, in screen cells
-	PrefixActive          bool           // True when prefix key was pressed (tmux-style)
-	WorkspacePrefixActive bool           // True when Ctrl+B, w was pressed (workspace sub-prefix)
-	MinimizePrefixActive  bool           // True when Ctrl+B, m was pressed (minimize sub-prefix)
-	TilingPrefixActive    bool           // True when Ctrl+B, t was pressed (tiling/window sub-prefix)
-	DebugPrefixActive     bool           // True when Ctrl+B, D was pressed (debug sub-prefix)
-	LastPrefixTime        time.Time      // Time when prefix was activated
+	pendingSplitDir    layout.PreselectionDir
+	pendingSplitTarget string
+	WindowToBSPID      map[string]int // Maps window UUID to stable BSP integer ID
+	BSPIDToWindowID    map[int]string // Reverse of WindowToBSPID: BSP integer ID to window UUID (speed-up for GetWindowByIntID)
+	NextBSPWindowID    int            // Next BSP window ID to assign (starts at 1)
+	RenameKind         RenameKind     // What the open rename editor targets (RenameNone when closed)
+	RenameBuffer       string         // Buffer for new window name
+	RenameTargetID     string         // Window the rename in flight applies to
+	renameHit          overlay.Rect   // Where the dialog was drawn, in screen cells
+	renameClearHit     overlay.Rect   // Where its clear hint was drawn, in screen cells
+	PrefixActive       bool           // True when prefix key was pressed (tmux-style)
+	// SubMenu is the leader sub-menu open now (leader, then w, m, t, D, T, L
+	// or the tuios menu key), SubMenuNone when none is.
+	SubMenu        SubMenu
+	LastPrefixTime time.Time // Time when prefix was activated
 	// LockHeld is true while lock mode keeps a menu open after a repeatable
 	// action, until esc. See lock_mode.go.
 	LockHeld bool
@@ -868,6 +867,9 @@ type OS struct {
 	// session state, so the rail reads the attached row from live state exactly
 	// as it reads the rest of that row.
 	SessionWorktree *session.WorktreeInfo
+	// setupCard is the worktree setup card's state. See
+	// worktree_setup_card.go.
+	setupCard setupCardState
 	// WorkspaceNames maps a workspace number to its daemon-owned label. An
 	// unnamed workspace shows its number, so an absent entry is not a missing
 	// label but the normal case.
@@ -1218,11 +1220,8 @@ type OS struct {
 	TapeManager       *TapeManagerState // Tape manager state
 	TapeRecorder      *tape.Recorder    // Tape recorder for recording sessions
 	TapeRecordingName string            // Name of current recording
-	TapePrefixActive  bool              // True when Ctrl+B, T was pressed (tape sub-prefix)
-	TuiosPrefixActive bool              // True when the tuios menu is open (leader, then prefix_tuios's key)
 	// Menu is the declared menu open now (see config.MenuConfig), "" when none is.
-	Menu               string
-	LayoutPrefixActive bool // True when Ctrl+B, L was pressed (layout sub-prefix)
+	Menu string
 	// MouseOff is set by toggle_mouse: the client stops asking the host for
 	// mouse reports, so the host terminal selects text itself, as tmux's
 	// mouse off does.
@@ -1378,6 +1377,9 @@ type OS struct {
 	// replyPreview draws the images of a reply's draft, nil until one does.
 	// See inbox_reply_preview.go.
 	replyPreview *replyPreview
+	// pastePreview is the card that shows an image just pasted as a path.
+	// See paste_preview.go.
+	pastePreview pastePreviewState
 
 	// quickLook is the rail's preview of the file under the files cursor.
 	// See quicklook.go.
@@ -1686,13 +1688,9 @@ type OS struct {
 	sidebarSessionStateMu     [2]sync.Mutex               // serialize replacements from old/new clients
 	sidebarSessionDone        chan struct{}
 	sidebarSessionFocus       int // 0 none, 1 left, 2 right, 3 the rail pane (railPaneFocus)
-	SidebarScrollS            int
-	SidebarScrollT            int
-	SidebarScrollA            int
-	SidebarScrollF            int
-	SidebarScrollG            int
-	SidebarScrollC            int
-	SidebarScrollP            int
+	// SidebarScroll is each rail section's own scroll offset, indexed by
+	// section, so a reset or a swap covers every section at once.
+	SidebarScroll [sidebarSectionCount]int
 
 	// stopCh is closed by Cleanup. Every listener command takes it when it is
 	// armed, so a session that ends leaves none of them parked on a channel
@@ -2281,12 +2279,13 @@ func createID() string {
 	return uuid.New().String()
 }
 
-// verboseLog controls whether INFO-level logs are formatted and recorded.
+// verboseLog reports whether INFO-level logs are formatted and recorded.
 // It is off by default so hot paths (retile traces) pay nothing in production,
-// and is enabled by setting TUIOS_DEBUG_INTERNAL=1, the same switch that gates
-// the internal kitty/sixel passthrough trace logs. WARN and ERROR are always
-// recorded regardless of this flag.
-var verboseLog = os.Getenv("TUIOS_DEBUG_INTERNAL") == "1"
+// and is on with the internal debug switch (debuglog.Enabled), the same switch
+// that gates the kitty and sixel passthrough trace logs. It is read at each
+// use, so a --debug flag read after startup turns it on. WARN and ERROR are
+// always recorded regardless of this flag.
+var verboseLog = debuglog.Enabled
 
 // nestedSwitchError is a switch the daemon refused because this client runs in
 // a pane of the target session. The client is back on its own session.

@@ -362,9 +362,9 @@ func sidebarSectionOfKind(kind sidebarRowKind) sidebarSection {
 		return sidebarSectionSessions
 	case sidebarRowWindow:
 		return sidebarSectionTerminals
-	case sidebarRowAgent, sidebarRowAgentFilter, sidebarRowAgentSort, sidebarRowAgentMail, sidebarRowAgentFold, sidebarRowSubagentToggle:
+	case sidebarRowAgent, sidebarRowAgentFilter, sidebarRowAgentSort, sidebarRowAgentMail, sidebarRowAgentFold, sidebarRowSubagentToggle, sidebarRowAgentKin:
 		return sidebarSectionAgents
-	case sidebarRowFileUp, sidebarRowFileEntry, sidebarRowFileCd:
+	case sidebarRowFileUp, sidebarRowFileEntry, sidebarRowFileCd, sidebarRowFileClose:
 		return sidebarSectionFiles
 	default:
 		return sidebarSectionCount
@@ -423,6 +423,8 @@ func (m *OS) SidebarActivateCursor() bool {
 		m.SidebarUnfoldAgents()
 	case sidebarRowSubagentToggle:
 		m.SidebarToggleSubagents(row.SessionID, row.WindowID)
+	case sidebarRowAgentKin:
+		m.SidebarToggleKin(row.SessionID, row.WindowID)
 	case sidebarRowNewSession:
 		m.SidebarNewSessionHere()
 	case sidebarRowNewWindow:
@@ -457,6 +459,8 @@ func (m *OS) SidebarActivateCursor() bool {
 		m.SidebarToggleHostCollapsed(row.SessionID)
 	case sidebarRowFiles:
 		m.queueSidebarCmd(m.ToggleFileView())
+	case sidebarRowFileClose:
+		m.CloseFileView()
 	case sidebarRowFileCd:
 		m.FileViewCd()
 	case sidebarRowFileUp:
@@ -625,7 +629,7 @@ func sidebarRowHasMenu(row sidebarNavRow) bool {
 		return row.SessionID != ""
 	case sidebarRowWindow, sidebarRowAgent:
 		return row.WindowID != "" || row.WindowIndex >= 0
-	case sidebarRowFileCd, sidebarRowFileUp, sidebarRowFileEntry:
+	case sidebarRowFileCd, sidebarRowFileClose, sidebarRowFileUp, sidebarRowFileEntry:
 		// Every row of the files section points at the section, which is a
 		// thing the menu is about: the header and the ".." row still offer the
 		// two actions that need no name. See fileRowMenu.

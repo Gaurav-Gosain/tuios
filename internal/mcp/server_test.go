@@ -296,7 +296,7 @@ func TestDefaultToolsAreReadMostly(t *testing.T) {
 			t.Errorf("tools/list lacks %s: %v", want, names)
 		}
 	}
-	for _, never := range []string{"tuios_send_text", "tuios_respond", "tuios_send_keys", "tuios_ask_agent", "tuios_fan"} {
+	for _, never := range []string{"tuios_send_text", "tuios_respond", "tuios_send_keys", "tuios_ask_agent", "tuios_fan", "tuios_delegate"} {
 		if slices.Contains(names, never) {
 			t.Errorf("tools/list offers %s without --write", never)
 		}

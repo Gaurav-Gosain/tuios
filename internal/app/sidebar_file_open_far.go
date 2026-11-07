@@ -198,8 +198,7 @@ func prepareFarOpen(ask farOpenAsk, files config.FilesConfig, hint string, onHos
 		far = openedcopy.FileFingerprint(st.Info.Size, st.Info.MTime)
 	case "dir":
 		raw, err := onHost(ask.host, "file-walk", map[string]any{"path": ask.path})
-		var verr *session.VerbCallError
-		if errors.As(err, &verr) && verr.Code == session.ErrVerbInvalidParams {
+		if session.VerbErrCode(err) == session.ErrVerbInvalidParams {
 			return note("warning", name+" on "+host+" holds more than "+strconv.Itoa(config.OpenCopyMaxFiles)+
 				" files. tuios does not open a copy of it."+hint)
 		}
@@ -290,7 +289,7 @@ func prepareFarOpen(ask farOpenAsk, files config.FilesConfig, hint string, onHos
 // as it is bound.
 func (m *OS) farSendHint() string {
 	if m.KeybindRegistry != nil {
-		if keys := m.KeybindRegistry.GetSidebarFilesKeys("file_send"); len(keys) > 0 {
+		if keys := m.KeybindRegistry.Keys(config.TableSidebarFiles, "file_send"); len(keys) > 0 {
 			return " Press " + keys[0] + " to send it to a folder here."
 		}
 	}

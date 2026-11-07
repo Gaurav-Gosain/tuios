@@ -56,9 +56,10 @@ func (s *hintsPane) find(matcher *hints.Matcher) []hintMatch {
 				continue
 			}
 			out = append(out, hintMatch{
-				text:  text[found.Start:found.End],
-				kind:  found.Kind,
-				cells: cells,
+				text:   text[found.Start:found.End],
+				kind:   found.Kind,
+				target: found.Target,
+				cells:  cells,
 			})
 		}
 		y = next

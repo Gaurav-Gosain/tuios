@@ -1,6 +1,6 @@
 package ptyspawn
 
-import "github.com/Gaurav-Gosain/tuios/internal/cellsize"
+import "tuios.dev/vt"
 
 // WinsizeSetter is a pty that can take its size in cells and in pixels in one
 // call. xpty.UnixPty is one; ConPTY and a pane whose bytes come from another
@@ -39,5 +39,5 @@ func pixelsOr(cols, rows, xpixel, ypixel int) (int, int) {
 	if xpixel > 0 && ypixel > 0 {
 		return xpixel, ypixel
 	}
-	return cols * cellsize.FallbackWidth, rows * cellsize.FallbackHeight
+	return cols * vt.FallbackCellWidth, rows * vt.FallbackCellHeight
 }

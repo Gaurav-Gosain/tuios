@@ -1,13 +1,13 @@
 package app
 
 import (
-	"errors"
 	"strconv"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
@@ -381,7 +381,9 @@ func (m *OS) ckJudge() tea.Cmd {
 			Ready        bool   `json:"ready"`
 			Reason       string `json:"reason"`
 		}
-		_ = jsonx.Unmarshal(raw, &res)
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
+			return ckFanActMsg{gen: gen, verb: "judge", err: errfmt.Errorf("read the judge-fan answer: %w", err)}
+		}
 		text := "A judge reads the attempts in " + res.JudgeSession + ". Its verdict shows here when it reports."
 		if !res.Ready && res.Reason != "" {
 			text = "The judge in " + res.JudgeSession + " is not ready: " + res.Reason
@@ -459,7 +461,9 @@ func (m *OS) ckKeepNow() tea.Cmd {
 			} `json:"removed"`
 			Left int `json:"left"`
 		}
-		_ = jsonx.Unmarshal(raw, &res)
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
+			return ckFanActMsg{gen: gen, verb: "keep", err: errfmt.Errorf("read the keep answer: %w", err)}
+		}
 		n := len(res.Removed) - res.Left
 		text := "Kept " + letter + ", " + kept + ". Removed " + strconv.Itoa(n) + " other " + map[bool]string{true: "attempt", false: "attempts"}[n == 1] + ". Their branches stay."
 		if res.Left > 0 {
@@ -486,7 +490,7 @@ func (m *OS) applyFanAct(msg ckFanActMsg) tea.Cmd {
 			what = "keep the attempt"
 		}
 		text := printableTitle(msg.err.Error())
-		if verr, ok := errors.AsType[*session.VerbCallError](msg.err); ok && verr.Code == session.ErrVerbUnknownVerb {
+		if session.VerbErrCode(msg.err) == session.ErrVerbUnknownVerb {
 			text = "this daemon is older than the view. " + m.restartHint()
 		}
 		cp.note = "tuios could not " + what + ": " + text

@@ -10,12 +10,22 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// composeReference is the frame the lipgloss Compositor produces for the same
-// layers: the path composeLayersIn replaced, kept here as the oracle it has to
-// match byte for byte.
+// composeReference gives each layer a unique rank by Z and input position.
+// The Compositor then provides an independent byte-for-byte rendering oracle.
 func composeReference(w, h int, layers []*lipgloss.Layer) string {
+	ranked := make([]*lipgloss.Layer, len(layers))
+	for i, layer := range layers {
+		rank := 1
+		for j, other := range layers {
+			if other.GetZ() < layer.GetZ() || (other.GetZ() == layer.GetZ() && j < i) {
+				rank++
+			}
+		}
+		copy := *layer
+		ranked[i] = copy.Z(rank)
+	}
 	canvas := lipgloss.NewCanvas(w, h)
-	canvas.Compose(lipgloss.NewCompositor(layers...))
+	canvas.Compose(lipgloss.NewCompositor(ranked...))
 	return canvas.Render()
 }
 
@@ -136,12 +146,18 @@ func TestComposeLayersMatchesCompositor(t *testing.T) {
 	}
 }
 
-// TestComposeLayersManyEqualZ pins the order of layers that share a z once
-// there are more of them than the sort's insertion-sort threshold. The
-// Compositor's sort is not stable, and the frame depends on the order it
-// happens to settle on, so the replacement must sort the same list the same
-// way.
+// TestComposeLayersManyEqualZ preserves input order for equal-Z layers,
+// including stacks larger than the sort's insertion-sort threshold.
 func TestComposeLayersManyEqualZ(t *testing.T) {
+	var stack []*lipgloss.Layer
+	for i := range 15 {
+		stack = append(stack, lipgloss.NewLayer(string(rune('A'+i))).Z(i%3))
+	}
+	first, cached := composeUnderTest(t, 1, 1, stack)
+	if first != "O" || cached != "O" {
+		t.Fatalf("last layer at the highest Z must be visible: first %q, cached %q", first, cached)
+	}
+
 	const w, h = 40, 6
 	rng := rand.New(rand.NewSource(7))
 	for round := range 20 {

@@ -55,6 +55,9 @@ type attentionRow struct {
 	// --snoozed: when it opens again (unix nanoseconds), -1 for when it
 	// changes.
 	SnoozedUntil int64 `json:"snoozed_until"`
+	// WithParentUntil is set on a delegated child's question that waits for
+	// its parent agent first: when it comes to the person (unix nanoseconds).
+	WithParentUntil int64 `json:"with_parent_until"`
 }
 
 // attentionHeldNote ends the row of an approval a hook is holding, so the
@@ -158,7 +161,7 @@ func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 		if it.SnoozedUntil != 0 {
 			// Listed after everything open, under a heading of their own.
 			title = "Snoozed"
-		} else {
+		} else if it.WithParentUntil == 0 {
 			waiting++
 		}
 		if title != heading {
@@ -212,6 +215,12 @@ func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 		}
 		if it.SnoozedUntil != 0 {
 			fmt.Fprintf(w, "  [%s]", snoozedUntilWords(it.SnoozedUntil, now))
+		}
+		if it.WithParentUntil != 0 {
+			// waitedFor measures back from now, so the time left is put
+			// that far back.
+			left := max(it.WithParentUntil-now.UnixNano(), 0)
+			fmt.Fprintf(w, "  [with the parent agent, comes to you in %s]", waitedFor(now.UnixNano()-left, now))
 		}
 		if it.Stale {
 			// What that machine said last. Nobody can check it now.

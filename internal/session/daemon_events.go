@@ -80,7 +80,11 @@ const (
 	// took the panes over.
 	EventDaemonUpgraded = "daemon-upgraded"
 	EventSessionClosed  = "session-closed" // a session was terminated
-	EventGap            = "gap"            // slow-subscriber marker: N events were dropped
+	// EventSessionLabelled: a session's display name was set, changed or
+	// cleared. Title is the new display name, absent when cleared. A rename
+	// raises session-closed and session-created instead.
+	EventSessionLabelled = "session-labelled"
+	EventGap             = "gap" // slow-subscriber marker: N events were dropped
 	// EventClientSessionChanged reports a client attaching, detaching or switching.
 	EventClientSessionChanged = "client-session-changed"
 	// EventAttention is a change to the Inbox, the daemon's attention queue:
@@ -343,6 +347,10 @@ type SessionEvent struct {
 	hookWorktree, hookAgentSession string
 	hookRoot                       string
 	hookRunDir                     string
+	// link is the window's place in a chain of agents, for the Inbox: the
+	// parent and the root its items carry, and whether a delegated task's
+	// question goes to the parent first. See attention_children.go.
+	link childLink
 	// taskRow and taskReason are an eventTaskReleased's card, as list-tasks
 	// gives it, and why it was let go (task.go).
 	taskRow    *TaskRow

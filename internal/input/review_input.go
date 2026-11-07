@@ -87,7 +87,7 @@ func handleReviewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		return o, nil
 	}
-	if action := lookupAction(o, msg, overlayKeys(o).GetReviewAction); action != "" {
+	if action := tableAction(o, msg, overlayKeys(o), config.TableReview); action != "" {
 		var cmd tea.Cmd
 		switch action {
 		case config.ActionReviewNextHunk:

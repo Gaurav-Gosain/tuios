@@ -67,19 +67,19 @@ func TestEveryPresetLoadsCleanly(t *testing.T) {
 func TestTheUserWinsOverThePreset(t *testing.T) {
 	cfg := presetConfig(t, "tmux", "[keybindings.prefix_mode]\nprefix_prev_window = [\"p\"]\nnew_workspace = [\"N\"]\n")
 	r := NewKeybindRegistry(cfg)
-	if got := r.GetPrefixAction("p"); got != "prefix_prev_window" {
+	if got := r.Action(TablePrefixMode, "p"); got != "prefix_prev_window" {
 		t.Errorf("p runs %q, want the user's prefix_prev_window", got)
 	}
 	if keys := cfg.Keybindings.PrefixMode["prev_workspace"]; slices.Contains(keys, "p") {
 		t.Errorf("prev_workspace still holds p: %v", keys)
 	}
-	if got := r.GetPrefixAction("N"); got != "new_workspace" {
+	if got := r.Action(TablePrefixMode, "N"); got != "new_workspace" {
 		t.Errorf("N runs %q, want the user's new_workspace", got)
 	}
-	if got := r.GetPrefixAction("c"); got == "new_workspace" {
+	if got := r.Action(TablePrefixMode, "c"); got == "new_workspace" {
 		t.Error("new_workspace kept the preset's c beside the user's N")
 	}
-	if got := r.GetPrefixAction("n"); got != "next_workspace" {
+	if got := r.Action(TablePrefixMode, "n"); got != "next_workspace" {
 		t.Errorf("n runs %q, want the preset's next_workspace", got)
 	}
 	if cfg.Keybindings.LeaderKey != "ctrl+b" {
@@ -100,7 +100,7 @@ func TestTheUserWinsOverThePreset(t *testing.T) {
 	old := presetConfig(t, "tmux", "[keybindings.prefix_mode]\nprefix_new_window = [\"c\"]\nprefix_next_window = [\"n\", \"tab\"]\n")
 	r = NewKeybindRegistry(old)
 	for key, want := range map[string]string{"c": "new_workspace", "n": "next_workspace", "o": "prefix_next_window"} {
-		if got := r.GetPrefixAction(key); got != want {
+		if got := r.Action(TablePrefixMode, key); got != want {
 			t.Errorf("full old config: %s runs %q, want %q", key, got, want)
 		}
 	}
@@ -135,7 +135,7 @@ func TestEveryDisplacedFeatureMoves(t *testing.T) {
 	for _, name := range Presets()[1:] {
 		cfg := presetConfig(t, name, "")
 		for action, keys := range DefaultConfig().Keybindings.PrefixMode {
-			if len(keys) == 0 || tuios.GetPrefixAction(keys[0]) != action {
+			if len(keys) == 0 || tuios.Action(TablePrefixMode, keys[0]) != action {
 				continue
 			}
 			reachable := len(cfg.Keybindings.PrefixMode[action]) > 0 || len(cfg.Keybindings.TuiosPrefix[action]) > 0
@@ -150,7 +150,7 @@ func TestEveryDisplacedFeatureMoves(t *testing.T) {
 // keys stay the tuios ones rather than half of a preset.
 func TestAnUnknownPresetKeepsTheTuiosKeys(t *testing.T) {
 	cfg := presetConfig(t, "tmx", "")
-	if got := NewKeybindRegistry(cfg).GetPrefixAction("c"); got != "prefix_new_window" {
+	if got := NewKeybindRegistry(cfg).Action(TablePrefixMode, "c"); got != "prefix_new_window" {
 		t.Errorf("c runs %q under an unknown preset, want the tuios prefix_new_window", got)
 	}
 	warned := false

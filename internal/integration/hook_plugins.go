@@ -1,5 +1,7 @@
 package integration
 
+import "github.com/Gaurav-Gosain/tuios/internal/oneline"
+
 // The maps for Amp, Kimi Code CLI and Pi, the three harnesses outside the
 // first four whose hooks cover the whole turn, so tuios takes the pane's state
 // from them.
@@ -41,7 +43,7 @@ func translateAmp(in Input, p fields) Decision {
 		if p.str("tool") != "ask_user_choice" {
 			return skip(Amp, event, "tool "+p.str("tool")+" is not a question")
 		}
-		msg := Clip(p.str("question"))
+		msg := oneline.Clip(p.str("question"))
 		if msg == "" {
 			msg = "a question"
 		}
@@ -102,7 +104,7 @@ func translateKimi(in Input, p fields) Decision {
 		return send(Kimi, event, id(Report{State: "working"}))
 	case "PreToolUse":
 		if p.str("tool_name") == "AskUserQuestion" {
-			msg := Clip(p.obj("tool_input").first("question", "prompt"))
+			msg := oneline.Clip(p.obj("tool_input").first("question", "prompt"))
 			return send(Kimi, event, id(Report{State: "needs_input", Kind: "question", Message: msg}))
 		}
 		return send(Kimi, event, id(Report{State: "working"}))
@@ -116,7 +118,7 @@ func translateKimi(in Input, p fields) Decision {
 	case "StopFailure":
 		msg := "stopped on an error"
 		if t := p.first("error_type", "error"); t != "" {
-			msg = "stopped on " + Clip(t)
+			msg = "stopped on " + oneline.Clip(t)
 		}
 		return send(Kimi, event, id(Report{State: "errored", Message: msg}))
 	case "Interrupt":
@@ -164,6 +166,10 @@ func piTurnStart(id, event string, p fields) (Decision, bool) {
 //	                        with the session id and session file
 //	agent_start             working
 //	agent_settled           done
+//	subagent_start,         a subagent of the session starting, stopping
+//	subagent_stop,          or in flight, reported alone (report-agent-
+//	subagent_update         activity) with its id, type and text, the
+//	                        update's tool, target and outcome
 //	ui_prompt_start         needs_input: kind approval for a confirm, kind
 //	                        question for a select, input, editor or custom
 //	                        prompt, with the prompt's title
@@ -198,7 +204,7 @@ func translatePi(in Input, p fields) Decision {
 		if p.str("kind") == "confirm" {
 			r.Kind = "approval"
 		}
-		r.Message = Clip(p.str("title"))
+		r.Message = oneline.Clip(p.str("title"))
 		if r.Message == "" {
 			r.Message = "waits for an answer"
 		}
@@ -207,6 +213,25 @@ func translatePi(in Input, p fields) Decision {
 		if busy, _ := p["busy"].(bool); busy {
 			r.State = "working"
 		}
+	case "subagent_start", "subagent_stop", "subagent_update":
+		id := p.str("agent_id")
+		if !ValidSubagentID(id) {
+			return skip(Pi, event, "agent_id is not an id tuios keeps: 1 to 128 letters, digits, '_', '.', ':', '@' or '-'")
+		}
+		a := &Activity{Event: event, AgentID: id, AgentType: activityText(p.str("agent_type")), Text: activityText(p.str("text"))}
+		if event == "subagent_update" {
+			// The update's tool and target ride top-level payload keys, not
+			// tool_input, so the target is taken and clipped directly instead
+			// of through ToolTarget's tool_input lookup.
+			a.Tool, a.Target = p.str("tool"), oneline.Clip(p.str("target"))
+			switch p.str("outcome") {
+			case "stopping":
+				a.Outcome = OutcomeStopping
+			case "failed":
+				a.Outcome = OutcomeFailed
+			}
+		}
+		return send(Pi, event, Report{SessionID: p.str("session_id"), Activity: a})
 	case "":
 		return skip(Pi, event, "the payload names no event")
 	default:
@@ -229,10 +254,10 @@ func translateOMP(in Input, p fields) Decision {
 		r.State = "done"
 	case "tool_approval_requested":
 		r.State, r.Kind = "needs_input", "approval"
-		r.Message = Clip(p.str("reason"))
+		r.Message = oneline.Clip(p.str("reason"))
 		if r.Message == "" {
 			r.Message = "approve a tool call"
-			if tool := Clip(p.str("tool_name")); tool != "" {
+			if tool := oneline.Clip(p.str("tool_name")); tool != "" {
 				r.Message = "approve " + tool
 			}
 		}

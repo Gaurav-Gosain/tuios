@@ -23,18 +23,14 @@ import (
 
 // What a machine linked to this one may do here. See link_policy.go.
 
-// TestEveryVerbHasALinkPolicy holds the capability table to the registry. A
-// verb added without an entry would be refused over every link, and an entry
-// for a verb that does not exist is a policy for nothing.
+// TestEveryVerbHasALinkPolicy: a verb entry that names no link policy is
+// refused over every link, which is the safe default and also a silent one.
+// This makes adding a verb a decision about what a linked machine may do with
+// it.
 func TestEveryVerbHasALinkPolicy(t *testing.T) {
 	for verb := range verbRegistry() {
-		if _, ok := verbCapabilities[verb]; !ok {
-			t.Errorf("verb %s has no entry in verbCapabilities, so it is refused over every link", verb)
-		}
-	}
-	for verb := range verbCapabilities {
-		if _, ok := verbRegistry()[verb]; !ok {
-			t.Errorf("verbCapabilities names %s, which is not a verb", verb)
+		if _, ok := verbLinkCaps(verb); !ok {
+			t.Errorf("verb %s names no link policy in its verbEntry, so it is refused over every link", verb)
 		}
 	}
 	for _, t2 := range []MessageType{
@@ -46,8 +42,8 @@ func TestEveryVerbHasALinkPolicy(t *testing.T) {
 			t.Errorf("message %d is handled by the daemon and has no link policy", t2)
 		}
 	}
-	for verb, caps := range verbCapabilities {
-		for _, c := range caps.list() {
+	for verb, e := range verbRegistry() {
+		for _, c := range e.link.list() {
 			if c != capRelay && !slices.Contains(config.LinkCapabilities, c) {
 				t.Errorf("verb %s needs %q, which is not a capability", verb, c)
 			}
@@ -757,16 +753,16 @@ func TestNoLowClassVerbTakesAPathOrReturnsAFile(t *testing.T) {
 		"peek-prompt.lines":              "pane text, which list reaches",
 		"show-buffer.data":               "a paste buffer, which list reaches as it reaches the panes",
 		"show-buffer.data_b64":           "a paste buffer, which list reaches as it reaches the panes",
+		"agent-transcript.data":          "an image pasted into the conversation, read from its base64 in the transcript record, which transcripts reaches",
 	}
 	pathy := []string{"path", "paths", "dir", "file", "files", "out", "output", "cwd", "sock", "attachments", "dest", "src", "root"}
 	carries := []string{"content", "data", "data_b64", "lines"}
 	high := []string{config.LinkAllowFiles, config.LinkAllowWrite, config.LinkAllowOpen, config.LinkAllowRespond}
 	seen := map[string]bool{}
-	for verb, caps := range verbCapabilities {
-		if slices.ContainsFunc(expandRelay(caps.list()), func(c string) bool { return slices.Contains(high, c) }) {
+	for verb, entry := range verbRegistry() {
+		if slices.ContainsFunc(expandRelay(entry.link.list()), func(c string) bool { return slices.Contains(high, c) }) {
 			continue
 		}
-		entry := verbRegistry()[verb]
 		for _, p := range entry.params {
 			if !slices.ContainsFunc(strings.Split(p.Name, "_"), func(w string) bool { return slices.Contains(pathy, w) }) {
 				continue
@@ -774,7 +770,7 @@ func TestNoLowClassVerbTakesAPathOrReturnsAFile(t *testing.T) {
 			key := verb + "." + p.Name
 			seen[key] = true
 			if checked[key] == "" {
-				t.Errorf("ASSERTION: %s takes %q, which looks like a path on this machine, and a link reaches it with %v", verb, p.Name, caps.list())
+				t.Errorf("ASSERTION: %s takes %q, which looks like a path on this machine, and a link reaches it with %v", verb, p.Name, entry.link.list())
 			}
 		}
 		for _, r := range entry.returns {
@@ -784,7 +780,7 @@ func TestNoLowClassVerbTakesAPathOrReturnsAFile(t *testing.T) {
 			key := verb + "." + r.Name
 			seen[key] = true
 			if checked[key] == "" {
-				t.Errorf("ASSERTION: %s returns %q, which can carry a file's bytes, and a link reaches it with %v", verb, r.Name, caps.list())
+				t.Errorf("ASSERTION: %s returns %q, which can carry a file's bytes, and a link reaches it with %v", verb, r.Name, entry.link.list())
 			}
 		}
 	}

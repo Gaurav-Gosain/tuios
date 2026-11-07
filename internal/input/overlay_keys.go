@@ -150,3 +150,69 @@ func handleCacheStatsKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	return o, nil
 }
+
+// routeOverlayKey gives a key to the top open overlay that takes keys, in
+// the order the overlays are stacked, which is the order the mouse uses. Both
+// modes route through it, so two open panels take keys in one order: the one
+// on top first. A panel that does not take this key, such as the log viewer
+// under a leader chord, passes it to the one below.
+func routeOverlayKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, bool) {
+	if !o.AnyOverlayOpen() {
+		return o, nil, false
+	}
+	stack := o.OverlayStack()
+	for i := len(stack) - 1; i >= 0; i-- {
+		if out, cmd, ok := overlayKey(stack[i], msg, o); ok {
+			return out, cmd, true
+		}
+	}
+	return o, nil, false
+}
+
+// overlayKey runs the key handler of overlay kind, and reports false for a
+// kind that takes no keys here or does not take this one. The settings
+// panel and the pickers over it share one handler, which knows their order.
+func overlayKey(kind string, msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, bool) {
+	var out *app.OS
+	var cmd tea.Cmd
+	switch kind {
+	case "help":
+		out, cmd = handleHelpOverlayKey(msg, o)
+	case "settings", "keybinds", "themepicker", "themeeditor", "presetpicker", "glyphpicker",
+		"effectpicker", "dockeditor", "sectioneditor", "layout", "hostpicker":
+		return routeSettingsOverlayKey(msg, o)
+	case "palette":
+		out, cmd = handleCommandPaletteInput(msg, o)
+	case "launcher":
+		out, cmd = handleLauncherInput(msg, o)
+	case "session":
+		out, cmd = handleSessionSwitcherInput(msg, o)
+	case "agentmail":
+		out, cmd = handleAgentMailInput(msg, o)
+	case "inbox":
+		out, cmd = handleInboxInput(msg, o)
+	case "navigator":
+		out, cmd = handleNavigatorInput(msg, o)
+	case "goto":
+		out, cmd = handleGotoPickerInput(msg, o)
+	case "workspace":
+		out, cmd = handleWorkspaceSwitcherInput(msg, o)
+	case "buffers":
+		out, cmd = handleBufferChooserInput(msg, o)
+	case "aggregate":
+		out, cmd = handleAggregateViewInput(msg, o)
+	case "message":
+		if !viewerTakesKey(msg, o) {
+			return o, nil, false
+		}
+		out, cmd = handleMessageViewKey(msg, o)
+	case "logs":
+		if !viewerTakesKey(msg, o) {
+			return o, nil, false
+		}
+		out, cmd = handleLogViewerKey(msg, o)
+	default:
+		return o, nil, false
+	}
+	return out, cmd, true
+}

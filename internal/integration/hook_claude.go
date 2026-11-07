@@ -3,6 +3,8 @@ package integration
 import (
 	"slices"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/oneline"
 )
 
 // The Claude Code event map. Source: the hooks reference at
@@ -265,11 +267,11 @@ func claudeNotification(event string, p fields) Decision {
 	case "permission_prompt":
 		// It names no subagent, and comes after the PermissionRequest it is
 		// about, so it must not take a subagent's prompt over.
-		return send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "approval", Message: Clip(msg), IfState: claudeNotBlocked, Notification: true}, p))
+		return send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "approval", Message: oneline.Clip(msg), IfState: claudeNotBlocked, Notification: true}, p))
 	case "elicitation_dialog", "agent_needs_input":
-		return send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "question", Message: Clip(msg), Notification: true}, p))
+		return send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "question", Message: oneline.Clip(msg), Notification: true}, p))
 	case "elicitation_url_dialog":
-		return send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "question", Message: Clip(msg)}, p))
+		return send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "question", Message: oneline.Clip(msg)}, p))
 	case "idle_prompt":
 		return send(ClaudeCode, event, identity(Report{State: "idle", IfState: "working,unknown"}, p))
 	default:

@@ -688,12 +688,12 @@ A refused call answers error `forbidden`, and nothing changes.
 | `session.snapshot` | `list-windows` for each session | `layouts` gives each pane's rectangle. `splits` is always empty |
 | `workspace.list`, `workspace.get` | `list-windows` | |
 | `workspace.create` | `new-session`, `set-session-name` | `label` is the display name. `focus` does nothing |
-| `workspace.rename` | `set-session-name` | |
+| `workspace.rename` | `set-session-name` | sends one `workspace_renamed` with the new label |
 | `workspace.close` | `kill-session` | |
 | `workspace.focus` | `select-workspace` grant, then the attached client | the client shows the session, as the session switcher does. The client is the one that shows the caller's session, else the one that shows the active workspace. Without a client it fails with `no_client` |
 | `tab.list`, `tab.get` | `list-windows` | |
 | `tab.create` | `new-window`, `set-workspace-name` | uses the first workspace that is not a tab. Fails with `tab_create_failed` when all are in use |
-| `tab.rename` | `set-workspace-name` | |
+| `tab.rename` | `set-workspace-name` | sends `tab_renamed` when the name changes |
 | `tab.focus` | `select-workspace` | |
 | `tab.move` | `set-workspace-order` | renumbers the workspaces to the new tab order: the tabs take the workspace numbers they hold between them. Every tab keeps its id |
 | `tab.close` | `close-window` for each pane, `set-workspace-name` | shows the nearest tab that holds a pane |
@@ -930,8 +930,9 @@ event is `{"event":"pane.agent_status_changed","data":{...}}`.
 
 | tuios event | herdr event |
 | --- | --- |
-| `session-created` | `workspace_created`, or `workspace_renamed` after a rename |
-| `session-closed` | `workspace_closed` |
+| `session-created` | `workspace_created`, or one `workspace_renamed` after `rename-session` |
+| `session-closed` | `workspace_closed`, or nothing for the old name of a rename |
+| `session-labelled` | `workspace_renamed`, when the label the workspace shows changed |
 | `window-created` | `pane_created`, and `tab_created` for a new tab |
 | `window-closed` | `pane_closed`, and `tab_closed` for a tab that is gone |
 | `window-exit` | `pane_exited` |
@@ -940,8 +941,15 @@ event is `{"event":"pane.agent_status_changed","data":{...}}`.
 | `window-moved` | `pane_moved` |
 | `workspace-switched` | `tab_focused` |
 | `client-session-changed` | `workspace_focused`, `tab_focused` and `pane_focused` when a client moves from one session to another, for the new session, its tab and its focused pane. A first attach sends none |
+| `workspace-renamed` | `tab_renamed`, whether the name came from `set-workspace-name` or `tab.rename`. A cleared name sends the label the tab falls back to, its workspace number. An empty workspace in the background sends nothing: its name comes with the `tab_created` of its first pane |
 | `agent-state` | `pane_agent_detected` when an agent comes or goes, and `pane.agent_status_changed` when its status changes |
 | `agent-seen` | `pane.agent_status_changed` from `done` to `idle` when the pane is looked at, and back when it is marked unread |
+
+A workspace's label is its session's display name, or the session's name
+when it has none. `workspace_renamed` carries the label the snapshot shows
+after the change. `workspace.create` with a `label` sets the display name
+after the session opens, so its `workspace_created` may carry the session's
+name and a `workspace_renamed` with the label follow it.
 
 `pane.agent_status_changed` needs a `pane_id`. `pane.scroll_changed` and
 `pane.output_matched` fail with `unsupported`: use `pane.wait_for_output`. A
@@ -3848,7 +3856,8 @@ The server is read-only by default: it lists and captures panes, waits for
 states, follows the event stream (`tuios_events`, resumable with the
 `last_seq` and `boot_id` it returns), reports the agent's own state and meta,
 and sends and reads mail. `--write` adds `tuios_send_text`,
-`tuios_send_keys`, `tuios_ask_agent`, `tuios_respond` and `tuios_fan`. Either
+`tuios_send_keys`, `tuios_ask_agent`, `tuios_respond`, `tuios_fan` and
+`tuios_delegate`. Either
 way it reaches only the session of the pane it runs in, the sessions in its fan
 group, and the sessions a `fan` from it started, unless it was started with
 `--scope all`.
@@ -4145,11 +4154,19 @@ the one that owns the pane. These filters keep those events off the pane:
   is refused with `foreign_session`, at rest and mid-turn. It makes no Inbox
   item and no notification. The daemon logs the refusal at debug level.
 - Codex's shared server keeps the `TUIOS_PANE_ID` of the pane that started it.
-  When that pane closes, every hook names a pane that is gone. tuios then shows
+  When that pane closes, every hook names a pane that is gone. The daemon then
+  sends each report to the live Codex pane that runs its conversation. That is
+  the pane that holds the conversation id, the pane joined to the rollout, or
+  the pane whose codex started in the rollout's folder within 60 seconds before
+  the rollout started. Only one pane may match. The hook's start hint names
+  that pane.
+- A report that matches no pane, or two, fails as before. tuios then shows
   an Inbox item, `Codex hooks`, after two such reports at least 10 seconds apart.
   Restart the server from outside tuios to fix it. The item closes on the next
   report that reaches a pane. Until then the pane takes its state from the screen
-  rules, and the hookless search still finds its rollout for the thread.
+  rules, and the hookless search still finds its rollout for the thread. A
+  second conversation in one codex, after `/new` for example, starts too late to
+  match, so it is the common case for this item.
 - Another conversation's `SessionStart` takes the pane over, because it looks
   like `/new` or `/resume` in the pane. A `SessionStart` after a compaction
   (source `compact`) is the same conversation and takes nothing over.

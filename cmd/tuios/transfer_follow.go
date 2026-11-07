@@ -16,6 +16,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/units"
@@ -491,7 +492,7 @@ func stateWords(r copyRow) string {
 		return "is paused. Resume it with: tuios transfers resume " + r.ID
 	case "conflict":
 		n := r.ConflictCount
-		return fmt.Sprintf("waits for an answer about %d %s that %s there and %s", n, pluralWord(n, "file", "files"), pluralWord(n, "is", "are"), pluralWord(n, "differs", "differ"))
+		return fmt.Sprintf("waits for an answer about %d %s that %s there and %s", n, plural.Word(n, "file", "files"), plural.Word(n, "is", "are"), plural.Word(n, "differs", "differ"))
 	}
 	return r.State
 }
@@ -662,7 +663,7 @@ func (f *follower) draw(final bool) {
 		lines = append(lines, f.block(r)...)
 	}
 	if waiting > 0 {
-		lines = append(lines, f.dim(fmt.Sprintf("  %d more %s %s.", waiting, pluralWord(waiting, "copy", "copies"), pluralWord(waiting, "waits", "wait"))))
+		lines = append(lines, f.dim(fmt.Sprintf("  %d more %s %s.", waiting, plural.Word(waiting, "copy", "copies"), plural.Word(waiting, "waits", "wait"))))
 	}
 	// The block moves up by its line count to draw again, which is right
 	// only while no line wraps: each one is cut to the width of the terminal.
@@ -827,22 +828,22 @@ func (f *follower) notes(r copyRow) {
 		}
 	}
 	if r.ConflictsSkipped > 0 {
-		list(f.stdout, fmt.Sprintf("%s %s there and %s, so %s skipped:", commas(r.ConflictsSkipped), pluralWord(r.ConflictsSkipped, "file was", "files were"), pluralWord(r.ConflictsSkipped, "differs", "differ"), pluralWord(r.ConflictsSkipped, "it was", "they were")), skipped, r.ConflictsSkipped)
+		list(f.stdout, fmt.Sprintf("%s %s there and %s, so %s skipped:", commas(r.ConflictsSkipped), plural.Word(r.ConflictsSkipped, "file was", "files were"), plural.Word(r.ConflictsSkipped, "differs", "differ"), plural.Word(r.ConflictsSkipped, "it was", "they were")), skipped, r.ConflictsSkipped)
 	}
 	if r.ConflictsLeft > 0 {
-		list(f.stdout, fmt.Sprintf("%s %s made there during the copy, or %s in the way. %s not replaced:", commas(r.ConflictsLeft), pluralWord(r.ConflictsLeft, "file was", "files were"), pluralWord(r.ConflictsLeft, "a folder is", "folders are"), pluralWord(r.ConflictsLeft, "It was", "They were")), left, r.ConflictsLeft)
+		list(f.stdout, fmt.Sprintf("%s %s made there during the copy, or %s in the way. %s not replaced:", commas(r.ConflictsLeft), plural.Word(r.ConflictsLeft, "file was", "files were"), plural.Word(r.ConflictsLeft, "a folder is", "folders are"), plural.Word(r.ConflictsLeft, "It was", "They were")), left, r.ConflictsLeft)
 	}
 	if r.Skipped > 0 {
 		items := make([]fileNote, 0, len(r.SkippedItems))
 		for _, s := range r.SkippedItems {
 			items = append(items, fileNote{rel: s.Rel + " (" + s.Kind + ")"})
 		}
-		list(f.stdout, fmt.Sprintf("%s %s not files or folders, so %s not copied:", commas(r.Skipped), pluralWord(r.Skipped, "item is", "items are"), pluralWord(r.Skipped, "it was", "they were")), items, r.Skipped)
+		list(f.stdout, fmt.Sprintf("%s %s not files or folders, so %s not copied:", commas(r.Skipped), plural.Word(r.Skipped, "item is", "items are"), plural.Word(r.Skipped, "it was", "they were")), items, r.Skipped)
 	}
 	if r.Denied > 0 {
 		// The source machine does not name them: their names are part of
 		// what a linked machine may not read.
-		_, _ = fmt.Fprintf(f.stdout, "%s %s not copied. A linked machine may not read keys, credentials or shell start files.\n", commas(r.Denied), pluralWord(r.Denied, "item was", "items were"))
+		_, _ = fmt.Fprintf(f.stdout, "%s %s not copied. A linked machine may not read keys, credentials or shell start files.\n", commas(r.Denied), plural.Word(r.Denied, "item was", "items were"))
 	}
 	if len(failed) > 1 {
 		list(f.stderr, "These files did not copy:", failed, max(r.FailedFiles, len(failed)))
@@ -866,11 +867,11 @@ func doneLine(r copyRow) string {
 		return fmt.Sprintf("Copied %s, %s, to %s%s.", r.shownName(), units.Bytes(r.Size), r.shownWhere(), check)
 	}
 	if copied <= 0 && r.Same > 0 {
-		return fmt.Sprintf("The %s %s of %s %s on %s already, with the same bytes. Nothing was copied.", commas(r.Same), pluralWord(r.Same, "file", "files"), r.shownName(), pluralWord(r.Same, "is", "are"), r.shownWhere())
+		return fmt.Sprintf("The %s %s of %s %s on %s already, with the same bytes. Nothing was copied.", commas(r.Same), plural.Word(r.Same, "file", "files"), r.shownName(), plural.Word(r.Same, "is", "are"), r.shownWhere())
 	}
-	line := fmt.Sprintf("Copied %s %s, %s, to %s%s.", commas(copied), pluralWord(copied, "file", "files"), units.Bytes(r.Size), r.shownWhere(), check)
+	line := fmt.Sprintf("Copied %s %s, %s, to %s%s.", commas(copied), plural.Word(copied, "file", "files"), units.Bytes(r.Size), r.shownWhere(), check)
 	if r.Same > 0 {
-		line += fmt.Sprintf(" %s %s the same already.", commas(r.Same), pluralWord(r.Same, "file was", "files were"))
+		line += fmt.Sprintf(" %s %s the same already.", commas(r.Same), plural.Word(r.Same, "file was", "files were"))
 	}
 	return line
 }
@@ -911,13 +912,6 @@ func farRefusal(msg string) bool {
 }
 
 // ---- words and numbers ------------------------------------------------------
-
-func pluralWord(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
-}
 
 func capitalize(s string) string {
 	if s == "" {

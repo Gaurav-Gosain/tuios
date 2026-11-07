@@ -94,95 +94,16 @@ func colourDiffLine(l string) string {
 	return l
 }
 
-// diffOp is one line of an edit script: ' ' kept, '-' removed, '+' added.
-type diffOp = linediff.Op
-
-// lineDiff is the edit script from a to b by longest common subsequence. Two
-// texts too large to compare in bounded time are shown as all removed and all
-// added, which is still a correct diff.
-func lineDiff(a, b []string) []diffOp {
-	// Common prefix and suffix are kept without the table.
-	pre := 0
-	for pre < len(a) && pre < len(b) && a[pre] == b[pre] {
-		pre++
-	}
-	suf := 0
-	for suf < len(a)-pre && suf < len(b)-pre && a[len(a)-1-suf] == b[len(b)-1-suf] {
-		suf++
-	}
-	ops := make([]diffOp, 0, len(a)+len(b))
-	for _, l := range a[:pre] {
-		ops = append(ops, diffOp{Op: ' ', Line: l})
-	}
-	ma, mb := a[pre:len(a)-suf], b[pre:len(b)-suf]
-	if len(ma)*len(mb) > maxLineDiffOps {
-		ops = append(ops, linediff.Replace(ma, mb)...)
-	} else {
-		ops = append(ops, linediff.LCS(ma, mb)...)
-	}
-	for _, l := range a[len(a)-suf:] {
-		ops = append(ops, diffOp{Op: ' ', Line: l})
-	}
-	return ops
-}
-
 // unifiedHunks is the diff of a and b as unified hunks with ctx lines of
-// context.
+// context. Two texts too large to compare in bounded time are shown as all
+// removed and all added, which is still a correct diff.
 func unifiedHunks(a, b []string, ctx int) []string {
-	ops := lineDiff(a, b)
 	var out []string
-	for start := 0; start < len(ops); {
-		// Find the next change.
-		first := start
-		for first < len(ops) && ops[first].Op == ' ' {
-			first++
+	for _, h := range linediff.Hunks(linediff.Bounded(a, b, maxLineDiffOps), ctx) {
+		out = append(out, h.Header())
+		for _, o := range h.Ops {
+			out = append(out, string(o.Op)+o.Line)
 		}
-		if first == len(ops) {
-			break
-		}
-		// Extend the hunk while changes are within 2*ctx of each other.
-		last := first
-		for k := first; k < len(ops); k++ {
-			if ops[k].Op != ' ' {
-				last = k
-				continue
-			}
-			if k-last > 2*ctx {
-				break
-			}
-		}
-		lo := max(first-ctx, start)
-		hi := min(last+ctx+1, len(ops))
-		// Line numbers at lo.
-		oldLine, newLine := 1, 1
-		for _, o := range ops[:lo] {
-			if o.Op != '+' {
-				oldLine++
-			}
-			if o.Op != '-' {
-				newLine++
-			}
-		}
-		oldCount, newCount := 0, 0
-		var body []string
-		for _, o := range ops[lo:hi] {
-			if o.Op != '+' {
-				oldCount++
-			}
-			if o.Op != '-' {
-				newCount++
-			}
-			body = append(body, string(o.Op)+o.Line)
-		}
-		if oldCount == 0 {
-			oldLine--
-		}
-		if newCount == 0 {
-			newLine--
-		}
-		out = append(out, fmt.Sprintf("@@ -%d,%d +%d,%d @@", oldLine, oldCount, newLine, newCount))
-		out = append(out, body...)
-		start = hi
 	}
 	return out
 }

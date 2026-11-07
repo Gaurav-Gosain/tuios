@@ -82,7 +82,7 @@ func (d *Daemon) keeperRecord() handoffKeeperRecord {
 	if d.keeper == nil {
 		return handoffKeeperRecord{FD: -1}
 	}
-	return handoffKeeperRecord{FD: int(d.keeper.conn.Fd()), PID: d.keeper.pid} //nolint:gosec // a descriptor number
+	return handoffKeeperRecord{FD: fdNum(d.keeper.conn), PID: d.keeper.pid}
 }
 
 // releaseKeeper tells the keeper to stand down, and reaps it once it has. The

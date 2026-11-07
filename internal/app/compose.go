@@ -249,10 +249,9 @@ type composedLayer struct {
 
 // composeLayersIn draws layers onto the canvas in ascending z order.
 //
-// The order is the lipgloss Compositor's, reproduced exactly: its root layer
-// takes part in the sort with a z of zero and empty bounds, and the sort is
-// the same unstable one, so layers that share a z land in the order they
-// always did. A layer with an id is drawn from its cellLayer, parsed the first
+// Layers with equal Z keep their input order, so later panes draw above
+// earlier panes, matching pointer hit tests. The empty root layer has Z=0.
+// A layer with an id is drawn from its cellLayer, parsed the first
 // time its string is seen and kept across frames under that id; a layer
 // without one is parsed straight onto the canvas as before.
 //
@@ -305,7 +304,7 @@ func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, pane
 		entry.bounds = image.Rect(l.GetX(), l.GetY(), l.GetX()+l.Width(), l.GetY()+l.Height())
 		ordered = append(ordered, entry)
 	}
-	slices.SortFunc(ordered, func(a, b composedLayer) int {
+	slices.SortStableFunc(ordered, func(a, b composedLayer) int {
 		return layerZ(a.layer) - layerZ(b.layer)
 	})
 

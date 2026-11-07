@@ -42,6 +42,8 @@ type copyModeEffects struct {
 	// editScrollback opens the scrollback in the editor. It reads the
 	// window and writes a file, so it runs after the lock is dropped.
 	editScrollback bool
+	// openHints opens hints mode on the pane, over the copy-mode view.
+	openHints bool
 }
 
 type copyModeNotification struct {
@@ -127,18 +129,44 @@ func (fx *copyModeEffects) apply(o *app.OS, window *terminal.Window) (*app.OS, t
 		}
 	}
 	if fx.setClipboard {
-		if o != nil && o.Settings.CopyCommand != "" {
-			// Yank keeps the paste buffer itself.
-			cmd = o.Yank(fx.clipboard)
-		} else {
-			cmd = tea.SetClipboard(fx.clipboard)
-			if o != nil {
-				cmd = tea.Batch(cmd, o.SaveToPasteBuffers(fx.clipboard))
-			}
-		}
+		cmd = fx.clipboardCmd(o)
 	}
 	if fx.editScrollback && o != nil {
 		cmd = tea.Batch(cmd, o.EditScrollbackInEditor())
 	}
+	if fx.openHints && o != nil {
+		o.OpenHints()
+	}
 	return o, cmd
+}
+
+// clipboardCmd writes the yank: through the copy command when one is set,
+// else an OSC 52 clipboard write, and into the paste buffers either way.
+func (fx *copyModeEffects) clipboardCmd(o *app.OS) tea.Cmd {
+	if o != nil && o.Settings.CopyCommand != "" {
+		// Yank keeps the paste buffer itself.
+		return o.Yank(fx.clipboard)
+	}
+	cmd := tea.SetClipboard(fx.clipboard)
+	if o != nil {
+		cmd = tea.Batch(cmd, o.SaveToPasteBuffers(fx.clipboard))
+	}
+	return cmd
+}
+
+// applyQuickLook runs the queued effects of a key in copy mode over the quick
+// look preview. Leaving copy mode, to the pane too (i), goes back to the
+// preview. The editor and hints work on a pane, so they do nothing here.
+func (fx *copyModeEffects) applyQuickLook(o *app.OS) (*app.OS, tea.Cmd) {
+	if fx.exitCopyMode || fx.enterTerminal {
+		o.QuickLookCopyEnd()
+	}
+	o.NoteAction(fx.action)
+	for _, n := range fx.notifications {
+		o.ShowNotification(n.message, n.notyType, n.duration)
+	}
+	if fx.setClipboard {
+		return o, fx.clipboardCmd(o)
+	}
+	return o, nil
 }

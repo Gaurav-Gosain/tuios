@@ -644,7 +644,7 @@ func (d *Daemon) placePaneWindow(cs *connState) (window, via string) {
 }
 
 // grantKind is what a verb needs from a pane: its restricted-connection class
-// (verbScopes), except for the verbs a pane calls about itself that a
+// (the scope on its verb entry), except for the verbs a pane calls about itself that a
 // restricted connection is not given.
 func grantKind(verb string) scopeKind {
 	switch verb {
@@ -658,7 +658,7 @@ func grantKind(verb string) scopeKind {
 		// its handler.
 		return scopeOpen
 	}
-	kind, ok := verbScopes[verb]
+	kind, ok := verbScope(verb)
 	if !ok {
 		return scopeDeny
 	}
@@ -1127,6 +1127,13 @@ func (d *Daemon) typingRefusal(pa *paneAuth, target WindowState, blockedChecked 
 	if target.ID == pa.window {
 		return ""
 	}
+	// What is typed into a child agent on an approval answers it, and that
+	// is the person's alone: no grant, admin included, covers it.
+	if !blockedChecked {
+		if why := d.childApprovalRefusal(pa.window, target); why != "" {
+			return why
+		}
+	}
 	held, _ := d.manager.grants.effective(target.ID)
 	if pa.plugin != "" {
 		held = 0
@@ -1440,7 +1447,8 @@ func (d *Daemon) paneMayRespond(cs *connState, target string) bool {
 //
 // The person, from outside every pane, may give anything. A pane may give
 // only what it holds, and a pane without admin that names nothing gives the
-// new pane its own grants, so starting an agent never widens anything. A
+// new pane its own grants, so starting an agent never widens anything. A pane
+// with admin that names nothing gives the default, cut to what it holds. A
 // machine over a link, and a pane run for another machine, may not give
 // respond, which answering for the person needs.
 func (d *Daemon) launchGrants(cs *connState, requested []string) (*Grants, *verbError) {
@@ -1467,7 +1475,9 @@ func (d *Daemon) launchGrants(cs *connState, requested []string) (*Grants, *verb
 	}
 	if want == nil {
 		if pa.grants.Has(GrantAdmin) {
-			return nil, nil
+			// The default, unless it holds what admin does not: under
+			// strict the list can hold respond (child_clamp.go).
+			return d.clampDefaultGrants(pa), nil
 		}
 		g := pa.grants
 		return &g, nil

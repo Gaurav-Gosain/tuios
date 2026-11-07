@@ -39,6 +39,10 @@ func (m *OS) SetPointerShape(shape PointerShape) {
 	m.writeHostSequence(fmt.Appendf(nil, "\x1b]22;%s\x1b\\", string(shape)))
 }
 
+// CurrentPointer reports the shape of the last OSC 22 write, so tests can
+// assert what the pointer is stuck on without a terminal to read back from.
+func (m *OS) CurrentPointer() PointerShape { return m.currentPointer }
+
 // ResetPointerShape sets the pointer back to default.
 func (m *OS) ResetPointerShape() {
 	m.SetPointerShape(PointerDefault)
@@ -89,7 +93,7 @@ func (m *OS) UpdatePointerForPosition(x, y int) {
 			continue
 		}
 		if x >= win.X && x < win.X+win.Width && y >= win.Y && y < win.Y+win.Height {
-			if z := HitZ(win); z > topZ {
+			if z := HitZ(win); z >= topZ {
 				topZ = z
 				topIdx = i
 			}

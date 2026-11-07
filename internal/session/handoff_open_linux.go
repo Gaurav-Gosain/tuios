@@ -41,7 +41,7 @@ func (b handoffBinary) execPath() string {
 	if b.open == nil {
 		return b.path
 	}
-	return "/proc/self/fd/" + strconv.Itoa(int(b.open.Fd())) //nolint:gosec // a descriptor number
+	return "/proc/self/fd/" + strconv.Itoa(fdNum(b.open))
 }
 
 // isScript reports whether the open file starts with #!. A script cannot run

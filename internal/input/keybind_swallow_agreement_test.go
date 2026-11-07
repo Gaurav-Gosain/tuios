@@ -9,8 +9,9 @@ import (
 )
 
 // The keybind report tells users which keys never reach the program in their
-// pane, and it works that out from its own copy of two predicates the input
-// path owns, because config cannot import input. A report that disagrees with
+// pane. It shares TerminalSafeAction with the input path, but keeps its own
+// copy of the reserved-chord test, because config reads a key as the config
+// writes it and the router reads a decoded key event. A report that disagrees with
 // the router is worse than no report: it is a confident wrong answer about
 // whether the user's editor is going to keep working.
 //
@@ -29,6 +30,7 @@ func TestSwallowSetMatchesTheInputPath(t *testing.T) {
 		// A window verb on a reserved chord: reserved, but not terminal-safe,
 		// so it must reach the shell.
 		kb.WindowManagement["close_window"] = []string{"alt+q"}
+		kb.Workspaces["next_workspace"] = []string{"ctrl+alt+l"}
 	})
 
 	report := o.KeybindRegistry.Report(config.PaneFacts{})
@@ -47,6 +49,7 @@ func TestSwallowSetMatchesTheInputPath(t *testing.T) {
 		{"alt+1", tea.KeyPressMsg{Code: '1', Mod: tea.ModAlt}},
 		{"ctrl+alt+2", tea.KeyPressMsg{Code: '2', Mod: tea.ModCtrl | tea.ModAlt}},
 		{"alt+shift+n", tea.KeyPressMsg{Code: 'n', Mod: tea.ModAlt | tea.ModShift}},
+		{"ctrl+alt+l", tea.KeyPressMsg{Code: 'l', Mod: tea.ModCtrl | tea.ModAlt}},
 		// Bound to a workspace switch, but with no reserved modifier, so the
 		// router leaves it to the shell.
 		{"f1", tea.KeyPressMsg{Code: tea.KeyF1}},
@@ -65,6 +68,7 @@ func TestSwallowSetMatchesTheInputPath(t *testing.T) {
 			kb.Workspaces["switch_workspace_2"] = []string{"ctrl+alt+2"}
 			kb.WindowManagement["next_session"] = []string{"alt+shift+n"}
 			kb.WindowManagement["close_window"] = []string{"alt+q"}
+			kb.Workspaces["next_workspace"] = []string{"ctrl+alt+l"}
 		})
 		router := handleTerminalModeBinds(tc.msg, fresh)
 		if got := swallowed[config.CanonicalKey(tc.key)]; got != router {
@@ -85,7 +89,7 @@ func TestBuiltInSwallowsAreNotConfigurable(t *testing.T) {
 		if s.Origin != "built-in" || s.Action == "leader" {
 			continue
 		}
-		if action := registry.GetTerminalModeAction(s.Key); action != "" {
+		if action := registry.Action(config.TableTerminalMode, s.Key); action != "" {
 			t.Errorf("%s is reported as built-in but the terminal_mode table binds it to %q",
 				s.Key, action)
 		}

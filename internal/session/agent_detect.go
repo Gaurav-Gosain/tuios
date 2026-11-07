@@ -858,6 +858,17 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 				w.AgentHarness = det.harness
 			}
 		case detected && owned:
+			// A program can clear its status and then report idle without
+			// exiting. The clear erased attribution but kept auto ownership,
+			// so restore the identity just as for an unowned program claim.
+			if w.AgentHarness == "" && det.harness != "" && claim.source != AgentSourceReport {
+				out.changed++
+				if write {
+					w.AgentHarness = det.harness
+					claim.harness, claim.identity = det.harness, det.tier
+					s.setAgentClaim(w.ID, claim)
+				}
+			}
 			// Still here. A miss count from an editor it opened is forgotten.
 			if claim.misses != 0 {
 				out.bookkeeping = true

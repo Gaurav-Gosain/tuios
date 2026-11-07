@@ -400,6 +400,11 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 		if pipLayer := m.renderPiP(); pipLayer != nil {
 			layers = append(layers, pipLayer)
 		}
+		// The worktree setup card, at the top right. See
+		// worktree_setup_card.go.
+		if card := m.renderSetupCard(); card != nil {
+			layers = append(layers, card)
+		}
 		overlays := m.renderOverlays()
 		layers = append(layers, overlays...)
 
@@ -863,9 +868,11 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	// Every panel is drawn by renderOverlays, which the fast path skips. The
 	// panels are asked through eachOverlayGate, the list mouse routing reads,
 	// so a panel added there cannot open over a lone pane unseen while it
-	// takes every key. The rest are the surfaces that list does not carry.
+	// takes every key. The rest are the surfaces that list does not carry,
+	// among them the paste preview, which takes no key and so is not a panel,
+	// but is drawn by renderOverlays all the same.
 	if m.AnyOverlayOpen() || m.ShowScrollbackBrowser || m.ShowCacheStats || m.ShowTapeManager || m.ShowTapeReview ||
-		m.PrefixActive || m.ContextMenu != nil || m.pathPicker != nil || m.Capture.Active || m.review.open {
+		m.PrefixActive || m.ContextMenu != nil || m.pathPicker != nil || m.pastePreviewOn() || m.Capture.Active || m.review.open {
 		return nil, false
 	}
 	if m.TapeRecorder != nil && m.TapeRecorder.IsRecording() {
@@ -932,6 +939,11 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	// background is painted. With one painted, the box's cells would need the
 	// same paint pass the pane gets, so the compositor draws the frame.
 	if m.pipWanted() && m.fastPathPaints() {
+		return nil, false
+	}
+	// The worktree setup card is a layer only the compositor draws. It is up
+	// while a setup runs and briefly after, so the fast path steps aside then.
+	if m.setupCardRecord() != nil {
 		return nil, false
 	}
 	// The sidebar is a reserved-region layer the fast path does not compose. When

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/hints"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
@@ -47,6 +48,9 @@ type UserConfig struct {
 	// Hints is the [hints] table: what hints mode labels on a pane. See
 	// hints.go.
 	Hints HintsConfig `toml:"hints"`
+	// Links is the [links] table: rules that turn plain text, such as a
+	// ticket ID, into links. See links.go.
+	Links LinksConfig `toml:"links"`
 	// Panes is the [panes] table: the keys display_panes labels the panes
 	// with. See panes.go.
 	Panes PanesConfig `toml:"panes"`
@@ -444,6 +448,7 @@ type AppearanceConfig struct {
 	FocusWrap                *bool                   `toml:"focus_wrap"`                   // A focus key at the edge of a tiled layout moves to the pane on the far side (default: false)
 	FocusFollowsMouse        *bool                   `toml:"focus_follows_mouse"`          // Focus the pane under the cursor as the mouse moves (default: false)
 	FocusFollowsMousePause   string                  `toml:"focus_follows_mouse_pause"`    // The key that pauses focus_follows_mouse while held: ctrl, alt, off (default: off)
+	PastePreview             *bool                   `toml:"paste_preview"`                // Show a pasted image in a card at the cursor for a few seconds (default: true)
 	AltDrag                  *bool                   `toml:"alt_drag"`                     // Alt + left-drag moves a pane (default: true)
 	RightClickOpensMenu      *bool                   `toml:"right_click_opens_menu"`       // A plain right-click on a pane in terminal mode opens the pane menu (default: false)
 	KittyPlaceholders        string                  `toml:"kitty_placeholders"`           // Draw kitty Unicode placeholder images: auto, on, off (default: auto)
@@ -1129,7 +1134,7 @@ type KeybindingsConfig struct {
 	// into. See getDefaultListsKeybinds.
 	Lists map[string][]string `toml:"lists"`
 	// Sidebar binds are looked up only while the rail owns the keyboard
-	// (SidebarFocused), through GetSidebarAction. They are deliberately kept out
+	// (SidebarFocused), through Action(TableSidebar). They are deliberately kept out
 	// of buildMappings: that flattens sections into the global keymap, which would
 	// leak rail keys (j/k/h/l/enter) onto panes.
 	Sidebar map[string][]string `toml:"sidebar"`
@@ -1146,7 +1151,7 @@ type KeybindingsConfig struct {
 	QuickLook       map[string][]string `toml:"quick_look"`
 	QuickLookInside map[string][]string `toml:"quick_look_inside"`
 	// Inbox binds are live while the Inbox is open and its selector line is
-	// not, through GetInboxAction. The digits 1 to 9 are not in it: they
+	// not, through Action(TableInbox). The digits 1 to 9 are not in it: they
 	// answer a held approval or a question by its number, which is the number
 	// the prompt itself shows. See getDefaultInboxKeybinds.
 	Inbox map[string][]string `toml:"inbox"`
@@ -1354,7 +1359,7 @@ func DefaultConfig() *UserConfig {
 				// Enter the sidebar rail's keyboard scope; s is free in window mode.
 				"focus_sidebar": {"s"},
 				// Walking sessions is a chord, not a letter, so it also works while
-				// typing in a shell (see isTerminalSafeAction). Spell the shift out:
+				// typing in a shell (see TerminalSafeAction). Spell the shift out:
 				// "alt+N" normalizes to alt+n, which is already next-window.
 				"next_session": {"alt+shift+n"},
 				"prev_session": {"alt+shift+p"},
@@ -1858,8 +1863,10 @@ const (
 	ActionInboxExpand  = "inbox_expand"
 	ActionInboxFold    = "inbox_fold"
 	// The thread's previous and next prompt, the marks on its ruler.
-	ActionInboxPromptPrev   = "inbox_prompt_prev"
-	ActionInboxPromptNext   = "inbox_prompt_next"
+	ActionInboxPromptPrev = "inbox_prompt_prev"
+	ActionInboxPromptNext = "inbox_prompt_next"
+	// The step through the agents the thread's cards started.
+	ActionInboxChild        = "inbox_child"
 	ActionAgentUnread       = "agent_unread"
 	ActionAgentSnooze       = "agent_snooze"
 	ActionAgentReply        = "agent_reply"
@@ -1953,6 +1960,7 @@ func getDefaultInboxKeybinds() map[string][]string {
 		// [ and ] step the tabs, so the prompt jumps take the braces.
 		ActionInboxPromptPrev: {"{"},
 		ActionInboxPromptNext: {"}"},
+		ActionInboxChild:      {"."},
 	}
 }
 
@@ -2113,6 +2121,7 @@ func getDefaultQuickLookInsideKeybinds() map[string][]string {
 		"line_up":      {"k", "up"},
 		"column_left":  {"h", "left"},
 		"column_right": {"l", "right"},
+		"open_details": {"enter"},
 		"next_view":    {"v"},
 		"half_down":    {"d", "ctrl+d", "J", "pgdown"},
 		"half_up":      {"u", "ctrl+u", "K", "pgup"},
@@ -2126,6 +2135,7 @@ func getDefaultQuickLookInsideKeybinds() map[string][]string {
 		"go_to":        {":"},
 		"wrap":         {"w"},
 		"filmstrip":    {"t"},
+		ActionCopyMode: {"["},
 	}
 }
 
@@ -2742,37 +2752,20 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 
 	// ZenMode only takes one of its three values, so a typo in the config lands
 	// on the default the validator warned it would fall back to.
-	if slices.Contains(ZenModeModes, cfg.Appearance.ZenMode) {
-		s.ZenMode = cfg.Appearance.ZenMode
-	} else if cfg.Appearance.ZenMode != "" {
-		s.ZenMode = ZenModeDisabled
-	}
+	s.ZenMode = closedSetValue(cfg.Appearance.ZenMode, ZenModeModes, s.ZenMode, ZenModeDisabled)
 
 	// TilingScheme takes the same shape: a typo falls back to spiral, which is
 	// what a new workspace already defaulted to before this setting existed.
-	if slices.Contains(TilingSchemes, cfg.Appearance.TilingScheme) {
-		s.TilingScheme = cfg.Appearance.TilingScheme
-	} else if cfg.Appearance.TilingScheme != "" {
-		s.TilingScheme = TilingSchemeSpiral
-	}
+	s.TilingScheme = closedSetValue(cfg.Appearance.TilingScheme, TilingSchemes, s.TilingScheme, TilingSchemeSpiral)
 
 	// Links takes the same shape: a typo falls back to the default rather than
 	// leaving the pointer with no policy at all.
-	if slices.Contains(LinkModes, cfg.Appearance.Links) {
-		s.Links = cfg.Appearance.Links
-	} else if cfg.Appearance.Links != "" {
-		s.Links = LinksAll
-	}
-	if slices.Contains(LinkClickModes, cfg.Appearance.LinkClick) {
-		s.LinkClick = cfg.Appearance.LinkClick
-	} else if cfg.Appearance.LinkClick != "" {
-		s.LinkClick = LinkClickBoth
-	}
-	if slices.Contains(LinkHoverModes, cfg.Appearance.LinkHover) {
-		s.LinkHover = cfg.Appearance.LinkHover
-	} else if cfg.Appearance.LinkHover != "" {
-		s.LinkHover = LinkHoverSafe
-	}
+	s.Links = closedSetValue(cfg.Appearance.Links, LinkModes, s.Links, LinksAll)
+	s.LinkClick = closedSetValue(cfg.Appearance.LinkClick, LinkClickModes, s.LinkClick, LinkClickBoth)
+	s.LinkHover = closedSetValue(cfg.Appearance.LinkHover, LinkHoverModes, s.LinkHover, LinkHoverSafe)
+	// Rules that do not compile are skipped here and reported by the
+	// validator, so a reload with a typo keeps the rest working.
+	s.LinkRules, _ = hints.CompileLinkRules(cfg.Links.Specs())
 	s.LinkOpener = strings.TrimSpace(cfg.Appearance.LinkOpener)
 	// A typo lands on the default, which is what the validator says.
 	if slices.Contains(DropPreviewModes, cfg.Appearance.DropPreview) {
@@ -2785,11 +2778,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// DockbarPosition defaults to top. A typo lands on that default, which is
 	// what the validator says it falls back to; left as written, the renderer
 	// would treat it as bottom.
-	if slices.Contains(DockbarPositions, cfg.Appearance.DockbarPosition) {
-		s.DockbarPosition = cfg.Appearance.DockbarPosition
-	} else if cfg.Appearance.DockbarPosition != "" {
-		s.DockbarPosition = DefaultDockbarPosition
-	}
+	s.DockbarPosition = closedSetValue(cfg.Appearance.DockbarPosition, DockbarPositions, s.DockbarPosition, DefaultDockbarPosition)
 
 	// Sidebar. Also runs for a config that never went through LoadUserConfig (the
 	// settings page builds one in memory), so an old flat key reaches the globals
@@ -2839,11 +2828,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if sb.Enabled != nil {
 		s.SidebarEnabled = *sb.Enabled
 	}
-	if slices.Contains(SidebarPositions, sb.Position) {
-		s.SidebarPosition = sb.Position
-	} else if sb.Position != "" {
-		s.SidebarPosition = DefaultSidebarPosition
-	}
+	s.SidebarPosition = closedSetValue(sb.Position, SidebarPositions, s.SidebarPosition, DefaultSidebarPosition)
 	if sb.Width > 0 {
 		s.SidebarWidth = sb.Width
 	}
@@ -2895,11 +2880,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 	// A typo reads as the default, the same contract the other enum options
 	// keep.
-	if slices.Contains(RailHeaderCases, sb.HeaderCase) {
-		s.RailHeaderCase = sb.HeaderCase
-	} else if sb.HeaderCase != "" {
-		s.RailHeaderCase = RailHeaderLowercase
-	}
+	s.RailHeaderCase = closedSetValue(sb.HeaderCase, RailHeaderCases, s.RailHeaderCase, RailHeaderLowercase)
 	s.RailRowStyle = RailRowBar
 	if slices.Contains(RailRowStyles, sb.RowStyle) {
 		s.RailRowStyle = sb.RowStyle
@@ -2992,11 +2973,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 	// A typo lands on the default, as the validator says; left as written, the
 	// renderer would draw it as thin.
-	if slices.Contains(ScrollbarStyles, cfg.Appearance.Scrollbar.Style) {
-		s.ScrollbarStyle = cfg.Appearance.Scrollbar.Style
-	} else if cfg.Appearance.Scrollbar.Style != "" {
-		s.ScrollbarStyle = ScrollbarStyleTrack
-	}
+	s.ScrollbarStyle = closedSetValue(cfg.Appearance.Scrollbar.Style, ScrollbarStyles, s.ScrollbarStyle, ScrollbarStyleTrack)
 	// The glyph and tint keys are assigned as written, empty included: empty is
 	// the "use the style's default" state, and the getters below resolve it. A
 	// value that does not measure one cell is rejected there too, so an edit
@@ -3197,11 +3174,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 
 	// WindowTitlePosition defaults to top, and a typo lands there too; left as
 	// written, the renderer would draw it at the bottom.
-	if slices.Contains(WindowTitlePositions, cfg.Appearance.WindowTitlePosition) {
-		s.WindowTitlePosition = cfg.Appearance.WindowTitlePosition
-	} else if cfg.Appearance.WindowTitlePosition != "" {
-		s.WindowTitlePosition = DefaultWindowTitlePosition
-	}
+	s.WindowTitlePosition = closedSetValue(cfg.Appearance.WindowTitlePosition, WindowTitlePositions, s.WindowTitlePosition, DefaultWindowTitlePosition)
 
 	s.WindowTitleStyle = DefaultWindowTitleStyle
 	if slices.Contains(WindowTitleStyles, cfg.Appearance.WindowTitleStyle) {
@@ -3244,6 +3217,10 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// settings page survives a reload just as turning it on does.
 	if cfg.Appearance.FocusFollowsMouse != nil {
 		s.FocusFollowsMouse = *cfg.Appearance.FocusFollowsMouse
+	}
+	// PastePreview defaults to true; a pointer so turning it off survives.
+	if cfg.Appearance.PastePreview != nil {
+		s.PastePreview = *cfg.Appearance.PastePreview
 	}
 	// The pause key keeps only ctrl or alt. Off, empty and a typo all leave
 	// hover focus unpaused, which is what the validator warns a typo becomes.
@@ -3299,11 +3276,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 
 	// ClickToType only takes one of its three values, so a typo in the config
 	// lands on the default the validator warned it would fall back to.
-	if slices.Contains(ClickToTypeModes, cfg.Appearance.ClickToType) {
-		s.ClickToType = cfg.Appearance.ClickToType
-	} else if cfg.Appearance.ClickToType != "" {
-		s.ClickToType = ClickToTypeDouble
-	}
+	s.ClickToType = closedSetValue(cfg.Appearance.ClickToType, ClickToTypeModes, s.ClickToType, ClickToTypeDouble)
 
 	// WordCharacters is a pointer so an explicitly empty string can mean "no
 	// punctuation is part of a word", which is different from "unset".
@@ -3756,98 +3729,10 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	}
 
 	// Initialize nil maps
-	if cfg.Keybindings.WindowManagement == nil {
-		cfg.Keybindings.WindowManagement = make(map[string][]string)
-	}
-	if cfg.Keybindings.Workspaces == nil {
-		cfg.Keybindings.Workspaces = make(map[string][]string)
-	}
-	if cfg.Keybindings.Layout == nil {
-		cfg.Keybindings.Layout = make(map[string][]string)
-	}
-	if cfg.Keybindings.ModeControl == nil {
-		cfg.Keybindings.ModeControl = make(map[string][]string)
-	}
-	if cfg.Keybindings.System == nil {
-		cfg.Keybindings.System = make(map[string][]string)
-	}
-	if cfg.Keybindings.Navigation == nil {
-		cfg.Keybindings.Navigation = make(map[string][]string)
-	}
-	if cfg.Keybindings.RestoreMinimized == nil {
-		cfg.Keybindings.RestoreMinimized = make(map[string][]string)
-	}
-	if cfg.Keybindings.PrefixMode == nil {
-		cfg.Keybindings.PrefixMode = make(map[string][]string)
-	}
-	if cfg.Keybindings.WindowPrefix == nil {
-		cfg.Keybindings.WindowPrefix = make(map[string][]string)
-	}
-	if cfg.Keybindings.MinimizePrefix == nil {
-		cfg.Keybindings.MinimizePrefix = make(map[string][]string)
-	}
-	if cfg.Keybindings.WorkspacePrefix == nil {
-		cfg.Keybindings.WorkspacePrefix = make(map[string][]string)
-	}
-	if cfg.Keybindings.DebugPrefix == nil {
-		cfg.Keybindings.DebugPrefix = make(map[string][]string)
-	}
-	if cfg.Keybindings.TapePrefix == nil {
-		cfg.Keybindings.TapePrefix = make(map[string][]string)
-	}
-	if cfg.Keybindings.LayoutPrefix == nil {
-		cfg.Keybindings.LayoutPrefix = make(map[string][]string)
-	}
-	if cfg.Keybindings.TuiosPrefix == nil {
-		cfg.Keybindings.TuiosPrefix = make(map[string][]string)
-	}
-	if cfg.Keybindings.TerminalMode == nil {
-		cfg.Keybindings.TerminalMode = make(map[string][]string)
-	}
-	if cfg.Keybindings.Global == nil {
-		cfg.Keybindings.Global = make(map[string][]string)
-	}
-	if cfg.Keybindings.Script == nil {
-		cfg.Keybindings.Script = make(map[string][]string)
-	}
-	if cfg.Keybindings.Lists == nil {
-		cfg.Keybindings.Lists = make(map[string][]string)
-	}
-	if cfg.Keybindings.Sidebar == nil {
-		cfg.Keybindings.Sidebar = make(map[string][]string)
-	}
-	if cfg.Keybindings.SidebarFiles == nil {
-		cfg.Keybindings.SidebarFiles = make(map[string][]string)
-	}
-	if cfg.Keybindings.QuickLook == nil {
-		cfg.Keybindings.QuickLook = make(map[string][]string)
-	}
-	if cfg.Keybindings.QuickLookInside == nil {
-		cfg.Keybindings.QuickLookInside = make(map[string][]string)
-	}
-	if cfg.Keybindings.SidebarAgents == nil {
-		cfg.Keybindings.SidebarAgents = make(map[string][]string)
-	}
-	if cfg.Keybindings.Inbox == nil {
-		cfg.Keybindings.Inbox = make(map[string][]string)
-	}
-	if cfg.Keybindings.InboxPeek == nil {
-		cfg.Keybindings.InboxPeek = make(map[string][]string)
-	}
-	if cfg.Keybindings.Mail == nil {
-		cfg.Keybindings.Mail = make(map[string][]string)
-	}
-	if cfg.Keybindings.Transfers == nil {
-		cfg.Keybindings.Transfers = make(map[string][]string)
-	}
-	if cfg.Keybindings.GUI == nil {
-		cfg.Keybindings.GUI = make(map[string][]string)
-	}
-	if cfg.Keybindings.CopyMode == nil {
-		cfg.Keybindings.CopyMode = make(map[string][]string)
-	}
-	if cfg.Keybindings.Review == nil {
-		cfg.Keybindings.Review = make(map[string][]string)
+	for _, t := range keybindTables {
+		if f := t.field(&cfg.Keybindings); *f == nil {
+			*f = make(map[string][]string)
+		}
 	}
 
 	migrateLegacyKeybinds(cfg)
@@ -4038,6 +3923,7 @@ var yieldingDefaults = map[string]bool{
 	"inbox_tab_next":     true,
 	"inbox_expand":       true,
 	"inbox_fold":         true,
+	"inbox_child":        true,
 	// ctrl+alt+N (ctrl+opt+N on macOS), the first default for
 	// send_to_workspace_N.
 	"send_to_workspace_1": true,
@@ -4205,39 +4091,11 @@ type keybindSection struct {
 
 func keybindSectionPairs(cfg, defaultCfg *UserConfig) []keybindSection {
 	c, d := &cfg.Keybindings, &defaultCfg.Keybindings
-	return []keybindSection{
-		{"window_management", c.WindowManagement, d.WindowManagement},
-		{"workspaces", c.Workspaces, d.Workspaces},
-		{"layout", c.Layout, d.Layout},
-		{"mode_control", c.ModeControl, d.ModeControl},
-		{"system", c.System, d.System},
-		{"navigation", c.Navigation, d.Navigation},
-		{"restore_minimized", c.RestoreMinimized, d.RestoreMinimized},
-		{"prefix_mode", c.PrefixMode, d.PrefixMode},
-		{"window_prefix", c.WindowPrefix, d.WindowPrefix},
-		{"minimize_prefix", c.MinimizePrefix, d.MinimizePrefix},
-		{"workspace_prefix", c.WorkspacePrefix, d.WorkspacePrefix},
-		{"debug_prefix", c.DebugPrefix, d.DebugPrefix},
-		{"tape_prefix", c.TapePrefix, d.TapePrefix},
-		{"layout_prefix", c.LayoutPrefix, d.LayoutPrefix},
-		{"tuios_prefix", c.TuiosPrefix, d.TuiosPrefix},
-		{"terminal_mode", c.TerminalMode, d.TerminalMode},
-		{"sidebar", c.Sidebar, d.Sidebar},
-		{"sidebar_files", c.SidebarFiles, d.SidebarFiles},
-		{"sidebar_agents", c.SidebarAgents, d.SidebarAgents},
-		{"quick_look", c.QuickLook, d.QuickLook},
-		{"quick_look_inside", c.QuickLookInside, d.QuickLookInside},
-		{"inbox", c.Inbox, d.Inbox},
-		{"inbox_peek", c.InboxPeek, d.InboxPeek},
-		{"mail", c.Mail, d.Mail},
-		{"transfers", c.Transfers, d.Transfers},
-		{"copy_mode", c.CopyMode, d.CopyMode},
-		{"review", c.Review, d.Review},
-		{"gui", c.GUI, d.GUI},
-		{"global", c.Global, d.Global},
-		{"script", c.Script, d.Script},
-		{"lists", c.Lists, d.Lists},
+	pairs := make([]keybindSection, 0, len(keybindTables))
+	for _, t := range keybindTables {
+		pairs = append(pairs, keybindSection{t.name, *t.field(c), *t.field(d)})
 	}
+	return pairs
 }
 
 // dropStaleDuplicateKeys resolves a key that two actions in the same section
@@ -4340,5 +4198,19 @@ func (a *AppearanceConfig) BorderOverrides() theme.BorderOverrides {
 		FocusedWindow:   a.BorderFocusedColorWindow,
 		FocusedTerminal: a.BorderFocusedColorTerminal,
 		Unfocused:       a.BorderUnfocusedColor,
+	}
+}
+
+// closedSetValue is value when it is one of set, current when value is empty
+// (the file leaves the option alone), and fallback for anything else: a typo
+// reads as the default, and validation warns about it.
+func closedSetValue[T ~string](value T, set []T, current, fallback T) T {
+	switch {
+	case slices.Contains(set, value):
+		return value
+	case value == "":
+		return current
+	default:
+		return fallback
 	}
 }

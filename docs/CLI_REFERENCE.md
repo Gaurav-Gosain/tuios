@@ -893,7 +893,7 @@ with a warning.
 
 **Usage:**
 ```bash
-tuios worktree new <branch> [--repo <dir>] [--base <ref>] [--name <session>] [--agent <cli>] [--host <host> [--clone]] [--detach]
+tuios worktree new <branch> [--repo <dir>] [--base <ref>] [--name <session>] [--agent <cli>] [--setup <command> [--setup-async]] [--host <host> [--clone]] [--detach]
 tuios worktree ls [--repo <name>] [--group <stem>] [--host <host>] [--json]
 tuios worktree rm [<host>:]<session> [--stash | --force] [--keep-session]
 tuios worktree diff <session> [--stat]
@@ -904,6 +904,7 @@ tuios worktree pull <host>:<session> [--repo <dir>] [--branch <name>] [--name <s
 ```bash
 tuios worktree new feat/retry                          # A new branch from HEAD, attached
 tuios worktree new feat/retry --agent claude --detach  # Headless, running Claude Code
+tuios worktree new feat/retry --agent claude --setup 'pnpm i'  # Install, then start Claude Code
 tuios worktree ls                                      # Repo, branch, agent state, changes, merged
 tuios worktree rm api-feat-retry --stash               # Keep the changes in git stash
 ```
@@ -917,6 +918,15 @@ An `after-new-worktree` hook runs in the new worktree before its first window
 starts, for example to copy `.env` from the main checkout. See
 [HOOKS.md](HOOKS.md). When the hook fails, `worktree new` prints a warning
 and keeps the worktree and the session.
+
+`--setup` runs a shell command in the new worktree, in a window named `setup`,
+before the agent or shell starts. `[worktree] setup` sets one for every
+worktree (see [Setup before the agent](CONFIGURATION.md#setup-before-the-agent)).
+The agent starts when the setup passes. When the setup fails, tuios removes the
+new worktree and the branch it made, if they hold no change and no commit. The
+session stays with the setup window open. `--setup-async` starts the agent at
+once, and a failed setup then keeps the worktree and the branch. The SETUP
+column of `worktree ls` shows the state, and the exit status of a failure.
 
 `worktree rm` refuses a worktree with uncommitted changes and removes nothing.
 `--stash` keeps the changes in git stash as `tuios: <branch>`. `--force`
@@ -975,7 +985,7 @@ Fan a prompt out across several agents, each in its own worktree.
 
 **Usage:**
 ```bash
-tuios fan <count> --agent <agent>[,<agent>...] [--env NAME[=VALUE]]... [--repo <dir>] [--base <ref>] [--name <stem>] [--host <host> [--clone]] [--wait] <prompt>
+tuios fan <count> --agent <agent>[,<agent>...] [--env NAME[=VALUE]]... [--repo <dir>] [--base <ref>] [--name <stem>] [--setup <command> [--setup-async]] [--host <host> [--clone]] [--wait] <prompt>
 tuios fan [<count>] --agent <agent>[,<agent>...] --prompt <prompt> --prompt <prompt>... [flags]
 tuios fan keep [<host>:]<session> [--stash | --force] [--merge [--squash | --ff-only] [--into <branch>]]
 tuios fan compare [[<host>:]<session>] [--no-changes] [--json]
@@ -1170,6 +1180,43 @@ report says idle. A permission the agent asks for is answered in the pane with
 a number key, or from the Inbox when one line shows the whole request, with no
 `[agents.approvals]` needed. A daemon older than `--protocol` refuses it by
 name.
+
+### `tuios delegate`
+
+Hand a task to a child agent, and get its answer back as mail.
+
+**Usage:**
+```bash
+tuios delegate '<task>' [--agent <agent>] [--role <role>] [--isolation shared|worktree] [--wait <duration>] [--name <name>] [-s <session>] [--cwd <dir>] [--parent <window>] [--grants <grant>[,<grant>...]] [--env NAME[=VALUE]]... [--ready-timeout <ms>] [--json] [-- <args>...]
+```
+
+The command starts the agent with `start-agent`, links it to you as its
+parent, and types the task as its first prompt. Without `--wait` it returns at
+once, and you end your turn. When the child finishes, tuios sends its answer
+to you as mail from the child, with the subject `Delegated task done: ROLE`.
+The mail wake then types one line into your pane once you are at rest. A
+question the child stops on comes as mail too. An approval stays in the Inbox.
+
+`--wait` returns the outcome instead, at most `10m`: `done`, `errored`,
+`question`, `approval` or `timeout`. The end of the wait does not stop the
+child, and its answer then comes as mail when there is a parent.
+
+`--isolation worktree` starts the child in a new worktree, in a session of its
+own, made from the commit of your checkout. It does not have your uncommitted
+changes. `--role` is `implementation`, `research`, `review`, `design`, `test`
+or `general`. `research` and `review` give the child the `read` grant unless
+`--grants` says otherwise. `--agent` defaults to your own harness.
+
+A child is never wider than its parent: the grants and permission mode rules
+of `start-agent` apply. From outside every pane, name the parent with
+`--parent` or pass `--wait`. The command exits 1 when the task was not typed
+into the child.
+
+**Examples:**
+```bash
+tuios delegate --role review 'Review the diff on this branch and list the bugs.'
+tuios delegate --agent codex --isolation worktree --role test --wait 10m 'Add tests for the parser.'
+```
 
 ### `tuios agent-proto`
 
@@ -1471,12 +1518,14 @@ tuios daemon upgrade [flags]
 **Flags:**
 - `--binary <path>`: The tuios binary to run the daemon as (default: the tuios running the command)
 - `--json`: Print the outcome as one JSON object
+- `--or-restart`: When the daemon cannot be upgraded live, restart it with the binary instead, which ends running programs. With no daemon running, start one
 
 **Examples:**
 ```bash
 tuios daemon upgrade
 tuios daemon upgrade --binary ~/bin/tuios-next
 tuios --server test daemon upgrade --binary ./tuios   # upgrades only the daemon named test
+tuios daemon upgrade --binary ~/.local/bin/tuios --or-restart   # live where it can, else a restart
 ```
 
 **Output:**
@@ -1487,7 +1536,7 @@ Starting v0.10.1 in place (pid 8615 kept)...
 Upgraded in 0.06 s. 4 panes and their programs kept.
 ```
 
-With attached clients the last line adds how many were told to attach again, such as ` 2 attached clients were told to attach again.` `--json` prints one object with `pid`, `from`, `to`, `binary`, `panes`, `clients`, `seconds`, `fallback`, `recovered`, `instance` and `handoff`, the measurements of the handoff in the shape of `hello`'s `upgrade` field (see [protocol.md](protocol.md#hello)).
+With attached clients the last line adds how many the upgrade dropped, such as ` 2 attached clients were dropped; tuios clients on this machine reattach by themselves.` `--json` prints one object with `action`, `pid`, `from`, `to`, `binary`, `panes`, `clients`, `seconds`, `fallback`, `recovered`, `instance` and `handoff`, the measurements of the handoff in the shape of `hello`'s `upgrade` field (see [protocol.md](protocol.md#hello)). `action` is what happened: `upgraded` live, `restarted` or `started` by `--or-restart`, `fallback` to the old binary (also after a recovery by the keeper), `refused` with nothing changed, or `failed`. `reason` says why the daemon was not upgraded live, and `unconfirmed` is set when that was the person not answering Yes in the dialog. `error` holds the failure when the command fails. The object is printed on a failure too, and the error goes to stderr.
 
 **How it runs:**
 1. The binary is run once as `<binary> daemon handoff-accepts`, before anything pauses. A binary that does not run, or reads another handoff version, is refused and nothing changes. A tuios from before live upgrades fails this check. Before that run, the command and the daemon refuse a binary owned by neither you nor root, or one its group or others can write. The daemon runs and execs the very file it checked, so renaming a folder on the path afterwards cannot put another file in its place. On Linux it runs the open file. On macOS and other systems it runs a private copy of the file in its own state folder. A script, such as a wrapper, still runs by its path. A binary you cannot read, only run, runs by its path on macOS. For these two, keep the binary in folders no other user can write.
@@ -1503,6 +1552,8 @@ With attached clients the last line adds how many were told to attach again, suc
 - A pane's `close_on_exit` is not carried: after the upgrade, a window whose program exits with no client attached stays open.
 
 **Refusals:** the command exits 1 with `upgrade_refused` and nothing changes when the daemon runs on Windows, is embedded in another program (`tuios-web`, the SSH server), holds panes hosted here for another machine or a window whose process runs on another machine, is running a `tuios fan verify` check, or is running a popup with `capture_stdout`. A second upgrade while one runs is refused as `busy`. Run from inside a pane, the upgrade waits for the person: every attached client shows a dialog with the binary's full path, its version, and the pane that asked by its title, id and session. No is the default, and only a key pressed at a client answers it: Down or Right moves to Yes, any other key, Tab included, moves back to No, and Enter chooses. The first answer closes the dialog on the other clients. No, Esc, 60 seconds without an answer, no client attached that shows the dialog (a view-only client, a `gui-bridge` renderer and a client too old for the dialog do not), or the agent features turned off refuses it with `forbidden` and `daemon-upgrade is for the person`, followed by which of these it was and what to do, and nothing changes. A plugin is refused the same way without a dialog. A daemon from before live upgrades answers `unknown_verb`, and the command says to restart it with `tuios restart-server`, which stops every program in every pane. On Windows, `tuios restart-server` is the way to move to another build.
+
+**With `--or-restart`:** an upgrade that cannot start is a restart instead. That covers a daemon from before live upgrades, a refusal, a binary that fails the preflight, a daemon that speaks another control protocol, and Windows. The command prints `Not upgraded live: <reason>.`, then runs `<binary> kill-server`, which saves every session, and `<binary> start-server`, which restores them with their layout and new shells. Both run on the server the command runs on. Before it stops anything it checks that the binary runs at all, so a binary that is not a tuios stops nothing. It runs the binary by its path three times, and before each run it checks that the path still names the file it checked, so a file put there in between is never run. It reports `restarted` or `started` only once a daemon answers after `start-server`, and for a restart only when that daemon is not the old one; otherwise the command fails and says which. With no daemon running, it starts one with the binary and reports `started`. A daemon that went back to its old binary (below) is never restarted: every program in it still runs, and the command fails so the reason can be read in `tuios logs`. Nor is a binary owned by neither you nor root, or one its group or others can write: the command checks that before it runs the file at all, reports `refused`, and neither restarts a daemon nor starts one. Nor is a running daemon when the command runs in a pane (`TUIOS_PANE_ID` is set), whatever stopped the live upgrade: the restart's `kill-server` would end that pane and the command in it before `start-server` ran, and leave no daemon. The command reports `refused`, says the daemon was not restarted, and exits 1. When the refusal was the dialog's, because no Yes came, `unconfirmed` is set too. `scripts/install.sh`, `tuios hosts sync --restart` and `just restart` move the daemon this way.
 
 **Fallback:** at start the daemon keeps the binary it runs at `<state>/handoff/tuios.prev` (a hard link, or a copy across file systems; one per server). If the new binary starts and cannot take the panes over (an error, a panic, or a 30 second watchdog), the daemon execs `tuios.prev`, which takes them back. The command then says the new binary could not take the panes over and the daemon went back to the old version, that every program is still running, to see `tuios logs`, and exits 1.
 
@@ -4438,7 +4489,7 @@ An enabled plugin runs with your rights. Grants are not a sandbox. See
 | `tuios transfers` | List the copies the daemon runs, and pause, resume, cancel, wait for or clear them (also `tuios copies`). See [below](#tuios-transfers) |
 | `tuios hosts tailnet` | List the machines on your tailnet and which are offered as addresses |
 | `tuios hosts signin [name]` | Open the Tailscale sign-in page of each host that waits for one, or of the named host. With no desktop, it prints the address. `--print`, `--json`. See [Tailscale SSH check mode](SESSIONS.md#tailscale-ssh-check-mode) |
-| `tuios hosts sync [host...]` | Install the tuios version of this machine on the hosts in the `[hosts]` table, every host when none is named. `--dev` builds a checkout (`--src DIR`, or the current folder), `--binary PATH` sends a file, and a release build fetches its own release. The daemon on a host keeps its old version unless `--restart` is given, which lists what a restart ends and asks first (`--yes` without a terminal). `--start` starts each daemon that does not run, after the install. `--dry-run`, `--json`, `--local`. See [below](#tuios-hosts-sync) |
+| `tuios hosts sync [host...]` | Install the tuios version of this machine on the hosts in the `[hosts]` table, every host when none is named. `--dev` builds a checkout (`--src DIR`, or the current folder), `--binary PATH` sends a file, and a release build fetches its own release. The daemon on a host keeps its old version unless `--restart` is given, which upgrades it live where it can and restarts it where it cannot, listing what a restart would end and asking first (`--yes` without a terminal). `--start` starts each daemon that does not run, after the install. `--dry-run`, `--json`, `--local`. See [below](#tuios-hosts-sync) |
 | `tuios pair` | Show a QR code that adds this machine to a phone. The phone sends its key, and you accept it. The key can only open a tuios link, with the policy of a new `[hosts.DEVICE]` table. See [below](#tuios-pair) |
 | `tuios stdio-proxy [--as NAME]` | Hidden. What the other machine's daemon runs over ssh for a link. `--as` pins the name this machine's link policy is resolved for, whatever the other machine calls itself: put it in a forced command in `authorized_keys` (`command="tuios stdio-proxy --as laptop",restrict ...`) to make the policy a boundary. See [What another machine may do here](CONFIGURATION.md#what-another-machine-may-do-here) |
 
@@ -4815,7 +4866,7 @@ Install the tuios version of this machine on the hosts in the `[hosts]` table.
 tuios hosts sync --dry-run          # the plan, and no change
 tuios hosts sync --dev              # install a build of this checkout on every host
 tuios hosts sync build lab          # only these hosts
-tuios hosts sync build --restart    # install, then restart the daemon on build
+tuios hosts sync build --restart    # install, then upgrade the daemon on build live, else restart it
 tuios hosts sync build --start      # install if needed, then start the daemon if it does not run
 tuios hosts sync --service          # install the daemon service on each host that has none
 tuios hosts sync --restart --yes --json
@@ -4826,10 +4877,10 @@ tuios hosts sync --restart --yes --json
 | `--dev` | Build the binary from a tuios checkout: `--src DIR`, or else the folder you are in. The version is `dev+COMMIT`, and `dev+COMMIT-dirty.HASH` for a tree with changes |
 | `--src DIR` | The checkout to build. Sets `--dev` |
 | `--binary PATH` | Send this binary. A host with a different system fails |
-| `--restart` | Restart each daemon whose version is different |
+| `--restart` | Move each daemon whose version is different onto the new binary: live where it can, else by a restart |
 | `--start` | Start the daemon on each host where it does not run |
 | `--service` | Install the daemon service on each host that has none. See `tuios daemon install-service` |
-| `--yes`, `-y` | Restart without a question. Needed for `--restart` without a terminal |
+| `--yes`, `-y` | Move the daemons without a question. Needed for `--restart` without a terminal |
 | `--dry-run` | Show the plan and change nothing |
 | `--json` | Print the result as JSON |
 | `--local` | Sync this machine too. Naming `local` does the same |
@@ -4855,16 +4906,18 @@ find it there. sync never uses sudo. It writes the binary to a temporary file
 in the same folder, checks its size and sha256, runs `--version` on it, and
 then renames it into place. A daemon that runs the old file keeps running.
 
-sync never restarts a daemon by default. The row says that the daemon still
-runs the old version, and gives the command that restarts it. A client of the
-new version can refuse to connect to an old daemon when the protocol changed.
-With `--restart`, sync lists the sessions on each daemon that it will restart
-and the panes with a running program, and asks. A restart is `kill-server`,
-which saves every session, then `start-server`, which restores them. The
-layouts come back with new shells, and the programs in them end. A daemon with
-no sessions restarts without a question. A daemon that already runs the new
-version is never restarted. On this machine, sync does not restart the daemon
-of the pane it runs in.
+sync never touches a daemon by default. The row says that the daemon still runs the old version, and gives the command that moves it. A client of the new version can refuse to connect to an old daemon when the protocol changed.
+
+With `--restart`, sync moves each daemon whose version is different onto the binary it just installed, on that host and against that host's daemon. It runs [`tuios daemon upgrade --binary <installed> --or-restart`](#tuios-daemon-upgrade) there:
+
+- A daemon from a build with live upgrades is upgraded live. It keeps its pid and every program in its panes. The row says `daemon upgraded live`, and in `--json` `daemon.upgraded` is true.
+- A daemon that cannot be upgraded live is restarted: one from before live upgrades, one that refuses (a pane on another machine, a running `tuios fan verify`), or one whose protocol the new binary does not speak. A restart is `kill-server`, which saves every session, then `start-server`, which restores them; the layouts come back with new shells, and the programs in them end. The row says `daemon restarted` with a note that names the reason, and `daemon.restarted` is true.
+- A daemon that took the upgrade and went back to its old binary, because the new one could not take the panes over, is not restarted. Its programs still run. The host fails with that reason, and `tuios logs` on the host says why.
+- A binary without live upgrades (a `--binary` from an older build) restarts the daemon as above, the old binary stopping it before the rename.
+
+Before anything moves, sync lists the sessions on each daemon and the panes with a running program that a restart would end, and asks. A daemon with no sessions is moved without a question. A daemon that already runs the new version is never touched.
+
+On this machine, `--local` from a pane of this machine's daemon only upgrades that daemon live, and never restarts it, since a restart would end the pane the command runs in. The daemon asks for the upgrade in a dialog on every attached client, and sync prints that it waits for your Yes there, for up to a minute. Yes upgrades it live. No, Esc, no answer, or no attached client leaves it on the old version: the row says the binary is installed, the daemon still runs the old version, and to run the sync again with a client attached and answer Yes, or run `tuios daemon upgrade` from a terminal outside tuios. A daemon from before live upgrades cannot be upgraded live, so from a pane it is left too, with a note that asks for the restart from a terminal outside tuios. `tuios --server NAME hosts sync --local` moves the daemon of server NAME and leaves every other daemon alone.
 
 With `--start`, sync starts the daemon on each host where it does not run,
 with the binary that the host has after the install. On a host with no
@@ -5556,7 +5609,8 @@ tuios mcp [--write] [--scope own|all]
 **Flags:**
 
 - `--write`: Also list the tools that type into panes: `tuios_send_text`,
-  `tuios_send_keys`, `tuios_ask_agent`, `tuios_respond` and `tuios_fan`
+  `tuios_send_keys`, `tuios_ask_agent`, `tuios_respond`, `tuios_fan` and
+  `tuios_delegate`
 - `--scope`: `own` (the default) reaches only the session of the pane the
   server runs in, its fan group, and the sessions a `fan` from it started.
   `all` reaches every session, for a harness that runs outside tuios
@@ -6341,11 +6395,7 @@ at all: both are downloaded and verified before either is put in place.
 A file that does not match is discarded, nothing is installed, and the old
 binary is untouched.
 
-**The running daemon** keeps the old build. Sessions you have open go on
-working. To move them to the new build, run `tuios restart-server`. Panes
-are restored; the programs that were running in them are not.
-
-On macOS and Linux, `tuios daemon upgrade` moves the running daemon to the installed build instead, with every pane's program still running. See [`tuios daemon upgrade`](#tuios-daemon-upgrade).
+**The running daemon** keeps the old build, and update leaves it alone. Sessions you have open go on working. On macOS and Linux, `tuios daemon upgrade` moves the running daemon to the installed build with every pane's program still running; see [`tuios daemon upgrade`](#tuios-daemon-upgrade). It says why when the daemon cannot be upgraded live, and then `tuios restart-server`, or "Restart the daemon" in the command palette, moves it: panes are restored, and the programs that were running in them are not. update prints both commands, with `--server NAME` on a named server.
 
 Set `GITHUB_TOKEN` or `GH_TOKEN` to raise the release lookup's rate limit. It is
 never required and no token is created for you.

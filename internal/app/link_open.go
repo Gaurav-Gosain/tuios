@@ -5,11 +5,12 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/anmitsu/go-shlex"
+
+	"github.com/Gaurav-Gosain/tuios/internal/hints"
 )
 
 // Which machine opens a link is the whole of this file, and it is the question
@@ -276,18 +277,17 @@ func linkHostLabel(rawURL string) string {
 // because it never reaches here: OpenLink routes it above, to a stat and a pane
 // on the machine the file is on. An application's own scheme is refused and
 // copied instead, which loses nothing a paste cannot do.
-var linkOpenSchemes = []string{"http", "https", "mailto", "ftp", "ftps"}
+//
+// The list lives in internal/hints (hints.OpenableScheme), because the link
+// rules that build a target from plain text are checked against the same set
+// before the text becomes a link at all.
 
 // linkOpenableScheme reports whether rawURL may be handed to the desktop's own
 // handler. An address with no scheme at all is refused: there is nothing for a
 // handler to resolve, and guessing http for it would be inventing a target the
 // program never wrote.
 func linkOpenableScheme(rawURL string) bool {
-	scheme, _, ok := strings.Cut(rawURL, ":")
-	if !ok || scheme == "" {
-		return false
-	}
-	return slices.Contains(linkOpenSchemes, strings.ToLower(scheme))
+	return hints.OpenableScheme(rawURL)
 }
 
 // openLocalPath opens a path that lives on the pane machine.

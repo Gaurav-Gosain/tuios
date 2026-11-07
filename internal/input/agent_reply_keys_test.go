@@ -133,7 +133,7 @@ func TestAgentRowXFromSendKeysDropsNothing(t *testing.T) {
 	if q.count("cancel-queued") != 0 || q.count("list-queued") != 0 {
 		t.Fatalf("x from send-keys sent %v", q.verbs)
 	}
-	rail := o.KeybindRegistry.GetSidebarAction("x")
+	rail := o.KeybindRegistry.Action(config.TableSidebar, "x")
 	if got := o.RecentActions(); len(got) > 0 && got[len(got)-1] == rail {
 		t.Error("x from send-keys fell through to the rail's own action")
 	}

@@ -22,76 +22,10 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// because nothing read it.
 	focusedWindow := o.GetFocusedWindow()
 
-	// Handle help menu first (takes priority over everything in terminal mode)
-	if o.ShowHelp {
-		return handleHelpOverlayKey(msg, o)
-	}
-
-	// Settings, the pickers over it, and the layout and machine pickers take
-	// priority in terminal mode: a letter typed into them must not reach the
-	// shell.
-	if out, cmd, ok := routeSettingsOverlayKey(msg, o); ok {
+	// The open panels, top first, take priority in terminal mode: a letter
+	// typed into one must not reach the shell.
+	if out, cmd, ok := routeOverlayKey(msg, o); ok {
 		return out, cmd
-	}
-
-	// Handle session switcher (takes priority in terminal mode)
-	if o.ShowSessionSwitcher {
-		return handleSessionSwitcherInput(msg, o)
-	}
-
-	// The mailbox, the same way: a reply typed into it must not reach the shell.
-	if o.ShowAgentMail {
-		return handleAgentMailInput(msg, o)
-	}
-
-	// The Inbox, the same way: its keys must not reach the shell.
-	if o.ShowInbox {
-		return handleInboxInput(msg, o)
-	}
-
-	// The pane navigator, the same way.
-	if o.NavigatorOpen() {
-		return handleNavigatorInput(msg, o)
-	}
-
-	// The go-to picker, the same way.
-	if o.GotoPickerOpen() {
-		return handleGotoPickerInput(msg, o)
-	}
-
-	// Handle workspace switcher overlay
-	if o.ShowWorkspaceSwitcher {
-		return handleWorkspaceSwitcherInput(msg, o)
-	}
-
-	// The paste buffer chooser, the same way.
-	if o.BufferChooserOpen() {
-		return handleBufferChooserInput(msg, o)
-	}
-
-	// Handle aggregate view
-	if o.ShowAggregateView {
-		return handleAggregateViewInput(msg, o)
-	}
-
-	// Handle command palette (takes priority in terminal mode)
-	if o.ShowCommandPalette {
-		return handleCommandPaletteInput(msg, o)
-	}
-
-	// Handle launcher (takes priority in terminal mode)
-	if o.ShowLauncher {
-		return handleLauncherInput(msg, o)
-	}
-
-	// The message view opens over the log viewer, so it takes the key first.
-	if o.MessageViewOpen() && viewerTakesKey(msg, o) {
-		return handleMessageViewKey(msg, o)
-	}
-
-	// Handle log viewer (takes priority in terminal mode)
-	if o.ShowLogs && viewerTakesKey(msg, o) {
-		return handleLogViewerKey(msg, o)
 	}
 
 	// Handle cache stats viewer (takes priority in terminal mode)
@@ -109,7 +43,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// compositor) gets the key itself: it has no scrollback to show, and
 	// Shift+Up is a key it uses. A pane already in copy mode keeps scrolling.
 	if focusedWindow != nil && keyScrollsPane(focusedWindow) && !o.Locked() {
-		action := sectionAction(msg, o, (*config.KeybindRegistry).GetTerminalModeAction)
+		action := sectionAction(msg, o, config.TableTerminalMode)
 		if handleTerminalScrollBinding(action, o, focusedWindow) {
 			return o, nil
 		}
@@ -187,32 +121,32 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// Handle workspace prefix commands (Ctrl+B, w, ...)
-	if o.WorkspacePrefixActive {
+	if o.SubMenu == app.SubMenuWorkspace {
 		return HandleWorkspacePrefixCommand(msg, o)
 	}
 
 	// Handle minimize prefix commands (Ctrl+B, m, ...)
-	if o.MinimizePrefixActive {
+	if o.SubMenu == app.SubMenuMinimize {
 		return HandleMinimizePrefixCommand(msg, o)
 	}
 
 	// Handle tiling prefix commands (Ctrl+B, t, ...)
-	if o.TilingPrefixActive {
+	if o.SubMenu == app.SubMenuTiling {
 		return HandleTilingPrefixCommand(msg, o)
 	}
 
 	// Handle debug prefix commands (Ctrl+B, D, ...)
-	if o.DebugPrefixActive {
+	if o.SubMenu == app.SubMenuDebug {
 		return HandleDebugPrefixCommand(msg, o)
 	}
 
 	// Handle tape prefix commands (Ctrl+B, T, ...)
-	if o.TapePrefixActive {
+	if o.SubMenu == app.SubMenuTape {
 		return HandleTapePrefixCommand(msg, o)
 	}
 
 	// The tuios menu: the tuios keys a preset moved.
-	if o.TuiosPrefixActive {
+	if o.SubMenu == app.SubMenuTuios {
 		return HandleTuiosPrefixCommand(msg, o)
 	}
 
@@ -222,7 +156,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// Handle layout prefix commands (Ctrl+B, L, ...)
-	if o.LayoutPrefixActive {
+	if o.SubMenu == app.SubMenuLayout {
 		return handleTerminalLayoutPrefix(msg, o)
 	}
 
@@ -247,7 +181,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	// The key's terminal-mode action, looked up once for the checks below.
 	// It depends on the key and the registry alone.
-	terminalAction := sectionAction(msg, o, (*config.KeybindRegistry).GetTerminalModeAction)
+	terminalAction := sectionAction(msg, o, config.TableTerminalMode)
 	nvimNavigation := false
 	if isTerminalFocusAction(terminalAction) {
 		nvimNavigation = o.NvimNavigationForwarding(nvimNavigationDirection(terminalAction))
@@ -385,7 +319,7 @@ func recordTerminalKey(o *app.OS, msg tea.KeyPressMsg) {
 // to the table stayed invisible until someone added a case, and the key it was
 // bound to silently dismissed the chord instead. One route, one table.
 func handleTerminalLayoutPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	return runPrefix(msg, o, (*config.KeybindRegistry).GetLayoutPrefixAction)
+	return runPrefix(msg, o, config.TableLayoutPrefix)
 }
 
 // handleLayoutPrefixLoad opens the layout picker on the saved layouts.

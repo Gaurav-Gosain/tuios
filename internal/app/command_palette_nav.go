@@ -170,11 +170,25 @@ func (m *OS) ActivateCommandPalette() tea.Cmd {
 		}
 		return nil
 	}
-	action := filtered[m.CommandPaletteSelected].Action
+	item := filtered[m.CommandPaletteSelected]
 	m.CloseCommandPalette()
-	if action != nil {
-		_, cmd := action(m)
-		return cmd
+	_, cmd := item.Run(m)
+	return cmd
+}
+
+// Run runs the row: its own handler when it has one, and otherwise the
+// keybind action it names, through the same runner a key press goes through,
+// so the row and the key do the same thing.
+func (it CommandPaletteItem) Run(m *OS) (*OS, tea.Cmd) {
+	if it.Action != nil {
+		return it.Action(m)
 	}
-	return nil
+	if it.Bind == "" {
+		return m, nil
+	}
+	if err := m.RunAction(it.Bind); err != nil {
+		m.ShowNotification(err.Error(), "error", m.Settings.NotificationDuration)
+		return m, nil
+	}
+	return m, m.takeScriptCmds()
 }

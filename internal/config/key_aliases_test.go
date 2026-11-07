@@ -124,11 +124,11 @@ func TestAliasBindingsMatchInEveryTable(t *testing.T) {
 			}
 		}
 		check("window_management", reg.GetAction("super+f5"), "new_window", "super+f5")
-		check("prefix_mode", reg.GetPrefixAction("ctrl+shift+f6"), "prefix_new_window", "ctrl+shift+f6")
-		check("terminal_mode", reg.GetTerminalModeAction("ctrl+f7"), "terminal_exit_mode", "ctrl+f7")
-		check("global", reg.GetGlobalAction("super+f8"), "command_palette", "super+f8")
+		check("prefix_mode", reg.Action(config.TablePrefixMode, "ctrl+shift+f6"), "prefix_new_window", "ctrl+shift+f6")
+		check("terminal_mode", reg.Action(config.TableTerminalMode, "ctrl+f7"), "terminal_exit_mode", "ctrl+f7")
+		check("global", reg.Action(config.TableGlobal, "super+f8"), "command_palette", "super+f8")
 		if mac {
-			check("terminal_mode", reg.GetTerminalModeAction("alt+f9"), "terminal_exit_mode", "alt+f9")
+			check("terminal_mode", reg.Action(config.TableTerminalMode, "alt+f9"), "terminal_exit_mode", "alt+f9")
 		}
 	})
 }

@@ -83,7 +83,7 @@ func copyModeFocusKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Window) (
 	}
 	var action string
 	if o.Mode == app.TerminalMode {
-		action = lookupAction(o, msg, o.KeybindRegistry.GetTerminalModeAction)
+		action = tableAction(o, msg, o.KeybindRegistry, config.TableTerminalMode)
 		if !isTerminalFocusAction(action) {
 			return nil, false
 		}
@@ -99,18 +99,22 @@ func copyModeFocusKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Window) (
 
 // copyModeAction is the [keybindings.copy_mode] action msg is bound to, or "".
 func copyModeAction(msg tea.KeyPressMsg, o *app.OS) string {
-	return lookupAction(o, msg, overlayKeys(o).GetCopyModeAction)
+	return tableAction(o, msg, overlayKeys(o), config.TableCopyMode)
 }
 
 // dispatchCopyModeKey runs one copy-mode key against one pane, under that
 // pane's I/O read lock, and records what it wants done in fx. action is the
 // [keybindings.copy_mode] action the key is bound to, or "".
 func dispatchCopyModeKey(msg tea.KeyPressMsg, action string, window *terminal.Window, fx *copyModeEffects, s *config.Settings) {
-	cm := window.CopyMode
 	window.RLockIO()
 	defer window.RUnlockIO()
+	runCopyModeKey(msg, action, window.CopyMode, window, fx, s)
+}
 
-	if action != "" && runCopyModeAction(action, cm, window, fx) {
+// runCopyModeKey runs one copy-mode key against grid and records what it
+// wants done in fx. The caller holds whatever lock the grid needs.
+func runCopyModeKey(msg tea.KeyPressMsg, action string, cm *terminal.CopyMode, grid terminal.CopyGrid, fx *copyModeEffects, s *config.Settings) {
+	if action != "" && runCopyModeAction(action, cm, grid, fx) {
 		return
 	}
 
@@ -125,11 +129,11 @@ func dispatchCopyModeKey(msg tea.KeyPressMsg, action string, window *terminal.Wi
 
 	switch cm.State {
 	case terminal.CopyModeSearch:
-		handleSearchInput(msg, cm, window, fx, s)
+		handleSearchInput(msg, cm, grid, fx, s)
 	case terminal.CopyModeVisualChar, terminal.CopyModeVisualLine, terminal.CopyModeVisualBlock:
-		handleVisualInput(msg, cm, window, fx, s)
+		handleVisualInput(msg, cm, grid, fx, s)
 	case terminal.CopyModeNormal:
-		handleNormalInput(msg, cm, window, fx, s)
+		handleNormalInput(msg, cm, grid, fx, s)
 	}
 }
 
@@ -138,9 +142,16 @@ func dispatchCopyModeKey(msg tea.KeyPressMsg, action string, window *terminal.Wi
 // pending f/t character take the key as text, so the action does not run
 // there. A count typed before the key is dropped: the line motions ignore it,
 // as 0 and $ do.
-func runCopyModeAction(action string, cm *terminal.CopyMode, window *terminal.Window, fx *copyModeEffects) bool {
+func runCopyModeAction(action string, cm *terminal.CopyMode, grid terminal.CopyGrid, fx *copyModeEffects) bool {
 	if cm.State == terminal.CopyModeSearch || cm.PendingCharSearch {
 		return false
+	}
+	if action == config.ActionHints {
+		// The labels go on the view as it is scrolled now. A label that
+		// copies ends copy mode; esc from hints keeps it.
+		fx.openHints = true
+		fx.action = action
+		return true
 	}
 	if action == config.ActionEditScrollback {
 		// The editor opens at the cursor, so the count and the selection
@@ -153,9 +164,9 @@ func runCopyModeAction(action string, cm *terminal.CopyMode, window *terminal.Wi
 	case config.ActionCopyModeLineStart:
 		cm.CursorX = 0
 	case config.ActionCopyModeFirstNonBlank:
-		cm.CursorX = firstNonBlankCol(cm, window)
+		cm.CursorX = firstNonBlankCol(cm, grid)
 	case config.ActionCopyModeLineEnd:
-		cm.CursorX = lastTextCol(cm, window)
+		cm.CursorX = lastTextCol(cm, grid)
 	default:
 		return false
 	}
@@ -164,7 +175,7 @@ func runCopyModeAction(action string, cm *terminal.CopyMode, window *terminal.Wi
 		fx.ShowNotification("", "info", 0)
 	}
 	if cm.State.InVisual() {
-		updateVisualEnd(cm, window)
+		updateVisualEnd(cm, grid)
 	}
 	fx.InvalidateCache()
 	fx.action = action
@@ -172,7 +183,7 @@ func runCopyModeAction(action string, cm *terminal.CopyMode, window *terminal.Wi
 }
 
 // handleNormalInput handles keys in normal navigation mode
-func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *terminal.Window, fx *copyModeEffects, s *config.Settings) {
+func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal.CopyGrid, fx *copyModeEffects, s *config.Settings) {
 	keyStr := msg.String()
 
 	// Handle pending character search (f/F/t/T followed by character)
@@ -190,7 +201,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 			// Only accept printable ASCII characters
 			char := rune(keyStr[0])
 			cm.LastCharSearch = char
-			findCharOnLine(cm, window, char, cm.LastCharSearchDir, cm.LastCharSearchTill)
+			findCharOnLine(cm, grid, char, cm.LastCharSearchDir, cm.LastCharSearchTill)
 			fx.InvalidateCache()
 			fx.ShowNotification("", "info", 0) // Clear notification
 		} else {
@@ -248,78 +259,78 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 	// Navigation: basic movement
 	case "h", "left":
 		for range count {
-			moveLeft(cm, window)
+			moveLeft(cm, grid)
 		}
 	case "l", "right":
 		for range count {
-			moveRight(cm, window)
+			moveRight(cm, grid)
 		}
 	case "j", "down":
 		for range count {
-			moveDown(cm, window)
+			moveDown(cm, grid)
 		}
 	case "k", "up":
 		for range count {
-			moveUp(cm, window)
+			moveUp(cm, grid)
 		}
 
 	// Navigation: word movement
 	case "w":
 		for range count {
-			moveWordForward(cm, window)
+			moveWordForward(cm, grid)
 		}
 	case "b":
 		for range count {
-			moveWordBackward(cm, window)
+			moveWordBackward(cm, grid)
 		}
 	case "e":
 		for range count {
-			moveWordEnd(cm, window)
+			moveWordEnd(cm, grid)
 		}
 	case "W":
 		for range count {
-			moveWordForwardBig(cm, window)
+			moveWordForwardBig(cm, grid)
 		}
 	case "B":
 		for range count {
-			moveWordBackwardBig(cm, window)
+			moveWordBackwardBig(cm, grid)
 		}
 	case "E":
 		for range count {
-			moveWordEndBig(cm, window)
+			moveWordEndBig(cm, grid)
 		}
 
 	// Navigation: line movement
 	case "0":
 		cm.CursorX = 0
 	case "^":
-		cm.CursorX = firstNonBlankCol(cm, window)
+		cm.CursorX = firstNonBlankCol(cm, grid)
 	case "$":
-		cm.CursorX = lastTextCol(cm, window)
+		cm.CursorX = lastTextCol(cm, grid)
 
 	// Navigation: page movement
 	case "ctrl+u":
 		for range count {
-			moveHalfPageUp(cm, window)
+			moveHalfPageUp(cm, grid)
 		}
 	case "ctrl+d":
 		for range count {
-			moveHalfPageDown(cm, window)
+			moveHalfPageDown(cm, grid)
 		}
 	case "ctrl+b", "pgup":
 		for range count {
-			movePageUp(cm, window)
+			movePageUp(cm, grid)
 		}
 	case "ctrl+f", "pgdown":
 		for range count {
-			movePageDown(cm, window)
+			movePageDown(cm, grid)
 		}
 
 	// Navigation: jump to top/bottom
 	case "g":
 		// Handle 'gg' sequence
 		if cm.PendingGCount && time.Since(cm.LastCommandTime) < 500*time.Millisecond {
-			moveToTop(cm, window)
+			moveToTop(cm, grid)
 			cm.PendingGCount = false
 		} else {
 			cm.PendingGCount = true
@@ -329,27 +340,27 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		// count + G goes to specific line (e.g., 10G goes to line 10)
 		if count > 1 {
 			// Go to specific line number (count is the line number)
-			scrollbackLen := window.ScrollbackLen()
+			scrollbackLen := grid.ScrollbackLen()
 			targetAbsY := count - 1 // Convert from 1-indexed to 0-indexed
-			totalLines := scrollbackLen + window.Terminal.Height()
+			totalLines := scrollbackLen + grid.Text().Height()
 			if targetAbsY >= totalLines {
 				targetAbsY = totalLines - 1
 			}
 
 			// Move to target line using step-by-step movement
-			currentAbsY := getAbsoluteY(cm, window)
+			currentAbsY := getAbsoluteY(cm, grid)
 			diff := targetAbsY - currentAbsY
 			if diff > 0 {
 				for range diff {
-					moveDown(cm, window)
+					moveDown(cm, grid)
 				}
 			} else if diff < 0 {
 				for range -diff {
-					moveUp(cm, window)
+					moveUp(cm, grid)
 				}
 			}
 		} else {
-			moveToBottom(cm, window)
+			moveToBottom(cm, grid)
 		}
 
 	// Navigation: screen position
@@ -358,24 +369,24 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		cm.CursorY = 0
 	case "M":
 		// Move to middle of screen
-		cm.CursorY = window.Height / 2
+		cm.CursorY = grid.ViewHeight() / 2
 	case "L":
 		// Move to bottom of screen
-		cm.CursorY = window.LastContentRow()
+		cm.CursorY = grid.LastContentRow()
 
 	// Navigation: paragraph movement
 	case "{":
 		for range count {
-			moveParagraphUp(cm, window)
+			moveParagraphUp(cm, grid)
 		}
 	case "}":
 		for range count {
-			moveParagraphDown(cm, window)
+			moveParagraphDown(cm, grid)
 		}
 
 	// Navigation: matching bracket
 	case "%":
-		moveToMatchingBracket(cm, window)
+		moveToMatchingBracket(cm, grid)
 
 	// Character search (f/F/t/T)
 	case "f":
@@ -409,18 +420,18 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 	case ";":
 		// Repeat last character search
 		for range count {
-			repeatCharSearch(cm, window, false)
+			repeatCharSearch(cm, grid, false)
 		}
 	case ",":
 		// Repeat last character search in opposite direction
 		for range count {
-			repeatCharSearch(cm, window, true)
+			repeatCharSearch(cm, grid, true)
 		}
 
 	// Search
 	case "/", "?":
 		backward := keyStr == "?"
-		cm.BeginSearch(backward, window.ScrollbackLen())
+		cm.BeginSearch(backward, grid.ScrollbackLen())
 		fx.ShowNotification(searchPrompt(backward), "info", 0) // Persistent until search complete
 		return
 	case "n", "N":
@@ -435,7 +446,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		}
 		wrapped := false
 		for range count {
-			if stepMatch(cm, window, backward) {
+			if stepMatch(cm, grid, backward) {
 				wrapped = true
 			}
 		}
@@ -454,17 +465,17 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 
 	// Visual mode
 	case "v":
-		enterVisualChar(cm, window)
+		enterVisualChar(cm, grid)
 		fx.InvalidateCache()
 		fx.ShowNotification("VISUAL", "info", 0)
 		return
 	case "V":
-		enterVisualLine(cm, window)
+		enterVisualLine(cm, grid)
 		fx.InvalidateCache()
 		fx.ShowNotification("VISUAL LINE", "info", 0)
 		return
 	case "ctrl+v":
-		enterVisualBlock(cm, window)
+		enterVisualBlock(cm, grid)
 		fx.InvalidateCache()
 		fx.ShowNotification(visualBlockMessage, "info", 0)
 		return
@@ -474,7 +485,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 }
 
 // handleSearchInput handles keys in search mode
-func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *terminal.Window, fx *copyModeEffects, s *config.Settings) {
+func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal.CopyGrid, fx *copyModeEffects, s *config.Settings) {
 	key := msg.Key()
 
 	searchPrefix := searchPrompt(cm.SearchBackward)
@@ -483,7 +494,7 @@ func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 	if textedit.IsWordDeleteKey(msg.String()) {
 		if cm.SearchQuery != "" {
 			cm.SearchQuery = textedit.DropLastWord(cm.SearchQuery)
-			executeSearch(cm, window)
+			executeSearch(cm, grid)
 		}
 		fx.ShowNotification(searchPrefix+cm.SearchQuery, "info", 0)
 		fx.InvalidateCache()
@@ -504,19 +515,19 @@ func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		cm.State = terminal.CopyModeNormal
 		cm.SearchQuery = ""
 		cm.SearchMatches = nil
-		restoreSearchOrigin(cm, window)
+		restoreSearchOrigin(cm, grid)
 		fx.ShowNotification("", "info", 0)
 	case tea.KeyBackspace:
 		if len(cm.SearchQuery) > 0 {
 			_, size := utf8.DecodeLastRuneInString(cm.SearchQuery)
 			cm.SearchQuery = cm.SearchQuery[:len(cm.SearchQuery)-size]
-			executeSearch(cm, window)
+			executeSearch(cm, grid)
 		}
 		fx.ShowNotification(searchPrefix+cm.SearchQuery, "info", 0)
 	default:
 		if key.Text != "" {
 			cm.SearchQuery += key.Text
-			executeSearch(cm, window)
+			executeSearch(cm, grid)
 			fx.ShowNotification(searchPrefix+cm.SearchQuery, "info", 0)
 		}
 	}
@@ -528,7 +539,7 @@ func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 const visualBlockMessage = "VISUAL BLOCK"
 
 // handleVisualInput handles keys in visual selection mode
-func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *terminal.Window, fx *copyModeEffects, s *config.Settings) {
+func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal.CopyGrid, fx *copyModeEffects, s *config.Settings) {
 	keyStr := msg.String()
 
 	// Handle pending character search (f/F/t/T followed by character)
@@ -546,8 +557,8 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 			// Only accept printable ASCII characters
 			char := rune(keyStr[0])
 			cm.LastCharSearch = char
-			findCharOnLine(cm, window, char, cm.LastCharSearchDir, cm.LastCharSearchTill)
-			updateVisualEnd(cm, window)
+			findCharOnLine(cm, grid, char, cm.LastCharSearchDir, cm.LastCharSearchTill)
+			updateVisualEnd(cm, grid)
 			fx.InvalidateCache()
 			fx.ShowNotification("", "info", 0) // Clear notification
 		} else {
@@ -591,7 +602,7 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		cm.State = terminal.CopyModeNormal
 		fx.ShowNotification("", "info", 0)
 	case "y", "c":
-		text := extractVisualText(cm, window)
+		text := extractVisualText(cm, grid)
 		// The region is taken before the selection ends, because the sweep
 		// is drawn over it after the selection has gone.
 		if cm.State == terminal.CopyModeVisualBlock {
@@ -608,56 +619,56 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 	// Movement in visual mode extends selection: basic
 	case "h", "left":
 		for range count {
-			moveLeft(cm, window)
+			moveLeft(cm, grid)
 		}
-		updateVisualEnd(cm, window)
+		updateVisualEnd(cm, grid)
 	case "l", "right":
 		for range count {
-			moveRight(cm, window)
+			moveRight(cm, grid)
 		}
-		updateVisualEnd(cm, window)
+		updateVisualEnd(cm, grid)
 	case "j", "down":
 		for range count {
-			moveDown(cm, window)
+			moveDown(cm, grid)
 		}
-		updateVisualEnd(cm, window)
+		updateVisualEnd(cm, grid)
 	case "k", "up":
 		for range count {
-			moveUp(cm, window)
+			moveUp(cm, grid)
 		}
-		updateVisualEnd(cm, window)
+		updateVisualEnd(cm, grid)
 
 	// Word movement
 	case "w":
 		for range count {
-			moveWordForward(cm, window)
+			moveWordForward(cm, grid)
 		}
-		updateVisualEnd(cm, window)
+		updateVisualEnd(cm, grid)
 	case "b":
 		for range count {
-			moveWordBackward(cm, window)
+			moveWordBackward(cm, grid)
 		}
-		updateVisualEnd(cm, window)
+		updateVisualEnd(cm, grid)
 	case "e":
 		for range count {
-			moveWordEnd(cm, window)
+			moveWordEnd(cm, grid)
 		}
-		updateVisualEnd(cm, window)
+		updateVisualEnd(cm, grid)
 	case "W":
 		for range count {
-			moveWordForwardBig(cm, window)
+			moveWordForwardBig(cm, grid)
 		}
-		updateVisualEnd(cm, window)
+		updateVisualEnd(cm, grid)
 	case "B":
 		for range count {
-			moveWordBackwardBig(cm, window)
+			moveWordBackwardBig(cm, grid)
 		}
-		updateVisualEnd(cm, window)
+		updateVisualEnd(cm, grid)
 	case "E":
 		for range count {
-			moveWordEndBig(cm, window)
+			moveWordEndBig(cm, grid)
 		}
-		updateVisualEnd(cm, window)
+		updateVisualEnd(cm, grid)
 
 	// Character search (f/F/t/T)
 	case "f":
@@ -685,80 +696,80 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		fx.ShowNotification("T", "info", 0)
 		return
 	case ";":
-		repeatCharSearch(cm, window, false)
-		updateVisualEnd(cm, window)
+		repeatCharSearch(cm, grid, false)
+		updateVisualEnd(cm, grid)
 	case ",":
-		repeatCharSearch(cm, window, true)
-		updateVisualEnd(cm, window)
+		repeatCharSearch(cm, grid, true)
+		updateVisualEnd(cm, grid)
 
 	// Line movement
 	case "0":
 		cm.CursorX = 0
-		updateVisualEnd(cm, window)
+		updateVisualEnd(cm, grid)
 	case "^":
-		cm.CursorX = firstNonBlankCol(cm, window)
-		updateVisualEnd(cm, window)
+		cm.CursorX = firstNonBlankCol(cm, grid)
+		updateVisualEnd(cm, grid)
 	case "$":
-		cm.CursorX = lastTextCol(cm, window)
-		updateVisualEnd(cm, window)
+		cm.CursorX = lastTextCol(cm, grid)
+		updateVisualEnd(cm, grid)
 
 	// Page movement
 	case "ctrl+u":
-		moveHalfPageUp(cm, window)
-		updateVisualEnd(cm, window)
+		moveHalfPageUp(cm, grid)
+		updateVisualEnd(cm, grid)
 	case "ctrl+d":
-		moveHalfPageDown(cm, window)
-		updateVisualEnd(cm, window)
+		moveHalfPageDown(cm, grid)
+		updateVisualEnd(cm, grid)
 	case "ctrl+b", "pgup":
-		movePageUp(cm, window)
-		updateVisualEnd(cm, window)
+		movePageUp(cm, grid)
+		updateVisualEnd(cm, grid)
 	case "ctrl+f", "pgdown":
-		movePageDown(cm, window)
-		updateVisualEnd(cm, window)
+		movePageDown(cm, grid)
+		updateVisualEnd(cm, grid)
 
 	// Jump movement
 	case "g":
 		// Detect the 'gg' sequence. Keys arrive singly, so a literal "gg" case
 		// never matches; mirror the pending-g state used in normal mode.
 		if cm.PendingGCount && time.Since(cm.LastCommandTime) < 500*time.Millisecond {
-			moveToTop(cm, window)
+			moveToTop(cm, grid)
 			cm.PendingGCount = false
-			updateVisualEnd(cm, window)
+			updateVisualEnd(cm, grid)
 		} else {
 			cm.PendingGCount = true
 			cm.LastCommandTime = time.Now()
 		}
 	case "G":
-		moveToBottom(cm, window)
-		updateVisualEnd(cm, window)
+		moveToBottom(cm, grid)
+		updateVisualEnd(cm, grid)
 
 	// Screen position
 	case "H":
 		cm.CursorY = 0
-		updateVisualEnd(cm, window)
+		updateVisualEnd(cm, grid)
 	case "M":
-		cm.CursorY = window.Height / 2
-		updateVisualEnd(cm, window)
+		cm.CursorY = grid.ViewHeight() / 2
+		updateVisualEnd(cm, grid)
 	case "L":
-		cm.CursorY = window.LastContentRow()
-		updateVisualEnd(cm, window)
+		cm.CursorY = grid.LastContentRow()
+		updateVisualEnd(cm, grid)
 
 	// Paragraph movement
 	case "{":
-		moveParagraphUp(cm, window)
-		updateVisualEnd(cm, window)
+		moveParagraphUp(cm, grid)
+		updateVisualEnd(cm, grid)
 	case "}":
-		moveParagraphDown(cm, window)
-		updateVisualEnd(cm, window)
+		moveParagraphDown(cm, grid)
+		updateVisualEnd(cm, grid)
 
 	// Bracket matching
 	case "%":
-		moveToMatchingBracket(cm, window)
-		updateVisualEnd(cm, window)
+		moveToMatchingBracket(cm, grid)
+		updateVisualEnd(cm, grid)
 
 	// Go to the other end of the selection
 	case "o":
-		swapVisualEnds(cm, window)
+		swapVisualEnds(cm, grid)
 
 	// Toggle visual mode (pressing v/V again exits visual mode)
 	case "v":
@@ -783,7 +794,7 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 			cm.State = terminal.CopyModeVisualBlock
 			fx.ShowNotification(visualBlockMessage, "info", 0)
 		default:
-			enterVisualBlock(cm, window)
+			enterVisualBlock(cm, grid)
 			fx.ShowNotification(visualBlockMessage, "info", 0)
 		}
 	case "V":
@@ -793,7 +804,7 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 			cm.State = terminal.CopyModeNormal
 			fx.ShowNotification("", "info", 0)
 		} else {
-			enterVisualLine(cm, window)
+			enterVisualLine(cm, grid)
 			fx.ShowNotification("VISUAL LINE", "info", 0)
 		}
 	}

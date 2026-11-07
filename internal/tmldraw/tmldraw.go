@@ -14,12 +14,10 @@ import (
 	"maps"
 	"slices"
 	"strings"
-	"sync"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"tuios.dev/loom"
-	sketchtext "tuios.dev/sketch/text"
 	"tuios.dev/tml"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
@@ -176,33 +174,17 @@ type Options struct {
 	Styled bool
 }
 
-// renderMu guards loom's package globals for a host: MissingDiagram,
-// ExternalDiagram and ExternalDrawn. loom reads them only inside
-// Surface.Render, and starts an external drawing there with the hooks it
-// read. One process can draw for many clients (the SSH server, tuios-web,
-// the daemon's TML capture), so a hook set per client would go to the last
-// client that set it, and its write would race with another client's render.
-var renderMu sync.Mutex
+// Hooks are what one surface tells its host about its diagrams. Each may be
+// nil.
+type Hooks = loom.Hooks
 
-// Hooks are what one render tells its host. Each may be nil.
-type Hooks struct {
-	// Missing hears of each diagram type the surface cannot draw.
-	Missing func(typ string)
-	// External draws a diagram loom does not, such as with the sketch
-	// plugin. Drawn hears that such a drawing came in.
-	External func(src string, cols int) ([][]sketchtext.Cell, bool, error)
-	Drawn    func()
-}
-
-// Render renders s, w by h cells, with h set as loom's hooks for the length
-// of the render. Every loom.Surface.Render in tuios goes through it, so the
-// hooks of one client never reach another. Surfaces render only when they
-// change, so two clients rarely wait on each other.
+// Render renders s, w by h cells, with hooks as what s tells its host. The
+// hooks are the surface's own, so a process that draws for many clients
+// (the SSH server, tuios-web, the daemon's TML capture) renders each
+// client's surfaces with that client's hooks, and no render waits on
+// another.
 func Render(s *loom.Surface, w, h int, hooks Hooks) *loom.Buffer {
-	renderMu.Lock()
-	defer renderMu.Unlock()
-	loom.MissingDiagram, loom.ExternalDiagram, loom.ExternalDrawn = hooks.Missing, hooks.External, hooks.Drawn
-	defer func() { loom.MissingDiagram, loom.ExternalDiagram, loom.ExternalDrawn = nil, nil, nil }()
+	s.SetHooks(hooks)
 	return s.Render(w, h)
 }
 

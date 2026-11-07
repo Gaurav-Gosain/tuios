@@ -15,7 +15,7 @@ import (
 
 // newStartAgentCommand builds `tuios start-agent`.
 func newStartAgentCommand() *cobra.Command {
-	var sessionName, name, cwd, repo, prompt, protocol, task string
+	var sessionName, name, cwd, repo, prompt, protocol, task, parent string
 	var env, grants []string
 	var workspace, readyTimeout int
 	var focus, clone, jsonOutput bool
@@ -67,6 +67,12 @@ agent asks for is answered in the pane with a number key, or from the Inbox
 when one line shows the whole request, with no [agents.approvals] needed. See
 tuios agent-proto --help.
 
+Started from an agent pane, the new agent is that agent's child: list-agents
+shows its parent and the root of the chain, and the rail draws it under its
+parent. --parent names the parent for a script that runs outside the parent's
+pane, by its window id. A pane may name itself or a pane it could type into.
+You may name any agent pane. A chain stops at 8 agents.
+
 --task claims a task card of the session for the new pane as soon as it
 exists, so the board shows who works on it while the agent loads. The card
 must be held by no pane, not blocked and not done, and you need what tuios
@@ -87,6 +93,9 @@ task claim needs. It is checked before anything starts.`,
   # An agent for task card t3, which it holds from the start
   tuios start-agent claude --name t3-worker --task t3 --prompt 'Take task t3: tuios task get t3.'
 
+  # A helper for the agent in pane 4be1c09a, from a script outside it
+  tuios start-agent claude --name helper --parent 4be1c09a
+
   # An ACP agent, headless, answered from the Inbox
   tuios start-agent --protocol acp 'opencode acp' --name helper --prompt 'Summarise the TODOs.'`,
 		Args: cobra.MinimumNArgs(1),
@@ -105,7 +114,7 @@ task claim needs. It is checked before anything starts.`,
 			return runStartAgent(startAgentOptions{
 				session: sessionName, agent: positional[0], args: extra, name: name, cwd: cwd, repo: repo, prompt: prompt, protocol: protocol,
 				env: callerEnv, explicitEnv: len(env) > 0, workspace: workspace, readyTimeout: readyTimeout, focus: focus, clone: clone,
-				grants: grants, task: task,
+				grants: grants, task: task, parent: parent,
 			}, jsonOutput)
 		},
 	}
@@ -117,6 +126,7 @@ task claim needs. It is checked before anything starts.`,
 	cmd.Flags().IntVar(&workspace, "workspace", 0, "The workspace to open the pane on (default: the current one)")
 	cmd.Flags().BoolVar(&focus, "focus", false, "Focus the new pane")
 	cmd.Flags().StringVar(&prompt, "prompt", "", "A first prompt, typed once the agent is ready")
+	cmd.Flags().StringVar(&parent, "parent", "", "The agent pane the new agent reports to, by window id (default: the agent pane this runs in)")
 	cmd.Flags().StringVar(&task, "task", "", "A task card of the session, such as t3, to claim for the new pane")
 	cmd.Flags().StringVar(&protocol, "protocol", "", "Run the agent headless over acp or codex (the Codex app-server) instead of in its own TUI")
 	_ = cmd.RegisterFlagCompletionFunc("protocol", cobra.FixedCompletions([]string{"acp", "codex"}, cobra.ShellCompDirectiveNoFileComp))
@@ -136,8 +146,10 @@ type startAgentOptions struct {
 	protocol string
 	// task is --task, the card to claim for the new pane.
 	task string
-	args []string
-	env  map[string]string
+	// parent is --parent, the agent pane the new agent reports to.
+	parent string
+	args   []string
+	env    map[string]string
 	// explicitEnv says the person passed --env. Without it the env holds
 	// only the PATH the CLI adds on its own.
 	explicitEnv             bool
@@ -206,7 +218,7 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 	maps.Copy(params, place)
 	// A daemon older than protocol refuses the parameter by name, so an old
 	// daemon never starts the agent in its TUI when a protocol was asked for.
-	for k, v := range map[string]string{"name": o.name, "prompt": o.prompt, "protocol": o.protocol, "task": o.task} {
+	for k, v := range map[string]string{"name": o.name, "prompt": o.prompt, "protocol": o.protocol, "task": o.task, "parent": o.parent} {
 		if v != "" {
 			params[k] = v
 		}
@@ -259,6 +271,9 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 		Task           *struct {
 			ID string `json:"id"`
 		} `json:"task"`
+		Parent *struct {
+			Window string `json:"window"`
+		} `json:"parent"`
 		TaskNote string `json:"task_note"`
 	}
 	if err := jsonx.Unmarshal(raw, &res); err != nil {
@@ -276,6 +291,9 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 			fmt.Printf("Cloned the repository to %s%s.\n", plainLine(res.Cwd), t.on())
 		}
 		who := fmt.Sprintf("%s (%s)", orNone(plainLine(res.Name)), shortWindowID(res.WindowID))
+		if res.Parent != nil {
+			fmt.Printf("%s reports to the agent in pane %s.\n", who, shortWindowID(res.Parent.Window))
+		}
 		switch {
 		case res.Task != nil:
 			fmt.Printf("%s holds task %s.\n", who, plainLine(res.Task.ID))

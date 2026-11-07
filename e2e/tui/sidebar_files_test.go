@@ -1885,12 +1885,20 @@ func quickLookMenuPreview(t *testing.T, term *tuitest.Terminal, name string) {
 // keyboard with the panes, in window mode. The rail has not had it yet.
 func quickLookListed(t *testing.T, env []string, out *lockedBuffer) (*tuitest.Terminal, string) {
 	t.Helper()
+	term, dir, _ := quickLookListedBase(t, env, out)
+	return term, dir
+}
+
+// quickLookListedBase is quickLookListed that also returns the client's config
+// base, for a test that installs a plugin.
+func quickLookListedBase(t *testing.T, env []string, out *lockedBuffer) (*tuitest.Terminal, string, string) {
+	t.Helper()
 	dir := quickLookFixture(t)
 	opts := startOpts{cols: 140, rows: 40, env: env}
 	if out != nil {
 		opts.out = out
 	}
-	term, _ := start(t, opts)
+	term, base := start(t, opts)
 	waitBoot(t, term)
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "opening a shell for the listing")
@@ -1899,7 +1907,7 @@ func quickLookListed(t *testing.T, env []string, out *lockedBuffer) (*tuitest.Te
 	leaveTerminalMode(t, term)
 	toggleSidebarViaPalette(t, term)
 	waitForAll(t, term, uiTimeout, "the listing", "main.go", "notes.md", "pic.png")
-	return term, dir
+	return term, dir, base
 }
 
 // quickLookFocusRail gives the rail the keyboard and puts its cursor on the
@@ -2116,6 +2124,71 @@ func TestQuickLookMovesInsideAFile(t *testing.T) {
 	alive(t, term, "after moving inside a file")
 }
 
+// TestQuickLookEndShowsALongLastLine goes to the end of wrapped texts. Where the
+// last line alone wraps to more rows than the panel holds, the end shows that
+// line's first rows, and j past the end and k back keep real rows on screen.
+// Where the last lines are short, the end shows as many of them as fit.
+//
+// How this could pass wrongly: the start of a file shows rows too, so each end
+// must hold the last line and not the first. And an end that showed only the
+// last line would pass on the long one, so the short rows must show more than
+// one line at the end.
+func TestQuickLookEndShowsALongLastLine(t *testing.T) {
+	term := quickLookWrapStart(t)
+
+	// The short rows first, then the long line on a new open. w holds for the
+	// rest of an open, and only closing it gives the next file its own default
+	// (wrap, for a .txt), so the wrap-off half comes last.
+	sendKeys(t, term, " ")
+	railLists(t, term, "space did not show zzzmany.txt", []string{"zzzmany.txt ", "row 001"}, nil)
+	sendKeys(t, term, tuitest.Tab)
+	railLists(t, term, "tab did not go inside with wrap on", []string{"Inside the file", "cut lines"}, nil)
+	sendKeys(t, term, "G")
+	quickLookShows(t, term, "quick-look-wrap-rows-end", "G on short rows did not show the last rows",
+		[]string{"row 080", "row 070"}, nil)
+
+	sendKeys(t, term, tuitest.Esc)
+	railLists(t, term, "esc did not come back to the list", []string{"go inside"}, []string{"Inside the file"})
+	sendKeys(t, term, " ")
+	railLists(t, term, "space did not close the preview", nil, []string{"row 080"})
+	sendKeys(t, term, "k", " ")
+	railLists(t, term, "space did not show zzwide.txt", []string{"zzwide.txt ", "alpha one"}, nil)
+	sendKeys(t, term, tuitest.Tab)
+	railLists(t, term, "tab did not go inside with wrap on", []string{"Inside the file", "cut lines"}, nil)
+
+	// The last line is 4, its first characters W00000.
+	sendKeys(t, term, "G")
+	quickLookShows(t, term, "quick-look-wrap-long-end", "G did not show the long last line",
+		[]string{"4  W00000"}, []string{"alpha one"})
+	sendKeys(t, term, "j")
+	railLists(t, term, "j past the end did not keep the long last line", []string{"4  W00000"}, []string{"alpha one"})
+	// k waits for the picture to hold the line before the last, so it needs the
+	// redraw bubbletea does after the j above, which moves nothing.
+	sendKeys(t, term, "k")
+	railLists(t, term, "k from the end did not show the line before the last", []string{"charlie three"}, []string{"bravo two"})
+
+	// Wrap off: the four lines fit, the long one cut.
+	cut := func(why string) {
+		t.Helper()
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			text := s.Text()
+			for line := range strings.SplitSeq(text, "\n") {
+				if _, after, ok := strings.Cut(line, "4  W00000"); ok && strings.Contains(after, "…") && strings.Contains(text, "alpha one") {
+					return true
+				}
+			}
+			return false
+		}, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: %s: want \"alpha one\" and line 4 cut on screen: %v\n%s", why, err, term.Snapshot())
+		}
+	}
+	sendKeys(t, term, "w")
+	cut("w did not cut the long line")
+	sendKeys(t, term, "G")
+	cut("G with the lines cut did not show the whole file")
+	alive(t, term, "after the end of a long last line")
+}
+
 // quickLookOnHost waits for the stream after mark to hold want, then for the
 // host to show one picture that place accepts, and returns it. A nil place
 // accepts any. hostPictures replays the stream by the rules a real kitty keeps:
@@ -2299,6 +2372,31 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 		t.Fatalf("ASSERTION: closing the preview did not take the picture down: %v", err)
 	}
 	alive(t, term, "after the kitty picture")
+}
+
+// quickLookWrapStart lists two texts in the rail, with the keyboard on the
+// second: zzwide.txt, three short lines and a last line of about 20 KB, taller
+// than the panel when it wraps, and zzzmany.txt, 80 short rows, more than the
+// panel holds.
+func quickLookWrapStart(t *testing.T) *tuitest.Terminal {
+	t.Helper()
+	term, dir := quickLookListed(t, []string{"TUIOS_KITTY_GRAPHICS=0"}, nil)
+	var wide, many strings.Builder
+	wide.WriteString("alpha one\nbravo two\ncharlie three\n")
+	for i := 0; wide.Len() < 20<<10; i++ {
+		fmt.Fprintf(&wide, "W%05d", i)
+	}
+	for i := range 80 {
+		fmt.Fprintf(&many, "row %03d\n", i+1)
+	}
+	for name, body := range map[string]string{"zzwide.txt": wide.String() + "\n", "zzzmany.txt": many.String()} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	railLists(t, term, "the rail did not list the new texts", []string{"zzwide.txt", "zzzmany.txt"}, nil)
+	quickLookFocusRail(t, term, "zzzmany.txt")
+	return term
 }
 
 // quickLookPDFStart lists a PDF of six pages in the rail, with the keyboard on it.
@@ -2818,6 +2916,79 @@ func TestQuickLookShowsADiff(t *testing.T) {
 	alive(t, term, "after the views")
 }
 
+// TestQuickLookReadsRichMarkdown reads a document with HTML, alerts, footnotes, a
+// reference link, a closed section and a Mermaid diagram.
+//
+// How this could pass wrongly: the words would be there as raw source too. So the test
+// also checks that no tag, no marker and no fence reaches the panel.
+//
+// The diagram is drawn by the sketch plugin, so the renderer stays out of the
+// tuios binary. A stand-in plugin answers with fakeCells, which spell PLUGIN-DREW.
+func TestQuickLookReadsRichMarkdown(t *testing.T) {
+	term, dir, base := quickLookListedBase(t, nil, nil)
+	plug := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(plug, "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := os.ReadFile(filepath.Join("..", "..", "plugins", "sketch", "tuios-plugin.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFiles(t, plug, map[string]string{"tuios-plugin.toml": string(manifest)})
+	if err := os.WriteFile(filepath.Join(plug, "bin", "sketch"), []byte("#!/bin/sh\ncat >/dev/null\necho '"+fakeCells+"'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLI(t, base, "plugins", "install", plug, "--yes"); err != nil {
+		t.Fatalf("install the plugin: %v\n%s", err, out)
+	}
+	// The install writes config.toml, and the reload puts the rail back as the
+	// file has it, so the rail is opened again.
+	waitFor(t, term, "the reload to hide the rail", func(s tuitest.Screen) bool {
+		_, _, ok := findOnGrid(s, "main.go")
+		return !ok
+	})
+	toggleSidebarViaPalette(t, term)
+	waitForAll(t, term, uiTimeout, "the listing after the install", "main.go", "notes.md")
+	doc := `<!-- a hidden comment -->
+<h2 align="center">Rich title</h2>
+
+<script>alert("hidden script")</script>
+
+Some <b>bold</b> words, a <kbd>key</kbd>, and a [link][site].
+
+> [!WARNING]
+> Mind the step.
+
+A claim[^one] here.
+
+<details>
+<summary>More words</summary>
+
+The secret body.
+</details>
+
+![a logo](logo.png)
+
+` + "```mermaid\nflowchart LR\n  A[Start] --> B[Stop]\n```" + `
+
+[site]: https://example.com
+[^one]: The note text.
+`
+	if err := os.WriteFile(filepath.Join(dir, "zrich.md"), []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	railLists(t, term, "the rail did not list the document", []string{"zrich.md"}, nil)
+	quickLookFocusRail(t, term, "zrich.md")
+	sendKeys(t, term, " ")
+	railLists(t, term, "the document did not read as Markdown",
+		[]string{"Rich title", "bold", "Warning", "Mind the step.", "[1]", "1. The note text.", "More words", "[Image: a logo]", "PLUGIN-DREW"},
+		[]string{"<h2", "<b>", "</", "[!WARNING]", "[^one]", "[site]", "hidden", "The secret body.", "```", "flowchart", "-->"})
+	saveCockpitFrames(t, term, "quick-look-rich-markdown")
+	sendKeys(t, term, tuitest.Tab, tuitest.Enter)
+	railLists(t, term, "enter did not open the section", []string{"The secret body."}, nil)
+	alive(t, term, "after rich Markdown")
+}
+
 // Kitty commands for the pictures the previews send: an upload, a free (the
 // uppercase delete, which drops the image data) and an unplace (the lowercase
 // one, which keeps it).
@@ -3079,11 +3250,18 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 		terminals, listing, agents := railRowOf(s, "terminals"), railRowOf(s, "alpha/"), railRowOf(s, "agents")
 		return terminals >= 0 && terminals < listing && listing < agents
 	}
+	// The header is left out: a section the switch opened carries a close
+	// control there, which a section the layout names does not, and the path
+	// beside it is cut to the room that leaves. Both are checked on their own
+	// below.
 	railText := func(s tuitest.Screen) string {
 		_, rows := s.Size()
+		header := filesHeaderRow(s)
 		var b strings.Builder
 		for r := range rows {
-			b.WriteString(railLine(s, r))
+			if r != header {
+				b.WriteString(railLine(s, r))
+			}
 			b.WriteByte('\n')
 		}
 		return b.String()
@@ -3113,6 +3291,9 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 	}
 	time.Sleep(insertGuard + 150*time.Millisecond)
 	opened := railText(term.Screen())
+	if filesHeaderClose(term.Screen()) < 0 {
+		t.Errorf("the section the switch opened has no close control:\n%s", term.Snapshot())
+	}
 	railShot(t, term, "files-open-short")
 	setLayout := func(sections string) {
 		t.Helper()
@@ -3129,6 +3310,9 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 	setLayout("sessions:25,terminals,files:25,agents:34")
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return railText(s) == opened }, uiTimeout); err != nil {
 		t.Fatalf("the opened section differs from a section the layout names: %v\nopened:\n%s\nnamed:\n%s", err, opened, railText(term.Screen()))
+	}
+	if filesHeaderClose(term.Screen()) >= 0 {
+		t.Errorf("a section the layout names offers a close control:\n%s", term.Snapshot())
 	}
 	setLayout(layout)
 	if err := term.Resize(120, 40); err != nil {
@@ -3187,4 +3371,352 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 	}
 	railShot(t, term, "files-no-terminals")
 	alive(t, term, "after opening the files section on demand")
+}
+
+// quickLookWrapOpen writes name into its own listing of the quick look fixture,
+// opens it with space and goes inside with tab. It returns the file's lines.
+//
+// zzwrap.txt wraps when it opens. Its line 1 is wide characters, 2 cells each.
+// Its line 2 is a Latin letter with a halfwidth sound mark, one cell to the
+// panel, sixty times, then ASCII to 200 cells. Its line 3 is ASCII alone. Lines
+// 4 to 102 are short, so the gutter takes 3 digits.
+//
+// zzwrap.go does not wrap when it opens. Its line 2 wraps at least twice with w,
+// and its return is on a later row.
+func quickLookWrapOpen(t *testing.T, name string) (*tuitest.Terminal, []string) {
+	t.Helper()
+	var text strings.Builder
+	// 321 characters, 642 cells: at the code column of 81 cells that is 8 rows
+	// by cells, but 9 rows of whole characters, 40 to a row.
+	text.WriteString(strings.Repeat("〇一二三四五六七八九", 32))
+	text.WriteString("〇\n")
+	text.WriteString(strings.Repeat("qﾟ", 60))
+	for i := range 35 {
+		fmt.Fprintf(&text, "k%03d", i)
+	}
+	text.WriteString("\n")
+	for i := range 50 {
+		fmt.Fprintf(&text, "a%03d", i)
+	}
+	text.WriteString("\n")
+	for i := 4; i <= 102; i++ {
+		fmt.Fprintf(&text, "end %d\n", i)
+	}
+	files := map[string]string{
+		"zzwrap.txt": text.String(),
+		"zzwrap.go": "func f() int { return 1 }\n" +
+			`func g() string { s := "` + strings.Repeat("x", 150) + `"; return s }` + "\n" +
+			"func h() {}\nfunc k() {}\nfunc m() {}\n",
+	}
+	term, dir := quickLookListed(t, []string{"TUIOS_KITTY_GRAPHICS=0"}, nil)
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(files[name]), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	railLists(t, term, "the rail did not list "+name, []string{name}, nil)
+	quickLookFocusRail(t, term, name)
+	sendKeys(t, term, " ")
+	railLists(t, term, "space did not show "+name, []string{name + " ", "go inside"}, nil)
+	sendKeys(t, term, tuitest.Tab)
+	railLists(t, term, "tab did not go inside "+name, []string{"Inside the file"}, nil)
+	return term, strings.Split(strings.TrimSuffix(files[name], "\n"), "\n")
+}
+
+// quickLookLineRows returns the code cells of line n's rows in the quick look
+// panel: the screen rows from the row whose gutter shows n to the row before the
+// next numbered row, each cut to the code column. It is nil until line n and
+// the number after it are on screen.
+func quickLookLineRows(s tuitest.Screen, n int) [][]tuitest.Cell {
+	cols, rows := s.Size()
+	num := strconv.Itoa(n) + "  "
+	for r := range rows {
+		for b := range cols {
+			// The panel's left frame, blanks, the number and two blanks.
+			if s.Cell(b, r).Content != "│" {
+				continue
+			}
+			d := b + 1
+			for d < cols && s.Cell(d, r).Content == " " {
+				d++
+			}
+			if d == b+1 || !gridMatchesAt(s, d, r, num) {
+				continue
+			}
+			x := d + len(num)
+			// The code column ends two cells before the right frame: a blank
+			// and the scroll bar's column sit between them.
+			top := r
+			for top > 0 && s.Cell(b, top).Content != "╭" {
+				top--
+			}
+			right := b + 1
+			for right < cols && s.Cell(right, top).Content != "╮" {
+				right++
+			}
+			var out [][]tuitest.Cell
+			for k := r; k < rows && s.Cell(b, k).Content == "│"; k++ {
+				if c := s.Cell(x-3, k).Content; k > r && c >= "0" && c <= "9" {
+					return out
+				}
+				row := make([]tuitest.Cell, 0, right-2-x)
+				for c := x; c < right-2; c++ {
+					row = append(row, s.Cell(c, k))
+				}
+				out = append(out, row)
+			}
+			return nil
+		}
+	}
+	return nil
+}
+
+// TestQuickLookWrapsWideCharactersWhole wraps a line of wide characters. Each
+// row holds whole characters, so every character is on a row once, and no row
+// ends in the ellipsis of a cut line. With wrap off the line is cut, and then
+// it does end in one.
+//
+// How this could pass wrongly: a row that lost a character at its edge still
+// shows a full row, so the test reads every character of the line in order.
+func TestQuickLookWrapsWideCharactersWhole(t *testing.T) {
+	term, lines := quickLookWrapOpen(t, "zzwrap.txt")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return quickLookLineRows(s, 3) != nil }, uiTimeout); err != nil {
+		t.Fatalf("lines 1 to 3 are not on screen: %v\n%s", err, term.Snapshot())
+	}
+	copiesFrame(t, term, "quick-look-wrap-wide")
+
+	want := []rune(lines[0])
+	var shown []string
+	var counts, ellipses []int
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		shown, counts, ellipses = nil, nil, nil
+		for i, row := range quickLookLineRows(s, 1) {
+			n, last := 0, ""
+			for _, c := range row {
+				if c.Width != 0 && c.Content != " " {
+					shown = append(shown, c.Content)
+					n, last = n+1, c.Content
+				}
+			}
+			counts = append(counts, n)
+			if last == "…" {
+				ellipses = append(ellipses, i)
+			}
+		}
+		if len(counts) == 0 || len(ellipses) > 0 || strings.Join(shown, "") != lines[0] {
+			return false
+		}
+		// 40 characters are 80 cells; a 41st would cross the code column's 81.
+		for _, n := range counts[:len(counts)-1] {
+			if n != 40 {
+				return false
+			}
+		}
+		return true
+	}, uiTimeout); err != nil {
+		var missing []int
+		j := 0
+		for i, r := range want {
+			for j < len(shown) && shown[j] == "…" {
+				j++
+			}
+			if j < len(shown) && shown[j] == string(r) {
+				j++
+			} else {
+				missing = append(missing, i)
+			}
+		}
+		t.Errorf("ASSERTION: line 1 does not wrap whole: %d rows holding %v characters, rows %v end in \"…\", characters %v of %d are on no row: %v\n%s",
+			len(counts), counts, ellipses, missing, len(want), err, term.Snapshot())
+	}
+
+	// Wrap off: the line is cut at the edge, and the lines after it show.
+	sendKeys(t, term, "w")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		rows := quickLookLineRows(s, 1)
+		return len(rows) == 1 && len(rows[0]) > 0 && rows[0][len(rows[0])-1].Content == "…" && strings.Contains(s.Text(), "end 4")
+	}, uiTimeout); err != nil {
+		t.Errorf("ASSERTION: w did not cut line 1 to one row ending in \"…\" with \"end 4\" on screen: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// TestQuickLookWrapsSoundMarksWhole wraps a line of Latin letters, each with a
+// halfwidth sound mark, then ASCII. Every ASCII character of the line is on a
+// row in order, no row ends in the ellipsis of a cut line, and no row is empty.
+// The ASCII line after it wraps whole too, which shows the rows are read right.
+func TestQuickLookWrapsSoundMarksWhole(t *testing.T) {
+	term, lines := quickLookWrapOpen(t, "zzwrap.txt")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return quickLookLineRows(s, 3) != nil }, uiTimeout); err != nil {
+		t.Fatalf("lines 1 to 3 are not on screen: %v\n%s", err, term.Snapshot())
+	}
+	copiesFrame(t, term, "quick-look-wrap-marks")
+
+	var want strings.Builder
+	for _, r := range lines[1] {
+		if r < 0x80 {
+			want.WriteRune(r)
+		}
+	}
+	var got strings.Builder
+	var ellipses, empty, short []int
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		got.Reset()
+		ellipses, empty, short = nil, nil, nil
+		rows := quickLookLineRows(s, 2)
+		for i, row := range rows {
+			last := ""
+			for _, c := range row {
+				if c.Width != 0 && c.Content != " " {
+					last = c.Content
+					for _, r := range c.Content {
+						if r < 0x80 {
+							got.WriteRune(r)
+						}
+					}
+				}
+			}
+			switch {
+			case last == "":
+				empty = append(empty, i)
+			case last == "…":
+				ellipses = append(ellipses, i)
+			}
+			// Row 0 is the sixty letters with their marks and 21 ASCII, 81
+			// cells; row 1 is 81 ASCII. Each fills the code column to its
+			// last cell.
+			if i < len(rows)-1 && len(row) > 0 && strings.TrimSpace(row[len(row)-1].Content) == "" {
+				short = append(short, i)
+			}
+		}
+		return len(rows) > 0 && got.String() == want.String() && len(ellipses)+len(empty)+len(short) == 0
+	}, uiTimeout); err != nil {
+		t.Errorf("ASSERTION: line 2 does not wrap whole: its rows hold %d of its %d ASCII characters (%q), rows %v end in \"…\", rows %v are empty, rows %v stop before the last cell: %v\n%s",
+			got.Len(), want.Len(), got.String(), ellipses, empty, short, err, term.Snapshot())
+	}
+
+	// The ASCII line wraps whole.
+	var line3 string
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		var b strings.Builder
+		for _, row := range quickLookLineRows(s, 3) {
+			for _, c := range row {
+				if c.Width != 0 && c.Content != " " {
+					b.WriteString(c.Content)
+				}
+			}
+		}
+		line3 = b.String()
+		return line3 == lines[2]
+	}, uiTimeout); err != nil {
+		t.Errorf("ASSERTION: line 3's rows hold %q, want %q: %v\n%s", line3, lines[2], err, term.Snapshot())
+	}
+}
+
+// TestQuickLookWrapKeepsColours wraps a Go line whose return is on its third
+// row. That return keeps the keyword's colour, the same as the return of line 1.
+//
+// How this could pass wrongly: two plain cells have the same colour too, so the
+// keyword's colour must differ from the plain identifier s's.
+func TestQuickLookWrapKeepsColours(t *testing.T) {
+	term, _ := quickLookWrapOpen(t, "zzwrap.go")
+	// at is the cells of word on the rows, after the rows before from: its row
+	// and its first cell, or -1.
+	at := func(rows [][]tuitest.Cell, from int, word string) (int, int) {
+		for i := from; i < len(rows); i++ {
+			for c := 0; c+len(word) <= len(rows[i]); c++ {
+				var b strings.Builder
+				for _, cell := range rows[i][c : c+len(word)] {
+					b.WriteString(cell.Content)
+				}
+				if b.String() == word {
+					return i, c
+				}
+			}
+		}
+		return -1, -1
+	}
+	// The highlight is there before w: line 1's return is not drawn plain.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		one, two := quickLookLineRows(s, 1), quickLookLineRows(s, 2)
+		kr, kc := at(one, 0, "return")
+		sr, sc := at(two, 0, "s :=")
+		return kr >= 0 && sr >= 0 && one[kr][kc].Fg != two[sr][sc].Fg
+	}, uiTimeout); err != nil {
+		t.Fatalf("line 1's return is not highlighted: %v\n%s", err, term.Snapshot())
+	}
+
+	sendKeys(t, term, "w")
+	var one, two [][]tuitest.Cell
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		one, two = quickLookLineRows(s, 1), quickLookLineRows(s, 2)
+		r, _ := at(two, 1, "return")
+		return len(two) >= 3 && r >= 1
+	}, uiTimeout); err != nil {
+		t.Fatalf("w did not wrap line 2 with its return on a later row: %v\n%s", err, term.Snapshot())
+	}
+	copiesFrame(t, term, "quick-look-wrap-colours")
+
+	kr, kc := at(one, 0, "return")
+	sr, sc := at(two, 0, "s :=")
+	rr, rc := at(two, 1, "return")
+	if kr < 0 || sr < 0 {
+		t.Fatalf("line 1's return or line 2's s is not on screen:\n%s", term.Snapshot())
+	}
+	keyword, plain := one[kr][kc].Fg, two[sr][sc].Fg
+	if keyword == plain {
+		t.Errorf("ASSERTION: line 1's return and the identifier s are the same colour %+v: the code is not highlighted", keyword)
+	}
+	for i, c := range two[rr][rc : rc+len("return")] {
+		if c.Fg != keyword {
+			t.Errorf("ASSERTION: cell %d of the return on row %d of line 2 is %+v, want the keyword's %+v (the identifier s is %+v)\n%s", i, rr, c.Fg, keyword, plain, term.Snapshot())
+		}
+	}
+}
+
+// TestQuickLookCopyModeSelectsAndCopies goes inside a text preview, presses [
+// for copy mode, and copies with the keys copy mode has over a pane: w v e y
+// copies a word, and V j y copies a line the panel wraps over two rows as one
+// line, with no newline where the row breaks. q and esc go back to the
+// preview's own keys.
+func TestQuickLookCopyModeSelectsAndCopies(t *testing.T) {
+	long := strings.Repeat("abcdefghij", 12)
+	text := "alpha beta gamma\nsecond line here\n" + long + "\nafter\n"
+	out := &lockedBuffer{}
+	term, dir := quickLookListed(t, []string{"TUIOS_KITTY_GRAPHICS=0"}, out)
+	if err := os.WriteFile(filepath.Join(dir, "zzcopy.txt"), []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	railLists(t, term, "the rail did not list zzcopy.txt", []string{"zzcopy.txt"}, nil)
+	quickLookFocusRail(t, term, "zzcopy.txt")
+	sendKeys(t, term, " ")
+	railLists(t, term, "space did not show zzcopy.txt", []string{"zzcopy.txt ", "go inside"}, nil)
+	sendKeys(t, term, tuitest.Tab)
+	railLists(t, term, "tab did not go inside", []string{"Inside the file", "select"}, nil)
+
+	enter := func(why string) {
+		t.Helper()
+		sendKeys(t, term, "[")
+		railLists(t, term, why, []string{"yank", "visual"}, nil)
+	}
+	enter("[ did not start copy mode in the preview")
+	sendKeys(t, term, "w", "v", "e")
+	time.Sleep(200 * time.Millisecond)
+	saveArtifact(t, term, artifactDir(t), "quicklook-copy-select")
+	from := len(clipboardWrites(out))
+	sendKeys(t, term, "y")
+	if got := rawWrite(t, term, out, from, "w v e y"); got != "beta" {
+		t.Fatalf("w v e y copied %q, want %q", got, "beta")
+	}
+	// A yank keeps copy mode, as over a pane, and q leaves it.
+	sendKeys(t, term, "q")
+	railLists(t, term, "q did not end copy mode", []string{"Inside the file", "select"}, nil)
+
+	enter("[ did not start copy mode again")
+	from = len(clipboardWrites(out))
+	sendKeys(t, term, "j", "j", "V", "j", "y")
+	if got := strings.TrimRight(rawWrite(t, term, out, from, "j j V j y"), "\n"); got != long {
+		t.Fatalf("V over the two rows of a wrapped line copied %q, want the line whole: %q", got, long)
+	}
+
+	sendKeys(t, term, tuitest.Esc)
+	railLists(t, term, "esc did not end copy mode", []string{"Inside the file", "select"}, nil)
+	alive(t, term, "after copy mode in the preview")
 }

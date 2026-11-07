@@ -230,7 +230,7 @@ func (m *OS) staleAttach(attach uint64) bool {
 
 // clientLog is the standard logger, when verbose logging is on.
 func clientLog(format string, args ...any) {
-	if verboseLog {
+	if verboseLog() {
 		log.Printf("[CLIENT] "+format, args...)
 	}
 }

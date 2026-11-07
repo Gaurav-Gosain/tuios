@@ -204,6 +204,9 @@ func TestWindowSummariesAgreeCoversEveryField(t *testing.T) {
 			f.Set(reflect.MakeSlice(f.Type(), 1, 1))
 		case reflect.Bool:
 			f.SetBool(true)
+		case reflect.Pointer:
+			// A value where there was none is a difference.
+			f.Set(reflect.New(f.Type().Elem()))
 		default:
 			t.Fatalf("field %s has a kind this test does not know: %s", rt.Field(i).Name, f.Kind())
 		}

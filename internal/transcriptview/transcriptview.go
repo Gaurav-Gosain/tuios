@@ -16,10 +16,14 @@
 // moves from "decode nothing" to "decode only for the person, and only on
 // request":
 //
-//   - It is reachable from one place, the agent-transcript verb, which runs
-//     only for a caller that holds the person's live human_nonce. Nothing
-//     reads a transcript here in the background, and nothing here keeps what
-//     it read, with one bounded exception: the records made from a document
+//   - It is reachable from two places. The agent-transcript verb runs only
+//     for a caller that holds the person's live human_nonce. delegate reads
+//     the newest page of a child agent's transcript once, when the child
+//     finishes the task its parent gave it, for the answer it mails to that
+//     parent; the parent chose to hand the child the task, and could read
+//     the child's screen anyway. Nothing else reads a transcript here in the
+//     background, and nothing here keeps what it read, with one bounded
+//     exception: the records made from a document
 //     format are kept a short time (docCache), so a person reading a large
 //     document page by page does not have it parsed for each page. Every
 //     other call opens the file, decodes, and returns. CursorAt, for

@@ -31,6 +31,21 @@ import (
 // runs, and the tag is what says the directory under it does not.
 const sidebarWorktreeGoneTag = "gone"
 
+// sidebarSetupTag is what a child row shows while its worktree setup runs,
+// or after it failed. A setup that passed shows nothing: the row is ready.
+func sidebarSetupTag(ref *sessiontree.WorktreeRef) string {
+	if ref == nil {
+		return ""
+	}
+	switch ref.Setup {
+	case session.SetupPending, session.SetupRunning:
+		return "setup"
+	case session.SetupFailed:
+		return "setup failed"
+	}
+	return ""
+}
+
 // worktreeRef adapts the daemon's record to the shared row model, which knows
 // nothing about internal/session. The main checkout's record comes through in
 // both of the rail's layouts, because both group by it. See sidebarRepoGrouping.
@@ -51,6 +66,9 @@ func (m *OS) worktreeRef(info *session.WorktreeInfo) *sessiontree.WorktreeRef {
 	}
 	if info.PR != nil {
 		ref.PRFailed = info.PR.Failed
+	}
+	if info.Setup != nil {
+		ref.Setup = info.Setup.State
 	}
 	if info.Group != "" {
 		// The first line, bounded: a row shows one line of it.

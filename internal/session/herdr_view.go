@@ -340,14 +340,17 @@ func (d *Daemon) buildHerdrView(cs *connState) *herdrView {
 	return v
 }
 
+// herdrWorkspaceLabel is the label a session shows as a herdr workspace:
+// its display name, or its name when it has none.
+func herdrWorkspaceLabel(sess *Session, st *SessionState) string {
+	return cmp.Or(st.DisplayName, sess.Name())
+}
+
 // addHerdrSession adds one session, as a herdr workspace numbered number, and
 // its tabs, panes and agents.
 func (d *Daemon) addHerdrSession(v *herdrView, sess *Session, st *SessionState, number int, active bool) {
 	wsID := herdrWorkspaceID(sess.ID)
-	label := st.DisplayName
-	if label == "" {
-		label = sess.Name()
-	}
+	label := herdrWorkspaceLabel(sess, st)
 	tabs := herdrOrderedTabs(st)
 	activeTab := herdrTabID(sess.ID, st.WorkspaceTabKey(max(st.CurrentWorkspace, 1)))
 	if IsScratchWorkspace(st.CurrentWorkspace) && len(tabs) > 0 {
@@ -425,16 +428,21 @@ func herdrOrderedTabs(st *SessionState) []int {
 	return out
 }
 
+// herdrTabLabel is the label of workspace ws named name: an unnamed
+// workspace's label is its workspace number, which is what the dock shows.
+func herdrTabLabel(name string, ws int) string {
+	if name == "" {
+		return strconv.Itoa(ws)
+	}
+	return name
+}
+
 // herdrTabRecord is herdr's TabInfo for workspace ws, the n-th listed tab.
 // herdr's number is the tab's own and stays through a move, so it is the
 // workspace's tab key, which the id is made from too (see
-// SessionState.WorkspaceTabKey). An unnamed workspace's label is its
-// workspace number, which is what the dock shows for it.
+// SessionState.WorkspaceTabKey). Its label is herdrTabLabel's.
 func herdrTabRecord(sess *Session, st *SessionState, ws, _ int, active bool, panes []herdrPaneInfo) herdrTab {
-	label := st.WorkspaceNames[ws]
-	if label == "" {
-		label = strconv.Itoa(ws)
-	}
+	label := herdrTabLabel(st.WorkspaceNames[ws], ws)
 	t := herdrTab{
 		TabID: herdrTabID(sess.ID, st.WorkspaceTabKey(ws)), WorkspaceID: herdrWorkspaceID(sess.ID), Number: st.WorkspaceTabKey(ws),
 		Label: label, Focused: active && ws == st.CurrentWorkspace, PaneCount: len(panes),

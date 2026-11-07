@@ -52,81 +52,12 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return HandleScrollbackBrowserKey(msg, o)
 	}
 
-	// Settings, the pickers over it, and the layout and machine pickers.
-	if out, cmd, ok := routeSettingsOverlayKey(msg, o); ok {
+	// The open panels, top first: each takes the keys while it is up.
+	if out, cmd, ok := routeOverlayKey(msg, o); ok {
 		return out, cmd
 	}
 
-	// Handle command palette overlay
-	if o.ShowCommandPalette {
-		return handleCommandPaletteInput(msg, o)
-	}
-
-	// Handle launcher overlay
-	if o.ShowLauncher {
-		return handleLauncherInput(msg, o)
-	}
-
-	// Handle session switcher overlay
-	if o.ShowSessionSwitcher {
-		return handleSessionSwitcherInput(msg, o)
-	}
-
-	// The mailbox owns the keyboard while it is up, like the switcher.
-	if o.ShowAgentMail {
-		return handleAgentMailInput(msg, o)
-	}
-
-	// So does the Inbox.
-	if o.ShowInbox {
-		return handleInboxInput(msg, o)
-	}
-
-	// The pane navigator owns the keyboard while it is up.
-	if o.NavigatorOpen() {
-		return handleNavigatorInput(msg, o)
-	}
-
-	// The go-to picker, the same way.
-	if o.GotoPickerOpen() {
-		return handleGotoPickerInput(msg, o)
-	}
-
-	// Handle workspace switcher overlay
-	if o.ShowWorkspaceSwitcher {
-		return handleWorkspaceSwitcherInput(msg, o)
-	}
-
-	// The paste buffer chooser, the same way.
-	if o.BufferChooserOpen() {
-		return handleBufferChooserInput(msg, o)
-	}
-
-	// Handle aggregate view overlay
-	if o.ShowAggregateView {
-		return handleAggregateViewInput(msg, o)
-	}
-
 	key := msg.String()
-
-	// Handle help menu interactions before general keybind dispatch. Help is
-	// modal, exactly as in terminal mode: an unhandled key that fell through
-	// to the window-manager dispatch below would act where the overlay hides
-	// it. n would create a window behind the help panel, x close one, t toggle
-	// tiling, and every other single-letter binding fire unseen.
-	if o.ShowHelp {
-		return handleHelpOverlayKey(msg, o)
-	}
-
-	// The message view opens over the log viewer, so it takes the key first.
-	if o.MessageViewOpen() && viewerTakesKey(msg, o) {
-		return handleMessageViewKey(msg, o)
-	}
-
-	// Handle log viewer (takes priority in window management mode)
-	if o.ShowLogs && viewerTakesKey(msg, o) {
-		return handleLogViewerKey(msg, o)
-	}
 
 	// Handle cache stats viewer (takes priority in window management mode)
 	if o.ShowCacheStats {

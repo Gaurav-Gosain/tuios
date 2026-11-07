@@ -163,11 +163,23 @@ type MailConfig struct {
 	// Wake types a one-line prompt into an agent at rest that has mail it
 	// was not told about, through the delivery queue. Unset means true.
 	Wake *bool `toml:"wake,omitempty"`
+	// QuestionsToParent sends a question from a delegated child agent to
+	// its parent agent by mail first, and to the person's Inbox after ten
+	// minutes with no answer. False sends it to the Inbox at once. Unset
+	// means true.
+	QuestionsToParent *bool `toml:"questions_to_parent,omitempty"`
 }
 
 // WakeOn reports whether an idle agent is told about its mail. It is unless
 // the file says wake = false.
 func (c MailConfig) WakeOn() bool { return c.Wake == nil || *c.Wake }
+
+// QuestionsToParentOn reports whether a delegated child's question goes to
+// its parent agent first. It does unless the file says
+// questions_to_parent = false.
+func (c MailConfig) QuestionsToParentOn() bool {
+	return c.QuestionsToParent == nil || *c.QuestionsToParent
+}
 
 // Checkpoint bounds: how many checkpoints one pane keeps.
 const (

@@ -3,6 +3,7 @@ package config
 import (
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/hints"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -192,6 +193,11 @@ type Settings struct {
 	// LinkHover is the hover highlight policy: one of the LinkHover*
 	// constants. Set via appearance.link_hover.
 	LinkHover string
+
+	// LinkRules are the compiled [[links.rules]]: plain text that is turned
+	// into a link with a target built from the match. Nil when there are
+	// none, which is what keeps the frame from scanning lines for them.
+	LinkRules *hints.LinkRules
 
 	// DropPreview is what a BSP drag draws where the pane would land: one of
 	// the DropPreview* constants. Set via appearance.drop_preview.
@@ -569,6 +575,9 @@ type Settings struct {
 	// window-manager habit, so it defaults off and users opt in.
 	// Set via appearance.focus_follows_mouse config.
 	FocusFollowsMouse bool
+	// PastePreview shows the image an image paste turned into a path, in a
+	// card at the pane's cursor for a few seconds.
+	PastePreview bool
 
 	// FocusFollowsMousePause is the modifier, "ctrl" or "alt", that pauses
 	// FocusFollowsMouse while it is held. Empty never pauses. tuios learns the
@@ -1073,6 +1082,7 @@ func DefaultSettings() Settings {
 		CopyOnSelect:                true,
 		NvimNavigation:              false,
 		FocusFollowsMouse:           false,
+		PastePreview:                true,
 		AltDrag:                     true,
 		ClickToType:                 ClickToTypeDouble,
 		NewWindowInheritCwd:         true,

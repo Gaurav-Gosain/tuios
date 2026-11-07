@@ -50,13 +50,8 @@ func (m *OS) attachedHostsChan() chan AttachedHostsMsg {
 	return m.attachedHostsCh
 }
 
-// ListenForAttachedHosts waits for one attached-hosts answer.
-func ListenForAttachedHosts(ch chan AttachedHostsMsg) tea.Cmd {
-	return listenAttachedHostsUntil(nil, ch)
-}
-
-// listenAttachedHostsUntil is ListenForAttachedHosts for a session that ends:
-// the command returns nil once stop is closed.
+// listenAttachedHostsUntil waits for the next message on its channel and returns nil once
+// stop is closed, so a session that ends leaves no listener parked.
 func listenAttachedHostsUntil(stop <-chan struct{}, ch chan AttachedHostsMsg) tea.Cmd {
 	return listenOnce(stop, ch, func(msg AttachedHostsMsg) tea.Msg { return msg })
 }

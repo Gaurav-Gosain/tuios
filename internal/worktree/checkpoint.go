@@ -1,7 +1,6 @@
 package worktree
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -12,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
@@ -638,22 +636,8 @@ func dirHoldsOnly(root, dir string, removed map[string]bool) bool {
 }
 
 // runStdin is runCtx with stdin.
+//
+//go:noinline
 func runStdin(ctx context.Context, dir string, env []string, stdin string, args ...string) (string, error) {
-	cmd := childproc.Git(ctx, dir, args...)
-	cmd.Env = append(cmd.Env, env...)
-	cmd.Stdin = strings.NewReader(stdin)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		if ctx.Err() != nil {
-			return "", errfmt.Errorf("git %s: %w", args[0], ctx.Err())
-		}
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			msg = err.Error()
-		}
-		return "", errfmt.Errorf("git %s: %s", args[0], msg)
-	}
-	return stdout.String(), nil
+	return runGit(ctx, dir, env, strings.NewReader(stdin), args...)
 }

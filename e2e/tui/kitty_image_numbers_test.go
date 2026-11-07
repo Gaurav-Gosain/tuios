@@ -548,6 +548,11 @@ func assertOneCellSize(t *testing.T, cells map[string]map[[2]int]bool, size func
 			for label, seen := range cells {
 				w, h := size(label)
 				for cr := range seen {
+					// An image at a pixel offset or on a layer has no box: it
+					// is drawn at its own pixels.
+					if cr == [2]int{} {
+						continue
+					}
 					if cr[0] != ceil(w, cw) || cr[1] != ceil(h, ch) {
 						fits = false
 					}

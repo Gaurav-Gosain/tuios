@@ -13,7 +13,7 @@ package debuglog
 import (
 	"fmt"
 	"os"
-	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -30,11 +30,25 @@ func Open(path string) (*os.File, error) {
 	return openPrivate(path)
 }
 
-// enabled reports whether TUIOS_DEBUG_INTERNAL=1 is set, read once on first
-// use. The switch is set at startup, before any pane exists.
-var enabled = sync.OnceValue(func() bool {
-	return os.Getenv("TUIOS_DEBUG_INTERNAL") == "1"
-})
+// on is the internal debug switch. It starts from TUIOS_DEBUG_INTERNAL=1 in
+// the environment, and Enable turns it on later, for a --debug flag that is
+// read after the packages start.
+var on atomic.Bool
+
+func init() { on.Store(os.Getenv("TUIOS_DEBUG_INTERNAL") == "1") }
+
+// Enabled reports whether the internal debug logs are on. It is the one
+// place every package asks, so a flag that turns the logs on reaches all of
+// them.
+func Enabled() bool { return on.Load() }
+
+// Enable turns the internal debug logs on for this process, and sets
+// TUIOS_DEBUG_INTERNAL=1 so the processes it starts, such as the daemon,
+// turn them on too.
+func Enable() {
+	on.Store(true)
+	_ = os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
+}
 
 // Internal is a logger that appends each line to Path, with a timestamp, when
 // TUIOS_DEBUG_INTERNAL=1. Otherwise it does nothing.
@@ -42,7 +56,7 @@ type Internal struct{}
 
 // Printf appends one formatted line to Path.
 func (Internal) Printf(format string, v ...any) {
-	if !enabled() {
+	if !Enabled() {
 		return
 	}
 	f, err := Open(Path)

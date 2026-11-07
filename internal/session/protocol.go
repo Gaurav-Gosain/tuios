@@ -655,6 +655,11 @@ type WindowSummary struct {
 	// Note is the pane's return note (WindowState.Note). Additive and omitted
 	// when empty, which is what an older peer sends.
 	Note string `json:"note,omitempty"`
+	// AgentParent is the agent pane that started this one, set only for a
+	// pane with an agent link (WindowState.AgentLink), so a rail watching
+	// another session can draw the child under its parent. Additive and
+	// omitted when nil, which is what an older peer sends.
+	AgentParent *PaneRef `json:"agent_parent,omitempty"`
 }
 
 // ClientInfo describes one daemon connection for listing.

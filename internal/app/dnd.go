@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
@@ -220,8 +219,7 @@ func (m *OS) dndWindowClosed(id string) {
 // the kitty passthrough does. Every message in and out goes through it, which
 // is how an exchange with a program is read back.
 func dndLog(format string, args ...any) {
-	dndLogOnce.Do(func() { dndLogOn = os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" })
-	if !dndLogOn {
+	if !debuglog.Enabled() {
 		return
 	}
 	f, err := debuglog.Open(debuglog.Path)
@@ -231,11 +229,6 @@ func dndLog(format string, args ...any) {
 	defer func() { _ = f.Close() }()
 	_, _ = fmt.Fprintf(f, "[%s] DND: %s\n", time.Now().Format("15:04:05.000"), fmt.Sprintf(format, args...))
 }
-
-var (
-	dndLogOnce sync.Once
-	dndLogOn   bool
-)
 
 // dndOn reports whether drag and drop is on for this client: the setting
 // says so.

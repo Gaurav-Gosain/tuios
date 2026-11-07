@@ -37,10 +37,14 @@ func (m *OS) copyModeHelp(focused *terminal.Window) []overlay.Hint {
 	if !mc.Has(focused.ID) {
 		legend := copyModeLegend(focused.CopyMode.State)
 		if focused.CopyMode.State == terminal.CopyModeNormal && m.KeybindRegistry != nil {
-			if keys := m.KeybindRegistry.GetCopyModeKeys(config.ActionEditScrollback); len(keys) > 0 {
+			if keys := m.KeybindRegistry.Keys(config.TableCopyMode, config.ActionEditScrollback); len(keys) > 0 {
 				// Before the last pair, so quit stays at the end.
 				edit := overlay.Hint{Key: keys[0], Label: "edit", Priority: overlay.HintOptional}
 				legend = slices.Insert(legend, len(legend)-1, edit)
+			}
+			if keys := m.KeybindRegistry.Keys(config.TableCopyMode, config.ActionHints); len(keys) > 0 {
+				hints := overlay.Hint{Key: keys[0], Label: "hints", Priority: overlay.HintOptional}
+				legend = slices.Insert(legend, len(legend)-1, hints)
 			}
 		}
 		return legend

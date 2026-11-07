@@ -301,6 +301,10 @@ A film shows one frame and a bar with the time. Click or drag the bar to move to
 time. There is no playback. Press `t` to show 7 small frames from across the film.
 At 16 colours the preview shows the facts of the film.
 
+Markdown shows HTML as formatted text, with alerts, footnotes and reference links.
+A `<details>` block starts closed, and `Enter` inside the file opens it. A Mermaid
+block shows as a diagram in text.
+
 JSON is laid out for reading. CSV and TSV show as a table. An archive shows the
 files in it. A binary file shows its first 16 KiB in hex. `J` and `K` step through
 the frames of a GIF.
@@ -336,12 +340,19 @@ Inside the file, every key acts on the preview:
 | `n` `N` | Go to the next match, or the one before |
 | `:` | Go to a line number, or a page of a PDF |
 | `w` | Wrap long lines, or cut them |
+| `[` | Start copy mode on the text |
 | `f` | Fill the area of the panes, or go back |
 | `Esc` or `Tab` | Move the keyboard back to the list |
 | `Space` | Close the preview |
 
 Change these keys in `[keybindings.quick_look]` and
 `[keybindings.quick_look_inside]`.
+
+`[` in a text file starts [copy mode](#copy-mode) on the text, with the cursor
+on the first line in view. All copy mode keys work: move, select with `v`,
+`V` or `Ctrl+V`, search with `/`, and copy with `y`. Long lines wrap while
+copy mode is on. A selection across a wrapped line copies the line whole. `q`
+or `Esc` goes back to the preview keys.
 
 For a listing on another machine, that machine reads the file and sends the
 preview. Its host policy must allow `files`. The binding is `file_quick_look`
@@ -1540,6 +1551,16 @@ copy_mode_line_end = ["end", "ctrl+e"]
 tuios cannot put two actions on one key. `tuios send-keys` cannot do it either,
 because a key from `send-keys` does not go to copy mode.
 
+### Hints in copy mode
+
+`s` in copy mode puts hint labels on the text in view, so you can copy text
+that you scrolled back to. See [docs/HINTS.md](HINTS.md#from-copy-mode).
+
+| Key | Where | Action |
+| --- | --- | --- |
+| `s` | Copy mode | `hints` |
+| `Ctrl+B F` | Window and terminal mode | `hints` |
+
 ### Open the scrollback in the editor
 
 `Ctrl+G` in copy mode opens the scrollback of the pane in your editor. The
@@ -1999,7 +2020,7 @@ These keys are in three sections of their own, rebindable like any other:
 `inbox_allow`, `inbox_allow_always`, `inbox_open`, `inbox_back`,
 `inbox_help`, `inbox_mark`, `inbox_mark_all`, `inbox_tab_prev`,
 `inbox_tab_next`, `inbox_expand`, `inbox_fold`, `inbox_prompt_prev`,
-`inbox_prompt_next`, `inbox_compare`, `inbox_artifact`, `inbox_board`,
+`inbox_prompt_next`, `inbox_child`, `inbox_compare`, `inbox_artifact`, `inbox_board`,
 `inbox_board_layout`, `inbox_view_list`, `inbox_take`, `inbox_stage_prev`, `inbox_stage_next`),
 `[keybindings.inbox_peek]` (the prompt: `peek_approve`, `peek_approve_always`,
 `peek_deny`, `peek_type`, `peek_read_again`, `peek_go`, `peek_back`) and

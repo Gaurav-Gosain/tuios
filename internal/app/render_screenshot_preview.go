@@ -92,7 +92,7 @@ func (m *OS) shotPreviewMetaLines() []string {
 	}
 	// The path is trimmed from the front, because the end of it is the part
 	// that says which file this is.
-	out = append(out, elideLeft(shortenPath(p.Path), m.panelWidth(shotPreviewWidth)-4))
+	out = append(out, truncateLeft(shortenPath(p.Path), m.panelWidth(shotPreviewWidth)-4))
 	if p.Note != "" {
 		out = append(out, p.Note)
 	}
@@ -200,19 +200,6 @@ func (m *OS) shotPreviewHeader() string {
 		line += fmt.Sprintf("  %d KB", max(1, p.Bytes/1024))
 	}
 	return line
-}
-
-// elideLeft trims a path from the front, because the end of it is the part
-// that says which file this is.
-func elideLeft(s string, width int) string {
-	if width < 4 || lipgloss.Width(s) <= width {
-		return s
-	}
-	runes := []rune(s)
-	for len(runes) > 0 && lipgloss.Width("…"+string(runes)) > width {
-		runes = runes[1:]
-	}
-	return "…" + string(runes)
 }
 
 // shotPreviewCells redraws the captured grid as styled terminal text. This is

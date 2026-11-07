@@ -58,5 +58,40 @@
     "name": "ui_prompt_end at rest",
     "payload": {"hook_event_name": "ui_prompt_end", "session_id": "pi-1", "kind": "select", "busy": false},
     "want": {"state": "idle", "if_state": "needs_input", "agent_session_id": "pi-1"}
+  },
+  {
+    "name": "pi subagent start",
+    "payload": {"hook_event_name": "subagent_start", "session_id": "pi-1", "agent_id": "9f0ca1b2c3d4e5f6", "agent_type": "researcher", "text": "Review auth boundaries"},
+    "want": {"agent_session_id": "pi-1", "activity": {"event": "subagent_start", "agent_id": "9f0ca1b2c3d4e5f6", "agent_type": "researcher", "text": "Review auth boundaries"}}
+  },
+  {
+    "name": "pi subagent stop with a result",
+    "payload": {"hook_event_name": "subagent_stop", "session_id": "pi-1", "agent_id": "9f0ca1b2c3d4e5f6", "text": "Wrote the brief"},
+    "want": {"agent_session_id": "pi-1", "activity": {"event": "subagent_stop", "agent_id": "9f0ca1b2c3d4e5f6", "text": "Wrote the brief"}}
+  },
+  {
+    "name": "pi subagent stop with no result",
+    "payload": {"hook_event_name": "subagent_stop", "session_id": "pi-1", "agent_id": "9f0ca1b2c3d4e5f6"},
+    "want": {"agent_session_id": "pi-1", "activity": {"event": "subagent_stop", "agent_id": "9f0ca1b2c3d4e5f6"}}
+  },
+  {
+    "name": "pi subagent update with a tool",
+    "payload": {"hook_event_name": "subagent_update", "session_id": "pi-1", "agent_id": "9f0ca1b2c3d4e5f6", "tool": "read", "target": "src/auth.ts"},
+    "want": {"agent_session_id": "pi-1", "activity": {"event": "subagent_update", "agent_id": "9f0ca1b2c3d4e5f6", "tool": "read", "target": "src/auth.ts"}}
+  },
+  {
+    "name": "pi subagent update failed",
+    "payload": {"hook_event_name": "subagent_update", "session_id": "pi-1", "agent_id": "9f0ca1b2c3d4e5f6", "outcome": "failed", "text": "token budget exhausted"},
+    "want": {"agent_session_id": "pi-1", "activity": {"event": "subagent_update", "agent_id": "9f0ca1b2c3d4e5f6", "outcome": "failed", "text": "token budget exhausted"}}
+  },
+  {
+    "name": "pi subagent event with an invalid agent_id",
+    "payload": {"hook_event_name": "subagent_start", "session_id": "pi-1", "agent_id": "bad id!"},
+    "skip": "agent_id is not an id tuios keeps"
+  },
+  {
+    "name": "pi subagent event with no agent_id",
+    "payload": {"hook_event_name": "subagent_start", "session_id": "pi-1"},
+    "skip": "agent_id is not an id tuios keeps"
   }
 ]

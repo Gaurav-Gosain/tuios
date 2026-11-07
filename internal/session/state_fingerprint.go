@@ -209,6 +209,26 @@ func StateFingerprint(s *SessionState) uint64 {
 			str("")
 			str("")
 		}
+		flag(w.AgentLink != nil)
+		if l := w.AgentLink; l != nil {
+			str(l.Harness)
+			str(l.AgentSessionID)
+			str(l.Root.Session)
+			str(l.Root.Window)
+			num(l.Depth)
+		}
+		flag(w.Delegation != nil)
+		if dl := w.Delegation; dl != nil {
+			str(dl.Role)
+			str(dl.Isolation)
+			str(dl.Mode)
+			str(dl.State)
+			num(int(dl.StartedAt))
+			num(int(dl.FinishedAt))
+			num(int(dl.AskedAt))
+			num(int(dl.QuestionMail))
+			num(int(dl.ResultMail))
+		}
 		num(len(w.Grants))
 		for _, g := range w.Grants {
 			str(g)

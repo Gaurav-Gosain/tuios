@@ -112,7 +112,7 @@ func frame(m *OS) string {
 // the render signal, turn it into the message Update expects, compose, and ask
 // whether the frame carries what the caller is waiting for.
 //
-// This is the honest client loop. ListenForPTYData is the Cmd bubbletea runs to
+// This is the honest client loop. listenPTYDataUntil is the Cmd bubbletea runs to
 // turn PTYDataChan into a PTYDataMsg, and PTYDataMsg is what makes Update mark
 // terminals dirty; doing both here reproduces the real sequence without needing
 // a tea.Program attached to a tty.

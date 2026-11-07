@@ -331,69 +331,10 @@ func ScopesFor(kb *KeybindingsConfig) []Scope {
 
 // section returns the config table with the given name, or nil.
 func (k *KeybindingsConfig) section(name string) map[string][]string {
-	switch name {
-	case SectionWindowManagement:
-		return k.WindowManagement
-	case SectionWorkspaces:
-		return k.Workspaces
-	case SectionLayout:
-		return k.Layout
-	case SectionModeControl:
-		return k.ModeControl
-	case SectionSystem:
-		return k.System
-	case SectionNavigation:
-		return k.Navigation
-	case SectionRestoreMinimized:
-		return k.RestoreMinimized
-	case SectionPrefixMode:
-		return k.PrefixMode
-	case SectionWindowPrefix:
-		return k.WindowPrefix
-	case SectionMinimizePrefix:
-		return k.MinimizePrefix
-	case SectionWorkspacePrefix:
-		return k.WorkspacePrefix
-	case SectionDebugPrefix:
-		return k.DebugPrefix
-	case SectionTapePrefix:
-		return k.TapePrefix
-	case SectionLayoutPrefix:
-		return k.LayoutPrefix
-	case SectionTuiosPrefix:
-		return k.TuiosPrefix
-	case SectionGlobal:
-		return k.Global
-	case SectionScript:
-		return k.Script
-	case SectionLists:
-		return k.Lists
-	case SectionTerminalMode:
-		return k.TerminalMode
-	case SectionSidebar:
-		return k.Sidebar
-	case SectionSidebarFiles:
-		return k.SidebarFiles
-	case SectionSidebarAgents:
-		return k.SidebarAgents
-	case SectionQuickLook:
-		return k.QuickLook
-	case SectionQuickLookInside:
-		return k.QuickLookInside
-	case SectionInbox:
-		return k.Inbox
-	case SectionInboxPeek:
-		return k.InboxPeek
-	case SectionMail:
-		return k.Mail
-	case SectionTransfers:
-		return k.Transfers
-	case SectionCopyMode:
-		return k.CopyMode
-	case SectionReview:
-		return k.Review
-	case SectionGUI:
-		return k.GUI
+	for _, t := range keybindTables {
+		if t.name == name {
+			return *t.field(k)
+		}
 	}
 	if table, ok := k.menuSection(name); ok {
 		return table

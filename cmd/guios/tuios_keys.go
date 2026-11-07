@@ -352,15 +352,15 @@ func (a *App) stepKey(k string) bool {
 	var action string
 	switch menu {
 	case "":
-		action = tk.reg.GetPrefixAction(k)
+		action = tk.reg.Action(config.TablePrefixMode, k)
 	case "workspace":
-		action = tk.reg.GetWorkspacePrefixAction(k)
+		action = tk.reg.Action(config.TableWorkspacePrefix, k)
 	case "window":
-		action = tk.reg.GetWindowPrefixAction(k)
+		action = tk.reg.Action(config.TableWindowPrefix, k)
 	case "layout":
-		action = tk.reg.GetLayoutPrefixAction(k)
+		action = tk.reg.Action(config.TableLayoutPrefix, k)
 	case "minimize":
-		action = tk.reg.GetMinimizePrefixAction(k)
+		action = tk.reg.Action(config.TableMinimizePrefix, k)
 	case "labels":
 		// The panes' labels show: a number goes to that pane.
 		if n, err := strconv.Atoi(k); err == nil && n >= 0 && n <= 9 {

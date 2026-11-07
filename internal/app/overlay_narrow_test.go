@@ -249,12 +249,12 @@ func TestWhichKeyFitsNarrowScreens(t *testing.T) {
 		apply func(*OS)
 	}{
 		{"leader", func(m *OS) {}},
-		{"workspace", func(m *OS) { m.WorkspacePrefixActive = true }},
-		{"minimize", func(m *OS) { m.MinimizePrefixActive = true }},
-		{"window", func(m *OS) { m.TilingPrefixActive = true }},
-		{"debug", func(m *OS) { m.DebugPrefixActive = true }},
-		{"tape", func(m *OS) { m.TapePrefixActive = true }},
-		{"layout", func(m *OS) { m.LayoutPrefixActive = true }},
+		{"workspace", func(m *OS) { m.SubMenu = SubMenuWorkspace }},
+		{"minimize", func(m *OS) { m.SubMenu = SubMenuMinimize }},
+		{"window", func(m *OS) { m.SubMenu = SubMenuTiling }},
+		{"debug", func(m *OS) { m.SubMenu = SubMenuDebug }},
+		{"tape", func(m *OS) { m.SubMenu = SubMenuTape }},
+		{"layout", func(m *OS) { m.SubMenu = SubMenuLayout }},
 	}
 	positions := []string{"top-left", "top-right", "bottom-left", "bottom-right", "center"}
 
@@ -371,9 +371,9 @@ func TestWhichKeyOnTinyScreens(t *testing.T) {
 		apply func(*OS)
 	}{
 		{"leader", func(m *OS) {}},
-		{"workspace", func(m *OS) { m.WorkspacePrefixActive = true }},
-		{"window", func(m *OS) { m.TilingPrefixActive = true }},
-		{"layout", func(m *OS) { m.LayoutPrefixActive = true }},
+		{"workspace", func(m *OS) { m.SubMenu = SubMenuWorkspace }},
+		{"window", func(m *OS) { m.SubMenu = SubMenuTiling }},
+		{"layout", func(m *OS) { m.SubMenu = SubMenuLayout }},
 	}
 	for _, sc := range tinyScreens {
 		for _, p := range prefixes {

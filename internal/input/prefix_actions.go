@@ -29,7 +29,7 @@ import (
 func (d *ActionDispatcher) registerPrefixHandlers() {
 	// Main prefix (leader, ...)
 	d.Register("prefix_new_window", handleNewWindow)
-	d.Register("prefix_close_window", handlePrefixCloseWindow)
+	d.Register("prefix_close_window", handleCloseWindow)
 	d.Register("prefix_rename_window", handlePrefixRenameWindow)
 	d.Register("prefix_settings", handleOpenSettings)
 	d.Register("prefix_keybinds", handlePrefixKeybinds)
@@ -83,17 +83,17 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 
 	// Sub-prefixes: each keeps the prefix active so the which-key overlay stays
 	// up for the second key.
-	d.Register("prefix_workspace", makeSubPrefixHandler(func(o *app.OS) { o.WorkspacePrefixActive = true }))
-	d.Register("prefix_minimize", makeSubPrefixHandler(func(o *app.OS) { o.MinimizePrefixActive = true }))
-	d.Register("prefix_window", makeSubPrefixHandler(func(o *app.OS) { o.TilingPrefixActive = true }))
-	d.Register("prefix_debug", makeSubPrefixHandler(func(o *app.OS) { o.DebugPrefixActive = true }))
-	d.Register("prefix_tape", makeSubPrefixHandler(func(o *app.OS) { o.TapePrefixActive = true }))
-	d.Register("prefix_layout", makeSubPrefixHandler(func(o *app.OS) { o.LayoutPrefixActive = true }))
-	d.Register("prefix_tuios", makeSubPrefixHandler(func(o *app.OS) { o.TuiosPrefixActive = true }))
+	d.Register("prefix_workspace", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuWorkspace }))
+	d.Register("prefix_minimize", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuMinimize }))
+	d.Register("prefix_window", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuTiling }))
+	d.Register("prefix_debug", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuDebug }))
+	d.Register("prefix_tape", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuTape }))
+	d.Register("prefix_layout", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuLayout }))
+	d.Register("prefix_tuios", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuTuios }))
 
 	// Window prefix (leader, t, ...)
 	d.Register("window_prefix_new", handleNewWindow)
-	d.Register("window_prefix_close", handlePrefixCloseWindow)
+	d.Register("window_prefix_close", handleCloseWindow)
 	d.Register("window_prefix_rename", handleWindowPrefixRename)
 	d.Register("window_prefix_next", handlePrefixNextWindow)
 	d.Register("window_prefix_prev", handlePrefixPrevWindow)
@@ -201,7 +201,10 @@ func handlePrefixCancel(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-func handlePrefixCloseWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+// handleCloseWindow closes the pane that has focus: the session pane in the
+// rail when it has focus, else the focused window. A scratch pane closes by
+// hand. Terminal mode ends when no window is left to type into.
+func handleCloseWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.SidebarSessionFocused() {
 		if w := o.SidebarSessionWindow(); w != nil {
 			o.SidebarSessionIntent("CloseWindow", w.ID)

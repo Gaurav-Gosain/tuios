@@ -112,24 +112,14 @@ func listenOnce[T any](stop <-chan struct{}, ch <-chan T, wrap func(T) tea.Msg) 
 	}
 }
 
-// ListenForSessionKill waits for a kill of another session to finish.
-func ListenForSessionKill(ch chan SessionKilledMsg) tea.Cmd {
-	return listenSessionKillUntil(nil, ch)
-}
-
-// listenSessionKillUntil is ListenForSessionKill for a session that ends: the
-// command returns nil once stop is closed.
+// listenSessionKillUntil waits for the next message on its channel and returns nil once
+// stop is closed, so a session that ends leaves no listener parked.
 func listenSessionKillUntil(stop <-chan struct{}, ch chan SessionKilledMsg) tea.Cmd {
 	return listenOnce(stop, ch, func(res SessionKilledMsg) tea.Msg { return res })
 }
 
-// ListenForSessionCreate waits for a detached-session creation to finish.
-func ListenForSessionCreate(ch chan SessionCreatedMsg) tea.Cmd {
-	return listenSessionCreateUntil(nil, ch)
-}
-
-// listenSessionCreateUntil is ListenForSessionCreate for a session that ends:
-// the command returns nil once stop is closed.
+// listenSessionCreateUntil waits for the next message on its channel and returns nil once
+// stop is closed, so a session that ends leaves no listener parked.
 func listenSessionCreateUntil(stop <-chan struct{}, ch chan SessionCreatedMsg) tea.Cmd {
 	return listenOnce(stop, ch, func(res SessionCreatedMsg) tea.Msg { return res })
 }
@@ -139,8 +129,8 @@ func ListenForClipboardSet(ch chan ClipboardSetMsg) tea.Cmd {
 	return listenClipboardSetUntil(nil, ch)
 }
 
-// listenClipboardSetUntil is ListenForClipboardSet for a session that ends: the
-// command returns nil once stop is closed.
+// listenClipboardSetUntil waits for the next message on its channel and returns nil once
+// stop is closed, so a session that ends leaves no listener parked.
 func listenClipboardSetUntil(stop <-chan struct{}, ch chan ClipboardSetMsg) tea.Cmd {
 	return listenOnce(stop, ch, func(msg ClipboardSetMsg) tea.Msg { return msg })
 }
@@ -543,44 +533,20 @@ func (m *OS) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// ListenForWindowExits creates a command that listens for window process exits.
-// It safely reads from the exit channel and converts exit signals to messages.
-func ListenForWindowExits(exitChan chan string) tea.Cmd {
-	return listenWindowExitsUntil(nil, exitChan)
-}
-
-// listenWindowExitsUntil is ListenForWindowExits for a session that ends: the
-// command returns nil once stop is closed.
+// listenWindowExitsUntil waits for the next message on its channel and returns nil once
+// stop is closed, so a session that ends leaves no listener parked.
 func listenWindowExitsUntil(stop <-chan struct{}, exitChan chan string) tea.Cmd {
 	return listenOnce(stop, exitChan, func(windowID string) tea.Msg { return WindowExitMsg{WindowID: windowID} })
 }
 
-// ListenForStateSync creates a command that listens for state sync from other clients.
-// It safely reads from the sync channel and converts state to messages for the update loop.
-func ListenForStateSync(syncChan chan StateSyncMsg) tea.Cmd {
-	return listenStateSyncUntil(nil, syncChan)
-}
-
-// listenStateSyncUntil is ListenForStateSync for a session that ends: the
-// command returns nil once stop is closed.
+// listenStateSyncUntil waits for the next message on its channel and returns nil once
+// stop is closed, so a session that ends leaves no listener parked.
 func listenStateSyncUntil(stop <-chan struct{}, syncChan chan StateSyncMsg) tea.Cmd {
 	return listenOnce(stop, syncChan, func(sync StateSyncMsg) tea.Msg { return sync })
 }
 
-// ListenForClientEvents creates a command that listens for client join/leave events.
-// It safely reads from the event channel and converts events to messages for the update loop.
-//
-// It reads one event and stops, so every one of the four messages it can produce
-// has to re-arm it. Two of them did not, and since all four share this one
-// channel, the first session resize or force refresh stopped the others as well:
-// a phone turned sideways got the columns it had before, because the effective
-// size the daemon recalculated was sitting in a channel nobody was reading.
-func ListenForClientEvents(eventChan chan ClientEvent) tea.Cmd {
-	return listenClientEventsUntil(nil, eventChan)
-}
-
-// listenClientEventsUntil is ListenForClientEvents for a session that ends: the
-// command returns nil once stop is closed.
+// listenClientEventsUntil waits for the next message on its channel and returns nil once
+// stop is closed, so a session that ends leaves no listener parked.
 func listenClientEventsUntil(stop <-chan struct{}, eventChan chan ClientEvent) tea.Cmd {
 	return listenOnce(stop, eventChan, clientEventMsg)
 }
@@ -738,14 +704,8 @@ func autoScrollTick() tea.Cmd {
 	})
 }
 
-// ListenForPTYData returns a Cmd that blocks until a PTY reader signals
-// new data, then sends a PTYDataMsg to trigger re-rendering.
-func ListenForPTYData(ch <-chan struct{}) tea.Cmd {
-	return listenPTYDataUntil(nil, ch)
-}
-
-// listenPTYDataUntil is ListenForPTYData for a session that ends: the command
-// returns nil once stop is closed.
+// listenPTYDataUntil waits for the next message on its channel and returns nil once
+// stop is closed, so a session that ends leaves no listener parked.
 func listenPTYDataUntil(stop <-chan struct{}, ch <-chan struct{}) tea.Cmd {
 	return func() tea.Msg {
 		select {
@@ -968,6 +928,9 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// or the position in its text.
 	if qc := m.quickLookPicture(); qc != nil {
 		cmd = tea.Batch(cmd, qc)
+	}
+	if pc := m.pastePreviewPicture(); pc != nil {
+		cmd = tea.Batch(cmd, pc)
 	}
 	if qc := m.quickLookWindow(); qc != nil {
 		cmd = tea.Batch(cmd, qc)
@@ -1248,7 +1211,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, m.applyImageProbe(msg)
 
 	case ImagePastedMsg:
-		m.applyImagePasted(msg)
+		return m, m.applyImagePasted(msg)
+
+	case pastePreviewExpireMsg:
+		m.applyPastePreviewExpire(msg)
 		return m, nil
 
 	case replyImageMsg:
@@ -2125,9 +2091,14 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// Typing means the person has moved on from the message the
 			// pointer may be resting on, so its hold ends.
 			m.NotifHoldEnd()
+			// And from a finished worktree setup's card.
+			m.hideSetupCard()
+			// And from the image it just pasted.
+			m.hidePastePreview()
 		case tea.MouseWheelMsg:
 			m.notePointerEvent(time.Now())
 		case tea.MouseClickMsg:
+			m.hidePastePreview()
 			m.notePointerEvent(time.Now())
 			m.dndHostMouseSeen()
 			m.pointerDown = true
@@ -3498,6 +3469,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case RemoteKeyMsg:
 		// Process a single key from a remote send-keys command
 		var cmd tea.Cmd
+
+		// A key sent from outside has moved on from a pasted image as much
+		// as a typed one, so it takes the paste preview down the same way.
+		m.hidePastePreview()
 
 		// Process this key through the input handler
 		if handler := getInputHandler(); handler != nil {

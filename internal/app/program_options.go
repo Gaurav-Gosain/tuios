@@ -2,8 +2,6 @@ package app
 
 import (
 	"fmt"
-	"os"
-	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -113,9 +111,7 @@ func sizeFilter(current func() (width, height int), next func(tea.Model, tea.Msg
 // eventDebugLog says whether TUIOS_DEBUG_INTERNAL=1 asked for the event log,
 // read once on the first event rather than per event. The local command sets
 // the variable at startup before the program runs, so the first event sees it.
-var eventDebugLog = sync.OnceValue(func() bool {
-	return os.Getenv("TUIOS_DEBUG_INTERNAL") == "1"
-})
+var eventDebugLog = debuglog.Enabled
 
 // debugLogEvent logs events to /tmp/tuios-events.log when TUIOS_DEBUG_INTERNAL=1.
 // Only logs KeyPressMsg, MouseMotionMsg, and unknown events in TerminalMode

@@ -15,7 +15,7 @@ func handlePrefixTransfers(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // handleTransfersInput handles keys while the Copies panel is up. The keys
 // are the transfers section of the keybinds, so each can be bound again.
 func handleTransfersInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	action := lookupAction(o, msg, overlayKeys(o).GetTransfersAction)
+	action := tableAction(o, msg, overlayKeys(o), config.TableTransfers)
 	var cmd tea.Cmd
 	switch action {
 	case config.ActionTransfersDown:

@@ -442,6 +442,10 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 			g = ckSnoozed
 		case it.Kind == session.AttentionFinished:
 			g = ckReview
+		case inboxWithParent(it):
+			// The parent agent answers it first: the child waits on its
+			// parent, as a working agent's row does.
+			g = ckWorking
 		}
 		idx := -1
 		if it.Window != "" {
@@ -573,7 +577,10 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 			if r.agent >= 0 {
 				e = list[r.agent]
 			}
-			if g == ckIdle || g == ckSettled || g == ckSnoozed || r.kind == ckRowNote || r.attempt || !m.ckHasLine2(r, e) {
+			// An idle or settled row is one line, unless its chain has
+			// something waiting for the person: the second line says so.
+			chainWaits := r.agent >= 0 && m.childrenWaiting(e) > 0
+			if (g == ckIdle || g == ckSettled) && !chainWaits || g == ckSnoozed || r.kind == ckRowNote || r.attempt || !m.ckHasLine2(r, e) {
 				r.lines = 1
 			}
 			ck.tall += r.lines
@@ -1347,6 +1354,9 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 			}
 			return nil
 		}
+		if ids, ok := strings.CutPrefix(action, "kid:"); ok {
+			return m.cockpitChildClick(ids)
+		}
 		if id, ok := strings.CutPrefix(action, "fold:"); ok {
 			if t := m.cockpitThread(); t != nil {
 				if t.folded == nil {
@@ -1612,7 +1622,12 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 	case config.ActionInboxFilter:
 		m.CockpitCycleFilter()
 		return nil, true
+	case config.ActionInboxChild:
+		return nil, m.CockpitNextChild()
 	case config.ActionInboxGo:
+		if cmd, ok := m.cockpitChildGo(); ok {
+			return cmd, true
+		}
 		// enter on a folded group's heading opens the group.
 		if r, ok := m.cockpitSelected(); ok && r.kind == ckRowHead {
 			m.CockpitFold()
