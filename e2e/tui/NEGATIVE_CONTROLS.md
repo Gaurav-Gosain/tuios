@@ -14586,3 +14586,18 @@ to "None, this session", none.
 Run on 2026-11-08 on macOS (arm64) on the daemon commit alone (d11eaf85a,
 the sheet still has a Session pill): "waiting for the capture sheet from
 terminal mode: timed out". **caught**
+
+## The thread reads a pasted image file
+
+`TestCockpitThreadPastedImageFile` writes four prompts that name a PNG in the
+daemon's paste folder, a text file there with a PNG name, a PNG with a paste
+name in another folder, and a link in the paste folder. Only the first two get
+a card, and only the first shows a picture. `TestFileImageBoundary`
+(internal/session) holds the same rules and the image id rules at the
+function level. Run on 2026-11-08 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| `withFileImages` not called in `verbAgentTranscript` | "no image card for the pasted file" | **caught** |
+| The paste folder check in `fileImagePaths` | "a PNG outside the paste folder got a card" (with the outside file first named header.png the prefix check refused it, so the test passed; it now has a paste name) | **caught** |
+| The magic byte sniff in `openFileImage` | e2e passes: the client's decoder refuses the text bytes too. `TestFileImageBoundary` fails at p2 and c5 ("the read gave <nil>, want ErrNoImage") | **caught by the unit test** |

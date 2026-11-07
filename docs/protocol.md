@@ -7216,6 +7216,18 @@ Params:
   names, in the file the pane is joined to. An id that names no image is
   `invalid_params`. Only Claude Code transcripts carry images.
 
+  Two images are files, not transcript data, and the daemon adds an entry
+  for each after the entry that names it, with an `id` of the form
+  `file.<entry id>.<k>`: a file of this daemon's paste folder (a
+  `tuios-paste-` name) that a prompt names, and an image an agent's read tool
+  (`view_image`, `read_file`, `read_many_files`, `read`, `view`) named by an
+  absolute path when no image follows the call. A prompt gives 4 at most. The
+  entry is there only while the file is a regular file of at most 10 MB. An
+  `image` read of such an id finds the entry again in the newest 1000 entries
+  and takes the path from it, so the caller never names a path. The file is
+  opened without following a link, and its first bytes must be PNG, JPEG, GIF
+  or WebP: `media_type` is what the bytes are, whatever the name says.
+
 Without `after` and `before`, the reply holds the newest `limit` entries.
 With `after`, it holds the entries after that cursor. With `before`, it holds
 the newest `limit` entries before that cursor. The entries are always oldest

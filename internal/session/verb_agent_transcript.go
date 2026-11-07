@@ -97,10 +97,7 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 	if tr := reg.TranscriptFor(harnessID); tr == nil || tr.Reader != format || !transcriptview.Known(format) {
 		return nil, unsupportedHarnessError(harnessID)
 	}
-	if p.Image != "" {
-		return d.transcriptImage(sess, w.ID, path, format, p.Image)
-	}
-	page, err := transcriptview.Read(path, transcriptview.Options{
+	opts := transcriptview.Options{
 		After:      p.After,
 		Before:     p.Before,
 		Limit:      limit,
@@ -109,7 +106,11 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 		Format:     format,
 		Session:    session,
 		Leaf:       leaf,
-	})
+	}
+	if p.Image != "" {
+		return d.transcriptImage(sess, w.ID, path, format, p.Image, opts)
+	}
+	page, err := transcriptview.Read(path, opts)
 	if err != nil {
 		if errors.Is(err, transcriptview.ErrNoFile) {
 			return nil, newVerbError(ErrVerbNoTranscript, "the transcript of window "+echoName(p.Window)+" is gone")
@@ -130,7 +131,7 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 		// session, so it is not passed on.
 		return nil, newVerbError(ErrVerbInternal, "could not read the transcript")
 	}
-	entries := page.Entries
+	entries := withFileImages(page.Entries, d.pasteDir())
 	if entries == nil {
 		entries = []transcriptview.Entry{}
 	}
@@ -151,8 +152,21 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 
 // transcriptImage reads the data of an image a page named, by its entry id.
 // It reaches only the file of the pane's join, as a page read does.
-func (d *Daemon) transcriptImage(sess *Session, window, path, format, id string) (any, *verbError) {
-	mediaType, data, err := transcriptview.ReadImage(path, format, id)
+func (d *Daemon) transcriptImage(sess *Session, window, path, format, id string, opts transcriptview.Options) (any, *verbError) {
+	var mediaType string
+	var data []byte
+	var err error
+	if strings.HasPrefix(id, fileImagePrefix) {
+		// An image file an entry names: the entry is found again in the
+		// newest page, and the path is the one it names.
+		opts.After, opts.Before, opts.Limit = "", "", transcriptview.MaxLimit
+		var page transcriptview.Page
+		if page, err = transcriptview.Read(path, opts); err == nil {
+			mediaType, data, err = readFileImage(page.Entries, d.pasteDir(), id)
+		}
+	} else {
+		mediaType, data, err = transcriptview.ReadImage(path, format, id)
+	}
 	switch {
 	case errors.Is(err, transcriptview.ErrNoFile):
 		return nil, newVerbError(ErrVerbNoTranscript, "the transcript of window "+echoName(window)+" is gone")
@@ -170,6 +184,18 @@ func (d *Daemon) transcriptImage(sess *Session, window, path, format, id string)
 		"data":       data,
 		"untrusted":  true,
 	}, nil
+}
+
+// pasteDir is this daemon's paste folder, "" when it has none.
+func (d *Daemon) pasteDir() string {
+	if d.pastes == nil {
+		return ""
+	}
+	dir, err := d.pastes.dir()
+	if err != nil {
+		return ""
+	}
+	return dir
 }
 
 // unsupportedHarnessError refuses a pane whose harness has no transcript this

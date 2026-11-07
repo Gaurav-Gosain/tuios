@@ -2585,6 +2585,13 @@ conversation, read from its transcript and drawn as cards:
   rows tall. A card that the window cuts shows no picture until you scroll it
   whole into view. A click on the card opens the image view. A thread shows
   16 images at most.
+- A screenshot you pasted through tuios is a file in the daemon's paste
+  folder, and the prompt holds only its path. The thread reads that file for
+  the card. It does the same for an image file that an agent's read tool
+  (such as `view_image` or `read_file`) named by an absolute path, when the
+  tool gave no image back. The daemon reads only a regular file, not a link,
+  of at most 10 MB, whose first bytes are PNG, JPEG, GIF or WebP. A file that
+  is gone or is not an image gets a card that says it could not be read.
 - A code block in an answer shows 12 lines and a line such as `10 more lines`.
   A click on that line, or `e`, shows all of it.
 - Each turn starts with one line that says how long it worked and what it
