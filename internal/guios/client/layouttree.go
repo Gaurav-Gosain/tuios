@@ -177,8 +177,8 @@ func (c *Client) sendTree(name string, ti treeInfo, l *proto.Layout) bool {
 // layout places them. It is the workspace's tree with the panes it lacks put
 // in by tuios's own rules: a new pane splits the pane that had the focus
 // (or the one a split asked for), on the side the split asked for or the
-// one the tree's scheme picks, and panes missing for another reason go in
-// beside the last leaf (layout.AddWindow, layout.InsertMissing). A TUI
+// one the tree's scheme picks, unless that leaves a pane too small
+// (placeNew). A TUI
 // places such a pane in the tree itself; with none attached, guios writes
 // the tree back with the pane in it.
 func (k *stateKeeper) layoutOf(sid, name string, wins []windowRow, focus string, ti *treeInfo) *proto.Layout {
@@ -213,8 +213,28 @@ func (k *stateKeeper) layoutOf(sid, name string, wins []windowRow, focus string,
 		}
 	}
 	bounds, gap := ti.bounds(), ti.ls.Gap
+	// Before guios measured its grid, bounds is a guess, and placeNew
+	// decided by it. Once the grid came, the panes placed under the guess
+	// go in again, in their order, by the same rule, while the tree is
+	// still the one guios built: the layout no longer depends on whether
+	// the grid came before the panes or after them (QM-009).
+	guess := !ti.tui && (ti.grid.W < 4 || ti.grid.H < 2)
+	k.mu.Lock()
+	g, wasGuess := k.guessed[sid]
+	if !guess {
+		delete(k.guessed, sid)
+	}
+	k.mu.Unlock()
 	restored := false
-	if len(missing) == 1 && !tree.IsEmpty() {
+	if wasGuess && !guess && !ti.tui && g.ws == ti.ws && treeKey(tree, leaves) == g.key {
+		fresh := layout.NewBSPTree()
+		fresh.AutoScheme, fresh.DefaultRatio = tree.AutoScheme, tree.DefaultRatio
+		for _, n := range ids {
+			placeNew(fresh, n, nums[g.target], bounds, gap)
+		}
+		tree, restored, changed = fresh, true, true
+	}
+	if !restored && len(missing) == 1 && !tree.IsEmpty() {
 		// A pane tiled again after it floated goes back where it tiled.
 		// Split off as a new pane, it split itself: a leaf the tree lacks,
 		// so the last leaf, and the person lost the layout they had
@@ -233,20 +253,33 @@ func (k *stateKeeper) layoutOf(sid, name string, wins []windowRow, focus string,
 	switch {
 	case restored:
 		// In place: no other rule moves it.
-	case len(missing) == 1 && !tree.IsEmpty():
-		// One new pane: it splits the pane the focus was on before it came,
-		// as the TUI's insertSyncedWindow does.
-		target, dir := prev, layout.PreselectionNone
-		if target == "" || !shown[target] || nums[target] == missing[0] {
+	case len(missing) == 1 && !tree.IsEmpty() && ps.at.After(time.Now().Add(-5*time.Second)) && shown[ps.target]:
+		// The split guios asked for: the pane it splits, on the side it
+		// asked for.
+		tree.AddWindow(missing[0], nums[ps.target], ps.dir, bounds, gap)
+		changed = true
+	case len(missing) > 0:
+		// Panes guios did not ask for, one or many, as a script or an agent
+		// opens them: each goes in by placeNew, beside the pane the focus
+		// was on before they came. One state used to bring one pane or
+		// several by timing alone, and the two went in by different rules,
+		// so the same script gave two layouts (QM-009).
+		target := prev
+		if target == "" || !shown[target] || slices.Contains(missing, nums[target]) {
 			target = focus
 		}
-		if ps.at.After(time.Now().Add(-5*time.Second)) && shown[ps.target] {
-			target, dir = ps.target, ps.dir
+		for _, n := range missing {
+			placeNew(tree, n, nums[target], bounds, gap)
 		}
-		tree.AddWindow(missing[0], nums[target], dir, bounds, gap)
 		changed = true
-	case tree.InsertMissing(ids, bounds, gap):
-		changed = true
+		if guess {
+			k.mu.Lock()
+			if old, ok := k.guessed[sid]; ok && old.ws == ti.ws {
+				target = old.target
+			}
+			k.guessed[sid] = guessedTree{ws: ti.ws, target: target, key: treeKey(tree, leaves)}
+			k.mu.Unlock()
+		}
 	}
 	if len(missing) > 0 {
 		k.mu.Lock()
@@ -268,6 +301,142 @@ func (k *stateKeeper) layoutOf(sid, name string, wins []windowRow, focus string,
 	k.layouts[sid] = l
 	k.mu.Unlock()
 	return l.Clone()
+}
+
+// Smallest terminal placeNew makes, in cells. A pane's rectangle in the
+// grid holds its terminal, its padding and its header too: placeOverCols
+// and placeOverRows more, as guios draws a pane at 13 px (a 74 by 25 cell
+// rectangle holds a 69 by 21 terminal).
+const (
+	placeMinCols  = 40
+	placeMinRows  = 8
+	placeOverCols = 6
+	placeOverRows = 4
+)
+
+// placeNew puts leaf num in t. It splits leaf target in half as the TUI
+// does for a pane it did not ask for (insertSyncedWindow, issue #1228), on
+// the side the tree's scheme picks, when both halves hold a terminal of
+// placeMinCols by placeMinRows. When they do not, or target is not in t, it
+// splits another leaf: the largest first, along its longer side first, and
+// gives the panes of the row or column the new pane joins equal shares
+// (evenRun), as tmux's even layouts do. Halves alone cannot give six panes
+// 40 columns each in a 1440 point window; thirds can. It takes the first
+// split where every pane holds such a terminal, or with none, the one whose
+// narrowest pane is widest. Panes opened one after another so no longer
+// cut the focused pane into slivers (QM-009).
+func placeNew(t *layout.BSPTree, num, target int, bounds layout.Rect, gap int) {
+	if t.IsEmpty() {
+		t.InsertWindow(num, 0, layout.SplitNone, 0, bounds, gap)
+		return
+	}
+	if t.HasWindow(target) {
+		try := t.Serialize().Deserialize()
+		try.AddWindow(num, target, layout.PreselectionNone, bounds, gap)
+		rs := try.ApplyLayout(bounds, gap)
+		if fits(rs[num]) && fits(rs[target]) {
+			t.AddWindow(num, target, layout.PreselectionNone, bounds, gap)
+			return
+		}
+	}
+	rs := t.ApplyLayout(bounds, gap)
+	order := t.GetAllWindowIDs()
+	slices.SortStableFunc(order, func(a, b int) int { return rs[b].W*rs[b].H - rs[a].W*rs[a].H })
+	var best *layout.BSPTree
+	bestScore := [2]int{-1, -1}
+	for _, id := range order {
+		for _, dir := range splitsOf(rs[id]) {
+			try := t.Serialize().Deserialize()
+			try.InsertWindow(num, id, dir, 0.5, bounds, gap)
+			try = evenRun(try, num, dir)
+			score := [2]int{1 << 30, 1 << 30}
+			for _, r := range try.ApplyLayout(bounds, gap) {
+				score[0], score[1] = min(score[0], r.W), min(score[1], r.H)
+			}
+			if score[0] >= placeMinCols+placeOverCols && score[1] >= placeMinRows+placeOverRows {
+				*t = *try
+				return
+			}
+			if score[0] > bestScore[0] || score[0] == bestScore[0] && score[1] > bestScore[1] {
+				best, bestScore = try, score
+			}
+		}
+	}
+	*t = *best
+}
+
+func fits(r layout.Rect) bool {
+	return r.W >= placeMinCols+placeOverCols && r.H >= placeMinRows+placeOverRows
+}
+
+// splitsOf is the two ways to split r, along its longer side first. Cells
+// are about twice as tall as they are wide.
+func splitsOf(r layout.Rect) [2]layout.SplitType {
+	if r.W >= 2*r.H {
+		return [2]layout.SplitType{layout.SplitVertical, layout.SplitHorizontal}
+	}
+	return [2]layout.SplitType{layout.SplitHorizontal, layout.SplitVertical}
+}
+
+// evenRun gives the panes of the run of dir splits leaf num is in equal
+// shares: the splits of dir joined to the one above leaf num, each pane or
+// subtree of another kind in it one share.
+func evenRun(t *layout.BSPTree, num int, dir layout.SplitType) *layout.BSPTree {
+	st := t.Serialize()
+	kind := int(dir)
+	// The path from the root to leaf num.
+	var path []*layout.SerializedNode
+	var find func(n *layout.SerializedNode) bool
+	find = func(n *layout.SerializedNode) bool {
+		if n == nil {
+			return false
+		}
+		path = append(path, n)
+		if n.Left == nil && n.Right == nil && n.WindowID == num {
+			return true
+		}
+		if find(n.Left) || find(n.Right) {
+			return true
+		}
+		path = path[:len(path)-1]
+		return false
+	}
+	if !find(st.Root) || len(path) < 2 {
+		return t
+	}
+	top := len(path) - 2
+	for top > 0 && int(path[top-1].SplitType) == kind {
+		top--
+	}
+	var shares func(n *layout.SerializedNode) int
+	shares = func(n *layout.SerializedNode) int {
+		if n.Left == nil || n.Right == nil || int(n.SplitType) != kind {
+			return 1
+		}
+		a, b := shares(n.Left), shares(n.Right)
+		n.SplitRatio = float64(a) / float64(a+b)
+		return a + b
+	}
+	shares(path[top])
+	return st.Deserialize()
+}
+
+// guessedTree is a tree guios placed new panes in before it measured its
+// grid: its workspace, the pane they split, and the tree as guios wrote it.
+type guessedTree struct {
+	ws     int
+	target string
+	key    string
+}
+
+// treeKey is t's shape, panes and ratios, to tell whether it changed. It
+// names the panes, not the leaf numbers, which the daemon renumbers.
+func treeKey(t *layout.BSPTree, leaves map[int]string) string {
+	st := sessionTree(t)
+	if st == nil {
+		return ""
+	}
+	return session.TreeKey(st, func(n int) string { return leaves[n] })
 }
 
 // floatSlot is where a pane tiled as it floated out of the split tree:

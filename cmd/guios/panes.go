@@ -1618,10 +1618,18 @@ func (a *App) reportGrid(c *ui.Context, s *proto.Session) {
 			}
 		}
 	}
-	if a.cell.w <= 0 || a.cell.h <= 0 {
-		return
+	cw, ch := a.cell.w, a.cell.h
+	if cw <= 0 || ch <= 0 {
+		// No cell measured yet: one guessed from the font, on the large
+		// side so the grid is not larger than the window holds (QA-072):
+		// 0.65 em wide and 1.45 em times the line height tall, where 13 px
+		// JetBrains Mono measures about 0.64 by 1.4. Until a grid came,
+		// the panes split off went into the daemon's 80 by 24 box, where
+		// the fit rule of new panes found no room and the layout came out
+		// by timing (QM-009). The cell measured replaces it.
+		cw, ch = font*0.65, font*1.45*max(a.set.LineHeight, 1)
 	}
-	g := [2]int{int(area.W / a.cell.w), int(area.H / a.cell.h)}
+	g := [2]int{int(area.W / cw), int(area.H / ch)}
 	if g == a.grid {
 		return
 	}

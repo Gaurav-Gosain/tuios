@@ -109,6 +109,9 @@ type stateKeeper struct {
 	// floated is where each pane floated out of the split tree tiled, by
 	// pane id, so that tiled again it goes back there (floatSlot).
 	floated map[string]floatSlot
+	// guessed is the tree each session's new panes went into before guios
+	// measured its grid (guessedTree).
+	guessed map[string]guessedTree
 	zoom    map[string]string // the pane guios zoomed, by session id, with no TUI to zoom it
 	unread  map[string]bool   // pane ids with a finished turn not seen
 	viewed  string
@@ -128,7 +131,7 @@ type stateKeeper struct {
 func newStateKeeper(c *Client) *stateKeeper {
 	k := &stateKeeper{c: c, layouts: map[string]*proto.Layout{}, trees: map[string]treeInfo{}, zoom: map[string]string{}, unread: map[string]bool{},
 		shown: map[string][]windowRow{}, prevFocus: map[string]string{}, pending: map[string]pendingSplit{},
-		floated: map[string]floatSlot{}, paneSession: map[string]string{}, sessionName: map[string]string{}, kick: make(chan struct{}, 1),
+		floated: map[string]floatSlot{}, guessed: map[string]guessedTree{}, paneSession: map[string]string{}, sessionName: map[string]string{}, kick: make(chan struct{}, 1),
 		exits: map[string]bool{}, closing: map[string]bool{},
 		started: time.Now().UnixMilli()}
 	k.loadLayouts()
