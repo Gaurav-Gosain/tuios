@@ -561,7 +561,7 @@ func (m *OS) kanbanHints() []overlay.Hint {
 	hints = append(hints, m.keyHints(config.ActionInboxNewAgent, "new card", config.ActionInboxBoardLayout, "list",
 		config.ActionInboxBoard, "agents", config.ActionInboxSelect, "search")...)
 	hints = append(hints, overlay.Hint{Key: "?", Label: "all keys"})
-	return append(hints, m.keyHints(config.ActionInboxClose, "close")...)
+	return append(hints, m.cockpitEscHints()...)
 }
 
 // kbTitleLines is a card's title wrapped to w cells, two lines at most.

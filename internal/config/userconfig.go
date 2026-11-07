@@ -1869,7 +1869,15 @@ const (
 	ActionInboxPromptPrev = "inbox_prompt_prev"
 	ActionInboxPromptNext = "inbox_prompt_next"
 	// The step through the agents the thread's cards started.
-	ActionInboxChild        = "inbox_child"
+	ActionInboxChild = "inbox_child"
+	// The view's regions: the list, the focus, the reply and the side
+	// column. tab and shift+tab step them, esc goes one step back (out of
+	// a region, then a search, then the view), and N goes to the next
+	// agent that needs the person.
+	ActionInboxRegionNext   = "inbox_region_next"
+	ActionInboxRegionPrev   = "inbox_region_prev"
+	ActionInboxEscape       = "inbox_escape"
+	ActionInboxNextNeeds    = "inbox_next_needs"
 	ActionAgentUnread       = "agent_unread"
 	ActionAgentSnooze       = "agent_snooze"
 	ActionAgentReply        = "agent_reply"
@@ -1924,10 +1932,16 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxFilter:   {"f"},
 		ActionInboxSelect:   {"/"},
 		ActionInboxMailbox:  {"m"},
-		ActionInboxClose:    {"esc", "q"},
-		ActionInboxWrite:    {"tab", "i"},
-		ActionInboxSort:     {"s"},
-		ActionInboxViewPane: {"ctrl+]"},
+		// esc goes back one step, q closes at once. tab steps the
+		// regions; i and r open the reply.
+		ActionInboxClose:      {"q"},
+		ActionInboxEscape:     {"esc"},
+		ActionInboxWrite:      {"i"},
+		ActionInboxRegionNext: {"tab"},
+		ActionInboxRegionPrev: {"shift+tab"},
+		ActionInboxNextNeeds:  {"N"},
+		ActionInboxSort:       {"s"},
+		ActionInboxViewPane:   {"ctrl+]"},
 		// Review, triage and approvals. z snoozes and waits for a digit; u
 		// undoes a dismiss or snooze made a moment ago; S shows what is
 		// snoozed; R rejects with a reason, after the a A r R of the

@@ -207,9 +207,18 @@ func handleInboxReplyInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// In the agents view the key that views the pane works while the editor
 	// is open: the draft is kept, as esc keeps it. The composer binds no
 	// ctrl+] of its own.
-	if o.InboxAgentsOn() && tableAction(o, msg, overlayKeys(o), config.TableInbox) == config.ActionInboxViewPane {
+	action := ""
+	if o.InboxAgentsOn() {
+		action = tableAction(o, msg, overlayKeys(o), config.TableInbox)
+	}
+	if action == config.ActionInboxViewPane {
 		o.InboxReplyCancel()
 		return o, o.InboxAgentsViewPane()
+	}
+	// tab and shift+tab step out of the reply to the next region and keep
+	// the draft. In the @ list tab puts the entry in.
+	if (action == config.ActionInboxRegionNext || action == config.ActionInboxRegionPrev) && !o.InboxMentionListOpen() {
+		return o, o.CockpitKeyAction(action)
 	}
 	return o, o.InboxReplyKey(msg)
 }

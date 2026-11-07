@@ -129,6 +129,10 @@ func (r ckRow) cursorable() bool {
 
 // cockpitState is the cockpit's own state, beside the Inbox's.
 type cockpitState struct {
+	// region has the keys (see cockpit_regions.go), and regionBox is where
+	// the last frame drew each region.
+	region    ckRegion
+	regionBox [ckRegions]ckRegionBox
 	// key is the selected row, and akey its agent, so the cursor stays on
 	// an agent whose approval was answered and whose row key changed.
 	key, akey string
@@ -1227,6 +1231,7 @@ func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 		ck.art.focus = false
 		m.cockpitTouch()
 	}
+	m.cockpitFocusRegionAt(x, y)
 	for _, h := range ck.hits {
 		if x < h.x0 || x >= h.x1 || y < h.y0 || y >= h.y1 {
 			continue
@@ -1522,7 +1527,21 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 	if cmd, ok := m.kanbanKey(action); ok {
 		return cmd, true
 	}
+	if cmd, ok := m.cockpitRegionKey(action); ok {
+		return cmd, true
+	}
 	switch action {
+	case config.ActionInboxRegionNext, config.ActionInboxRegionPrev:
+		d := 1
+		if action == config.ActionInboxRegionPrev {
+			d = -1
+		}
+		return m.CockpitStepRegion(d), true
+	case config.ActionInboxEscape:
+		return m.CockpitEscape(), true
+	case config.ActionInboxNextNeeds:
+		m.CockpitNextNeeds()
+		return nil, true
 	case config.ActionInboxAllow, config.ActionInboxAllowAlways, config.ActionInboxReply:
 		letter := "r"
 		switch action {
@@ -1633,10 +1652,6 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 			return m.CockpitOpenFocus(true), true
 		}
 		return m.CockpitGo(), true
-	case config.ActionInboxClose:
-		if m.Inbox.threads.open {
-			return m.CockpitOpenFocus(false), true
-		}
 	case config.ActionInboxUp, config.ActionInboxDown, config.ActionInboxPageUp, config.ActionInboxPageDown,
 		config.ActionInboxFirst, config.ActionInboxLast:
 		d := 1

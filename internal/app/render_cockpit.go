@@ -337,6 +337,7 @@ func (m *OS) drawCockpit(c *ckCanvas, l ckLook, top int, now time.Time) {
 	st := &m.Inbox
 	ck := &st.ck
 	ck.stripShown = false
+	ck.regionBox = [ckRegions]ckRegionBox{}
 	hdrY := 0
 	if c.h >= 32 {
 		hdrY = 1
@@ -406,6 +407,7 @@ func (m *OS) drawCockpit(c *ckCanvas, l ckLook, top int, now time.Time) {
 	}
 	if !strip && (c.w >= ckOneColumn || !st.threads.open) {
 		m.drawFleet(c, l, fleetW, colTop, colBot, top)
+		ck.regionBox[ckRegionList] = ckRegionBox{0, fleetW, top + colTop, top + colBot}
 	}
 	// The comparison of a fan takes the focus and the side column.
 	if ck.cmp != nil && c.w >= ckOneColumn && !strip {
@@ -418,6 +420,7 @@ func (m *OS) drawCockpit(c *ckCanvas, l ckLook, top int, now time.Time) {
 		if e, ok := m.cockpitAgent(); ok {
 			focusW -= ckSideWidth + 1
 			m.drawSide(c, l, e, c.w-ckSideWidth, colTop, ckSideWidth, colBot)
+			ck.regionBox[ckRegionSide] = ckRegionBox{c.w - ckSideWidth, c.w, top + colTop, top + colBot}
 		}
 	}
 	if focusW > 0 {
@@ -431,8 +434,29 @@ func (m *OS) drawCockpit(c *ckCanvas, l ckLook, top int, now time.Time) {
 			fy += 2
 		}
 		m.drawFocus(c, l, focusX, fy, focusW, colBot, top, now)
+		ck.regionBox[ckRegionFocus] = ckRegionBox{focusX, focusX + focusW, top + colTop, top + colBot}
 	}
+	m.drawRegionMark(c, l, colTop-1, hdrY, top)
 	m.drawCockpitHints(c, l, hintsY, now)
+}
+
+// drawRegionMark draws the accent rule on the top edge of the region that
+// has the keys, on the row above the columns. It draws nothing when the
+// frame shows one region only, or when that row is the header's.
+func (m *OS) drawRegionMark(c *ckCanvas, l ckLook, y, hdrY, top int) {
+	ck := &m.Inbox.ck
+	if y <= hdrY || !ck.regionBox[ckRegionFocus].shown() {
+		return
+	}
+	r := m.CockpitRegion()
+	if r == ckRegionReply {
+		r = ckRegionFocus
+	}
+	b := ck.regionBox[r]
+	if !b.shown() {
+		return
+	}
+	c.text(b.x0, y, b.x1, ckSeg{t: strings.Repeat("▁", b.x1-b.x0), fg: l.pal.Accent})
 }
 
 // drawCockpitHeader draws the title row: the counts, the search and the New
@@ -1731,10 +1755,28 @@ func (m *OS) drawCockpitHints(c *ckCanvas, l ckLook, y int, now time.Time) {
 		}
 		return n
 	}
+	// The region that has the keys is named first, when the frame shows
+	// more than one and there is room for it beside the first hint.
+	name := ""
+	if m.Inbox.ck.regionBox[ckRegionFocus].shown() {
+		name = ckRegionNames[m.CockpitRegion()]
+		if len(hints) > 0 && width(hints[:1])+ansi.StringWidth(name)+5 > room {
+			name = ""
+		}
+	}
+	if name != "" {
+		room -= ansi.StringWidth(name) + 5
+	}
 	for len(hints) > 1 && width(hints) > room {
 		hints = slices.Delete(hints, len(hints)-2, len(hints)-1)
 	}
 	x := 2
+	if name != "" {
+		// A heading, not a key: the mark after it keeps it apart from the
+		// hints, which are a key and a label each.
+		x = c.text(x, y, 2+room+ansi.StringWidth(name)+5, ckSeg{t: name, fg: pal.Fg, attrs: ckBold}, ckSeg{t: " ›", fg: pal.FgDim}) + 3
+		room += ansi.StringWidth(name) + 5
+	}
 	for _, h := range hints {
 		x = c.text(x, y, 2+room, ckSeg{t: h.Key, fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: " " + h.Label, fg: pal.FgMute}) + 3
 	}
@@ -1776,6 +1818,12 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 	}
 	if hints, ok := m.inboxReplyHints(); ok {
 		return hints
+	}
+	switch m.CockpitRegion() {
+	case ckRegionFocus:
+		return m.cockpitFocusHints()
+	case ckRegionSide:
+		return m.cockpitSideHints()
 	}
 	if m.InboxReasonOpen() {
 		return []overlay.Hint{{Key: overlay.EnterKey(), Label: "send"}, {Key: "esc", Label: "cancel"}}
@@ -1880,8 +1928,14 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 		// Optional, so a narrow footer gives it up first: ? lists it too.
 		hints = append(hints, overlay.Optional(m.keyHints(config.ActionInboxFold, "fold group"))...)
 	}
+	if m.cockpitNeedsCount() > 1 {
+		hints = append(hints, overlay.Optional(m.keyHints(config.ActionInboxNextNeeds, "next needs you"))...)
+	}
+	if m.Inbox.ck.regionBox[ckRegionFocus].shown() {
+		hints = append(hints, overlay.Optional(m.keyHints(config.ActionInboxRegionNext, "next region"))...)
+	}
 	hints = append(hints, overlay.Hint{Key: "?", Label: "all keys"})
-	return append(hints, m.keyHints(config.ActionInboxClose, "close")...)
+	return append(hints, m.cockpitEscHints()...)
 }
 
 // cockpitNote is the return note the focus shows for a row: its pane's note,

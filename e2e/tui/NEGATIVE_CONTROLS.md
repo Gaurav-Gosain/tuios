@@ -14363,3 +14363,29 @@ Run on 2026-11-07 on macOS (arm64):
 The steps are in `approval-command-focus.txt` under the test's artifact
 folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestApprovalHoldOutlastsACommandFocusMove$' -v .`.
+
+## The agents view's regions, esc ladder and N
+
+`TestCockpitRegions` opens the agents view at 200x50 with two agents that need
+you, puts the cursor on bench-idle, and walks the regions with `tab`: List,
+Focus, Reply, Side, List, then `shift+tab` to Side and `esc` back to List. Each
+step must name the region at the left of the key bar and draw the accent rule
+over that region's columns. A click in the focus must give it the keys. The
+esc ladder: esc in the reply gives the list the keys and keeps the draft; with
+`f` on, the key bar says `esc clear search` and esc clears it; the next esc
+closes the view; the draft is there when the view opens again. `N` three times
+must visit both agents that need you and wrap. A second client at 120x36, with
+no side column, must step List, Focus, Reply, List.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The old defaults: `tab` opens the reply, no region step | "tab from the list: want region Focus"; the key bar reads Reply | **caught** |
+| A region the frame does not draw takes a step | "tab from the reply at 120 columns, past the side column it does not draw"; the key bar reads Side | **caught** |
+| esc closes the view at once | "esc in the side column: want region List"; the view is gone | **caught** |
+| `N` does nothing | "N did not walk the two agents that need you and wrap" | **caught** |
+
+The frames are `regions-*` under the test's artifact folder. Repeat from
+`e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitRegions$' -v .`.

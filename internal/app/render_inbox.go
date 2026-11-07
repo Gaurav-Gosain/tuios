@@ -77,7 +77,7 @@ func (m *OS) keyHints(pairs ...string) []overlay.Hint {
 	for i := 0; i+1 < len(pairs); i += 2 {
 		if key := m.inboxKey(pairs[i]); key != "" {
 			h := overlay.Hint{Key: key, Label: pairs[i+1]}
-			if pairs[i] == config.ActionInboxClose {
+			if pairs[i] == config.ActionInboxClose || pairs[i] == config.ActionInboxEscape {
 				// The way out keeps its label on any key it is bound to.
 				h.Priority = overlay.HintEssential
 			}

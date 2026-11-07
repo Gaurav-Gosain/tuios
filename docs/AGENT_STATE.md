@@ -2549,7 +2549,7 @@ never answers a card you cannot see.
 
 The reply area sits at the foot of the focus: who the reply is for, when it
 is typed (at once, or when a working agent rests), and a Send button. A click
-on it, `r`, `i` or `tab` opens the editor. An image you paste or drop in shows
+on it, `r` or `i` opens the editor, and `tab` steps onto it from the focus. An image you paste or drop in shows
 as a chip with its name and size. A click on the chip opens the image view:
 the picture at the largest size the screen holds, its name, size in pixels
 and bytes, and who it is for. `o` opens it in the desktop's viewer, `c` saves
@@ -2704,7 +2704,7 @@ Inside the agents view:
 | `n` | Open the New agent sheet. |
 | `J` / `K`, `ctrl+d` / `ctrl+u` | Scroll a plan on the card. The wheel over the card does the same. |
 | `1` to `9` | On a question put with `ask-human`, pick that answer. The question and its numbered answers are shown on its card, and the keys work once it has been on screen as it is for 0.4 seconds. See [Questions an agent asks you](#questions-an-agent-asks-you). |
-| `r`, `i`, `tab` | With no approval waiting: reply to the agent, or to mail, whose thread opens with its reply line. |
+| `r`, `i` | With no approval waiting: reply to the agent, or to mail, whose thread opens with its reply line. `tab` steps the regions: the list, the focus, the reply, the side column. |
 | `y` | On a Resume row: type the conversation's resume command into its pane. The view stays open, and the row says `Resuming` until the agent is back. With marks, resume every marked Resume row. `enter` goes to the pane. |
 | `p` | On a row that says `held for NAME`: pass the mail another machine sent that agent on to it. See [Mail held from another machine](#mail-held-from-another-machine). |
 | `d` | Dismiss the item. The dock says `u` undoes it, and for 10 seconds it does. |

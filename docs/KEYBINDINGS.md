@@ -1890,7 +1890,9 @@ Inside it:
 | `g` `G` | Go to the first or last agent. When the thread is scrolled up, `G` first shows its newest lines and follows it again |
 | `enter` | Go to the agent's pane and close the view. On mail, open the thread |
 | `a` `A` `r` `R` | On a held approval: allow once, always allow, reject, reject and say why. `1` `2` `3` still work |
-| `r`, `i`, `tab` | With no approval waiting: write a reply to the agent, or to the mail |
+| `r`, `i` | With no approval waiting: write a reply to the agent, or to the mail |
+| `tab` `shift+tab` | Give the keys to the next or the previous region: the list, the focus, the reply, the side column. A region the screen does not show is skipped. See below |
+| `N` | Go to the next agent that needs you, and from the top again after the last |
 | `space` | Read an approval's or a question's prompt and answer it here |
 | `n` | Open the New agent sheet. See below |
 | `c` | On an attempt of a fan: compare the attempts. See below |
@@ -1918,7 +1920,16 @@ Inside it:
 | `ctrl+]` | Go to the agent's pane and zoom it. `ctrl+b i` comes back to the same agent |
 | `l` `h`, `right` `left` | On a narrow screen, open the focus and go back to the list |
 | `?` | All keys. Help opens over the view, and `esc` gives the view back as it was |
-| `esc` `q` | Close. On a narrow screen, go back from the focus to the list first |
+| `esc` | Go back one step: on a narrow screen from the focus to the list, then from a region to the list, then clear the search and the filter, then close the view. The key bar says what the next `esc` does |
+| `q` | Close the view at once |
+
+The region that has the keys wears an accent rule along its top edge, and
+the key bar names it at the left and shows its keys. In the focus, `j` `k`
+scroll the thread a line, the page keys a screen, and `g` `G` go to its ends;
+every other key does what it does in the list. In the side column `enter`
+opens the agent's pane. A click in a region gives it the keys; the wheel
+does not. Stepping onto the reply opens it, and stepping off keeps the
+draft, as `esc` does. In the `@` list `tab` still puts the entry in.
 
 On the board's columns, `h` `l` go between the columns, `j` `k` between the
 cards, `n` adds a card, and `enter` on a free card opens the New agent sheet
@@ -2034,7 +2045,8 @@ These keys are in three sections of their own, rebindable like any other:
 `inbox_help`, `inbox_mark`, `inbox_mark_all`, `inbox_tab_prev`,
 `inbox_tab_next`, `inbox_expand`, `inbox_fold`, `inbox_prompt_prev`,
 `inbox_prompt_next`, `inbox_child`, `inbox_compare`, `inbox_artifact`, `inbox_board`,
-`inbox_board_layout`, `inbox_view_list`, `inbox_take`, `inbox_stage_prev`, `inbox_stage_next`),
+`inbox_board_layout`, `inbox_view_list`, `inbox_take`, `inbox_stage_prev`, `inbox_stage_next`,
+`inbox_region_next`, `inbox_region_prev`, `inbox_escape`, `inbox_next_needs`),
 `[keybindings.inbox_peek]` (the prompt: `peek_approve`, `peek_approve_always`,
 `peek_deny`, `peek_type`, `peek_read_again`, `peek_go`, `peek_back`) and
 `[keybindings.mail]` (the mailbox: `mail_down`, `mail_up`, `mail_page_down`,
@@ -2069,7 +2081,7 @@ The keys new with the agents view yield to your own: when your
 `[keybindings.inbox]` already gives `n`, `R`, `a`, `x` or another new key to an
 action, that action keeps it, and the new action has no key. `tuios keybinds
 doctor` lists each one. `inbox_agents`, the old `tab` that switched the Inbox
-to the agents view, is gone: `inbox_write` has `tab` now, and doctor lists a
+to the agents view, is gone: `tab` is `inbox_region_next` now, and doctor lists a
 config that still binds `inbox_agents`. A config that kept the old default
 `inbox_deny_reason = ["n"]` moves it to `R`, so `n` starts a new agent, and
 doctor says so. When your binding takes one of an action's new keys, only
