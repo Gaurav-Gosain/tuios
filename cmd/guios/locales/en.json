@@ -1198,6 +1198,7 @@
   },
   "cockpitAllowAlways": "Always allow",
   "cockpitAllowOnce": "Allow once",
+  "cockpitAllowSession": "Allow for this session",
   "cockpitAlwaysAllows": "Always allows: {scope}",
   "cockpitAnswered": "{name}: {answer}",
   "cockpitAsks": "Asks",
@@ -1302,6 +1303,7 @@
   },
   "cockpitUnnamed": "unnamed",
   "cockpitWaits": "{name} waits {age}",
+  "cockpitWaitsFor": "waits {age}",
   "cockpitWorkspace": "workspace {n}",
   "@cockpitWorkspace": {
     "placeholders": {

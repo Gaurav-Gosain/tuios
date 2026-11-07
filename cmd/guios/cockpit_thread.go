@@ -398,7 +398,13 @@ var threadIcon = icon(`<path d="M3 3.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H8l-3 2.5
 // ckEmptyThread is a thread's empty state: it fills the tab's room, so
 // that a thread with nothing to show is never a blank column.
 func (a *App) ckEmptyThread(c *ui.Context, pal *palette, title, detail string) {
-	ui.Column(c.Key("thread-empty")).Grow(1).MinHeight(0).Children(func() {
+	// Over an approval card the card says what the agent waits for: the
+	// block would only be cut by the tab's least height (ckTabMinH).
+	if a.ck.cardShown {
+		return
+	}
+	col := ui.Column(c.Key("thread-empty")).Grow(1).MinHeight(0)
+	col.Children(func() {
 		emptyBlock(c, pal, threadIcon, title, detail, false, nil)
 	})
 }

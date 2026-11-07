@@ -6414,6 +6414,16 @@ func (msgs Messages) CockpitAllowOnce() string {
 	return Catalog.Format(msgs.locale, "cockpitAllowOnce", nil)
 }
 
+// CockpitAllowSession says "Allow for this session"
+// in the language the app shows.
+func CockpitAllowSession() string { return In(i18n.Locale()).CockpitAllowSession() }
+
+// CockpitAllowSession says "Allow for this session"
+// in the language of msgs.
+func (msgs Messages) CockpitAllowSession() string {
+	return Catalog.Format(msgs.locale, "cockpitAllowSession", nil)
+}
+
 // CockpitAlwaysAllows says "Always allows: {scope}"
 // in the language the app shows.
 func CockpitAlwaysAllows(scope string) string { return In(i18n.Locale()).CockpitAlwaysAllows(scope) }
@@ -7218,6 +7228,16 @@ func CockpitWaits(name string, age string) string { return In(i18n.Locale()).Coc
 // in the language of msgs.
 func (msgs Messages) CockpitWaits(name string, age string) string {
 	return Catalog.Format(msgs.locale, "cockpitWaits", map[string]any{"name": name, "age": age})
+}
+
+// CockpitWaitsFor says "waits {age}"
+// in the language the app shows.
+func CockpitWaitsFor(age string) string { return In(i18n.Locale()).CockpitWaitsFor(age) }
+
+// CockpitWaitsFor says "waits {age}"
+// in the language of msgs.
+func (msgs Messages) CockpitWaitsFor(age string) string {
+	return Catalog.Format(msgs.locale, "cockpitWaitsFor", map[string]any{"age": age})
 }
 
 // CockpitWorkspace says "workspace {n}"

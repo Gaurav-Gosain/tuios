@@ -103,7 +103,10 @@ type ckArmed struct {
 
 // cockpit is the agent cockpit's state.
 type cockpit struct {
-	open bool
+	// cardShown is set while the focus card shows an approval card, for
+	// the views drawn above it this frame.
+	cardShown bool
+	open      bool
 	// view is what the card shows: the agents, the board or the mail for
 	// the person.
 	view int
