@@ -24,6 +24,7 @@ import (
 	"github.com/Gaurav-Gosain/mygo/transfer"
 	"github.com/Gaurav-Gosain/mygo/ui"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/cli"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
@@ -297,6 +298,9 @@ type App struct {
 	side   sideState    // the side panel, beside a session's panes
 	quick  quickTerm    // the terminal the global shortcut drops down
 	sw     switchKeys   // the keys of a workspace switch on its way
+	// cfgWatch follows config.toml for the settings it holds
+	// (followTuiosConfig).
+	cfgWatch *config.Watcher
 }
 
 // confirmation is a question the app asks before something it cannot undo.

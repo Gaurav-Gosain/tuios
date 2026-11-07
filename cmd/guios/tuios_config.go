@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"slices"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -31,6 +32,11 @@ func loadTuiosSettings(s *settings.Settings) {
 	if err != nil || cfg == nil {
 		return
 	}
+	tuiosFromConfig(s, cfg)
+}
+
+// tuiosFromConfig copies the settings tuios's config holds from cfg into s.
+func tuiosFromConfig(s *settings.Settings, cfg *config.UserConfig) {
 	s.KeepHistory = cfg.Daemon.PersistScrollback == nil || *cfg.Daemon.PersistScrollback
 	switch cfg.Daemon.ResumeAgents {
 	case "auto", "off":
@@ -40,6 +46,39 @@ func loadTuiosSettings(s *settings.Settings) {
 	}
 	s.Shell = cfg.Appearance.PreferredShell
 	s.Approvals = len(cfg.Agents.Approvals.Enabled) > 0
+}
+
+// followTuiosConfig keeps the settings tuios's config holds in step with
+// the file while the app runs. They were read only at start, so a file
+// another program changed, as `tuios config` or an editor does, left the
+// app on the old values: with approvals turned on there, the card still
+// offered Turn on. The app's own saves are not delivered (the watcher drops
+// a self write). A watcher that cannot start leaves the values read at
+// start.
+func (a *App) followTuiosConfig() {
+	path, err := config.GetConfigPath()
+	if err != nil {
+		return
+	}
+	w, err := config.NewWatcherWithOptions(path, func(cfg *config.UserConfig, err error) {
+		if err != nil || cfg == nil {
+			return
+		}
+		a.update(func() {
+			var s settings.Settings
+			tuiosFromConfig(&s, cfg)
+			tuiosHeld(&a.set, s)
+			tuiosHeld(&a.applied, s)
+			if a.win != nil {
+				a.win.Invalidate()
+			}
+		})
+	}, config.WatcherOptions{})
+	if err != nil {
+		log.Printf("Warning: guios cannot follow config.toml, its tuios settings change at the next start: %v", err)
+		return
+	}
+	a.cfgWatch = w
 }
 
 // saveTuiosSettings writes the settings tuios's config holds when they

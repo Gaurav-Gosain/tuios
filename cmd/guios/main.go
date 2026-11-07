@@ -181,6 +181,9 @@ func (a *App) openWindow() {
 		})
 	})
 	a.win.OnClosed(a.windowClosed)
+	if a.cfgWatch == nil {
+		a.followTuiosConfig()
+	}
 }
 
 // newSessionIn starts a session in a directory of a host, in its project.
