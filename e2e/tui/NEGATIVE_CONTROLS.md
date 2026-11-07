@@ -14214,3 +14214,23 @@ Run on 2026-11-07 on macOS (arm64), each control its own binary:
 The steps are in `pane-close-jobs.txt` under the test's artifact folder. Repeat
 from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPaneCloseEndsItsJobs$' -v .`.
+
+## The keycast skips a modifier pressed on its own
+
+`TestShowKeysSkipsModifierPresses` runs with `--show-keys` and sends what a
+kitty terminal sends when a person holds a modifier: left super on its own
+(CSI 57444;9 u), then super+k (CSI 107;9 u), then x, a lone left ctrl, a lone
+left shift, and x. The keycast must show `Cmd + k` (`Super + k` off macOS) and
+`x ×2`, and never `leftsuper`, `leftctrl`, `leftshift` or the raw `super+k`.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The binary of main (56316191b) | "the keycast does not name Cmd for super+k"; the keycast reads `leftsuper` and `super+k` | **caught** |
+| `CaptureKeyEvent` records modifier presses again | "a modifier press between two x broke the count" | **caught** |
+| `CaptureKeyEvent` does not name Super | "the keycast does not name Cmd for super+k" | **caught** |
+
+The frames are `showkeys-super` and `showkeys-modifiers` under the test's
+artifact folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestShowKeysSkipsModifierPresses$' -v .`.

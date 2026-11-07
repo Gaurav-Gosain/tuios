@@ -178,6 +178,8 @@ it if it is gone. `startup.window` also focuses one pane in it. See
 - `--skill [topic]`: Print the embedded agent skill and exit: the core, one topic, or `all` (see [Agent Skill](#agent-skill))
 - `--ascii-only`: Use ASCII characters instead of Nerd Font icons
 - `--show-keys`: Enable showkeys overlay (screencaster-style key display)
+  A modifier pressed on its own is not shown: it is named in the chord it is
+  part of, such as `Cmd + k` (`Super + k` off macOS).
 - `--border-style <style>`: Window border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block, glyphs (default: from config or rounded)
 - `--dockbar-position <pos>`: Dockbar position: bottom, top, hidden (default: from config or top)
 - `--hide-window-buttons`: Hide window control buttons (minimize, maximize, close)
