@@ -734,21 +734,19 @@ func (a *App) ckSend(it session.AttentionItem, ag client.Agent, decision, messag
 			if err != nil {
 				// Not answered: the item shows again.
 				delete(a.ck.answered, it.ID)
-				a.toast(ckAnswerError(err))
+				_, toast := ckAnswerOutcome(verb, name, decision, nil, err)
+				a.toast(toast)
 				a.ck.peek = nil
 				a.refreshCockpit()
 				return
 			}
-			var out struct {
-				Applied *bool  `json:"applied"`
-				Reason  string `json:"reason"`
-			}
-			_ = jsonUnmarshal(raw, &out)
-			if out.Applied != nil && !*out.Applied {
-				a.toast(locales.CockpitNotApplied(out.Reason))
-			} else {
-				a.toast(locales.CockpitAnswered(name, ckDecisionWords(decision)))
+			taken, toast := ckAnswerOutcome(verb, name, decision, raw, nil)
+			a.toast(toast)
+			if taken {
 				a.ckAdvanceAfter(ag)
+			} else {
+				// Not taken: the item shows again, as it is now.
+				delete(a.ck.answered, it.ID)
 			}
 			a.ck.peek = nil
 			a.refreshCockpit()
@@ -757,6 +755,54 @@ func (a *App) ckSend(it session.AttentionItem, ag client.Agent, decision, messag
 }
 
 var _ = fmt.Sprint
+
+// ckAnswerOutcome reads the daemon's reply to an answer: whether the agent
+// took it, and the toast that says what happened. The toast names an answer
+// only when the daemon says the agent took it, and it names the daemon's
+// decision, which is the one the hook prints. A hold can end between the
+// card's draw and the answer (it timed out, or its hook stopped), and keys
+// sent to a screen prompt can leave it where it was: then the agent still
+// waits, and the toast says so (Mac round 1, W-M1).
+func ckAnswerOutcome(verb, name, decision string, raw []byte, err error) (bool, string) {
+	if err != nil {
+		var ve *session.VerbCallError
+		if verb == "reply-approval" && errors.As(err, &ve) && ve.Code == session.ErrVerbInvalidParams &&
+			ve.Hint != nil && ve.Hint.Param == "request_id" {
+			// The hold ended before the reply: the harness asks in its
+			// pane now.
+			return false, locales.CockpitStoppedWaiting(name)
+		}
+		return false, ckAnswerError(err)
+	}
+	if verb == "reply-approval" {
+		var out struct {
+			Applied  bool   `json:"applied"`
+			Decision string `json:"decision"`
+			Reason   string `json:"reason"`
+		}
+		if jsonUnmarshal(raw, &out) != nil || !out.Applied || out.Decision == "" {
+			if out.Reason == "changed" {
+				return false, locales.CockpitCallChanged(name)
+			}
+			return false, locales.CockpitStoppedWaiting(name)
+		}
+		return true, locales.CockpitAnswered(name, ckDecisionWords(out.Decision))
+	}
+	var out struct {
+		SettledBy string `json:"settled_by"`
+	}
+	if jsonUnmarshal(raw, &out) != nil {
+		return false, locales.CockpitStillWaits(name)
+	}
+	switch out.SettledBy {
+	case "state", "prompt":
+		// The agent left the prompt, or moved on to another one.
+		return true, locales.CockpitAnswered(name, ckDecisionWords(decision))
+	case "gone":
+		return false, locales.CockpitStoppedWaiting(name)
+	}
+	return false, locales.CockpitStillWaits(name)
+}
 
 // ckCanReject reports whether the selected row's card takes a reject: an
 // approval or a plan a hook holds, or a prompt on the screen whose rule

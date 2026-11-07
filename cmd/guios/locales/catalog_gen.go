@@ -6446,6 +6446,36 @@ func (msgs Messages) CockpitAnswered(name string, answer string) string {
 	return Catalog.Format(msgs.locale, "cockpitAnswered", map[string]any{"name": name, "answer": answer})
 }
 
+// CockpitStoppedWaiting says "{name} stopped waiting. Open the pane to answer it."
+// in the language the app shows.
+func CockpitStoppedWaiting(name string) string { return In(i18n.Locale()).CockpitStoppedWaiting(name) }
+
+// CockpitStoppedWaiting says "{name} stopped waiting. Open the pane to answer it."
+// in the language of msgs.
+func (msgs Messages) CockpitStoppedWaiting(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitStoppedWaiting", map[string]any{"name": name})
+}
+
+// CockpitStillWaits says "{name} still waits. Open the pane to answer it."
+// in the language the app shows.
+func CockpitStillWaits(name string) string { return In(i18n.Locale()).CockpitStillWaits(name) }
+
+// CockpitStillWaits says "{name} still waits. Open the pane to answer it."
+// in the language of msgs.
+func (msgs Messages) CockpitStillWaits(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitStillWaits", map[string]any{"name": name})
+}
+
+// CockpitCallChanged says "{name} asks about another call now. Read the card again."
+// in the language the app shows.
+func CockpitCallChanged(name string) string { return In(i18n.Locale()).CockpitCallChanged(name) }
+
+// CockpitCallChanged says "{name} asks about another call now. Read the card again."
+// in the language of msgs.
+func (msgs Messages) CockpitCallChanged(name string) string {
+	return Catalog.Format(msgs.locale, "cockpitCallChanged", map[string]any{"name": name})
+}
+
 // CockpitAsks says "Asks"
 // in the language the app shows.
 func CockpitAsks() string { return In(i18n.Locale()).CockpitAsks() }
