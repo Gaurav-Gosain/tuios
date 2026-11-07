@@ -6471,7 +6471,11 @@ starts with `*** Begin Patch`. A daemon that
 read no config file uses the shipped rules.
 
 - `reply-approval` with `once` or `always` on an item with `risk` must carry
-  `risk_ack` naming exactly those rules, in any order. Otherwise the call is
+  `risk_ack` naming exactly those rules, in any order. The allow matches the
+  rules again on the held call first: a rule that matches now and did not
+  when the hold opened, such as `outside the worktree` for a path that
+  became a link to another folder while it was held, is added to the item's
+  `risk` and must be in `risk_ack` too. Otherwise the call is
   refused with `risk_unacknowledged` (the hint's `accepted` lists the rules),
   nothing is answered and the hold runs on. A deny needs none.
 - `respond` holds its allowing answers to the same rule, against the risk of

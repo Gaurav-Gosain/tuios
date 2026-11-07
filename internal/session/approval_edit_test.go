@@ -3,6 +3,8 @@ package session
 import (
 	"fmt"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -281,5 +283,62 @@ func TestApprovalLineWithABlankLetterIsNotHeld(t *testing.T) {
 	res := result(t, callP(c, t, "request-approval", map[string]any{"session": "work", "window": a, "harness": "claude", "summary": line, "tool": "Bash", "target": "echo \u3164 | sh"}))
 	if res["reason"] != approvalEndNotShown || res["request_id"] != "" {
 		t.Fatalf("ASSERTION: a line with U+3164 answered %v, want not_shown", res)
+	}
+}
+
+// TestALinkSwappedInWhileHeldNeedsTheAcknowledgement: the risk rules read an
+// edit's path when the hold opens. A link put in its place while the person
+// reads the diff sends the write somewhere else, so the allow reads the path
+// again: a rule that matches now and did not then refuses the allow until
+// risk_ack names it, and the item shows it.
+func TestALinkSwappedInWhileHeldNeedsTheAcknowledgement(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	enableRiskyApprovals(t, d, 30*time.Second, nil)
+	// The pane's root is a folder of the test's own, so nothing is
+	// written where the test runs.
+	sess, a, _ := twoWindowSession(t, d, "work")
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess.noteStartDir(a, dir)
+	makeSessionWithWindow(t, d, "other")
+	c := dialVerb(t, sp)
+	tui := attachTUI(t, sp, "other")
+
+	target := filepath.Join(dir, "notes.txt")
+	if err := os.WriteFile(target, []byte("hi\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "authorized_keys")
+	if err := os.WriteFile(outside, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e := integration.EditBody{Tool: "Edit", Path: target, Hunks: []integration.EditHunk{{Old: "hi\n", New: "ssh-ed25519 AAAA attacker\n"}}}
+	pending, it := holdEdit(t, c, sp, a, e, nil)
+	id := it["request_id"].(string)
+	if len(itemRisk(it)) != 0 {
+		t.Fatalf("a file in the worktree is marked %v", itemRisk(it))
+	}
+
+	if err := os.Remove(target); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, target); err != nil {
+		t.Fatal(err)
+	}
+	resp := replyWith(c, t, id, ApprovalOnce, tui.HumanNonce(), map[string]any{"edit_sha": e.Digest()})
+	mustRefuse(t, resp, ErrVerbRiskUnacknowledged, "an allow after the path became a link outside the worktree")
+	stillHeld(t, pending, "an allow after the link was swapped in")
+	it = heldItem(t, c, a)
+	if !slices.Contains(itemRisk(it), risk.RuleOutsideWorktree) {
+		t.Fatalf("ASSERTION: the item does not show the new rule: %v", it)
+	}
+	res := result(t, replyWith(c, t, id, ApprovalOnce, tui.HumanNonce(), map[string]any{"edit_sha": e.Digest(), "risk_ack": itemRisk(it)}))
+	if res["applied"] != true {
+		t.Fatalf("the acknowledged allow answered %v", res)
+	}
+	if got := awaitResult(t, pending); got["decision"] != ApprovalOnce {
+		t.Fatalf("the hook got %v", got)
 	}
 }

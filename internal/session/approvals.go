@@ -461,7 +461,13 @@ var errNoHold = errors.New("no hold")
 // a call the risk rules matched, riskAck naming exactly those rules, without
 // which errRiskUnacknowledged is returned and nothing is answered. A deny
 // needs none of them.
-func (a *attentionStore) answer(requestID, decision, message, by, shown string, riskAck []string, planSHA, editSHA string) (out approvalOutcome, h approvalHold, applied bool, err error) {
+//
+// now is what the rules match on the call at the time of the reply
+// (recheckRisk). A rule in now that the hold did not have is added to the
+// hold and to its item before riskAck is checked, so a path that became a
+// link to somewhere else while the person read the call needs that rule
+// acknowledged too.
+func (a *attentionStore) answer(requestID, decision, message, by, shown string, riskAck []string, planSHA, editSHA string, now []risk.Hit) (out approvalOutcome, h approvalHold, applied bool, err error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	hold, ok := a.holds[requestID]
@@ -489,6 +495,7 @@ func (a *attentionStore) answer(requestID, decision, message, by, shown string, 
 		if hold.edit != nil && (hold.editSHA == "" || editSHA != hold.editSHA) {
 			return approvalOutcome{}, *hold, false, errEditUnreviewed
 		}
+		a.addHoldRiskLocked(hold, now)
 		if len(hold.risk) > 0 && !sameRuleSet(riskAck, risk.Names(hold.risk)) {
 			return approvalOutcome{}, *hold, false, errRiskUnacknowledged
 		}
@@ -816,7 +823,11 @@ func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, 
 		return nil, nonceScopeError("reply-approval")
 	}
 	message := attentionText(p.Message, approvalMaxMessage)
-	out, hold, applied, err := d.attention.answer(requestID, p.Decision, message, by, p.Summary, p.RiskAck, p.PlanSHA, p.EditSHA)
+	var now []risk.Hit
+	if p.Decision == ApprovalOnce || p.Decision == ApprovalAlways {
+		now = d.attention.recheckRisk(requestID)
+	}
+	out, hold, applied, err := d.attention.answer(requestID, p.Decision, message, by, p.Summary, p.RiskAck, p.PlanSHA, p.EditSHA, now)
 	switch {
 	case errors.Is(err, errNoHold):
 		return nil, noHoldError("no approval is held under request " + echoName(requestID))
