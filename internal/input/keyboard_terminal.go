@@ -22,76 +22,10 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// because nothing read it.
 	focusedWindow := o.GetFocusedWindow()
 
-	// Handle help menu first (takes priority over everything in terminal mode)
-	if o.ShowHelp {
-		return handleHelpOverlayKey(msg, o)
-	}
-
-	// Settings, the pickers over it, and the layout and machine pickers take
-	// priority in terminal mode: a letter typed into them must not reach the
-	// shell.
-	if out, cmd, ok := routeSettingsOverlayKey(msg, o); ok {
+	// The open panels, top first, take priority in terminal mode: a letter
+	// typed into one must not reach the shell.
+	if out, cmd, ok := routeOverlayKey(msg, o); ok {
 		return out, cmd
-	}
-
-	// Handle session switcher (takes priority in terminal mode)
-	if o.ShowSessionSwitcher {
-		return handleSessionSwitcherInput(msg, o)
-	}
-
-	// The mailbox, the same way: a reply typed into it must not reach the shell.
-	if o.ShowAgentMail {
-		return handleAgentMailInput(msg, o)
-	}
-
-	// The Inbox, the same way: its keys must not reach the shell.
-	if o.ShowInbox {
-		return handleInboxInput(msg, o)
-	}
-
-	// The pane navigator, the same way.
-	if o.NavigatorOpen() {
-		return handleNavigatorInput(msg, o)
-	}
-
-	// The go-to picker, the same way.
-	if o.GotoPickerOpen() {
-		return handleGotoPickerInput(msg, o)
-	}
-
-	// Handle workspace switcher overlay
-	if o.ShowWorkspaceSwitcher {
-		return handleWorkspaceSwitcherInput(msg, o)
-	}
-
-	// The paste buffer chooser, the same way.
-	if o.BufferChooserOpen() {
-		return handleBufferChooserInput(msg, o)
-	}
-
-	// Handle aggregate view
-	if o.ShowAggregateView {
-		return handleAggregateViewInput(msg, o)
-	}
-
-	// Handle command palette (takes priority in terminal mode)
-	if o.ShowCommandPalette {
-		return handleCommandPaletteInput(msg, o)
-	}
-
-	// Handle launcher (takes priority in terminal mode)
-	if o.ShowLauncher {
-		return handleLauncherInput(msg, o)
-	}
-
-	// The message view opens over the log viewer, so it takes the key first.
-	if o.MessageViewOpen() && viewerTakesKey(msg, o) {
-		return handleMessageViewKey(msg, o)
-	}
-
-	// Handle log viewer (takes priority in terminal mode)
-	if o.ShowLogs && viewerTakesKey(msg, o) {
-		return handleLogViewerKey(msg, o)
 	}
 
 	// Handle cache stats viewer (takes priority in terminal mode)
