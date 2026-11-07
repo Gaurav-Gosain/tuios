@@ -13,6 +13,9 @@ the prompts only the person may answer.
   with `plan_lines` and `plan_sha`); its pane still reads `blocked_by`
   approval. The `get-approval` verb reads the plan text
   while it is held. Only the person approves it, from the Inbox
+- an edit (Edit, MultiEdit or Write) held with its whole body: an approval
+  with `edit_lines` and `edit_sha`. `get-approval` serves the body while it is
+  held. Only the person allows it, from a client that draws the diff
 - an approval whose command matched a risk rule carries `risk`, the rule
   names. The person allows it in the Inbox with a key and `enter`; an agent with the `respond`
   grant may deny it and never allow it
@@ -186,9 +189,14 @@ ends with `(held: answer in the Inbox)`, and its JSON carries `request_id`,
 `options`, `expires` and, when always is offered, `always_scope`. The installed
 integration does all of this.
 
-Only a call the person can read whole on one line is held: a short shell
-command, a file read, a fetch. An edit, an MCP tool, or a long or multi-line
-command is answered in the pane as before. A Claude Code plan (`ExitPlanMode`)
+Only a call the person can read whole is held: a short shell command, a file
+read, a fetch, on one line, or a Claude Code Edit, MultiEdit or Write with its
+whole body beside the line. An edit over 32 KiB, or with a character other
+than printable text, tabs and newlines (a carriage return included), a
+NotebookEdit, an MCP tool, or a long or multi-line command is answered in the
+pane as before. An edit is never offered "always", and an allow of one needs
+the `edit_sha` of the body the person saw, so the TUI, which draws no diff,
+offers only reject and the pane for it. A Claude Code plan (`ExitPlanMode`)
 is held too, as a row of kind `plan` the person reads whole before `1` works;
 `3` or a typed reason keeps you planning, and the reason reaches you as the
 deny's message.
