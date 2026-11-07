@@ -27,6 +27,7 @@ const (
 	cardGap = 8 // around the card
 	rowH    = hRow
 	rowH2   = hRow2 // a detailed row, of two lines
+	rowH3   = 64    // a detailed session row: name, last agent line, branch
 	// rowInset is where a sidebar row's text starts: a session's name and
 	// its group's.
 	rowInset = 12
@@ -650,7 +651,7 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int, 
 	detailed := a.set.SidebarRows != "compact"
 	h := float32(rowH)
 	if detailed {
-		h = rowH2
+		h = rowH3
 	}
 	inset := float32(rowInset)
 	if nested {
@@ -786,9 +787,10 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int, 
 			}
 		}
 		if detailed {
-			// The name, the time and the status over what the session is
-			// at, on a line of the whole row's width, so that a long
-			// branch reads as far as it can.
+			// Three lines of a fixed height, so that no state change
+			// reflows the row (DESIGN.md principle 3): the state mark, the
+			// name and its age; what the agent said last, or what runs;
+			// the branch and its changes.
 			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
 				line1 := ui.Row(c.Key("line1")).Gap(sp2).AlignItems(ui.Center)
 				room := float32(0)
@@ -808,30 +810,25 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int, 
 					}
 				}
 				line1.Children(func() {
+					mark()
 					if nested {
 						ui.Icon(c, branchIcon).Size(12, 12).TextColor(pal.textMuted).Shrink(0)
 					}
 					name(room)
 					ui.Spacer(c)
 					when()
-					mark()
 				})
-				line, msg := a.sessionDetail(s, g, nested)
-				if nested && !msg {
-					// Its name leads: cut in the middle, as the title.
-					line = midCut(c, flat(line), fsSmall, 0, line1.Bounds().W)
-				}
-				if f := s.FocusPane(); !msg && !nested && f != nil && f.Shell != "" && line == a.railName(s) {
-					// A session named after its folder says its shell
-					// under the name, not the folder again.
-					line = f.Shell
-				}
-				// A detail line is text2, 4.5:1 on every ground (DESIGN.md
-				// section 6): a message reads stronger by its weight.
-				t := ui.Text(c, flat(line)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0)
-				if msg {
-					t.FontWeight(wMedium)
-				}
+				// Lines 2 and 3 start under the name, past the mark.
+				line2, msg, line3 := a.sessionLines(s, g, nested)
+				ui.Column(c).Gap(2).Padding(0, 0, 0, 14+sp2).MinWidth(0).Children(func() {
+					// text2, 4.5:1 on every ground (DESIGN.md section 6): a
+					// message reads stronger by its weight.
+					t := ui.Text(c, flat(line2)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0)
+					if msg {
+						t.FontWeight(wMedium)
+					}
+					ui.Text(c, flat(line3)).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum").SingleLine().Ellipsis("…").MinWidth(0)
+				})
 			})
 		} else {
 			if nested {

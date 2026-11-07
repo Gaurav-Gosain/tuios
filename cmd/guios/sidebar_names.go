@@ -92,20 +92,23 @@ func (a *App) sessionMarked(s *proto.Session) bool {
 	return len(a.sessionAgents(s, a.sbNeeds)) > 0
 }
 
-// sessionDetail is the second line of a session's detailed row. A status
-// message comes first. Else: the program or agent in the focused pane,
-// the branch (or the folder outside git), and the panes when there are
-// several, so that sessions in one folder read apart (QA-010).
+// sessionLines are the second and third lines of a detailed session row.
+// A status message, the agent's last line, comes first; else the program
+// or agent in the focused pane, and the panes when there are several, so
+// that sessions in one folder read apart (QA-010). The third line is the
+// branch with its changes, or the folder outside git.
 //
 // A row nested under its repository's session goes by its branch
-// (railTitle), so its detail line starts with the session's own name, the
-// one `tuios attach` takes, in place of the branch again (council round 5,
-// visual M2).
-func (a *App) sessionDetail(s *proto.Session, g *proto.GitInfo, nested bool) (line string, msg bool) {
-	// A nested row's agent says the message on its own row, under it.
+// (railTitle), so its second line starts with the session's own name, the
+// one `tuios attach` takes (council round 5, visual M2).
+func (a *App) sessionLines(s *proto.Session, g *proto.GitInfo, nested bool) (line2 string, msg bool, line3 string) {
+	if g != nil {
+		line3 = gitShort(g)
+	} else {
+		line3 = a.hostOf(s.ID).shortDir(s.WorkDir())
+	}
 	if s.Message != "" && !nested {
-		// A notification's text can run over lines: the row has one.
-		return strings.Join(strings.Fields(s.Message), " "), true
+		return strings.Join(strings.Fields(s.Message), " "), true, line3
 	}
 	var parts []string
 	if nested {
@@ -117,17 +120,12 @@ func (a *App) sessionDetail(s *proto.Session, g *proto.GitInfo, nested bool) (li
 			parts = append(parts, harnessName(f.Agent))
 		case f.Process != "":
 			parts = append(parts, f.Process)
+		case f.Shell != "":
+			parts = append(parts, f.Shell)
 		}
-	}
-	switch {
-	case nested:
-	case g != nil:
-		parts = append(parts, gitSummary(g))
-	default:
-		parts = append(parts, a.hostOf(s.ID).shortDir(s.WorkDir()))
 	}
 	if n := len(s.Panes) + len(s.Others); n > 1 {
 		parts = append(parts, locales.SidebarPanes(n))
 	}
-	return strings.Join(parts, " · "), false
+	return strings.Join(parts, " · "), false, line3
 }

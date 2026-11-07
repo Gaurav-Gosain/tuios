@@ -344,18 +344,18 @@ func (a *App) paneCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown float
 		if zone != zoneNone {
 			a.dropPreview(c, pal, p.ID, zone)
 		}
-		// The card's edge says its state: amber while it needs the person,
-		// the focus line on the pane the keyboard is in (council round 1,
-		// visual 11 and 12). It comes over dArrive.
+		// The card's edge says its state: the focus line on the pane the
+		// keyboard is in (council round 1, visual 11 and 12), and over it a
+		// 2 px need ring while the pane needs the person, as cmux rings a
+		// pane. Each comes over dArrive and then stays still.
 		edge := ui.Transparent
-		switch {
-		case p.Status == proto.Waiting:
-			edge = pal.attention
-		case multi && focused:
+		if multi && focused {
 			edge = pal.focusLine
 		}
 		e := ui.Box(c.Key("edge")).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough().Radius(rPane)
 		e.Border(1, e.AnimateColor("c", edge, ui.Animation{Duration: dArrive}))
+		ring := ui.Box(c.Key("need-ring")).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough().Radius(rPane).Border(2, pal.attention)
+		ring.Opacity(ring.Animate("on", b2f(p.Status == proto.Waiting), dArrive))
 	})
 	if multi && focused && !pal.dark {
 		// The focused card stands a level up from the others in the light.

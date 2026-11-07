@@ -91,6 +91,23 @@ func gitSummary(g *proto.GitInfo) string {
 	return b.String()
 }
 
+// gitShort is a branch with its changes, for a sidebar row: "feat/retry
+// ↑1 +12 −3".
+func gitShort(g *proto.GitInfo) string {
+	var b strings.Builder
+	b.WriteString(branchName(g))
+	if g.Ahead > 0 {
+		b.WriteString(" ↑" + itoa(g.Ahead))
+	}
+	if g.Behind > 0 {
+		b.WriteString(" ↓" + itoa(g.Behind))
+	}
+	if g.Added > 0 || g.Removed > 0 {
+		b.WriteString("  +" + itoa(g.Added) + " −" + itoa(g.Removed))
+	}
+	return b.String()
+}
+
 // sessionGit is the worktree a session's row tells of: its lead pane's,
 // else the one of the pane the user was in last, else any of its panes'.
 func sessionGit(s *proto.Session) *proto.GitInfo {
