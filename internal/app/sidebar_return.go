@@ -13,11 +13,27 @@ package app
 // beginSidebarReturn records what the rail is borrowing from.
 func (m *OS) beginSidebarReturn() {
 	m.sidebarReturnArmed = true
-	m.sidebarReturnMode = m.Mode
+	m.sidebarReturnMode = m.modeBeneathBorrows()
 	m.sidebarReturnWindow = ""
 	if w := m.GetFocusedWindow(); w != nil {
 		m.sidebarReturnWindow = w.ID
 	}
+}
+
+// modeBeneathBorrows is the mode the person chose, under any borrow open now.
+// A pointer gesture and a ctrl drag borrow window mode only from terminal
+// mode, and the hold key records what it borrowed from. The rail saves this,
+// not the mode in effect: holding the key, opening the rail and letting go
+// used to save the hold's window mode, and esc out of the rail then handed
+// it back, so the person's next line ran as window actions.
+func (m *OS) modeBeneathBorrows() Mode {
+	switch {
+	case m.pointerGestureWasTerminal || m.CtrlDragWasTerminal:
+		return TerminalMode
+	case m.hold.active && m.Mode == WindowManagementMode:
+		return m.hold.returnMode
+	}
+	return m.Mode
 }
 
 // The rail remembers its own place the same way, and for the same reason. Enter

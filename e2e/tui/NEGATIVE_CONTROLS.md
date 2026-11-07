@@ -14305,3 +14305,22 @@ Run on 2026-11-07 on macOS (arm64):
 The fixed build passes 3 of 3; `ctrl+b i` answers in about 1.02 s. Repeat from
 `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=3 -run '^TestSendKeysDoNotWaitOnAKeysTimer$' -v .`.
+
+## Hold, then the rail
+
+`TestHoldThenRailHandsBackTerminalMode` binds the hold key to left Option. In
+terminal mode it holds the key, opens the rail with s, then lets go and
+presses esc, in both orders. The shell must answer after both. The rail saved
+the mode in effect when it opened, which was the hold's borrowed window mode.
+When the release came first, the hold handed terminal mode back, and esc
+then put the saved window mode back over it. The rail now saves the mode
+beneath any borrow (`modeBeneathBorrows`).
+
+Run on 2026-11-07 on macOS (arm64):
+
+| Removed | Test | Failure | Result |
+|---------|------|---------|--------|
+| The fix (main at 719534e97) | `TestHoldThenRailHandsBackTerminalMode/release_then_esc` | "command \"echo back-$((3+4))\" never produced \"back-7\"" | **caught** |
+
+The esc-then-release order passes on main and with the fix, as the control.
+The fixed build passes 3 of 3.
