@@ -19,7 +19,7 @@ import (
 func threadLayout(t *agentThread, lines, room int) transcriptview.Layout {
 	l := transcriptview.Layout{Lines: lines, Room: room, Taken: t.taken, PromptAt: -1}
 	for _, en := range slices.Backward(t.entries) {
-		if en.Kind == "text" && en.Role == "user" {
+		if en.Kind == "text" && en.Role == "user" && en.Image == nil && !transcriptview.InterruptText(en.Text) {
 			l.Prompt = en.ID
 			break
 		}

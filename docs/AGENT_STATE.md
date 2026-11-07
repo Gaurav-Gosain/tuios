@@ -2560,12 +2560,25 @@ conversation, read from its transcript and drawn as cards:
 - A call you declined has a `declined` mark, not `failed`, and shows what you
   said with it. Where you stopped the agent, the thread shows one quiet line,
   `You stopped the agent`, not a prompt.
-- Thinking is one line, `Thought for 12s`, with how long it took.
-- An image that a read gave back counts on the read's line, as in `Read 1 ·
-  1 image`.
-- A finished turn starts with one line that says what it did and how long it
-  took, such as `Ran 1 command and read 1 file · 45s`. A turn you stopped or
-  declined in says so: `(stopped)`, `(declined)`.
+- Thinking is one line, `Thought for 12s`, with how long it took and the
+  start of the thought. A click on it shows the whole thought.
+- An image is a card: one you pasted sits under your prompt, and one a tool
+  gave back, such as a Read of a PNG, under the call. The card names the image
+  and its size. The picture is drawn with kitty graphics where the terminal
+  has them, with block glyphs at 256 colours and truecolor, and not at all at
+  16 colours. A small image keeps its own size, and a large one is at most 12
+  rows tall. A card that the window cuts shows no picture until you scroll it
+  whole into view. A click on the card opens the image view. A thread shows
+  16 images at most.
+- A code block in an answer shows 12 lines and a line such as `10 more lines`.
+  A click on that line, or `e`, shows all of it.
+- Each turn starts with one line that says how long it worked and what it
+  did, such as `Worked for 45s · ran 1 command and read 1 file`. A finished
+  turn with nothing failed folds to that line, and a click on it opens it. A
+  turn you stopped or declined in says so: `(stopped)`, `(declined)`. The turn
+  at work says `Working for 3m`, in whole minutes, and stays open.
+- While the agent works, its newest todo list is pinned above the thread,
+  whole, and in the thread it is folded to its count.
 - A todo list is a plan: done rows struck through, the running row bold, and
   a rule that fills as rows are done. Older lists fold to their count.
 

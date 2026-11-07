@@ -65,7 +65,10 @@ type Step struct {
 	Text string
 	// Edit says the call carries a diff.
 	Edit bool
-	At   int64
+	// Image says the entry is an image. An image the person pasted is part
+	// of the prompt it came with, not a prompt of its own.
+	Image bool
+	At    int64
 }
 
 // interrupted reports whether a user entry marks an interrupt rather than a
@@ -83,7 +86,7 @@ func Interrupt(role, kind, text string) bool {
 
 // prompt reports whether the step starts a turn.
 func (s *Step) prompt() bool {
-	return s.Role == RoleUser && s.Kind == KindText && !s.interrupted()
+	return s.Role == RoleUser && s.Kind == KindText && !s.Image && !s.interrupted()
 }
 
 // Turn is a run of steps: a prompt and the work after it.
@@ -127,7 +130,8 @@ func (t *Turn) Work() int {
 // Hidden reports whether a folded turn hides step i: its prompt, its final
 // answer and a plan stay, every other step hides.
 func (t *Turn) Hidden(steps []Step, i int) bool {
-	return i != t.Answer && !(i == t.Start && steps[i].prompt()) && steps[i].Kind != KindPlan
+	s := &steps[i]
+	return i != t.Answer && !(i == t.Start && s.prompt()) && s.Kind != KindPlan && !(s.Role == RoleUser && s.Image)
 }
 
 // Turns splits steps into turns. resting says the agent is not working, so
@@ -265,7 +269,7 @@ func times(n int) string {
 // Span is how long the turn took, as "42s", "3m 12s" or "1h 5m", "" when the
 // steps carry no times.
 func (t *Turn) Span() string {
-	return spanText(t.StartAt, t.EndAt)
+	return Duration(t.StartAt, t.EndAt)
 }
 
 // ThoughtFor is how long the agent thought before thinking step i, as Span
@@ -275,12 +279,12 @@ func ThoughtFor(steps []Step, i int) string {
 	if i <= 0 || i >= len(steps) || steps[i].Kind != KindThinking || steps[i-1].Kind == KindThinking {
 		return ""
 	}
-	return spanText(steps[i-1].At, steps[i].At)
+	return Duration(steps[i-1].At, steps[i].At)
 }
 
-// spanText says the time from one Unix millisecond to another, at least a
-// second, "" when either is missing.
-func spanText(from, to int64) string {
+// Duration says the time from one Unix millisecond to another as Span does,
+// "" when it is under a second or a time is missing.
+func Duration(from, to int64) string {
 	if from <= 0 || to-from < 1000 {
 		return ""
 	}

@@ -13998,3 +13998,46 @@ Run on 2026-11-07 on macOS (arm64), each control its own binary:
 The frame is `cockpit-stops` under the test's artifact folder. Repeat from
 `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestTranscriptStopsOnTheWire|TestCockpitThreadStops)$' -v .`.
+
+## Thread cards: image cards, folds, the working turn and the pinned todo list
+
+`TestCockpitThreadFoldsAndImages` writes a Claude Code transcript with times
+just before now: a finished turn with a pasted PNG, a two-line thought, a Read
+and an answer with a 22-line Go block, then a turn at work with a todo list
+and a Bash call with no result. It checks that the image is a card under its
+prompt and the next prompt is turn 2, that the card's picture is a kitty
+placement on the card's rows, the "Worked for 1m 0s" and "Working for 3m"
+lines, the todo list pinned above the thread and drawn once, that a click
+opens the turn, the code block (12 lines, then "10 more lines") and the
+thought, and that a click on the card opens the image view. Before the change
+(main, 3497aaab0) the image was a "You · turn 2" prompt of "[image]" and the
+next prompt "turn 3", with no picture, no thought line, the code unfolded and
+the todo list in place.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (3497aaab0) | "the thread has no image card under its prompt" | **caught** |
+| The `en.Image != nil` case cut from `threadCardLines` | "the thread has no image card under its prompt" | **caught** |
+| The `threadImagePlacements` call cut from `flushReplyPreviewForFrame` | "no picture on the image card (head at row 27 col 6)" | **caught** |
+| The fold cut from `ckMD.code` | "\"10 more lines\" never showed while pressing K" | **caught** |
+| The hit cut from `ckThoughtLines` | "a click did not open the thought" | **caught** |
+| The `ThreadPinnedLines` call cut from `drawFocus` | "the todo list is not pinned above the thread, once" | **caught** |
+| The `timg:` case cut from `cockpitAction` | "the image view did not open" | **caught** |
+
+Not caught here: with `Image` left out of the `Step` that `ckTurns` builds,
+the test passes, because the view draws an image entry by its own case before
+it counts prompts. The flag keeps `transcriptview.Turns` from starting a turn
+at a pasted image for its other readers.
+
+The frames are `thread-cards-closed` and `thread-cards-open` under the test's
+artifact folder, with the host's kitty pictures drawn in. Repeat from `e2e/tui`
+with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitThreadFoldsAndImages$' -v .`.
+
+`TestCockpitThreadCards` caught a bug in an early build of this change: at
+100x30 the pinned list did not fit and was not drawn, but the thread still
+folded its copy, so the plan showed whole nowhere ("the thread has no plan
+card"). `ThreadPinnedLines` now makes the one decision and records it for the
+thread.

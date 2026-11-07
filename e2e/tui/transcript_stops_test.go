@@ -31,11 +31,11 @@ import (
 //   - with declined returning false, the wire test fails at "Claude Code's
 //     own words reached the page" and the view at the "(declined)" summary.
 //   - with the resultImages call cut from recordEntries, the wire test fails
-//     at "the image of the Read" and the view at "Read 1 · 1 image".
+//     at "the image of the Read" and the view at "PNG image  6×4".
 //   - with the nested branch cut from ReadImage, the wire test fails at
 //     "the image data".
 //   - with the interrupt and decline cases cut from the Finished rule in
-//     Turns, the view never shows the second turn's "1m 42s".
+//     Turns, the view never shows the second turn's "Worked for 1m 42s".
 
 // stopsFixture is the transcript both tests read.
 var stopsFixture = filepath.Join("testdata", "transcript", "claude-stops.jsonl")
@@ -158,7 +158,7 @@ func TestTranscriptStopsOnTheWire(t *testing.T) {
 // TestCockpitThreadStops opens the fixture in the agents view. The interrupt
 // is one quiet line and no "You" prompt or "turn 3"; the declined calls say
 // declined, not failed, and the Bash one shows what the person said; the read
-// counts its image; each thinking block says how long it took; and both turns
+// shows its image as a card; each thinking block says how long it took; and both turns
 // have a summary line with their time, the second one too, though it ends on
 // the interrupt and not on an answer. The artifact is the frame
 // cockpit-stops (text and PNG).
@@ -219,12 +219,12 @@ func TestCockpitThreadStops(t *testing.T) {
 	text := term.Screen().Text()
 	for _, w := range []string{
 		"You stopped the agent",
-		"Read 1 · 1 image",
+		"PNG image  6×4",
 		"Thought for 12s",
 		"Thought for 5s",
 		"Keep the build folder, it has the fonts.",
-		"Ran 1 command and read 1 file (declined) · 45s",
-		"Ran 1 command and used 1 tool (stopped) · 1m 42s",
+		"Worked for 45s · ran 1 command and read 1 file (declined)",
+		"Worked for 1m 42s · ran 1 command and used 1 tool (stopped)",
 		"turn 2",
 	} {
 		if !strings.Contains(text, w) {

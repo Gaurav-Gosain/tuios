@@ -1231,6 +1231,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyThreadRecap(msg)
 		return m, nil
 
+	case threadImageMsg:
+		return m, m.applyThreadImage(msg)
+
 	case threadGrewMsg:
 		return m, m.applyThreadGrew(msg)
 

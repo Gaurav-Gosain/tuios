@@ -933,6 +933,12 @@ func threadFollowAndRuler(t *testing.T, base, path string) {
 	}
 	_ = term.WaitStable(uiTimeout)
 	s = term.Screen()
+	// The agent works, so its todo list is pinned above the thread: the
+	// thread starts under the list's last item, its panel's last row and a
+	// gap.
+	if rowWith(s, "2 of 5 done") == first {
+		first = rowWith(s, "Update the changelog") + 3
+	}
 	if r := rowWith(s, "turn 2"); r != first {
 		t.Fatalf("ASSERTION: the new prompt is not at the top of the thread: its label is on row %d, the thread starts on row %d\n%s", r, first, term.Snapshot())
 	}
@@ -1231,9 +1237,9 @@ func cockpitTurnFolds(t *testing.T, base, path string) {
 	// from the prompt to the answer, 13 s a record.
 	summary := func(k int) string {
 		if k%2 == 1 {
-			return "Edited 2 files, ran 1 command and 3 other actions · 3m 2s"
+			return "Worked for 3m 2s · edited 2 files, ran 1 command and 3 other actions"
 		}
-		return "Edited 1 file, ran 1 command and 3 other actions · 2m 36s"
+		return "Worked for 2m 36s · edited 1 file, ran 1 command and 3 other actions"
 	}
 	scrollTo := func(key, want string) {
 		t.Helper()
@@ -1288,6 +1294,14 @@ func cockpitTurnFolds(t *testing.T, base, path string) {
 	// A click on a summary line opens that turn, and another closes it.
 	find("Task 27: make")
 	find(summary(27))
+	// The turn opens under its line, so the line needs rows under it: one
+	// on the thread's last rows is brought up first.
+	if r, _ := findText(t, term, summary(27)); r > rowWith(term.Screen(), "Reply to")-6 {
+		if err := term.SendKeys("J"); err != nil {
+			t.Fatal(err)
+		}
+		_ = term.WaitStable(uiTimeout)
+	}
 	hr, hc := findText(t, term, summary(27))
 	mouseClick(t, term, hc, hr, tuitest.MouseLeft, 0)
 	// A thread scrolled up holds still, so the turn opens under the line

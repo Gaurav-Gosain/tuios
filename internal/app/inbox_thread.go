@@ -149,6 +149,13 @@ type agentThread struct {
 	// pill is the child pill under the pill cursor, "" for none. See
 	// cockpit_thread_kids.go.
 	pill string
+	// images are the thread's images by entry id, and imgWidth the width
+	// their cards were last drawn at. See cockpit_thread_image.go.
+	images   map[string]*ckThreadImage
+	imgWidth int
+	// pinned says the last frame pinned the todo list above the thread
+	// (ThreadPinnedLines), so the thread folds its copy.
+	pinned bool
 }
 
 // threadBodyKey is what a thread's drawn lines depend on.
@@ -164,6 +171,8 @@ type threadBodyKey struct {
 	working bool
 	// kids is ckKidsSig: the child pills' inputs.
 	kids uint64
+	// pics is the previews' version: an image card's picture arrived.
+	pics uint64
 }
 
 // threadsState is the threads kept and the transcript subscription.
@@ -293,6 +302,9 @@ func (m *OS) InboxThreadFetch() tea.Cmd {
 		if !t.read && !t.loading {
 			t.loading = true
 			cmds = append(cmds, m.threadPageCmd(t, ""))
+		}
+		if cmd := m.threadImagesCmd(t); cmd != nil {
+			cmds = append(cmds, cmd)
 		}
 	} else {
 		m.stopThreadWatch()
@@ -456,6 +468,11 @@ func (m *OS) applyThreadPage(msg threadPageMsg) tea.Cmd {
 		t.again = false
 		t.loading = true
 		return m.threadPageCmd(t, t.cursor)
+	}
+	// The page may name images: the thread on screen reads them now, not
+	// at the next key.
+	if e, ok := m.cockpitAgent(); ok && agentKey(e) == t.key && m.threadShown() {
+		return m.threadImagesCmd(t)
 	}
 	return nil
 }
@@ -629,6 +646,7 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []s
 		expand: t.expandAll, changes: m.cockpitTab() == "Changes",
 		working: e.State == string(session.AgentStateWorking),
 		kids:    m.ckKidsSig(e, t),
+		pics:    m.threadPicsVersion(t),
 	}
 	if t.body != nil && t.bodyAt == key {
 		return t.body
@@ -643,7 +661,9 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []s
 // a minute passing builds them again for nothing.
 func (m *OS) threadMinute(e sidebarAgentEntry, now time.Time) int64 {
 	if m.threadReadsTranscript(e) {
-		return 0
+		// Only the working turn's line, "Working for 3m", moves with
+		// the clock.
+		return ckThreadMinute(e.State == string(session.AgentStateWorking), now)
 	}
 	return now.Unix() / 60
 }
@@ -674,7 +694,7 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 			note(t.err)
 			return out
 		}
-		out, t.hits = m.threadCardLines(e, t, width, m.cockpitTab() == "Changes")
+		out, t.hits = m.threadCardLines(e, t, width, m.cockpitTab() == "Changes", now)
 		if len(out) == 0 {
 			note("No conversation yet.")
 		}

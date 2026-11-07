@@ -38,6 +38,9 @@ type ckImageView struct {
 	idx  int
 	zoom int
 	who  string
+	// from says where an image of the conversation came from, in place of
+	// who for a draft's.
+	from string
 	// saved is where each image was saved, by index, so c and s write
 	// one copy.
 	saved map[int]string
@@ -182,7 +185,9 @@ func (m *OS) drawImageView(c *ckCanvas, l ckLook, top int) {
 	y := 1
 	head := []ckSeg{{t: l.g(ckGlyphImage) + " ", fg: pal.FgMute}, {t: ckImageName(img, v.idx), fg: pal.Fg, attrs: ckBold},
 		{t: "   " + ckImageSize(img), fg: pal.FgDim}, {t: "   " + ckBytes(len(img.Data)), fg: pal.FgDim}}
-	if v.who != "" {
+	if v.from != "" {
+		head = append(head, ckSeg{t: "   " + v.from, fg: pal.FgMute})
+	} else if v.who != "" {
 		head = append(head, ckSeg{t: "   pasted by you for " + v.who, fg: pal.FgMute})
 	}
 	rx := c.textR(x1, y, ckSeg{t: strconv.Itoa(v.idx+1) + " of " + strconv.Itoa(len(v.imgs)) + "   ", fg: pal.FgMute},
