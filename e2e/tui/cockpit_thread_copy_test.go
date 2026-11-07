@@ -93,6 +93,7 @@ func TestCockpitThreadCopyMode(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err := term.WaitForText("Copy mode. v selects", uiTimeout); err != nil {
+			saveCockpitFrames(t, term, "cockpit-copy-missing")
 			t.Fatalf("ASSERTION: copy mode did not start: %v\n%s", err, term.Snapshot())
 		}
 	}
