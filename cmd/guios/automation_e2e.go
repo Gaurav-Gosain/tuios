@@ -16,6 +16,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -39,6 +41,25 @@ func init() {
 	// what a person types meanwhile (typeahead.go).
 	if d, err := time.ParseDuration(os.Getenv("GUIOS_ATTACH_DELAY")); err == nil {
 		attachDelay = d
+	}
+	// GUIOS_KEY_AUDIT=FILE writes a line for each thing the keyboard
+	// owner does (key_owner.go): hold, keep, done, land and drop, with the
+	// time, so a key lost or sent to the wrong place shows where.
+	if path := os.Getenv("GUIOS_KEY_AUDIT"); path != "" {
+		if f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
+			keyAudit = func(ev, what, note string) {
+				fmt.Fprintf(f, "%s %s %q %s\n", time.Now().Format("15:04:05.000"), ev, what, note)
+			}
+			auditCaller = func() string {
+				var out []string
+				for i := 3; i < 6; i++ {
+					if _, file, line, ok := runtime.Caller(i); ok {
+						out = append(out, filepath.Base(file)+":"+strconv.Itoa(line))
+					}
+				}
+				return strings.Join(out, " ")
+			}
+		}
 	}
 	// GUIOS_SCROLL_TRACE prints where smoothScroll puts the content in
 	// each frame, as MyGo's MYGO_SCROLL_TRACE does for a terminal.
