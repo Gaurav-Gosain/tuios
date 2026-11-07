@@ -258,7 +258,7 @@ func (a *App) toggleCockpit() {
 		return
 	}
 	a.ck.open = true
-	a.ck.fleetFocus.Focus()
+	a.moveKeys("view")
 	a.reportView()
 	a.refreshCockpit()
 	// A pane the cockpit zoomed to open it goes back into the layout.
@@ -273,7 +273,7 @@ func (a *App) toggleCockpit() {
 func (a *App) closeCockpit() {
 	a.ck.open = false
 	a.ck.reason = ""
-	a.focusTerminal()
+	a.moveKeys("view")
 	a.reportView()
 }
 

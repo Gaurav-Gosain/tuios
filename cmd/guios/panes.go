@@ -93,31 +93,14 @@ func (a *App) setFocus(s *proto.Session, pane string) {
 	})
 }
 
-// focusTerminal gives the keyboard to the pane the user is in.
+// focusTerminal gives the keyboard to the pane the user is in, or to the
+// scratch while it shows, through the owner, with what is typed until that
+// pane has it (key_owner.go).
 func (a *App) focusTerminal() {
-	if a.focusScratch() {
-		return
+	if a.quick.drop {
+		a.holdScratch()
 	}
-	if a.switching() {
-		// The switch keeps the keys until its panes show (switch_keys.go).
-		a.sw.ref.Focus()
-		return
-	}
-	defer func() {
-		if len(a.sw.queue) == 0 {
-			return
-		}
-		pane := ""
-		if s := a.session(a.selected); s != nil {
-			pane = a.focusOf(s)
-		}
-		a.replaySwitchKeys(pane)
-	}()
-	if s := a.session(a.selected); s != nil {
-		if id := a.focusOf(s); id != "" {
-			a.paneRef(id).Focus()
-		}
-	}
+	a.moveKeys("focus")
 }
 
 // panes shows a session's panes in their layout: the zoomed one alone.

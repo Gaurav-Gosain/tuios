@@ -615,7 +615,17 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 	if a.ownedKeys(col) {
 		return
 	}
+	if a.keysHeld() && a.ownListKey(col) {
+		// The owner has the keys: they wait for where they go
+		// (key_owner.go). Typed text goes on to the reply box.
+		c.Invalidate()
+		return
+	}
 	if ck.question != nil && a.ckQuestionKeys(c, col) {
+		return
+	}
+	if a.retriedIn(col) {
+		// A key a terminal had, offered again: it went where the keys go.
 		return
 	}
 	if text, ok := typedText(col); ok {
@@ -627,27 +637,66 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 		c.Invalidate()
 		return
 	}
-	if key(0, ui.KeyTab) {
-		// Tab goes on to the reply box, the next stop in the view, as a
-		// form's Tab does; it was a second Down that stopped at the last
-		// row (council round 5, feel S3). Shift+Tab in the box comes back.
-		if ag, ok := a.ckSelectedAgent(); ok && ag.Window != "" && ag.Host == "" {
-			a.ckFocusReply()
-			c.Invalidate()
-			return
-		}
-	}
-	if d, to, ok := listMove(col); ok {
-		a.ckMoveBy(d, to)
+	if m, k, ok := listKeyIn(col); ok && a.listKey(m, k) {
+		// The key came in this build: build again to show what it did.
 		c.Invalidate()
 		return
 	}
 	if a.ckChordKeys(col) {
 		c.Invalidate()
-		return
+	}
+}
+
+// listKeys are the keys of the agents list that type no text and are not
+// chords: Tab, the moves, Enter, the arrows and Escape.
+var listKeys = []struct {
+	mods ui.Modifiers
+	key  ui.Key
+}{
+	{0, ui.KeyTab}, {ui.Shift, ui.KeyTab}, {0, ui.KeyDown}, {0, ui.KeyUp},
+	{0, ui.KeyPageDown}, {0, ui.KeyPageUp}, {0, ui.KeyHome}, {0, ui.KeyEnd},
+	{0, ui.KeyEnter}, {0, ui.KeyLeft}, {0, ui.KeyRight}, {0, ui.KeyEscape},
+}
+
+// listKeyIn is the key of listKeys the list got in this build.
+func listKeyIn(col ui.Element) (ui.Modifiers, ui.Key, bool) {
+	for _, k := range listKeys {
+		if col.Shortcut(k.mods, k.key) {
+			return k.mods, k.key, true
+		}
+	}
+	return 0, 0, false
+}
+
+// listKey is the agents list's key route for a key that types no text: a
+// key it got, and a key the owner lands there (key_owner.go). It reports
+// whether the key did something.
+func (a *App) listKey(mods ui.Modifiers, k ui.Key) bool {
+	ck := &a.ck
+	is := func(m ui.Modifiers, x ui.Key) bool { return mods == m && k == x }
+	if is(0, ui.KeyTab) {
+		// Tab goes on to the reply box, the next stop in the view, as a
+		// form's Tab does; it was a second Down that stopped at the last
+		// row (council round 5, feel S3). Shift+Tab in the box comes back.
+		if ag, ok := a.ckSelectedAgent(); ok && ag.Window != "" && ag.Host == "" {
+			a.ckFocusReply()
+			return true
+		}
 	}
 	switch {
-	case key(0, ui.KeyEnter):
+	case is(0, ui.KeyDown), is(0, ui.KeyTab):
+		a.ckMoveBy(1, 0)
+	case is(0, ui.KeyUp), is(ui.Shift, ui.KeyTab):
+		a.ckMoveBy(-1, 0)
+	case is(0, ui.KeyPageDown):
+		a.ckMoveBy(8, 0)
+	case is(0, ui.KeyPageUp):
+		a.ckMoveBy(-8, 0)
+	case is(0, ui.KeyHome):
+		a.ckMoveBy(0, -1)
+	case is(0, ui.KeyEnd):
+		a.ckMoveBy(0, 1)
+	case is(0, ui.KeyEnter):
 		if r, ok := a.ckSelected(); ok {
 			switch {
 			case r.kind == ckRowHead:
@@ -656,25 +705,24 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 				a.goToAgent(ck.agents[r.agent])
 			}
 		}
-	case ck.stacked && ck.stackFocus && (key(0, ui.KeyLeft) || key(0, ui.KeyEscape)):
+	case ck.stacked && ck.stackFocus && (is(0, ui.KeyLeft) || is(0, ui.KeyEscape)):
 		ck.stackFocus = false
-	case ck.stacked && !ck.stackFocus && key(0, ui.KeyRight) && a.ckOnAgent():
+	case ck.stacked && !ck.stackFocus && is(0, ui.KeyRight) && a.ckOnAgent():
 		ck.stackFocus = true
-	case key(0, ui.KeyRight), key(0, ui.KeyLeft):
+	case is(0, ui.KeyRight), is(0, ui.KeyLeft):
 		if r, ok := a.ckSelected(); ok && r.kind == ckRowHead {
 			a.ckToggleFold(r.group)
 		}
-	case key(0, ui.KeyEscape):
+	case is(0, ui.KeyEscape):
 		if ck.view != viewAgents {
 			a.ckSetView(viewAgents)
 		} else {
 			a.closeCockpit()
 		}
 	default:
-		return
+		return false
 	}
-	// The key came in this build: build again to show what it did.
-	c.Invalidate()
+	return true
 }
 
 // ckMoveBy moves the cursor by d selectable rows, or to the first (to -1)
@@ -709,60 +757,77 @@ func (a *App) ckMoveBy(d, to int) {
 // ckChordKeys runs the agents list's chords (ckChords). It reports whether
 // one came.
 func (a *App) ckChordKeys(col ui.Element) bool {
-	ck := &a.ck
 	for _, ch := range ckChords {
 		if ch.list && col.Shortcut(ch.mods, ch.key) {
-			switch ch.id {
-			case chAllow:
-				a.ckAllowChord()
-			case chAlways:
-				a.ckAskFor(askAlways)
-			case chReject:
-				if a.ckCanReject() {
-					a.ckAnswer("deny")
-				}
-			case chSettle:
-				a.ckSettle()
-			case chUndoSettle:
-				a.ckUndoSettle()
-			case chSnooze:
-				r, ok := a.ckSelected()
-				switch {
-				case ok && r.item != nil && !ckHeld(*r.item):
-					a.ckSnooze()
-				case ok && r.item != nil:
-					a.toast(locales.CockpitNoSnoozeHeld())
-				default:
-					// Say what the press found: nothing to snooze here.
-					name := locales.CockpitUnnamed()
-					if ag, ok := a.ckSelectedAgent(); ok && ag.Name != "" {
-						name = ag.Name
-					}
-					a.toast(locales.CockpitNothingToSnooze(name))
-				}
-			case chBoard:
-				if ck.view == viewBoard {
-					a.ckSetView(viewAgents)
-				} else {
-					a.ckSetView(viewBoard)
-				}
-			case chMail:
-				if ck.view == viewMail {
-					a.ckSetView(viewAgents)
-				} else {
-					a.ckSetView(viewMail)
-				}
-			case chFilter:
-				ck.needsOnly = !ck.needsOnly
-			case chTabPrev:
-				a.ckStepTab(-1)
-			case chTabNext:
-				a.ckStepTab(1)
-			}
+			a.runChord(ch.id)
 			return true
 		}
 	}
 	return false
+}
+
+// chordKey runs the list's chord of a key the owner lands in the list
+// (key_owner.go). It reports whether the key is one.
+func (a *App) chordKey(mods ui.Modifiers, key ui.Key) bool {
+	for _, ch := range ckChords {
+		if ch.list && ch.mods == mods && ch.key == key {
+			a.runChord(ch.id)
+			return true
+		}
+	}
+	return false
+}
+
+// runChord runs one of the agents list's chords.
+func (a *App) runChord(id chordID) {
+	ck := &a.ck
+	switch id {
+	case chAllow:
+		a.ckAllowChord()
+	case chAlways:
+		a.ckAskFor(askAlways)
+	case chReject:
+		if a.ckCanReject() {
+			a.ckAnswer("deny")
+		}
+	case chSettle:
+		a.ckSettle()
+	case chUndoSettle:
+		a.ckUndoSettle()
+	case chSnooze:
+		r, ok := a.ckSelected()
+		switch {
+		case ok && r.item != nil && !ckHeld(*r.item):
+			a.ckSnooze()
+		case ok && r.item != nil:
+			a.toast(locales.CockpitNoSnoozeHeld())
+		default:
+			// Say what the press found: nothing to snooze here.
+			name := locales.CockpitUnnamed()
+			if ag, ok := a.ckSelectedAgent(); ok && ag.Name != "" {
+				name = ag.Name
+			}
+			a.toast(locales.CockpitNothingToSnooze(name))
+		}
+	case chBoard:
+		if ck.view == viewBoard {
+			a.ckSetView(viewAgents)
+		} else {
+			a.ckSetView(viewBoard)
+		}
+	case chMail:
+		if ck.view == viewMail {
+			a.ckSetView(viewAgents)
+		} else {
+			a.ckSetView(viewMail)
+		}
+	case chFilter:
+		ck.needsOnly = !ck.needsOnly
+	case chTabPrev:
+		a.ckStepTab(-1)
+	case chTabNext:
+		a.ckStepTab(1)
+	}
 }
 
 // cockpitHints is the key line at the foot.
@@ -1048,4 +1113,30 @@ func newAgentButton(c *ui.Context, pal *palette, tip string) bool {
 		ui.Text(c, locales.CockpitNewAgent()).FontSize(fsBody).FontWeight(wMedium).TextColor(pal.text).SingleLine()
 	})
 	return b.Clicked()
+}
+
+// retriedIn reports whether the key the list got in this build is the
+// copy of a key the owner took from a terminal (key_owner.go), and takes it.
+func (a *App) retriedIn(col ui.Element) bool {
+	if len(a.ko.taken) == 0 {
+		return false
+	}
+	t := a.ko.taken[0]
+	return col.Shortcut(t.mods, t.key) && a.retried(t.heldKey)
+}
+
+// ownListKey gives the key the list got in this build to the owner while it
+// has the keys, and reports whether one came.
+func (a *App) ownListKey(col ui.Element) bool {
+	if text, ok := typedText(col); ok {
+		if !a.ckProse(text) {
+			a.keepKey(heldKey{text: text})
+		}
+		return true
+	}
+	if m, k, ok := listKeyIn(col); ok {
+		a.keepKey(heldKey{mods: m, key: k})
+		return true
+	}
+	return false
 }

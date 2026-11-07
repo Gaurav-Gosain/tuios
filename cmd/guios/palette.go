@@ -286,7 +286,7 @@ func (a *App) jumpToPane(sid, pane string) {
 	}
 	if s.PaneByID(pane) != nil {
 		a.setFocus(s, pane)
-		a.defer_(func() { a.paneRef(pane).Focus() })
+		a.moveKeys("palette")
 		return
 	}
 	if a.focus == nil {

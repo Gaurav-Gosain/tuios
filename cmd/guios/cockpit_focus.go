@@ -495,7 +495,7 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 					Grow(1).MinWidth(0).MaxLines(2)
 				if reason && ghostButton(c, "ans-reason", ckDecisionWords("reason"), pal) {
 					a.ckAnswer("reason")
-					ck.fleetFocus.Focus()
+					a.moveKeys("card")
 				}
 			})
 		}
@@ -506,10 +506,10 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 			if in.Submitted() && strings.TrimSpace(ck.reason) != "" {
 				a.ckSend(it, ag, "deny", ck.reason)
 				ck.reasonFor, ck.reason = "", ""
-				ck.fleetFocus.Focus()
+				a.moveKeys("card")
 			} else if in.Shortcut(0, ui.KeyEscape) {
 				ck.reasonFor, ck.reason, ck.question = "", "", nil
-				ck.fleetFocus.Focus()
+				a.moveKeys("card")
 			}
 		}
 		// The buttons wrap rather than cut the last in a narrow card.
@@ -578,13 +578,13 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 					}
 					if capButton(c, "ans-"+o, words, keys, primary, pal) {
 						a.ckAnswer(o)
-						ck.fleetFocus.Focus()
+						a.moveKeys("card")
 					}
 				})
 			}
 			if reasonInRow && ghostButton(c, "ans-reason", ckDecisionWords("reason"), pal) {
 				a.ckAnswer("reason")
-				ck.fleetFocus.Focus()
+				a.moveKeys("card")
 			}
 			ui.Spacer(c)
 			if !held && len(opts) > 0 {

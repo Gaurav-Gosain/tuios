@@ -206,7 +206,7 @@ func (a *App) showInCockpit(key string) {
 	if key != "" {
 		ck.jumpTo = &ckJump{agent: key}
 	}
-	ck.fleetFocus.Focus()
+	a.moveKeys("view")
 }
 
 // sessionNeeds is how many agents of a session need the person.

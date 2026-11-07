@@ -819,13 +819,25 @@ func (a *App) keysCard(c *ui.Context, pal *palette) {
 			tk.card.Focus()
 		}
 		card.HandleInput(func(ev ui.InputEvent) bool {
+			if !a.tk.live() && (ev.Kind == ui.InputKeyDown || ev.Kind == ui.InputText) {
+				// The prefix ended and the card still has the keys: they
+				// go where the keys go now, as typed there (key_owner.go).
+				switch {
+				case ev.Kind == ui.InputText:
+					a.keepKey(heldKey{text: ev.Text})
+				case !typesText(ev.Mods, ev.Key):
+					a.keepKey(heldKey{mods: ev.Mods, key: ev.Key})
+				}
+				a.moveKeys("prefix")
+				return true
+			}
 			switch ev.Kind {
 			case ui.InputKeyDown:
 				if k, ok := keyString(ev.Mods, ev.Key); ok && !typesText(ev.Mods, ev.Key) {
 					a.stepKey(k)
 				}
 				if !a.tk.armed.Load() {
-					a.defer_(a.focusTerminal)
+					a.moveKeys("prefix")
 				}
 				return true
 			case ui.InputText:
@@ -833,7 +845,7 @@ func (a *App) keysCard(c *ui.Context, pal *palette) {
 					a.stepKey(k)
 				}
 				if !a.tk.armed.Load() {
-					a.defer_(a.focusTerminal)
+					a.moveKeys("prefix")
 				}
 				return true
 			}

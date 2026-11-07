@@ -42,9 +42,14 @@ type ckReply struct {
 	// focusNext puts the keys in the box once it is built: the Mail view
 	// builds it only when a reply starts.
 	focusNext bool
-	// insert is text typed while a list had the keys, which the typing
-	// guard found to be prose: the box adds it at its end.
-	insert string
+	// boxAgent, boxDraft and boxMail are the agent, the draft and the
+	// way of the box last built: the keys the owner lands there go to
+	// them (key_owner.go). toEnd puts the caret at the end of the text
+	// they added.
+	boxAgent client.Agent
+	boxDraft *ckDraft
+	boxMail  bool
+	toEnd    bool
 	// asMail holds, by agent, that the box sends mail to the agent's
 	// inbox rather than a prompt typed into its pane.
 	asMail map[string]bool
@@ -224,20 +229,17 @@ func (a *App) replyBoxBody(c *ui.Context, pal *palette, ag client.Agent, d *ckDr
 				}
 			})
 		}
-		insert := r.insert
-		if insert != "" && !d.sending {
-			d.text += insert
-		}
-		r.insert = ""
+		r.boxAgent, r.boxDraft, r.boxMail = ag, d, mail
 		in := ui.TextAreaBase(c.Key("text-"+ag.Key()), &d.text).Bind(&r.box).Lines(2, 8).
 			FontSize(fsProse).LineHeight(1.5).TextColor(pal.text).Placeholder(locales.CockpitReplyPlaceholder()).PlaceholderColor(pal.textMuted).ReadOnly(d.sending)
 		if r.focusNext {
 			r.focusNext = false
 			r.box.Focus()
-			if insert != "" {
-				n := utf8.RuneCountInString(d.text)
-				in.SetTextSelection(n, n)
-			}
+		}
+		if r.toEnd {
+			r.toEnd = false
+			n := utf8.RuneCountInString(d.text)
+			in.SetTextSelection(n, n)
 		}
 		in.OnPaste(func(text string) bool {
 			if text != "" {
@@ -246,44 +248,12 @@ func (a *App) replyBoxBody(c *ui.Context, pal *palette, ag client.Agent, d *ckDr
 			return a.pasteImageInto(d)
 		})
 		in.OnTextKey(func(k ui.TextKey) bool {
-			switch {
-			case k.Key == ui.KeyTab && k.Mods == ui.Shift:
-				// Back to the list, the stop before the box.
-				a.ck.fleetFocus.Focus()
-				return true
-			case k.Key == ui.KeyEnter && k.Mods == ui.Cmd && !mail && strings.TrimSpace(k.Text()) == "" && len(d.images) == 0:
-				// An empty box sends nothing: Ctrl+Enter allows, as it
-				// does in the list.
-				a.ckAllowChord()
-				return true
-			case k.Key == ui.KeyEnter && k.Mods == ui.Cmd && !mail:
-				d.text = k.Text()
-				a.sendReply(ag, d, true)
-				return true
-			case k.Key == ui.KeyEnter && k.Mods == 0 && strings.TrimSpace(k.Text()) == "" && len(d.images) == 0 && !mail:
-				// Enter in an empty box opens the agent's pane, as
-				// Enter in the list does.
-				a.goToAgent(ag)
-				return true
-			case k.Key == ui.KeyEnter && k.Mods == 0:
-				d.text = k.Text()
-				a.sendBox(ag, d, mail)
-				return true
-			case k.Key == ui.KeyUp && k.Mods == 0 && k.Text() == "" && d.last != "":
-				// The last message sent, to send again or change.
-				k.SetText(d.last)
-				return true
-			case k.Key == ui.KeyEscape:
-				if m := a.ck.tabs.mail; a.ck.view == viewMail && m != nil {
-					// In the Mail view, Escape drops the reply.
-					m.replyTo = 0
-					m.focus.Focus()
-					return true
-				}
-				a.ck.fleetFocus.Focus()
-				return true
+			text := k.Text()
+			took, set := a.replyKey(ag, d, mail, k.Mods, k.Key, &text)
+			if set {
+				k.SetText(text)
 			}
-			return false
+			return took
 		})
 		ui.Row(c).Gap(sp3).AlignItems(ui.Center).Children(func() {
 			// The hints as key caps, as the hint bar draws them; they
@@ -690,4 +660,49 @@ func (a *App) cancelQueued(ag client.Agent, id string) {
 			a.fetchQueued(ag)
 		})
 	}()
+}
+
+// replyKey is the reply box's key route: the keys it gives a meaning of its
+// own, with text the box's text. It reports whether it took the key, and
+// whether it changed text. The box's OnTextKey and the keys the owner lands
+// in the box (key_owner.go) both come here.
+func (a *App) replyKey(ag client.Agent, d *ckDraft, mail bool, mods ui.Modifiers, key ui.Key, text *string) (took, set bool) {
+	switch {
+	case key == ui.KeyTab && mods == ui.Shift:
+		// Back to the list, the stop before the box.
+		a.ck.fleetFocus.Focus()
+		return true, false
+	case key == ui.KeyEnter && mods == ui.Cmd && !mail && strings.TrimSpace(*text) == "" && len(d.images) == 0:
+		// An empty box sends nothing: Ctrl+Enter allows, as it does in
+		// the list.
+		a.ckAllowChord()
+		return true, false
+	case key == ui.KeyEnter && mods == ui.Cmd && !mail:
+		d.text = *text
+		a.sendReply(ag, d, true)
+		return true, false
+	case key == ui.KeyEnter && mods == 0 && strings.TrimSpace(*text) == "" && len(d.images) == 0 && !mail:
+		// Enter in an empty box opens the agent's pane, as Enter in the
+		// list does.
+		a.goToAgent(ag)
+		return true, false
+	case key == ui.KeyEnter && mods == 0:
+		d.text = *text
+		a.sendBox(ag, d, mail)
+		return true, false
+	case key == ui.KeyUp && mods == 0 && *text == "" && d.last != "":
+		// The last message sent, to send again or change.
+		*text = d.last
+		return true, true
+	case key == ui.KeyEscape:
+		if m := a.ck.tabs.mail; a.ck.view == viewMail && m != nil {
+			// In the Mail view, Escape drops the reply.
+			m.replyTo = 0
+			m.focus.Focus()
+			return true, false
+		}
+		a.ck.fleetFocus.Focus()
+		return true, false
+	}
+	return false, false
 }

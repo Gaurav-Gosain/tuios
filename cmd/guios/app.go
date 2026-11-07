@@ -305,7 +305,8 @@ type App struct {
 	picker folderPicker // the folders of a host, to open a project in
 	side   sideState    // the side panel, beside a session's panes
 	quick  quickTerm    // the terminal the global shortcut drops down
-	sw     switchKeys   // the keys of a workspace switch on its way
+	sw     switchState  // a workspace switch on its way
+	ko     keyOwner     // the keys while the focus moves (key_owner.go)
 	// cfgWatch follows config.toml for the settings it holds
 	// (followTuiosConfig).
 	cfgWatch *config.Watcher
@@ -811,6 +812,7 @@ type gated struct {
 	*client.Stream
 	ready chan struct{}
 	app   *App
+	pane  string
 
 	// past are writes the prefix already saw, in the order they were
 	// sent (sendPast): they go to the pane as they are.
@@ -824,7 +826,7 @@ func (g *gated) Write(p []byte) (int, error) {
 	if g.passed(p) {
 		return g.Stream.Write(p)
 	}
-	if g.app != nil && (g.app.takeTyped(p) || g.app.quick.route.take(g.Stream, p)) {
+	if g.app != nil && (g.app.fillSlot(g.pane, p) || g.app.takeTyped(p)) {
 		return len(p), nil
 	}
 	return g.Stream.Write(p)
@@ -878,7 +880,7 @@ func (a *App) ensureTerm(id string) {
 			})
 			return
 		}
-		g := &gated{Stream: stream, ready: make(chan struct{}), app: a}
+		g := &gated{Stream: stream, ready: make(chan struct{}), app: a, pane: id}
 		o := a.termOptions(id, g)
 		// The terminal shows kerod's frames: kerod's terminal is the
 		// session's, ours shows what it shows, cell for cell, and lays out
@@ -1002,7 +1004,7 @@ func (a *App) termOptions(id string, conn *gated) terminal.Options {
 		// Control+E, which shells take as kill-line, beginning-of-line and
 		// end-of-line.
 		OnKey: func(mods ui.Modifiers, key ui.Key) bool {
-			if a.keyDown(id, mods, key) {
+			if a.ownKey(id, mods, key) || a.keyDown(id, mods, key) {
 				return true
 			}
 			if runtime.GOOS != "darwin" || mods != ui.Super {

@@ -108,6 +108,12 @@ func listMove(el ui.Element) (d int, to int, ok bool) {
 
 // ckProse puts typed text in the reply box of the agent the cursor is on,
 // and the keys with it. It reports false when the row has no reply box.
+//
+// The box of that agent may not be built yet: a row click selects it in
+// this frame, and its box comes in a later one. The owner keeps the text
+// and every key after it until the box has the focus, and puts them there
+// in order (key_owner.go). Text that came in that gap took the place of
+// the text before it (Mac round 4, W4-M1).
 func (a *App) ckProse(text string) bool {
 	ck := &a.ck
 	ag, ok := a.ckSelectedAgent()
@@ -117,9 +123,35 @@ func (a *App) ckProse(text string) bool {
 	if ck.stacked {
 		ck.stackFocus = true
 	}
-	ck.reply.insert = text
-	ck.reply.focusNext = true
+	a.toReply("", text)
 	return true
+}
+
+// toReply has the owner put text, and the keys after it, in the reply box
+// once the box of the agent with this key has the focus. key "" is the
+// agent selected when the keys land: a row click that comes with the first
+// key selects in the same frame, after the list read the key.
+func (a *App) toReply(key, text string) {
+	r := &a.ck.reply
+	a.ko.reply = true
+	// Two passes at least: the row press that came with the key is read
+	// in the pass after the list read the key.
+	from := a.ko.pass
+	a.holdKeys("reply", replyWait, func() bool {
+		if a.ko.pass < from+2 {
+			return false
+		}
+		want := key
+		if want == "" {
+			ag, ok := a.ckSelectedAgent()
+			if !ok {
+				return true
+			}
+			want = ag.Key()
+		}
+		return r.boxDraft != nil && r.boxAgent.Key() == want
+	})
+	a.keepKey(heldKey{text: text})
 }
 
 // keysOwned reports whether a sheet, a dialog or a field of the agents view

@@ -143,6 +143,8 @@ func (a *App) view(c *ui.Context) {
 		defer auditFrame(a, c)
 	}
 	a.syncUsage()
+	// First: keys it lands go to their target before the target is built.
+	a.keyOwnerView(c)
 	defer func() {
 		// A frame when the first "ago" label shown changes, and none while
 		// no label would.
@@ -301,7 +303,7 @@ func (a *App) view(c *ui.Context) {
 	a.confirmView(c, pal)
 	a.worktreeView(c, pal)
 	a.keysCard(c, pal)
-	a.switchSink(c)
+	a.keySink(c)
 	// A preview that showed no more fades in anew next time.
 	if !a.previewShown {
 		a.previewKey = ""

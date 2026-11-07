@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"math"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -43,10 +42,9 @@ const (
 type quickTerm struct {
 	win   *mygo.Window // the panel, made as it first shows
 	shown bool         // the panel shows, or slides down
-	// drop says the dropdown shows over the panes of session, and
-	// focusDrop that its terminal takes the keyboard once it is built.
-	drop, focusDrop bool
-	session         string
+	// drop says the dropdown shows over the panes of session.
+	drop    bool
+	session string
 	// back is the pane the focus goes back to as the scratch hides.
 	back string
 	// creating says the daemon makes the session's scratch, until its pane
@@ -57,15 +55,10 @@ type quickTerm struct {
 	// shows or hides the scratch.
 	seen      string
 	seenFocus bool
-	// route sends what is typed to the scratch from the frame of the key
-	// that shows it, and back to the pane from the key that hides it, until
-	// the terminal that should have the keyboard has it (since routeAt).
-	route   keyRoute
-	routeAt time.Time
-	pane    string     // the pane the panel's terminal shows
-	e       *termEntry // that terminal, attached
-	ref     ui.Handle
-	err     string
+	pane      string     // the pane the panel's terminal shows
+	e         *termEntry // that terminal, attached
+	ref       ui.Handle
+	err       string
 	// keys is the global shortcut registered, and asked what the settings
 	// asked for last, which failed when it is not keys.
 	keys, asked string
@@ -107,75 +100,6 @@ func (a *App) toggleQuick() {
 	} else {
 		a.showQuick()
 	}
-}
-
-// keyRoute is where the terminals' typed bytes go for a moment: the
-// keyboard moves in the frame of a key, and a view that is not built yet
-// cannot take it. gated.Write asks it, from any goroutine.
-type keyRoute struct {
-	mu   sync.Mutex
-	on   bool
-	to   *client.Stream // nil keeps the bytes until it attaches
-	keep []byte
-}
-
-// routeKeep bounds the bytes a route keeps for a terminal still attaching.
-const routeKeep = 4096
-
-// set sends typed bytes to to, nil to keep them until a later set names
-// a stream, which then gets them first.
-func (r *keyRoute) set(to *client.Stream) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.on, r.to = true, to
-	if to != nil && len(r.keep) > 0 {
-		_, _ = to.Write(r.keep)
-		r.keep = nil
-	}
-}
-
-// off ends the route, and drops what no stream took.
-func (r *keyRoute) off() {
-	r.mu.Lock()
-	r.on, r.to, r.keep = false, nil, nil
-	r.mu.Unlock()
-}
-
-// active reports whether the route is on, and whether it keeps the bytes.
-func (r *keyRoute) active() (on, keeping bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.on, r.on && r.to == nil
-}
-
-// take sends p, which the terminal of from wrote, where the route goes,
-// and reports whether it did. The terminal the route goes to writes as
-// it would.
-func (r *keyRoute) take(from *client.Stream, p []byte) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if !r.on || r.to == from {
-		return false
-	}
-	if r.to == nil {
-		if len(r.keep)+len(p) <= routeKeep {
-			r.keep = append(r.keep, p...)
-		}
-		return true
-	}
-	_, _ = r.to.Write(p)
-	return true
-}
-
-// routeTo starts a route to a pane's terminal in the main window, keeping
-// the bytes while it attaches.
-func (a *App) routeTo(pane string) {
-	var to *client.Stream
-	if e := a.terms[pane]; e != nil {
-		to = e.stream
-	}
-	a.quick.route.set(to)
-	a.quick.routeAt = time.Now()
 }
 
 // scratchPane is the pane of a session's scratch to show: the one with the
@@ -231,16 +155,9 @@ func (a *App) showDrop() {
 	if q.shown {
 		a.hideQuick()
 	}
-	q.drop, q.focusDrop, q.session = true, true, s.ID
+	q.drop, q.session = true, s.ID
 	a.openScratch(s)
-	// The keys go to the scratch from this frame on, though its view is
-	// built only in the next one.
-	if p := scratchPane(s); p != nil {
-		a.routeTo(p.ID)
-	} else {
-		a.quick.route.set(nil)
-		a.quick.routeAt = time.Now()
-	}
+	a.holdScratch()
 	if a.win != nil {
 		a.win.Invalidate()
 	}
@@ -258,15 +175,8 @@ func (a *App) hideDrop() {
 		return
 	}
 	q.drop = false
-	if s != nil {
-		if back := a.backPane(s); back != "" {
-			a.routeTo(back)
-		} else {
-			q.route.off()
-		}
-	}
 	a.leaveScratch(s)
-	a.defer_(a.focusTerminal)
+	a.moveKeys("scratch")
 	if a.win != nil {
 		a.win.Invalidate()
 	}
@@ -358,7 +268,8 @@ func (a *App) quickChanged() {
 			q.seen = s.ID
 		}
 		if !q.shown && q.drop != f {
-			q.drop, q.focusDrop = f, f
+			q.drop = f
+			a.holdScratch()
 		}
 		if s != nil {
 			q.session = s.ID
@@ -366,16 +277,14 @@ func (a *App) quickChanged() {
 	case f != q.seenFocus:
 		q.seenFocus = f
 		if !q.shown && q.drop != f {
-			q.drop, q.focusDrop, q.session = f, f, s.ID
-			if !f {
-				a.defer_(a.focusTerminal)
-			}
+			q.drop, q.session = f, s.ID
+			a.holdScratch()
 		}
 	}
 	if q.drop && scratchPane(s) == nil && !q.creating {
 		// The scratch's shell exited.
 		q.drop = false
-		a.defer_(a.focusTerminal)
+		a.moveKeys("scratch")
 	}
 	if q.shown {
 		a.attachQuick()
@@ -529,7 +438,7 @@ func (a *App) attachQuick() {
 			})
 			return
 		}
-		g := &gated{Stream: stream, ready: make(chan struct{}), app: a}
+		g := &gated{Stream: stream, ready: make(chan struct{}), app: a, pane: id}
 		o := a.termOptions(id, g)
 		o.ResizeByConn = true
 		// No card under it: the terminal paints its background.
@@ -621,7 +530,6 @@ const (
 func (a *App) dropView(c *ui.Context, pal *palette, stack ui.Element, h float32) {
 	q := &a.quick
 	p := scratchPane(a.session(q.session))
-	a.followRoute(c, p)
 	k := stack.AnimateTo("scratch", b2f(q.drop), motionBase)
 	if k <= 0 {
 		return
@@ -675,13 +583,6 @@ func (a *App) dropPanel(c *ui.Context, pal *palette, p *proto.Pane, k, dh, shado
 			case e != nil && e.term != nil:
 				ref := a.paneRef(p.ID)
 				terminal.View(c.Key("term-"+p.ID), e.term).Fill().Bind(ref)
-				if q.focusDrop && q.drop {
-					// The keyboard comes here in the first frame that
-					// builds the view; until then the route takes the keys.
-					q.focusDrop = false
-					a.touch(p.ID)
-					ref.Focus()
-				}
 			case e != nil && e.err != "":
 				a.message(c, pal, locales.PaneCantShow(), e.err, "", nil)
 			default:
@@ -691,55 +592,23 @@ func (a *App) dropPanel(c *ui.Context, pal *palette, p *proto.Pane, k, dh, shado
 	})
 }
 
-// focusScratch gives the keyboard to the scratch while the dropdown shows,
-// and reports whether it did: what gives the keyboard back to the pane the
-// user is in, as a state that ends a workspace hold, gives it here then.
-func (a *App) focusScratch() bool {
+// holdScratch holds the keys while the scratch shows or hides: until its
+// terminal attaches, as the daemon may still start it, and they go to it
+// (keyTarget); as it hides, they go back to the pane the user is in.
+func (a *App) holdScratch() {
 	q := &a.quick
-	if !q.drop {
-		return false
-	}
-	p := scratchPane(a.session(q.session))
-	if p == nil {
-		q.focusDrop = true // once its view is built
-		return true
-	}
-	a.paneRef(p.ID).Focus()
-	return true
-}
-
-// followRoute keeps the route of typed bytes in step: it names the
-// scratch's stream once its terminal attaches, and ends once the terminal
-// that should have the keyboard has it, or after a second at most.
-func (a *App) followRoute(c *ui.Context, p *proto.Pane) {
-	q := &a.quick
-	on, keeping := q.route.active()
-	if !on {
-		return
-	}
-	switch {
-	case time.Since(q.routeAt) > time.Second && !keeping, time.Since(q.routeAt) > 5*time.Second:
-		// A scratch the daemon still starts keeps its bytes longer.
-		q.route.off()
-	case q.drop && p != nil:
-		if keeping {
-			if e := a.terms[p.ID]; e != nil && e.stream != nil {
-				q.route.set(e.stream)
-			}
+	a.holdKeys("scratch", scratchWait, func() bool {
+		if !q.drop {
+			return true
 		}
-		if a.paneRef(p.ID).Focused(c) {
-			q.route.off()
+		p := scratchPane(a.session(q.session))
+		if p == nil {
+			return false
 		}
-	case !q.drop:
-		if s := a.session(a.selected); s != nil {
-			if id := a.focusOf(s); id != "" && a.paneRef(id).Focused(c) {
-				q.route.off()
-			}
-		}
-	}
-	if on, _ := q.route.active(); on {
-		c.After(16 * time.Millisecond)
-	}
+		a.ensureTerm(p.ID)
+		e := a.terms[p.ID]
+		return e != nil && (e.term != nil || e.err != "")
+	})
 }
 
 // scratchKeys are the keys that show and hide the scratch, as "Ctrl+B g",

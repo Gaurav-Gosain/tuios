@@ -198,9 +198,8 @@ func (a *App) mailKeys(c *ui.Context, col ui.Element, m *ckMail, mine []ckMsg) {
 		if at >= 0 {
 			msg := mine[at]
 			a.mailReplyTo(m, msg)
-			if _, ok := ck.agentByWindow(msg.Session, msg.From); ok {
-				ck.reply.insert = text
-				ck.reply.focusNext = true
+			if ag, ok := ck.agentByWindow(msg.Session, msg.From); ok {
+				a.toReply(ag.Key(), text)
 			} else {
 				m.draft += text
 			}
