@@ -192,16 +192,6 @@ func sbAgentName(name, harness string) string {
 	return name
 }
 
-// cutTool splits a second line that names a tool (ckLine2's "\x00").
-func cutTool(s string) (string, string, bool) {
-	for i := 0; i < len(s); i++ {
-		if s[i] == 0 {
-			return s[:i], s[i+1:], true
-		}
-	}
-	return "", "", false
-}
-
 // showInCockpit opens the agents view on an agent, by its key, or on the
 // list for "".
 func (a *App) showInCockpit(key string) {
