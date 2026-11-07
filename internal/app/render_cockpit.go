@@ -2115,6 +2115,13 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 		return
 	}
 	if r.agent >= 0 && cardTop-bodyTop > 1 {
+		// A working agent's todo list is pinned above its thread.
+		if pin := m.ThreadPinnedLines(e, w, cardTop-bodyTop); len(pin) > 0 {
+			for i, s := range pin {
+				c.draw(x, bodyTop+i, w, s)
+			}
+			bodyTop += len(pin)
+		}
 		room := cardTop - bodyTop - 1
 		t := st.threads.byKey[agentKey(e)]
 		up := 0
