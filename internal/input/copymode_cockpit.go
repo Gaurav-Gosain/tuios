@@ -36,7 +36,7 @@ func handleCockpitCopyKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			fx.SetClipboard(text)
 			fx.ShowNotification("Copied as Markdown, "+strconv.Itoa(len(text))+" chars", "success", o.Settings.NotificationDuration)
 		}
-		return fx.applyCockpit(o)
+		return fx.applyOver(o, o.CockpitCopyEnd)
 	}
 	state := cm.State
 	runCopyModeKey(msg, copyModeAction(msg, o), cm, grid, fx, &o.Settings)
@@ -48,22 +48,5 @@ func handleCockpitCopyKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			}
 		}
 	}
-	return fx.applyCockpit(o)
-}
-
-// applyCockpit runs the queued effects of a key in copy mode over the
-// thread. Leaving copy mode, to the pane too (i), goes back to the thread.
-// The editor and hints work on a pane, so they do nothing here.
-func (fx *copyModeEffects) applyCockpit(o *app.OS) (*app.OS, tea.Cmd) {
-	if fx.exitCopyMode || fx.enterTerminal {
-		o.CockpitCopyEnd()
-	}
-	o.NoteAction(fx.action)
-	for _, n := range fx.notifications {
-		o.ShowNotification(n.message, n.notyType, n.duration)
-	}
-	if fx.setClipboard {
-		return o, fx.clipboardCmd(o)
-	}
-	return o, nil
+	return fx.applyOver(o, o.CockpitCopyEnd)
 }

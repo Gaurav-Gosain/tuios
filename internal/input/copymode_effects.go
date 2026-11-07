@@ -158,8 +158,16 @@ func (fx *copyModeEffects) clipboardCmd(o *app.OS) tea.Cmd {
 // look preview. Leaving copy mode, to the pane too (i), goes back to the
 // preview. The editor and hints work on a pane, so they do nothing here.
 func (fx *copyModeEffects) applyQuickLook(o *app.OS) (*app.OS, tea.Cmd) {
+	return fx.applyOver(o, o.QuickLookCopyEnd)
+}
+
+// applyOver runs the queued effects of a key in copy mode over text that is
+// not a pane, the quick look preview or the agents view's thread. Leaving
+// copy mode, to the pane too (i), calls end. The editor and hints work on a
+// pane, so they do nothing here.
+func (fx *copyModeEffects) applyOver(o *app.OS, end func()) (*app.OS, tea.Cmd) {
 	if fx.exitCopyMode || fx.enterTerminal {
-		o.QuickLookCopyEnd()
+		end()
 	}
 	o.NoteAction(fx.action)
 	for _, n := range fx.notifications {

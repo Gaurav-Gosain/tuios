@@ -221,7 +221,7 @@ func (m *OS) CockpitCopyText(start, end terminal.Position, line, block bool) str
 			indent = n
 		}
 	}
-	var sb strings.Builder
+	out := make([]string, 0, 2*len(parts))
 	for i, p := range parts {
 		s := strings.TrimRight(p.text, " ")
 		if i > 0 && parts[i-1].more {
@@ -229,16 +229,16 @@ func (m *OS) CockpitCopyText(start, end terminal.Position, line, block bool) str
 		} else if indent > 0 && len(s) >= indent {
 			s = s[indent:]
 		}
-		sb.WriteString(s)
-		if i < len(parts)-1 {
-			if p.more {
-				sb.WriteByte(' ')
-			} else {
-				sb.WriteByte('\n')
-			}
+		sep := "\n"
+		if p.more {
+			sep = " "
 		}
+		out = append(out, s, sep)
 	}
-	return sb.String()
+	if len(out) == 0 {
+		return ""
+	}
+	return strings.Join(out[:len(out)-1], "")
 }
 
 // ckCellsText is the text of cells a to b.
@@ -294,41 +294,26 @@ func ckEntryMarkdown(en *threadEntry) string {
 	case en.Kind == "plan":
 		return strings.TrimSpace(en.Plan)
 	case en.Kind == "todos":
-		var sb strings.Builder
-		for i, td := range en.Todos {
-			if i > 0 {
-				sb.WriteByte('\n')
-			}
-			mark := "[ ]"
+		out := make([]string, 0, 3*len(en.Todos))
+		for _, td := range en.Todos {
+			mark := "- [ ] "
 			if td.Status == "completed" {
-				mark = "[x]"
+				mark = "- [x] "
 			}
-			sb.WriteString("- ")
-			sb.WriteString(mark)
-			sb.WriteByte(' ')
-			sb.WriteString(td.Text)
+			out = append(out, mark, td.Text, "\n")
 		}
-		return sb.String()
+		return strings.TrimSuffix(strings.Join(out, ""), "\n")
 	case en.Kind == "tool_call" && en.Diff != nil:
-		var sb strings.Builder
-		sb.WriteString("```diff\n--- a/")
-		sb.WriteString(en.Diff.File)
-		sb.WriteString("\n+++ b/")
-		sb.WriteString(en.Diff.File)
-		sb.WriteByte('\n')
+		out := []string{"```diff\n--- a/", en.Diff.File, "\n+++ b/", en.Diff.File, "\n"}
 		for _, h := range en.Diff.Hunks {
 			for _, dl := range h.Lines {
-				sb.WriteString(dl.Op)
-				sb.WriteString(dl.Text)
-				sb.WriteByte('\n')
+				out = append(out, dl.Op, dl.Text, "\n")
 			}
 		}
-		sb.WriteString("```")
-		return sb.String()
+		return strings.Join(append(out, "```"), "")
+	case en.Kind == "tool_call" && en.Target == "":
+		return "`" + en.Tool + "`"
 	case en.Kind == "tool_call":
-		if en.Target == "" {
-			return "`" + en.Tool + "`"
-		}
 		return "`" + en.Tool + " " + en.Target + "`"
 	}
 	return ""
