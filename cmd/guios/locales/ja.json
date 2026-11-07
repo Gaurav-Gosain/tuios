@@ -711,7 +711,6 @@
   "cockpitTodosDone": "{total} 件中 {done} 件完了",
   "cockpitUnnamed": "名前なし",
   "cockpitWaits": "{name} が {age} 待っています",
-  "cockpitWaitsFor": "{age} 待機中",
   "cockpitRunEdited": "{count, plural, other {# 個のファイルを編集}}",
   "cockpitRunRan": "{count, plural, other {# 個のコマンドを実行}}",
   "cockpitRunRead": "{count, plural, other {# 回の読み取りや検索}}",

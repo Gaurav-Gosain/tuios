@@ -360,13 +360,12 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 				// "{name} asks", and how long it waits.
 				oneLine(c, locales.CockpitNameAsks(ag.Name), fsBody, wSemibold).TextColor(pal.text)
 				ui.Text(c, ago(it.Since/int64(time.Millisecond), now)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Shrink(0)
-			} else if tool, target, ok := ckAsk(it.Summary); ok {
-				// The tool and what it acts on, as the call names them:
-				// "Bash  go test ./retry/...", "Read  internal/auth/token.go".
-				// The whole call is in the code block under it.
+			} else if tool, _, ok := ckAsk(it.Summary); ok {
+				// The tool and who waits: "Bash · review waits now". What
+				// the call acts on is in the code box under it, once.
 				ui.Text(c, tool).FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text).SingleLine().Shrink(0)
-				ckTargetLine(c, pal, a.termFamily(), tool, target)
-				oneLine(c, locales.CockpitWaitsFor(ago(it.Since/int64(time.Millisecond), now)), fsSmall, 0).TextColor(pal.textFaint).Shrink(0)
+				ui.Text(c, "·").FontSize(fsSmall).TextColor(pal.textFaint).Shrink(0)
+				oneLine(c, locales.CockpitWaits(ag.Name, ago(it.Since/int64(time.Millisecond), now)), fsSmall, 0).TextColor(pal.textMuted).Shrink(2)
 			} else {
 				oneLine(c, verb+"?", fsBody, wSemibold).TextColor(pal.text)
 				oneLine(c, locales.CockpitWaits(ag.Name, ago(it.Since/int64(time.Millisecond), now)), fsSmall, 0).TextColor(pal.textMuted).Shrink(2)
@@ -822,22 +821,6 @@ func ckSessionScope(scope []string) bool {
 		}
 	}
 	return true
-}
-
-// ckTargetLine is what a call acts on, in the code font, in the header:
-// a path cut at its start so its file stays, a command cut at its end.
-func ckTargetLine(c *ui.Context, pal *palette, mono, tool, target string) {
-	target = flat(target)
-	box := ui.Box(c.Key("target")).Shrink(1).MinWidth(0).Clip()
-	w := box.Bounds().W
-	box.Children(func() {
-		t := target
-		if strings.Contains(target, "/") && !strings.Contains(target, " ") {
-			t = startCut(c, target, fsCode, w)
-		}
-		ui.Text(c, t).Font(mono).FontSize(fsCode).TextColor(pal.textMuted).SingleLine().Ellipsis("…").Tooltip(target)
-	})
-	_ = tool
 }
 
 // capButton is a card's answer: a button with its chord as key caps, so the

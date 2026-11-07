@@ -1303,7 +1303,6 @@
   },
   "cockpitUnnamed": "unnamed",
   "cockpitWaits": "{name} waits {age}",
-  "cockpitWaitsFor": "waits {age}",
   "cockpitRunEdited": "{count, plural, one {edited # file} other {edited # files}}",
   "cockpitRunRan": "{count, plural, one {ran # command} other {ran # commands}}",
   "cockpitRunRead": "{count, plural, one {read or searched # time} other {read or searched # times}}",

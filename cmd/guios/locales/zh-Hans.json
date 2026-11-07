@@ -711,7 +711,6 @@
   "cockpitTodosDone": "已完成 {done}/{total}",
   "cockpitUnnamed": "未命名",
   "cockpitWaits": "{name} 已等待 {age}",
-  "cockpitWaitsFor": "已等待 {age}",
   "cockpitRunEdited": "{count, plural, other {编辑了 # 个文件}}",
   "cockpitRunRan": "{count, plural, other {运行了 # 条命令}}",
   "cockpitRunRead": "{count, plural, other {读取或搜索 # 次}}",

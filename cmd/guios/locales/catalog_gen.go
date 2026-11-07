@@ -7230,16 +7230,6 @@ func (msgs Messages) CockpitWaits(name string, age string) string {
 	return Catalog.Format(msgs.locale, "cockpitWaits", map[string]any{"name": name, "age": age})
 }
 
-// CockpitWaitsFor says "waits {age}"
-// in the language the app shows.
-func CockpitWaitsFor(age string) string { return In(i18n.Locale()).CockpitWaitsFor(age) }
-
-// CockpitWaitsFor says "waits {age}"
-// in the language of msgs.
-func (msgs Messages) CockpitWaitsFor(age string) string {
-	return Catalog.Format(msgs.locale, "cockpitWaitsFor", map[string]any{"age": age})
-}
-
 // CockpitRunEdited says "{count, plural, one {edited # file} other {edited # files}}"
 // in the language the app shows.
 func CockpitRunEdited(count int) string { return In(i18n.Locale()).CockpitRunEdited(count) }
