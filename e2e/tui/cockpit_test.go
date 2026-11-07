@@ -1906,9 +1906,11 @@ func replyMentions(t *testing.T, plain bool, env []string) {
 	if plain {
 		return
 	}
-	send(tuitest.Ctrl('p'))
+	// up, not ctrl+p: ctrl+p opens the palette over the agents view, the
+	// reply included.
+	send(tuitest.Up)
 	if err := term.WaitFor(selectedIs(0), uiTimeout); err != nil {
-		t.Fatalf("ASSERTION: ctrl+p did not move the marker back up: %v\n%s", err, term.Snapshot())
+		t.Fatalf("ASSERTION: up did not move the marker back up: %v\n%s", err, term.Snapshot())
 	}
 
 	// Typing filters, and enter puts the entry in without sending.

@@ -29,6 +29,14 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.InboxPopSettling() {
 		return o, nil
 	}
+	// The global keys (the palette, the launcher) act over the view and
+	// over every sheet and field in it, and open on top of it. A plain
+	// character stays the view's: it is a list key, or text in a field.
+	if !plainTextKey(msg) {
+		if out, cmd, ok := handleGlobalBinds(msg, o); ok {
+			return out, cmd
+		}
+	}
 	// The image view takes every key while it is up.
 	if o.CockpitImageOpen() {
 		return o, o.CockpitImageKey(msg.String())
@@ -265,4 +273,10 @@ func noteInboxAction(o *app.OS, action string) {
 	if o.OnAction != nil {
 		o.OnAction(action)
 	}
+}
+
+// plainTextKey reports whether the key types a character with no ctrl, alt
+// or super held: a letter, a digit, a mark or space.
+func plainTextKey(msg tea.KeyPressMsg) bool {
+	return msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModSuper|tea.ModHyper|tea.ModMeta) == 0
 }

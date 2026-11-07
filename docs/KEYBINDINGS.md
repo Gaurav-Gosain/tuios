@@ -1917,7 +1917,7 @@ Inside it:
 | `v` | Review the agent's changes |
 | `ctrl+]` | Go to the agent's pane and zoom it. `ctrl+b i` comes back to the same agent |
 | `l` `h`, `right` `left` | On a narrow screen, open the focus and go back to the list |
-| `?` | All keys |
+| `?` | All keys. Help opens over the view, and `esc` gives the view back as it was |
 | `esc` `q` | Close. On a narrow screen, go back from the focus to the list first |
 
 On the board's columns, `h` `l` go between the columns, `j` `k` between the
@@ -2046,6 +2046,18 @@ line and the reply, message and answer lines take text, so every key there is
 typed. The selector line, the reason for a reject and the answer to a prompt are
 edited as the reply is: the arrows and the word keys move the cursor, `ctrl+z`
 undoes, and a paste keeps to one line.
+
+The global keys work over the view, and over every line and sheet in it: `ctrl+p`
+opens the command palette and `opt+space` (`alt+space` off macOS) the launcher on
+top of the view, the reply included. The leader works too, in window mode and in
+terminal mode, so `ctrl+b ,` opens settings over the view. Each one closes back
+to the view as you left it: the same agent, the same scroll, the same draft. A
+key that types a character stays the view's even when `[keybindings.global]`
+binds it, and `tuios keybinds doctor` lists a view key that a global key takes.
+A palette command that goes to another pane or workspace closes the view;
+`ctrl+b i` opens it again on the same agent. A click on the view outside the
+palette closes the palette and selects nothing. `ctrl+p` and `ctrl+n` no longer
+move the list: `j` `k` and the arrows do.
 
 ```toml
 [keybindings.inbox]

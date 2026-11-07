@@ -37,6 +37,14 @@ func (m *OS) topmostOverlayKind() string {
 	return m.OverlayZOrder[len(m.OverlayZOrder)-1]
 }
 
+// inboxCovered reports whether a panel is open over the agents view. The
+// view fills the screen, so a pointer outside that panel still lands on the
+// view: it belongs to the panel on top, not to the rows under it.
+func (m *OS) inboxCovered() bool {
+	stack := m.OverlayStack()
+	return len(stack) > 0 && stack[len(stack)-1] != "inbox"
+}
+
 // overlayHitByKind returns the recorded hit geometry for a kind.
 func (m *OS) overlayHitByKind(kind string) (overlayPanelHit, bool) {
 	for _, h := range m.OverlayHits {
@@ -58,8 +66,10 @@ func (m *OS) OverlayMouseClick(x, y int, right bool) (bool, tea.Cmd) {
 	}
 
 	h, ok := m.overlayHitAt(x, y)
-	if !ok {
-		// Clicked outside every panel: dismiss the frontmost.
+	if !ok || h.Kind == "inbox" && m.inboxCovered() {
+		// Clicked outside every panel, or on the agents view outside the
+		// panel over it: dismiss the frontmost. The row under the pointer
+		// is not selected.
 		m.closeOverlay(m.topmostOverlayKind())
 		return true, nil
 	}
@@ -157,7 +167,10 @@ func (m *OS) OverlayMouseMotion(x, y int) bool {
 		return false
 	}
 	if h.Kind == "inbox" {
-		m.CockpitHover(x, y)
+		// A panel over the view keeps the hover off the rows under it.
+		if !m.inboxCovered() {
+			m.CockpitHover(x, y)
+		}
 		return true
 	}
 	lx, ly := x-h.OriginX, y-h.OriginY
@@ -268,7 +281,9 @@ func (m *OS) OverlayMouseRelease() {
 // the topmost panel). Returns whether it was consumed.
 func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 	h, ok := m.overlayHitAt(x, y)
-	if !ok {
+	if !ok || h.Kind == "inbox" && m.inboxCovered() {
+		// Off every panel, or on the view under a panel: the wheel moves the
+		// panel on top.
 		h, ok = m.overlayHitByKind(m.topmostOverlayKind())
 		if !ok {
 			return false
@@ -609,7 +624,6 @@ func (m *OS) closeOverlay(kind string) {
 		m.HelpSearchMode = false
 		m.HelpSearchQuery = ""
 		m.HelpScrollOffset = 0
-		m.HelpClosed()
 	case "settings":
 		m.CloseSettings()
 	case "keybinds":

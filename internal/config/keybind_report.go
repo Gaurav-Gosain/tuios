@@ -159,6 +159,15 @@ func (r *KeybindRegistry) Collisions() []Collision {
 		if len(g.losers) == 0 {
 			continue
 		}
+		if g.winner.Action == "" {
+			// The key is lost to a binding of another scope that acts
+			// first: a global one over the agents view. See
+			// shadowInboxByGlobal.
+			l := g.losers[0]
+			g.winner = Binding{Scope: l.Scope, Key: l.Key, Press: l.Press, Action: l.ShadowedBy,
+				Desc: describeAction(l.ShadowedBy), Section: SectionGlobal}
+			g.sections[SectionGlobal] = true
+		}
 		scope := scopeNames[g.winner.Scope]
 		c := Collision{
 			Scope:        g.winner.Scope,

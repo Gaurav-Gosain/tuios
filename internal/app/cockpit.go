@@ -1552,13 +1552,8 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		}
 		return nil, true
 	case config.ActionInboxHelp:
-		ck := &m.Inbox.ck
-		back := ckBack{key: ck.key, akey: ck.akey, scroll: ck.scroll}
-		m.CloseInbox()
+		// Help opens over the view, which stays as it is behind it.
 		m.OpenHelpAtCategory(HelpCategoryAgents)
-		// The view opens again on this agent when the help closes.
-		ck.back = &back
-		m.helpBackToAgents = true
 		return nil, true
 	case config.ActionInboxTabPrev, config.ActionInboxTabNext:
 		d := 1
@@ -1665,4 +1660,16 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		return nil, true
 	}
 	return nil, false
+}
+
+// leaveInboxForPane closes the agents view for a pane and says how to come
+// back. The view opens again on this agent, as far down the fleet as it was,
+// the way it does after ctrl+] (InboxAgentsViewPane).
+func (m *OS) leaveInboxForPane() {
+	ck := &m.Inbox.ck
+	back := ckBack{key: ck.key, akey: ck.akey, scroll: ck.scroll}
+	m.CloseInbox()
+	ck.back = &back
+	key := m.sidebarAgentKeyOr("prefix_inbox", "ctrl+b i")
+	m.ShowNotification("Press "+key+" to go back to the agents.", "info", m.Settings.NotificationDuration*2)
 }

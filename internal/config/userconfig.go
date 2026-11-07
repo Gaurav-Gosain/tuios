@@ -1907,8 +1907,10 @@ const (
 // could all be rebound had a part that could not.
 func getDefaultInboxKeybinds() map[string][]string {
 	return map[string][]string{
-		ActionInboxDown:     {"j", "down", "ctrl+n"},
-		ActionInboxUp:       {"k", "up", "ctrl+p"},
+		// ctrl+p is the palette's, over the view too, so the moves are
+		// the letters and the arrows only.
+		ActionInboxDown:     {"j", "down"},
+		ActionInboxUp:       {"k", "up"},
 		ActionInboxPageDown: {"pgdown"},
 		ActionInboxPageUp:   {"pgup"},
 		ActionInboxFirst:    {"g", "home"},

@@ -405,14 +405,11 @@ type OS struct {
 	LockHeld bool
 	// nest is true while nest mode gives the focused pane every key, the
 	// leader too. See nest_mode.go.
-	nest             bool
-	HelpScrollOffset int    // Scroll offset for help menu
-	HelpCategory     int    // Current help category index (for left/right navigation)
-	HelpSearchMode   bool   // True when help search is active
-	HelpSearchQuery  string // Current search query in help menu
-	// helpBackToAgents says the help was opened from the agents view, which
-	// opens again when the help closes. See HelpClosed.
-	helpBackToAgents       bool
+	nest                   bool
+	HelpScrollOffset       int                           // Scroll offset for help menu
+	HelpCategory           int                           // Current help category index (for left/right navigation)
+	HelpSearchMode         bool                          // True when help search is active
+	HelpSearchQuery        string                        // Current search query in help menu
 	CurrentWorkspace       int                           // Current active workspace (1-9)
 	NumWorkspaces          int                           // Total number of workspaces
 	WorkspaceFocus         map[int]int                   // Remembers focused window per workspace

@@ -62,7 +62,6 @@ func closeHelp(o *app.OS) {
 	o.HelpCategory = -1
 	o.HelpSearchQuery = ""
 	o.HelpSearchMode = false
-	o.HelpClosed()
 }
 
 // handleHelpOverlayKey handles a key while the help overlay is open. Help is
@@ -190,6 +189,13 @@ func overlayKey(kind string, msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, 
 	case "agentmail":
 		out, cmd = handleAgentMailInput(msg, o)
 	case "inbox":
+		// The leader and the chord after it are the prefix table's, over
+		// the view as over a pane. Window mode reads them before it gets
+		// here; terminal mode reads them after the panels, so the view lets
+		// them go on.
+		if o.PrefixActive || isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) {
+			return o, nil, false
+		}
 		out, cmd = handleInboxInput(msg, o)
 	case "navigator":
 		out, cmd = handleNavigatorInput(msg, o)

@@ -14251,3 +14251,35 @@ Run on 2026-11-07 on macOS (arm64), each control its own binary:
 
 The frames are under the test's artifact folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTMLInputKeepsTypingOverALatePush$' -v .`.
+
+## The global keys act over the agents view
+
+`TestCockpitGlobalKeysOverTheView` opens the agents view on the fleet at 200x50
+and puts the cursor on bench-idle. `ctrl+p` must open the palette over the view
+with the cursor where it was, `j` and `k` typed into the palette must not move
+the list, and `esc` must close the palette alone. A click on the view outside
+the palette must close the palette and select nothing. `?` must open help over
+the view, and `ctrl+b ,` settings. A palette row that goes to workspace 2 must
+close the view, and `ctrl+b i` must open it on bench-idle again. `ctrl+p` in the
+reply editor must open the palette and keep the draft, and over the New
+agent sheet it must open and leave the sheet with its task. In terminal mode
+`ctrl+b ,` must open settings over the view (the view binds no comma, so only
+the prefix table can). `TestKeybindsDoctorNamesAGlobalKeyOverTheView` binds the
+launcher to `ctrl+d` and `j` to the palette, and reads the doctor: `ctrl+d` is
+dead in the view, `j` is not.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The binary of main (3497aaab0) | "ctrl+p did not open the palette over the agents view"; ctrl+p moved the cursor to cache-3 (it was `inbox_up`), and `?` did not open help over the view | **caught** |
+| `handleInboxInput` takes every key again (no global keys first) | "ctrl+p did not open the palette over the agents view" | **caught** |
+| `?` closes the view before it opens help | "? did not open help over the agents view" | **caught** |
+| The view takes the leader in terminal mode | "ctrl+b , in terminal mode did not open settings over the view" | **caught** |
+| A click on the view under a panel goes to the view | "a click on the view under the palette: the view did not come back as it was" | **caught** |
+| A palette row that moves the focus leaves the view open | "a palette row that left for another workspace kept the view over it" | **caught** |
+| `shadowInboxByGlobal` does nothing | "the doctor does not say ctrl+d is dead in the agents view" | **caught** |
+
+The frames are `global-keys-*` under the test's artifact folder. Repeat from
+`e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestCockpitGlobalKeysOverTheView|TestKeybindsDoctorNamesAGlobalKeyOverTheView)$' -v .`.
