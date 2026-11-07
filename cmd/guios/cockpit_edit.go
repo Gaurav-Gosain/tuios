@@ -341,9 +341,14 @@ func (a *App) ckEditTitle(it session.AttentionItem, tool, path, cwd string) (tit
 	if file == "" || file == "." {
 		file, dir = path, ""
 	}
-	if tool == "Write" {
+	switch tool {
+	case "Write":
 		title = locales.CockpitWriteFile(file)
-	} else {
+	case "MultiEdit":
+		// The rows and the pane chip say "Allow MultiEdit": one verb
+		// for one action (Mac round 3, visual S3).
+		title = locales.CockpitMultiEditFile(file)
+	default:
 		title = locales.CockpitEditFile(file)
 	}
 	dir = strings.TrimSuffix(dir, "/")

@@ -13364,6 +13364,16 @@ func (msgs Messages) CockpitWriteFile(file string) string {
 	return Catalog.Format(msgs.locale, "cockpitWriteFile", map[string]any{"file": file})
 }
 
+// CockpitMultiEditFile says "MultiEdit {file}"
+// in the language the app shows.
+func CockpitMultiEditFile(file string) string { return In(i18n.Locale()).CockpitMultiEditFile(file) }
+
+// CockpitMultiEditFile says "MultiEdit {file}"
+// in the language of msgs.
+func (msgs Messages) CockpitMultiEditFile(file string) string {
+	return Catalog.Format(msgs.locale, "cockpitMultiEditFile", map[string]any{"file": file})
+}
+
 // CockpitEditCount says "{count, plural, one {# edit} other {# edits}}"
 // in the language the app shows.
 func CockpitEditCount(count int) string { return In(i18n.Locale()).CockpitEditCount(count) }

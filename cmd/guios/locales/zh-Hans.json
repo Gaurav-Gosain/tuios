@@ -1319,6 +1319,7 @@
   "paneZoomedEnd": "显示所有窗格",
   "cockpitEditFile": "编辑 {file}",
   "cockpitWriteFile": "写入 {file}",
+  "cockpitMultiEditFile": "多处编辑 {file}",
   "cockpitEditCount": "{count, plural, other {# 处编辑}}",
   "cockpitEditLines": "{count, plural, other {# 行}}",
   "cockpitEditReading": "正在读取编辑…",

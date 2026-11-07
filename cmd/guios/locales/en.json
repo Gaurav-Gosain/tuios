@@ -2348,6 +2348,7 @@
   "paneZoomedEnd": "Show all panes",
   "cockpitEditFile": "Edit {file}",
   "cockpitWriteFile": "Write {file}",
+  "cockpitMultiEditFile": "MultiEdit {file}",
   "cockpitEditCount": "{count, plural, one {# edit} other {# edits}}",
   "cockpitEditLines": "{count, plural, one {# line} other {# lines}}",
   "cockpitEditReading": "Reading the edit…",

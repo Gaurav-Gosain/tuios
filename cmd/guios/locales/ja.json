@@ -1319,6 +1319,7 @@
   "paneZoomedEnd": "すべてのペインを表示",
   "cockpitEditFile": "{file} を編集",
   "cockpitWriteFile": "{file} を書き込み",
+  "cockpitMultiEditFile": "{file} を複数編集",
   "cockpitEditCount": "{count, plural, other {# 件の編集}}",
   "cockpitEditLines": "{count, plural, other {# 行}}",
   "cockpitEditReading": "編集を読み込み中…",
