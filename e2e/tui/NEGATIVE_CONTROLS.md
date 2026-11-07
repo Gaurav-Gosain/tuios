@@ -14284,3 +14284,24 @@ Run on 2026-11-07 on macOS (arm64), each control its own binary:
 The frames are `global-keys-*` under the test's artifact folder. Repeat from
 `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestCockpitGlobalKeysOverTheView|TestKeybindsDoctorNamesAGlobalKeyOverTheView)$' -v .`.
+
+## A key's timer holds send-keys
+
+`TestSendKeysDoNotWaitOnAKeysTimer` sends `ctrl+b i` with send-keys to an
+attached client. The agents view arms a minute tick when it opens. The next
+message of a send-keys chain waited in a `tea.Sequence` for every command the
+key started, and Bubble Tea runs a batch inside a sequence to its last
+command, so the chain waited for the tick and the CLI timed out. The send must
+answer within 5 seconds, the view must be open, and an Escape sent after it
+must close the view. The chain now waits at most `remoteKeyCmdWait` (one
+second) for a key's commands.
+
+Run on 2026-11-07 on macOS (arm64):
+
+| Removed | Test | Failure | Result |
+|---------|------|---------|--------|
+| The bound (`remoteKeyThen`), so the chain waits in `tea.Sequence` as before (main at 56316191b) | `TestSendKeysDoNotWaitOnAKeysTimer` | "send-keys of ctrl+b i failed after 10.045s: timed out waiting for the attached client" | **caught** |
+
+The fixed build passes 3 of 3; `ctrl+b i` answers in about 1.02 s. Repeat from
+`e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=3 -run '^TestSendKeysDoNotWaitOnAKeysTimer$' -v .`.

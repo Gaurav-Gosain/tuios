@@ -3500,32 +3500,16 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			cmd = keyCmd
 		}
 
-		// If there are more keys, schedule the next one
+		// The chain's next message: the next key, or the end after the last.
+		var next tea.Msg = RemoteKeysDoneMsg{RequestID: msg.RequestID}
 		if len(msg.RemainingKeys) > 0 {
-			nextKey := msg.RemainingKeys[0]
-			remaining := msg.RemainingKeys[1:]
-			nextCmd := func() tea.Msg {
-				return RemoteKeyMsg{
-					Key:           nextKey,
-					RemainingKeys: remaining,
-					RequestID:     msg.RequestID,
-				}
+			next = RemoteKeyMsg{
+				Key:           msg.RemainingKeys[0],
+				RemainingKeys: msg.RemainingKeys[1:],
+				RequestID:     msg.RequestID,
 			}
-			// Use Sequence to ensure keys are processed in order, not concurrently
-			if cmd != nil {
-				return m, tea.Sequence(cmd, nextCmd)
-			}
-			return m, nextCmd
 		}
-
-		// Last key: schedule cleanup
-		doneCmd := func() tea.Msg {
-			return RemoteKeysDoneMsg{RequestID: msg.RequestID}
-		}
-		if cmd != nil {
-			return m, tea.Sequence(cmd, doneCmd)
-		}
-		return m, doneCmd
+		return m, remoteKeyThen(cmd, next, remoteKeyCmdWait)
 
 	case RemoteKeysDoneMsg:
 		// This chain's keys have all been processed. Another chain may still
@@ -3634,6 +3618,48 @@ func isActivityInput(msg tea.Msg) bool {
 func isRemoteKey(msg tea.Msg) bool {
 	_, ok := msg.(RemoteKeyMsg)
 	return ok
+}
+
+// remoteKeyCmdWait is how long the next key of a send-keys chain waits for
+// the commands the key before it started.
+const remoteKeyCmdWait = time.Second
+
+// remoteKeyThen runs a send-keys key's command, then sends next, the chain's
+// next message. The next key waits for the command so that what it started
+// (a list it loads, a dialog it opens) is in place first, as it is for a
+// person who types after seeing the result. It waits no longer than wait: a
+// key can arm a long timer, such as the agents view's minute tick, and Bubble
+// Tea runs a batch inside a sequence to its last command, so the chain and
+// the send-keys call waited for the timer. After wait the chain goes on, and
+// the command's messages still arrive when it ends. Exactly one of the two
+// sends next.
+func remoteKeyThen(cmd tea.Cmd, next tea.Msg, wait time.Duration) tea.Cmd {
+	if cmd == nil {
+		return func() tea.Msg { return next }
+	}
+	var sent atomic.Bool
+	ran := make(chan struct{})
+	inOrder := func() tea.Msg {
+		close(ran)
+		if sent.CompareAndSwap(false, true) {
+			return next
+		}
+		return nil
+	}
+	late := func() tea.Msg {
+		t := time.NewTimer(wait)
+		defer t.Stop()
+		select {
+		case <-ran:
+			return nil
+		case <-t.C:
+		}
+		if sent.CompareAndSwap(false, true) {
+			return next
+		}
+		return nil
+	}
+	return tea.Batch(tea.Sequence(cmd, inOrder), late)
 }
 
 // isPersonInput reports whether msg came from the terminal the client runs
