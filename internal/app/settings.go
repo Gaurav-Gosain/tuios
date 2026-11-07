@@ -643,6 +643,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("shell.integration"),
 			opt("agents.fold_working"),
 			opt("agents.view_list"),
+			opt("agents.list_width"),
 			opt("review.focus"),
 			opt("review.scope"),
 			opt("pip.width"),
