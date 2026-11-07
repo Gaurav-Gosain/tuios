@@ -896,9 +896,15 @@ func (a *App) stateChip(c *ui.Context, pal *palette, p *proto.Pane, multi bool, 
 		if p.Status == proto.Working {
 			t.FontFeatures("tnum")
 		}
-	}).Shrink(0).MaxWidth(320)
+	}).MaxWidth(320)
 	if plan.sized {
-		ch.MaxWidth(width)
+		ch.Shrink(0).MaxWidth(width)
+	} else {
+		// No plan yet (the card's first frames): the chip shrinks with
+		// the header's row and cuts its text with the ellipsis. Kept at
+		// its cap, it ran under the card's edge, cut mid letter, until
+		// some input drew the window again (Mac round 3, V3-M1).
+		ch.Shrink(1).MinWidth(0)
 	}
 	// tuios starts no program again in a pane that stayed after its
 	// program exited (keep_open): it closes. With several panes the
@@ -1132,6 +1138,10 @@ func (a *App) planHeader(c *ui.Context, p *proto.Pane, title, dir string, showDi
 		w = a.paneRef("card-" + p.ID).Bounds(c).W
 	}
 	if w <= 0 {
+		// Planned for no width, the chips take their caps and can run
+		// past the card: the next frame, with the card's size, plans the
+		// header again. Nothing else asked for one in an idle window.
+		c.AnimationFrame()
 		return headerPlan{titleW: titleN, folderW: folderN, gitW: gitN, stateW: stateN, processW: processN,
 			state: msg != "", git: gitN > 0, gitCompact: sameGit, process: process, controls: true}
 	}
