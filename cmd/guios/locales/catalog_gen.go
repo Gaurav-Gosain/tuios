@@ -2904,6 +2904,16 @@ func (msgs Messages) SetColorsDetail() string {
 	return Catalog.Format(msgs.locale, "setColorsDetail", nil)
 }
 
+// SetColorsOmarchy says " guios follows Omarchy when tuios does."
+// in the language the app shows.
+func SetColorsOmarchy() string { return In(i18n.Locale()).SetColorsOmarchy() }
+
+// SetColorsOmarchy says " guios follows Omarchy when tuios does."
+// in the language of msgs.
+func (msgs Messages) SetColorsOmarchy() string {
+	return Catalog.Format(msgs.locale, "setColorsOmarchy", nil)
+}
+
 // SetThemeShared says "tuios and guios use this theme."
 // in the language the app shows.
 func SetThemeShared() string { return In(i18n.Locale()).SetThemeShared() }
