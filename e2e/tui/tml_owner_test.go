@@ -122,11 +122,23 @@ func TestTMLOwnerScriptAnswersEvents(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("the owner's surface never drew: %v\n%s", err, term.Snapshot())
 	}
-	idBytes, err := os.ReadFile(filepath.Join(base, "id"))
-	if err != nil || len(idBytes) == 0 {
-		t.Fatalf("the owner never read its surface id: %v", err)
+	// The surface can draw before the script has read its tml_opened line
+	// and written the id, so the test waits for the file.
+	var idBytes []byte
+	idWait := time.Now()
+	for deadline := time.Now().Add(uiTimeout); ; {
+		var err error
+		if idBytes, err = os.ReadFile(filepath.Join(base, "id")); err == nil && len(bytes.TrimSpace(idBytes)) > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			events, _ := os.ReadFile(filepath.Join(base, "events.log"))
+			t.Fatalf("the owner never read its surface id: %v (id %q); its events:\n%s", err, idBytes, events)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
-	id := string(idBytes)
+	t.Logf("the id was there %v after the surface drew", time.Since(idWait).Round(time.Millisecond))
+	id := strings.TrimSpace(string(idBytes))
 	saveTMLFrame(t, term, "1-owner-open")
 
 	if err := term.SendKeys("r"); err != nil {
