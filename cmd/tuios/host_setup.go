@@ -346,6 +346,9 @@ func runTailnetSetup(o hostSetupOptions) error {
 	if err != nil {
 		return err
 	}
+	if setupInteractive(o) {
+		return runTailnetSetupTTY(base, o)
+	}
 	opt, _ := tailnetOptions()
 	added, err := hostsetup.ConfiguredHosts(base.ConfigPath)
 	if err != nil {

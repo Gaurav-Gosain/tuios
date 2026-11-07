@@ -73,7 +73,8 @@ func (d *Daemon) stopHostsWatch() {
 }
 
 // onConfigReload runs on the watcher goroutine. It applies the [hosts] table,
-// [notify], appearance.preferred_shell, workspaces.return_when_empty,
+// [notify], appearance.preferred_shell, [shell] integration,
+// workspaces.return_when_empty,
 // [paste_buffers], [agents] enabled and herdr_protocol, [daemon] keep_awake,
 // single_client and ssh_agent, the
 // [agents.approvals], [agents.permissions] and [agents.queue] tables and
@@ -125,6 +126,9 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	d.forgetHostForwards()
 	d.agentPruneHosts(HostsFromConfig(cfg))
 	d.manager.SetPreferredShell(cfg.Appearance.PreferredShell)
+	// The marks change what a new shell prints and nothing a pane may do,
+	// so a file change applies both ways.
+	d.manager.SetShellIntegration(cfg.Shell.Integration)
 	d.manager.SetHerdrProtocol(cfg.Agents.HerdrProtocol)
 	d.manager.SetReturnWhenEmpty(cfg.Workspaces.ReturnsWhenEmpty())
 	d.manager.SetDragAndDrop(cfg.Panes.DragAndDrop)

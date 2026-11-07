@@ -30,7 +30,8 @@ import (
 // for a cursor the file no longer matches, the limit, and the transcript event
 // that says when to read again. And it checks who may read: not without a
 // nonce, not from inside a pane even with the person's nonce, not over a link
-// stream the hub did not vouch for, and not over a link without respond.
+// stream the hub did not vouch for, and not over a link whose allow list
+// names neither transcripts nor respond, which includes it.
 //
 // The artifact is agent-transcript.txt under artifactDir: every request and
 // reply, the events, and what the pane printed.
@@ -39,8 +40,8 @@ import (
 //   - with both nonce checks in verbAgentTranscript cut (humanNonceHeld and
 //     humanNonceFor), the read without a nonce is served and the test fails
 //     at "a read without a nonce".
-//   - with agent-transcript mapped to list instead of respond in
-//     verbCapabilities, the test fails at "a link without respond".
+//   - with agent-transcript mapped to list instead of transcripts in
+//     verbCapabilities, the test fails at "a link without transcripts".
 //   - with the noteTranscriptGrowth call cut from readAgentTranscript, the
 //     test fails at "no transcript event".
 //   - with foldResults cut from forward, the test fails at "the appended
@@ -158,8 +159,8 @@ func TestPersonReadsAgentTranscript(t *testing.T) {
 		t.Fatalf("attach-presence on the viewer link: %v", verr)
 	}
 	vp := params(map[string]any{"human_nonce": vpres["human_nonce"]})
-	if _, verr := read(vs, vp); verr == nil || verr.Code != "forbidden" || !strings.Contains(verr.Message, "respond") {
-		t.Fatalf("a link without respond: want forbidden naming respond, got %v", verr)
+	if _, verr := read(vs, vp); verr == nil || verr.Code != "forbidden" || !strings.Contains(verr.Message, "transcripts") {
+		t.Fatalf("a link without transcripts: want forbidden naming transcripts, got %v", verr)
 	}
 	vs.close()
 

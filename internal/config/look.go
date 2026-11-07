@@ -141,7 +141,7 @@ var lookKeys = []string{
 	// Motion.
 	"appearance.motion",
 	"appearance.animation_speed",
-	"appearance.zoom_animation",
+	"motion.zoom",
 	// The dock.
 	"appearance.dockbar_position",
 	"appearance.dock_background",
@@ -245,6 +245,8 @@ var hostReaching = map[string]bool{
 	"appearance.selection.osc52_write":  true,
 	"appearance.sidebar.editor":         true,
 	"appearance.sidebar.file_delete":    true,
+	// It decides which files a new shell reads when it starts.
+	"shell.integration": true,
 }
 
 // ReachesHost reports whether the option at path runs a program, names a file

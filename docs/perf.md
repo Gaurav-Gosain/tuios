@@ -3631,6 +3631,29 @@ significant change in time (24.38 ms and 24.11 ms, p=0.95, and in a second
 run 24.64 ms and 25.44 ms, p=0.081; Go 1.26.10) and the same bytes and
 allocations per op. The binary stays under the 50 MB ceiling.
 
+The sketch named themes are a static table. `sketch/internal/engine/themes.go`
+built its 13 named themes in package init by parsing 181 hex strings, so
+every tuios process paid for them at start. The table is a
+`[...]themeSpec` array of `uint32` colours now and `Themes` and `ThemeNamed`
+build a theme when asked, once per command or page. Every theme has the same
+values, names and aliases: a `%#v` dump of every `Themes` entry and every
+`ThemeNamed` result, by name and by title, plus "Rosé Pine", "rose pine",
+"catppuccin_mocha", "CATPPUCCIN-MOCHA" and an unknown name, is byte-identical
+to main's. Measured on main at 91a743c5a (Go 1.27.3, release flags,
+`GOWORK=off` with the pins moved):
+
+| target | main | change | |
+|---|---|---|---|
+| tuios linux/amd64 | 46,973,088 | 46,960,800 | -12,288 |
+| tuios darwin/arm64 | 43,774,002 | 43,740,450 | -33,552 |
+| tuios-web linux/amd64 | 50,307,232 | 50,290,848 | -16,384 |
+| tuios-web darwin/arm64 | 47,596,258 | 47,595,570 | -688 |
+
+Both tuios rows stay under the 50,000,000 ceiling. `GODEBUG=inittrace=1` on
+`tuios --version` shows the engine's init going from 1,472 bytes, 230
+allocations and 0.016 to 0.021 ms to 592 bytes, 9 allocations and about
+0.015 ms; the sketch packages together go from 561 to 340 init allocations.
+
 To raise the ceiling, do it on purpose in its own commit: change `ceiling` in
 `scripts/binary-size.sh`, record the new value and the reason here, and say in
 the commit message what grew and why it is worth the bytes. A Go version bump

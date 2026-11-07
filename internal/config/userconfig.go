@@ -26,6 +26,7 @@ import (
 // UserConfig represents the user's custom configuration
 type UserConfig struct {
 	Appearance    AppearanceConfig    `toml:"appearance"`
+	Motion        MotionConfig        `toml:"motion"`
 	Notifications NotificationsConfig `toml:"notifications"`
 	Keybindings   KeybindingsConfig   `toml:"keybindings"`
 	Daemon        DaemonConfig        `toml:"daemon"`
@@ -86,6 +87,10 @@ type UserConfig struct {
 	// Files is the [files] table: the programs the rail's files section opens
 	// a file with. See files_open.go.
 	Files FilesConfig `toml:"files"`
+
+	// Shell is the [shell] table: whether tuios turns on prompt marks in the
+	// shells it starts. See shell_integration.go.
+	Shell ShellConfig `toml:"shell"`
 
 	// YieldedDefaults are the new default bindings left off because the key
 	// was already the user's for another action in the same table. It is
@@ -512,6 +517,8 @@ type AppearanceConfig struct {
 	ZoomAnimation          *bool    `toml:"zoom_animation"`            // Slide a pane between its tile and the zoom box (default: true)
 	AnimationSpeed         int      `toml:"animation_speed"`           // Percent window animations run at: 100 as shipped, 200 twice as fast (default: 100)
 	ThemeTransition        string   `toml:"theme_transition"`          // How a theme change is shown: none, circle or fade (default: none)
+	WorkspaceTransition    string   `toml:"workspace_transition"`      // Old name of motion.workspace; folded on load
+	WorkspaceTransitionMs  *int     `toml:"workspace_transition_ms"`   // Old name of motion.workspace_ms; folded on load
 	ThemeTransitionMs      int      `toml:"theme_transition_duration"` // Milliseconds a theme transition takes, 100 to 2000 (default: 450)
 	ZoomBorderless         bool     `toml:"zoom_borderless"`           // A zoomed pane fills the whole pane region with no border (default: false)
 	ZoomFollowsFocus       *bool    `toml:"zoom_follows_focus"`        // Hand the zoom to the pane the focus lands on (default: true)
@@ -1177,6 +1184,15 @@ var defaultCopyFlash = true
 // DefaultConfig returns the default configuration
 func DefaultConfig() *UserConfig {
 	cfg := &UserConfig{
+		Motion: MotionConfig{
+			Workspace: WorkspaceTransitionSlide, WorkspaceMs: new(WorkspaceTransitionMsDefault),
+			Layout: MotionSwitchOn, LayoutMs: new(int(DefaultAnimationDuration.Milliseconds())),
+			Zoom: MotionSwitchOn, ZoomMs: new(int(FastAnimationDuration.Milliseconds())),
+			Overlays: MotionSwitchOn, OverlaysMs: new(int(OverlayFadeDuration.Milliseconds())),
+			Sidebar: MotionSwitchOn,
+			Scroll:  MotionSwitchOn, ScrollMs: new(int(DefaultAnimationDuration.Milliseconds())),
+			Copy: MotionSwitchOn, Confetti: MotionSwitchOn,
+		},
 		Appearance: AppearanceConfig{
 			BorderStyle:              "rounded",
 			ZenMode:                  ZenModeDisabled,
@@ -1287,6 +1303,12 @@ func DefaultConfig() *UserConfig {
 		PasteBuffers: defaultPasteBuffersConfig(),
 		Review:       defaultReviewConfig(),
 		Agents:       AgentsConfig{ViewList: AgentsViewListColumn},
+		Shell:        ShellConfig{Integration: ShellIntegrationAuto},
+		Files: FilesConfig{
+			OpenCopyAskMB:    DefaultOpenCopyAskMB,
+			OpenCopyMaxMB:    DefaultOpenCopyMaxMB,
+			OpenCopyKeepDays: DefaultOpenCopyKeepDays,
+		},
 		Keybindings: KeybindingsConfig{
 			LeaderKey: "ctrl+b",
 			WindowManagement: map[string][]string{
@@ -2558,6 +2580,7 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	if !slices.Contains(ThemeTransitions, cfg.Appearance.ThemeTransition) {
 		cfg.Appearance.ThemeTransition = defaultCfg.Appearance.ThemeTransition
 	}
+	fillMissingMotion(cfg)
 	if cfg.Appearance.ModalDim == nil {
 		cfg.Appearance.ModalDim = new(*defaultCfg.Appearance.ModalDim)
 	} else if d := *cfg.Appearance.ModalDim; d < 0 || d > ModalDimMax {
@@ -2960,9 +2983,6 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if cfg.Appearance.NiriHoverReveals != nil {
 		s.NiriHoverReveals = *cfg.Appearance.NiriHoverReveals
 	}
-	if cfg.Appearance.ZoomAnimation != nil {
-		s.ZoomAnimation = *cfg.Appearance.ZoomAnimation
-	}
 	s.ZoomBorderless = cfg.Appearance.ZoomBorderless
 	if cfg.Appearance.ZoomFollowsFocus != nil {
 		s.ZoomFollowsFocus = *cfg.Appearance.ZoomFollowsFocus
@@ -3075,6 +3095,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if slices.Contains(ThemeTransitions, cfg.Appearance.ThemeTransition) {
 		s.ThemeTransition = cfg.Appearance.ThemeTransition
 	}
+	applyMotionConfig(cfg, s)
 	s.ThemeTransitionMs = clampPercent(cfg.Appearance.ThemeTransitionMs, ThemeTransitionMsMin, ThemeTransitionMsMax, ThemeTransitionMsDefault)
 	s.ScrollColumnMax = clampPercent(cfg.Appearance.ScrollColumnMax, ScrollColumnWidthMin, ScrollColumnWidthCeiling, ScrollColumnWidthMax)
 	s.ScrollColumnWidth = clampPercent(cfg.Appearance.ScrollColumnWidth, ScrollColumnWidthMin, s.ScrollColumnMax, ScrollColumnWidthDefault)

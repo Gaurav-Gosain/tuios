@@ -164,6 +164,11 @@ commands and screen text. `panes.navigator_layout` sets the layout it opens in:
 ready to type a search. It is for the person at the keyboard: a script reads
 the same rows with `tuios list-windows --all --text N --json`.
 
+`shell.integration` (`auto` by default, or `off`) says whether new bash and
+zsh panes start with OSC 133 prompt marks on, which `tuios run` needs. tuios
+changes none of the person's files to do it. It applies to the next pane.
+`new-window --shell-integration off` turns it off for one pane.
+
 ## What the person sees
 
 These are for the person at the keyboard. Know them so you can answer a
@@ -204,9 +209,13 @@ question about the screen. Do not change them unless the person asks.
   is read on that machine, and needs the `files` grant there.
 - In the rail's files section, `o` opens the row with the system opener
   (`xdg-open`, `open`, `wslview`, or the Windows handler), or with the
-  command of the first `[[files.open]]` rule that matches. It opens only
-  files on the machine of the client. For a row on another machine, or a
-  remote client, it says so and starts nothing.
+  command of the first `[[files.open]]` rule that matches. For a row on
+  another machine it offers to copy the row to
+  `~/.cache/tuios/opened/HOST/HASH/NAME` and open the copy, after a click on
+  the message. A copy of an unchanged file opens at once. Changes stay here.
+  `[files] open_copy_ask_mb`, `open_copy_max_mb` and `open_copy_keep_days`
+  set the limits, and `tuios transfers clear-opened` deletes the copies. For
+  a remote client it says so and starts nothing.
 - When the last pane on the workspace on screen closes, the session shows
   the workspace the person came from: the one that ran `xpanes`, else the
   ones shown before, else the lowest with panes. `workspaces.return_when_empty
@@ -405,6 +414,15 @@ panel such as the command palette; 0 turns it off. `appearance.motion` is
 `none`, `basic` (window slides, workspace slides and the copy sweep) or `full` (the default: also the panel
 fade-in and the shimmer on a working agent's rail row). The old
 `animations_enabled` still works and maps `false` to `none`.
+
+Each motion has its own key under `[motion]`: `workspace` (`slide`, `fade` or
+`none`), and `layout`, `zoom`, `overlays`, `sidebar`, `scroll`, `copy` and
+`confetti` (`on` or `off`). `workspace`, `layout`, `zoom`, `overlays` and
+`scroll` also take `<name>_ms`, 0 to 1000, and 0 is a cut. `appearance.motion`
+`none` stops all of them, and `animation_speed` scales the lengths. The old
+`appearance.workspace_transition`, `workspace_transition_ms` and
+`zoom_animation` fold into `motion.workspace`, `motion.workspace_ms` and
+`motion.zoom` on load.
 
 `appearance.theme_transition` is `none` (the default), `circle` (the new theme
 grows from the middle of the screen) or `fade`. `theme_transition_duration` is

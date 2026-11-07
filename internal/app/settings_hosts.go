@@ -36,7 +36,7 @@ import (
 
 // hostAddRowLabel is the label of the row that adds a machine. It is matched by
 // name in the tests, so it is spelled once.
-const hostAddRowLabel = "Add a host"
+const hostAddRowLabel = "Add a machine"
 
 // hostTestRowLabel is the label of the row that dials every configured host.
 const hostTestRowLabel = "Test the links"
@@ -158,25 +158,18 @@ func hostStateSentence(status, reason, detail string) string {
 	return strings.Join(parts, " ")
 }
 
-// hostAddItem is the row that adds a machine. One field takes both the name and
-// the address, because the page has one text control and a second row that only
-// half-adds a host is worse than typing two words.
+// hostAddItem is the row that opens the add sheet, which tests the machine,
+// installs tuios there when it is missing, and adds it. See machine_sheet.go.
 func (m *OS) hostAddItem() settingItem {
-	desc := "Type a name and an address, separated by a space. Press enter."
-	if candidates := m.hostAddrCandidates(); len(candidates) > 0 {
-		desc += " Your ssh config names: " + strings.Join(candidates, ", ") + "."
-	}
-	if candidates := m.tailnetAddrCandidates(); len(candidates) > 0 {
-		desc += " Your tailnet has: " + strings.Join(candidates, ", ") + "."
-	}
 	return settingItem{
-		Label:       hostAddRowLabel,
-		Desc:        desc,
-		Control:     controlString,
-		Placeholder: "build gaurav@buildbox",
-		Unset:       "(name and address)",
-		value:       func(_ *OS) string { return "" },
-		setStr:      func(m *OS, v string) { m.addHostFromRow(v) },
+		Label:   hostAddRowLabel,
+		Desc:    "Test a machine over ssh, install tuios there, and add it. Press enter.",
+		Control: controlEnum,
+		Options: []string{"open"},
+		value:   func(_ *OS) string { return "open" },
+		activate: func(m *OS) tea.Cmd {
+			return m.OpenMachineSheet("")
+		},
 	}
 }
 
@@ -202,95 +195,6 @@ func (m *OS) hostAddrCandidates() []string {
 	return aliases
 }
 
-// tailnetAddrCandidates are the machines on this user's tailnet, offered as
-// addresses the same way the ssh_config aliases are. Nothing is added from the
-// list; see internal/federation's tailnet.go.
-//
-// The answer comes from a cache that a goroutine fills, because this runs in
-// the render path and the call behind it is a round trip to the tailscaled on
-// this machine. A page drawn before the first answer lands shows the ssh
-// aliases alone and gains the tailnet names on a later frame, which is the
-// same bargain every other live fact on this page makes.
-func (m *OS) tailnetAddrCandidates() []string {
-	if m.ConfigReadOnly {
-		// A served session must not read the serving machine's tailnet on
-		// behalf of whoever connected to it, for the same reason it must not
-		// read its ssh config.
-		return nil
-	}
-	// The [tailscale] table is read here, on the caller's goroutine, and only
-	// the tailnet call is handed off.
-	//
-	// Reading it inside the goroutine would mean that goroutine resolving an
-	// XDG path: reading the environment, and creating the config directory if
-	// it is not there. Both of those race with anything else changing the
-	// environment, which in a test binary is every test that points XDG at a
-	// directory of its own. The file is parsed again only when it changed
-	// (see tailnetOptionsCached), and the round trip that actually takes time
-	// is still off this goroutine.
-	m.tailnetMu.Lock()
-	defer m.tailnetMu.Unlock()
-	opt, enabled := m.tailnetOptionsCached()
-	if !enabled {
-		return nil
-	}
-	if time.Since(m.tailnetAskedAt) > tailnetCandidateTTL {
-		m.tailnetAskedAt = time.Now()
-		go m.refreshTailnetCandidates(opt)
-	}
-	if len(m.tailnetCandidates) > maxHostAddrCandidates {
-		return m.tailnetCandidates[:maxHostAddrCandidates]
-	}
-	return m.tailnetCandidates
-}
-
-// refreshTailnetCandidates fills the cache.
-//
-// The answer is kept for a minute rather than for the life of the client. A
-// machine coming up on the tailnet, or an edit to the [tailscale] table, has to
-// reach the row without a restart, and asking once per frame would be a socket
-// call behind a description line nobody is waiting on.
-func (m *OS) refreshTailnetCandidates(opt federation.TailnetOptions) {
-	ctx, cancel := context.WithTimeout(context.Background(), tailnetCandidateTimeout)
-	defer cancel()
-	addrs := federation.TailnetAddrs(ctx, opt)
-
-	m.tailnetMu.Lock()
-	m.tailnetCandidates = addrs
-	m.tailnetMu.Unlock()
-}
-
-// tailnetFileKey names one version of the config file: its path, size and
-// modification time.
-type tailnetFileKey struct {
-	path  string
-	size  int64
-	mtime time.Time
-}
-
-// tailnetOptionsCached is tailnetOptionsFromFile, parsed again only when the
-// config file changed. The hosts page builds this row on every frame the
-// settings panel is up, and parsing the whole config file each time was the
-// largest single cost of such a frame: a pointer moving over the panel
-// composes one per frame (issue #1058). A stat is all an unchanged file costs.
-// The caller holds tailnetMu.
-func (m *OS) tailnetOptionsCached() (federation.TailnetOptions, bool) {
-	path, err := config.GetConfigPath()
-	if err != nil {
-		return federation.DefaultTailnetOptions(), false
-	}
-	key := tailnetFileKey{path: path}
-	if fi, err := os.Stat(path); err == nil {
-		key.size, key.mtime = fi.Size(), fi.ModTime()
-	}
-	if m.tailnetOptValid && key == m.tailnetOptKey {
-		return m.tailnetOpt, m.tailnetOptEnabled
-	}
-	m.tailnetOpt, m.tailnetOptEnabled = tailnetOptionsFromFile()
-	m.tailnetOptKey, m.tailnetOptValid = key, true
-	return m.tailnetOpt, m.tailnetOptEnabled
-}
-
 // tailnetOptionsFromFile is the [tailscale] table, and whether it asks for
 // tailnet machines to be offered at all.
 //
@@ -308,14 +212,6 @@ func tailnetOptionsFromFile() (federation.TailnetOptions, bool) {
 	}
 	return ts.TailnetOptions(), ts.TailscaleEnabled()
 }
-
-// tailnetCandidateTimeout bounds the one local call. It goes to a unix socket
-// on this machine, so anything slower than this means nothing is answering.
-const tailnetCandidateTimeout = 3 * time.Second
-
-// tailnetCandidateTTL is how long an answer is kept before it is asked for
-// again.
-const tailnetCandidateTTL = time.Minute
 
 // hostTestItem is the row that dials every configured host.
 func (m *OS) hostTestItem() settingItem {

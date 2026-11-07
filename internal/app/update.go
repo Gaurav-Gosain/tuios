@@ -962,6 +962,8 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		msg = TickerMsg(dt.at)
 	}
 	model, cmd := m.update(msg)
+	// The pane of a person step of the add sheet may have ended.
+	m.machineSheetAfter()
 	// Whatever this message did may have moved the box of quick look's picture,
 	// or the position in its text.
 	if qc := m.quickLookPicture(); qc != nil {
@@ -1709,6 +1711,16 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.renderSkipped = false
 		return m, cmd
 
+	case farOpenPreparedMsg:
+		cmd := m.handleFarOpenPrepared(msg)
+		m.renderSkipped = false
+		return m, cmd
+
+	case farOpenEndedMsg:
+		cmd := m.handleFarOpenEnded(msg)
+		m.renderSkipped = false
+		return m, cmd
+
 	case fileOpenFailedMsg:
 		m.handleFileOpenFailed(msg)
 		m.renderSkipped = false
@@ -2047,6 +2059,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// the picker offered machines that were down and refused ones that
 		// were up.
 		return m, tea.Batch(refreshFederationCmd(), listenClientEventsUntil(m.stopSignal(), m.ClientEventChan))
+
+	case machineSheetMsg:
+		// The add sheet's engine ran in a Cmd. This stores what it said.
+		return m, m.applyMachineSheetMsg(msg)
 
 	case HostTestDoneMsg:
 		// Storing the results is the whole handler. The ssh children ran in the

@@ -130,6 +130,48 @@ const (
 // ThemeTransitions is what appearance.theme_transition accepts.
 var ThemeTransitions = []string{ThemeTransitionNone, ThemeTransitionCircle, ThemeTransitionFade}
 
+// Workspace transitions. motion.workspace takes one of these.
+const (
+	// WorkspaceTransitionSlide moves the old workspace out and the new one in.
+	// It is the default.
+	WorkspaceTransitionSlide = "slide"
+	// WorkspaceTransitionFade blends the old workspace's cells into the new
+	// workspace's.
+	WorkspaceTransitionFade = "fade"
+	// WorkspaceTransitionNone shows the new workspace in one frame.
+	WorkspaceTransitionNone = "none"
+)
+
+// WorkspaceTransitions is what motion.workspace accepts.
+var WorkspaceTransitions = []string{WorkspaceTransitionSlide, WorkspaceTransitionFade, WorkspaceTransitionNone}
+
+// WorkspaceTransitionMsDefault and Max bound motion.workspace_ms, in
+// milliseconds. Zero is a cut.
+const (
+	WorkspaceTransitionMsDefault = 200
+	WorkspaceTransitionMsMax     = 1000
+)
+
+// WorkspaceTransitionStyle is the transition a workspace switch made now is
+// shown with. It is none whenever motion is: appearance.motion = "none", calm
+// mode, a tape or remote command that suppressed animations, and
+// motion.workspace = "none".
+func (s *Settings) WorkspaceTransitionStyle() string {
+	if !s.MotionOn(AspectWorkspace) {
+		return WorkspaceTransitionNone
+	}
+	if s.WorkspaceTransition == WorkspaceTransitionFade {
+		return WorkspaceTransitionFade
+	}
+	return WorkspaceTransitionSlide
+}
+
+// WorkspaceTransitionDuration is how long a workspace transition runs,
+// scaled by appearance.animation_speed. Zero is a cut.
+func (s *Settings) WorkspaceTransitionDuration() time.Duration {
+	return s.MotionLength(AspectWorkspace, WorkspaceTransitionMsDefault*time.Millisecond)
+}
+
 // ThemeTransitionMsDefault, Min and Max bound
 // appearance.theme_transition_duration, in milliseconds.
 const (

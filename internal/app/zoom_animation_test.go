@@ -2,6 +2,8 @@ package app
 
 import (
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // TestALandedSlideResizesTheGuest pins the promise a slide has to keep. Landing
@@ -9,7 +11,7 @@ import (
 // inside stayed reflowed for the size it had when the slide began.
 func TestALandedSlideResizesTheGuest(t *testing.T) {
 	m, wins := zoomPeekOS(t)
-	m.Settings.ZoomAnimation = true
+	m.Settings.Aspects[config.AspectZoom].Off = false
 	m.FocusedWindow = 0
 	target := wins[0]
 

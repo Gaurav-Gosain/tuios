@@ -50,7 +50,7 @@ func TestToggleZoomResizesDaemonTerminal(t *testing.T) {
 				Width:          120,
 				Height:         40,
 			}
-			m.Settings.ZoomAnimation = animate
+			m.Settings.Aspects[config.AspectZoom].Off = !(animate)
 
 			read := func() (int, int, int) {
 				mu.Lock()

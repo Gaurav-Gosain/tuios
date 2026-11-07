@@ -87,14 +87,17 @@ var settingsUIExcluded = map[string]string{
 	// The deprecated flat spellings. Each is an alias of a nested path that has
 	// a row of its own, so a row here would be a second control for one value,
 	// disagreeing with the first whenever the file used the other spelling.
-	"appearance.sidebar_enabled":      "alias of appearance.sidebar.enabled",
-	"appearance.sidebar_position":     "alias of appearance.sidebar.position",
-	"appearance.sidebar_width":        "alias of appearance.sidebar.width",
-	"appearance.sidebar_show_windows": "alias of appearance.sidebar.show_windows",
-	"appearance.sidebar_show_glyphs":  "alias of appearance.sidebar.show_glyphs",
-	"appearance.sidebar_show_counts":  "alias of appearance.sidebar.show_counts",
-	"appearance.sidebar.workspaces":   "no longer used: panes name their own workspace, and switching lives on the dock and alt+1..9",
-	"appearance.animations_enabled":   "replaced by appearance.motion (false is none)",
+	"appearance.sidebar_enabled":         "alias of appearance.sidebar.enabled",
+	"appearance.sidebar_position":        "alias of appearance.sidebar.position",
+	"appearance.sidebar_width":           "alias of appearance.sidebar.width",
+	"appearance.sidebar_show_windows":    "alias of appearance.sidebar.show_windows",
+	"appearance.sidebar_show_glyphs":     "alias of appearance.sidebar.show_glyphs",
+	"appearance.sidebar_show_counts":     "alias of appearance.sidebar.show_counts",
+	"appearance.sidebar.workspaces":      "no longer used: panes name their own workspace, and switching lives on the dock and alt+1..9",
+	"appearance.animations_enabled":      "replaced by appearance.motion (false is none)",
+	"appearance.workspace_transition":    "old name of motion.workspace",
+	"appearance.workspace_transition_ms": "old name of motion.workspace_ms",
+	"appearance.zoom_animation":          "old name of motion.zoom",
 
 	// The two section switches. They fold into appearance.sidebar.sections on
 	// load, which is the one place membership lives: a layout may carry two

@@ -349,6 +349,9 @@ type newWindowParams struct {
 	// its own estimate when they are 0.
 	Cols int `json:"cols"`
 	Rows int `json:"rows"`
+	// ShellIntegration is auto or off for this pane's shell, "" for
+	// [shell] integration.
+	ShellIntegration string `json:"shell_integration"`
 }
 
 // openWindow is new-window. With split, the window goes beside a pane in the
@@ -368,6 +371,9 @@ func (d *Daemon) openWindow(cs *connState, p *newWindowParams, split *splitAsk) 
 	}
 	if p.Cols < 0 || p.Rows < 0 {
 		return nil, invalidParam("cols", "cols and rows are the pane's size in cells, or 0 for the session's")
+	}
+	if p.ShellIntegration != "" && !slices.Contains(config.ShellIntegrationModes, p.ShellIntegration) {
+		return nil, invalidParam("shell_integration", "shell_integration is auto or off")
 	}
 	if p.Wait && p.Host != "" && p.Host != "local" {
 		return nil, invalidParam("wait", "wait reads the exit status, and a window on another machine does not report one")
@@ -475,6 +481,8 @@ func (d *Daemon) openWindow(cs *connState, p *newWindowParams, split *splitAsk) 
 		Split:       placement,
 		Cols:        cols,
 		Rows:        rows,
+
+		ShellIntegration: p.ShellIntegration,
 	}, onExit)
 	if bverr != nil {
 		return nil, bverr

@@ -641,7 +641,7 @@ func TestAgentsSettingsHiddenWithAgentsOff(t *testing.T) {
 	if err := term.SendKeys("[", "["); err != nil {
 		t.Fatal(err)
 	}
-	if err := term.WaitForText("Add a host", uiTimeout); err != nil {
+	if err := term.WaitForText("Add a machine", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the tab before Tape is not Hosts with the features off: %v\n%s", err, term.Snapshot())
 	}
 	if s := term.Screen(); findRow(s, "Claude Code") >= 0 {
@@ -889,7 +889,7 @@ func TestAgentsSettingsAbsentOverSSH(t *testing.T) {
 	if err := term.SendKeys("[", "["); err != nil {
 		t.Fatal(err)
 	}
-	if err := term.WaitForText("Add a host", uiTimeout); err != nil {
+	if err := term.WaitForText("Add a machine", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the tab before Tape is not Hosts over ssh: %v\n%s", err, term.Snapshot())
 	}
 	if findRow(term.Screen(), "Claude Code") >= 0 {

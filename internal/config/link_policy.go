@@ -61,10 +61,19 @@ const (
 	// start files and tuios's own config. A read never returns keys or
 	// credentials. See verb_files_confine.go in internal/session.
 	LinkAllowFiles = "files"
+	// LinkAllowTranscripts reads an agent's conversation (agent-transcript)
+	// for the person at a client attached over the link. It is apart from
+	// respond, which also answers prompts and approvals for the person, so a
+	// machine can show the conversation without answering anything. The
+	// daemon still needs the attach nonce of a person's client that came
+	// over the link-human socket: an agent in a pane, a link the hub did not
+	// vouch for, and a caller with no nonce stay refused. respond includes
+	// it, so a table written before it existed keeps what it had.
+	LinkAllowTranscripts = "transcripts"
 )
 
 // LinkCapabilities is every capability, in the order they are documented.
-var LinkCapabilities = []string{LinkAllowList, LinkAllowMail, LinkAllowOpen, LinkAllowWrite, LinkAllowRespond, LinkAllowFiles}
+var LinkCapabilities = []string{LinkAllowList, LinkAllowMail, LinkAllowOpen, LinkAllowWrite, LinkAllowRespond, LinkAllowFiles, LinkAllowTranscripts}
 
 // LinkRelayCapabilities is what a machine needs to relay through this one to
 // its hosts: every capability there was before files. A table written for
@@ -88,6 +97,8 @@ func LinkCapabilityWords(c string) string {
 		return "answer for the person"
 	case LinkAllowFiles:
 		return "read and write files"
+	case LinkAllowTranscripts:
+		return "read agent conversations"
 	}
 	return c
 }
@@ -97,7 +108,9 @@ func LinkCapabilityWords(c string) string {
 // answering a prompt for the person is opt-in. files is on: a machine that
 // may type into a shell here can already move files, and the file verbs keep
 // its writes to the receive folder unless files_roots says more.
-var DefaultLinkAllow = []string{LinkAllowList, LinkAllowMail, LinkAllowOpen, LinkAllowWrite, LinkAllowFiles}
+// transcripts is on: the person's own client attached over the link reads
+// the conversation of an agent there, as it does on this machine.
+var DefaultLinkAllow = []string{LinkAllowList, LinkAllowMail, LinkAllowOpen, LinkAllowWrite, LinkAllowFiles, LinkAllowTranscripts}
 
 // DefaultHostedGrace is how long a pane run here for another machine outlives
 // a dropped link when nothing says otherwise.
@@ -144,9 +157,10 @@ type LinkPolicy struct {
 }
 
 // Allows reports whether the policy grants every capability in caps.
+// respond includes transcripts.
 func (p LinkPolicy) Allows(caps ...string) bool {
 	for _, c := range caps {
-		if !slices.Contains(p.Allow, c) {
+		if !slices.Contains(p.Allow, c) && (c != LinkAllowTranscripts || !slices.Contains(p.Allow, LinkAllowRespond)) {
 			return false
 		}
 	}

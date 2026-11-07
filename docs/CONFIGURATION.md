@@ -530,14 +530,49 @@ command = ["thunar", "{path}"]
   matches files only.
 - `command` is a list of words. tuios starts it directly, with no shell.
   `{path}` in a word becomes the path. With no `{path}`, the path goes last.
-- tuios starts the command on the machine that runs the client. It does not
-  open a file in a listing of another machine, or for a remote client.
+- tuios starts the command on the machine that runs the client. For a file in
+  a listing of another machine, it opens a copy here. See the next section. It
+  does not open a file for a remote client.
 - When the program stops with an error in the first 3 seconds, a message
   says so. The log has the reason.
 - tuios skips a rule with no pattern, a pattern that is not a valid glob, or
   no command, and shows a warning for it when it starts.
 - `appearance.link_opener` and `$BROWSER` do not apply to files. They name a
   browser for web links.
+
+### Open a file of another machine
+
+`o` on a row of a listing of another machine shows a message: "notes.md is on
+build. Click to open a copy here." Click it, or press the prefix and then `j`,
+to copy the file or folder here and open the copy. Press `esc` to say not now.
+
+- The copy goes to `~/.cache/tuios/opened/HOST/HASH/NAME`, or under
+  `$XDG_CACHE_HOME` when it is set. The hash is of the host and the far path,
+  so the same file always goes to the same place.
+- The copy uses the same engine as `S` and `tuios cp`. It shows in the Copies
+  panel.
+- When the far file did not change since the last copy, `o` opens the copy
+  here at once. When it changed, tuios copies it again. When the copy here
+  changed too, tuios keeps it and opens it. Run
+  `tuios transfers clear-opened` to get a new copy.
+- tuios does not send changes back. Changes to the copy stay here.
+- A folder is copied with all it holds. tuios does not copy links, so a link
+  cannot bring in a file from outside the folder.
+- Above 200 MiB, or above 1000 files, tuios shows the size and asks again.
+  Above 4096 MiB, or above 20000 files, it does not copy. Press `S` to send
+  it to a folder here instead.
+- tuios replaces each character that a file name cannot hold with `_`. A
+  name such as `..\..\x` stays in the folder of its copy.
+- tuios deletes a copy that nobody opened for 7 days when the daemon starts,
+  and each time `o` makes a copy. `tuios transfers clear-opened` deletes them
+  all now.
+
+```toml
+[files]
+open_copy_ask_mb = 200      # ask first above this size, in MiB
+open_copy_max_mb = 4096     # do not copy above this size, in MiB
+open_copy_keep_days = 7     # -1 keeps every copy
+```
 
 ## Drag a file into a pane
 
@@ -591,6 +626,42 @@ skeleton effects of TML surfaces. A surface then shows each part at once.
 Calm mode sits over `appearance.motion`. When you turn calm mode off, the
 motion level you set comes back. See
 [KEYBINDINGS.md](KEYBINDINGS.md#calm-mode) for what calm mode changes.
+
+## Motion
+
+The `[motion]` table turns each motion on or off by itself and sets how long it
+takes. `appearance.motion` and `appearance.animation_speed` stay on top.
+`appearance.motion = "none"` and calm mode stop every motion below. The speed
+divides every length.
+
+| Key | Values | Motion |
+|-----|--------|--------|
+| `workspace` | `slide`, `fade`, `none` | The switch between workspaces. `fade` is a cut at 16 colors. |
+| `layout` | `on`, `off` | A pane that opens, closes, splits, swaps, snaps, minimizes or restores. |
+| `zoom` | `on`, `off` | A pane growing to the zoom box and back. |
+| `overlays` | `on`, `off` | A palette or dialog fading in. Needs `appearance.motion = "full"` and truecolor. |
+| `sidebar` | `on`, `off` | The shimmer on a working agent row. Needs `appearance.motion = "full"`. |
+| `scroll` | `on`, `off` | The slide of the scrolling layout. |
+| `copy` | `on`, `off` | The sweep over the cells a copy took. |
+| `confetti` | `on`, `off` | The confetti burst. Needs `appearance.motion = "full"`. |
+
+`workspace`, `layout`, `zoom`, `overlays` and `scroll` also take `<name>_ms`,
+the length in milliseconds at speed 100, from 0 to 1000. 0 is a cut. The
+defaults are 200 for `workspace` and `zoom`, 300 for `layout` and `scroll`, and
+120 for `overlays`. `layout` also sets the snap and swap length, which is
+two thirds of `layout_ms`.
+
+```toml
+[motion]
+workspace = "fade"
+workspace_ms = 250
+zoom = "off"        # zoom is a cut. The workspace switch still fades.
+```
+
+The old keys `appearance.workspace_transition`, `workspace_transition_ms` and
+`zoom_animation` still read. Tuios folds them into `motion.workspace`,
+`motion.workspace_ms` and `motion.zoom` on load. A `[motion]` key that is set
+wins.
 
 ## Theme transition
 
@@ -1575,6 +1646,52 @@ option also applies to a floating pane. When you zoom out, the pane gets its
 border back. You can also set it on the settings page, in the Advanced section,
 or with `tuios set-config appearance.zoom_borderless true`. The change applies
 at once.
+
+## Shell integration
+
+tuios turns on OSC 133 prompt marks in the bash and zsh shells that it starts
+in panes, as Ghostty and kitty do. The marks tell tuios where a prompt starts,
+where a command starts, and how the command ended. `tuios run`,
+`wait-for command-finished`, `capture-pane --last-command`, the scrollback
+browser and copy mode read them. A pane with marks also keeps one copy of its
+prompt when you make the pane narrower.
+
+tuios does not change your files:
+
+- **zsh**: tuios starts zsh with `ZDOTDIR` set to a folder of its own. The
+  `.zshenv` there sets `ZDOTDIR` back to your value, reads your `.zshenv`, and
+  adds the marks. zsh then reads your `.zprofile`, `.zshrc` and `.zlogin` as
+  usual. Programs in the pane see your own `ZDOTDIR`.
+- **bash**: tuios starts bash with `--rcfile` set to a file of its own. That
+  file reads your `~/.bashrc` and then adds the marks. Your `PS1`, `PS0`,
+  `PROMPT_COMMAND` (a string or an array), traps, `BASH_ENV` and `set -e` or
+  `set -u` stay as they are. This needs bash 4.4 or newer. An older bash
+  starts with no marks.
+- **fish 4** and **nushell** send the marks themselves, so tuios adds nothing.
+- Other shells start as they are.
+
+When your own setup already sends a mark, for example from a prompt theme or
+your own `precmd`, tuios does not send that mark again.
+
+The files are in `$XDG_STATE_HOME/tuios/shell-integration`, by default
+`~/.local/state/tuios/shell-integration`. tuios writes them once and checks
+them the first time it starts a shell. A shell starts less than 1 ms slower.
+
+To turn it off:
+
+```toml
+[shell]
+integration = "off"   # default: "auto"
+```
+
+The change applies to new panes. To choose for one pane, use
+`tuios new-window --shell-integration off`, or `auto` when the config is off.
+`tuios doctor shell` shows which panes send marks.
+
+tuios does not set up the shell of a remote pane: a pane that runs `ssh`, or a
+window on another machine (`--host`). To get marks there, add the lines that
+`tuios doctor shell` prints to the rc file on that machine. Then open a new
+pane.
 
 ## Splits that follow ssh
 
@@ -3130,11 +3247,11 @@ allow = ["list", "mail"]
 | `open` | Start processes: sessions, windows, worktrees, fans, `start-agent`, clones of a repository by its URL, and panes this machine runs for it. |
 | `write` | Change what is here: type into panes, `run` a line at a prompt, close and move windows, set options, layouts and names, report agent state, and attach. Also read a worktree's work out with `bundle-worktree` (`tuios worktree pull`), since a machine that may type into a shell here can read those files already. |
 | `respond` | Answer for the person: prompts, held approvals, `ask-human` questions, dismissing Inbox items, and passing on held mail. Also type into a pane that waits on a prompt, from a pane on the other machine. The person on the other machine, outside every pane, needs only `write` for that. |
+| `transcripts` | Read the conversation of an agent here, from the person's own client attached over the link. The client must send the nonce of its attach: an agent in a pane, a link the other machine did not vouch for, and a caller with no nonce are refused. `respond` includes it. |
 | `files` | Read and write files here with the file verbs: a file's bytes, copies in and out (`transfer-start` on the other machine), new folders, moves and removes. It is apart from `write`, so you can stop one machine's copies and keep its typing. A write that arrives over the link lands only in the folders of `files_roots` (the receive folder unless you add more, see below), and the drop folder for dropped files, never in `~/.ssh`, `~/.gnupg`, credentials, shell start files, login items or tuios's own config, whatever `allow` and `files_roots` say. A read never returns keys or credentials. It also lets a window here that the other machine draws show kitty images that a program names by path (`kitten icat --transfer-mode=file`): this machine reads the file under the same read rules and `files_read_roots`, and sends the bytes. See [protocol.md](protocol.md#files-and-transfers). |
 
-With no table, a machine may `list`, `mail`, `open`, `write` and `files`,
-which is what every link could do before the policy existed. `respond` is
-opt-in. Relaying on to this machine's own hosts needs the five capabilities a
+With no table, a machine may `list`, `mail`, `open`, `write`, `files` and
+`transcripts`. `respond` is opt-in. Relaying on to this machine's own hosts needs the five capabilities a
 link had before `files` (`list`, `mail`, `open`, `write`, `respond`), because
 the next machine sees the relay as coming from this one; a table written for an
 older tuios that allows those five still relays. A copy this machine runs for

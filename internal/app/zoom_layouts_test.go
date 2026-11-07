@@ -22,7 +22,7 @@ import (
 func tiledZoomOS(t *testing.T, mode string) (*OS, []*terminal.Window) {
 	t.Helper()
 	m, wins := zoomPeekOS(t)
-	m.Settings.ZoomAnimation = false
+	m.Settings.Aspects[config.AspectZoom].Off = true
 	m.Settings.ZoomSize = 85
 	m.AutoTiling = true
 	m.FocusedWindow = 0
@@ -161,7 +161,7 @@ func TestOpeningAPaneWhileZoomedGivesItTheZoom(t *testing.T) {
 
 			h := newOpenAnimHarness(120, 40)
 			h.m.Settings.ZoomSize = size
-			h.m.Settings.ZoomAnimation = false
+			h.m.Settings.Aspects[config.AspectZoom].Off = true
 			h.createWindow(t)
 			h.createWindow(t)
 
@@ -228,7 +228,7 @@ func TestAddWindowPlacesThePaneBeforeFocusingIt(t *testing.T) {
 	defer closeWindows(m)
 	m.AutoTiling, m.UseBSPLayout = true, true
 	m.Settings.ZoomSize = 85
-	m.Settings.ZoomAnimation = false
+	m.Settings.Aspects[config.AspectZoom].Off = true
 
 	m.AddWindow("")
 	m.AddWindow("")
@@ -287,7 +287,7 @@ func TestAnEchoDoesNotStampTheRegionOnACameraZoom(t *testing.T) {
 
 	h := newOpenAnimHarness(120, 40)
 	h.m.Settings.ZoomSize = 95
-	h.m.Settings.ZoomAnimation = false
+	h.m.Settings.Aspects[config.AspectZoom].Off = true
 	h.createWindow(t)
 	h.createWindow(t)
 
@@ -348,7 +348,7 @@ func TestTheHandoverOnACreationReachesTheDaemon(t *testing.T) {
 
 			h := newOpenAnimHarness(120, 40)
 			h.m.Settings.ZoomSize = size
-			h.m.Settings.ZoomAnimation = false
+			h.m.Settings.Aspects[config.AspectZoom].Off = true
 			h.createWindow(t)
 			h.createWindow(t)
 

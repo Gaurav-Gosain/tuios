@@ -762,12 +762,6 @@
       ]
     },
     {
-      "path": "appearance.zoom_animation",
-      "type": "bool",
-      "description": "Slide a pane between its tile and the zoom box instead of swapping the two in one frame",
-      "default": "true"
-    },
-    {
       "path": "appearance.zoom_max_width",
       "type": "int",
       "description": "Width in cells of a zoomed pane. 0 fills the screen.",
@@ -975,6 +969,16 @@
       "description": "What {zoom} shows on the tab of the current workspace while a pane in it is zoomed",
       "default": "",
       "max_bytes": 32
+    },
+    {
+      "path": "motion.zoom",
+      "type": "string",
+      "description": "A pane slides between its tile and the zoom box: on or off",
+      "default": "on",
+      "accepted": [
+        "on",
+        "off"
+      ]
     },
     {
       "path": "spotlight.dim",

@@ -298,8 +298,10 @@ var verbCapabilities = map[string]linkCaps{
 	"respond":        {config.LinkAllowRespond},
 	"reply-approval": {config.LinkAllowRespond},
 	// The conversation holds the prompts, file contents and command output.
-	// Reading it is as much the person's act as answering for them.
-	"agent-transcript":      {config.LinkAllowRespond},
+	// Only the person reads it: the handler needs the nonce of a person's
+	// attach (human_sender.go). transcripts is in the default policy and
+	// respond includes it. See config.LinkAllowTranscripts.
+	"agent-transcript":      {config.LinkAllowTranscripts},
 	"reply-history":         {config.LinkAllowRespond},
 	"add-reply-history":     {config.LinkAllowRespond},
 	"dismiss-attention":     {config.LinkAllowRespond},

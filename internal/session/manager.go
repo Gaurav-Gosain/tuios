@@ -45,6 +45,9 @@ type Manager struct {
 	// reaches the next pane of a session that already exists. It is atomic so
 	// a spawn never needs m.mu.
 	preferredShell atomic.Pointer[string]
+	// shellIntegrationOff is [shell] integration = "off". The zero value is
+	// the default, auto. Every session reads it through ShellIntegration.
+	shellIntegrationOff atomic.Bool
 	// stayOnEmpty is workspaces.return_when_empty turned off. The zero value
 	// is the default, on. Every session reads it through ReturnWhenEmpty.
 	stayOnEmpty atomic.Bool
@@ -164,6 +167,18 @@ func (m *Manager) SetNewWindowInheritCwd(v bool) {
 // Empty means $SHELL and then the platform default.
 func (m *Manager) SetPreferredShell(shell string) {
 	m.preferredShell.Store(&shell)
+}
+
+// SetShellIntegration sets [shell] integration for every session: whether a
+// new pane's bash or zsh starts with the prompt marks on.
+func (m *Manager) SetShellIntegration(mode string) {
+	m.shellIntegrationOff.Store(!config.ShellIntegrationOn(mode))
+}
+
+// ShellIntegration is what SetShellIntegration last set, true when nothing
+// did.
+func (m *Manager) ShellIntegration() bool {
+	return !m.shellIntegrationOff.Load()
 }
 
 // SetReturnWhenEmpty sets workspaces.return_when_empty for every session.
@@ -317,6 +332,9 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	}
 	if cfg.ReturnWhenEmpty == nil {
 		cfg.ReturnWhenEmpty = m.ReturnWhenEmpty
+	}
+	if cfg.ShellIntegration == nil {
+		cfg.ShellIntegration = m.ShellIntegration
 	}
 	if cfg.DragAndDrop == nil {
 		cfg.DragAndDrop = m.DragAndDrop

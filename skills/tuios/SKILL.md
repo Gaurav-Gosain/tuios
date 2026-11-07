@@ -57,8 +57,10 @@ command. It opens the window manager.
 pane starts in your current directory. `--cwd DIR` starts it somewhere else.
 
 `run` prints what the command printed, and exits with its status. It needs a
-shell that marks its commands (OSC 133). Without the marks, it fails with
-`no_shell_integration` and types nothing. Then use `send-text`.
+shell that marks its commands (OSC 133). tuios turns the marks on in the bash
+and zsh panes it starts, and fish 4 sends them itself. Without the marks, it
+fails with `no_shell_integration` and types nothing. Then use `send-text`.
+`tuios doctor shell` says which panes send marks.
 `start-agent` returns when the agent is at its prompt. Then ask it with
 `ask-agent -w reviewer`.
 

@@ -196,6 +196,16 @@ is an answer, and each entry says which.
 `exited`, `exit_code` and `signal` once its process exited, and `keep_open`
 when the window stays after the exit. Other entries keep their shape.
 
+**`agent-transcript` over a link needs `transcripts`, which the default
+grants.** The person's own client attached through a host reads the
+conversation of an agent on that host. Before, the call over a link needed
+`respond`, which the default does not grant. `respond` still includes
+`transcripts`, so a table that allows `respond` reads as before. A table that
+sets `allow` without either now refuses with `forbidden` naming
+`transcripts`. The call still needs the nonce of a person's attach: a
+process in a pane, a link stream the hub did not vouch for and a caller with
+no nonce still get `not_human`.
+
 **herdr's `pane.focus` and `agent.focus` show the pane's session.** A
 focused pane in a session that no client shows now moves the attached client
 to that session, as `workspace.focus` does, so the pane is on screen. Before,
@@ -2610,9 +2620,12 @@ line that shows the exit status under the last output; not with
 another machine), `timeout` (with `wait`, milliseconds before the
 `timeout` error; 0 waits with no limit), and `env` (an object of variables
 to set in the process; checked as `start-agent` checks its `env`; not for a
-window on another machine, and refused from another machine), and `cols` with
+window on another machine, and refused from another machine), `cols` with
 `rows` (the size in cells the caller will give the pane, at most the
-session's, so that its program starts at that size). `new-session`
+session's, so that its program starts at that size), and
+`shell_integration` (`auto` or `off`: whether the pane's bash or zsh starts
+with OSC 133 prompt marks on; omit it for `[shell] integration`; no effect on
+a window that runs a command). `new-session`
 takes the same `env` for its first window, and refuses it with `window` false.
 
 A daemon that does not know `keep_open` and `wait` refuses them with
@@ -2644,8 +2657,8 @@ and a client that attaches later shows it.
 `side` (`left`, `right`, `up` or `down`: the side of the pane the new pane
 takes) or `direction` (`vertical` for right, `horizontal` for below), `ratio`
 (the new pane's share in percent, 1 to 99; omit for half), and `name`,
-`command`, `cwd`, `focus`, `keep_open`, `close_on_exit`, `env`, `host` and
-`grants` as for `new-window`. Without `cwd`, the pane starts in the caller's
+`command`, `cwd`, `focus`, `keep_open`, `close_on_exit`, `env`, `host`,
+`shell_integration` and `grants` as for `new-window`. Without `cwd`, the pane starts in the caller's
 directory when the caller runs in a pane. The new pane is on the workspace of
 the pane it cuts. A floating, minimized or popup pane cannot be split
 (`invalid_params`). The verb turns tiling on when it is off. The result is
@@ -7071,7 +7084,8 @@ the one before. The configuration is in
 | `open` and `write` | `verify-fan` |
 | `open` and `files` | `paste-pane-image` |
 | `write` and `files` | `paste-image` |
-| `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message`, `answer-ask`, `mark-attention`, `register-push`, `list-push`, `remove-push` |
+| `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message`, `answer-ask`, `mark-attention`, `register-push`, `list-push`, `remove-push`, `reply-history`, `add-reply-history` |
+| `transcripts` (or `respond`, which includes it) | `agent-transcript`. The call also needs the nonce of a person's attach. |
 | `files` | `file-read`, `file-preview`, `file-hash`, `file-walk`, `open-file-stream`, `file-mkdir`, `file-rename`, `file-remove`, `file-commit`, `file-abort`, `file-drop-dir`, `file-check`, `open-tree-stream`, `speed-test`. Writes are also held to `files_roots` and the deny list in [Files and transfers](#files-and-transfers), and reads to the read deny list. |
 | every one | `open-host-connection`, `retry-host`, `set-pane-grants` (whose handler refuses a link caller anyway), `transfer-start`, `transfer-list`, `transfer-pause`, `transfer-resume`, `transfer-cancel`, `transfer-answer`, `transfer-clear`, `host-speed-test`, `drop-files` (they make this daemon use its own links) |
 
@@ -7082,7 +7096,7 @@ Binary messages: `MsgList`, the PTY subscribe messages, `MsgGetTerminalState`,
 `MsgCreatePTY` and `MsgResurrect` need `open`; `MsgNew` needs `open`, `list`
 and `write`. A refused message is answered with `MsgError` code 10.
 
-The default grants `list`, `mail`, `open`, `write` and `files`. A `[hosts]` table written before `files` existed that sets `allow` does not have it: add `"files"` to let that machine use the file verbs.
+The default grants `list`, `mail`, `open`, `write`, `files` and `transcripts`. A `[hosts]` table written before `files` existed that sets `allow` does not have it: add `"files"` to let that machine use the file verbs. A table that sets `allow` without `transcripts` or `respond` keeps the person's client on that machine from reading agent conversations here.
 
 A verb or message with no entry in the table is refused over a link. A test
 holds the table to the verb registry, so a new verb cannot ship without one.
@@ -7502,8 +7516,9 @@ inside a pane and a link stream that the hub did not vouch for get
 `not_human`. [Nonce scope](#nonce-scope) applies: a presence made with a session
 reads only the panes of that session, and gets `not_human` for a pane of
 another session. A restricted connection is refused with `forbidden`. Over a link
-it needs `respond`, because the conversation holds the prompts, file contents
-and command output.
+it needs `transcripts`, which the default grants and `respond` includes. A
+client attached through a host sends the call to the far daemon over the link,
+with the nonce of its attach there.
 
 The [`transcript` event](#event-stream) says when to read again. Subscribe
 with `types` that name `transcript`, and call `agent-transcript` with your

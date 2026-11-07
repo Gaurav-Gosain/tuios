@@ -869,14 +869,21 @@ func slideMarks(line string, lo, hi int) (lastOld, firstNew int) {
 // startSlideClient starts a daemon session with workspace 1 filled with A
 // and workspace 2 filled with B, both shells, and attaches a client that
 // records the host stream.
-func startSlideClient(t *testing.T, level string) (*tuitest.Terminal, *hostTape, string) {
+//
+// extra is more appearance keys. It may set animation_speed, which is 50
+// otherwise.
+func startSlideClient(t *testing.T, level string, extra ...string) (*tuitest.Terminal, *hostTape, string) {
 	t.Helper()
 	base := t.TempDir()
 	killDaemon(t, base)
 	useShippedLooks(base)
 	// At half speed the slide runs 400ms, so a loaded machine still presents
 	// enough of its frames to read the direction off.
-	writeConfig(t, base, "[startup]\ntiled = true\n[appearance]\nmotion = \""+level+"\"\nanimation_speed = 50\n")
+	speed := "animation_speed = 50\n"
+	if len(extra) > 0 && strings.Contains(extra[0], "animation_speed") {
+		speed = ""
+	}
+	writeConfig(t, base, "[startup]\ntiled = true\n[appearance]\nmotion = \""+level+"\"\n"+speed+strings.Join(extra, "\n")+"\n")
 	const sess = "e2e-slide"
 	if out, err := tuiosCLI(t, base, "new", sess, "--detach"); err != nil {
 		t.Fatalf("create session: %v\n%s", err, out)
@@ -884,14 +891,16 @@ func startSlideClient(t *testing.T, level string) (*tuitest.Terminal, *hostTape,
 	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "--workspace", "2", "--no-focus", "bee"); err != nil {
 		t.Fatalf("open the pane on workspace 2: %v\n%s", err, out)
 	}
-	fill := func(w string, mark rune) {
-		line := fmt.Sprintf("clear; yes %s | head -n 80\n", strings.Repeat(string(mark), 150))
+	// Each workspace has its own ink, so a fade shows as colours between
+	// the two.
+	fill := func(w string, mark rune, rgb string) {
+		line := fmt.Sprintf(`clear; yes "$(printf '\033[38;2;%sm')%s" | head -n 80`+"\n", rgb, strings.Repeat(string(mark), 150))
 		if out, err := tuiosCLI(t, base, "send-text", "-s", sess, "-w", w, line); err != nil {
 			t.Fatalf("fill pane %s: %v\n%s", w, err, out)
 		}
 	}
-	fill("0", slideOldMark)
-	fill("bee", slideNewMark)
+	fill("0", slideOldMark, "220;40;40")
+	fill("bee", slideNewMark, "40;80;230")
 	tape := &hostTape{}
 	term := startIn(t, base, startOpts{args: []string{"attach", sess}, cols: slideCols, rows: slideRows,
 		shippedLooks: true, animations: true, out: tape, env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}})
@@ -1026,6 +1035,127 @@ func TestWorkspaceSwitchSlides(t *testing.T) {
 	}
 	if finals["full"] != finals["none"] {
 		t.Fatalf("the settled pane area after the slides differs from the one after the cuts\nslide:\n%s\ncut:\n%s", finals["full"], finals["none"])
+	}
+
+	// appearance.workspace_transition and workspace_transition_ms.
+	t.Run("fade", func(t *testing.T) {
+		r := switchOnce(t, `workspace_transition = "fade"`+"\nanimation_speed = 25")
+		t.Logf("fade: %d presented frames, %d blended, %d offset", len(r.frames), r.blended, len(r.mixed))
+		if r.blended < 2 {
+			t.Fatalf("only %d frames showed blended colours; the switch was a cut", r.blended)
+		}
+		if len(r.mixed) > 0 {
+			t.Fatalf("%d frames showed both workspaces side by side; a fade has no offset", len(r.mixed))
+		}
+		r.requireExactFinal(t)
+	})
+	t.Run("transition-none", func(t *testing.T) {
+		r := switchOnce(t, `workspace_transition = "none"`)
+		if r.blended > 0 || len(r.mixed) > 0 {
+			t.Fatalf("a cut presented %d blended and %d offset frames", r.blended, len(r.mixed))
+		}
+		r.requireExactFinal(t)
+	})
+	t.Run("duration", func(t *testing.T) {
+		short := switchOnce(t, "workspace_transition_ms = 100\nanimation_speed = 100")
+		long := switchOnce(t, "workspace_transition_ms = 1000\nanimation_speed = 100")
+		cut := switchOnce(t, "workspace_transition_ms = 0")
+		t.Logf("mid frames: 100ms %d, 1000ms %d, 0ms %d", len(short.mixed), len(long.mixed), len(cut.mixed))
+		if len(long.mixed) <= len(short.mixed) {
+			t.Fatalf("1000ms gave %d mid frames and 100ms gave %d; the longer one must give more", len(long.mixed), len(short.mixed))
+		}
+		if len(cut.mixed) > 0 {
+			t.Fatalf("a length of 0 presented %d mid frames", len(cut.mixed))
+		}
+		cut.requireExactFinal(t)
+	})
+}
+
+// switchResult is one alt+2 switch with the pane area compared by colour.
+type switchResult struct {
+	slideResult
+	pane image.Rectangle
+	// blended counts frames with a pane cell whose ink is neither
+	// workspace's own.
+	blended int
+	settled tuitest.Screen
+}
+
+// switchOnce starts a client with the extra appearance keys, switches from
+// workspace 1 to 2 and reads the frames back.
+func switchOnce(t *testing.T, extra string) switchResult {
+	t.Helper()
+	term, tape, _ := startSlideClient(t, "full", extra)
+	pane := slidePaneArea(term.Screen(), slideOldMark)
+	mid := pane.Min.Add(pane.Size().Div(2))
+	inkA := term.Screen().Cell(mid.X, mid.Y).Fg
+	r := switchResult{pane: pane}
+	// A fade keeps the text where it is, so waiting for the text to settle
+	// is not enough: wait for the ink of workspace 2 itself, and a little
+	// longer for the last frame.
+	inkB := tuitest.Color{Kind: tuitest.ColorRGB, R: 40, G: 80, B: 230}
+	from := tape.len()
+	if err := term.SendKeys(tuitest.Alt('2')); err != nil {
+		t.Fatalf("press alt+2: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return s.Cell(mid.X, mid.Y).Fg == inkB && !strings.ContainsRune(s.Line(slideRows/2), slideOldMark)
+	}, uiTimeout); err != nil {
+		t.Fatalf("workspace 2 never showed its ink: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(300 * time.Millisecond)
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("screen never settled: %v", err)
+	}
+	raw, full := tape.bytes()
+	if full {
+		t.Fatalf("the host tape filled up")
+	}
+	r.frames = presentedScreens(raw, slideCols, slideRows, from)
+	if len(r.frames) == 0 {
+		t.Fatalf("no frame was presented after the switch")
+	}
+	r.final = r.frames[len(r.frames)-1]
+	for i, f := range r.frames {
+		lastOld, firstNew := slideMarks(f.Line(slideRows/2), 0, slideCols)
+		if lastOld >= 0 && firstNew >= 0 {
+			r.mixed = append(r.mixed, i)
+			r.seams = append(r.seams, firstNew)
+		}
+	}
+	r.settled = term.Screen()
+	if inkA == inkB {
+		t.Fatalf("both workspaces show the same ink %v; the test cannot see a fade", inkA)
+	}
+	for _, f := range r.frames {
+		for y := pane.Min.Y; y < pane.Max.Y; y++ {
+			hit := false
+			for x := pane.Min.X; x < pane.Max.X; x++ {
+				c := f.Cell(x, y)
+				if (c.Content == string(slideOldMark) || c.Content == string(slideNewMark)) && c.Fg != inkA && c.Fg != inkB {
+					hit = true
+					break
+				}
+			}
+			if hit {
+				r.blended++
+				break
+			}
+		}
+	}
+	return r
+}
+
+// requireExactFinal fails unless the last presented frame holds the settled
+// pane area, colours included.
+func (r switchResult) requireExactFinal(t *testing.T) {
+	t.Helper()
+	for y := r.pane.Min.Y; y < r.pane.Max.Y; y++ {
+		for x := r.pane.Min.X; x < r.pane.Max.X; x++ {
+			if got, want := r.final.Cell(x, y), r.settled.Cell(x, y); got.Content != want.Content || got.Fg != want.Fg || got.Bg != want.Bg {
+				t.Fatalf("the last frame differs from the settled screen at %d,%d: %+v, want %+v", x, y, got, want)
+			}
+		}
 	}
 }
 
@@ -1200,4 +1330,73 @@ func slideRun(t *testing.T, level string) string {
 		b.WriteByte('\n')
 	}
 	return b.String()
+}
+
+// zoomFrames starts a client with the extra config, opens a second pane on
+// workspace 1, zooms it and reports how many presented frames fell between the
+// split and the zoomed screen. Then it unzooms and switches workspace, and
+// reports how many frames showed both workspaces.
+func zoomFrames(t *testing.T, extra string) (zoomMid, slideMid int) {
+	t.Helper()
+	term, tape, base := startSlideClient(t, "full", extra)
+	if out, err := tuiosCLI(t, base, "new-window", "-s", "e2e-slide", "second"); err != nil {
+		t.Fatalf("open the second pane: %v\n%s", err, out)
+	}
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("screen never settled: %v", err)
+	}
+	time.Sleep(time.Second)
+	// Only the pane region counts. The dock and the rail change for reasons
+	// of their own, such as a notice appearing.
+	body := func(s tuitest.Screen) string {
+		var b strings.Builder
+		for y := 1; y < slideRows-3; y++ {
+			b.WriteString(s.Line(y))
+			b.WriteByte('\n')
+		}
+		return b.String()
+	}
+	split := body(term.Screen())
+	from := tape.len()
+	if err := term.SendKeys(tuitest.Ctrl('b'), "z"); err != nil {
+		t.Fatalf("zoom: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return body(s) != split }, uiTimeout); err != nil {
+		t.Fatalf("the zoom never changed the screen: %v", err)
+	}
+	time.Sleep(time.Second)
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("screen never settled: %v", err)
+	}
+	raw, _ := tape.bytes()
+	frames := presentedScreens(raw, slideCols, slideRows, from)
+	zoomed := body(term.Screen())
+	for _, f := range frames {
+		if txt := body(f); txt != split && txt != zoomed {
+			zoomMid++
+		}
+	}
+	if err := term.SendKeys(tuitest.Ctrl('b'), "z"); err != nil {
+		t.Fatalf("unzoom: %v", err)
+	}
+	time.Sleep(time.Second)
+	r := runSlide(t, term, tape, '2', slideNewMark, nil)
+	return zoomMid, len(r.mixed)
+}
+
+// With motion.zoom off the zoom is a cut, and the workspace slide still runs.
+func TestMotionZoomOffKeepsWorkspaceSlide(t *testing.T) {
+	onZoom, onSlide := zoomFrames(t, "[motion]\nzoom = \"on\"")
+	offZoom, offSlide := zoomFrames(t, "[motion]\nzoom = \"off\"")
+	t.Logf("zoom frames in between: on %d, off %d. slide frames: on %d, off %d", onZoom, offZoom, onSlide, offSlide)
+	if onZoom < 10 {
+		t.Fatalf("with motion.zoom on, only %d frames fell between the split and the zoom; the control shows no slide", onZoom)
+	}
+	// A cut can present one frame between, while the host draws a repaint.
+	if offZoom > 1 {
+		t.Errorf("with motion.zoom off, %d frames fell between the split and the zoom; want a cut", offZoom)
+	}
+	if offSlide < 2 {
+		t.Errorf("with motion.zoom off, the workspace switch showed %d mixed frames; want a slide", offSlide)
+	}
 }

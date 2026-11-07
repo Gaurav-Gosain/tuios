@@ -178,4 +178,16 @@ func TestMachineOfferOnSSHLogin(t *testing.T) {
 		t.Fatalf("ASSERTION: the new client never offered another machine: %v\n%s", err, second.Snapshot())
 	}
 	saveArtifact(t, second, dir, "machine-offer-second-client")
+
+	// Add opens the add-a-machine sheet for the login's address, and the
+	// sheet goes straight to its test step.
+	row, col = findText(t, second, "Add  Not now")
+	mouseClick(t, second, col, row, tuitest.MouseLeft, 0)
+	if err := second.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, "Add a machine") && strings.Contains(text, "✓ Pick") && !strings.Contains(text, "otherbox is not a machine here")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: Add did not open the sheet at its test step: %v\n%s", err, second.Snapshot())
+	}
+	saveArtifact(t, second, dir, "machine-offer-add-sheet")
 }

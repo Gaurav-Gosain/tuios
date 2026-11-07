@@ -493,6 +493,9 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.sidebar.editor"),
 			opt("appearance.sidebar.file_actions"),
 			opt("appearance.sidebar.file_delete"),
+			opt("files.open_copy_ask_mb"),
+			opt("files.open_copy_max_mb"),
+			opt("files.open_copy_keep_days"),
 			opt("appearance.sidebar.group_main"),
 			opt("appearance.sidebar.marquee"),
 			opt("appearance.sidebar.peek"),
@@ -636,6 +639,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.prefix_repeat_time"),
 			custom("appearance.max_fps", m.maxFPSItem()),
 			opt("appearance.preferred_shell"),
+			opt("shell.integration"),
 			opt("agents.fold_working"),
 			opt("agents.view_list"),
 			opt("review.focus"),
@@ -681,6 +685,15 @@ func (m *OS) settingsCategories() []settingsCategory {
 		Items: m.resolveRows(alertRows),
 	}
 
+	var motionRows []settingsRow
+	for _, path := range []string{
+		"workspace", "workspace_ms", "layout", "layout_ms", "zoom", "zoom_ms", "overlays", "overlays_ms",
+		"sidebar", "scroll", "scroll_ms", "copy", "confetti",
+	} {
+		motionRows = append(motionRows, opt("motion."+path))
+	}
+	motion := settingsCategory{Name: "Motion", Items: m.resolveRows(motionRows)}
+
 	startup := settingsCategory{
 		Name: "Startup",
 		Items: m.resolveRows([]settingsRow{
@@ -703,7 +716,6 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.word_characters"),
 			opt("appearance.zoom_size"),
 			opt("appearance.zoom_borderless"),
-			opt("appearance.zoom_animation"),
 			opt("appearance.zoom_follows_focus"),
 			opt("appearance.window_button_zoom"),
 			opt("appearance.zoom_max_width"),
@@ -801,7 +813,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 	}
 
 	cats := []settingsCategory{
-		appearance, backgrounds, sidebar, selection, dock, behavior,
+		appearance, backgrounds, sidebar, selection, dock, behavior, motion,
 		notifications, startup, screenshot, screensaver, spotlight, advanced, daemon,
 		m.hostsCategory(),
 	}

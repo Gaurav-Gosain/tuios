@@ -958,6 +958,8 @@ func (m *OS) DeleteWindow(i int) *OS {
 
 	// Clean up window resources
 	deletedWindow := m.Windows[i]
+	wasZoomed := deletedWindow.Zoomed
+	deletedWasPopup := deletedWindow.IsPopup
 	m.clearNvimNavigation(deletedWindow.ID)
 	m.dndWindowClosed(deletedWindow.ID)
 	m.pipSourceClosed(deletedWindow)
@@ -1093,6 +1095,21 @@ func (m *OS) DeleteWindow(i int) *OS {
 			if hasVisibleInWorkspace {
 				m.TileAllWindows()
 			}
+		}
+	}
+
+	// The person was working zoomed, so the zoom goes to the pane that took
+	// the focus.
+	if wasZoomed && !deletedWasPopup {
+		if fw := m.GetFocusedWindow(); fw != nil && !fw.IsPopup && !fw.Zoomed {
+			m.settleSizes(func() {
+				m.requireRealLayout()
+				if m.zoomPane(fw) && m.AutoTiling {
+					m.tileAllWindows()
+				}
+				m.FlushPTYBuffersAfterResize()
+				m.MarkAllDirty()
+			})
 		}
 	}
 

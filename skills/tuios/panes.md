@@ -362,8 +362,8 @@ A program that a signal stopped exits 128 plus the signal number. `--json`
 gives `exit_code`, and `signal` when a signal stopped it. `--timeout` limits
 the wait in milliseconds. Close the pane when you are done with it.
 
-To run the command in a shell pane that exists, use `run`. When the pane's shell marks its commands with OSC 133 (fish 4 on its own, zsh
-and bash 4.4 or newer with the lines `tuios doctor shell` prints), `run` types
+To run the command in a shell pane that exists, use `run`. When the pane's
+shell marks its commands with OSC 133, `run` types
 the line at the prompt, waits for the shell to say it finished, prints exactly
 what that command printed, and exits with its status:
 
@@ -372,6 +372,13 @@ tuios run -s work -w build --timeout 600000 -- go test ./...
 echo "tests exited $?"
 tuios run -s work -w build --json -- make lint    # exit_code, output, duration_ms
 ```
+
+tuios turns the marks on in the bash 4.4+ and zsh panes it starts, unless
+`[shell] integration` is `off` or the pane was opened with
+`new-window --shell-integration off`. fish 4 and nushell send them themselves.
+A pane on another machine, or a pane that runs `ssh`, gets no marks from tuios.
+`tuios doctor shell` says which panes send marks, and prints the lines that
+turn them on where tuios cannot.
 
 `run` never types into a running program. A busy pane is refused with
 `not_at_prompt`, and a pane whose shell sends no marks with

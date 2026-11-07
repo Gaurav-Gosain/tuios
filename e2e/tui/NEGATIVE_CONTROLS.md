@@ -7,6 +7,34 @@ below. Two of them are **not** caught here; that is written down rather than
 papered over, because a suite whose real coverage is unknown is worse than no
 suite.
 
+## Shell integration by default
+
+`shell_integration_test.go` runs real bash 5.3 and zsh 5.9 in a daemon pane,
+with the user's startup files in the test's home. The tests check that a fresh
+pane marks its commands, that `tuios run` works there, that the user's prompt,
+`PROMPT_COMMAND`, `precmd`, `.zshenv` and `ZDOTDIR` still take effect, that
+`[shell] integration = "off"` and `--shell-integration off` give no marks, that
+a setup that marks itself is not marked twice, and that a narrowed pane shows
+its prompt once.
+
+Run on 2026-11-05 on Linux. The branch passes all five tests. Three controls:
+a binary of main (dc6d566fb), and this branch with one change each.
+
+| Control | Test | Failure | Verdict |
+| --- | --- | --- | --- |
+| Main | `TestShellIntegrationBashByDefault` | `run "echo RUN-''WORKS": exit 1: ... has not sent OSC 133 marks` | **caught** |
+| Main | `TestShellIntegrationZshByDefault` | `run "true": exit 1: ... has not sent OSC 133 marks` | **caught** |
+| Main | `TestShellIntegrationNarrowPaneKeepsOnePrompt` | `the narrowed pane shows the prompt 2 times, want 1` | **caught** |
+| Main | `TestShellIntegrationOff` | the run refusal passes, as it must; the doctor check fails (main has no `integration` field) | not a control of the option |
+| Main | `TestShellIntegrationLeavesAMarkingSetupAlone` | passes: main adds no marks to count | not a control |
+| `shellIntegrationFor` always true | `TestShellIntegrationOff` | `run in a pane with integration off exited 0, want a refusal for no marks` | **caught** |
+| The scripts send every mark, with no look at the user's setup | `TestShellIntegrationLeavesAMarkingSetupAlone` | bash and zsh: `the pane sent 4 C marks, want 2, one set: map[A:6 B:3 C:4 D:6]` | **caught** |
+
+The pane captures and the raw pane logs are under `TUIOS_E2E_FRAMES`, in each
+test's folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestShellIntegration' -v .`.
+The zsh cases skip when zsh is not installed.
+
 ## The daemon service keeps what outlives the daemon, and stays stopped after kill-server
 
 `TestDaemonRunsAsAService` installs the daemon as a systemd user unit under a
@@ -13156,9 +13184,39 @@ Run on 2026-11-05 on Linux on the branch feat/workspace-slide.
 | Main (a3da6ab91) | `full`: "up: only 0 presented frames showed both workspaces; the switch was a cut" | **caught** |
 | The direction flipped in `beginWorkspaceSlide` (`to > from` gives -1) | `full`: "up: frame 1 has the A workspace at column 95, right of the B one at 0" | **caught** |
 
+The fade, none and duration subtests start a client with
+`appearance.workspace_transition` and `workspace_transition_ms` set. A fade must
+present at least two frames whose ink is neither workspace's own, and no frame
+with both workspaces side by side. The last frame must equal the settled pane
+area, colours included. `none` and a length of 0 must present no mid frame. A
+length of 1000 ms must present more mid frames than 100 ms.
+
+Run on 2026-11-05 on Linux on the branch feat/workspace-transition-style.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| The fade's `themeBlendCell` call in `drawSlideOld` removed | `fade`: "only 0 frames showed blended colours; the switch was a cut" | **caught** |
+
 Frames, the settled screens and PNGs are under `TUIOS_E2E_FRAMES`, in the
 test's folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorkspaceSwitchSlides$' -v .`.
+
+## Motion aspects: zoom off, workspace slide on
+
+`TestMotionZoomOffKeepsWorkspaceSlide` runs a client with `motion.zoom` on and
+then off. It opens a second pane, zooms it and counts the presented frames of
+the pane region between the split and the zoomed screen. On must give at least
+ten. Off must give at most one, and the workspace switch must still present at least
+two frames with both workspaces.
+
+Run on 2026-11-05 on Linux on the branch feat/motion-per-aspect.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| `MotionOn` ignores the aspect's `Off` | "with motion.zoom off, 26 frames fell between the split and the zoom; want a cut" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestMotionZoomOff' -v .`.
 
 ## tuios hosts setup asks on a terminal
 
@@ -13215,3 +13273,122 @@ Run on 2026-11-06 on Linux with kitten icat. The fixed build passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestKittyImageRowsSurviveAReattach$' -v .`.
+## tuios hosts setup --tailnet asks on a terminal
+
+`TestSetUpTailnetMachinesOnATerminal` runs `hosts setup --tailnet --install none
+--no-service --one-way` in a pty. A fake `tailscale` lists four machines:
+buildbox and checkbox with no tuios, authbox that refuses the ssh key, and
+sleepy offline. checkbox asks for a Tailscale sign-in until a file exists.
+
+- space ticks authbox. `o` gives buildbox and checkbox their own answers: a
+  copy. The shared answer installs nothing, so only `o` can make them ready.
+- At the fix of authbox, `s` skips it.
+- At the fix of checkbox, enter shows the sign-in page, the test makes the
+  file, and `t` on the person step tests again.
+
+The end must be the summary box "2 machines are ready. 1 needs you.", tuios
+on buildbox and checkbox, both up in the daemon here, and no dial of sleepy.
+Frames of the checklist and the summary go under artifactDir.
+
+Run on 2026-11-05 on Linux. The fixed build passes in about 14 s.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| Space in the checklist (`Prompt.Key` of `AskPeers`) does not tick the row | "waiting for buildbox ticked: timed out": the row stays unticked (on the first version of this test) | **caught** |
+| `o` in `Prompt.Key` does nothing | "waiting for the install list of buildbox: timed out": no own answers open | **caught** |
+| `s` in `Prompt.Key` does nothing | "waiting for a fix: timed out": authbox stays at its fix, so the fix of checkbox never comes up | **caught** |
+| `t` on a person step in `Prompt.Key` does nothing | "waiting for the summary box: timed out": checkbox waits at its sign-in step, so the run never ends | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSetUpTailnetMachinesOnATerminal$' -v .`.
+## The Thread tab of an agent on a host
+
+`TestThreadReadsAnAgentOnAHost` attaches a client here to a session on build
+over the fake ssh link. A pane on build is joined to a Claude Code transcript
+by the real hook. With build's default policy, the Thread tab must show
+build's conversation and a line written to the file after it opened, and the
+Checkpoints panel must show build's answer for the pane. A caller here
+through the hub, with no nonce or with a nonce build never issued, must get
+`not_human`. After `config apply` on build sets an allow list without
+`transcripts`, the next read must be refused, and the tab must name
+`transcripts` and the table to change.
+
+On main the test fails at the first step: the tab shows `Only your own client
+reads a transcript.`. The read went to this machine's daemon, which logs
+`Verb agent-transcript refused ... not_human`: it holds neither the pane nor
+build's attach nonce.
+
+Run on 2026-11-05 on Linux on the branch fix/far-transcript-read.
+
+| Fix removed | How | Failure | Verdict |
+|---|---|---|---|
+| Thread reads go to the far daemon | `agentCaller` always returns `inboxCaller()` | `the Thread tab never showed build's conversation` | **caught** |
+| The transcript watch goes to the far daemon | `startThreadWatch` always dials this machine | `the Thread tab never showed a line build's agent wrote after it opened` | **caught** |
+| The default policy has `transcripts` | `transcripts` taken out of `DefaultLinkAllow` | `the Thread tab never showed build's conversation` | **caught** |
+| The Checkpoints panel asks the far daemon | `CockpitSideFetch` calls `inboxCaller()` | `the Checkpoints panel never showed build's answer` | **caught** |
+| `respond` includes `transcripts` | `LinkPolicy.Allows` stops treating `respond` as `transcripts` | `TestPersonReadsAgentTranscript`, whose phone link allows `respond`: `a pane with no join: want no_transcript, got forbidden` | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestThreadReadsAnAgentOnAHost|TestPersonReadsAgentTranscript)$' -v .`.
+## Zoom survives a close
+
+`TestZoomSurvivesClose` zooms one of three panes, closes it and reads the
+shell size of the pane that takes the focus. Run on 2026-11-05 against a
+build of main, which has no fix:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| the next pane is zoomed (daemon) | the fix removed | "the pane after the close is 48x26, want the zoomed 100x28" | **caught** |
+| the next pane is zoomed (--standalone) | the fix removed | same message | **caught** |
+
+## The add sheet sets up a machine from the app
+
+`TestAddMachineSheet` drives the real app over the two machines of
+`TestSetUpAMachineBothWays`. It runs "Add a machine" from the palette, types
+someone@buildbox and this machine's address someone@laptopbox, picks "Copy
+this tuios", says no to start at boot and yes to both ways, and must reach
+Done with `[hosts.buildbox]` here, an entry for this machine on buildbox, and
+the daemon here listing buildbox up. Before the person picks how to install,
+tuios must not be on buildbox. `TestAddMachineSheetTailnet` ticks buildbox on
+the Tailnet tab and must reach Done, and the offline peer must never be
+dialed.
+
+Run on 2026-11-05 on Linux. The fixed build passes both in about 8 s.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| The sheet answers the install prompt with its first choice when it arrives, before the person presses a key | `TestAddMachineSheet`: "the sheet never showed \"Pick how to install tuios on buildbox.\" at sheet-2-test" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAddMachineSheet' -v .`.
+
+## The ssh offer's Add opens the add-a-machine sheet
+
+`TestMachineOfferOnSSHLogin` ends by clicking Add on the offer for
+`gaurav@otherbox`. The add-a-machine sheet must open and go straight to its
+test step, and the offer must leave the dock.
+
+Run on 2026-11-05 on Linux. The control makes Add do nothing. The test fails
+with `Add did not open the sheet at its test step`.
+## o opens a copy of a far file
+
+`TestQuickLookOnAFarFile` runs the steps in `openFarCopies` at its end: two
+daemons over the fake ssh link, and the recording `xdg-open`. They replace the
+refusal row of the section above: `o` on a far row now offers a copy. The
+controls were run on 2026-11-05 on Linux on the branch
+feat/open-far-file-copy. Each control cuts one piece from the branch head.
+
+| Claim | Control | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| `o` on a far row offers a copy | the build of origin/main | "o on a far file did not offer a copy" | **caught** |
+| An unchanged far file opens the copy with no new copy | the `rec.Far == far` case in `prepareFarOpen` made false | "the second open of an unchanged file made a copy: 2 copies of notes.md, want 1" | **caught** |
+| A changed far file is copied again | the `rec.Far == far` case made true | "the open after the far file changed: the copy holds" the old bytes | **caught** |
+| A file over the ask limit asks again with its size | the ask case in `prepareFarOpen` made false | "the size ask: markers [zbig.bin on build is 2.00 MiB. ...] never all on screen" | **caught** |
+| A crafted name lands as one name in its own folder | `/` and `\` taken out of the characters `SafeName` replaces | "the open of a crafted name: the record holds" `..\..\x.txt` in place of `.._.._x.txt` | **caught** |
+| A click on the offer keeps the rail's keyboard | the `FarOpenOfferAt` branch in the click handler cut | "the second offer: markers [notes.md is on build. ...] never all on screen" | **caught** |
+
+The folder copy leaving out the link `inner/escape` is the transfer engine's
+rule, which `file-walk` states. The test checks it and no control cuts it.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestQuickLookOnAFarFile$' -v .`.

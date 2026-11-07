@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/shellinteg"
 	"github.com/spf13/cobra"
 )
 
@@ -33,10 +35,17 @@ type shellPane struct {
 type doctorShellReport struct {
 	DaemonRunning bool        `json:"daemon_running"`
 	Panes         []shellPane `json:"panes"`
-	// Shell is the login shell's name, from $SHELL, and Setup the lines that
-	// turn its OSC 133 marks on. Setup is empty for a shell with no recipe.
+	// Shell is the name of the shell new panes run, from
+	// appearance.preferred_shell or $SHELL, and Setup the lines that turn its
+	// OSC 133 marks on. Setup is empty for a shell with no recipe, and for a
+	// shell tuios sets up itself.
 	Shell string `json:"shell"`
 	Setup string `json:"setup,omitempty"`
+	// Integration is [shell] integration: auto or off. SetUpByTuios is true
+	// when it is auto and tuios turns the marks on in Shell by itself, so a
+	// new pane needs no setup lines.
+	Integration  string `json:"integration"`
+	SetUpByTuios bool   `json:"set_up_by_tuios"`
 }
 
 // shellSetups are the lines that make each shell mark its commands with OSC
@@ -73,17 +82,29 @@ func newDoctorShellCommand() *cobra.Command {
 
 tuios run, wait-for command-finished and capture-pane --last-command read where
 a command starts and ends, and its exit status, from those marks. A pane whose
-shell sends none is refused with no_shell_integration. When one is, this prints
-the lines that turn the marks on for your shell ($SHELL): zsh, bash and fish
-have a recipe. A pane counts once its shell has drawn one prompt with the marks
-on, so open a new pane after adding them. A shell that marks its prompts and
-not its commands (bash before 4.4 ignores the recipe's PS0) is flagged as
-prompt marks only once a command has run there, and run refuses it.`,
+shell sends none is refused with no_shell_integration.
+
+tuios turns the marks on in the bash and zsh shells it starts, and changes no
+file of yours. fish 4 and nushell send them by themselves. A pane that started
+before you turned this on keeps its old shell, so open a new pane. With
+[shell] integration = "off", or for bash before 4.4, this prints the lines that
+turn the marks on for the shell new panes run: zsh, bash and fish have a recipe.
+A pane counts once its shell has drawn one prompt with the marks on. A shell
+that marks its prompts and not its commands is flagged as prompt marks only
+once a command has run there, and run refuses it.`,
 		Example: `  tuios doctor shell
   tuios doctor shell -s work --json`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			report := doctorShell(sessionName, liveShellPanes, os.Getenv("SHELL"))
+			preferred, integration := "", config.ShellIntegrationAuto
+			if cfg, err := config.LoadUserConfig(); err == nil && cfg != nil {
+				preferred = cfg.Appearance.PreferredShell
+				if !config.ShellIntegrationOn(cfg.Shell.Integration) {
+					integration = config.ShellIntegrationOff
+				}
+			}
+			shell, _ := config.ShellFor(preferred)
+			report := doctorShell(sessionName, liveShellPanes, shell, integration)
 			return printDoctorShell(os.Stdout, report, asJSON)
 		},
 	}
@@ -160,13 +181,17 @@ func liveShellPanes(only string) ([]shellPane, bool) {
 
 // doctorShell builds the report. panes is injected so it can be tested
 // without a daemon.
-func doctorShell(only string, panes func(string) ([]shellPane, bool), loginShell string) doctorShellReport {
-	r := doctorShellReport{Shell: filepath.Base(loginShell)}
+func doctorShell(only string, panes func(string) ([]shellPane, bool), loginShell, integration string) doctorShellReport {
+	r := doctorShellReport{Shell: filepath.Base(loginShell), Integration: integration}
 	if loginShell == "" {
 		r.Shell = ""
 	}
+	r.SetUpByTuios = config.ShellIntegrationOn(integration) && shellinteg.Shell(loginShell) != ""
 	r.Panes, r.DaemonRunning = panes(only)
 	for _, p := range r.Panes {
+		// A pane tuios set up and that still has no marks runs a shell
+		// the integration cannot reach, such as bash before 4.4, or started
+		// before the integration did. The lines are the way out of the first.
 		if !p.Marks || p.PromptOnly {
 			r.Setup = shellSetups[r.Shell]
 			break
@@ -183,6 +208,14 @@ func printDoctorShell(w io.Writer, r doctorShellReport, asJSON bool) error {
 		}
 		_, err = fmt.Fprintln(w, string(out))
 		return err
+	}
+	switch {
+	case r.SetUpByTuios:
+		fmt.Fprintf(w, "tuios sets this up for you: new %s panes mark their commands. Your files do not change.\n", r.Shell)
+	case shellinteg.MarksItself(r.Shell):
+		fmt.Fprintf(w, "%s sends the marks by itself, so tuios adds none.\n", r.Shell)
+	case r.Integration == config.ShellIntegrationOff:
+		fmt.Fprintln(w, "Shell integration is off ([shell] integration), so tuios adds no marks to new shells.")
 	}
 	if !r.DaemonRunning {
 		fmt.Fprintln(w, "No daemon is running, so no panes were checked.")
@@ -210,6 +243,8 @@ func printDoctorShell(w io.Writer, r doctorShellReport, asJSON bool) error {
 		fmt.Fprintln(w, "No panes to check.")
 	case missing == 0:
 		fmt.Fprintln(w, "Every pane's shell marks its commands, so tuios run works in all of them.")
+	case r.SetUpByTuios && r.Setup != "":
+		fmt.Fprintf(w, "\nA pane with no marks started before the integration or with it off. Open a new pane.\nIf a new %s pane still has none, add these lines, then open a new pane:\n\n%s\n", r.Shell, r.Setup)
 	case r.Setup != "":
 		fmt.Fprintf(w, "\nTo turn the marks on for %s, add these lines, then open a new pane:\n\n%s\n", r.Shell, r.Setup)
 	default:

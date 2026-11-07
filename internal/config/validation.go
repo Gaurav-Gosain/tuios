@@ -136,6 +136,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 
 	// Validate enum appearance options (warn on unknown values; they fall back to defaults)
 	validateAppearanceEnums(cfg, result)
+	validateMotion(cfg, result)
 
 	// Validate the tape section (warn on an unknown autorun mode)
 	validateTapeConfig(cfg, result)
@@ -145,6 +146,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validateSSH(cfg, result)
 	validateDisplay(cfg, result)
 	validateKeepAwake(cfg, result)
+	warnEnum(result, "shell", "integration", cfg.Shell.Integration, ShellIntegrationModes, ShellIntegrationAuto)
 	validateLinkPolicies(cfg, result)
 	validatePanePermissions(cfg, result)
 	validateAgentWork(cfg, result)
@@ -1129,4 +1131,29 @@ func defaultKeybindingPairs() map[string]bool {
 		}
 	}
 	return out
+}
+
+// validateMotion warns about a [motion] value outside its set or range. The
+// old appearance.workspace_transition is checked as well, since a file may
+// still carry it.
+func validateMotion(cfg *UserConfig, result *ValidationResult) {
+	warnEnum(result, "appearance", "workspace_transition", cfg.Appearance.WorkspaceTransition, WorkspaceTransitions, "default")
+	sw, ms := cfg.Motion.fields()
+	for i := range sw {
+		ok := MotionSwitches
+		if MotionAspect(i) == AspectWorkspace {
+			ok = WorkspaceTransitions
+		}
+		warnEnum(result, "motion", aspectKeys[i], *sw[i], ok, "default")
+		if ms[i] == nil || *ms[i] == nil {
+			continue
+		}
+		if v := **ms[i]; v < 0 || v > MotionMsMax {
+			result.Warnings = append(result.Warnings, ValidationError{
+				Field:   "motion",
+				Key:     aspectKeys[i] + "_ms",
+				Message: fmt.Sprintf("%d is outside 0 to %d; read as %d", v, MotionMsMax, min(max(v, 0), MotionMsMax)),
+			})
+		}
+	}
 }

@@ -1743,6 +1743,7 @@ command that has flags of its own, or tuios reads them as its own flags:
 - `--keep-open`: Keep the window after its program exits. The window shows a line with the exit status under the last output
 - `--wait`: Wait for the program to exit, print nothing, and exit with its status. A program that a signal stopped gives 128 plus the signal number
 - `--timeout <ms>`: With `--wait`: milliseconds to wait before failing (default: no limit)
+- `--shell-integration <auto|off>`: Prompt marks in this pane's bash or zsh (default: `[shell] integration`). No effect on a window that runs a command. See [Shell integration](CONFIGURATION.md#shell-integration)
 
 **Output:**
 The 8-character window id and the window's name, separated by two spaces:
@@ -2246,6 +2247,7 @@ name alone. Some of them:
 | `border_style` | `rounded`, `normal`, `thick`, `double`, `block`, `outer-half-block`, `inner-half-block`, `ascii`, `hidden`, `glyphs` | Border style |
 | `motion` | `none`, `basic`, `full` | How much moves: `basic` keeps window slides, workspace slides and the copy sweep, `full` (the default) adds the overlay fade-in and the working-agent shimmer |
 | `theme_transition` | `none`, `circle`, `fade` | How a theme change shows: `circle` grows the new theme from the middle of the screen, `fade` changes all cells at the same time (default `none`) |
+| `workspace_transition`, `workspace_transition_ms`, `zoom_animation` | | Old names of `motion.workspace`, `motion.workspace_ms` and `motion.zoom`. See `[motion]` |
 | `theme_transition_duration` | `100` to `2000` | Milliseconds a theme transition takes (default `450`) |
 | `dim_unfocused` | `0` to `90` | Percent the content of a pane you are not in is dimmed (default `0`, off) |
 | `dim_foreground` | `true`, `false` | Let `dim_unfocused` dim the text of a pane you are not in as well as its background (default `true`). `false` keeps the text at full strength and dims only the background |
@@ -2415,9 +2417,10 @@ Type one command line at a pane's shell prompt, wait for it to finish, print
 what it printed, and exit with its exit status.
 
 It reads where the command starts and ends from the shell's own OSC 133 marks,
-so it needs a shell with prompt integration: fish and zsh with it on, bash with
-a setup, or any shell a terminal injects its integration script into. It never
-types into a running program.
+so it needs a shell with prompt integration. tuios turns the marks on in the
+bash and zsh panes it starts (see [Shell integration](CONFIGURATION.md#shell-integration)),
+and fish 4 and nushell send them themselves. It never types into a running
+program.
 
 **Usage:**
 ```bash
@@ -2439,7 +2442,7 @@ on stderr and exits `0`. A refusal exits `1`: `not_at_prompt` when a command is
 already running in the pane or another `run` there has not ended,
 `no_shell_integration` when its shell sends no marks. Nothing is typed in
 either case. A shell that marks its prompts and not its commands (bash before
-4.4, which ignores the recipe's PS0) is found out by the first `run` in the
+4.4 with the `tuios doctor shell` lines, which ignores their PS0) is found out by the first `run` in the
 pane: the line is typed, and when the shell draws a new prompt with no command
 mark, `run` fails at once with `no_shell_integration`. Every later `run` there
 is refused before typing.
@@ -4176,8 +4179,8 @@ replaces the middle, for example `… 48,213 lines omitted …`. `--commands N`
 keeps the last N commands under the same limit.
 
 A shell that sends no marks gives the last 2000 lines. So does `--unwrap`,
-because joined lines do not match the marks. `tuios doctor shell` prints the
-lines that turn the marks on.
+because joined lines do not match the marks. `tuios doctor shell` says which
+panes send marks.
 
 When the capture leaves something out, a note on stderr says what. With
 `--json`, `lines_omitted` gives the count, `command_marks` says whether the
@@ -4379,7 +4382,7 @@ every pane acts on the focused pane.
 | `tuios integration uninstall [harness...]` | Remove the hook entries tuios wrote, the MCP server entry it wrote and the Claude Code status line it wrote (putting back the command it chained to), and nothing else |
 | `tuios integration status [harness...]` | Say whether each integration is installed and current, and whether it reports state or the session id, for the four harnesses with an MCP registration whether `tuios mcp` is registered, and for Claude Code whether the status line feed is installed (`--json`, with `reports`, `mcp` and `status_line`) |
 | `tuios mcp` | Serve tuios to an agent harness as an MCP server over stdio. By default it cannot type into a pane, and it is held to the session of the pane it runs in. Its default tools still set your own agent state and meta and send and read mail. `--write` adds the tools that type into panes. `--scope all` reaches every session. See [tuios mcp](#tuios-mcp) |
-| `tuios doctor shell` | Per pane: whether its shell marks its commands with OSC 133, which `tuios run`, `wait-for command-finished` and `capture-pane --last-command` need, and, when one does not, the lines that turn the marks on for your `$SHELL` (zsh, and bash 4.4 or newer; fish 4 sends them itself). A pane that marks its prompts and ran a command without marking it is flagged as prompt marks only, and one that has not run a command yet is said to mark its prompts (`-s`, `--json`, with `command_mark_seen` and `prompt_marks_only`) |
+| `tuios doctor shell` | Per pane: whether its shell marks its commands with OSC 133, which `tuios run`, `wait-for command-finished` and `capture-pane --last-command` need. It says when tuios sets up the marks for the shell new panes run (bash 4.4 or newer and zsh, with `[shell] integration` on), and that fish 4 and nushell send them themselves. With the integration off, or when a pane has no marks, it prints the lines that turn the marks on for that shell. A pane that marks its prompts and ran a command without marking it is flagged as prompt marks only, and one that has not run a command yet is said to mark its prompts (`-s`, `--json`, with `integration`, `set_up_by_tuios`, `command_mark_seen` and `prompt_marks_only`) |
 | `tuios doctor agents` | Per harness: on PATH or not, integration installed and current or not, what it reports, the recognised harnesses with no integration and why, the running agent panes whose integration is missing or out of date with the command that fixes each, and the harness manifests loaded from the user manifest directory, which of them replace a bundled one, and the files there that failed to load (`--json`) |
 | `tuios doctor keep-awake` | Whether this machine has the program the daemon holds it awake with (`systemd-inhibit` that logind answers, `caffeinate`, or `SetThreadExecutionState`), and, when a daemon runs, `keep_awake` in `[daemon]`, the hold and the working agents |
 | `tuios agent-hook <harness> [event]` | What an installed hook runs: read the hook payload on stdin and report the pane's state, or for a session integration only its conversation id (`set-agent-session`). For Claude Code and Codex the prompt, tool and Stop events also carry the event as activity for [`tuios agent-log`](#tuios-agent-log), and a `Stop` reports `done` with the first line of what the agent said last. Claude Code's `SubagentStart` and `SubagentStop` report no state: they send the subagent with `report-agent-activity`, which moves the pane's `subagents` count, and a `SessionStart` sends a `session_start` there after its state report, which clears it. A report that ends a turn also sends what the pane's `agent-statusline` feed held back (`set-agent-meta`). For Claude Code and Codex, `SessionStart`, `UserPromptSubmit` and `PostToolUse` also add one line about the pane's unread mail to the agent's context, once per message: the count, the senders and the `read-agent-messages` command. It never holds a subject or a body. `--explain` prints the decision to stderr. With `[agents.approvals]` naming the harness, a permission prompt (Claude Code `PermissionRequest`, including an `ExitPlanMode` plan unless `hold_plans = false`, Qwen Code `PermissionRequest`, opencode or Kilo `permission.asked`) then waits for an answer from the Inbox and prints the harness's decision, or nothing when there is none. See [Agent state](AGENT_STATE.md#harness-integrations) and [Approvals from the Inbox](AGENT_STATE.md#approvals-from-the-inbox) |
@@ -4786,11 +4789,17 @@ command). Answer start at boot and both ways with `y` or `n`. A fix or a step
 that needs you, such as `ssh-copy-id`, runs in the same terminal, and the setup
 tests again when it ends. Press ctrl+c at any step to stop. The setup stops at
 the end of that step and says what it left: "Stopped. Nothing was added." A
-choice that a flag gives is not asked. `--json`, `--dry-run` and `--tailnet`
-never ask.
+choice that a flag gives is not asked. `--json` and `--dry-run` never ask.
 
 `--as NAME` is the name this machine gets on the other machine in the both-ways
 step. Without it, the name comes from this machine's tailnet name or host name.
+
+With `--tailnet` on a terminal, a checklist shows each machine. `space` ticks
+a machine, and `a` ticks all that can be set up. `o` gives one machine its own
+answers: how to install, start at boot, and both ways. `enter` starts the setup
+with the answers under the list. Each machine then gets one line with its step,
+and a summary follows at the end. At a fix, `s` skips that machine, and the
+others go on. `--all` or `--only` skips the checklist.
 
 `--tailnet` lists the machines on your tailnet with their state: tuios and its
 version, no tuios, a Tailscale sign-in first, no ssh, offline, or already

@@ -103,7 +103,7 @@ func (m *OS) copyFlashAllowed() bool {
 	// appearance.motion = none draws every change in one frame, and a sweep is
 	// nothing but frames. The selection and the dock message still say what
 	// was copied.
-	return m.Settings.MotionAllows(config.MotionBasic)
+	return m.Settings.MotionOn(config.AspectCopy)
 }
 
 // NoteCopyFlashMany records one copy taken from several panes at once, the

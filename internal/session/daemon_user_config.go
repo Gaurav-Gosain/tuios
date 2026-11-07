@@ -73,6 +73,9 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	// The daemon spawns every pane, so the shell the user asked for has to
 	// reach it, not only standalone panes.
 	cfg.PreferredShell = uc.Appearance.PreferredShell
+	// The daemon starts every shell, so it is the side that sets up the
+	// prompt marks.
+	cfg.ShellIntegration = uc.Shell.Integration
 	// The daemon owns the window set, so it sees the workspace on screen
 	// lose its last pane, with or without a client attached.
 	cfg.StayOnEmptyWorkspace = !uc.Workspaces.ReturnsWhenEmpty()
@@ -104,6 +107,8 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg.MailWakeOff = !uc.Agents.Mail.WakeOn()
 	// The daemon moves the task cards, so it reads whether to.
 	cfg.TaskAutoStageOff = !uc.Tasks.AutoStageOn()
+	// The daemon removes the old copies of far files at its start.
+	cfg.OpenedCopyKeep = uc.Files.OpenCopyKeep()
 	// The daemon takes every checkpoint, so it reads whether to.
 	cfg.Checkpoints = uc.Agents.Checkpoints
 	// The daemon runs the herdr plugins, so it reads which ones.

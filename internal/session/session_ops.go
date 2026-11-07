@@ -316,6 +316,10 @@ type NewWindowOptions struct {
 	// then drew its prompt twice (#1205). A popup ignores them: it has a
 	// size of its own.
 	Cols, Rows int
+	// ShellIntegration is auto or off for this pane's shell, "" for [shell]
+	// integration. It means nothing for a window that runs a command. It is
+	// not saved: a restored pane follows the config.
+	ShellIntegration string
 }
 
 // WindowKinds are the kinds a window can be. Empty is "terminal".
@@ -455,6 +459,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		windowID: windowID, cwd: cwd, command: opts.Command, env: opts.Env, host: opts.Host,
 		onExit: onExit, stdout: opts.stdout, extraFiles: opts.extraFiles, grants: opts.Grants, keepOpen: opts.keepOpen,
 		workspace: opts.Workspace, noStartDir: noStartDir, closeOnExit: opts.closeOnExit,
+		shellIntegration: opts.ShellIntegration,
 	})
 	if err != nil {
 		return WindowState{}, err
@@ -711,6 +716,18 @@ func (s *Session) removeWindowLocked(state *SessionState, idx int) WindowState {
 	gone := state.Windows[idx]
 	workspace := gone.Workspace
 	state.Windows = append(state.Windows[:idx], state.Windows[idx+1:]...)
+	defer func() {
+		// The person was working zoomed, so the zoom goes to the pane that
+		// takes the focus. With no pane left there is nothing to zoom.
+		if !gone.Zoomed || gone.Popup || state.FocusedWindowID == "" {
+			return
+		}
+		for i := range state.Windows {
+			if w := &state.Windows[i]; w.ID == state.FocusedWindowID && w.Workspace == workspace && !w.Popup {
+				w.Zoomed = true
+			}
+		}
+	}()
 	state.FocusHistory = RemoveFocus(state.FocusHistory, gone.ID)
 
 	// Repair focus if we removed the focused window.

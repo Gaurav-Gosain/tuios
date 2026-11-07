@@ -507,6 +507,14 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.UpgradeConfirmOpen() {
 		return o, o.UpgradeConfirmKey(msg.String())
 	}
+	// The add-a-machine sheet owns every key while it is up. See
+	// app/machine_sheet.go.
+	if o.MachineSheetOpen() {
+		if cmd, ok := pasteKeyIntoTextField(msg, o); ok {
+			return o, cmd
+		}
+		return o, o.MachineSheetKey(msg)
+	}
 	// The paste key, while a one-line field owns the keyboard, pastes into
 	// the field. See paste_text.go.
 	if cmd, ok := pasteKeyIntoTextField(msg, o); ok {
@@ -963,7 +971,7 @@ func handleMessageViewKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, o.CopyMessageView()
 	case "enter":
 		o.MessageViewActivate()
-		return o, nil
+		return o, o.TakeSidebarCmd()
 	case "ctrl+u":
 		o.MessageViewPage(-1)
 		return o, nil

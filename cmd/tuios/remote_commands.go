@@ -257,6 +257,9 @@ type newWindowOptions struct {
 	keepOpen bool
 	wait     bool
 	timeout  int
+	// shellIntegration is auto or off for the pane's shell, "" for the
+	// config's [shell] integration.
+	shellIntegration string
 }
 
 // runNewWindow opens a window in a session and reports its id, which is the
@@ -292,6 +295,9 @@ func runNewWindow(o newWindowOptions) error {
 	}
 	if o.keepOpen {
 		params["keep_open"] = true
+	}
+	if o.shellIntegration != "" {
+		params["shell_integration"] = o.shellIntegration
 	}
 	call := client.Call
 	if o.wait {

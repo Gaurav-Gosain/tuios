@@ -7,8 +7,9 @@ one, and sessions, panes, agents, mail and the Inbox reach across it.
 ## Set up a machine
 
 `tuios hosts setup DEST` tests ssh, installs tuios when it is missing, starts
-the daemon, adds the machine and tests the link. Run the dry run first and show
-the person the plan. Then run it with the choices they made:
+the daemon, adds the machine and tests the link. On a terminal it asks the
+person each choice. An agent runs it without a terminal: run the dry run first
+and show the person the plan, then run it with the choices they made:
 
 ```sh
 tuios hosts setup gaurav@buildbox --dry-run
@@ -178,8 +179,10 @@ tuios cp --json --conflict skip ./flame.png build:
 ## What another machine allows
 
 Each machine decides what other machines may do to it: `list`, `mail`, `open`,
-`write`, `respond` and `files`. By default a machine may do all of that but
-`respond`. `files` writes only in that machine's `files_roots`: its receive
+`write`, `respond`, `files` and `transcripts`. By default a machine may do all
+of that but `respond`. `transcripts` lets the person's own client attached
+there read an agent's conversation. An agent never can, because the read needs
+the nonce of a person's attach. `files` writes only in that machine's `files_roots`: its receive
 folder, `~/Downloads/tuios`, unless the person there added more. It never
 writes in its keys, credentials or shell start files. A
 call the far machine does not allow fails with `forbidden`, naming the

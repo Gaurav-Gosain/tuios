@@ -25,12 +25,14 @@ import (
 //
 //   - A listing of another machine (a far pane, or a session attached through
 //     a host) names a path that is not here. Opening the same path here would
-//     open some other file, or nothing.
+//     open some other file, or nothing. So the file is copied here first.
 //   - A remote client (tuios ssh, tuios-web) runs on the server, and a program
 //     started there opens in front of nobody.
 //
-// Each refusal says what to do instead: quick look reads a far file over the
-// link, and send copies it to this machine.
+// A listing of another machine offers to copy the file here and open the copy
+// (sidebar_file_open_far.go). A remote client is refused, and the refusal
+// says what to do instead: quick look reads a far file over the link, and
+// send copies it to this machine.
 
 // fileOpenSystemMsg is the opener's start, done off the update goroutine
 // because it stats the path. Exactly one of Watch and Note is set.
@@ -40,6 +42,8 @@ type fileOpenSystemMsg struct {
 	Name  string
 	Note  string
 	Level string
+	// Copy says the path is a copy here of a file on another machine.
+	Copy bool
 }
 
 // fileOpenFailedMsg reports an opener that exited with an error inside the
@@ -66,6 +70,11 @@ func (m *OS) SidebarFileOpenSystem() tea.Cmd {
 		return nil
 	}
 	path := filepath.Join(dir, e.Name)
+	if host, _ := m.farOpenHost(); host != "" {
+		ask := farOpenAsk{host: host, path: path, name: e.Name, dir: e.Dir}
+		m.offerFarOpen(ask, farOpenOfferText(ask))
+		return nil
+	}
 	var rules config.FilesConfig
 	if m.UserConfig != nil {
 		rules = m.UserConfig.Files
@@ -75,16 +84,16 @@ func (m *OS) SidebarFileOpenSystem() tea.Cmd {
 
 // fileOpenSystemRefusal is why the opener must not run for this listing, or ""
 // when it may.
+// A listing of another machine may: o offers a copy for it.
 func (m *OS) fileOpenSystemRefusal() string {
-	host := m.filesView.Host
-	if host == "" {
-		host = m.AttachedHost
-	}
-	if host != "" {
-		return "tuios did not open the file. It is on " + sanitizeLinkText(host) + "." + m.fileOpenNextStep(true)
-	}
+	host, reach := m.farOpenHost()
 	if m.IsRemoteClient() {
-		return "tuios did not open the file. This client is remote." + m.fileOpenNextStep(false)
+		// A program started here opens in front of nobody, and so would
+		// one started on a copy.
+		return "tuios did not open the file. This client is remote." + m.fileOpenNextStep(host != "" || !reach)
+	}
+	if !reach {
+		return "tuios cannot open a file from a host that you reach through another host." + m.fileOpenNextStep(false)
 	}
 	if m.FileViewSpoofed() {
 		return fileSpoofRefusal
@@ -154,6 +163,11 @@ func (m *OS) handleFileOpenSystem(msg fileOpenSystemMsg) tea.Cmd {
 	if msg.Watch == nil {
 		m.ShowNotification(msg.Note, msg.Level, m.Settings.NotificationDuration)
 		return nil
+	}
+	if msg.Copy {
+		m.ShowNotification("Opened a copy of "+msg.Name+" with "+msg.Prog+". Changes stay here.",
+			"success", m.Settings.NotificationDuration)
+		return msg.Watch
 	}
 	m.ShowNotification("Opened "+msg.Name+" with "+msg.Prog+".", "success", m.Settings.NotificationDuration)
 	return msg.Watch

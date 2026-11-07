@@ -23,8 +23,9 @@ import (
 // session of the pane (humanNonceFor, "Nonce scope"), so a process in a
 // pane and a link stream the hub did not vouch for get not_human. A
 // restricted connection is automation and is refused outright (conn_scope.go),
-// and a link needs respond (link_policy.go), the capability that answers for
-// the person.
+// and a link needs transcripts (link_policy.go). The default policy gives it,
+// so the person's own client attached over a link reads what it reads here.
+// respond includes it.
 //
 // The path comes from the join, in daemon memory. The caller names a window,
 // never a file. The decoding is internal/transcriptview, which nothing else
