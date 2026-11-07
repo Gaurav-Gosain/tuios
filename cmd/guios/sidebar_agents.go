@@ -1,7 +1,6 @@
 package main
 
 import (
-	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -11,7 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
@@ -39,8 +37,8 @@ type sbAgent struct {
 	need *ckNeed
 }
 
-// sessionAgents are the agents of a session of this machine, those that
-// need the person first, the oldest wait first.
+// sessionAgents are the agents of a session of this machine, in the
+// session's layout order.
 func (a *App) sessionAgents(s *proto.Session, needs []ckNeed) []sbAgent {
 	ck := &a.ck
 	if !ck.loaded || a.hostOf(s.ID).remote() {
@@ -65,24 +63,20 @@ func (a *App) sessionAgents(s *proto.Session, needs []ckNeed) []sbAgent {
 			out = append(out, sbAgent{i: i, need: byAgent[i]})
 		}
 	}
+	// In the session's layout order, the order of its panes, whatever
+	// their state: a state change never moves a row (DESIGN.md, principle
+	// 3). Needs you at the top of the rail points to the agents that wait;
+	// their rows here keep their place, with their mark (Mac round 1, feel
+	// S2, visual S5).
+	pos := map[string]int{}
+	for k, p := range s.Panes {
+		pos[p.ID] = k
+	}
+	for k, p := range s.Others {
+		pos[p.ID] = len(s.Panes) + k
+	}
 	sort.SliceStable(out, func(x, y int) bool {
-		nx, ny := out[x].need, out[y].need
-		switch {
-		case (nx != nil) != (ny != nil):
-			return nx != nil
-		case nx != nil:
-			if nx.tier != ny.tier {
-				return nx.tier < ny.tier
-			}
-			return nx.since < ny.since
-		}
-		// Then by the TUI rail's order: failed, done and not seen,
-		// working, done, idle.
-		ax, ay := ck.agents[out[x].i], ck.agents[out[y].i]
-		if rx, ry := sessiontree.AgentRank(ax.State, !ax.FinishedUnread), sessiontree.AgentRank(ay.State, !ay.FinishedUnread); rx != ry {
-			return rx > ry
-		}
-		return ax.Name < ay.Name
+		return pos[ck.agents[out[x].i].Window] < pos[ck.agents[out[y].i].Window]
 	})
 	return out
 }
@@ -90,9 +84,6 @@ func (a *App) sessionAgents(s *proto.Session, needs []ckNeed) []sbAgent {
 // agentRows draws a session's agent rows.
 func (a *App) agentRows(c *ui.Context, pal *palette, s *proto.Session, needs []ckNeed) {
 	rows := a.sessionAgents(s, needs)
-	// An agent in Needs you shows there, at the top, and not again here:
-	// the session's mark says it waits.
-	rows = slices.DeleteFunc(rows, func(r sbAgent) bool { return r.need != nil })
 	if len(rows) == 0 {
 		return
 	}
