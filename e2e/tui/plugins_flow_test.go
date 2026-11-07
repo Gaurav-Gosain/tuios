@@ -47,7 +47,7 @@ const flowDump = `env | grep '^TUIOS_' > "$TUIOS_PLUGIN_STATE_DIR/action.env"
 PATH= "$TUIOS_BIN" list-sessions > "$TUIOS_PLUGIN_STATE_DIR/action.sessions" 2>&1
 `
 
-const flowPane = `/usr/bin/env | /bin/grep '^TUIOS_' > "$TUIOS_PLUGIN_STATE_DIR/pane.env"
+const flowPane = `env | grep '^TUIOS_' > "$TUIOS_PLUGIN_STATE_DIR/pane.env"
 exec sleep 600
 `
 
