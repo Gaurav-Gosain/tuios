@@ -12,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -682,7 +683,10 @@ func (m *OS) resumeOffers(offers []session.AttentionItem) tea.Cmd {
 			var res struct {
 				Command string `json:"command"`
 			}
-			_ = jsonx.Unmarshal(raw, &res)
+			if err := jsonx.Unmarshal(raw, &res); err != nil {
+				fail(t, errfmt.Errorf("read the resume-agent answer: %w", err))
+				continue
+			}
 			command = res.Command
 			msg.Resumed++
 		}

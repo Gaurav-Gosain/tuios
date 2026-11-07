@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
@@ -381,7 +382,9 @@ func (m *OS) ckJudge() tea.Cmd {
 			Ready        bool   `json:"ready"`
 			Reason       string `json:"reason"`
 		}
-		_ = jsonx.Unmarshal(raw, &res)
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
+			return ckFanActMsg{gen: gen, verb: "judge", err: errfmt.Errorf("read the judge-fan answer: %w", err)}
+		}
 		text := "A judge reads the attempts in " + res.JudgeSession + ". Its verdict shows here when it reports."
 		if !res.Ready && res.Reason != "" {
 			text = "The judge in " + res.JudgeSession + " is not ready: " + res.Reason
@@ -459,7 +462,9 @@ func (m *OS) ckKeepNow() tea.Cmd {
 			} `json:"removed"`
 			Left int `json:"left"`
 		}
-		_ = jsonx.Unmarshal(raw, &res)
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
+			return ckFanActMsg{gen: gen, verb: "keep", err: errfmt.Errorf("read the keep answer: %w", err)}
+		}
 		n := len(res.Removed) - res.Left
 		text := "Kept " + letter + ", " + kept + ". Removed " + strconv.Itoa(n) + " other " + map[bool]string{true: "attempt", false: "attempts"}[n == 1] + ". Their branches stay."
 		if res.Left > 0 {

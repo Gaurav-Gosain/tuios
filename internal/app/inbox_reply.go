@@ -12,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -864,7 +865,10 @@ func (m *OS) SidebarAgentCancelQueued(sessionID, windowID string) (tea.Cmd, bool
 		var res struct {
 			Queued int `json:"queued"`
 		}
-		_ = jsonx.Unmarshal(raw, &res)
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
+			msg.Err = errfmt.Errorf("read the cancel-queued answer: %w", err)
+			return msg
+		}
 		msg.ID, msg.Left = id, res.Queued
 		return msg
 	}, true

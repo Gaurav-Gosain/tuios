@@ -20,6 +20,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
@@ -1116,7 +1117,9 @@ func (m *OS) spawnStart() tea.Cmd {
 			Task                    *session.TaskRow `json:"task"`
 			TaskNote                string           `json:"task_note"`
 		}
-		_ = jsonx.Unmarshal(raw, &res)
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
+			return spawnStartedMsg{sheet: s, err: errfmt.Errorf("read the %s answer: %w", verb, err)}
+		}
 		held := spawnClaim(call, nonce, card, res.Session, res.WindowID)
 		switch {
 		case res.Task != nil && verb == "start-agent":
