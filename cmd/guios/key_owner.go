@@ -60,6 +60,10 @@ type keyOwner struct {
 	// keptN how many were: a press comes to the queue once (keepKey).
 	kept  [32]uint64
 	keptN int
+	// asked are the panes the owner asked the focus for while it lands: a
+	// pane that has the focus a frame later because the owner asked is not
+	// a pane the user chose (ownerAsked).
+	asked []string
 	// has is the target that had the keys in the last frame built: a
 	// change whose target has them already lands at once (tryLand), with
 	// no frame in between, which a window out of sight does not build.
@@ -303,20 +307,30 @@ func (a *App) keyOwnerView(c *ui.Context) {
 	}
 	if !ko.landing {
 		ko.landing, ko.landAt = true, now
+		ko.asked = ko.asked[:0]
 		// A request the sink did not take yet must not take the keys
 		// from the target later: the sink goes once they land.
 		ko.ref.CancelFocus()
 	}
 	t := a.keyTarget()
 	ref := a.targetRef(t)
+	if t.reply && ref != nil && !ref.FocusWithin(c) {
+		// The draft takes the kept text before the box has the focus: a
+		// write to the draft in the frame the box takes typed text drops
+		// that text (MyGo keeps the app's string), so none may come after.
+		a.replyEarly()
+	}
 	if ref != nil && !ref.FocusWithin(c) && now.Sub(ko.landAt) < landWait || a.slotWaits(now) {
 		if ref != nil && !ref.FocusWithin(c) {
 			ref.Focus()
+			if t.pane != "" && !slices.Contains(ko.asked, t.pane) {
+				ko.asked = append(ko.asked, t.pane)
+			}
 		}
 		c.After(16 * time.Millisecond)
 		return
 	}
-	ko.landing = false
+	ko.landing, ko.asked = false, ko.asked[:0]
 	a.replayKeys(t)
 	c.Invalidate()
 }
@@ -392,6 +406,21 @@ func (a *App) targetRef(t keyTarget) *ui.Handle {
 		return a.paneRef(t.pane)
 	}
 	return nil
+}
+
+// replyEarly writes what the owner kept into the reply box's draft while
+// the sink still has the keys, and keeps the reply box the target.
+func (a *App) replyEarly() {
+	ko := &a.ko
+	ko.mu.Lock()
+	q := slices.DeleteFunc(ko.queue, func(k heldKey) bool { return k.slot })
+	ko.queue = nil
+	ko.mu.Unlock()
+	if len(q) == 0 {
+		return
+	}
+	keyAudit("early", "reply", strconv.Itoa(len(q))+" "+a.ck.reply.boxAgent.Name)
+	a.replayReply(q)
 }
 
 // replayKeys sends what the owner kept to the target, in the order it was
@@ -544,7 +573,12 @@ func (a *App) replayReply(q []heldKey) {
 			}
 		}
 	}
-	r.toEnd = true
+	if len(q) > 0 {
+		// Only with text written here: the caret goes after it, by a
+		// draft that holds no text typed in the box since (that frame
+		// moved the caret back into the typing).
+		r.toEnd = true
+	}
 }
 
 // prefixInMenu reports whether the prefix waits for a sub-prefix's key.
@@ -674,4 +708,13 @@ func seqNote(seq uint64) string {
 		return ""
 	}
 	return "seq " + strconv.FormatUint(seq, 10)
+}
+
+// ownerAsked reports whether the owner asked the focus for pane while it
+// lands. The focus moves a frame after the ask, so the pane that has it
+// then may be one the owner asked for before its target changed: taking it
+// as the user's choice would move the target back, and the two would swap
+// the focus each frame.
+func (a *App) ownerAsked(pane string) bool {
+	return a.ko.landing && slices.Contains(a.ko.asked, pane)
 }

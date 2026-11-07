@@ -443,7 +443,9 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 	row.Background(row.AnimateColor("bg", bg, ui.Animation{Duration: dHoverOut}))
 	if row.Pressed() || row.Clicked() {
 		a.ckSelect(r)
-		ck.fleetFocus.Focus()
+		// The owner moves the keyboard: to the list, or to the reply box
+		// that text typed meanwhile went to (key_owner.go).
+		a.moveKeys("row")
 	}
 	if row.Clicked() && ck.stacked {
 		ck.stackFocus = true
@@ -601,7 +603,12 @@ func (a *App) ckRowMenu(m *ui.Menu, r ckRow) {
 // moves, Enter and Escape, and the chords of ckChords.
 func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 	ck := &a.ck
-	if !ck.fleetFocus.FocusWithin(c) {
+	// A key typed in the list before a frame that moved the focus (as the
+	// key before it moved it to the reply box) comes in the frame after:
+	// the list still reads it then.
+	had := ck.keysHad
+	ck.keysHad = ck.fleetFocus.FocusWithin(c)
+	if !ck.keysHad && !had {
 		return
 	}
 	key := func(mods ui.Modifiers, k ui.Key) bool { return col.Shortcut(mods, k) }

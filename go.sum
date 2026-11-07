@@ -14,6 +14,8 @@ github.com/Gaurav-Gosain/mygo v0.7.4-tuios.10 h1:nMcqHoIslmHb2oRl9K9IIWrzDhlQxE7
 github.com/Gaurav-Gosain/mygo v0.7.4-tuios.10/go.mod h1:1HeCkbA/rhjcGSAKWOAOKoiosC9AUsNc8OShlhR1KEE=
 github.com/Gaurav-Gosain/mygo v0.7.5-0.20261107220905-d391bc5fc4d5 h1:l9OXTwvHrJY0gYJivO5QDSawGjx3MRTpmdolY3mk504=
 github.com/Gaurav-Gosain/mygo v0.7.5-0.20261107220905-d391bc5fc4d5/go.mod h1:1HeCkbA/rhjcGSAKWOAOKoiosC9AUsNc8OShlhR1KEE=
+github.com/Gaurav-Gosain/mygo v0.7.5-0.20261107223733-60bd087414a1 h1:Lueko3IGYDiZPaol88vftU7s2NXKUbwBwtAc2SBygzc=
+github.com/Gaurav-Gosain/mygo v0.7.5-0.20261107223733-60bd087414a1/go.mod h1:1HeCkbA/rhjcGSAKWOAOKoiosC9AUsNc8OShlhR1KEE=
 github.com/Gaurav-Gosain/sip v0.10.0 h1:u1pAfiSaUx9g3aB1kNH8KEzxP7j+ffHZkwImRhfGtfA=
 github.com/Gaurav-Gosain/sip v0.10.0/go.mod h1:BCi2XYCVFybEeSXPgSFmyPy+sO4xaPg47k+XCREyPDk=
 github.com/Gaurav-Gosain/tuiffects v0.7.1 h1:B/oTfyZy0JEopXkeka93qOhlw8lel97YQteiBhQv6z0=

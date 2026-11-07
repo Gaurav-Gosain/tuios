@@ -1229,7 +1229,7 @@ func (a *App) paneTerminal(c *ui.Context, pal *palette, s *proto.Session, p *pro
 				// terminal is here to take it.
 				ref.Focus()
 				a.wantFocus = ""
-			} else if ref.Focused(c) && a.focusOf(s) != p.ID && s.PaneByID(a.wantFocus) == nil {
+			} else if ref.Focused(c) && a.focusOf(s) != p.ID && s.PaneByID(a.wantFocus) == nil && !a.ownerAsked(p.ID) {
 				a.setFocus(s, p.ID)
 			}
 			if a.find.pane == p.ID {
