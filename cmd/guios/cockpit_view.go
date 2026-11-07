@@ -462,7 +462,9 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 		room -= attemptChipW + 7
 	}
 	harnessW := 12 + 4 + natural(c, harnessName(harness), fsSmall, 0)
-	showHarness := room >= harnessW
+	// A row with no harness reported shows its terminal icon alone, not
+	// the word "agent" (Mac round 1, visual S3).
+	showHarness := room >= harnessW && harness != ""
 	row.Children(func() {
 		ui.Column(c).Grow(1).MinWidth(0).Gap(3).Children(func() {
 			ui.Row(c).Gap(7).AlignItems(ui.Center).Children(func() {
@@ -475,7 +477,7 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 					ic := ui.Icon(c, harnessIcon(harness)).Size(12, 12).TextColor(pal.textFaint).Shrink(0)
 					if showHarness {
 						ui.Text(c, harnessName(harness)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Shrink(0)
-					} else {
+					} else if harness != "" {
 						ic.Tooltip(harnessName(harness))
 					}
 				})
@@ -945,7 +947,9 @@ func ckAsk(summary string) (tool, target string, ok bool) {
 	if t, r, found := strings.Cut(rest, " "); found {
 		return t, r, true
 	}
-	return rest, "", true
+	// A screen rule's "Allow Bash?" names the tool and asks: the row and
+	// the button already ask, so the mark goes.
+	return strings.TrimSuffix(rest, "?"), "", true
 }
 
 // ckToolName reports whether s reads as a tool's name: one word of letters,

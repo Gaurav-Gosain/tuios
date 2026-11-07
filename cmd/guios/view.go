@@ -1438,9 +1438,18 @@ func (a *App) toastBox() *ui.Rect {
 	if !ck.open || ck.cardRect.W <= 0 {
 		return nil
 	}
-	// Centred over the agents view's card, above its key line, in every
-	// view: one place for every toast (council round 5, visual S5).
+	// Over the foot of the list, the agents' or the Mail view's, which is
+	// empty there. Centred over the card, a toast covered the reply box's
+	// hints and ran up to its Send button (Mac round 1, workflow S4).
+	if r := ck.fleetRect; r.W >= 220 {
+		return &r
+	}
+	// No list: the card's bottom right, above its key line.
 	r := ck.cardRect
-	r.H -= hRow
+	r.H -= hRow + sp4
+	if w := float32(dialogW) + 2*sp4; r.W > w {
+		r.X += r.W - w
+		r.W = w
+	}
 	return &r
 }

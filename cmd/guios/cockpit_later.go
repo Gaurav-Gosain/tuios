@@ -29,7 +29,9 @@ func (a *App) cockpitSide(c *ui.Context, pal *palette) {
 				oneLine(c, v, fsSmall, 0).TextColor(pal.text)
 			})
 		}
-		row(locales.CockpitDetailAgent(), harnessName(ag.Harness))
+		if ag.Harness != "" {
+			row(locales.CockpitDetailAgent(), harnessName(ag.Harness))
+		}
 		if m, ok := ag.Meta["model"].(string); ok {
 			row(locales.CockpitDetailModel(), m)
 		}

@@ -91,25 +91,37 @@ func chordHit(el ui.Element, id chordID) bool {
 	return el.Shortcut(c.mods, c.key)
 }
 
-// chordName is a chord as this platform writes it: "Ctrl+↵", "⌘⇧X".
+// chordName is a chord as this platform writes it: "Ctrl+↵", "⇧⌘X".
 func chordName(id chordID) string {
 	c := chordOf(id)
 	mac := runtime.GOOS == "darwin"
+	cmd := c.mods&ui.Ctrl != 0 || c.mods&ui.Super != 0
+	if mac {
+		// Apple's order, as the menus and the empty state write it:
+		// ⌥ ⇧ ⌘, then the key ("⇧⌘X", not "⌘⇧X").
+		var b strings.Builder
+		if c.mods&ui.Alt != 0 {
+			b.WriteString("⌥")
+		}
+		if c.mods&ui.Shift != 0 {
+			b.WriteString("⇧")
+		}
+		if cmd {
+			b.WriteString("⌘")
+		}
+		return b.String() + chordKeyName(c.key)
+	}
 	var parts []string
-	if c.mods&ui.Ctrl != 0 || c.mods&ui.Super != 0 {
-		parts = append(parts, map[bool]string{true: "⌘", false: "Ctrl"}[mac])
+	if cmd {
+		parts = append(parts, "Ctrl")
 	}
 	if c.mods&ui.Alt != 0 {
-		parts = append(parts, map[bool]string{true: "⌥", false: "Alt"}[mac])
+		parts = append(parts, "Alt")
 	}
 	if c.mods&ui.Shift != 0 {
-		parts = append(parts, map[bool]string{true: "⇧", false: "Shift"}[mac])
+		parts = append(parts, "Shift")
 	}
-	parts = append(parts, chordKeyName(c.key))
-	if mac {
-		return strings.Join(parts, "")
-	}
-	return strings.Join(parts, "+")
+	return strings.Join(append(parts, chordKeyName(c.key)), "+")
 }
 
 // chordKeyName is the key of a chord as a key cap shows it.

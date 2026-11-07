@@ -205,6 +205,9 @@ func (a *App) fetchOlder(th *ckThread) {
 // the next selection or event reads again.
 const ckReadStuck = 5 * time.Second
 
+// ckSpinFor is how long an empty thread shows a spinner while it reads.
+const ckSpinFor = time.Second
+
 // ckTranscriptError says why a thread cannot be read, in the app's words.
 //
 // Only the daemon's no_transcript answer says the agent has no
@@ -482,10 +485,17 @@ func (a *App) threadView(c *ui.Context, pal *palette, ag client.Agent) {
 		// No read could start: the daemon is not connected.
 		ui.Column(c).Grow(1).Center().Children(func() { ui.Spinner(c) })
 		return
+	case len(th.items) == 0 && th.loading && time.Since(th.loadedAt) < ckSpinFor:
+		// A spinner for a read's first second only: past it the tab says
+		// what it holds, and the messages come in when the read ends (Mac
+		// round 1, visual S4).
+		c.After(ckSpinFor - time.Since(th.loadedAt))
+		ui.Column(c).Grow(1).Center().Children(func() { ui.Spinner(c) })
+		return
 	case len(th.items) == 0 && th.loading && time.Since(th.loadedAt) < ckReadStuck:
 		// Look again when the read would count as stuck.
 		c.After(ckReadStuck - time.Since(th.loadedAt))
-		ui.Column(c).Grow(1).Center().Children(func() { ui.Spinner(c) })
+		a.ckEmptyThread(c, pal, locales.CockpitThreadEmpty(), "")
 		return
 	case len(th.items) == 0 && th.unsupported:
 		// No retry: the harness's transcripts are not read at all.
@@ -527,6 +537,9 @@ func (a *App) ckEmptyThread(c *ui.Context, pal *palette, title, detail string) {
 	// Over an approval card the card says what the agent waits for: the
 	// block would only be cut by the tab's least height (ckTabMinH).
 	if a.ck.cardShown {
+		// One quiet line at the top, so the tab is not a blank area over
+		// the card (Mac round 1, workflow N2).
+		oneLine(c, locales.CockpitThreadEmptyLine(), fsSmall, 0).TextColor(pal.textFaint).Margin(18, a.ckSide(28), 0, a.ckSide(28))
 		return
 	}
 	col := ui.Column(c.Key("thread-empty")).Grow(1).MinHeight(0)

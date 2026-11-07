@@ -167,7 +167,9 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 			if name.Clicked() && ag.Window != "" {
 				a.goToAgent(ag)
 			}
-			if !ck.narrow {
+			// No harness reported yet: nothing, not the word "agent"
+			// (Mac round 1, visual S3).
+			if !ck.narrow && ag.Harness != "" {
 				ui.Text(c, harnessName(ag.Harness)).FontSize(fsBody).TextColor(pal.textMuted).SingleLine().Shrink(0)
 				if m, ok := ag.Meta["model"].(string); ok && m != "" {
 					oneLine(c, "· "+m, fsBody, 0).TextColor(pal.textFaint).Shrink(2)

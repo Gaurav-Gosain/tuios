@@ -638,6 +638,7 @@
   "cockpitKindApproval": "审批",
   "cockpitKindQuestion": "问题",
   "cockpitStopped": "已停止 · {message}",
+  "cockpitThreadEmptyLine": "还没有消息。代理的消息会显示在这里。",
   "cockpitAnswered": "{name}: {answer}",
   "cockpitStoppedWaiting": "{name} 已停止等待。请打开窗格回答。",
   "cockpitStillWaits": "{name} 仍在等待。请打开窗格回答。",
