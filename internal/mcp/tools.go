@@ -377,6 +377,8 @@ const (
 var EventTypes = []string{
 	"window-created", "window-closed", "window-exit", "window-retitled",
 	"window-focused", "window-foreground", "window-moved", "window-minimized", "window-restored",
+	// A pane's working folder changed.
+	"window-cwd",
 	"workspace-switched", "workspace-renamed", "layout-changed", "agent-state", "agent-seen", "agent-message",
 	"output", "bell", "notification", "mode-changed",
 	"session-created", "session-closed", "session-labelled", "client-session-changed", "gap", "attention",
