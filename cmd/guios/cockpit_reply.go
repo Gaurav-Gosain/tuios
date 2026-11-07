@@ -238,6 +238,10 @@ func (a *App) replyBoxBody(c *ui.Context, pal *palette, ag client.Agent, d *ckDr
 		})
 		in.OnTextKey(func(k ui.TextKey) bool {
 			switch {
+			case k.Key == ui.KeyTab && k.Mods == ui.Shift:
+				// Back to the list, the stop before the box.
+				a.ck.fleetFocus.Focus()
+				return true
 			case k.Key == ui.KeyEnter && k.Mods == ui.Cmd && !mail && strings.TrimSpace(k.Text()) == "" && len(d.images) == 0:
 				// An empty box sends nothing: Ctrl+Enter allows, as it
 				// does in the list.
