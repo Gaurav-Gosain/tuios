@@ -639,6 +639,7 @@
   "cockpitKindQuestion": "问题",
   "cockpitStopped": "已停止 · {message}",
   "cockpitThreadEmptyLine": "还没有消息。代理的消息会显示在这里。",
+  "cockpitWaitsAtPromptShort": "提示得到回答后发送",
   "cockpitDetailBranch": "分支",
   "cockpitDetailFolder": "文件夹",
   "cockpitDetailSince": "起始",

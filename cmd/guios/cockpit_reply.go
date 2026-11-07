@@ -193,12 +193,14 @@ func (a *App) replyBoxBody(c *ui.Context, pal *palette, ag client.Agent, d *ckDr
 				a.sendAsChip(c, pal, ag, true, locales.CockpitSendAsMail())
 			})
 			ui.Spacer(c)
-			note := locales.CockpitNextTurn()
+			note, tip := locales.CockpitNextTurn(), ""
 			if r, ok := a.ckSelected(); ok && r.item != nil && !ckHeld(*r.item) && !a.ckCanReject() &&
 				(r.item.Kind == session.AttentionApproval || r.item.Kind == session.AttentionPlan) {
 				// An approval this app cannot answer: what is sent
 				// waits for the prompt on the agent's screen.
-				note = locales.CockpitWaitsAtPrompt()
+				// Short, so that it fits beside Send as; the whole
+				// sentence is its tooltip (Mac round 1, visual S7).
+				note, tip = locales.CockpitWaitsAtPromptShort(), locales.CockpitWaitsAtPrompt()
 			}
 			if mail {
 				note = locales.CockpitMailInbox(ag.Name)
@@ -206,7 +208,10 @@ func (a *App) replyBoxBody(c *ui.Context, pal *palette, ag client.Agent, d *ckDr
 					note = locales.CockpitMailReplyTo(ag.Name)
 				}
 			}
-			oneLine(c, note, fsSmall, 0).TextColor(pal.textMuted).Shrink(2)
+			nl := oneLine(c, note, fsSmall, 0).TextColor(pal.textMuted).Shrink(2)
+			if tip != "" {
+				nl.Tooltip(tip)
+			}
 		})
 		if len(d.images) > 0 {
 			ui.Row(c).Gap(8).Wrap().Children(func() {

@@ -6504,6 +6504,16 @@ func (msgs Messages) CockpitThreadEmptyLine() string {
 	return Catalog.Format(msgs.locale, "cockpitThreadEmptyLine", nil)
 }
 
+// CockpitWaitsAtPromptShort says "Sent once its prompt is answered"
+// in the language the app shows.
+func CockpitWaitsAtPromptShort() string { return In(i18n.Locale()).CockpitWaitsAtPromptShort() }
+
+// CockpitWaitsAtPromptShort says "Sent once its prompt is answered"
+// in the language of msgs.
+func (msgs Messages) CockpitWaitsAtPromptShort() string {
+	return Catalog.Format(msgs.locale, "cockpitWaitsAtPromptShort", nil)
+}
+
 // CockpitDetailBranch says "Branch"
 // in the language the app shows.
 func CockpitDetailBranch() string { return In(i18n.Locale()).CockpitDetailBranch() }

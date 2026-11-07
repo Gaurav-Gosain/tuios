@@ -1207,6 +1207,7 @@
   "cockpitKindQuestion": "Question",
   "cockpitStopped": "Stopped · {message}",
   "cockpitThreadEmptyLine": "No messages yet. The agent's messages show here.",
+  "cockpitWaitsAtPromptShort": "Sent once its prompt is answered",
   "cockpitDetailBranch": "Branch",
   "cockpitDetailFolder": "Folder",
   "cockpitDetailSince": "Since",

@@ -639,6 +639,7 @@
   "cockpitKindQuestion": "質問",
   "cockpitStopped": "停止 · {message}",
   "cockpitThreadEmptyLine": "まだメッセージはありません。エージェントのメッセージはここに表示されます。",
+  "cockpitWaitsAtPromptShort": "プロンプトに答えた後に送信",
   "cockpitDetailBranch": "ブランチ",
   "cockpitDetailFolder": "フォルダー",
   "cockpitDetailSince": "開始",
