@@ -151,3 +151,29 @@ func TestStripLeavesNoInvisibleRune(t *testing.T) {
 		}
 	}
 }
+
+// TestBlankDrawingTextIsNotPrintable: a letter that draws as a blank, a
+// default-ignorable code point, or a stack of combining marks makes text read
+// differently from what it holds. `const ㅤ = req.query.ㅤ; exec(ㅤ)`
+// is a known hidden backdoor: U+3164 is a valid identifier and draws as
+// nothing. Printable and PrintableText refuse all of them.
+func TestBlankDrawingTextIsNotPrintable(t *testing.T) {
+	for _, r := range []rune{0x3164, 0x115f, 0x1160, 0xffa0, 0x2800, 0x034f, 0x17b4, 0x17b5, 0xfffc, 0x180b, 0x1bca0, 0xe0100, 0xfff0} {
+		s := "a" + string(r) + "b"
+		if Printable(s) || PrintableText(s) {
+			t.Errorf("U+%04X passes", r)
+		}
+	}
+	stack := "e" + strings.Repeat("́", MaxMarks+1)
+	if Printable(stack) || PrintableText(stack) {
+		t.Errorf("%d combining marks on one letter pass", MaxMarks+1)
+	}
+	for _, ok := range []string{"café", "café", "Việt", "क्ष", "한글", "x := 1"} {
+		if !Printable(ok) {
+			t.Errorf("%q is refused", ok)
+		}
+	}
+	if !PrintableText("a\tb\nc") || PrintableText("a\rb") || Printable("a\tb") {
+		t.Error("PrintableText takes tab and newline only, and Printable neither")
+	}
+}

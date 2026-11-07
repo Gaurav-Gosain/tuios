@@ -241,6 +241,29 @@ type InboxApprovalDetailMsg struct {
 	Err       error
 }
 
+// inboxEditWords is what this client says on a held edit. It draws no diff,
+// so it never allows one: the person reads the edit in the pane.
+const inboxEditWords = "Review this edit in the pane. Enter opens the pane."
+
+// inboxIsEdit reports whether an item holds an edit, whose body only a client
+// that draws the diff may allow (session.AttentionItem.HeldEdit).
+func inboxIsEdit(it session.AttentionItem) bool {
+	return it.Kind == session.AttentionApproval && it.HeldEdit
+}
+
+// inboxOptions is the answers this client offers on it: the item's options,
+// less every allow on an edit. Every key, hint, button and bulk answer reads
+// this, not it.Options.
+func inboxOptions(it session.AttentionItem) []string {
+	if !inboxIsEdit(it) {
+		return it.Options
+	}
+	if slices.Contains(it.Options, session.ApprovalDeny) {
+		return []string{session.ApprovalDeny}
+	}
+	return nil
+}
+
 // inboxHeld reports whether an item is an approval or plan the Inbox holds.
 func inboxHeld(it session.AttentionItem) bool {
 	return (it.Kind == session.AttentionApproval || it.Kind == session.AttentionPlan) && it.RequestID != ""
@@ -335,7 +358,7 @@ func inboxReplyExtras(it session.AttentionItem, decision string) map[string]any 
 // or plan (n).
 func (m *OS) InboxDenyReason() (tea.Cmd, bool) {
 	it, ok := m.inboxSelected()
-	if !ok || !inboxHeld(it) || !slices.Contains(it.Options, session.ApprovalDeny) {
+	if !ok || !inboxHeld(it) || !slices.Contains(inboxOptions(it), session.ApprovalDeny) {
 		return nil, false
 	}
 	if !it.DenyMessage {

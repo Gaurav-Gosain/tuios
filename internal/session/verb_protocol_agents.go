@@ -450,7 +450,7 @@ func agentWorkVerbs() map[string]verbEntry {
 
 		// verb_approval_ext.go
 		"get-approval": {
-			description: "Read a held approval or plan whole: the summary, the tool and its target, the answers it takes, the plan text of a plan, and the risk rules its command matched with why. Served only while the hook holds it. The text is the agent's, so it is marked untrusted.",
+			description: "Read a held approval or plan whole: the summary, the tool and its target, the answers it takes, the plan text of a plan, the body of an edit, and the risk rules its command matched with why. Served only while the hook holds it. The text is the agent's, so it is marked untrusted.",
 			params: []verbParam{
 				{Name: "request_id", Type: "string", Required: true, Description: "The request_id of the Inbox item."},
 				{Name: "session", Type: "string", Description: "The session the approval is in. When given, an approval in another session is not found. From a pane without the admin grant it is the pane's own unless named."},
@@ -467,6 +467,8 @@ func agentWorkVerbs() map[string]verbEntry {
 				{Name: "always_scope", Type: "[]string", Description: "What always allows from now on."},
 				{Name: "plan", Type: "string", Description: "A plan's text, at most 32 KiB."},
 				{Name: "plan_sha", Type: "string", Description: "The digest reply-approval takes for a plan."},
+				{Name: "edit", Type: "object", Description: "A held edit's whole body: {tool, path, hunks: [{old, new, replace_all}]}. Absent for any other hold."},
+				{Name: "edit_sha", Type: "string", Description: "The digest reply-approval takes for an edit: SHA-256 of the canonical encoding in docs/protocol.md. Absent for any other hold."},
 				{Name: "risk", Type: "[]object", Description: "The risk rules matched, each with rule and why."},
 				{Name: "deny_message", Type: "bool", Description: "Whether a deny may carry a reason."},
 				{Name: "untrusted", Type: "bool", Description: "Always true: the text is the agent's."},

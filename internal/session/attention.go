@@ -259,6 +259,13 @@ type AttentionItem struct {
 	// digest an answer names so it applies only to the plan that was shown.
 	PlanLines int    `json:"plan_lines,omitempty"`
 	PlanSHA   string `json:"plan_sha,omitempty"`
+	// HeldEdit and EditLines say a hook holds an Edit, MultiEdit or Write,
+	// and how many lines its hunks hold. The body and its digest, edit_sha,
+	// which an allow must name, are served only by get-approval: the item
+	// never carries the digest, so an allow cannot be made from the item
+	// alone. A client that draws no diff shows such an item without an allow.
+	HeldEdit  bool `json:"held_edit,omitempty"`
+	EditLines int  `json:"edit_lines,omitempty"`
 	// Upgrade is set on the ask a live upgrade from a pane puts to the person
 	// (upgrade_confirm.go). A client shows it as a dialog of its own, not as
 	// an Inbox question.
@@ -481,6 +488,7 @@ func (a *attentionStore) upsertLocked(next AttentionItem) {
 				// the risk is the held call's, not the newer line's.
 				next.Kind, next.Risk, next.DenyMessage = cur.Kind, cur.Risk, cur.DenyMessage
 				next.PlanLines, next.PlanSHA = cur.PlanLines, cur.PlanSHA
+				next.HeldEdit, next.EditLines = cur.HeldEdit, cur.EditLines
 			} else {
 				a.endHoldLocked(cur.RequestID, approvalOutcome{Reason: approvalEndResolved}, false)
 			}
@@ -533,7 +541,8 @@ func attentionSame(a, b AttentionItem) bool {
 		slices.Equal(a.Options, b.Options) && slices.Equal(a.AlwaysScope, b.AlwaysScope) &&
 		a.SnoozedUntil == b.SnoozedUntil && a.MarkedUnread == b.MarkedUnread &&
 		slices.Equal(a.Risk, b.Risk) && a.DenyMessage == b.DenyMessage &&
-		a.PlanLines == b.PlanLines && a.PlanSHA == b.PlanSHA
+		a.PlanLines == b.PlanLines && a.PlanSHA == b.PlanSHA &&
+		a.HeldEdit == b.HeldEdit && a.EditLines == b.EditLines
 }
 
 // closeLocked closes the item with this id, if it is open. The caller holds mu.

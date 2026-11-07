@@ -12,11 +12,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
+	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 	"github.com/Gaurav-Gosain/tuios/internal/risk"
 )
@@ -255,6 +255,11 @@ type approvalHold struct {
 	// plan and planSHA are a plan's text and its digest. An allow of a plan
 	// must name the digest of the plan it was made from.
 	plan, planSHA string
+	// edit and editSHA are an edit's body and its digest (edit_sha). An
+	// allow of an edit must name the digest of the body it was made from.
+	// edit is nil for a call that is not an edit.
+	edit    *integration.EditBody
+	editSHA string
 	// denyMessage says the harness takes a reason with a deny.
 	denyMessage bool
 	// done receives the outcome exactly once. It is buffered, so whatever
@@ -286,7 +291,9 @@ type holdSpec struct {
 	// risk are the rules the call matched, computed before the hold opens.
 	risk []risk.Hit
 	// plan is a plan's text.
-	plan        string
+	plan string
+	// edit is an edit's body, checked by the caller (EditBody.Showable).
+	edit        *integration.EditBody
 	denyMessage bool
 }
 
@@ -337,6 +344,12 @@ func (a *attentionStore) startHold(spec holdSpec) (*approvalHold, string) {
 	}
 	if kind == AttentionPlan {
 		h.plan, h.planSHA = spec.plan, planDigest(spec.plan)
+	} else if spec.edit != nil {
+		// A copy, so nothing the caller does to its body after this changes
+		// what the hold serves or the digest it takes.
+		body := *spec.edit
+		body.Hunks = slices.Clone(spec.edit.Hunks)
+		h.edit, h.editSHA = &body, body.Digest()
 	}
 	scope := spec.scope
 	if !slices.Contains(spec.options, ApprovalAlways) {
@@ -352,6 +365,10 @@ func (a *attentionStore) startHold(spec holdSpec) (*approvalHold, string) {
 	it.PlanLines, it.PlanSHA = 0, h.planSHA
 	if kind == AttentionPlan {
 		it.PlanLines = planLineCount(h.plan)
+	}
+	it.HeldEdit, it.EditLines = h.edit != nil, 0
+	if h.edit != nil {
+		it.EditLines = h.edit.Lines()
 	}
 	it.Seq = a.rev
 	a.publish(attentionEvent(AttentionUpdated, *it))
@@ -390,6 +407,7 @@ func (a *attentionStore) endHoldLocked(requestID string, out approvalOutcome, cl
 		// reason for, so the item is the pane's approval again, marked by
 		// what its line says now.
 		it.Kind, it.DenyMessage, it.PlanLines, it.PlanSHA = AttentionApproval, false, 0, ""
+		it.HeldEdit, it.EditLines = false, 0
 		it.Risk = stickyRisk(it.Risk, risk.Names(a.riskOfLine(it.Summary, h.root, h.runDir)))
 		it.Seq = a.rev
 		a.publish(attentionEvent(AttentionUpdated, *it))
@@ -438,10 +456,18 @@ var errNoHold = errors.New("no hold")
 //
 // An allow (once or always) must also say what the person saw: a plan's
 // digest (planSHA), without which or for another plan nothing is answered and
-// the reason is changed; and for a call the risk rules matched, riskAck naming
-// exactly those rules, without which errRiskUnacknowledged is returned and
-// nothing is answered. A deny needs neither.
-func (a *attentionStore) answer(requestID, decision, message, by, shown string, riskAck []string, planSHA string) (out approvalOutcome, h approvalHold, applied bool, err error) {
+// the reason is changed; an edit's digest (editSHA), without which or for
+// another body errEditUnreviewed is returned and nothing is answered; and for
+// a call the risk rules matched, riskAck naming exactly those rules, without
+// which errRiskUnacknowledged is returned and nothing is answered. A deny
+// needs none of them.
+//
+// now is what the rules match on the call at the time of the reply
+// (recheckRisk). A rule in now that the hold did not have is added to the
+// hold and to its item before riskAck is checked, so a path that became a
+// link to somewhere else while the person read the call needs that rule
+// acknowledged too.
+func (a *attentionStore) answer(requestID, decision, message, by, shown string, riskAck []string, planSHA, editSHA string, now []risk.Hit) (out approvalOutcome, h approvalHold, applied bool, err error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	hold, ok := a.holds[requestID]
@@ -466,6 +492,10 @@ func (a *attentionStore) answer(requestID, decision, message, by, shown string, 
 		if hold.kind == AttentionPlan && planSHA != hold.planSHA {
 			return approvalOutcome{Reason: approvalEndChanged}, *hold, false, nil
 		}
+		if hold.edit != nil && (hold.editSHA == "" || editSHA != hold.editSHA) {
+			return approvalOutcome{}, *hold, false, errEditUnreviewed
+		}
+		a.addHoldRiskLocked(hold, now)
 		if len(hold.risk) > 0 && !sameRuleSet(riskAck, risk.Names(hold.risk)) {
 			return approvalOutcome{}, *hold, false, errRiskUnacknowledged
 		}
@@ -503,20 +533,13 @@ const approvalMaxScope = integration.MaxScopeLines
 
 // approvalLineShown reports whether an Inbox item can show line exactly as it
 // is: the item's own cleaning (control characters, whitespace, masking, the
-// length cut) leaves it unchanged, and every rune is a visible character or a
-// space, so no format character such as a bidi override makes it read as
+// length cut) leaves it unchanged, and it is invisible.Printable: every rune a
+// visible character or a space, none that draws as a blank, and no long stack
+// of combining marks, so no bidi override or Hangul filler makes it read as
 // something else. The hook checks the same before it asks; the daemon checks
 // again because the person answers from the item, not from the hook.
 func approvalLineShown(line string) bool {
-	if line == "" || !utf8.ValidString(line) || attentionText(line, attentionMaxSummary) != line {
-		return false
-	}
-	for _, r := range line {
-		if !unicode.IsPrint(r) || InvisibleFormatRune(r) {
-			return false
-		}
-	}
-	return true
+	return line != "" && invisible.Printable(line) && attentionText(line, attentionMaxSummary) == line
 }
 
 // approvalScopeShown reports whether always may be offered with scope: one to
@@ -567,6 +590,8 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 		Target      string `json:"target"`
 		DenyMessage bool   `json:"deny_message"`
 		Cwd         string `json:"cwd"`
+		// Edit is an edit's whole body, for an Edit, MultiEdit or Write.
+		Edit *integration.EditBody `json:"edit"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -592,6 +617,15 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 	case len(p.Target) > approvalMaxTarget:
 		return nil, invalidParam("target", "target is longer than "+strconv.Itoa(approvalMaxTarget)+" bytes")
 	}
+	if p.Edit != nil {
+		if verr := checkEditRequest(p.Edit, isPlan, p.Tool, p.Target, p.Summary); verr != nil {
+			return nil, verr
+		}
+	} else if !isPlan && fileToolCall(p.Tool, p.Summary) {
+		// Held without its body, a file tool would be allowed from its
+		// path alone.
+		return nil, invalidParam("edit", "edit is required for a file tool: an edit is only held with its whole body")
+	}
 	harnessID := canonicalHarness(p.Harness)
 	if harnessID == "" {
 		return nil, invalidParam("harness", "harness is required: the id of the harness whose prompt this is, e.g. claude-code")
@@ -611,8 +645,9 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 			return nil, invalidParam("options", "options: "+echoName(o)+" is not a decision", approvalDecisions...)
 		}
 	}
-	// Always is only offered with the rules it adds, each shown as it is.
-	if slices.Contains(options, ApprovalAlways) && !approvalScopeShown(p.Scope) {
+	// Always is only offered with the rules it adds, each shown as it is,
+	// and never for an edit: it would allow later edits nobody read.
+	if slices.Contains(options, ApprovalAlways) && (p.Edit != nil || !approvalScopeShown(p.Scope)) {
 		options = slices.DeleteFunc(slices.Clone(options), func(o string) bool { return o == ApprovalAlways })
 	}
 	sess, verr := d.resolveVerbSession(cs, p.Session)
@@ -677,6 +712,7 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 	if isPlan {
 		spec.kind, spec.plan, spec.tool, spec.target = AttentionPlan, p.Plan, "", ""
 	} else {
+		spec.edit = p.Edit
 		spec.risk = d.attention.riskOfCall(spec.tool, spec.target, summary, spec.root, spec.runDir)
 	}
 	holdFor := policy.holdFor()
@@ -741,6 +777,9 @@ func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, 
 		// plan. See answer.
 		RiskAck []string `json:"risk_ack"`
 		PlanSHA string   `json:"plan_sha"`
+		// EditSHA is the edit_sha of the body the person read, for an allow
+		// of an edit. See answer.
+		EditSHA string `json:"edit_sha"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -784,12 +823,18 @@ func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, 
 		return nil, nonceScopeError("reply-approval")
 	}
 	message := attentionText(p.Message, approvalMaxMessage)
-	out, hold, applied, err := d.attention.answer(requestID, p.Decision, message, by, p.Summary, p.RiskAck, p.PlanSHA)
+	var now []risk.Hit
+	if p.Decision == ApprovalOnce || p.Decision == ApprovalAlways {
+		now = d.attention.recheckRisk(requestID)
+	}
+	out, hold, applied, err := d.attention.answer(requestID, p.Decision, message, by, p.Summary, p.RiskAck, p.PlanSHA, p.EditSHA, now)
 	switch {
 	case errors.Is(err, errNoHold):
 		return nil, noHoldError("no approval is held under request " + echoName(requestID))
 	case errors.Is(err, errBadDecision):
 		return nil, invalidParam("decision", "this prompt does not offer "+echoName(p.Decision), append(slices.Clone(hold.options), ApprovalAsk)...)
+	case errors.Is(err, errEditUnreviewed):
+		return nil, editUnreviewedError()
 	case errors.Is(err, errRiskUnacknowledged):
 		return nil, riskUnacknowledgedError(risk.Names(hold.risk), "Nothing was answered and the hold runs on. The Inbox allows a risky call on a second press of the same key; a client that predates that answers it in the pane.")
 	}
