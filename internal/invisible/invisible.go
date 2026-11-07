@@ -116,18 +116,80 @@ func pictographic(r rune) bool {
 	return false
 }
 
-// Printable reports whether s reads on screen as it is: valid UTF-8, and
-// every rune a visible character or a plain space. A format character such as
-// a bidi override, which can make a line read differently from what it holds,
-// fails.
+// Blank reports whether r is a character Rune does not remove that still
+// draws as nothing or as a blank cell: the rest of the Unicode
+// Default_Ignorable_Code_Point set (the combining grapheme joiner, the Hangul
+// fillers, the Khmer inherent vowels, the Mongolian free variation selectors,
+// the shorthand format controls, the noncharacters U+FFF0 to U+FFF8 and the
+// whole U+E0000 to U+E0FFF block), and letters and symbols that draw as a
+// blank: the braille pattern blank and the object replacement character.
+//
+// A Hangul filler is a letter, so a program reads it as part of a name. A
+// line such as `const \u3164 = req.query.\u3164; exec(\u3164)` shows as
+// "const   = req.query. ; exec( )" while it runs whatever the request names.
+func Blank(r rune) bool {
+	switch {
+	case r < 0x34f:
+		return false
+	case r == 0x34f, r == 0x61c, r == 0x115f, r == 0x1160, r == 0x17b4, r == 0x17b5:
+		return true
+	case r >= 0x180b && r <= 0x180f:
+		return true
+	case r == 0x2800, r == 0x3164, r == 0xffa0, r == 0xfffc:
+		return true
+	case r >= 0xfff0 && r <= 0xfff8:
+		return true
+	case r >= 0x1bca0 && r <= 0x1bca3:
+		return true
+	case r >= 0x1d173 && r <= 0x1d17a:
+		return true
+	case r >= 0xe0000 && r <= 0xe0fff:
+		return true
+	}
+	return false
+}
+
+// MaxMarks is the most combining marks Printable takes on one character. Real
+// text stacks two or three (Vietnamese, Thai, Devanagari); a longer stack
+// draws over the lines around it and can hide what is under it.
+const MaxMarks = 4
+
+// Printable reports whether s reads on screen as it is: valid UTF-8, every
+// rune a visible character or a plain space, none of them blank (Blank), and
+// no character with more than MaxMarks combining marks. A format character
+// such as a bidi override, which can make a line read differently from what
+// it holds, fails.
 func Printable(s string) bool {
+	return shown(s, false)
+}
+
+// PrintableText is Printable for text of several lines: a tab and a line feed
+// are taken too. A carriage return is not, since it can draw a line over the
+// one before it.
+func PrintableText(s string) bool {
+	return shown(s, true)
+}
+
+func shown(s string, text bool) bool {
 	if !utf8.ValidString(s) {
 		return false
 	}
+	marks := 0
 	for _, r := range s {
-		if !unicode.IsPrint(r) || Rune(r) {
+		if text && (r == '\t' || r == '\n') {
+			marks = 0
+			continue
+		}
+		if !unicode.IsPrint(r) || Rune(r) || Blank(r) {
 			return false
 		}
+		if unicode.In(r, unicode.Mn, unicode.Me) {
+			if marks++; marks > MaxMarks {
+				return false
+			}
+			continue
+		}
+		marks = 0
 	}
 	return true
 }

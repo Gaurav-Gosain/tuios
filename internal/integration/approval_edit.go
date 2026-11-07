@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
@@ -139,24 +138,14 @@ func (e EditBody) Showable() bool {
 	return true
 }
 
-// editTextShown reports whether a diff can show s as it is: valid UTF-8 whose
-// runes are printable, a tab, or a newline, with no format character such as
-// a bidi override or a zero width space. U+FFFD is refused too: a JSON decoder
-// puts it where the harness sent bytes that are not UTF-8 or a lone
-// surrogate, so the diff would show a character the file does not get.
+// editTextShown reports whether a diff can show s as it is: printable text
+// with tabs and newlines (invisible.PrintableText: no format character, no
+// character that draws as a blank, no long stack of combining marks). U+FFFD
+// is refused too: a JSON decoder puts it where the harness sent bytes that
+// are not UTF-8 or a lone surrogate, so the diff would show a character the
+// file does not get.
 func editTextShown(s string) bool {
-	if !utf8.ValidString(s) {
-		return false
-	}
-	for _, r := range s {
-		if r == '\t' || r == '\n' {
-			continue
-		}
-		if r == utf8.RuneError || !unicode.IsPrint(r) || invisible.Rune(r) {
-			return false
-		}
-	}
-	return true
+	return invisible.PrintableText(s) && !strings.ContainsRune(s, utf8.RuneError)
 }
 
 // claudeEditApproval is the Approval for a Claude Code Edit, MultiEdit or

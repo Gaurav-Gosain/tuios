@@ -12,11 +12,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
+	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 	"github.com/Gaurav-Gosain/tuios/internal/risk"
 )
@@ -526,20 +526,13 @@ const approvalMaxScope = integration.MaxScopeLines
 
 // approvalLineShown reports whether an Inbox item can show line exactly as it
 // is: the item's own cleaning (control characters, whitespace, masking, the
-// length cut) leaves it unchanged, and every rune is a visible character or a
-// space, so no format character such as a bidi override makes it read as
+// length cut) leaves it unchanged, and it is invisible.Printable: every rune a
+// visible character or a space, none that draws as a blank, and no long stack
+// of combining marks, so no bidi override or Hangul filler makes it read as
 // something else. The hook checks the same before it asks; the daemon checks
 // again because the person answers from the item, not from the hook.
 func approvalLineShown(line string) bool {
-	if line == "" || !utf8.ValidString(line) || attentionText(line, attentionMaxSummary) != line {
-		return false
-	}
-	for _, r := range line {
-		if !unicode.IsPrint(r) || InvisibleFormatRune(r) {
-			return false
-		}
-	}
-	return true
+	return line != "" && invisible.Printable(line) && attentionText(line, attentionMaxSummary) == line
 }
 
 // approvalScopeShown reports whether always may be offered with scope: one to

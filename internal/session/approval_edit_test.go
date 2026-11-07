@@ -237,6 +237,7 @@ func TestEditRequestRefusals(t *testing.T) {
 		{"a carriage return", editParams(a, with(func(e *integration.EditBody) { e.Hunks[0].New = "x\r\n" }), nil)},
 		{"an escape", editParams(a, with(func(e *integration.EditBody) { e.Hunks[0].New = "\x1b[2J" }), nil)},
 		{"a bidi override", editParams(a, with(func(e *integration.EditBody) { e.Hunks[0].Old = "a\u202eb" }), nil)},
+		{"a Hangul filler", editParams(a, with(func(e *integration.EditBody) { e.Hunks[0].New = "exec(\u3164)" }), nil)},
 		{"invalid UTF-8", editParams(a, with(func(e *integration.EditBody) { e.Hunks[0].New = "\xff" }), nil)},
 		{"no hunks", editParams(a, with(func(e *integration.EditBody) { e.Hunks = nil }), nil)},
 		{"a tool that is not an edit", editParams(a, with(func(e *integration.EditBody) { e.Tool = "Read" }), map[string]any{"summary": "approve Read: notes.txt"})},
@@ -254,5 +255,21 @@ func TestEditRequestRefusals(t *testing.T) {
 		{"another harness's file tool with no body", map[string]any{"session": "work", "window": a, "harness": "claude", "summary": "approve write: a.go", "tool": "write", "target": "a.go"}},
 	} {
 		mustRefuse(t, callP(c, t, "request-approval", tc.params), ErrVerbInvalidParams, tc.why)
+	}
+}
+
+// TestApprovalLineWithABlankLetterIsNotHeld: a line whose command holds a
+// letter that draws as nothing does not read as what it runs, so it is not
+// held, edit or not.
+func TestApprovalLineWithABlankLetterIsNotHeld(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	enableRiskyApprovals(t, d, 30*time.Second, nil)
+	_, a, _ := riskSession(t, d)
+	c := dialVerb(t, sp)
+	line := "approve Bash: echo \u3164 | sh"
+	setAgentState(t, c, "work", a, "needs_input", "approval", line)
+	res := result(t, callP(c, t, "request-approval", map[string]any{"session": "work", "window": a, "harness": "claude", "summary": line, "tool": "Bash", "target": "echo \u3164 | sh"}))
+	if res["reason"] != approvalEndNotShown || res["request_id"] != "" {
+		t.Fatalf("ASSERTION: a line with U+3164 answered %v, want not_shown", res)
 	}
 }
