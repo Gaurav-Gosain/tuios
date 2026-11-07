@@ -1985,13 +1985,12 @@ type OS struct {
 	SidebarCursor           int
 	SidebarNav              []sidebarNavRow
 	SidebarRevealedForFocus bool
-	// sidebarReturn* record where the keyboard came from when the rail took it,
-	// so leaving the rail can hand that back. sidebarLastRow is the same bargain
+	// sidebarReturnWindow records the pane the keyboard came from when the rail
+	// took it, so leaving the rail can hand it back; the rail's mode lease
+	// (mode.go) hands back the mode. sidebarLastRow is the same bargain
 	// pointing the other way: the row the rail was left on, so re-entering starts
 	// where it stopped rather than back at the attached session. See
 	// sidebar_return.go.
-	sidebarReturnArmed  bool
-	sidebarReturnMode   Mode
 	sidebarReturnWindow string
 	sidebarLastRow      sidebarNavRow
 	sidebarLastRowSet   bool

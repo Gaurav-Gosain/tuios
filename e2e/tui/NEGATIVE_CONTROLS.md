@@ -14714,3 +14714,16 @@ Run on 2026-11-08 on macOS (arm64):
 | `EndPointerGesture` and `EndCtrlDrag` made to do nothing | all three | "command \"echo back-$((3+4))\" never produced \"back-7\"" | **caught** |
 
 All three pass on the parent commit and on main.
+
+## The rail as a mode lease
+
+`TestRailEscHandsBackWindowMode` (`rail_lease_mode_test.go`) opens the rail
+in window management, browses with j and k, leaves with esc, and checks `,`
+opens the settings panel. It is a guard, and it is **not** a control of the
+rail's lease. The lease saves the mode chosen when the rail opens and hands
+it back when the rail lets go. No keyboard browse in the rail makes a choice
+of mode, so the mode it hands back is always the mode already in effect, and
+a build that hands back nothing passes every test here, as does
+`TestHoldThenRailHandsBackTerminalMode`. Enter on a terminal row, the
+relocating action a test can reach, keeps the mode it began in. This is
+written down so the guard is not read as coverage of the hand-back.

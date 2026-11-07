@@ -1,6 +1,8 @@
 package app
 
 import (
+	"slices"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 )
@@ -20,8 +22,10 @@ import (
 // sees, which can be a mode another borrow took. The first lease to open saves
 // the choice beneath every borrow, and a choice made while leases are open
 // replaces it and spends them: the choice stands when they end. The mode in
-// effect is the newest unspent lease's, else the choice. The borrowers that
-// are not leases yet write through SetBorrowedMode.
+// effect is the newest unspent lease's, else the choice. The rail takes the
+// keyboard and no mode: its lease saves the choice and hands it back when it
+// ends, so esc undoes a browse. The borrowers that are not leases write
+// through SetBorrowedMode.
 //
 // Before this file, 28 sites assigned Mode directly. Some told the recorder
 // and some did not, and only the two switch methods ended nest mode. The
@@ -46,9 +50,11 @@ const (
 	ModeCauseNoPane
 	// ModeCauseAction is an action that has a mode of its own, such as a rename.
 	ModeCauseAction
+	// ModeCauseRail is the rail handing back the choice it saved.
+	ModeCauseRail
 )
 
-var modeCauseNames = [...]string{"key", "click", "tape", "recording", "restore", "no pane", "action"}
+var modeCauseNames = [...]string{"key", "click", "tape", "recording", "restore", "no pane", "action", "rail"}
 
 // modeLogNames are the names the debug log gives a choice.
 func modeLogNames(from, to Mode, cause ModeCause) (string, string, string) {
@@ -70,7 +76,12 @@ const (
 	leaseGesture
 	// leaseCtrlDrag is a committed ctrl-drag of a pane.
 	leaseCtrlDrag
+	// leaseRail is the rail holding the keyboard.
+	leaseRail
 )
+
+// modeAny is the want of a lease that takes no mode: the rail's.
+const modeAny Mode = -1
 
 // modeLease is one borrow open now.
 type modeLease struct {
@@ -79,6 +90,10 @@ type modeLease struct {
 	// spent is set by a choice made while the lease was open. A spent lease
 	// stays open until its owner ends it, but no longer sets the mode.
 	spent bool
+	// owes is set on a lease that hands back saved when it ends, whatever was
+	// chosen while it was open. Only cancelLease ends it without that.
+	owes  bool
+	saved Mode
 }
 
 // modeState is the choice beneath the leases open now. With no lease open
@@ -100,21 +115,38 @@ func (m *OS) chosenMode() Mode {
 // borrowMode opens owner's lease on want. A second lease of the same owner
 // replaces the first.
 func (m *OS) borrowMode(owner modeOwner, want Mode) {
+	m.openLease(modeLease{owner: owner, want: want})
+}
+
+// borrowKeyboard opens owner's lease on the keyboard alone. It takes no mode,
+// and hands back the choice beneath it when it ends.
+func (m *OS) borrowKeyboard(owner modeOwner) {
+	m.openLease(modeLease{owner: owner, want: modeAny, owes: true, saved: m.chosenMode()})
+}
+
+func (m *OS) openLease(lease modeLease) {
 	if len(m.mode.leases) == 0 {
 		m.mode.base = m.chosenMode()
 	}
-	m.dropLease(owner)
-	m.mode.leases = append(m.mode.leases, modeLease{owner: owner, want: want})
+	if old, had := m.takeLease(lease.owner); had && old.owes {
+		lease.saved = old.saved
+	}
+	m.mode.leases = append(m.mode.leases, lease)
 	m.settleMode()
 }
 
 // returnMode ends owner's lease. Idempotent: every path a borrow can end by
-// runs it. When the last lease ends on terminal mode with no pane in focus,
-// that is a choice of window management, the mode that can go find a pane:
-// the pane the borrow began over closed while it was open.
+// runs it. A lease that owes its saved choice hands it back. When the last
+// lease ends on terminal mode with no pane in focus, that is a choice of
+// window management, the mode that can go find a pane: the pane the borrow
+// began over closed while it was open.
 func (m *OS) returnMode(owner modeOwner) {
-	if !m.dropLease(owner) {
+	lease, had := m.takeLease(owner)
+	if !had {
 		return
+	}
+	if lease.owes {
+		m.setChoice(lease.saved, ModeCauseRail, false)
 	}
 	m.settleMode()
 	if len(m.mode.leases) == 0 && m.Mode == TerminalMode && m.GetFocusedWindow() == nil {
@@ -122,22 +154,40 @@ func (m *OS) returnMode(owner modeOwner) {
 	}
 }
 
-// dropLease removes owner's lease and reports whether it had one.
-func (m *OS) dropLease(owner modeOwner) bool {
-	for i, lease := range m.mode.leases {
+// cancelLease ends owner's lease without handing anything back: what was
+// chosen while it was open stands.
+func (m *OS) cancelLease(owner modeOwner) {
+	if _, had := m.takeLease(owner); had {
+		m.settleMode()
+	}
+}
+
+// modeLeased reports whether owner holds a lease now.
+func (m *OS) modeLeased(owner modeOwner) bool {
+	for _, lease := range m.mode.leases {
 		if lease.owner == owner {
-			m.mode.leases = append(m.mode.leases[:i], m.mode.leases[i+1:]...)
 			return true
 		}
 	}
 	return false
 }
 
+// takeLease removes owner's lease and returns it.
+func (m *OS) takeLease(owner modeOwner) (modeLease, bool) {
+	for i, lease := range m.mode.leases {
+		if lease.owner == owner {
+			m.mode.leases = append(m.mode.leases[:i], m.mode.leases[i+1:]...)
+			return lease, true
+		}
+	}
+	return modeLease{}, false
+}
+
 // settleMode sets OS.Mode to the mode in effect: the newest unspent lease's,
 // else the choice.
 func (m *OS) settleMode() {
-	for i := len(m.mode.leases) - 1; i >= 0; i-- {
-		if lease := m.mode.leases[i]; !lease.spent {
+	for _, lease := range slices.Backward(m.mode.leases) {
+		if !lease.spent && lease.want != modeAny {
 			m.Mode = lease.want
 			return
 		}
@@ -149,6 +199,13 @@ func (m *OS) settleMode() {
 // changes the mode, so a replay ends where the recording did. A choice of
 // window management ends nest mode, which is valid only in terminal mode.
 func (m *OS) ChooseMode(to Mode, cause ModeCause) {
+	m.setChoice(to, cause, true)
+}
+
+// setChoice makes to the choice. A choice spends the open leases, so it
+// stands when they end. A lease handing back its saved choice does not spend
+// the others: a hold still held keeps window management in effect.
+func (m *OS) setChoice(to Mode, cause ModeCause, spend bool) {
 	if from := m.chosenMode(); to != from {
 		if verboseLog() {
 			fromName, toName, why := modeLogNames(from, to, cause)
@@ -158,13 +215,13 @@ func (m *OS) ChooseMode(to Mode, cause ModeCause) {
 			m.TapeRecorder.RecordModeSwitch(modeCommand(to))
 		}
 	}
-	m.Mode = to
-	if len(m.mode.leases) > 0 {
-		m.mode.base = to
+	m.mode.base = to
+	if spend {
 		for i := range m.mode.leases {
 			m.mode.leases[i].spent = true
 		}
 	}
+	m.settleMode()
 	if to == WindowManagementMode && m.nest {
 		m.nest = false
 		m.MarkAllDirty()
@@ -172,8 +229,7 @@ func (m *OS) ChooseMode(to Mode, cause ModeCause) {
 }
 
 // SetBorrowedMode is the write a borrower that is not a lease makes when it
-// takes a mode and when it hands one back: the rail, and a press that grabs a
-// pane's title bar or focuses it. It is not a choice: the recorder does not
+// takes a mode: a press that grabs a pane's title bar or focuses it. It is not a choice: the recorder does not
 // hear it, and nest mode waits for the borrow to end (see settleNest). While a
 // lease is open the lease decides the mode, and its end hands back the choice
 // beneath both.
