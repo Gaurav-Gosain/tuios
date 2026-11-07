@@ -14324,3 +14324,24 @@ Run on 2026-11-07 on macOS (arm64):
 
 The esc-then-release order passes on main and with the fix, as the control.
 The fixed build passes 3 of 3.
+
+## TestCopyModeCounts
+
+The test types counts in copy mode on a line with five x: twelve nines then
+w, which must not freeze the client; 3fx, which must go to the third x; 2tx;
+9fx, which must not move with five matches; g j g, which must be j and not
+gg; 3j at once, which moves three lines; and 3, a pause past the count
+timeout, then j, which moves one.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The cap on the count and the stop when a motion does not move, as before the fix | "a count of twelve digits then w: the copy cursor never left the counts line; the client takes no keys" | **caught** |
+| The count carried into f, F, t and T | "3fx: the copy cursor is on row 10 column 39, want row 10 column 45" (the first x) | **caught** |
+| The pending g dropped by any other key | "g j g: the copy cursor is on row 10 column 31, want row 11 column 31" (it went to the top) | **caught** |
+| The count timeout | "3, a pause, then j: the copy cursor is on row 13 column 31, want row 11 column 31" | **caught** |
+
+The last screen is in `copy-mode-counts.txt` under the test's artifact folder.
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCopyModeCounts$' -v .`.
