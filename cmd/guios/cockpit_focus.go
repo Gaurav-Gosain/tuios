@@ -394,7 +394,7 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 				// "{name} asks", and how long it waits.
 				oneLine(c, locales.CockpitNameAsks(ag.Name), fsBody, wSemibold).TextColor(pal.text)
 				ui.Text(c, ago(it.Since/int64(time.Millisecond), now)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Shrink(0)
-			} else if tool, path, ok := ckAsk(it.Summary); ok && ckIsEdit(it) {
+			} else if tool, path, ok := ckAsk(it.Summary); ok && (ckIsEdit(it) || ckEditTool(tool)) {
 				// The file is the title: "Edit backoff.go", its folder in
 				// text3, and how big the change is once it is read. The
 				// full path is in the folder's tooltip.
@@ -447,7 +447,10 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 			// A question is the agent's prose, not a command: no prompt
 			// sign and no code ground (council round 1, visual 8).
 			ui.Text(c, target).FontSize(fsProse).LineHeight(22.0 / fsProse).TextColor(pal.text).MaxLines(6).Selectable()
-		} else if target != "" {
+		} else if tool, _, _ := ckAsk(it.Summary); target != "" && !ckEditTool(tool) {
+			// An edit whose hold ended keeps its title and no "$" row: a
+			// path drawn as a command reads as "run this" (Mac round 2,
+			// workflow S1).
 			// A long command keeps the card's height in bounds: six lines,
 			// its whole text in a tooltip.
 			ui.Row(c).Radius(rControl).Background(ckCodeBg(pal)).Padding(8, 12).Gap(8).Children(func() {

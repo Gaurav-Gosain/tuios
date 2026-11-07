@@ -4,6 +4,7 @@ import (
 	"log"
 	"math"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -78,6 +79,10 @@ type CkEditView struct {
 	Complete bool
 	Left     int
 }
+
+// ckEditTool reports whether tool edits a file (Edit, MultiEdit, Write):
+// its target is a path, never a command.
+func ckEditTool(tool string) bool { return slices.Contains(integration.EditTools, tool) }
 
 // ckIsEdit reports whether an item is a held edit.
 func ckIsEdit(it session.AttentionItem) bool {
