@@ -3689,6 +3689,7 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 	}
 	state.BaseVersion = 0
 
+	debugLogTreeChange("push from "+origin, state.Version, debugTreeKeys(prev), state)
 	before := snapshotLifecycle(prev)
 	if prev != nil && !focusViewOf(prev).sameFocus(focusViewOf(state)) {
 		if s.clientFocusMoved == nil {
@@ -3866,6 +3867,7 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 
 	before := snapshotLifecycle(s.state)
 	focusBefore := focusViewOf(s.state)
+	treesBefore := debugTreeKeys(s.state)
 	s.focusIntent, s.focusNeutral, s.focusAskedBy = false, false, ""
 	if err := fn(s.state); err != nil {
 		s.focusIntent, s.focusNeutral, s.focusAskedBy = false, false, ""
@@ -3883,6 +3885,7 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 	// this point is reconciled by UpdateState rather than winning by arriving
 	// last.
 	s.state.Version++
+	debugLogTreeChange("mutation", s.state.Version, treesBefore, s.state)
 	if !s.focusNeutral && (s.focusIntent || !focusBefore.sameFocus(focusViewOf(s.state))) {
 		if s.focusAskedBy != "" {
 			if s.askedFocusMoved == nil {
