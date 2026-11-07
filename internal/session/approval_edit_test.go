@@ -236,7 +236,7 @@ func TestEditRequestRefusals(t *testing.T) {
 		{"a body over the bound", editParams(a, with(func(e *integration.EditBody) { e.Hunks[0].New = big }), nil)},
 		{"a carriage return", editParams(a, with(func(e *integration.EditBody) { e.Hunks[0].New = "x\r\n" }), nil)},
 		{"an escape", editParams(a, with(func(e *integration.EditBody) { e.Hunks[0].New = "\x1b[2J" }), nil)},
-		{"a bidi override", editParams(a, with(func(e *integration.EditBody) { e.Hunks[0].Old = "a‮b" }), nil)},
+		{"a bidi override", editParams(a, with(func(e *integration.EditBody) { e.Hunks[0].Old = "a\u202eb" }), nil)},
 		{"invalid UTF-8", editParams(a, with(func(e *integration.EditBody) { e.Hunks[0].New = "\xff" }), nil)},
 		{"no hunks", editParams(a, with(func(e *integration.EditBody) { e.Hunks = nil }), nil)},
 		{"a tool that is not an edit", editParams(a, with(func(e *integration.EditBody) { e.Tool = "Read" }), map[string]any{"summary": "approve Read: notes.txt"})},

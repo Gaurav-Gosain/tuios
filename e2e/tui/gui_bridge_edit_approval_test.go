@@ -40,7 +40,12 @@ type editBody struct {
 func editDigest(e editBody) string {
 	var b strings.Builder
 	b.WriteString("tuios-edit-v1\n")
-	field := func(s string) { b.WriteString(strconv.Itoa(len(s)) + ":" + s + ",") }
+	field := func(s string) {
+		b.WriteString(strconv.Itoa(len(s)))
+		b.WriteByte(':')
+		b.WriteString(s)
+		b.WriteByte(',')
+	}
 	field(e.Tool)
 	field(e.Path)
 	field(strconv.Itoa(len(e.Hunks)))

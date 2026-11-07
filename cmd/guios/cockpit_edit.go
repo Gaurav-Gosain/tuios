@@ -32,9 +32,9 @@ type ckEdit struct {
 	requestID string
 	// sha is the item's edit_sha the fetch was for.
 	sha     string
-	loading bool
+	loading bool //nolint:unused // the edit card (pane d1) calls it; see the file comment
 	body    *integration.EditBody
-	err     string
+	err     string //nolint:unused // the edit card (pane d1) calls it; see the file comment
 	// drawn says the card drew body whole. Only then may an allow go.
 	drawn bool
 }
@@ -59,7 +59,7 @@ func ckIsEdit(it session.AttentionItem) bool {
 // ckEditView is the held edit it as the card should draw it, and starts the
 // fetch the first time it is asked about a hold. It must be called on the UI
 // goroutine.
-func (a *App) ckEditView(it session.AttentionItem) CkEditView {
+func (a *App) ckEditView(it session.AttentionItem) CkEditView { //nolint:unused // the edit card (pane d1) calls it; see the file comment
 	if !ckIsEdit(it) {
 		return CkEditView{Err: "not a held edit"}
 	}
@@ -80,7 +80,7 @@ func (a *App) ckEditView(it session.AttentionItem) CkEditView {
 // ckEditDrawn records that the card drew the body of it whose digest is sha,
 // whole: every hunk, nothing clipped. It is the one call that lets an allow
 // of the edit go. A sha that is not the fetched body's is ignored.
-func (a *App) ckEditDrawn(it session.AttentionItem, sha string) {
+func (a *App) ckEditDrawn(it session.AttentionItem, sha string) { //nolint:unused // the edit card (pane d1) calls it; see the file comment
 	if e := a.ck.edit; e != nil && e.body != nil && e.requestID == it.RequestID && e.sha == it.EditSHA && sha == e.sha {
 		e.drawn = true
 	}
@@ -100,7 +100,7 @@ func (a *App) ckEditAllowSHA(it session.AttentionItem) (string, bool) {
 // ckFetchEdit reads the body of a held edit with get-approval. The body is
 // kept only when its digest is the item's edit_sha, so the card never draws
 // a body the allow would not name.
-func (a *App) ckFetchEdit(it session.AttentionItem) {
+func (a *App) ckFetchEdit(it session.AttentionItem) { //nolint:unused // the edit card (pane d1) calls it; see the file comment
 	e := &ckEdit{requestID: it.RequestID, sha: it.EditSHA, loading: true}
 	a.ck.edit = e
 	cl := a.cockpitClient()
