@@ -7,6 +7,8 @@ import (
 
 	"github.com/Gaurav-Gosain/mygo/ui"
 
+	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
+
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 )
 
@@ -45,7 +47,13 @@ func (a *App) cockpitSide(c *ui.Context, pal *palette) {
 				row(locales.CockpitDetailBranch(), gitShort(g))
 			}
 		}
-		row(locales.CockpitDetailFolder(), ag.Cwd)
+		// The folder as the header writes it, from home (Mac round 2,
+		// visual S3).
+		folder := ag.Cwd
+		if ag.Host == "" {
+			folder = proto.ShortDir(folder)
+		}
+		row(locales.CockpitDetailFolder(), folder)
 		if ag.StateAt > 0 {
 			row(locales.CockpitDetailSince(), time.Unix(0, ag.StateAt).Format("15:04"))
 		}
