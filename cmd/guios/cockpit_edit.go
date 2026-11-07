@@ -42,12 +42,12 @@ type ckEdit struct {
 	// sha is the edit_sha get-approval served with body, checked against
 	// the body's own digest.
 	sha     string
-	loading bool
+	loading bool //nolint:unused // read by ckEditView, which the edit card (pane d1) calls
 	body    *integration.EditBody
-	err     string
+	err     string //nolint:unused // read by ckEditView, which the edit card (pane d1) calls
 	// lines and review are the body drawn at review's width, and which of
 	// those lines the card reported as shown.
-	lines  []editreview.Line
+	lines  []editreview.Line //nolint:unused // read by ckEditView, which the edit card (pane d1) calls
 	review *editreview.Review
 }
 

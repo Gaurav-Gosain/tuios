@@ -32,7 +32,8 @@ func TestEveryLineFitsTheWidth(t *testing.T) {
 		if strings.ContainsAny(l.Text, "\t\r\n") {
 			t.Fatalf("line %d holds a tab or a line break: %q", i, l.Text)
 		}
-		text.WriteString(l.Text + "\n")
+		text.WriteString(l.Text)
+		text.WriteByte('\n')
 	}
 	all := text.String()
 	if strings.Count(all, "x") < 32<<10-10 {
