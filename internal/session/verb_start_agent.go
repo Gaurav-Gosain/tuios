@@ -58,6 +58,7 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		Task         string            `json:"task"`
 		HumanNonce   string            `json:"human_nonce"`
 		Parent       string            `json:"parent"`
+		launchChoice
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -105,7 +106,10 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	var launch agentLaunch
 	resolveAgent := func() *verbError {
 		var verr *verbError
-		launch, verr = d.resolveAgentLaunch("agent", p.Agent, pathList)
+		if launch, verr = d.resolveAgentLaunch("agent", p.Agent, pathList); verr != nil {
+			return verr
+		}
+		launch, verr = d.withChoice(launch, p.launchChoice)
 		return verr
 	}
 

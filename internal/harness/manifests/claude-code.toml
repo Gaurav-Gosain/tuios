@@ -373,3 +373,21 @@ keep_source  = "claude --help, Claude Code 2.1.312"
 # warning and is never typed automatically. From claude --help: "Bypass all
 # permission checks", and the bypassPermissions permission mode.
 keep_risky   = ["--dangerously-skip-permissions", "--allow-dangerously-skip-permissions", "--permission-mode=bypassPermissions"]
+
+# What a new agent can be started with: the model, the effort and the
+# permission mode, as the New agent sheet and start-agent --model --effort
+# --permission-mode pass them. A model outside the list is passed too, as
+# one word. No permission flag is the person's own settings.
+[launch]
+model_flag        = "--model"
+models            = ["fable", "opus", "sonnet"]
+effort_flag       = "--effort"
+efforts           = ["low", "medium", "high", "xhigh", "max"]
+permission_flag   = "--permission-mode"
+permissions       = ["manual", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"]
+risky_permissions = ["bypassPermissions"]
+# claude auth status prints JSON with "loggedIn": true when signed in. Only
+# the match is kept: the output also holds the account's email.
+signed_in_args    = ["auth", "status", "--json"]
+signed_in_match   = '"loggedIn":\s*true'
+source            = "claude --help and claude auth status --help, Claude Code 2.1.319"

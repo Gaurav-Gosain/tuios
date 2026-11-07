@@ -3660,6 +3660,33 @@ keep_source  = "myagent --help"
 A kept name is `-` or `--` and then letters, digits and `_ . / : + -`. A
 manifest that lists its own resume flag fails to load.
 
+### Starting with a model, an effort and a permission mode
+
+`[launch]` names the flags a new agent of the harness takes for the choices
+the New agent sheet and `tuios start-agent --model --effort
+--permission-mode` offer, and how to ask the harness whether it is signed in:
+
+```toml
+[launch]
+model_flag        = "--model"
+models            = ["opus", "sonnet"]   # suggestions; another one word is passed too
+effort_flag       = "--effort"
+efforts           = ["low", "medium", "high"]
+permission_flag   = "--permission-mode"
+permissions       = ["manual", "plan", "bypassPermissions"]
+risky_permissions = ["bypassPermissions"]  # shown with a warning, never chosen for you
+default_permission = ""                    # a mode that needs no flag, if any
+signed_in_args    = ["auth", "status", "--json"]
+signed_in_match   = '"loggedIn":\s*true'
+source            = "myagent --help"
+```
+
+A harness with no flag for a choice refuses it by name: tuios never guesses a
+flag. `signed_in_args` run on the harness's own program, never on a program
+the manifest names, for at most 2 seconds, and the answer is kept a minute.
+The output is matched and dropped. The `agent-readiness` verb answers with
+it, per machine: installed, and signed in yes, no or unknown.
+
 ## Harness integrations
 
 A harness with a hooks system reports its own state, which outranks everything

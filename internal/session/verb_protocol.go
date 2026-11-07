@@ -841,6 +841,9 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "task", Type: "string", Description: "A task card the fan works on, such as t3. The card gets the fan's group and fan_id, and moves from todo or plan to doing. It keeps no holder, since the fan's attempts work on it, and claim-task next skips it while the fan has a session. A fan check and the attempts' pull requests then move it (see [tasks] auto_stage). The caller needs what claim-task needs, and the card must be held by no pane but the caller's, not blocked and not done, checked before anything is made."},
 				{Name: "task_session", Type: "string", Description: "The session of task. Omit for the caller's own session, or outside every pane the most recently active one."},
 				{Name: "human_nonce", Type: "string", Description: "With task: the attached client's nonce, so the stamp is the person's (by human)."},
+				{Name: "model", Type: "string", Description: "The model for every agent, passed with the flag each harness's manifest names ([launch] model_flag). Refused when one of the agents takes no model flag."},
+				{Name: "effort", Type: "string", Description: "The effort for every agent, one of each harness's [launch] efforts."},
+				{Name: "permission_mode", Type: "string", Description: "The permission mode for every agent, one of each harness's [launch] permissions. From an agent pane it is held to the caller's own mode."},
 				grantsParam,
 			}, slices.Concat(setupParams, repoSourceParams)...),
 			returns: []verbParam{
@@ -922,6 +925,9 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "task", Type: "string", Description: "A task card of the session, such as t3, for the new pane to work on: it is claimed for the pane as soon as the pane exists, before the wait. The caller needs what claim-task needs, and the card must be held by no pane, not blocked and not done, checked before anything is started. The session must exist already."},
 				{Name: "human_nonce", Type: "string", Description: "With task: the attached client's nonce, so the claim is the person's (by human)."},
 				{Name: "parent", Type: "string", Description: "The agent pane the new agent reports to, by window id or a unique start of it. Omit it from an agent pane: that pane is the parent. A pane may name itself or a pane it could type into, and the person may name any agent pane. A chain of agents stops at 8: a deeper start is refused."},
+				{Name: "model", Type: "string", Description: "The model, passed with the flag the harness's manifest names ([launch] model_flag). One word, not starting with -. Refused for a harness with no model flag."},
+				{Name: "effort", Type: "string", Description: "The effort, one of the harness's [launch] efforts, passed with its effort flag. Refused for a harness with no effort flag."},
+				{Name: "permission_mode", Type: "string", Description: "The permission mode, one of the harness's [launch] permissions, passed with its permission flag. From an agent pane it is held to the caller's own mode. Refused for a harness with no permission flag."},
 				grantsParam,
 			}, repoSourceParams...),
 			returns: []verbParam{
@@ -957,6 +963,23 @@ func buildVerbRegistry() map[string]verbEntry {
 				`{"id":1,"verb":"start-agent","params":{"session":"work","agent":"opencode acp","protocol":"acp","name":"helper","cwd":"/src/api","prompt":"Summarise the open TODOs."}}`,
 			},
 			handler: (*Daemon).verbStartAgent,
+		},
+		"agent-readiness": {
+			scope:       scopeLaunch,
+			link:        needOpen,
+			description: "Say for each harness whether it can start an agent on this machine: its program on the PATH, and for a harness whose manifest names a check ([launch] signed_in_args), whether it says it is signed in. The check runs the harness's own program, is bounded to 2 seconds, and its answer is kept for a minute; its output is matched and dropped.",
+			params: []verbParam{
+				{Name: "harnesses", Type: "[]string", Description: "Harness ids to answer for. Omit for every harness the registry knows."},
+				{Name: "env", Type: "object", Description: "PATH in it is where the programs are looked up, as for start-agent. Refused from another machine."},
+			},
+			returns: []verbParam{
+				{Name: "agents", Type: "[]object", Description: "One per harness, by id: harness, name, command, installed, and signed_in (yes, no or unknown; absent for a harness with no check)."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"agent-readiness","params":{}}`,
+				`{"id":1,"verb":"agent-readiness","params":{"harnesses":["claude-code","codex"]}}`,
+			},
+			handler: (*Daemon).verbAgentReadiness,
 		},
 		"delegate": {
 			scope:       scopeLaunch,

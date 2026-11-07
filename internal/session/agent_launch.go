@@ -4,10 +4,12 @@ import (
 	"errors"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
@@ -439,4 +441,44 @@ func (d *Daemon) typePromptGated(sess *Session, windowID string, pastes []string
 		return PromptStalled, "The prompt was typed and Enter was sent, and the agent showed no sign of taking it within " + stall.String() + ". Look at the pane before sending it again: it may be in the input box, waiting for Enter.", at.UnixNano(), gate
 	}
 	return PromptSent, "", at.UnixNano(), gate
+}
+
+// launchChoice is the model, effort and permission mode a start-agent or fan
+// caller chose, as verb params.
+type launchChoice struct {
+	Model          string `json:"model"`
+	Effort         string `json:"effort"`
+	PermissionMode string `json:"permission_mode"`
+}
+
+// withChoice adds the flags of c after l's program, the flags its harness's
+// manifest names for each choice ([launch] in the manifest). A choice the
+// harness cannot take is refused by its param, before anything starts: a
+// guessed --model is how a model reached a harness that reads it as a
+// prompt. The flags go before the caller's own args and before the child
+// clamp, which reads the permission mode off the argv.
+func (d *Daemon) withChoice(l agentLaunch, c launchChoice) (agentLaunch, *verbError) {
+	var m *harness.Manifest
+	if reg := d.agentMatcher.registry; reg != nil && l.harness != "" {
+		m = reg.Lookup(l.harness)
+	}
+	var extra []string
+	for _, one := range []struct {
+		param string
+		c     harness.LaunchChoice
+	}{
+		{"model", harness.LaunchChoice{Model: c.Model}},
+		{"effort", harness.LaunchChoice{Effort: c.Effort}},
+		{"permission_mode", harness.LaunchChoice{Permission: c.PermissionMode}},
+	} {
+		args, err := harness.LaunchArgs(m, one.c)
+		if err != nil {
+			return l, invalidParam(one.param, err.Error())
+		}
+		extra = append(extra, args...)
+	}
+	if len(extra) > 0 {
+		l.argv = append(slices.Clip(l.argv), extra...)
+	}
+	return l, nil
 }

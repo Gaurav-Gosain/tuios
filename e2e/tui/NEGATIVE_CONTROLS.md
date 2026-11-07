@@ -13949,3 +13949,23 @@ Run on 2026-11-07 on macOS (arm64), each control its own binary:
 Frames are under the test's artifact folder (`reply-closed`, `reply-placeholder`,
 `reply-draft`, `new-agent`). Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAgentsViewTextMeetsItsFloor$' -v .`.
+
+## start-agent passes the harness's model, effort and permission flags
+
+`TestStartAgentLaunchChoiceAndReadiness` starts a fake `claude` with
+`--model opus --effort high --permission-mode plan -- --verbose` and reads the
+argv it ran with. It also checks three refusals (an effort claude does not
+list, a model that is a flag, a model for a program no manifest knows) open no
+pane, and asks `agent-readiness` for a signed-in, a signed-out, a missing and
+a hanging claude.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The whole change (the build before it) | `agent-readiness: exit status 1`, `unknown_verb` | **caught** |
+| `withChoice` adding no flags to the argv | "the agent started with argv \"--verbose\\n\", want \"--model\\nopus\\n--effort\\nhigh\\n--permission-mode\\nplan\\n--verbose\\n\"" | **caught** |
+
+The argv is saved as `start-agent-argv.txt` under the test's artifact folder.
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestStartAgentLaunchChoiceAndReadiness$' -v .`.

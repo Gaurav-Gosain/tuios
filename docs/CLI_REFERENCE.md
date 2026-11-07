@@ -1113,8 +1113,17 @@ is ready for a prompt.
 
 **Usage:**
 ```bash
-tuios start-agent <agent> [-s [<host>:]<session>] [--name <name>] [--cwd <dir> | --repo <dir> | --clone] [--workspace <n>] [--focus] [--prompt <prompt>] [--ready-timeout <ms>] [--protocol acp|codex] [--env NAME[=VALUE]]... [--grants <grant>[,<grant>...]] [--task <id>] [--json] [-- <args>...]
+tuios start-agent <agent> [-s [<host>:]<session>] [--name <name>] [--cwd <dir> | --repo <dir> | --clone] [--workspace <n>] [--focus] [--prompt <prompt>] [--ready-timeout <ms>] [--protocol acp|codex] [--env NAME[=VALUE]]... [--grants <grant>[,<grant>...]] [--task <id>] [--model <model>] [--effort <level>] [--permission-mode <mode>] [--json] [-- <args>...]
 ```
+
+`--model`, `--effort` and `--permission-mode` pass the harness's own flags for
+them, as the `[launch]` table of its manifest names them. For Claude Code they
+are `--model`, `--effort` (`low`, `medium`, `high`, `xhigh`, `max`) and
+`--permission-mode` (`manual`, `acceptEdits`, `plan`, `auto`, `dontAsk`,
+`bypassPermissions`). A harness with no such flag refuses the option, and a
+value it does not list is refused with the ones it takes, before anything
+starts. A model is one word that does not start with `-`. Started from an
+agent pane, the permission mode is held to that agent's own.
 
 `--task` claims a task card of the session for the new pane as soon as the
 pane exists. The card must be held by no pane, not blocked and not done, and
@@ -1131,6 +1140,7 @@ from a pane without `admin`, that pane's own grants.
 tuios start-agent claude --name reviewer
 tuios ask-agent -w reviewer 'review the diff on this branch'
 tuios start-agent 'codex --model o5' --name tests --prompt 'Run the tests and fix what fails.'
+tuios start-agent claude --model opus --effort high --permission-mode plan
 ```
 
 `<agent>` is written as for `fan`. The command waits until the agent shows it

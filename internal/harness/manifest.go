@@ -52,6 +52,9 @@ type Manifest struct {
 	Input Input `toml:"input"`
 	// Resume is how a conversation of the harness is reopened. See Resume.
 	Resume Resume `toml:"resume"`
+	// Launch is the model, effort and permission flags a new agent of the
+	// harness takes, and how to ask it whether it is signed in. See Launch.
+	Launch Launch `toml:"launch"`
 	// Box says what the input box reads with nothing typed in it, so a
 	// queued message waits while the person has a draft there. See draft.go.
 	Box BoxRule `toml:"prompt_box"`
@@ -395,6 +398,9 @@ func parseManifest(name string, data []byte) (*Manifest, error) {
 	}
 	if err := m.Resume.normalize(); err != nil {
 		return nil, errfmt.Errorf("%s: manifest %q resume: %w", name, m.ID, err)
+	}
+	if err := m.Launch.normalize(); err != nil {
+		return nil, errfmt.Errorf("%s: manifest %q launch: %w", name, m.ID, err)
 	}
 	if err := m.Box.check(m.Screen.Lines, m.Screen.Enabled); err != nil {
 		return nil, errfmt.Errorf("%s: manifest %q prompt_box: %w", name, m.ID, err)

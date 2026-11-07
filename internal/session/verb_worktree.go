@@ -857,6 +857,7 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 		TaskSession  string            `json:"task_session"`
 		HumanNonce   string            `json:"human_nonce"`
 		setupParam
+		launchChoice
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -938,6 +939,9 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 				param = "agents"
 			}
 			if launches[i], verr = d.resolveAgentLaunch(param, spec, pathList); verr != nil {
+				return verr
+			}
+			if launches[i], verr = d.withChoice(launches[i], p.launchChoice); verr != nil {
 				return verr
 			}
 			// Each agent's permission mode is held to the calling agent's
