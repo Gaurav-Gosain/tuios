@@ -363,6 +363,10 @@ func handlePrefixFullscreen(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handlePrefixSelection(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	// Over the agents view, copy mode runs on the thread.
+	if o.ShowInbox && o.CockpitCopyStart() {
+		return o, nil
+	}
 	// Multi copy mode when the focused pane is in a multifocus set of two or
 	// more panes; plain copy mode otherwise. See EnterCopyModeFocused.
 	o.EnterCopyModeFocused()

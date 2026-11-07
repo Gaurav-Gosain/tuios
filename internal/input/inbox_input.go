@@ -29,6 +29,10 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.InboxPopSettling() {
 		return o, nil
 	}
+	// Copy mode over the thread takes every key, as it does over a pane.
+	if o.CockpitCopyOn() {
+		return handleCockpitCopyKey(msg, o)
+	}
 	// The global keys (the palette, the launcher) act over the view and
 	// over every sheet and field in it, and open on top of it. A plain
 	// character stays the view's: it is a list key, or text in a field. The
