@@ -55,9 +55,9 @@ type WindowRect struct {
 	Floating *bool  `json:"floating,omitempty"`
 }
 
-// layoutStateOf is the workspace's layout besides its tree, as layout-tree
-// reports it.
-func layoutStateOf(sess *Session, state *SessionState, ws int) map[string]any {
+// layoutStateOf fills in the workspace's layout besides its tree, as
+// layout-tree reports it.
+func layoutStateOf(out *layoutTreeReply, sess *Session, state *SessionState, ws int) {
 	mode := state.WorkspaceLayoutModes[ws]
 	if mode == "" {
 		mode = state.LayoutMode
@@ -106,16 +106,9 @@ func layoutStateOf(sess *Session, state *SessionState, ws int) map[string]any {
 			}
 		}
 	}
-	return map[string]any{
-		"z":        z,
-		"unplaced": unplaced,
-		"mode":     mode,
-		"tiling":   state.AutoTiling,
-		"box":      map[string]int{"x": r.Left, "y": r.Top, "w": max(w-r.Left-r.Right, 0), "h": max(h-r.Top-r.Bottom, 0)},
-		"gap":      gap,
-		"master":   master,
-		"scroll":   scroll,
-	}
+	out.Z, out.Unplaced, out.Mode, out.Tiling = z, unplaced, mode, state.AutoTiling
+	out.Box = layoutBox{X: r.Left, Y: r.Top, W: max(w-r.Left-r.Right, 0), H: max(h-r.Top-r.Bottom, 0)}
+	out.Gap, out.Master, out.Scroll = gap, master, scroll
 }
 
 // verbSetLayoutState answers set-layout-state.

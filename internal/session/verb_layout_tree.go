@@ -2,7 +2,6 @@ package session
 
 import (
 	"encoding/json"
-	"maps"
 	"strconv"
 )
 
@@ -47,17 +46,45 @@ func (d *Daemon) verbLayoutTree(cs *connState, params json.RawMessage) (any, *ve
 	for i := range state.Windows {
 		workspaces[state.Windows[i].ID] = state.Windows[i].Workspace
 	}
-	out := map[string]any{
-		"type":       "layout_tree",
-		"session":    sess.Name(),
-		"workspace":  ws,
-		"version":    state.Version,
-		"tree":       tree,
-		"leaves":     leaves,
-		"workspaces": workspaces,
+	out := &layoutTreeReply{
+		Type:       "layout_tree",
+		Session:    sess.Name(),
+		Workspace:  ws,
+		Version:    state.Version,
+		Tree:       tree,
+		Leaves:     leaves,
+		Workspaces: workspaces,
 	}
-	maps.Copy(out, layoutStateOf(sess, state, ws))
+	layoutStateOf(out, sess, state, ws)
 	return out, nil
+}
+
+// layoutTreeReply is the answer to layout-tree. The fields are in the order
+// of their keys, so the JSON reads as a map of them would.
+type layoutTreeReply struct {
+	Box        layoutBox          `json:"box"`
+	Gap        int                `json:"gap"`
+	Leaves     map[string]string  `json:"leaves"`
+	Master     map[string]any     `json:"master"`
+	Mode       string             `json:"mode"`
+	Scroll     map[string]any     `json:"scroll"`
+	Session    string             `json:"session"`
+	Tiling     bool               `json:"tiling"`
+	Tree       *SerializedBSPTree `json:"tree"`
+	Type       string             `json:"type"`
+	Unplaced   []string           `json:"unplaced"`
+	Version    int                `json:"version"`
+	Workspace  int                `json:"workspace"`
+	Workspaces map[string]int     `json:"workspaces"`
+	Z          map[string]int     `json:"z"`
+}
+
+// layoutBox is the cells the panes are laid out in.
+type layoutBox struct {
+	H int `json:"h"`
+	W int `json:"w"`
+	X int `json:"x"`
+	Y int `json:"y"`
 }
 
 // verbSetLayoutTree answers set-layout-tree.
