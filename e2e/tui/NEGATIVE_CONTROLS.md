@@ -15180,3 +15180,22 @@ Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
 |---------|---------------------|--------|
 | main at 6db1de3ed | "config apply does not say the hook changed", "list-hooks does not show the hook after config apply" | **caught** |
 | The file-change check cut from `reloadHooks` (a file change arms any hook) | "a file change armed a new hook with no config apply" | **caught** |
+
+## TestTaskCaptureLateAnswerKeepsTheNextSheet
+
+State machine plan N3. The capture sheet files a card with ctrl+enter, and a
+fake claude waits eight seconds before it is ready, so the start-agent answer
+comes late. The sheet is opened again before that answer: it must be a new,
+empty sheet, enter on it must add no card and say to write the task, the next
+key must clear that notice, and the late answer must leave the sheet open with
+the text typed in it. The cards are read back from the daemon.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (95b2da88d), where the reopened sheet is the filed draft and the answer closes whatever sheet is up | "the second sheet offers the filed draft again", "the first card's answer closed the sheet the person types in", "home holds the cards [\"t1 First task\" \"t2 First task\"]" | **caught** |
+| The branch without the notice clearing in TaskCaptureKey | "the sheet still says \"Write the task first.\" after the task was typed" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskCaptureLateAnswerKeepsTheNextSheet$' -v .`.

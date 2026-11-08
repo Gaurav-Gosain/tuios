@@ -2068,7 +2068,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case tcFiledMsg:
-		m.applyTCFiled(msg)
+		return m, m.applyTCFiled(msg)
+
+	case tcStartedMsg:
+		m.applyTCStarted(msg)
 		return m, nil
 
 	case machineSheetMsg:

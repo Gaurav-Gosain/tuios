@@ -29,6 +29,12 @@ import (
 // An image goes to the card's session's file store, which lives as long as
 // the session does.
 //
+// A file is two calls. While add-task is out the draft waits in tcFiling and
+// the sheet does not open, so a refusal can give the draft back and the
+// draft cannot file twice. Once the card is added the draft is done: the
+// next open is a new sheet, and the start-agent answer, which can take
+// minutes, is a toast that touches no sheet.
+//
 // The card goes to the current session. The first pill is its project: the
 // repository of the focused pane's folder, by its origin URL, so the card
 // shows on that repository's board in every session and on linked machines;
@@ -84,7 +90,8 @@ type taskCapture struct {
 	machines []string
 	machine  int
 	notice   string
-	busy     bool
+	// gen is the opening the sheet is in, from OS.tcOpenGen.
+	gen uint64
 }
 
 // tcMachineValues are the Machine pill's values: this machine first, the
@@ -132,6 +139,10 @@ func (m *OS) OpenTaskCapture() tea.Cmd {
 	if m.TaskCaptureOpen() {
 		return nil
 	}
+	if m.tcFiling != nil {
+		m.ShowNotification("The last card is still being added. Open the sheet again in a moment.", "info", m.Settings.NotificationDuration)
+		return nil
+	}
 	if m.SessionName == "" {
 		m.ShowNotification("A task card needs a session. Start tuios with a daemon.", "warning", m.Settings.NotificationDuration)
 		return nil
@@ -141,7 +152,8 @@ func (m *OS) OpenTaskCapture() tea.Cmd {
 		s = &taskCapture{ed: composer.New(composer.Options{MaxRows: tcTaskRows, Placeholder: "What is the task? The first line is its title.", Images: true})}
 	}
 	m.taskCapture, m.taskCaptureClosed = s, false
-	s.field, s.notice, s.busy = tcTask, "", false
+	m.tcOpenGen++
+	s.field, s.notice, s.gen = tcTask, "", m.tcOpenGen
 	s.ed.SetPreviewer(m.replyPreviewer())
 	c := m.newReplyMentions("", "")
 	if !m.BrowserClient && (!m.RemoteClient || m.SSHIsLoopback) {
@@ -159,31 +171,43 @@ func (m *OS) OpenTaskCapture() tea.Cmd {
 	if i := slices.Index(s.machines, picked); i >= 0 && s.machines != nil && picked != "" {
 		s.machine = i
 	}
-	return tea.Batch(tcAgentsCmd(), tcProjectCmd(c.dir))
+	return tea.Batch(tcAgentsCmd(s.gen), tcProjectCmd(s.gen, c.dir))
+}
+
+// tcOpening is the sheet of opening gen, or nil when the sheet was opened
+// again since, or filed.
+func (m *OS) tcOpening(gen uint64) *taskCapture {
+	if s := m.taskCapture; s != nil && s.gen == gen {
+		return s
+	}
+	return nil
 }
 
 // tcProjectMsg carries the origin URL of the folder the sheet opened in,
 // read off the update loop.
-type tcProjectMsg struct{ url string }
+type tcProjectMsg struct {
+	gen uint64
+	url string
+}
 
 // tcProjectCmd reads dir's origin URL. A folder on no machine this client
 // can read (a remote client) has none.
-func tcProjectCmd(dir string) tea.Cmd {
+func tcProjectCmd(gen uint64, dir string) tea.Cmd {
 	if dir == "" {
 		return nil
 	}
 	return func() tea.Msg {
 		url, err := worktree.OriginURL(dir)
 		if err != nil || worktree.NormalizeRemote(url) == "" || strings.HasPrefix(worktree.NormalizeRemote(url), "file:") {
-			return tcProjectMsg{}
+			return tcProjectMsg{gen: gen}
 		}
-		return tcProjectMsg{url: url}
+		return tcProjectMsg{gen: gen, url: url}
 	}
 }
 
 // applyTCProject takes the folder's project.
 func (m *OS) applyTCProject(msg tcProjectMsg) {
-	if s := m.taskCapture; s != nil {
+	if s := m.tcOpening(msg.gen); s != nil {
 		s.project = msg.url
 	}
 }
@@ -202,9 +226,12 @@ func (s *taskCapture) projectLabel() string {
 }
 
 // tcAgentsMsg carries the installed harnesses, read off the update loop.
-type tcAgentsMsg struct{ agents []spawnAgent }
+type tcAgentsMsg struct {
+	gen    uint64
+	agents []spawnAgent
+}
 
-func tcAgentsCmd() tea.Cmd {
+func tcAgentsCmd(gen uint64) tea.Cmd {
 	return func() tea.Msg {
 		info := spawnInfoCmd(0, "")().(spawnInfoMsg)
 		var out []spawnAgent
@@ -213,13 +240,13 @@ func tcAgentsCmd() tea.Cmd {
 				out = append(out, a)
 			}
 		}
-		return tcAgentsMsg{agents: out}
+		return tcAgentsMsg{gen: gen, agents: out}
 	}
 }
 
 // applyTCAgents takes the installed harnesses, keeping the picked one.
 func (m *OS) applyTCAgents(msg tcAgentsMsg) {
-	s := m.taskCapture
+	s := m.tcOpening(msg.gen)
 	if s == nil {
 		return
 	}
@@ -249,6 +276,7 @@ func (m *OS) TaskCapturePaste(text string) tea.Cmd {
 	if !m.TaskCaptureOpen() || s.field != tcTask {
 		return nil
 	}
+	s.notice = ""
 	return m.composerPasteCmd(s.ed, "", text)
 }
 
@@ -258,6 +286,9 @@ func (m *OS) TaskCaptureKey(msg tea.KeyPressMsg) tea.Cmd {
 	if !m.TaskCaptureOpen() {
 		return nil
 	}
+	// A notice answers the last key: the next one clears it, and a file
+	// that is refused again says so again.
+	s.notice = ""
 	key := msg.String()
 	switch key {
 	case "tab":
@@ -337,10 +368,18 @@ func tcSplit(parts []composer.Part) (title string, prompt []composer.Part) {
 	return strings.TrimSpace(t.String()), prompt
 }
 
-// tcFiledMsg is the daemon's answer to a file.
+// tcFiledMsg is the daemon's answer to add-task for the draft s. next,
+// when set, starts the agent on the card.
 type tcFiledMsg struct {
+	s    *taskCapture
 	text string
 	err  error
+	next tea.Cmd
+}
+
+// tcStartedMsg is the answer to start-agent on a filed card.
+type tcStartedMsg struct {
+	text string
 	warn bool
 }
 
@@ -348,9 +387,6 @@ type tcFiledMsg struct {
 // it. The sheet closes at once; a refused file opens it again with the draft.
 func (m *OS) taskCaptureFile(start bool) tea.Cmd {
 	s := m.taskCapture
-	if s.busy {
-		return nil
-	}
 	title, promptParts := tcSplit(s.ed.Parts())
 	switch {
 	case title == "":
@@ -393,13 +429,13 @@ func (m *OS) taskCaptureFile(start bool) tea.Cmd {
 		build = m.DaemonClient.ClientVersion()
 	}
 	others := slices.DeleteFunc(slices.Clone(s.machines), func(v string) bool { return v == "" || v == session.TaskMachineAny || v == machine })
-	s.busy = true
-	m.closeTaskCapture(true)
+	m.closeTaskCapture(false)
+	m.tcFiling = s
 	return func() tea.Msg {
 		// The images go to the session's store, and the prompt names them.
 		prompt, err := spawnStashImages(call, sess, promptParts)
 		if err != nil {
-			return tcFiledMsg{err: err}
+			return tcFiledMsg{s: s, err: err}
 		}
 		if prompt == "" {
 			prompt = strings.TrimSpace(composer.JoinParts(promptParts))
@@ -416,90 +452,105 @@ func (m *OS) taskCaptureFile(start bool) tea.Cmd {
 		}
 		raw, err := call("add-task", params, 10*time.Second)
 		if err != nil {
-			return tcFiledMsg{err: err}
+			return tcFiledMsg{s: s, err: err}
 		}
 		var row session.TaskRow
 		if err := jsonx.Unmarshal(raw, &row); err != nil || row.ID == "" {
-			return tcFiledMsg{err: errfmt.Errorf("read the add-task answer: no card id")}
+			return tcFiledMsg{s: s, err: errfmt.Errorf("read the add-task answer: no card id")}
 		}
 		filed := "Added " + row.ID + " to " + where + "."
 		if !start {
-			return tcFiledMsg{text: filed}
+			return tcFiledMsg{s: s, text: filed}
 		}
-		first := "Take task " + row.ID + ": tuios task get " + row.ID + "."
-		if stage == session.TaskStagePlan {
-			first = "Take task " + row.ID + ": tuios task get " + row.ID + ". Write a plan first, and wait for the person before you change files."
-		}
-		sp := map[string]any{"agent": agent.cmd, "session": sess, "task": row.ID, "human_nonce": nonce, "prompt": first}
-		// Plan first starts the agent in its own plan mode where it has
-		// one. Its plan approval moves the card back to plan, and the
-		// person's yes on to doing (task_auto.go).
-		if stage == session.TaskStagePlan && slices.Contains(agent.launch.Permissions, "plan") {
-			sp["permission_mode"] = "plan"
-		}
-		start := call
-		where := ""
-		if machine != "" {
-			// The daemon picks the machine, or checks the one named: the
-			// agent there needs the agent, the repository and a link back.
-			pp := map[string]any{"agent": agent.cmd, "task": row.ID, "task_session": sess, "local_origin": project}
-			if machine != session.TaskMachineAny {
-				pp["exclude"] = append(others, federation.LocalHostName)
+		// The draft is done once the card is added. The agent's start,
+		// which can take minutes, is a call of its own whose answer is a
+		// toast only.
+		return tcFiledMsg{s: s, text: filed, next: func() tea.Msg {
+			first := "Take task " + row.ID + ": tuios task get " + row.ID + "."
+			if stage == session.TaskStagePlan {
+				first = "Take task " + row.ID + ": tuios task get " + row.ID + ". Write a plan first, and wait for the person before you change files."
 			}
-			if local {
-				pp["env"] = map[string]string{"PATH": os.Getenv("PATH")}
+			sp := map[string]any{"agent": agent.cmd, "session": sess, "task": row.ID, "human_nonce": nonce, "prompt": first}
+			// Plan first starts the agent in its own plan mode where it has
+			// one. Its plan approval moves the card back to plan, and the
+			// person's yes on to doing (task_auto.go).
+			if stage == session.TaskStagePlan && slices.Contains(agent.launch.Permissions, "plan") {
+				sp["permission_mode"] = "plan"
 			}
-			ans, err := placeCall(call, pp)
+			start := call
+			where := ""
+			if machine != "" {
+				// The daemon picks the machine, or checks the one named: the
+				// agent there needs the agent, the repository and a link back.
+				pp := map[string]any{"agent": agent.cmd, "task": row.ID, "task_session": sess, "local_origin": project}
+				if machine != session.TaskMachineAny {
+					pp["exclude"] = append(others, federation.LocalHostName)
+				}
+				if local {
+					pp["env"] = map[string]string{"PATH": os.Getenv("PATH")}
+				}
+				ans, err := placeCall(call, pp)
+				if err != nil {
+					return tcStartedMsg{warn: true, text: filed + " " + agent.cmd + " did not start: " + tcVerbMessage(err)}
+				}
+				if host := ans.Host; host != "" {
+					where = " on " + host
+					sp["task"], sp["task_host"], sp["task_session"] = row.ID, ans.TaskHost, sess
+					sp["repo_url"] = project
+					if root := spawnReposRoot(host); root != "" {
+						sp["repos_root"] = root
+					}
+					if ans.Clone {
+						sp["clone"] = true
+					}
+					start = hostCaller(host, build)
+				}
+			}
+			if local && where == "" {
+				sp["env"] = map[string]string{"PATH": os.Getenv("PATH")}
+			}
+			raw, err := start("start-agent", sp, spawnStartTimeout)
 			if err != nil {
-				return tcFiledMsg{warn: true, text: filed + " " + agent.cmd + " did not start: " + tcVerbMessage(err)}
+				return tcStartedMsg{warn: true, text: filed + " " + agent.cmd + " did not start: " + err.Error()}
 			}
-			if host := ans.Host; host != "" {
-				where = " on " + host
-				sp["task"], sp["task_host"], sp["task_session"] = row.ID, ans.TaskHost, sess
-				sp["repo_url"] = project
-				if root := spawnReposRoot(host); root != "" {
-					sp["repos_root"] = root
-				}
-				if ans.Clone {
-					sp["clone"] = true
-				}
-				start = hostCaller(host, build)
+			var res struct {
+				Ready  bool
+				Reason string
 			}
-		}
-		if local && where == "" {
-			sp["env"] = map[string]string{"PATH": os.Getenv("PATH")}
-		}
-		raw, err = start("start-agent", sp, spawnStartTimeout)
-		if err != nil {
-			return tcFiledMsg{warn: true, text: filed + " " + agent.cmd + " did not start: " + err.Error()}
-		}
-		var res struct {
-			Ready  bool
-			Reason string
-		}
-		_ = jsonx.Unmarshal(raw, &res)
-		if !res.Ready && res.Reason != "" {
-			return tcFiledMsg{warn: true, text: filed + " " + agent.cmd + " started on it and is not ready: " + printableTitle(res.Reason)}
-		}
-		return tcFiledMsg{text: filed + " " + agent.cmd + " works on it" + where + "."}
+			_ = jsonx.Unmarshal(raw, &res)
+			if !res.Ready && res.Reason != "" {
+				return tcStartedMsg{warn: true, text: filed + " " + agent.cmd + " started on it and is not ready: " + printableTitle(res.Reason)}
+			}
+			return tcStartedMsg{text: filed + " " + agent.cmd + " works on it" + where + "."}
+		}}
 	}
 }
 
-// applyTCFiled says what the daemon did. A filed card ends the draft; a
-// refused one opens the sheet again with it.
-func (m *OS) applyTCFiled(msg tcFiledMsg) {
-	s := m.taskCapture
-	if s != nil {
-		s.busy = false
+// applyTCFiled says what add-task did. A refused card opens the sheet again
+// with its draft; an added one ends the draft, and starts the agent when
+// ctrl+enter asked for one.
+func (m *OS) applyTCFiled(msg tcFiledMsg) tea.Cmd {
+	if m.tcFiling != msg.s {
+		return nil
 	}
+	m.tcFiling = nil
 	if msg.err != nil {
-		if s != nil {
-			m.taskCaptureClosed = false
-			s.notice = "The card was not added: " + msg.err.Error()
-		}
-		return
+		// The sheet stays shut while add-task is out, so no other draft
+		// is open to replace.
+		m.tcOpenGen++
+		m.taskCapture, m.taskCaptureClosed = msg.s, false
+		msg.s.gen, msg.s.notice = m.tcOpenGen, "The card was not added: "+msg.err.Error()
+		return nil
 	}
-	m.closeTaskCapture(false)
+	if msg.next != nil {
+		return msg.next
+	}
+	m.ShowNotification(msg.text, "success", m.Settings.NotificationDuration)
+	return nil
+}
+
+// applyTCStarted says what start-agent did on a filed card.
+func (m *OS) applyTCStarted(msg tcStartedMsg) {
 	kind := "success"
 	if msg.warn {
 		kind = "warning"
