@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"slices"
 	"sync"
 	"time"
 
@@ -113,10 +112,29 @@ func (l *conversationLog) add(c Conversation) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.loadLocked()
-	l.list = slices.DeleteFunc(l.list, func(o Conversation) bool { return o.Harness == c.Harness && o.ID == c.ID })
-	l.list = slices.Insert(l.list, 0, c)
+	l.dropLocked(c.Harness, c.ID)
+	l.list = append(l.list, Conversation{})
+	copy(l.list[1:], l.list)
+	l.list[0] = c
 	l.list = l.list[:min(len(l.list), maxConversations)]
 	l.saveLocked()
+}
+
+// dropLocked removes every entry for id, of harness when it is not empty,
+// and reports whether there was one. A plain loop, not slices.DeleteFunc: a
+// generic instantiation on Conversation costs the binary several KB. mu is
+// held.
+func (l *conversationLog) dropLocked(harness, id string) bool {
+	kept := l.list[:0]
+	for _, o := range l.list {
+		if o.ID != id || harness != "" && o.Harness != harness {
+			kept = append(kept, o)
+		}
+	}
+	clear(l.list[len(kept):])
+	gone := len(kept) != len(l.list)
+	l.list = kept
+	return gone
 }
 
 // forget drops the conversation, and reports whether the list held it.
@@ -124,9 +142,7 @@ func (l *conversationLog) forget(harness, id string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.loadLocked()
-	n := len(l.list)
-	l.list = slices.DeleteFunc(l.list, func(o Conversation) bool { return o.ID == id && (harness == "" || o.Harness == harness) })
-	if len(l.list) == n {
+	if !l.dropLocked(harness, id) {
 		return false
 	}
 	l.saveLocked()
