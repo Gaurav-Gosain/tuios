@@ -1306,6 +1306,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case ckTakeMsg:
 		m.applyTake(msg)
 		return m, nil
+	case ckShipMsg:
+		m.applyShip(msg)
+		return m, nil
 	case ckFarCardsMsg:
 		m.applyFarCards(msg)
 		return m, nil

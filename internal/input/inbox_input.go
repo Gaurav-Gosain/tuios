@@ -91,6 +91,11 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.CockpitGroupMenuOpen() {
 		return o, o.CockpitGroupMenuKey(msg.String())
 	}
+	// Ready to merge takes the next key: c, p or o, enter to send, anything
+	// else closes it.
+	if o.CockpitShipOpen() {
+		return o, o.CockpitShipKey(msg.String())
+	}
 	if o.InboxSnoozePicking() {
 		return o, o.InboxSnoozeKey(msg.String())
 	}

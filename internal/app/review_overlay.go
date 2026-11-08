@@ -439,6 +439,10 @@ func (m *OS) InboxReview() (tea.Cmd, bool) {
 	if !m.reviewSupported() {
 		return nil, false
 	}
+	// A card its agent is done with: the worktree that agent worked in.
+	if cmd, ok := m.CockpitCardReview(); ok {
+		return cmd, true
+	}
 	it, ok := m.inboxSelected()
 	if !ok {
 		// An agent with no Inbox item: review its pane.

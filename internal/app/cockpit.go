@@ -148,8 +148,10 @@ type cockpitState struct {
 	// and groupMenu is the picker s opens. See cockpit_groupby.go.
 	groupBy   string
 	groupMenu bool
-	zoom      bool
-	div       ckDivider
+	// ship is Ready to merge on a card in review, nil when it is closed.
+	ship *ckShip
+	zoom bool
+	div  ckDivider
 	// key is the selected row, and akey its agent, so the cursor stays on
 	// an agent whose approval was answered and whose row key changed.
 	key, akey string
@@ -1735,6 +1737,8 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		return nil, true
 	case config.ActionInboxTake:
 		return m.CockpitTake(), true
+	case config.ActionInboxShip:
+		return m.CockpitShip(), true
 	case config.ActionInboxCompare:
 		return m.CockpitCompare(), true
 	case config.ActionInboxWrite:

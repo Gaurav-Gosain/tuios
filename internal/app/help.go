@@ -246,7 +246,7 @@ func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings)
 	for _, action := range []string{
 		config.ActionInboxAllow, config.ActionInboxAllowAlways, config.ActionInboxReply, config.ActionInboxDenyReason,
 		config.ActionInboxPeek, config.ActionInboxGo, config.ActionInboxWrite, config.ActionInboxNewAgent, config.ActionInboxCompare, config.ActionInboxArtifact,
-		config.ActionInboxBoard, config.ActionInboxBoardLayout, config.ActionInboxViewList, config.ActionInboxTake,
+		config.ActionInboxBoard, config.ActionInboxBoardLayout, config.ActionInboxViewList, config.ActionInboxTake, config.ActionInboxShip,
 		config.ActionInboxStagePrev, config.ActionInboxStageNext,
 		config.ActionInboxDismiss, config.ActionInboxResume, config.ActionInboxPassOn, config.ActionInboxFilter,
 		config.ActionInboxSelect, config.ActionInboxMailbox, config.ActionInboxReview, config.ActionInboxSnooze,

@@ -14876,3 +14876,10 @@ Run on 2026-11-08 on macOS (arm64). The branch passes all three.
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCardLifecycle' -v .`.
 
+## TestTheBoardShowsTheCardLifecycle
+
+Three cards an agent was done with (failed, passed, verifying) on the board;
+v on the card in review opens its Changes, and M commits and pushes it.
+
+Run on 2026-11-08 on macOS (arm64). With `ckLifeLine` returning nothing, the
+wait for "Attempt 1 failed" times out. **caught**

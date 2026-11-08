@@ -545,6 +545,7 @@ var ActionDescriptions = map[string]string{
 	"inbox_compare":        "Agents view: compare the attempts of the fan under the cursor, ask a judge, keep one",
 	"inbox_board":          "Agents view: show the task board, or the agents again",
 	"inbox_take":           "Agents view: take the card for the focused pane",
+	"inbox_ship":           "Agents view: Ready to merge: commit, push or open a pull request for the card in review",
 	"inbox_stage_prev":     "Agents view: move the card to the stage before",
 	"inbox_stage_next":     "Agents view: move the card to the stage after",
 	"inbox_board_layout":   "Agents view: show the board as columns or as a list",

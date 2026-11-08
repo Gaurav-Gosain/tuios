@@ -1837,6 +1837,9 @@ const (
 	// focused pane.
 	ActionInboxBoard = "inbox_board"
 	ActionInboxTake  = "inbox_take"
+	// ActionInboxShip is Ready to merge on a card in review: commit, push or
+	// open the pull request of the work its agent did.
+	ActionInboxShip = "inbox_ship"
 	// ActionInboxStagePrev and ActionInboxStageNext move the card under the
 	// cursor to the stage before or after its own. ActionInboxBoardLayout
 	// switches the board between its columns and the list.
@@ -1974,6 +1977,7 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxCompare:       {"c"},
 		ActionInboxBoard:         {"b"},
 		ActionInboxTake:          {"t"},
+		ActionInboxShip:          {"M"},
 		ActionInboxStagePrev:     {"H", "shift+left"},
 		ActionInboxStageNext:     {"L", "shift+right"},
 		ActionInboxBoardLayout:   {"B"},

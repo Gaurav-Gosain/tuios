@@ -1903,6 +1903,8 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 		return []overlay.Hint{{Key: overlay.EnterKey(), Label: "apply"}, {Key: "esc", Label: "cancel"}}
 	case m.CockpitGroupMenuOpen():
 		return m.cockpitGroupMenuHints()
+	case m.CockpitShipOpen():
+		return m.cockpitShipHints()
 	case m.InboxSnoozePicking():
 		return inboxSnoozeHints()
 	case st.agents.sheet != nil:

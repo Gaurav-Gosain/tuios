@@ -566,6 +566,7 @@ func (m *OS) kanbanHints() []overlay.Hint {
 		if win := m.ckTakeWindow(c); win != "" && (c.Holder == nil || c.Holder.Window != win) && c.Stage != session.TaskStageDone {
 			hints = append(hints, m.keyHints(config.ActionInboxTake, "take")...)
 		}
+		hints = append(hints, m.ckLifeHints(c)...)
 	case ok && r.folded:
 		hints = append(hints, m.keyHints(config.ActionInboxFold, "open column")...)
 	}
@@ -958,7 +959,11 @@ func (m *OS) drawKanbanCard(c *ckCanvas, l ckLook, r ckRow, title []string, x, y
 	case card.Stage == session.TaskStageDone:
 		c.text(lx, my, rx, ckSeg{t: l.ckStateMark("done", ckGlyphReview) + " ", fg: ink(pal.Success)}, ckSeg{t: "done", fg: ink(pal.FgMute)})
 	default:
-		c.text(lx, my, rx, ckSeg{t: l.ckStateMark("idle", ckGlyphIdle) + " ", fg: ink(pal.FgMute)}, ckSeg{t: ckTrunc(free, max(rx-lx-2, 0)), fg: ink(pal.FgMute)})
+		words, wInk := ckLifeLine(pal, card)
+		if words == "" {
+			words, wInk = free, pal.FgMute
+		}
+		c.text(lx, my, rx, ckSeg{t: l.ckStateMark("idle", ckGlyphIdle) + " ", fg: ink(wInk)}, ckSeg{t: ckTrunc(words, max(rx-lx-2, 0)), fg: ink(wInk)})
 	}
 	c.mark(pal, x+1, y, w-1, h, overlay.RowState{Cursor: cursor, Focused: cursor, Hover: hover})
 	ck.hits = append(ck.hits, ckHit{x0: x, y0: top + y, x1: x + w, y1: top + y + h, kind: ckHitRow, key: r.key})

@@ -533,7 +533,7 @@ func (m *OS) ckCardHints(c session.TaskRow) []overlay.Hint {
 	if m.ckTakeWindow(c) != "" && (c.Holder == nil || c.Holder.Window != m.ckTakeWindow(c)) && c.Stage != session.TaskStageDone {
 		hints = append(hints, m.keyHints(config.ActionInboxTake, "take")...)
 	}
-	return hints
+	return append(hints, m.ckLifeHints(c)...)
 }
 
 // cockpitCardGo is enter on a card: the holder's pane, or the Card tab on a
@@ -631,6 +631,10 @@ func (m *OS) drawCardRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x, 
 			who, whoInk = holder, pal.FgDim
 		case card.Stage == session.TaskStageDone:
 			who = "done"
+		default:
+			if words, lInk := ckLifeLine(pal, card); words != "" {
+				who, whoInk = words, lInk
+			}
 		}
 		if card.Host != "" {
 			who += " on " + printableTitle(card.Host)
@@ -672,6 +676,10 @@ func (m *OS) drawCardRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x, 
 	case card.Stage == session.TaskStageDone:
 		c.text(nx, y+1, rx2, ckSeg{t: "done", fg: ink(pal.FgMute)})
 	default:
+		if words, lInk := ckLifeLine(pal, card); words != "" {
+			c.text(nx, y+1, rx2, ckSeg{t: ckTrunc(words, rx2-nx), fg: ink(lInk)})
+			return
+		}
 		free := "free"
 		if card.AskFirst {
 			free = "free, ask first"
@@ -719,8 +727,13 @@ func (m *OS) drawCardFocus(c *ckCanvas, l ckLook, r ckRow, card session.TaskRow,
 		}
 		line(ckSeg{t: "Held by ", fg: pal.FgDim}, ckSeg{t: who, fg: pal.Fg, attrs: ckBold},
 			ckSeg{t: "  " + inboxWait(card.Holder.HeldAt, now), fg: pal.FgMute})
+	case card.Stage == session.TaskStageVerify || card.Stage == session.TaskStageReview:
+		// Let go by its agent: the lifecycle lines below say where it is.
 	case card.Stage != session.TaskStageDone && card.Blocked == nil:
 		line(ckSeg{t: "Free. ", fg: pal.FgDim}, ckSeg{t: m.ckFreeWords(card), fg: pal.FgMute})
+	}
+	for _, segs := range m.ckLifeFocus(pal, card) {
+		line(segs...)
 	}
 	if b := card.Blocked; b != nil {
 		line(ckSeg{t: "Blocked ", fg: pal.Warn, attrs: ckBold}, ckSeg{t: printableTitle(b.Reason), fg: pal.FgDim})
