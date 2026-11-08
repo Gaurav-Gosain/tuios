@@ -39,7 +39,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.30 // indirect
 	github.com/pires/go-proxyproto v0.15.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	go.mitchellh.com/libghostty v0.0.0-20260920220152-31b65cdc24cf // indirect
+	go.mitchellh.com/libghostty v0.0.0-20261107144202-b13f277ddcb2 // indirect
 )
 
 require (
@@ -88,5 +88,5 @@ require (
 	tuios.dev/sketch v0.4.1-0.20261106165743-fef8f8756257
 	tuios.dev/swatch v0.1.2-0.20261030111253-c0f512aa3148
 	tuios.dev/tml v0.1.2-0.20261104012002-e0cf866a6ddb
-	tuios.dev/vt v0.3.3-0.20261108112158-6af89a4c0e5b
+	tuios.dev/vt v0.3.3-0.20261108114246-fa773b13b872
 )

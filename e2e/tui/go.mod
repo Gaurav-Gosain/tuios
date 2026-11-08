@@ -6,7 +6,7 @@ toolchain go1.27.3
 
 require (
 	github.com/Gaurav-Gosain/tuitest v0.1.0
-	tuios.dev/vt v0.3.3-0.20261108112158-6af89a4c0e5b
+	tuios.dev/vt v0.3.3-0.20261108114246-fa773b13b872
 )
 
 require (
@@ -30,7 +30,7 @@ require (
 	github.com/tklauser/go-sysconf v0.4.0 // indirect
 	github.com/tklauser/numcpus v0.12.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	go.mitchellh.com/libghostty v0.0.0-20260920220152-31b65cdc24cf // indirect
+	go.mitchellh.com/libghostty v0.0.0-20261107144202-b13f277ddcb2 // indirect
 	golang.org/x/image v0.47.0 // indirect
 	golang.org/x/term v0.47.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
