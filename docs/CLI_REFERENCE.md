@@ -7019,6 +7019,20 @@ The daemon's log level from the start: `off`, `errors`, `basic`, `messages`,
 Any value silences the agent alert sounds, whatever
 `notifications.agent.sound` says. For a CI job or a recording.
 
+### `TUIOS_EVENTS_LOG`
+
+A file path. A client that has it logs every key it reads, with its input mode
+at that moment, to that file, and turns on no other debug log.
+
+The file records every key typed in that client, passwords included. Use it
+for tests and debugging only, and delete the file after. tuios creates it with
+mode `0600`, does not follow a symbolic link there, and refuses a file another
+user owns. `--debug` and
+`TUIOS_DEBUG_INTERNAL=1` log the same lines to `/tmp/tuios-events.log` with
+the rest of the debug logs. The e2e harness gives each client a file of its
+own, so a test that waits on a key's effect can say whether the client read
+the key.
+
 ### `TUIOS_SSH`
 
 The ssh program to run instead of `ssh` on `PATH`: for the daemon's links to

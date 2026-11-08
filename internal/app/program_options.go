@@ -108,12 +108,13 @@ func sizeFilter(current func() (width, height int), next func(tea.Model, tea.Msg
 	}
 }
 
-// eventDebugLog says whether TUIOS_DEBUG_INTERNAL=1 asked for the event log,
-// read once on the first event rather than per event. The local command sets
-// the variable at startup before the program runs, so the first event sees it.
-var eventDebugLog = debuglog.Enabled
+// eventDebugLog says whether the event log is on: TUIOS_DEBUG_INTERNAL=1, or
+// TUIOS_EVENTS_LOG naming a file. The local command sets the variables at
+// startup before the program runs, so the first event sees them.
+var eventDebugLog = debuglog.EventsEnabled
 
-// debugLogEvent logs events to /tmp/tuios-events.log when TUIOS_DEBUG_INTERNAL=1.
+// debugLogEvent logs events to /tmp/tuios-events.log when TUIOS_DEBUG_INTERNAL=1,
+// or to the file TUIOS_EVENTS_LOG names.
 // Only logs KeyPressMsg, MouseMotionMsg, and unknown events in TerminalMode
 // to diagnose phantom keypresses.
 func debugLogEvent(m *OS, msg tea.Msg) {
@@ -148,7 +149,7 @@ func debugLogEvent(m *OS, msg tea.Msg) {
 		return
 	}
 
-	f, err := debuglog.Open(debuglog.EventsPath)
+	f, err := debuglog.Open(debuglog.EventsLogPath())
 	if err != nil {
 		return
 	}

@@ -394,6 +394,12 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 	if dir := os.Getenv("GOCOVERDIR"); dir != "" {
 		env = append(env, "GOCOVERDIR="+dir)
 	}
+	// Each client logs the keys it reads, with its input mode, to a file of
+	// its own (debuglog.EventsLogPath). It turns on no other debug log. A
+	// helper that waits on a key's effect prints it when the effect does not
+	// come, so a lost key says whether the client ever read it.
+	eventsLog := filepath.Join(t.TempDir(), "events.log")
+	env = append(env, "TUIOS_EVENTS_LOG="+eventsLog)
 	env = append(env, o.env...)
 
 	cols, rows := o.cols, o.rows
@@ -455,7 +461,51 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 	if o.out != nil {
 		opts = append(opts, tuitest.WithOutputMirror(o.out))
 	}
-	return tuitest.StartT(t, argv, opts...)
+	term := tuitest.StartT(t, argv, opts...)
+	clientStarts.Store(term, clientStart{at: time.Now(), events: eventsLog})
+	return term
+}
+
+// clientStart is when startIn started a client and where it logs its keys.
+type clientStart struct {
+	at     time.Time
+	events string
+}
+
+// clientStarts maps each client startIn started to its clientStart.
+var clientStarts sync.Map
+
+// keyEvidence says what is known about a key a client was sent and that had
+// no effect: when it was sent, whether the client still runs, the terminal
+// modes it set, and the keys it logged reading, with the input mode at each.
+// No logged key means the client never read the key.
+func keyEvidence(term *tuitest.Terminal, sent string, sentAt time.Time) string {
+	var b strings.Builder
+	v, _ := clientStarts.Load(term)
+	start, _ := v.(clientStart)
+	if !start.at.IsZero() {
+		fmt.Fprintf(&b, "sent %s %v after the client started, %v ago\n", sent, sentAt.Sub(start.at).Round(time.Millisecond), time.Since(sentAt).Round(time.Millisecond))
+	}
+	if st, exited := term.ExitStatus(); exited {
+		fmt.Fprintf(&b, "the client has exited: %v\n", st)
+	} else {
+		fmt.Fprintf(&b, "the client still runs (pid %d)\n", term.Pid())
+	}
+	fmt.Fprintf(&b, "terminal modes the client set: %+v\n", term.TermState())
+	if start.events != "" {
+		data, err := os.ReadFile(start.events)
+		switch {
+		case err != nil || len(data) == 0:
+			b.WriteString("the client logged no key read at all\n")
+		default:
+			lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+			fmt.Fprintf(&b, "the last keys the client read (%d logged):\n", len(lines))
+			for _, l := range lines[max(0, len(lines)-20):] {
+				fmt.Fprintf(&b, "  %s\n", l)
+			}
+		}
+	}
+	return b.String()
 }
 
 // describeProc names a process for a failure message: its name, state, parent,
@@ -478,15 +528,19 @@ func describeProc(pid int) string {
 		strings.Join(fields, ", "), wchan, strings.ReplaceAll(string(cmdline), "\x00", " "))
 }
 
-// logSurvivors names every process still running in the isolation root base,
-// with the state and the kernel wait channel it is in.
+// logSurvivors names every process running in the isolation root base when a
+// test failed, with the state and the kernel wait channel it is in, after the
+// client's teardown.
 //
 // Every process the suite starts runs in workDirIn(base) or below it, so the
-// working directory finds them. A daemon this client did not start is still
-// running at this point by design and is listed too; its parent pid tells it
-// apart. A process that has begun to exit has already given up its working
+// working directory finds them. The daemon and the panes under it are left
+// out: killDaemon stops them after this runs, by design, so they are alive
+// here whatever the failure was, and listing them made every failure read as
+// a process leak. Anything else still here is what the teardown could not
+// end. A process that has begun to exit has already given up its working
 // directory, and one owned by another user does not show it, so neither is
-// listed; tuitest's teardown check names those by pid. Linux only: it reads /proc.
+// listed; tuitest's teardown check names those by pid. Linux only: it reads
+// /proc.
 func logSurvivors(t *testing.T, base string) {
 	t.Helper()
 	if runtime.GOOS != "linux" {
@@ -496,17 +550,68 @@ func logSurvivors(t *testing.T, base string) {
 	if err != nil {
 		return
 	}
+	parent := map[int]int{}
+	var inBase []int
+	daemons := map[int]bool{}
 	for _, e := range entries {
 		pid, err := strconv.Atoi(e.Name())
 		if err != nil {
 			continue
 		}
+		parent[pid] = procPPid(pid)
 		cwd, err := os.Readlink(filepath.Join("/proc", e.Name(), "cwd"))
 		if err != nil || !strings.HasPrefix(cwd, base) {
 			continue
 		}
+		inBase = append(inBase, pid)
+		if argv := procArgv(pid); len(argv) > 1 && filepath.Base(argv[0]) == filepath.Base(tuiosBin) && argv[1] == "daemon" {
+			daemons[pid] = true
+		}
+	}
+	underDaemon := func(pid int) bool {
+		for seen := 0; pid > 1 && seen < 64; seen++ {
+			if daemons[pid] {
+				return true
+			}
+			pid = parent[pid]
+		}
+		return false
+	}
+	left := 0
+	for _, pid := range inBase {
+		if underDaemon(pid) {
+			left++
+			continue
+		}
 		t.Logf("still running in %s after the client's teardown: %s", base, describeProc(pid))
 	}
+	if left > 0 {
+		t.Logf("%d processes in %s are the daemon and its panes, which killDaemon stops after this; not listed", left, base)
+	}
+}
+
+// procPPid is a process's parent pid, or 0. Linux only.
+func procPPid(pid int) int {
+	status, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "status"))
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(string(status), "\n") {
+		if v, ok := strings.CutPrefix(line, "PPid:"); ok {
+			n, _ := strconv.Atoi(strings.TrimSpace(v))
+			return n
+		}
+	}
+	return 0
+}
+
+// procArgv is a process's argv. Linux only.
+func procArgv(pid int) []string {
+	cmdline, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "cmdline"))
+	if err != nil {
+		return nil
+	}
+	return strings.Split(strings.TrimRight(string(cmdline), "\x00"), "\x00")
 }
 
 // attachIn starts a client attached to an existing daemon session and returns
@@ -544,11 +649,15 @@ func attachIn(t *testing.T, base, session string, o startOpts) *tuitest.Terminal
 // something a reader can be expected to notice.
 func windowManagementMode(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
+	sentAt := time.Now()
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("normalise to window management mode: %v", err)
 	}
 	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
-		t.Fatalf("never settled in window management mode: %v\n%s", err, term.Snapshot())
+		// No retry: a key that is lost is a bug, so the failure says where
+		// it went instead of hiding it.
+		t.Fatalf("never settled in window management mode: %v\n%s\n%s", err,
+			keyEvidence(term, "Alt+Esc (bytes \\x1b\\x1b)", sentAt), term.Snapshot())
 	}
 	// The mode switch re-arms input handling; give it the same beat a mode
 	// change gets everywhere else.
