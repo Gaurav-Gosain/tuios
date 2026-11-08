@@ -915,7 +915,9 @@ func handlePrefixKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// If prefix is already active, deactivate it (double leader key cancels),
 	// or go back to the last workspace when leader_twice says so.
 	if o.PrefixActive {
-		o.PrefixActive = false
+		// The leader twice closes the leader and any menu it opened: a
+		// sub-menu left open would take the next key.
+		o.SetMenuState(app.MenuState{})
 		if o.KeybindRegistry != nil && o.KeybindRegistry.LeaderTwiceGoesBack() {
 			o.LastWorkspace()
 		}

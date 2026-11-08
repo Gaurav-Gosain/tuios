@@ -105,7 +105,9 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// kitty pane, legacy bytes otherwise. A leader with no legacy encoding
 		// is dropped rather than replaced with some other key.
 		if o.PrefixActive {
-			o.PrefixActive = false
+			// The leader twice closes the leader and any menu it opened: a
+			// sub-menu left open would take the next key.
+			o.SetMenuState(app.MenuState{})
 			if o.KeybindRegistry != nil && o.KeybindRegistry.LeaderTwiceGoesBack() {
 				// screen's C-a C-a. send_prefix still sends the leader.
 				o.LastWorkspace()
