@@ -456,8 +456,8 @@ func rowTooltip(c *ui.Context, el ui.Element, key, s string) {
 	})
 }
 
-// railFade is the height of the fade at the rail list's foot.
-const railFade = 32
+// railFoot is the room below the rail list's last row.
+const railFoot = 8
 
 // rowTipMax is the widest line of a row's tooltip.
 const rowTipMax = 360
@@ -490,11 +490,11 @@ func (a *App) sidebar(c *ui.Context, pal *palette, bar ui.TitleBar) {
 	})
 	// The space between and below the rows moves the window, as the top
 	// bar does.
-	// The list fades out above the footer, so a row it cuts is seen to go
-	// on under it; the padding below the last row is the fade's, so the
-	// row scrolls clear of it.
+	// A hairline parts the list from the footer, in the colour of the
+	// panes' edge (hairline). The fade
+	// that was there drew a dark band over the rail's ground.
 	ui.Column(c.Key("sessions-wrap")).Grow(1).MinHeight(0).Children(func() {
-		ui.Scroll(c.Key("sessions")).Grow(1).MinHeight(0).Padding(0, 10, railFade, 10).DragWindow().Children(func() {
+		ui.Scroll(c.Key("sessions")).Grow(1).MinHeight(0).Padding(0, 10, railFoot, 10).DragWindow().Children(func() {
 			a.railSearch(c, pal)
 			a.agentsRow(c, pal)
 			a.needsSection(c, pal)
@@ -520,9 +520,8 @@ func (a *App) sidebar(c *ui.Context, pal *palette, bar ui.TitleBar) {
 			}
 			a.newSessionRow(c, pal)
 		})
-		ui.Box(c.Key("rail-fade")).Absolute().Left(0).Right(0).Bottom(0).Height(railFade).PassThrough().
-			LinearGradient(ui.LinearGradient{Angle: 180, From: pal.sidebar.Alpha(0), To: pal.sidebar})
 	})
+	ui.Box(c.Key("rail-foot-line")).Height(1).Shrink(0).Background(hairline(pal))
 	// The copies between machines stay in view under the list.
 	ui.Column(c.Key("xfers")).Padding(0, 10, 0, 10).Shrink(0).Children(func() { a.transfersSection(c, pal) })
 	a.usagePanel(c, pal)

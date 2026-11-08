@@ -30,7 +30,17 @@ func paned(e ui.Element, pal *palette) ui.Element {
 		return raised(e, pal)
 	}
 	// Measured from Rex's at 2x: a darker outer pixel, a lighter inner.
-	return e.Border(0.5, ui.RGBA(0, 0, 0, 0.106)).InsetShadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.063))
+	return e.Border(0.5, hairline(pal)).InsetShadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.063))
+}
+
+// hairline is the colour of the line at a pane's edge, for a line that
+// parts two parts of the window as the panes are parted: the theme's
+// edge in the dark, the panes' outer pixel in the light.
+func hairline(pal *palette) ui.Color {
+	if pal.dark {
+		return pal.edge
+	}
+	return ui.RGBA(0, 0, 0, 0.106)
 }
 
 // chosen lifts the chosen row of a list, the sidebars', a hair: an even
