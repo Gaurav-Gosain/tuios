@@ -77,12 +77,16 @@ func TestTheBoardTurnsDispatchOnAndPausesIt(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('x')); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "dispatch on again", "Dispatch Pull")
+	// "Dispatch Pull" is on the paused header too, so the wait is for the
+	// header the daemon's push of the resume draws: Pull without Paused.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		txt := s.Text()
+		return strings.Contains(txt, "Dispatch Pull") && !strings.Contains(txt, "Paused")
+	}, uiTimeout); err != nil {
+		t.Errorf("ASSERTION: the header still says Paused after the resume: %v\n%s", err, term.Snapshot())
+	}
 	if got := mustCLI(t, base, "task", "dispatch"); !strings.Contains(got, "Dispatch: on") {
 		t.Fatalf("ASSERTION: the second ctrl+x did not start dispatch again:\n%s", got)
-	}
-	if strings.Contains(term.Screen().Text(), "Paused") {
-		t.Errorf("ASSERTION: the header still says Paused\n%s", term.Snapshot())
 	}
 }
 
