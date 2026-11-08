@@ -180,6 +180,10 @@ func runE2E(m *testing.M) int {
 	for _, key := range harnessDirKeys {
 		_ = os.Unsetenv(key)
 	}
+	// Every daemon checks each task card after each move and logs a broken
+	// rule (internal/session/task_move.go); killDaemon fails the test that
+	// left such a line.
+	_ = os.Setenv("TUIOS_TEST_CARD_CHECK", "1")
 	defer func() { _ = os.RemoveAll(shortRuntimeRoot) }()
 	defer func() {
 		if otherProtocolDir != "" {
@@ -932,12 +936,23 @@ var registeredKills sync.Map
 // and that is reported rather than swallowed. A swallowed teardown error is how
 // one test ends up running against another's daemon, and a suite where that can
 // happen cannot claim its tests are isolated.
+// cardInvariantLine starts the daemon's log line for a task card that broke
+// a rule of its lifecycle, under TUIOS_TEST_CARD_CHECK.
+const cardInvariantLine = "Task invariant broken"
+
 func killDaemon(t *testing.T, base string) {
 	t.Helper()
 	if _, already := registeredKills.LoadOrStore(daemonKey{t, base}, true); already {
 		return
 	}
 	t.Cleanup(func() {
+		if log, err := os.ReadFile(filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "daemon.log")); err == nil {
+			for line := range strings.SplitSeq(string(log), "\n") {
+				if strings.Contains(line, cardInvariantLine) {
+					t.Errorf("ASSERTION: the daemon broke a task card rule: %s", line)
+				}
+			}
+		}
 		if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
 			t.Logf("kill-server (best effort): %v: %s", err, strings.TrimSpace(out))
 		}

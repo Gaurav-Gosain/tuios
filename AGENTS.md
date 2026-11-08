@@ -485,6 +485,8 @@ the ones a change trips most often. Each test's doc comment gives the reason.
 | Every `git` starts through `childproc.Git`, which turns off repository hooks and filters | `internal/lint` `TestGitGoesThroughChildprocGit` | `//tuios:allow-exec <reason>` |
 | A client quits through `OS.QuitCmd`, never a bare `tea.Quit` | `internal/lint` `TestEveryClientQuitGoesThroughQuitCmd` | `//tuios:allow-quit <reason>` |
 | Lessons name real actions, overlays, events and keys | `internal/lint` `TestLessonsMatchTheApp` | none |
+| A task card's lifecycle fields are written only in `internal/session/task_move.go` (`Session.moveCard`) | `internal/lint` `TestOnlyTaskMoveWritesACardsLifecycle` | none |
+| A file transfer job's state is written only by `transferJob.to` and `reopen` | `internal/lint` `TestOnlyToWritesATransferState` | none |
 | Every `tea.NewProgram` takes `app.ProgramOptions()`, with no other `tea.With*` option than `WithOutput`, and a transport's `MakeOptions` before it | `internal/app` `TestEveryProgramTakesTheSharedOptions` | none |
 | No emoji in a string or rune literal under `internal/` and `cmd/` | `internal/app` `TestNoEmojiInSourceStrings` | `emojiSourceAllowed` |
 | A new overlay kind has a place in `overlayKindOrder` | `internal/app` `TestEveryOverlayKindHasAPlaceInTheStack` | none |

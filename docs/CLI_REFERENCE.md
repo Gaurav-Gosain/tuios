@@ -2947,7 +2947,8 @@ A pass moves the card to `review`. A fail (an exit other than 0, the time
 limit, a worktree that is gone) sends it back to `todo` with its `attempts`
 one higher and the last line of the output as its note; `get` shows the end
 of the output. A verify that cannot reach the pane's machine leaves the card
-in `verify` and says why; `stage ID verify` runs it again. A card moved out of
+in `verify` and says why; `stage ID verify` runs it again, and lets go of
+a pane that holds the card, since the card now waits on the command. A card moved out of
 `verify` by hand stops its run. An agent that errors while it holds a card
 dispatch gave it keeps the card, blocked, with its `attempts` one higher and
 its last message as the note, since the agent may go on; no second agent is

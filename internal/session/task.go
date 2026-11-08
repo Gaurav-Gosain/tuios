@@ -3,7 +3,6 @@ package session
 import (
 	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
@@ -177,50 +176,6 @@ func (tk *TaskState) note(ev TaskEvent) {
 	tk.History = slices.Concat(first, rest, []TaskEvent{ev})
 }
 
-// setStage moves the card to stage at now.
-func (tk *TaskState) setStage(stage string, now int64) {
-	if tk.Stage != stage {
-		tk.Stage, tk.StageAt = stage, now
-	}
-}
-
-// finish moves the card to done and lets it go, lifting any block. It returns
-// the holder it had, and false when the card was done already and nothing
-// changed.
-func (tk *TaskState) finish(by string, now int64) (string, bool) {
-	if tk.Stage == TaskStageDone && tk.Holder == "" && tk.Blocked == nil {
-		return "", false
-	}
-	holder := tk.Holder
-	tk.setStage(TaskStageDone, now)
-	tk.Holder, tk.HeldAt, tk.Blocked = "", 0, nil
-	tk.note(TaskEvent{Action: TaskActionFinished, By: by, At: now, Stage: tk.Stage, Holder: holder})
-	return holder, true
-}
-
-// release lets the card go, recording why. A card blocked on its errored
-// agent (blockErrored) goes back to todo with the block lifted, so dispatch
-// may start it again now that the agent is gone from it.
-func (tk *TaskState) release(by, reason string, now int64) {
-	holder := tk.Holder
-	tk.Holder, tk.HeldAt, tk.HolderName, tk.HolderHarness = "", 0, "", ""
-	if tk.blockedOnErrored() {
-		tk.Blocked = nil
-		tk.setStage(TaskStageTodo, now)
-	}
-	tk.note(TaskEvent{Action: TaskActionReleased, By: by, At: now, Holder: holder, Stage: tk.Stage, Reason: reason})
-}
-
-// taskBlockErrored starts the reason of a block dispatch puts on a card
-// whose agent errored.
-const taskBlockErrored = "agent errored"
-
-// blockedOnErrored reports whether the card's block is the one dispatch put
-// on it when its agent errored.
-func (tk *TaskState) blockedOnErrored() bool {
-	return tk.Blocked != nil && tk.Blocked.By == taskByDaemon && strings.HasPrefix(tk.Blocked.Reason, taskBlockErrored)
-}
-
 // workable refuses a card no pane may start on: one held by a pane other
 // than window, one that is done, and one that is blocked.
 func (tk *TaskState) workable(window string) *verbError {
@@ -240,24 +195,6 @@ func (tk *TaskState) workable(window string) *verbError {
 		})
 	}
 	return nil
-}
-
-// take gives the card to window, moving it from todo or plan to doing. It
-// reports false when window holds it already, and the refusal when the card
-// is not there to take (workable).
-func (tk *TaskState) take(window, by string, now int64) (bool, *verbError) {
-	if tk.Holder == window {
-		return false, nil
-	}
-	if verr := tk.workable(window); verr != nil {
-		return false, verr
-	}
-	tk.Holder, tk.HeldAt, tk.Dispatched = window, now, false
-	if tk.Stage == TaskStageTodo || tk.Stage == TaskStagePlan {
-		tk.setStage(TaskStageDoing, now)
-	}
-	tk.note(TaskEvent{Action: TaskActionClaimed, By: by, At: now, Stage: tk.Stage, Holder: window})
-	return true, nil
 }
 
 // taskIndex is the index of the card id in tasks, or -1.
@@ -309,14 +246,14 @@ func heldTasks(tasks []TaskState) map[string][]TaskState {
 
 // releaseHolders releases every card whose holder held reports true, and
 // returns the cards released as they are now.
-func releaseHolders(st *SessionState, held func(holder string) bool, reason string, now int64) []TaskState {
+func releaseHolders(sess *Session, st *SessionState, held func(holder string) bool, reason string, now int64) []TaskState {
 	var out []TaskState
 	for i := range st.Tasks {
 		tk := &st.Tasks[i]
 		if tk.Holder == "" || !held(tk.Holder) {
 			continue
 		}
-		tk.release(taskByDaemon, reason, now)
+		_, _, _ = sess.moveCard(tk, cardMove{kind: moveRelease, by: taskByDaemon, reason: reason}, now)
 		out = append(out, *tk)
 	}
 	return out
@@ -343,7 +280,7 @@ func releasedTaskEvents(sess *Session, st *SessionState, events []SessionEvent, 
 		default:
 			continue
 		}
-		for _, tk := range releaseHolders(st, func(holder string) bool { return holder == ev.Window }, reason, now) {
+		for _, tk := range releaseHolders(sess, st, func(holder string) bool { return holder == ev.Window }, reason, now) {
 			row := taskRow(sess, st, &tk)
 			out = append(out, SessionEvent{Type: eventTaskReleased, Window: ev.Window, taskRow: &row, taskReason: reason})
 		}

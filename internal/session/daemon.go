@@ -1265,6 +1265,15 @@ func (d *Daemon) onSessionCreated(s *Session) {
 	})
 	s.SetHostShownProbe(func() bool { return d.sessionShown(sessionID) })
 	s.SetTaskAutoProbe(func() bool { return !d.taskAutoOff.Load() })
+	// A dispatched card's outcome counts in the state change that ends it
+	// (task_move.go). It runs under the session's state lock: the store's
+	// own lock is taken inside it, and the event goes off the lock.
+	s.SetTaskOutcomeSink(func(board string, finished bool) {
+		if d.dispatch.noteOutcome(board, finished) {
+			LogBasic("Task dispatch stopped on board %s: %s", board, dispatchStopFailures)
+			go d.publishDispatch("stopped", dispatchStopFailures)
+		}
+	})
 	// A pane's first output or bell since its subscriptions changed. See
 	// pane_marks.go.
 	s.SetPaneMarkSink(func(ptyID, windowID string, mark uint32) {

@@ -143,23 +143,6 @@ func (ds *dispatchStore) loaded() bool {
 	return ds.path != ""
 }
 
-// handIn lets the card go as its agent is done with it, and moves it to
-// stage: verify, with a running record, or review. It returns the holder it
-// had.
-func (tk *TaskState) handIn(by, stage string, work *TaskWork, now int64) string {
-	holder := tk.Holder
-	tk.Holder, tk.HeldAt, tk.HolderName, tk.HolderHarness, tk.Blocked = "", 0, "", "", nil
-	tk.setStage(stage, now)
-	if work != nil {
-		tk.Work = work
-	}
-	if stage == TaskStageVerify {
-		tk.Verify = &TaskVerify{State: VerifyRunning, StartedAt: now}
-	}
-	tk.note(TaskEvent{Action: TaskActionFinished, By: by, At: now, Stage: tk.Stage, Holder: holder})
-	return holder
-}
-
 // handInStage is where a card of board goes when its agent is done with it:
 // verify when the board has a verify command, review when it has none, and
 // "" when the lifecycle is off and the card is done.
@@ -416,19 +399,15 @@ func (d *Daemon) applyVerify(sess *Session, id string, token int64, res verifyRe
 	var row TaskRow
 	if sess.mutateState(func(st *SessionState) error {
 		i := taskIndex(st.Tasks, id)
-		if i < 0 || st.Tasks[i].Stage != TaskStageVerify || st.Tasks[i].Verify == nil || st.Tasks[i].Verify.StartedAt != token {
+		if i < 0 {
 			return errNoTaskMove
 		}
 		tk := &st.Tasks[i]
 		now := time.Now().UnixNano()
 		v.FinishedAt = now
-		if stage == TaskStageTodo {
-			tk.Attempts++
-			tk.Note = note
+		if action, _, _ := sess.moveCard(tk, cardMove{kind: moveVerified, by: taskByDaemon, token: token, stage: stage, verify: v, note: note, reason: reason}, now); action == "" {
+			return errNoTaskMove
 		}
-		tk.setStage(stage, now)
-		tk.Verify = v
-		tk.note(TaskEvent{Action: TaskActionVerified, By: taskByDaemon, At: now, Stage: stage, Reason: reason})
 		row = taskRow(sess, st, tk)
 		return nil
 	}) != nil {

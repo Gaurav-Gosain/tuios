@@ -15340,3 +15340,34 @@ tests whose names carry Leader, Prefix, Menu or Lock.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestLeaderTwiceClosesTheSubMenu$' -v .`.
+
+## One transition function for task cards
+
+State machine plan S3, PR 2 (notes/sm2/design-S3.md). Every write of a task
+card's lifecycle fields goes through `Session.moveCard` in
+`internal/session/task_move.go`. Under `TUIOS_TEST_CARD_CHECK`, which the e2e
+harness sets for every daemon, each move checks the card's rules and logs
+`Task invariant broken`; `killDaemon`'s cleanup fails the test whose daemon
+logged one. A dispatched card's outcome now counts in the state change that
+ends it, not in a goroutine after the event.
+
+`TestAMoveToVerifyLetsTheHolderGo` (the lead's Q1): the person moves a held
+card to verify on a board with a verify command; the card must have no holder
+at once, and reach review with no holder.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes it and the 29 e2e tests
+that touch task cards, with the checks on.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (4991cfbe3) | `TestAMoveToVerifyLetsTheHolderGo`: "t1 after a move to verify is verify held by ...", "t1 in review is held by ..." | **caught** |
+| A move to verify keeps the holder (`letGo` in moveStage cut) | the same, and "the daemon broke a task card rule: ... the card is still held after a move that lets it go" | **caught** |
+| Finish keeps the holder (`letGo` in moveFinish cut) | `TestPullDispatchGivesTheNextCard`: "the daemon broke a task card rule: ... a done card is held or blocked" (caught only by the check; the test's own assertions pass) | **caught** |
+| The outcome not counted (the sink call in moveCard cut) | `TestPullDispatchStopsAfterThreeFailures`: "the board did not stop after three failures"; `TestCardLifecycleCountsOnAPullBoard`: "the board counts 0 failures" | **caught** |
+
+The order of two outcomes on one board (design-S3 H4) has no test: before,
+it depended on goroutine scheduling; now each counts in its own state change.
+`TestTaskMoveLintCatchesADirectWrite` checks the lint on injected writes.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAMoveToVerifyLetsTheHolderGo$' -v .`.

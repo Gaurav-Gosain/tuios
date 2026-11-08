@@ -610,7 +610,7 @@ func (d *Daemon) verbClaimTask(cs *connState, params json.RawMessage) (any, *ver
 			return errTaskRefused
 		}
 		tk := &st.Tasks[i]
-		if _, verr = tk.take(window, caller.by, time.Now().UnixNano()); verr != nil {
+		if _, _, verr = sess.moveCard(tk, cardMove{kind: moveClaim, by: caller.by, window: window}, time.Now().UnixNano()); verr != nil {
 			return errTaskRefused
 		}
 		row = taskRow(sess, st, tk)
@@ -660,17 +660,15 @@ func (d *Daemon) verbFinishTask(cs *connState, params json.RawMessage) (any, *ve
 		if verr := caller.mayTouch("finish-task", tk); verr != nil {
 			return "", verr
 		}
+		move := cardMove{kind: moveFinish, by: caller.by}
 		if caller.window != "" && tk.Holder == caller.window {
 			if stage := d.handInStage(dispatchBoardKey(sess.Name(), tk.Project)); stage != "" {
-				holder = tk.handIn(caller.by, stage, work, now)
-				return TaskActionFinished, nil
+				move = cardMove{kind: moveHandIn, by: caller.by, stage: stage, work: work}
 			}
 		}
-		var changed bool
-		if holder, changed = tk.finish(caller.by, now); !changed {
-			return "", nil
-		}
-		return TaskActionFinished, nil
+		var action string
+		action, holder, _ = sess.moveCard(tk, move, now)
+		return action, nil
 	})
 	if verr != nil {
 		return nil, verr
@@ -730,25 +728,16 @@ func (d *Daemon) verbSetTaskStage(cs *connState, params json.RawMessage) (any, *
 		if cmd != "" && caller.window != "" && (p.Stage == TaskStageReview || p.Stage == TaskStageShipped) {
 			return "", newVerbError(ErrVerbForbidden, "the board verifies its cards: a pane moves its card on with tuios task done")
 		}
-		if cmd != "" && p.Stage == TaskStageVerify && tk.Stage != TaskStageVerify && (work != nil || tk.Work != nil) {
-			if work != nil {
-				tk.Work = work
-			}
-			tk.Verify = &TaskVerify{State: VerifyRunning, StartedAt: now}
+		move := cardMove{kind: moveStage, by: caller.by, stage: p.Stage}
+		switch {
+		case p.Stage == TaskStageDone:
+			move = cardMove{kind: moveFinish, by: caller.by}
+		case cmd != "" && p.Stage == TaskStageVerify && (work != nil || tk.Work != nil):
+			move.verifyRun, move.work = true, work
 		}
-		if p.Stage == TaskStageDone {
-			var changed bool
-			if holder, changed = tk.finish(caller.by, now); !changed {
-				return "", nil
-			}
-			return TaskActionFinished, nil
-		}
-		if tk.Stage == p.Stage {
-			return "", nil
-		}
-		tk.setStage(p.Stage, now)
-		tk.note(TaskEvent{Action: TaskActionStaged, By: caller.by, At: now, Stage: tk.Stage, Holder: tk.Holder})
-		return TaskActionStaged, nil
+		var action string
+		action, holder, _ = sess.moveCard(tk, move, now)
+		return action, nil
 	})
 	if verr != nil {
 		return nil, verr
@@ -799,17 +788,12 @@ func (d *Daemon) verbBlockTask(cs *connState, params json.RawMessage) (any, *ver
 		if verr := caller.mayTouch("block-task", tk); verr != nil {
 			return "", verr
 		}
+		move := cardMove{kind: moveBlock, by: caller.by, reason: reason}
 		if p.Clear {
-			if tk.Blocked == nil {
-				return "", nil
-			}
-			tk.Blocked = nil
-			tk.note(TaskEvent{Action: TaskActionUnblocked, By: caller.by, At: now, Stage: tk.Stage, Holder: tk.Holder})
-			return TaskActionUnblocked, nil
+			move = cardMove{kind: moveUnblock, by: caller.by}
 		}
-		tk.Blocked = &TaskBlock{Reason: reason, By: caller.by, At: now}
-		tk.note(TaskEvent{Action: TaskActionBlocked, By: caller.by, At: now, Stage: tk.Stage, Holder: tk.Holder, Reason: reason})
-		return TaskActionBlocked, nil
+		action, _, _ := sess.moveCard(tk, move, now)
+		return action, nil
 	})
 	if verr != nil {
 		return nil, verr
@@ -845,8 +829,8 @@ func (d *Daemon) verbReleaseTask(cs *connState, params json.RawMessage) (any, *v
 		if tk.Holder == "" {
 			return "", invalidParam("id", "task card "+tk.ID+" is held by no pane, so there is nothing to release")
 		}
-		tk.release(caller.by, "", now)
-		return TaskActionReleased, nil
+		action, _, _ := sess.moveCard(tk, cardMove{kind: moveRelease, by: caller.by}, now)
+		return action, nil
 	})
 	if verr != nil {
 		return nil, verr
@@ -924,7 +908,7 @@ func (d *Daemon) restoreTasks(sess *Session, tasks []TaskState, next uint64) {
 // releasedRows releases the cards of st whose holder held reports true, and
 // returns their rows.
 func releasedRows(sess *Session, st *SessionState, held func(holder string) bool, reason string) []TaskRow {
-	released := releaseHolders(st, held, reason, time.Now().UnixNano())
+	released := releaseHolders(sess, st, held, reason, time.Now().UnixNano())
 	rows := make([]TaskRow, len(released))
 	for i := range released {
 		rows[i] = taskRow(sess, st, &released[i])

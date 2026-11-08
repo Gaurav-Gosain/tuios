@@ -257,7 +257,7 @@ func (d *Daemon) releaseHeld(sess *Session, window, reason string) {
 	}
 	var rows []TaskRow
 	_ = sess.mutateState(func(st *SessionState) error {
-		rel := releaseHolders(st, func(holder string) bool { return holder == window || strings.HasSuffix(holder, "/"+window) }, reason, time.Now().UnixNano())
+		rel := releaseHolders(sess, st, func(holder string) bool { return holder == window || strings.HasSuffix(holder, "/"+window) }, reason, time.Now().UnixNano())
 		for i := range rel {
 			rows = append(rows, taskRow(sess, st, &rel[i]))
 		}
@@ -449,11 +449,10 @@ func (d *Daemon) claimForRemote(cs *connState, p claimTaskParams) (any, *verbErr
 		}
 		// A claim for a card auto is starting on another machine is auto's.
 		auto := d.auto.expects(sess.Name(), tk.ID, true)
-		if _, verr = tk.take(holder, cmp.Or(auto, caller.by), time.Now().UnixNano()); verr != nil {
+		if _, _, verr = sess.moveCard(tk, cardMove{kind: moveClaim, by: cmp.Or(auto, caller.by), window: holder, dispatched: auto != "",
+			names: true, name: printableClaim(p.RemoteName, 64), harness: printableClaim(p.RemoteHarness, 64), refresh: true}, time.Now().UnixNano()); verr != nil {
 			return errTaskRefused
 		}
-		tk.Dispatched = auto != ""
-		tk.HolderName, tk.HolderHarness = printableClaim(p.RemoteName, 64), printableClaim(p.RemoteHarness, 64)
 		row = taskRow(sess, st, tk)
 		return nil
 	})

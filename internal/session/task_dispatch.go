@@ -449,40 +449,9 @@ func (d *Daemon) publishDispatch(action, reason string) {
 	d.events.publish(streamEvent{Type: EventTaskDispatch, Action: action, Reason: reason, Dispatch: &st})
 }
 
-// noteDispatchedOutcome counts how a dispatched card ended on its board. row
-// is the card after the change; reason is why it was let go.
-func (d *Daemon) noteDispatchedOutcome(action, reason string, row TaskRow) {
-	if !row.Dispatched || reason == taskReleaseRestart {
-		return
-	}
-	var finished bool
-	switch action {
-	case TaskActionFinished, TaskActionVerified:
-		// In verify, the outcome waits for the verify (task_verify.go).
-		if row.Stage == TaskStageVerify {
-			return
-		}
-		finished = row.Stage != TaskStageTodo
-	case TaskActionBlocked:
-		// A card blocked on its errored agent counts when it is let go:
-		// the agent may go on.
-		if strings.HasPrefix(reason, taskBlockErrored) {
-			return
-		}
-	case TaskActionReleased:
-	default:
-		return
-	}
-	board := dispatchBoardKey(row.Session, row.Project)
-	if d.dispatch.noteOutcome(board, finished) {
-		LogBasic("Task dispatch stopped on board %s: %s", board, dispatchStopFailures)
-		d.publishDispatch("stopped", dispatchStopFailures)
-	}
-}
-
-// afterTaskEvent is what dispatch does with a task event: it counts a
-// dispatched card's outcome, and after a finish offers the pane that held
-// the card its next one. It runs off the caller's goroutine, since a
+// afterTaskEvent is what dispatch does with a task event: after a finish it
+// offers the pane that held the card its next one. A dispatched card's
+// outcome counted in the move itself (task_move.go). It runs off the caller's goroutine, since a
 // release is published from the session's event sink under the state lock.
 func (d *Daemon) afterTaskEvent(sess *Session, action, window, reason string, row TaskRow) {
 	d.kickAuto()
@@ -497,13 +466,8 @@ func (d *Daemon) afterTaskEvent(sess *Session, action, window, reason string, ro
 			go d.offerPull()
 		}
 	}
-	if row.Dispatched || (action == TaskActionFinished && d.dispatch.anyMode(DispatchPull)) {
-		go func() {
-			d.noteDispatchedOutcome(action, reason, row)
-			if action == TaskActionFinished && window != "" && !strings.HasPrefix(window, remoteHolderPrefix) {
-				d.pullNext(sess, window, dispatchBoardKey(row.Session, row.Project), row.Project, false)
-			}
-		}()
+	if action == TaskActionFinished && window != "" && !strings.HasPrefix(window, remoteHolderPrefix) && d.dispatch.anyMode(DispatchPull) {
+		go d.pullNext(sess, window, dispatchBoardKey(row.Session, row.Project), row.Project, false)
 	}
 }
 
@@ -576,14 +540,12 @@ func (d *Daemon) blockErrored(sess *Session, window, last string) {
 		now := time.Now().UnixNano()
 		for i := range st.Tasks {
 			tk := &st.Tasks[i]
-			if tk.Holder != window || !tk.Dispatched || tk.Blocked != nil {
+			if tk.Holder != window {
 				continue
 			}
-			tk.Blocked = &TaskBlock{Reason: reason, By: taskByDaemon, At: now}
-			tk.Attempts++
-			tk.Note = line
-			tk.note(TaskEvent{Action: TaskActionBlocked, By: taskByDaemon, At: now, Stage: tk.Stage, Holder: tk.Holder, Reason: reason})
-			rows = append(rows, taskRow(sess, st, tk))
+			if action, _, _ := sess.moveCard(tk, cardMove{kind: moveBlockErrored, by: taskByDaemon, reason: reason, note: line}, now); action != "" {
+				rows = append(rows, taskRow(sess, st, tk))
+			}
 		}
 		if len(rows) == 0 {
 			return errNoTaskMove
@@ -607,12 +569,12 @@ func (d *Daemon) unblockErrored(sess *Session, window string) {
 		now := time.Now().UnixNano()
 		for i := range st.Tasks {
 			tk := &st.Tasks[i]
-			if tk.Holder != window || !tk.blockedOnErrored() {
+			if tk.Holder != window {
 				continue
 			}
-			tk.Blocked = nil
-			tk.note(TaskEvent{Action: TaskActionUnblocked, By: taskByDaemon, At: now, Stage: tk.Stage, Holder: tk.Holder})
-			rows = append(rows, taskRow(sess, st, tk))
+			if action, _, _ := sess.moveCard(tk, cardMove{kind: moveUnblockErrored, by: taskByDaemon}, now); action != "" {
+				rows = append(rows, taskRow(sess, st, tk))
+			}
 		}
 		if len(rows) == 0 {
 			return errNoTaskMove
@@ -669,10 +631,9 @@ func (d *Daemon) pullNext(sess *Session, window, board, project string, notOwn b
 			return errNoTaskMove
 		}
 		tk := &st.Tasks[i]
-		if _, verr := tk.take(window, taskByDispatch, time.Now().UnixNano()); verr != nil {
+		if action, _, _ := sess.moveCard(tk, cardMove{kind: moveClaim, by: taskByDispatch, window: window, dispatched: true}, time.Now().UnixNano()); action == "" {
 			return errNoTaskMove
 		}
-		tk.Dispatched = true
 		row, prompt, label = taskRow(sess, st, tk), tk.Prompt, windowLabelOf(w)
 		return nil
 	})

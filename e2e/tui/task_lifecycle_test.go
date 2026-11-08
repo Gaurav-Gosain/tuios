@@ -508,3 +508,44 @@ func TestCardLifecycleVerifiesOnTheCardsMachine(t *testing.T) {
 		t.Fatalf("ASSERTION: t1 with build down is in %s with attempts %d and verify note %q, want verify, 1, and build named", c.Stage, c.Attempts, c.Verify.Note)
 	}
 }
+
+// TestAMoveToVerifyLetsTheHolderGo: on a board with a verify command, the
+// person moves a card a pane holds to verify. The card is let go at once,
+// since it now waits on the command and not on a pane, and the verify runs
+// and moves it to review with no holder.
+//
+// How it could pass wrongly: a verify that never ran would leave the card in
+// verify, so the test waits for review and reads the record as passed.
+//
+// Negative controls (NEGATIVE_CONTROLS.md, TestAMoveToVerifyLetsTheHolderGo).
+func TestAMoveToVerifyLetsTheHolderGo(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	t.Cleanup(func() { dumpDaemonLogOnFail(t, base) })
+	const sess = "e2e-stage-verify"
+	mustCLI(t, base, "new", sess, "--detach")
+	waitForSessionInfo(t, base, sess)
+	var report strings.Builder
+	note := func(format string, args ...any) { fmt.Fprintf(&report, format+"\n", args...) }
+	defer func() { saveText(t, "task-stage-verify", report.String()) }()
+
+	repo := filepath.Join(base, "demo")
+	lifeRepo(t, repo)
+	a := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", sess, "agent-a", "--no-focus", "--print-id", "--cwd", repo))
+	mustCLI(t, base, "set-agent-state", "-s", sess, "-w", a, "working", "--harness", "claude-code", "-m", "on it")
+	note("%s", mustCLI(t, base, "task", "dispatch", "verify", "-s", sess, "sleep 1"))
+	mustCLI(t, base, "task", "add", "-s", sess, "-p", "do it", "the work") // t1
+	mustCLI(t, base, "task", "claim", "t1", "-s", sess, "-w", a)
+	note("%s", mustCLI(t, base, "task", "stage", "t1", "verify", "-s", sess))
+	cards, raw := lifeCards(t, base, sess)
+	note("right after the move to verify:\n%s", raw)
+	if c := cards["t1"]; c.Stage != "verify" || c.Holder != nil {
+		t.Errorf("ASSERTION: t1 after a move to verify is %s held by %+v, want verify and no holder", c.Stage, c.Holder)
+	}
+	cards, raw = waitLife(t, base, sess, 20*time.Second, "t1 did not reach review after its verify",
+		func(c map[string]lifeCard) bool { return c["t1"].Stage == "review" })
+	note("after the verify:\n%s", raw)
+	if c := cards["t1"]; c.Holder != nil || c.Verify == nil || c.Verify.State != "passed" {
+		t.Errorf("ASSERTION: t1 in review is held by %+v with verify %+v, want no holder and passed", c.Holder, c.Verify)
+	}
+}

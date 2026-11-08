@@ -73,16 +73,16 @@ func (mv taskMove) applies(tk *TaskState) bool {
 // autoStageLocked moves every card of st that match picks and mv applies to,
 // and returns the cards moved as they are now. The caller holds the state
 // lock.
-func autoStageLocked(st *SessionState, match func(*TaskState) bool, mv taskMove, reason string, now int64) []TaskState {
+func autoStageLocked(sess *Session, st *SessionState, match func(*TaskState) bool, mv taskMove, reason string, now int64) []TaskState {
 	var out []TaskState
 	for i := range st.Tasks {
 		tk := &st.Tasks[i]
-		if !match(tk) || !mv.applies(tk) {
+		if !match(tk) {
 			continue
 		}
-		tk.setStage(mv.to, now)
-		tk.note(TaskEvent{Action: TaskActionStaged, By: taskByDaemon, At: now, Stage: tk.Stage, Holder: tk.Holder, Reason: reason})
-		out = append(out, *tk)
+		if action, _, _ := sess.moveCard(tk, cardMove{kind: moveAuto, by: taskByDaemon, auto: mv, reason: reason}, now); action != "" {
+			out = append(out, *tk)
+		}
 	}
 	return out
 }
@@ -130,7 +130,7 @@ func (d *Daemon) autoStage(sess *Session, match func(*TaskState) bool, mv taskMo
 	}
 	var rows []TaskRow
 	_ = sess.mutateState(func(st *SessionState) error {
-		moved := autoStageLocked(st, match, mv, reason, time.Now().UnixNano())
+		moved := autoStageLocked(sess, st, match, mv, reason, time.Now().UnixNano())
 		if len(moved) == 0 {
 			return errNoTaskMove
 		}
@@ -339,11 +339,9 @@ func (d *Daemon) stampFan(tp *taskParam, stem, fanID string) (TaskRow, bool) {
 		found = true
 		tk := &st.Tasks[i]
 		tk.Fan, tk.FanID = stem, fanID
-		if tp.sess.taskAutoOn() && moveFanned.applies(tk) {
-			now := time.Now().UnixNano()
-			tk.setStage(moveFanned.to, now)
-			tk.note(TaskEvent{Action: TaskActionStaged, By: tp.caller.by, At: now, Stage: tk.Stage, Holder: tk.Holder, Reason: reason})
-			moved = true
+		if tp.sess.taskAutoOn() {
+			action, _, _ := tp.sess.moveCard(tk, cardMove{kind: moveAuto, by: tp.caller.by, auto: moveFanned, reason: reason}, time.Now().UnixNano())
+			moved = action != ""
 		}
 		row = taskRow(tp.sess, st, tk)
 		return nil
@@ -360,15 +358,9 @@ func (d *Daemon) stampFan(tp *taskParam, stem, fanID string) (TaskRow, bool) {
 func (d *Daemon) claimForPane(tp *taskParam, window, name, harness string, cross bool) (TaskRow, *verbError) {
 	auto := d.auto.expects(tp.sess.Name(), tp.id, false)
 	row, action, verr := d.changeTask(tp.sess, tp.id, func(_ *SessionState, tk *TaskState, now int64) (string, *verbError) {
-		taken, verr := tk.take(window, cmp.Or(auto, tp.caller.by), now)
-		if verr != nil || !taken {
-			return "", verr
-		}
-		tk.Dispatched = auto != ""
-		if cross {
-			tk.HolderName, tk.HolderHarness = name, harness
-		}
-		return TaskActionClaimed, nil
+		action, _, verr := tp.sess.moveCard(tk, cardMove{kind: moveClaim, by: cmp.Or(auto, tp.caller.by), window: window,
+			dispatched: auto != "", names: cross, name: name, harness: harness}, now)
+		return action, verr
 	})
 	if verr == nil && cross {
 		d.remoteHolds.note(window, remoteHold{session: tp.sess.Name(), id: tp.id}, true)

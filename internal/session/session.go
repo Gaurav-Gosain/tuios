@@ -1859,6 +1859,9 @@ type Session struct {
 	// taskAuto reports whether cards move on their own. See
 	// SetTaskAutoProbe.
 	taskAuto atomic.Pointer[func() bool]
+	// taskOutcome counts a dispatched card's outcome on its board. See
+	// SetTaskOutcomeSink.
+	taskOutcome atomic.Pointer[func(board string, finished bool)]
 }
 
 // SetGraphicsCapabilities records the graphics protocols tuios can forward to
