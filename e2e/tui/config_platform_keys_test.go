@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
@@ -428,7 +429,8 @@ func TestConfigApplyListsTheKeysItCannotRead(t *testing.T) {
 		"The daemon applied config.toml.",
 		"tuios cannot read 1 key:",
 		"config.d/keys.toml: [workspaces] hyper+3: invalid modifier: hyper.",
-		"switch_workspace_3 uses its default key, alt+3.",
+		// The default the daemon names is this platform's: opt+3 on macOS.
+		"switch_workspace_3 uses its default key, " + config.DefaultConfig().Keybindings.Workspaces["switch_workspace_3"][0] + ".",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("tuios config apply does not say %q:\n%s", want, out)
