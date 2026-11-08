@@ -107,6 +107,13 @@ func (m *OS) PressHoldKey(key tea.KeyPressMsg) bool {
 		return false
 	}
 	switch {
+	case !m.hold.active && m.chosenMode() == WindowManagementMode:
+		// Window mode is already the choice, so the hold has nothing to
+		// borrow. The key stays a plain modifier: alt chords keep their Alt
+		// and run their own bindings (issue 1744). The choice is read beneath
+		// the leases, so a hold pressed during a divider drag over terminal
+		// mode still arms.
+		return false
 	case !m.hold.active:
 		m.hold = holdMode{active: true, strip: modifierKeyMods[trigger]}
 		m.borrowMode(leaseHold, WindowManagementMode)

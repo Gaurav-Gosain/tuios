@@ -106,7 +106,8 @@ const configHeaderRest = "# Documentation: https://github.com/Gaurav-Gosain/tuio
 	"#\n" +
 	"# hold_window_mode binds a key that puts tuios in window-management mode for\n" +
 	"# as long as it is physically held, and hands the previous mode back when it\n" +
-	"# is let go:\n" +
+	"# is let go. In window-management mode the key does nothing and stays a\n" +
+	"# plain modifier, so alt chords there keep their own bindings:\n" +
 	"#\n" +
 	"#   [keybindings.mode_control]\n" +
 	"#   hold_window_mode = [\"leftalt\"]\n" +

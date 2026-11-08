@@ -14950,3 +14950,18 @@ Run on 2026-11-08 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestMailAndAskFromAPaneByItsOwnName$' -v .`.
+
+## TestHoldKeyIsIgnoredInWindowMode
+
+Issue 1744. The hold key is bound to left Option. In window mode (entered
+with alt+esc) the person presses the hold key, then alt+n. The hold armed
+anyway, showed HOLD, and took Alt off the chord, so n opened a third pane.
+The hold now arms only when the mode chosen beneath the leases is not window
+management, so a hold during a divider drag over terminal mode still arms
+(`TestHoldOutlastsADividerDrag`).
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| main at 6db1de3ed | "the hold key borrowed window mode while already in it" (dock shows HOLD and 1:3) | **caught** |

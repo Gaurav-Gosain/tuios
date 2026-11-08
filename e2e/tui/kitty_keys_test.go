@@ -217,3 +217,47 @@ func (b *syncBuffer) String() string {
 	defer b.mu.Unlock()
 	return b.buf.String()
 }
+
+// TestHoldKeyIsIgnoredInWindowMode is issue 1744. The hold key borrows window
+// mode from terminal mode. Already in window mode it has nothing to borrow,
+// and it must stay a plain modifier: a hold armed there takes Alt off every
+// chord, so alt+n ran new-window instead of next-window.
+func TestHoldKeyIsIgnoredInWindowMode(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, holdModeConfig)
+
+	term := startIn(t, base, startOpts{cols: 120, rows: 40})
+	waitBoot(t, term)
+	newWindow(t, term)
+	newWindow(t, term)
+	waitWindowCount(t, term, 2, "two panes to switch between")
+	enterTerminalMode(t, term)
+	leaveTerminalMode(t, term)
+
+	if err := term.SendKeys(tuitest.Key(kittyLeftAltPress)); err != nil {
+		t.Fatalf("send the held key: %v", err)
+	}
+	if err := term.SendKeys(tuitest.Key(kittyAltN)); err != nil {
+		t.Fatalf("send alt+n: %v", err)
+	}
+	// alt+n (kittyAltN) is next-window in window mode, and n alone is
+	// new-window. alt+n moves the focus and opens nothing. A hold armed in window mode
+	// stripped Alt, and n opened a third pane.
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		s := term.Screen()
+		if strings.Contains(s.Text(), "HOLD") {
+			t.Fatalf("the hold key borrowed window mode while already in it:\n%s", term.Snapshot())
+		}
+		if n := countWindows(s); n != 2 {
+			t.Fatalf("alt+n in window mode lost its Alt: %d panes, want 2\n%s", n, term.Snapshot())
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if err := term.SendKeys(tuitest.Key(kittyLeftAltRelease)); err != nil {
+		t.Fatalf("release the held key: %v", err)
+	}
+	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
+		t.Fatalf("releasing the key left window mode: %v\n%s", err, term.Snapshot())
+	}
+}
