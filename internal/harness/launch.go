@@ -49,6 +49,10 @@ type Launch struct {
 	// is. Both or neither.
 	SignedInArgs  []string `toml:"signed_in_args"`
 	SignedInMatch string   `toml:"signed_in_match"`
+	// AddDirFlag gives the harness one more directory it may work in, once
+	// per directory (Claude Code's --add-dir). A start-agent preset's
+	// add_dirs go through it; a harness without one refuses them.
+	AddDirFlag string `toml:"add_dir_flag"`
 	// Source is where the flags and values came from, in words.
 	Source string `toml:"source"`
 
@@ -72,7 +76,7 @@ func LaunchValueOK(v string) bool {
 // normalize checks the table when the manifest loads.
 func (l *Launch) normalize() error {
 	l.Source = strings.TrimSpace(l.Source)
-	for _, f := range []struct{ name, flag string }{{"model_flag", l.ModelFlag}, {"effort_flag", l.EffortFlag}, {"permission_flag", l.PermissionFlag}} {
+	for _, f := range []struct{ name, flag string }{{"model_flag", l.ModelFlag}, {"effort_flag", l.EffortFlag}, {"permission_flag", l.PermissionFlag}, {"add_dir_flag", l.AddDirFlag}} {
 		if f.flag != "" && (len(f.flag) < 2 || f.flag[0] != '-' || strings.Contains(f.flag, "=") || !safeResumeToken(f.flag)) {
 			return errfmt.Errorf("%s %q: a flag is - or -- and then letters, digits and _ . / : + -", f.name, f.flag)
 		}

@@ -1155,7 +1155,7 @@ is ready for a prompt.
 
 **Usage:**
 ```bash
-tuios start-agent <agent> [-s [<host>|any:]<session>] [--name <name>] [--cwd <dir> | --repo <dir> | --clone] [--workspace <n>] [--focus] [--prompt <prompt>] [--ready-timeout <ms>] [--protocol acp|codex] [--env NAME[=VALUE]]... [--grants <grant>[,<grant>...]] [--task <id>] [--model <model>] [--effort <level>] [--permission-mode <mode>] [--json] [-- <args>...]
+tuios start-agent [<agent>] [--preset <name>] [-s [<host>|any:]<session>] [--name <name>] [--cwd <dir> | --repo <dir> | --clone] [--workspace <n>] [--focus] [--prompt <prompt>] [--ready-timeout <ms>] [--protocol acp|codex] [--env NAME[=VALUE]]... [--grants <grant>[,<grant>...]] [--task <id>] [--model <model>] [--effort <level>] [--permission-mode <mode>] [--print-id] [--json] [-- <args>...]
 ```
 
 `--model`, `--effort` and `--permission-mode` pass the harness's own flags for
@@ -1226,6 +1226,24 @@ prompts into:
 ```bash
 tuios start-agent --protocol acp 'opencode acp' --name helper --prompt 'List the TODOs.'
 tuios start-agent --protocol codex codex --name tests
+```
+
+`--preset NAME` starts from an `[agents.presets.NAME]` entry of your config
+(see [CONFIGURATION.md](CONFIGURATION.md)), which may name the agent,
+so `<agent>` can be left out. A flag you pass wins over the preset's. `args`,
+`env` and `after_ready` are the preset's, then yours. `--grants` replaces the
+preset's grants, and a preset never gives more than you may give. The preset
+is read from this machine's config, merged by this machine's daemon, and sent
+in full to a session on another machine, so your presets work on every host.
+An unknown name is refused with the names there are, and nothing starts.
+
+`--print-id` prints the new pane's full id alone. When the agent is not
+ready, it still prints the id, says why on stderr and exits 1, so a script
+can close the pane. The plain success line ends with the full id too.
+
+```bash
+id=$(tuios start-agent --preset worker --name w3 -s crew --print-id)
+tuios send-agent-message -s crew -w "$id" 'Read the brief and start.'
 ```
 
 `acp` is the Agent Client Protocol, version 1, for any agent command that

@@ -15756,3 +15756,31 @@ Run on 2026-11-08 on macOS (arm64, Apple Color Emoji, morx) and on arch-btw
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 go test -count=1 -run '^TestScreenshotDrawsEmojiSequences$' -v .`.
+
+## TestStartAgentFromAPreset
+
+Orchestration gap G4. A config with `[agents.presets.worker]` (agent, args,
+add_dirs, grants, after_ready) and `[agents.presets.boss]` (admin). A claude
+stand-in writes its argv down and drops input until it is ready.
+`start-agent --preset worker --print-id` must print the full pane id alone,
+start the agent with one `--add-dir` per directory before the preset's args,
+give the pane the preset's grants, and send the after_ready steps after the
+agent is ready, in order. The plain success line carries the full id. An
+unknown preset is refused with the names there are, and a pane with read,
+write and fan is refused a preset that grants admin, with no pane opened.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (32d025cdf) | "start-agent --preset worker --print-id failed: exit status 1 ... unknown flag: --preset" | **caught** |
+| add_dirs not passed | "the agent was started with \"--verbose\\n\", want the preset's dirs and args" | **caught** |
+| The preset's grants not merged | "the pane holds grants [], want the preset's read, write and task", "a pane without admin was not refused a preset that grants admin", "the refused start opened a pane" | **caught** |
+| after_ready not sent | "the agent did not get the preset's keys after it was ready, in order" | **caught** |
+| Every step typed as text, Enter included | "the agent did not get the preset's keys after it was ready, in order" | **caught** |
+| --print-id prints the plain line | "--print-id printed \"w1 (742e53ae) is ready: ...\", want the full pane id alone" | **caught** |
+| The plain line without the full id | "the plain success line has no full id" | **caught** |
+| An unknown preset starts without it | "an unknown preset was not refused with the names that exist" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestStartAgentFromAPreset$' -v .`.

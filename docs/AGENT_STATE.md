@@ -3751,6 +3751,7 @@ efforts           = ["low", "medium", "high"]
 permission_flag   = "--permission-mode"
 permissions       = ["manual", "plan", "bypassPermissions"]
 risky_permissions = ["bypassPermissions"]  # shown with a warning, never chosen for you
+add_dir_flag      = "--add-dir"            # one per directory of a preset's add_dirs
 default_permission = ""                    # a mode that needs no flag, if any
 signed_in_args    = ["auth", "status", "--json"]
 signed_in_match   = '"loggedIn":\s*true'

@@ -429,6 +429,7 @@ efforts           = ["low", "medium", "high", "xhigh", "max"]
 permission_flag   = "--permission-mode"
 permissions       = ["manual", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"]
 risky_permissions = ["bypassPermissions"]
+add_dir_flag      = "--add-dir"
 # claude auth status prints JSON with "loggedIn": true when signed in. Only
 # the match is kept: the output also holds the account's email.
 signed_in_args    = ["auth", "status", "--json"]

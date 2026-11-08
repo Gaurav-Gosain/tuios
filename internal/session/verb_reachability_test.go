@@ -55,6 +55,7 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"swap-window#0":    {errCode: ErrVerbInvalidParams, why: "the fixture's session floats its panes, so there is no layout to swap in"},
 	"move-window#2":    {errCode: ErrVerbInvalidParams, why: "the fixture's session floats its panes, so there is no layout to move beside"},
 	"plugin-cell#0":    {errCode: ErrVerbForbidden, why: "the fixture's caller is not a plugin's process"},
+	"agent-preset#0":   {errCode: ErrVerbInvalidParams, why: "the fixture's daemon has no [agents.presets]"},
 	"plugin-notify#0":  {errCode: ErrVerbForbidden, why: "the fixture's caller is not a plugin's process"},
 	"block-task#0":     {errCode: ErrVerbNoTask, why: "the fixture's session holds no task card"},
 	"block-task#1":     {errCode: ErrVerbNoTask, why: "the fixture's session holds no task card"},
