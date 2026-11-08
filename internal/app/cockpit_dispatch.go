@@ -1,6 +1,8 @@
 package app
 
 import (
+	"cmp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,9 +17,10 @@ import (
 //
 // The board's header names the dispatch of one board: the project of the
 // focused pane's folder, as the capture sheet picks it, or the session's own
-// cards when the folder has none. It says Manual or Pull, and Paused,
+// cards when the folder has none. It says Manual, Pull or Auto (with the
+// agents auto runs and the cards that wait), and Paused,
 // Stopped or Quiet hours when a switch holds dispatch. ctrl+t turns the
-// board between manual and pull, and ctrl+x pauses all dispatch or starts it
+// board from manual to pull to auto, and ctrl+x pauses all dispatch or starts it
 // again. Both are chords: a printable key never changes what agents are
 // given. Turning dispatch on, or starting it again, is the person's: a key
 // that send-keys or a tape typed is refused. Pause is open to anyone.
@@ -83,6 +86,9 @@ func (m *OS) applyDispatch(msg ckDispatchMsg) {
 		return
 	}
 	st := msg.st
+	if b := st.Board; msg.set && b != nil && b.Preset != nil && b.Mode == session.DispatchAuto {
+		m.ShowNotification("Auto starts "+printableTitle(b.Preset.Agent)+" for each open card. ctrl+x pauses it.", "info", m.Settings.NotificationDuration)
+	}
 	ck.dispatch = &st
 	if st.Board != nil {
 		ck.dispatchBoard = st.Board.Board
@@ -114,6 +120,19 @@ func (m *OS) applyDispatchEvent(action, reason string, st *session.DispatchStatu
 		m.ShowNotification("Task dispatch stopped: "+printableTitle(reason)+". Press ctrl+x on the board to start it again.", "warning", m.Settings.NotificationDuration*2)
 	}
 	m.cockpitTouch()
+}
+
+// dispatchCounts is an auto board's "2 running, 1 waiting", "" for any
+// other board.
+func dispatchCounts(b *session.DispatchBoardRow) string {
+	if b == nil || b.Mode != session.DispatchAuto {
+		return ""
+	}
+	out := strconv.Itoa(b.Running) + " running"
+	if b.Waiting > 0 {
+		out += ", " + strconv.Itoa(b.Waiting) + " waiting for a free machine"
+	}
+	return out
 }
 
 // dispatchHeld is why dispatch gives no card on the shown board, "" when
@@ -168,8 +187,11 @@ func (m *OS) dispatchReady() bool {
 	return true
 }
 
-// CockpitDispatchMode is ctrl+t on the board: the shown board between manual
-// and pull.
+// CockpitDispatchMode is ctrl+t on the board: the shown board from manual to
+// pull, to auto, and back to manual. Auto starts the board's preset agent for
+// each open card; a board with no preset yet takes the New agent sheet's
+// saved preset (ctrl+s there), else Claude Code on this machine, with the
+// agent's own permission mode.
 func (m *OS) CockpitDispatchMode() tea.Cmd {
 	if !m.dispatchReady() {
 		return nil
@@ -180,10 +202,19 @@ func (m *OS) CockpitDispatchMode() tea.Cmd {
 	}
 	b := m.Inbox.ck.dispatch.Board
 	mode := session.DispatchPull
-	if b.Mode == session.DispatchPull {
+	switch b.Mode {
+	case session.DispatchPull:
+		mode = session.DispatchAuto
+	case session.DispatchAuto:
 		mode = session.DispatchManual
 	}
 	params := map[string]any{"action": "mode", "mode": mode}
+	if mode == session.DispatchAuto && b.Preset == nil {
+		params["agent"] = "claude"
+		if pr := m.Inbox.ck.spawnPreset; pr != nil {
+			params["agent"], params["model"], params["effort"], params["permission_mode"], params["machine"] = cmp.Or(pr.Agent, "claude"), pr.Model, pr.Effort, pr.Permission, pr.Host
+		}
+	}
 	if b.Project != "" {
 		params["project"] = b.Project
 	} else {

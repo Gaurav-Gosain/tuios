@@ -574,12 +574,18 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 		// The board's dispatch: its mode, a click turns it, and what holds
 		// it, a click pauses or starts it again (cockpit_dispatch.go).
 		mode, ink := "Manual", pal.FgDim
-		if ck.dispatch.Board.Mode == session.DispatchPull {
+		switch ck.dispatch.Board.Mode {
+		case session.DispatchPull:
 			mode, ink = "Pull", pal.AccentBright
+		case session.DispatchAuto:
+			mode, ink = "Auto", pal.AccentBright
 		}
 		mx0 := x
 		x = c.text(x, y, 0, ckSeg{t: "Dispatch ", fg: pal.FgMute}, ckSeg{t: mode, fg: ink, attrs: ckBold})
 		ck.hits = append(ck.hits, ckHit{x0: mx0, y0: top + y, x1: x, y1: top + y + 1, kind: ckHitAction, action: "dispatch-mode"})
+		if counts := dispatchCounts(ck.dispatch.Board); counts != "" {
+			x = c.text(x+2, y, 0, ckSeg{t: counts, fg: pal.FgDim})
+		}
 		if held := dispatchHeld(ck.dispatch); held != "" {
 			x += 2
 			hx0 := x

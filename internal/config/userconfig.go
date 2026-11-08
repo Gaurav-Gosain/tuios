@@ -1843,8 +1843,8 @@ const (
 	ActionInboxStagePrev   = "inbox_stage_prev"
 	ActionInboxStageNext   = "inbox_stage_next"
 	ActionInboxBoardLayout = "inbox_board_layout"
-	// ActionInboxDispatchMode turns the shown board's task dispatch between
-	// manual and pull. ActionInboxDispatchPause pauses all dispatch, or
+	// ActionInboxDispatchMode turns the shown board's task dispatch from
+	// manual to pull to auto. ActionInboxDispatchPause pauses all dispatch, or
 	// starts it again after a pause or a stop. Both are chords, so a
 	// printable key never changes what agents are given.
 	ActionInboxDispatchMode  = "inbox_dispatch_mode"

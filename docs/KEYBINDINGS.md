@@ -1908,7 +1908,7 @@ Inside it:
 | `t` | On a card: take it for the pane behind the agents view. `n` on a card in the board's list opens the New agent sheet on it |
 | `H` `L`, `shift+left` `shift+right` | On a card: move it to the stage before or after |
 | `B` | Show the task board as columns or as a list |
-| `Ctrl+T` | On the board: turn task dispatch between manual and pull. In pull, an agent that finishes its card is given the board's next open card. The header says which |
+| `Ctrl+T` | On the board: turn task dispatch from manual to pull to auto. In pull, an agent that finishes its card is given the board's next open card. In auto, tuios starts an agent for each open card in a new worktree, with the board's preset (the New agent sheet's saved preset the first time, else Claude Code on this machine), at most 3 at once. The header says which, and in auto how many run and wait |
 | `Ctrl+X` | On the board: pause all task dispatch, or start it again after a pause or a stop. The palette has "Agents: pause all task dispatch" too |
 | `\` | Show the agents as a column beside the focus, or as a strip of chips above it. tuios keeps the choice. See `view_list` in [CONFIGURATION.md](CONFIGURATION.md#the-agent-list) |
 | `o` | Open what the agent has shown, such as a TML form, on its Artifacts tab, and use it. `esc` goes back to the list |

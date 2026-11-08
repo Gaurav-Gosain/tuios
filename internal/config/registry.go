@@ -548,7 +548,7 @@ var ActionDescriptions = map[string]string{
 	"inbox_stage_prev":     "Agents view: move the card to the stage before",
 	"inbox_stage_next":     "Agents view: move the card to the stage after",
 	"inbox_board_layout":   "Agents view: show the board as columns or as a list",
-	"inbox_dispatch_mode":  "Agents view: on the board, give finished agents the next card (pull), or not (manual)",
+	"inbox_dispatch_mode":  "Agents view: on the board, turn task dispatch from manual to pull to auto",
 	"inbox_dispatch_pause": "Agents view: pause all task dispatch, or start it again",
 	"inbox_view_list":      "Agents view: show the agents as a column or as a strip above the focus",
 	"inbox_artifact":       "Agents view: open what the agent has shown, such as a TML form, and use it",

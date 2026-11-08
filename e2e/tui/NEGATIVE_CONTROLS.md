@@ -14843,3 +14843,11 @@ Run on 2026-11-08 on macOS (arm64). The branch passes 3 runs in a row.
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAutoDispatch' -v .`.
 
+## TestTheBoardTurnsOnAuto
+
+The board of a repository's cards with no agent. ctrl+t twice must set the
+daemon's board to auto with Claude Code, start an agent for the oldest card,
+hold the next at the cap of 1, and show Dispatch Auto with the counts.
+
+Run on 2026-11-08 on macOS (arm64). With ctrl+t turning pull back to manual,
+as before auto: "waiting for the board in auto mode" timed out. **caught**
