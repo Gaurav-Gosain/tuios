@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	shotcapture "github.com/Gaurav-Gosain/tuios/internal/capture"
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 	"github.com/Gaurav-Gosain/tuitest"
 	"tuios.dev/shot"
@@ -684,6 +685,10 @@ func saveCockpitFrames(t *testing.T, term *tuitest.Terminal, name string, pics .
 			}
 			f = shot.BuildFrame(shot.FrameSpec{Frame: "window", Title: "tuios", Padding: 28, Radius: 10, Shadow: true, Controls: "macos",
 				Font: shot.Font{Data: regular}, BoldFont: shot.Font{Data: bold}, Fallback: fallback}, shot.FrameInputs{Palette: p})
+			// The faces fontconfig names for the rest, as tuios screenshot
+			// finds them: a machine with the main font but no fallback
+			// listed draws Hangul, CJK and emoji from its own fonts.
+			shotcapture.FillFallbacks(g, f)
 			if missing, err := shot.MissingGlyphs(g, f); err == nil && len(missing) > 0 {
 				t.Errorf("ASSERTION: the font has no glyph for %q", string(missing))
 			}
