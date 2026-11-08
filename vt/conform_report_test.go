@@ -78,10 +78,11 @@ func TestConform_CursorPositionReport(t *testing.T) {
 		// Without DECOM the same cursor reports its absolute position.
 		{"absolute when origin mode is off", "\x1b[10;20r\x1b[3;5H\x1b[6n", "\x1b[3;5R"},
 
-		// DECXCPR is the same numbers behind a private marker. The page
-		// number is omitted because this emulator has one page.
-		{"DECXCPR", "\x1b[5;2H\x1b[?6n", "\x1b[?5;2R"},
-		{"DECXCPR in origin mode", "\x1b[10;20r\x1b[?6h\x1b[3;5H\x1b[?6n", "\x1b[?3;5R"},
+		// DECXCPR is the same numbers behind a private marker, and the page
+		// number after them, as the VT510 manual has it and xterm sends.
+		// This emulator has one page, page 1. libghostty-vt answers the same.
+		{"DECXCPR", "\x1b[5;2H\x1b[?6n", "\x1b[?5;2;1R"},
+		{"DECXCPR in origin mode", "\x1b[10;20r\x1b[?6h\x1b[3;5H\x1b[?6n", "\x1b[?3;5;1R"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := reply(t, 80, 24, tc.in); got != tc.want {

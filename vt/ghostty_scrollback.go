@@ -30,7 +30,7 @@ func (t *GhosttyTerminal) activeAltLiveLocked() bool {
 	}
 	legacy, _ := t.term.Mode(gh.ModeAltScreenLegacy)
 	a, _ := t.term.Mode(gh.ModeAltScreen)
-	b, _ := t.term.Mode(gh.ModeAltScreenSave)
+	b, _ := t.term.Mode(gh.ModeAltScreenSaveCursorClearEnter)
 	return legacy || a || b
 }
 

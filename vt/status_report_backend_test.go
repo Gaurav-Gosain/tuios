@@ -50,8 +50,9 @@ func TestStatusReportFormPerBackend(t *testing.T) {
 		{"DSR 5, ANSI", "\x1b[5n", "\x1b[0n"},
 		{"DSR 5, DEC private", "\x1b[?5n", "\x1b[?0n"},
 		{"CPR, ANSI", "\x1b[3;4H\x1b[6n", "\x1b[3;4R"},
-		{"DECXCPR, DEC private", "\x1b[3;4H\x1b[?6n", "\x1b[?3;4R"},
-		{"DECXCPR under DECOM", "\x1b[10;20r\x1b[?6h\x1b[3;5H\x1b[?6n", "\x1b[?3;5R"},
+		// The page number follows, page 1, on both backends.
+		{"DECXCPR, DEC private", "\x1b[3;4H\x1b[?6n", "\x1b[?3;4;1R"},
+		{"DECXCPR under DECOM", "\x1b[10;20r\x1b[?6h\x1b[3;5H\x1b[?6n", "\x1b[?3;5;1R"},
 		{"ANSI and private replies stay in order", "ab\x1b[6n\x1b[?5n", "\x1b[1;3R\x1b[?0n"},
 		// Unanswered on both backends, the same as before.
 		{"printer status", "\x1b[?15n", ""},

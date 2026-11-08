@@ -88,13 +88,18 @@ The script wraps this; run it directly when you want the build without the
 install.
 
 ```sh
-./scripts/ghostty-lib.sh            # needs Zig 0.16.x (set ZIG to pick a binary); caches in .ghostty-vt/
+./scripts/ghostty-lib.sh            # needs Zig 0.17.x (set ZIG to pick a binary); caches in .ghostty-vt/
 PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" go build -tags ghostty ./...
 ```
 
-`ghostty-lib.sh` pins the ghostty commit; bumping it is a deliberate
-change, reviewed like a dependency bump, and `go.mod` pins the binding
-commit to match. It also pins the CPU to baseline: the archive is cached
+`ghostty-lib.sh` pins a libghostty-vt release (1.0.0 now). It downloads
+the release's source tarball and its dependency tarball from
+`release.files.ghostty.org`, checks the SHA-256 it pins for each and their
+minisign signatures against the libghostty-vt release key
+(`scripts/minisign`, so no minisign install is needed), and builds
+offline from them. Bumping it is a deliberate change, reviewed like a
+dependency bump, and `vt/go.mod` pins the binding commit to match. It also
+pins the CPU to baseline: the archive is cached
 across CI runners and linked into release binaries, so tuning it for the
 machine that built it earns a SIGILL on the machine that runs it. What SIMD
 survives is in simdutf and highway, which pick their kernel at runtime.

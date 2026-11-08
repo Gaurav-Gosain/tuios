@@ -127,13 +127,13 @@ if [ "$backend" = ghostty ]; then
     cache=${GHOSTTY_VT_CACHE:-$ROOT/.ghostty-vt}
     # A cached build needs no zig. ghostty-lib.sh checks the version when it must build.
     [ -f "$cache/native/.commit" ] || command -v "${ZIG:-zig}" >/dev/null || die "zig not found, and the ghostty backend needs it to build libghostty-vt.
-Install Zig 0.16.x from https://ziglang.org/download, or build the pure Go
+Install Zig 0.17.x from https://ziglang.org/download, or build the pure Go
 emulator instead with: $0 pure"
 
     if [ -d "$cache/native" ]; then
         say "==> libghostty-vt"
     else
-        say "==> libghostty-vt (first run clones ghostty and takes a few minutes)"
+        say "==> libghostty-vt (first run downloads the libghostty-vt release and takes a few minutes)"
     fi
     "$ROOT/scripts/ghostty-lib.sh" native
 

@@ -48,7 +48,7 @@ func (t *GhosttyTerminal) saveCursorShadowLocked() {
 	}
 	c.PendingWrap, _ = t.term.CursorPendingWrap()
 	c.Origin, _ = t.term.Mode(gh.ModeOrigin)
-	if gs, err := t.term.CursorStyle(); err == nil && gs != nil {
+	if gs, err := t.term.CursorSGRStyle(); err == nil && gs != nil {
 		c.Pen = t.convertStyle(gs)
 	}
 	t.savedCur[t.liveScreenLocked()] = c
@@ -76,8 +76,7 @@ func (t *GhosttyTerminal) penExtrasLocked() (uv.Link, bool) {
 	f, err := gh.NewFormatter(t.term,
 		gh.WithFormatterFormat(gh.FormatterFormatVT),
 		gh.WithFormatterSelection(&gh.Selection{Start: *ref, End: *ref}),
-		gh.WithFormatterExtraHyperlink(true),
-		gh.WithFormatterExtraProtection(true))
+		gh.WithFormatterExtras(gh.FormatterExtraHyperlink|gh.FormatterExtraProtection))
 	if err != nil {
 		return uv.Link{}, false
 	}

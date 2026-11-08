@@ -5814,3 +5814,35 @@ A page where one small square turns:
 The page where every pixel changes each frame is the case that costs more. The host reads 16.8 GB and draws 58 frames a second, against 9.9 GB and 60 with whole frames, because tuios replaces a waiting frame only when it is one image. Kitty directly reads about 26 GB there, at 107 frames a second.
 
 The client pays for hashing each patch and for a compose on each write that holds an update: 1.4 s more per 26 s than v0.12.0 on the small page.
+
+## 2026-11 libghostty-vt 1.0
+
+The ghostty backend moved from ghostty commit 27e8b3fa (2026-09-20) to the
+libghostty-vt 1.0.0 release, and the binding from 31b65cdc to b13f277d.
+Measured on an M3 Pro with GOMAXPROCS=4, the three builds interleaved, n=8.
+
+| Benchmark | old | 1.0 | change |
+|-----------|-----|-----|--------|
+| `BenchmarkBackendDoomFire158x40` | 42.9 ms | 43.3 ms | `~` (p=0.51) |
+| `BenchmarkBackendScroll` | 5.77 ms | 5.46 ms | `~` (p=0.38) |
+| `BenchmarkBackendTUI` | 4.48 ms | 4.50 ms | `~` (p=0.72) |
+| `BenchmarkBackendApt` | 1.55 ms | 1.59 ms | `~` (p=0.23) |
+| `internal/session` wire and history benchmarks | | | `~` on all ten (p > 0.2) |
+
+Measured and not changed. The pure Go emulator against 1.0 on the same runs:
+the ghostty backend takes 44.6% less time (geomean), with Scroll 73% and Apt
+69% less.
+
+Memory: 50 panes of 120x40 with 10,000 lines of scrollback each are 10.2 MB a
+pane on 1.0 against 9.8 MB before (process RSS), and 2.0 MB a pane on the pure
+Go emulator. 1.0 adds history compression (`Terminal.Compress`), which takes
+one such pane from 10.6 MB to 0.89 MB as the library counts it, in 2.1 ms.
+On Linux (arch-btw, x86_64) the process RSS of the 50 panes fell from 548 MB
+to 109 MB after it, 3.0 ms a pane, and reading one compressed history back
+took 15 ms. On macOS the library's count fell the same way but the process
+footprint did not. tuios does not call it yet: it needs an idle schedule per
+pane, held to the idle-cost tests.
+
+On arch-btw the ghostty backend takes 35.8% less time than the pure Go
+emulator on `BenchmarkBackend*` (geomean, n=6), with Apt 60% and Scroll 36%
+less. The old library was not measured there.

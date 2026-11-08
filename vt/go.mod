@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/charmbracelet/ultraviolet v0.0.0-20260812204455-68fa937c71be
 	github.com/charmbracelet/x/ansi v0.11.8
-	go.mitchellh.com/libghostty v0.0.0-20260920220152-31b65cdc24cf
+	go.mitchellh.com/libghostty v0.0.0-20261107144202-b13f277ddcb2
 	tuios.dev/progstatus v0.1.0
 )
 
