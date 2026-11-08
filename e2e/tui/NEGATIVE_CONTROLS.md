@@ -15076,3 +15076,22 @@ Run on 2026-11-08 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestATurnEndKeepsTheCard$' -v .`.
+
+## TestF3ReachesAKittyKeyboardPane
+
+Issue #1615. A pane turns on the kitty keyboard protocol (`CSI > 1 u`), as
+fish 4 and Codex do, and prints each byte it reads. F3 from the host, as
+`ESC O R` and as `CSI 13 ~`, must reach it as `CSI 13 ~`. tuios sent
+`CSI R`, the cursor position report, which fish reads as no key.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (6db1de3ed): `kittyKeyForm` maps F3 to `CSI 1 R` | `F3 sent as "\x1bOR" reached the pane as "B1b B5b B52"` | **caught** |
+
+The conformance rows for F3 in `vt` `TestEncodeKeyCSIu` fail on main the same
+way.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestF3ReachesAKittyKeyboardPane$' -v .`.

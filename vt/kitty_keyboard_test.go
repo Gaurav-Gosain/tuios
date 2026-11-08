@@ -110,6 +110,11 @@ func TestEncodeKeyCSIu(t *testing.T) {
 		{"ctrl+shift+up arrow", KeyPressEvent{Code: KeyUp, Mod: ModCtrl | ModShift}, disambiguate, "\x1b[1;6A"},
 		{"F5 without modifiers", KeyPressEvent{Code: KeyF5}, disambiguate, "\x1b[15~"},
 		{"ctrl+F5", KeyPressEvent{Code: KeyF5, Mod: ModCtrl}, disambiguate, "\x1b[15;5~"},
+		// F3 is CSI 13 ~, never CSI R, which is the cursor position report
+		// (issue #1615).
+		{"F3 without modifiers", KeyPressEvent{Code: KeyF3}, disambiguate, "\x1b[13~"},
+		{"ctrl+F3", KeyPressEvent{Code: KeyF3, Mod: ModCtrl}, disambiguate, "\x1b[13;5~"},
+		{"F3 with report-all-keys", KeyPressEvent{Code: KeyF3}, ansi.KittyReportAllKeysAsEscapeCodes, "\x1b[13~"},
 
 		{"plain letter carries its text (flags 31)", KeyPressEvent{Code: 'a', Text: "a"}, all, "\x1b[97;1;97u"},
 		{"plain letter carries its text (flags 27)", KeyPressEvent{Code: 'a', Text: "a"}, focus, "\x1b[97;1;97u"},
