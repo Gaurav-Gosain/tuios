@@ -21,7 +21,7 @@ and a comma gives alternatives.
 | Key | Matches |
 | --- | --- |
 | `harness:` | the harness id, or the program name that starts it (`claude` is `claude-code`) |
-| `state:` | the agent state |
+| `state:` | the agent state, or `silent`. `state:working` also matches a silent pane |
 | `needs:you` | a pane on `needs_input` or `errored` |
 | `session:` | the session name, a glob |
 | `group:` | the fan-out group, the branch stem `fan` used, a glob |

@@ -103,6 +103,7 @@ func (d *Daemon) paneSelectorTarget(sess *Session, w WindowState, group string, 
 		Cwd:      w.Cwd,
 		Group:    group,
 		NeedsYou: w.AgentState.NeedsYou(),
+		Silent:   w.AgentReason == AgentReasonSilent && w.AgentState == AgentStateWorking,
 		Tasks:    tasks,
 		Stages:   stages,
 	}

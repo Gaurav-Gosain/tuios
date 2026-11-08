@@ -24,7 +24,10 @@ import (
 // match (OR). The keys:
 //
 //	harness:ID   the harness id, or a program name a manifest detects (claude)
-//	state:S      the agent state, one of AgentStateNames
+//	state:S      the agent state, one of AgentStateNames, or silent: a pane
+//	             whose agent said working and then nothing for silent_after.
+//	             state:working matches a silent pane too, since working is the
+//	             last thing its agent said.
 //	needs:you    a pane a person has to act on (needs_input or errored)
 //	session:G    the session name, a glob
 //	group:G      the worktree fan-out group (the branch stem), a glob
@@ -52,17 +55,20 @@ import (
 const (
 	SelectorHarness = "harness"
 	SelectorState   = "state"
-	SelectorNeeds   = "needs"
-	SelectorSession = "session"
-	SelectorGroup   = "group"
-	SelectorHost    = "host"
-	SelectorName    = "name"
-	SelectorCwd     = "cwd"
-	SelectorTask    = "task"
-	SelectorStage   = "stage"
-	SelectorParent  = "parent"
-	SelectorRoot    = "root"
-	SelectorRole    = "role"
+	// SelectorStateSilent is the state term value that picks the silent
+	// panes. It is not an agent state: a silent pane's state is unknown.
+	SelectorStateSilent = "silent"
+	SelectorNeeds       = "needs"
+	SelectorSession     = "session"
+	SelectorGroup       = "group"
+	SelectorHost        = "host"
+	SelectorName        = "name"
+	SelectorCwd         = "cwd"
+	SelectorTask        = "task"
+	SelectorStage       = "stage"
+	SelectorParent      = "parent"
+	SelectorRoot        = "root"
+	SelectorRole        = "role"
 )
 
 // SelectorKeys lists the keys a selector takes, in the order the docs give
@@ -102,6 +108,9 @@ type SelectorTarget struct {
 	Cwd      string
 	Group    string
 	NeedsYou bool
+	// Silent is a pane whose agent said working and then nothing for longer
+	// than silent_after. Its State is unknown. See agent_silent.go.
+	Silent bool
 	// Tasks are the ids of the task cards the pane holds. Only a pane of
 	// this machine fills it, so a task term matches nothing else.
 	Tasks []string
@@ -157,8 +166,8 @@ func ParseSelector(text, homeDir string) (*Selector, error) {
 			switch key {
 			case SelectorState:
 				v = strings.ToLower(v)
-				if !slices.Contains(AgentStateNames, v) {
-					return nil, errors.New("state " + echoName(v) + " is not an agent state. The states are " + strings.Join(AgentStateNames, ", "))
+				if !slices.Contains(AgentStateNames, v) && v != SelectorStateSilent {
+					return nil, errors.New("state " + echoName(v) + " is not an agent state. The states are " + strings.Join(AgentStateNames, ", ") + ", and silent")
 				}
 			case SelectorRole:
 				v = strings.ToLower(v)
@@ -274,7 +283,9 @@ func (term selectorTerm) matchOne(v string, t SelectorTarget) bool {
 		id := strings.ToLower(t.Harness)
 		return glob(id) || (id != "" && !strings.ContainsAny(v, "*?[") && strings.HasPrefix(id, v+"-"))
 	case SelectorState:
-		return t.State == v
+		// A silent pane shows unknown, but the last word of its agent was
+		// working, and a lead asking who is busy means it too.
+		return t.State == v || (t.Silent && (v == AgentStateWorking.Name() || v == SelectorStateSilent))
 	case SelectorNeeds:
 		return t.NeedsYou
 	case SelectorSession:

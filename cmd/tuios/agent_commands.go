@@ -90,6 +90,9 @@ type agentRow struct {
 	WindowID   string `json:"window_id"`
 	Name       string `json:"name"`
 	State      string `json:"state"`
+	LastState  string `json:"last_state"`
+	Reason     string `json:"reason"`
+	LastHeard  int64  `json:"last_heard_at"`
 	Message    string `json:"message"`
 	Source     string `json:"source"`
 	HarnessID  string `json:"harness_id"`
@@ -208,6 +211,11 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error
 			}
 		}
 		state := a.State
+		// A silent agent's last word was working: say that, and how long
+		// it has said nothing, rather than unknown.
+		if a.Reason == "silent" && a.LastState == "working" {
+			state = "working (silent " + silentFor(a.LastHeard) + ")"
+		}
 		if a.BlockedBy != "" {
 			state += " (" + plainLine(a.BlockedBy) + ")"
 		}
@@ -670,6 +678,22 @@ func agoOf(nanos int64) string {
 		return fmt.Sprintf("%dm ago", int(d.Minutes()))
 	default:
 		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	}
+}
+
+// silentFor is how long it is since nanos, short: 40s, 12m, 3h.
+func silentFor(nanos int64) string {
+	if nanos == 0 {
+		return "a while"
+	}
+	d := time.Since(time.Unix(0, nanos))
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", max(int(d.Seconds()), 0))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	default:
+		return fmt.Sprintf("%dh", int(d.Hours()))
 	}
 }
 

@@ -61,7 +61,7 @@ Read `--json`, not the box table. The states:
 | `done` | It finished a turn. `message` is the first line of its last reply, or the line it reported. |
 | `idle` | At rest, with nothing to report. |
 | `errored` | It reported an error. Read the pane. |
-| `unknown` | tuios lost track of it, or `reason` is `silent`: no report for `[agents] silent_after`. Look at the pane. |
+| `unknown` | tuios lost track of it, or `reason` is `silent`: no report for `[agents] silent_after`. A silent worker is still working: the table says `working (silent 12m)`, `last_state` is `working`, and `--select state:working` keeps it (`state:silent` picks only those). Look at the pane. |
 | `none` | Nothing reports here. It may be a shell. |
 
 `unread` counts mail the worker has not read. `finished_unread` is true while
