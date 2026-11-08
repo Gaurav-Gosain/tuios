@@ -16,7 +16,8 @@ import (
 // index plus the number of rows the history has let go of from its oldest end
 // (vt.Emulator.HistoryDropped), so it stays the same while output adds rows
 // at the bottom and the ring drops them at the top. The H frame, sent before
-// each S frame, gives the id of the first history row the snapshot carries.
+// each S frame to a stream that asked (row_ids), gives the id of the first
+// history row the snapshot carries.
 //
 // A resize keeps the ids of the rows a viewer fetches: the emulator lays out
 // again only the screen and the newest rows that belong to it, and keeps the

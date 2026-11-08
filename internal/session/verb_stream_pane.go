@@ -36,8 +36,9 @@ import (
 //	'X' exit:     UTF-8 reason. The pane is gone, or the caller may no
 //	    longer read it, and the daemon closes the connection.
 //	'H' history:  u64 id of the first history row of the S frame that
-//	    follows, for pane-history (verb_pane_history.go). Not sent for a pane
-//	    whose emulator gives no ids.
+//	    follows, for pane-history (verb_pane_history.go). Sent only to a
+//	    stream opened with row_ids, and not for a pane whose emulator gives
+//	    no ids.
 //
 // From the client:
 //
@@ -137,9 +138,11 @@ type paneStream struct {
 	rows   int
 	snap   *TerminalState // the snapshot to send first, nil in resume mode
 	// snapFirst is the id of the first history row snap carries, and
-	// snapIDs says the pane's emulator gives ids (verb_pane_history.go).
+	// snapIDs says the pane's emulator gives ids (verb_pane_history.go),
+	// and rowIDs that the client asked for them (row_ids).
 	snapFirst int64
 	snapIDs   bool
+	rowIDs    bool
 	// fit makes the stream's lease a viewer's, and viewer says the stream
 	// reported its terminal. See pane_lease.go and pane_viewers.go.
 	fit   bool
@@ -220,6 +223,9 @@ func (d *Daemon) verbStreamPane(cs *connState, params json.RawMessage) (any, *ve
 		// Viewer is the terminal the stream shows the pane in. See
 		// pane_viewers.go.
 		Viewer *ViewerReport `json:"viewer"`
+		// RowIDs asks for the H frame before each snapshot. A client that
+		// does not ask reads S first, as before H.
+		RowIDs bool `json:"row_ids"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -255,7 +261,7 @@ func (d *Daemon) verbStreamPane(cs *connState, params json.RawMessage) (any, *ve
 	}
 	win := state.Windows[idx]
 	ps := &paneStream{d: d, cs: cs, sess: sess, window: win.ID, pty: pty, subID: cs.clientID,
-		fit: p.Fit || p.Yield, yield: p.Yield, repaint: p.Repaint, keep: p.Yield && cs.peerUIDOK && !cs.viaLink, cellW: min(max(p.CellWidth, 0), maxLeaseDim), cellH: min(max(p.CellHeight, 0), maxLeaseDim), quit: make(chan struct{})}
+		fit: p.Fit || p.Yield, yield: p.Yield, repaint: p.Repaint, rowIDs: p.RowIDs, keep: p.Yield && cs.peerUIDOK && !cs.viaLink, cellW: min(max(p.CellWidth, 0), maxLeaseDim), cellH: min(max(p.CellHeight, 0), maxLeaseDim), quit: make(chan struct{})}
 	if p.LeaseCols > 0 {
 		if verr := ps.admitLease(p.LeaseCols, p.LeaseRows); verr != nil {
 			return nil, verr
@@ -630,7 +636,7 @@ func (ps *paneStream) resnap() error {
 func (ps *paneStream) writeSnap() error {
 	st := ps.snap
 	defer ps.dropSnap()
-	if ps.snapIDs {
+	if ps.snapIDs && ps.rowIDs {
 		if err := ps.writeHistoryID(); err != nil {
 			return err
 		}

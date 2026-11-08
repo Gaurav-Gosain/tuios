@@ -2157,6 +2157,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "fit", Type: "bool", Description: "Make the lease a viewer's: while no TUI client shows the session, the pane takes the size of the largest fit lease held, and goes back to its own size when the last one ends. While a client shows the session, a fit lease only holds the pane smaller."},
 				{Name: "yield", Type: "bool", Description: "A fit lease that yields to a TUI client. On the local socket it lasts until the stream closes."},
 				{Name: "repaint_on_resize", Type: "bool", Description: "On a resize send an S snapshot in place of R.", Default: "false"},
+				{Name: "row_ids", Type: "bool", Description: "Send the H frame, the id of the snapshot's first history row for pane-history, before each S.", Default: "false"},
 				{Name: "cell_width", Type: "int", Description: "Viewer cell width in pixels, for a fit lease."},
 				{Name: "cell_height", Type: "int", Description: "Viewer cell height in pixels."},
 				{Name: "viewer", Type: "object", Description: "The terminal the stream shows the pane in: bg, fg (#rrggbb), palette (sixteen comma-separated #rrggbb), kitty and sixel (bool). While no TUI client shows the session, the daemon answers the pane's OSC 10, 11 and 4, DA1 and kitty graphics queries from the newest viewer's report."},

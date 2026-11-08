@@ -138,7 +138,7 @@ func AttachVia(d Dialer, id string) (*Stream, error) {
 	// The pane comes as a snapshot of the daemon's screen where it changes
 	// size: the terminal here reflows nothing itself, so it shows what
 	// the daemon's emulator laid out (QA-011).
-	params := map[string]any{"session_id": sid, "session": name, "fit": true, "yield": true, "repaint_on_resize": true}
+	params := map[string]any{"session_id": sid, "session": name, "fit": true, "yield": true, "repaint_on_resize": true, "row_ids": true}
 	if window != "" {
 		params["window"] = window
 	}

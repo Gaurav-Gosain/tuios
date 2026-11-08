@@ -3465,6 +3465,8 @@ Params:
   `S` snapshot of the daemon's screen at the new size in place of the `R`
   frame. The client then reflows nothing itself, so its screen stays the
   daemon's: a prompt the daemon keeps whole on a resize stays whole there.
+- `row_ids` (optional bool): send the `H` frame before each `S` frame. A
+  client that does not ask gets no `H` frame.
 - `cell_width`, `cell_height` (optional ints): the cell of the client in
   pixels. See [The size lease](#the-size-lease).
 - `viewer` (optional object): the terminal the stream shows the pane in:
@@ -3517,7 +3519,7 @@ Frames from the daemon:
 
 | Type | Payload | Meaning |
 | --- | --- | --- |
-| `H` (0x48) | u64 id | The id of the first history row that the next `S` frame carries. Use it with `pane-history` to read the rows above. The daemon does not send it when the pane's emulator gives no row ids. |
+| `H` (0x48) | u64 id | The id of the first history row that the next `S` frame carries. Use it with `pane-history` to read the rows above. The daemon sends it only to a stream opened with `row_ids`, and not when the pane's emulator gives no row ids. |
 | `S` (0x53) | u64 seq, u16 cols, u16 rows, bytes | A snapshot. Reset the emulator to cols by rows and write the bytes into it. |
 | `O` (0x4F) | u64 seq, bytes | Output. Write the bytes into the emulator. `seq` is the stream position after the last byte. |
 | `R` (0x52) | u64 seq, u16 cols, u16 rows | The pane changed size at `seq`. Resize the emulator. |
