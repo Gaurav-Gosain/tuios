@@ -5,7 +5,9 @@ import (
 	"image"
 	"slices"
 	"strings"
+	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app/helptext"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -19,10 +21,13 @@ import (
 // Shift+Up and Shift+Down move into and out of a component that has parts; h
 // shows the whole keybinding set of the component selected; Shift+Esc leaves.
 // The rest of the keyboard is the app's, so a chord the pane lists runs while
-// the pane explains it, and the pane follows the layout that chord leaves. The
-// pane that explains the component is drawn above or below it, never over it
-// where the screen has room, and its border is the error ink, so it reads as an
-// inspection surface rather than as one more dock or rail.
+// the pane explains it, and the pane follows the layout that chord leaves. A
+// key that runs this way also steps the pane out of sight for a moment, so the
+// change it makes is seen rather than explained; a navigation key brings the
+// pane back at once. The pane that explains the component is drawn above or
+// below it, never over it where the screen has room, and its border is the
+// error ink, so it reads as an inspection surface rather than as one more dock
+// or rail.
 
 // helpKey is one binding as the pane shows it: the whole press, chord
 // included, and what it does.
@@ -63,6 +68,7 @@ func (m *OS) EnterHelpMode() {
 	m.CloseHints()
 	m.ClosePaneLabels()
 	m.HelpMode = true
+	m.helpHidden = false
 	m.helpShowKeys = false
 	m.helpScroll = 0
 	m.helpTarget = ""
@@ -79,6 +85,7 @@ func (m *OS) EnterHelpMode() {
 // leader menu again, and Shift+Esc or Shift+F1 goes back to the pane.
 func (m *OS) ExitHelpMode() {
 	m.HelpMode = false
+	m.helpHidden = false
 	m.helpShowKeys = false
 	m.helpScroll = 0
 	m.helpTarget = ""
@@ -107,6 +114,7 @@ func (m *OS) helpComponents() []helpComponent {
 // HelpNext moves to the next top-level component, or the one delta places
 // back. Shift+Tab calls it.
 func (m *OS) HelpNext(delta int) {
+	m.HelpResume()
 	comps := m.helpComponents()
 	tops := helpTopLevel(comps)
 	if len(tops) == 0 {
@@ -140,6 +148,7 @@ func (m *OS) HelpNext(delta int) {
 // HelpDeeper moves Shift+Down: into the selected component's first part, or to
 // its next sibling once inside one.
 func (m *OS) HelpDeeper() {
+	m.HelpResume()
 	comps := m.helpComponents()
 	cur := helpIndex(comps, m.helpTarget)
 	if cur < 0 {
@@ -165,6 +174,7 @@ func (m *OS) HelpDeeper() {
 // HelpShallower moves Shift+Up: to the previous sibling inside a component, or
 // back out to the component itself from its first part.
 func (m *OS) HelpShallower() {
+	m.HelpResume()
 	comps := m.helpComponents()
 	cur := helpIndex(comps, m.helpTarget)
 	if cur < 0 {
@@ -192,6 +202,7 @@ func (m *OS) HelpScroll(delta int) {
 	if !m.HelpMode || delta == 0 {
 		return
 	}
+	m.HelpResume()
 	m.helpScroll = max(m.helpScroll+delta, 0)
 	m.helpInvalidate()
 }
@@ -202,11 +213,73 @@ func (m *OS) HelpToggleKeys() {
 	if !m.HelpMode {
 		return
 	}
+	m.HelpResume()
 	m.helpShowKeys = !m.helpShowKeys
 	m.helpScroll = 0
 	m.helpInvalidate()
 }
 
+// helpHideFor is how long the explanation stays hidden after a key that is not
+// help's. The key acts on the screen it was aimed at, the pane comes back when
+// the person pauses, and any navigation key brings it back at once.
+const helpHideFor = 2 * time.Second
+
+// helpShowMsg ends the hide numbered seq, unless a later key started another.
+type helpShowMsg struct{ seq int }
+
+// HelpHidden reports whether a key that is not help's has the pane hidden for
+// the moment. The pointer and the caret read it to know that the screen is
+// the app's again.
+func (m *OS) HelpHidden() bool {
+	return m.HelpMode && m.helpHidden
+}
+
+// SuspendHelp hides the explanation while a key that is not help's runs. It is
+// the key router's to call: the router's own command is the key's, so the tick
+// that ends the hide is collected by Update from FlushHelpHide.
+func (m *OS) SuspendHelp() {
+	if !m.HelpMode {
+		return
+	}
+	m.helpHidden = true
+	m.helpHideSeq++
+	m.helpHideDue = true
+	m.helpInvalidate()
+}
+
+// FlushHelpHide returns the tick the last SuspendHelp owes, or nil when no key
+// hid the pane.
+func (m *OS) FlushHelpHide() tea.Cmd {
+	if !m.helpHideDue {
+		return nil
+	}
+	m.helpHideDue = false
+	seq := m.helpHideSeq
+	if !m.helpHidden {
+		return nil
+	}
+	return tea.Tick(helpHideFor, func(time.Time) tea.Msg { return helpShowMsg{seq: seq} })
+}
+
+// showHelp ends the hide the tick names, if it is still the newest one.
+func (m *OS) showHelp(msg helpShowMsg) {
+	if !m.HelpMode || !m.helpHidden || msg.seq != m.helpHideSeq {
+		return
+	}
+	m.helpHidden = false
+	m.helpInvalidate()
+}
+
+// HelpResume brings the explanation back at once, before the hide's time is
+// up. A navigation key calls it, because a key that asks for the pane is not
+// one the pane should be hiding from.
+func (m *OS) HelpResume() {
+	if !m.helpHidden {
+		return
+	}
+	m.helpHidden = false
+	m.helpInvalidate()
+}
 
 // HelpHoverAt selects the smallest component under the pointer. Motion over
 // the explaining pane itself is ignored, so reading the pane does not select
@@ -1199,7 +1272,7 @@ func helpRectUnion(rects []image.Rectangle) image.Rectangle {
 // called once per frame after the rail, the panes and the dock have drawn, so
 // the rectangles it places against are the ones the user is looking at.
 func (m *OS) renderHelpMode() *lipgloss.Layer {
-	if !m.HelpMode {
+	if !m.HelpMode || m.helpHidden {
 		m.helpPaneRect = image.Rectangle{}
 		return nil
 	}

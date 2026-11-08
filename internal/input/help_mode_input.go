@@ -19,9 +19,10 @@ func helpOwnsKey(msg tea.KeyPressMsg, o *app.OS) bool {
 
 // helpOwnsPointer reports whether the pointer is help mode's to read. A panel
 // above it, a capture or the review takes the pointer the way it takes the
-// keys, so help does not scroll or re-target under them.
+// keys, and a key that hid the explanation hands the pointer back with it, so
+// help does not scroll or re-target under them.
 func helpOwnsPointer(o *app.OS) bool {
-	return !o.PanelOwnsKeyboard() && !o.CaptureActive() && !o.ReviewOpen()
+	return !o.HelpHidden() && !o.PanelOwnsKeyboard() && !o.CaptureActive() && !o.ReviewOpen()
 }
 
 // handleHelpModeKey runs the keys help mode binds and reports whether it did.
@@ -34,6 +35,10 @@ func helpOwnsPointer(o *app.OS) bool {
 // itself and help must not take it. The keys themselves come from
 // [keybindings.help], through GetHelpAction, so a rebind moves the pane and the
 // hint that names it together.
+//
+// Every key below is a navigation key, and a navigation key is the pane's own:
+// one pressed while a key has the pane hidden brings it back at once rather
+// than waiting out the hide.
 func handleHelpModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, bool) {
 	if o.KeybindRegistry == nil {
 		return o, nil, false
