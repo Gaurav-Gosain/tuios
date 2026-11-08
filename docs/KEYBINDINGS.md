@@ -525,7 +525,12 @@ Under it, `Project` is the repository of the focused pane's folder, by its
 origin URL, so the card shows on that repository's board in every session and
 on linked machines; the arrows turn it to `None, this session` for a card of
 the session only. `Stage` is Todo or Plan first, and `Agent to start` is the
-agent `ctrl+enter` starts. `tab` steps through them and the arrows change one.
+agent `ctrl+enter` starts. With a linked machine, `Machine` says where that
+agent starts: `This machine` (the default), `Any machine` (the machine with
+the most room, as [Any machine](CLI_REFERENCE.md#any-machine) picks it), or
+one linked machine. On another machine the agent's pane holds the card here
+over that machine's link back. `tab` steps through them and the
+arrows change one.
 `enter` adds the card and closes. `ctrl+enter` adds it and starts the agent on
 it, which holds the card from the start; with Plan first it starts in the
 agent's own plan mode where it has one. `esc` closes and keeps the draft for

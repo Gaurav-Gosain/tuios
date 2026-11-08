@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"os"
 	"slices"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
@@ -30,8 +32,11 @@ import (
 // The card goes to the current session. The first pill is its project: the
 // repository of the focused pane's folder, by its origin URL, so the card
 // shows on that repository's board in every session and on linked machines;
-// or none, for a card of the session only. The design's "Any machine" pill
-// comes with pool placement.
+// or none, for a card of the session only. When a machine is linked, the
+// last pill is where the card's agent starts: Any machine (the daemon picks,
+// place-agent), this machine (the default), or one linked machine. ctrl+enter places the
+// agent there; on another machine its pane claims the card here over that
+// machine's link back.
 
 // overlayKindTaskCapture is the sheet's overlay kind.
 const overlayKindTaskCapture = "taskcapture"
@@ -44,6 +49,7 @@ const (
 	tcProject
 	tcStage
 	tcAgent
+	tcMachine
 	tcFields
 )
 
@@ -72,8 +78,49 @@ type taskCapture struct {
 	// one ctrl+enter starts.
 	agents []spawnAgent
 	agent  int
-	notice string
-	busy   bool
+	// machines are where the card's agent may start: "" for this machine,
+	// "any" for the machine the daemon picks, and each linked machine.
+	// machine is the pick. The pill shows only when a machine is linked.
+	machines []string
+	machine  int
+	notice   string
+	busy     bool
+}
+
+// tcMachineValues are the Machine pill's values: this machine first, the
+// default, then "any" and the linked machines this client knows. Nil when
+// none is linked. A card's agent moves only when the person picks it.
+func (m *OS) tcMachineValues() []string {
+	var hosts []string
+	for _, h := range m.FederationHosts {
+		if h.Name != federation.LocalHostName && h.Name != "" {
+			hosts = append(hosts, h.Name)
+		}
+	}
+	if len(hosts) == 0 {
+		return nil
+	}
+	return append([]string{"", session.TaskMachineAny}, hosts...)
+}
+
+// machineLabel is a Machine pill value as a person reads it.
+func tcMachineLabel(v string) string {
+	switch v {
+	case session.TaskMachineAny:
+		return "Any machine"
+	case "":
+		return "This machine"
+	}
+	return v
+}
+
+// lastField is the last stop of the tab order: the Machine pill shows only
+// when a machine is linked.
+func (s *taskCapture) lastField() tcField {
+	if len(s.machines) == 0 {
+		return tcAgent
+	}
+	return tcMachine
 }
 
 // TaskCaptureOpen reports whether the sheet is up and owns the keyboard.
@@ -103,6 +150,15 @@ func (m *OS) OpenTaskCapture() tea.Cmd {
 	s.ed.SetCompleter(c)
 	s.wires = draftWires{mentions: c}
 	s.project = ""
+	// The pick stays across openings while the machine is still linked.
+	picked := ""
+	if s.machine < len(s.machines) {
+		picked = s.machines[s.machine]
+	}
+	s.machines, s.machine = m.tcMachineValues(), 0
+	if i := slices.Index(s.machines, picked); i >= 0 && s.machines != nil && picked != "" {
+		s.machine = i
+	}
 	return tea.Batch(tcAgentsCmd(), tcProjectCmd(c.dir))
 }
 
@@ -239,7 +295,7 @@ func (m *OS) TaskCaptureKey(msg tea.KeyPressMsg) tea.Cmd {
 		s.field--
 		return nil
 	case "down", "j":
-		s.field = min(s.field+1, tcFields-1)
+		s.field = min(s.field+1, s.lastField())
 		return nil
 	}
 	step := func(i, n int) int { return (i + d + n) % max(n, 1) }
@@ -252,6 +308,8 @@ func (m *OS) TaskCaptureKey(msg tea.KeyPressMsg) tea.Cmd {
 		s.stage = step(s.stage, len(tcStages))
 	case tcAgent:
 		s.agent = step(s.agent, len(s.agents))
+	case tcMachine:
+		s.machine = step(s.machine, len(s.machines))
 	}
 	return nil
 }
@@ -315,6 +373,14 @@ func (m *OS) taskCaptureFile(start bool) tea.Cmd {
 		where = s.projectLabel()
 	}
 	stage := tcStages[s.stage]
+	machine := ""
+	if s.machine < len(s.machines) {
+		machine = s.machines[s.machine]
+	}
+	if machine != "" && project == "" {
+		s.notice, s.field = "A card of the session only starts on this machine. Pick a project, or This machine.", tcMachine
+		return nil
+	}
 	var agent spawnAgent
 	if start {
 		agent = s.agents[s.agent]
@@ -322,6 +388,11 @@ func (m *OS) taskCaptureFile(start bool) tea.Cmd {
 	}
 	call, nonce := m.inboxCaller(), m.inboxNonce()
 	local := m.AttachedHost == ""
+	build := ""
+	if m.DaemonClient != nil {
+		build = m.DaemonClient.ClientVersion()
+	}
+	others := slices.DeleteFunc(slices.Clone(s.machines), func(v string) bool { return v == "" || v == session.TaskMachineAny || v == machine })
 	s.busy = true
 	m.closeTaskCapture(true)
 	return func() tea.Msg {
@@ -339,6 +410,9 @@ func (m *OS) taskCaptureFile(start bool) tea.Cmd {
 		}
 		if project != "" {
 			params["project"] = project
+		}
+		if machine != "" {
+			params["machine"] = machine
 		}
 		raw, err := call("add-task", params, 10*time.Second)
 		if err != nil {
@@ -363,10 +437,39 @@ func (m *OS) taskCaptureFile(start bool) tea.Cmd {
 		if stage == session.TaskStagePlan && slices.Contains(agent.launch.Permissions, "plan") {
 			sp["permission_mode"] = "plan"
 		}
-		if local {
+		start := call
+		where := ""
+		if machine != "" {
+			// The daemon picks the machine, or checks the one named: the
+			// agent there needs the agent, the repository and a link back.
+			pp := map[string]any{"agent": agent.cmd, "task": row.ID, "task_session": sess, "local_origin": project}
+			if machine != session.TaskMachineAny {
+				pp["exclude"] = append(others, federation.LocalHostName)
+			}
+			if local {
+				pp["env"] = map[string]string{"PATH": os.Getenv("PATH")}
+			}
+			ans, err := placeCall(call, pp)
+			if err != nil {
+				return tcFiledMsg{warn: true, text: filed + " " + agent.cmd + " did not start: " + tcVerbMessage(err)}
+			}
+			if host := ans.Host; host != "" {
+				where = " on " + host
+				sp["task"], sp["task_host"], sp["task_session"] = row.ID, ans.TaskHost, sess
+				sp["repo_url"] = project
+				if root := spawnReposRoot(host); root != "" {
+					sp["repos_root"] = root
+				}
+				if ans.Clone {
+					sp["clone"] = true
+				}
+				start = hostCaller(host, build)
+			}
+		}
+		if local && where == "" {
 			sp["env"] = map[string]string{"PATH": os.Getenv("PATH")}
 		}
-		raw, err = call("start-agent", sp, spawnStartTimeout)
+		raw, err = start("start-agent", sp, spawnStartTimeout)
 		if err != nil {
 			return tcFiledMsg{warn: true, text: filed + " " + agent.cmd + " did not start: " + err.Error()}
 		}
@@ -378,7 +481,7 @@ func (m *OS) taskCaptureFile(start bool) tea.Cmd {
 		if !res.Ready && res.Reason != "" {
 			return tcFiledMsg{warn: true, text: filed + " " + agent.cmd + " started on it and is not ready: " + printableTitle(res.Reason)}
 		}
-		return tcFiledMsg{text: filed + " " + agent.cmd + " works on it."}
+		return tcFiledMsg{text: filed + " " + agent.cmd + " works on it" + where + "."}
 	}
 }
 
@@ -402,4 +505,13 @@ func (m *OS) applyTCFiled(msg tcFiledMsg) {
 		kind = "warning"
 	}
 	m.ShowNotification(msg.text, kind, m.Settings.NotificationDuration)
+}
+
+// tcVerbMessage is a verb error as the toast says it: the daemon's own words
+// without the code.
+func tcVerbMessage(err error) string {
+	if callErr, ok := errors.AsType[*session.VerbCallError](err); ok {
+		return printableTitle(callErr.Message)
+	}
+	return printableTitle(err.Error())
 }

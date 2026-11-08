@@ -613,6 +613,34 @@ func (m *OS) drawSpawnMachines(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout
 		if !mc.up {
 			ink = quiet
 		}
+		if mc.any {
+			// The daemon's pick and why, in place of a load.
+			c.text(x+2, y, 0, ckSeg{t: mark, fg: mk}, ckSeg{t: "  " + l.g(ckGlyphHost) + " ", fg: quiet},
+				ckSeg{t: mc.name, fg: ink, attrs: ckBold})
+			pick, why, warn := spawnAnyWords(s)
+			if picked && warn {
+				missing = why
+			}
+			pickInk := overlay.ReadableAt(pal.FgDim, ground, overlay.ContrastFloor)
+			if warn {
+				pickInk = overlay.ReadableAt(pal.Warning, ground, overlay.MarkFloor)
+			}
+			if p.twoLine {
+				c.textR(right-2, y, ckSeg{t: pick, fg: pickInk})
+				c.text(x+5, y+1, right-2, ckSeg{t: ckTrunc(why, right-2-x-5), fg: quiet})
+			} else {
+				c.textR(right-2, y, ckSeg{t: pick, fg: pickInk})
+			}
+			if picked {
+				c.mark(pal, x, y, w, rows, ckOn)
+			}
+			s.hits = append(s.hits, ckHit{x0: x, y0: top + y, x1: right, y1: top + y + rows, kind: ckHitAction, action: "machine:" + strconv.Itoa(i)})
+			y += rows
+			if p.twoLine {
+				y += p.gap
+			}
+			continue
+		}
 		nx := c.text(x+2, y, 0, ckSeg{t: mark, fg: mk}, ckSeg{t: "  " + l.g(ckGlyphHost) + " ", fg: quiet},
 			ckSeg{t: ckTrunc(mc.name, 16), fg: ink, attrs: ckBold})
 		// The load: a bar of ten, or a word when the machine does not say.
@@ -681,8 +709,15 @@ func (m *OS) drawSpawnMachines(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout
 	if p.twoLine {
 		// Why the order is what it is, and that it stays.
 		c.text(x, y, right, ckSeg{t: "Most free cores first, then fewest agents working.", fg: pal.FgMute})
+
 		second, ink := "The order holds still while this sheet is open.", pal.FgMute
-		if missing != "" && s.machine < len(s.machines) {
+		if len(s.machines) > 0 && s.machines[0].any {
+			second = "Any machine picks at Start, by the same rule."
+		}
+		switch {
+		case missing != "" && s.anyPicked():
+			second, ink = missing, pal.Warning
+		case missing != "" && s.machine < len(s.machines):
 			second, ink = s.machines[s.machine].name+": "+missing+".", pal.Warning
 		}
 		c.text(x, y+1, right, ckSeg{t: second, fg: ink})
@@ -770,4 +805,18 @@ func (c *ckCanvas) dim(l ckLook, cache map[color.Color]color.Color) {
 			}
 		}
 	}
+}
+
+// spawnAnyWords is what the "Any machine" row says: the pick, why in one
+// line, and whether that warns.
+func spawnAnyWords(s *spawnSheet) (pick, why string, warn bool) {
+	switch {
+	case s.anyHere():
+		return "this machine", "An agent in this folder works on this machine.", false
+	case s.placeErr != "":
+		return "no machine fits", s.placeErr, true
+	case s.place != nil:
+		return s.place.Name, s.place.Why, false
+	}
+	return "finding", "Asking each machine for its room.", false
 }

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuitest"
 )
 
 // "Any machine": tuios picks the machine a new agent starts on, this one or a
@@ -110,7 +112,7 @@ func startPool(t *testing.T, buildCap int, back bool) poolPair {
 
 	killDaemon(t, base)
 	homeLoad := strconv.Itoa(10 * runtime.NumCPU())
-	if out, err := tuiosCLIEnv(t, base, append(p.env, "TUIOS_LOAD1="+homeLoad), "new", "home", "--detach"); err != nil {
+	if out, err := tuiosCLIEnv(t, base, append(p.env, "TUIOS_LOAD1="+homeLoad), "new", "home", "--detach", "--cwd", p.here); err != nil {
 		t.Fatalf("start home's daemon: %v\n%s", err, out)
 	}
 	if out, err := tuiosCLIEnv(t, remote, buildEnv, "new", "far", "--detach"); err != nil {
@@ -324,5 +326,91 @@ func TestAnyMachineTakesACardAcrossTheLink(t *testing.T) {
 	note("build list-agents -s home:\n%s", agents)
 	if !strings.Contains(agents, row.Holder.Window) {
 		t.Errorf("ASSERTION: build has no pane %s for the card:\n%s", row.Holder.Window, agents)
+	}
+}
+
+// TestAnyMachineInTheSheets drives both sheets the way a person does, in a
+// client attached on home. The New agent sheet shows "Any machine" first,
+// with the daemon's pick and why, and keeps this machine picked: a new agent
+// moves only when asked. Picked by hand, Start sends the agent to build. The
+// capture sheet's Machine pill opens on This machine; turned to Any machine,
+// ctrl+enter files the card, starts its agent on build, and the card is held
+// here by that pane.
+func TestAnyMachineInTheSheets(t *testing.T) {
+	pp := startPool(t, 0, true)
+	useShippedLooks(pp.base)
+	cores := strconv.Itoa(runtime.NumCPU())
+	term := startIn(t, pp.base, startOpts{args: []string{"attach", "home"}, cols: 160, rows: 45, shippedLooks: true,
+		env: append(pp.env, "TERM=xterm-256color", "COLORTERM=truecolor", "TUIOS_KITTY_GRAPHICS=0")})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+
+	// The New agent sheet.
+	sendKeys(t, term, tuitest.Ctrl('b'), "i")
+	waitText(t, term, "the agents view", "Agents", "New agent")
+	sendKeys(t, term, "n")
+	waitText(t, term, "the sheet with Any machine and its pick", "Any machine", "build: "+cores+" cores, 0 working, the repo is there.")
+	sendKeys(t, term, "Add a retry to the client.")
+	_ = term.WaitStable(uiTimeout)
+	saveCockpitFrames(t, term, "sheet-default-this-machine-160x45")
+	// shift+tab from the task: Start, Cancel, Attempts, then Machine. The
+	// rows are Any machine, build, then this machine, which is picked.
+	sendKeys(t, term, tuitest.Key("\x1b[Z"), tuitest.Key("\x1b[Z"), tuitest.Key("\x1b[Z"), tuitest.Key("\x1b[Z"), tuitest.Up, tuitest.Up)
+	_ = term.WaitStable(uiTimeout)
+	saveCockpitFrames(t, term, "sheet-any-machine-160x45")
+	sendKeys(t, term, tuitest.Key("\x1b[13;5u"))
+	deadline := time.Now().Add(60 * time.Second)
+	for !strings.Contains(remoteSessionsListed(t, pp.remote), "add-retry-client") {
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: Start with Any machine did not start the agent on build: %s\n%s", remoteSessionsListed(t, pp.remote), term.Snapshot())
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	if ls, _ := tuiosCLI(t, pp.base, "ls"); strings.Contains(ls, "add-retry-client") {
+		t.Errorf("ASSERTION: the agent started on this machine too:\n%s", ls)
+	}
+	sendKeys(t, term, tuitest.Esc)
+
+	// The capture sheet.
+	sendKeys(t, term, tuitest.Ctrl('b'), "+")
+	waitText(t, term, "the capture sheet on This machine", "New task", "Machine", "‹ This machine ›")
+	sendKeys(t, term, "Fix the flaky retry test", tuitest.Tab, tuitest.Tab, tuitest.Tab, tuitest.Tab, tuitest.Right)
+	waitText(t, term, "the Machine pill on Any machine", "‹ Any machine ›")
+	_ = term.WaitStable(uiTimeout)
+	saveCockpitFrames(t, term, "capture-any-machine-160x45")
+	sendKeys(t, term, tuitest.Key("\x1b[13;5u"))
+	waitText(t, term, "the toast for the card's agent on build", "works on it on build.")
+	saveCockpitFrames(t, term, "capture-started-on-build-160x45")
+	out := mustCLI(t, pp.base, "task", "ls", "-s", "home", "--json")
+	var rows []struct {
+		Title   string `json:"title"`
+		Machine string `json:"machine"`
+		Holder  *struct {
+			Host string `json:"host"`
+		} `json:"holder"`
+	}
+	var wrapped struct {
+		Tasks json.RawMessage `json:"tasks"`
+	}
+	raw := []byte(out)
+	if json.Unmarshal(raw, &wrapped) == nil && len(wrapped.Tasks) > 0 {
+		raw = wrapped.Tasks
+	}
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		t.Fatalf("task ls --json: %v\n%s", err, out)
+	}
+	found := false
+	for _, r := range rows {
+		if r.Title == "Fix the flaky retry test" {
+			found = true
+			if r.Machine != "any" || r.Holder == nil || r.Holder.Host == "" {
+				t.Errorf("ASSERTION: the card is not for any machine and held by a pane on build: %s", out)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("ASSERTION: the capture sheet filed no card:\n%s", out)
 	}
 }

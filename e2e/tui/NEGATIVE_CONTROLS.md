@@ -14777,3 +14777,27 @@ controls, each one change:
 The reports are `pool-place.txt` and `pool-place-card.txt` in each test's
 artifact folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAnyMachine' -v .`.
+
+## Any machine in the sheets
+
+`TestAnyMachineInTheSheets` runs the pool of the tests above with build linked
+back to home, and a client attached on home at 160x45. The New agent sheet
+must show `Any machine` with build's line and keep this machine picked; with
+`Any machine` picked by hand, Start must start the agent on build. The
+capture sheet's Machine pill must open on `This machine`; turned to `Any
+machine`, ctrl+enter must start the card's agent on build with the card held
+here.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes. Three controls, each
+one change:
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `spawnRank` adds no Any machine row | "waiting for the sheet with Any machine and its pick" | **caught** |
+| The capture sheet never asks place-agent | "waiting for the toast for the card's agent on build" | **caught** |
+| The sheet's Start drops the pick and starts here | "Start with Any machine did not start the agent on build" | **caught** |
+
+The frames are `sheet-default-this-machine-160x45`, `sheet-any-machine-160x45`
+and `capture-any-machine-160x45` in the test's artifact folder. All nine
+controls of this section and the one above were run again on the revised
+branch, and all were caught.

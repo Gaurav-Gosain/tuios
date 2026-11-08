@@ -2423,8 +2423,14 @@ shown. `default` passes no flag, so the agent keeps its own settings. A mode
 that turns approvals off, such as Claude Code's `bypassPermissions`, says
 `approvals off` beside it and is never kept in a preset. Each machine row says
 what that machine's daemon finds: `claude ready`, `claude not signed in`,
-`claude not installed`, or `claude not known` for a daemon too old to say. The
-branch is named after the task (`agent/` and its first words), with `-2` added
+`claude not installed`, or `claude not known` for a daemon too old to say.
+With a linked machine, the first row is `Any machine`. It shows the machine
+the daemon would pick and why in one line ("build: 16 cores, 0 working, the
+repo is there."). This machine stays picked unless you pick another row, so
+an agent never moves on its own. With `Any machine` picked, Start asks again
+and starts the agents there ([Any machine](CLI_REFERENCE.md#any-machine) gives the
+rule). An agent in this folder works on this machine. A card the board opens
+the sheet on picks its own machine row. The branch is named after the task (`agent/` and its first words), with `-2` added
 when the repository has that branch. `f` shows only the items, the old
 flat Inbox with Needs you and Ready for review; `f` again shows one kind of
 item at a time, and after the last kind every agent again. `s` steps the order inside the

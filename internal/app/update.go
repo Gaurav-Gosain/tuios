@@ -1819,8 +1819,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, cmd
 
 	case spawnInfoMsg:
-		m.applySpawnInfo(msg)
-		return m, nil
+		return m, m.applySpawnInfo(msg)
+	case spawnPlacedMsg:
+		return m, m.applySpawnPlaced(msg)
 	case spawnStartedMsg:
 		m.applySpawnStarted(msg)
 		return m, nil

@@ -417,6 +417,14 @@ func (m *OS) CockpitNewAgentFor(c session.TaskRow) tea.Cmd {
 	s.task.SetText(text)
 	m.spawnFollowTask(s)
 	s.card = &spawnCard{session: c.Session, id: c.ID}
+	// The card says where its agent starts: any, a machine, or this one.
+	for i, mc := range s.machines {
+		switch {
+		case c.Machine == session.TaskMachineAny && mc.any,
+			c.Machine != session.TaskMachineAny && !mc.any && mc.host == c.Machine && mc.up:
+			s.machine = i
+		}
+	}
 	return cmd
 }
 

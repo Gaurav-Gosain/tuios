@@ -68,8 +68,9 @@ func (m *OS) renderTaskCapture() (string, overlay.Geometry) {
 	}
 	y += box + 1
 
-	// The pills: the card's project, its stage, and the agent ctrl+enter
-	// starts. Each steps with the arrows.
+	// The pills: the card's project, its stage, the agent ctrl+enter
+	// starts, and with a linked machine where it starts. Each steps with
+	// the arrows.
 	px := x
 	stage := "Todo"
 	if tcStages[s.stage] != tcStages[0] {
@@ -79,10 +80,17 @@ func (m *OS) renderTaskCapture() (string, overlay.Geometry) {
 	if s.agent < len(s.agents) {
 		agent = s.agents[s.agent].cmd
 	}
-	for _, p := range []struct {
+	pills := []struct {
 		f            tcField
 		label, value string
-	}{{tcProject, "Project", s.projectLabel()}, {tcStage, "Stage", stage}, {tcAgent, "Agent to start", agent}} {
+	}{{tcProject, "Project", s.projectLabel()}, {tcStage, "Stage", stage}, {tcAgent, "Agent to start", agent}}
+	if s.machine < len(s.machines) {
+		pills = append(pills, struct {
+			f            tcField
+			label, value string
+		}{tcMachine, "Machine", tcMachineLabel(s.machines[s.machine])})
+	}
+	for _, p := range pills {
 		ink := pal.FgDim
 		if s.field == p.f {
 			ink = t.key
