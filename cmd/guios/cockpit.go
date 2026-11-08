@@ -478,6 +478,12 @@ func (a *App) ckHoldGroup(c *ui.Context, key string, want int, st proto.Status, 
 // working.
 func ckSilent(ag client.Agent) bool { return ag.State == "unknown" && ag.Reason == "silent" }
 
+// ckSilentFor is how long a silent agent has sent no report, as line 2
+// says it: since its last report, which said working.
+func ckSilentFor(ag client.Agent, now time.Time) string {
+	return workedFor(now.Sub(time.Unix(0, ag.StateAt)).Milliseconds())
+}
+
 // ckShownStatus is the state every view draws for ag, with it its item:
 // its state, or while its row's move to a new group waits, the state of
 // the group it is still shown in (ckHoldGroup).

@@ -94,6 +94,9 @@ func (a *App) agentRow(c *ui.Context, pal *palette, ag client.Agent, need *ckNee
 		a.showInCockpit(ag.Key())
 	}
 	verb, rest := ckLine2(ag, it)
+	if ckSilent(ag) && it == nil {
+		c.After(time.Second) // the age in line 2 counts up
+	}
 	pointerTooltip(c, row, "ag-tip-"+ag.Window, locales.SidebarAgentTip())
 	st, unread := a.ckShownStatus(ag, it)
 	if need != nil && st != proto.Failed {

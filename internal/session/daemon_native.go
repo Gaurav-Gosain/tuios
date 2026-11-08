@@ -408,6 +408,13 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 	if w.AgentStateAt != 0 {
 		info["agent_state_at"] = w.AgentStateAt
 	}
+	// Why the state is shown as it is: "silent" for a hooked pane that
+	// reported working and then went quiet. agent_state stays the state the
+	// agent last gave, which is what a script that types into panes reads;
+	// a view shows a silent pane as list-agents does.
+	if w.AgentReason != "" {
+		info["agent_reason"] = w.AgentReason
+	}
 	// The grants the pane was given, omitted for a pane that holds the
 	// default, so the person sees in one listing which panes were narrowed.
 	// pane-grants says what the default is. See pane_grants.go.

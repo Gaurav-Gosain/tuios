@@ -1267,6 +1267,7 @@
   "cockpitNoTranscriptDetail": "tuios has not found this agent's transcript. Install the integration for its harness, or wait for its first turn.",
   "cockpitNoActivity": "No activity",
   "cockpitNoReportFor": "No report for {age}",
+  "cockpitSilentMessage": "No report for {age} · {message}",
   "cockpitOlder": "Show older messages",
   "cockpitOpenPane": "Open pane",
   "cockpitPickAgent": "Select an agent",

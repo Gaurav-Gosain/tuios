@@ -75,6 +75,7 @@ type windowRow struct {
 	AgentMsg    string           `json:"agent_message"`
 	AgentKind   string           `json:"agent_kind"`
 	AgentAt     int64            `json:"agent_state_at"`
+	AgentReason string           `json:"agent_reason"`
 	Harness     string           `json:"agent_harness"`
 	Foreground  string           `json:"foreground_cmd"`
 	Host        string           `json:"host"`
@@ -346,16 +347,20 @@ func (k *stateKeeper) pane(w windowRow) proto.Pane {
 	if p.Process == "" && title != "" && !strings.HasPrefix(title, "Terminal ") && !looksLikePrompt(title) {
 		p.Process = title
 	}
-	switch w.Agent {
-	case "working":
+	switch {
+	case w.Agent == "working" && w.AgentReason == "silent":
+		// It reported working and then went quiet: the daemon shows it
+		// as unknown (list-agents), so it spins no more. Not unread: a
+		// pane gone quiet has not finished.
+	case w.Agent == "working":
 		p.Status = proto.Working
-	case "needs_input":
+	case w.Agent == "needs_input":
 		p.Status = proto.Waiting
 		p.Unread = true
-	case "errored":
+	case w.Agent == "errored":
 		p.Status = proto.Failed
 		p.Unread = true
-	case "done":
+	case w.Agent == "done":
 		k.mu.Lock()
 		if _, seen := k.unread[w.ID]; !seen {
 			k.unread[w.ID] = true

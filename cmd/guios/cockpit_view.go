@@ -389,6 +389,11 @@ func ckLine2(ag client.Agent, it *session.AttentionItem) (verb, rest string) {
 		return "", s
 	}
 	if ag.Message != "" {
+		if ckSilent(ag) && ag.StateAt > 0 {
+			// Its last report said working, and none came since: how
+			// long, and what it said (Mac round 5, workflow S1).
+			return "", locales.CockpitSilentMessage(ckSilentFor(ag, time.Now()), ag.Message)
+		}
 		if ckStopped(ag, it) {
 			return "", locales.CockpitStopped(ag.Message)
 		}
@@ -417,7 +422,7 @@ func ckShortTarget(tool, target, cwd string) string {
 // tests") no longer says what it does. The line then reads "Stopped · ..."
 // in text3.
 func ckStopped(ag client.Agent, it *session.AttentionItem) bool {
-	if it != nil || ag.Message == "" {
+	if it != nil || ag.Message == "" || ckSilent(ag) {
 		return false
 	}
 	return ag.State == string(session.AgentStateIdle) || ag.State == string(session.AgentStateUnknown)
@@ -435,6 +440,9 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 		name = locales.CockpitUnnamed()
 	}
 	verb, rest := ckLine2(ag, r.item)
+	if ckSilent(ag) && r.item == nil {
+		c.After(time.Second) // the age in line 2 counts up
+	}
 	// Every agent's row is two lines high, an idle one too: a row with
 	// nothing to say says so, so that the rows keep one height (council
 	// round 1, visual 23).
@@ -531,9 +539,7 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 				ui.RichText(c, ckLine2Spans(pal, verb, flat(rest), ckStopped(ag, r.item))...).FontSize(fsSmall).SingleLine().Ellipsis("…").MinWidth(0).Margin(0, 0, 0, 21)
 			} else if ckSilent(ag) && ag.StateAt > 0 {
 				// How long since its last report, which said working.
-				ms := c.Now().Sub(time.Unix(0, ag.StateAt)).Milliseconds()
-				c.After(time.Second)
-				ui.Text(c, locales.CockpitNoReportFor(workedFor(ms))).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Margin(0, 0, 0, 21)
+				ui.Text(c, locales.CockpitNoReportFor(ckSilentFor(ag, c.Now()))).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Margin(0, 0, 0, 21)
 			} else {
 				ui.Text(c, locales.CockpitNoActivity()).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Margin(0, 0, 0, 21)
 			}
