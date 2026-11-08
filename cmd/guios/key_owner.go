@@ -848,17 +848,6 @@ func (a *App) replayReply(q []heldKey) {
 	}
 }
 
-// prefixInMenu reports whether the prefix waits for a sub-prefix's key.
-func (a *App) prefixInMenu() bool {
-	tk := &a.tk
-	if !tk.live() {
-		return false
-	}
-	tk.mu.Lock()
-	defer tk.mu.Unlock()
-	return tk.menu != ""
-}
-
 // keyText is the text a key that types text types on a US layout, for a
 // key the owner took before the terminal saw its text.
 func keyText(mods ui.Modifiers, key ui.Key) string {
