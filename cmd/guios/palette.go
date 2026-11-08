@@ -713,7 +713,8 @@ func (a *App) confirmView(c *ui.Context, pal *palette) {
 // serve.
 //
 // A destructive question opens with Cancel focused: a typed letter or a
-// space, as from a line typed at once after Ctrl+B x, never confirms it.
+// space, as from a line typed at once after Ctrl+B x, neither confirms
+// nor cancels it: they drop (dropTyped).
 // Enter does, and a click on the button (Mac round 6, M1).
 func confirmDialog(c *ui.Context, pal *palette, pending **confirmation, keys func(ui.Element) ui.Key) bool {
 	cf := *pending
@@ -730,13 +731,9 @@ func confirmDialog(c *ui.Context, pal *palette, pending **confirmation, keys fun
 		// panel takes it before the focused button does.
 		enter := panel.Shortcut(0, ui.KeyEnter) || c.Shortcut(0, ui.KeyEnter)
 		if cf.destroy {
-			panel.HandleInput(func(ev ui.InputEvent) bool {
-				if ev.Kind == ui.InputText && ev.Text != "" {
-					keyAudit("drop", ev.Text, "sheet confirm")
-					return true
-				}
-				return false
-			})
+			// A typed letter or space acts on no button: the panel takes
+			// them before the focused one does, and they drop.
+			dropTyped(panel, "sheet confirm")
 		}
 		ui.Text(c, cf.title).FontSize(fsTitle).FontWeight(wSemibold).TextColor(pal.text).MaxLines(2)
 		ui.Text(c, cf.detail).FontSize(fsBody).TextColor(pal.textMuted).LineHeight(1.45).MaxLines(5)
@@ -774,6 +771,18 @@ func confirmDialog(c *ui.Context, pal *palette, pending **confirmation, keys fun
 	}
 	*pending = nil
 	return true
+}
+
+// dropTyped takes the keys that type text in el, before the element in it
+// that has the focus, and drops them with a line in the key audit.
+func dropTyped(el ui.Element, why string) {
+	for _, k := range proseKeys {
+		for _, m := range []ui.Modifiers{0, ui.Shift} {
+			if el.Shortcut(m, k) {
+				keyAudit("drop", heldKey{mods: m, key: k, text: keyText(m, k)}.name(), why)
+			}
+		}
+	}
 }
 
 // shortcuts are the window's keys that no menu item has.
