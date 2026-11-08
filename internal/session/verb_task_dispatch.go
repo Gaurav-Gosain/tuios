@@ -3,7 +3,10 @@ package session
 import (
 	"encoding/json"
 	"slices"
+	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
 // taskDispatchParams are what get-task-dispatch and set-task-dispatch take.
@@ -14,6 +17,36 @@ type taskDispatchParams struct {
 	Project    string `json:"project"`
 	Quiet      string `json:"quiet"`
 	HumanNonce string `json:"human_nonce"`
+	// With preset, or mode auto: the board's preset.
+	Agent          string `json:"agent"`
+	Model          string `json:"model"`
+	Effort         string `json:"effort"`
+	PermissionMode string `json:"permission_mode"`
+	Machine        string `json:"machine"`
+	// With cap: auto's caps, 0 for the default.
+	Cap        *int `json:"cap"`
+	MachineCap *int `json:"machine_cap"`
+}
+
+// preset checks the preset p names, nil when it names no agent.
+func (d *Daemon) presetParam(p taskDispatchParams) (*DispatchPreset, *verbError) {
+	agent := strings.TrimSpace(p.Agent)
+	if agent == "" {
+		return nil, nil
+	}
+	if !harness.LaunchValueOK(agent) {
+		return nil, invalidParam("agent", "agent is one harness id or program name, such as claude")
+	}
+	for _, v := range []string{p.Model, p.Effort, p.PermissionMode} {
+		if v != "" && !harness.LaunchValueOK(v) {
+			return nil, invalidParam("agent", "model, effort and permission_mode are one word each")
+		}
+	}
+	machine := strings.TrimSpace(p.Machine)
+	if machine != "" && machine != TaskMachineAny && machine != dispatchMachineHere && !slices.Contains(d.farHosts(), machine) {
+		return nil, invalidParam("machine", "machine is here, any, or a linked machine")
+	}
+	return &DispatchPreset{Agent: agent, Model: p.Model, Effort: p.Effort, PermissionMode: p.PermissionMode, Machine: machine}, nil
 }
 
 // dispatchBoardParam is the board a call names: its project, or the session's
@@ -44,6 +77,7 @@ func (d *Daemon) verbGetTaskDispatch(cs *connState, params json.RawMessage) (any
 		return nil, verr
 	}
 	st := d.dispatch.status(board, time.Now())
+	d.autoStatus(&st)
 	st.Type = "task_dispatch"
 	return st, nil
 }
@@ -58,12 +92,12 @@ func (d *Daemon) verbSetTaskDispatch(cs *connState, params json.RawMessage) (any
 		return nil, verr
 	}
 	if !slices.Contains(dispatchActions, p.Action) {
-		return nil, invalidParam("action", "action is one of mode, pause, resume or quiet", dispatchActions...)
+		return nil, invalidParam("action", "action is one of mode, pause, resume, quiet, preset or cap", dispatchActions...)
 	}
 	if cs != nil && cs.viaLink {
 		return nil, newVerbError(ErrVerbForbidden, "set-task-dispatch is refused over the link: each machine's dispatch is set on that machine")
 	}
-	board, sess, verr := d.dispatchBoardParam(cs, p, p.Action == dispatchActionMode)
+	board, sess, verr := d.dispatchBoardParam(cs, p, p.Action == dispatchActionMode || p.Action == dispatchActionPreset)
 	if verr != nil {
 		return nil, verr
 	}
@@ -82,6 +116,18 @@ func (d *Daemon) verbSetTaskDispatch(cs *connState, params json.RawMessage) (any
 			Detail:  "Nothing changed. The person changes a board's mode, quiet hours, and starts dispatch again, from the agents view or a shell outside the panes.",
 		})
 	}
+	preset, verr := d.presetParam(p)
+	if verr != nil {
+		return nil, verr
+	}
+	if p.Action == dispatchActionPreset && preset == nil {
+		return nil, invalidParam("agent", "preset needs agent: the harness auto starts, such as claude")
+	}
+	for _, v := range []*int{p.Cap, p.MachineCap} {
+		if v != nil && (*v < 0 || *v > dispatchCapMax) {
+			return nil, invalidParam("cap", "cap and machine_cap are 0 (the default) to 64")
+		}
+	}
 	ds := &d.dispatch
 	ds.mu.Lock()
 	reason := ""
@@ -89,11 +135,18 @@ func (d *Daemon) verbSetTaskDispatch(cs *connState, params json.RawMessage) (any
 	case dispatchActionMode:
 		if !slices.Contains(DispatchModes, p.Mode) {
 			ds.mu.Unlock()
-			return nil, invalidParam("mode", "mode is manual or pull", DispatchModes...)
+			return nil, invalidParam("mode", "mode is manual, pull or auto", DispatchModes...)
 		}
 		b := ds.boardLocked(board, true)
+		if preset != nil {
+			b.Preset = preset
+		}
+		if p.Mode == DispatchAuto && b.Preset == nil {
+			ds.mu.Unlock()
+			return nil, invalidParam("agent", "auto needs a preset: name the agent it starts, such as claude")
+		}
 		b.Mode = p.Mode
-		if p.Mode == DispatchManual && b.Failures == 0 && b.Stopped == "" {
+		if p.Mode == DispatchManual && b.Failures == 0 && b.Stopped == "" && b.Preset == nil {
 			delete(ds.f.Boards, board)
 		}
 		reason = board + " is " + p.Mode
@@ -107,9 +160,19 @@ func (d *Daemon) verbSetTaskDispatch(cs *connState, params json.RawMessage) (any
 		ds.f.Paused, ds.f.PausedBy, ds.f.PausedAt, ds.f.Stopped = false, "", 0, ""
 		for k, b := range ds.f.Boards {
 			b.Failures, b.Stopped = 0, ""
-			if b.Mode == "" || b.Mode == DispatchManual {
+			if (b.Mode == "" || b.Mode == DispatchManual) && b.Preset == nil {
 				delete(ds.f.Boards, k)
 			}
+		}
+	case dispatchActionPreset:
+		ds.boardLocked(board, true).Preset = preset
+		reason = board + " preset " + preset.Agent
+	case dispatchActionCap:
+		if p.Cap != nil {
+			ds.f.Cap = *p.Cap
+		}
+		if p.MachineCap != nil {
+			ds.f.MachineCap = *p.MachineCap
 		}
 	case dispatchActionQuiet:
 		if p.Quiet != "" && p.Quiet != "off" {
@@ -126,7 +189,9 @@ func (d *Daemon) verbSetTaskDispatch(cs *connState, params json.RawMessage) (any
 	ds.mu.Unlock()
 	LogBasic("Task dispatch %s by %s", p.Action, caller.by)
 	d.publishDispatch(p.Action, reason)
+	d.kickAuto()
 	st := ds.status(board, time.Now())
+	d.autoStatus(&st)
 	st.Type = "task_dispatch"
 	return st, nil
 }
@@ -140,7 +205,10 @@ func taskDispatchVerbs(humanNonce verbParam) map[string]verbEntry {
 		{Name: "quiet", Type: "string", Description: "The quiet hours, local time, such as 22:00-07:00."},
 		{Name: "quiet_now", Type: "bool", Description: "True inside the quiet hours."},
 		{Name: "boards", Type: "[]object", Description: "The boards with a mode or a stop: board, project or session, mode, failures (dispatched cards in a row that did not finish), stopped."},
-		{Name: "board", Type: "object", Description: "The board the call named, also when it is manual."},
+		{Name: "cap", Type: "int", Description: "Auto's agents at once, in total."},
+		{Name: "machine_cap", Type: "int", Description: "Auto's agents at once on one machine."},
+		{Name: "running", Type: "int", Description: "Auto's agents now."},
+		{Name: "board", Type: "object", Description: "The board the call named, also when it is manual. An auto board adds preset, running, waiting and note."},
 	}
 	board := []verbParam{
 		sessionParam,
@@ -159,11 +227,18 @@ func taskDispatchVerbs(humanNonce verbParam) map[string]verbEntry {
 		"set-task-dispatch": {
 			scope:       scopeTask,
 			link:        needWrite,
-			description: "Change task dispatch. mode sets a board to manual or pull: in pull, an agent that finishes its card is given the board's next open card, as mail from tuios. pause stops all dispatch at once, and any pane may pause. resume lifts the pause and every stop. quiet sets the hours when dispatch gives no card. A pane needs admin for every action but pause. Refused over a link.",
+			description: "Change task dispatch. mode sets a board to manual, pull or auto: in pull, an agent that finishes its card is given the board's next open card, as mail from tuios; in auto, the daemon starts the board's preset agent for each open card, in a new worktree, and mails it the card. preset sets that agent; auto needs one. cap bounds the agents at once. pause stops all dispatch at once, and any pane may pause. resume lifts the pause and every stop. quiet sets the hours when dispatch gives no card. A pane needs admin for every action but pause. Refused over a link.",
 			params: append(slices.Clone(board),
 				verbParam{Name: "action", Type: "string", Required: true, Description: "What to change.", Accepted: dispatchActions},
 				verbParam{Name: "mode", Type: "string", Description: "With mode: the board's new mode.", Accepted: DispatchModes},
 				verbParam{Name: "quiet", Type: "string", Description: "With quiet: a span of local time such as 22:00-07:00, or off."},
+				verbParam{Name: "agent", Type: "string", Description: "With preset or mode auto: the agent auto starts. A card's own agent comes first."},
+				verbParam{Name: "model", Type: "string", Description: "With preset: as start-agent takes it."},
+				verbParam{Name: "effort", Type: "string", Description: "With preset: as start-agent takes it."},
+				verbParam{Name: "permission_mode", Type: "string", Description: "With preset: as start-agent takes it. Omit for the agent's own default."},
+				verbParam{Name: "machine", Type: "string", Description: "With preset: here (the default), any, or a linked machine."},
+				verbParam{Name: "cap", Type: "int", Description: "With cap: agents at once in total, 0 for 3."},
+				verbParam{Name: "machine_cap", Type: "int", Description: "With cap: on one machine, 0 for 2."},
 				humanNonce,
 			),
 			returns: status,

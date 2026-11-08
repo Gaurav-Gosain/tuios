@@ -2896,7 +2896,7 @@ tuios task stage ID STAGE [flags]
 tuios task block ID REASON... | --clear [flags]
 tuios task release ID [flags]
 tuios task rm ID [flags]
-tuios task dispatch [status | pause | resume | mode manual|pull | quiet SPAN|off] [--project URL] [flags]
+tuios task dispatch [status | pause | resume | mode manual|pull|auto | preset | cap N | quiet SPAN|off] [--project URL] [flags]
 ```
 
 **Flags:**
@@ -2949,6 +2949,26 @@ finishes it. Dispatch types nothing into a pane, and gives no card to a pane
 that waits for the person. In v1 the agent and the card are on one machine
 and in one session.
 
+In `auto` mode tuios starts an agent for each open card in todo or plan that
+no pane holds, is not blocked and is not `--ask-first`, oldest first. Each
+gets a new worktree on a branch named from its title (`task/fix-the-retry`;
+`-2` and on when that branch, its folder or its session exists, so your own
+branch is never checked out), on the machine `--machine` names: `here` (the
+default), `any` (picked as [Any machine](#any-machine) picks), or a linked
+machine. A card's own `--machine` and `--harness` come first. The agent holds
+the card from the start and gets it as mail from tuios; nothing is typed into
+its pane. At most `cap` agents run at once (default 3), and `--machine-cap` on
+one machine (default 2); each machine's `[tasks] machine_cap` still holds.
+Cards over a cap wait, and the status says how many. A card in doing is never
+started by auto: one let go mid-work (its pane closed, a restart) waits for
+you, so a restart never starts a second agent. Auto needs a preset: `mode
+auto --agent claude [--model M] [--effort E] [--permission-mode P]`, or
+`preset` with the same flags. With no `--permission-mode` the agent runs in
+its own default mode; auto never turns approvals off unless you name such a
+mode. A start that fails counts toward the 3 failures in a row, and a preset
+whose agent no machine has stops the board at once. If a far machine goes
+down, its card stays held until `tuios task release` frees it.
+
 The safety switches: `pause` stops all dispatch at once, and any pane may
 pause. `quiet 22:00-07:00` gives no card in those hours, local time (`off`
 clears it). A board stops after 3 dispatched cards in a row end without being
@@ -2985,6 +3005,10 @@ tuios task done t3 -s build:api
 # Agents that finish take the next card of this repository; stop it all at once
 tuios task dispatch mode pull --project .
 tuios task dispatch pause
+
+# An agent for each open card, at most 4 at once and 2 on one machine
+tuios task dispatch mode auto --agent claude --effort high --project .
+tuios task dispatch cap 4 --machine-cap 2
 ```
 
 ### `tuios review`

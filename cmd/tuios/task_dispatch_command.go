@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
@@ -17,8 +18,10 @@ import (
 func newTaskDispatchCommand() *cobra.Command {
 	var f taskFlags
 	var project string
+	var preset session.DispatchPreset
+	var capMachine int
 	cmd := &cobra.Command{
-		Use:   "dispatch [status | pause | resume | mode manual|pull | quiet SPAN|off]",
+		Use:   "dispatch [status | pause | resume | mode manual|pull|auto | preset | cap N | quiet SPAN|off]",
 		Short: "Show or change how task cards go to agents",
 		Long: `A board is a project's cards (--project) or a session's own cards. Its dispatch
 mode is manual, where a person starts each card, or pull, where an agent that
@@ -26,6 +29,10 @@ finishes its card is given the board's next open card: the oldest in todo,
 plan or doing that no pane holds, not blocked, not marked --ask-first, and for that
 agent's harness or any. The agent hears of it as mail from tuios. Dispatch
 types nothing into a pane, and gives no card to a pane that waits for you.
+
+In auto, tuios starts the preset agent (--agent, --model, --effort,
+--permission-mode, --machine) for each open card, in a new worktree. cap
+bounds the agents at once (default 3, and --machine-cap 2 on one machine).
 
 The safety switches:
   pause            stop all dispatch at once (any pane may pause)
@@ -44,7 +51,11 @@ From inside a pane, every action but pause needs the admin grant.`,
   tuios task dispatch resume
 
   # No new work at night
-  tuios task dispatch quiet 22:00-07:00`,
+  tuios task dispatch quiet 22:00-07:00
+
+  # Start an agent for each open card of this repository's board
+  tuios task dispatch mode auto --agent claude --effort high --project .
+  tuios task dispatch cap 4 --machine-cap 2`,
 		Args: cobra.RangeArgs(0, 2),
 		RunE: func(_ *cobra.Command, args []string) error {
 			verb, params := "get-task-dispatch", map[string]any{}
@@ -54,8 +65,14 @@ From inside a pane, every action but pause needs the admin grant.`,
 			}
 			switch action {
 			case "status":
-			case "pause", "resume":
+			case "pause", "resume", "preset":
 				verb, params["action"] = "set-task-dispatch", action
+			case "cap":
+				n, err := strconv.Atoi(args[len(args)-1])
+				if len(args) != 2 || err != nil {
+					return errfmt.Errorf("tuios task dispatch cap takes a number, such as 3")
+				}
+				verb, params["action"], params["cap"], params["machine_cap"] = "set-task-dispatch", action, n, capMachine
 			case "mode", "quiet":
 				if len(args) != 2 {
 					return errfmt.Errorf("tuios task dispatch %s takes one value", action)
@@ -65,7 +82,7 @@ From inside a pane, every action but pause needs the admin grant.`,
 			default:
 				return errfmt.Errorf("unknown dispatch action %q: status, pause, resume, mode or quiet", action)
 			}
-			if len(args) == 2 && action != "mode" && action != "quiet" {
+			if len(args) == 2 && action != "mode" && action != "quiet" && action != "cap" {
 				return errfmt.Errorf("tuios task dispatch %s takes no value", action)
 			}
 			if project != "" {
@@ -75,12 +92,21 @@ From inside a pane, every action but pause needs the admin grant.`,
 				}
 				params["project"] = url
 			}
+			if preset.Agent != "" {
+				params["agent"], params["model"], params["effort"], params["permission_mode"], params["machine"] = preset.Agent, preset.Model, preset.Effort, preset.PermissionMode, preset.Machine
+			}
 			return runTaskDispatch(os.Stdout, f, verb, params)
 		},
 	}
 	f.register(cmd)
 	cmd.Flags().StringVar(&project, "project", "", "The project board, by origin URL, or . for this folder's (default: the session's own cards)")
-	cmd.ValidArgs = []string{"status", "pause", "resume", "mode", "quiet"}
+	cmd.Flags().StringVar(&preset.Agent, "agent", "", "The agent auto starts, such as claude")
+	cmd.Flags().StringVar(&preset.Model, "model", "", "Its model")
+	cmd.Flags().StringVar(&preset.Effort, "effort", "", "Its effort")
+	cmd.Flags().StringVar(&preset.PermissionMode, "permission-mode", "", "Its permission mode (default: its own)")
+	cmd.Flags().StringVar(&preset.Machine, "machine", "", "here (default), any, or a linked machine")
+	cmd.Flags().IntVar(&capMachine, "machine-cap", 0, "With cap: agents on one machine")
+	cmd.ValidArgs = []string{"status", "pause", "resume", "mode", "preset", "cap", "quiet"}
 	return cmd
 }
 
@@ -91,7 +117,7 @@ func runTaskDispatch(w io.Writer, f taskFlags, verb string, params map[string]an
 		return err
 	}
 	defer t.Close()
-	if f.session != "" || params["action"] == "mode" {
+	if f.session != "" || params["action"] == "mode" || params["action"] == "preset" {
 		params = t.params(params)
 	}
 	raw, err := t.client.Call(verb, params)
@@ -136,6 +162,17 @@ func printDispatch(w io.Writer, st session.DispatchStatus) error {
 			line += ", stopped: " + plainLine(r.Stopped)
 		} else if r.Failures > 0 {
 			line += fmt.Sprintf(", %d failed in a row", r.Failures)
+		}
+		if pr := r.Preset; pr != nil && r.Mode == session.DispatchAuto {
+			where := pr.Machine
+			if where == "" || where == "here" {
+				where = "this machine"
+			}
+			line += plainLine(fmt.Sprintf(", starts %s on %s, %d running (cap %d, %d a machine), %d waiting",
+				strings.Join(strings.Fields(pr.Agent+" "+pr.Model+" "+pr.Effort+" "+pr.PermissionMode), " "), where, r.Running, st.Cap, st.MachineCap, r.Waiting))
+			if r.Note != "" {
+				line += " (" + plainLine(r.Note) + ")"
+			}
 		}
 		b.WriteString(line)
 		b.WriteByte('\n')

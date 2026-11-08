@@ -171,6 +171,9 @@ func taskRow(sess *Session, st *SessionState, tk *TaskState) TaskRow {
 		row.Holder = &TaskHolder{Window: tk.Holder, HeldAt: tk.HeldAt}
 		if w, ok := findWindowState(st, tk.Holder); ok {
 			row.Holder.Name, row.Holder.Harness, row.Holder.State = windowLabelOf(w), w.AgentHarness, w.AgentState.Name()
+		} else {
+			// A pane of another session (start-agent task_session).
+			row.Holder.Name, row.Holder.Harness = tk.HolderName, tk.HolderHarness
 		}
 	}
 	if tk.Fan != "" {

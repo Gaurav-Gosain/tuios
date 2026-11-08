@@ -183,6 +183,9 @@ type Daemon struct {
 	// dispatch holds the boards' dispatch modes and the switches that stop
 	// dispatch (task_dispatch.go).
 	dispatch dispatchStore
+	// auto starts agents for the cards of auto boards
+	// (task_dispatch_auto.go).
+	auto autoState
 	// hostDial is DaemonConfig.HostDial, kept for setupFederation.
 	hostDial federation.Dialer
 	// fleet follows the agents and the Inbox of every linked host over the
@@ -1672,6 +1675,7 @@ func (d *Daemon) Start() error {
 	d.outbox.load(outboxPath())
 	// Review notes come back for the panes that came back.
 	d.dispatch.load(dispatchPath())
+	d.kickAuto()
 	d.reviewNotes.load(reviewNotesPath(), func(window string) bool { return d.sessionOfWindow(window) != "" })
 
 	// The resume offers the restore found are opened only now, after the saved

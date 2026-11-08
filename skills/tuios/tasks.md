@@ -125,6 +125,11 @@ mail from tuios: read it with `tuios read-agent-messages -w "$TUIOS_PANE_ID"`.
 It names the card, its prompt, and the command that finishes it. You hold the
 card already, so do not claim it. If you cannot do it, `tuios task release ID`.
 
+On a board in auto mode, tuios starts a new agent for each open card, in its
+own worktree. If that is you, your first mail is the card: its done command
+carries `-s SESSION` (or `-s HOST:SESSION` on another machine), because the
+card lives in the session or on the machine that made it.
+
 | Command | What it does |
 | --- | --- |
 | `tuios task dispatch` | The boards' modes and the switches |

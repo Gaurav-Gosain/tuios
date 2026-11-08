@@ -14801,3 +14801,45 @@ The frames are `sheet-default-this-machine-160x45`, `sheet-any-machine-160x45`
 and `capture-any-machine-160x45` in the test's artifact folder. All nine
 controls of this section and the one above were run again on the revised
 branch, and all were caught.
+
+## TestAutoDispatchStartsAnAgentPerCard
+
+Two machines linked both ways, home loaded and build idle. A project board in
+auto mode with a cap of 2 in total and 1 on one machine, turned on by two
+clients at once while a third resumes. With the preset on this machine, the
+default, t1 must start on home and t2 wait. With the preset turned to any
+machine, t2 must start on build. Each agent runs in a worktree on a branch
+from its title, holds its card as dispatched, and has the card as mail from
+tuios. The ask-first card never starts, the fourth waits until a slot frees, a
+pause holds the fifth, and when build goes down its card stays held with no
+second agent.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 runs in a row. Each
+control is one change:
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| A machine at the per-machine cap not left out (`autoExclude`) | "t2 does not wait while the preset is this machine" | **caught** |
+| The preset machine defaults to any, not here | "t2 does not wait while the preset is this machine" | **caught** |
+| start-agent `task_mail` ignored | "home's agent has no mail from tuios with t1 and its done command" | **caught** |
+| `blocked` ignores the pause for auto boards | "the pause did not hold t5" | **caught** |
+| The total cap off by one | passes: the per-machine caps bind first here; caught by TestAutoDispatchSafety | not a control here |
+
+## TestAutoDispatchSafety
+
+One machine, a session board in auto mode. The person has a branch named from
+the first card's title; a preset names an agent no machine has; an agent exits
+as it starts, at a total cap of 1.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 runs in a row.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| new-worktree `new_branch` ignored | "t1's worktree is not on task/fix-the-retry-2" (it is on the person's branch) | **caught** |
+| The board not stopped when no machine has the agent (`notInstalledAnywhere`) | "the board did not stop for the missing agent" | **caught** |
+| A start that did not come up not let go (`releaseHeld` cut) | "three failed starts did not stop the board" (the cards stay held by panes with no agent) | **caught** |
+| The total cap off by one | "4 cards were tried, want 3 before the stop" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAutoDispatch' -v .`.
+

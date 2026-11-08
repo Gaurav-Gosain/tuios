@@ -1,6 +1,7 @@
 package session
 
 import (
+	"cmp"
 	"errors"
 	"slices"
 	"strconv"
@@ -353,14 +354,24 @@ func (d *Daemon) stampFan(tp *taskParam, stem, fanID string) (TaskRow, bool) {
 }
 
 // claimForPane gives the card to window, the pane start-agent opened for it.
-func (d *Daemon) claimForPane(tp *taskParam, window string) (TaskRow, *verbError) {
+// A pane of another session is named by name and harness, since the card's
+// session cannot read it, and its close lets the card go (remoteHolds).
+func (d *Daemon) claimForPane(tp *taskParam, window, name, harness string, cross bool) (TaskRow, *verbError) {
+	auto := d.auto.expects(tp.sess.Name(), tp.id, false)
 	row, action, verr := d.changeTask(tp.sess, tp.id, func(_ *SessionState, tk *TaskState, now int64) (string, *verbError) {
-		taken, verr := tk.take(window, tp.caller.by, now)
+		taken, verr := tk.take(window, cmp.Or(auto, tp.caller.by), now)
 		if verr != nil || !taken {
 			return "", verr
 		}
+		tk.Dispatched = auto != ""
+		if cross {
+			tk.HolderName, tk.HolderHarness = name, harness
+		}
 		return TaskActionClaimed, nil
 	})
+	if verr == nil && cross {
+		d.remoteHolds.note(window, remoteHold{session: tp.sess.Name(), id: tp.id}, true)
+	}
 	if verr != nil {
 		return TaskRow{}, verr
 	}

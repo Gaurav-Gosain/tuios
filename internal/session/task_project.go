@@ -1,8 +1,10 @@
 package session
 
 import (
+	"cmp"
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -120,7 +122,9 @@ func remoteCaller(cs *connState, verb string, rc remoteClaim) (taskCaller, strin
 	return taskCaller{by: queueByLinkPrefix + peer, window: h}, h, nil
 }
 
-// remoteHold is a card this daemon's pane holds on another machine.
+// remoteHold is a card this daemon's pane holds on another machine, or with
+// host empty in another session of this daemon (start-agent task_session),
+// which the pane's own session does not let go.
 type remoteHold struct {
 	host, session, id string
 }
@@ -171,10 +175,16 @@ func (rs *remoteHoldSet) take(window string) []remoteHold {
 // and tuios task release on either machine frees it.
 func (d *Daemon) releaseRemoteHolds(window string) {
 	list := d.remoteHolds.take(window)
-	if d.federation == nil {
-		return
-	}
 	for _, h := range list {
+		if h.host == "" {
+			if sess := d.manager.GetSession(h.session); sess != nil {
+				d.releaseHeld(sess, window, taskReleasePaneClosed)
+			}
+			continue
+		}
+		if d.federation == nil {
+			continue
+		}
 		go func() {
 			ctx, cancel := context.WithTimeout(d.ctx, 10*time.Second)
 			defer cancel()
@@ -183,6 +193,41 @@ func (d *Daemon) releaseRemoteHolds(window string) {
 			}
 		}()
 	}
+}
+
+// releaseHeld lets go, for reason, the cards of sess that window holds, here
+// or on another machine.
+func (d *Daemon) releaseHeld(sess *Session, window, reason string) {
+	if window == "" {
+		return
+	}
+	var rows []TaskRow
+	_ = sess.mutateState(func(st *SessionState) error {
+		rel := releaseHolders(st, func(holder string) bool { return holder == window || strings.HasSuffix(holder, "/"+window) }, reason, time.Now().UnixNano())
+		for i := range rel {
+			rows = append(rows, taskRow(sess, st, &rel[i]))
+		}
+		if len(rel) == 0 {
+			return errNoTaskMove
+		}
+		return nil
+	})
+	d.publishReleased(sess, rows, reason)
+}
+
+// cardSessions are the sessions whose cards window may hold: its own, and
+// those it holds a card of from another session of this daemon.
+func (d *Daemon) cardSessions(sess *Session, window string) []*Session {
+	out := []*Session{sess}
+	d.remoteHolds.mu.Lock()
+	list := slices.Clone(d.remoteHolds.m[window])
+	d.remoteHolds.mu.Unlock()
+	for _, h := range list {
+		if other := d.manager.GetSession(h.session); h.host == "" && other != nil && !slices.Contains(out, other) {
+			out = append(out, other)
+		}
+	}
+	return out
 }
 
 // forwardTask sends a claim, release or finish for a card owned by host, on
@@ -348,9 +393,12 @@ func (d *Daemon) claimForRemote(cs *connState, p claimTaskParams) (any, *verbErr
 			})
 			return errTaskRefused
 		}
-		if _, verr = tk.take(holder, caller.by, time.Now().UnixNano()); verr != nil {
+		// A claim for a card auto is starting on another machine is auto's.
+		auto := d.auto.expects(sess.Name(), tk.ID, true)
+		if _, verr = tk.take(holder, cmp.Or(auto, caller.by), time.Now().UnixNano()); verr != nil {
 			return errTaskRefused
 		}
+		tk.Dispatched = auto != ""
 		tk.HolderName, tk.HolderHarness = printableClaim(p.RemoteName, 64), printableClaim(p.RemoteHarness, 64)
 		row = taskRow(sess, st, tk)
 		return nil

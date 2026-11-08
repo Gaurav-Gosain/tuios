@@ -54,6 +54,7 @@ const (
 	ErrVerbSessionNotFound = "session_not_found" // named session does not exist
 	ErrVerbSessionExists   = "session_exists"    // new-session was given a name the daemon already holds
 	ErrVerbFanExists       = "fan_exists"        // fan was given the name of a fan that exists, with no join
+	ErrVerbBranchExists    = "branch_exists"     // new-worktree with new_branch named a branch, folder or session that exists
 	ErrVerbWindowNotFound  = "window_not_found"  // window target did not resolve
 	ErrVerbNoWindows       = "no_windows"        // session has no windows to act on
 	ErrVerbPTYNotFound     = "pty_not_found"     // the target window has no live PTY
@@ -753,6 +754,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "base", Type: "string", Description: "Ref a new branch starts from. Omit for HEAD of the main checkout."},
 				{Name: "name", Type: "string", Description: "Name for the session. Omit for <repo>-<branch>, with every slash in the branch turned into a hyphen."},
 				{Name: "command", Type: "[]string", Description: "Argv to exec as the first window's process instead of a shell. No shell parses it, so nothing needs quoting."},
+				{Name: "new_branch", Type: "bool", Description: "Refuse with branch_exists when the branch, its worktree folder or its session exists already, instead of checking out a branch that exists."},
 			}, slices.Concat(setupParams, repoSourceParams)...),
 			returns: append([]verbParam{
 				{Name: "session", Type: "string", Description: "Name of the new session."},
@@ -924,7 +926,8 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "protocol", Type: "string", Description: "Run the agent headless over a structured protocol instead of in its own TUI: acp (the Agent Client Protocol, for an agent command such as \"opencode acp\") or codex (the Codex app-server; app-server is added to the codex command). The pane runs tuios agent-proto, which shows the conversation as a transcript and reports the agent's state itself; the pane is ready on that report alone. Its permission requests are answered in the pane or, for a request one line shows whole, from the Inbox without [agents.approvals]. Omit for the agent's own TUI.", Accepted: agentproto.Protocols},
 				{Name: "task", Type: "string", Description: "A task card of the session, such as t3, for the new pane to work on: it is claimed for the pane as soon as the pane exists, before the wait. The caller needs what claim-task needs, and the card must be held by no pane, not blocked and not done, checked before anything is started. The session must exist already."},
 				{Name: "task_host", Type: "string", Description: "With task: the linked machine that owns the card. The new pane claims it there."},
-				{Name: "task_session", Type: "string", Description: "The card's session there."},
+				{Name: "task_session", Type: "string", Description: "The card's session: there with task_host, else another session of this daemon. The pane's close lets the card go."},
+				{Name: "task_mail", Type: "bool", Description: "With task: once the pane holds the card, mail it the card from tuios (title, prompt, and the commands that finish or release it), so nothing is typed into it."},
 				{Name: "human_nonce", Type: "string", Description: "With task: the attached client's nonce, so the claim is the person's (by human)."},
 				{Name: "parent", Type: "string", Description: "The agent pane the new agent reports to, by window id or a unique start of it. Omit it from an agent pane: that pane is the parent. A pane may name itself or a pane it could type into, and the person may name any agent pane. A chain of agents stops at 8: a deeper start is refused."},
 				{Name: "model", Type: "string", Description: "The model, passed with the flag the harness's manifest names ([launch] model_flag). One word, not starting with -. Refused for a harness with no model flag."},

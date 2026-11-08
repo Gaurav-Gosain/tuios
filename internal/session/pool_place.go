@@ -334,8 +334,18 @@ func (d *Daemon) verbPlaceAgent(cs *connState, params json.RawMessage) (any, *ve
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
+	ans, verr := d.placeAgent(cs, p)
+	if verr != nil {
+		return nil, verr
+	}
+	return ans, nil
+}
+
+// placeAgent is place-agent's decision. When no machine passes, the answer
+// still lists every machine with its reason.
+func (d *Daemon) placeAgent(cs *connState, p placeParams) (PlaceAnswer, *verbError) {
 	if len(p.Exclude) > 64 {
-		return nil, invalidParam("exclude", "exclude names at most 64 machines")
+		return PlaceAnswer{}, invalidParam("exclude", "exclude names at most 64 machines")
 	}
 	// The card, when one is named: its agent and repository are the
 	// defaults, and a card of the session only stays here.
@@ -343,7 +353,7 @@ func (d *Daemon) verbPlaceAgent(cs *connState, params json.RawMessage) (any, *ve
 	if p.Task != "" {
 		sess, verr := d.resolveVerbSession(cs, p.TaskSession)
 		if verr != nil {
-			return nil, verr
+			return PlaceAnswer{}, verr
 		}
 		st := sess.GetState()
 		i := -1
@@ -351,7 +361,7 @@ func (d *Daemon) verbPlaceAgent(cs *connState, params json.RawMessage) (any, *ve
 			i = taskIndex(st.Tasks, p.Task)
 		}
 		if i < 0 {
-			return nil, newVerbError(ErrVerbNoTask, "session "+echoName(sess.Name())+" has no task card "+echoName(p.Task))
+			return PlaceAnswer{}, newVerbError(ErrVerbNoTask, "session "+echoName(sess.Name())+" has no task card "+echoName(p.Task))
 		}
 		tk := &st.Tasks[i]
 		p.Agent = cmp.Or(strings.TrimSpace(p.Agent), tk.Harness)
@@ -362,7 +372,7 @@ func (d *Daemon) verbPlaceAgent(cs *connState, params json.RawMessage) (any, *ve
 	}
 	agent := strings.TrimSpace(p.Agent)
 	if agent == "" {
-		return nil, invalidParam("agent", "agent is required: the harness to place, such as claude")
+		return PlaceAnswer{}, invalidParam("agent", "agent is required: the harness to place, such as claude")
 	}
 	word, _, _ := strings.Cut(agent, " ")
 	id, cmd := word, word
@@ -373,11 +383,11 @@ func (d *Daemon) verbPlaceAgent(cs *connState, params json.RawMessage) (any, *ve
 	}
 	if p.RepoURL != "" {
 		if u := worktree.NormalizeRemote(p.RepoURL); u == "" || strings.HasPrefix(u, "file:") {
-			return nil, invalidParam("repo_url", "repo_url is a repository's origin URL, such as git@github.com:acme/api.git")
+			return PlaceAnswer{}, invalidParam("repo_url", "repo_url is a repository's origin URL, such as git@github.com:acme/api.git")
 		}
 	}
 	if p.Clone && p.RepoURL == "" {
-		return nil, invalidParam("clone", "clone only means something with repo_url")
+		return PlaceAnswer{}, invalidParam("clone", "clone only means something with repo_url")
 	}
 
 	machines := d.askPool(cs, p, id, sessionCard)
@@ -408,7 +418,7 @@ func (d *Daemon) verbPlaceAgent(cs *connState, params json.RawMessage) (any, *ve
 		for i := range machines {
 			why += " " + machines[i].Why
 		}
-		return nil, newVerbError(ErrVerbNoMachine, why)
+		return PlaceAnswer{Machines: machines}, newVerbError(ErrVerbNoMachine, why)
 	}
 	// The listing: the pick first, then the others in their order.
 	pick := machines[best]

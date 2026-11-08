@@ -1,6 +1,7 @@
 package session
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -419,6 +420,10 @@ func (d *Daemon) verbNewWorktree(cs *connState, params json.RawMessage) (any, *v
 		Base    string   `json:"base"`
 		Name    string   `json:"name"`
 		Command []string `json:"command"`
+		// NewBranch refuses a branch, worktree folder or session that
+		// exists, so a caller that names one from a title never lands on
+		// work of the person's.
+		NewBranch bool `json:"new_branch"`
 		setupParam
 	}
 	if verr := decodeParams(params, &p); verr != nil {
@@ -443,6 +448,16 @@ func (d *Daemon) verbNewWorktree(cs *connState, params json.RawMessage) (any, *v
 	root, cloned, verr := d.resolveRepoSource(cs, "new-worktree", p.repoSource, nil)
 	if verr != nil {
 		return nil, verr
+	}
+	if p.NewBranch {
+		path, verr := worktreePathFor(d.worktreeTemplate(), root, branch)
+		if verr != nil {
+			return nil, verr
+		}
+		_, statErr := os.Lstat(path)
+		if statErr == nil || worktree.BranchExists(root, branch) || d.manager.GetSession(cmp.Or(strings.TrimSpace(p.Name), worktree.SessionName(filepath.Base(root), branch))) != nil {
+			return nil, newVerbError(ErrVerbBranchExists, "branch "+echoName(branch)+", its worktree folder or its session exists already")
+		}
 	}
 	startedBy := d.startedByLater(cs)
 	out, verr := d.createWorktreeSession(cs, root, branch, strings.TrimSpace(p.Base), strings.TrimSpace(p.Name), command, nil, d.childDefaultGrants(cs), setup, nil, func(_ *Session, win WindowState) {

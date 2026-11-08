@@ -7644,7 +7644,7 @@ they make anything: a refusal names `task` in its hint.
 | `release-task` | Let the card go and keep its stage | `task`; only the card it holds | `write` | `task_changed` |
 | `remove-task` | Remove the card and its history | refused | `write` | `task_removed` with `id` |
 | `get-task-dispatch` | The dispatch settings: `paused`, `stopped` (why all dispatch stopped on its own), `quiet`, `quiet_now`, `boards` (each with `board`, `project` or `session`, `mode`, `failures`, `stopped`), and `board` for the board `project` or `session` names | `read` | `list` | `task_dispatch` |
-| `set-task-dispatch` | `action`: `mode` (with `mode` `manual` or `pull`, for the board `project` or `session` names), `pause`, `resume` (lifts the pause and every stop) or `quiet` (with `quiet`, such as `22:00-07:00`, or `off`) | `pause` only; the rest need `admin` | refused | `task_dispatch` |
+| `set-task-dispatch` | `action`: `mode` (with `mode` `manual`, `pull` or `auto`, for the board `project` or `session` names; auto needs a preset), `preset` (`agent`, `model`, `effort`, `permission_mode`, `machine`), `cap` (`cap`, `machine_cap`), `pause`, `resume` (lifts the pause and every stop) or `quiet` (with `quiet`, such as `22:00-07:00`, or `off`) | `pause` only; the rest need `admin` | refused | `task_dispatch` |
 
 `add-task` also takes `harness`, the agent the card is for, and `ask_first`,
 which keeps the card for a person. A row carries them, and `dispatched` when
