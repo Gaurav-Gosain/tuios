@@ -96,6 +96,11 @@ func TestTheBoardShowsTheCardLifecycle(t *testing.T) {
 	}
 	_ = term.WaitStable(uiTimeout)
 	saveCockpitFrames(t, term, "board-lifecycle-review-160x45")
+	// The card's history names the pane that finished it, as the rail
+	// does, not by its window id.
+	if text := term.Screen().Text(); !strings.Contains(text, "finished  agent") || strings.Contains(text, a[:8]) {
+		t.Errorf("ASSERTION: the history does not name the pane agent that finished t1 (window %s)\n%s", a[:8], text)
+	}
 
 	// v: the Changes view of the agent's worktree.
 	if err := term.SendKeys("v"); err != nil {

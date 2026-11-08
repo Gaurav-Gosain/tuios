@@ -771,9 +771,34 @@ func (m *OS) drawCardFocus(c *ckCanvas, l ckLook, r ckRow, card session.TaskRow,
 				words += ", " + printableTitle(ev.Reason)
 			}
 			line(ckSeg{t: ckPad(inboxWait(ev.At, now), 5), fg: pal.FgMute}, ckSeg{t: words, fg: pal.Fg},
-				ckSeg{t: "  " + printableTitle(ev.By), fg: pal.FgMute})
+				ckSeg{t: "  " + m.ckHistoryBy(ev.By), fg: pal.FgMute})
 		}
 	}
+}
+
+// ckHistoryBy is who made a history entry, as the person reads it. The
+// daemon keeps the stable form: a pane by its window id, the person as
+// "human", a caller outside every pane as "shell", a linked machine as
+// "link:NAME". A pane here is named as the rail names it; a pane this client
+// does not have is its short id.
+func (m *OS) ckHistoryBy(by string) string {
+	switch {
+	case by == session.AgentInboxHuman:
+		return "you"
+	case by == "shell":
+		return "a shell"
+	case strings.HasPrefix(by, "link:"):
+		return printableTitle(strings.TrimPrefix(by, "link:"))
+	}
+	if w := m.windowByID(by); w != nil {
+		if name := printableTitle(m.railTitleShown(w)); name != "" {
+			return agentMailNotThePerson(by, name)
+		}
+	}
+	if len(by) == 36 && strings.Count(by, "-") == 4 {
+		return shortWindowLabel(by)
+	}
+	return printableTitle(by)
 }
 
 // ckFreeWords says how a free card is taken.

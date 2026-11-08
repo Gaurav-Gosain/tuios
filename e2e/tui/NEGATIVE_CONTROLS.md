@@ -15311,3 +15311,14 @@ Run on 2026-11-08 on macOS (arm64). The branch passes, and so does
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitCopyModeEndsWithItsAgent$' -v .`.
+
+## TestTheBoardShowsTheCardLifecycle (History names the pane)
+
+The card's History must name the pane that finished the card, "agent", and
+not show its window id.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (90d8a0400), where History prints the recorded window id | "the history does not name the pane agent that finished t1" | **caught** |
