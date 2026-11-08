@@ -274,21 +274,30 @@ func paneFolder(s *proto.Session, p *proto.Pane, h *host) string {
 // paneRow is one pane under its session: a mark of its state, what runs
 // in it, and detail, what tells it from the others (paneRows).
 func (a *App) paneRow(c *ui.Context, pal *palette, s *proto.Session, p *proto.Pane, detail string, focused bool, h *host) {
+	// The row keeps the focus where it is, and its press moves the person
+	// into the pane in the press's own event: keys typed right after it
+	// reach the terminal that had the focus, whose owner gives them to the
+	// pane (key_owner.go). Acting on the click, a build later, left them
+	// with no element: a line typed with the click was lost (Mac round 6,
+	// visual S1).
 	row := ui.Row(c.Key("pn-"+p.ID)).Height(sbPaneH).Padding(0, 10, 0, rowInset+4).Gap(8).AlignItems(ui.Center).Radius(rRow).
-		Cursor(ui.CursorPointer).Label(p.PaneName())
+		Cursor(ui.CursorPointer).Label(p.PaneName()).KeepFocus()
 	if row.Hovered() {
 		row.Background(pal.rowHover)
 	}
+	sid, pid := s.ID, p.ID
+	row.HandleInput(func(ev ui.InputEvent) bool {
+		if ev.Kind == ui.InputPointerDown && ev.Button == 0 {
+			a.enterPane(sid, pid)
+			if a.win != nil {
+				a.win.Invalidate()
+			}
+		}
+		return false
+	})
 	if row.Clicked() {
 		c.Invalidate()
-		sid, pid := s.ID, p.ID
-		if a.selected != sid {
-			a.selectSession(sid)
-		}
-		if t := a.session(sid); t != nil {
-			a.setFocus(t, pid)
-			a.focusTerminal()
-		}
+		a.enterPane(sid, pid)
 	}
 	rowTooltip(c, row, "pn-tip-"+p.ID, h.shortDir(p.WorkDir()))
 	row.Children(func() {
@@ -418,4 +427,17 @@ func worktreeOrder(in []*proto.Session, letter func(*proto.Session) string) (out
 		}
 	}
 	return out, nested
+}
+
+// enterPane moves the person into pane of session sid, as a click on its
+// row: the session shows, the pane has the focus, and the keys go there
+// through the owner.
+func (a *App) enterPane(sid, pane string) {
+	if a.selected != sid {
+		a.selectSession(sid)
+	}
+	if t := a.session(sid); t != nil {
+		a.setFocus(t, pane)
+		a.focusTerminal()
+	}
 }
