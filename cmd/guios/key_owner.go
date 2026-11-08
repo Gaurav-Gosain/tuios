@@ -424,9 +424,11 @@ func (a *App) keyOwnerView(c *ui.Context) {
 			ko.sheetAt = now
 		}
 		if ko.acting == 0 {
+			// Not while an action waits: the keys kept before the sheet
+			// go where the keys go once it ran.
 			a.koSet(koOwned, a.keyTarget().String())
+			a.landBeforeSheet()
 		}
-		a.landBeforeSheet()
 	} else {
 		ko.sheetAt = time.Time{}
 	}
