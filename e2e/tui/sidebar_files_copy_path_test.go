@@ -198,9 +198,17 @@ func TestSidebarFileOpenSystem(t *testing.T) {
 	opened := false
 	for range 30 {
 		sendKeys(t, term, "j", "o")
-		time.Sleep(100 * time.Millisecond)
-		if len(openRecord(record)) > 0 && openRecord(record)[0] != "" {
-			opened = true
+		// Wait for this o to show whether it opened something before the
+		// next j: the opener starts at once and says so, but its record can
+		// land later (on macOS a process start often takes longer than a
+		// short sleep), and a j sent meanwhile walks on to open the next row.
+		deadline := time.Now().Add(time.Second)
+		for time.Now().Before(deadline) && !opened {
+			opened = len(openRecord(record)) > 0 && openRecord(record)[0] != "" ||
+				strings.Contains(term.Snapshot(), "Opened ")
+			time.Sleep(50 * time.Millisecond)
+		}
+		if opened {
 			break
 		}
 	}
