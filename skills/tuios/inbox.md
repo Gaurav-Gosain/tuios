@@ -24,7 +24,10 @@ the prompts only the person may answer.
 - a pane on `errored`
 - a conversation a daemon restart left to resume (kind `resume`)
 - a finished turn nobody has looked at
-- mail waiting for another machine's link (kind `outbox`)
+- mail waiting for another machine's link (kind `outbox`), with why the link
+  is down
+- mail another machine keeps for this one while its link here is down (kind
+  `held_mail`): only the count and the reason
 
 You can read the same list:
 

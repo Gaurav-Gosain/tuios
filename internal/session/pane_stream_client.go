@@ -31,6 +31,10 @@ const (
 	PaneFrameViewer   = 'V'
 	PaneFrameShown    = 'F'
 	PaneFrameHistory  = 'H'
+	// PaneFrameInputAt is input that names the stream offset it starts at:
+	// the daemon types it only there. Send it when the reply has
+	// InputOffsets.
+	PaneFrameInputAt = 'J'
 )
 
 // The values of an F frame.
@@ -60,6 +64,8 @@ type PaneStreamReply struct {
 	SessionID string `json:"session_id"`
 	Window    string `json:"window"`
 	Title     string `json:"title"`
+	// InputOffsets says the daemon takes J frames (InputAt).
+	InputOffsets bool `json:"input_offsets"`
 }
 
 // PaneStream is one open stream-pane connection.
@@ -129,6 +135,14 @@ func (s *PaneStream) Input(b []byte) error {
 		b = b[n:]
 	}
 	return nil
+}
+
+// InputAt sends b as one J frame that starts at stream offset off. b is at
+// most PaneStreamMaxInput long. The daemon types it only when off is the
+// number of input bytes the stream took, and otherwise refuses it as busy with
+// that number in accepted.
+func (s *PaneStream) InputAt(off int64, b []byte) error {
+	return s.WriteFrame(PaneFrameInputAt, append(binary.BigEndian.AppendUint64(make([]byte, 0, 8+len(b)), uint64(off)), b...))
 }
 
 // Lease holds the pane at most at cols by rows. Zero releases the lease.

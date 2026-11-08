@@ -402,6 +402,11 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 	// Always report the agent state (as "none" when unset) so a consumer building
 	// an attention view can read every pane's state in one list-windows call.
 	info["agent_state"] = w.AgentState.Name()
+	// The reason beside the raw state, so a script tells a working agent from
+	// one that has been silent past silent_after. See agent_silent.go.
+	if w.AgentReason != "" {
+		info["agent_reason"] = w.AgentReason
+	}
 	if w.AgentMessage != "" {
 		info["agent_message"] = w.AgentMessage
 	}

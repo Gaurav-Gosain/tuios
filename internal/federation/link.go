@@ -129,6 +129,9 @@ type link struct {
 	// trust. See SignInURLAllowed.
 	approvalRefused bool
 	shake           Handshake
+	// held is the mail the far machine holds for this one, from its last
+	// hello. See MailHeld.
+	held MailHeld
 	// load is the far machine's load from its last hello, at loadAt, and
 	// rtt the round trip of that hello. Zero until a hello carried one.
 	load    Load
@@ -259,6 +262,11 @@ func (l *link) setFailure(status Status, reason, detail string, failure SSHFailu
 	if changed && l.opts.OnStatus != nil {
 		l.opts.OnStatus(l.host.Name, status)
 	}
+	// What the far machine said it holds for this one is known only while
+	// the link is up. A stale count is worse than none.
+	if status != StatusUp {
+		l.noteMailHeld(MailHeld{})
+	}
 }
 
 // noteHello keeps the load a hello carried and the hello's round trip. A
@@ -283,6 +291,47 @@ func (l *link) noteVersion(v string) {
 	l.mu.Lock()
 	l.shake.DaemonVersion = v
 	l.mu.Unlock()
+}
+
+// MailHeld is what a far machine's hello says about mail it keeps for this
+// machine because its own link here is down: how many messages, and that
+// link's status there. It carries nothing of the mail itself: no sender, no
+// subject, no text. The far machine answers it only for the machine the link
+// connection named. Zero when nothing waits, and from an older daemon.
+type MailHeld struct {
+	Count  int    `json:"count,omitempty"`
+	Status Status `json:"status,omitempty"`
+}
+
+// maxMailHeldCount bounds the count a far machine may claim.
+const maxMailHeldCount = 100000
+
+// bounded is h as this machine keeps it: a count in range and a status that
+// is one of the names this build knows.
+func (h MailHeld) bounded() MailHeld {
+	if h.Count <= 0 {
+		return MailHeld{}
+	}
+	h.Count = min(h.Count, maxMailHeldCount)
+	switch h.Status {
+	case StatusConnecting, StatusUp, StatusUnreachable, StatusNoDaemon, StatusNoBinary,
+		StatusIncompatible, StatusReconnecting, StatusApproval:
+	default:
+		h.Status = ""
+	}
+	return h
+}
+
+// noteMailHeld keeps what the last hello said about held mail, and reports a
+// change to OnMailHeld.
+func (l *link) noteMailHeld(h MailHeld) {
+	l.mu.Lock()
+	changed := l.held != h
+	l.held = h
+	l.mu.Unlock()
+	if changed && l.opts.OnMailHeld != nil {
+		l.opts.OnMailHeld(l.host.Name, h)
+	}
 }
 
 // loadStale reports whether the load is older than loadMaxAge, so the

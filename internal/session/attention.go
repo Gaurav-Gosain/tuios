@@ -89,6 +89,11 @@ const (
 	// so it closes when the pane leaves needs_input, and the pane's
 	// blocked_by stays approval for every consumer that reads it.
 	AttentionPlan = "plan"
+	// AttentionHeldMail is mail another machine keeps for this one because
+	// its own link here is down, one item per machine: how many messages and
+	// why, and nothing of the mail. That machine says so in the hello this
+	// machine's link to it sends. See held_mail.go.
+	AttentionHeldMail = "held_mail"
 )
 
 // AttentionKindNames lists the kinds in the order the Inbox groups them: what
@@ -97,7 +102,7 @@ const (
 // waiting to leave. list-attention sorts by it. A plan follows the approvals
 // it is a larger kind of, and an ask sits with them: something is waiting on
 // the answer.
-var AttentionKindNames = []string{AttentionApproval, AttentionPlan, AttentionAsk, AttentionQuestion, AttentionMail, AttentionErrored, AttentionResume, AttentionFinished, AttentionOutbox}
+var AttentionKindNames = []string{AttentionApproval, AttentionPlan, AttentionAsk, AttentionQuestion, AttentionMail, AttentionErrored, AttentionResume, AttentionFinished, AttentionOutbox, AttentionHeldMail}
 
 // Close reasons an attention event carries on its closing action.
 const (
@@ -295,11 +300,14 @@ type AttentionItem struct {
 // called under it but the event hub, whose lock is a leaf, so the session event
 // sink may call into it with the session's state lock held.
 type attentionStore struct {
-	mu     sync.Mutex
-	items  map[string]*AttentionItem
-	byKey  map[string]string
-	nextID uint64
-	rev    uint64
+	mu sync.Mutex
+	// heldDismissed is, per machine, the held-mail count the person
+	// dismissed. The item stays closed until the count changes.
+	heldDismissed map[string]int
+	items         map[string]*AttentionItem
+	byKey         map[string]string
+	nextID        uint64
+	rev           uint64
 
 	// publish delivers an attention event. It is called with mu held, so the
 	// order of events on the stream is the order of changes to the queue.
@@ -427,6 +435,8 @@ func attentionItemKey(it *AttentionItem) string {
 	switch it.Kind {
 	case AttentionOutbox:
 		return "outbox\x00" + it.ForHost
+	case AttentionHeldMail:
+		return "held\x00" + it.ForHost
 	case AttentionAsk:
 		return "ask\x00" + it.Session + "\x00" + it.RequestID
 	case AttentionErrored:
@@ -441,7 +451,7 @@ func attentionItemKey(it *AttentionItem) string {
 
 // noteOutbox opens, updates or closes the outbox item for host: how many
 // messages wait for it and what it refused. With neither, the item closes.
-func (a *attentionStore) noteOutbox(host string, waiting int, fails []outboxFailure, since int64) {
+func (a *attentionStore) noteOutbox(host string, waiting int, fails []outboxFailure, since int64, why string) {
 	if a == nil {
 		return
 	}
@@ -456,7 +466,7 @@ func (a *attentionStore) noteOutbox(host string, waiting int, fails []outboxFail
 		Kind:    AttentionOutbox,
 		ForHost: host,
 		Name:    attentionText(host, attentionMaxSummary),
-		Summary: attentionText(outboxSummary(host, waiting, fails), attentionMaxSummary),
+		Summary: attentionText(outboxSummary(host, waiting, fails, why), attentionMaxSummary),
 		Count:   waiting,
 	}
 	if since == 0 && len(fails) > 0 {

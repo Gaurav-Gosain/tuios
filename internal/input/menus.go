@@ -41,6 +41,7 @@ func handleOpenMenu(action string) ActionHandler {
 // every other prefix does.
 func HandleMenuCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	name := o.Menu
+	origin := o.MenuState().Origin
 	k := startMenuKey(o)
 	menu, ok := declaredMenu(o, name)
 	if !ok || k.leaves(msg) {
@@ -50,6 +51,9 @@ func HandleMenuCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if k.refuses(o, action) {
 		k.unbound(msg, o)
 		return o, nil
+	}
+	if origin.Set {
+		return handleOverlayMenuKey(msg, o, name, menu, origin, action)
 	}
 	m, cmd, ran := dispatchAction(action, msg, o)
 	if ran {
@@ -71,4 +75,54 @@ func HandleMenuCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		forwardKeyToFocusedWindow(msg, o)
 	}
 	return o, nil
+}
+
+// handleOverlayMenuKey is HandleMenuCommand for a menu opened over an
+// overlay (issue #1590). The menu is closed when this runs. A key that opens
+// another declared menu opens it over the same overlay. Any other action the
+// menu binds is handed back to the overlay: its key handler runs once with
+// the key, and its tableAction returns that action in place of the key's own
+// (keychords.go). The hand-back is cleared after that one call whatever it
+// did, also when the overlay closed or never read its table, so it can never
+// answer a later key. A sticky menu opens again after, while the overlay is
+// still up. esc, ctrl+c and a key the menu does not bind close it and do
+// nothing else.
+func handleOverlayMenuKey(msg tea.KeyPressMsg, o *app.OS, name string, menu config.MenuConfig, origin app.MenuOrigin, action string) (*app.OS, tea.Cmd) {
+	if next, ok := config.MenuNameOf(action); ok {
+		if _, declared := declaredMenu(o, next); declared {
+			o.OpenMenuFrom(next, origin.Table, false)
+		}
+		return o, nil
+	}
+	if action == "" {
+		return o, nil
+	}
+	o.MenuAction = app.MenuHandback{Set: true, Table: origin.Table, Action: action}
+	m, cmd := routeKey(msg, o)
+	m.MenuAction = app.MenuHandback{}
+	o.MenuAction = app.MenuHandback{}
+	if menu.Sticky && m.Menu == "" && !m.PrefixActive && overlayOpen(m, origin.Table) {
+		m.OpenMenuFrom(name, origin.Table, true)
+	}
+	return m, cmd
+}
+
+// overlayOpen reports whether the overlay that table belongs to is still up,
+// for a sticky menu over it. A table this does not know counts as up.
+func overlayOpen(o *app.OS, table config.Table) bool {
+	switch table {
+	case config.TableInbox, config.TableInboxPeek:
+		return o.ShowInbox
+	case config.TableMail:
+		return o.ShowAgentMail
+	case config.TableTransfers:
+		return o.TransfersOpen()
+	case config.TableSidebar, config.TableSidebarFiles, config.TableSidebarAgents:
+		return o.SidebarFocused
+	case config.TableReview:
+		return o.ReviewOpen()
+	case config.TableQuickLook, config.TableQuickLookInside:
+		return o.QuickLookOpen()
+	}
+	return true
 }

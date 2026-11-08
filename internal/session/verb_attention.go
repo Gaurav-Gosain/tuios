@@ -218,6 +218,11 @@ func (d *Daemon) verbDismissAttention(cs *connState, params json.RawMessage) (an
 			"dismissed": true,
 		}, nil
 	}
+	// Mail another machine keeps for this one stays dismissed until its
+	// count changes. Nothing here can send it.
+	if it.Kind == AttentionHeldMail {
+		d.attention.noteHeldDismissed(it.ForHost, it.Count)
+	}
 	if sess := d.manager.GetSession(it.Session); sess != nil {
 		switch it.Kind {
 		case AttentionFinished:

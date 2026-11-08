@@ -43,7 +43,7 @@ require (
 	tuios.dev/loom v0.2.3-0.20261107080335-c0a363ccd509
 	tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8
 	tuios.dev/progstatus v0.1.2-0.20261030111253-c0f512aa3148
-	tuios.dev/shot v0.2.2-0.20261030111253-e3068c27991c
+	tuios.dev/shot v0.2.2-0.20261108190511-f7dea1948570
 	tuios.dev/sketch v0.4.1-0.20261106165743-fef8f8756257
 	tuios.dev/swatch v0.1.2-0.20261030111253-c0f512aa3148
 	tuios.dev/tml v0.1.2-0.20261104012002-e0cf866a6ddb

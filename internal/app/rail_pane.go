@@ -423,8 +423,9 @@ func (m *OS) createLocalRailPane(key string, cols, rows int) {
 		}
 	}
 	dir, _ := os.UserHomeDir()
-	w, err := terminal.NewWindowIn(dir, createID(), "rail pane", 0, 0, cols+2, rows+2, len(m.Windows),
-		m.WindowExitChan, m.PTYDataChan, m.Settings.ScrollbackLines, commandArgv(key, nil)...)
+	caps := m.hostCaps()
+	w, err := terminal.NewWindowInCell(dir, createID(), "rail pane", 0, 0, cols+2, rows+2, len(m.Windows),
+		m.WindowExitChan, m.PTYDataChan, m.Settings.ScrollbackLines, caps.CellWidth, caps.CellHeight, commandArgv(key, nil)...)
 	if err != nil {
 		m.railPaneView.err = plainCause(err)
 		m.sidebarCache.invalidate()

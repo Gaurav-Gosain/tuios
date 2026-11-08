@@ -15926,6 +15926,28 @@ Run on 2026-11-08 on macOS (arm64). The branch passes, 10 of 10 under load.
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestABlockingFormOutranksADoneReport$' -v .`.
 
+## TestScreenshotDrawsEmojiSequences
+
+A flag, two ZWJ sequences, a keycap and a skin tone, drawn by tuios.dev/shot in
+the fonts tuios screenshot finds: each must cover a quarter of its cell, as an
+emoji picture does, and differ from its first code point drawn alone.
+
+Run on 2026-11-08 on macOS (arm64, Apple Color Emoji, morx) and on arch-btw
+(x86_64, Noto Color Emoji, GSUB). The branch passes on both.
+
+| Control | Machine | The test fails with | Result |
+|---------|---------|---------------------|--------|
+| Base (feat/shot-color-emoji a1f9fd990): a cluster draws its first rune | macOS | all five: "draws as its first code point alone", and for the flag and keycap "draws ink on 198 (185) pixels of 1258" | **caught** |
+| No shaping | macOS | all five, as the base | **caught** |
+| No shaping | arch-btw | all five, as the base | **caught** |
+| morx ligature subtables skipped | macOS | all five, as the base | **caught** |
+| morx noncontextual subtables skipped | macOS | "keycap \"1️⃣\" draws ink on 185 pixels of 1258" | **caught** |
+| A variation selector the font does not list kept as a missing glyph | arch-btw | "keycap \"1️⃣\" draws ink on 185 pixels of 1258" | **caught** |
+| The same | macOS | passes: Apple Color Emoji lists U+FE0F | not reachable on Apple |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 go test -count=1 -run '^TestScreenshotDrawsEmojiSequences$' -v .`.
+
 ## TestStartAgentFromAPreset
 
 Orchestration gap G4. A config with `[agents.presets.worker]` (agent, args,
@@ -15953,3 +15975,67 @@ Run on 2026-11-08 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestStartAgentFromAPreset$' -v .`.
+
+## TestStreamPaneTypesInputAtItsOffset
+
+A J frame at offset 0, one at the wrong offset (10, after 3 bytes), the one at
+the right offset (3), an I frame and a last J frame, into a pane that reads at
+once. The wrong one must be refused as busy with accepted 3 and type nothing,
+the rest typed once in order, and the reply must carry `input_offsets: true`.
+The unit tests in `internal/session/stream_input_offset_test.go` hold the I
+rules as they were and a stale J frame after the queue drained.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (c7314dc3f) | "the reply does not say the daemon takes J frames", "the refusal ... is map[code:invalid_request ...]", "the program read \"DDD\"" | **caught** |
+| The offset check in paneInput.push cut | "a J frame at offset 10, where the stream had taken 3 bytes, got no refusal"; unit: "a stale J frame after the queue drained: ok true" | **caught** |
+| `input_offsets` left out of the reply | "the stream-pane reply does not say the daemon takes J frames" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestStreamPaneTypesInputAtItsOffset$' -v .`.
+
+## TestKittyImageSymbolsOnAHostWithoutGraphics
+
+A kitty a=T picture (RGBA, in 4096-byte chunks) in a pane on a host without
+graphics, standalone and in a daemon pane: it must be on the host as octants
+under the ceiling of the sixel test, scroll, go on a=d,d=I,i=7 and on
+a=d,d=A, and go on clear, with no graphics and no marker text sent to the
+host. vt TestImageMarkersPlaceAndErase holds both emulators to the marker
+cells the path writes and blanks. Run on 2026-11-09 on macOS (arm64), pure Go
+and -tags ghostty binaries.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (f09362e98): no glyph path | "the kitty picture on the host: error 377.2 ... holds \"S\", not a octant glyph", "SHOWN is 1 rows under the picture's top" | **caught** |
+| a=d not handled | "74 image cells left after a=d,d=I,i=7", "234 image cells left after a=d,d=A" | **caught** |
+| The cursor never moves past the picture | "SHOWN is 1 rows under the picture's top, want 13" | **caught** |
+| EraseImageMarkers does nothing (pure Go, then ghostty) | e2e passes, as the dropped image draws nothing; vt TestImageMarkersPlaceAndErase "6 cells of the erased picture are left" on both | **caught by the vt test** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestKittyImageSymbolsOnAHostWithoutGraphics$' -v .`.
+
+## TestOpenMenuInTheInboxAndTheRail, TestOpenMenuInTheReview
+
+`open_menu:NAME` bound in `[keybindings.inbox]`, `[keybindings.sidebar]` and
+`[keybindings.review]` (issue #1590). The menu's panel must show over the
+overlay, a menu key must run the overlay's own action (c closes the Inbox, w
+opens a window from the rail, y stages the file in the review), and esc must
+close the menu and leave the overlay up. The same key pressed after esc, and
+in the Inbox opened again after the menu closed it, must do what the overlay
+binds it to, so a menu action is never left to answer a later key.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes both.
+
+| Control | Test | The test fails with | Result |
+|---------|------|---------------------|--------|
+| Main (742a59880) | Inbox and rail | "x in the Inbox did not open the menu: ... waiting for text \"inbox x\"" | **caught** |
+| Main (742a59880) | Review | "m in the review did not open the menu: ... waiting for text \"quick stage\"" | **caught** |
+| The hand-back not cleared after the menu's key | Inbox and rail | "c in the Inbox opened again closed it: the menu's action answered a later key" | **caught** |
+| The panel at the leader's z (`ZIndexWhichKey`) | Inbox and rail | "x in the Inbox did not open the menu: ... waiting for text \"inbox x\"" (the panel is drawn under the Inbox) | **caught** |
+| No route to the menu ahead of the review | Review | "esc did not close the review's menu" | **caught** |
+| No route to the menu ahead of the review | Inbox and rail | passes: the Inbox and the rail leave keys to an open menu already | not a control of this test |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestOpenMenuIn' -v .`.

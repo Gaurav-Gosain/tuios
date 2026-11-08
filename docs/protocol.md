@@ -3493,6 +3493,8 @@ Response, one line:
 - `cols` and `rows` are the size of the pane at `seq`. In `resume` mode,
   resize your emulator to them when they are different.
 - `window` is the window id.
+- `input_offsets` is true when the daemon takes `J` frames. An older daemon
+  leaves it out.
 
 After the response line, the connection carries binary frames in both
 directions. A frame is one type byte, a 4-byte payload length (big-endian),
@@ -3528,6 +3530,7 @@ Frames from the client:
 | --- | --- | --- |
 | `I` (0x49) | bytes | Input for the pane, as typed. The client encodes the keys. |
 | `L` (0x4C) | u16 cols, u16 rows, optional u16 cell width, u16 cell height | Hold a size lease. `0 0` releases it. The 8-byte form also gives the cell of the client in pixels. |
+| `J` (0x4A) | u64 offset, bytes | Input, as `I`, that starts at this stream's input byte `offset`. Typed only when `offset` is the number of input bytes the stream took. |
 | `V` (0x56) | JSON viewer object | Replace the `viewer` report of the stream, as after a theme change. The object is the `viewer` param. |
 | `F` (0x46) | one byte | How the client shows the pane: 0 hidden, 1 on screen, 2 on screen and focused in a focused window. See [The shown frame](#the-shown-frame). |
 
@@ -3572,6 +3575,18 @@ pane has not read that much, the next `I` frame gets an `E` frame with code
 typed or waiting, in order. Every `I` frame after it is refused the same way
 until the pane has read what waits, so nothing is typed out of order. Send
 again from byte `accepted`. The daemon logs each run of refusals.
+
+A frame the client sent before it saw the refusal can reach the daemon after
+the pane has read what waited, and an `I` frame then is typed, after the bytes
+that were refused. A client that resends uses `J` frames instead, when the
+reply has `input_offsets: true`: each one names the input byte it starts at,
+and the daemon types it only at the offset it expects, `accepted`. A `J`
+frame at any other offset gets `E` with `busy` and `accepted`, nothing of it
+is typed, and the refusals of a full queue are not changed by it. So a resend
+from `accepted` is typed once, and a frame from before the resend never is.
+`I` and `J` frames count toward the same offset, and a stream may send both.
+A daemon without `input_offsets` refuses a `J` frame as an unknown type: send
+`I` frames to it.
 
 The daemon checks the caller again each second, as it checks a new
 `stream-pane`. When a pane loses its read grant, or the link policy no longer

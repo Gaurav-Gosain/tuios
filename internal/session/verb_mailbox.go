@@ -198,6 +198,11 @@ type AgentMessage struct {
 	// first thing that decides how much of it to believe.
 	Origin     string `json:"origin,omitempty"`
 	OriginHost string `json:"origin_host,omitempty"`
+	// OriginLink is the name this daemon's link policy knows the sending
+	// machine by, set from the connection like Origin. It is what
+	// agent-message-receipts checks, so a machine is told about the mail it
+	// sent itself and no other machine's.
+	OriginLink string `json:"origin_link,omitempty"`
 	// VerifiedHuman and ClaimedHuman say how far a message from human can be
 	// believed, and at most one is set. VerifiedHuman means the send carried
 	// the nonce of a client attached to this session at the time, which is the

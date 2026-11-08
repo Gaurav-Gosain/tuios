@@ -1703,7 +1703,12 @@ A pane that reported `working` through a hook, and then sends no report for
 
 - `get-agent-state` and `list-agents` report `state: unknown` and
   `reason: silent`. `agent_state_at` and `evidence_age_ms` still give the time
-  of the last report.
+  of the last report. `list-agents` also gives `last_state: working` and
+  `last_heard_at`, and its table says `working (silent 12m)`.
+- A selector's `state:working` still matches the pane, since working is the
+  last thing its agent said, and `state:silent` matches only silent panes.
+- `list-windows` gives the raw `agent_state: working` with
+  `agent_reason: silent`.
 - The `agent-state` event reports `unknown` with `reason: silent`.
 - The rail and the Inbox draw the `unknown` mark. The row reads "No report for
   N min", where N is the time since the last report.
@@ -2945,7 +2950,7 @@ match.
 | Key | Matches |
 | --- | --- |
 | `harness:` | The harness id, or a program name a manifest detects: `claude` is `claude-code`. A bare word also matches the id it starts (`gemini` is `gemini-cli`). |
-| `state:` | The agent state, one of the states above. |
+| `state:` | The agent state, one of the states above, or `silent`. `state:working` also matches a silent pane. |
 | `needs:you` | A pane a person has to act on: `needs_input` or `errored`. |
 | `session:` | The session name, a glob. |
 | `group:` | The fan-out group of the pane's session, the branch stem `fan` used, a glob. A session outside a fan-out has none. |

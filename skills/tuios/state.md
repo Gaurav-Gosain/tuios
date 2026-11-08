@@ -23,7 +23,10 @@ A pane that reported `working` and then sends no report for
 `[agents] silent_after` (default `10m`) shows as `unknown` with
 `reason: silent` in `get-agent-state`, `list-agents` and the `agent-state`
 event. Its rail row reads "No report for N min". The state underneath stays
-`working`, so nothing types into the pane. Your next report clears it, even
+`working`, so nothing types into the pane. `list-agents` gives it as
+`last_state`, and its table says `working (silent 12m)`. `--select
+state:working` still picks the pane, and `state:silent` picks only the silent
+ones. `list-windows` gives the raw `agent_state` with `agent_reason: silent`. Your next report clears it, even
 one that its `if_state` refuses. Report at each step of a long task, so that
 a long step does not read as a hang.
 

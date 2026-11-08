@@ -124,6 +124,41 @@ shot parses a fallback face only when a glyph needs it, and looks up each
 glyph once per render. A glyph wider than its cell is centred on the
 cell. tuios fills the fallback list from fontconfig.
 
+### Colour emoji
+
+PNG draws the colour bitmaps of an emoji font: the `sbix` table of Apple Color
+Emoji and the `CBDT` table of Noto Color Emoji. It picks the bitmap size that
+fits the cell and scales it into the cell in its own colours. A face that lists
+a glyph in neither an outline nor a bitmap it can draw does not count as having
+it, so `MissingGlyphs` reports it and the next face is tried.
+
+A large font file can be read in place: set `Font.File` to an open file (any
+`io.ReaderAt`) and leave `Data` empty. shot then reads only the tables and the
+glyphs it draws, which for Apple Color Emoji (about 190 MB) is a few hundred KB.
+
+```go
+emoji, _ := os.Open("/System/Library/Fonts/Apple Color Emoji.ttc")
+defer emoji.Close() // after the render
+frame.Fallback = append(frame.Fallback, shot.Font{File: emoji})
+```
+
+A cluster of several codepoints, such as a flag, a family joined by ZWJ, a
+keycap or a skin tone, draws as the one glyph the colour font's ligatures
+make of it: the `morx` table of Apple Color Emoji, or the `GSUB` ligatures of
+Noto Color Emoji. A sequence the font has no glyph for draws its first emoji.
+A table that does not add up, or whose state machine does not end in a
+bounded number of steps, is refused, and the face draws first emoji from then
+on.
+
+What shot does not do yet:
+
+- Shaping beyond emoji. Only colour faces run their ligatures, and only for a
+  cluster of several codepoints. A sequence a font draws as several glyphs
+  placed side by side, such as Apple's couple with two skin tones, draws its
+  first glyph.
+- `COLR` layered colour glyphs (Segoe UI Emoji, Twemoji Mozilla), and `sbix`
+  glyphs stored as JPEG or TIFF. Those glyphs count as missing.
+
 SVG and HTML name `Frame.FontFamily` and let the viewer pick the fonts. With
 `Frame.EmbedFont`, they also carry `Frame.Font` as an `@font-face`.
 

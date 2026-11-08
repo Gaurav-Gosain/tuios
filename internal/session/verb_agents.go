@@ -237,10 +237,15 @@ func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now i
 			source = claim.source.Name()
 		}
 		agents = append(agents, map[string]any{
-			"session":        sess.Name(),
-			"window_id":      w.ID,
-			"name":           windowLabelOf(w),
-			"state":          w.ShownAgentState().Name(),
+			"session":   sess.Name(),
+			"window_id": w.ID,
+			"name":      windowLabelOf(w),
+			"state":     w.ShownAgentState().Name(),
+			// last_state is the state the agent itself last gave, and
+			// last_heard_at when it last said anything. They differ from
+			// state for a silent pane: state is unknown, last_state working.
+			"last_state":     w.AgentState.Name(),
+			"last_heard_at":  max(w.AgentStateAt, claim.heardAt),
 			"reason":         w.AgentReason,
 			"quiet":          w.AgentQuiet,
 			"message":        w.AgentMessage,
@@ -567,6 +572,7 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 		// client. Their reply still carries the origin mark.
 		msg.Origin = AgentOriginLink
 		msg.OriginHost = printableClaim(p.FromHost, agentMsgMaxHostName)
+		msg.OriginLink = cs.linkPeer
 		if p.From == AgentInboxHuman {
 			msg.From, msg.FromLabel = AgentInboxHuman, AgentInboxHuman
 		} else {

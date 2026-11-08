@@ -218,6 +218,13 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 		// daemon too old to refuse it leaves the refusal to this client.
 		answer := clientAnswersKittyCommand(win.DaemonMode, cmd.Action, m.DaemonClient.DaemonRefusesKittyAnimation())
 
+		// On a host without graphics a kitty picture is drawn as glyphs,
+		// as a sixel one is (kitty_symbols.go). The passthrough below then
+		// sends nothing, and still answers a query as before.
+		if !kp.IsEnabled() && m.SixelPassthrough.DrawsSymbols() {
+			m.drawKittySymbols(win, kp, cmd)
+		}
+
 		cursorPos := win.Terminal.CursorPosition()
 		scrollbackLen := win.Terminal.ScrollbackLen()
 		// This callback runs on the PTY-reader goroutine while the update loop

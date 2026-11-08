@@ -73,7 +73,7 @@ func TestMailCrossesTheLink(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ASSERTION: send-agent-message to build failed, so the send did not reach build's daemon as a link connection: %v\n%s", err, out)
 	}
-	if !strings.Contains(out, "queued for human") || !strings.Contains(out, "on build") {
+	if !strings.Contains(out, "delivered to human") || !strings.Contains(out, "on build") {
 		t.Fatalf("ASSERTION: the send did not say it reached build:\n%s", out)
 	}
 	// It is build's ring and not this machine's.

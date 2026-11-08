@@ -849,6 +849,16 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 // NewWindowIn is NewWindow with the directory the process starts in. An empty
 // dir, or one that is not a directory, keeps this process's own.
 func NewWindowIn(dir, id, title string, x, y, width, height, z int, exitChan chan string, ptyDataChan chan struct{}, scrollbackLines int, command ...string) (*Window, error) {
+	return NewWindowInCell(dir, id, title, x, y, width, height, z, exitChan, ptyDataChan, scrollbackLines, 0, 0, command...)
+}
+
+// NewWindowInCell is NewWindowIn with the host's cell in pixels, zero when it
+// is not known. The pty is made with that cell's pixel size before the process
+// starts, so the SetCellPixelDimensions that follows writes the size the pty
+// already has. Born with the fallback cell instead, the pty changed in its
+// pixels alone when the host's cell came, and the kernel sent the shell a
+// SIGWINCH at the size it started with.
+func NewWindowInCell(dir, id, title string, x, y, width, height, z int, exitChan chan string, ptyDataChan chan struct{}, scrollbackLines, cellWidth, cellHeight int, command ...string) (*Window, error) {
 	if dir != "" && !ptyspawn.DirExists(dir) {
 		dir = ""
 	}
@@ -878,7 +888,7 @@ func NewWindowIn(dir, id, title string, x, y, width, height, z int, exitChan cha
 	//
 	// The command is rebuilt per attempt: an exec.Cmd that failed to start
 	// cannot be started again.
-	ptyInstance, cmd, err := ptyspawn.Spawn(terminalWidth, terminalHeight, func() *exec.Cmd {
+	ptyInstance, cmd, err := ptyspawn.SpawnTTY(terminalWidth, terminalHeight, cellWidth, cellHeight, func(string) *exec.Cmd {
 		// #nosec G204 - the command is the user's own shell or a program they chose
 		var cmd *exec.Cmd
 		shell, integration := "", false
@@ -917,7 +927,7 @@ func NewWindowIn(dir, id, title string, x, y, width, height, z int, exitChan cha
 	// zero pixels, and the next real announcement then changes the winsize
 	// at the same cell size, which SIGWINCHes a shell that may still be
 	// starting (#1205).
-	_ = ptyspawn.SetWinsize(ptyInstance, terminalWidth, terminalHeight, 0, 0)
+	_ = ptyspawn.SetWinsize(ptyInstance, terminalWidth, terminalHeight, terminalWidth*cellWidth, terminalHeight*cellHeight)
 	// The PTY has this size now, so a Resize to it tells the guest nothing.
 	// Unseeded, the first layout announced the size the pane was born at,
 	// and tellGuest SIGWINCHes the shell on every announcement.

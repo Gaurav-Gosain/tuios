@@ -8,7 +8,7 @@ require (
 	github.com/charmbracelet/ultraviolet v0.0.0-20260906173415-0277a179edd9
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/charmbracelet/x/xpty v0.1.4
-	tuios.dev/shot v0.2.2-0.20261030111253-e3068c27991c
+	tuios.dev/shot v0.2.2-0.20261108190511-f7dea1948570
 	tuios.dev/vt v0.3.3-0.20261108192538-67b763e4d915
 )
 

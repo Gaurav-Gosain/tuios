@@ -27,6 +27,25 @@ type MenuState struct {
 	Prefix bool
 	Sub    SubMenu
 	Menu   string
+	// Origin is the overlay a declared menu was opened from, when one was
+	// (issue #1590): its keys run that overlay's own actions.
+	Origin MenuOrigin
+}
+
+// MenuHandback is an action a menu hands back to the overlay table it was
+// opened from, for one key. The zero value is none.
+type MenuHandback struct {
+	Set    bool
+	Table  config.Table
+	Action string
+}
+
+// MenuOrigin names the keybinding table of the overlay a declared menu was
+// opened from, such as the Inbox or the rail. The zero value is none: the
+// menu was opened from the leader, a mode or another menu.
+type MenuOrigin struct {
+	Set   bool
+	Table config.Table
 }
 
 // SubMenu names a leader sub-menu. At most one is open at a time, so one value
@@ -47,7 +66,7 @@ const (
 
 // MenuState returns the leader menu that waits for a key now.
 func (m *OS) MenuState() MenuState {
-	return MenuState{Prefix: m.PrefixActive, Sub: m.SubMenu, Menu: m.Menu}
+	return MenuState{Prefix: m.PrefixActive, Sub: m.SubMenu, Menu: m.Menu, Origin: m.menuOrigin}
 }
 
 // MenuOpen reports whether the leader, or one of its menus, waits for a key.

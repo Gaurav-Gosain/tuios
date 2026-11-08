@@ -256,6 +256,10 @@ func (f *hostFleet) onStatus(host string, status federation.Status) {
 	if status == federation.StatusUp {
 		f.d.outbox.kick(host)
 	}
+	// The outbox item says why the link is down, so it follows the state.
+	if f.d.outbox.count(host) > 0 {
+		f.d.outbox.noteAttention(host)
+	}
 	f.publishChanged(host, status)
 }
 

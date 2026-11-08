@@ -1237,7 +1237,8 @@ func (d *Daemon) setupFederation(hosts []federation.Host) {
 		Log: func(format string, args ...any) {
 			log.Printf("[FEDERATION] "+format, args...)
 		},
-		OnStatus: d.fleet.onStatus,
+		OnStatus:   d.fleet.onStatus,
+		OnMailHeld: d.onMailHeld,
 	})
 }
 

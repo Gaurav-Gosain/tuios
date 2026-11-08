@@ -380,6 +380,13 @@ type Terminal interface {
 	// SetKittyPassthroughFunc installs the reader of every graphics
 	// command. fn must not write to rawData: cmd.RawPayload shares its bytes.
 	SetKittyPassthroughFunc(fn func(cmd *KittyCommand, rawData []byte))
+	// PlaceImageMarkers writes the marker cells of image id at the cursor,
+	// rows by cols, as a sixel's are written; move says whether the cursor
+	// moves past the image. EraseImageMarkers blanks the screen's marker
+	// cells whose id match accepts. Both are for a kitty image drawn as
+	// glyphs on a host without graphics.
+	PlaceImageMarkers(rows, cols int, id uint32, move bool)
+	EraseImageMarkers(match func(id uint32) bool)
 	// SetKittyHeaderOnly says whether the passthrough acts on the control
 	// keys alone, so the payload is not decoded. See ParseKittyHeader.
 	SetKittyHeaderOnly(on bool)

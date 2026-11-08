@@ -3501,6 +3501,8 @@ func buildVerbRegistry() map[string]verbEntry {
 	maps.Copy(table, taskVerbs())
 	// exec, what tuios run --host sends. See verb_exec.go.
 	maps.Copy(table, execVerbs())
+	// The sender's view of its mail. See verb_receipts.go.
+	maps.Copy(table, receiptVerbs())
 	maps.Copy(table, taskVerifyVerbs())
 	maps.Copy(table, taskDispatchVerbs(verbParam{Name: "human_nonce", Type: "string", Description: "The attached client's nonce, to act as the person (by human). One that does not verify is refused with not_human."}))
 	// The checkpoint verbs. See verb_checkpoint.go.
@@ -4038,6 +4040,11 @@ func (d *Daemon) verbHello(cs *connState, params json.RawMessage) (any, *verbErr
 		// os is the daemon's GOOS. A client attached from another machine
 		// builds a command line for this one: sh -c here, cmd /C on Windows.
 		"os": runtime.GOOS,
+	}
+	// mail_waiting is the mail this daemon keeps for the machine a link
+	// connection named, while its own link there is down. See held_mail.go.
+	if held := d.mailWaitingFor(cs); held != nil {
+		res["mail_waiting"] = held
 	}
 	// upgrade says this image took its panes over in a live upgrade, and
 	// what that measured. daemon upgrade waits for it.

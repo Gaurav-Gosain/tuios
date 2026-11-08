@@ -90,6 +90,9 @@ type agentRow struct {
 	WindowID   string `json:"window_id"`
 	Name       string `json:"name"`
 	State      string `json:"state"`
+	LastState  string `json:"last_state"`
+	Reason     string `json:"reason"`
+	LastHeard  int64  `json:"last_heard_at"`
 	Message    string `json:"message"`
 	Source     string `json:"source"`
 	HarnessID  string `json:"harness_id"`
@@ -208,6 +211,11 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error
 			}
 		}
 		state := a.State
+		// A silent agent's last word was working: say that, and how long
+		// it has said nothing, rather than unknown.
+		if a.Reason == "silent" && a.LastState == "working" {
+			state = "working (silent " + silentFor(a.LastHeard) + ")"
+		}
 		if a.BlockedBy != "" {
 			state += " (" + plainLine(a.BlockedBy) + ")"
 		}
@@ -358,7 +366,7 @@ func runSendAgentMessage(sessionName, to, from, subject, text string, replyTo ui
 	if res.To == "" {
 		fmt.Printf("notice %d posted to the session%s%s\n", res.MessageID, t.on(), thread)
 	} else {
-		fmt.Printf("message %d queued for %s (%s)%s%s\n", res.MessageID, orNone(plainLine(res.ToName)), shortWindowID(res.To), t.on(), thread)
+		fmt.Printf("message %d delivered to %s (%s)%s%s\n", res.MessageID, orNone(plainLine(res.ToName)), shortWindowID(res.To), t.on(), thread)
 	}
 	if res.ReplyToMissing {
 		fmt.Println("the message you answered has been dropped from the ring. The reply stands, and it starts the thread from the id you named.")
@@ -423,7 +431,7 @@ func queueAgentMessage(host, sess, window, from, subject, text string, replyTo u
 	}
 	if !res.Queued {
 		// The link came back between the two calls and the message went.
-		fmt.Printf("message %d sent to %s:%s\n", res.MessageID, host, sess)
+		fmt.Printf("message %d delivered to %s:%s\n", res.MessageID, host, sess)
 		return nil
 	}
 	fmt.Printf("the link to %s is down: the message waits here and goes when it is back (%d waiting). The Inbox shows it; dismissing it there discards what waits.\n", host, res.Waiting)
@@ -548,6 +556,10 @@ func printAgentMessages(w io.Writer, raw json.RawMessage, on string) error {
 			head += "  seen"
 		case m.WasUnread:
 			head += "  new"
+		case m.Kind == "message" && m.ReadAt != 0:
+			// Read before this read, by its recipient: what a sender
+			// reading the thread wants to know.
+			head += "  read " + agoOf(m.ReadAt)
 		}
 		if m.Undeliverable {
 			head += "  undeliverable: the recipient window is gone"
@@ -670,6 +682,22 @@ func agoOf(nanos int64) string {
 		return fmt.Sprintf("%dm ago", int(d.Minutes()))
 	default:
 		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	}
+}
+
+// silentFor is how long it is since nanos, short: 40s, 12m, 3h.
+func silentFor(nanos int64) string {
+	if nanos == 0 {
+		return "a while"
+	}
+	d := time.Since(time.Unix(0, nanos))
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", max(int(d.Seconds()), 0))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	default:
+		return fmt.Sprintf("%dh", int(d.Hours()))
 	}
 }
 
