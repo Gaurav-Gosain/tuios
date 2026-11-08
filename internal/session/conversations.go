@@ -123,7 +123,9 @@ func (l *conversationLog) add(c Conversation) {
 // dropLocked removes every entry for id, of harness when it is not empty,
 // and reports whether there was one. A plain loop, not slices.DeleteFunc: a
 // generic instantiation on Conversation costs the binary several KB. mu is
-// held.
+// held. Not inlined: add and forget share one copy.
+//
+//go:noinline
 func (l *conversationLog) dropLocked(harness, id string) bool {
 	kept := l.list[:0]
 	for _, o := range l.list {
