@@ -641,6 +641,14 @@ func (a *App) cockpitKeys(c *ui.Context, col ui.Element) {
 	// frame comes after the focus moved on (as the key before it moved it
 	// to the reply box), which the list must still read.
 	key := func(mods ui.Modifiers, k ui.Key) bool { return col.Shortcut(mods, k) }
+	if !ck.open {
+		// The view is shut and fades out: the list reads no keys. A
+		// shortcut it asked for would take a key typed for the pane, and
+		// it is not built to read it in the next frame (Mac round 5, feel
+		// M1). The owner's window shortcuts keep what is typed meanwhile
+		// (catchListKeys).
+		return
+	}
 	if ck.lightbox != nil {
 		if key(0, ui.KeyEscape) {
 			ck.lightbox = nil
