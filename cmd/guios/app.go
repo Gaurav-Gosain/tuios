@@ -163,20 +163,27 @@ type App struct {
 	st     proto.State
 	loaded bool // a state came
 
-	prefs      prefs
-	set        settings.Settings // the user's settings: Settings' controls edit it
-	applied    settings.Settings // set, as last applied and saved
-	setWin     *mygo.Window      // the Settings window, while open
-	ss         settingsState
-	selected   string
-	terms      map[string]*termEntry
-	webs       map[string]*webEntry // browser panes' pages, by pane
-	ads        adBlock              // what their pages block
-	icons      favicons             // and the icons they show
-	lru        []string
-	refs       map[string]*ui.Handle // panes' terminals, and splits, by id
-	focus      map[string]string     // the pane the user is in, by session
-	layoutDrag struct {              // the split whose divider is dragged
+	prefs    prefs
+	set      settings.Settings // the user's settings: Settings' controls edit it
+	applied  settings.Settings // set, as last applied and saved
+	setWin   *mygo.Window      // the Settings window, while open
+	ss       settingsState
+	selected string
+	terms    map[string]*termEntry
+	webs     map[string]*webEntry // browser panes' pages, by pane
+	ads      adBlock              // what their pages block
+	icons    favicons             // and the icons they show
+	lru      []string
+	refs     map[string]*ui.Handle // panes' terminals, and splits, by id
+	focus    map[string]string     // the pane the user is in, by session
+	// focusAsk is the pane the app asked the daemon to focus, by session,
+	// until it answers (setFocus); keyAt and keyPane are when and in which
+	// pane the person last typed. A focus the daemon moved is taken only
+	// apart from both (adoptDaemonFocus).
+	focusAsk   map[string]string
+	keyAt      time.Time
+	keyPane    string
+	layoutDrag struct { // the split whose divider is dragged
 		session, split string
 		ratio          float64 // where the pointer puts it, past its bounds
 	}
@@ -466,6 +473,12 @@ func (a *App) setState(h *host, st proto.State) {
 		dragged = s.Layout
 	}
 	before := a.snapshotSessions()
+	prevFocus := map[string]string{}
+	for _, s := range a.st.Sessions {
+		if a.hostOf(s.ID) == h {
+			prevFocus[s.ID] = s.Focus
+		}
+	}
 	// The session and the pane the user is in, which may go with this
 	// state: their program exited.
 	order := a.visibleOrder()
@@ -475,6 +488,7 @@ func (a *App) setState(h *host, st proto.State) {
 	}
 	a.mergeState(h, st)
 	a.loaded = true
+	a.adoptDaemonFocus(prevFocus)
 	if !h.remote() {
 		a.followPanes()
 	}
@@ -1022,6 +1036,7 @@ func (a *App) termOptions(id string, conn *gated) terminal.Options {
 		// end-of-line.
 		OnKeyEvent: func(ev ui.InputEvent) bool {
 			mods, key := ev.Mods, ev.Key
+			a.keyAt, a.keyPane = time.Now(), id
 			if a.ownKey(id, ev) || a.keyDown(id, mods, key) {
 				return true
 			}

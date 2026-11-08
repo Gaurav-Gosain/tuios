@@ -75,6 +75,10 @@ func (a *App) setFocus(s *proto.Session, pane string) {
 	}
 	a.focus[s.ID] = pane
 	s.Focus = pane
+	if a.focusAsk == nil {
+		a.focusAsk = map[string]string{}
+	}
+	a.focusAsk[s.ID] = pane
 	if pane != a.wantFocus {
 		// The person chose another pane before a new one was drawn.
 		a.wantFocus = ""
@@ -86,11 +90,52 @@ func (a *App) setFocus(s *proto.Session, pane string) {
 	a.touch(pane)
 	sid, scrolling := s.ID, s.LayoutMode == "scrolling"
 	a.call(s.ID, "focus", proto.FocusParams{Session: s.ID, Pane: pane}, func(err error) {
+		if a.focusAsk[sid] == pane {
+			delete(a.focusAsk, sid)
+		}
 		if err == nil && scrolling {
 			// The strip brings the focused column on screen.
 			a.arrange(a.session(sid), "scroll.reveal", func(p *proto.ArrangeParams) { p.Pane = pane })
 		}
 	})
+}
+
+// typedQuiet is how long after the person typed into a pane a focus the
+// daemon moved to another pane is not taken (adoptDaemonFocus).
+const typedQuiet = 300 * time.Millisecond
+
+// adoptDaemonFocus takes the focus the daemon moved itself, as a CLI
+// split-window or focus-window does, as the person's: guios kept its own,
+// so Ctrl+B x closed another pane than the TUI and the CLI name (Mac round
+// 6, feel S1). prev is each session's focus before this state.
+func (a *App) adoptDaemonFocus(prev map[string]string) {
+	now := time.Now()
+	for i := range a.st.Sessions {
+		s := &a.st.Sessions[i]
+		old, ok := prev[s.ID]
+		if !ok || s.Focus == "" || s.Focus == old || s.Focus == a.focus[s.ID] || s.PaneByID(s.Focus) == nil {
+			continue
+		}
+		if a.focusAsk[s.ID] != "" {
+			// The app's own move is on its way: a state sent before the
+			// daemon took it still names the old pane.
+			continue
+		}
+		if a.keyPane != s.Focus && s.PaneByID(a.keyPane) != nil && now.Sub(a.keyAt) < typedQuiet {
+			// The person types into another pane of it: theirs stays.
+			continue
+		}
+		keyAudit("focus", "daemon", s.Focus)
+		if a.focus == nil {
+			a.focus = map[string]string{}
+		}
+		a.focus[s.ID] = s.Focus
+		if s.ID == a.selected {
+			a.ensureTerm(s.Focus)
+			a.touch(s.Focus)
+			a.focusTerminal()
+		}
+	}
 }
 
 // focusTerminal gives the keyboard to the pane the user is in, or to the
