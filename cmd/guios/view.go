@@ -163,6 +163,11 @@ func (a *App) view(c *ui.Context) {
 	}()
 	a.looks()
 	pal := paletteFor(c)
+	// The frame a theme or the appearance changes in draws the new
+	// grounds at once: a pane's ground that faded from the old one showed
+	// the old theme in the focused pane for a frame (Mac round 4, feel S1).
+	a.lookSwap = a.lastPal != nil && a.lastPal != pal
+	a.lastPal = pal
 	c.SetTheme(borderless(c, pal))
 
 	a.ck.cardKey = "" // the approval card sets it as it draws
