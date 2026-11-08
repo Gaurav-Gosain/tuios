@@ -2999,7 +2999,12 @@ clears it). A board stops after 3 dispatched cards in a row end without being
 finished (let go, blocked, or put back because the agent errored). All
 dispatch stops when an agent reports a usage limit (`tuios set-agent-state
 errored --kind usage_limit`, or an errored message that says "usage limit").
-`resume` lifts the pause and every stop. From inside a pane, every action but
+`resume` lifts the pause and every stop. On a pull board an offer that a
+switch held is made when the switch lifts: on `resume`, when quiet hours end
+or change, and when a board is set to `pull`, each agent at rest (idle or
+done) that holds no card is offered the next one. So is a card that comes
+free: added, let go, moved back to todo or plan, or unblocked. Such an
+offer never gives a pane the card it let go itself. From inside a pane, every action but
 `pause` needs `admin`, and `verify` is refused. A dispatched card counts as
 finished when its verify passes (or when it reaches `review` with no verify
 command), and as a failure when its verify fails. The settings are saved, so

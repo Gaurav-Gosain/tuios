@@ -15109,3 +15109,25 @@ Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
 |---------|---------------------|--------|
 | main at 6db1de3ed | "ctrl+b m f hid the other panes and kept TWO focused" | **caught** |
 | The focus return cut from `restoreFocusOnly` | "the second press brought back what it hid, FOUR stays minimized, TWO keeps the focus" | **caught** |
+
+## TestPullDispatchOffersAgainWhenTheSwitchesLift
+
+State machine plan S5. On a pull board an agent at rest with no card must be
+offered one when the board is set to pull; a finish held by a pause must get
+its next card on resume; a finish held by quiet hours must get it when the
+quiet hours end (a span that ends at the next minute). A card added must be
+offered to an agent at rest, and two agents that each let a card go must
+each be offered the other's.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (364cd8002) | "agent b, at rest with no card, was not offered t2 when the board was set to pull" | **caught** |
+| No offer after a settings change (`go d.offerPull()` in set-task-dispatch cut) | the same | **caught** |
+| No timer at the quiet end (`armPullQuiet` returns at once) | "agent b's offer held by the quiet hours ... was not made when they ended" | **caught** |
+| No offer when a card comes free (the added/released/staged/unblocked branch in afterTaskEvent off) | "agent b, at rest with no card, was not offered t6 when it was added" | **caught** |
+| A pane offered the card it let go (`releasedBy` check off in pullNext) | "t5 is held by <a> and t6 by <b>; want each agent offered the card the other let go" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPullDispatchOffersAgainWhenTheSwitchesLift$' -v .`.

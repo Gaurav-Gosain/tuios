@@ -213,6 +213,7 @@ func (d *Daemon) verbSetTaskDispatch(cs *connState, params json.RawMessage) (any
 	LogBasic("Task dispatch %s by %s", p.Action, caller.by)
 	d.publishDispatch(p.Action, reason)
 	d.kickAuto()
+	go d.offerPull()
 	st := ds.status(board, time.Now())
 	d.autoStatus(&st)
 	st.Type = "task_dispatch"

@@ -152,6 +152,9 @@ type dispatchStore struct {
 	mu   sync.Mutex
 	path string
 	f    dispatchFile
+	// pullQuiet runs offerPull when the quiet hours end. It is armed only
+	// while quiet hours hold an offer of a pull board.
+	pullQuiet *time.Timer
 }
 
 // DispatchStatus is what get-task-dispatch and the task-dispatch event give.
@@ -315,6 +318,9 @@ func (ds *dispatchStore) status(board string, now time.Time) DispatchStatus {
 	return st
 }
 
+// dispatchQuietHours is why blocked holds an offer in the quiet hours.
+const dispatchQuietHours = "quiet hours"
+
 // blocked says why dispatch in mode makes no offer on board now, "" when
 // it may.
 func (ds *dispatchStore) blocked(board, mode string, now time.Time) string {
@@ -331,7 +337,7 @@ func (ds *dispatchStore) blocked(board, mode string, now time.Time) string {
 	case b.Stopped != "":
 		return "the board stopped: " + b.Stopped
 	case inQuietHours(ds.f.Quiet, now):
-		return "quiet hours"
+		return dispatchQuietHours
 	}
 	return ""
 }
@@ -478,11 +484,18 @@ func (d *Daemon) afterTaskEvent(sess *Session, action, window, reason string, ro
 		// A card moved out of verify ends the verify that ran on it.
 		d.verifies.stop(verifyKey(row.Session, row.ID), 0)
 	}
+	switch action {
+	case TaskActionAdded, TaskActionReleased, TaskActionStaged, TaskActionUnblocked:
+		// A card that came free is offered to an agent at rest.
+		if row.Holder == nil && row.Blocked == nil && pullable(row.Stage) && d.dispatch.anyMode(DispatchPull) {
+			go d.offerPull()
+		}
+	}
 	if row.Dispatched || (action == TaskActionFinished && d.dispatch.anyMode(DispatchPull)) {
 		go func() {
 			d.noteDispatchedOutcome(action, reason, row)
 			if action == TaskActionFinished && window != "" && !strings.HasPrefix(window, remoteHolderPrefix) {
-				d.pullNext(sess, window, dispatchBoardKey(row.Session, row.Project), row.Project)
+				d.pullNext(sess, window, dispatchBoardKey(row.Session, row.Project), row.Project, false)
 			}
 		}()
 	}
@@ -561,11 +574,16 @@ func (d *Daemon) putBackDispatched(sess *Session, window, last string) {
 
 // pullNext offers window the next card of board, when the board is in pull
 // mode and nothing holds dispatch. The claim and every check of the pane are
-// made in one state change of the session.
-func (d *Daemon) pullNext(sess *Session, window, board, project string) {
+// made in one state change of the session. notOwn leaves out a card window
+// let go last: an offer the pane did not ask for by a finish never hands it
+// back the card it gave up.
+func (d *Daemon) pullNext(sess *Session, window, board, project string, notOwn bool) {
 	if why := d.dispatch.blocked(board, DispatchPull, time.Now()); why != "" {
 		if d.dispatch.isMode(board, DispatchPull) {
 			LogBasic("Task dispatch held for window %s: %s", shortWindowID(window), why)
+		}
+		if why == dispatchQuietHours {
+			d.armPullQuiet()
 		}
 		return
 	}
@@ -592,8 +610,8 @@ func (d *Daemon) pullNext(sess *Session, window, board, project string) {
 		}
 		i := slices.IndexFunc(st.Tasks, func(tk TaskState) bool {
 			return tk.Project == project && tk.Holder == "" && tk.Blocked == nil && !tk.AskFirst &&
-				(tk.Stage == TaskStageTodo || tk.Stage == TaskStagePlan || tk.Stage == TaskStageDoing) &&
-				(tk.Harness == "" || tk.Harness == w.AgentHarness)
+				pullable(tk.Stage) && (tk.Harness == "" || tk.Harness == w.AgentHarness) &&
+				!(notOwn && releasedBy(tk, window))
 		})
 		if i < 0 {
 			return errNoTaskMove
@@ -612,6 +630,74 @@ func (d *Daemon) pullNext(sess *Session, window, board, project string) {
 	LogBasic("Task dispatch gave task %s in session %s to window %s", row.ID, sess.Name(), shortWindowID(window))
 	d.publishTask(sess, EventTaskClaimed, TaskActionClaimed, window, "dispatch", row)
 	d.mailDispatched(sess, window, label, row, prompt, "")
+}
+
+// pullable reports whether pull offers a free card in stage.
+func pullable(stage string) bool {
+	return stage == TaskStageTodo || stage == TaskStagePlan || stage == TaskStageDoing
+}
+
+// releasedBy reports whether the last change to tk was window letting it
+// go: pull does not offer a pane the card it just gave up.
+func releasedBy(tk TaskState, window string) bool {
+	n := len(tk.History)
+	return n > 0 && tk.History[n-1].Action == TaskActionReleased && tk.History[n-1].Holder == window
+}
+
+// offerPull offers a card of each pull board to each agent at rest that
+// holds none, as a finish would. It runs when a switch that holds offers
+// lifts or a board is set to pull (set-task-dispatch), when quiet hours
+// end, and when a card comes free (added, let go, moved back, unblocked):
+// otherwise only a finish asks for an offer.
+func (d *Daemon) offerPull() {
+	if !d.dispatch.anyMode(DispatchPull) {
+		return
+	}
+	now := time.Now()
+	for _, sess := range d.manager.AllSessions() {
+		st := sess.GetState()
+		if st == nil {
+			continue
+		}
+		// The boards with a free card in this session, by board key.
+		boards := map[string]string{}
+		for _, tk := range st.Tasks {
+			if tk.Holder == "" {
+				boards[dispatchBoardKey(sess.Name(), tk.Project)] = tk.Project
+			}
+		}
+		for board, project := range boards {
+			if why := d.dispatch.blocked(board, DispatchPull, now); why != "" {
+				if why == dispatchQuietHours {
+					d.armPullQuiet()
+				}
+				continue
+			}
+			for _, w := range st.Windows {
+				if w.AgentState == AgentStateIdle || w.AgentState == AgentStateDone {
+					d.pullNext(sess, w.ID, board, project, true)
+				}
+			}
+		}
+	}
+}
+
+// armPullQuiet runs offerPull once the quiet hours end, unless that is armed
+// already. A span changed meanwhile is read again then.
+func (d *Daemon) armPullQuiet() {
+	wait := d.dispatch.untilQuietEnds(time.Now())
+	ds := &d.dispatch
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
+	if ds.pullQuiet != nil {
+		return
+	}
+	ds.pullQuiet = time.AfterFunc(wait, func() {
+		ds.mu.Lock()
+		ds.pullQuiet = nil
+		ds.mu.Unlock()
+		d.offerPull()
+	})
 }
 
 // mailHeldCard tells win, which start-agent opened and which now holds the

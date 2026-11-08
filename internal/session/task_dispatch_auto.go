@@ -162,7 +162,7 @@ func (d *Daemon) autoPass() {
 		cards := open[board]
 		if why := d.dispatch.blocked(board, DispatchAuto, now); why != "" {
 			if len(cards) > 0 {
-				note[board], quiet = why, quiet || why == "quiet hours"
+				note[board], quiet = why, quiet || why == dispatchQuietHours
 			}
 			continue
 		}

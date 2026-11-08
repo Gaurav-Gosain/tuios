@@ -144,6 +144,9 @@ turn does not finish it: the card stays yours, in doing, until you run
 mail from tuios: read it with `tuios read-agent-messages -w "$TUIOS_PANE_ID"`.
 It names the card, its prompt, and the command that finishes it. You hold the
 card already, so do not claim it. If you cannot do it, `tuios task release ID`.
+While dispatch is paused or in quiet hours you get no card; when it resumes,
+an agent at rest that holds no card is offered one, and so is a card that
+comes free (added or let go). You are not offered back a card you let go.
 
 On a board in auto mode, tuios starts a new agent for each open card, in its
 own worktree. If that is you, your first mail is the card: its done command
