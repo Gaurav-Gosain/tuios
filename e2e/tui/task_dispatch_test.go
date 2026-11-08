@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -63,8 +64,8 @@ func waitForCards(t *testing.T, base, session, why string, ok func(holder, stage
 // Both finish at the same moment from inside their panes with tuios task done.
 // Each is given a different next card, as mail from tuios, and the card
 // marked ask-first and the card for another harness are skipped. An agent
-// that goes to done hands its card on to review and is given the next. After Pause, a
-// finish gives no card. A usage limit stops all dispatch and puts the
+// whose turn ends keeps its card; its own task done hands the card on to
+// review and gives it the next. After Pause, a finish gives no card. A usage limit stops all dispatch and puts the
 // agent's card back.
 //
 // How it could pass wrongly: the finishes could run one after the other, so
@@ -154,11 +155,15 @@ func TestPullDispatchGivesTheNextCard(t *testing.T) {
 		t.Fatalf("ASSERTION: agent a has no mail from tuios naming %s:\n%s", aCard, mail)
 	}
 
-	// An agent that goes to done hands its card on and is given the next.
+	// An agent whose turn ends keeps its card (TestATurnEndKeepsTheCard);
+	// its own task done hands the card on and gives it the next.
 	mustCLI(t, base, "set-agent-state", "-s", sess, "-w", a, "done", "--harness", "claude-code", "-m", "finished")
-	_, _, raw = waitForCards(t, base, sess, "agent a's done state did not finish "+aCard+" and give it t7",
+	if out := inPane(t, base, sess, a, "task done "+aCard); !strings.Contains(out, "EXIT=0") {
+		t.Fatalf("ASSERTION: tuios task done %s in agent a's pane failed:\n%s", aCard, out)
+	}
+	_, _, raw = waitForCards(t, base, sess, "agent a's task done did not finish "+aCard+" and give it t7",
 		func(h, s map[string]string) bool { return s[aCard] == "review" && h["t7"] == a })
-	fmt.Fprintf(&report, "after agent a went to done:\n%s\n", raw)
+	fmt.Fprintf(&report, "after agent a ran task done:\n%s\n", raw)
 
 	// Pause: a finish gives no card.
 	fmt.Fprintln(&report, mustCLI(t, base, "task", "dispatch", "pause"))
@@ -236,4 +241,110 @@ func TestPullDispatchStopsAfterThreeFailures(t *testing.T) {
 	}
 	fmt.Fprintln(&report, mustCLI(t, base, "task", "dispatch", "resume"))
 	saveText(t, "task-pull-dispatch-stop", report.String())
+}
+
+// TestATurnEndKeepsTheCard: an agent on a pull board, and one on an auto
+// board, each hold a card, one of them claimed by hand. Each ends its turn
+// with a question, through the Claude Code Stop hook every turn end runs.
+// The cards stay in doing with their holders, and the pull agent is given no
+// next card. Only the agent's own `tuios task done` hands its card in, and
+// that gives it the next one.
+//
+// How it could pass wrongly: a Stop the daemon never read would also leave
+// the cards alone, so the test first waits until each pane reads done with
+// the question, and the positive half shows the same pane is given the next
+// card once it runs task done.
+//
+// Negative controls (NEGATIVE_CONTROLS.md, TestATurnEndKeepsTheCard).
+func TestATurnEndKeepsTheCard(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	t.Cleanup(func() { dumpDaemonLogOnFail(t, base) })
+	const pull, auto = "e2e-turn-pull", "e2e-turn-auto"
+	var report strings.Builder
+	note := func(format string, args ...any) { fmt.Fprintf(&report, format+"\n", args...) }
+	defer func() { saveText(t, "task-turn-end", report.String()) }()
+	const question = "Should I use the retry library or write my own?"
+
+	stop := func(sess, w string) {
+		t.Helper()
+		cmd := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", sess, "--window", w, "--timeout", "10s")
+		cmd.Dir = workDirIn(t, base)
+		cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
+		for _, key := range xdgKeys {
+			cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
+		}
+		cmd.Stdin = strings.NewReader(`{"hook_event_name":"Stop","session_id":"turn-` + sess + `","last_assistant_message":"` + question + `"}`)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("the Stop hook failed: %v\n%s", err, out)
+		}
+		deadline := time.Now().Add(uiTimeout)
+		for {
+			out := mustCLI(t, base, "list-agents", "-s", sess, "--json")
+			if strings.Contains(out, `"done"`) && strings.Contains(out, "retry library") {
+				note("agents of %s after the Stop:\n%s", sess, out)
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("ASSERTION: the pane never read done with the question after the Stop hook:\n%s", out)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	held := func(sess, card, w string) {
+		t.Helper()
+		// Dispatch reads the state off the sink: give it time to act.
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			holder, stage, raw := cardsOf(t, base, sess)
+			if holder[card] != w || stage[card] != "doing" {
+				t.Fatalf("ASSERTION: after a turn end with a question, %s is %s held by %q, want doing held by %s:\n%s", card, stage[card], holder[card], w, raw)
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+		_, _, raw := cardsOf(t, base, sess)
+		note("cards of %s after the turn end:\n%s", sess, raw)
+	}
+
+	// Pull: t1 dispatched by a finish, t2 waits as the next card.
+	mustCLI(t, base, "new", pull, "--detach")
+	waitForSessionInfo(t, base, pull)
+	a := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", pull, "agent-a", "--no-focus", "--print-id"))
+	mustCLI(t, base, "set-agent-state", "-s", pull, "-w", a, "working", "--harness", "claude-code", "-m", "on it")
+	mustCLI(t, base, "task", "add", "-s", pull, "-p", "warm up", "warm up")     // t1
+	mustCLI(t, base, "task", "add", "-s", pull, "-p", "step one", "first card") // t2
+	mustCLI(t, base, "task", "add", "-s", pull, "-p", "step two", "next card")  // t3
+	note("%s", mustCLI(t, base, "task", "dispatch", "mode", "pull", "-s", pull))
+	mustCLI(t, base, "task", "claim", "t1", "-s", pull, "-w", a)
+	if out := inPane(t, base, pull, a, "task done t1"); !strings.Contains(out, "EXIT=0") {
+		t.Fatalf("ASSERTION: tuios task done t1 in the agent's pane failed:\n%s", out)
+	}
+	waitForCards(t, base, pull, "the pull board did not give agent a t2 after t1",
+		func(h, _ map[string]string) bool { return h["t2"] == a })
+	mustCLI(t, base, "set-agent-state", "-s", pull, "-w", a, "working", "--harness", "claude-code", "-m", "on t2")
+	stop(pull, a)
+	held(pull, "t2", a)
+	if holder, _, raw := cardsOf(t, base, pull); holder["t3"] != "" {
+		t.Fatalf("ASSERTION: a turn end gave agent a the next card t3:\n%s", raw)
+	}
+
+	// Auto: a card the person gave the agent by hand. Ask first keeps auto
+	// from starting an agent for it while it is open.
+	mustCLI(t, base, "new", auto, "--detach")
+	waitForSessionInfo(t, base, auto)
+	b := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", auto, "agent-b", "--no-focus", "--print-id"))
+	mustCLI(t, base, "set-agent-state", "-s", auto, "-w", b, "working", "--harness", "claude-code", "-m", "on it")
+	mustCLI(t, base, "task", "add", "-s", auto, "--ask-first", "-p", "by hand", "given by hand") // t1
+	mustCLI(t, base, "task", "claim", "t1", "-s", auto, "-w", b)
+	note("%s", mustCLI(t, base, "task", "dispatch", "mode", "auto", "--agent", "claude", "-s", auto))
+	stop(auto, b)
+	held(auto, "t1", b)
+
+	// The agent's own task done hands the card in and pulls the next.
+	if out := inPane(t, base, pull, a, "task done t2"); !strings.Contains(out, "EXIT=0") {
+		t.Fatalf("ASSERTION: tuios task done t2 in the agent's pane failed:\n%s", out)
+	}
+	_, _, raw := waitForCards(t, base, pull, "agent a's task done did not hand in t2 and give it t3",
+		func(h, s map[string]string) bool { return s["t2"] == "review" && h["t3"] == a })
+	note("after agent a ran task done t2:\n%s", raw)
 }

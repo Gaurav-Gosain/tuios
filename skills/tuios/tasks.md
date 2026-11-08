@@ -137,9 +137,10 @@ that holds the card succeeds. A card without a project stays on its machine.
 
 ## Dispatch: work that comes to you
 
-On a board in pull mode, finishing your card (`tuios task done ID`, or your
-agent state going to done) gives you the board's next open card, while your
-last card is verified. It comes as
+On a board in pull mode, finishing your card with `tuios task done ID` gives
+you the board's next open card, while your last card is verified. Ending your
+turn does not finish it: the card stays yours, in doing, until you run
+`tuios task done ID` or `tuios task release ID`. It comes as
 mail from tuios: read it with `tuios read-agent-messages -w "$TUIOS_PANE_ID"`.
 It names the card, its prompt, and the command that finishes it. You hold the
 card already, so do not claim it. If you cannot do it, `tuios task release ID`.

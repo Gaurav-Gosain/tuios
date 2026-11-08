@@ -2960,13 +2960,16 @@ board has one.
 `dispatch` shows and changes how cards go to agents. A board is a project's
 cards (`--project`) or a session's own cards. In `manual` mode, the default,
 a person starts each card. In `pull` mode, an agent that finishes its card
-(`tuios task done`, or its agent state going to done while it holds a card of
-the board) is given the board's next open card: the oldest card in todo, plan
+with `tuios task done` is given the board's next open card: the oldest card in todo, plan
 or doing that no pane holds, that is not blocked, not `--ask-first`, and names
 no harness or the agent's own. The claim is made in one state change of the
 session, so two agents that finish at once take two cards. The agent hears of
 it as mail from tuios, which names the card, its prompt and the command that
-finishes it. Dispatch types nothing into a pane, and gives no card to a pane
+finishes it. An agent that only ends its turn (its agent state goes to done,
+as each Claude Code `Stop` does) keeps its card and gets no new one: a turn
+can end on a question or part way. A card leaves
+`doing` only by `tuios task done`, a stage move, a release, or its verify.
+Dispatch types nothing into a pane, and gives no card to a pane
 that waits for the person. In v1 the agent and the card are on one machine
 and in one session.
 

@@ -15057,3 +15057,22 @@ Run on 2026-11-08 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskDispatchSurvivesALiveUpgrade$' -v .`.
+
+## TestATurnEndKeepsTheCard
+
+State machine plan S2. An agent on a pull board holds a dispatched card, and
+one on an auto board holds a card the person gave it by hand. Each ends its
+turn with a question through the Claude Code `Stop` hook. Both cards must stay
+in doing with their holders, and the pull agent must get no next card. Then
+the pull agent's own `tuios task done` hands its card in and gets the next.
+`TestPullDispatchGivesTheNextCard` now finishes with `task done` from the pane
+after a done state, where it used to expect the done state to finish.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (364cd8002), where a done state finishes the card | "after a turn end with a question, t2 is review held by \"\", want doing held by ..." | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestATurnEndKeepsTheCard$' -v .`.

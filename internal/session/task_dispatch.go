@@ -489,11 +489,16 @@ func (d *Daemon) afterTaskEvent(sess *Session, action, window, reason string, ro
 }
 
 // noteDispatchAgentState is what dispatch does with an agent state change of
-// window: done finishes the card the pane holds on a pull board, which then
-// pulls the next; errored puts back a card dispatch gave it, and a usage
-// limit stops all dispatch. It runs off the sink.
+// window: errored puts back a card dispatch gave it, and a usage limit stops
+// all dispatch. It runs off the sink.
+//
+// Done is not read here. Every turn end reports done (the Claude Code Stop
+// hook, Codex's turn notice, the transcript's turn end), also a turn that
+// ends on a question or part way, so done does not say the card is done. A
+// card leaves doing only by an act that names it: tuios task done, a stage
+// move, a release, or its verify result.
 func (d *Daemon) noteDispatchAgentState(sess *Session, window, state string) {
-	if state != AgentStateDone.Name() && state != AgentStateErrored.Name() {
+	if state != AgentStateErrored.Name() {
 		return
 	}
 	if !d.dispatch.anyMode(DispatchPull, DispatchAuto) {
@@ -504,21 +509,15 @@ func (d *Daemon) noteDispatchAgentState(sess *Session, window, state string) {
 		if !ok {
 			return
 		}
-		if state == AgentStateErrored.Name() {
-			if usageLimited(w) {
-				harness := firstNonEmpty(w.AgentHarness, "an agent")
-				if d.dispatch.stopAll(dispatchStopLimit) {
-					LogBasic("Task dispatch stopped: %s reported a usage limit in window %s", harness, shortWindowID(window))
-					d.publishDispatch("stopped", dispatchStopLimit+" reported by "+harness)
-				}
+		if usageLimited(w) {
+			harness := firstNonEmpty(w.AgentHarness, "an agent")
+			if d.dispatch.stopAll(dispatchStopLimit) {
+				LogBasic("Task dispatch stopped: %s reported a usage limit in window %s", harness, shortWindowID(window))
+				d.publishDispatch("stopped", dispatchStopLimit+" reported by "+harness)
 			}
-			for _, cs := range d.cardSessions(sess, window) {
-				d.putBackDispatched(cs, window, w.AgentMessage)
-			}
-			return
 		}
 		for _, cs := range d.cardSessions(sess, window) {
-			d.finishOnDone(cs, window)
+			d.putBackDispatched(cs, window, w.AgentMessage)
 		}
 	}()
 }
@@ -558,44 +557,6 @@ func (d *Daemon) putBackDispatched(sess *Session, window, last string) {
 		return nil
 	})
 	d.publishReleased(sess, rows, reason)
-}
-
-// finishOnDone finishes the cards of sess that window holds on pull and auto
-// boards, after its agent went to done. Each finish publishes task-finished, which pulls the
-// next card.
-func (d *Daemon) finishOnDone(sess *Session, window string) {
-	var work *TaskWork
-	if !d.lifecycleOff.Load() {
-		work = d.workOf(window)
-	}
-	var rows []TaskRow
-	_ = sess.mutateState(func(st *SessionState) error {
-		now := time.Now().UnixNano()
-		for i := range st.Tasks {
-			tk := &st.Tasks[i]
-			board := dispatchBoardKey(sess.Name(), tk.Project)
-			if tk.Holder != window || !d.dispatch.isMode(board, DispatchPull, DispatchAuto) {
-				continue
-			}
-			if stage := d.handInStage(board); stage != "" {
-				tk.handIn(taskByDaemon, stage, work, now)
-				rows = append(rows, taskRow(sess, st, tk))
-				continue
-			}
-			if _, changed := tk.finish(taskByDaemon, now); changed {
-				rows = append(rows, taskRow(sess, st, tk))
-			}
-		}
-		if len(rows) == 0 {
-			return errNoTaskMove
-		}
-		return nil
-	})
-	for _, row := range rows {
-		LogBasic("Task %s in session %s finished: its agent is done", row.ID, sess.Name())
-		d.publishTask(sess, EventTaskFinished, TaskActionFinished, window, "agent done", row)
-		d.startTaskVerify(sess, row.ID)
-	}
 }
 
 // pullNext offers window the next card of board, when the board is in pull
@@ -692,7 +653,7 @@ func (d *Daemon) mailDispatched(sess *Session, window, label string, row TaskRow
 	if strings.TrimSpace(prompt) != "" {
 		text += prompt + "\n\n"
 	}
-	text += "When it is done, run: tuios task done " + row.ID + where + "\nIf you cannot do it, run: tuios task release " + row.ID + where
+	text += "When it is done, run: tuios task done " + row.ID + where + " (ending your turn does not finish it)\nIf you cannot do it, run: tuios task release " + row.ID + where
 	if limit := agentMsgMaxText; len(text) > limit {
 		text = cutUTF8(text, limit)
 	}
