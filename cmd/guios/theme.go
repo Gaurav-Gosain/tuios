@@ -68,6 +68,7 @@ type palette struct {
 	// dangerFill is a destructive button's fill, under white text at 4.5:1.
 	dangerText ui.Color
 	dangerFill ui.Color
+	dangerTag  ui.Color // a tag's ink on the danger's tint, at 5:1
 	accent     ui.Color
 	accentText ui.Color // the accent as text on its own 16 % chip
 	// accentFill is the accent as a control's fill (the primary button,
@@ -126,6 +127,7 @@ func fromRoles(r *roles.Palette) *palette {
 		danger:        toUI(r.Danger),
 		dangerText:    toUI(r.DangerText),
 		dangerFill:    toUI(r.DangerFill),
+		dangerTag:     toUI(r.DangerTag),
 		accent:        toUI(r.Accent),
 		accentText:    toUI(r.AccentText),
 		accentFill:    toUI(r.AccentFill),

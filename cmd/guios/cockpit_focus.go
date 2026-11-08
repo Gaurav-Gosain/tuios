@@ -464,7 +464,7 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 			}
 			ui.Spacer(c)
 			if risky {
-				chip(c, pal, pal.danger.Alpha(0.14), pal.dangerText, func() {
+				chip(c, pal, pal.danger.Alpha(roles.DangerTagTint), pal.dangerTag, func() {
 					ui.Text(c, locales.CockpitRisky()).FontSize(fsSmall).FontWeight(wMedium).SingleLine()
 				}).Shrink(0)
 			}

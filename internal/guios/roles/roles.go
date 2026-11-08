@@ -67,6 +67,9 @@ type Palette struct {
 	// dangerFill is a destructive button's fill, under white text at 4.5:1.
 	DangerText Color
 	DangerFill Color
+	// DangerTag is the ink of a tag on the danger's own 14 % tint (the
+	// "risky" tag), at 5:1 on it, the floor the state pills keep.
+	DangerTag  Color
 	Accent     Color
 	AccentText Color // the accent as text on its own 16 % chip
 	// accentFill is the accent as a control's fill (the primary button,
@@ -282,7 +285,15 @@ func (p *Palette) finish(fg, bg Color) {
 	p.DangerText = deepen(p.Danger, dangerWorst, 4.5)
 	// White on the fill: the fill goes darker until white reads on it.
 	p.DangerFill = deepen(p.Danger, Hex("#ffffff"), 4.5)
+	// The risky tag's ink on its tint over the card it sits on, at 5:1:
+	// the text token read 4.58:1 there in light themes (Mac round 6,
+	// visual S3). Where the text token has 5:1 already, as in the dark,
+	// it stays.
+	p.DangerTag = deepen(p.DangerText, p.Danger.Alpha(DangerTagTint).Over(bg), 5)
 }
+
+// DangerTagTint is the opacity of the danger's tint under a danger tag.
+const DangerTagTint = 0.14
 
 // worstSurface is the surface text has the least contrast on: the
 // lightest of them in the dark, the darkest in the light.
