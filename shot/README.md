@@ -142,11 +142,20 @@ defer emoji.Close() // after the render
 frame.Fallback = append(frame.Fallback, shot.Font{File: emoji})
 ```
 
+A cluster of several codepoints, such as a flag, a family joined by ZWJ, a
+keycap or a skin tone, draws as the one glyph the colour font's ligatures
+make of it: the `morx` table of Apple Color Emoji, or the `GSUB` ligatures of
+Noto Color Emoji. A sequence the font has no glyph for draws its first emoji.
+A table that does not add up, or whose state machine does not end in a
+bounded number of steps, is refused, and the face draws first emoji from then
+on.
+
 What shot does not do yet:
 
-- Shaping. A cluster of several codepoints draws its first emoji: a skin tone
-  draws the plain emoji, a family joined by ZWJ draws its first person, and a
-  flag draws its first regional indicator letter.
+- Shaping beyond emoji. Only colour faces run their ligatures, and only for a
+  cluster of several codepoints. A sequence a font draws as several glyphs
+  placed side by side, such as Apple's couple with two skin tones, draws its
+  first glyph.
 - `COLR` layered colour glyphs (Segoe UI Emoji, Twemoji Mozilla), and `sbix`
   glyphs stored as JPEG or TIFF. Those glyphs count as missing.
 

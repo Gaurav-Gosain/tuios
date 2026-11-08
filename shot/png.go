@@ -8,6 +8,7 @@ import (
 	"image/draw"
 	"image/png"
 	"math"
+	"unicode/utf8"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
@@ -245,24 +246,36 @@ func runClusters(r run) []string {
 	return clusters(r.text)
 }
 
+// drawColorTile draws a colour glyph centred in its cell.
+func drawColorTile(img *image.RGBA, tile *image.RGBA, x, cellTop, cellW, cellH float64) {
+	tb := tile.Bounds()
+	ox := int(x + (cellW-float64(tb.Dx()))/2)
+	oy := int(cellTop + (cellH-float64(tb.Dy()))/2)
+	draw.Draw(img, image.Rect(ox, oy, ox+tb.Dx(), oy+tb.Dy()), tile, image.Point{}, draw.Over)
+}
+
 func drawCluster(img *image.RGBA, faces *faceSet, cl string, x, baseline, cellW, cellH, cellTop float64, ink Color, bold, italic bool) {
 	if cl == " " || cl == "" {
 		return
 	}
 	r := firstRune(cl)
+	// A cluster of several code points is drawn whole by a colour font's
+	// ligature when one has it (shape.go).
+	if len(cl) > utf8.RuneLen(r) {
+		if tile := faces.pickSequence(cl, bold, int(cellW), int(cellH)); tile != nil {
+			drawColorTile(img, tile, x, cellTop, cellW, cellH)
+			return
+		}
+	}
 	face, doubleStrike := faces.pick(r, bold)
 	if face == nil {
 		drawTofu(img, x, cellTop, cellW, cellH, ink)
 		return
 	}
 	// A colour glyph is drawn as its bitmap, centred in the cell, in its own
-	// colours. A cluster of several codepoints (a skin tone, a ZWJ family, a
-	// flag) draws its first emoji: shot does not shape.
+	// colours.
 	if tile := faces.pickColor(r, bold, int(cellW), int(cellH)); tile != nil {
-		tb := tile.Bounds()
-		ox := int(x + (cellW-float64(tb.Dx()))/2)
-		oy := int(cellTop + (cellH-float64(tb.Dy()))/2)
-		draw.Draw(img, image.Rect(ox, oy, ox+tb.Dx(), oy+tb.Dy()), tile, image.Point{}, draw.Over)
+		drawColorTile(img, tile, x, cellTop, cellW, cellH)
 		return
 	}
 	d := font.Drawer{

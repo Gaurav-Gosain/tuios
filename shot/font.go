@@ -62,6 +62,8 @@ type faceSet struct {
 	picks map[rune]int
 	// tiles caches the colour glyphs drawn, scaled to their box.
 	tiles map[colorTileKey]*image.RGBA
+	// seqs caches pickSequence by cluster, a NUL after it for bold.
+	seqs map[string]seqGlyph
 }
 
 // colorTileKey is one colour glyph at one box size.
@@ -244,12 +246,17 @@ func (fs *faceSet) pickColor(r rune, bold bool, w, h int) *image.RGBA {
 	if err != nil || idx == 0 {
 		return nil
 	}
-	key := colorTileKey{face: i, glyph: int(idx), w: w, h: h}
+	return fs.colorTile(i, int(idx), w, h)
+}
+
+// colorTile is colour glyph gid of face i, scaled into a box w by h, cached.
+func (fs *faceSet) colorTile(i, gid, w, h int) *image.RGBA {
+	key := colorTileKey{face: i, glyph: gid, w: w, h: h}
 	if t, ok := fs.tiles[key]; ok {
 		return t
 	}
 	var tile *image.RGBA
-	if data, ok := e.color.bitmap(int(idx), h); ok {
+	if data, ok := fs.faces[i].color.bitmap(gid, h); ok {
 		if src, ok := decodeColorBitmap(data); ok {
 			tile = fitColorTile(src, w, h)
 		}
@@ -259,6 +266,74 @@ func (fs *faceSet) pickColor(r rune, bold bool, w, h int) *image.RGBA {
 	}
 	fs.tiles[key] = tile
 	return tile
+}
+
+// seqGlyph is the colour glyph a cluster of several code points draws as.
+type seqGlyph struct{ face, glyph int }
+
+// pickSequence returns the colour glyph that draws cl, a cluster of several
+// code points such as a flag, a ZWJ sequence, a keycap or a skin tone, or nil
+// when no colour face draws it. The first colour face whose ligatures turn
+// the cluster into a glyph it has a bitmap for draws it; a face with no
+// ligature for it draws the first glyph its table leaves, the way a terminal
+// draws a sequence it does not know.
+func (fs *faceSet) pickSequence(cl string, bold bool, w, h int) *image.RGBA {
+	if w <= 0 || h <= 0 {
+		return nil
+	}
+	key := cl
+	if bold {
+		key += "\x00"
+	}
+	sg, ok := fs.seqs[key]
+	if !ok {
+		sg = fs.searchSequence(cl, bold)
+		if fs.seqs == nil {
+			fs.seqs = map[string]seqGlyph{}
+		}
+		fs.seqs[key] = sg
+	}
+	if sg.face < 0 {
+		return nil
+	}
+	return fs.colorTile(sg.face, sg.glyph, w, h)
+}
+
+func (fs *faceSet) searchSequence(cl string, bold bool) seqGlyph {
+	var glyphs []int
+faces:
+	for i := range fs.faces {
+		e := &fs.faces[i]
+		if e.boldOnly && !bold {
+			continue
+		}
+		if !e.parsed {
+			_ = fs.parse(e)
+		}
+		if e.font == nil || e.color == nil {
+			continue
+		}
+		glyphs = glyphs[:0]
+		for _, r := range cl {
+			idx, err := e.font.GlyphIndex(&fs.buf, r)
+			switch {
+			case err == nil && idx != 0:
+				glyphs = append(glyphs, int(idx))
+			case r == 0xFE0F || r == 0xFE0E:
+				// A variation selector the font does not list asks
+				// for nothing it can draw.
+			default:
+				continue faces
+			}
+		}
+		if len(glyphs) == 0 {
+			continue
+		}
+		if g := e.color.shaper().shape(glyphs)[0]; e.color.has(g) {
+			return seqGlyph{face: i, glyph: g}
+		}
+	}
+	return seqGlyph{face: -1}
 }
 
 // fitColorTile scales a glyph bitmap to fit w by h, keeping its proportions:

@@ -39,6 +39,11 @@ type colorFace struct {
 	cblcLength int64
 	cbdtOffset int64
 	cbdtLength int64
+	// lig is where the face's ligature table is (morx, else GSUB), read on
+	// the first cluster of several code points. See shape.go.
+	lig    tableRecord
+	isMorx bool
+	shape  *shaper
 }
 
 type sbixStrike struct {
@@ -80,7 +85,35 @@ func readColorFace(src io.ReaderAt, index, numGlyphs int) *colorFace {
 	if len(cf.sbix) == 0 && len(cf.cblc) == 0 {
 		return nil
 	}
+	if t, ok := tables["morx"]; ok {
+		cf.lig, cf.isMorx = t, true
+	} else if t, ok := tables["GSUB"]; ok {
+		cf.lig = t
+	}
 	return cf
+}
+
+// maxLigTable bounds the ligature table a face reads (Apple Color Emoji's
+// morx is about 470 KB).
+const maxLigTable = 8 << 20
+
+// shaper reads the face's ligature table once.
+func (cf *colorFace) shaper() *shaper {
+	if cf.shape != nil {
+		return cf.shape
+	}
+	cf.shape = &shaper{bad: true}
+	if cf.lig.length > 0 && cf.lig.length <= maxLigTable {
+		if b, ok := readAt(cf.src, cf.lig.offset, int(cf.lig.length)); ok {
+			cf.shape = &shaper{}
+			if cf.isMorx {
+				cf.shape.morx = b
+			} else {
+				cf.shape.gsub = b
+			}
+		}
+	}
+	return cf.shape
 }
 
 // readAt reads n bytes at off, or reports false.
