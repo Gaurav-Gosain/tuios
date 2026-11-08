@@ -495,6 +495,28 @@ func paletteSpan(text string, hit bool, pal *palette) ui.Span {
 	return ui.Span{Text: text}
 }
 
+// paletteRanked are the palette's items that the query finds, best first
+// while something is typed.
+func (a *App) paletteRanked() []paletteItem {
+	var items []paletteItem
+	var m fuzzy.Matcher
+	for _, it := range a.paletteItems() {
+		sc, hits, ok := paletteMatch(&m, a.pal.query, &it)
+		if it.top {
+			sc, ok = math.MaxInt32, true
+		}
+		if !ok {
+			continue
+		}
+		it.score, it.hits = sc, hits
+		items = append(items, it)
+	}
+	if strings.TrimSpace(a.pal.query) != "" {
+		slices.SortStableFunc(items, func(x, y paletteItem) int { return cmp.Compare(y.score, x.score) })
+	}
+	return items
+}
+
 // paletteStep moves the palette's choice by d rows: past either end it
 // goes round to the other, a page at a time it stops there.
 func (a *App) paletteStep(d, n int) {
@@ -518,22 +540,8 @@ func (a *App) paletteView(c *ui.Context, pal *palette) {
 	if !a.pal.open {
 		return
 	}
-	var items []paletteItem
-	var m fuzzy.Matcher
-	for _, it := range a.paletteItems() {
-		sc, hits, ok := paletteMatch(&m, a.pal.query, &it)
-		if it.top {
-			sc, ok = math.MaxInt32, true
-		}
-		if !ok {
-			continue
-		}
-		it.score, it.hits = sc, hits
-		items = append(items, it)
-	}
-	if strings.TrimSpace(a.pal.query) != "" {
-		slices.SortStableFunc(items, func(x, y paletteItem) int { return cmp.Compare(y.score, x.score) })
-	}
+	ranked := a.pal.query
+	items := a.paletteRanked()
 	a.pal.index = min(max(a.pal.index, 0), max(len(items)-1, 0))
 
 	var chosen func()
@@ -575,8 +583,18 @@ func (a *App) paletteView(c *ui.Context, pal *palette) {
 			case c.Shortcut(0, ui.KeyPageUp):
 				a.paletteStep(-palettePage, len(items))
 			}
-			if (in.Submitted() || c.Shortcut(0, ui.KeyEnter)) && len(items) > 0 {
-				chosen = items[a.pal.index].run
+			if in.Submitted() || c.Shortcut(0, ui.KeyEnter) {
+				if a.pal.query != ranked {
+					// The field took text in this frame, with the Enter
+					// after it: the items above are ranked by the query
+					// before that text, whose first is a session row
+					// (b10). Choose from the query the field holds.
+					items = a.paletteRanked()
+					a.pal.index = min(max(a.pal.index, 0), max(len(items)-1, 0))
+				}
+				if len(items) > 0 {
+					chosen = items[a.pal.index].run
+				}
 			}
 		})
 		ui.Box(c).Height(1).Shrink(0).Background(pal.divider)
