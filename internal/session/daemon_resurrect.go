@@ -416,13 +416,24 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	}
 
 	// The worktree record goes back on for the same reason: it is
-	// daemon-owned, and the canonical one is what the respawned first shell
-	// detected, which knows the repository and the branch and nothing tuios
-	// wrote. A fan's sessions lost their group and their managed mark on every
-	// restart, so review fell back to the default base and compare found no
-	// fan. A detected record is left to detection, which follows the shell.
+	// daemon-owned, and the new session has none. A fan's sessions lost their
+	// group and their managed mark on every restart, so review fell back to
+	// the default base and compare found no fan. A detected record is detected
+	// again from the folder the first shell started in, which the first save
+	// reads too. Left to that save, it came two seconds after the session was
+	// listed, and the rail drew every repository's sessions flat until then.
+	// The saved folder stands in where the shell's cannot be read; a saved
+	// folder that is gone started the shell elsewhere.
 	if wt := restoredWorktree(state.Worktree); wt != nil {
 		_ = sess.SetWorktree(wt)
+	} else if len(kept) > 0 {
+		cwd := kept[0].Cwd
+		if pty := sess.GetPTY(kept[0].PTYID); pty != nil {
+			if live, ok := pty.ProcessCwd(); ok {
+				cwd = live
+			}
+		}
+		sess.refreshWorktree(cwd)
 	}
 
 	// The conversation ids go back on after UpdateState for the same reason:

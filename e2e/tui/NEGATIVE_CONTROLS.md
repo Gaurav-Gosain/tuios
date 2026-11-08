@@ -15921,3 +15921,18 @@ Run on 2026-11-08 on Linux. The branch passes, three runs out of three.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRestoredPaneShowsItsHistoryAboveTheDivider$' -v .`.
+## A restored session lists its worktree record at once
+
+`TestRestoredPaneComesBackInItsDirectory` restores a session whose pane was
+in a git repository, and reads the first `tuios ls --json` that names the
+restored session. The record must already be there: it is what the rail groups
+the session by.
+
+Run on 2026-11-08 on Linux. The branch passes, three runs out of three.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (6db1de3ed): restore drops a detected record and leaves it to the first save, two seconds later | "the restored session's first listing has worktree <nil>, want the main checkout of restored-here" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRestoredPaneComesBackInItsDirectory$' -v .`.
