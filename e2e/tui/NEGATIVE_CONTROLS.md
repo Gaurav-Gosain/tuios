@@ -15508,3 +15508,22 @@ attempt's end into an error. It stays as the second guard.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestALinkCopyRevokedBeforeItsVerifyStaysFailed$' -v .`.
+
+## TestReadyToMergeAnswerStaysWithItsCard
+
+State machine plan N7. Two cards in review, each with its work in its own
+repository. The first repository has a pre-commit hook that sleeps six
+seconds. M, c on the first card, esc while the commit runs, then M on the
+second card. When the commit lands, the second card's Ready to merge must
+still be open, the toast must name the first card, and the second repository
+must have no new commit.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes, and so does
+`TestTheBoardShowsTheCardLifecycle`, whose toasts now name the card.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (86c2a51f1), where the answer acts on whatever Ready to merge is open | "the toast does not name the card the commit was for", "t1's answer closed Ready to merge on t2" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestReadyToMergeAnswerStaysWithItsCard$' -v .`.
