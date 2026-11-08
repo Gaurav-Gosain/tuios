@@ -315,8 +315,9 @@ func (tk *tuiosKeys) disarm() {
 	tk.mu.Unlock()
 }
 
-// takeTyped is gated.Write's: text a terminal writes while the prefix is
-// armed is the prefix's next key. It reports whether it took the bytes.
+// takeTyped reads text a terminal got while the prefix is armed as the
+// prefix's next key, on the main thread (the terminal's OnText, and the
+// owner's replay). It reports whether it took the text.
 func (a *App) takeTyped(p []byte) bool {
 	if !a.tk.live() {
 		return false
@@ -337,10 +338,12 @@ var subMenus = map[string]string{
 }
 
 // stepKey takes the prefix's next key: it opens a sub-prefix, sends the
-// leader to the pane, runs an action, or cancels. Any goroutine may call
-// it; what it runs, runs on the main thread. It reports whether it took
-// the key: in a repeat window, a key of no repeating action ends the
-// prefix and goes on to the pane.
+// leader to the pane, runs an action, or cancels. It runs on the main
+// thread, in the event of the key; the action runs on a later turn of it
+// (postAction), and until it ran the owner keeps every key typed after
+// this one (actStart, actDone). It reports whether it took the key: in a
+// repeat window, a key of no repeating action ends the prefix and goes on
+// to the pane.
 func (a *App) stepKey(k string) bool {
 	tk := &a.tk
 	tk.mu.Lock()
@@ -387,19 +390,32 @@ func (a *App) stepKey(k string) bool {
 		tk.menu = ""
 	}
 	tk.mu.Unlock()
-	postAction(a, func() {
-		switch {
-		case leaderAgain:
+	if !leaderAgain && (action == "" || subMenus[action] != "") {
+		// A sub-prefix, or a key that cancels: nothing runs later.
+		if a.win != nil {
+			a.win.Invalidate()
+		}
+		return true
+	}
+	run := func() {
+		if leaderAgain {
 			// The leader two times sends it to the program, as tmux does.
 			if t := a.termFor(pane); t != nil && len(tk.literal) > 0 {
 				t.Send(tk.literal)
 			}
-		case action != "" && subMenus[action] == "":
-			a.runKeyAction(action)
+			return
 		}
-		if a.win != nil {
-			a.win.Invalidate()
-		}
+		a.runKeyAction(action)
+	}
+	if a.win == nil {
+		run() // no main loop to post to (tests)
+		return true
+	}
+	a.actStart(action)
+	postAction(a, func() {
+		run()
+		a.actDone(action)
+		a.win.Invalidate()
 	})
 	return true
 }

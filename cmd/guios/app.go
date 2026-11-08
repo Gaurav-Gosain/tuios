@@ -309,6 +309,10 @@ type App struct {
 	quick  quickTerm    // the terminal the global shortcut drops down
 	sw     switchState  // a workspace switch on its way
 	ko     keyOwner     // the keys while the focus moves (key_owner.go)
+	sf     sheetField   // the field of the sheet that has the keyboard (sheet_keys.go)
+	// focusPrev is the pane whose terminal had the focus in the last frame
+	// built, focusNow the one in this frame (panes.go).
+	focusPrev, focusNow string
 	// cfgWatch follows config.toml for the settings it holds
 	// (followTuiosConfig).
 	cfgWatch *config.Watcher
@@ -822,15 +826,21 @@ type gated struct {
 	past [][]byte
 }
 
-// Write takes what the terminal writes as the tuios prefix's next key
-// while the prefix is armed, and sends the rest to the pane.
+// Write sends what the terminal writes to the pane, but for the text of a
+// key the owner kept a slot for (fillSlot). The prefix reads its keys on
+// the main thread (OnKey, OnText), never here: decided on this goroutine,
+// a frame late, the keys typed after an action key went to the pane the
+// action left (design-G, G1).
 func (g *gated) Write(p []byte) (int, error) {
 	if g.passed(p) {
+		keyAudit("write", string(p), g.pane+" past")
 		return g.Stream.Write(p)
 	}
-	if g.app != nil && (g.app.fillSlot(g.pane, p) || g.app.takeTyped(p)) {
+	if g.app != nil && g.app.fillSlot(g.pane, p) {
+		keyAudit("write", string(p), g.pane+" slot")
 		return len(p), nil
 	}
+	keyAudit("write", string(p), g.pane)
 	return g.Stream.Write(p)
 }
 
@@ -1023,6 +1033,14 @@ func (a *App) termOptions(id string, conn *gated) terminal.Options {
 			}
 			t.Send([]byte{b})
 			return true
+		},
+		// The text a key types comes here on the main thread, before the
+		// terminal sends it: the owner keeps it while it has the keys, and
+		// the prefix reads it as its next key while armed. Decided here, in
+		// the key's own event, an action key's text and the keys after it
+		// keep their order (design-G, G1).
+		OnText: func(ev ui.InputEvent) bool {
+			return a.ownText(id, ev) || a.takeTyped([]byte(ev.Text))
 		},
 		// The stream brings the last 500 rows of the pane's history: the
 		// rows above come as the view nears them.

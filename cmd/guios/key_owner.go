@@ -49,7 +49,15 @@ type keyOwner struct {
 	ref     ui.Handle // the sink
 	landing bool      // every hold is done: the keys go to keyTarget
 	landAt  time.Time
-	waiting bool // a replayed key's action has not run yet
+	// acting counts the prefix actions decided and not run yet: until
+	// they ran, every key goes to the queue (actStart, actDone). actAt is
+	// when the last was decided.
+	acting int
+	actAt  time.Time
+	// sheetAt is when the sheet that has the keyboard took it, zero while
+	// none has: kept keys typed before it go to the pane they were typed
+	// for, the ones after it to the sheet (landBeforeSheet, replaySheet).
+	sheetAt time.Time
 	// reply sends the keys to the reply box when they land: text typed
 	// in the agents list goes there (ckProse).
 	reply bool
@@ -102,10 +110,12 @@ type heldKey struct {
 const slotWait = 200 * time.Millisecond
 
 // keyTarget is where the keys go once a change is done: a pane's
-// terminal, the reply box or the agents list. None of them for nothing.
+// terminal, the reply box, the agents list, or the sheet that has the
+// keyboard. None of them for nothing.
 type keyTarget struct {
 	pane        string
 	reply, list bool
+	sheet       string // sheetName, "other" for a sheet with no field the owner writes
 }
 
 // holdKeys has the owner keep the keys until ready reports true, or wait
@@ -128,12 +138,12 @@ func (a *App) holdKeys(why string, wait time.Duration, ready func() bool) {
 // had the keys in the last frame, and reports whether it did.
 func (a *App) tryLand() bool {
 	ko := &a.ko
-	if ko.waiting || a.keysOwned() {
+	if ko.acting > 0 {
 		return false
 	}
 	now := time.Now()
 	for _, h := range ko.holds {
-		if !h.ready() && now.Before(h.until) {
+		if !h.ready() && now.Before(h.until) && !a.keysOwned() {
 			return false
 		}
 	}
@@ -157,7 +167,7 @@ func (a *App) moveKeys(why string) {
 // keysHeld reports whether the owner has the keys.
 func (a *App) keysHeld() bool {
 	ko := &a.ko
-	return len(ko.holds) > 0 || ko.landing || ko.waiting || len(ko.queue) > 0
+	return len(ko.holds) > 0 || ko.landing || ko.acting > 0 || len(ko.queue) > 0
 }
 
 // ownKey keeps a key that a pane's terminal got while the owner has the
@@ -198,6 +208,67 @@ func (a *App) takeKey(pane string, ev ui.InputEvent) bool {
 	return true
 }
 
+// ownText keeps text that the terminal of pane got while the owner has the
+// keys, and reports whether it did: the text of a key whose key down came
+// before the owner had them, or text that comes with no key (Linux, an
+// input method).
+func (a *App) ownText(pane string, ev ui.InputEvent) bool {
+	if ev.Text == "" || !a.keysPending(pane) {
+		return false
+	}
+	a.keepKey(heldKey{text: ev.Text, seq: ev.Seq})
+	return true
+}
+
+// actStart notes a prefix action decided, which runs on a later turn of
+// the main thread: until it ran (actDone) every key typed goes to the
+// queue, in order, so none reaches the pane the action leaves.
+func (a *App) actStart(action string) {
+	ko := &a.ko
+	ko.acting++
+	ko.actAt = time.Now()
+	keyAudit("act", action, strconv.Itoa(ko.acting))
+}
+
+// actDone notes a prefix action that ran, and gives the keys kept since it
+// was decided to where the keys go now. A sheet or a dialog the action
+// opened takes them; the settings window, which is not this window, takes
+// none of them, and they drop.
+func (a *App) actDone(action string) {
+	ko := &a.ko
+	ko.acting = max(ko.acting-1, 0)
+	keyAudit("acted", action, strconv.Itoa(ko.acting))
+	if settingsActions[action] {
+		a.dropKeptSince(ko.actAt, "settings")
+	}
+	if a.keysOwned() && ko.sheetAt.IsZero() {
+		ko.sheetAt = ko.actAt
+	}
+	a.moveKeys("act")
+}
+
+// settingsActions are the prefix actions that open the settings window.
+var settingsActions = map[string]bool{"prefix_settings": true, "prefix_keybinds": true, "prefix_agents_settings": true}
+
+// dropKeptSince drops the kept keys typed at or after t, each with a line
+// in the key audit.
+func (a *App) dropKeptSince(t time.Time, why string) {
+	ko := &a.ko
+	ko.mu.Lock()
+	var gone []heldKey
+	ko.queue = slices.DeleteFunc(ko.queue, func(k heldKey) bool {
+		if !k.at.Before(t) {
+			gone = append(gone, k)
+			return true
+		}
+		return false
+	})
+	ko.mu.Unlock()
+	for _, k := range gone {
+		keyAudit("drop", k.name(), why)
+	}
+}
+
 // keysPending reports whether a key the terminal of pane got must go to the
 // owner: a change is on its way, keys wait in the queue, or the keys land
 // in another place.
@@ -206,7 +277,7 @@ func (a *App) keysPending(pane string) bool {
 	if !a.keysHeld() {
 		return false
 	}
-	if ko.waiting || len(ko.queue) > 0 {
+	if ko.acting > 0 || len(ko.queue) > 0 {
 		return true
 	}
 	for _, h := range ko.holds {
@@ -239,6 +310,9 @@ func (a *App) fillSlot(pane string, p []byte) bool {
 
 // keepKey adds one input to the owner's queue.
 func (a *App) keepKey(k heldKey) {
+	if k.at.IsZero() {
+		k.at = time.Now()
+	}
 	a.ko.mu.Lock()
 	if k.seq != 0 && slices.Contains(a.ko.kept[:], k.seq) {
 		// The same press again, as the text of a key down kept with its
@@ -268,6 +342,7 @@ func (a *App) keepKey(k heldKey) {
 // once none is.
 func (a *App) keyOwnerView(c *ui.Context) {
 	ko := &a.ko
+	a.focusPrev, a.focusNow = a.focusNow, ""
 	if auditCaller() != "" {
 		a.auditFocus(c)
 	}
@@ -299,13 +374,19 @@ func (a *App) keyOwnerView(c *ui.Context) {
 		return done
 	})
 	ko.sink = true
-	if a.keysOwned() {
-		// A sheet or a dialog opened on the way has the keyboard: it keeps
-		// it, and the keys kept before it land once it closes.
-		c.After(50 * time.Millisecond)
-		return
+	owned := a.keysOwned()
+	if owned {
+		// A sheet or a dialog has the keyboard. One that opened on its own
+		// takes it now; the keys kept before it go to the pane they were
+		// typed for, the ones after it to the sheet (design-G, G2).
+		if ko.sheetAt.IsZero() {
+			ko.sheetAt = now
+		}
+		a.landBeforeSheet()
+	} else {
+		ko.sheetAt = time.Time{}
 	}
-	if len(ko.holds) > 0 || ko.waiting {
+	if len(ko.holds) > 0 && !owned || ko.acting > 0 {
 		ko.landing = false
 		next := now.Add(landWait)
 		for _, h := range ko.holds {
@@ -334,6 +415,27 @@ func (a *App) keyOwnerView(c *ui.Context) {
 		// that text (MyGo keeps the app's string), so none may come after.
 		a.replyEarly()
 	}
+	if t.sheet != "" && t.sheet != "other" {
+		// A sheet's field takes the kept text through its string, focused
+		// or not: once the sheet built it, the keys land, and the field is
+		// asked for the focus for what is typed next.
+		if !a.sheetBuilt(t.sheet) && now.Sub(ko.landAt) < landWait {
+			c.After(16 * time.Millisecond)
+			return
+		}
+		ko.holds = nil
+		a.replayKeys(t)
+		if !ref.FocusWithin(c) && now.Sub(ko.landAt) < landWait {
+			// The sink keeps what is typed until the field has the
+			// focus, and the next frame writes it after this.
+			ref.Focus()
+			c.After(16 * time.Millisecond)
+			return
+		}
+		ko.landing, ko.asked = false, ko.asked[:0]
+		c.Invalidate()
+		return
+	}
 	if ref != nil && !ref.FocusWithin(c) && now.Sub(ko.landAt) < landWait || a.slotWaits(now) {
 		if ref != nil && !ref.FocusWithin(c) {
 			ref.Focus()
@@ -345,8 +447,41 @@ func (a *App) keyOwnerView(c *ui.Context) {
 		return
 	}
 	ko.landing, ko.asked = false, ko.asked[:0]
+	if owned {
+		// The holds of the switch or the scratch are the pane's, not the
+		// sheet's: they go, and the keys after the sheet closes go where
+		// the keys go then.
+		ko.holds = nil
+	}
 	a.replayKeys(t)
 	c.Invalidate()
+}
+
+// landBeforeSheet sends the kept keys typed before the sheet took the
+// keyboard to the pane they were typed for, at once: the sheet must not
+// take them, and must not hold them until it closes (design-G, G2).
+func (a *App) landBeforeSheet() {
+	ko := &a.ko
+	ko.mu.Lock()
+	var early []heldKey
+	n := 0
+	for _, k := range ko.queue {
+		if k.slot || !k.at.Before(ko.sheetAt) {
+			break
+		}
+		n++
+	}
+	if n > 0 {
+		early = slices.Clone(ko.queue[:n])
+		ko.queue = slices.Delete(ko.queue, 0, n)
+	}
+	ko.mu.Unlock()
+	if n == 0 {
+		return
+	}
+	t := a.paneTarget()
+	keyAudit("land", t.String(), strconv.Itoa(n)+" before the sheet")
+	a.replayPane(t.pane, early)
 }
 
 // slotWaits reports whether a slot still waits for its text.
@@ -431,6 +566,18 @@ func (a *App) catchListKeys(c *ui.Context) {
 // reply box or the list while the agents view shows, else the pane the
 // user is in.
 func (a *App) keyTarget() keyTarget {
+	if a.keysOwned() {
+		name := a.sheetName()
+		if name == "" {
+			name = "other"
+		}
+		return keyTarget{sheet: name}
+	}
+	return a.paneTarget()
+}
+
+// paneTarget is keyTarget with no sheet open.
+func (a *App) paneTarget() keyTarget {
 	if q := &a.quick; q.drop {
 		if p := scratchPane(a.session(q.session)); p != nil {
 			return keyTarget{pane: p.ID}
@@ -452,6 +599,10 @@ func (a *App) keyTarget() keyTarget {
 // targetRef is the element of a target, nil for none.
 func (a *App) targetRef(t keyTarget) *ui.Handle {
 	switch {
+	case t.sheet == "other":
+		return nil
+	case t.sheet != "":
+		return &a.sf.ref
 	case t.reply:
 		return &a.ck.reply.box
 	case t.list:
@@ -485,6 +636,9 @@ func (a *App) replayKeys(t keyTarget) {
 	q := slices.DeleteFunc(ko.queue, func(k heldKey) bool { return k.slot })
 	ko.queue = nil
 	ko.mu.Unlock()
+	if t.sheet != "" && len(q) == 0 {
+		return // the sheet's field has the keys: nothing to say each frame
+	}
 	ko.reply = false
 	note := strconv.Itoa(len(q))
 	if t.reply {
@@ -492,6 +646,8 @@ func (a *App) replayKeys(t keyTarget) {
 	}
 	keyAudit("land", t.String(), note)
 	switch {
+	case t.sheet != "":
+		a.replaySheet(t.sheet, q)
 	case t.reply:
 		a.replayReply(q)
 	case t.list:
@@ -541,8 +697,19 @@ func (a *App) replayPane(pane string, q []heldKey) {
 			t.Send(b)
 		}
 	}
+	// The bytes of a run go in one write: the daemon queues a few input
+	// frames of a stream and refuses the next as busy, so a replay of one
+	// frame a key lost keys in the middle of a line.
+	var run []byte
+	flush := func() {
+		if len(run) > 0 {
+			send(run)
+			run = nil
+		}
+	}
+	defer flush()
 	for i, k := range q {
-		armed := a.tk.live()
+		acting := a.ko.acting
 		var took bool
 		if k.text != "" {
 			took = a.takeTyped([]byte(k.text))
@@ -551,24 +718,19 @@ func (a *App) replayPane(pane string, q []heldKey) {
 		}
 		if !took {
 			if k.text != "" {
-				send([]byte(k.text))
+				run = append(run, k.text...)
 			} else if b := switchKeyBytes(k.mods, k.key); b != nil {
-				send(b)
+				run = append(run, b...)
 			}
 			continue
 		}
-		if armed && !a.prefixInMenu() && i+1 < len(q) {
-			// The key ran an action: the rest waits for it.
+		flush()
+		if a.ko.acting > acting && i+1 < len(q) {
+			// The key chose an action (actStart): the rest waits for it,
+			// and lands where the keys go once it ran (actDone).
 			a.ko.mu.Lock()
 			a.ko.queue = append(slices.Clone(q[i+1:]), a.ko.queue...)
 			a.ko.mu.Unlock()
-			a.ko.waiting = true
-			a.update(func() {
-				a.ko.waiting = false
-				if a.win != nil {
-					a.win.Invalidate()
-				}
-			})
 			return
 		}
 	}
@@ -728,6 +890,8 @@ func (t keyTarget) String() string {
 		return "list"
 	case t.pane != "":
 		return "pane " + t.pane
+	case t.sheet != "":
+		return "sheet " + t.sheet
 	}
 	return "none"
 }

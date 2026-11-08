@@ -59,7 +59,7 @@ func (a *App) worktreeView(c *ui.Context, pal *palette) {
 		ui.Row(c).Margin(8, 0, 0, 0).Children(func() {
 			in := textField(c, "branch", &w.branch, locales.WorktreeBranch(), 0, pal)
 			in.AutoFocus()
-			if in.Submitted() {
+			if a.sheetInput("branch", in) || in.Submitted() {
 				create = true
 			}
 		})

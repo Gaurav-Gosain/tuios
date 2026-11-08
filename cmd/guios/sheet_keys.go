@@ -1,0 +1,134 @@
+package main
+
+import (
+	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/mygo/ui"
+)
+
+// The keys a sheet takes from the owner. A prefix action that opens a
+// sheet (the palette, a rename, the help, a new worktree) runs a turn of
+// the main thread after its key, and the sheet's field takes the focus a
+// frame after that. What is typed meanwhile is the sheet's: text meant for
+// the palette that reached a shell could run there as a command. The
+// owner keeps those keys (actStart), and once the sheet has the keyboard
+// writes them into its field, in order (replaySheet). A key the sheet has
+// no use for drops, with a line in the key audit: it never goes on to a
+// pane (design-G, the lead's go).
+
+// sheetField is the field of the sheet open now, as the sheet's last build
+// bound it (sheetInput).
+type sheetField struct {
+	name  string // sheetName of the sheet that bound it
+	pass  int    // the owner's pass of that build
+	ref   ui.Handle
+	toEnd bool // the caret goes to the end: the owner wrote text
+	enter bool // a kept Enter: the sheet submits
+}
+
+// sheetName names the open sheet whose field the owner writes, "" for
+// none or for one it does not write.
+func (a *App) sheetName() string {
+	switch {
+	case a.prompt != nil && a.prompt.open:
+		return "prompt"
+	case a.wtAsk != nil && a.wtAsk.open:
+		return "branch"
+	case a.pal.open:
+		return "palette"
+	case a.help.open:
+		return "help"
+	}
+	return ""
+}
+
+// sheetInput binds a sheet's field for the owner, as its build makes it,
+// and reports whether a kept Enter submits it.
+func (a *App) sheetInput(name string, in ui.Element) bool {
+	sf := &a.sf
+	in.Bind(&sf.ref)
+	sf.name, sf.pass = name, a.ko.pass
+	if sf.toEnd {
+		sf.toEnd = false
+		if v := a.sheetValue(name); v != nil {
+			n := utf8.RuneCountInString(*v)
+			in.SetTextSelection(n, n)
+		}
+	}
+	enter := sf.enter
+	sf.enter = false
+	return enter
+}
+
+// sheetBuilt reports whether the sheet name bound its field in the last
+// frame built.
+func (a *App) sheetBuilt(name string) bool {
+	return a.sf.name == name && a.sf.pass >= a.ko.pass-1
+}
+
+// sheetValue is the string a sheet's field edits, nil for none.
+func (a *App) sheetValue(name string) *string {
+	switch name {
+	case "prompt":
+		if a.prompt != nil {
+			return &a.prompt.value
+		}
+	case "branch":
+		if a.wtAsk != nil {
+			return &a.wtAsk.branch
+		}
+	case "palette":
+		return &a.pal.query
+	case "help":
+		return &a.help.query
+	}
+	return nil
+}
+
+// replaySheet writes kept keys into the field of the sheet name: text at
+// its end, Backspace, Enter where the sheet submits, the palette's Up and
+// Down. Any other key, and every key of a sheet with no such field, drops.
+func (a *App) replaySheet(name string, q []heldKey) {
+	v := a.sheetValue(name)
+	if v == nil || !a.sheetBuilt(name) {
+		for _, k := range q {
+			keyAudit("drop", k.name(), "sheet "+name)
+		}
+		return
+	}
+	wrote := false
+	for _, k := range q {
+		switch {
+		case k.text != "":
+			if name == "prompt" && !a.prompt.selected {
+				// The field selects the old name as it takes the focus,
+				// so that typing replaces it: kept text replaces it too.
+				a.prompt.selected = true
+				*v = ""
+			}
+			*v += k.text
+			wrote = true
+		case k.key == ui.KeyBackspace && k.mods == 0:
+			if _, n := utf8.DecodeLastRuneInString(*v); n > 0 {
+				*v = (*v)[:len(*v)-n]
+				wrote = true
+			}
+		case k.key == ui.KeyEnter && k.mods == 0 && name != "help":
+			a.sf.enter = true
+		case name == "palette" && k.mods == 0 && (k.key == ui.KeyDown || k.key == ui.KeyUp):
+			d := 1
+			if k.key == ui.KeyUp {
+				d = -1
+			}
+			a.paletteStep(d, len(a.paletteRanked()))
+		default:
+			keyAudit("drop", k.name(), "sheet "+name)
+		}
+	}
+	if wrote {
+		a.sf.toEnd = true
+		if name == "palette" {
+			a.pal.index, a.pal.reveal = 0, true
+		}
+	}
+}

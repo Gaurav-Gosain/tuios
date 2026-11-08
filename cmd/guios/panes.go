@@ -1226,12 +1226,20 @@ func (a *App) paneTerminal(c *ui.Context, pal *palette, s *proto.Session, p *pro
 			if link, isPath, at := e.term.HoveredLink(); isPath {
 				a.imagePeek(p.ID, link, at, ref.Bounds(c))
 			}
+			if ref.Focused(c) {
+				a.focusNow = p.ID
+			}
 			if a.wantFocus == p.ID {
 				// The keyboard goes to a pane made a moment ago once its
 				// terminal is here to take it.
 				ref.Focus()
 				a.wantFocus = ""
-			} else if ref.Focused(c) && a.focusOf(s) != p.ID && s.PaneByID(a.wantFocus) == nil && !a.ownerAsked(p.ID) {
+			} else if ref.Focused(c) && a.focusPrev != p.ID && a.focusOf(s) != p.ID && s.PaneByID(a.wantFocus) == nil && !a.ownerAsked(p.ID) {
+				// The terminal took the focus in this frame, as a click
+				// gives it: the user chose it. One that had it last frame
+				// too has it only until a move asked for (a prefix key, a
+				// switch) takes it, a frame after the ask: taken as the
+				// user's choice, it moved the keys back (design-G, G3).
 				a.setFocus(s, p.ID)
 			}
 			if a.find.pane == p.ID {

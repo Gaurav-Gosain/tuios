@@ -97,7 +97,7 @@ func (a *App) promptView(c *ui.Context, pal *palette) {
 				pr.selected = true
 				in.SetTextSelection(0, utf8.RuneCountInString(pr.value))
 			}
-			if in.Submitted() {
+			if a.sheetInput("prompt", in) || in.Submitted() {
 				done = true
 			}
 		})

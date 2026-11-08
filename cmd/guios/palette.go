@@ -583,7 +583,7 @@ func (a *App) paletteView(c *ui.Context, pal *palette) {
 			case c.Shortcut(0, ui.KeyPageUp):
 				a.paletteStep(-palettePage, len(items))
 			}
-			if in.Submitted() || c.Shortcut(0, ui.KeyEnter) {
+			if a.sheetInput("palette", in) || in.Submitted() || c.Shortcut(0, ui.KeyEnter) {
 				if a.pal.query != ranked {
 					// The field took text in this frame, with the Enter
 					// after it: the items above are ranked by the query

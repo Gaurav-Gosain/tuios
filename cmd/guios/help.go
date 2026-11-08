@@ -241,7 +241,7 @@ func (a *App) helpView(c *ui.Context, pal *palette) {
 		floating(panel.Width(width).MaxHeight(min(620, wh*0.76)).Radius(rSheet).Background(pal.popover), pal).Clip().Label(locales.HelpTitle())
 		ui.Row(c).Height(44).Shrink(0).Padding(0, sp4).Gap(10).AlignItems(ui.Center).Children(func() {
 			ui.Icon(c, searchIcon).Size(16, 16).TextColor(pal.textMuted).Shrink(0)
-			ui.TextInputBase(c.Key("q"), &a.help.query).Grow(1).MinWidth(0).FontSize(fsProse).Placeholder(locales.HelpPlaceholder()).AutoFocus()
+			a.sheetInput("help", ui.TextInputBase(c.Key("q"), &a.help.query).Grow(1).MinWidth(0).FontSize(fsProse).Placeholder(locales.HelpPlaceholder()).AutoFocus())
 			ui.Text(c, strconv.Itoa(len(rows))).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum").Shrink(0)
 		})
 		ui.Box(c).Height(1).Shrink(0).Background(pal.divider)
