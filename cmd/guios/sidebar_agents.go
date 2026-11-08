@@ -126,7 +126,11 @@ func (a *App) agentRow(c *ui.Context, pal *palette, ag client.Agent, need *ckNee
 					// nothing else. "claude" on every row of a fleet of one
 					// program said nothing (Mac round 2, visual S2). The
 					// detail header names it.
-					ui.Icon(c, harnessIcon(ag.Harness)).Size(12, 12).TextColor(pal.textMuted).Shrink(0).Tooltip(harnessName(ag.Harness))
+					// The mark only among more than one harness (Mac round
+					// 5, visual S3).
+					if a.ck.agentHarnesses() > 1 {
+						ui.Icon(c, harnessIcon(ag.Harness)).Size(12, 12).TextColor(pal.textMuted).Shrink(0).Tooltip(harnessName(ag.Harness))
+					}
 					if verb == "" && rest == "" {
 						ui.Text(c, harnessName(ag.Harness)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Shrink(0)
 					}

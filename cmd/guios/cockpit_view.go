@@ -507,14 +507,19 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 					attemptChip(c, pal, letter)
 				}
 				oneLine(c, name, fsBody, weight).TextColor(pal.text)
-				ui.Row(c).Gap(4).AlignItems(ui.Center).Shrink(0).Children(func() {
-					ic := ui.Icon(c, harnessIcon(harness)).Size(12, 12).TextColor(pal.textFaint).Shrink(0)
-					if showHarness {
-						ui.Text(c, harnessName(harness)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Shrink(0)
-					} else if harness != "" {
-						ic.Tooltip(harnessName(harness))
-					}
-				})
+				// The mark too tells rows apart only in a list of more than
+				// one harness; a row with none keeps its terminal icon (Mac
+				// round 5, visual S3). The detail header names who asks.
+				if ck.manyHarness || harness == "" {
+					ui.Row(c).Gap(4).AlignItems(ui.Center).Shrink(0).Children(func() {
+						ic := ui.Icon(c, harnessIcon(harness)).Size(12, 12).TextColor(pal.textFaint).Shrink(0)
+						if showHarness {
+							ui.Text(c, harnessName(harness)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Shrink(0)
+						} else if harness != "" {
+							ic.Tooltip(harnessName(harness))
+						}
+					})
+				}
 				ui.Spacer(c)
 				ui.Text(c, age).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum").SingleLine().Shrink(0)
 			})
@@ -1148,6 +1153,24 @@ func (a *App) ownListKey(c *ui.Context, col ui.Element) bool {
 		return true
 	}
 	return false
+}
+
+// agentHarnesses is how many harnesses the known agents use, for the rail.
+func (ck *cockpit) agentHarnesses() int {
+	var first string
+	for _, ag := range ck.agents {
+		switch {
+		case ag.Harness == "" || ag.Harness == first:
+		case first == "":
+			first = ag.Harness
+		default:
+			return 2
+		}
+	}
+	if first == "" {
+		return 0
+	}
+	return 1
 }
 
 // harnessesShown is how many harnesses the agents in the list use.
