@@ -88,6 +88,11 @@ type ckRow struct {
 type ckPlaced struct {
 	shown, want int
 	since       time.Time
+	// st and unread are the state the row showed in its shown group: while
+	// a move waits (ckHold), every view draws that state, so the row, its
+	// group, the counts, the badge and the rail say one thing.
+	st     proto.Status
+	unread bool
 }
 
 // ckShown is the held approval the card last drew, and since when.
@@ -417,7 +422,7 @@ func (a *App) ckItemOf(ag client.Agent) *session.AttentionItem {
 // ckHoldGroup is the group an agent's row is drawn in: the group its state
 // asks for, once it has asked for it for ckHold. It arms a frame for when a
 // held move is due.
-func (a *App) ckHoldGroup(c *ui.Context, key string, want int, now time.Time) int {
+func (a *App) ckHoldGroup(c *ui.Context, key string, want int, st proto.Status, unread bool, now time.Time) int {
 	ck := &a.ck
 	if ck.placed == nil {
 		ck.placed = map[string]ckPlaced{}
@@ -449,8 +454,21 @@ func (a *App) ckHoldGroup(c *ui.Context, key string, want int, now time.Time) in
 	if p.shown != ckNeeds {
 		delete(ck.placedFree, key)
 	}
+	if p.shown == p.want {
+		p.st, p.unread = st, unread
+	}
 	ck.placed[key] = p
 	return p.shown
+}
+
+// ckShownStatus is the state every view draws for ag, with it its item:
+// its state, or while its row's move to a new group waits, the state of
+// the group it is still shown in (ckHoldGroup).
+func (a *App) ckShownStatus(ag client.Agent, it *session.AttentionItem) (proto.Status, bool) {
+	if p, ok := a.ck.placed[ag.Key()]; ok && p.shown != p.want && p.st != "" {
+		return p.st, p.unread
+	}
+	return ckStatus(ag, it)
 }
 
 // buildCockpitRows groups the agents and the Inbox's items into rows.
@@ -501,7 +519,8 @@ func (a *App) buildCockpitRows(c *ui.Context) []ckRow {
 		if idx >= 0 {
 			used[idx] = true
 			kind = ckRowAgent
-			g = a.ckHoldGroup(c, ck.agents[idx].Key(), g, now)
+			st, unread := ckStatus(ck.agents[idx], it)
+			g = a.ckHoldGroup(c, ck.agents[idx].Key(), g, st, unread, now)
 		}
 		groups[g] = append(groups[g], ckRow{kind: kind, group: g, agent: idx, item: it, key: key})
 	}
@@ -509,7 +528,8 @@ func (a *App) buildCockpitRows(c *ui.Context) []ckRow {
 		if used[i] {
 			continue
 		}
-		g := a.ckHoldGroup(c, ag.Key(), ckShownGroup(ag, nil, now), now)
+		st, unread := ckStatus(ag, nil)
+		g := a.ckHoldGroup(c, ag.Key(), ckShownGroup(ag, nil, now), st, unread, now)
 		groups[g] = append(groups[g], ckRow{kind: ckRowAgent, group: g, agent: i, key: "a:" + ag.Key()})
 	}
 	var rows []ckRow

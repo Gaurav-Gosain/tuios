@@ -113,8 +113,8 @@ func (a *App) ckTabFor(r ckRow) string {
 }
 
 // ckStatePill is a state's word and colour.
-func ckStatePill(pal *palette, ag client.Agent, it *session.AttentionItem) (string, ui.Color) {
-	st, unread := ckStatus(ag, it)
+func (a *App) ckStatePill(pal *palette, ag client.Agent, it *session.AttentionItem) (string, ui.Color) {
+	st, unread := a.ckShownStatus(ag, it)
 	switch {
 	case st == proto.Waiting:
 		return locales.StatusNeedsYou(), pal.attnText
@@ -176,7 +176,7 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 				}
 			}
 			ui.Spacer(c)
-			word, col := ckStatePill(pal, ag, r.item)
+			word, col := a.ckStatePill(pal, ag, r.item)
 			ground, ink := col.Alpha(0.15), col
 			if st, _ := ckStatus(ag, r.item); st == proto.Waiting {
 				// Needs you is the pane chip's solid need (attnFill, its

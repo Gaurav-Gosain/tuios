@@ -473,7 +473,7 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 	// The folder, beside the row: the state's source is the Details
 	// column's, not the tooltip's.
 	rowTooltip(c, row, "ck-tip-"+r.key, a.hostOf(ag.Session).shortDir(filepath.Clean(ag.Cwd)))
-	st, unread := ckStatus(ag, r.item)
+	st, unread := a.ckShownStatus(ag, r.item)
 	since := ag.StateAt / int64(time.Millisecond)
 	if r.item != nil && r.item.Since > 0 {
 		since = r.item.Since / int64(time.Millisecond)
