@@ -574,6 +574,12 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// The review overlay covers the screen and owns every key while it is up,
 	// in either mode. It is opened from the Inbox and the rail, so it is
 	// checked ahead of both. See review_input.go.
+	// A menu opened over an overlay (open_menu in [keybindings.inbox], the
+	// rail, the review and the rest) takes the next key before that overlay
+	// does, which would otherwise read it first (issue #1590). See menus.go.
+	if o.Menu != "" && o.MenuState().Origin.Set {
+		return HandleMenuCommand(msg, o)
+	}
 	if o.ReviewOpen() {
 		return handleReviewInput(msg, o)
 	}

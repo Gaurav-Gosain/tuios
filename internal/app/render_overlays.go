@@ -636,10 +636,18 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		overlayX = max(min(overlayX, renderWidth-overlayWidth), 0)
 		overlayY = max(min(overlayY, renderHeight-overlayHeight), m.viewReserve().Top, 0)
 
+		// A menu opened over an overlay (the Inbox, the rail's preview, the
+		// review) is drawn above that overlay, and above every other, as its
+		// keys are taken ahead of them (issue #1590). Under them it ran
+		// unseen.
+		z := config.ZIndexWhichKey
+		if m.menuOrigin.Set {
+			z = config.ZIndexReview + 2
+		}
 		whichKeyLayer := lipgloss.NewLayer(renderedOverlay).
 			X(overlayX).
 			Y(overlayY).
-			Z(config.ZIndexWhichKey).
+			Z(z).
 			ID("whichkey")
 
 		layers = append(layers, whichKeyLayer)

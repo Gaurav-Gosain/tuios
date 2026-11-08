@@ -1448,7 +1448,35 @@ resize_pane_right_5 = ["l"]
   `+`.
 - `tuios keybinds list`, `doctor`, `unbind` and `free` read the menus as they
   read any other section. A config warning names a key that opens a menu that
-  is not declared, and a menu that no key opens.
+  is not declared, a menu that no key opens, and a menu key whose action
+  the overlay it opens over does not have (see below).
+
+### Menus in the rail, the Inbox and the other overlays
+
+`open_menu:NAME` also works in the sections of an overlay: `sidebar`,
+`sidebar_files`, `sidebar_agents`, `quick_look`, `quick_look_inside`, `inbox`,
+`inbox_peek`, `mail`, `transfers` and `review`. The menu opens over the
+overlay, and its keys run that overlay's own actions, so name actions of the
+same section.
+
+```toml
+[keybindings.inbox]
+"open_menu:triage" = ["x"]
+
+[keybindings.menus.triage]
+title = "Triage"
+
+[keybindings.menus.triage.keys]
+inbox_dismiss = ["d"]
+inbox_snooze = ["s"]
+inbox_close = ["c"]
+```
+
+In the Inbox, `x d` dismisses the selected item and `x c` closes the Inbox.
+`esc` closes the menu and leaves the overlay open, and the next key is the
+overlay's own again. A menu that the overlay's menu opens runs over the same
+overlay. A sticky menu stays open while the overlay does. Copy mode is not one
+of these sections: bind its menus in `terminal_mode` or under the leader.
 
 ## Split into the same ssh
 

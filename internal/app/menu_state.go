@@ -1,6 +1,10 @@
 package app
 
-import "time"
+import (
+	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+)
 
 // The leader and its menus: the one writer of PrefixActive, SubMenu, Menu and
 // LastPrefixTime. MenuState (lock_mode.go) names the three that say which
@@ -26,6 +30,13 @@ func (m *OS) OpenSubMenu(s SubMenu) {
 // OpenMenu opens the declared menu name.
 func (m *OS) OpenMenu(name string) {
 	m.setMenus(MenuState{Prefix: true, Menu: name}, true, "menu")
+}
+
+// OpenMenuFrom opens the declared menu name over the overlay whose table is
+// origin, so its keys run that overlay's actions (issue #1590). hold keeps
+// the which-key time, for a sticky menu after its key ran.
+func (m *OS) OpenMenuFrom(name string, origin config.Table, hold bool) {
+	m.setMenus(MenuState{Prefix: true, Menu: name, Origin: MenuOrigin{Set: true, Table: origin}}, !hold, "menu over an overlay")
 }
 
 // HoldMenu keeps the sticky menu name open after its key ran. The which-key
@@ -60,7 +71,7 @@ func (m *OS) setMenus(s MenuState, arm bool, cause string) {
 	if was := m.MenuState(); was != s && verboseLog() {
 		m.LogInfo("menu: %s to %s (%s)", menuStateName(was), menuStateName(s), cause)
 	}
-	m.PrefixActive, m.SubMenu, m.Menu = s.Prefix, s.Sub, s.Menu
+	m.PrefixActive, m.SubMenu, m.Menu, m.menuOrigin = s.Prefix, s.Sub, s.Menu, s.Origin
 	if arm {
 		m.LastPrefixTime = time.Now()
 	}

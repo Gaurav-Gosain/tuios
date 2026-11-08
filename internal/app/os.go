@@ -1242,6 +1242,13 @@ type OS struct {
 	TapeRecordingName string            // Name of current recording
 	// Menu is the declared menu open now (see config.MenuConfig), "" when none is.
 	Menu string
+	// menuOrigin is the overlay the open menu was opened from. See
+	// MenuOrigin.
+	menuOrigin MenuOrigin
+	// MenuAction is an action a menu opened over an overlay hands back to
+	// that overlay, for the one call of its key handler that follows
+	// (internal/input/menus.go). It is set and cleared there only.
+	MenuAction MenuHandback
 	// MouseOff is set by toggle_mouse: the client stops asking the host for
 	// mouse reports, so the host terminal selects text itself, as tmux's
 	// mouse off does.

@@ -346,6 +346,9 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // noteRailAction records a rail action the way Dispatch records the others,
 // and tells the browser build's tour about it, as Dispatch does.
 func noteRailAction(o *app.OS, action string) {
+	if action == actionMenuOpened {
+		return
+	}
 	o.NoteAction(action)
 	if o.OnAction != nil {
 		o.OnAction(action)

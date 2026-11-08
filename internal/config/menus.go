@@ -273,6 +273,76 @@ func validateMenus(cfg *UserConfig, result *ValidationResult) {
 			})
 		}
 	}
+	validateOverlayMenus(cfg, result)
+}
+
+// menuOverlayTables are the overlay tables open_menu works in (issue
+// #1590): the menu opens over the overlay, and its keys run that overlay's
+// own actions. The prefix and terminal tables open a menu through the
+// dispatcher, where a menu key runs any action.
+var menuOverlayTables = [...]Table{
+	TableSidebar, TableSidebarFiles, TableSidebarAgents, TableQuickLook, TableQuickLookInside,
+	TableInbox, TableInboxPeek, TableMail, TableTransfers, TableReview,
+}
+
+// MenuOverlayTable reports whether a menu opened from table t opens over
+// that overlay, so that its keys run the overlay's actions.
+func MenuOverlayTable(t Table) bool { return slices.Contains(menuOverlayTables[:], t) }
+
+// validateOverlayMenus warns about a key of a menu opened over an overlay
+// whose action that overlay does not have: the overlay runs the menu's
+// actions, so new_window in a menu opened from [keybindings.inbox] does
+// nothing. A menu the overlay's menu opens runs over the same overlay, so it
+// is checked the same way.
+func validateOverlayMenus(cfg *UserConfig, result *ValidationResult) {
+	kb := &cfg.Keybindings
+	if len(kb.Menus) == 0 {
+		return
+	}
+	defaults := DefaultConfig().Keybindings
+	for _, t := range menuOverlayTables {
+		section := keybindTables[t].name
+		own := *keybindTables[t].field(kb)
+		known := func(action string) bool {
+			if _, ok := own[action]; ok {
+				return true
+			}
+			_, ok := (*keybindTables[t].field(&defaults))[action]
+			return ok
+		}
+		seen := map[string]bool{}
+		var walk func(name string)
+		walk = func(name string) {
+			if seen[name] {
+				return
+			}
+			seen[name] = true
+			menu, ok := kb.Menu(name)
+			if !ok {
+				return
+			}
+			for _, action := range sortedActions(menu.Keys) {
+				if len(menu.Keys[action]) == 0 {
+					continue
+				}
+				if next, ok := MenuNameOf(action); ok {
+					walk(next)
+					continue
+				}
+				if !known(action) {
+					result.Warnings = append(result.Warnings, ValidationError{
+						Field: MenuSectionPrefix + name, Key: action,
+						Message: fmt.Sprintf("The menu %s opens over [keybindings.%s], which has no action %s, so the key does nothing there. Use an action of that section.", name, section, action),
+					})
+				}
+			}
+		}
+		for _, action := range sortedActions(own) {
+			if name, ok := MenuNameOf(action); ok && len(own[action]) > 0 {
+				walk(name)
+			}
+		}
+	}
 }
 
 func sortedActions(m map[string][]string) []string {

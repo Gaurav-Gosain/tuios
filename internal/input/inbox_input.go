@@ -286,6 +286,9 @@ func handleInboxPeekInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // report, and for the browser build's tour, which hears it as it hears a
 // keybinding's.
 func noteInboxAction(o *app.OS, action string) {
+	if action == actionMenuOpened {
+		return
+	}
 	o.NoteAction(action)
 	if o.OnAction != nil {
 		o.OnAction(action)

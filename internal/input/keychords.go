@@ -166,9 +166,42 @@ func lookupAction(o *app.OS, msg tea.KeyPressMsg, get func(string) string) strin
 // tableAction is lookupAction over one of the registry's tables. Each prefix
 // and overlay reads its own table, so the same key can mean different things
 // in each.
+//
+// It is also where a declared menu opens over an overlay and hands its key's
+// action back to it (issue #1590, menus.go), for the tables
+// config.MenuOverlayTable names. Copy mode reads its table many times for one
+// key, in every window of a multi-pane copy, so it is not one of them.
+//
+// open_menu:NAME of a declared menu opens that menu over the overlay. While
+// that menu is open, every lookup of these tables returns actionMenuOpened,
+// which no overlay runs, so the rest of the handler does nothing more with
+// the key. While menus.go routes the menu's next key, every lookup of the
+// overlay's table returns the menu's action in place of the key's own: an
+// overlay can look up its table more than once for one key, as the rail's
+// files section does.
 func tableAction(o *app.OS, msg tea.KeyPressMsg, reg *config.KeybindRegistry, table config.Table) string {
-	return lookupAction(o, msg, func(key string) string { return reg.Action(table, key) })
+	if !config.MenuOverlayTable(table) {
+		return lookupAction(o, msg, func(key string) string { return reg.Action(table, key) })
+	}
+	if h := o.MenuAction; h.Set && h.Table == table {
+		return h.Action
+	}
+	if o.Menu != "" && o.MenuState().Origin.Set {
+		return actionMenuOpened
+	}
+	action := lookupAction(o, msg, func(key string) string { return reg.Action(table, key) })
+	if name, ok := config.MenuNameOf(action); ok {
+		if _, declared := declaredMenu(o, name); declared {
+			o.OpenMenuFrom(name, table, false)
+			return actionMenuOpened
+		}
+	}
+	return action
 }
+
+// actionMenuOpened is what tableAction returns for a key that opened a menu
+// over an overlay. No table binds it, so the overlay does nothing more.
+const actionMenuOpened = "menu_opened"
 
 // macOptionChord returns the alt+ chord a macOS Option press stands for when the
 // OS composed a character out of it on a US layout, and whether msg is such a

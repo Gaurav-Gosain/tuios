@@ -15824,3 +15824,27 @@ and -tags ghostty binaries.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestKittyImageSymbolsOnAHostWithoutGraphics$' -v .`.
+
+## TestOpenMenuInTheInboxAndTheRail, TestOpenMenuInTheReview
+
+`open_menu:NAME` bound in `[keybindings.inbox]`, `[keybindings.sidebar]` and
+`[keybindings.review]` (issue #1590). The menu's panel must show over the
+overlay, a menu key must run the overlay's own action (c closes the Inbox, w
+opens a window from the rail, y stages the file in the review), and esc must
+close the menu and leave the overlay up. The same key pressed after esc, and
+in the Inbox opened again after the menu closed it, must do what the overlay
+binds it to, so a menu action is never left to answer a later key.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes both.
+
+| Control | Test | The test fails with | Result |
+|---------|------|---------------------|--------|
+| Main (742a59880) | Inbox and rail | "x in the Inbox did not open the menu: ... waiting for text \"inbox x\"" | **caught** |
+| Main (742a59880) | Review | "m in the review did not open the menu: ... waiting for text \"quick stage\"" | **caught** |
+| The hand-back not cleared after the menu's key | Inbox and rail | "c in the Inbox opened again closed it: the menu's action answered a later key" | **caught** |
+| The panel at the leader's z (`ZIndexWhichKey`) | Inbox and rail | "x in the Inbox did not open the menu: ... waiting for text \"inbox x\"" (the panel is drawn under the Inbox) | **caught** |
+| No route to the menu ahead of the review | Review | "esc did not close the review's menu" | **caught** |
+| No route to the menu ahead of the review | Inbox and rail | passes: the Inbox and the rail leave keys to an open menu already | not a control of this test |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestOpenMenuIn' -v .`.
