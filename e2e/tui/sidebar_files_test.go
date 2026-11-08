@@ -815,6 +815,23 @@ type dropShell struct {
 
 func posixQuote(p string) string { return "'" + strings.ReplaceAll(p, "'", `'\''`) + "'" }
 
+// runsAs is the program a pane runs when it starts shell: on macOS /bin/sh
+// is a shim that runs bash, so a pane started as sh runs bash, and the rail
+// names bash. The name is the kernel's accounting name of the shell, which
+// the rail reads too (ucomm; on macOS comm is argv[0], sh); the second command
+// keeps sh from running ps in its own place.
+func runsAs(t *testing.T, shell string) string {
+	t.Helper()
+	if shell != "sh" {
+		return shell
+	}
+	out, err := exec.Command("sh", "-c", "ps -o ucomm= -p $$; :").Output()
+	if err != nil {
+		t.Fatalf("ask sh what it runs as: %v", err)
+	}
+	return strings.TrimPrefix(filepath.Base(strings.TrimSpace(string(out))), "-")
+}
+
 func dropShells() []dropShell {
 	return []dropShell{
 		{name: "sh", printf: `printf '[%s]\n' `, quote: posixQuote},
@@ -865,8 +882,10 @@ func dropShells() []dropShell {
 // dialect, the fish round fails on the first drop, it's a file.txt, whose
 // POSIX form is not the fish form. See NEGATIVE_CONTROLS.md.
 func TestRailFileDragIntoPane(t *testing.T) {
-	// A short folder, so a command line with four paths fits on one row.
-	dir, err := os.MkdirTemp("", "dnd")
+	// A short folder, so a command line with four paths fits on one row. It
+	// is made under /tmp, not $TMPDIR: on macOS TMPDIR is a long folder under
+	// /private/var/folders, and the line wraps.
+	dir, err := os.MkdirTemp("/tmp", "dnd")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -893,15 +912,12 @@ func TestRailFileDragIntoPane(t *testing.T) {
 			paths[i] += "/"
 		}
 	}
-	// A stand-in for ssh: a program called ssh that holds the terminal.
-	fakeBin := t.TempDir()
-	// A script that reads its input, as ssh does. Its process name is the
-	// script's, ssh. A copy of cat does not do: a multi-call coreutils, as
-	// Ubuntu 26.04 ships, refuses to run under another name.
-	data := []byte("#!/bin/sh\nwhile IFS= read -r line; do :; done\n")
-	if err := os.WriteFile(filepath.Join(fakeBin, "ssh"), data, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	// A stand-in for ssh: a program called ssh that holds the terminal. It is
+	// this test binary, copied as ssh, reading its input as ssh does. A
+	// script does not do: on macOS /bin/sh runs bash, and the process is
+	// named bash. A copy of cat does not do either: a multi-call coreutils,
+	// as Ubuntu 26.04 ships, refuses to run under another name.
+	fakeBin := filepath.Dir(standInAs(t, "ssh"))
 
 	const cols, rowsN = 260, 44
 	term, _ := start(t, startOpts{daemonDefault: true, cols: cols, rows: rowsN})
@@ -1013,7 +1029,7 @@ func TestRailFileDragIntoPane(t *testing.T) {
 				if i == 0 && j == 0 {
 					name = "drag-mid"
 				}
-				drag(r, sh.name, name)
+				drag(r, runsAs(t, sh.name), name)
 				line += sh.quote(paths[j]) + " "
 				if err := term.WaitForText(strings.TrimSpace(line), uiTimeout); err != nil {
 					t.Fatalf("after dropping %q the command line is not\n%s\n%v\n%s", r, line, err, term.Snapshot())
@@ -1113,7 +1129,7 @@ func TestRailFileDragIntoPane(t *testing.T) {
 	// refused with the reason, and nothing is typed.
 	t.Run("ssh refused", func(t *testing.T) {
 		enterTerminalMode(t, term)
-		runInShell(t, term, "clear; PATH="+fakeBin+":$PATH; echo SSH\"\"ON; ssh", "SSHON", uiTimeout)
+		runInShell(t, term, "clear; PATH="+fakeBin+":$PATH; echo SSH\"\"ON; "+standInEnv+"=read ssh", "SSHON", uiTimeout)
 		row := "it's a file.txt"
 		from := at[row]
 		mousePress(t, term, from[0], from[1], tuitest.MouseLeft, 0)
