@@ -221,22 +221,41 @@ func (a *App) ckEditBlock(c *ui.Context, pal *palette, it session.AttentionItem)
 	// not the file's, so it reads above the block, as text, and the block
 	// holds only the file (Mac round 4, visual S3). Its rows count as shown
 	// with the first row of the body.
-	lead := 0
-	if e := ck.edit; e != nil && e.requestID == it.RequestID && e.body != nil && e.body.Tool == "Write" {
-		for lead < len(view.Lines) && view.Lines[lead].Kind == editreview.KindHead {
-			lead++
+	write := false
+	if e := ck.edit; e != nil && e.requestID == it.RequestID && e.body != nil {
+		write = e.body.Tool == "Write"
+	}
+	leadOf := func(v CkEditView) int {
+		n := 0
+		for write && n < len(v.Lines) && v.Lines[n].Kind == editreview.KindHead {
+			n++
 		}
-		if lead > 0 {
-			var words []string
-			for _, l := range view.Lines[:lead] {
-				words = append(words, strings.TrimSpace(l.Text))
-			}
-			ui.Text(c, strings.Join(words, " ")).FontSize(fsBody).TextColor(pal.textMuted)
+		return n
+	}
+	if lead := leadOf(view); lead > 0 {
+		var words []string
+		for _, l := range view.Lines[:lead] {
+			words = append(words, strings.TrimSpace(l.Text))
 		}
+		ui.Text(c, strings.Join(words, " ")).FontSize(fsBody).TextColor(pal.textMuted)
 	}
 	box := ui.Column(c.Key("edit-box")).Radius(rControl).Background(ckCodeBg(pal)).Clip()
 	b := box.Bounds()
-	ck.editBoxW = b.W
+	if b.W != ck.editBoxW {
+		// The box has a new width: count at it in this frame. With the
+		// last frame's width, the first frame the box had a width drew
+		// "too narrow" and asked for no frame, so a short edit was counted
+		// a frame later than its body showed, and in a window that builds
+		// frames only on input it kept its Allow hidden (Mac round 5,
+		// visual M1).
+		ck.editBoxW = b.W
+		width = 0
+		if b.W > 0 && cell > 0 {
+			width = int((b.W - 2*sp3 - ckEditGutter) / cell)
+		}
+		view = a.ckEditView(it, width)
+	}
+	lead := leadOf(view)
 	box.Children(func() {
 		switch {
 		case b.W <= 0:
