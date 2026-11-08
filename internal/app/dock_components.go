@@ -229,6 +229,19 @@ func (m *OS) dockCustomCell(name string) string {
 		// explanation is the key the explanation names, so the button and the
 		// chord teach each other.
 		text = "?"
+		if m.helpControlLit() {
+			// On while the explanation is up, the way a selected tab carries
+			// its ground: the bar says where the pane came from and how to put
+			// it away. bg as the ink, because accent is the ground it sits on.
+			pal := m.groundUI()
+			if accent := theme.ConfigColorOn("accent", &pal); overlay.CurrentDepth() == overlay.Depth16 || accent == nil || overlay.IsNoColor(accent) {
+				// At 16 colours there is no accent ground to give, so the
+				// state goes through the attribute: reverse turns the cell
+				// into the bar's ink, the same trick a chip on a slot uses.
+				return overlay.Style(pal.Panel).Reverse(true).Bold(true).Render(" " + text + " ")
+			}
+			return renderDockCell(text, config.DockCellStyle{Bg: "accent", Fg: "bg", Bold: true}, pal)
+		}
 	}
 	if text == "" {
 		return ""
