@@ -108,6 +108,17 @@ func (m *OS) RestoreWindow(i int) {
 			return
 		}
 
+		// A pane minimized through the daemon (set-window --minimize) or
+		// before any client laid it out has no box saved, and the animation
+		// below grew it to 0x0: the pane was restored and drew nothing. It
+		// gets the box a new pane gets. Its own box is no answer: the daemon
+		// gives every pane made with no client the same box, so a restore
+		// there put it exactly on top of another pane. The placement skips
+		// minimized panes, this one included, and steps off a taken corner.
+		if window.PreMinimizeWidth <= 0 || window.PreMinimizeHeight <= 0 {
+			window.PreMinimizeX, window.PreMinimizeY, window.PreMinimizeWidth, window.PreMinimizeHeight = m.NewWindowPlacement()
+		}
+
 		// Non-tiling mode: create smooth animation to PreMinimize position
 		// Create and start animation
 		anim := m.CreateRestoreAnimation(i)

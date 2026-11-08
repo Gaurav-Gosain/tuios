@@ -945,7 +945,24 @@ func (m *OS) sidebarSwitchSession(sessionID string) {
 // focus is still wherever it was. A caller building anything about "the pane"
 // afterwards has to ask, or it is building it about the pane the user was on
 // before they pointed at this row.
+//
+// A minimized pane is restored as well (issue 1730): the row is where the
+// person looks for an agent that needs them, and a focus on a pane that
+// stays hidden looks like the click did nothing.
 func (m *OS) sidebarFocusWindow(hit sidebarRowHit) (idx int, ok bool) {
+	return m.sidebarPickWindow(hit, true)
+}
+
+// sidebarPickWindow is sidebarFocusWindow. With restore false a minimized
+// pane takes the focus and stays minimized, for the row's context menu,
+// which is about the pane and is not a request to show it.
+func (m *OS) sidebarPickWindow(hit sidebarRowHit, restore bool) (idx int, ok bool) {
+	focus := func(i int) {
+		if restore && m.Windows[i].Minimized {
+			m.RestoreWindow(i)
+		}
+		m.FocusWindow(i)
+	}
 	m.clearSidebarReturn() // picking a pane is the whole point; esc must not undo it
 	// Whichever way this resolves, a pane picked off the rail is brought fully
 	// into view in the scrolling layout. Both the click and the keyboard reach
@@ -965,13 +982,13 @@ func (m *OS) sidebarFocusWindow(hit sidebarRowHit) (idx int, ok bool) {
 	// built on top of it would then offer to close that one instead.
 	if hit.WindowID != "" {
 		if idx := m.windowIndexByID(hit.WindowID); idx >= 0 {
-			m.FocusWindow(idx)
+			focus(idx)
 			return idx, true
 		}
 	}
 	// WindowIndex still answers for a row with no ID to match on.
 	if hit.WindowID == "" && hit.WindowIndex >= 0 && hit.WindowIndex < len(m.Windows) {
-		m.FocusWindow(hit.WindowIndex)
+		focus(hit.WindowIndex)
 		return hit.WindowIndex, true
 	}
 	// Window of another session: switch first, then focus by ID.
@@ -981,7 +998,7 @@ func (m *OS) sidebarFocusWindow(hit sidebarRowHit) (idx int, ok bool) {
 		}
 	}
 	if idx := m.windowIndexByID(hit.WindowID); idx >= 0 {
-		m.FocusWindow(idx)
+		focus(idx)
 		return idx, true
 	}
 	return -1, false
@@ -1049,7 +1066,7 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 		// out of the model would have offered the previous pane's rows under the
 		// title of the row that was clicked, and its close row would have closed
 		// that one. The failure has already said what happened.
-		idx, ok := m.sidebarFocusWindow(hit)
+		idx, ok := m.sidebarPickWindow(hit, false)
 		if !ok {
 			m.CloseContextMenu()
 			return

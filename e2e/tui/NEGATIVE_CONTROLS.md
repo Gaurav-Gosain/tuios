@@ -14965,3 +14965,21 @@ Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
 | main at 6db1de3ed | "the hold key borrowed window mode while already in it" (dock shows HOLD and 1:3) | **caught** |
+
+## TestRailClickRestoresAMinimizedAgent
+
+Issue 1730. An agent pane minimized with `set-window --minimize`, then a
+click on its row in the rail's agents section. The click only focused the
+pane, which stayed minimized. A restore of a pane minimized through the
+daemon also grew it to 0x0, because the client had no box saved for it, so
+the test asks for a size as well. Both panes are made with no client
+attached, where the daemon gives them one box, so the test also asks that
+the restored pane does not land on the other pane's corner.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| main at 6db1de3ed | "the click restored and focused the agent pane: AGENTONE never matched" (focused, still minimized) | **caught** |
+| The zero-box placement cut from `RestoreWindow` | the same (restored, 0x0) | **caught** |
+| The pane keeps the box it has instead of a new pane's box | "the restored pane sits on the other pane's corner (51,8)" | **caught** |
