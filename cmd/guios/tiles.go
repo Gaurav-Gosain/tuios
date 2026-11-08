@@ -380,6 +380,17 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 		}
 	}
 	moving := left > 0
+	tilesMoving.Store(moving)
+	if b.W > 0 && zoomed == "" && len(hidden) == 0 && g == nil {
+		// The end boxes' grids go out as the move begins, not its first
+		// frame's (end_lease.go); a frame at rest teaches the math.
+		if !moving {
+			a.learnTiles(c, s.ID, target, ew, eh, right)
+		}
+		if !a.side.sliding && a.slides[s.ID] == nil {
+			a.sendEndGrids(s.ID, target, ew, eh, right)
+		}
+	}
 	if moving {
 		c.AnimationFrame()
 	} else if a.motion.moved {
@@ -441,6 +452,9 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 		}
 	}
 	area.Children(func() {
+		// The window's scale, which turns DIPs into the pixels a
+		// terminal lays its cells in (end_lease.go).
+		ui.Box(c.Key("scale")).Absolute().Size(1, 1).PassThrough().Draw(func(p *ui.Painter, _ ui.Rect) { a.lease.scale = p.Scale() })
 		for _, id := range order {
 			p := s.PaneByID(id)
 			if g != nil && id == g.id {

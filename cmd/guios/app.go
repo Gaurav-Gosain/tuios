@@ -115,6 +115,7 @@ type App struct {
 	sbSeen   map[[2]string]int
 	// motion notes what moves the panes from frame to frame (motion.go).
 	motion motionWatch
+	lease  leaseMath // turns the tiles' end boxes into grids (end_lease.go)
 	// usage is the last reading of the resource views, usageOpen whether
 	// the sidebar's usage panel shows, and sampler what reads them
 	// (usage.go).
@@ -489,6 +490,9 @@ func (a *App) setState(h *host, st proto.State) {
 	a.mergeState(h, st)
 	a.loaded = true
 	a.adoptDaemonFocus(prevFocus)
+	if !h.remote() || a.hostOf(a.selected) == h {
+		a.stateEndGrids(a.session(a.selected))
+	}
 	if !h.remote() {
 		a.followPanes()
 	}
@@ -843,6 +847,13 @@ type gated struct {
 	// sent (sendPast): they go to the pane as they are.
 	mu   sync.Mutex
 	past [][]byte
+
+	// lastSent is the size last asked of the daemon, end the pane's end
+	// grid (end_lease.go) and endAt when it was sent.
+	lmu      sync.Mutex
+	lastSent [4]int
+	end      [4]int
+	endAt    time.Time
 }
 
 // Write sends what the terminal writes to the pane, but for the text of a
@@ -950,6 +961,7 @@ func (a *App) ensureTerm(id string) {
 				return
 			}
 			e.term, e.stream, e.gate = term, stream, g
+			a.attachedEnd(id, g)
 			a.flushTypeahead(id, e)
 			if a.selected == id {
 				a.focusTerminal()

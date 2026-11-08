@@ -32,8 +32,14 @@ func paneTransition(id string) ui.ElementTransition {
 var leaseHold struct {
 	mu      sync.Mutex
 	until   time.Time
-	pending map[*gated][4]int
+	pending map[*gated]heldAsk
 	timer   *time.Timer
+}
+
+// heldAsk is a terminal's ask held, and whether a frame at rest made it.
+type heldAsk struct {
+	l    [4]int
+	rest bool
 }
 
 // holdLeases holds the panes' size leases for d from now, or longer if a
@@ -76,16 +82,16 @@ const leaseSettle = 40 * time.Millisecond
 
 // heldLease keeps the lease of g while a hold runs, and reports whether it
 // did.
-func heldLease(g *gated, l [4]int) bool {
+func heldLease(g *gated, l [4]int, rest bool) bool {
 	leaseHold.mu.Lock()
 	defer leaseHold.mu.Unlock()
 	if !time.Now().Before(leaseHold.until) {
 		return false
 	}
 	if leaseHold.pending == nil {
-		leaseHold.pending = map[*gated][4]int{}
+		leaseHold.pending = map[*gated]heldAsk{}
 	}
-	leaseHold.pending[g] = l
+	leaseHold.pending[g] = heldAsk{l, rest}
 	return true
 }
 
@@ -100,18 +106,26 @@ func flushLeases() {
 	held := leaseHold.pending
 	leaseHold.pending = nil
 	leaseHold.mu.Unlock()
-	for g, l := range held {
-		_ = g.Stream.ResizePixels(l[0], l[1], l[2], l[3])
+	for g, h := range held {
+		l := h.l
+		if end, ok := g.endFor(); ok && !h.rest {
+			// Asked from a frame of the move: the pane's end grid,
+			// sent as the move began, stands (end_lease.go).
+			l = end
+		}
+		_ = g.send(l)
 	}
 }
 
 // ResizePixels asks for the pane at the view's size, unless the layout
 // moves: then the last size asked for goes out as the move ends.
 func (g *gated) ResizePixels(cols, rows, cellW, cellH int) error {
-	if heldLease(g, [4]int{cols, rows, cellW, cellH}) {
+	noteCell(cellW, cellH)
+	l := [4]int{cols, rows, cellW, cellH}
+	if heldLease(g, l, !tilesMoving.Load()) {
 		return nil
 	}
-	return g.Stream.ResizePixels(cols, rows, cellW, cellH)
+	return g.send(l)
 }
 
 // motionWatch notes what lays out the panes shown from frame to frame, and
