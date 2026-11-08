@@ -465,7 +465,14 @@ func (a *App) ckHoldGroup(c *ui.Context, key string, want int, st proto.Status, 
 // its state, or while its row's move to a new group waits, the state of
 // the group it is still shown in (ckHoldGroup).
 func (a *App) ckShownStatus(ag client.Agent, it *session.AttentionItem) (proto.Status, bool) {
-	if p, ok := a.ck.placed[ag.Key()]; ok && p.shown != p.want && p.st != "" {
+	p, ok := a.ck.placed[ag.Key()]
+	if !ok || p.st == "" || !a.ck.open {
+		// The view is shut: no row waits to move.
+		return ckStatus(ag, it)
+	}
+	// The rail draws before the view places its rows: a move the view will
+	// start in this frame holds already.
+	if want := ckShownGroup(ag, it, time.Now()); p.shown != p.want || want != p.want && want != ckNeeds {
 		return p.st, p.unread
 	}
 	return ckStatus(ag, it)
