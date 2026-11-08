@@ -878,8 +878,10 @@ func blockerOverridesClaim(w *WindowState, r AgentReport, claim agentClaim, now 
 	// describing the new screen, so it gets no grace. It is what a rest glyph
 	// in the title or a cleared progress bar leaves behind, and waiting two
 	// seconds on it meant the one look that sees the prompt, the settle look,
-	// was always too early and nothing else looked again.
-	if w.AgentState == AgentStateIdle || w.AgentState == AgentStateUnknown {
+	// was always too early and nothing else looked again. Done is at rest
+	// too: a turn's Stop said it, and Claude Code then draws a form (Teach
+	// auto mode about your environment?) that no hook reports.
+	if w.AgentState == AgentStateIdle || w.AgentState == AgentStateUnknown || w.AgentState == AgentStateDone {
 		return true
 	}
 	return now.UnixNano()-w.AgentStateAt >= int64(agentBlockerOverrideGrace)

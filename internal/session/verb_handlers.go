@@ -2363,6 +2363,9 @@ func (d *Daemon) verbGetAgentState(cs *connState, params json.RawMessage) (any, 
 		// where the kind a hook reported with set-agent-state reads back.
 		"ready":      d.agentReady(w, agentRestStates),
 		"blocked_by": agentBlockedBy(w),
+		// waits_on is what a done or idle agent still runs, such as "1
+		// background shell", from its screen; empty otherwise.
+		"waits_on": agentWaitsOn(w),
 		// The harness's own conversation id, empty until a hook reports one.
 		"agent_session_id": w.AgentSessionID,
 		// meta is what set-agent-meta recorded, key to value.

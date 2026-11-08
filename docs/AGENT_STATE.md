@@ -275,6 +275,19 @@ allowing, proceeding, confirming or trust reads as `approval`, anything else as
 `question`. An empty message gives an empty `blocked_by`, which means the
 source did not say.
 
+Both verbs report `waits_on` for a pane at rest (done or idle): what the agent
+still runs after its turn, read from its screen, such as `1 background shell`
+from Claude Code's footer (`1 shell, 1 monitor`). The state stays done; the
+note says the agent has not finished everything it started. A manifest names
+what it reads in `[[screen.waits_on]]` entries: a `region`, a `regex` whose
+first group is the count, and `what` it counts, in the singular. It is empty
+in every other state.
+
+A form Claude Code draws over its input box, such as "Teach auto mode about
+your environment?", reads `needs_input` from the screen: no hook reports it,
+and it takes the place of the done the turn's Stop reported, at once, since
+done is a resting claim. It goes back when the form is gone.
+
 Both verbs report `ready`, which is whether `ask-agent` would type at the pane
 now: true for `idle`, `done`, `errored` and `none`. It is false for
 `needs_input`: an agent there is waiting on a prompt, text typed at it answers
@@ -1347,6 +1360,7 @@ region:
 | `prompt_box` (or `prompt_box_body`) | The lines between the last two border lines of the tail |
 | `above_prompt_box`                | Everything in the tail above that box                   |
 | `last_non_empty_above_prompt_box` | The one non-empty line just above that box              |
+| `framed_above_prompt_box`         | The block just above that box, from the border line before it (or the top of the tail) to the box's top border: a form drawn over the input box |
 | `after_last_horizontal_rule`      | Everything in the tail under the last border line       |
 
 A border line is a run of at least three box-drawing dashes (`─` or `━`),

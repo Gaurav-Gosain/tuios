@@ -15712,3 +15712,25 @@ Run on 2026-11-08 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAskAgentReadsAFullScreenAgentsReply$' -v .`.
+
+## TestABlockingFormOutranksADoneReport
+
+Orchestration gap G2. A stand-in for Claude Code with auto mode on, run as
+`claude`, ends a turn with a Stop hook (done), then draws over its input box
+the "Teach auto mode about your environment?" form, line for line as captured
+from two blocked workers, with the footer that counts `1 shell, 1 monitor`. No
+hook fires for the form. The pane must read needs_input with the form's
+question as its message, show no `waits_on` while blocked, and once Esc
+closes the form be at rest (done or idle) with `waits_on: 1 background shell`.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes, 10 of 10 under load.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (81b39daae) | "with the form over the input box the pane reads done (report, \"Done with it.\"), want needs_input" | **caught** |
+| A done claim keeps its 2 s grace (`AgentStateDone` cut from the rest states in blockerOverridesClaim) | the same | **caught** |
+| The form rule reads `after_last_horizontal_rule`, as the older form rule does | the same | **caught** |
+| No `[[screen.waits_on]]` match (the shell pattern broken) | "a pane at rest whose footer counts a shell reads done with waits_on , want ... \"1 background shell\"" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestABlockingFormOutranksADoneReport$' -v .`.

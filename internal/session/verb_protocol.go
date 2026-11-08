@@ -2683,6 +2683,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "activity", Type: "string", Description: "The state in one word: working, waiting, resting, unknown or none."},
 				{Name: "ready", Type: "bool", Description: "Whether ask-agent would type at the pane now."},
 				{Name: "blocked_by", Type: "string", Description: "approval or question for a pane on needs_input, empty otherwise."},
+				{Name: "waits_on", Type: "string", Description: "What a done or idle agent still runs after its turn, read from its screen, such as 1 background shell. Empty otherwise."},
 				{Name: "agent_session_id", Type: "string", Description: "The harness's own conversation id, empty until a hook reports one."},
 				{Name: "meta", Type: "object", Description: "The set-agent-meta keys, key to value."},
 				{Name: "queued", Type: "int", Description: "How many messages wait in the pane's delivery queue."},

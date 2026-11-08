@@ -190,6 +190,11 @@ type WindowState struct {
 	// meaningless in any other state. Daemon-owned like AgentState, and empty in
 	// older state, which reads as "not said".
 	AgentKind string `json:"agent_kind,omitempty"`
+	// AgentWaitsOn is what the pane's screen says its agent still runs after
+	// its turn, such as "1 background shell" (harness waits_on). It is read
+	// on each screen look and shown only beside done and idle; see
+	// agentWaitsOn.
+	AgentWaitsOn string `json:"agent_waits_on,omitempty"`
 	// AgentReason is why the state a reader is shown differs from AgentState,
 	// empty when it does not. The one value is AgentReasonSilent: a pane whose
 	// hooks reported working and then stopped reporting, shown as unknown

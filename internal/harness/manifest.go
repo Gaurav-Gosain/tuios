@@ -211,6 +211,9 @@ type Screen struct {
 	// other rule reads.
 	Lines int          `toml:"lines"`
 	Rule  []ScreenRule `toml:"rule"`
+	// WaitsOn reads what an agent at rest still waits on, such as a
+	// background shell; see waits_on.go.
+	WaitsOn []WaitsOn `toml:"waits_on"`
 
 	// order is the rule indices highest priority first, ties in declaration
 	// order, so a scan can stop at the first rule that matches. Filled by
@@ -379,6 +382,9 @@ func parseManifest(name string, data []byte) (*Manifest, error) {
 		if err := m.Screen.Rule[i].check("screen", screenStates, m.Screen.FoldCase, m.Screen.Lines, &budget); err != nil {
 			return nil, errfmt.Errorf("%s: manifest %q screen rule %d: %w", name, m.ID, i, err)
 		}
+	}
+	if err := checkWaitsOn(m.Screen.WaitsOn); err != nil {
+		return nil, errfmt.Errorf("%s: manifest %q screen: %w", name, m.ID, err)
 	}
 	for i := range m.Title.Rule {
 		if err := m.Title.Rule[i].check("title", screenStates, m.Title.FoldCase, 0, &budget); err != nil {

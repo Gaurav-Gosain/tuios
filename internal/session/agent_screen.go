@@ -227,3 +227,37 @@ func (p *PTY) stopScreenSettle() {
 		p.screenSettle = nil
 	}
 }
+
+// noteAgentWaitsOn records what window's screen says its agent still runs
+// after its turn. It changes the state only when the words change, so a look
+// on every keystroke costs no state version.
+func (s *Session) noteAgentWaitsOn(windowID, waits string) {
+	s.stateMu.RLock()
+	same := false
+	if w, ok := findWindowState(s.state, windowID); ok {
+		same = w.AgentWaitsOn == waits
+	}
+	s.stateMu.RUnlock()
+	if same {
+		return
+	}
+	_ = s.mutateState(func(st *SessionState) error {
+		i, err := findWindowStateIndex(st.Windows, windowID)
+		if err != nil || st.Windows[i].AgentWaitsOn == waits {
+			return errNoTaskMove
+		}
+		st.Windows[i].AgentWaitsOn = waits
+		return nil
+	})
+}
+
+// agentWaitsOn is what a reader is told the agent still waits on: the
+// screen's count, beside a done or idle state only, since a working agent is
+// at it already and a blocked one needs the person first.
+func agentWaitsOn(w WindowState) string {
+	switch w.ShownAgentState() {
+	case AgentStateDone, AgentStateIdle:
+		return w.AgentWaitsOn
+	}
+	return ""
+}

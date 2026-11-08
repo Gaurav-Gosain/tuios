@@ -255,6 +255,7 @@ func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now i
 			"seen":           seen[w.ID],
 			"ready":          d.agentReady(w, agentRestStates),
 			"blocked_by":     agentBlockedBy(w),
+			"waits_on":       agentWaitsOn(w),
 			"needs_you":      w.AgentState.NeedsYou(),
 			"confidence":     claim.identity.confidence(),
 			// identity is the tier confidence is read from: report, manifest,

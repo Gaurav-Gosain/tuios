@@ -138,6 +138,7 @@ func (s *Session) lookAtPane(ptyID string, reg *harness.Registry, look paneLook)
 	}
 	screenLooked := false
 	if look.screen {
+		s.noteAgentWaitsOn(winID, reg.WaitsOn(hid, pty.tailText(reg.ScreenLines(hid))))
 		screen, screenLooked = screenVerdict(pty, hid, reg)
 		if screenLooked && !screen.ok {
 			// Nothing on the screen now, so any claim a blocker or an idle
