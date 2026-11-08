@@ -161,6 +161,60 @@ func (rs *remoteHoldSet) note(window string, h remoteHold, held bool) {
 	rs.m[window] = out
 }
 
+// far is every hold on another machine, for the handoff manifest.
+func (rs *remoteHoldSet) far() []handoffFarHold {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	var out []handoffFarHold
+	for window, list := range rs.m {
+		for _, h := range list {
+			if h.host != "" {
+				out = append(out, handoffFarHold{Window: window, Host: h.host, Session: h.session, ID: h.id})
+			}
+		}
+	}
+	return out
+}
+
+// rebuildTaskHolds notes again, from the cards, what only memory kept beside
+// them: each card a pane of another local session holds (remoteHolds), and
+// each card auto runs, which its cap counts. A live upgrade keeps every
+// holder but not that memory. A cold start lets every holder go, so it
+// finds nothing. The holds on other machines come from the handoff manifest.
+func (d *Daemon) rebuildTaskHolds() {
+	far := d.farHosts()
+	for _, sess := range d.manager.AllSessions() {
+		st := sess.GetState()
+		if st == nil {
+			continue
+		}
+		for _, tk := range st.Tasks {
+			if tk.Holder == "" {
+				continue
+			}
+			peer, _, remote := splitRemoteHolder(tk.Holder)
+			if !remote {
+				if other := d.sessionOfWindow(tk.Holder); other != "" && other != sess.Name() {
+					d.remoteHolds.note(tk.Holder, remoteHold{session: sess.Name(), id: tk.ID}, true)
+				}
+			}
+			board := dispatchBoardKey(sess.Name(), tk.Project)
+			if !tk.Dispatched || tk.Stage == TaskStageDone || !d.dispatch.isMode(board, DispatchAuto) {
+				continue
+			}
+			// A far holder is named by the name its machine gives itself;
+			// the cap per machine counts by the [hosts] name.
+			host := peer
+			if remote && !slices.Contains(far, peer) {
+				if h, ok := d.verifyPeers.Load(peer); ok {
+					host, _ = h.(string)
+				}
+			}
+			d.auto.noteRun(autoKey(sess.Name(), tk.ID), autoRun{board: board, host: host})
+		}
+	}
+}
+
 // take removes and returns what window holds.
 func (rs *remoteHoldSet) take(window string) []remoteHold {
 	rs.mu.Lock()

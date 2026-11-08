@@ -60,6 +60,16 @@ type autoRun struct {
 	starting    bool
 }
 
+// noteRun records run for key, as a run auto started.
+func (a *autoState) noteRun(key string, run autoRun) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.runs == nil {
+		a.runs = map[string]autoRun{}
+	}
+	a.runs[key] = run
+}
+
 // autoCard is one open card of an auto board.
 type autoCard struct {
 	sess                                  *Session

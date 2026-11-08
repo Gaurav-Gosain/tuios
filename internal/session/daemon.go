@@ -1714,6 +1714,9 @@ func (d *Daemon) loadStores(adopted bool) {
 	for _, s := range d.manager.AllSessions() {
 		d.resumeVerifies(s)
 	}
+	// What only memory held beside the cards, after the boards are read
+	// and before auto runs.
+	d.rebuildTaskHolds()
 	d.kickAuto()
 	// Review notes come back for the panes that came back.
 	d.reviewNotes.load(reviewNotesPath(), func(window string) bool { return d.sessionOfWindow(window) != "" })

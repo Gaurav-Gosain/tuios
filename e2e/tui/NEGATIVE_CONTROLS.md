@@ -15272,3 +15272,25 @@ working again (unblockErrored).
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAutoDispatchFailedStartsLeaveNothingBehind$' -v .`.
+
+## Task holds across a live upgrade
+
+State machine plan S3, PR 1 (notes/sm2/design-S3.md, H1 to H3).
+`TestAutoCardsKeepTheirHoldsAcrossALiveUpgrade`: an auto board with a cap of
+one runs an agent on t1 in its worktree session; after `tuios daemon upgrade`
+a new card must start no second agent, and the agent's pane closing must let
+t1 go and start t2. `TestAFarCardIsLetGoAfterALiveUpgrade`: home's auto board
+starts t1's agent on build; build is upgraded live; closing the pane on build
+must let t1 go on home.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes both.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (00e7a586a) | "2 auto worktree sessions after the upgrade, want 1", "t1 was not let go when its agent's pane closed after the upgrade"; "t1 on home was not let go when its pane on build closed after build's upgrade" | **caught** |
+| No rebuild of the cross-session holds (the remoteHolds note in rebuildTaskHolds cut) | "t1 was not let go when its agent's pane closed after the upgrade" | **caught** |
+| No rebuild of auto's runs (the noteRun call cut) | "2 auto worktree sessions after the upgrade, want 1" | **caught** |
+| The far holds not read from the manifest | "t1 on home was not let go when its pane on build closed after build's upgrade" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestAutoCardsKeepTheirHoldsAcrossALiveUpgrade|TestAFarCardIsLetGoAfterALiveUpgrade)$' -v .`.

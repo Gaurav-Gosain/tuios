@@ -205,6 +205,9 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 	_ = os.Unsetenv(handoffKeptEnv)
 	d.lastHandoff.Store(&stats)
 
+	for _, h := range m.Daemon.FarHolds {
+		d.remoteHolds.note(h.Window, remoteHold{host: h.Host, session: h.Session, id: h.ID}, true)
+	}
 	d.loadStores(true)
 	d.serve()
 	// A delegated child that finished while the daemon was handed over is

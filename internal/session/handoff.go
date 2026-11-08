@@ -452,6 +452,7 @@ func (r *handoffRun) writeManifest(sessions []*Session, refs []handoffPaneRef) e
 		Fallback:     r.prev.path,
 		FallbackFD:   r.prev.fd(),
 		Stats:        r.stats,
+		FarHolds:     d.remoteHolds.far(),
 	}
 	if dr.FallbackFD >= 0 {
 		r.fds = append(r.fds, dr.FallbackFD)
