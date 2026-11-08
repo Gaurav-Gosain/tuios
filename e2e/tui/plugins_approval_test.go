@@ -358,8 +358,11 @@ func TestNativePluginApproval(t *testing.T) {
 		screen, _ := tuiosCLI(t, base, "capture-pane", "-s", "work", "-w", w)
 		_ = os.WriteFile(filepath.Join(art, "race-"+name+".txt"), []byte(screen), 0o644)
 		// The command line holds approved:[$y] once. An answer prints a
-		// second approved:[.
-		if strings.Count(screen, "approved:[") > strings.Count(screen, "approved:[$y]") {
+		// second approved:[. The pane wraps the command line where its width
+		// falls, which depends on the length of the tuios path in it, so the
+		// marks are counted on the text with the wraps taken out.
+		joined := strings.ReplaceAll(screen, "\n", "")
+		if strings.Count(joined, "approved:[") > strings.Count(joined, "approved:[$y]") {
 			t.Errorf("the submit key of %s answered the prompt that came up during the paste:\n%s", name, screen)
 		}
 	}
