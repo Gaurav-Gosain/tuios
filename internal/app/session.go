@@ -1011,8 +1011,9 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 		m.adoptSyncedWindows(created, removed, placed, focusBefore)
 	case placed:
 		// Untiled, so there is nothing to retile, but the geometry this client
-		// just chose is news to the daemon.
-		m.RecalcZOrder()
+		// just chose is news to the daemon. A new TML surface goes in front,
+		// even when the focus stays where it was.
+		m.RaiseNewSurfaces(placedWindows)
 		m.SyncStateToDaemon()
 	}
 
