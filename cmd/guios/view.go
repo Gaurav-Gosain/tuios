@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Gaurav-Gosain/mygo/plugins/glass"
 	"github.com/Gaurav-Gosain/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/actions"
@@ -454,7 +453,7 @@ func rowTooltip(c *ui.Context, el ui.Element, key, s string) {
 }
 
 // railFade is the height of the fade at the rail list's foot.
-const railFade = 24
+const railFade = 32
 
 // rowTipMax is the widest line of a row's tooltip.
 const rowTipMax = 360
@@ -518,7 +517,7 @@ func (a *App) sidebar(c *ui.Context, pal *palette, bar ui.TitleBar) {
 			a.newSessionRow(c, pal)
 		})
 		ui.Box(c.Key("rail-fade")).Absolute().Left(0).Right(0).Bottom(0).Height(railFade).PassThrough().
-			Material(glass.ScrollEdge{Bottom: true, Background: pal.sidebar})
+			LinearGradient(ui.LinearGradient{Angle: 180, From: pal.sidebar.Alpha(0), To: pal.sidebar})
 	})
 	// The copies between machines stay in view under the list.
 	ui.Column(c.Key("xfers")).Padding(0, 10, 0, 10).Shrink(0).Children(func() { a.transfersSection(c, pal) })
