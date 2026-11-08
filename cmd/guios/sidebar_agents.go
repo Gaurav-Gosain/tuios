@@ -62,49 +62,16 @@ func (a *App) sessionAgents(s *proto.Session, needs []ckNeed) []sbAgent {
 			out = append(out, sbAgent{i: i, need: byAgent[i]})
 		}
 	}
-	// In the session's layout order, the order of its panes, whatever
+	// In the order the tiles show them, as the shells' rows, whatever
 	// their state: a state change never moves a row (DESIGN.md, principle
 	// 3). Needs you at the top of the rail points to the agents that wait;
 	// their rows here keep their place, with their mark (Mac round 1, feel
 	// S2, visual S5).
-	pos := map[string]int{}
-	for k, p := range s.Panes {
-		pos[p.ID] = k
-	}
-	for k, p := range s.Others {
-		pos[p.ID] = len(s.Panes) + k
-	}
+	pos := paneRank(s)
 	sort.SliceStable(out, func(x, y int) bool {
 		return pos[ck.agents[out[x].i].Window] < pos[ck.agents[out[y].i].Window]
 	})
 	return out
-}
-
-// agentRows draws a session's agent rows.
-func (a *App) agentRows(c *ui.Context, pal *palette, s *proto.Session, needs []ckNeed) {
-	rows := a.sessionAgents(s, needs)
-	if len(rows) == 0 {
-		return
-	}
-	ui.Column(c.Key("agents-"+s.ID)).Margin(0, 0, 4, 0).Children(func() {
-		for k, r := range rows {
-			if k == sbAgentsMax {
-				more := ui.Row(c.Key("more")).Height(sbMoreH).Padding(0, 10, 0, rowInset+24).AlignItems(ui.Center).Radius(rRow).Cursor(ui.CursorPointer)
-				if more.Hovered() {
-					more.Background(pal.rowHover)
-				}
-				if more.Clicked() {
-					c.Invalidate()
-					a.showInCockpit("")
-				}
-				more.Children(func() {
-					ui.Text(c, locales.SidebarMoreAgents(len(rows)-sbAgentsMax)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine()
-				})
-				return
-			}
-			a.agentRow(c, pal, a.ck.agents[r.i], r.need)
-		}
-	})
 }
 
 // agentRow is one agent: under its session, or in Needs you. Line 1 is

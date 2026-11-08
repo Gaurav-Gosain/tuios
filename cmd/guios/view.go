@@ -873,8 +873,7 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int, 
 		}
 	})
 	a.workspaceBar(c, pal, s)
-	a.paneRows(c, pal, s)
-	a.agentRows(c, pal, s, a.sbNeeds)
+	a.railRows(c, pal, s)
 }
 
 // renameStarted keeps a rename from ending in the frame it began in,

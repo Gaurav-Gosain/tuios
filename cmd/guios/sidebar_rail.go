@@ -119,12 +119,13 @@ func (a *App) moreRow(c *ui.Context, pal *palette, key, label string, fn func())
 	})
 }
 
-// paneRows lists a session's panes that run no agent (the agent rows list
-// those), when it has more than one: what runs in each and where, as the
-// TUI rail's terminals. A click goes to the pane.
-func (a *App) paneRows(c *ui.Context, pal *palette, s *proto.Session) {
+// shellPanes are a session's panes that run no agent (the agent rows list
+// those), when it has more than one, in the order the tiles show them, and
+// the detail each row says: what runs in each and where, as the TUI rail's
+// terminals.
+func (a *App) shellPanes(s *proto.Session) ([]*proto.Pane, []string) {
 	if len(s.Panes)+len(s.Others) < 2 {
-		return
+		return nil, nil
 	}
 	agents := map[string]bool{}
 	for _, r := range a.sessionAgents(s, a.sbNeeds) {
@@ -163,7 +164,7 @@ func (a *App) paneRows(c *ui.Context, pal *palette, s *proto.Session) {
 		}
 	}
 	if len(panes) == 0 {
-		return
+		return nil, nil
 	}
 	// Panes that would read the same, as three shells, get a detail:
 	// their folder within the session's, else their number, as the
@@ -185,20 +186,71 @@ func (a *App) paneRows(c *ui.Context, pal *palette, s *proto.Session) {
 			details[k] += locales.SidebarPaneNumber(strconv.Itoa(nums[k]))
 		}
 	}
+	return panes, details
+}
+
+// railRows lists a session's panes under it, the agents' and the shells',
+// in one list in the order the tiles show them, left to right and top
+// down: an agent's row is not put after every shell (Mac round 4, feel
+// S3). A click goes to the pane, or for an agent to its place in the
+// agents view.
+func (a *App) railRows(c *ui.Context, pal *palette, s *proto.Session) {
+	agents := a.sessionAgents(s, a.sbNeeds)
+	panes, details := a.shellPanes(s)
+	if len(agents)+len(panes) == 0 {
+		return
+	}
+	pos := paneRank(s)
 	focus := s.Focus
 	if f := a.focus[s.ID]; f != "" {
 		focus = f
 	}
-	ui.Column(c.Key("panes-"+s.ID)).Margin(0, 0, 2, 0).Children(func() {
-		for k, p := range panes {
-			if k == sbPanesMax {
+	h := a.hostOf(s.ID)
+	ui.Column(c.Key("rail-"+s.ID)).Margin(0, 0, 4, 0).Children(func() {
+		i, j := 0, 0
+		for n := 0; i < len(agents) || j < len(panes); n++ {
+			if n == sbRailMax {
 				sid := s.ID
-				a.moreRow(c, pal, "panes-more", locales.SidebarMorePanes(len(panes)-sbPanesMax), func() { a.selectSession(sid) })
+				a.moreRow(c, pal, "rail-more", locales.SidebarMorePanes(len(agents)-i+len(panes)-j), func() { a.selectSession(sid) })
 				return
 			}
-			a.paneRow(c, pal, s, p, details[k], p.ID == focus && s.ID == a.selected, h)
+			if j >= len(panes) || i < len(agents) && pos[a.ck.agents[agents[i].i].Window] < pos[panes[j].ID] {
+				a.agentRow(c, pal, a.ck.agents[agents[i].i], agents[i].need)
+				i++
+				continue
+			}
+			p := panes[j]
+			a.paneRow(c, pal, s, p, details[j], p.ID == focus && s.ID == a.selected, h)
+			j++
 		}
 	})
+}
+
+// sbRailMax is how many rows a session lists under it before a row that
+// says how many more.
+const sbRailMax = sbPanesMax + sbAgentsMax
+
+// paneRank is each pane's place in the order the tiles show them; a pane
+// the layout does not hold, and the session's other panes, come after.
+func paneRank(s *proto.Session) map[string]int {
+	at := map[string]int{}
+	for k, id := range paneOrder(s) {
+		at[id] = k
+	}
+	n := len(at)
+	for _, p := range s.Panes {
+		if _, ok := at[p.ID]; !ok {
+			at[p.ID] = n
+			n++
+		}
+	}
+	for _, p := range s.Others {
+		if _, ok := at[p.ID]; !ok {
+			at[p.ID] = n
+			n++
+		}
+	}
+	return at
 }
 
 // paneFolder is a pane's folder within its session's, as "docs" or

@@ -548,10 +548,11 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 			} else if len(opts) == 0 && pk != nil && pk.loading && !held {
 				// Say what the card waits for, rather than show nothing
 				// (QM-004): the header's Open pane stays until it knows.
-				ui.Text(c, locales.CockpitReadingPrompt()).FontSize(fsSmall).TextColor(pal.textMuted).MaxLines(2).MinWidth(0)
-				// The row keeps a button's height while it reads, so the
+				// The note line takes its own row, as the one after the read
+				// does, and the row under it keeps a button's height, so the
 				// card does not grow under the pointer when the answers
-				// come (Mac round 1, feel S4).
+				// come (Mac round 1, feel S4; Mac round 4, feel S2).
+				ui.Text(c, locales.CockpitReadingPrompt()).FontSize(fsSmall).TextColor(pal.textMuted).MaxLines(2).MinWidth(0).FillWidth()
 				ui.Box(c).Size(0, hControl).Shrink(0)
 			} else if len(opts) == 0 && (pk == nil || !pk.loading) {
 				// Nothing here can answer it: say so, and offer the pane.
@@ -562,9 +563,9 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 				case a.ckHoldEnded(it):
 					// tuios read it: the hold ended, and "cannot read"
 					// said what was not so (Mac round 3, workflow S1).
-					ui.Text(c, locales.CockpitHoldEnded()).FontSize(fsSmall).TextColor(pal.textMuted).MaxLines(2).MinWidth(0)
+					ui.Text(c, locales.CockpitHoldEnded()).FontSize(fsSmall).TextColor(pal.textMuted).MaxLines(2).MinWidth(0).FillWidth()
 				case !a.ckApprovalsOff(it, ag):
-					ui.Text(c, locales.CockpitAnswerInPane()).FontSize(fsSmall).TextColor(pal.textMuted).MaxLines(2).MinWidth(0)
+					ui.Text(c, locales.CockpitAnswerInPane()).FontSize(fsSmall).TextColor(pal.textMuted).MaxLines(2).MinWidth(0).FillWidth()
 				}
 				a.ckApprovalsOffLine(c, pal, it, ag)
 				// The view's one primary is Send: this one is secondary.

@@ -31,7 +31,7 @@ func (a *App) ckApprovalsOffLine(c *ui.Context, pal *palette, it session.Attenti
 	if !a.ckApprovalsOff(it, ag) {
 		return
 	}
-	ui.Text(c, locales.CockpitApprovalsOff()).FontSize(fsSmall).TextColor(pal.textMuted).MaxLines(2).MinWidth(0)
+	ui.Text(c, locales.CockpitApprovalsOff()).FontSize(fsSmall).TextColor(pal.textMuted).MaxLines(2).MinWidth(0).FillWidth()
 	if sizedButton(c, "ans-approvals-on", locales.CockpitApprovalsTurnOn(), "", false, hControl, rControl, pal) {
 		a.ckTurnOnApprovals()
 	}
