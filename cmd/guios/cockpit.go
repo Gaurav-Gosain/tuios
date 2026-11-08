@@ -436,15 +436,7 @@ func (a *App) ckHoldGroup(c *ui.Context, key string, want int, st proto.Status, 
 	case !ok:
 		p = ckPlaced{shown: want, want: want, since: now}
 	case p.want != want:
-		// The hold counts from when the data that moves the row came, not
-		// from the frame that saw it: a window that builds frames only on
-		// input showed the old state after it was long gone (Mac round 5,
-		// workflow S1).
-		since := now
-		if at := ck.agentsAt; at.After(p.since) && at.Before(now) {
-			since = at
-		}
-		p.want, p.since = want, since
+		p.want, p.since = want, ck.moveSince(p, want, now)
 	}
 	if p.shown == ckNeeds && p.want != ckNeeds && ck.placedFree[key] {
 		// The person just answered it: out of Needs you in this frame, so
@@ -473,6 +465,20 @@ func (a *App) ckHoldGroup(c *ui.Context, key string, want int, st proto.Status, 
 	return p.shown
 }
 
+// moveSince is when the hold of a row's move to group want starts. The hold
+// counts from when the data that moves the row came, not from the frame
+// that saw it: a window that builds frames only on input showed the old
+// state after it was long gone (Mac round 5, workflow S1).
+func (ck *cockpit) moveSince(p ckPlaced, want int, now time.Time) time.Time {
+	if p.want == want {
+		return p.since
+	}
+	if at := ck.agentsAt; at.After(p.since) && at.Before(now) {
+		return at
+	}
+	return now
+}
+
 // ckSilent reports whether ag stopped reporting while it worked: the daemon
 // shows it as unknown with the reason silent, and its last report was
 // working.
@@ -494,8 +500,11 @@ func (a *App) ckShownStatus(ag client.Agent, it *session.AttentionItem) (proto.S
 		return ckStatus(ag, it)
 	}
 	// The rail draws before the view places its rows: a move the view will
-	// start in this frame holds already.
-	if want := ckShownGroup(ag, it, time.Now()); p.shown != p.want || want != p.want && want != ckNeeds {
+	// start in this frame holds already, until the view would place it, so
+	// the rail and the list show one state in a frame.
+	now := time.Now()
+	want := ckShownGroup(ag, it, now)
+	if (p.shown != p.want || want != p.want && want != ckNeeds) && now.Before(a.ck.moveSince(p, want, now).Add(ckHold)) {
 		return p.st, p.unread
 	}
 	return ckStatus(ag, it)
