@@ -193,8 +193,10 @@ func (s *Session) ApplyLayoutState(p *LayoutStatePayload) (bool, error) {
 		if _, ok := state.WorkspaceMasterLayout[ws]; !ok && (p.MasterPosition != "" || p.MasterCount != 0) && len(state.WorkspaceMasterLayout) >= maxMasterLayouts {
 			return errfmt.Errorf("the session already holds %d master layouts", maxMasterLayouts)
 		}
+		// The windows change in a copy, which replaces state.Windows only
+		// when something changed.
 		before := *state
-		before.Windows = slices.Clone(state.Windows)
+		wins := slices.Clone(state.Windows)
 		changed := false
 		set := func(ok bool) { changed = changed || ok }
 
@@ -282,23 +284,20 @@ func (s *Session) ApplyLayoutState(p *LayoutStatePayload) (bool, error) {
 		if len(p.Order) > 1 {
 			// The windows named take the places they hold between them, in
 			// the order given; every other window keeps its place.
-			var at []int
-			var named []WindowState
+			var at, named []int
 			seen := map[string]bool{}
 			for _, id := range p.Order {
 				if i, ok := on[id]; ok && !seen[id] {
 					seen[id] = true
 					at = append(at, i)
-					named = append(named, state.Windows[i])
+					named = append(named, i)
 				}
 			}
 			slices.Sort(at)
-			wins := slices.Clone(state.Windows)
 			for k, i := range at {
-				set(wins[i].ID != named[k].ID)
-				wins[i] = named[k]
+				set(wins[i].ID != state.Windows[named[k]].ID)
+				wins[i] = state.Windows[named[k]]
 			}
-			state.Windows = wins
 			for i := range wins {
 				if wins[i].Workspace == ws {
 					on[wins[i].ID] = i
@@ -306,11 +305,11 @@ func (s *Session) ApplyLayoutState(p *LayoutStatePayload) (bool, error) {
 			}
 		}
 		top := 0
-		for i := range state.Windows {
-			top = max(top, state.Windows[i].Z)
+		for i := range wins {
+			top = max(top, wins[i].Z)
 		}
 		for _, r := range p.Windows {
-			w := &state.Windows[on[r.Window]]
+			w := &wins[on[r.Window]]
 			if w.X != r.X || w.Y != r.Y || w.Width != r.Width || w.Height != r.Height {
 				set(true)
 				w.X, w.Y, w.Width, w.Height = r.X, r.Y, r.Width, r.Height
@@ -330,6 +329,7 @@ func (s *Session) ApplyLayoutState(p *LayoutStatePayload) (bool, error) {
 			*state = before
 			return errLayoutStateSame
 		}
+		state.Windows = wins
 		return nil
 	})
 	switch {
