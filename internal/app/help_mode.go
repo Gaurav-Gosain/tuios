@@ -94,6 +94,13 @@ func (m *OS) ExitHelpMode() {
 	m.helpInvalidate()
 }
 
+// helpControlLit reports whether the dock's help control is drawn as the one
+// in use. A control that opened the pane stays lit while the pane is up, so
+// the bar answers "where did this come from" without a second glance.
+func (m *OS) helpControlLit() bool {
+	return m.HelpMode
+}
+
 // helpInvalidate makes the next frame compose rather than serve the last one.
 func (m *OS) helpInvalidate() {
 	m.cachedViewContent = ""
