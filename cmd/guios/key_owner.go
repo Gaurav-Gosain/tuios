@@ -993,8 +993,12 @@ func (a *App) ownerAsked(pane string) bool {
 // nothing read it there: the first keys of a line typed at once after the
 // close were lost (Mac round 6, M1). The owner holds them from now, and
 // lands them on the pane the user is in once its terminal has the keys.
-func (a *App) paneGoes(id string) {
-	if id == "" || id != a.focusPrev && id != a.focusNow {
+//
+// A close the app runs (closePane) holds them whichever element had the
+// keys: a click on a button in the pane's header took the focus from the
+// terminal the user typed in, and the button goes with the pane (always).
+func (a *App) paneGoes(id string, always bool) {
+	if id == "" || !always && id != a.focusPrev && id != a.focusNow {
 		return
 	}
 	a.ko.paneGone = true

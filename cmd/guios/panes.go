@@ -1512,6 +1512,7 @@ func (a *App) closePane(s *proto.Session, pane string, ask bool) {
 			break
 		}
 	}
+	a.paneGoes(pane, true)
 	a.dropTerm(pane)
 	a.dropWeb(pane)
 	a.call(pane, "pane.close", proto.IDParams{ID: pane}, nil)

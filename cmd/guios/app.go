@@ -794,7 +794,7 @@ func (a *App) touch(id string) {
 
 func (a *App) dropTerm(id string) {
 	if e := a.terms[id]; e != nil {
-		a.paneGoes(id)
+		a.paneGoes(id, false)
 		if e.term != nil {
 			e.term.Close()
 		}
