@@ -216,10 +216,10 @@ func projectFlag(v string) (string, error) {
 // newTaskAddCommand builds `tuios task add`.
 func newTaskAddCommand() *cobra.Command {
 	var f taskFlags
-	var prompt, stage, project, harnessID string
+	var prompt, stage, project, harnessID, machine string
 	var askFirst bool
 	cmd := &cobra.Command{
-		Use:   "add [-p PROMPT] [--stage S] [--project URL] [--harness ID] [--ask-first] TITLE...",
+		Use:   "add [-p PROMPT] [--stage S] [--project URL] [--harness ID] [--machine M] [--ask-first] TITLE...",
 		Short: "Add a task card",
 		Long: `Add a task card. The words are joined with spaces into its title. -p gives the
 prompt for the pane that takes it, at most 16 KiB; '-p -' reads it from
@@ -232,7 +232,11 @@ another machine can claim it.
 
 --harness names the agent the card is for, such as claude-code: pull dispatch
 gives it only to that agent. --ask-first keeps it for a person to start:
-dispatch never gives it to an agent (tuios task dispatch).`,
+dispatch never gives it to an agent (tuios task dispatch).
+
+--machine says where the card's agent starts: any for the machine with the
+most room, this one or a linked one (place-agent), or one linked
+machine's name. Omit it for this machine.`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			if prompt == "-" {
@@ -262,6 +266,9 @@ dispatch never gives it to an agent (tuios task dispatch).`,
 			if askFirst {
 				params["ask_first"] = true
 			}
+			if machine != "" {
+				params["machine"] = machine
+			}
 			return callTask(f, "", "add-task", params, func(r taskRow, on string) string {
 				return fmt.Sprintf("Added %s%s: %s", plainLine(r.ID), on, plainLine(r.Title))
 			})
@@ -273,6 +280,7 @@ dispatch never gives it to an agent (tuios task dispatch).`,
 	cmd.Flags().StringVar(&project, "project", "", "The repository the card is for, by origin URL, or . for this folder's")
 	cmd.Flags().StringVar(&harnessID, "harness", "", "The agent the card is for, such as claude-code (default: any agent)")
 	cmd.Flags().BoolVar(&askFirst, "ask-first", false, "Keep the card for a person to start: dispatch never gives it to an agent")
+	cmd.Flags().StringVar(&machine, "machine", "", "Where the card's agent starts: any, or a linked machine's name (default: this machine)")
 	_ = cmd.RegisterFlagCompletionFunc("stage", cobra.FixedCompletions(session.TaskStages, cobra.ShellCompDirectiveNoFileComp))
 	return cmd
 }

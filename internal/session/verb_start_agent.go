@@ -57,7 +57,13 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		Grants       []string          `json:"grants"`
 		Task         string            `json:"task"`
 		HumanNonce   string            `json:"human_nonce"`
-		Parent       string            `json:"parent"`
+		// TaskHost names the machine that owns the card, as this
+		// machine's [hosts] calls it, and TaskSession its session there:
+		// the new pane claims the card on its owner over the link
+		// (pool_place.go).
+		TaskHost    string `json:"task_host"`
+		TaskSession string `json:"task_session"`
+		Parent      string `json:"parent"`
 		launchChoice
 	}
 	if verr := decodeParams(params, &p); verr != nil {
@@ -159,7 +165,21 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	// It is a card of the session the pane opens in, so that session has to
 	// exist already. See task_auto.go.
 	var task *taskParam
-	if p.Task != "" {
+	taskHost := strings.TrimSpace(p.TaskHost)
+	if taskHost != "" {
+		switch {
+		case p.Task == "":
+			return nil, invalidParam("task_host", "task_host names the machine that owns the card task names. Pass task too")
+		case p.TaskSession == "":
+			return nil, invalidParam("task_session", "task_host needs task_session: the card's session on "+echoName(taskHost))
+		case d.federation == nil:
+			return nil, invalidParam("task_host", "task_host "+echoName(taskHost)+" is not a linked machine: this daemon has no [hosts]")
+		}
+		if _, err := d.federation.Table().Lookup(taskHost); err != nil {
+			return nil, invalidParam("task_host", "task_host "+echoName(taskHost)+" is not a linked machine")
+		}
+	}
+	if p.Task != "" && taskHost == "" {
 		if sess == nil {
 			return nil, invalidParam("task", "task names a card of the session the agent starts in, and session "+echoName(name)+" does not exist yet")
 		}
@@ -229,8 +249,17 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	}
 	// The card is the new pane's from the start, before the wait, so the
 	// board shows who works on it while the agent loads.
+	d.noteAgentStarted(sess, win.ID)
 	var taskRow *TaskRow
 	taskNote := ""
+	if taskHost != "" {
+		res, verr := d.forwardTaskFor(sess.Name(), win.ID, "claim-task", taskHost, p.TaskSession, p.Task)
+		if verr != nil {
+			taskNote = "Task card " + p.Task + " on " + taskHost + " was not claimed: " + verr.Message
+		} else if row, ok := res.(TaskRow); ok {
+			taskRow = &row
+		}
+	}
 	if task != nil {
 		if row, verr := d.claimForPane(task, win.ID); verr != nil {
 			taskNote = "Task card " + task.id + " was not claimed: " + verr.Message

@@ -66,6 +66,9 @@ const (
 	taskReleaseRestart    = "restart"
 )
 
+// TaskMachineAny is a card's machine when placement picks it.
+const TaskMachineAny = "any"
+
 // taskByDaemon is the by of a change the daemon makes on its own.
 const taskByDaemon = "tuios"
 
@@ -113,6 +116,10 @@ type TaskState struct {
 	// AskFirst marks a card that waits for a person to start it: dispatch
 	// never offers it (task_dispatch.go).
 	AskFirst bool `json:"ask_first,omitempty"`
+	// Machine is where the card's agent starts: empty for the machine the
+	// card was made on, TaskMachineAny for the machine placement picks
+	// (pool_place.go), or a [hosts] name.
+	Machine string `json:"machine,omitempty"`
 	// Dispatched says the card's last claim was made by dispatch. It stays
 	// on after a release or a finish, so the event says how a dispatched
 	// card ended.

@@ -1225,6 +1225,11 @@ var optionSpecs = []Option{
 		Description: "Move task cards on their own when tuios sees their work move: a plan held and then approved, a fan check, a pull request. Off leaves every stage to you.",
 		Default:     "true",
 	},
+	{
+		Path: "tasks.machine_cap", Type: OptionInt, Section: "agents",
+		Description: "How many agents may work on this machine before Any machine starts a new one on another machine. Agents that work, agents that start, and picks not yet started count. 0 is no cap.",
+		Default:     "0", Min: 0, Max: 1024,
+	},
 
 	// [daemon]. agent_binaries is absent: it is a list, and a value that arrives
 	// as one string has no unambiguous spelling for a list. respond_from_shell

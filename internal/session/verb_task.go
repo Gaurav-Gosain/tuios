@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
 // The task verbs: add-task, list-tasks, get-task, claim-task, finish-task,
@@ -117,6 +119,9 @@ type TaskRow struct {
 	Harness    string `json:"harness,omitempty"`
 	AskFirst   bool   `json:"ask_first,omitempty"`
 	Dispatched bool   `json:"dispatched,omitempty"`
+	// Machine is where the card's agent starts: empty for the owner,
+	// "any" for the machine placement picks, or a host name.
+	Machine string `json:"machine,omitempty"`
 }
 
 // TaskHolder is the pane that holds a card. Name, Harness and State are read
@@ -159,6 +164,7 @@ func taskRow(sess *Session, st *SessionState, tk *TaskState) TaskRow {
 	}
 	row.Project = tk.Project
 	row.Harness, row.AskFirst, row.Dispatched = tk.Harness, tk.AskFirst, tk.Dispatched
+	row.Machine = tk.Machine
 	if host, window, ok := splitRemoteHolder(tk.Holder); ok {
 		row.Holder = &TaskHolder{Window: window, Host: host, HeldAt: tk.HeldAt, Name: tk.HolderName, Harness: tk.HolderHarness}
 	} else if tk.Holder != "" {
@@ -254,6 +260,7 @@ type addTaskParams struct {
 	Project    string `json:"project"`
 	Harness    string `json:"harness"`
 	AskFirst   bool   `json:"ask_first"`
+	Machine    string `json:"machine"`
 }
 
 // verbAddTask answers add-task.
@@ -279,6 +286,13 @@ func (d *Daemon) verbAddTask(cs *connState, params json.RawMessage) (any, *verbE
 	harnessName := printableClaim(p.Harness, 64)
 	if harnessName != p.Harness || strings.ContainsAny(harnessName, " /") {
 		return nil, invalidParam("harness", "harness is one agent's id, such as claude-code")
+	}
+	machine := printableClaim(p.Machine, 64)
+	if machine != p.Machine || strings.ContainsAny(machine, " /:") {
+		return nil, invalidParam("machine", "machine is any, or one machine's [hosts] name. Omit it for this machine")
+	}
+	if machine == federation.LocalHostName {
+		machine = ""
 	}
 	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
@@ -309,6 +323,7 @@ func (d *Daemon) verbAddTask(cs *connState, params json.RawMessage) (any, *verbE
 			Project:  project,
 			Harness:  harnessName,
 			AskFirst: p.AskFirst,
+			Machine:  machine,
 		}
 		if wt := st.Worktree; wt != nil && wt.Group != "" {
 			tk.Fan, tk.FanID = wt.Group, wt.FanID

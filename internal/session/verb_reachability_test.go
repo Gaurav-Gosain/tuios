@@ -228,6 +228,9 @@ var exampleOutcomes = map[string]exampleOutcome{
 	// with claude installed does not get one started by this test. Starting
 	// and waiting are proved with fake agents in agent_launch_test.go and
 	// verb_start_agent_test.go.
+	"place-agent#0":     {errCode: ErrVerbNoMachine, why: "the fixture has no linked machine and claude is not signed in here"},
+	"place-agent#1":     {errCode: ErrVerbNoMachine, why: "the fixture has no codex and no linked machine"},
+	"place-agent#2":     {errCode: ErrVerbSessionNotFound, why: "the fixture has no session api"},
 	"start-agent#0":     {errCode: ErrVerbInvalidParams, why: "/src/api does not exist here"},
 	"start-agent#1":     {errCode: ErrVerbInvalidParams, why: "/src/api does not exist here"},
 	"start-agent#2":     {errCode: ErrVerbInvalidParams, why: "the fixture's home has no ~/src"},

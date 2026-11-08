@@ -14748,3 +14748,32 @@ Run on 2026-11-08 on macOS (arm64):
 The fixed build passes 3 of 3. On that Mac `TestScratchTerminalShowsOneShell`
 fails on main and on the branch alike, at its check of the new shell's
 folder.
+
+## Any machine placement
+
+`pool_place_test.go` runs two daemons, home and build, linked over the ssh
+stand-in. home is loaded ten times over (TUIOS_LOAD1), build is idle with a
+checkout of the repository and `[tasks] machine_cap = 2`.
+`TestAnyMachinePlacesTheAgentWhereThereIsRoom` checks that placement picks
+build by its room, leaves build out for an agent it does not have, starts an
+agent there with `start-agent -s any:work`, keeps a card off a machine with no
+link back, sees the pick before it in a burst, and leaves out a machine whose
+daemon stopped. `TestAnyMachineTakesACardAcrossTheLink` links build back to
+home and checks that the card's agent starts on build and holds the card on
+home.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes both, 3 runs of 3. Six
+controls, each one change:
+
+| Control | Test | The test fails with | Result |
+|---------|------|---------------------|--------|
+| The pick is never reserved | `TestAnyMachinePlacesTheAgentWhereThereIsRoom` | "the second placement did not see the first one's pick: host \"build\"" | **caught** |
+| The not-installed gate dropped | `TestAnyMachinePlacesTheAgentWhereThereIsRoom` | "codex was placed on \"build\", where it is not installed" | **caught** |
+| `poolScore` is 0 for every machine | `TestAnyMachinePlacesTheAgentWhereThereIsRoom` | "the pick is not build by its room" | **caught** |
+| The cap gate dropped | `TestAnyMachinePlacesTheAgentWhereThereIsRoom` | "the second placement did not see the first one's pick: host \"build\"" | **caught** |
+| The link-back gate dropped | `TestAnyMachinePlacesTheAgentWhereThereIsRoom` | "a card was placed on a machine that cannot claim it: host \"build\"" | **caught** |
+| start-agent never claims on `task_host` | `TestAnyMachineTakesACardAcrossTheLink` | "the card's agent was not placed on build holding the card" | **caught** |
+
+The reports are `pool-place.txt` and `pool-place-card.txt` in each test's
+artifact folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAnyMachine' -v .`.

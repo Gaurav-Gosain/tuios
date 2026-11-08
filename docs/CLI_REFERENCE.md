@@ -1108,6 +1108,46 @@ tuios worktree pull build:api-fan-add-retry-2
 tuios fan keep build:api-fan-add-retry-2 --stash
 ```
 
+### Any machine
+
+`tuios start-agent -s any:SESSION` and `tuios fan --host any` let this
+machine's daemon pick the machine, this one or a linked one from `[hosts]`,
+and print the pick and why. `tuios call place-agent '{"agent":"claude"}'`
+asks the same question and starts nothing. Nothing goes to another machine
+unless you ask for `any` or name the machine.
+
+The rule has three steps:
+
+1. A machine is left out when its link is not up or does not allow starting
+   agents, the agent is not installed or not signed in there, the agent
+   reached its usage limit there, it has no checkout of the repository (and
+   `clone` was not asked) or more than one, its memory is 95% used, it is at
+   its `[tasks] machine_cap`, or, for a card, it has no link back to this
+   machine to claim the card with. A card of the session only stays here.
+2. Of the rest, the most spare cores wins: the cores times the share the
+   one-minute load leaves free, less half a core for each agent that works,
+   starts, or was just picked there. Memory over 80% used lowers it.
+3. Two machines within one core tie: the one with the checkout wins, then
+   this machine.
+
+The repository is the one the current directory is in. The pick counts as a
+busy agent on that machine for 90 seconds, or until that machine reports the
+start, so a burst of starts spreads out.
+
+**Examples:**
+```bash
+tuios start-agent -s any:api claude --prompt 'Fix the flaky test.'
+# Placed on build. build: 16 cores, 0 working, the repo is there.
+tuios task add --project . --machine any 'Fix the retry'
+tuios start-agent -s any:home claude --task t1 --prompt 'Take task t1.'
+tuios call place-agent '{"agent":"claude","reserve":false}'
+```
+
+With `--task` and another machine, that machine's agent claims the card here
+over its own link back, so the card shows who holds it while the agent works
+there, and the pane's close lets it go. It fails with `no_machine` when no
+machine passes, and the message gives each machine's reason.
+
 ### `tuios start-agent`
 
 Start an agent in a new pane, here or on another machine, and return once it
@@ -1115,7 +1155,7 @@ is ready for a prompt.
 
 **Usage:**
 ```bash
-tuios start-agent <agent> [-s [<host>:]<session>] [--name <name>] [--cwd <dir> | --repo <dir> | --clone] [--workspace <n>] [--focus] [--prompt <prompt>] [--ready-timeout <ms>] [--protocol acp|codex] [--env NAME[=VALUE]]... [--grants <grant>[,<grant>...]] [--task <id>] [--model <model>] [--effort <level>] [--permission-mode <mode>] [--json] [-- <args>...]
+tuios start-agent <agent> [-s [<host>|any:]<session>] [--name <name>] [--cwd <dir> | --repo <dir> | --clone] [--workspace <n>] [--focus] [--prompt <prompt>] [--ready-timeout <ms>] [--protocol acp|codex] [--env NAME[=VALUE]]... [--grants <grant>[,<grant>...]] [--task <id>] [--model <model>] [--effort <level>] [--permission-mode <mode>] [--json] [-- <args>...]
 ```
 
 `--model`, `--effort` and `--permission-mode` pass the harness's own flags for
@@ -1131,6 +1171,10 @@ agent pane, the permission mode is held to that agent's own.
 pane exists. The card must be held by no pane, not blocked and not done, and
 the call needs what `tuios task claim` needs. It is checked before anything
 starts, and the session must exist already.
+
+`-s any:SESSION` lets this machine pick the machine first, as
+[Any machine](#any-machine) says, and prints the pick and why.
+With `--task`, the card is this machine's, in `SESSION`.
 
 `--grants` says what the agent may do through tuios: `read`, `write`, `fan`,
 `respond`, `admin`, or `none` (see [`tuios pane-grants`](#tuios-pane-grants)).
@@ -2843,7 +2887,7 @@ moves it back to `doing` while another may still be open.
 
 **Usage:**
 ```bash
-tuios task add [-p PROMPT] [--stage STAGE] [--project URL] TITLE... [flags]
+tuios task add [-p PROMPT] [--stage STAGE] [--project URL] [--machine any|HOST] TITLE... [flags]
 tuios task ls [--stage STAGE] [--open] [--all-sessions | --project URL [--hosts]] [flags]
 tuios task get ID [flags]
 tuios task claim ID | --next [-w <window>] [flags]
@@ -2862,6 +2906,7 @@ tuios task dispatch [status | pause | resume | mode manual|pull | quiet SPAN|off
 - `--open` (`ls`): Leave out the cards that are done
 - `--all-sessions` (`ls`): List the cards of every session on this machine, with a SESSION column first. Takes no `--session`
 - `--project <url>` (`add`, `ls`): The repository the card is for, by its origin URL, or `.` for the repository of the current folder. For `ls`, list that repository's cards from every session, with HOST and SESSION columns. Takes no `--session`. Two spellings of one URL (`git@host:a/b.git`, `https://host/a/b`) name one project; a local path is refused
+- `--machine <m>` (`add`): Where the card's agent starts: `any` for the machine with the most room, this one or a linked one ([Any machine](#any-machine)), or one linked machine's name. Omit it for this machine. The capture sheet's Machine pill sets it
 - `--hosts` (`ls`): With `--project`, also list the project's cards on each linked machine. A machine that does not answer is named under the table
 - `--next` (`claim`): Take the oldest card no pane holds that is not blocked or done, and that no fan of another session works on
 - `-w, --window <target>` (`claim`): The pane that takes the card (default: this pane; required outside a pane)

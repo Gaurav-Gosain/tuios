@@ -3219,6 +3219,18 @@ still written, though the card then stays where it is.
 auto_stage = false
 ```
 
+`machine_cap` is how many agents may work on this machine before "Any
+machine" starts a new one on another machine
+([CLI_REFERENCE.md](CLI_REFERENCE.md#any-machine)). Agents that work,
+agents that are starting, and picks made in the last 90 seconds that have not
+started yet all count. Each machine reads its own cap and says it when asked.
+`0`, the default, is no cap.
+
+```toml
+[tasks]
+machine_cap = 4
+```
+
 ## What a pane may do
 
 Every pane holds grants that say what a process in it may do through tuios:

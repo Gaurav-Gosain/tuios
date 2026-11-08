@@ -193,6 +193,7 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	// Moving cards types nothing and runs nothing, so a file change applies
 	// either way.
 	d.taskAutoOff.Store(!cfg.Tasks.AutoStageOn())
+	d.machineCap.Store(int64(max(cfg.Tasks.MachineCap, 0)))
 	// A new notification destination waits like a new host does.
 	d.notify.reload(cfg.Notify, byPerson)
 	perms := PanePermissionsFromConfig(cfg.Agents.Permissions)

@@ -54,6 +54,9 @@ type AgentReadiness struct {
 	// SignedIn is yes, no or unknown (the check failed or timed out), and
 	// empty for a harness with no check.
 	SignedIn string `json:"signed_in,omitempty"`
+	// UsageLimit says a pane of this harness here is errored with a usage
+	// limit, so a new agent of it would stop the same way.
+	UsageLimit bool `json:"usage_limit,omitempty"`
 }
 
 type readinessEntry struct {
@@ -69,29 +72,72 @@ var readinessCache struct {
 	m map[string]*readinessEntry
 }
 
+// readinessParams are what agent-readiness takes.
+type readinessParams struct {
+	Harnesses []string          `json:"harnesses"`
+	Env       map[string]string `json:"env"`
+	// RepoURL and ReposRoot ask whether this machine has a checkout of a
+	// repository, found the way start-agent finds one (pool_place.go).
+	RepoURL   string `json:"repo_url"`
+	ReposRoot string `json:"repos_root"`
+	// PeerInstance is the calling daemon's instance. The answer's back is
+	// this machine's name for that daemon, when a link to it is up.
+	PeerInstance string `json:"peer_instance"`
+}
+
+// readinessAnswer is agent-readiness's result.
+type readinessAnswer struct {
+	Agents []AgentReadiness `json:"agents"`
+	// Repo is found, none or many, with repo_url; empty without.
+	Repo string `json:"repo,omitempty"`
+	// Load is this machine's load now, with the agents that are starting.
+	Load *poolLoad `json:"load,omitempty"`
+	// Cap is [tasks] machine_cap, 0 for no cap.
+	Cap int `json:"cap"`
+	// Back is this machine's [hosts] name for the daemon peer_instance
+	// names, when its link is up.
+	Back string `json:"back,omitempty"`
+}
+
 func (d *Daemon) verbAgentReadiness(cs *connState, params json.RawMessage) (any, *verbError) {
-	var p struct {
-		Harnesses []string          `json:"harnesses"`
-		Env       map[string]string `json:"env"`
-	}
+	var p readinessParams
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
+	return d.readiness(cs, p)
+}
+
+// readiness answers agent-readiness for this machine.
+func (d *Daemon) readiness(cs *connState, p readinessParams) (readinessAnswer, *verbError) {
 	_, pathList, verr := callerEnv(cs, p.Env)
 	if verr != nil {
-		return nil, verr
+		return readinessAnswer{}, verr
+	}
+	ans := readinessAnswer{Agents: []AgentReadiness{}, Cap: int(d.machineCap.Load())}
+	if p.RepoURL != "" {
+		repo, verr := d.repoPresence(p.RepoURL, p.ReposRoot)
+		if verr != nil {
+			return readinessAnswer{}, verr
+		}
+		ans.Repo = repo
+	}
+	load := d.poolLoadNow()
+	ans.Load = &load
+	if p.PeerInstance != "" {
+		ans.Back = d.backName(p.PeerInstance)
 	}
 	reg := d.agentMatcher.registry
 	if reg == nil {
-		return map[string]any{"agents": []AgentReadiness{}}, nil
+		return ans, nil
 	}
 	ids := p.Harnesses
 	if len(ids) == 0 {
 		ids = reg.IDs()
 	}
 	if len(ids) > 64 {
-		return nil, invalidParam("harnesses", "name at most 64 harnesses")
+		return readinessAnswer{}, invalidParam("harnesses", "name at most 64 harnesses")
 	}
+	limited := d.usageLimitedHarnesses()
 	out := make([]AgentReadiness, 0, len(ids))
 	var wg sync.WaitGroup
 	for _, id := range ids {
@@ -99,7 +145,7 @@ func (d *Daemon) verbAgentReadiness(cs *connState, params json.RawMessage) (any,
 		if !ok || m == nil {
 			continue
 		}
-		r := AgentReadiness{Harness: m.ID, Name: m.DisplayName, Command: cmd}
+		r := AgentReadiness{Harness: m.ID, Name: m.DisplayName, Command: cmd, UsageLimit: limited[m.ID]}
 		var path string
 		var err error
 		if pathList != "" {
@@ -117,7 +163,8 @@ func (d *Daemon) verbAgentReadiness(cs *connState, params json.RawMessage) (any,
 	}
 	wg.Wait()
 	sort.Slice(out, func(a, b int) bool { return out[a].Harness < out[b].Harness })
-	return map[string]any{"agents": out}, nil
+	ans.Agents = out
+	return ans, nil
 }
 
 // signedIn is the harness's answer, from the cache when it is fresh.

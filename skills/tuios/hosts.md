@@ -262,3 +262,15 @@ the other machine changes. `--branch` names the branch here.
 On another machine `start-agent` uses that machine's `PATH`, and `env` is
 refused. `repo_not_found` means that machine has no checkout of the origin:
 pass `--clone` or a `repos_root`.
+
+To let tuios pick the machine, name the host `any`: `start-agent -s
+any:SESSION` and `fan --host any`. It prints the pick and why. `tuios call
+place-agent '{"agent":"claude"}'` gives the pick and each machine's reason and
+starts nothing. A machine is left out when the agent is not installed, signed
+in or free of a usage limit there, it has no checkout (pass `--clone`), or it
+is at its `[tasks] machine_cap`; of the rest the most spare cores wins.
+`no_machine` means none passed.
+
+```sh
+tuios start-agent -s any:api claude --prompt 'Fix the flaky test.'
+```

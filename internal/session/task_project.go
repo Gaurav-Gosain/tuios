@@ -199,6 +199,12 @@ func (d *Daemon) forwardTask(cs *connState, verb, host, sessionName, id string) 
 			Detail: "Nothing changed. Run it in the agent's pane, or let the person change the card on " + echoName(host) + ".",
 		})
 	}
+	return d.forwardTaskFor(pa.session, pa.window, verb, host, sessionName, id)
+}
+
+// forwardTaskFor is forwardTask for window, a pane of paneSession on this
+// machine: start-agent uses it for the pane it opened.
+func (d *Daemon) forwardTaskFor(paneSession, window, verb, host, sessionName, id string) (any, *verbError) {
 	if sessionName == "" {
 		return nil, invalidParam("session", verb+" with host names the card's session on "+echoName(host)+": list-tasks with project and hosts gives it")
 	}
@@ -208,10 +214,10 @@ func (d *Daemon) forwardTask(cs *connState, verb, host, sessionName, id string) 
 			Detail: "Nothing changed. tuios hosts ls lists the machines this daemon links to.",
 		})
 	}
-	params := map[string]any{"session": sessionName, "id": id, "remote_window": pa.window}
+	params := map[string]any{"session": sessionName, "id": id, "remote_window": window}
 	if verb == "claim-task" {
-		if sess := d.manager.GetSession(pa.session); sess != nil {
-			if w, ok := findWindowState(sess.GetState(), pa.window); ok {
+		if sess := d.manager.GetSession(paneSession); sess != nil {
+			if w, ok := findWindowState(sess.GetState(), window); ok {
 				params["remote_name"], params["remote_harness"] = windowLabelOf(w), w.AgentHarness
 			}
 		}
@@ -243,7 +249,7 @@ func (d *Daemon) forwardTask(cs *connState, verb, host, sessionName, id string) 
 	}
 	row.Host = host
 	h := remoteHold{host: host, session: firstNonEmpty(row.Session, sessionName), id: firstNonEmpty(row.ID, id)}
-	d.remoteHolds.note(pa.window, h, verb == "claim-task")
+	d.remoteHolds.note(window, h, verb == "claim-task")
 	return row, nil
 }
 

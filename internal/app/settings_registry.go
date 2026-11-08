@@ -43,6 +43,7 @@ var settingLabels = map[string]string{
 	"agents.view_list":                    "Agent list",
 	"agents.list_width":                   "Agent list width",
 	"tasks.auto_stage":                    "Move task cards",
+	"tasks.machine_cap":                   "Agents before Any machine looks elsewhere",
 	"appearance.sidebar.editor":           "File editor",
 	"appearance.dock_workspace_label_max": "Workspace label cap",
 	"appearance.dock_mode_icon_window":    "Window mode icon",

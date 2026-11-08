@@ -39,6 +39,8 @@ exist. It starts in --cwd, or the main checkout of the repository --repo
 names. Without either, it starts in the directory you run the command from
 when you run it in a pane, and in the focused pane's directory otherwise.
 
+-s any:SESSION starts it where place-agent picks, and says why.
+
 -s HOST:SESSION starts it on another machine from the [hosts] table. PATH is
 not sent then, and the agent is looked up on that machine's PATH. --env there
 is refused, since env does not cross machines. The agent starts in that
@@ -100,6 +102,9 @@ task claim needs. It is checked before anything starts.`,
 
   # Claude Code on host build, in its checkout of this repository
   tuios start-agent -s build:api claude --prompt 'Profile the build.' -- --model opus
+
+  # Claude Code on the machine with the most room, this one or a linked one
+  tuios start-agent -s any:api claude --prompt 'Fix the flaky test.'
 
   # An agent for task card t3, which it holds from the start
   tuios start-agent claude --name t3-worker --task t3 --prompt 'Take task t3: tuios task get t3.'
@@ -222,6 +227,35 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 	if err := ensureDaemon(); err != nil {
 		return err
 	}
+	// -s any:SESSION: this machine's daemon picks the machine first.
+	var taskHost, taskSession string
+	if host, name := splitHostSession(o.session); host == hostAny {
+		if o.cwd != "" || o.repo != "" {
+			return reportVerbError(errors.New("--cwd and --repo name a directory on one machine. With -s any:SESSION the agent starts in the picked machine's checkout of this repository"), jsonOutput)
+		}
+		if o.task != "" && name == "" {
+			return reportVerbError(errors.New("--task with -s any: name the card's session, as -s any:SESSION"), jsonOutput)
+		}
+		req := placeRequest{agent: o.agent, repoURL: originIfAny(), clone: o.clone}
+		if o.task != "" {
+			req.task, req.taskSession = o.task, name
+		}
+		ans, err := placeAgent(req)
+		if err != nil {
+			return reportVerbError(err, jsonOutput)
+		}
+		if !jsonOutput {
+			fmt.Println(placedLine(ans))
+		}
+		o.session = name
+		if ans.Host != "" {
+			o.session = ans.Host + ":" + name
+			o.clone = o.clone || ans.Clone
+			if o.task != "" {
+				taskHost, taskSession = ans.TaskHost, name
+			}
+		}
+	}
 	t, err := dialSessionTarget(o.session)
 	if err != nil {
 		return err
@@ -240,6 +274,9 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 		if v != "" {
 			params[k] = v
 		}
+	}
+	if taskHost != "" {
+		params["task_host"], params["task_session"] = taskHost, taskSession
 	}
 	if len(o.args) > 0 {
 		params["args"] = o.args

@@ -442,6 +442,11 @@ type Daemon struct {
 	// See task_auto.go. It is read under session state locks and written by
 	// a config reload, so it is atomic.
 	taskAutoOff atomic.Bool
+	// machineCap is [tasks] machine_cap, and pool the placement state:
+	// picks reserved and agents started that are not working yet. See
+	// pool_place.go.
+	machineCap atomic.Int64
+	pool       poolState
 	// openedKeep is DaemonConfig.OpenedCopyKeep.
 	openedKeep time.Duration
 
@@ -1041,6 +1046,9 @@ type DaemonConfig struct {
 	// TaskAutoStageOff is [tasks] auto_stage = false: the daemon moves no
 	// card on its own. See task_auto.go.
 	TaskAutoStageOff bool
+	// MachineCap is [tasks] machine_cap: how many agents may work here
+	// before placement looks elsewhere. Zero is no cap. See pool_place.go.
+	MachineCap int
 	// OpenedCopyKeep is [files] open_copy_keep_days: how long a copy the
 	// rail's o made of a far file stays when it is not opened again. Zero
 	// keeps them all. See internal/openedcopy.
@@ -1109,6 +1117,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.SetMailWake(!cfg.MailWakeOff)
 	d.SetChildQuestionsToParent(!cfg.ChildQuestionsToPerson)
 	d.taskAutoOff.Store(cfg.TaskAutoStageOff)
+	d.machineCap.Store(int64(max(cfg.MachineCap, 0)))
 	d.openedKeep = cfg.OpenedCopyKeep
 	d.SetCheckpoints(cfg.Checkpoints)
 	d.outbox = newHostOutbox(d)

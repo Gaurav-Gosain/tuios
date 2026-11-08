@@ -426,7 +426,7 @@ pull HOST:SESSION' brings its work here.`,
 	fanCmd.Flags().StringVar(&fanTaskSession, "task-session", "", "The session of --task (default: this pane's session, else the most recently active)")
 	fanCmd.Flags().BoolVar(&fanWait, "wait", false, "Return only when every prompt is sent or given up on")
 	fanCmd.Flags().BoolVar(&fanJSON, "json", false, "Output result as JSON")
-	fanCmd.Flags().StringVar(&fanHost, "host", "", "Run the fan-out on this machine from the [hosts] table")
+	fanCmd.Flags().StringVar(&fanHost, "host", "", "Run the fan-out on this machine from the [hosts] table, or any for the machine with the most room (place-agent)")
 	fanCmd.Flags().BoolVar(&fanClone, "clone", false, "With --host, clone the repository there when the host has no checkout")
 	fanCmd.Flags().StringSliceVar(&fanGrants, "grants", nil, "What every agent may do through tuios, comma separated: read, write, fan, files, task, respond, admin, or none (default: [agents.permissions], or the calling pane's own)")
 	_ = fanCmd.RegisterFlagCompletionFunc("host", completeConfiguredHosts)
@@ -913,6 +913,29 @@ func fanCallerEnv(flags []string, getenv func(string) string, environ []string) 
 func runFan(o fanOptions, wait, jsonOutput bool) error {
 	if err := ensureDaemon(); err != nil {
 		return err
+	}
+	if o.host == hostAny {
+		// This machine's daemon picks the machine for every attempt.
+		if len(o.agents) > 1 || o.task != "" || o.repo != "" {
+			return errors.New("--host any places one --agent, in this repository, with no --task or --repo. Name the host instead")
+		}
+		agent := o.agents[0]
+		url, err := originHere()
+		if err != nil {
+			return err
+		}
+		ans, err := placeAgent(placeRequest{agent: agent, repoURL: url, clone: o.clone})
+		if err != nil {
+			return reportVerbError(err, jsonOutput)
+		}
+		if !jsonOutput {
+			fmt.Println(placedLine(ans))
+		}
+		o.host = ans.Host
+		o.clone = o.clone || ans.Clone
+		if o.host == "" {
+			o.clone = false
+		}
 	}
 	if o.host != "" && o.host != "local" {
 		// The daemon on another machine refuses env from a link, and this

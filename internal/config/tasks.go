@@ -31,6 +31,10 @@ type TasksConfig struct {
 	// a plan held, its agent working, a fan check, a pull request. Nil means
 	// on.
 	AutoStage *bool `toml:"auto_stage,omitempty"`
+	// MachineCap is how many agents may work on this machine before "Any
+	// machine" places a new one elsewhere: working agents, agents still
+	// starting and picks not yet started count. Zero or less is no cap.
+	MachineCap int `toml:"machine_cap,omitempty"`
 }
 
 // AutoStageOn reports whether the daemon moves cards on its own.
