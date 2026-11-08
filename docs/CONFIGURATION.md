@@ -159,7 +159,9 @@ it, if its directory exists.
 
 `tuios config apply` makes the daemon and every tuios client on this machine
 apply the files as they are now. Use it when a save does not reach a client,
-for example when you make an included file in a new directory.
+for example when you make an included file in a new directory. It also loads
+the daemon's `[hooks]` table, so a hook change needs no restart. See
+[HOOKS.md](HOOKS.md).
 
 ### Where tuios writes a change
 

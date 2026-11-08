@@ -152,6 +152,9 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	// change applies only when it clears the command or keeps it. A new
 	// command waits for the person.
 	d.setups.waiting.Store(!d.setups.applyConfig(cfg.Worktree.Setup, cfg.Worktree.SetupAsync, byPerson))
+	// [hooks] runs commands as the daemon's child too: a file change only
+	// removes hooks, and a new one waits for the person.
+	d.reloadHooks(cfg, byPerson)
 	if d.buffers != nil {
 		d.buffers.SetLimits(cfg.PasteBuffers.Resolved())
 	}
@@ -233,7 +236,7 @@ func (d *Daemon) noteConfigWaiting() {
 // configWaiting reports whether config.toml holds a change that widens what
 // panes or links may do and waits for tuios config apply or a restart.
 func (d *Daemon) configWaiting() bool {
-	return d.manager.grants.restartNeeded.Load() || d.hostsWaiting.Load() || d.notify.waitingApply() || d.pluginsWaiting.Load() || d.approvalsWaiting.Load() || d.setups.waiting.Load()
+	return d.manager.grants.restartNeeded.Load() || d.hostsWaiting.Load() || d.notify.waitingApply() || d.pluginsWaiting.Load() || d.approvalsWaiting.Load() || d.setups.waiting.Load() || d.hooksWaiting.Load()
 }
 
 // reloadHosts applies a changed host table only where it dials less: a host

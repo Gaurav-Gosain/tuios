@@ -159,17 +159,20 @@ type Daemon struct {
 	events *eventHub
 
 	// hooks is the session-side hook table: the commands the daemon runs when a
-	// window, a workspace or an agent state changes. It is nil when no hooks are
-	// configured, so a daemon without hooks pays one nil check per event. See
-	// daemon_hooks.go.
+	// window, a workspace or an agent state changes. loadHooks sets it once and
+	// a reload refills it in place (reloadHooks), so readers need no lock; it
+	// is nil only on a daemon a test builds by hand. See daemon_hooks.go.
 	hooks *hooks.Manager
 	// agentAlerts is the [notifications.agent] policy the after-agent-state hook
 	// is gated by. It is the same policy the client applies to the dock message
-	// and the sound, read from the same config table.
-	agentAlerts config.AgentAlertPolicy
+	// and the sound, read from the same config table. A reload swaps it.
+	agentAlerts atomic.Pointer[config.AgentAlertPolicy]
 	// agentHooks holds the settle timers for after-agent-state. Nil when hooks
 	// are not loaded.
 	agentHooks *agentHookGate
+	// hooksWaiting is true while config.toml holds a hook the daemon does not
+	// run yet: a file change may only remove hooks (reloadHooks).
+	hooksWaiting atomic.Bool
 
 	// federation holds the outbound links to the hosts named in config. It is
 	// nil when no hosts are configured, which is the default, and every reader
