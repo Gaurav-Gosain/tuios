@@ -3495,7 +3495,7 @@ Frames from the daemon:
 | `S` (0x53) | u64 seq, u16 cols, u16 rows, bytes | A snapshot. Reset the emulator to cols by rows and write the bytes into it. |
 | `O` (0x4F) | u64 seq, bytes | Output. Write the bytes into the emulator. `seq` is the stream position after the last byte. |
 | `R` (0x52) | u64 seq, u16 cols, u16 rows | The pane changed size at `seq`. Resize the emulator. |
-| `E` (0x45) | JSON `{"code", "message"}` | The daemon refused an `I` or `L` frame, or released a lease that the client did not renew (code `lease_expired`). The other codes are the verb error codes. The stream continues. |
+| `E` (0x45) | JSON `{"code", "message"}`, and `accepted` on `busy` | The daemon refused an `I` or `L` frame, or released a lease that the client did not renew (code `lease_expired`). The other codes are the verb error codes. The stream continues. |
 | `X` (0x58) | UTF-8 text | The stream ended: `exited N` when the pane's program exited with status N, `killed N` when signal N ended it, `closed` when its window closed first, `the daemon stopped`, or `refused: ...` when the caller may no longer read the pane. The daemon then closes the connection. |
 
 Frames from the client:
@@ -3538,9 +3538,14 @@ frame, and the stream continues. A frame from the client larger than 64 KiB
 ends the stream. Send a longer paste as more than one `I` frame.
 
 The daemon writes `I` frames into the pane in order, on its own goroutine. A
-pane that does not read its input does not delay `L` frames. At most 4 `I`
-frames wait for the pane. The next `I` frame gets an `E` frame with code
-`busy`, and the daemon does not type it.
+pane that does not read its input does not delay `L` frames. Up to 256 KiB of
+input, in up to 4096 frames, waits for the pane, so a client may send one
+frame per key and a burst is never refused while the pane reads. When the
+pane has not read that much, the next `I` frame gets an `E` frame with code
+`busy` and `accepted`, the number of input bytes this stream took so far, all
+typed or waiting, in order. Every `I` frame after it is refused the same way
+until the pane has read what waits, so nothing is typed out of order. Send
+again from byte `accepted`. The daemon logs each run of refusals.
 
 The daemon checks the caller again each second, as it checks a new
 `stream-pane`. When a pane loses its read grant, or the link policy no longer

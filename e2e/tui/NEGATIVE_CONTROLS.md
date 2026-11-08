@@ -15390,3 +15390,26 @@ Run on 2026-11-08 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestCockpitMenuClosesBeforeAClickActs|TestReadyToMergeClosesOnAnotherRow)$' -v .`.
+
+## TestStreamPaneTypesABurstOfInputInOrder, TestStreamPaneLeaseBehindBlockedInput
+
+A stream-pane client that sends one `I` frame per key sends a burst of small
+frames. The daemon queued at most 4 and refused the rest as busy, also into
+a pane that reads at once, so keys were lost (found by the guios key owner
+work, notes/gk.md). `TestStreamPaneTypesABurstOfInputInOrder` sends 600 small
+frames in one write into `cat` in raw mode, which writes to a file; every byte
+must arrive in order with no refusal. `TestStreamPaneLeaseBehindBlockedInput`
+now also checks that a busy refusal gives `accepted`, the offset to send
+again from, and that a small frame after a refused one is refused too.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes both.
+`TestStreamPaneClientFrameMemory` reads /proc and fails on macOS on main too.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (8d1f4899d) | "118 of the burst's frames were refused, into a pane that reads its input", "the program read 2410 bytes, want the 3000 bytes" | **caught** |
+| A frame cap of 4 again (`paneInputFrames = 4`) | "389 of the burst's frames were refused", "the program read 1055 bytes" | **caught** |
+| No refusing run (a later frame that fits is taken after a refusal) | "a small frame after a refused one was taken, ahead of the frames refused before it" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestStreamPaneTypesABurstOfInputInOrder|TestStreamPaneLeaseBehindBlockedInput)$' -v .`.

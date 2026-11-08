@@ -85,9 +85,13 @@ const (
 	maxPaneOutputFrame = 256 << 10
 	// maxLeaseDim bounds a lease, which is a terminal size.
 	maxLeaseDim = 4096
-	// paneInputQueue is how many I frames wait for the pane to read the one
-	// before them. A frame that finds the queue full is refused as busy.
-	paneInputQueue = 4
+	// paneInputBytes and paneInputFrames bound the input that waits for the
+	// pane to read it: the bytes are the memory four full frames took, and
+	// the frames are many, since a client may send one frame per key and a
+	// burst of keys must never be refused while the pane reads. See
+	// paneInput.
+	paneInputBytes  = 4 * maxPaneInputFrame
+	paneInputFrames = 4096
 	// snapCellBytes is what one cell of a snapshot costs the daemon at most:
 	// its CellState in the TerminalState and its share of the VT bytes. A
 	// snapshot is charged this for every cell it may hold before it is taken.
@@ -142,11 +146,11 @@ type paneStream struct {
 	// goroutine in between would hand an input frame the authority another
 	// verb computed.
 	admitMu sync.Mutex
-	// inputQ holds I frames for the goroutine that writes them to the pane,
-	// so a pane that does not read its input never holds up an L frame.
-	// quit closes when the stream ends.
-	inputQ chan []byte
-	quit   chan struct{}
+	// in holds I frames for the goroutine that writes them to the pane, so
+	// a pane that does not read its input never holds up an L frame. quit
+	// closes when the stream ends.
+	in   paneInput
+	quit chan struct{}
 	// snapRelease gives back the read budget the snapshot in snap holds.
 	snapRelease func()
 }
@@ -204,7 +208,7 @@ func (d *Daemon) verbStreamPane(cs *connState, params json.RawMessage) (any, *ve
 	}
 	win := state.Windows[idx]
 	ps := &paneStream{d: d, cs: cs, sess: sess, window: win.ID, pty: pty, subID: cs.clientID,
-		fit: p.Fit, inputQ: make(chan []byte, paneInputQueue), quit: make(chan struct{})}
+		fit: p.Fit, quit: make(chan struct{})}
 	if p.LeaseCols > 0 {
 		if verr := ps.admitLease(p.LeaseCols, p.LeaseRows); verr != nil {
 			return nil, verr
@@ -365,6 +369,7 @@ func (ps *paneStream) close() {
 		ps.leased, ps.closed = false, true
 		ps.leaseMu.Unlock()
 		close(ps.quit)
+		ps.in.close()
 		ps.dropSnap()
 		LogBasic("Client %s stopped streaming pane %s", ps.cs.clientID, shortWindowID(ps.window))
 	})
@@ -662,21 +667,103 @@ func (ps *paneStream) readClient(br *bufio.Reader) {
 }
 
 // queueInput checks an I frame as send-text is checked, and queues it for
-// writeInput. A frame that finds paneInputQueue frames already waiting is
-// refused as busy: the pane is not reading its input.
+// writeInput. A frame that does not fit is refused as busy, and so is every
+// frame after it until the pane has read what waits: the input a client gets
+// typed is always what it sent, in order, up to the offset the refusal gives
+// in accepted. It writes that refusal itself, and returns the refusal of a
+// check.
 func (ps *paneStream) queueInput(data []byte) *verbError {
 	if len(data) == 0 {
 		return nil
 	}
 	if verr := ps.admitInput(); verr != nil {
+		LogBasic("Stream of pane %s refused an input frame: %s", shortWindowID(ps.window), verr.Message)
 		return verr
 	}
-	select {
-	case ps.inputQ <- data:
+	accepted, waiting, first, ok := ps.in.push(data)
+	if ok {
 		return nil
-	default:
-		return newVerbError(ErrVerbBusy, fmt.Sprintf("the pane has not read the last %d input frames. This frame was not typed. Send it again when the pane reads its input", paneInputQueue))
 	}
+	if first {
+		LogBasic("Stream of pane %s refuses input: the pane has not read %d bytes. The client is told to send again from byte %d", shortWindowID(ps.window), waiting, accepted)
+	}
+	// The refusal carries the offset as a number, for a client to resend
+	// from.
+	body, _ := jsonx.Marshal(map[string]any{"code": ErrVerbBusy, "accepted": accepted,
+		"message": fmt.Sprintf("the pane has not read the last %d bytes of input. This frame and every frame after it until the pane reads were not typed. Send again from byte %d of this stream's input", waiting, accepted)})
+	_ = ps.writeFrame(paneFrameError, body)
+	return nil
+}
+
+// paneInput is the input that waits for the pane, in order. The zero value
+// is ready.
+type paneInput struct {
+	mu     sync.Mutex
+	wake   chan struct{}
+	frames [][]byte
+	bytes  int
+	// accepted counts every byte the stream took, typed or waiting.
+	accepted int64
+	// refusing is set by a refusal and cleared once nothing waits, so no
+	// frame after a refused one is typed before it.
+	refusing bool
+	closed   bool
+}
+
+// push queues data, or refuses it. It returns the bytes accepted so far,
+// the bytes that wait, and whether this refusal is the first of its run.
+func (q *paneInput) push(data []byte) (accepted int64, waiting int, first, ok bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.closed {
+		return q.accepted, q.bytes, false, true
+	}
+	if q.refusing || len(q.frames) > 0 && (q.bytes+len(data) > paneInputBytes || len(q.frames) >= paneInputFrames) {
+		first = !q.refusing
+		q.refusing = true
+		return q.accepted, q.bytes, first, false
+	}
+	q.frames = append(q.frames, data)
+	q.bytes += len(data)
+	q.accepted += int64(len(data))
+	if q.wake == nil {
+		q.wake = make(chan struct{}, 1)
+	}
+	select {
+	case q.wake <- struct{}{}:
+	default:
+	}
+	return q.accepted, q.bytes, false, true
+}
+
+// pop takes the frames that wait, and the channel that says more came.
+func (q *paneInput) pop() ([][]byte, chan struct{}) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.wake == nil {
+		q.wake = make(chan struct{}, 1)
+	}
+	frames := q.frames
+	q.frames = nil
+	return frames, q.wake
+}
+
+// written gives back n bytes the pane took. Once nothing waits, a run of
+// refusals ends.
+func (q *paneInput) written(n int) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.bytes -= n
+	if q.bytes == 0 && len(q.frames) == 0 {
+		q.refusing = false
+	}
+}
+
+// close drops what waits: the stream is gone.
+func (q *paneInput) close() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.closed, q.frames, q.bytes = true, nil, 0
 }
 
 // admitInput runs every check send-text passes.
@@ -693,19 +780,27 @@ func (ps *paneStream) admitInput() *verbError {
 
 // writeInput types the queued I frames into the pane, one after another,
 // until the stream ends. A write into a pane that does not read blocks here,
-// and holds one frame, while the client's lease frames go on.
+// while the client's lease frames go on and further input is refused.
 func (ps *paneStream) writeInput() {
 	for {
+		frames, wake := ps.in.pop()
+		for _, data := range frames {
+			if _, err := ps.pty.Write(data); err != nil {
+				LogBasic("Stream of pane %s could not type %d bytes: %v", shortWindowID(ps.window), len(data), err)
+				ps.writeError(ptyWriteError(err))
+			} else {
+				ps.cs.lastInput.Store(time.Now().UnixNano())
+				ps.pty.noteHumanKey(data)
+			}
+			ps.in.written(len(data))
+		}
+		if len(frames) > 0 {
+			continue
+		}
 		select {
 		case <-ps.quit:
 			return
-		case data := <-ps.inputQ:
-			if _, err := ps.pty.Write(data); err != nil {
-				ps.writeError(ptyWriteError(err))
-				continue
-			}
-			ps.cs.lastInput.Store(time.Now().UnixNano())
-			ps.pty.noteHumanKey(data)
+		case <-wake:
 		}
 	}
 }
