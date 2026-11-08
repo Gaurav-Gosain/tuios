@@ -345,7 +345,7 @@ func ckEditRow(c *ui.Context, pal *palette, mono string, rowH float32, l editrev
 	ui.Row(c).Height(rowH).Padding(0, sp3).AlignItems(ui.Center).Background(bg).Children(func() {
 		ui.Box(c).Width(ckEditGutter).Shrink(0).Children(func() {
 			if l.Cont {
-				ui.Text(c, "↪").FontSize(fsCaption).TextColor(pal.textFaint)
+				ui.Text(c, "↳").FontSize(fsCaption).TextColor(pal.textFaint)
 			}
 		})
 		t := ui.Text(c, l.Text).Font(mono).FontSize(fsCode).TextColor(fg).NoWrap()
