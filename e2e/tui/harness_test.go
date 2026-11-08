@@ -104,6 +104,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
@@ -162,13 +163,10 @@ func runE2E(m *testing.M) int {
 	// live under one root, removed once here rather than per test: a test's own
 	// cleanup runs while another test may still be deriving the same path.
 	sweepShortRuntimeRoots()
-	// A run started from a tuios pane inherits the pane's TUIOS_SOCKET, which
-	// names the person's daemon, and tuiosCLI passes the environment on. The
-	// commands would dial it to check it; the suite has no business there.
-	_ = os.Unsetenv("TUIOS_SOCKET")
-	// A pane of a named server exports TUIOS_SERVER, which would put every
-	// tuios the suite spawns on that server. Tests that want one name it.
-	_ = os.Unsetenv("TUIOS_SERVER")
+	// A run started from a tuios pane inherits the pane's TUIOS_* variables,
+	// and tuiosCLI passes the environment on: every command would name the
+	// person's daemon, session and pane. Tests that want one of them set it.
+	testutil.ClearPaneEnv()
 	// tuios follows the Omarchy theme it finds. HOME is redirected per test,
 	// which hides the applied theme, but these two name directories outright:
 	// a developer on Omarchy has OMARCHY_PATH set, and its themes would join

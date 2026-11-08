@@ -75,16 +75,15 @@ func isolateXDG() (dir string, check func() error) {
 			}
 		}
 	}
-	// A run started from a tuios pane inherits the pane's TUIOS_SOCKET, which
-	// names the person's daemon. Nothing selects a daemon by it, but the check
-	// against it dials the socket it names, and a test has no business there.
-	if err := os.Unsetenv("TUIOS_SOCKET"); err != nil {
-		panic(fmt.Sprintf("testutil: unset TUIOS_SOCKET: %v", err))
+	// A test binary that a test's daemon runs as a pane's program, as the
+	// helper processes in internal/session are, has the pane variables of
+	// that daemon, and reads them. Only the outer run clears them: it marks
+	// the environment, and every process it starts inherits the mark.
+	if os.Getenv(isolatedEnv) == "" {
+		ClearPaneEnv()
 	}
-	// A pane of a named server exports TUIOS_SERVER; a test that runs tuios
-	// would otherwise land on that server.
-	if err := os.Unsetenv("TUIOS_SERVER"); err != nil {
-		panic(fmt.Sprintf("testutil: unset TUIOS_SERVER: %v", err))
+	if err := os.Setenv(isolatedEnv, "1"); err != nil {
+		panic(fmt.Sprintf("testutil: set %s: %v", isolatedEnv, err))
 	}
 	// tuios follows the Omarchy theme it finds when no theme is configured,
 	// and Omarchy keeps that theme under $HOME/.local/state and its themes
@@ -107,6 +106,42 @@ func isolateXDG() (dir string, check func() error) {
 	return tmp, func() error {
 		defer func() { _ = os.RemoveAll(tmp) }()
 		return stillRedirected(tmp)
+	}
+}
+
+// paneEnvVars are the variables a tuios daemon gives every pane. A run
+// started from a tuios pane inherits them, and they name the person's daemon,
+// session and pane, not the ones a test starts:
+//   - TUIOS_SOCKET names the person's daemon. Nothing selects a daemon by it,
+//     but the check against it dials the socket it names.
+//   - TUIOS_SERVER puts every tuios a test runs on the pane's named server.
+//   - TUIOS_PANE_ID and TUIOS_PANE_TOKEN are the pane's identity. A command a
+//     test runs sends them as its own, so the test's daemon finds no such pane
+//     (send-agent-message) or refuses the token (tuios mcp).
+//   - TUIOS_SESSION and TUIOS_WINDOW_ID fill a command's default session and
+//     window with the pane's.
+//
+// CI runs outside any pane and has none of them, so a test passed there and
+// failed here.
+var paneEnvVars = []string{
+	"TUIOS_SOCKET", "TUIOS_SERVER", "TUIOS_SESSION", "TUIOS_SESSION_REMOTE",
+	"TUIOS_PANE_ID", "TUIOS_WINDOW_ID", "TUIOS_WINDOW_NAME", "TUIOS_PANE_TOKEN",
+	"TUIOS_PANE_GRANTS", "TUIOS_PANE_HOSTED", "TUIOS_PANE_TTY", "TUIOS_RESTORED",
+	"TUIOS_HOST", "TUIOS_ENV",
+}
+
+// isolatedEnv marks a process that a test run started, directly or through
+// a daemon the test started.
+const isolatedEnv = "TUIOS_TEST_ISOLATED"
+
+// ClearPaneEnv unsets every variable a tuios pane gives the programs in it,
+// so a test run from a pane sees the environment CI does. RunIsolated calls
+// it, and so does the e2e suite's TestMain, which does not use RunIsolated.
+func ClearPaneEnv() {
+	for _, name := range paneEnvVars {
+		if err := os.Unsetenv(name); err != nil {
+			panic(fmt.Sprintf("testutil: unset %s: %v", name, err))
+		}
 	}
 }
 
