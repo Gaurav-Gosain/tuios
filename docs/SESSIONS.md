@@ -705,11 +705,18 @@ client ignores the order an older one saved.
 
 When the daemon starts, it restores every session it finds saved state for. For
 each window it spawns a **fresh shell** in that window's saved working directory
-(falling back to the shell's default directory if the saved path no longer
+(falling back to the directory the daemon runs in if the saved path no longer
 exists), and writes a dim one-line notice into it:
 
 ```
 -- tuios: session restored, fresh shell in /home/you/project --
+```
+
+The notice names the directory the shell started in, and the saved one when
+the shell could not start there:
+
+```
+-- tuios: session restored, fresh shell in /home/you (/home/you/old no longer available) --
 ```
 
 When the pane has saved history, the notice is a divider under that history:
