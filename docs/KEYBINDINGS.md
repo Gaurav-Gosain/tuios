@@ -203,7 +203,10 @@ holds it until the component takes it.
 Help mode is a view, not a mode. It reads only the keys in the table below;
 every other key reaches the app as if the pane were not up, so the rail's own
 toggles, a workspace switch and a command for the focused pane run while you
-read, and the pane redraws around the layout they leave.
+read, and the pane redraws around the layout they leave. The leader opens its
+menu over the screen rather than beside the pane: the explanation stands aside
+while the menu is up, and the chord that closes it leaves the pane hidden for
+the same two seconds as any other key.
 
 | Key | What it does |
 | --- | --- |
