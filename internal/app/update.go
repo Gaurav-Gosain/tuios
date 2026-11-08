@@ -1084,6 +1084,8 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// A reply editor the rows moved the cursor away from closes, keeping
 	// its draft.
 	m.CockpitReplyCheck()
+	// Copy mode over a thread the view no longer shows ends.
+	m.CockpitCopyCheck()
 	// Checkpoints a frame of the agents view drew for an older state: a
 	// turn that ended with no input is read now. A flag check when not.
 	if side := m.CockpitSideWanted(); side != nil {

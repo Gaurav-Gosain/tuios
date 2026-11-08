@@ -15294,3 +15294,20 @@ Run on 2026-11-08 on macOS (arm64). The branch passes both.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestAutoCardsKeepTheirHoldsAcrossALiveUpgrade|TestAFarCardIsLetGoAfterALiveUpgrade)$' -v .`.
+
+## TestCockpitCopyModeEndsWithItsAgent
+
+State machine plan N2. Two agents with threads. Copy mode starts over the
+first one's thread, then a click selects the second. ctrl+b [ there must start
+copy mode over the second thread (a search finds its words), and back on the
+first agent copy mode must be off (no copy mode legend in the dock).
+
+Run on 2026-11-08 on macOS (arm64). The branch passes, and so does
+`TestCockpitThreadCopyMode`.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (90d8a0400), where the copy mode pointer outlives its agent | "ctrl+b [ on B did not start copy mode after copy mode on A", "back on A, copy mode is on again" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitCopyModeEndsWithItsAgent$' -v .`.

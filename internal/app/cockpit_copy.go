@@ -170,6 +170,19 @@ func (m *OS) CockpitCopy() (*terminal.CopyMode, terminal.CopyGrid) {
 	return &q.cm, q
 }
 
+// CockpitCopyCheck ends copy mode over the thread once it no longer fits
+// what the view shows: the cursor went to another agent, the thread tab
+// closed, or the view did. Copy mode is for the thread it started on, and a
+// pointer kept past that refuses the next start and comes back with old rows
+// when the person returns to the agent. Update asks it after every message:
+// one pointer check when copy mode is off.
+func (m *OS) CockpitCopyCheck() {
+	if m.Inbox.threads.copy != nil && m.threadCopy() == nil {
+		m.Inbox.threads.copy = nil
+		m.cockpitTouch()
+	}
+}
+
 // CockpitCopyEnd ends copy mode over the thread.
 func (m *OS) CockpitCopyEnd() {
 	if m.Inbox.threads.copy != nil {
