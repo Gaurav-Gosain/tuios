@@ -71,6 +71,11 @@ type keyOwner struct {
 	// boxHas: the reply box had the focus in the last frame built
 	// (replyNow).
 	boxHas bool
+	// listHad: the agents list had the keys while the view was open. Once
+	// the view closes with the keys held, a key typed in the list finds
+	// no list to read it, so the window reads it for the owner
+	// (catchListKeys).
+	listHad bool
 }
 
 // keyHold is one change on its way.
@@ -270,6 +275,11 @@ func (a *App) keyOwnerView(c *ui.Context) {
 	}
 	ko.has = keyTarget{}
 	ko.boxHas = a.ck.open && a.ck.reply.box.FocusWithin(c)
+	if a.ck.open {
+		ko.listHad = a.ck.fleetFocus.FocusWithin(c)
+	} else if !a.keysHeld() {
+		ko.listHad = false
+	}
 	if t := a.keyTarget(); !ko.ref.Focused(c) {
 		if ref := a.targetRef(t); ref != nil && ref.FocusWithin(c) {
 			ko.has = t
@@ -375,6 +385,43 @@ func (a *App) keySink(c *ui.Context) {
 		return false
 	})
 	sink.TextCaret(ui.Rect{})
+	a.catchListKeys(c)
+}
+
+// catchListKeys keeps for the owner the keys typed in the agents list
+// after the view closed. MyGo routes a key to the element it was typed in;
+// the list reads its keys as shortcuts only while the view is built, so a
+// key typed as a landed Escape closed the view went nowhere, and the shell
+// lost the first letter of the line after it (Mac round 5, feel M1). A key
+// whose element is gone routes to the window: these shortcuts read it. A
+// key that typed text keeps the text, and the text that comes later to the
+// sink is the same press, which keepKey drops.
+func (a *App) catchListKeys(c *ui.Context) {
+	if a.ck.open || !a.ko.listHad {
+		return
+	}
+	for _, k := range proseKeys {
+		for _, shift := range []bool{true, false} {
+			m := ui.Modifiers(0)
+			if shift {
+				m = ui.Shift
+			}
+			if !c.Shortcut(m, k) {
+				continue
+			}
+			h := heldKey{mods: m, key: k, seq: c.ShortcutSeq()}
+			if r := keyRune(ckKey{key: k, shift: shift}); r != 0 {
+				h.text = string(r)
+			}
+			a.keepKey(h)
+			break
+		}
+	}
+	for _, k := range listKeys {
+		if c.Shortcut(k.mods, k.key) {
+			a.keepKey(heldKey{mods: k.mods, key: k.key, seq: c.ShortcutSeq()})
+		}
+	}
 }
 
 // keyTarget is where the keys go now: the scratch while it shows, the
