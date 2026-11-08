@@ -68,10 +68,11 @@ const (
 	dispatchActionQuiet  = "quiet"
 	dispatchActionPreset = "preset"
 	dispatchActionCap    = "cap"
+	dispatchActionVerify = "verify"
 )
 
 // dispatchActions are the actions set-task-dispatch takes.
-var dispatchActions = []string{dispatchActionMode, dispatchActionPause, dispatchActionResume, dispatchActionQuiet, dispatchActionPreset, dispatchActionCap}
+var dispatchActions = []string{dispatchActionMode, dispatchActionPause, dispatchActionResume, dispatchActionQuiet, dispatchActionPreset, dispatchActionCap, dispatchActionVerify}
 
 // taskByDispatch is the by of a claim dispatch makes.
 const taskByDispatch = "dispatch"
@@ -104,6 +105,17 @@ type dispatchBoard struct {
 	Stopped  string `json:"stopped,omitempty"`
 	// Preset is what auto starts each card's agent with.
 	Preset *DispatchPreset `json:"preset,omitempty"`
+	// Verify is the shell line the daemon runs in a card's worktree when
+	// its agent is done with it, and VerifyTimeout its limit in seconds,
+	// 0 for the default (task_verify.go). Only the person sets them.
+	Verify        string `json:"verify,omitempty"`
+	VerifyTimeout int    `json:"verify_timeout,omitempty"`
+}
+
+// keep reports whether the board holds a setting, so a board back to
+// manual with none is dropped from the file.
+func (b *dispatchBoard) keep() bool {
+	return (b.Mode != "" && b.Mode != DispatchManual) || b.Failures > 0 || b.Stopped != "" || b.Preset != nil || b.Verify != ""
 }
 
 // DispatchPreset is how auto starts a board's agents: the agent, its
@@ -179,6 +191,10 @@ type DispatchBoardRow struct {
 	Running int             `json:"running,omitempty"`
 	Waiting int             `json:"waiting,omitempty"`
 	Note    string          `json:"note,omitempty"`
+	// Verify is the board's verify command and VerifyTimeout its limit in
+	// seconds.
+	Verify        string `json:"verify,omitempty"`
+	VerifyTimeout int    `json:"verify_timeout,omitempty"`
 }
 
 // The default caps of auto.
@@ -265,6 +281,9 @@ func rowOf(key string, b *dispatchBoard) DispatchBoardRow {
 		row.Failures, row.Stopped = b.Failures, b.Stopped
 		if b.Mode == DispatchAuto {
 			row.Preset = b.Preset
+		}
+		if b.Verify != "" {
+			row.Verify, row.VerifyTimeout = b.Verify, verifyTimeoutOf(b.VerifyTimeout)
 		}
 	}
 	return row
@@ -432,8 +451,12 @@ func (d *Daemon) noteDispatchedOutcome(action, reason string, row TaskRow) {
 	}
 	var finished bool
 	switch action {
-	case TaskActionFinished:
-		finished = true
+	case TaskActionFinished, TaskActionVerified:
+		// In verify, the outcome waits for the verify (task_verify.go).
+		if row.Stage == TaskStageVerify {
+			return
+		}
+		finished = row.Stage != TaskStageTodo
 	case TaskActionReleased, TaskActionBlocked:
 	default:
 		return
@@ -451,6 +474,10 @@ func (d *Daemon) noteDispatchedOutcome(action, reason string, row TaskRow) {
 // release is published from the session's event sink under the state lock.
 func (d *Daemon) afterTaskEvent(sess *Session, action, window, reason string, row TaskRow) {
 	d.kickAuto()
+	if row.Stage != TaskStageVerify {
+		// A card moved out of verify ends the verify that ran on it.
+		d.verifies.stop(verifyKey(row.Session, row.ID), 0)
+	}
 	if row.Dispatched || (action == TaskActionFinished && d.dispatch.anyMode(DispatchPull)) {
 		go func() {
 			d.noteDispatchedOutcome(action, reason, row)
@@ -486,7 +513,7 @@ func (d *Daemon) noteDispatchAgentState(sess *Session, window, state string) {
 				}
 			}
 			for _, cs := range d.cardSessions(sess, window) {
-				d.putBackDispatched(cs, window)
+				d.putBackDispatched(cs, window, w.AgentMessage)
 			}
 			return
 		}
@@ -507,8 +534,9 @@ func usageLimited(w WindowState) bool {
 }
 
 // putBackDispatched lets go, back to todo, the cards dispatch gave window,
-// after its agent errored.
-func (d *Daemon) putBackDispatched(sess *Session, window string) {
+// after its agent errored, one attempt more, with the agent's last line as
+// the note.
+func (d *Daemon) putBackDispatched(sess *Session, window, last string) {
 	const reason = "agent errored"
 	var rows []TaskRow
 	_ = sess.mutateState(func(st *SessionState) error {
@@ -520,6 +548,8 @@ func (d *Daemon) putBackDispatched(sess *Session, window string) {
 			}
 			tk.release(taskByDaemon, reason, now)
 			tk.setStage(TaskStageTodo, now)
+			tk.Attempts++
+			tk.Note = cutUTF8(firstNonEmpty(printableClaim(last, taskMaxReason), reason), taskMaxReason)
 			rows = append(rows, taskRow(sess, st, tk))
 		}
 		if len(rows) == 0 {
@@ -534,12 +564,22 @@ func (d *Daemon) putBackDispatched(sess *Session, window string) {
 // boards, after its agent went to done. Each finish publishes task-finished, which pulls the
 // next card.
 func (d *Daemon) finishOnDone(sess *Session, window string) {
+	var work *TaskWork
+	if !d.lifecycleOff.Load() {
+		work = d.workOf(window)
+	}
 	var rows []TaskRow
 	_ = sess.mutateState(func(st *SessionState) error {
 		now := time.Now().UnixNano()
 		for i := range st.Tasks {
 			tk := &st.Tasks[i]
-			if tk.Holder != window || !d.dispatch.isMode(dispatchBoardKey(sess.Name(), tk.Project), DispatchPull, DispatchAuto) {
+			board := dispatchBoardKey(sess.Name(), tk.Project)
+			if tk.Holder != window || !d.dispatch.isMode(board, DispatchPull, DispatchAuto) {
+				continue
+			}
+			if stage := d.handInStage(board); stage != "" {
+				tk.handIn(taskByDaemon, stage, work, now)
+				rows = append(rows, taskRow(sess, st, tk))
 				continue
 			}
 			if _, changed := tk.finish(taskByDaemon, now); changed {
@@ -554,6 +594,7 @@ func (d *Daemon) finishOnDone(sess *Session, window string) {
 	for _, row := range rows {
 		LogBasic("Task %s in session %s finished: its agent is done", row.ID, sess.Name())
 		d.publishTask(sess, EventTaskFinished, TaskActionFinished, window, "agent done", row)
+		d.startTaskVerify(sess, row.ID)
 	}
 }
 

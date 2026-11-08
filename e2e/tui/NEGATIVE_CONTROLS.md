@@ -14851,3 +14851,28 @@ hold the next at the cap of 1, and show Dispatch Auto with the counts.
 
 Run on 2026-11-08 on macOS (arm64). With ctrl+t turning pull back to manual,
 as before auto: "waiting for the board in auto mode" timed out. **caught**
+
+## TestCardLifecycleVerifiesTheAgentsWork, TestCardLifecycleCountsOnAPullBoard, TestCardLifecycleVerifiesOnTheCardsMachine
+
+A fake agent pane in a git repository is done with its card from inside its
+pane; the board's verify command fails, passes, hangs, floods, is cut short by
+a hand move, finds its worktree gone and spans a restart. On a pull board the
+failure count follows the verify. A pane on a second machine is done with a
+card the first owns, and the first verifies it there.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes all three.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| A move out of verify does not end the run (`verifies.stop` in afterTaskEvent cut) | "the verify of t5 kept running after the card was moved by hand" | **caught** |
+| A pane may set the verify command (the pane refusal cut) | "a pane set the board's verify command" | **caught** |
+| The command not in a process group of its own (`OwnGroup` cut) | "the hang's child ... still runs after the timeout ended its verify" | **caught** |
+| No resume after a restart (`resumeVerifies` after the load cut) | "t7 did not reach review after a restart mid-verify" | **caught** |
+| A verify outcome not counted (`TaskActionVerified` left out of noteDispatchedOutcome) | "the board counts 0 failures after a dispatched card's verify failed, want 1" | **caught** |
+| A far card verified here (`farVerify` replaced by a local run) | "t1 after the failed far verify is ... Note:the worktree is gone" | **caught** |
+| The tail not cut to 2 KiB (`cleanTail` cut skipped) | "t4 after the flood has ... a 16383 byte tail" | **caught** |
+| An errored agent's line not kept (the note in putBackDispatched cut) | "t1 after its agent errored has note \"exit 1: no ok file\"" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCardLifecycle' -v .`.
+

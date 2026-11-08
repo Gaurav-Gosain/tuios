@@ -19,9 +19,9 @@ func newTaskDispatchCommand() *cobra.Command {
 	var f taskFlags
 	var project string
 	var preset session.DispatchPreset
-	var capMachine int
+	var capMachine, verifyTimeout int
 	cmd := &cobra.Command{
-		Use:   "dispatch [status | pause | resume | mode manual|pull|auto | preset | cap N | quiet SPAN|off]",
+		Use:   "dispatch [status | pause | resume | mode manual|pull|auto | preset | cap N | quiet SPAN|off | verify COMMAND|off]",
 		Short: "Show or change how task cards go to agents",
 		Long: `A board is a project's cards (--project) or a session's own cards. Its dispatch
 mode is manual, where a person starts each card, or pull, where an agent that
@@ -42,7 +42,15 @@ A board stops by itself after 3 dispatched cards in a row end without being
 finished, and all dispatch stops when an agent reports a usage limit
 (tuios set-agent-state errored --kind usage_limit). Only resume starts it.
 
-From inside a pane, every action but pause needs the admin grant.`,
+An agent that is done with its card does not close it. The card goes to
+verify when the board has a verify command (verify "go test ./..."), and
+tuios runs that command in the card's worktree: a pass moves the card to
+review, a fail sends it back to todo with the last line of the output and
+one attempt more. With no verify command the card goes to review. You close
+it with tuios task done, or it moves to shipped when its pull request merges.
+
+From inside a pane, every action but pause needs the admin grant, and
+verify is refused from every pane.`,
 		Example: `  # Pull mode for this repository's board
   tuios task dispatch mode pull --project .
 
@@ -55,7 +63,10 @@ From inside a pane, every action but pause needs the admin grant.`,
 
   # Start an agent for each open card of this repository's board
   tuios task dispatch mode auto --agent claude --effort high --project .
-  tuios task dispatch cap 4 --machine-cap 2`,
+  tuios task dispatch cap 4 --machine-cap 2
+
+  # Run the tests on each card its agent is done with, at most 15 minutes
+  tuios task dispatch verify "go test ./..." --verify-timeout 900 --project .`,
 		Args: cobra.RangeArgs(0, 2),
 		RunE: func(_ *cobra.Command, args []string) error {
 			verb, params := "get-task-dispatch", map[string]any{}
@@ -73,6 +84,11 @@ From inside a pane, every action but pause needs the admin grant.`,
 					return errfmt.Errorf("tuios task dispatch cap takes a number, such as 3")
 				}
 				verb, params["action"], params["cap"], params["machine_cap"] = "set-task-dispatch", action, n, capMachine
+			case "verify":
+				if len(args) != 2 {
+					return errfmt.Errorf("tuios task dispatch verify takes one shell line in quotes, or off")
+				}
+				verb, params["action"], params["verify"], params["verify_timeout"] = "set-task-dispatch", action, args[1], verifyTimeout
 			case "mode", "quiet":
 				if len(args) != 2 {
 					return errfmt.Errorf("tuios task dispatch %s takes one value", action)
@@ -80,9 +96,9 @@ From inside a pane, every action but pause needs the admin grant.`,
 				verb, params["action"] = "set-task-dispatch", action
 				params[action] = args[1]
 			default:
-				return errfmt.Errorf("unknown dispatch action %q: status, pause, resume, mode or quiet", action)
+				return errfmt.Errorf("unknown dispatch action %q: status, pause, resume, mode, preset, cap, quiet or verify", action)
 			}
-			if len(args) == 2 && action != "mode" && action != "quiet" && action != "cap" {
+			if len(args) == 2 && action != "mode" && action != "quiet" && action != "cap" && action != "verify" {
 				return errfmt.Errorf("tuios task dispatch %s takes no value", action)
 			}
 			if project != "" {
@@ -106,7 +122,8 @@ From inside a pane, every action but pause needs the admin grant.`,
 	cmd.Flags().StringVar(&preset.PermissionMode, "permission-mode", "", "Its permission mode (default: its own)")
 	cmd.Flags().StringVar(&preset.Machine, "machine", "", "here (default), any, or a linked machine")
 	cmd.Flags().IntVar(&capMachine, "machine-cap", 0, "With cap: agents on one machine")
-	cmd.ValidArgs = []string{"status", "pause", "resume", "mode", "preset", "cap", "quiet"}
+	cmd.Flags().IntVar(&verifyTimeout, "verify-timeout", 0, "With verify: its limit in seconds (default 600)")
+	cmd.ValidArgs = []string{"status", "pause", "resume", "mode", "preset", "cap", "quiet", "verify"}
 	return cmd
 }
 
@@ -117,7 +134,7 @@ func runTaskDispatch(w io.Writer, f taskFlags, verb string, params map[string]an
 		return err
 	}
 	defer t.Close()
-	if f.session != "" || params["action"] == "mode" || params["action"] == "preset" {
+	if f.session != "" || params["action"] == "mode" || params["action"] == "preset" || params["action"] == "verify" {
 		params = t.params(params)
 	}
 	raw, err := t.client.Call(verb, params)
@@ -173,6 +190,9 @@ func printDispatch(w io.Writer, st session.DispatchStatus) error {
 			if r.Note != "" {
 				line += " (" + plainLine(r.Note) + ")"
 			}
+		}
+		if r.Verify != "" {
+			line += plainLine(fmt.Sprintf(", verify: %s (%ds)", r.Verify, r.VerifyTimeout))
 		}
 		b.WriteString(line)
 		b.WriteByte('\n')

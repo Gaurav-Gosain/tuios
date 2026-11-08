@@ -445,6 +445,13 @@ type Daemon struct {
 	// See task_auto.go. It is read under session state locks and written by
 	// a config reload, so it is atomic.
 	taskAutoOff atomic.Bool
+	// lifecycleOff is DaemonConfig.TaskLifecycleOff, and verifies the
+	// verify commands running now. See task_verify.go.
+	lifecycleOff atomic.Bool
+	verifies     taskVerifies
+	// verifyPeers maps the name a far holder's machine gives itself to its
+	// [hosts] name here, as verifyHost found it.
+	verifyPeers sync.Map
 	// machineCap is [tasks] machine_cap, and pool the placement state:
 	// picks reserved and agents started that are not working yet. See
 	// pool_place.go.
@@ -1049,6 +1056,10 @@ type DaemonConfig struct {
 	// TaskAutoStageOff is [tasks] auto_stage = false: the daemon moves no
 	// card on its own. See task_auto.go.
 	TaskAutoStageOff bool
+	// TaskLifecycleOff keeps an agent's finished card going to done rather
+	// than to verify and review: [tasks] auto_stage = false, or [tasks]
+	// stages without review. See task_verify.go.
+	TaskLifecycleOff bool
 	// MachineCap is [tasks] machine_cap: how many agents may work here
 	// before placement looks elsewhere. Zero is no cap. See pool_place.go.
 	MachineCap int
@@ -1120,6 +1131,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.SetMailWake(!cfg.MailWakeOff)
 	d.SetChildQuestionsToParent(!cfg.ChildQuestionsToPerson)
 	d.taskAutoOff.Store(cfg.TaskAutoStageOff)
+	d.lifecycleOff.Store(cfg.TaskLifecycleOff)
 	d.machineCap.Store(int64(max(cfg.MachineCap, 0)))
 	d.openedKeep = cfg.OpenedCopyKeep
 	d.SetCheckpoints(cfg.Checkpoints)
@@ -1675,6 +1687,11 @@ func (d *Daemon) Start() error {
 	d.outbox.load(outboxPath())
 	// Review notes come back for the panes that came back.
 	d.dispatch.load(dispatchPath())
+	// The verifies a restart ended run again, now that the boards' verify
+	// commands are read (task_verify.go).
+	for _, s := range d.manager.AllSessions() {
+		d.resumeVerifies(s)
+	}
 	d.kickAuto()
 	d.reviewNotes.load(reviewNotesPath(), func(window string) bool { return d.sessionOfWindow(window) != "" })
 

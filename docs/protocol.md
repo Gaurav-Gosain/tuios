@@ -7638,13 +7638,21 @@ they make anything: a refusal names `task` in its hint.
 | `list-tasks` | The session's cards, oldest first. `stage`, `holder` and `open` (leave out `done`) narrow it. `all_sessions` lists every session's, in session name order, and takes no `session` or `holder`. `project` lists one repository's cards from every session; `hosts` with it also asks each linked machine for its own, and `hosts` with `all_sessions` adds every linked machine's project cards | `read` | `list` | `task_list` |
 | `get-task` | One card with its `prompt` and `history` | `read` | `list` | `task` |
 | `claim-task` | Take the card `id`, or with `next` the oldest card no pane holds that is not blocked or done, for `window` | `task`; for itself only | `write` | `task_claimed` |
-| `finish-task` | Mark the card done | `task`; only the card it holds | `write` | `task_finished` |
+| `finish-task` | Mark the card done. From the pane that holds it, the card is let go and goes to `verify` or `review` instead | `task`; only the card it holds | `write` | `task_finished` |
+| `run-task-verify` | Run a board's verify `command` in the worktree of `window`, a pane here, for the machine that owns the card; with `probe`, only say whether the pane is here (`here`) | refused | `open` | `task_verify` with `exit`, `note`, `tail` |
 | `set-task-stage` | Move the card to `stage` | `task`; only the card it holds | `write` | `task_changed` |
 | `block-task` | Mark the card stuck with `reason`, or lift it with `clear` | `task`; only the card it holds | `write` | `task_changed` |
 | `release-task` | Let the card go and keep its stage | `task`; only the card it holds | `write` | `task_changed` |
 | `remove-task` | Remove the card and its history | refused | `write` | `task_removed` with `id` |
 | `get-task-dispatch` | The dispatch settings: `paused`, `stopped` (why all dispatch stopped on its own), `quiet`, `quiet_now`, `boards` (each with `board`, `project` or `session`, `mode`, `failures`, `stopped`), and `board` for the board `project` or `session` names | `read` | `list` | `task_dispatch` |
-| `set-task-dispatch` | `action`: `mode` (with `mode` `manual`, `pull` or `auto`, for the board `project` or `session` names; auto needs a preset), `preset` (`agent`, `model`, `effort`, `permission_mode`, `machine`), `cap` (`cap`, `machine_cap`), `pause`, `resume` (lifts the pause and every stop) or `quiet` (with `quiet`, such as `22:00-07:00`, or `off`) | `pause` only; the rest need `admin` | refused | `task_dispatch` |
+| `set-task-dispatch` | `action`: `mode` (with `mode` `manual`, `pull` or `auto`, for the board `project` or `session` names; auto needs a preset), `preset` (`agent`, `model`, `effort`, `permission_mode`, `machine`), `cap` (`cap`, `machine_cap`), `pause`, `resume` (lifts the pause and every stop), `quiet` (with `quiet`, such as `22:00-07:00`, or `off`) or `verify` (with `verify`, a shell line or `off`, and `verify_timeout` in seconds) | `pause` only; `verify` is refused; the rest need `admin` | refused | `task_dispatch` |
+
+A row also carries the card's lifecycle: `attempts` (times it went back to
+todo after a failed verify or an errored agent), `note` (why the last one
+did), `work` (`host`, `session`, `window`, `dir` where its agent worked) and
+`verify` (`state` running, passed or failed, `exit`, `note`, `tail`, the last
+2 KiB of the output, `started_at`, `finished_at`). The history action
+`verified` records how a verify ended.
 
 `add-task` also takes `harness`, the agent the card is for, and `ask_first`,
 which keeps the card for a person. A row carries them, and `dispatched` when

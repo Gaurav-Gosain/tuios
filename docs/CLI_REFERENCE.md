@@ -2896,7 +2896,7 @@ tuios task stage ID STAGE [flags]
 tuios task block ID REASON... | --clear [flags]
 tuios task release ID [flags]
 tuios task rm ID [flags]
-tuios task dispatch [status | pause | resume | mode manual|pull|auto | preset | cap N | quiet SPAN|off] [--project URL] [flags]
+tuios task dispatch [status | pause | resume | mode manual|pull|auto | preset | cap N | quiet SPAN|off | verify COMMAND|off] [--project URL] [flags]
 ```
 
 **Flags:**
@@ -2911,6 +2911,7 @@ tuios task dispatch [status | pause | resume | mode manual|pull|auto | preset | 
 - `--next` (`claim`): Take the oldest card no pane holds that is not blocked or done, and that no fan of another session works on
 - `-w, --window <target>` (`claim`): The pane that takes the card (default: this pane; required outside a pane)
 - `--clear` (`block`): Lift the block
+- `--verify-timeout <seconds>` (`dispatch verify`): The verify command's time limit, at most 3600 (default 600)
 - `--json`: Output the verb result as JSON
 
 The words of `TITLE` and `REASON` are joined with spaces. `ls` prints one line
@@ -2935,6 +2936,26 @@ holds, unless it holds `admin`. `rm` from a pane needs `admin`.
 
 `add` also takes `--harness ID`, the agent the card is for, and `--ask-first`,
 which keeps the card for a person to start.
+
+`done` from the pane that holds the card is its agent saying the work is
+done: the card is let go and goes on to `review`, or to `verify` when the
+board has a verify command. tuios runs that command (`dispatch verify`) in the
+pane's worktree, on the pane's machine, as `sh -c COMMAND`, never in a pane,
+with a time limit (`--verify-timeout`, default 600 seconds) that ends the
+command and every process it started, and keeps only the end of its output.
+A pass moves the card to `review`. A fail (an exit other than 0, the time
+limit, a worktree that is gone) sends it back to `todo` with its `attempts`
+one higher and the last line of the output as its note; `get` shows the end
+of the output. A verify that cannot reach the pane's machine leaves the card
+in `verify` and says why; `stage ID verify` runs it again. A card moved out of
+`verify` by hand stops its run. An agent that errors while it holds a card
+dispatch gave it sends the card back to `todo` the same way, with its last
+message as the note. A merged pull request moves the card to `shipped`; `done`
+from you, a shell outside the panes, or a pane that holds `admin` closes it.
+With `[tasks] auto_stage = false`, or `[tasks] stages` without `review`, an
+agent's `done` closes the card as before. The verify command is refused from
+every pane, and so is a move to `review` or `shipped` by a pane while the
+board has one.
 
 `dispatch` shows and changes how cards go to agents. A board is a project's
 cards (`--project`) or a session's own cards. In `manual` mode, the default,
@@ -2976,7 +2997,10 @@ finished (let go, blocked, or put back because the agent errored). All
 dispatch stops when an agent reports a usage limit (`tuios set-agent-state
 errored --kind usage_limit`, or an errored message that says "usage limit").
 `resume` lifts the pause and every stop. From inside a pane, every action but
-`pause` needs `admin`. The settings are saved, so they survive a restart.
+`pause` needs `admin`, and `verify` is refused. A dispatched card counts as
+finished when its verify passes (or when it reaches `review` with no verify
+command), and as a failure when its verify fails. The settings are saved, so
+they survive a restart.
 
 **Examples:**
 ```bash
@@ -3009,6 +3033,9 @@ tuios task dispatch pause
 # An agent for each open card, at most 4 at once and 2 on one machine
 tuios task dispatch mode auto --agent claude --effort high --project .
 tuios task dispatch cap 4 --machine-cap 2
+
+# Run the tests on each card its agent is done with
+tuios task dispatch verify "go test ./..." --verify-timeout 900 --project .
 ```
 
 ### `tuios review`

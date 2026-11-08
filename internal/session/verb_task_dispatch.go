@@ -26,6 +26,10 @@ type taskDispatchParams struct {
 	// With cap: auto's caps, 0 for the default.
 	Cap        *int `json:"cap"`
 	MachineCap *int `json:"machine_cap"`
+	// With verify: the board's verify command ("" or off clears it), and
+	// its limit in seconds, 0 for the default.
+	Verify        string `json:"verify"`
+	VerifyTimeout int    `json:"verify_timeout"`
 }
 
 // preset checks the preset p names, nil when it names no agent.
@@ -92,12 +96,12 @@ func (d *Daemon) verbSetTaskDispatch(cs *connState, params json.RawMessage) (any
 		return nil, verr
 	}
 	if !slices.Contains(dispatchActions, p.Action) {
-		return nil, invalidParam("action", "action is one of mode, pause, resume, quiet, preset or cap", dispatchActions...)
+		return nil, invalidParam("action", "action is one of mode, pause, resume, quiet, preset, cap or verify", dispatchActions...)
 	}
 	if cs != nil && cs.viaLink {
 		return nil, newVerbError(ErrVerbForbidden, "set-task-dispatch is refused over the link: each machine's dispatch is set on that machine")
 	}
-	board, sess, verr := d.dispatchBoardParam(cs, p, p.Action == dispatchActionMode || p.Action == dispatchActionPreset)
+	board, sess, verr := d.dispatchBoardParam(cs, p, p.Action == dispatchActionMode || p.Action == dispatchActionPreset || p.Action == dispatchActionVerify)
 	if verr != nil {
 		return nil, verr
 	}
@@ -115,6 +119,15 @@ func (d *Daemon) verbSetTaskDispatch(cs *connState, params json.RawMessage) (any
 			Command: "tuios task dispatch pause",
 			Detail:  "Nothing changed. The person changes a board's mode, quiet hours, and starts dispatch again, from the agents view or a shell outside the panes.",
 		})
+	}
+	if p.Action == dispatchActionVerify && caller.window != "" {
+		// Admin too: the command is what judges an agent's work, so no
+		// agent writes it.
+		return nil, newVerbError(ErrVerbForbidden, "set-task-dispatch verify is refused from every pane")
+	}
+	verify, verr := verifyCommandParam(p.Verify, p.VerifyTimeout)
+	if verr != nil {
+		return nil, verr
 	}
 	preset, verr := d.presetParam(p)
 	if verr != nil {
@@ -146,7 +159,7 @@ func (d *Daemon) verbSetTaskDispatch(cs *connState, params json.RawMessage) (any
 			return nil, invalidParam("agent", "auto needs a preset: name the agent it starts, such as claude")
 		}
 		b.Mode = p.Mode
-		if p.Mode == DispatchManual && b.Failures == 0 && b.Stopped == "" && b.Preset == nil {
+		if !b.keep() {
 			delete(ds.f.Boards, board)
 		}
 		reason = board + " is " + p.Mode
@@ -160,7 +173,7 @@ func (d *Daemon) verbSetTaskDispatch(cs *connState, params json.RawMessage) (any
 		ds.f.Paused, ds.f.PausedBy, ds.f.PausedAt, ds.f.Stopped = false, "", 0, ""
 		for k, b := range ds.f.Boards {
 			b.Failures, b.Stopped = 0, ""
-			if (b.Mode == "" || b.Mode == DispatchManual) && b.Preset == nil {
+			if !b.keep() {
 				delete(ds.f.Boards, k)
 			}
 		}
@@ -174,6 +187,16 @@ func (d *Daemon) verbSetTaskDispatch(cs *connState, params json.RawMessage) (any
 		if p.MachineCap != nil {
 			ds.f.MachineCap = *p.MachineCap
 		}
+	case dispatchActionVerify:
+		b := ds.boardLocked(board, true)
+		b.Verify, b.VerifyTimeout = verify, p.VerifyTimeout
+		if verify == "" {
+			b.VerifyTimeout = 0
+		}
+		if !b.keep() {
+			delete(ds.f.Boards, board)
+		}
+		reason = board + " verify"
 	case dispatchActionQuiet:
 		if p.Quiet != "" && p.Quiet != "off" {
 			if _, _, ok := parseQuietHours(p.Quiet); !ok {
@@ -204,7 +227,7 @@ func taskDispatchVerbs(humanNonce verbParam) map[string]verbEntry {
 		{Name: "stopped", Type: "string", Description: "Why all dispatch stopped on its own, such as usage limit. Empty when it did not."},
 		{Name: "quiet", Type: "string", Description: "The quiet hours, local time, such as 22:00-07:00."},
 		{Name: "quiet_now", Type: "bool", Description: "True inside the quiet hours."},
-		{Name: "boards", Type: "[]object", Description: "The boards with a mode or a stop: board, project or session, mode, failures (dispatched cards in a row that did not finish), stopped."},
+		{Name: "boards", Type: "[]object", Description: "The boards with a mode or a stop: board, project or session, mode, failures (dispatched cards in a row that did not finish), stopped, verify and verify_timeout."},
 		{Name: "cap", Type: "int", Description: "Auto's agents at once, in total."},
 		{Name: "machine_cap", Type: "int", Description: "Auto's agents at once on one machine."},
 		{Name: "running", Type: "int", Description: "Auto's agents now."},
@@ -227,7 +250,7 @@ func taskDispatchVerbs(humanNonce verbParam) map[string]verbEntry {
 		"set-task-dispatch": {
 			scope:       scopeTask,
 			link:        needWrite,
-			description: "Change task dispatch. mode sets a board to manual, pull or auto: in pull, an agent that finishes its card is given the board's next open card, as mail from tuios; in auto, the daemon starts the board's preset agent for each open card, in a new worktree, and mails it the card. preset sets that agent; auto needs one. cap bounds the agents at once. pause stops all dispatch at once, and any pane may pause. resume lifts the pause and every stop. quiet sets the hours when dispatch gives no card. A pane needs admin for every action but pause. Refused over a link.",
+			description: "Change task dispatch. mode sets a board to manual, pull or auto: in pull, an agent that finishes its card is given the board's next open card, as mail from tuios; in auto, the daemon starts the board's preset agent for each open card, in a new worktree, and mails it the card. preset sets that agent; auto needs one. cap bounds the agents at once. verify sets the command run in a card's worktree when its agent is done: a pass moves the card to review, a fail to todo. pause stops all dispatch at once, and any pane may pause. resume lifts the pause and every stop. quiet sets the hours when dispatch gives no card. A pane needs admin for every action but pause, and verify is refused from every pane. Refused over a link.",
 			params: append(slices.Clone(board),
 				verbParam{Name: "action", Type: "string", Required: true, Description: "What to change.", Accepted: dispatchActions},
 				verbParam{Name: "mode", Type: "string", Description: "With mode: the board's new mode.", Accepted: DispatchModes},
@@ -239,6 +262,8 @@ func taskDispatchVerbs(humanNonce verbParam) map[string]verbEntry {
 				verbParam{Name: "machine", Type: "string", Description: "With preset: here (the default), any, or a linked machine."},
 				verbParam{Name: "cap", Type: "int", Description: "With cap: agents at once in total, 0 for 3."},
 				verbParam{Name: "machine_cap", Type: "int", Description: "With cap: on one machine, 0 for 2."},
+				verbParam{Name: "verify", Type: "string", Description: "With verify: a shell line, or off."},
+				verbParam{Name: "verify_timeout", Type: "int", Description: "With verify: seconds, 0 for 600."},
 				humanNonce,
 			),
 			returns: status,

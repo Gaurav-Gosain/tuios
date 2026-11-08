@@ -40,6 +40,11 @@ type TasksConfig struct {
 // AutoStageOn reports whether the daemon moves cards on its own.
 func (c TasksConfig) AutoStageOn() bool { return c.AutoStage == nil || *c.AutoStage }
 
+// LifecycleOn reports whether an agent's finished card goes to verify and
+// review rather than to done: cards move on their own, and the board shows
+// review.
+func (c TasksConfig) LifecycleOn() bool { return c.AutoStageOn() && c.Shows(TaskStageReview) }
+
 // Shows reports whether the board shows stage. A list that names no known
 // stage shows every one.
 func (c TasksConfig) Shows(stage string) bool {

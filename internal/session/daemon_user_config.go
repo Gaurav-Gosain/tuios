@@ -110,6 +110,7 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg.ChildQuestionsToPerson = !uc.Agents.Mail.QuestionsToParentOn()
 	// The daemon moves the task cards, so it reads whether to.
 	cfg.TaskAutoStageOff = !uc.Tasks.AutoStageOn()
+	cfg.TaskLifecycleOff = !uc.Tasks.LifecycleOn()
 	// The daemon answers placement for this machine, so it reads its cap.
 	cfg.MachineCap = uc.Tasks.MachineCap
 	// The daemon removes the old copies of far files at its start.

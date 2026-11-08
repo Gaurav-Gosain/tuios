@@ -91,8 +91,11 @@ type taskRow struct {
 		Reason string `json:"reason"`
 		By     string `json:"by"`
 	} `json:"blocked"`
-	Prompt  string `json:"prompt"`
-	History []struct {
+	Attempts int                 `json:"attempts"`
+	Note     string              `json:"note"`
+	Verify   *session.TaskVerify `json:"verify"`
+	Prompt   string              `json:"prompt"`
+	History  []struct {
 		Action string `json:"action"`
 		By     string `json:"by"`
 		At     int64  `json:"at"`
@@ -486,6 +489,15 @@ func describeTask(r taskRow, on string) string {
 	fmt.Fprintf(&b, "  added   %s by %s\n", agoOf(r.At), byLabel(r.By))
 	if r.Blocked != nil {
 		fmt.Fprintf(&b, "  blocked %s (by %s)\n", plainLine(r.Blocked.Reason), byLabel(r.Blocked.By))
+	}
+	if r.Attempts > 0 {
+		fmt.Fprintf(&b, "  attempts %d, last: %s\n", r.Attempts, plainLine(r.Note))
+	}
+	if v := r.Verify; v != nil {
+		fmt.Fprintf(&b, "  verify  %s %s\n", plainLine(v.State), plainLine(v.Note))
+		if v.State == session.VerifyFailed && v.Tail != "" {
+			fmt.Fprintf(&b, "\nVerify output (end):\n%s\n", plainText(v.Tail))
+		}
 	}
 	if r.Prompt != "" {
 		b.WriteString("\nPrompt:\n")

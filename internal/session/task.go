@@ -132,6 +132,16 @@ type TaskState struct {
 	// WorktreeInfo Group and FanID, empty outside a fan.
 	Fan   string `json:"fan,omitempty"`
 	FanID string `json:"fan_id,omitempty"`
+	// Attempts counts the times the card went back to todo after its
+	// agent was done (its verify failed) or errored, and Note is why the
+	// last one did (task_verify.go).
+	Attempts int    `json:"attempts,omitempty"`
+	Note     string `json:"note,omitempty"`
+	// Work is where the card's agent did the work, recorded when it was
+	// done with the card, and Verify the last run of the board's verify
+	// command on it. Both are only ever replaced, never changed in place.
+	Work   *TaskWork   `json:"work,omitempty"`
+	Verify *TaskVerify `json:"verify,omitempty"`
 	// History is every change to the card, oldest first, at most
 	// taskMaxHistory entries: the first is kept and the oldest after it go.
 	History []TaskEvent `json:"history,omitempty"`

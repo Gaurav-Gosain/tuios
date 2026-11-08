@@ -63,7 +63,7 @@ func waitForCards(t *testing.T, base, session, why string, ok func(holder, stage
 // Both finish at the same moment from inside their panes with tuios task done.
 // Each is given a different next card, as mail from tuios, and the card
 // marked ask-first and the card for another harness are skipped. An agent
-// that goes to done finishes its card and is given the next. After Pause, a
+// that goes to done hands its card on to review and is given the next. After Pause, a
 // finish gives no card. A usage limit stops all dispatch and puts the
 // agent's card back.
 //
@@ -132,8 +132,10 @@ func TestPullDispatchGivesTheNextCard(t *testing.T) {
 	if holder["t3"] != "" || holder["t4"] != "" || holder["t7"] != "" {
 		t.Fatalf("ASSERTION: dispatch took t3 (ask first), t4 (codex) or t7: %v", holder)
 	}
-	if stage["t1"] != "done" || stage["t2"] != "done" {
-		t.Fatalf("ASSERTION: t1 and t2 are %s and %s, want done", stage["t1"], stage["t2"])
+	// An agent done with its card hands it on to review (the board has no
+	// verify command); the person closes it.
+	if stage["t1"] != "review" || stage["t2"] != "review" {
+		t.Fatalf("ASSERTION: t1 and t2 are %s and %s, want review", stage["t1"], stage["t2"])
 	}
 	aCard := "t5"
 	if holder["t6"] == a {
@@ -152,10 +154,10 @@ func TestPullDispatchGivesTheNextCard(t *testing.T) {
 		t.Fatalf("ASSERTION: agent a has no mail from tuios naming %s:\n%s", aCard, mail)
 	}
 
-	// An agent that goes to done finishes its card and is given the next.
+	// An agent that goes to done hands its card on and is given the next.
 	mustCLI(t, base, "set-agent-state", "-s", sess, "-w", a, "done", "--harness", "claude-code", "-m", "finished")
 	_, _, raw = waitForCards(t, base, sess, "agent a's done state did not finish "+aCard+" and give it t7",
-		func(h, s map[string]string) bool { return s[aCard] == "done" && h["t7"] == a })
+		func(h, s map[string]string) bool { return s[aCard] == "review" && h["t7"] == a })
 	fmt.Fprintf(&report, "after agent a went to done:\n%s\n", raw)
 
 	// Pause: a finish gives no card.

@@ -122,6 +122,12 @@ type TaskRow struct {
 	// Machine is where the card's agent starts: empty for the owner,
 	// "any" for the machine placement picks, or a host name.
 	Machine string `json:"machine,omitempty"`
+	// Attempts, Note, Work and Verify are the card's lifecycle: see
+	// task_verify.go.
+	Attempts int         `json:"attempts,omitempty"`
+	Note     string      `json:"note,omitempty"`
+	Work     *TaskWork   `json:"work,omitempty"`
+	Verify   *TaskVerify `json:"verify,omitempty"`
 }
 
 // TaskHolder is the pane that holds a card. Name, Harness and State are read
@@ -165,6 +171,7 @@ func taskRow(sess *Session, st *SessionState, tk *TaskState) TaskRow {
 	row.Project = tk.Project
 	row.Harness, row.AskFirst, row.Dispatched = tk.Harness, tk.AskFirst, tk.Dispatched
 	row.Machine = tk.Machine
+	row.Attempts, row.Note, row.Work, row.Verify = tk.Attempts, tk.Note, tk.Work, tk.Verify
 	if host, window, ok := splitRemoteHolder(tk.Holder); ok {
 		row.Holder = &TaskHolder{Window: window, Host: host, HeldAt: tk.HeldAt, Name: tk.HolderName, Harness: tk.HolderHarness}
 	} else if tk.Holder != "" {
@@ -641,10 +648,23 @@ func (d *Daemon) verbFinishTask(cs *connState, params json.RawMessage) (any, *ve
 	if verr != nil {
 		return nil, verr
 	}
+	// The pane that holds the card is its agent, done with it: the card
+	// goes on to verify or review (task_verify.go). Where it did the work is
+	// read before the change, since that runs git.
+	var work *TaskWork
+	if caller.window != "" && !d.lifecycleOff.Load() {
+		work = d.workOf(caller.window)
+	}
 	var holder string
 	row, action, verr := d.changeTask(sess, p.ID, func(_ *SessionState, tk *TaskState, now int64) (string, *verbError) {
 		if verr := caller.mayTouch("finish-task", tk); verr != nil {
 			return "", verr
+		}
+		if caller.window != "" && tk.Holder == caller.window {
+			if stage := d.handInStage(dispatchBoardKey(sess.Name(), tk.Project)); stage != "" {
+				holder = tk.handIn(caller.by, stage, work, now)
+				return TaskActionFinished, nil
+			}
 		}
 		var changed bool
 		if holder, changed = tk.finish(caller.by, now); !changed {
@@ -657,6 +677,7 @@ func (d *Daemon) verbFinishTask(cs *connState, params json.RawMessage) (any, *ve
 	}
 	if action != "" {
 		d.publishTask(sess, EventTaskFinished, TaskActionFinished, holder, "", row)
+		d.startTaskVerify(sess, row.ID)
 	}
 	return row.typed("task_finished"), nil
 }
@@ -690,10 +711,30 @@ func (d *Daemon) verbSetTaskStage(cs *connState, params json.RawMessage) (any, *
 	if verr != nil {
 		return nil, verr
 	}
+	// With a verify command, a pane moves its card past verify only by
+	// finishing it, and a move to verify runs the command again, on the
+	// work recorded or on the pane that holds the card.
+	var work *TaskWork
+	cmd := ""
+	if tk, ok := sess.taskByID(p.ID); ok && !d.lifecycleOff.Load() {
+		cmd, _ = d.dispatch.verifyOf(dispatchBoardKey(sess.Name(), tk.Project))
+		if cmd != "" && p.Stage == TaskStageVerify && tk.Holder != "" {
+			work = d.workOf(tk.Holder)
+		}
+	}
 	var holder string
 	row, action, verr := d.changeTask(sess, p.ID, func(_ *SessionState, tk *TaskState, now int64) (string, *verbError) {
 		if verr := caller.mayTouch("set-task-stage", tk); verr != nil {
 			return "", verr
+		}
+		if cmd != "" && caller.window != "" && (p.Stage == TaskStageReview || p.Stage == TaskStageShipped) {
+			return "", newVerbError(ErrVerbForbidden, "the board verifies its cards: a pane moves its card on with tuios task done")
+		}
+		if cmd != "" && p.Stage == TaskStageVerify && tk.Stage != TaskStageVerify && (work != nil || tk.Work != nil) {
+			if work != nil {
+				tk.Work = work
+			}
+			tk.Verify = &TaskVerify{State: VerifyRunning, StartedAt: now}
 		}
 		if p.Stage == TaskStageDone {
 			var changed bool
@@ -717,6 +758,7 @@ func (d *Daemon) verbSetTaskStage(cs *connState, params json.RawMessage) (any, *
 		d.publishTask(sess, EventTaskFinished, TaskActionFinished, holder, "", row)
 	case TaskActionStaged:
 		d.publishTask(sess, EventTaskChanged, TaskActionStaged, "", "", row)
+		d.startTaskVerify(sess, row.ID)
 	}
 	return row.typed("task_changed"), nil
 }
@@ -872,6 +914,11 @@ func (d *Daemon) restoreTasks(sess *Session, tasks []TaskState, next uint64) {
 		return
 	}
 	d.publishReleased(sess, rows, taskReleaseRestart)
+	if d.dispatch.loaded() {
+		// A session resurrected later; at the start the daemon resumes
+		// them once the boards are read.
+		d.resumeVerifies(sess)
+	}
 }
 
 // releasedRows releases the cards of st whose holder held reports true, and

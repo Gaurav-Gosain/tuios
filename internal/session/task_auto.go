@@ -221,13 +221,14 @@ func (d *Daemon) notePR(sess *Session, root string, pr *ghpr.PR) bool {
 	d.autoStage(sess, func(tk *TaskState) bool {
 		return tk.Holder != "" || (fanID != "" && tk.FanID == fanID)
 	}, mv, reason)
-	if fanID == "" {
-		return changed
-	}
+	// And the cards whose agent was done with them in this worktree, in any
+	// session: they have no holder any more (task_verify.go).
+	name := sess.Name()
 	for _, s := range d.manager.AllSessions() {
-		if s != sess {
-			d.autoStage(s, func(tk *TaskState) bool { return tk.FanID == fanID }, mv, reason)
-		}
+		d.autoStage(s, func(tk *TaskState) bool {
+			return (s != sess && fanID != "" && tk.FanID == fanID) ||
+				(tk.Holder == "" && tk.Work != nil && tk.Work.Host == "" && tk.Work.Session == name)
+		}, mv, reason)
 	}
 	return changed
 }
