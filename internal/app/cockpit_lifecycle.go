@@ -34,8 +34,9 @@ type ckShip struct {
 	busy    bool
 }
 
-// ckShipMsg is a ship verb's answer.
+// ckShipMsg is a ship verb's answer, for the Ready to merge sheet sh.
 type ckShipMsg struct {
+	sh          *ckShip
 	verb, label string
 	err         error
 	confirm     string
@@ -138,7 +139,10 @@ func (m *OS) CockpitShipKey(key string) tea.Cmd {
 	defer m.cockpitTouch()
 	if sh.busy {
 		if key == "esc" {
+			// The call goes on, and its answer is a toast that names the
+			// card (applyShip).
 			m.Inbox.ck.ship = nil
+			m.ShowNotification(sh.label+" on "+sh.card.ID+" goes on. A notice says when it is done.", "info", m.Settings.NotificationDuration)
 		}
 		return nil
 	}
@@ -175,11 +179,11 @@ func (m *OS) shipCall(verb, label, confirm string) tea.Cmd {
 	if confirm != "" {
 		params["confirm"] = confirm
 	}
-	sh.busy = true
+	sh.busy, sh.label = true, label
 	call := m.inboxCaller()
 	return func() tea.Msg {
 		raw, err := call(verb, params, 3*time.Minute)
-		msg := ckShipMsg{verb: verb, label: label, err: err}
+		msg := ckShipMsg{sh: sh, verb: verb, label: label, err: err}
 		if verr, ok := errors.AsType[*session.VerbCallError](err); ok && verr.Code == session.ErrVerbConfirmRequired && verr.Hint != nil && confirm == "" {
 			msg.err, msg.confirm, msg.lines = nil, verr.Hint.Confirm, verr.Hint.Available
 		}
@@ -192,23 +196,34 @@ func (m *OS) shipCall(verb, label, confirm string) tea.Cmd {
 	}
 }
 
-// applyShip takes a ship verb's answer.
+// applyShip takes a ship verb's answer. The answer is for the sheet that
+// sent it: when the person closed that sheet, and maybe opened Ready to
+// merge on another card, the answer is a toast that names its card and
+// changes no sheet.
 func (m *OS) applyShip(msg ckShipMsg) {
-	sh := m.Inbox.ck.ship
-	if sh == nil {
-		return
-	}
+	sh := msg.sh
+	open := sh != nil && m.Inbox.ck.ship == sh
 	defer m.cockpitTouch()
-	sh.busy = false
+	what := msg.label
+	if sh != nil {
+		what += " on " + sh.card.ID
+	}
 	switch {
 	case msg.err != nil:
-		m.Inbox.ck.ship = nil
-		m.ShowNotification(msg.label+" did not go: "+printableTitle(msg.err.Error()), "error", m.Settings.NotificationDuration*2)
-	case msg.confirm != "":
+		if open {
+			m.Inbox.ck.ship = nil
+		}
+		m.ShowNotification(what+" did not go: "+printableTitle(msg.err.Error()), "error", m.Settings.NotificationDuration*2)
+	case msg.confirm != "" && open:
+		sh.busy = false
 		sh.verb, sh.label, sh.confirm, sh.lines = msg.verb, msg.label, msg.confirm, msg.lines
+	case msg.confirm != "":
+		m.ShowNotification(what+" sent nothing. Open Ready to merge again to see what it sends.", "info", m.Settings.NotificationDuration*2)
 	default:
-		m.Inbox.ck.ship = nil
-		text := msg.label + " done."
+		if open {
+			m.Inbox.ck.ship = nil
+		}
+		text := what + " done."
 		if msg.verb == "ship-pr" && msg.url != "" {
 			text = "Opened " + printableTitle(msg.url)
 		}

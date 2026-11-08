@@ -118,7 +118,7 @@ func TestTheBoardShowsTheCardLifecycle(t *testing.T) {
 	if err := term.SendKeys("c"); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "the commit", "Commit done")
+	waitText(t, term, "the commit", "Commit on t1 done")
 	if got := testutil.Git(t, here, "log", "-1", "--format=%s"); strings.TrimSpace(got) != "Fix the retry" {
 		t.Fatalf("ASSERTION: the last commit is %q, want the card's title", got)
 	}
@@ -140,7 +140,7 @@ func TestTheBoardShowsTheCardLifecycle(t *testing.T) {
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "the push", "Push done")
+	waitText(t, term, "the push", "Push on t1 done")
 	if got := testutil.Git(t, origin, "log", "-1", "--format=%s"); strings.TrimSpace(got) != "Fix the retry" {
 		t.Fatalf("ASSERTION: the origin's last commit is %q, want the card's", got)
 	}
