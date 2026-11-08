@@ -14,6 +14,9 @@ package app
 // sheets that take every key, then the answer asks, the lines, and the
 // one-key menus last.
 //
+// The peek takes the keys of the prompt it reads, and any click closes it
+// without acting: it has no controls a click works.
+//
 // A one-key menu takes the next key, and any other key closes it. A click
 // that is not on it closes it too and does nothing else: the click is spent
 // on the dismissal, so a click meant to close Ready to merge or a confirm can
@@ -176,6 +179,16 @@ func (l CockpitLayer) ownsAction(action string) bool {
 // lands off it, and reports whether it did: the click is then spent.
 func (m *OS) cockpitClickDismisses(x, y int) bool {
 	top := m.CockpitTop()
+	if top == CockpitLayerPeek {
+		// The peek reads one agent's prompt and has no controls a click
+		// works: a click anywhere closes it and does nothing else, so a
+		// click on another agent's row never leaves the peek of the first
+		// answering the digits.
+		m.InboxPeekBack()
+		m.cockpitTouch()
+		m.cockpitLayerSettle("click off the peek")
+		return true
+	}
 	if !top.oneKey() {
 		return false
 	}
