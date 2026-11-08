@@ -55,6 +55,9 @@ type AgentsConfig struct {
 	// HERDR_ENV, herdr itself included, which refuses to start inside one
 	// unless its own config allows nesting. See docs/AGENT_STATE.md.
 	HerdrProtocol string `toml:"herdr_protocol,omitempty"`
+	// Presets are the [agents.presets.NAME] tables: a named start-agent,
+	// for start-agent --preset NAME. See AgentPreset.
+	Presets map[string]AgentPreset `toml:"presets,omitempty"`
 	// HostProgramStatus says whether tuios reports its panes' agent states to
 	// the terminal it runs in, with OSC 7501 (the Program Status Protocol):
 	// "auto" (the default) asks the terminal at start and reports only when
@@ -222,4 +225,36 @@ type ApprovalsConfig struct {
 	// Risk is the [agents.approvals.risk] table: the rules that mark an
 	// approval risky. See RiskConfig.
 	Risk RiskConfig `toml:"risk,omitempty"`
+}
+
+// AgentPreset is one [agents.presets.NAME] table: what start-agent --preset
+// NAME starts. A flag the caller passes wins over the preset's value; args
+// and env are the preset's, then the caller's. The session, folder, name,
+// task and parent are the caller's alone.
+type AgentPreset struct {
+	// Agent is the harness or program, as start-agent AGENT takes it.
+	Agent string `toml:"agent,omitempty"`
+	// Args go after the harness's own flags and before the caller's.
+	Args []string `toml:"args,omitempty"`
+	// AddDirs are more directories the agent may work in, each passed with
+	// the harness's add-dir flag ([launch] add_dir_flag). ~ is the home
+	// folder of the machine the agent starts on.
+	AddDirs []string `toml:"add_dirs,omitempty"`
+	// Grants are what the agent may do through tuios, as --grants takes them.
+	// A preset never grants more than its caller may give.
+	Grants []string `toml:"grants,omitempty"`
+	// Model, Effort and PermissionMode are the --model, --effort and
+	// --permission-mode choices.
+	Model          string `toml:"model,omitempty"`
+	Effort         string `toml:"effort,omitempty"`
+	PermissionMode string `toml:"permission_mode,omitempty"`
+	// Env are variables for the agent, each NAME=VALUE. The caller's own
+	// --env wins for a name both set.
+	Env []string `toml:"env,omitempty"`
+	// AfterReady is sent to the agent once it is ready, step by step: a key
+	// name (Enter, Escape, Tab, C-c) is that key, anything else is typed as
+	// text. It is sent before --prompt.
+	AfterReady []string `toml:"after_ready,omitempty"`
+	// ReadyTimeout is --ready-timeout, in milliseconds.
+	ReadyTimeout int `toml:"ready_timeout,omitempty"`
 }

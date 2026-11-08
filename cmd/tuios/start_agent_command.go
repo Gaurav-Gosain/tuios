@@ -15,13 +15,13 @@ import (
 
 // newStartAgentCommand builds `tuios start-agent`.
 func newStartAgentCommand() *cobra.Command {
-	var sessionName, name, cwd, repo, prompt, protocol, task, parent string
+	var sessionName, name, cwd, repo, prompt, protocol, task, parent, preset string
 	var model, effort, permissionMode string
 	var env, grants []string
 	var workspace, readyTimeout int
-	var focus, clone, jsonOutput bool
+	var focus, clone, jsonOutput, printID bool
 	cmd := &cobra.Command{
-		Use:   "start-agent <agent> [-- args...]",
+		Use:   "start-agent [agent] [-- args...]",
 		Short: "Start an agent in a new pane and return once it is ready",
 		Long: `Start an agent in a new pane of a session, and return once it shows it is at
 its prompt: its state reads idle or done, from a hook, its screen or its title.
@@ -86,7 +86,22 @@ agent's own.
 --task claims a task card of the session for the new pane as soon as it
 exists, so the board shows who works on it while the agent loads. The card
 must be held by no pane, not blocked and not done, and you need what tuios
-task claim needs. It is checked before anything starts.`,
+task claim needs. It is checked before anything starts.
+
+--preset starts from an [agents.presets.NAME] entry of your config, which
+names the agent and any of its args, add_dirs, grants, model, effort,
+permission_mode, env (NAME=VALUE), after_ready and ready_timeout. <agent> may
+then be left out. A flag you pass wins over the preset's; args, env and
+after_ready are the preset's then yours. add_dirs is one --add-dir (the
+harness's [launch] add_dir_flag) per directory. after_ready is sent once the
+agent is ready, before --prompt: a step that is one key name (Enter, Escape,
+Tab, C-c) is that key, anything else is typed as text. The preset is read
+from this machine's config and sent in full to a session on another machine.
+An unknown preset is refused with the names there are.
+
+--print-id prints the new pane's full id alone, for
+id=$(tuios start-agent --preset worker --print-id). The pane is kept and
+the id printed when the agent is not ready, and the command exits non-zero.`,
 		Example: `  # A reviewer beside you, addressed by name afterwards
   tuios start-agent claude --name reviewer
   tuios ask-agent -w reviewer 'review the diff on this branch'
@@ -113,12 +128,18 @@ task claim needs. It is checked before anything starts.`,
   tuios start-agent claude --name helper --parent 4be1c09a
 
   # An ACP agent, headless, answered from the Inbox
-  tuios start-agent --protocol acp 'opencode acp' --name helper --prompt 'Summarise the TODOs.'`,
-		Args: cobra.MinimumNArgs(1),
+  tuios start-agent --protocol acp 'opencode acp' --name helper --prompt 'Summarise the TODOs.'
+
+  # A worker from [agents.presets.worker], its pane id in a variable
+  id=$(tuios start-agent --preset worker --name w3 --print-id)`,
+		Args: cobra.ArbitraryArgs,
 		RunE: func(c *cobra.Command, args []string) error {
 			positional, extra := args, []string(nil)
 			if dash := c.ArgsLenAtDash(); dash >= 0 {
 				positional, extra = args[:dash], args[dash:]
+			}
+			if len(positional) == 0 && preset != "" {
+				positional = []string{""}
 			}
 			if len(positional) != 1 {
 				return errfmt.Errorf("start-agent takes one agent, got %d arguments. Quote the agent with its arguments, pass the prompt with --prompt, and put more arguments for the agent after --", len(positional))
@@ -131,6 +152,7 @@ task claim needs. It is checked before anything starts.`,
 				session: sessionName, agent: positional[0], args: extra, name: name, cwd: cwd, repo: repo, prompt: prompt, protocol: protocol,
 				env: callerEnv, explicitEnv: len(env) > 0, workspace: workspace, readyTimeout: readyTimeout, focus: focus, clone: clone,
 				grants: grants, task: task, parent: parent, model: model, effort: effort, permissionMode: permissionMode,
+				preset: preset, printID: printID,
 			}, jsonOutput)
 		},
 	}
@@ -152,6 +174,8 @@ task claim needs. It is checked before anything starts.`,
 	cmd.Flags().IntVar(&readyTimeout, "ready-timeout", 0, "Milliseconds to wait for the agent to be ready (default 120000)")
 	cmd.Flags().StringArrayVar(&env, "env", nil, "Pass a variable to the agent: NAME for your own value, NAME=VALUE to set one. Repeatable. PATH is sent too, except to a session on another machine")
 	cmd.Flags().StringSliceVar(&grants, "grants", nil, "What the agent may do through tuios, comma separated: read, write, fan, files, task, respond, admin, or none (default: [agents.permissions], or the calling pane's own)")
+	cmd.Flags().StringVar(&preset, "preset", "", "Start from [agents.presets.NAME] of your config; the agent may then be left out")
+	cmd.Flags().BoolVar(&printID, "print-id", false, "Print only the new pane's full id")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
 	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	_ = cmd.RegisterFlagCompletionFunc("grants", completeGrantNames)
@@ -179,6 +203,10 @@ type startAgentOptions struct {
 	focus, clone            bool
 	// grants is --grants, nil when it was not passed.
 	grants []string
+	// preset is --preset, merged by this machine's daemon.
+	preset string
+	// printID is --print-id.
+	printID bool
 }
 
 // startAgentEnv is the env start-agent sends to a target on host ("" for
@@ -227,6 +255,21 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 	if err := ensureDaemon(); err != nil {
 		return err
 	}
+	// The params of the call, before the session and the place. With a
+	// preset, this machine's daemon merges it in, for any target.
+	host, _ := splitHostSession(o.session)
+	own := startAgentParams(o, host)
+	if o.preset != "" {
+		merged, err := expandAgentPreset(o.preset, own)
+		if err != nil {
+			return reportVerbError(err, jsonOutput)
+		}
+		own = merged
+		o.agent, _ = own["agent"].(string)
+		if n, ok := own["ready_timeout"].(float64); ok {
+			o.readyTimeout = int(n)
+		}
+	}
 	// -s any:SESSION: this machine's daemon picks the machine first.
 	var taskHost, taskSession string
 	if host, name := splitHostSession(o.session); host == hostAny {
@@ -265,36 +308,10 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 	if err != nil {
 		return reportVerbError(err, jsonOutput)
 	}
-	params := t.params(map[string]any{"agent": o.agent})
+	params := t.params(own)
 	maps.Copy(params, place)
-	// A daemon older than protocol refuses the parameter by name, so an old
-	// daemon never starts the agent in its TUI when a protocol was asked for.
-	for k, v := range map[string]string{"name": o.name, "prompt": o.prompt, "protocol": o.protocol, "task": o.task, "parent": o.parent,
-		"model": o.model, "effort": o.effort, "permission_mode": o.permissionMode} {
-		if v != "" {
-			params[k] = v
-		}
-	}
 	if taskHost != "" {
 		params["task_host"], params["task_session"] = taskHost, taskSession
-	}
-	if len(o.args) > 0 {
-		params["args"] = o.args
-	}
-	if env := startAgentEnv(o, t.host); len(env) > 0 {
-		params["env"] = env
-	}
-	if o.workspace > 0 {
-		params["workspace"] = o.workspace
-	}
-	if o.readyTimeout > 0 {
-		params["ready_timeout"] = o.readyTimeout
-	}
-	if o.focus {
-		params["focus"] = true
-	}
-	if len(o.grants) > 0 {
-		params["grants"] = o.grants
 	}
 	wait := o.readyTimeout
 	if wait <= 0 {
@@ -323,6 +340,8 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 		Reason         string `json:"reason"`
 		PromptStatus   string `json:"prompt_status"`
 		PromptNote     string `json:"prompt_note"`
+		AfterReady     string `json:"after_ready_status"`
+		AfterReadyNote string `json:"after_ready_note"`
 		Task           *struct {
 			ID string `json:"id"`
 		} `json:"task"`
@@ -334,11 +353,17 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return errfmt.Errorf("failed to parse response: %w", err)
 	}
-	if jsonOutput {
+	switch {
+	case jsonOutput:
 		if err := printVerbResultOn(t, raw, true); err != nil {
 			return err
 		}
-	} else {
+	case o.printID:
+		fmt.Println(res.WindowID)
+		if !res.Ready {
+			fmt.Fprintf(os.Stderr, "%s is not ready: %s\n", shortWindowID(res.WindowID), plainLine(res.Reason))
+		}
+	default:
 		if res.CreatedSession {
 			fmt.Printf("Created session '%s'%s.\n", plainLine(res.Session), t.on())
 		}
@@ -356,13 +381,16 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 			fmt.Println(plainLine(res.TaskNote))
 		}
 		if res.Ready {
-			fmt.Printf("%s is ready: it reads %s%s.\n", who, plainLine(res.ReadyBy), t.on())
+			fmt.Printf("%s is ready: it reads %s%s. Pane %s\n", who, plainLine(res.ReadyBy), t.on(), res.WindowID)
 		} else {
 			state := plainLine(res.State)
 			if res.BlockedBy != "" {
 				state += " (" + plainLine(res.BlockedBy) + ")"
 			}
-			fmt.Printf("%s is not ready: it reads %s%s. %s\n", who, state, t.on(), plainLine(res.Reason))
+			fmt.Printf("%s is not ready: it reads %s%s. %s Pane %s\n", who, state, t.on(), plainLine(res.Reason), res.WindowID)
+		}
+		if res.AfterReady != "" && res.AfterReady != "sent" {
+			fmt.Printf("The after_ready steps are %s. %s\n", plainLine(res.AfterReady), plainLine(res.AfterReadyNote))
 		}
 		switch res.PromptStatus {
 		case "":
@@ -372,8 +400,61 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 			fmt.Printf("The prompt is %s. %s\n", plainLine(res.PromptStatus), plainLine(res.PromptNote))
 		}
 	}
-	if !res.Ready || (res.PromptStatus != "" && res.PromptStatus != "sent") {
+	if !res.Ready || (res.PromptStatus != "" && res.PromptStatus != "sent") || (res.AfterReady != "" && res.AfterReady != "sent") {
 		return &statusError{code: 1}
 	}
 	return nil
+}
+
+// startAgentParams is what start-agent sends besides the session and the
+// place, for the daemon on host ("" for this machine).
+func startAgentParams(o startAgentOptions, host string) map[string]any {
+	params := map[string]any{}
+	// A daemon older than protocol refuses the parameter by name, so an old
+	// daemon never starts the agent in its TUI when a protocol was asked for.
+	for k, v := range map[string]string{"agent": o.agent, "name": o.name, "prompt": o.prompt, "protocol": o.protocol, "task": o.task, "parent": o.parent,
+		"model": o.model, "effort": o.effort, "permission_mode": o.permissionMode} {
+		if v != "" {
+			params[k] = v
+		}
+	}
+	if len(o.args) > 0 {
+		params["args"] = o.args
+	}
+	if env := startAgentEnv(o, host); len(env) > 0 {
+		params["env"] = env
+	}
+	if o.workspace > 0 {
+		params["workspace"] = o.workspace
+	}
+	if o.readyTimeout > 0 {
+		params["ready_timeout"] = o.readyTimeout
+	}
+	if o.focus {
+		params["focus"] = true
+	}
+	if len(o.grants) > 0 {
+		params["grants"] = o.grants
+	}
+	return params
+}
+
+// expandAgentPreset asks this machine's daemon to merge a preset into params.
+func expandAgentPreset(preset string, params map[string]any) (map[string]any, error) {
+	client, err := dialVerb()
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+	raw, err := client.Call("agent-preset", map[string]any{"preset": preset, "params": params})
+	if err != nil {
+		return nil, explainVerbError("agent-preset", err)
+	}
+	var res struct {
+		Params map[string]any `json:"params"`
+	}
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return nil, errfmt.Errorf("failed to parse response: %w", err)
+	}
+	return res.Params, nil
 }

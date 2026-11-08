@@ -933,6 +933,9 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "model", Type: "string", Description: "The model, passed with the flag the harness's manifest names ([launch] model_flag). One word, not starting with -. Refused for a harness with no model flag."},
 				{Name: "effort", Type: "string", Description: "The effort, one of the harness's [launch] efforts, passed with its effort flag. Refused for a harness with no effort flag."},
 				{Name: "permission_mode", Type: "string", Description: "The permission mode, one of the harness's [launch] permissions, passed with its permission flag. From an agent pane it is held to the caller's own mode. Refused for a harness with no permission flag."},
+				{Name: "preset", Type: "string", Description: "An [agents.presets] entry of this daemon's config to start from. A param the call passes wins over the preset's; args, add_dirs and after_ready are the preset's then the call's; env is the preset's with the call's on top; grants the call passes replace the preset's. An unknown name is refused with the names there are."},
+				{Name: "add_dirs", Type: "[]string", Description: "More directories the agent may work in, each passed with the harness's [launch] add_dir_flag (Claude Code: --add-dir), before args. ~ is this machine's home folder. Refused for a harness with no such flag."},
+				{Name: "after_ready", Type: "[]string", Description: "Steps sent once the agent is ready, in order and before prompt: a step that is one key name (Enter, Escape, Tab, C-c) is that key, anything else is typed as text. A step is refused while the pane waits on a prompt of its own, which stops the rest."},
 				grantsParam,
 			}, repoSourceParams...),
 			returns: []verbParam{
@@ -958,6 +961,8 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "reason", Type: "string", Description: "Why it is not ready, when it is not."},
 				{Name: "prompt_status", Type: "string", Description: "With prompt: sent, stalled or not_sent."},
 				{Name: "prompt_note", Type: "string", Description: "Why a prompt was not sent or looks stalled."},
+				{Name: "after_ready_status", Type: "string", Description: "With after_ready: sent, stopped or not_sent."},
+				{Name: "after_ready_note", Type: "string", Description: "Why the after_ready steps were not all sent."},
 				{Name: "task", Type: "object", Description: "With task: the card as claimed for the pane, as list-tasks gives a row."},
 				{Name: "task_note", Type: "string", Description: "With task: why the card was not claimed after all, such as another pane taking it while the pane opened."},
 			},
@@ -968,6 +973,22 @@ func buildVerbRegistry() map[string]verbEntry {
 				`{"id":1,"verb":"start-agent","params":{"session":"work","agent":"opencode acp","protocol":"acp","name":"helper","cwd":"/src/api","prompt":"Summarise the open TODOs."}}`,
 			},
 			handler: (*Daemon).verbStartAgent,
+		},
+		"agent-preset": {
+			scope:       scopeLaunch,
+			link:        needOpen,
+			description: "Merge an [agents.presets] entry of this daemon's config into start-agent params, as start-agent merges it, for a start-agent call on this machine or another one, so a preset of this machine works on every host. An unknown name is refused with the names there are.",
+			params: []verbParam{
+				{Name: "preset", Type: "string", Description: "The preset to merge."},
+				{Name: "params", Type: "object", Description: "The start-agent params to merge it into."},
+			},
+			returns: []verbParam{
+				{Name: "params", Type: "object", Description: "The merged start-agent params, without preset."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"agent-preset","params":{"preset":"worker","params":{"name":"w3","session":"crew"}}}`,
+			},
+			handler: (*Daemon).verbAgentPreset,
 		},
 		"agent-readiness": {
 			scope:       scopeLaunch,

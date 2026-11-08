@@ -376,6 +376,10 @@ type Daemon struct {
 	// Its zero value is on. See checkpoints.go.
 	checkpoints checkpointer
 
+	// agentPresets is [agents.presets], the named start-agent params, nil
+	// for none. See agent_presets.go.
+	agentPresets atomic.Pointer[map[string]config.AgentPreset]
+
 	// shipMu runs one commit, merge or push of the ship verbs at a time,
 	// shipAsks remembers the Inbox questions the outbound ones put, and prs
 	// polls the open pull requests. All three zero values are ready. See
@@ -1082,6 +1086,9 @@ type DaemonConfig struct {
 	// saved when its agent finishes a turn, and how many are kept. The zero
 	// value is on with the default keep. See checkpoints.go.
 	Checkpoints config.CheckpointsConfig
+	// AgentPresets is [agents.presets]: named start-agent params. See
+	// agent_presets.go.
+	AgentPresets map[string]config.AgentPreset
 	// AgentsOff is [agents] enabled = false: the daemon starts with every
 	// agent feature off. See agents_switch.go.
 	AgentsOff bool
@@ -1146,6 +1153,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.machineCap.Store(int64(max(cfg.MachineCap, 0)))
 	d.openedKeep = cfg.OpenedCopyKeep
 	d.SetCheckpoints(cfg.Checkpoints)
+	d.SetAgentPresets(cfg.AgentPresets)
 	d.outbox = newHostOutbox(d)
 	// The socket path is read through a closure rather than copied, because the
 	// line below may still change it and the stash root is derived from it.

@@ -3066,6 +3066,16 @@ questions_to_parent = true
 enabled = true
 keep = 50
 max_untracked_mb = 50
+
+[agents.presets.worker]
+agent = "claude"
+args = ["--verbose"]
+add_dirs = ["~/notes"]
+grants = ["read", "write", "task"]
+model = "opus"
+env = ["GOMAXPROCS=4"]
+after_ready = ["/remote-control", "Enter", "Escape"]
+ready_timeout = 180000
 ```
 
 - `hold_plans` also hands a plan an agent in plan mode asks to have approved
@@ -3122,6 +3132,17 @@ max_untracked_mb = 50
   A file change turns it off at once. Turning it on again waits for `tuios
   config apply` from outside tuios, or a restart. An approval of a child agent
   always goes to the person, and no pane can answer it.
+- `[agents.presets.NAME]` names a `tuios start-agent --preset NAME`: the
+  agent, and any of `args`, `add_dirs`, `grants`, `model`, `effort`,
+  `permission_mode`, `env` (each `NAME=VALUE`), `after_ready` and
+  `ready_timeout` (milliseconds). `add_dirs` passes the harness's
+  `[launch] add_dir_flag` (Claude Code: `--add-dir`) once per directory,
+  before `args`, with `~` as the home folder of the machine the agent starts
+  on. A harness with no such flag refuses it. `after_ready` is sent once the
+  agent is ready, before `--prompt`, step by step: a step that is one key
+  name (`Enter`, `Escape`, `Tab`, `C-c`) is that key, anything else is typed
+  as text. A step is refused while the agent waits on a prompt of its own,
+  which stops the rest. A file change applies at once.
 - `[agents.checkpoints]` saves the git work tree of an agent's pane each time
   the agent finishes a turn that changed a file (`tuios checkpoint`).
   `enabled` is true by default. `keep` is how many checkpoints one pane keeps:

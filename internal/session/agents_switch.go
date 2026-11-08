@@ -57,7 +57,7 @@ const ErrVerbAgentsDisabled = "agents_disabled"
 // refused (agentWaitConditions).
 var agentOnlyVerbs = []string{
 	// Agents and fleets.
-	"start-agent", "agent-readiness", "place-agent", "delegate", "fan", "compare-fan", "verify-fan", "keep-fan", "set-fan-verdict", "judge-fan",
+	"start-agent", "agent-preset", "agent-readiness", "place-agent", "delegate", "fan", "compare-fan", "verify-fan", "keep-fan", "set-fan-verdict", "judge-fan",
 	"list-agents", "list-host-agents", "resume-agent", "ask-agent",
 	"list-conversations", "forget-conversation",
 	"explain-agent-detect", "explain-agent-screen",

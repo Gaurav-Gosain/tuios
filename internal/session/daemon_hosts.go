@@ -193,6 +193,7 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	}
 	d.SetChildQuestionsToParent(toParent)
 	d.SetCheckpoints(cfg.Agents.Checkpoints)
+	d.SetAgentPresets(cfg.Agents.Presets)
 	// Moving cards types nothing and runs nothing, so a file change applies
 	// either way.
 	d.taskAutoOff.Store(!cfg.Tasks.AutoStageOn())
