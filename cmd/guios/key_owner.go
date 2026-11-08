@@ -71,11 +71,6 @@ type keyOwner struct {
 	// boxHas: the reply box had the focus in the last frame built
 	// (replyNow).
 	boxHas bool
-	// listHad: the agents list had the keys while the view was open. Once
-	// the view closes with the keys held, a key typed in the list finds
-	// no list to read it, so the window reads it for the owner
-	// (catchListKeys).
-	listHad bool
 }
 
 // keyHold is one change on its way.
@@ -275,11 +270,7 @@ func (a *App) keyOwnerView(c *ui.Context) {
 	}
 	ko.has = keyTarget{}
 	ko.boxHas = a.ck.open && a.ck.reply.box.FocusWithin(c)
-	if a.ck.open {
-		ko.listHad = a.ck.fleetFocus.FocusWithin(c)
-	} else if !a.keysHeld() {
-		ko.listHad = false
-	}
+
 	if t := a.keyTarget(); !ko.ref.Focused(c) {
 		if ref := a.targetRef(t); ref != nil && ref.FocusWithin(c) {
 			ko.has = t
@@ -388,16 +379,20 @@ func (a *App) keySink(c *ui.Context) {
 	a.catchListKeys(c)
 }
 
-// catchListKeys keeps for the owner the keys typed in the agents list
-// after the view closed. MyGo routes a key to the element it was typed in;
-// the list reads its keys as shortcuts only while the view is built, so a
-// key typed as a landed Escape closed the view went nowhere, and the shell
-// lost the first letter of the line after it (Mac round 5, feel M1). A key
-// whose element is gone routes to the window: these shortcuts read it. A
-// key that typed text keeps the text, and the text that comes later to the
-// sink is the same press, which keepKey drops.
+// catchListKeys keeps for the owner the keys that reach no element while
+// it holds them with the agents view shut. MyGo routes a key to the
+// element it was typed in, or that has the focus; the list reads its keys
+// as shortcuts only while the view is built. When a landed Escape closed
+// the view, the list kept the focus a frame or two without being built,
+// and what was typed then went nowhere: the first letter of a line, or the
+// whole line (Mac round 5, feel M1). A key whose element is gone routes to
+// the window: these shortcuts read it. The sink and a pane's terminal take
+// their keys by HandleInput before any shortcut, and a sheet that owns the
+// keyboard keeps its own, so only lost keys come here. A key that typed
+// text keeps the text, and the text that comes later to the sink is the
+// same press, which keepKey drops.
 func (a *App) catchListKeys(c *ui.Context) {
-	if a.ck.open || !a.ko.listHad {
+	if a.ck.open || !a.keysHeld() || a.keysOwned() || a.ko.ref.Focused(c) {
 		return
 	}
 	for _, k := range proseKeys {
