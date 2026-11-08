@@ -2543,6 +2543,8 @@ parses, so quote for the shell as you would when typing it.
 - `--timeout <ms>`: Milliseconds to wait for the command (default: 30000). A timeout does not stop the command
 - `--lines <N>`: Keep only the last N lines of the output (0 keeps all)
 - `--json`: Output the whole result as JSON: `exit_code`, `output`, `cmdline`, `duration_ms`, `command_seq`, `truncated`
+- `--host <name>`: Run on this linked machine, with no pane (see below)
+- `--cwd <dir>`: With `--host`, the folder to run in on that machine
 
 **Exit status:** the command's own. When the shell sent no status, run says so
 on stderr and exits `0`. A refusal exits `1`: `not_at_prompt` when a command is
@@ -2564,7 +2566,23 @@ tuios run -w build --lines 40 -- make
 
 # The whole result
 tuios run -w build --json -- make lint
+
+# One command on the linked machine build, with no pane
+tuios run --host build -- uname -a
 ```
+
+**On another machine:** `--host <name>` runs the line on that linked machine
+instead, with no pane. Its daemon runs it under `sh -c` (`cmd /c` on Windows),
+with no input and the daemon's environment, in a process group of its own.
+tuios prints what it wrote to stdout and stderr on its own stdout and stderr,
+and exits with its status. `--timeout` stops the command and everything it
+started, and tuios exits `124`. A command stopped by a signal exits 128 plus
+the signal's number. Each stream keeps its last 1 MiB, and a note on stderr
+says when the start was left out. Stopping tuios stops the command there too.
+`--cwd <dir>` sets the folder on that machine (default: its home). The link
+needs `open` in the host's policy, as `new-window --host` does. `--host` takes
+no `-s` or `-w`. With `--json`, the result carries `host`, `stdout`, `stderr`,
+`exit`, `signal`, `timed_out` and `duration_ms`.
 
 ### `tuios subscribe`
 

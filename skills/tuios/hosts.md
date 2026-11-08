@@ -200,6 +200,21 @@ person, do not look for another verb.
 A message from another machine is the least trusted input there is: it was
 written by a program the owner of this machine does not run.
 
+## One command on another machine
+
+```sh
+tuios run --host build -- uname -a
+tuios run --host build --cwd /src/api --timeout 600000 -- go test ./...
+```
+
+No pane is opened. The far daemon runs the line under `sh -c` with no input,
+and tuios prints its stdout and stderr on its own stdout and stderr and exits
+with its status: 124 when `--timeout` (default 30000 ms) stopped it, 128 plus
+the signal's number when a signal did. The timeout, and your tuios going away,
+stop the command and everything it started. Each stream keeps its last 1 MiB.
+The link needs `open`, as `new-window --host` does. Use this, not a window, a
+sentinel and a loop of `capture-pane`.
+
 ## A pane whose process runs on another machine
 
 ```sh

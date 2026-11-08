@@ -90,7 +90,7 @@ func printRunResult(out, errs io.Writer, raw json.RawMessage) error {
 
 // newRunCommand is `tuios run`.
 func newRunCommand() *cobra.Command {
-	var sessionName, windowTarget string
+	var sessionName, windowTarget, host, cwd string
 	var timeout, lines int
 	var jsonOutput bool
 	cmd := &cobra.Command{
@@ -114,7 +114,15 @@ into one line that the shell parses, so quote for the shell as you would when
 typing it.
 
 A timeout does not stop the command. The error names the wait-for command that
-picks it up where run left off.`,
+picks it up where run left off.
+
+With --host, the line runs on that linked machine instead, with no pane: its
+daemon runs it under sh -c, with no input, and tuios prints what it wrote to
+stdout and stderr on its own stdout and stderr and exits with its status. The
+link needs open in the host's policy, as new-window --host does. --timeout
+stops the command and everything it started, and tuios exits 124. A command
+stopped by a signal exits 128 plus the signal's number. Each stream keeps its
+last 1 MiB. --cwd sets the folder on that machine (default: its home).`,
 		Example: `  # Run the tests in the build pane and use the status
   tuios run -w build --timeout 600000 -- go test ./... && echo passed
 
@@ -122,9 +130,24 @@ picks it up where run left off.`,
   tuios run -w build --lines 40 -- make
 
   # The whole result, with the exit code and how long it took
-  tuios run -w build --json -- make lint`,
+  tuios run -w build --json -- make lint
+
+  # One command on the linked machine build, no pane
+  tuios run --host build -- uname -a
+
+  # The fonts a linked machine has, with a longer limit
+  tuios run --host build --timeout 60000 -- fc-list : family`,
 		Args: cobra.ArbitraryArgs,
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if host != "" {
+				if sessionName != "" || windowTarget != "" {
+					return errors.New("--host runs the command with no pane, so it takes no -s or -w")
+				}
+				return runLineOnHost(host, cwd, args, timeout, lines, jsonOutput)
+			}
+			if cwd != "" {
+				return errors.New("--cwd is for --host. A pane runs the command in its shell's folder")
+			}
 			return runInPane(sessionName, windowTarget, args, timeout, lines, jsonOutput)
 		},
 	}
@@ -133,6 +156,9 @@ picks it up where run left off.`,
 	cmd.Flags().IntVar(&timeout, "timeout", 0, "Milliseconds to wait for the command (default: 30000)")
 	cmd.Flags().IntVar(&lines, "lines", 0, "Keep only the last N lines of the output (0 keeps all)")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
+	cmd.Flags().StringVar(&host, "host", "", "Run on this linked machine, with no pane")
+	cmd.Flags().StringVar(&cwd, "cwd", "", "With --host: the folder to run in on that machine (default: its home)")
 	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	_ = cmd.RegisterFlagCompletionFunc("host", completeConfiguredHosts)
 	return cmd
 }

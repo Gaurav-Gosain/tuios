@@ -3351,6 +3351,8 @@ func buildVerbRegistry() map[string]verbEntry {
 	// a file of their own. See verb_protocol_agents.go.
 	maps.Copy(table, agentWorkVerbs())
 	maps.Copy(table, taskVerbs())
+	// exec, what tuios run --host sends. See verb_exec.go.
+	maps.Copy(table, execVerbs())
 	maps.Copy(table, taskVerifyVerbs())
 	maps.Copy(table, taskDispatchVerbs(verbParam{Name: "human_nonce", Type: "string", Description: "The attached client's nonce, to act as the person (by human). One that does not verify is refused with not_human."}))
 	// The checkpoint verbs. See verb_checkpoint.go.

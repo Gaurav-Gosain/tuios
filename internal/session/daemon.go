@@ -31,6 +31,9 @@ import (
 // Daemon manages the persistent TUIOS server process.
 // It owns PTYs and stores session state. Clients run the TUI.
 type Daemon struct {
+	// execRunning counts the exec verbs running now, held to execMaxRunning.
+	execRunning atomic.Int32
+
 	manager *Manager
 	// tml holds the open TML surfaces. See tml_surface.go.
 	tml tmlHost
