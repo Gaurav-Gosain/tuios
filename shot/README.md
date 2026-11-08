@@ -124,6 +124,32 @@ shot parses a fallback face only when a glyph needs it, and looks up each
 glyph once per render. A glyph wider than its cell is centred on the
 cell. tuios fills the fallback list from fontconfig.
 
+### Colour emoji
+
+PNG draws the colour bitmaps of an emoji font: the `sbix` table of Apple Color
+Emoji and the `CBDT` table of Noto Color Emoji. It picks the bitmap size that
+fits the cell and scales it into the cell in its own colours. A face that lists
+a glyph in neither an outline nor a bitmap it can draw does not count as having
+it, so `MissingGlyphs` reports it and the next face is tried.
+
+A large font file can be read in place: set `Font.File` to an open file (any
+`io.ReaderAt`) and leave `Data` empty. shot then reads only the tables and the
+glyphs it draws, which for Apple Color Emoji (about 190 MB) is a few hundred KB.
+
+```go
+emoji, _ := os.Open("/System/Library/Fonts/Apple Color Emoji.ttc")
+defer emoji.Close() // after the render
+frame.Fallback = append(frame.Fallback, shot.Font{File: emoji})
+```
+
+What shot does not do yet:
+
+- Shaping. A cluster of several codepoints draws its first emoji: a skin tone
+  draws the plain emoji, a family joined by ZWJ draws its first person, and a
+  flag draws its first regional indicator letter.
+- `COLR` layered colour glyphs (Segoe UI Emoji, Twemoji Mozilla), and `sbix`
+  glyphs stored as JPEG or TIFF. Those glyphs count as missing.
+
 SVG and HTML name `Frame.FontFamily` and let the viewer pick the fonts. With
 `Frame.EmbedFont`, they also carry `Frame.Font` as an `@font-face`.
 

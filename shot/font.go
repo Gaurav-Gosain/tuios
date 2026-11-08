@@ -1,8 +1,12 @@
 package shot
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"image"
+	"image/draw"
+	"io"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
@@ -17,9 +21,25 @@ type Font struct {
 	// Data is the whole font file. The renderer reads it and does not keep it
 	// past the render.
 	Data []byte
+	// File reads the font file in place of Data, when Data is empty. A
+	// render reads only the tables and glyphs it uses, which for a colour
+	// emoji font (Apple Color Emoji is about 190 MB) is a few hundred KB.
+	// It must stay readable for the render.
+	File io.ReaderAt
 	// Index selects a face when Data is a collection (.ttc, .otc). Zero is the
 	// first face, and the only one of a plain font file.
 	Index int
+}
+
+// present reports whether the font has data to read.
+func (f Font) present() bool { return len(f.Data) > 0 || f.File != nil }
+
+// reader is the font file as an io.ReaderAt.
+func (f Font) reader() io.ReaderAt {
+	if len(f.Data) > 0 {
+		return bytes.NewReader(f.Data)
+	}
+	return f.File
 }
 
 // faceSet is the order a PNG render looks for a glyph in:
@@ -40,6 +60,13 @@ type faceSet struct {
 	// picks caches the search. The key is the rune doubled, plus one for
 	// bold. The value is the index of the face in faces, or -1 for none.
 	picks map[rune]int
+	// tiles caches the colour glyphs drawn, scaled to their box.
+	tiles map[colorTileKey]*image.RGBA
+}
+
+// colorTileKey is one colour glyph at one box size.
+type colorTileKey struct {
+	face, glyph, w, h int
 }
 
 // faceEntry is one face in the search order.
@@ -56,6 +83,8 @@ type faceEntry struct {
 	bold bool
 	// boldOnly faces answer bold cells only.
 	boldOnly bool
+	// color is the face's colour glyph tables, nil for none.
+	color *colorFace
 }
 
 // loadFaces builds the search order for a frame at one pixel size. The
@@ -79,7 +108,7 @@ func loadFaces(f *Frame, size float64) (*faceSet, error) {
 	if f == nil {
 		return fs, fs.parse(&fs.faces[1])
 	}
-	own := len(f.Font.Data) > 0
+	own := f.Font.present()
 	if own {
 		fs.faces = []faceEntry{
 			{src: f.BoldFont, bold: true, boldOnly: true},
@@ -108,12 +137,18 @@ func (fs *faceSet) parse(e *faceEntry) error {
 		return nil
 	}
 	e.parsed = true
-	if len(e.src.Data) == 0 {
+	if !e.src.present() {
 		// An empty font is a face the caller does not have, such as the bold
 		// cut of a font with none. sfnt.ParseCollection panics on it.
 		return errors.New("parse font: no font data")
 	}
-	coll, err := sfnt.ParseCollection(e.src.Data)
+	var coll *sfnt.Collection
+	var err error
+	if len(e.src.Data) > 0 {
+		coll, err = sfnt.ParseCollection(e.src.Data)
+	} else {
+		coll, err = sfnt.ParseCollectionReaderAt(e.src.File)
+	}
 	if err != nil {
 		return fmt.Errorf("parse font: %w", err)
 	}
@@ -133,6 +168,7 @@ func (fs *faceSet) parse(e *faceEntry) error {
 		return fmt.Errorf("font face: %w", err)
 	}
 	e.font, e.face = sf, face
+	e.color = readColorFace(e.src.reader(), index, sf.NumGlyphs())
 	return nil
 }
 
@@ -168,11 +204,84 @@ func (fs *faceSet) search(r rune, bold bool) int {
 		if e.font == nil {
 			continue
 		}
-		if idx, err := e.font.GlyphIndex(&fs.buf, r); err == nil && idx != 0 {
-			return i
+		idx, err := e.font.GlyphIndex(&fs.buf, r)
+		if err != nil || idx == 0 {
+			continue
 		}
+		// A colour font lists its emoji and has no outline for them: it
+		// covers a glyph it has as a bitmap or as an outline, and passes over
+		// one it has in neither form.
+		if e.color != nil && !e.color.has(int(idx)) && !fs.hasOutline(e, idx) {
+			continue
+		}
+		return i
 	}
 	return -1
+}
+
+// hasOutline reports whether face e draws glyph idx as an outline.
+func (fs *faceSet) hasOutline(e *faceEntry, idx sfnt.GlyphIndex) bool {
+	segs, err := e.font.LoadGlyph(&fs.buf, idx, fixed.I(16), nil)
+	return err == nil && len(segs) > 0
+}
+
+// pickColor returns the colour glyph that draws r, scaled into a box w by h
+// pixels, or nil when the face that draws r draws it as an outline.
+func (fs *faceSet) pickColor(r rune, bold bool, w, h int) *image.RGBA {
+	if w <= 0 || h <= 0 {
+		return nil
+	}
+	fs.pick(r, bold) // fills picks
+	i := fs.picks[r*2+boolInt(bold)]
+	if i < 0 {
+		return nil
+	}
+	e := &fs.faces[i]
+	if e.color == nil {
+		return nil
+	}
+	idx, err := e.font.GlyphIndex(&fs.buf, r)
+	if err != nil || idx == 0 {
+		return nil
+	}
+	key := colorTileKey{face: i, glyph: int(idx), w: w, h: h}
+	if t, ok := fs.tiles[key]; ok {
+		return t
+	}
+	var tile *image.RGBA
+	if data, ok := e.color.bitmap(int(idx), h); ok {
+		if src, ok := decodeColorBitmap(data); ok {
+			tile = fitColorTile(src, w, h)
+		}
+	}
+	if fs.tiles == nil {
+		fs.tiles = map[colorTileKey]*image.RGBA{}
+	}
+	fs.tiles[key] = tile
+	return tile
+}
+
+// fitColorTile scales a glyph bitmap to fit w by h, keeping its proportions:
+// a box filter down, bilinear up (at most twice the size).
+func fitColorTile(src image.Image, w, h int) *image.RGBA {
+	b := src.Bounds()
+	rgba := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+	draw.Draw(rgba, rgba.Bounds(), src, b.Min, draw.Src)
+	if b.Dx() > w || b.Dy() > h {
+		return Downscale(rgba, w, h)
+	}
+	scale := min(float64(w)/float64(b.Dx()), float64(h)/float64(b.Dy()), 2)
+	ow, oh := max(1, int(float64(b.Dx())*scale)), max(1, int(float64(b.Dy())*scale))
+	out := image.NewRGBA(image.Rect(0, 0, ow, oh))
+	ScaleBilinear(out, out.Bounds(), rgba, rgba.Bounds(), false)
+	return out
+}
+
+func boolInt(b bool) rune {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // cellSize derives the grid cell from the primary face: the advance of "M"

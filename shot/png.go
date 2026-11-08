@@ -255,6 +255,16 @@ func drawCluster(img *image.RGBA, faces *faceSet, cl string, x, baseline, cellW,
 		drawTofu(img, x, cellTop, cellW, cellH, ink)
 		return
 	}
+	// A colour glyph is drawn as its bitmap, centred in the cell, in its own
+	// colours. A cluster of several codepoints (a skin tone, a ZWJ family, a
+	// flag) draws its first emoji: shot does not shape.
+	if tile := faces.pickColor(r, bold, int(cellW), int(cellH)); tile != nil {
+		tb := tile.Bounds()
+		ox := int(x + (cellW-float64(tb.Dx()))/2)
+		oy := int(cellTop + (cellH-float64(tb.Dy()))/2)
+		draw.Draw(img, image.Rect(ox, oy, ox+tb.Dx(), oy+tb.Dy()), tile, image.Point{}, draw.Over)
+		return
+	}
 	d := font.Drawer{
 		Dst:  img,
 		Src:  image.NewUniform(ink),
