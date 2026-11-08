@@ -15637,3 +15637,22 @@ fail on main on this Mac too.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRailEscKeepsAChoiceMadeWhileItWasOpen$' -v .`.
+
+## TestClipboardAskSettlesBeforeAClickAllows
+
+State machine plan M10. A background pane's OSC 52 write raises a clipboard
+ask on the dock. A click on it in the moment it appears must allow nothing and
+leave the ask up; a click after the 500 ms settle allows the write.
+`TestClipboardAskIsAllowedByAClick` now waits out the settle before its click.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes. Of the 44 e2e tests
+whose names carry OSC52, clipboard, notification or message, the two that fail
+(TestClipboardPasteStillPastesAndNotifies, TestClipboardPasteCannotEndBracketedPaste)
+fail on main on this Mac too.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (8d1f4899d), with no settle on the ask | "a click as the ask appeared allowed the write" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestClipboardAskSettlesBeforeAClickAllows$' -v .`.

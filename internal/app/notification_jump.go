@@ -221,6 +221,11 @@ func (m *OS) clickVisibleNotification() {
 	if !sameDrawnNotification(visible, m.notifHit.Drawn) {
 		return
 	}
+	// A clipboard ask that has not shown its text for the settle stays up,
+	// and the click allows nothing: it was on its way before the text was.
+	if t := visible.Target; isClipboardAsk(t) && m.clipboardAskSettling(t.ClipboardAsk) {
+		return
+	}
 	m.Notifications = m.Notifications[:n-1]
 	if m.notifHit.Cut && !isClipboardAsk(visible.Target) && !isRestartNotice(visible.Target) && !isInstallNotice(visible.Target) && !isFarOpenAsk(visible.Target) {
 		m.notifHoverEnd()
