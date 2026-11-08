@@ -185,6 +185,15 @@ func startProbe(a *App) {
 						conn.Write([]byte("ok\n"))
 						continue
 					}
+					// "confirm" opens a dialog no key asked for, as an event
+					// of the daemon does: what the keys kept then do (G2).
+					if sc.Text() == "confirm" {
+						a.update(func() {
+							a.confirm = &confirmation{open: true, title: "Probe", detail: "A dialog the probe opened.", action: "OK", run: func() {}}
+						})
+						conn.Write([]byte("ok\n"))
+						continue
+					}
 					// "size W H" sizes the main window, for frames at a
 					// width: a headless compositor has no edge to drag.
 					if p, ok := strings.CutPrefix(sc.Text(), "size "); ok {
