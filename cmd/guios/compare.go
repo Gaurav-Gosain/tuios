@@ -314,7 +314,10 @@ func ckKeepSig(rows []ckFanAttempt, keep int) string {
 	var b strings.Builder
 	for i, r := range rows {
 		if i != keep {
-			b.WriteString(r.Session + "\x00" + r.IgnoredHash + "\x00")
+			b.WriteString(r.Session)
+			b.WriteString("\x00")
+			b.WriteString(r.IgnoredHash)
+			b.WriteString("\x00")
 		}
 	}
 	return b.String()

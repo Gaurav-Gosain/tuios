@@ -102,10 +102,12 @@ func ParseAddr(s string) (Addr, error) {
 func (a Addr) String() string {
 	var b strings.Builder
 	if a.Scheme != "ssh" {
-		b.WriteString(a.Scheme + "://")
+		b.WriteString(a.Scheme)
+		b.WriteString("://")
 	}
 	if a.User != "" {
-		b.WriteString(url.User(a.User).String() + "@")
+		b.WriteString(url.User(a.User).String())
+		b.WriteString("@")
 	}
 	host := a.Host
 	if strings.Contains(host, ":") {
@@ -113,10 +115,12 @@ func (a Addr) String() string {
 	}
 	b.WriteString(host)
 	if a.Port != "" {
-		b.WriteString(":" + a.Port)
+		b.WriteString(":")
+		b.WriteString(a.Port)
 	}
 	if a.Kero != "" {
-		b.WriteString("?kero=" + url.QueryEscape(a.Kero))
+		b.WriteString("?kero=")
+		b.WriteString(url.QueryEscape(a.Kero))
 	}
 	return b.String()
 }

@@ -394,54 +394,6 @@ func readable(c, alt, bg Color, dark bool) Color {
 	return c
 }
 
-// tone is the hue of a kero theme, how much of it its cards and text
-// take, how vivid the programs' colors are, which lean to its hue, and
-// the hue of its accent: the cursor, selection and controls.
-type tone struct{ hue, tint, vivid, accent float32 }
-
-// toneTheme is a kero theme's terminal colors, and its accent: its cards
-// and text tinted with its hue, and the programs' colors muted to sit
-// with them, the cursor and selection in its hue.
-func toneTheme(t tone, dark bool) (*Term, Color) {
-	tint := func(l, c float32) Color { return Oklch(l, c*t.tint, t.hue) }
-	// Red, green, yellow, blue, magenta and cyan.
-	hues := [6]float32{28, 145, 85, 255, 325, 195}
-	ls := [6]float32{0.56, 0.56, 0.62, 0.54, 0.54, 0.56}
-	cs := [6]float32{0.15, 0.13, 0.12, 0.13, 0.14, 0.09}
-	bright := float32(0.05)
-	th := &Term{}
-	var accent Color
-	if dark {
-		ls = [6]float32{0.70, 0.74, 0.80, 0.70, 0.72, 0.76}
-		cs = [6]float32{0.14, 0.13, 0.12, 0.12, 0.13, 0.10}
-		bright = 0.06
-		th.Background, th.Foreground = tint(0.255, 0.02), tint(0.92, 0.015)
-		th.Palette[0], th.Palette[7], th.Palette[8], th.Palette[15] = tint(0.36, 0.02), tint(0.82, 0.012), tint(0.5, 0.02), tint(0.96, 0.01)
-		th.Selection = Oklch(0.38, 0.06, t.accent)
-		accent = Oklch(0.74, 0.13, t.accent)
-	} else {
-		// The less tinted, the whiter the paper: an untinted theme's
-		// cards are white.
-		paper := 0.978 + 0.022*max(0, 1-t.tint/0.5)
-		th.Background, th.Foreground = tint(paper, 0.012), tint(0.28, 0.03)
-		th.Palette[0], th.Palette[7], th.Palette[8], th.Palette[15] = th.Foreground, tint(0.7, 0.02), tint(0.52, 0.02), tint(0.8, 0.015)
-		th.Selection = Oklch(0.9, 0.045, t.accent)
-		accent = Oklch(0.55, 0.13, t.accent)
-	}
-	for i := range 6 {
-		// Toward the theme's hue, the less the farther it is, as a far
-		// color turned is a muddy one, and more vivid the nearer to it: a
-		// theme's own color stands out of its Palette.
-		d := float32(math.Remainder(float64(t.hue-hues[i]), 360))
-		h := hues[i] + d*0.35*(1-abs(d)/180)
-		c := cs[i] * t.vivid * (1 + 0.45*max(0, 1-abs(d)/60))
-		th.Palette[1+i] = Oklch(ls[i], c, h)
-		th.Palette[9+i] = Oklch(ls[i]+bright, c+0.01, h)
-	}
-	th.Cursor, th.CursorText, th.SelectionText = accent, th.Background, th.Foreground
-	return th, accent
-}
-
 // ToOklch returns a color's lightness, chroma and hue, as CSS's ToOklch().
 func ToOklch(c Color) (l, ch, h float32) {
 	lin := func(v uint8) float64 {

@@ -71,21 +71,27 @@ func gitSummary(g *proto.GitInfo) string {
 	var b strings.Builder
 	b.WriteString(branchName(g))
 	if g.Ahead > 0 {
-		b.WriteString(" ↑" + itoa(g.Ahead))
+		b.WriteString(" ↑")
+		b.WriteString(itoa(g.Ahead))
 	}
 	if g.Behind > 0 {
-		b.WriteString(" ↓" + itoa(g.Behind))
+		b.WriteString(" ↓")
+		b.WriteString(itoa(g.Behind))
 	}
 	if st := gitState(g.State); st != "" {
-		b.WriteString(" · " + st)
+		b.WriteString(" · ")
+		b.WriteString(st)
 	}
 	if g.Files > 0 {
-		b.WriteString(" · " + locales.ChangesFiles(g.Files))
+		b.WriteString(" · ")
+		b.WriteString(locales.ChangesFiles(g.Files))
 		if g.Added > 0 {
-			b.WriteString(" +" + itoa(g.Added))
+			b.WriteString(" +")
+			b.WriteString(itoa(g.Added))
 		}
 		if g.Removed > 0 {
-			b.WriteString(" −" + itoa(g.Removed))
+			b.WriteString(" −")
+			b.WriteString(itoa(g.Removed))
 		}
 	}
 	return b.String()
@@ -97,13 +103,18 @@ func gitShort(g *proto.GitInfo) string {
 	var b strings.Builder
 	b.WriteString(branchName(g))
 	if g.Ahead > 0 {
-		b.WriteString(" ↑" + itoa(g.Ahead))
+		b.WriteString(" ↑")
+		b.WriteString(itoa(g.Ahead))
 	}
 	if g.Behind > 0 {
-		b.WriteString(" ↓" + itoa(g.Behind))
+		b.WriteString(" ↓")
+		b.WriteString(itoa(g.Behind))
 	}
 	if g.Added > 0 || g.Removed > 0 {
-		b.WriteString("  +" + itoa(g.Added) + " −" + itoa(g.Removed))
+		b.WriteString("  +")
+		b.WriteString(itoa(g.Added))
+		b.WriteString(" −")
+		b.WriteString(itoa(g.Removed))
 	}
 	return b.String()
 }

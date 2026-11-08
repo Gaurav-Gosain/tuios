@@ -20,7 +20,7 @@ func cloneFrom(src *os.File, dst string) error {
 	if err := unix.Fclonefileat(int(src.Fd()), int(dir.Fd()), filepath.Base(dst), unix.CLONE_NOOWNERCOPY); err != nil { //nolint:gosec // descriptor numbers
 		return err
 	}
-	if err := os.Chmod(dst, 0o700); err != nil {
+	if err := os.Chmod(dst, 0o700); err != nil { //nolint:gosec // the copy is the binary the daemon execs, so it needs its execute bit
 		_ = os.Remove(dst)
 		return err
 	}

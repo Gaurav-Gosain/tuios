@@ -173,7 +173,8 @@ func layoutSig(s *proto.Session) string {
 		var walk func(l *proto.Layout)
 		walk = func(l *proto.Layout) {
 			if l.Leaf() {
-				b.WriteString(" " + l.Pane)
+				b.WriteString(" ")
+				b.WriteString(l.Pane)
 				return
 			}
 			fmt.Fprintf(&b, " (%t %.3f", l.Row, l.Ratio)
@@ -183,7 +184,8 @@ func layoutSig(s *proto.Session) string {
 		}
 		walk(s.Layout)
 	} else if p := s.FocusPane(); z == nil && p != nil {
-		b.WriteString(" " + p.ID)
+		b.WriteString(" ")
+		b.WriteString(p.ID)
 	}
 	if ar := s.Arrange; ar != nil && s.PaneByID(s.Zoomed) == nil {
 		// The layouts placed by rectangles change with them.
