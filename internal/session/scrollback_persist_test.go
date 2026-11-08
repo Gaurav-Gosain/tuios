@@ -100,7 +100,7 @@ func TestHistoryRoundTripKeepsTextStylesWideRunesAndWraps(t *testing.T) {
 	}
 
 	h := throughDisk(t, src, 1000)
-	dst := newRestoredEmulator(80, 8, 1000, "/tmp/x", h)
+	dst := newRestoredEmulator(80, 8, 1000, "/tmp/x", &restoreSpec{history: h, savedCwd: "/tmp/x"})
 	rows := allRows(dst)
 
 	// Every line, in order, then the prompt it was sitting at, then the divider.
@@ -189,7 +189,7 @@ func TestHistoryRestoreAtAnotherWidth(t *testing.T) {
 	_, _ = src.Write([]byte("first\r\n" + strings.Repeat("r", 30) + "\r\nlast\r\n$ "))
 	h := throughDisk(t, src, 1000)
 
-	dst := newRestoredEmulator(60, 6, 1000, "", h)
+	dst := newRestoredEmulator(60, 6, 1000, "", &restoreSpec{history: h})
 	if dst.Width() != 60 || dst.Height() != 6 {
 		t.Fatalf("restored emulator is %dx%d, want 60x6", dst.Width(), dst.Height())
 	}
@@ -224,7 +224,7 @@ func TestHistorySavesTheMainScreenUnderAnAlternateOne(t *testing.T) {
 		t.Fatal("the source never entered the alternate screen")
 	}
 	h := throughDisk(t, src, 1000)
-	dst := newRestoredEmulator(40, 6, 1000, "", h)
+	dst := newRestoredEmulator(40, 6, 1000, "", &restoreSpec{history: h})
 	if dst.IsAltScreen() {
 		t.Error("the restored pane is on the alternate screen")
 	}
@@ -250,7 +250,7 @@ func TestHistoryLinesBound(t *testing.T) {
 	if got := packedScrollbackRows(t, h.State); got != 50 {
 		t.Fatalf("saved %d history rows, want 50", got)
 	}
-	rows := allRows(newRestoredEmulator(40, 5, 1000, "", h))
+	rows := allRows(newRestoredEmulator(40, 5, 1000, "", &restoreSpec{history: h}))
 	// 50 history rows and the 5-row screen: n247 to n300.
 	if indexOf(rows, "n246") >= 0 || indexOf(rows, "n247") < 0 || indexOf(rows, "n300") < 0 {
 		t.Errorf("wrong rows kept:\n%s", strings.Join(rows, "\n"))
@@ -379,7 +379,7 @@ func TestHistoryPaneAndSessionByteBounds(t *testing.T) {
 	if h == nil {
 		t.Fatal("the bounded file does not load")
 	}
-	rows := allRows(newRestoredEmulator(40, 6, 5000, "", h))
+	rows := allRows(newRestoredEmulator(40, 6, 5000, "", &restoreSpec{history: h}))
 	// The newest rows are the ones kept.
 	if indexOf(rows, strings.TrimRight(fmt.Sprintf("row-%05d %s", 3999, strings.Repeat("x", 3999%31)), " ")) < 0 {
 		t.Errorf("the newest row was not kept")

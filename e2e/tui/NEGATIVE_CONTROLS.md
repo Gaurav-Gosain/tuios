@@ -15903,3 +15903,21 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPaneGoneSaysWhyInTheLog$' -v .`.
+## The restore banner names the folder the shell started in
+
+`TestRestoredPaneShowsItsHistoryAboveTheDivider` restores two sessions. One
+pane works in a folder that is removed while the daemon is down, so its new
+shell starts in the daemon's folder: its divider must name that folder and say
+the saved one is no longer available. The other session keeps its folder, and
+its banner must name that folder alone.
+
+Run on 2026-11-08 on Linux. The branch passes, three runs out of three.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (95b2da88d): the banner names the saved folder | "the divider of the pane whose folder is gone is \"... fresh shell in .../gone --\"" | **caught** |
+| The call site cut: `createPTY` does not fall back to the daemon's folder for a shell whose saved folder is gone | "the divider of the pane whose folder is gone is \"... fresh shell (.../gone no longer available) --\"" | **caught** |
+| The note added whenever a saved folder is known (`r.savedCwd != cwd` cut from `restoredBanner`) | "the banner of the pane whose folder stayed is \"... fresh shell in .../kept (.../kept no longer available) --\"" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRestoredPaneShowsItsHistoryAboveTheDivider$' -v .`.
