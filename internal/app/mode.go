@@ -136,7 +136,8 @@ func (m *OS) openLease(lease modeLease) {
 }
 
 // returnMode ends owner's lease. Idempotent: every path a borrow can end by
-// runs it. A lease that owes its saved choice hands it back. When the last
+// runs it. A lease that owes its saved choice hands it back, unless a choice
+// made while it was open spent it: that choice stands. When the last
 // lease ends on terminal mode with no pane in focus, that is a choice of
 // window management, the mode that can go find a pane: the pane the borrow
 // began over closed while it was open.
@@ -145,7 +146,7 @@ func (m *OS) returnMode(owner modeOwner) {
 	if !had {
 		return
 	}
-	if lease.owes {
+	if lease.owes && !lease.spent {
 		m.setChoice(lease.saved, ModeCauseRail, false)
 	}
 	m.settleMode()

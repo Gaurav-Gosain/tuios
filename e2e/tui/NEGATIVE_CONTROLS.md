@@ -15616,3 +15616,24 @@ Run on 2026-11-08 on macOS (arm64). The branch passes.
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
 | fix/sm-n1 (a1469257e), where the click rule covers the one-key menus only | "the peek is still open after a click", "the click that closed the peek also moved the cursor (now ... e2e-agent)" | **caught** |
+
+## TestRailEscKeepsAChoiceMadeWhileItWasOpen
+
+State machine plan, the M1 residual. The rail opened in window management,
+then `run-command TerminalMode` from outside the client while the rail has the
+keyboard, then esc. The choice spent the rail's lease, so esc must keep
+terminal mode: a line typed then reaches the shell. A first step runs the same
+run-command with no rail open and checks the line reaches the shell, so the
+run-command is known to choose.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes, and 228 of the 230 e2e
+tests whose names carry Mode, Rail, Hold, Lease, Gesture or Scratch pass; the
+other two (TestProgramStatusDrivesTheRailAndInbox, TestRailNamesAnAgentByItsTitle)
+fail on main on this Mac too.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (8d1f4899d), where returnMode hands back an owed choice even when a choice spent the lease | "after esc out of the rail the line did not reach the shell" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRailEscKeepsAChoiceMadeWhileItWasOpen$' -v .`.
