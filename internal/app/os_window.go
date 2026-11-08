@@ -1021,6 +1021,7 @@ func (m *OS) DeleteWindow(i int) *OS {
 	if m.SixelPassthrough != nil {
 		m.SixelPassthrough.ClearWindow(deletedWindow.ID)
 	}
+	m.kittySymbols.forget(deletedWindow.ID)
 	if m.KittyPassthrough != nil {
 		m.KittyPassthrough.OnWindowClose(deletedWindow.ID)
 		if data := m.KittyPassthrough.FlushPending(); len(data) > 0 {

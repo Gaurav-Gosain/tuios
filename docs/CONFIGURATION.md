@@ -801,11 +801,13 @@ machine are not the ones you see.
 
 ## Images on a terminal without graphics
 
-A program in a pane can draw a picture with sixel. Your terminal shows the
-picture when it supports sixel or kitty graphics. Some terminals support
-neither: kmscon, the Linux console, and many SSH clients. On these, tuios
-draws the picture with block characters. Each character cell shows two
-colours.
+A program in a pane can draw a picture with sixel or with kitty graphics.
+Your terminal shows the picture when it supports sixel or kitty graphics.
+Some terminals support neither: kmscon, the Linux console, xterm.js hosts
+such as VS Code, and many SSH clients. On these, tuios draws the picture with
+block characters. Each character cell shows two colours. The picture scrolls
+and clears with the text, and a kitty delete (`a=d`, of every image or of one
+id) takes it down. Kitty Unicode placeholders (`U=1`) are not drawn this way.
 
 `appearance.image_symbols` sets the characters.
 

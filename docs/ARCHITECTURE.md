@@ -1032,6 +1032,14 @@ the frame's text in the same write:
   and the pane is told no sixel. A host that answers for sixel or kitty
   graphics never gets glyphs.
 
+  A kitty image takes the same path on such a host (`internal/app/kitty_symbols.go`):
+  its chunks are put together, decoded (RGB, RGBA, PNG, zlib), cut to its source
+  rectangle, made into a palette image of 5 bits a channel, scaled to the cells
+  `calculateImageCells` gives it, and registered with the sixel passthrough as a
+  glyph-only image, which a change to a graphics mode drops. Its cells are marked
+  with `Terminal.PlaceImageMarkers`, and a delete by all or by id blanks them
+  with `EraseImageMarkers`.
+
   This is how a picture reaches the Linux console under kmscon, which has no
   image protocol. See [KMSCON-GRAPHICS.md](KMSCON-GRAPHICS.md).
 

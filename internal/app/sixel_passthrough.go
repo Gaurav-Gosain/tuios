@@ -132,6 +132,10 @@ type sixelEntry struct {
 	// born is when the image was registered. The sweep leaves a young image
 	// alone: its cells are written just after it is registered.
 	born time.Time
+	// glyphOnly marks a kitty image drawn as glyphs (kitty_symbols.go). Its
+	// palette is larger than a sixel's, so it is never sent as graphics: a
+	// change to a mode that would send it drops it.
+	glyphOnly bool
 }
 
 // SixelPassthroughOptions configures a SixelPassthrough instance.
@@ -215,6 +219,13 @@ func (sp *SixelPassthrough) setModeLocked(mode sixelMode) {
 	sixelPassthroughLog("sixel mode: %s -> %s", sp.mode, mode)
 	sp.frame.pending = append(sp.frame.pending, sp.takeDownLocked()...)
 	sp.mode = mode
+	if mode != sixelSymbols {
+		for id, e := range sp.images {
+			if e.glyphOnly {
+				sp.dropLocked(id)
+			}
+		}
+	}
 	// Images decoded for the old mode stay valid; ones registered in
 	// placeholder mode were never decoded and keep showing the box.
 }
@@ -294,6 +305,68 @@ func (sp *SixelPassthrough) Register(windowID string, cmd *vt.SixelCommand, view
 	sixelPassthroughLog("Register: win=%s id=%d %dx%d px, %dx%d cells at %dx%d, %d bytes, mode=%s",
 		windowID[:min(8, len(windowID))], id, cmd.Width, cmd.Height, cols, rows, cw, ch, e.bytes, mode)
 	return id
+}
+
+// DrawsSymbols reports whether images are drawn as glyphs: the host draws
+// no graphics, and a glyph set is chosen.
+func (sp *SixelPassthrough) DrawsSymbols() bool {
+	if sp == nil {
+		return false
+	}
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	return sp.mode == sixelSymbols
+}
+
+// RegisterImage is Register for a picture already decoded, img, which is
+// cols cells of cellW pixels wide and rows of cellH high: a kitty image drawn
+// as glyphs (kitty_symbols.go). It returns the id its cells are marked with,
+// 0 when images are not drawn as glyphs.
+func (sp *SixelPassthrough) RegisterImage(windowID string, img *vt.SixelImage, cellW, cellH, rows, cols int, view image.Rectangle) uint32 {
+	if img == nil || cellW <= 0 || cellH <= 0 || rows <= 0 || cols <= 0 {
+		return 0
+	}
+	sp.mu.Lock()
+	mode, symbols := sp.mode, sp.symbols
+	sp.mu.Unlock()
+	if mode != sixelSymbols {
+		return 0
+	}
+	e := &sixelEntry{windowID: windowID, img: img, cellW: cellW, cellH: cellH, rows: rows, cols: cols, glyphOnly: true}
+	e.bytes = img.Width * img.Height * 2
+	if colors, colored := symbolColors(); colored {
+		sp.drawSymbolsOnReader(e, symbols, colors, view)
+	}
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	id := sp.allocateIDLocked()
+	if id == 0 {
+		return 0
+	}
+	sp.frame.seq++
+	e.seq = sp.frame.seq
+	e.born = time.Now()
+	sp.images[id] = e
+	sp.byWindow[windowID] += e.bytes
+	sp.evictLocked(windowID)
+	if e.sym != nil && e.sym.waiting {
+		sp.wakeWhenBudgetLocked(windowID)
+	}
+	sixelPassthroughLog("RegisterImage: win=%s id=%d %dx%d px, %dx%d cells at %dx%d", windowID[:min(8, len(windowID))], id, img.Width, img.Height, cols, rows, cellW, cellH)
+	return id
+}
+
+// Forget drops the images ids names, once their cells are gone: a kitty
+// delete of pictures drawn as glyphs.
+func (sp *SixelPassthrough) Forget(ids []uint32) {
+	if sp == nil || len(ids) == 0 {
+		return
+	}
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	for _, id := range ids {
+		sp.dropLocked(id)
+	}
 }
 
 // allocateIDLocked returns a free id in 1..vt.SixelMaxID, or 0 when every id

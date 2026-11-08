@@ -1282,6 +1282,9 @@ type OS struct {
 	KittyPassthrough *KittyPassthrough
 	// Sixel Graphics passthrough for forwarding to host terminal
 	SixelPassthrough *SixelPassthrough
+	// kittySymbols draws kitty images as glyphs on a host without
+	// graphics; see kitty_symbols.go.
+	kittySymbols     kittySymbols
 	TextSizingState  *TextSizingState
 	PostRenderWriter *PostRenderWriter
 	// cursorPark keeps the host cursor hidden where tuios parks it for

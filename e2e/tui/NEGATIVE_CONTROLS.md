@@ -15804,3 +15804,23 @@ Run on 2026-11-08 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestStreamPaneTypesInputAtItsOffset$' -v .`.
+
+## TestKittyImageSymbolsOnAHostWithoutGraphics
+
+A kitty a=T picture (RGBA, in 4096-byte chunks) in a pane on a host without
+graphics, standalone and in a daemon pane: it must be on the host as octants
+under the ceiling of the sixel test, scroll, go on a=d,d=I,i=7 and on
+a=d,d=A, and go on clear, with no graphics and no marker text sent to the
+host. vt TestImageMarkersPlaceAndErase holds both emulators to the marker
+cells the path writes and blanks. Run on 2026-11-09 on macOS (arm64), pure Go
+and -tags ghostty binaries.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (f09362e98): no glyph path | "the kitty picture on the host: error 377.2 ... holds \"S\", not a octant glyph", "SHOWN is 1 rows under the picture's top" | **caught** |
+| a=d not handled | "74 image cells left after a=d,d=I,i=7", "234 image cells left after a=d,d=A" | **caught** |
+| The cursor never moves past the picture | "SHOWN is 1 rows under the picture's top, want 13" | **caught** |
+| EraseImageMarkers does nothing (pure Go, then ghostty) | e2e passes, as the dropped image draws nothing; vt TestImageMarkersPlaceAndErase "6 cells of the erased picture are left" on both | **caught by the vt test** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestKittyImageSymbolsOnAHostWithoutGraphics$' -v .`.
