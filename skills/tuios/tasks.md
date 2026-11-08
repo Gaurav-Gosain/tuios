@@ -57,9 +57,10 @@ in your worktree (your pane's repository, on your machine). A pass moves the
 card to `review`. A fail sends it back to `todo`: its `attempts` goes up by
 one and its `note` is the last line of the output (`tuios task get ID` shows
 the end of the output). If your agent errors while it holds a card that
-dispatch gave it, the card goes back to `todo` the same way, with your last
-message as the note. The person closes a card (`done`), or its pull request
-merging moves it to `shipped`.
+dispatch gave it, you keep the card, blocked, with its `attempts` one higher
+and your last message as the note. Work on it again and the block lifts; let
+it go (`tuios task release ID`) and it goes back to `todo`. The person
+closes a card (`done`), or its pull request merging moves it to `shipped`.
 
 The verify command is the person's: `tuios task dispatch verify CMD` is
 refused from every pane. From a pane you also cannot move your card to

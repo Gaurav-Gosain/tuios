@@ -2949,8 +2949,11 @@ one higher and the last line of the output as its note; `get` shows the end
 of the output. A verify that cannot reach the pane's machine leaves the card
 in `verify` and says why; `stage ID verify` runs it again. A card moved out of
 `verify` by hand stops its run. An agent that errors while it holds a card
-dispatch gave it sends the card back to `todo` the same way, with its last
-message as the note. A merged pull request moves the card to `shipped`; `done`
+dispatch gave it keeps the card, blocked, with its `attempts` one higher and
+its last message as the note, since the agent may go on; no second agent is
+started for it. The block lifts when the agent works again, and the card
+goes back to `todo` once it is let go (the agent leaves, its pane closes, or
+`release`). A merged pull request moves the card to `shipped`; `done`
 from you, a shell outside the panes, or a pane that holds `admin` closes it.
 With `[tasks] auto_stage = false`, or `[tasks] stages` without `review`, an
 agent's `done` closes the card as before. The verify command is refused from
@@ -2989,14 +2992,17 @@ you, so a restart never starts a second agent. Auto needs a preset: `mode
 auto --agent claude [--model M] [--effort E] [--permission-mode P]`, or
 `preset` with the same flags. With no `--permission-mode` the agent runs in
 its own default mode; auto never turns approvals off unless you name such a
-mode. A start that fails counts toward the 3 failures in a row, and a preset
+mode. A start that fails counts toward the 3 failures in a row, and auto
+closes what it opened for it: the agent's pane, its session and its
+worktree (one with changes or commits is kept; the branch is kept). A preset
 whose agent no machine has stops the board at once. If a far machine goes
 down, its card stays held until `tuios task release` frees it.
 
 The safety switches: `pause` stops all dispatch at once, and any pane may
 pause. `quiet 22:00-07:00` gives no card in those hours, local time (`off`
 clears it). A board stops after 3 dispatched cards in a row end without being
-finished (let go, blocked, or put back because the agent errored). All
+finished (let go or blocked; a card blocked on its errored agent counts
+when it is let go). All
 dispatch stops when an agent reports a usage limit (`tuios set-agent-state
 errored --kind usage_limit`, or an errored message that says "usage limit").
 `resume` lifts the pause and every stop. On a pull board an offer that a

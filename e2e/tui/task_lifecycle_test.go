@@ -384,7 +384,8 @@ func TestCardLifecycleCountsOnAPullBoard(t *testing.T) {
 		t.Fatalf("ASSERTION: the board counts %d failures after a dispatched card's verify failed, want 1", n)
 	}
 
-	// The agent now holds the next card; it errors, and the card goes back.
+	// The agent now holds the next card; it errors: the card stays with it,
+	// blocked with its last line, and goes back to todo once let go.
 	cards, _ = lifeCards(t, base, sess)
 	held := ""
 	for id, c := range cards {
@@ -396,12 +397,18 @@ func TestCardLifecycleCountsOnAPullBoard(t *testing.T) {
 		t.Fatalf("ASSERTION: the agent holds no card after it was done with t2:\n%s", raw)
 	}
 	mustCLI(t, base, "set-agent-state", "-s", sess, "-w", a, "errored", "--harness", "claude-code", "-m", "the API said no")
-	cards, raw = waitLife(t, base, sess, uiTimeout, held+" did not go back to todo when its agent errored",
-		func(c map[string]lifeCard) bool { return c[held].Holder == nil && c[held].Stage == "todo" })
+	cards, raw = waitLife(t, base, sess, uiTimeout, held+" was not blocked on its errored agent",
+		func(c map[string]lifeCard) bool { return c[held].Attempts >= 1 && c[held].Note == "the API said no" })
 	note("after the agent errored holding %s (failures %d):\n%s", held, failures(), raw)
-	if c := cards[held]; c.Note != "the API said no" || c.Attempts < 1 {
-		t.Fatalf("ASSERTION: %s after its agent errored has note %q and attempts %d, want the agent's last line and one attempt more", held, c.Note, c.Attempts)
+	if c := cards[held]; c.Holder == nil || c.Holder.Window != a || c.Stage != "doing" {
+		t.Fatalf("ASSERTION: %s after its agent errored is %s held by %+v, want doing and still held by the agent", held, c.Stage, c.Holder)
 	}
+	if out := inPane(t, base, sess, a, "task release "+held); !strings.Contains(out, "EXIT=0") {
+		t.Fatalf("tuios task release %s: %s", held, out)
+	}
+	cards, raw = waitLife(t, base, sess, uiTimeout, held+" did not go back to todo when the errored agent let it go",
+		func(c map[string]lifeCard) bool { return c[held].Holder == nil && c[held].Stage == "todo" })
+	note("after the errored agent let %s go (failures %d):\n%s", held, failures(), raw)
 
 	// A pass resets the count.
 	if err := os.WriteFile(filepath.Join(repo, "ok"), nil, 0o600); err != nil {

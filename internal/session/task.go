@@ -3,6 +3,7 @@ package session
 import (
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
@@ -197,11 +198,27 @@ func (tk *TaskState) finish(by string, now int64) (string, bool) {
 	return holder, true
 }
 
-// release lets the card go, recording why.
+// release lets the card go, recording why. A card blocked on its errored
+// agent (blockErrored) goes back to todo with the block lifted, so dispatch
+// may start it again now that the agent is gone from it.
 func (tk *TaskState) release(by, reason string, now int64) {
 	holder := tk.Holder
 	tk.Holder, tk.HeldAt, tk.HolderName, tk.HolderHarness = "", 0, "", ""
+	if tk.blockedOnErrored() {
+		tk.Blocked = nil
+		tk.setStage(TaskStageTodo, now)
+	}
 	tk.note(TaskEvent{Action: TaskActionReleased, By: by, At: now, Holder: holder, Stage: tk.Stage, Reason: reason})
+}
+
+// taskBlockErrored starts the reason of a block dispatch puts on a card
+// whose agent errored.
+const taskBlockErrored = "agent errored"
+
+// blockedOnErrored reports whether the card's block is the one dispatch put
+// on it when its agent errored.
+func (tk *TaskState) blockedOnErrored() bool {
+	return tk.Blocked != nil && tk.Blocked.By == taskByDaemon && strings.HasPrefix(tk.Blocked.Reason, taskBlockErrored)
 }
 
 // workable refuses a card no pane may start on: one held by a pane other

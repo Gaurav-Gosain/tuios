@@ -393,3 +393,139 @@ func dumpDaemonLogOnFail(t *testing.T, base string) {
 	}
 	t.Logf("agents of %s:\n%s\ncards:\n%s\ndaemon log (%d bytes):\n%s", base, out, cards, len(data), strings.Join(lines, "\n"))
 }
+
+// TestAutoDispatchFailedStartsLeaveNothingBehind: on an auto board, an agent
+// that errors while it holds its card keeps the card, marked blocked with
+// its last line, and no second agent starts for it while the first lives.
+// Once that pane closes, the card goes back to todo and auto starts it again.
+// Then a start whose agent never comes up: auto lets the card go, and closes
+// the pane, the session and the worktree it made for it. The errored agent
+// counts one failure, when its card is let go, not two.
+//
+// How it could pass wrongly: a second agent could start late, so the test
+// waits past the time a start takes on this board before it counts agents;
+// a leftover pane is looked for by its program, which the fake agent runs.
+//
+// Negative controls (NEGATIVE_CONTROLS.md, TestAutoDispatchFailedStartsLeaveNothingBehind).
+func TestAutoDispatchFailedStartsLeaveNothingBehind(t *testing.T) {
+	base, origin := fanFixture(t)
+	t.Setenv("TUIOS_WORKTREE_DIR", "")
+	var report strings.Builder
+	note := func(format string, args ...any) { fmt.Fprintf(&report, format+"\n", args...) }
+	defer func() { saveText(t, "task-auto-dispatch-failed-starts", report.String()) }()
+	t.Cleanup(func() { dumpDaemonLogOnFail(t, base) })
+	// codex here never comes up and never exits.
+	stall := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(stall, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stall, "codex"), []byte("#!/bin/sh\nexec sleep 987\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stall+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("TUIOS_DISPATCH_READY_SECONDS", "3")
+	here := filepath.Join(base, "work", "api")
+	cloneWithOrigin(t, origin, here, "git@example.com:acme/api")
+	mustCLI(t, base, "new", "home", "--detach", "--cwd", here)
+	waitForSessionInfo(t, base, "home")
+
+	type card struct {
+		Stage    string `json:"stage"`
+		Attempts int    `json:"attempts"`
+		Note     string `json:"note"`
+		Holder   *struct {
+			Window string `json:"window"`
+		} `json:"holder"`
+		Blocked *struct {
+			Reason string `json:"reason"`
+		} `json:"blocked"`
+	}
+	cardOf := func(id string) (card, string) {
+		raw := mustCLI(t, base, "task", "get", id, "-s", "home", "--json")
+		var c card
+		if err := json.Unmarshal([]byte(raw), &c); err != nil {
+			t.Fatalf("task get %s --json: %v\n%s", id, err, raw)
+		}
+		return c, raw
+	}
+
+	// An agent that errors keeps its card, and no second agent starts.
+	mustCLI(t, base, "task", "add", "-s", "home", "-p", "Retry on a 503.", "Fix the retry") // t1
+	note("%s", mustCLI(t, base, "task", "dispatch", "mode", "auto", "--agent", "claude", "-s", "home"))
+	cards, _ := waitAutoCards(t, base, "home", "auto did not start t1", func(c map[string]autoCard) bool { return held(c, "t1") })
+	first := cards["t1"].Holder.Window
+	waitUntil(t, 30*time.Second, "the agent of t1 never came up", func() bool {
+		return claudeAgents(t, mustCLI(t, base, "list-agents", "--json")) == 1
+	})
+	mustCLI(t, base, "set-agent-state", "-s", "api-task-fix-the-retry", "-w", first, "errored", "--harness", "claude-code", "-m", "the API said no")
+	time.Sleep(8 * time.Second) // longer than a start of the fake agent takes
+	c, raw := cardOf("t1")
+	ls := mustCLI(t, base, "ls")
+	note("t1 after its agent errored:\n%s\nsessions:\n%s", raw, ls)
+	if strings.Contains(ls, "api-task-fix-the-retry-2") {
+		t.Errorf("ASSERTION: a second agent started for t1 beside the first, in api-task-fix-the-retry-2:\n%s", ls)
+	}
+	if c.Holder == nil || c.Holder.Window != first || c.Blocked == nil || !strings.Contains(c.Blocked.Reason, "the API said no") || c.Attempts != 1 {
+		t.Fatalf("ASSERTION: t1 after its agent errored is %s; want held by the first agent %s, blocked with its last line, one attempt", raw, first)
+	}
+	// The pane closes: the card goes back and auto starts it again.
+	mustCLI(t, base, "close-window", "-s", "api-task-fix-the-retry", first)
+	cards, raw = waitAutoCards(t, base, "home", "t1 was not started again after its errored agent's pane closed",
+		func(c map[string]autoCard) bool { return held(c, "t1") && c["t1"].Holder.Window != first })
+	note("t1 after the errored pane closed:\n%s", raw)
+	if c, raw := cardOf("t1"); c.Blocked != nil {
+		t.Fatalf("ASSERTION: t1 is still blocked after its errored agent left: %s", raw)
+	}
+
+	// A start that never comes up: nothing it opened is left.
+	note("%s", mustCLI(t, base, "task", "dispatch", "preset", "--agent", "codex", "-s", "home"))
+	mustCLI(t, base, "task", "add", "-s", "home", "-p", "Stalls.", "Never comes up") // t2
+	waitUntil(t, 90*time.Second, "t2 was never let go after its agent did not come up", func() bool {
+		c, _ := cardOf("t2")
+		return c.Stage == "doing" && c.Holder == nil
+	})
+	// The start ends at its ready timeout (3 s here); give it room.
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) && strings.Contains(mustCLI(t, base, "ls"), "api-task-never-comes-up") {
+		time.Sleep(300 * time.Millisecond)
+	}
+	ls = mustCLI(t, base, "ls")
+	wts := gitIn(t, here, "worktree", "list")
+	ps, _ := exec.Command("ps", "-A", "-o", "command=").Output()
+	_, raw = cardOf("t2")
+	logged, _ := os.ReadFile(daemonLogOf(t, base))
+	var lines []string
+	for l := range strings.SplitSeq(string(logged), "\n") {
+		if strings.Contains(l, "Task dispatch") || strings.Contains(l, "task t2") {
+			lines = append(lines, l)
+		}
+	}
+	note("t2 after its start failed:\n%s\nsessions:\n%s\ngit worktree list:\n%s\ndispatch:\n%s\ndaemon log:\n%s",
+		raw, ls, wts, mustCLI(t, base, "task", "dispatch", "-s", "home"), strings.Join(lines, "\n"))
+	// Two failures in all: the errored agent's card when its pane let it
+	// go, and t2. The block alone is none, as that agent may go on.
+	if status := mustCLI(t, base, "task", "dispatch", "-s", "home"); strings.Contains(status, "stopped") {
+		t.Errorf("ASSERTION: the board stopped, so one errored agent counted more than one failure:\n%s", status)
+	}
+	if strings.Contains(ls, "api-task-never-comes-up") {
+		t.Errorf("ASSERTION: the session auto made for t2 is still there after its start failed:\n%s", ls)
+	}
+	if strings.Contains(wts, "task/never-comes-up") {
+		t.Errorf("ASSERTION: the worktree auto made for t2 is still there after its start failed:\n%s", wts)
+	}
+	if strings.Contains(string(ps), "sleep 987") {
+		t.Errorf("ASSERTION: the agent auto started for t2 still runs after its start failed")
+	}
+}
+
+// waitUntil polls ok until it holds, within limit.
+func waitUntil(t *testing.T, limit time.Duration, why string, ok func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(limit)
+	for !ok() {
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: %s", why)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}

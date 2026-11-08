@@ -65,8 +65,9 @@ func waitForCards(t *testing.T, base, session, why string, ok func(holder, stage
 // Each is given a different next card, as mail from tuios, and the card
 // marked ask-first and the card for another harness are skipped. An agent
 // whose turn ends keeps its card; its own task done hands the card on to
-// review and gives it the next. After Pause, a finish gives no card. A usage limit stops all dispatch and puts the
-// agent's card back.
+// review and gives it the next. After Pause, a finish gives no card. A usage
+// limit stops all dispatch and blocks the agent's card, which goes back to
+// todo once let go.
 //
 // How it could pass wrongly: the finishes could run one after the other, so
 // both panes wait on one gate; the cards could be claimed by someone else, so
@@ -178,10 +179,19 @@ func TestPullDispatchGivesTheNextCard(t *testing.T) {
 		t.Fatalf("ASSERTION: t8 was given to %s while dispatch was paused", holder["t8"])
 	}
 
-	// A usage limit stops all dispatch and puts the agent's card back.
+	// A usage limit stops all dispatch. The agent keeps its card, blocked,
+	// until it lets it go.
 	fmt.Fprintln(&report, mustCLI(t, base, "task", "dispatch", "resume"))
 	mustCLI(t, base, "set-agent-state", "-s", sess, "-w", a, "errored", "--kind", "usage_limit", "--harness", "claude-code", "-m", "usage limit reached")
-	_, stage, raw = waitForCards(t, base, sess, "t7 did not go back to todo after the usage limit",
+	waitForFileText(t, logPath, func(s string) bool {
+		return strings.Contains(s, "Task t7 in session "+sess+" blocked: agent errored: usage limit reached")
+	},
+		"t7 was not blocked on the agent's usage limit")
+	if holder, _, raw := cardsOf(t, base, sess); holder["t7"] != a {
+		t.Fatalf("ASSERTION: t7 is held by %q after the usage limit, want the agent %s:\n%s", holder["t7"], a, raw)
+	}
+	mustCLI(t, base, "task", "release", "t7", "-s", sess)
+	_, stage, raw = waitForCards(t, base, sess, "t7 did not go back to todo once let go after the usage limit",
 		func(h, s map[string]string) bool { return h["t7"] == "" && s["t7"] == "todo" })
 	fmt.Fprintf(&report, "after agent a reported a usage limit:\n%s\n", raw)
 	status := mustCLI(t, base, "task", "dispatch")

@@ -1433,8 +1433,8 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		// A pane with an activity ring gets its shell's commands and its
 		// state changes added to it. A pane without one costs a map lookup.
 		d.activity.noteSessionEvent(s, ev)
-		// A pane whose agent is done or errored may finish, put back or
-		// pull a card (task_dispatch.go).
+		// A pane whose agent errored blocks the cards dispatch gave it, and
+		// one that works again lifts that block (task_dispatch.go).
 		if ev.Type == EventAgentState {
 			d.noteDispatchAgentState(s, ev.Window, ev.State)
 		}

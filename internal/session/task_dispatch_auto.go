@@ -354,9 +354,12 @@ func (d *Daemon) autoStart(c autoCard, agent string, preset DispatchPreset, plac
 		var err error
 		if place.Host == "" {
 			raw, _ = jsonx.Marshal(params)
-			h := (*Daemon).verbNewWorktree
-			if verb != "new-worktree" {
-				h = (*Daemon).verbStartAgent
+			h := (*Daemon).verbStartAgent
+			switch verb {
+			case "new-worktree":
+				h = (*Daemon).verbNewWorktree
+			case "remove-worktree":
+				h = (*Daemon).verbRemoveWorktree
 			}
 			res, verr := h(d, autoConn(), raw)
 			if verr != nil {
@@ -409,6 +412,17 @@ func (d *Daemon) autoStart(c autoCard, agent string, preset DispatchPreset, plac
 		}
 		wt = res
 	}
+	// A start that fails from here closes what it opened: the worktree and
+	// its session, with the pane and its agent. remove-worktree keeps a
+	// worktree that holds changes or commits, and its branch either way.
+	defer func() {
+		if ok {
+			return
+		}
+		if _, verr := call("remove-worktree", map[string]any{"session": wt["session"]}); verr != nil {
+			LogBasic("Task dispatch kept the worktree session %v of task %s: %s", wt["session"], c.id, verr.Message)
+		}
+	}()
 	params = map[string]any{"session": wt["session"], "agent": agent, "task": c.id, "task_session": c.sess.Name(), "task_mail": true}
 	if c.harness == "" {
 		params["model"], params["effort"], params["permission_mode"] = preset.Model, preset.Effort, preset.PermissionMode

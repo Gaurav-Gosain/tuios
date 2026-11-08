@@ -463,7 +463,13 @@ func (d *Daemon) noteDispatchedOutcome(action, reason string, row TaskRow) {
 			return
 		}
 		finished = row.Stage != TaskStageTodo
-	case TaskActionReleased, TaskActionBlocked:
+	case TaskActionBlocked:
+		// A card blocked on its errored agent counts when it is let go:
+		// the agent may go on.
+		if strings.HasPrefix(reason, taskBlockErrored) {
+			return
+		}
+	case TaskActionReleased:
 	default:
 		return
 	}
@@ -502,8 +508,9 @@ func (d *Daemon) afterTaskEvent(sess *Session, action, window, reason string, ro
 }
 
 // noteDispatchAgentState is what dispatch does with an agent state change of
-// window: errored puts back a card dispatch gave it, and a usage limit stops
-// all dispatch. It runs off the sink.
+// window: errored blocks a card dispatch gave it (blockErrored), working
+// lifts that block, and a usage limit stops all dispatch. It runs off the
+// sink.
 //
 // Done is not read here. Every turn end reports done (the Claude Code Stop
 // hook, Codex's turn notice, the transcript's turn end), also a turn that
@@ -511,7 +518,7 @@ func (d *Daemon) afterTaskEvent(sess *Session, action, window, reason string, ro
 // card leaves doing only by an act that names it: tuios task done, a stage
 // move, a release, or its verify result.
 func (d *Daemon) noteDispatchAgentState(sess *Session, window, state string) {
-	if state != AgentStateErrored.Name() {
+	if state != AgentStateErrored.Name() && state != AgentStateWorking.Name() {
 		return
 	}
 	if !d.dispatch.anyMode(DispatchPull, DispatchAuto) {
@@ -522,6 +529,14 @@ func (d *Daemon) noteDispatchAgentState(sess *Session, window, state string) {
 		if !ok {
 			return
 		}
+		if state == AgentStateWorking.Name() {
+			// The agent goes on after an error: its card is no longer
+			// blocked on it.
+			for _, cs := range d.cardSessions(sess, window) {
+				d.unblockErrored(cs, window)
+			}
+			return
+		}
 		if usageLimited(w) {
 			harness := firstNonEmpty(w.AgentHarness, "an agent")
 			if d.dispatch.stopAll(dispatchStopLimit) {
@@ -530,7 +545,7 @@ func (d *Daemon) noteDispatchAgentState(sess *Session, window, state string) {
 			}
 		}
 		for _, cs := range d.cardSessions(sess, window) {
-			d.putBackDispatched(cs, window, w.AgentMessage)
+			d.blockErrored(cs, window, w.AgentMessage)
 		}
 	}()
 }
@@ -545,23 +560,29 @@ func usageLimited(w WindowState) bool {
 	return strings.Contains(msg, "usage limit") || strings.Contains(msg, "rate limit")
 }
 
-// putBackDispatched lets go, back to todo, the cards dispatch gave window,
-// after its agent errored, one attempt more, with the agent's last line as
-// the note.
-func (d *Daemon) putBackDispatched(sess *Session, window, last string) {
-	const reason = "agent errored"
+// blockErrored marks blocked the cards dispatch gave window, after its agent
+// errored: one attempt more, with the agent's last line as the note and in
+// the block. The pane keeps them. An error is often passing and the agent
+// lives on, so a card put back now would start a second agent on the same
+// work beside it. The card goes back to todo once the pane lets it go (its
+// agent leaves, the pane closes, a person releases it; release), and the
+// block lifts if the agent works again (unblockErrored). The block counts
+// one failure on the board.
+func (d *Daemon) blockErrored(sess *Session, window, last string) {
+	line := cutUTF8(firstNonEmpty(printableClaim(last, taskMaxReason), taskBlockErrored), taskMaxReason)
+	reason := cutUTF8(taskBlockErrored+": "+line, taskMaxReason)
 	var rows []TaskRow
 	_ = sess.mutateState(func(st *SessionState) error {
 		now := time.Now().UnixNano()
 		for i := range st.Tasks {
 			tk := &st.Tasks[i]
-			if tk.Holder != window || !tk.Dispatched {
+			if tk.Holder != window || !tk.Dispatched || tk.Blocked != nil {
 				continue
 			}
-			tk.release(taskByDaemon, reason, now)
-			tk.setStage(TaskStageTodo, now)
+			tk.Blocked = &TaskBlock{Reason: reason, By: taskByDaemon, At: now}
 			tk.Attempts++
-			tk.Note = cutUTF8(firstNonEmpty(printableClaim(last, taskMaxReason), reason), taskMaxReason)
+			tk.Note = line
+			tk.note(TaskEvent{Action: TaskActionBlocked, By: taskByDaemon, At: now, Stage: tk.Stage, Holder: tk.Holder, Reason: reason})
 			rows = append(rows, taskRow(sess, st, tk))
 		}
 		if len(rows) == 0 {
@@ -569,7 +590,38 @@ func (d *Daemon) putBackDispatched(sess *Session, window, last string) {
 		}
 		return nil
 	})
-	d.publishReleased(sess, rows, reason)
+	for _, row := range rows {
+		LogBasic("Task %s in session %s blocked: %s", row.ID, sess.Name(), reason)
+		d.publishTask(sess, EventTaskChanged, TaskActionBlocked, "", reason, row)
+	}
+}
+
+// unblockErrored lifts the block blockErrored put on the cards window holds.
+func (d *Daemon) unblockErrored(sess *Session, window string) {
+	// Every turn starts working: most find nothing, under a read lock.
+	if !sess.anyTask(func(tk *TaskState) bool { return tk.Holder == window && tk.blockedOnErrored() }) {
+		return
+	}
+	var rows []TaskRow
+	_ = sess.mutateState(func(st *SessionState) error {
+		now := time.Now().UnixNano()
+		for i := range st.Tasks {
+			tk := &st.Tasks[i]
+			if tk.Holder != window || !tk.blockedOnErrored() {
+				continue
+			}
+			tk.Blocked = nil
+			tk.note(TaskEvent{Action: TaskActionUnblocked, By: taskByDaemon, At: now, Stage: tk.Stage, Holder: tk.Holder})
+			rows = append(rows, taskRow(sess, st, tk))
+		}
+		if len(rows) == 0 {
+			return errNoTaskMove
+		}
+		return nil
+	})
+	for _, row := range rows {
+		d.publishTask(sess, EventTaskChanged, TaskActionUnblocked, "", "the agent works again", row)
+	}
 }
 
 // pullNext offers window the next card of board, when the board is in pull
