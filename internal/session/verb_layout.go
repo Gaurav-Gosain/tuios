@@ -87,6 +87,12 @@ func (d *Daemon) verbFocusWindow(cs *connState, params json.RawMessage) (any, *v
 		if err := sess.FocusDaemonWindow(p.Window); err != nil {
 			return nil, mapResolveErr(err, sess)
 		}
+		// A focus names a pane to look at, so a minimized one is restored
+		// (issue 1731), the way set-window --restore does it: on the
+		// daemon's state, which every client adopts. The client's own
+		// restore, from revealFocus, lands in a push older than this change
+		// and loses to it, so the daemon cannot leave it to the client.
+		sess.RestoreFocusedDaemonWindow()
 		d.revealFocus(sess)
 
 	case p.Relative != "":

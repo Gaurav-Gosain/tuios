@@ -558,9 +558,17 @@ func (m *OS) PrevWindow() error {
 //
 // A command that names the pane to focus asks to be taken there, so the
 // scrolling strip shows the whole column. See RevealFocusedColumn.
+//
+// A minimized pane is restored first (issue 1731): focus-window and the
+// navigator name a pane to look at, and a focus on a pane that stays hidden
+// looks like it did nothing. A title row of a stack is left to FocusPane,
+// which opens it in the stack's tile.
 func (m *OS) FocusWindowByID(windowID string) error {
 	for i, w := range m.Windows {
 		if w.ID == windowID {
+			if w.Minimized && w.Stack == "" {
+				m.RestoreWindow(i)
+			}
 			m.FocusWindow(i)
 			m.RevealFocusedColumn()
 			m.MarkAllDirty()

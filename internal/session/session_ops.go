@@ -999,6 +999,20 @@ func (s *Session) markRestoredViews(views map[string][2]string) {
 	})
 }
 
+// RestoreFocusedDaemonWindow clears the minimized flag of the focused
+// window. A stack's title row keeps its flag: it says which member is open.
+func (s *Session) RestoreFocusedDaemonWindow() {
+	_ = s.mutateState(func(state *SessionState) error {
+		for i := range state.Windows {
+			w := &state.Windows[i]
+			if w.ID == state.FocusedWindowID && w.Minimized && w.Stack == "" {
+				w.Minimized = false
+			}
+		}
+		return nil
+	})
+}
+
 // SetDaemonWindowMinimized sets the minimized flag on the window matching target.
 func (s *Session) SetDaemonWindowMinimized(target string, minimized bool) error {
 	return s.mutateState(func(state *SessionState) error {

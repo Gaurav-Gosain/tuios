@@ -278,7 +278,9 @@ func (m *OS) focusSwitchTarget(workspace int, paneID string) {
 		m.SwitchToWorkspace(workspace)
 	}
 	if paneID != "" {
-		m.focusWindowByID(paneID)
+		// FocusPane shows the pane: it restores a minimized one, and opens
+		// a stack's title row in the stack's tile.
+		_ = m.FocusPane(paneID)
 	}
 }
 

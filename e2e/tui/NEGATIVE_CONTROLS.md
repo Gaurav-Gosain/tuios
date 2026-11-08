@@ -14983,3 +14983,20 @@ Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
 | main at 6db1de3ed | "the click restored and focused the agent pane: AGENTONE never matched" (focused, still minimized) | **caught** |
 | The zero-box placement cut from `RestoreWindow` | the same (restored, 0x0) | **caught** |
 | The pane keeps the box it has instead of a new pane's box | "the restored pane sits on the other pane's corner (51,8)" | **caught** |
+
+## TestFocusRestoresAMinimizedPane
+
+Issue 1731. A pane minimized with m in window mode, then selected in the
+pane navigator (search, Enter), and another selected with
+`tuios focus-window`. Both focused the pane and left it minimized. With no
+client attached, `focus-window` must still mark the pane restored. The
+client's own restore after `focus-window` lands in a push older than the
+daemon's focus change, so the daemon restores the pane on its side, as
+`set-window --restore` does.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| main at 6db1de3ed | all three subtests: "is not restored, focused and sized" (focused, still minimized) | **caught** |
+| The daemon leaves the restore to the client when one is attached | `focus-window` subtest: "PLAINPANE is not restored, focused and sized" | **caught** |
