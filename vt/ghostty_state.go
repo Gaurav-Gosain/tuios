@@ -21,36 +21,36 @@ var ghosttyModeNumbers = []struct {
 	num  int
 	mode gh.Mode
 }{
-	{1, gh.ModeDECCKM},
+	{1, gh.ModeCursorKeys},
 	{3, gh.Mode132Column},
 	{4, gh.ModeSlowScroll},
 	{5, gh.ModeReverseColors},
 	{6, gh.ModeOrigin},
 	{7, gh.ModeWraparound},
 	{8, gh.ModeAutorepeat},
-	{9, gh.ModeX10Mouse},
+	{9, gh.ModeMouseEventX10},
 	{12, gh.ModeCursorBlinking},
 	{25, gh.ModeCursorVisible},
 	{45, gh.ModeReverseWrap},
 	{47, gh.ModeAltScreenLegacy},
 	{66, gh.ModeKeypadKeys},
-	{69, gh.ModeLeftRightMargin},
-	{1000, gh.ModeNormalMouse},
-	{1002, gh.ModeButtonMouse},
-	{1003, gh.ModeAnyMouse},
+	{69, gh.ModeEnableLeftAndRightMargin},
+	{1000, gh.ModeMouseEventNormal},
+	{1002, gh.ModeMouseEventButton},
+	{1003, gh.ModeMouseEventAny},
 	{1004, gh.ModeFocusEvent},
-	{1005, gh.ModeUTF8Mouse},
-	{1006, gh.ModeSGRMouse},
-	{1007, gh.ModeAltScroll},
-	{1015, gh.ModeURxvtMouse},
-	{1016, gh.ModeSGRPixelsMouse},
+	{1005, gh.ModeMouseFormatUTF8},
+	{1006, gh.ModeMouseFormatSGR},
+	{1007, gh.ModeMouseAlternateScroll},
+	{1015, gh.ModeMouseFormatURxvt},
+	{1016, gh.ModeMouseFormatSGRPixels},
 	{1047, gh.ModeAltScreen},
 	{1048, gh.ModeSaveCursor},
-	{1049, gh.ModeAltScreenSave},
+	{1049, gh.ModeAltScreenSaveCursorClearEnter},
 	{2004, gh.ModeBracketedPaste},
 	{2027, gh.ModeGraphemeCluster},
-	{2031, gh.ModeColorSchemeReport},
-	{2048, gh.ModeInBandResize},
+	{2031, gh.ModeReportColorScheme},
+	{2048, gh.ModeInBandSizeReports},
 	// Last, so the restore turns it on after it has set 3: with 40 on,
 	// setting 3 is DECCOLM, which clears the screen and the tab stops.
 	{40, gh.ModeEnableMode3},
@@ -282,7 +282,7 @@ func (t *GhosttyTerminal) SetReportColors(fg, bg color.Color, pal [16]color.Colo
 	if !changed {
 		return
 	}
-	if on, _ := t.term.Mode(gh.ModeColorSchemeReport); on {
+	if on, _ := t.term.Mode(gh.ModeReportColorScheme); on {
 		_, _ = io.WriteString(t.pipe, colorSchemeNotice(t.reportedBackgroundLocked()))
 	}
 }

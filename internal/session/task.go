@@ -66,6 +66,9 @@ const (
 	taskReleaseRestart    = "restart"
 )
 
+// TaskMachineAny is a card's machine when placement picks it.
+const TaskMachineAny = "any"
+
 // taskByDaemon is the by of a change the daemon makes on its own.
 const taskByDaemon = "tuios"
 
@@ -99,6 +102,28 @@ type TaskState struct {
 	// when it took it. Empty when no pane holds it.
 	Holder string `json:"holder,omitempty"`
 	HeldAt int64  `json:"held_at,omitempty"`
+	// HolderName and HolderHarness are how a holder on another machine
+	// reads there, as its daemon said when it claimed the card. A local
+	// holder is read from the pane instead.
+	HolderName    string `json:"holder_name,omitempty"`
+	HolderHarness string `json:"holder_harness,omitempty"`
+	// Project is the repository the card is for, its normalised origin URL
+	// (task_project.go). Empty for a card of its session only.
+	Project string `json:"project,omitempty"`
+	// Harness is the agent the card is for, such as claude-code. Pull
+	// dispatch offers it only to that agent; empty is any agent.
+	Harness string `json:"harness,omitempty"`
+	// AskFirst marks a card that waits for a person to start it: dispatch
+	// never offers it (task_dispatch.go).
+	AskFirst bool `json:"ask_first,omitempty"`
+	// Machine is where the card's agent starts: empty for the machine the
+	// card was made on, TaskMachineAny for the machine placement picks
+	// (pool_place.go), or a [hosts] name.
+	Machine string `json:"machine,omitempty"`
+	// Dispatched says the card's last claim was made by dispatch. It stays
+	// on after a release or a finish, so the event says how a dispatched
+	// card ended.
+	Dispatched bool `json:"dispatched,omitempty"`
 	// By is who added the card (see taskCaller), and At when.
 	By      string     `json:"by"`
 	At      int64      `json:"at"`
@@ -107,6 +132,16 @@ type TaskState struct {
 	// WorktreeInfo Group and FanID, empty outside a fan.
 	Fan   string `json:"fan,omitempty"`
 	FanID string `json:"fan_id,omitempty"`
+	// Attempts counts the times the card went back to todo after its
+	// agent was done (its verify failed) or errored, and Note is why the
+	// last one did (task_verify.go).
+	Attempts int    `json:"attempts,omitempty"`
+	Note     string `json:"note,omitempty"`
+	// Work is where the card's agent did the work, recorded when it was
+	// done with the card, and Verify the last run of the board's verify
+	// command on it. Both are only ever replaced, never changed in place.
+	Work   *TaskWork   `json:"work,omitempty"`
+	Verify *TaskVerify `json:"verify,omitempty"`
 	// History is every change to the card, oldest first, at most
 	// taskMaxHistory entries: the first is kept and the oldest after it go.
 	History []TaskEvent `json:"history,omitempty"`
@@ -141,40 +176,12 @@ func (tk *TaskState) note(ev TaskEvent) {
 	tk.History = slices.Concat(first, rest, []TaskEvent{ev})
 }
 
-// setStage moves the card to stage at now.
-func (tk *TaskState) setStage(stage string, now int64) {
-	if tk.Stage != stage {
-		tk.Stage, tk.StageAt = stage, now
-	}
-}
-
-// finish moves the card to done and lets it go, lifting any block. It returns
-// the holder it had, and false when the card was done already and nothing
-// changed.
-func (tk *TaskState) finish(by string, now int64) (string, bool) {
-	if tk.Stage == TaskStageDone && tk.Holder == "" && tk.Blocked == nil {
-		return "", false
-	}
-	holder := tk.Holder
-	tk.setStage(TaskStageDone, now)
-	tk.Holder, tk.HeldAt, tk.Blocked = "", 0, nil
-	tk.note(TaskEvent{Action: TaskActionFinished, By: by, At: now, Stage: tk.Stage, Holder: holder})
-	return holder, true
-}
-
-// release lets the card go, recording why.
-func (tk *TaskState) release(by, reason string, now int64) {
-	holder := tk.Holder
-	tk.Holder, tk.HeldAt = "", 0
-	tk.note(TaskEvent{Action: TaskActionReleased, By: by, At: now, Holder: holder, Stage: tk.Stage, Reason: reason})
-}
-
 // workable refuses a card no pane may start on: one held by a pane other
 // than window, one that is done, and one that is blocked.
 func (tk *TaskState) workable(window string) *verbError {
 	switch {
 	case tk.Holder != "" && tk.Holder != window:
-		return hintedVerbError(ErrVerbTaskHeld, "task card "+tk.ID+" is held by window "+shortWindowID(tk.Holder), &VerbHint{
+		return hintedVerbError(ErrVerbTaskHeld, "task card "+tk.ID+" is held by window "+holderLabel(tk.Holder), &VerbHint{
 			Command: "tuios task claim --next",
 			Detail:  "Nothing was claimed. Take another card with next, or wait for task-changed released.",
 		})
@@ -188,24 +195,6 @@ func (tk *TaskState) workable(window string) *verbError {
 		})
 	}
 	return nil
-}
-
-// take gives the card to window, moving it from todo or plan to doing. It
-// reports false when window holds it already, and the refusal when the card
-// is not there to take (workable).
-func (tk *TaskState) take(window, by string, now int64) (bool, *verbError) {
-	if tk.Holder == window {
-		return false, nil
-	}
-	if verr := tk.workable(window); verr != nil {
-		return false, verr
-	}
-	tk.Holder, tk.HeldAt = window, now
-	if tk.Stage == TaskStageTodo || tk.Stage == TaskStagePlan {
-		tk.setStage(TaskStageDoing, now)
-	}
-	tk.note(TaskEvent{Action: TaskActionClaimed, By: by, At: now, Stage: tk.Stage, Holder: window})
-	return true, nil
 }
 
 // taskIndex is the index of the card id in tasks, or -1.
@@ -257,14 +246,14 @@ func heldTasks(tasks []TaskState) map[string][]TaskState {
 
 // releaseHolders releases every card whose holder held reports true, and
 // returns the cards released as they are now.
-func releaseHolders(st *SessionState, held func(holder string) bool, reason string, now int64) []TaskState {
+func releaseHolders(sess *Session, st *SessionState, held func(holder string) bool, reason string, now int64) []TaskState {
 	var out []TaskState
 	for i := range st.Tasks {
 		tk := &st.Tasks[i]
 		if tk.Holder == "" || !held(tk.Holder) {
 			continue
 		}
-		tk.release(taskByDaemon, reason, now)
+		_, _, _ = sess.moveCard(tk, cardMove{kind: moveRelease, by: taskByDaemon, reason: reason}, now)
 		out = append(out, *tk)
 	}
 	return out
@@ -291,7 +280,7 @@ func releasedTaskEvents(sess *Session, st *SessionState, events []SessionEvent, 
 		default:
 			continue
 		}
-		for _, tk := range releaseHolders(st, func(holder string) bool { return holder == ev.Window }, reason, now) {
+		for _, tk := range releaseHolders(sess, st, func(holder string) bool { return holder == ev.Window }, reason, now) {
 			row := taskRow(sess, st, &tk)
 			out = append(out, SessionEvent{Type: eventTaskReleased, Window: ev.Window, taskRow: &row, taskReason: reason})
 		}

@@ -114,6 +114,25 @@ func dispatchCopyModeKey(msg tea.KeyPressMsg, action string, window *terminal.Wi
 // runCopyModeKey runs one copy-mode key against grid and records what it
 // wants done in fx. The caller holds whatever lock the grid needs.
 func runCopyModeKey(msg tea.KeyPressMsg, action string, cm *terminal.CopyMode, grid terminal.CopyGrid, fx *copyModeEffects, s *config.Settings) {
+	// copy_mode_exit (enter by default) leaves copy mode, as q does from
+	// navigation. From a selection it copies the selection first, as y does,
+	// the way tmux's copy-mode-vi takes Enter: leaving would lose it. The
+	// search prompt and a pending f/t character take the key as their own:
+	// enter runs the search.
+	if action == config.ActionCopyModeExit && cm.State != terminal.CopyModeSearch && !cm.PendingCharSearch {
+		cm.PendingCount = 0
+		msg := "Left copy mode"
+		if cm.State.InVisual() {
+			text := extractVisualText(cm, grid)
+			cm.State = terminal.CopyModeNormal
+			fx.SetClipboard(text)
+			msg = fmt.Sprintf("Yanked %d chars and left copy mode", len(text))
+		}
+		fx.ExitCopyMode()
+		fx.ShowNotification(msg, "info", s.NotificationDuration)
+		fx.action = action
+		return
+	}
 	if action != "" && runCopyModeAction(action, cm, grid, fx) {
 		return
 	}
@@ -201,7 +220,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 			// Only accept printable ASCII characters
 			char := rune(keyStr[0])
 			cm.LastCharSearch = char
-			findCharOnLine(cm, grid, char, cm.LastCharSearchDir, cm.LastCharSearchTill)
+			findCharCount(cm, grid, char, max(cm.PendingCharCount, 1))
 			fx.InvalidateCache()
 			fx.ShowNotification("", "info", 0) // Clear notification
 		} else {
@@ -214,6 +233,11 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 	// back to the base-layout key. See commandKey.
 	keyStr = commandKey(msg)
 
+	// A pending g is for the very next key: g j g is not gg.
+	pendingG := cm.PendingGCount
+	cm.PendingGCount = false
+	dropStaleCount(cm, fx)
+
 	// Handle digit keys for count prefix (1-9, 0 only if already has count)
 	if len(keyStr) == 1 && keyStr[0] >= '0' && keyStr[0] <= '9' {
 		digit := int(keyStr[0] - '0')
@@ -221,10 +245,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 		if digit == 0 && cm.PendingCount == 0 {
 			// Fall through to handle '0' as "start of line" command
 		} else {
-			// Accumulate count
-			cm.PendingCount = cm.PendingCount*10 + digit
-			cm.CountStartTime = time.Now()
-			fx.ShowNotification(fmt.Sprintf("%d", cm.PendingCount), "info", 0)
+			addCountDigit(cm, digit, fx)
 			return
 		}
 	}
@@ -258,47 +279,27 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 
 	// Navigation: basic movement
 	case "h", "left":
-		for range count {
-			moveLeft(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveLeft(cm, grid) })
 	case "l", "right":
-		for range count {
-			moveRight(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveRight(cm, grid) })
 	case "j", "down":
-		for range count {
-			moveDown(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveDown(cm, grid) })
 	case "k", "up":
-		for range count {
-			moveUp(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveUp(cm, grid) })
 
 	// Navigation: word movement
 	case "w":
-		for range count {
-			moveWordForward(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveWordForward(cm, grid) })
 	case "b":
-		for range count {
-			moveWordBackward(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveWordBackward(cm, grid) })
 	case "e":
-		for range count {
-			moveWordEnd(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveWordEnd(cm, grid) })
 	case "W":
-		for range count {
-			moveWordForwardBig(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveWordForwardBig(cm, grid) })
 	case "B":
-		for range count {
-			moveWordBackwardBig(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveWordBackwardBig(cm, grid) })
 	case "E":
-		for range count {
-			moveWordEndBig(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveWordEndBig(cm, grid) })
 
 	// Navigation: line movement
 	case "0":
@@ -310,28 +311,19 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 
 	// Navigation: page movement
 	case "ctrl+u":
-		for range count {
-			moveHalfPageUp(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveHalfPageUp(cm, grid) })
 	case "ctrl+d":
-		for range count {
-			moveHalfPageDown(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveHalfPageDown(cm, grid) })
 	case "ctrl+b", "pgup":
-		for range count {
-			movePageUp(cm, grid)
-		}
+		repeatMotion(count, cm, func() { movePageUp(cm, grid) })
 	case "ctrl+f", "pgdown":
-		for range count {
-			movePageDown(cm, grid)
-		}
+		repeatMotion(count, cm, func() { movePageDown(cm, grid) })
 
 	// Navigation: jump to top/bottom
 	case "g":
 		// Handle 'gg' sequence
-		if cm.PendingGCount && time.Since(cm.LastCommandTime) < 500*time.Millisecond {
+		if pendingG && time.Since(cm.LastCommandTime) < 500*time.Millisecond {
 			moveToTop(cm, grid)
-			cm.PendingGCount = false
 		} else {
 			cm.PendingGCount = true
 			cm.LastCommandTime = time.Now()
@@ -376,13 +368,9 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 
 	// Navigation: paragraph movement
 	case "{":
-		for range count {
-			moveParagraphUp(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveParagraphUp(cm, grid) })
 	case "}":
-		for range count {
-			moveParagraphDown(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveParagraphDown(cm, grid) })
 
 	// Navigation: matching bracket
 	case "%":
@@ -392,6 +380,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 	case "f":
 		// Find character forward on current line
 		cm.PendingCharSearch = true
+		cm.PendingCharCount = count
 		cm.LastCharSearchDir = 1
 		cm.LastCharSearchTill = false
 		fx.ShowNotification("f", "info", 0)
@@ -399,6 +388,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 	case "F":
 		// Find character backward on current line
 		cm.PendingCharSearch = true
+		cm.PendingCharCount = count
 		cm.LastCharSearchDir = -1
 		cm.LastCharSearchTill = false
 		fx.ShowNotification("F", "info", 0)
@@ -406,6 +396,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 	case "t":
 		// Till character forward (stop before)
 		cm.PendingCharSearch = true
+		cm.PendingCharCount = count
 		cm.LastCharSearchDir = 1
 		cm.LastCharSearchTill = true
 		fx.ShowNotification("t", "info", 0)
@@ -413,20 +404,17 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 	case "T":
 		// Till character backward (stop before)
 		cm.PendingCharSearch = true
+		cm.PendingCharCount = count
 		cm.LastCharSearchDir = -1
 		cm.LastCharSearchTill = true
 		fx.ShowNotification("T", "info", 0)
 		return
 	case ";":
 		// Repeat last character search
-		for range count {
-			repeatCharSearch(cm, grid, false)
-		}
+		repeatMotion(count, cm, func() { repeatCharSearch(cm, grid, false) })
 	case ",":
 		// Repeat last character search in opposite direction
-		for range count {
-			repeatCharSearch(cm, grid, true)
-		}
+		repeatMotion(count, cm, func() { repeatCharSearch(cm, grid, true) })
 
 	// Search
 	case "/", "?":
@@ -557,7 +545,7 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 			// Only accept printable ASCII characters
 			char := rune(keyStr[0])
 			cm.LastCharSearch = char
-			findCharOnLine(cm, grid, char, cm.LastCharSearchDir, cm.LastCharSearchTill)
+			findCharCount(cm, grid, char, max(cm.PendingCharCount, 1))
 			updateVisualEnd(cm, grid)
 			fx.InvalidateCache()
 			fx.ShowNotification("", "info", 0) // Clear notification
@@ -569,6 +557,11 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 	}
 	keyStr = commandKey(msg)
 
+	// A pending g is for the very next key: g j g is not gg.
+	pendingG := cm.PendingGCount
+	cm.PendingGCount = false
+	dropStaleCount(cm, fx)
+
 	// Handle digit keys for count prefix in visual mode
 	if len(keyStr) == 1 && keyStr[0] >= '0' && keyStr[0] <= '9' {
 		digit := int(keyStr[0] - '0')
@@ -576,9 +569,7 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 		if digit == 0 && cm.PendingCount == 0 {
 			// Fall through to handle '0' as "start of line" command
 		} else {
-			cm.PendingCount = cm.PendingCount*10 + digit
-			cm.CountStartTime = time.Now()
-			fx.ShowNotification(fmt.Sprintf("%d", cm.PendingCount), "info", 0)
+			addCountDigit(cm, digit, fx)
 			return
 		}
 	}
@@ -618,79 +609,63 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 
 	// Movement in visual mode extends selection: basic
 	case "h", "left":
-		for range count {
-			moveLeft(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveLeft(cm, grid) })
 		updateVisualEnd(cm, grid)
 	case "l", "right":
-		for range count {
-			moveRight(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveRight(cm, grid) })
 		updateVisualEnd(cm, grid)
 	case "j", "down":
-		for range count {
-			moveDown(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveDown(cm, grid) })
 		updateVisualEnd(cm, grid)
 	case "k", "up":
-		for range count {
-			moveUp(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveUp(cm, grid) })
 		updateVisualEnd(cm, grid)
 
 	// Word movement
 	case "w":
-		for range count {
-			moveWordForward(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveWordForward(cm, grid) })
 		updateVisualEnd(cm, grid)
 	case "b":
-		for range count {
-			moveWordBackward(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveWordBackward(cm, grid) })
 		updateVisualEnd(cm, grid)
 	case "e":
-		for range count {
-			moveWordEnd(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveWordEnd(cm, grid) })
 		updateVisualEnd(cm, grid)
 	case "W":
-		for range count {
-			moveWordForwardBig(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveWordForwardBig(cm, grid) })
 		updateVisualEnd(cm, grid)
 	case "B":
-		for range count {
-			moveWordBackwardBig(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveWordBackwardBig(cm, grid) })
 		updateVisualEnd(cm, grid)
 	case "E":
-		for range count {
-			moveWordEndBig(cm, grid)
-		}
+		repeatMotion(count, cm, func() { moveWordEndBig(cm, grid) })
 		updateVisualEnd(cm, grid)
 
 	// Character search (f/F/t/T)
 	case "f":
 		cm.PendingCharSearch = true
+		cm.PendingCharCount = count
 		cm.LastCharSearchDir = 1
 		cm.LastCharSearchTill = false
 		fx.ShowNotification("f", "info", 0)
 		return
 	case "F":
 		cm.PendingCharSearch = true
+		cm.PendingCharCount = count
 		cm.LastCharSearchDir = -1
 		cm.LastCharSearchTill = false
 		fx.ShowNotification("F", "info", 0)
 		return
 	case "t":
 		cm.PendingCharSearch = true
+		cm.PendingCharCount = count
 		cm.LastCharSearchDir = 1
 		cm.LastCharSearchTill = true
 		fx.ShowNotification("t", "info", 0)
 		return
 	case "T":
 		cm.PendingCharSearch = true
+		cm.PendingCharCount = count
 		cm.LastCharSearchDir = -1
 		cm.LastCharSearchTill = true
 		fx.ShowNotification("T", "info", 0)
@@ -731,9 +706,8 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 	case "g":
 		// Detect the 'gg' sequence. Keys arrive singly, so a literal "gg" case
 		// never matches; mirror the pending-g state used in normal mode.
-		if cm.PendingGCount && time.Since(cm.LastCommandTime) < 500*time.Millisecond {
+		if pendingG && time.Since(cm.LastCommandTime) < 500*time.Millisecond {
 			moveToTop(cm, grid)
-			cm.PendingGCount = false
 			updateVisualEnd(cm, grid)
 		} else {
 			cm.PendingGCount = true

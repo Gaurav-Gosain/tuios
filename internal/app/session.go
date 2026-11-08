@@ -507,7 +507,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	// and mouse events are forwarded to it. Staying in window management mode
 	// meant typing did nothing until a click.
 	if len(m.Windows) > 0 && m.FocusedWindow >= 0 {
-		m.Mode = TerminalMode
+		m.ChooseMode(TerminalMode, ModeCauseRestore)
 	}
 
 	return nil
@@ -817,7 +817,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// terminal to reach. Closing is the daemon's job, so the drop back to window
 	// management after the last window closes happens here.
 	if m.FocusedWindow < 0 && m.Mode == TerminalMode {
-		m.Mode = WindowManagementMode
+		m.ChooseMode(WindowManagementMode, ModeCauseNoPane)
 	}
 
 	// Update workspace focus map
@@ -1011,8 +1011,9 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 		m.adoptSyncedWindows(created, removed, placed, focusBefore)
 	case placed:
 		// Untiled, so there is nothing to retile, but the geometry this client
-		// just chose is news to the daemon.
-		m.RecalcZOrder()
+		// just chose is news to the daemon. A new TML surface goes in front,
+		// even when the focus stays where it was.
+		m.RaiseNewSurfaces(placedWindows)
 		m.SyncStateToDaemon()
 	}
 
@@ -2419,6 +2420,7 @@ func (m *OS) SyncStateToDaemon() {
 	// one, not what the state is.
 	key := focusKey(state)
 	state.FocusUnmoved = m.focusGivenSet && key == m.focusGiven
+	state.FocusByCommand = m.commandDriving || m.commandFocusMoved
 
 	if err := m.DaemonClient.UpdateState(state); err != nil {
 		m.LogError("Failed to sync state to daemon: %v", err)
@@ -2429,6 +2431,7 @@ func (m *OS) SyncStateToDaemon() {
 	m.syncedFP, m.syncedFPSet = fp, true
 	m.layoutGenPushed = state.LayoutGen
 	m.focusGiven, m.focusGivenSet = key, true
+	m.commandFocusMoved = false
 }
 
 // focusKey is what a state says of the session's focus: the workspace, the
@@ -2613,4 +2616,13 @@ func copyAgentWire(w *terminal.Window, ws *session.WindowState) {
 	w.ProgramStatus = programStatusFromWire(w.ProgramStatus, ws.ProgramStatus)
 	w.AgentStateAt = ws.AgentStateAt
 	w.AgentCompletionSeq = ws.CompletionSeq
+}
+
+// focusedWindowID is the id of the focused window, as a push names it, or ""
+// with none.
+func (m *OS) focusedWindowID() string {
+	if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+		return m.Windows[m.FocusedWindow].ID
+	}
+	return ""
 }

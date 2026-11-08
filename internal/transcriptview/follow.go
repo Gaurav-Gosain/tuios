@@ -78,6 +78,15 @@ func (f *Follow) Apply(l Layout) {
 	f.clamp()
 }
 
+// Older records n lines drawn above the oldest line, such as older turns
+// laid out once the view scrolled near the top. The view stays on the lines
+// it shows.
+func (f *Follow) Older(n int) {
+	if f.laid {
+		f.lines += n
+	}
+}
+
 // Scroll moves the view by delta lines, up when delta is positive. A scroll
 // that reaches the bottom follows again; one that leaves it holds.
 func (f *Follow) Scroll(delta int) {

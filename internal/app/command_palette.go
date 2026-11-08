@@ -262,6 +262,12 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Bind:     "minimize_prefix_restore_all",
 			Category: "Window",
 		},
+		{
+			Name:     "Focus only: minimize the other windows",
+			Shortcut: "prefix+m f",
+			Bind:     "minimize_prefix_focus_only",
+			Category: "Window",
+		},
 
 		// Layout
 		{
@@ -891,6 +897,15 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Category: "Session",
 		},
 		{
+			// A task card from anywhere. See task_capture.go.
+			Name:     "New task",
+			Category: "Session",
+			Bind:     "prefix_new_task",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				return m, m.OpenTaskCapture()
+			},
+		},
+		{
 			// The add sheet: test a machine over ssh, install tuios there,
 			// and add it. See machine_sheet.go.
 			Name:     "Add a machine",
@@ -934,6 +949,22 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Shortcut: "prefix+i",
 			Bind:     "prefix_inbox",
 			Category: paletteCategoryAgents,
+		},
+		{
+			// Task dispatch: stop every card going to agents at once, or
+			// start it again (cockpit_dispatch.go).
+			Name:     "Agents: pause all task dispatch",
+			Category: paletteCategoryAgents,
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				return m, m.DispatchSet("pause")
+			},
+		},
+		{
+			Name:     "Agents: start task dispatch again",
+			Category: paletteCategoryAgents,
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				return m, m.DispatchSet("resume")
+			},
 		},
 		{
 			// The copies between machines: the Copies panel.

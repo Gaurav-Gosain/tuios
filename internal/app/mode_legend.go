@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -67,13 +68,51 @@ func paneLabelsLegend() []overlay.Hint {
 	}
 }
 
+// copyModeExitKey is the first key copy_mode_exit is on, as the dock draws
+// it, or "" when it is unbound.
+func (m *OS) copyModeExitKey() string {
+	if m.KeybindRegistry == nil {
+		return ""
+	}
+	keys := m.KeybindRegistry.Keys(config.TableCopyMode, config.ActionCopyModeExit)
+	if len(keys) == 0 {
+		return ""
+	}
+	if keys[0] == "enter" {
+		return overlay.EnterKey()
+	}
+	return keys[0]
+}
+
 // copyModeLegend is copy mode's legend for a sub-state.
 //
 // They are key/label pairs rather than a "hjkl:move" string because the dock
 // is the one place left saying what a key does in its own format. Rendered
 // through the strip a panel footer uses, copy mode reads like the rest of the
 // app.
-func copyModeLegend(state terminal.CopyModeState) []overlay.Hint {
+//
+// exit is the key copy_mode_exit is on, drawn for the dock, or "" when it is
+// unbound. See copyModeExitKey.
+func copyModeLegend(state terminal.CopyModeState, exit string) []overlay.Hint {
+	// The exit key goes between q and esc: esc stays last, where a person
+	// looks for the way out.
+	quit := "q/esc"
+	if exit != "" {
+		quit = "q/" + exit + "/esc"
+	}
+	exitYank := overlay.Hint{Key: exit, Label: "yank and quit", Priority: overlay.HintOptional}
+	visual := func(h []overlay.Hint) []overlay.Hint {
+		if exit == "" {
+			return h
+		}
+		// After y, before esc.
+		for i := range h {
+			if h[i].Key == "esc" {
+				return append(h[:i:i], append([]overlay.Hint{exitYank}, h[i:]...)...)
+			}
+		}
+		return append(h, exitYank)
+	}
 	switch state {
 	case terminal.CopyModeNormal:
 		return []overlay.Hint{
@@ -85,7 +124,7 @@ func copyModeLegend(state terminal.CopyModeState) []overlay.Hint {
 			{Key: "v", Label: "visual"},
 			{Key: "ctrl+v", Label: "block", Priority: overlay.HintOptional},
 			{Key: "y", Label: "yank", Priority: overlay.HintEssential},
-			{Key: "q/esc", Label: "quit", Priority: overlay.HintEssential},
+			{Key: quit, Label: "quit", Priority: overlay.HintEssential},
 			{Key: "ctrl+c", Label: "quit", Priority: overlay.HintOptional},
 		}
 	case terminal.CopyModeSearch:
@@ -97,29 +136,29 @@ func copyModeLegend(state terminal.CopyModeState) []overlay.Hint {
 			{Key: "ctrl+c", Label: "quit", Priority: overlay.HintOptional},
 		}
 	case terminal.CopyModeVisualChar:
-		return []overlay.Hint{
+		return visual([]overlay.Hint{
 			{Key: "hjkl", Label: "extend"},
 			{Key: "w/b/e", Label: "word", Priority: overlay.HintOptional},
 			{Key: "%", Label: "bracket", Priority: overlay.HintOptional},
 			{Key: "y", Label: "yank", Priority: overlay.HintEssential},
 			{Key: "esc", Label: "cancel"},
 			{Key: "ctrl+c", Label: "quit", Priority: overlay.HintOptional},
-		}
+		})
 	case terminal.CopyModeVisualBlock:
-		return []overlay.Hint{
+		return visual([]overlay.Hint{
 			{Key: "hjkl", Label: "extend"},
 			{Key: "o", Label: "corner", Priority: overlay.HintOptional},
 			{Key: "y", Label: "yank", Priority: overlay.HintEssential},
 			{Key: "esc", Label: "cancel"},
 			{Key: "ctrl+c", Label: "quit", Priority: overlay.HintOptional},
-		}
+		})
 	case terminal.CopyModeVisualLine:
-		return []overlay.Hint{
+		return visual([]overlay.Hint{
 			{Key: "jk", Label: "extend"},
 			{Key: "y", Label: "yank", Priority: overlay.HintEssential},
 			{Key: "esc", Label: "cancel"},
 			{Key: "ctrl+c", Label: "quit", Priority: overlay.HintOptional},
-		}
+		})
 	}
 	return nil
 }

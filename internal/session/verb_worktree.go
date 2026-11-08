@@ -1,6 +1,7 @@
 package session
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -419,6 +420,10 @@ func (d *Daemon) verbNewWorktree(cs *connState, params json.RawMessage) (any, *v
 		Base    string   `json:"base"`
 		Name    string   `json:"name"`
 		Command []string `json:"command"`
+		// NewBranch refuses a branch, worktree folder or session that
+		// exists, so a caller that names one from a title never lands on
+		// work of the person's.
+		NewBranch bool `json:"new_branch"`
 		setupParam
 	}
 	if verr := decodeParams(params, &p); verr != nil {
@@ -443,6 +448,16 @@ func (d *Daemon) verbNewWorktree(cs *connState, params json.RawMessage) (any, *v
 	root, cloned, verr := d.resolveRepoSource(cs, "new-worktree", p.repoSource, nil)
 	if verr != nil {
 		return nil, verr
+	}
+	if p.NewBranch {
+		path, verr := worktreePathFor(d.worktreeTemplate(), root, branch)
+		if verr != nil {
+			return nil, verr
+		}
+		_, statErr := os.Lstat(path)
+		if statErr == nil || worktree.BranchExists(root, branch) || d.manager.GetSession(cmp.Or(strings.TrimSpace(p.Name), worktree.SessionName(filepath.Base(root), branch))) != nil {
+			return nil, newVerbError(ErrVerbBranchExists, "branch "+echoName(branch)+", its worktree folder or its session exists already")
+		}
 	}
 	startedBy := d.startedByLater(cs)
 	out, verr := d.createWorktreeSession(cs, root, branch, strings.TrimSpace(p.Base), strings.TrimSpace(p.Name), command, nil, d.childDefaultGrants(cs), setup, nil, func(_ *Session, win WindowState) {
@@ -763,6 +778,7 @@ func (d *Daemon) verbRemoveWorktree(cs *connState, params json.RawMessage) (any,
 			return nil, hintedVerbError(ErrVerbGitFailed, msg, nil)
 		}
 		out["discarded"] = discard
+		d.worktreeRemoved(sess.Name(), info.Path)
 	}
 	// The notes on the worktree's changes go with it.
 	d.reviewNotes.dropRoot(notesRoot)
@@ -777,6 +793,12 @@ func (d *Daemon) verbRemoveWorktree(cs *connState, params json.RawMessage) (any,
 		}
 	}
 	return out, nil
+}
+
+// worktreeRemoved tells the event stream, and with it the plugin hooks on
+// worktree.removed, that git removed the worktree at path.
+func (d *Daemon) worktreeRemoved(session, path string) {
+	d.events.publish(streamEvent{Type: EventWorktreeRemoved, Session: session, Path: path})
 }
 
 // fanStopWords are the words a branch stem drops. They carry no meaning on
@@ -857,6 +879,7 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 		TaskSession  string            `json:"task_session"`
 		HumanNonce   string            `json:"human_nonce"`
 		setupParam
+		launchChoice
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -938,6 +961,9 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 				param = "agents"
 			}
 			if launches[i], verr = d.resolveAgentLaunch(param, spec, pathList); verr != nil {
+				return verr
+			}
+			if launches[i], verr = d.withChoice(launches[i], p.launchChoice); verr != nil {
 				return verr
 			}
 			// Each agent's permission mode is held to the calling agent's

@@ -94,19 +94,26 @@ func SessionID(pid int) (int, bool) {
 	return sid, err == nil && sid > 0
 }
 
-// SessionMembers lists the pids of the processes in session sid, as the
-// kernel's process table says.
+// SessionMembers lists the pids of the processes in session sid. It reads
+// the whole process table and asks getsid of each process: x/sys does not
+// know the name "kern.proc.session", so the filtered sysctl fails with
+// ENOENT, and the kinfo_proc of a process holds its session's address, not
+// its id.
 func SessionMembers(sid int) []int {
 	if sid <= 0 {
 		return nil
 	}
-	procs, err := unix.SysctlKinfoProcSlice("kern.proc.session", sid)
+	procs, err := unix.SysctlKinfoProcSlice("kern.proc.all")
 	if err != nil {
 		return nil
 	}
-	out := make([]int, 0, len(procs))
+	var out []int
 	for _, p := range procs {
-		if pid := int(p.Proc.P_pid); pid > 0 {
+		pid := int(p.Proc.P_pid)
+		if pid <= 0 {
+			continue
+		}
+		if s, err := unix.Getsid(pid); err == nil && s == sid {
 			out = append(out, pid)
 		}
 	}

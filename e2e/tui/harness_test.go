@@ -104,6 +104,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
@@ -162,13 +163,10 @@ func runE2E(m *testing.M) int {
 	// live under one root, removed once here rather than per test: a test's own
 	// cleanup runs while another test may still be deriving the same path.
 	sweepShortRuntimeRoots()
-	// A run started from a tuios pane inherits the pane's TUIOS_SOCKET, which
-	// names the person's daemon, and tuiosCLI passes the environment on. The
-	// commands would dial it to check it; the suite has no business there.
-	_ = os.Unsetenv("TUIOS_SOCKET")
-	// A pane of a named server exports TUIOS_SERVER, which would put every
-	// tuios the suite spawns on that server. Tests that want one name it.
-	_ = os.Unsetenv("TUIOS_SERVER")
+	// A run started from a tuios pane inherits the pane's TUIOS_* variables,
+	// and tuiosCLI passes the environment on: every command would name the
+	// person's daemon, session and pane. Tests that want one of them set it.
+	testutil.ClearPaneEnv()
 	// tuios follows the Omarchy theme it finds. HOME is redirected per test,
 	// which hides the applied theme, but these two name directories outright:
 	// a developer on Omarchy has OMARCHY_PATH set, and its themes would join
@@ -182,6 +180,10 @@ func runE2E(m *testing.M) int {
 	for _, key := range harnessDirKeys {
 		_ = os.Unsetenv(key)
 	}
+	// Every daemon checks each task card after each move and logs a broken
+	// rule (internal/session/task_move.go); killDaemon fails the test that
+	// left such a line.
+	_ = os.Setenv("TUIOS_TEST_CARD_CHECK", "1")
 	defer func() { _ = os.RemoveAll(shortRuntimeRoot) }()
 	defer func() {
 		if otherProtocolDir != "" {
@@ -862,6 +864,19 @@ func waitForAll(t *testing.T, term *tuitest.Terminal, timeout time.Duration, wha
 	}
 }
 
+// resolvedPath is p with every symlink in it resolved. The daemon reads a
+// pane's folder from the kernel, which names the folder by its real path. On
+// macOS t.TempDir() is under /var, a link to /private/var, so a test that
+// compares a pane's folder with a folder it made compares the real paths.
+func resolvedPath(t *testing.T, p string) string {
+	t.Helper()
+	real, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		t.Fatalf("resolve %s: %v", p, err)
+	}
+	return real
+}
+
 // tuiosCLI runs a tuios subcommand (ls, send-keys, ...) against the daemon
 // living under an isolation root, and returns its combined output.
 func tuiosCLI(t *testing.T, base string, args ...string) (string, error) {
@@ -921,12 +936,23 @@ var registeredKills sync.Map
 // and that is reported rather than swallowed. A swallowed teardown error is how
 // one test ends up running against another's daemon, and a suite where that can
 // happen cannot claim its tests are isolated.
+// cardInvariantLine starts the daemon's log line for a task card that broke
+// a rule of its lifecycle, under TUIOS_TEST_CARD_CHECK.
+const cardInvariantLine = "Task invariant broken"
+
 func killDaemon(t *testing.T, base string) {
 	t.Helper()
 	if _, already := registeredKills.LoadOrStore(daemonKey{t, base}, true); already {
 		return
 	}
 	t.Cleanup(func() {
+		if log, err := os.ReadFile(filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "daemon.log")); err == nil {
+			for line := range strings.SplitSeq(string(log), "\n") {
+				if strings.Contains(line, cardInvariantLine) {
+					t.Errorf("ASSERTION: the daemon broke a task card rule: %s", line)
+				}
+			}
+		}
 		if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
 			t.Logf("kill-server (best effort): %v: %s", err, strings.TrimSpace(out))
 		}

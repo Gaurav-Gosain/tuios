@@ -13,7 +13,7 @@ import (
 // TestPaneFocusEventsFollowTheFocus checks the DECSET 1004 reports a pane gets
 // as the focus moves around it, through a real daemon and client.
 //
-// The pane runs cat -v in raw mode after turning focus reporting on, so the
+// The pane runs cat -u -v in raw mode after turning focus reporting on, so the
 // log holds every report as ^[[I or ^[[O. Each step waits for the log to hold
 // exactly the reports so far, so a report that is missing, sent twice or sent
 // to the wrong pane fails the step that caused it.
@@ -51,7 +51,7 @@ func TestPaneFocusEventsFollowTheFocus(t *testing.T) {
 			_ = os.WriteFile(filepath.Join(artifactDir(t), "focus.log"), data, 0o644)
 		}
 	})
-	if err := term.SendKeys(`stty raw -echo; printf '\033[?1004h'; cat -v > `+logPath, tuitest.Enter); err != nil {
+	if err := term.SendKeys(`stty raw -echo; printf '\033[?1004h'; cat -u -v > `+logPath, tuitest.Enter); err != nil {
 		t.Fatal(err)
 	}
 

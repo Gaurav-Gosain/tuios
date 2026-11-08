@@ -1667,7 +1667,10 @@ func (d *Daemon) setAgentState(cs *connState, params json.RawMessage, ownPane bo
 			Detail:     "source says where the state came from and decides which of two competing reports wins. Omit it to report for yourself.",
 		})
 	}
-	if p.Kind != "" {
+	if p.Kind == AgentKindUsageLimit && state != AgentStateErrored {
+		return nil, invalidParam("kind", "kind usage_limit describes an errored state, and this report is "+state.Name())
+	}
+	if p.Kind != "" && p.Kind != AgentKindUsageLimit {
 		if p.Kind != harness.PromptKindApproval && p.Kind != harness.PromptKindQuestion && p.Kind != harness.PromptKindAuth {
 			return nil, hintedVerbError(ErrVerbInvalidParams, "unknown kind "+echoName(p.Kind), &VerbHint{
 				Param:     "kind",
@@ -2111,7 +2114,7 @@ const maxAgentSessionIDLen = 256
 // agentKindNames are the values set-agent-state accepts for kind. They are
 // the manifest rule kinds, so a hook and a screen rule describe a block in the
 // same words.
-var agentKindNames = []string{harness.PromptKindApproval, harness.PromptKindQuestion, harness.PromptKindAuth}
+var agentKindNames = []string{harness.PromptKindApproval, harness.PromptKindQuestion, harness.PromptKindAuth, AgentKindUsageLimit}
 
 // transcriptIsTree says whether the harness's manifest names a reader for a
 // tree of entries, such as Pi's, rather than a log read from an offset.
@@ -2383,6 +2386,9 @@ func (d *Daemon) verbGetAgentState(cs *connState, params json.RawMessage) (any, 
 		// where the kind a hook reported with set-agent-state reads back.
 		"ready":      d.agentReady(w, agentRestStates),
 		"blocked_by": agentBlockedBy(w),
+		// waits_on is what a done or idle agent still runs, such as "1
+		// background shell", from its screen; empty otherwise.
+		"waits_on": agentWaitsOn(w),
 		// The harness's own conversation id, empty until a hook reports one.
 		"agent_session_id": w.AgentSessionID,
 		// meta is what set-agent-meta recorded, key to value.

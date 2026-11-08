@@ -66,17 +66,77 @@ func sortCards(cards []session.TaskRow) {
 // applyBoardSnapshot takes the watcher's listing of the cards.
 func (m *OS) applyBoardSnapshot(msg InboxSnapshotMsg) {
 	ck := &m.Inbox.ck
-	ck.cards, ck.noBoard, ck.boardErr = msg.Cards, msg.NoBoard, msg.BoardErr
+	ck.cards, ck.noBoard, ck.boardErr = append(slices.Clip(msg.Cards), ck.farCards...), msg.NoBoard, msg.BoardErr
 	if ck.cards == nil {
 		ck.cards = []session.TaskRow{}
 	}
 	ck.cardsGen++
 }
 
+// ckFarCardsMsg is the project cards of the linked machines.
+type ckFarCardsMsg struct{ rows []session.TaskRow }
+
+// cockpitFarCardsCmd asks this daemon for every linked machine's project
+// cards. It runs when the board opens, never on a frame: each machine may
+// take the link's budget to answer. A daemon from before projects, or with
+// no links, answers none.
+func (m *OS) cockpitFarCardsCmd() tea.Cmd {
+	if m.AttachedHost != "" || (m.DaemonClient == nil && m.Inbox.call == nil) {
+		return nil
+	}
+	call := m.inboxCaller()
+	return func() tea.Msg {
+		raw, err := call("list-tasks", map[string]any{"all_sessions": true, "hosts": true}, 20*time.Second)
+		if err != nil {
+			return ckFarCardsMsg{}
+		}
+		var res struct {
+			Tasks []session.TaskRow `json:"tasks"`
+		}
+		if jsonx.Unmarshal(raw, &res) != nil {
+			return ckFarCardsMsg{}
+		}
+		var far []session.TaskRow
+		for _, r := range res.Tasks {
+			if r.Host != "" {
+				far = append(far, r)
+			}
+		}
+		return ckFarCardsMsg{rows: far}
+	}
+}
+
+// applyFarCards puts the linked machines' cards after this machine's.
+func (m *OS) applyFarCards(msg ckFarCardsMsg) {
+	ck := &m.Inbox.ck
+	local := ck.cards[:0:0]
+	for _, c := range ck.cards {
+		if c.Host == "" {
+			local = append(local, c)
+		}
+	}
+	ck.farCards = msg.rows
+	ck.cards = append(local, msg.rows...)
+	ck.cardsGen++
+	m.cockpitTouchRows()
+}
+
+// ckFarCard says, for a card another machine owns, how to act on it, and
+// reports whether it is one. The view acts on this machine's cards only.
+func (m *OS) ckFarCard(c session.TaskRow) bool {
+	if c.Host == "" {
+		return false
+	}
+	m.ShowNotification(c.ID+" is on "+printableTitle(c.Host)+". In the agent's pane, run: tuios task claim "+c.ID+" -s "+printableTitle(c.Host)+":"+printableTitle(c.Session), "info", m.Settings.NotificationDuration)
+	return true
+}
+
 // applyTaskEvent folds one task event into the cards.
 func (m *OS) applyTaskEvent(action string, row session.TaskRow) {
 	ck := &m.Inbox.ck
-	i := slices.IndexFunc(ck.cards, func(c session.TaskRow) bool { return c.Session == row.Session && c.ID == row.ID })
+	// The events are this machine's: a card of another machine never
+	// matches.
+	i := slices.IndexFunc(ck.cards, func(c session.TaskRow) bool { return c.Host == "" && c.Session == row.Session && c.ID == row.ID })
 	switch {
 	case action == session.TaskActionRemoved:
 		if i >= 0 {
@@ -124,7 +184,7 @@ func (m *OS) ckHeldCards() map[string][]session.TaskRow {
 	if ck.held == nil || ck.heldGen != ck.cardsGen {
 		ck.held, ck.heldGen = map[string][]session.TaskRow{}, ck.cardsGen
 		for _, c := range ck.cards {
-			if c.Holder != nil {
+			if c.Holder != nil && c.Host == "" {
 				k := c.Session + "\x00" + c.Holder.Window
 				ck.held[k] = append(ck.held[k], c)
 			}
@@ -164,11 +224,11 @@ func (m *OS) boardStageItems(list []sidebarAgentEntry) [][]ckRow {
 	stages := make([][]ckRow, len(session.TaskStages))
 	for i, c := range ck.cards {
 		g := slices.Index(session.TaskStages, c.Stage)
-		if g < 0 || (live != nil && !live[c.Session]) || !m.ckStageShows(c.Stage) {
+		if g < 0 || (c.Host == "" && live != nil && !live[c.Session]) || !m.ckStageShows(c.Stage) {
 			continue
 		}
 		idx := -1
-		if c.Holder != nil {
+		if c.Holder != nil && c.Host == "" {
 			if j, ok := byKey[c.Session+"\x00"+c.Holder.Window]; ok {
 				idx = j
 			}
@@ -182,7 +242,11 @@ func (m *OS) boardStageItems(list []sidebarAgentEntry) [][]ckRow {
 				continue
 			}
 		}
-		stages[g] = append(stages[g], ckRow{kind: ckRowCard, group: g, card: i, agent: idx, key: "t:" + c.Session + "/" + c.ID})
+		key := "t:" + c.Session + "/" + c.ID
+		if c.Host != "" {
+			key = "t:" + c.Host + ":" + c.Session + "/" + c.ID
+		}
+		stages[g] = append(stages[g], ckRow{kind: ckRowCard, group: g, card: i, agent: idx, key: key})
 	}
 	// Blocked first, then a holder that needs the person, then the oldest.
 	rank := func(r ckRow) int {
@@ -251,13 +315,18 @@ func (m *OS) buildBoardRows(list []sidebarAgentEntry) []ckRow {
 	return rows
 }
 
-// CockpitToggleBoard is b: the board, or the agents again.
-func (m *OS) CockpitToggleBoard() {
+// CockpitToggleBoard is b: the board, or the agents again. Opening the board
+// reads the linked machines' project cards.
+func (m *OS) CockpitToggleBoard() tea.Cmd {
 	ck := &m.Inbox.ck
 	ck.board = !ck.board
 	ck.scroll, ck.idx, ck.key, ck.akey, ck.follow = 0, 0, "", "", true
 	ck.kb.add, ck.kb.drag = nil, nil
 	m.cockpitTouchRows()
+	if ck.board {
+		return tea.Batch(m.cockpitFarCardsCmd(), m.cockpitDispatchCmd())
+	}
+	return nil
 }
 
 // CockpitBoardOn reports whether the fleet column shows the board.
@@ -275,7 +344,7 @@ func (m *OS) cockpitCard() (ckRow, session.TaskRow, bool) {
 // ckTakeWindow is the pane t takes a card for: the focused pane behind the
 // agents view, when it is in the card's session on this machine.
 func (m *OS) ckTakeWindow(c session.TaskRow) string {
-	if m.AttachedHost != "" || !m.IsDaemonSession || c.Session != m.SessionName {
+	if m.AttachedHost != "" || !m.IsDaemonSession || c.Host != "" || c.Session != m.SessionName {
 		return ""
 	}
 	if w := m.GetFocusedWindow(); w != nil {
@@ -287,7 +356,7 @@ func (m *OS) ckTakeWindow(c session.TaskRow) string {
 // CockpitTake is t: claim the card under the cursor for the focused pane.
 func (m *OS) CockpitTake() tea.Cmd {
 	_, c, ok := m.cockpitCard()
-	if !ok {
+	if !ok || m.ckFarCard(c) {
 		return nil
 	}
 	win := m.ckTakeWindow(c)
@@ -299,7 +368,11 @@ func (m *OS) CockpitTake() tea.Cmd {
 		m.ShowNotification("The pane already holds "+c.ID+".", "info", m.Settings.NotificationDuration)
 		return nil
 	}
-	call, nonce := m.inboxCaller(), m.inboxNonce()
+	nonce, ok := m.signedNonce()
+	if !ok {
+		return nil
+	}
+	call := m.inboxCaller()
 	return func() tea.Msg {
 		raw, err := call("claim-task", map[string]any{"session": c.Session, "id": c.ID, "window": win, "human_nonce": nonce}, 5*time.Second)
 		msg := ckTakeMsg{err: err}
@@ -325,6 +398,9 @@ func (m *OS) applyTake(msg ckTakeMsg) {
 // folder claims the card for the new pane. A draft kept from esc keeps its
 // own task, and the card is not tied to it.
 func (m *OS) CockpitNewAgentFor(c session.TaskRow) tea.Cmd {
+	if m.ckFarCard(c) {
+		return nil
+	}
 	cmd := m.CockpitNewAgent()
 	s := m.Inbox.ck.spawn
 	if s == nil {
@@ -341,6 +417,14 @@ func (m *OS) CockpitNewAgentFor(c session.TaskRow) tea.Cmd {
 	s.task.SetText(text)
 	m.spawnFollowTask(s)
 	s.card = &spawnCard{session: c.Session, id: c.ID}
+	// The card says where its agent starts: any, a machine, or this one.
+	for i, mc := range s.machines {
+		switch {
+		case c.Machine == session.TaskMachineAny && mc.any,
+			c.Machine != session.TaskMachineAny && !mc.any && mc.host == c.Machine && mc.up:
+			s.machine = i
+		}
+	}
 	return cmd
 }
 
@@ -364,7 +448,7 @@ func spawnClaim(call inboxVerbCall, nonce string, card *spawnCard, sess, win str
 // ckTaskKey is what a card's detail was read for: a change to any of these
 // adds to its history.
 func ckTaskKey(c session.TaskRow) string {
-	k := c.Session + "/" + c.ID + "/" + strconv.FormatInt(c.StageAt, 10)
+	k := c.Host + ":" + c.Session + "/" + c.ID + "/" + strconv.FormatInt(c.StageAt, 10)
 	if c.Holder != nil {
 		k += "/" + c.Holder.Window + strconv.FormatInt(c.Holder.HeldAt, 10)
 	}
@@ -385,6 +469,11 @@ func (m *OS) cockpitCardFetch() tea.Cmd {
 	}
 	key := ckTaskKey(c)
 	if d := ck.card; d != nil && d.key == key {
+		return nil
+	}
+	if c.Host != "" {
+		// The prompt and history are on the owner.
+		ck.card = &ckTaskDetail{key: key, err: "This card is on " + printableTitle(c.Host) + ". tuios task get " + c.ID + " -s " + printableTitle(c.Host) + ":" + printableTitle(c.Session) + " shows it."}
 		return nil
 	}
 	ck.card = &ckTaskDetail{key: key, loading: true}
@@ -435,19 +524,27 @@ func (m *OS) applyCard(msg ckTaskMsg) {
 // ckCardHints are the footer's keys on a card row.
 func (m *OS) ckCardHints(c session.TaskRow) []overlay.Hint {
 	var hints []overlay.Hint
+	if c.Host != "" {
+		return nil
+	}
 	if c.Holder != nil {
 		hints = append(hints, m.keyHints(config.ActionInboxGo, "open pane")...)
 	}
 	if m.ckTakeWindow(c) != "" && (c.Holder == nil || c.Holder.Window != m.ckTakeWindow(c)) && c.Stage != session.TaskStageDone {
 		hints = append(hints, m.keyHints(config.ActionInboxTake, "take")...)
 	}
-	return hints
+	return append(hints, m.ckLifeHints(c)...)
 }
 
 // cockpitCardGo is enter on a card: the holder's pane, or the Card tab on a
 // narrow screen for a free card.
 func (m *OS) cockpitCardGo(r ckRow, c session.TaskRow) tea.Cmd {
 	switch {
+	case c.Host != "" && !m.kanbanOn():
+		return m.CockpitOpenFocus(true)
+	case c.Host != "":
+		m.ckFarCard(c)
+		return nil
 	case r.agent >= 0:
 		return m.InboxAgentsGo()
 	case c.Holder != nil:
@@ -524,6 +621,9 @@ func (m *OS) drawCardRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x, 
 		tw := max(min(rx-1-nx-10, 30), 8)
 		c.text(nx, y, nx+tw, ckSeg{t: ckTrunc(title, tw-1), fg: ink(pal.Fg), attrs: ckBold})
 		who, whoInk := "free", pal.FgMute
+		if card.AskFirst {
+			who = "ask first"
+		}
 		switch {
 		case card.Blocked != nil:
 			who, whoInk = "blocked", pal.Warn
@@ -531,6 +631,13 @@ func (m *OS) drawCardRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x, 
 			who, whoInk = holder, pal.FgDim
 		case card.Stage == session.TaskStageDone:
 			who = "done"
+		default:
+			if words, lInk := ckLifeLine(pal, card); words != "" {
+				who, whoInk = words, lInk
+			}
+		}
+		if card.Host != "" {
+			who += " on " + printableTitle(card.Host)
 		}
 		c.text(nx+tw, y, rx-1, ckSeg{t: ckTrunc(who, rx-1-nx-tw), fg: ink(whoInk)})
 		return
@@ -547,7 +654,11 @@ func (m *OS) drawCardRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x, 
 		if r.agent >= 0 {
 			harness = ckHarness(e.Harness)
 		}
-		if card.Session != m.SessionName {
+		switch {
+		case card.Host != "":
+			// A card another machine owns says which.
+			harness = "on " + ckTrunc(printableTitle(card.Host), 6)
+		case card.Session != m.SessionName:
 			// A card of another session says where its holder is.
 			harness = ckTrunc(printableTitle(card.Session), 9)
 		}
@@ -565,7 +676,18 @@ func (m *OS) drawCardRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x, 
 	case card.Stage == session.TaskStageDone:
 		c.text(nx, y+1, rx2, ckSeg{t: "done", fg: ink(pal.FgMute)})
 	default:
-		c.text(nx, y+1, rx2, ckSeg{t: "free", fg: ink(pal.FgMute)})
+		if words, lInk := ckLifeLine(pal, card); words != "" {
+			c.text(nx, y+1, rx2, ckSeg{t: ckTrunc(words, rx2-nx), fg: ink(lInk)})
+			return
+		}
+		free := "free"
+		if card.AskFirst {
+			free = "free, ask first"
+		}
+		if card.Host != "" {
+			free = "free on " + printableTitle(card.Host)
+		}
+		c.text(nx, y+1, rx2, ckSeg{t: ckTrunc(free, rx2-nx), fg: ink(pal.FgMute)})
 	}
 }
 
@@ -605,8 +727,13 @@ func (m *OS) drawCardFocus(c *ckCanvas, l ckLook, r ckRow, card session.TaskRow,
 		}
 		line(ckSeg{t: "Held by ", fg: pal.FgDim}, ckSeg{t: who, fg: pal.Fg, attrs: ckBold},
 			ckSeg{t: "  " + inboxWait(card.Holder.HeldAt, now), fg: pal.FgMute})
+	case card.Stage == session.TaskStageVerify || card.Stage == session.TaskStageReview:
+		// Let go by its agent: the lifecycle lines below say where it is.
 	case card.Stage != session.TaskStageDone && card.Blocked == nil:
 		line(ckSeg{t: "Free. ", fg: pal.FgDim}, ckSeg{t: m.ckFreeWords(card), fg: pal.FgMute})
+	}
+	for _, segs := range m.ckLifeFocus(pal, card) {
+		line(segs...)
 	}
 	if b := card.Blocked; b != nil {
 		line(ckSeg{t: "Blocked ", fg: pal.Warn, attrs: ckBold}, ckSeg{t: printableTitle(b.Reason), fg: pal.FgDim})
@@ -644,9 +771,34 @@ func (m *OS) drawCardFocus(c *ckCanvas, l ckLook, r ckRow, card session.TaskRow,
 				words += ", " + printableTitle(ev.Reason)
 			}
 			line(ckSeg{t: ckPad(inboxWait(ev.At, now), 5), fg: pal.FgMute}, ckSeg{t: words, fg: pal.Fg},
-				ckSeg{t: "  " + printableTitle(ev.By), fg: pal.FgMute})
+				ckSeg{t: "  " + m.ckHistoryBy(ev.By), fg: pal.FgMute})
 		}
 	}
+}
+
+// ckHistoryBy is who made a history entry, as the person reads it. The
+// daemon keeps the stable form: a pane by its window id, the person as
+// "human", a caller outside every pane as "shell", a linked machine as
+// "link:NAME". A pane here is named as the rail names it; a pane this client
+// does not have is its short id.
+func (m *OS) ckHistoryBy(by string) string {
+	switch {
+	case by == session.AgentInboxHuman:
+		return "you"
+	case by == "shell":
+		return "a shell"
+	case strings.HasPrefix(by, "link:"):
+		return printableTitle(strings.TrimPrefix(by, "link:"))
+	}
+	if w := m.windowByID(by); w != nil {
+		if name := printableTitle(m.railTitleShown(w)); name != "" {
+			return agentMailNotThePerson(by, name)
+		}
+	}
+	if len(by) == 36 && strings.Count(by, "-") == 4 {
+		return shortWindowLabel(by)
+	}
+	return printableTitle(by)
 }
 
 // ckFreeWords says how a free card is taken.

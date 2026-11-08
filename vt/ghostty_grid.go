@@ -569,7 +569,7 @@ func (t *GhosttyTerminal) CursorPen() (uv.Style, uv.Link) {
 		return uv.Style{}, uv.Link{}
 	}
 	t.flushRestoreLocked()
-	gs, err := t.term.CursorStyle()
+	gs, err := t.term.CursorSGRStyle()
 	if err != nil || gs == nil {
 		return uv.Style{}, uv.Link{}
 	}
@@ -724,7 +724,7 @@ func (t *GhosttyTerminal) reserveImageSpaceLocked(rows, _ int) {
 	var seq strings.Builder
 	if scrollCount > 0 {
 		// Save the pen, blank it, scroll from the bottom row, restore.
-		pen, err := t.term.CursorStyle()
+		pen, err := t.term.CursorSGRStyle()
 		penSeq := ""
 		if err == nil && pen != nil {
 			s := t.convertStyle(pen)
@@ -765,7 +765,7 @@ func (t *GhosttyTerminal) placeSixelLocked(rows, cols int, id uint32) {
 	if startY+rows+1 > height {
 		scroll = min(startY+rows+1-height, height)
 	}
-	pen, err := t.term.CursorStyle()
+	pen, err := t.term.CursorSGRStyle()
 	penSeq := ""
 	if err == nil && pen != nil {
 		s := t.convertStyle(pen)

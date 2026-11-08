@@ -972,13 +972,33 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // update is Update's body for every message but flushMsg.
 func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.applyScrollAnchors()
-	// ProcessingRemoteKeys stays set from the first key of a send-keys or
-	// tape run to its last, across messages. A key or click from the
-	// person's own terminal can arrive between two of them, and it is the
-	// person's: it must not be refused as one send-keys typed.
-	if m.ProcessingRemoteKeys && isPersonInput(msg) {
+	// The origin of a key is on its message. A RemoteKeyMsg is a key that
+	// send-keys typed, so it is never the person's, whatever another chain
+	// did to the flag. A key or click from the person's own terminal can
+	// arrive between two keys of a chain, and it is the person's: it must not
+	// be refused as one send-keys typed.
+	switch {
+	case isRemoteKey(msg):
+		prev := m.ProcessingRemoteKeys
+		m.ProcessingRemoteKeys = true
+		defer func() { m.ProcessingRemoteKeys = prev }()
+	case m.ProcessingRemoteKeys && isPersonInput(msg):
 		m.ProcessingRemoteKeys = false
 		defer func() { m.ProcessingRemoteKeys = true }()
+	}
+	// A focus move a command makes is marked on the push that carries it,
+	// so the daemon does not read it as the person turning to the pane.
+	if isPersonInput(msg) {
+		m.commandFocusMoved = false
+	} else if _, routed := msg.(RemoteCommandMsg); routed || m.ProcessingRemoteKeys {
+		before := m.focusedWindowID()
+		m.commandDriving = true
+		defer func() {
+			m.commandDriving = false
+			if m.focusedWindowID() != before {
+				m.commandFocusMoved = true
+			}
+		}()
 	}
 	m.msgClock = time.Now()
 	m.quietFrame = false
@@ -1064,6 +1084,12 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// A reply editor the rows moved the cursor away from closes, keeping
 	// its draft.
 	m.CockpitReplyCheck()
+	// Copy mode over a thread the view no longer shows ends.
+	m.CockpitCopyCheck()
+	// A one-key menu a newer layer covers closes. See cockpit_layers.go.
+	if m.ShowInbox || m.Inbox.ck.lastTop != CockpitBase {
+		m.CockpitLayerCheck()
+	}
 	// Checkpoints a frame of the agents view drew for an older state: a
 	// turn that ended with no input is read now. A flag check when not.
 	if side := m.CockpitSideWanted(); side != nil {
@@ -1231,6 +1257,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyThreadRecap(msg)
 		return m, nil
 
+	case threadImageMsg:
+		return m, m.applyThreadImage(msg)
+
 	case threadGrewMsg:
 		return m, m.applyThreadGrew(msg)
 
@@ -1282,6 +1311,15 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 	case ckTakeMsg:
 		m.applyTake(msg)
+		return m, nil
+	case ckShipMsg:
+		m.applyShip(msg)
+		return m, nil
+	case ckFarCardsMsg:
+		m.applyFarCards(msg)
+		return m, nil
+	case ckDispatchMsg:
+		m.applyDispatch(msg)
 		return m, nil
 	case ckCardMsg:
 		m.applyCardReply(msg)
@@ -1790,8 +1828,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, cmd
 
 	case spawnInfoMsg:
-		m.applySpawnInfo(msg)
-		return m, nil
+		return m, m.applySpawnInfo(msg)
+	case spawnPlacedMsg:
+		return m, m.applySpawnPlaced(msg)
 	case spawnStartedMsg:
 		m.applySpawnStarted(msg)
 		return m, nil
@@ -1851,7 +1890,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 		// Ensure we're in window management mode if no windows remain
 		if len(m.Windows) == 0 {
-			m.Mode = WindowManagementMode
+			m.ChooseMode(WindowManagementMode, ModeCauseNoPane)
 		}
 		return m, listenWindowExitsUntil(m.stopSignal(), m.WindowExitChan)
 
@@ -2025,6 +2064,21 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// the picker offered machines that were down and refused ones that
 		// were up.
 		return m, tea.Batch(refreshFederationCmd(), listenClientEventsUntil(m.stopSignal(), m.ClientEventChan))
+
+	case tcAgentsMsg:
+		m.applyTCAgents(msg)
+		return m, nil
+
+	case tcProjectMsg:
+		m.applyTCProject(msg)
+		return m, nil
+
+	case tcFiledMsg:
+		return m, m.applyTCFiled(msg)
+
+	case tcStartedMsg:
+		m.applyTCStarted(msg)
+		return m, nil
 
 	case machineSheetMsg:
 		// The add sheet's engine ran in a Cmd. This stores what it said.
@@ -3483,38 +3537,25 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			cmd = keyCmd
 		}
 
-		// If there are more keys, schedule the next one
+		// The chain's next message: the next key, or the end after the last.
+		var next tea.Msg = RemoteKeysDoneMsg{RequestID: msg.RequestID}
 		if len(msg.RemainingKeys) > 0 {
-			nextKey := msg.RemainingKeys[0]
-			remaining := msg.RemainingKeys[1:]
-			nextCmd := func() tea.Msg {
-				return RemoteKeyMsg{
-					Key:           nextKey,
-					RemainingKeys: remaining,
-					RequestID:     msg.RequestID,
-				}
+			next = RemoteKeyMsg{
+				Key:           msg.RemainingKeys[0],
+				RemainingKeys: msg.RemainingKeys[1:],
+				RequestID:     msg.RequestID,
 			}
-			// Use Sequence to ensure keys are processed in order, not concurrently
-			if cmd != nil {
-				return m, tea.Sequence(cmd, nextCmd)
-			}
-			return m, nextCmd
 		}
-
-		// Last key: schedule cleanup
-		doneCmd := func() tea.Msg {
-			return RemoteKeysDoneMsg{RequestID: msg.RequestID}
-		}
-		if cmd != nil {
-			return m, tea.Sequence(cmd, doneCmd)
-		}
-		return m, doneCmd
+		return m, remoteKeyThen(cmd, next, remoteKeyCmdWait)
 
 	case RemoteKeysDoneMsg:
-		// All remote keys have been processed: do final cleanup
-		// Re-enable animations
-		m.ProcessingRemoteKeys = false
-		m.Settings.AnimationsSuppressed = false
+		// This chain's keys have all been processed. Another chain may still
+		// run: its keys stay marked, and animations stay off, until it ends.
+		m.remoteKeyChains = max(m.remoteKeyChains-1, 0)
+		if m.remoteKeyChains == 0 {
+			m.ProcessingRemoteKeys = false
+			m.Settings.AnimationsSuppressed = false
+		}
 
 		// No retile here. Each key has already done what the same key does
 		// when a person presses it, layout included. This used to drop the
@@ -3608,6 +3649,54 @@ func isActivityInput(msg tea.Msg) bool {
 		return msg.Button != tea.MouseNone
 	}
 	return false
+}
+
+// isRemoteKey reports whether msg is a key that send-keys typed.
+func isRemoteKey(msg tea.Msg) bool {
+	_, ok := msg.(RemoteKeyMsg)
+	return ok
+}
+
+// remoteKeyCmdWait is how long the next key of a send-keys chain waits for
+// the commands the key before it started.
+const remoteKeyCmdWait = time.Second
+
+// remoteKeyThen runs a send-keys key's command, then sends next, the chain's
+// next message. The next key waits for the command so that what it started
+// (a list it loads, a dialog it opens) is in place first, as it is for a
+// person who types after seeing the result. It waits no longer than wait: a
+// key can arm a long timer, such as the agents view's minute tick, and Bubble
+// Tea runs a batch inside a sequence to its last command, so the chain and
+// the send-keys call waited for the timer. After wait the chain goes on, and
+// the command's messages still arrive when it ends. Exactly one of the two
+// sends next.
+func remoteKeyThen(cmd tea.Cmd, next tea.Msg, wait time.Duration) tea.Cmd {
+	if cmd == nil {
+		return func() tea.Msg { return next }
+	}
+	var sent atomic.Bool
+	ran := make(chan struct{})
+	inOrder := func() tea.Msg {
+		close(ran)
+		if sent.CompareAndSwap(false, true) {
+			return next
+		}
+		return nil
+	}
+	late := func() tea.Msg {
+		t := time.NewTimer(wait)
+		defer t.Stop()
+		select {
+		case <-ran:
+			return nil
+		case <-t.C:
+		}
+		if sent.CompareAndSwap(false, true) {
+			return next
+		}
+		return nil
+	}
+	return tea.Batch(tea.Sequence(cmd, inOrder), late)
 }
 
 // isPersonInput reports whether msg came from the terminal the client runs

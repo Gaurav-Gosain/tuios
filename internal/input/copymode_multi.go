@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 )
@@ -54,7 +55,10 @@ func handleMultiCopyKey(msg tea.KeyPressMsg, o *app.OS, focused *terminal.Window
 	if leadState != terminal.CopyModeSearch && !lcm.PendingCharSearch {
 		inVisual := leadState.InVisual()
 		pipe, isPipe := copyPipeKey(msg, o, lcm)
-		wholeSet := isPipe || k == "tab" || k == "y" || k == "Y" || (k == "c" && inVisual)
+		// copy_mode_exit from a selection is y on the whole set, then a
+		// leave, as it is in one pane.
+		exitYank := inVisual && copyModeAction(msg, o) == config.ActionCopyModeExit
+		wholeSet := isPipe || exitYank || k == "tab" || k == "y" || k == "Y" || (k == "c" && inVisual)
 		if wholeSet {
 			for _, w := range windows {
 				if w.CopyMode != nil {
@@ -83,6 +87,11 @@ func handleMultiCopyKey(msg tea.KeyPressMsg, o *app.OS, focused *terminal.Window
 		case k == "tab":
 			o.CycleMultiCopyFormat()
 			return o, nil
+		case exitYank:
+			panes, skipped, _ := collectMultiCopy(o, windows)
+			cmd := o.YankMultiCopy(panes, skipped)
+			o.ExitMultiCopyMode()
+			return o, cmd
 		case k == "y" || (k == "c" && inVisual):
 			panes, skipped, selected := collectMultiCopy(o, windows)
 			cmd := o.YankMultiCopy(panes, skipped)
@@ -107,7 +116,7 @@ func handleMultiCopyKey(msg tea.KeyPressMsg, o *app.OS, focused *terminal.Window
 		// pane at all, that holds for the lead too: nothing may move or select.
 		if o.MultiCopyParked(w.ID) && (w != lead || allParked) {
 			takes := leadState == terminal.CopyModeSearch ||
-				(leadState == terminal.CopyModeNormal && parkedCopyKeys[k])
+				(leadState == terminal.CopyModeNormal && (parkedCopyKeys[k] || copyModeAction(msg, o) == config.ActionCopyModeExit))
 			if !takes {
 				continue
 			}

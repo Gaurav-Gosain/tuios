@@ -82,6 +82,9 @@ const (
 	ckRowFan
 	// ckRowCard is a task card on the board (cockpit_board.go).
 	ckRowCard
+	// ckRowBand heads the rows of one session, machine or project when
+	// the list is grouped by one (cockpit_groupby.go).
+	ckRowBand
 )
 
 // ckRow is one row of the fleet.
@@ -110,6 +113,8 @@ type ckRow struct {
 	// rows the fold hides, for the marks on the heading and the focus.
 	folded bool
 	hidden []ckRow
+	// title names a band's heading.
+	title string
 	// rest lets the cursor rest on a heading: a column of the board's
 	// columns that shows no card.
 	rest bool
@@ -129,6 +134,24 @@ func (r ckRow) cursorable() bool {
 
 // cockpitState is the cockpit's own state, beside the Inbox's.
 type cockpitState struct {
+	// region has the keys (see cockpit_regions.go), and regionBox is where
+	// the last frame drew each region.
+	region    ckRegion
+	regionBox [ckRegions]ckRegionBox
+	// listWidth is the list width in cells the person chose (0: none),
+	// sideHidden hides the side column, zoom shows the focused region
+	// alone, and div is the edge of the list a drag resizes. See
+	// cockpit_layout.go.
+	listWidth  int
+	sideHidden bool
+	// groupBy groups the list by session, machine or project, "" by state,
+	// and groupMenu is the picker s opens. See cockpit_groupby.go.
+	groupBy   string
+	groupMenu bool
+	// ship is Ready to merge on a card in review, nil when it is closed.
+	ship *ckShip
+	zoom bool
+	div  ckDivider
 	// key is the selected row, and akey its agent, so the cursor stays on
 	// an agent whose approval was answered and whose row key changed.
 	key, akey string
@@ -149,6 +172,12 @@ type cockpitState struct {
 	// needsOnly is the f filter: the Needs you group alone, which is the
 	// old flat Inbox.
 	needsOnly bool
+	// chip is the header count a click chose: its state group alone in the
+	// list (1 + the group, 0 for none). Idle keeps Settled with it.
+	chip int
+	// groupN is each group's count of rows before the chip filters them,
+	// which the header's counts say, so every chip stays to click.
+	groupN [ckGroups]int
 	// The layout the rows were last built for.
 	colH    int
 	oneLine bool
@@ -232,6 +261,9 @@ type cockpitState struct {
 	// one.
 	lookGen uint64
 	canvas  *ckCanvas
+	// lastTop is the layer CockpitTop gave after the last message, for the
+	// verbose log of its changes (cockpit_layers.go).
+	lastTop CockpitLayer
 	// replyCheck says the rows moved the cursor, so the reply editor is
 	// checked against the row after the message.
 	replyCheck bool
@@ -264,9 +296,12 @@ type cockpitState struct {
 	// board, and boardErr why it refused to list the cards otherwise.
 	// boardFolded flips a stage's fold (Done starts folded), and boardOpened
 	// shows every row of a long one, by stage. card is the Card tab's
-	// detail, and cardWant says a frame drew it stale. See cockpit_board.go.
+	// detail, and cardWant says a frame drew it stale. farCards are the
+	// project cards of the linked machines, read when the board opens, and
+	// a part of cards too. See cockpit_board.go.
 	board                    bool
 	cards                    []session.TaskRow
+	farCards                 []session.TaskRow
 	cardsGen                 uint64
 	noBoard                  bool
 	boardErr                 string
@@ -284,6 +319,13 @@ type cockpitState struct {
 	// kb is the columns' own state. See cockpit_kanban.go.
 	boardList bool
 	kb        ckKanban
+	// dispatch is the task dispatch status, read when the board opens and
+	// kept by the task-dispatch events; dispatchBoard is the board the
+	// header names, and dispatchBusy a change in flight. See
+	// cockpit_dispatch.go.
+	dispatch      *session.DispatchStatus
+	dispatchBoard string
+	dispatchBusy  bool
 	// listMode is the list layout the person chose with the list key: one
 	// of the [agents] view_list values, and "" for no choice, where the
 	// config decides. It is kept in the state file. stripShown says the last
@@ -314,6 +356,7 @@ type ckRowsKey struct {
 	arts    uint64
 	colH    int
 	oneLine bool
+	groupBy string
 	minute  int64
 	// foldWorking is [agents] fold_working, which a set-option can change.
 	foldWorking bool
@@ -379,6 +422,7 @@ func (m *OS) cockpitRows() []ckRow {
 		list: m.Inbox.agents.listAt, inbox: m.Inbox.Gen, gen: ck.rowsGen, colH: ck.colH, arts: m.tml.setGen<<20 + ck.art.gen,
 		oneLine: ck.oneLine, minute: now.Unix() / 60, foldWorking: m.ckFoldWorking(),
 		cards: ck.cardsGen, board: ck.board, stages: m.ckStagesShown(), kanban: m.kanbanOn(),
+		groupBy: m.ckGroupBy(),
 	}
 	if ck.rows != nil && ck.rowsAt == key {
 		return ck.rows
@@ -517,9 +561,47 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 
 	var rows []ckRow
 	ck.tall = 0
+	itemsOnly := ck.needsOnly || kindFilter
+	// add puts one row of group g in the list, with the subagent rows under
+	// it, and works out how many lines it takes.
+	add := func(g int, r ckRow) {
+		if r.kind == ckRowFan {
+			r.lines = 1
+			if m.ckWorktreeOf(list[r.agent]).prompt != "" {
+				r.lines = 2
+			}
+			ck.tall += r.lines
+			if ck.oneLine {
+				r.lines = 1
+			}
+			rows = append(rows, r)
+			return
+		}
+		r.lines = 2
+		var e sidebarAgentEntry
+		if r.agent >= 0 {
+			e = list[r.agent]
+		}
+		// An idle or settled row is one line, unless its chain has
+		// something waiting for the person: the second line says so.
+		chainWaits := r.agent >= 0 && m.childrenWaiting(e) > 0
+		if (g == ckIdle || g == ckSettled) && !chainWaits || g == ckSnoozed || r.kind == ckRowNote || r.attempt || !m.ckHasLine2(r, e) {
+			r.lines = 1
+		}
+		ck.tall += r.lines
+		if ck.oneLine {
+			r.lines = 1
+		}
+		rows = append(rows, r)
+		if r.kind == ckRowAgent && !r.hasItem && !r.attempt && !ck.oneLine {
+			rows = append(rows, ckChildRows(list[r.agent], g)...)
+		}
+	}
+	by := m.ckGroupBy()
+	var bands []ckBand
+	ck.groupN = [ckGroups]int{}
 	for g := range ckGroups {
 		items := m.ckGatherFans(groups[g], list)
-		itemsOnly := ck.needsOnly || kindFilter
 		if len(items) == 0 || itemsOnly && g != ckNeeds && g != ckSnoozed && g != ckReview {
 			continue
 		}
@@ -529,7 +611,14 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 				n++
 			}
 		}
-		if n == 0 {
+		ck.groupN[g] = n
+		if n == 0 || !ck.chipKeeps(g) {
+			continue
+		}
+		if by != "" && g != ckNeeds {
+			// Grouped by session, machine or project: Needs you stays on
+			// top as it is, and the other rows go to their band.
+			bands = m.ckBandAdd(bands, by, g, items, itemsOnly, list)
 			continue
 		}
 		if len(rows) > 0 {
@@ -560,41 +649,19 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 			if r.selectable() {
 				shown++
 			}
-			if r.kind == ckRowFan {
-				r.lines = 1
-				if m.ckWorktreeOf(list[r.agent]).prompt != "" {
-					r.lines = 2
-				}
-				ck.tall += r.lines
-				if ck.oneLine {
-					r.lines = 1
-				}
-				rows = append(rows, r)
-				continue
-			}
-			r.lines = 2
-			var e sidebarAgentEntry
-			if r.agent >= 0 {
-				e = list[r.agent]
-			}
-			// An idle or settled row is one line, unless its chain has
-			// something waiting for the person: the second line says so.
-			chainWaits := r.agent >= 0 && m.childrenWaiting(e) > 0
-			if (g == ckIdle || g == ckSettled) && !chainWaits || g == ckSnoozed || r.kind == ckRowNote || r.attempt || !m.ckHasLine2(r, e) {
-				r.lines = 1
-			}
-			ck.tall += r.lines
-			if ck.oneLine {
-				r.lines = 1
-			}
-
-			rows = append(rows, r)
-			if r.kind == ckRowAgent && !r.hasItem && !r.attempt && !ck.oneLine {
-				rows = append(rows, ckChildRows(list[r.agent], g)...)
-			}
+			add(g, r)
 		}
 		if hidden := n - shown; hidden > 0 {
 			rows = append(rows, ckRow{kind: ckRowMore, group: g, count: hidden, lines: 1, key: "m:" + strconv.Itoa(g)})
+		}
+	}
+	for _, b := range bands {
+		if len(rows) > 0 {
+			rows = append(rows, ckRow{kind: ckRowGap, group: ckIdle, lines: 1, key: "bg:" + b.key})
+		}
+		rows = append(rows, ckRow{kind: ckRowBand, group: ckIdle, agent: -1, count: b.count, title: b.title, lines: 1, key: "b:" + b.key})
+		for _, br := range b.rows {
+			add(br.group, br.row)
 		}
 	}
 	return rows
@@ -1069,6 +1136,25 @@ func (m *OS) CockpitFold() {
 	m.cockpitReplyFollow()
 }
 
+// chipKeeps reports whether the header chip in force keeps group g in the
+// list.
+func (ck *cockpitState) chipKeeps(g int) bool {
+	return ck.chip == 0 || ck.chip == g+1 || ck.chip == ckIdle+1 && g == ckSettled
+}
+
+// cockpitChip is a click on a header count: the list keeps that state group
+// alone, and a second click on the same count gives the whole list back.
+func (m *OS) cockpitChip(g int) {
+	ck := &m.Inbox.ck
+	if ck.chip == g+1 {
+		ck.chip = 0
+	} else {
+		ck.chip = g + 1
+	}
+	ck.scroll, ck.follow = 0, true
+	m.cockpitTouchRows()
+}
+
 // CockpitCycleFilter is f: the whole fleet, then every item alone (the old
 // flat Inbox), then each kind of item there is, then the whole fleet again.
 func (m *OS) CockpitCycleFilter() {
@@ -1212,6 +1298,10 @@ func (m *OS) cockpitWideFocus() bool { return m.GetRenderWidth() >= ckOneColumn 
 // handled is false for a click outside it.
 func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 	ck := &m.Inbox.ck
+	// A one-key menu on top: a click off it closes it and does nothing else.
+	if m.cockpitClickDismisses(x, y) {
+		return nil, true
+	}
 	if ck.img != nil {
 		m.cockpitImageClick(x, y)
 		return nil, true
@@ -1227,6 +1317,10 @@ func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 		ck.art.focus = false
 		m.cockpitTouch()
 	}
+	if m.cockpitDividerPress(x, y) {
+		return nil, true
+	}
+	m.cockpitFocusRegionAt(x, y)
 	for _, h := range ck.hits {
 		if x < h.x0 || x >= h.x1 || y < h.y0 || y >= h.y1 {
 			continue
@@ -1276,14 +1370,24 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 	switch action {
 	case "new":
 		return m.CockpitNewAgent()
+	case "group":
+		m.cockpitOpenGroupMenu()
+		return nil
 	case "board":
-		m.CockpitToggleBoard()
+		return m.CockpitToggleBoard()
+	case "dispatch-mode":
+		return m.CockpitDispatchMode()
+	case "dispatch-pause":
+		return m.CockpitDispatchPause()
 	case "search":
 		m.InboxStartSelect()
 	case "scope":
 		m.cockpitNextScope()
 	case "needs":
 		m.CockpitCycleFilter()
+	case "chip:0", "chip:1", "chip:2", "chip:3":
+		g, _ := strconv.Atoi(strings.TrimPrefix(action, "chip:"))
+		m.cockpitChip(g)
 	case "follow":
 		m.CockpitThreadBottom()
 	case "go":
@@ -1293,7 +1397,7 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		// once. On a risky call it asks, as a key does, and a second click
 		// on the same button (or enter) answers.
 		decision := map[string]string{"a": session.ApprovalOnce, "A": session.ApprovalAlways, "r": session.ApprovalDeny}[action]
-		if m.InboxConfirmOpen() && m.Inbox.approvals.confirm.decision == decision {
+		if m.InboxConfirmOpen() && m.Inbox.approvals.answer.confirm.decision == decision {
 			return m.InboxConfirmKey("enter")
 		}
 		cmd, _ := m.CockpitAnswerLetter(action)
@@ -1357,6 +1461,9 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		if ids, ok := strings.CutPrefix(action, "kid:"); ok {
 			return m.cockpitChildClick(ids)
 		}
+		if img, ok := strings.CutPrefix(action, "timg:"); ok {
+			return m.cockpitOpenThreadImage(img)
+		}
 		if id, ok := strings.CutPrefix(action, "fold:"); ok {
 			if t := m.cockpitThread(); t != nil {
 				if t.folded == nil {
@@ -1393,6 +1500,9 @@ func (m *OS) cockpitReply() tea.Cmd {
 func (m *OS) CockpitHover(x, y int) {
 	ck := &m.Inbox.ck
 	if ck.spawn != nil {
+		return
+	}
+	if m.cockpitDividerMotion(x, y) {
 		return
 	}
 	if m.kanbanDragTo(x, y) {
@@ -1521,7 +1631,30 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 	if cmd, ok := m.kanbanKey(action); ok {
 		return cmd, true
 	}
+	if cmd, ok := m.cockpitRegionKey(action); ok {
+		return cmd, true
+	}
+	if cmd, ok := m.cockpitLayoutKey(action); ok {
+		return cmd, true
+	}
 	switch action {
+	case config.ActionInboxSort:
+		if m.Inbox.ck.board {
+			return nil, false
+		}
+		m.cockpitOpenGroupMenu()
+		return nil, true
+	case config.ActionInboxRegionNext, config.ActionInboxRegionPrev:
+		d := 1
+		if action == config.ActionInboxRegionPrev {
+			d = -1
+		}
+		return m.CockpitStepRegion(d), true
+	case config.ActionInboxEscape:
+		return m.CockpitEscape(), true
+	case config.ActionInboxNextNeeds:
+		m.CockpitNextNeeds()
+		return nil, true
 	case config.ActionInboxAllow, config.ActionInboxAllowAlways, config.ActionInboxReply:
 		letter := "r"
 		switch action {
@@ -1551,13 +1684,8 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		}
 		return nil, true
 	case config.ActionInboxHelp:
-		ck := &m.Inbox.ck
-		back := ckBack{key: ck.key, akey: ck.akey, scroll: ck.scroll}
-		m.CloseInbox()
+		// Help opens over the view, which stays as it is behind it.
 		m.OpenHelpAtCategory(HelpCategoryAgents)
-		// The view opens again on this agent when the help closes.
-		ck.back = &back
-		m.helpBackToAgents = true
 		return nil, true
 	case config.ActionInboxTabPrev, config.ActionInboxTabNext:
 		d := 1
@@ -1608,13 +1736,18 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		}
 		return m.CockpitNewAgent(), true
 	case config.ActionInboxBoard:
-		m.CockpitToggleBoard()
-		return nil, true
+		return m.CockpitToggleBoard(), true
+	case config.ActionInboxDispatchMode:
+		return m.CockpitDispatchMode(), true
+	case config.ActionInboxDispatchPause:
+		return m.CockpitDispatchPause(), true
 	case config.ActionInboxViewList:
 		m.CockpitToggleList()
 		return nil, true
 	case config.ActionInboxTake:
 		return m.CockpitTake(), true
+	case config.ActionInboxShip:
+		return m.CockpitShip(), true
 	case config.ActionInboxCompare:
 		return m.CockpitCompare(), true
 	case config.ActionInboxWrite:
@@ -1637,10 +1770,6 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 			return m.CockpitOpenFocus(true), true
 		}
 		return m.CockpitGo(), true
-	case config.ActionInboxClose:
-		if m.Inbox.threads.open {
-			return m.CockpitOpenFocus(false), true
-		}
 	case config.ActionInboxUp, config.ActionInboxDown, config.ActionInboxPageUp, config.ActionInboxPageDown,
 		config.ActionInboxFirst, config.ActionInboxLast:
 		d := 1
@@ -1664,4 +1793,24 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		return nil, true
 	}
 	return nil, false
+}
+
+// leaveInboxForPane closes the agents view for a pane and says how to come
+// back. The view opens again on this agent, as far down the fleet as it was,
+// the way it does after ctrl+] (InboxAgentsViewPane).
+func (m *OS) leaveInboxForPane() {
+	ck := &m.Inbox.ck
+	back := ckBack{key: ck.key, akey: ck.akey, scroll: ck.scroll}
+	m.CloseInbox()
+	ck.back = &back
+	key := m.sidebarAgentKeyOr("prefix_inbox", "ctrl+b i")
+	m.ShowNotification("Press "+key+" to go back to the agents.", "info", m.Settings.NotificationDuration*2)
+}
+
+// InboxMentionListOpen reports whether the reply editor's @ list is open.
+// ctrl+p and ctrl+n move in that list, so the palette does not take ctrl+p
+// while it is open.
+func (m *OS) InboxMentionListOpen() bool {
+	ed := m.Inbox.reply.editor
+	return ed != nil && ed.comp != nil && ed.comp.MentionOpen()
 }

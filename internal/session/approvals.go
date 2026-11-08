@@ -485,6 +485,13 @@ func (a *attentionStore) answer(requestID, decision, message, by, shown string, 
 	if !slices.Contains(hold.options, decision) {
 		return approvalOutcome{}, *hold, false, errBadDecision
 	}
+	// An allow names the line it was made from, so a caller that leaves it
+	// out answers nothing: without the line, an allow would approve whatever
+	// call the hold is on now, which the person may never have read. A deny
+	// may leave it out, as before.
+	if shown == "" && decision != ApprovalDeny {
+		return approvalOutcome{}, *hold, false, errSummaryRequired
+	}
 	if shown != "" && shown != hold.summary {
 		return approvalOutcome{Reason: approvalEndChanged}, *hold, false, nil
 	}
@@ -510,6 +517,9 @@ func (a *attentionStore) answer(requestID, decision, message, by, shown string, 
 
 // errBadDecision is a decision the hold's harness does not offer.
 var errBadDecision = errors.New("decision not offered")
+
+// errSummaryRequired is an allow that does not name the line it was made from.
+var errSummaryRequired = errors.New("summary required")
 
 // noteFocused ends the hold on a pane the person just brought in front of
 // them: the harness's own prompt is the quickest thing to answer there, and a
@@ -831,6 +841,8 @@ func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, 
 	switch {
 	case errors.Is(err, errNoHold):
 		return nil, noHoldError("no approval is held under request " + echoName(requestID))
+	case errors.Is(err, errSummaryRequired):
+		return nil, invalidParam("summary", "an allow must name the line the person read: pass summary, the line the Inbox item shows. Nothing was answered and the hold runs on")
 	case errors.Is(err, errBadDecision):
 		return nil, invalidParam("decision", "this prompt does not offer "+echoName(p.Decision), append(slices.Clone(hold.options), ApprovalAsk)...)
 	case errors.Is(err, errEditUnreviewed):

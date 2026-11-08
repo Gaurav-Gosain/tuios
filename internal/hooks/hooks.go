@@ -350,6 +350,44 @@ func lastLines(s string, n int) string {
 	return strings.Join(lines, " / ")
 }
 
+// Commands lists every registered hook as "event: command", sorted, so two
+// tables can be compared and a change can be told to the person.
+func (m *Manager) Commands() []string {
+	if m == nil {
+		return nil
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var out []string
+	for event, cmds := range m.hooks {
+		for _, c := range cmds {
+			out = append(out, string(event)+": "+c)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// ReplaceFrom makes src's table this manager's, in one step under the lock,
+// so a hook that fires during a reload sees the old table or the new one and
+// never a table half built. The runner, the hold and the hooks in flight stay
+// this manager's.
+func (m *Manager) ReplaceFrom(src *Manager) {
+	if m == nil || src == nil {
+		return
+	}
+	src.mu.RLock()
+	table := make(map[Event][]string, len(src.hooks))
+	for event, cmds := range src.hooks {
+		table[event] = slices.Clone(cmds)
+	}
+	src.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.hooks = table
+	m.clearStatus()
+}
+
 // HasHooks returns true if any hooks are registered.
 func (m *Manager) HasHooks() bool {
 	m.mu.RLock()

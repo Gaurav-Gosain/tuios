@@ -647,13 +647,14 @@ type CopyMode struct {
 
 	// Character search state (f/F/t/T commands)
 	PendingCharSearch  bool // Waiting for character after f/F/t/T
+	PendingCharCount   int  // The count typed before f/F/t/T, 1 when none
 	LastCharSearch     rune // Last searched character
 	LastCharSearchDir  int  // 1 for forward (f/t), -1 for backward (F/T)
 	LastCharSearchTill bool // true for till (t/T), false for find (f/F)
 
 	// Count prefix (e.g., 10j means move down 10 times)
 	PendingCount   int       // Accumulated count (0 means no count)
-	CountStartTime time.Time // When count entry started (for timeout)
+	CountStartTime time.Time // When the last digit of the count was typed
 
 	// Implicit marks a copy mode session that the user never asked for.
 	//

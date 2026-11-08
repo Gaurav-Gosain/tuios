@@ -249,7 +249,17 @@ func (m *OS) kanbanSetStage(c session.TaskRow, stage string) tea.Cmd {
 	if c.Stage == stage {
 		return nil
 	}
-	call, nonce := m.inboxCaller(), m.inboxNonce()
+	if c.Host != "" {
+		// set-task-stage names a session of this machine, which may hold a
+		// card of the same id.
+		m.ShowNotification(c.ID+" is on "+printableTitle(c.Host)+". Move it on that machine.", "info", m.Settings.NotificationDuration)
+		return nil
+	}
+	nonce, ok := m.signedNonce()
+	if !ok {
+		return nil
+	}
+	call := m.inboxCaller()
 	return func() tea.Msg {
 		raw, err := call("set-task-stage", map[string]any{"session": c.Session, "id": c.ID, "stage": stage, "human_nonce": nonce}, 5*time.Second)
 		msg := ckCardMsg{err: err, failed: "The card did not move: "}
@@ -347,6 +357,11 @@ func (m *OS) CockpitNewCardPaste(text string) {
 func (m *OS) kanbanAddSend() tea.Cmd {
 	ck := &m.Inbox.ck
 	a := ck.kb.add
+	nonce, signed := m.signedNonce()
+	if !signed {
+		// The draft stays open, so the person can add it with their own key.
+		return nil
+	}
 	text, ok := a.ed.Submit()
 	if !ok {
 		// Invisible characters were removed; the line says so.
@@ -357,7 +372,7 @@ func (m *OS) kanbanAddSend() tea.Cmd {
 	if title == "" {
 		return nil
 	}
-	call, nonce := m.inboxCaller(), m.inboxNonce()
+	call := m.inboxCaller()
 	return func() tea.Msg {
 		raw, err := call("add-task", map[string]any{"session": a.session, "title": title, "stage": a.stage, "human_nonce": nonce}, 5*time.Second)
 		msg := ckCardMsg{err: err, failed: "The card was not added: ", focus: true}
@@ -475,6 +490,9 @@ func (m *OS) kanbanDragTo(x, y int) bool {
 // card to its stage. handled is false when no drag was under way, and the
 // release goes on as before.
 func (m *OS) CockpitRelease(x, y int) (tea.Cmd, bool) {
+	if m.cockpitDividerRelease() {
+		return nil, true
+	}
 	ck := &m.Inbox.ck
 	d := ck.kb.drag
 	if d == nil {
@@ -535,24 +553,34 @@ func (m *OS) kanbanHints() []overlay.Hint {
 	case ok && r.kind == ckRowCard:
 		c := ck.cards[r.card]
 		switch {
+		case c.Host != "":
+			// A card of another machine is changed there.
 		case c.Holder != nil:
 			hints = append(hints, m.keyHints(config.ActionInboxGo, "open pane")...)
 		case c.Stage != session.TaskStageDone && c.Blocked == nil:
 			hints = append(hints, m.keyHints(config.ActionInboxGo, "start agent")...)
 		}
-		if prev, next := m.inboxKey(config.ActionInboxStagePrev), m.inboxKey(config.ActionInboxStageNext); prev != "" && next != "" {
+		if prev, next := m.inboxKey(config.ActionInboxStagePrev), m.inboxKey(config.ActionInboxStageNext); prev != "" && next != "" && c.Host == "" {
 			hints = append(hints, overlay.Hint{Key: prev + " " + next, Label: "move card"})
 		}
 		if win := m.ckTakeWindow(c); win != "" && (c.Holder == nil || c.Holder.Window != win) && c.Stage != session.TaskStageDone {
 			hints = append(hints, m.keyHints(config.ActionInboxTake, "take")...)
 		}
+		hints = append(hints, m.ckLifeHints(c)...)
 	case ok && r.folded:
 		hints = append(hints, m.keyHints(config.ActionInboxFold, "open column")...)
 	}
 	hints = append(hints, m.keyHints(config.ActionInboxNewAgent, "new card", config.ActionInboxBoardLayout, "list",
 		config.ActionInboxBoard, "agents", config.ActionInboxSelect, "search")...)
+	if ck.dispatch != nil && ck.dispatch.Board != nil {
+		pause := "pause"
+		if h := dispatchHeld(ck.dispatch); h != "" && h != "Quiet hours" {
+			pause = "resume"
+		}
+		hints = append(hints, m.keyHints(config.ActionInboxDispatchMode, "dispatch", config.ActionInboxDispatchPause, pause)...)
+	}
 	hints = append(hints, overlay.Hint{Key: "?", Label: "all keys"})
-	return append(hints, m.keyHints(config.ActionInboxClose, "close")...)
+	return append(hints, m.cockpitEscHints()...)
 }
 
 // kbTitleLines is a card's title wrapped to w cells, two lines at most.
@@ -905,6 +933,14 @@ func (m *OS) drawKanbanCard(c *ckCanvas, l ckLook, r ckRow, title []string, x, y
 			holder = t
 		}
 	}
+	free := "free"
+	if card.AskFirst {
+		// Dispatch never gives it to an agent: a person starts it.
+		free = "free, ask first"
+	}
+	if card.Host != "" {
+		free += " on " + printableTitle(card.Host)
+	}
 	lx := x + 2
 	switch {
 	case card.Blocked != nil:
@@ -913,14 +949,21 @@ func (m *OS) drawKanbanCard(c *ckCanvas, l ckLook, r ckRow, title []string, x, y
 	case card.Holder != nil:
 		g, gInk := l.ckMark(state, e.DoneSeen)
 		lx = c.text(lx, my, rx, ckSeg{t: g + " ", fg: ink(gInk)})
-		if card.Session != m.SessionName {
+		switch {
+		case card.Host != "":
+			holder += " on " + printableTitle(card.Host)
+		case card.Session != m.SessionName:
 			holder += " in " + printableTitle(card.Session)
 		}
 		c.text(lx, my, rx, ckSeg{t: ckTrunc(holder, rx-lx), fg: ink(pal.Fg)})
 	case card.Stage == session.TaskStageDone:
 		c.text(lx, my, rx, ckSeg{t: l.ckStateMark("done", ckGlyphReview) + " ", fg: ink(pal.Success)}, ckSeg{t: "done", fg: ink(pal.FgMute)})
 	default:
-		c.text(lx, my, rx, ckSeg{t: l.ckStateMark("idle", ckGlyphIdle) + " ", fg: ink(pal.FgMute)}, ckSeg{t: "free", fg: ink(pal.FgMute)})
+		words, wInk := ckLifeLine(pal, card)
+		if words == "" {
+			words, wInk = free, pal.FgMute
+		}
+		c.text(lx, my, rx, ckSeg{t: l.ckStateMark("idle", ckGlyphIdle) + " ", fg: ink(wInk)}, ckSeg{t: ckTrunc(words, max(rx-lx-2, 0)), fg: ink(wInk)})
 	}
 	c.mark(pal, x+1, y, w-1, h, overlay.RowState{Cursor: cursor, Focused: cursor, Hover: hover})
 	ck.hits = append(ck.hits, ckHit{x0: x, y0: top + y, x1: x + w, y1: top + y + h, kind: ckHitRow, key: r.key})

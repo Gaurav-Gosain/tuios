@@ -54,6 +54,7 @@ const (
 	ErrVerbSessionNotFound = "session_not_found" // named session does not exist
 	ErrVerbSessionExists   = "session_exists"    // new-session was given a name the daemon already holds
 	ErrVerbFanExists       = "fan_exists"        // fan was given the name of a fan that exists, with no join
+	ErrVerbBranchExists    = "branch_exists"     // new-worktree with new_branch named a branch, folder or session that exists
 	ErrVerbWindowNotFound  = "window_not_found"  // window target did not resolve
 	ErrVerbNoWindows       = "no_windows"        // session has no windows to act on
 	ErrVerbPTYNotFound     = "pty_not_found"     // the target window has no live PTY
@@ -753,6 +754,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "base", Type: "string", Description: "Ref a new branch starts from. Omit for HEAD of the main checkout."},
 				{Name: "name", Type: "string", Description: "Name for the session. Omit for <repo>-<branch>, with every slash in the branch turned into a hyphen."},
 				{Name: "command", Type: "[]string", Description: "Argv to exec as the first window's process instead of a shell. No shell parses it, so nothing needs quoting."},
+				{Name: "new_branch", Type: "bool", Description: "Refuse with branch_exists when the branch, its worktree folder or its session exists already, instead of checking out a branch that exists."},
 			}, slices.Concat(setupParams, repoSourceParams)...),
 			returns: append([]verbParam{
 				{Name: "session", Type: "string", Description: "Name of the new session."},
@@ -841,6 +843,9 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "task", Type: "string", Description: "A task card the fan works on, such as t3. The card gets the fan's group and fan_id, and moves from todo or plan to doing. It keeps no holder, since the fan's attempts work on it, and claim-task next skips it while the fan has a session. A fan check and the attempts' pull requests then move it (see [tasks] auto_stage). The caller needs what claim-task needs, and the card must be held by no pane but the caller's, not blocked and not done, checked before anything is made."},
 				{Name: "task_session", Type: "string", Description: "The session of task. Omit for the caller's own session, or outside every pane the most recently active one."},
 				{Name: "human_nonce", Type: "string", Description: "With task: the attached client's nonce, so the stamp is the person's (by human)."},
+				{Name: "model", Type: "string", Description: "The model for every agent, passed with the flag each harness's manifest names ([launch] model_flag). Refused when one of the agents takes no model flag."},
+				{Name: "effort", Type: "string", Description: "The effort for every agent, one of each harness's [launch] efforts."},
+				{Name: "permission_mode", Type: "string", Description: "The permission mode for every agent, one of each harness's [launch] permissions. From an agent pane it is held to the caller's own mode."},
 				grantsParam,
 			}, slices.Concat(setupParams, repoSourceParams)...),
 			returns: []verbParam{
@@ -920,8 +925,14 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "env", Type: "object", Description: "Environment variables for the agent, name to value, on top of the daemon's; PATH in it is where the program is looked up. The rules are fan's."},
 				{Name: "protocol", Type: "string", Description: "Run the agent headless over a structured protocol instead of in its own TUI: acp (the Agent Client Protocol, for an agent command such as \"opencode acp\") or codex (the Codex app-server; app-server is added to the codex command). The pane runs tuios agent-proto, which shows the conversation as a transcript and reports the agent's state itself; the pane is ready on that report alone. Its permission requests are answered in the pane or, for a request one line shows whole, from the Inbox without [agents.approvals]. Omit for the agent's own TUI.", Accepted: agentproto.Protocols},
 				{Name: "task", Type: "string", Description: "A task card of the session, such as t3, for the new pane to work on: it is claimed for the pane as soon as the pane exists, before the wait. The caller needs what claim-task needs, and the card must be held by no pane, not blocked and not done, checked before anything is started. The session must exist already."},
+				{Name: "task_host", Type: "string", Description: "With task: the linked machine that owns the card. The new pane claims it there."},
+				{Name: "task_session", Type: "string", Description: "The card's session: there with task_host, else another session of this daemon. The pane's close lets the card go."},
+				{Name: "task_mail", Type: "bool", Description: "With task: once the pane holds the card, mail it the card from tuios (title, prompt, and the commands that finish or release it), so nothing is typed into it."},
 				{Name: "human_nonce", Type: "string", Description: "With task: the attached client's nonce, so the claim is the person's (by human)."},
 				{Name: "parent", Type: "string", Description: "The agent pane the new agent reports to, by window id or a unique start of it. Omit it from an agent pane: that pane is the parent. A pane may name itself or a pane it could type into, and the person may name any agent pane. A chain of agents stops at 8: a deeper start is refused."},
+				{Name: "model", Type: "string", Description: "The model, passed with the flag the harness's manifest names ([launch] model_flag). One word, not starting with -. Refused for a harness with no model flag."},
+				{Name: "effort", Type: "string", Description: "The effort, one of the harness's [launch] efforts, passed with its effort flag. Refused for a harness with no effort flag."},
+				{Name: "permission_mode", Type: "string", Description: "The permission mode, one of the harness's [launch] permissions, passed with its permission flag. From an agent pane it is held to the caller's own mode. Refused for a harness with no permission flag."},
 				grantsParam,
 			}, repoSourceParams...),
 			returns: []verbParam{
@@ -957,6 +968,61 @@ func buildVerbRegistry() map[string]verbEntry {
 				`{"id":1,"verb":"start-agent","params":{"session":"work","agent":"opencode acp","protocol":"acp","name":"helper","cwd":"/src/api","prompt":"Summarise the open TODOs."}}`,
 			},
 			handler: (*Daemon).verbStartAgent,
+		},
+		"agent-readiness": {
+			scope:       scopeLaunch,
+			link:        needOpen,
+			description: "Say for each harness whether it can start an agent on this machine: its program on the PATH, and for a harness whose manifest names a check ([launch] signed_in_args), whether it says it is signed in. The check runs the harness's own program, is bounded to 2 seconds, and its answer is kept for a minute; its output is matched and dropped.",
+			params: []verbParam{
+				{Name: "harnesses", Type: "[]string", Description: "Harness ids to answer for. Omit for every harness the registry knows."},
+				{Name: "env", Type: "object", Description: "PATH in it is where the programs are looked up, as for start-agent. Refused from another machine."},
+				{Name: "repo_url", Type: "string", Description: "Also say if this machine has a checkout of it."},
+				{Name: "repos_root", Type: "string", Description: "Where to look, as for start-agent."},
+				{Name: "peer_instance", Type: "string", Description: "The caller's daemon instance, for back."},
+			},
+			returns: []verbParam{
+				{Name: "agents", Type: "[]object", Description: "One per harness, by id: harness, name, command, installed, signed_in (yes, no or unknown; absent for a harness with no check), usage_limit."},
+				{Name: "repo", Type: "string", Description: "found, none or many."},
+				{Name: "load", Type: "object", Description: "cores, load1, load_ok, mem_pct, working, starting, started, instance."},
+				{Name: "cap", Type: "int", Description: "[tasks] machine_cap, 0 for none."},
+				{Name: "back", Type: "string", Description: "This machine's name for the caller, when that link is up."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"agent-readiness","params":{}}`,
+				`{"id":1,"verb":"agent-readiness","params":{"harnesses":["claude-code","codex"]}}`,
+			},
+			handler: (*Daemon).verbAgentReadiness,
+		},
+		"place-agent": {
+			scope:       scopeLaunch,
+			link:        needOpen,
+			description: "Pick the machine for a new agent, this one or a linked one, and say why. A machine is left out when the agent is not installed, signed in or free of a usage limit there, it has no checkout of the repository, its memory is full, it is at its cap, or for a card it has no link back. Of the rest the most spare cores wins; a tie goes to the checkout, then this machine. Starts nothing. Refused over a link.",
+			params: []verbParam{
+				{Name: "agent", Type: "string", Description: "The harness, such as claude. Default: the card's."},
+				{Name: "repo_url", Type: "string", Description: "The repository by origin URL. Default: the card's project."},
+				{Name: "repos_root", Type: "string", Description: "Where this machine looks for it."},
+				{Name: "clone", Type: "bool", Description: "A machine with no checkout may clone one.", Default: "false"},
+				{Name: "local_origin", Type: "string", Description: "The origin of the caller's folder here: this machine has that checkout."},
+				{Name: "task", Type: "string", Description: "A card of this daemon the agent takes."},
+				{Name: "task_session", Type: "string", Description: "The card's session."},
+				{Name: "reserve", Type: "bool", Description: "Count the pick as busy there for 90 seconds.", Default: "true"},
+				{Name: "exclude", Type: "[]string", Description: "Machines to leave out; local is this one."},
+				{Name: "env", Type: "object", Description: "PATH for this machine, as for start-agent."},
+			},
+			returns: []verbParam{
+				{Name: "host", Type: "string", Description: "The pick, empty for this machine."},
+				{Name: "name", Type: "string", Description: "The pick as a person reads it."},
+				{Name: "why", Type: "string", Description: "One line on why."},
+				{Name: "task_host", Type: "string", Description: "With task: the pick's name for this machine, for start-agent."},
+				{Name: "clone", Type: "bool", Description: "The pick clones the repository."},
+				{Name: "machines", Type: "[]object", Description: "Every machine, the pick first: host, name, ok, why, repo."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"place-agent","params":{"agent":"claude"}}`,
+				`{"id":1,"verb":"place-agent","params":{"agent":"codex","repo_url":"git@github.com:acme/api.git"}}`,
+				`{"id":1,"verb":"place-agent","params":{"task":"t4","task_session":"api"}}`,
+			},
+			handler: (*Daemon).verbPlaceAgent,
 		},
 		"delegate": {
 			scope:       scopeLaunch,
@@ -2590,7 +2656,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "message", Type: "string", Description: "Optional short note reported with the state, e.g. what the agent is waiting for."},
 				{Name: "source", Type: "string", Description: "Where the state came from. A source ranked below the one that last set the window is refused. The result then reports applied false and the state that stands.", Accepted: AgentSourceNames, Default: "report"},
 				{Name: "harness", Type: "string", Description: "Optional id of the harness the state is about, reported back by get-agent-state."},
-				{Name: "kind", Type: "string", Description: "What a needs_input state waits for: approval for a tool call waiting to be allowed, question for anything else. Only valid with needs_input. Omitted, it is guessed from message. Reported back by get-agent-state and list-agents as blocked_by.", Accepted: agentKindNames},
+				{Name: "kind", Type: "string", Description: "What a needs_input state waits for: approval for a tool call waiting to be allowed, question for anything else. Only valid with needs_input, except usage_limit, which is only valid with errored and stops task dispatch. Omitted, it is guessed from message. Reported back by get-agent-state and list-agents as blocked_by.", Accepted: agentKindNames},
 				{Name: "agent_session_id", Type: "string", Description: "The harness's own id for the conversation, as a hook reports it. It is stored on the window for a later resume. It also turns on the nested-session guard: while the pane's harness is working or needs_input by its own report, a report for a different conversation or from a different harness is refused with reason foreign_session or foreign_harness."},
 				{Name: "transcript_path", Type: "string", Description: "The transcript file the harness is writing, as a hook reports it. For a harness whose manifest has a transcript reader, the window is joined to this exact file instead of a searched one. It must be a regular file under the harness's transcript folder, and a process in a pane may name one only for its own pane. Kept in daemon memory only."},
 				{Name: "transcript_leaf", Type: "string", Description: "Pi's selected tree entry id, at most 128 letters, digits, '-' or '_'. A present empty string selects the empty branch; omission preserves the previous selection or uses the last complete entry for an old hook. Requires harness pi and transcript_path. Kept in daemon memory only."},
@@ -2742,6 +2808,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "activity", Type: "string", Description: "The state in one word: working, waiting, resting, unknown or none."},
 				{Name: "ready", Type: "bool", Description: "Whether ask-agent would type at the pane now."},
 				{Name: "blocked_by", Type: "string", Description: "approval or question for a pane on needs_input, empty otherwise."},
+				{Name: "waits_on", Type: "string", Description: "What a done or idle agent still runs after its turn, read from its screen, such as 1 background shell. Empty otherwise."},
 				{Name: "agent_session_id", Type: "string", Description: "The harness's own conversation id, empty until a hook reports one."},
 				{Name: "meta", Type: "object", Description: "The set-agent-meta keys, key to value."},
 				{Name: "queued", Type: "int", Description: "How many messages wait in the pane's delivery queue."},
@@ -3161,7 +3228,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "decision", Type: "string", Description: "once, always or deny, whichever the item's options offer, or ask to give the prompt back to the pane.", Accepted: approvalReplies},
 				{Name: "message", Type: "string", Description: "The reason for a deny, which the harness passes to the model. One line, at most 500 bytes."},
 				{Name: "human_nonce", Type: "string", Description: "The nonce the daemon issued in an attach reply, for a client attached now over the same kind of connection. The TUI sends its own."},
-				{Name: "summary", Type: "string", Description: "The item's summary the decision was made from. When given and the hold is now on another line, nothing is answered: applied is false with reason changed, and the hold runs on. The TUI always sends it."},
+				{Name: "summary", Type: "string", Description: "The item's summary the decision was made from. Required for once and always: an allow without it is refused with invalid_params and nothing is answered. When the hold is now on another line, nothing is answered: applied is false with reason changed, and the hold runs on. A deny may leave it out."},
 				{Name: "risk_ack", Type: "[]string", Description: "For once or always on an item that matched risk rules: exactly the item's risk list, which says the person saw them. Without it such an allow is refused with risk_unacknowledged. A deny needs none."},
 				{Name: "plan_sha", Type: "string", Description: "For a plan item: the plan_sha of the plan that was shown. An answer without it, or for another plan, is not applied."},
 				{Name: "edit_sha", Type: "string", Description: "For once on a held_edit item: the edit_sha of the body shown. Without it the allow is refused with edit_unreviewed."},
@@ -3411,6 +3478,10 @@ func buildVerbRegistry() map[string]verbEntry {
 	// a file of their own. See verb_protocol_agents.go.
 	maps.Copy(table, agentWorkVerbs())
 	maps.Copy(table, taskVerbs())
+	// exec, what tuios run --host sends. See verb_exec.go.
+	maps.Copy(table, execVerbs())
+	maps.Copy(table, taskVerifyVerbs())
+	maps.Copy(table, taskDispatchVerbs(verbParam{Name: "human_nonce", Type: "string", Description: "The attached client's nonce, to act as the person (by human). One that does not verify is refused with not_human."}))
 	// The checkpoint verbs. See verb_checkpoint.go.
 	maps.Copy(table, checkpointVerbs())
 	// The ship verbs. See verb_ship.go.

@@ -246,7 +246,7 @@ func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings)
 	for _, action := range []string{
 		config.ActionInboxAllow, config.ActionInboxAllowAlways, config.ActionInboxReply, config.ActionInboxDenyReason,
 		config.ActionInboxPeek, config.ActionInboxGo, config.ActionInboxWrite, config.ActionInboxNewAgent, config.ActionInboxCompare, config.ActionInboxArtifact,
-		config.ActionInboxBoard, config.ActionInboxBoardLayout, config.ActionInboxViewList, config.ActionInboxTake,
+		config.ActionInboxBoard, config.ActionInboxBoardLayout, config.ActionInboxViewList, config.ActionInboxTake, config.ActionInboxShip,
 		config.ActionInboxStagePrev, config.ActionInboxStageNext,
 		config.ActionInboxDismiss, config.ActionInboxResume, config.ActionInboxPassOn, config.ActionInboxFilter,
 		config.ActionInboxSelect, config.ActionInboxMailbox, config.ActionInboxReview, config.ActionInboxSnooze,
@@ -255,6 +255,8 @@ func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings)
 		config.ActionInboxTabPrev, config.ActionInboxTabNext, config.ActionInboxExpand, config.ActionInboxFold,
 		config.ActionInboxPromptPrev, config.ActionInboxPromptNext, config.ActionInboxChild,
 		config.ActionInboxDetailDown, config.ActionInboxDetailUp,
+		config.ActionInboxRegionNext, config.ActionInboxRegionPrev, config.ActionInboxEscape, config.ActionInboxNextNeeds,
+		config.ActionInboxListNarrower, config.ActionInboxListWider, config.ActionInboxSide, config.ActionInboxZoom,
 	} {
 		inbox(action, config.ActionDescriptions[action])
 	}
@@ -297,7 +299,6 @@ const HelpCategorySidebar = "Sidebar"
 // usual auto-selection.
 func (m *OS) OpenHelpAtCategory(name string) {
 	m.ShowHelp = true
-	m.helpBackToAgents = false
 	m.HelpScrollOffset = 0
 	m.HelpSearchMode = false
 	m.HelpSearchQuery = ""
@@ -308,16 +309,6 @@ func (m *OS) OpenHelpAtCategory(name string) {
 			return
 		}
 	}
-}
-
-// HelpClosed is called after the help overlay closes. Help opened from the
-// agents view opens that view again, on the agent it was on.
-func (m *OS) HelpClosed() {
-	if !m.helpBackToAgents {
-		return
-	}
-	m.helpBackToAgents = false
-	m.OpenInbox("")
 }
 
 // HelpStepCategory moves the help's section strip by delta under the list
@@ -645,6 +636,7 @@ func generateCopyModeBindings(registry *config.KeybindRegistry, s *config.Settin
 		{config.ActionCopyModeLineStart, "Line start"},
 		{config.ActionCopyModeFirstNonBlank, "First nonblank"},
 		{config.ActionCopyModeLineEnd, "Line end"},
+		{config.ActionCopyModeExit, "Leave copy mode"},
 	} {
 		if keys := registry.Keys(config.TableCopyMode, row.action); len(keys) > 0 {
 			bound = append(bound, HelpBinding{Action: row.action, Keys: keys, Description: row.desc, Category: HelpCategoryCopyMode})

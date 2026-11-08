@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -80,7 +81,8 @@ func TestPresenceNonceScope(t *testing.T) {
 	if _, verr := anyConn.call(t, "respond", map[string]any{"session": otherSession, "window": ow, "action": "deny", "human_nonce": unscoped["human_nonce"]}); verr != nil && verr.Code == "not_human" {
 		t.Fatalf("a presence with no session was refused by respond in session %s: %v", otherSession, verr)
 	}
-	r, verr := anyConn.call(t, "reply-approval", map[string]any{"request_id": id, "decision": "once", "human_nonce": unscoped["human_nonce"]})
+	r, verr := anyConn.call(t, "reply-approval", map[string]any{"request_id": id, "decision": "once", "human_nonce": unscoped["human_nonce"],
+		"summary": heldApprovalLine(t, ctl, otherSession, id)})
 	if verr != nil || r["applied"] != true {
 		t.Fatalf("a presence with no session did not answer the approval in session %s: %v %v", otherSession, r, verr)
 	}
@@ -157,8 +159,16 @@ wait:
 	writeReviewArtifact(t, "stream-lease-expiry.txt", fmt.Sprintf("silent stream: lease_expired after %s, pane back at 80x24\nrenewing stream: pane held at 31x9 after %s\n", took.Round(100*time.Millisecond), time.Since(start).Round(time.Second)))
 }
 
+// busyRefusal is an E frame with code busy.
+type busyRefusal struct {
+	Code     string `json:"code"`
+	Accepted *int64 `json:"accepted"`
+}
+
 // TestStreamPaneLeaseBehindBlockedInput: input the pane does not read never
-// holds up a lease frame, and input past the queue is refused as busy.
+// holds up a lease frame, and input past the queue is refused as busy, with
+// the offset to send again from; every frame after a refused one is refused
+// too, so the pane never gets them out of order.
 func TestStreamPaneLeaseBehindBlockedInput(t *testing.T) {
 	_, link, ctl, w1, _ := limitsDaemon(t)
 	if _, verr := ctl.call(t, "resize", map[string]any{"session": streamSession, "window": w1, "width": 80, "height": 24}); verr != nil {
@@ -206,26 +216,45 @@ func TestStreamPaneLeaseBehindBlockedInput(t *testing.T) {
 		}
 	}
 	leaseTook := time.Since(sent)
-	// Fill the queue: the next frames are refused as busy.
-	busy := 0
+	// Fill the queue: the next frames are refused as busy, with the offset
+	// to send again from.
 	for range 8 {
 		ps.send(t, 'I', chunk)
 	}
-	end := time.After(5 * time.Second)
-	for busy == 0 {
-		select {
-		case f, ok := <-frames:
-			if !ok {
-				t.Fatalf("the stream ended while waiting for busy")
+	busy := func(why string) busyRefusal {
+		t.Helper()
+		end := time.After(5 * time.Second)
+		for {
+			select {
+			case f, ok := <-frames:
+				if !ok {
+					t.Fatalf("the stream ended while waiting for busy")
+				}
+				var r busyRefusal
+				if f[0].(byte) == 'E' && json.Unmarshal(f[1].([]byte), &r) == nil && r.Code == "busy" {
+					return r
+				}
+			case <-end:
+				t.Fatalf("ASSERTION: %s", why)
 			}
-			if f[0].(byte) == 'E' && frameCode(t, f[1].([]byte)) == "busy" {
-				busy++
-			}
-		case <-end:
-			t.Fatalf("input past the queue into a pane that does not read was never refused as busy")
 		}
 	}
-	writeReviewArtifact(t, "stream-lease-behind-input.txt", fmt.Sprintf("lease frame after blocked input: R 33x7 after %s\ninput past the queue: E busy\n", leaseTook.Round(time.Millisecond)))
+	first := busy("input past the queue into a pane that does not read was never refused as busy")
+	if first.Accepted == nil || *first.Accepted <= 0 || *first.Accepted%int64(len(chunk)) != 0 {
+		t.Fatalf("ASSERTION: the busy refusal gives accepted %v, want the bytes of the whole frames taken", first.Accepted)
+	}
+	// Drain the other refusals of the burst, then a frame small enough to
+	// fit: it is refused too, so it is never typed before the refused ones.
+	time.Sleep(time.Second)
+	for len(frames) > 0 {
+		<-frames
+	}
+	ps.send(t, 'I', []byte("y"))
+	after := busy("a small frame after a refused one was taken, ahead of the frames refused before it")
+	if after.Accepted == nil || *after.Accepted != *first.Accepted {
+		t.Fatalf("ASSERTION: after a refusal the offset moved from %d to %v", *first.Accepted, after.Accepted)
+	}
+	writeReviewArtifact(t, "stream-lease-behind-input.txt", fmt.Sprintf("lease frame after blocked input: R 33x7 after %s\ninput past the queue: E busy, accepted %d\na small frame after it: E busy, accepted %d\n", leaseTook.Round(time.Millisecond), *first.Accepted, *after.Accepted))
 }
 
 // TestStreamPaneSnapshotCharged: a snapshot is charged to the read budget
@@ -346,5 +375,66 @@ func writeReviewArtifact(t *testing.T, name, body string) {
 	}
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
 		t.Logf("write artifact: %v", err)
+	}
+}
+
+// TestStreamPaneTypesABurstOfInputInOrder: a client sends 600 small I frames
+// in one burst, as a client that sends a frame per key does when it replays
+// typeahead, into a program that reads every byte. Every byte reaches the
+// program, in order, and no frame is refused.
+//
+// How it could pass wrongly: a program that echoed what it read could show
+// a screen that only looks complete, so the program writes what it reads to
+// a file, and the file is compared byte for byte.
+//
+// Negative controls (NEGATIVE_CONTROLS.md, TestStreamPaneTypesABurstOfInputInOrder).
+func TestStreamPaneTypesABurstOfInputInOrder(t *testing.T) {
+	base, link, ctl, w1, _ := limitsDaemon(t)
+	got := filepath.Join(base, "typed.bin")
+	spType(t, ctl, w1, "stty raw -echo; echo READING; cat > "+got+"\n")
+	spWait(t, ctl, w1, "READING")
+	ps := link.open(t, true)
+	ps.streamPane(t, newSPTranscript(t), map[string]any{"session": streamSession, "window": w1})
+	refused := make(chan string, 1024)
+	go func() {
+		for {
+			typ, payload, err := ps.frameWithin(60 * time.Second)
+			if err != nil {
+				return
+			}
+			if typ == 'E' {
+				refused <- string(payload)
+			}
+		}
+	}()
+	var want []byte
+	var burst []byte
+	for i := range 600 {
+		key := fmt.Appendf(nil, "k%03d;", i)
+		want = append(want, key...)
+		// All the frames go out in one write, as one burst on the wire.
+		burst = append(burst, 'I', 0, 0, 0, byte(len(key)))
+		burst = append(burst, key...)
+	}
+	ps.write(t, burst)
+	deadline := time.Now().Add(20 * time.Second)
+	var have []byte
+	for time.Now().Before(deadline) {
+		have, _ = os.ReadFile(got)
+		if len(have) >= len(want) {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	var errs []string
+	for len(refused) > 0 {
+		errs = append(errs, <-refused)
+	}
+	writeReviewArtifact(t, "stream-input-burst.txt", fmt.Sprintf("sent %d bytes in 600 frames\ntyped %d bytes\nrefusals: %d %q\n", len(want), len(have), len(errs), errs))
+	if len(errs) > 0 {
+		t.Errorf("ASSERTION: %d of the burst's frames were refused, into a pane that reads its input: %s", len(errs), errs[0])
+	}
+	if !bytes.Equal(have, want) {
+		t.Fatalf("ASSERTION: the program read %d bytes, want the %d bytes of the burst in order\nhave: %.200q\nwant: %.200q", len(have), len(want), have, want)
 	}
 }

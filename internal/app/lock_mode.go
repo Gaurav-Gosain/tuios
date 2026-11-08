@@ -50,14 +50,6 @@ func (m *OS) MenuState() MenuState {
 	return MenuState{Prefix: m.PrefixActive, Sub: m.SubMenu, Menu: m.Menu}
 }
 
-// SetMenuState opens the menu s names, and closes every other. The zero
-// MenuState closes them all.
-func (m *OS) SetMenuState(s MenuState) {
-	m.PrefixActive = s.Prefix
-	m.SubMenu = s.Sub
-	m.Menu = s.Menu
-}
-
 // MenuOpen reports whether the leader, or one of its menus, waits for a key.
 func (m *OS) MenuOpen() bool { return m.prefixArmed() }
 

@@ -45,7 +45,7 @@ jobs:
           # warns that it forces it onto Node 24. It works there.
           - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
             with:
-              version: 0.16.0
+              version: 0.17.1
 
           - name: Cache libghostty-vt
             uses: actions/cache@v6

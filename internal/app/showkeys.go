@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -15,8 +16,15 @@ import (
 
 // CaptureKeyEvent captures a keyboard event for the showkeys overlay.
 // It handles key formatting, modifier extraction, and history management.
+//
+// A modifier pressed on its own (kitty keyboard reports it as a key, such as
+// leftsuper) is not recorded: it is part of the chord that follows, which
+// names it.
 func (m *OS) CaptureKeyEvent(msg tea.KeyPressMsg) {
 	key := msg.Key()
+	if modifierOnlyKey(key.Code) {
+		return
+	}
 	keyStr := msg.String()
 
 	// Extract modifiers from the key event
@@ -26,6 +34,15 @@ func (m *OS) CaptureKeyEvent(msg tea.KeyPressMsg) {
 	}
 	if key.Mod&tea.ModAlt != 0 {
 		modifiers = append(modifiers, "Alt")
+	}
+	if key.Mod&tea.ModSuper != 0 {
+		modifiers = append(modifiers, superLabel())
+	}
+	if key.Mod&tea.ModHyper != 0 {
+		modifiers = append(modifiers, "Hyper")
+	}
+	if key.Mod&tea.ModMeta != 0 {
+		modifiers = append(modifiers, "Meta")
 	}
 	// Skip Shift modifier for single letter keys: it's implied by uppercase.
 	// We only show Shift for non-letter keys (like Shift+Space, Shift+Tab, etc.)
@@ -63,6 +80,28 @@ func (m *OS) CaptureKeyEvent(msg tea.KeyPressMsg) {
 	if len(m.RecentKeys) > m.KeyHistoryMaxSize {
 		m.RecentKeys = m.RecentKeys[1:]
 	}
+}
+
+// modifierOnlyKey reports whether code is a modifier or lock key pressed on
+// its own: shift, ctrl, alt, super, hyper, meta and the ISO level shifts, left
+// or right, and caps lock, num lock and scroll lock.
+func modifierOnlyKey(code rune) bool {
+	switch {
+	case code >= tea.KeyLeftShift && code <= tea.KeyIsoLevel5Shift:
+		return true
+	case code == tea.KeyCapsLock, code == tea.KeyScrollLock, code == tea.KeyNumLock:
+		return true
+	}
+	return false
+}
+
+// superLabel is the name of the super key on this machine's keyboard: Cmd on
+// macOS, Super elsewhere.
+func superLabel() string {
+	if runtime.GOOS == "darwin" {
+		return "Cmd"
+	}
+	return "Super"
 }
 
 // isSingleLetter checks if a key string is a single letter (for shift detection)

@@ -197,7 +197,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			// beginWindowDrag leaves window management on, which is right for a
 			// title-bar grab but not here: a ctrl-drag from a pane the user is
 			// typing in should hand typing back when the pane lands.
-			o.CtrlDragWasTerminal = o.Mode == app.TerminalMode
+			o.BeginCtrlDrag()
 			beginWindowDrag(o, o.CtrlDragIndex, o.DragStartX, o.DragStartY)
 		}
 	}

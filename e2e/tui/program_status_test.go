@@ -333,24 +333,37 @@ func TestProgramStatusDrivesTheRailAndInbox(t *testing.T) {
 		t.Fatalf("focus the pane: %v\n%s", err, out)
 	}
 	enterTerminalMode(t, term)
-	if err := term.SendKeys("true", tuitest.Enter); err != nil {
+	if err := term.SendKeys("echo TY\"\"PED", tuitest.Enter); err != nil {
 		t.Fatalf("type: %v", err)
 	}
 	st = waitPSState(t, base, session, pane, "typing", func(s psState) bool { return len(s.Program) == 0 })
+	// The records end at the first key; the line is done once the shell ran
+	// it, so the next step's line is not typed onto this one.
+	waitCapture(t, base, session, pane, "TYPED")
 	if st.State != "none" {
 		t.Errorf("ASSERTION: with no record left the state is %q, want none", st.State)
 	}
 
 	// 9. tuios status with no controlling terminal, as an agent's shell tool
-	// runs it: setsid drops the terminal, and standard input and output are
+	// runs it: a new session drops the terminal, and standard input and output are
 	// a file and a pipe. The report reaches the pane through the daemon, and
 	// nothing goes to standard output. The first line proves /dev/tty does
 	// not open there. The pipe ends in a file, so a report written to
 	// standard output never reaches the pane's emulator.
-	sendText(`sh -c 'if setsid -w sh -c ": >/dev/tty" </dev/null 2>/dev/null; then echo TTY""-OPEN; else echo TTY""-NONE; fi; ` +
-		`setsid -w "` + tuiosBin + `" status working --app notty --msg "No tty here" </dev/null 2>notty.err | cat >notty.out; echo NOTTY""-SENT; sleep 8'` + "\n")
+	// detach starts its command in a new session, as setsid(1) does. macOS
+	// has no setsid command, and perl's POSIX::setsid is on both. The check
+	// runs inside the detached shell, so a detach that failed prints nothing
+	// and cannot pass for one that dropped the terminal.
+	detach := filepath.Join(base, "detach.pl")
+	if err := os.WriteFile(detach, []byte("use POSIX;\nPOSIX::setsid() >= 0 or die \"setsid: $!\";\nexec @ARGV or die \"exec: $!\";\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The probe runs in a subshell: in dash (sh on Linux) a redirection that
+	// fails on : ends the shell, so the else would never print.
+	sendText(`sh -c 'perl ` + detach + ` sh -c "if (: >/dev/tty) 2>/dev/null; then echo TTY""-OPEN; else echo TTY""-NONE; fi" </dev/null; ` +
+		`perl ` + detach + ` "` + tuiosBin + `" status working --app notty --msg "No tty here" </dev/null 2>notty.err | cat >notty.out; echo NOTTY""-SENT; sleep 8'` + "\n")
 	if text := waitCapture(t, base, session, pane, "NOTTY-SENT"); !strings.Contains(text, "TTY-NONE") {
-		t.Fatalf("setsid did not drop the terminal, so this step proves nothing:\n%s", text)
+		t.Fatalf("the detach did not drop the terminal, so this step proves nothing:\n%s", text)
 	}
 	st = waitPSStateWithin(t, base, session, pane, "the report without a terminal", 5*time.Second, func(s psState) bool { return len(s.Program) == 1 })
 	if st.records() != "-=working" || st.Program[0].App != "notty" || st.Message != "No tty here" || st.Source != "program" {

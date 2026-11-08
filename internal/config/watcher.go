@@ -646,6 +646,6 @@ func validateLayered(lc *LayeredConfig) (*UserConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	cfg.LoadWarnings = append(append([]string(nil), lc.Warnings...), DroppedWarnings(DropUnreadableKeys(cfg, lc))...)
+	cfg.LoadWarnings = append(append(append([]string(nil), lc.Warnings...), UnknownKeybindTables(lc)...), DroppedWarnings(DropUnreadableKeys(cfg, lc))...)
 	return cfg, nil
 }

@@ -488,6 +488,29 @@ func (m *OS) FocusWindow(i int) *OS {
 // A, C, B, clicking A put B back under C. Sorting by the current Z first
 // means the only window that moves is the one being raised.
 func (m *OS) RecalcZOrder() {
+	m.recalcZOrderWithTop(nil)
+}
+
+// RaiseNewSurfaces renumbers Z as RecalcZOrder does, and then puts the TML
+// surfaces among the windows this client has just placed on top of their
+// band, above the focused one. A surface a program shows without the focus,
+// with tuios tml show --pane, is there to be seen. It otherwise opened under
+// the focused window, and with tiling off the person could not see it.
+//
+// Only surfaces. Any other pane opened without the focus, such as the one
+// tmux split-window -d opens, was asked to stay in the background, and
+// raising it covered the pane the person was working in.
+func (m *OS) RaiseNewSurfaces(placed []*terminal.Window) {
+	var surfaces []*terminal.Window
+	for _, w := range placed {
+		if session.TMLSurfaceID(w.URI) != "" {
+			surfaces = append(surfaces, w)
+		}
+	}
+	m.recalcZOrderWithTop(surfaces)
+}
+
+func (m *OS) recalcZOrderWithTop(top []*terminal.Window) {
 	focused := m.FocusedWindow
 	if focused < 0 || focused >= len(m.Windows) {
 		focused = -1
@@ -499,17 +522,24 @@ func (m *OS) RecalcZOrder() {
 	slices.SortStableFunc(order, func(a, b int) int {
 		return cmp.Compare(m.Windows[a].Z, m.Windows[b].Z)
 	})
+	raised := func(j int) bool { return slices.Contains(top, m.Windows[j]) }
 	z := 0
 	place := func(floating bool) {
 		for _, j := range order {
-			if j != focused && m.Windows[j].IsFloating == floating {
+			if j != focused && !raised(j) && m.Windows[j].IsFloating == floating {
 				m.Windows[j].Z = z
 				z++
 			}
 		}
-		if focused >= 0 && m.Windows[focused].IsFloating == floating {
+		if focused >= 0 && !raised(focused) && m.Windows[focused].IsFloating == floating {
 			m.Windows[focused].Z = z
 			z++
+		}
+		for _, w := range top {
+			if w.IsFloating == floating && slices.Contains(m.Windows, w) {
+				w.Z = z
+				z++
+			}
 		}
 	}
 	place(false)
@@ -1046,7 +1076,7 @@ func (m *OS) DeleteWindow(i int) *OS {
 		m.FocusedWindow = -1
 		m.LogInfo("No windows remaining, switching to window management mode")
 		// Reset to window management mode when no windows are left
-		m.Mode = WindowManagementMode
+		m.ChooseMode(WindowManagementMode, ModeCauseNoPane)
 	} else if i < m.FocusedWindow {
 		m.FocusedWindow--
 	} else if i == m.FocusedWindow {

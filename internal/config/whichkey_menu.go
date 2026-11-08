@@ -84,6 +84,7 @@ var minimizeMenuRows = []menuRow{
 	{parts: []menuPart{{"minimize_prefix_focused", "Minimize focused window"}}, desc: "Minimize focused window"},
 	{parts: []menuPart{{"minimize_prefix_restore_1", "Restore window"}, {"minimize_prefix_restore_2", "Restore window"}, {"minimize_prefix_restore_3", "Restore window"}, {"minimize_prefix_restore_4", "Restore window"}, {"minimize_prefix_restore_5", "Restore window"}, {"minimize_prefix_restore_6", "Restore window"}, {"minimize_prefix_restore_7", "Restore window"}, {"minimize_prefix_restore_8", "Restore window"}, {"minimize_prefix_restore_9", "Restore window"}}, desc: "Restore window", numbered: true},
 	{parts: []menuPart{{"minimize_prefix_restore_all", "Restore all"}}, desc: "Restore all"},
+	{parts: []menuPart{{"minimize_prefix_focus_only", "Focus only"}}, desc: "Focus only"},
 	{parts: []menuPart{{"minimize_prefix_cancel", "Cancel"}}, desc: "Cancel"},
 }
 
@@ -192,7 +193,8 @@ var leaderSessionRows = []menuRow{
 	// height reason.
 	{parts: []menuPart{{"prefix_workspace_switcher", "Workspaces"}, {"set_note", "Session note"}}, desc: "Workspaces/session note"},
 	{parts: []menuPart{{"choose_tree", "Find a pane"}}, desc: "Find a pane"},
-	{parts: []menuPart{{"goto_picker", "Go to anything"}}, desc: "Go to anything"},
+	// The task capture shares the go-to row, for the same height reason.
+	{parts: []menuPart{{"goto_picker", "Go to anything"}, {"prefix_new_task", "New task"}}, desc: "Go to anything/new task"},
 	{parts: []menuPart{{"prefix_close_session", "Close session"}}, desc: "Close session"},
 	{parts: []menuPart{{"toggle_scratch", "Scratch session"}}, desc: "Scratch session"},
 	{parts: []menuPart{{"last_session", "Last session"}}, desc: "Last session"},

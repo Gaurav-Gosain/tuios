@@ -69,13 +69,19 @@ func (m *OS) composerClipboardCmd(comp *composer.Model, window string) tea.Cmd {
 	return forReply(comp, probeImageCmd(clip, window, imagePasteKey))
 }
 
-// composerLive reports whether comp is a draft open now: the Inbox reply's or
-// the mail editor's. A read for any other draft is dropped.
+// composerLive reports whether comp is a draft open now: the Inbox reply's,
+// the New agent sheet's task or the mail editor's. A read for any other draft is dropped.
 func (m *OS) composerLive(comp *composer.Model) bool {
 	if comp == nil {
 		return false
 	}
 	if ed := m.Inbox.reply.editor; ed != nil && ed.comp == comp {
+		return true
+	}
+	if sp := m.Inbox.ck.spawn; sp != nil && sp.task == comp {
+		return true
+	}
+	if tc := m.taskCapture; tc != nil && tc.ed == comp && m.TaskCaptureOpen() {
 		return true
 	}
 	return m.AgentMail.Composing && m.AgentMail.Comp == comp

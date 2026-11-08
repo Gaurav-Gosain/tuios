@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -93,8 +94,14 @@ func TestSidebarFolderCopyPath(t *testing.T) {
 	}
 }
 
+// systemOpener is the program tuios starts to open a file on this platform: open
+// on macOS, xdg-open elsewhere. The stub takes its name, so a test never starts
+// the real one: on macOS that opened TextEdit and Finder windows on the screen
+// of whoever ran the suite.
+var systemOpener = map[bool]string{true: "open", false: "xdg-open"}[runtime.GOOS == "darwin"]
+
 // openStubs writes two programs that record how they were started, one line
-// each, to record: xdg-open, which stands in for the system opener, and rule,
+// each, to record: the system opener (systemOpener), and rule,
 // which a [[files.open]] rule names. It returns the folder they are in and the
 // path of rule. The test puts the folder first on PATH and sets DISPLAY, so the
 // opener tuios picks is the real default path, on the real lookup.
@@ -104,7 +111,7 @@ func openStubs(t *testing.T, base, record string) (dir, rule string) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"xdg-open", "rule"} {
+	for _, name := range []string{systemOpener, "rule"} {
 		body := "#!/bin/sh\nprintf '" + name + " %s\\n' \"$*\" >> '" + record + "'\n"
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o755); err != nil {
 			t.Fatal(err)
@@ -191,17 +198,25 @@ func TestSidebarFileOpenSystem(t *testing.T) {
 	opened := false
 	for range 30 {
 		sendKeys(t, term, "j", "o")
-		time.Sleep(100 * time.Millisecond)
-		if len(openRecord(record)) > 0 && openRecord(record)[0] != "" {
-			opened = true
+		// Wait for this o to show whether it opened something before the
+		// next j: the opener starts at once and says so, but its record can
+		// land later (on macOS a process start often takes longer than a
+		// short sleep), and a j sent meanwhile walks on to open the next row.
+		deadline := time.Now().Add(time.Second)
+		for time.Now().Before(deadline) && !opened {
+			opened = len(openRecord(record)) > 0 && openRecord(record)[0] != "" ||
+				strings.Contains(term.Snapshot(), "Opened ")
+			time.Sleep(50 * time.Millisecond)
+		}
+		if opened {
 			break
 		}
 	}
 	if !opened {
 		t.Fatalf("o on the rows of the listing started nothing\n%s", term.Snapshot())
 	}
-	waitOpenRecord(t, term, record, []string{"xdg-open " + filepath.Join(dir, "alpha")}, "o on a folder")
-	waitForAll(t, term, uiTimeout, "the success note", "Opened alpha with xdg-open.")
+	waitOpenRecord(t, term, record, []string{systemOpener + " " + filepath.Join(dir, "alpha")}, "o on a folder")
+	waitForAll(t, term, uiTimeout, "the success note", "Opened alpha with "+systemOpener+".")
 	railLists(t, term, "o on a folder walked into it", []string{"brief.txt", "zulu/"}, nil)
 	copiesFrame(t, term, "open-system-folder")
 	saveArtifact(t, term, art, "open-system-folder")
@@ -215,10 +230,10 @@ func TestSidebarFileOpenSystem(t *testing.T) {
 	clickNoteGone(t, term)
 	sendKeys(t, term, "o")
 	waitOpenRecord(t, term, record, []string{
-		"xdg-open " + filepath.Join(dir, "alpha"),
-		"xdg-open " + filepath.Join(dir, "brief.txt"),
+		systemOpener + " " + filepath.Join(dir, "alpha"),
+		systemOpener + " " + filepath.Join(dir, "brief.txt"),
 	}, "o on a file")
-	waitForAll(t, term, uiTimeout, "the success note", "Opened brief.txt with xdg-open.")
+	waitForAll(t, term, uiTimeout, "the success note", "Opened brief.txt with "+systemOpener+".")
 
 	// A file a rule matches goes to the rule's program, in its argv. The rule
 	// is written in capitals, so the match also ignores case.
@@ -230,8 +245,8 @@ func TestSidebarFileOpenSystem(t *testing.T) {
 	clickNoteGone(t, term)
 	sendKeys(t, term, "o")
 	waitOpenRecord(t, term, record, []string{
-		"xdg-open " + filepath.Join(dir, "alpha"),
-		"xdg-open " + filepath.Join(dir, "brief.txt"),
+		systemOpener + " " + filepath.Join(dir, "alpha"),
+		systemOpener + " " + filepath.Join(dir, "brief.txt"),
 		"rule --page 1 " + filepath.Join(dir, "paper.pdf"),
 	}, "o on a file a rule matches")
 	waitForAll(t, term, uiTimeout, "the success note", "Opened paper.pdf with rule.")
@@ -245,8 +260,8 @@ func TestSidebarFileOpenSystem(t *testing.T) {
 	col, row, _ = findOnGrid(term.Screen(), "Open with system")
 	mouseClick(t, term, col+1, row, tuitest.MouseLeft, 0)
 	waitOpenRecord(t, term, record, []string{
-		"xdg-open " + filepath.Join(dir, "alpha"),
-		"xdg-open " + filepath.Join(dir, "brief.txt"),
+		systemOpener + " " + filepath.Join(dir, "alpha"),
+		systemOpener + " " + filepath.Join(dir, "brief.txt"),
 		"rule --page 1 " + filepath.Join(dir, "paper.pdf"),
 		"rule --page 1 " + filepath.Join(dir, "paper.pdf"),
 	}, "the menu row")

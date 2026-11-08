@@ -73,8 +73,20 @@ func (c *ccContent) UnmarshalJSON(b []byte) error {
 }
 
 // ccResultContent is a tool result's content: a string, or text and image
-// blocks, joined as text.
-type ccResultContent string
+// blocks. The text blocks are joined, with "[image]" where an image was, and
+// the images are kept apart, by their source alone: ReadImage reads the data.
+type ccResultContent struct {
+	text   string
+	images []ccImageSource
+}
+
+// ccImageSource is an image block's source, without its data.
+type ccImageSource struct {
+	Type      string `json:"type"`
+	MediaType string `json:"media_type"`
+	// at is the block's place in the content.
+	at int
+}
 
 func (c *ccResultContent) UnmarshalJSON(b []byte) error {
 	b = bytes.TrimSpace(b)
@@ -82,20 +94,18 @@ func (c *ccResultContent) UnmarshalJSON(b []byte) error {
 	case len(b) == 0 || b[0] == 'n':
 		return nil
 	case b[0] == '"':
-		var s string
-		err := jsonx.Unmarshal(b, &s)
-		*c = ccResultContent(s)
-		return err
+		return jsonx.Unmarshal(b, &c.text)
 	case b[0] != '[':
 		return nil
 	}
 	var parts []struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
+		Type   string        `json:"type"`
+		Text   string        `json:"text"`
+		Source ccImageSource `json:"source"`
 	}
 	_ = jsonx.Unmarshal(b, &parts)
 	var sb strings.Builder
-	for _, p := range parts {
+	for i, p := range parts {
 		if sb.Len() > 0 {
 			sb.WriteByte('\n')
 		}
@@ -104,9 +114,11 @@ func (c *ccResultContent) UnmarshalJSON(b []byte) error {
 			sb.WriteString(p.Text)
 		case "image":
 			sb.WriteString("[image]")
+			p.Source.at = i
+			c.images = append(c.images, p.Source)
 		}
 	}
-	*c = ccResultContent(sb.String())
+	c.text = sb.String()
 	return nil
 }
 
@@ -117,6 +129,13 @@ type ccToolUseResult struct {
 	FilePath        string    `json:"filePath"`
 	Type            string    `json:"type"`
 	StructuredPatch []ccPatch `json:"structuredPatch"`
+	// File is what a Read of an image says of it: its size in pixels.
+	File struct {
+		Dimensions struct {
+			OriginalWidth  int `json:"originalWidth"`
+			OriginalHeight int `json:"originalHeight"`
+		} `json:"dimensions"`
+	} `json:"file"`
 }
 
 type ccPatch struct {
@@ -215,6 +234,31 @@ func (r *reader) recordEntries(rec *ccRecord, off int64) []Entry {
 		e.ID = prefix + strconv.Itoa(i)
 		e.At = at
 		out = append(out, e)
+		if b.Type == "tool_result" {
+			out = resultImages(out, rec, &b, e.ID, at)
+		}
+	}
+	return out
+}
+
+// resultImagesMax bounds the images one result gives entries for. A read of
+// a long PDF gives an image a page.
+const resultImagesMax = 8
+
+// resultImages appends an entry for each image a tool result holds, after
+// the result. The ID is the result's and the image's place in its content,
+// "off-i.j", which ReadImage reads.
+func resultImages(out []Entry, rec *ccRecord, b *ccBlock, id string, at int64) []Entry {
+	imgs := b.Content.images
+	for _, src := range imgs[:min(len(imgs), resultImagesMax)] {
+		e := Entry{ID: id + "." + strconv.Itoa(src.at), At: at, Role: RoleTool, Kind: KindText, Text: "[image]", ToolID: b.ToolUseID}
+		if src.Type == "base64" && imageType(src.MediaType) {
+			e.Image = &Image{MediaType: src.MediaType}
+			if dim := rec.ToolUseResult.File.Dimensions; len(imgs) == 1 && dim.OriginalWidth > 0 && dim.OriginalHeight > 0 {
+				e.Image.Width, e.Image.Height = dim.OriginalWidth, dim.OriginalHeight
+			}
+		}
+		out = append(out, e)
 	}
 	return out
 }
@@ -230,6 +274,9 @@ func (r *reader) blockEntry(rec *ccRecord, b *ccBlock) (Entry, bool) {
 		if strings.TrimSpace(b.Text) == "" {
 			return Entry{}, false
 		}
+		if role == RoleUser && InterruptText(b.Text) {
+			return Entry{Role: role, Kind: KindInterrupt}, true
+		}
 		return Entry{Role: role, Kind: KindText, raw: rawText(b.Text)}, true
 	case "image":
 		e := Entry{Role: role, Kind: KindText, Text: "[image]"}
@@ -237,10 +284,10 @@ func (r *reader) blockEntry(rec *ccRecord, b *ccBlock) (Entry, bool) {
 			e.Image = &Image{MediaType: b.Source.MediaType}
 		}
 		return e, true
-	case "thinking":
-		if strings.TrimSpace(b.Thinking) == "" {
-			return Entry{}, false
-		}
+	case "thinking", "redacted_thinking":
+		// Most thinking blocks carry only a signature and no text. They
+		// are kept, so the thread can say the agent thought, and for how
+		// long.
 		return Entry{Role: RoleAssistant, Kind: KindThinking, raw: rawText(b.Thinking)}, true
 	case "tool_use":
 		return r.toolCall(b), true
@@ -263,16 +310,50 @@ func rawText(s string) *rawEntry {
 // secret that starts in them is masked to their end.
 func (r *reader) toolResult(rec *ccRecord, b *ccBlock) Entry {
 	e := Entry{Role: RoleTool, Kind: KindToolResult, ToolID: b.ToolUseID, Status: StatusOK}
+	content := b.Content.text
 	if b.IsError {
 		e.Status = StatusError
+		if reason, ok := declined(content); ok {
+			e.Status, content = StatusDeclined, reason
+		}
 	}
-	text, cutLines := headLines(string(b.Content), ResultLines)
+	text, cutLines := headLines(content, ResultLines)
 	text, cutBytes := cutString(text, rawTextMax)
 	e.raw = &rawEntry{text: text, textCut: cutLines || cutBytes}
 	if p := rec.ToolUseResult.StructuredPatch; len(p) > 0 {
 		e.raw.diff = &diffSrc{file: rec.ToolUseResult.FilePath, patch: p}
 	}
 	return e
+}
+
+// InterruptText reports whether a person's text is the mark Claude Code
+// writes where the person stopped the agent.
+func InterruptText(s string) bool {
+	switch strings.TrimSpace(s) {
+	case "[Request interrupted by user]", "[Request interrupted by user for tool use]":
+		return true
+	}
+	return false
+}
+
+// declineText starts the result Claude Code writes for a call the person
+// declined, and declineSaid comes before what they said with it.
+const (
+	declineText = "The user doesn't want to proceed with this tool use."
+	declineSaid = "the user said:\n"
+)
+
+// declined reports whether an error result is a decline, and returns what
+// the person said with it, "" when they said nothing.
+func declined(s string) (string, bool) {
+	if !strings.HasPrefix(s, declineText) {
+		return "", false
+	}
+	_, said, ok := strings.Cut(s, declineSaid)
+	if !ok {
+		return "", true
+	}
+	return strings.TrimSpace(said), true
 }
 
 // toolCall is a tool call, a plan or a todo list, as decoded. finish cleans

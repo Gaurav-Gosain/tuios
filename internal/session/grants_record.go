@@ -154,7 +154,9 @@ func (d *Daemon) verbApplyConfig(cs *connState, params json.RawMessage) (any, *v
 	}
 	// A key tuios cannot read is dropped, the same as on load, and the
 	// person is told which.
-	dropped := config.DroppedWarnings(config.DropUnreadableKeys(cfg, lc))
+	// A table under [keybindings] that tuios does not have is listed with
+	// them: the decoder drops it, and every binding in it (issue #1734).
+	dropped := append(config.UnknownKeybindTables(lc), config.DroppedWarnings(config.DropUnreadableKeys(cfg, lc))...)
 
 	before := d.configSnapshot()
 	if p.Host != "" {
@@ -217,6 +219,7 @@ type configSnapshot struct {
 	grants []string
 	hosts  map[string]federation.Host
 	links  map[string]config.HostConfig
+	hooks  []string
 }
 
 func (d *Daemon) configSnapshot() configSnapshot {
@@ -232,6 +235,7 @@ func (d *Daemon) configSnapshot() configSnapshot {
 	if t := d.linkPolicies.Load(); t != nil {
 		s.links = *t
 	}
+	s.hooks = d.hooks.Commands()
 	return s
 }
 
@@ -284,6 +288,16 @@ func describeConfigChanges(before, after configSnapshot) []string {
 		}
 		if !sameRoots {
 			out = append(out, fmt.Sprintf("%s may now write files in %s here. Before: %s.", who, grantWords(linkRootPaths(now)), grantWords(linkRootPaths(was))))
+		}
+	}
+	for _, h := range after.hooks {
+		if !slices.Contains(before.hooks, h) {
+			out = append(out, "Hook "+h+" runs now.")
+		}
+	}
+	for _, h := range before.hooks {
+		if !slices.Contains(after.hooks, h) {
+			out = append(out, "Hook "+h+" no longer runs.")
 		}
 	}
 	return out

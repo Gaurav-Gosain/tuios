@@ -2,7 +2,7 @@
 
 The docs site has the same reference: https://tuios.dev/docs/hooks
 
-Thirteen events, each running a shell command with `TUIOS_*` environment variables carrying the facts. This page lists every event and every variable. Hooks are read once at startup from the `[hooks]` table.
+Thirteen events, each running a shell command with `TUIOS_*` environment variables carrying the facts. This page lists every event and every variable. Hooks are read at startup, and again by `tuios config apply`, from the `[hooks]` table.
 
 ## Which side runs a hook
 
@@ -164,7 +164,9 @@ Use it to free the disk space of an agent you are done with:
 after-settle = '[ -n "$TUIOS_WORKTREE_PATH" ] && cargo clean'
 ```
 
-The daemon reads the `[hooks]` table when it starts. Restart the daemon with `tuios restart-server` after you change a hook the daemon runs. The daemon does not reload hooks when the file changes.
+The daemon reads the `[hooks]` table when it starts. After you add or change a hook the daemon runs, run `tuios config apply` from a terminal outside tuios. It loads the new table, and its output names each hook that runs now and each that no longer runs. `tuios list-hooks` shows the table in force. No restart is needed.
+
+When the file changes, the daemon applies the `[hooks]` table only if it removes hooks. A hook that is new or changed waits for `tuios config apply` or a daemon restart, because a program in a pane can write the file, and a hook runs a command as the daemon's child. `[notifications.agent]` and its `command` follow the same rule.
 
 A hook the daemon runs gets the daemon's environment, not your shell's. A daemon started by `tuios new` keeps the environment of that first shell. Put full paths in the command when in doubt.
 

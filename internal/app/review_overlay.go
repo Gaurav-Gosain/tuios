@@ -439,6 +439,10 @@ func (m *OS) InboxReview() (tea.Cmd, bool) {
 	if !m.reviewSupported() {
 		return nil, false
 	}
+	// A card its agent is done with: the worktree that agent worked in.
+	if cmd, ok := m.CockpitCardReview(); ok {
+		return cmd, true
+	}
 	it, ok := m.inboxSelected()
 	if !ok {
 		// An agent with no Inbox item: review its pane.
@@ -974,7 +978,7 @@ func (m *OS) ReviewResolveNote() tea.Cmd {
 func (m *OS) reviewNonce() (string, bool) {
 	nonce := m.inboxNonce()
 	if nonce == "" {
-		m.reviewNotify("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon", "error", m.Settings.NotificationDuration*2)
+		m.reviewNotify(m.noNonceText(), "error", m.Settings.NotificationDuration*2)
 		return "", false
 	}
 	return nonce, true

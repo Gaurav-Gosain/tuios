@@ -594,9 +594,23 @@ func TestRailRepeatedLabelStaysWithItsPane(t *testing.T) {
 	term := attachIn(t, base, session, startOpts{cols: cols, rows: rows, shippedLooks: true})
 	railCol := cols - width
 	rowsOf := func(s tuitest.Screen) []string { return railAgentRows(s, railCol) }
+	// suffixOf is the start of a window id a row shows after "claude ": four
+	// hex digits, or more when two unnamed agents' ids start the same way,
+	// as the rail grows it (sessiontree.shortRowID).
+	suffixOf := func(row string) string {
+		_, after, ok := strings.Cut(row, "claude ")
+		if !ok {
+			return ""
+		}
+		end := 0
+		for end < len(after) && strings.IndexByte("0123456789abcdef-", after[end]) >= 0 {
+			end++
+		}
+		return after[:end]
+	}
 	rowOf := func(s tuitest.Screen, id string) string {
 		for _, row := range rowsOf(s) {
-			if strings.Contains(row, "claude "+id[:4]) {
+			if suf := suffixOf(row); len(suf) >= 4 && strings.HasPrefix(id, suf) {
 				return row
 			}
 		}
@@ -619,7 +633,7 @@ func TestRailRepeatedLabelStaysWithItsPane(t *testing.T) {
 	railShot(t, term, "rail-repeated-before-close")
 
 	// What the row shows is enough to address the pane, as the docs say.
-	if out, err := tuiosCLI(t, base, "focus-window", "-s", session, "--json", ids[3][:4]); err != nil || !strings.Contains(out, ids[3]) {
+	if out, err := tuiosCLI(t, base, "focus-window", "-s", session, "--json", suffixOf(rowOf(term.Screen(), ids[3]))); err != nil || !strings.Contains(out, ids[3]) {
 		t.Fatalf("focus-window with the suffix from the row: %v\n%s", err, out)
 	}
 

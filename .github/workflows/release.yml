@@ -95,7 +95,7 @@ jobs:
       - name: Set up Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: 0.16.0
+          version: 0.17.1
 
       # setup-zig points Zig's caches at .zig-cache in the checkout, and
       # GoReleaser refuses to release from a tree with untracked files in it.
@@ -178,7 +178,7 @@ jobs:
       - name: Set up Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: 0.16.0
+          version: 0.17.1
 
       - name: Cache libghostty-vt
         uses: actions/cache@v6

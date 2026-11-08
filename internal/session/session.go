@@ -190,6 +190,11 @@ type WindowState struct {
 	// meaningless in any other state. Daemon-owned like AgentState, and empty in
 	// older state, which reads as "not said".
 	AgentKind string `json:"agent_kind,omitempty"`
+	// AgentWaitsOn is what the pane's screen says its agent still runs after
+	// its turn, such as "1 background shell" (harness waits_on). It is read
+	// on each screen look and shown only beside done and idle; see
+	// agentWaitsOn.
+	AgentWaitsOn string `json:"agent_waits_on,omitempty"`
 	// AgentReason is why the state a reader is shown differs from AgentState,
 	// empty when it does not. The one value is AgentReasonSilent: a pane whose
 	// hooks reported working and then stopped reporting, shown as unknown
@@ -653,6 +658,14 @@ type SessionState struct {
 	// back for everyone. False from an older client, whose push is taken as
 	// sent. Read and cleared by the daemon, never stored.
 	FocusUnmoved bool `json:"focus_unmoved,omitempty"`
+	// FocusByCommand marks a push whose focus a command moved, not the
+	// person at the client: a routed run-command, or keys sent to the client
+	// with send-keys or a tape. Every pane may run run-command by default, so
+	// a move like that is an agent's, and it must not end the person's
+	// approval hold as if they had turned to the pane (approvals.go,
+	// noteFocused). False from an older client. Read and cleared by the
+	// daemon, never stored.
+	FocusByCommand bool `json:"focus_by_command,omitempty"`
 
 	MasterRatio float64 `json:"master_ratio"`
 	AutoTiling  bool    `json:"auto_tiling"`
@@ -1851,6 +1864,9 @@ type Session struct {
 	// taskAuto reports whether cards move on their own. See
 	// SetTaskAutoProbe.
 	taskAuto atomic.Pointer[func() bool]
+	// taskOutcome counts a dispatched card's outcome on its board. See
+	// SetTaskOutcomeSink.
+	taskOutcome atomic.Pointer[func(board string, finished bool)]
 }
 
 // SetGraphicsCapabilities records the graphics protocols tuios can forward to
@@ -3708,6 +3724,8 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 	accepted = true
 	unmoved := state.FocusUnmoved
 	state.FocusUnmoved = false
+	byCommand := state.FocusByCommand
+	state.FocusByCommand = false
 	prev := s.state
 	if prev != nil && unmoved && keepSessionFocus(state, prev) {
 		// The push's focus was stale and the session's stands, so the
@@ -3779,8 +3797,9 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 		s.markCompletionSeenLocked(state.FocusedWindowID)
 		// A move of the focus is the person turning to a pane, which ends an
 		// approval hold on it (see approvals.go). Only a move: a push that
-		// keeps the focus says nothing new.
-		if state.FocusedWindowID != "" && (prev == nil || prev.FocusedWindowID != state.FocusedWindowID) {
+		// keeps the focus says nothing new. A move a command made is not the
+		// person turning to the pane.
+		if !byCommand && state.FocusedWindowID != "" && (prev == nil || prev.FocusedWindowID != state.FocusedWindowID) {
 			s.emit(SessionEvent{Type: eventPaneFocused, Window: state.FocusedWindowID})
 		}
 	}
@@ -5294,10 +5313,9 @@ func (p *PTY) Close() error {
 	p.subscriberCount.Store(0)
 	p.subscribersMu.Unlock()
 
-	// Kill process
-	if p.proc != nil {
-		_ = p.proc.Kill()
-	}
+	// Hang up the pane's jobs, as a terminal that goes away does, and kill
+	// the shell. See killPaneTree.
+	killPaneTree(p.proc)
 	// A reader waiting for output is in poll, which closing the master does
 	// not end.
 	if p.gate != nil {

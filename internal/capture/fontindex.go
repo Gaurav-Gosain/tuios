@@ -142,45 +142,73 @@ func buildFontIndex(dirs []string) *fontIndex {
 		byFamily:     map[string][]indexedFace{},
 		byPostScript: map[string]indexedFace{},
 	}
-	seen := map[string]bool{}
-	count := 0
+	w := fontWalk{seenDirs: map[string]bool{}, seenFiles: map[string]bool{}}
 	for _, dir := range dirs {
-		if count >= maxFontFiles {
+		if w.count >= maxFontFiles {
 			break
 		}
-		_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				// An unreadable directory is one place with no fonts in it, not
-				// a reason to abandon the places that are readable.
-				if d != nil && d.IsDir() {
-					return fs.SkipDir
-				}
-				return nil
-			}
-			if count >= maxFontFiles {
-				return fs.SkipAll
-			}
-			if d.IsDir() {
-				if strings.HasPrefix(d.Name(), ".") && path != dir {
-					return fs.SkipDir
-				}
-				return nil
-			}
-			if !fontFileExts[strings.ToLower(filepath.Ext(path))] {
-				return nil
-			}
-			if seen[path] {
-				return nil
-			}
-			seen[path] = true
-			count++
-			for _, face := range readFontNames(path) {
-				idx.add(face)
-			}
-			return nil
-		})
+		w.dir(dir, idx)
 	}
 	return idx
+}
+
+// fontWalk reads font folders the way a person means them, links included.
+// filepath.WalkDir does not follow a symbolic link, not even at the root, so
+// a fonts folder that is a link (a dotfile manager makes one, and so does a
+// scratch home) gave no fonts at all. Every folder is read once by its real
+// path, which also stops a link that points back up the tree.
+type fontWalk struct {
+	seenDirs  map[string]bool
+	seenFiles map[string]bool
+	count     int
+}
+
+func (w *fontWalk) dir(dir string, idx *fontIndex) {
+	real, err := filepath.EvalSymlinks(dir)
+	if err != nil || w.seenDirs[real] {
+		return
+	}
+	w.seenDirs[real] = true
+	// An unreadable directory is one place with no fonts in it, not a reason
+	// to abandon the places that are readable.
+	entries, err := os.ReadDir(real)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if w.count >= maxFontFiles {
+			return
+		}
+		path := filepath.Join(real, e.Name())
+		isDir := e.IsDir()
+		if e.Type()&fs.ModeSymlink != 0 {
+			info, err := os.Stat(path)
+			if err != nil {
+				continue // a broken link
+			}
+			isDir = info.IsDir()
+		}
+		if isDir {
+			if !strings.HasPrefix(e.Name(), ".") {
+				w.dir(path, idx)
+			}
+			continue
+		}
+		if !fontFileExts[strings.ToLower(filepath.Ext(path))] {
+			continue
+		}
+		if real, err := filepath.EvalSymlinks(path); err == nil {
+			path = real
+		}
+		if w.seenFiles[path] {
+			continue
+		}
+		w.seenFiles[path] = true
+		w.count++
+		for _, face := range readFontNames(path) {
+			idx.add(face)
+		}
+	}
 }
 
 // add files one face under every name it answers to.

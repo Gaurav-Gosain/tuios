@@ -270,7 +270,7 @@ func TestRiskyPeekAllowsOnTheSecondPress(t *testing.T) {
 	if cmd := m.InboxAnswer(harness.ActionApprove, ""); cmd != nil {
 		t.Fatal("ASSERTION: the first a on a risky prompt answered it")
 	}
-	if until := m.Inbox.approvals.armed.at.Add(inboxRiskPressWindow).Format("15:04:05"); !strings.Contains(m.Inbox.Peek.Note, "Press a again by "+until+" to allow") {
+	if until := m.Inbox.approvals.answer.armed.at.Add(inboxRiskPressWindow).Format("15:04:05"); !strings.Contains(m.Inbox.Peek.Note, "Press a again by "+until+" to allow") {
 		t.Errorf("note %q does not say until when the second press is taken", m.Inbox.Peek.Note)
 	}
 	press(m, "a")

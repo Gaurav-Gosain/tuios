@@ -155,6 +155,15 @@ type tmlView struct {
 	// not flicker back to the one before it. deferred holds that push.
 	inflight int
 	deferred *session.TMLSurfacePayload
+	// acked is the surface version the daemon gave in its answer to the
+	// last tml-input this view made, which holds every input this client
+	// sent. State of the same tree older than it is older than what this
+	// client shows: a tml-get that was read before those inputs landed, or a
+	// push held back until they were answered. Applying it would take the
+	// person's typing back, and their next input would then send the older
+	// text over the daemon's. Guarded by tmlClient.mu, and set in the same
+	// step that takes the answered input off inflight.
+	acked uint64
 	// sent closes when the last tml-input this view made has its answer.
 	// The next one waits for it, so the daemon applies the inputs in the
 	// order the person made them. Each call dials its own connection, and
@@ -495,8 +504,17 @@ func (m *OS) applyTMLSurface(p *session.TMLSurfacePayload) bool {
 		if busy {
 			v.deferred = p
 		}
+		stale := !busy && p.Version < v.acked
 		m.tml.mu.Unlock()
 		if busy {
+			return false
+		}
+		if stale {
+			// A read this drops is done with: a later gap reads again, and
+			// that read holds the inputs.
+			if len(p.State) > 0 {
+				v.refreshing = false
+			}
 			return false
 		}
 	}
@@ -1159,7 +1177,11 @@ type TMLActionFailedMsg struct{ Text string }
 // tmlInput sends what the person did to the daemon, off the UI goroutine:
 // the state, the emits for the owner, the pane() actions, and a close.
 func (m *OS) tmlInput(v *tmlView, r tmlInputReq) tea.Cmd {
-	call, nonce := m.tmlCaller(), m.inboxNonce()
+	nonce, ok := m.tmlNonce()
+	if !ok {
+		return nil
+	}
+	call := m.tmlCaller()
 	params := map[string]any{"surface": v.id, "human_nonce": nonce}
 	if len(r.ops) > 0 {
 		params["ops"] = r.ops
@@ -1194,8 +1216,22 @@ func (m *OS) tmlInput(v *tmlView, r tmlInputReq) tea.Cmd {
 			<-prev
 		}
 		raw, err := call("tml-input", params, tmlInputTimeout)
+		var res struct {
+			Version uint64 `json:"version"`
+			Actions []struct {
+				Verb  string `json:"verb"`
+				OK    bool   `json:"ok"`
+				Error string `json:"error"`
+			} `json:"actions"`
+		}
+		parsed := err == nil && jsonx.Unmarshal(raw, &res) == nil
 		close(done)
 		m.tml.mu.Lock()
+		// Before the input leaves inflight, so the wake that applies a
+		// held push already knows which versions are older than it.
+		if parsed && res.Version > v.acked {
+			v.acked = res.Version
+		}
 		v.inflight--
 		m.tml.mu.Unlock()
 		m.signalTML()
@@ -1205,14 +1241,7 @@ func (m *OS) tmlInput(v *tmlView, r tmlInputReq) tea.Cmd {
 			// value over the limit.
 			return TMLInputFailedMsg{Text: "The surface could not send what you did: " + err.Error()}
 		}
-		var res struct {
-			Actions []struct {
-				Verb  string `json:"verb"`
-				OK    bool   `json:"ok"`
-				Error string `json:"error"`
-			} `json:"actions"`
-		}
-		if jsonx.Unmarshal(raw, &res) == nil {
+		if parsed {
 			for _, a := range res.Actions {
 				if !a.OK {
 					return TMLActionFailedMsg{Text: "The surface could not run " + a.Verb + ": " + a.Error}

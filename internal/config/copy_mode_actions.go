@@ -25,6 +25,13 @@ const (
 	ActionCopyModeLineEnd       = "copy_mode_line_end"
 )
 
+// ActionCopyModeExit leaves copy mode and gives the pane the keyboard back,
+// as q and esc do. From a selection it copies the selection first, as y
+// does. It is on enter by default, as tmux's copy-mode-vi has it (issue
+// 1637). In the search prompt enter still runs the search. Set it to [] for
+// the old behaviour, where enter does nothing in copy mode.
+const ActionCopyModeExit = "copy_mode_exit"
+
 // ActionEditScrollback writes the focused pane's scrollback to a file and
 // opens it in the editor. It is bound after the leader and in copy mode.
 const ActionEditScrollback = "edit_scrollback"
@@ -133,6 +140,7 @@ func getDefaultCopyModeKeybinds() map[string][]string {
 	return map[string][]string{
 		ActionCopyModeLineStart: {"home"},
 		ActionCopyModeLineEnd:   {"end"},
+		ActionCopyModeExit:      {"enter"},
 		ActionEditScrollback:    {"ctrl+g"},
 		ActionHints:             {"s"},
 	}

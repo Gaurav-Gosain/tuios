@@ -16,6 +16,7 @@ import (
 // newStartAgentCommand builds `tuios start-agent`.
 func newStartAgentCommand() *cobra.Command {
 	var sessionName, name, cwd, repo, prompt, protocol, task, parent string
+	var model, effort, permissionMode string
 	var env, grants []string
 	var workspace, readyTimeout int
 	var focus, clone, jsonOutput bool
@@ -37,6 +38,8 @@ The pane opens in the session -s names, which is created when it does not
 exist. It starts in --cwd, or the main checkout of the repository --repo
 names. Without either, it starts in the directory you run the command from
 when you run it in a pane, and in the focused pane's directory otherwise.
+
+-s any:SESSION starts it where place-agent picks, and says why.
 
 -s HOST:SESSION starts it on another machine from the [hosts] table. PATH is
 not sent then, and the agent is looked up on that machine's PATH. --env there
@@ -73,6 +76,13 @@ parent. --parent names the parent for a script that runs outside the parent's
 pane, by its window id. A pane may name itself or a pane it could type into.
 You may name any agent pane. A chain stops at 8 agents.
 
+--model, --effort and --permission-mode pass the harness's own flags for
+them, as its manifest names them ([launch]): for Claude Code, --model,
+--effort and --permission-mode. A harness with no such flag refuses the
+option, and an effort or mode it does not list is refused with the ones it
+takes. Started from an agent pane, the permission mode is held to that
+agent's own.
+
 --task claims a task card of the session for the new pane as soon as it
 exists, so the board shows who works on it while the agent loads. The card
 must be held by no pane, not blocked and not done, and you need what tuios
@@ -87,8 +97,14 @@ task claim needs. It is checked before anything starts.`,
   # A reviewer that may read its session and nothing else
   tuios start-agent claude --name reviewer --grants read
 
+  # Claude Code on Opus at high effort, in plan mode
+  tuios start-agent claude --model opus --effort high --permission-mode plan
+
   # Claude Code on host build, in its checkout of this repository
   tuios start-agent -s build:api claude --prompt 'Profile the build.' -- --model opus
+
+  # Claude Code on the machine with the most room, this one or a linked one
+  tuios start-agent -s any:api claude --prompt 'Fix the flaky test.'
 
   # An agent for task card t3, which it holds from the start
   tuios start-agent claude --name t3-worker --task t3 --prompt 'Take task t3: tuios task get t3.'
@@ -114,7 +130,7 @@ task claim needs. It is checked before anything starts.`,
 			return runStartAgent(startAgentOptions{
 				session: sessionName, agent: positional[0], args: extra, name: name, cwd: cwd, repo: repo, prompt: prompt, protocol: protocol,
 				env: callerEnv, explicitEnv: len(env) > 0, workspace: workspace, readyTimeout: readyTimeout, focus: focus, clone: clone,
-				grants: grants, task: task, parent: parent,
+				grants: grants, task: task, parent: parent, model: model, effort: effort, permissionMode: permissionMode,
 			}, jsonOutput)
 		},
 	}
@@ -127,6 +143,9 @@ task claim needs. It is checked before anything starts.`,
 	cmd.Flags().BoolVar(&focus, "focus", false, "Focus the new pane")
 	cmd.Flags().StringVar(&prompt, "prompt", "", "A first prompt, typed once the agent is ready")
 	cmd.Flags().StringVar(&parent, "parent", "", "The agent pane the new agent reports to, by window id (default: the agent pane this runs in)")
+	cmd.Flags().StringVar(&model, "model", "", "The model, passed with the harness's own model flag")
+	cmd.Flags().StringVar(&effort, "effort", "", "The effort, one the harness lists, such as low, medium or high")
+	cmd.Flags().StringVar(&permissionMode, "permission-mode", "", "The permission mode, one the harness lists, such as plan or acceptEdits")
 	cmd.Flags().StringVar(&task, "task", "", "A task card of the session, such as t3, to claim for the new pane")
 	cmd.Flags().StringVar(&protocol, "protocol", "", "Run the agent headless over acp or codex (the Codex app-server) instead of in its own TUI")
 	_ = cmd.RegisterFlagCompletionFunc("protocol", cobra.FixedCompletions([]string{"acp", "codex"}, cobra.ShellCompDirectiveNoFileComp))
@@ -148,8 +167,11 @@ type startAgentOptions struct {
 	task string
 	// parent is --parent, the agent pane the new agent reports to.
 	parent string
-	args   []string
-	env    map[string]string
+	// model, effort and permissionMode are --model, --effort and
+	// --permission-mode, mapped by the daemon to the harness's own flags.
+	model, effort, permissionMode string
+	args                          []string
+	env                           map[string]string
 	// explicitEnv says the person passed --env. Without it the env holds
 	// only the PATH the CLI adds on its own.
 	explicitEnv             bool
@@ -205,6 +227,35 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 	if err := ensureDaemon(); err != nil {
 		return err
 	}
+	// -s any:SESSION: this machine's daemon picks the machine first.
+	var taskHost, taskSession string
+	if host, name := splitHostSession(o.session); host == hostAny {
+		if o.cwd != "" || o.repo != "" {
+			return reportVerbError(errors.New("--cwd and --repo name a directory on one machine. With -s any:SESSION the agent starts in the picked machine's checkout of this repository"), jsonOutput)
+		}
+		if o.task != "" && name == "" {
+			return reportVerbError(errors.New("--task with -s any: name the card's session, as -s any:SESSION"), jsonOutput)
+		}
+		req := placeRequest{agent: o.agent, repoURL: originIfAny(), clone: o.clone}
+		if o.task != "" {
+			req.task, req.taskSession = o.task, name
+		}
+		ans, err := placeAgent(req)
+		if err != nil {
+			return reportVerbError(err, jsonOutput)
+		}
+		if !jsonOutput {
+			fmt.Println(placedLine(ans))
+		}
+		o.session = name
+		if ans.Host != "" {
+			o.session = ans.Host + ":" + name
+			o.clone = o.clone || ans.Clone
+			if o.task != "" {
+				taskHost, taskSession = ans.TaskHost, name
+			}
+		}
+	}
 	t, err := dialSessionTarget(o.session)
 	if err != nil {
 		return err
@@ -218,10 +269,14 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 	maps.Copy(params, place)
 	// A daemon older than protocol refuses the parameter by name, so an old
 	// daemon never starts the agent in its TUI when a protocol was asked for.
-	for k, v := range map[string]string{"name": o.name, "prompt": o.prompt, "protocol": o.protocol, "task": o.task, "parent": o.parent} {
+	for k, v := range map[string]string{"name": o.name, "prompt": o.prompt, "protocol": o.protocol, "task": o.task, "parent": o.parent,
+		"model": o.model, "effort": o.effort, "permission_mode": o.permissionMode} {
 		if v != "" {
 			params[k] = v
 		}
+	}
+	if taskHost != "" {
+		params["task_host"], params["task_session"] = taskHost, taskSession
 	}
 	if len(o.args) > 0 {
 		params["args"] = o.args

@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
 // The task verbs: add-task, list-tasks, get-task, claim-task, finish-task,
@@ -106,12 +108,34 @@ type TaskRow struct {
 	At      int64       `json:"at"`
 	Blocked *TaskBlock  `json:"blocked"`
 	Fan     *TaskFan    `json:"fan,omitempty"`
+	// Project is the repository the card is for, its normalised origin
+	// URL, empty for a card of its session only. Host is the machine that
+	// owns the card, set on a row another machine gave; empty is this one.
+	Project string `json:"project,omitempty"`
+	Host    string `json:"host,omitempty"`
+	// Harness is the agent the card is for, AskFirst marks a card that
+	// waits for a person, and Dispatched says dispatch made its last claim
+	// (task_dispatch.go).
+	Harness    string `json:"harness,omitempty"`
+	AskFirst   bool   `json:"ask_first,omitempty"`
+	Dispatched bool   `json:"dispatched,omitempty"`
+	// Machine is where the card's agent starts: empty for the owner,
+	// "any" for the machine placement picks, or a host name.
+	Machine string `json:"machine,omitempty"`
+	// Attempts, Note, Work and Verify are the card's lifecycle: see
+	// task_verify.go.
+	Attempts int         `json:"attempts,omitempty"`
+	Note     string      `json:"note,omitempty"`
+	Work     *TaskWork   `json:"work,omitempty"`
+	Verify   *TaskVerify `json:"verify,omitempty"`
 }
 
 // TaskHolder is the pane that holds a card. Name, Harness and State are read
 // from the pane now, and left out when the session no longer has it.
 type TaskHolder struct {
-	Window  string `json:"window"`
+	Window string `json:"window"`
+	// Host is the machine the holding pane is on, empty for this one.
+	Host    string `json:"host,omitempty"`
 	Name    string `json:"name,omitempty"`
 	Harness string `json:"harness,omitempty"`
 	State   string `json:"state,omitempty"`
@@ -144,10 +168,19 @@ func taskRow(sess *Session, st *SessionState, tk *TaskState) TaskRow {
 		At:      tk.At,
 		Blocked: tk.Blocked,
 	}
-	if tk.Holder != "" {
+	row.Project = tk.Project
+	row.Harness, row.AskFirst, row.Dispatched = tk.Harness, tk.AskFirst, tk.Dispatched
+	row.Machine = tk.Machine
+	row.Attempts, row.Note, row.Work, row.Verify = tk.Attempts, tk.Note, tk.Work, tk.Verify
+	if host, window, ok := splitRemoteHolder(tk.Holder); ok {
+		row.Holder = &TaskHolder{Window: window, Host: host, HeldAt: tk.HeldAt, Name: tk.HolderName, Harness: tk.HolderHarness}
+	} else if tk.Holder != "" {
 		row.Holder = &TaskHolder{Window: tk.Holder, HeldAt: tk.HeldAt}
 		if w, ok := findWindowState(st, tk.Holder); ok {
 			row.Holder.Name, row.Holder.Harness, row.Holder.State = windowLabelOf(w), w.AgentHarness, w.AgentState.Name()
+		} else {
+			// A pane of another session (start-agent task_session).
+			row.Holder.Name, row.Holder.Harness = tk.HolderName, tk.HolderHarness
 		}
 	}
 	if tk.Fan != "" {
@@ -212,6 +245,7 @@ func (d *Daemon) changeTask(sess *Session, id string, fn func(st *SessionState, 
 // publishTask sends a task event for row.
 func (d *Daemon) publishTask(sess *Session, typ, action, window, reason string, row TaskRow) {
 	d.events.publish(streamEvent{Type: typ, Session: sess.Name(), Window: window, Action: action, Reason: reason, Task: &row})
+	d.afterTaskEvent(sess, action, window, reason, row)
 }
 
 // taskStageParam checks a stage parameter.
@@ -233,6 +267,10 @@ type addTaskParams struct {
 	Prompt     string `json:"prompt"`
 	Stage      string `json:"stage"`
 	HumanNonce string `json:"human_nonce"`
+	Project    string `json:"project"`
+	Harness    string `json:"harness"`
+	AskFirst   bool   `json:"ask_first"`
+	Machine    string `json:"machine"`
 }
 
 // verbAddTask answers add-task.
@@ -250,6 +288,21 @@ func (d *Daemon) verbAddTask(cs *connState, params json.RawMessage) (any, *verbE
 	}
 	if verr := taskStageParam("stage", p.Stage); verr != nil {
 		return nil, verr
+	}
+	project, verr := projectParam("project", p.Project)
+	if verr != nil {
+		return nil, verr
+	}
+	harnessName := printableClaim(p.Harness, 64)
+	if harnessName != p.Harness || strings.ContainsAny(harnessName, " /") {
+		return nil, invalidParam("harness", "harness is one agent's id, such as claude-code")
+	}
+	machine := printableClaim(p.Machine, 64)
+	if machine != p.Machine || strings.ContainsAny(machine, " /:") {
+		return nil, invalidParam("machine", "machine is any, or one machine's [hosts] name. Omit it for this machine")
+	}
+	if machine == federation.LocalHostName {
+		machine = ""
 	}
 	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
@@ -270,13 +323,17 @@ func (d *Daemon) verbAddTask(cs *connState, params json.RawMessage) (any, *verbE
 		}
 		now := time.Now().UnixNano()
 		tk := TaskState{
-			ID:      newTaskID(st),
-			Title:   title,
-			Prompt:  p.Prompt,
-			Stage:   firstNonEmpty(p.Stage, TaskStageTodo),
-			StageAt: now,
-			By:      caller.by,
-			At:      now,
+			ID:       newTaskID(st),
+			Title:    title,
+			Prompt:   p.Prompt,
+			Stage:    firstNonEmpty(p.Stage, TaskStageTodo),
+			StageAt:  now,
+			By:       caller.by,
+			At:       now,
+			Project:  project,
+			Harness:  harnessName,
+			AskFirst: p.AskFirst,
+			Machine:  machine,
 		}
 		if wt := st.Worktree; wt != nil && wt.Group != "" {
 			tk.Fan, tk.FanID = wt.Group, wt.FanID
@@ -304,6 +361,10 @@ type listTasksParams struct {
 	Holder      string `json:"holder"`
 	Open        bool   `json:"open"`
 	AllSessions bool   `json:"all_sessions"`
+	// Project lists the cards of one repository from every session; Hosts
+	// also asks each linked machine for its own (task_project.go).
+	Project string `json:"project"`
+	Hosts   bool   `json:"hosts"`
 }
 
 // verbListTasks answers list-tasks: the session's cards, oldest first. With
@@ -315,6 +376,29 @@ func (d *Daemon) verbListTasks(cs *connState, params json.RawMessage) (any, *ver
 	}
 	if verr := taskStageParam("stage", p.Stage); verr != nil {
 		return nil, verr
+	}
+	project, verr := projectParam("project", p.Project)
+	if verr != nil {
+		return nil, verr
+	}
+	p.Project = project
+	if p.Hosts && p.Project == "" && !p.AllSessions {
+		return nil, invalidParam("hosts", "hosts asks the linked machines for project cards: pass project or all_sessions too")
+	}
+	if p.Project != "" {
+		if p.Session != "" || p.Holder != "" {
+			return nil, invalidParam("project", "project lists the cards of every session of the repository, so it takes no session or holder")
+		}
+		res := map[string]any{"type": "task_list", "project": p.Project, "tasks": d.projectRows(p)}
+		// A call that came over the link lists this machine's cards only.
+		if p.Hosts && (cs == nil || !cs.viaLink) {
+			rows, down := d.hostTaskRows(p)
+			res["tasks"] = append(res["tasks"].([]TaskRow), rows...)
+			if len(down) > 0 {
+				res["hosts_down"] = down
+			}
+		}
+		return res, nil
 	}
 	if p.AllSessions {
 		if p.Session != "" {
@@ -329,11 +413,22 @@ func (d *Daemon) verbListTasks(cs *connState, params json.RawMessage) (any, *ver
 		for _, sess := range sessions {
 			rows = append(rows, listedTasks(sess, sess.GetState(), p, "")...)
 		}
-		return map[string]any{
-			"type":         "task_list",
-			"all_sessions": true,
-			"tasks":        rows,
-		}, nil
+		res := map[string]any{"type": "task_list", "all_sessions": true}
+		// With hosts, every linked machine's project cards too. A call
+		// that came over the link lists this machine's cards only.
+		if p.Hosts && (cs == nil || !cs.viaLink) {
+			far, down := d.hostTaskRows(p)
+			for _, r := range far {
+				if r.Project != "" {
+					rows = append(rows, r)
+				}
+			}
+			if len(down) > 0 {
+				res["hosts_down"] = down
+			}
+		}
+		res["tasks"] = rows
+		return res, nil
 	}
 	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
@@ -380,6 +475,20 @@ type taskIDParams struct {
 	Session    string `json:"session"`
 	ID         string `json:"id"`
 	HumanNonce string `json:"human_nonce"`
+	// Host is the machine that owns the card, for release-task and
+	// finish-task from the pane that holds it there (task_project.go).
+	Host string `json:"host"`
+	remoteClaim
+}
+
+// taskCallerFor is taskCallerOf, or the pane of a linked machine a call over
+// the link names with remote_window.
+func (d *Daemon) taskCallerFor(cs *connState, verb string, sess *Session, nonce string, rc remoteClaim) (taskCaller, *verbError) {
+	if rc.RemoteWindow != "" {
+		c, _, verr := remoteCaller(cs, verb, rc)
+		return c, verr
+	}
+	return d.taskCallerOf(cs, verb, sess, nonce)
 }
 
 // sessionForTaskID checks the card id a verb names and resolves the session
@@ -417,6 +526,10 @@ type claimTaskParams struct {
 	Next       bool   `json:"next"`
 	Window     string `json:"window"`
 	HumanNonce string `json:"human_nonce"`
+	// Host is the machine that owns the card: the claim is passed on to it
+	// for the calling pane (task_project.go).
+	Host string `json:"host"`
+	remoteClaim
 }
 
 // verbClaimTask answers claim-task: the card id, or with next the oldest card
@@ -429,6 +542,15 @@ func (d *Daemon) verbClaimTask(cs *connState, params json.RawMessage) (any, *ver
 	}
 	if p.Next == (p.ID != "") {
 		return nil, invalidParam("id", "name the card with id, or pass next to take the oldest open card, not both")
+	}
+	if p.Host != "" {
+		if p.Next {
+			return nil, invalidParam("next", "a card on another machine is claimed by its id: tuios task ls --project lists them")
+		}
+		return d.forwardTask(cs, "claim-task", p.Host, p.Session, p.ID)
+	}
+	if p.RemoteWindow != "" {
+		return d.claimForRemote(cs, p)
 	}
 	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
@@ -488,7 +610,7 @@ func (d *Daemon) verbClaimTask(cs *connState, params json.RawMessage) (any, *ver
 			return errTaskRefused
 		}
 		tk := &st.Tasks[i]
-		if _, verr = tk.take(window, caller.by, time.Now().UnixNano()); verr != nil {
+		if _, _, verr = sess.moveCard(tk, cardMove{kind: moveClaim, by: caller.by, window: window}, time.Now().UnixNano()); verr != nil {
 			return errTaskRefused
 		}
 		row = taskRow(sess, st, tk)
@@ -515,30 +637,45 @@ func (d *Daemon) verbFinishTask(cs *connState, params json.RawMessage) (any, *ve
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
+	if p.Host != "" {
+		return d.forwardTask(cs, "finish-task", p.Host, p.Session, p.ID)
+	}
 	sess, verr := d.sessionForTaskID(cs, p.Session, p.ID)
 	if verr != nil {
 		return nil, verr
 	}
-	caller, verr := d.taskCallerOf(cs, "finish-task", sess, p.HumanNonce)
+	caller, verr := d.taskCallerFor(cs, "finish-task", sess, p.HumanNonce, p.remoteClaim)
 	if verr != nil {
 		return nil, verr
+	}
+	// The pane that holds the card is its agent, done with it: the card
+	// goes on to verify or review (task_verify.go). Where it did the work is
+	// read before the change, since that runs git.
+	var work *TaskWork
+	if caller.window != "" && !d.lifecycleOff.Load() {
+		work = d.workOf(caller.window)
 	}
 	var holder string
 	row, action, verr := d.changeTask(sess, p.ID, func(_ *SessionState, tk *TaskState, now int64) (string, *verbError) {
 		if verr := caller.mayTouch("finish-task", tk); verr != nil {
 			return "", verr
 		}
-		var changed bool
-		if holder, changed = tk.finish(caller.by, now); !changed {
-			return "", nil
+		move := cardMove{kind: moveFinish, by: caller.by}
+		if caller.window != "" && tk.Holder == caller.window {
+			if stage := d.handInStage(dispatchBoardKey(sess.Name(), tk.Project)); stage != "" {
+				move = cardMove{kind: moveHandIn, by: caller.by, stage: stage, work: work}
+			}
 		}
-		return TaskActionFinished, nil
+		var action string
+		action, holder, _ = sess.moveCard(tk, move, now)
+		return action, nil
 	})
 	if verr != nil {
 		return nil, verr
 	}
 	if action != "" {
 		d.publishTask(sess, EventTaskFinished, TaskActionFinished, holder, "", row)
+		d.startTaskVerify(sess, row.ID)
 	}
 	return row.typed("task_finished"), nil
 }
@@ -572,24 +709,35 @@ func (d *Daemon) verbSetTaskStage(cs *connState, params json.RawMessage) (any, *
 	if verr != nil {
 		return nil, verr
 	}
+	// With a verify command, a pane moves its card past verify only by
+	// finishing it, and a move to verify runs the command again, on the
+	// work recorded or on the pane that holds the card.
+	var work *TaskWork
+	cmd := ""
+	if tk, ok := sess.taskByID(p.ID); ok && !d.lifecycleOff.Load() {
+		cmd, _ = d.dispatch.verifyOf(dispatchBoardKey(sess.Name(), tk.Project))
+		if cmd != "" && p.Stage == TaskStageVerify && tk.Holder != "" {
+			work = d.workOf(tk.Holder)
+		}
+	}
 	var holder string
 	row, action, verr := d.changeTask(sess, p.ID, func(_ *SessionState, tk *TaskState, now int64) (string, *verbError) {
 		if verr := caller.mayTouch("set-task-stage", tk); verr != nil {
 			return "", verr
 		}
-		if p.Stage == TaskStageDone {
-			var changed bool
-			if holder, changed = tk.finish(caller.by, now); !changed {
-				return "", nil
-			}
-			return TaskActionFinished, nil
+		if cmd != "" && caller.window != "" && (p.Stage == TaskStageReview || p.Stage == TaskStageShipped) {
+			return "", newVerbError(ErrVerbForbidden, "the board verifies its cards: a pane moves its card on with tuios task done")
 		}
-		if tk.Stage == p.Stage {
-			return "", nil
+		move := cardMove{kind: moveStage, by: caller.by, stage: p.Stage}
+		switch {
+		case p.Stage == TaskStageDone:
+			move = cardMove{kind: moveFinish, by: caller.by}
+		case cmd != "" && p.Stage == TaskStageVerify && (work != nil || tk.Work != nil):
+			move.verifyRun, move.work = true, work
 		}
-		tk.setStage(p.Stage, now)
-		tk.note(TaskEvent{Action: TaskActionStaged, By: caller.by, At: now, Stage: tk.Stage, Holder: tk.Holder})
-		return TaskActionStaged, nil
+		var action string
+		action, holder, _ = sess.moveCard(tk, move, now)
+		return action, nil
 	})
 	if verr != nil {
 		return nil, verr
@@ -599,6 +747,7 @@ func (d *Daemon) verbSetTaskStage(cs *connState, params json.RawMessage) (any, *
 		d.publishTask(sess, EventTaskFinished, TaskActionFinished, holder, "", row)
 	case TaskActionStaged:
 		d.publishTask(sess, EventTaskChanged, TaskActionStaged, "", "", row)
+		d.startTaskVerify(sess, row.ID)
 	}
 	return row.typed("task_changed"), nil
 }
@@ -639,17 +788,12 @@ func (d *Daemon) verbBlockTask(cs *connState, params json.RawMessage) (any, *ver
 		if verr := caller.mayTouch("block-task", tk); verr != nil {
 			return "", verr
 		}
+		move := cardMove{kind: moveBlock, by: caller.by, reason: reason}
 		if p.Clear {
-			if tk.Blocked == nil {
-				return "", nil
-			}
-			tk.Blocked = nil
-			tk.note(TaskEvent{Action: TaskActionUnblocked, By: caller.by, At: now, Stage: tk.Stage, Holder: tk.Holder})
-			return TaskActionUnblocked, nil
+			move = cardMove{kind: moveUnblock, by: caller.by}
 		}
-		tk.Blocked = &TaskBlock{Reason: reason, By: caller.by, At: now}
-		tk.note(TaskEvent{Action: TaskActionBlocked, By: caller.by, At: now, Stage: tk.Stage, Holder: tk.Holder, Reason: reason})
-		return TaskActionBlocked, nil
+		action, _, _ := sess.moveCard(tk, move, now)
+		return action, nil
 	})
 	if verr != nil {
 		return nil, verr
@@ -667,11 +811,14 @@ func (d *Daemon) verbReleaseTask(cs *connState, params json.RawMessage) (any, *v
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
+	if p.Host != "" {
+		return d.forwardTask(cs, "release-task", p.Host, p.Session, p.ID)
+	}
 	sess, verr := d.sessionForTaskID(cs, p.Session, p.ID)
 	if verr != nil {
 		return nil, verr
 	}
-	caller, verr := d.taskCallerOf(cs, "release-task", sess, p.HumanNonce)
+	caller, verr := d.taskCallerFor(cs, "release-task", sess, p.HumanNonce, p.remoteClaim)
 	if verr != nil {
 		return nil, verr
 	}
@@ -682,8 +829,8 @@ func (d *Daemon) verbReleaseTask(cs *connState, params json.RawMessage) (any, *v
 		if tk.Holder == "" {
 			return "", invalidParam("id", "task card "+tk.ID+" is held by no pane, so there is nothing to release")
 		}
-		tk.release(caller.by, "", now)
-		return TaskActionReleased, nil
+		action, _, _ := sess.moveCard(tk, cardMove{kind: moveRelease, by: caller.by}, now)
+		return action, nil
 	})
 	if verr != nil {
 		return nil, verr
@@ -751,12 +898,17 @@ func (d *Daemon) restoreTasks(sess *Session, tasks []TaskState, next uint64) {
 		return
 	}
 	d.publishReleased(sess, rows, taskReleaseRestart)
+	if d.dispatch.loaded() {
+		// A session resurrected later; at the start the daemon resumes
+		// them once the boards are read.
+		d.resumeVerifies(sess)
+	}
 }
 
 // releasedRows releases the cards of st whose holder held reports true, and
 // returns their rows.
 func releasedRows(sess *Session, st *SessionState, held func(holder string) bool, reason string) []TaskRow {
-	released := releaseHolders(st, held, reason, time.Now().UnixNano())
+	released := releaseHolders(sess, st, held, reason, time.Now().UnixNano())
 	rows := make([]TaskRow, len(released))
 	for i := range released {
 		rows[i] = taskRow(sess, st, &released[i])

@@ -73,17 +73,18 @@ func TestSecondPressEndsAHoldWhoseReleaseWasLost(t *testing.T) {
 }
 
 // Acting on the mode while holding it is the point, so a mode the action chose
-// outranks the one the release would restore.
+// outranks the one the release would restore. The hold begins in terminal
+// mode: in window mode the hold key does nothing (issue 1744).
 func TestModeChosenWhileHeldSurvivesTheRelease(t *testing.T) {
 	o := holdOS(t, "leftalt")
-	o.Mode = app.WindowManagementMode
 	o = feed(o, leftAltPress())
 
-	// enter_terminal_mode is bound to "i".
-	o = feed(o, tea.KeyPressMsg{Code: 'i', Mod: tea.ModAlt, Text: "i"})
+	// Held, alt+esc is esc in window mode: enter_window_mode, a choice of
+	// window management.
+	o = feed(o, tea.KeyPressMsg{Code: tea.KeyEscape, Mod: tea.ModAlt})
 	o = feed(o, leftAltRelease())
 
-	if o.Mode != app.TerminalMode {
+	if o.Mode != app.WindowManagementMode {
 		t.Fatalf("the release undid the mode the held chord chose: %v", o.Mode)
 	}
 }

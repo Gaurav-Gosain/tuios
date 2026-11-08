@@ -29,9 +29,11 @@ var (
 	ckGlyphUnload = ckGlyph{"■", "■", "-"}
 )
 
-// spawnTone is the sheet's grounds, from the cockpit's look.
+// spawnTone is the sheet's grounds, from the cockpit's look, and the key
+// ink held to the mark floor on the sheet.
 type spawnTone struct {
 	sheet, field, pick color.Color
+	key                color.Color
 }
 
 func spawnTones(l ckLook) spawnTone {
@@ -44,6 +46,9 @@ func spawnTones(l ckLook) spawnTone {
 	case overlay.Depth16:
 		t.pick = overlay.NoColor
 	}
+	// The accent is a theme's own colour: at 256 colours the default
+	// theme's lands under 3:1 on the sheet's grey.
+	t.key = overlay.ReadableAt(pal.AccentBright, t.sheet, overlay.MarkFloor)
 	return t
 }
 
@@ -86,7 +91,7 @@ func spawnPlan(s *spawnSheet, cw, ch int) spawnLayout {
 		chips = 2
 	}
 	height := func() int {
-		fields := 10 + 4*p.gap
+		fields := 12 + 5*p.gap
 		machines := 1 + p.shown
 		if p.twoLine {
 			machines = 1 + p.shown*(2+p.gap) + 2
@@ -146,7 +151,7 @@ func (m *OS) drawSpawnSheet(c *ckCanvas, l ckLook, top int) {
 	case s.folder != "":
 		from = "in " + s.folder
 	}
-	ex := c.textR(right, y, ckSeg{t: "esc", fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: " close", fg: pal.FgMute})
+	ex := c.textR(right, y, ckSeg{t: "esc", fg: t.key, attrs: ckBold}, ckSeg{t: " close", fg: pal.FgMute})
 	hit(ex, y, right, y+1, "close")
 	c.text(x, y, ex-2, ckSeg{t: "New agent", fg: pal.Fg, attrs: ckBold}, ckSeg{t: "   " + ckTrunc(from, ex-x-16), fg: pal.FgMute})
 	y += 2
@@ -158,14 +163,20 @@ func (m *OS) drawSpawnSheet(c *ckCanvas, l ckLook, top int) {
 	hit(x, y, right, y+1+box, "field:"+strconv.Itoa(int(spTask)))
 	if s.field == spTask {
 		lines := s.task.Render(w-2, spawnStyles(pal, t.field), t.field)
-		lines = lines[max(len(lines)-p.taskH, 0):]
-		for i, ln := range lines {
+		cut := max(len(lines)-p.taskH, 0)
+		for i, ln := range lines[cut:] {
 			c.draw(x+1, y+1+i, w-2, ln)
 		}
+		// Where the editor's first line is, for its pictures and caret.
+		at := &s.taskWires.at
+		at.x, at.y, at.ok, at.drawn, at.top = x+1, y+1-cut, cut == 0, true, cut
 	} else {
+		s.taskWires.at.ok, s.taskWires.at.drawn = false, false
 		text, ink := s.task.Text(), pal.Fg
 		if strings.TrimSpace(text) == "" {
-			text, ink = "What should the agent do?", pal.FgMute
+			// The editor holds its own placeholder to text contrast; the
+			// closed field shows it the same.
+			text, ink = "What should the agent do?", pal.FgDim
 		}
 		var rows []string
 		for para := range strings.SplitSeq(text, "\n") {
@@ -175,7 +186,7 @@ func (m *OS) drawSpawnSheet(c *ckCanvas, l ckLook, top int) {
 			c.text(x+3, y+1+i, right-2, ckSeg{t: r, fg: ink})
 		}
 	}
-	c.textR(right-2, y+box, ckSeg{t: "ctrl+j", fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: " new line", fg: pal.FgMute})
+	c.textR(right-2, y+box, ckSeg{t: "ctrl+j", fg: t.key, attrs: ckBold}, ckSeg{t: " new line", fg: pal.FgMute})
 	if pal.Depth == overlay.Depth16 {
 		spawnBrackets(c, l, x, y+1, w, box)
 	}
@@ -246,11 +257,11 @@ func (m *OS) drawSpawnSheet(c *ckCanvas, l ckLook, top int) {
 	cx := c.textR(sx-2, fy, btn("Cancel", spCancel, pal.Fg, pal.Card, 0))
 	c.mark(pal, cx, fy, sx-2-cx, 1, overlay.RowState{Cursor: true})
 	hit(cx, fy, sx-2, fy+1, "cancel")
-	keys := []ckSeg{{t: overlay.EnterKey(), fg: pal.AccentBright, attrs: ckBold}, {t: " start   ", fg: pal.FgMute},
-		{t: "tab", fg: pal.AccentBright, attrs: ckBold}, {t: " next field   ", fg: pal.FgMute}}
+	keys := []ckSeg{{t: overlay.EnterKey(), fg: t.key, attrs: ckBold}, {t: " start   ", fg: pal.FgMute},
+		{t: "tab", fg: t.key, attrs: ckBold}, {t: " next field   ", fg: pal.FgMute}}
 	for _, k := range [][2]string{{"ctrl+s", " save as preset   "}, {"esc", " close"}} {
 		if ckWidth(keys...)+ckWidth(ckSeg{t: k[0] + k[1]}) < cx-x-2 {
-			keys = append(keys, ckSeg{t: k[0], fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: k[1], fg: pal.FgMute})
+			keys = append(keys, ckSeg{t: k[0], fg: t.key, attrs: ckBold}, ckSeg{t: k[1], fg: pal.FgMute})
 		}
 	}
 	c.text(x, fy, cx-2, keys...)
@@ -293,7 +304,7 @@ func (m *OS) drawSpawnChips(c *ckCanvas, l ckLook, t spawnTone, s *spawnSheet, x
 			break
 		}
 		x0 := cx
-		segs := []ckSeg{{t: " " + string(rune('A'+i)) + " ", fg: pal.AccentBright, bg: pal.Card, attrs: ckBold},
+		segs := []ckSeg{{t: " " + string(rune('A'+i)) + " ", fg: overlay.ReadableAt(pal.AccentBright, pal.Card, overlay.MarkFloor), bg: pal.Card, attrs: ckBold},
 			{t: " " + name + " ", fg: pal.Fg, bg: t.field}}
 		if where != "" {
 			segs = append(segs, ckSeg{t: where, fg: pal.FgMute, bg: t.field})
@@ -346,7 +357,7 @@ func spawnStyles(pal overlay.Palette, field color.Color) composer.Styles {
 func (m *OS) spawnLabel(c *ckCanvas, l ckLook, s *spawnSheet, f spawnField, x, y int, text string) {
 	ink := l.pal.FgDim
 	if s.field == f {
-		ink = l.pal.AccentBright
+		ink = overlay.ReadableAt(l.pal.AccentBright, l.pal.Surface, overlay.MarkFloor)
 	}
 	c.text(x, y, 0, ckSeg{t: text, fg: ink, attrs: ckBold})
 }
@@ -402,7 +413,9 @@ func (m *OS) drawSpawnFields(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout, 
 		case i == s.agent:
 			seg = ckSeg{t: " " + a.cmd + " ", fg: pal.PillFg, bg: pal.Accent, attrs: ckBold}
 		case s.read && a.seen == 0 && !a.installed:
-			seg.fg = pal.FgMute
+			// Not installed: the quiet ink, held to the mark floor on the
+			// chip's card, where it is not promised.
+			seg.fg = overlay.ReadableAt(pal.FgMute, pal.Card, overlay.MarkFloor)
 		}
 		x0 := sx
 		sx = c.text(sx, y+1, limit, seg)
@@ -421,17 +434,56 @@ func (m *OS) drawSpawnFields(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout, 
 	hit(x, y, x+w, y+1, "field:"+strconv.Itoa(int(spAgent)))
 	y += step
 
-	// The model: typed, or picked from the models running agents report.
+	// The model: typed, or picked from the models the agent takes and the
+	// running agents report. An agent with no model flag takes none.
+	launch := s.launch()
 	m.spawnLabel(c, l, s, spModel, x, y, "Model")
 	iw := min(28, w)
 	models := len(s.listItems(spModel)) > 0
-	m.spawnInput(c, l, t, s, spModel, s.model, x, y+1, iw, "The agent's default", "", true, models, top)
-	hintW := x + w - (x + iw + 2)
-	switch {
-	case models && hintW >= 14:
-		c.text(x+iw+2, y+1, x+w, ckSeg{t: "from the agent", fg: pal.FgMute})
-	case hintW >= 17:
-		c.text(x+iw+2, y+1, x+w, ckSeg{t: "passed as --model", fg: pal.FgMute})
+	if launch.ModelFlag == "" && s.read {
+		c.text(x, y+1, x+w, ckSeg{t: "This agent takes no model choice.", fg: pal.FgMute})
+	} else {
+		m.spawnInput(c, l, t, s, spModel, s.model, x, y+1, iw, "The agent's default", "", true, models, top)
+		if hintW := x + w - (x + iw + 2); hintW >= 17 && launch.ModelFlag != "" {
+			c.text(x+iw+2, y+1, x+w, ckSeg{t: "passed as " + launch.ModelFlag, fg: pal.FgMute})
+		}
+	}
+	y += step
+
+	// The effort and the permission mode: a pill each, which opens its
+	// list. A mode that turns approvals off says so beside it.
+	px := x
+	for _, f := range []spawnField{spEffort, spPermission} {
+		label, flag := "Effort", launch.EffortFlag
+		if f == spPermission {
+			label, flag = "Permissions", launch.PermissionFlag
+		}
+		if flag == "" {
+			continue
+		}
+		m.spawnLabel(c, l, s, f, px, y, label)
+		v := s.choice(f)
+		if f == spPermission && launch.RiskyPermission(v) {
+			// On the label's row, where it has room beside a long mode.
+			c.text(px+len(label)+2, y, x+w, ckSeg{t: "approvals off", fg: overlay.ReadableAt(pal.Warning, t.sheet, overlay.MarkFloor), attrs: ckBold})
+		}
+		shown := v
+		if shown == "" {
+			shown = "default"
+		}
+		seg := ckSeg{t: " " + shown + " " + expand + " ", fg: pal.Fg, bg: t.field}
+		x0 := px
+		s.at[f], s.atX[f] = y+1, px
+		px = c.text(px, y+1, x+w, seg)
+		if s.field == f {
+			c.mark(pal, x0, y+1, px-x0, 1, overlay.RowState{Cursor: true, Focused: true})
+		}
+		hit(x0, y, px, y+1, "field:"+strconv.Itoa(int(f)))
+		hit(x0, y+1, px, y+2, "list:"+strconv.Itoa(int(f)))
+		px = max(px+3, x0+len(label)+3)
+	}
+	if px == x && s.read && s.agent < len(s.agents) {
+		c.text(x, y+1, x+w, ckSeg{t: "This agent takes no effort or permission choice.", fg: pal.FgMute})
 	}
 	y += step
 
@@ -443,7 +495,7 @@ func (m *OS) drawSpawnFields(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout, 
 		on := s.worktree == (i == 0)
 		mark, mc, ink := l.g(ckGlyphIdle), pal.FgMute, pal.FgDim
 		if on {
-			mark, mc, ink = l.g(ckGlyphPicked), pal.AccentBright, pal.Fg
+			mark, mc, ink = l.g(ckGlyphPicked), t.key, pal.Fg
 		}
 		if (i == 0 && !s.spawnCanWorktree() && s.read) || (i == 1 && s.host() != "") {
 			mc, ink = pal.FgMute, pal.FgMute
@@ -501,7 +553,7 @@ func (m *OS) spawnInput(c *ckCanvas, l ckLook, t spawnTone, s *spawnSheet, f spa
 			c.draw(x, y, w-sw, lines[0])
 		}
 	case strings.TrimSpace(ed.Text()) == "":
-		c.text(x+2, y, x+w-sw, ckSeg{t: placeholder, fg: pal.FgMute})
+		c.text(x+2, y, x+w-sw, ckSeg{t: placeholder, fg: pal.FgDim})
 	default:
 		ink := pal.Fg
 		if !live {
@@ -531,7 +583,9 @@ func (m *OS) drawSpawnMachines(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout
 	if s.agent < len(s.agents) {
 		agent = s.agents[s.agent].cmd
 	}
-	missing := false
+	// missing is what the picked machine says when the agent cannot start
+	// there.
+	missing := ""
 	for i, mc := range s.machines[:p.shown] {
 		picked := i == s.machine
 		ground := t.field
@@ -548,14 +602,46 @@ func (m *OS) drawSpawnMachines(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout
 				c.text(x, y+r, 0, ckSeg{t: l.g(ckGlyphBar), fg: pal.Accent})
 			}
 		}
-		mark, mk, ink := l.g(ckGlyphIdle), pal.FgMute, pal.Fg
+		// The picked row's ground is the accent's tint, which the quiet
+		// ink and the accent itself are not measured on: each is held to
+		// the mark floor on the row's own ground.
+		quiet := overlay.ReadableAt(pal.FgMute, ground, overlay.MarkFloor)
+		mark, mk, ink := l.g(ckGlyphIdle), quiet, pal.Fg
 		if picked {
-			mark, mk = l.g(ckGlyphPicked), pal.AccentBright
+			mark, mk = l.g(ckGlyphPicked), overlay.ReadableAt(pal.AccentBright, ground, overlay.MarkFloor)
 		}
 		if !mc.up {
-			ink = pal.FgMute
+			ink = quiet
 		}
-		nx := c.text(x+2, y, 0, ckSeg{t: mark, fg: mk}, ckSeg{t: "  " + l.g(ckGlyphHost) + " ", fg: pal.FgMute},
+		if mc.any {
+			// The daemon's pick and why, in place of a load.
+			c.text(x+2, y, 0, ckSeg{t: mark, fg: mk}, ckSeg{t: "  " + l.g(ckGlyphHost) + " ", fg: quiet},
+				ckSeg{t: mc.name, fg: ink, attrs: ckBold})
+			pick, why, warn := spawnAnyWords(s)
+			if picked && warn {
+				missing = why
+			}
+			pickInk := overlay.ReadableAt(pal.FgDim, ground, overlay.ContrastFloor)
+			if warn {
+				pickInk = overlay.ReadableAt(pal.Warning, ground, overlay.MarkFloor)
+			}
+			if p.twoLine {
+				c.textR(right-2, y, ckSeg{t: pick, fg: pickInk})
+				c.text(x+5, y+1, right-2, ckSeg{t: ckTrunc(why, right-2-x-5), fg: quiet})
+			} else {
+				c.textR(right-2, y, ckSeg{t: pick, fg: pickInk})
+			}
+			if picked {
+				c.mark(pal, x, y, w, rows, ckOn)
+			}
+			s.hits = append(s.hits, ckHit{x0: x, y0: top + y, x1: right, y1: top + y + rows, kind: ckHitAction, action: "machine:" + strconv.Itoa(i)})
+			y += rows
+			if p.twoLine {
+				y += p.gap
+			}
+			continue
+		}
+		nx := c.text(x+2, y, 0, ckSeg{t: mark, fg: mk}, ckSeg{t: "  " + l.g(ckGlyphHost) + " ", fg: quiet},
 			ckSeg{t: ckTrunc(mc.name, 16), fg: ink, attrs: ckBold})
 		// The load: a bar of ten, or a word when the machine does not say.
 		var load []ckSeg
@@ -576,7 +662,7 @@ func (m *OS) drawSpawnMachines(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout
 			load = []ckSeg{{t: strings.Repeat(l.g(ckGlyphLoad), n), fg: bar}, {t: strings.Repeat(empty, 10-n), fg: l.edgePanel},
 				{t: " " + strconv.Itoa(int(math.Round(frac*100))) + "%", fg: pal.FgDim}}
 		} else {
-			load = []ckSeg{{t: "no load report", fg: pal.FgMute}}
+			load = []ckSeg{{t: "no load report", fg: quiet}}
 		}
 		sub := strconv.Itoa(mc.working) + " working"
 		if mc.cores > 0 {
@@ -591,18 +677,23 @@ func (m *OS) drawSpawnMachines(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout
 		if p.twoLine {
 			c.textR(right-2, y, load...)
 			end := right - 2
-			if mc.host == "" && agent != "" && s.read {
-				if s.agents[s.agent].installed {
-					end = c.textR(right-2, y+1, ckSeg{t: agent + " ready", fg: pal.FgDim})
-				} else {
-					end = c.textR(right-2, y+1, ckSeg{t: agent + " not found", fg: pal.Warning})
-					missing = true
+			// What the machine's own daemon says of the agent: installed
+			// and signed in there, not what this client finds.
+			if agent != "" && mc.up {
+				words, ok := spawnReadyWords(mc, s.agents[s.agent].id, agent)
+				ink := overlay.ReadableAt(pal.FgDim, ground, overlay.ContrastFloor)
+				if !ok {
+					ink = overlay.ReadableAt(pal.Warning, ground, overlay.MarkFloor)
+					if picked {
+						missing = words
+					}
 				}
+				end = c.textR(right-2, y+1, ckSeg{t: words, fg: ink})
 			}
-			c.text(x+5, y+1, end-2, ckSeg{t: ckTrunc(sub, end-2-x-5), fg: pal.FgMute})
+			c.text(x+5, y+1, end-2, ckSeg{t: ckTrunc(sub, end-2-x-5), fg: quiet})
 		} else {
 			lx := c.text(nx+2, y, right, load...)
-			c.text(lx+2, y, right, ckSeg{t: strconv.Itoa(mc.working) + " working", fg: pal.FgMute})
+			c.text(lx+2, y, right, ckSeg{t: strconv.Itoa(mc.working) + " working", fg: quiet})
 		}
 		if picked {
 			c.mark(pal, x, y, w, rows, ckOn)
@@ -616,10 +707,20 @@ func (m *OS) drawSpawnMachines(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout
 		}
 	}
 	if p.twoLine {
-		c.text(x, y, right, ckSeg{t: "The order holds still while this sheet is open.", fg: pal.FgMute})
-		if missing {
-			c.text(x, y+1, right, ckSeg{t: s.machines[0].name + ": " + agent + " is not installed there.", fg: pal.FgMute})
+		// Why the order is what it is, and that it stays.
+		c.text(x, y, right, ckSeg{t: "Most free cores first, then fewest agents working.", fg: pal.FgMute})
+
+		second, ink := "The order holds still while this sheet is open.", pal.FgMute
+		if len(s.machines) > 0 && s.machines[0].any {
+			second = "Any machine picks at Start, by the same rule."
 		}
+		switch {
+		case missing != "" && s.anyPicked():
+			second, ink = missing, pal.Warning
+		case missing != "" && s.machine < len(s.machines):
+			second, ink = s.machines[s.machine].name+": "+missing+".", pal.Warning
+		}
+		c.text(x, y+1, right, ckSeg{t: second, fg: ink})
 		y += 2
 	}
 	return y
@@ -704,4 +805,18 @@ func (c *ckCanvas) dim(l ckLook, cache map[color.Color]color.Color) {
 			}
 		}
 	}
+}
+
+// spawnAnyWords is what the "Any machine" row says: the pick, why in one
+// line, and whether that warns.
+func spawnAnyWords(s *spawnSheet) (pick, why string, warn bool) {
+	switch {
+	case s.anyHere():
+		return "this machine", "An agent in this folder works on this machine.", false
+	case s.placeErr != "":
+		return "no machine fits", s.placeErr, true
+	case s.place != nil:
+		return s.place.Name, s.place.Why, false
+	}
+	return "finding", "Asking each machine for its room.", false
 }

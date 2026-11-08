@@ -79,6 +79,12 @@ func farCopyFixture(t *testing.T, base, top string) {
 // farCopyPath is where the copy of build's path lands: the cache, the host,
 // a hash of the host and the far path, and the name.
 func farCopyPath(base, farPath, name string) string {
+	// The pane names its folder by its real path (on macOS the temp folder
+	// is /private/var, which /var links to), and the copy is keyed by the
+	// path the listing shows.
+	if real, err := filepath.EvalSymlinks(farPath); err == nil {
+		farPath = real
+	}
 	sum := sha256.Sum256([]byte("build\x00" + farPath))
 	return filepath.Join(farCopyRoot(base), "build", hex.EncodeToString(sum[:8]), name)
 }
@@ -163,10 +169,10 @@ func openFarCopies(t *testing.T, term *tuitest.Terminal, base string, env []stri
 	notesCopy := farCopyPath(base, notes, "notes.md")
 	open("notes.md")
 	takeOffer(t, term, "notes.md is on build. Click to open a copy here.")
-	want = append(want, "xdg-open "+notesCopy)
+	want = append(want, systemOpener+" "+notesCopy)
 	waitOpenRecord(t, term, record, want, "the first open of a far file")
 	sameCopyBytes(t, notesCopy, notes, "the first open")
-	waitForAll(t, term, uiTimeout, "the note of the copy", "Opened a copy of notes.md with xdg-open.")
+	waitForAll(t, term, uiTimeout, "the note of the copy", "Opened a copy of notes.md with "+systemOpener+".")
 	copiesFrame(t, term, "open-far-copy-opened")
 	saveArtifact(t, term, art, "open-far-copy-opened")
 	if n := farCopies(t, base, env, "notes.md"); n != 1 {
@@ -178,7 +184,7 @@ func openFarCopies(t *testing.T, term *tuitest.Terminal, base string, env []stri
 	open("notes.md")
 	waitForAll(t, term, uiTimeout, "the second offer", "notes.md is on build. Click to open a copy here.")
 	sendKeys(t, term, tuitest.Ctrl('b'), "j")
-	want = append(want, "xdg-open "+notesCopy)
+	want = append(want, systemOpener+" "+notesCopy)
 	waitOpenRecord(t, term, record, want, "the second open of a far file")
 	if n := farCopies(t, base, env, "notes.md"); n != 1 {
 		t.Fatalf("the second open of an unchanged file made a copy: %d copies of notes.md, want 1", n)
@@ -194,7 +200,7 @@ func openFarCopies(t *testing.T, term *tuitest.Terminal, base string, env []stri
 	}
 	open("notes.md")
 	takeOffer(t, term, "notes.md is on build. Click to open a copy here.")
-	want = append(want, "xdg-open "+notesCopy)
+	want = append(want, systemOpener+" "+notesCopy)
 	waitOpenRecord(t, term, record, want, "the open after the far file changed")
 	sameCopyBytes(t, notesCopy, notes, "the open after the far file changed")
 	if n := farCopies(t, base, env, "notes.md"); n != 2 {
@@ -214,7 +220,7 @@ func openFarCopies(t *testing.T, term *tuitest.Terminal, base string, env []stri
 	col, row, _ = findOnGrid(term.Screen(), "Open with system")
 	mouseClick(t, term, col+1, row, tuitest.MouseLeft, 0)
 	takeOffer(t, term, "inner is on build. Click to open a copy here.")
-	want = append(want, "xdg-open "+innerCopy)
+	want = append(want, systemOpener+" "+innerCopy)
 	waitOpenRecord(t, term, record, want, "the open of a far folder")
 	for _, f := range []string{"inner-keep.txt", "inner-gone.txt"} {
 		sameCopyBytes(t, filepath.Join(innerCopy, f), filepath.Join(inner, f), "the folder copy")
@@ -238,7 +244,7 @@ func openFarCopies(t *testing.T, term *tuitest.Terminal, base string, env []stri
 		t.Fatalf("the size ask copied the file before the second yes")
 	}
 	takeOffer(t, term, "zbig.bin on build is 2.00 MiB.")
-	want = append(want, "xdg-open "+bigCopy)
+	want = append(want, systemOpener+" "+bigCopy)
 	waitOpenRecord(t, term, record, want, "the open of a file over the ask limit")
 	sameCopyBytes(t, bigCopy, big, "the copy of a file over the ask limit")
 
@@ -247,7 +253,7 @@ func openFarCopies(t *testing.T, term *tuitest.Terminal, base string, env []stri
 	craftedCopy := farCopyPath(base, crafted, ".._.._x.txt")
 	open(farCopyCrafted)
 	takeOffer(t, term, farCopyCrafted+" is on build.")
-	want = append(want, "xdg-open "+craftedCopy)
+	want = append(want, systemOpener+" "+craftedCopy)
 	waitOpenRecord(t, term, record, want, "the open of a crafted name")
 	sameCopyBytes(t, craftedCopy, crafted, "the copy of a crafted name")
 	rel, err := filepath.Rel(farCopyRoot(base), craftedCopy)

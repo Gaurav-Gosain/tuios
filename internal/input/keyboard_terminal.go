@@ -1,8 +1,6 @@
 package input
 
 import (
-	"time"
-
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -105,7 +103,9 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// kitty pane, legacy bytes otherwise. A leader with no legacy encoding
 		// is dropped rather than replaced with some other key.
 		if o.PrefixActive {
-			o.PrefixActive = false
+			// The leader twice closes the leader and any menu it opened: a
+			// sub-menu left open would take the next key.
+			o.SetMenuState(app.MenuState{})
 			if o.KeybindRegistry != nil && o.KeybindRegistry.LeaderTwiceGoesBack() {
 				// screen's C-a C-a. send_prefix still sends the leader.
 				o.LastWorkspace()
@@ -115,8 +115,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			return o, nil
 		}
 		// Activate prefix mode
-		o.PrefixActive = true
-		o.LastPrefixTime = time.Now()
+		o.ArmLeader()
 		return o, nil
 	}
 
@@ -253,7 +252,7 @@ func typeIntoPane(msg tea.KeyPressMsg, o *app.OS, nvimNavigation bool) (*app.OS,
 			}
 			if err := focusedWindow.SendInput(rawInput); err != nil {
 				// Terminal unavailable, switch back to window mode
-				o.Mode = app.WindowManagementMode
+				o.ChooseMode(app.WindowManagementMode, app.ModeCauseNoPane)
 				focusedWindow.InvalidateCache()
 			}
 			// Forward keystrokes to the multifocus set's panes on screen.
@@ -270,7 +269,7 @@ func typeIntoPane(msg tea.KeyPressMsg, o *app.OS, nvimNavigation bool) (*app.OS,
 		}
 	} else {
 		// No focused window, switch back to window mode
-		o.Mode = app.WindowManagementMode
+		o.ChooseMode(app.WindowManagementMode, app.ModeCauseNoPane)
 	}
 	return o, nil
 }

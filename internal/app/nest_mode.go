@@ -65,7 +65,7 @@ func (m *OS) settleNest() {
 // modeBorrowed reports whether a gesture holds window mode and will give
 // terminal mode back when it ends.
 func (m *OS) modeBorrowed() bool {
-	return m.pointerGestureWasTerminal || m.CtrlDragWasTerminal || m.hold.active ||
+	return len(m.mode.leases) > 0 ||
 		m.ClickToTypePending || m.Dragging || m.Resizing
 }
 

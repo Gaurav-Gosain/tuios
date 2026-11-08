@@ -31,6 +31,9 @@ import (
 //	prompt_box (or prompt_box_body)    between the last two border lines
 //	above_prompt_box                   everything above that box
 //	last_non_empty_above_prompt_box    the one line just above the box
+//	framed_above_prompt_box            the block just above the box, from the
+//	                                   border line before it (or the top of
+//	                                   the tail) to the box's top border
 //	after_last_horizontal_rule         everything under the last border line,
 //	                                   past a titled one at the very bottom
 //
@@ -45,13 +48,14 @@ const (
 	RegionPromptBox              = "prompt_box"
 	RegionAbovePromptBox         = "above_prompt_box"
 	RegionLastAbovePromptBox     = "last_non_empty_above_prompt_box"
+	RegionFramedAbovePromptBox   = "framed_above_prompt_box"
 	RegionAfterLastRule          = "after_last_horizontal_rule"
 	RegionOSCTitle               = "osc_title"
 	RegionOSCProgress            = "osc_progress"
 	regionBottomPrefix           = "bottom_non_empty_lines("
 	regionBottomSuffix           = ")"
 	maxRegionLines               = 200
-	screenRegionNamesForMessages = "tail, bottom_non_empty_lines(N), prompt_box, above_prompt_box, last_non_empty_above_prompt_box or after_last_horizontal_rule"
+	screenRegionNamesForMessages = "tail, bottom_non_empty_lines(N), prompt_box, above_prompt_box, last_non_empty_above_prompt_box, framed_above_prompt_box or after_last_horizontal_rule"
 )
 
 // screenRegionAliases maps the names a manifest may write to the name stored.
@@ -65,6 +69,8 @@ var screenRegionAliases = map[string]string{
 	RegionAbovePromptBox:     RegionAbovePromptBox,
 	RegionLastAbovePromptBox: RegionLastAbovePromptBox,
 	RegionAfterLastRule:      RegionAfterLastRule,
+
+	RegionFramedAbovePromptBox: RegionFramedAbovePromptBox,
 }
 
 // normalizeScreenRegion returns the stored form of a screen region name and,
@@ -225,6 +231,22 @@ func regionBounds(tail []string, region string) (lo, hi int, ok bool) {
 			}
 		}
 		return 0, 0, false
+	case RegionFramedAbovePromptBox:
+		// A form Claude Code draws over its input box, between two rules:
+		// the one above the form and the box's own top border. Only that
+		// block, so an answered form further up in the transcript is not
+		// read. A tail that starts inside the form has no rule above it,
+		// and the block then starts at the top of the tail.
+		top, _, ok := promptBox(tail)
+		if !ok {
+			return 0, 0, false
+		}
+		for i := top - 1; i >= 0; i-- {
+			if isBoxBorder(tail[i]) {
+				return i + 1, top, true
+			}
+		}
+		return 0, top, true
 	case RegionAfterLastRule:
 		// A titled rule with nothing under it closes the frame rather than
 		// separating settled output from what is live: Claude Code 2.1.311

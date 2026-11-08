@@ -122,8 +122,10 @@ only.
 
 Mail crosses sessions on one daemon: `--from "$TUIOS_PANE_ID"` (your full
 window id) names you from any session, and the message's `from_label` says
-which session you are in. A name or a short id is looked up only in the
-recipient's session. A reply goes to the sender's own session with `-s`.
+which session you are in. A name or a short id is looked up in the
+recipient's session, and then in the session of the pane you run in, so
+`--from` with your own pane's name also works. A name from any other session
+is not taken. A reply goes to the sender's own session with `-s`.
 
 ### Being reachable yourself
 

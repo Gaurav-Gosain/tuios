@@ -305,7 +305,7 @@ func (m *OS) deliverImageCmd(window string, data []byte) tea.Cmd {
 
 	nonce := m.inboxNonce()
 	if nonce == "" {
-		m.ShowNotification("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon.", "error", m.Settings.NotificationDuration*2)
+		m.ShowNotification(m.noNonceText()+".", "error", m.Settings.NotificationDuration*2)
 		return nil
 	}
 	sessionName := m.SessionName

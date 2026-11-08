@@ -53,6 +53,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_toggle_sidebar", handlePrefixToggleSidebar)
 	d.Register("prefix_toggle_other_rail", handlePrefixToggleOtherSidebar)
 	d.Register("prefix_session_switcher", handlePrefixSessionSwitcher)
+	d.Register("prefix_new_task", handlePrefixNewTask)
 	d.Register("prefix_workspace_switcher", handlePrefixWorkspaceSwitcher)
 	d.Register("choose_tree", handleChooseTree)
 	d.Register("goto_picker", handleGotoPicker)
@@ -83,13 +84,13 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 
 	// Sub-prefixes: each keeps the prefix active so the which-key overlay stays
 	// up for the second key.
-	d.Register("prefix_workspace", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuWorkspace }))
-	d.Register("prefix_minimize", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuMinimize }))
-	d.Register("prefix_window", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuTiling }))
-	d.Register("prefix_debug", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuDebug }))
-	d.Register("prefix_tape", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuTape }))
-	d.Register("prefix_layout", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuLayout }))
-	d.Register("prefix_tuios", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuTuios }))
+	d.Register("prefix_workspace", makeSubPrefixHandler(app.SubMenuWorkspace))
+	d.Register("prefix_minimize", makeSubPrefixHandler(app.SubMenuMinimize))
+	d.Register("prefix_window", makeSubPrefixHandler(app.SubMenuTiling))
+	d.Register("prefix_debug", makeSubPrefixHandler(app.SubMenuDebug))
+	d.Register("prefix_tape", makeSubPrefixHandler(app.SubMenuTape))
+	d.Register("prefix_layout", makeSubPrefixHandler(app.SubMenuLayout))
+	d.Register("prefix_tuios", makeSubPrefixHandler(app.SubMenuTuios))
 
 	// Window prefix (leader, t, ...)
 	d.Register("window_prefix_new", handleNewWindow)
@@ -108,6 +109,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 		d.Register("minimize_prefix_restore_"+string(rune('0'+i)), makeRestoreMinimizedByPositionHandler(i))
 	}
 	d.Register("minimize_prefix_restore_all", handleRestoreAll)
+	d.Register("minimize_prefix_focus_only", handleFocusOnly)
 	d.Register("minimize_prefix_cancel", handlePrefixCancel)
 
 	// Workspace prefix (leader, w, ...)
@@ -186,11 +188,9 @@ func refreshFocusedWindow(o *app.OS) {
 // makeSubPrefixHandler builds a handler that enters a sub-prefix. The prefix
 // stays active so the next key is routed to the sub-prefix rather than to the
 // terminal, and the timer restarts so the chord gets a fresh timeout.
-func makeSubPrefixHandler(activate func(*app.OS)) ActionHandler {
+func makeSubPrefixHandler(sub app.SubMenu) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-		activate(o)
-		o.PrefixActive = true
-		o.LastPrefixTime = time.Now()
+		o.OpenSubMenu(sub)
 		return o, nil
 	}
 }
@@ -219,13 +219,19 @@ func handleCloseWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.CloseWindowByHand(o.FocusedWindow)
 		return o, nil
 	}
+	// appearance.confirm_close: the close waits for the answer in the
+	// one-pane close dialog, which closes the pane the same way.
+	if o.CloseNeedsConfirm(o.FocusedWindow) {
+		o.OpenSessionCloseForWindow(o.FocusedWindow)
+		return o, nil
+	}
 	o.FireHook(hooks.AfterCloseWindow, w.ID, w.Title())
 	o.DeleteWindow(o.FocusedWindow)
 	if len(o.Windows) > 0 {
 		refreshFocusedWindow(o)
 	} else if o.Mode == app.TerminalMode {
 		// Nothing left to type into.
-		o.Mode = app.WindowManagementMode
+		o.ChooseMode(app.WindowManagementMode, app.ModeCauseNoPane)
 	}
 	return o, nil
 }
@@ -246,7 +252,7 @@ func startRename(o *app.OS) {
 	if focused == nil {
 		return
 	}
-	o.Mode = app.WindowManagementMode
+	o.ChooseMode(app.WindowManagementMode, app.ModeCauseAction)
 	o.BeginRenameWindow(focused)
 }
 
@@ -271,7 +277,7 @@ func handleWindowPrefixRename(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 // from which: the pill the menu was opened on, or the workspace in view.
 // Renaming is a window-management activity, like renaming a pane.
 func handleWorkspaceRename(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.Mode = app.WindowManagementMode
+	o.ChooseMode(app.WindowManagementMode, app.ModeCauseAction)
 	o.BeginRenameCurrentWorkspace()
 	return o, nil
 }
@@ -362,6 +368,10 @@ func handlePrefixFullscreen(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handlePrefixSelection(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	// Over the agents view, copy mode runs on the thread.
+	if o.ShowInbox && o.CockpitCopyStart() {
+		return o, nil
+	}
 	// Multi copy mode when the focused pane is in a multifocus set of two or
 	// more panes; plain copy mode otherwise. See EnterCopyModeFocused.
 	o.EnterCopyModeFocused()
@@ -469,6 +479,10 @@ func handlePrefixSessionSwitcher(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 	return o, nil
 }
 
+func handlePrefixNewTask(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return o, o.OpenTaskCapture()
+}
+
 func handlePrefixWorkspaceSwitcher(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.OpenWorkspaceSwitcher()
 	return o, nil
@@ -480,7 +494,7 @@ func leaveTerminalMode(o *app.OS) {
 	if o.Mode != app.TerminalMode {
 		return
 	}
-	o.Mode = app.WindowManagementMode
+	o.ChooseMode(app.WindowManagementMode, app.ModeCauseKey)
 	o.ShowNotification("Window management mode", "info", o.Settings.NotificationDuration)
 	refreshFocusedWindow(o)
 }
@@ -519,6 +533,13 @@ func handleMinimizeFocused(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
 		o.MinimizeWindow(o.FocusedWindow)
 	}
+	return o, nil
+}
+
+// handleFocusOnly minimizes the other panes on the workspace, or brings back
+// the ones the last press hid. See app.ToggleFocusOnly.
+func handleFocusOnly(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.ToggleFocusOnly()
 	return o, nil
 }
 

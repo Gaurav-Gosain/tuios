@@ -3519,7 +3519,7 @@ Frames from the daemon:
 | `S` (0x53) | u64 seq, u16 cols, u16 rows, bytes | A snapshot. Reset the emulator to cols by rows and write the bytes into it. |
 | `O` (0x4F) | u64 seq, bytes | Output. Write the bytes into the emulator. `seq` is the stream position after the last byte. |
 | `R` (0x52) | u64 seq, u16 cols, u16 rows | The pane changed size at `seq`. Resize the emulator. |
-| `E` (0x45) | JSON `{"code", "message"}` | The daemon refused a frame from the client, or released a lease that the client did not renew (code `lease_expired`). The other codes are the verb error codes. The stream continues. |
+| `E` (0x45) | JSON `{"code", "message"}`, and `accepted` on `busy` | The daemon refused a frame from the client, or released a lease that the client did not renew (code `lease_expired`). The other codes are the verb error codes. The stream continues. |
 | `X` (0x58) | UTF-8 text | The stream ended: `exited N` when the pane's program exited with status N, `killed N` when signal N ended it, `closed` when its window closed first, `the daemon stopped`, or `refused: ...` when the caller may no longer read the pane. The daemon then closes the connection. |
 
 Frames from the client:
@@ -3564,9 +3564,14 @@ frame, and the stream continues. A frame from the client larger than 64 KiB
 ends the stream. Send a longer paste as more than one `I` frame.
 
 The daemon writes `I` frames into the pane in order, on its own goroutine. A
-pane that does not read its input does not delay `L` frames. At most 4 `I`
-frames wait for the pane. The next `I` frame gets an `E` frame with code
-`busy`, and the daemon does not type it.
+pane that does not read its input does not delay `L` frames. Up to 256 KiB of
+input, in up to 4096 frames, waits for the pane, so a client may send one
+frame per key and a burst is never refused while the pane reads. When the
+pane has not read that much, the next `I` frame gets an `E` frame with code
+`busy` and `accepted`, the number of input bytes this stream took so far, all
+typed or waiting, in order. Every `I` frame after it is refused the same way
+until the pane has read what waits, so nothing is typed out of order. Send
+again from byte `accepted`. The daemon logs each run of refusals.
 
 The daemon checks the caller again each second, as it checks a new
 `stream-pane`. When a pane loses its read grant, or the link policy no longer
@@ -6467,8 +6472,16 @@ Response:
 
 Wire compatibility: both verbs are new, and the item fields are additive. An
 older daemon answers `unknown_verb`, which the hook reads as no decision.
-`reply-approval` without `summary` answers as before, with no check of the
-line.
+`reply-approval` must carry `summary` for an allow (`once` or `always`): an
+allow without it answers nothing and is refused with `invalid_params`, so a
+caller cannot approve a call by not saying which line it read. A `deny` may
+leave it out. The TUI Inbox and guios have always sent it.
+
+A client's push that moves the focus to a held pane ends the hold as `viewed`
+only when the person moved it. A push made while the client ran a routed
+`run-command`, or keys from `send-keys` or a tape, carries
+`focus_by_command`, and the hold runs on. `focus-window`, which the daemon
+carries out itself, never ended a hold.
 
 ### Risky approvals and plans
 
@@ -7483,6 +7496,24 @@ Params:
   `after` and `before` together.
 - `limit` (optional int): the most entries to return, 1 to 1000. The default
   is 200. Leave it out for the default. A `limit` of 0 is `invalid_params`.
+- `image` (optional): the `id` of an entry that has `image`. The reply is
+  then that image alone: `{"type": "agent_transcript_image", "session",
+  "window", "image", "media_type", "data", "untrusted": true}`, with `data`
+  the image bytes as base64. The daemon reads only the one record the id
+  names, in the file the pane is joined to. An id that names no image is
+  `invalid_params`. Only Claude Code transcripts carry images.
+
+  Two images are files, not transcript data, and the daemon adds an entry
+  for each after the entry that names it, with an `id` of the form
+  `file.<entry id>.<k>`: a file of this daemon's paste folder (a
+  `tuios-paste-` name) that a prompt names, and an image an agent's read tool
+  (`view_image`, `read_file`, `read_many_files`, `read`, `view`) named by an
+  absolute path when no image follows the call. A prompt gives 4 at most. The
+  entry is there only while the file is a regular file of at most 10 MB. An
+  `image` read of such an id finds the entry again in the newest 1000 entries
+  and takes the path from it, so the caller never names a path. The file is
+  opened without following a link, and its first bytes must be PNG, JPEG, GIF
+  or WebP: `media_type` is what the bytes are, whatever the name says.
 
 Without `after` and `before`, the reply holds the newest `limit` entries.
 With `after`, it holds the entries after that cursor. With `before`, it holds
@@ -7536,16 +7567,17 @@ Each entry has:
 | `id` | A stable id. A read of the same record gives the same id. An entry with an id that the client holds replaces it. |
 | `at` | When the agent wrote the record, unix milliseconds. |
 | `role` | `user`, `assistant` or `tool`. |
-| `kind` | `text`, `thinking`, `tool_call`, `tool_result`, `plan` or `todos`. |
+| `kind` | `text`, `thinking`, `tool_call`, `tool_result`, `plan`, `todos`, `error` or `interrupt`. A `thinking` entry can have no `text`: Claude Code keeps most thinking as a signature only, and the entry still says the agent thought. Its time less the time of the entry before it is how long. `interrupt` marks where the person stopped the agent, with `role` `user` and no `text`. It is not a prompt. `error` is an error the harness wrote, such as a failed request. |
 | `text` | The text. For a `tool_result`, the first 20 lines. |
 | `truncated` | `true` when `text` or `plan` was cut, or a tool result had more lines. |
 | `tool` | The tool name of a call: `Bash`, `Edit`, `TodoWrite`. |
 | `target` | One line that says what the call acts on: the command, the file path, the URL or the pattern. |
-| `status` | `ok`, `error` or `running`. A call gets the status of its result when the result is in the same reply, and `running` when it is not. |
+| `status` | `ok`, `error`, `running` or `declined`. A call gets the status of its result when the result is in the same reply, and `running` when it is not. `declined` says the person declined the call. The result's `text` is then what they said with it, or empty, not the harness's own words. |
 | `tool_id` | Joins a call to its result. When a result arrives in a later reply, update the call with that `tool_id` from it. |
 | `diff` | For `Edit`, `MultiEdit` and `Write`: `file`, `added`, `removed`, `truncated`, `plain`, `whole_replace` and `hunks`. Each hunk has `old_start`, `new_start` and `lines`, and each line has `op` (`" "`, `"+"` or `"-"`), `text`, `spans` and `words`. See [Diff colours](#diff-colours). A `Write` of a new file is all `+`. When the result carries the file's own line numbers (Claude Code's `structuredPatch`), the result has the diff too, and a call in the same reply takes those hunks. Without them, the line numbers count from the start of the edited text. |
 | `plan` | For `ExitPlanMode`: the plan, as markdown. |
 | `todos` | For `TodoWrite`: the list, each item with `text` and `status`. |
+| `image` | On an image the person pasted, or one a tool result holds: `media_type` (`image/png`, `image/jpeg`, `image/gif` or `image/webp`), and `width` and `height` in pixels when the transcript says them. The entry's `text` is `[image]`. An image of a tool result, such as a Read of a PNG, is an entry of `role` `tool` right after the result, with its `tool_id`, at most 8 for one result. Read its bytes with the `image` param. |
 
 #### Diff colours
 
@@ -7889,15 +7921,33 @@ they make anything: a refusal names `task` in its hint.
 
 | Verb | What it does | A pane without `admin` | Over a link | Result `type` |
 | --- | --- | --- | --- | --- |
-| `add-task` | Add a card: `title` (required, at most 200 bytes), `prompt` (at most 16 KiB), `stage` (default `todo`) | `task`, own session | `write` | `task_added` |
-| `list-tasks` | The session's cards, oldest first. `stage`, `holder` and `open` (leave out `done`) narrow it. `all_sessions` lists every session's, in session name order, and takes no `session` or `holder` | `read` | `list` | `task_list` |
+| `add-task` | Add a card: `title` (required, at most 200 bytes), `prompt` (at most 16 KiB), `stage` (default `todo`), `project` (the repository's origin URL) | `task`, own session | `write` | `task_added` |
+| `list-tasks` | The session's cards, oldest first. `stage`, `holder` and `open` (leave out `done`) narrow it. `all_sessions` lists every session's, in session name order, and takes no `session` or `holder`. `project` lists one repository's cards from every session; `hosts` with it also asks each linked machine for its own, and `hosts` with `all_sessions` adds every linked machine's project cards | `read` | `list` | `task_list` |
 | `get-task` | One card with its `prompt` and `history` | `read` | `list` | `task` |
 | `claim-task` | Take the card `id`, or with `next` the oldest card no pane holds that is not blocked or done, for `window` | `task`; for itself only | `write` | `task_claimed` |
-| `finish-task` | Mark the card done | `task`; only the card it holds | `write` | `task_finished` |
+| `finish-task` | Mark the card done. From the pane that holds it, the card is let go and goes to `verify` or `review` instead | `task`; only the card it holds | `write` | `task_finished` |
+| `run-task-verify` | Run a board's verify `command` in the worktree of `window`, a pane here, for the machine that owns the card; with `probe`, only say whether the pane is here (`here`) | refused | `open` | `task_verify` with `exit`, `note`, `tail` |
 | `set-task-stage` | Move the card to `stage` | `task`; only the card it holds | `write` | `task_changed` |
 | `block-task` | Mark the card stuck with `reason`, or lift it with `clear` | `task`; only the card it holds | `write` | `task_changed` |
 | `release-task` | Let the card go and keep its stage | `task`; only the card it holds | `write` | `task_changed` |
 | `remove-task` | Remove the card and its history | refused | `write` | `task_removed` with `id` |
+| `get-task-dispatch` | The dispatch settings: `paused`, `stopped` (why all dispatch stopped on its own), `quiet`, `quiet_now`, `boards` (each with `board`, `project` or `session`, `mode`, `failures`, `stopped`), and `board` for the board `project` or `session` names | `read` | `list` | `task_dispatch` |
+| `set-task-dispatch` | `action`: `mode` (with `mode` `manual`, `pull` or `auto`, for the board `project` or `session` names; auto needs a preset), `preset` (`agent`, `model`, `effort`, `permission_mode`, `machine`), `cap` (`cap`, `machine_cap`), `pause`, `resume` (lifts the pause and every stop), `quiet` (with `quiet`, such as `22:00-07:00`, or `off`) or `verify` (with `verify`, a shell line or `off`, and `verify_timeout` in seconds) | `pause` only; `verify` is refused; the rest need `admin` | refused | `task_dispatch` |
+
+A row also carries the card's lifecycle: `attempts` (times it went back to
+todo after a failed verify or an errored agent), `note` (why the last one
+did), `work` (`host`, `session`, `window`, `dir` where its agent worked) and
+`verify` (`state` running, passed or failed, `exit`, `note`, `tail`, the last
+2 KiB of the output, `started_at`, `finished_at`). The history action
+`verified` records how a verify ended.
+
+`add-task` also takes `harness`, the agent the card is for, and `ask_first`,
+which keeps the card for a person. A row carries them, and `dispatched` when
+dispatch made the card's last claim. On a board in pull mode, an agent that
+finishes its card is given the board's next open card in the same state change
+as the claim, and mail from `tuios` tells it. A board stops after 3 dispatched
+cards in a row end without a finish; all dispatch stops when an agent reports
+`errored` with `kind` `usage_limit`. See [`tuios task`](CLI_REFERENCE.md#tuios-task).
 
 Every verb but `list-tasks` and `remove-task` answers with the card's row at
 the top level of the result: `id`, `session`, `title`, `preview` (the first
@@ -7922,6 +7972,26 @@ finishes, stages, blocks or releases only the card it holds. A pane holding
 and change any card; outside a pane `window` is required. The pick and the
 take of a claim happen in one state change, so two panes that claim `next` at
 once take two cards.
+
+A card with a `project` is on that repository's board. `project` is the
+normalised origin URL (host and path, no user, port or `.git`), so two
+spellings of one repository match, and a local path is `invalid_params`.
+`list-tasks` with `project` answers `project` and `tasks`; with `hosts` the
+rows from another machine carry `host`, and machines that did not answer are
+in `hosts_down` (`host`, `error`). A `list-tasks` that came over a link lists
+that daemon's own cards only and never asks its links, so two machines that
+link each other list each card once.
+
+The daemon that made a card owns it. `claim-task`, `release-task` and
+`finish-task` with `host` and the owner's `session` are for a pane working on
+a card another machine owns: its daemon checks the calling pane, then calls
+the owner with `remote_window`, `remote_name` and `remote_harness`. The owner
+records the holder as that window on the link's peer name (`holder.host`),
+never a name from a param, and refuses `remote_window` outside a link and on a
+card without a project. A claim by the pane that holds the card already
+succeeds, so a retry after a lost answer is safe. The worker's daemon releases
+the card on the owner when the pane closes or its agent leaves, best effort.
+A refusal from the owner keeps its code, with the message prefixed `on HOST:`.
 
 `claim-task` of a card another pane holds is `task_held`. An unknown `id`, or
 `next` with nothing open to take, is `no_task`. Claiming a card that is done
@@ -7984,6 +8054,7 @@ Event types:
 | `gap` | Some events were not delivered to this connection. `reason` says why (see below). A gap has no `seq`. | `reason`, `dropped`, `boot_id` |
 | `attention` | An Inbox item opened, changed or closed. `action` is `open`, `update` or `close`, and `attention` is the item as `list-attention` returns it. On `close` the item carries `closed`: `resolved`, `seen`, `read`, `dismissed`, `answered`, `superseded`, `window_closed`, `session_closed`, `evicted`, `host_removed`, `agents_disabled` (the person turned the agent features off) or `snoozed` (the person snoozed it; it opens again with the same id). An `answered` item also carries `answer` and `answered_by`; the close of a linked host's item never reads `answered` here. `session` and `window` are the item's, so the usual filters apply. An item of a linked host also sets `host`, and a subscriber that filters on a session, window or pane does not get it unless it subscribed with `hosts`. | `session`, `window`, `host`, `action`, `attention` |
 | `host-changed` | A linked host's link changed state, or what it holds changed: its sessions, windows or agents. List the hosts again to see what. See [Following linked hosts](#following-linked-hosts). | `host`, `status` |
+| `worktree-removed` | git removed a worktree that tuios made: by `remove-worktree`, or by the undo of a setup or a delegation that did not start. `path` is the folder that is gone. `session` is the worktree's session, which may be gone too. A plugin hook on `worktree.removed` runs on it, with `data.path`. | `session`, `path` |
 | `prompt` | A shell that marks its commands with OSC 133 shows its prompt after anything else: at start, or after a command. A prompt drawn again changes nothing and raises nothing. | `session`, `window`, `pty_id` |
 | `command-started` | A shell with OSC 133 marks started a command. `cmdline` is cut to 512 bytes, with likely secrets masked. | `session`, `window`, `pty_id`, `cmdline` |
 | `command-finished` | That command finished. `exit_code` is absent when the shell sent no status; a prompt with no finish mark ends the command that way. `command_seq` counts the pane's finished commands. | `session`, `window`, `pty_id`, `cmdline`, `exit_code`, `duration_ms`, `command_seq` |
@@ -7997,6 +8068,7 @@ Event types:
 | `task-finished` | A task card was marked done. `window` is the pane that held it, empty when none did. | `session`, `window`, `task` |
 | `task-changed` | A task card was `added`, `staged`, `blocked`, `unblocked`, `released` or `removed` (`action`). A release tuios made on its own carries `reason`: `pane closed`, `agent left` or `restart`; a stage move it made on its own carries the fact (see [Task verbs](#task-verbs)); a block carries its reason too. `removed` carries the card's last row. | `session`, `action`, `reason`, `task` |
 | `fan-verdict` | A judge recorded its verdict on a fan with `set-fan-verdict`. One event for each attempt: `session` is the attempt, `title` the session the verdict picks. Read it with `compare-fan`. | `session`, `title` |
+| `task-dispatch` | A board's dispatch mode or a switch changed, or dispatch stopped on its own (`action` `stopped`, `reason` such as `3 failures in a row` or `usage limit reported by claude-code`). `dispatch` is the whole status as `get-task-dispatch` gives it. It names no session. | `action`, `reason`, `dispatch` |
 | `keep-awake` | The daemon took or dropped its hold that keeps the machine awake, the number of working agent panes changed while `keep_awake` is `agents`, or `keep_awake` changed. `mode` is `off`, `on` or `agents`, `state` is `held` or `released`, `working` counts the working agent panes on this machine, and `reason` says why the machine could not be held awake, when it could not. See [get-keep-awake](#get-keep-awake). It names no session. | `mode`, `state`, `working`, `reason` |
 | `tml-event` | What a person did on a TML surface that its owner hears: an `emit` action in the document, or the close, which is the surface's last event. `tml` has `surface`, `name` (the emit's name, or `close`), `value` (absent when null), `reason` (on a close: `closed`, `program` or `dismissed`) and `version`. `window` is the TML window. Opt-in: only a subscription whose `types` names it receives it, and a `tml-open` with `events` gets the events of its own surface. | `tml` |
 | `option-set` | `set-option` recorded a value for a session. `key` is the option's path and `value` the value. It fires whether or not an attached client applied the value. Opt-in: only a subscription whose `types` names it receives it. | `session`, `key`, `value` |

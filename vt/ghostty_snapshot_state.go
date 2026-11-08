@@ -46,9 +46,9 @@ func (t *GhosttyTerminal) clearTabStopLocked() {
 }
 
 // observeTabControl follows the CSI forms that change the tab stops, as the
-// library reads them: TBC (CSI g) with 0 clears the stop at the cursor and
-// with 3 clears them all, and with no parameter does nothing, where xterm
-// reads it as 0; CTC (CSI W) with no parameter or 0
+// library reads them: TBC (CSI g) with no parameter or 0 clears the stop at
+// the cursor and with 3 clears them all (libghostty before 1.0 did nothing
+// for the bare form); CTC (CSI W) with no parameter or 0
 // sets one at the cursor, with 2 clears it and with 5 clears them all; and
 // DECST8C (CSI ? 5 W) puts the default table back. Anything else changes
 // nothing in the library either.
@@ -56,7 +56,7 @@ func (t *GhosttyTerminal) observeTabControl(prefix, final byte, params []byte) {
 	n := csiParamCount(params)
 	v, _ := csiFirstParam(params)
 	switch {
-	case final == 'g' && prefix == 0 && n == 1:
+	case final == 'g' && prefix == 0 && n <= 1:
 		switch v {
 		case 0:
 			t.clearTabStopLocked()

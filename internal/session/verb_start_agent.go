@@ -57,7 +57,17 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		Grants       []string          `json:"grants"`
 		Task         string            `json:"task"`
 		HumanNonce   string            `json:"human_nonce"`
-		Parent       string            `json:"parent"`
+		// TaskHost names the machine that owns the card, as this
+		// machine's [hosts] calls it, and TaskSession its session there:
+		// the new pane claims the card on its owner over the link
+		// (pool_place.go).
+		TaskHost    string `json:"task_host"`
+		TaskSession string `json:"task_session"`
+		// TaskMail mails the pane the card once it holds it, from tuios,
+		// so the agent reads it rather than having it typed.
+		TaskMail bool   `json:"task_mail"`
+		Parent   string `json:"parent"`
+		launchChoice
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -105,7 +115,10 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	var launch agentLaunch
 	resolveAgent := func() *verbError {
 		var verr *verbError
-		launch, verr = d.resolveAgentLaunch("agent", p.Agent, pathList)
+		if launch, verr = d.resolveAgentLaunch("agent", p.Agent, pathList); verr != nil {
+			return verr
+		}
+		launch, verr = d.withChoice(launch, p.launchChoice)
 		return verr
 	}
 
@@ -155,11 +168,29 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	// It is a card of the session the pane opens in, so that session has to
 	// exist already. See task_auto.go.
 	var task *taskParam
-	if p.Task != "" {
-		if sess == nil {
-			return nil, invalidParam("task", "task names a card of the session the agent starts in, and session "+echoName(name)+" does not exist yet")
+	taskHost := strings.TrimSpace(p.TaskHost)
+	if taskHost != "" {
+		switch {
+		case p.Task == "":
+			return nil, invalidParam("task_host", "task_host names the machine that owns the card task names. Pass task too")
+		case p.TaskSession == "":
+			return nil, invalidParam("task_session", "task_host needs task_session: the card's session on "+echoName(taskHost))
+		case d.federation == nil:
+			return nil, invalidParam("task_host", "task_host "+echoName(taskHost)+" is not a linked machine: this daemon has no [hosts]")
 		}
-		if task, verr = d.admitTaskParam(cs, "start-agent", sess.Name(), p.Task, p.HumanNonce, false); verr != nil {
+		if _, err := d.federation.Table().Lookup(taskHost); err != nil {
+			return nil, invalidParam("task_host", "task_host "+echoName(taskHost)+" is not a linked machine")
+		}
+	}
+	if p.Task != "" && taskHost == "" {
+		cardSession := strings.TrimSpace(p.TaskSession)
+		if cardSession == "" {
+			if sess == nil {
+				return nil, invalidParam("task", "task names a card of the session the agent starts in, and session "+echoName(name)+" does not exist yet. Name the card's session with task_session")
+			}
+			cardSession = sess.Name()
+		}
+		if task, verr = d.admitTaskParam(cs, "start-agent", cardSession, p.Task, p.HumanNonce, false); verr != nil {
 			return nil, verr
 		}
 	}
@@ -225,14 +256,40 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	}
 	// The card is the new pane's from the start, before the wait, so the
 	// board shows who works on it while the agent loads.
+	d.noteAgentStarted(sess, win.ID)
 	var taskRow *TaskRow
 	taskNote := ""
+	if taskHost != "" {
+		res, verr := d.forwardTaskFor(sess.Name(), win.ID, "claim-task", taskHost, p.TaskSession, p.Task)
+		if verr != nil {
+			taskNote = "Task card " + p.Task + " on " + taskHost + " was not claimed: " + verr.Message
+		} else if row, ok := res.(TaskRow); ok {
+			taskRow = &row
+		}
+	}
 	if task != nil {
-		if row, verr := d.claimForPane(task, win.ID); verr != nil {
+		// The card's session cannot read the pane, so it keeps a name: the
+		// pane's own, or the agent's when the pane has none yet.
+		holderName := windowLabelOf(win)
+		if reg := d.agentMatcher.registry; p.Name == "" && reg != nil && launch.harness != "" {
+			if m := reg.Lookup(launch.harness); m != nil && m.DisplayName != "" {
+				holderName = m.DisplayName
+			}
+		}
+		if row, verr := d.claimForPane(task, win.ID, holderName, launch.harness, task.sess != sess); verr != nil {
 			taskNote = "Task card " + task.id + " was not claimed: " + verr.Message
 		} else {
 			taskRow = &row
+			// A pane that closed before the claim landed lets the card go
+			// now: its close found nothing to let go.
+			if _, ok := findWindowState(sess.GetState(), win.ID); !ok {
+				d.remoteHolds.take(win.ID)
+				d.releaseHeld(task.sess, win.ID, taskReleasePaneClosed)
+			}
 		}
+	}
+	if taskRow != nil && p.TaskMail {
+		d.mailHeldCard(sess, win, *taskRow, taskHost)
 	}
 	if p.Protocol != "" {
 		markMu.Lock()

@@ -487,7 +487,13 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if action, ok := o.WindowButtonIn(clickedWindow.ID, X, Y); ok {
 			switch action {
 			case app.WindowButtonClose:
-				o.CloseWindowByHand(clickedWindowIndex)
+				// appearance.confirm_close holds for the close control as
+				// for the keys: the same dialog, the same rule.
+				if o.CloseNeedsConfirm(clickedWindowIndex) {
+					o.OpenSessionCloseForWindow(clickedWindowIndex)
+				} else {
+					o.CloseWindowByHand(clickedWindowIndex)
+				}
 			case app.WindowButtonMinimize:
 				o.MinimizeWindow(clickedWindowIndex)
 			case app.WindowButtonFloat:
@@ -564,7 +570,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	o.FocusWindowFromClick(clickedWindowIndex, X, Y)
 	if o.Mode == app.TerminalMode {
-		o.Mode = app.WindowManagementMode
+		o.SetBorrowedMode(app.WindowManagementMode)
 	}
 
 	// A left press on the content area in window-management mode arms
@@ -687,7 +693,7 @@ func beginWindowDrag(o *app.OS, idx, x, y int) {
 	win := o.Windows[idx]
 	o.FocusWindowFromClick(idx, x, y)
 	if o.Mode == app.TerminalMode {
-		o.Mode = app.WindowManagementMode
+		o.SetBorrowedMode(app.WindowManagementMode)
 	}
 	o.SetPointerShape(app.PointerGrabbing)
 	o.InteractionMode = true

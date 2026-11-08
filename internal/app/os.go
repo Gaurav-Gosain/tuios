@@ -196,6 +196,8 @@ type OS struct {
 	Width         int
 	Height        int
 	Mode          Mode
+	// mode is the choice beneath the borrows open now; see mode.go.
+	mode modeState
 	// terminalMu guards the m.Windows slice and the per-window dirty flags and
 	// render caches against the UI goroutine's render pass. It does NOT guard
 	// emulator cell data; that is Window.ioMu.
@@ -406,14 +408,11 @@ type OS struct {
 	LockHeld bool
 	// nest is true while nest mode gives the focused pane every key, the
 	// leader too. See nest_mode.go.
-	nest             bool
-	HelpScrollOffset int    // Scroll offset for help menu
-	HelpCategory     int    // Current help category index (for left/right navigation)
-	HelpSearchMode   bool   // True when help search is active
-	HelpSearchQuery  string // Current search query in help menu
-	// helpBackToAgents says the help was opened from the agents view, which
-	// opens again when the help closes. See HelpClosed.
-	helpBackToAgents       bool
+	nest                   bool
+	HelpScrollOffset       int                           // Scroll offset for help menu
+	HelpCategory           int                           // Current help category index (for left/right navigation)
+	HelpSearchMode         bool                          // True when help search is active
+	HelpSearchQuery        string                        // Current search query in help menu
 	CurrentWorkspace       int                           // Current active workspace (1-9)
 	NumWorkspaces          int                           // Total number of workspaces
 	WorkspaceFocus         map[int]int                   // Remembers focused window per workspace
@@ -485,7 +484,11 @@ type OS struct {
 	// before anything dies. It holds the pane's ID, not its index, because
 	// m.Windows can change while the dialog is open, and an index would then
 	// name another pane. "" is no pane.
-	SessionCloseWindow   string
+	SessionCloseWindow string
+
+	// focusOnlyHidden is, per workspace, the panes the last focus-only press
+	// minimized, by id. See focus_only.go.
+	focusOnlyHidden      map[int][]string
 	SessionCloseSelected int
 	// SessionCloseWorktreeToll is what the delete-worktree row would take, read
 	// by a round trip after the dialog opened. Nil, or Loaded false, is a toll
@@ -818,6 +821,17 @@ type OS struct {
 	machineSheet *machineSheet
 	msCanvas     *ckCanvas
 
+	// taskCapture is the task capture sheet, open or kept as the draft,
+	// taskCaptureClosed says it is kept and not shown, and tcCanvas the
+	// grid it is drawn on. tcFiling is a draft whose add-task call is out,
+	// and tcOpenGen counts the openings, so a read for an earlier one is
+	// dropped. See task_capture.go.
+	taskCapture       *taskCapture
+	taskCaptureClosed bool
+	tcFiling          *taskCapture
+	tcOpenGen         uint64
+	tcCanvas          *ckCanvas
+
 	// copyFlash is the band of light crossing text that was just copied, or
 	// nil. It is dropped the moment it has run its course, so an idle client
 	// holds nothing. See copy_flash.go.
@@ -1005,6 +1019,13 @@ type OS struct {
 	// last push named. A session resize newer than the last push is pushed.
 	// See session/layout_gen.go.
 	layoutGenApplied, layoutGenPushed uint64
+	// commandDriving is set while Update handles a message a command sent
+	// this client (a routed run-command, or a key of send-keys or a tape),
+	// and commandFocusMoved when such a message moved the focus and no push
+	// has said so yet. A push made under either is marked FocusByCommand. A
+	// key or click of the person's clears commandFocusMoved: the focus they
+	// move is theirs.
+	commandDriving, commandFocusMoved bool
 	// focusGiven is the focus (focusKey) this client last pushed or was
 	// given by a sync. A push that still shows it is marked FocusUnmoved.
 	focusGiven    string
@@ -1228,8 +1249,17 @@ type OS struct {
 	MouseOff bool
 	// MarkedPaneID is the pane mark_pane marked, for join_marked_*.
 	MarkedPaneID string
-	// Remote command processing
-	ProcessingRemoteKeys bool // True when processing remote send-keys (disables animations)
+	// ProcessingRemoteKeys is true while the client handles a key that
+	// send-keys typed, and between the keys of a send-keys chain that is
+	// still running. Every gate that asks "did the person press this" reads
+	// it. A RemoteKeyMsg sets it for its own handler call, whatever other
+	// chains do, and a key from the person's terminal clears it for its call.
+	// Between messages it follows remoteKeyChains.
+	ProcessingRemoteKeys bool
+	// remoteKeyChains counts the send-keys chains started and not yet done.
+	// Two send-keys can overlap, and the first one to end must not mark the
+	// other one's keys as the person's.
+	remoteKeyChains int
 	// ScriptWait is the WaitFor playback is holding for, nil when none is.
 	ScriptWait *scriptWait
 	// ScriptFailure says where and why the last tape stopped, empty when it
@@ -1964,13 +1994,12 @@ type OS struct {
 	SidebarCursor           int
 	SidebarNav              []sidebarNavRow
 	SidebarRevealedForFocus bool
-	// sidebarReturn* record where the keyboard came from when the rail took it,
-	// so leaving the rail can hand that back. sidebarLastRow is the same bargain
+	// sidebarReturnWindow records the pane the keyboard came from when the rail
+	// took it, so leaving the rail can hand it back; the rail's mode lease
+	// (mode.go) hands back the mode. sidebarLastRow is the same bargain
 	// pointing the other way: the row the rail was left on, so re-entering starts
 	// where it stopped rather than back at the attached session. See
 	// sidebar_return.go.
-	sidebarReturnArmed  bool
-	sidebarReturnMode   Mode
 	sidebarReturnWindow string
 	sidebarLastRow      sidebarNavRow
 	sidebarLastRowSet   bool
@@ -2084,13 +2113,6 @@ type OS struct {
 	// was on one and link_click allows ctrl. A release before the drag
 	// threshold opens it; a drag clears it. See handleMouseRelease.
 	CtrlClickLink string
-	// CtrlDragWasTerminal remembers that the grab started in terminal mode, so
-	// dropping the window puts the user back where they were instead of leaving
-	// them in window management. Moving a pane is not a request to stop typing.
-	CtrlDragWasTerminal bool
-	// pointerGestureWasTerminal is the same bargain for a resize or an alt-drag
-	// move: see BeginPointerGesture.
-	pointerGestureWasTerminal bool
 
 	// ContextMenu is the open shift+right-click menu, or nil. It is deliberately
 	// not one of the draggable overlay kinds: a context menu is anchored to the

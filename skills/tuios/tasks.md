@@ -41,12 +41,31 @@ person or a shell outside every pane. Outside a pane, name the pane:
 | `tuios task block t1 waiting on the staging key` | Mark it stuck. It keeps its holder and stage, and `claim --next` skips it |
 | `tuios task block t1 --clear` | Lift the block |
 | `tuios task release t1` | Let it go without finishing. It keeps its stage, and another pane can claim it |
-| `tuios task done t1` | Mark it done and let it go |
+| `tuios task done t1` | Say your work on it is done and let it go: it goes on to `verify` or `review` (see below) |
 | `tuios task rm t1` | Remove it. From a pane this needs `admin` |
 
 tuios lets a card go on its own when its pane closes, when the agent leaves the
 pane, and when the daemon restarts. The card's history records the reason:
 `pane closed`, `agent left` or `restart`.
+
+## When you are done: verify and review
+
+`tuios task done ID` from the pane that holds the card does not close it. The
+card is let go, so you are free for your next one, and it goes to `review`, or
+to `verify` when the board has a verify command. tuios then runs that command
+in your worktree (your pane's repository, on your machine). A pass moves the
+card to `review`. A fail sends it back to `todo`: its `attempts` goes up by
+one and its `note` is the last line of the output (`tuios task get ID` shows
+the end of the output). If your agent errors while it holds a card that
+dispatch gave it, you keep the card, blocked, with its `attempts` one higher
+and your last message as the note. Work on it again and the block lifts; let
+it go (`tuios task release ID`) and it goes back to `todo`. The person
+closes a card (`done`), or its pull request merging moves it to `shipped`.
+
+The verify command is the person's: `tuios task dispatch verify CMD` is
+refused from every pane. From a pane you also cannot move your card to
+`review` or `shipped` while the board has one. Run `tuios task done` and let
+the verify decide.
 
 ## Stages that move on their own
 
@@ -64,7 +83,7 @@ without a merge, it moves them from `review` back to `doing`.
 
 Each move fires only from those stages, so a card you put somewhere else by
 hand stays there. A blocked card and a done card never move on their own.
-Done is always yours to set. The history entry is by `tuios` and names the
+Done is set by a finish, or by the person. The history entry is by `tuios` and names the
 reason. The person can turn this off with `[tasks] auto_stage = false`.
 
 ## Hand a card to a fan or a new agent
@@ -90,7 +109,7 @@ tuios subscribe -s "$TUIOS_SESSION" --types task-claimed,task-finished,task-chan
 
 Each event carries the card's row in `task`. `task-claimed` and `task-finished`
 carry the holder's pane in `window`. `task-changed` says what happened in
-`action`: `added`, `staged`, `blocked`, `unblocked`, `released` or `removed`. A
+`action`: `added`, `staged`, `verified`, `blocked`, `unblocked`, `released` or `removed`. A
 release or a stage move tuios made on its own carries the reason in `reason`.
 
 `--select 'task:t1'` names the pane that holds `t1`, whatever else it holds.
@@ -102,6 +121,47 @@ them as the board: `b` in the agents view (`ctrl+b i`) shows one column for
 each stage, with each holder's state on its card. The person moves a card
 there by key or by drag, and the move is a `task-changed` event with action
 `staged`, like `tuios task stage`.
+
+## Cards for a repository, across machines
+
+| Command | What it does |
+| --- | --- |
+| `tuios task add --project . TITLE` | Add a card for this folder's repository (by its origin URL). It shows in every session of the repository and on linked machines |
+| `tuios task ls --project . --hosts` | Every card of the repository, here and on each linked machine. HOST names the owner |
+| `tuios task claim t3 -s build:api` | From your pane, take card t3 of session api, which machine build owns |
+| `tuios task done t3 -s build:api` | Finish it there. `release` the same way |
+
+The machine that added a card owns it. Run the claim in your own pane: your
+daemon passes it to the owner and lets the card go there when your pane
+closes. If a claim fails with a lost answer, run it again: a claim by the pane
+that holds the card succeeds. A card without a project stays on its machine.
+
+## Dispatch: work that comes to you
+
+On a board in pull mode, finishing your card with `tuios task done ID` gives
+you the board's next open card, while your last card is verified. Ending your
+turn does not finish it: the card stays yours, in doing, until you run
+`tuios task done ID` or `tuios task release ID`. It comes as
+mail from tuios: read it with `tuios read-agent-messages -w "$TUIOS_PANE_ID"`.
+It names the card, its prompt, and the command that finishes it. You hold the
+card already, so do not claim it. If you cannot do it, `tuios task release ID`.
+While dispatch is paused or in quiet hours you get no card; when it resumes,
+an agent at rest that holds no card is offered one, and so is a card that
+comes free (added or let go). You are not offered back a card you let go.
+
+On a board in auto mode, tuios starts a new agent for each open card, in its
+own worktree. If that is you, your first mail is the card: its done command
+carries `-s SESSION` (or `-s HOST:SESSION` on another machine), because the
+card lives in the session or on the machine that made it.
+
+| Command | What it does |
+| --- | --- |
+| `tuios task dispatch` | The boards' modes and the switches |
+| `tuios task dispatch pause` | Stop all dispatch at once. Any pane may pause |
+| `tuios set-agent-state errored --kind usage_limit -m TEXT` | Say you hit a usage limit: all dispatch stops |
+
+A mode, `resume` and quiet hours are the person's. Dispatch never answers an
+approval and never gives a card to a pane that waits for the person.
 
 ## Grants
 

@@ -50,7 +50,10 @@ func fanFixture(t *testing.T) (base, repo string) {
 	// lost. It drops the keys, which loses the Enter as Claude Code's
 	// early-input capture does (the text it keeps for the box would be the
 	// same stall). Its box turns bracketed paste on when it is live.
-	script := "#!/bin/sh\nprintf '\\033]0;\\342\\234\\263 Claude Code\\007'\necho fake claude starting\n" +
+	// "claude auth status" is the New agent sheet's signed-in check
+	// (agent-readiness): the fake is signed in.
+	script := "#!/bin/sh\nif [ \"$1\" = auth ]; then echo '{\"loggedIn\": true}'; exit 0; fi\n" +
+		"printf '\\033]0;\\342\\234\\263 Claude Code\\007'\necho fake claude starting\n" +
 		hook("SessionStart") + "\n" +
 		"sleep 2\nstty -icanon min 0 time 1\ncat >/dev/null\nstty icanon\nprintf '\\033[?2004h'\necho fake claude ready\n" +
 		"while IFS= read -r line; do printf '\\033]0;\\342\\240\\220 Claude Code\\007'; " + hook("UserPromptSubmit") + "echo \"GOT: $line\"; sleep 1; printf '\\033]0;\\342\\234\\263 Claude Code\\007'; " + hook("Stop") + "done\n"

@@ -3,17 +3,17 @@ package app
 // The rail borrows the keyboard, not the user's place in the panes. Entering it
 // records the mode and the focused pane so leaving it hands both back: browsing
 // the sessions is not a request to stop typing, any more than moving a pane is
-// (BeginPointerGesture and CtrlDragWasTerminal, the same bargain).
+// (BeginPointerGesture and BeginCtrlDrag, the same bargain).
 //
 // A rail action that deliberately relocates the user disarms the return, and
 // what it chose stands. There are three: focusing a pane from a window row,
 // attaching to another session, and creating one. Everything else in the rail
 // is a browse, and a browse is what esc undoes.
 
-// beginSidebarReturn records what the rail is borrowing from.
+// beginSidebarReturn records what the rail is borrowing from: the mode, as a
+// lease on the keyboard (mode.go), and the focused pane.
 func (m *OS) beginSidebarReturn() {
-	m.sidebarReturnArmed = true
-	m.sidebarReturnMode = m.Mode
+	m.borrowKeyboard(leaseRail)
 	m.sidebarReturnWindow = ""
 	if w := m.GetFocusedWindow(); w != nil {
 		m.sidebarReturnWindow = w.ID
@@ -53,7 +53,7 @@ func (m *OS) restoreSidebarRow() bool {
 
 // clearSidebarReturn drops the record, leaving the user where the rail put them.
 func (m *OS) clearSidebarReturn() {
-	m.sidebarReturnArmed = false
+	m.cancelLease(leaseRail)
 	m.sidebarReturnWindow = ""
 }
 
@@ -61,27 +61,22 @@ func (m *OS) clearSidebarReturn() {
 // out of the rail runs it, and only the first has anything to do. The pane is
 // restored by ID rather than index, since the rail can close or reorder panes
 // while it holds the keyboard.
+//
+// The pane goes back first, then the mode. When the pane is gone (closed,
+// minimized, or on another workspace now) and nothing else is in focus, the
+// lease's end chooses window management, the mode that can go find another
+// one: a terminal mode with nothing to type into is not handed back.
 func (m *OS) endSidebarReturn() {
-	if !m.sidebarReturnArmed {
+	if !m.modeLeased(leaseRail) {
 		return
 	}
 	id := m.sidebarReturnWindow
-	m.clearSidebarReturn()
-
-	m.Mode = m.sidebarReturnMode
-	if id == "" {
-		return
-	}
+	m.sidebarReturnWindow = ""
 	for i, w := range m.Windows {
-		if w.ID == id && w.Workspace == m.CurrentWorkspace && !w.Minimized {
+		if id != "" && w.ID == id && w.Workspace == m.CurrentWorkspace && !w.Minimized {
 			m.FocusWindow(i)
-			return
+			break
 		}
 	}
-	// The pane is gone (closed, minimized, or on another workspace now). Window
-	// management is the mode that can go find another one, so a terminal mode
-	// with nothing to type into is not handed back.
-	if m.Mode == TerminalMode && m.GetFocusedWindow() == nil {
-		m.Mode = WindowManagementMode
-	}
+	m.returnMode(leaseRail)
 }

@@ -205,10 +205,10 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 	_ = os.Unsetenv(handoffKeptEnv)
 	d.lastHandoff.Store(&stats)
 
-	d.attention.loadHandoff(attentionPath(), d.attentionLive, d.attentionWaiting)
-	d.noteHostProblems(d.configProblems())
-	d.outbox.load(outboxPath())
-	d.reviewNotes.load(reviewNotesPath(), func(window string) bool { return d.sessionOfWindow(window) != "" })
+	for _, h := range m.Daemon.FarHolds {
+		d.remoteHolds.note(h.Window, remoteHold{host: h.Host, session: h.Session, id: h.ID}, true)
+	}
+	d.loadStores(true)
 	d.serve()
 	// A delegated child that finished while the daemon was handed over is
 	// still answered for.

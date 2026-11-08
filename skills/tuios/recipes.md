@@ -86,6 +86,12 @@ trust the folder. Then `start-agent` exits non-zero and keeps the pane. Tell
 the person, and do not answer the question yourself. Close the pane when the
 work is done.
 
+`--model`, `--effort` and `--permission-mode` pass the harness's own flags,
+such as `tuios start-agent claude --model sonnet --effort low` for a quick
+check. A harness with no such flag refuses the option. `tuios call
+agent-readiness` says which harnesses are installed and signed in on the
+machine before you start one.
+
 ## Start a server, and wait until it is ready
 
 ```sh

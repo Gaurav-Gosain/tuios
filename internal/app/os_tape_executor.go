@@ -519,7 +519,7 @@ func (m *OS) ToggleTiling() error {
 func (m *OS) SetMode(mode string) error {
 	switch mode {
 	case "terminal", "Terminal", "TerminalMode":
-		m.Mode = TerminalMode
+		m.ChooseMode(TerminalMode, ModeCauseTape)
 		if m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
 			for i, w := range m.Windows {
 				if w.Workspace == m.CurrentWorkspace && !w.Minimized {
@@ -529,7 +529,7 @@ func (m *OS) SetMode(mode string) error {
 			}
 		}
 	case "window", "Window", "WindowManagementMode":
-		m.Mode = WindowManagementMode
+		m.ChooseMode(WindowManagementMode, ModeCauseTape)
 	}
 	return nil
 }
@@ -558,9 +558,17 @@ func (m *OS) PrevWindow() error {
 //
 // A command that names the pane to focus asks to be taken there, so the
 // scrolling strip shows the whole column. See RevealFocusedColumn.
+//
+// A minimized pane is restored first (issue 1731): focus-window and the
+// navigator name a pane to look at, and a focus on a pane that stays hidden
+// looks like it did nothing. A title row of a stack is left to FocusPane,
+// which opens it in the stack's tile.
 func (m *OS) FocusWindowByID(windowID string) error {
 	for i, w := range m.Windows {
 		if w.ID == windowID {
+			if w.Minimized && w.Stack == "" {
+				m.RestoreWindow(i)
+			}
 			m.FocusWindow(i)
 			m.RevealFocusedColumn()
 			m.MarkAllDirty()
@@ -1276,6 +1284,7 @@ func (m *OS) startRemoteSendKeys(keys string, literal bool, raw bool, windowTarg
 
 	// Disable animations during remote key processing
 	// This ensures immediate layout updates instead of animations that might not complete
+	m.remoteKeyChains++
 	m.ProcessingRemoteKeys = true
 	m.Settings.AnimationsSuppressed = true
 

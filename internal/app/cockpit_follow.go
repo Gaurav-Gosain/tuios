@@ -19,7 +19,7 @@ import (
 func threadLayout(t *agentThread, lines, room int) transcriptview.Layout {
 	l := transcriptview.Layout{Lines: lines, Room: room, Taken: t.taken, PromptAt: -1}
 	for _, en := range slices.Backward(t.entries) {
-		if en.Kind == "text" && en.Role == "user" {
+		if en.Kind == "text" && en.Role == "user" && en.Image == nil && !transcriptview.InterruptText(en.Text) {
 			l.Prompt = en.ID
 			break
 		}
@@ -54,6 +54,11 @@ func (m *OS) CockpitPromptJump(next bool) {
 	}
 	if t.follow.Jump(t.prompts, d) {
 		m.cockpitTouch()
+	} else if !next && t.older {
+		// The previous prompt is in a turn not drawn yet: draw more, so
+		// the next press reaches it.
+		t.keep *= 2
+		m.cockpitTouch()
 	}
 }
 
@@ -87,7 +92,8 @@ func (m *OS) drawThreadUnseen(c *ckCanvas, l ckLook, t *agentThread, x, w, y, to
 
 // drawThreadRuler draws the thread's ruler in column x, rows y to y+rows,
 // for a thread of lines lines shown from line start: where the view is, and
-// a mark for each prompt. A thread that fits has none.
+// a mark for each prompt while the marks leave most rows clear. A thread that
+// fits has none.
 func drawThreadRuler(c *ckCanvas, l ckLook, t *agentThread, x, y, rows, lines, start int) {
 	if lines <= rows || rows < 2 {
 		return
@@ -101,7 +107,14 @@ func drawThreadRuler(c *ckCanvas, l ckLook, t *agentThread, x, y, rows, lines, s
 			c.text(x, y+r, x+1, ckSeg{t: thumb, fg: l.pal.FgMute})
 		}
 	}
-	for _, r := range transcriptview.RulerMarks(t.prompts, lines, rows) {
+	marks := transcriptview.RulerMarks(t.prompts, lines, rows)
+	if len(marks)*3 > rows {
+		// Marks on most rows point at no prompt in particular: a thread of
+		// many short turns, or of mail an agent got, would fill the ruler.
+		// The thumb alone shows where the view is.
+		return
+	}
+	for _, r := range marks {
 		c.text(x, y+r, x+1, ckSeg{t: mark, fg: l.pal.AccentBright, attrs: ckBold})
 	}
 }

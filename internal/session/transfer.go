@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -215,7 +216,7 @@ type transferJob struct {
 	// saved is when the journal last took the list of finished files.
 	saved   time.Time
 	cancel  context.CancelFunc
-	stop    string // "pause" or "cancel" while an attempt is being stopped
+	stop    transferStop
 	wake    chan struct{}
 	retryAt time.Time
 	limiter rateLimiter
@@ -271,15 +272,21 @@ func (m *transferManager) failRevoked() {
 		var te *transferError
 		_ = errors.As(err, &te)
 		var cancel context.CancelFunc
+		revoked := false
 		j.set(func(j *transferJob) {
-			j.state = transferFailed
+			if revoked = j.to(transferFailed); !revoked {
+				return
+			}
 			j.errText, j.errCode = te.msg, te.code
 			j.ended = time.Now()
 			if j.cancel != nil {
-				j.stop = "revoke"
+				j.stop = transferStopRevoke
 				cancel = j.cancel
 			}
 		})
+		if !revoked {
+			continue
+		}
 		LogBasic("Transfer %s stops: the link policy no longer lets %q copy here", j.id, j.opts.Link.Peer)
 		if cancel != nil {
 			cancel()
@@ -407,6 +414,49 @@ func (m *transferManager) start(src, dst Endpoint, o transferOptions) (*transfer
 
 // transferEnded reports whether a state is one a job does not leave by
 // itself.
+// transferStop is why a running attempt is being stopped: its context is
+// cancelled, and the run loop reads this first when the attempt returns.
+type transferStop string
+
+const (
+	transferStopNone   transferStop = ""
+	transferStopPause  transferStop = "pause"
+	transferStopCancel transferStop = "cancel"
+	// transferStopRevoke: the link policy took the copy away. failRevoked
+	// set the job failed already.
+	transferStopRevoke transferStop = "revoke"
+)
+
+// to moves the job to state, and reports false, with nothing changed, when
+// the job has ended: done, failed and cancelled are final, so an attempt's
+// own writes that race a stop cannot bring a job back from one. It is the one
+// writer of state but reopen (a check in internal/lint). j.mu is held.
+func (j *transferJob) to(state string) bool {
+	if transferEnded(j.state) {
+		return false
+	}
+	j.state = state
+	return true
+}
+
+// reopen takes a failed job back to queued, for a retry the person asked
+// for. j.mu is held.
+func (j *transferJob) reopen() {
+	if j.state == transferFailed {
+		j.state = transferQueued
+	}
+}
+
+// transferTestHold holds an attempt between its last byte and its verify
+// for TUIOS_TEST_TRANSFER_HOLD_MS, without looking at its context, so an e2e
+// test can land a stop where the attempt has not yet seen it.
+func transferTestHold(id string) {
+	if ms, _ := strconv.Atoi(os.Getenv("TUIOS_TEST_TRANSFER_HOLD_MS")); ms > 0 {
+		LogBasic("Transfer %s holds before its verify", id)
+		time.Sleep(time.Duration(min(ms, 60000)) * time.Millisecond)
+	}
+}
+
 func transferEnded(state string) bool {
 	return state == transferDone || state == transferFailed || state == transferCancelled
 }
@@ -511,7 +561,7 @@ func (m *transferManager) run(j *transferJob) {
 				j.started = time.Now()
 			}
 			if j.state != transferVerifying {
-				j.state = transferRunning
+				j.to(transferRunning)
 			}
 			j.errText, j.errCode = "", ""
 			j.limiter = rateLimiter{rate: j.opts.RateLimit}
@@ -528,39 +578,41 @@ func (m *transferManager) run(j *transferJob) {
 
 		j.mu.Lock()
 		stop := j.stop
-		j.stop = ""
+		j.stop = transferStopNone
 		j.cancel = nil
 		j.mu.Unlock()
 
 		switch {
+		case stop == transferStopRevoke:
+			// failRevoked set the state, also when the attempt got to its
+			// end; the parts stay for a copy the person may start again.
+			m.note(j, false)
+			return
 		case err == nil:
 			j.set(func(j *transferJob) {
-				j.state = transferDone
-				j.ended = time.Now()
+				if j.to(transferDone) {
+					j.ended = time.Now()
+				}
 				j.current = ""
 			})
 			LogBasic("Transfer %s finished: %s to %s, %d bytes, %d over the links", j.id, j.src, j.dst, j.done.Load(), j.wire.Load())
 			m.note(j, false)
 			return
-		case stop == "cancel":
+		case stop == transferStopCancel:
 			m.abortParts(j)
 			j.set(func(j *transferJob) {
-				j.state = transferCancelled
-				j.ended = time.Now()
+				if j.to(transferCancelled) {
+					j.ended = time.Now()
+				}
 			})
 			LogBasic("Transfer %s cancelled: %s to %s", j.id, j.src, j.dst)
 			m.note(j, false)
 			return
-		case stop == "pause":
-			j.set(func(j *transferJob) { j.state = transferPaused })
+		case stop == transferStopPause:
+			j.set(func(j *transferJob) { j.to(transferPaused) })
 			m.note(j, false)
 			tries = 0
 			continue
-		case stop == "revoke":
-			// failRevoked set the state; the parts stay for a copy the
-			// person may start again.
-			m.note(j, false)
-			return
 		case ctx.Err() != nil:
 			// The daemon is stopping. The journal keeps the job, and the
 			// next start goes on with it.
@@ -576,7 +628,9 @@ func (m *transferManager) run(j *transferJob) {
 				continue
 			}
 			j.set(func(j *transferJob) {
-				j.state = transferFailed
+				if !j.to(transferFailed) {
+					return
+				}
 				j.errText, j.errCode = te.msg, te.code
 				if te.code == ErrVerbHashMismatch {
 					j.errText = "The copy did not match the original twice. The disk or the file may be changing. " + te.msg
@@ -599,7 +653,9 @@ func (m *transferManager) run(j *transferJob) {
 			msg = host + " went away. The copy goes on when it is back."
 		}
 		j.set(func(j *transferJob) {
-			j.state = transferWaiting
+			if !j.to(transferWaiting) {
+				return
+			}
 			j.errText, j.errCode = msg, ErrVerbHostUnreachable
 			j.retryAt = time.Now().Add(wait)
 		})
@@ -1273,7 +1329,7 @@ func (m *transferManager) ask(ctx context.Context, j *transferJob, items []Confl
 			wasConflict := j.state == transferConflict
 			j.pending = nil
 			if wasConflict {
-				j.state = transferRunning
+				j.to(transferRunning)
 			}
 			j.mu.Unlock()
 			if wasConflict {
@@ -1283,7 +1339,11 @@ func (m *transferManager) ask(ctx context.Context, j *transferJob, items []Confl
 		}
 		j.pending = pending
 		was := j.state
-		j.state = transferConflict
+		if !j.to(transferConflict) {
+			// A stop ended the job; the attempt sees it on its context.
+			j.mu.Unlock()
+			return nil, ctx.Err()
+		}
 		j.mu.Unlock()
 		if was != transferConflict {
 			LogBasic("Transfer %s waits for an answer about %d files that are there and differ", j.id, len(pending))
@@ -1294,7 +1354,7 @@ func (m *transferManager) ask(ctx context.Context, j *transferJob, items []Confl
 		case <-ctx.Done():
 			j.set(func(j *transferJob) {
 				if j.state == transferConflict {
-					j.state = transferRunning
+					j.to(transferRunning)
 				}
 			})
 			return nil, ctx.Err()
@@ -1520,8 +1580,9 @@ func (m *transferManager) copyFile(ctx context.Context, j *transferJob, src, dst
 		}
 	}
 
+	transferTestHold(j.id)
 	j.set(func(j *transferJob) {
-		j.state = transferVerifying
+		j.to(transferVerifying)
 		j.done.Store(fc.base + size)
 	})
 	m.note(j, false)
@@ -1556,6 +1617,10 @@ func (m *transferManager) copyFile(ctx context.Context, j *transferJob, src, dst
 	if label == "" {
 		label = j.opts.Label
 	}
+	// A stop that came during the copy or the verify puts nothing in place.
+	if err := ctx.Err(); err != nil {
+		return "", false, "", err
+	}
 	got, skipped, err := dst.commit(ctx, fc.to, j.id, sum, fc.conflict, fc.perm, fc.mtime, label, known)
 	if err != nil {
 		return "", false, "", err
@@ -1563,7 +1628,7 @@ func (m *transferManager) copyFile(ctx context.Context, j *transferJob, src, dst
 	j.set(func(j *transferJob) {
 		j.hash, j.verified = sum, true
 		if j.state == transferVerifying {
-			j.state = transferRunning
+			j.to(transferRunning)
 		}
 	})
 	m.note(j, false)
@@ -2115,10 +2180,10 @@ func transferControl(op string) verbHandler {
 				return j.row(), nil
 			}
 			if j.cancel != nil {
-				j.stop = op
+				j.stop = transferStop(op)
 				j.cancel()
 			} else if op == "cancel" {
-				j.state = transferCancelled
+				j.to(transferCancelled)
 				j.ended = time.Now()
 				j.mu.Unlock()
 				go d.transfers.abortParts(j)
@@ -2129,13 +2194,13 @@ func transferControl(op string) verbHandler {
 				d.transfers.note(j, false)
 				return j.row(), nil
 			} else {
-				j.state = transferPaused
+				j.to(transferPaused)
 			}
 		case "resume":
 			switch state {
 			case transferPaused, transferWaiting:
 				if state == transferPaused {
-					j.state = transferQueued
+					j.to(transferQueued)
 				}
 				select {
 				case j.wake <- struct{}{}:
@@ -2143,7 +2208,7 @@ func transferControl(op string) verbHandler {
 				}
 			case transferFailed:
 				// Retry: the same job, from its parts.
-				j.state = transferQueued
+				j.reopen()
 				j.ended = time.Time{}
 				j.errText, j.errCode = "", ""
 				j.restarts = 0

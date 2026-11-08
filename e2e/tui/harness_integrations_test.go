@@ -1680,6 +1680,8 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 //     stderr and environment, and exits with the child's status. It is not a
 //     shell, so tuios agent-hook takes it for the harness of its hooks and
 //     reports its pid as harness_pid, the way it takes Claude Code.
+//   - read: reads its input until it ends, as a program that holds the
+//     terminal does (ssh), under the name of the copy it runs from.
 //   - detach: the program a person or a harness starts, which leaves at once
 //     and leaves a server running in a session of its own, under init, the
 //     way tmux starts its server and Claude Code starts its daemon. The
@@ -1738,6 +1740,9 @@ func runStandInIfAsked() {
 		os.Exit(0)
 	case "server":
 		runStandInServer()
+	case "read":
+		_, _ = io.Copy(io.Discard, os.Stdin)
+		os.Exit(0)
 	}
 	os.Exit(2)
 }

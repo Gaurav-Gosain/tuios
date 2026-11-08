@@ -247,7 +247,7 @@ func (m *OS) openInboxReply(sessionID, windowID, who, context string, closeAfter
 	if sessionID == "" {
 		sessionID = m.sidebarCurrentSessionID()
 	}
-	m.Inbox.approvals.armed = inboxArmed{}
+	m.answerEnd(answerArmed, "reply")
 	comp := m.takeInboxDraft(sessionID, windowID)
 	if comp == nil {
 		comp = composer.New(composer.Options{MaxRows: inboxReplyRows, Placeholder: "Type your reply.", Images: true, SendNow: true})
@@ -275,7 +275,7 @@ func (m *OS) openHostReply(host, sessionID, windowID, who, context string) bool 
 	if !m.inboxCanMark("Replying") {
 		return false
 	}
-	m.Inbox.approvals.armed = inboxArmed{}
+	m.answerEnd(answerArmed, "reply")
 	comp := m.takeInboxDraft(sessionID, windowID)
 	if comp == nil {
 		comp = composer.New(composer.Options{MaxRows: inboxReplyRows, Placeholder: "Type your reply.", Images: true})
@@ -531,7 +531,7 @@ func (m *OS) InboxReplySend() tea.Cmd {
 	}
 	nonce := m.inboxNonce()
 	if nonce == "" {
-		m.ShowNotification("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon", "error", m.Settings.NotificationDuration*2)
+		m.ShowNotification(m.noNonceText(), "error", m.Settings.NotificationDuration*2)
 		return nil
 	}
 	m.Inbox.reply.editor = nil
@@ -816,7 +816,7 @@ func (m *OS) SidebarAgentCancelQueued(sessionID, windowID string) (tea.Cmd, bool
 	}
 	nonce := m.inboxNonce()
 	if nonce == "" {
-		m.ShowNotification("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon", "error", m.Settings.NotificationDuration*2)
+		m.ShowNotification(m.noNonceText(), "error", m.Settings.NotificationDuration*2)
 		return nil, true
 	}
 	if sessionID == "" {

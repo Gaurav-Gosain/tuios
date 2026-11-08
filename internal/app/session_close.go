@@ -7,6 +7,8 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -172,14 +174,42 @@ func (m *OS) windowToll(i int) sessionToll {
 	return t
 }
 
+// windowTollLine is the toll line for the one pane at i. "1 pane, no agent
+// working" says nothing about a pane that runs a build, which is the pane the
+// question is for, so a pane with no agent in it says what it runs: the
+// program in its foreground, from its own PTY or as the daemon names it.
+func (m *OS) windowTollLine(i int, toll sessionToll) string {
+	if toll.Working > 0 || toll.Blocked > 0 || i < 0 || i >= len(m.Windows) || m.Windows[i] == nil {
+		return toll.Line()
+	}
+	w := m.Windows[i]
+	cmd := ""
+	if w.HasForegroundProcess() {
+		cmd = w.ForegroundCommand()
+	}
+	if cmd == "" {
+		cmd = w.ForegroundCmd
+	}
+	name := printableTitle(m.getWindowDisplayName(w))
+	if name == "" {
+		name = "The pane"
+	}
+	if cmd = printableTitle(cmd); cmd != "" {
+		return name + " is running " + cmd + "."
+	}
+	return "Only its shell runs in " + name + "."
+}
+
 // windowCloseLabel names the pane at i the way the dialog's question shows
-// it: its title where it has one, its id where it does not.
+// it: the name it was given, else its title, else its id. The dock and the
+// rail show the given name, so a question that showed the title asked about
+// a pane the person could not find.
 func (m *OS) windowCloseLabel(i int) string {
 	if i < 0 || i >= len(m.Windows) || m.Windows[i] == nil {
 		return "that pane"
 	}
 	w := m.Windows[i]
-	if name := printableTitle(w.Title()); name != "" {
+	if name := printableTitle(m.getWindowDisplayName(w)); name != "" {
 		return "pane '" + name + "'"
 	}
 	return "pane " + shortID(w.ID)
@@ -196,6 +226,25 @@ func (m *OS) sessionCloseTarget() string {
 
 // OpenSessionClose raises the close confirmation for the attached session.
 func (m *OS) OpenSessionClose() tea.Cmd { return m.OpenSessionCloseFor("") }
+
+// CloseNeedsConfirm reports whether closing the pane at i by hand, with a
+// key or the pane's menu, asks first (appearance.confirm_close, issue 1669).
+// Busy is the quit dialog's rule: the pane runs something besides its
+// shell. A local pane is asked of its PTY, and a daemon pane by the program
+// the daemon names in its foreground.
+func (m *OS) CloseNeedsConfirm(i int) bool {
+	if i < 0 || i >= len(m.Windows) || m.Windows[i] == nil {
+		return false
+	}
+	switch m.Settings.ConfirmClose {
+	case config.ConfirmCloseAlways:
+		return true
+	case config.ConfirmCloseBusy:
+		w := m.Windows[i]
+		return w.HasForegroundProcess() || w.ForegroundCmd != ""
+	}
+	return false
+}
 
 // OpenSessionCloseForWindow raises the confirmation for the one pane at i.
 // It is the path a tuios://window/<id>/close link takes: a program in any
@@ -299,7 +348,13 @@ func (m *OS) SessionCloseActivate(idx int) tea.Cmd {
 		// The pane is found again by its ID: it may have moved in
 		// m.Windows, or closed on its own, while the dialog was open.
 		if i := m.windowIndexByID(win); i >= 0 {
+			w := m.Windows[i]
+			m.FireHook(hooks.AfterCloseWindow, w.ID, w.Title())
 			m.CloseWindowByHand(i)
+			if len(m.Windows) == 0 && m.Mode == TerminalMode {
+				// Nothing left to type into.
+				m.ChooseMode(WindowManagementMode, ModeCauseNoPane)
+			}
 		}
 		return nil
 	}

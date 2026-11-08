@@ -107,6 +107,18 @@ type handoffDaemon struct {
 	// image is up. See handoff_keeper.go.
 	Keeper handoffKeeperRecord `json:"keeper"`
 	Stats  HandoffStats        `json:"stats"`
+	// FarHolds are the cards this daemon's panes hold on other machines.
+	// Only this daemon knows them, and a pane that closes after the
+	// upgrade must still let its card go there (task_project.go).
+	FarHolds []handoffFarHold `json:"far_holds,omitempty"`
+}
+
+// handoffFarHold is one card a local window holds on another machine.
+type handoffFarHold struct {
+	Window  string `json:"window"`
+	Host    string `json:"host"`
+	Session string `json:"session"`
+	ID      string `json:"id"`
 }
 
 // handoffManifest is a manifest as read.

@@ -96,6 +96,12 @@ const (
 	// names it and Status is its link status. It carries nothing else, so a
 	// client that shows hosts lists them again. See host_fleet.go.
 	EventHostChanged = "host-changed"
+	// EventWorktreeRemoved says a git worktree tuios made was removed: by
+	// remove-worktree, or by the undo of a setup or a delegation that did
+	// not start. Path is the folder that is gone and Session the worktree's
+	// session, which may be gone too. A plugin hook on worktree.removed runs
+	// on it, so a tool that keeps something per folder can clean up.
+	EventWorktreeRemoved = "worktree-removed"
 	// EventPrompt, EventCommandStarted and EventCommandFinished follow a
 	// shell's commands through its OSC 133 marks (shell_commands.go). A shell
 	// without that integration raises none of them. EventPrompt is the shell
@@ -270,8 +276,12 @@ type streamEvent struct {
 	// Key and Value are an option-set event's option path and value.
 	Key   string `json:"key,omitempty"`
 	Value string `json:"value,omitempty"`
+	// Dispatch is a task-dispatch event's status (task_dispatch.go).
+	Dispatch *DispatchStatus `json:"dispatch,omitempty"`
 	// Working is a keep-awake event's count of working agent panes.
 	Working *int `json:"working,omitempty"`
+	// Path is a worktree-removed event's folder.
+	Path string `json:"path,omitempty"`
 
 	// relayed marks an event copied from a linked host's own stream. It is
 	// delivered only to a subscriber that asked for other machines' events,

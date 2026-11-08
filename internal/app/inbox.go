@@ -187,6 +187,10 @@ type InboxEvent struct {
 	Item   *session.AttentionItem `json:"attention"`
 	// Task is the card of a task event.
 	Task *session.TaskRow `json:"task"`
+	// Dispatch is a task-dispatch event's status, and Reason why dispatch
+	// stopped on its own.
+	Dispatch *session.DispatchStatus `json:"dispatch"`
+	Reason   string                  `json:"reason"`
 }
 
 // InboxDownMsg says the watcher lost the daemon. Unsupported says the daemon
@@ -359,6 +363,13 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 	}
 	if !noBoard && boardErr == "" {
 		types = append(types, session.EventTaskClaimed, session.EventTaskFinished, session.EventTaskChanged)
+		// A daemon from before dispatch refuses a subscription that names
+		// its event.
+		if ok, _ := probeVerb(func(verb string, params map[string]any) ([]byte, error) {
+			return client.CallWithTimeout(verb, params, 5*time.Second)
+		}, "get-task-dispatch"); ok {
+			types = append(types, session.EventTaskDispatch)
+		}
 	}
 	if _, err := client.CallWithTimeout("subscribe", map[string]any{
 		"types":     types,
@@ -420,7 +431,7 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 			case ev.Type == session.EventGap:
 				put(read{gap: true})
 				return
-			case ev.Type == session.EventAttention && ev.Item != nil, ev.Task != nil:
+			case ev.Type == session.EventAttention && ev.Item != nil, ev.Task != nil, ev.Dispatch != nil:
 				if !put(read{ev: ev.InboxEvent}) {
 					return
 				}
@@ -642,6 +653,10 @@ func (m *OS) applyInboxEvents(msg InboxEventsMsg) tea.Cmd {
 	for _, ev := range msg.Events {
 		if ev.Task != nil {
 			m.applyTaskEvent(ev.Action, *ev.Task)
+			continue
+		}
+		if ev.Dispatch != nil {
+			m.applyDispatchEvent(ev.Action, ev.Reason, ev.Dispatch)
 			continue
 		}
 		it := ev.Item
@@ -1462,9 +1477,9 @@ func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string, upgradeD
 		m.ShowNotification("Answering needs a client attached to this machine's daemon", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
-	nonce := m.DaemonClient.HumanNonce()
+	nonce := m.inboxNonce()
 	if nonce == "" {
-		m.ShowNotification("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon", "error", m.Settings.NotificationDuration*2)
+		m.ShowNotification(m.noNonceText(), "error", m.Settings.NotificationDuration*2)
 		return nil
 	}
 	if m.Inbox.replied == nil {
@@ -1564,8 +1579,7 @@ func (m *OS) InboxReplyApproval(decision string) tea.Cmd {
 		return nil
 	}
 	// The key only asks: enter answers (InboxConfirmKey).
-	m.Inbox.approvals.armed = inboxArmed{}
-	m.Inbox.approvals.confirm = &inboxConfirm{decision: decision, itemID: it.ID, shown: inboxShownKey(it)}
+	m.answerAsk(&inboxConfirm{decision: decision, itemID: it.ID, shown: inboxShownKey(it)})
 	return nil
 }
 
@@ -1581,7 +1595,7 @@ func (m *OS) refuseRemoteAnswer(what string) bool {
 	if !m.ProcessingRemoteKeys {
 		return false
 	}
-	m.Inbox.approvals.armed = inboxArmed{}
+	m.answerEnd(answerArmed, "refused")
 	m.ShowNotification(what+" that send-keys typed is not sent: only keys from your keyboard act for you", "error", m.Settings.NotificationDuration)
 	return true
 }
@@ -1661,7 +1675,7 @@ func (m *OS) inboxReplyCmdWith(it session.AttentionItem, decision, message strin
 	}
 	nonce := m.inboxNonce()
 	if nonce == "" {
-		m.ShowNotification("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon", "error", m.Settings.NotificationDuration*2)
+		m.ShowNotification(m.noNonceText(), "error", m.Settings.NotificationDuration*2)
 		return nil
 	}
 	if m.Inbox.replied == nil {
@@ -1916,7 +1930,7 @@ func (m *OS) inboxDismissCmd(id string, silent bool) tea.Cmd {
 	nonce := m.inboxNonce()
 	if nonce == "" {
 		if !silent {
-			m.ShowNotification("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon", "error", m.Settings.NotificationDuration*2)
+			m.ShowNotification(m.noNonceText(), "error", m.Settings.NotificationDuration*2)
 		}
 		return nil
 	}
@@ -1948,9 +1962,9 @@ func (m *OS) InboxRelease() tea.Cmd {
 		m.ShowNotification("That mail is held on another machine; attach there to pass it on", "info", m.Settings.NotificationDuration)
 		return nil
 	}
-	nonce := m.DaemonClient.HumanNonce()
+	nonce := m.inboxNonce()
 	if nonce == "" {
-		m.ShowNotification("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon", "error", m.Settings.NotificationDuration*2)
+		m.ShowNotification(m.noNonceText(), "error", m.Settings.NotificationDuration*2)
 		return nil
 	}
 	build := m.DaemonClient.ClientVersion()

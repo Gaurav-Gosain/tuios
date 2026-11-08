@@ -157,7 +157,8 @@ var exampleOutcomes = map[string]exampleOutcome{
 	// link-peer names the machine a link connection came from, so it is only
 	// taken on a link socket. The allowed path is proved in
 	// link_policy_test.go.
-	"link-peer#0": {errCode: ErrVerbForbidden, why: "the fixture calls on the daemon's own socket, not a link socket"},
+	"link-peer#0":       {errCode: ErrVerbForbidden, why: "the fixture calls on the daemon's own socket, not a link socket"},
+	"run-task-verify#0": {errCode: ErrVerbForbidden, why: "the fixture calls on the daemon's own socket, not a link socket"},
 	// release-agent-message passes on a held message for the person, and
 	// needs a nonce no client here was issued. The allowed path is proved in
 	// link_mail_test.go.
@@ -228,6 +229,9 @@ var exampleOutcomes = map[string]exampleOutcome{
 	// with claude installed does not get one started by this test. Starting
 	// and waiting are proved with fake agents in agent_launch_test.go and
 	// verb_start_agent_test.go.
+	"place-agent#0":     {errCode: ErrVerbNoMachine, why: "the fixture has no linked machine and claude is not signed in here"},
+	"place-agent#1":     {errCode: ErrVerbNoMachine, why: "the fixture has no codex and no linked machine"},
+	"place-agent#2":     {errCode: ErrVerbSessionNotFound, why: "the fixture has no session api"},
 	"start-agent#0":     {errCode: ErrVerbInvalidParams, why: "/src/api does not exist here"},
 	"start-agent#1":     {errCode: ErrVerbInvalidParams, why: "/src/api does not exist here"},
 	"start-agent#2":     {errCode: ErrVerbInvalidParams, why: "the fixture's home has no ~/src"},

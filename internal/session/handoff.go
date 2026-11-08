@@ -222,6 +222,15 @@ func (r *handoffRun) prepare() error {
 	// this pid's child across the exec, cut off from the pipes it talks over
 	// and never waited for, and the new image starts its own: a second copy
 	// of every plugin, and an ssh link per host that nothing reads.
+	// A card's verify goes first, before the links its far runs use: the
+	// new image runs it again (loadStores).
+	d.verifies.hold(verifyWaitDelay + time.Second)
+	r.undo = append(r.undo, func() {
+		d.verifies.release()
+		for _, sess := range d.manager.AllSessions() {
+			d.resumeVerifies(sess)
+		}
+	})
 	d.plugins.stop()
 	d.fleet.stop()
 	if d.federation != nil {
@@ -443,6 +452,7 @@ func (r *handoffRun) writeManifest(sessions []*Session, refs []handoffPaneRef) e
 		Fallback:     r.prev.path,
 		FallbackFD:   r.prev.fd(),
 		Stats:        r.stats,
+		FarHolds:     d.remoteHolds.far(),
 	}
 	if dr.FallbackFD >= 0 {
 		r.fds = append(r.fds, dr.FallbackFD)

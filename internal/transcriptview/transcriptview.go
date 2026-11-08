@@ -120,6 +120,10 @@ const (
 	// KindError is an error the harness wrote into the conversation: a
 	// failed request, a refused model, a turn cut short. Its Text says what.
 	KindError = "error"
+	// KindInterrupt marks where the person stopped the agent. It has no
+	// text: Claude Code writes the stop into the conversation as the
+	// person's words, and they are not a prompt.
+	KindInterrupt = "interrupt"
 )
 
 // Tool call statuses.
@@ -127,6 +131,9 @@ const (
 	StatusOK      = "ok"
 	StatusError   = "error"
 	StatusRunning = "running"
+	// StatusDeclined says the person declined the call. The result's Text
+	// is what they said with it, or empty.
+	StatusDeclined = "declined"
 )
 
 // Entry is one item of the conversation.
@@ -148,7 +155,9 @@ type Entry struct {
 	Todos     []Todo `json:"todos,omitempty"`
 	// Image is set on the "[image]" text entry of an image a client can
 	// fetch with ReadImage, by the entry's ID. The data stays in the
-	// transcript, so a page carries only its media type.
+	// transcript, so a page carries only its media type. An image a tool
+	// result holds, such as a Read of a PNG, is an entry of role tool after
+	// the result, with the result's ToolID.
 	Image *Image `json:"image,omitempty"`
 
 	// line is the byte offset of the record the entry came from, and sub its
@@ -251,6 +260,10 @@ type DiffLine struct {
 // Image is an image in the conversation.
 type Image struct {
 	MediaType string `json:"media_type"`
+	// Width and Height are the image's size in pixels, when the transcript
+	// says it.
+	Width  int `json:"width,omitzero"`
+	Height int `json:"height,omitzero"`
 }
 
 // Todo is one item of a todo list.

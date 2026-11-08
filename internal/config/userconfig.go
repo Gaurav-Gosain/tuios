@@ -465,6 +465,7 @@ type AppearanceConfig struct {
 	Calm                     *bool                   `toml:"calm"`                         // Calm mode: no motion or blinking, and only messages that need you reach the dock (default: false)
 	ModalDim                 *int                    `toml:"modal_dim"`                    // Percent the screen behind a modal overlay is darkened; 0 is off (default: 30)
 	PopupDim                 *int                    `toml:"popup_dim"`                    // Percent the screen behind a popup is darkened; 0 is off (default: 0)
+	ConfirmClose             string                  `toml:"confirm_close"`                // When closing a pane by hand (a key, its menu, its close control) asks first: never, busy (it runs something besides its shell) or always (default: never)
 	ConfirmQuit              *bool                   `toml:"confirm_quit"`                 // Always show quit confirmation dialog (default: false). When false, only shown if foreground processes are running.
 	WhichKeyEnabled          *bool                   `toml:"whichkey_enabled"`             // Show which-key popup after pressing leader key (default: true)
 	WhichKeyPosition         string                  `toml:"whichkey_position"`            // Which-key popup position: bottom-right, bottom-left, top-right, top-left, center (default: bottom-right)
@@ -920,6 +921,7 @@ type SelectionConfig struct {
 // the default" and an explicit false survives a reload.
 type SidebarConfig struct {
 	Enabled     *bool  `toml:"enabled"`      // Show the rail (default: true)
+	PerSession  *bool  `toml:"per_session"`  // Each session keeps its own shown or hidden rail; off, a toggle applies to every session (default: false)
 	Position    string `toml:"position"`     // Edge: left, right, hidden (default: right)
 	Width       int    `toml:"width"`        // Preferred width in columns for a wide screen (default: 24)
 	ShowWindows *bool  `toml:"show_windows"` // The terminals section (default: true)
@@ -1238,6 +1240,7 @@ func DefaultConfig() *UserConfig {
 			ZoomSize:                 ZoomSizeDefault,
 			AnimationSpeed:           AnimationSpeedDefault,
 			ThemeTransition:          ThemeTransitionNone,
+			ConfirmClose:             ConfirmCloseNever,
 			ThemeTransitionMs:        ThemeTransitionMsDefault,
 			NiriScrollCells:          NiriScrollCellsDefault,
 			PrefixRepeatTime:         &defaultPrefixRepeatTime,
@@ -1507,8 +1510,11 @@ func DefaultConfig() *UserConfig {
 				// B turns the spotlight on and off from either mode. In
 				// terminal mode it is the way out of the beam, since esc
 				// belongs to the program in the pane there.
-				"prefix_toggle_spotlight":   {"B"},
-				"prefix_session_switcher":   {"S"},
+				"prefix_toggle_spotlight": {"B"},
+				"prefix_session_switcher": {"S"},
+				// + adds a task card from anywhere. N, the design's first
+				// pick, is the last message.
+				"prefix_new_task":           {"+"},
 				"prefix_workspace_switcher": {"W"},
 				// G for go to, one shift from the g that shows the scratch
 				// terminal.
@@ -1606,6 +1612,7 @@ func DefaultConfig() *UserConfig {
 				"minimize_prefix_restore_8":   {"8"},
 				"minimize_prefix_restore_9":   {"9"},
 				"minimize_prefix_restore_all": {"M"},
+				"minimize_prefix_focus_only":  {"f"},
 				"minimize_prefix_cancel":      {"esc"},
 			},
 			WorkspacePrefix: map[string][]string{
@@ -1834,12 +1841,21 @@ const (
 	// focused pane.
 	ActionInboxBoard = "inbox_board"
 	ActionInboxTake  = "inbox_take"
+	// ActionInboxShip is Ready to merge on a card in review: commit, push or
+	// open the pull request of the work its agent did.
+	ActionInboxShip = "inbox_ship"
 	// ActionInboxStagePrev and ActionInboxStageNext move the card under the
 	// cursor to the stage before or after its own. ActionInboxBoardLayout
 	// switches the board between its columns and the list.
 	ActionInboxStagePrev   = "inbox_stage_prev"
 	ActionInboxStageNext   = "inbox_stage_next"
 	ActionInboxBoardLayout = "inbox_board_layout"
+	// ActionInboxDispatchMode turns the shown board's task dispatch from
+	// manual to pull to auto. ActionInboxDispatchPause pauses all dispatch, or
+	// starts it again after a pause or a stop. Both are chords, so a
+	// printable key never changes what agents are given.
+	ActionInboxDispatchMode  = "inbox_dispatch_mode"
+	ActionInboxDispatchPause = "inbox_dispatch_pause"
 	// ActionInboxViewList folds the list column into a strip of chips above
 	// the focus, or opens it into the column again ([agents] view_list).
 	ActionInboxViewList = "inbox_view_list"
@@ -1866,7 +1882,21 @@ const (
 	ActionInboxPromptPrev = "inbox_prompt_prev"
 	ActionInboxPromptNext = "inbox_prompt_next"
 	// The step through the agents the thread's cards started.
-	ActionInboxChild        = "inbox_child"
+	ActionInboxChild = "inbox_child"
+	// The view's regions: the list, the focus, the reply and the side
+	// column. tab and shift+tab step them, esc goes one step back (out of
+	// a region, then a search, then the view), and N goes to the next
+	// agent that needs the person.
+	ActionInboxRegionNext = "inbox_region_next"
+	ActionInboxRegionPrev = "inbox_region_prev"
+	ActionInboxEscape     = "inbox_escape"
+	ActionInboxNextNeeds  = "inbox_next_needs"
+	// The layout keys: the list's width, the side column, and the zoom of
+	// the focused region.
+	ActionInboxListNarrower = "inbox_list_narrower"
+	ActionInboxListWider    = "inbox_list_wider"
+	ActionInboxSide         = "inbox_side"
+	ActionInboxZoom         = "inbox_zoom"
 	ActionAgentUnread       = "agent_unread"
 	ActionAgentSnooze       = "agent_snooze"
 	ActionAgentReply        = "agent_reply"
@@ -1904,8 +1934,10 @@ const (
 // could all be rebound had a part that could not.
 func getDefaultInboxKeybinds() map[string][]string {
 	return map[string][]string{
-		ActionInboxDown:     {"j", "down", "ctrl+n"},
-		ActionInboxUp:       {"k", "up", "ctrl+p"},
+		// ctrl+p is the palette's, over the view too, so the moves are
+		// the letters and the arrows only.
+		ActionInboxDown:     {"j", "down"},
+		ActionInboxUp:       {"k", "up"},
 		ActionInboxPageDown: {"pgdown"},
 		ActionInboxPageUp:   {"pgup"},
 		ActionInboxFirst:    {"g", "home"},
@@ -1919,44 +1951,57 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxFilter:   {"f"},
 		ActionInboxSelect:   {"/"},
 		ActionInboxMailbox:  {"m"},
-		ActionInboxClose:    {"esc", "q"},
-		ActionInboxWrite:    {"tab", "i"},
-		ActionInboxSort:     {"s"},
-		ActionInboxViewPane: {"ctrl+]"},
+		// esc goes back one step, q closes at once. tab steps the
+		// regions; i and r open the reply.
+		ActionInboxClose:        {"q"},
+		ActionInboxEscape:       {"esc"},
+		ActionInboxWrite:        {"i"},
+		ActionInboxRegionNext:   {"tab"},
+		ActionInboxRegionPrev:   {"shift+tab"},
+		ActionInboxNextNeeds:    {"N"},
+		ActionInboxListNarrower: {"<"},
+		ActionInboxListWider:    {">"},
+		ActionInboxSide:         {"w"},
+		ActionInboxZoom:         {"Z"},
+		ActionInboxSort:         {"s"},
+		ActionInboxViewPane:     {"ctrl+]"},
 		// Review, triage and approvals. z snoozes and waits for a digit; u
 		// undoes a dismiss or snooze made a moment ago; S shows what is
 		// snoozed; R rejects with a reason, after the a A r R of the
 		// approval card, where 3 stays the plain reject; n starts a new
 		// agent; J and K scroll a long detail such as a plan. On a held
 		// approval r rejects: inbox_reply answers it.
-		ActionInboxReview:      {"v"},
-		ActionInboxSnooze:      {"z"},
-		ActionInboxUndo:        {"u"},
-		ActionInboxShowSnoozed: {"S"},
-		ActionInboxSettle:      {"D"},
-		ActionInboxDenyReason:  {"R"},
-		ActionInboxNewAgent:    {"n"},
-		ActionInboxCompare:     {"c"},
-		ActionInboxBoard:       {"b"},
-		ActionInboxTake:        {"t"},
-		ActionInboxStagePrev:   {"H", "shift+left"},
-		ActionInboxStageNext:   {"L", "shift+right"},
-		ActionInboxBoardLayout: {"B"},
-		ActionInboxViewList:    {"\\"},
-		ActionInboxArtifact:    {"o"},
-		ActionInboxDetailDown:  {"J", "ctrl+d"},
-		ActionInboxDetailUp:    {"K", "ctrl+u"},
-		ActionInboxAllow:       {"a"},
-		ActionInboxAllowAlways: {"A"},
-		ActionInboxOpen:        {"l", "right"},
-		ActionInboxBack:        {"h", "left"},
-		ActionInboxHelp:        {"?"},
-		ActionInboxMark:        {"x"},
-		ActionInboxMarkAll:     {"*"},
-		ActionInboxTabPrev:     {"["},
-		ActionInboxTabNext:     {"]"},
-		ActionInboxExpand:      {"e"},
-		ActionInboxFold:        {"F"},
+		ActionInboxReview:        {"v"},
+		ActionInboxSnooze:        {"z"},
+		ActionInboxUndo:          {"u"},
+		ActionInboxShowSnoozed:   {"S"},
+		ActionInboxSettle:        {"D"},
+		ActionInboxDenyReason:    {"R"},
+		ActionInboxNewAgent:      {"n"},
+		ActionInboxCompare:       {"c"},
+		ActionInboxBoard:         {"b"},
+		ActionInboxTake:          {"t"},
+		ActionInboxShip:          {"M"},
+		ActionInboxStagePrev:     {"H", "shift+left"},
+		ActionInboxStageNext:     {"L", "shift+right"},
+		ActionInboxBoardLayout:   {"B"},
+		ActionInboxDispatchMode:  {"ctrl+t"},
+		ActionInboxDispatchPause: {"ctrl+x"},
+		ActionInboxViewList:      {"\\"},
+		ActionInboxArtifact:      {"o"},
+		ActionInboxDetailDown:    {"J", "ctrl+d"},
+		ActionInboxDetailUp:      {"K", "ctrl+u"},
+		ActionInboxAllow:         {"a"},
+		ActionInboxAllowAlways:   {"A"},
+		ActionInboxOpen:          {"l", "right"},
+		ActionInboxBack:          {"h", "left"},
+		ActionInboxHelp:          {"?"},
+		ActionInboxMark:          {"x"},
+		ActionInboxMarkAll:       {"*"},
+		ActionInboxTabPrev:       {"["},
+		ActionInboxTabNext:       {"]"},
+		ActionInboxExpand:        {"e"},
+		ActionInboxFold:          {"F"},
 		// [ and ] step the tabs, so the prompt jumps take the braces.
 		ActionInboxPromptPrev: {"{"},
 		ActionInboxPromptNext: {"}"},
@@ -2587,6 +2632,9 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	if !slices.Contains(MotionLevels, cfg.Appearance.Motion) {
 		cfg.Appearance.Motion = defaultCfg.Appearance.Motion
 	}
+	if !slices.Contains(ConfirmCloseLevels, cfg.Appearance.ConfirmClose) {
+		cfg.Appearance.ConfirmClose = defaultCfg.Appearance.ConfirmClose
+	}
 	if !slices.Contains(ThemeTransitions, cfg.Appearance.ThemeTransition) {
 		cfg.Appearance.ThemeTransition = defaultCfg.Appearance.ThemeTransition
 	}
@@ -2828,6 +2876,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if sb.Enabled != nil {
 		s.SidebarEnabled = *sb.Enabled
 	}
+	s.SidebarPerSession = sb.PerSession != nil && *sb.PerSession
 	s.SidebarPosition = closedSetValue(sb.Position, SidebarPositions, s.SidebarPosition, DefaultSidebarPosition)
 	if sb.Width > 0 {
 		s.SidebarWidth = sb.Width
@@ -3145,6 +3194,11 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 
 	if a.PopupDim != nil {
 		s.PopupDim = min(max(*a.PopupDim, 0), PopupDimMax)
+	}
+
+	s.ConfirmClose = ConfirmCloseNever
+	if slices.Contains(ConfirmCloseLevels, cfg.Appearance.ConfirmClose) {
+		s.ConfirmClose = cfg.Appearance.ConfirmClose
 	}
 
 	// ConfirmQuit defaults to false (nil means use default)

@@ -1,0 +1,107 @@
+api = 1
+id = "tuios.ovnfs"
+name = "ovnfs"
+version = "0.1.0"
+description = "Opens ovnfs checkouts of a folder in a pane, and shows, applies and cleans them up"
+min_tuios = "0.13.0"
+platforms = ["linux", "macos"]
+
+# ui shows the messages and the cell. The plugin types into no pane and reads
+# no pane.
+[permissions]
+grants = ["ui"]
+
+# Shows how many checkouts wait for a review after their pane closed. A click
+# opens the list.
+[[cell]]
+id = "pending"
+side = "right"
+
+# A pane of the plugin, so the plugin needs no grant to open it. It opens the
+# checkout, then runs your shell in it.
+[[process]]
+id = "new"
+run = "pane"
+title = "New checkout here"
+description = "Open an ovnfs checkout of the focused pane's folder in a new pane"
+placement = "split"
+command = ["sh", "ovnfs.sh", "new"]
+
+# The checkouts list opens a shell in a checkout through this pane.
+[[process]]
+id = "shell"
+run = "pane"
+title = "Shell in a checkout"
+description = "Open a shell in a checkout"
+placement = "split"
+command = ["sh", "ovnfs.sh", "shell"]
+
+[[process]]
+id = "review"
+run = "action"
+title = "Review closed checkouts"
+description = "Open the list of checkouts"
+command = ["sh", "ovnfs.sh", "review"]
+
+[[process]]
+id = "checkouts"
+run = "pane"
+title = "Checkouts"
+description = "List the checkouts: changes, idle time, diff, apply, remove and prune"
+placement = "popup"
+width = 110
+height = 30
+command = ["sh", "ovnfs.sh", "checkouts"]
+
+[[process]]
+id = "diff"
+run = "pane"
+title = "Diff"
+description = "Show what the checkout changed"
+placement = "popup"
+width = 120
+height = 36
+command = ["sh", "ovnfs.sh", "diff"]
+
+[[process]]
+id = "apply"
+run = "pane"
+title = "Apply"
+description = "Merge the checkout's changes into its folder"
+placement = "popup"
+width = 100
+height = 30
+command = ["sh", "ovnfs.sh", "apply"]
+
+[[process]]
+id = "apply-branch"
+run = "pane"
+title = "Apply to a branch"
+description = "Make a branch in the folder's repository from the checkout's commits"
+placement = "popup"
+width = 100
+height = 30
+command = ["sh", "ovnfs.sh", "apply-branch"]
+
+[[process]]
+id = "attach"
+run = "pane"
+title = "Attach to a host"
+description = "Make the checkout appear on another machine"
+placement = "popup"
+width = 100
+height = 30
+command = ["sh", "ovnfs.sh", "attach"]
+
+# Hooks run on the event and exit. Nothing stays in memory.
+[[process]]
+id = "worktree-removed"
+run = "event"
+on = ["worktree.removed"]
+command = ["sh", "ovnfs.sh", "worktree-removed"]
+
+[[process]]
+id = "pane-closed"
+run = "event"
+on = ["pane.closed"]
+command = ["sh", "ovnfs.sh", "pane-closed"]

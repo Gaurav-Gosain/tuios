@@ -474,6 +474,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 		Name: "Sidebar",
 		Items: m.resolveRows([]settingsRow{
 			opt("appearance.sidebar.enabled"),
+			opt("appearance.sidebar.per_session"),
 			opt("appearance.sidebar.position"),
 			opt("appearance.sidebar.width"),
 			custom("appearance.sidebar.sections", m.sectionLayoutItem()),
@@ -617,6 +618,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.animation_speed"),
 			opt("appearance.theme_transition"),
 			opt("appearance.theme_transition_duration"),
+			opt("appearance.confirm_close"),
 			opt("appearance.confirm_quit"),
 			opt("appearance.whichkey_enabled"),
 			opt("appearance.whichkey_position"),
@@ -643,6 +645,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("shell.integration"),
 			opt("agents.fold_working"),
 			opt("agents.view_list"),
+			opt("agents.list_width"),
 			opt("review.focus"),
 			opt("review.scope"),
 			opt("pip.width"),
@@ -767,6 +770,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("daemon.agent_detect_seconds"),
 			opt("daemon.resume_agents"),
 			opt("tasks.auto_stage"),
+			opt("tasks.machine_cap"),
 		}), daemon.Items[2:]...)...)
 	}
 	// The restart row leads the tab, where a person who came to the daemon's

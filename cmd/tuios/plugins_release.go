@@ -41,6 +41,7 @@ type firstPartyPlugin struct {
 
 // firstParty are the plugins tuios plugins install takes by name.
 var firstParty = map[string]firstPartyPlugin{
+	"ovnfs":     {},
 	"pr-status": {},
 	"sketch":    {binary: "sketch"},
 	"themes":    {},

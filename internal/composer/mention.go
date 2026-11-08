@@ -25,6 +25,10 @@ import (
 // for the list on each frame the list is open, which costs nothing when the
 // answer is the same as before, since the frame is kept.
 
+// MentionOpen reports whether the @ list is open. A host that takes ctrl+p
+// for itself leaves it to the list while it is open.
+func (m *Model) MentionOpen() bool { return m.mention != nil }
+
 // mentionRows is how many entries the list shows.
 const mentionRows = 6
 

@@ -3,6 +3,7 @@ package config
 import (
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 // A Scope is one keyboard context: a set of keys that are looked up together
@@ -520,7 +521,42 @@ func (r *KeybindRegistry) Bindings() []Binding {
 			}
 		}
 	}
+	shadowInboxByGlobal(out)
 	return out
+}
+
+// shadowInboxByGlobal marks the agents view's bindings that a global binding
+// takes first. The global keys act over the view (the palette opens over it),
+// all but a key that types a character, which stays the view's: see
+// handleInboxInput in internal/input.
+func shadowInboxByGlobal(out []Binding) {
+	global := map[string]int{}
+	for i, b := range out {
+		if b.Scope == ScopeGlobal && !b.Unbound && !b.Shadowed {
+			global[lookupForm(b.Key)] = i
+		}
+	}
+	if len(global) == 0 {
+		return
+	}
+	for i := range out {
+		b := &out[i]
+		if b.Scope != ScopeInbox || b.Unbound || b.Shadowed || typesCharacter(b.Key) {
+			continue
+		}
+		if g, ok := global[lookupForm(b.Key)]; ok {
+			b.Shadowed = true
+			b.ShadowedBy = out[g].Action
+		}
+	}
+}
+
+// typesCharacter reports whether a key spelling is a key that types a
+// character: one character, space, or shift and one character.
+func typesCharacter(key string) bool {
+	k := strings.ToLower(strings.TrimSpace(key))
+	k = strings.TrimPrefix(k, "shift+")
+	return k == "space" || utf8.RuneCountInString(k) == 1
 }
 
 // SectionCommand is the section name a command entry's binding reports: the

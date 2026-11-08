@@ -6,7 +6,6 @@ package input
 import (
 	"slices"
 	"strings"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
@@ -166,9 +165,11 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		if o.InboxReplyOpen() {
 			return o, o.InboxReplyPaste(msg.Content)
 		}
+		if o.TaskCaptureOpen() {
+			return o, o.TaskCapturePaste(msg.Content)
+		}
 		if o.CockpitSpawnOpen() {
-			o.CockpitSpawnPaste(msg.Content)
-			return o, nil
+			return o, o.CockpitSpawnPaste(msg.Content)
 		}
 		if cmd, taken := pasteTakenByOverlay(o, msg.Content); taken {
 			return o, cmd
@@ -223,9 +224,11 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 			}
 			return o, o.InboxReplyPaste(msg.Content)
 		}
+		if o.TaskCaptureOpen() {
+			return o, o.TaskCapturePaste(msg.Content)
+		}
 		if o.CockpitSpawnOpen() {
-			o.CockpitSpawnPaste(msg.Content)
-			return o, nil
+			return o, o.CockpitSpawnPaste(msg.Content)
 		}
 		if cmd, taken := pasteTakenByOverlay(o, msg.Content); taken {
 			return o, cmd
@@ -506,6 +509,11 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// See app/upgrade_confirm.go.
 	if o.UpgradeConfirmOpen() {
 		return o, o.UpgradeConfirmKey(msg.String())
+	}
+	// The task capture sheet owns every key while it is up. See
+	// app/task_capture.go.
+	if o.TaskCaptureOpen() {
+		return o, o.TaskCaptureKey(msg)
 	}
 	// The add-a-machine sheet owns every key while it is up. See
 	// app/machine_sheet.go.
@@ -906,15 +914,16 @@ func handlePrefixKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// If prefix is already active, deactivate it (double leader key cancels),
 	// or go back to the last workspace when leader_twice says so.
 	if o.PrefixActive {
-		o.PrefixActive = false
+		// The leader twice closes the leader and any menu it opened: a
+		// sub-menu left open would take the next key.
+		o.SetMenuState(app.MenuState{})
 		if o.KeybindRegistry != nil && o.KeybindRegistry.LeaderTwiceGoesBack() {
 			o.LastWorkspace()
 		}
 		return o, nil
 	}
 	// Activate prefix mode
-	o.PrefixActive = true
-	o.LastPrefixTime = time.Now()
+	o.ArmLeader()
 	return o, nil
 }
 

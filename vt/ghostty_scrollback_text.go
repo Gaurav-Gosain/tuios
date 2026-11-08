@@ -65,12 +65,11 @@ func (t *GhosttyTerminal) historyTextLocked(src *gh.Terminal, n int) (string, bo
 		return "", false
 	}
 	sel := &gh.Selection{Start: *start, End: *end}
-	text, err := src.SelectionFormatString(gh.WithSelection(sel), gh.WithSelectionTrim(true), gh.WithSelectionUnwrap(false))
+	text, err := formatSelection(src, sel, gh.FormatterFormatPlain)
 	if err != nil {
 		return "", false
 	}
-	styled, err := src.SelectionFormatString(gh.WithSelection(sel), gh.WithSelectionTrim(true), gh.WithSelectionUnwrap(false),
-		gh.WithSelectionFormat(gh.FormatterFormatVT))
+	styled, err := formatSelection(src, sel, gh.FormatterFormatVT)
 	if err != nil {
 		return "", false
 	}
@@ -142,7 +141,13 @@ func styledTailRows(vt string, n int) (marks []bool, ok bool) {
 			row, tail = row+1, false
 			i += 2
 		case c == 0x1b:
-			i = skipVTEscape(vt, i, &set)
+			var final byte
+			i, final = skipVTEscape(vt, i, &set)
+			// libghostty 1.0 writes a run of blanks as ECH and CUF over
+			// it, which under a set SGR are styled spaces.
+			if set && (final == 'X' || final == 'C') {
+				tail = true
+			}
 		case c == ' ':
 			if set {
 				tail = true
@@ -161,11 +166,12 @@ func styledTailRows(vt string, n int) (marks []bool, ok bool) {
 	return marks, true
 }
 
-// skipVTEscape returns the index past the escape sequence at vt[i]. An SGR
-// sequence sets *set: false for a plain reset, true for anything else.
-func skipVTEscape(vt string, i int, set *bool) int {
+// skipVTEscape returns the index past the escape sequence at vt[i], and the
+// final byte of a CSI sequence (0 for any other). An SGR sequence sets *set:
+// false for a plain reset, true for anything else.
+func skipVTEscape(vt string, i int, set *bool) (int, byte) {
 	if i+1 >= len(vt) {
-		return len(vt)
+		return len(vt), 0
 	}
 	switch vt[i+1] {
 	case '[':
@@ -174,25 +180,43 @@ func skipVTEscape(vt string, i int, set *bool) int {
 			j++
 		}
 		if j >= len(vt) {
-			return len(vt)
+			return len(vt), 0
 		}
 		if vt[j] == 'm' {
 			params := vt[i+2 : j]
 			*set = params != "" && params != "0"
 		}
-		return j + 1
+		return j + 1, vt[j]
 	case ']', 'P', '_', '^', 'X':
 		// A string runs to BEL or ST.
 		for j := i + 2; j < len(vt); j++ {
 			if vt[j] == 0x07 {
-				return j + 1
+				return j + 1, 0
 			}
 			if vt[j] == 0x1b && j+1 < len(vt) && vt[j+1] == '\\' {
-				return j + 2
+				return j + 2, 0
 			}
 		}
-		return len(vt)
+		return len(vt), 0
 	default:
-		return i + 2
+		return i + 2, 0
 	}
+}
+
+// formatSelection is the text of sel in format, trimmed and with soft wraps
+// kept as line breaks. It asks for no extras: a formatter adds the palette,
+// the pen style and the open hyperlink by default, and styledTailRows reads
+// the output row by row, so a prefix that is no row would shift every row.
+func formatSelection(src *gh.Terminal, sel *gh.Selection, format gh.FormatterFormat) (string, error) {
+	f, err := gh.NewFormatter(src,
+		gh.WithFormatterFormat(format),
+		gh.WithFormatterSelection(sel),
+		gh.WithFormatterTrim(true),
+		gh.WithFormatterUnwrap(false),
+		gh.WithFormatterExtras(gh.FormatterExtrasNone))
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	return f.FormatString()
 }

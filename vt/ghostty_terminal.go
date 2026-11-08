@@ -627,26 +627,26 @@ func (t *GhosttyTerminal) refreshCachesLocked() {
 	if t.closed.Load() {
 		return
 	}
-	x10, _ := t.term.Mode(gh.ModeX10Mouse)
-	normal, _ := t.term.Mode(gh.ModeNormalMouse)
-	button, _ := t.term.Mode(gh.ModeButtonMouse)
-	any, _ := t.term.Mode(gh.ModeAnyMouse)
+	x10, _ := t.term.Mode(gh.ModeMouseEventX10)
+	normal, _ := t.term.Mode(gh.ModeMouseEventNormal)
+	button, _ := t.term.Mode(gh.ModeMouseEventButton)
+	any, _ := t.term.Mode(gh.ModeMouseEventAny)
 	t.cachedHasMouse.Store(x10 || normal || button || any)
 	t.cachedAllMotion.Store(any)
 	t.cachedCellMotion.Store(button)
-	sgr, _ := t.term.Mode(gh.ModeSGRMouse)
-	px, _ := t.term.Mode(gh.ModeSGRPixelsMouse)
+	sgr, _ := t.term.Mode(gh.ModeMouseFormatSGR)
+	px, _ := t.term.Mode(gh.ModeMouseFormatSGRPixels)
 	t.cachedMouseSGR.Store(sgr)
 	t.cachedMousePx.Store(px)
-	utf8Mouse, _ := t.term.Mode(gh.ModeUTF8Mouse)
-	urxvt, _ := t.term.Mode(gh.ModeURxvtMouse)
+	utf8Mouse, _ := t.term.Mode(gh.ModeMouseFormatUTF8)
+	urxvt, _ := t.term.Mode(gh.ModeMouseFormatURxvt)
 	t.cachedMouseUTF8.Store(utf8Mouse)
 	t.cachedMouseURXVT.Store(urxvt)
 	t.cachedMouseX10.Store(x10 && !normal && !button && !any)
 
 	alt47, _ := t.term.Mode(gh.ModeAltScreenLegacy)
 	alt1047, _ := t.term.Mode(gh.ModeAltScreen)
-	alt1049, _ := t.term.Mode(gh.ModeAltScreenSave)
+	alt1049, _ := t.term.Mode(gh.ModeAltScreenSaveCursorClearEnter)
 	isAlt := alt47 || alt1047 || alt1049
 	t.cachedAltScreen.Store(isAlt)
 	if !isAlt {
@@ -661,7 +661,7 @@ func (t *GhosttyTerminal) refreshCachesLocked() {
 		}
 	}
 
-	sync, _ := t.term.Mode(gh.ModeSyncOutput)
+	sync, _ := t.term.Mode(gh.ModeSynchronizedOutput)
 	t.noteSyncOutput(sync)
 
 	t.cachedKittyFlags.Store(int32(t.kittyKbd.CurrentFlags()))
@@ -826,7 +826,7 @@ func (t *GhosttyTerminal) ApplicationCursorKeys() bool {
 	if t.closed.Load() {
 		return false
 	}
-	v, _ := t.term.Mode(gh.ModeDECCKM)
+	v, _ := t.term.Mode(gh.ModeCursorKeys)
 	return v
 }
 

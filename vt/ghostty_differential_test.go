@@ -411,6 +411,8 @@ func TestGhosttyDiffDECRQM(t *testing.T) {
 		"\x1b[?2048$p",
 		// A mode neither backend defines.
 		"\x1b[?9999h\x1b[?9999$p",
+		// DECXCPR, with the page number on both.
+		"\x1b[3;4H\x1b[?6n", "\x1b[10;20r\x1b[?6h\x1b[3;5H\x1b[?6n",
 	} {
 		t.Run(fmt.Sprintf("%q", in), func(t *testing.T) {
 			p := newDiffPair(t, 20, 5)

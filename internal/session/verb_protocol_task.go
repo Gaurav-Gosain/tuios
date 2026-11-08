@@ -23,6 +23,12 @@ func taskVerbs() map[string]verbEntry {
 		{Name: "blocked", Type: "object", Description: "reason, by and at when the card is blocked, else null."},
 		{Name: "fan", Type: "object", Description: "fan and fan_id, for a card added in a fan's session."},
 	}
+	host := verbParam{Name: "host", Type: "string", Description: "The machine that owns the card, for a project card claimed, released or finished from the pane that works on it here. The call is passed on over the link for this pane."}
+	remote := []verbParam{
+		{Name: "remote_window", Type: "string", Description: "Over the link only: the window on the calling machine that holds the card. Its daemon sends it; the holder's machine is the link's peer."},
+		{Name: "remote_name", Type: "string", Description: "Over the link only: how that window reads on its machine."},
+		{Name: "remote_harness", Type: "string", Description: "Over the link only: the agent that window runs."},
+	}
 	ownership := " A pane changes only the card it holds unless it holds admin; the person, a shell, a link and a plugin change any card."
 	return map[string]verbEntry{
 		"add-task": {
@@ -34,6 +40,10 @@ func taskVerbs() map[string]verbEntry {
 				{Name: "title", Type: "string", Required: true, Description: "One line that says what the card is, at most 200 bytes. Control characters are dropped."},
 				{Name: "prompt", Type: "string", Description: "What the pane that takes the card is to do, at most 16 KiB."},
 				{Name: "stage", Type: "string", Description: "The stage it starts in.", Accepted: TaskStages, Default: TaskStageTodo},
+				{Name: "project", Type: "string", Description: "The repository the card is for, by its origin URL. It then shows on that repository's board in every session and on linked machines, and a pane on another machine can claim it with host. Omit for a card of the session only."},
+				{Name: "harness", Type: "string", Description: "The agent the card is for, such as claude-code. Pull dispatch gives it only to that agent. Omit for any agent."},
+				{Name: "ask_first", Type: "bool", Description: "The card waits for a person to start it: dispatch never gives it to an agent.", Default: "false"},
+				{Name: "machine", Type: "string", Description: "Where the card's agent starts: any for the machine place-agent picks, or a linked machine's name. Omit for this machine."},
 				humanNonce,
 			},
 			returns: row,
@@ -56,6 +66,8 @@ func taskVerbs() map[string]verbEntry {
 				{Name: "stage", Type: "string", Description: "Only the cards in this stage.", Accepted: TaskStages},
 				{Name: "holder", Type: "string", Description: "Only the cards this window holds, by id or name."},
 				{Name: "open", Type: "bool", Description: "Leave out the cards that are done.", Default: "false"},
+				{Name: "project", Type: "string", Description: "List one repository's cards, by origin URL, from every session. Takes no session or holder."},
+				{Name: "hosts", Type: "bool", Description: "With project, or with all_sessions: also ask each linked machine for its own cards of the project, or for all its project cards. Rows from another machine carry host; machines that did not answer are in hosts_down.", Default: "false"},
 				{Name: "all_sessions", Type: "bool", Description: "List the cards of every session on the daemon, in session name order. Takes no session or holder.", Default: "false"},
 			},
 			returns: []verbParam{
@@ -87,13 +99,14 @@ func taskVerbs() map[string]verbEntry {
 			scope:       scopeTask,
 			link:        needWrite,
 			description: "Take a task card for a pane: the card id, or with next the oldest card no pane holds that is not blocked or done, and that no fan of another session works on (fan with task). A card in todo or plan moves to doing. The pick and the take are one step, so two panes claiming next at once take two cards. A pane claims only for itself unless it holds admin; outside a pane, name the window. The card is released when its pane closes, its agent leaves the pane, or the daemon restarts.",
-			params: []verbParam{
+			params: append([]verbParam{
 				sessionParam,
 				{Name: "id", Type: "string", Description: "The card to take. Not with next."},
 				{Name: "next", Type: "bool", Description: "Take the oldest open card no pane holds. Not with id. With none to take, the call fails with no_task.", Default: "false"},
 				{Name: "window", Type: "string", Description: "The pane that takes the card, by id or name. From a pane, omit it to claim for that pane. Required outside a pane."},
 				humanNonce,
-			},
+				host,
+			}, remote...),
 			returns: row,
 			examples: []string{
 				`{"id":1,"verb":"claim-task","params":{"session":"work","next":true,"window":"build"}}`,
@@ -105,7 +118,7 @@ func taskVerbs() map[string]verbEntry {
 			scope:       scopeTask,
 			link:        needWrite,
 			description: "Mark a task card done. Its holder lets it go and its block, if any, is lifted. Finishing a card that is done already changes nothing." + ownership,
-			params:      []verbParam{sessionParam, id, humanNonce},
+			params:      append([]verbParam{sessionParam, id, humanNonce, host}, remote...),
 			returns:     row,
 			examples: []string{
 				`{"id":1,"verb":"finish-task","params":{"session":"work","id":"t1"}}`,
@@ -150,7 +163,7 @@ func taskVerbs() map[string]verbEntry {
 			scope:       scopeTask,
 			link:        needWrite,
 			description: "Let a task card go without finishing it. It keeps its stage, and another pane can claim it." + ownership,
-			params:      []verbParam{sessionParam, id, humanNonce},
+			params:      append([]verbParam{sessionParam, id, humanNonce, host}, remote...),
 			returns:     row,
 			examples: []string{
 				`{"id":1,"verb":"release-task","params":{"session":"work","id":"t1"}}`,

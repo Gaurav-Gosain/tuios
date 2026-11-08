@@ -123,6 +123,7 @@ mode when its default is wider:
 tuios start-agent claude                       # starts claude --permission-mode plan
 tuios start-agent codex                        # starts codex --sandbox read-only
 tuios start-agent 'claude --permission-mode auto'   # refused
+tuios start-agent claude --permission-mode auto     # refused the same way
 ```
 
 When the work needs more, ask the person. The person starts agents from outside

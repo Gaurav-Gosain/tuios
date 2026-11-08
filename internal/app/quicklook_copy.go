@@ -252,15 +252,19 @@ func (m *OS) drawQuickLookCopy(c *ckCanvas, pal overlay.Palette, dv *diffview.Th
 		line := q.lines[row.line]
 		c.draw(codeX, bodyTop+y, q.w, dv.Code(line[row.at:row.end], ql.rowSpans, diffview.Range{}, diffview.Context, false, 0, q.w))
 	}
-	cm := &q.cm
-	// A row on the screen of absolute row abs, or -1 when it is out of view.
+	drawCopyMarks(c, m.marks(), &q.cm, codeX, bodyTop, q.w, q.h, top)
+}
+
+// drawCopyMarks draws copy mode's search matches, selection and cursor over
+// a view of h rows and w columns at x, y, whose first row is the grid's row
+// first.
+func drawCopyMarks(c *ckCanvas, marks *markStyles, cm *terminal.CopyMode, x0, y0, w, h, first int) {
 	view := func(abs int) int {
-		if y := abs - top; y >= 0 && y < q.h {
+		if y := abs - first; y >= 0 && y < h {
 			return y
 		}
 		return -1
 	}
-	marks := m.marks()
 	search, current := markCell(marks.search), markCell(marks.match)
 	for i, sm := range cm.SearchMatches {
 		if y := view(sm.Line); y >= 0 && sm.EndX > sm.StartX {
@@ -268,17 +272,17 @@ func (m *OS) drawQuickLookCopy(c *ckCanvas, pal overlay.Palette, dv *diffview.Th
 			if i == cm.CurrentMatch {
 				fn = current
 			}
-			c.restyle(codeX+sm.StartX, bodyTop+y, min(sm.EndX, q.w)-sm.StartX, 1, fn)
+			c.restyle(x0+sm.StartX, y0+y, min(sm.EndX, w)-sm.StartX, 1, fn)
 		}
 	}
 	if cm.State.InVisual() {
 		sel := markCell(marks.selection)
 		start, end := cm.VisualStart, cm.VisualEnd
 		if cm.State == terminal.CopyModeVisualBlock {
-			x0, x1 := min(start.X, end.X), max(start.X, end.X)
+			x1, x2 := min(start.X, end.X), max(start.X, end.X)
 			for abs := min(start.Y, end.Y); abs <= max(start.Y, end.Y); abs++ {
 				if y := view(abs); y >= 0 {
-					c.restyle(codeX+x0, bodyTop+y, x1-x0+1, 1, sel)
+					c.restyle(x0+x1, y0+y, x2-x1+1, 1, sel)
 				}
 			}
 		} else {
@@ -290,21 +294,21 @@ func (m *OS) drawQuickLookCopy(c *ckCanvas, pal overlay.Palette, dv *diffview.Th
 				if y < 0 {
 					continue
 				}
-				x0, x1 := 0, q.w-1
+				x1, x2 := 0, w-1
 				if cm.State != terminal.CopyModeVisualLine {
 					if abs == start.Y {
-						x0 = start.X
+						x1 = start.X
 					}
 					if abs == end.Y {
-						x1 = end.X
+						x2 = end.X
 					}
 				}
-				c.restyle(codeX+x0, bodyTop+y, x1-x0+1, 1, sel)
+				c.restyle(x0+x1, y0+y, x2-x1+1, 1, sel)
 			}
 		}
 	}
-	if cm.CursorY >= 0 && cm.CursorY < q.h {
-		c.restyle(codeX+cm.CursorX, bodyTop+cm.CursorY, 1, 1, markCell(marks.cursor))
+	if cm.CursorY >= 0 && cm.CursorY < h {
+		c.restyle(x0+cm.CursorX, y0+cm.CursorY, 1, 1, markCell(marks.cursor))
 	}
 }
 

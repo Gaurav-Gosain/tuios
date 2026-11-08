@@ -1,6 +1,8 @@
 package session
 
 import (
+	"log"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -155,10 +157,21 @@ func (cfg *DaemonConfig) ApplyUserHooks(uc *config.UserConfig) {
 	cfg.AgentHookCommand = uc.Notifications.Agent.Command
 }
 
-// loadHooks builds the daemon's hook table from the user config. A daemon with
-// no hooks configured keeps a nil manager, so the sink's first check is a nil
-// test and the event path costs nothing.
+// loadHooks builds the daemon's hook table from the user config. The daemon
+// keeps the manager from here on, with no hooks in it when none are
+// configured: an event with no hook stops at a map lookup, and a reload fills
+// the same manager in place.
 func (d *Daemon) loadHooks(cfg *DaemonConfig) {
+	m, policy := buildHookTable(cfg)
+	m.SetHold(d.pipes.hold)
+	d.agentAlerts.Store(&policy)
+	d.hooks = m
+	d.agentHooks = newAgentHookGate()
+}
+
+// buildHookTable builds the hook table and the alert policy a DaemonConfig
+// describes, without touching the daemon.
+func buildHookTable(cfg *DaemonConfig) (*hooks.Manager, config.AgentAlertPolicy) {
 	m := hooks.NewManager()
 	if len(cfg.Hooks) > 0 {
 		m.LoadFromConfig(cfg.Hooks)
@@ -179,13 +192,37 @@ func (d *Daemon) loadHooks(cfg *DaemonConfig) {
 	if cmd := strings.TrimSpace(cfg.AgentHookCommand); cmd != "" {
 		m.Register(hooks.AfterAgentState, cmd)
 	}
-	d.agentAlerts = config.ResolveAgentAlerts(cfg.AgentAlerts)
-	if !m.HasHooks() {
+	return m, config.ResolveAgentAlerts(cfg.AgentAlerts)
+}
+
+// reloadHooks loads the [hooks] table and [notifications.agent] of a config
+// the daemon reads while it runs (issue 1622). A hook runs a command as the
+// daemon's child, and a process in a pane can write config.toml, so from a
+// file change (byPerson false) the table applies only when every hook in it
+// already runs: it removes hooks, or changes nothing. A hook that is new or
+// changed waits for tuios config apply from outside every pane, or a restart.
+// The alert policy only times the hook and applies both ways.
+func (d *Daemon) reloadHooks(uc *config.UserConfig, byPerson bool) {
+	if d.hooks == nil || uc == nil {
 		return
 	}
-	m.SetHold(d.pipes.hold)
-	d.hooks = m
-	d.agentHooks = newAgentHookGate()
+	var cfg DaemonConfig
+	cfg.ApplyUserHooks(uc)
+	next, policy := buildHookTable(&cfg)
+	d.agentAlerts.Store(&policy)
+	if !byPerson {
+		running := d.hooks.Commands()
+		for _, c := range next.Commands() {
+			if !slices.Contains(running, c) {
+				if !d.hooksWaiting.Swap(true) {
+					log.Printf("[hooks] config.toml has a hook the daemon does not run yet. It runs after tuios config apply from outside tuios, or a daemon restart.")
+				}
+				return
+			}
+		}
+	}
+	d.hooks.ReplaceFrom(next)
+	d.hooksWaiting.Store(false)
 }
 
 // fireSessionHooks raises the hook a session event implies.
@@ -279,7 +316,10 @@ func findWindowState(state *SessionState, id string) (WindowState, bool) {
 // the client table or the session back from the sink would take a second lock
 // under the state lock the sink already holds.
 func (d *Daemon) fireAgentStateHook(sess *Session, ev SessionEvent) {
-	policy := d.agentAlerts
+	var policy config.AgentAlertPolicy
+	if p := d.agentAlerts.Load(); p != nil {
+		policy = *p
+	}
 	key := sess.Name() + "\x00" + ev.Window
 
 	// Any further transition retires whatever was parked for this pane: the

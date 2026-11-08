@@ -14,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/diffview"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
@@ -84,6 +85,9 @@ type ckLine struct {
 	hit string
 	// label marks a speaker's label, which starts after a blank line.
 	label bool
+	// wrap says the next line goes on with the same paragraph, so copy mode
+	// joins them.
+	wrap bool
 }
 
 // blank reports whether the line draws nothing.
@@ -113,7 +117,7 @@ func ckReadTool(tool string) string {
 // threadCardLines draws the thread of a transcript agent as cards, the newest
 // at the bottom. With changes it draws the edits
 // of the last turn alone, each whole.
-func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, changes bool) ([]string, []string) {
+func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, changes bool, now time.Time) ([]string, []string) {
 	pal := theme.UI()
 	l := m.cockpitLook()
 	who := ckHarness(e.Harness)
@@ -124,7 +128,7 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 	if changes {
 		last := 0
 		for i, en := range entries {
-			if en.Kind == "text" && en.Role == "user" {
+			if en.Kind == "text" && en.Role == "user" && en.Image == nil && !transcriptview.InterruptText(en.Text) {
 				last = i
 			}
 		}
@@ -154,7 +158,9 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 	}
 	c = c.reset(width, 1, l.canvas)
 	blank := c.render()
-	add := func(ls ...ckLine) { items = ckAddItem(items, ckItem{lines: ls, out: draw(ls)}, blank) }
+	// cur is the entry the loop draws, for copy mode's Markdown yank.
+	cur := ""
+	add := func(ls ...ckLine) { items = ckAddItem(items, ckItem{lines: ls, out: draw(ls), id: cur}, blank) }
 	// cached draws an entry's card once per width, fold and theme: a diff's
 	// highlighting and a long text's wrapping are the costly part, and a
 	// thread that grows by one entry draws only that one.
@@ -170,7 +176,7 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 		if t.cards == nil {
 			t.cards = make(map[string]ckCard)
 		}
-		it := ckItem{lines: ls, out: draw(ls)}
+		it := ckItem{lines: ls, out: draw(ls), id: en.ID}
 		t.cards[en.ID] = ckCard{key: key, item: it}
 		items = ckAddItem(items, it, blank)
 	}
@@ -182,9 +188,25 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 	if !changes {
 		steps, turns, turnOf = ckTurns(e, entries)
 	}
+	from := 0
+	t.older = false
+	if turnOf != nil && t.keep > 0 && t.keep < len(turns) {
+		from = turns[len(turns)-t.keep].Start
+		t.older = from > 0
+		for _, en := range entries[:from] {
+			if ckPrompt(en) {
+				turn++
+			}
+		}
+	}
 	prevText := false
-	for i := 0; i < len(entries); i++ {
+	working := e.State == string(session.AgentStateWorking)
+	// While the agent works its newest todo list is pinned above the
+	// thread, so in the thread it is folded to its count.
+	pinned := !changes && t.pinned
+	for i := from; i < len(entries); i++ {
 		en := entries[i]
+		cur = en.ID
 		isEdit := en.Kind == "tool_call" && en.Diff != nil
 		if changes && !isEdit {
 			continue
@@ -193,8 +215,8 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 			tn := &turns[turnOf[i]]
 			id := "turn:" + entries[tn.Start].ID
 			open := t.expandAll || tn.Folds() == t.folded[id]
-			if tn.Finished && tn.Work() > 0 && i == ckTurnHead(steps, tn) {
-				what, span := tn.Summary(), tn.Span()
+			if tn.Work() > 0 && i == ckTurnHead(steps, tn) && (tn.Finished || working && turnOf[i] == len(turns)-1) {
+				what, span := ckTurnWords(tn, now), ""
 				key := threadEntry{ID: id, Text: what, Plan: span}
 				key.sum = threadSum(&key)
 				cached(key, boolInt(open), func() []ckLine { return []ckLine{m.ckTurnLine(l, tn, id, what, span, width, open)} })
@@ -205,6 +227,12 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 			}
 		}
 		switch {
+		case en.Image != nil:
+			// An image the person pasted or a tool gave back: a card under
+			// its prompt or its call.
+			add(m.ckImageCard(l, t, en, width)...)
+		case en.Kind == "text" && en.Role == "tool" || transcriptview.Interrupt(en.Role, en.Kind, en.Text):
+			add(ckQuietLine(l, en))
 		case en.Kind == "text" && en.Role == "user":
 			turn++
 			prompts = append(prompts, len(items))
@@ -214,8 +242,9 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 					label = append(label, ckSeg{t: sepWord() + "turn " + strconv.Itoa(turn), fg: pal.FgMute})
 				}
 				ls := []ckLine{{segs: label, label: true}, {bg: l.panel, bar: "▎", barInk: pal.AccentBright}}
-				for _, s := range threadWrap(en.Text, max(width-6, 8)) {
-					ls = append(ls, ckLine{bg: l.panel, bar: "▎", barInk: pal.AccentBright, indent: 3, segs: []ckSeg{{t: s, fg: pal.Fg}}})
+				rows, more := threadWrapMore(en.Text, max(width-6, 8))
+				for k, s := range rows {
+					ls = append(ls, ckLine{bg: l.panel, bar: "▎", barInk: pal.AccentBright, indent: 3, wrap: more[k], segs: []ckSeg{{t: s, fg: pal.Fg}}})
 				}
 				return append(ls, ckLine{bg: l.panel, bar: "▎", barInk: pal.AccentBright}, ckLine{})
 			})
@@ -229,17 +258,15 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 				if variant == 0 {
 					ls = append(ls, ckLine{label: true, segs: []ckSeg{{t: who, fg: pal.FgDim, attrs: ckBold}, {t: "  " + ckClock(en.At), fg: pal.FgMute}}})
 				}
-				ls = append(ls, m.ckMarkdown(l, en.Text, max(width-2, 8))...)
+				ls = append(ls, m.ckMarkdownFold(l, en.Text, max(width-2, 8), en.ID, t.expandAll || t.folded[en.ID])...)
 				return append(ls, ckLine{})
 			})
 			prevText = true
 			continue
 		case en.Kind == "thinking":
-			first, _, _ := strings.Cut(strings.TrimSpace(en.Text), "\n")
-			add(ckLine{segs: []ckSeg{{t: l.g(ckGlyphFold) + " ", fg: pal.FgMute}, {t: "Thought", fg: pal.FgDim, attrs: ckItalic},
-				{t: "  " + ckTrunc(printableTitle(first), width-14), fg: pal.FgMute, attrs: ckItalic}}})
+			add(ckThoughtLines(l, en, steps, i, width, t.expandAll || t.folded[en.ID])...)
 		case en.Kind == "todos":
-			last := i == m.ckLastTodos(entries)
+			last := i == m.ckLastTodos(entries) && !pinned
 			variant := 0
 			if last {
 				variant = 1
@@ -250,51 +277,50 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 		case isEdit:
 			cached(en, 0, func() []ckLine { return m.ckDiffCard(l, t, en, width, changes) })
 		case en.Kind == "tool_call" && ckReadTool(en.Tool) != "":
-			// A run of reads and searches is one line.
+			// A run of reads and searches is one line, and opens on the
+			// files it read.
 			j := i
-			var targets []string
-			counts := map[string]int{}
-			var order []string
-			worst := "ok"
-			for ; j < len(entries) && (entries[j].Kind == "tool_result" || entries[j].Kind == "tool_call" && ckReadTool(entries[j].Tool) != ""); j++ {
-				if entries[j].Kind == "tool_result" {
+			var calls []threadEntry
+			images := 0
+			for ; j < len(entries) && (entries[j].Kind == "tool_result" || entries[j].Role == "tool" && entries[j].Image == nil || entries[j].Kind == "tool_call" && ckReadTool(entries[j].Tool) != ""); j++ {
+				if entries[j].Role == "tool" {
+					// A result, or an image a read gave.
+					if entries[j].Kind == "text" {
+						images++
+					}
 					continue
 				}
-				k := ckReadTool(entries[j].Tool)
-				if counts[k] == 0 {
-					order = append(order, k)
-				}
-				counts[k]++
-				targets = append(targets, path.Base(printableTitle(entries[j].Target)))
-				worst = ckWorse(worst, entries[j].Status)
+				calls = append(calls, entries[j])
 			}
 			i = j - 1
-			var what []string
-			for _, k := range order {
-				what = append(what, k+" "+strconv.Itoa(counts[k]))
+			key := threadEntry{ID: en.ID}
+			for _, c := range calls {
+				key.Text += c.Tool + "\x00" + c.Target + "\x00" + c.Status + "\x00"
+				key.Status = ckWorse(key.Status, c.Status)
 			}
-			add(m.ckToolLine(l, strings.Join(what, sepWord()), strings.Join(targets, ", "), worst, width))
+			key.sum = threadSum(&key)
+			open := t.expandAll || t.folded[en.ID]
+			cached(key, images, func() []ckLine { return m.ckReadGroup(l, en.ID, calls, images, width, open) })
 		case en.Kind == "error":
-			ls := []ckLine{m.ckToolLine(l, "Error", "", "error", width)}
+			ls := []ckLine{ckFoldMark(l, m.ckToolLine(l, "Error", "", "error", width), false, false)}
 			for _, s := range threadWrap(en.Text, max(width-6, 8)) {
 				ls = append(ls, ckLine{indent: 4, segs: []ckSeg{{t: s, fg: pal.FgDim}}})
 			}
 			add(ls...)
 		case en.Kind == "tool_call":
-			ls := []ckLine{m.ckToolLine(l, printableTitle(en.Tool), printableTitle(ckToolTarget(en.Tool, en.Target)), en.Status, width)}
-			if en.Status == "error" {
-				if res, ok := results[en.ToolID]; ok && res.Text != "" {
-					out := threadWrap(res.Text, max(width-6, 8))
-					if len(out) > ckFailShown {
-						out = out[len(out)-ckFailShown:]
-					}
-					for _, s := range out {
-						ls = append(ls, ckLine{indent: 4, segs: []ckSeg{{t: s, fg: pal.FgDim}}})
-					}
-				}
+			res := results[en.ToolID]
+			open := t.expandAll || t.folded[en.ID]
+			card := func() []ckLine { return m.ckToolCard(l, en, res.Text, width, open, t.expandAll) }
+			if p := pills[en.ID]; len(p) > 0 {
+				// The pills follow the pill cursor, so this card is drawn
+				// each time.
+				add(append(card(), m.ckPillLines(l, p, t.pill, width)...)...)
+				break
 			}
-			ls = append(ls, m.ckPillLines(l, pills[en.ID], t.pill, width)...)
-			add(ls...)
+			// The card changes with its result, which can come later.
+			key := en
+			key.sum = en.sum*1099511628211 ^ res.sum
+			cached(key, 0, card)
 		default:
 			continue
 		}
@@ -313,11 +339,18 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 			t.prompts = append(t.prompts, len(out))
 		}
 		out = append(out, it.out...)
+		t.lines = append(t.lines, it.lines...)
 		for _, ln := range it.lines {
 			hits = append(hits, ln.hit)
+			t.lineIDs = append(t.lineIDs, it.id)
 		}
 	}
 	return out, hits
+}
+
+// ckPrompt reports whether en is drawn as a prompt of the person's.
+func ckPrompt(en threadEntry) bool {
+	return en.Image == nil && en.Kind == "text" && en.Role == "user" && !transcriptview.Interrupt(en.Role, en.Kind, en.Text)
 }
 
 // ckTurns splits a thread's entries into turns, and gives each entry its
@@ -326,7 +359,7 @@ func ckTurns(e sidebarAgentEntry, entries []threadEntry) ([]transcriptview.Step,
 	steps := make([]transcriptview.Step, len(entries))
 	for i := range entries {
 		en := &entries[i]
-		steps[i] = transcriptview.Step{Role: en.Role, Kind: en.Kind, Tool: en.Tool, Status: en.Status, Text: en.Text, Edit: en.Diff != nil, At: en.At}
+		steps[i] = transcriptview.Step{Role: en.Role, Kind: en.Kind, Tool: en.Tool, Status: en.Status, Text: en.Text, Edit: en.Diff != nil, Image: en.Image != nil, At: en.At}
 	}
 	turns := transcriptview.Turns(steps, e.State != string(session.AgentStateWorking))
 	turnOf := make([]int, len(entries))
@@ -342,7 +375,12 @@ func ckTurns(e sidebarAgentEntry, entries []threadEntry) ([]transcriptview.Step,
 // for a thread that starts inside the turn.
 func ckTurnHead(steps []transcriptview.Step, tn *transcriptview.Turn) int {
 	if s := steps[tn.Start]; s.Role == "user" && s.Kind == "text" && tn.Start+1 < tn.End {
-		return tn.Start + 1
+		// After the prompt and the images pasted with it.
+		i := tn.Start + 1
+		for i+1 < tn.End && steps[i].Role == "user" && steps[i].Image {
+			i++
+		}
+		return i
 	}
 	return tn.Start
 }
@@ -356,7 +394,7 @@ func (m *OS) ckTurnLine(l ckLook, tn *transcriptview.Turn, id, what, span string
 		mark = ckGlyphOpen
 	}
 	var fail string
-	if k := strings.LastIndex(what, " ("); k > 0 && (tn.Failed > 0 || tn.Interrupted) {
+	if k := strings.LastIndex(what, " ("); k > 0 && (tn.Failed > 0 || tn.Interrupted || tn.Declined > 0) {
 		what, fail = what[:k], what[k:]
 	}
 	if span != "" {
@@ -365,7 +403,13 @@ func (m *OS) ckTurnLine(l ckLook, tn *transcriptview.Turn, id, what, span string
 	room := max(width-ansi.StringWidth(fail+span)-4, 8)
 	segs := []ckSeg{{t: l.g(mark) + " ", fg: pal.FgMute}, {t: ckTrunc(what, room), fg: pal.FgDim}}
 	if fail != "" {
-		segs = append(segs, ckSeg{t: fail, fg: pal.Warn, attrs: ckBold})
+		// A failure is lit. A stop or a decline is the person's own call,
+		// so it is only named.
+		if tn.Failed > 0 {
+			segs = append(segs, ckSeg{t: fail, fg: pal.Warn, attrs: ckBold})
+		} else {
+			segs = append(segs, ckSeg{t: fail, fg: pal.FgDim})
+		}
 	}
 	if span != "" {
 		segs = append(segs, ckSeg{t: span, fg: pal.FgMute})
@@ -373,10 +417,11 @@ func (m *OS) ckTurnLine(l ckLook, tn *transcriptview.Turn, id, what, span string
 	return ckLine{segs: segs, hit: "fold:" + id}
 }
 
-// ckItem is a card's lines and the lines drawn.
+// ckItem is a card's lines and the lines drawn, and the entry they draw.
 type ckItem struct {
 	lines []ckLine
 	out   []string
+	id    string
 }
 
 // ckCard is an entry's card as last built, and what it was built from.
@@ -408,7 +453,7 @@ func ckAddItem(items []ckItem, it ckItem, blank string) []ckItem {
 	if n := len(items); n > 0 && len(it.lines) > 0 && (it.lines[0].bg != nil || it.lines[0].label) {
 		if prev := items[n-1]; len(prev.lines) > 0 && !prev.lines[len(prev.lines)-1].blank() {
 			// Clipped, so a card the thread keeps is never written into.
-			items[n-1] = ckItem{lines: append(slices.Clip(prev.lines), ckLine{}), out: append(slices.Clip(prev.out), blank)}
+			items[n-1] = ckItem{lines: append(slices.Clip(prev.lines), ckLine{}), out: append(slices.Clip(prev.out), blank), id: prev.id}
 		}
 	}
 	return append(items, it)
@@ -425,11 +470,149 @@ func (m *OS) ckLastTodos(entries []threadEntry) int {
 	return -1
 }
 
+// ckQuietLine is a line of the thread that is not a card: where the person
+// stopped the agent, or an image a tool result holds, under its call. Kept
+// out of line, as ckAddItem is.
+//
+//go:noinline
+func ckQuietLine(l ckLook, en threadEntry) ckLine {
+	pal := l.pal
+	if en.Role == "tool" {
+		return ckLine{indent: 4, segs: []ckSeg{{t: ckImageWhat(en, nil), fg: pal.FgMute}}}
+	}
+	return ckLine{indent: 2, segs: []ckSeg{{t: "You stopped the agent", fg: pal.FgDim, attrs: ckItalic}, {t: "  " + ckClock(en.At), fg: pal.FgMute}}}
+}
+
+// ckThoughtLines is a thinking entry: one line that says how long the agent
+// thought and starts the thought, and the whole thought under it when open.
+// A click on the line opens or closes it; a thought with no text has nothing
+// to open.
+//
+//go:noinline
+func ckThoughtLines(l ckLook, en threadEntry, steps []transcriptview.Step, i, width int, open bool) []ckLine {
+	pal := l.pal
+	what := "Thought"
+	if steps != nil {
+		if span := transcriptview.ThoughtFor(steps, i); span != "" {
+			what += " for " + span
+		}
+	}
+	text := strings.TrimSpace(en.Text)
+	mark := ckGlyphFold
+	if open && text != "" {
+		mark = ckGlyphOpen
+	}
+	segs := []ckSeg{{t: l.g(mark) + " ", fg: pal.FgMute}, {t: what, fg: pal.FgDim, attrs: ckItalic}}
+	line := ckLine{segs: segs}
+	if text == "" {
+		// Nothing to open, so no fold mark.
+		return []ckLine{ckFoldMark(l, line, false, false)}
+	}
+	line.hit = "fold:" + en.ID
+	if !open {
+		first, _, _ := strings.Cut(text, "\n")
+		line.segs = append(line.segs, ckSeg{t: "  " + ckTrunc(printableTitle(first), width-ansi.StringWidth(what)-8), fg: pal.FgMute, attrs: ckItalic})
+		return []ckLine{line}
+	}
+	ls := []ckLine{line}
+	for _, s := range threadWrap(text, max(width-6, 8)) {
+		ls = append(ls, ckLine{indent: 4, hit: line.hit, segs: []ckSeg{{t: s, fg: pal.FgMute, attrs: ckItalic}}})
+	}
+	return ls
+}
+
+// ckTurnWords is a turn's line: how long it worked and what it did, such as
+// "Worked for 2m 42s · ran 6 commands and read 3 files". A turn still at
+// work says "Working for 3m", in whole minutes, so the line changes once a
+// minute and not every second.
+func ckTurnWords(tn *transcriptview.Turn, now time.Time) string {
+	what := tn.Summary()
+	lower := strings.ToLower(what[:1]) + what[1:]
+	if !tn.Finished {
+		if mins := (now.UnixMilli() - tn.StartAt) / 60000; tn.StartAt > 0 && mins >= 1 {
+			return "Working for " + strconv.FormatInt(mins, 10) + "m" + sepWord() + lower
+		}
+		return "Working" + sepWord() + lower
+	}
+	if span := tn.Span(); span != "" {
+		return "Worked for " + span + sepWord() + lower
+	}
+	return what
+}
+
+// threadPinsTodos reports whether the thread pins its newest todo list
+// above itself: the agent works, the Thread tab shows, and the list has an
+// item not done.
+func (m *OS) threadPinsTodos(e sidebarAgentEntry, t *agentThread) bool {
+	if t == nil || e.State != string(session.AgentStateWorking) || m.cockpitTab() != "Thread" {
+		return false
+	}
+	i := m.ckLastTodos(t.entries)
+	if i < 0 {
+		return false
+	}
+	for _, td := range t.entries[i].Todos {
+		if td.Status != "completed" {
+			return true
+		}
+	}
+	return false
+}
+
+// ThreadPinnedLines are the lines pinned above the thread of the selected
+// agent, in room rows: its newest todo list while it works, drawn whole. It
+// is nil when nothing is pinned, or when the list would leave the thread
+// fewer than 8 rows. It records whether it pinned, and the thread folds its
+// own copy of the list only then.
+func (m *OS) ThreadPinnedLines(e sidebarAgentEntry, width, room int) []string {
+	t := m.Inbox.threads.byKey[agentKey(e)]
+	if t == nil {
+		return nil
+	}
+	pin := m.threadReadsTranscript(e) && m.threadPinsTodos(e, t)
+	var ls []ckLine
+	l := m.cockpitLook()
+	if pin {
+		ls = m.ckPlanCard(l, t.entries[m.ckLastTodos(t.entries)], width, true)
+		pin = room > len(ls)+8
+	}
+	if pin != t.pinned {
+		t.pinned = pin
+		t.gen++
+	}
+	if !pin {
+		return nil
+	}
+	c := (*ckCanvas)(nil).reset(width, 1, l.canvas)
+	out := make([]string, 0, len(ls))
+	for _, ln := range ls {
+		c = c.reset(width, 1, l.canvas)
+		out = append(out, ckRender(c, width, ln))
+	}
+	return out
+}
+
+// ckSaidLines appends what the person said when they declined a call.
+//
+//go:noinline
+func ckSaidLines(l ckLook, ls []ckLine, said string, width int) []ckLine {
+	if said == "" {
+		return ls
+	}
+	out := threadWrap(said, max(width-6, 8))
+	for _, s := range out[:min(len(out), ckFailShown)] {
+		ls = append(ls, ckLine{indent: 4, segs: []ckSeg{{t: s, fg: l.pal.FgDim}}})
+	}
+	return ls
+}
+
 // ckWorse is the worse of two tool statuses: an error, then a run, then ok.
 func ckWorse(a, b string) string {
 	rank := func(s string) int {
 		switch s {
 		case "error":
+			return 3
+		case "declined":
 			return 2
 		case "running":
 			return 1
@@ -494,11 +677,215 @@ func (m *OS) ckToolLine(l ckLook, kind, target, status string, width int) ckLine
 	case "running":
 		mark, ink = l.g(ckGlyphWorking), pal.Busy
 		right = []ckSeg{{t: "running ", fg: pal.FgMute}}
+	case transcriptview.StatusDeclined:
+		// The person's choice, not a failure: no warning colour.
+		mark, ink = l.g(ckGlyphIdle), pal.FgMute
+		right = []ckSeg{{t: "declined ", fg: pal.FgDim}}
 	}
-	right = append(right, ckSeg{t: " " + mark, fg: ink})
-	room := max(width-ansi.StringWidth(kind)-ckWidth(right...)-8, 4)
+	// The last cell stays clear: the thread's ruler is drawn there.
+	right = append(right, ckSeg{t: " " + mark, fg: ink}, ckSeg{t: " "})
+	room := max(width-ansi.StringWidth(kind)-ckWidth(right...)-7, 4)
 	return ckLine{segs: []ckSeg{{t: l.g(ckGlyphFold) + " ", fg: pal.FgMute}, {t: kind, fg: pal.FgDim, attrs: ckBold},
 		{t: "  " + ckTrunc(target, room), fg: pal.FgMute}}, right: right}
+}
+
+// ckFoldMark sets a tool line's fold mark: the open mark when open, the
+// fold mark when it has more to show, and a blank cell when it has nothing
+// more, so its text stays in line with the others.
+func ckFoldMark(l ckLook, ln ckLine, more, open bool) ckLine {
+	g := ""
+	switch {
+	case more && open:
+		g = l.g(ckGlyphOpen)
+	case more:
+		g = l.g(ckGlyphFold)
+	}
+	segs := slices.Clone(ln.segs)
+	segs[0].t = ckPad(g, ansi.StringWidth(l.g(ckGlyphFold))) + " "
+	ln.segs = segs
+	return ln
+}
+
+// ckToolCard is a tool call: its line, and when open the whole command and
+// the head of its output. A failed call shows the end of its output folded,
+// and a declined one what the person said. The line folds only when it has
+// more to show than it shows folded.
+//
+//go:noinline
+func (m *OS) ckToolCard(l ckLook, en threadEntry, out string, width int, open, all bool) []ckLine {
+	pal := l.pal
+	label := printableTitle(ckToolTarget(en.Tool, en.Target))
+	head := m.ckToolLine(l, printableTitle(en.Tool), label, en.Status, width)
+	hit := "fold:" + en.ID
+	// The command whole: the line cuts it, or drops a cd in front.
+	cmd := strings.TrimSpace(en.Target)
+	cmdMore := cmd != "" && (head.segs[2].t != "  "+label || strings.ContainsRune(cmd, '\n') || printableTitle(cmd) != label)
+	wrapW := max(width-8, 8)
+	outLines := ckOutputLines(out, wrapW, l.ascii)
+	var folded []ckLine
+	switch {
+	case en.Status == transcriptview.StatusDeclined:
+		// What the person said when they declined, if anything.
+		folded = ckSaidLines(l, nil, out, width)
+		outLines = nil
+	case en.Status == "error":
+		tail := outLines
+		if len(tail) > ckFailShown {
+			tail = tail[len(tail)-ckFailShown:]
+		}
+		for _, s := range tail {
+			folded = append(folded, ckLine{indent: 4, segs: []ckSeg{{t: s, fg: pal.FgDim}}})
+		}
+		if len(tail) == len(outLines) {
+			outLines = nil
+		}
+	}
+	more := cmdMore || len(outLines) > 0
+	head = ckFoldMark(l, head, more, open)
+	if more {
+		head.hit = hit
+	}
+	if !more || !open {
+		return append([]ckLine{head}, folded...)
+	}
+	ls := []ckLine{head}
+	if cmdMore {
+		prompt := ""
+		if transcriptview.ShellTool(en.Tool) {
+			prompt = "$ "
+		}
+		for k, s := range threadWrap(cmd, wrapW-len(prompt)) {
+			if k == 0 {
+				s = prompt + s
+			} else {
+				s = strings.Repeat(" ", len(prompt)) + s
+			}
+			ls = append(ls, ckLine{indent: 4, hit: hit, segs: []ckSeg{{t: s, fg: pal.FgDim}}})
+		}
+	}
+	if en.Status == transcriptview.StatusDeclined {
+		return append(ls, folded...)
+	}
+	if en.Status == "error" && len(outLines) == 0 {
+		outLines = ckOutputLines(out, wrapW, l.ascii)
+	}
+	if len(outLines) == 0 {
+		word := "No output."
+		if en.Status == "running" {
+			word = "No output yet."
+		}
+		return append(ls, ckLine{indent: 4, hit: hit, segs: []ckSeg{{t: word, fg: pal.FgMute, attrs: ckItalic}}})
+	}
+	shown := outLines
+	if !all && len(shown) > ckDiffShown {
+		shown = shown[:ckDiffShown]
+	}
+	for _, s := range shown {
+		ls = append(ls, ckLine{indent: 4, hit: hit, segs: []ckSeg{{t: s, fg: pal.FgMute}}})
+	}
+	if len(shown) < len(outLines) {
+		ls = append(ls, ckLine{indent: 4, hit: hit, segs: []ckSeg{{t: strconv.Itoa(len(outLines)-len(shown)) + " more lines   ", fg: pal.FgMute}, {t: "e", fg: pal.AccentBright, attrs: ckBold}, {t: " expand all", fg: pal.FgMute}}})
+	}
+	return ls
+}
+
+// ckOutputLines is a command's output as a card shows it, wrapped at width:
+// tabs as spaces and each line's indent kept, as a terminal showed them.
+func ckOutputLines(text string, width int, ascii bool) []string {
+	var out []string
+	for line := range strings.SplitSeq(strings.TrimRight(text, " \t\r\n"), "\n") {
+		line = strings.TrimRight(ckCodeText(ckExpandTabs(line), ascii), " ")
+		body := strings.TrimLeft(line, " ")
+		lead := min(len(line)-len(body), width/2)
+		if body == "" {
+			out = append(out, "")
+			continue
+		}
+		for _, r := range wrapPlain(body, width-lead) {
+			out = append(out, strings.Repeat(" ", lead)+r)
+		}
+	}
+	if len(out) == 1 && out[0] == "" {
+		return nil
+	}
+	return out
+}
+
+// ckExpandTabs puts spaces for each tab in line up to the next stop of 8
+// cells, as a terminal does.
+func ckExpandTabs(line string) string {
+	if !strings.Contains(line, "\t") {
+		return line
+	}
+	var b strings.Builder
+	col := 0
+	for _, r := range line {
+		if r == '\t' {
+			n := 8 - col%8
+			b.WriteString(strings.Repeat(" ", n))
+			col += n
+			continue
+		}
+		b.WriteRune(r)
+		col += ansi.StringWidth(string(r))
+	}
+	return b.String()
+}
+
+// ckReadGroup is a run of reads and searches: one line that counts them and
+// names the files, and when open a line for each call with its whole path.
+//
+//go:noinline
+func (m *OS) ckReadGroup(l ckLook, id string, calls []threadEntry, images, width int, open bool) []ckLine {
+	pal := l.pal
+	counts := map[string]int{}
+	var order, targets []string
+	worst := "ok"
+	for _, c := range calls {
+		k := ckReadTool(c.Tool)
+		if counts[k] == 0 {
+			order = append(order, k)
+		}
+		counts[k]++
+		targets = append(targets, path.Base(printableTitle(c.Target)))
+		worst = ckWorse(worst, c.Status)
+	}
+	var what []string
+	for _, k := range order {
+		what = append(what, k+" "+strconv.Itoa(counts[k]))
+	}
+	if images > 0 {
+		what = append(what, plural.CountAs(images, "image", "images"))
+	}
+	names := strings.Join(targets, ", ")
+	head := m.ckToolLine(l, strings.Join(what, sepWord()), names, worst, width)
+	more := len(calls) > 1 || head.segs[2].t != "  "+names
+	if len(calls) == 1 {
+		more = more || printableTitle(calls[0].Target) != names
+	}
+	head = ckFoldMark(l, head, more, open)
+	if !more {
+		return []ckLine{head}
+	}
+	head.hit = "fold:" + id
+	if !open {
+		return []ckLine{head}
+	}
+	ls := []ckLine{head}
+	kw := 0
+	for _, k := range order {
+		kw = max(kw, ansi.StringWidth(k))
+	}
+	for _, c := range calls {
+		k := ckReadTool(c.Tool)
+		var right []ckSeg
+		if c.Status != "ok" && c.Status != "" {
+			right = m.ckToolLine(l, "", "", c.Status, width).right
+		}
+		room := max(width-kw-ckWidth(right...)-8, 4)
+		ls = append(ls, ckLine{indent: 4, hit: head.hit, right: right, segs: []ckSeg{{t: ckPad(k, kw), fg: pal.FgMute}, {t: "  " + ckTruncMid(printableTitle(c.Target), room), fg: pal.FgDim}}})
+	}
+	return ls
 }
 
 // ckPlanCard is a todo list as a plan: done rows struck and muted, the
@@ -585,7 +972,7 @@ func (m *OS) ckDiffCard(l ckLook, t *agentThread, en threadEntry, width int, who
 	right := ckDiffCounts(l, d.Added, d.Removed)
 	st := m.ckToolLine(l, "", "", en.Status, width)
 	right = append(right, st.right...)
-	head := ckLine{bg: l.panel, indent: 1, hit: "fold:" + en.ID, right: append(right, ckSeg{t: " "}),
+	head := ckLine{bg: l.panel, indent: 1, hit: "fold:" + en.ID, right: right,
 		segs: []ckSeg{{t: l.g(mark) + " ", fg: pal.FgDim}, {t: printableTitle(en.Tool), fg: pal.FgDim, attrs: ckBold},
 			{t: "   " + ckTrunc(file, width-24), fg: pal.Fg}}}
 	if !open {

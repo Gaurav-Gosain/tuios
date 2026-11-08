@@ -1067,7 +1067,7 @@ func (m *OS) AgentMailSendReply() tea.Cmd {
 	}
 	st.Sending = true
 	st.Error = ""
-	send := agentMailSendCmd(m.agentMailDialer(), m.AttachedHost != "", name, inbox, replyTo, text, m.agentMailReplyNonce(m.DaemonClient.HumanNonce()), parts)
+	send := agentMailSendCmd(m.agentMailDialer(), m.AttachedHost != "", name, inbox, replyTo, text, m.agentMailReplyNonce(m.inboxNonce()), parts)
 	w := st.wires
 	if w.histWindow == "" || st.draftAutomated() || m.ProcessingRemoteKeys {
 		return send

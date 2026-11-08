@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	shotcapture "github.com/Gaurav-Gosain/tuios/internal/capture"
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 	"github.com/Gaurav-Gosain/tuitest"
 	"tuios.dev/shot"
@@ -684,6 +685,10 @@ func saveCockpitFrames(t *testing.T, term *tuitest.Terminal, name string, pics .
 			}
 			f = shot.BuildFrame(shot.FrameSpec{Frame: "window", Title: "tuios", Padding: 28, Radius: 10, Shadow: true, Controls: "macos",
 				Font: shot.Font{Data: regular}, BoldFont: shot.Font{Data: bold}, Fallback: fallback}, shot.FrameInputs{Palette: p})
+			// The faces fontconfig names for the rest, as tuios screenshot
+			// finds them: a machine with the main font but no fallback
+			// listed draws Hangul, CJK and emoji from its own fonts.
+			shotcapture.FillFallbacks(g, f)
 			if missing, err := shot.MissingGlyphs(g, f); err == nil && len(missing) > 0 {
 				t.Errorf("ASSERTION: the font has no glyph for %q", string(missing))
 			}
@@ -933,6 +938,12 @@ func threadFollowAndRuler(t *testing.T, base, path string) {
 	}
 	_ = term.WaitStable(uiTimeout)
 	s = term.Screen()
+	// The agent works, so its todo list is pinned above the thread: the
+	// thread starts under the list's last item, its panel's last row and a
+	// gap.
+	if rowWith(s, "2 of 5 done") == first {
+		first = rowWith(s, "Update the changelog") + 3
+	}
 	if r := rowWith(s, "turn 2"); r != first {
 		t.Fatalf("ASSERTION: the new prompt is not at the top of the thread: its label is on row %d, the thread starts on row %d\n%s", r, first, term.Snapshot())
 	}
@@ -1231,13 +1242,14 @@ func cockpitTurnFolds(t *testing.T, base, path string) {
 	// from the prompt to the answer, 13 s a record.
 	summary := func(k int) string {
 		if k%2 == 1 {
-			return "Edited 2 files, ran 1 command and 3 other actions · 3m 2s"
+			return "Worked for 3m 2s · edited 2 files, ran 1 command and 3 other actions"
 		}
-		return "Edited 1 file, ran 1 command and 3 other actions · 2m 36s"
+		return "Worked for 2m 36s · edited 1 file, ran 1 command and 3 other actions"
 	}
+	// e opens every tool row with its output too, so the thread runs long.
 	scrollTo := func(key, want string) {
 		t.Helper()
-		for range 60 {
+		for range 200 {
 			if strings.Contains(term.Screen().Text(), want) {
 				return
 			}
@@ -1288,6 +1300,14 @@ func cockpitTurnFolds(t *testing.T, base, path string) {
 	// A click on a summary line opens that turn, and another closes it.
 	find("Task 27: make")
 	find(summary(27))
+	// The turn opens under its line, so the line needs rows under it: one
+	// on the thread's last rows is brought up first.
+	if r, _ := findText(t, term, summary(27)); r > rowWith(term.Screen(), "Reply to")-6 {
+		if err := term.SendKeys("J"); err != nil {
+			t.Fatal(err)
+		}
+		_ = term.WaitStable(uiTimeout)
+	}
 	hr, hc := findText(t, term, summary(27))
 	mouseClick(t, term, hc, hr, tuitest.MouseLeft, 0)
 	// A thread scrolled up holds still, so the turn opens under the line
@@ -1726,7 +1746,8 @@ func hostPictures(t *testing.T, stream []byte) []shot.Image {
 // The selected entry carries a marker and the lit ground, and the draft line
 // gives up its own ground while the list is open. The arrows move the
 // selection, typing filters, enter puts the entry in and sends nothing, esc
-// closes the list and keeps the text, deleting the @ closes it, and a click
+// closes the list and keeps the text, deleting the @ closes it, ctrl+p moves
+// in the open list and opens the palette once it is closed, and a click
 // on an entry puts it in. The list leaves out the agent the reply is for,
 // and a pane name with a space goes in quoted as a shell word that -w takes.
 // Around the list: ? opens the help and esc on it comes back to the agents
@@ -1892,6 +1913,8 @@ func replyMentions(t *testing.T, plain bool, env []string) {
 	if plain {
 		return
 	}
+	// ctrl+p is the list's while it is open, though it opens the palette
+	// over the agents view everywhere else.
 	send(tuitest.Ctrl('p'))
 	if err := term.WaitFor(selectedIs(0), uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: ctrl+p did not move the marker back up: %v\n%s", err, term.Snapshot())
@@ -1919,6 +1942,13 @@ func replyMentions(t *testing.T, plain bool, env []string) {
 	waitText(t, term, "the list on a new @", "agent web/web-ui")
 	send(tuitest.Backspace)
 	waitGone(t, term, "the list after the @ is deleted", "agent web/web-ui")
+	// With the list closed, ctrl+p opens the palette over the editor, and
+	// esc gives the editor back with its text.
+	send(tuitest.Ctrl('p'))
+	waitText(t, term, "the palette over the reply", paletteTitle)
+	send(tuitest.Esc)
+	waitGone(t, term, "the palette after esc", paletteTitle)
+	waitText(t, term, "the text after the palette", "Ask api/api-auth and")
 
 	// A click on an entry puts it in. The pane's name has a space, so it
 	// goes in quoted, and -w takes the name inside the quotes.
@@ -2369,8 +2399,10 @@ func TestCockpitSpawnSheet(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitText(t, term, "the second task", "Read the README.", "agent/read-readme")
-	// A branch typed by the person stops following the task.
-	for range 4 {
+	// A branch typed by the person stops following the task. The stops
+	// are the agent, the model, the effort and the permission mode, where
+	// it works, then the branch.
+	for range 6 {
 		if err := term.SendKeys(tuitest.Tab); err != nil {
 			t.Fatal(err)
 		}
@@ -2404,7 +2436,7 @@ func TestCockpitSpawnSheet(t *testing.T) {
 			t.Fatalf("the ending %s did not come off: %v\n%s", c.end, err, term.Snapshot())
 		}
 	}
-	for range 4 {
+	for range 6 {
 		if err := term.SendKeys(tuitest.Key("\x1b[Z")); err != nil {
 			t.Fatal(err)
 		}
@@ -2508,8 +2540,9 @@ func TestCockpitSpawnSheet(t *testing.T) {
 		}
 		waitText(t, small, "the task on "+v.name, want...)
 		if v.fan {
-			// Three attempts, each with its own agent.
-			for range 7 {
+			// Three attempts, each with its own agent. Attempts is the
+			// ninth stop, after the effort and the permission mode.
+			for range 9 {
 				if err := small.SendKeys(tuitest.Tab); err != nil {
 					t.Fatal(err)
 				}

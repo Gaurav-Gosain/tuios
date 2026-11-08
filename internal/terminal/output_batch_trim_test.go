@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"tuios.dev/vt"
 )
 
 // batchTrimLines is how many numbered lines one flood chunk holds. Numbered
@@ -128,10 +130,24 @@ func TestFloodedDaemonPanesGiveBackTheirBatchAfterASecond(t *testing.T) {
 	// batch either way, so it is run again. Only a reading made in time decides.
 	const floods = 5
 
+	// The burst after the give-back must reach the pane whole, so the pane
+	// needs room for all of it then. The pure Go emulator takes a new depth at
+	// any time: its panes start with one line, which keeps the flood out of
+	// the heap measured here, and get room for the burst before it. libghostty
+	// takes its depth only when the pane is made, and keeps its rows outside
+	// the Go heap, so its panes start with the room. It prunes whole pages and
+	// keeps up to a page fewer rows than its limit, so the limit is twice the
+	// burst. With one line it kept from 7 to about 3700 rows, by where its page
+	// boundaries fell, and these are not the same on macOS and Linux.
+	burst := chunks * batchTrimLines
+	depth := 1
+	if vt.Backend == "ghostty" {
+		depth = 2 * burst
+	}
 	before := settledLiveHeap(t)
 	windows := make([]*Window, panes)
 	for i := range windows {
-		windows[i] = memoryWindow(t, "batch-"+strconv.Itoa(i), 12, 6, 1)
+		windows[i] = memoryWindow(t, "batch-"+strconv.Itoa(i), 12, 6, depth)
 	}
 	var idle, drained time.Time
 	var early int64
@@ -180,8 +196,8 @@ func TestFloodedDaemonPanesGiveBackTheirBatchAfterASecond(t *testing.T) {
 	}
 
 	w := windows[0]
-	// One line of scrollback cannot show the burst, so ask for room for all of it.
-	burst := chunks * batchTrimLines
+	// One line of scrollback cannot show the burst, so ask for room for all of
+	// it. libghostty has had that room since the pane was made.
 	w.LockIO()
 	w.SetScrollbackMaxLines(burst + 16)
 	w.UnlockIO()
@@ -196,13 +212,14 @@ func TestFloodedDaemonPanesGiveBackTheirBatchAfterASecond(t *testing.T) {
 		t.Fatalf("after the burst that followed the give-back the pane ends %q, want its last line %q",
 			got[max(0, len(got)-7):], want)
 	}
-	// The backend sets how many lines the pane keeps: the pure Go emulator
-	// honours the limit above, libghostty fixes its depth at creation. Either
-	// way the lines the pane holds must be one unbroken run ending at the
-	// burst's last line, so a chunk lost or reordered after the give-back fails.
-	if len(got) < 1024 {
-		t.Fatalf("after the burst that followed the give-back the pane holds %d lines, want at least %d",
-			len(got), 1024)
+	// The pane holds all of the burst on both backends, as one unbroken run
+	// ending at its last line, so a chunk lost or reordered after the
+	// give-back fails as well as a tail that never came. The flood before it
+	// is numbered on from the same start, so lines older than the burst
+	// continue the run.
+	if len(got) < burst {
+		t.Fatalf("after the burst that followed the give-back the pane holds %d lines, want all %d of the burst",
+			len(got), burst)
 	}
 	last := first + burst - 1
 	for i, line := range got {

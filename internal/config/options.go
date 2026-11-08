@@ -357,6 +357,11 @@ var optionSpecs = []Option{
 		Deprecated:  "folded into appearance.motion on load (false is none); set appearance.motion",
 	},
 	{
+		Path: "appearance.confirm_close", Type: OptionString, Section: "appearance",
+		Description: "When closing a pane by hand (a key, its menu or its close control) asks first: never, busy (the pane runs something besides its shell) or always",
+		Accepted:    ConfirmCloseLevels, Default: ConfirmCloseNever,
+	},
+	{
 		Path: "appearance.confirm_quit", Type: OptionBool, Section: "appearance",
 		Description: "Always confirm on quit, not only when processes are running",
 		Default:     "false",
@@ -990,6 +995,11 @@ var optionSpecs = []Option{
 		Default:     "true",
 	},
 	{
+		Path: "appearance.sidebar.per_session", Type: OptionBool, Section: "sidebar",
+		Description: "Each session keeps its own shown or hidden rail. Off, showing or hiding the rail applies to every session",
+		Default:     "false",
+	},
+	{
 		Path: "appearance.sidebar.position", Type: OptionString, Section: "sidebar",
 		Description: "Edge the rail sits on, or hidden",
 		Accepted:    SidebarPositions, Default: DefaultSidebarPosition,
@@ -1213,12 +1223,22 @@ var optionSpecs = []Option{
 		Accepted:    AgentsViewLists,
 		Default:     AgentsViewListColumn,
 	},
+	{
+		Path: "agents.list_width", Type: OptionString, Section: "agents",
+		Description: "The width of the agents view's list: a number of cells, such as 52, or a share of the view, such as 30%. Empty follows the screen. The < and > keys and a drag on the edge of the list change it, and the view keeps that choice.",
+		Default:     "",
+	},
 
 	// [tasks]. The daemon reads it when it starts and when the file changes.
 	{
 		Path: "tasks.auto_stage", Type: OptionBool, Section: "agents",
 		Description: "Move task cards on their own when tuios sees their work move: a plan held and then approved, a fan check, a pull request. Off leaves every stage to you.",
 		Default:     "true",
+	},
+	{
+		Path: "tasks.machine_cap", Type: OptionInt, Section: "agents",
+		Description: "How many agents may work on this machine before Any machine starts a new one on another machine. Agents that work, agents that start, and picks not yet started count. 0 is no cap.",
+		Default:     "0", Min: 0, Max: 1024,
 	},
 
 	// [daemon]. agent_binaries is absent: it is a list, and a value that arrives

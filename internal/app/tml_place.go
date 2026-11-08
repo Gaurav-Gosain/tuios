@@ -34,7 +34,11 @@ func (m *OS) tmlTogglePlacement(w *terminal.Window) tea.Cmd {
 	if popup {
 		target = session.TMLTargetPopup
 	}
-	call, nonce := m.tmlCaller(), m.inboxNonce()
+	nonce, ok := m.tmlNonce()
+	if !ok {
+		return nil
+	}
+	call := m.tmlCaller()
 	id, wid := v.id, w.ID
 	return func() tea.Msg {
 		_, err := call("tml-place", map[string]any{"surface": id, "target": target, "human_nonce": nonce}, tmlInputTimeout)

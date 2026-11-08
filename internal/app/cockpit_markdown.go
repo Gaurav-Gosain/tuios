@@ -11,6 +11,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/diffview"
 	"github.com/Gaurav-Gosain/tuios/internal/markdown"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
 // An agent's words in the thread are Markdown: internal/markdown reads them
@@ -40,6 +41,20 @@ type ckMD struct {
 	lines []ckLine
 	// lexed is how many bytes of code the lexer has read.
 	lexed int
+	// fold is the hit that opens a long code block, "" for a layout that
+	// shows every line, and open says the message's blocks are open.
+	fold string
+	open bool
+}
+
+// ckCodeFold is how many lines of a code block a closed message shows.
+const ckCodeFold = 12
+
+// ckMarkdownFold is ckMarkdown for a thread's message: a code block longer
+// than ckCodeFold lines shows that many and a line that opens it, unless
+// open.
+func (m *OS) ckMarkdownFold(l ckLook, text string, width int, id string, open bool) []ckLine {
+	return (&ckMD{m: m, l: l, fold: "fold:" + id, open: open}).layout(text, width, markdown.Options{})
 }
 
 // ckMarkdown lays out an agent's message as card lines of at most width
@@ -50,8 +65,13 @@ func (m *OS) ckMarkdown(l ckLook, text string, width int) []ckLine {
 
 // ckMarkdownWith is ckMarkdown with the parser's options.
 func (m *OS) ckMarkdownWith(l ckLook, text string, width int, opt markdown.Options) []ckLine {
+	return (&ckMD{m: m, l: l}).layout(text, width, opt)
+}
+
+// layout lays out a message's text.
+func (md *ckMD) layout(text string, width int, opt markdown.Options) []ckLine {
+	l := md.l
 	blocks, cut := markdown.ParseWith(strings.TrimSpace(text), opt)
-	md := &ckMD{m: m, l: l}
 	md.blocks(blocks, nil, nil, width, l.pal.Fg, 0, false)
 	if cut {
 		md.lines = append(md.lines, ckLine{segs: []ckSeg{{t: overlay.Ellipsis() + " the rest is not shown", fg: l.pal.FgMute}}})
@@ -227,12 +247,13 @@ func ckLinkTarget(u string) string {
 // text wraps segments to avail cells and adds them as lines, the first
 // with first before it and the rest with rest.
 func (md *ckMD) text(segs []ckSeg, first, rest []ckSeg, avail int) {
-	for i, ln := range ckWrapSegs(segs, avail) {
+	lines := ckWrapSegs(segs, avail)
+	for i, ln := range lines {
 		pre := rest
 		if i == 0 {
 			pre = first
 		}
-		md.lines = append(md.lines, ckLine{segs: append(slicesClone(pre), ln...)})
+		md.lines = append(md.lines, ckLine{segs: append(slicesClone(pre), ln...), wrap: i < len(lines)-1})
 	}
 }
 
@@ -421,13 +442,21 @@ func (md *ckMD) code(b markdown.Block, first, rest []ckSeg, avail int) {
 		head.right = []ckSeg{{t: ckTrunc(b.Lang, 16), fg: pal.FgMute}, {t: " "}}
 	}
 	md.lines = append(md.lines, head)
-	for i, t := range texts {
+	more := 0
+	if md.fold != "" && !md.open && len(texts) > ckCodeFold {
+		more = len(texts) - ckCodeFold
+	}
+	for i, t := range texts[:len(texts)-more] {
 		var sp []diffview.Span
 		if i < len(spans) {
 			sp = spans[i]
 		}
 		raw := dv.Code(t, sp, diffview.Range{}, diffview.Context, false, 0, codeW)
 		md.lines = append(md.lines, ckLine{bg: l.panel, bgAt: at, indent: at + 2, raw: raw})
+	}
+	if more > 0 {
+		md.lines = append(md.lines, ckLine{bg: l.panel, bgAt: at, indent: at + 2, hit: md.fold,
+			segs: []ckSeg{{t: l.g(ckGlyphFold) + " " + plural.CountAs(more, "more line", "more lines"), fg: pal.FgMute}}})
 	}
 	md.lines = append(md.lines, ckLine{bg: l.panel, bgAt: at, segs: slicesClone(rest)})
 }

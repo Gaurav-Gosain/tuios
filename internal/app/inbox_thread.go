@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"image/color"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -73,6 +74,8 @@ type threadEntry struct {
 	At     int64       `json:"at"`
 	ToolID string      `json:"tool_id"`
 	Diff   *threadDiff `json:"diff"`
+	// Image is set on an image entry the daemon can serve.
+	Image *transcriptview.Image `json:"image"`
 	// sum is a hash of the text and the plan, set when the entry is taken
 	// in, for the key of its card: a message written again, or still being
 	// written, keeps its id and changes its text.
@@ -147,6 +150,28 @@ type agentThread struct {
 	// pill is the child pill under the pill cursor, "" for none. See
 	// cockpit_thread_kids.go.
 	pill string
+	// images are the thread's images by entry id, and imgWidth the width
+	// their cards were last drawn at. See cockpit_thread_image.go.
+	images   map[string]*ckThreadImage
+	imgWidth int
+	// pinned says the last frame pinned the todo list above the thread
+	// (ThreadPinnedLines), so the thread folds its copy.
+	pinned bool
+	// lines are body's lines as laid out, and lineIDs the entry each one
+	// belongs to, for copy mode. viewW and viewH are the thread's view in
+	// the last frame.
+	lines        []ckLine
+	lineIDs      []string
+	viewW, viewH int
+	// keep is how many of the newest turns the thread draws, 0 for every
+	// turn, and older says turns older than those are left out. A long
+	// conversation is drawn only as far up as the view needs: its oldest
+	// cards cost the most to open and are the least read.
+	keep  int
+	older bool
+	// toTop says a key asked for the first line before every turn was
+	// drawn.
+	toTop bool
 }
 
 // threadBodyKey is what a thread's drawn lines depend on.
@@ -162,6 +187,10 @@ type threadBodyKey struct {
 	working bool
 	// kids is ckKidsSig: the child pills' inputs.
 	kids uint64
+	// pics is the previews' version: an image card's picture arrived.
+	pics uint64
+	// keep is agentThread.keep.
+	keep int
 }
 
 // threadsState is the threads kept and the transcript subscription.
@@ -174,6 +203,9 @@ type threadsState struct {
 	events   chan tea.Msg
 	// open is the thread shown in place of the list on a narrow screen.
 	open bool
+	// copy is copy mode over the shown thread, nil when it is off. See
+	// cockpit_copy.go.
+	copy *ckThreadCopy
 }
 
 // threadPageMsg is an agent-transcript reply.
@@ -292,6 +324,9 @@ func (m *OS) InboxThreadFetch() tea.Cmd {
 			t.loading = true
 			cmds = append(cmds, m.threadPageCmd(t, ""))
 		}
+		if cmd := m.threadImagesCmd(t); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	} else {
 		m.stopThreadWatch()
 		if rk := strconv.FormatInt(e.StateAt, 10); t.recapKey != rk && !t.loading {
@@ -331,7 +366,7 @@ func (m *OS) threadPageCmd(t *agentThread, after string) tea.Cmd {
 		stateAt = e.StateAt
 	}
 	return func() tea.Msg {
-		params := map[string]any{"session": sess, "window": window, "human_nonce": nonce, "limit": 200}
+		params := map[string]any{"session": sess, "window": window, "human_nonce": nonce, "limit": threadReadLimit}
 		if after != "" {
 			params["after"] = after
 		}
@@ -454,6 +489,11 @@ func (m *OS) applyThreadPage(msg threadPageMsg) tea.Cmd {
 		t.again = false
 		t.loading = true
 		return m.threadPageCmd(t, t.cursor)
+	}
+	// The page may name images: the thread on screen reads them now, not
+	// at the next key.
+	if e, ok := m.cockpitAgent(); ok && agentKey(e) == t.key && m.threadShown() {
+		return m.threadImagesCmd(t)
 	}
 	return nil
 }
@@ -627,13 +667,56 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []s
 		expand: t.expandAll, changes: m.cockpitTab() == "Changes",
 		working: e.State == string(session.AgentStateWorking),
 		kids:    m.ckKidsSig(e, t),
+		pics:    m.threadPicsVersion(t),
 	}
-	if t.body != nil && t.bodyAt == key {
-		return t.body
+	if t.keep == 0 && m.threadReadsTranscript(e) {
+		t.keep = ckKeepTurns
 	}
-	t.hits, t.prompts = nil, nil
-	t.body, t.bodyAt = m.threadBodyLines(e, t, width, room, now), key
-	return t.body
+	for {
+		key.keep = t.keep
+		if t.body != nil && t.bodyAt == key {
+			// The view needs room lines and a page more to scroll into.
+			// Short of that, the thread takes twice the turns.
+			if !t.older || len(t.body) >= room+ckKeepMargin {
+				t.toTop = false
+				return t.body
+			}
+			t.keep *= 2
+			continue
+		}
+		first, kept := "", t.bodyAt.keep
+		if len(t.lineIDs) > 0 {
+			first = t.lineIDs[0]
+		}
+		t.hits, t.prompts, t.lines, t.lineIDs = nil, nil, nil, nil
+		t.body, t.bodyAt = m.threadBodyLines(e, t, width, room, now), key
+		// More turns drawn: the view stays on the lines it showed, or goes
+		// to the first line for a key that asked for it.
+		if at := slices.Index(t.lineIDs, first); kept != 0 && kept != key.keep && at > 0 {
+			t.follow.Older(at)
+			if t.toTop {
+				t.follow.Scroll(1 << 30)
+			}
+		}
+	}
+}
+
+// threadReadLimit is how many of the newest entries a thread reads.
+const threadReadLimit = 200
+
+// ckKeepTurns is how many of the newest turns a thread draws first, and
+// ckKeepMargin how many lines past the view it keeps drawn.
+const (
+	ckKeepTurns  = 8
+	ckKeepMargin = 60
+)
+
+// threadKeepAll makes the thread draw every turn, for a key that goes to its
+// first line.
+func threadKeepAll(t *agentThread) {
+	if t.older {
+		t.keep, t.toTop = 1<<30, true
+	}
 }
 
 // threadMinute is the minute a thread's lines depend on: a recap says how
@@ -641,7 +724,9 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []s
 // a minute passing builds them again for nothing.
 func (m *OS) threadMinute(e sidebarAgentEntry, now time.Time) int64 {
 	if m.threadReadsTranscript(e) {
-		return 0
+		// Only the working turn's line, "Working for 3m", moves with
+		// the clock.
+		return ckThreadMinute(e.State == string(session.AgentStateWorking), now)
 	}
 	return now.Unix() / 60
 }
@@ -672,7 +757,7 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 			note(t.err)
 			return out
 		}
-		out, t.hits = m.threadCardLines(e, t, width, m.cockpitTab() == "Changes")
+		out, t.hits = m.threadCardLines(e, t, width, m.cockpitTab() == "Changes", now)
 		if len(out) == 0 {
 			note("No conversation yet.")
 		}
@@ -750,20 +835,7 @@ func firstNonEmptyStr(a, b string) string {
 // own line breaks, then at spaces. Blank lines are kept, at most one in a
 // row, and every line is made printable.
 func threadWrap(text string, width int) []string {
-	var out []string
-	blank := false
-	for line := range strings.SplitSeq(strings.TrimSpace(text), "\n") {
-		line = printableTitle(line)
-		if strings.TrimSpace(line) == "" {
-			if !blank && len(out) > 0 {
-				out = append(out, "")
-			}
-			blank = true
-			continue
-		}
-		blank = false
-		out = append(out, wrapPlain(line, width)...)
-	}
+	out, _ := threadWrapMore(text, width)
 	return out
 }
 

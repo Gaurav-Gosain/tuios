@@ -176,7 +176,7 @@ Four verbs carry everything between agents and the person:
 | --- | --- |
 | `tuios send-agent-message` | Leaves a message in a pane's inbox, or `human`'s, without touching its keyboard. Threads with `--reply-to`, files with `--attach` or the session stash |
 | `tuios read-agent-messages`, `tuios wait-for agent-message` | Read the inbox, or block until mail arrives |
-| `tuios ask-agent` | Types a question at an agent that is at its prompt, submits it, and returns what the pane printed. Refuses a pane on `needs_input` (`agent_blocked`), since the text would answer its prompt |
+| `tuios ask-agent` | Types a question at an agent that is at its prompt, submits it, and returns its answer: the agent's text since the question from its transcript, or what the pane printed for an agent with no transcript (a full-screen agent redraws, so its new lines can be empty). Refuses a pane on `needs_input` (`agent_blocked`), since the text would answer its prompt |
 | `tuios ask-human` | Puts a question with fixed answers in the Inbox and returns your answer. While the call waits, the asking pane shows `needs_input` with the question as its note |
 
 What keeps it safe: every body an agent reads is fenced as untrusted data and
@@ -274,6 +274,19 @@ reported message the same way: a message that mentions approval, permission,
 allowing, proceeding, confirming or trust reads as `approval`, anything else as
 `question`. An empty message gives an empty `blocked_by`, which means the
 source did not say.
+
+Both verbs report `waits_on` for a pane at rest (done or idle): what the agent
+still runs after its turn, read from its screen, such as `1 background shell`
+from Claude Code's footer (`1 shell, 1 monitor`). The state stays done; the
+note says the agent has not finished everything it started. A manifest names
+what it reads in `[[screen.waits_on]]` entries: a `region`, a `regex` whose
+first group is the count, and `what` it counts, in the singular. It is empty
+in every other state.
+
+A form Claude Code draws over its input box, such as "Teach auto mode about
+your environment?", reads `needs_input` from the screen: no hook reports it,
+and it takes the place of the done the turn's Stop reported, at once, since
+done is a resting claim. It goes back when the form is gone.
 
 Both verbs report `ready`, which is whether `ask-agent` would type at the pane
 now: true for `idle`, `done`, `errored` and `none`. It is false for
@@ -1347,6 +1360,7 @@ region:
 | `prompt_box` (or `prompt_box_body`) | The lines between the last two border lines of the tail |
 | `above_prompt_box`                | Everything in the tail above that box                   |
 | `last_non_empty_above_prompt_box` | The one non-empty line just above that box              |
+| `framed_above_prompt_box`         | The block just above that box, from the border line before it (or the top of the tail) to the box's top border: a form drawn over the input box |
 | `after_last_horizontal_rule`      | Everything in the tail under the last border line       |
 
 A border line is a run of at least three box-drawing dashes (`─` or `━`),
@@ -2408,9 +2422,30 @@ the keys refuse.
 A click on a row selects it and leaves the view open. A double-click, or
 `enter`, goes to the agent's pane and closes the view. `n` and the
 `+ New agent` button open the New agent sheet: the task, the agent, the
-model, a new worktree or this folder, the machine and the attempts. `enter`
-starts the agent through `fan` (a new worktree) or `start-agent` (this
-folder), and the task is typed once the agent is ready. `f` shows only the items, the old
+model, the effort and the permission mode, a new worktree or this folder, the
+machine and the attempts. `enter` starts the agent through `fan` (a new
+worktree) or `start-agent` (this folder), and the task is typed once the
+agent is ready.
+
+The task is the reply's editor: `@` names a file of the folder or an agent, a
+pasted image path or `ctrl+v` adds an image, and `ctrl+j` starts a new line.
+An image goes to the session's file store when the agent starts, and the task
+names it by its stored path. Only an agent on this machine takes an image.
+The model, effort and permission choices are the agent's own, from the
+`[launch]` table of its manifest, and a choice the agent does not have is not
+shown. `default` passes no flag, so the agent keeps its own settings. A mode
+that turns approvals off, such as Claude Code's `bypassPermissions`, says
+`approvals off` beside it and is never kept in a preset. Each machine row says
+what that machine's daemon finds: `claude ready`, `claude not signed in`,
+`claude not installed`, or `claude not known` for a daemon too old to say.
+With a linked machine, the first row is `Any machine`. It shows the machine
+the daemon would pick and why in one line ("build: 16 cores, 0 working, the
+repo is there."). This machine stays picked unless you pick another row, so
+an agent never moves on its own. With `Any machine` picked, Start asks again
+and starts the agents there ([Any machine](CLI_REFERENCE.md#any-machine) gives the
+rule). An agent in this folder works on this machine. A card the board opens
+the sheet on picks its own machine row. The branch is named after the task (`agent/` and its first words), with `-2` added
+when the repository has that branch. `f` shows only the items, the old
 flat Inbox with Needs you and Ready for review; `f` again shows one kind of
 item at a time, and after the last kind every agent again. `s` steps the order inside the
 groups: needs you first and then the longest wait, name, most recent change,
@@ -2534,7 +2569,7 @@ never answers a card you cannot see.
 
 The reply area sits at the foot of the focus: who the reply is for, when it
 is typed (at once, or when a working agent rests), and a Send button. A click
-on it, `r`, `i` or `tab` opens the editor. An image you paste or drop in shows
+on it, `r` or `i` opens the editor, and `tab` steps onto it from the focus. An image you paste or drop in shows
 as a chip with its name and size. A click on the chip opens the image view:
 the picture at the largest size the screen holds, its name, size in pixels
 and bytes, and who it is for. `o` opens it in the desktop's viewer, `c` saves
@@ -2557,12 +2592,52 @@ conversation, read from its transcript and drawn as cards:
   shows its first 8 lines. `e` shows every line of every card, and a click on
   a card's header folds it.
 - A command that failed shows the end of its output and a `failed` mark.
+- A call you declined has a `declined` mark, not `failed`, and shows what you
+  said with it. Where you stopped the agent, the thread shows one quiet line,
+  `You stopped the agent`, not a prompt.
+- Thinking is one line, `Thought for 12s`, with how long it took and the
+  start of the thought. A click on it shows the whole thought.
+- An image is a card: one you pasted sits under your prompt, and one a tool
+  gave back, such as a Read of a PNG, under the call. The card names the image
+  and its size. The picture is drawn with kitty graphics where the terminal
+  has them, with block glyphs at 256 colours and truecolor, and not at all at
+  16 colours. A small image keeps its own size, and a large one is at most 12
+  rows tall. A card that the window cuts shows no picture until you scroll it
+  whole into view. A click on the card opens the image view. A thread shows
+  16 images at most.
+- A screenshot you pasted through tuios is a file in the daemon's paste
+  folder, and the prompt holds only its path. The thread reads that file for
+  the card. It does the same for an image file that an agent's read tool
+  (such as `view_image` or `read_file`) named by an absolute path, when the
+  tool gave no image back. The daemon reads only a regular file, not a link,
+  of at most 10 MB, whose first bytes are PNG, JPEG, GIF or WebP. A file that
+  is gone or is not an image gets a card that says it could not be read.
+- A code block in an answer shows 12 lines and a line such as `10 more lines`.
+  A click on that line, or `e`, shows all of it.
+- Each turn starts with one line that says how long it worked and what it
+  did, such as `Worked for 45s · ran 1 command and read 1 file`. A finished
+  turn with nothing failed folds to that line, and a click on it opens it. A
+  turn you stopped or declined in says so: `(stopped)`, `(declined)`. The turn
+  at work says `Working for 3m`, in whole minutes, and stays open.
+- While the agent works, its newest todo list is pinned above the thread,
+  whole, and in the thread it is folded to its count.
 - A todo list is a plan: done rows struck through, the running row bold, and
   a rule that fills as rows are done. Older lists fold to their count.
 
 The newest card is at the bottom. The wheel over the thread, or `J` and `K`,
 scrolls it. `[` and `]` switch between the Thread and Changes tabs: Changes
 shows every edit of the last turn whole.
+
+`ctrl+b` `[` starts copy mode over the thread, and so does `y` in the focus
+region. It has the keys of a pane's copy
+mode: the motions, `/` and `?` to search, `v`, `V` and `ctrl+v` to select,
+and `y` to copy. A copy is the text as the agent wrote it: a paragraph the
+thread wraps is one line, and the card edges, the marks and the indent of the
+card are left out. Code keeps its own indent. `Y` copies the entries under
+the selection, or under the cursor, as Markdown: an answer as the agent wrote
+it, a prompt as a quote, and an edit as a `diff` block. The thread holds
+still while copy mode runs, and new entries show when it ends. `esc` ends it
+and keeps the view open. A change of width, tab or agent ends it too.
 
 The thread follows the newest card while it shows the bottom. A new prompt
 goes to the top of the thread, and the reply fills the space under it. When
@@ -2667,7 +2742,7 @@ Inside the agents view:
 | `n` | Open the New agent sheet. |
 | `J` / `K`, `ctrl+d` / `ctrl+u` | Scroll a plan on the card. The wheel over the card does the same. |
 | `1` to `9` | On a question put with `ask-human`, pick that answer. The question and its numbered answers are shown on its card, and the keys work once it has been on screen as it is for 0.4 seconds. See [Questions an agent asks you](#questions-an-agent-asks-you). |
-| `r`, `i`, `tab` | With no approval waiting: reply to the agent, or to mail, whose thread opens with its reply line. |
+| `r`, `i` | With no approval waiting: reply to the agent, or to mail, whose thread opens with its reply line. `tab` steps the regions: the list, the focus, the reply, the side column. |
 | `y` | On a Resume row: type the conversation's resume command into its pane. The view stays open, and the row says `Resuming` until the agent is back. With marks, resume every marked Resume row. `enter` goes to the pane. |
 | `p` | On a row that says `held for NAME`: pass the mail another machine sent that agent on to it. See [Mail held from another machine](#mail-held-from-another-machine). |
 | `d` | Dismiss the item. The dock says `u` undoes it, and for 10 seconds it does. |
@@ -2908,7 +2983,8 @@ for the same set. The CLI prints the set and asks at a terminal, and takes
 
 Each pane of a write goes through every check a single call makes. A message
 is charged to the sender's rate cap per pane, and `from` may name the sender's
-own pane in another session by its exact id. An ask refuses a pane on
+own pane in another session by its exact id. A single send or ask also
+takes the name or short id of the caller's own pane in its own session. An ask refuses a pane on
 `needs_input` with `agent_blocked` in that pane's row, waits for a working pane
 unless `force`, and records the exchange in the pane's own session; one pane
 that refuses does not stop the others.
@@ -3669,6 +3745,33 @@ keep_source  = "myagent --help"
 
 A kept name is `-` or `--` and then letters, digits and `_ . / : + -`. A
 manifest that lists its own resume flag fails to load.
+
+### Starting with a model, an effort and a permission mode
+
+`[launch]` names the flags a new agent of the harness takes for the choices
+the New agent sheet and `tuios start-agent --model --effort
+--permission-mode` offer, and how to ask the harness whether it is signed in:
+
+```toml
+[launch]
+model_flag        = "--model"
+models            = ["opus", "sonnet"]   # suggestions; another one word is passed too
+effort_flag       = "--effort"
+efforts           = ["low", "medium", "high"]
+permission_flag   = "--permission-mode"
+permissions       = ["manual", "plan", "bypassPermissions"]
+risky_permissions = ["bypassPermissions"]  # shown with a warning, never chosen for you
+default_permission = ""                    # a mode that needs no flag, if any
+signed_in_args    = ["auth", "status", "--json"]
+signed_in_match   = '"loggedIn":\s*true'
+source            = "myagent --help"
+```
+
+A harness with no flag for a choice refuses it by name: tuios never guesses a
+flag. `signed_in_args` run on the harness's own program, never on a program
+the manifest names, for at most 2 seconds, and the answer is kept a minute.
+The output is matched and dropped. The `agent-readiness` verb answers with
+it, per machine: installed, and signed in yes, no or unknown.
 
 ## Harness integrations
 

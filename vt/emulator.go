@@ -678,6 +678,20 @@ type markerGridReader interface {
 	ScrollbackLen() int
 	ScrollbackLine(index int) uv.Line
 	CellAt(x, y int) *uv.Cell
+	// lineSoftWrapped reports whether the line at absLine (scrollback first,
+	// then the screen) carries on to the next line by autowrap.
+	lineSoftWrapped(absLine int) bool
+}
+
+// lineSoftWrapped is markerGridReader's wrap query for the pure Go emulator.
+func (e *Emulator) lineSoftWrapped(absLine int) bool {
+	if sbLen := e.ScrollbackLen(); absLine < sbLen {
+		wrapped, _ := e.ScrollbackSoftWrapped(absLine)
+		return wrapped
+	} else {
+		wrapped, _ := e.RowSoftWrapped(absLine - sbLen)
+		return wrapped
+	}
 }
 
 // extractCommandTextFrom extracts the command text between a B marker
@@ -687,36 +701,44 @@ func extractCommandTextFrom(e markerGridReader, bLine, bCol, cLine int) string {
 	width := e.Width()
 	height := e.Height()
 
+	// readLine reads one line as text. Cells with no content read as spaces
+	// and are trimmed off the end. A line that soft-wraps keeps its own
+	// trailing spaces, cells that hold a space, because the command goes on
+	// past them on the next line: "echo " split after the space must not
+	// come back as "echofiller".
 	readLine := func(absLine int) string {
+		var cells []string
 		if absLine < sbLen {
-			line := e.ScrollbackLine(absLine)
-			if line == nil {
+			for _, cell := range e.ScrollbackLine(absLine) {
+				cells = append(cells, cell.Content)
+			}
+		} else {
+			screenY := absLine - sbLen
+			if screenY < 0 || screenY >= height {
 				return ""
 			}
-			var sb strings.Builder
-			for _, cell := range line {
-				if cell.Content != "" {
-					sb.WriteString(string(cell.Content))
-				} else {
-					sb.WriteByte(' ')
+			for x := range width {
+				content := ""
+				if cell := e.CellAt(x, screenY); cell != nil {
+					content = cell.Content
 				}
+				cells = append(cells, content)
 			}
-			return strings.TrimRight(sb.String(), " ")
 		}
-		screenY := absLine - sbLen
-		if screenY < 0 || screenY >= height {
-			return ""
-		}
+		wrapped := e.lineSoftWrapped(absLine)
 		var sb strings.Builder
-		for x := range width {
-			cell := e.CellAt(x, screenY)
-			if cell != nil && cell.Content != "" {
-				sb.WriteString(string(cell.Content))
-			} else {
+		end := len(cells)
+		for end > 0 && (cells[end-1] == "" || (!wrapped && cells[end-1] == " ")) {
+			end--
+		}
+		for _, c := range cells[:end] {
+			if c == "" {
 				sb.WriteByte(' ')
+			} else {
+				sb.WriteString(c)
 			}
 		}
-		return strings.TrimRight(sb.String(), " ")
+		return sb.String()
 	}
 
 	// Single-line command (most common case)
@@ -729,16 +751,24 @@ func extractCommandTextFrom(e markerGridReader, bLine, bCol, cLine int) string {
 		return strings.TrimSpace(string(runes[bCol:]))
 	}
 
-	// Multi-line command
+	// Multi-line command. A line that soft-wraps runs on into the next one
+	// with nothing between them: the shell drew one long line, and the
+	// newline is the terminal's, not the person's. Only a line the shell
+	// ended (a continuation prompt after a typed newline) starts a new part.
 	var parts []string
-	firstLine := readLine(bLine)
-	runes := []rune(firstLine)
-	if bCol < len(runes) {
-		parts = append(parts, strings.TrimSpace(string(runes[bCol:])))
+	cur := ""
+	if runes := []rune(readLine(bLine)); bCol < len(runes) {
+		cur = strings.TrimLeft(string(runes[bCol:]), " ")
 	}
 	for line := bLine + 1; line < cLine; line++ {
-		parts = append(parts, readLine(line))
+		if e.lineSoftWrapped(line - 1) {
+			cur += readLine(line)
+			continue
+		}
+		parts = append(parts, strings.TrimRight(cur, " "))
+		cur = readLine(line)
 	}
+	parts = append(parts, strings.TrimRight(cur, " "))
 	return strings.Join(parts, "\n")
 }
 

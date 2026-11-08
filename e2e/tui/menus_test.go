@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -62,6 +63,10 @@ func TestDeclaredMenuSplitsFromTheLeader(t *testing.T) {
 // two h presses are the positive half: the pane does shrink, so the unchanged
 // width at the end is the menu closing and not a resize that never worked.
 //
+// The which-key panel stays on screen through the h presses: a held menu
+// keeps the time it opened (HoldMenu), so it is not hidden for the
+// which-key delay again.
+//
 // Negative control: delete the sticky re-open (`m.Menu = name`) in
 // HandleMenuCommand. The first h resizes and closes the menu, and the second h
 // is a focus key, so the width does not shrink a second time.
@@ -98,6 +103,12 @@ func TestDeclaredStickyMenuStaysOpenUntilAnUnboundKey(t *testing.T) {
 	w1 := waitShrinks(w0, "the first h")
 	if err := term.SendKeys("h"); err != nil {
 		t.Fatalf("send second h: %v", err)
+	}
+	// A menu that stays open stays shown: the panel does not wait the
+	// which-key delay (500 ms) again after a key the menu ran.
+	time.Sleep(150 * time.Millisecond)
+	if !strings.Contains(term.Screen().Text(), "Narrow the focused pane by 5") {
+		t.Errorf("ASSERTION: the held menu's panel went away after h, as if the menu had opened again\n%s", term.Snapshot())
 	}
 	w2 := waitShrinks(w1, "the second h, on the same chord")
 

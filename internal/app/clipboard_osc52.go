@@ -40,7 +40,17 @@ type clipboardAsk struct {
 	// message the user dismissed raises a new one at most once per
 	// notifyRateLimit, the limit guest notifications keep.
 	raised time.Time
+	// shown is when the message last showed this text: when it was raised,
+	// or when a newer write changed its text in place. A click sooner than
+	// clipboardAskSettle after it allows nothing.
+	shown time.Time
 }
+
+// clipboardAskSettle is how long a clipboard ask's message must have shown
+// its text before a click allows it, the settle the plugin approval dialog
+// keeps. A click already on its way when the message appeared under the
+// pointer, or when its text changed, was not aimed at that text.
+const clipboardAskSettle = 500 * time.Millisecond
 
 // clipboardPreviewLen is how many characters of the text an ask shows.
 const clipboardPreviewLen = 24
@@ -127,6 +137,7 @@ func (m *OS) askClipboardWrite(msg ClipboardSetMsg) {
 	changed := ask.text != msg.Text && ask.version > 0
 	if ask.text != msg.Text || ask.version == 0 {
 		ask.version++
+		ask.shown = time.Now()
 	}
 	ask.text = msg.Text
 	text := m.clipboardAskText(ask)
@@ -148,6 +159,7 @@ func (m *OS) askClipboardWrite(msg ClipboardSetMsg) {
 		return
 	}
 	ask.raised = time.Now()
+	ask.shown = ask.raised
 	m.ShowNotificationFrom(text, "warning", 2*m.Settings.NotificationDuration, NotifTarget{ClipboardAsk: ask.seq, ClipboardVersion: ask.version})
 }
 
@@ -178,6 +190,17 @@ func (m *OS) clipboardPaneName(windowID string) string {
 	return "A pane"
 }
 
+// clipboardAskSettling reports whether ask seq showed its text less than
+// clipboardAskSettle ago.
+func (m *OS) clipboardAskSettling(seq uint64) bool {
+	for _, a := range m.clipboardAsks {
+		if a.seq == seq {
+			return time.Since(a.shown) < clipboardAskSettle
+		}
+	}
+	return false
+}
+
 // allowClipboardAsk lets the waiting write with this number through.
 // version is the text version the activated message showed. An ask whose text
 // has changed since is not allowed.
@@ -195,6 +218,10 @@ func (m *OS) allowClipboardAsk(seq, version uint64) {
 	}
 	if ask.version != version {
 		m.ShowNotification("The text changed. Check the new request, then click it again.", "warning", m.Settings.NotificationDuration)
+		return
+	}
+	if m.clipboardAskSettling(seq) {
+		m.ShowNotification("Read the request, then click it again to allow it.", "info", m.Settings.NotificationDuration)
 		return
 	}
 	delete(m.clipboardAsks, ask.windowID)

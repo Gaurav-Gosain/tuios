@@ -551,7 +551,7 @@ func (m *OS) bulkHints() []overlay.Hint {
 		// do nothing for them, so the footer leaves them out.
 		hints = append(hints, m.keyHints(config.ActionInboxDismiss, "dismiss",
 			config.ActionInboxMark, "mark", config.ActionInboxMarkAll, "all or none")...)
-		return append(hints, m.keyHints(config.ActionInboxClose, "close")...)
+		return append(hints, m.cockpitEscHints()...)
 	}
 	hints = append(hints, m.keyHints(config.ActionInboxReply, "reply to each")...)
 	hints = append(hints,
@@ -560,7 +560,7 @@ func (m *OS) bulkHints() []overlay.Hint {
 	)
 	hints = append(hints, m.keyHints(config.ActionInboxDismiss, "dismiss", config.ActionInboxSnooze, "snooze", config.ActionInboxSettle, "settle",
 		config.ActionInboxMark, "mark", config.ActionInboxMarkAll, "all or none")...)
-	return append(hints, m.keyHints(config.ActionInboxClose, "close")...)
+	return append(hints, m.cockpitEscHints()...)
 }
 
 // InboxBulkResumedMsg is the answer to a resume of more than one offer: how

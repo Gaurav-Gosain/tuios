@@ -13,6 +13,11 @@ import gh "go.mitchellh.com/libghostty"
 func (t *GhosttyTerminal) RowSoftWrapped(y int) (wrapped, known bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	return t.rowSoftWrappedLocked(y)
+}
+
+// rowSoftWrappedLocked is RowSoftWrapped with t.mu held.
+func (t *GhosttyTerminal) rowSoftWrappedLocked(y int) (wrapped, known bool) {
 	if t.closed.Load() || y < 0 || y >= t.height {
 		return false, true
 	}
@@ -25,6 +30,11 @@ func (t *GhosttyTerminal) RowSoftWrapped(y int) (wrapped, known bool) {
 func (t *GhosttyTerminal) ScrollbackSoftWrapped(index int) (wrapped, known bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	return t.scrollbackSoftWrappedLocked(index)
+}
+
+// scrollbackSoftWrappedLocked is ScrollbackSoftWrapped with t.mu held.
+func (t *GhosttyTerminal) scrollbackSoftWrappedLocked(index int) (wrapped, known bool) {
 	t.flushRestoreLocked()
 	if t.closed.Load() || index < 0 || index >= t.scrollbackLenLocked() {
 		return false, true

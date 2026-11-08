@@ -29,9 +29,14 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	if e.State == "working" {
 		when = "typed when it rests"
 	}
-	hints := []ckSeg{{t: "@", fg: pal.AccentBright, attrs: ckBold}, {t: " mention   ", fg: pal.FgMute},
-		{t: "ctrl+v", fg: pal.AccentBright, attrs: ckBold}, {t: " image   ", fg: pal.FgMute},
-		{t: "ctrl+j", fg: pal.AccentBright, attrs: ckBold}, {t: " new line", fg: pal.FgMute}}
+	// The area is text on the panel: what a key does is read, so its label
+	// is the secondary ink, held to text contrast, as every panel footer's
+	// is. The quiet ink is held to 3:1 only and is for marks. A key is a
+	// mark in the accent, held to 3:1 on the panel it is drawn on.
+	label, key := pal.FgDim, overlay.ReadableAt(pal.AccentBright, l.panel, overlay.MarkFloor)
+	hints := []ckSeg{{t: "@", fg: key, attrs: ckBold}, {t: " mention   ", fg: label},
+		{t: "ctrl+v", fg: key, attrs: ckBold}, {t: " image   ", fg: label},
+		{t: "ctrl+j", fg: key, attrs: ckBold}, {t: " new line", fg: label}}
 	// While the agent works, enter queues the reply and alt+enter sends it
 	// now. The button names what enter does, and the send-now hint goes
 	// first, so a narrow area cuts the other hints before it. A bulk reply
@@ -40,7 +45,7 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	if replyEnterQueues(e.State) {
 		verb = "Queue"
 		if ed := st.reply.editor; e.Host == "" && (ed == nil || (ed.host == "" && len(ed.targets) == 0)) {
-			hints = append([]ckSeg{{t: "alt+" + overlay.EnterGlyph, fg: pal.AccentBright, attrs: ckBold}, {t: " send now   ", fg: pal.FgMute}}, hints...)
+			hints = append([]ckSeg{{t: "alt+" + overlay.EnterGlyph, fg: key, attrs: ckBold}, {t: " send now   ", fg: label}}, hints...)
 		}
 	}
 	send := ckSeg{t: " " + overlay.EnterGlyph + " " + verb + " ", fg: overlay.Readable(pal.Fg, pal.Card), bg: pal.Card, attrs: ckBold}
@@ -63,13 +68,13 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 		y := y1 - h
 		c.hline(x, y-1, w, hzGlyph(), l.edge)
 		c.fill(x, y, w, h, l.panel)
-		c.text(x+2, y, right-16, ckSeg{t: "Reply to ", fg: pal.FgMute}, ckSeg{t: name, fg: pal.FgDim, attrs: ckBold})
-		c.textR(right-2, y, ckSeg{t: when, fg: pal.FgDim})
-		prompt := []ckSeg{{t: " ", bg: pal.FgMute}, {t: " Write a reply.", fg: pal.FgMute}}
+		c.text(x+2, y, right-16, ckSeg{t: "Reply to ", fg: label}, ckSeg{t: name, fg: pal.Fg, attrs: ckBold})
+		c.textR(right-2, y, ckSeg{t: when, fg: label})
+		prompt := []ckSeg{{t: " ", bg: pal.FgMute}, {t: " Write a reply.", fg: label}}
 		// A draft kept for this agent shows here, so the person knows r
 		// brings it back.
 		if d := st.reply.drafts[inboxDraftKey(e.SessionID, e.WindowID)]; d != nil && !d.Empty() {
-			prompt = []ckSeg{{t: "Draft: ", fg: pal.FgMute}, {t: ansi.Truncate(ckDraftLine(d), max(w-11, 1), "…"), fg: pal.FgDim}}
+			prompt = []ckSeg{{t: "Draft: ", fg: label}, {t: ansi.Truncate(ckDraftLine(d), max(w-11, 1), "…"), fg: pal.Fg}}
 		}
 		c.text(x+2, y+1, right-2, prompt...)
 		c.text(x+2, y1-1, right-14, hints...)
@@ -91,7 +96,7 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	y := max(y1-h, bodyTop+1)
 	c.hline(x, y-1, w, hzGlyph(), l.edge)
 	c.fill(x, y, w, y1-y, l.panel)
-	c.text(x+2, y, right-24, ckSeg{t: "Reply to ", fg: pal.FgMute}, ckSeg{t: ed.who, fg: pal.FgDim, attrs: ckBold})
+	c.text(x+2, y, right-24, ckSeg{t: "Reply to ", fg: label}, ckSeg{t: ed.who, fg: pal.Fg, attrs: ckBold})
 	ctx := ed.context
 	if strings.HasPrefix(ctx, "working") {
 		// A reply to an agent at work waits, and the line says so before
@@ -103,7 +108,7 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 		ctx = "typed when it rests"
 	}
 	if ctx != "" {
-		c.textR(right-2, y, ckSeg{t: ctx, fg: pal.FgDim})
+		c.textR(right-2, y, ckSeg{t: ctx, fg: label})
 	}
 	row := y + 1
 	if len(images) > 0 {
@@ -119,7 +124,7 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 			st.ck.hits = append(st.ck.hits, ckHit{x0: x0, y0: top + row, x1: cx, y1: top + row + 1, kind: ckHitAction, action: "image:" + strconv.Itoa(i)})
 			cx += 2
 		}
-		c.text(cx, row, right-2, ckSeg{t: "click to view", fg: pal.FgMute})
+		c.text(cx, row, right-2, ckSeg{t: "click to view", fg: label})
 		row++
 	}
 	fy := y1 - 1

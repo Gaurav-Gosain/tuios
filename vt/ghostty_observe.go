@@ -128,6 +128,23 @@ func (t *GhosttyTerminal) resetShadowState() {
 	t.titleStack = nil
 }
 
+// softResetShadowLocked follows DECSTR into the shadow state. libghostty
+// implements DECSTR from 1.0 (Terminal.softReset): it puts the scroll region
+// and both margins back to the full page, the charsets and GL and GR to their
+// defaults, stops DECSCA protection, forgets the saved cursor of the active
+// screen, and turns modifyOtherKeys off, as xterm does. The copies here follow
+// it, because the reattach snapshot carries them, and a client must restore
+// the state the guest's terminal really has. Pinned by
+// TestGhosttyDECSTRResetsTheRegion.
+func (t *GhosttyTerminal) softResetShadowLocked() {
+	t.scrollRegion = uv.Rect(0, 0, t.width, t.height)
+	t.charsetIDs = defaultCharsetIDs
+	t.gl, t.gr = 0, 0
+	t.penProtected = false
+	t.savedCur[t.liveScreenLocked()] = SavedCursor{Charsets: defaultCharsetIDs}
+	t.modifyOtherKeys.Store(0)
+}
+
 func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 	switch {
 	case final == 'r' && prefix == 0 && inter == 0:
@@ -152,7 +169,7 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 			return
 		}
 		t.scanner.flushOut()
-		on, _ := t.term.Mode(gh.ModeLeftRightMargin)
+		on, _ := t.term.Mode(gh.ModeEnableLeftAndRightMargin)
 		if !on {
 			// SCOSC saves the cursor as DECSC does.
 			t.saveCursorShadowLocked()
@@ -174,7 +191,7 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 		// XTSAVE. Only DECLRMM matters to the margin copy.
 		if csiHasParam(params, 69) && !t.closed.Load() {
 			t.scanner.flushOut()
-			t.savedLRMM, _ = t.term.Mode(gh.ModeLeftRightMargin)
+			t.savedLRMM, _ = t.term.Mode(gh.ModeEnableLeftAndRightMargin)
 		}
 	case final == 'r' && prefix == '?' && inter == 0:
 		// XTRESTORE. The library sets each mode through its mode handler,
@@ -232,13 +249,8 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 		t.kittyKbd.Set(flags, mode)
 	case (final == 'm' || final == 'n') && prefix == '>' && inter == 0:
 		t.observeModifyOtherKeys(final, params)
-	case final == 'p' && inter == '!':
-		// DECSTR. libghostty does not implement it: its parser logs the
-		// sequence as unimplemented and leaves the margins and the charsets
-		// where they were. The copy follows the library, not the pure
-		// emulator, because the reattach snapshot carries the copy, and a
-		// client must restore the state the guest's terminal really has.
-		// Pinned by TestGhosttyDivergence_DECSTRIgnored.
+	case final == 'p' && inter == '!' && prefix == 0:
+		t.softResetShadowLocked()
 	case final == 'J' && prefix == 0 && inter == 0:
 		t.observeEraseDisplay(params)
 	case (final == 'g' || final == 'W') && inter == 0:
@@ -278,11 +290,12 @@ func (t *GhosttyTerminal) observeModifyOtherKeys(final byte, params []byte) {
 }
 
 // answerDecStatusReport answers the DEC private DSR queries that libghostty
-// drops: CSI ? 5 n (operating status), CSI ? 6 n (DECXCPR) and CSI ? 996 n
-// (the colour scheme, which libghostty leaves to its host). The pure
-// emulator answers both, and xterm does too, so a guest that probes with the
-// private form would otherwise wait out its timeout on this backend only.
-// libghostty still answers the ANSI forms CSI 5 n and CSI 6 n itself.
+// drops: CSI ? 5 n (operating status) and CSI ? 996 n (the colour scheme,
+// which libghostty leaves to its host). The pure emulator answers both, and
+// xterm does too, so a guest that probes with the private form would
+// otherwise wait out its timeout on this backend only. libghostty answers the
+// ANSI forms CSI 5 n and CSI 6 n itself, and from 1.0 also CSI ? 6 n
+// (DECXCPR), with the page number.
 //
 // Earlier bytes of the chunk flush first. That settles the cursor, and it
 // puts libghostty's replies to earlier queries in the pipe ahead of this one.
@@ -295,22 +308,6 @@ func (t *GhosttyTerminal) answerDecStatusReport(params []byte) {
 	case 5:
 		t.scanner.flushOut()
 		_, _ = t.pipe.Write([]byte(ansi.DeviceStatusReport(ansi.DECStatusReport(0))))
-	case 6:
-		t.scanner.flushOut()
-		x, errX := t.term.CursorX()
-		y, errY := t.term.CursorY()
-		if errX != nil || errY != nil {
-			return
-		}
-		col, line := int(x), int(y)
-		// Under DECOM the report is relative to the margins, the way
-		// libghostty answers CSI 6 n and the pure emulator answers both.
-		if on, _ := t.term.Mode(gh.ModeOrigin); on {
-			col -= t.scrollRegion.Min.X
-			line -= t.scrollRegion.Min.Y
-		}
-		// No page number, as xterm at the VT220 level this pane claims in DA1.
-		_, _ = t.pipe.Write([]byte(ansi.ExtendedCursorPositionReport(line+1, col+1, 0)))
 	case 996:
 		t.scanner.flushOut()
 		_, _ = t.pipe.Write([]byte(colorSchemeNotice(t.reportedBackgroundLocked())))

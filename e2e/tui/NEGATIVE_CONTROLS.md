@@ -14119,3 +14119,1809 @@ Run on 2026-11-07 on macOS (arm64), each control its own binary:
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestMailFromAPaneOfAnotherSession$' -v .`.
+
+## The agents view's reply area and New agent sheet hold text to its floor
+
+`TestAgentsViewTextMeetsItsFloor` opens the reply area closed, open and with a
+draft, then the New agent sheet, under the dark look, rose_pine and
+catppuccin_latte at 256 colours and truecolor. It measures every glyph on
+screen against the cell ground it is drawn on. In the reply area a key clears
+3:1, other text 4.5:1 and the draft 7:1. In the sheet every glyph clears 3:1
+and the task placeholder 4.5:1.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The whole fix (main at 3497aaab0) | every run: "Reply to", "mention", "image", "new line" at 3.71:1 (dark, rose_pine) and 3.04:1 (latte) on the panel; the picked machine row's text at 2.35 to 2.45:1 on the accent tint; at 256 colours the default theme's accent at 2.77:1 on the sheet | **caught** |
+| The reply area's labels in `FgMute` again (`label` in `drawReplyArea`) | "49 glyphs in the reply area miss their floor": `"R" at (53,30) 3.71:1 under 4.5` in "Reply to docs-cli" | **caught** |
+| The not-installed agent chip and "not found" held to nothing (9ba3e5e4e, with the client's PATH holding no agent) | the chip "claude" at 2.28:1 (truecolor) and 2.41:1 (256) on the card; "claude not found" at 2.33 to 2.62:1 on the picked machine's tint. CI failed the same way on Linux, where no agent is installed | **caught** |
+
+Frames are under the test's artifact folder (`reply-closed`, `reply-placeholder`,
+`reply-draft`, `new-agent`). Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAgentsViewTextMeetsItsFloor$' -v .`.
+
+## start-agent passes the harness's model, effort and permission flags
+
+`TestStartAgentLaunchChoiceAndReadiness` starts a fake `claude` with
+`--model opus --effort high --permission-mode plan -- --verbose` and reads the
+argv it ran with. It also checks three refusals (an effort claude does not
+list, a model that is a flag, a model for a program no manifest knows) open no
+pane, and asks `agent-readiness` for a signed-in, a signed-out, a missing and
+a hanging claude.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The whole change (the build before it) | `agent-readiness: exit status 1`, `unknown_verb` | **caught** |
+| `withChoice` adding no flags to the argv | "the agent started with argv \"--verbose\\n\", want \"--model\\nopus\\n--effort\\nhigh\\n--permission-mode\\nplan\\n--verbose\\n\"" | **caught** |
+
+The argv is saved as `start-agent-argv.txt` under the test's artifact folder.
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestStartAgentLaunchChoiceAndReadiness$' -v .`.
+
+## Interrupts, declines and the images of tool results in a transcript
+
+`transcript_stops_test.go` reads the fixture `testdata/transcript/claude-stops.jsonl`:
+two turns with a thinking block that has only a signature, a Read whose result
+is a PNG image block, a Bash call the person declined with a reason, an
+AskUserQuestion declined with none, and Claude Code's
+"[Request interrupted by user for tool use]" mark as the last record.
+`TestTranscriptStopsOnTheWire` reads it with agent-transcript and reads the
+image by its id. `TestCockpitThreadStops` reads it in the agents view. Before
+the fix (main, 3497aaab0), the view drew the interrupt as a "You" prompt and
+"turn 3", both declines as "failed" with Claude Code's canned text, no line for
+the empty thinking block, "Read 1" with no image, and no summary or time for
+the second turn.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (3497aaab0) | wire: "the entries are"; view: "the thread does not show \"You stopped the agent\"" | **caught** |
+| `InterruptText` returns false | wire: "the entries are"; view: "You stopped the agent" missing | **caught** |
+| `declined` returns false | wire: "Claude Code's own words reached the page"; view: the "(declined) · 45s" summary missing | **caught** |
+| The `resultImages` call cut from `recordEntries` | wire: "the entries are"; view: "Read 1 · 1 image" missing | **caught** |
+| The nested branch of `ReadImage` cut | wire: "the image data: ... no image has the id hx-0.0" | **caught** |
+| The interrupt and decline cases cut from the Finished rule in `Turns` | view: "Ran 1 command and used 1 tool (stopped) · 1m 42s" missing | **caught** |
+
+The frame is `cockpit-stops` under the test's artifact folder. Repeat from
+`e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestTranscriptStopsOnTheWire|TestCockpitThreadStops)$' -v .`.
+
+## Thread cards: image cards, folds, the working turn and the pinned todo list
+
+`TestCockpitThreadFoldsAndImages` writes a Claude Code transcript with times
+just before now: a finished turn with a pasted PNG, a two-line thought, a Read
+and an answer with a 22-line Go block, then a turn at work with a todo list
+and a Bash call with no result. It checks that the image is a card under its
+prompt and the next prompt is turn 2, that the card's picture is a kitty
+placement on the card's rows, the "Worked for 1m 0s" and "Working for 3m"
+lines, the todo list pinned above the thread and drawn once, that a click
+opens the turn, the code block (12 lines, then "10 more lines") and the
+thought, and that a click on the card opens the image view. Before the change
+(main, 3497aaab0) the image was a "You · turn 2" prompt of "[image]" and the
+next prompt "turn 3", with no picture, no thought line, the code unfolded and
+the todo list in place.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (3497aaab0) | "the thread has no image card under its prompt" | **caught** |
+| The `en.Image != nil` case cut from `threadCardLines` | "the thread has no image card under its prompt" | **caught** |
+| The `threadImagePlacements` call cut from `flushReplyPreviewForFrame` | "no picture on the image card (head at row 27 col 6)" | **caught** |
+| The fold cut from `ckMD.code` | "\"10 more lines\" never showed while pressing K" | **caught** |
+| The hit cut from `ckThoughtLines` | "a click did not open the thought" | **caught** |
+| The `ThreadPinnedLines` call cut from `drawFocus` | "the todo list is not pinned above the thread, once" | **caught** |
+| The `timg:` case cut from `cockpitAction` | "the image view did not open" | **caught** |
+
+Not caught here: with `Image` left out of the `Step` that `ckTurns` builds,
+the test passes, because the view draws an image entry by its own case before
+it counts prompts. The flag keeps `transcriptview.Turns` from starting a turn
+at a pasted image for its other readers.
+
+The frames are `thread-cards-closed` and `thread-cards-open` under the test's
+artifact folder, with the host's kitty pictures drawn in. Repeat from `e2e/tui`
+with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitThreadFoldsAndImages$' -v .`.
+
+`TestCockpitThreadCards` caught a bug in an early build of this change: at
+100x30 the pinned list did not fit and was not drawn, but the thread still
+folded its copy, so the plan showed whole nowhere ("the thread has no plan
+card"). `ThreadPinnedLines` now makes the one decision and records it for the
+thread.
+
+## The New agent sheet asks each machine, and passes the agent's own flags
+
+`TestNewAgentSheetChoicesAndReadiness` opens the sheet with a fake Claude Code
+that is signed out, then one that is signed in. It steps the Effort and
+Permissions pills, checks that `bypassPermissions` shows `approvals off`,
+starts the agent with `opus`, `high` and `plan`, and reads the argv and the
+first prompt the agent got. An image pasted into the task must reach the
+agent as a stored file with the same bytes.
+
+Run on 2026-11-07 on macOS (arm64):
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The sheet change (the 7a build, agents-view/new-agent) | "waiting for the signed-out row": the signed-out claude's row says `claude ready`, from the client's PATH lookup | **caught** |
+
+The frames and `sheet-start.txt` (argv and first prompt) are under the test's
+artifact folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestNewAgentSheetChoicesAndReadiness$' -v .`.
+
+## The New agent sheet asks each machine, and passes the agent's own flags
+
+`TestNewAgentSheetChoicesAndReadiness` opens the sheet with a fake Claude Code
+that is signed out, then one that is signed in. It steps the Effort and
+Permissions pills, checks that `bypassPermissions` shows `approvals off`,
+starts the agent with `opus`, `high` and `plan`, and reads the argv and the
+first prompt the agent got. An image pasted into the task must reach the
+agent as a stored file with the same bytes.
+
+Run on 2026-11-07 on macOS (arm64):
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The sheet change (the 7a build, agents-view/new-agent) | "waiting for the signed-out row": the signed-out claude's row says `claude ready`, from the client's PATH lookup | **caught** |
+
+The frames and `sheet-start.txt` (argv and first prompt) are under the test's
+artifact folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestNewAgentSheetChoicesAndReadiness$' -v .`.
+
+## A task card from anywhere
+
+`TestTaskCaptureFromAnywhere` opens the capture sheet with `ctrl+b +` in
+terminal mode and window management mode and from the palette, keeps a draft
+across esc, files a card with a second line and a pasted image into another
+session, and files a Plan first card with ctrl+enter. Each card is read back
+with `list-tasks` and `get-task`; the image's stored file must hold its bytes,
+and the started agent must hold the card, run in its plan mode, and get the
+"Take task" prompt.
+
+Run on 2026-11-07 on macOS (arm64):
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The sheet (the build before it, agents-view/new-agent-sheet) | "waiting for the capture sheet from terminal mode": `ctrl+b +` opens nothing | **caught** |
+
+Frames `capture-filled`, `capture-plan` and `capture-cards.txt` are under the
+test's artifact folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskCaptureFromAnywhere$' -v .`.
+
+## Overlapping send-keys
+
+`TestOverlappingSendKeysDoNotAnswerAnApproval` holds a plugin approval dialog
+open on an attached client. Three rounds each start one long send-keys chain
+(400 ctrl+u, then allow and Enter) and eight one-key chains while it runs. The
+plugin must not run and the dialog must stay open. The person then types allow
+and Enter, and the plugin must run. Before the fix the first chain to end
+cleared `ProcessingRemoteKeys` while the long chain still ran, so its allow
+and Enter answered the dialog as the person.
+
+The kept race regression tests in `internal/app` (`remote_keys_overlap_test.go`)
+drive the real `Update` with the chains interleaved one message at a time:
+`TestOverlappingSendKeysDoNotAllowAPlugin` (two chains, plugin approval) and
+`TestOverlappingSendKeysDoNotAnswerAHeldApproval` (three chains, a held Inbox
+approval, then a stray end).
+
+Run on 2026-11-07 on macOS (arm64):
+
+| Removed | Test | Failure | Result |
+|---------|------|---------|--------|
+| The whole fix: `RemoteKeysDoneMsg` clears the flag for every chain, `RemoteKeyMsg` does not mark its own call, no chain count | `TestOverlappingSendKeysDoNotAnswerAnApproval`, 4 runs | "overlapping send-keys allowed the plugin: ran.code is \"0\"" in 4 of 4; the frame shows the dialog gone and the later chains' allow typed into the shell | **caught** |
+| The same | `TestOverlappingSendKeysDoNotAllowAPlugin` | "keys from the second send-keys allowed the plugin (typed \"allow\")" | **caught** |
+| The same | `TestOverlappingSendKeysDoNotAnswerAHeldApproval` | "keys from the third send-keys answered a held approval", the reply signed with the client's `human_nonce` | **caught** |
+
+The fixed build passes the e2e test 4 of 4. The fix has two parts, and each
+one alone holds the two unit tests (run with only the count, and with only the
+mark): the per-message mark covers every key a chain types, and the count
+keeps the messages between those keys (the results of the commands a key
+starts) marked until the last chain ends. Repeat from
+`e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=4 -run '^TestOverlappingSendKeysDoNotAnswerAnApproval$' -v .`.
+
+## Overlapping send-keys
+
+`TestOverlappingSendKeysDoNotAnswerAnApproval` holds a plugin approval dialog
+open on an attached client. Three rounds each start one long send-keys chain
+(400 ctrl+u, then allow and Enter) and eight one-key chains while it runs. The
+plugin must not run and the dialog must stay open. The person then types allow
+and Enter, and the plugin must run. Before the fix the first chain to end
+cleared `ProcessingRemoteKeys` while the long chain still ran, so its allow
+and Enter answered the dialog as the person.
+
+The kept race regression tests in `internal/app` (`remote_keys_overlap_test.go`)
+drive the real `Update` with the chains interleaved one message at a time:
+`TestOverlappingSendKeysDoNotAllowAPlugin` (two chains, plugin approval) and
+`TestOverlappingSendKeysDoNotAnswerAHeldApproval` (three chains, a held Inbox
+approval, then a stray end).
+
+Run on 2026-11-07 on macOS (arm64):
+
+| Removed | Test | Failure | Result |
+|---------|------|---------|--------|
+| The whole fix: `RemoteKeysDoneMsg` clears the flag for every chain, `RemoteKeyMsg` does not mark its own call, no chain count | `TestOverlappingSendKeysDoNotAnswerAnApproval`, 4 runs | "overlapping send-keys allowed the plugin: ran.code is \"0\"" in 4 of 4; the frame shows the dialog gone and the later chains' allow typed into the shell | **caught** |
+| The same | `TestOverlappingSendKeysDoNotAllowAPlugin` | "keys from the second send-keys allowed the plugin (typed \"allow\")" | **caught** |
+| The same | `TestOverlappingSendKeysDoNotAnswerAHeldApproval` | "keys from the third send-keys answered a held approval", the reply signed with the client's `human_nonce` | **caught** |
+
+The fixed build passes the e2e test 4 of 4. The fix has two parts, and each
+one alone holds the two unit tests (run with only the count, and with only the
+mark): the per-message mark covers every key a chain types, and the count
+keeps the messages between those keys (the results of the commands a key
+starts) marked until the last chain ends. Repeat from
+`e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=4 -run '^TestOverlappingSendKeysDoNotAnswerAnApproval$' -v .`.
+
+## Signed calls from send-keys
+
+The client signs a call with its attach nonce (`human_nonce`), and the daemon
+takes a signed call as the person's. Some signed calls never asked whether the
+key that made them was the person's. `inboxNonce` is now the one source of the
+nonce, and it is empty while the client handles a key from send-keys or a
+tape's Press, so no such key makes a signed call.
+
+`TestSendKeysDoNotDismissAnInboxItem`: an agent pane is on `errored`. The
+person opens the Inbox, send-keys presses `d`, and the item must stay in
+`list-attention`. The person's own `d` must then dismiss it.
+
+`TestSignedCallsRefuseKeysThePersonDidNotPress` (internal/app) makes each
+signed call from a key handler: tml-input, tml-place, dismiss-attention (also
+the silent seen dismiss), mark-attention, set-task-stage, add-task,
+agent-transcript, add-reply-history, and start-agent with a card. A key from
+the person must sign it, and a RemoteKeyMsg or a tape's Press must not.
+
+Run on 2026-11-07 on macOS (arm64):
+
+| Removed | Test | Failure | Result |
+|---------|------|---------|--------|
+| The whole fix (the binary of the commit before) | `TestSendKeysDoNotDismissAnInboxItem` | "a d from send-keys dismissed the item as the person"; the frame shows "Dismissed Terminal ... u undoes." | **caught** |
+| The `notThePersonsKey` check in `inboxNonce` | `TestSignedCallsRefuseKeysThePersonDidNotPress` | all 10 cases: "a key from send-keys made signed calls" and the same for the tape | **caught** |
+
+The fixed build passes the e2e test 3 of 3. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=3 -run '^TestSendKeysDoNotDismissAnInboxItem$' -v .`.
+
+## TestPaneCloseEndsItsJobs
+
+The test starts five jobs from the interactive shell of a pane: a plain
+background job, a stopped one, an orphan whose parent exited but which stays
+in the pane's session, a nohup job, and a child that left the session with
+setsid while its parent waits. It then closes the pane with close-window,
+kill-session and kill-server in turn. The first three must end, the nohup and
+setsid jobs must still run (as in tmux), and so must a process the test
+started outside every pane.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The hangup: `killPaneTree` back to `proc.Kill()` alone, as before the fix | "background" and "orphan in the session" "STILL RUNS, want it hung up", on all three paths | **caught** |
+| The session scan (`SessionMembers`), which also stands for the macOS `SessionMembers` that returned nothing before this change | the same six failures: only the shell's own group is hung up | **caught** |
+| Added: SIGKILL to each group after the hangup (kills too much) | "nohup" "ENDED, want it running", on all three paths | **caught** |
+| The SIGCONT after SIGHUP | passes: when the shell dies, the stopped job's group is orphaned, and the kernel sends it SIGHUP and SIGCONT itself | **not caught**; SIGCONT stays for a stopped group that is not orphaned |
+
+The steps are in `pane-close-jobs.txt` under the test's artifact folder. Repeat
+from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPaneCloseEndsItsJobs$' -v .`.
+
+## The keycast skips a modifier pressed on its own
+
+`TestShowKeysSkipsModifierPresses` runs with `--show-keys` and sends what a
+kitty terminal sends when a person holds a modifier: left super on its own
+(CSI 57444;9 u), then super+k (CSI 107;9 u), then x, a lone left ctrl, a lone
+left shift, and x. The keycast must show `Cmd + k` (`Super + k` off macOS) and
+`x ×2`, and never `leftsuper`, `leftctrl`, `leftshift` or the raw `super+k`.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The binary of main (56316191b) | "the keycast does not name Cmd for super+k"; the keycast reads `leftsuper` and `super+k` | **caught** |
+| `CaptureKeyEvent` records modifier presses again | "a modifier press between two x broke the count" | **caught** |
+| `CaptureKeyEvent` does not name Super | "the keycast does not name Cmd for super+k" | **caught** |
+
+The frames are `showkeys-super` and `showkeys-modifiers` under the test's
+artifact folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestShowKeysSkipsModifierPresses$' -v .`.
+
+## TestTMLInputKeepsTypingOverALatePush
+
+The daemon holds each TML push back one second after it builds it
+(`TUIOS_E2E_TML_PUSH_DELAY`), so the push for the first key typed into a field
+lands after the client has the tml-input answers for all the others. The test
+types "draft", reads the screen every 20 ms for three seconds, types "!",
+submits, and checks the agent's --wait prints "draft!".
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The check in `applyTMLSurface` that drops state older than the last answered input (`p.Version < v.acked`) | "ASSERTION: a late push took the typed text back: the field no longer shows \"draft\"". The frame `taken-back` shows the field as "d" | **caught** |
+
+The frames are under the test's artifact folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTMLInputKeepsTypingOverALatePush$' -v .`.
+
+## The global keys act over the agents view
+
+`TestCockpitGlobalKeysOverTheView` opens the agents view on the fleet at 200x50
+and puts the cursor on bench-idle. `ctrl+p` must open the palette over the view
+with the cursor where it was, `j` and `k` typed into the palette must not move
+the list, and `esc` must close the palette alone. A click on the view outside
+the palette must close the palette and select nothing. `?` must open help over
+the view, and `ctrl+b ,` settings. A palette row that goes to workspace 2 must
+close the view, and `ctrl+b i` must open it on bench-idle again. `ctrl+p` in the
+reply editor must open the palette and keep the draft, and over the New
+agent sheet it must open and leave the sheet with its task. In terminal mode
+`ctrl+b ,` must open settings over the view (the view binds no comma, so only
+the prefix table can). `TestKeybindsDoctorNamesAGlobalKeyOverTheView` binds the
+launcher to `ctrl+d` and `j` to the palette, and reads the doctor: `ctrl+d` is
+dead in the view, `j` is not.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The binary of main (3497aaab0) | "ctrl+p did not open the palette over the agents view"; ctrl+p moved the cursor to cache-3 (it was `inbox_up`), and `?` did not open help over the view | **caught** |
+| `handleInboxInput` takes every key again (no global keys first) | "ctrl+p did not open the palette over the agents view" | **caught** |
+| `?` closes the view before it opens help | "? did not open help over the agents view" | **caught** |
+| The view takes the leader in terminal mode | "ctrl+b , in terminal mode did not open settings over the view" | **caught** |
+| A click on the view under a panel goes to the view | "a click on the view under the palette: the view did not come back as it was" | **caught** |
+| A palette row that moves the focus leaves the view open | "a palette row that left for another workspace kept the view over it" | **caught** |
+| `shadowInboxByGlobal` does nothing | "the doctor does not say ctrl+d is dead in the agents view" | **caught** |
+| The palette takes ctrl+p while the reply's @ list is open (`TestCockpitReplyMentions`, which also checks that ctrl+p opens the palette once the list is closed) | "ctrl+p did not move the marker back up" | **caught** |
+
+The frames are `global-keys-*` under the test's artifact folder. Repeat from
+`e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestCockpitGlobalKeysOverTheView|TestKeybindsDoctorNamesAGlobalKeyOverTheView)$' -v .`.
+
+## A key's timer holds send-keys
+
+`TestSendKeysDoNotWaitOnAKeysTimer` sends `ctrl+b i` with send-keys to an
+attached client. The agents view arms a minute tick when it opens. The next
+message of a send-keys chain waited in a `tea.Sequence` for every command the
+key started, and Bubble Tea runs a batch inside a sequence to its last
+command, so the chain waited for the tick and the CLI timed out. The send must
+answer within 5 seconds, the view must be open, and an Escape sent after it
+must close the view. The chain now waits at most `remoteKeyCmdWait` (one
+second) for a key's commands.
+
+Run on 2026-11-07 on macOS (arm64):
+
+| Removed | Test | Failure | Result |
+|---------|------|---------|--------|
+| The bound (`remoteKeyThen`), so the chain waits in `tea.Sequence` as before (main at 56316191b) | `TestSendKeysDoNotWaitOnAKeysTimer` | "send-keys of ctrl+b i failed after 10.045s: timed out waiting for the attached client" | **caught** |
+
+The fixed build passes 3 of 3; `ctrl+b i` answers in about 1.02 s. Repeat from
+`e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=3 -run '^TestSendKeysDoNotWaitOnAKeysTimer$' -v .`.
+
+## Hold, then the rail
+
+`TestHoldThenRailHandsBackTerminalMode` binds the hold key to left Option. In
+terminal mode it holds the key, opens the rail with s, then lets go and
+presses esc, in both orders. The shell must answer after both. The rail saved
+the mode in effect when it opened, which was the hold's borrowed window mode.
+When the release came first, the hold handed terminal mode back, and esc
+then put the saved window mode back over it. The rail now saves the mode
+chosen beneath any borrow (`chosenMode` in `internal/app/mode.go`, which
+replaced `modeBeneathBorrows`).
+
+Run on 2026-11-07 on macOS (arm64):
+
+| Removed | Test | Failure | Result |
+|---------|------|---------|--------|
+| The fix (main at 719534e97) | `TestHoldThenRailHandsBackTerminalMode/release_then_esc` | "command \"echo back-$((3+4))\" never produced \"back-7\"" | **caught** |
+
+The esc-then-release order passes on main and with the fix, as the control.
+The fixed build passes 3 of 3.
+
+## TestCopyModeCounts
+
+The test types counts in copy mode on a line with five x: twelve nines then
+w, which must not freeze the client; 3fx, which must go to the third x; 2tx;
+9fx, which must not move with five matches; g j g, which must be j and not
+gg; 3j at once, which moves three lines; and 3, a pause past the count
+timeout, then j, which moves one.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The cap on the count and the stop when a motion does not move, as before the fix | "a count of twelve digits then w: the copy cursor never left the counts line; the client takes no keys" | **caught** |
+| The count carried into f, F, t and T | "3fx: the copy cursor is on row 10 column 39, want row 10 column 45" (the first x) | **caught** |
+| The pending g dropped by any other key | "g j g: the copy cursor is on row 10 column 31, want row 11 column 31" (it went to the top) | **caught** |
+| The count timeout | "3, a pause, then j: the copy cursor is on row 13 column 31, want row 11 column 31" | **caught** |
+
+The last screen is in `copy-mode-counts.txt` under the test's artifact folder.
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCopyModeCounts$' -v .`.
+
+## TestApprovalHoldOutlastsACommandFocusMove
+
+The person's client is on another pane of the agent's session while the real
+hook holds a PermissionRequest on the agent's pane. `tuios run-command
+NextWindow`, which every pane may run by default, moves the focus to the held
+pane, and the hold must run on. Then the person presses tab, which focuses
+the same pane, and the hold must end.
+
+Run on 2026-11-07 on macOS (arm64):
+
+| Binary | The test fails with | Result |
+|--------|---------------------|--------|
+| origin/main (56316191b), with no `focus_by_command` | "ASSERTION: run-command NextWindow ended the person's hold (hook exited <nil>, printed \"\")" | **caught** |
+
+The steps are in `approval-command-focus.txt` under the test's artifact
+folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestApprovalHoldOutlastsACommandFocusMove$' -v .`.
+
+## The agents view's regions, esc ladder and N
+
+`TestCockpitRegions` opens the agents view at 200x50 with two agents that need
+you, puts the cursor on bench-idle, and walks the regions with `tab`: List,
+Focus, Reply, Side, List, then `shift+tab` to Side and `esc` back to List. Each
+step must name the region at the left of the key bar and draw the accent rule
+over that region's columns. A click in the focus must give it the keys. The
+esc ladder: esc in the reply gives the list the keys and keeps the draft; with
+`f` on, the key bar says `esc clear search` and esc clears it; the next esc
+closes the view; the draft is there when the view opens again. `N` three times
+must visit both agents that need you and wrap. A second client at 120x36, with
+no side column, must step List, Focus, Reply, List.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The old defaults: `tab` opens the reply, no region step | "tab from the list: want region Focus"; the key bar reads Reply | **caught** |
+| A region the frame does not draw takes a step | "tab from the reply at 120 columns, past the side column it does not draw"; the key bar reads Side | **caught** |
+| esc closes the view at once | "esc in the side column: want region List"; the view is gone | **caught** |
+| `N` does nothing | "N did not walk the two agents that need you and wrap" | **caught** |
+
+The frames are `regions-*` under the test's artifact folder. Repeat from
+`e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitRegions$' -v .`.
+
+## The agents view's list width, side column and zoom
+
+`TestCockpitLayout` at 200x50: the list is 56 cells, `>` makes it 60, `<` twice
+52; the pointer on its edge lights a bar and the key bar says "drag to resize";
+a drag to column 71 makes it 70 and leaves the cursor; a new client keeps 70; a
+double click on the edge gives back 56. `w` hides the side column and shows it
+again. `Z` on the focus shows it alone and `esc` gives the view back on the
+focus. A fleet with `[agents] list_width = "30"` draws a 30 cell list.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The width not read from the state file | "a new client after the drag: the list ends at 56, want 70" | **caught** |
+| The drag not followed | "a drag of the edge to column 71: the list ends at 52, want 70" | **caught** |
+| `w` does nothing | "w did not hide the side column" | **caught** |
+| `Z` does nothing | "Z did not show the focus alone" | **caught** |
+
+## The agents view's list grouped by session, machine and project
+
+`TestCockpitGroupBy` at 200x50: `s` opens the picker with `1 state`, `2
+session`, `3 machine`, `4 project`; `2` groups by session, with Needs you on
+top holding api-auth, then api, cache, docs and misc in name order, each
+holding its own agents, no Working heading, the header saying `Group:
+session` and still counting `6 working`, `3 to review`, `2 idle`. A new client
+keeps the grouping. `3` and `4` group by machine and by project (No
+repository), `1` gives the state groups back, and a click on Group in the
+header opens the picker.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The bands never built | "2 did not group the list by session under Needs you" | **caught** |
+| The header counts only the state headings | "2 did not group the list by session under Needs you"; the header shows 1 needs you only | **caught** |
+| The grouping not read from the state file | "a new client did not keep the session grouping" | **caught** |
+
+## TestCockpitHeaderChipsFilter
+
+A click on a header count keeps that state group alone in the agents view's
+list. The test clicks "6 working", then "3 to review" twice, turns on session
+grouping with the working chip on, and presses esc.
+
+Run on 2026-11-07 on macOS (arm64):
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The counts taken before the filter (`ck.groupN`): the header reads the heading rows of the filtered list again | "ASSERTION: a click on 6 working did not keep the Working group alone with every count drawn" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitHeaderChipsFilter$' -v .`.
+
+## TestCockpitMachineChip
+
+With a host configured, every row of the agents view named a machine, this
+machine's too, in place of the session. The test opens the frame A fleet
+(this machine, build and gpu) and checks the remote rows carry the machine's
+chip and the local rows, fan attempts included, carry none.
+
+Run on 2026-11-07 on macOS (arm64):
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The `e.Host == ""` rule in `ckPlace` (the header-chips binary, before the change) | "ASSERTION: the row of api-auth, on this machine, carries a machine chip", and the same for docs-cli, scratch, migrate-cfg and cache-1 | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitMachineChip$' -v .`.
+
+## TestSuperKeysTypeNothingInAPlainPane
+
+A kitty host sends Cmd+K as CSI 107 ; 9 u. The legacy encoder masked Super off
+and sent a bare k, so an unbound Cmd chord typed its letter into a shell. The
+test types `echo A`, super+k, hyper+k, `B` into a plain shell and reads the
+output line, then turns the kitty protocol on in `cat -v` and checks super+k
+still arrives as CSI 107 ; 9 u.
+
+Run on 2026-11-07 on macOS (arm64):
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The `legacyDropsKey` check in `paneKeyBytes` (the main binary at 175501997) | "ASSERTION: super+k or hyper+k typed a k into a plain shell". The screen shows `$ echo AkkB` and `AkkB` | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSuperKeysTypeNothingInAPlainPane$' -v .`.
+
+## Copy mode in the agents view's thread
+
+`TestCockpitThreadCopyMode` starts copy mode with ctrl+b [ over a thread, and
+reads each yank back with `tuios show-buffer`: a wrapped paragraph (one line,
+no indent), a code block (its own indent), a prompt (no card edge) and Y on an
+edit (a diff block). It waits for the selection to be drawn, and checks that
+esc leaves copy mode and the next esc closes the view. In the focus region, y
+starts copy mode too.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| `CockpitCopyText` not called (the pane's yank text kept) | "the paragraph's yank is" | **caught** |
+| The `CockpitCopyOn` hook cut from `handleInboxInput` | "rows of ... -1" (the keys reach the view, / opens its search) | **caught** |
+| The wrap flag left off `ckMD.text`'s lines | "the paragraph's yank is" | **caught** |
+| The `cockpitTouch` cut from `CockpitCopy` | "the selection is not drawn" (a bug of an early build: a key did not redraw the view) | **caught** |
+| `ckGlyphSet` empty | passes | **not caught** |
+| y in the focus region not sent to `CockpitCopyStart` (2026-11-08, after the regions landed) | "y in the focus region did not start copy mode" | **caught** |
+
+The glyph set is not caught: the card edge is drawn from a field of its own
+and is never text, and no row this test yanks starts with a fold or state
+glyph. A yank of a tool line would need it.
+
+## The agents view draws a long thread's newest turns first
+
+`TestCockpitThreadLongScroll` opens a thread of 40 turns, of which the view
+first draws the newest 8. It checks the turn number of the newest prompt,
+pages up to the first prompt (each page at most four turns older), then G,
+g and G again. Run on 2026-11-08 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| `Follow.Older` not called when older turns are drawn | "a page up jumped from question 39 to 29" | **caught** |
+| The growth in `threadBody` (keep stays at 8 turns) | "pages up never reached the first prompt; the oldest shown is question 33" | **caught** |
+| The prompt count before the kept turns | "the prompt of question 40 is labelled "You  14:40 · turn 8", want turn 40" | **caught** |
+
+The first control of the turn label passed in an early version of the test,
+which looked at labels only after every turn was drawn. The test now checks
+the newest prompt's label first.
+
+## TestProjectCardsAreClaimedFromAnotherMachine
+
+Two daemons that link each other, home and build. build owns project cards in
+two sessions under two spellings of one origin URL, and home owns one. A pane
+on home claims build's card, retries the claim, is refused a card another
+pane holds and a session card, loses the link, claims again when it is back,
+and closes, which must let the card go on build.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes. Four controls, each
+this branch with one change:
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| A listing over the link asks its own links too (`hosts` sent on, the `viaLink` guard dropped) | "ASSERTION: the links never came up" (each listing asks the other machine back until the budget runs out) | **caught** |
+| A claim by the pane that holds the card is refused | "ASSERTION: a retried claim by the holder was refused: claim-task failed: on build: held." | **caught** |
+| A closed pane does not release its holds on other machines | "ASSERTION: far t1 is still held after its pane on home closed" | **caught** |
+| The holder is the window param, not the link peer's window | "ASSERTION: build says far t1 is held by \"83ebe36a-...\" on \"\", want window 83ebe36a-... on home's link name" | **caught** |
+
+The steps are in `task-project-hosts.txt` under the test's artifact folder.
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestProjectCardsAreClaimedFromAnotherMachine$' -v .`.
+
+## TestProjectCardsAreClaimedFromAnotherMachine
+
+Two daemons that link each other, home and build. build owns project cards in
+two sessions under two spellings of one origin URL, and home owns one. A pane
+on home claims build's card, retries the claim, is refused a card another
+pane holds and a session card, loses the link, claims again when it is back,
+and closes, which must let the card go on build.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes. Four controls, each
+this branch with one change:
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| A listing over the link asks its own links too (`hosts` sent on, the `viaLink` guard dropped) | "ASSERTION: the links never came up" (each listing asks the other machine back until the budget runs out) | **caught** |
+| A claim by the pane that holds the card is refused | "ASSERTION: a retried claim by the holder was refused: claim-task failed: on build: held." | **caught** |
+| A closed pane does not release its holds on other machines | "ASSERTION: far t1 is still held after its pane on home closed" | **caught** |
+| The holder is the window param, not the link peer's window | "ASSERTION: build says far t1 is held by \"83ebe36a-...\" on \"\", want window 83ebe36a-... on home's link name" | **caught** |
+
+The steps are in `task-project-hosts.txt` under the test's artifact folder.
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestProjectCardsAreClaimedFromAnotherMachine$' -v .`.
+
+## TestTheBoardShowsTheLinkedMachinesProjectCards
+
+home links to build. build owns two project cards, one held by a pane on
+home, and a session card; home owns a project card. The board on home must
+show build's project cards as "on build", never build's session card, and
+`t` and `L` on a far card must change no card on either machine.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes. Two controls:
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The daemon commit alone (d11eaf85a, no board change) | "waiting for the far cards on the board: timed out" | **caught** |
+| `L` on a far card calls set-task-stage on this machine (the `Host` guard in `kanbanSetStage` dropped) | "waiting for the toast for a far move: timed out" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTheBoardShowsTheLinkedMachinesProjectCards$' -v .`.
+
+## TestTaskCaptureFromAnywhere (Project pill)
+
+The sheet opens in a pane whose folder is a clone of acme/api. The first card
+must carry project example.com/acme/api, and the second, with the pill turned
+to "None, this session", none.
+
+Run on 2026-11-08 on macOS (arm64) on the daemon commit alone (d11eaf85a,
+the sheet still has a Session pill): "waiting for the capture sheet from
+terminal mode: timed out". **caught**
+
+## The thread reads a pasted image file
+
+`TestCockpitThreadPastedImageFile` writes four prompts that name a PNG in the
+daemon's paste folder, a text file there with a PNG name, a PNG with a paste
+name in another folder, and a link in the paste folder. Only the first two get
+a card, and only the first shows a picture. `TestFileImageBoundary`
+(internal/session) holds the same rules and the image id rules at the
+function level. Run on 2026-11-08 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| `withFileImages` not called in `verbAgentTranscript` | "no image card for the pasted file" | **caught** |
+| The paste folder check in `fileImagePaths` | "a PNG outside the paste folder got a card" (with the outside file first named header.png the prefix check refused it, so the test passed; it now has a paste name) | **caught** |
+| The magic byte sniff in `openFileImage` | e2e passes: the client's decoder refuses the text bytes too. `TestFileImageBoundary` fails at p2 and c5 ("the read gave <nil>, want ErrNoImage") | **caught by the unit test** |
+
+## TestPullDispatchGivesTheNextCard
+
+A session board in pull mode and two fake agents. Both finish their card at
+the same moment from their own panes, and each must be given a different
+card, skipping the ask-first card and the card for codex. An agent that goes
+to done must finish its card and get the next. After pause a finish gives no
+card, and a usage limit stops all dispatch and puts the agent's card back.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 5 runs in a row. Four
+controls, each a change to `internal/session/task_dispatch.go`:
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The pick made from a state snapshot outside the claim's state change, 200 ms before it, and the card taken with no holder check | "the two agents were not each given one of t5 and t6" (3 runs of 3) | **caught** |
+| `!tk.AskFirst` dropped from the pick | "the two agents were not each given one of t5 and t6" (t3 taken) | **caught** |
+| The `Paused` case dropped from `blocked` | "the daemon never held b's offer for the pause" | **caught** |
+| `usageLimited` never checked on errored | "dispatch did not stop for the usage limit" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPullDispatchGivesTheNextCard$' -v .`.
+
+## TestPullDispatchStopsAfterThreeFailures
+
+Three dispatched cards in a row are let go without a finish. The board must
+stop, and the next finish must give no card while a free card is there.
+
+Run on 2026-11-08 on macOS (arm64). With `noteOutcome` never stopping the
+board: "the board did not stop after three failures". **caught**
+
+## TestTheBoardTurnsDispatchOnAndPausesIt
+
+The board in a session with a fake agent that holds a card. ctrl+t must turn
+the board to pull on the daemon, the agent's finish must give it the next
+card, and ctrl+x must pause and start dispatch again, each read back with
+tuios task dispatch.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes. With the
+`ActionInboxDispatchMode` case dropped from the cockpit's keys: "waiting for
+the board in pull mode: timed out". **caught**
+
+## One writer of the client mode
+
+`TestTapeRecordingKeepsEveryModeChoice` (`mode_record_test.go`) starts a tape
+recording, which puts the client in terminal mode, runs a line in the shell,
+leaves with alt+esc, and stops. The saved tape must hold a `TerminalMode` line
+before the typed line and a `WindowManagementMode` line after it. Played back
+from terminal mode, it must end in window management, where `,` opens the
+settings panel. Both switches assigned `OS.Mode` directly and did not tell the
+recorder. Every write of the mode now goes through `internal/app/mode.go`,
+and `TestOnlyModeGoWritesTheClientMode` in `internal/lint` rejects any other.
+
+Run on 2026-11-08 on macOS (arm64):
+
+| Removed | Test | Failure | Result |
+|---------|------|---------|--------|
+| The change (main at c4e977d25) | `TestTapeRecordingKeepsEveryModeChoice` | "the tape has no TerminalMode line for the start of the recording" | **caught** |
+| A direct `m.Mode =` put back in `os_minimize.go` | `TestOnlyModeGoWritesTheClientMode` | "internal/app/os_minimize.go:130: m.Mode =" | **caught** |
+
+The fixed build passes 3 of 3. The saved tape is under `TUIOS_E2E_FRAMES` as
+`recording.tape`.
+
+## The hold key as a mode lease
+
+The tests are in `hold_lease_mode_test.go`. The hold key is bound to left
+Option. The hold saved the mode it saw when pressed and handed it back on
+release unless the mode had changed while held, so a choice of window
+management while held was lost, and a borrow that ended while held moved the
+mode under it. The hold is now a lease (`internal/app/mode.go`): a choice made
+while held spends it, a lease that ends on terminal mode with no pane chooses
+window management, and the other borrowers cannot move the mode while it is
+open.
+
+- `TestHoldReleaseAfterTheLastPaneClosedStaysInWindowMode`: terminal mode,
+  hold, x closes the only pane, release, then n. n must open a pane.
+- `TestHoldOutlastsADividerDrag`: terminal mode, a divider drag begins, hold,
+  the mouse is let go while held, then alt+n. It must open a pane (n in
+  window mode), not move to the next one (alt+n in terminal mode). The dock
+  shows HOLD in both builds.
+
+Run on 2026-11-08 on macOS (arm64):
+
+| Removed | Test | Failure | Result |
+|---------|------|---------|--------|
+| The change (its parent, "write the client mode in one place") | `TestHoldReleaseAfterTheLastPaneClosedStaysInWindowMode` | "n after the release opens a pane: window count never reached 1 (last 0)" | **caught** |
+| The change (main at c4e977d25) | `TestHoldReleaseAfterTheLastPaneClosedStaysInWindowMode` | the same | **caught** |
+| The change (its parent) | `TestHoldOutlastsADividerDrag` | "n struck while held after the drag ended: window count never reached 3 (last 2)" | **caught** |
+
+The fixed build passes each 3 of 3. `TestHoldThenRailHandsBackTerminalMode`
+passes on both builds.
+
+## Pointer gestures as mode leases
+
+The tests are in `gesture_lease_mode_test.go`. They are guards for a change
+that fixes nothing on its own: the pointer gesture and the ctrl-drag kept a
+flag each (`pointerGestureWasTerminal`, `CtrlDragWasTerminal`) and are now
+leases on window management. Each test begins in terminal mode, ends the
+gesture, and asks the shell to answer.
+
+- `TestDividerDragHandsBackTerminalMode`: a divider drag between two tiles.
+- `TestHoldReleasedDuringADividerDragHandsBackTerminalMode`: hold, a divider
+  drag begins, the key is let go during the drag, the drag drops.
+- `TestCtrlDragHandsBackTerminalMode`: a ctrl-drag swaps the two tiles. The
+  test fails first if the screen did not change.
+
+Run on 2026-11-08 on macOS (arm64):
+
+| Removed | Test | Failure | Result |
+|---------|------|---------|--------|
+| `EndPointerGesture` and `EndCtrlDrag` made to do nothing | all three | "command \"echo back-$((3+4))\" never produced \"back-7\"" | **caught** |
+
+All three pass on the parent commit and on main.
+
+## The rail as a mode lease
+
+`TestRailEscHandsBackWindowMode` (`rail_lease_mode_test.go`) opens the rail
+in window management, browses with j and k, leaves with esc, and checks `,`
+opens the settings panel. It is a guard, and it is **not** a control of the
+rail's lease. The lease saves the mode chosen when the rail opens and hands
+it back when the rail lets go. No keyboard browse in the rail makes a choice
+of mode, so the mode it hands back is always the mode already in effect, and
+a build that hands back nothing passes every test here, as does
+`TestHoldThenRailHandsBackTerminalMode`. Enter on a terminal row, the
+relocating action a test can reach, keeps the mode it began in. This is
+written down so the guard is not read as coverage of the hand-back.
+
+## The scratch pane beneath a hold
+
+`TestScratchShownDuringAHoldHandsBackTerminalMode` (`scratch_lease_mode_test.go`)
+binds the hold key to left Option. In terminal mode it holds the key, shows
+the scratch pane with the leader and g, lets go, runs a line in the scratch
+shell, hides the scratch pane, and asks the pane's shell to answer. The
+scratch pane saved the mode in effect when shown, which was the hold's
+borrowed window management, and hiding it handed that back. It now saves
+`chosenMode`.
+
+Run on 2026-11-08 on macOS (arm64):
+
+| Removed | Test | Failure | Result |
+|---------|------|---------|--------|
+| The fix (main at c4e977d25) | `TestScratchShownDuringAHoldHandsBackTerminalMode` | "command \"echo back-$((3+4))\" never produced \"back-7\"" | **caught** |
+| The fix (its parent, "make the rail a lease on the keyboard") | the same | the same | **caught** |
+
+The fixed build passes 3 of 3. On that Mac `TestScratchTerminalShowsOneShell`
+fails on main and on the branch alike, at its check of the new shell's
+folder.
+
+## Any machine placement
+
+`pool_place_test.go` runs two daemons, home and build, linked over the ssh
+stand-in. home is loaded ten times over (TUIOS_LOAD1), build is idle with a
+checkout of the repository and `[tasks] machine_cap = 2`.
+`TestAnyMachinePlacesTheAgentWhereThereIsRoom` checks that placement picks
+build by its room, leaves build out for an agent it does not have, starts an
+agent there with `start-agent -s any:work`, keeps a card off a machine with no
+link back, sees the pick before it in a burst, and leaves out a machine whose
+daemon stopped. `TestAnyMachineTakesACardAcrossTheLink` links build back to
+home and checks that the card's agent starts on build and holds the card on
+home.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes both, 3 runs of 3. Six
+controls, each one change:
+
+| Control | Test | The test fails with | Result |
+|---------|------|---------------------|--------|
+| The pick is never reserved | `TestAnyMachinePlacesTheAgentWhereThereIsRoom` | "the second placement did not see the first one's pick: host \"build\"" | **caught** |
+| The not-installed gate dropped | `TestAnyMachinePlacesTheAgentWhereThereIsRoom` | "codex was placed on \"build\", where it is not installed" | **caught** |
+| `poolScore` is 0 for every machine | `TestAnyMachinePlacesTheAgentWhereThereIsRoom` | "the pick is not build by its room" | **caught** |
+| The cap gate dropped | `TestAnyMachinePlacesTheAgentWhereThereIsRoom` | "the second placement did not see the first one's pick: host \"build\"" | **caught** |
+| The link-back gate dropped | `TestAnyMachinePlacesTheAgentWhereThereIsRoom` | "a card was placed on a machine that cannot claim it: host \"build\"" | **caught** |
+| start-agent never claims on `task_host` | `TestAnyMachineTakesACardAcrossTheLink` | "the card's agent was not placed on build holding the card" | **caught** |
+
+The reports are `pool-place.txt` and `pool-place-card.txt` in each test's
+artifact folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAnyMachine' -v .`.
+
+## Any machine in the sheets
+
+`TestAnyMachineInTheSheets` runs the pool of the tests above with build linked
+back to home, and a client attached on home at 160x45. The New agent sheet
+must show `Any machine` with build's line and keep this machine picked; with
+`Any machine` picked by hand, Start must start the agent on build. The
+capture sheet's Machine pill must open on `This machine`; turned to `Any
+machine`, ctrl+enter must start the card's agent on build with the card held
+here.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes. Three controls, each
+one change:
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `spawnRank` adds no Any machine row | "waiting for the sheet with Any machine and its pick" | **caught** |
+| The capture sheet never asks place-agent | "waiting for the toast for the card's agent on build" | **caught** |
+| The sheet's Start drops the pick and starts here | "Start with Any machine did not start the agent on build" | **caught** |
+
+The frames are `sheet-default-this-machine-160x45`, `sheet-any-machine-160x45`
+and `capture-any-machine-160x45` in the test's artifact folder. All nine
+controls of this section and the one above were run again on the revised
+branch, and all were caught.
+
+## TestAutoDispatchStartsAnAgentPerCard
+
+Two machines linked both ways, home loaded and build idle. A project board in
+auto mode with a cap of 2 in total and 1 on one machine, turned on by two
+clients at once while a third resumes. With the preset on this machine, the
+default, t1 must start on home and t2 wait. With the preset turned to any
+machine, t2 must start on build. Each agent runs in a worktree on a branch
+from its title, holds its card as dispatched, and has the card as mail from
+tuios. The ask-first card never starts, the fourth waits until a slot frees, a
+pause holds the fifth, and when build goes down its card stays held with no
+second agent.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 runs in a row. Each
+control is one change:
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| A machine at the per-machine cap not left out (`autoExclude`) | "t2 does not wait while the preset is this machine" | **caught** |
+| The preset machine defaults to any, not here | "t2 does not wait while the preset is this machine" | **caught** |
+| start-agent `task_mail` ignored | "home's agent has no mail from tuios with t1 and its done command" | **caught** |
+| `blocked` ignores the pause for auto boards | "the pause did not hold t5" | **caught** |
+| The total cap off by one | passes: the per-machine caps bind first here; caught by TestAutoDispatchSafety | not a control here |
+
+## TestAutoDispatchSafety
+
+One machine, a session board in auto mode. The person has a branch named from
+the first card's title; a preset names an agent no machine has; an agent exits
+as it starts, at a total cap of 1.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 runs in a row.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| new-worktree `new_branch` ignored | "t1's worktree is not on task/fix-the-retry-2" (it is on the person's branch) | **caught** |
+| The board not stopped when no machine has the agent (`notInstalledAnywhere`) | "the board did not stop for the missing agent" | **caught** |
+| A start that did not come up not let go (`releaseHeld` cut) | "three failed starts did not stop the board" (the cards stay held by panes with no agent) | **caught** |
+| The total cap off by one | "4 cards were tried, want 3 before the stop" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAutoDispatch' -v .`.
+
+## TestTheBoardTurnsOnAuto
+
+The board of a repository's cards with no agent. ctrl+t twice must set the
+daemon's board to auto with Claude Code, start an agent for the oldest card,
+hold the next at the cap of 1, and show Dispatch Auto with the counts.
+
+Run on 2026-11-08 on macOS (arm64). With ctrl+t turning pull back to manual,
+as before auto: "waiting for the board in auto mode" timed out. **caught**
+
+## TestCardLifecycleVerifiesTheAgentsWork, TestCardLifecycleCountsOnAPullBoard, TestCardLifecycleVerifiesOnTheCardsMachine
+
+A fake agent pane in a git repository is done with its card from inside its
+pane; the board's verify command fails, passes, hangs, floods, is cut short by
+a hand move, finds its worktree gone and spans a restart. On a pull board the
+failure count follows the verify. A pane on a second machine is done with a
+card the first owns, and the first verifies it there.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes all three.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| A move out of verify does not end the run (`verifies.stop` in afterTaskEvent cut) | "the verify of t5 kept running after the card was moved by hand" | **caught** |
+| A pane may set the verify command (the pane refusal cut) | "a pane set the board's verify command" | **caught** |
+| The command not in a process group of its own (`OwnGroup` cut) | "the hang's child ... still runs after the timeout ended its verify" | **caught** |
+| No resume after a restart (`resumeVerifies` after the load cut) | "t7 did not reach review after a restart mid-verify" | **caught** |
+| A verify outcome not counted (`TaskActionVerified` left out of noteDispatchedOutcome) | "the board counts 0 failures after a dispatched card's verify failed, want 1" | **caught** |
+| A far card verified here (`farVerify` replaced by a local run) | "t1 after the failed far verify is ... Note:the worktree is gone" | **caught** |
+| The tail not cut to 2 KiB (`cleanTail` cut skipped) | "t4 after the flood has ... a 16383 byte tail" | **caught** |
+| An errored agent's line not kept (the note in putBackDispatched cut; since S4 it is blockErrored) | "t1 after its agent errored has note \"exit 1: no ok file\"" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCardLifecycle' -v .`.
+
+## TestTheBoardShowsTheCardLifecycle
+
+Three cards an agent was done with (failed, passed, verifying) on the board;
+v on the card in review opens its Changes, and M commits and pushes it.
+
+Run on 2026-11-08 on macOS (arm64). With `ckLifeLine` returning nothing, the
+wait for "Attempt 1 failed" times out. **caught**
+
+## The ovnfs plugin
+
+`TestPluginOvnfs` runs `plugins/ovnfs` against a real ovnfs (v0.2.3) in a
+daemon of the test's own, when `TUIOS_E2E_OVNFS` names the binary. Without it
+only the part with no ovnfs on PATH runs: CI has no NFS mount on macOS and no
+FUSE on Linux.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| No `worktree-removed` event (`worktreeRemoved` publishes nothing) | "no message for the removed checkout", then "the checkout of the removed worktree stays" | **caught** |
+| The hook removes the checkout with no snapshot first | "no snapshot keeps the removed checkout's change" | **caught** |
+| The `pane.closed` hook does nothing | "no cell after the pane closed" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_OVNFS=/path/to/ovnfs go test -count=1 -run '^TestPluginOvnfs$' -v .`.
+
+## TestCockpitThreadToolRowsOpen
+
+A working turn's tool rows in the agents view: a long Bash call with output,
+a long one with none, a "true", and two Reads, under 30 short turns. A click
+opens a row on its whole command and the head of its output, the "true" row
+has no fold mark, and a ruler with a prompt on most rows draws no marks.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `head.hit = hit` cut from `ckToolCard` | "a click did not open the tool row" | **caught** |
+| `more` forced true in `ckToolCard` | "the true row has a fold mark" | **caught** |
+| The saturation return cut from `drawThreadRuler` | "the ruler draws prompt marks (16)" | **caught** |
+
+## TestSaveGoesToTheConfigFileItLoaded
+
+Issue #1691. The config.toml is in a search directory (`XDG_CONFIG_DIRS`, the
+place macOS puts `~/.config`) and the config home has none. A `set-config`
+must change the loaded file and make no second config.toml in the config
+home, which would hide the first from the next start.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (6db1de3ed): `RenderUserConfig` saves to `xdg.ConfigFile` | "set-config did not write the config file tuios loaded" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSaveGoesToTheConfigFileItLoaded$' -v .`.
+
+## TestMailAndAskFromAPaneByItsOwnName
+
+Issue #1624, after #1693. A pane in session `lead` sends to and asks a pane in
+session `team` and names itself with `--from NAME` or a short id. The daemon
+looks the name up in the recipient's session and then in the caller's own
+session, which it knows from the caller's pane. A name of a third session is
+refused, and the error is about `from`, not the recipient.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (6db1de3ed) | "a pane could not mail another session by its own name" (`no window found matching "boss"`, with the recipient's windows listed) | **caught** |
+| `senderNotFound` replaced by `mapResolveErr` | "the refusal of an unknown sender does not say it is about the sender" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestMailAndAskFromAPaneByItsOwnName$' -v .`.
+
+## TestHoldKeyIsIgnoredInWindowMode
+
+Issue 1744. The hold key is bound to left Option. In window mode (entered
+with alt+esc) the person presses the hold key, then alt+n. The hold armed
+anyway, showed HOLD, and took Alt off the chord, so n opened a third pane.
+The hold now arms only when the mode chosen beneath the leases is not window
+management, so a hold during a divider drag over terminal mode still arms
+(`TestHoldOutlastsADividerDrag`).
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| main at 6db1de3ed | "the hold key borrowed window mode while already in it" (dock shows HOLD and 1:3) | **caught** |
+
+## TestRailClickRestoresAMinimizedAgent
+
+Issue 1730. An agent pane minimized with `set-window --minimize`, then a
+click on its row in the rail's agents section. The click only focused the
+pane, which stayed minimized. A restore of a pane minimized through the
+daemon also grew it to 0x0, because the client had no box saved for it, so
+the test asks for a size as well. Both panes are made with no client
+attached, where the daemon gives them one box, so the test also asks that
+the restored pane does not land on the other pane's corner.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| main at 6db1de3ed | "the click restored and focused the agent pane: AGENTONE never matched" (focused, still minimized) | **caught** |
+| The zero-box placement cut from `RestoreWindow` | the same (restored, 0x0) | **caught** |
+| The pane keeps the box it has instead of a new pane's box | "the restored pane sits on the other pane's corner (51,8)" | **caught** |
+
+## TestFocusRestoresAMinimizedPane
+
+Issue 1731. A pane minimized with m in window mode, then selected in the
+pane navigator (search, Enter), and another selected with
+`tuios focus-window`. Both focused the pane and left it minimized. With no
+client attached, `focus-window` must still mark the pane restored. The
+client's own restore after `focus-window` lands in a push older than the
+daemon's focus change, so the daemon restores the pane on its side, as
+`set-window --restore` does.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| main at 6db1de3ed | all three subtests: "is not restored, focused and sized" (focused, still minimized) | **caught** |
+| The daemon leaves the restore to the client when one is attached | `focus-window` subtest: "PLAINPANE is not restored, focused and sized" | **caught** |
+
+## TestUnknownKeybindTableIsNamed
+
+Issue #1734. config.toml binds `ctrl+v` under `[keybindings.terminal]`, a
+table tuios does not have (the table is `terminal_mode`). The log viewer and
+`tuios config apply` must name the table and the table that was meant.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (6db1de3ed): the decoder drops the table without a word | "the client does not say that it ignores [keybindings.terminal]" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestUnknownKeybindTableIsNamed$' -v .`.
+
+## TestConfirmCloseAsksForABusyPane
+
+Issue 1669. `appearance.confirm_close` is new: never (the default, today's
+behaviour), busy and always. With busy, x on a pane that runs `sleep 600`
+must ask in the one-pane close dialog, esc must keep the pane, the Close
+pane row must close it, and x on a pane at its prompt must close it at once.
+A click on the pane's close control in the title bar must ask the same way.
+For one pane the dialog says what runs in it ("is running sleep").
+`TestConfirmCloseAlwaysAsks` covers always, and `TestCloseDoesNotAskByDefault`
+holds the default to the old behaviour.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| main at 6db1de3ed | "x on a busy pane did not ask"; always: "x on a pane at its prompt did not ask" | **caught** |
+| The close control closes at once (the check cut from the click in `mouse_click.go`) | "the close control on a busy pane did not ask" | **caught** |
+| `CloseNeedsConfirm` reads only `HasForegroundProcess` (the daemon's `ForegroundCmd` cut) | passes: the client's own PTY check already sees `sleep` here | not caught |
+
+The `ForegroundCmd` half is the fallback `paneBusyReason` uses as well, for a
+pane whose PTY this client cannot read. No test here reaches it.
+
+## TestTaskDispatchSurvivesALiveUpgrade
+
+State machine plan S1 and S6. A pull board with a verify command, quiet hours
+and a pause, and a card in verify, go through `tuios daemon upgrade`. The
+settings must read the same after it, the verify must run again and land,
+the old image's run must not finish beside it or stay as a zombie, and a
+change made after the upgrade must be what a cold restart reads.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (364cd8002) | "after the live upgrade the dispatch settings read board <nil>, paused false, quiet \"\"", "t1 did not reach review after a live upgrade mid-verify" | **caught** |
+| The dispatch store read on a cold start only (`if !adopted` around `dispatch.load`) | the same two | **caught** |
+| No resume on the adopt path (`if !adopted` around `resumeVerifies`) | "t1 did not reach review after a live upgrade mid-verify" | **caught** |
+| The verifies not held before the exec (`verifies.hold` in prepare cut) | "the verify command ran to its end 2 times across the upgrade, want 1", "the daemon has a child left from the old image's verify: ... <defunct>" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskDispatchSurvivesALiveUpgrade$' -v .`.
+
+## TestATurnEndKeepsTheCard
+
+State machine plan S2. An agent on a pull board holds a dispatched card, and
+one on an auto board holds a card the person gave it by hand. Each ends its
+turn with a question through the Claude Code `Stop` hook. Both cards must stay
+in doing with their holders, and the pull agent must get no next card. Then
+the pull agent's own `tuios task done` hands its card in and gets the next.
+`TestPullDispatchGivesTheNextCard` now finishes with `task done` from the pane
+after a done state, where it used to expect the done state to finish.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (364cd8002), where a done state finishes the card | "after a turn end with a question, t2 is review held by \"\", want doing held by ..." | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestATurnEndKeepsTheCard$' -v .`.
+
+## TestF3ReachesAKittyKeyboardPane
+
+Issue #1615. A pane turns on the kitty keyboard protocol (`CSI > 1 u`), as
+fish 4 and Codex do, and prints each byte it reads. F3 from the host, as
+`ESC O R` and as `CSI 13 ~`, must reach it as `CSI 13 ~`. tuios sent
+`CSI R`, the cursor position report, which fish reads as no key.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (6db1de3ed): `kittyKeyForm` maps F3 to `CSI 1 R` | `F3 sent as "\x1bOR" reached the pane as "B1b B5b B52"` | **caught** |
+
+The conformance rows for F3 in `vt` `TestEncodeKeyCSIu` fail on main the same
+way.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestF3ReachesAKittyKeyboardPane$' -v .`.
+
+## TestFocusOnlyHidesTheOtherPanes
+
+Issue 1723. `minimize_prefix_focus_only` is new, on `ctrl+b m f`. Four
+panes, FOUR minimized by hand, TWO focused. The first press must minimize
+ONE and THREE and keep TWO focused. The second press must restore ONE and
+THREE, leave FOUR minimized, and keep TWO focused.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| main at 6db1de3ed | "ctrl+b m f hid the other panes and kept TWO focused" | **caught** |
+| The focus return cut from `restoreFocusOnly` | "the second press brought back what it hid, FOUR stays minimized, TWO keeps the focus" | **caught** |
+
+## TestPullDispatchOffersAgainWhenTheSwitchesLift
+
+State machine plan S5. On a pull board an agent at rest with no card must be
+offered one when the board is set to pull; a finish held by a pause must get
+its next card on resume; a finish held by quiet hours must get it when the
+quiet hours end (a span that ends at the next minute). A card added must be
+offered to an agent at rest, and two agents that each let a card go must
+each be offered the other's.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (364cd8002) | "agent b, at rest with no card, was not offered t2 when the board was set to pull" | **caught** |
+| No offer after a settings change (`go d.offerPull()` in set-task-dispatch cut) | the same | **caught** |
+| No timer at the quiet end (`armPullQuiet` returns at once) | "agent b's offer held by the quiet hours ... was not made when they ended" | **caught** |
+| No offer when a card comes free (the added/released/staged/unblocked branch in afterTaskEvent off) | "agent b, at rest with no card, was not offered t6 when it was added" | **caught** |
+| A pane offered the card it let go (`releasedBy` check off in pullNext) | "t5 is held by <a> and t6 by <b>; want each agent offered the card the other let go" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPullDispatchOffersAgainWhenTheSwitchesLift$' -v .`.
+
+## TestEnterLeavesCopyMode
+
+Issue 1637. `copy_mode_exit` is a new `[keybindings.copy_mode]` action, on
+enter by default. Enter must leave copy mode from navigation, and the shell
+must answer after it. From a `V` selection Enter must write the selected
+line to the clipboard (OSC 52), then leave. The dock legend must name the
+exit key. In the `?` search prompt Enter must still run the search and stay
+in copy mode.
+`TestCopyModeExitUnboundKeepsEnter` holds `copy_mode_exit = []` to the old
+behaviour, where Enter does nothing.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| main at 6db1de3ed | "Enter in normal navigation did not leave copy mode" | **caught** |
+| The search and f/t checks cut from the exit in `runCopyModeKey` | "Enter in the search prompt did not run the search" | **caught** |
+| The copy cut from the exit in a selection | "the gesture never produced the clipboard writes [\"back-37\"]; it wrote []" | **caught** |
+| The legend keeps "q/esc" alone | "the copy mode legend does not name the exit key" | **caught** |
+
+## TestRailToggleIsGlobal
+
+Issue 589. Two sessions, alpha and beta, both visited with the rail shown.
+`Ctrl+B b` on alpha hides the rail; on beta it must be hidden too. Shown
+again on beta, it must be shown on alpha. `TestRailTogglePerSession` holds
+`appearance.sidebar.per_session = true` to the old behaviour, where beta
+keeps its own rail.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| main at 6db1de3ed | "beta after the rail was hidden on alpha: the rail is not hidden" | **caught** |
+| The daemon applies the op to the sender's session only (`applySidebarEverywhere` cut) | the same | **caught** |
+
+## TestConfigApplyReloadsHooks
+
+Issue 1622. A daemon with no hooks. A file edit adds an after-new-window
+hook: it must not run yet. `tuios config apply` must load it, name it in its
+output and in `tuios list-hooks`, and a new window must run it. A file edit
+that removes the hook must apply with no `config apply`.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| main at 6db1de3ed | "config apply does not say the hook changed", "list-hooks does not show the hook after config apply" | **caught** |
+| The file-change check cut from `reloadHooks` (a file change arms any hook) | "a file change armed a new hook with no config apply" | **caught** |
+
+## TestTaskCaptureLateAnswerKeepsTheNextSheet
+
+State machine plan N3. The capture sheet files a card with ctrl+enter, and a
+fake claude waits eight seconds before it is ready, so the start-agent answer
+comes late. The sheet is opened again before that answer: it must be a new,
+empty sheet, enter on it must add no card and say to write the task, the next
+key must clear that notice, and the late answer must leave the sheet open with
+the text typed in it. The cards are read back from the daemon.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (95b2da88d), where the reopened sheet is the filed draft and the answer closes whatever sheet is up | "the second sheet offers the filed draft again", "the first card's answer closed the sheet the person types in", "home holds the cards [\"t1 First task\" \"t2 First task\"]" | **caught** |
+| The branch without the notice clearing in TaskCaptureKey | "the sheet still says \"Write the task first.\" after the task was typed" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskCaptureLateAnswerKeepsTheNextSheet$' -v .`.
+
+## TestALinkCopyRevokedBeforeItsVerifyStaysFailed
+
+State machine plan M16. A linked machine's copy on build is held between its
+last byte and its verify (`TUIOS_TEST_TRANSFER_HOLD_MS`, a test hold that does
+not look at the attempt's context), and build's link policy takes `files`
+away during the hold. The copy must end failed as forbidden, the file must
+not be put in place, and a new copy to the same place (with `files` given
+back) must start and end done.
+
+Main has no test hold, so the main control is main with only the hold added.
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (86c2a51f1) with only the test hold | "a copy revoked before its verify is done (forbidden), want failed", "the copy was put in place after its files capability was taken away" | **caught** |
+| `transferJob.to` writes a final state over (its guard off) | "a copy revoked before its verify is verifying (forbidden)", "a new copy to the revoked copy's destination was refused: busy: another copy writes this path now" | **caught** |
+| No context check before the commit | "the copy was put in place after its files capability was taken away" | **caught** |
+
+The order of the run loop's switch (a revoke read before a nil error) is not
+caught on its own: the context check before the commit already turns the
+attempt's end into an error. It stays as the second guard.
+`TestOnlyToWritesATransferState` in internal/lint holds the one writer, and
+`TestTransferStateLintCatchesADirectWrite` checks the lint on injected writes.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestALinkCopyRevokedBeforeItsVerifyStaysFailed$' -v .`.
+
+## TestReadyToMergeAnswerStaysWithItsCard
+
+State machine plan N7. Two cards in review, each with its work in its own
+repository. The first repository has a pre-commit hook that sleeps six
+seconds. M, c on the first card, esc while the commit runs, then M on the
+second card. When the commit lands, the second card's Ready to merge must
+still be open, the toast must name the first card, and the second repository
+must have no new commit.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes, and so does
+`TestTheBoardShowsTheCardLifecycle`, whose toasts now name the card.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (86c2a51f1), where the answer acts on whatever Ready to merge is open | "the toast does not name the card the commit was for", "t1's answer closed Ready to merge on t2" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestReadyToMergeAnswerStaysWithItsCard$' -v .`.
+
+## TestAutoDispatchFailedStartsLeaveNothingBehind
+
+State machine plan S4. On an auto board an agent errors while it holds its
+card: the card must stay with it, blocked with its last line, one attempt
+more, and no second agent may start for it. Once its pane closes, the card
+goes back to todo and auto starts it again. A start whose agent never comes
+up (a stand-in codex that sleeps, a 3 s ready timeout) must leave no session,
+worktree or agent process. The errored agent counts one failure, so the
+board is not stopped at the end. `TestPullDispatchGivesTheNextCard` and
+`TestCardLifecycleCountsOnAPullBoard` now expect the errored card blocked and
+held, and back in todo once let go.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (95b2da88d) | "a second agent started for t1 beside the first, in api-task-fix-the-retry-2", "t1 after its agent errored is ... want held by the first agent" | **caught** |
+| No cleanup of a failed start (the remove-worktree defer in autoStart returns at once) | "the session auto made for t2 is still there", "the worktree ... is still there", "the agent auto started for t2 still runs" | **caught** |
+| The release keeps the errored block (`blockedOnErrored` branch in `release` off) | "t1 was not started again after its errored agent's pane closed" | **caught** |
+| The errored block counts a failure (the `taskBlockErrored` return in noteDispatchedOutcome off) | "the board stopped, so one errored agent counted more than one failure" | **caught** |
+
+Not covered by the e2e: the block lifting when the errored agent reports
+working again (unblockErrored).
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAutoDispatchFailedStartsLeaveNothingBehind$' -v .`.
+
+## Task holds across a live upgrade
+
+State machine plan S3, PR 1 (notes/sm2/design-S3.md, H1 to H3).
+`TestAutoCardsKeepTheirHoldsAcrossALiveUpgrade`: an auto board with a cap of
+one runs an agent on t1 in its worktree session; after `tuios daemon upgrade`
+a new card must start no second agent, and the agent's pane closing must let
+t1 go and start t2. `TestAFarCardIsLetGoAfterALiveUpgrade`: home's auto board
+starts t1's agent on build; build is upgraded live; closing the pane on build
+must let t1 go on home.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes both.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (00e7a586a) | "2 auto worktree sessions after the upgrade, want 1", "t1 was not let go when its agent's pane closed after the upgrade"; "t1 on home was not let go when its pane on build closed after build's upgrade" | **caught** |
+| No rebuild of the cross-session holds (the remoteHolds note in rebuildTaskHolds cut) | "t1 was not let go when its agent's pane closed after the upgrade" | **caught** |
+| No rebuild of auto's runs (the noteRun call cut) | "2 auto worktree sessions after the upgrade, want 1" | **caught** |
+| The far holds not read from the manifest | "t1 on home was not let go when its pane on build closed after build's upgrade" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestAutoCardsKeepTheirHoldsAcrossALiveUpgrade|TestAFarCardIsLetGoAfterALiveUpgrade)$' -v .`.
+
+## TestCockpitCopyModeEndsWithItsAgent
+
+State machine plan N2. Two agents with threads. Copy mode starts over the
+first one's thread, then a click selects the second. ctrl+b [ there must start
+copy mode over the second thread (a search finds its words), and back on the
+first agent copy mode must be off (no copy mode legend in the dock).
+
+Run on 2026-11-08 on macOS (arm64). The branch passes, and so does
+`TestCockpitThreadCopyMode`.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (90d8a0400), where the copy mode pointer outlives its agent | "ctrl+b [ on B did not start copy mode after copy mode on A", "back on A, copy mode is on again" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitCopyModeEndsWithItsAgent$' -v .`.
+
+## TestTheBoardShowsTheCardLifecycle (History names the pane)
+
+The card's History must name the pane that finished the card, "agent", and
+not show its window id.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (90d8a0400), where History prints the recorded window id | "the history does not name the pane agent that finished t1" | **caught** |
+
+## TestLeaderTwiceClosesTheSubMenu
+
+State machine plan M2. ctrl+b w opens the workspace menu, and the leader again
+sends the leader to the pane. The key after that must be the pane's in
+terminal mode (2 2 7 reach the shell, the client stays on workspace 1) and a
+window key in window management mode (n opens a pane).
+
+Run on 2026-11-08 on macOS (arm64). The branch passes, and so do the 46 e2e
+tests whose names carry Leader, Prefix, Menu or Lock.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (90d8a0400), where the leader twice clears the leader flag alone | "the keys after the leader twice did not reach the shell", "the client left workspace 1" (the dock reads 2:0) | **caught** |
+| The branch with handler.go as on main (window management mode path) | "in window management mode, n after the leader twice did not open a pane" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestLeaderTwiceClosesTheSubMenu$' -v .`.
+
+## One transition function for task cards
+
+State machine plan S3, PR 2 (notes/sm2/design-S3.md). Every write of a task
+card's lifecycle fields goes through `Session.moveCard` in
+`internal/session/task_move.go`. Under `TUIOS_TEST_CARD_CHECK`, which the e2e
+harness sets for every daemon, each move checks the card's rules and logs
+`Task invariant broken`; `killDaemon`'s cleanup fails the test whose daemon
+logged one. A dispatched card's outcome now counts in the state change that
+ends it, not in a goroutine after the event.
+
+`TestAMoveToVerifyLetsTheHolderGo` (the lead's Q1): the person moves a held
+card to verify on a board with a verify command; the card must have no holder
+at once, and reach review with no holder.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes it and the 29 e2e tests
+that touch task cards, with the checks on.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (4991cfbe3) | `TestAMoveToVerifyLetsTheHolderGo`: "t1 after a move to verify is verify held by ...", "t1 in review is held by ..." | **caught** |
+| A move to verify keeps the holder (`letGo` in moveStage cut) | the same, and "the daemon broke a task card rule: ... the card is still held after a move that lets it go" | **caught** |
+| Finish keeps the holder (`letGo` in moveFinish cut) | `TestPullDispatchGivesTheNextCard`: "the daemon broke a task card rule: ... a done card is held or blocked" (caught only by the check; the test's own assertions pass) | **caught** |
+| The outcome not counted (the sink call in moveCard cut) | `TestPullDispatchStopsAfterThreeFailures`: "the board did not stop after three failures"; `TestCardLifecycleCountsOnAPullBoard`: "the board counts 0 failures" | **caught** |
+
+The order of two outcomes on one board (design-S3 H4) has no test: before,
+it depended on goroutine scheduling; now each counts in its own state change.
+`TestTaskMoveLintCatchesADirectWrite` checks the lint on injected writes.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAMoveToVerifyLetsTheHolderGo$' -v .`.
+
+## TestCockpitMenuClosesBeforeAClickActs and TestReadyToMergeClosesOnAnotherRow
+
+State machine plan N1. The agents view's one-key menus (group menu, Ready to
+merge, snooze, bulk sheet, confirm, search line) take the next key, and a click
+that is not on them closes them and does nothing else. The first test opens
+the group menu and clicks "+ New agent": the menu must close and no sheet
+open. The second opens Ready to merge on t1 and clicks t2's row: Ready to merge
+must close, the cursor must stay on t1, and c must commit nothing.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (4991cfbe3), where each reader picks the top layer by its own chain and a click ignores the menus | "the group menu is still open after a click outside it"; "Ready to merge is still open after a click on another row", "the click that closed Ready to merge also moved the cursor off t1", "c after the click committed t1's work (2 commits in its repository)" | **caught** |
+| `TestCockpitLayersHaveOneDecider` on main | lists every per-layer predicate the key router, the key bar and the click handler call | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestCockpitMenuClosesBeforeAClickActs|TestReadyToMergeClosesOnAnotherRow)$' -v .`.
+
+## TestStreamPaneTypesABurstOfInputInOrder, TestStreamPaneLeaseBehindBlockedInput
+
+A stream-pane client that sends one `I` frame per key sends a burst of small
+frames. The daemon queued at most 4 and refused the rest as busy, also into
+a pane that reads at once, so keys were lost (found by the guios key owner
+work, notes/gk.md). `TestStreamPaneTypesABurstOfInputInOrder` sends 600 small
+frames in one write into `cat` in raw mode, which writes to a file; every byte
+must arrive in order with no refusal. `TestStreamPaneLeaseBehindBlockedInput`
+now also checks that a busy refusal gives `accepted`, the offset to send
+again from, and that a small frame after a refused one is refused too.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes both.
+`TestStreamPaneClientFrameMemory` reads /proc and fails on macOS on main too.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (8d1f4899d) | "118 of the burst's frames were refused, into a pane that reads its input", "the program read 2410 bytes, want the 3000 bytes" | **caught** |
+| A frame cap of 4 again (`paneInputFrames = 4`) | "389 of the burst's frames were refused", "the program read 1055 bytes" | **caught** |
+| No refusing run (a later frame that fits is taken after a refusal) | "a small frame after a refused one was taken, ahead of the frames refused before it" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestStreamPaneTypesABurstOfInputInOrder|TestStreamPaneLeaseBehindBlockedInput)$' -v .`.
+
+## TestEnterLeavesCopyMode
+
+Issue 1637. `copy_mode_exit` is a new `[keybindings.copy_mode]` action, on
+enter by default. Enter must leave copy mode from navigation, and the shell
+must answer after it. From a `V` selection Enter must write the selected
+line to the clipboard (OSC 52), then leave. The dock legend must name the
+exit key. In the `?` search prompt Enter must still run the search and stay
+in copy mode.
+`TestCopyModeExitUnboundKeepsEnter` holds `copy_mode_exit = []` to the old
+behaviour, where Enter does nothing.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| main at 6db1de3ed | "Enter in normal navigation did not leave copy mode" | **caught** |
+| The search and f/t checks cut from the exit in `runCopyModeKey` | "Enter in the search prompt did not run the search" | **caught** |
+| The copy cut from the exit in a selection | "the gesture never produced the clipboard writes [\"back-37\"]; it wrote []" | **caught** |
+| The legend keeps "q/esc" alone | "the copy mode legend does not name the exit key" | **caught** |
+
+## TestRailToggleIsGlobal
+
+Issue 589. Two sessions, alpha and beta, both visited with the rail shown.
+`Ctrl+B b` on alpha hides the rail; on beta it must be hidden too. Shown
+again on beta, it must be shown on alpha. `TestRailTogglePerSession` holds
+`appearance.sidebar.per_session = true` to the old behaviour, where beta
+keeps its own rail.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| main at 6db1de3ed | "beta after the rail was hidden on alpha: the rail is not hidden" | **caught** |
+| The daemon applies the op to the sender's session only (`applySidebarEverywhere` cut) | the same | **caught** |
+
+## TestConfigApplyReloadsHooks
+
+Issue 1622. A daemon with no hooks. A file edit adds an after-new-window
+hook: it must not run yet. `tuios config apply` must load it, name it in its
+output and in `tuios list-hooks`, and a new window must run it. A file edit
+that removes the hook must apply with no `config apply`.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| main at 6db1de3ed | "config apply does not say the hook changed", "list-hooks does not show the hook after config apply" | **caught** |
+| The file-change check cut from `reloadHooks` (a file change arms any hook) | "a file change armed a new hook with no config apply" | **caught** |
+
+## TestTaskCaptureLateAnswerKeepsTheNextSheet
+
+State machine plan N3. The capture sheet files a card with ctrl+enter, and a
+fake claude waits eight seconds before it is ready, so the start-agent answer
+comes late. The sheet is opened again before that answer: it must be a new,
+empty sheet, enter on it must add no card and say to write the task, the next
+key must clear that notice, and the late answer must leave the sheet open with
+the text typed in it. The cards are read back from the daemon.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (95b2da88d), where the reopened sheet is the filed draft and the answer closes whatever sheet is up | "the second sheet offers the filed draft again", "the first card's answer closed the sheet the person types in", "home holds the cards [\"t1 First task\" \"t2 First task\"]" | **caught** |
+| The branch without the notice clearing in TaskCaptureKey | "the sheet still says \"Write the task first.\" after the task was typed" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskCaptureLateAnswerKeepsTheNextSheet$' -v .`.
+
+## TestALinkCopyRevokedBeforeItsVerifyStaysFailed
+
+State machine plan M16. A linked machine's copy on build is held between its
+last byte and its verify (`TUIOS_TEST_TRANSFER_HOLD_MS`, a test hold that does
+not look at the attempt's context), and build's link policy takes `files`
+away during the hold. The copy must end failed as forbidden, the file must
+not be put in place, and a new copy to the same place (with `files` given
+back) must start and end done.
+
+Main has no test hold, so the main control is main with only the hold added.
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (86c2a51f1) with only the test hold | "a copy revoked before its verify is done (forbidden), want failed", "the copy was put in place after its files capability was taken away" | **caught** |
+| `transferJob.to` writes a final state over (its guard off) | "a copy revoked before its verify is verifying (forbidden)", "a new copy to the revoked copy's destination was refused: busy: another copy writes this path now" | **caught** |
+| No context check before the commit | "the copy was put in place after its files capability was taken away" | **caught** |
+
+The order of the run loop's switch (a revoke read before a nil error) is not
+caught on its own: the context check before the commit already turns the
+attempt's end into an error. It stays as the second guard.
+`TestOnlyToWritesATransferState` in internal/lint holds the one writer, and
+`TestTransferStateLintCatchesADirectWrite` checks the lint on injected writes.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestALinkCopyRevokedBeforeItsVerifyStaysFailed$' -v .`.
+
+## TestReadyToMergeAnswerStaysWithItsCard
+
+State machine plan N7. Two cards in review, each with its work in its own
+repository. The first repository has a pre-commit hook that sleeps six
+seconds. M, c on the first card, esc while the commit runs, then M on the
+second card. When the commit lands, the second card's Ready to merge must
+still be open, the toast must name the first card, and the second repository
+must have no new commit.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes, and so does
+`TestTheBoardShowsTheCardLifecycle`, whose toasts now name the card.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (86c2a51f1), where the answer acts on whatever Ready to merge is open | "the toast does not name the card the commit was for", "t1's answer closed Ready to merge on t2" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestReadyToMergeAnswerStaysWithItsCard$' -v .`.
+
+## TestAutoDispatchFailedStartsLeaveNothingBehind
+
+State machine plan S4. On an auto board an agent errors while it holds its
+card: the card must stay with it, blocked with its last line, one attempt
+more, and no second agent may start for it. Once its pane closes, the card
+goes back to todo and auto starts it again. A start whose agent never comes
+up (a stand-in codex that sleeps, a 3 s ready timeout) must leave no session,
+worktree or agent process. The errored agent counts one failure, so the
+board is not stopped at the end. `TestPullDispatchGivesTheNextCard` and
+`TestCardLifecycleCountsOnAPullBoard` now expect the errored card blocked and
+held, and back in todo once let go.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (95b2da88d) | "a second agent started for t1 beside the first, in api-task-fix-the-retry-2", "t1 after its agent errored is ... want held by the first agent" | **caught** |
+| No cleanup of a failed start (the remove-worktree defer in autoStart returns at once) | "the session auto made for t2 is still there", "the worktree ... is still there", "the agent auto started for t2 still runs" | **caught** |
+| The release keeps the errored block (`blockedOnErrored` branch in `release` off) | "t1 was not started again after its errored agent's pane closed" | **caught** |
+| The errored block counts a failure (the `taskBlockErrored` return in noteDispatchedOutcome off) | "the board stopped, so one errored agent counted more than one failure" | **caught** |
+
+Not covered by the e2e: the block lifting when the errored agent reports
+working again (unblockErrored).
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAutoDispatchFailedStartsLeaveNothingBehind$' -v .`.
+
+## TestLeaderTwiceClosesTheSubMenu
+
+State machine plan M2. ctrl+b w opens the workspace menu, and the leader again
+sends the leader to the pane. The key after that must be the pane's in
+terminal mode (2 2 7 reach the shell, the client stays on workspace 1) and a
+window key in window management mode (n opens a pane).
+
+Run on 2026-11-08 on macOS (arm64). The branch passes, and so do the 46 e2e
+tests whose names carry Leader, Prefix, Menu or Lock.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (90d8a0400), where the leader twice clears the leader flag alone | "the keys after the leader twice did not reach the shell", "the client left workspace 1" (the dock reads 2:0) | **caught** |
+| The branch with handler.go as on main (window management mode path) | "in window management mode, n after the leader twice did not open a pane" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestLeaderTwiceClosesTheSubMenu$' -v .`.
+
+## TestDeclaredStickyMenuStaysOpenUntilAnUnboundKey (the held menu stays shown)
+
+State machine plan M2. A sticky menu that stays open after its key ran keeps
+the time it opened, so the which-key panel stays on screen and does not wait
+the 500 ms delay again. The test reads the panel 150 ms after the second h.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| HoldMenu restarting the which-key time (`setMenus(..., true, "sticky menu")`) | "the held menu's panel went away after h, as if the menu had opened again", 3 of 3 | **caught** |
+| `TestOnlyMenuStateWritesTheLeader` on main | lists the direct writes in internal/input and internal/learn | **caught** |
+
+## TestCockpitMenuClosesBeforeAClickActs and TestReadyToMergeClosesOnAnotherRow
+
+State machine plan N1. The agents view's one-key menus (group menu, Ready to
+merge, snooze, bulk sheet, confirm, search line) take the next key, and a click
+that is not on them closes them and does nothing else. The first test opens
+the group menu and clicks "+ New agent": the menu must close and no sheet
+open. The second opens Ready to merge on t1 and clicks t2's row: Ready to merge
+must close, the cursor must stay on t1, and c must commit nothing.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (4991cfbe3), where each reader picks the top layer by its own chain and a click ignores the menus | "the group menu is still open after a click outside it"; "Ready to merge is still open after a click on another row", "the click that closed Ready to merge also moved the cursor off t1", "c after the click committed t1's work (2 commits in its repository)" | **caught** |
+| `TestCockpitLayersHaveOneDecider` on main | lists every per-layer predicate the key router, the key bar and the click handler call | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestCockpitMenuClosesBeforeAClickActs|TestReadyToMergeClosesOnAnotherRow)$' -v .`.
+
+## TestCockpitPeekClosesOnAClick
+
+State machine plan N1, from the M3 probe. With the peek open on one agent, a
+click on another agent's row must close the peek and do nothing else: the
+cursor stays, and 1 answers nothing.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| fix/sm-n1 (a1469257e), where the click rule covers the one-key menus only | "the peek is still open after a click", "the click that closed the peek also moved the cursor (now ... e2e-agent)" | **caught** |
+
+## TestRailEscKeepsAChoiceMadeWhileItWasOpen
+
+State machine plan, the M1 residual. The rail opened in window management,
+then `run-command TerminalMode` from outside the client while the rail has the
+keyboard, then esc. The choice spent the rail's lease, so esc must keep
+terminal mode: a line typed then reaches the shell. A first step runs the same
+run-command with no rail open and checks the line reaches the shell, so the
+run-command is known to choose.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes, and 228 of the 230 e2e
+tests whose names carry Mode, Rail, Hold, Lease, Gesture or Scratch pass; the
+other two (TestProgramStatusDrivesTheRailAndInbox, TestRailNamesAnAgentByItsTitle)
+fail on main on this Mac too.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (8d1f4899d), where returnMode hands back an owed choice even when a choice spent the lease | "after esc out of the rail the line did not reach the shell" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRailEscKeepsAChoiceMadeWhileItWasOpen$' -v .`.
+
+## TestClipboardAskSettlesBeforeAClickAllows
+
+State machine plan M10. A background pane's OSC 52 write raises a clipboard
+ask on the dock. A click on it in the moment it appears must allow nothing and
+leave the ask up; a click after the 500 ms settle allows the write.
+`TestClipboardAskIsAllowedByAClick` now waits out the settle before its click.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes. Of the 44 e2e tests
+whose names carry OSC52, clipboard, notification or message, the two that fail
+(TestClipboardPasteStillPastesAndNotifies, TestClipboardPasteCannotEndBracketedPaste)
+fail on main on this Mac too.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (8d1f4899d), with no settle on the ask | "a click as the ask appeared allowed the write" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestClipboardAskSettlesBeforeAClickAllows$' -v .`.
+
+## TestInboxAnswerOneStepAtATime (guard)
+
+State machine plan M3. One held risky call in the agents view: 1 asks, R with
+the ask open only drops it, R again opens the reason line, a 1 typed there is
+text, esc closes it, and 1 then enter allow. After each step the held hook
+must still be waiting. It is a guard for the one answer step: no run of keys
+leaves two steps standing on the base either, so it has no failing control.
+The click paths that could (a card button under an open ask or peek) are
+closed by the agents view's click rule, which TestCockpitMenuClosesBeforeAClickActs
+and TestCockpitPeekClosesOnAClick hold.
+
+| Control | Result |
+|---------|--------|
+| fix/sm-n1-peek (a53cdef2a), the base | passes (guard) |
+| `TestOnlyInboxAnswerWritesTheAnswerStep` with an injected write (self test) | **caught** |
+
+## TestQueuedMessageReachesAnEmptyCodexBox
+
+Issue #1588. A stand-in draws the Codex composer as codex-cli 0.166.0 and
+0.167.0 do with no status line setting: the bold glyph and the faint
+placeholder, then the status line and the key-hint row. A queued entry must
+be typed at rest into the empty box, and must wait while the box holds typed
+text.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (6db1de3ed): one `empty` pattern that allows one row under the composer | "the queued entry was never typed into the empty Codex box (draft_held true)" | **caught** |
+
+`TestBoxFixtures` in `internal/harness` fails on main's pattern with the
+fixture `codex-idle-empty-status-line.txt` from the issue.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestQueuedMessageReachesAnEmptyCodexBox$' -v .`.
+
+## TestAskAgentReadsAFullScreenAgentsReply
+
+Orchestration gap G1. A stand-in for Claude Code, run as `claude`, draws its
+whole screen in the alternate screen and draws it again for each prompt, with
+its answer in the middle and the footer on a fixed row. It joins its pane to a
+transcript under `~/.claude/projects` with the real SessionStart hook and
+writes each prompt and answer there. An ask must return the answer from the
+transcript, say `reply_source: transcript`, and a second ask must return only
+its own answer.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (81b39daae) | "the reply of a full-screen agent is \"\", want its answer from the transcript" | **caught** |
+| The reply read from the start of the transcript, not after the question | "the second reply is \"The answer to [what is the answer] ... [and the second] ...\", want only the second answer" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAskAgentReadsAFullScreenAgentsReply$' -v .`.
+
+## TestABlockingFormOutranksADoneReport
+
+Orchestration gap G2. A stand-in for Claude Code with auto mode on, run as
+`claude`, ends a turn with a Stop hook (done), then draws over its input box
+the "Teach auto mode about your environment?" form, line for line as captured
+from two blocked workers, with the footer that counts `1 shell, 1 monitor`. No
+hook fires for the form. The pane must read needs_input with the form's
+question as its message, show no `waits_on` while blocked, and once Esc
+closes the form be at rest (done or idle) with `waits_on: 1 background shell`.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes, 10 of 10 under load.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (81b39daae) | "with the form over the input box the pane reads done (report, \"Done with it.\"), want needs_input" | **caught** |
+| A done claim keeps its 2 s grace (`AgentStateDone` cut from the rest states in blockerOverridesClaim) | the same | **caught** |
+| The form rule reads `after_last_horizontal_rule`, as the older form rule does | the same | **caught** |
+| No `[[screen.waits_on]]` match (the shell pattern broken) | "a pane at rest whose footer counts a shell reads done with waits_on , want ... \"1 background shell\"" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestABlockingFormOutranksADoneReport$' -v .`.

@@ -190,7 +190,10 @@ select a file.
 With both sidebar edges visible, `e` while the sidebar has keyboard focus
 switches focus to the other edge; press it again to return. `Ctrl+B H` toggles
 the independently configured opposite rail without changing the original
-rail (`Ctrl+B b` still toggles that original rail).
+rail (`Ctrl+B b` still toggles that original rail). `Ctrl+B b` shows or
+hides the rail in every session. Set `appearance.sidebar.per_session = true`
+to keep a shown or hidden rail per session, as before. See
+[CONFIGURATION.md](CONFIGURATION.md#show-or-hide-the-rail-in-every-session).
 
 `Enter` opens a folder or copies the path of a file. `Shift+Enter` opens a text
 file in a new pane. The pane runs the editor set under Settings, Sidebar, File
@@ -400,7 +403,7 @@ modifier runs over such a program too. Other mouse gestures are fixed.
 
 You can use one `config.toml` on macOS and on Linux. On Linux, `opt+1` is `alt+1`. `tuios keybinds doctor` lists these keys for information.
 
-tuios ignores a key that it cannot read, such as `ctrl+nope`, and loads the rest of the file. The action gets its default key when it has no other key. If another action already has that default key, the action has no key. A leader that tuios cannot read changes to `ctrl+b`. tuios shows a config problem when it starts. The log viewer (leader `D` `l`) names each key and its file. `tuios keybinds doctor` shows the same information.
+tuios ignores a key that it cannot read, such as `ctrl+nope`, and loads the rest of the file. The action gets its default key when it has no other key. If another action already has that default key, the action has no key. A leader that tuios cannot read changes to `ctrl+b`. tuios shows a config problem when it starts. The log viewer (leader `D` `l`) names each key and its file. `tuios keybinds doctor` shows the same information. A table name that tuios does not have, such as `[keybindings.terminal]`, is reported the same way, with the table you most likely meant.
 
 A `super+` chord needs a terminal that sends the Super key. Most macOS terminals keep Command chords for their own menus. Ghostty and kitty send an unbound Command chord under the Kitty keyboard protocol.
 
@@ -515,6 +518,27 @@ click on a session or a workspace opens or closes it.
 
 `tuios list-windows --all --text 40 --json` prints the same rows for a script.
 See [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-list-windows).
+
+### New task
+
+`Ctrl+B +` opens the task capture sheet from any mode. Write the task: the
+first line is the card's title, and the rest, with any image you paste (its
+path, or `ctrl+v`), is its prompt. The card goes to the current session.
+Under it, `Project` is the repository of the focused pane's folder, by its
+origin URL, so the card shows on that repository's board in every session and
+on linked machines; the arrows turn it to `None, this session` for a card of
+the session only. `Stage` is Todo or Plan first, and `Agent to start` is the
+agent `ctrl+enter` starts. With a linked machine, `Machine` says where that
+agent starts: `This machine` (the default), `Any machine` (the machine with
+the most room, as [Any machine](CLI_REFERENCE.md#any-machine) picks it), or
+one linked machine. On another machine the agent's pane holds the card here
+over that machine's link back. `tab` steps through them and the
+arrows change one.
+`enter` adds the card and closes. `ctrl+enter` adds it and starts the agent on
+it, which holds the card from the start; with Plan first it starts in the
+agent's own plan mode where it has one. `esc` closes and keeps the draft for
+the next open. The action is `prefix_new_task`, and the command palette has it
+as "New task".
 
 ### Go to anything
 
@@ -1173,6 +1197,35 @@ set_master_position_center = ["c"]
 
 See [LAYOUT_MODES.md](LAYOUT_MODES.md#master-stack-layout).
 
+## Ask before a pane closes
+
+`x` in window mode (`close_window`), `Ctrl+B x` (`prefix_close_window`), the
+pane menu's `Close pane` and the close control in the title bar close the pane
+at once. To get a question first, set `appearance.confirm_close`:
+
+```toml
+[appearance]
+confirm_close = "busy"   # never (default), busy or always
+```
+
+- `never` closes at once. This is the default.
+- `busy` asks when the pane runs something besides its shell, such as an
+  agent, an editor or a long job. A pane at its shell prompt closes at once.
+- `always` asks for every pane.
+
+The dialog names the pane. `Cancel` is the default row. Go down to
+`Close pane` and press `Enter` to close it, or press `Esc` to keep it.
+`tuios close-window` and the other commands never ask.
+
+## Focus only
+
+`Ctrl+B m f` (`minimize_prefix_focus_only`, in the `minimize_prefix` section)
+minimizes every other pane on the workspace and keeps the focused pane. Press
+it again to restore the panes it minimized. A pane that you minimized before
+the first press stays minimized. A pane that you restored or closed in between
+is skipped. The command palette has the entry "Focus only". Scratch panes and
+popups are not minimized.
+
 ## Close every pane on a workspace
 
 The `close_workspace` action closes every pane on the current workspace. It is
@@ -1451,6 +1504,7 @@ in the middle row, set `appearance.selection.copy_entry` to `center`.
 | `Ctrl+V` | Start a block selection. In a block selection, end the selection |
 | `o` | Go to the other end of the selection. In a block selection, go to the opposite corner |
 | `q` or `Esc` | Leave copy mode. In a selection, `Esc` and `q` only end the selection |
+| `Enter` | Leave copy mode. In a selection, copy the selection, then leave. In the search prompt, `Enter` runs the search. The action is `copy_mode_exit` in the `copy_mode` section |
 | `Ctrl+C` | Leave copy mode from normal mode, a selection, the search prompt or `f`/`t`. Nothing is copied |
 
 A block selection is a rectangle. The cursor is one corner, and every motion
@@ -1528,6 +1582,7 @@ selection.
 | `copy_mode_line_start` | `Home` |
 | `copy_mode_first_nonblank` | none |
 | `copy_mode_line_end` | `End` |
+| `copy_mode_exit` | `Enter` |
 
 The keys are in the `copy_mode` section. They work only in copy mode. In the
 search prompt, they do not move the cursor. `0`, `^` and `$` are fixed keys,
@@ -1537,6 +1592,18 @@ Do not bind a key here that copy mode already uses, such as `y` or `v`, or a
 key of a `[[keybindings.copy_pipe]]` entry. `tuios keybinds doctor` and the
 config check warn about such a key. A copy pipe key runs the pipe, and the
 binding does not run. A key that copy mode uses loses its copy mode action.
+
+`copy_mode_exit` leaves copy mode, as `q` does, and gives the pane the
+keyboard back. From a `v`, `V` or `Ctrl+V` selection it copies the selection
+first, as `y` does, then leaves, as tmux does with `Enter`. In multi-pane copy
+mode it copies every selection, as `y` does there.
+In the search prompt `Enter` still runs the search. For the old behaviour,
+where `Enter` does nothing in copy mode, set it to no key:
+
+```toml
+[keybindings.copy_mode]
+copy_mode_exit = []
+```
 
 `Ctrl+A` and `Ctrl+E` are not defaults. `Ctrl+A` is a common leader key, and
 `Ctrl+E` scrolls one line in tmux copy mode. To use them, add them to the
@@ -1877,18 +1944,24 @@ Inside it:
 | `g` `G` | Go to the first or last agent. When the thread is scrolled up, `G` first shows its newest lines and follows it again |
 | `enter` | Go to the agent's pane and close the view. On mail, open the thread |
 | `a` `A` `r` `R` | On a held approval: allow once, always allow, reject, reject and say why. `1` `2` `3` still work |
-| `r`, `i`, `tab` | With no approval waiting: write a reply to the agent, or to the mail |
+| `r`, `i` | With no approval waiting: write a reply to the agent, or to the mail |
+| `tab` `shift+tab` | Give the keys to the next or the previous region: the list, the focus, the reply, the side column. A region the screen does not show is skipped. See below |
+| `N` | Go to the next agent that needs you, and from the top again after the last |
 | `space` | Read an approval's or a question's prompt and answer it here |
 | `n` | Open the New agent sheet. See below |
 | `c` | On an attempt of a fan: compare the attempts. See below |
 | `b` | Show the task board, the cards grouped by stage, or the agents again |
 | `t` | On a card: take it for the pane behind the agents view. `n` on a card in the board's list opens the New agent sheet on it |
 | `H` `L`, `shift+left` `shift+right` | On a card: move it to the stage before or after |
+| `v` | On a card its agent is done with: open the Changes view of that agent's worktree, while its pane is open |
+| `M` | On a card in review: Ready to merge. Then `c` commits the work with the card's title, `p` pushes the branch, `o` pushes it and opens the pull request. A push and a pull request show what they send first, and `enter` sends it |
 | `B` | Show the task board as columns or as a list |
+| `Ctrl+T` | On the board: turn task dispatch from manual to pull to auto. In pull, an agent that finishes its card is given the board's next open card. In auto, tuios starts an agent for each open card in a new worktree, with the board's preset (the New agent sheet's saved preset the first time, else Claude Code on this machine), at most 3 at once. The header says which, and in auto how many run and wait |
+| `Ctrl+X` | On the board: pause all task dispatch, or start it again after a pause or a stop. The palette has "Agents: pause all task dispatch" too |
 | `\` | Show the agents as a column beside the focus, or as a strip of chips above it. tuios keeps the choice. See `view_list` in [CONFIGURATION.md](CONFIGURATION.md#the-agent-list) |
 | `o` | Open what the agent has shown, such as a TML form, on its Artifacts tab, and use it. `esc` goes back to the list |
 | `f` | Show only what needs you, then each kind of item, then every agent |
-| `s` | Step the order inside each group |
+| `s` | Group and sort: `1` groups by state (Needs you, Ready for review, Working, Idle, Settled), `2` by session, `3` by machine, `4` by project, and `s` again steps the order inside each group. Needs you stays on top in every grouping, and the header counts the agents by state in every one. tuios keeps the grouping. A click on Group in the header opens the same choice |
 | `/` | Search. A `key:value` term is a selector, such as `harness:codex` |
 | `d` `z` `u` `S` | Dismiss, snooze, undo, show the snoozed items |
 | `D` | Settle the agent: put it away until it needs you. It goes to Settled, and its finished turn closes. `D` on a settled agent takes it off the shelf, and `u` undoes a settle within 10 seconds. With marks, settle every marked agent. The Settle button in the focus header does the same |
@@ -1900,16 +1973,36 @@ Inside it:
 | `J` `K` | Scroll the thread, or a long plan waiting for a yes. On the Artifacts tab, move between the artifacts |
 | `{` `}` | Show the thread's previous or next prompt at the top. The ruler at the right of the thread marks each prompt |
 | `e` | Show every line of every card in the thread |
+| `ctrl+b` `[` | Copy mode over the thread (`y` in the focus region too): the pane's copy mode keys, and `Y` copies the selected entries as Markdown |
 | `F` | Fold or open the group of the row under the cursor. On a folded heading, `enter` also opens it |
 | `v` | Review the agent's changes |
 | `ctrl+]` | Go to the agent's pane and zoom it. `ctrl+b i` comes back to the same agent |
 | `l` `h`, `right` `left` | On a narrow screen, open the focus and go back to the list |
-| `?` | All keys |
-| `esc` `q` | Close. On a narrow screen, go back from the focus to the list first |
+| `?` | All keys. Help opens over the view, and `esc` gives the view back as it was |
+| `esc` | Go back one step: on a narrow screen from the focus to the list, then from a region to the list, then clear the search and the filter, then close the view. The key bar says what the next `esc` does |
+| `q` | Close the view at once |
+| `<` `>` | Make the list narrower or wider by 4 cells. A drag on the edge of the list sets it, and a double click there resets it. tuios keeps the width. See `list_width` in [CONFIGURATION.md](CONFIGURATION.md) |
+| `w` | Hide the side column, or show it again |
+| `Z` | Show the focused region alone. `Z` or `esc` gives the whole view back |
+
+The region that has the keys wears an accent rule along its top edge, and
+the key bar names it at the left and shows its keys. In the focus, `j` `k`
+scroll the thread a line, the page keys a screen, and `g` `G` go to its ends;
+every other key does what it does in the list. In the side column `enter`
+opens the agent's pane. A click in a region gives it the keys; the wheel
+does not. Stepping onto the reply opens it, and stepping off keeps the
+draft, as `esc` does. In the `@` list `tab` still puts the entry in.
 
 On the board's columns, `h` `l` go between the columns, `j` `k` between the
 cards, `n` adds a card, and `enter` on a free card opens the New agent sheet
 on it. See [AGENT_STATE.md](AGENT_STATE.md#the-agents-view).
+
+When the board opens, it also reads the project cards of each linked machine
+(`tuios task ls --hosts`). Such a card says `on HOST`, and its holder, if it
+has one, is a pane on another machine. The view does not change it: `t` and
+`n` on it show the command to run in the agent's pane,
+`tuios task claim ID -s HOST:SESSION`, and its Card tab names
+`tuios task get`, which reads it from its machine.
 
 A bulk key acts only on the marked agents the list shows. An agent in a
 folded group, or one a search hides, is left out, and closing the view clears
@@ -2021,7 +2114,8 @@ These keys are in three sections of their own, rebindable like any other:
 `inbox_help`, `inbox_mark`, `inbox_mark_all`, `inbox_tab_prev`,
 `inbox_tab_next`, `inbox_expand`, `inbox_fold`, `inbox_prompt_prev`,
 `inbox_prompt_next`, `inbox_child`, `inbox_compare`, `inbox_artifact`, `inbox_board`,
-`inbox_board_layout`, `inbox_view_list`, `inbox_take`, `inbox_stage_prev`, `inbox_stage_next`),
+`inbox_board_layout`, `inbox_dispatch_mode`, `inbox_dispatch_pause`, `inbox_view_list`, `inbox_take`, `inbox_ship`, `inbox_stage_prev`, `inbox_stage_next`,
+`inbox_region_next`, `inbox_region_prev`, `inbox_escape`, `inbox_next_needs`),
 `[keybindings.inbox_peek]` (the prompt: `peek_approve`, `peek_approve_always`,
 `peek_deny`, `peek_type`, `peek_read_again`, `peek_go`, `peek_back`) and
 `[keybindings.mail]` (the mailbox: `mail_down`, `mail_up`, `mail_page_down`,
@@ -2034,6 +2128,19 @@ typed. The selector line, the reason for a reject and the answer to a prompt are
 edited as the reply is: the arrows and the word keys move the cursor, `ctrl+z`
 undoes, and a paste keeps to one line.
 
+The global keys work over the view, and over every line and sheet in it: `ctrl+p`
+opens the command palette and `opt+space` (`alt+space` off macOS) the launcher on
+top of the view, the reply included. While the reply's `@` list is open,
+`ctrl+p` and `ctrl+n` move in the list. The leader works too, in window mode and in
+terminal mode, so `ctrl+b ,` opens settings over the view. Each one closes back
+to the view as you left it: the same agent, the same scroll, the same draft. A
+key that types a character stays the view's even when `[keybindings.global]`
+binds it, and `tuios keybinds doctor` lists a view key that a global key takes.
+A palette command that goes to another pane or workspace closes the view;
+`ctrl+b i` opens it again on the same agent. A click on the view outside the
+palette closes the palette and selects nothing. `ctrl+p` and `ctrl+n` no longer
+move the list: `j` `k` and the arrows do.
+
 ```toml
 [keybindings.inbox]
 inbox_dismiss = ["x"]
@@ -2043,7 +2150,7 @@ The keys new with the agents view yield to your own: when your
 `[keybindings.inbox]` already gives `n`, `R`, `a`, `x` or another new key to an
 action, that action keeps it, and the new action has no key. `tuios keybinds
 doctor` lists each one. `inbox_agents`, the old `tab` that switched the Inbox
-to the agents view, is gone: `inbox_write` has `tab` now, and doctor lists a
+to the agents view, is gone: `tab` is `inbox_region_next` now, and doctor lists a
 config that still binds `inbox_agents`. A config that kept the old default
 `inbox_deny_reason = ["n"]` moves it to `R`, so `n` starts a new agent, and
 doctor says so. When your binding takes one of an action's new keys, only

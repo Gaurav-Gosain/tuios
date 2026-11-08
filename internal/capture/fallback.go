@@ -31,15 +31,29 @@ import (
 // capture asks about at most maxFallbackLookups glyphs, cached or not, so a
 // warm cache draws the same picture as a cold one.
 
-// maxFallbackLookups bounds the glyphs one capture asks fontconfig about.
+// maxFallbackLookups bounds the queries one capture asks fontconfig.
 // fc-match answers in about ten milliseconds, and a screen in three scripts
 // needs three fonts, so a bound well past that only stops a screen of random
 // codepoints from spending seconds on lookups.
 const maxFallbackLookups = 8
 
+// fallbackQueries are the fontconfig patterns asked for a glyph, in turn,
+// the second only when the face the first named does not have it: a
+// monospace face first, as a terminal prefers; then any family, since on
+// macOS fontconfig answers a monospace query for Hangul with LastResort, which
+// draws only a box, where Arial Unicode has the glyph. No emoji query: the
+// emoji fonts fontconfig names (Apple Color Emoji, Noto Color Emoji) hold
+// bitmaps, which shot does not draw, so the glyph would pass as covered and
+// come out blank.
+var fallbackQueries = []string{"monospace:", ":"}
+
 // maxFallbackFaces bounds the faces one capture adds. Each one is a font file
 // read into memory for the render.
 const maxFallbackFaces = 6
+
+// FillFallbacks is fillFallbacks for a frame built outside Frame, as the e2e
+// suite builds its pictures, so they draw a glyph as a capture does.
+func FillFallbacks(g *shot.Grid, f *shot.Frame) { fillFallbacks(g, f) }
 
 // fillFallbacks appends to f.Fallback a face for each glyph of g that no face
 // of f has, when fontconfig knows one.
@@ -47,7 +61,8 @@ func fillFallbacks(g *shot.Grid, f *shot.Frame) {
 	if g == nil || f == nil {
 		return
 	}
-	tried := map[rune]bool{}
+	stage := map[rune]int{} // the queries asked for each glyph so far
+	lookups := 0
 	var added []FontFace // the faces in f.Fallback, in order
 	var last rune        // the glyph the face added last was found for
 	for {
@@ -58,7 +73,8 @@ func fillFallbacks(g *shot.Grid, f *shot.Frame) {
 		if last != 0 && slices.Contains(missing, last) {
 			// fontconfig named a face that does not have the glyph it was
 			// asked for. It draws nothing, so it goes, and the glyphs it
-			// seemed to cover are missing again.
+			// seemed to cover are missing again. The glyph's next query
+			// comes next.
 			f.Fallback = f.Fallback[:len(f.Fallback)-1]
 			added = added[:len(added)-1]
 			last = 0
@@ -67,18 +83,20 @@ func fillFallbacks(g *shot.Grid, f *shot.Frame) {
 		last = 0
 		var r rune
 		for _, m := range missing {
-			if !tried[m] {
+			if stage[m] < len(fallbackQueries) {
 				r = m
 				break
 			}
 		}
-		if r == 0 || len(f.Fallback) >= maxFallbackFaces || len(tried) >= maxFallbackLookups {
+		if r == 0 || len(f.Fallback) >= maxFallbackFaces || lookups >= maxFallbackLookups {
 			return
 		}
-		tried[r] = true
+		query := fallbackQueries[stage[r]]
+		stage[r]++
+		lookups++
 		hex := strconv.FormatInt(int64(r), 16)
-		face, ok := cachedLookup("glyph:"+hex, func() (FontFace, bool) {
-			return fcMatch("monospace:charset="+hex, "%{file}|%{family}", func(string) bool { return true })
+		face, ok := cachedLookup("glyph:"+query+hex, func() (FontFace, bool) {
+			return fcMatch(query+"charset="+hex, "%{file}|%{family}", func(string) bool { return true })
 		})
 		// A face in the list already does not cover r: fontconfig answers
 		// with its best guess when no font has the glyph.

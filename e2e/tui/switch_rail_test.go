@@ -85,25 +85,28 @@ func TestSwitchedSessionTakesItsOwnRail(t *testing.T) {
 	bravoSpan("the daemon after the rail is hidden in bravo", 0)
 	saveArtifact(t, term, dir, "bravo-hidden")
 
-	// Back in alpha, whose rail is still shown.
+	// Back in alpha. The rail is one state for every session (issue 589), so
+	// the hide made in bravo holds here too, and alpha's panes take the
+	// space back: the resize answers of alpha, numbered from its own
+	// generation, must not be dropped as stale.
 	switchToNext(t, term, "alpha")
-	waitRail(t, term, true, rail, "the client back in alpha")
+	waitRail(t, term, false, 0, "the client back in alpha")
 	waitSpan(t, base, "alpha", "the daemon back in alpha", func(s paneSpan) bool {
-		return s.left == rail && s.right == bigCols
+		return s.left == 0 && s.right == bigCols
 	})
 	saveArtifact(t, term, dir, "alpha-back")
 
 	toggleRail(t, term)
-	waitRail(t, term, false, 0, "the client after the rail is hidden back in alpha")
-	waitSpan(t, base, "alpha", "the daemon after the rail is hidden back in alpha", func(s paneSpan) bool {
-		return s.left == 0 && s.right == bigCols
+	waitRail(t, term, true, rail, "the client after the rail is shown back in alpha")
+	waitSpan(t, base, "alpha", "the daemon after the rail is shown back in alpha", func(s paneSpan) bool {
+		return s.left == rail && s.right == bigCols
 	})
-	saveArtifact(t, term, dir, "alpha-hidden")
+	saveArtifact(t, term, dir, "alpha-shown")
 
-	// And in bravo again, whose rail is hidden.
+	// And in bravo again, where the show made in alpha holds.
 	switchToNext(t, term, "bravo")
-	waitRail(t, term, false, 0, "the client in bravo again")
-	bravoSpan("the daemon in bravo again", 0)
+	waitRail(t, term, true, rail, "the client in bravo again")
+	bravoSpan("the daemon in bravo again", rail)
 	saveArtifact(t, term, dir, "bravo-again")
 }
 

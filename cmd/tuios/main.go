@@ -232,6 +232,7 @@ time each one last changed. 'tuios tape dir' prints the directory.`,
 
 	attachCmd := &cobra.Command{
 		Use:   "attach [session-name]",
+		Args:  cobra.MaximumNArgs(1),
 		Short: "Attach to a TUIOS session",
 		Long: `Attach to an existing TUIOS session.
 
@@ -302,6 +303,7 @@ the remote client. See 'tuios hosts --help'.`,
 	var newSpace string
 	newCmd := &cobra.Command{
 		Use:   "new [session-name]",
+		Args:  cobra.MaximumNArgs(1),
 		Short: "Create a new TUIOS session",
 		Long: `Create a new persistent TUIOS session and attach to it.
 
@@ -1140,6 +1142,7 @@ The template itself is a JSON file in the directory 'tuios layout dir' prints.`,
 
 	addExplorers(rootCmd)
 	rejectUnknownSubcommands(rootCmd)
+	refuseUnreadArgs(rootCmd)
 	return rootCmd
 }
 

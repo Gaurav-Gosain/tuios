@@ -159,7 +159,9 @@ it, if its directory exists.
 
 `tuios config apply` makes the daemon and every tuios client on this machine
 apply the files as they are now. Use it when a save does not reach a client,
-for example when you make an included file in a new directory.
+for example when you make an included file in a new directory. It also loads
+the daemon's `[hooks]` table, so a hook change needs no restart. See
+[HOOKS.md](HOOKS.md).
 
 ### Where tuios writes a change
 
@@ -208,7 +210,7 @@ The `[keybindings.terminal_mode]` table also accepts `middle` for the middle
 mouse button, with `ctrl`, `alt` or `shift`, such as `ctrl+middle`. A program
 that uses the mouse gets a plain middle press.
 
-tuios ignores a key that it cannot read and loads the rest of the file. The action gets its default key when it has no other key. If another action already has that default key, the action has no key. tuios shows a config problem when it starts, and the log viewer (leader `D` `l`) names each key and its file. `tuios keybinds doctor` and `tuios config apply` list these keys too.
+tuios ignores a key that it cannot read and loads the rest of the file. The action gets its default key when it has no other key. If another action already has that default key, the action has no key. tuios shows a config problem when it starts, and the log viewer (leader `D` `l`) names each key and its file. `tuios keybinds doctor` and `tuios config apply` list these keys too. A table under `[keybindings]` that tuios does not have, such as `[keybindings.terminal]` for `[keybindings.terminal_mode]`, is a config problem too: tuios ignores every binding in it, and the log viewer and `tuios config apply` name the table and the table you most likely meant.
 
 ## Keyboard layout and Option characters
 
@@ -701,6 +703,24 @@ The old keys `appearance.workspace_transition`, `workspace_transition_ms` and
 `zoom_animation` still read. Tuios folds them into `motion.workspace`,
 `motion.workspace_ms` and `motion.zoom` on load. A `[motion]` key that is set
 wins.
+
+## Confirm a pane close
+
+`appearance.confirm_close` sets when closing a pane by hand asks first: with
+`close_window`, `prefix_close_window`, the pane menu's `Close pane` or the
+close control in the title bar.
+
+- `never` closes the pane at once. This is the default.
+- `busy` asks when the pane runs something besides its shell.
+- `always` asks for every pane.
+
+```toml
+[appearance]
+confirm_close = "busy"
+```
+
+The commands, such as `tuios close-window`, never ask. See
+[KEYBINDINGS.md](KEYBINDINGS.md#ask-before-a-pane-closes).
 
 ## Theme transition
 
@@ -2013,6 +2033,22 @@ activity_marker = "#"         # after the label when a pane on it printed
 
 `examples/dock/README.md` is the full contract and five working recipes.
 
+## Show or hide the rail in every session
+
+`Ctrl+B b` (`prefix_toggle_sidebar`), the settings page and
+`appearance.sidebar.enabled` show or hide the rail in every session on the
+daemon, not only in the session you are in. tuios saves the choice to
+`appearance.sidebar.enabled`, so a new session starts the same way. Every
+client of a session shows the rail or hides it together.
+
+To keep the old behaviour, where each session keeps its own shown or hidden
+rail, set `per_session`:
+
+```toml
+[appearance.sidebar]
+per_session = true
+```
+
 ## Two sidebar edges
 
 The existing `[appearance.sidebar]` settings still configure the original rail.
@@ -2919,6 +2955,7 @@ of agents as a column beside the focus. `view_list` sets that layout:
 ```toml
 [agents]
 view_list = "column"   # default; "strip" or "auto"
+list_width = ""        # cells ("52") or a share ("30%"); empty follows the screen
 ```
 
 | Value | What the view shows |
@@ -3201,6 +3238,10 @@ unknown name is reported as a config warning and ignored.
 stages = ["todo", "doing", "verify"]
 ```
 
+`ctrl+b +`, or "New task" in the palette, adds a card from anywhere
+([KEYBINDINGS.md](KEYBINDINGS.md#new-task)). An image in it goes to the
+session's file store and the prompt names its stored path.
+
 tuios moves a card on its own when it records a fact about the card's work: a
 plan held for approval and then approved, a fan check, a pull request
 opening, merging or closing ([CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-task)
@@ -3214,6 +3255,18 @@ still written, though the card then stays where it is.
 ```toml
 [tasks]
 auto_stage = false
+```
+
+`machine_cap` is how many agents may work on this machine before "Any
+machine" starts a new one on another machine
+([CLI_REFERENCE.md](CLI_REFERENCE.md#any-machine)). Agents that work,
+agents that are starting, and picks made in the last 90 seconds that have not
+started yet all count. Each machine reads its own cap and says it when asked.
+`0`, the default, is no cap.
+
+```toml
+[tasks]
+machine_cap = 4
 ```
 
 ## What a pane may do

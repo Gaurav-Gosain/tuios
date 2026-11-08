@@ -31,6 +31,9 @@ import (
 // Daemon manages the persistent TUIOS server process.
 // It owns PTYs and stores session state. Clients run the TUI.
 type Daemon struct {
+	// execRunning counts the exec verbs running now, held to execMaxRunning.
+	execRunning atomic.Int32
+
 	manager *Manager
 	// tml holds the open TML surfaces. See tml_surface.go.
 	tml tmlHost
@@ -159,17 +162,20 @@ type Daemon struct {
 	events *eventHub
 
 	// hooks is the session-side hook table: the commands the daemon runs when a
-	// window, a workspace or an agent state changes. It is nil when no hooks are
-	// configured, so a daemon without hooks pays one nil check per event. See
-	// daemon_hooks.go.
+	// window, a workspace or an agent state changes. loadHooks sets it once and
+	// a reload refills it in place (reloadHooks), so readers need no lock; it
+	// is nil only on a daemon a test builds by hand. See daemon_hooks.go.
 	hooks *hooks.Manager
 	// agentAlerts is the [notifications.agent] policy the after-agent-state hook
 	// is gated by. It is the same policy the client applies to the dock message
-	// and the sound, read from the same config table.
-	agentAlerts config.AgentAlertPolicy
+	// and the sound, read from the same config table. A reload swaps it.
+	agentAlerts atomic.Pointer[config.AgentAlertPolicy]
 	// agentHooks holds the settle timers for after-agent-state. Nil when hooks
 	// are not loaded.
 	agentHooks *agentHookGate
+	// hooksWaiting is true while config.toml holds a hook the daemon does not
+	// run yet: a file change may only remove hooks (reloadHooks).
+	hooksWaiting atomic.Bool
 
 	// federation holds the outbound links to the hosts named in config. It is
 	// nil when no hosts are configured, which is the default, and every reader
@@ -177,6 +183,15 @@ type Daemon struct {
 	// never gets a channel into it (federation package, section 1 of the design
 	// document).
 	federation *federation.Manager
+	// remoteHolds are the task cards this daemon's panes hold on other
+	// machines (task_project.go).
+	remoteHolds remoteHoldSet
+	// dispatch holds the boards' dispatch modes and the switches that stop
+	// dispatch (task_dispatch.go).
+	dispatch dispatchStore
+	// auto starts agents for the cards of auto boards
+	// (task_dispatch_auto.go).
+	auto autoState
 	// hostDial is DaemonConfig.HostDial, kept for setupFederation.
 	hostDial federation.Dialer
 	// fleet follows the agents and the Inbox of every linked host over the
@@ -439,6 +454,18 @@ type Daemon struct {
 	// See task_auto.go. It is read under session state locks and written by
 	// a config reload, so it is atomic.
 	taskAutoOff atomic.Bool
+	// lifecycleOff is DaemonConfig.TaskLifecycleOff, and verifies the
+	// verify commands running now. See task_verify.go.
+	lifecycleOff atomic.Bool
+	verifies     taskVerifies
+	// verifyPeers maps the name a far holder's machine gives itself to its
+	// [hosts] name here, as verifyHost found it.
+	verifyPeers sync.Map
+	// machineCap is [tasks] machine_cap, and pool the placement state:
+	// picks reserved and agents started that are not working yet. See
+	// pool_place.go.
+	machineCap atomic.Int64
+	pool       poolState
 	// openedKeep is DaemonConfig.OpenedCopyKeep.
 	openedKeep time.Duration
 
@@ -1040,6 +1067,13 @@ type DaemonConfig struct {
 	// TaskAutoStageOff is [tasks] auto_stage = false: the daemon moves no
 	// card on its own. See task_auto.go.
 	TaskAutoStageOff bool
+	// TaskLifecycleOff keeps an agent's finished card going to done rather
+	// than to verify and review: [tasks] auto_stage = false, or [tasks]
+	// stages without review. See task_verify.go.
+	TaskLifecycleOff bool
+	// MachineCap is [tasks] machine_cap: how many agents may work here
+	// before placement looks elsewhere. Zero is no cap. See pool_place.go.
+	MachineCap int
 	// OpenedCopyKeep is [files] open_copy_keep_days: how long a copy the
 	// rail's o made of a far file stays when it is not opened again. Zero
 	// keeps them all. See internal/openedcopy.
@@ -1108,6 +1142,8 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.SetMailWake(!cfg.MailWakeOff)
 	d.SetChildQuestionsToParent(!cfg.ChildQuestionsToPerson)
 	d.taskAutoOff.Store(cfg.TaskAutoStageOff)
+	d.lifecycleOff.Store(cfg.TaskLifecycleOff)
+	d.machineCap.Store(int64(max(cfg.MachineCap, 0)))
 	d.openedKeep = cfg.OpenedCopyKeep
 	d.SetCheckpoints(cfg.Checkpoints)
 	d.outbox = newHostOutbox(d)
@@ -1237,6 +1273,15 @@ func (d *Daemon) onSessionCreated(s *Session) {
 	})
 	s.SetHostShownProbe(func() bool { return d.sessionShown(sessionID) })
 	s.SetTaskAutoProbe(func() bool { return !d.taskAutoOff.Load() })
+	// A dispatched card's outcome counts in the state change that ends it
+	// (task_move.go). It runs under the session's state lock: the store's
+	// own lock is taken inside it, and the event goes off the lock.
+	s.SetTaskOutcomeSink(func(board string, finished bool) {
+		if d.dispatch.noteOutcome(board, finished) {
+			LogBasic("Task dispatch stopped on board %s: %s", board, dispatchStopFailures)
+			go d.publishDispatch("stopped", dispatchStopFailures)
+		}
+	})
 	// A pane's first output or bell since its subscriptions changed. See
 	// pane_marks.go.
 	s.SetPaneMarkSink(func(ptyID, windowID string, mark uint32) {
@@ -1405,9 +1450,19 @@ func (d *Daemon) onSessionCreated(s *Session) {
 			d.publishReleased(s, []TaskRow{*ev.taskRow}, ev.taskReason)
 			return
 		}
+		// A pane that closed, or whose agent left, lets go of the cards it
+		// held on other machines (task_project.go).
+		if ev.Type == EventWindowClosed || (ev.Type == EventAgentState && ev.State == AgentStateNone.Name()) {
+			d.releaseRemoteHolds(ev.Window)
+		}
 		// A pane with an activity ring gets its shell's commands and its
 		// state changes added to it. A pane without one costs a map lookup.
 		d.activity.noteSessionEvent(s, ev)
+		// A pane whose agent errored blocks the cards dispatch gave it, and
+		// one that works again lifts that block (task_dispatch.go).
+		if ev.Type == EventAgentState {
+			d.noteDispatchAgentState(s, ev.Window, ev.State)
+		}
 		// A finished turn in a git work tree gets a checkpoint, taken off
 		// this path. With the agent features off no turn finishes.
 		if !d.agentsOff.Load() {
@@ -1649,17 +1704,7 @@ func (d *Daemon) Start() error {
 
 	// The Inbox comes back after the sessions do, since what it keeps is
 	// decided by which sessions and panes came back.
-	d.attention.load(attentionPath(), d.attentionLive)
-	// A default that widened while the daemon was down is said now, when
-	// the Inbox can show it.
-	d.checkGrantsSinceLastRun()
-	// A host entry dropped at start is said now, when the Inbox can show it.
-	d.noteHostProblems(d.configProblems())
-	// Mail still waiting for another machine comes back with its Inbox items,
-	// and goes when that machine's link comes up.
-	d.outbox.load(outboxPath())
-	// Review notes come back for the panes that came back.
-	d.reviewNotes.load(reviewNotesPath(), func(window string) bool { return d.sessionOfWindow(window) != "" })
+	d.loadStores(false)
 
 	// The resume offers the restore found are opened only now, after the saved
 	// Inbox items took their ids, so an offer never shares an id with one.
@@ -1668,6 +1713,38 @@ func (d *Daemon) Start() error {
 
 	d.serve()
 	return nil
+}
+
+// loadStores reads the daemon's own stores, after the sessions are in
+// place, and resumes the work they record. A cold start and a live upgrade
+// both call it, so a store one start path reads is never missing from the
+// other: adopted is set for the image a live upgrade execs.
+func (d *Daemon) loadStores(adopted bool) {
+	if adopted {
+		d.attention.loadHandoff(attentionPath(), d.attentionLive, d.attentionWaiting)
+	} else {
+		d.attention.load(attentionPath(), d.attentionLive)
+		// A default that widened while the daemon was down is said now,
+		// when the Inbox can show it.
+		d.checkGrantsSinceLastRun()
+	}
+	// A host entry dropped at start is said now, when the Inbox can show it.
+	d.noteHostProblems(d.configProblems())
+	// Mail still waiting for another machine comes back with its Inbox
+	// items, and goes when that machine's link comes up.
+	d.outbox.load(outboxPath())
+	d.dispatch.load(dispatchPath())
+	// The verifies a restart or an upgrade ended run again, now that the
+	// boards' verify commands are read (task_verify.go).
+	for _, s := range d.manager.AllSessions() {
+		d.resumeVerifies(s)
+	}
+	// What only memory held beside the cards, after the boards are read
+	// and before auto runs.
+	d.rebuildTaskHolds()
+	d.kickAuto()
+	// Review notes come back for the panes that came back.
+	d.reviewNotes.load(reviewNotesPath(), func(window string) bool { return d.sessionOfWindow(window) != "" })
 }
 
 // serveHerdrOn takes l as the herdr protocol socket and points the panes at

@@ -536,7 +536,10 @@ func kittyKeyForm(code rune) (form csiuForm, ok bool) {
 	case KeyF2:
 		return csiuForm{1, 'Q'}, true
 	case KeyF3:
-		return csiuForm{1, 'R'}, true
+		// CSI 13 ~, not CSI R: the kitty protocol moved F3 off CSI R because
+		// that is the cursor position report, and a program that knows this,
+		// such as fish 4, reads CSI R as no key (issue #1615).
+		return csiuForm{13, '~'}, true
 	case KeyF4:
 		return csiuForm{1, 'S'}, true
 	case KeyInsert:

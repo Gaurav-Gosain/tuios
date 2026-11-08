@@ -294,10 +294,57 @@ func TestClipboardAskIsAllowedByAClick(t *testing.T) {
 		t.Fatalf("the background write raised no ask: %v\n%s", err, term.Snapshot())
 	}
 	longMessageShot(t, term, "1-ask")
+	// A click allows only once the message has shown its text for the
+	// settle (TestClipboardAskSettlesBeforeAClickAllows).
+	time.Sleep(700 * time.Millisecond)
 	col, row := dockColumnOf(t, term, "asks to copy")
 	mouseClick(t, term, col+1, row, tuitest.MouseLeft, 0)
 	if err := term.WaitForText("Copied 8 characters", uiTimeout); err != nil {
 		t.Fatalf("a click on the ask did not allow the write: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// TestClipboardAskSettlesBeforeAClickAllows: a click on the clipboard ask in
+// the moment its message appears allows nothing, as a click already on its
+// way to the dock was not aimed at it, and the ask stays up. A click after the
+// settle allows the write.
+//
+// How this could pass wrongly, written down first:
+//   - The first click could miss the message. The second click goes to the
+//     same cell and must allow, so the cell is the message.
+//
+// Negative control, recorded in NEGATIVE_CONTROLS.md: on main the first click
+// allows the write ("Copied 8 characters").
+func TestClipboardAskSettlesBeforeAClickAllows(t *testing.T) {
+	term, _ := start(t, startOpts{cols: 110, rows: 30})
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	// UFJPQkUzODY= is PROBE386, eight characters.
+	if err := term.SendKeys(`(sleep 4; printf '\033]52;c;UFJPQkUzODY=\007') &`, tuitest.Enter); err != nil {
+		t.Fatalf("start the background write: %v", err)
+	}
+	leaveTerminalMode(t, term)
+	newWindow(t, term)
+
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(dockRow(s), "asks to copy")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the background write raised no ask: %v\n%s", err, term.Snapshot())
+	}
+	col, row := dockColumnOf(t, term, "asks to copy")
+	mouseClick(t, term, col+1, row, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "Copied 8 characters") }, 2*time.Second); err == nil {
+		t.Fatalf("ASSERTION: a click as the ask appeared allowed the write\n%s", term.Snapshot())
+	}
+	// The early click allowed nothing and left the ask up.
+	if !strings.Contains(dockRow(term.Screen()), "asks to copy") {
+		t.Fatalf("ASSERTION: the early click took the ask off the dock, with no way left to allow it\n%s", term.Snapshot())
+	}
+	col, row = dockColumnOf(t, term, "asks to copy")
+	mouseClick(t, term, col+1, row, tuitest.MouseLeft, 0)
+	if err := term.WaitForText("Copied 8 characters", uiTimeout); err != nil {
+		t.Fatalf("a click after the settle did not allow the write: %v\n%s", err, term.Snapshot())
 	}
 }
 

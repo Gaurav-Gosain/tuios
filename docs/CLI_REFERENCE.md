@@ -178,6 +178,8 @@ it if it is gone. `startup.window` also focuses one pane in it. See
 - `--skill [topic]`: Print the embedded agent skill and exit: the core, one topic, or `all` (see [Agent Skill](#agent-skill))
 - `--ascii-only`: Use ASCII characters instead of Nerd Font icons
 - `--show-keys`: Enable showkeys overlay (screencaster-style key display)
+  A modifier pressed on its own is not shown: it is named in the chord it is
+  part of, such as `Cmd + k` (`Super + k` off macOS).
 - `--border-style <style>`: Window border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block, glyphs (default: from config or rounded)
 - `--dockbar-position <pos>`: Dockbar position: bottom, top, hidden (default: from config or top)
 - `--hide-window-buttons`: Hide window control buttons (minimize, maximize, close)
@@ -1106,6 +1108,46 @@ tuios worktree pull build:api-fan-add-retry-2
 tuios fan keep build:api-fan-add-retry-2 --stash
 ```
 
+### Any machine
+
+`tuios start-agent -s any:SESSION` and `tuios fan --host any` let this
+machine's daemon pick the machine, this one or a linked one from `[hosts]`,
+and print the pick and why. `tuios call place-agent '{"agent":"claude"}'`
+asks the same question and starts nothing. Nothing goes to another machine
+unless you ask for `any` or name the machine.
+
+The rule has three steps:
+
+1. A machine is left out when its link is not up or does not allow starting
+   agents, the agent is not installed or not signed in there, the agent
+   reached its usage limit there, it has no checkout of the repository (and
+   `clone` was not asked) or more than one, its memory is 95% used, it is at
+   its `[tasks] machine_cap`, or, for a card, it has no link back to this
+   machine to claim the card with. A card of the session only stays here.
+2. Of the rest, the most spare cores wins: the cores times the share the
+   one-minute load leaves free, less half a core for each agent that works,
+   starts, or was just picked there. Memory over 80% used lowers it.
+3. Two machines within one core tie: the one with the checkout wins, then
+   this machine.
+
+The repository is the one the current directory is in. The pick counts as a
+busy agent on that machine for 90 seconds, or until that machine reports the
+start, so a burst of starts spreads out.
+
+**Examples:**
+```bash
+tuios start-agent -s any:api claude --prompt 'Fix the flaky test.'
+# Placed on build. build: 16 cores, 0 working, the repo is there.
+tuios task add --project . --machine any 'Fix the retry'
+tuios start-agent -s any:home claude --task t1 --prompt 'Take task t1.'
+tuios call place-agent '{"agent":"claude","reserve":false}'
+```
+
+With `--task` and another machine, that machine's agent claims the card here
+over its own link back, so the card shows who holds it while the agent works
+there, and the pane's close lets it go. It fails with `no_machine` when no
+machine passes, and the message gives each machine's reason.
+
 ### `tuios start-agent`
 
 Start an agent in a new pane, here or on another machine, and return once it
@@ -1113,13 +1155,26 @@ is ready for a prompt.
 
 **Usage:**
 ```bash
-tuios start-agent <agent> [-s [<host>:]<session>] [--name <name>] [--cwd <dir> | --repo <dir> | --clone] [--workspace <n>] [--focus] [--prompt <prompt>] [--ready-timeout <ms>] [--protocol acp|codex] [--env NAME[=VALUE]]... [--grants <grant>[,<grant>...]] [--task <id>] [--json] [-- <args>...]
+tuios start-agent <agent> [-s [<host>|any:]<session>] [--name <name>] [--cwd <dir> | --repo <dir> | --clone] [--workspace <n>] [--focus] [--prompt <prompt>] [--ready-timeout <ms>] [--protocol acp|codex] [--env NAME[=VALUE]]... [--grants <grant>[,<grant>...]] [--task <id>] [--model <model>] [--effort <level>] [--permission-mode <mode>] [--json] [-- <args>...]
 ```
+
+`--model`, `--effort` and `--permission-mode` pass the harness's own flags for
+them, as the `[launch]` table of its manifest names them. For Claude Code they
+are `--model`, `--effort` (`low`, `medium`, `high`, `xhigh`, `max`) and
+`--permission-mode` (`manual`, `acceptEdits`, `plan`, `auto`, `dontAsk`,
+`bypassPermissions`). A harness with no such flag refuses the option, and a
+value it does not list is refused with the ones it takes, before anything
+starts. A model is one word that does not start with `-`. Started from an
+agent pane, the permission mode is held to that agent's own.
 
 `--task` claims a task card of the session for the new pane as soon as the
 pane exists. The card must be held by no pane, not blocked and not done, and
 the call needs what `tuios task claim` needs. It is checked before anything
 starts, and the session must exist already.
+
+`-s any:SESSION` lets this machine pick the machine first, as
+[Any machine](#any-machine) says, and prints the pick and why.
+With `--task`, the card is this machine's, in `SESSION`.
 
 `--grants` says what the agent may do through tuios: `read`, `write`, `fan`,
 `respond`, `admin`, or `none` (see [`tuios pane-grants`](#tuios-pane-grants)).
@@ -1131,6 +1186,7 @@ from a pane without `admin`, that pane's own grants.
 tuios start-agent claude --name reviewer
 tuios ask-agent -w reviewer 'review the diff on this branch'
 tuios start-agent 'codex --model o5' --name tests --prompt 'Run the tests and fix what fails.'
+tuios start-agent claude --model opus --effort high --permission-mode plan
 ```
 
 `<agent>` is written as for `fan`. The command waits until the agent shows it
@@ -2487,6 +2543,8 @@ parses, so quote for the shell as you would when typing it.
 - `--timeout <ms>`: Milliseconds to wait for the command (default: 30000). A timeout does not stop the command
 - `--lines <N>`: Keep only the last N lines of the output (0 keeps all)
 - `--json`: Output the whole result as JSON: `exit_code`, `output`, `cmdline`, `duration_ms`, `command_seq`, `truncated`
+- `--host <name>`: Run on this linked machine, with no pane (see below)
+- `--cwd <dir>`: With `--host`, the folder to run in on that machine
 
 **Exit status:** the command's own. When the shell sent no status, run says so
 on stderr and exits `0`. A refusal exits `1`: `not_at_prompt` when a command is
@@ -2508,7 +2566,23 @@ tuios run -w build --lines 40 -- make
 
 # The whole result
 tuios run -w build --json -- make lint
+
+# One command on the linked machine build, with no pane
+tuios run --host build -- uname -a
 ```
+
+**On another machine:** `--host <name>` runs the line on that linked machine
+instead, with no pane. Its daemon runs it under `sh -c` (`cmd /c` on Windows),
+with no input and the daemon's environment, in a process group of its own.
+tuios prints what it wrote to stdout and stderr on its own stdout and stderr,
+and exits with its status. `--timeout` stops the command and everything it
+started, and tuios exits `124`. A command stopped by a signal exits 128 plus
+the signal's number. Each stream keeps its last 1 MiB, and a note on stderr
+says when the start was left out. Stopping tuios stops the command there too.
+`--cwd <dir>` sets the folder on that machine (default: its home). The link
+needs `open` in the host's policy, as `new-window --host` does. `--host` takes
+no `-s` or `-w`. With `--json`, the result carries `host`, `stdout`, `stderr`,
+`exit`, `signal`, `timed_out` and `duration_ms`.
 
 ### `tuios subscribe`
 
@@ -2831,8 +2905,8 @@ moves it back to `doing` while another may still be open.
 
 **Usage:**
 ```bash
-tuios task add [-p PROMPT] [--stage STAGE] TITLE... [flags]
-tuios task ls [--stage STAGE] [--open] [--all-sessions] [flags]
+tuios task add [-p PROMPT] [--stage STAGE] [--project URL] [--machine any|HOST] TITLE... [flags]
+tuios task ls [--stage STAGE] [--open] [--all-sessions | --project URL [--hosts]] [flags]
 tuios task get ID [flags]
 tuios task claim ID | --next [-w <window>] [flags]
 tuios task done ID [flags]
@@ -2840,6 +2914,7 @@ tuios task stage ID STAGE [flags]
 tuios task block ID REASON... | --clear [flags]
 tuios task release ID [flags]
 tuios task rm ID [flags]
+tuios task dispatch [status | pause | resume | mode manual|pull|auto | preset | cap N | quiet SPAN|off | verify COMMAND|off] [--project URL] [flags]
 ```
 
 **Flags:**
@@ -2848,9 +2923,13 @@ tuios task rm ID [flags]
 - `--stage <stage>` (`add`, `ls`): The stage it starts in; for `ls`, only the cards in it
 - `--open` (`ls`): Leave out the cards that are done
 - `--all-sessions` (`ls`): List the cards of every session on this machine, with a SESSION column first. Takes no `--session`
+- `--project <url>` (`add`, `ls`): The repository the card is for, by its origin URL, or `.` for the repository of the current folder. For `ls`, list that repository's cards from every session, with HOST and SESSION columns. Takes no `--session`. Two spellings of one URL (`git@host:a/b.git`, `https://host/a/b`) name one project; a local path is refused
+- `--machine <m>` (`add`): Where the card's agent starts: `any` for the machine with the most room, this one or a linked one ([Any machine](#any-machine)), or one linked machine's name. Omit it for this machine. The capture sheet's Machine pill sets it
+- `--hosts` (`ls`): With `--project`, also list the project's cards on each linked machine. A machine that does not answer is named under the table
 - `--next` (`claim`): Take the oldest card no pane holds that is not blocked or done, and that no fan of another session works on
 - `-w, --window <target>` (`claim`): The pane that takes the card (default: this pane; required outside a pane)
 - `--clear` (`block`): Lift the block
+- `--verify-timeout <seconds>` (`dispatch verify`): The verify command's time limit, at most 3600 (default 600)
 - `--json`: Output the verb result as JSON
 
 The words of `TITLE` and `REASON` are joined with spaces. `ls` prints one line
@@ -2859,9 +2938,102 @@ its age, and its title. `claim` prints the card's id and title on its first
 line, so a script can read the id with `cut -d' ' -f1`; with nothing to take it
 fails with `no_task`, and a card another pane holds fails with `task_held`.
 
+A card with a project shows on that repository's board in every session and on
+every linked machine. The machine where it was added owns it. A pane on
+another machine claims, releases and finishes it with `-s HOST:SESSION`: its
+own daemon passes the call over the link, and the owner records the holder as
+that pane on the link's peer. The card is let go on the owner when the pane
+closes or its agent leaves. If the link is down then, the card stays held
+until `tuios task release` frees it on either machine. A retried claim by the
+pane that holds the card succeeds, so a claim whose answer was lost to a
+dropped link can be run again. A card without a project stays on its machine.
+
 From inside a pane, changing a card needs the `task` grant. A pane claims
 only for itself and finishes, stages, blocks or releases only the card it
 holds, unless it holds `admin`. `rm` from a pane needs `admin`.
+
+`add` also takes `--harness ID`, the agent the card is for, and `--ask-first`,
+which keeps the card for a person to start.
+
+`done` from the pane that holds the card is its agent saying the work is
+done: the card is let go and goes on to `review`, or to `verify` when the
+board has a verify command. tuios runs that command (`dispatch verify`) in the
+pane's worktree, on the pane's machine, as `sh -c COMMAND`, never in a pane,
+with a time limit (`--verify-timeout`, default 600 seconds) that ends the
+command and every process it started, and keeps only the end of its output.
+A pass moves the card to `review`. A fail (an exit other than 0, the time
+limit, a worktree that is gone) sends it back to `todo` with its `attempts`
+one higher and the last line of the output as its note; `get` shows the end
+of the output. A verify that cannot reach the pane's machine leaves the card
+in `verify` and says why; `stage ID verify` runs it again, and lets go of
+a pane that holds the card, since the card now waits on the command. A card moved out of
+`verify` by hand stops its run. An agent that errors while it holds a card
+dispatch gave it keeps the card, blocked, with its `attempts` one higher and
+its last message as the note, since the agent may go on; no second agent is
+started for it. The block lifts when the agent works again, and the card
+goes back to `todo` once it is let go (the agent leaves, its pane closes, or
+`release`). A merged pull request moves the card to `shipped`; `done`
+from you, a shell outside the panes, or a pane that holds `admin` closes it.
+With `[tasks] auto_stage = false`, or `[tasks] stages` without `review`, an
+agent's `done` closes the card as before. The verify command is refused from
+every pane, and so is a move to `review` or `shipped` by a pane while the
+board has one.
+
+`dispatch` shows and changes how cards go to agents. A board is a project's
+cards (`--project`) or a session's own cards. In `manual` mode, the default,
+a person starts each card. In `pull` mode, an agent that finishes its card
+with `tuios task done` is given the board's next open card: the oldest card in todo, plan
+or doing that no pane holds, that is not blocked, not `--ask-first`, and names
+no harness or the agent's own. The claim is made in one state change of the
+session, so two agents that finish at once take two cards. The agent hears of
+it as mail from tuios, which names the card, its prompt and the command that
+finishes it. An agent that only ends its turn (its agent state goes to done,
+as each Claude Code `Stop` does) keeps its card and gets no new one: a turn
+can end on a question or part way. A card leaves
+`doing` only by `tuios task done`, a stage move, a release, or its verify.
+Dispatch types nothing into a pane, and gives no card to a pane
+that waits for the person. In v1 the agent and the card are on one machine
+and in one session.
+
+In `auto` mode tuios starts an agent for each open card in todo or plan that
+no pane holds, is not blocked and is not `--ask-first`, oldest first. Each
+gets a new worktree on a branch named from its title (`task/fix-the-retry`;
+`-2` and on when that branch, its folder or its session exists, so your own
+branch is never checked out), on the machine `--machine` names: `here` (the
+default), `any` (picked as [Any machine](#any-machine) picks), or a linked
+machine. A card's own `--machine` and `--harness` come first. The agent holds
+the card from the start and gets it as mail from tuios; nothing is typed into
+its pane. At most `cap` agents run at once (default 3), and `--machine-cap` on
+one machine (default 2); each machine's `[tasks] machine_cap` still holds.
+Cards over a cap wait, and the status says how many. A card in doing is never
+started by auto: one let go mid-work (its pane closed, a restart) waits for
+you, so a restart never starts a second agent. Auto needs a preset: `mode
+auto --agent claude [--model M] [--effort E] [--permission-mode P]`, or
+`preset` with the same flags. With no `--permission-mode` the agent runs in
+its own default mode; auto never turns approvals off unless you name such a
+mode. A start that fails counts toward the 3 failures in a row, and auto
+closes what it opened for it: the agent's pane, its session and its
+worktree (one with changes or commits is kept; the branch is kept). A preset
+whose agent no machine has stops the board at once. If a far machine goes
+down, its card stays held until `tuios task release` frees it.
+
+The safety switches: `pause` stops all dispatch at once, and any pane may
+pause. `quiet 22:00-07:00` gives no card in those hours, local time (`off`
+clears it). A board stops after 3 dispatched cards in a row end without being
+finished (let go or blocked; a card blocked on its errored agent counts
+when it is let go). All
+dispatch stops when an agent reports a usage limit (`tuios set-agent-state
+errored --kind usage_limit`, or an errored message that says "usage limit").
+`resume` lifts the pause and every stop. On a pull board an offer that a
+switch held is made when the switch lifts: on `resume`, when quiet hours end
+or change, and when a board is set to `pull`, each agent at rest (idle or
+done) that holds no card is offered the next one. So is a card that comes
+free: added, let go, moved back to todo or plan, or unblocked. Such an
+offer never gives a pane the card it let go itself. From inside a pane, every action but
+`pause` needs `admin`, and `verify` is refused. A dispatched card counts as
+finished when its verify passes (or when it reaches `review` with no verify
+command), and as a failure when its verify fails. The settings are saved, so
+they survive a restart.
 
 **Examples:**
 ```bash
@@ -2878,6 +3050,25 @@ tuios task block t1 --clear
 
 # What is open
 tuios task ls --open
+
+# A card for the repository, and every machine's cards of it
+tuios task add --project . add retries to the client
+tuios task ls --project . --hosts
+
+# A worker on this machine takes a card that build owns
+tuios task claim t3 -s build:api
+tuios task done t3 -s build:api
+
+# Agents that finish take the next card of this repository; stop it all at once
+tuios task dispatch mode pull --project .
+tuios task dispatch pause
+
+# An agent for each open card, at most 4 at once and 2 on one machine
+tuios task dispatch mode auto --agent claude --effort high --project .
+tuios task dispatch cap 4 --machine-cap 2
+
+# Run the tests on each card its agent is done with
+tuios task dispatch verify "go test ./..." --verify-timeout 900 --project .
 ```
 
 ### `tuios review`
@@ -4184,8 +4375,14 @@ Capture the content of a terminal pane and write it to stdout.
 
 **Usage:**
 ```bash
-tuios capture-pane [flags]
+tuios capture-pane [window] [flags]
 ```
+
+The window can be the argument or `-w`: `tuios capture-pane build` is
+`tuios capture-pane -w build`. Two different windows fail.
+
+A command that reads no argument refuses one rather than dropping it. For
+example, `tuios screenshot build` fails and says to use `-w build`.
 
 **Flags:**
 - `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
@@ -4422,7 +4619,7 @@ every pane acts on the focused pane.
 | `tuios resume-agent [-w pane] [--dry-run]` | Type the pane's recorded conversation's resume command into its shell, after a daemon restart |
 | `tuios send-agent-message <text>` | Leave a message in another agent's inbox, or post a notice to the session. `--from` names the sender, and defaults to the pane the command runs in. `--from human` from inside a pane is refused with `forbidden`: only the person at an attached client can send as `human` (see [Who can act as the person](AGENT_STATE.md#who-can-act-as-the-person)). With `-s HOST:SESSION` and that host's link down, the message waits on this machine and goes when the link is back; the Inbox shows it under Waiting to send. `--select` sends one message to every agent pane a selector matches, after listing them: it asks at a terminal, and takes `--yes` or `--confirm TOKEN` otherwise. `--subject` gives it a one-line subject (at most 120 characters), `--reply-to ID` joins that message's thread, and `--attach PATH` (absolute, repeatable, at most 8) attaches files |
 | `tuios read-agent-messages` | Read the messages agents have left in this session. Each body prints inside the untrusted fence, and every body line starts with `│ `, as in `ask-agent` replies and `peek-prompt`. Reading `-w human` from inside a pane is always a peek. `--unread` shows only unread messages, `--peek` reads without marking anything read, except that a peek by a pane of its own inbox (`-w "$TUIOS_PANE_ID"`) marks its unread messages seen, so the sender can tell they were looked at. A peek of another pane's inbox marks nothing, `--notices` includes the session-wide notices |
-| `tuios ask-agent <text>` | Ask another agent a question and wait for its answer. `--from` names the asking pane, and defaults to the pane the command runs in. Fails with `prompt_stalled` when the target shows no sign of taking the question within `--stall-timeout` (5000 ms) of Enter. `--select` asks every agent pane a selector matches, at most 16 at once, after the same confirmation as `send-agent-message --select`; a pane on `needs_input` is refused in its own row. `--settle MS` (2000) is the silence that counts as finished for a pane that reports no state; `--allow-blocked` types at a target on `needs_input`, answering its prompt |
+| `tuios ask-agent <text>` | Ask another agent a question and wait for its answer. The answer is the agent's own text since the question, from its transcript, for an agent whose transcript tuios reads (Claude Code and the harnesses `agent-transcript` reads); for any other pane it is what the pane printed after the question. `--json` says which in `reply_source` (`transcript` or `screen`). `--from` names the asking pane, and defaults to the pane the command runs in. Fails with `prompt_stalled` when the target shows no sign of taking the question within `--stall-timeout` (5000 ms) of Enter. `--select` asks every agent pane a selector matches, at most 16 at once, after the same confirmation as `send-agent-message --select`; a pane on `needs_input` is refused in its own row. `--settle MS` (2000) is the silence that counts as finished for a pane that reports no state; `--allow-blocked` types at a target on `needs_input`, answering its prompt |
 | `tuios queue <text>` | Leave a message for an agent that is typed as a prompt when it comes to rest, never over a prompt it waits on and never twice. `queue ls` lists what waits, `queue rm ID` or `queue rm --all -w PANE` drops it. See [`tuios queue`](#tuios-queue) |
 | `tuios review [SESSION]` | Show what the agent in a pane changed against its base, with the notes left on it. `review note FILE:LINE TEXT` leaves one, `review notes` lists them, `review send` sends the unsent ones to the agent as one queued message. See [`tuios review`](#tuios-review) |
 | `tuios start-agent <agent>` | Start an agent in a new pane and return once it shows it is at its prompt, optionally typing a first `--prompt`. `-s HOST:SESSION` starts it on another machine, in its checkout of the repository you are in. `--protocol acp\|codex` runs it headless as a transcript. See [above](#tuios-start-agent) |

@@ -91,10 +91,26 @@ func heldItem(t *testing.T, c *verbConn, window string) map[string]any {
 	return nil
 }
 
+// reply answers a hold the way the Inbox does: with the line its item shows.
 func reply(c *verbConn, t *testing.T, requestID, decision, nonce string) map[string]any {
 	t.Helper()
-	raw, _ := json.Marshal(map[string]any{"request_id": requestID, "decision": decision, "human_nonce": nonce})
+	params := map[string]any{"request_id": requestID, "decision": decision, "human_nonce": nonce}
+	if line := heldLine(c, t, requestID); line != "" {
+		params["summary"] = line
+	}
+	raw, _ := json.Marshal(params)
 	return c.call(t, fmt.Sprintf(`{"id":1,"verb":"reply-approval","params":%s}`, raw))
+}
+
+// heldLine is the line a held request's item shows, "" once it has ended.
+func heldLine(c *verbConn, t *testing.T, requestID string) string {
+	t.Helper()
+	resp := callP(c, t, "get-approval", map[string]any{"request_id": requestID})
+	if res, ok := resp["result"].(map[string]any); ok {
+		line, _ := res["summary"].(string)
+		return line
+	}
+	return ""
 }
 
 // TestApprovalHeldAndAnsweredFromTheInbox is the round trip: the hook's
@@ -499,5 +515,60 @@ func TestApprovalNotHeldUnlessShownWhole(t *testing.T) {
 			case <-time.After(5 * time.Second):
 			}
 		})
+	}
+}
+
+// TestApprovalAllowMustNameTheLine is a security boundary: an allow that does
+// not name the line the person read (summary) answers nothing. Without the
+// line the daemon could not tell whether the hold is still on the call the
+// person read, so any holder of an attach nonce (the GUI bridge forwards
+// reply-approval) would approve whatever call the hold had moved to. A deny
+// may leave it out: refusing a call the person did not read costs nothing.
+//
+// How this could pass wrongly, written down first:
+//   - The refusal could come from something else, such as the nonce. The same
+//     reply with the line then applies.
+//   - The hold could end on the refused reply while the verb reports an
+//     error. The hook's request must still be waiting after both refusals.
+func TestApprovalAllowMustNameTheLine(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	enableApprovals(t, d, 30*time.Second)
+	_, a, _ := twoWindowSession(t, d, "work")
+	makeSessionWithWindow(t, d, "other")
+	c := dialVerb(t, sp)
+	tui := attachTUI(t, sp, "other")
+
+	setAgentState(t, c, "work", a, "needs_input", "approval", testHeldLine)
+	pending, _ := requestApproval(t, sp, "work", a, "once", "always", "deny")
+	id := heldItem(t, c, a)["request_id"].(string)
+
+	for _, decision := range []string{ApprovalOnce, ApprovalAlways} {
+		resp := callP(c, t, "reply-approval", map[string]any{"request_id": id, "decision": decision, "human_nonce": tui.HumanNonce()})
+		mustRefuse(t, resp, ErrVerbInvalidParams, "an allow ("+decision+") with no summary")
+	}
+	select {
+	case got := <-pending:
+		t.Fatalf("ASSERTION: the hold ended on an allow that named no line: %v", got)
+	default:
+	}
+
+	res := result(t, replyShown(c, t, id, ApprovalOnce, tui.HumanNonce(), testHeldLine))
+	if res["applied"] != true || res["decision"] != ApprovalOnce {
+		t.Fatalf("the allow from the held line answered %v", res)
+	}
+	if got := awaitResult(t, pending); got["decision"] != ApprovalOnce {
+		t.Fatalf("the hook got %v", got)
+	}
+
+	// A deny names no line and still applies.
+	setAgentState(t, c, "work", a, "needs_input", "approval", testHeldLine)
+	pending, _ = requestApproval(t, sp, "work", a, "once", "deny")
+	id = heldItem(t, c, a)["request_id"].(string)
+	resp := callP(c, t, "reply-approval", map[string]any{"request_id": id, "decision": ApprovalDeny, "human_nonce": tui.HumanNonce()})
+	if res := result(t, resp); res["applied"] != true || res["decision"] != ApprovalDeny {
+		t.Fatalf("a deny with no summary answered %v", res)
+	}
+	if got := awaitResult(t, pending); got["decision"] != ApprovalDeny {
+		t.Fatalf("the hook got %v", got)
 	}
 }

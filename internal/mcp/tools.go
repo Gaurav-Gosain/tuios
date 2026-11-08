@@ -391,13 +391,15 @@ var EventTypes = []string{
 	// What a person did on a TML surface. Opt-in.
 	"tml-event",
 	// A session's task cards.
-	"task-claimed", "task-finished", "task-changed",
+	"task-claimed", "task-finished", "task-changed", "task-dispatch",
 	// A judge's verdict on a fan.
 	"fan-verdict",
 	// A session option set-option recorded. Opt-in.
 	"option-set",
 	// The daemon took or dropped its hold that keeps the machine awake.
 	"keep-awake",
+	// git removed a worktree tuios made.
+	"worktree-removed",
 }
 
 // defaultEventTypes are the types a call that names none gets: what an agent

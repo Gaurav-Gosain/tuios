@@ -142,6 +142,49 @@ any_of   = [
 deny   = { keys = ["esc"] }
 choose = "digit"
 
+# A form drawn over the input box: between a rule and the box's own top
+# border, with the empty box and the footer under it, so nothing sits under
+# the last rule but the box and the footer and the rule above misses it. No
+# hook fires for it, and the turn's Stop has said done (or nothing has been
+# said), so the screen is the only word that the agent waits. As captured from
+# Claude Code with auto mode on:
+#
+#   ─────────────────────────────────────────
+#     Teach auto mode about your environment?
+#     Auto mode works better when it knows your environment. Takes about a minute.
+#     ❯ 1. Yes
+#       2. Not now
+#       3. Don't show again
+#     Enter to confirm · Esc to cancel
+#   ─────────────────────────────────────────
+#   ❯
+#   ─────────────────────────────────────────
+#     ⏵⏵ auto mode on (shift+tab to cycle) · 1 shell, 1 monitor · ↓ to manage
+[[screen.rule]]
+state    = "needs_input"
+priority = 25
+kind     = "question"
+message  = "Waits for an answer on a form."
+region   = "framed_above_prompt_box"
+# The question line is the one the message quotes; the footer and the first
+# option are what make it a live form.
+any      = ["?"]
+regex    = ['(?i)^\s*enter to confirm\s*·\s*esc to cancel\s*$', '^\s*❯?\s*1\.\s+\S']
+
+[screen.rule.answers]
+deny   = { keys = ["esc"] }
+choose = "digit"
+
+# What Claude Code still runs after its turn, from the footer under the input
+# box. The state stays done; the count is shown beside it, so a done agent
+# waiting on its own background shell does not read as finished.
+#
+#   ⏵⏵ auto mode on (shift+tab to cycle) · 1 shell, 1 monitor · ↓ to manage
+[[screen.waits_on]]
+region = "bottom_non_empty_lines(1)"
+regex  = '·\s+(\d+)\s+shells?\b'
+what   = "background shell"
+
 # The same form in a named session with a task panel under the name divider.
 # The titled divider is then no longer the last line, so the rule above does
 # not see the form. herdr's live_blocked_form_named_session accepts only a
@@ -373,3 +416,21 @@ keep_source  = "claude --help, Claude Code 2.1.312"
 # warning and is never typed automatically. From claude --help: "Bypass all
 # permission checks", and the bypassPermissions permission mode.
 keep_risky   = ["--dangerously-skip-permissions", "--allow-dangerously-skip-permissions", "--permission-mode=bypassPermissions"]
+
+# What a new agent can be started with: the model, the effort and the
+# permission mode, as the New agent sheet and start-agent --model --effort
+# --permission-mode pass them. A model outside the list is passed too, as
+# one word. No permission flag is the person's own settings.
+[launch]
+model_flag        = "--model"
+models            = ["fable", "opus", "sonnet"]
+effort_flag       = "--effort"
+efforts           = ["low", "medium", "high", "xhigh", "max"]
+permission_flag   = "--permission-mode"
+permissions       = ["manual", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"]
+risky_permissions = ["bypassPermissions"]
+# claude auth status prints JSON with "loggedIn": true when signed in. Only
+# the match is kept: the output also holds the account's email.
+signed_in_args    = ["auth", "status", "--json"]
+signed_in_match   = '"loggedIn":\s*true'
+source            = "claude --help and claude auth status --help, Claude Code 2.1.319"

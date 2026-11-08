@@ -1,6 +1,7 @@
 package session
 
 import (
+	"cmp"
 	"errors"
 	"slices"
 	"strconv"
@@ -72,16 +73,16 @@ func (mv taskMove) applies(tk *TaskState) bool {
 // autoStageLocked moves every card of st that match picks and mv applies to,
 // and returns the cards moved as they are now. The caller holds the state
 // lock.
-func autoStageLocked(st *SessionState, match func(*TaskState) bool, mv taskMove, reason string, now int64) []TaskState {
+func autoStageLocked(sess *Session, st *SessionState, match func(*TaskState) bool, mv taskMove, reason string, now int64) []TaskState {
 	var out []TaskState
 	for i := range st.Tasks {
 		tk := &st.Tasks[i]
-		if !match(tk) || !mv.applies(tk) {
+		if !match(tk) {
 			continue
 		}
-		tk.setStage(mv.to, now)
-		tk.note(TaskEvent{Action: TaskActionStaged, By: taskByDaemon, At: now, Stage: tk.Stage, Holder: tk.Holder, Reason: reason})
-		out = append(out, *tk)
+		if action, _, _ := sess.moveCard(tk, cardMove{kind: moveAuto, by: taskByDaemon, auto: mv, reason: reason}, now); action != "" {
+			out = append(out, *tk)
+		}
 	}
 	return out
 }
@@ -129,7 +130,7 @@ func (d *Daemon) autoStage(sess *Session, match func(*TaskState) bool, mv taskMo
 	}
 	var rows []TaskRow
 	_ = sess.mutateState(func(st *SessionState) error {
-		moved := autoStageLocked(st, match, mv, reason, time.Now().UnixNano())
+		moved := autoStageLocked(sess, st, match, mv, reason, time.Now().UnixNano())
 		if len(moved) == 0 {
 			return errNoTaskMove
 		}
@@ -220,13 +221,14 @@ func (d *Daemon) notePR(sess *Session, root string, pr *ghpr.PR) bool {
 	d.autoStage(sess, func(tk *TaskState) bool {
 		return tk.Holder != "" || (fanID != "" && tk.FanID == fanID)
 	}, mv, reason)
-	if fanID == "" {
-		return changed
-	}
+	// And the cards whose agent was done with them in this worktree, in any
+	// session: they have no holder any more (task_verify.go).
+	name := sess.Name()
 	for _, s := range d.manager.AllSessions() {
-		if s != sess {
-			d.autoStage(s, func(tk *TaskState) bool { return tk.FanID == fanID }, mv, reason)
-		}
+		d.autoStage(s, func(tk *TaskState) bool {
+			return (s != sess && fanID != "" && tk.FanID == fanID) ||
+				(tk.Holder == "" && tk.Work != nil && tk.Work.Host == "" && tk.Work.Session == name)
+		}, mv, reason)
 	}
 	return changed
 }
@@ -337,11 +339,9 @@ func (d *Daemon) stampFan(tp *taskParam, stem, fanID string) (TaskRow, bool) {
 		found = true
 		tk := &st.Tasks[i]
 		tk.Fan, tk.FanID = stem, fanID
-		if tp.sess.taskAutoOn() && moveFanned.applies(tk) {
-			now := time.Now().UnixNano()
-			tk.setStage(moveFanned.to, now)
-			tk.note(TaskEvent{Action: TaskActionStaged, By: tp.caller.by, At: now, Stage: tk.Stage, Holder: tk.Holder, Reason: reason})
-			moved = true
+		if tp.sess.taskAutoOn() {
+			action, _, _ := tp.sess.moveCard(tk, cardMove{kind: moveAuto, by: tp.caller.by, auto: moveFanned, reason: reason}, time.Now().UnixNano())
+			moved = action != ""
 		}
 		row = taskRow(tp.sess, st, tk)
 		return nil
@@ -353,14 +353,18 @@ func (d *Daemon) stampFan(tp *taskParam, stem, fanID string) (TaskRow, bool) {
 }
 
 // claimForPane gives the card to window, the pane start-agent opened for it.
-func (d *Daemon) claimForPane(tp *taskParam, window string) (TaskRow, *verbError) {
+// A pane of another session is named by name and harness, since the card's
+// session cannot read it, and its close lets the card go (remoteHolds).
+func (d *Daemon) claimForPane(tp *taskParam, window, name, harness string, cross bool) (TaskRow, *verbError) {
+	auto := d.auto.expects(tp.sess.Name(), tp.id, false)
 	row, action, verr := d.changeTask(tp.sess, tp.id, func(_ *SessionState, tk *TaskState, now int64) (string, *verbError) {
-		taken, verr := tk.take(window, tp.caller.by, now)
-		if verr != nil || !taken {
-			return "", verr
-		}
-		return TaskActionClaimed, nil
+		action, _, verr := tp.sess.moveCard(tk, cardMove{kind: moveClaim, by: cmp.Or(auto, tp.caller.by), window: window,
+			dispatched: auto != "", names: cross, name: name, harness: harness}, now)
+		return action, verr
 	})
+	if verr == nil && cross {
+		d.remoteHolds.note(window, remoteHold{session: tp.sess.Name(), id: tp.id}, true)
+	}
 	if verr != nil {
 		return TaskRow{}, verr
 	}

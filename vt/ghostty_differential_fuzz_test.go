@@ -401,13 +401,6 @@ func diffFilter(s vtgen.Script) vtgen.Script {
 		if seq.Kind == "mode" && strings.Contains(seq.Bytes, "2027") {
 			continue
 		}
-		// The library ignores DECSTR, and the pure emulator runs it. Pinned by
-		// TestGhosttyDivergence_DECSTRIgnored, and for DECSCA, which a soft
-		// reset stops on the pure emulator only, by
-		// TestGhosttyDivergence_ProtectionLost.
-		if seq.Bytes == "\x1b[!p" {
-			continue
-		}
 		out = append(out, seq)
 	}
 	return out
@@ -891,8 +884,8 @@ func TestGhosttyDivergence_SelectiveErase(t *testing.T) {
 	}
 }
 
-// TestGhosttyDivergence_ProtectionLost pins the two places the pure emulator
-// lets DECSCA protection go where the library keeps it.
+// TestGhosttyDivergence_ProtectionLost pins the place the pure emulator lets
+// DECSCA protection go where the library keeps it.
 //
 // A reflow drops it: the pure emulator lays the main screen out again on a
 // change of width and builds new rows, which carry no protection. The library
@@ -900,9 +893,8 @@ func TestGhosttyDivergence_SelectiveErase(t *testing.T) {
 // protects cells and is then resized loses them to its next selective erase
 // on the pure backend.
 //
-// A soft reset stops it on the pure emulator, as DEC lists for DECSTR. The
-// library does not implement DECSTR (TestGhosttyDivergence_DECSTRIgnored),
-// so the pen keeps protecting there.
+// A soft reset stops it on both, as DEC lists for DECSTR. libghostty before
+// 1.0 did not implement DECSTR and kept protecting.
 func TestGhosttyDivergence_ProtectionLost(t *testing.T) {
 	t.Run("a reflow drops the protection on the pure emulator", func(t *testing.T) {
 		p := newDiffPair(t, 40, 12)
@@ -916,15 +908,6 @@ func TestGhosttyDivergence_ProtectionLost(t *testing.T) {
 		}
 		if got := p.gh.CellAt(0, 0).Content; got != "P" {
 			t.Errorf("ghostty no longer keeps protection through a reflow (cell %q); update this entry", got)
-		}
-	})
-	t.Run("a soft reset stops protecting on the pure emulator", func(t *testing.T) {
-		p := probeBoth(t, "\x1b[1\"q\x1b[!pA\x1b[1;1H\x1b[?2K", 0, 0)
-		if p.pureCell != " " {
-			t.Fatalf("the pure emulator protects after DECSTR (cell %q); this entry goes", p.pureCell)
-		}
-		if p.ghCell != "A" {
-			t.Errorf("ghostty stops protecting after DECSTR (cell %q); update this entry", p.ghCell)
 		}
 	})
 }
@@ -1027,21 +1010,19 @@ func TestGhosttyLeftRightMarginResetAgrees(t *testing.T) {
 	}
 }
 
-// TestGhosttyDivergence_DECSTRIgnored pins the soft reset.
+// TestGhosttyDECSTRResetsTheRegion pins the soft reset on both backends.
 //
-// The pure emulator runs DECSTR: the scroll region goes back to the full page,
-// with the rest of the DEC list (see softReset). libghostty does not implement
-// it. Its stream parser logs "ignoring unimplemented CSI p with intermediates"
-// and does nothing, so the region stays where the guest put it. The pure
-// emulator is the side that matches DEC and xterm.
+// Both run DECSTR: the scroll region goes back to the full page, with the rest
+// of the DEC list (see softReset). libghostty before 1.0 did not implement it
+// and kept the region where the guest put it.
 //
 // The Go-side copy of the region on the ghostty backend has to follow the
-// library, not the pure emulator: the reattach snapshot carries that copy,
-// and a client that restores the full page under a guest that still scrolls
-// rows 3 to 10 scrolls the wrong rows. The probe makes the library show which
-// region it is using: a line feed on row 10 scrolls rows 3 to 10 when the
-// region survived, and moves the cursor down a row when it did not.
-func TestGhosttyDivergence_DECSTRIgnored(t *testing.T) {
+// library: the reattach snapshot carries that copy, and a client that restores
+// rows 3 to 10 under a guest whose terminal scrolls the full page scrolls the
+// wrong rows. The probe makes the library show which region it is using: a
+// line feed on row 10 scrolls rows 3 to 10 when the region survived, and moves
+// the cursor down a row when it did not.
+func TestGhosttyDECSTRResetsTheRegion(t *testing.T) {
 	p := newDiffPair(t, 40, 12)
 	var fill strings.Builder
 	for i := 1; i <= 12; i++ {
@@ -1052,23 +1033,18 @@ func TestGhosttyDivergence_DECSTRIgnored(t *testing.T) {
 	}
 	p.write(t, []byte("\x1b[H"+fill.String()+"\x1b[3;10r\x1b[!p"))
 
-	if got, want := p.pure.ScrollRegion(), uv.Rect(0, 0, 40, 12); got != want {
-		t.Errorf("pure scroll region after DECSTR = %v, want the full page %v", got, want)
-	}
-	if got, want := p.gh.ScrollRegion(), uv.Rect(0, 2, 40, 8); got != want {
-		if got == uv.Rect(0, 0, 40, 12) {
-			t.Fatalf("the ghostty copy of the region says the full page after DECSTR, %v; "+
-				"if the library now runs DECSTR too, this entry goes", got)
+	full := uv.Rect(0, 0, 40, 12)
+	for name, term := range map[string]Terminal{"pure": p.pure, "ghostty": p.gh} {
+		if got := term.ScrollRegion(); got != full {
+			t.Errorf("%s scroll region after DECSTR = %v, want the full page %v", name, got, full)
 		}
-		t.Errorf("ghostty scroll region after DECSTR = %v, want rows 3 to 10, %v", got, want)
 	}
 
 	p.write(t, []byte("\x1b[10;1H\n"))
-	if got := diffRowText(p.pure, 2); got != "L3" {
-		t.Errorf("pure row 2 = %q, want L3: a line feed under the full page does not scroll", got)
-	}
-	if got := diffRowText(p.gh, 2); got != "L4" {
-		t.Errorf("ghostty row 2 = %q, want L4: the library kept rows 3 to 10 and scrolled them", got)
+	for name, term := range map[string]Terminal{"pure": p.pure, "ghostty": p.gh} {
+		if got := diffRowText(term, 2); got != "L3" {
+			t.Errorf("%s row 2 = %q, want L3: a line feed under the full page does not scroll", name, got)
+		}
 	}
 }
 

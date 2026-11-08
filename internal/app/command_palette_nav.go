@@ -172,8 +172,29 @@ func (m *OS) ActivateCommandPalette() tea.Cmd {
 	}
 	item := filtered[m.CommandPaletteSelected]
 	m.CloseCommandPalette()
+	over, before := m.ShowInbox, m.focusSpot()
 	_, cmd := item.Run(m)
+	// A row run over the agents view that went to another pane or
+	// workspace closes the view, so the person sees where they went. The
+	// view opens again on the same agent, as after ctrl+].
+	if over && m.ShowInbox && m.focusSpot() != before {
+		m.leaveInboxForPane()
+	}
 	return cmd
+}
+
+// focusSpot is where the focus is: the workspace and the focused window.
+type focusSpot struct {
+	workspace int
+	window    string
+}
+
+func (m *OS) focusSpot() focusSpot {
+	spot := focusSpot{workspace: m.CurrentWorkspace}
+	if w := m.GetFocusedWindow(); w != nil {
+		spot.window = w.ID
+	}
+	return spot
 }
 
 // Run runs the row: its own handler when it has one, and otherwise the
