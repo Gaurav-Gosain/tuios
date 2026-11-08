@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	shotcapture "github.com/Gaurav-Gosain/tuios/internal/capture"
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
@@ -691,6 +692,8 @@ func saveCockpitFrames(t *testing.T, term *tuitest.Terminal, name string, pics .
 			shotcapture.FillFallbacks(g, f)
 			if missing, err := shot.MissingGlyphs(g, f); err == nil && len(missing) > 0 {
 				t.Errorf("ASSERTION: the font has no glyph for %q", string(missing))
+			} else if err == nil {
+				checkEmojiDrawn(t, g, f)
 			}
 		}
 	}
@@ -2556,4 +2559,49 @@ func TestCockpitSpawnSheet(t *testing.T) {
 		saveCockpitFrames(t, small, v.name)
 		alive(t, small, "on "+v.name)
 	}
+}
+
+// checkEmojiDrawn draws each emoji of g on its own, in the fonts the frame f
+// draws with, and fails when one comes out without colour: a box, or a blank
+// from a colour font whose bitmaps the renderer does not read. A glyph check
+// alone passes a blank, since a colour font lists the emoji it has.
+func checkEmojiDrawn(t *testing.T, g *shot.Grid, f *shot.Frame) {
+	t.Helper()
+	seen := map[string]bool{}
+	for _, row := range g.Cells {
+		for _, c := range row {
+			r, _ := utf8.DecodeRuneInString(c.Cluster)
+			if !isEmojiRune(r) || seen[c.Cluster] {
+				continue
+			}
+			seen[c.Cluster] = true
+			one := shot.NewGrid(2, 1, g.FG, g.BG)
+			one.Cells[0][0] = shot.Cell{Cluster: c.Cluster, Width: 2, FG: g.FG, BG: g.BG}
+			img, err := shot.Raster(one, &shot.Frame{Mode: shot.FrameNone, Font: f.Font, BoldFont: f.BoldFont, Fallback: f.Fallback})
+			if err != nil {
+				t.Errorf("ASSERTION: draw %q alone: %v", c.Cluster, err)
+				continue
+			}
+			coloured := 0
+			b := img.Bounds()
+			for y := b.Min.Y; y < b.Max.Y; y++ {
+				for x := b.Min.X; x < b.Max.X; x++ {
+					p := img.RGBAAt(x, y)
+					hi, lo := max(p.R, p.G, p.B), min(p.R, p.G, p.B)
+					if hi-lo > 48 {
+						coloured++
+					}
+				}
+			}
+			if coloured < b.Dx()*b.Dy()/20 {
+				t.Errorf("ASSERTION: %q draws with %d coloured pixels of %d: a box or a blank, not the emoji", c.Cluster, coloured, b.Dx()*b.Dy())
+			}
+		}
+	}
+}
+
+// isEmojiRune reports whether r is in the blocks that hold the pictographic
+// emoji (the ones a colour font draws and an outline font mostly lacks).
+func isEmojiRune(r rune) bool {
+	return r >= 0x1F300 && r <= 0x1FAFF
 }

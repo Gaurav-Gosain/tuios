@@ -38,14 +38,14 @@ import (
 const maxFallbackLookups = 8
 
 // fallbackQueries are the fontconfig patterns asked for a glyph, in turn,
-// the second only when the face the first named does not have it: a
+// each one only when the face the one before named does not have it: a
 // monospace face first, as a terminal prefers; then any family, since on
 // macOS fontconfig answers a monospace query for Hangul with LastResort, which
-// draws only a box, where Arial Unicode has the glyph. No emoji query: the
-// emoji fonts fontconfig names (Apple Color Emoji, Noto Color Emoji) hold
-// bitmaps, which shot does not draw, so the glyph would pass as covered and
-// come out blank.
-var fallbackQueries = []string{"monospace:", ":"}
+// draws only a box, where Arial Unicode has the glyph; then an emoji face,
+// since only that query names Apple Color Emoji or Noto Color Emoji. shot
+// draws their sbix and CBDT bitmaps, and a glyph a face has in no form it
+// draws counts as missing there, so the next query follows.
+var fallbackQueries = []string{"monospace:", ":", "emoji:"}
 
 // maxFallbackFaces bounds the faces one capture adds. Each one is a font file
 // read into memory for the render.
@@ -103,14 +103,49 @@ func fillFallbacks(g *shot.Grid, f *shot.Frame) {
 		if !ok || slices.Contains(added, face) {
 			continue
 		}
-		data, err := readFontFile(face.File)
-		if err != nil {
+		src, ok := openFontFile(face.File)
+		if !ok {
 			continue
 		}
-		f.Fallback = append(f.Fallback, shot.Font{Data: data, Index: face.Index})
+		f.Fallback = append(f.Fallback, src)
+		f.Fallback[len(f.Fallback)-1].Index = face.Index
 		added = append(added, face)
 		last = r
 	}
+}
+
+// maxOpenFontFiles bounds the fallback font files kept open. Past it, a
+// file is read whole for its capture, as before.
+const maxOpenFontFiles = 32
+
+var openFonts struct {
+	mu    sync.Mutex
+	files map[string]*os.File
+}
+
+// openFontFile is a fallback font for shot to read in place: an open file it
+// reads only the tables and glyphs of. A colour emoji font is far too big to
+// read whole for each capture (Apple Color Emoji is about 190 MB). The files
+// stay open for the life of the process: fontconfig names a handful.
+func openFontFile(path string) (shot.Font, bool) {
+	openFonts.mu.Lock()
+	defer openFonts.mu.Unlock()
+	if f, ok := openFonts.files[path]; ok {
+		return shot.Font{File: f}, true
+	}
+	if len(openFonts.files) >= maxOpenFontFiles {
+		data, err := readFontFile(path)
+		return shot.Font{Data: data}, err == nil
+	}
+	f, err := os.Open(path) // #nosec G304 - a font file fontconfig named
+	if err != nil {
+		return shot.Font{}, false
+	}
+	if openFonts.files == nil {
+		openFonts.files = map[string]*os.File{}
+	}
+	openFonts.files[path] = f
+	return shot.Font{File: f}, true
 }
 
 // fontFileKeep is how long the font files stay in memory after the last
