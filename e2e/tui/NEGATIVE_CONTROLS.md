@@ -14916,3 +14916,19 @@ Run on 2026-11-08 on macOS (arm64). The branch passes.
 | `head.hit = hit` cut from `ckToolCard` | "a click did not open the tool row" | **caught** |
 | `more` forced true in `ckToolCard` | "the true row has a fold mark" | **caught** |
 | The saturation return cut from `drawThreadRuler` | "the ruler draws prompt marks (16)" | **caught** |
+
+## TestSaveGoesToTheConfigFileItLoaded
+
+Issue #1691. The config.toml is in a search directory (`XDG_CONFIG_DIRS`, the
+place macOS puts `~/.config`) and the config home has none. A `set-config`
+must change the loaded file and make no second config.toml in the config
+home, which would hide the first from the next start.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (6db1de3ed): `RenderUserConfig` saves to `xdg.ConfigFile` | "set-config did not write the config file tuios loaded" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSaveGoesToTheConfigFileItLoaded$' -v .`.

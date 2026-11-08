@@ -521,3 +521,40 @@ func TestIncludedFileIsNeverRewrittenWhole(t *testing.T) {
 	saveSyncArtifact(t, "config.toml", main)
 	saveArtifact(t, term, artifactDir(t), "notice")
 }
+
+// TestSaveGoesToTheConfigFileItLoaded is issue #1691. tuios loads the first
+// config.toml on the search path, and on macOS that path ends in ~/.config
+// while the config home is ~/Library/Application Support. A save went to the
+// config home all the same, so one change in tuios made a second config.toml
+// there, and from the next start that file hid the person's own config.
+// Here the config is in a search directory and the config home has none. A
+// change must go into the loaded file, and no other config.toml may appear.
+func TestSaveGoesToTheConfigFileItLoaded(t *testing.T) {
+	base := t.TempDir()
+	useShippedLooks(base)
+	loaded := filepath.Join(xdgDir(base, "XDG_CONFIG_DIRS"), "tuios", "config.toml")
+	body := "[appearance]\nborder_style = \"double\"\n"
+	writeConfigAtomically(t, loaded, []byte(body))
+	home := configPathIn(base)
+	if _, err := os.Stat(home); err == nil {
+		t.Fatal("the config home has a config.toml before the start, so this cannot test it")
+	}
+
+	term := startIn(t, base, startOpts{args: []string{"new", "loaded"}})
+	waitBoot(t, term)
+	if out, err := tuiosCLI(t, base, "config", "files"); err != nil || !strings.Contains(out, loaded) {
+		t.Fatalf("tuios did not load the config in the search directory: %v\n%s", err, out)
+	}
+
+	setLive(t, base, "border_style", "thick")
+	after := waitForFileText(t, loaded, func(s string) bool { return strings.Contains(s, `border_style = "thick"`) },
+		"set-config did not write the config file tuios loaded")
+	if data, err := os.ReadFile(home); err == nil {
+		t.Fatalf("ASSERTION: the save made a second config.toml in the config home, which hides the loaded one:\n%s", data)
+	}
+	if out, err := tuiosCLI(t, base, "config", "files"); err != nil || !strings.Contains(out, loaded) {
+		t.Fatalf("ASSERTION: after the save tuios no longer reads the config it loaded: %v\n%s", err, out)
+	}
+	saveArtifact(t, term, artifactDir(t), "after-set-config")
+	saveSyncArtifact(t, "config.toml.after", after)
+}

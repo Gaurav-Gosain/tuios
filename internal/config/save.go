@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
-	"github.com/adrg/xdg"
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -327,7 +326,12 @@ var (
 // older one gives way rather than overwriting the newer. Its WriteNote says
 // when a read-only file sent a change to another file.
 func RenderUserConfig(cfg *UserConfig) (func() (WriteNote, error), error) {
-	configPath, err := xdg.ConfigFile("tuios/config.toml")
+	// The file the config was loaded from, which is the first config.toml on
+	// the search path. The config home is only where a missing one is made.
+	// On macOS the search ends in ~/.config while the config home is
+	// ~/Library/Application Support, so a save to the config home made a second
+	// file that hid the first from the next start (#1691).
+	configPath, err := GetConfigPath()
 	if err != nil {
 		return nil, errfmt.Errorf("failed to resolve config path: %w", err)
 	}
