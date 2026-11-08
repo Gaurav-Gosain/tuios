@@ -317,9 +317,13 @@ func resolveMailParty(state *SessionState, target string) (id, label string, err
 
 // resolveSender is resolveMailParty for a sender. With anySession, a sender
 // that is not in the session is looked for by its exact window id in every
-// session, and labelled with the session it is in. Only the exact id is taken
-// there: a name or a prefix means different panes in different sessions.
-func (d *Daemon) resolveSender(state *SessionState, from string, anySession bool) (string, string, error) {
+// session, and then as a name, short id or index in the session of the pane
+// the caller runs in, and labelled with the session it is in. A name or a
+// prefix of a third session is not taken: it means different panes in
+// different sessions. The caller's own session is known from its pane, not
+// from anything it sent, and a pane that names itself by name is the common
+// case: a lead in one session that mails its workers in another (#1624).
+func (d *Daemon) resolveSender(cs *connState, state *SessionState, from string, anySession bool) (string, string, error) {
 	id, label, err := resolveMailParty(state, from)
 	if err == nil || !anySession {
 		return id, label, err
@@ -329,7 +333,31 @@ func (d *Daemon) resolveSender(state *SessionState, from string, anySession bool
 			return w.ID, windowLabelOf(w) + " in " + sess.Name(), nil
 		}
 	}
+	if ref := d.callerPaneRef(cs); ref != nil {
+		if own := d.sessionHoldingWindow(ref.Window); own != nil {
+			if id, label, oerr := resolveMailParty(own.GetState(), from); oerr == nil && id != AgentInboxHuman {
+				return id, label + " in " + own.Name(), nil
+			}
+		}
+	}
 	return "", "", err
+}
+
+// senderNotFound is mapResolveErr for a from that names no window. The
+// error is about from, not about the recipient, so the hint names from and
+// does not list or suggest the recipient's windows, which made a missing
+// sender read as a wrong target.
+func senderNotFound(err error, sess *Session) *verbError {
+	verr := mapResolveErr(err, sess)
+	if verr.Code != ErrVerbWindowNotFound || verr.Hint == nil {
+		return verr
+	}
+	verr.Message = "from: " + verr.Message
+	verr.Hint.Param = "from"
+	verr.Hint.Available = nil
+	verr.Hint.DidYouMean = ""
+	verr.Hint.Detail = "from names the sender, not the recipient. A name, a short id or an index names a window of the recipient's session or of the caller's own session. A window of another session is named by its full id."
+	return verr
 }
 
 // firstNonEmpty returns the first argument that is not empty.
@@ -544,9 +572,9 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 			msg.FromLabel = printableClaim(p.From, agentMsgMaxSubject)
 		}
 	case p.From != "":
-		id, label, err := d.resolveSender(state, p.From, fromAnySession)
+		id, label, err := d.resolveSender(cs, state, p.From, fromAnySession)
 		if err != nil {
-			return nil, mapResolveErr(err, sess)
+			return nil, senderNotFound(err, sess)
 		}
 		msg.From, msg.FromLabel = id, label
 	}
@@ -1129,9 +1157,9 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 		// window here, so its name is a label and never resolved.
 		fromLabel = printableClaim(p.From, agentMsgMaxSubject)
 	case p.From != "":
-		fid, flabel, ferr := d.resolveSender(state, p.From, fromAnySession)
+		fid, flabel, ferr := d.resolveSender(cs, state, p.From, fromAnySession)
 		if ferr != nil {
-			return nil, mapResolveErr(ferr, sess)
+			return nil, senderNotFound(ferr, sess)
 		}
 		// The record of an ask from human reads as the person asking, so
 		// a pane cannot leave one. See human_origin.go.

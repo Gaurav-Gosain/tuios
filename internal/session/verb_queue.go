@@ -228,7 +228,7 @@ func (d *Daemon) newQueueEntry(cs *connState, sess *Session, state *SessionState
 			}
 			e.by = pa.window
 			if from != "" && from != pa.window {
-				if fid, _, err := d.resolveSender(state, from, true); err != nil || fid != pa.window {
+				if fid, _, err := d.resolveSender(cs, state, from, true); err != nil || fid != pa.window {
 					return nil, hintedVerbError(ErrVerbForbidden, "queue-prompt from "+echoName(from)+" is refused: a pane queues only as itself", &VerbHint{
 						Param:  "from",
 						Detail: "Nothing was queued. Leave from out, or pass $TUIOS_PANE_ID.",
@@ -242,9 +242,9 @@ func (d *Daemon) newQueueEntry(cs *connState, sess *Session, state *SessionState
 		e.by = queueByShell
 	}
 	if from != "" {
-		fid, _, err := d.resolveSender(state, from, true)
+		fid, _, err := d.resolveSender(cs, state, from, true)
 		if err != nil {
-			return nil, mapResolveErr(err, sess)
+			return nil, senderNotFound(err, sess)
 		}
 		if fid == AgentInboxHuman && !human {
 			return nil, humanForbiddenError("queue-prompt")

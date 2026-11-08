@@ -14932,3 +14932,21 @@ Run on 2026-11-08 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSaveGoesToTheConfigFileItLoaded$' -v .`.
+
+## TestMailAndAskFromAPaneByItsOwnName
+
+Issue #1624, after #1693. A pane in session `lead` sends to and asks a pane in
+session `team` and names itself with `--from NAME` or a short id. The daemon
+looks the name up in the recipient's session and then in the caller's own
+session, which it knows from the caller's pane. A name of a third session is
+refused, and the error is about `from`, not the recipient.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (6db1de3ed) | "a pane could not mail another session by its own name" (`no window found matching "boss"`, with the recipient's windows listed) | **caught** |
+| `senderNotFound` replaced by `mapResolveErr` | "the refusal of an unknown sender does not say it is about the sender" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestMailAndAskFromAPaneByItsOwnName$' -v .`.

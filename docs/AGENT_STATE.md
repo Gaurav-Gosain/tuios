@@ -2969,7 +2969,8 @@ for the same set. The CLI prints the set and asks at a terminal, and takes
 
 Each pane of a write goes through every check a single call makes. A message
 is charged to the sender's rate cap per pane, and `from` may name the sender's
-own pane in another session by its exact id. An ask refuses a pane on
+own pane in another session by its exact id. A single send or ask also
+takes the name or short id of the caller's own pane in its own session. An ask refuses a pane on
 `needs_input` with `agent_blocked` in that pane's row, waits for a working pane
 unless `force`, and records the exchange in the pane's own session; one pane
 that refuses does not stop the others.
