@@ -2031,6 +2031,22 @@ activity_marker = "#"         # after the label when a pane on it printed
 
 `examples/dock/README.md` is the full contract and five working recipes.
 
+## Show or hide the rail in every session
+
+`Ctrl+B b` (`prefix_toggle_sidebar`), the settings page and
+`appearance.sidebar.enabled` show or hide the rail in every session on the
+daemon, not only in the session you are in. tuios saves the choice to
+`appearance.sidebar.enabled`, so a new session starts the same way. Every
+client of a session shows the rail or hides it together.
+
+To keep the old behaviour, where each session keeps its own shown or hidden
+rail, set `per_session`:
+
+```toml
+[appearance.sidebar]
+per_session = true
+```
+
 ## Two sidebar edges
 
 The existing `[appearance.sidebar]` settings still configure the original rail.

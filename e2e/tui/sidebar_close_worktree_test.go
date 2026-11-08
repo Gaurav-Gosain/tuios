@@ -398,7 +398,8 @@ func TestSidebarKillQuitConfirmsOnWorktree(t *testing.T) {
 		t.Fatalf("second client never attached: %v\n%s", err, second.Snapshot())
 	}
 	windowManagementMode(t, second)
-	toggleSidebarViaPalette(t, second)
+	// The first client showed the rail for every session (issue 589), so it
+	// is already shown here.
 	waitForAll(t, second, uiTimeout, "sidebar with the plain row", sidebarHeader, "plain")
 
 	col, row = findOnScreen(t, second, "plain")

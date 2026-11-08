@@ -82,19 +82,23 @@ func TestSessionOrderIsTheDaemons(t *testing.T) {
 		// second in places: keep the three apart.
 		time.Sleep(50 * time.Millisecond)
 	}
-	open := func(sess string) *tuitest.Terminal {
+	// toggle shows the rail. The rail is one setting for every session, so
+	// the second client finds it shown already.
+	open := func(sess string, toggle bool) *tuitest.Terminal {
 		t.Helper()
 		term := startIn(t, base, startOpts{cols: 140, rows: 40, args: []string{"attach", sess}})
 		if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
 			t.Fatalf("client never attached to %s: %v\n%s", sess, err, term.Snapshot())
 		}
 		clientShows(t, base, sess)
-		toggleSidebarViaPalette(t, term)
+		if toggle {
+			toggleSidebarViaPalette(t, term)
+		}
 		waitForAll(t, term, uiTimeout, "the rail with every session", sidebarHeader, "alpha", "bravo", "charlie")
 		return term
 	}
-	a := open("alpha")
-	b := open("bravo")
+	a := open("alpha", true)
+	b := open("bravo", false)
 	for name, term := range map[string]*tuitest.Terminal{"A": a, "B": b} {
 		if err := term.WaitFor(func(s tuitest.Screen) bool { return railOrder(s, "alpha", "bravo", "charlie") }, uiTimeout); err != nil {
 			t.Fatalf("setup: client %s does not list alpha, bravo, charlie: %v\n%s", name, err, term.Snapshot())
@@ -195,7 +199,7 @@ func TestSessionOrderAnOlderClientDoesNotUndoIt(t *testing.T) {
 		if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
 			t.Fatalf("client never attached to %s: %v\n%s", sess, err, term.Snapshot())
 		}
-		toggleSidebarViaPalette(t, term)
+		showRail(t, term)
 		waitForAll(t, term, uiTimeout, "the rail with every session", sidebarHeader, "alpha", "bravo", "charlie")
 		return term
 	}
@@ -233,6 +237,18 @@ func TestSessionOrderAnOlderClientDoesNotUndoIt(t *testing.T) {
 	time.Sleep(time.Second)
 	if !railOrder(fresh.Screen(), "bravo", "charlie", "alpha") {
 		t.Fatalf("ASSERTION: a new client lists another order than the daemon's bravo, charlie, alpha\n%s", fresh.Snapshot())
+	}
+}
+
+// showRail shows the rail when it is hidden. The rail is one setting for
+// every session, so a client may attach with it shown already, and a toggle
+// then hides it. An older client keeps the rail per session, so the client
+// after it may find it hidden.
+func showRail(t *testing.T, term *tuitest.Terminal) {
+	t.Helper()
+	_ = term.WaitStable(uiTimeout)
+	if !strings.Contains(term.Screen().Text(), sidebarHeader) {
+		toggleSidebarViaPalette(t, term)
 	}
 }
 

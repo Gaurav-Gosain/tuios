@@ -47,6 +47,12 @@ type SidebarVisibilityPayload struct {
 	// first client to attach settles the rail and a later one with another
 	// config adopts it instead of fighting over it.
 	IfAbsent bool
+	// All applies the op to every session on the daemon, not only the
+	// sender's (issue 589): showing or hiding the rail is how the person
+	// wants the screen to look, not a property of one session. A daemon
+	// from before the field reads it as false and applies the op to the
+	// sender's session alone. IfAbsent ops never set it.
+	All bool
 }
 
 // maxSidebarVisibilityFrame bounds a MsgSidebarVisibility frame. The payload
@@ -129,6 +135,9 @@ func (d *Daemon) handleSidebarVisibility(cs *connState, msg *Message) error {
 		LogError("Refused a sidebar op from %s: %v", cs.clientID, err)
 		session.NotePush(p.PushOrigin, p.PushSeq)
 	}
+	if err == nil && p.All && !p.IfAbsent {
+		d.applySidebarEverywhere(session, p.Visibility)
+	}
 	if applied {
 		return nil
 	}
@@ -136,6 +145,39 @@ func (d *Daemon) handleSidebarVisibility(cs *connState, msg *Message) error {
 		State:       session.GetState(),
 		TriggerType: "reconcile",
 	})
+}
+
+// applySidebarEverywhere sets the rail's visibility on every session but
+// from, which the op itself already set. Each session that changes advances
+// its Version and sends its clients the result, as the op does for its own.
+func (d *Daemon) applySidebarEverywhere(from *Session, visibility string) {
+	for _, s := range d.manager.AllSessions() {
+		if s == from {
+			continue
+		}
+		s.SetSidebarVisibility(visibility)
+	}
+}
+
+// SetSidebarVisibility sets the rail's visibility on a session for an op
+// sent to another one (see SidebarVisibilityPayload.All). It changes nothing
+// when the session already holds the value.
+func (s *Session) SetSidebarVisibility(visibility string) {
+	if !validSidebarVisibility(visibility) {
+		return
+	}
+	snap, err := s.mutateStateLocked(func(state *SessionState) error {
+		if state.Sidebar == visibility {
+			return errSidebarSame
+		}
+		state.Sidebar = visibility
+		s.noteTreeOpLocked(state.Version+1, "", treeOpNoWorkspace)
+		return nil
+	})
+	if err != nil {
+		return
+	}
+	s.publishState(snap)
 }
 
 // legacySidebar makes this client behave as a build from before the sidebar
@@ -155,7 +197,7 @@ func (c *TUIClient) SidebarOps() bool {
 
 // SendSidebarVisibility sends whether the rail is shown to the daemon as an
 // op, numbered in the same sequence as the state pushes. See SendLayoutTree.
-func (c *TUIClient) SendSidebarVisibility(shown, ifAbsent bool) error {
+func (c *TUIClient) SendSidebarVisibility(shown, ifAbsent, all bool) error {
 	c.pushMu.Lock()
 	defer c.pushMu.Unlock()
 	seq := c.pushSeq.Load() + 1
@@ -163,7 +205,7 @@ func (c *TUIClient) SendSidebarVisibility(shown, ifAbsent bool) error {
 	if shown {
 		v = SidebarShown
 	}
-	p := &SidebarVisibilityPayload{PushSeq: seq, Visibility: v, IfAbsent: ifAbsent}
+	p := &SidebarVisibilityPayload{PushSeq: seq, Visibility: v, IfAbsent: ifAbsent, All: all && !ifAbsent}
 	if origin := c.pushOrigin.Load(); origin != nil {
 		p.PushOrigin = *origin
 	}

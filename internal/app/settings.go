@@ -474,6 +474,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 		Name: "Sidebar",
 		Items: m.resolveRows([]settingsRow{
 			opt("appearance.sidebar.enabled"),
+			opt("appearance.sidebar.per_session"),
 			opt("appearance.sidebar.position"),
 			opt("appearance.sidebar.width"),
 			custom("appearance.sidebar.sections", m.sectionLayoutItem()),

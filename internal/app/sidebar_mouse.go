@@ -77,7 +77,7 @@ func (m *OS) ToggleSidebar() {
 	m.SidebarRevealedForFocus = false
 	if m.sidebarOpsOn() {
 		m.sidebarSession = sidebarVisibility(on)
-		if err := m.DaemonClient.SendSidebarVisibility(on, false); err != nil {
+		if err := m.DaemonClient.SendSidebarVisibility(on, false, !m.Settings.SidebarPerSession); err != nil {
 			m.LogError("Failed to send the sidebar state: %v", err)
 		}
 	}
@@ -173,7 +173,7 @@ func (m *OS) seedSidebar() {
 	}
 	m.sidebarSeeded = true
 	on := m.Settings.SidebarEnabled && !m.SidebarRevealedForFocus
-	if err := m.DaemonClient.SendSidebarVisibility(on, true); err != nil {
+	if err := m.DaemonClient.SendSidebarVisibility(on, true, false); err != nil {
 		m.LogError("Failed to offer the sidebar state: %v", err)
 	}
 }
@@ -192,7 +192,7 @@ func (m *OS) syncSidebarToSession() {
 		return
 	}
 	m.sidebarSession = v
-	if err := m.DaemonClient.SendSidebarVisibility(m.Settings.SidebarEnabled, false); err != nil {
+	if err := m.DaemonClient.SendSidebarVisibility(m.Settings.SidebarEnabled, false, !m.Settings.SidebarPerSession); err != nil {
 		m.LogError("Failed to send the sidebar state: %v", err)
 	}
 }

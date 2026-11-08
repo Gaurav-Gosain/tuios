@@ -995,6 +995,11 @@ var optionSpecs = []Option{
 		Default:     "true",
 	},
 	{
+		Path: "appearance.sidebar.per_session", Type: OptionBool, Section: "sidebar",
+		Description: "Each session keeps its own shown or hidden rail. Off, showing or hiding the rail applies to every session",
+		Default:     "false",
+	},
+	{
 		Path: "appearance.sidebar.position", Type: OptionString, Section: "sidebar",
 		Description: "Edge the rail sits on, or hidden",
 		Accepted:    SidebarPositions, Default: DefaultSidebarPosition,

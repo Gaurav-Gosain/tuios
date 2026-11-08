@@ -260,6 +260,12 @@ type Settings struct {
 	// SidebarMarquee scrolls a hovered row's title when it overflows its columns.
 	SidebarMarquee bool
 
+	// SidebarPerSession keeps the rail's shown or hidden state per session,
+	// as before issue 589. Off (the default), showing or hiding the rail
+	// applies to every session on the daemon. Set via
+	// appearance.sidebar.per_session.
+	SidebarPerSession bool
+
 	// SidebarPeekEnabled lets hovering a session row, or moving the rail
 	// cursor onto it, show that session's panes in the terminals section.
 	// Off, the section shows the attached session's panes until a click

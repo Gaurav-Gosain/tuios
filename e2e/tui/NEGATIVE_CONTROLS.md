@@ -15151,3 +15151,18 @@ Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
 | The search and f/t checks cut from the exit in `runCopyModeKey` | "Enter in the search prompt did not run the search" | **caught** |
 | The copy cut from the exit in a selection | "the gesture never produced the clipboard writes [\"back-37\"]; it wrote []" | **caught** |
 | The legend keeps "q/esc" alone | "the copy mode legend does not name the exit key" | **caught** |
+
+## TestRailToggleIsGlobal
+
+Issue 589. Two sessions, alpha and beta, both visited with the rail shown.
+`Ctrl+B b` on alpha hides the rail; on beta it must be hidden too. Shown
+again on beta, it must be shown on alpha. `TestRailTogglePerSession` holds
+`appearance.sidebar.per_session = true` to the old behaviour, where beta
+keeps its own rail.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| main at 6db1de3ed | "beta after the rail was hidden on alpha: the rail is not hidden" | **caught** |
+| The daemon applies the op to the sender's session only (`applySidebarEverywhere` cut) | the same | **caught** |

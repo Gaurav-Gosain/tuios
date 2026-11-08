@@ -69,6 +69,7 @@ var settingLabels = map[string]string{
 	"appearance.show_cpu":                 "CPU meter",
 	"appearance.show_ram":                 "RAM meter",
 	"appearance.sidebar.enabled":          "Sidebar",
+	"appearance.sidebar.per_session":      "Sidebar per session",
 	"spotlight.shake":                     "Shake to toggle",
 	"appearance.sidebar.position":         "Position",
 	"appearance.sidebar.width":            "Width",

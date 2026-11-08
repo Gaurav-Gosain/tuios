@@ -921,6 +921,7 @@ type SelectionConfig struct {
 // the default" and an explicit false survives a reload.
 type SidebarConfig struct {
 	Enabled     *bool  `toml:"enabled"`      // Show the rail (default: true)
+	PerSession  *bool  `toml:"per_session"`  // Each session keeps its own shown or hidden rail; off, a toggle applies to every session (default: false)
 	Position    string `toml:"position"`     // Edge: left, right, hidden (default: right)
 	Width       int    `toml:"width"`        // Preferred width in columns for a wide screen (default: 24)
 	ShowWindows *bool  `toml:"show_windows"` // The terminals section (default: true)
@@ -2875,6 +2876,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if sb.Enabled != nil {
 		s.SidebarEnabled = *sb.Enabled
 	}
+	s.SidebarPerSession = sb.PerSession != nil && *sb.PerSession
 	s.SidebarPosition = closedSetValue(sb.Position, SidebarPositions, s.SidebarPosition, DefaultSidebarPosition)
 	if sb.Width > 0 {
 		s.SidebarWidth = sb.Width

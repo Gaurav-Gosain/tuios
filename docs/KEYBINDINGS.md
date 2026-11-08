@@ -190,7 +190,10 @@ select a file.
 With both sidebar edges visible, `e` while the sidebar has keyboard focus
 switches focus to the other edge; press it again to return. `Ctrl+B H` toggles
 the independently configured opposite rail without changing the original
-rail (`Ctrl+B b` still toggles that original rail).
+rail (`Ctrl+B b` still toggles that original rail). `Ctrl+B b` shows or
+hides the rail in every session. Set `appearance.sidebar.per_session = true`
+to keep a shown or hidden rail per session, as before. See
+[CONFIGURATION.md](CONFIGURATION.md#show-or-hide-the-rail-in-every-session).
 
 `Enter` opens a folder or copies the path of a file. `Shift+Enter` opens a text
 file in a new pane. The pane runs the editor set under Settings, Sidebar, File
