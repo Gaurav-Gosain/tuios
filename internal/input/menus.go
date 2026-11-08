@@ -1,8 +1,6 @@
 package input
 
 import (
-	"time"
-
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -26,9 +24,7 @@ func handleOpenMenu(action string) ActionHandler {
 		if _, ok := declaredMenu(o, name); !ok {
 			return o, nil
 		}
-		o.Menu = name
-		o.PrefixActive = true
-		o.LastPrefixTime = time.Now()
+		o.OpenMenu(name)
 		return o, nil
 	}
 }
@@ -58,8 +54,7 @@ func HandleMenuCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	m, cmd, ran := dispatchAction(action, msg, o)
 	if ran {
 		if menu.Sticky && m.Menu == "" && !m.PrefixActive {
-			m.Menu = name
-			m.PrefixActive = true
+			m.HoldMenu(name)
 		} else {
 			// Lock mode holds a menu open after a repeatable action too.
 			k.ran(m, action)

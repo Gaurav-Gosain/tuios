@@ -15572,3 +15572,16 @@ tests whose names carry Leader, Prefix, Menu or Lock.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestLeaderTwiceClosesTheSubMenu$' -v .`.
+
+## TestDeclaredStickyMenuStaysOpenUntilAnUnboundKey (the held menu stays shown)
+
+State machine plan M2. A sticky menu that stays open after its key ran keeps
+the time it opened, so the which-key panel stays on screen and does not wait
+the 500 ms delay again. The test reads the panel 150 ms after the second h.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| HoldMenu restarting the which-key time (`setMenus(..., true, "sticky menu")`) | "the held menu's panel went away after h, as if the menu had opened again", 3 of 3 | **caught** |
+| `TestOnlyMenuStateWritesTheLeader` on main | lists the direct writes in internal/input and internal/learn | **caught** |

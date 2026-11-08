@@ -6,7 +6,6 @@ package input
 import (
 	"slices"
 	"strings"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
@@ -924,8 +923,7 @@ func handlePrefixKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 	// Activate prefix mode
-	o.PrefixActive = true
-	o.LastPrefixTime = time.Now()
+	o.ArmLeader()
 	return o, nil
 }
 

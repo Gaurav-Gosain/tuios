@@ -95,7 +95,7 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// It was typed after the leader, so it is dropped, not typed into the
 		// pane, and the prefix stays pending so the key can be typed again.
 		if o.AllKeysPending() && isLayoutTextWithoutBase(msg) {
-			o.PrefixActive = true
+			o.KeepLeaderPending()
 			return o, nil
 		}
 		forwardKeyToFocusedWindow(msg, o)

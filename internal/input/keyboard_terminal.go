@@ -1,8 +1,6 @@
 package input
 
 import (
-	"time"
-
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -117,8 +115,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			return o, nil
 		}
 		// Activate prefix mode
-		o.PrefixActive = true
-		o.LastPrefixTime = time.Now()
+		o.ArmLeader()
 		return o, nil
 	}
 

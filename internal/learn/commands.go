@@ -204,9 +204,7 @@ func (m *Model) reset() {
 		o.ExitSidebarFocus()
 		o.ToggleSidebar()
 	}
-	o.PrefixActive = false
-	o.SubMenu = app.SubMenuNone
-	o.Menu = ""
+	o.CloseMenus()
 	_ = o.SwitchWorkspace(1)
 	if o.LayoutModeName() != config.LayoutModeBSP {
 		m.RunCommand("layout", config.LayoutModeBSP)

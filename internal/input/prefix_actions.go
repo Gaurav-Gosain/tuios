@@ -84,13 +84,13 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 
 	// Sub-prefixes: each keeps the prefix active so the which-key overlay stays
 	// up for the second key.
-	d.Register("prefix_workspace", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuWorkspace }))
-	d.Register("prefix_minimize", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuMinimize }))
-	d.Register("prefix_window", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuTiling }))
-	d.Register("prefix_debug", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuDebug }))
-	d.Register("prefix_tape", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuTape }))
-	d.Register("prefix_layout", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuLayout }))
-	d.Register("prefix_tuios", makeSubPrefixHandler(func(o *app.OS) { o.SubMenu = app.SubMenuTuios }))
+	d.Register("prefix_workspace", makeSubPrefixHandler(app.SubMenuWorkspace))
+	d.Register("prefix_minimize", makeSubPrefixHandler(app.SubMenuMinimize))
+	d.Register("prefix_window", makeSubPrefixHandler(app.SubMenuTiling))
+	d.Register("prefix_debug", makeSubPrefixHandler(app.SubMenuDebug))
+	d.Register("prefix_tape", makeSubPrefixHandler(app.SubMenuTape))
+	d.Register("prefix_layout", makeSubPrefixHandler(app.SubMenuLayout))
+	d.Register("prefix_tuios", makeSubPrefixHandler(app.SubMenuTuios))
 
 	// Window prefix (leader, t, ...)
 	d.Register("window_prefix_new", handleNewWindow)
@@ -188,11 +188,9 @@ func refreshFocusedWindow(o *app.OS) {
 // makeSubPrefixHandler builds a handler that enters a sub-prefix. The prefix
 // stays active so the next key is routed to the sub-prefix rather than to the
 // terminal, and the timer restarts so the chord gets a fresh timeout.
-func makeSubPrefixHandler(activate func(*app.OS)) ActionHandler {
+func makeSubPrefixHandler(sub app.SubMenu) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-		activate(o)
-		o.PrefixActive = true
-		o.LastPrefixTime = time.Now()
+		o.OpenSubMenu(sub)
 		return o, nil
 	}
 }
