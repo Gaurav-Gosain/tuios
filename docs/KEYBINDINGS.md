@@ -1194,6 +1194,26 @@ set_master_position_center = ["c"]
 
 See [LAYOUT_MODES.md](LAYOUT_MODES.md#master-stack-layout).
 
+## Ask before a pane closes
+
+`x` in window mode (`close_window`), `Ctrl+B x` (`prefix_close_window`), the
+pane menu's `Close pane` and the close control in the title bar close the pane
+at once. To get a question first, set `appearance.confirm_close`:
+
+```toml
+[appearance]
+confirm_close = "busy"   # never (default), busy or always
+```
+
+- `never` closes at once. This is the default.
+- `busy` asks when the pane runs something besides its shell, such as an
+  agent, an editor or a long job. A pane at its shell prompt closes at once.
+- `always` asks for every pane.
+
+The dialog names the pane. `Cancel` is the default row. Go down to
+`Close pane` and press `Enter` to close it, or press `Esc` to keep it.
+`tuios close-window` and the other commands never ask.
+
 ## Close every pane on a workspace
 
 The `close_workspace` action closes every pane on the current workspace. It is

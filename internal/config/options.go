@@ -357,6 +357,11 @@ var optionSpecs = []Option{
 		Deprecated:  "folded into appearance.motion on load (false is none); set appearance.motion",
 	},
 	{
+		Path: "appearance.confirm_close", Type: OptionString, Section: "appearance",
+		Description: "When closing a pane by hand (a key, its menu or its close control) asks first: never, busy (the pane runs something besides its shell) or always",
+		Accepted:    ConfirmCloseLevels, Default: ConfirmCloseNever,
+	},
+	{
 		Path: "appearance.confirm_quit", Type: OptionBool, Section: "appearance",
 		Description: "Always confirm on quit, not only when processes are running",
 		Default:     "false",

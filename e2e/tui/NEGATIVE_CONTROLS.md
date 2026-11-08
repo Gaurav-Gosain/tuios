@@ -15015,3 +15015,25 @@ Run on 2026-11-08 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestUnknownKeybindTableIsNamed$' -v .`.
+
+## TestConfirmCloseAsksForABusyPane
+
+Issue 1669. `appearance.confirm_close` is new: never (the default, today's
+behaviour), busy and always. With busy, x on a pane that runs `sleep 600`
+must ask in the one-pane close dialog, esc must keep the pane, the Close
+pane row must close it, and x on a pane at its prompt must close it at once.
+A click on the pane's close control in the title bar must ask the same way.
+For one pane the dialog says what runs in it ("is running sleep").
+`TestConfirmCloseAlwaysAsks` covers always, and `TestCloseDoesNotAskByDefault`
+holds the default to the old behaviour.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| main at 6db1de3ed | "x on a busy pane did not ask"; always: "x on a pane at its prompt did not ask" | **caught** |
+| The close control closes at once (the check cut from the click in `mouse_click.go`) | "the close control on a busy pane did not ask" | **caught** |
+| `CloseNeedsConfirm` reads only `HasForegroundProcess` (the daemon's `ForegroundCmd` cut) | passes: the client's own PTY check already sees `sleep` here | not caught |
+
+The `ForegroundCmd` half is the fallback `paneBusyReason` uses as well, for a
+pane whose PTY this client cannot read. No test here reaches it.

@@ -487,7 +487,13 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if action, ok := o.WindowButtonIn(clickedWindow.ID, X, Y); ok {
 			switch action {
 			case app.WindowButtonClose:
-				o.CloseWindowByHand(clickedWindowIndex)
+				// appearance.confirm_close holds for the close control as
+				// for the keys: the same dialog, the same rule.
+				if o.CloseNeedsConfirm(clickedWindowIndex) {
+					o.OpenSessionCloseForWindow(clickedWindowIndex)
+				} else {
+					o.CloseWindowByHand(clickedWindowIndex)
+				}
 			case app.WindowButtonMinimize:
 				o.MinimizeWindow(clickedWindowIndex)
 			case app.WindowButtonFloat:

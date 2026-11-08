@@ -220,6 +220,12 @@ func handleCloseWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.CloseWindowByHand(o.FocusedWindow)
 		return o, nil
 	}
+	// appearance.confirm_close: the close waits for the answer in the
+	// one-pane close dialog, which closes the pane the same way.
+	if o.CloseNeedsConfirm(o.FocusedWindow) {
+		o.OpenSessionCloseForWindow(o.FocusedWindow)
+		return o, nil
+	}
 	o.FireHook(hooks.AfterCloseWindow, w.ID, w.Title())
 	o.DeleteWindow(o.FocusedWindow)
 	if len(o.Windows) > 0 {

@@ -89,6 +89,7 @@ var settingLabels = map[string]string{
 	"appearance.calm":                     "Calm mode",
 	"appearance.modal_dim":                "Dim behind panels",
 	"appearance.popup_dim":                "Dim behind popups",
+	"appearance.confirm_close":            "Confirm pane close",
 	"appearance.confirm_quit":             "Confirm quit",
 	"appearance.session_colors":           "Session colors",
 	"appearance.session_border":           "Session border",

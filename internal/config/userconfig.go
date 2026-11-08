@@ -465,6 +465,7 @@ type AppearanceConfig struct {
 	Calm                     *bool                   `toml:"calm"`                         // Calm mode: no motion or blinking, and only messages that need you reach the dock (default: false)
 	ModalDim                 *int                    `toml:"modal_dim"`                    // Percent the screen behind a modal overlay is darkened; 0 is off (default: 30)
 	PopupDim                 *int                    `toml:"popup_dim"`                    // Percent the screen behind a popup is darkened; 0 is off (default: 0)
+	ConfirmClose             string                  `toml:"confirm_close"`                // When closing a pane by hand (a key, its menu, its close control) asks first: never, busy (it runs something besides its shell) or always (default: never)
 	ConfirmQuit              *bool                   `toml:"confirm_quit"`                 // Always show quit confirmation dialog (default: false). When false, only shown if foreground processes are running.
 	WhichKeyEnabled          *bool                   `toml:"whichkey_enabled"`             // Show which-key popup after pressing leader key (default: true)
 	WhichKeyPosition         string                  `toml:"whichkey_position"`            // Which-key popup position: bottom-right, bottom-left, top-right, top-left, center (default: bottom-right)
@@ -1238,6 +1239,7 @@ func DefaultConfig() *UserConfig {
 			ZoomSize:                 ZoomSizeDefault,
 			AnimationSpeed:           AnimationSpeedDefault,
 			ThemeTransition:          ThemeTransitionNone,
+			ConfirmClose:             ConfirmCloseNever,
 			ThemeTransitionMs:        ThemeTransitionMsDefault,
 			NiriScrollCells:          NiriScrollCellsDefault,
 			PrefixRepeatTime:         &defaultPrefixRepeatTime,
@@ -2628,6 +2630,9 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	if !slices.Contains(MotionLevels, cfg.Appearance.Motion) {
 		cfg.Appearance.Motion = defaultCfg.Appearance.Motion
 	}
+	if !slices.Contains(ConfirmCloseLevels, cfg.Appearance.ConfirmClose) {
+		cfg.Appearance.ConfirmClose = defaultCfg.Appearance.ConfirmClose
+	}
 	if !slices.Contains(ThemeTransitions, cfg.Appearance.ThemeTransition) {
 		cfg.Appearance.ThemeTransition = defaultCfg.Appearance.ThemeTransition
 	}
@@ -3186,6 +3191,11 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 
 	if a.PopupDim != nil {
 		s.PopupDim = min(max(*a.PopupDim, 0), PopupDimMax)
+	}
+
+	s.ConfirmClose = ConfirmCloseNever
+	if slices.Contains(ConfirmCloseLevels, cfg.Appearance.ConfirmClose) {
+		s.ConfirmClose = cfg.Appearance.ConfirmClose
 	}
 
 	// ConfirmQuit defaults to false (nil means use default)

@@ -617,6 +617,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.animation_speed"),
 			opt("appearance.theme_transition"),
 			opt("appearance.theme_transition_duration"),
+			opt("appearance.confirm_close"),
 			opt("appearance.confirm_quit"),
 			opt("appearance.whichkey_enabled"),
 			opt("appearance.whichkey_position"),

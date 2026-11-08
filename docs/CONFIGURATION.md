@@ -702,6 +702,24 @@ The old keys `appearance.workspace_transition`, `workspace_transition_ms` and
 `motion.workspace_ms` and `motion.zoom` on load. A `[motion]` key that is set
 wins.
 
+## Confirm a pane close
+
+`appearance.confirm_close` sets when closing a pane by hand asks first: with
+`close_window`, `prefix_close_window`, the pane menu's `Close pane` or the
+close control in the title bar.
+
+- `never` closes the pane at once. This is the default.
+- `busy` asks when the pane runs something besides its shell.
+- `always` asks for every pane.
+
+```toml
+[appearance]
+confirm_close = "busy"
+```
+
+The commands, such as `tuios close-window`, never ask. See
+[KEYBINDINGS.md](KEYBINDINGS.md#ask-before-a-pane-closes).
+
 ## Theme transition
 
 `appearance.theme_transition` sets how tuios shows a change of theme. The

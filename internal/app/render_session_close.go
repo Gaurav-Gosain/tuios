@@ -37,12 +37,16 @@ func (m *OS) renderSessionClose() (string, overlay.Geometry, []overlayRowHit) {
 	if toll.Working > 0 || toll.Blocked > 0 {
 		tollColor = pal.Warn
 	}
+	tollLine := toll.Line()
+	if m.SessionCloseWindow != "" {
+		tollLine = m.windowTollLine(m.windowIndexByID(m.SessionCloseWindow), toll)
+	}
 
 	body := []string{
 		overlay.Fill(overlay.Style(bg).Render(" ")+
 			overlay.Style(bg).Foreground(pal.Fg).Bold(true).Render(overlay.Truncate(m.sessionCloseQuestion(), max(width-1, 1))), width, bg),
 		overlay.Fill(overlay.Style(bg).Render(" ")+
-			overlay.Style(bg).Foreground(tollColor).Render(overlay.Truncate(toll.Line(), max(width-1, 1))), width, bg),
+			overlay.Style(bg).Foreground(tollColor).Render(overlay.Truncate(tollLine, max(width-1, 1))), width, bg),
 		overlay.Fill(overlay.Style(bg).Render(" ")+overlay.DashRule(max(width-2, 0), bg, pal), width, bg),
 		m.sessionCloseRow(SessionCloseRowCancel, width, pal),
 		m.sessionCloseRow(SessionCloseRowClose, width, pal),

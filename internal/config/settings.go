@@ -7,6 +7,21 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
+// The values of appearance.confirm_close: when closing a pane by hand, with a
+// key or the pane's menu, asks first. A script never gets the question.
+const (
+	// ConfirmCloseNever closes the pane at once, as tuios always did.
+	ConfirmCloseNever = "never"
+	// ConfirmCloseBusy asks when the pane runs something besides its shell,
+	// the rule the quit dialog uses.
+	ConfirmCloseBusy = "busy"
+	// ConfirmCloseAlways asks for every pane.
+	ConfirmCloseAlways = "always"
+)
+
+// ConfirmCloseLevels is what appearance.confirm_close accepts.
+var ConfirmCloseLevels = []string{ConfirmCloseNever, ConfirmCloseBusy, ConfirmCloseAlways}
+
 // Settings is every appearance and behaviour value a running session reads.
 //
 // It is a struct rather than a wall of package variables because one tuios
@@ -124,6 +139,10 @@ type Settings struct {
 	// PopupDim is the percent the screen behind a focused plain popup is darkened
 	// by. Zero turns it off. Set via appearance.popup_dim.
 	PopupDim int
+
+	// ConfirmClose is when closing a pane by hand asks first: ConfirmCloseNever,
+	// ConfirmCloseBusy or ConfirmCloseAlways. Set via appearance.confirm_close.
+	ConfirmClose string
 
 	// AlwaysConfirmQuit controls whether the quit confirmation dialog is shown
 	// every time, regardless of whether there are active foreground processes.
@@ -997,6 +1016,7 @@ func DefaultSettings() Settings {
 		PopupDim:                    PopupDimDefault,
 		AnimationsSuppressed:        false,
 		AlwaysConfirmQuit:           false,
+		ConfirmClose:                ConfirmCloseNever,
 		WhichKeyEnabled:             true,
 		WhichKeyPosition:            "bottom-right",
 		WrapLists:                   true,
