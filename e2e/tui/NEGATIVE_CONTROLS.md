@@ -15554,3 +15554,21 @@ working again (unblockErrored).
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAutoDispatchFailedStartsLeaveNothingBehind$' -v .`.
+
+## TestLeaderTwiceClosesTheSubMenu
+
+State machine plan M2. ctrl+b w opens the workspace menu, and the leader again
+sends the leader to the pane. The key after that must be the pane's in
+terminal mode (2 2 7 reach the shell, the client stays on workspace 1) and a
+window key in window management mode (n opens a pane).
+
+Run on 2026-11-08 on macOS (arm64). The branch passes, and so do the 46 e2e
+tests whose names carry Leader, Prefix, Menu or Lock.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (90d8a0400), where the leader twice clears the leader flag alone | "the keys after the leader twice did not reach the shell", "the client left workspace 1" (the dock reads 2:0) | **caught** |
+| The branch with handler.go as on main (window management mode path) | "in window management mode, n after the leader twice did not open a pane" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestLeaderTwiceClosesTheSubMenu$' -v .`.
