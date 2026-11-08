@@ -15448,3 +15448,17 @@ Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
 |---------|---------------------|--------|
 | main at 6db1de3ed | "beta after the rail was hidden on alpha: the rail is not hidden" | **caught** |
 | The daemon applies the op to the sender's session only (`applySidebarEverywhere` cut) | the same | **caught** |
+
+## TestConfigApplyReloadsHooks
+
+Issue 1622. A daemon with no hooks. A file edit adds an after-new-window
+hook: it must not run yet. `tuios config apply` must load it, name it in its
+output and in `tuios list-hooks`, and a new window must run it. A file edit
+that removes the hook must apply with no `config apply`.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| main at 6db1de3ed | "config apply does not say the hook changed", "list-hooks does not show the hook after config apply" | **caught** |
+| The file-change check cut from `reloadHooks` (a file change arms any hook) | "a file change armed a new hook with no config apply" | **caught** |
