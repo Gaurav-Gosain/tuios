@@ -219,8 +219,9 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 
 	// Help mode reads the pointer as its selection cursor. This is the
 	// whitelist every hover needs a clause in, so without it the pane would
-	// only ever follow Tab.
-	if m.HelpMode {
+	// only ever follow Tab. While the explanation is hidden for a key, the
+	// pointer is the app's again.
+	if m.HelpMode && !m.helpHidden {
 		return msg
 	}
 

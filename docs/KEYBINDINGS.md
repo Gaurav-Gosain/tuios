@@ -233,8 +233,13 @@ and cannot focus or move it, and the wheel scrolls the explanation. The dock is
 the exception, because its cells are controls: a click on one does what it does
 with the pane down, from a workspace tab to a minimized pane's pill to a custom
 cell, and the explanation follows the click. A panel opened over help takes
-the pointer and the keys. Because the pane is a view, a bare `h`, `Up` or
-`Down` belongs to it even over a terminal pane: leave help to type them.
+the pointer and the keys.
+
+A key help mode does not bind does what it does without the pane, and the pane
+steps out of sight while it runs: it comes back after two seconds, and any of
+the navigation keys brings it back at once. That is how a bare `h` or `Up` can
+belong to the pane's explanation over a terminal and still leave the keyboard
+free. `Shift+Esc` is the way out for good.
 
 The default is
 `prefix_help_mode = ["h"]` in

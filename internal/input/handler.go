@@ -42,6 +42,12 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		result, cmd = HandleKeyPress(msg, o)
+		// A key help mode does not bind marks the explanation hidden; the tick
+		// that brings it back is returned from here, because the router's own
+		// command is the key's.
+		if show := o.FlushHelpHide(); show != nil {
+			cmd = tea.Batch(cmd, show)
+		}
 	case tea.KeyReleaseMsg:
 		// Releases only arrive once the host has been asked for event types, and
 		// tuios itself does one thing with one: end a hold. No binding acts on a
@@ -450,6 +456,12 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if result, cmd, handled := handleHelpModeKey(msg, o); handled {
 			return result, cmd
 		}
+		// The key is not help's. It runs on the screen the pane explains, so
+		// the pane steps out of the way for a moment: a chord that moves a
+		// rail or switches workspace should be seen doing it, not read about
+		// through an explanation laid over the change. A navigation key brings
+		// the pane back at once. See SuspendHelp.
+		o.SuspendHelp()
 	}
 
 	// Hold-to-window-mode. The trigger is consumed here, before any mode routing,

@@ -282,6 +282,16 @@ type OS struct {
 	// is taller than the screen allows. Up and Down move it; the title and the
 	// footer stay where they are.
 	helpScroll int
+	// helpHidden is set while a key that is not help's runs: the explanation
+	// steps out of the way so the key acts on the screen it was aimed at, and
+	// comes back after helpHideFor. A navigation key brings it back at once.
+	helpHidden bool
+	// helpHideSeq numbers the hides, so a tick a later key scheduled cannot
+	// end a hide a still later one started.
+	helpHideSeq int
+	// helpHideDue says a key hid the pane and the tick that ends the hide is
+	// still owed to Update. The key router marks it; see FlushHelpHide.
+	helpHideDue bool
 	// helpComps is the component list the last frame drew. Motion and the
 	// Tab/arrow keys read it instead of rebuilding every row's help.
 	helpComps       []helpComponent
