@@ -279,7 +279,7 @@ func (m *OS) renderCockpit() (string, int, int, int) {
 	}
 	// A state that moves with the clock or the keyboard is drawn afresh.
 	// The reply editor is not one: what it draws is in the key.
-	transient := m.CockpitTop().transient() || ck.kb.drag != nil || st.approvals.armed.key != ""
+	transient := m.CockpitTop().transient() || ck.kb.drag != nil || st.approvals.answer.step == answerArmed
 	if !transient && ck.frame != "" && ck.frameAt == key {
 		return ck.frame, top, w, h
 	}
@@ -1901,7 +1901,7 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 		}
 		return hints
 	case CockpitLayerConfirm:
-		return inboxConfirmHints(st.approvals.confirm.decision)
+		return inboxConfirmHints(st.approvals.answer.confirm.decision)
 	case CockpitLayerPeek:
 		return nil
 	case CockpitLayerReason:
@@ -2430,7 +2430,7 @@ func (m *OS) ckApprovalLines(it session.AttentionItem, where string, width int, 
 		}
 	}
 	if key, armed := m.inboxArmedFor(it, now); armed {
-		press := m.Inbox.approvals.armed.press
+		press := m.Inbox.approvals.answer.armed.press
 		if press == "" {
 			press = inboxDecisionKey(key)
 		}
@@ -2495,7 +2495,7 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 	// gaps and its buttons.
 	st.ck.cardRoom = max(y1-y0-base-2, 0)
 	var detail, inset []string
-	plain := it.Kind == session.AttentionApproval && st.approvals.reason == nil && inboxShowsWhole(it)
+	plain := it.Kind == session.AttentionApproval && st.approvals.answer.reason == nil && inboxShowsWhole(it)
 	// cut is whether any of what the card asks about is left off. A held
 	// approval or question shown cut is never counted as read.
 	cut := false
@@ -2542,7 +2542,7 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 	type btn struct{ key, label, action string }
 	var btns []btn
 	switch {
-	case st.approvals.reason != nil:
+	case st.approvals.answer.reason != nil:
 	case it.Kind == session.AttentionAsk && it.RequestID != "":
 		for i, o := range it.Options {
 			if i == 9 {

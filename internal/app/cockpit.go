@@ -1395,7 +1395,7 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		// once. On a risky call it asks, as a key does, and a second click
 		// on the same button (or enter) answers.
 		decision := map[string]string{"a": session.ApprovalOnce, "A": session.ApprovalAlways, "r": session.ApprovalDeny}[action]
-		if m.InboxConfirmOpen() && m.Inbox.approvals.confirm.decision == decision {
+		if m.InboxConfirmOpen() && m.Inbox.approvals.answer.confirm.decision == decision {
 			return m.InboxConfirmKey("enter")
 		}
 		cmd, _ := m.CockpitAnswerLetter(action)

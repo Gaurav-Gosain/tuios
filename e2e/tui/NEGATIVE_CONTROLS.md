@@ -15656,3 +15656,19 @@ fail on main on this Mac too.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestClipboardAskSettlesBeforeAClickAllows$' -v .`.
+
+## TestInboxAnswerOneStepAtATime (guard)
+
+State machine plan M3. One held risky call in the agents view: 1 asks, R with
+the ask open only drops it, R again opens the reason line, a 1 typed there is
+text, esc closes it, and 1 then enter allow. After each step the held hook
+must still be waiting. It is a guard for the one answer step: no run of keys
+leaves two steps standing on the base either, so it has no failing control.
+The click paths that could (a card button under an open ask or peek) are
+closed by the agents view's click rule, which TestCockpitMenuClosesBeforeAClickActs
+and TestCockpitPeekClosesOnAClick hold.
+
+| Control | Result |
+|---------|--------|
+| fix/sm-n1-peek (a53cdef2a), the base | passes (guard) |
+| `TestOnlyInboxAnswerWritesTheAnswerStep` with an injected write (self test) | **caught** |

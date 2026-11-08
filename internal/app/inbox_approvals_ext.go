@@ -48,22 +48,14 @@ const inboxApprovalFetchTimeout = 5 * time.Second
 
 // inboxApprovalState is the Inbox's state for the safer approvals.
 type inboxApprovalState struct {
-	// armed is the first press of an allow on a risky item, waiting for the
-	// second.
-	armed inboxArmed
+	// answer is where an answer stands: armed, asked, asked in the peek, or
+	// the reason line open (inbox_answer.go).
+	answer inboxAnswer
 	// lastKey is the key the Inbox or its peek received last, as the
 	// keyboard spells it.
 	lastKey string
-	// reason is the open "Reason:" line, nil when none is open.
-	reason *inboxReasonLine
 	// plan is the plan shown in the detail.
 	plan inboxPlanView
-	// confirm is the answer a list key asked for, waiting for enter.
-	confirm *inboxConfirm
-	// peekAsk is the answer a key in the peek asked for, waiting for
-	// enter, and peekConfirmed holds that its enter answers now.
-	peekAsk       *inboxPeekAsk
-	peekConfirmed bool
 }
 
 // inboxPeekAsk is an answer a key in the peek asked for.
@@ -79,8 +71,7 @@ func (m *OS) InboxPeekAsk(action, value string) {
 	if p == nil {
 		return
 	}
-	m.Inbox.approvals.armed = inboxArmed{}
-	m.Inbox.approvals.peekAsk = &inboxPeekAsk{action: action, value: value}
+	m.answerPeekAsk(&inboxPeekAsk{action: action, value: value})
 	what := "Answer the prompt"
 	switch action {
 	case harness.ActionApprove:
@@ -97,23 +88,21 @@ func (m *OS) InboxPeekAsk(action, value string) {
 
 // InboxPeekAskOpen reports whether an answer in the peek waits for enter.
 func (m *OS) InboxPeekAskOpen() bool {
-	return m.Inbox.Peek != nil && m.Inbox.approvals.peekAsk != nil
+	return m.Inbox.Peek != nil && m.Inbox.approvals.answer.peekAsk != nil
 }
 
 // InboxPeekAskKey takes the key after an answer key in the peek: enter
 // sends the answer, any other key drops it and does nothing else.
 func (m *OS) InboxPeekAskKey(key string) tea.Cmd {
-	a := m.Inbox.approvals.peekAsk
-	m.Inbox.approvals.peekAsk = nil
+	a := m.Inbox.approvals.answer.peekAsk
+	m.answerEnd(answerPeekAsk, "key after the peek ask")
 	if p := m.Inbox.Peek; p != nil {
 		p.Note = ""
 	}
 	if a == nil || key != "enter" {
 		return nil
 	}
-	m.Inbox.approvals.peekConfirmed = true
-	defer func() { m.Inbox.approvals.peekConfirmed = false }()
-	return m.InboxAnswer(a.action, a.value)
+	return m.inboxAnswer(a.action, a.value, true)
 }
 
 // inboxConfirm is an answer a list key asked for. It answers the item as it
@@ -127,12 +116,12 @@ type inboxConfirm struct {
 // InboxConfirmOpen reports whether an answer waits for enter. It goes when
 // its item is no longer under the cursor.
 func (m *OS) InboxConfirmOpen() bool {
-	c := m.Inbox.approvals.confirm
+	c := m.Inbox.approvals.answer.confirm
 	if c == nil {
 		return false
 	}
 	if it, ok := m.inboxSelected(); !ok || it.ID != c.itemID {
-		m.Inbox.approvals.confirm = nil
+		m.answerEnd(answerConfirm, "its item left the cursor")
 		return false
 	}
 	return true
@@ -141,8 +130,8 @@ func (m *OS) InboxConfirmOpen() bool {
 // InboxConfirmKey takes the key after an answer key: enter sends the
 // answer, and any other key drops it and does nothing else.
 func (m *OS) InboxConfirmKey(key string) tea.Cmd {
-	c := m.Inbox.approvals.confirm
-	m.Inbox.approvals.confirm = nil
+	c := m.Inbox.approvals.answer.confirm
+	m.answerEnd(answerConfirm, "key after the ask")
 	if c == nil || key != "enter" {
 		return nil
 	}
@@ -159,7 +148,7 @@ func (m *OS) InboxConfirmKey(key string) tea.Cmd {
 
 // inboxConfirmLine is what the open confirm says on it, if one is open.
 func (m *OS) inboxConfirmLine(it session.AttentionItem) (string, bool) {
-	c := m.Inbox.approvals.confirm
+	c := m.Inbox.approvals.answer.confirm
 	if c == nil || c.itemID != it.ID {
 		return "", false
 	}
@@ -256,8 +245,8 @@ func inboxRisky(it session.AttentionItem) bool {
 func (m *OS) InboxKeyPressed(key string) {
 	st := &m.Inbox.approvals
 	st.lastKey = key
-	if st.armed.key != "" && key != st.armed.press {
-		st.armed = inboxArmed{}
+	if a := st.answer.armed; st.answer.step == answerArmed && key != a.press {
+		m.answerEnd(answerArmed, "another key")
 	}
 }
 
@@ -267,11 +256,11 @@ func (m *OS) InboxKeyPressed(key string) {
 func (m *OS) inboxArm(key string, it session.AttentionItem, now time.Time) bool {
 	st := &m.Inbox.approvals
 	shown := inboxShownKey(it)
-	if st.armed.key == key && st.armed.item == shown && now.Sub(st.armed.at) <= inboxRiskPressWindow {
-		st.armed = inboxArmed{}
+	if a := st.answer.armed; st.answer.step == answerArmed && a.key == key && a.item == shown && now.Sub(a.at) <= inboxRiskPressWindow {
+		m.answerEnd(answerArmed, "second press")
 		return true
 	}
-	st.armed = inboxArmed{key: key, item: shown, at: now, press: st.lastKey}
+	m.answerArm(inboxArmed{key: key, item: shown, at: now, press: st.lastKey})
 	return false
 }
 
@@ -279,14 +268,14 @@ func (m *OS) inboxArm(key string, it session.AttentionItem, now time.Time) bool 
 // redraws the line when it does, so it names the time rather than implying
 // the press is still waiting.
 func (m *OS) inboxArmedUntil() string {
-	return "by " + m.Inbox.approvals.armed.at.Add(inboxRiskPressWindow).Format("15:04:05")
+	return "by " + m.Inbox.approvals.answer.armed.at.Add(inboxRiskPressWindow).Format("15:04:05")
 }
 
 // inboxArmedFor reports whether a press on it is waiting for its second, and
 // which key it was.
 func (m *OS) inboxArmedFor(it session.AttentionItem, now time.Time) (string, bool) {
-	a := m.Inbox.approvals.armed
-	if a.key == "" || a.item != inboxShownKey(it) || now.Sub(a.at) > inboxRiskPressWindow {
+	a := m.Inbox.approvals.answer.armed
+	if m.Inbox.approvals.answer.step != answerArmed || a.item != inboxShownKey(it) || now.Sub(a.at) > inboxRiskPressWindow {
 		return "", false
 	}
 	return a.key, true
@@ -342,19 +331,18 @@ func (m *OS) InboxDenyReason() (tea.Cmd, bool) {
 		m.ShowNotification("This agent takes no reason with a reject. 3 rejects it", "warning", m.Settings.NotificationDuration)
 		return nil, true
 	}
-	m.Inbox.approvals.armed = inboxArmed{}
 	ed := newLineEditor(inboxReasonMax, "Type the reason, or press enter to reject without one.")
 	if m.ProcessingRemoteKeys {
 		ed.MarkAutomated()
 	}
-	m.Inbox.approvals.reason = &inboxReasonLine{itemID: it.ID, requestID: it.RequestID, ed: ed}
+	m.answerReason(&inboxReasonLine{itemID: it.ID, requestID: it.RequestID, ed: ed})
 	return nil, true
 }
 
 // InboxReasonOpen reports whether the reason line is open, where every
 // printable key is text.
 func (m *OS) InboxReasonOpen() bool {
-	r := m.Inbox.approvals.reason
+	r := m.Inbox.approvals.answer.reason
 	if r == nil {
 		return false
 	}
@@ -362,7 +350,7 @@ func (m *OS) InboxReasonOpen() bool {
 	// or no longer under the cursor, the line is gone with it.
 	it, ok := m.inboxSelected()
 	if !ok || it.ID != r.itemID || it.RequestID != r.requestID {
-		m.Inbox.approvals.reason = nil
+		m.answerEnd(answerReason, "its item left the cursor")
 		return false
 	}
 	return true
@@ -370,14 +358,14 @@ func (m *OS) InboxReasonOpen() bool {
 
 // InboxReasonType types text into the reason at the cursor.
 func (m *OS) InboxReasonType(text string) {
-	if r := m.Inbox.approvals.reason; r != nil && text != "" {
+	if r := m.Inbox.approvals.answer.reason; r != nil && text != "" {
 		r.ed.Insert(text, m.ProcessingRemoteKeys)
 	}
 }
 
 // InboxReasonPaste puts a paste into the reason, on one line.
 func (m *OS) InboxReasonPaste(text string) {
-	if r := m.Inbox.approvals.reason; r != nil && text != "" {
+	if r := m.Inbox.approvals.answer.reason; r != nil && text != "" {
 		r.ed.Paste(text, m.ProcessingRemoteKeys)
 	}
 }
@@ -385,7 +373,7 @@ func (m *OS) InboxReasonPaste(text string) {
 // InboxReasonKey gives a key to the reason line: enter denies with it, esc
 // closes it, and every other key edits it.
 func (m *OS) InboxReasonKey(msg tea.KeyPressMsg) tea.Cmd {
-	r := m.Inbox.approvals.reason
+	r := m.Inbox.approvals.answer.reason
 	if r == nil {
 		return nil
 	}
@@ -405,18 +393,18 @@ const inboxReasonMax = 500
 
 // InboxReasonCancel closes the reason line and drops what was typed.
 func (m *OS) InboxReasonCancel() {
-	m.Inbox.approvals.reason = nil
+	m.answerEnd(answerReason, "esc")
 }
 
 // InboxReasonSend denies the item with the reason. An empty reason sends the
 // harness's default.
 func (m *OS) InboxReasonSend() tea.Cmd {
-	r := m.Inbox.approvals.reason
+	r := m.Inbox.approvals.answer.reason
 	if r == nil || !m.InboxReasonOpen() {
 		return nil
 	}
 	if r.ed.Automated() || m.ProcessingRemoteKeys {
-		m.Inbox.approvals.reason = nil
+		m.answerEnd(answerReason, "typed by send-keys")
 		m.ShowNotification("A reason that send-keys typed is not sent: only keys from your keyboard answer an approval", "error", m.Settings.NotificationDuration)
 		return nil
 	}
@@ -430,7 +418,7 @@ func (m *OS) InboxReasonSend() tea.Cmd {
 		// Invisible characters were removed; the line says so.
 		return nil
 	}
-	m.Inbox.approvals.reason = nil
+	m.answerEnd(answerReason, "sent")
 	return m.inboxReplyCmdWith(it, session.ApprovalDeny, strings.TrimSpace(text))
 }
 
@@ -687,7 +675,7 @@ func inboxPlanRowText(it session.AttentionItem) string {
 // reason line itself. ok is false for every other item.
 func (m *OS) inboxDetailExtra(it session.AttentionItem) (detail func(width int) []string, ok bool) {
 	if m.InboxReasonOpen() {
-		r := m.Inbox.approvals.reason
+		r := m.Inbox.approvals.answer.reason
 		return func(width int) []string {
 			pal := theme.UI()
 			bg := pal.Surface
@@ -721,7 +709,7 @@ func (m *OS) inboxDetailExtra(it session.AttentionItem) (detail func(width int) 
 				}
 			}
 			if key, armed := m.inboxArmedFor(it, now); armed {
-				press := m.Inbox.approvals.armed.press
+				press := m.Inbox.approvals.answer.armed.press
 				if press == "" {
 					press = inboxDecisionKey(key)
 				}
@@ -764,7 +752,7 @@ func inboxPeekApproves(action string) bool {
 
 // inboxPeekRiskGate is the peek's second press on a risky prompt. It returns
 // the rules to acknowledge and whether the answer may be sent now.
-func (m *OS) inboxPeekRiskGate(p *inboxPeek, action, value string) ([]string, bool) {
+func (m *OS) inboxPeekRiskGate(p *inboxPeek, action, value string, confirmed bool) ([]string, bool) {
 	cur, ok := m.inboxItem(p.Item.ID)
 	if !ok {
 		cur = p.Item
@@ -778,7 +766,7 @@ func (m *OS) inboxPeekRiskGate(p *inboxPeek, action, value string) ([]string, bo
 	if !inboxPeekApproves(action) {
 		return nil, true
 	}
-	if m.Inbox.approvals.peekConfirmed {
+	if confirmed {
 		// Enter after the peek asked is the second step.
 		return slices.Clone(cur.Risk), true
 	}
@@ -787,7 +775,7 @@ func (m *OS) inboxPeekRiskGate(p *inboxPeek, action, value string) ([]string, bo
 		key += ":" + value
 	}
 	if !m.inboxArm(key, cur, time.Now()) {
-		press := m.Inbox.approvals.armed.press
+		press := m.Inbox.approvals.answer.armed.press
 		if press == "" {
 			press = "it"
 		}

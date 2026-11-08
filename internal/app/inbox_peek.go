@@ -284,6 +284,12 @@ func (m *OS) applyInboxPeek(msg InboxPeekMsg) {
 // text. It refuses, without calling the daemon, what the peek does not offer
 // and any key that did not come from the keyboard.
 func (m *OS) InboxAnswer(action, value string) tea.Cmd {
+	return m.inboxAnswer(action, value, false)
+}
+
+// inboxAnswer is InboxAnswer; confirmed says the answer is the enter after
+// the peek asked, its second step.
+func (m *OS) inboxAnswer(action, value string, confirmed bool) tea.Cmd {
 	p := m.Inbox.Peek
 	if p == nil || p.Sending || p.Loading {
 		return nil
@@ -312,7 +318,7 @@ func (m *OS) InboxAnswer(action, value string) tea.Cmd {
 	}
 	// An allow of a risky call takes a second press of the same key, and
 	// carries the rules it matched. See inbox_approvals_ext.go.
-	ack, send := m.inboxPeekRiskGate(p, action, value)
+	ack, send := m.inboxPeekRiskGate(p, action, value, confirmed)
 	if !send {
 		return nil
 	}

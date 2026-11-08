@@ -123,7 +123,7 @@ func (m *OS) cockpitOneKeyOpen(l CockpitLayer) bool {
 	st := &m.Inbox
 	switch l {
 	case CockpitLayerConfirm:
-		return st.approvals.confirm != nil
+		return st.approvals.answer.step == answerConfirm
 	case CockpitLayerSelect:
 		return st.selectEditing
 	case CockpitLayerGroupMenu:
@@ -144,7 +144,7 @@ func (m *OS) cockpitCloseOneKey(l CockpitLayer) {
 	st := &m.Inbox
 	switch l {
 	case CockpitLayerConfirm:
-		st.approvals.confirm = nil
+		m.answerEnd(answerConfirm, "closed by a click or a newer layer")
 	case CockpitLayerSelect:
 		m.InboxSelectCancel()
 	case CockpitLayerGroupMenu:

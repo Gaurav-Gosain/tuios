@@ -1575,8 +1575,7 @@ func (m *OS) InboxReplyApproval(decision string) tea.Cmd {
 		return nil
 	}
 	// The key only asks: enter answers (InboxConfirmKey).
-	m.Inbox.approvals.armed = inboxArmed{}
-	m.Inbox.approvals.confirm = &inboxConfirm{decision: decision, itemID: it.ID, shown: inboxShownKey(it)}
+	m.answerAsk(&inboxConfirm{decision: decision, itemID: it.ID, shown: inboxShownKey(it)})
 	return nil
 }
 
@@ -1592,7 +1591,7 @@ func (m *OS) refuseRemoteAnswer(what string) bool {
 	if !m.ProcessingRemoteKeys {
 		return false
 	}
-	m.Inbox.approvals.armed = inboxArmed{}
+	m.answerEnd(answerArmed, "refused")
 	m.ShowNotification(what+" that send-keys typed is not sent: only keys from your keyboard act for you", "error", m.Settings.NotificationDuration)
 	return true
 }
