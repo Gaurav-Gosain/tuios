@@ -15037,3 +15037,23 @@ Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
 
 The `ForegroundCmd` half is the fallback `paneBusyReason` uses as well, for a
 pane whose PTY this client cannot read. No test here reaches it.
+
+## TestTaskDispatchSurvivesALiveUpgrade
+
+State machine plan S1 and S6. A pull board with a verify command, quiet hours
+and a pause, and a card in verify, go through `tuios daemon upgrade`. The
+settings must read the same after it, the verify must run again and land,
+the old image's run must not finish beside it or stay as a zombie, and a
+change made after the upgrade must be what a cold restart reads.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (364cd8002) | "after the live upgrade the dispatch settings read board <nil>, paused false, quiet \"\"", "t1 did not reach review after a live upgrade mid-verify" | **caught** |
+| The dispatch store read on a cold start only (`if !adopted` around `dispatch.load`) | the same two | **caught** |
+| No resume on the adopt path (`if !adopted` around `resumeVerifies`) | "t1 did not reach review after a live upgrade mid-verify" | **caught** |
+| The verifies not held before the exec (`verifies.hold` in prepare cut) | "the verify command ran to its end 2 times across the upgrade, want 1", "the daemon has a child left from the old image's verify: ... <defunct>" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskDispatchSurvivesALiveUpgrade$' -v .`.

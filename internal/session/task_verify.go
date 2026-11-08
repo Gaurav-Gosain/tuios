@@ -200,24 +200,64 @@ func (d *Daemon) workOf(window string) *TaskWork {
 type taskVerifies struct {
 	mu   sync.Mutex
 	runs map[string]taskVerifyRun
+	// held is set while a live upgrade is prepared: no run starts, and the
+	// card keeps its running record for the image that comes next.
+	held bool
 }
 
 type taskVerifyRun struct {
 	token  int64
 	cancel context.CancelFunc
+	done   chan struct{}
 }
 
-// put records the run for key, ending the one it replaces.
-func (t *taskVerifies) put(key string, token int64, cancel context.CancelFunc) {
+// put records the run for key, ending the one it replaces. It reports false,
+// and records nothing, while the runs are held.
+func (t *taskVerifies) put(key string, token int64, cancel context.CancelFunc, done chan struct{}) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.held {
+		return false
+	}
 	if old, ok := t.runs[key]; ok {
 		old.cancel()
 	}
 	if t.runs == nil {
 		t.runs = map[string]taskVerifyRun{}
 	}
-	t.runs[key] = taskVerifyRun{token: token, cancel: cancel}
+	t.runs[key] = taskVerifyRun{token: token, cancel: cancel, done: done}
+	return true
+}
+
+// hold ends every run and waits, up to limit, until each has ended, so no
+// command outlives this image as a child that nothing waits for. A run ended
+// this way lands no result: its card stays in verify with a running record,
+// which resumeVerifies runs again. No run starts until release.
+func (t *taskVerifies) hold(limit time.Duration) {
+	t.mu.Lock()
+	t.held = true
+	var waits []chan struct{}
+	for _, r := range t.runs {
+		r.cancel()
+		waits = append(waits, r.done)
+	}
+	t.mu.Unlock()
+	deadline := time.NewTimer(limit)
+	defer deadline.Stop()
+	for _, done := range waits {
+		select {
+		case <-done:
+		case <-deadline.C:
+			return
+		}
+	}
+}
+
+// release lets runs start again after hold.
+func (t *taskVerifies) release() {
+	t.mu.Lock()
+	t.held = false
+	t.mu.Unlock()
 }
 
 // stop ends the run of key and takes it out: the one with token, or any
@@ -250,8 +290,13 @@ func (d *Daemon) startTaskVerify(sess *Session, id string) {
 	command, timeout := d.dispatch.verifyOf(dispatchBoardKey(sess.Name(), tk.Project))
 	ctx, cancel := context.WithCancel(d.ctx)
 	key := verifyKey(sess.Name(), id)
-	d.verifies.put(key, token, cancel)
+	done := make(chan struct{})
+	if !d.verifies.put(key, token, cancel, done) {
+		cancel()
+		return
+	}
 	go func() {
+		defer close(done)
 		defer d.verifies.stop(key, token)
 		res := verifyResult{Note: "no verify command", unreached: true}
 		switch {

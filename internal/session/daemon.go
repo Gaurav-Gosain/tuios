@@ -1676,24 +1676,7 @@ func (d *Daemon) Start() error {
 
 	// The Inbox comes back after the sessions do, since what it keeps is
 	// decided by which sessions and panes came back.
-	d.attention.load(attentionPath(), d.attentionLive)
-	// A default that widened while the daemon was down is said now, when
-	// the Inbox can show it.
-	d.checkGrantsSinceLastRun()
-	// A host entry dropped at start is said now, when the Inbox can show it.
-	d.noteHostProblems(d.configProblems())
-	// Mail still waiting for another machine comes back with its Inbox items,
-	// and goes when that machine's link comes up.
-	d.outbox.load(outboxPath())
-	// Review notes come back for the panes that came back.
-	d.dispatch.load(dispatchPath())
-	// The verifies a restart ended run again, now that the boards' verify
-	// commands are read (task_verify.go).
-	for _, s := range d.manager.AllSessions() {
-		d.resumeVerifies(s)
-	}
-	d.kickAuto()
-	d.reviewNotes.load(reviewNotesPath(), func(window string) bool { return d.sessionOfWindow(window) != "" })
+	d.loadStores(false)
 
 	// The resume offers the restore found are opened only now, after the saved
 	// Inbox items took their ids, so an offer never shares an id with one.
@@ -1702,6 +1685,35 @@ func (d *Daemon) Start() error {
 
 	d.serve()
 	return nil
+}
+
+// loadStores reads the daemon's own stores, after the sessions are in
+// place, and resumes the work they record. A cold start and a live upgrade
+// both call it, so a store one start path reads is never missing from the
+// other: adopted is set for the image a live upgrade execs.
+func (d *Daemon) loadStores(adopted bool) {
+	if adopted {
+		d.attention.loadHandoff(attentionPath(), d.attentionLive, d.attentionWaiting)
+	} else {
+		d.attention.load(attentionPath(), d.attentionLive)
+		// A default that widened while the daemon was down is said now,
+		// when the Inbox can show it.
+		d.checkGrantsSinceLastRun()
+	}
+	// A host entry dropped at start is said now, when the Inbox can show it.
+	d.noteHostProblems(d.configProblems())
+	// Mail still waiting for another machine comes back with its Inbox
+	// items, and goes when that machine's link comes up.
+	d.outbox.load(outboxPath())
+	d.dispatch.load(dispatchPath())
+	// The verifies a restart or an upgrade ended run again, now that the
+	// boards' verify commands are read (task_verify.go).
+	for _, s := range d.manager.AllSessions() {
+		d.resumeVerifies(s)
+	}
+	d.kickAuto()
+	// Review notes come back for the panes that came back.
+	d.reviewNotes.load(reviewNotesPath(), func(window string) bool { return d.sessionOfWindow(window) != "" })
 }
 
 // serveHerdrOn takes l as the herdr protocol socket and points the panes at
