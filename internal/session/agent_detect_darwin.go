@@ -4,6 +4,7 @@ package session
 
 import (
 	"encoding/binary"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/sys/unix"
@@ -60,7 +61,24 @@ func readProcessInfo(pid int) foregroundInfo {
 		info.comm = cString(kp.Proc.P_comm[:])
 	}
 	info.exe, info.argv = readProcArgs(pid)
+	info.exe = resolvedExe(info.exe)
 	return info
+}
+
+// resolvedExe is the executed path with its symlinks resolved, as Linux's
+// /proc/<pid>/exe gives it. kern.procargs2 keeps the path as exec was given
+// it, and on macOS an agent is most often run through a link: Homebrew's bin
+// and npm's global bin hold links into the install, so the path a manifest
+// reads (a node install, pi-coding-agent in the package path) is only in the
+// target. A relative path, or one that no longer resolves, is kept as it is.
+func resolvedExe(exe string) string {
+	if !filepath.IsAbs(exe) {
+		return exe
+	}
+	if real, err := filepath.EvalSymlinks(exe); err == nil {
+		return real
+	}
+	return exe
 }
 
 // readProcArgs reads kern.procargs2 for a pid and returns the executed path and
