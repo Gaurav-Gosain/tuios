@@ -766,13 +766,15 @@ func (m *OS) addLocalWindow(dir, name string, command []string) *OS {
 		}
 	}
 
-	window, err := terminal.NewWindowIn(dir, newID, title, x, y, width, height, len(m.Windows), m.WindowExitChan, m.PTYDataChan, m.Settings.ScrollbackLines, command...)
+	// Born with the host's cell, so the pixels set below change nothing and
+	// the shell is not signalled at the size it starts with.
+	caps := m.hostCaps()
+	window, err := terminal.NewWindowInCell(dir, newID, title, x, y, width, height, len(m.Windows), m.WindowExitChan, m.PTYDataChan, m.Settings.ScrollbackLines, caps.CellWidth, caps.CellHeight, command...)
 	if err != nil {
 		m.LogError("Failed to create window %s: %v", title, err)
 		return m // Failed to create window
 	}
 
-	caps := m.hostCaps()
 	if caps.CellWidth > 0 && caps.CellHeight > 0 {
 		window.SetCellPixelDimensions(caps.CellWidth, caps.CellHeight)
 	}

@@ -568,14 +568,15 @@ func (m *OS) newLocalPopup(dir, title, widthSpec, heightSpec string, command []s
 	x, y, width, height := m.popupRect(probe)
 
 	id := createID()
-	w, err := terminal.NewWindowIn(dir, id, title, x, y, width, height, len(m.Windows),
-		m.WindowExitChan, m.PTYDataChan, m.Settings.ScrollbackLines, command...)
+	caps := m.hostCaps()
+	w, err := terminal.NewWindowInCell(dir, id, title, x, y, width, height, len(m.Windows),
+		m.WindowExitChan, m.PTYDataChan, m.Settings.ScrollbackLines, caps.CellWidth, caps.CellHeight, command...)
 	if err != nil {
 		m.LogError("Failed to create the popup %s: %v", title, err)
 		m.ShowNotification("The popup did not open: "+err.Error(), "error", m.Settings.NotificationDuration)
 		return nil
 	}
-	if caps := m.hostCaps(); caps.CellWidth > 0 && caps.CellHeight > 0 {
+	if caps.CellWidth > 0 && caps.CellHeight > 0 {
 		w.SetCellPixelDimensions(caps.CellWidth, caps.CellHeight)
 	}
 	w.Workspace = m.CurrentWorkspace
