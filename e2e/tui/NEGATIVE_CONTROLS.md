@@ -15734,3 +15734,25 @@ Run on 2026-11-08 on macOS (arm64). The branch passes, 10 of 10 under load.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestABlockingFormOutranksADoneReport$' -v .`.
+
+## TestScreenshotDrawsEmojiSequences
+
+A flag, two ZWJ sequences, a keycap and a skin tone, drawn by tuios.dev/shot in
+the fonts tuios screenshot finds: each must cover a quarter of its cell, as an
+emoji picture does, and differ from its first code point drawn alone.
+
+Run on 2026-11-08 on macOS (arm64, Apple Color Emoji, morx) and on arch-btw
+(x86_64, Noto Color Emoji, GSUB). The branch passes on both.
+
+| Control | Machine | The test fails with | Result |
+|---------|---------|---------------------|--------|
+| Base (feat/shot-color-emoji a1f9fd990): a cluster draws its first rune | macOS | all five: "draws as its first code point alone", and for the flag and keycap "draws ink on 198 (185) pixels of 1258" | **caught** |
+| No shaping | macOS | all five, as the base | **caught** |
+| No shaping | arch-btw | all five, as the base | **caught** |
+| morx ligature subtables skipped | macOS | all five, as the base | **caught** |
+| morx noncontextual subtables skipped | macOS | "keycap \"1️⃣\" draws ink on 185 pixels of 1258" | **caught** |
+| A variation selector the font does not list kept as a missing glyph | arch-btw | "keycap \"1️⃣\" draws ink on 185 pixels of 1258" | **caught** |
+| The same | macOS | passes: Apple Color Emoji lists U+FE0F | not reachable on Apple |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 go test -count=1 -run '^TestScreenshotDrawsEmojiSequences$' -v .`.
