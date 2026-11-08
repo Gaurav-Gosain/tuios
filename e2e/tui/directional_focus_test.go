@@ -114,6 +114,37 @@ func waitFocusChange(t *testing.T, base, session, prev string) string {
 	return prev
 }
 
+// waitClientFocus waits until the client draws pane id as the focused one:
+// its border's top left corner in one colour and every other pane's in
+// another. The daemon answers list-windows from its own state, which a focus
+// change reaches before the client does.
+func waitClientFocus(t *testing.T, term *tuitest.Terminal, layout []focusedRect, id string) {
+	t.Helper()
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		var mine *tuitest.Cell
+		var others []tuitest.Cell
+		for _, r := range layout {
+			c := s.Cell(r.X, r.Y)
+			if r.ID == id {
+				mine = &c
+			} else {
+				others = append(others, c)
+			}
+		}
+		if mine == nil || len(others) == 0 {
+			return false
+		}
+		for _, o := range others {
+			if o.Fg == mine.Fg || o.Fg != others[0].Fg {
+				return false
+			}
+		}
+		return true
+	}, uiTimeout); err != nil {
+		t.Fatalf("the client never drew %s as focused: %v\n%s", id[:8], err, term.Snapshot())
+	}
+}
+
 // walkEveryDirection presses each direction key from each pane that has a
 // neighbour that way, and checks where focus lands.
 func walkEveryDirection(t *testing.T, term *tuitest.Terminal, base, session string, keys []focusKey, panes int) {
@@ -326,6 +357,10 @@ func TestDirectionalFocusWrapBSP(t *testing.T) {
 			if _, now := focusedLayout(t, base, session); now != from.ID {
 				t.Fatalf("focus-window %s left focus on %s", from.ID[:8], now)
 			}
+			// The daemon has the focus at once. The client draws it when the
+			// push lands, and a key before that moves from the pane the client
+			// still has: wait for the client.
+			waitClientFocus(t, term, layout, from.ID)
 			want := farSide(from.winRect, layout, k.name)
 			send(t, term, k.keys...)
 			if len(want) == 0 {
