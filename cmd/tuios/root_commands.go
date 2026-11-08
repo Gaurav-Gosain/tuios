@@ -169,11 +169,14 @@ func newCapturePaneCommand() *cobra.Command {
 	var capturePaneCommands int
 	var capturePaneJSON bool
 	capturePaneCmd := &cobra.Command{
-		Use:   "capture-pane",
+		Use:   "capture-pane [window]",
 		Short: "Capture the content of a pane",
+		Args:  cobra.MaximumNArgs(1),
 		Long: `Capture the visible content (or scrollback history) of a terminal pane.
 
 Output is written to stdout. By default captures the focused window's visible screen.
+Name another window with -w, or as the argument: capture-pane build is
+capture-pane -w build.
 Use --scrollback to include the scrollback history. Without --lines it keeps
 the last 3 commands, found by the shell's OSC 133 marks, in at most 2000
 lines. A long output keeps its start and its end, and one line says how many
@@ -197,6 +200,9 @@ untrusted content. With --ansi or --resolved, only colour and style codes are
 kept from it. With --json the result carries host and "untrusted": true.`,
 		Example: `  # Capture focused window
   tuios capture-pane
+
+  # Capture a window by name or ID
+  tuios capture-pane build
 
   # Capture the last 3 commands of a window
   tuios capture-pane -w mywindow --scrollback
@@ -224,7 +230,13 @@ kept from it. With --json the result carries host and "untrusted": true.`,
 
   # Read pane 0 of session api on host build, as JSON
   tuios capture-pane -w build:api:0 --json`,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 1 {
+				if capturePaneWindow != "" && capturePaneWindow != args[0] {
+					return errfmt.Errorf("capture-pane got two windows, -w %s and %s. Name one", capturePaneWindow, args[0])
+				}
+				capturePaneWindow = args[0]
+			}
 			linesSet := cmd.Flags().Changed("lines")
 			explicit := cmd.Flags().Changed("commands")
 			if explicit {

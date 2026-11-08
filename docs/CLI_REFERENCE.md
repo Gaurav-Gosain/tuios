@@ -4357,8 +4357,14 @@ Capture the content of a terminal pane and write it to stdout.
 
 **Usage:**
 ```bash
-tuios capture-pane [flags]
+tuios capture-pane [window] [flags]
 ```
+
+The window can be the argument or `-w`: `tuios capture-pane build` is
+`tuios capture-pane -w build`. Two different windows fail.
+
+A command that reads no argument refuses one rather than dropping it. For
+example, `tuios screenshot build` fails and says to use `-w build`.
 
 **Flags:**
 - `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
