@@ -200,17 +200,36 @@ func (a *App) ckEditBlock(c *ui.Context, pal *palette, it session.AttentionItem)
 	ck := &a.ck
 	mono := a.termFamily()
 	rowH := float32(fsCode) * 1.5
-	box := ui.Column(c.Key("edit-box")).Radius(rControl).Background(ckCodeBg(pal)).Clip()
-	b := box.Bounds()
-	// The text column's width in cells: the box, less its padding and the
-	// gutter of continuation marks, over one cell of the code font.
+	// The text column's width in cells: the box as the last frame laid it
+	// out, less its padding and the gutter of continuation marks, over one
+	// cell of the code font.
 	cell, _ := c.MeasureText(0, ui.Span{Text: "0000000000", Size: fsCode, Font: mono})
 	cell /= 10
 	width := 0
-	if b.W > 0 && cell > 0 {
-		width = int((b.W - 2*sp3 - ckEditGutter) / cell)
+	if bw := ck.editBoxW; bw > 0 && cell > 0 {
+		width = int((bw - 2*sp3 - ckEditGutter) / cell)
 	}
 	view := a.ckEditView(it, width)
+	// A Write's head says how it acts on the file: it is the card's words,
+	// not the file's, so it reads above the block, as text, and the block
+	// holds only the file (Mac round 4, visual S3). Its rows count as shown
+	// with the first row of the body.
+	lead := 0
+	if e := ck.edit; e != nil && e.requestID == it.RequestID && e.body != nil && e.body.Tool == "Write" {
+		for lead < len(view.Lines) && view.Lines[lead].Kind == editreview.KindHead {
+			lead++
+		}
+		if lead > 0 {
+			var words []string
+			for _, l := range view.Lines[:lead] {
+				words = append(words, strings.TrimSpace(l.Text))
+			}
+			ui.Text(c, strings.Join(words, " ")).FontSize(fsBody).TextColor(pal.textMuted)
+		}
+	}
+	box := ui.Column(c.Key("edit-box")).Radius(rControl).Background(ckCodeBg(pal)).Clip()
+	b := box.Bounds()
+	ck.editBoxW = b.W
 	box.Children(func() {
 		switch {
 		case b.W <= 0:
@@ -222,7 +241,7 @@ func (a *App) ckEditBlock(c *ui.Context, pal *palette, it session.AttentionItem)
 		case view.Err != "":
 			ui.Text(c, view.Err).FontSize(fsSmall).TextColor(pal.textMuted).Padding(sp2, sp3).MaxLines(3)
 		default:
-			n := len(view.Lines)
+			n := len(view.Lines) - lead
 			// As many rows as fit in the room the card may take, with its
 			// head and answers: the tab above gives way down to its least
 			// height. The body then scrolls inside the card rather than the
@@ -231,7 +250,7 @@ func (a *App) ckEditBlock(c *ui.Context, pal *palette, it session.AttentionItem)
 			// last frame laid them out: a guess at it gave a MultiEdit at
 			// 1100x700 four rows and hid Allow under a card that had room.
 			rows := ckEditRows
-			if room := ck.tabH + ck.cardView.H - ck.tabMin; ck.cardView.H > 0 {
+			if room := ck.tabH + ck.gapH + ck.cardView.H - ck.tabMin; ck.cardView.H > 0 {
 				chrome := float32(ckEditChrome)
 				if lb := ck.editLast[0]; ck.cardH > 0 && lb.H > 0 && ck.cardH > lb.H {
 					chrome = ck.cardH - lb.H
@@ -266,14 +285,18 @@ func (a *App) ckEditBlock(c *ui.Context, pal *palette, it session.AttentionItem)
 				// A row counts only when the whole of it is on screen.
 				from := int(math.Ceil(float64((top-vb.Y+ck.editScroll.Y)/step) - 0.01))
 				to := int((bottom - vb.Y + ck.editScroll.Y + 0.5) / step)
-				a.ckEditShown(it, view.SHA, width, from, min(to, n))
+				// The rows above the block count with the body's first.
+				if from > 0 {
+					from += lead
+				}
+				a.ckEditShown(it, view.SHA, width, from, min(to, n)+lead)
 			}
 			sc.Children(func() {
 				// The rows take the box's padding inside their wash, so a
 				// changed line's colour runs to the box's edges (Mac round
 				// 2, visual S5).
 				ui.Column(c).Children(func() {
-					for i := range view.Lines {
+					for i := lead; i < len(view.Lines); i++ {
 						l := view.Lines[i]
 						ckEditRow(c, pal, mono, rowH, l)
 					}

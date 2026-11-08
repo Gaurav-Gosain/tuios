@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/mygo/plugins/glass"
 	"github.com/Gaurav-Gosain/mygo/ui"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/actions"
@@ -447,6 +448,9 @@ func rowTooltip(c *ui.Context, el ui.Element, key, s string) {
 	})
 }
 
+// railFade is the height of the fade at the rail list's foot.
+const railFade = 24
+
 // rowTipMax is the widest line of a row's tooltip.
 const rowTipMax = 360
 
@@ -478,31 +482,38 @@ func (a *App) sidebar(c *ui.Context, pal *palette, bar ui.TitleBar) {
 	})
 	// The space between and below the rows moves the window, as the top
 	// bar does.
-	ui.Scroll(c.Key("sessions")).Grow(1).Padding(0, 10, 16, 10).DragWindow().Children(func() {
-		a.railSearch(c, pal)
-		a.agentsRow(c, pal)
-		a.needsSection(c, pal)
-		n := 0  // the rows shown, for ⌘1–9 (Ctrl+1–9 elsewhere)
-		gi := 0 // the groups shown, the first of which sits higher
-		// This machine's projects first, unlabeled; then each host's,
-		// under its name.
-		if local := a.local(); local.loaded {
-			for _, g := range a.hostGroups(local) {
-				a.groupView(c, pal, g, gi, &n)
-				gi++
+	// The list fades out above the footer, so a row it cuts is seen to go
+	// on under it; the padding below the last row is the fade's, so the
+	// row scrolls clear of it.
+	ui.Column(c.Key("sessions-wrap")).Grow(1).MinHeight(0).Children(func() {
+		ui.Scroll(c.Key("sessions")).Grow(1).MinHeight(0).Padding(0, 10, railFade, 10).DragWindow().Children(func() {
+			a.railSearch(c, pal)
+			a.agentsRow(c, pal)
+			a.needsSection(c, pal)
+			n := 0  // the rows shown, for ⌘1–9 (Ctrl+1–9 elsewhere)
+			gi := 0 // the groups shown, the first of which sits higher
+			// This machine's projects first, unlabeled; then each host's,
+			// under its name.
+			if local := a.local(); local.loaded {
+				for _, g := range a.hostGroups(local) {
+					a.groupView(c, pal, g, gi, &n)
+					gi++
+				}
+				if len(a.st.Sessions) == 0 && local.conn == connReady && len(a.hosts) == 1 {
+					ui.Text(c, locales.SidebarNoSessions()).FontSize(fsSmall).TextColor(pal.textFaint).Padding(8, 10).MaxLines(2)
+				}
 			}
-			if len(a.st.Sessions) == 0 && local.conn == connReady && len(a.hosts) == 1 {
-				ui.Text(c, locales.SidebarNoSessions()).FontSize(fsSmall).TextColor(pal.textFaint).Padding(8, 10).MaxLines(2)
+			// Then the machines this machine's daemon links, each with its
+			// sessions under it.
+			a.machinesSection(c, pal, &gi, &n)
+			a.filesRow(c, pal)
+			if a.set.SessionHistory {
+				a.endedSections(c, pal)
 			}
-		}
-		// Then the machines this machine's daemon links, each with its
-		// sessions under it.
-		a.machinesSection(c, pal, &gi, &n)
-		a.filesRow(c, pal)
-		if a.set.SessionHistory {
-			a.endedSections(c, pal)
-		}
-		a.newSessionRow(c, pal)
+			a.newSessionRow(c, pal)
+		})
+		ui.Box(c.Key("rail-fade")).Absolute().Left(0).Right(0).Bottom(0).Height(railFade).PassThrough().
+			Material(glass.ScrollEdge{Bottom: true, Background: pal.sidebar})
 	})
 	// The copies between machines stay in view under the list.
 	ui.Column(c.Key("xfers")).Padding(0, 10, 0, 10).Shrink(0).Children(func() { a.transfersSection(c, pal) })
@@ -1096,8 +1107,8 @@ var agoDue time.Time
 const statusDone proto.Status = "done"
 
 // statusIcon draws a session's status, as the sidebar shows it: a ring
-// turning while it works, an amber ring when it needs the user, a filled
-// check when it finished unseen, a faint check once seen.
+// turning while it works, an amber ring when it needs the user, a green
+// check when it is done and not seen yet, a hollow dot once seen.
 func statusIcon(c *ui.Context, pal *palette, st proto.Status, unread bool, size float32) ui.Element {
 	return statusIconP(c, pal, st, unread, -1, size)
 }
@@ -1176,16 +1187,11 @@ func statusIconP(c *ui.Context, pal *palette, st proto.Status, unread bool, prog
 			k := rad * 0.38
 			p.Line(cx-k, cy-k, cx+k, cy+k, 1.5, col)
 			p.Line(cx+k, cy-k, cx-k, cy+k, 1.5, col)
-		case unread:
-			var disc ui.Path
-			disc.Circle(cx, cy, rad+0.5)
-			p.FillPath(&disc, pal.done)
-			check := (&ui.Path{}).MoveTo(cx-rad*0.42, cy+0.2).LineTo(cx-rad*0.08, cy+rad*0.36).LineTo(cx+rad*0.46, cy-rad*0.34)
-			p.StrokePath(check, 1.6, pal.onDone)
-		case st == statusDone:
-			// The done green, as the filled mark of a result not seen yet:
-			// a grey check read as a third mark for done (Mac round 1,
-			// visual S8).
+		case unread, st == statusDone:
+			// Done is one mark everywhere: the plain check in the done
+			// green. A filled disc for a result not seen yet read as a
+			// second mark for done (Mac round 4, visual S4), and a grey
+			// check as a third (Mac round 1, visual S8).
 			check := (&ui.Path{}).MoveTo(cx-rad*0.62, cy+0.3).LineTo(cx-rad*0.14, cy+rad*0.52).LineTo(cx+rad*0.66, cy-rad*0.48)
 			p.StrokePath(check, 1.6, pal.done)
 		default:

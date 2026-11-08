@@ -120,6 +120,15 @@ type cockpit struct {
 	// cardH the approval card's whole height in the last frame, which
 	// with the body's gives the room around the body (ckEditBlock).
 	tabMin, cardH float32
+	// gapH is the room under the card in the last frame, which an empty
+	// thread leaves there rather than above the card (cardUnder).
+	gapH float32
+	// editBoxW is the held edit's code block's width in the last frame,
+	// which its rows wrap to.
+	editBoxW float32
+	// manyHarness is set while the list's agents use more than one
+	// harness, so a row names its harness in words.
+	manyHarness bool
 	// editLast is the body's and the card's bounds when the body last
 	// counted its rows.
 	editLast [2]ui.Rect

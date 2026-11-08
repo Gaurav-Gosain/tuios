@@ -246,7 +246,16 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 	if r.item != nil && ckIsEdit(*r.item) {
 		ck.tabMin = ckTabMinEdit
 	}
-	tabCol := ui.Column(c.Key("tab-" + ck.tab)).Grow(1).MinHeight(ck.tabMin)
+	// Over an empty thread the card comes right under its one line, as a
+	// pending approval follows the last message, and the room is left
+	// under the card, above the pinned reply box (Mac round 4, visual S2).
+	cardUnder := ck.cardShown && ck.tab == tabThread && a.ckThreadEmpty(ag)
+	tabCol := ui.Column(c.Key("tab-" + ck.tab))
+	if cardUnder {
+		tabCol.Shrink(0)
+	} else {
+		tabCol.Grow(1).MinHeight(ck.tabMin)
+	}
 	ck.tabH = tabCol.Bounds().H
 	tabCol.ClipY().AlignItems(ui.Stretch).Children(func() {
 		switch ck.tab {
@@ -281,9 +290,21 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 			})
 		})
 	}
+	ck.gapH = 0
+	if cardUnder {
+		gap := ui.Box(c.Key("ck-card-gap")).Grow(1).MinHeight(0)
+		ck.gapH = gap.Bounds().H
+	}
 	if ck.tab == tabThread || ck.tab == tabMail {
 		a.replyBox(c, pal, ag)
 	}
+}
+
+// ckThreadEmpty reports whether ag's thread shows no message, so its tab
+// is the one quiet line over the card (ckEmptyThread).
+func (a *App) ckThreadEmpty(ag client.Agent) bool {
+	th := a.ck.threads[threadKey(ag)]
+	return th != nil && len(th.items) == 0 && !th.unsupported && !th.failed
 }
 
 // ckTabMinH is the least height the tab's content keeps above the card,

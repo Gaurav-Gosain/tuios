@@ -86,6 +86,7 @@ func ckGround(pal *palette) ui.Color {
 func (a *App) cockpitCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32) {
 	ck := &a.ck
 	ck.rows = a.buildCockpitRows(c)
+	ck.manyHarness = ck.harnessesShown() > 1
 	a.ckTakeJump()
 	a.ckClamp()
 	a.ckTakeAdvance(c)
@@ -169,11 +170,16 @@ func (a *App) cockpitCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown fl
 func (a *App) cockpitHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32) {
 	ck := &a.ck
 	var n [ckGroups]int
+	var head [ckGroups]bool
 	for _, r := range ck.rows {
 		if r.kind == ckRowHead {
 			n[r.group] = r.count
+			head[r.group] = true
 		}
 	}
+	// The list shows the agents column, with its group heads and their
+	// counts: unless the stacked card shows one agent instead.
+	listShown := ck.view == viewAgents && !(ck.stacked && ck.stackFocus)
 	// Needs you counts what the badge counts (cockpit_needs.go).
 	if ck.loaded {
 		n[ckNeeds] = len(ck.needs())
@@ -192,6 +198,12 @@ func (a *App) cockpitHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown 
 		count := func(key string, g int, st proto.Status, unread bool, label string) {
 			if n[g] == 0 || ck.narrow {
 				// A narrow card has no room: the groups' heads count them.
+				return
+			}
+			if g == ckNeeds && head[g] && listShown && !ck.needsOnly {
+				// The Needs you head counts them already, right under it
+				// (Mac round 4, visual S4). While the filter is on, the chip
+				// stays, to turn it off.
 				return
 			}
 			b := ui.ButtonBase(c.Key(key)).Height(hControlSm).Padding(0, 8).Gap(6).Radius(rRow).AlignItems(ui.Center).Shrink(0).Label(label)
@@ -484,7 +496,9 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 	harnessW := 12 + 4 + natural(c, harnessName(harness), fsSmall, 0)
 	// A row with no harness reported shows its terminal icon alone, not
 	// the word "agent" (Mac round 1, visual S3).
-	showHarness := room >= harnessW && harness != ""
+	// The harness's word only tells rows apart when the list holds more
+	// than one harness: else its icon says it (Mac round 4, visual S4).
+	showHarness := room >= harnessW && harness != "" && ck.manyHarness
 	row.Children(func() {
 		ui.Column(c).Grow(1).MinWidth(0).Gap(3).Children(func() {
 			ui.Row(c).Gap(7).AlignItems(ui.Center).Children(func() {
@@ -1131,4 +1145,22 @@ func (a *App) ownListKey(c *ui.Context, col ui.Element) bool {
 		return true
 	}
 	return false
+}
+
+// harnessesShown is how many harnesses the agents in the list use.
+func (ck *cockpit) harnessesShown() int {
+	seen := map[string]bool{}
+	for _, r := range ck.rows {
+		if r.kind == ckRowHead {
+			continue
+		}
+		h := ck.rowAgent(r).Harness
+		if r.item != nil && r.agent < 0 {
+			h = r.item.Harness
+		}
+		if h != "" {
+			seen[h] = true
+		}
+	}
+	return len(seen)
 }
