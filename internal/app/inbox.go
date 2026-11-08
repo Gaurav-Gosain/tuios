@@ -992,6 +992,8 @@ func inboxKindWords(it session.AttentionItem) string {
 		return "can resume its conversation"
 	case session.AttentionOutbox:
 		return "mail waits to be sent"
+	case session.AttentionHeldMail:
+		return "mail for this machine waits there"
 	}
 	return it.Kind
 }
@@ -1013,6 +1015,9 @@ func inboxWho(it session.AttentionItem) string {
 func (m *OS) inboxWhere(it session.AttentionItem) string {
 	if it.Kind == session.AttentionOutbox {
 		return "for " + printableTitle(it.ForHost)
+	}
+	if it.Kind == session.AttentionHeldMail {
+		return "on " + printableTitle(it.ForHost)
 	}
 	if it.Host != "" {
 		return printableTitle(it.Host) + ":" + printableTitle(it.Session)
@@ -1140,6 +1145,8 @@ func inboxGroupTitle(kind string) string {
 		return "Done"
 	case session.AttentionOutbox:
 		return "Waiting to send"
+	case session.AttentionHeldMail:
+		return "Waiting elsewhere"
 	}
 	return kind
 }
@@ -1368,8 +1375,25 @@ func (m *OS) InboxActivate() tea.Cmd {
 	}
 	if it.Kind == session.AttentionOutbox {
 		// Mail waiting for another machine has no pane to go to. It goes on
-		// its own when the link is back.
+		// its own when the link is back. A link that waits for a sign-in is
+		// one key from coming back, so the key opens the sign-in.
+		if m.hostWaitsForSignIn(it.ForHost) {
+			m.CloseInbox()
+			return m.openHostSignIn(it.ForHost)
+		}
 		m.ShowNotification("This mail goes to "+printableTitle(it.ForHost)+" when its link is back. d discards it.", "info", m.Settings.NotificationDuration)
+		// The machines' states come with the rail. With the rail closed this
+		// client does not know whether the link waits for a sign-in, so it
+		// asks: the daemon answers retry-host with the page when it does.
+		if m.hostStatusByName(it.ForHost) == "" {
+			m.askHostSignIn(it.ForHost)
+			return retryHostCmd(it.ForHost)
+		}
+		return nil
+	}
+	if it.Kind == session.AttentionHeldMail {
+		// The mail is on the other machine, and only its link can bring it.
+		m.ShowNotification(printableTitle(it.ForHost)+" sends this mail when its link to this machine is back. Nothing here can send it.", "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	m.CloseInbox()
@@ -2044,7 +2068,7 @@ func (m *OS) applyInboxDismissed(msg InboxDismissedMsg) {
 // which is what the next-attention key visits. A finished turn is news, not a
 // request, so it is left to the Inbox.
 func inboxNeedsYou(it session.AttentionItem) bool {
-	return it.Kind != session.AttentionFinished && it.Kind != session.AttentionOutbox && !it.Stale
+	return it.Kind != session.AttentionFinished && it.Kind != session.AttentionOutbox && it.Kind != session.AttentionHeldMail && !it.Stale
 }
 
 // JumpToNextAttention goes to the oldest item that needs the person, in Inbox
@@ -2139,6 +2163,11 @@ func inboxKindGlyph(kind string) string {
 			return "^"
 		}
 		return "↑"
+	case session.AttentionHeldMail:
+		if overlay.UseASCII() {
+			return "v"
+		}
+		return "↓"
 	case session.AttentionMail:
 		return sidebarMailGlyph()
 	case session.AttentionResume:

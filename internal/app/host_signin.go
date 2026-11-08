@@ -106,6 +106,15 @@ func (m *OS) openHostSignIn(host string) tea.Cmd {
 	return retry
 }
 
+// askHostSignIn marks host as waiting for a sign-in page, so the daemon's
+// answer to retry-host opens one if the link waits for a sign-in.
+func (m *OS) askHostSignIn(host string) {
+	if m.hostSignInPending == nil {
+		m.hostSignInPending = map[string]time.Time{}
+	}
+	m.hostSignInPending[host] = time.Now().Add(hostSignInWatch)
+}
+
 // openSignInPage opens a sign-in page in the person's browser. A client that
 // cannot start a browser on the person's machine (an ssh or web client, or a
 // machine with no desktop) shows the address in a notice and puts it on the

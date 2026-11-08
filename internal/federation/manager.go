@@ -47,6 +47,10 @@ type Options struct {
 	// that a host came up or went away without polling the listing. Nil
 	// reports nothing.
 	OnStatus func(host string, status Status)
+	// OnMailHeld is called when a host's hello says something new about the
+	// mail it keeps for this machine (MailHeld), and with a zero MailHeld
+	// when the link goes down. Same rules as OnStatus. Nil reports nothing.
+	OnMailHeld func(host string, held MailHeld)
 
 	// now is the clock, so tests can freeze it. Zero means time.Now.
 	now func() time.Time

@@ -417,6 +417,22 @@ func (o *hostOutbox) remove(id uint64, failed *outboxFailure) {
 	o.saveLocked()
 }
 
+// waitReason is why the link to host is not up now, in the words the rail
+// uses, or "" when it is up or its state is not known.
+func (o *hostOutbox) waitReason(host string) string {
+	if o.d.federation == nil {
+		return ""
+	}
+	r, ok := o.d.federation.Report(host)
+	if !ok || r.Status == federation.StatusUp {
+		return ""
+	}
+	if r.Status == federation.StatusApproval {
+		return federation.SignInSentence
+	}
+	return r.Reason
+}
+
 // noteAttention opens, updates or closes host's outbox item.
 func (o *hostOutbox) noteAttention(host string) {
 	o.mu.Lock()
@@ -432,7 +448,7 @@ func (o *hostOutbox) noteAttention(host string) {
 	}
 	fails := append([]outboxFailure(nil), o.failures[host]...)
 	o.mu.Unlock()
-	o.d.attention.noteOutbox(host, waiting, fails, since)
+	o.d.attention.noteOutbox(host, waiting, fails, since, o.waitReason(host))
 }
 
 // sendAgentMessageToHost is send-agent-message with host: deliver the message
@@ -523,13 +539,18 @@ func (d *Daemon) queueForHost(host, sessionName, to string, params []byte, why s
 }
 
 // outboxSummary is the Inbox line for a machine's outbox.
-func outboxSummary(host string, waiting int, fails []outboxFailure) string {
+func outboxSummary(host string, waiting int, fails []outboxFailure, why string) string {
 	var s string
 	switch {
 	case waiting == 1:
 		s = "1 message waits for the link to " + host
 	case waiting > 1:
 		s = strconv.Itoa(waiting) + " messages wait for the link to " + host
+	}
+	// Why the link is down, so a link that waits for a sign-in does not read
+	// as a machine that is off.
+	if s != "" && why != "" {
+		s += ". " + why
 	}
 	if len(fails) > 0 {
 		last := fails[len(fails)-1]

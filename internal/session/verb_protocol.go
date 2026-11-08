@@ -3912,6 +3912,11 @@ func (d *Daemon) verbHello(cs *connState, params json.RawMessage) (any, *verbErr
 		// builds a command line for this one: sh -c here, cmd /C on Windows.
 		"os": runtime.GOOS,
 	}
+	// mail_waiting is the mail this daemon keeps for the machine a link
+	// connection named, while its own link there is down. See held_mail.go.
+	if held := d.mailWaitingFor(cs); held != nil {
+		res["mail_waiting"] = held
+	}
 	// upgrade says this image took its panes over in a live upgrade, and
 	// what that measured. daemon upgrade waits for it.
 	if st := d.lastHandoff.Load(); st != nil {

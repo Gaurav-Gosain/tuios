@@ -212,7 +212,7 @@ func (l ckLook) ckItemMark(it session.AttentionItem) (string, color.Color) {
 			return l.g(ckGlyphResume), l.pal.Warn
 		}
 		return l.g(ckGlyphResume), l.pal.AccentBright
-	case session.AttentionOutbox:
+	case session.AttentionOutbox, session.AttentionHeldMail:
 		return inboxKindGlyph(it.Kind), l.pal.AccentBright
 	}
 	return l.ckStateMark("needs_input", ckGlyphNeeds), l.pal.Attention
@@ -1503,6 +1503,8 @@ func ckItemVerb(it session.AttentionItem) (verb, rest string) {
 		return "Resume", sum
 	case session.AttentionOutbox:
 		return "To send", sum
+	case session.AttentionHeldMail:
+		return "Held there", sum
 	}
 	return capitalize(inboxKindWords(it)), sum
 }

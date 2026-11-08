@@ -2719,7 +2719,7 @@ tuios list-attention [flags]
 **Flags:**
 - `-s, --session <name>`: Only this session on this machine, or on `--host` (default: every session)
 - `--host <name>`: Only this machine: `local`, or a linked host by name (default: every machine)
-- `--kind <kind>`: Only these kinds, repeatable or comma-separated: `approval`, `plan`, `ask`, `question`, `mail`, `errored`, `resume`, `finished`, `outbox`
+- `--kind <kind>`: Only these kinds, repeatable or comma-separated: `approval`, `plan`, `ask`, `question`, `mail`, `errored`, `resume`, `finished`, `outbox`, `held_mail`
 - `--select <selector>`: Only the items a [selector](AGENT_STATE.md#selectors) matches, such as `harness:codex needs:you`
 - `--snoozed`: Also list the items snoozed in the Inbox, after the rest
 - `--json`: Output the verb result as JSON

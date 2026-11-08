@@ -157,7 +157,11 @@ label there. A reply comes back as a notice in that ring, so read the thread wit
 `read-agent-messages -s HOST:SESSION --thread ID`.
 
 A send to a host whose link is down is kept here and sent when the link is back
-(`queued` in `--json`), in order. Do not send it again. A host can hold mail from
+(`queued` in `--json`), in order. Do not send it again. The Inbox here (kind
+`outbox`) says how many wait and why the link is down, for example that it
+waits for a Tailscale sign-in, and its key opens that sign-in. When the host's
+own link to this machine is up, its Inbox says too (kind `held_mail`): how many
+messages wait for it and why, and nothing of the mail itself. A host can hold mail from
 you for its person: the send answers `held: true`, and the agent sees it only if
 the person passes it on. A host bounds unread mail from links at 32 messages and
 32 notices per session (`rate_limited`).
