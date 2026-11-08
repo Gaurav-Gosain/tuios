@@ -1031,6 +1031,13 @@ func (m *OS) helpDockCellComponent(name, parent string, rect image.Rectangle) he
 		c.purpose = text.Purpose
 		c.keys = helpCap(m.helpKeys("prefix_session_switcher", "prefix_close_session"), 6)
 		c.cli = []string{"tuios rename-session <name>", "tuios set-session-accent <colour>", "tuios ls"}
+	case name == "help":
+		c.title = "Help"
+		c.purpose = "The ? control: a click opens this explanation for whatever the pointer is over, and a click while it is up closes it. It does the same thing the keys do, so a person who does not know the chord can still find the explanation, and it is the cell that teaches its own key."
+		c.keys = helpCap(m.helpKeys("prefix_help_mode", "toggle_help_mode"), 4)
+		if exit := m.helpOwnKey(config.ActionHelpExit); exit != "" {
+			c.rows = append(c.rows, helpKey{press: exit, desc: "Close the explanation from the keyboard"})
+		}
 	case name == "mode":
 		text := dockText(m.helpLanguage(), helptext.DockCell("mode"), "Mode")
 		c.title = text.Title

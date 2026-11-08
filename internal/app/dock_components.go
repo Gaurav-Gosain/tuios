@@ -223,6 +223,13 @@ func (m *OS) dockCustomCell(name string) string {
 	if name == config.DockComponentSession {
 		text = m.dockSessionText()
 	}
+	if name == config.DockComponentHelp {
+		// A control rather than a value, so it draws through the same cell
+		// with the one glyph that needs no translation. The key that opens the
+		// explanation is the key the explanation names, so the button and the
+		// chord teach each other.
+		text = "?"
+	}
 	if text == "" {
 		return ""
 	}
@@ -320,14 +327,16 @@ func (m *OS) dockCustomCells(names []string) (cells []string, widths []int, keys
 // value the engine holds, rather than from model state the renderer reads.
 func dockCellComponent(name string) bool {
 	return strings.HasPrefix(name, config.DockCustomPrefix) || strings.HasPrefix(name, config.DockPluginPrefix) || name == config.DockComponentClock ||
-		name == config.DockComponentTransfers || name == config.DockComponentSession
+		name == config.DockComponentTransfers || name == config.DockComponentSession || name == config.DockComponentHelp
 }
 
 // dockCellClickable reports whether a cell records where it was drawn, for a
-// click: a custom component, which runs its on-click command, and the
-// copies, which open the Copies panel.
+// click: a custom component, which runs its on-click command, the copies,
+// which open the Copies panel, and the help control, which opens the
+// explanation.
 func dockCellClickable(name string) bool {
-	return strings.HasPrefix(name, config.DockCustomPrefix) || strings.HasPrefix(name, config.DockPluginPrefix) || name == config.DockComponentTransfers
+	return strings.HasPrefix(name, config.DockCustomPrefix) || strings.HasPrefix(name, config.DockPluginPrefix) || name == config.DockComponentTransfers ||
+		name == config.DockComponentHelp
 }
 
 // dockCustomWidth is the room a side's custom cells want.

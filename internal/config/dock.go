@@ -33,6 +33,12 @@ const (
 	// the focused pane's place in it, "main 2:1" by default. It is a cell, so
 	// it goes wherever it is listed, and it is in no default list.
 	DockComponentSession = "session"
+	// DockComponentHelp is the "?" control that opens the hover help, the way
+	// the key does: a click turns the explanation on, and a click while it is
+	// up turns it off. A cell like the session name, so it can be moved; it is
+	// in the default left list because a control nobody is told about is not a
+	// control.
+	DockComponentHelp = "help"
 )
 
 // DockCustomPrefix marks a name in one of the dock lists as referring to a
@@ -61,6 +67,7 @@ var dockBuiltins = []string{
 	DockComponentSessionControls,
 	DockComponentTransfers,
 	DockComponentSession,
+	DockComponentHelp,
 }
 
 // DockBuiltinComponents returns the built-in component names, sorted. Used by
@@ -106,7 +113,7 @@ func DockFixedSide(name string) string { return dockFixedSides[name] }
 // and never a first one: naming a component makes it eligible to draw, not
 // certain to.
 var (
-	defaultDockLeft   = []string{DockComponentMode, DockComponentWorkspaces, DockComponentTrail, DockComponentTape}
+	defaultDockLeft   = []string{DockComponentMode, DockComponentHelp, DockComponentWorkspaces, DockComponentTrail, DockComponentTape}
 	defaultDockCenter = []string{DockComponentWindows}
 	defaultDockRight  = []string{
 		DockComponentTransfers,

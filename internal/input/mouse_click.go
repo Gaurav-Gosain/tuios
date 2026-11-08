@@ -207,6 +207,18 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				}
 				return o, nil
 			}
+			// The help control opens the explanation, and closes it when it is
+			// already up: the button and the chord do the same thing.
+			if name == config.DockComponentHelp {
+				if msg.Button == tea.MouseLeft {
+					if o.HelpMode {
+						o.ExitHelpMode()
+					} else {
+						o.EnterHelpMode()
+					}
+				}
+				return o, nil
+			}
 			if o.RunDockComponentClick(name, int(msg.Button)) {
 				return o, nil
 			}
