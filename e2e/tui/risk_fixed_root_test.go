@@ -183,11 +183,13 @@ func TestRiskRootIsTheStartFolder(t *testing.T) {
 
 	for _, c := range cases {
 		if c.tool == "Edit" {
-			// The hook reports the pane blocked and exits.
+			// The Edit carries a field the Inbox would not show, so it is
+			// not held for the Inbox (as fireEditHook): the hook reports the
+			// pane blocked and exits, and the item is marked from its line.
 			fields := map[string]any{
 				"hook_event_name": "PermissionRequest",
 				"tool_name":       "Edit",
-				"tool_input":      map[string]string{"file_path": c.target, "old_string": "hi", "new_string": "hello"},
+				"tool_input":      map[string]string{"file_path": c.target, "old_string": "hi", "new_string": "hello", "e2e_not_shown": "1"},
 			}
 			if c.agentMovesTo != "" {
 				fields["cwd"] = c.agentMovesTo
