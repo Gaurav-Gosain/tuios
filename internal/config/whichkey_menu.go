@@ -84,6 +84,7 @@ var minimizeMenuRows = []menuRow{
 	{parts: []menuPart{{"minimize_prefix_focused", "Minimize focused window"}}, desc: "Minimize focused window"},
 	{parts: []menuPart{{"minimize_prefix_restore_1", "Restore window"}, {"minimize_prefix_restore_2", "Restore window"}, {"minimize_prefix_restore_3", "Restore window"}, {"minimize_prefix_restore_4", "Restore window"}, {"minimize_prefix_restore_5", "Restore window"}, {"minimize_prefix_restore_6", "Restore window"}, {"minimize_prefix_restore_7", "Restore window"}, {"minimize_prefix_restore_8", "Restore window"}, {"minimize_prefix_restore_9", "Restore window"}}, desc: "Restore window", numbered: true},
 	{parts: []menuPart{{"minimize_prefix_restore_all", "Restore all"}}, desc: "Restore all"},
+	{parts: []menuPart{{"minimize_prefix_focus_only", "Focus only"}}, desc: "Focus only"},
 	{parts: []menuPart{{"minimize_prefix_cancel", "Cancel"}}, desc: "Cancel"},
 }
 

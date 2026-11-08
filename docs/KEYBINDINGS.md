@@ -1214,6 +1214,15 @@ The dialog names the pane. `Cancel` is the default row. Go down to
 `Close pane` and press `Enter` to close it, or press `Esc` to keep it.
 `tuios close-window` and the other commands never ask.
 
+## Focus only
+
+`Ctrl+B m f` (`minimize_prefix_focus_only`, in the `minimize_prefix` section)
+minimizes every other pane on the workspace and keeps the focused pane. Press
+it again to restore the panes it minimized. A pane that you minimized before
+the first press stays minimized. A pane that you restored or closed in between
+is skipped. The command palette has the entry "Focus only". Scratch panes and
+popups are not minimized.
+
 ## Close every pane on a workspace
 
 The `close_workspace` action closes every pane on the current workspace. It is

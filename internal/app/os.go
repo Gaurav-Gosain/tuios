@@ -483,7 +483,11 @@ type OS struct {
 	// before anything dies. It holds the pane's ID, not its index, because
 	// m.Windows can change while the dialog is open, and an index would then
 	// name another pane. "" is no pane.
-	SessionCloseWindow   string
+	SessionCloseWindow string
+
+	// focusOnlyHidden is, per workspace, the panes the last focus-only press
+	// minimized, by id. See focus_only.go.
+	focusOnlyHidden      map[int][]string
 	SessionCloseSelected int
 	// SessionCloseWorktreeToll is what the delete-worktree row would take, read
 	// by a round trip after the dialog opened. Nil, or Loaded false, is a toll

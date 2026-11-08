@@ -262,6 +262,12 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Bind:     "minimize_prefix_restore_all",
 			Category: "Window",
 		},
+		{
+			Name:     "Focus only: minimize the other windows",
+			Shortcut: "prefix+m f",
+			Bind:     "minimize_prefix_focus_only",
+			Category: "Window",
+		},
 
 		// Layout
 		{

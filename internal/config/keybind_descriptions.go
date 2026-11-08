@@ -57,6 +57,7 @@ var scopedDescriptions = map[string]map[string]string{
 	ScopePrefixMinimize: {
 		"minimize_prefix_focused":     "Minimize the focused window",
 		"minimize_prefix_restore_all": "Restore all minimized windows",
+		"minimize_prefix_focus_only":  "Minimize the other windows on the workspace, or restore them",
 		"minimize_prefix_cancel":      "Cancel the minimize prefix",
 	},
 	ScopePrefixWorkspce: {

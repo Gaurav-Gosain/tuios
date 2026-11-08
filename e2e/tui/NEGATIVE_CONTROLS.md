@@ -15095,3 +15095,17 @@ way.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestF3ReachesAKittyKeyboardPane$' -v .`.
+
+## TestFocusOnlyHidesTheOtherPanes
+
+Issue 1723. `minimize_prefix_focus_only` is new, on `ctrl+b m f`. Four
+panes, FOUR minimized by hand, TWO focused. The first press must minimize
+ONE and THREE and keep TWO focused. The second press must restore ONE and
+THREE, leave FOUR minimized, and keep TWO focused.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| main at 6db1de3ed | "ctrl+b m f hid the other panes and kept TWO focused" | **caught** |
+| The focus return cut from `restoreFocusOnly` | "the second press brought back what it hid, FOUR stays minimized, TWO keeps the focus" | **caught** |

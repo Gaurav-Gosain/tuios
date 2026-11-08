@@ -65,6 +65,7 @@ var allowedActions = map[string]bool{
 	"window_prefix_new": true, "window_prefix_close": true,
 	"window_prefix_next": true, "window_prefix_prev": true, "window_prefix_tiling": true, "window_prefix_float": true,
 	"minimize_prefix_focused": true, "minimize_prefix_restore_all": true,
+	"minimize_prefix_focus_only": true,
 }
 
 // numberedActions are the action families that end in one digit.

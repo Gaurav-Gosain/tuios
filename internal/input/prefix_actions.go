@@ -109,6 +109,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 		d.Register("minimize_prefix_restore_"+string(rune('0'+i)), makeRestoreMinimizedByPositionHandler(i))
 	}
 	d.Register("minimize_prefix_restore_all", handleRestoreAll)
+	d.Register("minimize_prefix_focus_only", handleFocusOnly)
 	d.Register("minimize_prefix_cancel", handlePrefixCancel)
 
 	// Workspace prefix (leader, w, ...)
@@ -534,6 +535,13 @@ func handleMinimizeFocused(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
 		o.MinimizeWindow(o.FocusedWindow)
 	}
+	return o, nil
+}
+
+// handleFocusOnly minimizes the other panes on the workspace, or brings back
+// the ones the last press hid. See app.ToggleFocusOnly.
+func handleFocusOnly(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.ToggleFocusOnly()
 	return o, nil
 }
 

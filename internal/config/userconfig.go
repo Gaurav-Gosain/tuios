@@ -1611,6 +1611,7 @@ func DefaultConfig() *UserConfig {
 				"minimize_prefix_restore_8":   {"8"},
 				"minimize_prefix_restore_9":   {"9"},
 				"minimize_prefix_restore_all": {"M"},
+				"minimize_prefix_focus_only":  {"f"},
 				"minimize_prefix_cancel":      {"esc"},
 			},
 			WorkspacePrefix: map[string][]string{
