@@ -289,7 +289,7 @@ var copyLegendItems = []legendItem{
 	{key: "y", label: "yank"},
 	{key: "ctrl+g", label: "edit"},
 	{key: "s", label: "hints"},
-	{key: "q/esc", label: "quit"},
+	{key: "q/enter/esc", short: []string{"q/↵/esc"}, label: "quit"},
 	{key: "ctrl+c", short: []string{"^c"}, label: "quit"},
 }
 
@@ -308,6 +308,7 @@ var copyVisualLegendItems = []legendItem{
 	{key: "w/b/e", label: "word"},
 	{key: "%", label: "bracket"},
 	{key: "y", label: "yank"},
+	{key: "enter", short: []string{"↵"}, label: "yank and quit"},
 	{key: "esc", label: "cancel"},
 	{key: "ctrl+c", short: []string{"^c"}, label: "quit"},
 }
@@ -331,7 +332,7 @@ func TestCopyModeLegend(t *testing.T) {
 				return strings.Contains(r, "y yank") && strings.Contains(r, "quit")
 			})
 			saveArtifact(t, term, dir, "copy-normal")
-			checkLegend(t, row, copyLegendItems, []string{"y", "q/esc"}, size.cols >= 80, size.cols >= 200)
+			checkLegend(t, row, copyLegendItems, []string{"y", "q/enter/esc"}, size.cols >= 80, size.cols >= 200)
 
 			if err := term.SendKeys("v"); err != nil {
 				t.Fatalf("send v: %v", err)

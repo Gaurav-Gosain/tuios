@@ -1501,6 +1501,7 @@ in the middle row, set `appearance.selection.copy_entry` to `center`.
 | `Ctrl+V` | Start a block selection. In a block selection, end the selection |
 | `o` | Go to the other end of the selection. In a block selection, go to the opposite corner |
 | `q` or `Esc` | Leave copy mode. In a selection, `Esc` and `q` only end the selection |
+| `Enter` | Leave copy mode. In a selection, copy the selection, then leave. In the search prompt, `Enter` runs the search. The action is `copy_mode_exit` in the `copy_mode` section |
 | `Ctrl+C` | Leave copy mode from normal mode, a selection, the search prompt or `f`/`t`. Nothing is copied |
 
 A block selection is a rectangle. The cursor is one corner, and every motion
@@ -1578,6 +1579,7 @@ selection.
 | `copy_mode_line_start` | `Home` |
 | `copy_mode_first_nonblank` | none |
 | `copy_mode_line_end` | `End` |
+| `copy_mode_exit` | `Enter` |
 
 The keys are in the `copy_mode` section. They work only in copy mode. In the
 search prompt, they do not move the cursor. `0`, `^` and `$` are fixed keys,
@@ -1587,6 +1589,18 @@ Do not bind a key here that copy mode already uses, such as `y` or `v`, or a
 key of a `[[keybindings.copy_pipe]]` entry. `tuios keybinds doctor` and the
 config check warn about such a key. A copy pipe key runs the pipe, and the
 binding does not run. A key that copy mode uses loses its copy mode action.
+
+`copy_mode_exit` leaves copy mode, as `q` does, and gives the pane the
+keyboard back. From a `v`, `V` or `Ctrl+V` selection it copies the selection
+first, as `y` does, then leaves, as tmux does with `Enter`. In multi-pane copy
+mode it copies every selection, as `y` does there.
+In the search prompt `Enter` still runs the search. For the old behaviour,
+where `Enter` does nothing in copy mode, set it to no key:
+
+```toml
+[keybindings.copy_mode]
+copy_mode_exit = []
+```
 
 `Ctrl+A` and `Ctrl+E` are not defaults. `Ctrl+A` is a common leader key, and
 `Ctrl+E` scrolls one line in tmux copy mode. To use them, add them to the

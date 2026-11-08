@@ -114,6 +114,25 @@ func dispatchCopyModeKey(msg tea.KeyPressMsg, action string, window *terminal.Wi
 // runCopyModeKey runs one copy-mode key against grid and records what it
 // wants done in fx. The caller holds whatever lock the grid needs.
 func runCopyModeKey(msg tea.KeyPressMsg, action string, cm *terminal.CopyMode, grid terminal.CopyGrid, fx *copyModeEffects, s *config.Settings) {
+	// copy_mode_exit (enter by default) leaves copy mode, as q does from
+	// navigation. From a selection it copies the selection first, as y does,
+	// the way tmux's copy-mode-vi takes Enter: leaving would lose it. The
+	// search prompt and a pending f/t character take the key as their own:
+	// enter runs the search.
+	if action == config.ActionCopyModeExit && cm.State != terminal.CopyModeSearch && !cm.PendingCharSearch {
+		cm.PendingCount = 0
+		msg := "Left copy mode"
+		if cm.State.InVisual() {
+			text := extractVisualText(cm, grid)
+			cm.State = terminal.CopyModeNormal
+			fx.SetClipboard(text)
+			msg = fmt.Sprintf("Yanked %d chars and left copy mode", len(text))
+		}
+		fx.ExitCopyMode()
+		fx.ShowNotification(msg, "info", s.NotificationDuration)
+		fx.action = action
+		return
+	}
 	if action != "" && runCopyModeAction(action, cm, grid, fx) {
 		return
 	}

@@ -1387,7 +1387,7 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 	}
 	if ql.copy != nil {
 		// Copy mode over the text has the keys it has over a pane.
-		return copyModeLegend(ql.copy.cm.State)
+		return copyModeLegend(ql.copy.cm.State, m.copyModeExitKey())
 	}
 	if ql.inside {
 		in := func(action string) []string { return reg.Keys(config.TableQuickLookInside, action) }

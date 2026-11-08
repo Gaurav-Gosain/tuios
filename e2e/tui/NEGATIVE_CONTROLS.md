@@ -15131,3 +15131,23 @@ Run on 2026-11-08 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPullDispatchOffersAgainWhenTheSwitchesLift$' -v .`.
+
+## TestEnterLeavesCopyMode
+
+Issue 1637. `copy_mode_exit` is a new `[keybindings.copy_mode]` action, on
+enter by default. Enter must leave copy mode from navigation, and the shell
+must answer after it. From a `V` selection Enter must write the selected
+line to the clipboard (OSC 52), then leave. The dock legend must name the
+exit key. In the `?` search prompt Enter must still run the search and stay
+in copy mode.
+`TestCopyModeExitUnboundKeepsEnter` holds `copy_mode_exit = []` to the old
+behaviour, where Enter does nothing.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| main at 6db1de3ed | "Enter in normal navigation did not leave copy mode" | **caught** |
+| The search and f/t checks cut from the exit in `runCopyModeKey` | "Enter in the search prompt did not run the search" | **caught** |
+| The copy cut from the exit in a selection | "the gesture never produced the clipboard writes [\"back-37\"]; it wrote []" | **caught** |
+| The legend keeps "q/esc" alone | "the copy mode legend does not name the exit key" | **caught** |

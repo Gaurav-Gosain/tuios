@@ -35,7 +35,7 @@ func (m *OS) multiCopyPill() (string, bool) {
 func (m *OS) copyModeHelp(focused *terminal.Window) []overlay.Hint {
 	mc := m.MultiCopy
 	if !mc.Has(focused.ID) {
-		legend := copyModeLegend(focused.CopyMode.State)
+		legend := copyModeLegend(focused.CopyMode.State, m.copyModeExitKey())
 		if focused.CopyMode.State == terminal.CopyModeNormal && m.KeybindRegistry != nil {
 			if keys := m.KeybindRegistry.Keys(config.TableCopyMode, config.ActionEditScrollback); len(keys) > 0 {
 				// Before the last pair, so quit stays at the end.
@@ -64,18 +64,22 @@ func (m *OS) copyModeHelp(focused *terminal.Window) []overlay.Hint {
 		state = lead.CopyMode.State
 	}
 	if state == terminal.CopyModeSearch {
-		return copyModeLegend(state)
+		return copyModeLegend(state, m.copyModeExitKey())
 	}
 	yank := overlay.Hint{Key: "y", Label: "yank all", Priority: overlay.HintEssential}
 	save := overlay.Hint{Key: "Y", Label: "save to file", Priority: overlay.HintOptional}
 	format.Priority = overlay.HintEssential
+	quit := "q/esc"
+	if exit := m.copyModeExitKey(); exit != "" {
+		quit = "q/" + exit + "/esc"
+	}
 	if state == terminal.CopyModeNormal {
 		return []overlay.Hint{
 			{Key: "/", Label: "search all"},
 			{Key: "n/N", Label: "next", Priority: overlay.HintOptional},
 			{Key: "v/V", Label: "select"},
 			yank, save, format,
-			{Key: "q/esc", Label: "quit", Priority: overlay.HintEssential},
+			{Key: quit, Label: "quit", Priority: overlay.HintEssential},
 			{Key: "ctrl+c", Label: "quit", Priority: overlay.HintOptional},
 		}
 	}
