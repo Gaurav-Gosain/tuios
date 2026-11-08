@@ -2061,13 +2061,50 @@ func (e *Emulator) registerSixelGraphicsHandler() {
 // Leaving the cursor on the last row instead let the next text a program
 // printed overwrite the picture's bottom row. See sixel_marker.go.
 func (e *Emulator) placeSixel(rows, cols int, id uint32) {
+	e.placeImage(rows, cols, id, true)
+}
+
+// PlaceImageMarkers writes the marker cells of image id, rows by cols, at the
+// cursor, as a sixel's are written: a kitty image drawn as glyphs on a host
+// without graphics (internal/app). With move the cursor ends at column 0 of
+// the row under the image, scrolling first so that row exists, as
+// ReserveImageSpace leaves it for a kitty image a host draws. Without (C=1)
+// nothing scrolls and the cursor stays, and rows past the screen are not
+// written.
+func (e *Emulator) PlaceImageMarkers(rows, cols int, id uint32, move bool) {
+	e.placeImage(rows, cols, id, move)
+}
+
+// EraseImageMarkers blanks every marker cell on the screen whose image id
+// match accepts, keeping its background: a kitty delete (a=d) of a picture
+// drawn as glyphs.
+func (e *Emulator) EraseImageMarkers(match func(id uint32) bool) {
+	height, width := e.scr.Height(), e.scr.Width()
+	for y := range height {
+		for x := range width {
+			old := e.scr.CellAt(x, y)
+			if old == nil {
+				continue
+			}
+			id, _, _, ok := ParseSixelMarker(old.Content)
+			if !ok || !match(id) {
+				continue
+			}
+			cell := uv.Cell{Content: " ", Width: 1}
+			cell.Style.Bg = old.Style.Bg
+			e.scr.SetCell(x, y, &cell)
+		}
+	}
+}
+
+func (e *Emulator) placeImage(rows, cols int, id uint32, move bool) {
 	if rows <= 0 || cols <= 0 {
 		return
 	}
 	startX, startY := e.scr.CursorPosition()
 	height, width := e.scr.Height(), e.scr.Width()
 	scroll := 0
-	if startY+rows+1 > height {
+	if move && startY+rows+1 > height {
 		// Clamped: rows past a full screen cannot be shown, and a hostile
 		// raster size would otherwise drive a scroll per row.
 		scroll = min(startY+rows+1-height, height)
@@ -2098,6 +2135,10 @@ func (e *Emulator) placeSixel(rows, cols int, id uint32) {
 			}
 			e.scr.SetCell(x, y, &cell)
 		}
+	}
+	if !move {
+		e.scr.setCursor(startX, startY, false)
+		return
 	}
 	e.scr.setCursor(0, min(startY+rows-scroll, height-1), false)
 }
