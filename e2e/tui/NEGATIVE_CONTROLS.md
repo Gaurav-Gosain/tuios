@@ -14901,3 +14901,18 @@ Run on 2026-11-08 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_OVNFS=/path/to/ovnfs go test -count=1 -run '^TestPluginOvnfs$' -v .`.
+
+## TestCockpitThreadToolRowsOpen
+
+A working turn's tool rows in the agents view: a long Bash call with output,
+a long one with none, a "true", and two Reads, under 30 short turns. A click
+opens a row on its whole command and the head of its output, the "true" row
+has no fold mark, and a ruler with a prompt on most rows draws no marks.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `head.hit = hit` cut from `ckToolCard` | "a click did not open the tool row" | **caught** |
+| `more` forced true in `ckToolCard` | "the true row has a fold mark" | **caught** |
+| The saturation return cut from `drawThreadRuler` | "the ruler draws prompt marks (16)" | **caught** |

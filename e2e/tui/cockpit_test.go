@@ -1241,9 +1241,10 @@ func cockpitTurnFolds(t *testing.T, base, path string) {
 		}
 		return "Worked for 2m 36s · edited 1 file, ran 1 command and 3 other actions"
 	}
+	// e opens every tool row with its output too, so the thread runs long.
 	scrollTo := func(key, want string) {
 		t.Helper()
-		for range 60 {
+		for range 200 {
 			if strings.Contains(term.Screen().Text(), want) {
 				return
 			}
