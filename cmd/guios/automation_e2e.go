@@ -42,6 +42,15 @@ func init() {
 	if d, err := time.ParseDuration(os.Getenv("GUIOS_ATTACH_DELAY")); err == nil {
 		attachDelay = d
 	}
+	// GUIOS_ACTION_DELAY runs every prefix action that long after the
+	// prefix took its key: a main thread slow to come back, which a window
+	// out of sight gives now and then, so what is typed meanwhile shows
+	// where it goes (tuios_keys.go).
+	if d, err := time.ParseDuration(os.Getenv("GUIOS_ACTION_DELAY")); err == nil && d > 0 {
+		postAction = func(a *App, fn func()) {
+			time.AfterFunc(d, func() { a.update(fn) })
+		}
+	}
 	// GUIOS_KEY_AUDIT=FILE writes a line for each thing the keyboard
 	// owner does (key_owner.go): hold, keep, done, land and drop, with the
 	// time, so a key lost or sent to the wrong place shows where.

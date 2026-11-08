@@ -387,7 +387,7 @@ func (a *App) stepKey(k string) bool {
 		tk.menu = ""
 	}
 	tk.mu.Unlock()
-	a.update(func() {
+	postAction(a, func() {
 		switch {
 		case leaderAgain:
 			// The leader two times sends it to the program, as tmux does.
@@ -403,6 +403,10 @@ func (a *App) stepKey(k string) bool {
 	})
 	return true
 }
+
+// postAction runs a prefix action on the main thread, after the key that
+// chose it. The e2e build can hold it (GUIOS_ACTION_DELAY).
+var postAction = func(a *App, fn func()) { a.update(fn) }
 
 // nativeActions are the keymap's actions guios runs on its own path, and
 // daemonActions those it asks the daemon to run (run-command): the TUI
