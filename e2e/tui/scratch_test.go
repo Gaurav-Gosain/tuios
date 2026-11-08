@@ -262,8 +262,12 @@ func TestScratchTerminalShowsOneShell(t *testing.T) {
 	}
 	typeUntil(t, term, "echo FRESH-$((5*5))", "FRESH-25")
 	typeUntil(t, term, `echo "AT-$(pwd)-END"`, "-END")
-	if pane, err := tuiosCLI(t, base, "capture-pane", "-s", "work", "-w", fresh.ID); err != nil || !strings.Contains(pane, "AT-"+here+"-END") {
-		t.Fatalf("the new scratch shell did not start in %s, the pane's folder after its cd: %v\n%s", here, err, pane)
+	// The pane's process is read for its folder, and the kernel names it by
+	// its real path: on macOS here is under /var, a link to /private/var.
+	// The path is long enough to wrap in the pane, so the capture joins rows.
+	want := resolvedPath(t, here)
+	if pane, err := tuiosCLI(t, base, "capture-pane", "-s", "work", "-w", fresh.ID, "--unwrap"); err != nil || !strings.Contains(pane, "AT-"+want+"-END") {
+		t.Fatalf("the new scratch shell did not start in %s, the pane's folder after its cd: %v\n%s", want, err, pane)
 	}
 	if strings.Contains(term.Screen().Text(), "SCRATCH-42") {
 		t.Errorf("the new scratch shell shows the old one's text\n%s", term.Snapshot())
