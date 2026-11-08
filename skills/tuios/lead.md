@@ -129,6 +129,12 @@ To unstick it:
 - An approval or a form the person must answer: tell the person which pane
   and what it asks. The Inbox holds an approval already. Do not press keys or
   type into the pane.
+- A form the harness put up on its own, such as a tip or an offer to change a
+  mode, that blocks the worker: leave it to the person, or pick the form's own
+  "not now" choice by its number (`send-keys -s crew-api -w api-docs 2`, after
+  `capture-pane` shows that 2 is that choice). Never press Esc to close it. In
+  Claude Code, Esc also interrupts the running turn, and the worker stops with
+  "Interrupted".
 - A worker you sent the wrong work: mail it, or `queue` the next prompt.
 - A worker that works on and on: `get-agent-state --json` gives
   `subagents`, and `agent-log` shows what it does. Stop it with
