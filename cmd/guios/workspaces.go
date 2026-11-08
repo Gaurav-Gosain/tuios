@@ -286,8 +286,26 @@ func (a *App) workspacePill(c *ui.Context, pal *palette, s *proto.Session, w pro
 		}
 		// The dot keeps its room while there is none, so that a pill
 		// does not change its width as its panes change their state.
-		ui.Box(c).Size(6, 6).Radius(3).Shrink(0).Background(workspaceDot(pal, w))
+		dot := ui.Box(c.Key("ws-dot-"+strconv.Itoa(w.N))).Size(6, 6).Radius(3).Shrink(0).Background(workspaceDot(pal, w))
+		if say := workspaceDotWord(w); say != "" {
+			dot.Label(say)
+		}
 	})
+}
+
+// workspaceDotWord says what a pill's dot shows, for the screen reader.
+func workspaceDotWord(w proto.Workspace) string {
+	switch {
+	case w.Status == proto.Waiting:
+		return locales.StatusNeedsYou()
+	case w.Status == proto.Failed:
+		return locales.StatusFailed()
+	case w.Unread:
+		return locales.StatusDone()
+	case w.Status == proto.Working:
+		return locales.StatusWorking()
+	}
+	return ""
 }
 
 // workspaceDot is the color of the dot a pill shows for the most urgent

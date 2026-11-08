@@ -143,6 +143,8 @@ func (a *App) view(c *ui.Context) {
 		defer auditFrame(a, c)
 	}
 	a.syncUsage()
+	// Every view reads one state per agent, held moves too (agent_shown.go).
+	a.shareAgentStates()
 	// First: keys it lands go to their target before the target is built.
 	a.keyOwnerView(c)
 	defer func() {
@@ -795,7 +797,7 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int, 
 		// coming moves no text.
 		mark := func() {
 			if a.sessionMarked(s) {
-				statusIconP(c, pal, s.Status, s.Unread, s.Progress, 14)
+				statusIconP(c.Key("sess-mark-"+s.ID), pal, s.Status, s.Unread, s.Progress, 14)
 			} else {
 				ui.Box(c).Size(14, 14).Shrink(0)
 			}

@@ -178,6 +178,10 @@ type cockpit struct {
 	// agentsAt is when the agents list last came from the daemon: a row
 	// held on its way to a new group counts from it (ckHoldGroup).
 	agentsAt time.Time
+	// pushed is what the last state push said of each local agent pane,
+	// pushedAt when it came: laid on the agents' rows (followPanes).
+	pushed   map[string]ckPushed
+	pushedAt time.Time
 	folded   map[int]bool
 	opened   map[int]bool
 	// needsOnly is the f filter: the Needs you group alone.
@@ -362,6 +366,7 @@ func (a *App) refreshCockpit() {
 		return
 	}
 	a.ck.fetching = true
+	began := time.Now()
 	go func() {
 		agents, items, err := cl.Agents()
 		a.update(func() {
@@ -372,6 +377,8 @@ func (a *App) refreshCockpit() {
 				a.ck.err = ""
 				a.ck.agents, a.ck.items, a.ck.loaded = agents, items, true
 				a.ck.agentsAt = time.Now()
+				a.ck.ckRefetched(began)
+				a.shareAgentStates()
 				a.ckKeepAnswered()
 				a.ck.letters = ckFanLetters(agents)
 				if a.ck.undo != nil && time.Now().After(a.ck.undo.until) {
@@ -504,6 +511,11 @@ func (a *App) ckShownStatus(ag client.Agent, it *session.AttentionItem) (proto.S
 	// the rail and the list show one state in a frame.
 	now := time.Now()
 	want := ckShownGroup(ag, it, now)
+	if p.shown == ckNeeds && want != ckNeeds && a.ck.placedFree[ag.Key()] {
+		// Just answered: out of Needs you in this frame, as its row
+		// (ckHoldGroup).
+		return ckStatus(ag, it)
+	}
 	if (p.shown != p.want || want != p.want && want != ckNeeds) && now.Before(a.ck.moveSince(p, want, now).Add(ckHold)) {
 		return p.st, p.unread
 	}

@@ -475,6 +475,10 @@ func (a *App) setState(h *host, st proto.State) {
 	}
 	a.mergeState(h, st)
 	a.loaded = true
+	if !h.remote() {
+		a.followPanes()
+	}
+	a.shareAgentStates()
 	a.holdSwitches(before)
 	if s := a.session(a.layoutDrag.session); s != nil && s.Layout.SameShape(dragged) {
 		s.Layout = dragged

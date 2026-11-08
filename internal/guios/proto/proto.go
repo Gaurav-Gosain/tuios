@@ -203,6 +203,14 @@ type Pane struct {
 	// Kind is what a program waits for (OSC 7501): permission, question
 	// or auth.
 	Kind string `json:"kind,omitempty"`
+	// AgentState is the agent state the daemon shows for the pane, in its
+	// wire spelling ("unknown" for a silent one), AgentReason why it is not
+	// the state the agent gave ("silent"), and AgentAt when the agent last
+	// set it (unix ns). The agents view's rows take them from each state, so
+	// that the list is never older than the rail.
+	AgentState  string `json:"agentState,omitempty"`
+	AgentReason string `json:"agentReason,omitempty"`
+	AgentAt     int64  `json:"agentAt,omitempty"`
 	// Progress is a program's progress, 0–100, or -1 when unknown.
 	Progress int `json:"progress"`
 	// Records are the status reports of the programs (OSC 7501), when
