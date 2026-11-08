@@ -1649,7 +1649,14 @@ because a key from `send-keys` does not go to copy mode.
 ### Word movement
 
 `Shift+Left` and `Shift+Right` move by word as `b` and `w` do, including
-counts and visual selections. Rebind or disable them in copy mode:
+counts and visual selections.
+
+| Action | Default key |
+| --- | --- |
+| `copy_mode_word_backward` | `Shift+Left` |
+| `copy_mode_word_forward` | `Shift+Right` |
+
+Rebind or disable them in copy mode:
 
 ```toml
 [keybindings.copy_mode]

@@ -165,7 +165,6 @@ func runCopyModeAction(action string, cm *terminal.CopyMode, grid terminal.CopyG
 	if cm.State == terminal.CopyModeSearch || cm.PendingCharSearch {
 		return false
 	}
-	dropStaleCount(cm, fx)
 	if action == config.ActionHints {
 		// The labels go on the view as it is scrolled now. A label that
 		// copies ends copy mode; esc from hints keeps it.
@@ -180,6 +179,10 @@ func runCopyModeAction(action string, cm *terminal.CopyMode, grid terminal.CopyG
 		fx.action = action
 		return true
 	}
+	dropStaleCount(cm, fx)
+	// A pending g waits for the g of gg. This key is not that, so the
+	// prefix goes rather than firing on the next g.
+	cm.PendingGCount = false
 	switch action {
 	case config.ActionCopyModeLineStart:
 		cm.CursorX = 0
