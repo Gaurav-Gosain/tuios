@@ -112,10 +112,13 @@ tuios list-agents --select 'needs:you' --json
 tuios peek-prompt -s crew-api -w api-docs
 ```
 
-The state can lag what the screen shows. A form that sends no hook, such as
-a numbered choice with "Enter to confirm / Esc to cancel", can show under a
-state of `done` or `idle`. So can a worker that waits on its own background
-shell ("1 shell still running"). When a worker is quiet too long, look:
+A form Claude Code draws over its input box with no hook, such as "Teach
+auto mode about your environment?", reads `needs_input` with the form's
+question as its message, so `needs:you` finds it. A worker that rests but
+still runs a background shell reads `done` or `idle` with `waits_on` (`1
+background shell`) in `list-agents --json` and `get-agent-state --json`: it
+has not finished everything it started. A form another harness draws can
+still show under `done` or `idle`. When a worker is quiet too long, look:
 
 ```sh
 tuios capture-pane -s crew-api -w api-docs --trim
@@ -140,10 +143,13 @@ the reply. It refuses a worker on `needs_input`:
 tuios ask-agent -s crew-api -w api-docs --from "$TUIOS_PANE_ID" --timeout 600000 'Which pages are left?'
 ```
 
-The reply is the text the pane printed while it answered. A full-screen
-agent such as Claude Code redraws its screen, so the reply can come back
-empty although it answered. Then, and when the worker is busy, on another
-machine, or the answer is long, ask by mail and wait for the reply:
+For Claude Code, and the other harnesses whose transcript tuios reads, the
+reply is the worker's own text since the question, from its transcript, so
+a full-screen agent that redraws its screen still answers in full. For any
+other pane it is the text the pane printed while it answered. `--json` says
+which in `reply_source` (`transcript` or `screen`). When the worker is busy,
+on another machine, or the answer is long, ask by mail and wait for the
+reply:
 
 ```sh
 tuios send-agent-message -s crew-api -w api-docs --from "$TUIOS_PANE_ID" 'Which pages are left? Answer by mail.'
