@@ -637,6 +637,8 @@ func generateCopyModeBindings(registry *config.KeybindRegistry, s *config.Settin
 		{config.ActionCopyModeFirstNonBlank, "First nonblank"},
 		{config.ActionCopyModeLineEnd, "Line end"},
 		{config.ActionCopyModeExit, "Leave copy mode"},
+		{config.ActionCopyModeWordForward, "Next word"},
+		{config.ActionCopyModeWordBackward, "Previous word"},
 	} {
 		if keys := registry.Keys(config.TableCopyMode, row.action); len(keys) > 0 {
 			bound = append(bound, HelpBinding{Action: row.action, Keys: keys, Description: row.desc, Category: HelpCategoryCopyMode})

@@ -1646,6 +1646,20 @@ copy_mode_line_end = ["end", "ctrl+e"]
 tuios cannot put two actions on one key. `tuios send-keys` cannot do it either,
 because a key from `send-keys` does not go to copy mode.
 
+### Word movement
+
+`Shift+Left` and `Shift+Right` move by word as `b` and `w` do, including
+counts and visual selections. Rebind or disable them in copy mode:
+
+```toml
+[keybindings.copy_mode]
+copy_mode_word_backward = []
+copy_mode_word_forward = ["alt+right"]
+```
+
+The fixed `b` and `w` keys remain available. Terminal emulators must send
+shifted arrow keys to tuios for the defaults to work.
+
 ### Hints in copy mode
 
 `s` in copy mode puts hint labels on the text in view, so you can copy text

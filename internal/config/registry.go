@@ -769,6 +769,8 @@ var ActionDescriptions = map[string]string{
 	ActionCopyModeFirstNonBlank:  "Copy mode: go to the first nonblank character of the line",
 	ActionCopyModeLineEnd:        "Copy mode: go to the last nonblank character of the line",
 	ActionCopyModeExit:           "Copy mode: leave copy mode; from a selection, copy it first",
+	ActionCopyModeWordForward:    "Copy mode: move forward a word",
+	ActionCopyModeWordBackward:   "Copy mode: move backward a word",
 	ActionReviewNextHunk:         "Review: next hunk, going on into the next file",
 	ActionReviewPrevHunk:         "Review: previous hunk, going back into the previous file",
 	ActionReviewNextFile:         "Review: next file",

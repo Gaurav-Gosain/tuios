@@ -159,12 +159,13 @@ func runCopyModeKey(msg tea.KeyPressMsg, action string, cm *terminal.CopyMode, g
 // runCopyModeAction runs a bound copy-mode motion in normal mode or in a
 // visual selection, and reports whether it ran. The search prompt and a
 // pending f/t character take the key as text, so the action does not run
-// there. A count typed before the key is dropped: the line motions ignore it,
-// as 0 and $ do.
+// there. A count typed before the key is dropped by the line motions, which
+// ignore it as 0 and $ do, and runs the word motions count times.
 func runCopyModeAction(action string, cm *terminal.CopyMode, grid terminal.CopyGrid, fx *copyModeEffects) bool {
 	if cm.State == terminal.CopyModeSearch || cm.PendingCharSearch {
 		return false
 	}
+	dropStaleCount(cm, fx)
 	if action == config.ActionHints {
 		// The labels go on the view as it is scrolled now. A label that
 		// copies ends copy mode; esc from hints keeps it.
@@ -186,6 +187,12 @@ func runCopyModeAction(action string, cm *terminal.CopyMode, grid terminal.CopyG
 		cm.CursorX = firstNonBlankCol(cm, grid)
 	case config.ActionCopyModeLineEnd:
 		cm.CursorX = lastTextCol(cm, grid)
+	case config.ActionCopyModeWordForward, config.ActionCopyModeWordBackward:
+		move := moveWordForward
+		if action == config.ActionCopyModeWordBackward {
+			move = moveWordBackward
+		}
+		repeatMotion(max(cm.PendingCount, 1), cm, func() { move(cm, grid) })
 	default:
 		return false
 	}

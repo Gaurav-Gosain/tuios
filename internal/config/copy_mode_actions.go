@@ -23,6 +23,8 @@ const (
 	ActionCopyModeLineStart     = "copy_mode_line_start"
 	ActionCopyModeFirstNonBlank = "copy_mode_first_nonblank"
 	ActionCopyModeLineEnd       = "copy_mode_line_end"
+	ActionCopyModeWordForward   = "copy_mode_word_forward"
+	ActionCopyModeWordBackward  = "copy_mode_word_backward"
 )
 
 // ActionCopyModeExit leaves copy mode and gives the pane the keyboard back,
@@ -138,10 +140,12 @@ func validateCopyModeKeys(cfg *UserConfig, result *ValidationResult) {
 // leader, but F is the backward character search here.
 func getDefaultCopyModeKeybinds() map[string][]string {
 	return map[string][]string{
-		ActionCopyModeLineStart: {"home"},
-		ActionCopyModeLineEnd:   {"end"},
-		ActionCopyModeExit:      {"enter"},
-		ActionEditScrollback:    {"ctrl+g"},
-		ActionHints:             {"s"},
+		ActionCopyModeLineStart:    {"home"},
+		ActionCopyModeLineEnd:      {"end"},
+		ActionCopyModeExit:         {"enter"},
+		ActionCopyModeWordForward:  {"shift+right"},
+		ActionCopyModeWordBackward: {"shift+left"},
+		ActionEditScrollback:       {"ctrl+g"},
+		ActionHints:                {"s"},
 	}
 }
