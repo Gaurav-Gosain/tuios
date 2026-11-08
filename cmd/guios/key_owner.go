@@ -83,6 +83,10 @@ type keyOwner struct {
 	// listHad: the agents list had the keys in the last frame built
 	// (catchListKeys).
 	listHad bool
+	// paneGone: the terminal that had the keys went, as a pane closed
+	// (dropTerm). Until the keys land, the keys typed for it route to the
+	// window, which catchListKeys reads.
+	paneGone bool
 }
 
 // koPhase is the key owner's phase. The owner keeps the keys while it is
@@ -113,6 +117,9 @@ func (a *App) koSet(next koPhase, why string) {
 	if next == koLanding || next == koOwned {
 		ko.landAt = time.Now()
 		ko.asked = ko.asked[:0]
+	}
+	if next == koIdle {
+		ko.paneGone = false
 	}
 	ko.phase = next
 }
@@ -575,7 +582,8 @@ func (a *App) keySink(c *ui.Context) {
 }
 
 // catchListKeys keeps for the owner the keys typed in the agents list
-// after the view shut. MyGo routes a key to the element it was typed in,
+// after the view shut, or in a pane's terminal after the pane closed
+// (paneGone). MyGo routes a key to the element it was typed in,
 // or that has the focus; the list reads its keys as shortcuts only while
 // the view is built. When a landed Escape closed the view, the list kept
 // the focus a frame or two without being built, and what was typed then
@@ -586,7 +594,7 @@ func (a *App) keySink(c *ui.Context) {
 // twice. A key that typed text keeps the text, and the text that comes
 // later to the sink is the same press, which keepKey drops.
 func (a *App) catchListKeys(c *ui.Context) {
-	if a.ck.open || !a.keysHeld() || a.keysOwned() || !a.ko.listHad {
+	if a.ck.open || !a.keysHeld() || a.keysOwned() || !a.ko.listHad && !a.ko.paneGone {
 		return
 	}
 	for _, k := range proseKeys {
@@ -652,6 +660,8 @@ func (a *App) targetRef(t keyTarget) *ui.Handle {
 	switch {
 	case t.sheet == "other":
 		return nil
+	case t.sheet == "confirm":
+		return &a.sf.cancel
 	case t.sheet != "":
 		return &a.sf.ref
 	case t.reply:
@@ -975,4 +985,19 @@ func seqNote(seq uint64) string {
 // the focus each frame.
 func (a *App) ownerAsked(pane string) bool {
 	return a.ko.phase == koLanding && slices.Contains(a.ko.asked, pane)
+}
+
+// paneGoes has the owner keep the keys when the terminal that has them
+// goes: a pane closed by a key, a button, a menu or the daemon. MyGo sends
+// a key to the window while the element that had the focus is gone, and
+// nothing read it there: the first keys of a line typed at once after the
+// close were lost (Mac round 6, M1). The owner holds them from now, and
+// lands them on the pane the user is in once its terminal has the keys.
+func (a *App) paneGoes(id string) {
+	if id == "" || id != a.focusPrev && id != a.focusNow {
+		return
+	}
+	a.ko.paneGone = true
+	keyAudit("gone", id, "")
+	a.moveKeys("gone")
 }

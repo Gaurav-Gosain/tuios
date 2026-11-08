@@ -794,6 +794,7 @@ func (a *App) touch(id string) {
 
 func (a *App) dropTerm(id string) {
 	if e := a.terms[id]; e != nil {
+		a.paneGoes(id)
 		if e.term != nil {
 			e.term.Close()
 		}
@@ -1543,7 +1544,7 @@ func (a *App) openProjectDirs(h *host, cl *client.Client, dirs []string, local b
 // busy reports whether closing a session would end a program the user may
 // care about: anything but the shell at its prompt.
 func busy(s *proto.Session) bool {
-	return s.Status != proto.Exited && s.Process != ""
+	return s.Status != proto.Exited && s.Running
 }
 
 func (a *App) closeSession(id string, ask bool) {

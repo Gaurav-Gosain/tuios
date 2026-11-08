@@ -1474,7 +1474,7 @@ func (a *App) closePane(s *proto.Session, pane string, ask bool) {
 	if p == nil {
 		return
 	}
-	if ask && a.set.ConfirmClose && p.Status != proto.Exited && p.Process != "" {
+	if ask && a.set.ConfirmClose && p.Status != proto.Exited && p.Running {
 		sid := s.ID
 		a.confirm = &confirmation{
 			open:    true,

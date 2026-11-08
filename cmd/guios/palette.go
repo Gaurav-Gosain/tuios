@@ -702,14 +702,20 @@ func (a *App) paletteView(c *ui.Context, pal *palette) {
 }
 
 func (a *App) confirmView(c *ui.Context, pal *palette) {
-	if a.confirm != nil && confirmDialog(c, pal, &a.confirm) {
+	if a.confirm != nil && confirmDialog(c, pal, &a.confirm, a.confirmKeys) {
 		a.focusTerminal()
 	}
 }
 
 // confirmDialog asks *pending's question in c's window, and clears it once
-// answered, which it reports.
-func confirmDialog(c *ui.Context, pal *palette, pending **confirmation) bool {
+// answered, which it reports. keys binds the dialog for the key owner and
+// gives its kept answer (confirmKeys), nil in a window the owner does not
+// serve.
+//
+// A destructive question opens with Cancel focused: a typed letter or a
+// space, as from a line typed at once after Ctrl+B x, never confirms it.
+// Enter does, and a click on the button (Mac round 6, M1).
+func confirmDialog(c *ui.Context, pal *palette, pending **confirmation, keys func(ui.Element) ui.Key) bool {
 	cf := *pending
 	run, alt := false, false
 	ui.DialogBase(c.Key("confirm"), &cf.open, func(backdrop, panel ui.Element) {
@@ -720,10 +726,28 @@ func confirmDialog(c *ui.Context, pal *palette, pending **confirmation) bool {
 		}
 		ww, _ := c.Size()
 		floating(panel.Width(min(width, ww-2*sp4)).Padding(sp5).Gap(sp2).Radius(rSheet).Background(pal.popover), pal).Label(cf.title)
+		// Enter is the action's while a button has the focus too: the
+		// panel takes it before the focused button does.
+		enter := panel.Shortcut(0, ui.KeyEnter) || c.Shortcut(0, ui.KeyEnter)
+		if cf.destroy {
+			panel.HandleInput(func(ev ui.InputEvent) bool {
+				if ev.Kind == ui.InputText && ev.Text != "" {
+					keyAudit("drop", ev.Text, "sheet confirm")
+					return true
+				}
+				return false
+			})
+		}
 		ui.Text(c, cf.title).FontSize(fsTitle).FontWeight(wSemibold).TextColor(pal.text).MaxLines(2)
 		ui.Text(c, cf.detail).FontSize(fsBody).TextColor(pal.textMuted).LineHeight(1.45).MaxLines(5)
 		ui.Row(c).Gap(sp2).Justify(ui.End).Margin(sp3, 0, 0, 0).Wrap().Children(func() {
-			if button(c, "cancel", locales.CommonCancel(), "Esc", false, pal) {
+			var answer ui.Key
+			bind := func(b ui.Element) {
+				if keys != nil {
+					answer = keys(b)
+				}
+			}
+			if kindButtonEl(c, "cancel", locales.CommonCancel(), "Esc", btnSecondary, hControl, rControl, pal, cf.destroy, bind) || answer == ui.KeyEscape {
 				cf.open = false
 			}
 			if cf.alt != "" && button(c, "alt", cf.alt, "", false, pal) {
@@ -733,7 +757,7 @@ func confirmDialog(c *ui.Context, pal *palette, pending **confirmation) bool {
 			if cf.destroy {
 				kind = btnDanger
 			}
-			if kindButton(c, "ok", cf.action, "↵", kind, hControl, rControl, pal, true) || c.Shortcut(0, ui.KeyEnter) {
+			if kindButton(c, "ok", cf.action, "↵", kind, hControl, rControl, pal, !cf.destroy) || enter || answer == ui.KeyEnter {
 				run = true
 			}
 		})

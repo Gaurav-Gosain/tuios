@@ -340,7 +340,7 @@ func (k *stateKeeper) pane(w windowRow) proto.Pane {
 		ID: w.ID, Title: title, Dir: w.Cwd, Cols: w.Width, Rows: w.Height, PID: w.PID,
 		Process: w.Foreground, Agent: w.Harness, Message: w.AgentMsg, Kind: w.AgentKind, Progress: -1,
 		Status: proto.Idle, Since: w.AgentAt / int64(time.Millisecond), Host: w.Host,
-		Named: w.CustomName != "",
+		Named: w.CustomName != "", Running: w.Foreground != "",
 	}
 	// A pane named by the person or its program shows that name: kero
 	// shows a pane's title while a program runs in it.

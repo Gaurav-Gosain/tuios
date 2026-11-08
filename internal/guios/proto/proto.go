@@ -169,8 +169,13 @@ type Pane struct {
 	// program on (tuios new-window --host), "" for this machine.
 	Host    string   `json:"host,omitempty"`
 	Command []string `json:"command,omitempty"`
-	// Process is the foreground program, "" while the shell is.
+	// Process is the foreground program, "" while the shell is. A pane
+	// named by the person or its program has that name here too, for its
+	// label: Running tells whether a program runs.
 	Process string `json:"process,omitempty"`
+	// Running says a program other than the shell runs in the foreground,
+	// one that a close of the pane ends.
+	Running bool `json:"running,omitempty"`
 	// ProcessDir is the foreground program's working directory, as a
 	// worktree a coding agent went into, while it is not the shell's.
 	ProcessDir string `json:"processDir,omitempty"`

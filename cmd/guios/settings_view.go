@@ -341,7 +341,7 @@ func (a *App) settingsView(c *ui.Context) {
 	keepOverlay(c)
 	toasts(c)
 	if a.ss.confirm != nil {
-		confirmDialog(c, pal, &a.ss.confirm)
+		confirmDialog(c, pal, &a.ss.confirm, nil)
 	}
 	// The controls edit a.set: what changed applies, and saves.
 	if !reflect.DeepEqual(a.set, a.applied) {

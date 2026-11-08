@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/mygo/ui"
@@ -24,12 +25,20 @@ type sheetField struct {
 	ref   ui.Handle
 	toEnd bool // the caret goes to the end: the owner wrote text
 	enter bool // a kept Enter: the sheet submits
+	// The confirm dialog has no field: its Cancel button, which has the
+	// focus, is bound here, by the build of pass cpass. answer is a kept
+	// Enter or Escape the dialog reads in its next build (replayConfirm).
+	cancel ui.Handle
+	cpass  int
+	answer ui.Key
 }
 
 // sheetName names the open sheet whose field the owner writes, "" for
 // none or for one it does not write.
 func (a *App) sheetName() string {
 	switch {
+	case a.confirm != nil && a.confirm.open:
+		return "confirm"
 	case a.prompt != nil && a.prompt.open:
 		return "prompt"
 	case a.wtAsk != nil && a.wtAsk.open:
@@ -63,6 +72,9 @@ func (a *App) sheetInput(name string, in ui.Element) bool {
 // sheetBuilt reports whether the sheet name bound its field in the last
 // frame built.
 func (a *App) sheetBuilt(name string) bool {
+	if name == "confirm" {
+		return a.sf.cpass >= a.ko.pass-1
+	}
 	return a.sf.name == name && a.sf.pass >= a.ko.pass-1
 }
 
@@ -89,6 +101,10 @@ func (a *App) sheetValue(name string) *string {
 // its end, Backspace, Enter where the sheet submits, the palette's Up and
 // Down. Any other key, and every key of a sheet with no such field, drops.
 func (a *App) replaySheet(name string, q []heldKey) {
+	if name == "confirm" {
+		a.replayConfirm(q)
+		return
+	}
 	v := a.sheetValue(name)
 	if v == nil || !a.sheetBuilt(name) {
 		for _, k := range q {
@@ -131,4 +147,44 @@ func (a *App) replaySheet(name string, q []heldKey) {
 			a.pal.index, a.pal.reveal = 0, true
 		}
 	}
+}
+
+// replayConfirm gives kept keys to the confirm dialog: Enter answers with
+// its action and Escape with Cancel. Every other key drops, with a line in
+// the key audit: a typed key never confirms a destructive dialog, and
+// never goes on to the pane it would close (Mac round 6, M1). The keys
+// after the answer wait in the queue, and land where the keys go once the
+// dialog closed.
+func (a *App) replayConfirm(q []heldKey) {
+	keep := func(rest []heldKey) {
+		if len(rest) == 0 {
+			return
+		}
+		a.ko.mu.Lock()
+		a.ko.queue = append(slices.Clone(rest), a.ko.queue...)
+		a.ko.mu.Unlock()
+	}
+	if a.sf.answer != 0 {
+		keep(q) // the dialog did not read its answer yet
+		return
+	}
+	for i, k := range q {
+		if k.text == "" && k.mods == 0 && (k.key == ui.KeyEnter || k.key == ui.KeyEscape) {
+			a.sf.answer = k.key
+			keep(q[i+1:])
+			return
+		}
+		keyAudit("drop", k.name(), "sheet confirm")
+	}
+}
+
+// confirmKeys binds the confirm dialog of this window for the owner, as
+// its build makes it, and reports the kept answer: Enter or Escape, or 0.
+func (a *App) confirmKeys(cancel ui.Element) ui.Key {
+	sf := &a.sf
+	cancel.Bind(&sf.cancel)
+	sf.cpass = a.ko.pass
+	k := sf.answer
+	sf.answer = 0
+	return k
 }

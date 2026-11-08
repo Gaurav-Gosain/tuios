@@ -134,6 +134,12 @@ const (
 )
 
 func kindButton(c *ui.Context, key, label, keys string, kind int, height, radius float32, pal *palette, focus bool) bool {
+	return kindButtonEl(c, key, label, keys, kind, height, radius, pal, focus, nil)
+}
+
+// kindButtonEl is kindButton, and gives the button to bind before it is
+// built, nil for none.
+func kindButtonEl(c *ui.Context, key, label, keys string, kind int, height, radius float32, pal *palette, focus bool, bind func(ui.Element)) bool {
 	pad := float32(sp3)
 	if height < hControl {
 		pad = 10
@@ -141,6 +147,9 @@ func kindButton(c *ui.Context, key, label, keys string, kind int, height, radius
 	b := ui.ButtonBase(c.Key(key)).Height(height).Padding(0, pad).Gap(6).Radius(radius).AlignItems(ui.Center).Shrink(0).Label(label)
 	if focus {
 		b.AutoFocus()
+	}
+	if bind != nil {
+		bind(b)
 	}
 	bg, fg := pal.control, pal.text
 	switch kind {
