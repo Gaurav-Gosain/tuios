@@ -691,6 +691,7 @@
   "cockpitNoTranscript": "表示する会話はありません",
   "cockpitNoTranscriptDetail": "tuios はこのエージェントの記録を見つけていません。ハーネスの連携を入れるか、最初のターンを待ってください。",
   "cockpitNoActivity": "動きなし",
+  "cockpitNoReportFor": "{age} 報告なし",
   "cockpitOlder": "以前のメッセージを表示",
   "cockpitOpenPane": "ペインを開く",
   "cockpitPickAgent": "エージェントを選んでください",

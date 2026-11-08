@@ -175,8 +175,11 @@ type cockpit struct {
 	sel    string // the selected row's key
 	selAgt string // its agent's key, so the cursor follows an agent whose row key changed
 	placed map[string]ckPlaced
-	folded map[int]bool
-	opened map[int]bool
+	// agentsAt is when the agents list last came from the daemon: a row
+	// held on its way to a new group counts from it (ckHoldGroup).
+	agentsAt time.Time
+	folded   map[int]bool
+	opened   map[int]bool
 	// needsOnly is the f filter: the Needs you group alone.
 	needsOnly bool
 	// tab is the focus area's tab; picked the one the person chose last,
@@ -368,6 +371,7 @@ func (a *App) refreshCockpit() {
 			} else {
 				a.ck.err = ""
 				a.ck.agents, a.ck.items, a.ck.loaded = agents, items, true
+				a.ck.agentsAt = time.Now()
 				a.ckKeepAnswered()
 				a.ck.letters = ckFanLetters(agents)
 				if a.ck.undo != nil && time.Now().After(a.ck.undo.until) {
@@ -432,7 +436,15 @@ func (a *App) ckHoldGroup(c *ui.Context, key string, want int, st proto.Status, 
 	case !ok:
 		p = ckPlaced{shown: want, want: want, since: now}
 	case p.want != want:
-		p.want, p.since = want, now
+		// The hold counts from when the data that moves the row came, not
+		// from the frame that saw it: a window that builds frames only on
+		// input showed the old state after it was long gone (Mac round 5,
+		// workflow S1).
+		since := now
+		if at := ck.agentsAt; at.After(p.since) && at.Before(now) {
+			since = at
+		}
+		p.want, p.since = want, since
 	}
 	if p.shown == ckNeeds && p.want != ckNeeds && ck.placedFree[key] {
 		// The person just answered it: out of Needs you in this frame, so
@@ -460,6 +472,11 @@ func (a *App) ckHoldGroup(c *ui.Context, key string, want int, st proto.Status, 
 	ck.placed[key] = p
 	return p.shown
 }
+
+// ckSilent reports whether ag stopped reporting while it worked: the daemon
+// shows it as unknown with the reason silent, and its last report was
+// working.
+func ckSilent(ag client.Agent) bool { return ag.State == "unknown" && ag.Reason == "silent" }
 
 // ckShownStatus is the state every view draws for ag, with it its item:
 // its state, or while its row's move to a new group waits, the state of

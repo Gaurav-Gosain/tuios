@@ -122,6 +122,10 @@ func (a *App) ckStatePill(pal *palette, ag client.Agent, it *session.AttentionIt
 		return locales.StatusWorking(), pal.work
 	case st == proto.Failed:
 		return locales.StatusFailed(), pal.dangerText
+	case ckSilent(ag) && st == proto.Idle && !unread:
+		// The last report, in the muted token: guios does not know that
+		// it still works (Mac round 5, workflow S1).
+		return locales.StatusWorking(), pal.textMuted
 	case unread:
 		return locales.CockpitToReview(), pal.done
 	case st == statusDone:

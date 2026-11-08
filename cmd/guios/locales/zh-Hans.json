@@ -691,6 +691,7 @@
   "cockpitNoTranscript": "没有可显示的对话",
   "cockpitNoTranscriptDetail": "tuios 还没有找到此代理的记录。请安装其工具的集成,或等待它的第一轮。",
   "cockpitNoActivity": "无活动",
+  "cockpitNoReportFor": "{age} 无报告",
   "cockpitOlder": "显示更早的消息",
   "cockpitOpenPane": "打开窗格",
   "cockpitPickAgent": "选择一个代理",

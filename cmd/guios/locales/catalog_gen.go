@@ -7026,6 +7026,16 @@ func (msgs Messages) CockpitNoActivity() string {
 	return Catalog.Format(msgs.locale, "cockpitNoActivity", nil)
 }
 
+// CockpitNoReportFor says "No report for {age}"
+// in the language the app shows.
+func CockpitNoReportFor(age string) string { return In(i18n.Locale()).CockpitNoReportFor(age) }
+
+// CockpitNoReportFor says "No report for {age}"
+// in the language of msgs.
+func (msgs Messages) CockpitNoReportFor(age string) string {
+	return Catalog.Format(msgs.locale, "cockpitNoReportFor", map[string]any{"age": age})
+}
+
 // CockpitOlder says "Show older messages"
 // in the language the app shows.
 func CockpitOlder() string { return In(i18n.Locale()).CockpitOlder() }

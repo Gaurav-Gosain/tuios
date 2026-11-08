@@ -529,6 +529,11 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 			}
 			if verb != "" || rest != "" {
 				ui.RichText(c, ckLine2Spans(pal, verb, flat(rest), ckStopped(ag, r.item))...).FontSize(fsSmall).SingleLine().Ellipsis("…").MinWidth(0).Margin(0, 0, 0, 21)
+			} else if ckSilent(ag) && ag.StateAt > 0 {
+				// How long since its last report, which said working.
+				ms := c.Now().Sub(time.Unix(0, ag.StateAt)).Milliseconds()
+				c.After(time.Second)
+				ui.Text(c, locales.CockpitNoReportFor(workedFor(ms))).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Margin(0, 0, 0, 21)
 			} else {
 				ui.Text(c, locales.CockpitNoActivity()).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Margin(0, 0, 0, 21)
 			}
