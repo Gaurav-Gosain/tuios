@@ -9,7 +9,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/charmbracelet/x/xpty v0.1.4
 	tuios.dev/shot v0.2.2-0.20261030111253-e3068c27991c
-	tuios.dev/vt v0.3.3-0.20261107133616-35e8581af7af
+	tuios.dev/vt v0.3.3-0.20261108192538-67b763e4d915
 )
 
 require (
