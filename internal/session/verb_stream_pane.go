@@ -65,6 +65,9 @@ const (
 	paneFrameExit   = 'X'
 	paneFrameInput  = 'I'
 	paneFrameLease  = 'L'
+	// paneFrameInputAt is input with the stream offset it starts at, typed
+	// only at the offset the stream expects (queueInput).
+	paneFrameInputAt = 'J'
 )
 
 const (
@@ -254,16 +257,18 @@ func (d *Daemon) verbStreamPane(cs *connState, params json.RawMessage) (any, *ve
 	cs.replyFailed = ps.close
 	cs.takeover = func(br *bufio.Reader) { ps.run(br) }
 	return map[string]any{
-		"type":       "pane_stream",
-		"mode":       mode,
-		"seq":        ps.pos,
-		"cols":       ps.cols,
-		"rows":       ps.rows,
-		"boot_id":    boot,
-		"session":    sess.Name(),
-		"session_id": sess.ID,
-		"window":     win.ID,
-		"title":      title,
+		"type":    "pane_stream",
+		"mode":    mode,
+		"seq":     ps.pos,
+		"cols":    ps.cols,
+		"rows":    ps.rows,
+		"boot_id": boot,
+		// The stream takes J frames: input typed only at its offset.
+		"input_offsets": true,
+		"session":       sess.Name(),
+		"session_id":    sess.ID,
+		"window":        win.ID,
+		"title":         title,
 	}, nil
 }
 
@@ -652,8 +657,13 @@ func (ps *paneStream) readClient(br *bufio.Reader) {
 			return
 		}
 		switch head[0] {
-		case paneFrameInput:
-			if verr := ps.queueInput(payload); verr != nil {
+		case paneFrameInput, paneFrameInputAt:
+			at, data, ok := inputFrame(head[0], payload)
+			if !ok {
+				ps.writeError(newVerbError(ErrVerbInvalidRequest, "a J frame starts with its 8-byte stream offset; this one is shorter. It was skipped"))
+				continue
+			}
+			if verr := ps.queueInput(at, data); verr != nil {
 				ps.writeError(verr)
 			}
 		case paneFrameLease:
@@ -672,7 +682,12 @@ func (ps *paneStream) readClient(br *bufio.Reader) {
 // typed is always what it sent, in order, up to the offset the refusal gives
 // in accepted. It writes that refusal itself, and returns the refusal of a
 // check.
-func (ps *paneStream) queueInput(data []byte) *verbError {
+//
+// at is the stream offset a J frame says its bytes start at, or -1 for an I
+// frame. A J frame at any other offset than the bytes the stream took is
+// refused the same way and changes nothing: a frame the client sent before it
+// went back to resend from a refusal is never typed after the resend.
+func (ps *paneStream) queueInput(at int64, data []byte) *verbError {
 	if len(data) == 0 {
 		return nil
 	}
@@ -680,7 +695,7 @@ func (ps *paneStream) queueInput(data []byte) *verbError {
 		LogBasic("Stream of pane %s refused an input frame: %s", shortWindowID(ps.window), verr.Message)
 		return verr
 	}
-	accepted, waiting, first, ok := ps.in.push(data)
+	accepted, waiting, first, ok := ps.in.push(at, data)
 	if ok {
 		return nil
 	}
@@ -689,10 +704,29 @@ func (ps *paneStream) queueInput(data []byte) *verbError {
 	}
 	// The refusal carries the offset as a number, for a client to resend
 	// from.
-	body, _ := jsonx.Marshal(map[string]any{"code": ErrVerbBusy, "accepted": accepted,
-		"message": fmt.Sprintf("the pane has not read the last %d bytes of input. This frame and every frame after it until the pane reads were not typed. Send again from byte %d of this stream's input", waiting, accepted)})
+	msg := fmt.Sprintf("the pane has not read the last %d bytes of input. This frame and every frame after it until the pane reads were not typed. Send again from byte %d of this stream's input", waiting, accepted)
+	if at >= 0 && at != accepted {
+		msg = fmt.Sprintf("this frame starts at byte %d, and the stream has taken %d bytes. It was not typed. Send again from byte %d", at, accepted, accepted)
+	}
+	body, _ := jsonx.Marshal(map[string]any{"code": ErrVerbBusy, "accepted": accepted, "message": msg})
 	_ = ps.writeFrame(paneFrameError, body)
 	return nil
+}
+
+// inputFrame reads an I or J frame: the offset a J frame names, -1 for an
+// I frame, and the input bytes.
+func inputFrame(kind byte, payload []byte) (at int64, data []byte, ok bool) {
+	if kind == paneFrameInput {
+		return -1, payload, true
+	}
+	if len(payload) < 8 {
+		return 0, nil, false
+	}
+	off := binary.BigEndian.Uint64(payload)
+	if off > 1<<62 {
+		return 0, nil, false
+	}
+	return int64(off), payload[8:], true
 }
 
 // paneInput is the input that waits for the pane, in order. The zero value
@@ -710,13 +744,19 @@ type paneInput struct {
 	closed   bool
 }
 
-// push queues data, or refuses it. It returns the bytes accepted so far,
-// the bytes that wait, and whether this refusal is the first of its run.
-func (q *paneInput) push(data []byte) (accepted int64, waiting int, first, ok bool) {
+// push queues data, or refuses it. at is where a J frame says data starts,
+// -1 for an I frame. It returns the bytes accepted so far, the bytes that
+// wait, and whether this refusal is the first of its run.
+func (q *paneInput) push(at int64, data []byte) (accepted int64, waiting int, first, ok bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if q.closed {
 		return q.accepted, q.bytes, false, true
+	}
+	if at >= 0 && at != q.accepted {
+		// Not the next byte: refused, and the run of refusals is left as
+		// it is, so the frame at the right offset is not held up by it.
+		return q.accepted, q.bytes, false, false
 	}
 	if q.refusing || len(q.frames) > 0 && (q.bytes+len(data) > paneInputBytes || len(q.frames) >= paneInputFrames) {
 		first = !q.refusing

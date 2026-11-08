@@ -438,3 +438,76 @@ func TestStreamPaneTypesABurstOfInputInOrder(t *testing.T) {
 		t.Fatalf("ASSERTION: the program read %d bytes, want the %d bytes of the burst in order\nhave: %.200q\nwant: %.200q", len(have), len(want), have, want)
 	}
 }
+
+// TestStreamPaneTypesInputAtItsOffset: a J frame names the stream offset its
+// bytes start at, and the daemon types it only at the offset it expects.
+// One at the wrong offset, such as a frame a client sent before it went back
+// to resend from a refusal, is refused as busy with the offset it expects, and
+// nothing of it is typed. The one at the right offset is typed once. An I
+// frame, which old clients send, is typed as before and counts toward the
+// same offset. The reply says the daemon takes J frames.
+//
+// How it could pass wrongly: the refused frame could be typed late, after the
+// test read the file, so the file is read only after a last frame that comes
+// after it is typed.
+//
+// Negative controls (NEGATIVE_CONTROLS.md, TestStreamPaneTypesInputAtItsOffset).
+func TestStreamPaneTypesInputAtItsOffset(t *testing.T) {
+	base, link, ctl, w1, _ := limitsDaemon(t)
+	got := filepath.Join(base, "typed.bin")
+	spType(t, ctl, w1, "stty raw -echo; echo READING; cat > "+got+"\n")
+	spWait(t, ctl, w1, "READING")
+	ps := link.open(t, true)
+	reply := ps.streamPane(t, newSPTranscript(t), map[string]any{"session": streamSession, "window": w1})
+	if reply["input_offsets"] != true {
+		t.Errorf("ASSERTION: the stream-pane reply does not say the daemon takes J frames: %v", reply)
+	}
+	refused := make(chan map[string]any, 16)
+	go func() {
+		for {
+			typ, payload, err := ps.frameWithin(60 * time.Second)
+			if err != nil {
+				return
+			}
+			if typ == 'E' {
+				var e map[string]any
+				_ = json.Unmarshal(payload, &e)
+				refused <- e
+			}
+		}
+	}()
+	at := func(off int, s string) []byte {
+		return append(binary.BigEndian.AppendUint64(nil, uint64(off)), s...)
+	}
+	ps.send(t, 'J', at(0, "AAA"))
+	ps.send(t, 'J', at(10, "BBB")) // a stale frame: the daemon expects 3
+	var e map[string]any
+	select {
+	case e = <-refused:
+	case <-time.After(10 * time.Second):
+		t.Fatalf("ASSERTION: a J frame at offset 10, where the stream had taken 3 bytes, got no refusal")
+	}
+	if e["code"] != "busy" || e["accepted"] != float64(3) {
+		t.Errorf("ASSERTION: the refusal of a J frame at the wrong offset is %v, want busy with accepted 3", e)
+	}
+	ps.send(t, 'J', at(3, "CCC"))
+	ps.send(t, 'I', []byte("DDD"))
+	ps.send(t, 'J', at(9, "END"))
+	want := "AAACCCDDDEND"
+	deadline := time.Now().Add(20 * time.Second)
+	var have []byte
+	for time.Now().Before(deadline) {
+		have, _ = os.ReadFile(got)
+		if bytes.HasSuffix(have, []byte("END")) {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	writeReviewArtifact(t, "stream-input-offsets.txt", fmt.Sprintf("reply input_offsets: %v\nrefusal: %v\ntyped: %q\nwant:  %q\n", reply["input_offsets"], e, have, want))
+	if string(have) != want {
+		t.Fatalf("ASSERTION: the program read %q, want %q: the frame at the wrong offset typed nothing, the rest once and in order", have, want)
+	}
+	for len(refused) > 0 {
+		t.Errorf("ASSERTION: a frame at its right offset was refused: %v", <-refused)
+	}
+}

@@ -15784,3 +15784,23 @@ Run on 2026-11-08 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestStartAgentFromAPreset$' -v .`.
+
+## TestStreamPaneTypesInputAtItsOffset
+
+A J frame at offset 0, one at the wrong offset (10, after 3 bytes), the one at
+the right offset (3), an I frame and a last J frame, into a pane that reads at
+once. The wrong one must be refused as busy with accepted 3 and type nothing,
+the rest typed once in order, and the reply must carry `input_offsets: true`.
+The unit tests in `internal/session/stream_input_offset_test.go` hold the I
+rules as they were and a stale J frame after the queue drained.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (c7314dc3f) | "the reply does not say the daemon takes J frames", "the refusal ... is map[code:invalid_request ...]", "the program read \"DDD\"" | **caught** |
+| The offset check in paneInput.push cut | "a J frame at offset 10, where the stream had taken 3 bytes, got no refusal"; unit: "a stale J frame after the queue drained: ok true" | **caught** |
+| `input_offsets` left out of the reply | "the stream-pane reply does not say the daemon takes J frames" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestStreamPaneTypesInputAtItsOffset$' -v .`.
