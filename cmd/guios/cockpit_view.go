@@ -36,6 +36,26 @@ const (
 	ckRowH1       = 30
 )
 
+// ckIdleAllDone reports whether every agent at rest in the Idle group
+// finished its turn, which the person saw: the group and its count then
+// say Done, not Idle, which reads as an agent that did nothing (Mac round
+// 6, visual S2). A group with one agent that has no state says Idle.
+func (a *App) ckIdleAllDone() bool {
+	now := time.Now()
+	n := 0
+	for _, ag := range a.ck.agents {
+		it := a.ckItemOf(ag)
+		if ckShownGroup(ag, it, now) != ckIdle {
+			continue
+		}
+		if st, _ := ckStatus(ag, it); st != statusDone {
+			return false
+		}
+		n++
+	}
+	return n > 0
+}
+
 // ckGroupTitle names a group, as its heading says it.
 func ckGroupTitle(g int) string {
 	switch g {
@@ -238,7 +258,11 @@ func (a *App) cockpitHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown 
 		count("c-needs", ckNeeds, proto.Waiting, true, locales.CockpitCountNeeds())
 		count("c-review", ckReview, proto.Idle, true, locales.CockpitCountReview())
 		count("c-working", ckWorking, proto.Working, false, locales.CockpitCountWorking())
-		count("c-idle", ckIdle, proto.Idle, false, locales.CockpitCountIdle())
+		if a.ckIdleAllDone() {
+			count("c-idle", ckIdle, statusDone, false, locales.CockpitCountDone())
+		} else {
+			count("c-idle", ckIdle, proto.Idle, false, locales.CockpitCountIdle())
+		}
 		ui.Box(c).Size(1, 16).Shrink(0).Background(pal.divider)
 		a.ckViewButton(c, pal, viewBoard, locales.CockpitTabBoard(), 0, locales.CockpitShowBoard())
 		a.ckViewButton(c, pal, viewMail, locales.CockpitTabMail(), a.ck.mailNeeds(), locales.CockpitShowMail())
@@ -342,7 +366,11 @@ func (a *App) ckHead(c *ui.Context, pal *palette, r ckRow) {
 			ic = chevronIcon
 		}
 		ui.Icon(c, ic).Size(12, 12).TextColor(pal.textFaint).Shrink(0)
-		t := oneLine(c, ckGroupTitle(r.group), fsSmall, wMedium).TextColor(pal.textMuted)
+		title := ckGroupTitle(r.group)
+		if r.group == ckIdle && a.ckIdleAllDone() {
+			title = locales.CockpitGroupDone()
+		}
+		t := oneLine(c, title, fsSmall, wMedium).TextColor(pal.textMuted)
 		if r.group == ckNeeds {
 			t.TextColor(pal.attnText)
 		}

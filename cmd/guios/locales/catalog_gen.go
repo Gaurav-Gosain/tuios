@@ -6626,6 +6626,16 @@ func (msgs Messages) CockpitCopy() string {
 	return Catalog.Format(msgs.locale, "cockpitCopy", nil)
 }
 
+// CockpitCountDone says "done"
+// in the language the app shows.
+func CockpitCountDone() string { return In(i18n.Locale()).CockpitCountDone() }
+
+// CockpitCountDone says "done"
+// in the language of msgs.
+func (msgs Messages) CockpitCountDone() string {
+	return Catalog.Format(msgs.locale, "cockpitCountDone", nil)
+}
+
 // CockpitCountIdle says "idle"
 // in the language the app shows.
 func CockpitCountIdle() string { return In(i18n.Locale()).CockpitCountIdle() }
@@ -6744,6 +6754,16 @@ func CockpitGroupWorking() string { return In(i18n.Locale()).CockpitGroupWorking
 // in the language of msgs.
 func (msgs Messages) CockpitGroupWorking() string {
 	return Catalog.Format(msgs.locale, "cockpitGroupWorking", nil)
+}
+
+// CockpitGroupDone says "Done"
+// in the language the app shows.
+func CockpitGroupDone() string { return In(i18n.Locale()).CockpitGroupDone() }
+
+// CockpitGroupDone says "Done"
+// in the language of msgs.
+func (msgs Messages) CockpitGroupDone() string {
+	return Catalog.Format(msgs.locale, "cockpitGroupDone", nil)
 }
 
 // CockpitGroupIdle says "Idle"
