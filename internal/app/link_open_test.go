@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -177,17 +178,41 @@ func TestTuiosWindowLinkResolution(t *testing.T) {
 		{ID: "ffffffff-0000-0000-0000-000000000001"},
 	}
 
-	if i, ok := m.resolveWindowByIDPrefix("a878cd43-0b70-4c1e-bd43-7b78de51cc43"); !ok || i != 0 {
-		t.Errorf("full uuid resolved to %d, %v; want 0, true", i, ok)
+	resolve := func(id string) (string, bool) {
+		got := m.resolveWindowLink(id, nil)
+		if len(got) != 1 {
+			return "", false
+		}
+		return got[0].id, true
 	}
-	if i, ok := m.resolveWindowByIDPrefix("4262c319"); ok {
-		t.Errorf("unknown prefix resolved to %d; want no window", i)
+	if id, ok := resolve("a878cd43-0b70-4c1e-bd43-7b78de51cc43"); !ok || id != m.Windows[0].ID {
+		t.Errorf("full uuid resolved to %q, %v; want window 0", id, ok)
 	}
-	if i, ok := m.resolveWindowByIDPrefix("a878cd4"); ok {
-		t.Errorf("ambiguous prefix resolved to %d; want no window", i)
+	if id, ok := resolve("4262c319"); ok {
+		t.Errorf("unknown prefix resolved to %q; want no window", id)
 	}
-	if i, ok := m.resolveWindowByIDPrefix("ffff"); !ok || i != 2 {
-		t.Errorf("unique prefix resolved to %d, %v; want 2, true", i, ok)
+	if id, ok := resolve("a878cd4"); ok {
+		t.Errorf("ambiguous prefix resolved to %q; want no window", id)
+	}
+	if id, ok := resolve("ffff"); !ok || id != m.Windows[2].ID {
+		t.Errorf("unique prefix resolved to %q, %v; want window 2", id, ok)
+	}
+
+	// Another session's panes resolve too, and a prefix shared across
+	// sessions is as ambiguous as one shared within the attached session.
+	m.SessionName = "home"
+	listing := []session.SessionInfo{
+		{Name: "home", Windows: []session.WindowSummary{{ID: "ffffffff-0000-0000-0000-000000000001"}}},
+		{Name: "away", Windows: []session.WindowSummary{
+			{ID: "bbbbbbbb-0000-0000-0000-000000000001"},
+			{ID: "ffffffff-0000-0000-0000-000000000002"},
+		}},
+	}
+	if got := m.resolveWindowLink("bbbbbbbb", listing); len(got) != 1 || got[0].session != "away" {
+		t.Errorf("another session's pane resolved to %+v; want one match in away", got)
+	}
+	if got := m.resolveWindowLink("ffffffff", listing); len(got) != 2 {
+		t.Errorf("prefix shared across sessions resolved to %+v; want both, so the click refuses", got)
 	}
 }
 
