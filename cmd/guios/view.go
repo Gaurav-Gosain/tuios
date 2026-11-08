@@ -162,10 +162,14 @@ func (a *App) view(c *ui.Context) {
 	}()
 	a.looks()
 	pal := paletteFor(c)
-	// The frame a theme or the appearance changes in draws the new
-	// grounds at once: a pane's ground that faded from the old one showed
-	// the old theme in the focused pane for a frame (Mac round 4, feel S1).
-	a.lookSwap = a.lastPal != nil && a.lastPal != pal
+	// The frame a theme or the appearance changes in draws every color of
+	// the new look at once. A ground that faded from the old one showed the
+	// old theme in the focused pane, which is opaque, for a frame (Mac
+	// rounds 4 and 5, feel S1). An Animation with no Duration is a spring
+	// in MyGo, not a cut, so only DisableAnimations lands it in this frame.
+	if a.lastPal != nil && a.lastPal != pal {
+		c.DisableAnimations()
+	}
 	a.lastPal = pal
 	c.SetTheme(borderless(c, pal))
 

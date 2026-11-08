@@ -235,10 +235,8 @@ type App struct {
 	xp       transfersPanel
 	calm     bool
 	calmHeld int
-	// lastPal is the palette the last frame drew with, and lookSwap is set
-	// in the frame it changes in (view).
-	lastPal  *palette
-	lookSwap bool
+	// lastPal is the palette the last frame drew with (view).
+	lastPal *palette
 	// badge is the count the app's icon shows, -1 before the first.
 	badge int
 	dbg   debugCard

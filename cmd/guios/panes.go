@@ -279,11 +279,7 @@ func (a *App) paneCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown float
 	if dim < 1 {
 		card.Opacity(dim)
 	}
-	fade := ui.Animation{Duration: dFade}
-	if a.lookSwap {
-		fade.Duration = 0
-	}
-	paned(card.Background(card.AnimateColor("bg", bg, fade)), pal)
+	paned(card.Background(card.AnimateColor("bg", bg, ui.Animation{Duration: dFade})), pal)
 	if b := a.paneRef("card-" + p.ID).Bounds(c); b.W > 0 {
 		if a.cardBox == nil {
 			a.cardBox = map[string]ui.Rect{}
