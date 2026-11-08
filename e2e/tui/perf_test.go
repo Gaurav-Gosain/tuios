@@ -27,6 +27,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -524,9 +525,22 @@ func daemonRSS(t *testing.T, base string) int {
 	return rssOf(t, pid)
 }
 
-// rssOf reads a process's resident set size in KiB.
+// rssOf reads a process's resident set size in KiB: from /proc on Linux,
+// and from ps where there is no /proc (macOS, the BSDs), whose rss column is
+// KiB too.
 func rssOf(t *testing.T, pid int) int {
 	t.Helper()
+	if runtime.GOOS != "linux" {
+		out, err := exec.Command("ps", "-o", "rss=", "-p", strconv.Itoa(pid)).Output()
+		if err != nil {
+			t.Fatalf("ps rss of %d: %v", pid, err)
+		}
+		kib, err := strconv.Atoi(strings.TrimSpace(string(out)))
+		if err != nil {
+			t.Fatalf("ps rss of %d: %q: %v", pid, out, err)
+		}
+		return kib
+	}
 	status, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
 	if err != nil {
 		t.Fatalf("read status of %d: %v", pid, err)
