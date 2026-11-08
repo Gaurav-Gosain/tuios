@@ -49,5 +49,5 @@ pkgs.buildGo127Module rec {
   '';
 
   # This has to be updated each time dependencies are updated.
-  vendorHash = "sha256-vXuXWt1Z6ZamjAcnEKUDJgDGZ6UACfkum4cHVWSr09A=";
+  vendorHash = "sha256-zMNRK7oD9W3PVw2CFQUpmzp0TWMd6aNvMyDqZQnmago=";
 }
