@@ -15000,3 +15000,18 @@ Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
 |---------|---------------------|--------|
 | main at 6db1de3ed | all three subtests: "is not restored, focused and sized" (focused, still minimized) | **caught** |
 | The daemon leaves the restore to the client when one is attached | `focus-window` subtest: "PLAINPANE is not restored, focused and sized" | **caught** |
+
+## TestUnknownKeybindTableIsNamed
+
+Issue #1734. config.toml binds `ctrl+v` under `[keybindings.terminal]`, a
+table tuios does not have (the table is `terminal_mode`). The log viewer and
+`tuios config apply` must name the table and the table that was meant.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (6db1de3ed): the decoder drops the table without a word | "the client does not say that it ignores [keybindings.terminal]" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestUnknownKeybindTableIsNamed$' -v .`.

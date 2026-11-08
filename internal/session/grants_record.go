@@ -154,7 +154,9 @@ func (d *Daemon) verbApplyConfig(cs *connState, params json.RawMessage) (any, *v
 	}
 	// A key tuios cannot read is dropped, the same as on load, and the
 	// person is told which.
-	dropped := config.DroppedWarnings(config.DropUnreadableKeys(cfg, lc))
+	// A table under [keybindings] that tuios does not have is listed with
+	// them: the decoder drops it, and every binding in it (issue #1734).
+	dropped := append(config.UnknownKeybindTables(lc), config.DroppedWarnings(config.DropUnreadableKeys(cfg, lc))...)
 
 	before := d.configSnapshot()
 	if p.Host != "" {
