@@ -64,16 +64,24 @@ func TestFocusOnlyHidesTheOtherPanes(t *testing.T) {
 		t.Fatalf("never in window mode: %v\n%s", err, term.Snapshot())
 	}
 	time.Sleep(insertGuard)
-	for _, name := range []string{"ONE", "TWO", "THREE", "FOUR"} {
+	for i, name := range []string{"ONE", "TWO", "THREE", "FOUR"} {
 		if name != "ONE" {
 			newWindow(t, term)
+			want := i + 1
+			if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == want }, uiTimeout); err != nil {
+				t.Fatalf("window %s never opened: %v\n%s", name, err, term.Snapshot())
+			}
 		}
 		if out, err := tuiosCLI(t, base, "set-window", "-s", "fo", "--name", name); err != nil {
 			t.Fatalf("name %s: %v\n%s", name, err, out)
 		}
 	}
-	// FOUR is minimized by hand first, and must stay minimized at the end.
-	sendKeys(t, term, "m")
+	// FOUR is minimized before ctrl+b m f, and must stay minimized at the
+	// end. It is minimized from the command line: a key here raced the new
+	// windows, so on a slow run nothing was minimized and the setup failed.
+	if out, err := tuiosCLI(t, base, "set-window", "-s", "fo", "-w", "FOUR", "--minimize"); err != nil {
+		t.Fatalf("minimize FOUR: %v\n%s", err, out)
+	}
 	if out, err := tuiosCLI(t, base, "focus-window", "-s", "fo", "TWO"); err != nil {
 		t.Fatalf("focus TWO: %v\n%s", err, out)
 	}
