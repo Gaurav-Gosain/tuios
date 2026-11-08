@@ -1,6 +1,8 @@
 package app
 
 import (
+	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -112,16 +114,24 @@ func TestCockpitThreadOpenBudget(t *testing.T) {
 	if open > 600_000 {
 		t.Errorf("the first frame of a 200 entry thread made %.0f allocations, the budget is 600000", open)
 	}
+	// The entries slice is grown first, so a run is not charged for the
+	// append that doubles it. The budget holds the fewest allocations of a
+	// few measurements: the count moves by a few dozen between runs on
+	// Linux, and only extra work makes it rise in every one.
+	th.entries = slices.Grow(th.entries, 64)
 	i := 0
-	grow := testing.AllocsPerRun(5, func() {
-		en := threadEntry{ID: "n" + strconv.Itoa(i), Role: "assistant", Kind: "text", Text: "Next step."}
-		en.sum = threadSum(&en)
-		th.entries = append(th.entries, en)
-		th.gen++
-		m.renderInbox()
-		i++
-	})
-	if grow > 7_500 {
-		t.Errorf("a frame after one new answer made %.0f allocations, the budget is 7500", grow)
+	grow := math.Inf(1)
+	for range 3 {
+		grow = min(grow, testing.AllocsPerRun(5, func() {
+			en := threadEntry{ID: "n" + strconv.Itoa(i), Role: "assistant", Kind: "text", Text: "Next step."}
+			en.sum = threadSum(&en)
+			th.entries = append(th.entries, en)
+			th.gen++
+			m.renderInbox()
+			i++
+		}))
+	}
+	if grow > 6_000 {
+		t.Errorf("a frame after one new answer made %.0f allocations, the budget is 6000", grow)
 	}
 }
