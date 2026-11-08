@@ -128,6 +128,7 @@ send the text again. `tuios --skill errors` lists every code. After
 `tuios --skill TOPIC` prints one topic, and `tuios --skill all` prints all.
 
 - Panes and state: `panes`, `state`, `events`, `stream`, `clients`
+- Leading a crew of long-lived agents across sessions and machines: `lead`
 - Agents: `mail`, `inbox`, `fleet`, `tasks`, `recipes`, `checkpoints`, `ship`
 - Rules: `grants`, `errors`, `agents-off`
 - Results, dashboards and forms for the person: `tml`
