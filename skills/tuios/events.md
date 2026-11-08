@@ -120,6 +120,7 @@ Every type, and what it reports:
 | `prompt`, `command-started`, `command-finished` | Shell integration marks in a pane |
 | `output` | A pane writes output. High volume |
 | `host-changed` | A host link connects or drops |
+| `worktree-removed` | git removed a worktree tuios made: `path` is the folder, `session` its session, which may be gone |
 | `keep-awake` | The daemon took or dropped the hold that keeps the machine awake (`state` `held` or `released`), or `keep_awake` changed (`mode`). `working` counts the working agent panes |
 | `transfer`, `transfer-progress` | A copy the daemon runs is created, changes state, ends, or leaves the list (`action` `removed`, after `transfer-clear` or 30 minutes after it ended); its progress, opt-in (`tuios --skill files`) |
 | `transfer-file` | One file of a copy ended: `file` has `id`, `rel`, `state` (`done`, `same`, `skipped`, `conflict` or `failed`), `sha256`, `code`, `error`. Opt-in |

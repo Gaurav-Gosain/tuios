@@ -794,6 +794,7 @@ func (wt *delegateWorktreeMade) undo(d *Daemon) {
 	}
 	_ = d.manager.DeleteSession(wt.session)
 	if err := worktree.Remove(wt.root, wt.path, true); err == nil {
+		d.worktreeRemoved(wt.session, wt.path)
 		_ = worktree.DeleteBranch(wt.root, wt.branch)
 	}
 }

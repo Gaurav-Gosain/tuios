@@ -80,7 +80,7 @@ var herdrHubTypes = map[string]bool{
 	EventWindowClosed: true, EventWindowExit: true, EventWindowRetitled: true,
 	EventWindowFocused: true, EventWindowMoved: true, EventWorkspaceSwitched: true,
 	EventWorkspaceRenamed: true, EventAgentState: true, EventAgentSeen: true,
-	EventClientSessionChanged: true, EventSessionLabelled: true,
+	EventClientSessionChanged: true, EventSessionLabelled: true, EventWorktreeRemoved: true,
 }
 
 // herdrParseSubscriptions reads and checks events.subscribe's list. One
@@ -141,6 +141,7 @@ type herdrEventData struct {
 	PreviousPaneID      string          `json:"previous_pane_id,omitempty"`
 	PreviousWorkspaceID string          `json:"previous_workspace_id,omitempty"`
 	PreviousTabID       string          `json:"previous_tab_id,omitempty"`
+	Path                string          `json:"path,omitempty"`
 	Pane                *herdrPaneInfo  `json:"pane,omitempty"`
 	Tab                 *herdrTab       `json:"tab,omitempty"`
 	Workspace           *herdrWorkspace `json:"workspace,omitempty"`
@@ -331,6 +332,16 @@ func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 		return []herdrEvent{global("workspace_renamed", &herdrEventData{WorkspaceID: herdrWorkspaceID(sess.ID), Label: label})}
 	case EventWindowClosed, EventWindowExit:
 		return t.closed(ev)
+	case EventWorktreeRemoved:
+		// The session goes with the worktree, so it may be gone already. The
+		// stream still knows its id from when it was there.
+		data := &herdrEventData{Path: ev.Path}
+		if sess != nil {
+			data.WorkspaceID = herdrWorkspaceID(sess.ID)
+		} else if id, ok := t.sessions[ev.Session]; ok {
+			data.WorkspaceID = herdrWorkspaceID(id)
+		}
+		return []herdrEvent{global("worktree_removed", data)}
 	case EventClientSessionChanged:
 		return t.clientMoved(ev, sess)
 	}

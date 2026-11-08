@@ -208,8 +208,11 @@ The events are `pane.created`, `pane.closed`, `pane.focused`, `pane.moved`,
 `pane.exited`, `pane.agent_detected`, `pane.agent_status_changed`, the same for
 `tab` (`created`, `closed`, `renamed`, `moved`, `focused`) and `workspace`
 (`created`, `updated`, `closed`, `renamed`, `moved`, `reordered`, `focused`), and
-`worktree.created`, `worktree.opened` and `worktree.removed`. A plugin runs at
-most 20 event commands in 10 seconds. tuios drops the rest.
+`worktree.created`, `worktree.opened` and `worktree.removed`. tuios sends
+`worktree.removed` when git removes a worktree that tuios made, with the folder
+in `data.path` of `TUIOS_PLUGIN_EVENT_JSON`. It does not send
+`worktree.created` or `worktree.opened` yet. A plugin runs at most 20 event
+commands in 10 seconds. tuios drops the rest.
 
 **Use an action, a pane or an event when you can.** They cost nothing until a
 person uses them or the event happens. A `startup` process stays in memory and wakes up for as long as it runs.
@@ -332,6 +335,7 @@ a plugin does nothing. `tuios --skill tml` has the components.
 
 | tuios | Change | What to do |
 |---|---|---|
+| next | tuios sends `worktree.removed`, with `data.path`. | A plugin that needs it sets `min_tuios`. |
 | next | New: `tuios plugins update`. | Nothing. |
 | next | New: `tuios plugins stats`. | Nothing. |
 | next | New: `[[theme]]`. A plugin of files only needs no approval. | Nothing. |

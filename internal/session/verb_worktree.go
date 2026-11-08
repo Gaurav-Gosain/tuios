@@ -778,6 +778,7 @@ func (d *Daemon) verbRemoveWorktree(cs *connState, params json.RawMessage) (any,
 			return nil, hintedVerbError(ErrVerbGitFailed, msg, nil)
 		}
 		out["discarded"] = discard
+		d.worktreeRemoved(sess.Name(), info.Path)
 	}
 	// The notes on the worktree's changes go with it.
 	d.reviewNotes.dropRoot(notesRoot)
@@ -792,6 +793,12 @@ func (d *Daemon) verbRemoveWorktree(cs *connState, params json.RawMessage) (any,
 		}
 	}
 	return out, nil
+}
+
+// worktreeRemoved tells the event stream, and with it the plugin hooks on
+// worktree.removed, that git removed the worktree at path.
+func (d *Daemon) worktreeRemoved(session, path string) {
+	d.events.publish(streamEvent{Type: EventWorktreeRemoved, Session: session, Path: path})
 }
 
 // fanStopWords are the words a branch stem drops. They carry no meaning on

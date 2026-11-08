@@ -492,6 +492,7 @@ func (d *Daemon) undoFailedSetup(l setupLaunch) (removed, branchRemoved bool, no
 	if err := worktree.Remove(info.RepoRoot, info.Path, false); err != nil {
 		return false, false, "git did not remove the worktree: " + strings.TrimSpace(err.Error())
 	}
+	d.worktreeRemoved(l.sess.Name(), info.Path)
 	if !l.created {
 		return true, false, "The worktree was removed. The branch " + info.Branch + " was there before, so it is kept."
 	}

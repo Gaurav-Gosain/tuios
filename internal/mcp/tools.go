@@ -392,6 +392,8 @@ var EventTypes = []string{
 	"task-claimed", "task-finished", "task-changed", "task-dispatch",
 	// The daemon took or dropped its hold that keeps the machine awake.
 	"keep-awake",
+	// git removed a worktree tuios made.
+	"worktree-removed",
 }
 
 // defaultEventTypes are the types a call that names none gets: what an agent
