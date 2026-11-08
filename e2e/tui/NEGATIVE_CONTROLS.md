@@ -14883,3 +14883,21 @@ v on the card in review opens its Changes, and M commits and pushes it.
 
 Run on 2026-11-08 on macOS (arm64). With `ckLifeLine` returning nothing, the
 wait for "Attempt 1 failed" times out. **caught**
+
+## The ovnfs plugin
+
+`TestPluginOvnfs` runs `plugins/ovnfs` against a real ovnfs (v0.2.3) in a
+daemon of the test's own, when `TUIOS_E2E_OVNFS` names the binary. Without it
+only the part with no ovnfs on PATH runs: CI has no NFS mount on macOS and no
+FUSE on Linux.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| No `worktree-removed` event (`worktreeRemoved` publishes nothing) | "no message for the removed checkout", then "the checkout of the removed worktree stays" | **caught** |
+| The hook removes the checkout with no snapshot first | "no snapshot keeps the removed checkout's change" | **caught** |
+| The `pane.closed` hook does nothing | "no cell after the pane closed" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_OVNFS=/path/to/ovnfs go test -count=1 -run '^TestPluginOvnfs$' -v .`.
