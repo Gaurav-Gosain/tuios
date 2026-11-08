@@ -654,3 +654,71 @@ func TestADarwinLinkCannotReadThroughTheDataVolume(t *testing.T) {
 	}
 	saveTransferArtifact(t, "darwin-data-volume", record)
 }
+
+// TestALinkCopyRevokedBeforeItsVerifyStaysFailed is the state machine plan's
+// M16. The link policy takes files away from a machine while its copy is
+// between its last byte and its verify (a test hold keeps it there without
+// a look at its context, as the attempt's own code runs between two looks).
+// The copy must end failed as forbidden and stay so: not verifying, not done,
+// and the file not put in place. A copy to the same place, once the policy
+// gives files back, must start and finish: an ended job holds no destination.
+//
+// How it could pass wrongly: the revoke could land before the copy ever ran,
+// so the test waits for the daemon's line that the attempt holds before its
+// verify, and the final state is read for 15 s after the hold ended.
+//
+// Negative controls (NEGATIVE_CONTROLS.md, TestALinkCopyRevokedBeforeItsVerifyStaysFailed).
+func TestALinkCopyRevokedBeforeItsVerifyStaysFailed(t *testing.T) {
+	t.Setenv("TUIOS_TEST_TRANSFER_HOLD_MS", "3000")
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	farHome := xdgDir(remote, "HOME")
+	writeRemoteConfig(t, remote, relayFilesPolicy)
+	hubWithFileHost(t, base, remote, writeFakeSSHTo(t, base, remote))
+	far := dialHostVerbs(t, base)
+	writeFarFile(t, filepath.Join(farHome, "small.bin"), strings.Repeat("tuios ", 1<<16), 0o600)
+	var row transferRow
+	far.must("transfer-start", map[string]any{
+		"src": map[string]any{"path": "~/small.bin"}, "dst": map[string]any{"path": "~/Downloads/tuios/small.bin"}, "conflict": "replace",
+	}, &row)
+	holds := "Transfer " + row.ID + " holds before its verify"
+	waitForFileText(t, daemonLogOf(t, remote), func(s string) bool { return strings.Contains(s, holds) }, "the copy never reached its verify")
+	writeRemoteConfig(t, remote, relayNoFilesPolicy)
+	if out, err := tuiosCLI(t, remote, "config", "apply"); err != nil {
+		t.Fatalf("apply build's config: %v\n%s", err, out)
+	}
+	time.Sleep(4 * time.Second) // the hold ends, and the attempt goes on
+	end := farTransfer(t, dialFileVerbs(t, remote), row.ID, 15*time.Second)
+	record := map[string]any{"revoked": end}
+	if end.State != "failed" || end.Code != "forbidden" {
+		t.Errorf("ASSERTION: a copy revoked before its verify is %s (%s), want failed as forbidden: %s", end.State, end.Code, end.Error)
+	}
+	if _, err := os.Stat(filepath.Join(farHome, "Downloads", "tuios", "small.bin")); err == nil {
+		t.Errorf("ASSERTION: the copy was put in place after its files capability was taken away")
+	}
+
+	// The positive half: with files given back, the same copy starts and
+	// ends done.
+	writeRemoteConfig(t, remote, relayFilesPolicy)
+	if out, err := tuiosCLI(t, remote, "config", "apply"); err != nil {
+		t.Fatalf("apply build's config: %v\n%s", err, out)
+	}
+	raw, err := far.call("transfer-start", map[string]any{
+		"src": map[string]any{"path": "~/small.bin"}, "dst": map[string]any{"path": "~/Downloads/tuios/small.bin"}, "conflict": "replace",
+	})
+	record["second_start"] = errString(err)
+	var again transferRow
+	if err == nil {
+		err = json.Unmarshal(raw, &again)
+	}
+	if err != nil {
+		t.Errorf("ASSERTION: a new copy to the revoked copy's destination was refused: %v", err)
+	} else {
+		again = farTransfer(t, dialFileVerbs(t, remote), again.ID, 30*time.Second)
+		record["second"] = again
+		if again.State != "done" {
+			t.Errorf("ASSERTION: the second copy to the same place ended %s, want done: %s", again.State, again.Error)
+		}
+	}
+	saveTransferArtifact(t, "link-copy-revoked-before-verify", record)
+}

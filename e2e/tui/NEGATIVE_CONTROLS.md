@@ -15199,3 +15199,30 @@ Run on 2026-11-08 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskCaptureLateAnswerKeepsTheNextSheet$' -v .`.
+
+## TestALinkCopyRevokedBeforeItsVerifyStaysFailed
+
+State machine plan M16. A linked machine's copy on build is held between its
+last byte and its verify (`TUIOS_TEST_TRANSFER_HOLD_MS`, a test hold that does
+not look at the attempt's context), and build's link policy takes `files`
+away during the hold. The copy must end failed as forbidden, the file must
+not be put in place, and a new copy to the same place (with `files` given
+back) must start and end done.
+
+Main has no test hold, so the main control is main with only the hold added.
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (86c2a51f1) with only the test hold | "a copy revoked before its verify is done (forbidden), want failed", "the copy was put in place after its files capability was taken away" | **caught** |
+| `transferJob.to` writes a final state over (its guard off) | "a copy revoked before its verify is verifying (forbidden)", "a new copy to the revoked copy's destination was refused: busy: another copy writes this path now" | **caught** |
+| No context check before the commit | "the copy was put in place after its files capability was taken away" | **caught** |
+
+The order of the run loop's switch (a revoke read before a nil error) is not
+caught on its own: the context check before the commit already turns the
+attempt's end into an error. It stays as the second guard.
+`TestOnlyToWritesATransferState` in internal/lint holds the one writer, and
+`TestTransferStateLintCatchesADirectWrite` checks the lint on injected writes.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestALinkCopyRevokedBeforeItsVerifyStaysFailed$' -v .`.

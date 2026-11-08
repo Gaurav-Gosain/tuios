@@ -307,13 +307,13 @@ func (m *transferManager) load() {
 		j.filesDone = len(j.finished)
 		switch rec.State {
 		case transferPaused:
-			j.state = transferPaused
+			j.to(transferPaused)
 		case transferFailed:
-			j.state = transferFailed
+			j.to(transferFailed)
 			j.errText, j.errCode = rec.Error, rec.Code
 			j.ended = time.UnixMilli(rec.Ended)
 		default:
-			j.state = transferWaiting
+			j.to(transferWaiting)
 			j.errText = "tuios restarted. The copy goes on from where it stopped."
 			resumed = append(resumed, j)
 		}
