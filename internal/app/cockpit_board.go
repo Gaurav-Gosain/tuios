@@ -210,21 +210,11 @@ func (m *OS) boardStageItems(list []sidebarAgentEntry) [][]ckRow {
 			byKey[e.SessionID+"\x00"+e.WindowID] = i
 		}
 	}
-	// A killed session's cards are gone, and no event says so.
-	var live map[string]bool
-	if c := m.DaemonClient; c != nil {
-		if names := c.AvailableSessionNames(); len(names) > 0 {
-			live = make(map[string]bool, len(names))
-			for _, n := range names {
-				live[n] = true
-			}
-		}
-	}
 	searching := st.agents.query != "" || st.Select != ""
 	stages := make([][]ckRow, len(session.TaskStages))
 	for i, c := range ck.cards {
 		g := slices.Index(session.TaskStages, c.Stage)
-		if g < 0 || (c.Host == "" && live != nil && !live[c.Session]) || !m.ckStageShows(c.Stage) {
+		if g < 0 || !m.ckStageShows(c.Stage) {
 			continue
 		}
 		idx := -1

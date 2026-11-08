@@ -15936,3 +15936,27 @@ Run on 2026-11-08 on Linux. The branch passes, three runs out of three.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRestoredPaneComesBackInItsDirectory$' -v .`.
+## The task board follows a renamed, killed or new session
+
+`TestTaskBoardFollowsARenamedSession` and `TestTaskBoardDropsAKilledSessionsCards`
+start a daemon with sessions V and S, add "first card" and "second card" to S,
+attach to V at 200x40 and open the board. Its positive half is the same in
+both: the board shows `Todo  2` and both cards. The first test then renames S
+to S2 and moves t1 to verify under the new name, and must show `Todo  1`,
+`Verify  1` and both cards. The second kills S, makes a new S and adds "fresh
+card" to it, and must show `Todo  1` and "fresh card" with neither old card.
+Each step waits for the column counts as well as the titles, because a stale
+row and a fresh one carry the same title.
+
+Run on 2026-11-08 on Linux. The control for both is main at c4edf64df:
+
+| Control | Test | The test fails with | Result |
+|---------|------|---------------------|--------|
+| main | `TestTaskBoardFollowsARenamedSession` | "board-rename-after: want [\"Todo  1\" \"Verify  1\" \"first card\" \"second card\"] and not []: timed out after 10s"; the board shows `Todo  0`, `Verify  1` and "first card" alone | **caught** |
+| main | `TestTaskBoardDropsAKilledSessionsCards` | "board-kill-after: want [\"Todo  1\" \"fresh card\"] and not [\"first card\" \"second card\"]: timed out after 10s"; the board shows `Todo  2`, the killed session's "second card" beside "fresh card" | **caught** |
+| The two session event types dropped from the subscribe types in `inboxWatchOnce` | `TestTaskBoardFollowsARenamedSession` | "tasks_board_session_test.go:28: ASSERTION: board-rename-after: want [\"Todo  1\" \"Verify  1\" \"first card\" \"second card\"] and not []: tuitest: WaitForDesc timed out after 10.004s waiting for custom condition"; the board shows `Todo  2` (the stale first and second card) and `Verify  1` | **caught** |
+| The two session event types dropped from the subscribe types in `inboxWatchOnce` | `TestTaskBoardDropsAKilledSessionsCards` | "tasks_board_session_test.go:40: ASSERTION: board-kill-after: want [\"Todo  1\" \"fresh card\"] and not [\"first card\" \"second card\"]: tuitest: WaitForDesc timed out after 10.003s waiting for custom condition"; the board shows `Todo  2`, the killed session's ghost "second card" beside "fresh card" | **caught** |
+
+The frames are `board-rename-open`, `board-rename-after`, `board-kill-open`
+and `board-kill-after` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskBoard(FollowsARenamedSession|DropsAKilledSessionsCards)$' -v .`.
