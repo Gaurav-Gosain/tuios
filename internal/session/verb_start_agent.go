@@ -67,7 +67,16 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		// so the agent reads it rather than having it typed.
 		TaskMail bool   `json:"task_mail"`
 		Parent   string `json:"parent"`
+		// AddDirs are passed with the harness's add-dir flag, and
+		// AfterReady is sent once the agent is ready (agent_presets.go).
+		AddDirs    []string `json:"add_dirs"`
+		AfterReady []string `json:"after_ready"`
 		launchChoice
+	}
+	// A preset is read once, here, and merged into the params.
+	params, verr := d.expandAgentPreset(params)
+	if verr != nil {
+		return nil, verr
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -137,9 +146,14 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 			return nil, verr
 		}
 	}
-	argv := append(append([]string{}, launch.argv...), p.Args...)
+	extra, verr := d.addDirArgs(launch, p.AddDirs)
+	if verr != nil {
+		return nil, verr
+	}
+	extra = append(extra, p.Args...)
+	argv := append(append([]string{}, launch.argv...), extra...)
 	if p.Protocol != "" {
-		argv = protocolAgentArgv(p.Protocol, launch.argv, p.Args)
+		argv = protocolAgentArgv(p.Protocol, launch.argv, extra)
 	}
 	// The agent's permission mode is held to the calling agent's, before
 	// anything is made (child_clamp.go).
@@ -353,6 +367,23 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		out["reason"] = "The agent's window closed before it was ready: the program exited. Look at what it printed by starting it in a shell pane."
 	default:
 		out["reason"] = "The wait ended with the " + string(outcome) + "."
+	}
+	if len(p.AfterReady) > 0 {
+		if outcome != agentStartReady {
+			out["after_ready_status"] = PromptNotSent
+			out["after_ready_note"] = "The agent was not ready, so the after_ready steps were not sent."
+		} else {
+			status, note := d.sendAfterReady(sess, win.ID, p.AfterReady)
+			out["after_ready_status"] = status
+			if note != "" {
+				out["after_ready_note"] = note
+			}
+			if status != PromptSent && p.Prompt != "" {
+				out["prompt_status"] = PromptNotSent
+				out["prompt_note"] = "The after_ready steps stopped, so the prompt was not typed."
+				return out, nil
+			}
+		}
 	}
 	if p.Prompt != "" {
 		if outcome != agentStartReady {
