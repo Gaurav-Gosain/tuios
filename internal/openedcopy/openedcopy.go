@@ -34,6 +34,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/adrg/xdg"
 )
 
 // recordExt is the suffix of a copy's record.
@@ -43,13 +44,15 @@ const recordExt = ".json"
 // leaves room for the part file the copy writes first (.NAME.tuios-part-ID).
 const nameMax = 180
 
-// Root is the folder every copy is under.
+// Root is the folder every copy is under: tuios/opened in the cache home,
+// read as the rest of tuios reads its folders (adrg/xdg). os.UserCacheDir
+// would ignore XDG_CACHE_HOME on macOS, and put the copies where the person
+// did not say tuios keeps its cache.
 func Root() (string, error) {
-	cache, err := os.UserCacheDir()
-	if err != nil {
-		return "", err
+	if xdg.CacheHome == "" {
+		return "", errors.New("no cache folder: neither XDG_CACHE_HOME nor HOME is set")
 	}
-	return filepath.Join(cache, "tuios", "opened"), nil
+	return filepath.Join(xdg.CacheHome, "tuios", "opened"), nil
 }
 
 // Place is where the copy of one far path goes.

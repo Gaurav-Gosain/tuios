@@ -79,6 +79,12 @@ func farCopyFixture(t *testing.T, base, top string) {
 // farCopyPath is where the copy of build's path lands: the cache, the host,
 // a hash of the host and the far path, and the name.
 func farCopyPath(base, farPath, name string) string {
+	// The pane names its folder by its real path (on macOS the temp folder
+	// is /private/var, which /var links to), and the copy is keyed by the
+	// path the listing shows.
+	if real, err := filepath.EvalSymlinks(farPath); err == nil {
+		farPath = real
+	}
 	sum := sha256.Sum256([]byte("build\x00" + farPath))
 	return filepath.Join(farCopyRoot(base), "build", hex.EncodeToString(sum[:8]), name)
 }
