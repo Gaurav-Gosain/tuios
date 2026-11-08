@@ -198,18 +198,15 @@ func (a *App) replyBoxBody(c *ui.Context, pal *palette, ag client.Agent, d *ckDr
 				a.sendAsChip(c, pal, ag, true, locales.CockpitSendAsMail())
 			})
 			ui.Spacer(c)
-			note, tip := locales.CockpitNextTurn(), ""
-			if r, ok := a.ckSelected(); ok && r.item != nil &&
+			// The queue types a reply when the agent rests. At a prompt
+			// this app holds, that is once the prompt is answered (Mac
+			// round 2, workflow S3); a prompt it does not hold (the hold
+			// ended, approvals off) may never be answered here, so the
+			// note says only what the queue does (Mac round 5, workflow S2).
+			note := locales.CockpitNextTurn()
+			if r, ok := a.ckSelected(); ok && r.item != nil && ckHeld(*r.item) &&
 				(r.item.Kind == session.AttentionApproval || r.item.Kind == session.AttentionPlan) {
-				// At an approval, held or not, what is sent waits for its
-				// answer: one note for one queue (Mac round 2, workflow
-				// S3). Short, so that it fits beside Send as; for a prompt
-				// this app cannot answer the whole sentence is its tooltip
-				// (Mac round 1, visual S7).
 				note = locales.CockpitWaitsAtPromptShort()
-				if !ckHeld(*r.item) && !a.ckCanReject() {
-					tip = locales.CockpitWaitsAtPrompt()
-				}
 			}
 			if mail {
 				note = locales.CockpitMailInbox(ag.Name)
@@ -217,10 +214,7 @@ func (a *App) replyBoxBody(c *ui.Context, pal *palette, ag client.Agent, d *ckDr
 					note = locales.CockpitMailReplyTo(ag.Name)
 				}
 			}
-			nl := oneLine(c, note, fsSmall, 0).TextColor(pal.textMuted).Shrink(2)
-			if tip != "" {
-				nl.Tooltip(tip)
-			}
+			oneLine(c, note, fsSmall, 0).TextColor(pal.textMuted).Shrink(2)
 		})
 		if len(d.images) > 0 {
 			ui.Row(c).Gap(8).Wrap().Children(func() {
