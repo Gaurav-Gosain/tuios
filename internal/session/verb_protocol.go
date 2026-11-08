@@ -3374,6 +3374,8 @@ func buildVerbRegistry() map[string]verbEntry {
 	maps.Copy(table, taskVerbs())
 	// exec, what tuios run --host sends. See verb_exec.go.
 	maps.Copy(table, execVerbs())
+	// The sender's view of its mail. See verb_receipts.go.
+	maps.Copy(table, receiptVerbs())
 	maps.Copy(table, taskVerifyVerbs())
 	maps.Copy(table, taskDispatchVerbs(verbParam{Name: "human_nonce", Type: "string", Description: "The attached client's nonce, to act as the person (by human). One that does not verify is refused with not_human."}))
 	// The checkpoint verbs. See verb_checkpoint.go.

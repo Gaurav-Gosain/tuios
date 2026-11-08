@@ -24,6 +24,25 @@ const (
 	EventsPath = "/tmp/tuios-events.log"
 )
 
+// EventsLogPath is where the input event log goes: TUIOS_EVENTS_LOG when it
+// names a file, else EventsPath. A test harness names one per client, so the
+// keys one client read are not mixed with another's. The log records every
+// key typed, passwords included, so it is for tests and debugging only. Open
+// creates it 0600 and refuses a link or another user's file.
+func EventsLogPath() string {
+	if p := os.Getenv("TUIOS_EVENTS_LOG"); p != "" {
+		return p
+	}
+	return EventsPath
+}
+
+// EventsEnabled reports whether the input event log is on: with the internal
+// debug logs, or alone when TUIOS_EVENTS_LOG names a file. Alone it turns on
+// nothing else, so a run that keeps it on is not slowed by the other logs.
+func EventsEnabled() bool {
+	return Enabled() || os.Getenv("TUIOS_EVENTS_LOG") != ""
+}
+
 // Open opens path for appending, creating it with mode 0600. The caller
 // closes it.
 func Open(path string) (*os.File, error) {
