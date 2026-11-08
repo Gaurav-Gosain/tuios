@@ -573,6 +573,12 @@ func (d *Daemon) holdToPane(verb string, kind scopeKind, params json.RawMessage,
 			return nil, verr
 		}
 	case scopeRead:
+		// A pane reads the receipts of its own mail only.
+		if verb == "agent-message-receipts" {
+			if verr := mine("window"); verr != nil {
+				return nil, verr
+			}
+		}
 		if verb == "read-agent-messages" && str("to") != "" && str("to") != window {
 			return nil, deny("to must be the caller's own window " + shortWindowID(window) + ", or omitted to read the session's ring without marking anything read")
 		}

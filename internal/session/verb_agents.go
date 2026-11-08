@@ -572,6 +572,7 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 		// client. Their reply still carries the origin mark.
 		msg.Origin = AgentOriginLink
 		msg.OriginHost = printableClaim(p.FromHost, agentMsgMaxHostName)
+		msg.OriginLink = cs.linkPeer
 		if p.From == AgentInboxHuman {
 			msg.From, msg.FromLabel = AgentInboxHuman, AgentInboxHuman
 		} else {

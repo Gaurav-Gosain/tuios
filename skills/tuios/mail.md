@@ -89,8 +89,18 @@ Naming an inbox marks what it returns as read. `--peek` does not mark them
 read. When a pane peeks its own inbox (`-w "$TUIOS_PANE_ID"`), it marks the
 unread ones seen. A peek of another pane's inbox, for example to check on a
 message you sent, marks nothing. A message goes from unread to seen to
-read, and the sender sees which with `read-agent-messages` on the session (the
-header says `seen`; `--json` has `seen_at` and `read_at`). Seen means the
+read. The sender sees which, for all its mail at once, with:
+
+```sh
+tuios read-agent-messages --sent -w "$TUIOS_PANE_ID"
+```
+
+One line per message it sent, in any session and on any linked machine:
+`delivered, unread`, `seen ... not read yet`, `read 2m ago`, or
+`undeliverable`. Mail waiting for a link shows as `queued`, and a machine that
+cannot be asked now is named. It marks nothing. Check it rather than mailing
+again to ask whether a message arrived. A send already says `delivered` when the
+message is in the recipient's inbox. Seen means the
 recipient looked at the message, not that it acted on it. A seen message still
 counts as unread: `--unread` returns it, and the `MAIL` column of `list-agents`
 shows it as `1 (1 seen)`. Reading with no `-w` reads the whole session and

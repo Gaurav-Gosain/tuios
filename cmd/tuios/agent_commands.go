@@ -366,7 +366,7 @@ func runSendAgentMessage(sessionName, to, from, subject, text string, replyTo ui
 	if res.To == "" {
 		fmt.Printf("notice %d posted to the session%s%s\n", res.MessageID, t.on(), thread)
 	} else {
-		fmt.Printf("message %d queued for %s (%s)%s%s\n", res.MessageID, orNone(plainLine(res.ToName)), shortWindowID(res.To), t.on(), thread)
+		fmt.Printf("message %d delivered to %s (%s)%s%s\n", res.MessageID, orNone(plainLine(res.ToName)), shortWindowID(res.To), t.on(), thread)
 	}
 	if res.ReplyToMissing {
 		fmt.Println("the message you answered has been dropped from the ring. The reply stands, and it starts the thread from the id you named.")
@@ -431,7 +431,7 @@ func queueAgentMessage(host, sess, window, from, subject, text string, replyTo u
 	}
 	if !res.Queued {
 		// The link came back between the two calls and the message went.
-		fmt.Printf("message %d sent to %s:%s\n", res.MessageID, host, sess)
+		fmt.Printf("message %d delivered to %s:%s\n", res.MessageID, host, sess)
 		return nil
 	}
 	fmt.Printf("the link to %s is down: the message waits here and goes when it is back (%d waiting). The Inbox shows it; dismissing it there discards what waits.\n", host, res.Waiting)
@@ -556,6 +556,10 @@ func printAgentMessages(w io.Writer, raw json.RawMessage, on string) error {
 			head += "  seen"
 		case m.WasUnread:
 			head += "  new"
+		case m.Kind == "message" && m.ReadAt != 0:
+			// Read before this read, by its recipient: what a sender
+			// reading the thread wants to know.
+			head += "  read " + agoOf(m.ReadAt)
 		}
 		if m.Undeliverable {
 			head += "  undeliverable: the recipient window is gone"
