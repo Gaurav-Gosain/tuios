@@ -15672,3 +15672,23 @@ and TestCockpitPeekClosesOnAClick hold.
 |---------|--------|
 | fix/sm-n1-peek (a53cdef2a), the base | passes (guard) |
 | `TestOnlyInboxAnswerWritesTheAnswerStep` with an injected write (self test) | **caught** |
+
+## TestQueuedMessageReachesAnEmptyCodexBox
+
+Issue #1588. A stand-in draws the Codex composer as codex-cli 0.166.0 and
+0.167.0 do with no status line setting: the bold glyph and the faint
+placeholder, then the status line and the key-hint row. A queued entry must
+be typed at rest into the empty box, and must wait while the box holds typed
+text.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (6db1de3ed): one `empty` pattern that allows one row under the composer | "the queued entry was never typed into the empty Codex box (draft_held true)" | **caught** |
+
+`TestBoxFixtures` in `internal/harness` fails on main's pattern with the
+fixture `codex-idle-empty-status-line.txt` from the issue.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestQueuedMessageReachesAnEmptyCodexBox$' -v .`.

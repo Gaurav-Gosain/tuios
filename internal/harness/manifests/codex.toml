@@ -228,8 +228,17 @@ verify = ["cwd"]
 #   codex-rs/tui/src/bottom_pane/chat_composer.rs:1162   shell mode is not empty
 [prompt_box]
 region = "tail"
-empty  = ['(?:\A|\n)[›»][ \x{00A0}]*(?:Ask Codex to do anything|Ask a follow-up question)?[ \x{00A0}]*(?:\n[^\n]*)?\z']
-source = "read from openai/codex rust-v0.165.0 (360319d8dee6) and its composer snapshots; not measured on a live screen"
+#
+# With no status line setting, codex-cli 0.166.0 and 0.167.0 draw two rows
+# under an empty composer: the status line and the key hints (issue #1588).
+# The second pattern takes one free row and then a last row that holds
+# " for agents", which Codex shows only while the box is empty, so text typed
+# on a second composer line still reads as a draft.
+empty  = [
+	'(?:\A|\n)[›»][ \x{00A0}]*(?:Ask Codex to do anything|Ask a follow-up question)?[ \x{00A0}]*(?:\n[^\n]*)?\z',
+	'(?:\A|\n)[›»][ \x{00A0}]*(?:Ask Codex to do anything|Ask a follow-up question)?[ \x{00A0}]*\n[^\n]*\n[^\n]* for agents\b[^\n]*\z',
+]
+source = "read from openai/codex rust-v0.165.0 (360319d8dee6) and its composer snapshots; the two-row footer measured on live codex-cli 0.166.0 and 0.167.0 screens (issue #1588)"
 
 [input]
 submit          = "cr"
