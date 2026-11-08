@@ -767,7 +767,8 @@ settings, the opener and a table of terminals.
 
 A pane can address another pane with a `tuios://window/<id>` link, where
 `<id>` is the pane's short id from the sidebar or `list-windows`. A plain
-`Ctrl+click` there jumps to that pane, and a
+`Ctrl+click` there jumps to that pane, and switches to its session first
+when the pane is in another session of the same daemon. A
 `tuios://window/<id>/close` link asks first: the confirmation names the
 pane and only a second click closes it.
 

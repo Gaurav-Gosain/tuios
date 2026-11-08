@@ -1927,6 +1927,15 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 		return m, listen
 
+	case windowLinkListedMsg:
+		cmd := m.followWindowLink(msg.target, msg.rawURL, msg.sessions)
+		// The focus moved outside the input handler, which is what pushes a
+		// mutation to the daemon otherwise.
+		if m.IsDaemonSession {
+			m.SyncStateToDaemon()
+		}
+		return m, cmd
+
 	case foreignSessionsChangedMsg:
 		// The rail's render cache keys on the listing's generation, so this
 		// frame rebuilds the rows the refresh moved.

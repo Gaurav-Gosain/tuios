@@ -14363,3 +14363,19 @@ Run on 2026-11-07 on macOS (arm64):
 The steps are in `approval-command-focus.txt` under the test's artifact
 folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestApprovalHoldOutlastsACommandFocusMove$' -v .`.
+
+## A window link reaches a pane of another session
+
+`TestCtrlClickWindowLinkCrossesSessions` attaches session `linkhome`, prints a
+`tuios://window/<short id>` link to a pane of session `linkaway`, and
+Ctrl+clicks it. The client must switch to `linkaway` and focus that pane.
+
+Run on 2026-11-08 on macOS (arm64):
+
+| Binary | The test fails with | Result |
+|--------|---------------------|--------|
+| origin/main (ba70cdac), where `openWindowLink` searches only the attached session | "the link did not switch to linkaway and focus fc898980-... (focused 81d21ada-...)" | **caught** |
+| this branch without the `SyncStateToDaemon` in the `windowLinkListedMsg` case | the client switches and focuses the pane, but the daemon keeps the old focus: "the link did not switch to linkaway and focus 908c786b-... (focused a78297fb-...)" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCtrlClickWindowLinkCrossesSessions$' -v .`.
