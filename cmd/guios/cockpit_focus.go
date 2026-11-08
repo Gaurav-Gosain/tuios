@@ -154,7 +154,11 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 		pad = 14
 	}
 	ui.Column(c).Shrink(0).Padding(14, pad, 0, pad).Gap(4).Children(func() {
-		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+		// The row keeps a button's height when the card has the Open pane
+		// in place of the header: the column under it does not move as
+		// the selection goes between the two kinds (Mac round 5, workflow
+		// S3).
+		ui.Row(c).Gap(10).AlignItems(ui.Center).MinHeight(hControlSm).Children(func() {
 			if ck.stacked {
 				iconButton(c, "ck-back", chevronLeftIcon, a.tip(locales.CockpitBack(), ""), pal, func() { ck.stackFocus = false })
 			}
@@ -301,10 +305,12 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 }
 
 // ckThreadEmpty reports whether ag's thread shows no message, so its tab
-// is the one quiet line over the card (ckEmptyThread).
+// is the gap over the card (threadView).
 func (a *App) ckThreadEmpty(ag client.Agent) bool {
 	th := a.ck.threads[threadKey(ag)]
-	return th != nil && len(th.items) == 0 && !th.unsupported && !th.failed
+	// A thread not read yet is empty until its read says otherwise: the
+	// card takes the same place from the first frame (Mac round 5, feel S2).
+	return th == nil || len(th.items) == 0 && !th.unsupported && !th.failed
 }
 
 // ckTabMinH is the least height the tab's content keeps above the card,

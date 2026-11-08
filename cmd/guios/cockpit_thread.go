@@ -482,6 +482,16 @@ func (a *App) threadView(c *ui.Context, pal *palette, ag client.Agent) {
 	// Every thread with no messages shows the same empty state, with its
 	// icon tile, whatever the reason (council round 1, visual 6).
 	switch {
+	case a.ck.cardShown && (th == nil || len(th.items) == 0 && !th.unsupported && !th.failed):
+		// An empty thread over an approval card: the card is the message.
+		// One gap the same in every frame, read or not, so the card starts
+		// under the tabs and never moves as the read ends (Mac round 5,
+		// visual S1, feel S2).
+		ui.Box(c.Key("thread-card-gap")).Height(ckCardGap).Shrink(0)
+		if th != nil && th.loading {
+			c.After(ckSpinFor)
+		}
+		return
 	case th == nil:
 		// No read could start: the daemon is not connected.
 		ui.Column(c).Grow(1).Center().Children(func() { ui.Spinner(c) })
@@ -535,20 +545,16 @@ func (a *App) threadView(c *ui.Context, pal *palette, ag client.Agent) {
 		Rows(func(r ui.ListRow) { a.itemView(r.Context, pal, th, &th.items[r.Index], mono) })
 }
 
+// ckCardGap is the room between the tabs and an approval card over an
+// empty thread.
+const ckCardGap = 16
+
 // threadIcon is a speech bubble, for a thread's empty state.
 var threadIcon = icon(`<path d="M3 3.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H8l-3 2.5v-2.5H3a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z"/>`)
 
 // ckEmptyThread is a thread's empty state: it fills the tab's room, so
 // that a thread with nothing to show is never a blank column.
 func (a *App) ckEmptyThread(c *ui.Context, pal *palette, title, detail string) {
-	// Over an approval card the card says what the agent waits for: the
-	// block would only be cut by the tab's least height (ckTabMinH).
-	if a.ck.cardShown {
-		// One quiet line at the top, so the tab is not a blank area over
-		// the card (Mac round 1, workflow N2).
-		oneLine(c, locales.CockpitThreadEmptyLine(), fsSmall, 0).TextColor(pal.textFaint).Margin(18, a.ckSide(28), 0, a.ckSide(28))
-		return
-	}
 	col := ui.Column(c.Key("thread-empty")).Grow(1).MinHeight(0)
 	col.Children(func() {
 		emptyBlock(c, pal, threadIcon, title, detail, false, nil)
