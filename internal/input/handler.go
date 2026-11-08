@@ -452,16 +452,26 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// pane is a view of the layout, not a mode over it: the chords it lists
 	// run while it is up, so pressing the rail's toggle beside the explanation
 	// changes what the next frame explains.
-	if o.HelpMode && helpOwnsKey(msg, o) {
-		if result, cmd, handled := handleHelpModeKey(msg, o); handled {
-			return result, cmd
+	if o.HelpMode {
+		owns := helpOwnsKey(msg, o)
+		if owns {
+			if result, cmd, handled := handleHelpModeKey(msg, o); handled {
+				return result, cmd
+			}
 		}
 		// The key is not help's. It runs on the screen the pane explains, so
 		// the pane steps out of the way for a moment: a chord that moves a
 		// rail or switches workspace should be seen doing it, not read about
 		// through an explanation laid over the change. A navigation key brings
 		// the pane back at once. See SuspendHelp.
-		o.SuspendHelp()
+		//
+		// The leader and the chord after it are the same case even though the
+		// menu, not help, owns the keys: the menu hides the pane while it is
+		// up, and the chord that closes it hides the pane long enough for its
+		// result to be seen.
+		if owns || o.MenuOpen() {
+			o.SuspendHelp()
+		}
 	}
 
 	// Hold-to-window-mode. The trigger is consumed here, before any mode routing,

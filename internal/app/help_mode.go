@@ -1271,8 +1271,13 @@ func helpRectUnion(rects []image.Rectangle) image.Rectangle {
 // renderHelpMode draws the explanation pane for the selected component. It is
 // called once per frame after the rail, the panes and the dock have drawn, so
 // the rectangles it places against are the ones the user is looking at.
+//
+// The pane stands aside while the leader or one of its menus waits for a key:
+// the menu is read against the layout, and its own keys are the next thing the
+// user reads, so two popups on one screen would compete. The hide on a key
+// covers the moment after it; this covers a menu left open longer than that.
 func (m *OS) renderHelpMode() *lipgloss.Layer {
-	if !m.HelpMode || m.helpHidden {
+	if !m.HelpMode || m.helpHidden || m.MenuOpen() {
 		m.helpPaneRect = image.Rectangle{}
 		return nil
 	}

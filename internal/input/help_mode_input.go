@@ -22,7 +22,8 @@ func helpOwnsKey(msg tea.KeyPressMsg, o *app.OS) bool {
 // keys, and a key that hid the explanation hands the pointer back with it, so
 // help does not scroll or re-target under them.
 func helpOwnsPointer(o *app.OS) bool {
-	return !o.HelpHidden() && !o.PanelOwnsKeyboard() && !o.CaptureActive() && !o.ReviewOpen()
+	return !o.HelpHidden() && !o.MenuOpen() && !o.PanelOwnsKeyboard() &&
+		!o.CaptureActive() && !o.ReviewOpen()
 }
 
 // handleHelpModeKey runs the keys help mode binds and reports whether it did.
