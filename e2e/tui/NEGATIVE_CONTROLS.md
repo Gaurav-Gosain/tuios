@@ -15692,3 +15692,23 @@ fixture `codex-idle-empty-status-line.txt` from the issue.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestQueuedMessageReachesAnEmptyCodexBox$' -v .`.
+
+## TestAskAgentReadsAFullScreenAgentsReply
+
+Orchestration gap G1. A stand-in for Claude Code, run as `claude`, draws its
+whole screen in the alternate screen and draws it again for each prompt, with
+its answer in the middle and the footer on a fixed row. It joins its pane to a
+transcript under `~/.claude/projects` with the real SessionStart hook and
+writes each prompt and answer there. An ask must return the answer from the
+transcript, say `reply_source: transcript`, and a second ask must return only
+its own answer.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (81b39daae) | "the reply of a full-screen agent is \"\", want its answer from the transcript" | **caught** |
+| The reply read from the start of the transcript, not after the question | "the second reply is \"The answer to [what is the answer] ... [and the second] ...\", want only the second answer" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAskAgentReadsAFullScreenAgentsReply$' -v .`.

@@ -409,39 +409,22 @@ func (d *Daemon) delegateAnswer(sess *Session, w WindowState, baseline int) (ans
 // the child's transcript. It reads the newest entries once, through the same
 // Clean and secret masking agent-transcript applies, and keeps nothing.
 func (d *Daemon) delegateTranscriptAnswer(sess *Session, window string) (string, bool) {
-	reg := d.agentMatcher.registry
-	path, harnessID, format, session, leaf, joined := sess.transcriptViewOf(window)
-	if !joined || reg == nil {
+	path, opts, ok := d.transcriptOptions(sess, window)
+	if !ok {
 		return "", false
 	}
-	if tr := reg.TranscriptFor(harnessID); tr == nil || tr.Reader != format || !transcriptview.Known(format) {
-		return "", false
-	}
-	page, err := transcriptview.Read(path, transcriptview.Options{
-		Limit:      delegateTranscriptEntries,
-		Clean:      transcriptText,
-		CleanLines: maskSecretLines,
-		Format:     format,
-		Session:    session,
-		Leaf:       leaf,
-	})
+	opts.Limit = delegateTranscriptEntries
+	page, err := transcriptview.Read(path, opts)
 	if err != nil {
 		return "", false
 	}
-	var parts []string
-	for _, e := range slices.Backward(page.Entries) {
-		if e.Role == transcriptview.RoleUser && e.Kind == transcriptview.KindText {
-			break
-		}
-		if e.Role == transcriptview.RoleAssistant && e.Kind == transcriptview.KindText && strings.TrimSpace(e.Text) != "" {
-			parts = append(parts, e.Text)
-		}
+	entries := page.Entries
+	if i := lastIndexFunc(entries, func(e transcriptview.Entry) bool {
+		return e.Role == transcriptview.RoleUser && e.Kind == transcriptview.KindText
+	}); i >= 0 {
+		entries = entries[i+1:]
 	}
-	if len(parts) == 0 {
-		return "", false
-	}
-	slices.Reverse(parts)
-	return strings.Join(parts, "\n\n"), true
+	return assistantText(entries)
 }
 
 // delegateMail mails the parent of rec, from the child, and lets the mail

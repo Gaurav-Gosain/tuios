@@ -1253,6 +1253,9 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 	// Step three: the baseline for the reply. Everything the pane prints from
 	// here on is what it printed in answer.
 	before := contentLines(pty.CaptureContent(true, false))
+	// And the end of its transcript, for an agent that has one: the reply is
+	// then its own text since the question (verb_ask_transcript.go).
+	mark := d.askTranscriptMark(sess, target.ID)
 
 	// The pane is checked once more right before anything is typed, since a
 	// prompt can have come up while the wait above returned or the baseline was
@@ -1299,6 +1302,13 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 
 	after := pty.CaptureContent(true, false)
 	reply, truncated := tailLines(after, before, lines)
+	replySource := "screen"
+	if settledBy != askSettledStalled {
+		if text, ok := d.askTranscriptReply(sess, target.ID, mark); ok {
+			reply, truncated = tailLines(text, 0, lines)
+			replySource = "transcript"
+		}
+	}
 
 	// The exchange goes in the ring once it is over, so the person at the
 	// client can see what one agent asked another and what came back. It is
@@ -1334,6 +1344,9 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 		"reply":     reply,
 		"lines":     countLines(reply),
 		"truncated": truncated,
+		// reply_source is where the reply was read: the agent's transcript,
+		// or the lines the pane printed after the question.
+		"reply_source": replySource,
 	}, nil
 }
 
