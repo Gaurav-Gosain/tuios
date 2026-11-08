@@ -1,6 +1,8 @@
 package main
 
 import (
+	"strconv"
+
 	"github.com/Gaurav-Gosain/mygo/ui"
 )
 
@@ -133,6 +135,9 @@ func (a *App) ckProse(text string) bool {
 // key selects in the same frame, after the list read the key.
 func (a *App) toReply(key, text string) {
 	r := &a.ck.reply
+	if a.replyNow(key, text) {
+		return
+	}
 	a.ko.reply = true
 	// Two passes at least: the row press that came with the key is read
 	// in the pass after the list read the key.
@@ -152,6 +157,39 @@ func (a *App) toReply(key, text string) {
 		return r.boxDraft != nil && r.boxAgent.Key() == want
 	})
 	a.keepKey(heldKey{text: text})
+}
+
+// replyNow puts text typed in the agents list straight into the reply box
+// when that box has the keys already, and reports whether it did. MyGo
+// routes a letter typed while the list had the focus to the list, where it
+// was typed, and the box takes the letters typed after it at once. Held for
+// a frame by the owner, the list's letter came after them: "mmoo" showed
+// as "momo" (b10). Written in the frame the list reads it, it comes first:
+// MyGo applies the box's own text at the end of that build, after this
+// write, and keeps both.
+func (a *App) replyNow(key, text string) bool {
+	r := &a.ck.reply
+	d := r.boxDraft
+	if !a.ck.open || d == nil || !a.ko.boxHas || a.keysHeld() {
+		return false
+	}
+	want := key
+	if want == "" {
+		ag, ok := a.ckSelectedAgent()
+		if !ok {
+			return false
+		}
+		want = ag.Key()
+	}
+	if r.boxAgent.Key() != want {
+		return false
+	}
+	if !d.sending {
+		d.text += text
+	}
+	r.toEnd = true
+	keyAudit("now", "reply", strconv.Quote(text)+" "+r.boxAgent.Name)
+	return true
 }
 
 // keysOwned reports whether a sheet, a dialog or a field of the agents view

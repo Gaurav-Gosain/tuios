@@ -68,6 +68,9 @@ type keyOwner struct {
 	// change whose target has them already lands at once (tryLand), with
 	// no frame in between, which a window out of sight does not build.
 	has keyTarget
+	// boxHas: the reply box had the focus in the last frame built
+	// (replyNow).
+	boxHas bool
 }
 
 // keyHold is one change on its way.
@@ -266,6 +269,7 @@ func (a *App) keyOwnerView(c *ui.Context) {
 		a.auditFocus(c)
 	}
 	ko.has = keyTarget{}
+	ko.boxHas = a.ck.open && a.ck.reply.box.FocusWithin(c)
 	if t := a.keyTarget(); !ko.ref.Focused(c) {
 		if ref := a.targetRef(t); ref != nil && ref.FocusWithin(c) {
 			ko.has = t
