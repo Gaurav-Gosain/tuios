@@ -173,8 +173,15 @@ func (a *App) ckAllowChord() {
 	if !ok || r.item == nil || !ckAnswerable(*r.item) || ckIsQuestion(*r.item) {
 		// A press with nothing to allow says so, in the key line: a
 		// question is answered by its buttons or a reply.
-		a.ck.nothingAt = time.Now()
+		a.ck.nothingAt, a.ck.nothingOff = time.Now(), false
 		a.ck.nothingQuestion = ok && r.item != nil && ckIsQuestion(*r.item)
+		return
+	}
+	if !ckHeld(*r.item) && a.ckApprovalsOff(*r.item, a.ck.rowAgent(r)) {
+		// The card has no Allow: it says approvals are off, and the key
+		// line says the same, never a reason of its own (Mac round 4,
+		// workflow S3).
+		a.ck.nothingAt, a.ck.nothingQuestion, a.ck.nothingOff = time.Now(), false, true
 		return
 	}
 	rules := r.item.Risk

@@ -467,6 +467,8 @@ func (a *App) approvalCard(c *ui.Context, pal *palette, ag client.Agent, it sess
 		mono := a.termFamily()
 		if ckIsEdit(it) {
 			a.ckEditBlock(c, pal, it)
+		} else if a.ckEndedEdit(c, pal, it) {
+			// Drawn: what the edit was, after its hold ended.
 		} else if !held && pk != nil && len(pk.lines) > 0 && (!question || len(pk.actions) > 0) {
 			ui.Column(c).Radius(rControl).Background(ckCodeBg(pal)).Padding(8, 12).Gap(1).Clip().Children(func() {
 				for _, l := range pk.lines {

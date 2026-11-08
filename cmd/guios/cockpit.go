@@ -11,6 +11,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
+	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
@@ -129,6 +130,9 @@ type cockpit struct {
 	// manyHarness is set while the list's agents use more than one
 	// harness, so a row names its harness in words.
 	manyHarness bool
+	// keptEdits is the body of each held edit the card drew, by its prompt
+	// key, for the card once its hold ends (ckEndedEdit).
+	keptEdits map[string]*integration.EditBody
 	// editLast is the body's and the card's bounds when the body last
 	// counted its rows.
 	editLast [2]ui.Rect
@@ -210,6 +214,9 @@ type cockpit struct {
 	// so for 1.5 s.
 	nothingAt       time.Time
 	nothingQuestion bool
+	// nothingOff says the chord came to a card that approvals being off
+	// leaves with no Allow.
+	nothingOff bool
 	// reason is the open "reject and say why" line, for the item id.
 	reason, reasonFor string
 	// undo is the last settle, which u takes back for 10 s.

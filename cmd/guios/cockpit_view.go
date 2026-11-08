@@ -870,8 +870,11 @@ func (a *App) cockpitHints(c *ui.Context, pal *palette) {
 			// A chord found nothing to answer.
 			c.After(1500*time.Millisecond - d)
 			msg := locales.CockpitNothingWaits()
-			if a.ck.nothingQuestion {
+			switch {
+			case a.ck.nothingQuestion:
 				msg = locales.CockpitQuestionTypeReply()
+			case a.ck.nothingOff:
+				msg = locales.CockpitApprovalsFirst()
 			}
 			ui.Text(c, msg).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.text).SingleLine()
 			return

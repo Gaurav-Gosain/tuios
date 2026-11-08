@@ -210,6 +210,13 @@ func (a *App) ckEditBlock(c *ui.Context, pal *palette, it session.AttentionItem)
 		width = int((bw - 2*sp3 - ckEditGutter) / cell)
 	}
 	view := a.ckEditView(it, width)
+	if e := ck.edit; e != nil && e.requestID == it.RequestID && e.body != nil {
+		// Kept for the card once the hold ends (ckEndedEdit).
+		if ck.keptEdits == nil || len(ck.keptEdits) > 32 {
+			ck.keptEdits = map[string]*integration.EditBody{}
+		}
+		ck.keptEdits[ckPromptKey(it)] = e.body
+	}
 	// A Write's head says how it acts on the file: it is the card's words,
 	// not the file's, so it reads above the block, as text, and the block
 	// holds only the file (Mac round 4, visual S3). Its rows count as shown
@@ -359,6 +366,9 @@ func (a *App) ckEditTitle(it session.AttentionItem, tool, path, cwd string) (tit
 	if e := a.ck.edit; e != nil && e.requestID == it.RequestID && e.body != nil {
 		body = e.body
 		tool, path = body.Tool, body.Path
+	} else if kept := a.ckKeptEdit(it); kept != nil {
+		body = kept
+		tool, path = body.Tool, body.Path
 	}
 	dir, file := filepath.Split(filepath.Clean(path))
 	if file == "" || file == "." {
@@ -410,4 +420,57 @@ func (a *App) ckEditTitle(it session.AttentionItem, tool, path, cwd string) (tit
 		size = locales.CockpitEditCount(len(body.Hunks)) + " · " + size
 	}
 	return title, folder, size
+}
+
+// ckKeptEdit is the body of the held edit it was, once its hold ended, or
+// nil.
+func (a *App) ckKeptEdit(it session.AttentionItem) *integration.EditBody {
+	if !a.ckHoldEnded(it) {
+		return nil
+	}
+	return a.ck.keptEdits[ckPromptKey(it)]
+}
+
+// ckEndedEditRows is how many rows of its body an edit whose hold ended
+// keeps on its card.
+const ckEndedEditRows = 4
+
+// ckEndedEdit draws the body of an edit whose hold ended, read only: its
+// first rows and how many more, so the person still sees what the edit was
+// without opening the pane (Mac round 4, workflow S2). It reports whether
+// it drew one.
+func (a *App) ckEndedEdit(c *ui.Context, pal *palette, it session.AttentionItem) bool {
+	body := a.ckKeptEdit(it)
+	if body == nil {
+		return false
+	}
+	ck := &a.ck
+	mono := a.termFamily()
+	rowH := float32(fsCode) * 1.5
+	cell, _ := c.MeasureText(0, ui.Span{Text: "0000000000", Size: fsCode, Font: mono})
+	cell /= 10
+	width := editreview.MinWidth
+	if bw := ck.editBoxW; bw > 0 && cell > 0 {
+		width = max(width, int((bw-2*sp3-ckEditGutter)/cell))
+	}
+	var rows []editreview.Line
+	for _, l := range editreview.Lines(*body, width) {
+		if l.Kind != editreview.KindHead {
+			rows = append(rows, l)
+		}
+	}
+	if len(rows) == 0 {
+		return false
+	}
+	box := ui.Column(c.Key("edit-box")).Radius(rControl).Background(ckCodeBg(pal)).Clip()
+	ck.editBoxW = box.Bounds().W
+	box.Children(func() {
+		for _, l := range rows[:min(len(rows), ckEndedEditRows)] {
+			ckEditRow(c, pal, mono, rowH, l)
+		}
+	})
+	if left := len(rows) - ckEndedEditRows; left > 0 {
+		ui.Text(c, locales.CockpitMore(left)).FontSize(fsSmall).TextColor(pal.textMuted)
+	}
+	return true
 }

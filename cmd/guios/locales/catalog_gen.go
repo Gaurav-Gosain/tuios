@@ -13282,6 +13282,16 @@ func (msgs Messages) CockpitNothingWaits() string {
 	return Catalog.Format(msgs.locale, "cockpitNothingWaits", nil)
 }
 
+// CockpitApprovalsFirst says "Turn on approvals first."
+// in the language the app shows.
+func CockpitApprovalsFirst() string { return In(i18n.Locale()).CockpitApprovalsFirst() }
+
+// CockpitApprovalsFirst says "Turn on approvals first."
+// in the language of msgs.
+func (msgs Messages) CockpitApprovalsFirst() string {
+	return Catalog.Format(msgs.locale, "cockpitApprovalsFirst", nil)
+}
+
 // SidebarSameName says "Another session has the same name. The line under it tells them apart."
 // in the language the app shows.
 func SidebarSameName() string { return In(i18n.Locale()).SidebarSameName() }

@@ -2340,6 +2340,7 @@
   "cockpitWaitsForAnswer": "Waits until the call is answered.",
   "cockpitHintQueue": "queue",
   "cockpitNothingWaits": "Nothing waits for you.",
+  "cockpitApprovalsFirst": "Turn on approvals first.",
   "sidebarSameName": "Another session has the same name. The line under it tells them apart.",
   "cockpitTypeToReply": "Type to reply",
   "cockpitTypeToAddCard": "Type to add a card",
