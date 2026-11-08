@@ -29,8 +29,11 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.InboxPopSettling() {
 		return o, nil
 	}
+	// The layer on top takes the key: one decision, in app.CockpitTop, that
+	// the key bar and the clicks read too.
+	top := o.CockpitTop()
 	// Copy mode over the thread takes every key, as it does over a pane.
-	if o.CockpitCopyOn() {
+	if top == app.CockpitLayerCopy {
 		return handleCockpitCopyKey(msg, o)
 	}
 	// The global keys (the palette, the launcher) act over the view and
@@ -42,66 +45,56 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			return out, cmd
 		}
 	}
-	// The image view takes every key while it is up.
-	if o.CockpitImageOpen() {
+	switch top {
+	case app.CockpitLayerImage:
+		// The image view takes every key while it is up.
 		return o, o.CockpitImageKey(msg.String())
-	}
-	// The spawn sheet takes every key while it is up.
-	if o.CockpitSpawnOpen() {
+	case app.CockpitLayerSpawn:
+		// The spawn sheet takes every key while it is up.
 		return o, o.CockpitSpawnKey(msg)
-	}
-	// The comparison of a fan's attempts takes every key while it is up.
-	if o.CockpitCompareOpen() {
+	case app.CockpitLayerCompare:
+		// The comparison of a fan's attempts takes every key while it is up.
 		return o, o.CockpitCompareKey(msg.String())
-	}
-	// A TML surface drawn in the view takes every key while the person is
-	// in it; esc it does not use gives them back.
-	if o.CockpitArtifactFocused() {
+	case app.CockpitLayerArtifact:
+		// A TML surface drawn in the view takes every key while the person
+		// is in it; esc it does not use gives them back.
 		return o, o.CockpitArtifactKey(msg.String())
-	}
-	// The line for a new card on the board takes every key while it is
-	// open.
-	if o.CockpitNewCardOpen() {
+	case app.CockpitLayerNewCard:
+		// The line for a new card on the board takes every key while it is
+		// open.
 		return o, o.CockpitNewCardKey(msg)
-	}
-	// An answer key only asks: enter sends the answer, and any other key
-	// drops it and does nothing else.
-	if o.InboxConfirmOpen() {
+	case app.CockpitLayerConfirm:
+		// An answer key only asks: enter sends the answer, and any other key
+		// drops it and does nothing else.
 		return o, o.InboxConfirmKey(msg.String())
 	}
 	// A risky allow's first press in the peek waits for the same key again;
 	// any other key resets it.
 	o.InboxKeyPressed(msg.String())
-	if o.InboxPeeking() {
+	switch top {
+	case app.CockpitLayerPeek:
 		return handleInboxPeekInput(msg, o)
-	}
-	if o.InboxReplyOpen() {
+	case app.CockpitLayerReply:
 		return handleInboxReplyInput(msg, o)
-	}
-	if o.InboxReasonOpen() {
+	case app.CockpitLayerReason:
 		return handleInboxReasonInput(msg, o)
-	}
-	if o.InboxSelecting() {
+	case app.CockpitLayerSelect:
 		return handleInboxSelectInput(msg, o)
-	}
-	// The snooze picker takes the next key: a digit from 1 to 4 is how long,
-	// anything else closes it.
-	// The group and sort picker takes the next key: a digit chooses the
-	// grouping, s steps the sort, anything else closes it.
-	if o.CockpitGroupMenuOpen() {
+	case app.CockpitLayerGroupMenu:
+		// The group and sort picker takes the next key: a digit chooses the
+		// grouping, s steps the sort, anything else closes it.
 		return o, o.CockpitGroupMenuKey(msg.String())
-	}
-	// Ready to merge takes the next key: c, p or o, enter to send, anything
-	// else closes it.
-	if o.CockpitShipOpen() {
+	case app.CockpitLayerShip:
+		// Ready to merge takes the next key: c, p or o, enter to send,
+		// anything else closes it.
 		return o, o.CockpitShipKey(msg.String())
-	}
-	if o.InboxSnoozePicking() {
+	case app.CockpitLayerSnooze:
+		// The snooze picker takes the next key: a digit from 1 to 4 is how
+		// long, anything else closes it.
 		return o, o.InboxSnoozeKey(msg.String())
-	}
-	// The bulk allow's sheet takes the next key: enter allows, anything
-	// else closes it.
-	if o.InboxAgentsSheetOpen() {
+	case app.CockpitLayerBulkSheet:
+		// The bulk allow's sheet takes the next key: enter allows, anything
+		// else closes it.
 		return o, o.InboxAgentsSheetKey(msg.String())
 	}
 	key := msg.String()

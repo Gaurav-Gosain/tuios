@@ -261,6 +261,9 @@ type cockpitState struct {
 	// one.
 	lookGen uint64
 	canvas  *ckCanvas
+	// lastTop is the layer CockpitTop gave after the last message, for the
+	// verbose log of its changes (cockpit_layers.go).
+	lastTop CockpitLayer
 	// replyCheck says the rows moved the cursor, so the reply editor is
 	// checked against the row after the message.
 	replyCheck bool
@@ -1295,6 +1298,10 @@ func (m *OS) cockpitWideFocus() bool { return m.GetRenderWidth() >= ckOneColumn 
 // handled is false for a click outside it.
 func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 	ck := &m.Inbox.ck
+	// A one-key menu on top: a click off it closes it and does nothing else.
+	if m.cockpitClickDismisses(x, y) {
+		return nil, true
+	}
 	if ck.img != nil {
 		m.cockpitImageClick(x, y)
 		return nil, true

@@ -123,18 +123,18 @@ func (m *OS) cockpitFocusRegionAt(x, y int) {
 func (m *OS) CockpitEscape() tea.Cmd {
 	st := &m.Inbox
 	ck := &st.ck
-	switch {
-	case ck.zoom:
+	switch step, _ := m.cockpitEscapeStep(); step {
+	case ckEscUnzoom:
 		ck.zoom = false
 		m.cockpitTouch()
 		return nil
-	case st.threads.open:
+	case ckEscBack:
 		return m.CockpitOpenFocus(false)
-	case m.CockpitRegion() != ckRegionList:
+	case ckEscList:
 		ck.region = ckRegionList
 		m.cockpitTouch()
 		return nil
-	case m.cockpitNarrowed():
+	case ckEscClear:
 		st.Select, st.Filter, st.agents.query, ck.needsOnly, ck.chip = "", "", "", false, 0
 		m.cockpitTouchRows()
 		m.cockpitRows()
@@ -144,6 +144,37 @@ func (m *OS) CockpitEscape() tea.Cmd {
 	}
 	m.CloseInbox()
 	return nil
+}
+
+// ckEscStep is what esc does in the view's base layer, from the top rung of
+// the ladder down.
+type ckEscStep uint8
+
+const (
+	ckEscClose ckEscStep = iota
+	ckEscUnzoom
+	ckEscBack
+	ckEscList
+	ckEscClear
+)
+
+// cockpitEscapeStep is the rung of the esc ladder that applies now, and its
+// words for the key bar. CockpitEscape and the key bar both read it, so the
+// bar says what esc does.
+func (m *OS) cockpitEscapeStep() (ckEscStep, string) {
+	switch {
+	case m.Inbox.ck.zoom:
+		return ckEscUnzoom, "unzoom"
+	case m.Inbox.threads.open:
+		return ckEscBack, "back"
+	case m.CockpitRegion() != ckRegionList:
+		return ckEscList, "list"
+	case m.Inbox.ck.chip > 0 && !m.cockpitSearched():
+		return ckEscClear, "clear filter"
+	case m.cockpitNarrowed():
+		return ckEscClear, "clear search"
+	}
+	return ckEscClose, "close"
 }
 
 // cockpitNarrowed reports whether a search or a filter narrows the list.
@@ -159,19 +190,8 @@ func (m *OS) cockpitSearched() bool {
 
 // cockpitEscapeLabel is what esc does now, for the key bar.
 func (m *OS) cockpitEscapeLabel() string {
-	switch {
-	case m.Inbox.ck.zoom:
-		return "unzoom"
-	case m.Inbox.threads.open:
-		return "back"
-	case m.CockpitRegion() != ckRegionList:
-		return "list"
-	case m.Inbox.ck.chip > 0 && !m.cockpitSearched():
-		return "clear filter"
-	case m.cockpitNarrowed():
-		return "clear search"
-	}
-	return "close"
+	_, label := m.cockpitEscapeStep()
+	return label
 }
 
 // CockpitNextNeeds puts the cursor on the next agent in Needs you after the

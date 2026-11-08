@@ -279,8 +279,7 @@ func (m *OS) renderCockpit() (string, int, int, int) {
 	}
 	// A state that moves with the clock or the keyboard is drawn afresh.
 	// The reply editor is not one: what it draws is in the key.
-	transient := st.ck.img != nil || ck.spawn != nil || ck.kb.add != nil || ck.kb.drag != nil || st.Peek != nil || st.selectEditing || m.InboxSnoozePicking() || st.agents.sheet != nil ||
-		st.approvals.reason != nil || st.approvals.armed.key != "" || st.approvals.confirm != nil
+	transient := m.CockpitTop().transient() || ck.kb.drag != nil || st.approvals.armed.key != ""
 	if !transient && ck.frame != "" && ck.frameAt == key {
 		return ck.frame, top, w, h
 	}
@@ -1885,10 +1884,12 @@ func (m *OS) drawCockpitHints(c *ckCanvas, l ckLook, y int, now time.Time) {
 // work anywhere. esc stays last, so it is never dropped.
 func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 	st := &m.Inbox
-	switch {
-	case st.ck.art.focus:
+	// The key bar names the keys of the layer on top, the one the next key
+	// goes to (cockpit_layers.go).
+	switch m.CockpitTop() {
+	case CockpitLayerArtifact:
 		return []overlay.Hint{{Key: "esc", Label: "back to the agents", Priority: overlay.HintEssential}}
-	case st.ck.cmp != nil:
+	case CockpitLayerCompare:
 		n := "1"
 		if res := st.ck.cmp.res; res != nil && len(res.Rows) > 1 {
 			n = "1-" + strconv.Itoa(min(len(res.Rows), 9))
@@ -1899,22 +1900,25 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 			hints = append([]overlay.Hint{{Key: "up down", Label: "scroll the list"}}, hints...)
 		}
 		return hints
-	case st.selectEditing:
-		return []overlay.Hint{{Key: overlay.EnterKey(), Label: "apply"}, {Key: "esc", Label: "cancel"}}
-	case m.CockpitGroupMenuOpen():
-		return m.cockpitGroupMenuHints()
-	case m.CockpitShipOpen():
-		return m.cockpitShipHints()
-	case m.InboxSnoozePicking():
-		return inboxSnoozeHints()
-	case st.agents.sheet != nil:
-		return m.bulkSheetHints()
-	case st.approvals.confirm != nil:
+	case CockpitLayerConfirm:
 		return inboxConfirmHints(st.approvals.confirm.decision)
-	case len(st.agents.marks) > 0:
-		return m.bulkHints()
-	case st.Peek != nil:
+	case CockpitLayerPeek:
 		return nil
+	case CockpitLayerReason:
+		return []overlay.Hint{{Key: overlay.EnterKey(), Label: "send"}, {Key: "esc", Label: "cancel"}}
+	case CockpitLayerSelect:
+		return []overlay.Hint{{Key: overlay.EnterKey(), Label: "apply"}, {Key: "esc", Label: "cancel"}}
+	case CockpitLayerGroupMenu:
+		return m.cockpitGroupMenuHints()
+	case CockpitLayerShip:
+		return m.cockpitShipHints()
+	case CockpitLayerSnooze:
+		return inboxSnoozeHints()
+	case CockpitLayerBulkSheet:
+		return m.bulkSheetHints()
+	}
+	if len(st.agents.marks) > 0 {
+		return m.bulkHints()
 	}
 	if hints, ok := m.inboxReplyHints(); ok {
 		return hints
@@ -1924,9 +1928,6 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 		return m.cockpitFocusHints()
 	case ckRegionSide:
 		return m.cockpitSideHints()
-	}
-	if m.InboxReasonOpen() {
-		return []overlay.Hint{{Key: overlay.EnterKey(), Label: "send"}, {Key: "esc", Label: "cancel"}}
 	}
 	// Resume all comes first while the fleet shows more than one offer:
 	// after a restart it is the one thing to do.

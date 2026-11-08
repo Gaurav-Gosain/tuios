@@ -15371,3 +15371,22 @@ it depended on goroutine scheduling; now each counts in its own state change.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAMoveToVerifyLetsTheHolderGo$' -v .`.
+
+## TestCockpitMenuClosesBeforeAClickActs and TestReadyToMergeClosesOnAnotherRow
+
+State machine plan N1. The agents view's one-key menus (group menu, Ready to
+merge, snooze, bulk sheet, confirm, search line) take the next key, and a click
+that is not on them closes them and does nothing else. The first test opens
+the group menu and clicks "+ New agent": the menu must close and no sheet
+open. The second opens Ready to merge on t1 and clicks t2's row: Ready to merge
+must close, the cursor must stay on t1, and c must commit nothing.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (4991cfbe3), where each reader picks the top layer by its own chain and a click ignores the menus | "the group menu is still open after a click outside it"; "Ready to merge is still open after a click on another row", "the click that closed Ready to merge also moved the cursor off t1", "c after the click committed t1's work (2 commits in its repository)" | **caught** |
+| `TestCockpitLayersHaveOneDecider` on main | lists every per-layer predicate the key router, the key bar and the click handler call | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestCockpitMenuClosesBeforeAClickActs|TestReadyToMergeClosesOnAnotherRow)$' -v .`.

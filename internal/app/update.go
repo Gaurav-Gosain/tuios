@@ -1086,6 +1086,10 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.CockpitReplyCheck()
 	// Copy mode over a thread the view no longer shows ends.
 	m.CockpitCopyCheck()
+	// A one-key menu a newer layer covers closes. See cockpit_layers.go.
+	if m.ShowInbox || m.Inbox.ck.lastTop != CockpitBase {
+		m.CockpitLayerCheck()
+	}
 	// Checkpoints a frame of the agents view drew for an older state: a
 	// turn that ended with no input is read now. A flag check when not.
 	if side := m.CockpitSideWanted(); side != nil {
