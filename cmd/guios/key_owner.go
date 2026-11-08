@@ -44,11 +44,12 @@ type keyOwner struct {
 	holds []keyHold
 	// queue is on the main thread, but for the text a terminal writes
 	// into a slot (fillSlot), which mu guards.
-	mu      sync.Mutex
-	queue   []heldKey
-	ref     ui.Handle // the sink
-	landing bool      // every hold is done: the keys go to keyTarget
-	landAt  time.Time
+	mu    sync.Mutex
+	queue []heldKey
+	ref   ui.Handle // the sink
+	// phase is where the owner is (koPhase); koSet alone writes it.
+	phase  koPhase
+	landAt time.Time // when the phase became koLanding or koOwned
 	// acting counts the prefix actions decided and not run yet: until
 	// they ran, every key goes to the queue (actStart, actDone). actAt is
 	// when the last was decided.
@@ -82,6 +83,38 @@ type keyOwner struct {
 	// listHad: the agents list had the keys in the last frame built
 	// (catchListKeys).
 	listHad bool
+}
+
+// koPhase is the key owner's phase. The owner keeps the keys while it is
+// not koIdle, and the queue holds what it kept.
+type koPhase uint8
+
+const (
+	koIdle    koPhase = iota // keys go where they are typed
+	koHolding                // a change is on its way (holdKeys): the sink keeps the keys
+	koActing                 // a prefix action is decided, not run (actStart): every key is kept
+	koOwned                  // a sheet or a dialog has the keyboard: kept keys go to it or to their pane
+	koLanding                // every change is done: the target is asked for the focus, then the keys land
+)
+
+// String names a phase for the key audit.
+func (p koPhase) String() string {
+	return [...]string{"idle", "holding", "acting", "owned", "landing"}[p]
+}
+
+// koSet moves the owner to phase next, and notes the move in the key audit.
+// It is the one writer of ko.phase: TestKeyOwnerPhaseHasOneWriter holds it.
+func (a *App) koSet(next koPhase, why string) {
+	ko := &a.ko
+	if next == ko.phase {
+		return
+	}
+	keyAudit("phase", ko.phase.String()+">"+next.String(), why)
+	if next == koLanding || next == koOwned {
+		ko.landAt = time.Now()
+		ko.asked = ko.asked[:0]
+	}
+	ko.phase = next
 }
 
 // keyHold is one change on its way.
@@ -124,7 +157,9 @@ func (a *App) holdKeys(why string, wait time.Duration, ready func() bool) {
 	ko := &a.ko
 	ko.holds = slices.DeleteFunc(ko.holds, func(h keyHold) bool { return h.why == why })
 	ko.holds = append(ko.holds, keyHold{why: why, until: time.Now().Add(wait), ready: ready})
-	ko.landing = false
+	if ko.acting == 0 {
+		a.koSet(koHolding, why)
+	}
 	keyAudit("hold", why, auditCaller())
 	if a.tryLand() {
 		return
@@ -151,7 +186,8 @@ func (a *App) tryLand() bool {
 	if t != ko.has || a.slotWaits(now) {
 		return false
 	}
-	ko.holds, ko.landing = nil, false
+	ko.holds = nil
+	a.koSet(koIdle, "land at once")
 	ko.ref.CancelFocus()
 	a.replayKeys(t)
 	return true
@@ -167,7 +203,7 @@ func (a *App) moveKeys(why string) {
 // keysHeld reports whether the owner has the keys.
 func (a *App) keysHeld() bool {
 	ko := &a.ko
-	return len(ko.holds) > 0 || ko.landing || ko.acting > 0 || len(ko.queue) > 0
+	return len(ko.holds) > 0 || ko.phase != koIdle || ko.acting > 0 || len(ko.queue) > 0
 }
 
 // ownKey keeps a key that a pane's terminal got while the owner has the
@@ -228,6 +264,7 @@ func (a *App) actStart(action string) {
 	ko.acting++
 	ko.actAt = time.Now()
 	keyAudit("act", action, strconv.Itoa(ko.acting))
+	a.koSet(koActing, action)
 }
 
 // actDone notes a prefix action that ran, and gives the keys kept since it
@@ -365,6 +402,10 @@ func (a *App) keyOwnerView(c *ui.Context) {
 	if !a.keysHeld() {
 		return
 	}
+	if len(ko.holds) == 0 && ko.acting == 0 && ko.phase != koLanding && ko.phase != koOwned && !a.keysOwned() {
+		// Only kept keys: they land.
+		a.koSet(koLanding, "kept")
+	}
 	now := time.Now()
 	ko.holds = slices.DeleteFunc(ko.holds, func(h keyHold) bool {
 		done := h.ready() || now.After(h.until)
@@ -382,12 +423,19 @@ func (a *App) keyOwnerView(c *ui.Context) {
 		if ko.sheetAt.IsZero() {
 			ko.sheetAt = now
 		}
+		if ko.acting == 0 {
+			a.koSet(koOwned, a.keyTarget().String())
+		}
 		a.landBeforeSheet()
 	} else {
 		ko.sheetAt = time.Time{}
 	}
 	if len(ko.holds) > 0 && !owned || ko.acting > 0 {
-		ko.landing = false
+		if ko.acting > 0 {
+			a.koSet(koActing, "frame")
+		} else {
+			a.koSet(koHolding, "frame")
+		}
 		next := now.Add(landWait)
 		for _, h := range ko.holds {
 			if h.until.Before(next) {
@@ -400,9 +448,8 @@ func (a *App) keyOwnerView(c *ui.Context) {
 		}
 		return
 	}
-	if !ko.landing {
-		ko.landing, ko.landAt = true, now
-		ko.asked = ko.asked[:0]
+	if ko.phase != koLanding && !owned {
+		a.koSet(koLanding, "done")
 		// A request the sink did not take yet must not take the keys
 		// from the target later: the sink goes once they land.
 		ko.ref.CancelFocus()
@@ -432,7 +479,8 @@ func (a *App) keyOwnerView(c *ui.Context) {
 			c.After(16 * time.Millisecond)
 			return
 		}
-		ko.landing, ko.asked = false, ko.asked[:0]
+		ko.asked = ko.asked[:0]
+		a.koSet(koIdle, "sheet")
 		c.Invalidate()
 		return
 	}
@@ -446,7 +494,8 @@ func (a *App) keyOwnerView(c *ui.Context) {
 		c.After(16 * time.Millisecond)
 		return
 	}
-	ko.landing, ko.asked = false, ko.asked[:0]
+	ko.asked = ko.asked[:0]
+	a.koSet(koIdle, "land")
 	if owned {
 		// The holds of the switch or the scratch are the pane's, not the
 		// sheet's: they go, and the keys after the sheet closes go where
@@ -934,5 +983,5 @@ func seqNote(seq uint64) string {
 // as the user's choice would move the target back, and the two would swap
 // the focus each frame.
 func (a *App) ownerAsked(pane string) bool {
-	return a.ko.landing && slices.Contains(a.ko.asked, pane)
+	return a.ko.phase == koLanding && slices.Contains(a.ko.asked, pane)
 }

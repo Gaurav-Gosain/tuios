@@ -61,7 +61,14 @@ func (a *App) pendingInput(c *ui.Context, id string) {
 func (a *App) flushTypeahead(id string, e *termEntry) {
 	b := a.early[id]
 	delete(a.early, id)
-	if len(b) > 0 && e.stream != nil {
+	switch {
+	case len(b) == 0:
+	case e.term != nil && e.gate != nil:
+		// Through the terminal's own input queue, before what is typed
+		// into the terminal from now: written on a goroutine of its own,
+		// they could come after it (design-G, G3).
+		e.gate.sendPast(e.term, b)
+	case e.stream != nil:
 		go func() {
 			if _, err := e.stream.Write(b); err != nil {
 				a.update(func() { a.toast(locales.ToastTypeaheadLost(err.Error())) })
