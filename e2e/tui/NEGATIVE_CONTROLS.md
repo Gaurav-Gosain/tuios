@@ -15527,3 +15527,30 @@ Run on 2026-11-08 on macOS (arm64). The branch passes, and so does
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestReadyToMergeAnswerStaysWithItsCard$' -v .`.
+
+## TestAutoDispatchFailedStartsLeaveNothingBehind
+
+State machine plan S4. On an auto board an agent errors while it holds its
+card: the card must stay with it, blocked with its last line, one attempt
+more, and no second agent may start for it. Once its pane closes, the card
+goes back to todo and auto starts it again. A start whose agent never comes
+up (a stand-in codex that sleeps, a 3 s ready timeout) must leave no session,
+worktree or agent process. The errored agent counts one failure, so the
+board is not stopped at the end. `TestPullDispatchGivesTheNextCard` and
+`TestCardLifecycleCountsOnAPullBoard` now expect the errored card blocked and
+held, and back in todo once let go.
+
+Run on 2026-11-08 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (95b2da88d) | "a second agent started for t1 beside the first, in api-task-fix-the-retry-2", "t1 after its agent errored is ... want held by the first agent" | **caught** |
+| No cleanup of a failed start (the remove-worktree defer in autoStart returns at once) | "the session auto made for t2 is still there", "the worktree ... is still there", "the agent auto started for t2 still runs" | **caught** |
+| The release keeps the errored block (`blockedOnErrored` branch in `release` off) | "t1 was not started again after its errored agent's pane closed" | **caught** |
+| The errored block counts a failure (the `taskBlockErrored` return in noteDispatchedOutcome off) | "the board stopped, so one errored agent counted more than one failure" | **caught** |
+
+Not covered by the e2e: the block lifting when the errored agent reports
+working again (unblockErrored).
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAutoDispatchFailedStartsLeaveNothingBehind$' -v .`.
