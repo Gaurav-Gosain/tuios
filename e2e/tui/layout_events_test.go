@@ -336,8 +336,10 @@ $T zoom-window -w "$X" --on
 	if l.ID == "" || x.ID == "" {
 		t.Fatalf("the splits made no logs and tests panes: %v", rows)
 	}
-	if l.Cwd != agentDir {
-		t.Errorf("ASSERTION: the split started in %q, want the agent's folder %s", l.Cwd, agentDir)
+	// The script cds by the path t.TempDir() gave, which on macOS goes
+	// through the /var link. The daemon reports the folder the kernel names.
+	if want := resolvedPath(t, agentDir); l.Cwd != want {
+		t.Errorf("ASSERTION: the split started in %q, want the agent's folder %s", l.Cwd, want)
 	}
 	if !x.Zoomed {
 		t.Errorf("ASSERTION: tests is not zoomed with no client attached: %+v", x)

@@ -862,6 +862,19 @@ func waitForAll(t *testing.T, term *tuitest.Terminal, timeout time.Duration, wha
 	}
 }
 
+// resolvedPath is p with every symlink in it resolved. The daemon reads a
+// pane's folder from the kernel, which names the folder by its real path. On
+// macOS t.TempDir() is under /var, a link to /private/var, so a test that
+// compares a pane's folder with a folder it made compares the real paths.
+func resolvedPath(t *testing.T, p string) string {
+	t.Helper()
+	real, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		t.Fatalf("resolve %s: %v", p, err)
+	}
+	return real
+}
+
 // tuiosCLI runs a tuios subcommand (ls, send-keys, ...) against the daemon
 // living under an isolation root, and returns its combined output.
 func tuiosCLI(t *testing.T, base string, args ...string) (string, error) {
