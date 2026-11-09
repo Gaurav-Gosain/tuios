@@ -1389,6 +1389,9 @@
   "tmlAskRun": "This surface wants to run {verb}.",
   "tmlRequired": "Fill in every required field first.",
   "tmlTooManyActions": "One press can run at most {count} pane actions. Nothing ran.",
+  "tmlImageUnreadable": "guios cannot read this image.",
+  "tmlImageTooLarge": "This image is too large to show.",
+  "tmlMermaidFailed": "guios cannot draw this diagram: {reason}",
   "cockpitNoChanges": "No changes",
   "cockpitFilesChanged": "{count, plural, one {# file changed} other {# files changed}}",
   "@cockpitFilesChanged": {

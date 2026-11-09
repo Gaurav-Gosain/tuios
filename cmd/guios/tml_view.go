@@ -62,6 +62,12 @@ type tmlView struct {
 	confirmed map[string]bool
 	// toasts are when each toast with a ttl first showed (tml_data.go).
 	toasts map[string]time.Time
+	// maps are the drawn world maps and medias the decoded images and
+	// drawn diagrams (tml_chart.go, tml_media.go).
+	maps   map[string]tmlMap
+	medias map[string]*tmlMedia
+	// scale is the last scale a diagram was painted at.
+	scale float32
 }
 
 // tmlCellW and tmlCellH are a terminal cell in DIPs, at the code font.
@@ -430,6 +436,12 @@ func (r *tmlDraw) node(n *tml.Node, ptr string, vars map[string]any) {
 		r.input(n, ptr, vars)
 	case "list", "table", "tree", "tabs", "modal", "toast", "split":
 		r.dataNode(n, ptr, vars)
+	case "bar", "line", "area", "sparkline", "gauge", "histogram", "heatmap", "map", "pie":
+		r.chart(n, ptr, vars)
+	case "image":
+		r.image(n, ptr, vars)
+	case "mermaid":
+		r.mermaid(n, ptr, vars)
 	default:
 		ui.Text(c.Key(ptr), locales.TmlNotDrawn(n.Type)).FontSize(fsSmall).TextColor(pal.textFaint)
 	}
@@ -590,6 +602,10 @@ func (r *tmlDraw) role(name string, def ui.Color) ui.Color {
 		return pal.textFaint
 	case "accent", "accent-bright", "info", "series1":
 		return pal.accent
+	case "series5":
+		return pal.accent.Mix(pal.danger, 0.5)
+	case "series6":
+		return pal.done.Mix(pal.accent, 0.5)
 	case "success", "series2":
 		return pal.done
 	case "warning", "attention", "busy", "series3":

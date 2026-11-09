@@ -102,6 +102,9 @@ type App struct {
 	tmls map[string]*tmlView
 	// tmlSent, set in tests, takes each tml-input in place of the daemon.
 	tmlSent func(map[string]any)
+	// tmlWork, set in tests, runs a surface's image decode or diagram
+	// draw in place of a goroutine.
+	tmlWork func(work func() func())
 	// diffClip is the view a diff page shows its diffs in, in window DIPs
 	// of the last frame, while the page builds them: diffView builds only
 	// the lines in it. Empty builds every line.

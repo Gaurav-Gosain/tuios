@@ -7882,6 +7882,36 @@ func (msgs Messages) TmlTooManyActions(count string) string {
 	return Catalog.Format(msgs.locale, "tmlTooManyActions", map[string]any{"count": count})
 }
 
+// TmlImageUnreadable says "guios cannot read this image."
+// in the language the app shows.
+func TmlImageUnreadable() string { return In(i18n.Locale()).TmlImageUnreadable() }
+
+// TmlImageUnreadable says "guios cannot read this image."
+// in the language of msgs.
+func (msgs Messages) TmlImageUnreadable() string {
+	return Catalog.Format(msgs.locale, "tmlImageUnreadable", nil)
+}
+
+// TmlImageTooLarge says "This image is too large to show."
+// in the language the app shows.
+func TmlImageTooLarge() string { return In(i18n.Locale()).TmlImageTooLarge() }
+
+// TmlImageTooLarge says "This image is too large to show."
+// in the language of msgs.
+func (msgs Messages) TmlImageTooLarge() string {
+	return Catalog.Format(msgs.locale, "tmlImageTooLarge", nil)
+}
+
+// TmlMermaidFailed says "guios cannot draw this diagram: {reason}"
+// in the language the app shows.
+func TmlMermaidFailed(reason string) string { return In(i18n.Locale()).TmlMermaidFailed(reason) }
+
+// TmlMermaidFailed says "guios cannot draw this diagram: {reason}"
+// in the language of msgs.
+func (msgs Messages) TmlMermaidFailed(reason string) string {
+	return Catalog.Format(msgs.locale, "tmlMermaidFailed", map[string]any{"reason": reason})
+}
+
 // CockpitNoChanges says "No changes"
 // in the language the app shows.
 func CockpitNoChanges() string { return In(i18n.Locale()).CockpitNoChanges() }
