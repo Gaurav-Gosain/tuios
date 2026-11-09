@@ -490,7 +490,7 @@ func (c *Client) split(p proto.CreateParams) (proto.Session, error) {
 		// layoutOf puts the pane in the tree when it shows up, as the
 		// TUI's insertSyncedWindow does with its pending split.
 		c.st.mu.Lock()
-		c.st.pending[sid] = pendingSplit{target: beside, dir: preselection(dirn), at: time.Now()}
+		c.st.pending[sid] = pendingSplit{target: beside, side: dirn, at: time.Now()}
 		c.st.mu.Unlock()
 	}
 	if p.Cols > 0 && p.Rows > 0 && p.Host == "" {

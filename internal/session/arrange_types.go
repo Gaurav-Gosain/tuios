@@ -68,6 +68,11 @@ type ArrangeParams struct {
 	At      *ArrangeRect `json:"at,omitempty"`
 	Ratio   float64      `json:"ratio,omitempty"`
 	Delta   int          `json:"delta,omitempty"`
+	// For place: the split the client asked for (Asked, Target, Mode the
+	// side), else Target the pane the focus was on before the new panes,
+	// and Slot where the one new pane tiled before it floated.
+	Asked bool       `json:"asked,omitempty"`
+	Slot  *FloatSlot `json:"slot,omitempty"`
 }
 
 // VerbCaller runs one of the daemon's verbs and returns its JSON result: the

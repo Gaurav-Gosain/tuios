@@ -16322,3 +16322,20 @@ passes 4 of 4.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestArrangeVerb$' -v .`.
+
+## TestArrangePlace
+
+The daemon puts a pane its split tree lacks into the tree (the arrange verb's
+place op, `internal/session/arrange_place.go`), on the side the caller asked
+for. With no client, two split panes get a third from new-window, which the
+tree lacks; place below the first pane must put it there.
+
+Run on 2026-11-09 on macOS (arm64), as the Atlas helper user. The branch
+passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| No place op in the engine | "arrange place: exit status 1" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestArrangePlace$' -v .`.

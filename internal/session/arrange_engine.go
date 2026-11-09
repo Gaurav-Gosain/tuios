@@ -570,6 +570,8 @@ func (e *engine) run(p ArrangeParams) error {
 		return e.moveBeside(p.Pane, p.Target, p.Mode)
 	case "split.ratio":
 		return e.splitRatio(p.Pane, p.Target, p.Ratio)
+	case "place":
+		return e.place(p)
 	}
 	return errors.New("no such layout change: " + p.Op)
 }
@@ -1135,4 +1137,25 @@ func (e *engine) splitRatio(pane, target string, ratio float64) error {
 		return e.writeTree(t, leaves)
 	}
 	return nil
+}
+
+// place puts the tiled panes the workspace's tree lacks into it, by tuios's
+// rules (PlaceMissing), with what the client knows of them in p, and writes
+// the tree. A TUI on the session places such panes itself.
+func (e *engine) place(p ArrangeParams) error {
+	if e.ti.Mode() != ArrangeModeBSP || e.ti.TUI {
+		return nil
+	}
+	pc := PlaceContext{Asked: p.Asked, Target: p.Target, Side: p.Mode}
+	if !p.Asked {
+		pc.Prev = p.Target
+	}
+	if p.Slot != nil && p.Pane != "" {
+		pc.Slots = map[string]FloatSlot{p.Pane: *p.Slot}
+	}
+	tree, leaves, changed, _ := PlaceMissing(e.ti, e.wins, e.focus, pc)
+	if !changed || tree.IsEmpty() {
+		return nil
+	}
+	return e.writeTree(tree, leaves)
 }

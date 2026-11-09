@@ -139,7 +139,7 @@ func (c *Client) arrangeOp(p proto.ArrangeParams) (proto.ArrangeResult, error) {
 		if !cur.UseTree || cur.Tree == nil {
 			return
 		}
-		if slot, ok := slotOf(cur.Tree.Root, cur.Leaves, pane); ok {
+		if slot, ok := session.SlotOf(cur.Tree.Root, cur.Leaves, pane); ok {
 			c.st.mu.Lock()
 			c.st.floated[pane] = slot
 			c.st.mu.Unlock()
