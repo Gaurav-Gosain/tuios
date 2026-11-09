@@ -16079,3 +16079,26 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestLeaderTakesTheCharacterAnOptionChordTyped$' -v .`.
+
+## TestGuiosReapClosesOnlyExitedPanes
+
+The guios client (internal/guios/client) closes the window of a pane whose
+program exited, and only that one: a live pane and a keep_open pane stay.
+Every close writes a log line with the window, its PTY and the exit code.
+On 2026-11-09 a live claude pane vanished twice right after a guios showed
+its session.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The client of guios/land (59d71b2e5) | "no log line names the close" | **caught** (the old client closes the exited pane too, with no line) |
+| Every window counted exited | "no log line names the close" (the client ends the whole session, live pane included) | **caught** |
+| No reap | "the pane whose program exited was not closed" | **caught** |
+
+Not covered: a window-exit event that names a live window, which the old
+client took as that window's exit. No daemon path makes one on demand, so
+the test cannot send one; the branch no longer reads the event at all.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestGuiosReapClosesOnlyExitedPanes$' -v .`.
