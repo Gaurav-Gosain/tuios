@@ -2382,5 +2382,20 @@
   "sidebarMinimized": "Minimized · {count}",
   "sidebarRestorePane": "Restore {name}",
   "sidebarMinimizedTip": "Panes minimized on this workspace. Click one to restore it.",
-  "workspaceMinimized": "{count} minimized"
+  "workspaceMinimized": "{count} minimized",
+  "actionLayoutSave": "Save layout…",
+  "actionLayoutLoad": "Load layout…",
+  "promptSaveLayout": "Save layout",
+  "promptSaveLayoutDetail": "Keeps the panes of this workspace, their names, folders and splits, under a name. Load layout… puts them back.",
+  "promptSaveLayoutPlaceholder": "Layout name",
+  "layoutsLabel": "Load layout",
+  "layoutsNone": "There are no saved layouts. Save one with Layout › Save layout….",
+  "layoutPanes": "{count, plural, one {# pane} other {# panes}}",
+  "layoutLoad": "Load",
+  "layoutDelete": "Delete",
+  "confirmDeleteLayout": "Delete the layout {name}?",
+  "confirmDeleteLayoutDetail": "The layout's file is removed. The panes that show now stay.",
+  "toastLayoutSaved": "Saved layout {name}",
+  "toastLayoutLoaded": "Loaded layout {name}",
+  "toastLayoutDeleted": "Deleted layout {name}"
 }

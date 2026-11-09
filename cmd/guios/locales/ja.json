@@ -1353,5 +1353,20 @@
   "sidebarMinimized": "最小化 · {count}",
   "sidebarRestorePane": "{name} を元に戻す",
   "sidebarMinimizedTip": "このワークスペースで最小化したペインです。クリックすると元に戻ります。",
-  "workspaceMinimized": "最小化 {count}"
+  "workspaceMinimized": "最小化 {count}",
+  "actionLayoutSave": "レイアウトを保存…",
+  "actionLayoutLoad": "レイアウトを読み込む…",
+  "promptSaveLayout": "レイアウトを保存",
+  "promptSaveLayoutDetail": "このワークスペースのペイン、その名前、フォルダ、分割を名前を付けて保存します。「レイアウトを読み込む…」で元に戻せます。",
+  "promptSaveLayoutPlaceholder": "レイアウト名",
+  "layoutsLabel": "レイアウトを読み込む",
+  "layoutsNone": "保存されたレイアウトはありません。レイアウト › レイアウトを保存… で保存できます。",
+  "layoutPanes": "{count, plural, other {# 個のペイン}}",
+  "layoutLoad": "読み込む",
+  "layoutDelete": "削除",
+  "confirmDeleteLayout": "レイアウト {name} を削除しますか?",
+  "confirmDeleteLayoutDetail": "レイアウトのファイルが削除されます。いま表示されているペインはそのまま残ります。",
+  "toastLayoutSaved": "レイアウト {name} を保存しました",
+  "toastLayoutLoaded": "レイアウト {name} を読み込みました",
+  "toastLayoutDeleted": "レイアウト {name} を削除しました"
 }

@@ -16885,3 +16885,19 @@ Run on 2026-11-10 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTheLayoutPickerListsTheDaemonsLayouts$' -v .`.
+
+## TestGuiosSavesAndLoadsALayout
+
+The guios client, with no window, saves a two-pane workspace through
+layout.save, closes the second pane, loads the layout through layout.load,
+lists it (two panes and its time) and deletes it. The daemon holds a new
+second pane with its name and folder, and the file is gone.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The branch with the client's layout.* case taken out of its dispatch | "layout.save: unknown method \"layout.save\"" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestGuiosSavesAndLoadsALayout$' -v .`.

@@ -129,6 +129,10 @@ func (a *App) run(id string, args map[string]string) {
 		a.arrange(s, "tiling", nil)
 	case "layout.rotate":
 		a.arrange(s, "rotate", nil)
+	case "layout.save":
+		a.saveLayout()
+	case "layout.load":
+		a.openLayouts()
 	case "layout.equalize":
 		a.arrange(s, "equalize", nil)
 	case "layout.float":
@@ -268,6 +272,8 @@ var actionTitles = map[string]func() string{
 	"layout.tiling":           locales.ActionLayoutTiling,
 	"layout.rotate":           locales.ActionLayoutRotate,
 	"layout.equalize":         locales.ActionLayoutEqualize,
+	"layout.save":             locales.ActionLayoutSave,
+	"layout.load":             locales.ActionLayoutLoad,
 	"layout.float":            locales.ActionLayoutFloat,
 	"layout.master.position":  locales.ActionLayoutMasterPosition,
 	"layout.master.add":       locales.ActionLayoutMasterAdd,
@@ -381,7 +387,8 @@ var layoutModes = map[string]string{
 func (a *App) layoutMenu() []*mygo.MenuItem {
 	items := a.items("Layout",
 		[]string{"layout.bsp", "layout.master", "layout.scrolling", "layout.floating", "layout.next", "layout.tiling"},
-		[]string{"layout.rotate", "layout.equalize", "layout.float"})
+		[]string{"layout.rotate", "layout.equalize", "layout.float"},
+		[]string{"layout.save", "layout.load"})
 	return append(items, mygo.Separator(),
 		&mygo.MenuItem{Label: locales.MenuLayoutMaster(), Submenu: a.items("Layout",
 			[]string{"layout.master.position", "layout.master.add", "layout.master.remove", "layout.master.swap", "layout.master.focus"})},

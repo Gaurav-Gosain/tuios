@@ -70,6 +70,8 @@ type paletteItem struct {
 	// danger marks a command that ends or deletes something: its title
 	// is in the danger colour.
 	danger bool
+	// menu, when set, is the row's context menu.
+	menu func(*ui.Menu)
 }
 
 // paletteDanger are the commands that end or delete something.
@@ -678,6 +680,9 @@ func (a *App) paletteView(c *ui.Context, pal *palette) {
 			}
 			if row.Clicked() {
 				chosen = it.run
+			}
+			if it.menu != nil {
+				row.ContextMenu(it.menu)
 			}
 			row.Children(func() {
 				switch kind {
