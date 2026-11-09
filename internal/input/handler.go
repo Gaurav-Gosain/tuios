@@ -261,7 +261,7 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 
 	// Sync state to daemon after any input that might have changed state
 	// This ensures state persists across reconnects without explicit save
-	if o.IsDaemonSession {
+	if o.IsDaemonSession && !o.TakeIntentSent() {
 		o.SyncStateToDaemon()
 	}
 
