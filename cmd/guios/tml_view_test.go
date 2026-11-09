@@ -42,6 +42,26 @@ func TestTMLDrawsWhatLoomDraws(t *testing.T) {
     <badge role="warning">three running</badge>
   </col>
 </tml>`,
+		"data": `<tml version="1" title="Tests">
+  <state>{"tab": "fail", "rows": [{"pkg": "session", "ms": 2210}, {"pkg": "app", "ms": 840}, {"pkg": "vt", "ms": 120}],
+    "tree": [{"label": "internal", "children": [{"label": "session"}, {"label": "app"}]}, {"label": "vt"}], "names": ["alpha", "beta"]}</state>
+  <col gap="1">
+    <tabs value="state.tab">
+      <tab id="fail" title="Failures">
+        <table rows="state.rows" sort="ms:desc">
+          <column field="pkg" title="Package"/>
+          <column field="ms" title="Time" format="value / 1000"/>
+        </table>
+      </tab>
+      <tab id="other" title="Other"><text>other tab words</text></tab>
+    </tabs>
+    <tree items="state.tree" open="1"/>
+    <list items="state.names" as="name"><text>name {name}</text></list>
+    <toast role="success">Saved</toast>
+    <split ratio="0.4"><text>left side</text><text>right side</text></split>
+    <modal title="Confirm" open="true"><text>modal body</text></modal>
+  </col>
+</tml>`,
 		"kv": `<tml version="1" title="Release">
   <state>{"tag": "v0.12.2", "date": "2026-11-09"}</state>
   <kv>
@@ -66,10 +86,16 @@ func TestTMLDrawsWhatLoomDraws(t *testing.T) {
 			}
 			cells := s.Render(100, 30).String()
 			got := strings.Join(guiosTexts(t, doc), " ")
+			// Case is the drawing's: loom writes a table's headers in
+			// capitals, as a terminal has no bold to set them apart.
+			lower := strings.ToLower(got)
 			for _, w := range word.FindAllString(cells, -1) {
-				if !strings.Contains(got, strings.TrimRight(w, ".:")) {
+				if !strings.Contains(lower, strings.ToLower(strings.TrimRight(w, ".:"))) {
 					t.Errorf("ASSERTION: loom shows %q, guios does not.\nloom:\n%s\nguios: %s", w, cells, got)
 				}
+			}
+			if strings.Contains(got, "other tab words") {
+				t.Errorf("ASSERTION: guios drew a tab that is not open")
 			}
 			if strings.Contains(got, "hidden words") {
 				t.Errorf("ASSERTION: guios drew a node whose if is false")
@@ -210,3 +236,66 @@ func click(t *testing.T, tt *ui.Tester, text string) {
 }
 
 func jsonMarshal(v any) ([]byte, error) { return json.Marshal(v) }
+
+// TestTMLDataViewsActAsLoom: a header click sorts a table, a tab click opens
+// the tab and sends its value, and a list pick runs on-select, each as in
+// loom.
+func TestTMLDataViewsActAsLoom(t *testing.T) {
+	doc, _, err := tml.Check([]byte(`<tml version="1">
+  <state>{"tab": "a", "rows": [{"pkg": "b-pkg", "ms": 1}, {"pkg": "a-pkg", "ms": 2}], "names": ["one", "two"]}</state>
+  <col gap="1">
+    <tabs value="state.tab">
+      <tab id="a" title="First"><table rows="state.rows"><column field="pkg" title="Package"/><column field="ms" title="Time"/></table></tab>
+      <tab id="b" title="Second"><text>second open</text></tab>
+    </tabs>
+    <list items="state.names" as="name" select="single" on-select="emit('picked', event.value)"><text>pick {name}</text></list>
+  </col>
+</tml>`), nil)
+	if err != nil {
+		t.Fatalf("the document does not check: %v", err)
+	}
+	a, v := tmlApp(t, doc)
+	var sent []string
+	a.tmlSent = func(p map[string]any) {
+		b, _ := jsonMarshal(p)
+		sent = append(sent, string(b))
+	}
+	tester := ui.NewTester(func(c *ui.Context) {
+		a.paneTML(c, paletteFor(c), &proto.Pane{Surface: "s1"})
+	}, 800, 600)
+	tester.Frame()
+	order := func() string {
+		var out []string
+		for _, s := range tester.Texts() {
+			if strings.HasSuffix(s, "-pkg") {
+				out = append(out, s)
+			}
+		}
+		return strings.Join(out, ",")
+	}
+	if got := order(); got != "b-pkg,a-pkg" {
+		t.Fatalf("the rows start as %s, want the state's order b-pkg,a-pkg", got)
+	}
+	click(t, tester, "Package")
+	if got := order(); got != "a-pkg,b-pkg" {
+		t.Errorf("ASSERTION: after a click on the header the rows are %s, want a-pkg,b-pkg", got)
+	}
+	click(t, tester, "Package ↑")
+	if got := order(); got != "b-pkg,a-pkg" {
+		t.Errorf("ASSERTION: after a second click the rows are %s, want b-pkg,a-pkg", got)
+	}
+	if v.view.Sort["/children/1/children/0/children/0/children/0"].Field == "" && len(v.view.Sort) == 0 {
+		t.Errorf("ASSERTION: the sort is not in the view state")
+	}
+	click(t, tester, "Second")
+	if !tester.HasText("second open") {
+		t.Errorf("ASSERTION: the second tab did not open: %v", tester.Texts())
+	}
+	click(t, tester, "pick two")
+	all := strings.Join(sent, "\n")
+	for _, w := range []string{`"ops":[{"op":"add","path":"/tab","value":"b"}]`, `"events":[{"name":"picked","value":"two"}]`} {
+		if !strings.Contains(all, w) {
+			t.Errorf("ASSERTION: no tml-input with %s. It sent:\n%s", w, all)
+		}
+	}
+}

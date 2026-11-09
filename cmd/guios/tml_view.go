@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Gaurav-Gosain/mygo/ui"
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
@@ -59,6 +60,8 @@ type tmlView struct {
 	// the ones the person said yes to.
 	ask       *tmlAsk
 	confirmed map[string]bool
+	// toasts are when each toast with a ttl first showed (tml_data.go).
+	toasts map[string]time.Time
 }
 
 // tmlCellW and tmlCellH are a terminal cell in DIPs, at the code font.
@@ -425,6 +428,8 @@ func (r *tmlDraw) node(n *tml.Node, ptr string, vars map[string]any) {
 		})
 	case "form", "button", "checkbox", "toggle", "input", "textarea", "select", "slider":
 		r.input(n, ptr, vars)
+	case "list", "table", "tree", "tabs", "modal", "toast", "split":
+		r.dataNode(n, ptr, vars)
 	default:
 		ui.Text(c.Key(ptr), locales.TmlNotDrawn(n.Type)).FontSize(fsSmall).TextColor(pal.textFaint)
 	}
