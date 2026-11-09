@@ -1,6 +1,7 @@
 package main
 
 import (
+	"maps"
 	"sync"
 	"time"
 
@@ -34,6 +35,13 @@ var leaseHold struct {
 	until   time.Time
 	pending map[*gated]heldAsk
 	timer   *time.Timer
+	// deferred are asks from a frame of a move, with no end grid to send
+	// in their place: they wait for a frame at rest (released). A terminal
+	// asks only when its grid changes, so one that asks nothing in that
+	// frame is at the size it last asked for, and that goes out then.
+	deferred map[*gated][4]int
+	// released says the frame a move ends in was built (releaseLeases).
+	released bool
 }
 
 // heldAsk is a terminal's ask held, and whether a frame at rest made it.
@@ -68,6 +76,7 @@ func holdLeases(d time.Duration) {
 func releaseLeases() {
 	leaseHold.mu.Lock()
 	defer leaseHold.mu.Unlock()
+	leaseHold.released = true
 	leaseHold.until = time.Now().Add(leaseSettle)
 	if leaseHold.timer == nil {
 		leaseHold.timer = time.AfterFunc(leaseSettle, flushLeases)
@@ -105,14 +114,36 @@ func flushLeases() {
 	}
 	held := leaseHold.pending
 	leaseHold.pending = nil
-	leaseHold.mu.Unlock()
+	if leaseHold.deferred == nil {
+		leaseHold.deferred = map[*gated][4]int{}
+	}
+	deferred := leaseHold.deferred
+	send := map[*gated][4]int{}
 	for g, h := range held {
-		l := h.l
-		if end, ok := g.endFor(); ok && !h.rest {
-			// Asked from a frame of the move: the pane's end grid,
-			// sent as the move began, stands (end_lease.go).
-			l = end
+		delete(deferred, g)
+		if h.rest {
+			send[g] = h.l
+			continue
 		}
+		// Asked from a frame of the move: the pane's end grid, sent as the
+		// move began, stands (end_lease.go). With none known the ask is
+		// the move's size, as small as a new pane's first sliver (6
+		// columns, 1 row), and with no frame after it (a window behind
+		// another, which builds none) a shell drew its prompt there. It
+		// waits for a frame at rest instead (gm.md).
+		if end, ok := g.endFor(); ok {
+			send[g] = end
+		} else {
+			deferred[g] = h.l
+		}
+	}
+	if leaseHold.released {
+		maps.Copy(send, deferred)
+		clear(deferred)
+		leaseHold.released = false
+	}
+	leaseHold.mu.Unlock()
+	for g, l := range send {
 		_ = g.send(l)
 	}
 }
@@ -125,6 +156,9 @@ func (g *gated) ResizePixels(cols, rows, cellW, cellH int) error {
 	if heldLease(g, l, !tilesMoving.Load()) {
 		return nil
 	}
+	leaseHold.mu.Lock()
+	delete(leaseHold.deferred, g)
+	leaseHold.mu.Unlock()
 	return g.send(l)
 }
 

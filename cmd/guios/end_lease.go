@@ -42,6 +42,9 @@ type leaseMath struct {
 	sent map[string]string
 	// pending are end grids of panes with no stream yet, sent on attach.
 	pending map[string][2]int
+	// restBefore says the last frame laid the tiles out at rest, so the
+	// terminals' bounds it left are the ones a frame at rest shows.
+	restBefore bool
 }
 
 // cellPx is the terminals' cell in pixels, as the last ask gave it.

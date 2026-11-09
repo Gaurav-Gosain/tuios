@@ -384,9 +384,15 @@ func (a *App) tiled(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32,
 	if b.W > 0 && zoomed == "" && len(hidden) == 0 && g == nil {
 		// The end boxes' grids go out as the move begins, not its first
 		// frame's (end_lease.go); a frame at rest teaches the math.
-		if !moving {
+		// A terminal's bounds are those of the last frame built. In the
+		// first frame at rest after a move that is the move's first frame,
+		// where a new pane was a sliver, and the chrome learned from it came
+		// out as most of the tile: the end grids were 6 columns (gm.md). So
+		// only a frame at rest after one at rest teaches.
+		if !moving && a.lease.restBefore {
 			a.learnTiles(c, s.ID, target, ew, eh, right)
 		}
+		a.lease.restBefore = !moving
 		if !a.side.sliding && a.slides[s.ID] == nil {
 			a.sendEndGrids(s.ID, target, ew, eh, right)
 		}
