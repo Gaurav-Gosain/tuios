@@ -766,6 +766,7 @@
   "cockpitQueueFull": "{name} の待機キューがいっぱいです。メッセージを削除するか、{name} が受け取るまで待ってください。",
   "cockpitQueuedFor": "{name} 宛てに待機中です。休止したときに受け取ります。",
   "cockpitSendNotes": "メモをエージェントに送る",
+  "cockpitDiffCut": "変更された {count} 行は表示されません。この表示には多すぎます。",
   "cockpitNoChanges": "変更はありません",
   "cockpitFilesChanged": "{count} 個のファイルを変更",
   "cockpitAgainst": "{base} との差分",
