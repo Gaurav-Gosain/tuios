@@ -78,3 +78,20 @@ func ExampleRunActions() {
 	// 2 [/n]
 	// emit bumped 2
 }
+
+// SortRows and FilterRows order and narrow a table's rows as a Surface does,
+// for a host that draws the table itself.
+func ExampleSortRows() {
+	rows := []any{
+		map[string]any{"pkg": "vt", "ms": 120.0},
+		map[string]any{"pkg": "app", "ms": 840.0},
+		map[string]any{"pkg": "session", "ms": 2210.0},
+	}
+	spec, _ := loom.ParseSort("ms:desc")
+	for _, r := range loom.SortRows(loom.FilterRows(rows, "1"), spec) {
+		fmt.Println(r.(map[string]any)["pkg"])
+	}
+	// Output:
+	// session
+	// vt
+}

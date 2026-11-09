@@ -91,6 +91,19 @@ func RunActions(doc *tml.Node, store *tml.Store, view *View, source string, acti
 	return runActions(doc, store, view, source, actions, env)
 }
 
+// ParseSort parses a table's sort attribute: field, field:asc or
+// field:desc. ok is false for any other text.
+func ParseSort(s string) (spec SortSpec, ok bool) { return parseSort(s) }
+
+// SortRows returns a table's rows sorted by spec, as a Surface sorts them:
+// stably, numbers by value, strings without regard to case, and rows that
+// lack the field last.
+func SortRows(rows []any, spec SortSpec) []any { return sortRows(rows, spec) }
+
+// FilterRows returns the rows that hold text in any field, without regard
+// to case, as a Surface filters a table.
+func FilterRows(rows []any, text string) []any { return filterRows(rows, text) }
+
 // runActions runs the actions of one attribute. source is the JSON Pointer
 // of the node that holds the attribute; sort without a table id and tab use
 // it to find their target. env supplies event, form and the other roots;
