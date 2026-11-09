@@ -583,6 +583,9 @@ func (m *OS) startThreadWatch(t *agentThread) tea.Cmd {
 		}, threadReadTimeout); err != nil {
 			return
 		}
+		// Catch up from the kept cursor after subscribing.
+		ch <- threadGrewMsg{key: key}
+		// Follow subsequent transcript changes until the subscription ends.
 		for ctx.Err() == nil {
 			if _, err := client.ReadEventLine(0); err != nil {
 				return
