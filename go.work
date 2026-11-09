@@ -27,4 +27,4 @@ replace tuios.dev/shot v0.2.2-0.20261108190511-f7dea1948570 => ./shot
 
 replace tuios.dev/vt v0.3.3-0.20261108225514-f94072158ac9 => ./vt
 
-replace tuios.dev/loom v0.2.3-0.20261109104706-2c068fc8fa93 => ./loom
+replace tuios.dev/loom v0.2.3-0.20261109111216-ac9ad5f5c246 => ./loom
