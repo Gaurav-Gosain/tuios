@@ -750,7 +750,7 @@ func (m *OS) renderCopyDialog() (string, overlay.Geometry, []overlayRowHit) {
 	d := m.transfers.dialog
 	pal := m.overlayUI()
 	bg := pal.Canvas
-	width := overlay.DialogFitWidth(copyDialogWidth, m.GetRenderWidth())
+	width := overlay.DialogFitWidth(copyDialogWidth, m.modalRoomWidth())
 
 	var body []string
 	for i, l := range d.lines() {

@@ -159,7 +159,7 @@ func (d *Daemon) readiness(cs *connState, p readinessParams) (readinessAnswer, *
 			continue
 		}
 		i, launch := len(out)-1, &m.Launch
-		wg.Go(func() { out[i].SignedIn = signedIn(m.ID, path, launch) })
+		wg.Go(func() { out[i].SignedIn = signedIn(d.ctx, m.ID, path, launch) })
 	}
 	wg.Wait()
 	sort.Slice(out, func(a, b int) bool { return out[a].Harness < out[b].Harness })
@@ -167,8 +167,10 @@ func (d *Daemon) readiness(cs *connState, p readinessParams) (readinessAnswer, *
 	return ans, nil
 }
 
-// signedIn is the harness's answer, from the cache when it is fresh.
-func signedIn(id, path string, l *harness.Launch) string {
+// signedIn is the harness's answer, from the cache when it is fresh. ctx is
+// the daemon's: a check still running when the daemon stops is killed, and
+// its answer is not kept.
+func signedIn(ctx context.Context, id, path string, l *harness.Launch) string {
 	key := id + "\x00" + path
 	readinessCache.Lock()
 	if readinessCache.m == nil {
@@ -184,17 +186,24 @@ func signedIn(id, path string, l *harness.Launch) string {
 	readinessCache.m[key] = e
 	readinessCache.Unlock()
 
-	answer := runSignedInCheck(path, l)
+	answer := runSignedInCheck(ctx, path, l)
 	readinessCache.Lock()
 	e.answer, e.at = answer, time.Now()
+	if ctx.Err() != nil {
+		// Cut short by the stop: nothing was learned.
+		delete(readinessCache.m, key)
+	}
 	readinessCache.Unlock()
 	close(e.done)
 	return answer
 }
 
-// runSignedInCheck runs the check once.
-func runSignedInCheck(path string, l *harness.Launch) string {
-	ctx, cancel := context.WithTimeout(context.Background(), readinessCheckTimeout)
+// runSignedInCheck runs the check once, under parent: the harness's program
+// is killed when parent ends, so a daemon that stops leaves no check running
+// after it. A check left running wrote the harness's own files (Claude Code's
+// ~/.claude.json) after its daemon was gone.
+func runSignedInCheck(parent context.Context, path string, l *harness.Launch) string {
+	ctx, cancel := context.WithTimeout(parent, readinessCheckTimeout)
 	defer cancel()
 	cmd := childproc.CommandContext(ctx, path, l.SignedInArgs...)
 	cmd.WaitDelay = 500 * time.Millisecond

@@ -3,7 +3,6 @@ package app
 import (
 	"fmt"
 	"image/color"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -1018,20 +1017,7 @@ func (m *OS) getDockItems() []DockItem {
 	if !m.dockPlan.Has(config.DockComponentWindows) {
 		return nil
 	}
-	// Find all minimized/minimizing windows in current workspace
-	dockWindows := []int{}
-	for i, window := range m.Windows {
-		// The hidden scratch terminal is minimized but has no entry: the
-		// scratch key is the way back to it.
-		if window.Workspace == m.CurrentWorkspace && window.Minimized && !window.IsScratch {
-			dockWindows = append(dockWindows, i)
-		}
-	}
-
-	// Sort by minimize order (oldest first)
-	sort.Slice(dockWindows, func(i, j int) bool {
-		return m.Windows[dockWindows[i]].MinimizeOrder < m.Windows[dockWindows[j]].MinimizeOrder
-	})
+	dockWindows := m.MinimizedInOrder()
 
 	// Build dock items
 	items := make([]DockItem, 0, len(dockWindows))

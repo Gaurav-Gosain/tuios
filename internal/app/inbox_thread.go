@@ -118,6 +118,9 @@ type agentThread struct {
 	fallbackAt int64
 	// gen changes when what the thread shows changes, for the drawn lines.
 	gen uint64
+	// echoAsked says the thread asked list-queued for the person's queued
+	// replies, to show them (thread_echo.go).
+	echoAsked bool
 	// body is the conversation's lines as last drawn, and bodyAt what they
 	// were drawn from, so a frame drawn for another reason does not wrap
 	// and style the conversation again.
@@ -191,6 +194,10 @@ type threadBodyKey struct {
 	pics uint64
 	// keep is agentThread.keep.
 	keep int
+	// card is whether the Done card under the thread shows the recap.
+	card bool
+	// echo is the replies' echoes' generation.
+	echo uint64
 }
 
 // threadsState is the threads kept and the transcript subscription.
@@ -304,12 +311,28 @@ func (m *OS) InboxThreadFetch() tea.Cmd {
 		return nil
 	}
 	e, ok := m.cockpitAgent()
-	if !ok || e.Host != "" {
+	if !ok {
 		m.stopThreadWatch()
 		return nil
 	}
 	t := m.thread(e)
 	var cmds []tea.Cmd
+	if e.Host != "" {
+		// The conversation is read on that machine, and the person's
+		// replies queued there show here, from its queue.
+		m.stopThreadWatch()
+		if !t.echoAsked {
+			t.echoAsked = true
+			return m.echoQueueCmd(e.Host, e.SessionID, e.WindowID, printableTitle(e.Title), true)
+		}
+		return nil
+	}
+	if !t.echoAsked {
+		// The person's replies queued for the pane show again, as a new
+		// client or a view opened again finds them.
+		t.echoAsked = true
+		cmds = append(cmds, m.echoQueueCmd(e.Host, e.SessionID, e.WindowID, printableTitle(e.Title), true))
+	}
 	if t.fallback && e.StateAt != t.fallbackAt && !t.loading {
 		// The agent moved on since the daemon had no transcript. The hook
 		// that joins the pane to its file may have run.
@@ -485,6 +508,8 @@ func (m *OS) applyThreadPage(msg threadPageMsg) tea.Cmd {
 	if msg.cursor != "" {
 		t.cursor = msg.cursor
 	}
+	// A reply's own entry has come: its echo goes.
+	m.echoTake(t)
 	if msg.more || t.again {
 		t.again = false
 		t.loading = true
@@ -658,10 +683,10 @@ func (m *OS) applyThreadWatchEnded(msg threadWatchEnded) {
 // threadBody is the thread's text, oldest first: the conversation for a
 // transcript agent, the recap and the mail for the rest. It holds at least
 // the last room lines, and is kept on the thread until what it shows changes.
-func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []string {
+func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time, card bool) []string {
 	t := m.Inbox.threads.byKey[agentKey(e)]
 	if t == nil {
-		return m.threadBodyLines(e, nil, width, room, now)
+		return m.threadBodyLines(e, nil, width, room, now, card)
 	}
 	key := threadBodyKey{
 		gen: t.gen, mailGen: m.AgentMail.Gen, theme: theme.Generation(), look: m.cockpitLookGen(),
@@ -671,6 +696,8 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []s
 		working: e.State == string(session.AgentStateWorking),
 		kids:    m.ckKidsSig(e, t),
 		pics:    m.threadPicsVersion(t),
+		card:    card,
+		echo:    m.Inbox.echoes.gen,
 	}
 	if t.keep == 0 && m.threadReadsTranscript(e) {
 		t.keep = ckKeepTurns
@@ -692,7 +719,12 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []s
 			first = t.lineIDs[0]
 		}
 		t.hits, t.prompts, t.lines, t.lineIDs = nil, nil, nil, nil
-		t.body, t.bodyAt = m.threadBodyLines(e, t, width, room, now), key
+		t.body, t.bodyAt = m.threadBodyLines(e, t, width, room, now, key.card), key
+		if t.body == nil {
+			// An empty body is a body: the cache above takes a nil body
+			// for none, and would draw it again on every turn of the loop.
+			t.body = []string{}
+		}
 		// More turns drawn: the view stays on the lines it showed, or goes
 		// to the first line for a key that asked for it.
 		if at := slices.Index(t.lineIDs, first); kept != 0 && kept != key.keep && at > 0 {
@@ -737,7 +769,7 @@ func (m *OS) threadMinute(e sidebarAgentEntry, now time.Time) int64 {
 // threadBodyLines draws threadBody. A conversation is drawn from its newest
 // entry back, until room lines are drawn: the thread shows the bottom, and
 // two hundred entries wrapped and styled on every change cost milliseconds.
-func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room int, now time.Time) []string {
+func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room int, now time.Time, card bool) []string {
 	pal := theme.UI()
 	bg := pal.Canvas
 	st := overlay.Style(bg)
@@ -749,6 +781,13 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 	}
 	if e.Host != "" {
 		note(printableTitle(e.Title) + " runs on " + printableTitle(e.Host) + ". Attach there to read its conversation.")
+		if t != nil {
+			// The replies sent to it, as this machine knows them, with
+			// their cancel and retry.
+			echo, hits := m.threadEchoLines(t.key, width)
+			t.hits = append(make([]string, len(out)), hits...)
+			out = append(out, echo...)
+		}
 		return out
 	}
 	if t == nil || (!t.read && t.recap == nil && t.loading) {
@@ -761,23 +800,38 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 			return out
 		}
 		out, t.hits = m.threadCardLines(e, t, width, m.cockpitTab() == "Changes", now)
+		if m.cockpitTab() != "Changes" {
+			// The replies sent that the transcript does not hold yet.
+			echo, hits := m.threadEchoLines(t.key, width)
+			out, t.hits = append(out, echo...), append(t.hits, hits...)
+			for range echo {
+				t.lines, t.lineIDs = append(t.lines, ckLine{}), append(t.lineIDs, "")
+			}
+		}
 		if len(out) == 0 {
 			note("No conversation yet.")
 		}
 		return out
 	}
-	if t.recap != nil && !recapEmpty(t.recap) {
-		for _, s := range recapSentences(t.recap, 0, now) {
+	switch {
+	case card:
+		// The Done card under the thread says the recap; the thread does
+		// not say it twice.
+	case t.recap != nil && !recapEmpty(t.recap):
+		for _, s := range recapSentences(t.recap, 0, now, t.recap.Folder) {
 			note(s)
 		}
 		if facts := m.agentFactsLine(e.SessionID, e.WindowID, e.Harness); facts != "" {
 			note(facts)
 		}
-	} else if e.Message != "" {
+	case e.Message != "":
 		note("Says: " + printableTitle(e.Message))
 	}
 	out = append(out, m.threadMail(e, width, bg, pal)...)
-	if len(out) == 0 {
+	echo, hits := m.threadEchoLines(t.key, width)
+	t.hits = append(make([]string, len(out)), hits...)
+	out = append(out, echo...)
+	if len(out) == 0 && !card {
 		note(threadNothingYet(e.Harness))
 	}
 	return out

@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -189,7 +190,7 @@ func (m *OS) inboxRecapLines(it session.AttentionItem, width int, now time.Time)
 			add("Last said: " + s)
 		}
 	default:
-		for _, s := range recapSentences(v.recap, v.since, now) {
+		for _, s := range recapSentences(v.recap, v.since, now, v.recap.Folder) {
 			add(s)
 		}
 	}
@@ -219,13 +220,13 @@ func recapCount(n int, one, many string) string {
 }
 
 // recapFiles names the first shown files and says how many more.
-func recapFiles(files []string, total, shown int) string {
+func recapFiles(files []string, total, shown int, root string) string {
 	var names []string
 	for _, f := range files {
 		if len(names) == shown {
 			break
 		}
-		names = append(names, printableTitle(f))
+		names = append(names, printableTitle(recapPath(f, root)))
 	}
 	more := total - len(names)
 	switch {
@@ -440,7 +441,7 @@ func agentReturnState(state string) string {
 
 // recapSentences is what a recap says, a sentence a line: since when, the
 // turns and files, the commands and the last test run, and the last words.
-func recapSentences(rc *session.AgentActivityRecap, since int64, now time.Time) []string {
+func recapSentences(rc *session.AgentActivityRecap, since int64, now time.Time, root string) []string {
 	var out []string
 	if since > 0 {
 		out = append(out, "While you were away ("+inboxWait(since, now)+")")
@@ -449,16 +450,55 @@ func recapSentences(rc *session.AgentActivityRecap, since int64, now time.Time) 
 	}
 	line := recapCount(int(rc.Turns), "turn", "turns") + "."
 	if rc.FilesTotal > 0 {
-		line += " " + recapCount(rc.FilesTotal, "file", "files") + ": " + recapFiles(rc.Files, rc.FilesTotal, 2)
+		line += " " + recapCount(rc.FilesTotal, "file", "files") + ": " + recapFiles(rc.Files, rc.FilesTotal, 2, root)
 	}
 	out = append(out, line)
 	line = recapCount(rc.Commands, "command", "commands") + "."
 	if t := rc.Tests; t != nil {
-		line += " Tests: " + printableTitle(transcriptview.CommandLabel(t.Cmdline)) + " " + recapTestWord(t.OK) + " " + inboxWait(t.At, now) + " ago"
+		line += " Tests: " + recapTestCommand(t.Cmdline) + " " + recapTestWord(t.OK) + " " + inboxWait(t.At, now) + " ago"
 	}
 	out = append(out, line)
 	if rc.LastSaid != "" {
 		out = append(out, "Last said: "+printableTitle(rc.LastSaid))
 	}
 	return out
+}
+
+// recapPath is a file a recap names: relative to the pane's folder root when
+// it is under it, from ~ when it is under the home folder, as it is otherwise.
+func recapPath(f, root string) string {
+	if root != "" && root != "/" {
+		if rel, ok := strings.CutPrefix(f, strings.TrimSuffix(root, "/")+"/"); ok && rel != "" {
+			return rel
+		}
+	}
+	return ckHomePath(f)
+}
+
+// recapTestCommand is a test command as a recap names it: the command and its
+// targets, with no flags, no variables set in front of it and nothing of the
+// shell after it (redirections, pipes, a second command).
+func recapTestCommand(cmdline string) string {
+	const most = 4
+	var keep []string
+	for _, w := range strings.Fields(printableTitle(transcriptview.CommandLabel(cmdline))) {
+		if strings.ContainsAny(w, "|;&<>") {
+			break
+		}
+		if strings.HasPrefix(w, "-") || len(keep) == 0 && strings.Contains(w, "=") {
+			continue
+		}
+		if len(keep) == most {
+			keep = append(keep, overlay.Ellipsis())
+			break
+		}
+		if len(w) > 2 && strings.HasSuffix(w, "/") {
+			w = strings.TrimSuffix(w, "/")
+		}
+		keep = append(keep, w)
+	}
+	if len(keep) == 0 {
+		return printableTitle(transcriptview.CommandLabel(cmdline))
+	}
+	return strings.Join(keep, " ")
 }

@@ -389,6 +389,11 @@ func (m *OS) whichKeyLayout(title string, groups []config.KeybindingGroup, maxRo
 	if cw := m.ViewContentWidth(); cw > 0 && cw < m.GetRenderWidth() {
 		beside = max(cw-8, 1)
 	}
+	// At the centre it is centred on the whole screen, as the panels are,
+	// so it is laid out in the room that clears the rail on both sides.
+	if m.Settings.WhichKeyPosition == "center" {
+		beside = max(min(beside, m.modalRoomWidth()-8), 1)
+	}
 	key := whichKeySignature(title, groups, full, beside, maxRows)
 	if c := &m.whichKeyCache; c.valid && c.key == key {
 		return c.cols, c.more

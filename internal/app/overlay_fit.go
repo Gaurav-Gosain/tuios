@@ -23,9 +23,39 @@ const (
 )
 
 // panelWidth returns the inner content width to build a panel at, given the
-// width it would prefer. The screen wins when it is narrower.
+// width it would prefer. The room a centred panel has wins when it is
+// narrower (modalRoomWidth).
 func (m *OS) panelWidth(preferred int) int {
-	return overlay.FitWidth(preferred, m.GetRenderWidth())
+	return overlay.FitWidth(preferred, m.modalRoomWidth())
+}
+
+// modalClearMin is the narrowest room a centred panel is kept to so that it
+// clears the rail. Below it the panel takes the whole screen width instead: a
+// settings page or a sheet cut down to a strip is worse than a rail covered
+// under the scrim.
+const modalClearMin = 72
+
+// modalRoomWidth is the width a panel centred on the whole screen may take and
+// still clear the rail and any column reserved at the other edge: the screen
+// less the wider reserve and a cell of gap on each side, so the margin is the same both ways
+// and the panel stays at the centre. A panel that ran into the rail cut its
+// rows mid-word ("Terminal 79fc"), which reads as broken text even under the
+// scrim. When that room is under modalClearMin, it is the whole screen.
+func (m *OS) modalRoomWidth() int {
+	rw := m.GetRenderWidth()
+	if rw <= 0 {
+		return rw
+	}
+	r := m.viewReserve()
+	side := max(r.Left, r.Right)
+	if side == 0 {
+		return rw
+	}
+	// One more column each side keeps a cell of gap from the rail's border.
+	if room := rw - 2*(side+1); room >= modalClearMin {
+		return room
+	}
+	return rw
 }
 
 // panelBodyRows returns how many scrolling body rows a panel can show. extra is

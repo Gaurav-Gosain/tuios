@@ -2371,13 +2371,16 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 		railLists(t, term, "j did not move the preview to zpage.pdf", []string{"zpage.pdf ", "PDF"}, nil)
 		page := quickLookOnHost(t, term, out, 0, "", "zpage.pdf", func(p shot.Image) bool { return p.Cols > 16 })
 		mark = resize(160, 40)
+		// The panel is centred on the screen and grows with it, so its left
+		// edge can stay where it was. The page is placed again at the new
+		// size, which moves it or widens it.
 		wider := quickLookOnHost(t, term, out, mark, erase, "a wider terminal took the PDF page off the host", func(p shot.Image) bool {
-			return p.Col != page.Col
+			return p.Col != page.Col || p.Cols != page.Cols
 		})
 		saveCockpitFrames(t, term, "quick-look-kitty-pdf-resized", wider)
 		mark = resize(140, 40)
 		quickLookOnHost(t, term, out, mark, erase, "a return to 140 columns took the PDF page off the host", func(p shot.Image) bool {
-			return p.Col == page.Col
+			return p.Col == page.Col && p.Cols == page.Cols
 		})
 	}
 
@@ -3520,9 +3523,10 @@ func TestQuickLookWrapsWideCharactersWhole(t *testing.T) {
 		if len(counts) == 0 || len(ellipses) > 0 || strings.Join(shown, "") != lines[0] {
 			return false
 		}
-		// 40 characters are 80 cells; a 41st would cross the code column's 81.
+		// Every row but the last is full: the same count of wide characters,
+		// as many as the code column holds. A row cut short holds fewer.
 		for _, n := range counts[:len(counts)-1] {
-			if n != 40 {
+			if n != counts[0] {
 				return false
 			}
 		}

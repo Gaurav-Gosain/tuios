@@ -144,10 +144,13 @@ type cockpitState struct {
 	// cockpit_layout.go.
 	listWidth  int
 	sideHidden bool
-	// groupBy groups the list by session, machine or project, "" by state,
-	// and groupMenu is the picker s opens. See cockpit_groupby.go.
-	groupBy   string
-	groupMenu bool
+	// groupBy groups the list by session, machine or project, "" by state.
+	// See cockpit_groupby.go.
+	groupBy string
+	// menu is the open dropdown, nil when none is, and anchors are where
+	// the header drew the controls that open one. See cockpit_menu.go.
+	menu    *ckMenu
+	anchors map[string]ckAnchor
 	// ship is Ready to merge on a card in review, nil when it is closed.
 	ship *ckShip
 	zoom bool
@@ -1298,6 +1301,10 @@ func (m *OS) cockpitWideFocus() bool { return m.GetRenderWidth() >= ckOneColumn 
 // handled is false for a click outside it.
 func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 	ck := &m.Inbox.ck
+	// A click on the open dropdown picks its row.
+	if cmd, ok := m.cockpitMenuClick(x, y); ok {
+		return cmd, true
+	}
 	// A one-key menu on top: a click off it closes it and does nothing else.
 	if m.cockpitClickDismisses(x, y) {
 		return nil, true
@@ -1370,24 +1377,24 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 	switch action {
 	case "new":
 		return m.CockpitNewAgent()
-	case "group":
-		m.cockpitOpenGroupMenu()
+	case "group", "board", "scope":
+		m.cockpitOpenMenu(action)
 		return nil
-	case "board":
-		return m.CockpitToggleBoard()
 	case "dispatch-mode":
 		return m.CockpitDispatchMode()
 	case "dispatch-pause":
 		return m.CockpitDispatchPause()
 	case "search":
 		m.InboxStartSelect()
-	case "scope":
-		m.cockpitNextScope()
 	case "needs":
 		m.CockpitCycleFilter()
 	case "chip:0", "chip:1", "chip:2", "chip:3":
 		g, _ := strconv.Atoi(strings.TrimPrefix(action, "chip:"))
 		m.cockpitChip(g)
+	case "dismiss":
+		// The cross on a card that asks nothing: the card's item goes, as
+		// the dismiss key puts it away.
+		return m.InboxDismiss()
 	case "follow":
 		m.CockpitThreadBottom()
 	case "go":
@@ -1464,6 +1471,9 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		if img, ok := strings.CutPrefix(action, "timg:"); ok {
 			return m.cockpitOpenThreadImage(img)
 		}
+		if cmd, ok := m.echoAction(action); ok {
+			return cmd
+		}
 		if id, ok := strings.CutPrefix(action, "fold:"); ok {
 			if t := m.cockpitThread(); t != nil {
 				if t.folded == nil {
@@ -1499,7 +1509,14 @@ func (m *OS) cockpitReply() tea.Cmd {
 // CockpitHover lights the row under the pointer. It selects nothing.
 func (m *OS) CockpitHover(x, y int) {
 	ck := &m.Inbox.ck
-	if ck.spawn != nil {
+	if s := ck.spawn; s != nil {
+		// The sheet's open list lights the row under the pointer.
+		if s.list && s.dd != nil && s.dd.Hover(x, y) {
+			m.cockpitTouch()
+		}
+		return
+	}
+	if m.cockpitMenuHover(x, y) {
 		return
 	}
 	if m.cockpitDividerMotion(x, y) {
@@ -1642,7 +1659,7 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		if m.Inbox.ck.board {
 			return nil, false
 		}
-		m.cockpitOpenGroupMenu()
+		m.cockpitOpenMenu("group")
 		return nil, true
 	case config.ActionInboxRegionNext, config.ActionInboxRegionPrev:
 		d := 1

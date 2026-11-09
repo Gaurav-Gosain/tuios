@@ -86,6 +86,24 @@ type AgentsConfig struct {
 	// client's state file, where it wins over this value. The list keeps 28
 	// cells and the focus 40. See ListWidthCells.
 	ListWidth string `toml:"list_width,omitempty"`
+	// ReplyRows is the most rows a multi-line editor grows to before it
+	// scrolls: the reply to an agent, the reply to many, a mail draft and a
+	// new agent's task. Zero keeps each editor's own: 8 for a reply, 6 for a
+	// mail draft, 3 for a task. An editor is held to the rows its view has
+	// whatever this says, and alt+m in it takes all of them. See
+	// ReplyRowsOr.
+	ReplyRows int `toml:"reply_rows,omitempty"`
+}
+
+// ReplyRowsMax bounds reply_rows. No view is taller.
+const ReplyRowsMax = 200
+
+// ReplyRowsOr is reply_rows, or def when it is unset.
+func (a AgentsConfig) ReplyRowsOr(def int) int {
+	if a.ReplyRows <= 0 {
+		return def
+	}
+	return min(a.ReplyRows, ReplyRowsMax)
 }
 
 // ListWidthCells is list_width for a view total cells wide, and 0 when it

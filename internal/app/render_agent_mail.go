@@ -195,7 +195,7 @@ func (m *OS) renderAgentMailCompose() (string, overlay.Geometry, []overlayRowHit
 	if st.Comp != nil {
 		hints = composerHints(st.Comp.Hints(overlay.UseASCII()))
 	}
-	draft := m.agentMailDraftLines("message: ", width)
+	draft := m.agentMailDraftLines("message: ", width, hints)
 	extra := 1 + len(draft)
 	if st.Error != "" {
 		extra++
@@ -224,7 +224,7 @@ func (m *OS) renderAgentMailCompose() (string, overlay.Geometry, []overlayRowHit
 // agentMailDraftLines are the lines a draft is typed on: the prompt, which
 // says when the draft is being sent and when keys from outside the keyboard
 // touched it, then the editor.
-func (m *OS) agentMailDraftLines(prompt string, width int) []string {
+func (m *OS) agentMailDraftLines(prompt string, width int, hints []overlay.Hint) []string {
 	st := &m.AgentMail
 	pal := m.overlayUI()
 	bg := pal.Surface
@@ -240,6 +240,17 @@ func (m *OS) agentMailDraftLines(prompt string, width int) []string {
 	if st.Comp == nil {
 		return out
 	}
+	// The editor's room is the panel's body less the fewest lines of the
+	// thread or the notes above it, the rule and the prompt, and the error
+	// line under it. It never grows past it, and alt+m takes all of it.
+	if rh := m.panelRoomHeight(); rh > 0 {
+		room := rh - panelChrome(0, width, nil, hints) - minPanelRows - 2
+		if st.Error != "" {
+			room--
+		}
+		st.Comp.SetRoom(max(room, 2))
+	}
+	st.Comp.SetMaxRows(m.composerRows(agentMailDraftRows))
 	return append(out, st.Comp.Render(max(width, 8), composerStyles(pal), bg)...)
 }
 
@@ -434,7 +445,7 @@ func (m *OS) renderAgentMailThread() (string, overlay.Geometry, []overlayRowHit)
 		if st.Comp != nil {
 			hints = composerHints(st.Comp.Hints(overlay.UseASCII()))
 		}
-		draft = m.agentMailDraftLines("reply: ", width)
+		draft = m.agentMailDraftLines("reply: ", width, hints)
 		extra += 1 + len(draft)
 	} else {
 		hints = m.keyHints(config.ActionMailReply, "reply", config.ActionMailFocusPane, "open pane")

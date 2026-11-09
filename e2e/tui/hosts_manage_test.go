@@ -37,6 +37,9 @@ func tuiosCLIEnv(t *testing.T, base string, env []string, args ...string) (strin
 	for _, key := range xdgKeys {
 		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
 	}
+	for _, kv := range env {
+		agentPathGuard(t, kv)
+	}
 	cmd.Env = append(cmd.Env, env...)
 	out, err := cmd.CombinedOutput()
 	return string(out), err

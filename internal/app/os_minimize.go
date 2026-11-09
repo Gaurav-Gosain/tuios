@@ -1,6 +1,8 @@
 package app
 
 import (
+	"cmp"
+	"slices"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -39,7 +41,10 @@ func (m *OS) MinimizeWindow(i int) {
 		// Immediately minimize without animation
 		now := time.Now()
 		window.Minimized = true
-		window.MinimizeOrder = now.UnixNano() // Track order for dock sorting
+		if !m.IsDaemonSession {
+			// The daemon stamps it in a daemon session.
+			window.MinimizedAt = now.UnixNano()
+		}
 
 		// Set highlight timestamp for dock tab
 		window.MinimizeHighlightUntil = now.Add(1 * time.Second)
@@ -675,17 +680,29 @@ func (m *OS) unzoomPane(w *terminal.Window) bool {
 
 // RestoreMinimizedByIndex restores a minimized window by its minimized index.
 func (m *OS) RestoreMinimizedByIndex(index int) {
-	// Find the nth minimized window in current workspace
-	minimizedCount := 0
-	for i, window := range m.Windows {
-		if window.Workspace == m.CurrentWorkspace && window.Minimized && !window.IsScratch {
-			if minimizedCount == index {
-				m.RestoreWindow(i)
-				return
-			}
-			minimizedCount++
+	if mins := m.MinimizedInOrder(); index >= 0 && index < len(mins) {
+		m.RestoreWindow(mins[index])
+	}
+}
+
+// MinimizedInOrder are the indices of the current workspace's minimized
+// windows in the order the dock lists them and restore_N counts them: the
+// order they were minimized in, oldest first. The daemon stamps that time in
+// session state (WindowState.MinimizedAt), so every client of a session has
+// one order; a standalone client stamps it itself. Windows with the same
+// stamp keep window order. The hidden scratch terminal is minimized but has
+// no entry: the scratch key is the way back to it.
+func (m *OS) MinimizedInOrder() []int {
+	var out []int
+	for i, w := range m.Windows {
+		if w.Workspace == m.CurrentWorkspace && w.Minimized && !w.IsScratch {
+			out = append(out, i)
 		}
 	}
+	slices.SortStableFunc(out, func(a, b int) int {
+		return cmp.Compare(m.Windows[a].MinimizedAt, m.Windows[b].MinimizedAt)
+	})
+	return out
 }
 
 // FocusNextVisibleWindow focuses the next visible window in the current workspace.

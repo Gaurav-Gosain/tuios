@@ -2753,8 +2753,19 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case InboxRepliedMsg:
+		echo := m.echoReplied(msg)
 		m.applyInboxReplied(msg)
-		return m, m.replyHistoryOnSent(msg)
+		return m, tea.Batch(m.replyHistoryOnSent(msg), echo)
+
+	case echoTickMsg:
+		return m, m.applyEchoTick()
+
+	case echoQueueMsg:
+		return m, m.applyEchoQueue(msg)
+
+	case echoCancelledMsg:
+		m.applyEchoCancelled(msg)
+		return m, nil
 
 	case replyHistoryMsg:
 		m.applyReplyHistory(msg)

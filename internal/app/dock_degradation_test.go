@@ -42,7 +42,6 @@ func dockCrowdedOS(t testing.TB, width, workspaces, minimized int) *OS {
 		win.Workspace = 1
 		win.CustomName = fmt.Sprintf("min%d", i)
 		win.Minimized = true
-		win.MinimizeOrder = int64(i + 1)
 		m.Windows = append(m.Windows, win)
 	}
 	return m

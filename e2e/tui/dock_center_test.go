@@ -154,15 +154,22 @@ refresh = "once"
 					}
 				}
 				line := term.Screen().Line(row)
-				before, _, ok := strings.Cut(line, "1:")
+				before, after, ok := strings.Cut(line, "1:")
 				if !ok {
 					t.Fatalf("no minimized entry to restore: %q", line)
 				}
+				// The pane the first pill names is the one its click restores.
+				name := "EDITOR"
+				if strings.HasPrefix(after, "SERVE") {
+					name = "SERVER"
+				}
+				other := map[string]string{"EDITOR": "SERVER", "SERVER": "EDITOR"}[name]
 				leftClick(t, term, ansi.StringWidth(before), row)
 				if err := term.WaitFor(func(s tuitest.Screen) bool {
-					return !strings.Contains(s.Line(row), "EDITOR") && strings.Contains(s.Text(), "EDITOR-WITH-A-LONG-NAME")
+					return !strings.Contains(s.Line(row), name) && strings.Contains(s.Line(row), other) &&
+						strings.Contains(s.Text(), name+"-WITH-A-LONG-NAME")
 				}, uiTimeout); err != nil {
-					t.Fatalf("clicking the minimized pane did not restore it: %v\n%s", err, term.Snapshot())
+					t.Fatalf("clicking the first pill did not restore %s, the pane it names: %v\n%s", name, err, term.Snapshot())
 				}
 				longMessageShot(t, term, "after-restore")
 			})

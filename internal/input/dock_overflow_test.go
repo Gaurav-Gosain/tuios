@@ -26,7 +26,7 @@ func TestDockOverflowMarkerOpensTheListOfWhatItHides(t *testing.T) {
 	for i := range 8 {
 		o.Windows = append(o.Windows, &terminal.Window{
 			ID: fmt.Sprintf("m%d", i), CustomName: fmt.Sprintf("min%d", i),
-			Workspace: 1, Minimized: true, MinimizeOrder: int64(i + 1),
+			Workspace: 1, Minimized: true,
 		})
 	}
 	_ = o.View()

@@ -63,7 +63,7 @@ func (m *OS) renderFileDialog() (string, overlay.Geometry, []overlayRowHit) {
 func (m *OS) renderFileNamePrompt() (string, overlay.Geometry, []overlayRowHit) {
 	pal := m.overlayUI()
 	bg := pal.Canvas
-	width := overlay.DialogFitWidth(fileDialogWidth, m.GetRenderWidth())
+	width := overlay.DialogFitWidth(fileDialogWidth, m.modalRoomWidth())
 
 	var body []string
 	body = append(body, dialogBodyLine(m.filePromptContext(width), width, pal.FgDim, bg))
@@ -140,7 +140,7 @@ func (m *OS) filePromptNote() string {
 func (m *OS) renderFileConfirm() (string, overlay.Geometry, []overlayRowHit) {
 	pal := m.overlayUI()
 	bg := pal.Canvas
-	width := overlay.DialogFitWidth(fileDialogWidth, m.GetRenderWidth())
+	width := overlay.DialogFitWidth(fileDialogWidth, m.modalRoomWidth())
 	m.filePrompt.Selected = clampInt(m.filePrompt.Selected, 0, fileConfirmRowCount-1)
 
 	// The path is cut from the front, like the rail's own header: the tail is

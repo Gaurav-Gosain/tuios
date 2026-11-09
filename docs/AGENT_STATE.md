@@ -4702,7 +4702,14 @@ the reply editor under the Inbox list:
 ```
 
 The editor keeps line breaks and grows to 8 rows, then scrolls. `ctrl+j`,
-`shift+enter`, `alt+enter`, or `\` then `enter` adds a new line. The arrows,
+`shift+enter`, or `\` then `enter` adds a new line. While the agent works,
+`enter` queues the reply and `alt+enter` sends it now; so does `ctrl+enter`,
+where the terminal speaks the kitty keyboard protocol. On a Mac, Option+Enter
+reaches tuios as alt+enter only from a terminal that uses Option as Alt
+(`macos-option-as-alt` in Ghostty, `macos_option_as_alt` in kitty, Esc+ in
+iTerm2, Use Option as Meta in Terminal.app); otherwise it is a plain enter,
+and `ctrl+enter` is the key to use. The hint names the key this terminal can
+send: `⌃↩` or `⌥↩` on a Mac, `alt+↩` elsewhere. The arrows,
 `alt+left`/`alt+right` (or `ctrl+left`/`ctrl+right`) by word, `home`/`end`
 (or `ctrl+a`/`ctrl+e`), `ctrl+w` and `alt+backspace` to delete a word,
 `ctrl+u` and `ctrl+k` to delete to the line start or end, `ctrl+z` to undo
@@ -4818,6 +4825,10 @@ folder keeps it, and it ends with the daemon. Only your attached client reads
 it. A message keeps at most 256 KB of pastes and images. A larger block is
 not kept, and the editor says so when the message comes back.
 
+The editor grows to 8 rows, then scrolls. `[agents] reply_rows` sets how many
+rows it grows to, and `alt+m` makes it as tall as its area and back. It never
+takes more rows than the view has.
+
 `ctrl+g` opens the draft in `$VISUAL` or `$EDITOR`, with each block's text in
 its place, and what you save comes back as the draft. An image is in the file
 as its label, such as `[Image #1 · 640×480 png]`. Keep the label, and the
@@ -4840,6 +4851,15 @@ machine's daemon, which passes it over the link. That machine queues it as its
 link's, writes any paste or image file there, and types it when the agent
 comes to rest. Its `[hosts]` policy for this machine must allow `write`, and
 `files` for a paste block or an image.
+
+The thread shows the reply at its end from the moment you send it, as your
+message with a line under it that says where it is: `Sending`, `Queued, typed
+when it rests` with `cancel`, `Sent, waiting for api` once it is typed, or
+`Not sent: <why>` with `retry`. It goes when the agent's transcript logs it,
+so it never shows twice; one the transcript never logs goes after two
+minutes. A queued reply shows again when the agents view opens again, or in
+another client, since the thread reads the pane's queue (`list-queued`). A
+bulk reply shows in each agent's thread.
 
 `x` on a rail row with messages queued drops the newest one still waiting
 (`cancel-queued`), and the dock says `Dropped 1 queued message to api. u
