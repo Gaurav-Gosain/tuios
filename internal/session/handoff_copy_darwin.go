@@ -20,7 +20,7 @@ func cloneFrom(src *os.File, dst string) error {
 	if err := unix.Fclonefileat(int(src.Fd()), int(dir.Fd()), filepath.Base(dst), unix.CLONE_NOOWNERCOPY); err != nil { //nolint:gosec // descriptor numbers
 		return err
 	}
-	if err := os.Chmod(dst, 0o700); err != nil {
+	if err := os.Chmod(dst, 0o700); err != nil { //nolint:gosec // the clone is the tuios binary the handoff runs: it needs its owner's execute bit, and no one else gets any
 		_ = os.Remove(dst)
 		return err
 	}
