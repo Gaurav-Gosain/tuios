@@ -2450,6 +2450,17 @@ To type `[ ] { } |` with Option, set the right Option key to compose. See
 [One Option key for typing](#one-option-key-for-typing). With
 `keyboard_layout = "other"`, tuios sends those characters to the pane.
 
+### Characters typed with Option
+
+Some layouts type ASCII characters with Option. On a German Mac, `|` is
+Option and 7, `\` is Option, Shift and 7, and `@` is Option and L. While tuios
+reads keys itself (window mode, after the leader, an overlay), Ghostty sends
+such a key as the chord and the character: Option and 7 is `opt+7` with the
+text `|`. A binding on the chord runs first, so `opt+7` still goes to
+workspace 7 in window mode. When no binding has the chord, the binding on the
+character runs, so `ctrl+b` then Option and 7 splits the pane as `ctrl+b |`
+does. In a pane the character is text, as before.
+
 ## Keys sent to a pane
 
 In terminal mode, tuios sends these keys to the program in the pane:

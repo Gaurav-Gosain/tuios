@@ -150,6 +150,47 @@ try {
   if (actions < 50) fail('tuios.actions() has only ' + actions + ' actions');
   await checkBottomRow(page, 'webgl');
 
+  // Option and 7 on a German Mac layout types | (tuios discussion #850). In
+  // a pane it is text, and after the leader it splits as | does. Playwright
+  // cannot switch the layout, so the key event is the one Chrome on a Mac
+  // sends for it, dispatched on the focused textarea, on a page that says it
+  // runs on a Mac: xterm reads Option by the platform.
+  const macPage = await browser.newPage({ viewport: { width: 1000, height: 700 } });
+  macPage.on('pageerror', (err) => logs.push('mac pageerror: ' + err.message));
+  await macPage.addInitScript(() => Object.defineProperty(Navigator.prototype, 'platform', { get: () => 'MacIntel' }));
+  await macPage.goto(`http://127.0.0.1:${port}/`);
+  await macPage.waitForFunction(() => window.tuiosTimings && window.tuiosTimings.firstFrame, null, { timeout: 60000 });
+  let macSeen = 0;
+  const macEvent = async (type, match, what) => {
+    const handle = await macPage.waitForFunction(({ type, match, from }) => {
+      const ok = eval(match);
+      const i = window.tuiosEvents.findIndex((e, k) => k >= from && e.type === type && ok(e));
+      return i >= 0 ? i : null;
+    }, { type, match, from: macSeen }, { timeout: 10000 }).catch(() => fail(what));
+    macSeen = (await handle.jsonValue()) + 1;
+  };
+  const germanPipe = () => macPage.evaluate(() => {
+    const el = document.activeElement;
+    const init = { key: '|', code: 'Digit7', keyCode: 55, altKey: true, bubbles: true, cancelable: true };
+    el.dispatchEvent(new KeyboardEvent('keydown', init));
+    el.dispatchEvent(new KeyboardEvent('keyup', init));
+  });
+  await macPage.locator('#terminal').click();
+  await macPage.keyboard.press('n');
+  await macEvent('window.open', '() => true', 'n did not open a window on the Mac page');
+  await macPage.keyboard.press('i');
+  await macEvent('mode', "(e) => e.data.to === 'terminal'", 'i did not enter terminal mode on the Mac page');
+  await macPage.keyboard.type('echo x');
+  await germanPipe();
+  await macPage.keyboard.type('y');
+  await macPage.keyboard.press('Enter');
+  await macEvent('shell.command', "(e) => e.data.line === 'echo x|y'", 'Option and 7 on a German layout did not type | into the shell');
+  await macPage.keyboard.press('Control+b');
+  await macEvent('prefix', "(e) => e.data.to === 'prefix'", 'no leader on the Mac page');
+  await germanPipe();
+  await macEvent('window.open', '() => true', 'the leader, then Option and 7 on a German layout did not split');
+  await macPage.close();
+
   // ?renderer=vtgl must reach vtgl. A newer sip ships it as webterm-vtgl.js,
   // which the page has to load itself, and without it webterm falls back to
   // WebGL without an error.

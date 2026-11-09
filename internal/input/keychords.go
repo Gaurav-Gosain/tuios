@@ -41,6 +41,10 @@ const lockMods = tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock
 //     under "auto" on a US Mac layout. Neither answers under "type" or
 //     keyboard_layout = "other". The character is then text for the pane.
 //
+// Last comes the ASCII character an Option chord typed on a layout that types
+// it with Option (see optionTypedKey): German | is Option and 7. It is last so
+// that a binding on the chord, such as opt+7 for workspace 7, still wins.
+//
 // base is the base-layout key the host sent with msg. The input path reads a
 // key without it (see readKey), so the caller hands it back here.
 func bindingKeys(msg tea.KeyPressMsg, base rune) []string {
@@ -48,6 +52,7 @@ func bindingKeys(msg tea.KeyPressMsg, base rune) []string {
 	// has one. The key produced is tried first, spelled without it, and the
 	// base-layout key last and only where usesBaseLayout allows it. Otherwise
 	// German Ctrl+Z matched only ctrl+y, and an unbound AZERTY "a" ran quit.
+	typed, typedOK := optionTypedKey(msg, base)
 	msg = withoutChordText(msg)
 	orig := msg
 	msg = producedKey(msg)
@@ -82,6 +87,9 @@ func bindingKeys(msg tea.KeyPressMsg, base rune) []string {
 		if chord != key {
 			keys = append(keys, tier(chord))
 		}
+	}
+	if typedOK && !slices.Contains(keys, typed) {
+		keys = append(keys, typed)
 	}
 	return keys
 }

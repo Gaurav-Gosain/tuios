@@ -15848,3 +15848,23 @@ Run on 2026-11-09 on macOS (arm64). The branch passes both.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestOpenMenuIn' -v .`.
+
+## TestLeaderTakesTheCharacterAnOptionChordTyped
+
+The leader, then Option and 7 on a German Mac layout (discussion #850).
+Ghostty sends it after the leader as `CSI 55;3;124u`: the 7 key, Alt, and the
+text `|`. It must split, as must Option, Shift and 7 (`\`). Alt, Shift and `\`
+with the text `|` (a chord, as Windows Terminal sends it) must not. Option
+and 7 in window mode must still switch to workspace 7, the chord's own
+binding.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (8915c61d1) | "the leader, then Option and 7 (\|): workspace 1 has 2 panes, want 3" | **caught** |
+| The typed character tried ahead of the chord spellings in bindingKeys | "e2e-opt-german-pipe is on workspace 2, want 7" | **caught** |
+| optionTypedKey without the US shifted check | "workspace 2 has 4 panes, want 3: Alt, Shift and \ after the leader split as \|" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestLeaderTakesTheCharacterAnOptionChordTyped$' -v .`.

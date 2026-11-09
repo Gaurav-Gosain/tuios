@@ -1,6 +1,7 @@
 package input
 
 import (
+	"strings"
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
@@ -162,4 +163,51 @@ func isModifierKeyPress(msg tea.KeyPressMsg) bool {
 		return true
 	}
 	return false
+}
+
+// optionTypedKey returns the character an Alt chord typed, spelled as a bare
+// key, when that character is printable ASCII the key does not give by
+// itself or with Shift. base is the base-layout key the host sent with msg.
+//
+// On a German Mac layout | is Option and 7, \ is Option, Shift and 7, and @
+// is Option and L. After the leader tuios asks for every key as an escape
+// code with its text, so Ghostty sends Option and 7 as the 7 key with the
+// Alt bit and the text "|" (discussion #850). The chord alone, alt+7, is not
+// what the person pressed the key for.
+//
+// The character must differ from the key's own characters: Windows Terminal
+// sends Alt+2 with the text "2", and Alt, Shift and \ with the text "|" on a
+// US layout. Those are chords. A US Mac layout's Option characters are not
+// ASCII, so they never come here; composedChords reads them.
+//
+// Not limited to darwin: a client on Linux reached over SSH from a Mac sees
+// the same keys.
+func optionTypedKey(msg tea.KeyPressMsg, base rune) (string, bool) {
+	mods := msg.Mod &^ lockMods
+	if mods&tea.ModAlt == 0 || mods&^(tea.ModAlt|tea.ModShift) != 0 {
+		return "", false
+	}
+	text := []rune(msg.Text)
+	if len(text) != 1 || text[0] <= ' ' || text[0] > '~' {
+		return "", false
+	}
+	c := text[0]
+	for _, own := range []rune{msg.Code, msg.ShiftedCode, base} {
+		if own == 0 {
+			continue
+		}
+		if c == own || c == unicode.ToUpper(own) || (mods&tea.ModShift != 0 && c == usShifted(own)) {
+			return "", false
+		}
+	}
+	return string(c), true
+}
+
+// usShifted is the character a US layout gives for key r with Shift, or 0.
+func usShifted(r rune) rune {
+	const plain, shifted = "1234567890-=[]\\;',./`", "!@#$%^&*()_+{}|:\"<>?~"
+	if i := strings.IndexRune(plain, r); i >= 0 {
+		return rune(shifted[i])
+	}
+	return 0
 }

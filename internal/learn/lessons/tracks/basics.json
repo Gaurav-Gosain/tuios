@@ -90,7 +90,7 @@
           "on": "window.open"
         }
       },
-      "hint": "Hold ctrl, tap b, let go. A menu pops up. Now press | (shift and backslash).",
+      "hint": "Hold ctrl, tap b, let go. A menu pops up. Now press |.",
       "learned": "split"
     },
     {
