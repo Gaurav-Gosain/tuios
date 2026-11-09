@@ -15868,3 +15868,19 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestLeaderTakesTheCharacterAnOptionChordTyped$' -v .`.
+
+## A home reached through a symbolic link (TestFilesFollowAWindowOnAHost)
+
+The kernel resolves the symbolic links in a process's folder, and `$HOME`
+need not, so a pane's folder under home did not start with the home the far
+daemon names, and the path picker showed the full path instead of `~/...`.
+On macOS the test's home is under `/var`, a link to `/private/var`, so the
+existing assertion "the picker on a far window does not name the far home as
+~" is the control. Linux temp folders have no link, so CI did not see it.
+
+Run on 2026-11-09 on macOS (arm64).
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (8915c61d1) | "the picker on a far window does not name the far home as ~" | **caught** (3 of 3 run) |
+| The fix | passes | 3 of 3 run |
