@@ -43,7 +43,8 @@ func (m *OS) SendsDaemonAction(action string) bool {
 		// Batch C1: the layout shape keys. resize_master_grow and shrink
 		// are a width step, sent in the split layout only, as the swap
 		// and resize steps are.
-		if action == "resize_master_grow" || action == "resize_master_shrink" {
+		switch action {
+		case "resize_master_grow", "resize_master_shrink", "resize_height_grow", "resize_height_shrink":
 			return m.AutoTiling && m.LayoutModeName() == LayoutModeBSP && !m.SidebarFocused
 		}
 		// Tiling on and off and the next layout stay here: this client's

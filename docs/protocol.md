@@ -1894,7 +1894,12 @@ The layout shape actions run in the daemon too, in any layout, through the
 there in the split layout only. The TUI's keys for them go to the daemon and
 show their dock message from the client's own state, except the keys for
 `toggle_tiling` and `cycle_layout`, which the client runs itself: its switch
-settles the panes' sizes and borders in one step.
+settles the panes' sizes and borders in one step. `resize_height_grow` and
+`resize_height_shrink` run in the daemon in the split layout, as the width
+steps do. The scrolling layout's strip actions (`scroll_consume`,
+`scroll_expel`, `scroll_move_*`, `scroll_cycle_width`, `scroll_maximize`) are
+still routed to a TUI that is attached, because the TUI keeps the strip's
+columns and sends them whole.
 
 The verbs a live renderer still has to own to stay in sync (`send-keys` with
 no window, and the live apply half of `set-option`) route to the attached TUI
