@@ -1897,8 +1897,10 @@ show their dock message from the client's own state, except the keys for
 settles the panes' sizes and borders in one step. `resize_height_grow` and
 `resize_height_shrink` run in the daemon in the split layout, as the width
 steps do. The scrolling layout's strip actions (`scroll_consume`,
-`scroll_expel`, `scroll_move_*`, `scroll_cycle_width`, `scroll_maximize`) are
-still routed to a TUI that is attached.
+`scroll_expel`, `scroll_move_*`, `scroll_cycle_width`, `scroll_maximize`, and
+`scroll_focus_*` by run-command) run in the daemon too, through the `arrange`
+verb's engine, while every attached TUI takes the columns as ops (below). The
+TUI's strip keys go to the daemon; its scroll focus keys stay in the client.
 
 The scrolling layout's columns (`workspace_scroll_columns`) travel as their own
 op, MsgScrollColumns, one workspace's columns whole, for a client whose hello

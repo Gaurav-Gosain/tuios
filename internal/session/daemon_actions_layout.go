@@ -47,6 +47,25 @@ func layoutActionOp(name string) (op, mode string, ok bool) {
 		return "master.remove", "", true
 	case "swap_with_master":
 		return "master.swap", "", true
+	// The scrolling layout's strip, which the engine changes only in that
+	// layout, as the TUI's keys do. With the columns as ops a TUI's push no
+	// longer puts a strip change back (scroll_columns.go).
+	case "scroll_consume":
+		return "scroll.consume", "", true
+	case "scroll_expel":
+		return "scroll.expel", "", true
+	case "scroll_move_left":
+		return "scroll.moveLeft", "", true
+	case "scroll_move_right":
+		return "scroll.moveRight", "", true
+	case "scroll_cycle_width":
+		return "scroll.width", "", true
+	case "scroll_maximize":
+		return "scroll.max", "", true
+	case "scroll_focus_left":
+		return "scroll.left", "", true
+	case "scroll_focus_right":
+		return "scroll.right", "", true
 	}
 	if side, found := strings.CutPrefix(name, "set_master_position_"); found {
 		for _, p := range config.MasterPositions {

@@ -30,10 +30,19 @@ func (m *OS) scrollOpsOn() bool {
 	return m.IsDaemonSession && m.DaemonClient != nil && m.DaemonClient.ScrollColumnOps()
 }
 
-// colsKey keys one workspace's columns, "" for none.
+// colsKey keys one workspace's columns, "" for none. A column's Active row
+// is left out: it follows the focus, which travels in the push, and a focus
+// move rewrote it here. Keyed, every focus move read as a change of this
+// client's not yet sent: the client stopped taking the session's columns for
+// the workspace, the two clients drew the strip two ways, and the columns it
+// then sent, built on an older strip, could put a daemon change back.
 func colsKey(cols []session.SerializedScrollColumn) string {
 	if len(cols) == 0 {
 		return ""
+	}
+	cols = slices.Clone(cols)
+	for i := range cols {
+		cols[i].Active = 0
 	}
 	b, err := jsonx.Marshal(cols)
 	if err != nil {
@@ -101,4 +110,39 @@ func (m *OS) columnsToAdopt(cols map[int][]session.SerializedScrollColumn) map[i
 		m.colsSeen[ws] = key
 	}
 	return out
+}
+
+// noteDerivedColumns records, for each workspace just taken from a state,
+// the columns this client holds after taking them as the session's, when
+// they hold the same panes. Taking them can rework them without a pane more
+// or fewer (a column's row follows the focus); that is a local reading of the
+// state, shown and not sent, as treeDerived is for the trees. Sent, it was a
+// whole-columns op built on the strip of that state, and it could land after
+// the daemon's next strip change and put it back. A pane the session's
+// columns do not hold yet is placed here, and that is sent: no other side
+// places it.
+func (m *OS) noteDerivedColumns(adopted map[int][]session.SerializedScrollColumn) {
+	if len(adopted) == 0 {
+		return
+	}
+	cur := m.scrollColumnsState()
+	for ws, theirs := range adopted {
+		if samePanes(cur[ws], theirs) {
+			m.colsSeen[ws] = colsKey(cur[ws])
+		}
+	}
+}
+
+// samePanes reports whether two workspaces' columns hold the same panes.
+func samePanes(a, b []session.SerializedScrollColumn) bool {
+	set := func(cols []session.SerializedScrollColumn) map[string]bool {
+		out := map[string]bool{}
+		for _, c := range cols {
+			for _, id := range c.Windows {
+				out[id] = true
+			}
+		}
+		return out
+	}
+	return maps.Equal(set(a), set(b))
 }

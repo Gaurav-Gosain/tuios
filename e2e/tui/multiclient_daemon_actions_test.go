@@ -714,18 +714,15 @@ func daReadStrip(t *testing.T, base, sess string) (daStrip, string) {
 	return st, string(cols)
 }
 
-// TestDaemonHeightStepRunsAndTheStripIsRouted (T1, batch C2): in the split
+// TestDaemonHeightStepRunsWithATUIAttached (T1, batch C2): in the split
 // layout with a TUI attached, run-command runs resize_height_grow in the
-// daemon (routed false) and the tree changes. The scrolling layout's strip
-// actions stay routed with a TUI attached: the TUI owns the strip's columns
-// and pushes them whole, and a strip the daemon changed is overwritten by
-// its next push (parity-gap1.md, batch C2), so scroll_consume must answer
-// routed true there.
+// daemon (routed false) and the tree changes. The strip actions are
+// multiclient_strip_ops_test.go's.
 //
 // How this could pass wrongly, written down first:
 //   - The TUI could run it and push: routed false is the daemon's answer.
 //   - The tree could hold already: it is compared before and after.
-func TestDaemonHeightStepRunsAndTheStripIsRouted(t *testing.T) {
+func TestDaemonHeightStepRunsWithATUIAttached(t *testing.T) {
 	const name = "da-c2"
 	base, a, _ := daSession(t, name, 4)
 	before := daReadLayout(t, base, name).Tree
@@ -739,15 +736,7 @@ func TestDaemonHeightStepRunsAndTheStripIsRouted(t *testing.T) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	if out, err := tuiosCLI(t, base, "call", "arrange", `{"session":"`+name+`","op":"mode","mode":"scrolling"}`); err != nil {
-		t.Fatalf("arrange mode scrolling: %v: %s", err, out)
-	}
-	daWait(t, base, name, "the strip", func(daState) bool { s, _ := daReadStrip(t, base, name); return len(s.Scroll.Columns) == 4 })
-	daFocusFirstColumn(t, base, name)
-	if !daRun(t, base, name, "scroll_consume") {
-		t.Fatalf("scroll_consume answered routed false; the TUI owns the strip, so the daemon must route it")
-	}
-	alive(t, a, "after the actions")
+	alive(t, a, "after the height step")
 }
 
 // daFocusFirstColumn focuses the pane of the strip's first column.

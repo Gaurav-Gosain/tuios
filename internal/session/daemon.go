@@ -679,6 +679,10 @@ type connState struct {
 	// daemonActions says the client's hello offered DaemonActions. Read
 	// under mu. See daemon_actions.go.
 	daemonActions bool
+	// intents runs this client's action intents in order, off its read loop
+	// (runIntent), started by intentOnce.
+	intents    chan func()
+	intentOnce sync.Once
 	// scrollOps says the client's hello offered ScrollColumnOps: its pushes
 	// do not move the scrolling columns. Read under mu. See
 	// scroll_columns.go.
@@ -2553,6 +2557,15 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 	case MsgGetTerminalState:
 		return d.handleGetTerminalState(cs, msg)
 	case MsgExecuteCommand:
+		if d.tuiActionIntent(cs, msg) {
+			// Off this connection's read loop. See daemon_actions.go.
+			cs.runIntent(func() {
+				if err := d.handleExecuteCommand(cs, msg); err != nil {
+					LogError("An action from %s failed: %v", cs.clientID, err)
+				}
+			})
+			return nil
+		}
 		return d.handleExecuteCommand(cs, msg)
 	case MsgCommandResult:
 		return d.handleCommandResult(cs, msg)

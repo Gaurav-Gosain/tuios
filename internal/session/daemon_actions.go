@@ -115,3 +115,51 @@ func (d *Daemon) runsAction(sess *Session, command string, args []string) bool {
 func (c *TUIClient) DaemonActions() bool {
 	return c != nil && c.daemonActions.Load()
 }
+
+// tuiActionIntent reports whether msg is a TUI client's key for an action the
+// daemon runs (runsAction). Such an intent runs off the client's read loop
+// (runIntent): the action's path can route to an attached TUI and wait for
+// its answer (focus-window's revealFocus, a routed verb), and that TUI may be
+// the one whose read loop is running the action. It then waited out the
+// routed verb's timeout, 10 seconds a key, and a second key pressed
+// meanwhile reached the strip it had read before.
+func (d *Daemon) tuiActionIntent(cs *connState, msg *Message) bool {
+	cs.mu.Lock()
+	tui := cs.isTUIClient
+	cs.mu.Unlock()
+	if !tui {
+		return false
+	}
+	var p ExecuteCommandPayload
+	if err := msg.ParsePayload(&p); err != nil || p.TapeScript != "" {
+		return false
+	}
+	command, args, ok := resolveCommandName(p.CommandType, p.Args)
+	if !ok {
+		return false
+	}
+	sess := d.findTargetSession(cs, p.SessionName)
+	return sess != nil && d.runsAction(sess, command, args)
+}
+
+// runIntent runs f after every intent this client sent before it, on a
+// goroutine of its own that ends with the connection.
+func (cs *connState) runIntent(f func()) {
+	cs.intentOnce.Do(func() {
+		cs.intents = make(chan func(), 64)
+		go func() {
+			for {
+				select {
+				case f := <-cs.intents:
+					f()
+				case <-cs.done:
+					return
+				}
+			}
+		}()
+	})
+	select {
+	case cs.intents <- f:
+	case <-cs.done:
+	}
+}
