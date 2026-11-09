@@ -200,11 +200,15 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 			if payload.CommandType == "NewWindow" {
 				err = newWindowHoldForTest()
 			}
+			var closeBy string
+			if payload.CommandType == "CloseWindow" {
+				closeBy = d.askerOf(cs)
+			}
 			if err == nil {
 				data, err = d.executeDaemonCommandEnv(session, payload.CommandType, payload.Args, NewWindowOptions{
 					Cwd: payload.Cwd, Workspace: payload.Workspace, Env: newWindowEnv,
 					Cols: payload.Cols, Rows: payload.Rows, keepOpen: keepOpen,
-					focusAskedBy: origin,
+					focusAskedBy: origin, closeAskedBy: closeBy,
 				}, onExit)
 			}
 		}

@@ -461,7 +461,7 @@ func (d *Daemon) watchWorktreeSetup(l setupLaunch, run *setupRun, codes <-chan *
 	if current && passed {
 		// The window has ended on its own after letGo. Closing it here takes
 		// it out of a session no client is attached to.
-		_, _ = sess.CloseDaemonWindow(run.window)
+		_, _ = sess.CloseDaemonWindow(run.window, "the daemon, as its worktree setup passed")
 	}
 }
 

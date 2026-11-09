@@ -69,7 +69,7 @@ func (d *Daemon) verbRailPane(cs *connState, params json.RawMessage) (any, *verb
 		return map[string]any{"type": "rail_pane", "window_id": existing.ID, "created": false}, nil
 	}
 	if existing != nil {
-		if _, err := sess.CloseDaemonWindow(existing.ID); err != nil {
+		if _, err := sess.CloseDaemonWindow(existing.ID, d.askerOf(cs)+" (rail-pane, which replaces it)"); err != nil {
 			// Gone meanwhile is what was asked for.
 			if _, gone := findWindowStateIndex(sess.GetState().Windows, existing.ID); gone == nil {
 				return nil, newVerbError(ErrVerbInternal, "cannot close the rail pane: "+err.Error())

@@ -61,7 +61,7 @@ func TestMessageToAClosedWindowReadsUndeliverable(t *testing.T) {
 	c := dialVerb(t, sp)
 
 	c.call(t, `{"id":1,"verb":"send-agent-message","params":{"session":"gone","to":"`+b+`","from":"`+a+`","text":"are you there"}}`)
-	if _, err := sess.CloseDaemonWindow(b); err != nil {
+	if _, err := sess.CloseDaemonWindow(b, "a test"); err != nil {
 		t.Fatalf("CloseDaemonWindow: %v", err)
 	}
 

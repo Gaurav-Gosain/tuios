@@ -893,7 +893,7 @@ func (d *Daemon) tmlClose(id string, value any, has bool, reason string) *verbEr
 	d.pushTMLSurface(sessionID, payload)
 	d.publishTMLEvent(s, "close", value, reason)
 	if sess := d.manager.GetSessionByID(sessionID); sess != nil && windowID != "" {
-		d.goTracked(func() { _, _ = sess.CloseDaemonWindow(windowID) })
+		d.goTracked(func() { _, _ = sess.CloseDaemonWindow(windowID, "the daemon, as its TML surface closed") })
 	}
 	return nil
 }

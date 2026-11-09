@@ -3,6 +3,7 @@ package session
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"strings"
 	"sync"
@@ -288,6 +289,9 @@ type NewWindowOptions struct {
 	// for the window, empty for none. With Focus set, the focus move counts
 	// as that client's own. See pushOwnsFocusLocked.
 	focusAskedBy string
+	// closeAskedBy names who asked for a CloseWindow command, for the line
+	// the close writes to the log (see CloseDaemonWindow).
+	closeAskedBy string
 	// TabKey names the workspace by its tab key, which follows it through a
 	// renumber, when the caller read the workspace's number before one it
 	// may not have seen. Zero names it by Workspace alone. See
@@ -684,7 +688,10 @@ func scratchNameIf(opts NewWindowOptions) string {
 // CloseDaemonWindow removes the window matching target from the session state
 // and closes its PTY. It moves focus to another window in the same workspace
 // when the closed window was focused. It returns the closed window's ID.
-func (s *Session) CloseDaemonWindow(target string) (string, error) {
+//
+// by names who asked, and goes to the log with the window, so a pane that is
+// gone is one grep: "closed, asked for by" and its short ID.
+func (s *Session) CloseDaemonWindow(target, by string) (string, error) {
 	var closed WindowState
 	err := s.mutateState(func(state *SessionState) error {
 		idx, err := findWindowStateIndex(state.Windows, target)
@@ -705,6 +712,11 @@ func (s *Session) CloseDaemonWindow(target string) (string, error) {
 		return "", err
 	}
 
+	if by == "" {
+		by = "an unnamed caller"
+	}
+	LogBasic("Window %s %q (PTY %s) in session %s closed, asked for by %s",
+		shortID(closed.ID), windowLabelOf(closed), shortID(closed.PTYID), s.Name(), by)
 	// Close the PTY outside the state lock.
 	if closed.PTYID != "" {
 		_ = s.ClosePTY(closed.PTYID)
@@ -733,6 +745,15 @@ func (s *Session) removeWindowLocked(state *SessionState, idx int) WindowState {
 		}
 	}()
 	state.FocusHistory = RemoveFocus(state.FocusHistory, gone.ID)
+	// A window that is gone keeps no BSP number. The map is replaced whole,
+	// never written into, as snapshots share it (see snapshotStateLocked).
+	// NextBSPWindowID does not go back, so the number is not given out again,
+	// and placeTree drops a leaf whose window is gone.
+	if _, ok := state.WindowToBSPID[gone.ID]; ok {
+		ids := maps.Clone(state.WindowToBSPID)
+		delete(ids, gone.ID)
+		state.WindowToBSPID = ids
+	}
 
 	// Repair focus if we removed the focused window.
 	if state.FocusedWindowID == gone.ID {

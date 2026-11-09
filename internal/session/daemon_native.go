@@ -90,7 +90,7 @@ func (d *Daemon) executeDaemonCommandEnv(sess *Session, commandType string, args
 			}
 			target = id
 		}
-		if _, err := sess.CloseDaemonWindow(target); err != nil {
+		if _, err := sess.CloseDaemonWindow(target, base.closeAskedBy); err != nil {
 			return nil, err
 		}
 		return nil, nil

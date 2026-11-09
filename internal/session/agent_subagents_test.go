@@ -151,7 +151,7 @@ func TestSubagentsClearWithTheAgent(t *testing.T) {
 	agentAtRest(t, c)
 	counted("before the window closed")
 	id := sess.GetState().Windows[0].ID
-	if _, err := sess.CloseDaemonWindow(id); err != nil {
+	if _, err := sess.CloseDaemonWindow(id, "a test"); err != nil {
 		t.Fatal(err)
 	}
 	if n := sess.subagentCount(id); n != 0 {

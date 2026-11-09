@@ -510,10 +510,10 @@ func (d *Daemon) startFanVerify(sess *Session, dir, command string, env []string
 	prev, failedWindow := d.fanVerifies.take(sess.ID)
 	if prev != nil {
 		prev.halt()
-		_, _ = sess.CloseDaemonWindow(prev.window)
+		_, _ = sess.CloseDaemonWindow(prev.window, "the daemon, as a new fan check replaced it")
 	}
 	if failedWindow != "" {
-		_, _ = sess.CloseDaemonWindow(failedWindow)
+		_, _ = sess.CloseDaemonWindow(failedWindow, "the daemon, as a new fan check replaced the failed one")
 	}
 
 	var (
@@ -667,7 +667,7 @@ func (d *Daemon) watchFanVerify(sess *Session, run *fanVerifyRun, rec *FanVerify
 		// A passed check's window has already ended on its own; closing it
 		// here takes it out of a session no client is attached to. A timed
 		// out one is ended here.
-		_, _ = sess.CloseDaemonWindow(run.window)
+		_, _ = sess.CloseDaemonWindow(run.window, "the daemon, as its fan check ended")
 	}
 }
 
