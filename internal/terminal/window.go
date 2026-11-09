@@ -891,11 +891,11 @@ func NewWindowInCell(dir, id, title string, x, y, width, height, z int, exitChan
 	ptyInstance, cmd, err := ptyspawn.SpawnTTY(terminalWidth, terminalHeight, cellWidth, cellHeight, func(string) *exec.Cmd {
 		// #nosec G204 - the command is the user's own shell or a program they chose
 		var cmd *exec.Cmd
-		shell, integration := "", false
+		shell, integration, login := "", false, false
 		if len(command) > 0 {
 			cmd = exec.Command(command[0], command[1:]...)
 		} else {
-			shell, integration = detectShell()
+			shell, integration, login = detectShell()
 			cmd = exec.Command(shell)
 		}
 		cmd.Dir = dir
@@ -913,6 +913,9 @@ func NewWindowInCell(dir, id, title string, x, y, width, height, z int, exitChan
 				cmd.Args = append(cmd.Args, args...)
 				cmd.Env = env
 			}
+		}
+		if login {
+			shellinteg.Login(cmd)
 		}
 		return cmd
 	}, debugLine)

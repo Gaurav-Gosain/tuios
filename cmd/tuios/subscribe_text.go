@@ -70,6 +70,13 @@ type subscribeEvent struct {
 		Value   any    `json:"value"`
 		Reason  string `json:"reason"`
 	} `json:"tml"`
+	TMLSurface *struct {
+		Surface string          `json:"surface"`
+		Title   string          `json:"title"`
+		Version uint64          `json:"version"`
+		Ops     json.RawMessage `json:"ops"`
+		Closed  bool            `json:"closed"`
+	} `json:"tml_surface"`
 	Task *struct {
 		ID    string `json:"id"`
 		Title string `json:"title"`
@@ -302,6 +309,19 @@ func (p *textPrinter) what(ev *subscribeEvent) string {
 			}
 		}
 		return joinText("tml "+plainLine(ev.TML.Surface)+" "+plainLine(ev.TML.Name), value, ev.TML.Reason)
+	case session.EventTMLSurface:
+		if ev.TMLSurface == nil {
+			return "tml surface"
+		}
+		s := ev.TMLSurface
+		what := fmt.Sprintf("version %d", s.Version)
+		switch {
+		case s.Closed:
+			what = "closed"
+		case len(s.Ops) > 0:
+			what += ", patched"
+		}
+		return joinText("tml "+plainLine(s.Surface), what, plainLine(s.Title))
 	case session.EventTaskClaimed, session.EventTaskFinished, session.EventTaskChanged:
 		verb := strings.TrimPrefix(ev.Type, "task-")
 		if ev.Type == session.EventTaskChanged && ev.Action != "" {

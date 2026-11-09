@@ -28,6 +28,7 @@ type handoffEvents struct {
 	LastFileSeq       uint64        `json:"last_file_seq,omitempty"`
 	LastLayoutSeq     uint64        `json:"last_layout_seq,omitempty"`
 	LastTMLSeq        uint64        `json:"last_tml_seq,omitempty"`
+	LastTMLSurfaceSeq uint64        `json:"last_tml_surface_seq,omitempty"`
 }
 
 // handoffMailbox is one session's agent mailbox.
@@ -69,7 +70,7 @@ func (h *eventHub) handoffState() handoffEvents {
 		LastOutputSeq: h.lastOutputSeq, LastActivitySeq: h.lastActivitySeq,
 		LastTranscriptSeq: h.lastTranscriptSeq, LastProgressSeq: h.lastProgressSeq,
 		LastFileSeq: h.lastFileSeq, LastLayoutSeq: h.lastLayoutSeq,
-		LastTMLSeq: h.lastTMLSeq,
+		LastTMLSeq: h.lastTMLSeq, LastTMLSurfaceSeq: h.lastTMLSurfaceSeq,
 	}
 	for i := range h.ringLen {
 		e := h.ring[(h.ringStart+i)%len(h.ring)]
@@ -93,7 +94,7 @@ func (h *eventHub) restore(ev handoffEvents) {
 	h.lastOutputSeq, h.lastActivitySeq = ev.LastOutputSeq, ev.LastActivitySeq
 	h.lastTranscriptSeq, h.lastProgressSeq = ev.LastTranscriptSeq, ev.LastProgressSeq
 	h.lastFileSeq, h.lastLayoutSeq = ev.LastFileSeq, ev.LastLayoutSeq
-	h.lastTMLSeq = ev.LastTMLSeq
+	h.lastTMLSeq, h.lastTMLSurfaceSeq = ev.LastTMLSeq, ev.LastTMLSurfaceSeq
 	ring := ev.Ring
 	if len(ring) > len(h.ring) {
 		// A smaller ring than the old image's: the oldest go, as they would

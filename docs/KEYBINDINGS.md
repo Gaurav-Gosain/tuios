@@ -778,7 +778,8 @@ settings, the opener and a table of terminals.
 
 A pane can address another pane with a `tuios://window/<id>` link, where
 `<id>` is the pane's short id from the sidebar or `list-windows`. A plain
-`Ctrl+click` there jumps to that pane, and a
+`Ctrl+click` there jumps to that pane, and switches to its session first
+when the pane is in another session of the same daemon. A
 `tuios://window/<id>/close` link asks first: the confirmation names the
 pane and only a second click closes it.
 
@@ -1645,6 +1646,27 @@ copy_mode_line_end = ["end", "ctrl+e"]
 
 tuios cannot put two actions on one key. `tuios send-keys` cannot do it either,
 because a key from `send-keys` does not go to copy mode.
+
+### Word movement
+
+`Shift+Left` and `Shift+Right` move by word as `b` and `w` do, including
+counts and visual selections.
+
+| Action | Default key |
+| --- | --- |
+| `copy_mode_word_backward` | `Shift+Left` |
+| `copy_mode_word_forward` | `Shift+Right` |
+
+Rebind or disable them in copy mode:
+
+```toml
+[keybindings.copy_mode]
+copy_mode_word_backward = []
+copy_mode_word_forward = ["alt+right"]
+```
+
+The fixed `b` and `w` keys remain available. Terminal emulators must send
+shifted arrow keys to tuios for the defaults to work.
 
 ### Hints in copy mode
 

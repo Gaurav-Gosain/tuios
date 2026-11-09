@@ -45,3 +45,53 @@ func ExampleSurface_Key() {
 	// Output:
 	// emit rerun 3
 }
+
+// RunActions is for a host that draws the document with widgets of its own:
+// a press on its button runs the button's actions with loom's semantics.
+func ExampleRunActions() {
+	doc, _, err := tml.Check([]byte(`<tml version="1">
+  <state>{"n": 1}</state>
+  <button on-press="set('n', state.n + 1); emit('bumped', state.n)">Bump</button>
+</tml>`), nil)
+	if err != nil {
+		panic(err)
+	}
+	store, err := tml.StoreFor(doc, nil)
+	if err != nil {
+		panic(err)
+	}
+	button := doc.Children[len(doc.Children)-1]
+	attr, _ := button.Attr("on-press")
+	acts, err := tml.ParseActions(attr.Str)
+	if err != nil {
+		panic(err)
+	}
+	res, err := loom.RunActions(doc, store, loom.NewView(), "/children/1", acts, nil)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(store.Get("/n"), res.Changed)
+	for _, e := range res.Effects {
+		fmt.Println(e.Action, e.Name, e.Value)
+	}
+	// Output:
+	// 2 [/n]
+	// emit bumped 2
+}
+
+// SortRows and FilterRows order and narrow a table's rows as a Surface does,
+// for a host that draws the table itself.
+func ExampleSortRows() {
+	rows := []any{
+		map[string]any{"pkg": "vt", "ms": 120.0},
+		map[string]any{"pkg": "app", "ms": 840.0},
+		map[string]any{"pkg": "session", "ms": 2210.0},
+	}
+	spec, _ := loom.ParseSort("ms:desc")
+	for _, r := range loom.SortRows(loom.FilterRows(rows, "1"), spec) {
+		fmt.Println(r.(map[string]any)["pkg"])
+	}
+	// Output:
+	// session
+	// vt
+}

@@ -11,6 +11,7 @@ import (
 	"github.com/anmitsu/go-shlex"
 
 	"github.com/Gaurav-Gosain/tuios/internal/hints"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // Which machine opens a link is the whole of this file, and it is the question
@@ -186,17 +187,41 @@ func parseTuiosLink(rawURL string) (tuiosLink, bool) {
 	return tuiosLink{id: rest}, true
 }
 
-// openWindowLink acts on a tuios://window link. The window set is the
-// client's own in every deployment, so the id resolves here: a full uuid or
-// a prefix that names exactly one window. A prefix two windows share names
-// nothing, because focusing or closing the wrong pane one time in many is
-// worse than saying the address was ambiguous.
+// openWindowLink acts on a tuios://window link. The id resolves among the
+// attached session's windows and the windows of the daemon's other sessions:
+// a full uuid, or a prefix that names exactly one pane. A pane of another
+// session switches the client there first, as switch-session then
+// focus-window would. A prefix two panes share names nothing, because
+// focusing or closing the wrong pane one time in many is worse than saying
+// the address was ambiguous.
+//
+// The other sessions' windows come from a fresh listing, fetched off the UI
+// goroutine, never from the rail's cache: a cached pane may have closed, and
+// switching for it would move the person to a session for nothing.
 func (m *OS) openWindowLink(target tuiosLink, rawURL string) tea.Cmd {
-	i, found := m.resolveWindowByIDPrefix(target.id)
-	if !found {
-		m.ShowNotification("The window link names no window on this machine, or names more than one. The address is on your clipboard.",
-			"warning", m.Settings.NotificationDuration)
-		return tea.SetClipboard(rawURL)
+	if m.DaemonClient == nil {
+		return m.followWindowLink(target, rawURL, nil)
+	}
+	client := m.DaemonClient
+	return func() tea.Msg {
+		sessions, _ := client.RefreshSessionList() // on an error only the attached session's panes resolve
+		return windowLinkListedMsg{target: target, rawURL: rawURL, sessions: sessions}
+	}
+}
+
+// followWindowLink acts on a window link once the other sessions' panes are
+// known.
+func (m *OS) followWindowLink(target tuiosLink, rawURL string, sessions []session.SessionInfo) tea.Cmd {
+	matches := m.resolveWindowLink(target.id, sessions)
+	if len(matches) != 1 {
+		return m.windowLinkMiss(rawURL)
+	}
+	if matches[0].session != "" && !m.openSession("", matches[0].session) {
+		return nil // openSession reported why
+	}
+	i := m.windowIndexByID(matches[0].id)
+	if i < 0 {
+		return m.windowLinkMiss(rawURL)
 	}
 	if target.close {
 		// The click lands wherever a program chose to print the link, and the
@@ -211,25 +236,47 @@ func (m *OS) openWindowLink(target tuiosLink, rawURL string) tea.Cmd {
 	return nil
 }
 
-// resolveWindowByIDPrefix finds the window an id or id prefix names.
-func (m *OS) resolveWindowByIDPrefix(id string) (int, bool) {
-	for i, w := range m.Windows {
-		if strings.EqualFold(w.ID, id) {
-			return i, true
+// windowLinkListedMsg carries a window link and the session listing fetched
+// for it.
+type windowLinkListedMsg struct {
+	target   tuiosLink
+	rawURL   string
+	sessions []session.SessionInfo
+}
+
+// windowLinkMiss says a window link named no pane, or more than one.
+func (m *OS) windowLinkMiss(rawURL string) tea.Cmd {
+	m.ShowNotification("The window link names no window on this machine, or names more than one. The address is on your clipboard.",
+		"warning", m.Settings.NotificationDuration)
+	return tea.SetClipboard(rawURL)
+}
+
+// windowLinkMatch is a pane a window link names: its session ("" for the
+// attached one) and its full id.
+type windowLinkMatch struct{ session, id string }
+
+// resolveWindowLink finds the panes an id or id prefix names, in the attached
+// session and in the listing of the daemon's other sessions. Every id is a
+// uuid of the same length, so a full id is a prefix of its own pane only.
+func (m *OS) resolveWindowLink(id string, sessions []session.SessionInfo) []windowLinkMatch {
+	var matches []windowLinkMatch
+	add := func(session, wid string) {
+		if strings.HasPrefix(strings.ToLower(wid), strings.ToLower(id)) {
+			matches = append(matches, windowLinkMatch{session, wid})
 		}
 	}
-	matches := 0
-	index := 0
-	for i, w := range m.Windows {
-		if strings.HasPrefix(strings.ToLower(w.ID), strings.ToLower(id)) {
-			matches++
-			index = i
+	for _, w := range m.Windows {
+		add("", w.ID)
+	}
+	for _, s := range sessions {
+		if s.Name == m.SessionName {
+			continue // m.Windows is the attached session's live list
+		}
+		for _, w := range s.Windows {
+			add(s.Name, w.ID)
 		}
 	}
-	if matches == 1 {
-		return index, true
-	}
-	return 0, false
+	return matches
 }
 
 // linkTextClean reports whether an address holds no control byte and no

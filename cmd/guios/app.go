@@ -98,6 +98,10 @@ type App struct {
 	// diffW is the width each diff's rows were last sized to
 	// (diffWidthSeen).
 	diffW map[uint64]float32
+	// tmls are the TML surfaces the app draws, by surface id (tml_view.go).
+	tmls map[string]*tmlView
+	// tmlSent, set in tests, takes each tml-input in place of the daemon.
+	tmlSent func(map[string]any)
 	// diffClip is the view a diff page shows its diffs in, in window DIPs
 	// of the last frame, while the page builds them: diffView builds only
 	// the lines in it. Empty builds every line.
@@ -448,6 +452,10 @@ func (a *App) event(h *host, cl *client.Client, m proto.Message) {
 		if !h.remote() && m.Daemon != nil && m.Daemon.Type == "option-set" {
 			// tuios set-config on a theme: guios follows the TUI's theme.
 			a.tuiosOptionSet(m.Daemon.Key, m.Daemon.Value)
+			return
+		}
+		if !h.remote() && m.Daemon != nil && m.Daemon.Type == "tml-surface" {
+			a.tmlEvent(m.Daemon)
 			return
 		}
 		if !h.remote() {

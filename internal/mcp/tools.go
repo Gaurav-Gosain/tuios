@@ -388,8 +388,9 @@ var EventTypes = []string{
 	// every connection of tuios mcp is, so these two never arrive here.
 	// They are listed so the list stays the daemon's.
 	"transfer", "transfer-progress", "transfer-file",
-	// What a person did on a TML surface. Opt-in.
+	// What a person did on a TML surface, and its changes. Opt-in.
 	"tml-event",
+	"tml-surface",
 	// A session's task cards.
 	"task-claimed", "task-finished", "task-changed", "task-dispatch",
 	// A judge's verdict on a fan.

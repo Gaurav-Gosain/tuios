@@ -636,6 +636,15 @@ type SessionState struct {
 	// used last. Only the save and the restore read it. Zero in state written
 	// before it existed, and for a session nobody has used.
 	LastUsed int64 `json:"last_used,omitempty"`
+	// KittyGraphics and SixelGraphics are the graphics the session's last
+	// attached client draws (Session.GraphicsCapabilities), as they were when
+	// the state was saved. ResurrectionState stamps them and a restore sets
+	// them again before it spawns a shell. The restore runs before any client
+	// attaches, so without them every restored shell was told
+	// TERM_PROGRAM=TUIOS where it had been told ghostty, and Claude Code
+	// resumed in it lost Shift+Enter (see guestenv.TermProgram).
+	KittyGraphics bool `json:"kitty_graphics,omitempty"`
+	SixelGraphics bool `json:"sixel_graphics,omitempty"`
 	// Worktree is the daemon's record of the git worktree this session's
 	// directory is, or nil for a session that is not in one. Daemon-owned and
 	// omitted when nil, which is what every older client and state file reads.
@@ -1842,6 +1851,9 @@ type Session struct {
 	graphicsMu    sync.RWMutex
 	kittyGraphics bool
 	sixelGraphics bool
+	// graphicsKnown says SetGraphicsCapabilities was called. Until then
+	// GraphicsCapabilities answers with the daemon's most recent client.
+	graphicsKnown bool
 	// linkedViewer says a client attached over a link, from another machine,
 	// is drawing this session. Read from the VT callback, so it is atomic
 	// rather than behind a lock that callback could wait on. See
@@ -1885,6 +1897,7 @@ func (s *Session) SetGraphicsCapabilities(kitty, sixel bool) {
 	defer s.graphicsMu.Unlock()
 	s.kittyGraphics = kitty
 	s.sixelGraphics = sixel
+	s.graphicsKnown = true
 }
 
 // SetKittyAnimation records whether the hosts of the session's attached
@@ -1927,11 +1940,16 @@ func (s *Session) SetKittyAdvertised(ok bool) { s.kittyAdvertised.Store(ok) }
 // SixelAdvertised reports what SetSixelAdvertised last recorded.
 func (s *Session) SixelAdvertised() bool { return s.sixelAdvertised.Load() }
 
-// GraphicsCapabilities returns the recorded kitty and sixel support.
+// GraphicsCapabilities returns the recorded kitty and sixel support, or the
+// daemon's most recent client's while no client has attached to the session.
 func (s *Session) GraphicsCapabilities() (kitty, sixel bool) {
 	s.graphicsMu.RLock()
-	defer s.graphicsMu.RUnlock()
-	return s.kittyGraphics, s.sixelGraphics
+	kitty, sixel, known := s.kittyGraphics, s.sixelGraphics, s.graphicsKnown
+	s.graphicsMu.RUnlock()
+	if !known && s.config != nil && s.config.HostGraphics != nil {
+		return s.config.HostGraphics()
+	}
+	return kitty, sixel
 }
 
 // SessionConfig holds configuration for a session.
@@ -1963,6 +1981,9 @@ type SessionConfig struct {
 	// each spawn so a reload reaches the next pane. Nil means on. See
 	// internal/shellinteg.
 	ShellIntegration func() bool
+	// ShellLogin reports whether [shell] login is on, read at each spawn.
+	// Nil means off. See shellinteg.Login.
+	ShellLogin func() bool
 	// ReturnWhenEmpty reports workspaces.return_when_empty. The manager
 	// stamps it with its own getter, so a config reload reaches every
 	// session. Nil means on.
@@ -1983,6 +2004,10 @@ type SessionConfig struct {
 	// session's newest local client while [daemon] display follows, nil
 	// otherwise. The manager stamps it. See display_follow.go.
 	DisplayEnv func(sessionID string) []string
+	// HostGraphics returns the graphics of the daemon's most recent client,
+	// which a session no client has attached to tells its shells. The
+	// manager stamps it. See Manager.noteHostGraphics.
+	HostGraphics func() (kitty, sixel bool)
 	// CellSize returns the cell, in pixels, a new pane of the session takes,
 	// ok false when no client has measured one. The manager stamps it. See
 	// Daemon.newPaneCellSize.
@@ -2533,7 +2558,7 @@ func (s *Session) CreatePTY(windowID string, width, height int, onExit func(ptyI
 // and a one-line banner is written to the terminal so the user can see the
 // process is a freshly respawned shell, not the original long-lived one.
 func (s *Session) RestorePTY(windowID string, width, height int, cwd string, onExit func(ptyID string)) (*PTY, error) {
-	return s.createPTY(width, height, ptySpawn{windowID: windowID, cwd: cwd, restored: &restoreSpec{}, onExit: onExit})
+	return s.createPTY(width, height, ptySpawn{windowID: windowID, cwd: cwd, restored: &restoreSpec{savedCwd: cwd}, onExit: onExit})
 }
 
 // restorePTYWithGrants is RestorePTY for a window that was saved with grants
@@ -2541,7 +2566,7 @@ func (s *Session) RestorePTY(windowID string, width, height int, cwd string, onE
 // history, when not nil, is the pane's saved history, which the new emulator
 // shows above the banner.
 func (s *Session) restorePTYWithGrants(windowID string, width, height int, cwd string, grants *Grants, history *savedHistory, workspace int, onExit func(ptyID string)) (*PTY, error) {
-	return s.createPTY(width, height, ptySpawn{windowID: windowID, cwd: cwd, restored: &restoreSpec{history: history}, onExit: onExit, grants: grants, workspace: workspace})
+	return s.createPTY(width, height, ptySpawn{windowID: windowID, cwd: cwd, restored: &restoreSpec{history: history, savedCwd: cwd}, onExit: onExit, grants: grants, workspace: workspace})
 }
 
 // restorePlaceholderPTY starts the placeholder of a window a renderer draws
@@ -2612,12 +2637,19 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 	if sp.grants == nil && sp.host == "" && sp.windowID != "" {
 		sp.grants = s.recordedGrants(sp.windowID)
 	}
+	// startDir is the folder a local shell starts in, "" for the daemon's: cwd
+	// when it is a folder. Decided once, so the shell, its start folder and a
+	// restored pane's banner agree.
+	var startDir string
+	if sp.host == "" && sp.cwd != "" {
+		if info, err := os.Stat(sp.cwd); err == nil && info.IsDir() {
+			startDir = sp.cwd
+		}
+	}
 	if sp.restored == nil && sp.host == "" && sp.windowID != "" && !sp.noStartDir {
 		dir := s.StartDir()
-		if sp.cwd != "" {
-			if info, err := os.Stat(sp.cwd); err == nil && info.IsDir() {
-				dir = sp.cwd
-			}
+		if startDir != "" {
+			dir = startDir
 		}
 		s.noteStartDir(sp.windowID, dir)
 	}
@@ -2704,6 +2736,9 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 					cmd.Env = env
 				}
 			}
+			if len(sp.command) == 0 && s.config != nil && s.config.ShellLogin != nil && s.config.ShellLogin() {
+				shellinteg.Login(cmd)
+			}
 			// The pane's terminal, so a tuios client can tell whether it runs
 			// on it or only inherited the pane's variables. See
 			// nested_attach.go.
@@ -2724,10 +2759,8 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 			// somewhere else and no indication of it. Restoration and placement are
 			// separate questions: the flag still decides the banner, because that
 			// is what it is about.
-			if sp.cwd != "" {
-				if info, statErr := os.Stat(sp.cwd); statErr == nil && info.IsDir() {
-					cmd.Dir = sp.cwd
-				}
+			if startDir != "" {
+				cmd.Dir = startDir
 			}
 			return cmd
 		}, debugLog)
@@ -2748,7 +2781,13 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 	// the real PTY, so the shell is unaffected.
 	var terminal vt.Terminal
 	if sp.restored != nil {
-		terminal = newRestoredEmulator(width, height, s.scrollbackLines(), sp.cwd, sp.restored.history)
+		// A saved folder the shell could not start in left it in the daemon's.
+		// A pane saved with no folder names none.
+		startedIn := startDir
+		if startedIn == "" && sp.restored.savedCwd != "" {
+			startedIn, _ = os.Getwd()
+		}
+		terminal = newRestoredEmulator(width, height, s.scrollbackLines(), startedIn, sp.restored)
 	} else {
 		terminal = vt.NewWithScrollback(width, height, s.scrollbackLines())
 	}
@@ -3631,6 +3670,7 @@ func (s *Session) ResurrectionState() *SessionState {
 	}
 	state.SessionID = s.ID
 	state.StartDir = s.StartDir()
+	state.KittyGraphics, state.SixelGraphics = s.GraphicsCapabilities()
 	state.LastUsed = 0
 	if used := s.LastUsed(); !used.IsZero() {
 		state.LastUsed = used.UnixNano()
@@ -4451,18 +4491,6 @@ func (s *Session) buildEnvFor(windowID string, workspace int, restored bool, ext
 	}
 
 	return env
-}
-
-// restoredBanner returns the dim one-line notice written to a restored shell's
-// terminal emulator. cwd, when set, is included so the user sees where the
-// fresh shell was spawned.
-func restoredBanner(cwd string) string {
-	msg := "-- tuios: session restored, fresh shell"
-	if cwd != "" {
-		msg += " in " + cwd
-	}
-	msg += " --"
-	return "\x1b[2m" + msg + "\x1b[0m\r\n"
 }
 
 // PTY methods

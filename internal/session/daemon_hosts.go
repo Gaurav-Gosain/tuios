@@ -129,6 +129,7 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	// The marks change what a new shell prints and nothing a pane may do,
 	// so a file change applies both ways.
 	d.manager.SetShellIntegration(cfg.Shell.Integration)
+	d.manager.SetShellLogin(cfg.Shell.Login)
 	d.manager.SetHerdrProtocol(cfg.Agents.HerdrProtocol)
 	d.manager.SetReturnWhenEmpty(cfg.Workspaces.ReturnsWhenEmpty())
 	d.manager.SetDragAndDrop(cfg.Panes.DragAndDrop)

@@ -132,6 +132,8 @@ type savedHistory struct {
 type restoreSpec struct {
 	// history is the pane's saved history, nil when it has none.
 	history *savedHistory
+	// savedCwd is the folder the pane was saved in, "" when none was saved.
+	savedCwd string
 }
 
 // historyMark is what a session remembers about the last save of one pane.
@@ -556,12 +558,22 @@ func loadHistory(sessionName string) map[string]*savedHistory {
 	return out
 }
 
-// historyBanner is the divider a restored pane shows under its history, or
-// the banner alone when it has none.
-func historyBanner(cwd string, savedAt time.Time) string {
-	msg := "-- tuios: restored from " + savedAt.Local().Format("Jan 2 15:04") + ", fresh shell"
+// restoredBanner is the dim notice a restored pane shows: the divider under
+// its history, or the banner alone when it has none. It names the folder the
+// new shell started in, cwd, and the saved folder when the shell could not
+// start there.
+func restoredBanner(cwd string, r *restoreSpec) string {
+	var msg string
+	if r.history != nil {
+		msg = "-- tuios: restored from " + r.history.SavedAt.Local().Format("Jan 2 15:04") + ", fresh shell"
+	} else {
+		msg = "-- tuios: session restored, fresh shell"
+	}
 	if cwd != "" {
 		msg += " in " + cwd
+	}
+	if r.savedCwd != "" && r.savedCwd != cwd {
+		msg += " (" + r.savedCwd + " no longer available)"
 	}
 	msg += " --"
 	return "\x1b[2m" + msg + "\x1b[0m\r\n"
@@ -577,15 +589,16 @@ func restoreHistory(t vt.Terminal, h *savedHistory) {
 
 // newRestoredEmulator builds the emulator for a restored pane of width x
 // height: the saved history, when there is one, and the banner.
-func newRestoredEmulator(width, height, scrollback int, cwd string, h *savedHistory) vt.Terminal {
+func newRestoredEmulator(width, height, scrollback int, cwd string, r *restoreSpec) vt.Terminal {
+	h := r.history
 	if h == nil {
 		t := vt.NewWithScrollback(width, height, scrollback)
-		_, _ = t.Write([]byte(restoredBanner(cwd)))
+		_, _ = t.Write([]byte(restoredBanner(cwd, r)))
 		return t
 	}
 	t := vt.NewWithScrollback(h.State.Width, h.State.Height, scrollback)
 	restoreHistory(t, h)
-	_, _ = t.Write([]byte(historyBanner(cwd, h.SavedAt)))
+	_, _ = t.Write([]byte(restoredBanner(cwd, r)))
 	if t.Width() != width || t.Height() != height {
 		t.Resize(width, height)
 	}

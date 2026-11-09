@@ -92,7 +92,7 @@ func TestSavedHistoryCarriesPadding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	restored := newRestoredEmulator(9, 4, 1000, "", back)
+	restored := newRestoredEmulator(9, 4, 1000, "", &restoreSpec{history: back})
 	restored.Resize(20, 12)
 	// The positive half: the daemon that saved it joins the line too.
 	src.Resize(20, 12)
@@ -170,7 +170,7 @@ func TestSavedHistoryKeepsAFrozenPromptsTail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	restored := newRestoredEmulator(60, 4, 1000, "", back)
+	restored := newRestoredEmulator(60, 4, 1000, "", &restoreSpec{history: back})
 	if got := textOf(restored); !strings.Contains(got, typed) {
 		t.Errorf("the restored pane lost the part of the command past the narrow width:\n%s", got)
 	}

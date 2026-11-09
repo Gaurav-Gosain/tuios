@@ -7792,6 +7792,96 @@ func (msgs Messages) CockpitDiffCut(count int) string {
 	return Catalog.Format(msgs.locale, "cockpitDiffCut", map[string]any{"count": count})
 }
 
+// TmlNotDrawn says "guios does not draw a {kind} yet."
+// in the language the app shows.
+func TmlNotDrawn(kind string) string { return In(i18n.Locale()).TmlNotDrawn(kind) }
+
+// TmlNotDrawn says "guios does not draw a {kind} yet."
+// in the language of msgs.
+func (msgs Messages) TmlNotDrawn(kind string) string {
+	return Catalog.Format(msgs.locale, "tmlNotDrawn", map[string]any{"kind": kind})
+}
+
+// TmlAllow says "Allow"
+// in the language the app shows.
+func TmlAllow() string { return In(i18n.Locale()).TmlAllow() }
+
+// TmlAllow says "Allow"
+// in the language of msgs.
+func (msgs Messages) TmlAllow() string {
+	return Catalog.Format(msgs.locale, "tmlAllow", nil)
+}
+
+// TmlDoNotRun says "Do not run"
+// in the language the app shows.
+func TmlDoNotRun() string { return In(i18n.Locale()).TmlDoNotRun() }
+
+// TmlDoNotRun says "Do not run"
+// in the language of msgs.
+func (msgs Messages) TmlDoNotRun() string {
+	return Catalog.Format(msgs.locale, "tmlDoNotRun", nil)
+}
+
+// TmlAskType says "This surface wants to type {text} into a pane."
+// in the language the app shows.
+func TmlAskType(text string) string { return In(i18n.Locale()).TmlAskType(text) }
+
+// TmlAskType says "This surface wants to type {text} into a pane."
+// in the language of msgs.
+func (msgs Messages) TmlAskType(text string) string {
+	return Catalog.Format(msgs.locale, "tmlAskType", map[string]any{"text": text})
+}
+
+// TmlAskOpenShell says "This surface wants to open a pane with a shell."
+// in the language the app shows.
+func TmlAskOpenShell() string { return In(i18n.Locale()).TmlAskOpenShell() }
+
+// TmlAskOpenShell says "This surface wants to open a pane with a shell."
+// in the language of msgs.
+func (msgs Messages) TmlAskOpenShell() string {
+	return Catalog.Format(msgs.locale, "tmlAskOpenShell", nil)
+}
+
+// TmlAskOpenCommand says "This surface wants to open a pane that runs: {command}"
+// in the language the app shows.
+func TmlAskOpenCommand(command string) string { return In(i18n.Locale()).TmlAskOpenCommand(command) }
+
+// TmlAskOpenCommand says "This surface wants to open a pane that runs: {command}"
+// in the language of msgs.
+func (msgs Messages) TmlAskOpenCommand(command string) string {
+	return Catalog.Format(msgs.locale, "tmlAskOpenCommand", map[string]any{"command": command})
+}
+
+// TmlAskRun says "This surface wants to run {verb}."
+// in the language the app shows.
+func TmlAskRun(verb string) string { return In(i18n.Locale()).TmlAskRun(verb) }
+
+// TmlAskRun says "This surface wants to run {verb}."
+// in the language of msgs.
+func (msgs Messages) TmlAskRun(verb string) string {
+	return Catalog.Format(msgs.locale, "tmlAskRun", map[string]any{"verb": verb})
+}
+
+// TmlRequired says "Fill in every required field first."
+// in the language the app shows.
+func TmlRequired() string { return In(i18n.Locale()).TmlRequired() }
+
+// TmlRequired says "Fill in every required field first."
+// in the language of msgs.
+func (msgs Messages) TmlRequired() string {
+	return Catalog.Format(msgs.locale, "tmlRequired", nil)
+}
+
+// TmlTooManyActions says "One press can run at most {count} pane actions. Nothing ran."
+// in the language the app shows.
+func TmlTooManyActions(count string) string { return In(i18n.Locale()).TmlTooManyActions(count) }
+
+// TmlTooManyActions says "One press can run at most {count} pane actions. Nothing ran."
+// in the language of msgs.
+func (msgs Messages) TmlTooManyActions(count string) string {
+	return Catalog.Format(msgs.locale, "tmlTooManyActions", map[string]any{"count": count})
+}
+
 // CockpitNoChanges says "No changes"
 // in the language the app shows.
 func CockpitNoChanges() string { return In(i18n.Locale()).CockpitNoChanges() }

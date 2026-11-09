@@ -40,8 +40,29 @@ tuios send-agent-message -s crew-lead -w LEAD_ID --from "$TUIOS_PANE_ID" 'api-do
 tuios set-agent-state done -m 'api-docs: 3 pages rewritten'
 ```
 
-There are no start presets yet. Keep the start line, its flags and any keys
-the worker needs once it is ready in a script of your own.
+A preset keeps the start line in the config, with the keys the worker needs
+once it is ready:
+
+```toml
+[agents.presets.worker]
+agent = "claude"
+add_dirs = ["~/notes"]
+grants = ["read", "write", "task"]
+after_ready = ["/remote-control", "Enter"]
+```
+
+```sh
+id=$(tuios start-agent --preset worker -s crew-api --name api-docs --cwd ~/dev/api --prompt 'Read ~/notes/briefs/api-docs.md and do it.' --print-id)
+```
+
+`--print-id` prints the full id alone. Your own flags add to the preset's:
+`args`, `env` and `after_ready` come after the preset's, `--grants` replaces
+its grants, and a preset never grants more than you may. `after_ready` runs
+before `--prompt`, a step at a time. A step that is one key name (`Enter`,
+`Escape`) is that key, and any other step is typed as text. A worker that
+stops on a prompt of its own stops the steps, and `after_ready_status` in
+`--json` says so. A preset works for a worker on another machine too
+(`-s build:crew`).
 
 ## See the crew
 
@@ -100,7 +121,9 @@ tuios capture-pane -s crew-api -w api-docs --trim
 tuios agent-log -s crew-api -w api-docs --since 30m --recap
 ```
 
-`capture-pane` is a quick look at the screen. A full-screen agent redraws,
+`capture-pane` takes the window as `-w` or as its argument
+(`capture-pane -s crew-api api-docs`), and refuses the two when they name
+different windows. It is a quick look at the screen. A full-screen agent redraws,
 so the scrollback does not hold its whole answer. `agent-log --recap` gives
 the turns, the files written, the last test run and the last words. A pane
 reads the log of panes in its own session and fan group only.
@@ -164,15 +187,17 @@ tuios wait-for agent-message -w "$TUIOS_PANE_ID" --timeout 1800000
 
 ## Work on another machine
 
-There is no `run --host` yet. Run one command as the program of a window
-whose process is on the host. `--wait` exits with its status, and
-`--keep-open` keeps the output to read:
+Run one command on a linked machine with `run --host`. It opens no pane,
+prints the command's output and exits with its status:
 
 ```sh
-tuios new-window -s crew-lead probe --host build --no-focus --keep-open --wait -- sh -c 'fc-list | wc -l'
-tuios capture-pane -s crew-lead -w probe --trim
-tuios close-window -s crew-lead probe
+tuios run --host build -- sh -c 'fc-list | wc -l'
+tuios run --host build --cwd ~/dev/api --timeout 600000 --json -- go test ./...
 ```
+
+`--timeout` stops the command and everything it started, and tuios exits
+`124`. Each stream keeps its last 1 MiB. The link needs `open` in the host's
+policy.
 
 Copy files with `tuios cp`. The daemon checks each file with sha256:
 
@@ -191,10 +216,22 @@ tuios send-agent-message -s build:crew -w bench --from "$TUIOS_PANE_ID" 'main mo
 ```
 
 Mail to a host whose link is down waits here and goes when the link is back
-(`queued` in `--json`). A link that needs a sign-in holds mail and tells
-nobody. When a far worker is quiet, run `tuios hosts` and look at its link
-state. `tuios hosts signin build --print` gives the sign-in page for the
-person.
+(`queued` in `--json`). The person's Inbox says how many messages wait and
+why the link is down, and when the link waits for a sign-in, the item opens
+the sign-in page. The other machine's Inbox says that mail waits there too.
+When a far worker is quiet, run `tuios hosts` and look at its link state.
+`tuios hosts signin build --print` gives the sign-in page for the person.
+
+To see whether your mail arrived and was read, on every session and machine:
+
+```sh
+tuios read-agent-messages --sent -w "$TUIOS_PANE_ID"
+```
+
+Each message shows as delivered and unread, seen, read (with when), or
+undeliverable, and mail that still waits for a link shows as waiting. It
+marks nothing. A machine it cannot ask now is named, and its mail is left
+out.
 
 ## Clean up
 

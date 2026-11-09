@@ -442,7 +442,7 @@ func (d *Daemon) mailOriginOf(cs *connState, verifiedHuman bool) (queueOrigin, b
 		if pa.hosted {
 			return queueOrigin{}, false
 		}
-		return queueOrigin{kind: "pane", window: pa.window, session: pa.session}, true
+		return queueOrigin{kind: "pane", window: pa.window, session: pa.session, outside: pa.outsideWithAdmin()}, true
 	}
 	return queueOrigin{kind: queueByShell}, true
 }

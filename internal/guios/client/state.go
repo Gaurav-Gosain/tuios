@@ -87,8 +87,10 @@ type windowRow struct {
 	// Kind and URI name a window a native renderer draws, and what it
 	// shows: kind web is a browser pane on the page in uri. Empty for a
 	// terminal.
-	Kind     string `json:"kind"`
-	URI      string `json:"uri"`
+	Kind string `json:"kind"`
+	URI  string `json:"uri"`
+	// Surface is a tml window's surface id.
+	Surface  string `json:"surface"`
 	Exited   bool   `json:"exited"`
 	ExitCode int    `json:"exit_code"`
 	Signal   int    `json:"signal"`
@@ -351,6 +353,12 @@ func (k *stateKeeper) pane(w windowRow) proto.Pane {
 	if w.Agent == "working" && w.AgentReason == "silent" {
 		p.AgentState = "unknown"
 	}
+	if w.Kind == "tml" {
+		// A TML surface, drawn by the app (cmd/guios/tml_view.go). Its
+		// program is the daemon's placeholder, as a web window's is.
+		p.Surface = w.Surface
+		p.Process, p.Running = "", false
+	}
 	if w.Kind == "web" {
 		// A browser pane, drawn by the app's web view (proto.Pane.Browser).
 		// Its program is the daemon's placeholder: its title ("Terminal
@@ -528,6 +536,8 @@ func (k *stateKeeper) watch() {
 		"fan-verdict",
 		// tuios set-config on a theme, which guios follows.
 		"option-set",
+		// A TML surface opened, changed or closed: the app draws it.
+		"tml-surface",
 	}); err != nil {
 		k.c.end()
 		return
@@ -548,8 +558,18 @@ func (k *stateKeeper) watch() {
 			Message string `json:"message"`
 			Key     string `json:"key"`
 			Value   string `json:"value"`
+			// TML is a tml-surface event's change.
+			TML *proto.TMLChange `json:"tml_surface"`
 		}
 		_ = jsonx.Unmarshal(line, &ev)
+		if ev.Type == "tml-surface" {
+			// No pane changed: the window's own events say when one opens
+			// or closes. The app keeps the surface's tree and state.
+			if ev.TML != nil {
+				k.c.emit(proto.Message{Event: "daemon", Daemon: &proto.DaemonEvent{Type: ev.Type, Session: ev.Session, Window: ev.Window, TML: ev.TML}})
+			}
+			continue
+		}
 		if ev.Type == "option-set" {
 			// No pane changed. Only the theme options reach the app.
 			if slices.Contains(ThemeOptions, ev.Key) {

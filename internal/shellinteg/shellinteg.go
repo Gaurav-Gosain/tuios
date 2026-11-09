@@ -15,7 +15,8 @@
 //     ~/.bashrc and then adds the marks. tuios starts bash as an interactive
 //     shell that is not a login shell, which is the shell that reads
 //     ~/.bashrc, so --rcfile changes nothing else about the startup.
-//     BASH_ENV, ENV and HISTFILE stay as they are.
+//     BASH_ENV, ENV and HISTFILE stay as they are. With [shell] login on,
+//     the file reads the login files in place of ~/.bashrc (see Login).
 //
 // Each script looks at what the user's own setup sends first and sends only
 // the marks it does not, so a prompt that marks itself is not marked twice.
@@ -34,6 +35,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -52,6 +54,10 @@ var zshEnvScript []byte
 
 //go:embed scripts/tuios.zsh
 var zshScript []byte
+
+// BashLoginEnv tells tuios's bash rc file to read the files a login bash
+// reads, in place of ~/.bashrc. It unsets it.
+const BashLoginEnv = "TUIOS_BASH_LOGIN"
 
 // ZDOTDIREnv carries the user's ZDOTDIR past the shim, which sets it back.
 // Its absence means the user had none.
@@ -204,4 +210,38 @@ func install(dir string) error {
 		}
 	}
 	return nil
+}
+
+// Login makes cmd, which starts a shell with what Setup gave it or as it is,
+// start a login shell, for [shell] login (issue #1768), so the shell reads
+// the user's login files (.zprofile, .bash_profile, .profile) as a terminal
+// on macOS does.
+//
+//   - zsh, fish and nushell take -l. A login zsh reads .zprofile and .zlogin
+//     from the ZDOTDIR the shim gives back.
+//   - bash with tuios's --rcfile keeps it: a login bash reads no rc file at
+//     all, so it would lose the marks. The rc file reads the login files in
+//     place of ~/.bashrc when BashLoginEnv is set, as VS Code does. A bash
+//     without the rc file takes -l.
+//   - Any other shell gets a leading - in argv[0], the login convention
+//     every Unix shell reads: sh, dash, ksh, tcsh.
+//
+// On Windows a shell has no login mode, and cmd is left as it is.
+func Login(cmd *exec.Cmd) {
+	if runtime.GOOS == "windows" || len(cmd.Args) == 0 {
+		return
+	}
+	name := strings.TrimPrefix(filepath.Base(cmd.Path), "-")
+	switch name {
+	case "zsh", "fish", "nu":
+		cmd.Args = slices.Insert(cmd.Args, 1, "-l")
+	case "bash":
+		if slices.Contains(cmd.Args[1:], "--rcfile") {
+			cmd.Env = append(slices.Clone(cmd.Env), BashLoginEnv+"=1")
+			return
+		}
+		cmd.Args = slices.Insert(cmd.Args, 1, "-l")
+	default:
+		cmd.Args[0] = "-" + name
+	}
 }

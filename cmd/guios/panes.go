@@ -374,6 +374,10 @@ func (a *App) paneCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown float
 		if p.Browser() {
 			// A browser's address bar is its header.
 			dragging = a.paneBrowser(c, pal, bar, shown, s, p, top, left, right, multi, focused, hovered)
+		} else if p.Surface != "" {
+			// A TML surface, drawn with the app's widgets (tml_view.go).
+			dragging = a.paneHeader(c, pal, bar, shown, s, p, top, left, right, multi, focused, hovered)
+			a.paneTML(c, pal, p)
 		} else {
 			dragging = a.paneHeader(c, pal, bar, shown, s, p, top, left, right, multi, focused, hovered)
 			a.paneTerminal(c, pal, s, p)

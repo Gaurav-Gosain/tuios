@@ -247,6 +247,7 @@ var hostReaching = map[string]bool{
 	"appearance.sidebar.file_delete":    true,
 	// It decides which files a new shell reads when it starts.
 	"shell.integration": true,
+	"shell.login":       true,
 }
 
 // ReachesHost reports whether the option at path runs a program, names a file
