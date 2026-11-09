@@ -746,6 +746,9 @@ type OS struct {
 	// focus it moves enters terminal mode when its push lands. See
 	// daemon_actions.go.
 	focusEnterPending bool
+	// intentSent says the input being handled sent a daemon action, so the
+	// push after it is skipped. See TakeIntentSent.
+	intentSent bool
 	// shownOn is the session this client last showed on each machine, by
 	// machine name, for next_host and prev_host. See host_cycle.go.
 	shownOn map[string]string

@@ -16403,3 +16403,34 @@ admin pane.
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestDaemonAction' -v .`
 and `go test -count=1 -run TestDaemonActionsFollowTheClientsHello ./internal/session/`.
+
+## TestDaemonDirectionActionsRunWithATUIAttached, TestDaemonResizeFromTwoClientsAtOnce
+
+Parity gap 1, step 4, batch B. On a tiled workspace in the split layout the
+daemon runs the focus, swap and resize steps with a TUI attached, and the TUI's
+swap and resize keys send the step to the daemon. T1 runs terminal_focus_right,
+swap_left and resize_pane_right_5 by run-command and needs `routed: false`. In
+the scrolling layout swap_left must stay routed. T3 has two clients press
+resize_pane_right_5 at the same moment for three rounds and needs the root
+split of the session's tree to move by both steps each round. It reads the
+tree, not list-windows: with a client attached the daemon's rectangles are the
+last ones a client pushed and can lag the tree until the next push.
+
+Run on 2026-11-09 on macOS (arm64), as the Atlas helper user. The branch
+passes both.
+
+| Test | Control | The test fails with | Result |
+|------|---------|---------------------|--------|
+| T1 | guios/land before batch B (a3f2d17e9) | "terminal_focus_right: run-command answered routed true; the TUI ran it, not the daemon" | **caught** |
+| T3 | guios/land before batch B (a3f2d17e9): the key changes the client's tree and sends it as a tree op | "round 0: two presses of resize_pane_right_5 moved the root ratio from 0.5000 to 0.5458, want 0.5833: a press was lost" | **caught**, 5 of 5 |
+
+The existing TestTiledPanesMoveOneWay caught two faults in the first build of
+the swap key, and passes 3 of 3 on the branch:
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| headlessSwapSide through swapPanes, which waits on the TUI's connection for its push (settleRects) | "swap: the first pane ended at x=0, want it right of x=0" | **caught** |
+| The push after every input sent after a key that sent a daemon action | "close: the first pane's left edge only 0 values between 60 and 0: the pane was cut, not slid" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'TestDaemonDirectionActions|TestDaemonResizeFromTwo' -v .`.

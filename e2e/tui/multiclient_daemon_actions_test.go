@@ -281,7 +281,7 @@ func TestDaemonActionFromAPaneKeepsItsGrants(t *testing.T) {
 
 // daKeys binds the batch A actions with no free default key in window
 // management mode.
-const daKeys = "[keybindings.window_management]\nsend_to_workspace_2 = [\"alt+x\"]\n"
+const daKeys = "[keybindings.window_management]\nsend_to_workspace_2 = [\"alt+x\"]\nresize_pane_right_5 = [\"alt+r\"]\n"
 
 // daSession is treeOpsSession with daKeys and n tiled panes: a detached
 // session, two TUI clients of one size.
@@ -409,6 +409,161 @@ func TestDaemonActionsFromTwoClientsAtOnce(t *testing.T) {
 	}
 	requireOneLayout(t, base, name, a, b, 4, "after every round")
 	if err := os.WriteFile(filepath.Join(artifactDir(t), "daemon-actions-t3.txt"), []byte(log.String()), 0o600); err != nil {
+		t.Logf("write the transcript: %v", err)
+	}
+}
+
+// daGeom is the daemon's rectangles by window id, once they settle.
+func daGeom(t *testing.T, base, sess string, n int) map[string]winRect {
+	t.Helper()
+	m := map[string]winRect{}
+	for _, r := range waitForSettledGeometryIn(t, base, sess, n) {
+		m[r.ID] = r
+	}
+	return m
+}
+
+// TestDaemonDirectionActionsRunWithATUIAttached (T1, batch B): with a TUI on
+// a tiled BSP session of two panes side by side, run-command runs
+// terminal_focus_right, swap_left and resize_pane_right_5 in the daemon (routed
+// false), each changing the daemon's state by its step, and the TUI draws
+// the same layout.
+//
+// How this could pass wrongly, written down first:
+//   - The TUI could run it and push: routed false is the daemon's answer.
+//   - A step could hold already: the focus move starts on the left pane, swap
+//     needs the pane order to change, resize needs the width to grow.
+func TestDaemonDirectionActionsRunWithATUIAttached(t *testing.T) {
+	const name = "da-b1"
+	base, a, b := daSession(t, name, 2)
+	g := daGeom(t, base, name, 2)
+	var left, right string
+	for id, r := range g {
+		if left == "" || r.X < g[left].X {
+			left = id
+		}
+	}
+	for id := range g {
+		if id != left {
+			right = id
+		}
+	}
+	if out, err := tuiosCLI(t, base, "focus-window", "-s", name, left); err != nil {
+		t.Fatalf("focus-window: %v: %s", err, out)
+	}
+	daWait(t, base, name, "the focus on the left pane", func(s daState) bool { return s.Focused == left })
+	run := func(action string) {
+		t.Helper()
+		if daRun(t, base, name, action) {
+			t.Fatalf("%s: run-command answered routed true; the TUI ran it, not the daemon", action)
+		}
+	}
+	run("terminal_focus_right")
+	daWait(t, base, name, "terminal_focus_right", func(s daState) bool { return s.Focused == right })
+	run("swap_left")
+	deadline := time.Now().Add(uiTimeout)
+	for g = daGeom(t, base, name, 2); g[right].X >= g[left].X; g = daGeom(t, base, name, 2) {
+		if time.Now().After(deadline) {
+			t.Fatalf("swap_left: the right pane did not move left: %v", g)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	// The pane now on the left is focused: resize_pane_right_5 grows it.
+	w0 := g[right].Width
+	run("resize_pane_right_5")
+	deadline = time.Now().Add(uiTimeout)
+	for g = daGeom(t, base, name, 2); g[right].Width < w0+4; g = daGeom(t, base, name, 2) {
+		if time.Now().After(deadline) {
+			t.Fatalf("resize_pane_right_5: the focused pane is %d wide, was %d", g[right].Width, w0)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	requireOneLayout(t, base, name, a, b, 2, "after the direction actions")
+
+	// In the scrolling layout a side is a column, which the client works
+	// out: the same action is routed to it.
+	if out, err := tuiosCLI(t, base, "call", "arrange", `{"session":"`+name+`","op":"mode","mode":"scrolling"}`); err != nil {
+		t.Fatalf("arrange mode scrolling: %v: %s", err, out)
+	}
+	if !daRun(t, base, name, "swap_left") {
+		t.Fatalf("swap_left in the scrolling layout answered routed false; the daemon has no columns to swap")
+	}
+}
+
+// daRootRatio is the split ratio at the root of the current workspace's
+// tree, as layout-tree reports it.
+func daRootRatio(t *testing.T, base, sess string) float64 {
+	t.Helper()
+	out, err := tuiosCLI(t, base, "call", "layout-tree", `{"session":"`+sess+`"}`)
+	if err != nil {
+		t.Fatalf("layout-tree: %v\n%s", err, out)
+	}
+	var lt struct {
+		Tree struct {
+			Root struct {
+				Ratio float64 `json:"split_ratio"`
+			} `json:"root"`
+		} `json:"tree"`
+	}
+	if err := json.Unmarshal([]byte(out), &lt); err != nil {
+		t.Fatalf("read layout-tree: %v\n%s", err, out)
+	}
+	return lt.Tree.Root.Ratio
+}
+
+// TestDaemonResizeFromTwoClientsAtOnce (T3, batch B): both clients press
+// resize_pane_right_5 at the same moment on the left pane of two, for three
+// rounds. Every press must land in the session's tree, which every client
+// lays out from: the root split moves by two steps of 5 cells in 120 a
+// round, and the two clients draw one layout.
+//
+// The tree is read, not list-windows: with a client attached the daemon's
+// rectangles are the ones a client last pushed, which can lag the tree until
+// the next push. requireOneLayout at the end has both clients push and
+// checks the rectangles agree.
+//
+// How this could pass wrongly, written down first:
+//   - The presses could land one after the other by chance: each round sends
+//     both at once, and the ratio is checked after every round.
+//   - The pane could reach the layout's limit and stop for that reason: three
+//     rounds of ten cells stay inside the 120 columns.
+func TestDaemonResizeFromTwoClientsAtOnce(t *testing.T) {
+	const name = "da-b3"
+	base, a, b := daSession(t, name, 2)
+	g := daGeom(t, base, name, 2)
+	left := ""
+	for id, r := range g {
+		if left == "" || r.X < g[left].X {
+			left = id
+		}
+	}
+	if out, err := tuiosCLI(t, base, "focus-window", "-s", name, left); err != nil {
+		t.Fatalf("focus-window: %v: %s", err, out)
+	}
+	daWait(t, base, name, "the focus on the left pane", func(s daState) bool { return s.Focused == left })
+	var log strings.Builder
+	const step = 5.0 / bigCols
+	ratio := daRootRatio(t, base, name)
+	for round := range 3 {
+		together(t, a, string(tuitest.Alt("r")), b, string(tuitest.Alt("r")))
+		want := ratio + 2*step
+		deadline := time.Now().Add(uiTimeout)
+		now := daRootRatio(t, base, name)
+		for now < want-step/2 && time.Now().Before(deadline) {
+			time.Sleep(100 * time.Millisecond)
+			now = daRootRatio(t, base, name)
+		}
+		time.Sleep(300 * time.Millisecond)
+		now = daRootRatio(t, base, name)
+		fmt.Fprintf(&log, "round %d: root ratio %.4f -> %.4f (want %.4f)\n", round, ratio, now, want)
+		if now < want-step/2 || now > want+step/2 {
+			t.Fatalf("round %d: two presses of resize_pane_right_5 moved the root ratio from %.4f to %.4f, want %.4f: a press was lost\n%s", round, ratio, now, want, log.String())
+		}
+		requireSameScreens(t, a, b, fmt.Sprintf("round %d", round))
+		ratio = now
+	}
+	requireOneLayout(t, base, name, a, b, 2, "after every round")
+	if err := os.WriteFile(filepath.Join(artifactDir(t), "daemon-actions-b3.txt"), []byte(log.String()), 0o600); err != nil {
 		t.Logf("write the transcript: %v", err)
 	}
 }

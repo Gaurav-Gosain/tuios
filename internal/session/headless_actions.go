@@ -349,18 +349,28 @@ func (d *Daemon) headlessFocusSide(sess *Session, side layout.Side) error {
 	return sess.FocusDaemonWindow(to.ID)
 }
 
-// headlessSwapSide swaps the focused pane with the one toward side, through
-// swapPanes, which keeps the tiled and same-workspace rules and hands a
-// layout the daemon does not arrange to the client.
+// headlessSwapSide swaps the focused pane with the one toward side. Where
+// the daemon arranges the workspace it swaps the two in the tree itself and
+// does not wait for a client to lay them out: a swap key from the TUI runs
+// on the TUI's own connection, and waiting there for that client's next
+// push (swapPanes' settleRects) held the push back for its whole timeout,
+// so the swap reached the screen two seconds late. Elsewhere swapPanes
+// hands the swap to the client.
 func (d *Daemon) headlessSwapSide(sess *Session, side layout.Side) error {
 	from, to, err := d.neighbourOf(sess, side)
 	if err != nil {
 		return err
 	}
-	if verr := d.swapPanes(sess, from, to); verr != nil {
-		return errors.New(verr.Message)
+	if !d.daemonArranges(sess, from.Workspace) || !sess.GetState().AutoTiling || !tiledPane(&from) || !tiledPane(&to) || from.Workspace != to.Workspace {
+		if verr := d.swapPanes(sess, from, to); verr != nil {
+			return errors.New(verr.Message)
+		}
+		return nil
 	}
-	return nil
+	return sess.arrangeLayout(!d.hasTUIClient(sess), func(_ *SessionState, e *layoutEdit) (int, error) {
+		e.tree(from.Workspace).SwapWindows(e.leaf(from.ID), e.leaf(to.ID))
+		return from.Workspace, nil
+	})
 }
 
 // headlessResizeStep makes the focused pane cells wider (right), narrower
@@ -391,7 +401,9 @@ func (d *Daemon) headlessResizeStep(sess *Session, side layout.Side, cells int) 
 	if side == layout.SideLeft || side == layout.SideUp {
 		delta = -delta
 	}
-	err = sess.arrangeLayout(true, func(_ *SessionState, e *layoutEdit) (int, error) {
+	// With a client showing the session it lays the new tree out and sends
+	// its rectangles (DaemonLayout), as for the resize-window verb.
+	err = sess.arrangeLayout(!d.hasTUIClient(sess), func(_ *SessionState, e *layoutEdit) (int, error) {
 		if !e.tree(w.Workspace).GrowPane(e.leaf(w.ID), horizontal, delta) {
 			return 0, errLayoutUnchanged
 		}

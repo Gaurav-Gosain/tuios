@@ -51,14 +51,36 @@ func IsDaemonAction(name string) bool {
 	return false
 }
 
+// IsDirectionAction reports whether name is a batch B action: a focus move,
+// a swap or a resize step toward a side (parity gap 1, step 4, batch B). The
+// daemon runs one with a TUI attached only where it arranges the layout
+// itself, a tiled workspace in the split layout (daemonArranges): in the
+// scrolling and master-stack layouts a side means a column or the master,
+// which the attached client works out.
+func IsDirectionAction(name string) bool {
+	if _, ok := directionOf(name, "focus_", "terminal_focus_", "swap_"); ok {
+		return true
+	}
+	_, _, ok := resizeStepOf(name)
+	return ok
+}
+
 // runsAction reports whether the daemon runs the command itself on sess even
-// with a TUI attached: a batch A action, with every attached TUI one that
-// sends those actions as intents. The tape's MinimizeWindow and
+// with a TUI attached: a batch A action, or a batch B one on a workspace
+// the daemon arranges, with every attached TUI one that sends those actions
+// as intents. The tape's MinimizeWindow and
 // RestoreWindow count with them.
 func (d *Daemon) runsAction(sess *Session, command string, args []string) bool {
 	switch command {
 	case string(tape.CommandTypeAction):
-		if len(args) != 1 || !IsDaemonAction(args[0]) {
+		if len(args) != 1 {
+			return false
+		}
+		if IsDirectionAction(args[0]) {
+			if !d.daemonArranges(sess, sess.GetState().CurrentWorkspace) {
+				return false
+			}
+		} else if !IsDaemonAction(args[0]) {
 			return false
 		}
 	case string(tape.CommandTypeMinimizeWindow), string(tape.CommandTypeRestoreWindow):

@@ -1876,6 +1876,15 @@ not say so is attached, the daemon routes these actions to a client as
 before, because that client runs its key in its own state. `last_pane` stays
 the client's: it goes back across workspaces from the client's own record.
 
+The swap and resize steps (`swap_left`, `swap_right`, `swap_up`, `swap_down`,
+`resize_pane_DIR_5` and `_20`) and the focus moves (`focus_up`, `focus_down`,
+`terminal_focus_DIR`) run in the daemon the same way, but only on a tiled
+workspace in the split layout, where the daemon arranges the panes from its
+tree. In the scrolling and master-stack layouts, and with tiling off, they are
+routed to a client as before. The TUI's swap and resize keys in the split layout
+go to the daemon. Its focus keys stay in the client, because a focus key can
+leave or enter the rail or go to an editor in the pane.
+
 The verbs a live renderer still has to own to stay in sync (`send-keys` with
 no window, and the live apply half of `set-option`) route to the attached TUI
 when one is present and act on daemon owned state otherwise. `send-keys` with
