@@ -259,9 +259,15 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 	// under the card, above the pinned reply box (Mac round 4, visual S2).
 	cardUnder := ck.cardShown && ck.tab == tabThread && a.ckThreadEmpty(ag)
 	tabCol := ui.Column(c.Key("tab-" + ck.tab))
-	if cardUnder {
+	// alt+m in the reply box: the tab gives way to its least, and the box
+	// grows into the rest.
+	replyFull := ck.reply.full && (ck.tab == tabThread || ck.tab == tabMail)
+	switch {
+	case replyFull:
+		tabCol.Shrink(0).Height(ck.tabMin)
+	case cardUnder:
 		tabCol.Shrink(0)
-	} else {
+	default:
 		tabCol.Grow(1).MinHeight(ck.tabMin)
 	}
 	ck.tabH = tabCol.Bounds().H
@@ -299,7 +305,7 @@ func (a *App) cockpitFocus(c *ui.Context, pal *palette) {
 		})
 	}
 	ck.gapH = 0
-	if cardUnder {
+	if cardUnder && !replyFull {
 		gap := ui.Box(c.Key("ck-card-gap")).Grow(1).MinHeight(0)
 		ck.gapH = gap.Bounds().H
 	}

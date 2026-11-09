@@ -18,7 +18,7 @@ import (
 // tuiosHeld copies the settings tuios's config holds from src into dst.
 func tuiosHeld(dst *settings.Settings, src settings.Settings) {
 	dst.KeepHistory, dst.ResumeAgents, dst.Shell = src.KeepHistory, src.ResumeAgents, src.Shell
-	dst.Approvals = src.Approvals
+	dst.Approvals, dst.ReplyRows = src.Approvals, src.ReplyRows
 }
 
 // approvalsHarness is the harness the Approvals switch turns on: the one
@@ -46,6 +46,7 @@ func tuiosFromConfig(s *settings.Settings, cfg *config.UserConfig) {
 	}
 	s.Shell = cfg.Appearance.PreferredShell
 	s.Approvals = len(cfg.Agents.Approvals.Enabled) > 0
+	s.ReplyRows = cfg.Agents.ReplyRowsOr(0)
 }
 
 // followTuiosConfig keeps the settings tuios's config holds in step with
@@ -114,4 +115,13 @@ func saveTuiosSettings(old, s settings.Settings) error {
 	}
 	_, err = config.SaveUserConfig(cfg)
 	return err
+}
+
+// replyRows is how many lines a reply box or a task grows to: the config's
+// agents.reply_rows, or def when it is unset, as the TUI reads it.
+func (a *App) replyRows(def int) int {
+	if a.set.ReplyRows > 0 {
+		return a.set.ReplyRows
+	}
+	return def
 }

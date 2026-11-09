@@ -129,7 +129,13 @@ func (a *App) humanMailView(c *ui.Context, pal *palette) {
 			emptyBlock(c, pal, nil, locales.CockpitNoMailForYou(), locales.CockpitNoMailForYouDetail(), false, nil)
 			return
 		}
-		list := ui.Scroll(c.Key("hm")).Grow(1).MinHeight(0).Padding(14, a.ckSide(24), 10, a.ckSide(24))
+		list := ui.Scroll(c.Key("hm")).Padding(14, a.ckSide(24), 10, a.ckSide(24))
+		if m.replyTo != 0 && ck.reply.full {
+			// alt+m in the reply: the list gives way to its heading.
+			list.Shrink(0).Height(ckMailListMinH)
+		} else {
+			list.Grow(1).MinHeight(0)
+		}
 		// Toasts show over the foot of the list, above the reply box.
 		ck.fleetRect = list.Bounds()
 		list.Children(func() {

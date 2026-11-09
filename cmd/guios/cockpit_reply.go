@@ -14,6 +14,8 @@ import (
 	"github.com/Gaurav-Gosain/mygo"
 	"github.com/Gaurav-Gosain/mygo/ui"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+
 	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 
@@ -50,6 +52,10 @@ type ckReply struct {
 	boxDraft *ckDraft
 	boxMail  bool
 	toEnd    bool
+	// full is that the box takes all the room the view above it can spare
+	// (alt+m, as the TUI's editor): the view above gives way to its least,
+	// and the box grows into what that leaves.
+	full bool
 	// asMail holds, by agent, that the box sends mail to the agent's
 	// inbox rather than a prompt typed into its pane.
 	asMail map[string]bool
@@ -113,7 +119,11 @@ func (a *App) replyBox(c *ui.Context, pal *palette, ag client.Agent) {
 		r.asked[ag.Key()] = true
 		a.fetchQueued(ag)
 	}
-	ui.Column(c.Key("reply")).Shrink(0).Margin(0, a.ckSide(24), 12, a.ckSide(24)).Gap(8).Children(func() {
+	col := ui.Column(c.Key("reply")).Shrink(0)
+	if r.full {
+		col.Grow(1).MinHeight(0)
+	}
+	col.Margin(0, a.ckSide(24), 12, a.ckSide(24)).Gap(8).Children(func() {
 		cardWaits := a.ckCardWaits(ag)
 		queued := r.queued[ag.Key()]
 		if len(queued) == 0 {
@@ -169,6 +179,9 @@ func (a *App) replyBoxBody(c *ui.Context, pal *palette, ag client.Agent, d *ckDr
 	// became another element each time, which took the keyboard focus from
 	// the field. A reply typed after Enter queued the last one went nowhere.
 	box := ui.Column(c.Key("reply-box")).Radius(rCard).Padding(10, 12, 8, 12).Gap(8).Background(pal.control)
+	if r.full {
+		box.Grow(1).MinHeight(0)
+	}
 	focused := r.box.FocusWithin(c)
 	if focused {
 		box.Border(1, pal.accent.Alpha(0.6))
@@ -224,8 +237,15 @@ func (a *App) replyBoxBody(c *ui.Context, pal *palette, ag client.Agent, d *ckDr
 			})
 		}
 		r.boxAgent, r.boxDraft, r.boxMail = ag, d, mail
-		in := ui.TextAreaBase(c.Key("text-"+ag.Key()), &d.text).Bind(&r.box).Lines(2, 8).
+		in := ui.TextAreaBase(c.Key("text-"+ag.Key()), &d.text).Bind(&r.box).Lines(2, a.replyRows(8)).
 			FontSize(fsProse).LineHeight(1.5).TextColor(pal.text).Placeholder(locales.CockpitReplyPlaceholder()).PlaceholderColor(pal.textMuted).ReadOnly(d.sending)
+		if r.full {
+			in.Lines(2, config.ReplyRowsMax).Grow(1).MinHeight(0)
+		}
+		if in.Shortcut(ui.Alt, ui.KeyM) {
+			r.full = !r.full
+			c.Invalidate()
+		}
 		if r.focusNext {
 			r.focusNext = false
 			r.box.Focus()
@@ -242,6 +262,11 @@ func (a *App) replyBoxBody(c *ui.Context, pal *palette, ag client.Agent, d *ckDr
 			return a.pasteImageInto(d)
 		})
 		in.OnTextKey(func(k ui.TextKey) bool {
+			if fullHeightKey(k.Mods, k.Key) {
+				r.full = !r.full
+				a.update(func() {})
+				return true
+			}
 			text := k.Text()
 			took, set := a.replyKey(ag, d, mail, k.Mods, k.Key, &text)
 			if set {
@@ -699,4 +724,18 @@ func (a *App) replyKey(ag client.Agent, d *ckDraft, mail bool, mods ui.Modifiers
 		return true, false
 	}
 	return false, false
+}
+
+// ckMailListMinH is what alt+m leaves the mail list above a reply: its
+// heading and one row.
+const ckMailListMinH = 80
+
+// fullHeightKey reports whether a key in a reply box or a task toggles its
+// full height: alt+m, as the TUI's editor. On macOS Option+M types µ, which
+// a text box never hands on as a key, so there Control+M does it too.
+func fullHeightKey(mods ui.Modifiers, key ui.Key) bool {
+	if key != ui.KeyM {
+		return false
+	}
+	return mods == ui.Alt || (runtime.GOOS == "darwin" && mods == ui.Ctrl)
 }
