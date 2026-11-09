@@ -566,6 +566,10 @@ func (a *App) runKeyAction(action string) {
 		a.openDeclaredMenu(name)
 		return
 	}
+	if action == "launcher" {
+		a.openLauncher()
+		return
+	}
 	if notInGuios[action] {
 		// A TUI mode or the terminal's mouse: guios has neither, so the
 		// key does nothing, said plainly, not "needs the TUI".

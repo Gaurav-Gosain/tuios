@@ -3294,6 +3294,23 @@ Response:
 {"result": {"type": "ok"}}
 ```
 
+### list-programs
+
+The programs on the PATH of the machine the session runs on, by name, for a
+launcher: guios's "Run a program" lists them, and opens the one chosen with
+`new-window` and its path as `command`. A session on a linked host is answered
+by that host's daemon, so the list is the host's. Desktop entries are not
+listed: they start a desktop program, not a pane. Read scope; a link needs
+`list`.
+
+```json
+{"id":1,"verb":"list-programs","params":{"session":"work"}}
+{"id":1,"result":{"programs":[{"name":"htop","path":"/usr/bin/htop"}],"truncated":false}}
+```
+
+`truncated` is true when the PATH holds more programs than the answer carries
+(10000).
+
 ### list-buffers, show-buffer, set-buffer, delete-buffer, paste-buffer
 
 The paste buffers, after tmux's. The daemon keeps one list of buffers, newest

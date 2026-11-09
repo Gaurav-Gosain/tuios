@@ -16917,3 +16917,15 @@ Run on 2026-11-10 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestGuiosSavesAndLoadsALayout$' -v .`.
+
+## TestListProgramsNamesThePath
+
+The list-programs verb (`internal/session/verb_programs.go`), which guios's Run
+a program lists (parity gap 18).
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| guios/land before the verb (d9d943ffc) | "list-programs: exit status 1" (no such verb) | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run TestListProgramsNamesThePath -v .`.

@@ -302,6 +302,47 @@ func startProbe(a *App) {
 						conn.Write([]byte("ok\n"))
 						continue
 					}
+					// "palette Q" opens the palette (or keeps the list it
+					// shows, a launcher's say) with the query Q and answers the
+					// ranked rows, title and detail, the first 30. "palettepick
+					// N" runs row N of that ranking as Enter does: the palette
+					// closes, then the row runs.
+					if q, ok := strings.CutPrefix(sc.Text(), "palette"); ok && (q == "" || q[0] == ' ') {
+						got := make(chan []map[string]string, 1)
+						a.update(func() {
+							if !a.pal.open {
+								a.openPalette()
+							}
+							a.pal.query = strings.TrimSpace(q)
+							var rows []map[string]string
+							for i, it := range a.paletteRanked() {
+								if i == 30 {
+									break
+								}
+								rows = append(rows, map[string]string{"title": it.title, "detail": it.detail})
+							}
+							got <- rows
+						})
+						line, _ := json.Marshal(<-got)
+						conn.Write(append(line, '\n'))
+						continue
+					}
+					if n, ok := strings.CutPrefix(sc.Text(), "palettepick "); ok {
+						done := make(chan string, 1)
+						a.update(func() {
+							ranked := a.paletteRanked()
+							i, err := strconv.Atoi(n)
+							if err != nil || i < 0 || i >= len(ranked) {
+								done <- "no such row"
+								return
+							}
+							a.pal.open = false
+							ranked[i].run()
+							done <- ranked[i].title
+						})
+						conn.Write([]byte(<-done + "\n"))
+						continue
+					}
 					if sc.Text() == "loadkeys" {
 						done := make(chan struct{})
 						a.update(func() { a.loadKeys(); close(done) })

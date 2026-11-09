@@ -2,6 +2,7 @@ package main
 
 import (
 	"cmp"
+	"maps"
 	"math"
 	"slices"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/actions"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 
 	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
@@ -382,6 +384,11 @@ func (a *App) commandItems() []paletteItem {
 			words: action + " " + config.ActionDescriptions[action],
 			run:   func() { a.runKeyAction(action) }})
 	}
+	if s != nil {
+		cmds = append(cmds, paletteItem{title: locales.LauncherRow(), keys: [2]string{"", a.prefixKeys("launcher")},
+			words: "run launcher program app anything " + en.LauncherRow(), run: a.openLauncher})
+	}
+	cmds = append(cmds, a.allKeymapItems(s, tuiosOf)...)
 	for _, page := range settingsPages {
 		id := page.id
 		it := paletteItem{title: locales.PaletteSettingsPage(page.title()), words: "settings preferences " + id + " " + pageWords[id], run: func() { a.openSettings(id) }}
@@ -892,4 +899,55 @@ func paletteMark(m string) string {
 		return ""
 	}
 	return " · " + m
+}
+
+// allKeymapItems are the rest of the tuios keymap's actions, the ones
+// keyRows does not list (parity gap 18): every action with a description,
+// titled by it, as the TUI's palette lists them. A row is listed when guios
+// runs the action itself or the daemon runs it with no TUI attached (gap 1);
+// the others only while a TUI shows the session, marked so. What guios does
+// not do (notInGuios) and a declared menu's open_menu are left out.
+func (a *App) allKeymapItems(s *proto.Session, tuiosOf map[string]string) []paletteItem {
+	listed := map[string]bool{}
+	for _, r := range keyRows {
+		listed[r.action] = true
+	}
+	for _, ta := range tuiosOf {
+		listed[ta] = true
+	}
+	tui := s != nil && s.TUI
+	var out []paletteItem
+	for _, action := range slices.Sorted(maps.Keys(config.ActionDescriptions)) {
+		if listed[action] || notInGuios[action] || strings.HasPrefix(action, config.OpenMenuPrefix) {
+			continue
+		}
+		if to, ok := keyAliases[action]; ok && listed[to] {
+			continue
+		}
+		desc := config.ActionDescriptions[action]
+		runs := guiosRunsAction(action)
+		if desc == "" || !runs && !tui {
+			continue
+		}
+		detail := ""
+		if !runs {
+			detail = locales.PaletteViaTui()
+		}
+		out = append(out, paletteItem{title: desc, detail: detail, keys: [2]string{"", a.prefixKeys(action)},
+			words: action + " " + strings.ReplaceAll(action, "_", " ") + " " + desc,
+			run:   func() { a.runKeyAction(action) }})
+	}
+	return out
+}
+
+// guiosRunsAction reports whether a keymap action runs with no TUI
+// attached: on guios's own path, or in the daemon.
+func guiosRunsAction(action string) bool {
+	if to, ok := keyAliases[action]; ok {
+		action = to
+	}
+	if nativeActions[action] || daemonActions[action] || layoutKeys[action] != "" || action == "launcher" {
+		return true
+	}
+	return session.IsDaemonAction(action) || session.IsDirectionAction(action) || session.IsLayoutAction(action) || action == "kill_session"
 }
