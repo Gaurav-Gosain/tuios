@@ -93,3 +93,13 @@ func sendWith(t *testing.T, term *tuitest.Terminal, text, seq string) {
 		_ = term.WaitStable(uiTimeout)
 	}
 }
+
+// sendNowHint is the reply area's send-now hint as the platform names it: ⌥↵
+// or ⌃↵ on a Mac, by whether the host speaks the kitty keyboard protocol,
+// and alt+↵ elsewhere. On a Mac it is the part both share.
+func sendNowHint() string {
+	if runtime.GOOS == "darwin" {
+		return "↵ send now"
+	}
+	return "alt+↵ send now"
+}

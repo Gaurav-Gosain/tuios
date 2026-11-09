@@ -99,7 +99,7 @@ func TestCockpitReplyEditorStdout(t *testing.T) {
 // replySendNowOrQueue is the send-now half of TestCockpitReplyEditorStdout.
 // The reply box is open on docs-cli, which rests. The button reads Send and
 // no send-now hint shows. The agent then reports working: the button reads
-// Queue and the hints offer alt+enter to send now. enter queues a reply,
+// Queue and the hints offer alt+enter (⌥↩ or ⌃↩ on a Mac) to send now. enter queues a reply,
 // which waits and is not typed. alt+enter on a second reply types it into the
 // pane at once, while the agent still reports working, and the queue still
 // holds only the first reply: send now leaves the queue as it is. Frames of
@@ -135,7 +135,7 @@ func replySendNowOrQueue(t *testing.T, term *tuitest.Terminal, base string) {
 	saveCockpitFrames(t, term, "reply-send-resting-200x55")
 
 	cli("set-agent-state working", "set-agent-state", "working", "-s", "docs", "-w", "docs-cli", "--harness", "claude-code")
-	waitText(t, term, "the footer of a working agent", "Queue", "alt+↵ send now")
+	waitText(t, term, "the footer of a working agent", "Queue", sendNowHint())
 	_ = term.WaitStable(uiTimeout)
 	saveCockpitFrames(t, term, "reply-send-working-200x55")
 
