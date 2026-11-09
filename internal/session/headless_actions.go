@@ -121,12 +121,11 @@ func headlessSendToWorkspace(sess *Session, ws int, follow bool) error {
 		return err
 	}
 	after := sess.GetState()
-	i, err := findWindowStateIndex(after.Windows, id)
-	if err != nil {
+	if _, err := findWindowStateIndex(after.Windows, id); err != nil {
 		return nil // it closed meanwhile
 	}
 	if follow {
-		return sess.SwitchDaemonWorkspace(after.Windows[i].Workspace)
+		return sess.FollowDaemonWindow(id)
 	}
 	if after.FocusedWindowID != id {
 		return nil

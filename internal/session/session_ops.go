@@ -961,6 +961,22 @@ func (s *Session) SetDaemonWorkspaceName(ws int, name string) error {
 	})
 }
 
+// FollowDaemonWindow shows the workspace window id is on and focuses it: a
+// move's follow. The daemon numbers workspaces with no gap, so a move past
+// an empty workspace lands lower than the number asked for, and the follow
+// goes where the window is, not to that number.
+func (s *Session) FollowDaemonWindow(id string) error {
+	state := s.GetState()
+	i, err := findWindowStateIndex(state.Windows, id)
+	if err != nil {
+		return err
+	}
+	if err := s.SwitchDaemonWorkspace(state.Windows[i].Workspace); err != nil {
+		return err
+	}
+	return s.FocusDaemonWindow(id)
+}
+
 // SwitchDaemonWorkspace sets the current workspace, restoring that workspace's
 // last-focused window when one is recorded.
 func (s *Session) SwitchDaemonWorkspace(ws int) error {
@@ -970,11 +986,28 @@ func (s *Session) SwitchDaemonWorkspace(ws int) error {
 		}
 		s.markFocusIntentLocked()
 		state.CurrentWorkspace = ws
-		if state.WorkspaceFocus != nil {
-			if focus, ok := state.WorkspaceFocus[ws]; ok {
-				state.FocusedWindowID = focus
-				state.FocusHistory = RecordFocus(state.FocusHistory, ws, focus)
+		// The pane focused there last, while it is still there and shown;
+		// else the first shown pane of the workspace; else none, as the
+		// TUI's SwitchToWorkspace. A focus left on a window of another
+		// workspace sent the next key and the next action to a pane out of
+		// view (parity gap 1).
+		focus := ""
+		if f, ok := state.WorkspaceFocus[ws]; ok {
+			if i, err := findWindowStateIndex(state.Windows, f); err == nil && state.Windows[i].Workspace == ws && !state.Windows[i].Minimized {
+				focus = f
 			}
+		}
+		if focus == "" {
+			for _, w := range state.Windows {
+				if w.Workspace == ws && !w.Minimized {
+					focus = w.ID
+					break
+				}
+			}
+		}
+		state.FocusedWindowID = focus
+		if focus != "" {
+			state.FocusHistory = RecordFocus(state.FocusHistory, ws, focus)
 		}
 		// A focus left on a scratch pane would show its group over the
 		// workspace just selected: the selection means the workspace.

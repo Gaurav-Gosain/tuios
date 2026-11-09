@@ -155,7 +155,7 @@ func (d *Daemon) executeDaemonCommandEnv(sess *Session, commandType string, args
 			return nil, err
 		}
 		if commandType == "MoveAndFollowWorkspace" {
-			return nil, sess.SwitchDaemonWorkspace(ws)
+			return nil, sess.FollowDaemonWindow(id)
 		}
 		return nil, nil
 

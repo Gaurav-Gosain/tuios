@@ -136,6 +136,12 @@ func TestHeadlessKeymapActions(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "run-command", "-s", sess, "SwitchWorkspace", "1"); err != nil {
 		t.Fatalf("SwitchWorkspace 1: %v\n%s", err, out)
 	}
+	// Workspace 1 has no focus recorded since a left it: the switch takes
+	// its first pane, as the TUI does, and leaves none on a window out of
+	// view.
+	step("SwitchWorkspace 1 focuses a pane of workspace 1", func(l list) bool {
+		return l.Current == 1 && where(l, name(l, l.Focused)).Workspace == 1
+	})
 	run("select_window_1", true)
 	x := ""
 	step("select_window_1 on workspace 1 focuses a window there", func(l list) bool {
