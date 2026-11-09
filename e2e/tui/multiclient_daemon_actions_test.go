@@ -762,3 +762,59 @@ func daFocusFirstColumn(t *testing.T, base, sess string) {
 	}
 	daWait(t, base, sess, "the focus on the first column", func(s daState) bool { return s.Focused == id })
 }
+
+// TestDaemonKillSessionAction (batch D): kill_session by run-command. With
+// no client the daemon runs it as the kill-session verb (routed false) and
+// the session is gone. With a TUI attached it stays routed: the action is
+// the TUI's close dialog, which asks the person first, and the daemon does
+// not take that question away. The session must still be there until the
+// person answers, and gone after they confirm.
+//
+// How this could pass wrongly, written down first:
+//   - The headless kill could fail and the session still look gone if the
+//     listing were wrong: the other session of the same daemon must remain.
+//   - The attached case could kill at once: the session is read after the
+//     command and must still exist with the dialog on screen.
+func TestDaemonKillSessionAction(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "\n")
+	killDaemon(t, base)
+	for _, n := range []string{"da-d1", "da-d2", "keep"} {
+		if out, err := tuiosCLI(t, base, "new", n, "--detach"); err != nil {
+			t.Fatalf("new %s: %v: %s", n, err, out)
+		}
+	}
+	sessions := func() string {
+		out, _ := tuiosCLI(t, base, "ls")
+		return out
+	}
+	if daRun(t, base, "da-d1", "kill_session") {
+		t.Fatalf("kill_session with no client answered routed true")
+	}
+	deadline := time.Now().Add(uiTimeout)
+	for strings.Contains(sessions(), "da-d1") {
+		if time.Now().After(deadline) {
+			t.Fatalf("kill_session with no client left the session: %s", sessions())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if !strings.Contains(sessions(), "keep") {
+		t.Fatalf("kill_session took another session too: %s", sessions())
+	}
+
+	term := attachIn(t, base, "da-d2", startOpts{})
+	if !daRun(t, base, "da-d2", "kill_session") {
+		t.Fatalf("kill_session with a TUI attached answered routed false; the person's dialog was skipped")
+	}
+	time.Sleep(500 * time.Millisecond)
+	if !strings.Contains(sessions(), "da-d2") {
+		t.Fatalf("kill_session with a TUI attached killed the session before the person answered: %s", sessions())
+	}
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatal(err)
+	}
+	alive(t, term, "after the person cancelled")
+	if !strings.Contains(sessions(), "da-d2") {
+		t.Fatalf("the session went after the person cancelled: %s", sessions())
+	}
+}

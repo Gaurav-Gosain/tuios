@@ -1899,7 +1899,9 @@ settles the panes' sizes and borders in one step. `resize_height_grow` and
 steps do. The scrolling layout's strip actions (`scroll_consume`,
 `scroll_expel`, `scroll_move_*`, `scroll_cycle_width`, `scroll_maximize`) are
 still routed to a TUI that is attached, because the TUI keeps the strip's
-columns and sends them whole.
+columns and sends them whole. `kill_session` with no client attached runs as the
+`kill-session` verb; with a TUI attached it is routed to it, whose close
+dialog asks the person first.
 
 The verbs a live renderer still has to own to stay in sync (`send-keys` with
 no window, and the live apply half of `set-option`) route to the attached TUI

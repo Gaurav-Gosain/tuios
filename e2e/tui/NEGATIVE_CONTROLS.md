@@ -16469,3 +16469,16 @@ routed (the TUI owns the strip's columns).
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run TestDaemonHeightStep -v .`.
+
+## TestDaemonKillSessionAction
+
+Parity gap 1, step 4, batch D. kill_session by run-command with no client runs as
+the kill-session verb; with a TUI attached it stays routed, so the TUI's close
+dialog asks the person first.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| guios/land before batch D (78d9d1a2d) | "run-command kill_session: exit status 1" (this action needs the tuios TUI) | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run TestDaemonKillSessionAction -v .`.
