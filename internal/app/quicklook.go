@@ -204,8 +204,8 @@ type quickLookState struct {
 	statusLine bool
 	wrap       bool
 	wrapSet    bool
-	// rowSpans is the syntax spans of the wrapped row being drawn, kept so a
-	// frame allocates no spans slice per row.
+	// rowSpans is the syntax spans of the wrapped or cut row being drawn, kept so
+	// a frame allocates no spans slice per row.
 	rowSpans []diffview.Span
 	// copy is copy mode over the text, nil when it is off. codeW and bodyRows
 	// are the code column and the rows of the last text drawn, where copy
@@ -1131,7 +1131,14 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 				sp = r.spans[n]
 			}
 			if !ql.wrap {
-				c.draw(codeX, bodyTop+row, codeW, dv.Code(r.lines[n], sp, diffview.Range{}, diffview.Context, false, 0, codeW))
+				// A long line is cut to the bytes its row can show, so the
+				// row does not measure all of it. Search keeps the whole line.
+				text := r.lines[n]
+				if end := quickLookCutEnd(text, codeW); end < len(text) {
+					ql.rowSpans = quickLookRowSpans(ql.rowSpans, sp, 0, end)
+					sp, text = ql.rowSpans, text[:end]
+				}
+				c.draw(codeX, bodyTop+row, codeW, dv.Code(text, sp, diffview.Range{}, diffview.Context, false, 0, codeW))
 				quickLookLightMatches(c, pal, ql.query, r.lines[n], codeX, bodyTop+row, codeW, 0)
 				row++
 				continue

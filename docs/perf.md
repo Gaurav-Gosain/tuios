@@ -5720,6 +5720,145 @@ panel even when its size stays the same. A picture is never kept, nor is a
 result still being read or a stale one. Closing the panel drops the kept
 frame, so a large file is not held after it.
 
+## 2026-11 quick look cuts a long line before it draws it with wrap off
+
+With wrap off, quick look handed the whole line to the drawing code for every
+row on screen. That code measures the line with `ansi.StringWidth` and cuts it
+with `ansi.Truncate`, so a 64 KiB line was walked two or three times a row
+though the row shows about a hundred cells. A frame of 43 such rows took 47 ms
+of ASCII and about 100 ms of CJK, 3.8 MiB a frame, and a `j` step the same.
+Quick look now cuts the line first (`quickLookCutEnd`) and draws the prefix with
+the syntax spans clipped to it. Searching still reads the whole line.
+
+The prefix is the bytes up to the unit that brings a walk to 3*(width+1) cells,
+three times one cell more than the row. The walk counts the units
+`ansi.Truncate` counts, and such a unit can be counted wider than its grapheme
+is: a printable ASCII byte followed by U+16FF0 is 3 cells to the walk and 1 to
+`ansi.StringWidth`. The drawing code decides on its ellipsis from grapheme
+widths, so a prefix of three times one cell more than the row is still at least
+one cell wider than the row whenever the line goes on, and the row keeps its
+ellipsis. On such input the margin has one cell to spare: two times one cell
+more loses the ellipsis on a line of `q` and U+16FF0 pairs. A line of no more
+than 3*(width+1) bytes is returned whole without a walk: every unit takes at
+least as many bytes as the cells it is counted at, so the walk would end first.
+A long line made mostly of zero-width characters also reaches its end before the
+limit and is drawn whole, as before, so not every long line gets cheaper.
+
+Wrap on needs nothing since the wrap fix that draws each row from its own bytes.
+
+### Numbers
+
+AMD Ryzen 5 5600, Linux x86_64, Go 1.27.3 (`go version` checked on both test
+binaries), one core (`taskset -c 3`, `-test.cpu 1`), 20 iterations a run, runs
+of before and after alternated 8 times (n=8), benchstat, a 200x60 panel, no CPU
+throttling during the runs. Before is main at c29f871bf. Linux only: not
+measured on macOS arm64. One frame is 60 copies of the line with wrap off, the
+file scrolled to the top, drawn from nothing:
+
+| line | time before | time after | bytes before | bytes after | allocs before | allocs after |
+|---|---:|---:|---:|---:|---:|---:|
+| 80 B, ASCII | 1.274 ms | 1.255 ms | 719.8 KiB | 719.8 KiB | 1.928k | 1.928k |
+| 300 B, ASCII | 1.610 ms | 1.610 ms | 751.0 KiB | 751.0 KiB | 2.186k | 2.186k |
+| 2 KiB, ASCII | 2.991 ms | 1.760 ms (-41.15%) | 831.6 KiB | 752.4 KiB | 2.187k | 2.187k |
+| 8 KiB, ASCII | 7.020 ms | 1.713 ms (-75.59%) | 1132.7 KiB | 752.4 KiB | 2.188k | 2.187k |
+| 64 KiB, ASCII | 46.819 ms | 1.556 ms (-96.68%) | 3831.1 KiB | 752.3 KiB | 2.190k | 2.187k |
+| 80 B, CJK | 1.575 ms | 1.529 ms | 723.2 KiB | 723.2 KiB | 1.928k | 1.928k |
+| 300 B, CJK | 2.030 ms | 2.067 ms | 760.5 KiB | 760.5 KiB | 2.186k | 2.186k |
+| 2 KiB, CJK | 4.937 ms | 2.643 ms (-46.46%) | 841.1 KiB | 768.5 KiB | 2.188k | 2.187k |
+| 8 KiB, CJK | 15.019 ms | 2.687 ms (-82.11%) | 1142.1 KiB | 768.5 KiB | 2.188k | 2.187k |
+| 64 KiB, CJK | 111.668 ms | 2.547 ms (-97.72%) | 3840.6 KiB | 768.5 KiB | 2.191k | 2.187k |
+| 80 B, `q` and U+FF9F | 1.625 ms | 1.672 ms | 729.2 KiB | 729.2 KiB | 1.928k | 1.928k |
+| 300 B, `q` and U+FF9F | 2.131 ms | 2.114 ms | 790.3 KiB | 790.3 KiB | 1.971k | 1.971k |
+| 2 KiB, `q` and U+FF9F | 4.753 ms | 3.145 ms (-33.84%) | 895.2 KiB | 830.7 KiB | 2.360k | 2.359k |
+| 8 KiB, `q` and U+FF9F | 13.448 ms | 3.086 ms (-77.05%) | 1196.2 KiB | 830.7 KiB | 2.360k | 2.359k |
+| 64 KiB, `q` and U+FF9F | 97.041 ms | 3.090 ms (-96.82%) | 3894.6 KiB | 830.6 KiB | 2.363k | 2.359k |
+
+A `j` step is the scroll set to the top, one `j`, then the frame:
+
+| step, 64 KiB, wrap off | time before | time after | bytes before | bytes after |
+|---|---:|---:|---:|---:|
+| ASCII | 47.462 ms | 1.577 ms (-96.68%) | 3831.1 KiB | 752.3 KiB |
+| CJK | 110.398 ms | 2.552 ms (-97.69%) | 3840.6 KiB | 768.5 KiB |
+| `q` and U+FF9F | 97.050 ms | 2.889 ms (-97.02%) | 3894.6 KiB | 830.6 KiB |
+
+The 80 B and 300 B rows are the same as main within noise (no mark in the
+time column), and their allocations are equal, so a small file pays nothing.
+They again at n=16, wrap off and wrap on (none differs at p<0.05, bytes and
+allocations equal):
+
+| line, n=16 | wrap off before | wrap off after | wrap on before | wrap on after |
+|---|---:|---:|---:|---:|
+| 80 B, ASCII | 1.270 ms | 1.265 ms | 876 µs | 886 µs |
+| 300 B, ASCII | 1.607 ms | 1.585 ms | 864 µs | 882 µs |
+| 80 B, CJK | 1.554 ms | 1.571 ms | 849 µs | 850 µs |
+| 300 B, CJK | 2.075 ms | 2.027 ms | 855 µs | 867 µs |
+| 80 B, `q` and U+FF9F | 1.665 ms | 1.642 ms | 848 µs | 882 µs |
+| 300 B, `q` and U+FF9F | 2.153 ms | 2.117 ms | 883 µs | 886 µs |
+
+With wrap on, a frame is three lines, "short", the long line and "short". Every
+wrap on row of the n=8 runs is within noise except the CJK step; the 64 KiB
+rows:
+
+| wrap on | time before | time after | bytes before | bytes after |
+|---|---:|---:|---:|---:|
+| frame, 64 KiB, ASCII | 1.495 ms | 1.380 ms (~) | 706.4 KiB | 706.5 KiB |
+| frame, 64 KiB, CJK | 3.413 ms | 3.432 ms (~) | 725.8 KiB | 725.8 KiB |
+| frame, 64 KiB, `q` and U+FF9F | 4.040 ms | 4.004 ms (~) | 782.8 KiB | 782.8 KiB |
+| `j` step, 64 KiB, ASCII | 1.468 ms | 1.429 ms (~) | 706.3 KiB | 706.3 KiB |
+| `j` step, 64 KiB, CJK | 3.300 ms | 3.382 ms (+2.48% (p=0.028)) | 726.1 KiB | 726.1 KiB |
+| `j` step, 64 KiB, `q` and U+FF9F | 4.032 ms | 4.040 ms (~) | 810.7 KiB | 810.7 KiB |
+
+The CJK rows are the odd ones. Repeated alone at n=16 the CJK step reads
+3.036 ms before and 3.167 ms after (+4.3%, p=0.001; +4.0% with the order of the
+runs reversed) and the CJK frame 3.009 ms and 3.191 ms (+6.1%, p<0.001), while
+the mixed rows show nothing. No code of the wrap on path changed, and the allocations are
+equal. The same instructions run: counted with hardware counters, the CJK 64 KiB
+step is about 56.0 million instructions an op on both. The hot wrap functions
+(`quickLookWrapRows`, `quickLookLastWrapped` and `quickLookWrapNext`) moved 480 bytes
+in the binary. A later interleaved run on a loaded machine did not show the
+difference, and I did not track it further.
+
+Binary size: +0 B on linux/amd64 (48,877,728 B) and darwin/arm64 (45,555,522 B),
+and +0 B for `tuios-web` (52,113,568 B and 49,309,666 B).
+
+### Checked against drawing the whole line
+
+Every panel was drawn twice, once with the cut and once with the cut out of
+reach, wrap off, and every canvas cell compared. All groups drew the same:
+
+- Lines of `q` times n, a unit, then `r`, 130 to 460 bytes, the unit at 24
+  places around 1, 2 and 3 times one cell more than the row; the units U+FF9E,
+  U+FF9F, U+16FF0, U+0301, U+20E3, U+200D and a digit with U+20E3, alone and in
+  runs of 4, 5 and 6. At 200x60, 60x30 and 47x20 and at code columns of 1, 2, 5
+  and 20: 217,770 panels, 97,128,840 cells, 0 differing, with 2,686,115 line
+  draws shortened by the cut.
+- 6,000 random screens (200x60, 121x40, 80x30, 47x20, lines of up to 1,500 bytes
+  from ASCII, tabs, CJK, the pairs above, keycaps, a ZWJ family and combining
+  marks, a gutter on a third, highlighted Go on a quarter, every scroll offset):
+  38,632 panels and 93,231,468 cells wrap off, 0 differing, and the same count
+  with wrap on. 500 random screens at each narrow code column: 13,041 panels, 0
+  differing.
+- Syntax spans that start or end at every byte in and around a grapheme
+  cluster, at all seven widths, wrap off and on: 53,352 panels, 0 differing.
+
+The same runs with the margin cut to one cell more than the row differ in
+166,802 cells (the first group) and 1,470 (the third). At two times one cell
+more they differ only on lines that reach the margin's one cell of slack: the
+line of 100 `q` and U+16FF0 pairs then 10 digits, 106 cells over its four panels
+(8 at one times).
+
+### Measured and deliberately not changed
+
+- The two whole-line walks a frame with wrap on still makes, `quickLookWrapRows`
+  from the draw and `quickLookLastWrapped`: one walk of a 64 KiB line takes
+  0.9 to 1.0 ms of CJK and 0.85 to 1.3 ms of mixed text, 0.03 ms of ASCII, so
+  a frame spends about 1.8 to 2.6 ms on them for non-ASCII.
+- The search lighter lowercases the whole line for each drawn row when the query
+  has no capital letter and the line has one. With wrap off, 60 lines of 64 KiB
+  and the query `abc`, a frame takes 7.5 ms and 3.4 MiB after the cut, against
+  1.6 ms and 752 KiB with no query (60.6 ms and 6.4 MiB before the cut): about
+  6 ms and 2.7 MiB a frame for the lowercasing.
+
 ## 2026-11 preview search lowers into one buffer
 
 A search in a previewed file (quick look's `/`, `file-preview` find) with no

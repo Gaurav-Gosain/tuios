@@ -16468,3 +16468,34 @@ Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTMLOwnersKeepHooksAndHerdrPluginsApart$' -v .`,
 and from the repository root with
 `go test -count=1 -run '^TestHookOfPeerMatchesTheStartTime$' ./internal/session/`.
+## Quick look cuts a long line before it draws it with wrap off
+
+`TestQuickLookCutLineBytes` (internal/app, a perf budget) steps with j
+through 60 lines of 64 KiB with wrap off and holds one drawn frame to 1536 KiB;
+its positive half, a small highlighted Go file whose lines are at most 300
+bytes, stays at main's 811 KiB plus 16 KiB.
+`TestQuickLookCutKeepsTheEllipsis` turns wrap off on zzwrap.txt at 140x40
+(code column 81): line 2, a letter with a halfwidth sound mark sixty times
+then ASCII, and line 1, wide characters, each hold the ellipsis on their row,
+and line 4 shows `end 4` whole. Then a file of its own, zzcut.log, whose line 1
+is a letter with U+16FF0 a hundred times then ten digits: its row holds the
+ellipsis. The ellipsis is looked for anywhere on the row, since it can come
+before blanks at the row's end.
+
+Run on 2026-11-09 on Linux, go1.27.3. The control for the budget is main at
+d95718d05:
+
+| Control | Test | The test fails with | Result |
+|---------|------|---------------------|--------|
+| main (d95718d05) | `TestQuickLookCutLineBytes` | "a step through 60 cut lines of 64 KiB allocated 3901 KiB a frame, want at most 1536 KiB"; the small file passes | **caught** |
+| The wrap-off branch ignores the cut end and draws the whole line | `TestQuickLookCutLineBytes` | "a step through 60 cut lines of 64 KiB allocated 3901 KiB a frame, want at most 1536 KiB"; the small file passes | **caught** |
+| The cut keeps a prefix of one cell more than the row, not three times that (margin 1x) | `TestQuickLookCutKeepsTheEllipsis` | "ASSERTION: with wrap off line 1's row is \"〇一二...九…\" and line 2's row is \"qﾟqﾟ...qﾟ\", want each to hold \"…\"; line 4's row is \"end 4\", want \"end 4\": tuitest: WaitForDesc timed out after 10.005s waiting for custom condition" and "ASSERTION: with wrap off line 1's row of zzcut.log is \"q𖿰...q\", want it to hold \"…\"" | **caught** |
+| The cut keeps a prefix of two times one cell more than the row, not three (margin 2x) | `TestQuickLookCutKeepsTheEllipsis` | "ASSERTION: with wrap off line 1's row of zzcut.log is \"q𖿰q𖿰...q𖿰\", want it to hold \"…\": tuitest: WaitForDesc timed out after 10.005s waiting for custom condition" (only the zzcut.log row fails) | **caught** |
+
+`TestQuickLookCutKeepsTheEllipsis` passes on main: it guards the ellipsis the
+whole line draws. The frames are `quick-look-cut-marks` and
+`quick-look-cut-spacing-marks` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui`
+with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestQuickLookCutKeepsTheEllipsis$' -v .`,
+and from the root with
+`go test -count=1 -run '^TestQuickLookCutLineBytes$' ./internal/app/`.
