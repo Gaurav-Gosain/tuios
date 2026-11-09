@@ -16747,3 +16747,18 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestDockPillsAndRestoreNAgree$' -v .`.
+
+## TestArrangeRestoreByPaneAndOrder
+
+The arrange verb's restore, as guios sends it. Gamma then alpha are minimized:
+Delta 1 restores gamma, Pane restores that pane and hands the client its
+focus, and a Pane that is not minimized with no Delta restores every one.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| guios/land with main merged (095386beb), where restore counts in window order and takes no pane | "restore Delta 1 should restore gamma, minimized first; minimized now \"gamma\"" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestArrangeRestoreByPaneAndOrder$' -v .`.

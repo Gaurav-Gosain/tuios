@@ -56,8 +56,9 @@ type ArrangeResult struct {
 // "scroll.reveal", "rect" (Pane to Rect, snapped when At is at an edge),
 // "snap" (Mode "left", "right", "top-left", "top-right", "bottom-left",
 // "bottom-right", "full" or "unsnap"), "float", "swap" (Pane and
-// Target), "minimize" or "restore" (the Delta-th minimized pane, every
-// one with 0). Pane is the pane it acts on, the focused one when empty.
+// Target), "minimize" or "restore" (Pane when it is minimized, else the
+// Delta-th minimized pane in the order they were minimized, every one with
+// 0). Pane is the pane it acts on, the focused one when empty.
 type ArrangeParams struct {
 	Session string       `json:"session"`
 	Op      string       `json:"op"`
