@@ -184,6 +184,14 @@ func (d *Daemon) executeDaemonCommandEnv(sess *Session, commandType string, args
 		}
 		return windowStateToData(state, idx), nil
 
+	case "Action":
+		// A keymap action by its name: the ones that are only an op on
+		// session state run here (headless_actions.go).
+		if len(args) != 1 {
+			return nil, errNeedsClient{verb: commandType}
+		}
+		return d.runHeadlessAction(sess, args[0], base)
+
 	default:
 		return nil, errNeedsClient{verb: commandType}
 	}

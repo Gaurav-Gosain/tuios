@@ -16141,3 +16141,21 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPaneGoneSaysWhyInTheLog$' -v .`.
+
+## TestHeadlessKeymapActions
+
+With no TUI client on a session, run-command runs the keymap actions that are
+only an op on session state (`internal/session/headless_actions.go`):
+select_window_N, last_pane, send_to_workspace_N, move_and_follow_N,
+break_pane, move_workspace_left/right, minimize_window, restore_all and
+close_workspace. Each step reads the daemon's state back with list-windows.
+
+Run on 2026-11-09 on macOS (arm64), as the Atlas helper user. The branch
+passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The Action case in `executeDaemonCommandEnv` answers `errNeedsClient` (before this step) | "select_window_1 still needs a client: command "Action" requires an attached client" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHeadlessKeymapActions$' -v .`.
