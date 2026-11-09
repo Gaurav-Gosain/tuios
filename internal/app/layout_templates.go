@@ -1,96 +1,33 @@
 package app
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
-	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
+	"github.com/Gaurav-Gosain/tuios/internal/layouttmpl"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"github.com/adrg/xdg"
 )
 
-// LayoutTemplate is the v2 layout specification.
-//
-// A layout template captures everything needed to recreate a terminal
-// workspace: window positions, BSP tree structure, per-window startup
-// commands, working directories, and tiling configuration.
-//
-// Templates are stored as JSON in ~/.config/tuios/layouts/.
+// LayoutTemplate is a saved layout, kept by internal/layouttmpl in
+// ~/.config/tuios/layouts/.
 //
 // Integration points:
 //   - Command palette: "Save Layout", "Load Layout"
 //   - Keybinding: prefix+L l (load), prefix+L s (save)
 //   - Tape scripting: SaveLayout/LoadLayout commands
-//   - CLI: tuios layout list/delete/dir/export (no save or load, since
-//     both need a running session)
-type LayoutTemplate struct {
-	// Metadata
-	Name        string    `json:"name"`
-	Description string    `json:"description,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
-	Version     int       `json:"version"` // Schema version (2)
+//   - CLI: tuios layout list/delete/dir/export
+type LayoutTemplate = layouttmpl.Template
 
-	// Tiling configuration
-	AutoTiling   bool    `json:"auto_tiling"`
-	TilingScheme string  `json:"tiling_scheme,omitempty"` // "spiral", "alternate", "smart_split", etc.
-	MasterRatio  float64 `json:"master_ratio,omitempty"`
-
-	// Windows holds each window's configuration.
-	Windows []LayoutWindow `json:"windows"`
-
-	// Screen dimensions at save time (for proportional scaling on different screens)
-	ScreenWidth  int `json:"screen_width,omitempty"`
-	ScreenHeight int `json:"screen_height,omitempty"`
-}
-
-// LayoutWindow stores per-window configuration.
-type LayoutWindow struct {
-	// Position and size (used in free-float mode or as fallback)
-	X      int `json:"x"`
-	Y      int `json:"y"`
-	Width  int `json:"width"`
-	Height int `json:"height"`
-
-	// Window identity
-	Title      string `json:"title,omitempty"`       // Custom name
-	CustomName string `json:"custom_name,omitempty"` // User-set name
-
-	// Startup configuration
-	Command    string   `json:"command,omitempty"`     // Shell command to run on creation (e.g., "vim", "htop")
-	Args       []string `json:"args,omitempty"`        // Command arguments
-	WorkingDir string   `json:"working_dir,omitempty"` // Working directory for the shell
-	Shell      string   `json:"shell,omitempty"`       // Override shell (empty = default)
-
-	// State
-	Minimized bool `json:"minimized,omitempty"`
-}
+// LayoutWindow is one pane of a template.
+type LayoutWindow = layouttmpl.Window
 
 // GetTemplatesDir returns the directory path for layout template files.
-func GetTemplatesDir() string {
-	return filepath.Join(xdg.ConfigHome, "tuios", "layouts")
-}
-
-func ensureTemplatesDir() error {
-	return os.MkdirAll(GetTemplatesDir(), 0750)
-}
-
-func templateFilePath(name string) string {
-	safe := strings.ReplaceAll(name, string(os.PathSeparator), "_")
-	safe = strings.ReplaceAll(safe, " ", "_")
-	safe = strings.ReplaceAll(safe, "..", "_")
-	if safe == "" {
-		safe = "unnamed"
-	}
-	return filepath.Join(GetTemplatesDir(), safe+".json")
-}
+func GetTemplatesDir() string { return layouttmpl.Dir() }
 
 // SaveLayoutTemplate saves the current workspace layout.
 func SaveLayoutTemplate(name string, m *OS) error {
@@ -100,10 +37,6 @@ func SaveLayoutTemplate(name string, m *OS) error {
 	if m.InScratchView() {
 		return errLayoutInScratch
 	}
-	if err := ensureTemplatesDir(); err != nil {
-		return errfmt.Errorf("create layouts dir: %w", err)
-	}
-
 	tmpl := LayoutTemplate{
 		Name:         name,
 		CreatedAt:    time.Now(),
@@ -147,42 +80,11 @@ func SaveLayoutTemplate(name string, m *OS) error {
 		tmpl.Windows = append(tmpl.Windows, lw)
 	}
 
-	data, err := json.MarshalIndent(tmpl, "", "  ")
-	if err != nil {
-		return errfmt.Errorf("marshal: %w", err)
-	}
-	return os.WriteFile(templateFilePath(name), data, 0600)
+	return layouttmpl.Save(tmpl)
 }
 
 // LoadLayoutTemplates reads all templates from the layouts directory.
-func LoadLayoutTemplates() ([]LayoutTemplate, error) {
-	dir := GetTemplatesDir()
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	var templates []LayoutTemplate
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
-		}
-		// #nosec G304
-		data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
-		if err != nil {
-			continue
-		}
-		var tmpl LayoutTemplate
-		if err := jsonx.Unmarshal(data, &tmpl); err != nil {
-			continue
-		}
-		templates = append(templates, tmpl)
-	}
-	return templates, nil
-}
+func LoadLayoutTemplates() ([]LayoutTemplate, error) { return layouttmpl.List() }
 
 // ApplyLayoutTemplate recreates a workspace from a template.
 func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
@@ -344,27 +246,11 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 }
 
 // DeleteLayoutTemplate removes a template file.
-func DeleteLayoutTemplate(name string) error {
-	err := os.Remove(templateFilePath(name))
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	return nil
-}
+func DeleteLayoutTemplate(name string) error { return layouttmpl.Delete(name) }
 
 // FilterLayoutTemplates filters by name substring.
 func FilterLayoutTemplates(templates []LayoutTemplate, query string) []LayoutTemplate {
-	if query == "" {
-		return templates
-	}
-	q := strings.ToLower(query)
-	var filtered []LayoutTemplate
-	for _, tmpl := range templates {
-		if strings.Contains(strings.ToLower(tmpl.Name), q) {
-			filtered = append(filtered, tmpl)
-		}
-	}
-	return filtered
+	return layouttmpl.Filter(templates, query)
 }
 
 // GenerateTapeScript converts a layout template to a tape script that
