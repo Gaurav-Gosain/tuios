@@ -57,6 +57,7 @@ func writeSetupSSH(t *testing.T, here, far string) string {
 		}
 		fmt.Fprintf(&b, "    export PATH=%s SHELL=/bin/sh\n    ;;\n", m.path)
 	}
+	b.WriteString("  someone@newkeybox) echo \"No ED25519 host key is known for newkeybox and you have requested strict checking.\" >&2; echo \"Host key verification failed.\" >&2; exit 255 ;;\n")
 	b.WriteString("  *) echo \"ssh: Could not resolve hostname $addr: Name or service not known\" >&2; exit 255 ;;\nesac\n")
 	b.WriteString("exec /bin/sh -c \"$*\"\n")
 	ssh := filepath.Join(here, "fake-ssh-setup")
@@ -196,6 +197,28 @@ func TestSetUpAMachineBothWays(t *testing.T) {
 	}
 	att := waitForAttention(t, here, env, "build:far", "rate limited by the api")
 	t.Logf("list-attention here:\n%s", att)
+}
+
+// TestSetUpNamesAnUnknownHostKey runs a setup to a machine whose host key ssh
+// does not know. The reason puts the machine's name in place of "the host"
+// and keeps "the host key" whole: a plain replace once printed "ssh does not
+// know newkey key of newkey."
+func TestSetUpNamesAnUnknownHostKey(t *testing.T) {
+	here := remoteMachine(t)
+	far := remoteMachine(t)
+	env := []string{"TUIOS_SSH=" + writeSetupSSH(t, here, far)}
+
+	out, err := tuiosCLIEnv(t, here, env, "hosts", "setup", "someone@newkeybox", "--name", "newkey", "--install", "copy", "--dry-run")
+	t.Logf("tuios hosts setup someone@newkeybox --dry-run:\n%s", out)
+	if err == nil {
+		t.Fatalf("ASSERTION: a dry run to a machine with an unknown host key passed")
+	}
+	if want := "ssh does not know the host key of newkey."; !strings.Contains(out, want) {
+		t.Errorf("ASSERTION: the reason is not %q", want)
+	}
+	if strings.Contains(out, "newkey key of") {
+		t.Errorf("ASSERTION: the name replaced \"the host\" inside \"the host key\"")
+	}
 }
 
 // writeFakeTailscale puts a tailscale stand-in in dir whose status names

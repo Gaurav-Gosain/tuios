@@ -16013,3 +16013,18 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTMLSurfaceEventFollowsEachChange$' -v .`.
+
+## TestSetUpNamesAnUnknownHostKey
+
+`tuios hosts setup` to a machine whose host key ssh does not know. The reason
+puts the machine's name in place of "the host" and keeps "the host key" whole.
+Before the fix it read "ssh does not know newkey key of newkey."
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (d95718d05), where `named` replaces every "the host" | "the reason is not \"ssh does not know the host key of newkey.\"" and "the name replaced \"the host\" inside \"the host key\"" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSetUpNamesAnUnknownHostKey$' -v .`.
