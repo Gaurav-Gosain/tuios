@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -37,8 +38,10 @@ type ckDiff struct {
 	loading bool
 	err     string
 	base    string
-	files   []ckFile
-	notes   []ckNote
+	// root is the work tree the paths are in, on the agent's machine.
+	root  string
+	files []ckFile
+	notes []ckNote
 	// note is the line a note is being written on, "" for none.
 	note, noteText string
 	scroll         smoothScroll
@@ -50,7 +53,10 @@ type ckFile struct {
 	Added   int      `json:"added"`
 	Removed int      `json:"removed"`
 	Hunks   []ckHunk `json:"hunks"`
-	diff    *transcriptview.Diff
+	// Truncated says the daemon sent the file's counts and no lines: it
+	// has more lines than a diff carries (review.DefaultLimits).
+	Truncated bool `json:"truncated"`
+	diff      *transcriptview.Diff
 }
 
 type ckHunk struct {
@@ -148,9 +154,10 @@ func (a *App) fetchAgentChanges(ag client.Agent) {
 	d.loading = true
 	go func() {
 		var out struct {
-			Base  string   `json:"base"`
-			Files []ckFile `json:"files"`
-			Notes []ckNote `json:"notes"`
+			Base     string   `json:"base"`
+			Worktree string   `json:"worktree"`
+			Files    []ckFile `json:"files"`
+			Notes    []ckNote `json:"notes"`
 		}
 		err := cl.VerbInto("review-diff", map[string]any{"session": ag.Session, "window": ag.Window}, false, &out)
 		a.update(func() {
@@ -159,7 +166,7 @@ func (a *App) fetchAgentChanges(ag client.Agent) {
 				d.err = err.Error()
 				return
 			}
-			d.err, d.base, d.files, d.notes = "", out.Base, out.Files, out.Notes
+			d.err, d.base, d.root, d.files, d.notes = "", out.Base, out.Worktree, out.Files, out.Notes
 		})
 	}()
 }
@@ -193,7 +200,10 @@ func (a *App) diffPage(c *ui.Context, pal *palette, ag client.Agent, d *ckDiff, 
 	}
 	mono := a.termFamily()
 	added, removed := a.diffColorsFor(pal)
-	d.scroll.track(c, ui.Scroll(c.Key("diff"))).Grow(1).MinHeight(0).Padding(14, 24, 18, 24).Children(func() {
+	page := d.scroll.track(c, ui.Scroll(c.Key("diff"))).Grow(1).MinHeight(0).Padding(14, 24, 18, 24)
+	a.diffClip, a.diffScrollY = page.Bounds(), d.scroll.Y
+	defer func() { a.diffClip = ui.Rect{} }()
+	page.Children(func() {
 		ui.Column(c).Gap(12).Children(func() {
 			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 				ta, tr := 0, 0
@@ -221,13 +231,33 @@ func (a *App) diffPage(c *ui.Context, pal *palette, ag client.Agent, d *ckDiff, 
 						ui.Text(c, fmt.Sprint("+", f.Added)).Font(mono).FontSize(fsSmall).TextColor(added)
 						ui.Text(c, fmt.Sprint("−", f.Removed)).Font(mono).FontSize(fsSmall).TextColor(removed)
 					})
-					a.diffView(c, pal, f.asDiff(), true, mono)
+					if f.Truncated && len(f.Hunks) == 0 {
+						a.diffCut(c, pal, ag, d, f)
+					} else {
+						a.diffView(c, pal, f.asDiff(), true, mono)
+					}
 					if notes {
 						a.fileNotes(c, pal, ag, d, f)
 					}
 				})
 			}
 		})
+	})
+}
+
+// diffCut stands for the lines of a file the daemon did not send, as there
+// are more than a diff carries: it says so, and opens the file on this
+// machine when the agent works here.
+func (a *App) diffCut(c *ui.Context, pal *palette, ag client.Agent, d *ckDiff, f *ckFile) {
+	ui.Row(c).Gap(10).AlignItems(ui.Center).Padding(4, 12, 10, 12).Children(func() {
+		ui.Text(c, locales.CockpitDiffCut(f.Added+f.Removed)).FontSize(fsSmall).TextColor(pal.textMuted).Grow(1).MinWidth(0)
+		if d.root == "" || ag.Host != "" || f.Status == "D" {
+			return
+		}
+		full := filepath.Join(d.root, filepath.FromSlash(f.Path))
+		if sizedButton(c, "open", locales.ChangesOpenFile(), "", false, 24, 6, pal) {
+			a.openPath(full)
+		}
 	})
 }
 
@@ -377,8 +407,9 @@ func (a *App) chooseCheckpoint(ag client.Agent, cp *ckCheckpoints, n int) {
 	}
 	go func() {
 		var out struct {
-			Base  string   `json:"base"`
-			Files []ckFile `json:"files"`
+			Base     string   `json:"base"`
+			Worktree string   `json:"worktree"`
+			Files    []ckFile `json:"files"`
 		}
 		err := cl.VerbInto("checkpoint-diff", map[string]any{"session": ag.Session, "window": ag.Window, "n": n}, false, &out)
 		a.update(func() {
@@ -387,7 +418,7 @@ func (a *App) chooseCheckpoint(ag client.Agent, cp *ckCheckpoints, n int) {
 				d.err = err.Error()
 				return
 			}
-			d.base, d.files = out.Base, out.Files
+			d.base, d.root, d.files = out.Base, out.Worktree, out.Files
 		})
 	}()
 }

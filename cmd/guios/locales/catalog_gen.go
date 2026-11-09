@@ -7732,6 +7732,16 @@ func (msgs Messages) CockpitSendNotes() string {
 	return Catalog.Format(msgs.locale, "cockpitSendNotes", nil)
 }
 
+// CockpitDiffCut says "{count, plural, one {# changed line is not shown: too many for this view.} other {# changed lines are not shown: too …"
+// in the language the app shows.
+func CockpitDiffCut(count int) string { return In(i18n.Locale()).CockpitDiffCut(count) }
+
+// CockpitDiffCut says "{count, plural, one {# changed line is not shown: too many for this view.} other {# changed lines are not shown: too …"
+// in the language of msgs.
+func (msgs Messages) CockpitDiffCut(count int) string {
+	return Catalog.Format(msgs.locale, "cockpitDiffCut", map[string]any{"count": count})
+}
+
 // CockpitNoChanges says "No changes"
 // in the language the app shows.
 func CockpitNoChanges() string { return In(i18n.Locale()).CockpitNoChanges() }
