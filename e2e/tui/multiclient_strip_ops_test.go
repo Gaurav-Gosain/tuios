@@ -413,3 +413,92 @@ func TestAStripChangeFromTheDaemonSlides(t *testing.T) {
 		t.Errorf("the moved pane's left edge %s: %v", msg, compactSeq(xs))
 	}
 }
+
+// TestStripActionsRunWithATUIAttached (S1, part 2): with two TUIs on a
+// scrolling session of four one-pane columns, run-command runs the strip
+// actions in the daemon (routed false), each changing the session's strip by
+// its step, and both clients draw the same.
+//
+// How this could pass wrongly, written down first:
+//   - The TUI could run each and push: routed false is the daemon's answer.
+//   - A step could hold already: each compares the strip before and after,
+//     and consume and expel need the column count to move by one.
+func TestStripActionsRunWithATUIAttached(t *testing.T) {
+	const name = "strip-s1"
+	base, a, b := stripSession(t, name, 4)
+	var log strings.Builder
+	step := func(action, what string, ok func(before, now daStrip, bj, nj string) bool) {
+		t.Helper()
+		before, bj := daReadStrip(t, base, name)
+		if daRun(t, base, name, action) {
+			t.Fatalf("%s: run-command answered routed true; the TUI ran it, not the daemon", action)
+		}
+		deadline := time.Now().Add(uiTimeout)
+		for {
+			now, nj := daReadStrip(t, base, name)
+			if ok(before, now, bj, nj) {
+				fmt.Fprintf(&log, "%s: routed false, %s: %s\n", action, what, nj)
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("%s: %s did not hold: before %s now %s", action, what, bj, nj)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	changed := func(_, _ daStrip, bj, nj string) bool { return bj != nj }
+	step("scroll_consume", "one column fewer", func(b, n daStrip, _, _ string) bool { return len(n.Scroll.Columns) == len(b.Scroll.Columns)-1 })
+	step("scroll_expel", "one column more", func(b, n daStrip, _, _ string) bool { return len(n.Scroll.Columns) == len(b.Scroll.Columns)+1 })
+	daFocusFirstColumn(t, base, name)
+	step("scroll_move_right", "the columns are in another order", changed)
+	step("scroll_cycle_width", "a column's width changed", changed)
+	step("scroll_maximize", "a column's width changed", changed)
+	stripPushes(t, base, name, a, b, 4, "after the strip actions")
+	if err := os.WriteFile(filepath.Join(artifactDir(t), "strip-s1.txt"), []byte(log.String()), 0o600); err != nil {
+		t.Logf("write the transcript: %v", err)
+	}
+}
+
+// TestStripKeysFromTwoClientsAtOnce (S3, part 2): both TUIs press
+// scroll_consume at the same moment on six one-pane columns, for four
+// rounds. Both presses must land: six columns to four, every pane once, and
+// both clients draw one layout. The strip is put back between rounds by
+// expelling, one at a time (two expels at once on one column are one expel:
+// the focus follows the pane out).
+//
+// How this could pass wrongly, written down first:
+//   - The two presses could land one after the other by chance: each is sent
+//     from two goroutines at once, and every round is checked.
+//   - The first column could be a different one each round: the focus is put
+//     on the strip's first column before each round.
+func TestStripKeysFromTwoClientsAtOnce(t *testing.T) {
+	const name = "strip-s3"
+	base, a, b := stripSession(t, name, 6)
+	var log strings.Builder
+	for round := range 4 {
+		daFocusFirstColumn(t, base, name)
+		together(t, a, string(tuitest.Alt("c")), b, string(tuitest.Alt("c")))
+		deadline := time.Now().Add(uiTimeout)
+		n, sj := stripCols(t, base, name, 6)
+		for n > 4 && time.Now().Before(deadline) {
+			time.Sleep(100 * time.Millisecond)
+			n, sj = stripCols(t, base, name, 6)
+		}
+		fmt.Fprintf(&log, "round %d: two scroll_consume at once: %d columns\n", round, n)
+		if n != 4 {
+			t.Fatalf("round %d: two scroll_consume at once left %d columns, want 4: a press was lost: %s\n%s", round, n, sj, log.String())
+		}
+		requireSameScreens(t, a, b, fmt.Sprintf("round %d", round))
+		for range 2 {
+			st, _ := daReadStrip(t, base, name)
+			col := st.Scroll.Columns[0].Windows
+			if out, err := tuiosCLI(t, base, "call", "arrange", `{"session":"`+name+`","op":"scroll.expel","pane":"`+col[len(col)-1]+`"}`); err != nil {
+				t.Fatalf("round %d: arrange scroll.expel: %v: %s", round, err, out)
+			}
+			stripCols(t, base, name, 6)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(artifactDir(t), "strip-s3.txt"), []byte(log.String()), 0o600); err != nil {
+		t.Logf("write the transcript: %v", err)
+	}
+}

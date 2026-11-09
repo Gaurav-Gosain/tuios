@@ -919,10 +919,15 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// With the columns as ops the session's are taken from every state, for
 	// each workspace that holds no unsent change of this client's. See
 	// scroll_columns_sync.go.
+	stripMoved := false
 	if state.WorkspaceScrollColumns != nil && state.AutoTiling {
 		switch {
 		case m.scrollOpsOn():
-			m.adoptScrollColumns(m.columnsToAdopt(state.WorkspaceScrollColumns))
+			before := colsKey(m.scrollColumnsState()[m.CurrentWorkspace])
+			adopted := m.columnsToAdopt(state.WorkspaceScrollColumns)
+			m.adoptScrollColumns(adopted)
+			m.noteDerivedColumns(adopted)
+			stripMoved = colsKey(m.scrollColumnsState()[m.CurrentWorkspace]) != before
 		case adoptTopology:
 			m.adoptScrollColumns(state.WorkspaceScrollColumns)
 		}
@@ -1165,6 +1170,13 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 		if treeRetile || zoomRetile {
 			m.SyncStateToDaemon()
 		}
+	}
+	// The same for a strip the session changed on the workspace on screen:
+	// the daemon writes no rectangles for it while a TUI is attached
+	// (arrange_engine.go flush), so the ones this client laid it out at are
+	// sent, or list-windows reports the strip as it was.
+	if stripMoved && m.AutoTiling && m.UseScrollingLayout {
+		m.SyncStateToDaemon()
 	}
 
 	// A pane a switch to an empty workspace asked for has arrived.

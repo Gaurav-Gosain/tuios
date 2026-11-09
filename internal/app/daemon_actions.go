@@ -46,6 +46,15 @@ func (m *OS) SendsDaemonAction(action string) bool {
 		switch action {
 		case "resize_master_grow", "resize_master_shrink", "resize_height_grow", "resize_height_shrink":
 			return m.AutoTiling && m.LayoutModeName() == LayoutModeBSP && !m.SidebarFocused
+		case "scroll_focus_left", "scroll_focus_right":
+			// A focus key: see the direction keys above.
+			return false
+		}
+		if strings.HasPrefix(action, "scroll_") {
+			// The strip keys, while the daemon takes the columns as ops:
+			// against one that does not, a TUI's push would put the
+			// daemon's change back (scroll_columns_sync.go).
+			return m.AutoTiling && m.UseScrollingLayout && !m.SidebarFocused && m.scrollOpsOn()
 		}
 		// Tiling on and off and the next layout stay here: this client's
 		// switch settles the panes' sizes, the border mode and the tiled

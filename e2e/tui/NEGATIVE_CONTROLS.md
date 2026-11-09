@@ -16457,18 +16457,18 @@ passes both.
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'TestDaemonLayoutActions|TestDaemonMastersFromTwo' -v .`.
 
-## TestDaemonHeightStepRunsAndTheStripIsRouted
+## TestDaemonHeightStepRunsWithATUIAttached
 
 Parity gap 1, step 4, batch C2. resize_height_grow runs in the daemon with a TUI
-attached in the split layout, and the scrolling strip's scroll_consume stays
-routed (the TUI owns the strip's columns).
+attached in the split layout. (Its strip half, scroll_consume staying routed,
+was dropped when the strip ops' part 2 moved the strip keys to the daemon.)
 
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
 | guios/land before batch C2 (b86bd244a) | "resize_height_grow: run-command answered routed true in the split layout" | **caught** |
 
 Repeat from `e2e/tui` with
-`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run TestDaemonHeightStep -v .`.
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run TestDaemonHeightStepRuns -v .`.
 
 ## TestDaemonKillSessionAction
 
@@ -16510,3 +16510,19 @@ stripPushes compares the session's columns instead.
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'Strip|TestPanesComeAndGo' -v .`
 and `go test -count=1 -run TestScrollColumnsFollowTheClientsHello ./internal/session/`.
+
+## The scrolling strip as daemon state, part 2 (TestStripActionsRunWithATUIAttached, TestStripKeysFromTwoClientsAtOnce)
+
+The strip actions run in the daemon through the arrange engine with a TUI
+attached, the TUI's strip keys send them there, and an action intent from a
+TUI runs off that TUI's read loop (`runIntent`, `internal/session/daemon_actions.go`).
+
+| Test | Control | The test fails with | Result |
+|------|---------|---------------------|--------|
+| S1 | guios/land before part 2 (95b8e1e26) | "scroll_consume: run-command answered routed true; the TUI ran it, not the daemon" | **caught** |
+| S3 | guios/land before part 2 (95b8e1e26): the key consumes in the client | "round 0: two scroll_consume at once left 5 columns, want 4: a press was lost" | **caught** |
+| S3 | part 2 with the Active row in the client's columns key (colsKey), under load (internal/app's tests running beside it) | "two scroll_consume at once left 5 columns, want 4" | **caught**, 3 of 10; the branch passes 10 of 10 under the same load |
+| S3 | part 2 with the intent run on the TUI's read loop | "round 1: two scroll_consume at once left 5 columns" and "the two clients draw different layouts"; the daemon log shows each consume finishing 10 s after its intent (the routed FocusWindow of revealFocus waited out its timeout on the blocked client) | **caught**, 2 of 2 |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'TestStripActionsRun|TestStripKeysFromTwo' -v .`.
