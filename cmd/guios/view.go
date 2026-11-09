@@ -711,8 +711,16 @@ func (a *App) sessionRow(c *ui.Context, pal *palette, s *proto.Session, n *int, 
 	if h := a.hostOf(s.ID); h.remote() && h.conn != connReady {
 		row.Opacity(0.55)
 	}
-	if (row.Pressed() || row.Clicked()) && !selected {
-		a.selectSession(s.ID)
+	if row.Pressed() || row.Clicked() {
+		// A session clicked in the sidebar is the one to look at: the
+		// Agents view over the panes closes, the shown session's row too
+		// (polish wave 1, item 4).
+		if a.ck.open {
+			a.closeCockpit()
+		}
+		if !selected {
+			a.selectSession(s.ID)
+		}
 	}
 	if row.DoubleClicked() {
 		a.startRename(s.ID)

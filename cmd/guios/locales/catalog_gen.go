@@ -7056,6 +7056,56 @@ func (msgs Messages) CockpitNoActivity() string {
 	return Catalog.Format(msgs.locale, "cockpitNoActivity", nil)
 }
 
+// CockpitNowRunning says "Running"
+// in the language the app shows.
+func CockpitNowRunning() string { return In(i18n.Locale()).CockpitNowRunning() }
+
+// CockpitNowRunning says "Running"
+// in the language of msgs.
+func (msgs Messages) CockpitNowRunning() string {
+	return Catalog.Format(msgs.locale, "cockpitNowRunning", nil)
+}
+
+// CockpitNowEditing says "Editing"
+// in the language the app shows.
+func CockpitNowEditing() string { return In(i18n.Locale()).CockpitNowEditing() }
+
+// CockpitNowEditing says "Editing"
+// in the language of msgs.
+func (msgs Messages) CockpitNowEditing() string {
+	return Catalog.Format(msgs.locale, "cockpitNowEditing", nil)
+}
+
+// CockpitNowReading says "Reading"
+// in the language the app shows.
+func CockpitNowReading() string { return In(i18n.Locale()).CockpitNowReading() }
+
+// CockpitNowReading says "Reading"
+// in the language of msgs.
+func (msgs Messages) CockpitNowReading() string {
+	return Catalog.Format(msgs.locale, "cockpitNowReading", nil)
+}
+
+// CockpitNowSearching says "Searching"
+// in the language the app shows.
+func CockpitNowSearching() string { return In(i18n.Locale()).CockpitNowSearching() }
+
+// CockpitNowSearching says "Searching"
+// in the language of msgs.
+func (msgs Messages) CockpitNowSearching() string {
+	return Catalog.Format(msgs.locale, "cockpitNowSearching", nil)
+}
+
+// CockpitNowFetching says "Fetching"
+// in the language the app shows.
+func CockpitNowFetching() string { return In(i18n.Locale()).CockpitNowFetching() }
+
+// CockpitNowFetching says "Fetching"
+// in the language of msgs.
+func (msgs Messages) CockpitNowFetching() string {
+	return Catalog.Format(msgs.locale, "cockpitNowFetching", nil)
+}
+
 // CockpitNoReportFor says "No report for {age}"
 // in the language the app shows.
 func CockpitNoReportFor(age string) string { return In(i18n.Locale()).CockpitNoReportFor(age) }

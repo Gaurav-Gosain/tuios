@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -312,6 +313,10 @@ func buildItems(entries []transcriptview.Entry, more bool, mdc map[string][]mark
 			it.kind = ckItemText
 			it.md = parse(e.ID, e.Text)
 			it.label = lastRole != "assistant"
+		case e.Kind == transcriptview.KindThinking && strings.TrimSpace(e.Text) == "":
+			// Claude Code writes its thinking redacted, a signature with no
+			// text: a row for it says nothing and splits every run.
+			continue
 		case e.Kind == transcriptview.KindThinking:
 			it.kind = ckItemThinking
 		case e.Kind == transcriptview.KindTodos:
@@ -360,15 +365,20 @@ func ckTooly(it ckItem) bool {
 }
 
 // ckRuns folds two or more tool calls in a row into one run item, so a turn
-// reads as its answers with one line of work between them.
+// reads as its answers with one line of work between them. Thinking between
+// the calls goes into the run, shown when it opens: an agent that thinks
+// before each call would otherwise leave no two calls in a row.
 func ckRuns(items []ckItem) []ckItem {
 	out := make([]ckItem, 0, len(items))
 	for i := 0; i < len(items); {
-		j := i
-		for j < len(items) && ckTooly(items[j]) {
+		j, calls := i, 0
+		for j < len(items) && (ckTooly(items[j]) || items[j].kind == ckItemThinking) {
+			if ckTooly(items[j]) {
+				calls++
+			}
 			j++
 		}
-		if j-i >= 2 {
+		if calls >= 2 {
 			run := slices.Clone(items[i:j])
 			out = append(out, ckItem{kind: ckItemRun, key: "run-" + items[i].key, at: items[i].at, run: run})
 			i = j
@@ -412,6 +422,9 @@ func ckRunSummary(run []ckItem) (string, bool) {
 	edits, commands, reads, others := 0, 0, 0, 0
 	failed := false
 	for _, it := range run {
+		if it.kind == ckItemThinking {
+			continue
+		}
 		if callStatus(&it) == transcriptview.StatusError {
 			failed = true
 		}
@@ -450,6 +463,16 @@ func ckRunSummary(run []ckItem) (string, bool) {
 		s = strings.ToUpper(s[:1]) + s[1:]
 	}
 	return s, failed
+}
+
+// ckRunRunning reports whether a run's last call has not finished.
+func ckRunRunning(run []ckItem) bool {
+	for i := len(run) - 1; i >= 0; i-- {
+		if ckTooly(run[i]) {
+			return callStatus(&run[i]) == transcriptview.StatusRunning
+		}
+	}
+	return false
 }
 
 // ckCommand reports whether a tool runs a shell command.
@@ -610,8 +633,11 @@ func (a *App) itemView(c *ui.Context, pal *palette, th *ckThread, it *ckItem, mo
 		}
 		a.foldItem(c, pal, th, it, func() {
 			ui.Text(c, summary).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0)
-			if failed {
+			switch {
+			case failed:
 				statusMark(c, pal, transcriptview.StatusError)
+			case ckRunRunning(it.run):
+				statusMark(c, pal, transcriptview.StatusRunning)
 			}
 		}, func() {
 			ui.Column(c).Gap(6).Children(func() {
@@ -696,7 +722,7 @@ func (a *App) toolsItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, m
 			order = append(order, e.Tool)
 		}
 		counts[e.Tool]++
-		targets = append(targets, e.Target)
+		targets = append(targets, ckRelPath(e.Target, th.agent.Cwd))
 	}
 	var head []string
 	for _, t := range order {
@@ -714,7 +740,7 @@ func (a *App) toolsItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, m
 		for _, e := range it.calls {
 			ui.Row(c).Gap(8).Children(func() {
 				ui.Text(c, e.Tool).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.textMuted).Shrink(0)
-				ui.Text(c, e.Target).Font(mono).FontSize(fsSmall).TextColor(pal.text).MinWidth(0)
+				ckPathText(c, e.Target, th.agent.Cwd).Font(mono).FontSize(fsSmall).TextColor(pal.text).MinWidth(0)
 			})
 		}
 	})
@@ -733,7 +759,7 @@ func (a *App) toolItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, mo
 	}
 	a.foldItem(c, pal, th, it, func() {
 		ui.Text(c, tool).FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text).Shrink(0)
-		ui.Text(c, it.e.Target).Font(mono).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
+		ckPathText(c, it.e.Target, th.agent.Cwd).Font(mono).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
 		if failed {
 			ui.Text(c, locales.CockpitFailedPill()).FontSize(fsCaption).FontWeight(wSemibold).TextColor(pal.danger).Padding(1, 7).Radius(rChip).Background(pal.danger.Alpha(0.14))
 		} else {
@@ -813,7 +839,7 @@ func (a *App) editItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, mo
 			}
 			ui.Icon(c, ic).Size(12, 12).TextColor(pal.textFaint)
 			ui.Text(c, it.e.Tool).FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text)
-			ui.Text(c, d.File).Font(mono).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
+			ckPathText(c, d.File, th.agent.Cwd).Font(mono).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
 			added, removed := a.diffColorsFor(pal)
 			if d.Added > 0 {
 				ui.Text(c, fmt.Sprint("+", d.Added)).Font(mono).FontSize(fsSmall).TextColor(added)
@@ -1172,4 +1198,28 @@ func (a *App) integrationMissing(c *ui.Context, harness string) bool {
 		}()
 	}
 	return in.missing[harness]
+}
+
+// ckRelPath is a call's target as the thread shows it: a path under the
+// agent's folder from that folder ("api/retry.go"), as the TUI and
+// Conductor show it, anything else as it is.
+func ckRelPath(target, cwd string) string {
+	if cwd == "" || !filepath.IsAbs(target) {
+		return target
+	}
+	if r, err := filepath.Rel(cwd, target); err == nil && r != "." && !strings.HasPrefix(r, "..") {
+		return r
+	}
+	return target
+}
+
+// ckPathText is a target drawn short (ckRelPath), with the full path on
+// hover when it was cut.
+func ckPathText(c *ui.Context, target, cwd string) ui.Element {
+	short := ckRelPath(target, cwd)
+	t := ui.Text(c, short)
+	if short != target {
+		t.Tooltip(target)
+	}
+	return t
 }

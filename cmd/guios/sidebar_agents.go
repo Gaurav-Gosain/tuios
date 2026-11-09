@@ -139,7 +139,11 @@ func (a *App) agentRow(c *ui.Context, pal *palette, ag client.Agent, need *ckNee
 					}
 				}
 				if verb != "" {
-					ui.Text(c, verb).FontSize(fsSmall).FontWeight(wMedium).TextColor(pal.attnText).SingleLine().Shrink(0)
+					col := pal.text
+					if it != nil {
+						col = pal.attnText
+					}
+					ui.Text(c, verb).FontSize(fsSmall).FontWeight(wMedium).TextColor(col).SingleLine().Shrink(0)
 				}
 				if rest != "" {
 					col := pal.textMuted
