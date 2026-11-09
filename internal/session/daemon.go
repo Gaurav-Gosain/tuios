@@ -679,6 +679,10 @@ type connState struct {
 	// daemonActions says the client's hello offered DaemonActions. Read
 	// under mu. See daemon_actions.go.
 	daemonActions bool
+	// scrollOps says the client's hello offered ScrollColumnOps: its pushes
+	// do not move the scrolling columns. Read under mu. See
+	// scroll_columns.go.
+	scrollOps bool
 	// scratchWS says the client's hello offered scratch workspaces. See
 	// Daemon.refreshTreeOps.
 	scratchWS bool
@@ -2536,6 +2540,8 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 		return d.handleLayoutTree(cs, msg)
 	case MsgMasterLayout:
 		return d.handleMasterLayout(cs, msg)
+	case MsgScrollColumns:
+		return d.handleScrollColumns(cs, msg)
 	case MsgSidebarVisibility:
 		return d.handleSidebarVisibility(cs, msg)
 	case MsgSessionUsed:

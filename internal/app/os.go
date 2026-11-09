@@ -746,6 +746,9 @@ type OS struct {
 	// focus it moves enters terminal mode when its push lands. See
 	// daemon_actions.go.
 	focusEnterPending bool
+	// colsSeen keys the scrolling columns of each workspace as the session
+	// was last known to hold them. See scroll_columns_sync.go.
+	colsSeen map[int]string
 	// intentSent says the input being handled sent a daemon action, so the
 	// push after it is skipped. See TakeIntentSent.
 	intentSent bool

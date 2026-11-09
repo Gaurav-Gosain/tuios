@@ -281,7 +281,7 @@ func TestDaemonActionFromAPaneKeepsItsGrants(t *testing.T) {
 
 // daKeys binds the batch A actions with no free default key in window
 // management mode.
-const daKeys = "[keybindings.window_management]\nsend_to_workspace_2 = [\"alt+x\"]\nresize_pane_right_5 = [\"alt+r\"]\nadd_master = [\"alt+a\"]\nremove_master = [\"alt+d\"]\n"
+const daKeys = "[keybindings.window_management]\nsend_to_workspace_2 = [\"alt+x\"]\nresize_pane_right_5 = [\"alt+r\"]\nadd_master = [\"alt+a\"]\nremove_master = [\"alt+d\"]\nscroll_consume = [\"alt+c\"]\n"
 
 // daSession is treeOpsSession with daKeys and n tiled panes: a detached
 // session, two TUI clients of one size.
@@ -693,8 +693,9 @@ type daStrip struct {
 	Scroll struct {
 		Width   int `json:"column_width"`
 		Columns []struct {
-			Windows []string `json:"windows"`
-			Width   int      `json:"width"`
+			Windows    []string `json:"windows"`
+			Proportion float64  `json:"proportion"`
+			FixedWidth int      `json:"fixed_width"`
 		} `json:"columns"`
 	} `json:"scroll"`
 }
