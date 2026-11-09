@@ -1373,5 +1373,6 @@
   "hintTypeFailed": "已复制文本。无法输入到窗格中: {why}",
   "hintOpenOff": "tuios 配置中已关闭打开功能 (hints.open)。文本已复制。",
   "hintNotOpenable": "只能打开链接和路径。文本已复制。",
-  "hintNoFile": "从窗格的文件夹看不存在文件 {path}。文本已复制。"
+  "hintNoFile": "从窗格的文件夹看不存在文件 {path}。文本已复制。",
+  "keysNoMenu": "tuios 配置中没有菜单 {name} ([keybindings.menus.{name}])。"
 }

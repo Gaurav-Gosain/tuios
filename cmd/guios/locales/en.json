@@ -2409,5 +2409,6 @@
       }
     }
   },
-  "hintNoFile": "There is no file {path} from the pane's folder. The text is copied."
+  "hintNoFile": "There is no file {path} from the pane's folder. The text is copied.",
+  "keysNoMenu": "There is no menu {name} in the tuios config ([keybindings.menus.{name}])."
 }

@@ -48,7 +48,7 @@ func (a *App) helpRows() []helpRow {
 				lead += " " + chordLabel(ks[0])
 			}
 			for _, g := range config.PrefixMenuGroups(tk.reg, m, config.MenuState{Daemon: true, Minimized: -1}) {
-				title := keysTitle(m)
+				title := a.keysTitle(m)
 				switch {
 				case g.Title != "":
 					title += " · " + groupWords(g.Title)

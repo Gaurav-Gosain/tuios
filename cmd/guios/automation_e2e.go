@@ -280,6 +280,51 @@ func startProbe(a *App) {
 						conn.Write(append(line, '\n'))
 						continue
 					}
+					// "loadkeys" reads the tuios keymap again, as the window's
+					// focus does: a QA run changes the config while the window
+					// has no focus to give. "stepkey K" gives the prefix one key,
+					// as the keymap spells it, as a press does, and answers
+					// whether the prefix took it, whether it is still armed, the
+					// menu it is in, and the toast after a second and a half.
+					// "arm" arms the prefix on the focused pane, as the leader
+					// key does.
+					if sc.Text() == "arm" {
+						done := make(chan struct{})
+						a.update(func() {
+							pane := ""
+							if s := a.session(a.selected); s != nil {
+								pane = a.focusOf(s)
+							}
+							a.arm(pane)
+							close(done)
+						})
+						<-done
+						conn.Write([]byte("ok\n"))
+						continue
+					}
+					if sc.Text() == "loadkeys" {
+						done := make(chan struct{})
+						a.update(func() { a.loadKeys(); close(done) })
+						<-done
+						conn.Write([]byte("ok\n"))
+						continue
+					}
+					if k, ok := strings.CutPrefix(sc.Text(), "stepkey "); ok {
+						took := make(chan bool, 1)
+						a.update(func() { a.lastToast = ""; took <- a.stepKey(k) })
+						t := <-took
+						time.Sleep(1500 * time.Millisecond)
+						got := make(chan map[string]any, 1)
+						a.update(func() {
+							a.tk.mu.Lock()
+							menu := a.tk.menu
+							a.tk.mu.Unlock()
+							got <- map[string]any{"key": k, "took": t, "armed": a.tk.armed.Load(), "menu": menu, "toast": a.lastToast}
+						})
+						line, _ := json.Marshal(<-got)
+						conn.Write(append(line, '\n'))
+						continue
+					}
 					if t, ok := strings.CutPrefix(sc.Text(), "toast "); ok {
 						a.update(func() { a.toast(t); a.win.Invalidate() })
 						conn.Write([]byte("ok\n"))

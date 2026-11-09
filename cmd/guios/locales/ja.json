@@ -1373,5 +1373,6 @@
   "hintTypeFailed": "テキストをコピーしました。ペインに入力できませんでした: {why}",
   "hintOpenOff": "tuios の設定で開く機能がオフです (hints.open)。テキストはコピーしました。",
   "hintNotOpenable": "開けるのはリンクとパスだけです。テキストはコピーしました。",
-  "hintNoFile": "ペインのフォルダーから見て {path} というファイルはありません。テキストはコピーしました。"
+  "hintNoFile": "ペインのフォルダーから見て {path} というファイルはありません。テキストはコピーしました。",
+  "keysNoMenu": "tuios の設定にメニュー {name} がありません ([keybindings.menus.{name}])。"
 }
