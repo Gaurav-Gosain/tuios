@@ -16305,3 +16305,20 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTMLSurfaceEventFollowsEachChange$' -v .`.
+
+## TestArrangeVerb
+
+The daemon runs a layout change itself with the arrange verb
+(`internal/session/verb_arrange.go`, the engine in `arrange_engine.go`), one op
+per session at a time. Four callers on connections of their own send
+master.add at the same moment, and every one must land.
+
+Run on 2026-11-09 on macOS (arm64), as the Atlas helper user. The branch
+passes 4 of 4.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| No per-session lock in verbArrange (each op reads and writes while others do) | "four master.add at once took the masters from 1 to 3, want 5: a change was lost" (1 to 2 and 1 to 3 in the other runs) | **caught**, 3 of 3 |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestArrangeVerb$' -v .`.

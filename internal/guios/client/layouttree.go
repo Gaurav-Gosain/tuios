@@ -2,11 +2,9 @@ package client
 
 import (
 	"slices"
-	"strconv"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
-	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -24,63 +22,9 @@ const (
 	splitHorizontal = 2 // top and bottom
 )
 
-// treeInfo is what the session says about the shown workspace's layout.
-type treeInfo struct {
-	ws        int
-	tree      *session.SerializedBSPTree
-	leaves    map[int]string
-	ls        layoutState
-	grid      layout.Rect // guios's pane area in cells (setGrid)
-	useTree   bool        // the tree arranges the panes, and guios's changes go back to it
-	tui       bool        // a TUI client is attached
-	numWS     int
-	wsNames   map[int]string
-	wsOrder   []int
-	zoomByTUI string // the pane a TUI zoomed on the shown workspace
-}
-
 // readTree reads the session's settings and the shown workspace's tree.
 func (k *stateKeeper) readTree(name string, ws int) treeInfo {
-	ti := treeInfo{ws: ws, numWS: 9, grid: currentGrid()}
-	if raw, err := k.c.verb("session-info", map[string]any{"session": name}); err == nil {
-		var si struct {
-			TUI     bool              `json:"tui_attached"`
-			NumWS   int               `json:"num_workspaces"`
-			WSNames map[string]string `json:"workspace_names"`
-			WSOrder []int             `json:"workspace_order"`
-			Current int               `json:"current_workspace"`
-		}
-		if jsonx.Unmarshal(raw, &si) == nil {
-			ti.tui, ti.wsOrder = si.TUI, si.WSOrder
-			if si.NumWS > 0 {
-				ti.numWS = si.NumWS
-			}
-			ti.wsNames = map[int]string{}
-			for k, v := range si.WSNames {
-				if n, err := strconv.Atoi(k); err == nil && v != "" {
-					ti.wsNames[n] = v
-				}
-			}
-		}
-	}
-	if raw, err := k.c.verb("layout-tree", map[string]any{"session": name, "workspace": ws}); err == nil {
-		var lt struct {
-			Tree   *session.SerializedBSPTree `json:"tree"`
-			Leaves map[string]string          `json:"leaves"`
-		}
-		if jsonx.Unmarshal(raw, &lt) == nil {
-			_ = jsonx.Unmarshal(raw, &ti.ls)
-			ti.tree = lt.Tree
-			ti.leaves = make(map[int]string, len(lt.Leaves))
-			for k, v := range lt.Leaves {
-				if n, err := strconv.Atoi(k); err == nil {
-					ti.leaves[n] = v
-				}
-			}
-		}
-	}
-	ti.useTree = ti.mode() == modeBSP
-	return ti
+	return session.ReadArrangeTree(k.c.verb, name, ws, currentGrid())
 }
 
 // fromTree is the tree as kero's layout, with only the panes in shown. A
@@ -158,18 +102,18 @@ func (c *Client) writeTree(sid string, l *proto.Layout) bool {
 }
 
 func (c *Client) sendTree(name string, ti treeInfo, l *proto.Layout) bool {
-	if !ti.useTree {
+	if !ti.UseTree {
 		return false
 	}
 	scheme, defRatio := 0, 0.0
-	if ti.tree != nil {
-		scheme, defRatio = ti.tree.AutoScheme, ti.tree.DefaultRatio
+	if ti.Tree != nil {
+		scheme, defRatio = ti.Tree.AutoScheme, ti.Tree.DefaultRatio
 	} else {
-		t, _, _ := ti.bspTree()
+		t, _, _ := ti.BSPTree()
 		scheme, defRatio = int(t.AutoScheme), t.DefaultRatio
 	}
 	tree, leaves := toTree(l, scheme, defRatio)
-	_, err := c.verb("set-layout-tree", map[string]any{"session": name, "workspace": ti.ws, "tree": tree, "leaves": leaves})
+	_, err := c.verb("set-layout-tree", map[string]any{"session": name, "workspace": ti.WS, "tree": tree, "leaves": leaves})
 	return err == nil
 }
 
@@ -187,22 +131,22 @@ func (k *stateKeeper) layoutOf(sid, name string, wins []windowRow, focus string,
 	k.prevFocus[sid] = focus
 	ps := k.pending[sid]
 	k.mu.Unlock()
-	if !ti.useTree {
+	if !ti.UseTree {
 		return nil
 	}
-	if ti.tui && ti.zoomByTUI != "" {
+	if ti.TUI && ti.ZoomByTUI != "" {
 		// A TUI's zoom is a camera: below zoom_size 100 it lays the layout
 		// out on a larger canvas and pans to the zoomed pane. guios draws
 		// the zoom itself, the zoomed pane over the whole area, from the
 		// tree, which the zoom leaves alone.
-		focus = ti.zoomByTUI
+		focus = ti.ZoomByTUI
 	}
 	t := tiled(wins)
-	tree, leaves, nums := ti.bspTree()
+	tree, leaves, nums := ti.BSPTree()
 	ids := make([]int, len(t))
 	shown := make(map[string]bool, len(t))
 	for i, w := range t {
-		ids[i] = number(leaves, nums, w.ID)
+		ids[i] = session.LeafNumber(leaves, nums, w.ID)
 		shown[w.ID] = true
 	}
 	changed := tree.PruneTo(ids)
@@ -212,7 +156,7 @@ func (k *stateKeeper) layoutOf(sid, name string, wins []windowRow, focus string,
 			missing = append(missing, n)
 		}
 	}
-	bounds, gap := ti.bounds(), ti.ls.Gap
+	bounds, gap := ti.Bounds(), ti.LS.Gap
 	restored := false
 	if len(missing) == 1 && !tree.IsEmpty() {
 		// A pane tiled again after it floated goes back where it tiled.
@@ -259,12 +203,12 @@ func (k *stateKeeper) layoutOf(sid, name string, wins []windowRow, focus string,
 		delete(k.pending, sid)
 		k.mu.Unlock()
 	}
-	if changed && !ti.tui && !tree.IsEmpty() {
+	if changed && !ti.TUI && !tree.IsEmpty() {
 		// Written before the build ends, so the next build reads it.
-		_, _ = k.c.verb("set-layout-tree", map[string]any{"session": name, "workspace": ti.ws, "tree": sessionTree(tree), "leaves": leaves})
+		_, _ = k.c.verb("set-layout-tree", map[string]any{"session": name, "workspace": ti.WS, "tree": session.SessionTree(tree), "leaves": leaves})
 	}
 	var l *proto.Layout
-	if st := sessionTree(tree); st != nil {
+	if st := session.SessionTree(tree); st != nil {
 		l = fromTree(st.Root, leaves, shown)
 	}
 	if l == nil || l.Leaf() {
@@ -459,7 +403,7 @@ func paneSet(n *session.SerializedBSPNode, leaves map[int]string) []string {
 // subtree holds those panes now, as after one of them closed or moved: the
 // pane then goes in by the rules for a new pane.
 func (s floatSlot) restore(t *layout.BSPTree, leaves map[int]string, num int) (*layout.BSPTree, bool) {
-	st := sessionTree(t)
+	st := session.SessionTree(t)
 	if st == nil {
 		return nil, false
 	}
@@ -491,7 +435,7 @@ func (s floatSlot) restore(t *layout.BSPTree, leaves map[int]string, num int) (*
 	if !done {
 		return nil, false
 	}
-	return (&layout.SerializedBSPTree{Root: toLayoutNode(st.Root), AutoScheme: st.AutoScheme, DefaultRatio: st.DefaultRatio}).Deserialize(), true
+	return (&layout.SerializedBSPTree{Root: session.ToLayoutNode(st.Root), AutoScheme: st.AutoScheme, DefaultRatio: st.DefaultRatio}).Deserialize(), true
 }
 
 // pendingSplit is a split guios asked the daemon for and has not seen the
@@ -524,15 +468,15 @@ func workspaceList(counts map[int]*proto.Workspace, shown int, ti treeInfo) []pr
 	if counts[shown] == nil {
 		counts[shown] = &proto.Workspace{N: shown, Status: proto.Idle}
 	}
-	order := make([]int, 0, ti.numWS)
+	order := make([]int, 0, ti.NumWS)
 	seen := map[int]bool{}
-	for _, n := range ti.wsOrder {
+	for _, n := range ti.WSOrder {
 		if !seen[n] {
 			seen[n] = true
 			order = append(order, n)
 		}
 	}
-	for n := 1; n <= max(ti.numWS, 9); n++ {
+	for n := 1; n <= max(ti.NumWS, 9); n++ {
 		if !seen[n] {
 			seen[n] = true
 			order = append(order, n)
@@ -541,7 +485,7 @@ func workspaceList(counts map[int]*proto.Workspace, shown int, ti treeInfo) []pr
 	var out []proto.Workspace
 	for _, n := range order {
 		if w := counts[n]; w != nil {
-			w.Name = ti.wsNames[n]
+			w.Name = ti.WSNames[n]
 			out = append(out, *w)
 		}
 	}
@@ -580,12 +524,12 @@ func (c *Client) AutoSplitDown(sid, pane string) (down, ok bool) {
 	c.st.mu.Lock()
 	ti, have := c.st.trees[sid]
 	c.st.mu.Unlock()
-	if !have || !ti.useTree {
+	if !have || !ti.UseTree {
 		return false, false
 	}
-	tree, leaves, nums := ti.bspTree()
-	bounds, gap := ti.bounds(), ti.ls.Gap
-	n := number(leaves, nums, pane)
+	tree, leaves, nums := ti.BSPTree()
+	bounds, gap := ti.Bounds(), ti.LS.Gap
+	n := session.LeafNumber(leaves, nums, pane)
 	if !tree.HasWindow(n) {
 		// A pane the tree lacks yet goes in as layoutOf puts it.
 		tree.InsertMissing([]int{n}, bounds, gap)

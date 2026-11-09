@@ -50,52 +50,8 @@ type sessionRow struct {
 	} `json:"worktree"`
 }
 
-type windowRow struct {
-	ID          string           `json:"window_id"`
-	PTY         string           `json:"pty_id"`
-	Title       string           `json:"title"`
-	DisplayName string           `json:"display_name"`
-	Name        string           `json:"name"`
-	CustomName  string           `json:"custom_name"`
-	Cwd         string           `json:"cwd"`
-	Width       int              `json:"width"`
-	Height      int              `json:"height"`
-	PID         int              `json:"pid"`
-	Focused     bool             `json:"focused"`
-	Minimized   bool             `json:"minimized"`
-	Zoomed      bool             `json:"zoomed"`
-	Floating    bool             `json:"floating"`
-	Scratch     bool             `json:"scratch"`
-	ScratchName string           `json:"scratch_name"`
-	Rail        string           `json:"rail"`
-	Workspace   int              `json:"workspace"`
-	X           int              `json:"x"`
-	Y           int              `json:"y"`
-	Agent       string           `json:"agent_state"`
-	AgentMsg    string           `json:"agent_message"`
-	AgentKind   string           `json:"agent_kind"`
-	AgentAt     int64            `json:"agent_state_at"`
-	AgentReason string           `json:"agent_reason"`
-	Harness     string           `json:"agent_harness"`
-	Foreground  string           `json:"foreground_cmd"`
-	Host        string           `json:"host"`
-	Program     []map[string]any `json:"program_status"`
-	// Exited and its exit status say the window's process ended; KeepOpen
-	// says the window stays after that (new-window keep_open). A daemon
-	// from before these fields sends neither, and guios closes none of its
-	// windows (exits.go).
-	// Kind and URI name a window a native renderer draws, and what it
-	// shows: kind web is a browser pane on the page in uri. Empty for a
-	// terminal.
-	Kind string `json:"kind"`
-	URI  string `json:"uri"`
-	// Surface is a tml window's surface id.
-	Surface  string `json:"surface"`
-	Exited   bool   `json:"exited"`
-	ExitCode int    `json:"exit_code"`
-	Signal   int    `json:"signal"`
-	KeepOpen bool   `json:"keep_open"`
-}
+// windowRow is a window as list-windows gives it.
+type windowRow = session.WindowRow
 
 // stateKeeper builds the state and keeps it current from the daemon's events.
 type stateKeeper struct {
@@ -233,7 +189,7 @@ func (k *stateKeeper) build() (*proto.State, error) {
 		gone, hide, end := exitedIn(wl.Windows, ws)
 		goneID := goneIDs(gone)
 		if len(gone) > 0 {
-			reaps = append(reaps, reap{session: s.Name, windows: gone, end: end && !ti.tui})
+			reaps = append(reaps, reap{session: s.Name, windows: gone, end: end && !ti.TUI})
 		}
 		// The panes of the workspace the session shows; the others are
 		// counted on their workspaces.
@@ -272,20 +228,20 @@ func (k *stateKeeper) build() (*proto.State, error) {
 				continue
 			}
 			if w.Zoomed {
-				ti.zoomByTUI = w.ID
+				ti.ZoomByTUI = w.ID
 			}
 			shown = append(shown, w)
 			ks.Panes = append(ks.Panes, p)
 		}
 		ks.Workspaces = workspaceList(counts, ws, ti)
-		ks.TUI = ti.tui
+		ks.TUI = ti.TUI
 		ks.Layout = k.layoutOf(s.ID, s.Name, shown, wl.Focus, &ti)
-		ks.LayoutMode = ti.mode()
-		if a := ti.arrange(shown, wl.Focus); ks.LayoutMode != modeBSP || len(a.Float) > 0 {
+		ks.LayoutMode = ti.Mode()
+		if a := ti.Arrange(shown, wl.Focus); ks.LayoutMode != modeBSP || len(a.Float) > 0 {
 			ks.Arrange = a
 			k.settle(s.Name, &ti, shown, wl.Focus, a)
 		}
-		ks.Zoomed = ti.zoomByTUI
+		ks.Zoomed = ti.ZoomByTUI
 		if ks.Zoomed == "" {
 			k.mu.Lock()
 			if z := k.zoom[s.ID]; z != "" && contains(ids(shown), z) {

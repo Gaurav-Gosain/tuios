@@ -9,6 +9,8 @@
 package proto
 
 import (
+	"github.com/Gaurav-Gosain/tuios/internal/session"
+
 	"encoding/json"
 	"fmt"
 	"os"
@@ -387,35 +389,14 @@ type Session struct {
 	Arrange    *Arrange `json:"arrange,omitempty"`
 }
 
-// Arrange is where a workspace's panes are, in the cells of Box, the box
-// tuios lays them out in. A pane in Rects that Float names floats over the
-// others, drawn in Float's order, the topmost last.
-type Arrange struct {
-	Box   Rect            `json:"box"`
-	Rects map[string]Rect `json:"rects"`
-	Float []string        `json:"float,omitempty"`
-	// Master is the line between the masters and the stack in the
-	// master-stack layout, which a drag moves; nil when there is none to
-	// move, as in the grid.
-	Master *MasterLine `json:"master,omitempty"`
-}
+// Arrange is the layout engine's ArrangeView (internal/session/arrange_types.go).
+type Arrange = session.ArrangeView
 
-// MasterLine is where the masters end: the cell At across the box, a
-// line from top to bottom when Vertical, and the masters before it (left
-// or above) when Before.
-type MasterLine struct {
-	Vertical bool `json:"vertical"`
-	At       int  `json:"at"`
-	Before   bool `json:"before"`
-}
+// MasterLine is the layout engine's MasterLine (internal/session/arrange_types.go).
+type MasterLine = session.MasterLine
 
-// Rect is a rectangle in cells.
-type Rect struct {
-	X int `json:"x"`
-	Y int `json:"y"`
-	W int `json:"w"`
-	H int `json:"h"`
-}
+// Rect is the layout engine's ArrangeRect (internal/session/arrange_types.go).
+type Rect = session.ArrangeRect
 
 // GridParams is the app's pane area in cells: the box the client lays
 // panes out in while no TUI shows the session.
@@ -424,35 +405,11 @@ type GridParams struct {
 	Rows int `json:"rows"`
 }
 
-// ArrangeResult is what a change to the layout did beyond the layout:
-// Focus is the pane it moved the focus to, "" when it moved none.
-type ArrangeResult struct {
-	Focus string `json:"focus,omitempty"`
-}
+// ArrangeResult is the layout engine's ArrangeResult (internal/session/arrange_types.go).
+type ArrangeResult = session.ArrangeResult
 
-// ArrangeParams changes a session's layout: Op "mode" (Mode "bsp",
-// "master-stack", "scrolling" or "floating"), "next", "tiling", "rotate",
-// "equalize", "master.position", "master.add", "master.remove",
-// "master.swap", "master.ratio" (Ratio), "scroll.left", "scroll.right",
-// "scroll.width", "scroll.max", "scroll.consume", "scroll.expel",
-// "scroll.moveLeft", "scroll.moveRight", "scroll.view" (Delta cells),
-// "scroll.reveal", "rect" (Pane to Rect, snapped when At is at an edge),
-// "snap" (Mode "left", "right", "top-left", "top-right", "bottom-left",
-// "bottom-right", "full" or "unsnap"), "float", "swap" (Pane and
-// Target), "minimize" or "restore" (the Delta-th minimized pane, every
-// one with 0). Pane is the pane it acts on, the
-// focused one when empty.
-type ArrangeParams struct {
-	Session string  `json:"session"`
-	Op      string  `json:"op"`
-	Mode    string  `json:"mode,omitempty"`
-	Pane    string  `json:"pane,omitempty"`
-	Target  string  `json:"target,omitempty"`
-	Rect    *Rect   `json:"rect,omitempty"`
-	At      *Rect   `json:"at,omitempty"`
-	Ratio   float64 `json:"ratio,omitempty"`
-	Delta   int     `json:"delta,omitempty"`
-}
+// ArrangeParams is the layout engine's ArrangeParams (internal/session/arrange_types.go).
+type ArrangeParams = session.ArrangeParams
 
 // Workspace is one of a tuios session's workspaces: its number, its name
 // when it has one, how many panes it holds, and the most urgent status of
