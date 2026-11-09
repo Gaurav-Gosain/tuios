@@ -1042,6 +1042,10 @@ type PTY struct {
 	// reach the session that shows it. See window_move_session.go.
 	sessionID string
 	home      atomic.Pointer[Session]
+	// windowID is the window the pane was made for, for the line its exit
+	// writes to the log. A window keeps its ID when it moves to another
+	// session, and a PTY never serves another window.
+	windowID string
 	// probeTail is the end of the last output chunk, so a probe split across
 	// two reads is still seen. Only readOutput touches it.
 	probeTail []byte
@@ -2772,6 +2776,7 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 	pty := &PTY{
 		ID:          id,
 		sessionID:   s.ID,
+		windowID:    sp.windowID,
 		host:        sp.host,
 		pty:         ptyInstance,
 		cmd:         cmd,
@@ -5763,6 +5768,7 @@ func (p *PTY) noteExit(code int) {
 	p.exited = true
 	p.exitCode = code
 	p.exitedMu.Unlock()
+	p.logExit(code)
 	if p.keepOpen != nil {
 		p.keepOpen.exited(p)
 	}

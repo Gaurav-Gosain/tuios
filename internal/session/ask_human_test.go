@@ -162,7 +162,7 @@ func TestAskHumanEndsWithItsPane(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if _, err := sess.CloseDaemonWindow(a); err != nil {
+	if _, err := sess.CloseDaemonWindow(a, "a test"); err != nil {
 		t.Fatalf("CloseDaemonWindow: %v", err)
 	}
 	select {

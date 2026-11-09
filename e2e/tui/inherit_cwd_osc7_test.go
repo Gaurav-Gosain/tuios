@@ -79,7 +79,7 @@ func TestNewWindowInheritsTheOSC7Folder(t *testing.T) {
 	report(first, host, proj)
 	waitAnnounced(t, base, "osc", first, proj)
 	second := newWindowIn(t, base, "osc")
-	if got := paneFolder(t, base, "osc", second); got != proj {
+	if got := paneFolder(t, base, "osc", second); !sameFolder(got, proj) {
 		t.Fatalf("ASSERTION: a new window started in %q, want %q, the folder the focused pane reported over OSC 7", got, proj)
 	}
 
@@ -87,7 +87,7 @@ func TestNewWindowInheritsTheOSC7Folder(t *testing.T) {
 	report(second, computerName, other)
 	waitAnnounced(t, base, "osc", second, other)
 	third := newWindowIn(t, base, "osc")
-	if got := paneFolder(t, base, "osc", third); got != other {
+	if got := paneFolder(t, base, "osc", third); !sameFolder(got, other) {
 		t.Fatalf("ASSERTION: a new window started in %q, want %q, the folder the focused pane reported with host %s", got, other, computerName)
 	}
 
@@ -95,7 +95,7 @@ func TestNewWindowInheritsTheOSC7Folder(t *testing.T) {
 	report(third, host, gone)
 	waitAnnounced(t, base, "osc", third, gone)
 	fourth := newWindowIn(t, base, "osc")
-	if got := paneFolder(t, base, "osc", fourth); got != start {
+	if got := paneFolder(t, base, "osc", fourth); !sameFolder(got, start) {
 		t.Fatalf("ASSERTION: a new window started in %q after the focused pane reported a missing folder, want the session's start folder %q", got, start)
 	}
 
@@ -107,7 +107,7 @@ func TestNewWindowInheritsTheOSC7Folder(t *testing.T) {
 	}
 	waitAnnounced(t, base, "osc", fourth, nine)
 	fifth := newWindowIn(t, base, "osc")
-	if got := paneFolder(t, base, "osc", fifth); got != nine {
+	if got := paneFolder(t, base, "osc", fifth); !sameFolder(got, nine) {
 		t.Fatalf("ASSERTION: a new window started in %q, want %q, the folder the focused pane reported over OSC 9;9", got, nine)
 	}
 }
@@ -144,12 +144,12 @@ func TestNewWindowPrefersTheShellsProcessFolder(t *testing.T) {
 	if err := paneSend(base, "spoof", first, "cd '"+realDir+"'\n"); err != nil {
 		t.Fatalf("cd into %s: %v", realDir, err)
 	}
-	if got := paneFolder(t, base, "spoof", first); got != realDir {
+	if got := paneFolder(t, base, "spoof", first); !sameFolder(got, realDir) {
 		t.Fatalf("the shell is in %q after cd, want %q: the fixture does not hold", got, realDir)
 	}
 
 	second := newWindowIn(t, base, "spoof")
-	if got := paneFolder(t, base, "spoof", second); got != realDir {
+	if got := paneFolder(t, base, "spoof", second); !sameFolder(got, realDir) {
 		t.Fatalf("ASSERTION: a new window started in %q, want %q, the folder of the shell's process. The pane's OSC 7 report named %q", got, realDir, fake)
 	}
 }

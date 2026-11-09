@@ -320,7 +320,7 @@ func TestStaleClientSyncCannotResurrectAClosedWindow(t *testing.T) {
 	// The client's snapshot, taken before the close.
 	stale := clientSnapshot(sess)
 
-	if _, err := sess.CloseDaemonWindow(doomed.ID); err != nil {
+	if _, err := sess.CloseDaemonWindow(doomed.ID, "a test"); err != nil {
 		t.Fatalf("CloseDaemonWindow: %v", err)
 	}
 

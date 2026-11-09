@@ -112,7 +112,7 @@ func TestDaemonClosePrunesUnfocusedWindowFromFocusHistory(t *testing.T) {
 		t.Fatalf("seeding state: %v", err)
 	}
 
-	if _, err := sess.CloseDaemonWindow("closed"); err != nil {
+	if _, err := sess.CloseDaemonWindow("closed", "a test"); err != nil {
 		t.Fatalf("CloseDaemonWindow: %v", err)
 	}
 	got := sess.GetState().FocusHistory
@@ -247,7 +247,7 @@ func TestDaemonFocusRepairAfterClose(t *testing.T) {
 				t.Fatalf("seeding state failed: %v", err)
 			}
 
-			if _, err := sess.CloseDaemonWindow(tc.close); err != nil {
+			if _, err := sess.CloseDaemonWindow(tc.close, "a test"); err != nil {
 				t.Fatalf("CloseDaemonWindow(%q) failed: %v", tc.close, err)
 			}
 

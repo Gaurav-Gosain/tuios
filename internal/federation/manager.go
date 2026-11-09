@@ -469,6 +469,21 @@ func (m *Manager) Retry(host string) bool {
 	return true
 }
 
+// AskWaiting makes every link that holds an ssh to a host with no daemon ask
+// that host again now, over the ssh it has, and waits until each answered or
+// ctx ends. It dials nothing: a host whose link is down is left to its
+// backoff, since a dial is a login. The hosts listing calls it, so a person
+// who started the daemon on a machine sees it at once.
+func (m *Manager) AskWaiting(ctx context.Context) {
+	var wg sync.WaitGroup
+	for _, name := range m.Table().Names() {
+		if l := m.link(name); l != nil {
+			wg.Go(func() { l.askWaiting(ctx) })
+		}
+	}
+	wg.Wait()
+}
+
 // Reports snapshots every host. It waits, bounded by ctx, for hosts whose first
 // attempt has not settled yet, so the first listing after the daemon starts
 // says up or unreachable instead of connecting. A host still unsettled when ctx

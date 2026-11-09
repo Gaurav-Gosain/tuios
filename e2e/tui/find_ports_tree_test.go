@@ -247,18 +247,11 @@ func TestFindPortsAndStartedBy(t *testing.T) {
 	if h := byCmd[want[3]]; h.Exit == nil || *h.Exit != 1 {
 		t.Errorf("the failing command has exit %v, want 1", h.Exit)
 	}
-	// The shell reports the folder with symlinks resolved. On macOS the
-	// temporary folder is under /var, a link to /private/var, so both sides
-	// are compared resolved.
-	samePath := func(a, b string) bool {
-		ra, errA := filepath.EvalSymlinks(a)
-		rb, errB := filepath.EvalSymlinks(b)
-		return errA == nil && errB == nil && ra == rb
-	}
-	if h := byCmd["pwd"]; h.Exit == nil || *h.Exit != 0 || !samePath(h.Cwd, sub) {
+	// The shell reports the folder with symlinks resolved (see sameFolder).
+	if h := byCmd["pwd"]; h.Exit == nil || *h.Exit != 0 || !sameFolder(h.Cwd, sub) {
 		t.Errorf("pwd: exit %v, cwd %q; want 0 and %q", h.Exit, h.Cwd, sub)
 	}
-	if h := byCmd["cd sub"]; !samePath(h.Cwd, work) {
+	if h := byCmd["cd sub"]; !sameFolder(h.Cwd, work) {
 		t.Errorf("cd sub started in %q, want %q", h.Cwd, work)
 	}
 	if h := byCmd[want[2]]; h.Seq != 4 {

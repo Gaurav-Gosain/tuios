@@ -842,7 +842,7 @@ func (d *Daemon) verbPopup(cs *connState, params json.RawMessage) (any, *verbErr
 		// has a scratch terminal", or was shown and hidden, dead, instead of
 		// starting the command again. An error means it is closed already.
 		if p.Scratch {
-			_, _ = sess.CloseDaemonWindow(win.ID)
+			_, _ = sess.CloseDaemonWindow(win.ID, "the daemon, as the scratch popup's command ended")
 		}
 		res := map[string]any{
 			"type":      "popup_result",
@@ -922,7 +922,8 @@ func (d *Daemon) verbCloseWindow(cs *connState, params json.RawMessage) (any, *v
 	// through the state push that the mutation raises. There is no second
 	// implementation to keep in step and no round trip to the client to fail.
 	onExit := func(ptyID string) { d.notifyPTYClosed(sess.ID, ptyID) }
-	if _, err := d.executeDaemonCommand(sess, "CloseWindow", args, onExit); err != nil {
+	by := d.askerOf(cs) + " (close-window)"
+	if _, err := d.executeDaemonCommandEnv(sess, "CloseWindow", args, NewWindowOptions{closeAskedBy: by}, onExit); err != nil {
 		return nil, mapResolveErr(err, sess)
 	}
 	return map[string]any{"type": "ok"}, nil
@@ -944,7 +945,7 @@ func (d *Daemon) closeWindowOfPTY(sess *Session, ptyID string, popupOnly bool) {
 				if popupOnly && !w.Popup {
 					return
 				}
-				_, _ = sess.CloseDaemonWindow(w.ID)
+				_, _ = sess.CloseDaemonWindow(w.ID, "the daemon, as the pane's process exited")
 				return
 			}
 		}
@@ -976,8 +977,9 @@ func (d *Daemon) verbCloseWorkspace(cs *connState, params json.RawMessage) (any,
 	}
 	ids := WindowsToCloseOnWorkspace(state.Windows, ws)
 	closed := make([]string, 0, len(ids))
+	by := d.askerOf(cs) + " (close-workspace)"
 	for _, id := range ids {
-		if _, err := sess.CloseDaemonWindow(id); err != nil {
+		if _, err := sess.CloseDaemonWindow(id, by); err != nil {
 			// A window that closed on its own meanwhile is not a failure.
 			if _, gone := findWindowStateIndex(sess.GetState().Windows, id); gone != nil {
 				continue

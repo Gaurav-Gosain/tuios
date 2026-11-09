@@ -165,7 +165,7 @@ func TestAgentClaimDroppedWithTheWindow(t *testing.T) {
 	if sess.agentClaimFor(id).source == "" {
 		t.Fatal("no claim recorded for a reported window")
 	}
-	if _, err := sess.CloseDaemonWindow(id); err != nil {
+	if _, err := sess.CloseDaemonWindow(id, "a test"); err != nil {
 		t.Fatalf("CloseDaemonWindow: %v", err)
 	}
 	if claim := sess.agentClaimFor(id); claim.source != "" {

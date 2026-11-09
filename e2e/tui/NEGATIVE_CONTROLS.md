@@ -16106,3 +16106,38 @@ the test cannot send one; the branch no longer reads the event at all.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestGuiosReapClosesOnlyExitedPanes$' -v .`.
+
+## A home reached through a symbolic link (TestFilesFollowAWindowOnAHost)
+
+The kernel resolves the symbolic links in a process's folder, and `$HOME`
+need not, so a pane's folder under home did not start with the home the far
+daemon names, and the path picker showed the full path instead of `~/...`.
+On macOS the test's home is under `/var`, a link to `/private/var`, so the
+existing assertion "the picker on a far window does not name the far home as
+~" is the control. Linux temp folders have no link, so CI did not see it.
+
+Run on 2026-11-09 on macOS (arm64).
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (8915c61d1) | "the picker on a far window does not name the far home as ~" | **caught** (3 of 3 run) |
+| The fix | passes | 3 of 3 run |
+
+## TestPaneGoneSaysWhyInTheLog
+
+A pane that is gone must leave a line in daemon.log. A close names the
+window and who asked, and an exit names the pane, its window and the exit
+code or signal. A closed window must also leave the session's
+window_to_bsp_id. On 2026-11-09 a pane went missing around a live upgrade
+and the log had no line for either.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (8915c61d1) | "the window after its close: the saved window_to_bsp_id holds ...: true, want false" | **caught** |
+| removeWindowLocked keeps the BSP number | "the window after its close: the saved window_to_bsp_id holds ...: true, want false" | **caught** |
+| noteExit writes no line | "no daemon log line for the exit with code 3" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPaneGoneSaysWhyInTheLog$' -v .`.

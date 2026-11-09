@@ -269,7 +269,7 @@ func TestClosedWindowLeavesTheSessionsTree(t *testing.T) {
 	op := &LayoutTreePayload{PushOrigin: "one", Workspace: 1,
 		Tree: bspTree(bspSplit(1, 0.3, bspLeaf(1), bspLeaf(2))), Leaves: map[int]string{1: a, 2: b}}
 	applyTree(t, sess, op)
-	if _, err := sess.CloseDaemonWindow(a); err != nil {
+	if _, err := sess.CloseDaemonWindow(a, "a test"); err != nil {
 		t.Fatalf("CloseDaemonWindow: %v", err)
 	}
 	if got := sessionTreeKey(sess, 1); got != "0/0.5 "+b {

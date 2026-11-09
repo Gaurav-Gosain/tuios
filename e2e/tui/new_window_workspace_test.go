@@ -154,7 +154,7 @@ func TestNewWindowFromAPaneStartsInThatPanesFolder(t *testing.T) {
 		}
 	}
 	agent := waitCwd("agent")
-	if got := waitCwd("person").Cwd; got != theirs {
+	if got := waitCwd("person").Cwd; !sameFolder(got, theirs) {
 		t.Fatalf("the person's pane is in %s, want %s", got, theirs)
 	}
 	out, err := tuiosCLI(t, base, "get-window", "-s", sess, "--json")
@@ -168,7 +168,7 @@ func TestNewWindowFromAPaneStartsInThatPanesFolder(t *testing.T) {
 	}
 	probe := waitCwd("probe")
 	t.Logf("agent %s, person %s, probe %s", mine, theirs, probe.Cwd)
-	if probe.Cwd != mine {
+	if !sameFolder(probe.Cwd, mine) {
 		t.Fatalf("ASSERTION: the window a pane in %s opened starts in %s, want %s", mine, probe.Cwd, mine)
 	}
 
@@ -176,7 +176,7 @@ func TestNewWindowFromAPaneStartsInThatPanesFolder(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "outside", "--no-focus"); err != nil {
 		t.Fatalf("new-window outside: %v\n%s", err, out)
 	}
-	if got := waitCwd("outside").Cwd; got != theirs {
+	if got := waitCwd("outside").Cwd; !sameFolder(got, theirs) {
 		t.Fatalf("a window opened outside every pane starts in %s, want the focused pane's %s", got, theirs)
 	}
 }
