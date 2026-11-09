@@ -16265,3 +16265,22 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestDockPillsAndRestoreNAgree$' -v .`.
+
+## tuios's git and the index's optional lock
+
+`TestTuiosGitTakesNoOptionalLock` runs a review fan with an attached client,
+opens the review and lists the worktrees, with a git on PATH that records each
+git tuios starts (marked by GIT_SEQUENCE_EDITOR=true, which childproc.GitEnv
+sets). Each must carry GIT_OPTIONAL_LOCKS=0, so no background read of a
+worktree writes its index under .git/index.lock while the person's own git
+command needs the lock: the race TestReviewFileKeysFollowTheirBindings's
+fixture hit.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (c983aba9e) | "269 of tuios's git calls may take the index's optional lock", 16 of them `status --porcelain -z --untracked-files=all --ignored=matching` | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTuiosGitTakesNoOptionalLock$' -v .`.
