@@ -929,15 +929,49 @@ func tmlReader(cs *connState, sessionID string) bool {
 }
 
 // pushTMLSurface sends one surface to every client of its session that draws
-// TML, through each client's outbox.
+// TML, through each client's outbox, and publishes a tml-surface event for a
+// client that draws it from verbs.
 func (d *Daemon) pushTMLSurface(sessionID string, payload *TMLSurfacePayload) {
 	d.clientsMu.RLock()
-	defer d.clientsMu.RUnlock()
 	for _, cs := range d.clients {
 		if tmlReader(cs, sessionID) {
 			d.tmlEnqueue(cs, payload)
 		}
 	}
+	d.clientsMu.RUnlock()
+	d.publishTMLSurface(sessionID, payload)
+}
+
+// TMLSurfaceEvent is a tml-surface event: a surface changed, opened or
+// closed (EventTMLSurface).
+type TMLSurfaceEvent struct {
+	Surface string `json:"surface"`
+	Title   string `json:"title,omitempty"`
+	// Version counts every change, DocVersion the changes to the tree.
+	Version    uint64 `json:"version"`
+	DocVersion uint64 `json:"doc_version"`
+	// Ops is the JSON Patch on the state that made Version from
+	// Version-1, when a patch did and it is at most tmlSurfaceEventOps.
+	// Otherwise the client reads the surface with tml-get.
+	Ops    json.RawMessage `json:"ops,omitempty"`
+	Closed bool            `json:"closed,omitempty"`
+}
+
+// tmlSurfaceEventOps bounds the patch a tml-surface event carries, as the
+// hub fans each event out to every subscriber of the session.
+const tmlSurfaceEventOps = 64 << 10
+
+// publishTMLSurface publishes the tml-surface event of a push.
+func (d *Daemon) publishTMLSurface(sessionID string, p *TMLSurfacePayload) {
+	session := ""
+	if sess := d.manager.GetSessionByID(sessionID); sess != nil {
+		session = sess.Name()
+	}
+	ev := &TMLSurfaceEvent{Surface: p.Surface, Title: p.Title, Version: p.Version, DocVersion: p.DocVersion, Closed: p.Closed}
+	if len(p.Ops) > 0 && len(p.Ops) <= tmlSurfaceEventOps {
+		ev.Ops = json.RawMessage(p.Ops)
+	}
+	d.events.publish(streamEvent{Type: EventTMLSurface, Session: session, Window: p.WindowID, TMLSurface: ev})
 }
 
 // tmlOutbox is one client's TML pushes not yet written: at most one per
