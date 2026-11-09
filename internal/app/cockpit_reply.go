@@ -45,7 +45,7 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	if replyEnterQueues(e.State) {
 		verb = "Queue"
 		if ed := st.reply.editor; e.Host == "" && (ed == nil || (ed.host == "" && len(ed.targets) == 0)) {
-			hints = append([]ckSeg{{t: "alt+" + overlay.EnterGlyph, fg: key, attrs: ckBold}, {t: " send now   ", fg: label}}, hints...)
+			hints = append([]ckSeg{{t: m.sendNowKeyName(), fg: key, attrs: ckBold}, {t: " send now   ", fg: label}}, hints...)
 		}
 	}
 	send := ckSeg{t: " " + overlay.EnterGlyph + " " + verb + " ", fg: overlay.Readable(pal.Fg, pal.Card), bg: pal.Card, attrs: ckBold}

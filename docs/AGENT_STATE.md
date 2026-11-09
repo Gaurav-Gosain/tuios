@@ -4692,7 +4692,14 @@ the reply editor under the Inbox list:
 ```
 
 The editor keeps line breaks and grows to 8 rows, then scrolls. `ctrl+j`,
-`shift+enter`, `alt+enter`, or `\` then `enter` adds a new line. The arrows,
+`shift+enter`, or `\` then `enter` adds a new line. While the agent works,
+`enter` queues the reply and `alt+enter` sends it now; so does `ctrl+enter`,
+where the terminal speaks the kitty keyboard protocol. On a Mac, Option+Enter
+reaches tuios as alt+enter only from a terminal that uses Option as Alt
+(`macos-option-as-alt` in Ghostty, `macos_option_as_alt` in kitty, Esc+ in
+iTerm2, Use Option as Meta in Terminal.app); otherwise it is a plain enter,
+and `ctrl+enter` is the key to use. The hint names the key this terminal can
+send: `⌃↩` or `⌥↩` on a Mac, `alt+↩` elsewhere. The arrows,
 `alt+left`/`alt+right` (or `ctrl+left`/`ctrl+right`) by word, `home`/`end`
 (or `ctrl+a`/`ctrl+e`), `ctrl+w` and `alt+backspace` to delete a word,
 `ctrl+u` and `ctrl+k` to delete to the line start or end, `ctrl+z` to undo

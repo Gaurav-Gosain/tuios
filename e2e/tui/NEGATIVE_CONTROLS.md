@@ -16177,3 +16177,23 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitReplyEchoes$' -v .`.
+
+## Send now from a Mac
+
+`TestCockpitSendNowKeys` sends a reply to a working agent with the bytes each
+terminal sends: ESC CR (Option as Alt, Alt+Enter), CSI 13;3u and CSI 13;5u
+(the kitty keyboard protocol's Alt+Enter and Ctrl+Enter), ESC LF, and a plain
+CR (Option+Enter where Option is not Alt). The first four send now: the reply
+is in the agent's pane and not in its queue. The CR queues. On a Mac the hint
+names ⌥↵ or ⌃↵, elsewhere alt+↵.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (2366bfc71) | "on a Mac the hint does not name ⌥↵ or ⌃↵ for send now" | **caught** |
+| The hint names alt+↵ on every platform | the same | **caught** |
+| ctrl+enter left a new line | "kitty-ctrl: the reply is not in the agent's pane" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitSendNowKeys$' -v .`.

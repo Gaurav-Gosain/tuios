@@ -52,7 +52,8 @@ type Options struct {
 	// line keys do nothing, a paste's line breaks become spaces, and a long
 	// paste is text, never a block. The line still wraps on screen.
 	SingleLine bool
-	// SendNow makes alt+enter ask for the message sent now (EventSendNow)
+	// SendNow makes alt+enter and ctrl+enter ask for the message sent now
+	// (EventSendNow)
 	// rather than add a new line. The reply to an agent uses it: enter
 	// queues while the agent works, alt+enter types it at once.
 	SendNow bool
@@ -81,7 +82,7 @@ const (
 	// for the host to keep in the history.
 	EventCleared
 	// EventSendNow: the person wants the message sent now, without a wait
-	// (alt+enter, with Options.SendNow). The host calls Submit.
+	// (alt+enter or ctrl+enter, with Options.SendNow). The host calls Submit.
 	EventSendNow
 )
 
@@ -520,14 +521,21 @@ func (m *Model) Update(msg tea.KeyPressMsg, remote bool) Event {
 			return EventNone
 		}
 		return EventSend
-	case "alt+enter":
+	case "alt+enter", "ctrl+alt+j", "alt+ctrl+j", "ctrl+enter":
+		// Send now. alt+enter is ESC CR, or CSI 13;3u from a terminal that
+		// speaks the kitty keyboard protocol; a few send ESC LF. On a Mac
+		// whose terminal does not use Option as Alt, which is the default in
+		// Ghostty, kitty, Terminal.app and iTerm2, Option+Enter is a plain
+		// CR, the same as enter, so ctrl+enter sends now too where the
+		// protocol reports it (CSI 13;5u). Without the protocol ctrl+enter
+		// is LF, which reads as ctrl+j: a new line.
 		if m.opt.SendNow {
 			return EventSendNow
 		}
 		if !m.opt.SingleLine {
 			m.typeKey("\n")
 		}
-	case "ctrl+j", "shift+enter", "ctrl+enter":
+	case "ctrl+j", "shift+enter":
 		if !m.opt.SingleLine {
 			m.typeKey("\n")
 		}
