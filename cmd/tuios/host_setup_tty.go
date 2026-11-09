@@ -307,7 +307,7 @@ func (m *setupModel) finish(prog *tea.Program) error {
 	case r.bulk != nil && r.bulk.Summary.NeedYou > 0:
 		code = setupNeedPerson
 	case r.err != nil:
-		code = setupExit(r.err).(*diagnosticError).ExitStatus()
+		code = setupExit(r.err, false).(*diagnosticError).ExitStatus()
 	}
 	if code != 0 {
 		return &statusError{code: code}

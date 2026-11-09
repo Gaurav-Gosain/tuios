@@ -221,6 +221,53 @@ func TestSetUpNamesAnUnknownHostKey(t *testing.T) {
 	}
 }
 
+// TestSetUpDryRunWithNoInstallChoice runs the dry run the docs show first,
+// with no --install, against a machine that has no tuios. A dry run changes
+// nothing, so it has no reason to stop for the choice: it shows the plan of
+// the first install choice, names that choice and the others as the flags
+// that pick them, and exits 0. It once failed with exit 2 and the fix "run
+// with --dry-run to see each command", the flag it was run with.
+//
+// The printed plan and the JSON of the same dry run go under artifactDir.
+func TestSetUpDryRunWithNoInstallChoice(t *testing.T) {
+	here := remoteMachine(t)
+	far := remoteMachine(t)
+	farBin := filepath.Join(xdgDir(far, "HOME"), ".local", "bin", "tuios")
+	env := []string{"TUIOS_SSH=" + writeSetupSSH(t, here, far)}
+	dir := artifactDir(t)
+
+	out, err := tuiosCLIEnv(t, here, env, "hosts", "setup", "someone@buildbox", "--name", "build", "--dry-run")
+	t.Logf("tuios hosts setup someone@buildbox --name build --dry-run:\n%s", out)
+	_ = os.WriteFile(filepath.Join(dir, "dry-run.txt"), []byte(out), 0o644)
+	if err != nil {
+		t.Errorf("ASSERTION: a dry run with no --install failed (exit %d); it should show the plan", exitStatus(err))
+	}
+	if strings.Contains(out, "run with --dry-run") {
+		t.Errorf("ASSERTION: the dry run's fix tells the person to pass --dry-run, which they did")
+	}
+	for _, want := range []string{"tuios is not installed on build.", "The plan. Nothing runs.", "--install copy", "send ", "start-server", "write [hosts.build]"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("ASSERTION: the dry run does not say %q", want)
+		}
+	}
+	if _, statErr := os.Stat(farBin); statErr == nil {
+		t.Fatalf("ASSERTION: the dry run installed tuios on buildbox")
+	}
+	if hosts, _ := os.ReadFile(filepath.Join(xdgDir(here, "XDG_CONFIG_HOME"), "tuios", "config.toml")); strings.Contains(string(hosts), "[hosts.build]") {
+		t.Fatalf("ASSERTION: the dry run wrote [hosts.build]:\n%s", hosts)
+	}
+
+	// The same dry run for a script: the plan names the install it shows.
+	out, err = tuiosCLIEnv(t, here, env, "hosts", "setup", "someone@buildbox", "--name", "build", "--dry-run", "--json")
+	_ = os.WriteFile(filepath.Join(dir, "dry-run.json"), []byte(out), 0o644)
+	if err != nil {
+		t.Errorf("ASSERTION: the JSON dry run with no --install failed (exit %d):\n%s", exitStatus(err), out)
+	}
+	if r := decodeSetup(t, out); r.Installed != "copy" {
+		t.Errorf("ASSERTION: the JSON dry run plans the install %q, want copy, the first choice:\n%s", r.Installed, out)
+	}
+}
+
 // writeFakeTailscale puts a tailscale stand-in in dir whose status names
 // this machine, buildbox (online, linux) and sleepy (offline).
 func writeFakeTailscale(t *testing.T, dir string) {

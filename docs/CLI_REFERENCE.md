@@ -5044,7 +5044,9 @@ The steps:
 
 Without a terminal, every choice comes from a flag. `--install` is the only one
 that is required when tuios is missing. A missing choice stops the command
-before it changes anything, with exit status 2 and the flag to pass. A step
+before it changes anything, with exit status 2 and the flag to pass. A dry run
+does not stop for it: it plans the first install choice that can run there,
+and names it and the other choices by their flags. A step
 that needs the person, such as a password or a host key to check, stops it with
 exit status 3 and the command to run. tuios never takes a password, and it
 never accepts a changed host key.

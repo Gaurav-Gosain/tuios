@@ -16028,3 +16028,24 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSetUpNamesAnUnknownHostKey$' -v .`.
+
+## TestSetUpDryRunWithNoInstallChoice
+
+`tuios hosts setup someone@buildbox --name build --dry-run`, the dry run the
+docs show first, to a machine with no tuios and no `--install`. The dry run
+shows the plan of the first install choice, names it and the other choices by
+their flags, and exits 0. Before the fix it exited 2 with "Pass --install copy,
+release, pkg or script" and the fix "run with --dry-run to see each command",
+the flag it was run with.
+
+Run on 2026-11-09 on Linux (golang:1.27-alpine, arm64). The probe finds a
+Homebrew tuios on a Mac, so the far machine is not without tuios there. The
+branch passes, with the other `TestSetUp` tests.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (c29f871bf) | "a dry run with no --install failed (exit 2)", "the dry run's fix tells the person to pass --dry-run, which they did", and the JSON dry run plans the install "" | **caught** |
+| The fix's hint guard alone removed (`setupExit` adds the fix in a dry run again) | passes: with the engine fix no dry run stops for a choice, so the hint is not reached | not a control; the guard is kept so a later choice cannot bring the hint back |
+
+Repeat from `e2e/tui` on Linux with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSetUpDryRunWithNoInstallChoice$' -v .`.
