@@ -9,6 +9,7 @@
 package proto
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -90,6 +91,20 @@ type DaemonEvent struct {
 	// Key and Value are an option-set's option path and value.
 	Key   string `json:"key,omitempty"`
 	Value string `json:"value,omitempty"`
+	// TML is a tml-surface's change: a surface opened, its state or tree
+	// changed, or it closed.
+	TML *TMLChange `json:"tml,omitempty"`
+}
+
+// TMLChange is one change of a TML surface, as the daemon's tml-surface
+// event says it. A view that holds Version - 1 applies Ops; any other reads
+// the surface again.
+type TMLChange struct {
+	Surface    string          `json:"surface"`
+	Version    uint64          `json:"version"`
+	DocVersion uint64          `json:"doc_version"`
+	Ops        json.RawMessage `json:"ops,omitempty"`
+	Closed     bool            `json:"closed,omitempty"`
 }
 
 // Notice is a desktop notification a program in a session sent.
@@ -164,7 +179,11 @@ type Pane struct {
 	// URL is the page a browser pane shows, as the app last told: set,
 	// the pane runs no shell.
 	URL string `json:"url,omitempty"`
-	Dir string `json:"dir,omitempty"` // the shell's working directory
+	// Surface is the TML surface a pane of kind tml draws, which the app
+	// draws with its own widgets (cmd/guios/tml_view.go). Empty for any
+	// other pane.
+	Surface string `json:"surface,omitempty"`
+	Dir     string `json:"dir,omitempty"` // the shell's working directory
 	// Host is the linked machine a pane of this machine's session runs its
 	// program on (tuios new-window --host), "" for this machine.
 	Host    string   `json:"host,omitempty"`
