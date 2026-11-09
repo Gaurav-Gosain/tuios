@@ -405,7 +405,7 @@ func TestCockpitFrameA(t *testing.T) {
 		t.Fatalf("ASSERTION: the build row did not narrow the fleet to build: %v\n%s", err, term.Snapshot())
 	}
 	saveCockpitFrames(t, term, "frame-a-200x55-build")
-	row, col = findText(t, term, "build "+"\uf078")
+	row, col = findText(t, term, "build "+"\ueab4")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return fleetRowWith(s, "docs-cli") < 0 && fleetRowWith(s, "ws-reconnect") < 0 && fleetRowWith(s, "release-not") < 0 && fleetRowWith(s, "bench-idle") >= 0

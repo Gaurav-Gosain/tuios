@@ -142,7 +142,7 @@ var (
 	ckGlyphIdle    = ckGlyph{"○", "○", "o"}
 	ckGlyphHost    = ckGlyph{"\U000f048b", "@", "@"}
 	ckGlyphBranch  = ckGlyph{"", "", "br"}
-	ckGlyphFold    = ckGlyph{"", "›", ">"}
+	ckGlyphFold    = ckGlyph{"\ueab6", "˃", ">"}
 	ckGlyphMarked  = ckGlyph{"\uf14a", "•", "*"}
 	ckGlyphResume  = ckGlyph{"\uf01e", "»", ">"}
 	ckGlyphImage   = ckGlyph{"\U000f02e9", "[img]", "[img]"}
