@@ -619,6 +619,7 @@ func (m *OS) screenShotPieces(hits []shotCellHit) []shotPiece {
 	// kitty pictures, placed beside the passthrough rather than through it, so
 	// it does not list them.
 	pieces = append(pieces, m.replyPreview.shotPieces()...)
+	pieces = append(pieces, m.replyPreview.placeholderShotPieces(kittyRects)...)
 	return append(pieces, m.launcherIcons.shotPieces()...)
 }
 

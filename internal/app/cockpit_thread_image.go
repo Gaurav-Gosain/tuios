@@ -25,8 +25,9 @@ import (
 //
 // A kitty picture is placed from the frame's own hits: each row of the card
 // carries "timg:row/rows/cols/id", so the placement is where the frame drew
-// the card, and a card that the window cuts, or that another panel covers, is
-// not placed. A click on the card opens the image view.
+// the card's rows. A card the window cuts is placed on the rows in the
+// window, cropped to them, and one that another panel covers is not placed.
+// A click on the card opens the image view.
 
 // ckImgRows and ckImgCols bound an image card's picture, in cells.
 const (
@@ -226,6 +227,11 @@ func (m *OS) ckImageCard(l ckLook, t *agentThread, en threadEntry, width int) []
 	}
 	cols, rows := m.ckImageBox(ti.img, width)
 	var cells []string
+	if mode == composer.PreviewPixels {
+		// A host that draws placeholders gets the picture as cells that
+		// scroll and clip with the thread.
+		cells = m.placeholderLines(ti.img, cols, rows)
+	}
 	if mode == composer.PreviewCells {
 		if cells = p.Cells(ti.img, cols, rows); cells == nil {
 			// Still being prepared: the rows keep their place.
@@ -235,7 +241,7 @@ func (m *OS) ckImageCard(l ckLook, t *agentThread, en threadEntry, width int) []
 	ls := []ckLine{head}
 	for r := range rows {
 		ln := ckLine{indent: ckImgIndent, hit: "timg:" + strconv.Itoa(r) + "/" + strconv.Itoa(rows) + "/" + strconv.Itoa(cols) + "/" + en.ID}
-		if mode == composer.PreviewCells && r < len(cells) && cells[r] != "" {
+		if r < len(cells) && cells[r] != "" {
 			ln.raw = cells[r]
 		}
 		ls = append(ls, ln)
@@ -268,7 +274,8 @@ func ckImgHit(action string) (row, rows, cols int, id string, ok bool) {
 }
 
 // threadImagePlacements adds the kitty pictures of the image cards the last
-// frame drew whole, at the cells it drew them. Nothing is placed while
+// frame drew, at the cells it drew them. A card the window cuts shows the
+// rows in the window: the picture is cropped to them. Nothing is placed while
 // another panel, a menu or the image view is over the thread.
 func (m *OS) threadImagePlacements(want []previewPlacement) []previewPlacement {
 	if !m.ShowInbox || !m.threadShown() || m.Inbox.ck.img != nil || m.ContextMenu != nil || !m.overlayOnTop("inbox") || !m.replyPixelsReady() {
@@ -282,23 +289,42 @@ func (m *OS) threadImagePlacements(want []previewPlacement) []previewPlacement {
 	if t == nil || len(t.images) == 0 {
 		return want
 	}
-	// The hits are in the order the frame drew the lines. A card is whole
-	// on screen when its last row follows its first one, rows-1 lines on.
-	var top ckHit
+	// Placeholder cells place the picture themselves; the host needs the
+	// picture and its virtual placement while any of its rows is drawn.
+	virtual := m.threadPlaceholders()
+	// The hits are in the order the frame drew the lines, so the rows of a
+	// card on screen come one after the other: a run of the same card, each
+	// row one line under the last. The run is the part to show.
+	type run struct {
+		id               string
+		x, y             int
+		first, last      int
+		cols, rows, next int
+	}
+	var cur *run
+	flush := func() {
+		if cur == nil {
+			return
+		}
+		if ti := t.images[cur.id]; ti != nil && ti.img != nil {
+			want = append(want, previewPlacement{key: pixelsKey(ti.img, cur.cols, cur.rows), x: cur.x + ckImgIndent, y: cur.y,
+				cols: cur.cols, rows: cur.last - cur.first + 1, skip: cur.first, virtual: virtual})
+		}
+		cur = nil
+	}
 	for _, h := range m.Inbox.ck.hits {
 		row, rows, cols, id, ok := ckImgHit(h.action)
-		if !ok || row < 0 {
+		if !ok || row < 0 || row >= rows {
 			continue
 		}
-		if row == 0 {
-			top = h
-		}
-		ti := t.images[id]
-		if row != rows-1 || top.y0 != h.y0-row || top.action != "timg:0"+h.action[len("timg:")+len(strconv.Itoa(row)):] || ti == nil || ti.img == nil {
+		if cur != nil && cur.id == id && cur.cols == cols && cur.rows == rows && row == cur.last+1 && h.y0 == cur.next {
+			cur.last, cur.next = row, h.y0+1
 			continue
 		}
-		want = append(want, previewPlacement{key: pixelsKey(ti.img, cols, rows), x: top.x0 + ckImgIndent, y: top.y0, cols: cols, rows: rows})
+		flush()
+		cur = &run{id: id, x: h.x0, y: h.y0, first: row, last: row, cols: cols, rows: rows, next: h.y0 + 1}
 	}
+	flush()
 	return want
 }
 

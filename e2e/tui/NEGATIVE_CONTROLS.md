@@ -16099,3 +16099,30 @@ none changed.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAgentsViewLeavesTheChromeLit$' -v .`.
+
+## Image cards the thread's edge cuts
+
+`TestCockpitThreadImageCropsWhenScrolled` cuts the agents view thread's image
+card at the thread's bottom (a shorter screen) and its top (J scrolls it up),
+then scrolls it off, and replays the kitty graphics the client sent to its
+host. A cut card is placed on its rows in the window with a source rect of
+those rows, once, and a card off the thread is not placed.
+`TestCockpitThreadImagePlaceholdersScroll` does the same with
+`appearance.kitty_placeholders = "on"`: the card is placeholder cells that
+name the picture's rows, the host gets the picture and one virtual
+placement, and nothing placed at a position. Its cells are read from the
+host stream replayed through tuios.dev/vt, since tuitest's emulator drops a
+placeholder's base character.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes both.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (4f5cedc1a), crop test | "the card's bottom is cut by the thread's edge and no picture is on its rows; placed: []" | **caught** |
+| Main, placeholder test | "no virtual placement (a=p,U=1) reached the host" | **caught** |
+| The crop from the picture's top (skip always 0) | "step 3: the crop shows the wrong part: 3 rows cut, want the source rect y=48 h=128 w=320, got y=0" | **caught** |
+| Every placeholder row names picture row 0 | "the placeholder rows are not one run in order" | **caught** |
+| A placeholder picture freed every frame, drawn or not | "step 3: the host let go of picture ... while its cells are on screen" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitThreadImage' -v .`.

@@ -1664,6 +1664,8 @@ func hostPictures(t *testing.T, stream []byte) []shot.Image {
 	t.Helper()
 	type placed struct {
 		row, col, cols, rows int
+		// src is the source rect, empty for the whole picture.
+		src image.Rectangle
 	}
 	data := map[uint32][]byte{}
 	decoded := map[uint32]image.Image{}
@@ -1704,7 +1706,11 @@ func hostPictures(t *testing.T, stream []byte) []shot.Image {
 			c, _ := strconv.Atoi(string(m[2]))
 			cols, _ := strconv.Atoi(p["c"])
 			rows, _ := strconv.Atoi(p["r"])
-			live[gfxKey{id, atoiU32(p["p"])}] = placed{row: r - 1, col: c - 1, cols: cols, rows: rows}
+			sx, _ := strconv.Atoi(p["x"])
+			sy, _ := strconv.Atoi(p["y"])
+			sw, _ := strconv.Atoi(p["w"])
+			sh, _ := strconv.Atoi(p["h"])
+			live[gfxKey{id, atoiU32(p["p"])}] = placed{row: r - 1, col: c - 1, cols: cols, rows: rows, src: image.Rect(sx, sy, sx+sw, sy+sh)}
 		case "d":
 			keep := map[gfxKey]bool{}
 			for k := range live {
@@ -1739,6 +1745,12 @@ func hostPictures(t *testing.T, stream []byte) []shot.Image {
 				continue
 			}
 			decoded[k.img] = img
+		}
+		// A source rect crops the picture, as the host does.
+		if sub, ok := img.(interface {
+			SubImage(image.Rectangle) image.Image
+		}); ok && !pl.src.Empty() {
+			img = sub.SubImage(pl.src.Add(img.Bounds().Min))
 		}
 		out = append(out, shot.Image{Pixels: img, Col: pl.col, Row: pl.row, Cols: pl.cols, Rows: pl.rows})
 	}
