@@ -48,6 +48,9 @@ type Manager struct {
 	// shellIntegrationOff is [shell] integration = "off". The zero value is
 	// the default, auto. Every session reads it through ShellIntegration.
 	shellIntegrationOff atomic.Bool
+	// shellLogin is [shell] login: a new pane's shell starts as a login
+	// shell.
+	shellLogin atomic.Bool
 	// stayOnEmpty is workspaces.return_when_empty turned off. The zero value
 	// is the default, on. Every session reads it through ReturnWhenEmpty.
 	stayOnEmpty atomic.Bool
@@ -183,6 +186,13 @@ func (m *Manager) SetShellIntegration(mode string) {
 func (m *Manager) ShellIntegration() bool {
 	return !m.shellIntegrationOff.Load()
 }
+
+// SetShellLogin sets [shell] login for every session: whether a new pane's
+// shell starts as a login shell.
+func (m *Manager) SetShellLogin(on bool) { m.shellLogin.Store(on) }
+
+// ShellLogin is what SetShellLogin last set, false when nothing did.
+func (m *Manager) ShellLogin() bool { return m.shellLogin.Load() }
 
 // SetReturnWhenEmpty sets workspaces.return_when_empty for every session.
 func (m *Manager) SetReturnWhenEmpty(on bool) {
@@ -338,6 +348,9 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	}
 	if cfg.ShellIntegration == nil {
 		cfg.ShellIntegration = m.ShellIntegration
+	}
+	if cfg.ShellLogin == nil {
+		cfg.ShellLogin = m.ShellLogin
 	}
 	if cfg.DragAndDrop == nil {
 		cfg.DragAndDrop = m.DragAndDrop

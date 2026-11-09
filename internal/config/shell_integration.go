@@ -9,6 +9,10 @@ type ShellConfig struct {
 	// file of yours: it starts the shell so that it reads your startup files
 	// and then the marks. See internal/shellinteg.
 	Integration string `toml:"integration"`
+	// Login starts the shell of each new pane as a login shell, as a
+	// terminal does on macOS, so it reads the login files (.zprofile,
+	// .bash_profile, .profile). Off by default. See shellinteg.Login.
+	Login bool `toml:"login"`
 }
 
 const (

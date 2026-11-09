@@ -1759,6 +1759,11 @@ var optionSpecs = []Option{
 		Description: "Turn on prompt marks in the bash and zsh shells that new panes start. Your files do not change. off starts each shell as it is",
 		Accepted:    ShellIntegrationModes, Default: ShellIntegrationAuto,
 	},
+	{
+		Path: "shell.login", Type: OptionBool, Section: "appearance",
+		Description: "Start the shell of each new pane as a login shell, so it reads .zprofile, .bash_profile or .profile, as a terminal on macOS does",
+		Default:     "false",
+	},
 	// [paste_buffers]. The daemon reads it when it starts and when the file
 	// changes, and so does a client with no daemon.
 	{

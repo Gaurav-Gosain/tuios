@@ -1978,6 +1978,9 @@ type SessionConfig struct {
 	// each spawn so a reload reaches the next pane. Nil means on. See
 	// internal/shellinteg.
 	ShellIntegration func() bool
+	// ShellLogin reports whether [shell] login is on, read at each spawn.
+	// Nil means off. See shellinteg.Login.
+	ShellLogin func() bool
 	// ReturnWhenEmpty reports workspaces.return_when_empty. The manager
 	// stamps it with its own getter, so a config reload reaches every
 	// session. Nil means on.
@@ -2729,6 +2732,9 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 					cmd.Args = append(cmd.Args, args...)
 					cmd.Env = env
 				}
+			}
+			if len(sp.command) == 0 && s.config != nil && s.config.ShellLogin != nil && s.config.ShellLogin() {
+				shellinteg.Login(cmd)
 			}
 			// The pane's terminal, so a tuios client can tell whether it runs
 			// on it or only inherited the pane's variables. See

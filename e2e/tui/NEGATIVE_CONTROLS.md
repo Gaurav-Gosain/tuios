@@ -15976,3 +15976,22 @@ Run on 2026-11-08 on macOS (arm64):
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCtrlClickWindowLinkCrossesSessions$' -v .`.
+
+## TestLoginShellReadsTheLoginFiles
+
+`[shell] login = true` (issue #1768): zsh and fish start with `-l`, bash keeps
+tuios's `--rcfile` and that file reads the login files in place of
+`~/.bashrc`, and any other shell gets a `-` in front of its name. Each case's
+prompt says which files the shell read. Off by default.
+
+Run on 2026-11-09 on macOS (arm64), with zsh 5.9, Homebrew bash 5, /bin/sh
+and fish 4. The branch passes every case.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (ab67a42a1) | zsh, bash, sh and fish: "the pane never showed" their login prompt; off by default passes | **caught** |
+| tuios's bash rc file without its login branch | bash: "the pane never showed \"B-bash_profile-1>\"" | **caught** |
+| No `-` in front of argv[0] for other shells | sh: "the pane never showed \"S-profile>\"" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestLoginShellReadsTheLoginFiles$' -v .`.

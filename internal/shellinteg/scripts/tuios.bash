@@ -2,14 +2,30 @@
 #
 # tuios starts an interactive bash with --rcfile set to this file, which bash
 # then reads in place of ~/.bashrc. The file reads ~/.bashrc, as bash would
-# have, and then makes bash mark its prompts and commands with OSC 133: A
+# have (or the login files, below), and then makes bash mark its prompts and commands with OSC 133: A
 # where the prompt starts, B where the input starts, C when a command runs and
 # D with its exit status when it finishes. It prints nothing but those marks,
 # and it sends no mark that the user's own setup already sends.
 #
 # Turn it off with [shell] integration = "off" in the tuios config.
 
-if [[ -r ~/.bashrc ]]; then
+# With [shell] login = true, tuios sets TUIOS_BASH_LOGIN: read the files a
+# login bash reads, in its order, in place of ~/.bashrc, as bash -l would. A
+# login bash reads no rc file, so --rcfile is how the marks stay on. Most
+# ~/.bash_profile files read ~/.bashrc themselves.
+if [[ -n ${TUIOS_BASH_LOGIN-} ]]; then
+    builtin unset TUIOS_BASH_LOGIN
+    if [[ -r /etc/profile ]]; then
+        builtin source /etc/profile
+    fi
+    if [[ -r ~/.bash_profile ]]; then
+        builtin source ~/.bash_profile
+    elif [[ -r ~/.bash_login ]]; then
+        builtin source ~/.bash_login
+    elif [[ -r ~/.profile ]]; then
+        builtin source ~/.profile
+    fi
+elif [[ -r ~/.bashrc ]]; then
     builtin source ~/.bashrc
 fi
 
