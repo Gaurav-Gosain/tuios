@@ -13675,3 +13675,43 @@ func CockpitEditLeft(count int) string { return In(i18n.Locale()).CockpitEditLef
 func (msgs Messages) CockpitEditLeft(count int) string {
 	return Catalog.Format(msgs.locale, "cockpitEditLeft", map[string]any{"count": count})
 }
+
+// SidebarMinimized says "Minimized · {count}"
+// in the language the app shows.
+func SidebarMinimized(count string) string { return In(i18n.Locale()).SidebarMinimized(count) }
+
+// SidebarMinimized says "Minimized · {count}"
+// in the language of msgs.
+func (msgs Messages) SidebarMinimized(count string) string {
+	return Catalog.Format(msgs.locale, "sidebarMinimized", map[string]any{"count": count})
+}
+
+// SidebarRestorePane says "Restore {name}"
+// in the language the app shows.
+func SidebarRestorePane(name string) string { return In(i18n.Locale()).SidebarRestorePane(name) }
+
+// SidebarRestorePane says "Restore {name}"
+// in the language of msgs.
+func (msgs Messages) SidebarRestorePane(name string) string {
+	return Catalog.Format(msgs.locale, "sidebarRestorePane", map[string]any{"name": name})
+}
+
+// SidebarMinimizedTip says "Panes minimized on this workspace. Click one to restore it."
+// in the language the app shows.
+func SidebarMinimizedTip() string { return In(i18n.Locale()).SidebarMinimizedTip() }
+
+// SidebarMinimizedTip says "Panes minimized on this workspace. Click one to restore it."
+// in the language of msgs.
+func (msgs Messages) SidebarMinimizedTip() string {
+	return Catalog.Format(msgs.locale, "sidebarMinimizedTip", nil)
+}
+
+// WorkspaceMinimized says "{count} minimized"
+// in the language the app shows.
+func WorkspaceMinimized(count string) string { return In(i18n.Locale()).WorkspaceMinimized(count) }
+
+// WorkspaceMinimized says "{count} minimized"
+// in the language of msgs.
+func (msgs Messages) WorkspaceMinimized(count string) string {
+	return Catalog.Format(msgs.locale, "workspaceMinimized", map[string]any{"count": count})
+}

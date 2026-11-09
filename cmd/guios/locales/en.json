@@ -2378,5 +2378,9 @@
   "cockpitEditCount": "{count, plural, one {# edit} other {# edits}}",
   "cockpitEditLines": "{count, plural, one {# line} other {# lines}}",
   "cockpitEditReading": "Reading the edit…",
-  "cockpitEditLeft": "{count, plural, one {Scroll through the edit to allow it: # line is not shown yet.} other {Scroll through the edit to allow it: # lines are not shown yet.}}"
+  "cockpitEditLeft": "{count, plural, one {Scroll through the edit to allow it: # line is not shown yet.} other {Scroll through the edit to allow it: # lines are not shown yet.}}",
+  "sidebarMinimized": "Minimized · {count}",
+  "sidebarRestorePane": "Restore {name}",
+  "sidebarMinimizedTip": "Panes minimized on this workspace. Click one to restore it.",
+  "workspaceMinimized": "{count} minimized"
 }

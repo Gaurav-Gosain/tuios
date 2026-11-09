@@ -1349,5 +1349,9 @@
   "cockpitEditCount": "{count, plural, other {# 处编辑}}",
   "cockpitEditLines": "{count, plural, other {# 行}}",
   "cockpitEditReading": "正在读取编辑…",
-  "cockpitEditLeft": "{count, plural, other {请滚动查看完整编辑后再允许：还有 # 行未显示。}}"
+  "cockpitEditLeft": "{count, plural, other {请滚动查看完整编辑后再允许：还有 # 行未显示。}}",
+  "sidebarMinimized": "已最小化 · {count}",
+  "sidebarRestorePane": "还原 {name}",
+  "sidebarMinimizedTip": "此工作区中已最小化的窗格。点击即可还原。",
+  "workspaceMinimized": "已最小化 {count}"
 }

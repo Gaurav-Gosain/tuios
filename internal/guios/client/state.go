@@ -1,6 +1,7 @@
 package client
 
 import (
+	"cmp"
 	"errors"
 	"os"
 	"path/filepath"
@@ -194,6 +195,7 @@ func (k *stateKeeper) build() (*proto.State, error) {
 		// The panes of the workspace the session shows; the others are
 		// counted on their workspaces.
 		var shown []windowRow
+		var minimized []minimizedPane
 		counts := map[int]*proto.Workspace{}
 		for _, w := range wl.Windows {
 			paneSession[w.ID] = s.ID
@@ -215,12 +217,20 @@ func (k *stateKeeper) build() (*proto.State, error) {
 				counts[w.Workspace] = cw
 			}
 			cw.Panes++
+			if w.Minimized {
+				cw.Minimized++
+			}
 			cw.Unread = cw.Unread || p.Unread
 			if statusRank(p.Status) > statusRank(cw.Status) {
 				cw.Status = p.Status
 			}
 			if w.Minimized || w.Workspace != ws {
-				// A minimized pane stays out until it is restored.
+				// A minimized pane stays out of the panes until it is
+				// restored. On the shown workspace it is listed, for the
+				// rail's minimized row.
+				if w.Minimized && w.Workspace == ws {
+					minimized = append(minimized, minimizedPane{p: p, at: w.MinimizedAt})
+				}
 				if !w.Minimized {
 					p.Workspace = w.Workspace
 					ks.Others = append(ks.Others, p)
@@ -234,6 +244,7 @@ func (k *stateKeeper) build() (*proto.State, error) {
 			ks.Panes = append(ks.Panes, p)
 		}
 		ks.Workspaces = workspaceList(counts, ws, ti)
+		ks.Minimized = minimizedOrder(minimized)
 		ks.TUI = ti.TUI
 		ks.Layout = k.layoutOf(s.ID, s.Name, shown, wl.Focus, &ti)
 		ks.LayoutMode = ti.Mode()
@@ -699,4 +710,22 @@ func (c *Client) Refresh() {
 	case c.st.kick <- struct{}{}:
 	default:
 	}
+}
+
+// minimizedPane is a minimized pane with when it was minimized, for the
+// session's Minimized list.
+type minimizedPane struct {
+	p  proto.Pane
+	at int64
+}
+
+// minimizedOrder is the panes in the order they were minimized, oldest first,
+// then window order, as the TUI's dock lists them.
+func minimizedOrder(in []minimizedPane) []proto.Pane {
+	slices.SortStableFunc(in, func(a, b minimizedPane) int { return cmp.Compare(a.at, b.at) })
+	out := make([]proto.Pane, len(in))
+	for i, m := range in {
+		out[i] = m.p
+	}
+	return out
 }

@@ -269,6 +269,30 @@ func (a *App) paneItems() []paletteItem {
 			}
 		}
 	}
+	return append(items, a.minimizedItems()...)
+}
+
+// minimizedItems are "Restore <name>" for each minimized pane of every
+// session's shown workspace, with the tuios keys that restore it in the
+// selected session (the prefix, m, then its place in the minimized order).
+func (a *App) minimizedItems() []paletteItem {
+	var items []paletteItem
+	for _, g := range a.groups() {
+		for _, s := range g.sessions {
+			sid, name := s.ID, a.railName(s)
+			for i := range s.Minimized {
+				p := &s.Minimized[i]
+				keys := ""
+				if pre := a.prefixKeys("prefix_minimize"); pre != "" && s.ID == a.selected && i < 9 {
+					keys = pre + " " + itoa(i+1)
+				}
+				pane := p.ID
+				items = append(items, paletteItem{session: s, title: locales.SidebarRestorePane(p.PaneName()), detail: name,
+					keys: [2]string{"", keys}, words: name + " " + p.PaneName() + " minimized restore",
+					run: func() { a.restorePane(sid, pane) }})
+			}
+		}
+	}
 	return items
 }
 

@@ -268,6 +268,9 @@ func (a *App) workspacePill(c *ui.Context, pal *palette, s *proto.Session, w pro
 		pill.Border(1, pal.accent)
 	}
 	tip := locales.WorkspaceTip(w.Panes, workspaceName(w))
+	if w.Minimized > 0 {
+		tip += " · " + locales.WorkspaceMinimized(strconv.Itoa(w.Minimized))
+	}
 	pointerTooltip(c, pill, "ws-tip-"+strconv.Itoa(w.N), tip)
 	if pill.Clicked() && !cur {
 		a.defer_(func() {
@@ -283,6 +286,11 @@ func (a *App) workspacePill(c *ui.Context, pal *palette, s *proto.Session, w pro
 		t := oneLine(c, workspaceName(w), fsSmall, wMedium).TextColor(fg).FontFeatures("tnum").MaxWidth(96)
 		if cur {
 			t.FontWeight(wSemibold)
+		}
+		if w.Minimized > 0 {
+			// How many of its panes are minimized: the rail's minimized row
+			// lists them by name.
+			ui.Text(c, "−"+strconv.Itoa(w.Minimized)).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum").SingleLine()
 		}
 		// The dot keeps its room while there is none, so that a pill
 		// does not change its width as its panes change their state.

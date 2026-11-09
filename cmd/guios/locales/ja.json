@@ -1349,5 +1349,9 @@
   "cockpitEditCount": "{count, plural, other {# 件の編集}}",
   "cockpitEditLines": "{count, plural, other {# 行}}",
   "cockpitEditReading": "編集を読み込み中…",
-  "cockpitEditLeft": "{count, plural, other {許可するには編集を最後までスクロールしてください。あと # 行あります。}}"
+  "cockpitEditLeft": "{count, plural, other {許可するには編集を最後までスクロールしてください。あと # 行あります。}}",
+  "sidebarMinimized": "最小化 · {count}",
+  "sidebarRestorePane": "{name} を元に戻す",
+  "sidebarMinimizedTip": "このワークスペースで最小化したペインです。クリックすると元に戻ります。",
+  "workspaceMinimized": "最小化 {count}"
 }
