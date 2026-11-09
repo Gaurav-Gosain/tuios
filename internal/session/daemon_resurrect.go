@@ -181,6 +181,9 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 
 	// Work on a copy so the original (loaded) state is untouched.
 	restored := *state
+	// The graphics went to the session above. They belong in the saved file
+	// alone, so the live state, which every push carries, leaves them out.
+	restored.KittyGraphics, restored.SixelGraphics = false, false
 	restored.Windows = make([]WindowState, len(state.Windows))
 	copy(restored.Windows, state.Windows)
 	restored.WorkspaceFocus = maps.Clone(state.WorkspaceFocus)
