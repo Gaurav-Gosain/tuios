@@ -690,9 +690,26 @@ func (d *Daemon) verbRemoveWorktree(cs *connState, params json.RawMessage) (any,
 		}
 		out["changes"] = changes
 		// A jj workspace's work is its working-copy commit, which forgetting
-		// the workspace keeps: nothing to stash, nothing to lose.
-		if gitstate.Find(info.Path).JJ {
+		// the workspace keeps: nothing to stash. What the snapshot left out,
+		// such as a new file over snapshot.max-new-file-size, is lost.
+		jj := gitstate.Find(info.Path).JJ
+		if jj {
 			changes = 0
+			left, err := worktree.JJLeftOut(info.Path)
+			if err != nil {
+				return nil, hintedVerbError(ErrVerbGitFailed, err.Error(), &VerbHint{
+					Detail: "jj could not snapshot the workspace, so nothing was removed.",
+				})
+			}
+			if len(left) > 0 && !p.Force {
+				return nil, hintedVerbError(ErrVerbWorktreeDirty,
+					fmt.Sprintf("%s holds %d %s jj did not record: %s. Nothing was removed.", info.Path, len(left), plural.Word(len(left), "file", "files"), strings.Join(left, ", ")),
+					&VerbHint{
+						Param:   "force",
+						Command: "tuios worktree rm " + sess.Name() + " --force",
+						Detail:  "jj leaves a new file over snapshot.max-new-file-size out of the working-copy commit. Raise that limit and snapshot again, or pass force to delete the files with the workspace.",
+					})
+			}
 		}
 		if own, err := worktree.OwnCommits(info.Path); err == nil {
 			out["own_commits"] = own
@@ -756,7 +773,7 @@ func (d *Daemon) verbRemoveWorktree(cs *connState, params json.RawMessage) (any,
 			out["stashed"] = true
 			out["stash_message"] = "tuios: " + info.Branch
 		}
-		discard := changes > 0 && !p.Stash
+		discard := changes > 0 && !p.Stash || jj && p.Force
 		// On Windows the session's shells hold the worktree as their cwd, and
 		// git cannot remove a directory a process sits inside. The stash has
 		// already run, so the session goes first and the removal has the

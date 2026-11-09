@@ -21,14 +21,18 @@ import (
 //     restore writes turn 1's file back.
 //   - ship commit runs jj commit and takes the bookmark along. ship merge
 //     fast-forwards main. ship push sends the bookmark to origin.
-//   - worktree rm forgets the workspace. The committed work stays in the
-//     repository.
+//   - worktree rm refuses while the workspace holds a file jj did not
+//     record (a new file over 1 MiB), and with --force forgets the
+//     workspace. The committed work stays in the repository.
 //
 // The test fails on a build without jj worktrees: worktree new runs git
 // worktree add, which finds no git repository.
 //
 // Negative control: with the cache lookup in worktree.Merged moved after
 // jjMergedTips, the repeated listing runs jj log -r coalesce(...) again.
+//
+// Negative control: on the build before the refusal, the first worktree rm
+// deletes big.bin with the workspace.
 //
 // Negative control: with the main-workspace check removed from
 // worktree.Merged, the main session reads as merged into trunk() before any
@@ -157,7 +161,22 @@ func TestWorktreeJJSession(t *testing.T) {
 		t.Errorf("ASSERTION: origin's feat/jj is %s, want %s", got, tip)
 	}
 
-	tr.ok("worktree", "rm", session)
+	// jj leaves a new file over 1 MiB out of the snapshot, so forgetting the
+	// workspace would lose it: rm without force refuses and keeps it.
+	big := filepath.Join(ws, "big.bin")
+	if err := os.WriteFile(big, make([]byte, 2<<20), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tr.run("worktree", "rm", session); err == nil {
+		t.Fatalf("ASSERTION: worktree rm deleted a workspace holding a file jj did not record:\n%s", out)
+	} else if !strings.Contains(out, "big.bin") || !strings.Contains(out, "--force") {
+		t.Errorf("ASSERTION: the refusal names neither big.bin nor --force:\n%s", out)
+	}
+	if _, err := os.Stat(big); err != nil {
+		t.Fatalf("ASSERTION: the refused rm lost big.bin: %v", err)
+	}
+
+	tr.ok("worktree", "rm", session, "--force")
 	if _, err := os.Stat(ws); !os.IsNotExist(err) {
 		t.Errorf("ASSERTION: the workspace folder is still there: %v", err)
 	}

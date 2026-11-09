@@ -307,9 +307,45 @@ func jjStatusEnv(ctx context.Context, path string) (env []string, done func(), e
 	return env, done, nil
 }
 
+// JJLeftOut lists the files in the jj workspace at path that its
+// working-copy commit does not hold after a snapshot: a new file over
+// snapshot.max-new-file-size, or one snapshot.auto-track leaves out. Ignored
+// files are not listed. Forgetting the workspace keeps the commit and loses
+// these.
+func JJLeftOut(path string) ([]string, error) {
+	ctx := context.Background()
+	env, done, err := jjStatusEnv(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	defer done()
+	out, err := runCtx(ctx, path, env, "status", "--porcelain", "-z", "--untracked-files=all")
+	if err != nil {
+		return nil, err
+	}
+	var left []string
+	for record := range strings.SplitSeq(out, "\x00") {
+		if len(record) > 3 {
+			left = append(left, record[3:])
+		}
+	}
+	return left, nil
+}
+
 // jjRemove forgets the workspace at path and deletes its directory. The
 // forget snapshots the working copy first, so the work is in its commit.
-func jjRemove(path string) error {
+// Without force it refuses when the snapshot leaves files out, as git
+// worktree remove refuses on untracked files.
+func jjRemove(path string, force bool) error {
+	if !force {
+		left, err := JJLeftOut(path)
+		if err != nil {
+			return err
+		}
+		if len(left) > 0 {
+			return errfmt.Errorf("%s holds files jj did not record: %s; use force to delete them", path, strings.Join(left, ", "))
+		}
+	}
 	if _, err := jjRun(context.Background(), path, "workspace", "forget"); err != nil {
 		return err
 	}

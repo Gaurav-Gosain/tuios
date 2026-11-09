@@ -12958,6 +12958,7 @@ colocated and not, and folds it. Run on 2026-11-02 on macOS with jj 0.46.0:
 | Run on 2026-11-07: main `663b2c44c572`, a build without jj worktrees | `TestWorktreeJJSession` | "... is not a jj workspace: stat .../feat-jj/.jj: no such file" | **caught** |
 | Run on 2026-11-07: the cache lookup in `worktree.Merged` moved after `jjMergedTips` | `TestWorktreeJJSession` | "a repeated listing ran the merged check's jj again" | **caught** |
 | Run on 2026-11-07: the main-workspace check removed from `worktree.Merged` | `TestWorktreeJJSession` | "main on main reads as merged before any work" | **caught** |
+| Run on 2026-11-09: the build before the refusal (`jjRemove` ignores force, and the rm verb does not check what the snapshot left out) | `TestWorktreeJJSession` | "worktree rm deleted a workspace holding a file jj did not record" | **caught** |
 | Run on 2026-11-07: the squash check cut from `jjMerge` | `TestShipJJRefusals` | "ship merge --squash = <nil>", and the refused squash moved main | **caught** |
 | Run on 2026-11-07: the commit check cut from `jjPush` | `TestShipJJRefusals` | "the push never refused the moved bookmark" | **caught** |
 | Run on 2026-11-07: `fanRowChanges` taking the merge base from `HEAD` | `TestFanCompareJJ` | "the untouched attempt: ... 1 files, want ... 0 files", and the working one 3 files, want 2 | **caught** |

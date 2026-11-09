@@ -446,7 +446,7 @@ func Stash(path, message string) error {
 // worktree made.
 func Remove(repoRoot, path string, force bool) error {
 	if gitstate.Find(path).JJ {
-		return jjRemove(path)
+		return jjRemove(path, force)
 	}
 	args := []string{"worktree", "remove"}
 	if force {
