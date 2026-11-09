@@ -323,6 +323,12 @@ type DaemonConfig struct {
 	// that on disk; turning it off deletes what was saved when the daemon
 	// next starts.
 	PersistScrollback *bool `toml:"persist_scrollback"`
+	// ClientFollowsUpgrade makes a client on this machine follow a live
+	// upgrade of its daemon to a newer build: once the new image takes the
+	// session back, the client runs the binary the upgrade named, as tuios
+	// attach on the same terminal. Nil means on, the default. Off, the
+	// client keeps its build and says so, as before.
+	ClientFollowsUpgrade *bool `toml:"client_follows_upgrade"`
 	// PersistScrollbackLines is the most history lines one pane saves, the
 	// screen not counted. Zero means 1000.
 	PersistScrollbackLines int `toml:"persist_scrollback_lines"`
@@ -357,6 +363,12 @@ type DaemonConfig struct {
 	// default, never. The display can still dim and lock. See
 	// internal/session/keep_awake.go.
 	KeepAwake string `toml:"keep_awake"`
+}
+
+// FollowsUpgrade reports whether a local client follows a live upgrade of its
+// daemon. See DaemonConfig.ClientFollowsUpgrade.
+func (d DaemonConfig) FollowsUpgrade() bool {
+	return d.ClientFollowsUpgrade == nil || *d.ClientFollowsUpgrade
 }
 
 // Resume modes. See DaemonConfig.ResumeAgents.

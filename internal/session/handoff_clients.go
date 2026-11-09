@@ -75,7 +75,7 @@ func (d *Daemon) tuiClientCount() int {
 
 // closeClientsForHandoff tells every client what is happening, as far as it
 // listens within handoffNoticeWait, and drops it.
-func (d *Daemon) closeClientsForHandoff(version string) {
+func (d *Daemon) closeClientsForHandoff(version, binary string) {
 	d.clientsMu.Lock()
 	clients := make([]*connState, 0, len(d.clients))
 	for _, cs := range d.clients {
@@ -91,7 +91,7 @@ func (d *Daemon) closeClientsForHandoff(version string) {
 		cs.mu.Unlock()
 		wg.Go(func() {
 			if tui {
-				_ = d.sendMessage(cs, MsgDaemonUpgrading, &DaemonUpgradingPayload{Version: version})
+				_ = d.sendMessage(cs, MsgDaemonUpgrading, &DaemonUpgradingPayload{Version: version, Binary: binary})
 			}
 			if id, verb, ok := cs.verbCall.take(); ok {
 				_ = d.writeVerbError(cs, id, verb, hintedVerbError(ErrVerbDaemonUpgrading,

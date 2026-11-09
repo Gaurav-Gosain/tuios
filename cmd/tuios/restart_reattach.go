@@ -43,9 +43,28 @@ func restartAttachArgs(session string) []string {
 	return append(args, "attach", "--after-restart", "--", session)
 }
 
+// attachAfterUpgrade is the hidden attach --after-upgrade flag: the version
+// of the live upgrade the client that started this one followed. See
+// app/upgrade_follow.go.
+var attachAfterUpgrade string
+
+// followUpgrade starts the build a live upgrade gave the daemon as this
+// client, on the same session.
+func followUpgrade(e *app.UpgradeExec) error {
+	fmt.Printf("The daemon was upgraded to %s. tuios starts it on session '%s'.\n", e.Version, e.Session)
+	return execClient(e.Binary, upgradeAttachArgs(e.Session, e.Version))
+}
+
+// upgradeAttachArgs is the command line of the client that follows an
+// upgrade, without the program name.
+func upgradeAttachArgs(session, version string) []string {
+	args := carriedFlags()
+	return append(args, "attach", "--after-upgrade="+version, "--", session)
+}
+
 // attachOwnFlags are the attach flags that are not carried: they say which
 // session to attach to and how, and the restart names the session itself.
-var attachOwnFlags = map[string]bool{"create": true, "host": true, "ssh": true, "hold": true, "force": true, "detach-others": true, "terminal-mode": true, "after-restart": true}
+var attachOwnFlags = map[string]bool{"create": true, "host": true, "ssh": true, "hold": true, "force": true, "detach-others": true, "terminal-mode": true, "after-restart": true, "after-upgrade": true}
 
 // carriedFlags is the flags this process was given that attach takes too, as
 // --name=value: the interface flags, and the root's --debug and --server.
@@ -71,4 +90,13 @@ func carriedFlags() []string {
 // client exits with.
 func appRestartFailure(f *app.RestartFailure) error {
 	return &diagnosticError{What: f.What, Fix: strings.TrimSuffix(strings.TrimSpace(f.Fix), ".") + "."}
+}
+
+// afterUpgradeFor is the version a local attach was started to follow, and
+// empty for an attach through a host, whose daemon is not this machine's.
+func afterUpgradeFor(host string) string {
+	if host != "" {
+		return ""
+	}
+	return attachAfterUpgrade
 }

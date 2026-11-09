@@ -292,6 +292,9 @@ the remote client. See 'tuios hosts --help'.`,
 	// Set by the client a restart from the app starts. See restart_reattach.go.
 	attachCmd.Flags().BoolVar(&attachAfterRestart, "after-restart", false, "Say that the daemon restarted when the client starts")
 	_ = attachCmd.Flags().MarkHidden("after-restart")
+	// Set by the client that follows a live upgrade. See restart_reattach.go.
+	attachCmd.Flags().StringVar(&attachAfterUpgrade, "after-upgrade", "", "Say that this client follows a live upgrade to this version")
+	_ = attachCmd.Flags().MarkHidden("after-upgrade")
 	registerHostNameCompletion(attachCmd, "host")
 
 	var newDetach bool

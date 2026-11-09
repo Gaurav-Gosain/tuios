@@ -448,6 +448,8 @@ The tmux shim always wraps, as tmux does, and does not read this option.
 
 `persist_scrollback` in `[daemon]` (default `true`) saves each pane's history with its session. After a daemon restart or a reboot, the restored pane shows that history above a dim divider, and the new shell starts under it. `persist_scrollback_lines` (default 1000) and `persist_scrollback_kb` (default 2048) set the most lines and the most KiB one pane saves. The files hold what your panes printed, secrets included. Set `persist_scrollback = false` to stop this. The next time the daemon starts, it deletes the history it saved before. See [SESSIONS.md](SESSIONS.md#pane-history).
 
+`client_follows_upgrade` in `[daemon]` (default `true`) makes a client on this machine follow a live upgrade (`tuios daemon upgrade`). When the new image takes the session back and its build is newer than the client's, the client runs the binary the upgrade named, as `tuios attach` on the same terminal. The session, its panes and the flags you started the client with stay. A client of another machine, over ssh or in a browser, keeps its build. Set it to `false` to keep the old client running; it then says that it still runs the old build.
+
 `window_size` in `[daemon]` sets the size of a session that has more than one client. The names are the names of the tmux `window-size` option. See [SESSIONS.md](SESSIONS.md#session-size-with-more-than-one-client).
 
 | Value | Size of the session |

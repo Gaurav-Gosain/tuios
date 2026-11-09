@@ -1286,6 +1286,11 @@ var optionSpecs = []Option{
 		Default:     "true",
 	},
 	{
+		Path: "daemon.client_follows_upgrade", Type: OptionBool, Section: "daemon",
+		Description: "After a live upgrade of the daemon to a newer build, a client on this machine runs the new build too, on the same terminal and session.",
+		Default:     "true",
+	},
+	{
 		Path: "daemon.persist_scrollback_lines", Type: OptionInt, Section: "daemon",
 		Description: "Most history lines one pane saves. 0 uses 1000. A change applies when the daemon next starts.",
 		Default:     "0", Min: 0, Max: 1000000,

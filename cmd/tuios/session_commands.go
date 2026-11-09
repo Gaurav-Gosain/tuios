@@ -560,6 +560,8 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		// Only a local attach asks for it, and only with --terminal-mode.
 		StartInTerminalMode: host == "" && attachTerminalMode,
 		AfterRestart:        host == "" && attachAfterRestart,
+		AfterUpgrade:        afterUpgradeFor(host),
+		FollowUpgrades:      host == "",
 		AttachedHost:        host,
 		// One writer for the terminal: frames, kitty and sixel sequences all
 		// serialize on it. Left nil, the passthroughs open their own /dev/tty
@@ -608,9 +610,10 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	exitClient := client
 	var restartExec *app.RestartExec
 	var restartFail *app.RestartFailure
+	var upgradeExec *app.UpgradeExec
 	if finalOS, ok := finalModel.(*app.OS); ok {
 		reason = finalOS.ExitReason
-		restartExec, restartFail = finalOS.RestartExec, finalOS.RestartFailure
+		restartExec, restartFail, upgradeExec = finalOS.RestartExec, finalOS.RestartFailure, finalOS.UpgradeExec
 		if finalOS.DaemonClient != nil {
 			exitClient = finalOS.DaemonClient
 		}
@@ -648,6 +651,11 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	}
 	if reason == app.ExitRestartFailed && restartFail != nil {
 		return appRestartFailure(restartFail)
+	}
+	// A live upgrade gave the daemon a newer build: this client runs it on
+	// the same session. See app/upgrade_follow.go.
+	if reason == app.ExitUpgradeFollowed && upgradeExec != nil {
+		return followUpgrade(upgradeExec)
 	}
 
 	// The daemon took this client off the session after the attach: its

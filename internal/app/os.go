@@ -290,6 +290,15 @@ type OS struct {
 	// bring the client back. RestartFailure is set with ExitRestartFailed.
 	RestartExec    *RestartExec
 	RestartFailure *RestartFailure
+	// UpgradeExec is set with ExitUpgradeFollowed: the build a live upgrade
+	// gave the daemon, for the entry point to run. followedUpgrade is
+	// OSOptions.AfterUpgrade, upgradeAnnounced says its note is shown, and
+	// followUpgrades is OSOptions.FollowUpgrades.
+	// See upgrade_follow.go.
+	UpgradeExec      *UpgradeExec
+	followedUpgrade  string
+	upgradeAnnounced bool
+	followUpgrades   bool
 	// calm is calm mode's runtime state. See calm.go.
 	calm calmState
 	// restartLater says the person put the version notice off for this run.

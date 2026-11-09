@@ -114,6 +114,9 @@ type TUIClient struct {
 	// upgradedTo is the version a live upgrade told this client the daemon
 	// is becoming, nil when none has. See MsgDaemonUpgrading.
 	upgradedTo atomic.Pointer[string]
+	// upgradeBinary is the binary that live upgrade named, empty from an
+	// older daemon. See UpgradeBinary.
+	upgradeBinary atomic.Pointer[string]
 	// detachedReason is the daemon's reason when it detached this client
 	// because another client attached or detach-client named it. See
 	// DetachedReason.
@@ -2031,7 +2034,8 @@ func (c *TUIClient) handleMessage(msg *Message) {
 	case MsgDaemonUpgrading:
 		var payload DaemonUpgradingPayload
 		if err := msg.ParsePayload(&payload); err == nil {
-			v := payload.Version
+			v, bin := payload.Version, payload.Binary
+			c.upgradeBinary.Store(&bin)
 			c.upgradedTo.Store(&v)
 		}
 
@@ -3060,6 +3064,15 @@ func windowSummariesAgree(a, b WindowSummary) bool {
 		a.ForegroundCmd == b.ForegroundCmd && a.Workspace == b.Workspace &&
 		a.Scratch == b.Scratch && a.Note == b.Note &&
 		(a.AgentParent == nil) == (b.AgentParent == nil) && (a.AgentParent == nil || *a.AgentParent == *b.AgentParent)
+}
+
+// UpgradeBinary is the path of the binary a live upgrade told this client
+// the daemon now runs, empty when none did or the daemon did not say.
+func (c *TUIClient) UpgradeBinary() string {
+	if v := c.upgradeBinary.Load(); v != nil {
+		return *v
+	}
+	return ""
 }
 
 // UpgradedTo is the version a live upgrade said the daemon was becoming as
