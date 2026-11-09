@@ -191,6 +191,8 @@ type threadBodyKey struct {
 	pics uint64
 	// keep is agentThread.keep.
 	keep int
+	// card is whether the Done card under the thread shows the recap.
+	card bool
 }
 
 // threadsState is the threads kept and the transcript subscription.
@@ -658,10 +660,10 @@ func (m *OS) applyThreadWatchEnded(msg threadWatchEnded) {
 // threadBody is the thread's text, oldest first: the conversation for a
 // transcript agent, the recap and the mail for the rest. It holds at least
 // the last room lines, and is kept on the thread until what it shows changes.
-func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []string {
+func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time, card bool) []string {
 	t := m.Inbox.threads.byKey[agentKey(e)]
 	if t == nil {
-		return m.threadBodyLines(e, nil, width, room, now)
+		return m.threadBodyLines(e, nil, width, room, now, card)
 	}
 	key := threadBodyKey{
 		gen: t.gen, mailGen: m.AgentMail.Gen, theme: theme.Generation(), look: m.cockpitLookGen(),
@@ -671,6 +673,7 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []s
 		working: e.State == string(session.AgentStateWorking),
 		kids:    m.ckKidsSig(e, t),
 		pics:    m.threadPicsVersion(t),
+		card:    card,
 	}
 	if t.keep == 0 && m.threadReadsTranscript(e) {
 		t.keep = ckKeepTurns
@@ -692,7 +695,12 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []s
 			first = t.lineIDs[0]
 		}
 		t.hits, t.prompts, t.lines, t.lineIDs = nil, nil, nil, nil
-		t.body, t.bodyAt = m.threadBodyLines(e, t, width, room, now), key
+		t.body, t.bodyAt = m.threadBodyLines(e, t, width, room, now, key.card), key
+		if t.body == nil {
+			// An empty body is a body: the cache above takes a nil body
+			// for none, and would draw it again on every turn of the loop.
+			t.body = []string{}
+		}
 		// More turns drawn: the view stays on the lines it showed, or goes
 		// to the first line for a key that asked for it.
 		if at := slices.Index(t.lineIDs, first); kept != 0 && kept != key.keep && at > 0 {
@@ -737,7 +745,7 @@ func (m *OS) threadMinute(e sidebarAgentEntry, now time.Time) int64 {
 // threadBodyLines draws threadBody. A conversation is drawn from its newest
 // entry back, until room lines are drawn: the thread shows the bottom, and
 // two hundred entries wrapped and styled on every change cost milliseconds.
-func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room int, now time.Time) []string {
+func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room int, now time.Time, card bool) []string {
 	pal := theme.UI()
 	bg := pal.Canvas
 	st := overlay.Style(bg)
@@ -766,18 +774,22 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 		}
 		return out
 	}
-	if t.recap != nil && !recapEmpty(t.recap) {
+	switch {
+	case card:
+		// The Done card under the thread says the recap; the thread does
+		// not say it twice.
+	case t.recap != nil && !recapEmpty(t.recap):
 		for _, s := range recapSentences(t.recap, 0, now, t.recap.Folder) {
 			note(s)
 		}
 		if facts := m.agentFactsLine(e.SessionID, e.WindowID, e.Harness); facts != "" {
 			note(facts)
 		}
-	} else if e.Message != "" {
+	case e.Message != "":
 		note("Says: " + printableTitle(e.Message))
 	}
 	out = append(out, m.threadMail(e, width, bg, pal)...)
-	if len(out) == 0 {
+	if len(out) == 0 && !card {
 		note(threadNothingYet(e.Harness))
 	}
 	return out

@@ -28,8 +28,8 @@ const doneCardLastSaid = "A thread image card that the window cuts now shows its
 // How it could pass wrongly, written down first:
 //   - The cross could be drawn and the click land on the row under it, or on
 //     nothing. The test clicks the cross's own cell and waits for the card
-//     to go. The thread above the card says the same recap lines, so the
-//     card is known by its cross.
+//     to go. The thread above the card says the recap again once the card
+//     is gone, so the card is known by its cross.
 //   - The click could settle the agent or hide its row. The row must stay.
 //   - The card could go for a frame and come back from the next delivery.
 //     The test waits past a refresh with the card still gone.
@@ -96,14 +96,15 @@ func TestDoneCardDismissAndRecapLines(t *testing.T) {
 	_ = term.WaitStable(uiTimeout)
 	saveCockpitFrames(t, term, "done-card-160x45")
 	text := term.Screen().Text()
+	if n := strings.Count(text, "Last said:"); n != 1 {
+		t.Errorf("ASSERTION: the recap shows %d times, want once, on the card\n%s", n, term.Snapshot())
+	}
 	if !strings.Contains(text, "1 file: e2e/tui/cockpit_thread_image_crop_test.go") || strings.Contains(text, repo) {
 		t.Errorf("ASSERTION: the file is not named from the pane's folder %s\n%s", repo, term.Snapshot())
 	}
 	if !strings.Contains(text, "Tests: go test ./internal/app passed") || strings.Contains(text, "2>&1") || strings.Contains(text, "-count") {
 		t.Errorf("ASSERTION: the test run is not named short\n%s", term.Snapshot())
 	}
-	// The card is the last thing on screen to say Last said; the thread
-	// above it says the same.
 	said := text[strings.LastIndex(text, "Last said:"):]
 	if i := strings.Index(said, "..."); i < 0 {
 		t.Errorf("ASSERTION: the last words are not cut\n%s", term.Snapshot())

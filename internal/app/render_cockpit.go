@@ -2296,7 +2296,9 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 		if m.drawThreadCopy(c, t, x, w, base-room, room) {
 			return
 		}
-		lines := m.threadBody(e, w, room+up, now)
+		// A Done card under the thread draws the recap, so the thread
+		// leaves it out.
+		lines := m.threadBody(e, w, room+up, now, r.hasItem && m.inboxRecapFor(r.item))
 		var hits []string
 		if t != nil && len(t.hits) == len(lines) {
 			hits = t.hits
