@@ -330,6 +330,40 @@ func (a *App) takeTyped(p []byte) bool {
 	return a.stepKey(k)
 }
 
+// declaredMenuPrefix starts tk.menu while a declared menu is open:
+// "menus.NAME", as the config names the menu's keys.
+const declaredMenuPrefix = config.MenuSectionPrefix
+
+// declaredMenu is the menu called name in the tuios config the keys read.
+func (tk *tuiosKeys) declaredMenu(name string) (config.MenuConfig, bool) {
+	if tk.reg == nil || tk.reg.GetConfig() == nil {
+		return config.MenuConfig{}, false
+	}
+	return tk.reg.GetConfig().Keybindings.Menu(name)
+}
+
+// openDeclaredMenu opens the menu name for the next key, as open_menu:NAME
+// on a key of its own does, outside the prefix: the prefix arms in it. A
+// name the config does not declare says so.
+func (a *App) openDeclaredMenu(name string) {
+	tk := &a.tk
+	tk.mu.Lock()
+	_, ok := tk.declaredMenu(name)
+	if ok {
+		tk.menu, tk.since = declaredMenuPrefix+name, time.Now()
+		tk.repeat.Store(0)
+		tk.armed.Store(true)
+	}
+	tk.mu.Unlock()
+	if !ok {
+		a.toast(locales.KeysNoMenu(name))
+		return
+	}
+	if a.win != nil {
+		a.win.Invalidate()
+	}
+}
+
 // subMenus are the actions that open a sub-prefix, and the menu each opens.
 var subMenus = map[string]string{
 	"prefix_workspace": "workspace",
@@ -371,6 +405,28 @@ func (a *App) stepKey(k string) bool {
 			action = "prefix_select_" + k
 		}
 	}
+	// A declared menu ([keybindings.menus.NAME], open_menu:NAME): its keys,
+	// and whether it stays open after one runs.
+	sticky := false
+	if declared, ok := strings.CutPrefix(menu, declaredMenuPrefix); ok {
+		action = tk.reg.GetMenuAction(declared, k)
+		if mc, ok := tk.declaredMenu(declared); ok {
+			sticky = mc.Sticky
+		}
+	}
+	// A key that opens a declared menu, from the prefix or a menu: the next
+	// key is that menu's.
+	if next, ok := config.MenuNameOf(action); ok {
+		if _, ok := tk.declaredMenu(next); ok {
+			tk.menu, tk.since = declaredMenuPrefix+next, time.Now()
+			tk.mu.Unlock()
+			if a.win != nil {
+				a.win.Invalidate()
+			}
+			return true
+		}
+		action = ""
+	}
 	repeats := menu == "" && action != "" && tk.reg.PrefixRepeats(action)
 	if tk.repeat.Load() != 0 && !repeats {
 		tk.armed.Store(false)
@@ -382,6 +438,9 @@ func (a *App) stepKey(k string) bool {
 	switch sub, ok := subMenus[action]; {
 	case ok:
 		tk.menu, tk.since = sub, time.Now()
+	case sticky && action != "":
+		// A sticky menu stays open after its key runs, until esc or a key
+		// it does not bind, as tmux's -r: h h h resizes three steps.
 	case repeats:
 		// Stays armed for a moment, so a run of arrows costs one prefix,
 		// as in the TUI.
@@ -391,6 +450,12 @@ func (a *App) stepKey(k string) bool {
 		tk.menu = ""
 	}
 	tk.mu.Unlock()
+	if sticky && action == "" && k != "esc" && k != "ctrl+c" {
+		// A key a sticky menu does not bind closes it and goes on to the
+		// pane, as the TUI passes it, so the letter typed after the
+		// resizes is not lost.
+		return false
+	}
 	if !leaderAgain && (action == "" || subMenus[action] != "") {
 		// A sub-prefix, or a key that cancels: nothing runs later.
 		if a.win != nil {
@@ -496,6 +561,10 @@ func digitOf(action, prefix string) (int, bool) {
 func (a *App) runKeyAction(action string) {
 	if to, ok := keyAliases[action]; ok {
 		action = to
+	}
+	if name, ok := config.MenuNameOf(action); ok {
+		a.openDeclaredMenu(name)
+		return
 	}
 	if notInGuios[action] {
 		// A TUI mode or the terminal's mouse: guios has neither, so the
@@ -810,7 +879,13 @@ func leaderChord(k string) (ui.Modifiers, ui.Key, bool) {
 }
 
 // keysTitle is the card's title for a menu.
-func keysTitle(menu string) string {
+func (a *App) keysTitle(menu string) string {
+	if name, ok := strings.CutPrefix(menu, declaredMenuPrefix); ok {
+		if a.tk.reg != nil && a.tk.reg.GetConfig() != nil {
+			return a.tk.reg.GetConfig().Keybindings.MenuTitle(name)
+		}
+		return name
+	}
 	switch menu {
 	case "workspace":
 		return locales.KeysMenuWorkspace()
@@ -850,7 +925,15 @@ func (a *App) keysCard(c *ui.Context, pal *palette) {
 		c.After(whichKeyDelay - c.Now().Sub(since))
 	}
 	var groups []config.KeybindingGroup
+	if name, ok := strings.CutPrefix(menu, declaredMenuPrefix); ok && tk.reg.GetConfig() != nil {
+		// A declared menu shows every key it binds: they run as their keys
+		// do (runKeyAction), most of them in the daemon.
+		groups = config.MenuKeybindingGroups(&tk.reg.GetConfig().Keybindings, name)
+	}
 	for _, g := range config.PrefixMenuGroups(tk.reg, menu, config.MenuState{Daemon: true, Minimized: -1}) {
+		if len(groups) > 0 && strings.HasPrefix(menu, declaredMenuPrefix) {
+			break
+		}
 		g.Bindings = slices.DeleteFunc(g.Bindings, func(b config.Keybinding) bool {
 			return !nativeActions[b.Action] && !daemonActions[b.Action]
 		})
@@ -859,7 +942,7 @@ func (a *App) keysCard(c *ui.Context, pal *palette) {
 		}
 	}
 	card := ui.Column(c.Key("tuios-keys")).Absolute().Right(cardGap+12).Bottom(cardGap+12).
-		Padding(14, 16).Gap(10).Radius(rCard).Background(pal.popover).Label(keysTitle(menu))
+		Padding(14, 16).Gap(10).Radius(rCard).Background(pal.popover).Label(a.keysTitle(menu))
 	floating(card, pal)
 	// It fades in and rises 4 DIPs once the which-key delay is over, and
 	// fades out as the prefix ends, as one cached bitmap.
@@ -911,7 +994,7 @@ func (a *App) keysCard(c *ui.Context, pal *palette) {
 	card.Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			kbd(c, pal, chordLabel(tk.leader))
-			ui.Text(c, keysTitle(menu)).FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text)
+			ui.Text(c, a.keysTitle(menu)).FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text)
 		})
 		cols := 1
 		if len(groups) > 2 {

@@ -13915,3 +13915,13 @@ func HintNoFile(path string) string { return In(i18n.Locale()).HintNoFile(path) 
 func (msgs Messages) HintNoFile(path string) string {
 	return Catalog.Format(msgs.locale, "hintNoFile", map[string]any{"path": path})
 }
+
+// KeysNoMenu says "There is no menu {name} in the tuios config ([keybindings.menus.{name}])."
+// in the language the app shows.
+func KeysNoMenu(name string) string { return In(i18n.Locale()).KeysNoMenu(name) }
+
+// KeysNoMenu says "There is no menu {name} in the tuios config ([keybindings.menus.{name}])."
+// in the language of msgs.
+func (msgs Messages) KeysNoMenu(name string) string {
+	return Catalog.Format(msgs.locale, "keysNoMenu", map[string]any{"name": name})
+}
