@@ -1,4 +1,4 @@
-package app
+package dockengine
 
 import (
 	"context"
@@ -20,6 +20,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/crashexit"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
 // The dock's refresh engine.
@@ -41,9 +42,9 @@ import (
 // reading a bounded amount of output, and a failure hides the cell rather than
 // breaking the bar.
 
-// dockComponentUpdate is one component's new state, travelling from an engine
+// Update is one component's new state, travelling from an engine
 // goroutine to the model.
-type dockComponentUpdate struct {
+type Update struct {
 	Name string
 
 	// Builtin marks this as a due notice rather than a value. A built-in's
@@ -56,19 +57,14 @@ type dockComponentUpdate struct {
 	Exit int
 	Err  string
 
-	// from is the engine that sent the update, set by the listener. A reload
+	// From is the engine that sent the update, set by the listener. A reload
 	// replaces the engine, and an update from the old one is not applied to
 	// the new one.
-	from *dockEngine
+	From *Engine
 }
 
-// dockComponentMsg carries an update into Update. One message per update keeps
-// the render gate simple: the handler compares the new text against the old and
-// skips the frame when nothing moved.
-type dockComponentMsg dockComponentUpdate
-
-// dockComponent is one cell's definition and its live state.
-type dockComponent struct {
+// Component is one cell's definition and its live state.
+type Component struct {
 	Name     string // "cpu", or "custom/git" for a user's own
 	Builtin  bool
 	Command  string
@@ -87,7 +83,7 @@ type dockComponent struct {
 	// an event keeps its re-run without this (see fire).
 	Coalesce bool
 
-	// Everything below is guarded by dockEngine.mu.
+	// Everything below is guarded by Engine.mu.
 	text     string
 	lastRun  time.Time
 	lastExit int
@@ -107,14 +103,14 @@ type dockComponent struct {
 	revive chan struct{}
 }
 
-// dockEngine schedules the dock's components. One per client: components draw
+// Engine schedules the dock's components. One per client: components draw
 // in the client, so they run in the client.
-type dockEngine struct {
+type Engine struct {
 	mu    sync.Mutex
-	comps map[string]*dockComponent
+	comps map[string]*Component
 	order []string // definition order, so listings are stable
 
-	updates chan dockComponentUpdate
+	updates chan Update
 
 	// wake re-plans the scheduler after the component set or a deadline
 	// changes. It is a channel rather than a timer because parking on a receive
@@ -133,8 +129,11 @@ type dockEngine struct {
 	// focused pane and the section's size, read fresh by the model for each
 	// run and handed over here, under mu, because runs start on engine
 	// goroutines that may not touch the model.
-	rail          railContext
-	secondaryRail railContext
+	rail          RailContext
+	secondaryRail RailContext
+
+	// folder resolves the rail context's folder, set once by New.
+	folder func(RailContext) string
 
 	// wakes counts scheduler firings and pushed lines. The idle guard reads it;
 	// nothing else should.
@@ -154,15 +153,15 @@ const dockEngineUpdateBuffer = 64
 // re-runs, so a burst of daemon events costs one execution.
 const dockEventDebounce = 200 * time.Millisecond
 
-// railContext is what the rail section's command is told about where it
+// RailContext is what the rail section's command is told about where it
 // draws and what has the focus.
 //
 // The pane's folder is carried as the model holds it, not as the command is
 // told it. Turning it into a folder means a stat, and the model builds this
 // on every message on the update goroutine, where a pane sitting in a hung
 // network folder would freeze the client. So the run resolves it when it
-// starts, on its own goroutine (railContext.folder).
-type railContext struct {
+// starts, on its own goroutine (RailContext.folder).
+type RailContext struct {
 	Width, Height int
 	PaneID        string
 	// PaneDir is the folder the pane last reported (OSC 7), unparsed, or
@@ -176,15 +175,21 @@ type railContext struct {
 	Remote bool
 }
 
-// newDockEngine builds the engine for a set of components and starts the
+// New builds the engine for a set of components and starts the
 // scheduler. The scheduler goroutine exists even with nothing to schedule: it
 // parks on a receive, costing one goroutine and no timer, which is what keeps
 // refresh-dock and event refreshes working on a dock that never polls.
-func newDockEngine(comps []*dockComponent) *dockEngine {
+//
+// folder resolves the focused pane's folder for the rail section's command
+// (TUIOS_ACTIVE_PANE_CWD). It is the host's: telling a local folder from a
+// remote one is the client's business. It runs on the run's goroutine, and
+// nil gives an empty folder.
+func New(comps []*Component, folder func(RailContext) string) *Engine {
 	ctx, cancel := context.WithCancel(context.Background())
-	e := &dockEngine{
-		comps:    make(map[string]*dockComponent, len(comps)),
-		updates:  make(chan dockComponentUpdate, dockEngineUpdateBuffer),
+	e := &Engine{
+		folder:   folder,
+		comps:    make(map[string]*Component, len(comps)),
+		updates:  make(chan Update, dockEngineUpdateBuffer),
 		wake:     make(chan struct{}, 1),
 		ctx:      ctx,
 		cancel:   cancel,
@@ -206,7 +211,7 @@ func newDockEngine(comps []*dockComponent) *dockEngine {
 
 // Stop tears the engine down. Every command it started is killed with it: the
 // components are UI, and UI that outlives the client that drew it is a leak.
-func (e *dockEngine) Stop() {
+func (e *Engine) Stop() {
 	if e == nil {
 		return
 	}
@@ -214,7 +219,7 @@ func (e *dockEngine) Stop() {
 }
 
 // SetContext records the session name and socket path handed to every command.
-func (e *dockEngine) SetContext(session, socket string) {
+func (e *Engine) SetContext(session, socket string) {
 	if e == nil {
 		return
 	}
@@ -227,7 +232,7 @@ func (e *dockEngine) SetContext(session, socket string) {
 // in the hold that starts the run, so a run always sees the values the model
 // had when it started, and the width it is skipped for is the width it would
 // have been told.
-func (e *dockEngine) SetRailContext(ctx railContext) {
+func (e *Engine) SetRailContext(ctx RailContext) {
 	if e == nil {
 		return
 	}
@@ -236,7 +241,7 @@ func (e *dockEngine) SetRailContext(ctx railContext) {
 	e.mu.Unlock()
 }
 
-func (e *dockEngine) SetSecondaryRailContext(ctx railContext) {
+func (e *Engine) SetSecondaryRailContext(ctx RailContext) {
 	if e == nil {
 		return
 	}
@@ -246,7 +251,7 @@ func (e *dockEngine) SetSecondaryRailContext(ctx railContext) {
 }
 
 // Updates is the channel the model listens on.
-func (e *dockEngine) Updates() <-chan dockComponentUpdate {
+func (e *Engine) Updates() <-chan Update {
 	if e == nil {
 		return nil
 	}
@@ -256,7 +261,7 @@ func (e *dockEngine) Updates() <-chan dockComponentUpdate {
 // Wakes is how many times the engine has had something to say. The idle guard
 // asserts this stays at zero for a dock made only of once, push and event
 // components.
-func (e *dockEngine) Wakes() int64 {
+func (e *Engine) Wakes() int64 {
 	if e == nil {
 		return 0
 	}
@@ -264,7 +269,7 @@ func (e *dockEngine) Wakes() int64 {
 }
 
 // Text is a component's current cell text.
-func (e *dockEngine) Text(name string) string {
+func (e *Engine) Text(name string) string {
 	if e == nil {
 		return ""
 	}
@@ -277,27 +282,27 @@ func (e *dockEngine) Text(name string) string {
 }
 
 // Component returns a copy of one component's definition and state.
-func (e *dockEngine) Component(name string) (dockComponent, bool) {
+func (e *Engine) Component(name string) (Component, bool) {
 	if e == nil {
-		return dockComponent{}, false
+		return Component{}, false
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	c, ok := e.comps[name]
 	if !ok {
-		return dockComponent{}, false
+		return Component{}, false
 	}
 	return *c, true
 }
 
 // Snapshot copies every component in definition order, for list-dock-components.
-func (e *dockEngine) Snapshot() []dockComponent {
+func (e *Engine) Snapshot() []Component {
 	if e == nil {
 		return nil
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	out := make([]dockComponent, 0, len(e.order))
+	out := make([]Component, 0, len(e.order))
 	for _, name := range e.order {
 		if c, ok := e.comps[name]; ok {
 			out = append(out, *c)
@@ -307,7 +312,7 @@ func (e *dockEngine) Snapshot() []dockComponent {
 }
 
 // Names lists the components the engine holds, sorted.
-func (e *dockEngine) Names() []string {
+func (e *Engine) Names() []string {
 	if e == nil {
 		return nil
 	}
@@ -321,12 +326,12 @@ func (e *dockEngine) Names() []string {
 // Start runs the initial fill and spawns the push readers. It is separate from
 // construction so a test can build an engine and inspect its plan without any
 // subprocess running.
-func (e *dockEngine) Start() {
+func (e *Engine) Start() {
 	if e == nil {
 		return
 	}
 	e.mu.Lock()
-	var initial, pushes []*dockComponent
+	var initial, pushes []*Component
 	for _, name := range e.order {
 		c := e.comps[name]
 		switch c.Refresh.Kind {
@@ -352,13 +357,13 @@ func (e *dockEngine) Start() {
 			go e.runOnce(c)
 		}
 	}
-	e.replan()
+	e.Replan()
 }
 
 // alignedDeadline is when a component next comes due. An interval that divides
 // a second or a minute is aligned to it, so a clock showing 15:04 changes at the
 // top of the minute rather than at some offset from when the session started.
-func (e *dockEngine) alignedDeadline(c *dockComponent, now time.Time) time.Time {
+func (e *Engine) alignedDeadline(c *Component, now time.Time) time.Time {
 	d := c.Refresh.Interval
 	if d <= 0 {
 		return now
@@ -369,9 +374,9 @@ func (e *dockEngine) alignedDeadline(c *dockComponent, now time.Time) time.Time 
 	return now.Add(d)
 }
 
-// replan nudges the scheduler to recompute the earliest deadline. Non-blocking:
+// Replan nudges the scheduler to recompute the earliest deadline. Non-blocking:
 // the channel holds one, and one pending nudge is as good as ten.
-func (e *dockEngine) replan() {
+func (e *Engine) Replan() {
 	if e == nil {
 		return
 	}
@@ -396,7 +401,7 @@ const dockWallCheck = 15 * time.Second
 // schedule is the single-timer loop. When no component has a deadline it parks
 // on a receive and no timer exists at all, which is the invariant this whole
 // design is built to hold.
-func (e *dockEngine) schedule() {
+func (e *Engine) schedule() {
 	defer crashexit.Recover()
 	for {
 		next, due := e.earliest()
@@ -430,13 +435,13 @@ func (e *dockEngine) schedule() {
 // earliest is the component due soonest and when, or nil when nothing polls.
 // Event components appear here only while their debounce is pending, which is
 // what makes an event refresh cost one wake rather than a standing timer.
-func (e *dockEngine) earliest() (*dockComponent, time.Time) {
+func (e *Engine) earliest() (*Component, time.Time) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	var best *dockComponent
+	var best *Component
 	var bestAt time.Time
-	consider := func(c *dockComponent, at time.Time) {
+	consider := func(c *Component, at time.Time) {
 		if best == nil || at.Before(bestAt) {
 			best, bestAt = c, at
 		}
@@ -459,7 +464,7 @@ func (e *dockEngine) earliest() (*dockComponent, time.Time) {
 // fire runs whatever came due. A built-in is reported to the model, which owns
 // the state its refresh reads; a custom one is executed here, off the render
 // goroutine, and never alongside a run that has not finished.
-func (e *dockEngine) fire(c *dockComponent) {
+func (e *Engine) fire(c *Component) {
 	e.mu.Lock()
 	delete(e.eventDue, c.Name)
 	if c.Refresh.Kind == config.DockRefreshInterval {
@@ -477,7 +482,7 @@ func (e *dockEngine) fire(c *dockComponent) {
 	e.mu.Unlock()
 
 	if builtin {
-		e.emit(dockComponentUpdate{Name: c.Name, Builtin: true})
+		e.emit(Update{Name: c.Name, Builtin: true})
 		return
 	}
 	if running {
@@ -492,7 +497,7 @@ func (e *dockEngine) fire(c *dockComponent) {
 // NotifyEvent marks every component watching this event type as due, debounced.
 // Cost at idle is zero: events only arrive when something happened, and
 // something happening is when the frame redraws anyway.
-func (e *dockEngine) NotifyEvent(eventType string) {
+func (e *Engine) NotifyEvent(eventType string) {
 	if e == nil || eventType == "" {
 		return
 	}
@@ -516,7 +521,7 @@ func (e *dockEngine) NotifyEvent(eventType string) {
 	}
 	e.mu.Unlock()
 	if changed {
-		e.replan()
+		e.Replan()
 	}
 }
 
@@ -524,7 +529,7 @@ func (e *dockEngine) NotifyEvent(eventType string) {
 // a give-up so a fixed script recovers without a restart. This is what the
 // refresh-dock verb calls, and it is what makes a component scriptable from a
 // hook, from cron, and from an agent.
-func (e *dockEngine) Refresh(name string) error {
+func (e *Engine) Refresh(name string) error {
 	if e == nil {
 		return errfmt.Errorf("no dock components are loaded")
 	}
@@ -540,7 +545,7 @@ func (e *dockEngine) Refresh(name string) error {
 
 	switch {
 	case builtin:
-		e.emit(dockComponentUpdate{Name: name, Builtin: true})
+		e.emit(Update{Name: name, Builtin: true})
 	case push:
 		// A push component's value is whatever its process last wrote; there is
 		// nothing to re-run without killing the process the user asked to keep
@@ -561,7 +566,7 @@ func (e *dockEngine) Refresh(name string) error {
 // asking, not a person, and only a person asking clears a stop. The rail calls
 // it when it opens, because the runs it skipped while shut left its rows
 // behind the focus.
-func (e *dockEngine) Rerun(name string) {
+func (e *Engine) Rerun(name string) {
 	if e == nil {
 		return
 	}
@@ -574,13 +579,13 @@ func (e *dockEngine) Rerun(name string) {
 	}
 	e.mu.Unlock()
 	if wake {
-		e.replan()
+		e.Replan()
 	}
 }
 
 // RefreshAll re-runs every component. Used by the verb with no argument and by
 // a config reload that kept the same component set.
-func (e *dockEngine) RefreshAll() {
+func (e *Engine) RefreshAll() {
 	for _, name := range e.Names() {
 		_ = e.Refresh(name)
 	}
@@ -588,7 +593,7 @@ func (e *dockEngine) RefreshAll() {
 
 // emit sends an update, counting the wake. It never blocks forever: a model
 // that has stopped draining is a model that is shutting down.
-func (e *dockEngine) emit(u dockComponentUpdate) {
+func (e *Engine) emit(u Update) {
 	e.wakes.Add(1)
 	select {
 	case e.updates <- u:
@@ -596,18 +601,18 @@ func (e *dockEngine) emit(u dockComponentUpdate) {
 	}
 }
 
-// commandEnv is the environment a component's command runs in: the session's
+// CommandEnv is the environment a component's command runs in: the session's
 // own, plus the three variables that tell the command what it is and how to
 // talk back. Same shape as a hook, deliberately, because a component is a hook
 // that draws.
-func (e *dockEngine) commandEnv(name string, extra ...string) []string {
+func (e *Engine) CommandEnv(name string, extra ...string) []string {
 	env := append(e.baseEnv(), "TUIOS_DOCK_COMPONENT="+strings.TrimPrefix(name, config.DockCustomPrefix))
 	return append(env, extra...)
 }
 
 // baseEnv is the client's own environment with the session and the socket,
 // which every command the engine runs is given.
-func (e *dockEngine) baseEnv() []string {
+func (e *Engine) baseEnv() []string {
 	e.mu.Lock()
 	session, socket := e.session, e.socket
 	e.mu.Unlock()
@@ -648,9 +653,12 @@ func dockSupervise(cmd *exec.Cmd) {
 // rail is the context runOnce read when it started the run. It runs on the
 // run's goroutine, and the folder is resolved after the lock is let go: the
 // stat that checks it can block, and only this run waits.
-func (e *dockEngine) railCommandEnv(rail railContext) []string {
+func (e *Engine) railCommandEnv(rail RailContext) []string {
 	env := e.baseEnv()
-	folder := rail.folder()
+	folder := ""
+	if e.folder != nil {
+		folder = e.folder(rail)
+	}
 	return append(env,
 		"TUIOS_RAIL_SECTION="+config.SidebarSectionCustom,
 		"TUIOS_RAIL_WIDTH="+strconv.Itoa(rail.Width),
@@ -671,18 +679,18 @@ func (e *dockEngine) railCommandEnv(rail railContext) []string {
 //
 // Output a component wrote before it hung is dropped, not shown. A cell that
 // timed out is a failed cell, and a half written value is the confidently wrong
-// reading applyUpdate blanks a failure to avoid.
-func (e *dockEngine) runOnce(c *dockComponent) {
+// reading ApplyUpdate blanks a failure to avoid.
+func (e *Engine) runOnce(c *Component) {
 	defer crashexit.Recover()
 	e.mu.Lock()
 	if c.running {
 		e.mu.Unlock()
 		return
 	}
-	var rail railContext
-	if c.Name == railCustomComponent || c.Name == railSecondaryComponent {
+	var rail RailContext
+	if c.Name == RailComponent || c.Name == RailSecondaryComponent {
 		rail = e.rail
-		if c.Name == railSecondaryComponent {
+		if c.Name == RailSecondaryComponent {
 			rail = e.secondaryRail
 		}
 		if rail.Width <= 0 {
@@ -706,10 +714,10 @@ func (e *dockEngine) runOnce(c *dockComponent) {
 	// #nosec G204 - the command is the user's own config, run as the user, on
 	// the same footing as [hooks]. There is no new trust boundary here.
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
-	if c.Name == railCustomComponent || c.Name == railSecondaryComponent {
+	if c.Name == RailComponent || c.Name == RailSecondaryComponent {
 		cmd.Env = e.railCommandEnv(rail)
 	} else {
-		cmd.Env = e.commandEnv(c.Name)
+		cmd.Env = e.CommandEnv(c.Name)
 	}
 	cmd.Stdin = nil
 	cmd.Stderr = nil
@@ -728,11 +736,11 @@ func (e *dockEngine) runOnce(c *dockComponent) {
 
 	// A MultiLine component keeps every line of the bounded read and the rest
 	// keep the first.
-	text := dockFirstLine
+	text := FirstLine
 	if c.MultiLine {
-		text = dockLines
+		text = Lines
 	}
-	update := dockComponentUpdate{Name: c.Name}
+	update := Update{Name: c.Name}
 	switch {
 	case out.overflowed:
 		// What is used is in the buffer: the first line, or for a MultiLine
@@ -802,7 +810,7 @@ func (w *dockCappedWriter) Write(p []byte) (int, error) {
 // A command that exits is restarted with exponential backoff, and after enough
 // consecutive immediate failures it is left alone: a script that cannot start is
 // not made more likely to start by being started faster.
-func (e *dockEngine) readPushed(c *dockComponent) {
+func (e *Engine) readPushed(c *Component) {
 	defer crashexit.Recover()
 	backoff := 500 * time.Millisecond
 	failures := 0
@@ -824,7 +832,7 @@ func (e *dockEngine) readPushed(c *dockComponent) {
 
 		// #nosec G204 - the user's own config, as above.
 		cmd := exec.CommandContext(e.ctx, "sh", "-c", command)
-		cmd.Env = e.commandEnv(c.Name)
+		cmd.Env = e.CommandEnv(c.Name)
 		cmd.Stderr = nil
 		// Same tree, same rule. Stop promises that every command the engine
 		// started dies with it; without the group a push script that forks
@@ -836,7 +844,7 @@ func (e *dockEngine) readPushed(c *dockComponent) {
 			lines = e.drainPushed(c, pipe)
 			_ = cmd.Wait()
 		} else if err != nil {
-			e.emit(dockComponentUpdate{Name: c.Name, Exit: -1, Err: err.Error()})
+			e.emit(Update{Name: c.Name, Exit: -1, Err: err.Error()})
 		}
 
 		if lines > 0 {
@@ -851,7 +859,7 @@ func (e *dockEngine) readPushed(c *dockComponent) {
 				c.stopped = true
 				c.lastErr = fmt.Sprintf("exited %d times without output; not restarting", failures)
 				e.mu.Unlock()
-				e.emit(dockComponentUpdate{Name: c.Name, Exit: -1, Err: "exited without output; not restarting"})
+				e.emit(Update{Name: c.Name, Exit: -1, Err: "exited without output; not restarting"})
 				continue
 			}
 		}
@@ -870,7 +878,7 @@ func (e *dockEngine) readPushed(c *dockComponent) {
 // drainPushed reads lines from a running component, one update each, and
 // reports how many it saw. The reader is bounded per line: a process that writes
 // forever without a newline fills a cell's worth and no more.
-func (e *dockEngine) drainPushed(c *dockComponent, pipe io.Reader) int {
+func (e *Engine) drainPushed(c *Component, pipe io.Reader) int {
 	buf := make([]byte, 4096)
 	acc := make([]byte, 0, 4096)
 	lines := 0
@@ -886,7 +894,7 @@ func (e *dockEngine) drainPushed(c *dockComponent, pipe io.Reader) int {
 				line := string(acc[:idx])
 				acc = acc[idx+1:]
 				lines++
-				e.emit(dockComponentUpdate{Name: c.Name, Text: dockSanitize(line)})
+				e.emit(Update{Name: c.Name, Text: Sanitize(line)})
 			}
 			if len(acc) > config.DockCustomMaxOutput {
 				// No newline in a very long run of bytes. Keep the tail so a
@@ -912,14 +920,14 @@ func indexByte(b []byte, c byte) int {
 	return -1
 }
 
-// applyUpdate folds one update into the component's state and reports whether
+// ApplyUpdate folds one update into the component's state and reports whether
 // the cell text moved and whether this is a failure the user has not been told
 // about yet.
 //
 // The render gate lives here: a poll whose value has not changed produces no
 // frame. A one-second component watching a number that moves every five minutes
 // costs sixty executions an hour and about zero frames.
-func (e *dockEngine) applyUpdate(u dockComponentUpdate) (changed, newFailure bool) {
+func (e *Engine) ApplyUpdate(u Update) (changed, newFailure bool) {
 	if e == nil {
 		return false, false
 	}
@@ -954,7 +962,7 @@ func (e *dockEngine) applyUpdate(u dockComponentUpdate) (changed, newFailure boo
 	// columns on the frame it draws; the engine has no width to cut to.
 	trimmed := text
 	if !c.MultiLine {
-		trimmed = dockTruncateCell(text, c.MaxWidth)
+		trimmed = TruncateCell(text, c.MaxWidth)
 	}
 	if trimmed != c.text {
 		c.text, changed = trimmed, true
@@ -964,7 +972,7 @@ func (e *dockEngine) applyUpdate(u dockComponentUpdate) (changed, newFailure boo
 
 // SetBuiltinText records a built-in's rendered value, so the change gate and
 // list-dock-components see built-ins exactly as they see custom cells.
-func (e *dockEngine) SetBuiltinText(name, text string) bool {
+func (e *Engine) SetBuiltinText(name, text string) bool {
 	if e == nil {
 		return false
 	}
@@ -982,31 +990,31 @@ func (e *dockEngine) SetBuiltinText(name, text string) bool {
 	return true
 }
 
-// dockFirstLine is the first line of a command's stdout, laundered.
-func dockFirstLine(out []byte) string {
+// FirstLine is the first line of a command's stdout, laundered.
+func FirstLine(out []byte) string {
 	s := strings.TrimRight(string(out), "\r\n")
 	line, _, _ := strings.Cut(s, "\n")
-	return dockSanitize(strings.TrimRight(line, "\r"))
+	return Sanitize(strings.TrimRight(line, "\r"))
 }
 
-// dockLines is every line of a command's stdout, laundered one line at a
+// Lines is every line of a command's stdout, laundered one line at a
 // time and joined with newlines. Split first and sanitise after, because
-// dockSanitize drops control characters and a newline is one; a line's
+// Sanitize drops control characters and a newline is one; a line's
 // worth of SGR is kept the same way a cell's is. Trailing blank lines go,
 // so a command that ends with a newline does not draw an empty row.
-func dockLines(out []byte) string {
+func Lines(out []byte) string {
 	s := strings.TrimRight(string(out), "\r\n")
 	if s == "" {
 		return ""
 	}
 	lines := strings.Split(s, "\n")
 	for i, line := range lines {
-		lines[i] = dockSanitize(strings.TrimRight(line, "\r"))
+		lines[i] = Sanitize(strings.TrimRight(line, "\r"))
 	}
 	return strings.Join(lines, "\n")
 }
 
-// dockSanitize keeps printable text and SGR colour, and drops every other
+// Sanitize keeps printable text and SGR colour, and drops every other
 // control sequence.
 //
 // Colour survives because a meter without it is a worse meter, and because
@@ -1023,7 +1031,7 @@ func dockLines(out []byte) string {
 // as everywhere else tuios shows another program's text: a bidi override would
 // reorder the bar around the cell, and a zero-width character hides text a
 // person cannot see. Printable text, wide characters and emoji stay.
-func dockSanitize(s string) string {
+func Sanitize(s string) string {
 	s = invisible.Strip(s)
 	var b strings.Builder
 	b.Grow(len(s))
@@ -1093,3 +1101,39 @@ func dockSanitize(s string) string {
 	}
 	return b.String()
 }
+
+// RailComponent and RailSecondaryComponent are the engine names of the
+// rail's and the secondary rail's custom section commands. They are not under
+// the dock's custom/ prefix, so neither is ever drawn as a bar cell, and
+// tuios refresh-dock rail/custom reaches the first.
+const (
+	RailComponent          = "rail/custom"
+	RailSecondaryComponent = "rail/secondary/custom"
+)
+
+// TruncateCell caps a cell at maxWidth cells, measured as rendered rather
+// than in bytes so a component emitting wide runes or colour is cut where it
+// looks cut.
+func TruncateCell(text string, maxWidth int) string {
+	if text == "" {
+		return ""
+	}
+	if maxWidth <= 0 {
+		maxWidth = config.DockCustomDefaultMaxWidth
+	}
+	return overlay.Truncate(text, maxWidth)
+}
+
+// Output is the component's last text, LastExit and LastErr how its last run
+// ended, and Stopped whether the engine gave up on it. They read a copy, such
+// as Snapshot's.
+func (c Component) Output() string  { return c.text }
+func (c Component) LastExit() int   { return c.lastExit }
+func (c Component) LastErr() string { return c.lastErr }
+func (c Component) Stopped() bool   { return c.stopped }
+
+// LastRun is when the component last ran.
+func (c Component) LastRun() time.Time { return c.lastRun }
+
+// Done is closed when the engine stops.
+func (e *Engine) Done() <-chan struct{} { return e.ctx.Done() }

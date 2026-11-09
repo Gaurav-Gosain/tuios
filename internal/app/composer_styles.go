@@ -19,9 +19,12 @@ func composerStyles(pal overlay.Palette) composer.Styles {
 		Accent:   pal.Accent,
 		Warning:  pal.Warning,
 		Selected: pal.RowSel,
-		ASCII:    overlay.UseASCII(),
-		Sigil:    overlay.SigilMark(),
-		Readable: overlay.Readable,
+		// Selected text takes the palette's selection role, the tint copy
+		// mode and lists use for a selection.
+		Selection: pal.Selected,
+		ASCII:     overlay.UseASCII(),
+		Sigil:     overlay.SigilMark(),
+		Readable:  overlay.Readable,
 	}
 	if pal.Depth == overlay.Depth16 {
 		st.Plain, st.Reverse, st.Underline = true, composerReverse, composerUnderline

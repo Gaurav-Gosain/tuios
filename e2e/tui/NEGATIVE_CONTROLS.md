@@ -16762,3 +16762,126 @@ Run on 2026-11-10 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestArrangeRestoreByPaneAndOrder$' -v .`.
+
+## tuios's git and the index's optional lock
+
+`TestTuiosGitTakesNoOptionalLock` runs a review fan with an attached client,
+opens the review and lists the worktrees, with a git on PATH that records each
+git tuios starts (marked by GIT_SEQUENCE_EDITOR=true, which childproc.GitEnv
+sets). Each must carry GIT_OPTIONAL_LOCKS=0, so no background read of a
+worktree writes its index under .git/index.lock while the person's own git
+command needs the lock: the race TestReviewFileKeysFollowTheirBindings's
+fixture hit.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (c983aba9e) | "269 of tuios's git calls may take the index's optional lock", 16 of them `status --porcelain -z --untracked-files=all --ignored=matching` | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTuiosGitTakesNoOptionalLock$' -v .`.
+
+## A focus key right after a command focus
+
+`TestFocusKeyRightAfterACommandFocus` runs focus-window on the top right of
+four tiled panes, waits for the client to draw it, and presses ctrl+b left,
+five times. focus-window moves the daemon's focus and then routes a command
+to the client to reveal the pane. When the command reached Update before the
+state push the daemon sent ahead of it, the client drew the new focus on the
+version from before the move, the key's push carried that version, and the
+daemon refused its focus as stale: the key did nothing. That is the
+TestDirectionalFocusWrapBSP failure on a loaded Linux runner (run
+42679841917). A stress loop of the same press failed about 4 times in 100 at
+one CPU with three busy loops, and passed 300 of 300 with the fix.
+
+The test sets TUIOS_TEST_STATE_PUSH_HOLD_MS=300 (the daemon holds each state
+push before it writes it) and TUIOS_TEST_STATE_SYNC_HOLD_MS=700 (the client
+holds each state before Update takes it), so each half of the race happens
+on every round.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes, three runs of three.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The daemon writes a routed command at once, not after the broadcasts queued for the client (`sendInBroadcastOrder` is a plain `sendEncoded`) | "round 0: ctrl+b left right after focus-window ... left the focus on" the same pane | **caught** |
+| The client runs a routed command at once, not after the states that came before it (`holdRemote` never holds) | "round 0: ctrl+b left right after focus-window ... left the focus on" the same pane | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestFocusKeyRightAfterACommandFocus$' -v .`.
+
+## A pairing refusal the phone can read
+
+`TestPairOversizeBodySentLateGetsItsReply` sends the headers of a pairing
+request over the size cap, waits for the listener to refuse it, then writes
+the body in two parts and reads the reply. The listener used to close at
+once after a refusal it made before the body was read. The phone's first
+late write reached a closed socket, the listener's side answered with a
+reset, and the next write failed. An HTTP client stops at a failed write and
+never reads the reply. That is TestPairRefusesWrongRequests/oversize_body
+failing on CI with "connection reset", not 413. In a Linux container at one
+CPU with three busy loops, that subtest failed 2 times in 30 before the fix
+and passed 100 of 100 after.
+
+The listener now shuts its write side after the reply and drops what the
+phone still sends, up to 64 KB or one second (`drainPairConn`), as net/http's
+server does.
+
+Run on 2026-11-10 in a Linux container (golang:1.27-alpine, arm64). The
+branch passes, five runs of five.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The listener closes at once after the reply (`drainPairConn` not called) | "the phone could not write its body after the refusal: <nil>, write tcp ...: write: broken pipe", five runs of five | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=5 -run '^TestPairOversizeBodySentLateGetsItsReply$' -v .`.
+
+## TestLayoutTemplateSaveAndLoadInTheDaemon
+
+A three-pane split layout (right, then down on the right pane at 30 percent),
+each pane named and in a folder of its own, saved with tuios layout save. Two
+panes are closed and tuios layout load, with no client attached, opens them
+again in their folders with their names, and puts every pane back on the
+rectangle it had at the save.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (b90a592bb), with no layout-template verb and no tuios layout save | "tuios layout save three -s tmpl: exit status 1" | **caught** |
+| The branch with the load's tree step turned off, so the panes go in by the scheme | "right is at 40,0 40x12, not where it was saved, 40,0 40x16" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestLayoutTemplateSaveAndLoadInTheDaemon$' -v .`.
+
+## TestTheTUISavesItsLayoutThroughTheDaemon
+
+An attached client with two panes saves a layout with prefix L s. The file is
+the daemon's version 3 with the split tree, and the CLI loads it back onto the
+two panes.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The branch with the client's save on its own writer (daemonLayouts false) | "the TUI's save did not go through the daemon (no version 3 file with a tree)" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTheTUISavesItsLayoutThroughTheDaemon$' -v .`.
+
+## TestTheLayoutPickerListsTheDaemonsLayouts
+
+The daemon runs with a config folder of its own, as a daemon on another
+machine has, and holds one layout. A client attached from a config folder
+with no layouts opens the picker with prefix L l and sees the daemon's
+layout, and ctrl+d deletes the daemon's file and empties the list.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| c826da4db (PR 3), where the picker reads the client's own folder | "the picker does not list the daemon's layout" (the picker says "No saved layouts") | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTheLayoutPickerListsTheDaemonsLayouts$' -v .`.

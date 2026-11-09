@@ -1,96 +1,36 @@
 package app
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
+	"github.com/Gaurav-Gosain/tuios/internal/layouttmpl"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"github.com/adrg/xdg"
 )
 
-// LayoutTemplate is the v2 layout specification.
-//
-// A layout template captures everything needed to recreate a terminal
-// workspace: window positions, BSP tree structure, per-window startup
-// commands, working directories, and tiling configuration.
-//
-// Templates are stored as JSON in ~/.config/tuios/layouts/.
+// LayoutTemplate is a saved layout, kept by internal/layouttmpl in
+// ~/.config/tuios/layouts/.
 //
 // Integration points:
 //   - Command palette: "Save Layout", "Load Layout"
 //   - Keybinding: prefix+L l (load), prefix+L s (save)
 //   - Tape scripting: SaveLayout/LoadLayout commands
-//   - CLI: tuios layout list/delete/dir/export (no save or load, since
-//     both need a running session)
-type LayoutTemplate struct {
-	// Metadata
-	Name        string    `json:"name"`
-	Description string    `json:"description,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
-	Version     int       `json:"version"` // Schema version (2)
+//   - CLI: tuios layout list/delete/dir/export
+type LayoutTemplate = layouttmpl.Template
 
-	// Tiling configuration
-	AutoTiling   bool    `json:"auto_tiling"`
-	TilingScheme string  `json:"tiling_scheme,omitempty"` // "spiral", "alternate", "smart_split", etc.
-	MasterRatio  float64 `json:"master_ratio,omitempty"`
-
-	// Windows holds each window's configuration.
-	Windows []LayoutWindow `json:"windows"`
-
-	// Screen dimensions at save time (for proportional scaling on different screens)
-	ScreenWidth  int `json:"screen_width,omitempty"`
-	ScreenHeight int `json:"screen_height,omitempty"`
-}
-
-// LayoutWindow stores per-window configuration.
-type LayoutWindow struct {
-	// Position and size (used in free-float mode or as fallback)
-	X      int `json:"x"`
-	Y      int `json:"y"`
-	Width  int `json:"width"`
-	Height int `json:"height"`
-
-	// Window identity
-	Title      string `json:"title,omitempty"`       // Custom name
-	CustomName string `json:"custom_name,omitempty"` // User-set name
-
-	// Startup configuration
-	Command    string   `json:"command,omitempty"`     // Shell command to run on creation (e.g., "vim", "htop")
-	Args       []string `json:"args,omitempty"`        // Command arguments
-	WorkingDir string   `json:"working_dir,omitempty"` // Working directory for the shell
-	Shell      string   `json:"shell,omitempty"`       // Override shell (empty = default)
-
-	// State
-	Minimized bool `json:"minimized,omitempty"`
-}
+// LayoutWindow is one pane of a template.
+type LayoutWindow = layouttmpl.Window
 
 // GetTemplatesDir returns the directory path for layout template files.
-func GetTemplatesDir() string {
-	return filepath.Join(xdg.ConfigHome, "tuios", "layouts")
-}
-
-func ensureTemplatesDir() error {
-	return os.MkdirAll(GetTemplatesDir(), 0750)
-}
-
-func templateFilePath(name string) string {
-	safe := strings.ReplaceAll(name, string(os.PathSeparator), "_")
-	safe = strings.ReplaceAll(safe, " ", "_")
-	safe = strings.ReplaceAll(safe, "..", "_")
-	if safe == "" {
-		safe = "unnamed"
-	}
-	return filepath.Join(GetTemplatesDir(), safe+".json")
-}
+func GetTemplatesDir() string { return layouttmpl.Dir() }
 
 // SaveLayoutTemplate saves the current workspace layout.
 func SaveLayoutTemplate(name string, m *OS) error {
@@ -100,10 +40,10 @@ func SaveLayoutTemplate(name string, m *OS) error {
 	if m.InScratchView() {
 		return errLayoutInScratch
 	}
-	if err := ensureTemplatesDir(); err != nil {
-		return errfmt.Errorf("create layouts dir: %w", err)
+	if m.daemonLayouts() {
+		m.queueTMLCmd(m.layoutTemplateCmd("save", name))
+		return nil
 	}
-
 	tmpl := LayoutTemplate{
 		Name:         name,
 		CreatedAt:    time.Now(),
@@ -147,47 +87,220 @@ func SaveLayoutTemplate(name string, m *OS) error {
 		tmpl.Windows = append(tmpl.Windows, lw)
 	}
 
-	data, err := json.MarshalIndent(tmpl, "", "  ")
-	if err != nil {
-		return errfmt.Errorf("marshal: %w", err)
+	return layouttmpl.Save(tmpl)
+}
+
+// LayoutTemplateDoneMsg reports a layout save or load the daemon ran for
+// this client.
+type LayoutTemplateDoneMsg struct {
+	Action, Name string
+	Err          error
+}
+
+// daemonLayouts reports whether a save or a load goes to the daemon. The
+// daemon writes and reads the files of its own machine and changes the
+// session's state in one step, so every client of the session sees one
+// layout, and an attach to another host uses that host's layouts.
+func (m *OS) daemonLayouts() bool {
+	return m.IsDaemonSession && m.DaemonClient != nil && m.SessionName != ""
+}
+
+// layoutTemplateCmd calls the layout-template verb off the Update goroutine,
+// as sessionOrderCmd does. The state push that follows a load lays the
+// panes out.
+func (m *OS) layoutTemplateCmd(action, name string) tea.Cmd {
+	call := m.layoutTemplateCall()
+	return func() tea.Msg {
+		return LayoutTemplateDoneMsg{Action: action, Name: name, Err: call(action, name)}
 	}
-	return os.WriteFile(templateFilePath(name), data, 0600)
+}
+
+// layoutTemplateCall returns a call of the layout-template verb for this
+// client's session, which holds nothing of the model.
+func (m *OS) layoutTemplateCall() func(action, name string) error {
+	host, build, sess := m.AttachedHost, m.DaemonClient.ClientVersion(), m.SessionName
+	return func(action, name string) error {
+		c, err := dialSessionDaemon(host, build)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = c.Close() }()
+		_, err = c.Call("layout-template", map[string]any{"action": action, "session": sess, "name": name})
+		return err
+	}
+}
+
+// LayoutTemplateNow saves ("save") or loads ("load") the layout called name
+// and returns when it is done: for a caller that answers only after the
+// layout is written or applied, such as a tape command or the GUI bridge,
+// which has no Bubble Tea loop to run a command on.
+func (m *OS) LayoutTemplateNow(action, name string) error {
+	if m.InScratchView() {
+		return errLayoutInScratch
+	}
+	if m.daemonLayouts() {
+		return m.layoutTemplateCall()(action, name)
+	}
+	switch action {
+	case "save":
+		return SaveLayoutTemplate(name, m)
+	case "load":
+		t, err := layouttmpl.Load(name)
+		if err != nil {
+			return errfmt.Errorf("layout template not found: %s", name)
+		}
+		ApplyLayoutTemplate(t, m)
+		return nil
+	}
+	return errfmt.Errorf("%s is not a layout action", action)
+}
+
+// layoutTemplatesListedMsg carries the daemon's layouts to the callback a
+// withLayoutTemplates call left.
+type layoutTemplatesListedMsg struct {
+	items []LayoutTemplate
+	err   error
+	then  func([]LayoutTemplate) tea.Cmd
+}
+
+// withLayoutTemplates runs then with the saved layouts, on the Update
+// goroutine: at once from this machine's folder, or in a daemon session when
+// the daemon's list arrives, so an attach to another host lists that host's
+// layouts, the ones a load there reads.
+func (m *OS) withLayoutTemplates(then func([]LayoutTemplate) tea.Cmd) tea.Cmd {
+	if !m.daemonLayouts() {
+		ts, _ := LoadLayoutTemplates()
+		return then(ts)
+	}
+	host, build, sess := m.AttachedHost, m.DaemonClient.ClientVersion(), m.SessionName
+	return func() tea.Msg {
+		ts, err := listDaemonLayouts(host, build, sess)
+		return layoutTemplatesListedMsg{items: ts, err: err, then: then}
+	}
+}
+
+// listDaemonLayouts reads the layout-template list of the daemon that holds
+// session sess. A row names a layout and how many panes it has; the panes
+// themselves stay in the daemon's file, which a load reads by name.
+func listDaemonLayouts(host, build, sess string) ([]LayoutTemplate, error) {
+	c, err := dialSessionDaemon(host, build)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = c.Close() }()
+	raw, err := c.Call("layout-template", map[string]any{"action": "list", "session": sess})
+	if err != nil {
+		return nil, err
+	}
+	var res struct {
+		Layouts []struct {
+			Name      string `json:"name"`
+			Panes     int    `json:"panes"`
+			Mode      string `json:"mode"`
+			Tiling    bool   `json:"tiling"`
+			CreatedAt string `json:"created_at"`
+			Version   int    `json:"version"`
+		} `json:"layouts"`
+	}
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return nil, err
+	}
+	out := make([]LayoutTemplate, 0, len(res.Layouts))
+	for _, r := range res.Layouts {
+		t := LayoutTemplate{
+			Name: r.Name, Mode: r.Mode, AutoTiling: r.Tiling, Version: r.Version,
+			Windows: make([]LayoutWindow, r.Panes),
+		}
+		t.CreatedAt, _ = time.Parse(time.RFC3339, r.CreatedAt)
+		out = append(out, t)
+	}
+	return out, nil
+}
+
+// handleLayoutTemplatesListed hands the daemon's layouts to the caller that
+// asked for them. A list that failed is shown, and the caller gets none.
+func (m *OS) handleLayoutTemplatesListed(msg layoutTemplatesListedMsg) tea.Cmd {
+	if msg.err != nil {
+		m.ShowNotification("Failed to list layouts: "+msg.err.Error(), "error", m.Settings.NotificationDuration)
+	}
+	if msg.then == nil {
+		return nil
+	}
+	return msg.then(msg.items)
+}
+
+// OpenLayoutPicker opens the layout picker on the saved layouts. In a daemon
+// session the list arrives from the daemon; until then the picker says it
+// is reading.
+func (m *OS) OpenLayoutPicker() tea.Cmd {
+	m.ShowLayoutPicker = true
+	m.LayoutPickerMode = "load"
+	m.LayoutPickerItems = nil
+	m.LayoutPickerQuery = ""
+	m.LayoutPickerSelected = 0
+	m.LayoutPickerScroll = 0
+	m.LayoutPickerLoading = true
+	return m.withLayoutTemplates(m.fillLayoutPicker)
+}
+
+// fillLayoutPicker puts ts in the picker, if it is still open on the list.
+func (m *OS) fillLayoutPicker(ts []LayoutTemplate) tea.Cmd {
+	m.LayoutPickerLoading = false
+	if !m.ShowLayoutPicker || m.LayoutPickerMode != "load" {
+		return nil
+	}
+	m.LayoutPickerItems = ts
+	if m.LayoutPickerSelected >= len(ts) {
+		m.LayoutPickerSelected = max(len(ts)-1, 0)
+	}
+	return nil
+}
+
+// DeleteLayoutFromPicker deletes the layout called name, from the daemon's
+// machine in a daemon session, and fills the picker again.
+func (m *OS) DeleteLayoutFromPicker(name string) tea.Cmd {
+	done := func(err error) {
+		if err != nil {
+			m.ShowNotification("Failed to delete layout: "+err.Error(), "error", m.Settings.NotificationDuration)
+			return
+		}
+		m.ShowNotification("Layout deleted: "+name, "info", m.Settings.NotificationDuration)
+	}
+	if !m.daemonLayouts() {
+		done(DeleteLayoutTemplate(name))
+		return m.withLayoutTemplates(m.fillLayoutPicker)
+	}
+	call := m.layoutTemplateCall()
+	host, build, sess := m.AttachedHost, m.DaemonClient.ClientVersion(), m.SessionName
+	return func() tea.Msg {
+		err := call("delete", name)
+		ts, lerr := listDaemonLayouts(host, build, sess)
+		return layoutTemplatesListedMsg{items: ts, err: lerr, then: func(ts []LayoutTemplate) tea.Cmd {
+			done(err)
+			return m.fillLayoutPicker(ts)
+		}}
+	}
+}
+
+// handleLayoutTemplateDone shows a save or load the daemon refused.
+func (m *OS) handleLayoutTemplateDone(msg LayoutTemplateDoneMsg) {
+	if msg.Err == nil {
+		return
+	}
+	m.ShowNotification(fmt.Sprintf("Failed to %s layout %s: %v", msg.Action, msg.Name, msg.Err), "error", m.Settings.NotificationDuration)
 }
 
 // LoadLayoutTemplates reads all templates from the layouts directory.
-func LoadLayoutTemplates() ([]LayoutTemplate, error) {
-	dir := GetTemplatesDir()
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	var templates []LayoutTemplate
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
-		}
-		// #nosec G304
-		data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
-		if err != nil {
-			continue
-		}
-		var tmpl LayoutTemplate
-		if err := jsonx.Unmarshal(data, &tmpl); err != nil {
-			continue
-		}
-		templates = append(templates, tmpl)
-	}
-	return templates, nil
-}
+func LoadLayoutTemplates() ([]LayoutTemplate, error) { return layouttmpl.List() }
 
 // ApplyLayoutTemplate recreates a workspace from a template.
 func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 	if m.InScratchView() {
 		m.ShowNotification(errLayoutInScratch.Error(), "warning", m.Settings.NotificationDuration)
+		return
+	}
+	if m.daemonLayouts() {
+		m.queueTMLCmd(m.layoutTemplateCmd("load", tmpl.Name))
 		return
 	}
 	// Collect existing windows in current workspace (reuse them instead of killing)
@@ -344,27 +457,11 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 }
 
 // DeleteLayoutTemplate removes a template file.
-func DeleteLayoutTemplate(name string) error {
-	err := os.Remove(templateFilePath(name))
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	return nil
-}
+func DeleteLayoutTemplate(name string) error { return layouttmpl.Delete(name) }
 
 // FilterLayoutTemplates filters by name substring.
 func FilterLayoutTemplates(templates []LayoutTemplate, query string) []LayoutTemplate {
-	if query == "" {
-		return templates
-	}
-	q := strings.ToLower(query)
-	var filtered []LayoutTemplate
-	for _, tmpl := range templates {
-		if strings.Contains(strings.ToLower(tmpl.Name), q) {
-			filtered = append(filtered, tmpl)
-		}
-	}
-	return filtered
+	return layouttmpl.Filter(templates, query)
 }
 
 // GenerateTapeScript converts a layout template to a tape script that

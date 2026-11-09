@@ -405,6 +405,8 @@ func (m *OS) InboxReasonKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.InboxReasonSend()
 	case composer.EventClose:
 		m.InboxReasonCancel()
+	case composer.EventCopy, composer.EventCut:
+		return m.CopyFromEditor(r.ed.Copied())
 	case composer.EventPaste:
 		return m.RequestHostPaste()
 	}

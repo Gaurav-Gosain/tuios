@@ -494,6 +494,8 @@ func (m *OS) InboxPeekTextKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.InboxPeekSendText()
 	case composer.EventClose:
 		m.InboxPeekCancelText()
+	case composer.EventCopy, composer.EventCut:
+		return m.CopyFromEditor(p.Answer.Copied())
 	case composer.EventPaste:
 		return m.RequestHostPaste()
 	}

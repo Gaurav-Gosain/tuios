@@ -323,14 +323,7 @@ func handleTerminalLayoutPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 
 // handleLayoutPrefixLoad opens the layout picker on the saved layouts.
 func handleLayoutPrefixLoad(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	templates, _ := app.LoadLayoutTemplates()
-	o.ShowLayoutPicker = true
-	o.LayoutPickerMode = "load"
-	o.LayoutPickerItems = templates
-	o.LayoutPickerQuery = ""
-	o.LayoutPickerSelected = 0
-	o.LayoutPickerScroll = 0
-	return o, nil
+	return o, o.OpenLayoutPicker()
 }
 
 // handleLayoutPrefixSave opens the layout picker to name and save the layout.

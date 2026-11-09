@@ -58,21 +58,11 @@ func (m *model) layoutTemplate(op, name string) error {
 	}
 	switch op {
 	case "layout-save":
-		return app.SaveLayoutTemplate(name, m.os)
+		return m.os.LayoutTemplateNow("save", name)
 	case "layout-delete":
 		return app.DeleteLayoutTemplate(name)
 	case "layout-load":
-		tmpls, err := app.LoadLayoutTemplates()
-		if err != nil {
-			return err
-		}
-		for _, t := range tmpls {
-			if t.Name == name {
-				app.ApplyLayoutTemplate(t, m.os)
-				return nil
-			}
-		}
-		return errfmt.Errorf("no saved layout %q", name)
+		return m.os.LayoutTemplateNow("load", name)
 	}
 	return errfmt.Errorf("%s is not a layout command", op)
 }

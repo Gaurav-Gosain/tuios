@@ -84,6 +84,11 @@ const (
 	// EventSendNow: the person wants the message sent now, without a wait
 	// (alt+enter or ctrl+enter, with Options.SendNow). The host calls Submit.
 	EventSendNow
+	// EventCopy: the person copied the selection. Copied holds the text, for
+	// the host to put where its copies go.
+	EventCopy
+	// EventCut: as EventCopy, and the selection is gone from the draft.
+	EventCut
 )
 
 // Model is one draft and its editor.
@@ -93,6 +98,13 @@ type Model struct {
 	cells []cell
 	// cur is the cursor, an index into cells from 0 to len(cells).
 	cur int
+	// anchor is the other end of the selection, -1 when nothing is selected
+	// (selection.go). dragFrom is where the last mouse press landed.
+	anchor, dragFrom int
+	// copied is the text the last copy or cut took.
+	copied string
+	// rowLine is the frame line the draft's first shown row was drawn on.
+	rowLine int
 	// ver changes with every edit, for the layout cache.
 	ver uint64
 	// size is the draft's bytes, blocks included.
@@ -182,7 +194,7 @@ func New(o Options) *Model {
 	if o.MaxBytes <= 0 {
 		o.MaxBytes = DefaultMaxBytes
 	}
-	return &Model{opt: o, goal: -1, width: 80, dismissedAt: -1, histAt: -1}
+	return &Model{opt: o, goal: -1, width: 80, dismissedAt: -1, histAt: -1, anchor: -1}
 }
 
 // Automated reports whether a key that did not come from the keyboard
@@ -331,13 +343,15 @@ func (m *Model) Insert(text string, remote bool) {
 	if text == "" {
 		return
 	}
-	if m.size+len(text) > m.opt.MaxBytes {
+	if m.size-m.selectedBytes()+len(text) > m.opt.MaxBytes {
 		m.notice = "The message is too long to add more."
 		return
 	}
 	m.edited()
 	ins := segment(nil, text)
-	m.change(m.cur, 0, ins, m.cur+len(ins))
+	if !m.replaceSelection(ins) {
+		m.change(m.cur, 0, ins, m.cur+len(ins))
+	}
 	m.syncMention()
 }
 
@@ -357,7 +371,9 @@ func (m *Model) Paste(text string, remote bool) {
 	if text == "" {
 		return
 	}
-	if m.size+len(text) > m.opt.MaxBytes {
+	// A paste replaces the selection, so the selected bytes are room. The
+	// check comes first: a refused paste leaves the selection as it was.
+	if m.size-m.selectedBytes()+len(text) > m.opt.MaxBytes {
 		// The room left can be a few bytes, so the line names no size: a
 		// paste of one character must not read as larger than a kilobyte.
 		m.notice = "The paste is too large for the message. Save it to a file and type the path."
@@ -370,7 +386,9 @@ func (m *Model) Paste(text string, remote bool) {
 	}
 	m.edited()
 	b := newBlock(m.nextNumber(false), text)
-	m.change(m.cur, 0, []cell{blockCell(b)}, m.cur+1)
+	if !m.replaceSelection([]cell{blockCell(b)}) {
+		m.change(m.cur, 0, []cell{blockCell(b)}, m.cur+1)
+	}
 }
 
 // measure counts text's lines, a final line break not making a line of its
@@ -508,8 +526,11 @@ func (m *Model) Update(msg tea.KeyPressMsg, remote bool) Event {
 		m.endHistoryWalk()
 	}
 	defer m.syncMention()
-	if key != "up" && key != "down" {
+	if key != "up" && key != "down" && key != "shift+up" && key != "shift+down" {
 		m.goal = -1
+	}
+	if ev, done := m.selectionKey(msg, key); done {
+		return ev
 	}
 	switch key {
 	case "enter":

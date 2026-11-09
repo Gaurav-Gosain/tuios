@@ -974,6 +974,8 @@ func (m *OS) AgentMailKey(msg tea.KeyPressMsg) tea.Cmd {
 		cmd = m.AgentMailSendReply()
 	case composer.EventClose:
 		m.AgentMailCancelReply()
+	case composer.EventCopy, composer.EventCut:
+		cmd = m.CopyFromEditor(comp.Copied())
 	case composer.EventPaste:
 		cmd = m.composerClipboardCmd(comp, "")
 	case composer.EventOpenImage:

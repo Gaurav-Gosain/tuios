@@ -142,9 +142,12 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	cut := max(len(body)-max(fy-row, 0), 0)
 	for i, s := range body[cut:] {
 		c.draw(x+2, row+i, inner, s)
-		// An entry of the @ list takes a click.
+		// An entry of the @ list takes a click. Any other line places the
+		// cursor or selects.
 		if j, ok := ed.comp.MentionAt(cut + i); ok {
 			st.ck.hits = append(st.ck.hits, ckHit{x0: x + 2, y0: top + row + i, x1: x + 2 + inner, y1: top + row + i + 1, kind: ckHitAction, action: "mention:" + strconv.Itoa(j)})
+		} else {
+			st.ck.hits = append(st.ck.hits, ckHit{x0: x + 2, y0: top + row + i, x1: x + 2 + inner, y1: top + row + i + 1, kind: ckHitEditor, group: cut + i})
 		}
 	}
 	// The pictures the draft shows are placed relative to the layer.
