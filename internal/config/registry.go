@@ -263,9 +263,21 @@ func (r *KeybindRegistry) GetHelpAction(key string) string {
 	return r.Action(TableHelp, key)
 }
 
-// GetHelpKeys is the keys help mode binds to action, for the pane's footer
-// and the scroll marker, so a rebind moves the key and every hint naming it
-// together.
+// LeaderKey is the prefix key in force, or the shipped default when the
+// config names none. A caller spelling a chord for a person needs the same key
+// the press was built with.
+func (r *KeybindRegistry) LeaderKey() string {
+	if r.config != nil {
+		if l := r.config.Keybindings.LeaderKey; l != "" {
+			return l
+		}
+	}
+	return DefaultLeaderKey
+}
+
+// GetHelpKeys is GetKeys for help mode's own navigation, for the pane's footer
+// and the scroll marker. A rebound key shows there as the key the config binds,
+// not as the default the code was written with.
 func (r *KeybindRegistry) GetHelpKeys(action string) []string {
 	return r.Keys(TableHelp, action)
 }
