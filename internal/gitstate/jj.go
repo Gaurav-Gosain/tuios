@@ -3,6 +3,7 @@ package gitstate
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -142,28 +143,54 @@ func (r Repo) GitEnv() []string {
 	return []string{"GIT_DIR=" + r.GitDir, "GIT_WORK_TREE=" + r.Root}
 }
 
+// JJTimeout bounds a jj call whose caller set no deadline. jj waits for a
+// lock another jj holds, and a verb must not hang on it.
+const JJTimeout = time.Minute
+
+// RunJJ runs jj with args in dir and returns its stdout. It ends jj, and
+// every process jj started, at ctx's deadline, or after JJTimeout when ctx
+// has none. A failure is jj's own stderr, or the context's error when the
+// deadline ended the run.
+func RunJJ(ctx context.Context, dir string, args ...string) (string, error) {
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, JJTimeout)
+		defer cancel()
+	}
+	cmd := childproc.CommandContext(ctx, "jj", append([]string{"--no-pager", "--color=never"}, args...)...)
+	cmd.Dir = dir
+	childproc.OwnGroup(cmd)
+	cmd.WaitDelay = time.Second
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		msg := strings.TrimSpace(stderr.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		return "", errors.New(msg)
+	}
+	return stdout.String(), nil
+}
+
 // JJCommit returns the commit the first revision of revset names in the jj
 // workspace at root. With snapshot jj first records the working copy as @,
 // as any jj command does, which writes an operation; without it nothing is
 // written and @ is as jj last recorded it.
 func JJCommit(ctx context.Context, root, revset string, snapshot bool) (string, error) {
-	args := []string{"--no-pager", "--color=never", "log", "--no-graph", "-r", revset, "-T", `commit_id ++ "\n"`}
+	args := []string{"log", "--no-graph", "-r", revset, "-T", `commit_id ++ "\n"`}
 	if !snapshot {
 		args = append([]string{"--ignore-working-copy"}, args...)
 	}
-	cmd := childproc.CommandContext(ctx, "jj", args...)
-	cmd.Dir = root
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
+	out, err := RunJJ(ctx, root, args...)
 	if err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			msg = err.Error()
-		}
-		return "", errfmt.Errorf("jj log -r %s: %s", revset, msg)
+		return "", errfmt.Errorf("jj log -r %s: %w", revset, err)
 	}
-	id, _, _ := strings.Cut(string(out), "\n")
+	id, _, _ := strings.Cut(out, "\n")
 	if id == "" {
 		return "", errfmt.Errorf("jj: %s names no commit", revset)
 	}

@@ -1,7 +1,6 @@
 package worktree
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -10,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 )
@@ -38,19 +36,11 @@ const jjDir = ".jj/"
 // jjRun runs jj in the workspace at root and returns its stdout. A failure
 // carries jj's own stderr.
 func jjRun(ctx context.Context, root string, args ...string) (string, error) {
-	cmd := childproc.CommandContext(ctx, "jj", append([]string{"--no-pager", "--color=never"}, args...)...)
-	cmd.Dir = root
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			msg = err.Error()
-		}
-		return "", errfmt.Errorf("jj %s: %s", args[0], msg)
+	out, err := gitstate.RunJJ(ctx, root, args...)
+	if err != nil {
+		return "", errfmt.Errorf("jj %s: %w", args[0], err)
 	}
-	return stdout.String(), nil
+	return out, nil
 }
 
 // jjBookmark is the revset of the local bookmark name.
