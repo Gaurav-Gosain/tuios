@@ -103,6 +103,7 @@ type displayRateMsg struct{ hz int }
 // the next start.
 func (m *OS) BindProgram(p *tea.Program) {
 	m.frameRate.program = p
+
 	m.applyFrameRate()
 	m.detectDisplayRate(false)
 	dumpTickStatsOnSignal(p)

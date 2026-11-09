@@ -35,9 +35,9 @@ const (
 	DockComponentSession = "session"
 	// DockComponentHelp is the "?" control that opens the hover help, the way
 	// the key does: a click turns the explanation on, and a click while it is
-	// up turns it off. A cell like the session name, so it can be moved; it is
-	// in the default left list because a control nobody is told about is not a
-	// control.
+	// up turns it off. A cell like the session name, so it can be moved, and it
+	// is in no default list: the default bar is what tuios has always drawn,
+	// and the control is for a user who wants the way in on screen.
 	DockComponentHelp = "help"
 )
 
@@ -104,16 +104,17 @@ var dockFixedSides = map[string]string{
 // wherever it is listed.
 func DockFixedSide(name string) string { return dockFixedSides[name] }
 
-// Default dock arrangements. These reproduce the bar exactly as it was drawn
-// before the lists existed, which is what lets a session with no [dock] table
-// stay byte-for-byte unchanged.
+// Default dock arrangements. These are the bar a session with no [dock] table
+// gets: the arrangement the lists were introduced to reproduce, unchanged. The
+// help control is drawn only when a list names it, so a bar that has never been
+// configured has no control it did not have before.
 //
 // Each built-in keeps whatever conditional it always had (the strip needs two
 // workspaces, the meters need show_cpu), so membership here is a second gate
 // and never a first one: naming a component makes it eligible to draw, not
 // certain to.
 var (
-	defaultDockLeft   = []string{DockComponentMode, DockComponentHelp, DockComponentWorkspaces, DockComponentTrail, DockComponentTape}
+	defaultDockLeft   = []string{DockComponentMode, DockComponentWorkspaces, DockComponentTrail, DockComponentTape}
 	defaultDockCenter = []string{DockComponentWindows}
 	defaultDockRight  = []string{
 		DockComponentTransfers,

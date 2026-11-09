@@ -1948,7 +1948,7 @@ component:
 
 ```toml
 [dock]
-left   = ["mode", "help", "workspaces", "trail", "tape"]
+left   = ["mode", "workspaces", "trail", "tape"]
 center = ["windows"]
 right  = ["transfers", "notifications", "copy-help", "cpu", "ram", "clock", "session-controls"]
 
@@ -1981,10 +1981,11 @@ count and a percent, `3 copies 42%`. `waiting` means a link is down, and
 default list. `[dock.session]` takes `format` (`{session}`, `{workspace}`,
 `{pane}`) and the cell style keys `fg`, `bg`, `bold`, `cap_left` and
 `cap_right`, which `[dock.custom.NAME]` takes too. Colours take any [colour value](#colour-values).
-`help` draws the `?` control, and is in the default left list. A click opens
-the hover help for whatever the pointer is over; a click while it is up closes
-it. It is the button for the same thing `Ctrl+B h` and `Shift+F1` do, so the
-bar names the feature to a person who does not know the chord.
+`help` draws the `?` control, and is in no default list: add it to `left` or
+`right` to put it on the bar. A click opens the hover help for whatever the
+pointer is over; a click while it is up closes it. It is the button for the
+same thing `Ctrl+B h` and `Shift+F1` do, so the bar names the feature to a
+person who does not know the chord.
 A custom component's first line of stdout becomes its cell, it is hidden when
 the command fails, and `tuios list-dock-components` says which and why.
 tuios runs one copy of the command at a time. When an event arrives while the
