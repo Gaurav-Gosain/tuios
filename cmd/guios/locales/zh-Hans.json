@@ -836,6 +836,7 @@
   "setTuiosKeys": "使用 tuios 按键",
   "setTuiosKeysDetail": "在窗格中按 tuios 前缀键（默认 Ctrl+B）打开 tuios 菜单。按 Ctrl+P 打开命令面板。按键由 tuios 的 config.toml 设置。",
   "keysNeedTui": "请在 tuios TUI 中打开此会话以使用此按键。",
+  "keysNotInGuios": "此按键用于 tuios TUI，guios 不使用它。",
   "keysMenuPrefix": "前缀",
   "keysMenuWorkspace": "工作区",
   "keysMenuWindow": "窗格",

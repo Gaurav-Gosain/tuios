@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Gaurav-Gosain/mygo"
 	"github.com/Gaurav-Gosain/mygo/ui"
 	"github.com/adrg/xdg"
 
@@ -492,6 +493,15 @@ func digitOf(action, prefix string) (int, bool) {
 
 // runKeyAction runs a keymap action, on the main thread.
 func (a *App) runKeyAction(action string) {
+	if to, ok := keyAliases[action]; ok {
+		action = to
+	}
+	if notInGuios[action] {
+		// A TUI mode or the terminal's mouse: guios has neither, so the
+		// key does nothing, said plainly, not "needs the TUI".
+		a.toast(locales.KeysNotInGuios())
+		return
+	}
 	s := a.session(a.selected)
 	if n, ok := digitOf(action, "prefix_select_"); ok {
 		a.selectPaneN(s, n)
@@ -622,6 +632,30 @@ func (a *App) runKeyAction(action string) {
 		tk.armed.Store(true)
 		tk.mu.Unlock()
 		return
+	case "app_quit":
+		mygo.App.Quit()
+		return
+	case "app_close_window":
+		if a.win != nil {
+			a.win.Close()
+		}
+		return
+	case "send_prefix":
+		if s != nil {
+			if t := a.termFor(a.focusOf(s)); t != nil && len(a.tk.literal) > 0 {
+				t.Send(a.tk.literal)
+			}
+		}
+	case "rename_session":
+		if s != nil {
+			a.startRename(s.ID)
+		}
+		return
+	case "restart_daemon":
+		a.restartDaemon()
+		return
+	case "reload_config":
+		// guios reads the config again whenever it changes.
 	case "prefix_toggle_spotlight":
 		a.spotlight = !a.spotlight
 	case "prefix_help":
@@ -930,4 +964,32 @@ func (a *App) labelsShown() bool {
 	a.tk.mu.Lock()
 	defer a.tk.mu.Unlock()
 	return a.tk.menu == "labels"
+}
+
+// keyAliases are the keymap's bare names for actions guios runs under
+// another name: a user may bind either, and both run here (parity gap 1,
+// step 0).
+var keyAliases = map[string]string{
+	"toggle_spotlight":      "prefix_toggle_spotlight",
+	"toggle_help":           "prefix_help",
+	"open_settings":         "prefix_settings",
+	"settings_sidebar":      "prefix_settings",
+	"focus_sidebar":         "prefix_explore",
+	"rename_window":         "prefix_rename_window",
+	"rename_workspace":      "workspace_prefix_rename",
+	"workspace_pill_switch": "prefix_workspace_switcher",
+	"quit":                  "app_quit",
+	"prefix_quit":           "app_quit",
+	"prefix_detach":         "app_close_window",
+}
+
+// notInGuios are keymap actions for what only a terminal client has: its
+// modes, its mouse capture and its own prefix.
+var notInGuios = map[string]bool{
+	"enter_terminal_mode": true,
+	"enter_window_mode":   true,
+	"hold_window_mode":    true,
+	"terminal_exit_mode":  true,
+	"toggle_mouse":        true,
+	"prefix_tuios":        true,
 }

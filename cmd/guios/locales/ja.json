@@ -836,6 +836,7 @@
   "setTuiosKeys": "tuios のキーを使う",
   "setTuiosKeysDetail": "ペインで tuios のプレフィックスキー (既定は Ctrl+B) を押すと、tuios のメニューが開きます。Ctrl+P を押すと、コマンドパレットが開きます。キーは tuios の config.toml で設定します。",
   "keysNeedTui": "このキーを使うには、このセッションを tuios TUI で開いてください。",
+  "keysNotInGuios": "このキーは tuios TUI 用です。guios では使いません。",
   "keysMenuPrefix": "プレフィックス",
   "keysMenuWorkspace": "ワークスペース",
   "keysMenuWindow": "ペイン",

@@ -8482,6 +8482,16 @@ func (msgs Messages) KeysNeedTui() string {
 	return Catalog.Format(msgs.locale, "keysNeedTui", nil)
 }
 
+// KeysNotInGuios says "This key is for the tuios TUI. guios does not use it."
+// in the language the app shows.
+func KeysNotInGuios() string { return In(i18n.Locale()).KeysNotInGuios() }
+
+// KeysNotInGuios says "This key is for the tuios TUI. guios does not use it."
+// in the language of msgs.
+func (msgs Messages) KeysNotInGuios() string {
+	return Catalog.Format(msgs.locale, "keysNotInGuios", nil)
+}
+
 // KeysMenuPrefix says "Prefix"
 // in the language the app shows.
 func KeysMenuPrefix() string { return In(i18n.Locale()).KeysMenuPrefix() }
