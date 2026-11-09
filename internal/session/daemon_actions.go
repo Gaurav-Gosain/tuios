@@ -77,7 +77,7 @@ func (d *Daemon) runsAction(sess *Session, command string, args []string) bool {
 			return false
 		}
 		switch name := args[0]; {
-		case name == "resize_master_grow" || name == "resize_master_shrink" || IsDirectionAction(name):
+		case isStepAction(name) || IsDirectionAction(name):
 			if !d.daemonArranges(sess, sess.GetState().CurrentWorkspace) {
 				return false
 			}

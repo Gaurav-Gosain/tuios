@@ -60,6 +60,13 @@ func (d *Daemon) runHeadlessAction(sess *Session, name string, base NewWindowOpt
 			side = layout.SideLeft
 		}
 		return nil, d.headlessResizeStep(sess, side, 4)
+	case "resize_height_grow", "resize_height_shrink":
+		// ResizeFocusedWindowHeight by 2 rows.
+		side := layout.SideDown
+		if name == "resize_height_shrink" {
+			side = layout.SideUp
+		}
+		return nil, d.headlessResizeStep(sess, side, 2)
 	case "last_pane":
 		return nil, headlessLastPane(sess)
 	case "break_pane":

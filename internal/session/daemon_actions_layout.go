@@ -65,7 +65,18 @@ func IsLayoutAction(name string) bool {
 	if _, _, ok := layoutActionOp(name); ok {
 		return true
 	}
-	return name == "resize_master_grow" || name == "resize_master_shrink"
+	return isStepAction(name)
+}
+
+// isStepAction reports whether name is a resize step the daemon runs in the
+// split layout only (layout.GrowPane): the TUI's width keys of 4 columns and
+// height keys of 2 rows.
+func isStepAction(name string) bool {
+	switch name {
+	case "resize_master_grow", "resize_master_shrink", "resize_height_grow", "resize_height_shrink":
+		return true
+	}
+	return false
 }
 
 // headlessArrange runs arrange op on sess for the connection that asked,

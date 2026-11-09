@@ -687,3 +687,78 @@ func TestDaemonMastersFromTwoClientsAtOnce(t *testing.T) {
 		t.Logf("write the transcript: %v", err)
 	}
 }
+
+// daStrip is the scrolling layout's columns as layout-tree reports them.
+type daStrip struct {
+	Scroll struct {
+		Width   int `json:"column_width"`
+		Columns []struct {
+			Windows []string `json:"windows"`
+			Width   int      `json:"width"`
+		} `json:"columns"`
+	} `json:"scroll"`
+}
+
+func daReadStrip(t *testing.T, base, sess string) (daStrip, string) {
+	t.Helper()
+	out, err := tuiosCLI(t, base, "call", "layout-tree", `{"session":"`+sess+`"}`)
+	if err != nil {
+		t.Fatalf("layout-tree: %v\n%s", err, out)
+	}
+	var st daStrip
+	if err := json.Unmarshal([]byte(out), &st); err != nil {
+		t.Fatalf("read layout-tree: %v\n%s", err, out)
+	}
+	cols, _ := json.Marshal(st.Scroll.Columns)
+	return st, string(cols)
+}
+
+// TestDaemonHeightStepRunsAndTheStripIsRouted (T1, batch C2): in the split
+// layout with a TUI attached, run-command runs resize_height_grow in the
+// daemon (routed false) and the tree changes. The scrolling layout's strip
+// actions stay routed with a TUI attached: the TUI owns the strip's columns
+// and pushes them whole, and a strip the daemon changed is overwritten by
+// its next push (parity-gap1.md, batch C2), so scroll_consume must answer
+// routed true there.
+//
+// How this could pass wrongly, written down first:
+//   - The TUI could run it and push: routed false is the daemon's answer.
+//   - The tree could hold already: it is compared before and after.
+func TestDaemonHeightStepRunsAndTheStripIsRouted(t *testing.T) {
+	const name = "da-c2"
+	base, a, _ := daSession(t, name, 4)
+	before := daReadLayout(t, base, name).Tree
+	if daRun(t, base, name, "resize_height_grow") {
+		t.Fatalf("resize_height_grow: run-command answered routed true in the split layout")
+	}
+	deadline := time.Now().Add(uiTimeout)
+	for string(daReadLayout(t, base, name).Tree) == string(before) {
+		if time.Now().After(deadline) {
+			t.Fatalf("resize_height_grow: the tree did not change")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if out, err := tuiosCLI(t, base, "call", "arrange", `{"session":"`+name+`","op":"mode","mode":"scrolling"}`); err != nil {
+		t.Fatalf("arrange mode scrolling: %v: %s", err, out)
+	}
+	daWait(t, base, name, "the strip", func(daState) bool { s, _ := daReadStrip(t, base, name); return len(s.Scroll.Columns) == 4 })
+	daFocusFirstColumn(t, base, name)
+	if !daRun(t, base, name, "scroll_consume") {
+		t.Fatalf("scroll_consume answered routed false; the TUI owns the strip, so the daemon must route it")
+	}
+	alive(t, a, "after the actions")
+}
+
+// daFocusFirstColumn focuses the pane of the strip's first column.
+func daFocusFirstColumn(t *testing.T, base, sess string) {
+	t.Helper()
+	st, sj := daReadStrip(t, base, sess)
+	if len(st.Scroll.Columns) == 0 || len(st.Scroll.Columns[0].Windows) == 0 {
+		t.Fatalf("no strip to focus: %s", sj)
+	}
+	id := st.Scroll.Columns[0].Windows[0]
+	if out, err := tuiosCLI(t, base, "focus-window", "-s", sess, id); err != nil {
+		t.Fatalf("focus-window: %v: %s", err, out)
+	}
+	daWait(t, base, sess, "the focus on the first column", func(s daState) bool { return s.Focused == id })
+}

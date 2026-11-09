@@ -16456,3 +16456,16 @@ passes both.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'TestDaemonLayoutActions|TestDaemonMastersFromTwo' -v .`.
+
+## TestDaemonHeightStepRunsAndTheStripIsRouted
+
+Parity gap 1, step 4, batch C2. resize_height_grow runs in the daemon with a TUI
+attached in the split layout, and the scrolling strip's scroll_consume stays
+routed (the TUI owns the strip's columns).
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| guios/land before batch C2 (b86bd244a) | "resize_height_grow: run-command answered routed true in the split layout" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run TestDaemonHeightStep -v .`.
