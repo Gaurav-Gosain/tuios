@@ -2868,6 +2868,12 @@ an event stream already is refused. The owner answers on another connection
 with `tml-patch` or `tml-replace`. Anyone may also `subscribe` with
 `types: ["tml-event"]`.
 
+A client that draws surfaces from verbs, with no attach, subscribes with
+`types: ["tml-surface"]`. Each change of a surface of the session is one
+event with the surface's `version` and `doc_version`, the state patch that
+made the version when it is small, and the close. It applies the patch to the
+version it holds, and otherwise reads the surface with `tml-get`.
+
 Request:
 
 ```json
@@ -7801,6 +7807,7 @@ Event types:
 | `task-dispatch` | A board's dispatch mode or a switch changed, or dispatch stopped on its own (`action` `stopped`, `reason` such as `3 failures in a row` or `usage limit reported by claude-code`). `dispatch` is the whole status as `get-task-dispatch` gives it. It names no session. | `action`, `reason`, `dispatch` |
 | `keep-awake` | The daemon took or dropped its hold that keeps the machine awake, the number of working agent panes changed while `keep_awake` is `agents`, or `keep_awake` changed. `mode` is `off`, `on` or `agents`, `state` is `held` or `released`, `working` counts the working agent panes on this machine, and `reason` says why the machine could not be held awake, when it could not. See [get-keep-awake](#get-keep-awake). It names no session. | `mode`, `state`, `working`, `reason` |
 | `tml-event` | What a person did on a TML surface that its owner hears: an `emit` action in the document, or the close, which is the surface's last event. `tml` has `surface`, `name` (the emit's name, or `close`), `value` (absent when null), `reason` (on a close: `closed`, `program` or `dismissed`) and `version`. `window` is the TML window. Opt-in: only a subscription whose `types` names it receives it, and a `tml-open` with `events` gets the events of its own surface. | `tml` |
+| `tml-surface` | A TML surface opened, changed or closed, for a client that draws it from verbs (guios), which gets no attach pushes. `tml_surface` has `surface`, `title`, `version`, `doc_version`, `ops` (the JSON Patch on the state that made `version` from `version` - 1, when a patch did and it is at most 64 KiB) and `closed`. A client that holds `version` - 1 applies `ops`; any other reads the surface with `tml-get`, which a changed `doc_version` also asks for. `window` is the TML window. Opt-in, and not kept for replay: a resume over one is marked with a `gap` |
 
 ### What fires when
 
