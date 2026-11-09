@@ -11166,11 +11166,11 @@ func (msgs Messages) CopyModeHints() string {
 	return Catalog.Format(msgs.locale, "copyModeHints", nil)
 }
 
-// CopyModeHintsHint says "Type a label to copy its text. Press Esc to leave."
+// CopyModeHintsHint says "Type a label to copy its text. With Shift it is also typed into the pane, with Ctrl or Cmd it is opened. Press Esc to…"
 // in the language the app shows.
 func CopyModeHintsHint() string { return In(i18n.Locale()).CopyModeHintsHint() }
 
-// CopyModeHintsHint says "Type a label to copy its text. Press Esc to leave."
+// CopyModeHintsHint says "Type a label to copy its text. With Shift it is also typed into the pane, with Ctrl or Cmd it is opened. Press Esc to…"
 // in the language of msgs.
 func (msgs Messages) CopyModeHintsHint() string {
 	return Catalog.Format(msgs.locale, "copyModeHintsHint", nil)
@@ -13864,4 +13864,54 @@ func ToastLayoutDeleted(name string) string { return In(i18n.Locale()).ToastLayo
 // in the language of msgs.
 func (msgs Messages) ToastLayoutDeleted(name string) string {
 	return Catalog.Format(msgs.locale, "toastLayoutDeleted", map[string]any{"name": name})
+}
+
+// HintTyped says "Copied {count} characters and typed them into the pane."
+// in the language the app shows.
+func HintTyped(count int) string { return In(i18n.Locale()).HintTyped(count) }
+
+// HintTyped says "Copied {count} characters and typed them into the pane."
+// in the language of msgs.
+func (msgs Messages) HintTyped(count int) string {
+	return Catalog.Format(msgs.locale, "hintTyped", map[string]any{"count": count})
+}
+
+// HintTypeFailed says "Copied the text. It could not be typed into the pane: {why}"
+// in the language the app shows.
+func HintTypeFailed(why string) string { return In(i18n.Locale()).HintTypeFailed(why) }
+
+// HintTypeFailed says "Copied the text. It could not be typed into the pane: {why}"
+// in the language of msgs.
+func (msgs Messages) HintTypeFailed(why string) string {
+	return Catalog.Format(msgs.locale, "hintTypeFailed", map[string]any{"why": why})
+}
+
+// HintOpenOff says "Opening is off in the tuios config (hints.open). The text is copied."
+// in the language the app shows.
+func HintOpenOff() string { return In(i18n.Locale()).HintOpenOff() }
+
+// HintOpenOff says "Opening is off in the tuios config (hints.open). The text is copied."
+// in the language of msgs.
+func (msgs Messages) HintOpenOff() string {
+	return Catalog.Format(msgs.locale, "hintOpenOff", nil)
+}
+
+// HintNotOpenable says "Hints open only links and paths. The text is copied."
+// in the language the app shows.
+func HintNotOpenable() string { return In(i18n.Locale()).HintNotOpenable() }
+
+// HintNotOpenable says "Hints open only links and paths. The text is copied."
+// in the language of msgs.
+func (msgs Messages) HintNotOpenable() string {
+	return Catalog.Format(msgs.locale, "hintNotOpenable", nil)
+}
+
+// HintNoFile says "There is no file {path} from the pane's folder. The text is copied."
+// in the language the app shows.
+func HintNoFile(path string) string { return In(i18n.Locale()).HintNoFile(path) }
+
+// HintNoFile says "There is no file {path} from the pane's folder. The text is copied."
+// in the language of msgs.
+func (msgs Messages) HintNoFile(path string) string {
+	return Catalog.Format(msgs.locale, "hintNoFile", map[string]any{"path": path})
 }

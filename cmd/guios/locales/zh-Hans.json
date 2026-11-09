@@ -1103,7 +1103,7 @@
   "keysWorkspaceQuery": "工作区",
   "keysNest": "现在所有按键都发送到窗格，{leader} 也是。按 {key} 退出。",
   "copyModeHints": "提示",
-  "copyModeHintsHint": "输入标签以复制其文本。按 Esc 退出。",
+  "copyModeHintsHint": "输入标签以复制其文本。按住 Shift 时同时输入到窗格中，按住 Ctrl 或 Cmd 时打开它。按 Esc 退出。",
   "copyModeNoHints": "屏幕上没有可标记的内容。",
   "keysSidebarLabel": "用键盘选择会话",
   "keysNoTransfers": "还没有机器之间的复制。在文件标签页中把文件复制到另一台机器。",
@@ -1368,5 +1368,10 @@
   "confirmDeleteLayoutDetail": "布局文件将被删除。当前显示的窗格保持不变。",
   "toastLayoutSaved": "已保存布局 {name}",
   "toastLayoutLoaded": "已载入布局 {name}",
-  "toastLayoutDeleted": "已删除布局 {name}"
+  "toastLayoutDeleted": "已删除布局 {name}",
+  "hintTyped": "已复制 {count} 个字符并输入到窗格中。",
+  "hintTypeFailed": "已复制文本。无法输入到窗格中: {why}",
+  "hintOpenOff": "tuios 配置中已关闭打开功能 (hints.open)。文本已复制。",
+  "hintNotOpenable": "只能打开链接和路径。文本已复制。",
+  "hintNoFile": "从窗格的文件夹看不存在文件 {path}。文本已复制。"
 }

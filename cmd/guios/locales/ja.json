@@ -1103,7 +1103,7 @@
   "keysWorkspaceQuery": "ワークスペース",
   "keysNest": "すべてのキーがペインに送られます ({leader} も)。{key} で終了します。",
   "copyModeHints": "ヒント",
-  "copyModeHintsHint": "ラベルを入力すると、そのテキストをコピーします。Esc で終了します。",
+  "copyModeHintsHint": "ラベルを入力するとテキストをコピーします。Shift を押しながらだとペインに入力し、Ctrl か Cmd を押しながらだと開きます。Esc で終了します。",
   "copyModeNoHints": "画面にラベルを付けるものがありません。",
   "keysSidebarLabel": "キーボードでセッションを選択",
   "keysNoTransfers": "マシン間のコピーはまだありません。ファイルタブから別のマシンにコピーします。",
@@ -1368,5 +1368,10 @@
   "confirmDeleteLayoutDetail": "レイアウトのファイルが削除されます。いま表示されているペインはそのまま残ります。",
   "toastLayoutSaved": "レイアウト {name} を保存しました",
   "toastLayoutLoaded": "レイアウト {name} を読み込みました",
-  "toastLayoutDeleted": "レイアウト {name} を削除しました"
+  "toastLayoutDeleted": "レイアウト {name} を削除しました",
+  "hintTyped": "{count} 文字をコピーしてペインに入力しました。",
+  "hintTypeFailed": "テキストをコピーしました。ペインに入力できませんでした: {why}",
+  "hintOpenOff": "tuios の設定で開く機能がオフです (hints.open)。テキストはコピーしました。",
+  "hintNotOpenable": "開けるのはリンクとパスだけです。テキストはコピーしました。",
+  "hintNoFile": "ペインのフォルダーから見て {path} というファイルはありません。テキストはコピーしました。"
 }

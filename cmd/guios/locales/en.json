@@ -1961,7 +1961,7 @@
   "keysWorkspaceQuery": "workspace",
   "keysNest": "Every key goes to the pane now, {leader} too. Press {key} to leave.",
   "copyModeHints": "Hints",
-  "copyModeHintsHint": "Type a label to copy its text. Press Esc to leave.",
+  "copyModeHintsHint": "Type a label to copy its text. With Shift it is also typed into the pane, with Ctrl or Cmd it is opened. Press Esc to leave.",
   "copyModeNoHints": "Nothing on the screen to label.",
   "keysSidebarLabel": "Sessions, by keyboard",
   "keysNoTransfers": "No copies between machines yet. Copy a file to another machine from the Files tab.",
@@ -2397,5 +2397,17 @@
   "confirmDeleteLayoutDetail": "The layout's file is removed. The panes that show now stay.",
   "toastLayoutSaved": "Saved layout {name}",
   "toastLayoutLoaded": "Loaded layout {name}",
-  "toastLayoutDeleted": "Deleted layout {name}"
+  "toastLayoutDeleted": "Deleted layout {name}",
+  "hintTyped": "Copied {count} characters and typed them into the pane.",
+  "hintTypeFailed": "Copied the text. It could not be typed into the pane: {why}",
+  "hintOpenOff": "Opening is off in the tuios config (hints.open). The text is copied.",
+  "hintNotOpenable": "Hints open only links and paths. The text is copied.",
+  "@hintTyped": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "hintNoFile": "There is no file {path} from the pane's folder. The text is copied."
 }

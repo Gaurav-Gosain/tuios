@@ -39,7 +39,10 @@ type Settings struct {
 	// ReplyRows is agents.reply_rows in the same file: the most lines the
 	// reply box and a new agent's task grow to before they scroll. Zero
 	// keeps each box's own.
-	ReplyRows      int    `json:"-"`
+	ReplyRows int `json:"-"`
+	// HintsOpen is the tuios config's hints.open: whether a hint label
+	// typed with Ctrl or Cmd opens its link or path.
+	HintsOpen      bool   `json:"-"`
 	SessionHistory bool   `json:"sessionHistory"` // the sidebar lists the agents' ended conversations
 	QuitConfirm    bool   `json:"quitConfirm"`    // tell, the first time, that quitting keeps sessions
 	AppIcon        string `json:"appIcon"`        // macOS: AppIcons; elsewhere the icon is always in the notification area

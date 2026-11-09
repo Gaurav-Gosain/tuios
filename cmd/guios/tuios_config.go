@@ -47,6 +47,7 @@ func tuiosFromConfig(s *settings.Settings, cfg *config.UserConfig) {
 	s.Shell = cfg.Appearance.PreferredShell
 	s.Approvals = len(cfg.Agents.Approvals.Enabled) > 0
 	s.ReplyRows = cfg.Agents.ReplyRowsOr(0)
+	s.HintsOpen = cfg.Hints.OpenEnabled()
 }
 
 // followTuiosConfig keeps the settings tuios's config holds in step with
