@@ -1863,6 +1863,19 @@ own and clears the flag by pushing the geometry it chose. A window state without
 the field is placed, so state written before this existed is read exactly as
 before.
 
+The keymap actions that only change the focus, a pane's workspace or whether
+it is minimized run in the daemon too, attached or not: `select_window_N`,
+`send_to_workspace_N`, `move_and_follow_N`, `break_pane`, `close_workspace`,
+`move_workspace_left`, `move_workspace_right`, `minimize_window` (and the
+`MinimizeWindow` and `RestoreWindow` commands) and `restore_all`. `run-command`
+answers `routed: false` for them, and the TUI's own key for one sends it to
+the daemon instead of changing its copy and pushing it, so two clients that
+press one at once both land. A client says it does this with `daemon_actions`
+in its hello, and the daemon offers it in its welcome. While a client that did
+not say so is attached, the daemon routes these actions to a client as
+before, because that client runs its key in its own state. `last_pane` stays
+the client's: it goes back across workspaces from the client's own record.
+
 The verbs a live renderer still has to own to stay in sync (`send-keys` with
 no window, and the live apply half of `set-option`) route to the attached TUI
 when one is present and act on daemon owned state otherwise. `send-keys` with

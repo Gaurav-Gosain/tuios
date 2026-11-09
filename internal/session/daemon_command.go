@@ -150,7 +150,7 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 	// commands are routed to it (unchanged behavior). With no client attached,
 	// structural verbs execute directly against daemon-owned state.
 	tuiClient := d.findTUIClient(session.ID)
-	if tuiClient == nil || daemonOwnedCommands[payload.CommandType] {
+	if tuiClient == nil || daemonOwnedCommands[payload.CommandType] || d.runsAction(session, payload.CommandType, payload.Args) {
 		if payload.TapeScript != "" {
 			return d.sendCommandResult(cs, payload.RequestID, false,
 				"tape scripts need an attached client. A headless daemon has no renderer to run them")

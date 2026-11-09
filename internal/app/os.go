@@ -742,6 +742,10 @@ type OS struct {
 	// current workspace and session, for last_workspace and last_session.
 	lastWorkspace int
 	lastSession   lastSession
+	// focusEnterPending says a select_window key went to the daemon and the
+	// focus it moves enters terminal mode when its push lands. See
+	// daemon_actions.go.
+	focusEnterPending bool
 	// shownOn is the session this client last showed on each machine, by
 	// machine name, for next_host and prev_host. See host_cycle.go.
 	shownOn map[string]string

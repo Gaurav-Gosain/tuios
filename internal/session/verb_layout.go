@@ -1037,7 +1037,7 @@ func (d *Daemon) verbRunCommand(cs *connState, params json.RawMessage) (any, *ve
 	// The daemon-owned commands run here whether or not a client is attached, the
 	// same rule the CLI path follows, so the two cannot disagree about what a
 	// detached session can do.
-	if daemonOwnedCommands[p.Command] || !d.hasTUIClient(sess) {
+	if daemonOwnedCommands[p.Command] || !d.hasTUIClient(sess) || d.runsAction(sess, p.Command, p.Args) {
 		onExit := func(ptyID string) { d.notifyPTYClosed(sess.ID, ptyID) }
 		data, err := d.executeDaemonCommand(sess, p.Command, p.Args, onExit)
 		if err != nil {
