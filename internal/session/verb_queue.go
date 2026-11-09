@@ -258,6 +258,8 @@ func (d *Daemon) newQueueEntry(cs *connState, sess *Session, state *SessionState
 type listQueuedParams struct {
 	Session string `json:"session"`
 	Window  string `json:"window"`
+	// Host lists a pane's queue on that machine, over the link.
+	Host string `json:"host"`
 }
 
 // verbListQueued answers list-queued: one pane's queue, or every queue in the
@@ -266,6 +268,9 @@ func (d *Daemon) verbListQueued(cs *connState, params json.RawMessage) (any, *ve
 	var p listQueuedParams
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
+	}
+	if p.Host != "" {
+		return d.listQueuedOnHost(cs, p)
 	}
 	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
@@ -322,6 +327,8 @@ type cancelQueuedParams struct {
 	ID         string `json:"id"`
 	All        bool   `json:"all"`
 	HumanNonce string `json:"human_nonce"`
+	// Host drops from a pane's queue on that machine, over the link.
+	Host string `json:"host"`
 }
 
 // verbCancelQueued answers cancel-queued.
@@ -336,6 +343,9 @@ func (d *Daemon) verbCancelQueued(cs *connState, params json.RawMessage) (any, *
 	var p cancelQueuedParams
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
+	}
+	if p.Host != "" {
+		return d.cancelQueuedOnHost(cs, p)
 	}
 	if verr := refuseForwardedPane(cs, "cancel-queued"); verr != nil {
 		return nil, verr

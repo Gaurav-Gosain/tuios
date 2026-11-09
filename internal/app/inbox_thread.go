@@ -311,12 +311,22 @@ func (m *OS) InboxThreadFetch() tea.Cmd {
 		return nil
 	}
 	e, ok := m.cockpitAgent()
-	if !ok || e.Host != "" {
+	if !ok {
 		m.stopThreadWatch()
 		return nil
 	}
 	t := m.thread(e)
 	var cmds []tea.Cmd
+	if e.Host != "" {
+		// The conversation is read on that machine, and the person's
+		// replies queued there show here, from its queue.
+		m.stopThreadWatch()
+		if !t.echoAsked {
+			t.echoAsked = true
+			return m.echoQueueCmd(e.Host, e.SessionID, e.WindowID, printableTitle(e.Title), true)
+		}
+		return nil
+	}
 	if !t.echoAsked {
 		// The person's replies queued for the pane show again, as a new
 		// client or a view opened again finds them.
@@ -771,6 +781,13 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 	}
 	if e.Host != "" {
 		note(printableTitle(e.Title) + " runs on " + printableTitle(e.Host) + ". Attach there to read its conversation.")
+		if t != nil {
+			// The replies sent to it, as this machine knows them, with
+			// their cancel and retry.
+			echo, hits := m.threadEchoLines(t.key, width)
+			t.hits = append(make([]string, len(out)), hits...)
+			out = append(out, echo...)
+		}
 		return out
 	}
 	if t == nil || (!t.read && t.recap == nil && t.loading) {
@@ -811,7 +828,8 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 		note("Says: " + printableTitle(e.Message))
 	}
 	out = append(out, m.threadMail(e, width, bg, pal)...)
-	echo, _ := m.threadEchoLines(t.key, width)
+	echo, hits := m.threadEchoLines(t.key, width)
+	t.hits = append(make([]string, len(out)), hits...)
 	out = append(out, echo...)
 	if len(out) == 0 && !card {
 		note(threadNothingYet(e.Harness))

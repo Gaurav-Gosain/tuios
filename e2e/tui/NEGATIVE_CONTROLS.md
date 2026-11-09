@@ -16197,3 +16197,21 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitSendNowKeys$' -v .`.
+
+## The reply's echo for an agent on a linked machine
+
+`TestCockpitReplyEchoOnAHost` replies from this machine's agents view to an
+agent on alpha, a linked machine: the thread shows the reply queued, a new
+client shows it again from alpha's queue (list-queued with host, over the
+link), and cancel drops it from alpha's queue (cancel-queued with host).
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (2366bfc71) | "the reply to the far agent does not show as queued" | **caught** |
+| list-queued with host not forwarded | "a new client does not show the reply queued on alpha" | **caught** |
+| cancel-queued with host not forwarded | "cancel did not take the far reply away" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitReplyEchoOnAHost$' -v .`.

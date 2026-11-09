@@ -115,6 +115,7 @@ type echoQueueMsg struct {
 type echoQueueEntry struct {
 	ID      string `json:"id"`
 	By      string `json:"by"`
+	From    string `json:"from"`
 	Preview string `json:"preview"`
 	State   string `json:"state"`
 	At      int64  `json:"at"`
@@ -332,14 +333,18 @@ func (m *OS) applyEchoTick() tea.Cmd {
 // queued messages the client does not show.
 func (m *OS) echoQueueCmd(host, sessionID, windowID, who string, restore bool) tea.Cmd {
 	call := m.inboxCaller()
-	if call == nil || host != "" {
-		// A linked machine's queue is read there.
+	if call == nil {
 		return nil
 	}
 	key := host + "\x00" + sessionID + "\x00" + windowID
+	params := map[string]any{"session": sessionID, "window": windowID}
+	if host != "" {
+		// This machine's daemon asks that machine's over the link.
+		params["host"] = host
+	}
 	return func() tea.Msg {
 		msg := echoQueueMsg{key: key, host: host, session: sessionID, window: windowID, who: who, restore: restore}
-		raw, err := call("list-queued", map[string]any{"session": sessionID, "window": windowID}, inboxReplyTimeout)
+		raw, err := call("list-queued", params, inboxReplyTimeout)
 		if err != nil {
 			msg.err = err
 			return msg
@@ -397,7 +402,7 @@ func (m *OS) applyEchoQueue(msg echoQueueMsg) tea.Cmd {
 	}
 	if msg.restore {
 		for _, q := range msg.entries {
-			if known[q.ID] || q.By != "human" {
+			if known[q.ID] || !echoMine(msg.host, q) {
 				continue
 			}
 			m.addEcho(msg.host, msg.session, msg.window, msg.who, q.Preview, nil, 0)
@@ -422,6 +427,16 @@ func (m *OS) applyEchoQueue(msg echoQueueMsg) tea.Cmd {
 		}
 	}
 	return m.echoPollCmd()
+}
+
+// echoMine reports whether a queued message is one the person sent: queued
+// as the person on this machine, or, on a linked machine, by this machine's
+// link for the person here.
+func echoMine(host string, q echoQueueEntry) bool {
+	if host == "" {
+		return q.By == "human"
+	}
+	return strings.HasPrefix(q.By, "link:") && strings.HasPrefix(q.From, "the person on ")
 }
 
 // echoAction runs a click on an echo's cancel or retry.

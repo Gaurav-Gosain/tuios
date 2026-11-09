@@ -480,6 +480,7 @@ func agentWorkVerbs() map[string]verbEntry {
 			params: []verbParam{
 				sessionParam,
 				{Name: "window", Type: "string", Description: "Window id or name. Omit to list every pane of the session."},
+				{Name: "host", Type: "string", Description: "A machine from [hosts]: list a pane's queue there, over the link. Session and window name the pane there. The person's replies queued from this machine are by link:THIS-MACHINE there. Only a caller outside every pane may ask; the far machine's policy for this one must allow list."},
 			},
 			returns: []verbParam{
 				{Name: "session", Type: "string", Description: "The session listed."},
@@ -500,6 +501,7 @@ func agentWorkVerbs() map[string]verbEntry {
 				{Name: "id", Type: "string", Description: "The entry to drop."},
 				{Name: "all", Type: "bool", Description: "Drop every entry of the window the caller may drop.", Default: "false"},
 				{Name: "human_nonce", Type: "string", Description: "The attached client's nonce, to drop as the person. One that does not verify is refused with not_human."},
+				{Name: "host", Type: "string", Description: "A machine from [hosts]: drop from a pane's queue there, over the link. The link drops only the entries this machine queued there. Only a caller outside every pane may ask; the far machine's policy for this one must allow write."},
 			},
 			returns: []verbParam{
 				{Name: "cancelled", Type: "[]string", Description: "The entries dropped."},
