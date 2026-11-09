@@ -16372,3 +16372,19 @@ Run on 2026-11-10 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTheTUISavesItsLayoutThroughTheDaemon$' -v .`.
+
+## TestTheLayoutPickerListsTheDaemonsLayouts
+
+The daemon runs with a config folder of its own, as a daemon on another
+machine has, and holds one layout. A client attached from a config folder
+with no layouts opens the picker with prefix L l and sees the daemon's
+layout, and ctrl+d deletes the daemon's file and empties the list.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| c826da4db (PR 3), where the picker reads the client's own folder | "the picker does not list the daemon's layout" (the picker says "No saved layouts") | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTheLayoutPickerListsTheDaemonsLayouts$' -v .`.

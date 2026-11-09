@@ -1606,6 +1606,8 @@ type OS struct {
 	// adoptScrollColumns.
 	pendingScrollColumns map[int][]session.SerializedScrollColumn
 	LayoutPickerItems    []LayoutTemplate
+	// LayoutPickerLoading is true while the picker waits on the daemon's list.
+	LayoutPickerLoading  bool
 	LayoutPickerSelected int
 	LayoutPickerScroll   int
 	LayoutPickerQuery    string

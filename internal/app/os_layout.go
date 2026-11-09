@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
@@ -345,32 +347,24 @@ func (m *OS) DisableAllTiling() {
 }
 
 // NextLayout cycles to the next saved layout template.
-func (m *OS) NextLayout() {
-	templates, err := LoadLayoutTemplates()
-	if err != nil || len(templates) == 0 {
-		m.ShowNotification("No saved layouts", "warn", 0)
-		return
-	}
-
-	m.LayoutCycleIndex = (m.LayoutCycleIndex + 1) % len(templates)
-	tmpl := templates[m.LayoutCycleIndex]
-	ApplyLayoutTemplate(tmpl, m)
-	m.ShowNotification(fmt.Sprintf("Layout: %s (%d/%d)", tmpl.Name, m.LayoutCycleIndex+1, len(templates)), "info", 0)
-}
+func (m *OS) NextLayout() tea.Cmd { return m.cycleLayout(1) }
 
 // PrevLayout cycles to the previous saved layout template.
-func (m *OS) PrevLayout() {
-	templates, err := LoadLayoutTemplates()
-	if err != nil || len(templates) == 0 {
-		m.ShowNotification("No saved layouts", "warn", 0)
-		return
-	}
+func (m *OS) PrevLayout() tea.Cmd { return m.cycleLayout(-1) }
 
-	m.LayoutCycleIndex--
-	if m.LayoutCycleIndex < 0 {
-		m.LayoutCycleIndex = len(templates) - 1
-	}
-	tmpl := templates[m.LayoutCycleIndex]
-	ApplyLayoutTemplate(tmpl, m)
-	m.ShowNotification(fmt.Sprintf("Layout: %s (%d/%d)", tmpl.Name, m.LayoutCycleIndex+1, len(templates)), "info", 0)
+// cycleLayout loads the saved layout step places from the last one cycled
+// to, from the daemon's list in a daemon session.
+func (m *OS) cycleLayout(step int) tea.Cmd {
+	return m.withLayoutTemplates(func(templates []LayoutTemplate) tea.Cmd {
+		if len(templates) == 0 {
+			m.ShowNotification("No saved layouts", "warn", 0)
+			return nil
+		}
+		n := len(templates)
+		m.LayoutCycleIndex = ((m.LayoutCycleIndex+step)%n + n) % n
+		tmpl := templates[m.LayoutCycleIndex]
+		ApplyLayoutTemplate(tmpl, m)
+		m.ShowNotification(fmt.Sprintf("Layout: %s (%d/%d)", tmpl.Name, m.LayoutCycleIndex+1, n), "info", 0)
+		return nil
+	})
 }

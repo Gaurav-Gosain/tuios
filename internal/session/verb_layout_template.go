@@ -51,6 +51,7 @@ type layoutTemplateRow struct {
 	Name      string `json:"name"`
 	Panes     int    `json:"panes"`
 	Mode      string `json:"mode,omitempty"`
+	Tiling    bool   `json:"tiling"`
 	CreatedAt string `json:"created_at,omitempty"`
 	Version   int    `json:"version"`
 }
@@ -77,7 +78,8 @@ func (d *Daemon) verbLayoutTemplate(cs *connState, params json.RawMessage) (any,
 		}
 		rows := make([]layoutTemplateRow, 0, len(ts))
 		for _, t := range ts {
-			r := layoutTemplateRow{Name: t.Name, Panes: len(t.Windows), Mode: t.Mode, Version: t.Version}
+			r := layoutTemplateRow{Name: t.Name, Panes: len(t.Windows), Mode: t.Mode, Version: t.Version,
+				Tiling: t.AutoTiling && t.Mode != "floating"}
 			if !t.CreatedAt.IsZero() {
 				r.CreatedAt = t.CreatedAt.UTC().Format(time.RFC3339)
 			}

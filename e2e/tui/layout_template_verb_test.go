@@ -179,3 +179,60 @@ func TestTheTUISavesItsLayoutThroughTheDaemon(t *testing.T) {
 	}
 	alive(t, term, "after the load")
 }
+
+// TestTheLayoutPickerListsTheDaemonsLayouts gives the daemon a config folder
+// of its own, as a daemon on another machine has, and saves a layout there
+// with the CLI. A client attached from a config folder with no layouts opens
+// the picker with prefix L l: it lists the daemon's layout, which a load
+// there reads, and ctrl+d deletes the daemon's file.
+//
+// How it could pass wrongly, written down first:
+//   - The client's own folder could hold the layout too. The test checks it
+//     has no layouts folder before the picker opens.
+//   - The daemon could share the client's folder. It was started with
+//     another XDG_CONFIG_HOME, and the save is checked to land there.
+//
+// Negative control: with the picker on the client's own folder, as before,
+// it says "No saved layouts".
+func TestTheLayoutPickerListsTheDaemonsLayouts(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	const sess = "farlay"
+	far := filepath.Join(base, "far-config")
+	farEnv := []string{"XDG_CONFIG_HOME=" + far}
+	if out, err := tuiosCLIEnv(t, base, farEnv, "new", sess, "--detach"); err != nil {
+		t.Fatalf("new: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "layout", "save", "faraway", "-s", sess); err != nil {
+		t.Fatalf("layout save: %v\n%s", err, out)
+	}
+	farFile := filepath.Join(far, "tuios", "layouts", "faraway.json")
+	if _, err := os.Stat(farFile); err != nil {
+		t.Fatalf("the save did not land in the daemon's folder: %v", err)
+	}
+	localDir := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios", "layouts")
+	if _, err := os.Stat(localDir); err == nil {
+		t.Fatalf("the client's own folder holds layouts, so the test proves nothing: %s", localDir)
+	}
+
+	term := startIn(t, base, startOpts{args: []string{"attach", sess}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	sendKeys(t, term, tuitest.Ctrl('b'), "L", "l")
+	if err := term.WaitForText("faraway", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the picker does not list the daemon's layout: %v\n%s", err, term.Snapshot())
+	}
+	sendKeys(t, term, tuitest.Ctrl('d'))
+	if err := term.WaitForText("Layout deleted", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: ctrl+d did not delete the daemon's layout: %v\n%s", err, term.Snapshot())
+	}
+	if _, err := os.Stat(farFile); err == nil {
+		t.Fatalf("ASSERTION: the daemon's file is still there after the delete: %s", farFile)
+	}
+	if err := term.WaitForText("No saved layouts", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the picker did not refill after the delete: %v\n%s", err, term.Snapshot())
+	}
+	sendKeys(t, term, tuitest.Esc)
+	alive(t, term, "after the delete")
+}

@@ -2655,6 +2655,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.handleLayoutTemplateDone(msg)
 		return m, nil
 
+	case layoutTemplatesListedMsg:
+		return m, m.handleLayoutTemplatesListed(msg)
+
 	case StripSnapMsg:
 		if m.SnapStrip(msg) && m.IsDaemonSession {
 			m.SyncStateToDaemon()

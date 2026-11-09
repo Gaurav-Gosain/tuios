@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/layouttmpl"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -152,6 +153,133 @@ func (m *OS) LayoutTemplateNow(action, name string) error {
 		return nil
 	}
 	return errfmt.Errorf("%s is not a layout action", action)
+}
+
+// layoutTemplatesListedMsg carries the daemon's layouts to the callback a
+// withLayoutTemplates call left.
+type layoutTemplatesListedMsg struct {
+	items []LayoutTemplate
+	err   error
+	then  func([]LayoutTemplate) tea.Cmd
+}
+
+// withLayoutTemplates runs then with the saved layouts, on the Update
+// goroutine: at once from this machine's folder, or in a daemon session when
+// the daemon's list arrives, so an attach to another host lists that host's
+// layouts, the ones a load there reads.
+func (m *OS) withLayoutTemplates(then func([]LayoutTemplate) tea.Cmd) tea.Cmd {
+	if !m.daemonLayouts() {
+		ts, _ := LoadLayoutTemplates()
+		return then(ts)
+	}
+	host, build, sess := m.AttachedHost, m.DaemonClient.ClientVersion(), m.SessionName
+	return func() tea.Msg {
+		ts, err := listDaemonLayouts(host, build, sess)
+		return layoutTemplatesListedMsg{items: ts, err: err, then: then}
+	}
+}
+
+// listDaemonLayouts reads the layout-template list of the daemon that holds
+// session sess. A row names a layout and how many panes it has; the panes
+// themselves stay in the daemon's file, which a load reads by name.
+func listDaemonLayouts(host, build, sess string) ([]LayoutTemplate, error) {
+	c, err := dialSessionDaemon(host, build)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = c.Close() }()
+	raw, err := c.Call("layout-template", map[string]any{"action": "list", "session": sess})
+	if err != nil {
+		return nil, err
+	}
+	var res struct {
+		Layouts []struct {
+			Name      string `json:"name"`
+			Panes     int    `json:"panes"`
+			Mode      string `json:"mode"`
+			Tiling    bool   `json:"tiling"`
+			CreatedAt string `json:"created_at"`
+			Version   int    `json:"version"`
+		} `json:"layouts"`
+	}
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return nil, err
+	}
+	out := make([]LayoutTemplate, 0, len(res.Layouts))
+	for _, r := range res.Layouts {
+		t := LayoutTemplate{
+			Name: r.Name, Mode: r.Mode, AutoTiling: r.Tiling, Version: r.Version,
+			Windows: make([]LayoutWindow, r.Panes),
+		}
+		t.CreatedAt, _ = time.Parse(time.RFC3339, r.CreatedAt)
+		out = append(out, t)
+	}
+	return out, nil
+}
+
+// handleLayoutTemplatesListed hands the daemon's layouts to the caller that
+// asked for them. A list that failed is shown, and the caller gets none.
+func (m *OS) handleLayoutTemplatesListed(msg layoutTemplatesListedMsg) tea.Cmd {
+	if msg.err != nil {
+		m.ShowNotification("Failed to list layouts: "+msg.err.Error(), "error", m.Settings.NotificationDuration)
+	}
+	if msg.then == nil {
+		return nil
+	}
+	return msg.then(msg.items)
+}
+
+// OpenLayoutPicker opens the layout picker on the saved layouts. In a daemon
+// session the list arrives from the daemon; until then the picker says it
+// is reading.
+func (m *OS) OpenLayoutPicker() tea.Cmd {
+	m.ShowLayoutPicker = true
+	m.LayoutPickerMode = "load"
+	m.LayoutPickerItems = nil
+	m.LayoutPickerQuery = ""
+	m.LayoutPickerSelected = 0
+	m.LayoutPickerScroll = 0
+	m.LayoutPickerLoading = true
+	return m.withLayoutTemplates(m.fillLayoutPicker)
+}
+
+// fillLayoutPicker puts ts in the picker, if it is still open on the list.
+func (m *OS) fillLayoutPicker(ts []LayoutTemplate) tea.Cmd {
+	m.LayoutPickerLoading = false
+	if !m.ShowLayoutPicker || m.LayoutPickerMode != "load" {
+		return nil
+	}
+	m.LayoutPickerItems = ts
+	if m.LayoutPickerSelected >= len(ts) {
+		m.LayoutPickerSelected = max(len(ts)-1, 0)
+	}
+	return nil
+}
+
+// DeleteLayoutFromPicker deletes the layout called name, from the daemon's
+// machine in a daemon session, and fills the picker again.
+func (m *OS) DeleteLayoutFromPicker(name string) tea.Cmd {
+	done := func(err error) {
+		if err != nil {
+			m.ShowNotification("Failed to delete layout: "+err.Error(), "error", m.Settings.NotificationDuration)
+			return
+		}
+		m.ShowNotification("Layout deleted: "+name, "info", m.Settings.NotificationDuration)
+	}
+	if !m.daemonLayouts() {
+		done(DeleteLayoutTemplate(name))
+		return m.withLayoutTemplates(m.fillLayoutPicker)
+	}
+	call := m.layoutTemplateCall()
+	host, build, sess := m.AttachedHost, m.DaemonClient.ClientVersion(), m.SessionName
+	return func() tea.Msg {
+		err := call("delete", name)
+		ts, lerr := listDaemonLayouts(host, build, sess)
+		return layoutTemplatesListedMsg{items: ts, err: lerr, then: func(ts []LayoutTemplate) tea.Cmd {
+			done(err)
+			return m.fillLayoutPicker(ts)
+		}}
+	}
 }
 
 // handleLayoutTemplateDone shows a save or load the daemon refused.

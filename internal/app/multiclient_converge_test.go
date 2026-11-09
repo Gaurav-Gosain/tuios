@@ -916,7 +916,7 @@ func (f *fleet) step() string {
 		if convergeModes {
 			m.ToggleLayoutMode()
 		} else {
-			m.NextLayout()
+			_ = m.NextLayout()
 		}
 		fc.commit()
 		return fmt.Sprintf("client %s switched to the %s layout", fc.name, m.LayoutModeName())
