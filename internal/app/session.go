@@ -804,6 +804,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 		focusAfter = m.Windows[m.FocusedWindow].ID
 	}
 	focusChanged := focusAfter != focusBefore
+	m.takeFocusEnter(focusChanged)
 
 	// The folded turns, now that the focus is the one this sync names.
 	for _, w := range m.turnsWithinSync {

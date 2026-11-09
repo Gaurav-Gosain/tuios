@@ -26,6 +26,7 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	cs.pluginAsks = payload.PluginApprovals
 	changed := cs.treeOps != payload.LayoutTreeOps || cs.scratchWS != payload.ScratchWorkspaces
 	cs.treeOps = payload.LayoutTreeOps
+	cs.daemonActions = payload.DaemonActions
 	cs.scratchWS = payload.ScratchWorkspaces
 	sizeCapChanged := cs.windowSizeCap != payload.WindowSize
 	cs.windowSizeCap = payload.WindowSize
@@ -97,6 +98,8 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		DirWatch: true,
 		// See sidebar_visibility.go.
 		SidebarOps: true,
+		// See daemon_actions.go.
+		DaemonActions: true,
 		// See Message.ReqID.
 		RequestIDs: true,
 		// See ExecuteCommandPayload.FocusIfShown.

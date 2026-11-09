@@ -284,6 +284,12 @@ type HelloPayload struct {
 	// attached to a session the daemon turns the ops off for every client
 	// there. See Session.SetLayoutTreeOps.
 	LayoutTreeOps bool `json:"layout_tree_ops,omitempty"`
+	// DaemonActions says the client sends the keymap actions that are an op
+	// on session state (daemonActions) to the daemon as an intent, and takes
+	// their result from the state push. The daemon runs those actions itself
+	// only while every attached client says so; for a client that predates
+	// it they are routed to it as before. See daemon_actions.go.
+	DaemonActions bool `json:"daemon_actions,omitzero"`
 	// ScratchWorkspaces says the client shows a scratch group from its own
 	// workspace (see scratch_workspace.go). A client that predates it leaves
 	// it false, and while such a client is attached the session makes the
@@ -387,6 +393,10 @@ type WelcomePayload struct {
 	// the rail is shown as session state. A client that does not see it keeps
 	// its rail to itself, as every client did before.
 	SidebarOps bool `json:"sidebar_ops,omitzero"`
+	// DaemonActions says the daemon runs the actions of daemonActions itself
+	// when an attached client sent DaemonActions in its hello. A client that
+	// does not see it runs them in its own state, as before.
+	DaemonActions bool `json:"daemon_actions,omitzero"`
 	// RequestIDs says the daemon reads tagged frames and tags its answer to a
 	// tagged request with the same id (see Message.ReqID). A client that does
 	// not see it matches replies by message type, as every client did before.

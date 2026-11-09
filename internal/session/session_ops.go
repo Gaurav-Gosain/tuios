@@ -1077,6 +1077,27 @@ func (s *Session) SetDaemonWindowMinimized(target string, minimized bool) error 
 			return err
 		}
 		state.Windows[idx].Minimized = minimized
+		// A minimized pane does not keep the focus: it goes to the first
+		// pane still shown on the workspace, as the TUI's MinimizeWindow
+		// does (FocusNextVisibleWindow). Kept on the hidden pane, a second
+		// minimize_window hid nothing, and two pressed at once hid one pane.
+		if minimized && state.FocusedWindowID == state.Windows[idx].ID {
+			ws := state.Windows[idx].Workspace
+			state.FocusedWindowID = ""
+			for _, w := range state.Windows {
+				if w.Workspace == ws && !w.Minimized {
+					state.FocusedWindowID = w.ID
+					break
+				}
+			}
+			if state.WorkspaceFocus != nil {
+				if state.FocusedWindowID == "" {
+					delete(state.WorkspaceFocus, ws)
+				} else {
+					state.WorkspaceFocus[ws] = state.FocusedWindowID
+				}
+			}
+		}
 		return nil
 	})
 }

@@ -35,6 +35,6 @@ func RunActionByName(name string, o *app.OS) (handled bool, cmd tea.Cmd) {
 	if !d.HasAction(name) {
 		return false, nil
 	}
-	_, cmd = d.Dispatch(name, tea.KeyPressMsg{}, o)
+	_, cmd = d.dispatch(name, tea.KeyPressMsg{}, o, false)
 	return true, cmd
 }

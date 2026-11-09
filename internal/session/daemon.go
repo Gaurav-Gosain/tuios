@@ -676,6 +676,9 @@ type connState struct {
 	// treeOps says the client's hello offered MsgLayoutTree. Set once, at
 	// hello. See Daemon.refreshTreeOps.
 	treeOps bool
+	// daemonActions says the client's hello offered DaemonActions. Read
+	// under mu. See daemon_actions.go.
+	daemonActions bool
 	// scratchWS says the client's hello offered scratch workspaces. See
 	// Daemon.refreshTreeOps.
 	scratchWS bool

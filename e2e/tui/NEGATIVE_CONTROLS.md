@@ -16372,3 +16372,34 @@ passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestArrangePlace$' -v .`.
+
+## TestDaemonActionRunsOnceWithATUIAttached, TestDaemonActionsFromTwoClientsAtOnce, TestDaemonActionFromAPaneKeepsItsGrants
+
+Parity gap 1, step 4, batch A (`internal/session/daemon_actions.go`,
+`internal/app/daemon_actions.go`). The keymap actions that only change the
+focus, a pane's workspace or whether it is minimized run in the daemon with a
+TUI attached, and the TUI's key for one sends it to the daemon. T1 runs each by
+run-command with one TUI attached and needs `routed: false`. T3 has two clients
+press minimize_window at the same moment for ten rounds and needs two panes
+minimized each round. T6 has a pane with admin and not respond call the
+run-command verb, and needs a refusal with nothing changed.
+
+Run on 2026-11-09 on macOS (arm64), as the Atlas helper user. The branch
+passes all five batch A tests and the internal/session T7.
+
+| Test | Control | The test fails with | Result |
+|------|---------|---------------------|--------|
+| T1 | guios/land before batch A (cca32b56d) | "select_window_1: run-command answered routed true; the TUI ran it, not the daemon" | **caught** |
+| T3 | The TUI's key path off (`SendsDaemonAction` always false) | "round 0: two presses of minimize_window did not hold": one pane minimized | **caught** |
+| T3 | The key path on, `SetDaemonWindowMinimized` leaving the focus on the pane it hid | "round 0: two presses of minimize_window did not hold": the second press hid nothing | **caught** |
+| T6 | `refuseTapeTyping` returning "" | "run-command select_window_1 from a pane without respond was not refused": `routed: false` | **caught** |
+| T7 | `runsAction` ignoring the clients' hello | "waiting for RemoteCommand: ... i/o timeout": an old TUI was not routed the action | **caught** |
+
+T2 and T5 pass on the controls too: T5 holds since step 1, and T2's single key
+is not a race. T6 with a `read` or `read,write` pane passes on the control as
+well, because the admin check refuses run-command first, so the test uses an
+admin pane.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestDaemonAction' -v .`
+and `go test -count=1 -run TestDaemonActionsFollowTheClientsHello ./internal/session/`.
