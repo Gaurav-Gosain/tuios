@@ -38,6 +38,12 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// The end of a press in a draft: the selection it made stays.
+	if o.DraftRelease() {
+		o.OverlayMouseRelease()
+		return o, nil
+	}
+
 	// A press on the picture-in-picture view was the view's, and so is its
 	// release. Without this the release of a click that jumped to the pinned
 	// pane went on to that pane as a release it never saw pressed.

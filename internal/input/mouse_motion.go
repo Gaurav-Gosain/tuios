@@ -115,6 +115,11 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.OverlayMouseMotion(mouse.X, mouse.Y)
 		return o, nil
 	}
+	// A press in a draft selects as the pointer moves, over the panel or
+	// past it.
+	if o.DraftDrag(mouse.X, mouse.Y) {
+		return o, nil
+	}
 	if !o.Dragging && !o.Resizing && !o.ScrollbarDragging {
 		if o.OverlayMouseMotion(mouse.X, mouse.Y) {
 			return o, nil

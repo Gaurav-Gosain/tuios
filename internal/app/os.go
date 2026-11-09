@@ -1462,6 +1462,8 @@ type OS struct {
 	// The agent mailbox overlay and the mirror behind it. See agent_mail.go.
 	ShowAgentMail bool
 	AgentMail     AgentMailState
+	// draftMouse is a mouse press in the open draft (draft_mouse.go).
+	draftMouse draftPress
 	// The Inbox overlay and the mirror of the daemon's attention queue behind
 	// it. See inbox.go.
 	ShowInbox bool
