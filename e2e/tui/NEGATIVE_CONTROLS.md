@@ -16159,3 +16159,22 @@ passes 3 of 3.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHeadlessKeymapActions$' -v .`.
+
+## TestHeadlessDirectionActions
+
+With no TUI client, run-command runs focus_up/down, terminal_focus_*,
+swap_* and resize_pane_*_5/20 on the daemon's own layout of the tree
+(`internal/session/headless_actions.go`, `layout.GrowPane`), in a | (b over
+c) split by split-window. Each step reads the rectangles back.
+
+Run on 2026-11-09 on macOS (arm64), as the Atlas helper user. The branch
+passes 3 of 3. The same commit's TestHeadlessKeymapActions also gains a
+step for the workspace switch's focus: with the step 1 build it fails at
+"SwitchWorkspace 1 focuses a pane of workspace 1".
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The direction actions left out of runHeadlessAction (before this step) | "focus_up still needs a client" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHeadlessDirectionActions$' -v .`.

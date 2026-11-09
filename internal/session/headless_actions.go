@@ -1,11 +1,13 @@
 package session
 
 import (
+	"errors"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
 )
 
 // Keymap actions with no TUI client (parity gap 1, step 1).
@@ -35,6 +37,15 @@ func (d *Daemon) runHeadlessAction(sess *Session, name string, base NewWindowOpt
 	}
 	if n, ok := actionDigit(name, "move_and_follow_"); ok {
 		return nil, headlessSendToWorkspace(sess, n, true)
+	}
+	if dir, ok := directionOf(name, "focus_", "terminal_focus_"); ok {
+		return nil, d.headlessFocusSide(sess, dir)
+	}
+	if dir, ok := directionOf(name, "swap_"); ok {
+		return nil, d.headlessSwapSide(sess, dir)
+	}
+	if dir, cells, ok := resizeStepOf(name); ok {
+		return nil, d.headlessResizeStep(sess, dir, cells)
 	}
 	switch name {
 	case "last_pane":
@@ -237,4 +248,157 @@ func headlessRestoreAll(sess *Session) error {
 		}
 	}
 	return nil
+}
+
+// directionOf reads the left, right, up or down at the end of an action that
+// starts with one of prefixes, such as focus_up or swap_left.
+func directionOf(name string, prefixes ...string) (layout.Side, bool) {
+	for _, pre := range prefixes {
+		if rest, ok := strings.CutPrefix(name, pre); ok {
+			return layout.ParseSide(rest)
+		}
+	}
+	return 0, false
+}
+
+// resizeStepOf reads resize_pane_DIR_N: the way and the cells.
+func resizeStepOf(name string) (layout.Side, int, bool) {
+	rest, ok := strings.CutPrefix(name, "resize_pane_")
+	if !ok {
+		return 0, 0, false
+	}
+	dir, n, ok := strings.Cut(rest, "_")
+	if !ok {
+		return 0, 0, false
+	}
+	side, ok := layout.ParseSide(dir)
+	cells, err := strconv.Atoi(n)
+	if !ok || err != nil || cells <= 0 {
+		return 0, 0, false
+	}
+	return side, cells, true
+}
+
+// neighbourOf is the window toward side of the focused one on the current
+// workspace, by layout.Neighbour, the rule the TUI's FocusDirection uses. A
+// tiled workspace is laid out from its tree in the daemon's box now, since a
+// session no client shows may hold no rectangles or old ones; a floating one
+// takes the windows' recorded rectangles, with the floating fallback.
+func (d *Daemon) neighbourOf(sess *Session, side layout.Side) (WindowState, WindowState, error) {
+	state := sess.GetState()
+	id, err := focusedWindowID(state)
+	if err != nil {
+		return WindowState{}, WindowState{}, err
+	}
+	i, err := findWindowStateIndex(state.Windows, id)
+	if err != nil {
+		return WindowState{}, WindowState{}, err
+	}
+	from := state.Windows[i]
+	if from.Workspace != state.CurrentWorkspace || from.Minimized {
+		return WindowState{}, WindowState{}, errfmt.Errorf("the focused pane is not shown on the current workspace")
+	}
+	rects := map[string]layout.Rect{}
+	tiled := state.AutoTiling && tiledPane(&from) && d.daemonArranges(sess, from.Workspace)
+	if tiled {
+		box := sess.layoutBox()
+		e := newLayoutEdit(state, box)
+		byLeaf := e.tree(from.Workspace).ApplyLayout(box, 0)
+		for wid, leaf := range e.ids {
+			if r, ok := byLeaf[leaf]; ok {
+				rects[wid] = r
+			}
+		}
+	}
+	var cands []layout.Rect
+	var wins []WindowState
+	for _, w := range state.Windows {
+		if w.ID == from.ID || w.Workspace != from.Workspace || w.Minimized {
+			continue
+		}
+		r := layout.Rect{X: w.X, Y: w.Y, W: w.Width, H: w.Height}
+		if tiled {
+			var ok bool
+			if r, ok = rects[w.ID]; !ok {
+				continue
+			}
+		}
+		cands, wins = append(cands, r), append(wins, w)
+	}
+	origin := layout.Rect{X: from.X, Y: from.Y, W: from.Width, H: from.Height}
+	if tiled {
+		origin = rects[from.ID]
+	}
+	n := layout.Neighbour(origin, cands, side, !tiled)
+	if n < 0 {
+		return from, WindowState{}, errfmt.Errorf("no pane %s of the focused one", sideName(side))
+	}
+	return from, wins[n], nil
+}
+
+func sideName(s layout.Side) string {
+	return [...]string{"left", "right", "up", "down"}[s]
+}
+
+// headlessFocusSide focuses the pane toward side.
+func (d *Daemon) headlessFocusSide(sess *Session, side layout.Side) error {
+	_, to, err := d.neighbourOf(sess, side)
+	if err != nil {
+		return err
+	}
+	return sess.FocusDaemonWindow(to.ID)
+}
+
+// headlessSwapSide swaps the focused pane with the one toward side, through
+// swapPanes, which keeps the tiled and same-workspace rules and hands a
+// layout the daemon does not arrange to the client.
+func (d *Daemon) headlessSwapSide(sess *Session, side layout.Side) error {
+	from, to, err := d.neighbourOf(sess, side)
+	if err != nil {
+		return err
+	}
+	if verr := d.swapPanes(sess, from, to); verr != nil {
+		return errors.New(verr.Message)
+	}
+	return nil
+}
+
+// headlessResizeStep makes the focused pane cells wider (right), narrower
+// (left), taller (down) or shorter (up), as the TUI's resize_pane keys: the
+// cells turn into a share of the daemon's box, and the tree moves the pane's
+// far border, or its near one at the far edge (layout.GrowPane).
+func (d *Daemon) headlessResizeStep(sess *Session, side layout.Side, cells int) error {
+	state := sess.GetState()
+	id, err := focusedWindowID(state)
+	if err != nil {
+		return err
+	}
+	i, err := findWindowStateIndex(state.Windows, id)
+	if err != nil {
+		return err
+	}
+	w := state.Windows[i]
+	if !state.AutoTiling || !tiledPane(&w) {
+		return errfmt.Errorf("the focused pane is not tiled, so there is no layout to resize it in")
+	}
+	box := sess.layoutBox()
+	horizontal := side == layout.SideLeft || side == layout.SideRight
+	extent := box.H
+	if horizontal {
+		extent = box.W
+	}
+	delta := float64(cells) / float64(max(extent, 1))
+	if side == layout.SideLeft || side == layout.SideUp {
+		delta = -delta
+	}
+	err = sess.arrangeLayout(true, func(_ *SessionState, e *layoutEdit) (int, error) {
+		if !e.tree(w.Workspace).GrowPane(e.leaf(w.ID), horizontal, delta) {
+			return 0, errLayoutUnchanged
+		}
+		return w.Workspace, nil
+	})
+	if errors.Is(err, errLayoutUnchanged) {
+		return nil
+	}
+	return err
 }
