@@ -179,17 +179,6 @@ func (c *Client) dispatch(method string, params any) (any, error) {
 		}
 		return true, c.zoom(p.Session, p.Pane)
 
-	case "layout":
-		p, err := decode[proto.LayoutParams](params)
-		if err != nil {
-			return nil, err
-		}
-		c.st.setLayout(p.Session, p.Layout)
-		if !c.writeTree(p.Session, p.Layout) {
-			c.kickState()
-		}
-		return true, nil
-
 	case "grid":
 		p, err := decode[proto.GridParams](params)
 		if err != nil {
@@ -489,19 +478,19 @@ func (c *Client) split(p proto.CreateParams) (proto.Session, error) {
 	// itself, so the split goes through it: a tree written here would race
 	// the one it writes for the new pane. A pane the daemon makes splits
 	// the focused pane there, so the focus goes first.
-	if ti.tui && beside != "" && len(p.Command) == 0 && p.Ratio == 0 && p.Host == "" && p.URL == "" {
-		if dirn != "" && ti.useTree {
+	if ti.TUI && beside != "" && len(p.Command) == 0 && p.Ratio == 0 && p.Host == "" && p.URL == "" {
+		if dirn != "" && ti.UseTree {
 			if _, err := c.verb("split-window", map[string]any{"session": name, "window": beside, "side": dirn}); err == nil {
 				return c.sessionNamed(name, sid)
 			}
 		}
 		_, _ = c.verb("focus-window", map[string]any{"session": name, "window": beside})
 	}
-	if !ti.tui && beside != "" {
+	if !ti.TUI && beside != "" {
 		// layoutOf puts the pane in the tree when it shows up, as the
 		// TUI's insertSyncedWindow does with its pending split.
 		c.st.mu.Lock()
-		c.st.pending[sid] = pendingSplit{target: beside, dir: preselection(dirn), at: time.Now()}
+		c.st.pending[sid] = pendingSplit{target: beside, side: dirn, at: time.Now()}
 		c.st.mu.Unlock()
 	}
 	if p.Cols > 0 && p.Rows > 0 && p.Host == "" {
@@ -530,13 +519,13 @@ func (c *Client) split(p proto.CreateParams) (proto.Session, error) {
 func (c *Client) zoom(sid, pane string) error {
 	c.st.mu.Lock()
 	ti := c.st.trees[sid]
-	cur := ti.zoomByTUI
+	cur := ti.ZoomByTUI
 	if cur == "" {
 		cur = c.st.zoom[sid]
 	}
 	name := c.st.sessionName[sid]
 	c.st.mu.Unlock()
-	if ti.tui {
+	if ti.TUI {
 		target := pane
 		if cur != "" && cur != pane {
 			// Unzoom the zoomed one first, then zoom this one.

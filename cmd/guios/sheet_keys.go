@@ -54,6 +54,12 @@ func (a *App) sheetName() string {
 // sheetInput binds a sheet's field for the owner, as its build makes it,
 // and reports whether a kept Enter submits it.
 func (a *App) sheetInput(name string, in ui.Element) bool {
+	if a.sheetName() != name {
+		// Two sheets open at once, as a rename run over the help: only
+		// the one that owns the keys binds the shared field, since two
+		// bound in one build ended the app.
+		return false
+	}
 	sf := &a.sf
 	in.Bind(&sf.ref)
 	sf.name, sf.pass = name, a.ko.pass

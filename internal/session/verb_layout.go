@@ -226,7 +226,7 @@ func (d *Daemon) verbMoveWindow(cs *connState, params json.RawMessage) (any, *ve
 		return nil, moveErr(err, sess, p.Workspace)
 	}
 	if p.Follow {
-		if err := sess.SwitchDaemonWorkspace(p.Workspace); err != nil {
+		if err := sess.FollowDaemonWindow(windowID); err != nil {
 			return nil, moveErr(err, sess, p.Workspace)
 		}
 	}

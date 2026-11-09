@@ -16142,6 +16142,43 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPaneGoneSaysWhyInTheLog$' -v .`.
 
+## TestHeadlessKeymapActions
+
+With no TUI client on a session, run-command runs the keymap actions that are
+only an op on session state (`internal/session/headless_actions.go`):
+select_window_N, last_pane, send_to_workspace_N, move_and_follow_N,
+break_pane, move_workspace_left/right, minimize_window, restore_all and
+close_workspace. Each step reads the daemon's state back with list-windows.
+
+Run on 2026-11-09 on macOS (arm64), as the Atlas helper user. The branch
+passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The Action case in `executeDaemonCommandEnv` answers `errNeedsClient` (before this step) | "select_window_1 still needs a client: command "Action" requires an attached client" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHeadlessKeymapActions$' -v .`.
+
+## TestHeadlessDirectionActions
+
+With no TUI client, run-command runs focus_up/down, terminal_focus_*,
+swap_* and resize_pane_*_5/20 on the daemon's own layout of the tree
+(`internal/session/headless_actions.go`, `layout.GrowPane`), in a | (b over
+c) split by split-window. Each step reads the rectangles back.
+
+Run on 2026-11-09 on macOS (arm64), as the Atlas helper user. The branch
+passes 3 of 3. The same commit's TestHeadlessKeymapActions also gains a
+step for the workspace switch's focus: with the step 1 build it fails at
+"SwitchWorkspace 1 focuses a pane of workspace 1".
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The direction actions left out of runHeadlessAction (before this step) | "focus_up still needs a client" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHeadlessDirectionActions$' -v .`.
+
 ## TestGuiosBrowserPaneIsAWebWindow
 
 guios's New browser pane on a tuios daemon (guios polish wave 1, item 5): the
@@ -16301,3 +16338,37 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSetUpNamesAnUnknownHostKey$' -v .`.
+
+## TestArrangeVerb
+
+The daemon runs a layout change itself with the arrange verb
+(`internal/session/verb_arrange.go`, the engine in `arrange_engine.go`), one op
+per session at a time. Four callers on connections of their own send
+master.add at the same moment, and every one must land.
+
+Run on 2026-11-09 on macOS (arm64), as the Atlas helper user. The branch
+passes 4 of 4.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| No per-session lock in verbArrange (each op reads and writes while others do) | "four master.add at once took the masters from 1 to 3, want 5: a change was lost" (1 to 2 and 1 to 3 in the other runs) | **caught**, 3 of 3 |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestArrangeVerb$' -v .`.
+
+## TestArrangePlace
+
+The daemon puts a pane its split tree lacks into the tree (the arrange verb's
+place op, `internal/session/arrange_place.go`), on the side the caller asked
+for. With no client, two split panes get a third from new-window, which the
+tree lacks; place below the first pane must put it there.
+
+Run on 2026-11-09 on macOS (arm64), as the Atlas helper user. The branch
+passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| No place op in the engine | "arrange place: exit status 1" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestArrangePlace$' -v .`.

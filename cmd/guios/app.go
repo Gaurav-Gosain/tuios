@@ -314,6 +314,9 @@ type App struct {
 	skillsAt     time.Time
 	sideDrag     float32 // the width as a drag of the sidebar's edge began
 	pendingToast string
+	// lastToast is the last toast asked for, kept after it shows, for the
+	// QA probe (automation_e2e.go).
+	lastToast string
 	// tk is the tuios prefix key's state (tuios_keys.go).
 	tk tuiosKeys
 	// later are actions that change what the view is building, run once
@@ -1438,7 +1441,7 @@ func (a *App) callOn(h *host, method string, params any, done func(err error)) {
 	})
 }
 
-func (a *App) toast(msg string) { a.pendingToast = msg }
+func (a *App) toast(msg string) { a.pendingToast, a.lastToast = msg, msg }
 
 // newSession starts a session in a project: in the directory of the
 // session shown when it is the project's, as a terminal's new tab does,
