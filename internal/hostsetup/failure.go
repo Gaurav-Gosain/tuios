@@ -104,9 +104,14 @@ func gateFailure(g federation.SSHGate, name string) *Failure {
 	}
 }
 
-// named puts the machine's name in a sentence about "the host".
+// named puts the machine's name in a sentence about "the host". "the host
+// key" names the key, not the machine, so it stays: the replacer tries its
+// pairs in order at each place, and those come first.
 func named(sentence, name string) string {
-	return strings.NewReplacer("The host", name, "the host", name).Replace(sentence)
+	return strings.NewReplacer(
+		"The host key", "The host key", "the host key", "the host key",
+		"The host", name, "the host", name,
+	).Replace(sentence)
 }
 
 // said is the last line of what ssh wrote, cleaned.
