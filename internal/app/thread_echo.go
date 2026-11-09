@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"errors"
 	"strconv"
 	"strings"
@@ -573,7 +574,7 @@ func (m *OS) echoStateLine(l ckLook, e *replyEcho) ckLine {
 			act, verb = "echo:cancel:"+strconv.FormatUint(e.n, 10), "cancel"
 		}
 	case echoTyped:
-		mark, what, ink = "◌", "Sent, waiting for "+cmpOr(e.who, "the agent"), pal.FgDim
+		mark, what, ink = "◌", "Sent, waiting for "+cmp.Or(e.who, "the agent"), pal.FgDim
 	case echoFailed:
 		mark, what, ink = "✕", "Not sent: "+e.why, pal.Warn
 		if !e.preview {
