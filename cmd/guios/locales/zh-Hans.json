@@ -761,6 +761,7 @@
   "cockpitQueueFull": "{name} 的队列已满。请删除一条消息，或等待 {name} 取走一条。",
   "cockpitQueuedFor": "已排队等待 {name}。它空闲时会收到。",
   "cockpitSendNotes": "把备注发给代理",
+  "cockpitDiffCut": "未显示 {count} 行更改：此视图中的行数过多。",
   "cockpitNoChanges": "没有更改",
   "cockpitFilesChanged": "更改了 {count} 个文件",
   "cockpitAgainst": "对比 {base}",

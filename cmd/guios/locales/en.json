@@ -1374,6 +1374,7 @@
   "cockpitQueueFull": "The queue for {name} is full. Drop a message, or wait until {name} takes one.",
   "cockpitQueuedFor": "Queued for {name}. It gets it when it rests.",
   "cockpitSendNotes": "Send notes to the agent",
+  "cockpitDiffCut": "{count, plural, one {# changed line is not shown: too many for this view.} other {# changed lines are not shown: too many for this view.}}",
   "cockpitNoChanges": "No changes",
   "cockpitFilesChanged": "{count, plural, one {# file changed} other {# files changed}}",
   "@cockpitFilesChanged": {

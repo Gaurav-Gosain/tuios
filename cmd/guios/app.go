@@ -19,6 +19,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
+
 	"github.com/Gaurav-Gosain/mygo"
 	"github.com/Gaurav-Gosain/mygo/plugins/terminal"
 	"github.com/Gaurav-Gosain/mygo/transfer"
@@ -96,6 +98,17 @@ type App struct {
 	// diffW is the width each diff's rows were last sized to
 	// (diffWidthSeen).
 	diffW map[uint64]float32
+	// diffClip is the view a diff page shows its diffs in, in window DIPs
+	// of the last frame, while the page builds them: diffView builds only
+	// the lines in it. Empty builds every line.
+	diffClip ui.Rect
+	// diffScrollY is how far that page is scrolled now, in DIPs.
+	diffScrollY float32
+	// diffWide is the width of each diff's longest line, by diff.
+	diffWide map[*transcriptview.Diff]float32
+	// diffAt is, for each diff, the rows it built in the last frame and
+	// how far its page was scrolled then (diffView).
+	diffAt map[*transcriptview.Diff]diffBuilt
 
 	// leftCrowded says the window is too narrow for the sidebar beside
 	// the panes, which then hides unless leftForced (view.go).
