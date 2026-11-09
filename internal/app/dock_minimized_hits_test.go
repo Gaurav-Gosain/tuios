@@ -27,7 +27,6 @@ func dockMinimizedOS(t testing.TB) *OS {
 		w.Workspace = 1
 		w.CustomName = []string{"alpha", "bravo"}[i]
 		w.Minimized = true
-		w.MinimizeOrder = int64(i + 1)
 	}
 	m.FocusedWindow = -1
 	return m

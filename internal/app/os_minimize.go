@@ -39,7 +39,6 @@ func (m *OS) MinimizeWindow(i int) {
 		// Immediately minimize without animation
 		now := time.Now()
 		window.Minimized = true
-		window.MinimizeOrder = now.UnixNano() // Track order for dock sorting
 
 		// Set highlight timestamp for dock tab
 		window.MinimizeHighlightUntil = now.Add(1 * time.Second)

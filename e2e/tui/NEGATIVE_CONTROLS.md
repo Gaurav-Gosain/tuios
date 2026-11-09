@@ -16248,3 +16248,18 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSpawnSheetListIsTheDropdown$' -v .`.
+
+## TestDockPillsAndRestoreNAgree
+
+Three panes, gamma then alpha minimized by keys (the opposite of window
+order). The first client's and a second client's docks list the pills in one
+order, and prefix m 2 restores the pane on the second pill.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (0ff7245bc), where the dock sorts by a client-side minimize time | "the two clients list the pills in different orders: [gamma alpha] and [alpha gamma]" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestDockPillsAndRestoreNAgree$' -v .`.

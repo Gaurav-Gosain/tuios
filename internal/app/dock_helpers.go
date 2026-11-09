@@ -3,7 +3,6 @@ package app
 import (
 	"fmt"
 	"image/color"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -1028,10 +1027,10 @@ func (m *OS) getDockItems() []DockItem {
 		}
 	}
 
-	// Sort by minimize order (oldest first)
-	sort.Slice(dockWindows, func(i, j int) bool {
-		return m.Windows[dockWindows[i]].MinimizeOrder < m.Windows[dockWindows[j]].MinimizeOrder
-	})
+	// The pills are in window order, the order restore_N counts in
+	// (RestoreMinimizedByIndex) and the one every client of the session
+	// shares. A client-side minimize time put the Nth pill and restore_N on
+	// different panes, and gave a second client another order.
 
 	// Build dock items
 	items := make([]DockItem, 0, len(dockWindows))

@@ -261,7 +261,6 @@ type Window struct {
 	ioMu                   sync.RWMutex
 	Minimized              bool        // True when window is minimized to dock
 	MinimizeHighlightUntil time.Time   // Highlight dock tab until this time
-	MinimizeOrder          int64       // Unix nano timestamp when minimized (for dock ordering)
 	PreMinimizeX           int         // Store position before minimizing
 	PreMinimizeY           int         // Store position before minimizing
 	PreMinimizeWidth       int         // Store size before minimizing
