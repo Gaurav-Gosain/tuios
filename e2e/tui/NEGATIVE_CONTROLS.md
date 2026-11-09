@@ -16126,3 +16126,18 @@ Run on 2026-11-09 on macOS (arm64). The branch passes both.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitThreadImage' -v .`.
+
+## TestReadinessCheckEndsWithTheDaemon
+
+The agent-readiness check runs a claude whose `auth status` hangs, and the
+daemon is stopped while it runs. The check's process must be gone within 3 s
+of kill-server.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (4f5cedc1a), where the check runs under context.Background | "claude auth status (pid N) is still running 3 s after kill-server: the check outlives its daemon" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestReadinessCheckEndsWithTheDaemon$' -v .`.
