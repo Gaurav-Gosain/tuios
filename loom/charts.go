@@ -54,18 +54,18 @@ func (s *Surface) buildChart(b *box, vars map[string]any) widget {
 		w.label = s.str(n, "label", vars)
 		w.height = 1
 	case "sparkline":
-		w.values = numbers(s.data(n, "values", vars), "")
+		w.values = ChartValues(s.data(n, "values", vars), "")
 		w.height, w.width = 1, len(w.values)
 	case "histogram":
-		w.values = numbers(s.data(n, "values", vars), "")
+		w.values = ChartValues(s.data(n, "values", vars), "")
 		w.bins = s.count(n, "bins", vars, 0, 0, 200)
 		w.height = 5
 	case "bar":
 		rows := s.data(n, "data", vars)
-		w.values = numbers(rows, n.AttrString("y"))
-		w.labels = labels(rows, n.AttrString("x"))
+		w.values = ChartValues(rows, n.AttrString("y"))
+		w.labels = ChartLabels(rows, n.AttrString("x"))
 		w.horiz = n.AttrString("dir") == "h"
-		w.roles, w.keys = rowRoles(rows)
+		w.roles, w.keys = ChartRowRoles(rows)
 		w.height = 6
 		if w.horiz {
 			w.height = len(w.values)
@@ -79,22 +79,22 @@ func (s *Surface) buildChart(b *box, vars map[string]any) widget {
 			fields = fields[:maxSeries]
 		}
 		for i, f := range fields {
-			sr := plot.Series{Name: strings.TrimSpace(f), Values: numbers(rows, strings.TrimSpace(f))}
+			sr := plot.Series{Name: strings.TrimSpace(f), Values: ChartValues(rows, strings.TrimSpace(f))}
 			if i == 0 && validRole(w.role) && w.role != "" {
 				sr.Role = plot.Role(w.role)
 			}
 			w.series = append(w.series, sr)
 		}
-		w.labels = labels(rows, n.AttrString("x"))
+		w.labels = ChartLabels(rows, n.AttrString("x"))
 		w.axis = s.flag(n, "axis", vars, false)
 		w.height = 6
 	case "heatmap":
-		w.grid, w.rowsL, w.colsL = pivot(s.data(n, "data", vars), n.AttrString("x"), n.AttrString("y"), n.AttrString("v"))
+		w.grid, w.rowsL, w.colsL = ChartGrid(s.data(n, "data", vars), n.AttrString("x"), n.AttrString("y"), n.AttrString("v"))
 		w.height = len(w.rowsL) + 2
 	case "map":
 		rows := s.data(n, "data", vars)
-		vals := numbers(rows, n.AttrString("y"))
-		keys := labels(rows, n.AttrString("x"))
+		vals := ChartValues(rows, n.AttrString("y"))
+		keys := ChartLabels(rows, n.AttrString("x"))
 		w.codes = make(map[string]float64, len(keys))
 		for i, k := range keys {
 			// The plot map is keyed by ISO 3166-1 alpha-2. A row that names
@@ -111,19 +111,19 @@ func (s *Surface) buildChart(b *box, vars map[string]any) widget {
 		w.height = 0 // measured from the width, since the map keeps its shape
 	case "pie":
 		rows := s.data(n, "data", vars)
-		w.values = numbers(rows, n.AttrString("v"))
-		w.labels = labels(rows, n.AttrString("label"))
+		w.values = ChartValues(rows, n.AttrString("v"))
+		w.labels = ChartLabels(rows, n.AttrString("label"))
 		w.donut = n.AttrString("style") == "donut"
 		w.height = 7
 	}
 	return w
 }
 
-// rowRoles reads the colour of each bar from its row: a row's role field
+// ChartRowRoles reads the colour of each bar from its row: a row's role field
 // names a theme role, and its series field names the legend entry for
 // that role, such as {"secs": 24.1, "role": "error", "series": "failed"}.
 // A row without a valid role takes the chart's.
-func rowRoles(rows []any) ([]plot.Role, []plot.LegendItem) {
+func ChartRowRoles(rows []any) ([]plot.Role, []plot.LegendItem) {
 	var roles []plot.Role
 	var keys []plot.LegendItem
 	seen := map[string]bool{}
@@ -150,9 +150,9 @@ func rowRoles(rows []any) ([]plot.Role, []plot.LegendItem) {
 	return roles, keys
 }
 
-// pivot turns rows of {x, y, v} into a grid: one row per y and one column
+// ChartGrid turns rows of {x, y, v} into a grid: one row per y and one column
 // per x, in the order they first appear. A pair with no row is NaN.
-func pivot(rows []any, xf, yf, vf string) ([][]float64, []string, []string) {
+func ChartGrid(rows []any, xf, yf, vf string) ([][]float64, []string, []string) {
 	var xs, ys []string
 	xi, yi := map[string]int{}, map[string]int{}
 	type cell struct {
@@ -202,10 +202,10 @@ func pivot(rows []any, xf, yf, vf string) ([][]float64, []string, []string) {
 // maxSeries bounds the y fields of a line or an area.
 const maxSeries = 12
 
-// numbers reads a data array as numbers: the elements themselves, or the
+// ChartValues reads a data array as numbers: the elements themselves, or the
 // field of each row. A row with no such field, and anything that is not a
 // number, is missing (NaN).
-func numbers(rows []any, field string) []float64 {
+func ChartValues(rows []any, field string) []float64 {
 	out := make([]float64, len(rows))
 	for i, r := range rows {
 		v := r
@@ -240,7 +240,9 @@ func firstNumber(m map[string]any) any {
 	return m[best]
 }
 
-func labels(rows []any, field string) []string {
+// ChartLabels reads the field of each row as text, or nil when the field
+// is empty. A host that draws charts itself reads labels the way loom does.
+func ChartLabels(rows []any, field string) []string {
 	if field == "" {
 		return nil
 	}
