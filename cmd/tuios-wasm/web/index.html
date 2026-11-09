@@ -196,6 +196,28 @@ function isReloadKey(e) {
   return (e.ctrlKey || e.metaKey) && !e.altKey && (e.code === 'KeyR' || e.key === 'r' || e.key === 'R');
 }
 
+// The character Shift gives each key on a US layout.
+const usShifted = { 1: '!', 2: '@', 3: '#', 4: '$', 5: '%', 6: '^', 7: '&', 8: '*', 9: '(', 0: ')',
+  '-': '_', '=': '+', '[': '{', ']': '}', '\\': '|', ';': ':', "'": '"', ',': '<', '.': '>', '/': '?', '`': '~' };
+const usPunctuation = { Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']', Backslash: '\\',
+  Semicolon: ';', Quote: "'", Comma: ',', Period: '.', Slash: '/', Backquote: '`' };
+
+// optionTypedText is the ASCII character Alt and a key typed when the layout
+// types it with Option (German | is Option and 7, tuios discussion #850), with
+// the US key at its position, or null. A US Mac's Option characters are not ASCII, and the key's own
+// character, as Linux and Windows report Alt and a key, is a chord.
+function optionTypedText(e) {
+  if (!e.altKey || e.ctrlKey || e.metaKey || !/^[\x21-\x7e]$/.test(e.key)) return null;
+  const code = e.code || '';
+  const base = /^Key[A-Z]$/.test(code) ? code.slice(3).toLowerCase()
+    : /^Digit[0-9]$/.test(code) ? code.slice(5) : usPunctuation[code];
+  if (!base || e.key === base || e.key === base.toUpperCase() || e.key === usShifted[base]) return null;
+  return { text: e.key, base };
+}
+
+// Set once tuios runs: sends text to it as if typed.
+let sendText = () => {};
+
 // The server picks .br or .gz by Accept-Encoding and names the file
 // tuios.wasm. A static host that cannot set Content-Encoding serves no
 // tuios.wasm at all, and then the page fetches the gzip file and unpacks it
@@ -239,7 +261,27 @@ function loadVtgl() {
     renderer: { prefer: renderer, vtgl },
     theme: { background: '#11111b' },
     mouse: { suppressContextMenu: true },
-    keyboard: { onKeyEvent: (e) => !isReloadKey(e) },
+    keyboard: {
+      onKeyEvent: (e) => {
+        if (isReloadKey(e)) return false;
+        // An ASCII character the layout types with Option, such as German
+        // | (Option and 7), goes as Ghostty sends it. While tuios reads every
+        // key with its text (flags 8 and 16) that is the key, the modifiers
+        // and the character, CSI 55;3;124u, and tuios runs the chord's
+        // binding or else the character's. webterm's encoder would send the
+        // character as the key code with no text. Otherwise the page sends the
+        // character, so a shell gets it.
+        const typed = optionTypedText(e);
+        if (typed === null) return true;
+        if (e.type === 'keydown') {
+          e.preventDefault();
+          const flags = term.keyboardProtocol?.flags ?? 0;
+          const mods = 3 + (e.shiftKey ? 1 : 0);
+          sendText((flags & 24) === 24 ? `\x1b[${typed.base.codePointAt(0)};${mods};${typed.text.codePointAt(0)}u` : typed.text);
+        }
+        return false;
+      },
+    },
     // Option is the workspace modifier on a Mac; xterm must send it as Alt.
     xterm: { macOptionIsMeta: true },
   });
@@ -282,6 +324,7 @@ function loadVtgl() {
     api.onEvent(onEvent);
     // webterm hands keyboard and mouse bytes to the attached transport.
     term.attach({ name: 'wasm', start() {}, send(bytes) { api.input(bytes); }, close() {} });
+    sendText = (text) => api.input(text);
     term.on('resize', ({ cols, rows }) => api.resize(cols, rows));
     // The fit may have run between reading the initial size and now.
     api.resize(term.cols, term.rows);
