@@ -76,6 +76,13 @@ type poolPair struct {
 // home too.
 func startPool(t *testing.T, buildCap int, back bool) poolPair {
 	t.Helper()
+	return startPoolOn(t, buildCap, back, tuiosBin)
+}
+
+// startPoolOn is startPool with build running buildBin, its daemon and the
+// far end of home's link to it, as a machine with another tuios installed.
+func startPoolOn(t *testing.T, buildCap int, back bool, buildBin string) poolPair {
+	t.Helper()
 	base, origin := fanFixture(t)
 	t.Setenv("TUIOS_WORKTREE_DIR", "")
 	claudeDir, _ := poolAgentBin(t)
@@ -107,7 +114,7 @@ func startPool(t *testing.T, buildCap int, back bool) poolPair {
 	}
 	writeCfg(remote, buildCfg)
 	ssh := writeFakeSSHTo(t, base, remote)
-	writeCfg(base, "[hosts.build]\naddr = \"someone@buildbox\"\ncommand = \""+tuiosBin+"\"\nconnect_timeout = 5\nrepos_root = \""+reposRoot+"\"\n")
+	writeCfg(base, "[hosts.build]\naddr = \"someone@buildbox\"\ncommand = \""+buildBin+"\"\nconnect_timeout = 5\nrepos_root = \""+reposRoot+"\"\n")
 	p.env = []string{"TUIOS_SSH=" + ssh}
 
 	killDaemon(t, base)
@@ -115,7 +122,7 @@ func startPool(t *testing.T, buildCap int, back bool) poolPair {
 	if out, err := tuiosCLIEnv(t, base, append(p.env, "TUIOS_LOAD1="+homeLoad), "new", "home", "--detach", "--cwd", p.here); err != nil {
 		t.Fatalf("start home's daemon: %v\n%s", err, out)
 	}
-	if out, err := tuiosCLIEnv(t, remote, buildEnv, "new", "far", "--detach"); err != nil {
+	if out, err := tuiosCLIBinEnv(t, buildBin, remote, buildEnv, "new", "far", "--detach"); err != nil {
 		t.Fatalf("start build's daemon: %v\n%s", err, out)
 	}
 	// "up" alone also matches a host with no daemon yet: wait until build

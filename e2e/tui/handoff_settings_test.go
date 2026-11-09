@@ -602,8 +602,9 @@ func sessionAttached(t *testing.T, base, session string) bool {
 
 // TestDaemonUpgradeAcrossHandoffVersions needs a tuios that writes the
 // previous handoff version, named by TUIOS_E2E_HANDOFF_PREV_BIN: a build of
-// the commit before HandoffVersion moved. It checks the three directions a
-// version change opens:
+// main before HandoffVersion moved, so its manifest has every field main
+// added at that version. It checks the three directions a version change
+// opens, and the task state an older manifest carries:
 //
 //   - older to newer: a daemon of the older build hands its panes to this
 //     one, which reads the older manifest, keeps every pane, and runs;
@@ -611,7 +612,10 @@ func sessionAttached(t *testing.T, base, session string) bool {
 //     and the preflight refuses with nothing changed;
 //   - the fallback: the older daemon hands over to this build, which fails
 //     to adopt on purpose, and the older binary, kept as tuios.prev, adopts
-//     the manifest it wrote.
+//     the manifest it wrote;
+//   - task holds and dispatch settings: a pane of the older build holds a
+//     card on another machine (far_holds in its manifest), and this build
+//     lets the card go there when the pane closes after the upgrade.
 func TestDaemonUpgradeAcrossHandoffVersions(t *testing.T) {
 	prev := os.Getenv("TUIOS_E2E_HANDOFF_PREV_BIN")
 	if prev == "" {
@@ -690,5 +694,63 @@ func TestDaemonUpgradeAcrossHandoffVersions(t *testing.T) {
 			}
 		}
 	})
+	// The task state main keeps beside a v3 manifest: a pane of the older
+	// build holds a card on another machine (the manifest's far_holds), and
+	// the older daemon has dispatch settings of its own. This build adopts
+	// both: the card is let go on home when the pane closes, and the settings
+	// read the same.
+	t.Run("task holds and dispatch settings from the older build", func(t *testing.T) {
+		pp := startPoolOn(t, 2, true, prev)
+		t.Cleanup(func() { dumpDaemonLogOnFail(t, pp.base); dumpDaemonLogOnFail(t, pp.remote) })
+		const proj = "https://example.com/acme/api.git"
+		mustCLI(t, pp.base, "task", "add", "-s", "home", "--project", proj, "-p", "Retry on a 503.", "Fix the retry") // t1
+		mustCLI(t, pp.base, "task", "dispatch", "mode", "auto", "--agent", "claude", "--machine", "build", "--project", proj, "-s", "home")
+		cards, _ := waitAutoCards(t, pp.base, "home", "auto did not start t1 on build",
+			func(c map[string]autoCard) bool { return held(c, "t1") && c["t1"].Holder.Host != "" })
+		window := cards["t1"].Holder.Window
+		untilTrue(t, 30*time.Second, "the agent of t1 never came up on build", func() bool {
+			return claudeAgents(t, mustCLI(t, pp.remote, "list-agents", "--all-sessions", "--json")) == 1
+		})
+		mustCLI(t, pp.remote, "task", "dispatch", "quiet", "22:00-07:00")
+		mustCLI(t, pp.remote, "task", "dispatch", "pause")
+		settings, _ := dispatchStatus(t, pp.remote)
+
+		older := helloImage(t, pp.remote)
+		res, out, err := daemonUpgrade(t, pp.remote, copyTuios(t))
+		if err != nil {
+			t.Fatalf("ASSERTION: daemon upgrade on build from the older build: %v\n%s", err, out)
+		}
+		newer := helloImage(t, pp.remote)
+		hello := mustCall(t, pp.remote, "hello", map[string]any{})
+		got, raw := dispatchStatus(t, pp.remote)
+		_, heldRaw := autoCards(t, pp.base, "home")
+		entry := map[string]any{"pid_before": older.PID, "pid_after": newer.PID, "upgrade": res, "handoff_after": hello["handoff"],
+			"dispatch_after": raw, "home_cards_after_upgrade": heldRaw}
+		results["far_hold"] = entry
+		if newer.PID != older.PID || newer.Instance == older.Instance || res["fallback"] != false {
+			t.Fatalf("ASSERTION: build's upgrade from the older build was not a live one: %v", res)
+		}
+		if !settings.Paused || settings.Quiet != "22:00-07:00" {
+			t.Fatalf("ASSERTION: build's dispatch settings were not set before the upgrade: paused %v, quiet %q", settings.Paused, settings.Quiet)
+		}
+		if got.Paused != settings.Paused || got.Quiet != settings.Quiet {
+			t.Errorf("ASSERTION: after the upgrade build's dispatch settings read paused %v, quiet %q; want paused %v, quiet %q",
+				got.Paused, got.Quiet, settings.Paused, settings.Quiet)
+		}
+		if cards, raw := autoCards(t, pp.base, "home"); !held(cards, "t1") {
+			t.Fatalf("ASSERTION: t1 is not held right after build's upgrade:\n%s", raw)
+		}
+
+		ls := ansiCSI.ReplaceAllString(mustCLI(t, pp.remote, "ls"), "")
+		sess := regexp.MustCompile(`[a-z0-9-]*task-fix-the-retry[a-z0-9-]*`).FindString(ls)
+		if sess == "" {
+			t.Fatalf("no session on build holds t1's agent:\n%s", ls)
+		}
+		mustCLI(t, pp.remote, "close-window", "-s", sess, window)
+		_, raw = waitAutoCards(t, pp.base, "home", "t1 on home was not let go when its pane on build closed after build's upgrade from the older build",
+			func(c map[string]autoCard) bool { return !held(c, "t1") })
+		entry["home_cards_after_close"] = raw
+	})
+
 	writeHandoffArtifact(t, results)
 }
