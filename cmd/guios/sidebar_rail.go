@@ -502,7 +502,9 @@ func (a *App) minimizedRows(c *ui.Context, pal *palette, s *proto.Session) {
 			ui.Textf(c, "%d", i+1).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum").Shrink(0)
 			oneLine(c, p.PaneName(), fsSmall, wMedium).TextColor(pal.textMuted)
 			ui.Spacer(c)
-			if d := h.shortDir(p.WorkDir()); d != "" {
+			// The folder as a pane row writes it: within the session's, or ~,
+			// and none for the session's own.
+			if d := paneFolder(s, p, h); d != "" {
 				ui.Text(c, d).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0).Shrink(2).MaxWidth(110)
 			}
 		})
