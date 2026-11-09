@@ -42,6 +42,10 @@ const ErrVerbUnknownHost = "unknown_host"
 // mechanism.
 const federationVerbBudget = 15 * time.Second
 
+// hostAskBudget bounds how long the hosts listing waits for the hosts with no
+// daemon to answer again. A slow one is listed as it was.
+const hostAskBudget = 2 * time.Second
+
 // hostSessionsEntry is one host's slice of an aggregated session listing.
 type hostSessionsEntry struct {
 	Host   string             `json:"host"`
@@ -301,6 +305,11 @@ func (d *Daemon) verbListHosts(cs *connState, _ json.RawMessage) (any, *verbErro
 
 	ctx, cancel := context.WithTimeout(d.ctx, federationVerbBudget)
 	defer cancel()
+	// A host with no daemon is asked again over the ssh its link holds, so
+	// a daemon started there since shows now. It costs no login.
+	askCtx, cancelAsk := context.WithTimeout(ctx, hostAskBudget)
+	d.federation.AskWaiting(askCtx)
+	cancelAsk()
 	reports := d.federation.Reports(ctx)
 	for i := range reports {
 		reports[i].Events, reports[i].EventsNote = d.fleet.mode(reports[i].Host)

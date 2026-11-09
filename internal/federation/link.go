@@ -199,6 +199,11 @@ type link struct {
 	// approvalRetry at most, so the new sign-in page shows up in seconds and
 	// a link whose sign-in went through comes up without anyone asking.
 	eagerUntil time.Time
+	// waiting says the link holds an ssh to a host that has no daemon, and
+	// asks the host again over it (see waitForDaemon). ask hands that loop
+	// a request to ask now, which it closes once the answer is in.
+	waiting bool
+	ask     chan chan struct{}
 }
 
 func newLink(h Host, opts Options) *link {
@@ -210,6 +215,7 @@ func newLink(h Host, opts Options) *link {
 		settled: make(chan struct{}),
 		wake:    make(chan struct{}, 1),
 		probe:   make(chan struct{}, 1),
+		ask:     make(chan chan struct{}, 1),
 	}
 }
 
@@ -666,6 +672,11 @@ preamble:
 	shake, verr := handshake(shakeCtx, c, l.opts)
 	shakeRTT := time.Since(shakeAt)
 	cancelShake()
+	if verr != nil && verr.status == StatusNoDaemon {
+		l.set(verr.status, verr.reason, trimDetail(joinDetail(verr.detail, tr.Diagnostic())))
+		_ = ctrl.Close()
+		c, shake, shakeRTT, verr = l.waitForDaemon(ctx, m, muxDone, verr)
+	}
 	if verr != nil {
 		l.mu.Lock()
 		l.shake = shake
@@ -825,6 +836,137 @@ const exitGrace = 250 * time.Millisecond
 // sshExitCode is what ssh exits with for its own failures: it could not reach
 // the machine, or was refused by it. Any other code came from the far side.
 const sshExitCode = 255
+
+// waitForDaemon keeps the ssh of a link whose host is up with no daemon,
+// and asks the host again over it until a daemon answers, the ssh ends, or
+// ctx ends. It returns what the last ask returned.
+//
+// A dial to such a host costs a login: a new ssh, a new key authentication,
+// and with an agent that asks for each one (1Password), a question to the
+// person. Redialing it every backoff step asked them every minute (#1820).
+// The proxy on the far side dials the daemon socket for each stream it is
+// given, so a new control stream over the same ssh reaches a daemon that
+// started since, and costs no login.
+//
+// The asks follow the dial backoff. Retry asks at once, and so does
+// askWaiting, which the hosts listing calls. When the ssh ends (the network,
+// a sleep) the link dials again as before, under the same backoff, so a host
+// that keeps dropping still costs at most one login per backoff step. After
+// a sleep the link asks at once, and a connection that does not answer is
+// not reused: the next dial skips any shared master.
+func (l *link) waitForDaemon(ctx context.Context, m *mux, muxDone <-chan struct{}, last *handshakeError) (*caller, Handshake, time.Duration, *handshakeError) {
+	l.mu.Lock()
+	l.waiting = true
+	l.mu.Unlock()
+	defer func() {
+		l.mu.Lock()
+		l.waiting = false
+		l.mu.Unlock()
+		// A request that came as the wait ended is answered by what ends it.
+		select {
+		case done := <-l.ask:
+			close(done)
+		default:
+		}
+	}()
+	// The host answered: a listing need not wait for this attempt to end.
+	l.markSettled()
+
+	backoff := l.opts.InitialBackoff
+	for {
+		var answered chan struct{}
+		clock := newSleepWatch()
+		deadline := time.Now().Add(backoff)
+		t := time.NewTimer(min(backoff, heartbeatInterval))
+	wait:
+		for {
+			select {
+			case <-ctx.Done():
+				t.Stop()
+				return nil, Handshake{}, 0, last
+			case <-muxDone:
+				t.Stop()
+				return nil, Handshake{}, 0, last
+			case <-l.wake:
+				break wait
+			case answered = <-l.ask:
+				break wait
+			case <-t.C:
+			}
+			if clock.slept() {
+				break wait
+			}
+			left := time.Until(deadline)
+			if left <= 0 {
+				break wait
+			}
+			t.Reset(min(left, heartbeatInterval))
+		}
+		t.Stop()
+
+		c, shake, rtt, verr := l.askOver(ctx, m)
+		if answered != nil {
+			close(answered)
+		}
+		switch {
+		case verr == nil:
+			return c, shake, rtt, nil
+		case verr.status == StatusNoDaemon:
+			last = verr
+			backoff = min(backoff*2, l.opts.MaxBackoff)
+		default:
+			// The ssh did not carry the ask. It is not used again.
+			l.mu.Lock()
+			l.fresh = true
+			l.mu.Unlock()
+			return nil, shake, 0, verr
+		}
+	}
+}
+
+// askOver opens a control stream over m and runs the handshake on it.
+func (l *link) askOver(ctx context.Context, m *mux) (*caller, Handshake, time.Duration, *handshakeError) {
+	l.mu.Lock()
+	l.lastTry = l.opts.now()
+	l.mu.Unlock()
+	ctrl, err := m.Open()
+	if err != nil {
+		return nil, Handshake{}, 0, &handshakeError{status: StatusUnreachable, reason: "The link closed before it was used.", detail: err.Error()}
+	}
+	c := newCaller(ctrl)
+	shakeCtx, cancel := context.WithTimeout(ctx, l.opts.CallTimeout)
+	at := time.Now()
+	shake, verr := handshake(shakeCtx, c, l.opts)
+	rtt := time.Since(at)
+	cancel()
+	if verr != nil {
+		_ = ctrl.Close()
+	}
+	return c, shake, rtt, verr
+}
+
+// askWaiting makes a link that waits for its host's daemon ask now, over the
+// ssh it holds, and waits for the answer until ctx ends. A link that does not
+// wait is left alone: for it an ask would be a new dial, and a new login.
+// An ask within retryMinGap of the last one is not made again.
+func (l *link) askWaiting(ctx context.Context) {
+	l.mu.Lock()
+	ok := l.waiting && (l.lastTry.IsZero() || l.opts.now().Sub(l.lastTry) >= retryMinGap)
+	l.mu.Unlock()
+	if !ok {
+		return
+	}
+	done := make(chan struct{})
+	select {
+	case l.ask <- done:
+	default:
+		return
+	}
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
+}
 
 // handshakeError carries the state a failed handshake should leave behind.
 type handshakeError struct {
