@@ -1726,11 +1726,14 @@ func (m *OS) ckStripWidth(l ckLook) int {
 }
 
 // cockpitEmptyLines is what the cockpit says when it has no rows, nil when it
-// has some.
+// has some. A folded group's heading counts: with every group folded the
+// list is headings only, and it is not empty. Said empty, the view drew "No
+// agents yet." over a header that counted the agents, with no heading left
+// to open a group from.
 func (m *OS) cockpitEmptyLines(rows []ckRow) []string {
 	st := &m.Inbox
 	for _, r := range rows {
-		if r.selectable() {
+		if r.selectable() || r.kind == ckRowHead && r.folded {
 			return nil
 		}
 	}

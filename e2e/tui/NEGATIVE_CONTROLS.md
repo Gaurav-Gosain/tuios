@@ -16141,3 +16141,19 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestReadinessCheckEndsWithTheDaemon$' -v .`.
+
+## TestCockpitFoldedGroupsKeepTheirHeadings
+
+Two working and two idle agents. F folds each group of the agents view, then
+the view is closed and opened again with the folds read from the state file.
+Each folded group keeps its heading and count, and the view never says "No
+agents yet.".
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (4946f5cf2), where the empty check counts agent rows only | "with every group folded, every group is not folded to its heading and count", the screen showing "No agents yet." | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitFoldedGroupsKeepTheirHeadings$' -v .`.
