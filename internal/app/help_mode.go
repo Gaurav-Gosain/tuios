@@ -207,6 +207,7 @@ func (m *OS) HelpToggleKeys() {
 	m.helpInvalidate()
 }
 
+
 // HelpHoverAt selects the smallest component under the pointer. Motion over
 // the explaining pane itself is ignored, so reading the pane does not select
 // whatever it covers.
@@ -1514,7 +1515,12 @@ func (m *OS) helpFooterLines(comps []helpComponent, cur *helpComponent, width in
 		}
 	}
 	own(config.ActionHelpKeys, "all keys")
-	own(config.ActionHelpExit, "exit")
+	// The way out is named, not bound: help leaves through the chord that
+	// opened it, spelled with the leader the config sets. The all-keys key is
+	// left out on purpose; the ? page lists it where a reader can find it.
+	if press := m.helpToggleChord(); press != "" {
+		hints = append(hints, hint{press, "close"})
+	}
 
 	const gap = "    "
 	lines := []string{title.Render("Navigating help")}
