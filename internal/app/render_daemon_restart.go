@@ -20,7 +20,7 @@ const restartInnerWidth = 66
 func (m *OS) renderDaemonRestart() (string, overlay.Geometry, []overlayRowHit) {
 	pal := m.overlayUI()
 	bg := pal.Canvas
-	width := overlay.DialogFitWidth(restartInnerWidth, m.GetRenderWidth())
+	width := overlay.DialogFitWidth(restartInnerWidth, m.modalRoomWidth())
 	r := &m.restart
 
 	base := overlay.Style(bg)

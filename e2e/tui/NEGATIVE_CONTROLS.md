@@ -16051,3 +16051,20 @@ branch passes, with the other `TestSetUp` tests.
 
 Repeat from `e2e/tui` on Linux with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSetUpDryRunWithNoInstallChoice$' -v .`.
+
+## TestPopupsShareTheScreenCentre
+
+The Add a machine sheet and the command palette, on a 160x48 screen with the
+rail open and eight terminals on it. Both are centred on the whole screen, and
+the sheet is narrowed to clear the rail with the same margin on each side,
+so no rail row is cut. The frames are in the test's artifact folder.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes: both centres are at
+column 79.5 of 0 to 159.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (c29f871bf), where a panel is centred in the columns beside the rail | "machine-sheet is not centred across the screen: its centre is column 93.5, the screen's 79.5", and the same for the palette | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPopupsShareTheScreenCentre$' -v .`.

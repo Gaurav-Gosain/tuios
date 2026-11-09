@@ -34,7 +34,7 @@ const worktreeFieldLabelW = 9
 func (m *OS) renderWorktreePrompt() (string, overlay.Geometry, []overlayRowHit) {
 	pal := m.overlayUI()
 	bg := pal.Canvas
-	width := overlay.DialogFitWidth(worktreeDialogWidth, m.GetRenderWidth())
+	width := overlay.DialogFitWidth(worktreeDialogWidth, m.modalRoomWidth())
 
 	var body []string
 	body = append(body, dialogBodyLine(m.worktreePromptContext(width), width, pal.FgDim, bg))

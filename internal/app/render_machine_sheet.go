@@ -38,7 +38,8 @@ type msPainter struct {
 
 // renderMachineSheet draws the sheet.
 func (m *OS) renderMachineSheet() (string, overlay.Geometry) {
-	cw, ch := m.GetRenderWidth(), m.GetRenderHeight()
+	// The width is the room that clears the rail, as panelWidth's is.
+	cw, ch := m.modalRoomWidth(), m.GetRenderHeight()
 	w0 := min(128, cw-4)
 	if cw < 100 {
 		w0 = cw - 2

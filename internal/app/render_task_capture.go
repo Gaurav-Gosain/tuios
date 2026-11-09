@@ -12,7 +12,8 @@ import (
 // pills, a notice when there is one, and the keys.
 func (m *OS) renderTaskCapture() (string, overlay.Geometry) {
 	s := m.taskCapture
-	cw, ch := m.GetRenderWidth(), m.GetRenderHeight()
+	// The width is the room that clears the rail, as panelWidth's is.
+	cw, ch := m.modalRoomWidth(), m.GetRenderHeight()
 	w0 := min(96, cw-4)
 	if cw < 64 {
 		w0 = cw

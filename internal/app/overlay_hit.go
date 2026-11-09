@@ -227,7 +227,16 @@ func (m *OS) centerOrigin(w, h int) (int, int) {
 
 // overlayOrigin returns the top-left screen cell for an overlay panel: centered,
 // shifted by that kind's drag offset, and clamped so the panel stays on screen.
+//
+// A modal panel is centred on the whole screen, as centerOrigin centres the
+// dialogs, so every popup lands at one centre whatever the rail and the dock
+// take. The part of the rail it covers is under the scrim. A picker that
+// previews the chrome (see previewsChrome) is centred beside the rail and
+// between the docks instead, so it does not cover what it previews.
 func (m *OS) overlayOrigin(kind string, geo overlay.Geometry) (int, int) {
+	if !previewsChrome(kind) {
+		return m.screenOrigin(kind, geo)
+	}
 	rw, rh := m.GetRenderWidth(), m.GetRenderHeight()
 	// Centred in the rows between the docks, where panelRoomHeight fits it,
 	// and kept below a dock at the top while it fits under it.
@@ -245,6 +254,43 @@ func (m *OS) overlayOrigin(kind string, geo overlay.Geometry) (int, int) {
 	return x, y
 }
 
+// screenOrigin is overlayOrigin for a modal panel: centred on the whole
+// screen, its top held while it stays open, shifted by its drag offset and
+// kept on screen.
+//
+// A panel too tall to sit at the screen centre with a row clear of each dock
+// is centred in the rows between the docks instead. The tallest panels, the
+// navigator and the settings page, are fitted to those rows (panelRoomHeight),
+// and at the screen centre they ran into the dock at the bottom.
+func (m *OS) screenOrigin(kind string, geo overlay.Geometry) (int, int) {
+	rw, rh := m.GetRenderWidth(), m.GetRenderHeight()
+	off := m.overlayOffset(kind)
+	x := (rw-geo.Width)/2 + off[0]
+	r := m.viewReserve()
+	top, room := 0, rh
+	if mid := (rh - geo.Height) / 2; (r.Top > 0 && mid < r.Top+1) || (r.Bottom > 0 && mid+geo.Height > rh-r.Bottom-1) {
+		top = min(r.Top, max(rh-geo.Height, 0))
+		room = rh - top
+		if geo.Height <= rh-r.Top-r.Bottom {
+			room -= r.Bottom
+		}
+	}
+	y := top + m.overlayAnchorY(kind, geo.Height, room) + off[1]
+	x = max(min(x, rw-geo.Width), 0)
+	y = max(min(y, rh-geo.Height), 0)
+	return x, y
+}
+
+// previewsChrome reports whether the overlay kind is one of the pickers and
+// editors that show their change on the chrome as it is made: the theme,
+// accent, glyph and effect pickers and the dock and section editors. They are
+// the modal overlays drawn with no scrim (modalOverlays), for the same reason:
+// the rail and the dock behind them are the preview.
+func previewsChrome(kind string) bool {
+	i, ok := modalIndex[kind]
+	return ok && !modalOverlays[i].scrim
+}
+
 // panelCenterX is the left column that centres a panel w cells wide: in the
 // columns the panes have when it fits there, and on the whole screen when it
 // does not.
@@ -252,10 +298,10 @@ func (m *OS) overlayOrigin(kind string, geo overlay.Geometry) (int, int) {
 // Centred on the whole screen, a panel that fitted beside the rail still ran
 // a few cells into it, and cut the rail mid-word: "erminals", "iles" and
 // "gents" down the edge of the help panel, the gutter marks gone beside the
-// Inbox. Beside the rail it leaves the rail whole, which is where the agents
-// the Inbox is about are listed. The modal dialogs keep the screen centre, see
-// centerOrigin: they are small, and ask for an answer where the eye already
-// is.
+// Inbox. Beside the rail it leaves the rail whole. It is used only for the
+// pickers that preview the chrome (previewsChrome): every other panel is
+// centred on the whole screen, over the rail under the scrim, see
+// screenOrigin.
 //
 // A panel too wide for the panes' columns covers the rail, and covers all of
 // it. Centred on the screen it covered all but a column or two, and the rail's
