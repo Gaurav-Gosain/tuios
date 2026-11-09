@@ -76,6 +76,21 @@ type Result struct {
 	Effects []Effect
 }
 
+// NewView returns an empty view state, for a host that draws a document
+// itself and keeps each client's view as loom does.
+func NewView() *View { return newView() }
+
+// RunActions runs the actions of one attribute, as a click or a key on the
+// node at JSON Pointer source runs them in a Surface: set, sort, tab, fold
+// and the other local actions change store and view, and emit, close, copy,
+// open and pane come back in Result as Effects. It is for a host that draws
+// a document with widgets of its own (guios) and keeps loom's semantics:
+// the same document does the same thing in both. env supplies event, form
+// and the other roots; RunActions adds state.
+func RunActions(doc *tml.Node, store *tml.Store, view *View, source string, actions []tml.Action, env *tml.Env) (Result, error) {
+	return runActions(doc, store, view, source, actions, env)
+}
+
 // runActions runs the actions of one attribute. source is the JSON Pointer
 // of the node that holds the attribute; sort without a table id and tab use
 // it to find their target. env supplies event, form and the other roots;
