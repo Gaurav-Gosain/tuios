@@ -566,14 +566,14 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 		view = "Agents"
 	}
 	bx0 := x
-	x = c.text(x, y, 0, ckSeg{t: view + " ", fg: pal.FgDim}, ckSeg{t: l.g(ckGlyphOpen), fg: pal.FgMute})
+	x = c.text(x, y, 0, ckSeg{t: view + " ", fg: pal.FgDim}, ckSeg{t: l.g(ckGlyphExpand), fg: pal.FgMute})
 	ck.hits = append(ck.hits, ckHit{x0: bx0, y0: top + y, x1: x, y1: top + y + 1, kind: ckHitAction, action: "board"})
 	ck.anchors["board"] = ckAnchor{x: bx0, y: y, w: x - bx0}
 	x += 3
 	if !ck.board {
 		// The list's grouping, which a click or s changes.
 		gx0 := x
-		x = c.text(x, y, 0, ckSeg{t: "Group: " + m.ckGroupingName() + " ", fg: pal.FgDim}, ckSeg{t: l.g(ckGlyphOpen), fg: pal.FgMute})
+		x = c.text(x, y, 0, ckSeg{t: "Group: " + m.ckGroupingName() + " ", fg: pal.FgDim}, ckSeg{t: l.g(ckGlyphExpand), fg: pal.FgMute})
 		ck.hits = append(ck.hits, ckHit{x0: gx0, y0: top + y, x1: x, y1: top + y + 1, kind: ckHitAction, action: "group"})
 		ck.anchors["group"] = ckAnchor{x: gx0, y: y, w: x - gx0}
 		x += 3
@@ -653,7 +653,7 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 	default:
 		label = ckHostLabel(h)
 	}
-	segs := []ckSeg{{t: label + " ", fg: pal.FgDim}, {t: l.g(ckGlyphOpen), fg: pal.FgMute}}
+	segs := []ckSeg{{t: label + " ", fg: pal.FgDim}, {t: l.g(ckGlyphExpand), fg: pal.FgMute}}
 	if mx := sx - 3 - ckWidth(segs...); mx > x {
 		c.text(mx, y, sx-3, segs...)
 		ck.hits = append(ck.hits, ckHit{x0: mx, y0: top + y, x1: sx - 3, y1: top + y + 1, kind: ckHitAction, action: "scope"})

@@ -743,44 +743,10 @@ func (m *OS) drawSpawnMachines(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout
 }
 
 // drawSpawnList draws the open list under the row y of its field at x: below
-// it when it fits, above it otherwise.
+// it when it fits, above it otherwise. It is the TUI's one dropdown.
 func (m *OS) drawSpawnList(c *ckCanvas, l ckLook, x, y, w, top0, bottom, top int) {
-	s := m.Inbox.ck.spawn
-	pal := l.pal
-	items := s.listItems(s.listFor)
-	below := bottom - (y + 1) - 2
-	above := y - top0 - 2
-	rows := min(len(items), max(below, above))
-	if rows <= 0 {
-		return
-	}
-	y0 := y + 1
-	if rows > below {
-		y0 = y - rows - 2
-	}
-	first := min(max(s.listAt-rows/2, 0), len(items)-rows)
-	c.fill(x, y0, w, rows+2, pal.Card)
-	c.hline(x, y0, w, hzGlyph(), l.edge)
-	c.hline(x, y0+rows+1, w, hzGlyph(), l.edge)
-	for r := range rows {
-		i := first + r
-		it := items[i]
-		yy := y0 + 1 + r
-		ink, tone, ground := pal.Fg, pal.FgDim, pal.Card
-		if it.muted {
-			ink, tone = pal.FgDim, pal.FgMute
-		}
-		if i == s.listAt {
-			ink, tone, ground = pal.PillFg, pal.PillFg, pal.Accent
-		}
-		c.fill(x, yy, w, 1, ground)
-		c.text(x+2, yy, x+w-2, ckSeg{t: ckPad(it.label, 20) + " ", fg: ink, attrs: ckBold}, ckSeg{t: it.note, fg: tone})
-		if i == s.listAt {
-			c.mark(pal, x, yy, w, 1, ckOn)
-		}
-		// The list's rows come last, so they win over the fields under
-		// them.
-		s.hits = append(s.hits, ckHit{x0: x, y0: top + yy, x1: x + w, y1: top + yy + 1, kind: ckHitAction, action: "item:" + strconv.Itoa(i)})
+	if s := m.Inbox.ck.spawn; s.dd != nil {
+		drawDropdown(c, l, s.dd, x, y, w, top0, bottom, top)
 	}
 }
 

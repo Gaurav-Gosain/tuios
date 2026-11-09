@@ -37,7 +37,7 @@ func TestCockpitGroupBy(t *testing.T) {
 	ckPress(t, term, "s")
 	groupMenuOpen := func(s tuitest.Screen) bool {
 		text := s.Text()
-		for _, re := range []string{`state\s+1`, `session\s+2`, `machine\s+3`, `project\s+4`, `Sort: `} {
+		for _, re := range []string{`state\s+1`, `session\s+2`, `machine\s+3`, `project\s+4`, `Sort\s+(needs you|name|recent|session)\s+s`} {
 			if !regexp.MustCompile(re).MatchString(text) {
 				return false
 			}

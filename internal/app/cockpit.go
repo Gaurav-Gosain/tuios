@@ -1507,7 +1507,11 @@ func (m *OS) cockpitReply() tea.Cmd {
 // CockpitHover lights the row under the pointer. It selects nothing.
 func (m *OS) CockpitHover(x, y int) {
 	ck := &m.Inbox.ck
-	if ck.spawn != nil {
+	if s := ck.spawn; s != nil {
+		// The sheet's open list lights the row under the pointer.
+		if s.list && s.dd != nil && s.dd.Hover(x, y) {
+			m.cockpitTouch()
+		}
 		return
 	}
 	if m.cockpitMenuHover(x, y) {

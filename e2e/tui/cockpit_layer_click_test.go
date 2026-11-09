@@ -39,7 +39,7 @@ func TestCockpitMenuClosesBeforeAClickActs(t *testing.T) {
 	sendKeys(t, term, tuitest.Ctrl('b'), "i")
 	waitText(t, term, "the agents view", "Group:", "New agent")
 	clickAgentsRow(t, term, "Group:")
-	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "Sort: ") }, uiTimeout); err != nil {
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return sortRowShown(s) }, uiTimeout); err != nil {
 		t.Fatalf("the group menu did not open: %v\n%s", err, term.Snapshot())
 	}
 	_ = term.WaitStable(uiTimeout)
@@ -53,7 +53,7 @@ func TestCockpitMenuClosesBeforeAClickActs(t *testing.T) {
 	if strings.Contains(text, "Start") && strings.Contains(text, "Agent") && strings.Contains(text, "Machine") {
 		t.Errorf("ASSERTION: a click outside the open group menu opened the New agent sheet\n%s", term.Snapshot())
 	}
-	if strings.Contains(term.Screen().Text(), "Sort: ") {
+	if sortRowShown(term.Screen()) {
 		t.Errorf("ASSERTION: the group menu is still open after a click outside it\n%s", term.Snapshot())
 	}
 }

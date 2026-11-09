@@ -16232,3 +16232,19 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitHeaderDropdowns$' -v .`.
+
+## TestSpawnSheetListIsTheDropdown
+
+The New agent sheet's agent list, by mouse: it opens under "more", the agent in
+force marked, a key beside each row, the pointer lights the row under it, a
+click outside on Cancel closes the list and leaves the sheet open, and the key
+at the end of aider's row picks aider.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The branch before the shared dropdown (ada9b33bd), where the sheet list has no keys | "a click on more opened no list under it with keys beside its rows" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSpawnSheetListIsTheDropdown$' -v .`.

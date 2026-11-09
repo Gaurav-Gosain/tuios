@@ -110,10 +110,11 @@ type spawnSheet struct {
 	agents                    []spawnAgent
 	agent                     int
 	// list says a list is open under the field listFor: every agent, the
-	// models the running agents use, or the branches. listAt is its cursor.
+	// models the running agents use, or the branches. dd is the open list,
+	// the TUI's one dropdown (dropdown.go).
 	list    bool
 	listFor spawnField
-	listAt  int
+	dd      *dropdown
 	// models are the models running agents report, by harness id, and
 	// branches the repository's local branches.
 	models   map[string][]string
@@ -1082,11 +1083,19 @@ func (s *spawnSheet) openList(f spawnField) {
 	if len(items) == 0 {
 		return
 	}
-	s.field, s.list, s.listFor, s.listAt = f, true, f, 0
+	s.field, s.list, s.listFor = f, true, f
+	at := 0
+	defer func() {
+		dd := make([]ddItem, len(items))
+		for i, it := range items {
+			dd[i] = ddItem{label: it.label, note: it.note, muted: it.muted, current: i == at}
+		}
+		s.dd = newDropdown(dd)
+	}()
 	cur := ""
 	switch f {
 	case spAgent:
-		s.listAt = s.agent
+		at = s.agent
 		return
 	case spModel:
 		cur = strings.TrimSpace(s.model.Text())
@@ -1097,7 +1106,7 @@ func (s *spawnSheet) openList(f spawnField) {
 	}
 	for i, it := range items {
 		if it.value == cur {
-			s.listAt = i
+			at = i
 		}
 	}
 }
@@ -1184,17 +1193,18 @@ func (s *spawnSheet) launchChoice() harness.LaunchChoice {
 	return harness.LaunchChoice{Model: model, Effort: s.choice(spEffort), Permission: s.choice(spPermission)}
 }
 
-// spawnListKey handles a key while a field's list is open.
+// spawnListKey handles a key while a field's list is open: the dropdown's
+// keys, and tab or shift+tab, which close it to move on. Any other key is
+// spent, so a letter typed while the list is open does not reach a field.
 func (m *OS) spawnListKey(s *spawnSheet, key string) tea.Cmd {
-	n := len(s.listItems(s.listFor))
-	switch key {
-	case "up", "k":
-		s.listAt = max(s.listAt-1, 0)
-	case "down", "j":
-		s.listAt = min(s.listAt+1, n-1)
-	case "enter", "space":
-		m.pickList(s, s.listAt)
-	case "esc", "tab", "shift+tab":
+	if key == "tab" || key == "shift+tab" || s.dd == nil {
+		s.list = false
+		return nil
+	}
+	switch i, what := s.dd.Key(key, false); what {
+	case ddKeyPicked:
+		m.pickList(s, i)
+	case ddKeyClosed:
 		s.list = false
 	}
 	return nil
@@ -1686,6 +1696,19 @@ func (m *OS) applySpawnStarted(msg spawnStartedMsg) {
 // so a stray click never loses a draft.
 func (m *OS) spawnClick(x, y int) tea.Cmd {
 	s := m.Inbox.ck.spawn
+	// An open list takes the click first: a row picks, the rest of its box
+	// does nothing, and a click anywhere else closes it and does nothing
+	// else, but on the control that opened it, which closes it too.
+	if s.list && s.dd != nil {
+		row, inside := s.dd.RowAt(x, y)
+		switch {
+		case row >= 0:
+			m.pickList(s, row)
+		case !inside:
+			s.list = false
+		}
+		return nil
+	}
 	for _, h := range slices.Backward(s.hits) {
 		if x < h.x0 || x >= h.x1 || y < h.y0 || y >= h.y1 {
 			continue
@@ -1697,8 +1720,6 @@ func (m *OS) spawnClick(x, y int) tea.Cmd {
 			s.field, s.list = spawnField(n), false
 		case "agent":
 			s.field, s.agent, s.list = spAgent, n, false
-		case "item":
-			m.pickList(s, n)
 		case "list":
 			if s.list && s.listFor == spawnField(n) {
 				s.list = false
