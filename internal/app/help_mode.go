@@ -719,7 +719,7 @@ func (m *OS) helpDockComponent() helpComponent {
 	if position == "" {
 		position = "top"
 	}
-	purpose := dockText(helptext.IDDock, "Dock").Purpose
+	purpose := dockText(m.helpLanguage(), helptext.IDDock, "Dock").Purpose
 	if hidden {
 		purpose = "The dock is hidden, so it has no rectangle to hover. Show it with the CLI line below and it becomes a component here again. " + purpose
 	}
@@ -738,7 +738,7 @@ func (m *OS) helpDockComponent() helpComponent {
 	}
 	return helpComponent{
 		id:      "dock",
-		title:   dockText(helptext.IDDock, "Dock").Title,
+		title:   dockText(m.helpLanguage(), helptext.IDDock, "Dock").Title,
 		purpose: purpose,
 		keys:    helpCap(keys, 7),
 		allKeys: m.helpKeys(
@@ -752,11 +752,36 @@ func (m *OS) helpDockComponent() helpComponent {
 	}
 }
 
-// dockText reads a dock page's text from the table, and falls back to the
-// title the caller would have given it when the table has no entry yet: a
-// cell added before its text exists still opens a page.
-func dockText(id, fallback string) helptext.Entry {
-	if e, ok := helptext.DockEntry(id); ok {
+// helpLanguage is the table this client's help reads in: [ui] language, or
+// the locale when it is unset. The lookup is a string compare per frame, and
+// the warning a load owes is owed once, which Load arranges.
+func (m *OS) helpLanguage() helptext.Language {
+	return helptext.Load(m.Settings.Language, nil)
+}
+
+// helpPartLabel is what the count after a page's name reads: "parts" in a
+// language whose table says nothing, and that language's own word when it
+// does. A dock cell's parts are the cells the bar drew, so a dock cell takes
+// the dock's inflection.
+func helpPartLabel(lang helptext.Language, n int, id string) string {
+	owner := id
+	if strings.HasPrefix(id, helptext.IDDock+"/") {
+		owner = helptext.IDDock
+	}
+	if e, ok := lang.Entries[owner]; ok && e.Plural != nil {
+		return e.Plural(n)
+	}
+	if n == 1 {
+		return "part"
+	}
+	return "parts"
+}
+
+// dockText reads a dock page's text in a language, and falls back to the
+// title the caller would have given it when neither the language nor English
+// has an entry yet: a cell added before its text exists still opens a page.
+func dockText(lang helptext.Language, id, fallback string) helptext.Entry {
+	if e, ok := helptext.Lookup(lang, id); ok {
 		return e
 	}
 	return helptext.Entry{Title: fallback}
@@ -787,13 +812,13 @@ func (m *OS) helpDockCellComponent(name, parent string, rect image.Rectangle) he
 		c.purpose = "A cell supplied by a plugin. The plugin owns what it draws and what a click does; its manifest and cells are described in the plugin's own documentation."
 		c.cli = []string{"tuios plugins list", "tuios config edit  # [dock] lists", "tuios list-dock-components"}
 	case name == "workspaces":
-		text := dockText(helptext.DockCell("workspaces"), "Workspaces")
+		text := dockText(m.helpLanguage(), helptext.DockCell("workspaces"), "Workspaces")
 		c.title = text.Title
 		c.purpose = text.Purpose
 		c.keys = helpCap(m.helpKeys("prefix_workspace", "prefix_workspace_switcher", "next_workspace", "prev_workspace"), 6)
 		c.cli = []string{"tuios select-workspace 2", "tuios set-workspace-name 2 work", "tuios set-config appearance.dock_workspace_tabs true"}
 	case name == "windows":
-		text := dockText(helptext.DockCell("windows"), "Minimized panes")
+		text := dockText(m.helpLanguage(), helptext.DockCell("windows"), "Minimized panes")
 		c.title = text.Title
 		c.purpose = text.Purpose
 		if len(m.dockCenterLabels) == 0 {
@@ -812,51 +837,51 @@ func (m *OS) helpDockCellComponent(name, parent string, rect image.Rectangle) he
 			m.helpScopedKeys(config.ScopeSidebar, "activate")...), 6)
 		c.cli = []string{"tuios list-windows", "tuios restore-window <name>", "tuios set-config appearance.dock_compact true"}
 	case name == "session-controls":
-		text := dockText(helptext.DockCell("session-controls"), "Session controls")
+		text := dockText(m.helpLanguage(), helptext.DockCell("session-controls"), "Session controls")
 		c.title = text.Title
 		c.purpose = text.Purpose
 		c.keys = helpCap(m.helpKeys("prefix_session_switcher", "prefix_detach", "prefix_close_session", "prefix_quit"), 6)
 		c.cli = []string{"tuios ls", "tuios detach-client", "tuios kill-session <name>", "tuios new"}
 	case name == "messages":
-		text := dockText(helptext.DockCell("messages"), "Messages")
+		text := dockText(m.helpLanguage(), helptext.DockCell("messages"), "Messages")
 		c.title = text.Title
 		c.purpose = text.Purpose
 		c.keys = helpCap(m.helpKeys("prefix_jump_notif", "prefix_last_message", "prefix_inbox", "prefix_mail"), 6)
 		c.cli = []string{"tuios notify test", "tuios set-config notifications.duration 4", "tuios set-config notifications.error_sticky true"}
 	case name == "overflow":
-		text := dockText(helptext.DockCell("overflow"), "Minimized overflow")
+		text := dockText(m.helpLanguage(), helptext.DockCell("overflow"), "Minimized overflow")
 		c.title = text.Title
 		c.purpose = text.Purpose
 		c.cli = []string{"tuios list-windows", "tuios set-config appearance.dock_compact true"}
 	case name == "clock":
-		text := dockText(helptext.DockCell("clock"), "Clock")
+		text := dockText(m.helpLanguage(), helptext.DockCell("clock"), "Clock")
 		c.title = text.Title
 		c.purpose = text.Purpose
 		c.cli = []string{"tuios set-config appearance.show_clock true", "tuios set-config appearance.clock_format 15:04"}
 	case name == "cpu":
-		text := dockText(helptext.DockCell("cpu"), "CPU")
+		text := dockText(m.helpLanguage(), helptext.DockCell("cpu"), "CPU")
 		c.title = text.Title
 		c.purpose = text.Purpose
 		c.cli = []string{"tuios set-config appearance.show_cpu true"}
 	case name == "ram":
-		text := dockText(helptext.DockCell("ram"), "RAM")
+		text := dockText(m.helpLanguage(), helptext.DockCell("ram"), "RAM")
 		c.title = text.Title
 		c.purpose = text.Purpose
 		c.cli = []string{"tuios set-config appearance.show_ram true"}
 	case name == "transfers":
-		text := dockText(helptext.DockCell("transfers"), "Transfers")
+		text := dockText(m.helpLanguage(), helptext.DockCell("transfers"), "Transfers")
 		c.title = text.Title
 		c.purpose = text.Purpose
 		c.keys = helpCap(m.helpKeys("prefix_transfers", "paste_buffer", "choose_buffer"), 6)
 		c.cli = []string{"tuios list-buffers", "tuios set-config appearance.dock_compact true"}
 	case name == "session":
-		text := dockText(helptext.DockCell("session"), "Session name")
+		text := dockText(m.helpLanguage(), helptext.DockCell("session"), "Session name")
 		c.title = text.Title
 		c.purpose = text.Purpose
 		c.keys = helpCap(m.helpKeys("prefix_session_switcher", "prefix_close_session"), 6)
 		c.cli = []string{"tuios rename-session <name>", "tuios set-session-accent <colour>", "tuios ls"}
 	case name == "mode":
-		text := dockText(helptext.DockCell("mode"), "Mode")
+		text := dockText(m.helpLanguage(), helptext.DockCell("mode"), "Mode")
 		c.title = text.Title
 		c.purpose = text.Purpose
 		c.values = []helpKey{
@@ -880,7 +905,7 @@ func (m *OS) helpDockCellComponent(name, parent string, rect image.Rectangle) he
 			"tuios keybinds list",
 		}
 	case name == "trail":
-		text := dockText(helptext.DockCell("trail"), "Workspace counter")
+		text := dockText(m.helpLanguage(), helptext.DockCell("trail"), "Workspace counter")
 		c.title = text.Title
 		c.purpose = text.Purpose
 		c.rows = []helpKey{
@@ -889,18 +914,18 @@ func (m *OS) helpDockCellComponent(name, parent string, rect image.Rectangle) he
 		}
 		c.cli = []string{"tuios list-workspaces", "tuios list-dock-components", "tuios config edit  # [dock] lists"}
 	case name == "tape":
-		text := dockText(helptext.DockCell("tape"), "Tape")
+		text := dockText(m.helpLanguage(), helptext.DockCell("tape"), "Tape")
 		c.title = text.Title
 		c.purpose = text.Purpose
 		c.keys = helpCap(m.helpKeys("prefix_tape"), 3)
 		c.cli = []string{"tuios tape list", "tuios tape play <file>"}
 	case name == "notifications":
-		text := dockText(helptext.DockCell("notifications"), "Notifications")
+		text := dockText(m.helpLanguage(), helptext.DockCell("notifications"), "Notifications")
 		c.title = text.Title
 		c.purpose = text.Purpose
 		c.cli = []string{"tuios notify test", "tuios set-config notifications.duration 4", "tuios set-config notifications.error_sticky true"}
 	case name == "copy-help":
-		text := dockText(helptext.DockCell("copy-help"), "Copy help")
+		text := dockText(m.helpLanguage(), helptext.DockCell("copy-help"), "Copy help")
 		c.title = text.Title
 		c.purpose = text.Purpose
 		c.cli = []string{"tuios keybinds list"}
@@ -1109,7 +1134,8 @@ func (m *OS) renderHelpMode() *lipgloss.Layer {
 
 	pal := m.overlayUI()
 	width := m.helpPaneWidth(cur)
-	header := m.helpHeaderLines(comps, cur, width, pal)
+	lang := m.helpLanguage()
+	header := m.helpHeaderLines(comps, cur, width, pal, lang)
 	body := m.helpSectionLines(cur, width, pal)
 
 	// The pane cannot be taller than the screen it is drawn on. The title and
@@ -1191,7 +1217,7 @@ func (m *OS) helpPaneWidth(cur *helpComponent) int {
 
 // helpHeaderLines is the pane's fixed top: the component's name, the number of
 // parts it has, and where it sits. It stays put while the body scrolls.
-func (m *OS) helpHeaderLines(comps []helpComponent, cur *helpComponent, width int, pal overlay.Palette) []string {
+func (m *OS) helpHeaderLines(comps []helpComponent, cur *helpComponent, width int, pal overlay.Palette, lang helptext.Language) []string {
 	inner := max(width-4, 8)
 	bg := pal.Surface
 	title := overlay.Style(bg).Foreground(pal.Fg).Bold(true)
@@ -1202,11 +1228,7 @@ func (m *OS) helpHeaderLines(comps []helpComponent, cur *helpComponent, width in
 	// into says so before the key is pressed.
 	heading := cur.title
 	if kids := len(helpChildren(comps, cur.id)); kids > 0 {
-		noun := "parts"
-		if kids == 1 {
-			noun = "part"
-		}
-		heading += fmt.Sprintf(" (%d %s)", kids, noun)
+		heading += fmt.Sprintf(" (%d %s)", kids, helpPartLabel(lang, kids, cur.id))
 	}
 	lines = append(lines, title.Render(overlay.Truncate(heading, inner)))
 	if path := m.helpPath(comps, cur); path != "" && path != cur.title {

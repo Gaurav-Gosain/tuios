@@ -219,12 +219,15 @@ nothing else, and the wheel scrolls the explanation. A panel opened over it
 takes the pointer and the keys. Because the pane is a view, a bare `h`, `Up` or
 `Down` belongs to it even over a terminal pane: leave help to type them.
 
-Everything but that component and the explaining pane is dimmed by
-`appearance.modal_dim` (default `30`), so the component under the pane stays the
-bright thing on screen; `0` turns the dimming off. The default is
+The default is
 `prefix_help_mode = ["h"]` in
 `[keybindings.prefix_mode]`, so a preset that binds `h` to something else takes
 the key with it; rebind either action.
+
+The pane's prose follows the language of the client: `[ui] language`, or the
+locale when that is unset. A CLI line, a config path and a key label stay as
+they are in every language. See
+[CONFIGURATION.md](CONFIGURATION.md#language-of-the-help).
 
 ## Editing sidebar files
 
