@@ -431,6 +431,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	if state.AutoTiling {
 		m.adoptScrollColumns(state.WorkspaceScrollColumns)
 	}
+	m.noteSessionColumns(state.WorkspaceScrollColumns)
 	m.ApplyLayoutModeName(state.LayoutMode)
 	m.LogInfo("[RESTORE] NextBSPWindowID=%d, TilingScheme=%d, LayoutMode=%s", m.NextBSPWindowID, m.TilingScheme, m.LayoutModeName())
 
@@ -915,8 +916,16 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	}
 	// The scrolling columns, on the same terms as the trees. Nil is a peer that
 	// did not say, which leaves this client's columns alone.
-	if adoptTopology && state.WorkspaceScrollColumns != nil && state.AutoTiling {
-		m.adoptScrollColumns(state.WorkspaceScrollColumns)
+	// With the columns as ops the session's are taken from every state, for
+	// each workspace that holds no unsent change of this client's. See
+	// scroll_columns_sync.go.
+	if state.WorkspaceScrollColumns != nil && state.AutoTiling {
+		switch {
+		case m.scrollOpsOn():
+			m.adoptScrollColumns(m.columnsToAdopt(state.WorkspaceScrollColumns))
+		case adoptTopology:
+			m.adoptScrollColumns(state.WorkspaceScrollColumns)
+		}
 	}
 
 	// Mirror the structural half of a float toggled elsewhere. The peer that
@@ -2413,6 +2422,13 @@ func (m *OS) SyncStateToDaemon() {
 		state.WorkspaceTrees = nil
 		state.WindowToBSPID = nil
 		state.NextBSPWindowID = 0
+	}
+	// The columns go the same way. See scroll_columns_sync.go.
+	if m.scrollOpsOn() {
+		if !m.sendScrollColumnOps() {
+			return
+		}
+		state.WorkspaceScrollColumns = nil
 	}
 	fp := session.StateFingerprint(state)
 	if m.syncedFPSet && m.syncedFP == fp {

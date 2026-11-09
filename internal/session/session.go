@@ -938,6 +938,10 @@ type SessionState struct {
 	// Nil means unstated, and a client that receives nil keeps the columns it
 	// has, which is the behaviour that predates the field.
 	WorkspaceScrollColumns map[int][]SerializedScrollColumn `json:"workspace_scroll_columns,omitempty"`
+	// columnsByOp marks a push from a client that sends the columns as
+	// MsgScrollColumns ops: the merge keeps the session's columns over the
+	// push's. Set by the daemon on receipt, never on the wire.
+	columnsByOp bool
 }
 
 // SerializedScrollColumn is one column of the scrolling layout.
@@ -3800,6 +3804,9 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 			accepted = false
 		}
 		retainDaemonExclusive(state, prev)
+		if state.columnsByOp {
+			state.WorkspaceScrollColumns = prev.WorkspaceScrollColumns
+		}
 		// While a client too old for scratch workspaces is attached, a push
 		// cannot put the focus on one: that client would draw it nowhere.
 		if s.scratchWSOff {

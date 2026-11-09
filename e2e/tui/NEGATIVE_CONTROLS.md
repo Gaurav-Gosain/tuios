@@ -16482,3 +16482,31 @@ dialog asks the person first.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run TestDaemonKillSessionAction -v .`.
+
+## The scrolling strip as daemon state, part 1 (multiclient_strip_ops_test.go, scroll_columns_test.go)
+
+The scrolling columns travel as MsgScrollColumns ops (`internal/session/scroll_columns.go`,
+`internal/app/scroll_columns_sync.go`), a push from a client that offers them
+does not move the columns, and the arrange engine writes no pane rectangles
+for a strip change while a TUI is attached, so the TUI lays it out itself and
+slides it.
+
+Run on 2026-11-09 on macOS (arm64), as the Atlas helper user. The branch
+passes every test below.
+
+| Test | Control | The test fails with | Result |
+|------|---------|---------------------|--------|
+| S4c TestTwoStripChangesByTheDaemonAtOnce | guios/land before part 1 (924746b48) | "round 0: two scroll.consume at once left 5 columns, want 4: a change was lost" | **caught**, 3 of 3 |
+| S8 TestAStripChangeFromTheDaemonSlides | guios/land before part 1 (924746b48) | "the moved pane's left edge only 0 values between 0 and 0: the pane was cut, not slid" (it took the daemon's rectangle at once) | **caught** |
+| S7 TestScrollColumnsFollowTheClientsHello | the push merge without the columnsByOp rule | "a push from a client that sends ops moved the columns" | **caught** |
+
+S2 (TestAStripKeyReachesThePeer), S4 (TestStripChangeByTheDaemonOutlivesATUIPush),
+S4b (TestStripChangeByTheDaemonRacesATUIPush), S5 (TestAStripColumnWidthHolds) and S6
+(TestPanesComeAndGoInTheStrip) pass on the control too: they are guards that
+part 1 must not break. requireOneLayout does not fit the strip: its focus
+cycle scrolls it, so each client pushes rectangles for another offset;
+stripPushes compares the session's columns instead.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'Strip|TestPanesComeAndGo' -v .`
+and `go test -count=1 -run TestScrollColumnsFollowTheClientsHello ./internal/session/`.

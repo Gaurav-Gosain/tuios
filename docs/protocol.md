@@ -1898,8 +1898,17 @@ settles the panes' sizes and borders in one step. `resize_height_grow` and
 `resize_height_shrink` run in the daemon in the split layout, as the width
 steps do. The scrolling layout's strip actions (`scroll_consume`,
 `scroll_expel`, `scroll_move_*`, `scroll_cycle_width`, `scroll_maximize`) are
-still routed to a TUI that is attached, because the TUI keeps the strip's
-columns and sends them whole. `kill_session` with no client attached runs as the
+still routed to a TUI that is attached.
+
+The scrolling layout's columns (`workspace_scroll_columns`) travel as their own
+op, MsgScrollColumns, one workspace's columns whole, for a client whose hello
+sets `scroll_column_ops` and a daemon whose welcome does. Such a client's
+pushes do not move the columns, and it takes the session's columns from every
+state for each workspace that holds no change of its own not yet sent. A
+client that predates the op sends the columns in its pushes, which the daemon
+takes as before. While a TUI is attached, the `arrange` verb writes no pane
+rectangles for a change in the scrolling layout: the TUI lays the strip out
+from the columns and moves the panes there as for a change of its own. `kill_session` with no client attached runs as the
 `kill-session` verb; with a TUI attached it is routed to it, whose close
 dialog asks the person first.
 

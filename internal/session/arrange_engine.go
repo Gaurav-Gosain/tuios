@@ -485,7 +485,15 @@ func (e *engine) flush() error {
 	if e.state == nil {
 		return nil
 	}
-	if e.ti.LS.Tiling || e.ti.Mode() != ArrangeModeFloating {
+	// In the scrolling layout with a TUI attached, the TUI lays the strip out
+	// from the columns it takes and sends its rectangles, as for a change of
+	// its own, so it slides the panes there. Rectangles written here were
+	// taken as they are, and a strip change by the daemon was a cut on its
+	// screen. The other layouts keep them: a TUI does not lay the panes out
+	// again for an order the daemon changed (a master swap), and their
+	// rectangles are what it shows.
+	tuiLaysOut := e.ti.TUI && e.ti.Mode() == ArrangeModeScroll
+	if !tuiLaysOut && (e.ti.LS.Tiling || e.ti.Mode() != ArrangeModeFloating) {
 		named := map[string]bool{}
 		var rs []WindowRect
 		if w, ok := e.state["windows"].([]WindowRect); ok {
