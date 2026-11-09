@@ -118,6 +118,9 @@ type agentThread struct {
 	fallbackAt int64
 	// gen changes when what the thread shows changes, for the drawn lines.
 	gen uint64
+	// echoAsked says the thread asked list-queued for the person's queued
+	// replies, to show them (thread_echo.go).
+	echoAsked bool
 	// body is the conversation's lines as last drawn, and bodyAt what they
 	// were drawn from, so a frame drawn for another reason does not wrap
 	// and style the conversation again.
@@ -193,6 +196,8 @@ type threadBodyKey struct {
 	keep int
 	// card is whether the Done card under the thread shows the recap.
 	card bool
+	// echo is the replies' echoes' generation.
+	echo uint64
 }
 
 // threadsState is the threads kept and the transcript subscription.
@@ -312,6 +317,12 @@ func (m *OS) InboxThreadFetch() tea.Cmd {
 	}
 	t := m.thread(e)
 	var cmds []tea.Cmd
+	if !t.echoAsked {
+		// The person's replies queued for the pane show again, as a new
+		// client or a view opened again finds them.
+		t.echoAsked = true
+		cmds = append(cmds, m.echoQueueCmd(e.Host, e.SessionID, e.WindowID, printableTitle(e.Title), true))
+	}
 	if t.fallback && e.StateAt != t.fallbackAt && !t.loading {
 		// The agent moved on since the daemon had no transcript. The hook
 		// that joins the pane to its file may have run.
@@ -487,6 +498,8 @@ func (m *OS) applyThreadPage(msg threadPageMsg) tea.Cmd {
 	if msg.cursor != "" {
 		t.cursor = msg.cursor
 	}
+	// A reply's own entry has come: its echo goes.
+	m.echoTake(t)
 	if msg.more || t.again {
 		t.again = false
 		t.loading = true
@@ -674,6 +687,7 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time, car
 		kids:    m.ckKidsSig(e, t),
 		pics:    m.threadPicsVersion(t),
 		card:    card,
+		echo:    m.Inbox.echoes.gen,
 	}
 	if t.keep == 0 && m.threadReadsTranscript(e) {
 		t.keep = ckKeepTurns
@@ -769,6 +783,14 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 			return out
 		}
 		out, t.hits = m.threadCardLines(e, t, width, m.cockpitTab() == "Changes", now)
+		if m.cockpitTab() != "Changes" {
+			// The replies sent that the transcript does not hold yet.
+			echo, hits := m.threadEchoLines(t.key, width)
+			out, t.hits = append(out, echo...), append(t.hits, hits...)
+			for range echo {
+				t.lines, t.lineIDs = append(t.lines, ckLine{}), append(t.lineIDs, "")
+			}
+		}
 		if len(out) == 0 {
 			note("No conversation yet.")
 		}
@@ -789,6 +811,8 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 		note("Says: " + printableTitle(e.Message))
 	}
 	out = append(out, m.threadMail(e, width, bg, pal)...)
+	echo, _ := m.threadEchoLines(t.key, width)
+	out = append(out, echo...)
 	if len(out) == 0 && !card {
 		note(threadNothingYet(e.Harness))
 	}

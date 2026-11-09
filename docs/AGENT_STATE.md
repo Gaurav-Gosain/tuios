@@ -4835,6 +4835,15 @@ link's, writes any paste or image file there, and types it when the agent
 comes to rest. Its `[hosts]` policy for this machine must allow `write`, and
 `files` for a paste block or an image.
 
+The thread shows the reply at its end from the moment you send it, as your
+message with a line under it that says where it is: `Sending`, `Queued, typed
+when it rests` with `cancel`, `Sent, waiting for api` once it is typed, or
+`Not sent: <why>` with `retry`. It goes when the agent's transcript logs it,
+so it never shows twice; one the transcript never logs goes after two
+minutes. A queued reply shows again when the agents view opens again, or in
+another client, since the thread reads the pane's queue (`list-queued`). A
+bulk reply shows in each agent's thread.
+
 `x` on a rail row with messages queued drops the newest one still waiting
 (`cancel-queued`), and the dock says `Dropped 1 queued message to api. u
 undoes.`: `u` on the same row within 10 seconds queues its text again, at the

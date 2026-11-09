@@ -519,6 +519,8 @@ func (m *OS) InboxReplySend() tea.Cmd {
 	}
 	parts = trimReplyParts(parts)
 	text := composer.JoinParts(parts)
+	// The text the thread's echo shows, before a block-only send empties it.
+	shown := text
 	blocks := ed.comp.Blocks() > 0
 	if !blocks && len(text) > inboxReplyMax {
 		// A draft with no block was typed or pasted inline, and has no
@@ -565,12 +567,14 @@ func (m *OS) InboxReplySend() tea.Cmd {
 		for _, t := range ed.targets {
 			st.sendSeq++
 			st.sending[st.sendSeq] = ed.comp.Clone()
+			m.addEcho("", t.session, t.window, t.who, shown, parts, st.sendSeq)
 			cmds = append(cmds, m.inboxQueueCmd(t.session, t.window, t.who, text, nonce, false, st.sendSeq, parts))
 		}
 		return tea.Batch(cmds...)
 	}
 	st.sendSeq++
 	st.sending[st.sendSeq] = ed.comp
+	m.addEcho(ed.host, ed.session, ed.window, ed.who, shown, parts, st.sendSeq)
 	m.threadFollowOnSend(ed.host, ed.session, ed.window)
 	return m.inboxQueueCmdOn(ed.host, ed.session, ed.window, ed.who, text, nonce, false, st.sendSeq, parts)
 }
@@ -887,6 +891,9 @@ func (m *OS) SidebarAgentCancelQueued(sessionID, windowID string) (tea.Cmd, bool
 // applyInboxQueueDropped says what x did, and keeps the text of a message
 // this client queued for u.
 func (m *OS) applyInboxQueueDropped(msg InboxQueueDroppedMsg) {
+	if msg.Err == nil {
+		m.echoDropped(msg.Session, msg.Window, msg.ID)
+	}
 	if msg.Err != nil {
 		if session.VerbErrCode(msg.Err) == session.ErrVerbUnknownVerb {
 			m.Inbox.reply.noQueue = true

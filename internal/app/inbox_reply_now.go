@@ -80,6 +80,7 @@ func (m *OS) InboxReplySendNow() tea.Cmd {
 	}
 	st.sendSeq++
 	st.sending[st.sendSeq] = ed.comp
+	m.addEcho("", ed.session, ed.window, ed.who, text, nil, st.sendSeq)
 	call := m.inboxCaller()
 	params := map[string]any{"session": ed.session, "window": ed.window, "text": text, "submit": true}
 	msg := InboxRepliedMsg{Session: ed.session, Window: ed.window, Who: ed.who, Text: text, Send: st.sendSeq, Now: true}

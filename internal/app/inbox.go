@@ -154,6 +154,9 @@ type InboxState struct {
 	agents inboxAgentsState
 	// threads are the agents' threads the view shows. See inbox_thread.go.
 	threads threadsState
+	// echoes are the replies sent that the threads show before their
+	// transcripts do (thread_echo.go).
+	echoes threadEchoes
 	// ck is the cockpit's own state. See cockpit.go.
 	ck cockpitState
 }

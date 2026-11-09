@@ -16157,3 +16157,23 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitFoldedGroupsKeepTheirHeadings$' -v .`.
+
+## The reply's local echo in the thread
+
+`TestCockpitReplyEchoes` sends replies from the agents view's reply area to
+a working Claude Code agent and reads the thread: queued with cancel, refused
+with retry (`[agents.queue] max = 1`), cancel, retry, the queued reply shown
+again by a new client from list-queued, typed when the agent rests, and gone
+once the transcript logs it, so it shows once.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (2366bfc71) | "the queued reply does not show in the thread as queued" | **caught** |
+| The transcript match (echoTake) taken out | "once the transcript has the reply, it does not show once, as the transcript's" | **caught** |
+| No list-queued when a thread opens | "a new client does not show the queued reply" | **caught** |
+| retry sends nothing | "retry did not queue the refused reply" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitReplyEchoes$' -v .`.
