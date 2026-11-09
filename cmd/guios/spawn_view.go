@@ -26,6 +26,14 @@ const (
 // in.
 type spawnHandles struct {
 	task, agent, model, branch, base, machine, attempts ui.Handle
+	// taskFull is that the task takes every line the sheet can spare
+	// (alt+m). other is the height of the rest of the sheet, measured while
+	// the task was not full, so a full task is the window's room less it.
+	taskFull bool
+	other    float32
+	// room is the most the sheet may be, and panelH its height, in the
+	// last frame.
+	room, panelH float32
 }
 
 func (h *spawnHandles) of(f spawnField) *ui.Handle {
@@ -60,6 +68,7 @@ func (a *App) spawnView(c *ui.Context, pal *palette) {
 		ww, wh := c.Size()
 		w := min(float32(spawnW), ww-2*sp4)
 		floating(panel.Width(w).MaxHeight(wh-2*sp4).Padding(sp5).Gap(sp4).Radius(rSheet).Background(pal.popover), pal).Label(locales.SpawnTitle())
+		h.room, h.panelH = wh-2*sp4, panel.Bounds().H
 		switch {
 		case c.Shortcut(ui.Cmd, ui.KeyEnter):
 			start = true
@@ -189,8 +198,27 @@ func (a *App) spawnTask(c *ui.Context, pal *palette, s *spawnSheet, h *spawnHand
 					}
 				})
 			}
-			in := ui.TextAreaBase(c.Key("task"), &s.task.text).Bind(&h.task).MinHeight(66).MaxHeight(176).
+			in := ui.TextAreaBase(c.Key("task"), &s.task.text).Bind(&h.task).MinHeight(66).
 				FontSize(fsProse).LineHeight(1.5).TextColor(pal.text).Placeholder(locales.SpawnTaskPlaceholder()).Label(locales.SpawnTask())
+			switch {
+			case h.taskFull:
+				if full := h.room - h.other; full > 66 {
+					in.MinHeight(full).MaxHeight(full)
+				}
+			case a.set.ReplyRows > 0:
+				// agents.reply_rows lines, each fsProse at 1.5, and the
+				// box's padding as the default's 176 leaves it.
+				in.MaxHeight(max(66, float32(a.set.ReplyRows)*fsProse*1.5+spawnTaskPad))
+			default:
+				in.MaxHeight(176)
+			}
+			if !h.taskFull {
+				h.other = h.panelH - in.Bounds().H
+			}
+			if in.Shortcut(ui.Alt, ui.KeyM) {
+				h.taskFull = !h.taskFull
+				c.Invalidate()
+			}
 			in.OnPaste(func(text string) bool {
 				if text != "" {
 					return false
@@ -204,6 +232,11 @@ func (a *App) spawnTask(c *ui.Context, pal *palette, s *spawnSheet, h *spawnHand
 				}
 			}
 			in.OnTextKey(func(k ui.TextKey) bool {
+				if fullHeightKey(k.Mods, k.Key) {
+					h.taskFull = !h.taskFull
+					a.update(func() {})
+					return true
+				}
 				if k.Key == ui.KeyEscape && k.Mods == 0 {
 					// One Escape closes the sheet: the box would take the
 					// first for itself, and the sheet stayed open.
@@ -708,3 +741,7 @@ func (a *App) spawnFoot(c *ui.Context, pal *palette, s *spawnSheet, h *spawnHand
 		}
 	})
 }
+
+// spawnTaskPad is the task box's padding over its lines, as the default
+// height of 176 leaves it for eight lines.
+const spawnTaskPad = 8
