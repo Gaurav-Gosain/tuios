@@ -405,12 +405,23 @@ func TestCockpitFrameA(t *testing.T) {
 		t.Fatalf("ASSERTION: the build row did not narrow the fleet to build: %v\n%s", err, term.Snapshot())
 	}
 	saveCockpitFrames(t, term, "frame-a-200x55-build")
+	// The header's machine control opens its menu, and gpu in it scopes
+	// the fleet to gpu.
 	row, col = findText(t, term, "build "+"\ueab4")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	var gr, gc int
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		gr, gc = menuRow(s, row, "gpu")
+		r2, _ := menuRow(s, row, "All machines")
+		return gr > row && r2 > row
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the header's machine control opened no menu with All machines and gpu: %v\n%s", err, term.Snapshot())
+	}
+	mouseClick(t, term, gc, gr, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return fleetRowWith(s, "docs-cli") < 0 && fleetRowWith(s, "ws-reconnect") < 0 && fleetRowWith(s, "release-not") < 0 && fleetRowWith(s, "bench-idle") >= 0
 	}, uiTimeout); err != nil {
-		t.Fatalf("ASSERTION: the header did not step the scope on to gpu: %v\n%s", err, term.Snapshot())
+		t.Fatalf("ASSERTION: gpu in the machine menu did not scope the fleet to gpu: %v\n%s", err, term.Snapshot())
 	}
 	alive(t, term, "after frame a")
 }

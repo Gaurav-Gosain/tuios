@@ -16215,3 +16215,20 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitReplyEchoOnAHost$' -v .`.
+
+## TestCockpitHeaderDropdowns
+
+The agents view's header controls, by mouse. A click on "Group: state" opens a
+menu under it with the groupings, the current one marked and a key beside
+each. The pointer lights the row it is over, a click picks, esc closes with
+nothing changed, a click outside closes and does nothing else, and the Board
+control's menu picks the board with 2.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (f53016f55), where a click puts the choices in the key bar | "a click on \"Group: state\" opened no menu under it" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitHeaderDropdowns$' -v .`.

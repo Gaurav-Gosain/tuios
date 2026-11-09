@@ -293,6 +293,7 @@ func (m *OS) renderCockpit() (string, int, int, int) {
 		m.drawCockpitUnderSheet(c, l, top, now, key)
 	} else {
 		m.drawCockpit(c, l, top, now)
+		m.drawCockpitMenu(c, l, top)
 	}
 	ck.frame, ck.frameAt = c.render(), key
 	if transient {
@@ -483,6 +484,12 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 	ck := &st.ck
 	pal := l.pal
 	x := c.text(2, y, 0, ckSeg{t: "Agents", fg: pal.Fg, attrs: ckBold}) + 3
+	// The controls with a dropdown say where they are drawn this frame; one
+	// not drawn has no place to open its menu from.
+	clear(ck.anchors)
+	if ck.anchors == nil {
+		ck.anchors = map[string]ckAnchor{}
+	}
 	var counts [ckGroups]int
 	if ck.board {
 		counts = m.ckAgentCounts()
@@ -561,12 +568,14 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 	bx0 := x
 	x = c.text(x, y, 0, ckSeg{t: view + " ", fg: pal.FgDim}, ckSeg{t: l.g(ckGlyphOpen), fg: pal.FgMute})
 	ck.hits = append(ck.hits, ckHit{x0: bx0, y0: top + y, x1: x, y1: top + y + 1, kind: ckHitAction, action: "board"})
+	ck.anchors["board"] = ckAnchor{x: bx0, y: y, w: x - bx0}
 	x += 3
 	if !ck.board {
 		// The list's grouping, which a click or s changes.
 		gx0 := x
 		x = c.text(x, y, 0, ckSeg{t: "Group: " + m.ckGroupingName() + " ", fg: pal.FgDim}, ckSeg{t: l.g(ckGlyphOpen), fg: pal.FgMute})
 		ck.hits = append(ck.hits, ckHit{x0: gx0, y0: top + y, x1: x, y1: top + y + 1, kind: ckHitAction, action: "group"})
+		ck.anchors["group"] = ckAnchor{x: gx0, y: y, w: x - gx0}
 		x += 3
 	}
 	if ck.board && ck.dispatch != nil && ck.dispatch.Board != nil {
@@ -648,6 +657,7 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 	if mx := sx - 3 - ckWidth(segs...); mx > x {
 		c.text(mx, y, sx-3, segs...)
 		ck.hits = append(ck.hits, ckHit{x0: mx, y0: top + y, x1: sx - 3, y1: top + y + 1, kind: ckHitAction, action: "scope"})
+		ck.anchors["scope"] = ckAnchor{x: mx, y: y, w: sx - 3 - mx}
 	}
 }
 
@@ -878,25 +888,6 @@ func (m *OS) CockpitScope(host string) {
 	}
 	st.ck.scroll, st.ck.follow = 0, true
 	m.cockpitTouchRows()
-}
-
-// cockpitNextScope steps the machine scope: every machine, this one, then
-// each host, then every machine again.
-func (m *OS) cockpitNextScope() {
-	order := []string{"", federation.LocalHostName}
-	for _, h := range m.FederationHosts {
-		if h.Name != federation.LocalHostName {
-			order = append(order, h.Name)
-		}
-	}
-	cur := m.ckScope()
-	next := ""
-	for i, h := range order {
-		if h == cur {
-			next = order[(i+1)%len(order)]
-		}
-	}
-	m.CockpitScope(next)
 }
 
 // ckRowMark is the mark and colour of an agent's or an item's row.
@@ -1913,8 +1904,8 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 		return []overlay.Hint{{Key: overlay.EnterKey(), Label: "send"}, {Key: "esc", Label: "cancel"}}
 	case CockpitLayerSelect:
 		return []overlay.Hint{{Key: overlay.EnterKey(), Label: "apply"}, {Key: "esc", Label: "cancel"}}
-	case CockpitLayerGroupMenu:
-		return m.cockpitGroupMenuHints()
+	case CockpitLayerMenu:
+		return m.cockpitMenuHints()
 	case CockpitLayerShip:
 		return m.cockpitShipHints()
 	case CockpitLayerSnooze:
