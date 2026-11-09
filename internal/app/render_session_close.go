@@ -20,7 +20,7 @@ const sessionCloseInnerWidth = 54
 func (m *OS) renderSessionClose() (string, overlay.Geometry, []overlayRowHit) {
 	pal := m.overlayUI()
 	bg := pal.Canvas
-	width := overlay.DialogFitWidth(sessionCloseInnerWidth, m.GetRenderWidth())
+	width := overlay.DialogFitWidth(sessionCloseInnerWidth, m.modalRoomWidth())
 	rows := m.sessionCloseRowCount()
 	m.SessionCloseSelected = clampInt(m.SessionCloseSelected, 0, rows-1)
 

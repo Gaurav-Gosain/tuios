@@ -3,6 +3,8 @@ package app
 import (
 	"slices"
 
+	"github.com/Gaurav-Gosain/tuios/internal/dockengine"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -85,7 +87,7 @@ func (m *OS) handlePluginUI(p session.PluginUIPayload) {
 	}
 	cells := make(map[string]session.PluginCell, len(p.Cells))
 	for _, c := range p.Cells {
-		c.Text = dockSanitize(c.Text)
+		c.Text = dockengine.Sanitize(c.Text)
 		cells[pluginCellName(c)] = c
 	}
 	m.pluginCells = cells
@@ -98,7 +100,7 @@ func (m *OS) pluginCellDrawn(name string) string {
 	if !ok || c.Text == "" {
 		return ""
 	}
-	text := dockTruncateCell(c.Text, config.DockCustomDefaultMaxWidth)
+	text := dockengine.TruncateCell(c.Text, config.DockCustomDefaultMaxWidth)
 	return renderDockCell(text, config.DockCellStyle{}, m.groundUI())
 }
 

@@ -1,4 +1,4 @@
-package app
+package dockengine
 
 import (
 	"strings"
@@ -17,20 +17,20 @@ import (
 // second cell watching a number that changes every five minutes is meant to be
 // twelve execs a minute and about zero renders.
 func TestDockEngineUnchangedValueDrawsNothing(t *testing.T) {
-	engine := newDockEngine([]*dockComponent{
+	engine := New([]*Component{
 		{Name: "custom/steady", Command: "echo same", MaxWidth: 24},
-	})
+	}, nil)
 	t.Cleanup(engine.Stop)
 
-	first, _ := engine.applyUpdate(dockComponentUpdate{Name: "custom/steady", Text: "same"})
+	first, _ := engine.ApplyUpdate(Update{Name: "custom/steady", Text: "same"})
 	if !first {
 		t.Fatal("the first value did not change the cell")
 	}
-	again, _ := engine.applyUpdate(dockComponentUpdate{Name: "custom/steady", Text: "same"})
+	again, _ := engine.ApplyUpdate(Update{Name: "custom/steady", Text: "same"})
 	if again {
 		t.Fatal("an unchanged value asked for a frame")
 	}
-	moved, _ := engine.applyUpdate(dockComponentUpdate{Name: "custom/steady", Text: "different"})
+	moved, _ := engine.ApplyUpdate(Update{Name: "custom/steady", Text: "different"})
 	if !moved {
 		t.Fatal("a changed value did not ask for a frame")
 	}
@@ -42,24 +42,24 @@ func TestDockEngineUnchangedValueDrawsNothing(t *testing.T) {
 // confidently wrong, and one that failed in total silence is the failure mode
 // the hackability audit kept finding.
 func TestDockComponentFailureHidesTheCellAndSaysSoOnce(t *testing.T) {
-	engine := newDockEngine([]*dockComponent{
+	engine := New([]*Component{
 		{Name: "custom/flaky", Command: "false", MaxWidth: 24},
-	})
+	}, nil)
 	t.Cleanup(engine.Stop)
 
-	engine.applyUpdate(dockComponentUpdate{Name: "custom/flaky", Text: "ok"})
+	engine.ApplyUpdate(Update{Name: "custom/flaky", Text: "ok"})
 	if engine.Text("custom/flaky") != "ok" {
 		t.Fatal("a working component did not draw")
 	}
 
-	_, reported := engine.applyUpdate(dockComponentUpdate{Name: "custom/flaky", Exit: 1, Err: "exit status 1"})
+	_, reported := engine.ApplyUpdate(Update{Name: "custom/flaky", Exit: 1, Err: "exit status 1"})
 	if !reported {
 		t.Fatal("the first failure was not reported")
 	}
 	if got := engine.Text("custom/flaky"); got != "" {
 		t.Fatalf("a failed component still draws %q; a broken cell must be absent, not stale", got)
 	}
-	_, reportedAgain := engine.applyUpdate(dockComponentUpdate{Name: "custom/flaky", Exit: 1, Err: "exit status 1"})
+	_, reportedAgain := engine.ApplyUpdate(Update{Name: "custom/flaky", Exit: 1, Err: "exit status 1"})
 	if reportedAgain {
 		t.Fatal("a failing component reported itself twice; one report per failure streak")
 	}
@@ -68,7 +68,7 @@ func TestDockComponentFailureHidesTheCellAndSaysSoOnce(t *testing.T) {
 	// schedule. A script that cannot run is not made more likely to run by
 	// being run more often.
 	for range config.DockCustomFailureLimit {
-		engine.applyUpdate(dockComponentUpdate{Name: "custom/flaky", Exit: 1, Err: "exit status 1"})
+		engine.ApplyUpdate(Update{Name: "custom/flaky", Exit: 1, Err: "exit status 1"})
 	}
 	c, _ := engine.Component("custom/flaky")
 	if !c.stopped {
@@ -89,12 +89,12 @@ func TestDockComponentFailureHidesTheCellAndSaysSoOnce(t *testing.T) {
 // writes is one update, and the wakes are driven by the pipe rather than by a
 // clock.
 func TestDockPushComponentReadsLines(t *testing.T) {
-	engine := newDockEngine([]*dockComponent{{
+	engine := New([]*Component{{
 		Name:     "custom/pushed",
 		Command:  "printf 'one\\n'; sleep 0.2; printf 'two\\n'; sleep 30",
 		Refresh:  config.DockRefresh{Kind: config.DockRefreshPush},
 		MaxWidth: 24,
-	}})
+	}}, nil)
 	t.Cleanup(engine.Stop)
 	engine.Start()
 
@@ -115,11 +115,11 @@ func TestDockPushComponentReadsLines(t *testing.T) {
 // nothing at all until the daemon says something happened, and then once for a
 // burst rather than once per event.
 func TestDockEventComponentWakesOnItsEventOnly(t *testing.T) {
-	engine := newDockEngine([]*dockComponent{{
+	engine := New([]*Component{{
 		Name:    "custom/agents",
 		Command: "echo agents",
 		Refresh: config.DockRefresh{Kind: config.DockRefreshEvent, Events: []string{"agent-state"}},
-	}})
+	}}, nil)
 	t.Cleanup(engine.Stop)
 
 	engine.NotifyEvent("window-focused")
@@ -163,8 +163,8 @@ func TestDockSanitizeKeepsColourAndDropsControls(t *testing.T) {
 		{"\x1b]2;a\x1b\\tail", "tail"},
 	}
 	for _, tc := range cases {
-		if got := dockSanitize(tc.in); got != tc.want {
-			t.Errorf("dockSanitize(%q) = %q, want %q", tc.in, got, tc.want)
+		if got := Sanitize(tc.in); got != tc.want {
+			t.Errorf("Sanitize(%q) = %q, want %q", tc.in, got, tc.want)
 		}
 	}
 }
@@ -204,8 +204,8 @@ func TestDockSanitizeDropsUnsafeCharacters(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := dockSanitize(tc.in); got != tc.want {
-				t.Errorf("dockSanitize(%q) = %q, want %q", tc.in, got, tc.want)
+			if got := Sanitize(tc.in); got != tc.want {
+				t.Errorf("Sanitize(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
 	}
@@ -215,17 +215,17 @@ func TestDockSanitizeDropsUnsafeCharacters(t *testing.T) {
 // its first line becomes the cell, colour survives, and everything else that
 // could reach the screen does not.
 func TestDockComponentRunsAndLaunders(t *testing.T) {
-	engine := newDockEngine([]*dockComponent{{
+	engine := New([]*Component{{
 		Name:     "custom/hello",
 		Command:  "printf 'br\\033[33manch\\033[0m\\033[2Jx\\nsecond line\\n'",
 		MaxWidth: 24,
-	}})
+	}}, nil)
 	t.Cleanup(engine.Stop)
 	engine.Start()
 
 	select {
 	case u := <-engine.Updates():
-		engine.applyUpdate(u)
+		engine.ApplyUpdate(u)
 	case <-time.After(5 * time.Second):
 		t.Fatal("the component never reported")
 	}

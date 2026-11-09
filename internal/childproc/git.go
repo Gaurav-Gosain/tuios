@@ -97,7 +97,8 @@ func Git(ctx context.Context, dir string, args ...string) *exec.Cmd {
 // GitEnv is env (os.Environ when nil) with the settings above for a git that
 // runs in dir, for a program tuios starts that runs git itself, such as gh.
 // It drops the variables that would point git at another repository or
-// index, and sets git to never prompt or open an editor.
+// index, and sets git to never prompt, open an editor or take an optional
+// lock on the index.
 func GitEnv(ctx context.Context, dir string, env []string) ([]string, error) {
 	if env == nil {
 		env = os.Environ()
@@ -116,7 +117,13 @@ func GitEnv(ctx context.Context, dir string, env []string) ([]string, error) {
 		}
 		out = append(out, kv)
 	}
-	out = append(out, "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true", "GIT_SEQUENCE_EDITOR=true")
+	// GIT_OPTIONAL_LOCKS=0: git status, and a diff against the work tree,
+	// write the refreshed index back under .git/index.lock when they may.
+	// tuios runs them in the background on the person's worktrees, and one
+	// that holds the lock makes the person's own commit, checkout or add
+	// there fail with "Unable to create '.git/index.lock': File exists". A
+	// lock git needs, for a commit or an add, is taken as before.
+	out = append(out, "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true", "GIT_SEQUENCE_EDITOR=true", "GIT_OPTIONAL_LOCKS=0")
 	if isPerson(ctx) {
 		return appendConfig(out, n, [][2]string{{"core.fsmonitor", "false"}}), nil
 	}

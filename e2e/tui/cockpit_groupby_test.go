@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -24,7 +25,7 @@ func ckHeadingRow(s tuitest.Screen, heading string) int {
 // heading, in name order, with its own agents under it; the header says
 // Group: session and still counts the agents by state. A new client keeps the grouping. 3 groups by machine, 4 by
 // project (these agents have no repository), and 1 goes back to the state
-// groups. A click on the header's Group control opens the picker too.
+// groups. A click on the header's Group control opens the Group menu too.
 //
 // Negative controls, recorded in NEGATIVE_CONTROLS.md: with the bands never
 // built, the session headings are missing; with the header counting only
@@ -34,11 +35,17 @@ func TestCockpitGroupBy(t *testing.T) {
 	term, base, _, _ := startCockpitFleet(t, 200, 50, nil)
 	saveCockpitFrames(t, term, "groupby-state")
 	ckPress(t, term, "s")
-	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		bar := ckKeyBar(s)
-		return containsAll(bar, "1 state", "2 session", "3 machine", "4 project")
-	}, uiTimeout); err != nil {
-		t.Fatalf("ASSERTION: s did not open the group picker: %q: %v\n%s", ckKeyBar(term.Screen()), err, term.Snapshot())
+	groupMenuOpen := func(s tuitest.Screen) bool {
+		text := s.Text()
+		for _, re := range []string{`state\s+1`, `session\s+2`, `machine\s+3`, `project\s+4`, `Sort\s+(needs you|name|recent|session)\s+s`} {
+			if !regexp.MustCompile(re).MatchString(text) {
+				return false
+			}
+		}
+		return true
+	}
+	if err := term.WaitFor(groupMenuOpen, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: s did not open the Group menu: %v\n%s", err, term.Snapshot())
 	}
 	saveCockpitFrames(t, term, "groupby-picker")
 	ckPress(t, term, "2")
@@ -82,11 +89,11 @@ func TestCockpitGroupBy(t *testing.T) {
 		t.Fatalf("ASSERTION: 1 did not give the state groups back: %v\n%s", err, again.Snapshot())
 	}
 
-	// The header's control opens the picker.
+	// The header's control opens the menu.
 	row, col := findText(t, again, "Group: state")
 	mouseClick(t, again, col, row, tuitest.MouseLeft, 0)
-	if err := again.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(ckKeyBar(s), "2 session") }, uiTimeout); err != nil {
-		t.Fatalf("ASSERTION: a click on Group did not open the picker: %v\n%s", err, again.Snapshot())
+	if err := again.WaitFor(groupMenuOpen, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: a click on Group did not open the menu: %v\n%s", err, again.Snapshot())
 	}
 	ckPress(t, again, tuitest.Esc)
 	alive(t, again, "after the groupings")

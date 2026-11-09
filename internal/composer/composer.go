@@ -52,7 +52,8 @@ type Options struct {
 	// line keys do nothing, a paste's line breaks become spaces, and a long
 	// paste is text, never a block. The line still wraps on screen.
 	SingleLine bool
-	// SendNow makes alt+enter ask for the message sent now (EventSendNow)
+	// SendNow makes alt+enter and ctrl+enter ask for the message sent now
+	// (EventSendNow)
 	// rather than add a new line. The reply to an agent uses it: enter
 	// queues while the agent works, alt+enter types it at once.
 	SendNow bool
@@ -81,8 +82,13 @@ const (
 	// for the host to keep in the history.
 	EventCleared
 	// EventSendNow: the person wants the message sent now, without a wait
-	// (alt+enter, with Options.SendNow). The host calls Submit.
+	// (alt+enter or ctrl+enter, with Options.SendNow). The host calls Submit.
 	EventSendNow
+	// EventCopy: the person copied the selection. Copied holds the text, for
+	// the host to put where its copies go.
+	EventCopy
+	// EventCut: as EventCopy, and the selection is gone from the draft.
+	EventCut
 )
 
 // Model is one draft and its editor.
@@ -92,6 +98,13 @@ type Model struct {
 	cells []cell
 	// cur is the cursor, an index into cells from 0 to len(cells).
 	cur int
+	// anchor is the other end of the selection, -1 when nothing is selected
+	// (selection.go). dragFrom is where the last mouse press landed.
+	anchor, dragFrom int
+	// copied is the text the last copy or cut took.
+	copied string
+	// rowLine is the frame line the draft's first shown row was drawn on.
+	rowLine int
 	// ver changes with every edit, for the layout cache.
 	ver uint64
 	// size is the draft's bytes, blocks included.
@@ -108,6 +121,11 @@ type Model struct {
 	goal int
 	// top is the first row shown when the draft is taller than MaxRows.
 	top int
+	// room is how many lines the host can give the editor's frame, set
+	// with SetRoom before each Render; 0 when the host has not said. full
+	// says the editor takes all of it, toggled with alt+m.
+	room int
+	full bool
 	// width is the text width of the last frame, which up, down, home and
 	// end move by.
 	width int
@@ -176,7 +194,7 @@ func New(o Options) *Model {
 	if o.MaxBytes <= 0 {
 		o.MaxBytes = DefaultMaxBytes
 	}
-	return &Model{opt: o, goal: -1, width: 80, dismissedAt: -1, histAt: -1}
+	return &Model{opt: o, goal: -1, width: 80, dismissedAt: -1, histAt: -1, anchor: -1}
 }
 
 // Automated reports whether a key that did not come from the keyboard
@@ -325,13 +343,15 @@ func (m *Model) Insert(text string, remote bool) {
 	if text == "" {
 		return
 	}
-	if m.size+len(text) > m.opt.MaxBytes {
+	if m.size-m.selectedBytes()+len(text) > m.opt.MaxBytes {
 		m.notice = "The message is too long to add more."
 		return
 	}
 	m.edited()
 	ins := segment(nil, text)
-	m.change(m.cur, 0, ins, m.cur+len(ins))
+	if !m.replaceSelection(ins) {
+		m.change(m.cur, 0, ins, m.cur+len(ins))
+	}
 	m.syncMention()
 }
 
@@ -351,7 +371,9 @@ func (m *Model) Paste(text string, remote bool) {
 	if text == "" {
 		return
 	}
-	if m.size+len(text) > m.opt.MaxBytes {
+	// A paste replaces the selection, so the selected bytes are room. The
+	// check comes first: a refused paste leaves the selection as it was.
+	if m.size-m.selectedBytes()+len(text) > m.opt.MaxBytes {
 		// The room left can be a few bytes, so the line names no size: a
 		// paste of one character must not read as larger than a kilobyte.
 		m.notice = "The paste is too large for the message. Save it to a file and type the path."
@@ -364,7 +386,9 @@ func (m *Model) Paste(text string, remote bool) {
 	}
 	m.edited()
 	b := newBlock(m.nextNumber(false), text)
-	m.change(m.cur, 0, []cell{blockCell(b)}, m.cur+1)
+	if !m.replaceSelection([]cell{blockCell(b)}) {
+		m.change(m.cur, 0, []cell{blockCell(b)}, m.cur+1)
+	}
 }
 
 // measure counts text's lines, a final line break not making a line of its
@@ -502,8 +526,11 @@ func (m *Model) Update(msg tea.KeyPressMsg, remote bool) Event {
 		m.endHistoryWalk()
 	}
 	defer m.syncMention()
-	if key != "up" && key != "down" {
+	if key != "up" && key != "down" && key != "shift+up" && key != "shift+down" {
 		m.goal = -1
+	}
+	if ev, done := m.selectionKey(msg, key); done {
+		return ev
 	}
 	switch key {
 	case "enter":
@@ -515,14 +542,21 @@ func (m *Model) Update(msg tea.KeyPressMsg, remote bool) Event {
 			return EventNone
 		}
 		return EventSend
-	case "alt+enter":
+	case "alt+enter", "ctrl+alt+j", "alt+ctrl+j", "ctrl+enter":
+		// Send now. alt+enter is ESC CR, or CSI 13;3u from a terminal that
+		// speaks the kitty keyboard protocol; a few send ESC LF. On a Mac
+		// whose terminal does not use Option as Alt, which is the default in
+		// Ghostty, kitty, Terminal.app and iTerm2, Option+Enter is a plain
+		// CR, the same as enter, so ctrl+enter sends now too where the
+		// protocol reports it (CSI 13;5u). Without the protocol ctrl+enter
+		// is LF, which reads as ctrl+j: a new line.
 		if m.opt.SendNow {
 			return EventSendNow
 		}
 		if !m.opt.SingleLine {
 			m.typeKey("\n")
 		}
-	case "ctrl+j", "shift+enter", "ctrl+enter":
+	case "ctrl+j", "shift+enter":
 		if !m.opt.SingleLine {
 			m.typeKey("\n")
 		}
@@ -543,6 +577,11 @@ func (m *Model) Update(msg tea.KeyPressMsg, remote bool) Event {
 	case "ctrl+g":
 		if !m.opt.SingleLine {
 			return EventEditor
+		}
+	case FullKey:
+		if !m.opt.SingleLine {
+			m.full = !m.full
+			m.top = 0
 		}
 	case "left":
 		m.move(m.cur - 1)
@@ -814,4 +853,55 @@ func (m *Model) SetText(text string) {
 	m.undo, m.redo, m.undoSize = nil, nil, 0
 	m.Insert(text, false)
 	m.undo, m.redo, m.undoSize = nil, nil, 0
+}
+
+// FullKey toggles the editor between its own height and the whole room its
+// host gives it (SetRoom).
+const FullKey = "alt+m"
+
+// SetMaxRows sets how many rows the editor grows to before it scrolls, as
+// Options.MaxRows does when the editor is made. Zero or less takes
+// DefaultMaxRows. A host calls it when the setting that names it changes.
+func (m *Model) SetMaxRows(n int) {
+	if n <= 0 {
+		n = DefaultMaxRows
+	}
+	m.opt.MaxRows = n
+}
+
+// MaxRows is how many rows the editor grows to before it scrolls.
+func (m *Model) MaxRows() int { return m.opt.MaxRows }
+
+// SetRoom tells the editor how many lines its frame may take this frame: its
+// rows, the strip of blocks above them, and the line under them. The rows
+// are held to it, so a MaxRows larger than the view never pushes the
+// editor over what is drawn below it. Zero means the host does not say, and
+// MaxRows alone holds.
+func (m *Model) SetRoom(lines int) { m.room = max(lines, 0) }
+
+// Full reports whether the editor takes the whole room (alt+m).
+func (m *Model) Full() bool { return m.full }
+
+// SetFull sets whether the editor takes the whole room.
+func (m *Model) SetFull(on bool) {
+	if m.opt.SingleLine {
+		return
+	}
+	m.full = on
+}
+
+// textRows is how many text rows the frame shows, given the lines the strip
+// above them takes: MaxRows held to the room, or all of the room when full.
+func (m *Model) textRows(strip int) int {
+	limit := m.opt.MaxRows
+	if m.room > 0 {
+		// One line under the rows for a notice or the line it leaves.
+		avail := max(m.room-strip-1, 1)
+		if m.full {
+			limit = avail
+		} else {
+			limit = min(limit, avail)
+		}
+	}
+	return max(limit, 1)
 }

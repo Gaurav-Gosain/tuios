@@ -817,8 +817,9 @@ func TestNavigatorOpensReadyToType(t *testing.T) {
 // TestNavigatorOpensOverTheFocusedRail: with the rail holding the keyboard,
 // prefix / opens the navigator, the navigator takes the keys at once, and the
 // rail has them again when it closes. The go-to picker is checked the same
-// way, since the fix is one rule for every panel. The navigator sits in the
-// pane area beside the rail with even margins, clear of the dock.
+// way, since the fix is one rule for every panel. The navigator is centred
+// on the whole screen, a cell clear of the rail, and between the docks with
+// even margins.
 //
 // How it could pass wrongly, written down first:
 //   - The rail could swallow / and the marker, and the marker could still
@@ -940,11 +941,14 @@ func navCheckMargins(t *testing.T, s tuitest.Screen) {
 			}
 		}
 	}
+	// Across, it is centred on the whole screen and clear of the rail by a
+	// cell. Down, it is centred between the docks, which it is fitted to.
 	top, bottom := y0, dock-1-y1
-	left, right := x0-(rail+1), cols-1-x1
-	t.Logf("navigator box x %d-%d, y %d-%d; rail edge %d; margins top %d bottom %d left %d right %d", x0, x1, y0, y1, rail, top, bottom, left, right)
-	if rail < 0 || abs(top-bottom) > 1 || abs(left-right) > 1 || top < 1 || bottom < 1 || left < 1 || right < 1 {
-		t.Fatalf("ASSERTION: the navigator is not centred in the pane area: margins top %d bottom %d left %d right %d (dock row %d, panel to row %d)\n%s",
-			top, bottom, left, right, dock, y1, s.Text())
+	left, right := x0, cols-1-x1
+	gap := x0 - (rail + 1)
+	t.Logf("navigator box x %d-%d, y %d-%d; rail edge %d; margins top %d bottom %d, screen left %d right %d, gap to the rail %d", x0, x1, y0, y1, rail, top, bottom, left, right, gap)
+	if rail < 0 || abs(top-bottom) > 1 || abs(left-right) > 1 || top < 1 || bottom < 1 || gap < 1 {
+		t.Fatalf("ASSERTION: the navigator is not centred on the screen clear of the rail and the dock: margins top %d bottom %d, screen left %d right %d, gap to the rail %d (dock row %d, panel to row %d)\n%s",
+			top, bottom, left, right, gap, dock, y1, s.Text())
 	}
 }

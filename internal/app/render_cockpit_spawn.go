@@ -18,11 +18,12 @@ import (
 // frame d. At 120 columns and wider the machines sit beside the fields; on a
 // narrower screen they follow them, one line each.
 
-// The sheet's glyphs: a control that opens a list, the picked radio and
+// The sheet's glyphs: a control that opens a list (the down mark every
+// dropdown control in the chrome ends in, the one ckGlyphOpen is), the picked radio and
 // machine, the bar beside the picked machine, and a load cell full and
 // empty.
 var (
-	ckGlyphExpand = ckGlyph{"", "v", "v"}
+	ckGlyphExpand = ckGlyph{"\ueab4", "˅", "v"}
 	ckGlyphPicked = ckGlyph{"●", "●", "*"}
 	ckGlyphBar    = ckGlyph{"▌", "▌", "|"}
 	ckGlyphLoad   = ckGlyph{"■", "■", "#"}
@@ -68,7 +69,7 @@ type spawnLayout struct {
 }
 
 // spawnPlan picks the roomiest layout that fits the screen.
-func spawnPlan(s *spawnSheet, cw, ch int) spawnLayout {
+func spawnPlan(s *spawnSheet, cw, ch, taskRows int) spawnLayout {
 	p := spawnLayout{w0: min(112, cw-4), wide: cw >= 120}
 	if cw < 64 {
 		p.w0 = cw
@@ -103,7 +104,15 @@ func spawnPlan(s *spawnSheet, cw, ch int) spawnLayout {
 		// Title, task, columns, attempts, notice, footer and the pads.
 		return 3 + (p.taskH + 2) + 1 + body + 1 + 2 + chips + 3
 	}
-	for _, try := range []struct{ gap, task int }{{1, 3}, {0, 3}, {0, 2}, {0, 1}} {
+	// The task box is taskRows tall ([agents] reply_rows, 3 when it is
+	// unset), and gives up rows one at a time when the screen is short.
+	// alt+m in the task takes every row the sheet can spare.
+	want := max(taskRows, 1)
+	tries := []struct{ gap, task int }{{1, want}, {0, want}}
+	for n := want - 1; n >= 1; n-- {
+		tries = append(tries, struct{ gap, task int }{0, n})
+	}
+	for _, try := range tries {
 		p.gap, p.taskH = try.gap, try.task
 		p.shown, p.twoLine = len(s.machines), p.wide
 		for p.shown > 1 && height() > ch-2 {
@@ -112,6 +121,12 @@ func spawnPlan(s *spawnSheet, cw, ch int) spawnLayout {
 		if p.h0 = height(); p.h0 <= ch-2 {
 			break
 		}
+	}
+	if s.task != nil && s.task.Full() {
+		for height() < ch-2 {
+			p.taskH++
+		}
+		p.h0 = height()
 	}
 	p.h0 = min(p.h0, ch)
 	p.y0 = max((ch-p.h0)/2, 0)
@@ -124,7 +139,7 @@ func (m *OS) drawSpawnSheet(c *ckCanvas, l ckLook, top int) {
 	pal := l.pal
 	t := spawnTones(l)
 	s.hits = s.hits[:0]
-	p := spawnPlan(s, c.w, c.h)
+	p := spawnPlan(s, c.w, c.h, m.composerRows(spawnTaskBoxRows))
 	s.shown = p.shown
 	if s.machine >= p.shown {
 		s.machine = 0
@@ -162,6 +177,8 @@ func (m *OS) drawSpawnSheet(c *ckCanvas, l ckLook, top int) {
 	c.fill(x, y+1, w, box, t.field)
 	hit(x, y, right, y+1+box, "field:"+strconv.Itoa(int(spTask)))
 	if s.field == spTask {
+		s.task.SetMaxRows(max(m.composerRows(spawnTaskRows), p.taskH))
+		s.task.SetRoom(p.taskH + 1)
 		lines := s.task.Render(w-2, spawnStyles(pal, t.field), t.field)
 		cut := max(len(lines)-p.taskH, 0)
 		for i, ln := range lines[cut:] {
@@ -727,44 +744,10 @@ func (m *OS) drawSpawnMachines(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout
 }
 
 // drawSpawnList draws the open list under the row y of its field at x: below
-// it when it fits, above it otherwise.
+// it when it fits, above it otherwise. It is the TUI's one dropdown.
 func (m *OS) drawSpawnList(c *ckCanvas, l ckLook, x, y, w, top0, bottom, top int) {
-	s := m.Inbox.ck.spawn
-	pal := l.pal
-	items := s.listItems(s.listFor)
-	below := bottom - (y + 1) - 2
-	above := y - top0 - 2
-	rows := min(len(items), max(below, above))
-	if rows <= 0 {
-		return
-	}
-	y0 := y + 1
-	if rows > below {
-		y0 = y - rows - 2
-	}
-	first := min(max(s.listAt-rows/2, 0), len(items)-rows)
-	c.fill(x, y0, w, rows+2, pal.Card)
-	c.hline(x, y0, w, hzGlyph(), l.edge)
-	c.hline(x, y0+rows+1, w, hzGlyph(), l.edge)
-	for r := range rows {
-		i := first + r
-		it := items[i]
-		yy := y0 + 1 + r
-		ink, tone, ground := pal.Fg, pal.FgDim, pal.Card
-		if it.muted {
-			ink, tone = pal.FgDim, pal.FgMute
-		}
-		if i == s.listAt {
-			ink, tone, ground = pal.PillFg, pal.PillFg, pal.Accent
-		}
-		c.fill(x, yy, w, 1, ground)
-		c.text(x+2, yy, x+w-2, ckSeg{t: ckPad(it.label, 20) + " ", fg: ink, attrs: ckBold}, ckSeg{t: it.note, fg: tone})
-		if i == s.listAt {
-			c.mark(pal, x, yy, w, 1, ckOn)
-		}
-		// The list's rows come last, so they win over the fields under
-		// them.
-		s.hits = append(s.hits, ckHit{x0: x, y0: top + yy, x1: x + w, y1: top + yy + 1, kind: ckHitAction, action: "item:" + strconv.Itoa(i)})
+	if s := m.Inbox.ck.spawn; s.dd != nil {
+		drawDropdown(c, l, s.dd, x, y, w, top0, bottom, top)
 	}
 }
 

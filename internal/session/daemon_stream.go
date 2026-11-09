@@ -2,7 +2,10 @@ package session
 
 import (
 	"log"
+	"os"
 	"runtime/debug"
+	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -439,6 +442,34 @@ func (d *Daemon) broadcastEncodedToSession(sessionID string, msg *Message, exclu
 // queue while something else is sent.
 var broadcastSendHeld atomic.Pointer[func()]
 
+// statePushTestHold is how long each state push waits, in its turn, before it
+// is written: TUIOS_TEST_STATE_PUSH_HOLD_MS, at most a minute. It lets an e2e
+// test send a routed command while the state before it is still on its way,
+// which a loaded machine does now and then (see sendInBroadcastOrder).
+var statePushTestHold = sync.OnceValue(func() time.Duration {
+	ms, _ := strconv.Atoi(os.Getenv("TUIOS_TEST_STATE_PUSH_HOLD_MS"))
+	return time.Duration(min(max(ms, 0), 60000)) * time.Millisecond
+})
+
+// sendInBroadcastOrder writes a message to one client after every broadcast
+// already queued for it, on the caller's goroutine. A routed command goes
+// this way. A verb that changes the session and then routes a command to the
+// client queues the state first (publishState), and a command written past it
+// reached the client first: the client showed the focus the command named
+// while it still held the version before the change, and the next push it
+// built from that, such as a focus key, the daemon took for a stale one and
+// refused.
+func (d *Daemon) sendInBroadcastOrder(cs *connState, msgType MessageType, payload any) error {
+	msg, err := NewMessage(msgType, payload)
+	if err != nil {
+		return err
+	}
+	ticket := cs.takeBroadcastTicket()
+	defer cs.finishBroadcast()
+	cs.awaitBroadcastTurn(ticket)
+	return d.sendEncoded(cs, msg)
+}
+
 // queueBroadcast writes one already encoded broadcast to one client, off this
 // goroutine and in turn.
 //
@@ -460,6 +491,11 @@ func (d *Daemon) queueBroadcast(cs *connState, msg *Message, what string) {
 		client.awaitBroadcastTurn(ticket)
 		if hook := broadcastSendHeld.Load(); hook != nil {
 			(*hook)()
+		}
+		if msg.Type == MsgStateSync {
+			if hold := statePushTestHold(); hold > 0 {
+				time.Sleep(hold)
+			}
 		}
 		if err := d.sendEncoded(client, msg); err != nil {
 			debugLog("[DEBUG] %s: failed to send to client %s: %v", what, client.clientID, err)

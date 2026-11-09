@@ -28,6 +28,20 @@ import (
 // from the JSON verb protocol; Cwd is captured daemon-side from the live shell
 // process; ResurrectionVersion is stamped when state is written to disk.
 func retainDaemonExclusive(incoming, canonical *SessionState) {
+	// When a window was minimized is the daemon's to stamp
+	// (stampMinimizedLocked): a client knows it only from a push, so its
+	// copy is never newer.
+	if len(canonical.Windows) > 0 {
+		at := make(map[string]int64, len(canonical.Windows))
+		for _, w := range canonical.Windows {
+			if w.MinimizedAt != 0 {
+				at[w.ID] = w.MinimizedAt
+			}
+		}
+		for i := range incoming.Windows {
+			incoming.Windows[i].MinimizedAt = at[incoming.Windows[i].ID]
+		}
+	}
 	if incoming.Options == nil {
 		incoming.Options = canonical.Options
 	}
@@ -759,4 +773,26 @@ func keepClientFocus(incoming *SessionState, mine focusView) {
 	incoming.WorkspaceFocus = mine.perWS
 	incoming.FocusHistory = mine.history
 	incoming.ScrollStrip = mine.strip
+}
+
+// stampMinimizedLocked stamps now on every minimized window with no stamp yet
+// and clears the stamp of every window that is not minimized, and reports
+// whether it stamped one. Windows minimized by one write are stamped in window
+// order, a nanosecond apart, so the order is total.
+func stampMinimizedLocked(state *SessionState, now int64) (stamped bool) {
+	if state == nil {
+		return false
+	}
+	for i := range state.Windows {
+		w := &state.Windows[i]
+		switch {
+		case !w.Minimized:
+			w.MinimizedAt = 0
+		case w.MinimizedAt == 0:
+			w.MinimizedAt = now
+			now++
+			stamped = true
+		}
+	}
+	return stamped
 }

@@ -930,12 +930,13 @@ const agentMailMaxDraft = 1 << 20
 // wired as the Inbox reply is: image previews, the @ list and the pane's
 // history. An empty windowID, a sender on another machine, keeps no history.
 func (m *OS) newMailDraft(windowID string) *composer.Model {
-	comp := composer.New(composer.Options{MaxRows: agentMailDraftRows, MaxBytes: agentMailMaxDraft, Placeholder: "Type the message.", Images: true})
+	comp := composer.New(composer.Options{MaxRows: m.composerRows(agentMailDraftRows), MaxBytes: agentMailMaxDraft, Placeholder: "Type the message.", Images: true})
 	m.AgentMail.wires = m.wireDraft(comp, m.sidebarCurrentSessionID(), windowID, windowID != "")
 	return comp
 }
 
-// agentMailDraftRows is how many rows the mail editor grows to.
+// agentMailDraftRows is how many rows the mail editor grows to, when [agents]
+// reply_rows is unset.
 const agentMailDraftRows = 6
 
 // AgentMailType types text into the draft at the cursor.
@@ -973,6 +974,8 @@ func (m *OS) AgentMailKey(msg tea.KeyPressMsg) tea.Cmd {
 		cmd = m.AgentMailSendReply()
 	case composer.EventClose:
 		m.AgentMailCancelReply()
+	case composer.EventCopy, composer.EventCut:
+		cmd = m.CopyFromEditor(comp.Copied())
 	case composer.EventPaste:
 		cmd = m.composerClipboardCmd(comp, "")
 	case composer.EventOpenImage:

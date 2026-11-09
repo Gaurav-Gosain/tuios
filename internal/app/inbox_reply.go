@@ -105,8 +105,18 @@ type inboxReplyState struct {
 // in memory only and end with the client.
 const inboxReplyDraftsMax = 16
 
-// inboxReplyRows is how many rows the editor grows to before it scrolls.
+// inboxReplyRows is how many rows the editor grows to before it scrolls,
+// when [agents] reply_rows is unset.
 const inboxReplyRows = 8
+
+// composerRows is the rows a multi-line editor grows to: [agents]
+// reply_rows, or def, the editor's own, when it is unset.
+func (m *OS) composerRows(def int) int {
+	if m.UserConfig == nil {
+		return def
+	}
+	return m.UserConfig.Agents.ReplyRowsOr(def)
+}
 
 // inboxDraftKey is the key of a pane's draft.
 func inboxDraftKey(sessionID, windowID string) string { return sessionID + "/" + windowID }
@@ -250,7 +260,7 @@ func (m *OS) openInboxReply(sessionID, windowID, who, context string, closeAfter
 	m.answerEnd(answerArmed, "reply")
 	comp := m.takeInboxDraft(sessionID, windowID)
 	if comp == nil {
-		comp = composer.New(composer.Options{MaxRows: inboxReplyRows, Placeholder: "Type your reply.", Images: true, SendNow: true})
+		comp = composer.New(composer.Options{MaxRows: m.composerRows(inboxReplyRows), Placeholder: "Type your reply.", Images: true, SendNow: true})
 	}
 	m.Inbox.reply.editor = &inboxReplyEditor{
 		draftWires: m.wireDraft(comp, sessionID, windowID, true),
@@ -278,7 +288,7 @@ func (m *OS) openHostReply(host, sessionID, windowID, who, context string) bool 
 	m.answerEnd(answerArmed, "reply")
 	comp := m.takeInboxDraft(sessionID, windowID)
 	if comp == nil {
-		comp = composer.New(composer.Options{MaxRows: inboxReplyRows, Placeholder: "Type your reply.", Images: true})
+		comp = composer.New(composer.Options{MaxRows: m.composerRows(inboxReplyRows), Placeholder: "Type your reply.", Images: true})
 	}
 	// The @ list offers no files of the far pane's folder. The history is
 	// kept under the far pane, as before.
@@ -434,6 +444,8 @@ func (m *OS) InboxReplyKey(msg tea.KeyPressMsg) tea.Cmd {
 		cmd = m.InboxReplySendNow()
 	case composer.EventClose:
 		m.InboxReplyCancel()
+	case composer.EventCopy, composer.EventCut:
+		cmd = m.CopyFromEditor(ed.comp.Copied())
 	case composer.EventPaste:
 		cmd = m.inboxReplyClipboard(ed)
 	case composer.EventOpenImage:
@@ -509,6 +521,8 @@ func (m *OS) InboxReplySend() tea.Cmd {
 	}
 	parts = trimReplyParts(parts)
 	text := composer.JoinParts(parts)
+	// The text the thread's echo shows, before a block-only send empties it.
+	shown := text
 	blocks := ed.comp.Blocks() > 0
 	if !blocks && len(text) > inboxReplyMax {
 		// A draft with no block was typed or pasted inline, and has no
@@ -555,12 +569,14 @@ func (m *OS) InboxReplySend() tea.Cmd {
 		for _, t := range ed.targets {
 			st.sendSeq++
 			st.sending[st.sendSeq] = ed.comp.Clone()
+			m.addEcho("", t.session, t.window, t.who, shown, parts, st.sendSeq)
 			cmds = append(cmds, m.inboxQueueCmd(t.session, t.window, t.who, text, nonce, false, st.sendSeq, parts))
 		}
 		return tea.Batch(cmds...)
 	}
 	st.sendSeq++
 	st.sending[st.sendSeq] = ed.comp
+	m.addEcho(ed.host, ed.session, ed.window, ed.who, shown, parts, st.sendSeq)
 	m.threadFollowOnSend(ed.host, ed.session, ed.window)
 	return m.inboxQueueCmdOn(ed.host, ed.session, ed.window, ed.who, text, nonce, false, st.sendSeq, parts)
 }
@@ -877,6 +893,9 @@ func (m *OS) SidebarAgentCancelQueued(sessionID, windowID string) (tea.Cmd, bool
 // applyInboxQueueDropped says what x did, and keeps the text of a message
 // this client queued for u.
 func (m *OS) applyInboxQueueDropped(msg InboxQueueDroppedMsg) {
+	if msg.Err == nil {
+		m.echoDropped(msg.Session, msg.Window, msg.ID)
+	}
 	if msg.Err != nil {
 		if session.VerbErrCode(msg.Err) == session.ErrVerbUnknownVerb {
 			m.Inbox.reply.noQueue = true

@@ -1784,6 +1784,38 @@ func buildVerbRegistry() map[string]verbEntry {
 			},
 			handler: (*Daemon).verbSplitWindow,
 		},
+		"layout-template": {
+			// It opens panes and types their commands, as split-window
+			// opens one: the person's tool, not a restricted caller's.
+			scope:       scopeDeny,
+			link:        needOpen,
+			description: "Save the workspace a session shows as a layout template, load one back, list them, or delete one. Templates are files of this machine (~/.config/tuios/layouts), so every client reads one list. A load reuses the workspace's panes in order, opens the ones it lacks with their folder and name and types their command, minimizes the ones it does not name, and gives a bsp layout its split tree back. Works with no client attached.",
+			params: []verbParam{
+				{Name: "action", Type: "string", Required: true, Description: "What to do.", Accepted: layoutTemplateActions},
+				sessionParam,
+				{Name: "name", Type: "string", Description: "The layout. Needed to save, load and delete."},
+			},
+			returns: []verbParam{
+				{Name: "layouts", Type: "[]object", Description: "list: each layout's name, panes, mode, tiling, created_at and version."},
+				{Name: "dir", Type: "string", Description: "list: the folder the layouts are kept in."},
+				{Name: "name", Type: "string", Description: "The layout saved, loaded or deleted."},
+				{Name: "panes", Type: "int", Description: "save and load: how many panes the layout holds, or shows."},
+				{Name: "mode", Type: "string", Description: "save and load: the layout mode, bsp, master-stack, scrolling or floating."},
+				{Name: "workspace", Type: "int", Description: "save and load: the workspace."},
+				{Name: "path", Type: "string", Description: "save: the file written."},
+				{Name: "focus", Type: "string", Description: "load: the pane that has the focus after the load, a pane of the layout."},
+				{Name: "opened", Type: "int", Description: "load: panes opened for the layout."},
+				{Name: "reused", Type: "int", Description: "load: panes of the workspace that took a place."},
+				{Name: "minimized", Type: "int", Description: "load: panes of the workspace the layout does not name, minimized."},
+				{Name: "deleted", Type: "bool", Description: "delete: the layout was removed."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"layout-template","params":{"action":"save","session":"work","name":"three-up"}}`,
+				`{"id":2,"verb":"layout-template","params":{"action":"load","session":"work","name":"three-up"}}`,
+				`{"id":3,"verb":"layout-template","params":{"action":"list"}}`,
+			},
+			handler: (*Daemon).verbLayoutTemplate,
+		},
 		"zoom-window": {
 			scope:       scopeDeny,
 			link:        needWrite,

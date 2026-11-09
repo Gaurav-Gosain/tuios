@@ -543,23 +543,11 @@ func handleFocusOnly(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// minimizedInCurrentWorkspace lists the indices of minimized windows on the
-// current workspace, in the order the restore digits address them.
-func minimizedInCurrentWorkspace(o *app.OS) []int {
-	var indices []int
-	for i, win := range o.Windows {
-		if win.Minimized && win.Workspace == o.CurrentWorkspace && !win.IsScratch {
-			indices = append(indices, i)
-		}
-	}
-	return indices
-}
-
 // makeRestoreMinimizedByPositionHandler restores the position-th minimized
 // window (1-based) of the current workspace.
 func makeRestoreMinimizedByPositionHandler(position int) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-		minimized := minimizedInCurrentWorkspace(o)
+		minimized := o.MinimizedInOrder()
 		if position < 1 || position > len(minimized) {
 			return o, nil
 		}

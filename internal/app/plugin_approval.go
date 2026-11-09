@@ -294,7 +294,7 @@ func (m *OS) renderPluginApproval() (string, overlay.Geometry, []overlayRowHit) 
 	a := st.open
 	pal := m.overlayUI()
 	bg := pal.Canvas
-	width := overlay.DialogFitWidth(pluginApprovalWidth, m.GetRenderWidth())
+	width := overlay.DialogFitWidth(pluginApprovalWidth, m.modalRoomWidth())
 	inner := max(width-2, 1)
 
 	var body []string

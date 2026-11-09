@@ -2011,7 +2011,7 @@ Inside it:
 | `\` | Show the agents as a column beside the focus, or as a strip of chips above it. tuios keeps the choice. See `view_list` in [CONFIGURATION.md](CONFIGURATION.md#the-agent-list) |
 | `o` | Open what the agent has shown, such as a TML form, on its Artifacts tab, and use it. `esc` goes back to the list |
 | `f` | Show only what needs you, then each kind of item, then every agent |
-| `s` | Group and sort: `1` groups by state (Needs you, Ready for review, Working, Idle, Settled), `2` by session, `3` by machine, `4` by project, and `s` again steps the order inside each group. Needs you stays on top in every grouping, and the header counts the agents by state in every one. tuios keeps the grouping. A click on Group in the header opens the same choice |
+| `s` | Opens the Group menu under the header's Group control: `1` groups by state (Needs you, Ready for review, Working, Idle, Settled), `2` by session, `3` by machine, `4` by project, and `s` steps the order inside each group. Up and down and enter pick too, and esc closes it. Needs you stays on top in every grouping, and the header counts the agents by state in every one. tuios keeps the grouping. A click on Group opens the same menu, and the header's Board and machine controls open menus of their own: Agents or Board, and All machines or one machine |
 | `/` | Search. A `key:value` term is a selector, such as `harness:codex` |
 | `d` `z` `u` `S` | Dismiss, snooze, undo, show the snoozed items |
 | `D` | Settle the agent: put it away until it needs you. It goes to Settled, and its finished turn closes. `D` on a settled agent takes it off the shelf, and `u` undoes a settle within 10 seconds. With marks, settle every marked agent. The Settle button in the focus header does the same |
@@ -2298,7 +2298,8 @@ keeps the draft. A paste keeps its line breaks, and a long one shows as one
 block. `ctrl+v` attaches the clipboard's image when it holds one and no text. `@`
 opens a list of agents, panes and files to name: `tab` puts one in. `up` on
 the first row brings back an earlier message to the same agent, `ctrl+r`
-searches them, and `ctrl+g` opens the draft in `$EDITOR`.
+searches them, and `ctrl+g` opens the draft in `$EDITOR`. `alt+m` makes the
+editor as tall as its area and back; `[agents] reply_rows` sets its own height.
 `ctrl+o` on a selected image shows it larger, and `o` there opens it in the
 desktop's image viewer. The editing keys are in docs/AGENT_STATE.md, "Replying to an agent".
 They are not bindings yet. Attached to a daemon without `queue-prompt` (an older one), the

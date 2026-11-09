@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/dockengine"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
@@ -42,7 +44,7 @@ func (m *OS) InitDockComponents() tea.Cmd {
 	if secondary != nil {
 		comps = append(comps, secondary)
 	}
-	m.dockEngine = newDockEngine(comps)
+	m.dockEngine = dockengine.New(comps, railFolder)
 	m.dockEngine.SetContext(m.SessionName, dockSocketPath())
 	// Before Start, so the first run is told the focus and the size rather
 	// than running with none.
@@ -134,16 +136,16 @@ func dockSocketPath() string {
 // otherwise wait forever on a receive nothing answers: one goroutine leaked per
 // reload. The message carries the engine it came from, so Update re-arms only
 // the current engine's listener.
-func ListenForDockComponents(e *dockEngine) tea.Cmd {
+func ListenForDockComponents(e *dockengine.Engine) tea.Cmd {
 	if e == nil {
 		return nil
 	}
 	return func() tea.Msg {
 		select {
-		case u := <-e.updates:
-			u.from = e
+		case u := <-e.Updates():
+			u.From = e
 			return dockComponentMsg(u)
-		case <-e.ctx.Done():
+		case <-e.Done():
 			return nil
 		}
 	}
@@ -159,7 +161,7 @@ func (m *OS) handleDockComponent(msg dockComponentMsg) bool {
 	if msg.Builtin {
 		return m.refreshBuiltinDockComponent(msg.Name)
 	}
-	changed, newFailure := m.dockEngine.applyUpdate(dockComponentUpdate(msg))
+	changed, newFailure := m.dockEngine.ApplyUpdate(dockengine.Update(msg))
 	if msg.Name == railSecondaryComponent {
 		if changed {
 			m.railCustomSecond.gen++
@@ -318,7 +320,7 @@ func (m *OS) RunDockComponentClick(name string, button int) bool {
 	if !ok || strings.TrimSpace(c.OnClick) == "" {
 		return false
 	}
-	env := m.dockEngine.commandEnv(name, "TUIOS_CLICK_BUTTON="+strconv.Itoa(button))
+	env := m.dockEngine.CommandEnv(name, "TUIOS_CLICK_BUTTON="+strconv.Itoa(button))
 	command := c.OnClick
 	go func() {
 		// #nosec G204 - the user's own config, run as the user, exactly as a
@@ -330,3 +332,8 @@ func (m *OS) RunDockComponentClick(name string, button int) bool {
 	}()
 	return true
 }
+
+// dockComponentMsg carries an engine's update into Update. One message per
+// update keeps the render gate simple: the handler compares the new text
+// against the old and skips the frame when nothing moved.
+type dockComponentMsg dockengine.Update

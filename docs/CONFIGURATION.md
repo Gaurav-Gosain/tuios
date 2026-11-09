@@ -3002,6 +3002,27 @@ strip. tuios keeps that choice in `sidebar.json` in its state folder. The
 choice wins over `view_list`. The settings page has this option on the
 Behavior tab, as "Agent list".
 
+## Editor height
+
+A reply to an agent, a reply to many, a mail draft and a new agent's task are
+written in an editor that grows as you type, then scrolls. `reply_rows` sets
+how many rows it grows to:
+
+```toml
+[agents]
+reply_rows = 0   # default: each editor's own height
+```
+
+| Value | What the editors do |
+|---|---|
+| `0` | Each keeps its own height: 8 rows for a reply, 6 for a mail draft, 3 for a new agent's task |
+| `1` to `200` | Each grows to that many rows |
+
+An editor never takes more rows than its view has: on a short screen it
+stops at the view's edge and scrolls. `alt+m` in an editor switches it to the
+whole height of its area and back. The settings page has this option on the
+Behavior tab, as "Reply rows".
+
 ## Report pane states to your terminal
 
 When tuios runs in a terminal that reads OSC 7501, the Program Status

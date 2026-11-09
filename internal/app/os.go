@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/dockengine"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/agentseen"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -451,10 +453,18 @@ type OS struct {
 	dockPlan               dockPlan                      // which components are on which side, in draw order
 	diagramsTold           map[string]bool               // the diagram types the person heard need the sketch plugin, this session
 	pluginCells            map[string]session.PluginCell // what plugins show on the dock, by name, nil until one does
-	dockEngine             *dockEngine                   // refresh scheduler for the components that move on their own
+	dockEngine             *dockengine.Engine            // refresh scheduler for the components that move on their own
 	// RemoteCommandChan carries a verb the daemon routed to this client, for
 	// the hosts that cannot Send into the program directly. See dock_remote.go.
 	RemoteCommandChan chan RemoteCommandMsg
+	// stateSyncsArrived counts the states QueueStateSync took, on the read
+	// loop. stateSyncsApplied is the newest of them Update has taken,
+	// heldRemote the routed commands that wait for one, and heldRemoteGen
+	// names the timeout armed for them. See remote_after_sync.go.
+	stateSyncsArrived atomic.Uint64
+	stateSyncsApplied uint64
+	heldRemote        []RemoteCommandMsg
+	heldRemoteGen     uint64
 	ClipboardContent  string // Store clipboard content from tea.ClipboardMsg
 	ShowCacheStats    bool   // True when showing style cache statistics overlay
 	// Quit menu state. The menu replaces the old yes/no quit dialog: a small
@@ -1607,6 +1617,8 @@ type OS struct {
 	// adoptScrollColumns.
 	pendingScrollColumns map[int][]session.SerializedScrollColumn
 	LayoutPickerItems    []LayoutTemplate
+	// LayoutPickerLoading is true while the picker waits on the daemon's list.
+	LayoutPickerLoading  bool
 	LayoutPickerSelected int
 	LayoutPickerScroll   int
 	LayoutPickerQuery    string

@@ -177,3 +177,79 @@ func runLayoutVerb(verb, sessionName, window string, params map[string]any, json
 	fmt.Printf("%s  %s%s\n", shortWindowID(id), line(res), t.on())
 	return nil
 }
+
+// newLayoutSaveCommand is tuios layout save: the workspace a session shows,
+// kept as a layout template by the daemon.
+func newLayoutSaveCommand() *cobra.Command {
+	var sessionName string
+	var jsonOutput bool
+	cmd := &cobra.Command{
+		Use:   "save <name>",
+		Short: "Save the workspace a session shows as a layout",
+		Long: `Save the panes of the workspace a session shows as a layout template: where
+each pane is, its name and folder, and how the workspace is tiled, with its
+split tree. Works with no client attached. Load it with 'tuios layout load'.`,
+		Example: `  tuios layout save three-up
+  tuios layout save review -s api`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return runLayoutTemplate("save", sessionName, args[0], jsonOutput, func(res map[string]any) string {
+				return fmt.Sprintf("Saved layout %s: %v panes, %v.", args[0], res["panes"], res["mode"])
+			})
+		},
+	}
+	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
+	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	return cmd
+}
+
+// newLayoutLoadCommand is tuios layout load: a layout template applied to
+// the workspace a session shows, by the daemon.
+func newLayoutLoadCommand() *cobra.Command {
+	var sessionName string
+	var jsonOutput bool
+	cmd := &cobra.Command{
+		Use:   "load <name>",
+		Short: "Load a layout into the workspace a session shows",
+		Long: `Load a layout template into the workspace a session shows. The panes there
+are reused in order, the ones the layout lacks are opened in their folder
+with their name and command, and the ones it does not name are minimized.
+A bsp layout gets its split tree back. Works with no client attached.`,
+		Example: `  tuios layout load three-up
+  tuios layout load review -s api`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return runLayoutTemplate("load", sessionName, args[0], jsonOutput, func(res map[string]any) string {
+				return fmt.Sprintf("Loaded layout %s: %v panes, %v opened, %v reused, %v minimized.", args[0], res["panes"], res["opened"], res["reused"], res["minimized"])
+			})
+		},
+	}
+	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
+	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	return cmd
+}
+
+// runLayoutTemplate sends one layout-template action and prints line of
+// its result, or the result itself with --json.
+func runLayoutTemplate(action, sessionName, name string, jsonOutput bool, line func(map[string]any) string) error {
+	t, err := dialTarget(sessionName, "")
+	if err != nil {
+		return err
+	}
+	defer t.Close()
+	raw, err := t.client.Call("layout-template", t.params(map[string]any{"action": action, "name": name}))
+	if err != nil {
+		return reportVerbError(t.explain("layout-template", err), jsonOutput)
+	}
+	if jsonOutput {
+		return printVerbResultOn(t, raw, jsonOutput)
+	}
+	var res map[string]any
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
+	}
+	fmt.Println(line(res) + t.on())
+	return nil
+}

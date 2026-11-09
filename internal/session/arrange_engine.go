@@ -1,6 +1,7 @@
 package session
 
 import (
+	"cmp"
 	"errors"
 	"math"
 	"os"
@@ -923,8 +924,10 @@ func (e *engine) minimize(p ArrangeParams) error {
 		return set(e.focus, true)
 	}
 	// Read from the session now: the state the app last built can be
-	// older than the minimize just before this.
-	var mins []string
+	// older than the minimize just before this. The order is the one the
+	// TUI's dock and restore digits use: when each was minimized, oldest
+	// first (WindowState.MinimizedAt), then window order.
+	var rows []WindowRow
 	if raw, err := e.call("list-windows", map[string]any{"session": e.name}); err == nil {
 		var wl struct {
 			Windows []WindowRow `json:"windows"`
@@ -932,9 +935,21 @@ func (e *engine) minimize(p ArrangeParams) error {
 		_ = jsonx.Unmarshal(raw, &wl)
 		for _, w := range wl.Windows {
 			if w.Minimized && w.Workspace == e.ti.WS {
-				mins = append(mins, w.ID)
+				rows = append(rows, w)
 			}
 		}
+	}
+	slices.SortStableFunc(rows, func(a, b WindowRow) int { return cmp.Compare(a.MinimizedAt, b.MinimizedAt) })
+	mins := make([]string, len(rows))
+	for i, w := range rows {
+		mins[i] = w.ID
+	}
+	// Pane restores that pane when it is one of them. A client sends the
+	// focused pane as Pane on every op, which is not minimized, so any
+	// other Pane falls through to Delta.
+	if p.Pane != "" && slices.Contains(mins, p.Pane) {
+		e.result.Focus = p.Pane
+		return set(p.Pane, false)
 	}
 	if p.Delta > 0 {
 		if p.Delta > len(mins) {
@@ -1075,6 +1090,7 @@ type WindowRow struct {
 	PID         int              `json:"pid"`
 	Focused     bool             `json:"focused"`
 	Minimized   bool             `json:"minimized"`
+	MinimizedAt int64            `json:"minimized_at"`
 	Zoomed      bool             `json:"zoomed"`
 	Floating    bool             `json:"floating"`
 	Scratch     bool             `json:"scratch"`

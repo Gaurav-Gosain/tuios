@@ -1,6 +1,6 @@
 //go:build !unix
 
-package app
+package dockengine
 
 import (
 	"os"

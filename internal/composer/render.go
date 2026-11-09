@@ -24,6 +24,8 @@ type inks struct {
 	blockText, blockNum  color.Color
 	blockDim             color.Color
 	selected             color.Color
+	// span and spanText are the ground and ink of selected text.
+	span, spanText color.Color
 	// blank is the gutter of a row with no mark, drawn once a frame.
 	blank string
 }
@@ -41,6 +43,11 @@ func newInks(st Styles, surface color.Color) inks {
 		in.block = st.Blend(in.field, st.Accent, blockMix)
 	}
 	in.selected = st.Selected
+	in.span = st.Selection
+	if in.span == nil {
+		in.span = st.Selected
+	}
+	in.spanText = st.readable(st.Text, in.span)
 	in.blockText = st.readable(st.Text, in.block)
 	in.blockNum = st.readable(st.Key, in.block)
 	in.blockDim = st.readable(st.Dim, in.block)
@@ -95,16 +102,18 @@ func (m *Model) render(width int, st Styles, surface color.Color) []string {
 	m.width = textW
 	rows := m.rows(textW)
 	cr := rowOf(rows, m.cur)
-	shown := min(len(rows), m.opt.MaxRows)
+	out := m.renderStrip(width, in)
+	limit := m.textRows(len(out))
+	shown := min(len(rows), limit)
 	m.top = min(max(m.top, cr-shown+1), cr)
 	m.top = min(max(m.top, 0), len(rows)-shown)
 
-	out := m.renderStrip(width, in)
 	m.caret = Caret{Row: len(out) + cr - m.top, Col: gutter}
 	if len(m.cells) > 0 {
 		m.caret.Col += m.colOf(rows[cr], m.cur, textW)
 	}
 	m.caretOK = true
+	m.rowLine = len(out)
 	sel := m.selectedBlock()
 	in.blank = on(in.field).Render("  ")
 	for r := m.top; r < m.top+shown; r++ {
@@ -120,6 +129,13 @@ func (m *Model) render(width int, st Styles, surface color.Color) []string {
 			m.renderRow(&b, rows[r], r == cr, textW, sel, in)
 		}
 		out = append(out, fill(b.String(), width, in.field))
+	}
+	// Full, the editor takes the whole room, so the rows under a short
+	// draft are blank field.
+	if m.full {
+		for r := shown; r < limit; r++ {
+			out = append(out, fill(in.blank, width, in.field))
+		}
 	}
 	out = append(out, m.renderMentions(width, len(out), in)...)
 	if m.hsearch != nil {
@@ -168,7 +184,14 @@ func arrowKeys(ascii bool) string {
 // renderRow writes one row of the draft. Text is drawn in runs, so a row
 // costs a few styled strings and not one per character.
 func (m *Model) renderRow(b *strings.Builder, row vline, hasCursor bool, textW int, sel *block, in inks) {
-	textStyle := on(in.field).Foreground(in.text)
+	plainStyle := on(in.field).Foreground(in.text)
+	spanStyle := on(in.span).Foreground(in.spanText)
+	if in.st.Plain {
+		// At 16 colours no ground shows, so selected text is reversed.
+		spanStyle = on(in.field).Foreground(in.text).Reverse(true)
+	}
+	lo, hi, selecting := m.Selection()
+	textStyle, inRun := plainStyle, false
 	var run strings.Builder
 	flush := func() {
 		if run.Len() > 0 {
@@ -178,9 +201,28 @@ func (m *Model) renderRow(b *strings.Builder, row vline, hasCursor bool, textW i
 	}
 	for i := row.start; i < row.end; i++ {
 		c := m.cells[i]
+		inSpan := selecting && i >= lo && i < hi
+		if inSpan != inRun {
+			flush()
+			inRun, textStyle = inSpan, plainStyle
+			if inSpan {
+				textStyle = spanStyle
+			}
+		}
 		if hasCursor && i == m.cur {
 			flush()
-			b.WriteString(cursor(cursorText(c), in.field, in.text))
+			if inSpan {
+				// The cursor at the start of a selection is drawn over
+				// the selection's colours; at 16 colours, where the
+				// selection is reversed, it is the one cell that is not.
+				if in.st.Plain {
+					b.WriteString(on(in.field).Foreground(in.text).Underline(true).Render(cursorText(c)))
+				} else {
+					b.WriteString(cursor(cursorText(c), in.span, in.spanText))
+				}
+			} else {
+				b.WriteString(cursor(cursorText(c), in.field, in.text))
+			}
 			if c.block != nil {
 				// The cursor cell took the bracket. The rest of the
 				// label follows it.
@@ -190,7 +232,7 @@ func (m *Model) renderRow(b *strings.Builder, row vline, hasCursor bool, textW i
 		}
 		if c.block != nil {
 			flush()
-			b.WriteString(renderBlock(c.block, textW, c.block == sel, false, in))
+			b.WriteString(renderBlock(c.block, textW, inSpan || c.block == sel, false, in))
 			continue
 		}
 		if c.s == "\t" {
@@ -287,7 +329,7 @@ func wrapWords(s string, width int) []string {
 // The list is kept until the keys change, so a footer drawn every frame
 // costs no allocation. It is shared: do not change it.
 func (m *Model) Hints(ascii bool) []Hint {
-	k := hintsKey{state: m.hintState(), ascii: ascii}
+	k := hintsKey{state: m.hintState(), ascii: ascii, full: m.full}
 	if k.state == hintsImage && m.preview != nil {
 		k.canOpen = m.preview.CanOpen()
 	}
@@ -310,8 +352,8 @@ const (
 
 // hintsKey is what the hints depend on.
 type hintsKey struct {
-	state          int
-	ascii, canOpen bool
+	state                int
+	ascii, canOpen, full bool
 }
 
 // hintState is the state the editor is in, for its keys.
@@ -381,7 +423,12 @@ func (o Options) hints(k hintsKey) []Hint {
 	if o.Images {
 		hints = append(hints, Hint{Key: "ctrl+v", Label: "paste image"})
 	}
+	full := "taller"
+	if k.full {
+		full = "shorter"
+	}
 	return append(hints,
+		Hint{Key: FullKey, Label: full, Optional: true},
 		Hint{Key: "ctrl+z", Label: "undo", Optional: true},
 		Hint{Key: "esc", Label: "close"},
 	)

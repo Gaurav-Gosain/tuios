@@ -1,13 +1,16 @@
 package app
 
 import (
+	"runtime"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// Send now: alt+enter in the reply editor types the reply into the agent's
+// Send now: alt+enter, or ctrl+enter, in the reply editor types the reply into the agent's
 // pane at once, even while the agent works, rather than queue it for the next
 // rest as enter does. The harness takes it as it takes a line the person types
 // into its box: most read it at their next tool boundary. It goes by
@@ -23,6 +26,27 @@ import (
 // no images and no host, so a reply with an image, a reply to an agent on a
 // linked machine and a bulk reply are queued with enter, as before. The bulk
 // and linked editors keep alt+enter as a new line.
+
+// sendNowKeyName is the send-now key as the platform names it, the one this
+// host can send. On a Mac, Option+Enter reaches tuios only from a terminal
+// that uses Option as Alt, so with the kitty keyboard protocol the hint names
+// ctrl+enter, which then always arrives (⌃↩), and without it ⌥↩. Elsewhere it
+// is alt+enter.
+func (m *OS) sendNowKeyName() string {
+	if runtime.GOOS == "darwin" {
+		if overlay.UseASCII() {
+			if m.KeyboardEnhancementsEnabled {
+				return "ctrl+enter"
+			}
+			return "opt+enter"
+		}
+		if m.KeyboardEnhancementsEnabled {
+			return "⌃" + overlay.EnterGlyph
+		}
+		return "⌥" + overlay.EnterGlyph
+	}
+	return "alt+" + overlay.EnterGlyph
+}
 
 // replyEnterQueues reports whether enter in the reply editor queues the reply
 // rather than send it at once: while the agent works. The footer names the
@@ -80,6 +104,7 @@ func (m *OS) InboxReplySendNow() tea.Cmd {
 	}
 	st.sendSeq++
 	st.sending[st.sendSeq] = ed.comp
+	m.addEcho("", ed.session, ed.window, ed.who, text, nil, st.sendSeq)
 	call := m.inboxCaller()
 	params := map[string]any{"session": ed.session, "window": ed.window, "text": text, "submit": true}
 	msg := InboxRepliedMsg{Session: ed.session, Window: ed.window, Who: ed.who, Text: text, Send: st.sendSeq, Now: true}

@@ -81,6 +81,8 @@ type previewKey struct {
 type previewPicture struct {
 	lines []string
 	png   []byte
+	// w and h are the PNG's size in pixels.
+	w, h int
 }
 
 // size is the bytes the picture holds: the capacity of the PNG and the glyph
@@ -120,6 +122,10 @@ type replyPreview struct {
 	gone   []uint32
 	nextID uint32
 	shown  map[previewID]previewPlacement
+	// ph is the pictures drawn as kitty Unicode placeholders (see
+	// thread_image_placeholder.go): the id the cells name, made when the
+	// frame draws them, and what the host holds of it.
+	ph map[previewKey]*placeholderPic
 	// eraseHooked says the writer tells hostErased when it erases the host's
 	// screen. Only the render touches it.
 	eraseHooked bool
@@ -140,6 +146,14 @@ type previewPlacement struct {
 	key        previewKey
 	x, y       int
 	cols, rows int
+	// skip is the picture rows cut off the top, and rows the ones shown
+	// from there: a card the window cuts shows its part in the window. Both
+	// count rows of key's box, so a whole picture has skip 0 and rows
+	// key.rows.
+	skip int
+	// virtual says the frame drew the picture as placeholder cells: the host
+	// gets the picture and a virtual placement, and the cells place it.
+	virtual bool
 }
 
 // replyPreviewMsg carries prepared pictures back to the Update goroutine.
@@ -355,7 +369,7 @@ func preparePicture(img *composer.Image, k previewKey, cellW, cellH int, ground 
 		}
 		out := make([]byte, b.Len())
 		copy(out, b.Bytes())
-		return &previewPicture{png: out}
+		return &previewPicture{png: out, w: dst.Bounds().Dx(), h: dst.Bounds().Dy()}
 	}
 	// Four by eight pixels a cell is enough for every glyph set, octants
 	// included, and keeps the palette small.
@@ -555,8 +569,10 @@ func (p *replyPreview) shotPieces() []shotPiece {
 				return png.Decode(bytes.NewReader(data))
 			},
 			source: func(pix image.Image) image.Rectangle { return pix.Bounds() },
-			col:    pl.x, row: pl.y, cols: pl.cols, rows: pl.rows,
-			z: math.MaxInt32,
+			// A cropped placement is the rows from skip of the whole box.
+			col: pl.x, row: pl.y - pl.skip, cols: pl.cols, rows: max(pl.key.rows, pl.skip+pl.rows),
+			sub: image.Rect(0, pl.skip, pl.cols, pl.skip+pl.rows),
+			z:   math.MaxInt32,
 		})
 	}
 	return out

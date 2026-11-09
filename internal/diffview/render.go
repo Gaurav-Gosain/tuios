@@ -85,7 +85,15 @@ func (t *Theme) CodeRanges(text string, spans []Span, changed []Range, kind Kind
 		styled = ""
 		known = 0
 	case left > width && width > ellW:
-		styled = ansi.Truncate(styled, width-ellW, "") + plain + ell
+		cut := ansi.Truncate(styled, width-ellW, "")
+		// A wide character that would cross the cut is dropped whole, and
+		// leaves a cell before the ellipsis. The gap goes before it, so the
+		// ellipsis is in the last cell, as it is on every other cut line.
+		gap := 0
+		if !ascii {
+			gap = max(width-ellW-ansi.StringWidth(cut), 0)
+		}
+		styled = cut + plain + strings.Repeat(" ", gap) + ell
 		known = width
 	case left > width:
 		styled = ansi.Truncate(styled, width, "")

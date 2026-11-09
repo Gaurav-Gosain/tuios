@@ -3,9 +3,6 @@ package app
 import (
 	"path/filepath"
 	"sort"
-
-	tea "charm.land/bubbletea/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
 // Grouping the agents view's list. By default the list is grouped by what
@@ -119,34 +116,16 @@ func (m *OS) ckBandAdd(bands []ckBand, by string, g int, items []ckRow, itemsOnl
 	return bands
 }
 
-// CockpitGroupMenuOpen reports whether the group and sort picker is open.
-func (m *OS) CockpitGroupMenuOpen() bool { return m.Inbox.ck.groupMenu }
-
-// cockpitOpenGroupMenu opens the group and sort picker.
-func (m *OS) cockpitOpenGroupMenu() {
-	m.Inbox.ck.groupMenu = true
-	m.cockpitTouch()
-}
-
-// CockpitGroupMenuKey takes the key after s: a digit chooses the grouping,
-// s steps the sort, and any other key closes the picker.
-func (m *OS) CockpitGroupMenuKey(key string) tea.Cmd {
+// cockpitSetGrouping groups the list by g, "" by state, and keeps it.
+func (m *OS) cockpitSetGrouping(g string) {
 	ck := &m.Inbox.ck
-	ck.groupMenu = false
-	switch {
-	case len(key) == 1 && key[0] >= '1' && int(key[0]-'1') < len(ckGroupings):
-		ck.groupBy = ckGroupings[key[0]-'1']
-		m.cockpitTouchRows()
-		m.cockpitRows()
-		m.cockpitClamp()
-		m.cockpitSync()
-		m.saveSidebarState()
-	case key == "s":
-		m.InboxAgentsCycleSort()
-		m.cockpitTouchRows()
-	}
+	ck.groupBy = g
+	m.cockpitTouchRows()
+	m.cockpitRows()
+	m.cockpitClamp()
+	m.cockpitSync()
+	m.saveSidebarState()
 	m.cockpitTouch()
-	return nil
 }
 
 // ckGroupingName is the grouping in force as the header names it.
@@ -158,13 +137,4 @@ func (m *OS) ckGroupingName() string {
 		}
 	}
 	return ckGroupingNames[0]
-}
-
-// cockpitGroupMenuHints are the picker's keys for the key bar.
-func (m *OS) cockpitGroupMenuHints() []overlay.Hint {
-	hints := []overlay.Hint{{Key: "Group by", Label: m.ckGroupingName()}}
-	for i, name := range ckGroupingNames {
-		hints = append(hints, overlay.Hint{Key: string(rune('1' + i)), Label: name})
-	}
-	return append(hints, overlay.Hint{Key: "s", Label: "sort order"}, overlay.Hint{Key: "esc", Label: "close", Priority: overlay.HintEssential})
 }

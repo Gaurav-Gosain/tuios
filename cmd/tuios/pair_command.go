@@ -90,6 +90,10 @@ const (
 	// pairConnDeadline is how long one connection may take, from accept to
 	// the reply.
 	pairConnDeadline = 10 * time.Second
+	// pairDrainLimit and pairDrainWait bound what a connection reads after
+	// its reply, so a refused phone sees the reply. See drainPairConn.
+	pairDrainLimit = 64 << 10
+	pairDrainWait  = time.Second
 	// pairConnLimit caps the connections open at once. More are closed at
 	// accept.
 	pairConnLimit = 16
@@ -989,7 +993,8 @@ func (s *pairServer) serve(ctx context.Context, listeners []net.Listener) (*pair
 func (s *pairServer) serveConn(c net.Conn) {
 	defer func() { _ = c.Close() }()
 	_ = c.SetDeadline(time.Now().Add(pairConnDeadline))
-	req := readPairHTTP(bufio.NewReaderSize(c, 1024), c)
+	br := bufio.NewReaderSize(c, 1024)
+	req := readPairHTTP(br, c)
 	if req.closed {
 		return
 	}
@@ -1000,6 +1005,24 @@ func (s *pairServer) serveConn(c net.Conn) {
 	// phone never learns the host key to pin.
 	_ = c.SetWriteDeadline(time.Now().Add(pairConnDeadline))
 	writePairReply(c, status, reply)
+	drainPairConn(c, br)
+}
+
+// drainPairConn ends the connection after the reply without a reset. A
+// refusal can come before the body is read, as 413 does for a body over
+// pairBodyLimit, and a phone that sends no Expect: 100-continue is still
+// writing it then. Closed with those bytes unread, or with more on the way,
+// the connection is reset, and a reset can reach the phone before it reads
+// the reply: it saw "connection reset", not 413. So the write side is shut
+// first, which tells the phone the reply is complete, and what it still
+// sends is read and dropped until it closes, up to pairDrainLimit bytes or
+// pairDrainWait. net/http's server does the same.
+func drainPairConn(c net.Conn, r io.Reader) {
+	if cw, ok := c.(interface{ CloseWrite() error }); ok {
+		_ = cw.CloseWrite()
+	}
+	_ = c.SetReadDeadline(time.Now().Add(pairDrainWait))
+	_, _ = io.CopyN(io.Discard, r, pairDrainLimit)
 }
 
 // answer handles one request that was read, one at a time.

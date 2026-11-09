@@ -513,14 +513,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Bind:     "prefix_layout",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
-				templates, _ := LoadLayoutTemplates()
-				m.ShowLayoutPicker = true
-				m.LayoutPickerMode = "load"
-				m.LayoutPickerItems = templates
-				m.LayoutPickerQuery = ""
-				m.LayoutPickerSelected = 0
-				m.LayoutPickerScroll = 0
-				return m, nil
+				return m, m.OpenLayoutPicker()
 			},
 		},
 
@@ -613,16 +606,14 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Name:     "Next layout",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.NextLayout()
-				return m, nil
+				return m, m.NextLayout()
 			},
 		},
 		{
 			Name:     "Previous layout",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.PrevLayout()
-				return m, nil
+				return m, m.PrevLayout()
 			},
 		},
 		{

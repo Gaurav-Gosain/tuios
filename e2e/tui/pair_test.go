@@ -542,6 +542,65 @@ func TestPairRefusesWrongRequests(t *testing.T) {
 	tr.save(t, "pair-refusals.txt")
 }
 
+// TestPairOversizeBodySentLateGetsItsReply is a phone that sends the headers
+// of a request over the size cap, and the body only after the listener has
+// refused it, as a phone on a slow link or a loaded machine does. The phone
+// must still read the 413. The ways it goes wrong, each an assertion here:
+//   - the listener closes with the body on its way, so the body meets a
+//     closed socket, the phone's side is reset and the reply is lost: this
+//     was TestPairRefusesWrongRequests/oversize_body failing now and then on
+//     CI with "connection reset", not 413;
+//   - the listener reads the late body as a request and counts it.
+//
+// The good request after it still pairs, so the refusal did not spend the
+// code. The exchange goes under artifactDir as pair-late-body.txt.
+func TestPairOversizeBodySentLateGetsItsReply(t *testing.T) {
+	needTools(t, "ssh-keygen")
+	base := t.TempDir()
+	keys := filepath.Join(base, "keys")
+	mustMkdir(keys)
+	keygen(t, keys, "host", "-t", "ed25519")
+	_, phoneLine := keygen(t, keys, "phone", "-t", "ecdsa", "-b", "256")
+	ak := filepath.Join(base, "ak")
+	run := startPair(t, base, nil, "--yes", "--authorized-keys", ak, "--listen", "127.0.0.1:0",
+		"--host-key", filepath.Join(keys, "host.pub"), "--advertise-ssh", "127.0.0.1:2222", "--timeout", "1m")
+	ph := run.phone(t)
+	var tr transcript
+
+	body := pairBody(ph.token, "phone", phoneLine+" "+strings.Repeat("x", 9000))
+	c, err := net.Dial("tcp", ph.addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	_ = c.SetDeadline(time.Now().Add(10 * time.Second))
+	if _, err := fmt.Fprintf(c, "POST /v1/pair HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n", ph.addr, len(body)); err != nil {
+		t.Fatal(err)
+	}
+	// The listener refuses on the header and replies. The body goes after
+	// that, in two parts, as a phone's HTTP client writes a body: the first
+	// part reaches a listener that is gone, which answers with a reset, and
+	// the second write fails on it. An HTTP client stops at a failed write
+	// and never reads the reply.
+	time.Sleep(300 * time.Millisecond)
+	_, werr1 := c.Write(body[:len(body)/2])
+	time.Sleep(300 * time.Millisecond)
+	_, werr2 := c.Write(body[len(body)/2:])
+	raw, rerr := io.ReadAll(c)
+	tr.add("late body writes: %v, %v\nread: %v\n%s", werr1, werr2, rerr, raw)
+	tr.save(t, "pair-late-body.txt")
+	if werr1 != nil || werr2 != nil {
+		t.Fatalf("ASSERTION: the phone could not write its body after the refusal: %v, %v", werr1, werr2)
+	}
+	if !strings.HasPrefix(string(raw), "HTTP/1.1 413 ") || !strings.Contains(string(raw), `"error"`) {
+		t.Fatalf("ASSERTION: the phone did not read a 413 with an error after its late body (read %v):\n%q", rerr, raw)
+	}
+	status, reply, err := post(ph.addr, http.MethodPost, "/v1/pair", pairBody(ph.token, "phone", phoneLine))
+	if err != nil || !reply.OK {
+		t.Fatalf("ASSERTION: the good request after the late body: %d %+v %v", status, reply, err)
+	}
+}
+
 // TestPairListensOnlyWhereTheCodeSays: --listen on every interface is
 // refused without --listen-all, and warned about with it. Without --listen,
 // every listener is on an address the code names, never 0.0.0.0 or [::].

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"slices"
 	"strings"
-	"time"
 
 	"charm.land/lipgloss/v2"
 
@@ -146,7 +145,6 @@ func (m *OS) collapse(w *terminal.Window) {
 	w.PreMinimizeX, w.PreMinimizeY = w.X, w.Y
 	w.PreMinimizeWidth, w.PreMinimizeHeight = w.Width, w.Height
 	w.Minimized = true
-	w.MinimizeOrder = time.Now().UnixNano()
 	w.InvalidateCache()
 }
 

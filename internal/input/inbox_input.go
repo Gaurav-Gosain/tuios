@@ -80,10 +80,10 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleInboxReasonInput(msg, o)
 	case app.CockpitLayerSelect:
 		return handleInboxSelectInput(msg, o)
-	case app.CockpitLayerGroupMenu:
+	case app.CockpitLayerMenu:
 		// The group and sort picker takes the next key: a digit chooses the
 		// grouping, s steps the sort, anything else closes it.
-		return o, o.CockpitGroupMenuKey(msg.String())
+		return o, o.CockpitMenuKey(msg.String())
 	case app.CockpitLayerShip:
 		// Ready to merge takes the next key: c, p or o, enter to send,
 		// anything else closes it.

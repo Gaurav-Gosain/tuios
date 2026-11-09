@@ -217,22 +217,26 @@ func runHostSetup(dest string, o hostSetupOptions) error {
 	case o.json:
 		outputJSON(res)
 	case o.dryRun:
-		writeSetupPlan(os.Stdout, res.Steps)
+		writeSetupPlan(os.Stdout, res.Steps, res.Note)
 	case runErr == nil:
 		fmt.Printf("\n%s is ready. Its agents reach your Inbox.\nOpen a session: tuios attach --host %s\n", res.Name, res.Name)
 	}
-	return setupExit(runErr)
+	return setupExit(runErr, o.dryRun)
 }
 
 // setupExit is the command's error for a setup that stopped: status 2 for a
 // missing choice, 3 for a step that needs the person, 1 for the rest.
-func setupExit(err error) error {
+func setupExit(err error, dryRun bool) error {
 	if err == nil {
 		return nil
 	}
 	d := &diagnosticError{What: err.Error(), Status: 1}
 	if _, ok := errors.AsType[*hostsetup.NeedChoice](err); ok {
-		d.Status, d.Fix = setupNeedChoice, "run with --dry-run to see each command"
+		d.Status = setupNeedChoice
+		// The fix never names a flag the run already has.
+		if !dryRun {
+			d.Fix = "run with --dry-run to see each command"
+		}
 	}
 	if f, ok := errors.AsType[*hostsetup.Failure](err); ok && f.NeedsPerson {
 		d.Status = setupNeedPerson
@@ -246,14 +250,18 @@ func setupExit(err error) error {
 	return d
 }
 
-// writeSetupPlan prints a dry run: what the probe found, then every command
-// in order with where it runs.
-func writeSetupPlan(w io.Writer, steps []hostsetup.Event) {
+// writeSetupPlan prints a dry run: what the probe found, the note on the
+// plan when it has one, then every command in order with where it runs.
+func writeSetupPlan(w io.Writer, steps []hostsetup.Event, note string) {
 	n := 0
 	for _, st := range steps {
 		switch {
 		case st.Step == hostsetup.StepProbe:
-			fmt.Fprintf(w, "%s\nThis changed nothing.\n\nThe plan. Nothing runs.\n", plainLine(st.Text))
+			fmt.Fprintf(w, "%s\nThis changed nothing.\n", plainLine(st.Text))
+			if note != "" {
+				fmt.Fprintf(w, "%s\n", plainLine(note))
+			}
+			fmt.Fprintf(w, "\nThe plan. Nothing runs.\n")
 		case st.State == hostsetup.StatePlan:
 			cmds := st.Commands
 			if len(cmds) == 0 {

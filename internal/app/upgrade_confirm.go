@@ -116,7 +116,7 @@ func (m *OS) renderUpgradeConfirm() (string, overlay.Geometry, []overlayRowHit) 
 	it := st.open
 	pal := m.overlayUI()
 	bg := pal.Canvas
-	width := overlay.DialogFitWidth(upgradeConfirmWidth, m.GetRenderWidth())
+	width := overlay.DialogFitWidth(upgradeConfirmWidth, m.modalRoomWidth())
 	inner := max(width-2, 1)
 
 	var body []string

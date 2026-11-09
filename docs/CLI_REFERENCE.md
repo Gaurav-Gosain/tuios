@@ -4163,6 +4163,7 @@ the command says so and points at `tuios new-window`.
       "height": 38,
       "index": 0,
       "minimized": false,
+      "minimized_at": 0,
       "pty_id": "fd022e1f-7d42-4c45-8ddf-5ecaf8bee488",
       "title": "Terminal 0ceb415a",
       "width": 60,
@@ -4180,6 +4181,7 @@ the command says so and points at `tuios new-window`.
       "height": 38,
       "index": 1,
       "minimized": false,
+      "minimized_at": 0,
       "pty_id": "23ed3d8a-b6f4-4047-b01a-3d2f1dd83515",
       "title": "build",
       "width": 60,
@@ -4193,7 +4195,10 @@ the command says so and points at `tuios new-window`.
 }
 ```
 
-`custom_name` is present only on a window that was given a name, `cwd` only
+`minimized_at` is when the window was minimized, in Unix nanoseconds, and 0
+while it is not: the dock lists minimized windows oldest first, and the restore
+digits count in that order. `custom_name` is present only on a window that was
+given a name, `cwd` only
 when the shell has reported its directory, and `host` only when the window's
 process runs on another machine. `agent_message` and `agent_state_at` appear
 once a pane has reported an agent state. `agent_resumable` names the harness
@@ -5044,7 +5049,9 @@ The steps:
 
 Without a terminal, every choice comes from a flag. `--install` is the only one
 that is required when tuios is missing. A missing choice stops the command
-before it changes anything, with exit status 2 and the flag to pass. A step
+before it changes anything, with exit status 2 and the flag to pass. A dry run
+does not stop for it: it plans the first install choice that can run there,
+and names it and the other choices by their flags. A step
 that needs the person, such as a password or a host key to check, stops it with
 exit status 3 and the command to run. tuios never takes a password, and it
 never accepts a changed host key.

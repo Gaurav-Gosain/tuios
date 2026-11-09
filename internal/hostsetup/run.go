@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
@@ -280,7 +281,7 @@ func (s *Setup) Run(ctx context.Context, c Choices, a Asker) (res *Result, err e
 	case federation.StatusIncompatible:
 		said = "tuios " + p.TuiosVersion + " on " + s.name + " is too old for this machine."
 	}
-	s.emit(Event{Step: StepProbe, State: StateOK, Text: p.System + ", " + p.Arch + ". " + strings.Join(append(p.Managers, p.Service), ", ") + ". " + said, Probe: p})
+	s.emit(Event{Step: StepProbe, State: StateOK, Text: p.System + ", " + p.Arch + ". " + probeFound(p) + said, Probe: p})
 
 	// 4. Install, when it is missing or too old.
 	installed := false
@@ -353,6 +354,57 @@ func (s *Setup) testLink(ctx context.Context, h federation.Host) (federation.Hos
 	return DialOnce(ctx, h, s.opts.Version)
 }
 
+// probeFound is the sentence of what the probe found to install and start
+// tuios with: the package managers and the service manager, such as "apt,
+// systemd. ". A machine with none of them, or with no service manager, gets
+// no empty item.
+func probeFound(p *Probe) string {
+	tools := slices.Clone(p.Managers)
+	if p.Service != "" {
+		tools = append(tools, p.Service)
+	}
+	if len(tools) == 0 {
+		return ""
+	}
+	return strings.Join(tools, ", ") + ". "
+}
+
+// planDefaultInstall is the install step of a dry run with no --install:
+// the plan of the first install choice that can run, and a note that names
+// it and the other choices by the flags that pick them.
+func (s *Setup) planDefaultInstall(opts []InstallOption, res *Result) error {
+	var pick InstallOption
+	var others []string
+	for _, o := range opts {
+		switch {
+		case !o.Available:
+		case pick.ID == "":
+			pick = o
+		default:
+			others = append(others, InstallFlag(o))
+		}
+	}
+	if pick.ID == "" {
+		return errors.New("no way to install tuios can run on " + s.name)
+	}
+	res.Installed = pick.ID
+	res.Note = "The plan installs tuios with " + InstallFlag(pick) + ", the first choice."
+	if len(others) > 0 {
+		res.Note += " The other choices: " + strings.Join(others, ", ") + "."
+	}
+	s.say(StepInstall, StatePlan, pick.Label, pick.Commands...)
+	return nil
+}
+
+// InstallFlag is the flag that picks an install choice, such as --install
+// copy, or --install pkg --pkg brew.
+func InstallFlag(o InstallOption) string {
+	if o.Manager != "" {
+		return "--install " + o.ID + " --pkg " + o.Manager
+	}
+	return "--install " + o.ID
+}
+
 // install picks a source, gets consent, and installs tuios.
 func (s *Setup) install(ctx context.Context, c Choices, a Asker, res *Result) error {
 	opts := s.installOptions()
@@ -360,7 +412,10 @@ func (s *Setup) install(ctx context.Context, c Choices, a Asker, res *Result) er
 	var pick InstallOption
 	if c.Install == "" {
 		if c.DryRun {
-			return &NeedChoice{Flag: "--install copy, release, pkg or script", What: "tuios is not installed on " + s.name + "."}
+			// A dry run changes nothing, so it does not stop for the choice:
+			// it plans the first one, as the install list puts its cursor
+			// there, and names the flags of the others.
+			return s.planDefaultInstall(opts, res)
 		}
 		var err error
 		if pick, err = a.PickInstall(ctx, opts); err != nil {

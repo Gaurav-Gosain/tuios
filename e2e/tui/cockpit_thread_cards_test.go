@@ -50,41 +50,7 @@ import (
 //   - with the timg prefix cut from cockpitAction, the test fails at "the
 //     image view did not open".
 func TestCockpitThreadFoldsAndImages(t *testing.T) {
-	base := t.TempDir()
-	killDaemon(t, base)
-	useShippedLooks(base)
-	writeConfig(t, base, "[agents]\nview_list = \"strip\"\n")
-	for _, s := range []string{"home", "api"} {
-		if out, err := tuiosCLI(t, base, "new", s, "--detach"); err != nil {
-			t.Fatalf("create session %s: %v\n%s", s, err, out)
-		}
-	}
-	path := filepath.Join(atProjects(base), "work", "c4a7d00e.jsonl")
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, cardsTranscript(t, time.Now()), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if out, err := tuiosCLI(t, base, "set-window", "-s", "api", "-w", "0", "--name", "header-fix"); err != nil {
-		t.Fatalf("name the pane: %v\n%s", err, out)
-	}
-	hook := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", "api", "--window", "header-fix")
-	hook.Dir = workDirIn(t, base)
-	hook.Env = append(os.Environ(), "SHELL=/bin/sh")
-	for _, key := range xdgKeys {
-		hook.Env = append(hook.Env, key+"="+xdgDir(base, key))
-	}
-	hook.Stdin = bytes.NewReader(hookPayload(path, "c4a7d00e"))
-	if out, err := hook.CombinedOutput(); err != nil {
-		t.Fatalf("agent-hook SessionStart: %v\n%s", err, out)
-	}
-	if out, err := tuiosCLI(t, base, "set-agent-state", "working", "-s", "api", "-w", "header-fix", "--harness", "claude-code"); err != nil {
-		t.Fatalf("set-agent-state: %v\n%s", err, out)
-	}
-	host := &lockedBuffer{}
-	term := startIn(t, base, startOpts{args: []string{"attach", "home"}, cols: 200, rows: 90, shippedLooks: true, out: host,
-		env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}})
+	term, host := startCardsThread(t, 200, 90, "")
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}
@@ -164,6 +130,50 @@ func TestCockpitThreadFoldsAndImages(t *testing.T) {
 	}
 	waitText(t, term, "the thread after the image view", "PNG image  320×180")
 	alive(t, term, "after the thread cards")
+}
+
+// startCardsThread starts a client of cols by rows on the thread of
+// cardsTranscript: an agent in the api session whose transcript holds the
+// pasted image card. extra is more config. It returns the client and the
+// stream it wrote to its host.
+func startCardsThread(t *testing.T, cols, rows int, extra string) (*tuitest.Terminal, *lockedBuffer) {
+	t.Helper()
+	base := t.TempDir()
+	killDaemon(t, base)
+	useShippedLooks(base)
+	writeConfig(t, base, "[agents]\nview_list = \"strip\"\n"+extra)
+	for _, s := range []string{"home", "api"} {
+		if out, err := tuiosCLI(t, base, "new", s, "--detach"); err != nil {
+			t.Fatalf("create session %s: %v\n%s", s, err, out)
+		}
+	}
+	path := filepath.Join(atProjects(base), "work", "c4a7d00e.jsonl")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, cardsTranscript(t, time.Now()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLI(t, base, "set-window", "-s", "api", "-w", "0", "--name", "header-fix"); err != nil {
+		t.Fatalf("name the pane: %v\n%s", err, out)
+	}
+	hook := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", "api", "--window", "header-fix")
+	hook.Dir = workDirIn(t, base)
+	hook.Env = append(os.Environ(), "SHELL=/bin/sh")
+	for _, key := range xdgKeys {
+		hook.Env = append(hook.Env, key+"="+xdgDir(base, key))
+	}
+	hook.Stdin = bytes.NewReader(hookPayload(path, "c4a7d00e"))
+	if out, err := hook.CombinedOutput(); err != nil {
+		t.Fatalf("agent-hook SessionStart: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "set-agent-state", "working", "-s", "api", "-w", "header-fix", "--harness", "claude-code"); err != nil {
+		t.Fatalf("set-agent-state: %v\n%s", err, out)
+	}
+	host := &lockedBuffer{}
+	term := startIn(t, base, startOpts{args: []string{"attach", "home"}, cols: cols, rows: rows, shippedLooks: true, out: host,
+		env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}})
+	return term, host
 }
 
 // scrollUntil presses key until want shows, at most 15 times.

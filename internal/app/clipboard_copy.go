@@ -128,3 +128,16 @@ func (m *OS) clipboardWriteCmd(text string) tea.Cmd {
 		return set()
 	}
 }
+
+// CopyFromEditor copies text a person selected in a text editor (a reply, a
+// task, a reason) as a yank does: to the clipboard and the paste buffers.
+// Unlike CopyToClipboard it shows no sweep on the focused pane, which the
+// text did not come from.
+func (m *OS) CopyFromEditor(text string) tea.Cmd {
+	if text == "" {
+		return nil
+	}
+	m.CancelPendingCopy()
+	m.ShowNotification(fmt.Sprintf("Copied %d chars", len(text)), "success", m.Settings.NotificationDuration)
+	return tea.Batch(m.clipboardWriteCmd(text), m.SaveToPasteBuffers(text))
+}

@@ -993,11 +993,11 @@ For single tape commands, use: tuios run-command <Command> [args...]`,
 	layoutCmd := &cobra.Command{
 		Use:   "layout",
 		Short: "Manage layout templates",
-		Long: `List, delete and export the saved window layout templates.
+		Long: `Save, load, list, delete and export the window layout templates.
 
-Save and load a layout in a running session, with the layout prefix keys or
-the command palette. With no layout saved, 'tuios layout list' says which keys
-save one.`,
+Save and load a layout in a running session with these commands, the layout
+prefix keys or the command palette. With no layout saved, 'tuios layout list'
+says which keys save one.`,
 	}
 	var layoutListJSON bool
 	layoutListCmd := &cobra.Command{
@@ -1083,7 +1083,7 @@ The template itself is a JSON file in the directory 'tuios layout dir' prints.`,
 		},
 	}
 	layoutListCmd.Flags().BoolVar(&layoutListJSON, "json", false, "Output as JSON")
-	layoutCmd.AddCommand(layoutListCmd, layoutDeleteCmd, layoutDirCmd, layoutExportCmd)
+	layoutCmd.AddCommand(layoutListCmd, newLayoutSaveCommand(), newLayoutLoadCommand(), layoutDeleteCmd, layoutDirCmd, layoutExportCmd)
 
 	// The interface flags ride only the commands that draw the interface. They
 	// were persistent on the root once, which buried a read command's few real

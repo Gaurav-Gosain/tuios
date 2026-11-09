@@ -374,6 +374,10 @@ type Session struct {
 	// Others are the session's panes on its other workspaces, which the
 	// command palette goes to.
 	Others []Pane `json:"others,omitempty"`
+	// Minimized are the shown workspace's minimized panes, in the order they
+	// were minimized, oldest first: the TUI dock's order, which its restore
+	// digits count in.
+	Minimized []Pane `json:"minimized,omitempty"`
 	// Scratch are the panes of the session's scratch terminal, the TUI's
 	// toggle_scratch group: on a scratch workspace, in no list, shown over
 	// the panes as the scratch dropdown.
@@ -415,11 +419,13 @@ type ArrangeParams = session.ArrangeParams
 // when it has one, how many panes it holds, and the most urgent status of
 // them.
 type Workspace struct {
-	N      int    `json:"n"`
-	Name   string `json:"name,omitempty"`
-	Panes  int    `json:"panes"`
-	Status Status `json:"status,omitempty"`
-	Unread bool   `json:"unread,omitempty"`
+	N     int    `json:"n"`
+	Name  string `json:"name,omitempty"`
+	Panes int    `json:"panes"`
+	// Minimized counts the workspace's minimized panes, among Panes.
+	Minimized int    `json:"minimized,omitempty"`
+	Status    Status `json:"status,omitempty"`
+	Unread    bool   `json:"unread,omitempty"`
 }
 
 // WorkspaceParams shows a session's workspace, or with Pane moves that

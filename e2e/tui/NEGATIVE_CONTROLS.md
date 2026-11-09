@@ -16526,3 +16526,394 @@ TUI runs off that TUI's read loop (`runIntent`, `internal/session/daemon_actions
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'TestStripActionsRun|TestStripKeysFromTwo' -v .`.
+
+## TestSetUpDryRunWithNoInstallChoice
+
+`tuios hosts setup someone@buildbox --name build --dry-run`, the dry run the
+docs show first, to a machine with no tuios and no `--install`. The dry run
+shows the plan of the first install choice, names it and the other choices by
+their flags, and exits 0. Before the fix it exited 2 with "Pass --install copy,
+release, pkg or script" and the fix "run with --dry-run to see each command",
+the flag it was run with. A second step runs the dry run to barebox, a
+machine with no service manager, whose probe line once had an empty item.
+
+Run on 2026-11-09 on Linux (golang:1.27-alpine, arm64). The probe finds a
+Homebrew tuios on a Mac, so the far machine is not without tuios there. The
+branch passes, with the other `TestSetUp` tests.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (c29f871bf) | "a dry run with no --install failed (exit 2)", "the dry run's fix tells the person to pass --dry-run, which they did", and the JSON dry run plans the install "" | **caught** |
+| The probe line's fix removed (the parent commit a1cc9d943) | the barebox step: "the probe line has an empty item: \"Alpine Linux v3.24, arm64. go, . tuios is not installed on bare.\"" | **caught** |
+| The fix's hint guard alone removed (`setupExit` adds the fix in a dry run again) | passes: with the engine fix no dry run stops for a choice, so the hint is not reached | not a control; the guard is kept so a later choice cannot bring the hint back |
+
+Repeat from `e2e/tui` on Linux with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSetUpDryRunWithNoInstallChoice$' -v .`.
+
+## TestPopupsShareTheScreenCentre
+
+The Add a machine sheet and the command palette, on a 160x48 screen with the
+rail open and eight terminals on it. Both are centred on the whole screen, and
+the sheet is narrowed to clear the rail with the same margin on each side,
+so no rail row is cut. The frames are in the test's artifact folder.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes: both centres are at
+column 79.5 of 0 to 159.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (c29f871bf), where a panel is centred in the columns beside the rail | "machine-sheet is not centred across the screen: its centre is column 93.5, the screen's 79.5", and the same for the palette | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPopupsShareTheScreenCentre$' -v .`.
+
+## TestReplyRowsGrowTheEditor
+
+Twenty lines typed into the agents view's reply editor. With `[agents]
+reply_rows` unset it shows 8, with 12 it shows 12, `alt+m` shows all 20 in
+the whole reply area, and `alt+m` again brings it back.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes both cases.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (4f5cedc1a), with no reply_rows and no alt+m | twelve: "after typing: the editor shows 8 of the 20 lines, want 12"; unset: "after alt+m: the editor shows 8 of the 20 lines, want 20" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestReplyRowsGrowTheEditor$' -v .`.
+
+## TestAgentsViewLeavesTheChromeLit
+
+The agents view opened with the rail on. Every dock cell, and every rail cell
+the view leaves showing, that shows the same character before and after keeps
+its colours.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes: 175 dock cells compared,
+none changed.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (4f5cedc1a), where the agents view takes the modal scrim | "the agents view dimmed 175 rail and dock cells, first \"\ue0b6\" at 0,0: fg 92,92,255 to 54,54,158" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAgentsViewLeavesTheChromeLit$' -v .`.
+
+## Image cards the thread's edge cuts
+
+`TestCockpitThreadImageCropsWhenScrolled` cuts the agents view thread's image
+card at the thread's bottom (a shorter screen) and its top (J scrolls it up),
+then scrolls it off, and replays the kitty graphics the client sent to its
+host. A cut card is placed on its rows in the window with a source rect of
+those rows, once, and a card off the thread is not placed.
+`TestCockpitThreadImagePlaceholdersScroll` does the same with
+`appearance.kitty_placeholders = "on"`: the card is placeholder cells that
+name the picture's rows, the host gets the picture and one virtual
+placement, and nothing placed at a position. Its cells are read from the
+host stream replayed through tuios.dev/vt, since tuitest's emulator drops a
+placeholder's base character.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes both.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (4f5cedc1a), crop test | "the card's bottom is cut by the thread's edge and no picture is on its rows; placed: []" | **caught** |
+| Main, placeholder test | "no virtual placement (a=p,U=1) reached the host" | **caught** |
+| The crop from the picture's top (skip always 0) | "step 3: the crop shows the wrong part: 3 rows cut, want the source rect y=48 h=128 w=320, got y=0" | **caught** |
+| Every placeholder row names picture row 0 | "the placeholder rows are not one run in order" | **caught** |
+| A placeholder picture freed every frame, drawn or not | "step 3: the host let go of picture ... while its cells are on screen" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitThreadImage' -v .`.
+
+## TestReadinessCheckEndsWithTheDaemon
+
+The agent-readiness check runs a claude whose `auth status` hangs, and the
+daemon is stopped while it runs. The check's process must be gone within 3 s
+of kill-server.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (4f5cedc1a), where the check runs under context.Background | "claude auth status (pid N) is still running 3 s after kill-server: the check outlives its daemon" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestReadinessCheckEndsWithTheDaemon$' -v .`.
+
+## TestCockpitFoldedGroupsKeepTheirHeadings
+
+Two working and two idle agents. F folds each group of the agents view, then
+the view is closed and opened again with the folds read from the state file.
+Each folded group keeps its heading and count, and the view never says "No
+agents yet.".
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (4946f5cf2), where the empty check counts agent rows only | "with every group folded, every group is not folded to its heading and count", the screen showing "No agents yet." | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitFoldedGroupsKeepTheirHeadings$' -v .`.
+
+## The reply's local echo in the thread
+
+`TestCockpitReplyEchoes` sends replies from the agents view's reply area to
+a working Claude Code agent and reads the thread: queued with cancel, refused
+with retry (`[agents.queue] max = 1`), cancel, retry, the queued reply shown
+again by a new client from list-queued, typed when the agent rests, and gone
+once the transcript logs it, so it shows once.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (2366bfc71) | "the queued reply does not show in the thread as queued" | **caught** |
+| The transcript match (echoTake) taken out | "once the transcript has the reply, it does not show once, as the transcript's" | **caught** |
+| No list-queued when a thread opens | "a new client does not show the queued reply" | **caught** |
+| retry sends nothing | "retry did not queue the refused reply" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitReplyEchoes$' -v .`.
+
+## Send now from a Mac
+
+`TestCockpitSendNowKeys` sends a reply to a working agent with the bytes each
+terminal sends: ESC CR (Option as Alt, Alt+Enter), CSI 13;3u and CSI 13;5u
+(the kitty keyboard protocol's Alt+Enter and Ctrl+Enter), ESC LF, and a plain
+CR (Option+Enter where Option is not Alt). The first four send now: the reply
+is in the agent's pane and not in its queue. The CR queues. On a Mac the hint
+names ⌥↵ or ⌃↵, elsewhere alt+↵.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (2366bfc71) | "on a Mac the hint does not name ⌥↵ or ⌃↵ for send now" | **caught** |
+| The hint names alt+↵ on every platform | the same | **caught** |
+| ctrl+enter left a new line | "kitty-ctrl: the reply is not in the agent's pane" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitSendNowKeys$' -v .`.
+
+## The reply's echo for an agent on a linked machine
+
+`TestCockpitReplyEchoOnAHost` replies from this machine's agents view to an
+agent on alpha, a linked machine: the thread shows the reply queued, a new
+client shows it again from alpha's queue (list-queued with host, over the
+link), and cancel drops it from alpha's queue (cancel-queued with host).
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (2366bfc71) | "the reply to the far agent does not show as queued" | **caught** |
+| list-queued with host not forwarded | "a new client does not show the reply queued on alpha" | **caught** |
+| cancel-queued with host not forwarded | "cancel did not take the far reply away" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitReplyEchoOnAHost$' -v .`.
+
+## TestCockpitHeaderDropdowns
+
+The agents view's header controls, by mouse. A click on "Group: state" opens a
+menu under it with the groupings, the current one marked and a key beside
+each. The pointer lights the row it is over, a click picks, esc closes with
+nothing changed, a click outside closes and does nothing else, and the Board
+control's menu picks the board with 2.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (f53016f55), where a click puts the choices in the key bar | "a click on \"Group: state\" opened no menu under it" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitHeaderDropdowns$' -v .`.
+
+## TestSpawnSheetListIsTheDropdown
+
+The New agent sheet's agent list, by mouse: it opens under "more", the agent in
+force marked, a key beside each row, the pointer lights the row under it, a
+click outside on Cancel closes the list and leaves the sheet open, and the key
+at the end of aider's row picks aider.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The branch before the shared dropdown (ada9b33bd), where the sheet list has no keys | "a click on more opened no list under it with keys beside its rows" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSpawnSheetListIsTheDropdown$' -v .`.
+
+## TestDockPillsAndRestoreNAgree
+
+Three panes, gamma then alpha minimized by keys (the opposite of window
+order). The first client's and a second client's docks list the pills in one
+order, the order they were minimized in, and prefix m 2 restores the pane on
+the second pill.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (0ff7245bc), where the dock sorts by a client-side minimize time | "the two clients list the pills in different orders: [gamma alpha] and [alpha gamma]" | **caught** |
+| 764711c74, the pills in window order with no MinimizedAt | "the pills are not in the order they were minimized (gamma, then alpha): [alpha gamma]" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestDockPillsAndRestoreNAgree$' -v .`.
+
+## TestArrangeRestoreByPaneAndOrder
+
+The arrange verb's restore, as guios sends it. Gamma then alpha are minimized:
+Delta 1 restores gamma, Pane restores that pane and hands the client its
+focus, and a Pane that is not minimized with no Delta restores every one.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| guios/land with main merged (095386beb), where restore counts in window order and takes no pane | "restore Delta 1 should restore gamma, minimized first; minimized now \"gamma\"" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestArrangeRestoreByPaneAndOrder$' -v .`.
+
+## tuios's git and the index's optional lock
+
+`TestTuiosGitTakesNoOptionalLock` runs a review fan with an attached client,
+opens the review and lists the worktrees, with a git on PATH that records each
+git tuios starts (marked by GIT_SEQUENCE_EDITOR=true, which childproc.GitEnv
+sets). Each must carry GIT_OPTIONAL_LOCKS=0, so no background read of a
+worktree writes its index under .git/index.lock while the person's own git
+command needs the lock: the race TestReviewFileKeysFollowTheirBindings's
+fixture hit.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (c983aba9e) | "269 of tuios's git calls may take the index's optional lock", 16 of them `status --porcelain -z --untracked-files=all --ignored=matching` | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTuiosGitTakesNoOptionalLock$' -v .`.
+
+## A focus key right after a command focus
+
+`TestFocusKeyRightAfterACommandFocus` runs focus-window on the top right of
+four tiled panes, waits for the client to draw it, and presses ctrl+b left,
+five times. focus-window moves the daemon's focus and then routes a command
+to the client to reveal the pane. When the command reached Update before the
+state push the daemon sent ahead of it, the client drew the new focus on the
+version from before the move, the key's push carried that version, and the
+daemon refused its focus as stale: the key did nothing. That is the
+TestDirectionalFocusWrapBSP failure on a loaded Linux runner (run
+42679841917). A stress loop of the same press failed about 4 times in 100 at
+one CPU with three busy loops, and passed 300 of 300 with the fix.
+
+The test sets TUIOS_TEST_STATE_PUSH_HOLD_MS=300 (the daemon holds each state
+push before it writes it) and TUIOS_TEST_STATE_SYNC_HOLD_MS=700 (the client
+holds each state before Update takes it), so each half of the race happens
+on every round.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes, three runs of three.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The daemon writes a routed command at once, not after the broadcasts queued for the client (`sendInBroadcastOrder` is a plain `sendEncoded`) | "round 0: ctrl+b left right after focus-window ... left the focus on" the same pane | **caught** |
+| The client runs a routed command at once, not after the states that came before it (`holdRemote` never holds) | "round 0: ctrl+b left right after focus-window ... left the focus on" the same pane | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestFocusKeyRightAfterACommandFocus$' -v .`.
+
+## A pairing refusal the phone can read
+
+`TestPairOversizeBodySentLateGetsItsReply` sends the headers of a pairing
+request over the size cap, waits for the listener to refuse it, then writes
+the body in two parts and reads the reply. The listener used to close at
+once after a refusal it made before the body was read. The phone's first
+late write reached a closed socket, the listener's side answered with a
+reset, and the next write failed. An HTTP client stops at a failed write and
+never reads the reply. That is TestPairRefusesWrongRequests/oversize_body
+failing on CI with "connection reset", not 413. In a Linux container at one
+CPU with three busy loops, that subtest failed 2 times in 30 before the fix
+and passed 100 of 100 after.
+
+The listener now shuts its write side after the reply and drops what the
+phone still sends, up to 64 KB or one second (`drainPairConn`), as net/http's
+server does.
+
+Run on 2026-11-10 in a Linux container (golang:1.27-alpine, arm64). The
+branch passes, five runs of five.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The listener closes at once after the reply (`drainPairConn` not called) | "the phone could not write its body after the refusal: <nil>, write tcp ...: write: broken pipe", five runs of five | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=5 -run '^TestPairOversizeBodySentLateGetsItsReply$' -v .`.
+
+## TestLayoutTemplateSaveAndLoadInTheDaemon
+
+A three-pane split layout (right, then down on the right pane at 30 percent),
+each pane named and in a folder of its own, saved with tuios layout save. Two
+panes are closed and tuios layout load, with no client attached, opens them
+again in their folders with their names, and puts every pane back on the
+rectangle it had at the save.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (b90a592bb), with no layout-template verb and no tuios layout save | "tuios layout save three -s tmpl: exit status 1" | **caught** |
+| The branch with the load's tree step turned off, so the panes go in by the scheme | "right is at 40,0 40x12, not where it was saved, 40,0 40x16" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestLayoutTemplateSaveAndLoadInTheDaemon$' -v .`.
+
+## TestTheTUISavesItsLayoutThroughTheDaemon
+
+An attached client with two panes saves a layout with prefix L s. The file is
+the daemon's version 3 with the split tree, and the CLI loads it back onto the
+two panes.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The branch with the client's save on its own writer (daemonLayouts false) | "the TUI's save did not go through the daemon (no version 3 file with a tree)" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTheTUISavesItsLayoutThroughTheDaemon$' -v .`.
+
+## TestTheLayoutPickerListsTheDaemonsLayouts
+
+The daemon runs with a config folder of its own, as a daemon on another
+machine has, and holds one layout. A client attached from a config folder
+with no layouts opens the picker with prefix L l and sees the daemon's
+layout, and ctrl+d deletes the daemon's file and empties the list.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| c826da4db (PR 3), where the picker reads the client's own folder | "the picker does not list the daemon's layout" (the picker says "No saved layouts") | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTheLayoutPickerListsTheDaemonsLayouts$' -v .`.
+
+## TestGuiosSavesAndLoadsALayout
+
+The guios client, with no window, saves a two-pane workspace through
+layout.save, closes the second pane, loads the layout through layout.load,
+lists it (two panes and its time) and deletes it. The daemon holds a new
+second pane with its name and folder, and the file is gone.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The branch with the client's layout.* case taken out of its dispatch | "layout.save: unknown method \"layout.save\"" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestGuiosSavesAndLoadsALayout$' -v .`.

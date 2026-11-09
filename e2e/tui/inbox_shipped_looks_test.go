@@ -1,6 +1,9 @@
 package tuie2e
 
 import (
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -97,4 +100,17 @@ func TestInboxOnTheShippedLooks(t *testing.T) {
 		t.Fatalf("a click on the button at (%d,%d) did not act on the agents view: %v\n%s", col, row, err, term.Snapshot())
 	}
 	alive(t, term, "after a click in the Inbox over the rail")
+
+	// The sheet's signed-in check ran claude's stub, never the developer's
+	// own Claude Code (agent_stubs_test.go). Only where claude is installed:
+	// with none there is no check and no stub.
+	if _, err := os.Stat(filepath.Join(agentStubDir, "claude")); err == nil {
+		deadline := time.Now().Add(5 * time.Second)
+		for !slices.Contains(agentStubCalls(base), "claude auth status --json") {
+			if time.Now().After(deadline) {
+				t.Fatalf("ASSERTION: the New agent sheet's check never reached claude's stub: %q", agentStubCalls(base))
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
 }

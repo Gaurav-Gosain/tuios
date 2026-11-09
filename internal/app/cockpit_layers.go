@@ -3,8 +3,8 @@ package app
 // The agents view's layers. Sixteen sub-views can sit over the list: copy
 // mode, the image view, the New agent sheet, a comparison, a surface, the new
 // card line, an answer that waits for enter, the peek, the reply, the reason
-// line, the search line, and the one-key menus (group, Ready to merge, snooze,
-// the bulk sheet). Each keeps its own state in its own file. Which one is on
+// line, the search line, and the one-key menus (the header's dropdowns, Ready to merge,
+// snooze, the bulk sheet). Each keeps its own state in its own file. Which one is on
 // top, and so owns the keys, the key bar and the clicks, is decided here and
 // only here: CockpitTop. The key router, the key bar, the click handler and
 // the frame cache all read it, so the key bar always says what the next key
@@ -41,7 +41,7 @@ const (
 	CockpitLayerReply
 	CockpitLayerReason
 	CockpitLayerSelect
-	CockpitLayerGroupMenu
+	CockpitLayerMenu
 	CockpitLayerShip
 	CockpitLayerSnooze
 	CockpitLayerBulkSheet
@@ -51,7 +51,7 @@ const (
 // cockpitLayerNames name the layers in the verbose log.
 var cockpitLayerNames = [cockpitLayers]string{
 	"base", "copy", "image", "spawn", "compare", "artifact", "new card", "confirm", "peek",
-	"reply", "reason", "select", "group menu", "ship", "snooze", "bulk sheet",
+	"reply", "reason", "select", "menu", "ship", "snooze", "bulk sheet",
 }
 
 // CockpitTop is the layer on top of the agents view now. One ordered switch:
@@ -82,8 +82,8 @@ func (m *OS) CockpitTop() CockpitLayer {
 		return CockpitLayerReason
 	case st.selectEditing:
 		return CockpitLayerSelect
-	case ck.groupMenu:
-		return CockpitLayerGroupMenu
+	case ck.menu != nil:
+		return CockpitLayerMenu
 	case ck.ship != nil:
 		return CockpitLayerShip
 	case m.InboxSnoozePicking():
@@ -98,7 +98,7 @@ func (m *OS) CockpitTop() CockpitLayer {
 // key or on a click outside it.
 func (l CockpitLayer) oneKey() bool {
 	switch l {
-	case CockpitLayerConfirm, CockpitLayerSelect, CockpitLayerGroupMenu, CockpitLayerShip, CockpitLayerSnooze, CockpitLayerBulkSheet:
+	case CockpitLayerConfirm, CockpitLayerSelect, CockpitLayerMenu, CockpitLayerShip, CockpitLayerSnooze, CockpitLayerBulkSheet:
 		return true
 	}
 	return false
@@ -111,7 +111,7 @@ func (l CockpitLayer) oneKey() bool {
 func (l CockpitLayer) transient() bool {
 	switch l {
 	case CockpitLayerImage, CockpitLayerSpawn, CockpitLayerNewCard, CockpitLayerConfirm, CockpitLayerPeek,
-		CockpitLayerReason, CockpitLayerSelect, CockpitLayerSnooze, CockpitLayerBulkSheet:
+		CockpitLayerMenu, CockpitLayerReason, CockpitLayerSelect, CockpitLayerSnooze, CockpitLayerBulkSheet:
 		return true
 	}
 	return false
@@ -126,8 +126,8 @@ func (m *OS) cockpitOneKeyOpen(l CockpitLayer) bool {
 		return st.approvals.answer.step == answerConfirm
 	case CockpitLayerSelect:
 		return st.selectEditing
-	case CockpitLayerGroupMenu:
-		return st.ck.groupMenu
+	case CockpitLayerMenu:
+		return st.ck.menu != nil
 	case CockpitLayerShip:
 		return st.ck.ship != nil
 	case CockpitLayerSnooze:
@@ -147,8 +147,8 @@ func (m *OS) cockpitCloseOneKey(l CockpitLayer) {
 		m.answerEnd(answerConfirm, "closed by a click or a newer layer")
 	case CockpitLayerSelect:
 		m.InboxSelectCancel()
-	case CockpitLayerGroupMenu:
-		st.ck.groupMenu = false
+	case CockpitLayerMenu:
+		st.ck.menu = nil
 	case CockpitLayerShip:
 		st.ck.ship = nil
 	case CockpitLayerSnooze:
@@ -161,14 +161,14 @@ func (m *OS) cockpitCloseOneKey(l CockpitLayer) {
 
 // ownsAction reports whether a button with action is one of layer l's own
 // controls: a click on it goes on, where a click elsewhere dismisses l. A
-// confirm's are the card's answer buttons (a second click answers), the
-// group menu's the Group button, and the search line's the search field.
+// confirm's are the card's answer buttons (a second click answers), a
+// dropdown's the header controls that open one (cockpit_menu.go), and the search line's the search field.
 func (l CockpitLayer) ownsAction(action string) bool {
 	switch l {
 	case CockpitLayerConfirm:
 		return action == "a" || action == "A" || action == "r"
-	case CockpitLayerGroupMenu:
-		return action == "group"
+	case CockpitLayerMenu:
+		return ckMenuControls[action]
 	case CockpitLayerSelect:
 		return action == "search"
 	}

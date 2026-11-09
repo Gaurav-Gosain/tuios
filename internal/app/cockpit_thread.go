@@ -30,8 +30,14 @@ import (
 // The cards are built from the entries the client already holds and kept
 // with the thread until it, the width or the folds change.
 
-// ckGlyphOpen is an open card's fold mark.
-var ckGlyphOpen = ckGlyph{"\uf078", "▽", "v"}
+// ckGlyphOpen is an open card's fold mark, and the down mark of a control
+// that opens a menu. It and ckGlyphFold are a pair of the same weight and
+// size as the text: the Codicon chevrons in a Nerd Font, which are drawn
+// with the text's stroke, and the modifier arrowheads otherwise. The Font
+// Awesome chevrons read heavier and larger than the words beside them, the
+// closed one most of all, and the white triangle was a different shape from
+// the closed mark.
+var ckGlyphOpen = ckGlyph{"\ueab4", "˅", "v"}
 
 // ckDiffShown is how many lines of a diff a card shows until it is expanded.
 const ckDiffShown = 8

@@ -184,6 +184,13 @@ func runE2E(m *testing.M) int {
 	// rule (internal/session/task_move.go); killDaemon fails the test that
 	// left such a line.
 	_ = os.Setenv("TUIOS_TEST_CARD_CHECK", "1")
+	// No test reaches a real agent CLI (agent_stubs_test.go).
+	unstub, err := installAgentStubs()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "e2e: %v\n", err)
+		return 1
+	}
+	defer unstub()
 	defer func() { _ = os.RemoveAll(shortRuntimeRoot) }()
 	defer func() {
 		if otherProtocolDir != "" {
@@ -373,6 +380,7 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 	// one pinned.
 	configHome := xdgDir(base, "XDG_CONFIG_HOME")
 	for _, kv := range o.env {
+		agentPathGuard(t, kv)
 		if v, ok := strings.CutPrefix(kv, "XDG_CONFIG_HOME="); ok {
 			configHome = v
 		}

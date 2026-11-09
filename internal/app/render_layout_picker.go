@@ -30,6 +30,10 @@ func (m *OS) renderLayoutPicker() (string, overlay.Geometry, []overlayRowHit) {
 	}
 
 	filtered := FilterLayoutTemplates(m.LayoutPickerItems, m.LayoutPickerQuery)
+	empty := "No saved layouts"
+	if m.LayoutPickerLoading {
+		empty = "Reading the layouts..."
+	}
 	if len(filtered) > 0 {
 		m.LayoutPickerSelected = clampInt(m.LayoutPickerSelected, 0, len(filtered)-1)
 	}
@@ -43,7 +47,7 @@ func (m *OS) renderLayoutPicker() (string, overlay.Geometry, []overlayRowHit) {
 		Count:      len(filtered),
 		Selected:   m.LayoutPickerSelected,
 		Scroll:     &m.LayoutPickerScroll,
-		EmptyMsg:   "No saved layouts",
+		EmptyMsg:   empty,
 		Hints: []overlay.Hint{
 			{Key: overlay.EnterGlyph, Label: "apply"},
 			{Key: "ctrl+d", Label: "delete"},

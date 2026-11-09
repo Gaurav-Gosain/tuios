@@ -195,6 +195,7 @@ func (a *App) shellPanes(s *proto.Session) ([]*proto.Pane, []string) {
 // S3). A click goes to the pane, or for an agent to its place in the
 // agents view.
 func (a *App) railRows(c *ui.Context, pal *palette, s *proto.Session) {
+	defer a.minimizedRows(c, pal, s)
 	agents := a.sessionAgents(s, a.sbNeeds)
 	panes, details := a.shellPanes(s)
 	if len(agents)+len(panes) == 0 {
@@ -444,4 +445,78 @@ func (a *App) enterPane(sid, pane string) {
 		a.setFocus(t, pane)
 		a.focusTerminal()
 	}
+}
+
+// minimizedRows is the shown workspace's minimized panes under a session's
+// rows: a row that says how many, folded until the person opens it, and
+// under it each pane by name in the order they were minimized, the TUI
+// dock's order, which the restore digits count in. A click on a pane
+// restores it and moves the focus to it. The fold is kept in prefs.
+func (a *App) minimizedRows(c *ui.Context, pal *palette, s *proto.Session) {
+	if len(s.Minimized) == 0 {
+		return
+	}
+	key := "minimized:" + s.ID
+	open := a.prefs.Collapsed[key]
+	hdr := ui.Row(c.Key("min-"+s.ID)).Height(sbMoreH).Padding(0, 10, 0, rowInset+4).Gap(6).AlignItems(ui.Center).Radius(rRow).
+		Cursor(ui.CursorPointer).Label(locales.SidebarMinimized(strconv.Itoa(len(s.Minimized))))
+	if hdr.Hovered() {
+		hdr.Background(pal.rowHover)
+	}
+	if hdr.Clicked() {
+		c.Invalidate()
+		if a.prefs.Collapsed == nil {
+			a.prefs.Collapsed = map[string]bool{}
+		}
+		if open {
+			delete(a.prefs.Collapsed, key)
+		} else {
+			a.prefs.Collapsed[key] = true
+		}
+		a.savePrefs()
+	}
+	rowTooltip(c, hdr, "min-tip-"+s.ID, locales.SidebarMinimizedTip())
+	hdr.Children(func() {
+		chev := ui.Icon(c, chevronIcon).Size(12, 12).TextColor(pal.textFaint).Shrink(0)
+		chev.Rotate(chev.AnimateTo("turn", 90*b2f(open), ui.Snappy))
+		ui.Text(c, locales.SidebarMinimized(strconv.Itoa(len(s.Minimized)))).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine()
+	})
+	if !open {
+		return
+	}
+	h := a.hostOf(s.ID)
+	for i := range s.Minimized {
+		p := &s.Minimized[i]
+		sid, pid := s.ID, p.ID
+		row := ui.Row(c.Key("minpn-"+p.ID)).Height(sbPaneH).Padding(0, 10, 0, rowInset+24).Gap(8).AlignItems(ui.Center).Radius(rRow).
+			Cursor(ui.CursorPointer).Label(locales.SidebarRestorePane(p.PaneName()))
+		if row.Hovered() {
+			row.Background(pal.rowHover)
+		}
+		if row.Clicked() {
+			c.Invalidate()
+			a.restorePane(sid, pid)
+		}
+		rowTooltip(c, row, "minpn-tip-"+p.ID, locales.SidebarRestorePane(p.PaneName()))
+		row.Children(func() {
+			ui.Textf(c, "%d", i+1).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum").Shrink(0)
+			oneLine(c, p.PaneName(), fsSmall, wMedium).TextColor(pal.textMuted)
+			ui.Spacer(c)
+			// The folder as a pane row writes it: within the session's, or ~,
+			// and none for the session's own.
+			if d := paneFolder(s, p, h); d != "" {
+				ui.Text(c, d).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0).Shrink(2).MaxWidth(110)
+			}
+		})
+	}
+}
+
+// restorePane restores minimized pane pid of session sid and focuses it,
+// through the daemon's arrange op.
+func (a *App) restorePane(sid, pid string) {
+	s := a.session(sid)
+	if s == nil {
+		return
+	}
+	a.arrange(s, "restore", func(p *proto.ArrangeParams) { p.Pane = pid })
 }

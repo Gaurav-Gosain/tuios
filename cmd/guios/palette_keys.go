@@ -107,6 +107,8 @@ var keyRows = []keyRow{
 	{action: "cycle_layout", kero: "layout.next"},
 	{action: "prefix_rotate_split", kero: "layout.rotate"},
 	{action: "prefix_equalize_splits", kero: "layout.equalize"},
+	{action: "layout_prefix_save", kero: "layout.save"},
+	{action: "layout_prefix_load", kero: "layout.load"},
 	{action: "window_prefix_float", kero: "layout.float"},
 	{action: "cycle_master_position", kero: "layout.master.position"},
 	{action: "swap_with_master", kero: "layout.master.swap"},

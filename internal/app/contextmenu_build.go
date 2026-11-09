@@ -184,19 +184,13 @@ func (m *OS) OpenAggregateView() {
 
 // minimizedPosition returns the position of a window among the minimized
 // windows of the current workspace, counting from zero, or -1 when it is not
-// minimized. This is the index the restore_minimized_N actions count in.
+// minimized. This is the index the restore_minimized_N actions count in,
+// and the dock's order (MinimizedInOrder).
 func (m *OS) minimizedPosition(windowIndex int) int {
-	pos := 0
-	for i, win := range m.Windows {
-		// The hidden scratch terminal is not counted, as RestoreMinimizedByIndex
-		// does not count it.
-		if win == nil || win.Workspace != m.CurrentWorkspace || !win.Minimized || win.IsScratch {
-			continue
-		}
+	for pos, i := range m.MinimizedInOrder() {
 		if i == windowIndex {
 			return pos
 		}
-		pos++
 	}
 	return -1
 }

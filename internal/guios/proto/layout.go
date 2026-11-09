@@ -212,3 +212,21 @@ func contains(ids []string, id string) bool {
 	}
 	return false
 }
+
+// LayoutTemplateParams names a session and one of the saved layouts of its
+// daemon's machine (layout.save, layout.load, layout.delete; layout.list
+// takes the session alone).
+type LayoutTemplateParams struct {
+	Session string `json:"session"`
+	Name    string `json:"name,omitempty"`
+}
+
+// SavedLayout is one saved layout as layout.list lists it: its name, the
+// panes it holds, its layout mode, and when it was saved, in Unix
+// milliseconds.
+type SavedLayout struct {
+	Name    string `json:"name"`
+	Panes   int    `json:"panes"`
+	Mode    string `json:"mode,omitempty"`
+	SavedAt int64  `json:"saved_at,omitempty"`
+}

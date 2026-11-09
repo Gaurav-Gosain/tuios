@@ -67,6 +67,8 @@ var All = []Action{
 	{ID: "layout.rotate", Title: "Rotate split", Menu: "Layout"},
 	{ID: "layout.equalize", Title: "Even out splits", Menu: "Layout"},
 	{ID: "layout.float", Title: "Float pane", Menu: "Layout"},
+	{ID: "layout.save", Title: "Save layout…", Menu: "Layout"},
+	{ID: "layout.load", Title: "Load layout…", Menu: "Layout"},
 	{ID: "layout.master.position", Title: "Move masters", Menu: "Layout"},
 	{ID: "layout.master.add", Title: "Add a master", Menu: "Layout"},
 	{ID: "layout.master.remove", Title: "Remove a master", Menu: "Layout"},

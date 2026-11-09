@@ -528,6 +528,24 @@ func appendKittyPlaceBox(buf []byte, id, placement uint32, x, y, cols, rows int)
 	return buf
 }
 
+// appendKittyPlaceRows places rows of a picture of key's rows in a cell box:
+// the rows from skip, shown on the box's rows cells. With every row it is
+// appendKittyPlaceBox. Otherwise a source rect (x, y, w, h in the picture's
+// pixels) crops the picture to those rows, so the host draws them at their
+// size, not the whole picture squeezed into the box.
+func appendKittyPlaceRows(buf []byte, id, placement uint32, x, y, cols, rows, skip, allRows, pw, ph int) []byte {
+	if skip == 0 && rows == allRows || allRows <= 0 || pw <= 0 || ph <= 0 {
+		return appendKittyPlaceBox(buf, id, placement, x, y, cols, rows)
+	}
+	rowPx := ph / allRows
+	buf = append(buf, "\x1b7"...)
+	buf = append(buf, fmt.Sprintf("\x1b[%d;%dH", y+1, x+1)...)
+	buf = append(buf, fmt.Sprintf("\x1b_Ga=p,i=%d,p=%d,c=%d,r=%d,x=0,y=%d,w=%d,h=%d,q=2,C=1;\x1b\\",
+		id, placement, cols, rows, skip*rowPx, pw, rows*rowPx)...)
+	buf = append(buf, "\x1b8"...)
+	return buf
+}
+
 // appendKittyUnplace removes one placement, leaving the image resident so the
 // row that shows it next does not pay for the upload again.
 func appendKittyUnplace(buf []byte, id, placement uint32) []byte {

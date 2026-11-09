@@ -622,7 +622,8 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			overlayX = regionX + 2
 			overlayY = renderHeight - overlayHeight - 2
 		case "center":
-			overlayX = regionX + (regionW-overlayWidth)/2
+			// The screen centre, where the panels are centred.
+			overlayX = (renderWidth - overlayWidth) / 2
 			overlayY = (renderHeight - overlayHeight) / 2
 		default:
 			overlayX = regionX + regionW - overlayWidth - 2

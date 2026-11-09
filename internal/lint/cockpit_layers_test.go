@@ -19,7 +19,7 @@ const allowLayer = "//tuios:allow-layer"
 var cockpitLayerPredicates = []string{
 	"CockpitCopyOn", "CockpitImageOpen", "CockpitSpawnOpen", "CockpitCompareOpen", "CockpitArtifactFocused",
 	"CockpitNewCardOpen", "InboxConfirmOpen", "InboxPeeking", "InboxReplyOpen", "InboxReasonOpen",
-	"InboxSelecting", "CockpitGroupMenuOpen", "CockpitShipOpen", "InboxSnoozePicking", "InboxAgentsSheetOpen",
+	"InboxSelecting", "CockpitMenuOpen", "CockpitShipOpen", "InboxSnoozePicking", "InboxAgentsSheetOpen",
 }
 
 // cockpitLayerReaders are the functions that act on the layer on top: the

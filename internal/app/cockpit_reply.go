@@ -45,7 +45,7 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	if replyEnterQueues(e.State) {
 		verb = "Queue"
 		if ed := st.reply.editor; e.Host == "" && (ed == nil || (ed.host == "" && len(ed.targets) == 0)) {
-			hints = append([]ckSeg{{t: "alt+" + overlay.EnterGlyph, fg: key, attrs: ckBold}, {t: " send now   ", fg: label}}, hints...)
+			hints = append([]ckSeg{{t: m.sendNowKeyName(), fg: key, attrs: ckBold}, {t: " send now   ", fg: label}}, hints...)
 		}
 	}
 	send := ckSeg{t: " " + overlay.EnterGlyph + " " + verb + " ", fg: overlay.Readable(pal.Fg, pal.Card), bg: pal.Card, attrs: ckBold}
@@ -85,8 +85,17 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	}
 
 	inner := max(w-4, 8)
-	body := ed.comp.Render(inner, replyStyles(l), l.panel)
 	images := ckDraftImages(ed.comp)
+	// The editor's room is every row from under the focus header to above
+	// the hints: its title row, the pictures' row and the hints row are not
+	// its own. It never grows past it, and alt+m takes all of it.
+	img := 0
+	if len(images) > 0 {
+		img = 1
+	}
+	ed.comp.SetMaxRows(m.composerRows(inboxReplyRows))
+	ed.comp.SetRoom(y1 - bodyTop - 3 - img)
+	body := ed.comp.Render(inner, replyStyles(l), l.panel)
 	h := 3 + len(body)
 	if len(images) > 0 {
 		h++
@@ -133,9 +142,12 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	cut := max(len(body)-max(fy-row, 0), 0)
 	for i, s := range body[cut:] {
 		c.draw(x+2, row+i, inner, s)
-		// An entry of the @ list takes a click.
+		// An entry of the @ list takes a click. Any other line places the
+		// cursor or selects.
 		if j, ok := ed.comp.MentionAt(cut + i); ok {
 			st.ck.hits = append(st.ck.hits, ckHit{x0: x + 2, y0: top + row + i, x1: x + 2 + inner, y1: top + row + i + 1, kind: ckHitAction, action: "mention:" + strconv.Itoa(j)})
+		} else {
+			st.ck.hits = append(st.ck.hits, ckHit{x0: x + 2, y0: top + row + i, x1: x + 2 + inner, y1: top + row + i + 1, kind: ckHitEditor, group: cut + i})
 		}
 	}
 	// The pictures the draft shows are placed relative to the layer.

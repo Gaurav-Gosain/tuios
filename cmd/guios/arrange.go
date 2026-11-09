@@ -504,13 +504,20 @@ func (a *App) arrange(s *proto.Session, op string, set func(*proto.ArrangeParams
 				a.toast(err.Error())
 				return
 			}
-			if s := a.session(sid); s != nil && res.Focus != "" && s.PaneByID(res.Focus) != nil {
+			if s := a.session(sid); s != nil && res.Focus != "" {
+				// A pane the op restored is not among the session's panes
+				// until the state push that follows: the focus is kept for
+				// it, and the keyboard goes to it once its terminal is
+				// drawn (wantFocus). Dropped, a restore from the rail left
+				// the focus on the pane that had it.
 				if a.focus == nil {
 					a.focus = map[string]string{}
 				}
 				a.focus[sid] = res.Focus
 				s.Focus = res.Focus
-				a.paneRef(res.Focus).Focus()
+				if s.PaneByID(res.Focus) != nil {
+					a.paneRef(res.Focus).Focus()
+				}
 				a.wantFocus = res.Focus
 			}
 		})

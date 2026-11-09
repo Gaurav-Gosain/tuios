@@ -13675,3 +13675,193 @@ func CockpitEditLeft(count int) string { return In(i18n.Locale()).CockpitEditLef
 func (msgs Messages) CockpitEditLeft(count int) string {
 	return Catalog.Format(msgs.locale, "cockpitEditLeft", map[string]any{"count": count})
 }
+
+// SidebarMinimized says "Minimized · {count}"
+// in the language the app shows.
+func SidebarMinimized(count string) string { return In(i18n.Locale()).SidebarMinimized(count) }
+
+// SidebarMinimized says "Minimized · {count}"
+// in the language of msgs.
+func (msgs Messages) SidebarMinimized(count string) string {
+	return Catalog.Format(msgs.locale, "sidebarMinimized", map[string]any{"count": count})
+}
+
+// SidebarRestorePane says "Restore {name}"
+// in the language the app shows.
+func SidebarRestorePane(name string) string { return In(i18n.Locale()).SidebarRestorePane(name) }
+
+// SidebarRestorePane says "Restore {name}"
+// in the language of msgs.
+func (msgs Messages) SidebarRestorePane(name string) string {
+	return Catalog.Format(msgs.locale, "sidebarRestorePane", map[string]any{"name": name})
+}
+
+// SidebarMinimizedTip says "Panes minimized on this workspace. Click one to restore it."
+// in the language the app shows.
+func SidebarMinimizedTip() string { return In(i18n.Locale()).SidebarMinimizedTip() }
+
+// SidebarMinimizedTip says "Panes minimized on this workspace. Click one to restore it."
+// in the language of msgs.
+func (msgs Messages) SidebarMinimizedTip() string {
+	return Catalog.Format(msgs.locale, "sidebarMinimizedTip", nil)
+}
+
+// WorkspaceMinimized says "{count} minimized"
+// in the language the app shows.
+func WorkspaceMinimized(count string) string { return In(i18n.Locale()).WorkspaceMinimized(count) }
+
+// WorkspaceMinimized says "{count} minimized"
+// in the language of msgs.
+func (msgs Messages) WorkspaceMinimized(count string) string {
+	return Catalog.Format(msgs.locale, "workspaceMinimized", map[string]any{"count": count})
+}
+
+// ActionLayoutSave says "Save layout…"
+// in the language the app shows.
+func ActionLayoutSave() string { return In(i18n.Locale()).ActionLayoutSave() }
+
+// ActionLayoutSave says "Save layout…"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutSave() string {
+	return Catalog.Format(msgs.locale, "actionLayoutSave", nil)
+}
+
+// ActionLayoutLoad says "Load layout…"
+// in the language the app shows.
+func ActionLayoutLoad() string { return In(i18n.Locale()).ActionLayoutLoad() }
+
+// ActionLayoutLoad says "Load layout…"
+// in the language of msgs.
+func (msgs Messages) ActionLayoutLoad() string {
+	return Catalog.Format(msgs.locale, "actionLayoutLoad", nil)
+}
+
+// PromptSaveLayout says "Save layout"
+// in the language the app shows.
+func PromptSaveLayout() string { return In(i18n.Locale()).PromptSaveLayout() }
+
+// PromptSaveLayout says "Save layout"
+// in the language of msgs.
+func (msgs Messages) PromptSaveLayout() string {
+	return Catalog.Format(msgs.locale, "promptSaveLayout", nil)
+}
+
+// PromptSaveLayoutDetail says "Keeps the panes of this workspace, their names, folders and splits, under a name. Load layout… puts them back."
+// in the language the app shows.
+func PromptSaveLayoutDetail() string { return In(i18n.Locale()).PromptSaveLayoutDetail() }
+
+// PromptSaveLayoutDetail says "Keeps the panes of this workspace, their names, folders and splits, under a name. Load layout… puts them back."
+// in the language of msgs.
+func (msgs Messages) PromptSaveLayoutDetail() string {
+	return Catalog.Format(msgs.locale, "promptSaveLayoutDetail", nil)
+}
+
+// PromptSaveLayoutPlaceholder says "Layout name"
+// in the language the app shows.
+func PromptSaveLayoutPlaceholder() string { return In(i18n.Locale()).PromptSaveLayoutPlaceholder() }
+
+// PromptSaveLayoutPlaceholder says "Layout name"
+// in the language of msgs.
+func (msgs Messages) PromptSaveLayoutPlaceholder() string {
+	return Catalog.Format(msgs.locale, "promptSaveLayoutPlaceholder", nil)
+}
+
+// LayoutsLabel says "Load layout"
+// in the language the app shows.
+func LayoutsLabel() string { return In(i18n.Locale()).LayoutsLabel() }
+
+// LayoutsLabel says "Load layout"
+// in the language of msgs.
+func (msgs Messages) LayoutsLabel() string {
+	return Catalog.Format(msgs.locale, "layoutsLabel", nil)
+}
+
+// LayoutsNone says "There are no saved layouts. Save one with Layout › Save layout…."
+// in the language the app shows.
+func LayoutsNone() string { return In(i18n.Locale()).LayoutsNone() }
+
+// LayoutsNone says "There are no saved layouts. Save one with Layout › Save layout…."
+// in the language of msgs.
+func (msgs Messages) LayoutsNone() string {
+	return Catalog.Format(msgs.locale, "layoutsNone", nil)
+}
+
+// LayoutPanes says "{count, plural, one {# pane} other {# panes}}"
+// in the language the app shows.
+func LayoutPanes(count int) string { return In(i18n.Locale()).LayoutPanes(count) }
+
+// LayoutPanes says "{count, plural, one {# pane} other {# panes}}"
+// in the language of msgs.
+func (msgs Messages) LayoutPanes(count int) string {
+	return Catalog.Format(msgs.locale, "layoutPanes", map[string]any{"count": count})
+}
+
+// LayoutLoad says "Load"
+// in the language the app shows.
+func LayoutLoad() string { return In(i18n.Locale()).LayoutLoad() }
+
+// LayoutLoad says "Load"
+// in the language of msgs.
+func (msgs Messages) LayoutLoad() string {
+	return Catalog.Format(msgs.locale, "layoutLoad", nil)
+}
+
+// LayoutDelete says "Delete"
+// in the language the app shows.
+func LayoutDelete() string { return In(i18n.Locale()).LayoutDelete() }
+
+// LayoutDelete says "Delete"
+// in the language of msgs.
+func (msgs Messages) LayoutDelete() string {
+	return Catalog.Format(msgs.locale, "layoutDelete", nil)
+}
+
+// ConfirmDeleteLayout says "Delete the layout {name}?"
+// in the language the app shows.
+func ConfirmDeleteLayout(name string) string { return In(i18n.Locale()).ConfirmDeleteLayout(name) }
+
+// ConfirmDeleteLayout says "Delete the layout {name}?"
+// in the language of msgs.
+func (msgs Messages) ConfirmDeleteLayout(name string) string {
+	return Catalog.Format(msgs.locale, "confirmDeleteLayout", map[string]any{"name": name})
+}
+
+// ConfirmDeleteLayoutDetail says "The layout's file is removed. The panes that show now stay."
+// in the language the app shows.
+func ConfirmDeleteLayoutDetail() string { return In(i18n.Locale()).ConfirmDeleteLayoutDetail() }
+
+// ConfirmDeleteLayoutDetail says "The layout's file is removed. The panes that show now stay."
+// in the language of msgs.
+func (msgs Messages) ConfirmDeleteLayoutDetail() string {
+	return Catalog.Format(msgs.locale, "confirmDeleteLayoutDetail", nil)
+}
+
+// ToastLayoutSaved says "Saved layout {name}"
+// in the language the app shows.
+func ToastLayoutSaved(name string) string { return In(i18n.Locale()).ToastLayoutSaved(name) }
+
+// ToastLayoutSaved says "Saved layout {name}"
+// in the language of msgs.
+func (msgs Messages) ToastLayoutSaved(name string) string {
+	return Catalog.Format(msgs.locale, "toastLayoutSaved", map[string]any{"name": name})
+}
+
+// ToastLayoutLoaded says "Loaded layout {name}"
+// in the language the app shows.
+func ToastLayoutLoaded(name string) string { return In(i18n.Locale()).ToastLayoutLoaded(name) }
+
+// ToastLayoutLoaded says "Loaded layout {name}"
+// in the language of msgs.
+func (msgs Messages) ToastLayoutLoaded(name string) string {
+	return Catalog.Format(msgs.locale, "toastLayoutLoaded", map[string]any{"name": name})
+}
+
+// ToastLayoutDeleted says "Deleted layout {name}"
+// in the language the app shows.
+func ToastLayoutDeleted(name string) string { return In(i18n.Locale()).ToastLayoutDeleted(name) }
+
+// ToastLayoutDeleted says "Deleted layout {name}"
+// in the language of msgs.
+func (msgs Messages) ToastLayoutDeleted(name string) string {
+	return Catalog.Format(msgs.locale, "toastLayoutDeleted", map[string]any{"name": name})
+}

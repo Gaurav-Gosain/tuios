@@ -118,7 +118,7 @@ func (m *OS) renderIntegrationAsk() (string, overlay.Geometry, []overlayRowHit) 
 	a := &m.integrationAsk
 	pal := m.overlayUI()
 	bg := pal.Canvas
-	width := overlay.DialogFitWidth(integrationAskWidth, m.GetRenderWidth())
+	width := overlay.DialogFitWidth(integrationAskWidth, m.modalRoomWidth())
 	word, question, effect := "Install", "Install the "+a.st.Name+" integration?", "This adds hooks to "+joinPaths(a.paths)+"."
 	if a.verb == agentUpdate {
 		word, question, effect = "Update", "Update the "+a.st.Name+" integration?", "This updates the hooks in "+joinPaths(a.paths)+"."

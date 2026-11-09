@@ -82,18 +82,7 @@ func handleLayoutLoadInput(msg tea.KeyPressMsg, keyStr string, o *app.OS) (*app.
 		// must never destroy saved state.
 		{
 			if len(filtered) > 0 && o.LayoutPickerSelected < len(filtered) {
-				selected := filtered[o.LayoutPickerSelected]
-				if err := app.DeleteLayoutTemplate(selected.Name); err != nil {
-					o.ShowNotification("Failed to delete layout: "+err.Error(), "error", o.Settings.NotificationDuration)
-				} else {
-					o.ShowNotification("Layout deleted: "+selected.Name, "info", o.Settings.NotificationDuration)
-					// Refresh the list
-					templates, _ := app.LoadLayoutTemplates()
-					o.LayoutPickerItems = templates
-					if o.LayoutPickerSelected >= len(o.LayoutPickerItems) {
-						o.LayoutPickerSelected = max(len(o.LayoutPickerItems)-1, 0)
-					}
-				}
+				return o, o.DeleteLayoutFromPicker(filtered[o.LayoutPickerSelected].Name)
 			}
 		}
 		return o, nil

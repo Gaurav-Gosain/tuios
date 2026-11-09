@@ -189,6 +189,13 @@ func (c *Client) dispatch(method string, params any) (any, error) {
 		}
 		return true, nil
 
+	case "layout.list", "layout.save", "layout.load", "layout.delete":
+		p, err := decode[proto.LayoutTemplateParams](params)
+		if err != nil {
+			return nil, err
+		}
+		return c.layoutTemplate(strings.TrimPrefix(method, "layout."), p)
+
 	case "arrange":
 		p, err := decode[proto.ArrangeParams](params)
 		if err != nil {
@@ -691,4 +698,46 @@ func paneEnv() map[string]string {
 		return nil
 	}
 	return env
+}
+
+// layoutTemplate runs the daemon's layout-template verb for a session: the
+// layouts are files of the daemon's machine, so a session on a linked host
+// lists and loads that host's. list answers []proto.SavedLayout.
+func (c *Client) layoutTemplate(action string, p proto.LayoutTemplateParams) (any, error) {
+	c.st.mu.Lock()
+	name := c.st.sessionName[p.Session]
+	c.st.mu.Unlock()
+	if name == "" {
+		return nil, errors.New("no such session")
+	}
+	raw, err := c.verb("layout-template", map[string]any{"action": action, "session": name, "name": p.Name})
+	if err != nil {
+		return nil, err
+	}
+	if action == "load" {
+		c.kickState()
+	}
+	if action != "list" {
+		return true, nil
+	}
+	var res struct {
+		Layouts []struct {
+			Name      string `json:"name"`
+			Panes     int    `json:"panes"`
+			Mode      string `json:"mode"`
+			CreatedAt string `json:"created_at"`
+		} `json:"layouts"`
+	}
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return nil, err
+	}
+	out := make([]proto.SavedLayout, 0, len(res.Layouts))
+	for _, l := range res.Layouts {
+		s := proto.SavedLayout{Name: l.Name, Panes: l.Panes, Mode: l.Mode}
+		if t, err := time.Parse(time.RFC3339, l.CreatedAt); err == nil {
+			s.SavedAt = t.UnixMilli()
+		}
+		out = append(out, s)
+	}
+	return out, nil
 }

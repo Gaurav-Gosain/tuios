@@ -11,6 +11,7 @@ import (
 type frameKey struct {
 	ver      uint64
 	cur, top int
+	anchor   int
 	width    int
 	notice   string
 	info     string
@@ -28,7 +29,10 @@ type frameKey struct {
 	hsel    int
 	plain   bool
 	sigil   string
-	colours [9][4]uint32
+	colours [10][4]uint32
+	// The rows the frame may show: MaxRows, the host's room, and full.
+	maxRows, room int
+	full          bool
 }
 
 // frameKey is the key of a frame drawn now at width.
@@ -37,8 +41,9 @@ type frameKey struct {
 // changes a colour or a flag of st with them.
 func (m *Model) frameKey(width int, st *Styles, surface color.Color) frameKey {
 	k := frameKey{
-		ver: m.ver, cur: m.cur, top: m.top, width: width, notice: m.notice, info: m.info,
+		ver: m.ver, cur: m.cur, top: m.top, anchor: m.anchor, width: width, notice: m.notice, info: m.info,
 		pager: m.pager, ascii: st.ASCII, plain: st.Plain, sigil: st.Sigil,
+		maxRows: m.opt.MaxRows, room: m.room, full: m.full,
 	}
 	if m.pager != nil {
 		k.pagerTop = m.pager.top
@@ -57,7 +62,7 @@ func (m *Model) frameKey(width int, st *Styles, surface color.Color) frameKey {
 	}
 	// Colours are compared by value: they are interfaces, and comparing them
 	// with == can panic on a type that is not comparable.
-	for i, c := range [...]color.Color{surface, st.Field, st.Text, st.Muted, st.Dim, st.Key, st.Accent, st.Warning, st.Selected} {
+	for i, c := range [...]color.Color{surface, st.Field, st.Text, st.Muted, st.Dim, st.Key, st.Accent, st.Warning, st.Selected, st.Selection} {
 		k.colours[i] = rgba(c)
 	}
 	return k

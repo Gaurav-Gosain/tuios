@@ -736,12 +736,18 @@ func (m *OS) quickLookSize() (innerW, bodyH int) {
 	if cw <= 0 {
 		cw = rw
 	}
+	// The panel is centred on the screen, so it is held to the room that
+	// clears the rail on both sides.
+	clear := m.modalRoomWidth()
+	if clear <= 0 {
+		clear = rw
+	}
 	r := m.viewReserve()
 	usable := max(rh-r.Top-r.Bottom, 1)
 	ql := &m.quickLook
 	switch {
 	case ql.full:
-		innerW = min(max(cw-4, 24), rw-2)
+		innerW = min(max(cw-4, 24), clear-4, rw-2)
 		bodyH = min(max(usable-4, 3), max(rh-2, 1))
 	case rw < quickLookSmallW || rh < quickLookSmallH:
 		innerW = max(rw-2, 1)
@@ -751,7 +757,7 @@ func (m *OS) quickLookSize() (innerW, bodyH int) {
 		if session.PreviewShowsPicture(ql.target.name) {
 			capW, capH = quickLookPicW, quickLookPicH
 		}
-		innerW = min(max(cw*4/5, 24), capW, rw-2)
+		innerW = min(max(cw*4/5, 24), capW, clear-4, rw-2)
 		bodyH = min(max(usable*4/5-2, 3), capH, max(rh-2, 1))
 	}
 	return max(innerW, overlay.MinDialogWidth), bodyH

@@ -341,6 +341,7 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 		"display_name": displayName,
 		"workspace":    w.Workspace,
 		"minimized":    w.Minimized,
+		"minimized_at": w.MinimizedAt,
 		"focused":      w.ID == state.FocusedWindowID,
 		"x":            w.X,
 		"y":            w.Y,
