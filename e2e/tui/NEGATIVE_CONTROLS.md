@@ -16312,3 +16312,30 @@ Run on 2026-11-10 on macOS (arm64). The branch passes, three runs of three.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestFocusKeyRightAfterACommandFocus$' -v .`.
+
+## A pairing refusal the phone can read
+
+`TestPairOversizeBodySentLateGetsItsReply` sends the headers of a pairing
+request over the size cap, waits for the listener to refuse it, then writes
+the body in two parts and reads the reply. The listener used to close at
+once after a refusal it made before the body was read. The phone's first
+late write reached a closed socket, the listener's side answered with a
+reset, and the next write failed. An HTTP client stops at a failed write and
+never reads the reply. That is TestPairRefusesWrongRequests/oversize_body
+failing on CI with "connection reset", not 413. In a Linux container at one
+CPU with three busy loops, that subtest failed 2 times in 30 before the fix
+and passed 100 of 100 after.
+
+The listener now shuts its write side after the reply and drops what the
+phone still sends, up to 64 KB or one second (`drainPairConn`), as net/http's
+server does.
+
+Run on 2026-11-10 in a Linux container (golang:1.27-alpine, arm64). The
+branch passes, five runs of five.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The listener closes at once after the reply (`drainPairConn` not called) | "the phone could not write its body after the refusal: <nil>, write tcp ...: write: broken pipe", five runs of five | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=5 -run '^TestPairOversizeBodySentLateGetsItsReply$' -v .`.
