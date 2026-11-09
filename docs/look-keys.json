@@ -809,7 +809,7 @@
       "path": "dock.left",
       "type": "list",
       "description": "The built-in cells on the left end of the dock, in order. An empty list draws nothing there.",
-      "default": "[\"mode\", \"help\", \"workspaces\", \"trail\", \"tape\"]",
+      "default": "[\"mode\", \"workspaces\", \"trail\", \"tape\"]",
       "items": [
         "clock",
         "copy-help",

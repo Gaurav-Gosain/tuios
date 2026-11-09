@@ -184,15 +184,17 @@ on a terminal too.
 
 ## Hover help
 
-`Ctrl+B h` or `Shift+F1` opens help mode; the `?` control on the dock does the
-same with a click, and another click closes it. It explains one component at a
-time rather than listing every key: move the pointer over a rail, the dock or
-one of its cells, a pane's title bar or its terminal body, and a pane with a
-warning-toned border appears above or below it, never over it when the screen
-has room. A rail section is the exception: its pane sits beside the rail, so
-the column being explained stays visible, narrowing the pane when the screen is
-tight. The pane says what the component is for, the hotkeys that act on it, and
-the `tuios` commands that change it. A line above the keys names the mode the keys belong
+`Ctrl+B h` or `Shift+F1` opens help mode. A `?` control on the dock does the
+same with a click, opening on the control's own page, and another click closes
+it; the control is in no default list, so add `"help"` to `dock.left` or
+`dock.right` to have it. It explains one component at a time rather than
+listing every key: move the pointer over a rail, the dock or one of its cells,
+a pane's title bar or its terminal body, and a pane with a warning-toned border
+appears above or below it, never over it when the screen has room. A rail
+section is the exception: its pane sits beside the rail, so the column being
+explained stays visible, narrowing the pane when the screen is tight. The pane
+says what the component is for, the hotkeys that act on it, and the `tuios`
+commands that change it. A line above the keys names the mode the keys belong
 to, window or terminal, and whether the component holds the keyboard, so the
 list is read in the state it will run in; a component that never takes the
 keyboard, such as the dock, says so. A rail reads its keys in either mode, so
