@@ -987,10 +987,12 @@ func (s *Session) SwitchDaemonWorkspace(ws int) error {
 		s.markFocusIntentLocked()
 		state.CurrentWorkspace = ws
 		// The pane focused there last, while it is still there and shown;
-		// else the first shown pane of the workspace; else none, as the
-		// TUI's SwitchToWorkspace. A focus left on a window of another
-		// workspace sent the next key and the next action to a pane out of
-		// view (parity gap 1).
+		// else the first shown pane of the workspace, as the TUI's
+		// SwitchToWorkspace. A focus left on a window of another workspace
+		// sent the next key and the next action to a pane out of view
+		// (parity gap 1). A workspace with no shown pane keeps the focus it
+		// had: an attached TUI reads no focus as "leave terminal mode", and
+		// a switch back would then type into the window manager.
 		focus := ""
 		if f, ok := state.WorkspaceFocus[ws]; ok {
 			if i, err := findWindowStateIndex(state.Windows, f); err == nil && state.Windows[i].Workspace == ws && !state.Windows[i].Minimized {
@@ -1005,8 +1007,8 @@ func (s *Session) SwitchDaemonWorkspace(ws int) error {
 				}
 			}
 		}
-		state.FocusedWindowID = focus
 		if focus != "" {
+			state.FocusedWindowID = focus
 			state.FocusHistory = RecordFocus(state.FocusHistory, ws, focus)
 		}
 		// A focus left on a scratch pane would show its group over the
