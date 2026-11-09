@@ -72,15 +72,19 @@ func (m *OS) BuildSessionState() *session.SessionState {
 			// Display text is clamped the way the daemon clamps it, so the
 			// two agree and a long title cannot push the session past the
 			// daemon's limit on a state update.
-			Title:        session.ClampDisplayText(w.Title()),
-			CustomName:   session.ClampDisplayText(w.CustomName),
-			X:            x,
-			Y:            y,
-			Width:        width,
-			Height:       height,
-			Z:            w.Z,
-			Workspace:    w.Workspace,
-			Minimized:    w.Minimized,
+			Title:      session.ClampDisplayText(w.Title()),
+			CustomName: session.ClampDisplayText(w.CustomName),
+			X:          x,
+			Y:          y,
+			Width:      width,
+			Height:     height,
+			Z:          w.Z,
+			Workspace:  w.Workspace,
+			Minimized:  w.Minimized,
+			// Carried back as the daemon stamped it, so this client's state
+			// compares equal to the push it adopted. The daemon never takes it
+			// from a client (retainDaemonExclusive).
+			MinimizedAt:  w.MinimizedAt,
 			PreMinimizeX: w.PreMinimizeX,
 			PreMinimizeY: w.PreMinimizeY,
 			PreMinimizeW: w.PreMinimizeWidth,

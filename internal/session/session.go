@@ -3832,7 +3832,12 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 	// still carries the old one, and taking it would undo the rename.
 	state.Name = s.Name()
 	s.state = state
-	stampMinimizedLocked(state, time.Now().UnixNano())
+	// A push that minimized a window got its stamp here, which the client
+	// that sent it does not have: it is answered with the session's state,
+	// so its dock lists the panes in the order every other client does.
+	if stampMinimizedLocked(state, time.Now().UnixNano()) {
+		behind = true
+	}
 	// A window the client closed takes its subagents with it.
 	s.forgetSubagentsLocked(state)
 	// A client pushing state with a pane focused has that pane in front of

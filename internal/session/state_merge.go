@@ -776,12 +776,12 @@ func keepClientFocus(incoming *SessionState, mine focusView) {
 }
 
 // stampMinimizedLocked stamps now on every minimized window with no stamp yet
-// and clears the stamp of every window that is not minimized. Windows
-// minimized by one write are stamped in window order, a nanosecond apart, so
-// the order is total.
-func stampMinimizedLocked(state *SessionState, now int64) {
+// and clears the stamp of every window that is not minimized, and reports
+// whether it stamped one. Windows minimized by one write are stamped in window
+// order, a nanosecond apart, so the order is total.
+func stampMinimizedLocked(state *SessionState, now int64) (stamped bool) {
 	if state == nil {
-		return
+		return false
 	}
 	for i := range state.Windows {
 		w := &state.Windows[i]
@@ -791,6 +791,8 @@ func stampMinimizedLocked(state *SessionState, now int64) {
 		case w.MinimizedAt == 0:
 			w.MinimizedAt = now
 			now++
+			stamped = true
 		}
 	}
+	return stamped
 }
