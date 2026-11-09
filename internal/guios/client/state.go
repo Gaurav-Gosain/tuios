@@ -82,7 +82,8 @@ type windowRow struct {
 	Program     []map[string]any `json:"program_status"`
 	// Exited and its exit status say the window's process ended; KeepOpen
 	// says the window stays after that (new-window keep_open). A daemon
-	// from before these fields sends neither: see stateKeeper.exits.
+	// from before these fields sends neither, and guios closes none of its
+	// windows (exits.go).
 	Exited   bool `json:"exited"`
 	ExitCode int  `json:"exit_code"`
 	Signal   int  `json:"signal"`
@@ -117,10 +118,8 @@ type stateKeeper struct {
 	// paneSession finds a pane's session, for streams and pane methods.
 	paneSession map[string]string
 	sessionName map[string]string // session id to name
-	// exits are the windows a window-exit event named, for a daemon whose
-	// list-windows does not say a window exited; closing those being
-	// closed (exits.go).
-	exits   map[string]bool
+	// closing are the windows being closed because their program exited
+	// (exits.go).
 	closing map[string]bool
 
 	kick chan struct{}
@@ -130,7 +129,7 @@ func newStateKeeper(c *Client) *stateKeeper {
 	k := &stateKeeper{c: c, layouts: map[string]*proto.Layout{}, trees: map[string]treeInfo{}, zoom: map[string]string{}, unread: map[string]bool{},
 		shown: map[string][]windowRow{}, prevFocus: map[string]string{}, pending: map[string]pendingSplit{},
 		floated: map[string]floatSlot{}, paneSession: map[string]string{}, sessionName: map[string]string{}, kick: make(chan struct{}, 1),
-		exits: map[string]bool{}, closing: map[string]bool{},
+		closing: map[string]bool{},
 		started: time.Now().UnixMilli()}
 	k.loadLayouts()
 	return k
@@ -224,7 +223,8 @@ func (k *stateKeeper) build() (*proto.State, error) {
 		ti := k.readTree(s.Name, ws)
 		// A pane whose program exited goes, unless it stays (keep_open):
 		// guios closes it, as a TUI client does (exits.go).
-		gone, hide, end := k.exitedIn(wl.Windows, ws)
+		gone, hide, end := exitedIn(wl.Windows, ws)
+		goneID := goneIDs(gone)
 		if len(gone) > 0 {
 			reaps = append(reaps, reap{session: s.Name, windows: gone, end: end && !ti.tui})
 		}
@@ -234,14 +234,14 @@ func (k *stateKeeper) build() (*proto.State, error) {
 		counts := map[int]*proto.Workspace{}
 		for _, w := range wl.Windows {
 			paneSession[w.ID] = s.ID
-			if w.Scratch && w.ScratchName == config.DefaultScratchName && session.IsScratchWorkspace(w.Workspace) && !(hide && slices.Contains(gone, w.ID)) {
+			if w.Scratch && w.ScratchName == config.DefaultScratchName && session.IsScratchWorkspace(w.Workspace) && !(hide && slices.Contains(goneID, w.ID)) {
 				// The built-in scratch terminal's group, as the TUI's
 				// toggle_scratch shows it: a pane of no workspace's.
 				p := k.pane(w)
 				p.Workspace = w.Workspace
 				ks.Scratch = append(ks.Scratch, p)
 			}
-			if w.Scratch || w.Rail != "" || hide && slices.Contains(gone, w.ID) {
+			if w.Scratch || w.Rail != "" || hide && slices.Contains(goneID, w.ID) {
 				continue
 			}
 			p := k.pane(w)
@@ -546,11 +546,8 @@ func (k *stateKeeper) watch() {
 			// The daemon records an ended conversation on either.
 			k.convGen.Add(1)
 		}
-		if ev.Type == "window-exit" && ev.Window != "" {
-			k.mu.Lock()
-			k.exits[ev.Window] = true
-			k.mu.Unlock()
-		}
+		// A window-exit event only asks for a build, which reads from
+		// list-windows whether the window's own PTY exited (exits.go).
 		switch ev.Type {
 		case "agent-state", "agent-seen", "attention", "window-closed", "window-created", "window-retitled",
 			"transcript", "agent-message", "task-claimed", "task-finished", "task-changed", "agent-activity", "fan-verdict":

@@ -15,6 +15,7 @@ require (
 require (
 	charm.land/lipgloss/v2 v2.0.6 // indirect
 	charm.land/tone v0.1.0 // indirect
+	github.com/Gaurav-Gosain/mygo v0.7.5-0.20261108121735-4c7c850552b4 // indirect
 	github.com/Gaurav-Gosain/tuiffects v0.7.1 // indirect
 	github.com/adrg/xdg v0.5.3 // indirect
 	github.com/alecthomas/chroma/v2 v2.27.0 // indirect
@@ -31,6 +32,7 @@ require (
 	github.com/ebitengine/purego v0.11.1 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
+	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/lrstanley/bubbletint/v2 v2.0.2 // indirect
 	github.com/lrstanley/go-nf v0.0.0-20260418212552-215ab243b591 // indirect
@@ -48,6 +50,7 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.mitchellh.com/libghostty v0.0.0-20261107144202-b13f277ddcb2 // indirect
 	golang.org/x/image v0.47.0 // indirect
+	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/term v0.47.0 // indirect
