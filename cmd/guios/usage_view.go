@@ -27,7 +27,10 @@ func sparkline(c *ui.Context, key string, s series, top float32, col ui.Color, w
 	if w > 0 {
 		box.Width(w)
 	}
-	if len(s) == 0 {
+	// A trend only once it has one: a flat line on its ground read as a
+	// broken chart (polish wave 1, item 8), as it did in the agents view's
+	// figures (usageFigure). The figure beside it says the value.
+	if !moves(s) {
 		return box
 	}
 	if top <= 0 {
@@ -47,10 +50,6 @@ func sparkline(c *ui.Context, key string, s series, top float32, col ui.Color, w
 	}
 	box.Radius(rChip).Background(col.Alpha(0.06))
 	box.Draw(func(p *ui.Painter, r ui.Rect) {
-		if n == 1 {
-			p.Line(chart.X(r, xs[0]), chart.Y(r, ys[0]), r.X+r.W, chart.Y(r, ys[0]), 1.5, col)
-			return
-		}
 		p.FillPath(chart.Area(r, xs, nil, ys, chart.CurveMonotone), col.Alpha(0.14))
 		p.StrokePath(chart.Line(r, xs, ys, chart.CurveMonotone), 1.5, col)
 	})
