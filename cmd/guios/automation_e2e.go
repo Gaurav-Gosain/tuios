@@ -220,6 +220,20 @@ func startProbe(a *App) {
 					}
 					// "toast TEXT" shows a toast, for frames of one coming
 					// and going.
+					// "action NAME" runs a keymap action as its key would,
+					// and answers the toast it left after a second and a
+					// half ("" for none): the check that a bound name works
+					// in guios rather than saying it needs the TUI. A
+					// run-command answers on the daemon's time, so the wait.
+					if name, ok := strings.CutPrefix(sc.Text(), "action "); ok {
+						a.update(func() { a.lastToast = ""; a.runKeyAction(name) })
+						time.Sleep(1500 * time.Millisecond)
+						got := make(chan string, 1)
+						a.update(func() { got <- a.lastToast })
+						line, _ := json.Marshal(map[string]string{"action": name, "toast": <-got})
+						conn.Write(append(line, '\n'))
+						continue
+					}
 					if t, ok := strings.CutPrefix(sc.Text(), "toast "); ok {
 						a.update(func() { a.toast(t); a.win.Invalidate() })
 						conn.Write([]byte("ok\n"))

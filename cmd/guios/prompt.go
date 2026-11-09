@@ -41,9 +41,9 @@ func (a *App) renamePane() {
 	if p == nil {
 		return
 	}
-	a.prompt = &promptState{open: true, title: locales.PromptRenamePane(), detail: locales.PromptRenamePaneDetail(),
+	a.openPrompt(&promptState{open: true, title: locales.PromptRenamePane(), detail: locales.PromptRenamePaneDetail(),
 		value: p.PaneName(), placeholder: p.PaneName(),
-		run: func(name string) { a.call(id, "pane.rename", proto.RenameParams{ID: id, Name: name}, nil) }}
+		run: func(name string) { a.call(id, "pane.rename", proto.RenameParams{ID: id, Name: name}, nil) }})
 }
 
 func (a *App) renameWorkspace() {
@@ -58,11 +58,11 @@ func (a *App) renameWorkspace() {
 			cur = w.Name
 		}
 	}
-	a.prompt = &promptState{open: true, title: locales.PromptRenameWorkspace(itoa(n)), detail: locales.PromptRenameWorkspaceDetail(),
+	a.openPrompt(&promptState{open: true, title: locales.PromptRenameWorkspace(itoa(n)), detail: locales.PromptRenameWorkspaceDetail(),
 		value: cur, placeholder: strconv.Itoa(n),
 		run: func(name string) {
 			a.call(sid, "workspace.rename", proto.NameWorkspaceParams{Session: sid, Workspace: n, Name: name}, nil)
-		}}
+		}})
 }
 
 func (a *App) setNote() {
@@ -71,9 +71,19 @@ func (a *App) setNote() {
 		return
 	}
 	sid := s.ID
-	a.prompt = &promptState{open: true, title: locales.PromptNote(), detail: locales.PromptNoteDetail(),
+	a.openPrompt(&promptState{open: true, title: locales.PromptNote(), detail: locales.PromptNoteDetail(),
 		placeholder: locales.PromptNotePlaceholder(),
-		run:         func(note string) { a.call(sid, "note", proto.NoteParams{Session: sid, Note: note}, nil) }}
+		run:         func(note string) { a.call(sid, "note", proto.NoteParams{Session: sid, Note: note}, nil) }})
+}
+
+// openPrompt opens p, unless a prompt is open: the one open keeps the
+// keyboard, and a second one over it, as a rename key run while a rename
+// waits, bound the prompt's field twice in one frame and ended the app.
+func (a *App) openPrompt(p *promptState) {
+	if a.prompt != nil && a.prompt.open {
+		return
+	}
+	a.prompt = p
 }
 
 // promptView draws the open prompt.
