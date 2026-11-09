@@ -1046,6 +1046,43 @@ func (s *Session) SetDaemonWindowMinimized(target string, minimized bool) error 
 	})
 }
 
+// SetDaemonWindowURI changes what a window of a native kind (web, view, app)
+// shows, as its renderer moved to another page. A terminal or a TML window
+// has no uri to change.
+func (s *Session) SetDaemonWindowURI(target, uri string) error {
+	return s.mutateState(func(state *SessionState) error {
+		idx, err := findWindowStateIndex(state.Windows, target)
+		if err != nil {
+			return err
+		}
+		w := &state.Windows[idx]
+		if w.Kind == "" || w.Kind == "terminal" || w.Kind == WindowKindTML {
+			return errWindowHasNoURI
+		}
+		w.URI = uri
+		return nil
+	})
+}
+
+// errWindowHasNoURI refuses a uri for a window that draws a terminal or a
+// TML surface.
+var errWindowHasNoURI = errors.New("the window is a terminal or a TML surface, which has no uri to change. Only a web, view or app window has one")
+
+// windowURIProblem says what is wrong with a window's uri, or "". The
+// placeholder of a native window prints it into a terminal, so it holds no
+// control character, and it is at most 8 KiB.
+func windowURIProblem(uri string) string {
+	if len(uri) > 8<<10 {
+		return "uri is at most 8 KiB"
+	}
+	for _, r := range uri {
+		if r < 0x20 || r == 0x7f || r >= 0x80 && r < 0xa0 {
+			return "uri holds a control character"
+		}
+	}
+	return ""
+}
+
 // describeWindows lists the windows match accepts as index, short id and name,
 // for an error that has to say which windows a target could have meant.
 func describeWindows(windows []WindowState, match func(WindowState) bool) string {

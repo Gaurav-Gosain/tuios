@@ -1887,12 +1887,13 @@ func buildVerbRegistry() map[string]verbEntry {
 		"set-window": {
 			scope:       scopeDeny,
 			link:        needWrite,
-			description: "Change a window's name or minimized state. Pass only the fields to change.",
+			description: "Change a window's name, minimized state, or the uri of a web, view or app window, as its renderer moves to another page. Pass only the fields to change.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "window", Type: "string", Description: "Window to change. Omit for the focused one."},
 				{Name: "name", Type: "string", Description: "New name. Pass an empty string to clear it and fall back to the shell's title."},
 				{Name: "minimized", Type: "bool", Description: "Minimize the window, or restore it."},
+				{Name: "uri", Type: "string", Description: "What a web, view or app window shows now, such as the page a browser pane moved to. At most 8 KiB, with no control character. A terminal or a TML window refuses it."},
 			},
 			returns: []verbParam{
 				{Name: "window_id", Type: "string", Description: "Id of the window that changed."},

@@ -378,12 +378,21 @@ func (d *Daemon) verbSetWindow(cs *connState, params json.RawMessage) (any, *ver
 		Window    string  `json:"window"`
 		Name      *string `json:"name"`
 		Minimized *bool   `json:"minimized"`
+		URI       *string `json:"uri"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	if p.Name == nil && p.Minimized == nil {
-		return nil, invalidParam("name", "nothing to set: pass name, minimized, or both")
+	if p.Name == nil && p.Minimized == nil && p.URI == nil {
+		return nil, invalidParam("name", "nothing to set: pass name, minimized or uri")
+	}
+	if p.URI != nil {
+		if *p.URI == "" {
+			return nil, invalidParam("uri", "uri is what the window shows, and cannot be empty")
+		}
+		if why := windowURIProblem(*p.URI); why != "" {
+			return nil, invalidParam("uri", why)
+		}
 	}
 	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
@@ -412,6 +421,14 @@ func (d *Daemon) verbSetWindow(cs *connState, params json.RawMessage) (any, *ver
 	}
 	if p.Minimized != nil {
 		if err := sess.SetDaemonWindowMinimized(windowID, *p.Minimized); err != nil {
+			return nil, mapResolveErr(err, sess)
+		}
+	}
+	if p.URI != nil {
+		if err := sess.SetDaemonWindowURI(windowID, *p.URI); err != nil {
+			if errors.Is(err, errWindowHasNoURI) {
+				return nil, invalidParam("uri", err.Error())
+			}
 			return nil, mapResolveErr(err, sess)
 		}
 	}

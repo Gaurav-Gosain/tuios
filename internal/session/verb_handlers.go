@@ -363,6 +363,9 @@ func (d *Daemon) openWindow(cs *connState, p *newWindowParams, split *splitAsk) 
 	if p.Kind != "" && p.Kind != "terminal" && p.URI == "" {
 		return nil, invalidParam("uri", "a "+p.Kind+" window needs uri, what it shows")
 	}
+	if why := windowURIProblem(p.URI); why != "" {
+		return nil, invalidParam("uri", why)
+	}
 	if p.KeepOpen && p.CloseOnExit {
 		return nil, invalidParam("keep_open", "keep_open and close_on_exit cannot be used together")
 	}
