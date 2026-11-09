@@ -2,11 +2,11 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/Gaurav-Gosain/mygo/ui"
+	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
 	"github.com/Gaurav-Gosain/tuios/internal/markdown"
 	"tuios.dev/loom"
@@ -50,6 +50,15 @@ type tmlView struct {
 	// text runs, and expr the paths of its each attributes, by source.
 	tmpl map[string]*tml.Template
 	expr map[string]*tml.Expr
+	// acts holds the parsed actions of its action attributes, by source.
+	acts map[string][]tml.Action
+	// text holds what each text field shows while it is typed in, by the
+	// field's key (tml_input.go).
+	text map[string]*string
+	// ask is a pane() action waiting for the person's yes, and confirmed
+	// the ones the person said yes to.
+	ask       *tmlAsk
+	confirmed map[string]bool
 }
 
 // tmlCellW and tmlCellH are a terminal cell in DIPs, at the code font.
@@ -158,6 +167,9 @@ func (a *App) paneTML(c *ui.Context, pal *palette, p *proto.Pane) {
 	}
 	body.Children(func() {
 		ui.Column(c).Gap(tmlCellH / 2).AlignItems(ui.Stretch).Children(func() {
+			if v.ask != nil {
+				r.a.tmlAskBar(c, pal, v)
+			}
 			r.children(v.doc, "", r.vars)
 		})
 	})
@@ -182,6 +194,8 @@ type tmlDraw struct {
 	v    *tmlView
 	mono string
 	vars map[string]any
+	// form is the form whose fields are being drawn, for submit.
+	form *tmlForm
 }
 
 // template is the parsed template of s, parsed once per surface.
@@ -390,17 +404,29 @@ func (r *tmlDraw) node(n *tml.Node, ptr string, vars map[string]any) {
 			})
 		})
 	case "kv":
-		ui.Grid(c.Key(ptr)).Columns(2).Gap(4).Children(func() {
+		// The keys' column is as wide as its longest key, as in loom, and a
+		// long value wraps under its own column.
+		keyW := float32(0)
+		for _, it := range n.Children {
+			if it.Type == "item" {
+				keyW = max(keyW, float32(len([]rune(r.str(it, "k", vars)))))
+			}
+		}
+		ui.Column(c.Key(ptr)).Gap(4).AlignItems(ui.Stretch).Children(func() {
 			for i, it := range n.Children {
 				if it.Type != "item" {
 					continue
 				}
-				ui.Text(c.Key(i), r.str(it, "k", vars)).FontSize(fsBody).TextColor(pal.textMuted)
-				ui.Text(c.Key(-i-1), r.str(it, "v", vars)).FontSize(fsBody).TextColor(r.role(it.AttrString("role"), pal.text))
+				ui.Row(c.Key(i)).Gap(tmlCellW * 2).AlignItems(ui.Start).Children(func() {
+					ui.Text(c, r.str(it, "k", vars)).FontSize(fsBody).TextColor(pal.textMuted).Width(keyW * fsBody * 0.62).Shrink(0)
+					ui.Text(c, r.str(it, "v", vars)).FontSize(fsBody).TextColor(r.role(it.AttrString("role"), pal.text)).Grow(1).MinWidth(0)
+				})
 			}
 		})
+	case "form", "button", "checkbox", "toggle", "input", "textarea", "select", "slider":
+		r.input(n, ptr, vars)
 	default:
-		ui.Text(c.Key(ptr), fmt.Sprintf("guios does not draw a %s yet.", n.Type)).FontSize(fsSmall).TextColor(pal.textFaint)
+		ui.Text(c.Key(ptr), locales.TmlNotDrawn(n.Type)).FontSize(fsSmall).TextColor(pal.textFaint)
 	}
 }
 

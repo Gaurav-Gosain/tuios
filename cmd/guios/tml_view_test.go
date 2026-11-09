@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"regexp"
 	"strings"
 	"testing"
@@ -124,3 +125,88 @@ func guiosTexts(t *testing.T, doc *tml.Node) []string {
 	tester.Frame()
 	return tester.Texts()
 }
+
+// TestTMLInputsSendWhatLoomRuns: an input runs its actions with loom's
+// RunActions, and what changed goes to the daemon in one tml-input, as the
+// TUI sends it: the state ops, the emits, a close, and a pane() action only
+// after the person said yes.
+func TestTMLInputsSendWhatLoomRuns(t *testing.T) {
+	cases := []struct {
+		name, doc string
+		do        func(t *testing.T, tester *ui.Tester)
+		want      []string
+	}{
+		{
+			name: "button",
+			doc:  `<tml version="1"><state>{"n": 1}</state><button on-press="set('n', state.n + 1); emit('bumped', state.n)">Bump</button></tml>`,
+			do:   func(t *testing.T, tt *ui.Tester) { click(t, tt, "Bump") },
+			want: []string{`"ops":[{"op":"add","path":"/n","value":2}]`, `"events":[{"name":"bumped","value":2}]`},
+		},
+		{
+			name: "checkbox",
+			doc:  `<tml version="1"><state>{"on": false}</state><checkbox name="watch" bind="state.on" label="Watch" on-change="emit('watch', event.value)"/></tml>`,
+			do:   func(t *testing.T, tt *ui.Tester) { click(t, tt, "Watch") },
+			want: []string{`"ops":[{"op":"add","path":"/on","value":true}]`, `"events":[{"name":"watch","value":true}]`},
+		},
+		{
+			name: "form",
+			doc:  `<tml version="1"><form on-submit="emit('ask', form.q); close(form.q)"><input name="q" placeholder="Question"/><button submit="true">Send</button></form></tml>`,
+			do: func(t *testing.T, tt *ui.Tester) {
+				click(t, tt, "Question")
+				tt.Type("why")
+				tt.Frame()
+				click(t, tt, "Send")
+			},
+			want: []string{`"events":[{"name":"ask","value":"why"}]`, `"close":true`, `"value":"why"`},
+		},
+		{
+			name: "pane action waits for a yes",
+			doc:  `<tml version="1"><button on-press="pane('new-window', {'command': ['go', 'test', './...']})">Test</button></tml>`,
+			do: func(t *testing.T, tt *ui.Tester) {
+				click(t, tt, "Test")
+				if !tt.HasText("This surface wants to open a pane that runs: go test ./...") {
+					t.Fatalf("ASSERTION: no question before the pane action: %v", tt.Texts())
+				}
+				click(t, tt, "Allow")
+			},
+			want: []string{`"actions":[{"params":{"command":["go","test","./..."]},"verb":"new-window"}]`},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc, _, err := tml.Check([]byte(tc.doc), nil)
+			if err != nil {
+				t.Fatalf("the document does not check: %v", err)
+			}
+			a, _ := tmlApp(t, doc)
+			var sent []string
+			a.tmlSent = func(p map[string]any) {
+				b, _ := jsonMarshal(p)
+				sent = append(sent, string(b))
+			}
+			tester := ui.NewTester(func(c *ui.Context) {
+				a.paneTML(c, paletteFor(c), &proto.Pane{Surface: "s1"})
+			}, 700, 500)
+			tester.Frame()
+			tc.do(t, tester)
+			tester.Frame()
+			all := strings.Join(sent, "\n")
+			for _, w := range tc.want {
+				if !strings.Contains(all, w) {
+					t.Errorf("ASSERTION: the tml-input lacks %s. It sent:\n%s", w, all)
+				}
+			}
+		})
+	}
+}
+
+func click(t *testing.T, tt *ui.Tester, text string) {
+	t.Helper()
+	tt.Frame()
+	if err := tt.Click(text); err != nil {
+		t.Fatalf("click %q: %v (texts %v)", text, err, tt.Texts())
+	}
+	tt.Frame()
+}
+
+func jsonMarshal(v any) ([]byte, error) { return json.Marshal(v) }
