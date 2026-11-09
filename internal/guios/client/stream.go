@@ -166,20 +166,28 @@ func openPane(host string, params map[string]any) (*session.PaneStream, session.
 	}
 	ps, reply, err := vc.OpenPaneStream(params)
 	renew := false
-	// An older daemon refuses a parameter it does not know, one at a time.
-	for range 2 {
-		switch {
-		case err != nil && strings.Contains(err.Error(), "parameter repaint_on_resize"):
-			// From before repaints: the terminal here reflows at the
-			// 'R' frames, as it did.
-			delete(params, "repaint_on_resize")
-		case err != nil && strings.Contains(err.Error(), "parameter yield"):
+	// An older daemon refuses a parameter it does not know, one at a time:
+	// drop each optional one it refuses and ask again.
+	for range len(optionalPaneParams) {
+		name := refusedParam(err)
+		if !slices.Contains(optionalPaneParams, name) {
+			break
+		}
+		if _, sent := params[name]; !sent {
+			break
+		}
+		delete(params, name)
+		switch name {
+		case "yield":
 			// From before yielding leases: its fit lease holds a TUI
 			// client's pane at most at this view's size.
-			delete(params, "yield")
 			renew = true
-		default:
-			continue
+		case "repaint_on_resize":
+			// From before repaints: the terminal here reflows at the
+			// 'R' frames, as it did.
+		case "row_ids":
+			// From before row ids: no H frame comes, so the history
+			// stays unknown and pane-history is never asked for it.
 		}
 		ps, reply, err = vc.OpenPaneStream(params)
 	}
@@ -188,6 +196,29 @@ func openPane(host string, params map[string]any) (*session.PaneStream, session.
 		return nil, reply, false, err
 	}
 	return ps, reply, renew, nil
+}
+
+// optionalPaneParams are the stream-pane parameters a daemon from before
+// them refuses, and that guios can do without.
+var optionalPaneParams = []string{"repaint_on_resize", "yield", "row_ids"}
+
+// refusedParam is the parameter an invalid_params refusal names: the hint's,
+// or else the word after "has no parameter" in the error of a daemon that
+// gives no hint. It is "" for any other error.
+func refusedParam(err error) string {
+	if err == nil {
+		return ""
+	}
+	var ve *session.VerbCallError
+	if errors.As(err, &ve) && ve.Code == session.ErrVerbInvalidParams && ve.Hint != nil && ve.Hint.Param != "" {
+		return ve.Hint.Param
+	}
+	_, rest, ok := strings.Cut(err.Error(), "has no parameter ")
+	if !ok {
+		return ""
+	}
+	name, _, _ := strings.Cut(rest, " ")
+	return strings.Trim(name, `"`)
 }
 
 // backs wake the streams of a host that wait for its link: closed and
