@@ -182,6 +182,50 @@ the keys, the action, the scope and the description. `q` or `esc` leaves it.
 It opens only when you run `browse`. `tuios keybinds list` stays plain text,
 on a terminal too.
 
+## Hover help
+
+`Ctrl+B h` or `Shift+F1` opens help mode. It explains one component at a time rather
+than listing every key: move the pointer over a rail, the dock or one of its
+cells, a pane's title bar or its terminal body, and a pane with a red border
+appears above or below it, never over it when the screen has room. A rail
+section is the exception: its pane sits beside the rail, so the column being
+explained stays visible, narrowing the pane when the screen is tight. The pane
+says what the component is for, the hotkeys that act on it, and the `tuios`
+commands that change it. A line above the keys names the mode the keys belong
+to, window or terminal, and whether the component holds the keyboard, so the
+list is read in the state it will run in; a component that never takes the
+keyboard, such as the dock, says so. A rail reads its keys in either mode, so
+its line names only whether it holds the keyboard. `Ctrl+B ?` still opens the full key list.
+
+Help mode is a view, not a mode. It reads only the keys in the table below;
+every other key reaches the app as if the pane were not up, so the rail's own
+toggles, a workspace switch and a command for the focused pane run while you
+read, and the pane redraws around the layout they leave.
+
+| Key | What it does |
+| --- | --- |
+| `Tab`, `Shift+Tab` | Next or previous top-level component. `←` and `→` do the same. |
+| `Down` | Move into the selected component's parts, such as a rail's sections or a pane's title bar and body, then through them. |
+| `Up` | Move back out: previous part, then the component itself. |
+| `h` | Show every keybinding of the selected component instead of the short list. |
+| `s` | Show or hide the session rail, so a hidden rail can be inspected. |
+| `S` | Show or hide the opposite rail, when one is configured. |
+| `esc` | Leave help mode. |
+
+A hidden rail still has an entry in the rotation, marked `(hidden)`; its pane
+names the chord that brings it back, and that chord works from here. Help mode
+keeps the pointer while it is up: a click picks the component under it and does
+nothing else, and the wheel scrolls the explanation. A panel opened over it
+takes the pointer and the keys. Because the pane is a view, a bare `h`, `Up` or
+`Down` belongs to it even over a terminal pane: leave help to type them.
+
+Everything but that component and the explaining pane is dimmed by
+`appearance.modal_dim` (default `30`), so the component under the pane stays the
+bright thing on screen; `0` turns the dimming off. The default is
+`prefix_help_mode = ["h"]` in
+`[keybindings.prefix_mode]`, so a preset that binds `h` to something else takes
+the key with it; rebind either action.
+
 ## Editing sidebar files
 
 Focus the sidebar with `s` in window mode or `Ctrl+B e`, or walk into it with
