@@ -78,6 +78,9 @@ func (p *PTY) writeWinsizeLocked(width, height int, now time.Time) error {
 	}
 	p.winsizeWritten = now
 	err := ptyspawn.SetWinsize(p.pty, width, height, width*p.cellWidth, height*p.cellHeight)
+	if err == nil {
+		p.checkWinsizeLocked(width, height)
+	}
 	// Cleared once the kernel has the size, not before. flushWinsize reads the
 	// flag without the lock, and a clear ahead of the ioctl let a keystroke
 	// through to a guest that then read the size from before the burst.
@@ -136,4 +139,30 @@ func (p *PTY) closeWinsize() {
 		p.winsizeTimer.Stop()
 		p.winsizeTimer = nil
 	}
+}
+
+// checkWinsizeLocked reads the size back after a write and writes it once more
+// when the kernel does not hold it.
+//
+// On macOS a write was seen lost under load: TIOCSWINSZ on the right master
+// returned no error, a TIOCGWINSZ right after read the size from before, and
+// the pane's programs saw that size until the next change. The daemon's own
+// record said the new size, so nothing would ever write it again: the pane
+// stayed at a size nobody chose. Every window size write in the daemon goes
+// through here, and no other writer showed in the daemon or on the tty; what
+// puts the old size back is not known. The readback is through the pty's
+// Size, never its Fd, which would switch the master to blocking reads. The
+// write is tried again once, never in a loop, so a program in the pane that
+// sets its own size on purpose is not fought. The caller holds winsizeMu.
+func (p *PTY) checkWinsizeLocked(width, height int) {
+	s, ok := p.pty.(interface{ Size() (int, int, error) })
+	if !ok {
+		return
+	}
+	w, h, err := s.Size()
+	if err != nil || w == width && h == height {
+		return
+	}
+	err = ptyspawn.SetWinsize(p.pty, width, height, width*p.cellWidth, height*p.cellHeight)
+	LogBasic("PTY %s: the window size %dx%d did not hold, the pty had %dx%d; written again (err %v)", shortID(p.ID), width, height, w, h, err)
 }
