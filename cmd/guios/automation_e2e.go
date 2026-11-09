@@ -234,6 +234,52 @@ func startProbe(a *App) {
 						conn.Write(append(line, '\n'))
 						continue
 					}
+					// "opencheck" proves the opener writes to GUIOS_OPEN_LOG
+					// instead of opening: the QA kit runs it before any probe
+					// and refuses to go on when it answers "unguarded". With
+					// no log it opens nothing at all.
+					if sc.Text() == "opencheck" {
+						if openLog == "" {
+							conn.Write([]byte("unguarded\n"))
+							continue
+						}
+						done := make(chan struct{})
+						a.update(func() { a.openExternal("guios-open-check://probe"); close(done) })
+						<-done
+						conn.Write([]byte("logged\n"))
+						continue
+					}
+					// "hints" opens hint mode on the focused pane, as the
+					// prefix and F do, and answers each label's text, as one
+					// JSON line. "hintkey K" gives hint mode one key, as the
+					// keymap spells it ("a", "A", "ctrl+a", "super+a").
+					if sc.Text() == "hints" {
+						got := make(chan map[string]string, 1)
+						a.update(func() {
+							a.openHints()
+							m := map[string]string{}
+							if a.cm != nil {
+								for _, h := range a.cm.hints {
+									m[h.label] = h.text
+								}
+							}
+							got <- m
+						})
+						line, _ := json.Marshal(<-got)
+						conn.Write(append(line, '\n'))
+						continue
+					}
+					if k, ok := strings.CutPrefix(sc.Text(), "hintkey "); ok {
+						done := make(chan struct{})
+						a.update(func() { a.lastToast = ""; a.copyKey(k); close(done) })
+						<-done
+						time.Sleep(1500 * time.Millisecond)
+						got := make(chan string, 1)
+						a.update(func() { got <- a.lastToast })
+						line, _ := json.Marshal(map[string]string{"key": k, "toast": <-got})
+						conn.Write(append(line, '\n'))
+						continue
+					}
 					if t, ok := strings.CutPrefix(sc.Text(), "toast "); ok {
 						a.update(func() { a.toast(t); a.win.Invalidate() })
 						conn.Write([]byte("ok\n"))

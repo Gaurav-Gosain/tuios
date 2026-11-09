@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
@@ -23,8 +24,32 @@ func fileManager() string {
 	return locales.FileManagerFiles()
 }
 
+// openLog, when set (GUIOS_OPEN_LOG, which the QA kit sets), is a file each
+// open, reveal and open-in-browser writes its target to instead of starting
+// the program that opens it. The opener is a native call, so a QA probe's
+// stub of the open program on the PATH does not catch it, and a probe that
+// opened a link would start a browser on the person's screen.
+var openLog = os.Getenv("GUIOS_OPEN_LOG")
+
+// loggedOpen writes what kind of open ran and its target to openLog, and
+// reports whether it did, in which case nothing is opened.
+func loggedOpen(kind, target string) bool {
+	if openLog == "" {
+		return false
+	}
+	f, err := os.OpenFile(openLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err == nil {
+		_, _ = fmt.Fprintf(f, "%s %s\n", kind, target)
+		_ = f.Close()
+	}
+	return true
+}
+
 // openPath opens a file or folder in the app that opens it.
 func (a *App) openPath(path string) {
+	if loggedOpen("path", path) {
+		return
+	}
 	if err := mygo.Shell.OpenPath(path); err != nil {
 		a.toast(locales.ToastOpenFailed(err.Error()))
 	}
@@ -32,13 +57,21 @@ func (a *App) openPath(path string) {
 
 // openExternal opens a link in the browser.
 func (a *App) openExternal(url string) {
+	if loggedOpen("url", url) {
+		return
+	}
 	if err := mygo.Shell.OpenExternal(url); err != nil {
 		a.toast(locales.ToastOpenFailed(err.Error()))
 	}
 }
 
 // revealPath shows a file in the file manager.
-func revealPath(path string) { mygo.Shell.ShowItemInFolder(path) }
+func revealPath(path string) {
+	if loggedOpen("reveal", path) {
+		return
+	}
+	mygo.Shell.ShowItemInFolder(path)
+}
 
 // openTextFile opens a text file, as the configuration, which has no
 // extension to tell its app by, in the text editor.

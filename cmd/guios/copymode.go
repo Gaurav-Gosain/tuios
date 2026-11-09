@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"math"
 	"regexp"
 	"strconv"
@@ -73,6 +74,9 @@ type copyMode struct {
 	// outside it, and typed what of a label has been typed.
 	hints []copyHint
 	typed string
+	// hintAction is what the hint label typed so far asks for: hintCopy,
+	// hintType or hintOpen, the strongest of its letters.
+	hintAction int
 }
 
 // copyHint is a text hint mode labels on the screen: a URL, a path, a
@@ -133,7 +137,38 @@ func (a *App) openHints() {
 	cm.message = locales.CopyModeHintsHint()
 }
 
-// hintKey takes a key in hint mode: a label's letters copy its text.
+// What a completed hint label does, as in the TUI's hints: a label copies
+// its text; typed with Shift it also types it into the pane, and with Ctrl
+// or Cmd it also opens it. The strongest of the label's letters counts.
+const (
+	hintCopy = iota
+	hintType
+	hintOpen
+)
+
+// hintLetter reads one key of hint mode: the label letter and what it asks
+// for. Shift comes as the capital letter; Ctrl and Cmd as a chord.
+func hintLetter(k string) (string, int, bool) {
+	action := hintCopy
+	for _, pre := range []string{"ctrl+", "super+"} {
+		if rest, ok := strings.CutPrefix(k, pre); ok {
+			k, action = rest, hintOpen
+		}
+	}
+	if len(k) != 1 {
+		return "", 0, false
+	}
+	if c := k[0]; c >= 'A' && c <= 'Z' {
+		if action == hintCopy {
+			action = hintType
+		}
+		k = strings.ToLower(k)
+	}
+	return k, action, true
+}
+
+// hintKey takes a key in hint mode: a label's letters copy its text, and
+// with Shift or Ctrl and Cmd type it or open it.
 func (a *App) hintKey(k string) {
 	cm := a.cm
 	if k == "esc" || k == "q" && cm.typed == "" {
@@ -144,22 +179,71 @@ func (a *App) hintKey(k string) {
 		cm.typed = cm.typed[:len(cm.typed)-1]
 		return
 	}
-	if len(k) != 1 {
+	letter, action, ok := hintLetter(k)
+	if !ok {
 		return
 	}
-	cm.typed += k
+	cm.typed += letter
+	cm.hintAction = max(cm.hintAction, action)
 	any := false
 	for _, h := range cm.hints {
 		if h.label == cm.typed {
+			pane, act := cm.pane, cm.hintAction
 			a.copyText = h.text
 			a.addBuffer(h.text)
 			a.closeCopyMode()
+			a.runHint(pane, h.text, act)
 			return
 		}
 		any = any || strings.HasPrefix(h.label, cm.typed)
 	}
 	if !any {
-		cm.typed = ""
+		cm.typed, cm.hintAction = "", hintCopy
+	}
+}
+
+// runHint does what a completed label asked for beyond the copy. The text
+// is typed into, or opened from, the pane hint mode opened on, which is the
+// screen the person read the label from, even if the focus moved since.
+func (a *App) runHint(pane, text string, action int) {
+	switch action {
+	case hintType:
+		s := a.sessionOfPane(pane)
+		if s == nil {
+			return
+		}
+		// paste: the daemon removes the control characters a pane's output
+		// can hold and brackets the text when the program asked for it, as
+		// the TUI's hints paste.
+		a.verbOn(s.ID, "send-text", map[string]any{"window": pane, "text": text, "paste": true}, func(_ json.RawMessage, err error) {
+			if err != nil {
+				a.toast(locales.HintTypeFailed(err.Error()))
+				return
+			}
+			a.toast(locales.HintTyped(utf8.RuneCountInString(text)))
+		})
+	case hintOpen:
+		if !a.set.HintsOpen {
+			a.toast(locales.HintOpenOff())
+			return
+		}
+		// What a Command+click on the same text opens, by the same rules
+		// (openLink): a path from the pane's folder, another machine's
+		// through that machine, and a URL openLink leaves with the system,
+		// as the terminal does for a click.
+		if a.openLink(pane, text) {
+			return
+		}
+		if strings.Contains(text, "://") {
+			a.openExternal(text)
+			return
+		}
+		if strings.Contains(text, "/") {
+			// A path openLink did not find from the pane's folder.
+			a.toast(locales.HintNoFile(text))
+			return
+		}
+		a.toast(locales.HintNotOpenable())
 	}
 }
 
