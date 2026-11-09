@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
@@ -280,7 +281,7 @@ func (s *Setup) Run(ctx context.Context, c Choices, a Asker) (res *Result, err e
 	case federation.StatusIncompatible:
 		said = "tuios " + p.TuiosVersion + " on " + s.name + " is too old for this machine."
 	}
-	s.emit(Event{Step: StepProbe, State: StateOK, Text: p.System + ", " + p.Arch + ". " + strings.Join(append(p.Managers, p.Service), ", ") + ". " + said, Probe: p})
+	s.emit(Event{Step: StepProbe, State: StateOK, Text: p.System + ", " + p.Arch + ". " + probeFound(p) + said, Probe: p})
 
 	// 4. Install, when it is missing or too old.
 	installed := false
@@ -351,6 +352,21 @@ func (s *Setup) testLink(ctx context.Context, h federation.Host) (federation.Hos
 		return s.opts.TestLink(ctx, h)
 	}
 	return DialOnce(ctx, h, s.opts.Version)
+}
+
+// probeFound is the sentence of what the probe found to install and start
+// tuios with: the package managers and the service manager, such as "apt,
+// systemd. ". A machine with none of them, or with no service manager, gets
+// no empty item.
+func probeFound(p *Probe) string {
+	tools := slices.Clone(p.Managers)
+	if p.Service != "" {
+		tools = append(tools, p.Service)
+	}
+	if len(tools) == 0 {
+		return ""
+	}
+	return strings.Join(tools, ", ") + ". "
 }
 
 // planDefaultInstall is the install step of a dry run with no --install:

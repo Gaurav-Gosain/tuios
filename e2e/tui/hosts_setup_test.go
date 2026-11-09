@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -221,6 +222,50 @@ func TestSetUpNamesAnUnknownHostKey(t *testing.T) {
 	}
 }
 
+// writeBareSetupSSH writes an ssh stand-in for someone@barebox: a machine
+// with no service manager and none of the tools the probe looks for. Its
+// PATH is a folder of links to every program in /usr/bin and /bin but
+// those tools, and its shell drops -l, so a login profile cannot put them
+// back on the PATH.
+func writeBareSetupSSH(t *testing.T, here, far string) string {
+	t.Helper()
+	bin := filepath.Join(far, "barebin")
+	if err := os.MkdirAll(bin, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	skip := map[string]bool{}
+	for _, name := range strings.Fields("brew pacman yay paru nix go apt-get dnf curl wget systemctl tailscale launchctl") {
+		skip[name] = true
+	}
+	for _, dir := range []string{"/usr/bin", "/bin"} {
+		entries, _ := os.ReadDir(dir)
+		for _, e := range entries {
+			if skip[e.Name()] {
+				continue
+			}
+			_ = os.Symlink(filepath.Join(dir, e.Name()), filepath.Join(bin, e.Name()))
+		}
+	}
+	shell := filepath.Join(far, "bare-sh")
+	if err := os.WriteFile(shell, []byte("#!/bin/sh\nif [ \"$1\" = -l ]; then shift; fi\nexec /bin/sh \"$@\"\n"), 0o700); err != nil { //nolint:gosec // a login shell stand-in this test runs
+		t.Fatal(err)
+	}
+	var b strings.Builder
+	b.WriteString("#!/bin/sh\nwhile [ $# -gt 0 ]; do case \"$1\" in -o) shift 2 ;; -T|-t) shift ;; --) shift; break ;; *) break ;; esac; done\n")
+	b.WriteString("addr=\"$1\"\nshift\ncase \"$addr\" in\n  someone@barebox)\n")
+	for _, key := range xdgKeys {
+		fmt.Fprintf(&b, "    export %s=%s\n", key, xdgDir(far, key))
+	}
+	fmt.Fprintf(&b, "    export PATH=%s SHELL=%s\n    ;;\n", bin, shell)
+	b.WriteString("  *) echo \"ssh: Could not resolve hostname $addr: Name or service not known\" >&2; exit 255 ;;\nesac\n")
+	b.WriteString("exec /bin/sh -c \"$*\"\n")
+	ssh := filepath.Join(here, "fake-ssh-bare")
+	if err := os.WriteFile(ssh, []byte(b.String()), 0o700); err != nil { //nolint:gosec // an ssh stand-in this test runs
+		t.Fatalf("write the ssh stand-in: %v", err)
+	}
+	return ssh
+}
+
 // TestSetUpDryRunWithNoInstallChoice runs the dry run the docs show first,
 // with no --install, against a machine that has no tuios. A dry run changes
 // nothing, so it has no reason to stop for the choice: it shows the plan of
@@ -265,6 +310,24 @@ func TestSetUpDryRunWithNoInstallChoice(t *testing.T) {
 	}
 	if r := decodeSetup(t, out); r.Installed != "copy" {
 		t.Errorf("ASSERTION: the JSON dry run plans the install %q, want copy, the first choice:\n%s", r.Installed, out)
+	}
+
+	// A machine with no service manager and no package manager: the probe's
+	// line names what it found and has no empty item. It once read
+	// "go, . tuios is not installed", and with nothing found ". .".
+	bare := []string{"TUIOS_SSH=" + writeBareSetupSSH(t, here, far)}
+	out, err = tuiosCLIEnv(t, here, bare, "hosts", "setup", "someone@barebox", "--name", "bare", "--dry-run")
+	t.Logf("tuios hosts setup someone@barebox --dry-run:\n%s", out)
+	_ = os.WriteFile(filepath.Join(dir, "dry-run-bare.txt"), []byte(out), 0o644)
+	if err != nil {
+		t.Errorf("ASSERTION: the dry run to barebox failed (exit %d)", exitStatus(err))
+	}
+	probeLine, _, _ := strings.Cut(out, "\n")
+	if !strings.Contains(probeLine, "tuios is not installed on bare.") {
+		t.Errorf("ASSERTION: the first line is not the probe of barebox: %q", probeLine)
+	}
+	if regexp.MustCompile(`(, |\. )\.`).MatchString(probeLine) {
+		t.Errorf("ASSERTION: the probe line has an empty item: %q", probeLine)
 	}
 }
 

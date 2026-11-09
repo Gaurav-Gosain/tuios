@@ -16036,7 +16036,8 @@ docs show first, to a machine with no tuios and no `--install`. The dry run
 shows the plan of the first install choice, names it and the other choices by
 their flags, and exits 0. Before the fix it exited 2 with "Pass --install copy,
 release, pkg or script" and the fix "run with --dry-run to see each command",
-the flag it was run with.
+the flag it was run with. A second step runs the dry run to barebox, a
+machine with no service manager, whose probe line once had an empty item.
 
 Run on 2026-11-09 on Linux (golang:1.27-alpine, arm64). The probe finds a
 Homebrew tuios on a Mac, so the far machine is not without tuios there. The
@@ -16045,6 +16046,7 @@ branch passes, with the other `TestSetUp` tests.
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
 | Main (c29f871bf) | "a dry run with no --install failed (exit 2)", "the dry run's fix tells the person to pass --dry-run, which they did", and the JSON dry run plans the install "" | **caught** |
+| The probe line's fix removed (the parent commit a1cc9d943) | the barebox step: "the probe line has an empty item: \"Alpine Linux v3.24, arm64. go, . tuios is not installed on bare.\"" | **caught** |
 | The fix's hint guard alone removed (`setupExit` adds the fix in a dry run again) | passes: with the engine fix no dry run stops for a choice, so the hint is not reached | not a control; the guard is kept so a later choice cannot bring the hint back |
 
 Repeat from `e2e/tui` on Linux with
