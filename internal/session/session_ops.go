@@ -289,6 +289,10 @@ type NewWindowOptions struct {
 	// for the window, empty for none. With Focus set, the focus move counts
 	// as that client's own. See pushOwnsFocusLocked.
 	focusAskedBy string
+	// caller is the connection that ran the command, for an Action that
+	// runs as a layout op through its verbs (daemon_actions.go). Nil runs
+	// none of those.
+	caller *connState
 	// closeAskedBy names who asked for a CloseWindow command, for the line
 	// the close writes to the log (see CloseDaemonWindow).
 	closeAskedBy string

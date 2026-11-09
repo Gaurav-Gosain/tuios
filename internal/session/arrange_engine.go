@@ -713,18 +713,32 @@ func arrangeFit(rects map[int]layout.Rect) float64 {
 
 // masterOp changes the master-stack shape, as the TUI's master actions do.
 func (e *engine) masterOp(p ArrangeParams) error {
-	if e.ti.Mode() != ArrangeModeMaster {
+	// As the TUI's: the shape is kept for the workspace in any tiled layout
+	// and shows in master-stack. Only the swap needs master-stack on.
+	if e.ti.Mode() == ArrangeModeFloating || (p.Op == "master.swap" && e.ti.Mode() != ArrangeModeMaster) {
 		return nil
 	}
 	mp := e.ti.MasterParams()
 	t := ArrangeTiled(e.wins)
 	switch p.Op {
 	case "master.position":
-		i := slices.Index(config.MasterPositions, mp.Position)
-		e.set("master_position", config.MasterPositions[(i+1)%len(config.MasterPositions)])
+		// Mode names the side (set_master_position_SIDE); without it the
+		// masters go to the next side (cycle_master_position).
+		next := p.Mode
+		if next == "" {
+			i := slices.Index(config.MasterPositions, mp.Position)
+			next = config.MasterPositions[(i+1)%len(config.MasterPositions)]
+		} else if !slices.Contains(config.MasterPositions, next) {
+			return errors.New("no such master position: " + next)
+		}
+		e.set("master_position", next)
 		e.set("master_count", mp.Count)
 	case "master.add", "master.remove":
+		// As the TUI's AddMaster: no more masters than tiled panes.
 		n := mp.Count + 1
+		if p.Op == "master.add" && mp.Count >= len(t) {
+			n = mp.Count
+		}
 		if p.Op == "master.remove" {
 			n = mp.Count - 1
 		}

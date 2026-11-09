@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -38,6 +39,20 @@ func (m *OS) SendsDaemonAction(action string) bool {
 		return !strings.HasPrefix(action, "focus_") && !strings.HasPrefix(action, "terminal_focus_") &&
 			m.AutoTiling && m.LayoutModeName() == LayoutModeBSP && !m.SidebarFocused
 	}
+	if session.IsLayoutAction(action) {
+		// Batch C1: the layout shape keys. resize_master_grow and shrink
+		// are a width step, sent in the split layout only, as the swap
+		// and resize steps are.
+		if action == "resize_master_grow" || action == "resize_master_shrink" {
+			return m.AutoTiling && m.LayoutModeName() == LayoutModeBSP && !m.SidebarFocused
+		}
+		// Tiling on and off and the next layout stay here: this client's
+		// switch settles the panes' sizes, the border mode and the tiled
+		// flags in one step (settleSizes), which a push does not repeat, and
+		// a pane resized once more or drawn with floating corners came of
+		// it. A toggle is not a step two clients can lose.
+		return action != "toggle_tiling" && action != "cycle_layout"
+	}
 	if !session.IsDaemonAction(action) {
 		return false
 	}
@@ -59,6 +74,41 @@ func (m *OS) SendDaemonAction(action string) {
 	if err := m.DaemonClient.SendIntent("Action", action); err != nil {
 		m.focusEnterPending = false
 		m.ShowNotification("Could not reach the daemon: "+err.Error(), "error", m.Settings.NotificationDuration)
+		return
+	}
+	m.announceLayoutAction(action)
+}
+
+// announceLayoutAction shows the dock message the key's handler showed, for
+// a layout action sent to the daemon. Each is worked out from this client's
+// state as the handler did, since the daemon runs the same step on it.
+func (m *OS) announceLayoutAction(action string) {
+	d := m.Settings.NotificationDuration
+	ws := m.CurrentWorkspace
+	if !m.AutoTiling {
+		return
+	}
+	switch action {
+	case "rotate_split":
+		m.ShowNotification("Split rotated", "info", d)
+	case "equalize_splits":
+		m.ShowNotification("Splits equalized", "info", d)
+	case "cycle_master_position":
+		pos := m.masterLayoutFor(ws).Position
+		i := slices.Index(config.MasterPositions, pos)
+		m.ShowNotification(MasterPositionMessage(m, config.MasterPositions[(i+1)%len(config.MasterPositions)]), "info", d)
+	case "add_master":
+		n := m.masterLayoutFor(ws).Count
+		if n < len(m.tilablePanes(ws)) {
+			n++
+		}
+		m.ShowNotification(MasterCountMessage(m, config.ClampMasterCount(n)), "info", d)
+	case "remove_master":
+		m.ShowNotification(MasterCountMessage(m, config.ClampMasterCount(m.masterLayoutFor(ws).Count-1)), "info", d)
+	default:
+		if pos, ok := strings.CutPrefix(action, "set_master_position_"); ok && config.IsMasterPosition(pos) {
+			m.ShowNotification(MasterPositionMessage(m, pos), "info", d)
+		}
 	}
 }
 
