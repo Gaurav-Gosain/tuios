@@ -427,6 +427,46 @@ func helpPressLabel(press string) string {
 	return strings.Join(parts, " ")
 }
 
+// helpToggleChord spells the chord that opens help mode, for the footer that
+// names the way out. The way in is the way out: PressesByAction's press for
+// prefix_help_mode, the leader included and spelled as the config sets it, or
+// Shift+F1 when that prefix mode carries none. Empty when neither is bound, so
+// the footer promises only a key that runs.
+func (m *OS) helpToggleChord() string {
+	if m.KeybindRegistry == nil {
+		return ""
+	}
+	var chord string
+	for _, press := range config.PressesByAction(m.KeybindRegistry)["prefix_help_mode"] {
+		if press != "" {
+			chord = helpPressLabel(press)
+			break
+		}
+	}
+	if chord == "" {
+		for _, press := range config.PressesByAction(m.KeybindRegistry)["toggle_help_mode"] {
+			if press != "" {
+				chord = helpPressLabel(press)
+				break
+			}
+		}
+	}
+	return chord
+}
+
+// shellQuote puts a pane name in single quotes for the shell examples the
+// pane lists, unless the shell would leave it whole anyway: a name with no
+// space and no shell metacharacter comes back as it is, and one with either,
+// or an empty one, is quoted. A name in another script is written as it is, a
+// UTF-8 pi or a box glyph being a word to the shell like any letter. A single
+// quote inside is closed, escaped and reopened.
+func shellQuote(s string) string {
+	if s != "" && !strings.ContainsAny(s, " \t\n'\"`$\\&|;<>()*?[]{}!~#") {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
 func helpCap(keys []helpKey, n int) []helpKey {
 	if len(keys) <= n {
 		return keys
@@ -1046,7 +1086,7 @@ func (m *OS) helpPaneComponent(w *terminal.Window, rect image.Rectangle) helpCom
 		cli: []string{
 			"tuios split-window vertical",
 			"tuios set-layout <layout>",
-			"tuios close-window " + name,
+			"tuios close-window " + shellQuote(name),
 			"tuios set-config appearance.border_style rounded",
 		},
 		rect: rect,
@@ -1097,9 +1137,13 @@ func (m *OS) helpPaneContentComponent(w *terminal.Window, rect image.Rectangle) 
 			"prefix_selection", "prefix_screenshot", "prefix_split_vertical",
 			"prefix_split_horizontal", "prefix_fullscreen", "prefix_close_window",
 			"prefix_scrollback", "prefix_toggle_tiling"),
+		// A pane's name can hold spaces, so the name the CLI is given is
+		// quoted in every example that passes one: unquoted, the shell splits
+		// it and the verb addresses a word that matches no pane. The name is
+		// this pane's, quoted for the shell, so the line runs as it reads.
 		cli: []string{
 			"tuios send-keys <text>",
-			"tuios capture-pane <name>",
+			"tuios capture-pane -w " + shellQuote(name),
 			"tuios set-config appearance.dim_unfocused 20",
 			"tuios set-config appearance.border_focused_color_window <colour>",
 		},
