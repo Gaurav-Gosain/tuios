@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -721,7 +722,7 @@ func (a *App) toolsItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, m
 			order = append(order, e.Tool)
 		}
 		counts[e.Tool]++
-		targets = append(targets, e.Target)
+		targets = append(targets, ckRelPath(e.Target, th.agent.Cwd))
 	}
 	var head []string
 	for _, t := range order {
@@ -739,7 +740,7 @@ func (a *App) toolsItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, m
 		for _, e := range it.calls {
 			ui.Row(c).Gap(8).Children(func() {
 				ui.Text(c, e.Tool).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.textMuted).Shrink(0)
-				ui.Text(c, e.Target).Font(mono).FontSize(fsSmall).TextColor(pal.text).MinWidth(0)
+				ckPathText(c, e.Target, th.agent.Cwd).Font(mono).FontSize(fsSmall).TextColor(pal.text).MinWidth(0)
 			})
 		}
 	})
@@ -758,7 +759,7 @@ func (a *App) toolItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, mo
 	}
 	a.foldItem(c, pal, th, it, func() {
 		ui.Text(c, tool).FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text).Shrink(0)
-		ui.Text(c, it.e.Target).Font(mono).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
+		ckPathText(c, it.e.Target, th.agent.Cwd).Font(mono).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
 		if failed {
 			ui.Text(c, locales.CockpitFailedPill()).FontSize(fsCaption).FontWeight(wSemibold).TextColor(pal.danger).Padding(1, 7).Radius(rChip).Background(pal.danger.Alpha(0.14))
 		} else {
@@ -838,7 +839,7 @@ func (a *App) editItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, mo
 			}
 			ui.Icon(c, ic).Size(12, 12).TextColor(pal.textFaint)
 			ui.Text(c, it.e.Tool).FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text)
-			ui.Text(c, d.File).Font(mono).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
+			ckPathText(c, d.File, th.agent.Cwd).Font(mono).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
 			added, removed := a.diffColorsFor(pal)
 			if d.Added > 0 {
 				ui.Text(c, fmt.Sprint("+", d.Added)).Font(mono).FontSize(fsSmall).TextColor(added)
@@ -1197,4 +1198,28 @@ func (a *App) integrationMissing(c *ui.Context, harness string) bool {
 		}()
 	}
 	return in.missing[harness]
+}
+
+// ckRelPath is a call's target as the thread shows it: a path under the
+// agent's folder from that folder ("api/retry.go"), as the TUI and
+// Conductor show it, anything else as it is.
+func ckRelPath(target, cwd string) string {
+	if cwd == "" || !filepath.IsAbs(target) {
+		return target
+	}
+	if r, err := filepath.Rel(cwd, target); err == nil && r != "." && !strings.HasPrefix(r, "..") {
+		return r
+	}
+	return target
+}
+
+// ckPathText is a target drawn short (ckRelPath), with the full path on
+// hover when it was cut.
+func ckPathText(c *ui.Context, target, cwd string) ui.Element {
+	short := ckRelPath(target, cwd)
+	t := ui.Text(c, short)
+	if short != target {
+		t.Tooltip(target)
+	}
+	return t
 }

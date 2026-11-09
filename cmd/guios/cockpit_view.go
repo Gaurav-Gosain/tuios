@@ -448,12 +448,7 @@ func ckLine2(ag client.Agent, it *session.AttentionItem) (verb, rest string) {
 // command, "Editing" and the file, the file shown from the agent's folder.
 func ckNowWords(now, cwd string) (verb, rest string) {
 	tool, target, _ := strings.Cut(now, ": ")
-	short := target
-	if filepath.IsAbs(target) && cwd != "" {
-		if r, err := filepath.Rel(cwd, target); err == nil && !strings.HasPrefix(r, "..") {
-			short = r
-		}
-	}
+	short := ckRelPath(target, cwd)
 	switch {
 	case ckCommand(tool):
 		return locales.CockpitNowRunning(), target
