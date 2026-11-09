@@ -84,10 +84,15 @@ type windowRow struct {
 	// says the window stays after that (new-window keep_open). A daemon
 	// from before these fields sends neither, and guios closes none of its
 	// windows (exits.go).
-	Exited   bool `json:"exited"`
-	ExitCode int  `json:"exit_code"`
-	Signal   int  `json:"signal"`
-	KeepOpen bool `json:"keep_open"`
+	// Kind and URI name a window a native renderer draws, and what it
+	// shows: kind web is a browser pane on the page in uri. Empty for a
+	// terminal.
+	Kind     string `json:"kind"`
+	URI      string `json:"uri"`
+	Exited   bool   `json:"exited"`
+	ExitCode int    `json:"exit_code"`
+	Signal   int    `json:"signal"`
+	KeepOpen bool   `json:"keep_open"`
 }
 
 // stateKeeper builds the state and keeps it current from the daemon's events.
@@ -345,6 +350,17 @@ func (k *stateKeeper) pane(w windowRow) proto.Pane {
 	}
 	if w.Agent == "working" && w.AgentReason == "silent" {
 		p.AgentState = "unknown"
+	}
+	if w.Kind == "web" {
+		// A browser pane, drawn by the app's web view (proto.Pane.Browser).
+		// Its program is the daemon's placeholder: its title ("Terminal
+		// …") and its process (sleep) say nothing of the page, so the pane
+		// is named by its page, unless the person named it.
+		p.URL = w.URI
+		p.Process, p.Running = "", false
+		if !p.Named {
+			p.Title = ""
+		}
 	}
 	// A pane named by the person or its program shows that name: kero
 	// shows a pane's title while a program runs in it.

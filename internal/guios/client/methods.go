@@ -70,6 +70,20 @@ func (c *Client) dispatch(method string, params any) (any, error) {
 		}
 		return c.split(p)
 
+	case "pane.page":
+		// The page a browser pane moved to, kept by the daemon as the web
+		// window's uri, so a restore and every other client open it.
+		p, err := decode[proto.PageParams](params)
+		if err != nil {
+			return nil, err
+		}
+		_, name, ok := c.st.lookup(p.ID)
+		if !ok {
+			return nil, errors.New("no such pane")
+		}
+		_, err = c.verb("set-window", map[string]any{"session": name, "window": p.ID, "uri": p.URL})
+		return true, err
+
 	case "close":
 		p, err := decode[proto.CloseParams](params)
 		if err != nil {
@@ -432,6 +446,14 @@ func (c *Client) split(p proto.CreateParams) (proto.Session, error) {
 		beside = ""
 	}
 	params := map[string]any{"session": name}
+	if p.URL != "" {
+		// A browser pane: a window of kind web, which guios draws with its
+		// web view. Its program is the daemon's placeholder, which prints
+		// the page for a terminal client; it takes no folder, command or
+		// environment.
+		params["kind"], params["uri"] = "web", p.URL
+		p.Dir, p.Command, p.Host = "", nil, ""
+	}
 	dir := p.Dir
 	if dir == "" && beside != "" && p.Host == "" {
 		// A pane on another machine starts in its home there: this
@@ -447,7 +469,7 @@ func (c *Client) split(p proto.CreateParams) (proto.Session, error) {
 	if len(p.Command) > 0 {
 		params["command"] = p.Command
 	}
-	if env := paneEnv(); env != nil && c.host == "" && p.Host == "" {
+	if env := paneEnv(); env != nil && c.host == "" && p.Host == "" && p.URL == "" {
 		params["env"] = env
 	}
 	// The side the new pane takes, or "" for the side the layout picks:
@@ -467,7 +489,7 @@ func (c *Client) split(p proto.CreateParams) (proto.Session, error) {
 	// itself, so the split goes through it: a tree written here would race
 	// the one it writes for the new pane. A pane the daemon makes splits
 	// the focused pane there, so the focus goes first.
-	if ti.tui && beside != "" && len(p.Command) == 0 && p.Ratio == 0 && p.Host == "" {
+	if ti.tui && beside != "" && len(p.Command) == 0 && p.Ratio == 0 && p.Host == "" && p.URL == "" {
 		if dirn != "" && ti.useTree {
 			if _, err := c.verb("split-window", map[string]any{"session": name, "window": beside, "side": dirn}); err == nil {
 				return c.sessionNamed(name, sid)

@@ -16178,3 +16178,20 @@ step for the workspace switch's focus: with the step 1 build it fails at
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHeadlessDirectionActions$' -v .`.
+
+## TestGuiosBrowserPaneIsAWebWindow
+
+guios's New browser pane on a tuios daemon (guios polish wave 1, item 5): the
+guios client's split with a URL must make a window of kind web on that page,
+pane.page must move its uri (set-window uri), and the uri must come back
+after a daemon restart.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| guios/land (0460c4e72) | "the split with a URL: the session's native windows are [], want one of kind web" | **caught** |
+| The daemon without set-window uri | "the page the client reported: ... URI:https://example.com/first ... want ... second" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestGuiosBrowserPaneIsAWebWindow$' -v .`.

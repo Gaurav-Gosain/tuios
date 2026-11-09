@@ -303,7 +303,11 @@ func (a *App) paneRow(c *ui.Context, pal *palette, s *proto.Session, p *proto.Pa
 	row.Children(func() {
 		ui.Row(c).Width(12).Shrink(0).Justify(ui.Center).Children(func() {
 			if p.Status == proto.Idle && !p.Unread {
-				ui.Icon(c, terminalIcon).Size(12, 12).TextColor(pal.textFaint)
+				icon := terminalIcon
+				if p.Browser() {
+					icon = globeIcon
+				}
+				ui.Icon(c, icon).Size(12, 12).TextColor(pal.textFaint)
 			} else {
 				statusIconP(c, pal, p.Status, p.Unread, p.Progress, 12)
 			}
