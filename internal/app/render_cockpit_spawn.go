@@ -18,11 +18,12 @@ import (
 // frame d. At 120 columns and wider the machines sit beside the fields; on a
 // narrower screen they follow them, one line each.
 
-// The sheet's glyphs: a control that opens a list, the picked radio and
+// The sheet's glyphs: a control that opens a list (the down mark every
+// dropdown control in the chrome ends in, the one ckGlyphOpen is), the picked radio and
 // machine, the bar beside the picked machine, and a load cell full and
 // empty.
 var (
-	ckGlyphExpand = ckGlyph{"", "v", "v"}
+	ckGlyphExpand = ckGlyph{"\ueab4", "˅", "v"}
 	ckGlyphPicked = ckGlyph{"●", "●", "*"}
 	ckGlyphBar    = ckGlyph{"▌", "▌", "|"}
 	ckGlyphLoad   = ckGlyph{"■", "■", "#"}
