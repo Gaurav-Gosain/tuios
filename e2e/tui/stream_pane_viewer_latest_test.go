@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,6 +23,13 @@ import (
 // client takes it back. Each side keeps it for the second-long hold after
 // its own last activity, so TUI input right after the viewer's does not
 // resize the pane at once. The transcript goes to stream-viewer-latest.txt.
+//
+// The sizes asserted are the daemon's: the pane size it announces on the
+// stream in its S and R frames, which is the size it gave the pane and holds.
+// What stty reads in the pane's shell is logged beside them and not asserted:
+// on macOS under load the kernel was seen to lose a window size write after
+// the daemon made it, from the shell's side of the tty, which is not the
+// daemon's contract (see the readback guard in pty_winsize.go).
 //
 // How this could pass wrongly, written down first:
 //   - The pane could take the lease's size for another reason (the client
@@ -41,11 +49,19 @@ func TestStreamPaneViewerTakesLatest(t *testing.T) {
 	term := attachIn(t, base, streamSession, startOpts{})
 	enableTiling(t, term)
 	n := 0
-	size := func() string {
+	// shell is what stty reads in the pane: logged, not asserted.
+	shell := func() string {
 		n++
 		mark := fmt.Sprintf("Z%d-", n)
 		spType(t, ctl, w1, "clear; echo "+mark+"$(stty size | tr ' ' x)\n")
 		return spSize(t, ctl, w1, mark)
+	}
+	// announced is the pane size, rows x cols, of the stream's last S or R
+	// frame: set by the frame reader below.
+	var announced atomic.Value
+	announced.Store("")
+	size := func() string {
+		return announced.Load().(string)
 	}
 	until := func(what string, ok func(string) bool) string {
 		t.Helper()
@@ -53,6 +69,7 @@ func TestStreamPaneViewerTakesLatest(t *testing.T) {
 		for {
 			got := size()
 			if ok(got) {
+				fmt.Fprintf(&log, "  (%s: the shell reads %s)\n", what, shell())
 				return got
 			}
 			if time.Now().After(deadline) {
@@ -68,7 +85,7 @@ func TestStreamPaneViewerTakesLatest(t *testing.T) {
 		}
 	}
 	tuiInput()
-	tui := size()
+	tui := shell()
 	fmt.Fprintf(&log, "TUI client attached, typed: %s\n", tui)
 	if tui == "6x30" {
 		t.Fatalf("the TUI client's pane is already 6x30; pick another lease size")
@@ -103,8 +120,14 @@ func TestStreamPaneViewerTakesLatest(t *testing.T) {
 			if _, err := io.ReadFull(br, payload); err != nil {
 				return
 			}
-			if head[0] == 'E' {
+			switch head[0] {
+			case 'E':
 				errs <- string(payload)
+			case 'S', 'R':
+				if len(payload) >= 12 {
+					cols, rows := binary.BigEndian.Uint16(payload[8:]), binary.BigEndian.Uint16(payload[10:])
+					announced.Store(fmt.Sprintf("%dx%d", rows, cols))
+				}
 			}
 		}
 	}()

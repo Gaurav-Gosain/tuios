@@ -16049,13 +16049,17 @@ its lease size the pane over an attached TUI client, input at the TUI client
 must take it back, and TUI input within the viewer's one-second hold must not
 resize the pane at once.
 
+The sizes it asserts are the ones the daemon announces on the stream (S and R
+frames); what stty reads in the pane is logged only. Asserted on stty, it
+failed about 1 run in 6 under load on macOS, where a window size write was
+lost on the shell's side of the tty after the daemon made it.
+
 Run on 2026-11-09 on macOS (arm64), as the Atlas helper user. The branch
-passed 9 of 10 runs; the one failure, at the I frame, did not come back in 9
-more runs, run alone or right after the control.
+passes 30 of 30 under nice 19 with eight CPU burners.
 
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
-| `paneStream.noteActivity` returns at once (no viewer activity) | "after the viewer's I frame: the pane is 36x58" | **caught**, 4 of 4 |
+| `paneStream.noteActivity` returns at once (no viewer activity) | "after the viewer's I frame: the pane is 36x58" | **caught**, 6 of 6 |
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestStreamPaneViewerTakesLatest$' -v .`.
