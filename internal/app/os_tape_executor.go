@@ -1218,22 +1218,12 @@ func (m *OS) ShowCommandPaletteExec() error {
 
 // SaveLayoutExec saves the current layout with the given name (tape executor interface).
 func (m *OS) SaveLayoutExec(name string) error {
-	return SaveLayoutTemplate(name, m)
+	return m.LayoutTemplateNow("save", name)
 }
 
 // LoadLayoutExec loads a saved layout by name (tape executor interface).
 func (m *OS) LoadLayoutExec(name string) error {
-	templates, err := LoadLayoutTemplates()
-	if err != nil {
-		return errfmt.Errorf("failed to load layout templates: %w", err)
-	}
-	for _, t := range templates {
-		if t.Name == name {
-			ApplyLayoutTemplate(t, m)
-			return nil
-		}
-	}
-	return errfmt.Errorf("layout template not found: %s", name)
+	return m.LayoutTemplateNow("load", name)
 }
 
 // startRemoteSendKeys initiates sequential key processing for remote send-keys.

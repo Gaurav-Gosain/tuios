@@ -16339,3 +16339,36 @@ branch passes, five runs of five.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=5 -run '^TestPairOversizeBodySentLateGetsItsReply$' -v .`.
+
+## TestLayoutTemplateSaveAndLoadInTheDaemon
+
+A three-pane split layout (right, then down on the right pane at 30 percent),
+each pane named and in a folder of its own, saved with tuios layout save. Two
+panes are closed and tuios layout load, with no client attached, opens them
+again in their folders with their names, and puts every pane back on the
+rectangle it had at the save.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (b90a592bb), with no layout-template verb and no tuios layout save | "tuios layout save three -s tmpl: exit status 1" | **caught** |
+| The branch with the load's tree step turned off, so the panes go in by the scheme | "right is at 40,0 40x12, not where it was saved, 40,0 40x16" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestLayoutTemplateSaveAndLoadInTheDaemon$' -v .`.
+
+## TestTheTUISavesItsLayoutThroughTheDaemon
+
+An attached client with two panes saves a layout with prefix L s. The file is
+the daemon's version 3 with the split tree, and the CLI loads it back onto the
+two panes.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The branch with the client's save on its own writer (daemonLayouts false) | "the TUI's save did not go through the daemon (no version 3 file with a tree)" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTheTUISavesItsLayoutThroughTheDaemon$' -v .`.

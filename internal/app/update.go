@@ -2651,6 +2651,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case SessionOrderAppliedMsg:
 		return m, m.applySessionOrderResult(msg)
 
+	case LayoutTemplateDoneMsg:
+		m.handleLayoutTemplateDone(msg)
+		return m, nil
+
 	case StripSnapMsg:
 		if m.SnapStrip(msg) && m.IsDaemonSession {
 			m.SyncStateToDaemon()

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/layouttmpl"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -36,6 +38,10 @@ func SaveLayoutTemplate(name string, m *OS) error {
 	// with panes of the workspace's size.
 	if m.InScratchView() {
 		return errLayoutInScratch
+	}
+	if m.daemonLayouts() {
+		m.queueTMLCmd(m.layoutTemplateCmd("save", name))
+		return nil
 	}
 	tmpl := LayoutTemplate{
 		Name:         name,
@@ -83,6 +89,79 @@ func SaveLayoutTemplate(name string, m *OS) error {
 	return layouttmpl.Save(tmpl)
 }
 
+// LayoutTemplateDoneMsg reports a layout save or load the daemon ran for
+// this client.
+type LayoutTemplateDoneMsg struct {
+	Action, Name string
+	Err          error
+}
+
+// daemonLayouts reports whether a save or a load goes to the daemon. The
+// daemon writes and reads the files of its own machine and changes the
+// session's state in one step, so every client of the session sees one
+// layout, and an attach to another host uses that host's layouts.
+func (m *OS) daemonLayouts() bool {
+	return m.IsDaemonSession && m.DaemonClient != nil && m.SessionName != ""
+}
+
+// layoutTemplateCmd calls the layout-template verb off the Update goroutine,
+// as sessionOrderCmd does. The state push that follows a load lays the
+// panes out.
+func (m *OS) layoutTemplateCmd(action, name string) tea.Cmd {
+	call := m.layoutTemplateCall()
+	return func() tea.Msg {
+		return LayoutTemplateDoneMsg{Action: action, Name: name, Err: call(action, name)}
+	}
+}
+
+// layoutTemplateCall returns a call of the layout-template verb for this
+// client's session, which holds nothing of the model.
+func (m *OS) layoutTemplateCall() func(action, name string) error {
+	host, build, sess := m.AttachedHost, m.DaemonClient.ClientVersion(), m.SessionName
+	return func(action, name string) error {
+		c, err := dialSessionDaemon(host, build)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = c.Close() }()
+		_, err = c.Call("layout-template", map[string]any{"action": action, "session": sess, "name": name})
+		return err
+	}
+}
+
+// LayoutTemplateNow saves ("save") or loads ("load") the layout called name
+// and returns when it is done: for a caller that answers only after the
+// layout is written or applied, such as a tape command or the GUI bridge,
+// which has no Bubble Tea loop to run a command on.
+func (m *OS) LayoutTemplateNow(action, name string) error {
+	if m.InScratchView() {
+		return errLayoutInScratch
+	}
+	if m.daemonLayouts() {
+		return m.layoutTemplateCall()(action, name)
+	}
+	switch action {
+	case "save":
+		return SaveLayoutTemplate(name, m)
+	case "load":
+		t, err := layouttmpl.Load(name)
+		if err != nil {
+			return errfmt.Errorf("layout template not found: %s", name)
+		}
+		ApplyLayoutTemplate(t, m)
+		return nil
+	}
+	return errfmt.Errorf("%s is not a layout action", action)
+}
+
+// handleLayoutTemplateDone shows a save or load the daemon refused.
+func (m *OS) handleLayoutTemplateDone(msg LayoutTemplateDoneMsg) {
+	if msg.Err == nil {
+		return
+	}
+	m.ShowNotification(fmt.Sprintf("Failed to %s layout %s: %v", msg.Action, msg.Name, msg.Err), "error", m.Settings.NotificationDuration)
+}
+
 // LoadLayoutTemplates reads all templates from the layouts directory.
 func LoadLayoutTemplates() ([]LayoutTemplate, error) { return layouttmpl.List() }
 
@@ -90,6 +169,10 @@ func LoadLayoutTemplates() ([]LayoutTemplate, error) { return layouttmpl.List() 
 func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 	if m.InScratchView() {
 		m.ShowNotification(errLayoutInScratch.Error(), "warning", m.Settings.NotificationDuration)
+		return
+	}
+	if m.daemonLayouts() {
+		m.queueTMLCmd(m.layoutTemplateCmd("load", tmpl.Name))
 		return
 	}
 	// Collect existing windows in current workspace (reuse them instead of killing)
