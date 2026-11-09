@@ -678,7 +678,7 @@ Run on 2026-10-17 on Linux arm64, in a Debian 13 container (Go 1.26.9, `CGO_ENAB
 
 ### 7.3 What a window holds outside the session state (handoff version 4)
 
-The session state, the pane records and the daemon record of versions 2 and 3 carried the screen, the stream and every field of `WindowState`. What the daemon holds about a window, a pane or a session outside those was rebuilt fresh by the new image, or not at all. Version 4 carries the part of it a person or a program can see. The inventory, field by field (`PTY` in `internal/session/session.go`, `Session` beside it, `Daemon` in `daemon.go`):
+The session state, the pane records and the daemon record of versions 2 and 3 carried the screen, the stream and every field of `WindowState`. What the daemon holds about a window, a pane or a session outside those was rebuilt fresh by the new image, or not at all. Version 3 already carries one such record, the cards this daemon's panes hold on other machines (`far_holds`), and rebuilds the other task state from the cards (`loadStores`); version 4 reads it as written. Version 4 carries the part of it a person or a program can see. The inventory, field by field (`PTY` in `internal/session/session.go`, `Session` beside it, `Daemon` in `daemon.go`):
 
 | Field | Carried in v3 | Visible if lost | Decision |
 |---|---|---|---|
