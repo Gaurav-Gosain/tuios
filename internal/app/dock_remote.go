@@ -42,6 +42,7 @@ func (m *OS) QueueRemoteCommand(payload *session.RemoteCommandPayload) bool {
 		ConfigValue:  payload.ConfigValue,
 		ConfigNoSave: payload.ConfigNoSave,
 		RequestID:    payload.RequestID,
+		afterSync:    m.stateSyncsArrived.Load(),
 	}
 	select {
 	case m.RemoteCommandChan <- msg:

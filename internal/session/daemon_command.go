@@ -127,7 +127,7 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 		if why != "" && cs.isTUIClient {
 			// An ssh runs there and is not followed. The client that asked
 			// says why on its dock.
-			_ = d.sendMessage(cs, MsgRemoteCommand, &RemoteCommandPayload{CommandType: "notice", TapeArgs: []string{why}})
+			_ = d.sendInBroadcastOrder(cs, MsgRemoteCommand, &RemoteCommandPayload{CommandType: "notice", TapeArgs: []string{why}})
 		}
 		if ok {
 			newWindowEnv = env
@@ -267,7 +267,7 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 		d.wakes.cleanup.Set()
 	}
 
-	if err := d.sendMessage(tuiClient, MsgRemoteCommand, remoteCmd); err != nil {
+	if err := d.sendInBroadcastOrder(tuiClient, MsgRemoteCommand, remoteCmd); err != nil {
 		if forwarded {
 			d.pendingRequestsMu.Lock()
 			delete(d.pendingRequests, payload.RequestID)
@@ -361,7 +361,7 @@ func (d *Daemon) routeToTUISync(tui *connState, requestID string, cmd *RemoteCom
 		d.pendingRequestsMu.Unlock()
 	}
 
-	if err := d.sendMessage(tui, MsgRemoteCommand, cmd); err != nil {
+	if err := d.sendInBroadcastOrder(tui, MsgRemoteCommand, cmd); err != nil {
 		clearPending()
 		return nil, errfmt.Errorf("failed to reach the attached client: %w", err)
 	}

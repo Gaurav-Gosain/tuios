@@ -16284,3 +16284,31 @@ Run on 2026-11-10 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTuiosGitTakesNoOptionalLock$' -v .`.
+
+## A focus key right after a command focus
+
+`TestFocusKeyRightAfterACommandFocus` runs focus-window on the top right of
+four tiled panes, waits for the client to draw it, and presses ctrl+b left,
+five times. focus-window moves the daemon's focus and then routes a command
+to the client to reveal the pane. When the command reached Update before the
+state push the daemon sent ahead of it, the client drew the new focus on the
+version from before the move, the key's push carried that version, and the
+daemon refused its focus as stale: the key did nothing. That is the
+TestDirectionalFocusWrapBSP failure on a loaded Linux runner (run
+42679841917). A stress loop of the same press failed about 4 times in 100 at
+one CPU with three busy loops, and passed 300 of 300 with the fix.
+
+The test sets TUIOS_TEST_STATE_PUSH_HOLD_MS=300 (the daemon holds each state
+push before it writes it) and TUIOS_TEST_STATE_SYNC_HOLD_MS=700 (the client
+holds each state before Update takes it), so each half of the race happens
+on every round.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes, three runs of three.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The daemon writes a routed command at once, not after the broadcasts queued for the client (`sendInBroadcastOrder` is a plain `sendEncoded`) | "round 0: ctrl+b left right after focus-window ... left the focus on" the same pane | **caught** |
+| The client runs a routed command at once, not after the states that came before it (`holdRemote` never holds) | "round 0: ctrl+b left right after focus-window ... left the focus on" the same pane | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestFocusKeyRightAfterACommandFocus$' -v .`.

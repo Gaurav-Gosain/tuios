@@ -28,6 +28,7 @@ func (m *OS) QueueStateSync(sync StateSyncMsg) (displaced bool) {
 	if m.StateSyncChan == nil || sync.State == nil {
 		return false
 	}
+	sync.arrival = m.stateSyncsArrived.Add(1)
 	select {
 	case m.StateSyncChan <- sync:
 		return false
@@ -48,6 +49,7 @@ func (m *OS) QueueStateSync(sync StateSyncMsg) (displaced bool) {
 		// restart the one that arrived later wins, as it did before.
 		if queued.State != nil && queued.Attach == sync.Attach && queued.State.Name == sync.State.Name &&
 			sync.State.SnapshotSeq != 0 && queued.State.SnapshotSeq > sync.State.SnapshotSeq {
+			queued.arrival = sync.arrival
 			sync = queued
 		}
 	default:

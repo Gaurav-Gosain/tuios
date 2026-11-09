@@ -156,6 +156,10 @@ type RemoteCommandMsg struct {
 	ConfigValue  string   // For set_config
 	ConfigNoSave bool     // For set_config: apply without saving (set-config --no-save)
 	RequestID    string   // For response tracking
+	// afterSync is how many state syncs had arrived when this command did,
+	// and released marks one that waited for them. See remote_after_sync.go.
+	afterSync uint64
+	released  bool
 }
 
 // remoteSwitchSessionMsg switches this client to another session, after the
@@ -189,6 +193,9 @@ type StateSyncMsg struct {
 	// Attach is the client's attach generation when the state arrived. See
 	// TUIClient.AttachGeneration and QueueStateSync.
 	Attach uint64
+	// arrival numbers this state among the syncs that reached the client.
+	// See remote_after_sync.go.
+	arrival uint64
 }
 
 // ClientJoinedMsg is sent when another client joins the session.
@@ -542,7 +549,12 @@ func listenWindowExitsUntil(stop <-chan struct{}, exitChan chan string) tea.Cmd 
 // listenStateSyncUntil waits for the next message on its channel and returns nil once
 // stop is closed, so a session that ends leaves no listener parked.
 func listenStateSyncUntil(stop <-chan struct{}, syncChan chan StateSyncMsg) tea.Cmd {
-	return listenOnce(stop, syncChan, func(sync StateSyncMsg) tea.Msg { return sync })
+	return listenOnce(stop, syncChan, func(sync StateSyncMsg) tea.Msg {
+		if hold := stateSyncTestHold(); hold > 0 {
+			time.Sleep(hold)
+		}
+		return sync
+	})
 }
 
 // listenClientEventsUntil waits for the next message on its channel and returns nil once
@@ -2510,7 +2522,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// A state of the session this client has left describes none of
 		// the panes it now shows. Applied, it replaced them.
 		if m.staleAttach(msg.Attach) {
-			return m, listenStateSyncUntil(m.stopSignal(), m.StateSyncChan)
+			return m, tea.Batch(listenStateSyncUntil(m.stopSignal(), m.StateSyncChan), m.noteStateSyncApplied(msg.arrival))
 		}
 		// Another client updated state: apply incrementally
 		if msg.State != nil {
@@ -2574,7 +2586,13 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			}
 		}
 		// Continue listening for more state syncs
-		return m, tea.Batch(listenStateSyncUntil(m.stopSignal(), m.StateSyncChan), m.refreshSidebarSessions())
+		return m, tea.Batch(listenStateSyncUntil(m.stopSignal(), m.StateSyncChan), m.refreshSidebarSessions(), m.noteStateSyncApplied(msg.arrival))
+
+	case heldRemoteTimeoutMsg:
+		if msg.gen != m.heldRemoteGen {
+			return m, nil
+		}
+		return m, m.releaseHeldRemote(true)
 
 	case ScratchOpenedMsg:
 		m.handleScratchOpened(msg)
@@ -3208,7 +3226,15 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Execute remote command from CLI. The listener is re-armed on every
 		// path out of this case, including the early returns, or a channel-fed
 		// host would take exactly one routed verb per session.
-		relisten := listenRemoteCommandsUntil(m.stopSignal(), m.RemoteCommandChan)
+		// A command that waited for a state is run again from
+		// releaseHeldRemote, and the listener was re-armed when it came.
+		var relisten tea.Cmd
+		if !msg.released {
+			relisten = listenRemoteCommandsUntil(m.stopSignal(), m.RemoteCommandChan)
+		}
+		if held, wait := m.holdRemote(msg); held {
+			return m, tea.Batch(relisten, wait)
+		}
 		var err error
 		// persistCmd writes a routed config change to disk, off this goroutine.
 		var persistCmd tea.Cmd

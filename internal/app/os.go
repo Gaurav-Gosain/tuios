@@ -456,6 +456,14 @@ type OS struct {
 	// RemoteCommandChan carries a verb the daemon routed to this client, for
 	// the hosts that cannot Send into the program directly. See dock_remote.go.
 	RemoteCommandChan chan RemoteCommandMsg
+	// stateSyncsArrived counts the states QueueStateSync took, on the read
+	// loop. stateSyncsApplied is the newest of them Update has taken,
+	// heldRemote the routed commands that wait for one, and heldRemoteGen
+	// names the timeout armed for them. See remote_after_sync.go.
+	stateSyncsArrived atomic.Uint64
+	stateSyncsApplied uint64
+	heldRemote        []RemoteCommandMsg
+	heldRemoteGen     uint64
 	ClipboardContent  string // Store clipboard content from tea.ClipboardMsg
 	ShowCacheStats    bool   // True when showing style cache statistics overlay
 	// Quit menu state. The menu replaces the old yes/no quit dialog: a small
