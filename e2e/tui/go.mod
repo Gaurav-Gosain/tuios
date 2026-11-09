@@ -55,7 +55,7 @@ require (
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/term v0.47.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
-	tuios.dev/loom v0.2.3-0.20261107080335-c0a363ccd509 // indirect
+	tuios.dev/loom v0.2.3-0.20261109101042-5982368aa957 // indirect
 	tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8 // indirect
 	tuios.dev/progstatus v0.1.2-0.20261030111253-c0f512aa3148 // indirect
 	tuios.dev/sketch v0.4.1-0.20261106165743-fef8f8756257 // indirect

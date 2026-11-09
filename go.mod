@@ -40,7 +40,7 @@ require (
 	golang.org/x/term v0.47.0
 	golang.org/x/text v0.43.0
 	rsc.io/qr v0.2.0
-	tuios.dev/loom v0.2.3-0.20261107080335-c0a363ccd509
+	tuios.dev/loom v0.2.3-0.20261109101042-5982368aa957
 	tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8
 	tuios.dev/progstatus v0.1.2-0.20261030111253-c0f512aa3148
 	tuios.dev/shot v0.2.2-0.20261108190511-f7dea1948570
