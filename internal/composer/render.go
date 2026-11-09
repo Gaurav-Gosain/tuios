@@ -24,6 +24,8 @@ type inks struct {
 	blockText, blockNum  color.Color
 	blockDim             color.Color
 	selected             color.Color
+	// span and spanText are the ground and ink of selected text.
+	span, spanText color.Color
 	// blank is the gutter of a row with no mark, drawn once a frame.
 	blank string
 }
@@ -41,6 +43,11 @@ func newInks(st Styles, surface color.Color) inks {
 		in.block = st.Blend(in.field, st.Accent, blockMix)
 	}
 	in.selected = st.Selected
+	in.span = st.Selection
+	if in.span == nil {
+		in.span = st.Selected
+	}
+	in.spanText = st.readable(st.Text, in.span)
 	in.blockText = st.readable(st.Text, in.block)
 	in.blockNum = st.readable(st.Key, in.block)
 	in.blockDim = st.readable(st.Dim, in.block)
@@ -106,6 +113,7 @@ func (m *Model) render(width int, st Styles, surface color.Color) []string {
 		m.caret.Col += m.colOf(rows[cr], m.cur, textW)
 	}
 	m.caretOK = true
+	m.rowLine = len(out)
 	sel := m.selectedBlock()
 	in.blank = on(in.field).Render("  ")
 	for r := m.top; r < m.top+shown; r++ {
@@ -176,7 +184,14 @@ func arrowKeys(ascii bool) string {
 // renderRow writes one row of the draft. Text is drawn in runs, so a row
 // costs a few styled strings and not one per character.
 func (m *Model) renderRow(b *strings.Builder, row vline, hasCursor bool, textW int, sel *block, in inks) {
-	textStyle := on(in.field).Foreground(in.text)
+	plainStyle := on(in.field).Foreground(in.text)
+	spanStyle := on(in.span).Foreground(in.spanText)
+	if in.st.Plain {
+		// At 16 colours no ground shows, so selected text is reversed.
+		spanStyle = on(in.field).Foreground(in.text).Reverse(true)
+	}
+	lo, hi, selecting := m.Selection()
+	textStyle, inRun := plainStyle, false
 	var run strings.Builder
 	flush := func() {
 		if run.Len() > 0 {
@@ -186,9 +201,28 @@ func (m *Model) renderRow(b *strings.Builder, row vline, hasCursor bool, textW i
 	}
 	for i := row.start; i < row.end; i++ {
 		c := m.cells[i]
+		inSpan := selecting && i >= lo && i < hi
+		if inSpan != inRun {
+			flush()
+			inRun, textStyle = inSpan, plainStyle
+			if inSpan {
+				textStyle = spanStyle
+			}
+		}
 		if hasCursor && i == m.cur {
 			flush()
-			b.WriteString(cursor(cursorText(c), in.field, in.text))
+			if inSpan {
+				// The cursor at the start of a selection is drawn over
+				// the selection's colours; at 16 colours, where the
+				// selection is reversed, it is the one cell that is not.
+				if in.st.Plain {
+					b.WriteString(on(in.field).Foreground(in.text).Underline(true).Render(cursorText(c)))
+				} else {
+					b.WriteString(cursor(cursorText(c), in.span, in.spanText))
+				}
+			} else {
+				b.WriteString(cursor(cursorText(c), in.field, in.text))
+			}
 			if c.block != nil {
 				// The cursor cell took the bracket. The rest of the
 				// label follows it.
@@ -198,7 +232,7 @@ func (m *Model) renderRow(b *strings.Builder, row vline, hasCursor bool, textW i
 		}
 		if c.block != nil {
 			flush()
-			b.WriteString(renderBlock(c.block, textW, c.block == sel, false, in))
+			b.WriteString(renderBlock(c.block, textW, inSpan || c.block == sel, false, in))
 			continue
 		}
 		if c.s == "\t" {

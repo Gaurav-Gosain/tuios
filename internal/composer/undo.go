@@ -13,8 +13,10 @@ const (
 type edit struct {
 	pos      int
 	del, ins []cell
-	// before and after are the cursor before and after the edit.
-	before, after int
+	// before and after are the cursor before and after the edit, and
+	// anchor the selection's anchor before it (-1 for none), so undo
+	// brings back the selection an edit replaced.
+	before, after, anchor int
 	// typing says the step is a run of typed characters, which the next
 	// typed character may join.
 	typing bool
@@ -58,6 +60,11 @@ func (m *Model) splice(pos, n int, ins []cell) []cell {
 	}
 	copy(m.cells[pos:], ins)
 	m.ver++
+	// An edit that replaces the draft from outside (SetText, a history
+	// step) ends any selection it does not account for.
+	if m.anchor > len(m.cells) {
+		m.anchor = -1
+	}
 	return del
 }
 
@@ -65,9 +72,12 @@ func (m *Model) splice(pos, n int, ins []cell) []cell {
 // cursor at after.
 func (m *Model) change(pos, n int, ins []cell, after int) {
 	before := m.cur
+	if m.anchor == before {
+		m.anchor = -1
+	}
 	del := m.splice(pos, n, ins)
 	m.cur = after
-	m.push(edit{pos: pos, del: del, ins: ins, before: before, after: after, size: editSize(del, ins)})
+	m.push(edit{pos: pos, del: del, ins: ins, before: before, after: after, anchor: m.anchor, size: editSize(del, ins)})
 }
 
 // typeCell inserts one typed cell at the cursor. A run of typed characters is
@@ -78,7 +88,9 @@ func (m *Model) typeCell(c cell) {
 	if n := len(m.undo); n > 0 && m.joinTyping {
 		last := &m.undo[n-1]
 		boundary := c.isSpace() && len(last.ins) > 0 && !last.ins[len(last.ins)-1].isSpace()
-		if last.typing && len(last.del) == 0 && last.pos+len(last.ins) == pos && !boundary {
+		// A typing step may start by replacing a selection, so del can
+		// hold the selected cells.
+		if last.typing && last.pos+len(last.ins) == pos && !boundary {
 			m.splice(pos, 0, []cell{c})
 			m.cur = pos + 1
 			last.ins = append(last.ins, c)
@@ -93,7 +105,7 @@ func (m *Model) typeCell(c cell) {
 	ins := []cell{c}
 	m.splice(pos, 0, ins)
 	m.cur = pos + 1
-	m.push(edit{pos: pos, ins: ins, before: pos, after: m.cur, typing: true, size: c.bytes()})
+	m.push(edit{pos: pos, ins: ins, before: pos, after: m.cur, anchor: -1, typing: true, size: c.bytes()})
 	m.joinTyping = true
 }
 
@@ -132,6 +144,10 @@ func (m *Model) Undo() bool {
 	m.undoSize -= e.size
 	m.splice(e.pos, len(e.ins), e.del)
 	m.cur = e.before
+	m.anchor = -1
+	if e.anchor >= 0 && e.anchor <= len(m.cells) {
+		m.anchor = e.anchor
+	}
 	e.typing = false
 	m.redo = append(m.redo, e)
 	m.joinTyping = false
@@ -150,6 +166,7 @@ func (m *Model) Redo() bool {
 	m.redo = m.redo[:n-1]
 	m.splice(e.pos, len(e.del), e.ins)
 	m.cur = e.after
+	m.anchor = -1
 	m.undo = append(m.undo, e)
 	m.undoSize += e.size
 	m.joinTyping = false

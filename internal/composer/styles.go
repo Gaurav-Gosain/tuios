@@ -28,6 +28,9 @@ type Styles struct {
 	// Selected is the ground of the selected row of a list and of the
 	// selected block.
 	Selected color.Color
+	// Selection is the ground of selected text in the draft. Nil takes
+	// Selected. With Plain the selected text is reversed instead.
+	Selection color.Color
 
 	// Plain is for a terminal of 16 colours, where a ground cannot show a
 	// selection. A selected row is then reversed and a selected block

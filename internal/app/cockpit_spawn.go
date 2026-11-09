@@ -929,6 +929,8 @@ func (m *OS) spawnKey(s *spawnSheet, msg tea.KeyPressMsg) tea.Cmd {
 			return m.spawnStart()
 		case composer.EventClose:
 			m.spawnClose()
+		case composer.EventCopy, composer.EventCut:
+			return m.CopyFromEditor(ed.Copied())
 		case composer.EventPaste:
 			// ctrl+v: the clipboard's image into the task, as in a
 			// reply, or its text into any field.

@@ -71,6 +71,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// clicks before they can reach the window layer: select a tab/row/control,
 	// grab the title bar or right-drag to move, or click away to dismiss.
 	if o.OverlayActive() {
+		o.NoteClickShift(msg.Mod&tea.ModShift != 0)
 		if handled, cmd := o.OverlayMouseClick(X, Y, msg.Button == tea.MouseRight); handled {
 			return o, cmd
 		}

@@ -309,6 +309,8 @@ func (m *OS) TaskCaptureKey(msg tea.KeyPressMsg) tea.Cmd {
 			return m.taskCaptureFile(false)
 		case composer.EventClose:
 			m.closeTaskCapture(true)
+		case composer.EventCopy, composer.EventCut:
+			return m.CopyFromEditor(s.ed.Copied())
 		case composer.EventPaste:
 			return m.composerClipboardCmd(s.ed, "")
 		}

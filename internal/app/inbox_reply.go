@@ -444,6 +444,8 @@ func (m *OS) InboxReplyKey(msg tea.KeyPressMsg) tea.Cmd {
 		cmd = m.InboxReplySendNow()
 	case composer.EventClose:
 		m.InboxReplyCancel()
+	case composer.EventCopy, composer.EventCut:
+		cmd = m.CopyFromEditor(ed.comp.Copied())
 	case composer.EventPaste:
 		cmd = m.inboxReplyClipboard(ed)
 	case composer.EventOpenImage:
