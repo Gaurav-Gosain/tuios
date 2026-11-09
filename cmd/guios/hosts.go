@@ -464,6 +464,19 @@ func (a *App) connected(h *host, gen int, cl *client.Client, err error) {
 		return
 	}
 	h.cl, h.conn, h.err, h.retries, h.dialFail = cl, connReady, "", 0, dialOK
+	if !h.remote() {
+		// Opened from a pane's shell, the app takes on the pane's
+		// environment and the daemon does not take it as the person:
+		// the sidebar says so (fromPaneNotice).
+		go func() {
+			person := cl.ActsAsPerson()
+			a.update(func() {
+				if h.cl == cl {
+					a.fromPane = !person
+				}
+			})
+		}()
+	}
 	h.daemonApp, h.daemonFP = cl.Welcome.App, cl.Welcome.Build
 	cl.OnEvent(func(m proto.Message) { a.update(func() { a.event(h, cl, m) }) })
 	cl.Go("subscribe", nil, nil)

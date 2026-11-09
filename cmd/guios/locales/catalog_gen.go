@@ -1948,6 +1948,16 @@ func (msgs Messages) PaneCantShow() string {
 	return Catalog.Format(msgs.locale, "paneCantShow", nil)
 }
 
+// RailFromPane says "guios started from a tuios pane, so it cannot act as you or size your panes. Start it from the Dock or Finder."
+// in the language the app shows.
+func RailFromPane() string { return In(i18n.Locale()).RailFromPane() }
+
+// RailFromPane says "guios started from a tuios pane, so it cannot act as you or size your panes. Start it from the Dock or Finder."
+// in the language of msgs.
+func (msgs Messages) RailFromPane() string {
+	return Catalog.Format(msgs.locale, "railFromPane", nil)
+}
+
 // PaneAttaching says "Attaching"
 // in the language the app shows.
 func PaneAttaching() string { return In(i18n.Locale()).PaneAttaching() }

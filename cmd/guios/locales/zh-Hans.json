@@ -189,6 +189,7 @@
   "paneExited": "已退出 {code}",
   "paneForegroundTip": "正在前台运行",
   "paneCantShow": "无法显示此窗格",
+  "railFromPane": "guios 是从 tuios 窗格启动的，因此不能代表你操作，也不能决定窗格的大小。请从程序坞或访达启动它。",
   "paneAttaching": "正在连接",
   "pageGeneral": "通用",
   "pageAppearance": "外观",

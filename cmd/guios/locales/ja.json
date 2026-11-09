@@ -189,6 +189,7 @@
   "paneExited": "終了コード {code}",
   "paneForegroundTip": "フォアグラウンドで実行中",
   "paneCantShow": "このペインを表示できません",
+  "railFromPane": "guios は tuios のペインから起動されたため、あなたとして操作することも、ペインのサイズを決めることもできません。Dock か Finder から起動してください。",
   "paneAttaching": "接続中",
   "pageGeneral": "一般",
   "pageAppearance": "外観",

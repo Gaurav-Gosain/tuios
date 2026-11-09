@@ -243,6 +243,9 @@ type App struct {
 	xp       transfersPanel
 	calm     bool
 	calmHeld int
+	// fromPane says this machine's daemon refused the app's presence: it
+	// runs inside a tuios pane (fromPaneNotice).
+	fromPane bool
 	// lastPal is the palette the last frame drew with (view).
 	lastPal *palette
 	// badge is the count the app's icon shows, -1 before the first.

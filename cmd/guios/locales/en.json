@@ -300,6 +300,7 @@
   },
   "paneForegroundTip": "Running in the foreground",
   "paneCantShow": "Can’t show this pane",
+  "railFromPane": "guios started from a tuios pane, so it cannot act as you or size your panes. Start it from the Dock or Finder.",
   "paneAttaching": "Attaching",
   "pageGeneral": "General",
   "pageAppearance": "Appearance",

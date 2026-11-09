@@ -524,6 +524,7 @@ func (a *App) sidebar(c *ui.Context, pal *palette, bar ui.TitleBar) {
 		})
 	})
 	ui.Box(c.Key("rail-foot-line")).Height(1).Shrink(0).Background(hairline(pal))
+	a.fromPaneNotice(c, pal)
 	// The copies between machines stay in view under the list.
 	ui.Column(c.Key("xfers")).Padding(0, 10, 0, 10).Shrink(0).Children(func() { a.transfersSection(c, pal) })
 	a.usagePanel(c, pal)

@@ -95,6 +95,21 @@ func (c *Client) cockpit() (*cockpitConn, error) {
 	return ck, nil
 }
 
+// ActsAsPerson reports whether the daemon takes this app as the person. It is
+// false only when the daemon refused the app's presence: the app runs inside
+// a pane of that daemon, for one, as when it was opened from a pane's shell.
+// Such an app answers nothing for the person, and its panes never take the
+// session's latest from a TUI client. Any other error, a lost connection
+// say, reads as true: it says nothing about who the app is.
+func (c *Client) ActsAsPerson() bool {
+	_, err := c.cockpit()
+	if errors.Is(err, ErrNotHuman) {
+		return false
+	}
+	var ve *session.VerbCallError
+	return !errors.As(err, &ve) || ve.Code != session.ErrVerbForbidden
+}
+
 // Verb calls a daemon verb on the cockpit's connection. With human set, the
 // call carries the person's nonce. params, when set, is a map the nonce is
 // added to.
