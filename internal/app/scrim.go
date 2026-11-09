@@ -58,7 +58,8 @@ type modalOverlay struct {
 	// glyph pickers restyle the chrome as the selection moves, the effect
 	// picker plays its effect there, and the dock and section editors change
 	// the dock and the rail. Dimming what is being previewed would make the
-	// preview wrong.
+	// preview wrong. It is false for the agents view too, which fills the
+	// pane area and leaves the dock and the rail to be read beside it.
 	scrim bool
 }
 
@@ -73,7 +74,9 @@ var modalOverlays = [...]modalOverlay{
 	{id: "session", open: func(m *OS) bool { return m.ShowSessionSwitcher }, scrim: true},
 	{id: "goto", open: func(m *OS) bool { return m.gotoPicker.open }, scrim: true},
 	{id: "agentmail", open: func(m *OS) bool { return m.ShowAgentMail }, scrim: true},
-	{id: "inbox", open: func(m *OS) bool { return m.ShowInbox }, scrim: true},
+	// The agents view covers the pane area and is a view, not a question:
+	// dimmed, the dock and the rail beside it read as muddy, so they stay lit.
+	{id: "inbox", open: func(m *OS) bool { return m.ShowInbox }},
 	{id: "workspace", open: func(m *OS) bool { return m.ShowWorkspaceSwitcher }, scrim: true},
 	{id: overlayKindBuffers, open: func(m *OS) bool { return m.buffers.open }, scrim: true},
 	{id: overlayKindTransfers, open: func(m *OS) bool { return m.transfers.open }, scrim: true},

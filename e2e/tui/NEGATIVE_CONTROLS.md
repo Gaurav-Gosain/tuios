@@ -16083,3 +16083,19 @@ Run on 2026-11-09 on macOS (arm64). The branch passes both cases.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestReplyRowsGrowTheEditor$' -v .`.
+
+## TestAgentsViewLeavesTheChromeLit
+
+The agents view opened with the rail on. Every dock cell, and every rail cell
+the view leaves showing, that shows the same character before and after keeps
+its colours.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes: 175 dock cells compared,
+none changed.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (4f5cedc1a), where the agents view takes the modal scrim | "the agents view dimmed 175 rail and dock cells, first \"\ue0b6\" at 0,0: fg 92,92,255 to 54,54,158" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAgentsViewLeavesTheChromeLit$' -v .`.
