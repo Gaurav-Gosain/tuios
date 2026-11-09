@@ -67,13 +67,24 @@ func Redact(s string) string {
 
 // Clip makes s fit a one-line message: secrets redacted, whitespace collapsed
 // to single spaces, and at most MaxMessage runes, ending in "..." when cut.
+// The cut falls at a space when there is one in the last third, so no word
+// is left half shown.
 func Clip(s string) string {
 	s = strings.Join(strings.Fields(Redact(s)), " ")
 	if utf8.RuneCountInString(s) <= MaxMessage {
 		return s
 	}
-	r := []rune(s)
-	return strings.TrimSpace(string(r[:MaxMessage-3])) + "..."
+	r := []rune(s)[:MaxMessage-3]
+	// A space right after the cut means the last word is whole.
+	if next := []rune(s)[MaxMessage-3]; next != ' ' {
+		for i := len(r) - 1; i >= len(r)*2/3; i-- {
+			if r[i] == ' ' {
+				r = r[:i]
+				break
+			}
+		}
+	}
+	return strings.TrimRight(strings.TrimSpace(string(r)), ",;:") + "..."
 }
 
 // Clipped reports whether s reads as a line Clip cut short: as long as Clip

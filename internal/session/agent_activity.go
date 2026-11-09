@@ -10,6 +10,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
+	"github.com/Gaurav-Gosain/tuios/internal/winpath"
 )
 
 // An agent pane's activity: the prompts, tool calls, tool results, finished
@@ -725,6 +726,9 @@ type AgentActivityRecap struct {
 	LastSaid string `json:"last_said,omitempty"`
 	// State is the pane's agent state now.
 	State string `json:"state"`
+	// Folder is the folder the pane's shell last reported, so a client can
+	// name Files relative to it. Empty when the shell reported none.
+	Folder string `json:"folder,omitempty"`
 }
 
 // AgentActivityTest is the newest test run a recap found.
@@ -911,7 +915,22 @@ func (d *Daemon) verbAgentActivity(cs *connState, params json.RawMessage) (any, 
 		if len(all) > 0 && all[0].At > since && (since == 0 || dropped) {
 			since = all[0].At
 		}
-		out["recap"] = agentActivityRecap(matched, since, w.AgentState, d.recapTestPatterns())
+		rc := agentActivityRecap(matched, since, w.AgentState, d.recapTestPatterns())
+		rc.Folder = cwdPath(w.Cwd)
+		out["recap"] = rc
 	}
 	return out, nil
+}
+
+// cwdPath is the path a pane's Cwd names: the path of an OSC 7 file URL, or
+// the Cwd when it is a plain absolute path.
+func cwdPath(cwd string) string {
+	if strings.HasPrefix(cwd, "file://") {
+		_, p, _ := winpath.FileURL(cwd)
+		return p
+	}
+	if strings.HasPrefix(cwd, "/") {
+		return cwd
+	}
+	return ""
 }

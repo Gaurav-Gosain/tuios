@@ -2672,6 +2672,19 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 	c.text(tx, ty, x+w-14, ckSeg{t: "   " + inboxWho(it) + when, fg: pal.FgMute})
 	if inboxRisky(it) || len(it.RiskyFlags) > 0 {
 		c.textR(x+w-2, ty, ckSeg{t: " risky ", fg: overlay.Readable(pal.Warn, l.warnTint), bg: l.warnTint, attrs: ckBold})
+	} else if !answerable && !(it.Kind == session.AttentionAsk && it.RequestID != "") {
+		// A card that asks nothing is put away from its head: the key that
+		// dismisses it, then a cross the mouse hits. The hit takes the
+		// key's words too, so it is wide enough to find.
+		cross := "×"
+		if overlay.UseASCII() {
+			cross = "x"
+		}
+		key := m.inboxKeyOr(config.ActionInboxDismiss, "d")
+		dx := c.textR(x+w-2, ty, ckSeg{t: key, fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: " dismiss ", fg: pal.FgMute},
+			ckSeg{t: " " + cross + " ", fg: pal.Fg, bg: l.cursor, attrs: ckBold})
+		c.mark(pal, x+w-5, ty, 3, 1, ckOn)
+		st.ck.hits = append(st.ck.hits, ckHit{x0: dx, y0: top + ty, x1: x + w - 2, y1: top + ty + 1, kind: ckHitAction, action: "dismiss"})
 	}
 	yy := by
 	for i, s := range inset {

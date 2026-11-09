@@ -767,7 +767,7 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 		return out
 	}
 	if t.recap != nil && !recapEmpty(t.recap) {
-		for _, s := range recapSentences(t.recap, 0, now) {
+		for _, s := range recapSentences(t.recap, 0, now, t.recap.Folder) {
 			note(s)
 		}
 		if facts := m.agentFactsLine(e.SessionID, e.WindowID, e.Harness); facts != "" {

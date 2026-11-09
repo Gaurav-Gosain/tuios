@@ -1388,6 +1388,10 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 	case "chip:0", "chip:1", "chip:2", "chip:3":
 		g, _ := strconv.Atoi(strings.TrimPrefix(action, "chip:"))
 		m.cockpitChip(g)
+	case "dismiss":
+		// The cross on a card that asks nothing: the card's item goes, as
+		// the dismiss key puts it away.
+		return m.InboxDismiss()
 	case "follow":
 		m.CockpitThreadBottom()
 	case "a", "A", "r":
