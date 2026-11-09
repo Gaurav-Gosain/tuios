@@ -167,7 +167,18 @@ func (a *App) openWindow() {
 	}))
 	a.winOpen = true
 	a.updateTitle()
-	a.win.OnFocus(func() { a.update(func() { a.focused = true; a.reportView(); a.loadKeys() }) })
+	a.win.OnFocus(func() {
+		a.update(func() {
+			a.focused = true
+			a.reportView()
+			a.loadKeys()
+			// The window's focus-in, not a click on a pane, makes guios
+			// the session's latest client (viewer_latest.go).
+			if h := a.selectedHost(); h != nil && h.cl != nil && a.selected != "" {
+				go h.cl.FocusIn(a.selected)
+			}
+		})
+	})
 	a.win.OnBlur(func() {
 		a.update(func() {
 			a.focused = false

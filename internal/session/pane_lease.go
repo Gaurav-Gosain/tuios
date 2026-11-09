@@ -56,6 +56,9 @@ type paneLease struct {
 	fit, yield bool
 	// cellW and cellH are the viewer's cell in pixels, 0 when unknown.
 	cellW, cellH int
+	// owner is the viewer the lease's stream belongs to when it may contend
+	// for latest, "" otherwise. See viewer_latest.go.
+	owner string
 }
 
 // leasedSizeLocked is the size the pane takes when its clients ask for width
@@ -65,6 +68,12 @@ type paneLease struct {
 // streamMu is held.
 func (p *PTY) leasedSizeLocked(width, height int) (int, int) {
 	detached := p.noClients.Load()
+	lead, leads := p.leadLeaseLocked()
+	if leads {
+		// The viewer holds latest: its lease sizes the pane over the
+		// clients, as a fit lease does with none (viewer_latest.go).
+		width, height = lead.width, lead.height
+	}
 	if detached {
 		fw, fh := 0, 0
 		for _, l := range p.leases {
@@ -175,7 +184,11 @@ func (p *PTY) applyLeasesLocked() error {
 	w, h := p.leasedSizeLocked(askedW, askedH)
 	// A fit lease that sizes the pane gives it the viewer's cell too, before
 	// the resize, so the size the program is told carries the pixels.
-	if p.noClients.Load() {
+	if lead, ok := p.leadLeaseLocked(); ok && lead.cellW > 0 && lead.cellH > 0 {
+		if err := p.UpdatePixelDimensions(lead.cellW, lead.cellH); err != nil {
+			LogBasic("PTY %s: a viewer's cell could not be set: %v", shortID(p.ID), err)
+		}
+	} else if p.noClients.Load() {
 		for _, l := range p.leases {
 			if l.fit && l.cellW > 0 && l.cellH > 0 {
 				if err := p.UpdatePixelDimensions(l.cellW, l.cellH); err != nil {

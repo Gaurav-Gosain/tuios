@@ -16039,3 +16039,23 @@ Run on 2026-11-09 on macOS (arm64). The branch passes both.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestOpenMenuIn' -v .`.
+
+## TestStreamPaneViewerTakesLatest
+
+Under `window_size` latest a stream with a `yield` lease, from a caller that
+may act as the person, contends for the latest client
+(`internal/session/viewer_latest.go`). Its `I` input or an `A` frame must make
+its lease size the pane over an attached TUI client, input at the TUI client
+must take it back, and TUI input within the viewer's one-second hold must not
+resize the pane at once.
+
+Run on 2026-11-09 on macOS (arm64), as the Atlas helper user. The branch
+passed 9 of 10 runs; the one failure, at the I frame, did not come back in 9
+more runs, run alone or right after the control.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `paneStream.noteActivity` returns at once (no viewer activity) | "after the viewer's I frame: the pane is 36x58" | **caught**, 4 of 4 |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestStreamPaneViewerTakesLatest$' -v .`.

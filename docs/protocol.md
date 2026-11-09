@@ -3497,6 +3497,8 @@ Response, one line:
 - `window` is the window id.
 - `input_offsets` is true when the daemon takes `J` frames. An older daemon
   leaves it out.
+- `activity` is true when the daemon takes `A` frames. An older daemon leaves
+  it out.
 
 After the response line, the connection carries binary frames in both
 directions. A frame is one type byte, a 4-byte payload length (big-endian),
@@ -3535,6 +3537,7 @@ Frames from the client:
 | `J` (0x4A) | u64 offset, bytes | Input, as `I`, that starts at this stream's input byte `offset`. Typed only when `offset` is the number of input bytes the stream took. |
 | `V` (0x56) | JSON viewer object | Replace the `viewer` report of the stream, as after a theme change. The object is the `viewer` param. |
 | `F` (0x46) | one byte | How the client shows the pane: 0 hidden, 1 on screen, 2 on screen and focused in a focused window. See [The shown frame](#the-shown-frame). |
+| `A` (0x41) | empty | The client's window gained focus. It counts as the viewer's activity for `window_size` latest. See [A viewer as the latest client](#a-viewer-as-the-latest-client). Send it only when the reply has `activity: true`. |
 
 The snapshot bytes paint the pane on a fresh xterm-compatible emulator: up to
 500 rows of history above the screen, every cell with its colours and
@@ -3655,6 +3658,23 @@ A desktop app that shows the same session as a TUI client uses it, so the
 panes of the TUI client keep their size. When the last client leaves, the
 lease sizes the pane again. When a client attaches, the pane goes back to the
 size that the clients ask for.
+
+#### A viewer as the latest client
+
+Under `window_size` latest a viewer with a `yield` lease is a contender for
+the latest client, as a TUI client is. The viewer is the process that opened
+the stream, so all its streams count as one, and every pane it shows follows.
+Its `I` and `J` frames are its input, and an `A` frame says its window gained
+focus. A click on a pane is not activity: send `A` for the focus-in of the
+window only. When the viewer had activity after every TUI client of the
+session, its `yield` leases size their panes as they do with no client, and
+each TUI client draws those panes smaller in its own rectangles. Input at a
+TUI client takes it back. Each side keeps it for one second after its own
+last activity, so two people who type at the same time do not resize the
+panes on each key. Only a caller that may act as the person contends: a
+stream from a process inside a pane, or from a link the hub did not vouch
+for, never does. Under `smallest` and `largest`, and while a client too old
+for `window_size` is attached, a viewer does not contend.
 
 While a viewer's lease sizes the pane, the pane takes the cell of that client:
 `cell_width` and `cell_height`, or the last 8-byte `L` frame. The pixel size of

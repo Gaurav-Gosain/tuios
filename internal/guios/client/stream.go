@@ -42,8 +42,11 @@ type Stream struct {
 	params  map[string]any
 	// shown is the last F frame sent: session.PaneHidden, PaneVisible or
 	// PaneFocused. Guarded by c.viewMu.
-	shown   byte
-	Welcome proto.Welcome
+	shown byte
+	// activity says the daemon takes A frames on this stream (the reply's
+	// activity), set at each open.
+	activity atomic.Bool
+	Welcome  proto.Welcome
 
 	// psMu guards ps, which a reconnect replaces.
 	psMu sync.RWMutex
@@ -153,6 +156,7 @@ func AttachVia(d Dialer, id string) (*Stream, error) {
 		params["window"] = reply.Window
 	}
 	s := &Stream{ps: ps, c: c, session: name, sid: sid, window: reply.Window, params: params, closed: make(chan struct{}), Gone: make(chan struct{}), renew: renew}
+	s.activity.Store(reply.Activity)
 	c.addStream(s)
 	s.Welcome = proto.Welcome{Version: proto.Version, Cols: reply.Cols, Rows: reply.Rows}
 	return s, nil
@@ -398,6 +402,7 @@ func (s *Stream) reopen() bool {
 		s.psMu.Lock()
 		s.ps = ps
 		s.psMu.Unlock()
+		s.activity.Store(reply.Activity)
 		// The new stream knows nothing of this view yet.
 		s.leaseMu.Lock()
 		if s.lease[0] > 0 {
@@ -623,6 +628,22 @@ func (c *Client) setFocus(sid, pane string) {
 	c.focused[sid] = pane
 	c.viewMu.Unlock()
 	c.applyView()
+}
+
+// FocusIn tells the daemon the app's window gained focus while it shows the
+// session sid: an A frame on one of the session's streams. Under window_size
+// latest that makes the app the session's latest, so the panes take the
+// sizes it shows them at rather than an attached TUI client's. A daemon
+// that takes no A frame is sent none: it refuses a frame it does not know.
+func (c *Client) FocusIn(sid string) {
+	c.viewMu.Lock()
+	defer c.viewMu.Unlock()
+	for s := range c.streams {
+		if s.sid == sid && s.activity.Load() {
+			_ = s.pane().Activity()
+			return
+		}
+	}
 }
 
 // applyView sends each stream whose state changed its F frame.

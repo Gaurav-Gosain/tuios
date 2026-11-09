@@ -1224,6 +1224,9 @@ type PTY struct {
 	// noClients is set while no TUI client shows the pane's session. A fit
 	// lease sizes the pane only then. See pane_lease.go.
 	noClients atomic.Bool
+	// leadOwner is the viewer that holds latest in the pane's session, ""
+	// when none does. Guarded by streamMu. See viewer_latest.go.
+	leadOwner string
 	// leaseAt is when a lease last resized the pane, and leaseTimer the
 	// resize put off until leaseInterval has passed since. Both guarded by
 	// streamMu.

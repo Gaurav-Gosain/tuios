@@ -149,6 +149,9 @@ type Daemon struct {
 	display displayFollow
 	// latest is each session's latest client, for the latest policy.
 	latest latestState
+	// viewerLead is each session's viewer contender for latest. See
+	// viewer_latest.go.
+	viewerLead viewerLeadState
 	// attachCount hands out connState.attachSeq.
 	attachCount atomic.Uint64
 

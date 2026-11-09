@@ -81,6 +81,9 @@ const (
 	// paneFrameInputAt is input with the stream offset it starts at, typed
 	// only at the offset the stream expects (queueInput).
 	paneFrameInputAt = 'J'
+	// paneFrameActivity says the viewer's window gained focus: it counts
+	// as the viewer's activity for latest (viewer_latest.go).
+	paneFrameActivity = 'A'
 )
 
 const (
@@ -160,6 +163,9 @@ type paneStream struct {
 	// a local socket does not die silently as a phone's network does.
 	keep   bool
 	viewer bool
+	// owner is the viewer this stream belongs to when it may contend for
+	// latest, "" otherwise. Set once. See viewer_latest.go.
+	owner string
 	// cellW and cellH are the client's cell in pixels, 0 when unknown.
 	// Guarded by leaseMu once the stream runs.
 	cellW, cellH int
@@ -261,7 +267,7 @@ func (d *Daemon) verbStreamPane(cs *connState, params json.RawMessage) (any, *ve
 	}
 	win := state.Windows[idx]
 	ps := &paneStream{d: d, cs: cs, sess: sess, window: win.ID, pty: pty, subID: cs.clientID,
-		fit: p.Fit || p.Yield, yield: p.Yield, repaint: p.Repaint, rowIDs: p.RowIDs, keep: p.Yield && cs.peerUIDOK && !cs.viaLink, cellW: min(max(p.CellWidth, 0), maxLeaseDim), cellH: min(max(p.CellHeight, 0), maxLeaseDim), quit: make(chan struct{})}
+		fit: p.Fit || p.Yield, yield: p.Yield, repaint: p.Repaint, rowIDs: p.RowIDs, keep: p.Yield && cs.peerUIDOK && !cs.viaLink, cellW: min(max(p.CellWidth, 0), maxLeaseDim), cellH: min(max(p.CellHeight, 0), maxLeaseDim), quit: make(chan struct{}), owner: d.viewerOwner(cs, p.Yield)}
 	if p.LeaseCols > 0 {
 		if verr := ps.admitLease(p.LeaseCols, p.LeaseRows); verr != nil {
 			return nil, verr
@@ -315,10 +321,12 @@ func (d *Daemon) verbStreamPane(cs *connState, params json.RawMessage) (any, *ve
 		"boot_id": boot,
 		// The stream takes J frames: input typed only at its offset.
 		"input_offsets": true,
-		"session":       sess.Name(),
-		"session_id":    sess.ID,
-		"window":        win.ID,
-		"title":         title,
+		// The stream takes A frames: the viewer's window gained focus.
+		"activity":   true,
+		"session":    sess.Name(),
+		"session_id": sess.ID,
+		"window":     win.ID,
+		"title":      title,
 	}, nil
 }
 
@@ -738,6 +746,8 @@ func (ps *paneStream) readClient(br *bufio.Reader) {
 			}
 			if verr := ps.queueInput(at, data); verr != nil {
 				ps.writeError(verr)
+			} else if len(data) > 0 {
+				ps.noteActivity()
 			}
 		case paneFrameLease:
 			if verr := ps.lease(payload); verr != nil {
@@ -751,6 +761,8 @@ func (ps *paneStream) readClient(br *bufio.Reader) {
 			if verr := ps.show(payload); verr != nil {
 				ps.writeError(verr)
 			}
+		case paneFrameActivity:
+			ps.noteActivity()
 		default:
 			ps.writeError(newVerbError(ErrVerbInvalidRequest, fmt.Sprintf("frame type 0x%02x is not one a client sends; it was skipped", head[0])))
 		}
@@ -976,8 +988,18 @@ func (ps *paneStream) setLease(cols, rows int) error {
 	if ps.fit {
 		ps.pty.setNoClients(home.tuiClients.Load() == 0)
 	}
+	ps.pty.noteLeadOwner(ps.d.viewerLeadOwner(home.ID))
 	return ps.pty.SetViewerLease(ps.subID, paneLease{width: cols, height: rows,
-		fit: ps.fit, yield: ps.yield, cellW: ps.cellW, cellH: ps.cellH})
+		fit: ps.fit, yield: ps.yield, cellW: ps.cellW, cellH: ps.cellH, owner: ps.owner})
+}
+
+// noteActivity is the viewer's input or window focus: it may make the viewer
+// the latest in the pane's session (viewer_latest.go).
+func (ps *paneStream) noteActivity() {
+	if ps.owner == "" {
+		return
+	}
+	ps.d.noteViewerActivity(ps.home().ID, ps.owner)
 }
 
 // report reads a 'V' frame and makes it the stream's viewer report.

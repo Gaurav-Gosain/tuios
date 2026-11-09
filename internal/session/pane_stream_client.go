@@ -35,6 +35,10 @@ const (
 	// the daemon types it only there. Send it when the reply has
 	// InputOffsets.
 	PaneFrameInputAt = 'J'
+	// PaneFrameActivity says the viewer's window gained focus, which makes
+	// the viewer the session's latest under window_size latest. Send it
+	// when the reply has Activity.
+	PaneFrameActivity = 'A'
 )
 
 // The values of an F frame.
@@ -66,6 +70,8 @@ type PaneStreamReply struct {
 	Title     string `json:"title"`
 	// InputOffsets says the daemon takes J frames (InputAt).
 	InputOffsets bool `json:"input_offsets"`
+	// Activity says the daemon takes A frames (Activity).
+	Activity bool `json:"activity"`
 }
 
 // PaneStream is one open stream-pane connection.
@@ -143,6 +149,11 @@ func (s *PaneStream) Input(b []byte) error {
 // that number in accepted.
 func (s *PaneStream) InputAt(off int64, b []byte) error {
 	return s.WriteFrame(PaneFrameInputAt, append(binary.BigEndian.AppendUint64(make([]byte, 0, 8+len(b)), uint64(off)), b...))
+}
+
+// Activity sends an A frame: the viewer's window gained focus.
+func (s *PaneStream) Activity() error {
+	return s.WriteFrame(PaneFrameActivity, nil)
 }
 
 // Lease holds the pane at most at cols by rows. Zero releases the lease.
