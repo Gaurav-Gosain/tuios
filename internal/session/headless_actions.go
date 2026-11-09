@@ -22,9 +22,8 @@ import (
 // verbs use, so every client gets the change in the next state push.
 //
 // What a client shows stays the client's (issue #162): the workspace a client
-// was on before, which last_workspace goes back to, is not here. Neither is
-// kill_session, which waits for a step of its own behind kill-session's
-// checks.
+// was on before, which last_workspace goes back to, is not here. kill_session
+// runs here only with no client, as the kill-session verb (batch D).
 
 // runHeadlessAction runs keymap action name on sess with no client, or
 // reports errNeedsClient for one it has no headless form of.
@@ -67,6 +66,18 @@ func (d *Daemon) runHeadlessAction(sess *Session, name string, base NewWindowOpt
 			side = layout.SideUp
 		}
 		return nil, d.headlessResizeStep(sess, side, 2)
+	case "kill_session":
+		// With no client there is no person to ask, so the action is the
+		// kill-session verb, on the caller's connection and its grants.
+		// With a TUI attached it is routed: the TUI's close dialog asks
+		// the person first (batch D, daemon_actions.go).
+		if base.caller == nil {
+			return nil, errNeedsClient{verb: "Action " + name}
+		}
+		if _, verr := d.callVerb(base.caller, "kill-session", map[string]any{"session": sess.Name()}); verr != nil {
+			return nil, verr
+		}
+		return nil, nil
 	case "last_pane":
 		return nil, headlessLastPane(sess)
 	case "break_pane":
