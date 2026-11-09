@@ -4,6 +4,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/dockengine"
+
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -96,8 +98,8 @@ func (m *OS) ensureDockPlan() {
 //
 // Everything else on the bar is drawn from model state on the frames that were
 // happening anyway, so it has nothing to schedule and costs nothing to hold.
-func dockRefreshableComponents(cfg *config.UserConfig, plan dockPlan, showClock bool, s *config.Settings) []*dockComponent {
-	var comps []*dockComponent
+func dockRefreshableComponents(cfg *config.UserConfig, plan dockPlan, showClock bool, s *config.Settings) []*dockengine.Component {
+	var comps []*dockengine.Component
 
 	// Scheduled only when it will actually draw. The clock sits in the default
 	// list now, so an "or" here woke a component every minute for every session
@@ -107,7 +109,7 @@ func dockRefreshableComponents(cfg *config.UserConfig, plan dockPlan, showClock 
 	// times a second.
 	if plan.Has(config.DockComponentClock) && showClock {
 		format := cfg.Dock.DockClockFormat(s)
-		comps = append(comps, &dockComponent{
+		comps = append(comps, &dockengine.Component{
 			Name:    config.DockComponentClock,
 			Builtin: true,
 			Refresh: config.DockRefresh{
@@ -119,14 +121,14 @@ func dockRefreshableComponents(cfg *config.UserConfig, plan dockPlan, showClock 
 	// The meters keep their own switches: the lists say where they go, show_cpu
 	// and show_ram still say whether they are on.
 	if plan.Has(config.DockComponentCPU) && s.ShowCPU {
-		comps = append(comps, &dockComponent{
+		comps = append(comps, &dockengine.Component{
 			Name:    config.DockComponentCPU,
 			Builtin: true,
 			Refresh: config.DockRefresh{Kind: config.DockRefreshInterval, Interval: dockMeterInterval},
 		})
 	}
 	if plan.Has(config.DockComponentRAM) && s.ShowRAM {
-		comps = append(comps, &dockComponent{
+		comps = append(comps, &dockengine.Component{
 			Name:    config.DockComponentRAM,
 			Builtin: true,
 			Refresh: config.DockRefresh{Kind: config.DockRefreshInterval, Interval: dockMeterInterval},
@@ -150,7 +152,7 @@ func dockRefreshableComponents(cfg *config.UserConfig, plan dockPlan, showClock 
 			if width <= 0 || width > config.DockCustomMaxWidthLimit {
 				width = config.DockCustomDefaultMaxWidth
 			}
-			comps = append(comps, &dockComponent{
+			comps = append(comps, &dockengine.Component{
 				Name:     name,
 				Command:  spec.Command,
 				OnClick:  spec.OnClick,
@@ -185,19 +187,6 @@ func (m *OS) DockCustomComponentAt(x, y int) string {
 		}
 	}
 	return ""
-}
-
-// dockTruncateCell caps a cell at maxWidth cells, measured as rendered rather
-// than in bytes so a component emitting wide runes or colour is cut where it
-// looks cut.
-func dockTruncateCell(text string, maxWidth int) string {
-	if text == "" {
-		return ""
-	}
-	if maxWidth <= 0 {
-		maxWidth = config.DockCustomDefaultMaxWidth
-	}
-	return overlay.Truncate(text, maxWidth)
 }
 
 // dockCustomCell is one custom component drawn as a bar cell: the component's
@@ -440,18 +429,18 @@ func (m *OS) DockComponents() []DockComponentInfo {
 				info.Command = c.Command
 				info.OnClick = c.OnClick
 				info.MaxWidth = c.MaxWidth
-				info.Text = c.text
-				info.LastExit = c.lastExit
-				info.LastErr = c.lastErr
-				info.Stopped = c.stopped
+				info.Text = c.Output()
+				info.LastExit = c.LastExit()
+				info.LastErr = c.LastErr()
+				info.Stopped = c.Stopped()
 				if c.Refresh.Interval > 0 {
 					info.Interval = c.Refresh.Interval.String()
 				}
 				if len(c.Refresh.Events) > 0 {
 					info.Events = strings.Join(c.Refresh.Events, ",")
 				}
-				if !c.lastRun.IsZero() {
-					info.LastRun = c.lastRun.UTC().Format(time.RFC3339)
+				if !c.LastRun().IsZero() {
+					info.LastRun = c.LastRun().UTC().Format(time.RFC3339)
 				}
 			}
 			// A built-in drawn from model state is visible whenever its own

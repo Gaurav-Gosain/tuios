@@ -4,6 +4,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/dockengine"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -25,8 +27,10 @@ import (
 // railCustomComponent is the engine name of the section's command. It is not
 // under the dock's custom/ prefix, so it is never drawn as a bar cell, and
 // tuios refresh-dock rail/custom reaches it.
-const railCustomComponent = "rail/custom"
-const railSecondaryComponent = "rail/secondary/custom"
+const (
+	railCustomComponent    = dockengine.RailComponent
+	railSecondaryComponent = dockengine.RailSecondaryComponent
+)
 
 // railCustomState is the model's side of the section.
 type railCustomState struct {
@@ -42,7 +46,7 @@ type railCustomState struct {
 	gen uint64
 	// ctx is what the engine was last told. Compared before the engine's
 	// lock is taken, so a message that moved nothing takes no lock.
-	ctx railContext
+	ctx dockengine.RailContext
 }
 
 // railCustomEnabled reports whether the layout names the section. The
@@ -145,7 +149,7 @@ func (m *OS) railCustomWanted() bool {
 // railCustomComponent is the engine component for the section, or nil when
 // the section runs nothing. Built beside the dock's components in
 // InitDockComponents, so a config reload rebuilds it with them.
-func (m *OS) secondaryRailCustomComponent() *dockComponent {
+func (m *OS) secondaryRailCustomComponent() *dockengine.Component {
 	custom := m.secondaryRailCustomConfig()
 	if !custom.HasCommand() || m.secondarySidebarWidth() == 0 || m.UserConfig == nil {
 		return nil
@@ -172,16 +176,16 @@ func (m *OS) secondaryRailCustomComponent() *dockComponent {
 	if err != nil {
 		return nil
 	}
-	return &dockComponent{Name: railSecondaryComponent, Command: custom.Command, Refresh: refresh, MultiLine: true, Coalesce: true}
+	return &dockengine.Component{Name: railSecondaryComponent, Command: custom.Command, Refresh: refresh, MultiLine: true, Coalesce: true}
 }
 
-func (m *OS) railCustomComponent() *dockComponent {
+func (m *OS) railCustomComponent() *dockengine.Component {
 	if !m.railCustomWanted() {
 		return nil
 	}
 	custom := m.railCustomConfig()
 	refresh, _ := config.ParseSidebarCustomRefresh(custom.Refresh)
-	return &dockComponent{
+	return &dockengine.Component{
 		Name:      railCustomComponent,
 		Command:   custom.Command,
 		Refresh:   refresh,
@@ -199,9 +203,9 @@ func (m *OS) railCustomComponent() *dockComponent {
 // engine runs nothing while the width is zero (runOnce).
 //
 // It runs once per message, so it only copies what the model holds. The
-// folder is left for the run to resolve (railContext.folder).
-func (m *OS) railContextNow() railContext {
-	ctx := railContext{}
+// folder is left for the run to resolve (dockengine.RailContext.folder).
+func (m *OS) railContextNow() dockengine.RailContext {
+	ctx := dockengine.RailContext{}
 	if w := m.GetFocusedWindow(); w != nil {
 		ctx.PaneID = w.ID
 		ctx.Remote = m.AttachedHost != ""
@@ -230,12 +234,12 @@ func (m *OS) railContextNow() railContext {
 	return ctx
 }
 
-// folder is TUIOS_ACTIVE_PANE_CWD: the folder the command keys would start a
+// railFolder is TUIOS_ACTIVE_PANE_CWD, for the engine (dockengine.New): the folder the command keys would start a
 // command for the focused pane in, so a script written for one works for the
 // other. Empty with no pane focused. It reads the shell's working directory
 // and stats the folder, so it is called when a run starts, on the run's
 // goroutine, and never on the update goroutine.
-func (ctx railContext) folder() string {
+func railFolder(ctx dockengine.RailContext) string {
 	switch {
 	case ctx.PaneID == "":
 		return ""
@@ -258,7 +262,7 @@ func (ctx railContext) folder() string {
 // when an edit to the layout gains or loses the section; then the engine is
 // rebuilt, which is what a dock component gets on a config reload too. The
 // per-run context is the other, and syncRailContext hands it over.
-func (m *OS) secondaryRailContextNow() railContext {
+func (m *OS) secondaryRailContextNow() dockengine.RailContext {
 	ctx := m.railContextNow()
 	w := m.secondarySidebarWidth()
 	if w <= 0 || sidebarVariant(w) == sidebarVariantGlyph {
@@ -352,18 +356,18 @@ func (m *OS) railCustomInfo() DockComponentInfo {
 	}
 	if c, ok := m.dockEngine.Component(railCustomComponent); ok {
 		info.Refresh = c.Refresh.Kind.String()
-		info.Text = c.text
-		info.LastExit = c.lastExit
-		info.LastErr = c.lastErr
-		info.Stopped = c.stopped
+		info.Text = c.Output()
+		info.LastExit = c.LastExit()
+		info.LastErr = c.LastErr()
+		info.Stopped = c.Stopped()
 		if c.Refresh.Interval > 0 {
 			info.Interval = c.Refresh.Interval.String()
 		}
 		if len(c.Refresh.Events) > 0 {
 			info.Events = strings.Join(c.Refresh.Events, ",")
 		}
-		if !c.lastRun.IsZero() {
-			info.LastRun = c.lastRun.UTC().Format(time.RFC3339)
+		if !c.LastRun().IsZero() {
+			info.LastRun = c.LastRun().UTC().Format(time.RFC3339)
 		}
 		info.Visible = info.Text != ""
 		return info

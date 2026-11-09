@@ -1618,7 +1618,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		//
 		// An update from an engine a reload has replaced is dropped and its
 		// listener is not re-armed: the current engine has its own.
-		if msg.from != m.dockEngine {
+		if msg.From != m.dockEngine {
 			m.renderSkipped = true
 			return m, nil
 		}
@@ -2451,7 +2451,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// The dock's timers read the wall clock again, so a clock that slept
 		// through a suspend shows the time now rather than after its next
 		// dockWallCheck. Focus coming back is often the first sign of a wake.
-		m.dockEngine.replan()
+		m.dockEngine.Replan()
 		return m, m.noteHostFocus(true)
 
 	case tea.BlurMsg:

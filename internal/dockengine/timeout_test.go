@@ -1,6 +1,6 @@
 //go:build unix
 
-package app
+package dockengine
 
 import (
 	"fmt"
@@ -27,14 +27,14 @@ import (
 const dockTimeoutSlack = 4 * time.Second
 
 // awaitDockUpdate waits for one update, failing with why if none arrives.
-func awaitDockUpdate(t *testing.T, e *dockEngine, wait time.Duration, why string) dockComponentUpdate {
+func awaitDockUpdate(t *testing.T, e *Engine, wait time.Duration, why string) Update {
 	t.Helper()
 	select {
 	case u := <-e.Updates():
 		return u
 	case <-time.After(wait):
 		t.Fatal(why)
-		return dockComponentUpdate{}
+		return Update{}
 	}
 }
 
@@ -63,9 +63,9 @@ func TestDockComponentTimeoutKillsAForkedChild(t *testing.T) {
 					t.Skipf("this machine has no %s", tc.needs)
 				}
 			}
-			engine := newDockEngine([]*dockComponent{{
+			engine := New([]*Component{{
 				Name: "custom/hang", Command: tc.command, MaxWidth: 24,
-			}})
+			}}, nil)
 			t.Cleanup(engine.Stop)
 			start := time.Now()
 			engine.Start()
@@ -78,7 +78,7 @@ func TestDockComponentTimeoutKillsAForkedChild(t *testing.T) {
 			if elapsed := time.Since(start); elapsed > config.DockCustomTimeout+dockTimeoutSlack {
 				t.Fatalf("the timeout took %s, want about %s", elapsed, config.DockCustomTimeout)
 			}
-			engine.applyUpdate(u)
+			engine.ApplyUpdate(u)
 			if got := engine.Text("custom/hang"); got != "" {
 				t.Fatalf("a hung component drew %q", got)
 			}
@@ -99,9 +99,9 @@ func TestDockComponentTimeoutLeavesNoOrphan(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "orphan-ran")
 	command := fmt.Sprintf("sh -c 'sleep 5; touch %s' & wait", marker)
 
-	engine := newDockEngine([]*dockComponent{{
+	engine := New([]*Component{{
 		Name: "custom/hang", Command: command, MaxWidth: 24,
-	}})
+	}}, nil)
 	t.Cleanup(engine.Stop)
 	engine.Start()
 

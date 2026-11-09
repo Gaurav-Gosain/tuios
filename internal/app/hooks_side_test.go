@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/dockengine"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -87,14 +89,14 @@ func TestAStandaloneClientFiresEveryHookItself(t *testing.T) {
 // dock component watching the same event is drawn here and has to refresh here.
 func TestTheDockStillHearsAHookTheDaemonRuns(t *testing.T) {
 	m, _ := sideRig(t, true)
-	m.dockEngine = newDockEngine([]*dockComponent{{
+	m.dockEngine = dockengine.New([]*dockengine.Component{{
 		Name:    "custom/windows",
 		Command: "echo counted",
 		Refresh: config.DockRefresh{
 			Kind:   config.DockRefreshEvent,
 			Events: []string{string(hooks.AfterNewWindow)},
 		},
-	}})
+	}}, nil)
 	t.Cleanup(m.dockEngine.Stop)
 
 	m.FireHookContext(hooks.AfterNewWindow, hooks.Context{})

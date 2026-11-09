@@ -1,6 +1,6 @@
 //go:build unix
 
-package app
+package dockengine
 
 import (
 	"os"
@@ -24,14 +24,14 @@ import (
 // third update never arrives.
 func TestDockEngineCoalescesAnEventMidRun(t *testing.T) {
 	t.Run("rail section", func(t *testing.T) {
-		testDockEngineCoalesces(t, &dockComponent{Name: "rail/custom", MultiLine: true, Coalesce: true})
+		testDockEngineCoalesces(t, &Component{Name: "rail/custom", MultiLine: true, Coalesce: true})
 	})
 	t.Run("dock cell", func(t *testing.T) {
-		testDockEngineCoalesces(t, &dockComponent{Name: "custom/slow"})
+		testDockEngineCoalesces(t, &Component{Name: "custom/slow"})
 	})
 }
 
-func testDockEngineCoalesces(t *testing.T, comp *dockComponent) {
+func testDockEngineCoalesces(t *testing.T, comp *Component) {
 	dir := t.TempDir()
 	mark := filepath.Join(dir, "mark")
 	if err := os.WriteFile(mark, []byte("first\n"), 0o600); err != nil {
@@ -39,11 +39,11 @@ func testDockEngineCoalesces(t *testing.T, comp *dockComponent) {
 	}
 	comp.Command = "sleep 1; cat " + mark
 	comp.Refresh = config.DockRefresh{Kind: config.DockRefreshEvent, Events: []string{"window-focused"}}
-	engine := newDockEngine([]*dockComponent{comp})
+	engine := New([]*Component{comp}, nil)
 	t.Cleanup(engine.Stop)
 	// An open rail, as InitDockComponents tells it before Start: the engine
 	// runs nothing for the rail while the width is zero.
-	engine.SetRailContext(railContext{Width: 26, Height: 10})
+	engine.SetRailContext(RailContext{Width: 26, Height: 10})
 	engine.Start()
 
 	first := awaitDockUpdate(t, engine, 5*time.Second, "the run at start")
@@ -79,12 +79,12 @@ func testDockEngineCoalesces(t *testing.T, comp *dockComponent) {
 // Negative control: make fire keep a re-run for every kind of refresh. The
 // second update arrives.
 func TestDockEngineDropsAnIntervalMidRun(t *testing.T) {
-	comp := &dockComponent{
+	comp := &Component{
 		Name:    "custom/poll",
 		Command: "sleep 1; echo polled",
 		Refresh: config.DockRefresh{Kind: config.DockRefreshInterval, Interval: time.Hour},
 	}
-	engine := newDockEngine([]*dockComponent{comp})
+	engine := New([]*Component{comp}, nil)
 	t.Cleanup(engine.Stop)
 	engine.Start()
 

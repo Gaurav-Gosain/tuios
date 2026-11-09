@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/dockengine"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/agentseen"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -450,7 +452,7 @@ type OS struct {
 	dockPlan               dockPlan                      // which components are on which side, in draw order
 	diagramsTold           map[string]bool               // the diagram types the person heard need the sketch plugin, this session
 	pluginCells            map[string]session.PluginCell // what plugins show on the dock, by name, nil until one does
-	dockEngine             *dockEngine                   // refresh scheduler for the components that move on their own
+	dockEngine             *dockengine.Engine            // refresh scheduler for the components that move on their own
 	// RemoteCommandChan carries a verb the daemon routed to this client, for
 	// the hosts that cannot Send into the program directly. See dock_remote.go.
 	RemoteCommandChan chan RemoteCommandMsg
