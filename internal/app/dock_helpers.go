@@ -1017,20 +1017,7 @@ func (m *OS) getDockItems() []DockItem {
 	if !m.dockPlan.Has(config.DockComponentWindows) {
 		return nil
 	}
-	// Find all minimized/minimizing windows in current workspace
-	dockWindows := []int{}
-	for i, window := range m.Windows {
-		// The hidden scratch terminal is minimized but has no entry: the
-		// scratch key is the way back to it.
-		if window.Workspace == m.CurrentWorkspace && window.Minimized && !window.IsScratch {
-			dockWindows = append(dockWindows, i)
-		}
-	}
-
-	// The pills are in window order, the order restore_N counts in
-	// (RestoreMinimizedByIndex) and the one every client of the session
-	// shares. A client-side minimize time put the Nth pill and restore_N on
-	// different panes, and gave a second client another order.
+	dockWindows := m.MinimizedInOrder()
 
 	// Build dock items
 	items := make([]DockItem, 0, len(dockWindows))

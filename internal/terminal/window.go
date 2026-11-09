@@ -260,6 +260,7 @@ type Window struct {
 	//   window-to-window ordering to respect.
 	ioMu                   sync.RWMutex
 	Minimized              bool        // True when window is minimized to dock
+	MinimizedAt            int64       // When the daemon saw it minimized (Unix ns), for the dock's order; 0 outside a daemon session
 	MinimizeHighlightUntil time.Time   // Highlight dock tab until this time
 	PreMinimizeX           int         // Store position before minimizing
 	PreMinimizeY           int         // Store position before minimizing

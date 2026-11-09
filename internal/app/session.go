@@ -1360,6 +1360,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	w.Z = ws.Z
 	w.Workspace = ws.Workspace
 	w.Minimized = ws.Minimized
+	w.MinimizedAt = ws.MinimizedAt
 	// A float is layout intent: without it this client tiles the pane a peer
 	// floated back into the box and destroys the float everywhere.
 	w.IsFloating = ws.IsFloating
@@ -1497,6 +1498,7 @@ func adoptWindowState(window *terminal.Window, ws session.WindowState) {
 	window.CustomName = ws.CustomName
 	window.Workspace = ws.Workspace
 	window.Minimized = ws.Minimized
+	window.MinimizedAt = ws.MinimizedAt
 	// A float is layout intent, not a rectangle: a peer that does not know a
 	// pane floats tiles it back into the box. See WindowState.IsFloating.
 	window.IsFloating = ws.IsFloating

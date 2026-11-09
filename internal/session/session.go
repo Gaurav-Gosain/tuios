@@ -66,16 +66,22 @@ type KeptFlags struct {
 
 // WindowState represents the serializable state of a window.
 type WindowState struct {
-	ID           string `json:"id"`
-	Title        string `json:"title"`
-	CustomName   string `json:"custom_name,omitempty"`
-	X            int    `json:"x"`
-	Y            int    `json:"y"`
-	Width        int    `json:"width"`
-	Height       int    `json:"height"`
-	Z            int    `json:"z"`
-	Workspace    int    `json:"workspace"`
-	Minimized    bool   `json:"minimized,omitempty"`
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	CustomName string `json:"custom_name,omitempty"`
+	X          int    `json:"x"`
+	Y          int    `json:"y"`
+	Width      int    `json:"width"`
+	Height     int    `json:"height"`
+	Z          int    `json:"z"`
+	Workspace  int    `json:"workspace"`
+	Minimized  bool   `json:"minimized,omitempty"`
+	// MinimizedAt is when the window was minimized, in Unix nanoseconds, and
+	// 0 while it is not. The daemon stamps it on every write that minimizes
+	// a window and clears it on restore (stampMinimizedLocked), so every
+	// client lists the minimized windows in one order, the order they were
+	// minimized in, and a client push never sets it.
+	MinimizedAt  int64  `json:"minimized_at,omitempty"`
 	PreMinimizeX int    `json:"pre_minimize_x,omitempty"`
 	PreMinimizeY int    `json:"pre_minimize_y,omitempty"`
 	PreMinimizeW int    `json:"pre_minimize_w,omitempty"`
@@ -3826,6 +3832,7 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 	// still carries the old one, and taking it would undo the rename.
 	state.Name = s.Name()
 	s.state = state
+	stampMinimizedLocked(state, time.Now().UnixNano())
 	// A window the client closed takes its subagents with it.
 	s.forgetSubagentsLocked(state)
 	// A client pushing state with a pane focused has that pane in front of
@@ -3999,6 +4006,7 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 		return nil, err
 	}
 	s.noteAgentTurnsLocked(before, time.Now().UnixNano())
+	stampMinimizedLocked(s.state, time.Now().UnixNano())
 	clearStaleSilenceLocked(before, s.state)
 	clearNowAtRestLocked(before, s.state)
 	wakeSettledLocked(before, s.state)

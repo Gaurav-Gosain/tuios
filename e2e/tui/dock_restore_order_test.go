@@ -41,8 +41,9 @@ func dockOrder(s tuitest.Screen, names ...string) []string {
 // TestDockPillsAndRestoreNAgree minimizes two of three panes by keys in the
 // opposite order to the window order, then reads the dock on the client that
 // minimized them and on a second client, and restores the second pill with
-// prefix m 2. Both docks list the pills in one order, and restore_2 restores
-// the pane on the second pill.
+// prefix m 2. Both docks list the pills in the order they were minimized,
+// which the daemon keeps in session state, and restore_2 restores the pane on
+// the second pill.
 //
 // How it could pass wrongly, written down first:
 //   - The panes could be minimized in window order, where every order agrees.
@@ -51,9 +52,11 @@ func dockOrder(s tuitest.Screen, names ...string) []string {
 //     It waits for both names on its dock.
 //   - The restored pane is read from the daemon, not from the screen.
 //
-// Negative control: on main the first client's dock lists the panes in the
-// order they were minimized (gamma, alpha) while restore_2 counts in window
-// order, and the order check fails.
+// Negative controls: on main the first client's dock lists the panes in the
+// order they were minimized (gamma, alpha) and the second client's in window
+// order, and the check that the clients agree fails. With the order in window
+// order only (no MinimizedAt), the clients agree and the check for the
+// minimize order fails.
 func TestDockPillsAndRestoreNAgree(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -98,8 +101,8 @@ func TestDockPillsAndRestoreNAgree(t *testing.T) {
 	if strings.Join(first, ",") != strings.Join(second, ",") {
 		t.Fatalf("ASSERTION: the two clients list the pills in different orders: %v and %v", first, second)
 	}
-	if strings.Join(first, ",") != "alpha,gamma" {
-		t.Fatalf("ASSERTION: the pills are not in the order restore_N counts in (window order, alpha then gamma): %v", first)
+	if strings.Join(first, ",") != "gamma,alpha" {
+		t.Fatalf("ASSERTION: the pills are not in the order they were minimized (gamma, then alpha): %v", first)
 	}
 
 	// prefix m 2 restores the second pill.
