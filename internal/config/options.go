@@ -1228,6 +1228,11 @@ var optionSpecs = []Option{
 		Description: "The width of the agents view's list: a number of cells, such as 52, or a share of the view, such as 30%. Empty follows the screen. The < and > keys and a drag on the edge of the list change it, and the view keeps that choice.",
 		Default:     "",
 	},
+	{
+		Path: "agents.reply_rows", Type: OptionInt, Section: "agents",
+		Description: "The most rows a multi-line editor grows to before it scrolls: a reply to an agent or to many, a mail draft and a new agent's task. 0 keeps each editor's own: 8 for a reply, 6 for mail, 3 for a task. An editor never takes more rows than its view has, and alt+m in it takes all of them.",
+		Default:     "0", Min: 0, Max: ReplyRowsMax,
+	},
 
 	// [tasks]. The daemon reads it when it starts and when the file changes.
 	{

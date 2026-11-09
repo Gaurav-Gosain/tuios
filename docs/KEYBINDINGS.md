@@ -2298,7 +2298,8 @@ keeps the draft. A paste keeps its line breaks, and a long one shows as one
 block. `ctrl+v` attaches the clipboard's image when it holds one and no text. `@`
 opens a list of agents, panes and files to name: `tab` puts one in. `up` on
 the first row brings back an earlier message to the same agent, `ctrl+r`
-searches them, and `ctrl+g` opens the draft in `$EDITOR`.
+searches them, and `ctrl+g` opens the draft in `$EDITOR`. `alt+m` makes the
+editor as tall as its area and back; `[agents] reply_rows` sets its own height.
 `ctrl+o` on a selected image shows it larger, and `o` there opens it in the
 desktop's image viewer. The editing keys are in docs/AGENT_STATE.md, "Replying to an agent".
 They are not bindings yet. Attached to a daemon without `queue-prompt` (an older one), the

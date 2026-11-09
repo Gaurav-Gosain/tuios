@@ -29,6 +29,9 @@ type frameKey struct {
 	plain   bool
 	sigil   string
 	colours [9][4]uint32
+	// The rows the frame may show: MaxRows, the host's room, and full.
+	maxRows, room int
+	full          bool
 }
 
 // frameKey is the key of a frame drawn now at width.
@@ -39,6 +42,7 @@ func (m *Model) frameKey(width int, st *Styles, surface color.Color) frameKey {
 	k := frameKey{
 		ver: m.ver, cur: m.cur, top: m.top, width: width, notice: m.notice, info: m.info,
 		pager: m.pager, ascii: st.ASCII, plain: st.Plain, sigil: st.Sigil,
+		maxRows: m.opt.MaxRows, room: m.room, full: m.full,
 	}
 	if m.pager != nil {
 		k.pagerTop = m.pager.top

@@ -85,8 +85,17 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	}
 
 	inner := max(w-4, 8)
-	body := ed.comp.Render(inner, replyStyles(l), l.panel)
 	images := ckDraftImages(ed.comp)
+	// The editor's room is every row from under the focus header to above
+	// the hints: its title row, the pictures' row and the hints row are not
+	// its own. It never grows past it, and alt+m takes all of it.
+	img := 0
+	if len(images) > 0 {
+		img = 1
+	}
+	ed.comp.SetMaxRows(m.composerRows(inboxReplyRows))
+	ed.comp.SetRoom(y1 - bodyTop - 3 - img)
+	body := ed.comp.Render(inner, replyStyles(l), l.panel)
 	h := 3 + len(body)
 	if len(images) > 0 {
 		h++

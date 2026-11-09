@@ -108,6 +108,11 @@ type Model struct {
 	goal int
 	// top is the first row shown when the draft is taller than MaxRows.
 	top int
+	// room is how many lines the host can give the editor's frame, set
+	// with SetRoom before each Render; 0 when the host has not said. full
+	// says the editor takes all of it, toggled with alt+m.
+	room int
+	full bool
 	// width is the text width of the last frame, which up, down, home and
 	// end move by.
 	width int
@@ -544,6 +549,11 @@ func (m *Model) Update(msg tea.KeyPressMsg, remote bool) Event {
 		if !m.opt.SingleLine {
 			return EventEditor
 		}
+	case FullKey:
+		if !m.opt.SingleLine {
+			m.full = !m.full
+			m.top = 0
+		}
 	case "left":
 		m.move(m.cur - 1)
 	case "right":
@@ -814,4 +824,55 @@ func (m *Model) SetText(text string) {
 	m.undo, m.redo, m.undoSize = nil, nil, 0
 	m.Insert(text, false)
 	m.undo, m.redo, m.undoSize = nil, nil, 0
+}
+
+// FullKey toggles the editor between its own height and the whole room its
+// host gives it (SetRoom).
+const FullKey = "alt+m"
+
+// SetMaxRows sets how many rows the editor grows to before it scrolls, as
+// Options.MaxRows does when the editor is made. Zero or less takes
+// DefaultMaxRows. A host calls it when the setting that names it changes.
+func (m *Model) SetMaxRows(n int) {
+	if n <= 0 {
+		n = DefaultMaxRows
+	}
+	m.opt.MaxRows = n
+}
+
+// MaxRows is how many rows the editor grows to before it scrolls.
+func (m *Model) MaxRows() int { return m.opt.MaxRows }
+
+// SetRoom tells the editor how many lines its frame may take this frame: its
+// rows, the strip of blocks above them, and the line under them. The rows
+// are held to it, so a MaxRows larger than the view never pushes the
+// editor over what is drawn below it. Zero means the host does not say, and
+// MaxRows alone holds.
+func (m *Model) SetRoom(lines int) { m.room = max(lines, 0) }
+
+// Full reports whether the editor takes the whole room (alt+m).
+func (m *Model) Full() bool { return m.full }
+
+// SetFull sets whether the editor takes the whole room.
+func (m *Model) SetFull(on bool) {
+	if m.opt.SingleLine {
+		return
+	}
+	m.full = on
+}
+
+// textRows is how many text rows the frame shows, given the lines the strip
+// above them takes: MaxRows held to the room, or all of the room when full.
+func (m *Model) textRows(strip int) int {
+	limit := m.opt.MaxRows
+	if m.room > 0 {
+		// One line under the rows for a notice or the line it leaves.
+		avail := max(m.room-strip-1, 1)
+		if m.full {
+			limit = avail
+		} else {
+			limit = min(limit, avail)
+		}
+	}
+	return max(limit, 1)
 }

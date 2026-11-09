@@ -105,8 +105,18 @@ type inboxReplyState struct {
 // in memory only and end with the client.
 const inboxReplyDraftsMax = 16
 
-// inboxReplyRows is how many rows the editor grows to before it scrolls.
+// inboxReplyRows is how many rows the editor grows to before it scrolls,
+// when [agents] reply_rows is unset.
 const inboxReplyRows = 8
+
+// composerRows is the rows a multi-line editor grows to: [agents]
+// reply_rows, or def, the editor's own, when it is unset.
+func (m *OS) composerRows(def int) int {
+	if m.UserConfig == nil {
+		return def
+	}
+	return m.UserConfig.Agents.ReplyRowsOr(def)
+}
 
 // inboxDraftKey is the key of a pane's draft.
 func inboxDraftKey(sessionID, windowID string) string { return sessionID + "/" + windowID }
@@ -250,7 +260,7 @@ func (m *OS) openInboxReply(sessionID, windowID, who, context string, closeAfter
 	m.answerEnd(answerArmed, "reply")
 	comp := m.takeInboxDraft(sessionID, windowID)
 	if comp == nil {
-		comp = composer.New(composer.Options{MaxRows: inboxReplyRows, Placeholder: "Type your reply.", Images: true, SendNow: true})
+		comp = composer.New(composer.Options{MaxRows: m.composerRows(inboxReplyRows), Placeholder: "Type your reply.", Images: true, SendNow: true})
 	}
 	m.Inbox.reply.editor = &inboxReplyEditor{
 		draftWires: m.wireDraft(comp, sessionID, windowID, true),
@@ -278,7 +288,7 @@ func (m *OS) openHostReply(host, sessionID, windowID, who, context string) bool 
 	m.answerEnd(answerArmed, "reply")
 	comp := m.takeInboxDraft(sessionID, windowID)
 	if comp == nil {
-		comp = composer.New(composer.Options{MaxRows: inboxReplyRows, Placeholder: "Type your reply.", Images: true})
+		comp = composer.New(composer.Options{MaxRows: m.composerRows(inboxReplyRows), Placeholder: "Type your reply.", Images: true})
 	}
 	// The @ list offers no files of the far pane's folder. The history is
 	// kept under the far pane, as before.

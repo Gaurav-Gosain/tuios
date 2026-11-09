@@ -95,11 +95,12 @@ func (m *Model) render(width int, st Styles, surface color.Color) []string {
 	m.width = textW
 	rows := m.rows(textW)
 	cr := rowOf(rows, m.cur)
-	shown := min(len(rows), m.opt.MaxRows)
+	out := m.renderStrip(width, in)
+	limit := m.textRows(len(out))
+	shown := min(len(rows), limit)
 	m.top = min(max(m.top, cr-shown+1), cr)
 	m.top = min(max(m.top, 0), len(rows)-shown)
 
-	out := m.renderStrip(width, in)
 	m.caret = Caret{Row: len(out) + cr - m.top, Col: gutter}
 	if len(m.cells) > 0 {
 		m.caret.Col += m.colOf(rows[cr], m.cur, textW)
@@ -120,6 +121,13 @@ func (m *Model) render(width int, st Styles, surface color.Color) []string {
 			m.renderRow(&b, rows[r], r == cr, textW, sel, in)
 		}
 		out = append(out, fill(b.String(), width, in.field))
+	}
+	// Full, the editor takes the whole room, so the rows under a short
+	// draft are blank field.
+	if m.full {
+		for r := shown; r < limit; r++ {
+			out = append(out, fill(in.blank, width, in.field))
+		}
 	}
 	out = append(out, m.renderMentions(width, len(out), in)...)
 	if m.hsearch != nil {
@@ -287,7 +295,7 @@ func wrapWords(s string, width int) []string {
 // The list is kept until the keys change, so a footer drawn every frame
 // costs no allocation. It is shared: do not change it.
 func (m *Model) Hints(ascii bool) []Hint {
-	k := hintsKey{state: m.hintState(), ascii: ascii}
+	k := hintsKey{state: m.hintState(), ascii: ascii, full: m.full}
 	if k.state == hintsImage && m.preview != nil {
 		k.canOpen = m.preview.CanOpen()
 	}
@@ -310,8 +318,8 @@ const (
 
 // hintsKey is what the hints depend on.
 type hintsKey struct {
-	state          int
-	ascii, canOpen bool
+	state                int
+	ascii, canOpen, full bool
 }
 
 // hintState is the state the editor is in, for its keys.
@@ -381,7 +389,12 @@ func (o Options) hints(k hintsKey) []Hint {
 	if o.Images {
 		hints = append(hints, Hint{Key: "ctrl+v", Label: "paste image"})
 	}
+	full := "taller"
+	if k.full {
+		full = "shorter"
+	}
 	return append(hints,
+		Hint{Key: FullKey, Label: full, Optional: true},
 		Hint{Key: "ctrl+z", Label: "undo", Optional: true},
 		Hint{Key: "esc", Label: "close"},
 	)

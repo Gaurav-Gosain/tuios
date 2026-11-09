@@ -229,7 +229,7 @@ func (m *OS) CockpitNewAgent() tea.Cmd {
 	ck.spawnDraft = nil
 	if s == nil {
 		s = &spawnSheet{
-			task:     composer.New(composer.Options{MaxRows: spawnTaskRows, Placeholder: "What should the agent do?", Images: true}),
+			task:     composer.New(composer.Options{MaxRows: m.composerRows(spawnTaskRows), Placeholder: "What should the agent do?", Images: true}),
 			model:    composer.New(composer.Options{MaxRows: 1, SingleLine: true, Placeholder: "The agent's default"}),
 			branch:   composer.New(composer.Options{MaxRows: 1, SingleLine: true}),
 			base:     composer.New(composer.Options{MaxRows: 1, SingleLine: true}),
@@ -1125,6 +1125,10 @@ func (m *OS) pickList(s *spawnSheet, i int) {
 
 // spawnTaskRows is how many rows the task's editor shows before it scrolls.
 const spawnTaskRows = 6
+
+// spawnTaskBoxRows is how tall the sheet draws the task box when [agents]
+// reply_rows is unset. The editor scrolls inside it.
+const spawnTaskBoxRows = 3
 
 // launch is the picked agent's [launch] table.
 func (s *spawnSheet) launch() harness.Launch {

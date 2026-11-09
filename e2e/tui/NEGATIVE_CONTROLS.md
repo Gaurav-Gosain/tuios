@@ -16068,3 +16068,18 @@ column 79.5 of 0 to 159.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPopupsShareTheScreenCentre$' -v .`.
+
+## TestReplyRowsGrowTheEditor
+
+Twenty lines typed into the agents view's reply editor. With `[agents]
+reply_rows` unset it shows 8, with 12 it shows 12, `alt+m` shows all 20 in
+the whole reply area, and `alt+m` again brings it back.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes both cases.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (4f5cedc1a), with no reply_rows and no alt+m | twelve: "after typing: the editor shows 8 of the 20 lines, want 12"; unset: "after alt+m: the editor shows 8 of the 20 lines, want 20" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestReplyRowsGrowTheEditor$' -v .`.

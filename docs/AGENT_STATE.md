@@ -4808,6 +4808,10 @@ folder keeps it, and it ends with the daemon. Only your attached client reads
 it. A message keeps at most 256 KB of pastes and images. A larger block is
 not kept, and the editor says so when the message comes back.
 
+The editor grows to 8 rows, then scrolls. `[agents] reply_rows` sets how many
+rows it grows to, and `alt+m` makes it as tall as its area and back. It never
+takes more rows than the view has.
+
 `ctrl+g` opens the draft in `$VISUAL` or `$EDITOR`, with each block's text in
 its place, and what you save comes back as the draft. An image is in the file
 as its label, such as `[Image #1 · 640×480 png]`. Keep the label, and the

@@ -68,7 +68,7 @@ type spawnLayout struct {
 }
 
 // spawnPlan picks the roomiest layout that fits the screen.
-func spawnPlan(s *spawnSheet, cw, ch int) spawnLayout {
+func spawnPlan(s *spawnSheet, cw, ch, taskRows int) spawnLayout {
 	p := spawnLayout{w0: min(112, cw-4), wide: cw >= 120}
 	if cw < 64 {
 		p.w0 = cw
@@ -103,7 +103,15 @@ func spawnPlan(s *spawnSheet, cw, ch int) spawnLayout {
 		// Title, task, columns, attempts, notice, footer and the pads.
 		return 3 + (p.taskH + 2) + 1 + body + 1 + 2 + chips + 3
 	}
-	for _, try := range []struct{ gap, task int }{{1, 3}, {0, 3}, {0, 2}, {0, 1}} {
+	// The task box is taskRows tall ([agents] reply_rows, 3 when it is
+	// unset), and gives up rows one at a time when the screen is short.
+	// alt+m in the task takes every row the sheet can spare.
+	want := max(taskRows, 1)
+	tries := []struct{ gap, task int }{{1, want}, {0, want}}
+	for n := want - 1; n >= 1; n-- {
+		tries = append(tries, struct{ gap, task int }{0, n})
+	}
+	for _, try := range tries {
 		p.gap, p.taskH = try.gap, try.task
 		p.shown, p.twoLine = len(s.machines), p.wide
 		for p.shown > 1 && height() > ch-2 {
@@ -112,6 +120,12 @@ func spawnPlan(s *spawnSheet, cw, ch int) spawnLayout {
 		if p.h0 = height(); p.h0 <= ch-2 {
 			break
 		}
+	}
+	if s.task != nil && s.task.Full() {
+		for height() < ch-2 {
+			p.taskH++
+		}
+		p.h0 = height()
 	}
 	p.h0 = min(p.h0, ch)
 	p.y0 = max((ch-p.h0)/2, 0)
@@ -124,7 +138,7 @@ func (m *OS) drawSpawnSheet(c *ckCanvas, l ckLook, top int) {
 	pal := l.pal
 	t := spawnTones(l)
 	s.hits = s.hits[:0]
-	p := spawnPlan(s, c.w, c.h)
+	p := spawnPlan(s, c.w, c.h, m.composerRows(spawnTaskBoxRows))
 	s.shown = p.shown
 	if s.machine >= p.shown {
 		s.machine = 0
@@ -162,6 +176,8 @@ func (m *OS) drawSpawnSheet(c *ckCanvas, l ckLook, top int) {
 	c.fill(x, y+1, w, box, t.field)
 	hit(x, y, right, y+1+box, "field:"+strconv.Itoa(int(spTask)))
 	if s.field == spTask {
+		s.task.SetMaxRows(max(m.composerRows(spawnTaskRows), p.taskH))
+		s.task.SetRoom(p.taskH + 1)
 		lines := s.task.Render(w-2, spawnStyles(pal, t.field), t.field)
 		cut := max(len(lines)-p.taskH, 0)
 		for i, ln := range lines[cut:] {
