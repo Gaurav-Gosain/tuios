@@ -1039,7 +1039,7 @@ func (d *Daemon) verbRunCommand(cs *connState, params json.RawMessage) (any, *ve
 	// detached session can do.
 	if daemonOwnedCommands[p.Command] || !d.hasTUIClient(sess) || d.runsAction(sess, p.Command, p.Args) {
 		onExit := func(ptyID string) { d.notifyPTYClosed(sess.ID, ptyID) }
-		data, err := d.executeDaemonCommand(sess, p.Command, p.Args, onExit)
+		data, err := d.executeDaemonCommandEnv(sess, p.Command, p.Args, NewWindowOptions{caller: cs}, onExit)
 		if err != nil {
 			return nil, mapResolveErr(err, sess)
 		}

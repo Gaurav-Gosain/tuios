@@ -16434,3 +16434,25 @@ the swap key, and passes 3 of 3 on the branch:
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'TestDaemonDirectionActions|TestDaemonResizeFromTwo' -v .`.
+
+## TestDaemonLayoutActionsRunWithATUIAttached, TestDaemonMastersFromTwoClientsAtOnce
+
+Parity gap 1, step 4, batch C1 (`internal/session/daemon_actions_layout.go`).
+The layout shape actions run in the daemon through the arrange engine with a TUI
+attached, and the TUI's keys send them there. T1 runs rotate_split,
+equalize_splits, cycle_layout, add_master, remove_master, cycle_master_position,
+set_master_position_top and toggle_tiling twice by run-command and needs
+`routed: false` and each one's change in layout-tree. T3 has two clients press
+add_master at the same moment, then remove_master, for five rounds on six panes,
+and needs the count to move by two each time.
+
+Run on 2026-11-09 on macOS (arm64), as the Atlas helper user. The branch
+passes both.
+
+| Test | Control | The test fails with | Result |
+|------|---------|---------------------|--------|
+| T1 | guios/land before batch C1 (bc208570b) | "rotate_split: run-command answered routed true; the TUI ran it, not the daemon" | **caught** |
+| T3 | guios/land before batch C1 (bc208570b): the key sends the whole master shape (MsgMasterLayout) | "round 0, two add_master at once: 2 masters, want 3: a press was lost" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'TestDaemonLayoutActions|TestDaemonMastersFromTwo' -v .`.

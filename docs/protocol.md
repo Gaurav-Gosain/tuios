@@ -1885,6 +1885,17 @@ routed to a client as before. The TUI's swap and resize keys in the split layout
 go to the daemon. Its focus keys stay in the client, because a focus key can
 leave or enter the rail or go to an editor in the pane.
 
+The layout shape actions run in the daemon too, in any layout, through the
+`arrange` verb's engine, one op per session at a time: `toggle_tiling`,
+`cycle_layout`, `rotate_split`, `equalize_splits`, `cycle_master_position`,
+`set_master_position_SIDE`, `add_master`, `remove_master` and
+`swap_with_master`, and the tape commands of the same names (`RotateSplit`,
+`AddMaster` and the rest). `resize_master_grow` and `resize_master_shrink` run
+there in the split layout only. The TUI's keys for them go to the daemon and
+show their dock message from the client's own state, except the keys for
+`toggle_tiling` and `cycle_layout`, which the client runs itself: its switch
+settles the panes' sizes and borders in one step.
+
 The verbs a live renderer still has to own to stay in sync (`send-keys` with
 no window, and the live apply half of `set-option`) route to the attached TUI
 when one is present and act on daemon owned state otherwise. `send-keys` with

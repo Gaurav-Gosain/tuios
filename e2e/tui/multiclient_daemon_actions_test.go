@@ -281,7 +281,7 @@ func TestDaemonActionFromAPaneKeepsItsGrants(t *testing.T) {
 
 // daKeys binds the batch A actions with no free default key in window
 // management mode.
-const daKeys = "[keybindings.window_management]\nsend_to_workspace_2 = [\"alt+x\"]\nresize_pane_right_5 = [\"alt+r\"]\n"
+const daKeys = "[keybindings.window_management]\nsend_to_workspace_2 = [\"alt+x\"]\nresize_pane_right_5 = [\"alt+r\"]\nadd_master = [\"alt+a\"]\nremove_master = [\"alt+d\"]\n"
 
 // daSession is treeOpsSession with daKeys and n tiled panes: a detached
 // session, two TUI clients of one size.
@@ -564,6 +564,126 @@ func TestDaemonResizeFromTwoClientsAtOnce(t *testing.T) {
 	}
 	requireOneLayout(t, base, name, a, b, 2, "after every round")
 	if err := os.WriteFile(filepath.Join(artifactDir(t), "daemon-actions-b3.txt"), []byte(log.String()), 0o600); err != nil {
+		t.Logf("write the transcript: %v", err)
+	}
+}
+
+// daLayout is the part of layout-tree batch C reads.
+type daLayout struct {
+	Mode   string `json:"mode"`
+	Tiling bool   `json:"tiling"`
+	Master struct {
+		Count    int     `json:"count"`
+		Position string  `json:"position"`
+		Ratio    float64 `json:"ratio"`
+	} `json:"master"`
+	Tree json.RawMessage `json:"tree"`
+}
+
+func daReadLayout(t *testing.T, base, sess string) daLayout {
+	t.Helper()
+	out, err := tuiosCLI(t, base, "call", "layout-tree", `{"session":"`+sess+`"}`)
+	if err != nil {
+		t.Fatalf("layout-tree: %v\n%s", err, out)
+	}
+	var l daLayout
+	if err := json.Unmarshal([]byte(out), &l); err != nil {
+		t.Fatalf("read layout-tree: %v\n%s", err, out)
+	}
+	return l
+}
+
+// TestDaemonLayoutActionsRunWithATUIAttached (T1, batch C1): with a TUI on
+// a tiled session of four panes, run-command runs the layout shape actions
+// in the daemon (routed false), each changing layout-tree by its step, and
+// the TUI keeps drawing. The transcript goes to daemon-actions-c1.txt.
+//
+// How this could pass wrongly, written down first:
+//   - The TUI could run each and push: routed false is the daemon's answer.
+//   - A step could already hold: each check names a value the step before
+//     did not have (a new mode, count, position, tree or tiling flag).
+func TestDaemonLayoutActionsRunWithATUIAttached(t *testing.T) {
+	const name = "da-c1"
+	base, a, b := daSession(t, name, 4)
+	var log strings.Builder
+	step := func(action, what string, ok func(before, now daLayout) bool) {
+		t.Helper()
+		before := daReadLayout(t, base, name)
+		if daRun(t, base, name, action) {
+			t.Fatalf("%s: run-command answered routed true; the TUI ran it, not the daemon", action)
+		}
+		deadline := time.Now().Add(uiTimeout)
+		for {
+			now := daReadLayout(t, base, name)
+			if ok(before, now) {
+				fmt.Fprintf(&log, "%s: routed false, %s: mode %s tiling %v masters %d at %s\n", action, what, now.Mode, now.Tiling, now.Master.Count, now.Master.Position)
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("%s: %s did not hold: before %+v now %+v", action, what, before, now)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	step("rotate_split", "the tree changed", func(b, n daLayout) bool { return string(n.Tree) != string(b.Tree) })
+	step("equalize_splits", "the tree is even", func(_, n daLayout) bool {
+		return !strings.Contains(string(n.Tree), `"split_ratio":0.`) || strings.Count(string(n.Tree), `"split_ratio":0.5,`) >= 3
+	})
+	step("cycle_layout", "the layout is master-stack", func(_, n daLayout) bool { return n.Mode == "master-stack" })
+	step("add_master", "one master more", func(b, n daLayout) bool { return n.Master.Count == max(b.Master.Count, 1)+1 })
+	step("remove_master", "one master fewer", func(b, n daLayout) bool { return n.Master.Count == b.Master.Count-1 })
+	step("cycle_master_position", "the masters moved", func(b, n daLayout) bool { return n.Master.Position != b.Master.Position })
+	step("set_master_position_top", "the masters are on top", func(_, n daLayout) bool { return n.Master.Position == "top" })
+	step("toggle_tiling", "tiling is off", func(_, n daLayout) bool { return !n.Tiling })
+	step("toggle_tiling", "tiling is on again", func(_, n daLayout) bool { return n.Tiling })
+	requireSameScreens(t, a, b, "after the layout actions")
+	if err := os.WriteFile(filepath.Join(artifactDir(t), "daemon-actions-c1.txt"), []byte(log.String()), 0o600); err != nil {
+		t.Logf("write the transcript: %v", err)
+	}
+	alive(t, a, "after the layout actions")
+}
+
+// TestDaemonMastersFromTwoClientsAtOnce (T3, batch C1): in master-stack on
+// six panes, both clients press add_master at the same moment, then
+// remove_master, for five rounds. Every press must land: the count goes up
+// by two and back down by two each round, and the two clients draw one
+// layout.
+//
+// How this could pass wrongly, written down first:
+//   - The presses could land one after the other by chance: each is sent
+//     from two goroutines at once, and the count is read after each.
+//   - The count could reach its limit and stop for that reason: it moves
+//     between 1 and 3 of six panes.
+func TestDaemonMastersFromTwoClientsAtOnce(t *testing.T) {
+	const name = "da-c3"
+	base, a, b := daSession(t, name, 6)
+	if out, err := tuiosCLI(t, base, "call", "arrange", `{"session":"`+name+`","op":"mode","mode":"master-stack"}`); err != nil {
+		t.Fatalf("arrange mode master-stack: %v: %s", err, out)
+	}
+	count := func() int { return max(daReadLayout(t, base, name).Master.Count, 1) }
+	waitCount := func(what string, want int) {
+		t.Helper()
+		deadline := time.Now().Add(uiTimeout)
+		for count() != want && time.Now().Before(deadline) {
+			time.Sleep(100 * time.Millisecond)
+		}
+		time.Sleep(300 * time.Millisecond)
+		if got := count(); got != want {
+			t.Fatalf("%s: %d masters, want %d: a press was lost", what, got, want)
+		}
+	}
+	var log strings.Builder
+	n := count()
+	for round := range 5 {
+		together(t, a, string(tuitest.Alt("a")), b, string(tuitest.Alt("a")))
+		waitCount(fmt.Sprintf("round %d, two add_master at once", round), n+2)
+		requireSameScreens(t, a, b, fmt.Sprintf("round %d added", round))
+		together(t, a, string(tuitest.Alt("d")), b, string(tuitest.Alt("d")))
+		waitCount(fmt.Sprintf("round %d, two remove_master at once", round), n)
+		requireSameScreens(t, a, b, fmt.Sprintf("round %d removed", round))
+		fmt.Fprintf(&log, "round %d: %d -> %d -> %d masters\n", round, n, n+2, n)
+	}
+	if err := os.WriteFile(filepath.Join(artifactDir(t), "daemon-actions-c3.txt"), []byte(log.String()), 0o600); err != nil {
 		t.Logf("write the transcript: %v", err)
 	}
 }

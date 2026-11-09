@@ -208,7 +208,7 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 				data, err = d.executeDaemonCommandEnv(session, payload.CommandType, payload.Args, NewWindowOptions{
 					Cwd: payload.Cwd, Workspace: payload.Workspace, Env: newWindowEnv,
 					Cols: payload.Cols, Rows: payload.Rows, keepOpen: keepOpen,
-					focusAskedBy: origin, closeAskedBy: closeBy,
+					focusAskedBy: origin, closeAskedBy: closeBy, caller: cs,
 				}, onExit)
 			}
 		}

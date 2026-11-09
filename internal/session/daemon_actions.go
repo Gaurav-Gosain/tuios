@@ -76,11 +76,18 @@ func (d *Daemon) runsAction(sess *Session, command string, args []string) bool {
 		if len(args) != 1 {
 			return false
 		}
-		if IsDirectionAction(args[0]) {
+		switch name := args[0]; {
+		case name == "resize_master_grow" || name == "resize_master_shrink" || IsDirectionAction(name):
 			if !d.daemonArranges(sess, sess.GetState().CurrentWorkspace) {
 				return false
 			}
-		} else if !IsDaemonAction(args[0]) {
+		case IsLayoutAction(name), IsDaemonAction(name):
+		default:
+			return false
+		}
+	case "RotateSplit", "EqualizeSplits", "ToggleTiling", "AddMaster", "RemoveMaster", "SwapWithMaster", "CycleMasterPosition":
+		// Batch C1 under the tape's names (layoutTapeActions).
+		if len(args) != 0 {
 			return false
 		}
 	case string(tape.CommandTypeMinimizeWindow), string(tape.CommandTypeRestoreWindow):

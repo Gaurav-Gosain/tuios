@@ -47,7 +47,19 @@ func (d *Daemon) runHeadlessAction(sess *Session, name string, base NewWindowOpt
 	if dir, cells, ok := resizeStepOf(name); ok {
 		return nil, d.headlessResizeStep(sess, dir, cells)
 	}
+	if op, mode, ok := layoutActionOp(name); ok {
+		return nil, d.headlessArrange(sess, base.caller, op, mode)
+	}
 	switch name {
+	case "resize_master_grow", "resize_master_shrink":
+		// The TUI's key widens or narrows the focused pane by 4 columns
+		// (ResizeFocusedWindowWidth); in the split layout that is the
+		// resize step. Another layout is routed (runsAction).
+		side := layout.SideRight
+		if name == "resize_master_shrink" {
+			side = layout.SideLeft
+		}
+		return nil, d.headlessResizeStep(sess, side, 4)
 	case "last_pane":
 		return nil, headlessLastPane(sess)
 	case "break_pane":

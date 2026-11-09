@@ -38,20 +38,16 @@ func focusedWindowID(state *SessionState) (string, error) {
 	return "", errfmt.Errorf("session has no windows")
 }
 
-// executeDaemonCommand runs a structural tape command against daemon-owned
+// executeDaemonCommandEnv runs a structural tape command against daemon-owned
 // session state with no TUI client. onExit is wired into any PTY it spawns so
 // the daemon can notify clients when that shell exits. It returns result data
 // (for read verbs and NewWindow) or an error. Rendering-dependent verbs return
-// errNeedsClient.
-func (d *Daemon) executeDaemonCommand(sess *Session, commandType string, args []string, onExit func(ptyID string)) (map[string]any, error) {
-	return d.executeDaemonCommandEnv(sess, commandType, args, NewWindowOptions{}, onExit)
-}
-
-// executeDaemonCommandEnv is executeDaemonCommand with what a NewWindow takes
-// on top, in base: the directory it starts in, the workspace it goes on (zero
-// is the session's current one), environment entries its process gets on top
-// of an ordinary pane's, and the size its pane will have. An ssh split uses
-// Env for the agent socket; see SSHFollowArgv. Other commands ignore base.
+// errNeedsClient. base is what a NewWindow takes on top: the directory it
+// starts in, the workspace it goes on (zero is the session's current one),
+// environment entries its process gets on top of an ordinary pane's, and the
+// size its pane will have. An ssh split uses Env for the agent socket; see
+// SSHFollowArgv. base.caller is the connection that asked, for an Action that
+// runs as a layout op. Other commands ignore base.
 func (d *Daemon) executeDaemonCommandEnv(sess *Session, commandType string, args []string, base NewWindowOptions, onExit func(ptyID string)) (map[string]any, error) {
 	switch commandType {
 	case "NewWindow":
@@ -193,6 +189,9 @@ func (d *Daemon) executeDaemonCommandEnv(sess *Session, commandType string, args
 		return d.runHeadlessAction(sess, args[0], base)
 
 	default:
+		if action, ok := layoutTapeActions[commandType]; ok && len(args) == 0 {
+			return d.runHeadlessAction(sess, action, base)
+		}
 		return nil, errNeedsClient{verb: commandType}
 	}
 }
