@@ -179,17 +179,6 @@ func (c *Client) dispatch(method string, params any) (any, error) {
 		}
 		return true, c.zoom(p.Session, p.Pane)
 
-	case "layout":
-		p, err := decode[proto.LayoutParams](params)
-		if err != nil {
-			return nil, err
-		}
-		c.st.setLayout(p.Session, p.Layout)
-		if !c.writeTree(p.Session, p.Layout) {
-			c.kickState()
-		}
-		return true, nil
-
 	case "grid":
 		p, err := decode[proto.GridParams](params)
 		if err != nil {

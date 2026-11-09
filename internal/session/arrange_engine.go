@@ -566,6 +566,10 @@ func (e *engine) run(p ArrangeParams) error {
 		return e.minimize(p)
 	case "swap":
 		return e.swap(p.Pane, p.Target)
+	case "move":
+		return e.moveBeside(p.Pane, p.Target, p.Mode)
+	case "split.ratio":
+		return e.splitRatio(p.Pane, p.Target, p.Ratio)
 	}
 	return errors.New("no such layout change: " + p.Op)
 }
@@ -1079,4 +1083,56 @@ type WindowRow struct {
 	ExitCode int    `json:"exit_code"`
 	Signal   int    `json:"signal"`
 	KeepOpen bool   `json:"keep_open"`
+}
+
+// moveBeside puts pane beside target in the split tree, on side (left,
+// right, up or down) of it, as a pane dropped on the edge of another.
+func (e *engine) moveBeside(pane, target, side string) error {
+	sd, ok := layout.ParseSide(side)
+	if !ok || pane == "" || target == "" || pane == target || e.ti.Mode() != ArrangeModeBSP {
+		return nil
+	}
+	t, leaves, nums := e.ti.BSPTree()
+	na, oka := nums[pane]
+	nb, okb := nums[target]
+	if !oka || !okb || !t.MoveWindowBeside(na, nb, sd, 0) {
+		return nil
+	}
+	return e.writeTree(t, leaves)
+}
+
+// splitRatio sets the split that parts pane from target, the nearest one
+// with each on a side of it, to give pane's side ratio of the room: a
+// divider dragged, or set back to the middle. A split is named by a pane on
+// each side, which a client knows, not by the tree's own numbering.
+func (e *engine) splitRatio(pane, target string, ratio float64) error {
+	if pane == "" || target == "" || pane == target || ratio <= 0 || ratio >= 1 || e.ti.Mode() != ArrangeModeBSP {
+		return nil
+	}
+	t, leaves, nums := e.ti.BSPTree()
+	a, b := t.WindowToNode[nums[pane]], t.WindowToNode[nums[target]]
+	if a == nil || b == nil {
+		return nil
+	}
+	above := map[*layout.TileNode]*layout.TileNode{} // ancestor -> the child on pane's path
+	for c := a; c.Parent != nil; c = c.Parent {
+		above[c.Parent] = c
+	}
+	for c := b; c.Parent != nil; c = c.Parent {
+		via, ok := above[c.Parent]
+		if !ok {
+			continue
+		}
+		p := c.Parent
+		r := min(max(ratio, 0.1), 0.9)
+		if via != p.Left {
+			r = 1 - r
+		}
+		if p.SplitRatio == r {
+			return nil
+		}
+		p.SplitRatio = r
+		return e.writeTree(t, leaves)
+	}
+	return nil
 }

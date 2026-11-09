@@ -149,6 +149,67 @@ func TestArrangeVerb(t *testing.T) {
 	if string(after.Tree) == string(before.Tree) {
 		t.Fatalf("rotate left the tree as it was: %s", after.Tree)
 	}
+	// A divider dragged: the split between the first two panes gives the
+	// first 70 percent of their room.
+	type wrect struct {
+		ID   string `json:"window_id"`
+		X, Y int
+		W    int `json:"width"`
+		H    int `json:"height"`
+	}
+	rects := func() map[string]wrect {
+		t.Helper()
+		out, err := tuiosCLI(t, base, "list-windows", "-s", sess, "--json")
+		if err != nil {
+			t.Fatalf("list-windows: %v\n%s", err, out)
+		}
+		var l struct {
+			Windows []wrect `json:"windows"`
+		}
+		_ = json.Unmarshal([]byte(out), &l)
+		m := map[string]wrect{}
+		for _, w := range l.Windows {
+			m[w.ID] = w
+		}
+		fmt.Fprintf(&log, "  rects: %v\n", l.Windows)
+		return m
+	}
+	if err := arrange(map[string]any{"op": "mode", "mode": "bsp"}); err != nil {
+		t.Fatalf("arrange mode bsp: %v", err)
+	}
+	r0 := rects()
+	ids := []string{first}
+	for id := range r0 {
+		if id != first {
+			ids = append(ids, id)
+		}
+	}
+	// The pane right of first, sharing its top: its split's other side.
+	next := ""
+	for _, id := range ids[1:] {
+		if r0[id].X == r0[first].X+r0[first].W && r0[id].Y == r0[first].Y {
+			next = id
+		}
+	}
+	if next == "" {
+		t.Fatalf("no pane right beside the first: %v", r0)
+	}
+	t0 := read("before split.ratio")
+	if err := arrange(map[string]any{"op": "split.ratio", "pane": first, "target": next, "ratio": 0.7}); err != nil {
+		t.Fatalf("arrange split.ratio: %v", err)
+	}
+	t1 := read("split.ratio 0.7")
+	if !strings.Contains(string(t1.Tree), `"split_ratio":0.7`) && !strings.Contains(string(t1.Tree), `"split_ratio":0.3`) {
+		t.Fatalf("split.ratio 0.7: no split of the tree has 0.7 or 0.3: %s (was %s)", t1.Tree, t0.Tree)
+	}
+	// A pane dropped on the lower edge of another: it moves below it.
+	if err := arrange(map[string]any{"op": "move", "pane": first, "target": next, "mode": "down"}); err != nil {
+		t.Fatalf("arrange move: %v", err)
+	}
+	if t2 := read("move down"); string(t2.Tree) == string(t1.Tree) {
+		t.Fatalf("move down left the tree as it was: %s", t2.Tree)
+	}
+
 	if err := arrange(map[string]any{"op": "tiling"}); err != nil {
 		t.Fatalf("arrange tiling: %v", err)
 	}

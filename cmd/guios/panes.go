@@ -287,11 +287,11 @@ func (a *App) divider(c *ui.Context, pal *palette, s *proto.Session, l *proto.La
 		// Only the divider dragged saves the layout: another of the same
 		// session would save it every frame of the drag.
 		a.layoutDrag.session, a.layoutDrag.split = "", ""
-		a.call(s.ID, "layout", proto.LayoutParams{Session: s.ID, Layout: s.Layout.Clone()}, nil)
+		a.setSplitRatio(s, l)
 	}
 	if d.DoubleClicked() {
 		l.Ratio = 0.5
-		a.call(s.ID, "layout", proto.LayoutParams{Session: s.ID, Layout: s.Layout.Clone()}, nil)
+		a.setSplitRatio(s, l)
 	}
 }
 
@@ -555,15 +555,34 @@ func (a *App) movePane(sid, pane, target string, zone dropZone) {
 		}
 		return
 	}
+	// Drawn at once from the layout here; the daemon makes the change
+	// (arrange), so a peer's change made meanwhile is kept, not written
+	// over by this whole tree (issue #162).
 	if zone == zoneSwap {
 		s.Layout = s.Layout.Swap(pane, target)
+		a.arrange(s, "swap", func(p *proto.ArrangeParams) { p.Pane, p.Target = pane, target })
 	} else {
 		s.Layout = s.Layout.Move(pane, target, zone.side())
+		a.arrange(s, "move", func(p *proto.ArrangeParams) { p.Pane, p.Target, p.Mode = pane, target, zone.side() })
 	}
 	s.Zoomed = ""
 	a.setFocus(s, pane)
 	a.paneRef(pane).Focus()
-	a.call(sid, "layout", proto.LayoutParams{Session: sid, Layout: s.Layout.Clone()}, nil)
+}
+
+// setSplitRatio sends the ratio of split l, a divider dragged or set back,
+// as the daemon's change to that one split: named by a pane on each side,
+// the ratio its first side's share.
+func (a *App) setSplitRatio(s *proto.Session, l *proto.Layout) {
+	if l == nil || l.Leaf() {
+		return
+	}
+	pa, pb := l.A.Panes(), l.B.Panes()
+	if len(pa) == 0 || len(pb) == 0 {
+		return
+	}
+	ratio := l.Ratio
+	a.arrange(s, "split.ratio", func(p *proto.ArrangeParams) { p.Pane, p.Target, p.Ratio = pa[0], pb[0], ratio })
 }
 
 // paneHeader builds a pane's header, and reports whether its title is

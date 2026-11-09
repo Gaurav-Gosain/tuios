@@ -891,10 +891,6 @@ type (
 		// takes over Dir when it can read it.
 		From string `json:"from,omitempty"`
 	}
-	LayoutParams struct {
-		Session string  `json:"session"`
-		Layout  *Layout `json:"layout"`
-	}
 	// PageParams tell the page a browser pane shows, as the app's user
 	// went to it (pane.page).
 	PageParams struct {

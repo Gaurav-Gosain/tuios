@@ -55,68 +55,6 @@ func fromTree(n *session.SerializedBSPNode, leaves map[int]string, shown map[str
 	return &proto.Layout{Row: n.SplitType != splitHorizontal, Ratio: r, A: a, B: b}
 }
 
-// toTree is kero's layout as a tuios tree, its leaves numbered from 1, with
-// leaves naming the window of each number. The scheme and default ratio
-// are the ones the workspace's tree had, so a tree that only moves a
-// divider compares as that change alone.
-func toTree(l *proto.Layout, scheme int, defRatio float64) (*session.SerializedBSPTree, map[int]string) {
-	if l == nil {
-		return nil, map[int]string{}
-	}
-	leaves := map[int]string{}
-	var walk func(l *proto.Layout) *session.SerializedBSPNode
-	walk = func(l *proto.Layout) *session.SerializedBSPNode {
-		if l.Leaf() {
-			n := len(leaves) + 1
-			leaves[n] = l.Pane
-			return &session.SerializedBSPNode{WindowID: n}
-		}
-		t := splitHorizontal
-		if l.Row {
-			t = splitVertical
-		}
-		r := l.Ratio
-		if r <= 0 || r >= 1 {
-			r = 0.5
-		}
-		return &session.SerializedBSPNode{SplitType: t, SplitRatio: r, Left: walk(l.A), Right: walk(l.B)}
-	}
-	if defRatio <= 0 {
-		defRatio = 0.5
-	}
-	return &session.SerializedBSPTree{Root: walk(l), AutoScheme: scheme, DefaultRatio: defRatio}, leaves
-}
-
-// writeTree sends a session's layout as its shown workspace's tree, when
-// the tree arranges the workspace. It reports whether it went to the
-// daemon.
-func (c *Client) writeTree(sid string, l *proto.Layout) bool {
-	c.st.mu.Lock()
-	ti, ok := c.st.trees[sid]
-	name := c.st.sessionName[sid]
-	c.st.mu.Unlock()
-	if !ok || name == "" {
-		return false
-	}
-	return c.sendTree(name, ti, l)
-}
-
-func (c *Client) sendTree(name string, ti treeInfo, l *proto.Layout) bool {
-	if !ti.UseTree {
-		return false
-	}
-	scheme, defRatio := 0, 0.0
-	if ti.Tree != nil {
-		scheme, defRatio = ti.Tree.AutoScheme, ti.Tree.DefaultRatio
-	} else {
-		t, _, _ := ti.BSPTree()
-		scheme, defRatio = int(t.AutoScheme), t.DefaultRatio
-	}
-	tree, leaves := toTree(l, scheme, defRatio)
-	_, err := c.verb("set-layout-tree", map[string]any{"session": name, "workspace": ti.WS, "tree": tree, "leaves": leaves})
-	return err == nil
-}
-
 // layoutOf is the split tree of a session's shown panes, when the BSP
 // layout places them. It is the workspace's tree with the panes it lacks put
 // in by tuios's own rules: a new pane splits the pane that had the focus

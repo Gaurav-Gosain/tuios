@@ -398,13 +398,6 @@ func (k *stateKeeper) seen(sid string) {
 	}
 }
 
-func (k *stateKeeper) setLayout(sid string, l *proto.Layout) {
-	k.mu.Lock()
-	k.layouts[sid] = l
-	k.mu.Unlock()
-	k.saveLayouts()
-}
-
 func contains(ids []string, id string) bool {
 	for _, x := range ids {
 		if x == id {
@@ -440,21 +433,6 @@ func (k *stateKeeper) loadLayouts() {
 	if k.layouts == nil {
 		k.layouts = map[string]*proto.Layout{}
 	}
-}
-
-func (k *stateKeeper) saveLayouts() {
-	p := layoutsPath()
-	if p == "" {
-		return
-	}
-	k.mu.Lock()
-	b, err := jsonx.Marshal(k.layouts)
-	k.mu.Unlock()
-	if err != nil {
-		return
-	}
-	_ = os.MkdirAll(filepath.Dir(p), 0o700)
-	_ = os.WriteFile(p, b, 0o600)
 }
 
 // watch subscribes to the daemon's events on a connection of its own and
