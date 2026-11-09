@@ -107,6 +107,32 @@ func TestQueueOriginRefusalForALink(t *testing.T) {
 	}
 }
 
+// TestQueueOriginRefusalForAProcessOutsidePanes: a process the daemon starts
+// outside every pane, such as an after-agent-state hook, holds the default
+// grants in no session. Its mail wake or queued prompt is typed while that
+// default holds admin, and refused once it does not. A caller whose process
+// went away holds the strict default and lends a wake nothing.
+func TestQueueOriginRefusalForAProcessOutsidePanes(t *testing.T) {
+	d, _, sess, _, _, b := queueFixture(t)
+	target, _ := findWindowState(sess.GetState(), b)
+	hook := &paneAuth{window: unplacedWindow, via: "pid", grants: d.manager.grants.defaults()}
+	if !hook.outsideWithAdmin() {
+		t.Fatalf("a hook under the open default (%s) is not outside with admin", hook.grants.String())
+	}
+	e := &queueEntry{origin: queueOrigin{kind: "pane", window: hook.window, outside: hook.outsideWithAdmin()}}
+	if why := d.queueOriginRefusal(e, sess, target); why != "" {
+		t.Fatalf("a hook under the open default was refused: %s", why)
+	}
+	gone := &paneAuth{window: unplacedWindow, via: "pid", grants: d.manager.grants.strictDefaults()}
+	if gone.outsideWithAdmin() {
+		t.Fatal("a caller held to the strict default counts as outside with admin")
+	}
+	d.onConfigReload(&config.UserConfig{Agents: config.AgentsConfig{Permissions: config.PermissionsConfig{Mode: "strict", Grants: []string{"read", "write"}}}}, nil)
+	if why := d.queueOriginRefusal(e, sess, target); why == "" || !strings.Contains(why, "outside every pane") {
+		t.Fatalf("a hook whose default lost admin was not refused: %q", why)
+	}
+}
+
 // TestCancelQueuedOwnership: the person drops anything, a pane only what it
 // queued, a shell anything but the person's.
 func TestCancelQueuedOwnership(t *testing.T) {

@@ -16,13 +16,16 @@ const (
 
 // The copy-mode motions a config can bind, in [keybindings.copy_mode]. They
 // are live only while a pane is in copy mode, in normal and visual selection.
-// The vim keys 0, ^ and $ do the same and are not bindings: copy mode reads
-// them itself, with the other vim motions. The line end and ^ go to the last
-// and first nonblank characters of the row, not to the pane edge.
+// The vim keys 0, ^ and $ do the same as the line motions and are not bindings:
+// copy mode reads them itself, with the other vim motions. The line end and ^ go
+// to the last and first nonblank characters of the row, not to the pane edge.
+// Word motions jump between words like w and b.
 const (
 	ActionCopyModeLineStart     = "copy_mode_line_start"
 	ActionCopyModeFirstNonBlank = "copy_mode_first_nonblank"
 	ActionCopyModeLineEnd       = "copy_mode_line_end"
+	ActionCopyModeWordForward   = "copy_mode_word_forward"
+	ActionCopyModeWordBackward  = "copy_mode_word_backward"
 )
 
 // ActionCopyModeExit leaves copy mode and gives the pane the keyboard back,
@@ -138,10 +141,12 @@ func validateCopyModeKeys(cfg *UserConfig, result *ValidationResult) {
 // leader, but F is the backward character search here.
 func getDefaultCopyModeKeybinds() map[string][]string {
 	return map[string][]string{
-		ActionCopyModeLineStart: {"home"},
-		ActionCopyModeLineEnd:   {"end"},
-		ActionCopyModeExit:      {"enter"},
-		ActionEditScrollback:    {"ctrl+g"},
-		ActionHints:             {"s"},
+		ActionCopyModeLineStart:    {"home"},
+		ActionCopyModeLineEnd:      {"end"},
+		ActionCopyModeExit:         {"enter"},
+		ActionCopyModeWordForward:  {"shift+right"},
+		ActionCopyModeWordBackward: {"shift+left"},
+		ActionEditScrollback:       {"ctrl+g"},
+		ActionHints:                {"s"},
 	}
 }

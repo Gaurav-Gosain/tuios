@@ -944,6 +944,8 @@ type DaemonConfig struct {
 	PreferredShell string
 	// ShellIntegration is [shell] integration: auto or off.
 	ShellIntegration string
+	// ShellLogin is [shell] login: new panes start a login shell.
+	ShellLogin bool
 	// HerdrProtocol is [agents] herdr_protocol: which panes are told about
 	// the herdr protocol socket. See Manager.HerdrEnv.
 	HerdrProtocol string
@@ -1169,6 +1171,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.manager.SetNewWindowInheritCwd(cfg.NewWindowInheritCwd)
 	d.manager.SetPreferredShell(cfg.PreferredShell)
 	d.manager.SetShellIntegration(cfg.ShellIntegration)
+	d.manager.SetShellLogin(cfg.ShellLogin)
 	d.manager.SetHerdrProtocol(cfg.HerdrProtocol)
 	d.manager.SetReturnWhenEmpty(!cfg.StayOnEmptyWorkspace)
 	d.manager.SetDragAndDrop(cfg.DragAndDrop)

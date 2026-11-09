@@ -1742,8 +1742,9 @@ tuios does not change your files:
 
 - **zsh**: tuios starts zsh with `ZDOTDIR` set to a folder of its own. The
   `.zshenv` there sets `ZDOTDIR` back to your value, reads your `.zshenv`, and
-  adds the marks. zsh then reads your `.zprofile`, `.zshrc` and `.zlogin` as
-  usual. Programs in the pane see your own `ZDOTDIR`.
+  adds the marks. zsh then reads your `.zshrc` as usual, and your `.zprofile`
+  and `.zlogin` too when it is a login shell (see [Login shells](#login-shells)).
+  Programs in the pane see your own `ZDOTDIR`.
 - **bash**: tuios starts bash with `--rcfile` set to a file of its own. That
   file reads your `~/.bashrc` and then adds the marks. Your `PS1`, `PS0`,
   `PROMPT_COMMAND` (a string or an array), traps, `BASH_ENV` and `set -e` or
@@ -1774,6 +1775,34 @@ tuios does not set up the shell of a remote pane: a pane that runs `ssh`, or a
 window on another machine (`--host`). To get marks there, add the lines that
 `tuios doctor shell` prints to the rc file on that machine. Then open a new
 pane.
+
+## Login shells
+
+By default tuios starts the shell of a new pane as an interactive shell that
+is not a login shell. Such a shell reads `.zshrc` or `.bashrc`, but not
+`.zprofile`, `.bash_profile` or `.profile`. Most terminals on macOS start a
+login shell, so a `PATH` that you set in `.zprofile` can be missing in tuios.
+
+To start each new pane as a login shell:
+
+```toml
+[shell]
+login = true   # default: false
+```
+
+- **zsh** and **fish** start with `-l`. zsh then reads `.zprofile` and
+  `.zlogin`.
+- **bash** keeps the file that tuios uses for the prompt marks, because a
+  login bash reads no rc file. That file reads `/etc/profile` and then the
+  first of `~/.bash_profile`, `~/.bash_login` and `~/.profile`, as a login bash
+  does, in place of `~/.bashrc`. Most `~/.bash_profile` files read `~/.bashrc`
+  themselves. With `[shell] integration = "off"`, bash starts with `-l`.
+- Other shells (`sh`, `dash`, `ksh`, `tcsh`) start with a `-` in front of
+  their name, which every Unix shell reads as a login shell.
+- On Windows the option does nothing.
+
+The change applies to new panes. A pane that runs a command, such as
+`tuios new-window -- htop`, runs the command as it is.
 
 ## Splits that follow ssh
 

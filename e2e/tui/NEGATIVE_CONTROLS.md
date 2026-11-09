@@ -16158,3 +16158,113 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestGuiosBrowserPaneIsAWebWindow$' -v .`.
+## The restore banner names the folder the shell started in
+
+`TestRestoredPaneShowsItsHistoryAboveTheDivider` restores two sessions. One
+pane works in a folder that is removed while the daemon is down, so its new
+shell starts in the daemon's folder: its divider must name that folder and say
+the saved one is no longer available. The other session keeps its folder, and
+its banner must name that folder alone.
+
+Run on 2026-11-08 on Linux. The branch passes, three runs out of three.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (95b2da88d): the banner names the saved folder | "the divider of the pane whose folder is gone is \"... fresh shell in .../gone --\"" | **caught** |
+| The call site cut: `createPTY` does not fall back to the daemon's folder for a shell whose saved folder is gone | "the divider of the pane whose folder is gone is \"... fresh shell (.../gone no longer available) --\"" | **caught** |
+| The note added whenever a saved folder is known (`r.savedCwd != cwd` cut from `restoredBanner`) | "the banner of the pane whose folder stayed is \"... fresh shell in .../kept (.../kept no longer available) --\"" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRestoredPaneShowsItsHistoryAboveTheDivider$' -v .`.
+## A restored session lists its worktree record at once
+
+`TestRestoredPaneComesBackInItsDirectory` restores a session whose pane was
+in a git repository, and reads the first `tuios ls --json` that names the
+restored session. The record must already be there: it is what the rail groups
+the session by.
+
+Run on 2026-11-08 on Linux. The branch passes, three runs out of three.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (6db1de3ed): restore drops a detected record and leaves it to the first save, two seconds later | "the restored session's first listing has worktree <nil>, want the main checkout of restored-here" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRestoredPaneComesBackInItsDirectory$' -v .`.
+## The task board follows a renamed, killed or new session
+
+`TestTaskBoardFollowsARenamedSession` and `TestTaskBoardDropsAKilledSessionsCards`
+start a daemon with sessions V and S, add "first card" and "second card" to S,
+attach to V at 200x40 and open the board. Its positive half is the same in
+both: the board shows `Todo  2` and both cards. The first test then renames S
+to S2 and moves t1 to verify under the new name, and must show `Todo  1`,
+`Verify  1` and both cards. The second kills S, makes a new S and adds "fresh
+card" to it, and must show `Todo  1` and "fresh card" with neither old card.
+Each step waits for the column counts as well as the titles, because a stale
+row and a fresh one carry the same title.
+
+Run on 2026-11-08 on Linux. The control for both is main at c4edf64df:
+
+| Control | Test | The test fails with | Result |
+|---------|------|---------------------|--------|
+| main | `TestTaskBoardFollowsARenamedSession` | "board-rename-after: want [\"Todo  1\" \"Verify  1\" \"first card\" \"second card\"] and not []: timed out after 10s"; the board shows `Todo  0`, `Verify  1` and "first card" alone | **caught** |
+| main | `TestTaskBoardDropsAKilledSessionsCards` | "board-kill-after: want [\"Todo  1\" \"fresh card\"] and not [\"first card\" \"second card\"]: timed out after 10s"; the board shows `Todo  2`, the killed session's "second card" beside "fresh card" | **caught** |
+| The two session event types dropped from the subscribe types in `inboxWatchOnce` | `TestTaskBoardFollowsARenamedSession` | "tasks_board_session_test.go:28: ASSERTION: board-rename-after: want [\"Todo  1\" \"Verify  1\" \"first card\" \"second card\"] and not []: tuitest: WaitForDesc timed out after 10.004s waiting for custom condition"; the board shows `Todo  2` (the stale first and second card) and `Verify  1` | **caught** |
+| The two session event types dropped from the subscribe types in `inboxWatchOnce` | `TestTaskBoardDropsAKilledSessionsCards` | "tasks_board_session_test.go:40: ASSERTION: board-kill-after: want [\"Todo  1\" \"fresh card\"] and not [\"first card\" \"second card\"]: tuitest: WaitForDesc timed out after 10.003s waiting for custom condition"; the board shows `Todo  2`, the killed session's ghost "second card" beside "fresh card" | **caught** |
+
+The frames are `board-rename-open`, `board-rename-after`, `board-kill-open`
+and `board-kill-after` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskBoard(FollowsARenamedSession|DropsAKilledSessionsCards)$' -v .`.
+
+## A window link reaches a pane of another session
+
+`TestCtrlClickWindowLinkCrossesSessions` attaches session `linkhome`, prints a
+`tuios://window/<short id>` link to a pane of session `linkaway`, and
+Ctrl+clicks it. The client must switch to `linkaway` and focus that pane.
+
+Run on 2026-11-08 on macOS (arm64):
+
+| Binary | The test fails with | Result |
+|--------|---------------------|--------|
+| origin/main (ba70cdac), where `openWindowLink` searches only the attached session | "the link did not switch to linkaway and focus fc898980-... (focused 81d21ada-...)" | **caught** |
+| this branch without the `SyncStateToDaemon` in the `windowLinkListedMsg` case | the client switches and focuses the pane, but the daemon keeps the old focus: "the link did not switch to linkaway and focus 908c786b-... (focused a78297fb-...)" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCtrlClickWindowLinkCrossesSessions$' -v .`.
+
+## TestLoginShellReadsTheLoginFiles
+
+`[shell] login = true` (issue #1768): zsh and fish start with `-l`, bash keeps
+tuios's `--rcfile` and that file reads the login files in place of
+`~/.bashrc`, and any other shell gets a `-` in front of its name. Each case's
+prompt says which files the shell read. Off by default.
+
+Run on 2026-11-09 on macOS (arm64), with zsh 5.9, Homebrew bash 5, /bin/sh
+and fish 4. The branch passes every case.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (ab67a42a1) | zsh, bash, sh and fish: "the pane never showed" their login prompt; off by default passes | **caught** |
+| tuios's bash rc file without its login branch | bash: "the pane never showed \"B-bash_profile-1>\"" | **caught** |
+| No `-` in front of argv[0] for other shells | sh: "the pane never showed \"S-profile>\"" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestLoginShellReadsTheLoginFiles$' -v .`.
+
+## TestTMLSurfaceEventFollowsEachChange
+
+The daemon publishes a `tml-surface` event with each push of a TML surface,
+for a client that draws surfaces from verbs (guios): the open, a state patch
+with its JSON Patch and the next version, a replace with a new
+`doc_version`, and the close. Opt-in.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (9f2063a87) | "subscribe [-s e2e-tml-surface --types tml-surface] did not acknowledge" (the type is unknown) | **caught** |
+| The event not opt-in | "a subscriber that named no types got a tml-surface event" | **caught** |
+| No ops in the event | "no tml-surface event for the patch" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTMLSurfaceEventFollowsEachChange$' -v .`.

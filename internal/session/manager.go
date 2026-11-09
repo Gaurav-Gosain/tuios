@@ -48,6 +48,9 @@ type Manager struct {
 	// shellIntegrationOff is [shell] integration = "off". The zero value is
 	// the default, auto. Every session reads it through ShellIntegration.
 	shellIntegrationOff atomic.Bool
+	// shellLogin is [shell] login: a new pane's shell starts as a login
+	// shell.
+	shellLogin atomic.Bool
 	// stayOnEmpty is workspaces.return_when_empty turned off. The zero value
 	// is the default, on. Every session reads it through ReturnWhenEmpty.
 	stayOnEmpty atomic.Bool
@@ -62,6 +65,9 @@ type Manager struct {
 	// display. See display_follow.go.
 	displayFollow atomic.Bool
 	displaySource atomic.Pointer[func(sessionID string) []string]
+	// hostGraphicsBits are the graphics of the daemon's most recent client,
+	// for a session no client has attached to. See noteHostGraphics.
+	hostGraphicsBits atomic.Uint32
 	// cellSource gives a new pane its session's cell in pixels. See
 	// Daemon.newPaneCellSize.
 	cellSource atomic.Pointer[func(sessionID string) (w, h int, ok bool)]
@@ -180,6 +186,13 @@ func (m *Manager) SetShellIntegration(mode string) {
 func (m *Manager) ShellIntegration() bool {
 	return !m.shellIntegrationOff.Load()
 }
+
+// SetShellLogin sets [shell] login for every session: whether a new pane's
+// shell starts as a login shell.
+func (m *Manager) SetShellLogin(on bool) { m.shellLogin.Store(on) }
+
+// ShellLogin is what SetShellLogin last set, false when nothing did.
+func (m *Manager) ShellLogin() bool { return m.shellLogin.Load() }
 
 // SetReturnWhenEmpty sets workspaces.return_when_empty for every session.
 func (m *Manager) SetReturnWhenEmpty(on bool) {
@@ -336,6 +349,9 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	if cfg.ShellIntegration == nil {
 		cfg.ShellIntegration = m.ShellIntegration
 	}
+	if cfg.ShellLogin == nil {
+		cfg.ShellLogin = m.ShellLogin
+	}
 	if cfg.DragAndDrop == nil {
 		cfg.DragAndDrop = m.DragAndDrop
 	}
@@ -347,6 +363,9 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	}
 	if cfg.DisplayEnv == nil {
 		cfg.DisplayEnv = m.displayEnv
+	}
+	if cfg.HostGraphics == nil {
+		cfg.HostGraphics = m.hostGraphics
 	}
 	if cfg.CellSize == nil {
 		cfg.CellSize = m.cellSize
@@ -735,4 +754,32 @@ func (m *Manager) GenerateSessionName() string {
 			return name
 		}
 	}
+}
+
+// Bits of Manager.hostGraphicsBits.
+const (
+	hostKittyGraphics = 1 << iota
+	hostSixelGraphics
+)
+
+// noteHostGraphics records the graphics of the client that attached or
+// reported them last, on any session. A session no client has attached to
+// tells its new shells these (see Session.GraphicsCapabilities): a session
+// an agent made with new --detach, or one a restore brought back, has no
+// client of its own and told every shell TERM_PROGRAM=TUIOS.
+func (m *Manager) noteHostGraphics(kitty, sixel bool) {
+	var bits uint32
+	if kitty {
+		bits |= hostKittyGraphics
+	}
+	if sixel {
+		bits |= hostSixelGraphics
+	}
+	m.hostGraphicsBits.Store(bits)
+}
+
+// hostGraphics returns what noteHostGraphics last recorded.
+func (m *Manager) hostGraphics() (kitty, sixel bool) {
+	bits := m.hostGraphicsBits.Load()
+	return bits&hostKittyGraphics != 0, bits&hostSixelGraphics != 0
 }

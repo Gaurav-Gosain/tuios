@@ -362,7 +362,8 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 		return false, err
 	}
 	if !noBoard && boardErr == "" {
-		types = append(types, session.EventTaskClaimed, session.EventTaskFinished, session.EventTaskChanged)
+		types = append(types, session.EventTaskClaimed, session.EventTaskFinished, session.EventTaskChanged,
+			session.EventSessionCreated, session.EventSessionClosed)
 		// A daemon from before dispatch refuses a subscription that names
 		// its event.
 		if ok, _ := probeVerb(func(verb string, params map[string]any) ([]byte, error) {
@@ -395,9 +396,10 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 	// One goroutine reads, this one batches: a read deadline cannot be used to
 	// end a batch, because a line cut by a deadline is lost.
 	type read struct {
-		ev  InboxEvent
-		gap bool
-		err error
+		ev     InboxEvent
+		gap    bool
+		relist bool
+		err    error
 	}
 	lines := make(chan read, 64)
 	// quit ends the reader when this watch returns for any reason, so a reader
@@ -431,6 +433,10 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 			case ev.Type == session.EventGap:
 				put(read{gap: true})
 				return
+			case ev.Type == session.EventSessionCreated, ev.Type == session.EventSessionClosed:
+				if !put(read{relist: true}) {
+					return
+				}
 			case ev.Type == session.EventAttention && ev.Item != nil, ev.Task != nil, ev.Dispatch != nil:
 				if !put(read{ev: ev.InboxEvent}) {
 					return
@@ -450,7 +456,11 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 		if first.gap {
 			return true, errInboxGap
 		}
-		batch := []InboxEvent{first.ev}
+		var batch []InboxEvent
+		relist := first.relist
+		if !relist {
+			batch = append(batch, first.ev)
+		}
 		timer := time.NewTimer(inboxBatch)
 		var end error
 	gather:
@@ -467,6 +477,9 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 				case r.gap:
 					end = errInboxGap
 					break gather
+				case r.relist:
+					relist = true
+					continue
 				}
 				batch = append(batch, r.ev)
 			case <-timer.C:
@@ -474,13 +487,46 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 			}
 		}
 		timer.Stop()
-		if !inboxSend(ctx, out, InboxEventsMsg{Events: batch}) {
+		if len(batch) > 0 && !inboxSend(ctx, out, InboxEventsMsg{Events: batch}) {
 			return true, ctx.Err()
+		}
+		// A session made, renamed or killed changes whose cards the listing
+		// holds, and no card event says so. This connection carries the
+		// stream, so the cards are listed again on a second one.
+		if relist {
+			if err := inboxRelistCards(ctx, dial, out); err != nil {
+				return true, err
+			}
 		}
 		if end != nil {
 			return true, end
 		}
 	}
+}
+
+// inboxCardsMsg is a fresh listing of the cards alone.
+type inboxCardsMsg struct{ InboxSnapshotMsg }
+
+// inboxRelistCards lists the cards on a connection of its own and delivers
+// them.
+func inboxRelistCards(ctx context.Context, dial inboxDial, out chan<- tea.Msg) error {
+	client, err := dial()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+	cards, noBoard, boardErr, err := inboxListCards(client)
+	if err != nil {
+		return err
+	}
+	if noBoard || boardErr != "" {
+		// The board's state changed under the watch: a fresh watch decides it as at attach.
+		return errInboxGap
+	}
+	if !inboxSend(ctx, out, inboxCardsMsg{InboxSnapshotMsg{Cards: cards}}) {
+		return ctx.Err()
+	}
+	return nil
 }
 
 // inboxListCards lists every session's task cards. noBoard is true when the
@@ -532,6 +578,9 @@ func (m *OS) handleInboxWatch(msg inboxWatchMsg) tea.Cmd {
 		// An approval that arrived while the person types is held, and is
 		// drawn released when the hold ends.
 		cmd = tea.Batch(cmd, m.armInboxTypingRelease())
+	case inboxCardsMsg:
+		m.applyBoardSnapshot(inner.InboxSnapshotMsg)
+		m.inboxChanged()
 	case InboxDownMsg:
 		m.applyInboxDown(inner)
 		if inner.Unsupported {

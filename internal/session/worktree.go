@@ -242,7 +242,7 @@ func (s *Session) worktreeListing() *WorktreeInfo {
 }
 
 // refreshWorktree re-detects a session's worktree from its first window's
-// directory. It is called when a window is created and on every dirty save,
+// directory. It is called when a session is restored and on every dirty save,
 // so it costs nothing while the session is idle. A managed record is left
 // alone: the verbs that wrote it own it.
 //

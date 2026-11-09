@@ -248,6 +248,11 @@ type sessionInfo struct {
 	Name        string `json:"name"`
 	WindowCount int    `json:"window_count"`
 	Restored    bool   `json:"restored"`
+	// Worktree is the record the rail groups the session by.
+	Worktree *struct {
+		Repo string `json:"repo"`
+		Main bool   `json:"main"`
+	} `json:"worktree"`
 }
 
 // waitForSessionInfo polls the daemon's listing until the named session appears,

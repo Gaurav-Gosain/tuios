@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -20,6 +21,12 @@ import (
 // Linux-only once, and every macOS restore then opened its panes wherever the
 // daemon was started.
 //
+// The directory is a repository, so the session has a worktree record, which
+// is what the rail groups it by. The restored session carries the record in
+// the first listing that names it. Restore once dropped a detected record and
+// left it to the first save, two seconds later, so the rail drew every
+// session flat after a reboot and regrouped them a moment after.
+//
 // The ways it could pass without testing that:
 //   - The restored shell could start in the directory by accident. The
 //     directory is one made for this test, and the daemon runs elsewhere.
@@ -28,6 +35,9 @@ import (
 //     CWD-SAME or CWD-ELSEWHERE.
 //   - The pane read could be the one from before the restart. The session is
 //     checked to be marked restored first, which only a new daemon does.
+//   - The record could come from a save after the restore. The listing read
+//     is the first one that names the session. The daemon restores before it
+//     takes a connection, and its first save waits two seconds from then.
 //
 // The pane's text before and after the restart is saved under artifactDir.
 func TestRestoredPaneComesBackInItsDirectory(t *testing.T) {
@@ -41,6 +51,9 @@ func TestRestoredPaneComesBackInItsDirectory(t *testing.T) {
 	dir := filepath.Join(base, "restored-here")
 	if err := os.Mkdir(dir, 0o755); err != nil {
 		t.Fatal(err)
+	}
+	if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
 	}
 	// The kernel reports the directory with its symlinks resolved, and on
 	// macOS the temporary directory is under one (/var is /private/var).
@@ -66,8 +79,12 @@ func TestRestoredPaneComesBackInItsDirectory(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "new", "e2e-restore-cwd-trigger", "--detach"); err != nil {
 		t.Fatalf("start a fresh daemon: %v\n%s", err, out)
 	}
-	if info := waitForSessionInfo(t, base, session); !info.Restored {
+	info := waitForSessionInfo(t, base, session)
+	if !info.Restored {
 		t.Fatalf("the session is not marked restored, so its pane is not the respawned one")
+	}
+	if wt := info.Worktree; wt == nil || wt.Repo != filepath.Base(dir) || !wt.Main {
+		t.Errorf("ASSERTION: the restored session's first listing has worktree %+v, want the main checkout of %s, so the rail draws it ungrouped until the next save", wt, filepath.Base(dir))
 	}
 
 	// The restored shell is asked where it is before anything moves it.

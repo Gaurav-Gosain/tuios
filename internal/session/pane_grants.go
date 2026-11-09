@@ -1206,6 +1206,14 @@ func (pa *paneAuth) inPane() bool {
 	return pa != nil && pa.plugin == "" && pa.via != "link" && pa.window != "" && pa.window != unplacedWindow
 }
 
+// outsideWithAdmin reports whether pa is a process the daemon started outside
+// every pane, such as a hook, holding a default that includes admin. It has no
+// session, so a queue origin for it is checked against the default grants, not
+// against a pane (queueOriginRefusal).
+func (pa *paneAuth) outsideWithAdmin() bool {
+	return pa != nil && pa.plugin == "" && !pa.hosted && pa.window == unplacedWindow && pa.grants.Has(GrantAdmin)
+}
+
 // typingNeedsWindow refuses a typing verb from a pane that names no window.
 // With no window the text goes to the pane the person has in focus, which an
 // agent cannot see and which moves under it. Its own pane is one an agent

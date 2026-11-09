@@ -140,6 +140,14 @@ const (
 	// the value. It reaches only a subscriber that names it in types, and a
 	// tml-open with events. See tml_surface.go.
 	EventTML = "tml-event"
+	// EventTMLSurface follows a TML surface for a client that draws it from
+	// verbs, such as guios, which has no attach for the pushes a TUI gets.
+	// TMLSurface carries the surface, its versions, the JSON Patch that made
+	// the version when one did and is small, and the close. A client that
+	// holds the version before applies the patch; any other reads the
+	// surface with tml-get. It reaches only a subscriber that names it in
+	// types, and it is not kept for replay.
+	EventTMLSurface = "tml-surface"
 	// EventTaskClaimed, EventTaskFinished and EventTaskChanged follow the
 	// task cards of a session (task.go). Task carries the card's row as
 	// list-tasks gives it. On claimed and finished, Window is the pane that
@@ -271,6 +279,8 @@ type streamEvent struct {
 	File *TransferFile `json:"file,omitempty"`
 	// TML is a tml-event's surface, name and value.
 	TML *TMLEvent `json:"tml,omitempty"`
+	// TMLSurface is a tml-surface event's surface and versions.
+	TMLSurface *TMLSurfaceEvent `json:"tml_surface,omitempty"`
 	// Task is a task event's card, as list-tasks gives its row.
 	Task *TaskRow `json:"task,omitempty"`
 	// Key and Value are an option-set event's option path and value.
@@ -473,7 +483,7 @@ func (f eventFilter) match(ev streamEvent) bool {
 // optInEventTypes are the event types a subscription receives only when its
 // types filter names them. They arrive at the speed an agent works rather
 // than the speed a person does.
-var optInEventTypes = map[string]bool{EventLayoutChanged: true, EventWindowForeground: true, EventWindowCwd: true, EventAgentActivity: true, EventTranscript: true, EventTransferProgress: true, EventTransferFile: true, EventTML: true, EventOptionSet: true}
+var optInEventTypes = map[string]bool{EventLayoutChanged: true, EventWindowForeground: true, EventWindowCwd: true, EventAgentActivity: true, EventTranscript: true, EventTransferProgress: true, EventTransferFile: true, EventTML: true, EventTMLSurface: true, EventOptionSet: true}
 
 // admitsOutput reports whether the filter lets output events through, which
 // decides whether a resume can be exact: output events are not kept for replay.
@@ -538,6 +548,9 @@ type eventHub struct {
 	// large and are the person's input: they go live to the owner and to
 	// subscribers, and are not kept for a later reader.
 	lastTMLSeq uint64
+	// lastTMLSurfaceSeq is the same for tml-surface events. A client that
+	// missed one reads the surface with tml-get.
+	lastTMLSurfaceSeq uint64
 }
 
 func newEventHub() *eventHub {
@@ -643,7 +656,8 @@ func (h *eventHub) replayLocked(filter eventFilter, from resumePoint) []streamEv
 		filter.types[EventTransferProgress] && h.lastProgressSeq > from.afterSeq,
 		filter.types[EventTransferFile] && h.lastFileSeq > from.afterSeq,
 		filter.types[EventLayoutChanged] && h.lastLayoutSeq > from.afterSeq,
-		filter.types[EventTML] && h.lastTMLSeq > from.afterSeq:
+		filter.types[EventTML] && h.lastTMLSeq > from.afterSeq,
+		filter.types[EventTMLSurface] && h.lastTMLSurfaceSeq > from.afterSeq:
 		out = append(out, gap(GapNotRetained))
 	}
 	for i := range h.ringLen {
@@ -687,6 +701,9 @@ func (h *eventHub) retain(ev streamEvent) {
 		return
 	case EventTML:
 		h.lastTMLSeq = ev.Seq
+		return
+	case EventTMLSurface:
+		h.lastTMLSurfaceSeq = ev.Seq
 		return
 	}
 	if h.ringLen == len(h.ring) {

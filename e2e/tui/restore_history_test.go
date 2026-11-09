@@ -21,6 +21,12 @@ import (
 // shell that answers a command under it. Copy mode then has to reach the
 // oldest line, which is history the new shell never printed.
 //
+// The pane works in a folder that is removed while the daemon is down, so the
+// new shell starts in the daemon's folder. The divider names that folder and
+// says the saved one is gone; it named the saved folder once, where the shell
+// had never been. A second session keeps its folder, and its banner names that
+// folder alone.
+//
 // The ways it could pass without testing that:
 //   - The old lines could be the typed command line echoed back. The shell
 //     computes each marker with arithmetic, so the text HIST-n-END appears
@@ -42,16 +48,42 @@ func TestRestoredPaneShowsItsHistoryAboveTheDivider(t *testing.T) {
 	artifacts := artifactDir(t)
 	base := t.TempDir()
 	killDaemon(t, base)
+	// The daemon saves the folders the kernel reports, with symlinks resolved,
+	// and on macOS the temporary directory is under one.
+	gone, kept := filepath.Join(base, "gone"), filepath.Join(base, "kept")
+	for _, dir := range []*string{&gone, &kept} {
+		if err := os.Mkdir(*dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		resolved, err := filepath.EvalSymlinks(*dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		*dir = resolved
+	}
+	daemonDir, err := filepath.EvalSymlinks(workDirIn(t, base))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	withBinary("TUIOS_E2E_HISTORY_WRITER", func() {
 		if out, err := tuiosCLI(t, base, "new", session, "--detach"); err != nil {
 			t.Fatalf("create the session: %v\n%s", err, out)
+		}
+		// Moved there by its shell, because a writer from before new --cwd
+		// has to run this too.
+		if out, err := tuiosCLI(t, base, "new", session+"-kept", "--detach"); err != nil {
+			t.Fatalf("create the session that keeps its folder: %v\n%s", err, out)
+		}
+		if out, err := tuiosCLI(t, base, "send-keys", "-s", session+"-kept", "-l", "cd '"+kept+"'\r"); err != nil {
+			t.Fatalf("move the session that keeps its folder: %v\n%s", err, out)
 		}
 		first := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"attach", session}})
 		if err := first.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 			t.Fatalf("the client never attached: %v\n%s", err, first.Snapshot())
 		}
 		time.Sleep(insertGuard + 150*time.Millisecond)
+		runInShell(t, first, `cd '`+gone+`' && echo "IN-$((1+1))-GONE"`, "IN-2-GONE", shellTimeout)
 		runInShell(t, first,
 			fmt.Sprintf(`i=1; while [ $i -le %d ]; do echo "HIST-$i-END"; i=$((i+1)); done`, last),
 			fmt.Sprintf("HIST-%d-END", last), bulkTimeout)
@@ -63,6 +95,9 @@ func TestRestoredPaneShowsItsHistoryAboveTheDivider(t *testing.T) {
 		}
 		waitExit(t, first, "after kill-server")
 	})
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
 
 	// The history file is private: it holds whatever the pane printed.
 	files, _ := filepath.Glob(filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "sessions", "scrollback", session, "*.hist.gz"))
@@ -136,5 +171,31 @@ func TestRestoredPaneShowsItsHistoryAboveTheDivider(t *testing.T) {
 		t.Fatalf("ASSERTION: copy mode does not reach the oldest restored line: %v\n%s", err, second.Snapshot())
 	}
 	saveArtifact(t, second, artifacts, "copy-mode-oldest")
+
+	// The folders the banners name. The paths can be wider than the pane, so
+	// the panes are read unwrapped.
+	if got, want := restoreBannerOf(t, base, session), "fresh shell in "+daemonDir+" ("+gone+" no longer available) --"; !strings.HasSuffix(got, want) {
+		t.Errorf("ASSERTION: the divider of the pane whose folder is gone is %q, want it to end %q", got, want)
+	}
+	if got, want := restoreBannerOf(t, base, session+"-kept"), "fresh shell in "+kept+" --"; !strings.HasSuffix(got, want) {
+		t.Errorf("ASSERTION: the banner of the pane whose folder stayed is %q, want it to end %q", got, want)
+	}
 	alive(t, second, "after restoring history")
+}
+
+// restoreBannerOf is the last restore banner in the session's whole pane, read
+// unwrapped, or "" when the pane has none.
+func restoreBannerOf(t *testing.T, base, session string) string {
+	t.Helper()
+	out, err := tuiosCLI(t, base, "capture-pane", "-s", session, "--scrollback", "--lines", "0", "--unwrap")
+	if err != nil {
+		t.Fatalf("capture %s: %v\n%s", session, err, out)
+	}
+	var banner string
+	for line := range strings.SplitSeq(out, "\n") {
+		if strings.Contains(line, "-- tuios: ") {
+			banner = strings.TrimSpace(line)
+		}
+	}
+	return banner
 }

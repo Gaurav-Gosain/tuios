@@ -35,6 +35,7 @@ func (d *Daemon) handleClientGraphics(cs *connState, msg *Message) error {
 	if s := d.manager.GetSessionByID(sessionID); s != nil {
 		s.SetGraphicsCapabilities(p.KittyGraphics, p.SixelGraphics)
 	}
+	d.manager.noteHostGraphics(p.KittyGraphics, p.SixelGraphics)
 	d.refreshTreeOps(sessionID)
 	return nil
 }
