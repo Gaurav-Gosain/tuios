@@ -427,7 +427,46 @@ func ckLine2(ag client.Agent, it *session.AttentionItem) (verb, rest string) {
 		}
 		return "", ag.Message
 	}
+	// While it works, what the hooks said it is doing (polish wave 1,
+	// item 2: a working row said No activity): the tool call running now,
+	// which the daemon clears at a turn's end, a new prompt and a rest, so
+	// it is never a stale turn's; else the prompt it works on. At rest the
+	// prompt is left out: the daemon keeps it across a /clear and a new
+	// conversation, where it would be the last one's.
+	if ag.State == "working" {
+		if now, _ := ag.Meta[session.AgentMetaNow].(string); now != "" {
+			return ckNowWords(now, ag.Cwd)
+		}
+		if p, _ := ag.Meta[session.AgentMetaPrompt].(string); strings.TrimSpace(p) != "" {
+			return "", strings.TrimSpace(p)
+		}
+	}
 	return "", ""
+}
+
+// ckNowWords is the daemon's "Tool: target" in words: "Running" and the
+// command, "Editing" and the file, the file shown from the agent's folder.
+func ckNowWords(now, cwd string) (verb, rest string) {
+	tool, target, _ := strings.Cut(now, ": ")
+	short := target
+	if filepath.IsAbs(target) && cwd != "" {
+		if r, err := filepath.Rel(cwd, target); err == nil && !strings.HasPrefix(r, "..") {
+			short = r
+		}
+	}
+	switch {
+	case ckCommand(tool):
+		return locales.CockpitNowRunning(), target
+	case slices.Contains(integration.EditTools, tool):
+		return locales.CockpitNowEditing(), short
+	case tool == "Read" || tool == "read_file" || tool == "view":
+		return locales.CockpitNowReading(), short
+	case tool == "Grep" || tool == "Glob" || tool == "search_file_content" || tool == "grep" || tool == "glob":
+		return locales.CockpitNowSearching(), short
+	case tool == "WebFetch" || tool == "WebSearch":
+		return locales.CockpitNowFetching(), target
+	}
+	return tool, short
 }
 
 // ckShortTarget is what a row shows of an approval's target: an edit's path
@@ -564,7 +603,7 @@ func (a *App) ckRowView(c *ui.Context, pal *palette, r ckRow) {
 				rest = ck.spawnTasks[ag.Name]
 			}
 			if verb != "" || rest != "" {
-				ui.RichText(c, ckLine2Spans(pal, verb, flat(rest), ckStopped(ag, r.item))...).FontSize(fsSmall).SingleLine().Ellipsis("…").MinWidth(0).Margin(0, 0, 0, 21)
+				ui.RichText(c, ckLine2Spans(pal, verb, flat(rest), ckStopped(ag, r.item), r.item != nil)...).FontSize(fsSmall).SingleLine().Ellipsis("…").MinWidth(0).Margin(0, 0, 0, 21)
 			} else if ckSilent(ag) && ag.StateAt > 0 {
 				// How long since its last report, which said working.
 				ui.Text(c, locales.CockpitNoReportFor(ckSilentFor(ag, c.Now()))).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Margin(0, 0, 0, 21)
@@ -589,10 +628,16 @@ func attemptChip(c *ui.Context, pal *palette, letter string) {
 
 // ckLine2Spans draws a second line: an ask's verb in the attention colour,
 // the rest muted, or faint when it is old (ckStopped).
-func ckLine2Spans(pal *palette, verb, rest string, stopped bool) []ui.Span {
+func ckLine2Spans(pal *palette, verb, rest string, stopped, needs bool) []ui.Span {
 	var out []ui.Span
 	if verb != "" {
-		out = append(out, ui.Span{Text: verb + " ", Color: pal.attnText, Weight: wSemibold})
+		// The attention colour says the agent needs the person; what it is
+		// doing on its own ("Running") is in the row's text colour.
+		col := pal.text
+		if needs {
+			col = pal.attnText
+		}
+		out = append(out, ui.Span{Text: verb + " ", Color: col, Weight: wSemibold})
 	}
 	col := pal.textMuted
 	if stopped {
