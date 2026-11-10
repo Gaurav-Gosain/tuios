@@ -182,6 +182,81 @@ the keys, the action, the scope and the description. `q` or `esc` leaves it.
 It opens only when you run `browse`. `tuios keybinds list` stays plain text,
 on a terminal too.
 
+## Hover help
+
+`Ctrl+B h` or `Shift+F1` opens help mode. A `?` control on the dock does the
+same with a click, opening on the control's own page, and another click closes
+it; the control is in no default list, so add `"help"` to `dock.left` or
+`dock.right` to have it. It explains one component at a time rather than
+listing every key: move the pointer over a rail, the dock or one of its cells,
+a pane's title bar or its terminal body, and a pane with a warning-toned border
+appears above or below it, never over it when the screen has room. A rail
+section is the exception: its pane sits beside the rail, so the column being
+explained stays visible, narrowing the pane when the screen is tight. The pane
+says what the component is for, the hotkeys that act on it, and the `tuios`
+commands that change it. A line above the keys names the mode the keys belong
+to, window or terminal, and whether the component holds the keyboard, so the
+list is read in the state it will run in; a component that never takes the
+keyboard, such as the dock, says so. A rail reads its keys in either mode, so
+its line names only whether it holds the keyboard. A component that does not
+hold the keyboard has its key list dimmed, because those keys act on whatever
+holds it until the component takes it.
+`Ctrl+B ?` still opens the full key list.
+
+Help mode is a view, not a mode. It reads only the keys in the table below;
+every other key reaches the app as if the pane were not up, so the rail's own
+toggles, a workspace switch and a command for the focused pane run while you
+read, and the pane redraws around the layout they leave. The leader opens its
+menu over the screen rather than beside the pane: the explanation stands aside
+while the menu is up, and the chord that closes it leaves the pane hidden for
+the same two seconds as any other key.
+
+| Key | What it does |
+| --- | --- |
+| `Tab`, `Shift+Tab` | Next or previous top-level component. `←` and `→` do the same. |
+| `Down` | Move into the selected component's parts, such as a rail's sections or a pane's title bar and body, then through them. |
+| `Up` | Move back out: previous part, then the component itself. |
+| `h` | Show every keybinding of the selected component instead of the short list. |
+| `s` | Show or hide the session rail, so a hidden rail can be inspected. |
+| `S` | Show or hide the opposite rail, when one is configured. |
+| `Shift+Esc` | Leave help mode. |
+
+Those are defaults, and the navigation ones live in `[keybindings.help]`, each
+as an action: `help_next`, `help_prev`, `help_deeper`, `help_shallower`,
+`help_scroll_up`, `help_scroll_down`, `help_keys` and `help_exit`. A rebind
+moves the key and everything the pane says about it together: the footer and
+the scroll marker name the configured keys, and an action set to `[]` leaves
+its line out rather than naming a key that does nothing. `help_exit` is
+`Shift+Esc` rather than `esc` on purpose: esc is what a pane wants for itself,
+and help must not take it. `Shift+F1` still leaves, being `toggle_help_mode` in
+`[keybindings.global]`. `s` and `S` are the rail's own actions, in their own
+tables.
+
+A hidden rail still has an entry in the rotation, marked `(hidden)`; its pane
+names the chord that brings it back, and that chord works from here. Help mode
+keeps the pointer while it is up: a click on a pane picks the part it explains
+and cannot focus or move it, and the wheel scrolls the explanation. The dock is
+the exception, because its cells are controls: a click on one does what it does
+with the pane down, from a workspace tab to a minimized pane's pill to a custom
+cell, and the explanation follows the click. A panel opened over help takes
+the pointer and the keys.
+
+A key help mode does not bind does what it does without the pane, and the pane
+steps out of sight while it runs: it comes back after two seconds, and any of
+the navigation keys brings it back at once. That is how a bare `h` or `Up` can
+belong to the pane's explanation over a terminal and still leave the keyboard
+free. `Shift+Esc` is the way out for good.
+
+The default is
+`prefix_help_mode = ["h"]` in
+`[keybindings.prefix_mode]`, so a preset that binds `h` to something else takes
+the key with it; rebind either action.
+
+The pane's prose follows the language of the client: `[ui] language`, or the
+locale when that is unset. A CLI line, a config path and a key label stay as
+they are in every language. See
+[CONFIGURATION.md](CONFIGURATION.md#language-of-the-help).
+
 ## Editing sidebar files
 
 Focus the sidebar with `s` in window mode or `Ctrl+B e`, or walk into it with

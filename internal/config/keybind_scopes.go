@@ -79,6 +79,7 @@ const (
 	SectionTransfers        = "transfers"
 	SectionCopyMode         = "copy_mode"
 	SectionReview           = "review"
+	SectionHelp             = "help"
 	SectionGlobal           = "global"
 	SectionScript           = "script"
 	SectionLists            = "lists"
@@ -101,6 +102,7 @@ const (
 	ScopeTransfers      = "transfers"
 	ScopeCopyMode       = "copy"
 	ScopeReview         = "review"
+	ScopeHelp           = "help"
 	ScopePrefix         = "prefix"
 	ScopePrefixWindow   = "prefix.window"
 	ScopePrefixMinimize = "prefix.minimize"
@@ -224,6 +226,14 @@ func Scopes(leader string) []Scope {
 			// [ move through its hunks and nothing else.
 			ID: ScopeReview, Name: "Review",
 			Sections: []string{SectionReview},
+			Reaches:  ReachModal,
+		},
+		{
+			// Help mode reads these and passes every other key to the app, so
+			// they are live only while its pane is up: shift+tab says next
+			// component there and nothing elsewhere.
+			ID: ScopeHelp, Name: "Help mode",
+			Sections: []string{SectionHelp},
 			Reaches:  ReachModal,
 		},
 		{

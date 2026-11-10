@@ -147,6 +147,10 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validateDisplay(cfg, result)
 	validateKeepAwake(cfg, result)
 	warnEnum(result, "shell", "integration", cfg.Shell.Integration, ShellIntegrationModes, ShellIntegrationAuto)
+	// An unknown language is a warning, not an error: the help reads in
+	// English, which is what it read before, and a config that names a
+	// language a later build adds stays loadable.
+	warnEnum(result, "ui", "language", cfg.UI.Language, UILanguages, "")
 	validateLinkPolicies(cfg, result)
 	validatePanePermissions(cfg, result)
 	validateAgentWork(cfg, result)

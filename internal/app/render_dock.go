@@ -356,7 +356,7 @@ func (m *OS) renderDockString() (string, int) {
 		windowIndex, x0, x1 int
 	}
 	var itemSpans []itemSpan
-	var centerCustom []dockCustomHit
+	var centerCustom, centerHelp []dockCustomHit
 	relX := 0
 	overflowX0, overflowX1 := 0, 0
 
@@ -371,6 +371,8 @@ func (m *OS) renderDockString() (string, int) {
 			}
 			w := lipgloss.Width(cell)
 			dockItemsStr.WriteString(cell)
+			centerHelp = append(centerHelp, dockCustomHit{X0: relX, X1: relX + w, Name: name})
+			m.dockCenterParts = append(m.dockCenterParts, name)
 			if dockCellClickable(name) {
 				centerCustom = append(centerCustom, dockCustomHit{X0: relX, X1: relX + w, Name: name})
 			}
@@ -378,8 +380,12 @@ func (m *OS) renderDockString() (string, int) {
 			continue
 		}
 
+		if len(layout.VisibleItems) > 0 {
+			m.dockCenterParts = append(m.dockCenterParts, name)
+		}
 		for _, dockItem := range layout.VisibleItems {
 			windowIndex := dockItem.WindowIndex
+			m.dockCenterLabels = append(m.dockCenterLabels, dockItem.Label)
 			window := m.Windows[windowIndex]
 
 			// A minimized entry rests on the same Panel step the rest of the chrome
@@ -445,6 +451,9 @@ func (m *OS) renderDockString() (string, int) {
 	// cell record the rectangle that was just drawn rather than one derived
 	// afterwards from a layout that may have moved.
 	m.dockCustomHits = m.dockCustomHits[:0]
+	m.dockHelpHits = m.dockHelpHits[:0]
+	m.dockCenterLabels = m.dockCenterLabels[:0]
+	m.dockCenterParts = m.dockCenterParts[:0]
 	dockY := m.GetDockbarContentYPosition()
 	m.dockWorkspaceHits = m.dockWorkspaceHits[:0]
 	m.dockWorkspaceArrowHits = m.dockWorkspaceArrowHits[:0]
@@ -492,6 +501,8 @@ func (m *OS) renderDockString() (string, int) {
 			continue
 		}
 		w := lipgloss.Width(chunk)
+		m.dockHelpHits = append(m.dockHelpHits,
+			dockCustomHit{X0: leftX, X1: leftX + w, Y: dockY, Name: name})
 		if custom {
 			m.dockCustomHits = append(m.dockCustomHits,
 				dockCustomHit{X0: leftX, X1: leftX + w, Y: dockY, Name: name})
@@ -546,7 +557,7 @@ func (m *OS) renderDockString() (string, int) {
 
 	// Where the right block's custom cells landed inside it. Converted to screen
 	// columns below, once the block's own first column is known.
-	var rightCustom []dockCustomHit
+	var rightCustom, rightHelp []dockCustomHit
 
 	legend := m.dockModeLegend()
 	switch {
@@ -564,7 +575,7 @@ func (m *OS) renderDockString() (string, int) {
 		// cut below never reaches it.
 		rightInfo = renderModeLegend(legend, rightWidth, pal)
 	default:
-		rightInfo, rightCustom = m.renderDockRightCells(rightWidth, sysInfoStyle)
+		rightInfo, rightCustom, rightHelp = m.renderDockRightCells(rightWidth, sysInfoStyle)
 	}
 	if w := lipgloss.Width(rightInfo); w > rightWidth {
 		rightInfo = truncateToWidth(rightInfo, rightWidth)
@@ -618,11 +629,21 @@ func (m *OS) renderDockString() (string, int) {
 			X0: itemsX + h.X0, X1: itemsX + h.X1, Y: itemY, Name: h.Name,
 		})
 	}
+	for _, h := range centerHelp {
+		m.dockHelpHits = append(m.dockHelpHits, dockCustomHit{
+			X0: itemsX + h.X0, X1: itemsX + h.X1, Y: itemY, Name: h.Name,
+		})
+	}
 	// The right block is drawn right-aligned inside the room it was given, so
 	// its cells sit against its right-hand end rather than its first column.
 	rightBlockX := notifX0 + rightWidth - lipgloss.Width(rightInfo)
 	for _, h := range rightCustom {
 		m.dockCustomHits = append(m.dockCustomHits, dockCustomHit{
+			X0: rightBlockX + h.X0, X1: rightBlockX + h.X1, Y: itemY, Name: h.Name,
+		})
+	}
+	for _, h := range rightHelp {
+		m.dockHelpHits = append(m.dockHelpHits, dockCustomHit{
 			X0: rightBlockX + h.X0, X1: rightBlockX + h.X1, Y: itemY, Name: h.Name,
 		})
 	}
