@@ -502,3 +502,90 @@ func TestStripKeysFromTwoClientsAtOnce(t *testing.T) {
 		t.Logf("write the transcript: %v", err)
 	}
 }
+
+// TestADaemonRotateSlides: with animations on, a TUI on a session of two
+// panes side by side in the split layout takes the arrange verb's rotate (a
+// change the daemon made, guios's path) from a state. The second pane must
+// slide to its place below the first, through the frames in between, not
+// cut, and one way. The frames go to rotate-frames.txt.
+//
+// How this could pass wrongly, written down first:
+//   - The rotate could do nothing and no pane move: the second pane must end
+//     below the first, at the first's x.
+//   - The trace could miss frames: the move must pass through at least three
+//     values in between (oneWay).
+func TestADaemonRotateSlides(t *testing.T) {
+	const name = "rotate-slide"
+	trace := filepath.Join(t.TempDir(), "render-trace.log")
+	term, base := start(t, startOpts{cols: 120, rows: 40, args: []string{"new", name}, animations: true,
+		env: []string{"TUIOS_RENDER_TRACE=" + trace}})
+	killDaemon(t, base)
+	waitBoot(t, term)
+	for range 2 {
+		newWindow(t, term)
+	}
+	enableTiling(t, term)
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("screen never settled: %v", err)
+	}
+	g := daGeom(t, base, name, 2)
+	var first, second string
+	for id, r := range g {
+		if first == "" || r.X < g[first].X {
+			first = id
+		}
+	}
+	for id := range g {
+		if id != first {
+			second = id
+		}
+	}
+	if g[second].X == g[first].X {
+		t.Fatalf("the two panes do not stand side by side: %v", g)
+	}
+	if out, err := tuiosCLI(t, base, "focus-window", "-s", name, first); err != nil {
+		t.Fatalf("focus-window: %v: %s", err, out)
+	}
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("screen never settled: %v", err)
+	}
+	mark := fileSize(t, trace)
+	if out, err := tuiosCLI(t, base, "call", "arrange", `{"session":"`+name+`","op":"rotate"}`); err != nil {
+		t.Fatalf("arrange rotate: %v: %s", err, out)
+	}
+	// The screen can hold still before the state with the new tree lands,
+	// so the trace is read until the second pane stands under the first.
+	short := second[:8]
+	var frames []traceFrame
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		frames = readTraceFrames(t, trace, mark, short)
+		if n := len(frames); n > 0 && frames[n-1].anims == 0 && frames[n-1].panes[short].X == frames[n-1].panes[first[:8]].X {
+			break
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	var b strings.Builder
+	var xs []int
+	for _, f := range frames {
+		fmt.Fprintf(&b, "anims=%d syncs=%d %v\n", f.anims, f.syncs, f.panes)
+		if r, ok := f.panes[short]; ok {
+			xs = append(xs, r.X)
+		}
+	}
+	_ = os.WriteFile(filepath.Join(artifactDir(t), "rotate-frames.txt"), []byte(b.String()), 0o644)
+	if len(xs) == 0 {
+		t.Fatalf("the trace has no frame of the second pane")
+	}
+	firstX := frames[len(frames)-1].panes[first[:8]].X
+	t.Logf("the second pane's left edges %v, the first pane at %d", compactSeq(xs), firstX)
+	if xs[len(xs)-1] != firstX {
+		t.Fatalf("the second pane ended at x=%d, want under the first at x=%d", xs[len(xs)-1], firstX)
+	}
+	if msg := oneWay(xs, xs[0], firstX); msg != "" {
+		t.Errorf("the second pane's left edge %s: %v", msg, compactSeq(xs))
+	}
+}
