@@ -388,6 +388,8 @@ func (a *App) commandItems() []paletteItem {
 		cmds = append(cmds, paletteItem{title: locales.LauncherRow(), keys: [2]string{"", a.prefixKeys("launcher")},
 			words: "run launcher program app anything " + en.LauncherRow(), run: a.openLauncher})
 	}
+	cmds = append(cmds, a.commandEntryItems()...)
+	cmds = append(cmds, a.pluginItems(s)...)
 	cmds = append(cmds, a.allKeymapItems(s, tuiosOf)...)
 	for _, page := range settingsPages {
 		id := page.id

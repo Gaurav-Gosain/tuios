@@ -13987,3 +13987,65 @@ func LauncherRunFailed(name string, why string) string {
 func (msgs Messages) LauncherRunFailed(name string, why string) string {
 	return Catalog.Format(msgs.locale, "launcherRunFailed", map[string]any{"name": name, "why": why})
 }
+
+// CommandEntryFailed says "{name} did not run: {why}"
+// in the language the app shows.
+func CommandEntryFailed(name string, why string) string {
+	return In(i18n.Locale()).CommandEntryFailed(name, why)
+}
+
+// CommandEntryFailed says "{name} did not run: {why}"
+// in the language of msgs.
+func (msgs Messages) CommandEntryFailed(name string, why string) string {
+	return Catalog.Format(msgs.locale, "commandEntryFailed", map[string]any{"name": name, "why": why})
+}
+
+// CommandEntryRan says "Ran {name}."
+// in the language the app shows.
+func CommandEntryRan(name string) string { return In(i18n.Locale()).CommandEntryRan(name) }
+
+// CommandEntryRan says "Ran {name}."
+// in the language of msgs.
+func (msgs Messages) CommandEntryRan(name string) string {
+	return Catalog.Format(msgs.locale, "commandEntryRan", map[string]any{"name": name})
+}
+
+// PluginActionDetail says "plugin action"
+// in the language the app shows.
+func PluginActionDetail() string { return In(i18n.Locale()).PluginActionDetail() }
+
+// PluginActionDetail says "plugin action"
+// in the language of msgs.
+func (msgs Messages) PluginActionDetail() string {
+	return Catalog.Format(msgs.locale, "pluginActionDetail", nil)
+}
+
+// PluginPaneDetail says "plugin pane, {placement}"
+// in the language the app shows.
+func PluginPaneDetail(placement string) string { return In(i18n.Locale()).PluginPaneDetail(placement) }
+
+// PluginPaneDetail says "plugin pane, {placement}"
+// in the language of msgs.
+func (msgs Messages) PluginPaneDetail(placement string) string {
+	return Catalog.Format(msgs.locale, "pluginPaneDetail", map[string]any{"placement": placement})
+}
+
+// PluginNoDaemon says "The tuios daemon on this machine cannot be reached."
+// in the language the app shows.
+func PluginNoDaemon() string { return In(i18n.Locale()).PluginNoDaemon() }
+
+// PluginNoDaemon says "The tuios daemon on this machine cannot be reached."
+// in the language of msgs.
+func (msgs Messages) PluginNoDaemon() string {
+	return Catalog.Format(msgs.locale, "pluginNoDaemon", nil)
+}
+
+// PluginNeedsLocal says "{name} is a plugin of this machine's daemon, and this session runs on another machine."
+// in the language the app shows.
+func PluginNeedsLocal(name string) string { return In(i18n.Locale()).PluginNeedsLocal(name) }
+
+// PluginNeedsLocal says "{name} is a plugin of this machine's daemon, and this session runs on another machine."
+// in the language of msgs.
+func (msgs Messages) PluginNeedsLocal(name string) string {
+	return Catalog.Format(msgs.locale, "pluginNeedsLocal", map[string]any{"name": name})
+}
