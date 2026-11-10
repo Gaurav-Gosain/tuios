@@ -1322,6 +1322,22 @@ func (m *OS) helpSectionLines(cur *helpComponent, width int, pal overlay.Palette
 	key := overlay.Style(bg).Foreground(pal.Accent).Bold(true)
 	note := overlay.Style(bg).Foreground(pal.FgMute)
 
+	// A key list is read against the state it will run in, so a component that
+	// does not hold the keyboard has its keys drawn quieter than the ones that
+	// would act: the state line above says why, and the dimming repeats it in
+	// the list. The dock and the desktop never take the keyboard, so theirs are
+	// not dimmed: their keys are chords that act wherever the keyboard is.
+	focused, focusable := m.helpFocus(cur)
+	keysLive := !focusable || focused
+	keyInk, descInk := key, body
+	if !keysLive {
+		// Faint as well as muted: at 16 colours a role can resolve to the
+		// terminal's own ink, and then colour alone would leave the line as
+		// bright as a live one. The attribute survives every depth.
+		keyInk = overlay.Style(bg).Foreground(pal.FgMute).Faint(true)
+		descInk = muted
+	}
+
 	var lines []string
 	if m.helpShowKeys {
 		lines = append(lines, "")
@@ -1329,7 +1345,7 @@ func (m *OS) helpSectionLines(cur *helpComponent, width int, pal overlay.Palette
 		if len(cur.allKeys) == 0 {
 			lines = append(lines, muted.Render("Nothing is bound to this component."))
 		} else {
-			lines = append(lines, helpKeyLines(cur.allKeys, inner, key, body)...)
+			lines = append(lines, helpKeyLines(cur.allKeys, inner, keyInk, descInk)...)
 		}
 		return lines
 	}
@@ -1363,7 +1379,7 @@ func (m *OS) helpSectionLines(cur *helpComponent, width int, pal overlay.Palette
 			heading = "Hotkeys when focused"
 		}
 		lines = append(lines, dim.Bold(true).Render(heading))
-		lines = append(lines, helpKeyLines(cur.keys, inner, key, body)...)
+		lines = append(lines, helpKeyLines(cur.keys, inner, keyInk, descInk)...)
 	}
 	if len(cur.cli) > 0 {
 		lines = append(lines, "")
