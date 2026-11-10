@@ -1380,5 +1380,7 @@
   "launcherNoSession": "请先打开一个会话。程序在它的窗格中运行。",
   "launcherFailed": "无法列出程序。",
   "launcherEmpty": "PATH 中没有程序。",
-  "launcherRunFailed": "{name} 无法启动: {why}"
+  "launcherRunFailed": "{name} 无法启动: {why}",
+  "railPaneStopped": "已停止",
+  "railPaneStartAgain": "重新开始"
 }

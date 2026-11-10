@@ -2416,5 +2416,7 @@
   "launcherNoSession": "Open a session first. A program runs in a pane of it.",
   "launcherFailed": "The programs could not be listed.",
   "launcherEmpty": "There are no programs on the PATH.",
-  "launcherRunFailed": "{name} could not start: {why}"
+  "launcherRunFailed": "{name} could not start: {why}",
+  "railPaneStopped": "Stopped",
+  "railPaneStartAgain": "Start again"
 }

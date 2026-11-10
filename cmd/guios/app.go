@@ -191,12 +191,18 @@ type App struct {
 	ss       settingsState
 	selected string
 	terms    map[string]*termEntry
-	webs     map[string]*webEntry // browser panes' pages, by pane
-	ads      adBlock              // what their pages block
-	icons    favicons             // and the icons they show
-	lru      []string
-	refs     map[string]*ui.Handle // panes' terminals, and splits, by id
-	focus    map[string]string     // the pane the user is in, by session
+	// railCustom runs the rail's custom section, and railPaneAsked and
+	// railPaneSeen are, by session, the command line its pane section asked
+	// the daemon for and the one it has shown (rail_sections.go).
+	railCustom    railCustom
+	railPaneAsked map[string]string
+	railPaneSeen  map[string]string
+	webs          map[string]*webEntry // browser panes' pages, by pane
+	ads           adBlock              // what their pages block
+	icons         favicons             // and the icons they show
+	lru           []string
+	refs          map[string]*ui.Handle // panes' terminals, and splits, by id
+	focus         map[string]string     // the pane the user is in, by session
 	// focusAsk is the pane the app asked the daemon to focus, by session,
 	// until it answers (setFocus); keyAt and keyPane are when and in which
 	// pane the person last typed. A focus the daemon moved is taken only
@@ -368,7 +374,7 @@ type confirmation struct {
 }
 
 func newApp() *App {
-	a := &App{terms: map[string]*termEntry{}, webs: map[string]*webEntry{}, statuses: map[string]proto.Status{}, active: true, focused: true, badge: -1,
+	a := &App{terms: map[string]*termEntry{}, railPaneAsked: map[string]string{}, railPaneSeen: map[string]string{}, webs: map[string]*webEntry{}, statuses: map[string]proto.Status{}, active: true, focused: true, badge: -1,
 		refs: map[string]*ui.Handle{}, focus: map[string]string{}}
 	a.loadPrefs()
 	a.loadBackup()

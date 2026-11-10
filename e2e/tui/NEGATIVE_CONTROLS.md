@@ -16951,3 +16951,20 @@ branch passes both cases on both.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAttachedClientRunsTheUpgradedBuild$' -v .`.
+
+## TestGuiosRailPaneIsTheTUIs
+
+The guios client, with no window, asks for the session's rail pane through
+rail.pane with a command line. The pane shows in its state as the session's
+RailPane keyed by that line. The rail-pane verb a TUI's rail calls with the
+same line gets the same window (created false), and the window shows what
+the command printed.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The branch with the client's rail.pane case taken out of its dispatch | "rail.pane: unknown method \"rail.pane\"" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestGuiosRailPaneIsTheTUIs$' -v .`.

@@ -13987,3 +13987,23 @@ func LauncherRunFailed(name string, why string) string {
 func (msgs Messages) LauncherRunFailed(name string, why string) string {
 	return Catalog.Format(msgs.locale, "launcherRunFailed", map[string]any{"name": name, "why": why})
 }
+
+// RailPaneStopped says "Stopped"
+// in the language the app shows.
+func RailPaneStopped() string { return In(i18n.Locale()).RailPaneStopped() }
+
+// RailPaneStopped says "Stopped"
+// in the language of msgs.
+func (msgs Messages) RailPaneStopped() string {
+	return Catalog.Format(msgs.locale, "railPaneStopped", nil)
+}
+
+// RailPaneStartAgain says "Start again"
+// in the language the app shows.
+func RailPaneStartAgain() string { return In(i18n.Locale()).RailPaneStartAgain() }
+
+// RailPaneStartAgain says "Start again"
+// in the language of msgs.
+func (msgs Messages) RailPaneStartAgain() string {
+	return Catalog.Format(msgs.locale, "railPaneStartAgain", nil)
+}

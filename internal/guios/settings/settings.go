@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/adblock"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
@@ -36,6 +37,13 @@ type Settings struct {
 	// Approvals is agents.approvals in the same file: the agents view
 	// answers Claude Code's permission prompts while it is on.
 	Approvals bool `json:"-"`
+	// RailSections, RailCustom and RailPane are appearance.sidebar's
+	// sections, custom and pane in the same file: which sections the rail
+	// shows and in what order, the custom section's command, and the pane
+	// section's program.
+	RailSections string                     `json:"-"`
+	RailCustom   config.SidebarCustomConfig `json:"-"`
+	RailPane     config.SidebarPaneConfig   `json:"-"`
 	// ReplyRows is agents.reply_rows in the same file: the most lines the
 	// reply box and a new agent's task grow to before they scroll. Zero
 	// keeps each box's own.

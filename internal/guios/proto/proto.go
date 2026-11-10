@@ -382,6 +382,11 @@ type Session struct {
 	// toggle_scratch group: on a scratch workspace, in no list, shown over
 	// the panes as the scratch dropdown.
 	Scratch []Pane `json:"scratch,omitempty"`
+	// RailPane is the session's rail pane, the program the TUI's rail shows
+	// as its pane section (appearance.sidebar.pane), and RailKey the command
+	// line that keys it: a client that wants another line gets another pane.
+	RailPane *Pane  `json:"railPane,omitempty"`
+	RailKey  string `json:"railKey,omitempty"`
 	// TUI tells that a tuios TUI client shows the session, which runs the
 	// keymap actions only a TUI has.
 	TUI bool `json:"tui,omitempty"`
@@ -1019,3 +1024,14 @@ type (
 		Text string `json:"text"`
 	}
 )
+
+// RailPaneParams asks for a session's rail pane running Command, Cols by
+// Rows cells, started in Dir. A pane the session has for that command line
+// is kept, and one for another line is replaced.
+type RailPaneParams struct {
+	Session string `json:"session"`
+	Command string `json:"command"`
+	Cols    int    `json:"cols"`
+	Rows    int    `json:"rows"`
+	Dir     string `json:"dir,omitempty"`
+}

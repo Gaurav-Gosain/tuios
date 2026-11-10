@@ -165,7 +165,7 @@ func (k *stateKeeper) build() (*proto.State, error) {
 			}
 			st.Projects = append(st.Projects, proto.Project{ID: project, Name: name, Dir: home})
 		}
-		wraw, err := k.c.verb("list-windows", map[string]any{"session": s.Name})
+		wraw, err := k.c.verb("list-windows", map[string]any{"session": s.Name, "rail": true})
 		if err != nil {
 			continue
 		}
@@ -205,6 +205,11 @@ func (k *stateKeeper) build() (*proto.State, error) {
 				p := k.pane(w)
 				p.Workspace = w.Workspace
 				ks.Scratch = append(ks.Scratch, p)
+			}
+			if w.Rail != "" && !(hide && slices.Contains(goneID, w.ID)) {
+				// The rail pane: in no workspace's list, drawn in the rail.
+				p := k.pane(w)
+				ks.RailPane, ks.RailKey = &p, w.Rail
 			}
 			if w.Scratch || w.Rail != "" || hide && slices.Contains(goneID, w.ID) {
 				continue
@@ -273,7 +278,7 @@ func (k *stateKeeper) build() (*proto.State, error) {
 			// work, else its own folder. list-sessions may give that
 			// folder by its last name alone, which is no path to start in.
 			for _, w := range wl.Windows {
-				if filepath.IsAbs(w.Cwd) {
+				if w.Rail == "" && filepath.IsAbs(w.Cwd) {
 					ks.Pane.Dir = w.Cwd
 					break
 				}
