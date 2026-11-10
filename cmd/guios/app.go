@@ -297,6 +297,7 @@ type App struct {
 	chrome       chrome // where the sidebar's animation puts things
 
 	pal     paletteState
+	plugins []pluginRow // the enabled plugins' rows, read as the palette opens
 	find    findState
 	confirm *confirmation
 	wtAsk   *worktreeAsk
