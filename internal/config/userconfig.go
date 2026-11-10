@@ -96,6 +96,10 @@ type UserConfig struct {
 	// shells it starts. See shell_integration.go.
 	Shell ShellConfig `toml:"shell"`
 
+	// UI is the [ui] table: the language the client's own prose reads in.
+	// See ui.go.
+	UI UIConfig `toml:"ui"`
+
 	// YieldedDefaults are the new default bindings left off because the key
 	// was already the user's for another action in the same table. It is
 	// worked out on load and never written. See yieldingDefaults.
@@ -1490,6 +1494,7 @@ func DefaultConfig() *UserConfig {
 				"prefix_exit_mode":        {"esc"},
 				"prefix_selection":        {"["},
 				"prefix_help":             {"?"},
+				"prefix_help_mode":        {"h"},
 				"prefix_debug":            {"D"},
 				"prefix_tape":             {"T"},
 				"prefix_quit":             {"q"},
@@ -2964,6 +2969,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// DockWorkspaceTabFormat is assigned unconditionally: an empty string is the
 	// "{name}" default, and clearing it on reload has to be possible too.
 	s.DockWorkspaceTabFormat = cfg.Appearance.DockWorkspaceTabFormat
+	// Assigned unconditionally: an empty language means "follow the
+	// locale", and clearing it on reload has to bring that back.
+	s.Language = cfg.UI.Language
 	if cfg.Appearance.DockWorkspaceTooltip != nil {
 		s.DockWorkspaceTooltip = *cfg.Appearance.DockWorkspaceTooltip
 	}

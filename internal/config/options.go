@@ -785,6 +785,12 @@ var optionSpecs = []Option{
 		Deprecated:  "folded into [appearance.sidebar] on load; set appearance.sidebar.show_counts",
 	},
 
+	{
+		Path: "ui.language", Type: OptionString, Section: "ui",
+		Description: "Language of the client's own prose: a code such as fr, empty to follow the locale",
+		Accepted:    UILanguages, Default: "",
+	},
+
 	// The dock and the readouts on it.
 	{
 		Path: "appearance.dockbar_position", Type: OptionString, Section: "dock",

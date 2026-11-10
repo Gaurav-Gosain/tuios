@@ -63,6 +63,13 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	case tea.PasteEndMsg:
 		return o, nil
 	case tea.MouseClickMsg:
+		// Help mode reads the pointer: a click picks the component under it
+		// and does nothing else, so a click cannot focus or move a pane while
+		// the user is inspecting it. A panel above it takes the pointer.
+		if o.HelpMode && helpOwnsPointer(o) {
+			o.HelpHoverAt(msg.X, msg.Y)
+			return o, nil
+		}
 		if _, inside := o.SidebarSessionAt(msg.X, msg.Y); !inside {
 			o.BlurSidebarSession()
 		}
@@ -88,6 +95,13 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 			result, cmd = handleMouseClick(msg, o)
 		}
 	case tea.MouseMotionMsg:
+		// Help mode reads the pointer as its cursor. Motion never moves,
+		// resizes or hovers anything else while it is on, unless a panel above
+		// it is open.
+		if o.HelpMode && helpOwnsPointer(o) {
+			o.HelpHoverAt(msg.X, msg.Y)
+			return o, nil
+		}
 		// The labels cover the pane, so motion over it is not the pane's.
 		if o.HintsOpen() || o.PaneLabelsOpen() {
 			return o, nil
@@ -107,6 +121,9 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// Don't sync on motion: too frequent
 		return handleMouseMotion(msg, o)
 	case tea.MouseReleaseMsg:
+		if o.HelpMode && helpOwnsPointer(o) {
+			return o, nil
+		}
 		if o.CaptureActive() {
 			result, cmd = handleCaptureMouseRelease(o)
 		} else if o.ShowScrollbackBrowser {
@@ -121,6 +138,16 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// tick.
 		o.ReleaseGestureAnnouncements()
 	case tea.MouseWheelMsg:
+		if o.HelpMode && helpOwnsPointer(o) {
+			// The wheel scrolls the explanation the way Up and Down do. It
+			// turns nothing else: no pane, no list, no review.
+			step := -3
+			if msg.Button == tea.MouseWheelDown {
+				step = 3
+			}
+			o.HelpScroll(step)
+			return o, nil
+		}
 		// A wheel scrolls the pane out from under the labels, so it ends
 		// hints mode and then scrolls as usual. The pane labels the same.
 		o.CloseHints()
@@ -404,6 +431,16 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// window-management and terminal mode. It only observes; it never consumes.
 	if o.ShowKeys {
 		o.CaptureKeyEvent(msg)
+	}
+
+	// Help mode reads the keys it binds and leaves the rest to the app. Its
+	// pane is a view of the layout, not a mode over it: the chords it lists
+	// run while it is up, so pressing the rail's toggle beside the explanation
+	// changes what the next frame explains.
+	if o.HelpMode && helpOwnsKey(msg, o) {
+		if result, cmd, handled := handleHelpModeKey(msg, o); handled {
+			return result, cmd
+		}
 	}
 
 	// Hold-to-window-mode. The trigger is consumed here, before any mode routing,

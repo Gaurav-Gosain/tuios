@@ -1804,6 +1804,28 @@ login = true   # default: false
 The change applies to new panes. A pane that runs a command, such as
 `tuios new-window -- htop`, runs the command as it is.
 
+## Language of the help
+
+Hover help speaks the language of the client that draws it. With nothing set,
+it follows the locale, asking `LC_ALL`, then `LC_MESSAGES`, then `LANG`. To
+choose for this client alone:
+
+```toml
+[ui]
+language = "fr"   # default: follow the locale
+```
+
+`en` and `fr` are the languages this build carries. The choice covers prose:
+titles, explanations and the count after a component's name. A CLI line, a
+configuration path and a key label stay as they are in every language, because
+those are things a person types and the shell, the file and the keyboard do
+not read French.
+
+A language code the build has no pages for is a warning, not an error: the
+help reads in English, as it did before, and the config still loads. A
+translation that is missing a page is reported once, naming the page, which
+reads in English until it is written.
+
 ## Splits that follow ssh
 
 The actions `split_ssh_horizontal`, `split_ssh_vertical` and `new_window_ssh`
