@@ -1826,7 +1826,7 @@ catalog.
 | `busy` | The daemon had no room for the request now, (`transfer-start`) another copy writes that destination now, or (`daemon-upgrade`) a live upgrade is already running. Nothing was done. |
 | `invalid_tml` | The TML document does not parse or does not validate. Nothing was opened or changed. The error carries `problems`: each one has `at` (a JSON Pointer to the node), `code`, `message`, and where it helps `did_you_mean`, `accepted` or `available`. |
 | `no_surface` | No open TML surface has that id. It closed, or the id is wrong. `list-windows` names the surface of each TML window. |
-| `too_many_surfaces` | The caller holds as many open TML surfaces as it may: 8 for a pane, and 32 per session for the callers outside the panes. Nothing was opened. |
+| `too_many_surfaces` | The caller holds as many open TML surfaces as it may: one caller holds 8, and the person 32 per session. Nothing was opened. |
 
 Codes are stable and additive: existing codes never change meaning, and a new
 code is only ever introduced for a condition that previously had none. A client
@@ -2780,9 +2780,9 @@ object), `target` (`popup`, the default, or `pane`), `session`, `name`
 The document is checked as `tuios tml validate` checks it. A document with
 errors fails with `invalid_tml`, and the error carries `problems`, each with a
 JSON Pointer to the node and the fix. A caller in no pane may send up to 1 MiB,
-and a caller in a pane up to 256 KiB. A pane may hold 8 open surfaces, and the
-callers outside the panes 32 per session; one more fails with
-`too_many_surfaces`. A popup needs an attached client and fails with
+and a caller in a pane up to 256 KiB. One caller (see who may change a
+surface, below) may hold 8 open surfaces, and the person 32 per session; one
+more fails with `too_many_surfaces`. A popup needs an attached client and fails with
 `needs_client` without one. Control characters are dropped from `name`.
 
 The window is of kind `tml`, and `list-windows` reports it with `kind`, `uri`
@@ -2823,15 +2823,17 @@ them, quoted with any control or invisible character escaped; a command too
 long to show in the window is not run. The question is drawn whole or not at
 all: when the window is too small for it, it asks for room, and y and n do
 nothing until it fits. The client sends the session by name. A `new-window` from a surface takes only `session`, `name`, `workspace`,
-`cwd`, `focus` and `command`. A refusal shows as a message. A surface opened
-over a link, or by a pane this daemon cannot place, runs no pane action.
+`cwd`, `focus` and `command`. A refusal shows as a message. Only a surface
+a pane of this machine opened runs a pane action.
 `open` and links do nothing yet.
 
-Who may change a surface: a caller in a pane may patch, replace and close only
-the surfaces its pane opened, and needs the `write` grant for `tml-open`,
-`tml-patch`, `tml-replace` and `tml-close`; any other pane fails with
-`forbidden`. A caller in no pane, the person's own commands and hooks, may act
-on any surface. A surface takes at most 100 patches and replaces a second, and
+Who may change a surface: the person's own commands, and the client's hooks
+and dock components, may act on any surface. Every other caller may patch,
+replace and close only the surfaces it opened: a pane, a plugin, a linked
+machine, the daemon's hooks together, each herdr plugin, and the other
+processes tuios starts outside every pane together. Any other caller fails
+with `forbidden`. A caller in a pane needs the `write` grant for `tml-open`,
+`tml-patch`, `tml-replace` and `tml-close`. A surface takes at most 100 patches and replaces a second, and
 one more fails with `rate_limited`. The window's name is the owner, then the
 title, such as `from api · Deploy`, which the document cannot change. The
 owner is the opening pane's name when no other window has that name and it

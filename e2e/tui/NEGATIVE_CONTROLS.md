@@ -16436,3 +16436,35 @@ and opens the board on both.
 Repeat with
 `go test -count=1 -run '^TestStatePushLeavesCardBodies$' -v ./internal/session/`, and from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskCardsKeepTheirBodiesThroughStatePushes$' -v .`.
+
+## The owners of hook and herdr plugin surfaces
+
+`TestTMLOwnersKeepHooksAndHerdrPluginsApart` opens forms from an armed
+`after-new-window` hook, from a herdr plugin installed with `tuios plugins
+install`, and from a line the person runs with `tuios call exec`. The herdr
+plugin's patch, replace and close of the hook's form, a second hook run's
+patch of the herdr plugin's form, and the exec line's patch of either form are
+refused; each changes its own forms, a second hook run patches and closes the
+first run's form, every class reads every form, and the person patches and
+closes both. `TestHookOfPeerMatchesTheStartTime` (internal/session) gives
+hookOfPeer a real shell and its sleep, with the hook registry and the process
+reads given: a registered start time other than the live one is not a hook,
+and a parent that started after the process below it ends the walk.
+
+Run on 2026-11-10 on Linux (amd64).
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (6fe2c0df9), every caller outside the panes one owner | "the herdr plugin's patch of the hook's form: exit 0, want 1 and the owner's refusal", the same for its replace and close, "a second hook run's patch of the herdr plugin's form: exit 0", "the exec line's patch of the hook's form: exit 0", "the exec line's patch of the herdr plugin's form: exit 0"; the person's later patch and close of the hook's form also fail ("no open surface"), because the herdr plugin's close already closed it | **caught** |
+| The herdr branch cut from tmlCallerKey | "the exec line's patch of the herdr plugin's form: exit 0, want 1 and the owner's refusal" | **caught** |
+| The registry record call cut from executeHook | "the exec line's patch of the hook's form: exit 0, want 1 and the owner's refusal" | **caught** |
+| The start-time compare dropped from hookOfPeer | "the parent registered with another start time: hookOfPeer = true, want false" | **caught** |
+| The check that a parent did not start after the process below it dropped from hookOfPeer | "a parent younger than the caller, registered with that start time: hookOfPeer = true, want false" | **caught** |
+
+On main `TestHookOfPeerMatchesTheStartTime` does not build: hookOfPeer and
+the hookStarts and hookProc seams do not exist there.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTMLOwnersKeepHooksAndHerdrPluginsApart$' -v .`,
+and from the repository root with
+`go test -count=1 -run '^TestHookOfPeerMatchesTheStartTime$' ./internal/session/`.

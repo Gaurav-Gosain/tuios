@@ -313,6 +313,13 @@ type Daemon struct {
 	// hostedPeer names the hosted pane a caller runs in, for pane grants.
 	// Nil walks the process table (hostedPaneOfPeer); a test sets it.
 	hostedPeer func(cs *connState) string
+	// hookStarts reports whether a pid is a daemon hook's shell running now,
+	// and the start time it had, for hookOfPeer. Nil asks d.hooks
+	// (hooks.Manager.HookStart); a test sets it.
+	hookStarts func(pid int) (uint64, bool)
+	// hookProc reads a process's parent and start time for hookOfPeer. Nil
+	// reads the process table; a test sets it.
+	hookProc func(pid int) (ppid int, start uint64, ok bool)
 
 	// protocolPanes holds the windows start-agent --protocol opened, window
 	// id to protocol. See agent_protocol.go.
@@ -816,6 +823,11 @@ type connState struct {
 	paneBound  atomic.Pointer[string]
 	panePlaced atomic.Pointer[string]
 	paneView   atomic.Pointer[paneAuth]
+	// outsideKey caches the TML owner key of a caller in no pane that is a
+	// herdr plugin or a daemon hook, once found. Only a found key is kept,
+	// and it is used only while the process that connected is still the
+	// same one (peerChanged). See tmlKeyOf.
+	outsideKey atomic.Pointer[string]
 	// pluginBound is the native plugin this connection presented the
 	// token of with pane-grants, nil when it presented none. See
 	// plugin_token.go.

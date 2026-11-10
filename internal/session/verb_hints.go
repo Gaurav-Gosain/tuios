@@ -152,7 +152,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbDaemonUpgrading, "A live upgrade replaced the daemon's image while it worked on, or waited in, this call. The connection closes after it. A call that reads or waits can be made again: the new image answers, with the same panes. A call that changes something, such as fan or send-text, may have partly run, so check what it did before calling again."},
 	{ErrVerbInvalidTML, "The TML document does not parse or does not validate. Nothing was opened or changed. The error lists each problem with a JSON Pointer to the node and the fix. Check a document with tuios tml validate."},
 	{ErrVerbNoSurface, "No open TML surface has that id. It closed, or the id is wrong. list-windows names the surface of each TML window."},
-	{ErrVerbTooManySurfaces, "The caller holds as many open TML surfaces as it may: 8 for a pane, and 32 per session for the callers outside the panes. Nothing was opened. Close one with tml-close."},
+	{ErrVerbTooManySurfaces, "The caller holds as many open TML surfaces as it may: one caller holds 8, and the person 32 per session. Nothing was opened. Close one with tml-close."},
 	{ErrVerbInternal, "Unexpected server-side failure."},
 }
 

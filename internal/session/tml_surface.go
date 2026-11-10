@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"tuios.dev/tml"
 )
@@ -286,9 +287,10 @@ func (s *tmlSurface) payload(withDoc bool, ops []byte) *TMLSurfacePayload {
 }
 
 // artifactCaller is the window id of the pane that opened s, or "" for a
-// caller in no pane, a pane tuios cannot place and a linked machine.
+// caller in no pane, a pane tuios cannot place, a daemon hook, a herdr plugin
+// and a linked machine.
 func (s *tmlSurface) artifactCaller() string {
-	if s.caller == unplacedWindow || strings.HasPrefix(s.caller, "link:") {
+	if s.caller == unplacedWindow || s.caller == "hook" || strings.HasPrefix(s.caller, "herdr:") || strings.HasPrefix(s.caller, "link:") {
 		return ""
 	}
 	return s.caller
@@ -347,29 +349,63 @@ func (d *Daemon) tmlLimitsFor(cs *connState) tml.Limits {
 	return tml.DefaultLimits()
 }
 
-// Open surfaces a caller may hold at once: a pane, and every caller outside
-// the panes together, per session. A surface is a window, a PTY and a
-// process, so a loop that opens them must stop.
+// Open surfaces a caller may hold at once: one caller (a pane, a plugin, a
+// linked machine, the daemon's hooks), and the person, per session. A surface
+// is a window, a PTY and a process, so a loop that opens them must stop.
 const (
 	tmlSurfacesPerPane    = 8
 	tmlSurfacesPerSession = 32
 )
 
-// tmlCallerKey names the caller on cs for the surface cap: its pane, or ""
-// for a caller in no pane.
+// tmlCallerKey names the caller on cs as the owner of the surfaces it opens,
+// for the owner checks and the surface cap: its pane's window, "plugin:<id>"
+// for a native plugin, "herdr:<id>" for a herdr plugin, "hook" for the
+// daemon's hooks, "link:<peer>" for a linked machine, "hosted:<id>" for a pane
+// run for another machine, "unknown" for any other process tuios starts
+// outside every pane, and "" for the person's own commands and the client's
+// hooks.
 func (d *Daemon) tmlCallerKey(cs *connState) string {
+	return d.tmlKeyOf(cs, d.paneAuthority(cs))
+}
+
+// tmlKeyOf is tmlCallerKey for a caller whose paneAuthority is pa.
+func (d *Daemon) tmlKeyOf(cs *connState, pa *paneAuth) string {
 	if cs.viaLink {
 		return "link:" + cs.linkPeer
 	}
-	if pa := d.paneAuthority(cs); pa != nil {
-		if pa.plugin != "" {
-			return "plugin:" + pa.plugin
-		}
-		// A pane this daemon cannot place, or one it runs for another
-		// machine, is still not the person.
-		return cmp.Or(pa.window, unplacedWindow)
+	if pa == nil {
+		return ""
 	}
-	return ""
+	if pa.plugin != "" {
+		return "plugin:" + pa.plugin
+	}
+	if pa.window == unplacedWindow && !pa.hosted && !d.peerChanged(cs) {
+		if key := d.outsideCallerKey(cs); key != "" {
+			return key
+		}
+	}
+	// A pane this daemon cannot place, or one it runs for another
+	// machine, is still not the person.
+	return cmp.Or(pa.window, unplacedWindow)
+}
+
+// outsideCallerKey names a caller in no pane that is a herdr plugin or a
+// daemon hook, or "" for any other. A found key is kept on the connection;
+// the caller checks peerChanged before every use.
+func (d *Daemon) outsideCallerKey(cs *connState) string {
+	if key := cs.outsideKey.Load(); key != nil {
+		return *key
+	}
+	var key string
+	if p := d.pluginOfPeer(cs); p != nil && p.Format != herdrplugin.FormatTuios {
+		key = "herdr:" + p.PluginID
+	} else if d.hookOfPeer(cs) {
+		key = "hook"
+	} else {
+		return ""
+	}
+	cs.outsideKey.Store(&key)
+	return key
 }
 
 // tmlOwnerLabel names the caller on cs for the frame: its pane, a linked
@@ -613,7 +649,7 @@ func (d *Daemon) verbTMLOpen(cs *connState, params json.RawMessage) (any, *verbE
 		d.tml.mu.Unlock()
 		return nil, hintedVerbError(ErrVerbTooManySurfaces, fmt.Sprintf("%d surfaces are open already, the most one caller may hold", limit), &VerbHint{
 			Command: "tuios tml close <surface>",
-			Detail:  fmt.Sprintf("A pane holds at most %d open surfaces, and the callers outside the panes %d per session. Close one first.", tmlSurfacesPerPane, tmlSurfacesPerSession),
+			Detail:  fmt.Sprintf("One caller holds at most %d open surfaces, and the person %d per session. Close one first.", tmlSurfacesPerPane, tmlSurfacesPerSession),
 		})
 	}
 	d.tml.surfaces[s.id] = s
@@ -1328,8 +1364,8 @@ const (
 
 // tmlReach refuses a caller that may not reach a surface's session: a pane
 // outside the session and its fan group, a pane without the read grant for
-// a read, and a connection restricted to its own session. A caller in no
-// pane, and a pane that holds admin, reach every surface.
+// a read, and a connection restricted to its own session. The person, a
+// caller that holds admin, and the caller that opened the surface reach it.
 func (d *Daemon) tmlReach(cs *connState, s *tmlSurface, verb string, write bool) *verbError {
 	d.tml.mu.Lock()
 	sessionID := s.sessionID
@@ -1345,12 +1381,13 @@ func (d *Daemon) tmlReach(cs *connState, s *tmlSurface, verb string, write bool)
 	if pa == nil || pa.grants.Has(GrantAdmin) {
 		return nil
 	}
-	// The pane that opened a surface reaches it, with write alone. A plugin is in no
+	// The caller that opened a surface reaches it, with write alone, by the
+	// key tmlOwnerCheck compares. A plugin, a hook or a herdr plugin is in no
 	// pane, so only its own surfaces are its.
 	d.tml.mu.Lock()
 	owner := s.caller
 	d.tml.mu.Unlock()
-	if (pa.plugin == "" && pa.window != "" && pa.window == owner) || (pa.plugin != "" && "plugin:"+pa.plugin == owner) {
+	if key := d.tmlKeyOf(cs, pa); key != "" && key == owner {
 		return nil
 	}
 	if !d.sessionInScope(pa.session, target) {
@@ -1390,9 +1427,9 @@ func (b *tmlBucket) allow(now time.Time) bool {
 	return true
 }
 
-// tmlOwnerCheck refuses a caller that may not change s: a pane that did not
-// open it. A caller in no pane, the person's own commands and hooks, may
-// change any surface.
+// tmlOwnerCheck refuses a caller that may not change s: any caller but the
+// one that opened it (tmlCallerKey). The person's own commands, and the
+// client's hooks and dock components, may change any surface.
 func (d *Daemon) tmlOwnerCheck(cs *connState, s *tmlSurface, verb string) *verbError {
 	caller := d.tmlCallerKey(cs)
 	if caller == "" || caller == s.caller {

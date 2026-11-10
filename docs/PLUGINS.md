@@ -622,7 +622,8 @@ Enable only plugins that you trust. A process that a plugin starts cannot
 enable a plugin or answer as you, also after its command exits. While the
 command runs, its processes hold the default pane grants
 (`[agents.permissions]`). A plugin pane is an ordinary pane. It holds the grants that a pane
-started by its caller holds.
+started by its caller holds. A TML form that a herdr plugin's commands open is the plugin's own: a hook,
+another plugin or a pane cannot change or close it.
 
 ### What runs in a herdr plugin
 

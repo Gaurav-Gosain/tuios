@@ -20,6 +20,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
 // Event represents a hook event type.
@@ -153,14 +154,62 @@ type Manager struct {
 	// hold, when set, is held while a hook runs: the daemon will not hand
 	// off while a pipe it reads is open. See SetHold.
 	hold func(what string) (release func())
+	// pids holds the shell of each hook running now, by pid, with the start
+	// time it had when it started, so a process that later gets the same pid
+	// is never taken for that hook. See HookStart. pidsMu guards it alone, so a
+	// lookup never waits on the table's lock.
+	pidsMu sync.Mutex
+	pids   map[int]uint64
 }
 
 // NewManager creates a new hooks manager.
 func NewManager() *Manager {
-	return &Manager{
-		hooks: make(map[Event][]string),
-		run:   executeHook,
+	m := &Manager{hooks: make(map[Event][]string)}
+	m.run = m.executeHook
+	return m
+}
+
+// HookStart reports whether pid is the shell of a hook running now, and the
+// start time (procinfo.StartTime) that shell had when it started. A caller
+// compares it with the live start time at pid, since the pid may have been
+// reused between the hook's exit and its removal here.
+func (m *Manager) HookStart(pid int) (uint64, bool) {
+	if m == nil {
+		return 0, false
 	}
+	m.pidsMu.Lock()
+	defer m.pidsMu.Unlock()
+	st, ok := m.pids[pid]
+	return st, ok
+}
+
+// start starts a hook's shell and records it, and returns what removes the
+// record again after the shell is reaped. A shell whose start time cannot be
+// read is not recorded, so it is never taken for a hook.
+func (m *Manager) start(cmd *exec.Cmd) (forget func(), err error) {
+	// Held across Start so the hook's own CLI, which can connect before Start
+	// returns, waits in HookStart until its shell is recorded.
+	m.pidsMu.Lock()
+	defer m.pidsMu.Unlock()
+	if err = cmd.Start(); err != nil {
+		return nil, err
+	}
+	pid := cmd.Process.Pid
+	st, ok := procinfo.StartTime(pid)
+	if !ok {
+		return func() {}, nil
+	}
+	if m.pids == nil {
+		m.pids = make(map[int]uint64)
+	}
+	m.pids[pid] = st
+	return func() {
+		m.pidsMu.Lock()
+		if m.pids[pid] == st {
+			delete(m.pids, pid)
+		}
+		m.pidsMu.Unlock()
+	}, nil
 }
 
 // SetRunner replaces the command runner. It exists for tests: the real runner
@@ -397,8 +446,9 @@ func (m *Manager) HasHooks() bool {
 
 // executeHook runs a shell command with context as environment variables. It
 // reports the exit code, how long the command took, and the tail of its stderr,
-// which is what makes a failing hook visible instead of silent.
-func executeHook(cmdStr string, ctx Context, timeout time.Duration) hookResult {
+// which is what makes a failing hook visible instead of silent. While the shell
+// runs, its pid is recorded for HookStart.
+func (m *Manager) executeHook(cmdStr string, ctx Context, timeout time.Duration) hookResult {
 	cctx := context.Background()
 	if timeout > 0 {
 		var cancel context.CancelFunc
@@ -453,7 +503,14 @@ func executeHook(cmdStr string, ctx Context, timeout time.Duration) hookResult {
 	cmd.Stderr = tail
 
 	start := time.Now()
-	err := cmd.Run()
+	// Start and Wait are what Run does, split so the shell is recorded while it
+	// runs. It is the daemon's unreaped child until Wait returns, so its pid is
+	// not reused before the record is made.
+	forget, err := m.start(cmd)
+	if err == nil {
+		defer forget()
+		err = cmd.Wait()
+	}
 	res := hookResult{duration: time.Since(start), stderr: tail.String()}
 	if timeout > 0 && errors.Is(cctx.Err(), context.DeadlineExceeded) {
 		res.err = errfmt.Errorf("it did not finish in %s and was stopped", timeout)

@@ -102,7 +102,7 @@ A retry without a change fails the same way, except for `busy`, `too_many_connec
 | `same_session`, `pane_not_movable` | From `move-window` with `to_session`: the window is already in that session, or it is a popup, a scratch pane, a TML pane or a pane on another machine. Nothing moved. |
 | `invalid_tml` | A TML document does not parse or validate. The error lists each problem with a JSON Pointer to the node and the fix. Run `tuios tml validate`. |
 | `no_surface` | No open TML surface has that id. It closed, or the id is wrong. |
-| `too_many_surfaces` | The caller holds as many open TML surfaces as it may: 8 for a pane, 32 per session for the callers outside the panes. Close one first. |
+| `too_many_surfaces` | The caller holds as many open TML surfaces as it may: one caller holds 8, and the person 32 per session. Close one first. |
 
 ## The exit codes of tuios cp
 
