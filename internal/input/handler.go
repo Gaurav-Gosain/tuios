@@ -63,12 +63,17 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	case tea.PasteEndMsg:
 		return o, nil
 	case tea.MouseClickMsg:
-		// Help mode reads the pointer: a click picks the component under it
-		// and does nothing else, so a click cannot focus or move a pane while
-		// the user is inspecting it. A panel above it takes the pointer.
+		// Help mode reads the pointer: a click picks the component under it.
+		// A click outside the dock goes no further, so it cannot focus or move
+		// a pane while the user is inspecting it. A click on the dock is the
+		// exception: the bar is controls, not decoration, and a control that
+		// stops working while its explanation is up teaches the wrong thing
+		// about it. A panel above help takes the pointer.
 		if o.HelpMode && helpOwnsPointer(o) {
 			o.HelpHoverAt(msg.X, msg.Y)
-			return o, nil
+			if !o.InDockBand(msg.Y) {
+				return o, nil
+			}
 		}
 		if _, inside := o.SidebarSessionAt(msg.X, msg.Y); !inside {
 			o.BlurSidebarSession()
@@ -121,7 +126,11 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// Don't sync on motion: too frequent
 		return handleMouseMotion(msg, o)
 	case tea.MouseReleaseMsg:
-		if o.HelpMode && helpOwnsPointer(o) {
+		// The dock's gestures are the dock's while help is up, the same as its
+		// presses: a workspace pill switches on the release, so swallowing it
+		// would leave the gesture half done. Everywhere else the button coming
+		// up is help's to ignore.
+		if o.HelpMode && helpOwnsPointer(o) && !o.InDockBand(msg.Y) {
 			return o, nil
 		}
 		if o.CaptureActive() {
