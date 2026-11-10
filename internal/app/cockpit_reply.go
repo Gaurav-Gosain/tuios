@@ -51,7 +51,10 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	send := ckSeg{t: " " + overlay.EnterGlyph + " " + verb + " ", fg: overlay.Readable(pal.Fg, pal.Card), bg: pal.Card, attrs: ckBold}
 	// A hint that does not fit goes whole: a key with its label cut off
 	// says nothing.
-	hints = ckFitHints(hints, right-14-(x+2))
+	// The header, the hints and the pictures start where the draft's text
+	// does, after the editor's two-cell gutter.
+	tx := x + 4
+	hints = ckFitHints(hints, right-14-tx)
 
 	ed := st.reply.editor
 	if ed == nil || m.cockpitReplyMismatch() {
@@ -68,7 +71,7 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 		y := y1 - h
 		c.hline(x, y-1, w, hzGlyph(), l.edge)
 		c.fill(x, y, w, h, l.panel)
-		c.text(x+2, y, right-16, ckSeg{t: "Reply to ", fg: label}, ckSeg{t: name, fg: pal.Fg, attrs: ckBold})
+		c.text(tx, y, right-16, ckSeg{t: "Reply to ", fg: label}, ckSeg{t: name, fg: pal.Fg, attrs: ckBold})
 		c.textR(right-2, y, ckSeg{t: when, fg: label})
 		prompt := []ckSeg{{t: " ", bg: pal.FgMute}, {t: " Write a reply.", fg: label}}
 		// A draft kept for this agent shows here, so the person knows r
@@ -77,7 +80,7 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 			prompt = []ckSeg{{t: "Draft: ", fg: label}, {t: ansi.Truncate(ckDraftLine(d), max(w-11, 1), "…"), fg: pal.Fg}}
 		}
 		c.text(x+2, y+1, right-2, prompt...)
-		c.text(x+2, y1-1, right-14, hints...)
+		c.text(tx, y1-1, right-14, hints...)
 		bx := c.textR(right-2, y1-1, send)
 		c.mark(pal, bx, y1-1, right-2-bx, 1, ckOn)
 		st.ck.hits = append(st.ck.hits, ckHit{x0: x, y0: top + y, x1: right, y1: top + y1, kind: ckHitAction, action: "reply"})
@@ -105,7 +108,16 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	y := max(y1-h, bodyTop+1)
 	c.hline(x, y-1, w, hzGlyph(), l.edge)
 	c.fill(x, y, w, y1-y, l.panel)
-	c.text(x+2, y, right-24, ckSeg{t: "Reply to ", fg: label}, ckSeg{t: ed.who, fg: pal.Fg, attrs: ckBold})
+	// The focus edge: while the editor is open it has the keys, and a bar
+	// in the accent runs down the area's left side.
+	bar := "▌"
+	if overlay.UseASCII() {
+		bar = "|"
+	}
+	for i := y; i < y1; i++ {
+		c.text(x, i, 0, ckSeg{t: bar, fg: pal.Accent})
+	}
+	c.text(tx, y, right-24, ckSeg{t: "Reply to ", fg: label}, ckSeg{t: ed.who, fg: pal.Fg, attrs: ckBold})
 	ctx := ed.context
 	if strings.HasPrefix(ctx, "working") {
 		// A reply to an agent at work waits, and the line says so before
@@ -121,7 +133,7 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	}
 	row := y + 1
 	if len(images) > 0 {
-		cx := x + 2
+		cx := tx
 		for i, img := range images {
 			label := l.g(ckGlyphImage) + " " + ckImageName(img, i) + "  " + ckImageSize(img)
 			if cx+ansi.StringWidth(label)+4 > right-14 {
@@ -151,7 +163,7 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	// The pictures the draft shows are placed relative to the layer.
 	ed.at.x, ed.at.y, ed.at.ok = x+2, row-cut, cut == 0
 	ed.at.drawn, ed.at.top = true, cut
-	c.text(x+2, fy, right-14, hints...)
+	c.text(tx, fy, right-14, hints...)
 	sx := c.textR(right-2, fy, send)
 	c.mark(pal, sx, fy, right-2-sx, 1, ckOn)
 	st.ck.hits = append(st.ck.hits, ckHit{x0: sx, y0: top + fy, x1: right - 2, y1: top + fy + 1, kind: ckHitAction, action: "send"})
@@ -171,6 +183,9 @@ func ckDraftLine(d *composer.Model) string {
 func replyStyles(l ckLook) composer.Styles {
 	st := composerStyles(l.pal)
 	st.Selected = l.pal.Card
+	// The draft is drawn on the reply area's own ground: one ground for
+	// the whole area, with no band of its own inside it.
+	st.Field = l.panel
 	return st
 }
 

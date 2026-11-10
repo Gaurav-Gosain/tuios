@@ -225,7 +225,7 @@ func (m *Model) renderRow(b *strings.Builder, row vline, hasCursor bool, textW i
 					b.WriteString(cursor(cursorText(c), in.span, in.spanText))
 				}
 			} else {
-				b.WriteString(cursor(cursorText(c), in.field, in.text))
+				b.WriteString(m.caretAt(cursorText(c), selecting, in))
 			}
 			if c.block != nil {
 				// The cursor cell took the bracket. The rest of the
@@ -247,7 +247,7 @@ func (m *Model) renderRow(b *strings.Builder, row vline, hasCursor bool, textW i
 	}
 	flush()
 	if hasCursor && m.cur == row.end && (row.end == len(m.cells) || !row.soft) {
-		b.WriteString(cursor(" ", in.field, in.text))
+		b.WriteString(m.caretAt(" ", selecting, in))
 	}
 }
 
@@ -436,4 +436,14 @@ func (o Options) hints(k hintsKey) []Hint {
 		Hint{Key: "ctrl+z", Label: "undo", Optional: true},
 		Hint{Key: "esc", Label: "close"},
 	)
+}
+
+// caretAt draws the cursor cell outside a selection. At 16 colours, where the
+// selection is reversed, a cursor at its edge is underlined: two reversed
+// spans side by side read as one bar with no cursor in it.
+func (m *Model) caretAt(ch string, selecting bool, in inks) string {
+	if selecting && in.st.Plain {
+		return on(in.field).Foreground(in.text).Underline(true).Render(ch)
+	}
+	return cursor(ch, in.field, in.text)
 }
