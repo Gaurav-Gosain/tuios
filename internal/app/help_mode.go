@@ -21,7 +21,8 @@ import (
 // overlay: nothing is listed up front, and it reads only the keys it binds.
 // The pointer, or Shift+Tab, moves between the components on screen;
 // Shift+Up and Shift+Down move into and out of a component that has parts; h
-// shows the whole keybinding set of the component selected; Shift+Esc leaves.
+// shows the whole keybinding set of the component selected. Nothing here closes
+// the pane: the chord that opened it toggles it, and so does the dock's ?.
 // The rest of the keyboard is the app's, so a chord the pane lists runs while
 // the pane explains it, and the pane follows the layout that chord leaves. A
 // key that runs this way also steps the pane out of sight for a moment, so the
@@ -84,7 +85,7 @@ func (m *OS) EnterHelpMode() {
 }
 
 // ExitHelpMode leaves help mode. A leader chord after it opens the ordinary
-// leader menu again, and Shift+Esc or Shift+F1 goes back to the pane.
+// leader menu again, and the toggle chord or the dock's ? control closes it.
 func (m *OS) ExitHelpMode() {
 	m.HelpMode = false
 	m.helpHidden = false

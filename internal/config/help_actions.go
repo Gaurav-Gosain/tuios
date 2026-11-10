@@ -30,7 +30,9 @@ const (
 
 // getDefaultHelpKeybinds returns the keys help mode answers to. Each is a
 // chord rather than a bare letter: the bare ones write into the pane once the
-// explanation is gone, and h is the only letter the pane keeps.
+// explanation is gone, and h is the only letter the pane keeps. Nothing here
+// closes the pane: the chord that opens it and the dock's ? control both
+// toggle it, so a key of help's own would be a second way out to learn.
 func getDefaultHelpKeybinds() map[string][]string {
 	return map[string][]string{
 		// The shift arrows are what a person reaches for on a component and

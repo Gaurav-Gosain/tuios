@@ -223,14 +223,17 @@ the same two seconds as any other key.
 
 Those are defaults, and the navigation ones live in `[keybindings.help]`, each
 as an action: `help_next`, `help_prev`, `help_deeper`, `help_shallower`,
-`help_scroll_up`, `help_scroll_down`, `help_keys` and `help_exit`. A rebind
-moves the key and everything the pane says about it together: the footer and
-the scroll marker name the configured keys, and an action set to `[]` leaves
-its line out rather than naming a key that does nothing. `help_exit` is
-`Shift+Esc` rather than `esc` on purpose: esc is what a pane wants for itself,
-and help must not take it. `Shift+F1` still leaves, being `toggle_help_mode` in
-`[keybindings.global]`. `s` and `S` are the rail's own actions, in their own
-tables.
+`help_scroll_up`, `help_scroll_down`, `help_keys` and `help_exit`. A rebind moves the key and
+everything the pane says about it together: the footer and the scroll marker
+name the configured keys, and an action set to `[]` leaves its line out rather
+than naming a key that does nothing. `s` and `S` are the rail's own actions, in
+their own tables.
+
+`help_exit` is `Shift+Esc` rather than `esc` on purpose: esc is what a pane asks
+the app for, and in window management mode it leaves that mode. Help must not
+take it. `Ctrl+B h` and `Shift+F1` are toggles as well, and so is a click on the
+dock's `?` control, so the way in is also a way out. There is no countdown: the
+pane stays until one of them closes it.
 
 A hidden rail still has an entry in the rotation, marked `(hidden)`; its pane
 names the chord that brings it back, and that chord works from here. Help mode
@@ -245,7 +248,7 @@ A key help mode does not bind does what it does without the pane, and the pane
 steps out of sight while it runs: it comes back after two seconds, and any of
 the navigation keys brings it back at once. That is how a bare `h` or `Up` can
 belong to the pane's explanation over a terminal and still leave the keyboard
-free. `Shift+Esc` is the way out for good.
+free. `Shift+Esc` is the way out.
 
 The default is
 `prefix_help_mode = ["h"]` in
