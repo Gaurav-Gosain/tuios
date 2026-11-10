@@ -1342,7 +1342,7 @@ func NewMessage(msgType MessageType, payload any) (*Message, error) {
 	var err error
 
 	if payload != nil {
-		data, err = encodePayload(payload)
+		data, err = encodePayload(withoutCardBodies(payload))
 		if err != nil {
 			return nil, errfmt.Errorf("failed to encode payload: %w", err)
 		}

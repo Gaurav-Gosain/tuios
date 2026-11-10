@@ -42,6 +42,44 @@ func encodePayload(v any) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// withoutCardBodies returns the payload a state push encodes. No client reads
+// a card's prompt, history or verify output from a pushed state: the board
+// lists cards with list-tasks and reads one with get-task. A push is the whole
+// state, so every change to the session would otherwise send every card's
+// prompt, history and verify output again, and a session with many long cards
+// could pass the frame limit and not be attachable. So a state sync or an
+// attach reply whose state holds a card is encoded from a copy that keeps each
+// card's other fields and drops those three bodies. The state itself, the
+// payload passed in and every verify record stay as they were. A payload with
+// no card, or of another type, is returned as it is, with nothing copied.
+func withoutCardBodies(payload any) any {
+	switch p := payload.(type) {
+	case *StateSyncPayload:
+		if p != nil && p.State != nil && len(p.State.Tasks) > 0 {
+			c := *p
+			c.State = stateWithoutCardBodies(p.State)
+			return &c
+		}
+	case *AttachedPayload:
+		if p != nil && p.State != nil && len(p.State.Tasks) > 0 {
+			c := *p
+			c.State = stateWithoutCardBodies(p.State)
+			return &c
+		}
+	}
+	return payload
+}
+
+// stateWithoutCardBodies copies st with each card replaced by its push copy.
+func stateWithoutCardBodies(st *SessionState) *SessionState {
+	c := *st
+	c.Tasks = make([]TaskState, len(st.Tasks))
+	for i, tk := range st.Tasks {
+		c.Tasks[i] = tk.pushCopy()
+	}
+	return &c
+}
+
 // decodePayload deserializes a gob payload into v. An empty payload leaves v
 // untouched. A payload that nests too deeply for gob to decode safely is
 // refused before gob sees it: see wire_gobscan.go.

@@ -5846,3 +5846,60 @@ pane, held to the idle-cost tests.
 On arch-btw the ghostty backend takes 35.8% less time than the pure Go
 emulator on `BenchmarkBackend*` (geomean, n=6), with Apt 60% and Scroll 36%
 less. The old library was not measured there.
+
+## 2026-11 a state push leaves the cards' bodies out
+
+Every state push to a client (`state_sync`, and the reply to an attach)
+encoded the whole session state, and a card carries three bodies: its prompt
+(up to 16 KiB), its history (up to 100 entries) and the output tail of its
+last verify run (up to 2 KiB). No client reads a body from a pushed state: the
+board lists cards with `list-tasks` and `get-task` reads one from the daemon.
+So every change to the session (a rename, a resize, a layout change) sent
+every card's bodies again, and a session with about a thousand long cards went
+past the 16 MiB frame limit, which the client refuses, so the session could
+not be attached.
+
+`NewMessage` now encodes a state sync or an attach reply whose state holds a
+card from a copy in which each card keeps its other fields and loses its
+prompt, history and verify tail. The verify record is copied before its tail
+is cleared, because the card shares it with the daemon's state; the daemon's
+cards are never written. A payload with no card is encoded as before, with
+nothing copied. TestStatePushLeavesCardBodies holds it: a state of 1000 long
+cards stays under a 256 KiB push, the decoded cards equal the state's cards
+minus those three bodies, and the state itself keeps every body.
+
+Numbers, on arch-btw (Ryzen 5 5600, Linux x86_64, go1.27.3), one core,
+`NewMessage(MsgStateSync, ...)` per call, n=10 interleaved, benchstat means.
+Cards of 500 B prompts and 5 history entries, no verify record; the last row
+is 1000 cards of 16 KiB prompts, 13 history entries and a failed verify with
+a 2 KiB tail:
+
+| Cards | Wire bytes main | Wire bytes branch | Encode main | Encode branch |
+|-------|-----------------|-------------------|-------------|---------------|
+| 0 | 5.64 KiB | 5.64 KiB | 95.4 us | 92.2 us (not significant) |
+| 10 | 12.3 KiB | 6.00 KiB | 132.7 us | 101.8 us (-23%) |
+| 100 | 72.4 KiB | 9.34 KiB | 340.0 us | 148.8 us (-56%) |
+| 1000 | 675.4 KiB | 44.5 KiB | 2.29 ms | 0.70 ms (-69%) |
+| 1000, 16 KiB | 18441 KiB | 75.8 KiB | 20.9 ms | 0.98 ms (-95%) |
+
+The client decodes the push with `ParsePayload`: 1000 cards take 2.49 ms on
+main and 0.68 ms on the branch (-73%); the 16 KiB set takes 15.4 ms and 1.1 ms
+(-93%). Bytes allocated per encode fall from 3.8 MiB to 0.54 MiB at 1000 cards
+and from 123 MiB to 0.77 MiB for the 16 KiB set.
+
+The allocation count of the small rows does not rise: 0 cards is 90 allocations
+on both, 10 cards 98 on main and 93 on the branch, 100 cards 106 and 96, 1000
+cards 115 and 105. The 16 KiB set allocates more times (122 on main, 1108 on
+the branch, about one more per card) because each card's verify record is
+copied, while it allocates 160 times fewer bytes. A state with no cards is
+encoded as before, with no copy, so the first row is a wash.
+
+Not measured: darwin, and the cost of the daemon pushing to a client that is
+not attached.
+
+
+The cost is a copy of each pushed card (the card is a few hundred bytes plus
+one verify record when it has one) in place of encoding its bodies.
+
+The binary grows by 8,192 B on linux/amd64 and 16,512 B on darwin/arm64
+(tuios-web: 8,192 B and 0).

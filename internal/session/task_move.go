@@ -280,3 +280,19 @@ const taskBlockErrored = "agent errored"
 func (tk *TaskState) blockedOnErrored() bool {
 	return tk.Blocked != nil && tk.Blocked.By == taskByDaemon && strings.HasPrefix(tk.Blocked.Reason, taskBlockErrored)
 }
+
+// pushCopy is the card as a state push sends it: a copy with its prompt and
+// history cleared and, when a verify record is set, a copy of that record with
+// its output tail cleared. It is a copy for a push and moves no card. Verify
+// points into the daemon's state, so the record is copied, never written
+// through; tk and everything it points to stay as they were.
+func (tk TaskState) pushCopy() TaskState {
+	tk.Prompt = ""
+	tk.History = nil
+	if tk.Verify != nil {
+		v := *tk.Verify
+		v.Tail = ""
+		tk.Verify = &v
+	}
+	return tk
+}

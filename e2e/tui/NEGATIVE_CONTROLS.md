@@ -16410,3 +16410,29 @@ branch passes both cases on both.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAttachedClientRunsTheUpgradedBuild$' -v .`.
+
+## A state push carries the cards without their bodies
+
+`TestStatePushLeavesCardBodies` (internal/session) builds a state with 1000
+cards, each with a 16 KiB prompt, 13 history entries and a failed verify with
+a 2 KiB tail. A state sync and an attach reply of it must each encode to at
+most 256 KiB; after both encodes the state still holds every prompt, history
+and tail, and the decoded push holds every card as the state's card with no
+prompt, history or verify tail. A state with no cards encodes to the
+same bytes as a plain gob encode of the payload.
+`TestTaskCardsKeepTheirBodiesThroughStatePushes` (e2e) attaches a client to a
+session with a long-prompt card and a card whose verify failed, renames a pane
+and moves the long-prompt card to doing, then reads both cards with
+`tuios task get --json` (the whole prompt, the history, the verify output)
+and opens the board on both.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (6fe2c0df9) | state sync: "a state sync of 1000 cards is 18964571 bytes, want at most 262144"; attach reply: "an attach reply of 1000 cards is 18964819 bytes, want at most 262144"; the keep subtest: "the state sync's card t1 carries its bodies: prompt 16384 bytes, 13 history entries, tail 2048 bytes" | **caught** |
+| The branch with the call in NewMessage cut | state sync: "a state sync of 1000 cards is 18964571 bytes, want at most 262144"; attach reply: "an attach reply of 1000 cards is 18964819 bytes, want at most 262144"; the keep subtest: "the state sync's card t1 carries its bodies: prompt 16384 bytes, 13 history entries, tail 2048 bytes" | **caught** |
+| The branch with the bodies cleared on the state's own cards instead of a copy | the keep subtest: "after the pushes the state's card t1 lost a body: prompt 0 bytes, 0 history entries, verify &{State:failed Exit:0x171d5b7f2238 Note:exit 3: not ok yet Tail: StartedAt:1762000000 FinishedAt:1762000005}" | **caught** |
+| The branch with the tail cleared through the card's shared Verify record | the e2e: "after the pushes t1 lost its prompt, its history or its verify output:"; the keep subtest: "after the pushes the state's card t1 lost a body: prompt 16384 bytes, 13 history entries, verify &{State:failed Exit:0x15bbfa89aac8 Note:exit 3: not ok yet Tail: StartedAt:1762000000 FinishedAt:1762000005}" | **caught** |
+
+Repeat with
+`go test -count=1 -run '^TestStatePushLeavesCardBodies$' -v ./internal/session/`, and from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskCardsKeepTheirBodiesThroughStatePushes$' -v .`.
