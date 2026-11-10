@@ -383,6 +383,13 @@ func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, pane
 			m.applyScrim(canvas, m.Settings.ModalDim)
 			scrimmed = true
 		}
+		// The hover help's spotlight, immediately before the pane's own layer:
+		// every component is on the canvas by now and the pane is not, so the
+		// pane keeps the contrast it was drawn with and the wash never reaches
+		// it. See applyHelpSpotlight.
+		if m.HelpMode && cl.layer.GetID() == helpLayerID {
+			m.applyHelpSpotlight(canvas)
+		}
 		m.drawComposedLayer(canvas, cl, painted, &grounds, area)
 		if chromeScrim && scrimmedChrome(cl.layer.GetID()) {
 			m.applyScrimIn(canvas, cl.bounds, popupDim)

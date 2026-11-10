@@ -13,6 +13,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"tuios.dev/vt"
 )
 
 // Help mode is the hover help the leader then h opens. It is not the help
@@ -1380,6 +1382,147 @@ func (m *OS) helpScrollLine(total, room, width int, pal overlay.Palette) string 
 
 // helpLayerID is the compositor id of the help pane.
 const helpLayerID = "help-mode"
+
+// helpSpotlightRect is the cells help mode leaves lit: the component, or the
+// part of one, that the pane is explaining. It is empty when there is nothing
+// to light: the mode is off, or the target has no rectangle to point at (a
+// hidden rail).
+//
+// The pane is deliberately not part of it. Compose draws the pane after the
+// scrim (see applyHelpSpotlight), so it keeps full strength on its own. Adding
+// it here lights the whole rectangle between the item and the pane, whatever
+// the layout put there — the desktop, a gap, another component — and the dim
+// then follows the pane's placement instead of the thing being explained.
+func (m *OS) helpSpotlightRect() image.Rectangle {
+	if !m.HelpMode {
+		return image.Rectangle{}
+	}
+	cur := helpComponentByID(m.helpComps, m.helpTarget)
+	if cur == nil || cur.rect.Empty() {
+		return image.Rectangle{}
+	}
+	return cur.rect
+}
+
+// applyHelpSpotlight turns the screen down around the lit rectangle, so the
+// component help mode explains is the one thing left at full strength. Compose
+// runs it immediately before the pane's own layer is drawn: every component is
+// on the canvas by then and the pane is not, so the pane, the notifications
+// above it and the pointer's labels keep the contrast they were drawn with.
+// That draw order is also why the pane needs no exemption in the lit
+// rectangle.
+//
+// It is the modal scrim, four bands around the lit rectangle rather than a
+// pass per pane: it edits the composed canvas in place, so moving the
+// selection re-renders no pane, and each cell is visited at most once. At 16
+// colours it inherits the scrim's faint-only fallback, which still leaves the
+// lit component the only run at full contrast.
+//
+// appearance.modal_dim sets how far the rest is turned down, the same knob the
+// screen behind a modal follows; zero turns the cue off with it. The lit item
+// itself is then washed in the palette's HelpTint: the dim keeps the scrim's
+// neutral target, so the rose marks the one thing the pane is explaining and
+// nothing else on the screen carries it.
+func (m *OS) applyHelpSpotlight(canvas *frameCanvas) {
+	lit := m.helpSpotlightRect().Intersect(canvas.Bounds())
+	dim := m.Settings.ModalDim
+	if lit.Empty() {
+		return
+	}
+	b := canvas.Bounds()
+	// Image glyphs first, so the dim reaches them like text, as it does under
+	// a modal scrim.
+	m.drawImageSymbols(canvas)
+	// The scrim's four bands are empty at zero, which is what turns the cue
+	// off; the wash stays, since a theme's rose marks the component without
+	// taking anything else down.
+	if dim > 0 {
+		m.applyScrimIn(canvas, image.Rect(b.Min.X, b.Min.Y, b.Max.X, lit.Min.Y), dim)
+		m.applyScrimIn(canvas, image.Rect(b.Min.X, lit.Max.Y, b.Max.X, b.Max.Y), dim)
+		m.applyScrimIn(canvas, image.Rect(b.Min.X, lit.Min.Y, lit.Min.X, lit.Max.Y), dim)
+		m.applyScrimIn(canvas, image.Rect(lit.Max.X, lit.Min.Y, b.Max.X, lit.Max.Y), dim)
+	}
+	m.applyHelpTintIn(canvas, lit)
+}
+
+// helpTintAmount is how far the documented item's own ground is carried toward
+// the palette's HelpTint. A third names the item on a dark ground (#683b50 over
+// the canvas, #7c4e65 over a rail) and takes a light one pink (#fec6d5)
+// without turning the control into a differently coloured one; at half the
+// wash is close to the theme's rose itself and the dock cell stops reading as
+// a dock cell.
+const helpTintAmount = 0.35
+
+// applyHelpTintIn washes the lit rectangle with the palette's rose. It paints
+// the ground under cells that name none of their own, the palette's canvas or
+// the ground a light theme veils toward, so a transparent part of the item is
+// tinted like the rest rather than left at the terminal's background. A cell
+// whose ink is a ground of the item is not text but a shape drawn in the fill's
+// colour, the rounded end of a pill: it is washed with the fill instead, and
+// its own background is left alone, since behind a cap that is the bar. At 16
+// colours there is no hue to mix (the palette's HelpTint is NoColor) and the
+// scrim's faint-only fallback stands alone.
+func (m *OS) applyHelpTintIn(canvas *frameCanvas, area image.Rectangle) {
+	pal := theme.UI()
+	if theme.Depth() == overlay.Depth16 || pal.HelpTint == nil ||
+		overlay.IsNoColor(pal.HelpTint) {
+		return
+	}
+	base := pal.Canvas
+	if g := m.scrimToward(); g != nil {
+		base = g
+	}
+	area = area.Intersect(canvas.Bounds())
+	// The item's grounds, before any of them is washed. A rounded end is drawn
+	// as a glyph in the item's own ground colour on the cell beside the fill
+	// (see renderDockCell and the mode chip), not as a painted ground, so the
+	// wash alone leaves it the colour of the pill it caps. Collecting the
+	// grounds lets a glyph that matches one be washed with it; the key is the
+	// colour's channels, so a cap's ink finds its fill without guessing which
+	// cell is a cap.
+	grounds := make(map[[4]uint32]struct{}, 8)
+	for _, line := range canvas.Lines[area.Min.Y:area.Max.Y] {
+		for x := area.Min.X; x < min(area.Max.X, len(line)); x++ {
+			if g := line[x].Style.Bg; g != nil && !overlay.IsNoColor(g) {
+				grounds[rgbaKey(g)] = struct{}{}
+			}
+		}
+	}
+	for _, line := range canvas.Lines[area.Min.Y:area.Max.Y] {
+		for x := area.Min.X; x < min(area.Max.X, len(line)); x++ {
+			cell := &line[x]
+			// The same two cells the scrim leaves alone: the tail of a wide
+			// glyph, and an image's placeholder, whose foreground is an id.
+			if cell.Content == "" || vt.IsKittyPlaceholder(cell.Content) {
+				continue
+			}
+			fg := cell.Style.Fg
+			if fg != nil && !overlay.IsNoColor(fg) {
+				if _, isGround := grounds[rgbaKey(fg)]; isGround {
+					// The item's shape, not its ink: a rounded end is a glyph
+					// in the fill's colour. Wash it with the ground it caps so
+					// the end and the fill are one colour, and leave the cell's
+					// own background: behind a cap it is the bar, not the item.
+					cell.Style.Fg = overlay.MixColors(fg, pal.HelpTint, helpTintAmount)
+					continue
+				}
+			}
+			ground := cell.Style.Bg
+			if overlay.IsNoColor(ground) {
+				ground = base
+			}
+			cell.Style.Bg = overlay.MixColors(ground, pal.HelpTint, helpTintAmount)
+			if fg == nil || overlay.IsNoColor(fg) {
+				continue
+			}
+			// The wash can land closer to the ink than the ground it replaced,
+			// and this is the one thing on screen the reader has to read. Hold
+			// the ink to the palette's contrast floor; a default ink has no
+			// colour to raise, and keeps the host's own.
+			cell.Style.Fg = overlay.Readable(fg, cell.Style.Bg)
+		}
+	}
+}
 
 // helpPaneWidth is the pane's target width: wide enough for a key, its
 // description and a CLI line, never wider than the screen keeps room for. A

@@ -852,7 +852,7 @@ func furnitureRole(r Role) color.Color {
 	case RoleDotClose, RoleDotMinimize, RoleDotZoom:
 		closeDot, minimise, zoom := WindowDots()
 		return [...]color.Color{closeDot, minimise, zoom}[r-RoleDotClose]
-	case RoleDockGround, RoleRailGround:
+	case RoleDockGround, RoleRailGround, RoleHelpTint:
 		return chromeFurniture(r)
 	}
 	return nil

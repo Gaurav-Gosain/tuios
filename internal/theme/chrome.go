@@ -203,7 +203,7 @@ var chromeFallbackSlot = [roleLastSettable + 1]int8{
 	RoleSurface: -1, RoleCanvas: -1, RolePanel: -1, RoleCard: -1,
 	RoleBorderUnfocused: 1, RoleBorderCopy: 3, RoleBorderMultifocus: 3, RoleRule: -1,
 	RoleAttention: 3, RoleBusy: 4, RoleDotClose: 9, RoleDotMinimize: 11, RoleDotZoom: 10,
-	RoleDockGround: -1, RoleRailGround: -1,
+	RoleDockGround: -1, RoleRailGround: -1, RoleHelpTint: -1,
 }
 
 // chromeRole is role r's colour in the object, following role references.

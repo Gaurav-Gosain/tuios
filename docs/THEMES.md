@@ -102,7 +102,7 @@ The sheet has three tabs:
   dark. The rest of the chrome follows them: the dialog greys and the text
   inks from the surface, the pills and marks from the accent and the sixteen.
   A new theme opens here.
-- **Roles**: the chrome roles, in groups: Accents, Frame, Dock and rail,
+- **Roles**: the chrome roles, in groups: Accents, Frame, Dock and rail, Help,
   Dialogs and Status. `Text`, `Dim text` and `Quiet text` show their measured
   colour. You cannot set them.
 - **Pane colours**: the foreground, the background, the selection, the cursor
@@ -623,7 +623,8 @@ by surface. Each one you leave out draws as before:
   "status": { "attention": "bright_red", "busy": "accent" },
   "dots":   { "close": "red", "minimize": "yellow", "zoom": "green" },
   "dock":   { "ground": "#181825" },
-  "rail":   { "ground": "#181825" }
+  "rail":   { "ground": "#181825" },
+  "help":   { "tint":   "#f5a9c0" }
 }
 ```
 
@@ -638,6 +639,7 @@ by surface. Each one you leave out draws as before:
 | `dots.close`, `dots.minimize`, `dots.zoom` | the window buttons in the dots style | red, amber and green |
 | `dock.ground` | the background of the dock | none |
 | `rail.ground` | the background of the rail | none |
+| `help.tint` | the wash on the component help mode explains, rounded ends included | half the theme's `bright_red`, half the built-in rose; never drawn at 16 colours |
 
 - `appearance.dock_background` and `appearance.sidebar.background` in the
   config win over `dock.ground` and `rail.ground`, `off` included. So does an

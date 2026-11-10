@@ -93,6 +93,7 @@ const (
 	RoleDotZoom
 	RoleDockGround
 	RoleRailGround
+	RoleHelpTint
 	RoleText
 	RoleDim
 	RoleMuted
@@ -100,7 +101,7 @@ const (
 
 // roleLastSettable is the last role a theme's chrome object may set. The ink
 // tiers after it are measured, never named.
-const roleLastSettable = RoleRailGround
+const roleLastSettable = RoleHelpTint
 
 // roleNames maps each role to the name a file writes.
 var roleNames = [...]string{
@@ -126,6 +127,7 @@ var roleNames = [...]string{
 	RoleDotZoom:          "dots.zoom",
 	RoleDockGround:       "dock.ground",
 	RoleRailGround:       "rail.ground",
+	RoleHelpTint:         "help.tint",
 
 	RoleText:  "text",
 	RoleDim:   "dim",

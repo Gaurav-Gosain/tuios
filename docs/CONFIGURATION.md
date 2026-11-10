@@ -973,7 +973,8 @@ The role names are `accent`, `accent_bright`, `success`, `warning`,
 theme's `chrome` object sets (see [THEMES.md](THEMES.md)). The roles for one
 piece of chrome have a dotted name: `border.unfocused`, `border.copy`,
 `border.multifocus`, `rule`, `status.attention`, `status.busy`,
-`dots.close`, `dots.minimize`, `dots.zoom`, `dock.ground` and `rail.ground`.
+`dots.close`, `dots.minimize`, `dots.zoom`, `dock.ground`, `rail.ground` and
+`help.tint`.
 `text`, `dim` and `muted` are the three text inks. You can use them, but a
 theme cannot set them.
 
