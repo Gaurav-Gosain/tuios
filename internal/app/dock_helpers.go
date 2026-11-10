@@ -980,6 +980,21 @@ func (m *OS) dockMeterParts() []string {
 	return parts
 }
 
+// dockMeterNames names the readouts dockMeterParts returns, in the same order,
+// so the help pane can point at the CPU or the RAM alone even though the two
+// share one segment.
+func (m *OS) dockMeterNames() []string {
+	m.ensureDockPlan()
+	var names []string
+	if m.Settings.ShowCPU && m.dockPlan.Has(config.DockComponentCPU) {
+		names = append(names, config.DockComponentCPU)
+	}
+	if m.Settings.ShowRAM && m.dockPlan.Has(config.DockComponentRAM) {
+		names = append(names, config.DockComponentRAM)
+	}
+	return names
+}
+
 // dockNotificationBlock is the message block, or nothing when the dock does not
 // list the notifications component. The takeover itself is unconditional: a
 // message is a transient claim on the right-hand end rather than a cell, so

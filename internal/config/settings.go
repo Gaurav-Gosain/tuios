@@ -415,6 +415,12 @@ type Settings struct {
 	// dock exactly as it was before the strip existed.
 	DockWorkspaceTabs bool
 
+	// Language is the language help text reads in: a language code such as
+	// "fr", empty to follow the client's locale. Set via [ui] language. It
+	// names prose only; a CLI line, a config path and a key label stay as
+	// they are in every language.
+	Language string
+
 	// DockWorkspaceTabFormat is the format string for each workspace tab in the
 	// dock strip. Placeholders: {index} (the workspace number) and {name} (the
 	// workspace name, or its number when it has no name). Empty means "{name}",

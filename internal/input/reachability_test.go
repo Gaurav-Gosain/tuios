@@ -153,6 +153,14 @@ func reachSections(t *testing.T) []bindingSection {
 		// The agent rows' keys are read first too, and only while the cursor is
 		// on an agent row.
 		{name: "sidebar_agents", binds: k.SidebarAgents, modes: windowMode, newOS: reachAgentsOS},
+		// Help mode's own keys are read before anything else while its pane is
+		// up, in either mode, and the pane has to be up for them to be live.
+		{name: "help", binds: k.Help, modes: bothModes, newOS: func(t *testing.T) *app.OS {
+			t.Helper()
+			o := reachOS(t)
+			o.EnterHelpMode()
+			return o
+		}},
 		// The file preview's keys are read first while it is open, and the keys
 		// inside the file while the keyboard is there.
 		{name: "quick_look", binds: k.QuickLook, modes: windowMode, newOS: reachQuickLookOS},
@@ -843,7 +851,7 @@ func TestEveryDescribedActionIsHandled(t *testing.T) {
 	// below does not name it; runCopyModeAction runs it through its constant.
 	handled := map[string]bool{app.HoldModeAction: true, config.ActionCopyModeFirstNonBlank: true}
 	k := config.DefaultConfig().Keybindings
-	for _, section := range []map[string][]string{k.Inbox, k.InboxPeek, k.Mail, k.SidebarAgents, k.CopyMode, k.Transfers, k.Lists, k.Review} {
+	for _, section := range []map[string][]string{k.Inbox, k.InboxPeek, k.Mail, k.SidebarAgents, k.CopyMode, k.Transfers, k.Lists, k.Review, k.Help} {
 		for action := range section {
 			handled[action] = true
 		}
