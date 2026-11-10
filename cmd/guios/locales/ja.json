@@ -1381,6 +1381,12 @@
   "launcherFailed": "プログラムを一覧できませんでした。",
   "launcherEmpty": "PATH にプログラムがありません。",
   "launcherRunFailed": "{name} を開始できませんでした: {why}",
+  "commandEntryFailed": "{name} を実行できませんでした: {why}",
+  "commandEntryRan": "{name} を実行しました。",
+  "pluginActionDetail": "プラグインのアクション",
+  "pluginPaneDetail": "プラグインのペイン、{placement}",
+  "pluginNoDaemon": "このマシンの tuios デーモンに接続できません。",
+  "pluginNeedsLocal": "{name} はこのマシンのデーモンのプラグインですが、このセッションは別のマシンで動いています。",
   "railPaneStopped": "停止しました",
   "railPaneStartAgain": "もう一度開始"
 }

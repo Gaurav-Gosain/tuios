@@ -2417,6 +2417,12 @@
   "launcherFailed": "The programs could not be listed.",
   "launcherEmpty": "There are no programs on the PATH.",
   "launcherRunFailed": "{name} could not start: {why}",
+  "commandEntryFailed": "{name} did not run: {why}",
+  "commandEntryRan": "Ran {name}.",
+  "pluginActionDetail": "plugin action",
+  "pluginPaneDetail": "plugin pane, {placement}",
+  "pluginNoDaemon": "The tuios daemon on this machine cannot be reached.",
+  "pluginNeedsLocal": "{name} is a plugin of this machine's daemon, and this session runs on another machine.",
   "railPaneStopped": "Stopped",
   "railPaneStartAgain": "Start again"
 }

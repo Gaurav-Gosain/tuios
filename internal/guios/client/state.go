@@ -13,7 +13,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
@@ -199,11 +198,13 @@ func (k *stateKeeper) build() (*proto.State, error) {
 		counts := map[int]*proto.Workspace{}
 		for _, w := range wl.Windows {
 			paneSession[w.ID] = s.ID
-			if w.Scratch && w.ScratchName == config.DefaultScratchName && session.IsScratchWorkspace(w.Workspace) && !(hide && slices.Contains(goneID, w.ID)) {
-				// The built-in scratch terminal's group, as the TUI's
-				// toggle_scratch shows it: a pane of no workspace's.
+			if w.Scratch && session.IsScratchWorkspace(w.Workspace) && !(hide && slices.Contains(goneID, w.ID)) {
+				// A scratch terminal's group, the built-in one that the
+				// TUI's toggle_scratch shows or a command entry's: a
+				// pane of no workspace's.
 				p := k.pane(w)
 				p.Workspace = w.Workspace
+				p.ScratchName = w.ScratchName
 				ks.Scratch = append(ks.Scratch, p)
 			}
 			if w.Rail != "" && !(hide && slices.Contains(goneID, w.ID)) {

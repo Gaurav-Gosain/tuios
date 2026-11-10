@@ -10,6 +10,7 @@ import (
 	"github.com/Gaurav-Gosain/mygo/plugins/terminal"
 	"github.com/Gaurav-Gosain/mygo/ui"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/actions"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
 	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
@@ -103,9 +104,9 @@ func (a *App) toggleQuick() {
 }
 
 // scratchPane is the pane of a session's scratch to show: the one with the
-// focus, else its first, nil for none.
+// focus, else the first of the built-in group, nil for none.
 func scratchPane(s *proto.Session) *proto.Pane {
-	if s == nil || len(s.Scratch) == 0 {
+	if s == nil {
 		return nil
 	}
 	for i := range s.Scratch {
@@ -113,7 +114,20 @@ func scratchPane(s *proto.Session) *proto.Pane {
 			return &s.Scratch[i]
 		}
 	}
-	return &s.Scratch[0]
+	return namedScratch(s, config.DefaultScratchName)
+}
+
+// namedScratch is the first pane of the scratch group name, nil for none.
+func namedScratch(s *proto.Session, name string) *proto.Pane {
+	if s == nil {
+		return nil
+	}
+	for i := range s.Scratch {
+		if s.Scratch[i].ScratchName == name {
+			return &s.Scratch[i]
+		}
+	}
+	return nil
 }
 
 // scratchFocused reports whether the daemon's focus is on the session's
@@ -548,8 +562,13 @@ func (a *App) dropView(c *ui.Context, pal *palette, stack ui.Element, h float32)
 // dropPanel is the dropdown itself, k of the way down.
 func (a *App) dropPanel(c *ui.Context, pal *palette, p *proto.Pane, k, dh, shadow float32) {
 	q := &a.quick
+	// A command entry's group is named by the entry.
+	title := locales.ScratchTerminal()
+	if p != nil && p.ScratchName != config.DefaultScratchName && p.Title != "" {
+		title = p.Title
+	}
 	panel := floating(ui.Column(c.Key("scratch")).Absolute().Left(shadow).Top(0).Right(shadow).Height(dh).Radius(rPane).Clip().
-		Background(lookFor(c).term.Background).AlignItems(ui.Stretch).Label(locales.ScratchTerminal()), pal)
+		Background(lookFor(c).term.Background).AlignItems(ui.Stretch).Label(title), pal)
 	if k < 1 {
 		// One cached bitmap moves, as the agents view does.
 		panel.Cache().Translate(0, -(dh+shadow)*(1-k))
@@ -561,7 +580,7 @@ func (a *App) dropPanel(c *ui.Context, pal *palette, p *proto.Pane, k, dh, shado
 		// A header as a pane's: what it is, and the key that hides it.
 		ui.Row(c.Key("scratch-head")).Height(headerH).Shrink(0).AlignItems(ui.Center).Gap(8).Padding(0, 10, 0, 16).Children(func() {
 			ui.Icon(c, terminalIcon).Size(14, 14).TextColor(pal.textMuted).Shrink(0)
-			ui.Text(c, locales.ScratchTerminal()).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.text).SingleLine()
+			ui.Text(c, title).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.text).SingleLine()
 			if p != nil && p.Dir != "" {
 				ui.Text(c, proto.ShortDir(p.Dir)).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).Shrink(2)
 			}

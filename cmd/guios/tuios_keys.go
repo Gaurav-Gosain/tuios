@@ -566,6 +566,9 @@ func (a *App) runKeyAction(action string) {
 		a.openDeclaredMenu(name)
 		return
 	}
+	if strings.HasPrefix(action, config.CommandActionPrefix) && a.runCommandAction(action) {
+		return
+	}
 	if action == "launcher" {
 		a.openLauncher()
 		return

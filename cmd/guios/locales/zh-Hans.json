@@ -1381,6 +1381,12 @@
   "launcherFailed": "无法列出程序。",
   "launcherEmpty": "PATH 中没有程序。",
   "launcherRunFailed": "{name} 无法启动: {why}",
+  "commandEntryFailed": "{name} 未能运行: {why}",
+  "commandEntryRan": "已运行 {name}。",
+  "pluginActionDetail": "插件操作",
+  "pluginPaneDetail": "插件窗格，{placement}",
+  "pluginNoDaemon": "无法连接本机的 tuios 守护进程。",
+  "pluginNeedsLocal": "{name} 是本机守护进程的插件，而此会话运行在另一台机器上。",
   "railPaneStopped": "已停止",
   "railPaneStartAgain": "重新开始"
 }
