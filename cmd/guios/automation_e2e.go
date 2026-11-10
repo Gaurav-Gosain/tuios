@@ -343,6 +343,21 @@ func startProbe(a *App) {
 						conn.Write([]byte(<-done + "\n"))
 						continue
 					}
+					// "helprows" answers the help sheet's rows: group, keys,
+					// what.
+					if sc.Text() == "helprows" {
+						got := make(chan [][3]string, 1)
+						a.update(func() {
+							var rows [][3]string
+							for _, r := range a.helpRows() {
+								rows = append(rows, [3]string{r.group, r.keys, r.what})
+							}
+							got <- rows
+						})
+						line, _ := json.Marshal(<-got)
+						conn.Write(append(line, '\n'))
+						continue
+					}
 					if sc.Text() == "loadkeys" {
 						done := make(chan struct{})
 						a.update(func() { a.loadKeys(); close(done) })

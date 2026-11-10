@@ -185,7 +185,11 @@ type Pane struct {
 	// draws with its own widgets (cmd/guios/tml_view.go). Empty for any
 	// other pane.
 	Surface string `json:"surface,omitempty"`
-	Dir     string `json:"dir,omitempty"` // the shell's working directory
+	// ScratchName names the scratch group a pane of Session.Scratch is
+	// in: config.DefaultScratchName for the built-in one, or a command
+	// entry's name. Empty for any other pane.
+	ScratchName string `json:"scratch_name,omitempty"`
+	Dir         string `json:"dir,omitempty"` // the shell's working directory
 	// Host is the linked machine a pane of this machine's session runs its
 	// program on (tuios new-window --host), "" for this machine.
 	Host    string   `json:"host,omitempty"`
@@ -378,9 +382,10 @@ type Session struct {
 	// were minimized, oldest first: the TUI dock's order, which its restore
 	// digits count in.
 	Minimized []Pane `json:"minimized,omitempty"`
-	// Scratch are the panes of the session's scratch terminal, the TUI's
-	// toggle_scratch group: on a scratch workspace, in no list, shown over
-	// the panes as the scratch dropdown.
+	// Scratch are the panes of the session's scratch terminals: the TUI's
+	// toggle_scratch group and the groups command entries open, each on a
+	// scratch workspace, in no list, shown over the panes as the scratch
+	// dropdown while the focus is on one.
 	Scratch []Pane `json:"scratch,omitempty"`
 	// TUI tells that a tuios TUI client shows the session, which runs the
 	// keymap actions only a TUI has.

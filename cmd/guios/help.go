@@ -69,6 +69,7 @@ func (a *App) helpRows() []helpRow {
 				}
 			}
 		}
+		rows = append(rows, a.declaredMenuRows()...)
 	}
 	// The agents view's keys: typed text goes to the reply box, and the
 	// actions are chords (cockpit_chords.go).
@@ -288,4 +289,37 @@ func helpSpans(what, q string, pal *palette) []ui.Span {
 		return []ui.Span{{Text: what}}
 	}
 	return []ui.Span{paletteSpan(what[:i], false, pal), paletteSpan(what[i:i+len(q)], true, pal), paletteSpan(what[i+len(q):], false, pal)}
+}
+
+// declaredMenuRows are the keys of the menus the tuios config declares
+// ([keybindings.menus.NAME]), each under the keys that open it, as the TUI's
+// help lists them. A menu nothing opens is listed under its name alone.
+func (a *App) declaredMenuRows() []helpRow {
+	tk := &a.tk
+	if tk.reg == nil || tk.reg.GetConfig() == nil {
+		return nil
+	}
+	kb := &tk.reg.GetConfig().Keybindings
+	presses := config.PressesByAction(tk.reg)
+	var rows []helpRow
+	for _, name := range kb.MenuNames() {
+		open := config.OpenMenuAction(name)
+		lead := a.prefixKeys(open)
+		if lead == "" {
+			if ps := presses[open]; len(ps) > 0 {
+				lead = chordLabel(ps[0])
+			}
+		}
+		title := kb.MenuTitle(name)
+		for _, g := range config.MenuKeybindingGroups(kb, name) {
+			for _, b := range g.Bindings {
+				keys := b.Key
+				if lead != "" {
+					keys = lead + " " + b.Key
+				}
+				rows = append(rows, helpRow{title, keys, paneWords(b)})
+			}
+		}
+	}
+	return rows
 }
