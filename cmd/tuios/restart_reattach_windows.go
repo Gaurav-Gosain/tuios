@@ -21,8 +21,8 @@ func execClient(bin string, args []string) error {
 	}
 	if err != nil {
 		return &diagnosticError{
-			What: fmt.Sprintf("The daemon restarted, and tuios could not start again: %v.", err),
-			Fix:  "Start tuios again. Your session is on the new daemon.",
+			What: fmt.Sprintf("The daemon is back, and tuios could not start %s on this terminal: %v.", bin, err),
+			Fix:  "Start tuios again. Your session is on the daemon.",
 			Err:  err,
 		}
 	}

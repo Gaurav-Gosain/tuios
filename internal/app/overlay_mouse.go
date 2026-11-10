@@ -87,6 +87,11 @@ func (m *OS) OverlayMouseClick(x, y int, right bool) (bool, tea.Cmd) {
 		return true, cmd
 	}
 
+	// A click on the open draft of the panel places its cursor or selects.
+	if !right && m.draftClick(h.Kind, x, y) {
+		return true, nil
+	}
+
 	lx, ly := x-h.OriginX, y-h.OriginY
 
 	// Right-click anywhere on the panel grabs it for dragging.

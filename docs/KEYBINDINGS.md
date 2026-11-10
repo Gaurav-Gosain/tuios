@@ -1286,8 +1286,11 @@ says it. Keys typed then are not sent to the panes.
 
 A live upgrade (`tuios daemon upgrade`) drops the clients the same way, and
 they wait for the new image and attach again by themselves, saying "The
-daemon was upgraded. tuios reattached." A client whose build speaks another
-wire protocol than the new image exits instead and says how to attach again.
+daemon was upgraded. tuios reattached." When the new image is a newer
+build, the client runs that build instead, on the same terminal and session,
+and says "The daemon was upgraded to <version>. This window runs it too."
+A client whose build speaks another wire protocol than the new image and is
+not older than it exits instead and says how to attach again.
 
 When a step fails, the dialog says what happened and what to do next. When
 a program started or stopped after you agreed, the restart does not run, and

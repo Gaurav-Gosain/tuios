@@ -200,10 +200,6 @@ type cockpitState struct {
 	rowsAt ckRowsKey
 	// hits are the click targets of the last frame.
 	hits []ckHit
-	// ed is a press in the reply editor (cockpit_editor_mouse.go).
-	ed ckEdPress
-	// clickShift is whether shift was held with the click being handled.
-	clickShift bool
 	// lastClick and lastClickKey find a double-click.
 	lastClick    time.Time
 	lastClickKey string
@@ -393,9 +389,6 @@ const (
 	ckHitAction
 	ckHitTab
 	ckHitMark
-	// ckHitEditor is a line of the reply editor: group is the line of the
-	// editor's frame, x0 the screen column of the frame's left edge.
-	ckHitEditor
 	// ckHitColumn is a column of the board's columns, behind its cards.
 	ckHitColumn
 )
@@ -1320,6 +1313,10 @@ func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 		m.cockpitImageClick(x, y)
 		return nil, true
 	}
+	// A click on the open draft places its cursor or selects in it.
+	if m.draftClick("inbox", x, y) {
+		return nil, true
+	}
 	if ck.spawn != nil {
 		return m.spawnClick(x, y), true
 	}
@@ -1373,8 +1370,6 @@ func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 			return nil, true
 		case ckHitTab:
 			m.CockpitTab(h.group - m.cockpitTabIndex())
-		case ckHitEditor:
-			m.cockpitEditorPress(h, x, y)
 		}
 		return nil, true
 	}
@@ -1532,9 +1527,6 @@ func (m *OS) CockpitHover(x, y int) {
 		return
 	}
 	if m.kanbanDragTo(x, y) {
-		return
-	}
-	if m.cockpitEditorDrag(x, y) {
 		return
 	}
 	key := ""

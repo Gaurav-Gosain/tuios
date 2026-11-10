@@ -582,7 +582,7 @@ func (r *handoffRun) commit() error {
 		}
 		r.bin = bin
 	}
-	d.closeClientsForHandoff(r.bin.accepts.Version)
+	d.closeClientsForHandoff(r.bin.accepts.Version, r.bin.path)
 
 	argv := append([]string{r.bin.path}, d.handoffArgs(fdNum(r.file))...)
 	log.Printf("Live upgrade: exec %s with %d panes (manifest %d bytes, stopped %s)", r.bin.path, r.panes, r.manifestBytes, time.Since(r.started).Round(time.Millisecond))

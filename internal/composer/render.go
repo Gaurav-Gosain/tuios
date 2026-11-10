@@ -78,6 +78,10 @@ type Caret struct{ Row, Col int }
 // next to the text being typed. ok is false when the frame drew no cursor.
 func (m *Model) Caret() (c Caret, ok bool) { return m.caret, m.caretOK }
 
+// FrameSize is the width and the line count of the last frame Render
+// returned, for a host that maps the mouse onto it.
+func (m *Model) FrameSize() (width, lines int) { return m.frameAt.width, len(m.frame) }
+
 // Drawn counts the frames Render drew rather than took from its cache. A host
 // that wraps the lines keeps its own copy until this changes.
 func (m *Model) Drawn() uint64 { return m.drawn }
