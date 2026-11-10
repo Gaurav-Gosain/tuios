@@ -82,6 +82,7 @@ var paletteDanger = map[string]bool{"app.quitAll": true, "session.close": true}
 func (a *App) openPalette() {
 	a.pal = paletteState{open: true, reveal: true, gen: a.pal.gen + 1, list: a.pal.list}
 	a.loadConversations()
+	a.loadPlugins()
 }
 
 // openConversations opens the palette on the conversations alone.
