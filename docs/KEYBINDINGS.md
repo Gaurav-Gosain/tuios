@@ -217,9 +217,12 @@ read, and the pane redraws around the layout they leave.
 
 A hidden rail still has an entry in the rotation, marked `(hidden)`; its pane
 names the chord that brings it back, and that chord works from here. Help mode
-keeps the pointer while it is up: a click picks the component under it and does
-nothing else, and the wheel scrolls the explanation. A panel opened over it
-takes the pointer and the keys. Because the pane is a view, a bare `h`, `Up` or
+keeps the pointer while it is up: a click on a pane picks the part it explains
+and cannot focus or move it, and the wheel scrolls the explanation. The dock is
+the exception, because its cells are controls: a click on one does what it does
+with the pane down, from a workspace tab to a minimized pane's pill to a custom
+cell, and the explanation follows the click. A panel opened over help takes
+the pointer and the keys. Because the pane is a view, a bare `h`, `Up` or
 `Down` belongs to it even over a terminal pane: leave help to type them.
 
 The default is
