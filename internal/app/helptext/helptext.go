@@ -25,6 +25,11 @@ type Entry struct {
 	Title string
 	// Purpose is the paragraph under the heading.
 	Purpose string
+	// Hidden is the sentence that opens the page of a component the layout
+	// has no room for, such as a rail that is put away. It names the key that
+	// brings the component back, which the engine passes as %s. A language
+	// that has no sentence of its own reads the English one.
+	Hidden func(key string) string
 	// Plural is what the count after a page's name reads, in this language,
 	// for a component drawn in n parts: the engine writes the number. Nil
 	// reads "parts", which is the English of every language whose count does
@@ -54,7 +59,38 @@ const (
 	IDDockTape          = "dock/tape"
 	IDDockNotifications = "dock/notifications"
 	IDDockCopyHelp      = "dock/copy-help"
+
+	// The rail and its own controls.
+	IDRail         = "rail"
+	IDRailControls = "rail/controls"
+
+	// The rail's sections, named as the row kind that draws them.
+	IDRailSessions = "rail/sessions"
+	IDRailPanes    = "rail/panes"
+	IDRailAgents   = "rail/agents"
+	IDRailFiles    = "rail/files"
+
+	// The panes and the desktop. A pane's id carries the window it explains,
+	// so its page is found by the kind alone: PanePage.
+	IDPane    = "pane"
+	IDDesktop = "desktop"
 )
+
+// PanePage is the entry id for the kind of a pane component: "pane:abc/title"
+// reads pane/title, and "pane:abc/content" reads pane/content.
+func PanePage(id string) string {
+	kind := id
+	if i := strings.Index(kind, "/"); i >= 0 {
+		kind = kind[i:]
+	} else {
+		kind = ""
+	}
+	return IDPane + kind
+}
+
+// RailSection is the entry id for a rail section, named by the row kind that
+// draws it: "sessions" reads rail/sessions.
+func RailSection(kind string) string { return "rail/" + kind }
 
 // DockCell is the entry id for a dock cell, whose name comes from the [dock]
 // list the configuration carries: "mode" reads dock/mode.
@@ -167,6 +203,72 @@ var english = Language{
 			Purpose: "The copy-help cell is the dock's reminder of the copy-mode chord while " +
 				"copy mode is available. It is documentation, not a control.",
 		},
+
+		IDRail: {
+			Title: "Session rail",
+			Purpose: "The session rail is the column beside the panes. It lists the sessions " +
+				"on this machine and on other hosts, the panes of the session it is " +
+				"following, the agents that need a person, the files below the focused pane, " +
+				"and the controls that add and collapse.",
+			Hidden: func(key string) string {
+				return "This rail is hidden, so it has no rectangle to hover. Press " + key +
+					" to show it, and the pane follows the layout as it changes."
+			},
+		},
+		IDRailControls: {
+			Title: "Rail controls",
+			Purpose: "The rail's own controls: collapse it to a strip, widen or narrow it, put " +
+				"the files section on and off, and move keyboard focus into the rail.",
+		},
+		IDRailSessions: {
+			Title: "Sessions",
+			Purpose: "One row per daemon session. Enter opens the session this client shows; " +
+				"n makes a new one; r renames; x kills. The number ahead of a name is the " +
+				"switch key.",
+		},
+		IDRailPanes: {
+			Title: "Panes",
+			Purpose: "The panes of the session the rail follows. Enter focuses one; the + makes " +
+				"another. A pane row is also the drag handle for moving the pane between " +
+				"workspaces.",
+		},
+		IDRailAgents: {
+			Title: "Agents",
+			Purpose: "Agents that are working, waiting for an answer, or finished. a cycles " +
+				"all/here, s cycles priority/recent, m opens the mailbox, and Enter opens the " +
+				"agent's pane.",
+		},
+		IDPane: {
+			Title: "Pane: {name}",
+			Purpose: "One terminal window. It owns a pty and a shell; keys go to the shell " +
+				"in terminal mode and to the window manager in window mode. The title bar " +
+				"names it and carries its buttons, and the body is the terminal.",
+		},
+		IDPane + "/title": {
+			Title: "Title bar: {name}",
+			Purpose: "The pane's title bar. It names the pane, shows which pane has focus " +
+				"and which workspace it is on, and carries the close and minimize buttons. " +
+				"Dragging it moves the pane; the edge under the pointer resizes it.",
+		},
+		IDPane + "/content": {
+			Title: "Terminal body: {name}",
+			Purpose: "The terminal itself. In terminal mode every key but the leader goes " +
+				"to the shell; copy mode moves over the scrollback without sending " +
+				"anything. The scroll bar and the selection are drawn here too.",
+		},
+		IDDesktop: {
+			Title: "Workspace",
+			Purpose: "The desktop behind the panes, on the current workspace. Clicking it " +
+				"leaves terminal mode; the leader then a workspace key switches " +
+				"workspaces. Tiling arranges the panes here, and the scratch pane opens " +
+				"over them.",
+		},
+		IDRailFiles: {
+			Title: "Files",
+			Purpose: "The directory below the focused pane. Enter opens a name, e edits it in " +
+				"the configured editor, / searches, and p pastes a copied or cut entry. The " +
+				"header's cd sends the pane there.",
+		},
 	},
 }
 
@@ -201,6 +303,24 @@ func Lookup(t Language, id string) (e Entry, found bool) {
 		return e, false
 	}
 	return Entry{}, false
+}
+
+// Text is the page a component's name and paragraph are read from in a
+// language, in the fallback order dockText and the rail's sections both need:
+// the language's own page, then its dock page for what the dock has words
+// for, then English. It always returns a page, with fallback as the name when
+// neither table knows the id, because a component added before its prose
+// still opens.
+func Text(t Language, id, fallback string) Entry {
+	if e, ok := Lookup(t, id); ok {
+		return e
+	}
+	// A section of the rail is explained by the rail's own page when the
+	// language writes one for it, and by its own word when it does not.
+	if e, ok := Lookup(t, strings.Split(id, "/")[0]); ok && e.Plural != nil {
+		return Entry{Title: fallback, Plural: e.Plural}
+	}
+	return Entry{Title: fallback}
 }
 
 // Missing is the ids of the pages a translation has not written, in a stable

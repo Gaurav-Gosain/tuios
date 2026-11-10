@@ -497,11 +497,14 @@ func (m *OS) helpRailComponent(edge sidebarEdge, width int, shown, other bool) [
 		rect = image.Rect(x, top, x+width, top+height)
 	}
 
-	purpose := "The session rail is the column beside the panes. It lists the sessions on this machine and on other hosts, the panes of the session it is following, the agents that need a person, the files below the focused pane, and the controls that add and collapse."
+	railText := dockText(m.helpLanguage(), helptext.IDRail, "Session rail")
+	purpose := railText.Purpose
 	if !shown {
 		// Help mode reads only its navigation keys, so the toggle it lists
-		// works from here; the pane stays up and redraws around the rail.
-		purpose = "This rail is hidden, so it has no rectangle to hover. Press " + helpRailToggleLabel(wide) + " to show it, and the pane follows the layout as it changes. " + purpose
+		// works from here; the pane stays up and redraws around the rail. The
+		// sentence and the page behind it come from the same language, so a
+		// translation reads as one paragraph.
+		purpose = hiddenRailText(m.helpLanguage(), helpRailToggleLabel(wide)) + " " + purpose
 	}
 	keys := m.helpScopedKeys(config.ScopeSidebar, "activate", "cursor_down", "cursor_up", "collapse", "expand", "section", "new_session", "new_window")
 	keys = helpCap(keys, 7)
@@ -584,36 +587,41 @@ func (m *OS) helpRailChild(group, parent string, rect image.Rectangle, other boo
 	c := helpComponent{id: parent + "/" + group, parent: parent, rect: rect}
 	switch group {
 	case "sessions":
-		c.title = "Sessions"
-		c.purpose = "One row per daemon session. Enter opens the session this client shows; n makes a new one; r renames; x kills. The number ahead of a name is the switch key."
+		text := dockText(m.helpLanguage(), helptext.RailSection("sessions"), "Sessions")
+		c.title = text.Title
+		c.purpose = text.Purpose
 		c.keys = helpCap(m.helpScopedKeys(config.ScopeSidebar,
-			"activate", "new_session", "rename", "kill", "cursor_down", "cursor_up"), 6)
+			"activate", "new_session", "rename", "kill", "cursor_down", "cursor_up"), 4)
 		c.cli = []string{"tuios ls", "tuios new work", "tuios rename-session work", "tuios kill-session work"}
 	case "panes":
-		c.title = "Panes"
-		c.purpose = "The panes of the session the rail follows. Enter focuses one; the + makes another. A pane row is also the drag handle for moving the pane between workspaces."
+		text := dockText(m.helpLanguage(), helptext.RailSection("panes"), "Panes")
+		c.title = text.Title
+		c.purpose = text.Purpose
 		c.keys = helpCap(m.helpScopedKeys(config.ScopeSidebar,
-			"activate", "new_window", "cursor_down", "cursor_up", "reorder_down", "reorder_up"), 6)
+			"activate", "new_window", "cursor_down", "cursor_up", "reorder_down", "reorder_up"), 4)
 		c.keys = append(c.keys, m.helpKeys("prefix_next_window", "prefix_prev_window")...)
 		c.cli = []string{"tuios new-window", "tuios list-windows", "tuios select-window <name>"}
 	case "agents":
-		c.title = "Agents"
-		c.purpose = "Agents that are working, waiting for an answer, or finished. a cycles all/here, s cycles priority/recent, m opens the mailbox, and Enter opens the agent's pane."
+		text := dockText(m.helpLanguage(), helptext.RailSection("agents"), "Agents")
+		c.title = text.Title
+		c.purpose = text.Purpose
 		c.keys = append(m.helpScopedKeys(config.ScopeSidebarAgents,
 			"activate", "cursor_down", "cursor_up"), m.helpScopedKeys(config.ScopeSidebar,
 			"agents_filter", "agents_sort", "mail", "cursor_down", "cursor_up")...)
-		c.keys = helpCap(c.keys, 7)
+		c.keys = helpCap(c.keys, 6)
 		c.keys = append(c.keys, m.helpKeys("prefix_inbox", "prefix_next_attention")...)
 		c.cli = []string{"tuios list-agents", "tuios respond <action>", "tuios send-agent-message <text>"}
 	case "files":
-		c.title = "Files"
-		c.purpose = "The directory below the focused pane. Enter opens a name, e edits it in the configured editor, / searches, and p pastes a copied or cut entry. The header's cd sends the pane there."
+		text := dockText(m.helpLanguage(), helptext.RailSection("files"), "Files")
+		c.title = text.Title
+		c.purpose = text.Purpose
 		c.keys = helpCap(m.helpScopedKeys(config.ScopeSidebarFiles,
-			"file_open", "file_edit", "file_search", "file_delete", "file_paste", "file_copy", "file_cut"), 7)
+			"file_open", "file_edit", "file_search", "file_delete", "file_paste", "file_copy", "file_cut"), 5)
 		c.cli = []string{"tuios set-config appearance.sidebar.sections sessions:25,terminals,files:25,agents:34", "tuios config edit"}
 	case "controls":
-		c.title = "Rail controls"
-		c.purpose = "The rail's own controls: collapse it to a strip, widen or narrow it, put the files section on and off, and move keyboard focus into the rail."
+		text := dockText(m.helpLanguage(), helptext.RailSection("controls"), "Rail controls")
+		c.title = text.Title
+		c.purpose = text.Purpose
 		c.keys = m.helpScopedKeys(config.ScopeSidebar,
 			"collapse", "expand", "narrow", "widen", "file_search")
 		c.cli = []string{"tuios set-config appearance.sidebar.width 30", "tuios set-config appearance.sidebar.position left"}
@@ -752,6 +760,24 @@ func (m *OS) helpDockComponent() helpComponent {
 	}
 }
 
+// hiddenRailText names why a hidden rail has no rectangle, in the language
+// the rest of the page is in.
+func hiddenRailText(lang helptext.Language, key string) string {
+	if e, ok := helptext.Lookup(lang, helptext.IDRail); ok && e.Hidden != nil {
+		return e.Hidden(key)
+	}
+	return "This rail is hidden, so it has no rectangle to hover. Press " + key +
+		" to show it, and the pane follows the layout as it changes."
+}
+
+// paneText is a pane page's title or paragraph in a language, with the pane's
+// name written where the page names it.
+func paneText(m *OS, id, fallback, name string) helptext.Entry {
+	e := dockText(m.helpLanguage(), id, fallback)
+	e.Title = strings.ReplaceAll(e.Title, "{name}", name)
+	return e
+}
+
 // helpLanguage is the table this client's help reads in: [ui] language, or
 // the locale when it is unset. The lookup is a string compare per frame, and
 // the warning a load owes is owed once, which Load arranges.
@@ -781,10 +807,7 @@ func helpPartLabel(lang helptext.Language, n int, id string) string {
 // title the caller would have given it when neither the language nor English
 // has an entry yet: a cell added before its text exists still opens a page.
 func dockText(lang helptext.Language, id, fallback string) helptext.Entry {
-	if e, ok := helptext.Lookup(lang, id); ok {
-		return e
-	}
-	return helptext.Entry{Title: fallback}
+	return helptext.Text(lang, id, fallback)
 }
 
 // helpDockCellComponent explains one dock cell. Custom and plugin cells carry
@@ -1002,8 +1025,8 @@ func (m *OS) helpPaneComponent(w *terminal.Window, rect image.Rectangle) helpCom
 		"prefix_toggle_tiling", "prefix_next_window", "prefix_prev_window")...)
 	return helpComponent{
 		id:      "pane:" + w.ID,
-		title:   "Pane: " + name,
-		purpose: "One terminal window. It owns a pty and a shell; keys go to the shell in terminal mode and to the window manager in window mode. The title bar names it and carries its buttons, and the body is the terminal.",
+		title:   paneText(m, helptext.PanePage("pane:"+w.ID), "Pane: "+name, name).Title,
+		purpose: paneText(m, helptext.PanePage("pane:"+w.ID), "Pane", name).Purpose,
 		keys:    helpCap(keys, 7),
 		allKeys: append(keys, m.helpKeys("prefix_window", "prefix_layout", "prefix_close_session")...),
 		cli: []string{
@@ -1024,8 +1047,8 @@ func (m *OS) helpPaneTitleComponent(w *terminal.Window, rect image.Rectangle) he
 	return helpComponent{
 		id:      "pane:" + w.ID + "/title",
 		parent:  "pane:" + w.ID,
-		title:   "Title bar: " + name,
-		purpose: "The pane's title bar. It names the pane, shows which pane has focus and which workspace it is on, and carries the close and minimize buttons. Dragging it moves the pane; the edge under the pointer resizes it.",
+		title:   paneText(m, helptext.PanePage("pane:"+w.ID+"/title"), "Title bar: "+name, name).Title,
+		purpose: paneText(m, helptext.PanePage("pane:"+w.ID+"/title"), "Title bar", name).Purpose,
 		keys: helpCap(m.helpKeys(
 			"prefix_rename_window", "prefix_fullscreen", "prefix_close_window",
 			"prefix_minimize"), 6),
@@ -1051,8 +1074,8 @@ func (m *OS) helpPaneContentComponent(w *terminal.Window, rect image.Rectangle) 
 	return helpComponent{
 		id:      "pane:" + w.ID + "/content",
 		parent:  "pane:" + w.ID,
-		title:   "Terminal body: " + name,
-		purpose: "The terminal itself. In terminal mode every key but the leader goes to the shell; copy mode moves over the scrollback without sending anything. The scroll bar and the selection are drawn here too.",
+		title:   paneText(m, helptext.PanePage("pane:"+w.ID+"/content"), "Terminal body: "+name, name).Title,
+		purpose: paneText(m, helptext.PanePage("pane:"+w.ID+"/content"), "Terminal body", name).Purpose,
 		keys: helpCap(m.helpKeys(
 			"prefix_selection", "prefix_screenshot", "prefix_split_vertical",
 			"prefix_split_horizontal"), 7),
@@ -1076,8 +1099,8 @@ func (m *OS) helpPaneContentComponent(w *terminal.Window, rect image.Rectangle) 
 func (m *OS) helpDesktopComponent() helpComponent {
 	return helpComponent{
 		id:      "desktop",
-		title:   "Workspace",
-		purpose: "The desktop behind the panes, on the current workspace. Clicking it leaves terminal mode; the leader then a workspace key switches workspaces. Tiling arranges the panes here, and the scratch pane opens over them.",
+		title:   dockText(m.helpLanguage(), helptext.IDDesktop, "Workspace").Title,
+		purpose: dockText(m.helpLanguage(), helptext.IDDesktop, "Workspace").Purpose,
 		keys: helpCap(m.helpKeys(
 			"prefix_workspace", "prefix_toggle_tiling", "prefix_next_window",
 			"prefix_prev_window", "next_workspace", "prev_workspace"), 7),
