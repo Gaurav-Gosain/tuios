@@ -17,12 +17,12 @@ import (
 // overlay: nothing is listed up front, and it reads only the keys it binds.
 // The pointer, or Shift+Tab, moves between the components on screen;
 // Shift+Up and Shift+Down move into and out of a component that has parts; h
-// shows the whole keybinding set of the component selected; esc leaves. The
-// rest of the keyboard is the app's, so a chord the pane lists runs while the
-// pane explains it, and the pane follows the layout that chord leaves. The
+// shows the whole keybinding set of the component selected; Shift+Esc leaves.
+// The rest of the keyboard is the app's, so a chord the pane lists runs while
+// the pane explains it, and the pane follows the layout that chord leaves. The
 // pane that explains the component is drawn above or below it, never over it
-// where the screen has room, and its border is the error ink, so it reads as
-// an inspection surface rather than as one more dock or rail.
+// where the screen has room, and its border is the error ink, so it reads as an
+// inspection surface rather than as one more dock or rail.
 
 // helpKey is one binding as the pane shows it: the whole press, chord
 // included, and what it does.
@@ -76,7 +76,7 @@ func (m *OS) EnterHelpMode() {
 }
 
 // ExitHelpMode leaves help mode. A leader chord after it opens the ordinary
-// leader menu again, and esc or Shift+F1 goes back to the pane.
+// leader menu again, and Shift+Esc or Shift+F1 goes back to the pane.
 func (m *OS) ExitHelpMode() {
 	m.HelpMode = false
 	m.helpShowKeys = false
@@ -320,6 +320,20 @@ func (m *OS) helpKeys(actions ...string) []helpKey {
 		out = append(out, helpKey{press: helpPressLabel(p[0]), desc: desc})
 	}
 	return out
+}
+
+// helpOwnKey is the first press the config binds to one of help mode's own
+// actions, as the pane shows it, or "" when the config leaves it unbound.
+func (m *OS) helpOwnKey(action string) string {
+	if m.KeybindRegistry == nil {
+		return ""
+	}
+	for _, press := range m.KeybindRegistry.GetHelpKeys(action) {
+		if press != "" {
+			return helpPressLabel(press)
+		}
+	}
+	return ""
 }
 
 // helpRailWideKeys are the moves that act on a rail as a whole rather than on
@@ -1209,7 +1223,19 @@ func (m *OS) renderHelpMode() *lipgloss.Layer {
 func (m *OS) helpScrollLine(total, room, width int, pal overlay.Palette) string {
 	from := min(m.helpScroll+1, total)
 	to := min(m.helpScroll+room, total)
-	text := fmt.Sprintf("lines %d-%d of %d · Up/Down or the wheel", from, to, total)
+	// The marker names the keys the config binds, not the ones the code was
+	// written with. The wheel needs no binding: it always scrolls the pane.
+	nav := "the wheel"
+	up, down := m.helpOwnKey(config.ActionHelpScrollUp), m.helpOwnKey(config.ActionHelpScrollDown)
+	switch {
+	case up != "" && down != "":
+		nav = up + "/" + down + " or the wheel"
+	case up != "":
+		nav = up + " or the wheel"
+	case down != "":
+		nav = down + " or the wheel"
+	}
+	text := fmt.Sprintf("lines %d-%d of %d · %s", from, to, total, nav)
 	return overlay.Style(pal.Surface).Foreground(pal.FgMute).
 		Render(overlay.Truncate(text, max(width-4, 8)))
 }
@@ -1409,17 +1435,42 @@ func (m *OS) helpFooterLines(comps []helpComponent, cur *helpComponent, width in
 	title := overlay.Style(bg).Foreground(pal.FgDim).Bold(true)
 
 	type hint struct{ press, desc string }
-	hints := []hint{{"Shift+Tab", "components"}}
+	var hints []hint
+	// Every hint is a configured key, so a rebind shows the key the config
+	// binds and an action the config unbound leaves no promise behind.
+	own := func(action, desc string) {
+		if press := m.helpOwnKey(action); press != "" {
+			hints = append(hints, hint{press, desc})
+		}
+	}
+	own(config.ActionHelpNext, "components")
 	// Shift+Down and Shift+Up do nothing on a top-level component with no
 	// parts: there is nowhere deeper to go and nothing to come back out of.
 	// Naming them there promises a move the keys cannot make.
 	if cur.parent != "" || len(helpChildren(comps, cur.id)) > 0 {
-		hints = append(hints, hint{"Shift+Up/Down", "in and out"})
+		up, down := m.helpOwnKey(config.ActionHelpShallower), m.helpOwnKey(config.ActionHelpDeeper)
+		switch {
+		case up != "" && down != "":
+			hints = append(hints, hint{up + "/" + down, "in and out"})
+		case up != "":
+			hints = append(hints, hint{up, "out"})
+		case down != "":
+			hints = append(hints, hint{down, "in"})
+		}
 	}
 	if scrollable {
-		hints = append(hints, hint{"Up/Down", "scroll, or the wheel"})
+		up, down := m.helpOwnKey(config.ActionHelpScrollUp), m.helpOwnKey(config.ActionHelpScrollDown)
+		switch {
+		case up != "" && down != "":
+			hints = append(hints, hint{up + "/" + down, "scroll, or the wheel"})
+		case up != "":
+			hints = append(hints, hint{up, "scroll up"})
+		case down != "":
+			hints = append(hints, hint{down, "scroll down"})
+		}
 	}
-	hints = append(hints, hint{"h", "all keys"}, hint{"Esc", "exit"})
+	own(config.ActionHelpKeys, "all keys")
+	own(config.ActionHelpExit, "exit")
 
 	const gap = "    "
 	lines := []string{title.Render("Navigating help")}
