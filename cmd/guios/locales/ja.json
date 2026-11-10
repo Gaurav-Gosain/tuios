@@ -1374,5 +1374,11 @@
   "hintOpenOff": "tuios の設定で開く機能がオフです (hints.open)。テキストはコピーしました。",
   "hintNotOpenable": "開けるのはリンクとパスだけです。テキストはコピーしました。",
   "hintNoFile": "ペインのフォルダーから見て {path} というファイルはありません。テキストはコピーしました。",
-  "keysNoMenu": "tuios の設定にメニュー {name} がありません ([keybindings.menus.{name}])。"
+  "keysNoMenu": "tuios の設定にメニュー {name} がありません ([keybindings.menus.{name}])。",
+  "launcherRow": "プログラムを実行…",
+  "launcherLabel": "プログラム",
+  "launcherNoSession": "先にセッションを開いてください。プログラムはそのペインで実行されます。",
+  "launcherFailed": "プログラムを一覧できませんでした。",
+  "launcherEmpty": "PATH にプログラムがありません。",
+  "launcherRunFailed": "{name} を開始できませんでした: {why}"
 }

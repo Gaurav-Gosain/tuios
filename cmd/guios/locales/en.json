@@ -2410,5 +2410,11 @@
     }
   },
   "hintNoFile": "There is no file {path} from the pane's folder. The text is copied.",
-  "keysNoMenu": "There is no menu {name} in the tuios config ([keybindings.menus.{name}])."
+  "keysNoMenu": "There is no menu {name} in the tuios config ([keybindings.menus.{name}]).",
+  "launcherRow": "Run a program…",
+  "launcherLabel": "Programs",
+  "launcherNoSession": "Open a session first. A program runs in a pane of it.",
+  "launcherFailed": "The programs could not be listed.",
+  "launcherEmpty": "There are no programs on the PATH.",
+  "launcherRunFailed": "{name} could not start: {why}"
 }

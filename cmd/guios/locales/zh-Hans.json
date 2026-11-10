@@ -1374,5 +1374,11 @@
   "hintOpenOff": "tuios 配置中已关闭打开功能 (hints.open)。文本已复制。",
   "hintNotOpenable": "只能打开链接和路径。文本已复制。",
   "hintNoFile": "从窗格的文件夹看不存在文件 {path}。文本已复制。",
-  "keysNoMenu": "tuios 配置中没有菜单 {name} ([keybindings.menus.{name}])。"
+  "keysNoMenu": "tuios 配置中没有菜单 {name} ([keybindings.menus.{name}])。",
+  "launcherRow": "运行程序…",
+  "launcherLabel": "程序",
+  "launcherNoSession": "请先打开一个会话。程序在它的窗格中运行。",
+  "launcherFailed": "无法列出程序。",
+  "launcherEmpty": "PATH 中没有程序。",
+  "launcherRunFailed": "{name} 无法启动: {why}"
 }

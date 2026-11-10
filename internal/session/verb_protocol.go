@@ -3572,6 +3572,8 @@ func buildVerbRegistry() map[string]verbEntry {
 	maps.Copy(table, shipVerbs())
 	// The paste buffer verbs. See verb_buffers.go.
 	maps.Copy(table, bufferVerbs())
+	// list-programs, for a launcher. See verb_programs.go.
+	maps.Copy(table, programVerbs())
 	// The file verbs, transfers, the drop folder and previews. See
 	// verb_files.go, transfer.go, drop_files.go and verb_preview.go.
 	maps.Copy(table, fileVerbs())

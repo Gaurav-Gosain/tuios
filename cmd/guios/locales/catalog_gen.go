@@ -13925,3 +13925,65 @@ func KeysNoMenu(name string) string { return In(i18n.Locale()).KeysNoMenu(name) 
 func (msgs Messages) KeysNoMenu(name string) string {
 	return Catalog.Format(msgs.locale, "keysNoMenu", map[string]any{"name": name})
 }
+
+// LauncherRow says "Run a program…"
+// in the language the app shows.
+func LauncherRow() string { return In(i18n.Locale()).LauncherRow() }
+
+// LauncherRow says "Run a program…"
+// in the language of msgs.
+func (msgs Messages) LauncherRow() string {
+	return Catalog.Format(msgs.locale, "launcherRow", nil)
+}
+
+// LauncherLabel says "Programs"
+// in the language the app shows.
+func LauncherLabel() string { return In(i18n.Locale()).LauncherLabel() }
+
+// LauncherLabel says "Programs"
+// in the language of msgs.
+func (msgs Messages) LauncherLabel() string {
+	return Catalog.Format(msgs.locale, "launcherLabel", nil)
+}
+
+// LauncherNoSession says "Open a session first. A program runs in a pane of it."
+// in the language the app shows.
+func LauncherNoSession() string { return In(i18n.Locale()).LauncherNoSession() }
+
+// LauncherNoSession says "Open a session first. A program runs in a pane of it."
+// in the language of msgs.
+func (msgs Messages) LauncherNoSession() string {
+	return Catalog.Format(msgs.locale, "launcherNoSession", nil)
+}
+
+// LauncherFailed says "The programs could not be listed."
+// in the language the app shows.
+func LauncherFailed() string { return In(i18n.Locale()).LauncherFailed() }
+
+// LauncherFailed says "The programs could not be listed."
+// in the language of msgs.
+func (msgs Messages) LauncherFailed() string {
+	return Catalog.Format(msgs.locale, "launcherFailed", nil)
+}
+
+// LauncherEmpty says "There are no programs on the PATH."
+// in the language the app shows.
+func LauncherEmpty() string { return In(i18n.Locale()).LauncherEmpty() }
+
+// LauncherEmpty says "There are no programs on the PATH."
+// in the language of msgs.
+func (msgs Messages) LauncherEmpty() string {
+	return Catalog.Format(msgs.locale, "launcherEmpty", nil)
+}
+
+// LauncherRunFailed says "{name} could not start: {why}"
+// in the language the app shows.
+func LauncherRunFailed(name string, why string) string {
+	return In(i18n.Locale()).LauncherRunFailed(name, why)
+}
+
+// LauncherRunFailed says "{name} could not start: {why}"
+// in the language of msgs.
+func (msgs Messages) LauncherRunFailed(name string, why string) string {
+	return Catalog.Format(msgs.locale, "launcherRunFailed", map[string]any{"name": name, "why": why})
+}
