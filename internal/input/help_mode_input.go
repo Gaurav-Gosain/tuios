@@ -3,6 +3,7 @@ package input
 import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // helpOwnsKey reports whether a key is help mode's to read. Help is a view,
@@ -28,26 +29,53 @@ func helpOwnsPointer(o *app.OS) bool {
 // rail's own chords, a workspace switch and the pane itself keep working while
 // the explanation is up. The pane follows whatever layout they leave on the
 // next frame, which is what makes the listed chords worth pressing.
+//
+// Shift+Esc is the way out by default, because esc is what a pane wants for
+// itself and help must not take it. The keys themselves come from
+// [keybindings.help], through GetHelpAction, so a rebind moves the pane and the
+// hint that names it together.
 func handleHelpModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, bool) {
-	switch msg.String() {
-	case "esc", "shift+f1":
+	if o.KeybindRegistry == nil {
+		return o, nil, false
+	}
+	action := lookupAction(o, msg, o.KeybindRegistry.GetHelpAction)
+	switch action {
+	case config.ActionHelpExit:
+		noteHelpAction(o, action)
 		o.ExitHelpMode()
-	case "tab":
+	case config.ActionHelpNext:
+		noteHelpAction(o, action)
 		o.HelpNext(1)
-	case "shift+tab":
+	case config.ActionHelpPrev:
+		noteHelpAction(o, action)
 		o.HelpNext(-1)
-	case "down":
+	case config.ActionHelpDeeper:
+		noteHelpAction(o, action)
 		o.HelpDeeper()
-	case "up":
+	case config.ActionHelpShallower:
+		noteHelpAction(o, action)
 		o.HelpShallower()
-	case "left":
-		o.HelpNext(-1)
-	case "right":
-		o.HelpNext(1)
-	case "h":
+	case config.ActionHelpScrollUp:
+		noteHelpAction(o, action)
+		o.HelpScroll(-1)
+	case config.ActionHelpScrollDown:
+		noteHelpAction(o, action)
+		o.HelpScroll(1)
+	case config.ActionHelpKeys:
+		noteHelpAction(o, action)
 		o.HelpToggleKeys()
 	default:
 		return o, nil, false
 	}
 	return o, nil, true
+}
+
+// noteHelpAction records that a help-mode key ran, the way the dispatcher
+// records every other action: the crash report's last-actions line and a
+// host's OnAction hook both read it.
+func noteHelpAction(o *app.OS, action string) {
+	o.NoteAction(action)
+	if o.OnAction != nil {
+		o.OnAction(action)
+	}
 }

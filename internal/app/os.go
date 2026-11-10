@@ -263,7 +263,7 @@ type OS struct {
 	pointerSeenY int
 	ShowHelp     bool
 	// HelpMode is the hover help mode: the leader then h, or Shift+F1, enters it,
-	// esc leaves it. The mouse, or Shift+Tab and Shift+Up/Down, walk the
+	// Shift+Esc leaves it. The mouse, or Shift+Tab and Shift+Up/Down, walk the
 	// components on screen and the pane explains the one under the cursor. It
 	// reads only the keys it binds, so every other key reaches the app and the
 	// pane redraws around the layout those keys leave. See help_mode.go.
