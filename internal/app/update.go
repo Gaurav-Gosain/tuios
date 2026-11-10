@@ -3117,6 +3117,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.endThemeEditorFlash(msg)
 		return m, nil
 
+	case helpShowMsg:
+		m.showHelp(msg)
+		return m, nil
+
 	case displayRateMsg:
 		m.handleDisplayRate(msg)
 		return m, nil

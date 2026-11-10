@@ -72,6 +72,7 @@ var themeEditorRoleRows = []themeEditorRow{
 	{group: "Dock and rail", label: "Dock ground", role: theme.RoleDockGround, pane: -1},
 	{group: "Dock and rail", label: "Rail ground", role: theme.RoleRailGround, pane: -1},
 	{group: "Dock and rail", label: "Rule", role: theme.RoleRule, pane: -1},
+	{group: "Help", label: "Tint", role: theme.RoleHelpTint, pane: -1},
 	{group: "Dialogs", label: "Surface", role: theme.RoleSurface, pane: -1},
 	{group: "Dialogs", label: "Canvas", role: theme.RoleCanvas, pane: -1},
 	{group: "Dialogs", label: "Panel", role: theme.RolePanel, pane: -1},

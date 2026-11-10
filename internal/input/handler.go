@@ -42,6 +42,12 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		result, cmd = HandleKeyPress(msg, o)
+		// A key help mode does not bind marks the explanation hidden; the tick
+		// that brings it back is returned from here, because the router's own
+		// command is the key's.
+		if show := o.FlushHelpHide(); show != nil {
+			cmd = tea.Batch(cmd, show)
+		}
 	case tea.KeyReleaseMsg:
 		// Releases only arrive once the host has been asked for event types, and
 		// tuios itself does one thing with one: end a hold. No binding acts on a
@@ -63,6 +69,18 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	case tea.PasteEndMsg:
 		return o, nil
 	case tea.MouseClickMsg:
+		// Help mode reads the pointer: a click picks the component under it.
+		// A click outside the dock goes no further, so it cannot focus or move
+		// a pane while the user is inspecting it. A click on the dock is the
+		// exception: the bar is controls, not decoration, and a control that
+		// stops working while its explanation is up teaches the wrong thing
+		// about it. A panel above help takes the pointer.
+		if o.HelpMode && helpOwnsPointer(o) {
+			o.HelpHoverAt(msg.X, msg.Y)
+			if !o.InDockBand(msg.Y) {
+				return o, nil
+			}
+		}
 		if _, inside := o.SidebarSessionAt(msg.X, msg.Y); !inside {
 			o.BlurSidebarSession()
 		}
@@ -88,6 +106,13 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 			result, cmd = handleMouseClick(msg, o)
 		}
 	case tea.MouseMotionMsg:
+		// Help mode reads the pointer as its cursor. Motion never moves,
+		// resizes or hovers anything else while it is on, unless a panel above
+		// it is open.
+		if o.HelpMode && helpOwnsPointer(o) {
+			o.HelpHoverAt(msg.X, msg.Y)
+			return o, nil
+		}
 		// The labels cover the pane, so motion over it is not the pane's.
 		if o.HintsOpen() || o.PaneLabelsOpen() {
 			return o, nil
@@ -107,6 +132,13 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// Don't sync on motion: too frequent
 		return handleMouseMotion(msg, o)
 	case tea.MouseReleaseMsg:
+		// The dock's gestures are the dock's while help is up, the same as its
+		// presses: a workspace pill switches on the release, so swallowing it
+		// would leave the gesture half done. Everywhere else the button coming
+		// up is help's to ignore.
+		if o.HelpMode && helpOwnsPointer(o) && !o.InDockBand(msg.Y) {
+			return o, nil
+		}
 		if o.CaptureActive() {
 			result, cmd = handleCaptureMouseRelease(o)
 		} else if o.ShowScrollbackBrowser {
@@ -121,6 +153,16 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// tick.
 		o.ReleaseGestureAnnouncements()
 	case tea.MouseWheelMsg:
+		if o.HelpMode && helpOwnsPointer(o) {
+			// The wheel scrolls the explanation the way Up and Down do. It
+			// turns nothing else: no pane, no list, no review.
+			step := -3
+			if msg.Button == tea.MouseWheelDown {
+				step = 3
+			}
+			o.HelpScroll(step)
+			return o, nil
+		}
 		// A wheel scrolls the pane out from under the labels, so it ends
 		// hints mode and then scrolls as usual. The pane labels the same.
 		o.CloseHints()
@@ -404,6 +446,32 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// window-management and terminal mode. It only observes; it never consumes.
 	if o.ShowKeys {
 		o.CaptureKeyEvent(msg)
+	}
+
+	// Help mode reads the keys it binds and leaves the rest to the app. Its
+	// pane is a view of the layout, not a mode over it: the chords it lists
+	// run while it is up, so pressing the rail's toggle beside the explanation
+	// changes what the next frame explains.
+	if o.HelpMode {
+		owns := helpOwnsKey(msg, o)
+		if owns {
+			if result, cmd, handled := handleHelpModeKey(msg, o); handled {
+				return result, cmd
+			}
+		}
+		// The key is not help's. It runs on the screen the pane explains, so
+		// the pane steps out of the way for a moment: a chord that moves a
+		// rail or switches workspace should be seen doing it, not read about
+		// through an explanation laid over the change. A navigation key brings
+		// the pane back at once. See SuspendHelp.
+		//
+		// The leader and the chord after it are the same case even though the
+		// menu, not help, owns the keys: the menu hides the pane while it is
+		// up, and the chord that closes it hides the pane long enough for its
+		// result to be seen.
+		if owns || o.MenuOpen() {
+			o.SuspendHelp()
+		}
 	}
 
 	// Hold-to-window-mode. The trigger is consumed here, before any mode routing,

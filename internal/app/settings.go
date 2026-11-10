@@ -640,6 +640,9 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.niri_click_reveals"),
 			opt("appearance.niri_hover_reveals"),
 			opt("appearance.prefix_repeat_time"),
+			// The language of the client's own prose, so a person who reads
+			// French finds the setting without editing the file.
+			opt("ui.language"),
 			custom("appearance.max_fps", m.maxFPSItem()),
 			opt("appearance.preferred_shell"),
 			opt("shell.integration"),

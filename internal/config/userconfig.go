@@ -96,6 +96,10 @@ type UserConfig struct {
 	// shells it starts. See shell_integration.go.
 	Shell ShellConfig `toml:"shell"`
 
+	// UI is the [ui] table: the language the client's own prose reads in.
+	// See ui.go.
+	UI UIConfig `toml:"ui"`
+
 	// YieldedDefaults are the new default bindings left off because the key
 	// was already the user's for another action in the same table. It is
 	// worked out on load and never written. See yieldingDefaults.
@@ -1186,6 +1190,13 @@ type KeybindingsConfig struct {
 	// Review binds are live while the review overlay is open and no note is
 	// being typed: its hunk and file motions. See getDefaultReviewKeybinds.
 	Review map[string][]string `toml:"review"`
+	// Help binds are live only while help mode is up, and are read before
+	// anything else the pane would route: walking the components, moving in
+	// and out of one, scrolling the explanation, showing the whole key set and
+	// leaving. They are kept out of buildMappings for the same reason the
+	// rail's are: flattening them would let shift+tab mean "next component"
+	// with no help on screen. See getDefaultHelpKeybinds.
+	Help map[string][]string `toml:"help"`
 	// GUI binds are read only by a native GUI client (tuios-gpui), through
 	// the GUI bridge's keybinds event. They are desktop chords that need no
 	// leader, such as ctrl+shift+t. The terminal client never looks them up,
@@ -1502,6 +1513,7 @@ func DefaultConfig() *UserConfig {
 				"prefix_exit_mode":        {"esc"},
 				"prefix_selection":        {"["},
 				"prefix_help":             {"?"},
+				"prefix_help_mode":        {"h"},
 				"prefix_debug":            {"D"},
 				"prefix_tape":             {"T"},
 				"prefix_quit":             {"q"},
@@ -1709,6 +1721,7 @@ func DefaultConfig() *UserConfig {
 			Transfers:       getDefaultTransfersKeybinds(),
 			CopyMode:        getDefaultCopyModeKeybinds(),
 			Review:          getDefaultReviewKeybinds(),
+			Help:            getDefaultHelpKeybinds(),
 			GUI:             getDefaultGUIKeybinds(),
 			Global: map[string][]string{
 				// ctrl+p is fish's history-back and vim's keyword completion, and
@@ -2976,6 +2989,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// DockWorkspaceTabFormat is assigned unconditionally: an empty string is the
 	// "{name}" default, and clearing it on reload has to be possible too.
 	s.DockWorkspaceTabFormat = cfg.Appearance.DockWorkspaceTabFormat
+	// Assigned unconditionally: an empty language means "follow the
+	// locale", and clearing it on reload has to bring that back.
+	s.Language = cfg.UI.Language
 	if cfg.Appearance.DockWorkspaceTooltip != nil {
 		s.DockWorkspaceTooltip = *cfg.Appearance.DockWorkspaceTooltip
 	}
@@ -3800,6 +3816,9 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 			*f = make(map[string][]string)
 		}
 	}
+	if cfg.Keybindings.Help == nil {
+		cfg.Keybindings.Help = make(map[string][]string)
+	}
 
 	migrateLegacyKeybinds(cfg)
 	migrateSettingsComma(cfg)
@@ -3878,6 +3897,10 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	fillMapDefaults(cfg.Keybindings.SidebarAgents, defaultCfg.Keybindings.SidebarAgents)
 	fillMapDefaults(cfg.Keybindings.QuickLook, defaultCfg.Keybindings.QuickLook)
 	fillMapDefaults(cfg.Keybindings.QuickLookInside, defaultCfg.Keybindings.QuickLookInside)
+	// Help mode's navigation keys were written into the input path before the
+	// section existed, so a config written before it has no help table and
+	// would otherwise leave the pane with no keys of its own.
+	fillMapDefaults(cfg.Keybindings.Help, defaultCfg.Keybindings.Help)
 	// The Inbox, its peek and the mailbox had their keys written into the
 	// input path before these sections existed, so every config written
 	// before them has none and has to get the keys it always had.

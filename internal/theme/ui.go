@@ -271,6 +271,13 @@ func buildUIOn(d overlay.Depth, cur *tint.Tint, ch *Chrome, pane color.Color) ov
 		Success: tone.Julep,
 		Info:    tone.Malibu,
 		Warning: tone.Tang,
+
+		// The component help mode explains is washed toward a pink, so the
+		// pane's border and the thing it points at share a colour. Tuna is
+		// the palette's rose; a theme substitutes a rose built from its own red
+		// below, and depth 16 keeps the component on its own ground because it
+		// has no hue to wash with.
+		HelpTint: tone.Tuna,
 	}
 	customRamp := false
 
@@ -282,6 +289,7 @@ func buildUIOn(d overlay.Depth, cur *tint.Tint, ch *Chrome, pane color.Color) ov
 		p.Success = t.BrightGreen
 		p.Info = t.BrightBlue
 		p.Warning = t.Yellow
+		p.HelpTint = helpTintFor(t)
 
 		// A theme that names its own chrome colours overrides the slots above,
 		// one role at a time. See Chrome: the point is a palette whose accent
@@ -319,6 +327,11 @@ func buildUIOn(d overlay.Depth, cur *tint.Tint, ch *Chrome, pane color.Color) ov
 				p.Card, customRamp = c.Card, true
 			}
 			p.Attention, p.Busy = c.Furniture(RoleAttention), c.Furniture(RoleBusy)
+			if tint := c.Furniture(RoleHelpTint); tint != nil {
+				// A theme that names its rose keeps it; unset keeps the one
+				// derived from the theme's red.
+				p.HelpTint = tint
+			}
 		}
 	}
 
@@ -378,6 +391,7 @@ func buildUIOn(d overlay.Depth, cur *tint.Tint, ch *Chrome, pane color.Color) ov
 		p.Fg, p.FgDim, p.FgMute = overlay.NoColor, overlay.NoColor, overlay.Slot(8)
 		// Derive takes them from the warning and info slots.
 		p.Attention, p.Busy = nil, nil
+		p.HelpTint = overlay.NoColor
 	case overlay.Depth256:
 		if !customRamp && !light {
 			// Set by hand on the grey ramp. Stepping the charmtone neutrals
@@ -391,6 +405,9 @@ func buildUIOn(d overlay.Depth, cur *tint.Tint, ch *Chrome, pane color.Color) ov
 		p.Accent, p.AccentBright, p.Selected = overlay.To256(p.Accent), overlay.To256(p.AccentBright), overlay.To256(p.Selected)
 		p.Warn, p.Success = overlay.To256(p.Warn), overlay.To256(p.Success)
 		p.Info, p.Warning = overlay.To256(p.Info), overlay.To256(p.Warning)
+		if p.HelpTint != nil {
+			p.HelpTint = overlay.To256(p.HelpTint)
+		}
 		if p.Attention != nil {
 			p.Attention = overlay.To256(p.Attention)
 		}
@@ -403,6 +420,28 @@ func buildUIOn(d overlay.Depth, cur *tint.Tint, ch *Chrome, pane color.Color) ov
 	}
 
 	return overlay.Derive(p)
+}
+
+// helpTintFor builds the rose the documented component is washed toward, from
+// the theme in force: half its bright red, half the palette's pink. The red is
+// the half that makes the hue the theme's own; the pink is what keeps it a
+// rose rather than the theme's warning colour, and it is the only half for a
+// theme that names no red. A theme's bright purple is deliberately not used:
+// on most themes it is a lavender, and dimmed behind text it reads as blue.
+//
+// The palette is rebuilt when the theme changes (see UI's memo key), so a theme
+// switch, an imported theme file and a live Omarchy palette each get their own
+// rose. Depth 16 never reaches this: there is no hue to mix.
+func helpTintFor(t *tint.Tint) color.Color {
+	if t != nil {
+		if red := t.BrightRed; red != nil {
+			return overlay.MixColors(red, tone.Tuna, 0.5)
+		}
+		if red := t.Red; red != nil {
+			return overlay.MixColors(red, tone.Tuna, 0.5)
+		}
+	}
+	return tone.Tuna
 }
 
 // lightDialogStep is how far a dialog's surface sits below a light ground, as

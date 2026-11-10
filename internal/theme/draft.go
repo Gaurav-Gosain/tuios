@@ -339,6 +339,8 @@ func furnitureFallback(r Role, t *tint.Tint, pal overlay.Palette) color.Color {
 		return tokDotMinimise
 	case RoleDotZoom:
 		return tokDotZoom
+	case RoleHelpTint:
+		return pal.HelpTint
 	}
 	return nil
 }

@@ -223,6 +223,26 @@ func (m *OS) dockCustomCell(name string) string {
 	if name == config.DockComponentSession {
 		text = m.dockSessionText()
 	}
+	if name == config.DockComponentHelp {
+		// A control rather than a value, so it draws through the same cell
+		// with the one glyph that needs no translation. The key that opens the
+		// explanation is the key the explanation names, so the button and the
+		// chord teach each other.
+		text = "?"
+		if m.helpControlLit() {
+			// On while the explanation is up, the way a selected tab carries
+			// its ground: the bar says where the pane came from and how to put
+			// it away. bg as the ink, because accent is the ground it sits on.
+			pal := m.groundUI()
+			if accent := theme.ConfigColorOn("accent", &pal); overlay.CurrentDepth() == overlay.Depth16 || accent == nil || overlay.IsNoColor(accent) {
+				// At 16 colours there is no accent ground to give, so the
+				// state goes through the attribute: reverse turns the cell
+				// into the bar's ink, the same trick a chip on a slot uses.
+				return overlay.Style(pal.Panel).Reverse(true).Bold(true).Render(" " + text + " ")
+			}
+			return renderDockCell(text, config.DockCellStyle{Bg: "accent", Fg: "bg", Bold: true}, pal)
+		}
+	}
 	if text == "" {
 		return ""
 	}
@@ -320,14 +340,16 @@ func (m *OS) dockCustomCells(names []string) (cells []string, widths []int, keys
 // value the engine holds, rather than from model state the renderer reads.
 func dockCellComponent(name string) bool {
 	return strings.HasPrefix(name, config.DockCustomPrefix) || strings.HasPrefix(name, config.DockPluginPrefix) || name == config.DockComponentClock ||
-		name == config.DockComponentTransfers || name == config.DockComponentSession
+		name == config.DockComponentTransfers || name == config.DockComponentSession || name == config.DockComponentHelp
 }
 
 // dockCellClickable reports whether a cell records where it was drawn, for a
-// click: a custom component, which runs its on-click command, and the
-// copies, which open the Copies panel.
+// click: a custom component, which runs its on-click command, the copies,
+// which open the Copies panel, and the help control, which opens the
+// explanation.
 func dockCellClickable(name string) bool {
-	return strings.HasPrefix(name, config.DockCustomPrefix) || strings.HasPrefix(name, config.DockPluginPrefix) || name == config.DockComponentTransfers
+	return strings.HasPrefix(name, config.DockCustomPrefix) || strings.HasPrefix(name, config.DockPluginPrefix) || name == config.DockComponentTransfers ||
+		name == config.DockComponentHelp
 }
 
 // dockCustomWidth is the room a side's custom cells want.
@@ -475,7 +497,7 @@ func (m *OS) DockComponents() []DockComponentInfo {
 // minimized entries; a custom cell yields before either, because it is the one
 // thing on the bar tuios cannot reason about the value of. What is left when
 // nothing fits is the same thing that was left before components existed.
-func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, []dockCustomHit) {
+func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, []dockCustomHit, []dockCustomHit) {
 	// One pass over the plan builds the segments in draw order. The two meters
 	// are one segment, emitted where the first of them is named, so a plan of
 	// ["cpu", "custom/x"] draws the readouts and then the cell.
@@ -483,12 +505,14 @@ func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, 
 		text   string
 		width  int
 		name   string
-		custom bool // yields first when room runs out
-		hit    bool // records a hit rectangle
-		meters bool // stands for whatever is left of the CPU and RAM readouts
+		custom bool     // yields first when room runs out
+		hit    bool     // records a hit rectangle
+		meters bool     // stands for whatever is left of the CPU and RAM readouts
+		parts  []string // the readouts the meters segment draws
+		names  []string // the plan names those readouts answer to
 	}
 
-	meters := m.dockMeterParts()
+	meters, meterNames := m.dockMeterParts(), m.dockMeterNames()
 	var segs []segment
 	placedMeters := false
 	for _, name := range m.dockPlan.Right {
@@ -498,7 +522,7 @@ func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, 
 				continue
 			}
 			placedMeters = true
-			segs = append(segs, segment{meters: true})
+			segs = append(segs, segment{meters: true, parts: meters, names: meterNames})
 		default:
 			if !dockCellComponent(name) {
 				continue
@@ -519,22 +543,36 @@ func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, 
 
 	for {
 		var b strings.Builder
-		var hits []dockCustomHit
+		var hits, helpHits []dockCustomHit
 		x := 0
 		for _, seg := range segs {
 			text, width := seg.text, seg.width
 			if seg.meters {
-				text = meterStyle.Render(strings.Join(meters, " "))
+				text = meterStyle.Render(strings.Join(seg.parts, " "))
 				width = lipgloss.Width(text)
+				// The readouts share one segment but are separate parts, so
+				// each one records the columns it alone occupies.
+				px := x
+				for i, part := range seg.parts {
+					pw := lipgloss.Width(meterStyle.Render(part))
+					if i < len(seg.names) {
+						helpHits = append(helpHits,
+							dockCustomHit{X0: px, X1: px + pw, Name: seg.names[i]})
+					}
+					px += pw + 1 // the space joining the readouts
+				}
 			}
 			if seg.hit {
 				hits = append(hits, dockCustomHit{X0: x, X1: x + width, Name: seg.name})
+			}
+			if seg.name != "" {
+				helpHits = append(helpHits, dockCustomHit{X0: x, X1: x + width, Name: seg.name})
 			}
 			b.WriteString(text)
 			x += width
 		}
 		if x <= room {
-			return b.String(), hits
+			return b.String(), hits, helpHits
 		}
 
 		// A custom cell yields before a meter does, because it is the one thing
@@ -558,7 +596,7 @@ func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, 
 		}
 		// Nothing left to give up. Whatever remains is drawn and the bar's own
 		// backstop truncates it.
-		return b.String(), hits
+		return b.String(), hits, helpHits
 	}
 }
 

@@ -74,6 +74,11 @@ type Palette struct {
 	RowSelQuiet color.Color
 	// Hover is the row under the pointer: a light wash over Surface.
 	Hover color.Color
+	// HelpTint is the hue the documented component is washed with while help
+	// mode explains it, so the pane and the thing it points at share a colour.
+	// It is a ground target, not an ink: no text is drawn in it. Nil or NoColor
+	// leaves the component on its own ground, as it is at 16 colours.
+	HelpTint color.Color
 	// Edge is the ink of decorative structure on Surface: a panel's frame at
 	// 16 colours, a divider. It aims at StructureTarget, not a floor.
 	Edge color.Color
