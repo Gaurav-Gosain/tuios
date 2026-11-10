@@ -872,7 +872,7 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	// among them the paste preview, which takes no key and so is not a panel,
 	// but is drawn by renderOverlays all the same.
 	if m.AnyOverlayOpen() || m.ShowScrollbackBrowser || m.ShowCacheStats || m.ShowTapeManager || m.ShowTapeReview ||
-		m.PrefixActive || m.ContextMenu != nil || m.pathPicker != nil || m.pastePreviewOn() || m.Capture.Active || m.review.open {
+		m.PrefixActive || m.ContextMenu != nil || m.pathPicker != nil || m.pastePreviewOn() || m.Capture.Active || m.review.open || m.HelpMode {
 		return nil, false
 	}
 	if m.TapeRecorder != nil && m.TapeRecorder.IsRecording() {

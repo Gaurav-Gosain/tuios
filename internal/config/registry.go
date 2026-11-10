@@ -256,6 +256,20 @@ func (r *KeybindRegistry) Keys(t Table, action string) []string {
 	return (*keybindTables[t].field(&r.config.Keybindings))[action]
 }
 
+// GetHelpAction returns the action a key runs while help mode is up, or "" for
+// a key help mode does not bind. The pane reads only its own keys: every other
+// key is the app's, and this lookup is what tells the two apart.
+func (r *KeybindRegistry) GetHelpAction(key string) string {
+	return r.Action(TableHelp, key)
+}
+
+// GetHelpKeys is the keys help mode binds to action, for the pane's footer
+// and the scroll marker, so a rebind moves the key and every hint naming it
+// together.
+func (r *KeybindRegistry) GetHelpKeys(action string) []string {
+	return r.Keys(TableHelp, action)
+}
+
 // lookupKey performs the actual key lookup with case handling
 func (r *KeybindRegistry) lookupKey(key string, keyMap map[string]string) string {
 	// Trim whitespace but preserve case for single letters
@@ -403,7 +417,7 @@ func buildPressesByAction(r *KeybindRegistry) map[string][]string {
 // no chord that would say so.
 func contextOnlyScope(scope string) bool {
 	switch scope {
-	case ScopeSidebar, ScopeSidebarFiles, ScopeSidebarAgents, ScopeQuickLook, ScopeQuickLookIn, ScopeScript, ScopeLists, ScopeInbox, ScopeInboxPeek, ScopeMail, ScopeTransfers, ScopeCopyMode, ScopeReview:
+	case ScopeSidebar, ScopeSidebarFiles, ScopeSidebarAgents, ScopeQuickLook, ScopeQuickLookIn, ScopeScript, ScopeLists, ScopeInbox, ScopeInboxPeek, ScopeMail, ScopeTransfers, ScopeCopyMode, ScopeReview, ScopeHelp:
 		return true
 	case ScopeGUI:
 		// Only the GUI reads these keys. A terminal's help that listed
@@ -824,6 +838,7 @@ var ActionDescriptions = map[string]string{
 	"prefix_exit_mode":          "Leave terminal mode",
 	"prefix_selection":          "Enter copy/scrollback mode",
 	"prefix_help":               "Toggle help",
+	"prefix_help_mode":          "Inspect a component's help",
 	"prefix_debug":              "Enter debug prefix",
 	"prefix_tape":               "Enter tape manager prefix",
 	"prefix_quit":               "Quit (daemon: kills session)",
@@ -926,6 +941,16 @@ var ActionDescriptions = map[string]string{
 	"command_palette": "Open the command palette",
 	"launcher":        "Open the app launcher",
 	"new_session":     "Make a session, asking which machine",
+
+	// Help mode's own navigation, live only while it is up. See
+	// getDefaultHelpKeybinds.
+	"help_next":        "Next component in the explanation",
+	"help_deeper":      "Into the selected component's parts",
+	"help_shallower":   "Back out to the component above the part",
+	"help_scroll_up":   "Scroll the explanation up",
+	"help_scroll_down": "Scroll the explanation down",
+	"help_keys":        "Show or hide all of the component's keys",
+	"help_exit":        "Leave the explanation",
 
 	// Script playback
 	"script_pause": "Pause or resume the playing tape",

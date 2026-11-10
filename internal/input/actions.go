@@ -1069,6 +1069,19 @@ func handleToggleHelp(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
+// handleToggleHelpMode opens or closes hover help. It is separate from
+// handleToggleHelp: the old overlay lists every binding up front, while this
+// mode explains whatever the pointer or Tab selects, so the two never stand in
+// for each other.
+func handleToggleHelpMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.HelpMode {
+		o.ExitHelpMode()
+	} else {
+		o.EnterHelpMode()
+	}
+	return o, nil
+}
+
 func handleQuit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Close help if showing
 	if o.ShowHelp {
