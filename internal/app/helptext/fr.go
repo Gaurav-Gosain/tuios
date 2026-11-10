@@ -125,6 +125,86 @@ var french = Language{
 				"des réglages de notification.",
 			Plural: ucFirst(frPart),
 		},
+		IDRail: {
+			Title: "Rail des sessions",
+			Purpose: "La rail des sessions est la colonne à côté des panneaux. Elle liste les " +
+				"sessions de cette machine et des autres hôtes, les panneaux de la session " +
+				"qu'elle suit, les agents qui attendent une personne, les fichiers sous le " +
+				"panneau au focus, et les commandes qui ajoutent et replient.",
+			Hidden: func(key string) string {
+				return "Cette rail est masquée, elle n'a donc pas de rectangle à survoler. " +
+					"Appuyez sur " + key + " pour l'afficher : le panneau suit la mise en page " +
+					"au fil de ses changements."
+			},
+			Plural: ucFirst(frPart),
+		},
+		IDRailControls: {
+			Title: "Commandes de la rail",
+			Purpose: "Les commandes propres à la rail : la replier en bande, l'élargir ou la " +
+				"rétrécir, activer ou couper la section des fichiers, et déplacer le focus " +
+				"clavier dans la rail.",
+			Plural: ucFirst(frPart),
+		},
+		IDRailSessions: {
+			Title: "Sessions",
+			Purpose: "Une ligne par session du démon. Entrée ouvre la session que ce client " +
+				"affiche ; n en crée une ; r la renomme ; x la tue. Le nombre devant un nom " +
+				"est la touche de bascule.",
+			Plural: ucFirst(frPart),
+		},
+		IDRailPanes: {
+			Title: "Panneaux",
+			Purpose: "Les panneaux de la session que la rail suit. Entrée en met un au " +
+				"focus ; le + en crée un autre. Une ligne de panneau sert aussi de poignée " +
+				"pour déplacer le panneau entre espaces de travail.",
+			Plural: ucFirst(frPart),
+		},
+		IDRailAgents: {
+			Title: "Agents",
+			Purpose: "Les agents qui travaillent, attendent une réponse ou ont fini. a passe " +
+				"de tous à ici, s de la priorité à la récence, m ouvre la boîte aux lettres, " +
+				"et Entrée ouvre le panneau de l'agent.",
+			Plural: ucFirst(frPart),
+		},
+		IDPane: {
+			Title: "Panneau : {name}",
+			Purpose: "Une fenêtre de terminal. Elle possède un pty et un shell ; en mode " +
+				"terminal les touches vont au shell, en mode gestion des fenêtres au " +
+				"gestionnaire. La barre de titre la nomme et porte ses boutons, et le " +
+				"corps est le terminal.",
+			Plural: ucFirst(frPart),
+		},
+		IDPane + "/title": {
+			Title: "Barre de titre : {name}",
+			Purpose: "La barre de titre du panneau. Elle nomme le panneau, montre lequel a " +
+				"le focus et sur quel espace de travail il se trouve, et porte les boutons " +
+				"fermer et réduire. La faire glisser déplace le panneau ; le bord sous le " +
+				"pointeur le redimensionne.",
+			Plural: ucFirst(frPart),
+		},
+		IDPane + "/content": {
+			Title: "Corps du terminal : {name}",
+			Purpose: "Le terminal lui-même. En mode terminal, toutes les touches sauf le " +
+				"leader vont au shell ; le mode copie se déplace dans l'historique sans " +
+				"rien envoyer. La barre de défilement et la sélection se dessinent ici " +
+				"aussi.",
+			Plural: ucFirst(frPart),
+		},
+		IDDesktop: {
+			Title: "Espace de travail",
+			Purpose: "Le bureau derrière les panneaux, sur l'espace de travail courant. Un " +
+				"clic dessus quitte le mode terminal ; le leader puis une touche d'espace " +
+				"de travail change d'espace. Le pavage arrange les panneaux ici, et le " +
+				"panneau jetable s'ouvre par-dessus.",
+			Plural: ucFirst(frPart),
+		},
+		IDRailFiles: {
+			Title: "Fichiers",
+			Purpose: "Le dossier sous le panneau au focus. Entrée ouvre un nom, e l'édite " +
+				"dans l'éditeur configuré, / cherche, et p colle une entrée copiée ou " +
+				"coupée. Le cd de l'en-tête y envoie le panneau.",
+			Plural: ucFirst(frPart),
+		},
 		IDDockCopyHelp: {
 			Title: "Aide au copie",
 			Purpose: "La cellule d'aide au copie rappelle dans le dock la combinaison du " +
