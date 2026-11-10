@@ -824,6 +824,7 @@ var ActionDescriptions = map[string]string{
 	"prefix_exit_mode":          "Leave terminal mode",
 	"prefix_selection":          "Enter copy/scrollback mode",
 	"prefix_help":               "Toggle help",
+	"prefix_help_mode":          "Inspect a component's help",
 	"prefix_debug":              "Enter debug prefix",
 	"prefix_tape":               "Enter tape manager prefix",
 	"prefix_quit":               "Quit (daemon: kills session)",
