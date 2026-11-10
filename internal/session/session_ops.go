@@ -289,6 +289,10 @@ type NewWindowOptions struct {
 	// for the window, empty for none. With Focus set, the focus move counts
 	// as that client's own. See pushOwnsFocusLocked.
 	focusAskedBy string
+	// caller is the connection that ran the command, for an Action that
+	// runs as a layout op through its verbs (daemon_actions.go). Nil runs
+	// none of those.
+	caller *connState
 	// closeAskedBy names who asked for a CloseWindow command, for the line
 	// the close writes to the log (see CloseDaemonWindow).
 	closeAskedBy string
@@ -961,6 +965,22 @@ func (s *Session) SetDaemonWorkspaceName(ws int, name string) error {
 	})
 }
 
+// FollowDaemonWindow shows the workspace window id is on and focuses it: a
+// move's follow. The daemon numbers workspaces with no gap, so a move past
+// an empty workspace lands lower than the number asked for, and the follow
+// goes where the window is, not to that number.
+func (s *Session) FollowDaemonWindow(id string) error {
+	state := s.GetState()
+	i, err := findWindowStateIndex(state.Windows, id)
+	if err != nil {
+		return err
+	}
+	if err := s.SwitchDaemonWorkspace(state.Windows[i].Workspace); err != nil {
+		return err
+	}
+	return s.FocusDaemonWindow(id)
+}
+
 // SwitchDaemonWorkspace sets the current workspace, restoring that workspace's
 // last-focused window when one is recorded.
 func (s *Session) SwitchDaemonWorkspace(ws int) error {
@@ -970,11 +990,30 @@ func (s *Session) SwitchDaemonWorkspace(ws int) error {
 		}
 		s.markFocusIntentLocked()
 		state.CurrentWorkspace = ws
-		if state.WorkspaceFocus != nil {
-			if focus, ok := state.WorkspaceFocus[ws]; ok {
-				state.FocusedWindowID = focus
-				state.FocusHistory = RecordFocus(state.FocusHistory, ws, focus)
+		// The pane focused there last, while it is still there and shown;
+		// else the first shown pane of the workspace, as the TUI's
+		// SwitchToWorkspace. A focus left on a window of another workspace
+		// sent the next key and the next action to a pane out of view
+		// (parity gap 1). A workspace with no shown pane keeps the focus it
+		// had: an attached TUI reads no focus as "leave terminal mode", and
+		// a switch back would then type into the window manager.
+		focus := ""
+		if f, ok := state.WorkspaceFocus[ws]; ok {
+			if i, err := findWindowStateIndex(state.Windows, f); err == nil && state.Windows[i].Workspace == ws && !state.Windows[i].Minimized {
+				focus = f
 			}
+		}
+		if focus == "" {
+			for _, w := range state.Windows {
+				if w.Workspace == ws && !w.Minimized {
+					focus = w.ID
+					break
+				}
+			}
+		}
+		if focus != "" {
+			state.FocusedWindowID = focus
+			state.FocusHistory = RecordFocus(state.FocusHistory, ws, focus)
 		}
 		// A focus left on a scratch pane would show its group over the
 		// workspace just selected: the selection means the workspace.
@@ -1042,8 +1081,66 @@ func (s *Session) SetDaemonWindowMinimized(target string, minimized bool) error 
 			return err
 		}
 		state.Windows[idx].Minimized = minimized
+		// A minimized pane does not keep the focus: it goes to the first
+		// pane still shown on the workspace, as the TUI's MinimizeWindow
+		// does (FocusNextVisibleWindow). Kept on the hidden pane, a second
+		// minimize_window hid nothing, and two pressed at once hid one pane.
+		if minimized && state.FocusedWindowID == state.Windows[idx].ID {
+			ws := state.Windows[idx].Workspace
+			state.FocusedWindowID = ""
+			for _, w := range state.Windows {
+				if w.Workspace == ws && !w.Minimized {
+					state.FocusedWindowID = w.ID
+					break
+				}
+			}
+			if state.WorkspaceFocus != nil {
+				if state.FocusedWindowID == "" {
+					delete(state.WorkspaceFocus, ws)
+				} else {
+					state.WorkspaceFocus[ws] = state.FocusedWindowID
+				}
+			}
+		}
 		return nil
 	})
+}
+
+// SetDaemonWindowURI changes what a window of a native kind (web, view, app)
+// shows, as its renderer moved to another page. A terminal or a TML window
+// has no uri to change.
+func (s *Session) SetDaemonWindowURI(target, uri string) error {
+	return s.mutateState(func(state *SessionState) error {
+		idx, err := findWindowStateIndex(state.Windows, target)
+		if err != nil {
+			return err
+		}
+		w := &state.Windows[idx]
+		if w.Kind == "" || w.Kind == "terminal" || w.Kind == WindowKindTML {
+			return errWindowHasNoURI
+		}
+		w.URI = uri
+		return nil
+	})
+}
+
+// errWindowHasNoURI refuses a uri for a window that draws a terminal or a
+// TML surface.
+var errWindowHasNoURI = errors.New("the window is a terminal or a TML surface, which has no uri to change. Only a web, view or app window has one")
+
+// windowURIProblem says what is wrong with a window's uri, or "". The
+// placeholder of a native window prints it into a terminal, so it holds no
+// control character, and it is at most 8 KiB.
+func windowURIProblem(uri string) string {
+	if len(uri) > 8<<10 {
+		return "uri is at most 8 KiB"
+	}
+	for _, r := range uri {
+		if r < 0x20 || r == 0x7f || r >= 0x80 && r < 0xa0 {
+			return "uri holds a control character"
+		}
+	}
+	return ""
 }
 
 // describeWindows lists the windows match accepts as index, short id and name,

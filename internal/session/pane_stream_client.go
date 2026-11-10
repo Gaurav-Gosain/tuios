@@ -28,10 +28,24 @@ const (
 	PaneFrameEnd      = 'X'
 	PaneFrameInput    = 'I'
 	PaneFrameLease    = 'L'
+	PaneFrameViewer   = 'V'
+	PaneFrameShown    = 'F'
+	PaneFrameHistory  = 'H'
 	// PaneFrameInputAt is input that names the stream offset it starts at:
 	// the daemon types it only there. Send it when the reply has
 	// InputOffsets.
 	PaneFrameInputAt = 'J'
+	// PaneFrameActivity says the viewer's window gained focus, which makes
+	// the viewer the session's latest under window_size latest. Send it
+	// when the reply has Activity.
+	PaneFrameActivity = 'A'
+)
+
+// The values of an F frame.
+const (
+	PaneHidden  = 0
+	PaneVisible = 1
+	PaneFocused = 2
 )
 
 // paneFrameMax bounds a frame this client reads. The daemon's largest is a
@@ -56,6 +70,8 @@ type PaneStreamReply struct {
 	Title     string `json:"title"`
 	// InputOffsets says the daemon takes J frames (InputAt).
 	InputOffsets bool `json:"input_offsets"`
+	// Activity says the daemon takes A frames (Activity).
+	Activity bool `json:"activity"`
 }
 
 // PaneStream is one open stream-pane connection.
@@ -135,12 +151,42 @@ func (s *PaneStream) InputAt(off int64, b []byte) error {
 	return s.WriteFrame(PaneFrameInputAt, append(binary.BigEndian.AppendUint64(make([]byte, 0, 8+len(b)), uint64(off)), b...))
 }
 
+// Activity sends an A frame: the viewer's window gained focus.
+func (s *PaneStream) Activity() error {
+	return s.WriteFrame(PaneFrameActivity, nil)
+}
+
 // Lease holds the pane at most at cols by rows. Zero releases the lease.
 func (s *PaneStream) Lease(cols, rows int) error {
 	var p [4]byte
 	binary.BigEndian.PutUint16(p[0:2], uint16(max(0, min(cols, 4096))))
 	binary.BigEndian.PutUint16(p[2:4], uint16(max(0, min(rows, 4096))))
 	return s.WriteFrame(PaneFrameLease, p[:])
+}
+
+// LeaseCell is Lease with the viewer's cell in pixels, which the pane takes
+// while a fit lease sizes it.
+func (s *PaneStream) LeaseCell(cols, rows, cellW, cellH int) error {
+	var p [8]byte
+	for i, v := range [4]int{cols, rows, cellW, cellH} {
+		binary.BigEndian.PutUint16(p[2*i:], uint16(max(0, min(v, 4096))))
+	}
+	return s.WriteFrame(PaneFrameLease, p[:])
+}
+
+// Viewer replaces the stream's viewer report, as after a theme change.
+func (s *PaneStream) Viewer(r ViewerReport) error {
+	b, err := jsonx.Marshal(r)
+	if err != nil {
+		return err
+	}
+	return s.WriteFrame(PaneFrameViewer, b)
+}
+
+// Shown says how the client shows the pane: PaneHidden, PaneVisible or
+// PaneFocused.
+func (s *PaneStream) Shown(v byte) error {
+	return s.WriteFrame(PaneFrameShown, []byte{v})
 }
 
 // Close ends the stream.

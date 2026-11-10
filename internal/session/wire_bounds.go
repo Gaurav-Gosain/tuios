@@ -126,7 +126,7 @@ func daemonFrameLimit(t MessageType) uint32 {
 	switch t {
 	case MsgInput, MsgExecuteCommand:
 		return maxFrameBytes
-	case MsgUpdateState, MsgLayoutTree:
+	case MsgUpdateState, MsgLayoutTree, MsgScrollColumns:
 		return uint32(maxStateUpdateBytes) + 2
 	case MsgCommandResult:
 		return uint32(maxCommandResultBytes) + 2

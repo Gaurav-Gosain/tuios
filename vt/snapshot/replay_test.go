@@ -109,3 +109,48 @@ func TestApplyCarriesKittyKeyboardOff(t *testing.T) {
 		t.Errorf("the client took the push: flags = %d, want 0", got)
 	}
 }
+
+// TestCursorShapeOnlyWhenAGuestSetOne: a pane no program styled must carry no
+// cursor shape, so a client restoring it keeps its own default. guios applies
+// the user's blink setting to that default. When the snapshot spelled the
+// default as DECSCUSR 2, guios took it for a program's request for a steady
+// block, and the cursor never blinked after an attach.
+//
+// Ways it can go wrong, each a case:
+//   - an unstyled pane carries a shape, or its replay sends DECSCUSR;
+//   - a guest's explicit steady block (2) is dropped as if it were the default;
+//   - DECSCUSR 0 is dropped, and a client no longer blinks where the pane did;
+//   - a shape restored from a snapshot is lost on the next capture.
+func TestCursorShapeOnlyWhenAGuestSetOne(t *testing.T) {
+	cases := []struct {
+		name, input string
+		want        int
+	}{
+		{"no program styled it", "$ ", 0},
+		{"a steady block asked for", "\x1b[2 q", 2},
+		{"DECSCUSR 0 is a blinking block", "\x1b[0 q", 1},
+		{"a steady bar", "\x1b[6 q", 6},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			a := vt.New(20, 4)
+			_, _ = a.Write([]byte(c.input))
+			st := Capture(a, 20, 4, 0, 0)
+			if st.CursorShape != c.want {
+				t.Fatalf("captured shape %d, want %d", st.CursorShape, c.want)
+			}
+			b := vt.New(20, 4)
+			_, _ = b.Write(Replay(st))
+			if got := Capture(b, 20, 4, 0, 0).CursorShape; got != c.want {
+				t.Errorf("after replay the shape is %d, want %d", got, c.want)
+			}
+			d := vt.New(20, 4)
+			if err := Apply(d, st); err != nil {
+				t.Fatal(err)
+			}
+			if got := Capture(d, 20, 4, 0, 0).CursorShape; got != c.want {
+				t.Errorf("after apply the shape is %d, want %d", got, c.want)
+			}
+		})
+	}
+}

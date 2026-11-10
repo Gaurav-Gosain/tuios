@@ -1,0 +1,1861 @@
+package main
+
+import (
+	"fmt"
+	"math"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/Gaurav-Gosain/mygo"
+	"github.com/Gaurav-Gosain/mygo/plugins/terminal"
+	"github.com/Gaurav-Gosain/mygo/ui"
+
+	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
+	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
+
+	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
+)
+
+const paneGap = 8 // between panes, where the divider is
+
+// paneRef returns the handle a pane's terminal binds, which its focus
+// follows.
+func (a *App) paneRef(id string) *ui.Handle {
+	if a.refs == nil {
+		a.refs = map[string]*ui.Handle{}
+	}
+	h := a.refs[id]
+	if h == nil {
+		h = &ui.Handle{}
+		a.refs[id] = h
+	}
+	return h
+}
+
+// focusOf returns the pane of a session the user is in.
+func (a *App) focusOf(s *proto.Session) string {
+	if id := a.focus[s.ID]; id != "" && s.PaneByID(id) != nil {
+		return id
+	}
+	if p := s.FocusPane(); p != nil {
+		return p.ID
+	}
+	return ""
+}
+
+// shownPanes returns the panes of a session the window shows, as panes
+// lays them out: the zoomed one alone, or the one the user is in without
+// a layout.
+func shownPanes(s *proto.Session) []string {
+	p := s.PaneByID(s.Zoomed)
+	if p == nil && (s.Layout != nil || s.Arrange != nil) && len(s.Panes) > 1 {
+		ids := make([]string, len(s.Panes))
+		for i, p := range s.Panes {
+			ids[i] = p.ID
+		}
+		return ids
+	}
+	if p == nil {
+		p = s.FocusPane()
+	}
+	if p == nil {
+		return nil
+	}
+	return []string{p.ID}
+}
+
+// setFocus moves the user into a pane, and tells kerod, which remembers it.
+func (a *App) setFocus(s *proto.Session, pane string) {
+	if a.focus == nil {
+		a.focus = map[string]string{}
+	}
+	if a.focus[s.ID] == pane && s.Focus == pane {
+		return
+	}
+	a.focus[s.ID] = pane
+	s.Focus = pane
+	if a.focusAsk == nil {
+		a.focusAsk = map[string]string{}
+	}
+	a.focusAsk[s.ID] = pane
+	if pane != a.wantFocus {
+		// The person chose another pane before a new one was drawn.
+		a.wantFocus = ""
+	}
+	if s.Zoomed != "" {
+		s.Zoomed = pane
+	}
+	a.ensureTerm(pane)
+	a.touch(pane)
+	sid, scrolling := s.ID, s.LayoutMode == "scrolling"
+	a.call(s.ID, "focus", proto.FocusParams{Session: s.ID, Pane: pane}, func(err error) {
+		if a.focusAsk[sid] == pane {
+			delete(a.focusAsk, sid)
+		}
+		if err == nil && scrolling {
+			// The strip brings the focused column on screen.
+			a.arrange(a.session(sid), "scroll.reveal", func(p *proto.ArrangeParams) { p.Pane = pane })
+		}
+	})
+}
+
+// typedQuiet is how long after the person typed into a pane a focus the
+// daemon moved to another pane is not taken (adoptDaemonFocus).
+const typedQuiet = 300 * time.Millisecond
+
+// adoptDaemonFocus takes the focus the daemon moved itself, as a CLI
+// split-window or focus-window does, as the person's: guios kept its own,
+// so Ctrl+B x closed another pane than the TUI and the CLI name (Mac round
+// 6, feel S1). prev is each session's focus before this state.
+func (a *App) adoptDaemonFocus(prev map[string]string) {
+	now := time.Now()
+	for i := range a.st.Sessions {
+		s := &a.st.Sessions[i]
+		old, ok := prev[s.ID]
+		if !ok || s.Focus == "" || s.Focus == old || s.Focus == a.focus[s.ID] || s.PaneByID(s.Focus) == nil {
+			continue
+		}
+		if a.focusAsk[s.ID] != "" {
+			// The app's own move is on its way: a state sent before the
+			// daemon took it still names the old pane.
+			continue
+		}
+		if a.keyPane != s.Focus && s.PaneByID(a.keyPane) != nil && now.Sub(a.keyAt) < typedQuiet {
+			// The person types into another pane of it: theirs stays.
+			continue
+		}
+		keyAudit("focus", "daemon", s.Focus)
+		if a.focus == nil {
+			a.focus = map[string]string{}
+		}
+		a.focus[s.ID] = s.Focus
+		if s.ID == a.selected {
+			a.ensureTerm(s.Focus)
+			a.touch(s.Focus)
+			a.focusTerminal()
+		}
+	}
+}
+
+// focusTerminal gives the keyboard to the pane the user is in, or to the
+// scratch while it shows, through the owner, with what is typed until that
+// pane has it (key_owner.go).
+func (a *App) focusTerminal() {
+	if a.quick.drop {
+		a.holdScratch()
+	}
+	a.moveKeys("focus")
+}
+
+// panes shows a session's panes in their layout: the zoomed one alone.
+// right tells that they reach the window's right edge, which the side
+// panel takes while it shows.
+func (a *App) panes(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32, s *proto.Session, right bool) {
+	if len(s.Panes) == 0 {
+		a.emptyWorkspace(c, pal, bar, shown, s)
+		return
+	}
+	// A divider dragged moves the panes under the pointer, not after it.
+	view, sig := s.ID+"/"+strconv.Itoa(s.Workspace), layoutSig(s)
+	if a.layoutDrag.split != "" {
+		c.DisableAnimations()
+		// The frames of a drag resize the panes as they go.
+		a.motion.layout = sig
+	}
+	a.watchPanes(view, sig)
+	// One parent for each session and workspace: another one shown comes
+	// at once, while panes opened, closed or moved within it animate
+	// (paneTransition).
+	a.reportGrid(c, a.hostOf(s.ID), a.paneRef("ws-area").Bounds(c))
+	// The area holds the workspace's panes, and the panes of the one left
+	// as they slide out (slide.go).
+	area := ui.Column(c.Key("ws-slide")).Grow(1).Basis(0).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch)
+	sl, k := a.slideOf(c, s)
+	if sl == nil {
+		a.area = a.paneRef("ws-area").Bounds(c)
+	} else {
+		area.Clip()
+	}
+	area.Children(func() {
+		ws := ui.Column(c.Key("ws-" + view)).Grow(1).Basis(0).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch)
+		switch {
+		case sl == nil:
+		case s.Workspace == sl.to:
+			// The panes shown come in; those left go out, as they were.
+			a.frozenPanes(c, pal, &sl.from, "ws-out", -sl.dir*sl.w*k, sl.w, sl.h)
+			ws.Translate(sl.dir*sl.w*(1-k), 0)
+		default:
+			// The daemon has not answered yet: the panes still shown go
+			// out, and those of the workspace asked for come in as they
+			// last showed.
+			a.frozenPanes(c, pal, sl.incoming, "ws-in", sl.dir*sl.w*(1-k), sl.w, sl.h)
+			ws.Translate(-sl.dir*sl.w*k, 0)
+		}
+		a.workspacePanes(c, pal, bar, shown, s, right, ws)
+	})
+}
+
+// workspacePanes builds ws, the column of the panes of s.
+func (a *App) workspacePanes(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32, s *proto.Session, right bool, ws ui.Element) {
+	ws.Bind(a.paneRef("ws-area")).Children(func() {
+		if s.PaneByID(s.Zoomed) == nil && s.Arrange != nil && len(s.Panes) > 1 {
+			// Master-stack, scrolling and floating, and panes floating
+			// over the split tree: by their rectangles.
+			a.arranged(c, pal, bar, shown, s, right)
+			return
+		}
+		a.tiled(c, pal, bar, shown, s, right)
+	})
+}
+
+// layoutSig is what lays out the panes a session shows: the zoomed pane,
+// or the split tree with its ratios. A change animates them.
+func layoutSig(s *proto.Session) string {
+	var b strings.Builder
+	b.WriteString(s.Zoomed)
+	if z := s.PaneByID(s.Zoomed); z == nil && s.Layout != nil && len(s.Panes) > 1 {
+		var walk func(l *proto.Layout)
+		walk = func(l *proto.Layout) {
+			if l.Leaf() {
+				b.WriteString(" ")
+				b.WriteString(l.Pane)
+				return
+			}
+			fmt.Fprintf(&b, " (%t %.3f", l.Row, l.Ratio)
+			walk(l.A)
+			walk(l.B)
+			b.WriteString(")")
+		}
+		walk(s.Layout)
+	} else if p := s.FocusPane(); z == nil && p != nil {
+		b.WriteString(" ")
+		b.WriteString(p.ID)
+	}
+	if ar := s.Arrange; ar != nil && s.PaneByID(s.Zoomed) == nil {
+		// The layouts placed by rectangles change with them.
+		for _, p := range s.Panes {
+			if r, ok := ar.Rects[p.ID]; ok {
+				fmt.Fprintf(&b, " %s %d %d %d %d", p.ID, r.X, r.Y, r.W, r.H)
+			}
+		}
+	}
+	return b.String()
+}
+
+// divider is the gap between two panes, at r in the tiles' area, which a
+// drag moves. w and h are the split's size.
+func (a *App) divider(c *ui.Context, pal *palette, s *proto.Session, l *proto.Layout, key string, r ui.Rect, w, h float32) {
+	// A drag leaves the keyboard in the pane the user is in.
+	d := ui.Box(c.Key("div-" + key)).Absolute().Left(r.X).Top(r.Y).Width(r.W).Height(r.H).KeepFocus()
+	if l.Row {
+		d.Cursor(ui.CursorResizeColumn)
+	} else {
+		d.Cursor(ui.CursorResizeRow)
+	}
+	if d.Hovered() || d.Pressed() {
+		// A short grip, so the gap shows it moves.
+		d.Draw(func(p *ui.Painter, r ui.Rect) {
+			if l.Row {
+				p.Fill(ui.Rect{X: r.X + r.W/2 - 1.5, Y: r.Y + r.H/2 - 18, W: 3, H: 36}, pal.textFaint.Alpha(0.7), 1.5)
+			} else {
+				p.Fill(ui.Rect{X: r.X + r.W/2 - 18, Y: r.Y + r.H/2 - 1.5, W: 36, H: 3}, pal.textFaint.Alpha(0.7), 1.5)
+			}
+		})
+	}
+	if dx, dy, ok := d.Dragged(); ok {
+		// The ratio shares out the room the panes take, the split's less
+		// the divider's.
+		size, delta := w, dx
+		if !l.Row {
+			size, delta = h, dy
+		}
+		if size > 0 {
+			// The ratio goes on past its bounds, unclamped, so the divider
+			// comes back as the pointer comes back to it.
+			if a.layoutDrag.split != key {
+				r := l.Ratio
+				if r <= 0 || r >= 1 {
+					r = 0.5
+				}
+				a.layoutDrag.session, a.layoutDrag.split, a.layoutDrag.ratio = s.ID, key, r
+			}
+			a.layoutDrag.ratio += float64(delta / size)
+			l.Ratio = math.Min(math.Max(a.layoutDrag.ratio, 0.12), 0.88)
+		}
+	} else if a.layoutDrag.split == key && !d.Pressed() {
+		// Only the divider dragged saves the layout: another of the same
+		// session would save it every frame of the drag.
+		a.layoutDrag.session, a.layoutDrag.split = "", ""
+		a.setSplitRatio(s, l)
+	}
+	if d.DoubleClicked() {
+		l.Ratio = 0.5
+		a.setSplitRatio(s, l)
+	}
+}
+
+// paneCard is a pane: a card with a header and the terminal. top, left and
+// right tell that it touches the window's edges, where the header drags
+// the window, keeps clear of the traffic lights on macOS, and keeps room
+// for the window controls elsewhere (controlsRoom).
+func (a *App) paneCard(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32, s *proto.Session, p *proto.Pane, top, left, right, multi bool) {
+	focused := p.ID == a.focusOf(s)
+	bg := pal.card
+	// A browser's page stays opaque, so its toolbar does too, and neither
+	// fades: a page is read, not typed into, from beside it.
+	// A floating pane keeps an opaque ground: the panes under it must not
+	// show through (council round 4, visual M2).
+	if multi && !focused && !p.Browser() && a.set.DimUnfocused && !(a.floatHere[p.ID] && s.Arrange != nil) {
+		bg = pal.cardDim
+	}
+	// The spotlight (the prefix and B): the other panes all but go.
+	dim := float32(1)
+	if a.spotlight && multi && !focused {
+		dim = 0.28
+	}
+	card := ui.Column(c.Key("pane-" + p.ID)).Grow(1).Basis(0).MinWidth(0).MinHeight(0).Radius(rPane).Clip().Bind(a.paneRef("card-" + p.ID))
+	// The tiles move their panes themselves (tiles.go); the panes placed
+	// by rectangles move from where they were shown (paneTransition).
+	if !a.motion.placed[p.ID] {
+		card.Transition(paneTransition(p.ID))
+	}
+	a.motion.notePane(p.ID)
+	if dim < 1 {
+		card.Opacity(dim)
+	}
+	paned(card.Background(card.AnimateColor("bg", bg, ui.Animation{Duration: dFade})), pal)
+	if b := a.paneRef("card-" + p.ID).Bounds(c); b.W > 0 {
+		if a.cardBox == nil {
+			a.cardBox = map[string]ui.Rect{}
+		}
+		a.cardBox[p.ID] = b
+	}
+	hovered := card.Hovered()
+	if a.set.FocusFollowsMouse && multi {
+		a.followMouse(c, s, p, card, hovered, focused)
+	}
+	// As the window controls over its header were its own (underControls).
+	if !hovered && top && right {
+		hovered = underControls(card, a.paneRef("card-"+p.ID).Bounds(c).W)
+	}
+	// The card takes presses: one on its padding, beside the terminal,
+	// focuses the pane, rather than going on to what drags the window.
+	if card.Pressed() && !focused {
+		a.setFocus(s, p.ID)
+		a.paneRef(p.ID).Focus()
+	}
+
+	// Another pane dragged over this one: where it would go.
+	zone := zoneNone
+	if multi {
+		if d, over := ui.DragOver[paneDrag](card); over && d.session == s.ID && d.pane != p.ID {
+			if x, y, in := card.PointerPosition(); in {
+				b := a.paneRef("card-" + p.ID).Bounds(c)
+				zone = zoneAt(x/max(b.W, 1), y/max(b.H, 1))
+			}
+		}
+		if d, ok := ui.Drop[paneDrag](card); ok && d.session == s.ID && d.pane != p.ID {
+			sid, target := s.ID, p.ID
+			drop := a.lastZone
+			// The pane lands from where its copy was let go.
+			if g := a.motion.ghost; g.pane == d.pane {
+				a.motion.landing = g
+			}
+			a.defer_(func() { a.movePane(sid, d.pane, target, drop) })
+		}
+	}
+	if zone != zoneNone {
+		a.lastZone = zone
+	}
+
+	dragging := false
+	card.Children(func() {
+		if p.Browser() {
+			// A browser's address bar is its header.
+			dragging = a.paneBrowser(c, pal, bar, shown, s, p, top, left, right, multi, focused, hovered)
+		} else if p.Surface != "" {
+			// A TML surface, drawn with the app's widgets (tml_view.go).
+			dragging = a.paneHeader(c, pal, bar, shown, s, p, top, left, right, multi, focused, hovered)
+			a.paneTML(c, pal, p)
+		} else {
+			dragging = a.paneHeader(c, pal, bar, shown, s, p, top, left, right, multi, focused, hovered)
+			a.paneTerminal(c, pal, s, p)
+		}
+		if multi && !p.Browser() && a.set.DimUnfocused {
+			// The terminals the user is not in fade, text and all. The
+			// header does not: in a grid of agents the panes read are the
+			// ones not typed in, and their titles and needs-you chips keep
+			// their contrast. The edge, the ground and the shadow show
+			// focus (council round 3, visual M1).
+			v := ui.Box(c.Key("veil")).Absolute().Top(paneHeaderH(top)).Left(0).Right(0).Bottom(0).PassThrough().Background(pal.veil)
+			v.Opacity(v.Animate("on", b2f(!focused), dFade))
+		}
+		if zone != zoneNone {
+			a.dropPreview(c, pal, p.ID, zone)
+		}
+		// The card's edge says its state: the focus line on the pane the
+		// keyboard is in (council round 1, visual 11 and 12), and over it a
+		// 2 px need ring while the pane needs the person, as cmux rings a
+		// pane. Both change in the frame that changes the state, as the
+		// header's need chip does: a fade put the ring and the chip in
+		// different frames, and the focus line came after the click that
+		// moved it (council mac-1, feel S3).
+		if multi && focused {
+			ui.Box(c.Key("edge")).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough().Radius(rPane).Border(1, pal.focusLine)
+		}
+		if p.Status == proto.Waiting {
+			ui.Box(c.Key("need-ring")).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough().Radius(rPane).Border(2, pal.attention)
+		}
+	})
+	if multi && focused && !pal.dark {
+		// The focused card stands a level up from the others in the light.
+		card.Shadow(0, 1, 2, 0, pal.cardShadow).Shadow(0, 1, 6, 0, pal.cardShadow2)
+	}
+
+	// The pane dragged sinks back as it goes, and comes up where it lands,
+	// as one cached bitmap: opacity on the terminal's layers would draw
+	// them again in each frame. A pane moved goes to its new place with
+	// the tiles' motion (tiles.go), or its Match.
+	if k := card.AnimateTo("drag", b2f(dragging), motionQuick); k > 0 {
+		card.Cache().Opacity(1-0.6*k).Scale(1-0.015*k, 1-0.015*k)
+	}
+}
+
+// followMouse focuses the pane the pointer moves into. Only the pointer
+// moving does: a pane that comes under a pointer standing still, as another
+// session shows or the layout changes, leaves the focus where the keyboard
+// put it. And only going in does, so the keyboard can take the focus from
+// the pane the pointer rests in.
+func (a *App) followMouse(c *ui.Context, s *proto.Session, p *proto.Pane, card ui.Element, hovered, focused bool) {
+	x, y, over := card.PointerPosition()
+	if !over {
+		if a.hoverPane == p.ID {
+			a.hoverPane = ""
+		}
+		return
+	}
+	b := a.paneRef("card-" + p.ID).Bounds(c)
+	at := [2]float32{b.X + x, b.Y + y}
+	moved := at != a.hoverAt
+	a.hoverAt = at
+	// A press begun in another pane, as a selection dragged on past its
+	// edge, does not hover this one.
+	if !hovered || a.hoverPane == p.ID {
+		return
+	}
+	a.hoverPane = p.ID
+	if moved && !focused {
+		a.setFocus(s, p.ID)
+		a.paneRef(p.ID).Focus()
+	}
+}
+
+// paneDrag is a pane dragged by its title to another place.
+type paneDrag struct{ session, pane string }
+
+// dropZone is where a pane dropped on another goes: beside it, on a side,
+// or in its place, which the other takes (swap).
+type dropZone int
+
+const (
+	zoneNone dropZone = iota
+	zoneLeft
+	zoneRight
+	zoneUp
+	zoneDown
+	zoneSwap
+)
+
+// zoneAt returns the zone under the pointer, at u, v of a pane (0 to 1):
+// its middle swaps, else the nearest edge.
+func zoneAt(u, v float32) dropZone {
+	if u > 0.3 && u < 0.7 && v > 0.3 && v < 0.7 {
+		return zoneSwap
+	}
+	best, zone := u, zoneLeft
+	for _, e := range []struct {
+		d float32
+		z dropZone
+	}{{1 - u, zoneRight}, {v, zoneUp}, {1 - v, zoneDown}} {
+		if e.d < best {
+			best, zone = e.d, e.z
+		}
+	}
+	return zone
+}
+
+func (z dropZone) side() string {
+	return [...]string{"", "left", "right", "up", "down", ""}[z]
+}
+
+// dropPreview shows, over the pane under the pointer, the room the
+// dragged pane would take, gliding from zone to zone, with what dropping
+// does.
+func (a *App) dropPreview(c *ui.Context, pal *palette, target string, zone dropZone) {
+	key := target
+	a.previewShown = true
+	if a.previewKey != key {
+		a.previewKey, a.previewSince = key, c.Now()
+	}
+	// left, top, width, height in percent of the pane
+	r := [...][4]float32{
+		zoneLeft:  {0, 0, 50, 100},
+		zoneRight: {50, 0, 50, 100},
+		zoneUp:    {0, 0, 100, 50},
+		zoneDown:  {0, 50, 100, 50},
+		zoneSwap:  {0, 0, 100, 100},
+	}[zone]
+	label, glyph := map[dropZone]string{
+		zoneLeft: locales.PaneSplitLeft(), zoneRight: locales.ActionSplitRight(), zoneUp: locales.PaneSplitUp(), zoneDown: locales.ActionSplitDown(), zoneSwap: locales.PaneSwap(),
+	}[zone], splitRightIcon
+	if zone == zoneUp || zone == zoneDown {
+		glyph = splitDownIcon
+	}
+	if zone == zoneSwap {
+		glyph = swapIcon
+	}
+	fadeIn := min(float32(c.Now().Sub(a.previewSince))/float32(140*time.Millisecond), 1)
+	if fadeIn < 1 {
+		c.AnimationFrame()
+	}
+	spring := ui.Animation{Spring: ui.SpringOptions{Duration: 300 * time.Millisecond, Bounce: 0.12}}
+	o := ui.Column(c.Key("drop")).Absolute().PassThrough().Padding(8).Opacity(fadeIn)
+	o.LeftPercent(o.AnimateTo("l", r[0], spring)).TopPercent(o.AnimateTo("t", r[1], spring)).
+		WidthPercent(o.AnimateTo("w", r[2], spring)).HeightPercent(o.AnimateTo("h", r[3], spring))
+	o.Children(func() {
+		room := ui.Column(c).Grow(1).Radius(rPane).AlignItems(ui.Center).
+			Background(pal.accent.Alpha(0.10)).InsetShadow(0, 0, 28, 0, pal.accent.Alpha(0.22))
+		room.Children(func() {
+			// The label sits high in the room, clear of the title the
+			// pointer carries through its middle.
+			ui.Box(c).HeightPercent(22).Shrink(0)
+			pill := ui.Row(c).Height(30).Padding(0, 12).Gap(7).Radius(15).AlignItems(ui.Center).
+				Background(pal.accentFill).TextColor(pal.accentInk)
+			floating(pill, pal).Children(func() {
+				ui.Icon(c, glyph).Size(14, 14)
+				ui.Text(c, label).FontSize(fsBody).FontWeight(wSemibold).SingleLine()
+			})
+			pill.AnimatePose(ui.Pose{Scale: 0.9 + 0.1*fadeIn}, ui.Snappy)
+		})
+	})
+}
+
+// movePane puts a pane dropped on another beside it, or in its place.
+func (a *App) movePane(sid, pane, target string, zone dropZone) {
+	s := a.session(sid)
+	if s == nil || zone == zoneNone {
+		return
+	}
+	if s.Layout == nil || s.Arrange != nil && s.Arrange.Rects[pane] != (proto.Rect{}) {
+		// The layouts placed by rectangles take panes in an order: the
+		// dropped pane and the one it lands on change places.
+		if s.Arrange != nil {
+			a.arrange(s, "swap", func(p *proto.ArrangeParams) { p.Pane, p.Target = pane, target })
+		}
+		return
+	}
+	// Drawn at once from the layout here; the daemon makes the change
+	// (arrange), so a peer's change made meanwhile is kept, not written
+	// over by this whole tree (issue #162).
+	if zone == zoneSwap {
+		s.Layout = s.Layout.Swap(pane, target)
+		a.arrange(s, "swap", func(p *proto.ArrangeParams) { p.Pane, p.Target = pane, target })
+	} else {
+		s.Layout = s.Layout.Move(pane, target, zone.side())
+		a.arrange(s, "move", func(p *proto.ArrangeParams) { p.Pane, p.Target, p.Mode = pane, target, zone.side() })
+	}
+	s.Zoomed = ""
+	a.setFocus(s, pane)
+	a.paneRef(pane).Focus()
+}
+
+// setSplitRatio sends the ratio of split l, a divider dragged or set back,
+// as the daemon's change to that one split: named by a pane on each side,
+// the ratio its first side's share.
+func (a *App) setSplitRatio(s *proto.Session, l *proto.Layout) {
+	if l == nil || l.Leaf() {
+		return
+	}
+	pa, pb := l.A.Panes(), l.B.Panes()
+	if len(pa) == 0 || len(pb) == 0 {
+		return
+	}
+	ratio := l.Ratio
+	a.arrange(s, "split.ratio", func(p *proto.ArrangeParams) { p.Pane, p.Target, p.Ratio = pa[0], pb[0], ratio })
+}
+
+// paneHeader builds a pane's header, and reports whether its title is
+// being dragged.
+func (a *App) paneHeader(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32, s *proto.Session, p *proto.Pane, top, left, right, multi, focused, hovered bool) (dragging bool) {
+	pad := float32(16)
+	strip, compact := float32(0), false
+	if top && left {
+		// With the sidebar hidden, the header at the window's top left
+		// starts after the traffic lights, the sidebar's buttons and the
+		// workspace strip, which come here.
+		strip, compact = a.stripRoom(c, s, p.ID)
+		pad = a.chrome.headerPad + strip
+	}
+	// A lone pane is titled as split ones are, by what runs in it: the
+	// sidebar names the session (QA-037).
+	title := p.PaneName()
+	hostOf := a.hostOf(p.ID)
+	if p.Host != "" && !hostOf.remote() {
+		// A pane of this session whose program runs on a linked
+		// machine is that machine's, as its paths are.
+		if o := a.hostNamed(p.Host); o != nil {
+			hostOf = o
+		} else {
+			hostOf = &host{name: p.Host}
+		}
+	}
+	dir := hostOf.shortDir(p.WorkDir())
+	showDir := dir != title || hostOf.remote()
+	// In a session of several panes, a pane names its folder and branch
+	// only where they differ from the ones its neighbours share: the TUI's
+	// titles carry the name alone, and the same "../demo  main" in every
+	// header said nothing new. A lone pane keeps both, as it has room.
+	sameGit := false
+	if multi && !hostOf.remote() {
+		sdir, sbranch := sharedPlace(s)
+		if sdir != "" && p.WorkDir() == sdir {
+			showDir = false
+		}
+		sameGit = p.Git != nil && sbranch != "" && branchName(p.Git) == sbranch
+	}
+	planDir := dir
+	if hostOf.remote() {
+		// The machine's chip comes before the folder: room for both.
+		planDir = hostOf.name + "\u2003\u2003" + dir
+	}
+	plan := a.planHeader(c, p, title, planDir, showDir, sameGit, pad, multi, top && right)
+	h := ui.Row(c.Key("hdr")).Height(paneHeaderH(top)).Shrink(0).AlignItems(ui.Center).Padding(0, headerEnd, 0, pad).Gap(sp2)
+	if h.Pressed() && !focused {
+		a.setFocus(s, p.ID)
+		a.paneRef(p.ID).Focus()
+	}
+	h.Children(func() {
+		if top && left {
+			a.sidebarButtons(c, pal, bar, shown, s, strip > 0, compact)
+		}
+		// The title is the pane's handle: dragged, it takes the pane to
+		// another place in the session.
+		grip := ui.Row(c.Key("grip")).Gap(sp2).AlignItems(ui.Center).Shrink(0).Height(hControl).Padding(0, sp2).Margin(0, 0, 0, -sp2).Radius(rControl)
+		if !plan.sized {
+			grip.Shrink(1).MinWidth(min(plan.titleW, titleKeep) + 2*sp2 + 14 + sp2)
+		}
+		floats := a.floatHere[p.ID] && s.Arrange != nil
+		if floats {
+			// A floating pane's header moves it, under the pointer as it
+			// is: it does not fade as a pane carried to a drop does.
+			grip.Cursor(ui.CursorMove)
+			a.dragFloat(c, "grip", grip, s, p, 0)
+		} else if multi {
+			grip.Drag(paneDrag{s.ID, p.ID}).Tooltip(locales.PaneDragTip())
+			dragging = grip.Dragging()
+			switch {
+			case dragging:
+				// What follows the pointer is a copy of the pane, drawn
+				// by the tiles (dragGhost): MyGo's copy of the grip shows
+				// nothing.
+				grip.Opacity(0)
+				a.motion.dragging = p.ID
+			case grip.Hovered():
+				grip.Background(pal.rowHover).Cursor(ui.CursorGrab)
+			}
+		}
+		grip.Children(func() {
+			a.paneIcon(c, pal, p, 14)
+			if plan.noTitle {
+				// Too narrow for any of the title: the mark alone, and
+				// the name in its tooltip.
+				grip.Tooltip(title)
+				return
+			}
+			// The title gives way last: it keeps its first titleKeep DIPs
+			// while the chips and the folder go before it.
+			// The pane the keyboard is in says so in its title too, in the
+			// accent, as its edge does: from across the room the edge is a
+			// hairline, the title is not.
+			titleColor := pal.text
+			if multi && focused {
+				titleColor = pal.accentText
+			}
+			name := oneLine(c, title, fsBody, wSemibold).TextColor(titleColor)
+			if plan.sized {
+				name.Width(plan.titleW).Shrink(0)
+			} else {
+				name.MinWidth(min(plan.titleW, titleKeep))
+			}
+			// The home directory names itself "~", which the title may
+			// already say; another machine's, as scp writes it: devbox:~/api.
+			if showDir && plan.folderW > 0 {
+				if !hostOf.remote() {
+					// Cut at its start, so its last folder stays.
+					// The folder clips inside its own box: it never runs
+					// under the chips after it.
+					cut := startCut(c, dir, fsSmall, plan.folderW)
+					ui.Box(c.Key("folder")).Width(plan.folderW).Shrink(0).Clip().Children(func() {
+						t := ui.Text(c, cut).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine()
+						if cut != dir {
+							t.Tooltip(dir)
+						}
+					})
+				} else {
+					// The host's name in its color, as the sidebar's strip
+					// marks it: no pane passes for another machine's.
+					ui.Row(c.Key("where")).Width(plan.folderW).Shrink(0).MinWidth(0).AlignItems(ui.Center).Clip().Children(func() {
+						// The machine as a chip before its folder, rather than
+						// "build:" run into the path (council round 1, visual 28).
+						chip(c, pal, pal.chip, pal.hostColor(hostOf), func() {
+							oneLine(c, hostOf.name, fsSmall, wMedium)
+						}).Shrink(0.5).MinWidth(0).Margin(0, sp1, 0, 0)
+						oneLine(c, dir, fsSmall, 0).TextColor(pal.textMuted)
+					})
+				}
+			}
+		})
+		if p.Git != nil && plan.git {
+			a.gitChip(c, pal, s, p, plan)
+		}
+		// The chips follow the folder and the branch, packed left with the
+		// same gap in every pane (council round 1, visual 13).
+		a.paneChips(c, pal, p, multi, plan)
+		if s.Zoomed == p.ID && len(s.Panes) > 1 {
+			a.zoomChip(c, pal, s, p)
+		}
+		// The header's empty stretch moves the window, as a title bar
+		// does, and zooms it on a double click: the header around it
+		// takes clicks, which focus the pane.
+		gap := ui.Box(c.Key("drag")).Grow(1).AlignSelf(ui.Stretch)
+		if floats {
+			gap.Cursor(ui.CursorMove)
+			a.dragFloat(c, "gap", gap, s, p, 0)
+		} else if top {
+			gap.DragWindow()
+		}
+		// The button that shows the right sidebar sits by the pane's own,
+		// as one row of buttons.
+		ui.Row(c.Key("buttons")).AlignItems(ui.Center).Shrink(0).Children(func() {
+			if top && right && !plan.noShowRight {
+				a.showRightButton(c, pal)
+			}
+		})
+		if top && right {
+			a.controlsRoom(c, 8)
+		}
+		// The pane's buttons float over the header's right end while the
+		// pointer is over the pane, on a raised strip of their own: the
+		// chips take the header's whole width meanwhile, and nothing in
+		// it moves as the buttons come and go (DESIGN.md principle 3;
+		// council round 1, visual 2).
+		if plan.controls {
+			show := hovered && !dragging
+			strip := ui.Row(c.Key("controls-over")).Absolute().Top(0).Bottom(0).Right(headerEnd + a.cornerW(top && right)).AlignItems(ui.Center)
+			if !show {
+				strip.PassThrough()
+			}
+			strip.Opacity(strip.Animate("shown", b2f(show), dHoverOut)).Children(func() {
+				ui.Row(c.Key("controls-strip")).Radius(rControl).Padding(1).Background(pal.popover).Border(1, pal.kbdBorder).
+					Shadow(0, 1, 3, 0, pal.cardShadow).Children(func() {
+					a.paneControls(c, pal, s, p, show, multi)
+				})
+			})
+		}
+	})
+	return dragging
+}
+
+// paneMark is the state a pane is marked with, and whether it gets a mark
+// rather than the program's icon. An agent's pane keeps its agent's mark
+// as the sidebar draws it: the daemon reports a finished agent that was
+// seen, and one that waits for a task, as idle, which showed the plain
+// terminal icon where the sidebar showed the check or the ring.
+func (a *App) paneMark(p *proto.Pane) (st proto.Status, unread, mark bool) {
+	if p.Status != proto.Idle || p.Unread {
+		return p.Status, p.Unread, true
+	}
+	if a.ck.loaded && !a.hostOf(p.ID).remote() {
+		for _, ag := range a.ck.agents {
+			if ag.Host == "" && ag.Window == p.ID {
+				st, unread = ckStatus(ag, a.ckItemOf(ag))
+				return st, unread, true
+			}
+		}
+	}
+	return proto.Idle, false, p.Agent != ""
+}
+
+// paneIcon is the icon that stands for a pane wherever it is named: its
+// state's mark, else its program's.
+func (a *App) paneIcon(c *ui.Context, pal *palette, p *proto.Pane, size float32) {
+	if st, unread, mark := a.paneMark(p); mark {
+		statusIconP(c, pal, st, unread, p.Progress, size)
+		return
+	}
+	ui.Icon(c, programIcon(p)).Size(size, size).TextColor(pal.textFaint)
+}
+
+// cornerW is the room the window's corner takes at the right end of the
+// top right pane's header: the button that shows the right sidebar and
+// the window's controls, with the gap before them.
+func (a *App) cornerW(corner bool) float32 {
+	if !corner {
+		return 0
+	}
+	w := float32(0)
+	if !a.rightShown() {
+		w += hControl + sp2
+	}
+	if ownControls && a.win != nil {
+		w += max(controlsW+6+sp2-a.side.barW, 0)
+	}
+	return w
+}
+
+// sidebarButtons are the sidebar's buttons, which the header at the
+// window's top left holds while the sidebar hides.
+func (a *App) sidebarButtons(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32, s *proto.Session, strip, compact bool) {
+	if shown >= 0.5 {
+		return
+	}
+	ui.Row(c).Absolute().Left(a.chrome.buttonsLeft(bar)).Top(0).Bottom(0).AlignItems(ui.Center).Gap(2).Opacity(1 - 2*shown).Children(func() {
+		iconButton(c, "show-sidebar", sidebarIcon, a.tip(locales.SidebarShow(), "sidebar.toggle"), pal, a.toggleSidebar)
+		iconButton(c, "new-session-2", plusIcon, a.tip(locales.ActionNewSession(), "session.new"), pal, func() { a.newSession("") })
+		if strip {
+			a.workspaceStrip(c, pal, s, compact)
+		}
+	})
+}
+
+// stripRoom is the room the workspace strip takes in the header of the
+// top left pane, pane: it grows as the sidebar hides, in whole pixels.
+// compact tells that the strip keeps its pills alone (wsStripW).
+func (a *App) stripRoom(c *ui.Context, s *proto.Session, pane string) (room float32, compact bool) {
+	if a.chrome.shown >= 1 {
+		return 0, false
+	}
+	card, ok := a.motion.width[pane]
+	if !ok {
+		card = a.paneRef("card-" + pane).Bounds(c).W
+	}
+	w, compact := a.wsStripW(c, s, card)
+	return float32(math.Round(float64(w * (1 - a.chrome.shown)))), compact
+}
+
+// paneControls are a header's buttons acting on its pane, which show while
+// the pointer is over it.
+func (a *App) paneControls(c *ui.Context, pal *palette, s *proto.Session, p *proto.Pane, show, multi bool) {
+	ctl := ui.Row(c.Key("controls")).Gap(0).AlignItems(ui.Center).Shrink(0)
+	// They keep their room while hidden, so that nothing in the header
+	// moves as the pointer comes (DESIGN.md principle 3).
+	if !show {
+		ctl.Invisible()
+	}
+	ctl.Opacity(ctl.Animate("shown", b2f(show), dHoverOut)).Children(func() {
+		iconButton(c, "split-r", splitRightIcon, a.tip(locales.ActionSplitRight(), "pane.split.right"), pal, func() { a.splitPane(s, p.ID, "right") })
+		iconButton(c, "split-d", splitDownIcon, a.tip(locales.ActionSplitDown(), "pane.split.down"), pal, func() { a.splitPane(s, p.ID, "down") })
+		if multi {
+			sid, pid := s.ID, p.ID
+			zoom := func() { a.defer_(func() { a.zoomPane(a.session(sid), pid) }) }
+			if s.Zoomed == p.ID {
+				iconButton(c, "zoom", unzoomIcon, a.tip(locales.PaneShowAll(), "pane.zoom"), pal, zoom)
+			} else {
+				iconButton(c, "zoom", zoomIcon, a.tip(locales.ActionZoomPane(), "pane.zoom"), pal, zoom)
+			}
+			iconButton(c, "close", closeIcon, a.tip(locales.PaneClose(), "pane.close"), pal, func() { a.defer_(func() { a.closePane(a.session(sid), pid, true) }) })
+		}
+	})
+}
+
+// paneChips says what the pane is doing. The title leads with the status
+// mark, so the chips go without one.
+func (a *App) paneChips(c *ui.Context, pal *palette, p *proto.Pane, multi bool, plan headerPlan) {
+	if plan.state {
+		a.stateChip(c, pal, p, multi, plan)
+	}
+	if plan.process {
+		pc := chip(c, pal, pal.chip, pal.textMuted, func() {
+			oneLine(c, p.Process, fsSmall, 0)
+		}).Shrink(0).Tooltip(locales.PaneForegroundTip())
+		if plan.sized {
+			pc.MaxWidth(plan.processW)
+		}
+	}
+}
+
+// zoomChip says that the pane is zoomed and how many panes that hides,
+// and ends the zoom on a click (QM-012): with the others gone and nothing
+// saying so, the way back was the keys alone.
+func (a *App) zoomChip(c *ui.Context, pal *palette, s *proto.Session, p *proto.Pane) {
+	b := ui.ButtonBase(c.Key("zoomed")).Height(hChip).Padding(0, 7).Gap(5).Radius(rRow).AlignItems(ui.Center).Shrink(0).
+		Label(locales.PaneZoomedEnd()).Tooltip(a.tip(locales.PaneZoomedEnd(), "pane.zoom"))
+	bg := pal.accent.Alpha(0.14)
+	if b.Hovered() {
+		bg = pal.accent.Alpha(0.22)
+	}
+	b.Background(bg).TextColor(pal.accentText).Children(func() {
+		ui.Icon(c, unzoomIcon).Size(12, 12)
+		oneLine(c, locales.PaneZoomedHides(len(s.Panes)-1), fsSmall, wMedium)
+	})
+	if b.Clicked() {
+		sid, pid := s.ID, p.ID
+		a.defer_(func() { a.zoomPane(a.session(sid), pid) })
+	}
+}
+
+// stateChip says what the pane is doing, one line, in its state's color,
+// as wide as the header's plan gives it.
+func (a *App) stateChip(c *ui.Context, pal *palette, p *proto.Pane, multi bool, plan headerPlan) {
+	msg, weight := stateText(p)
+	if msg == "" {
+		return
+	}
+	bg, fg := pal.chip, pal.textMuted
+	switch p.Status {
+	case proto.Waiting:
+		// What the agent asks is the one solid chip in a header: need
+		// filled, its ink on it at 5:1, so it reads from across the room
+		// and nothing else in the header looks like it.
+		bg, fg = pal.attnFill, pal.attnInk
+	case proto.Failed, proto.Exited:
+		bg, fg = pal.danger.Alpha(0.1), pal.dangerText
+	case proto.Working:
+		msg = ago(p.Since, c.Now())
+		if p.Progress >= 0 {
+			msg = itoa(p.Progress) + "%"
+		}
+		if p.Message != "" {
+			msg = p.Message + " · " + msg
+		}
+	}
+	width := plan.stateW
+	exitedClose := p.Status == proto.Exited && !multi
+	if exitedClose {
+		width -= sp2 + hControl
+	}
+	ch := chip(c, pal, bg, fg, func() {
+		if verb, rest := paneNeedWords(p); p.Status == proto.Waiting && verb != "" {
+			// The row's own two parts: the verb in the need weight, then
+			// what it names.
+			oneLine(c, verb, fsSmall, wSemibold).Shrink(0)
+			if rest != "" {
+				oneLine(c, rest, fsSmall, wRegular)
+			}
+			return
+		}
+		t := oneLine(c, msg, fsSmall, weight)
+		if p.Status == proto.Working {
+			t.FontFeatures("tnum")
+		}
+	}).MaxWidth(320)
+	if plan.sized {
+		ch.Shrink(0).MaxWidth(width)
+	} else {
+		// No plan yet (the card's first frames): the chip shrinks with
+		// the header's row and cuts its text with the ellipsis. Kept at
+		// its cap, it ran under the card's edge, cut mid letter, until
+		// some input drew the window again (Mac round 3, V3-M1).
+		ch.Shrink(1).MinWidth(0)
+	}
+	// tuios starts no program again in a pane that stayed after its
+	// program exited (keep_open): it closes. With several panes the
+	// header's own close button does it.
+	if exitedClose {
+		id := p.ID
+		iconButton(c, "close-"+id, closeIcon, locales.PaneClose(), pal, func() {
+			a.defer_(func() { a.closePane(a.sessionOfPane(id), id, false) })
+		})
+	}
+}
+
+// headerPlan is what a pane's header shows and how wide each part is,
+// from the room its card had in the last frame. One budget holds the
+// title, the folder and the chips: the title keeps at least
+// min(natural, titleKeep), then the state chip comes, then the branch, the
+// process and the folder, each whole or not at all (DESIGN.md section 7,
+// rule 5). What fits at its least then grows toward its natural width in
+// the same order, so a chip is cut only when the header has no room left.
+type headerPlan struct {
+	// sized tells that the widths below are the card's: in the first frame
+	// the card has no bounds yet and the parts take their natural widths.
+	sized                                     bool
+	titleW, folderW, gitW, stateW, processW   float32
+	state, git, gitCompact, process, controls bool
+	// noTitle leaves the status mark alone in a header too narrow for
+	// any of the title: its name goes to the mark's tooltip.
+	noTitle bool
+	// noShowRight leaves out the button that shows the right sidebar, in
+	// a top right header too narrow for it and the window controls: it
+	// ran under Minimize. The View menu and the keys still show it.
+	noShowRight bool
+}
+
+// headerEnd is a pane header's padding at its end.
+const headerEnd = 12
+
+// paneHeaderH is the height of a pane's header. In the top row it is the
+// window's title bar, centered on barMid with the traffic lights and the
+// window controls. Below, it is one row: the TUI gives a pane's title no
+// row of its own, and 44 DIPs a header cost a pane of a grid about a line
+// of text.
+func paneHeaderH(top bool) float32 {
+	if top {
+		return headerH
+	}
+	return hRow
+}
+
+// sharedPlace is the folder and the branch that two or more of the
+// session's panes work in, the most of them, "" for none.
+func sharedPlace(s *proto.Session) (dir, branch string) {
+	dirs, branches := map[string]int{}, map[string]int{}
+	bestD, bestB := 1, 1
+	for i := range s.Panes {
+		p := &s.Panes[i]
+		if p.Browser() || p.Host != "" {
+			continue
+		}
+		if d := p.WorkDir(); d != "" {
+			if dirs[d]++; dirs[d] > bestD {
+				dir, bestD = d, dirs[d]
+			}
+		}
+		if p.Git != nil {
+			if b := branchName(p.Git); b != "" {
+				if branches[b]++; branches[b] > bestB {
+					branch, bestB = b, branches[b]
+				}
+			}
+		}
+	}
+	return dir, branch
+}
+
+// titleLeast is the least of a title worth showing; below it the header
+// shows the status mark alone.
+const titleLeast = 28
+
+// chipPad is a chip's padding on both sides.
+const chipPad = 2 * 7
+
+// sixChars is the least a cut label shows: its first six characters and
+// the ellipsis. A label that would show fewer drops whole (DESIGN.md
+// section 7, rule 5: never a chip of one letter).
+func sixChars(c *ui.Context, s string, size float32, weight int) float32 {
+	s = flat(s)
+	r := []rune(s)
+	if len(r) <= 6 {
+		return natural(c, s, size, weight)
+	}
+	return min(natural(c, s, size, weight), natural(c, string(r[:6])+"…", size, weight))
+}
+
+// stateText is what the state chip says, and its weight; "" for no chip.
+// paneNeedWords is a waiting pane's approval in the words its row in the
+// rail and the Agents view uses: "Allow Edit" and the path from the pane's
+// folder ("retry/backoff.go"). The hook's own line, "approve Edit:
+// /Users/.../retry/backoff.go", gave the header chip another verb and only
+// the start of the absolute path (Mac round 2, V2-M1). A message that names
+// no tool gives "", "".
+func paneNeedWords(p *proto.Pane) (verb, rest string) {
+	if p.Status != proto.Waiting || p.Message == "" {
+		return "", ""
+	}
+	tool, target, ok := ckAsk(p.Message)
+	if !ok {
+		return "", ""
+	}
+	dir := p.ProcessDir
+	if dir == "" {
+		dir = p.Dir
+	}
+	return locales.CockpitAllowTool(tool), ckShortTarget(tool, target, dir)
+}
+
+func stateText(p *proto.Pane) (string, int) {
+	switch p.Status {
+	case proto.Waiting:
+		if verb, rest := paneNeedWords(p); verb != "" {
+			return strings.TrimSpace(verb + " " + rest), wMedium
+		}
+		msg := p.Message
+		if msg == "" {
+			msg = map[string]string{"permission": locales.PaneNeedsPermission(), "question": locales.PaneHasQuestion(), "auth": locales.PaneNeedsSignIn()}[p.Kind]
+		}
+		if msg == "" {
+			msg = locales.StatusNeedsYou()
+		}
+		return msg, wMedium
+	case proto.Working:
+		// The age changes each minute: the chip is sized for a long one, so
+		// that it does not move the header as it grows.
+		label := "59m"
+		if p.Progress >= 0 {
+			label = "100%"
+		}
+		if p.Message != "" {
+			label = p.Message + " · " + label
+		}
+		return label, wRegular
+	case proto.Failed:
+		if p.Message == "" {
+			return locales.StatusFailed(), wMedium
+		}
+		return p.Message, wMedium
+	case proto.Exited:
+		return locales.PaneExited(itoa(p.ExitCode)), wMedium
+	case proto.Idle:
+		return p.Message, wRegular
+	}
+	return "", 0
+}
+
+// gitWidths are the branch chip's natural width, its least, and its width
+// with its counts alone.
+func (a *App) gitWidths(c *ui.Context, g *proto.GitInfo) (full, least, compact float32) {
+	box := float32(2*8 + 12 + 5)
+	counts := float32(0)
+	if g.Added > 0 {
+		counts += natural(c, "+"+itoa(g.Added), fsSmall, 0)
+	}
+	if g.Removed > 0 {
+		if counts > 0 {
+			counts += 5
+		}
+		counts += natural(c, "−"+itoa(g.Removed), fsSmall, 0)
+	}
+	if counts > 0 {
+		counts += 5
+	}
+	extra := counts
+	if st := gitState(g.State); st != "" {
+		extra += 5 + natural(c, st, fsSmall, 0)
+	}
+	name := branchName(g)
+	full = box + min(natural(c, name, fsSmall, 0), 180) + extra
+	least = box + sixChars(c, name, fsSmall, 0) + extra
+	compact = 0
+	if g.Files > 0 && counts > 0 {
+		compact = box + counts - 5
+	}
+	return full, least, compact
+}
+
+func (a *App) planHeader(c *ui.Context, p *proto.Pane, title, dir string, showDir, sameGit bool, pad float32, multi, corner bool) headerPlan {
+	titleN := natural(c, title, fsBody, wSemibold)
+	folderN := float32(0)
+	if showDir {
+		folderN = natural(c, dir, fsSmall, 0) + 1
+	}
+	msg, weight := stateText(p)
+	stateCap := float32(240)
+	if p.Status == proto.Waiting {
+		stateCap = 320
+	}
+	stateN, stateMin := float32(0), float32(0)
+	if msg != "" {
+		stateN = min(chipPad+natural(c, msg, fsSmall, weight)+1, stateCap)
+		// A cut message keeps 80 at least, or six characters if those are
+		// wider (DESIGN.md section 6, chips).
+		stateMin = min(stateN, max(80, chipPad+sixChars(c, msg, fsSmall, weight)))
+	}
+	exitedClose := p.Status == proto.Exited && !multi
+	if exitedClose {
+		// The exited chip's close button rides with it.
+		stateN += sp2 + hControl
+		stateMin += sp2 + hControl
+	}
+	// A process named as the title says nothing more.
+	process := p.Process != "" && p.Status != proto.Exited && !strings.EqualFold(p.Process, title)
+	processN := float32(0)
+	if process {
+		processN = chipPad + natural(c, p.Process, fsSmall, 0) + 1
+	}
+	gitN, gitMin, gitCompact := float32(0), float32(0), float32(0)
+	if p.Git != nil {
+		gitN, gitMin, gitCompact = a.gitWidths(c, p.Git)
+		if sameGit {
+			// The branch the session shares goes: the chip keeps the
+			// pane's changes alone, or goes too.
+			gitN, gitMin = gitCompact, gitCompact
+		}
+	}
+
+	// The width the tiles give the card in this frame, while they move
+	// it: the last frame's lags behind, and a header planned for it ran
+	// under the window controls as a split grew the pane.
+	w, ok := a.motion.width[p.ID]
+	if !ok {
+		w = a.paneRef("card-" + p.ID).Bounds(c).W
+	}
+	if w <= 0 {
+		// Planned for no width, the chips take their caps and can run
+		// past the card: the next frame, with the card's size, plans the
+		// header again. Nothing else asked for one in an idle window.
+		c.AnimationFrame()
+		return headerPlan{titleW: titleN, folderW: folderN, gitW: gitN, stateW: stateN, processW: processN,
+			state: msg != "", git: gitN > 0, gitCompact: sameGit, process: process, controls: true}
+	}
+	plan := headerPlan{sized: true}
+	// The header's own room: its padding, the grip's status mark and gap,
+	// the stretch that moves the window and the gaps around it.
+	room := w - pad - headerEnd - (14 + sp2 + sp2) - 2*sp2
+	// The pane's buttons float over the header while the pointer is
+	// over the pane, so they take none of its room. Below 260 DIPs they
+	// leave the header, and the Pane menu, the pane's own right-click menu
+	// and the keys still reach them.
+	plan.controls = w >= 260
+	room -= a.cornerW(corner)
+	if corner && room < 0 && !a.rightShown() {
+		plan.noShowRight = true
+		room += hControl + sp2
+	}
+	// The title takes no more than the header has: in a pane too narrow
+	// for its least it was cut mid-word by the card's edge, with no
+	// ellipsis (council round 2, N1).
+	titleMin := min(titleN, titleKeep, max(room, 0))
+	if w < 120 || titleMin < min(titleN, titleLeast) {
+		plan.noTitle = true
+		titleMin = 0
+	}
+	room -= titleMin
+	plan.titleW = titleMin
+	// Each part at its least, in order, each with the gap before it.
+	take := func(least float32) bool {
+		if least > 0 && least+sp2 <= room {
+			room -= least + sp2
+			return true
+		}
+		return false
+	}
+	if plan.state = take(stateMin); plan.state {
+		plan.stateW = stateMin
+	}
+	if gitN > 0 && w >= 320 {
+		if plan.git = take(gitMin); plan.git {
+			plan.gitW, plan.gitCompact = gitMin, sameGit
+		} else if plan.git = take(gitCompact); plan.git {
+			plan.gitW, plan.gitCompact = gitCompact, true
+		}
+	}
+	if plan.process = process && take(processN); plan.process {
+		plan.processW = processN
+	}
+	// The folder takes what is left, cut at its start, down to 48 DIPs.
+	if showDir && take(min(48, folderN)) {
+		plan.folderW = min(48, folderN)
+	}
+	// Then each grows toward its natural width, in the same order.
+	grow := func(cur *float32, want float32) {
+		if more := min(want-*cur, room); more > 0 {
+			*cur += more
+			room -= more
+		}
+	}
+	if !plan.noTitle {
+		grow(&plan.titleW, titleN)
+	}
+	if plan.state {
+		grow(&plan.stateW, stateN)
+	}
+	if plan.git && !plan.gitCompact {
+		grow(&plan.gitW, gitN)
+	}
+	if plan.folderW > 0 {
+		grow(&plan.folderW, folderN)
+	}
+	return plan
+}
+
+func (a *App) paneTerminal(c *ui.Context, pal *palette, s *proto.Session, p *proto.Pane) {
+	e := a.terms[p.ID]
+	if e == nil {
+		a.ensureTerm(p.ID)
+		e = a.terms[p.ID]
+	}
+	// The terminal fills the card under the header: its own padding
+	// takes the colors of the cells beside it, so that a full-screen
+	// program's background reaches the card's edges.
+	ui.Box(c.Key("body")).Grow(1).MinHeight(0).Children(func() {
+		switch {
+		case e != nil && e.term != nil && a.cm != nil && a.cm.pane == p.ID:
+			a.copyView(c, pal)
+		case e != nil && e.term != nil:
+			if auditPane != nil {
+				auditPane(p.ID, "live", e.term)
+			}
+			ref := a.paneRef(p.ID)
+			terminal.View(c.Key("term"), e.term).Fill().Bind(ref)
+			if a.labelsShown() {
+				a.paneLabel(c, pal, s, p.ID)
+			}
+			if link, isPath, at := e.term.HoveredLink(); isPath {
+				a.imagePeek(p.ID, link, at, ref.Bounds(c))
+			}
+			if ref.Focused(c) {
+				a.focusNow = p.ID
+			}
+			if a.wantFocus == p.ID {
+				// The keyboard goes to a pane made a moment ago once its
+				// terminal is here to take it.
+				ref.Focus()
+				a.wantFocus = ""
+			} else if ref.Focused(c) && a.focusPrev != p.ID && a.focusOf(s) != p.ID && s.PaneByID(a.wantFocus) == nil && !a.ownerAsked(p.ID) {
+				// The terminal took the focus in this frame, as a click
+				// gives it: the user chose it. One that had it last frame
+				// too has it only until a move asked for (a prefix key, a
+				// switch) takes it, a frame after the ask: taken as the
+				// user's choice, it moved the keys back (design-G, G3).
+				a.setFocus(s, p.ID)
+			}
+			if a.find.pane == p.ID {
+				a.findBar(c, pal, p, e.term)
+			}
+			a.linkBadge(c, pal, p.ID, e)
+		case e == nil && a.hostOf(p.ID).remote() && a.hostOf(p.ID).conn != connReady:
+			// Shown as it was, until its host is back.
+			a.pendingInput(c, p.ID)
+			h := a.hostOf(p.ID)
+			switch {
+			case h.conn == connConnecting || h.busy != "":
+				ui.Column(c).Fill().Center().Gap(10).Children(func() {
+					ui.Spinner(c)
+					ui.Text(c, locales.HostReconnectingTo(h.name)).FontSize(fsSmall).TextColor(pal.textFaint)
+				})
+			default:
+				a.message(c, pal, a.hostProblem(h), h.err, locales.CommonTryAgain(), func() { a.reconnectHost(h) })
+			}
+		case e != nil && e.err != "":
+			a.message(c, pal, locales.PaneCantShow(), e.err, locales.CommonTryAgain(), func() {
+				a.dropTerm(p.ID)
+				a.ensureTerm(p.ID)
+			})
+		default:
+			if auditPane != nil {
+				auditPane(p.ID, "blank", nil)
+			}
+			a.pendingInput(c, p.ID)
+			// Attaching takes a moment for a long scrollback: a spinner
+			// only once it is a noticeable one.
+			if e != nil && time.Since(e.started) > 250*time.Millisecond {
+				ui.Column(c).Fill().Center().Children(func() { ui.Spinner(c).Label(locales.PaneAttaching()) })
+			} else {
+				c.After(260 * time.Millisecond)
+			}
+		}
+	})
+}
+
+// linkBadge marks a pane of another machine whose link is down: its last
+// frame stays, faded, with a badge that says the app reconnects. The new
+// frame paints over it in place once the link is back.
+func (a *App) linkBadge(c *ui.Context, pal *palette, id string, e *termEntry) {
+	h := a.hostOf(id)
+	if !h.remote() || e.stream == nil {
+		return
+	}
+	lost := e.stream.Lost()
+	if !lost && h.conn == connReady {
+		return
+	}
+	ui.Box(c.Key("lost-veil")).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough().Background(pal.veil)
+	label := locales.HostPaneReconnecting(h.name)
+	if !lost && h.conn == connFailed {
+		label = locales.HostPaneWaiting(h.name)
+	}
+	ui.Row(c.Key("lost")).Absolute().Top(8).Right(12).Height(28).Padding(0, 10, 0, 8).Gap(7).AlignItems(ui.Center).
+		Radius(14).Background(pal.popover).Border(1, pal.edgeHigh).Label(label).Children(func() {
+		if lost || h.conn == connConnecting {
+			ui.Spinner(c).Size(12, 12)
+		} else {
+			ui.Box(c).Size(7, 7).Radius(3.5).Background(a.hostDotColor(pal, h))
+		}
+		ui.Text(c, label).FontSize(12).TextColor(pal.textMuted).SingleLine()
+	})
+}
+
+// --- pane actions ---
+
+func (a *App) splitPane(s *proto.Session, at, direction string) {
+	if s == nil {
+		return
+	}
+	if at == "" && a.splitting[s.ID] {
+		// The focused pane's split is on its way, and the pane it makes
+		// takes the focus: this one splits that pane, once it is here,
+		// as a second new window in the TUI splits the first.
+		sid := s.ID
+		a.splitQueue[sid] = append(a.splitQueue[sid], func() { a.splitPane(a.session(sid), "", direction) })
+		return
+	}
+	if at == "" {
+		at = a.focusOf(s)
+	}
+	if at == "" {
+		// An empty workspace: the session itself, so the new pane opens
+		// alone in the workspace it shows, where the session works.
+		a.split(s, proto.CreateParams{Split: s.ID, Direction: direction, Dir: s.WorkDir()})
+		return
+	}
+	a.split(s, proto.CreateParams{Split: at, Direction: direction})
+}
+
+// split makes a pane beside another, as p asks, on the session's host,
+// and puts the user in it.
+// splitGrid is the grid of the pane a split makes beside one of cols by
+// rows in a card of box: half the card, less the gap between the two and
+// each one's header and padding, at the cells' size. The pane starts at it,
+// so its shell prints its first prompt at the width it keeps (QA-011). An
+// estimate errs small: a pane that grows a column redraws nothing a reflow
+// broke.
+func splitGrid(box ui.Rect, cols, rows int, down bool) (int, int) {
+	if box.W <= 0 || box.H <= 0 || cols <= 0 || rows <= 0 {
+		if down {
+			return cols, max(rows/2, 4)
+		}
+		return max(cols/2, 10), rows
+	}
+	padX, padY := float32(2*termPadX), float32(2*termPadY)
+	cellW := (box.W - padX) / float32(cols)
+	cellH := (box.H - headerH - padY) / float32(rows)
+	if down {
+		h := (box.H-paneGap)/2 - headerH - padY
+		return cols, max(int(h/cellH), 4)
+	}
+	w := (box.W-paneGap)/2 - padX
+	return max(int(w/cellW), 10), rows
+}
+
+func (a *App) split(s *proto.Session, p proto.CreateParams) {
+	if s == nil {
+		return
+	}
+	h := a.hostOf(s.ID)
+	if pane := s.PaneByID(p.Split); pane != nil && !pane.Browser() {
+		// Two halves too small to read a prompt help no one: the pane
+		// stays whole, and the toast says what to do instead.
+		// The pane's size is its terminal's grid, what the person sees.
+		// Pane.Cols and Rows are the rectangle the layout last gave the
+		// window in the session's cells, which a session guios made sets
+		// from the pane it came from, as small as 20 by 12.
+		cols, rows := pane.Cols, pane.Rows
+		if t := a.termFor(pane.ID); t != nil {
+			if c, r := t.Size(); c > 0 && r > 0 {
+				cols, rows = c, r
+			}
+		}
+		down := p.Direction == "down" || p.Direction == "up"
+		fitsDown, fitsRight := rows/2 >= minPaneRows, cols/2 >= minPaneCols
+		fits := down && fitsDown || !down && fitsRight
+		if p.Direction == "" {
+			// The layout picks the side: check the side it will take, as
+			// the split tree splits a tall pane down. Where no side is
+			// taken (master-stack, scrolling), either one fitting will do.
+			if d, ok := h.autoSplitDown(s.ID, pane.ID); ok {
+				down = d
+				fits = down && fitsDown || !down && fitsRight
+			} else {
+				fits = fitsDown || fitsRight
+			}
+		}
+		if cols > 0 && rows > 0 && !fits {
+			a.toast(locales.ToastPaneTooSmall())
+			return
+		}
+		p.Cols, p.Rows = splitGrid(a.cardBox[pane.ID], cols, rows, down)
+	}
+	cl := h.cl
+	if cl == nil {
+		return
+	}
+	if a.splitting == nil {
+		a.splitting, a.splitQueue = map[string]bool{}, map[string][]func(){}
+	}
+	sid := s.ID
+	a.splitting[sid] = true
+	a.guessSplit(s, p)
+	go func() {
+		var ns proto.Session
+		err := cl.Call("split", p, &ns)
+		a.update(func() {
+			a.splitting[sid] = false
+			delete(a.guesses, sid)
+			if q := a.splitQueue[sid]; len(q) > 0 {
+				a.splitQueue[sid] = q[1:]
+				defer q[0]()
+			}
+			if err != nil {
+				a.toast(err.Error())
+				return
+			}
+			a.replaceSession(h, ns)
+			if cur := a.session(ns.ID); cur != nil {
+				if a.focus == nil {
+					a.focus = map[string]string{}
+				}
+				a.focus[ns.ID] = ns.Focus
+				a.ensureTerm(ns.Focus)
+				a.touch(ns.Focus)
+				if !a.isBrowser(ns.Focus) {
+					// A browser takes the keyboard in its address bar, or
+					// its page once it has one. A terminal takes it once it
+					// is drawn: until then the pane that had the keyboard
+					// keeps it, and must not take the focus back.
+					a.paneRef(ns.Focus).Focus()
+					a.wantFocus = ns.Focus
+				}
+			}
+		})
+	}()
+}
+
+// replaceSession puts a session as kerod answered into the state, before
+// the state that has it comes.
+func (a *App) replaceSession(h *host, ns proto.Session) {
+	// Its new pane is the host's from now, as its terminal attaches there.
+	a.own(h, ns)
+	for i := range a.st.Sessions {
+		if a.st.Sessions[i].ID == ns.ID {
+			a.st.Sessions[i] = ns
+			return
+		}
+	}
+	a.addPending(h, ns)
+}
+
+func (a *App) closePane(s *proto.Session, pane string, ask bool) {
+	if s == nil {
+		return
+	}
+	if len(s.Panes) == 0 {
+		return
+	}
+	// The last pane of a session ends it, unless another workspace still
+	// holds panes.
+	if len(s.Panes) == 1 && !otherWorkspacePanes(s) {
+		a.closeSession(s.ID, ask)
+		return
+	}
+	p := s.PaneByID(pane)
+	if p == nil {
+		return
+	}
+	if ask && a.set.ConfirmClose && p.Status != proto.Exited && p.Running {
+		sid := s.ID
+		a.confirm = &confirmation{
+			open:    true,
+			title:   locales.ConfirmClosePaneTitle(),
+			detail:  locales.ConfirmClosePaneDetail(p.Process),
+			action:  locales.PaneClose(),
+			destroy: true,
+			run: func() {
+				if s := a.session(sid); s != nil {
+					a.closePane(s, pane, false)
+				}
+			},
+		}
+		return
+	}
+	// The neighbor taking the room takes the focus, as kerod does.
+	if a.focusOf(s) == pane && s.Layout != nil {
+		for _, dir := range []string{"left", "up", "right", "down"} {
+			if n := s.Layout.Neighbor(pane, dir); n != "" {
+				a.focus[s.ID] = n
+				break
+			}
+		}
+	}
+	s.Layout = s.Layout.Remove(pane)
+	if s.Layout.Leaf() {
+		s.Layout = nil
+	}
+	if s.Zoomed == pane {
+		s.Zoomed = ""
+	}
+	for i := range s.Panes {
+		if s.Panes[i].ID == pane {
+			s.Panes = append(s.Panes[:i], s.Panes[i+1:]...)
+			break
+		}
+	}
+	a.paneGoes(pane, true)
+	a.dropTerm(pane)
+	a.dropWeb(pane)
+	a.call(pane, "pane.close", proto.IDParams{ID: pane}, nil)
+	// Once the panes left are built in their new layout: a pane that was
+	// in a split is a new element alone, which a focus given now misses.
+	a.defer_(a.focusTerminal)
+}
+
+func (a *App) zoomPane(s *proto.Session, pane string) {
+	if s == nil || len(s.Panes) < 2 {
+		return
+	}
+	if pane == "" {
+		pane = a.focusOf(s)
+	}
+	if s.Zoomed == pane {
+		s.Zoomed = ""
+	} else {
+		s.Zoomed = pane
+		a.setFocus(s, pane)
+	}
+	a.call(s.ID, "zoom", proto.FocusParams{Session: s.ID, Pane: pane}, nil)
+	a.paneRef(pane).Focus()
+}
+
+// focusDirection moves into the pane next to the focused one.
+func (a *App) focusDirection(dir string) {
+	s := a.session(a.selected)
+	if s == nil || s.Zoomed != "" {
+		return
+	}
+	n := ""
+	switch {
+	case s.Arrange != nil:
+		n = arrangedNeighbour(s, a.focusOf(s), dir)
+		if n == "" && s.Layout != nil {
+			n = s.Layout.Neighbor(a.focusOf(s), dir)
+		}
+	case s.Layout != nil:
+		n = s.Layout.Neighbor(a.focusOf(s), dir)
+	}
+	if n != "" {
+		a.setFocus(s, n)
+		a.paneRef(n).Focus()
+	}
+}
+
+// cyclePane moves to the next or previous pane, in the layout's order.
+func (a *App) cyclePane(d int) {
+	s := a.session(a.selected)
+	if s == nil || len(s.Panes) < 2 {
+		return
+	}
+	order := paneOrder(s)
+	i := 0
+	for j, id := range order {
+		if id == a.focusOf(s) {
+			i = j
+		}
+	}
+	n := order[(i+d+len(order))%len(order)]
+	a.setFocus(s, n)
+	a.paneRef(n).Focus()
+}
+
+func itoa(n int) string {
+	if n < 0 {
+		return "-" + itoa(-n)
+	}
+	if n < 10 {
+		return string(rune('0' + n))
+	}
+	return itoa(n/10) + string(rune('0'+n%10))
+}
+
+// defer_ runs fn once the view is built: for actions that change the
+// panes or sessions being built.
+func (a *App) defer_(fn func()) { a.later = append(a.later, fn) }
+
+func chip(c *ui.Context, pal *palette, bg, fg ui.Color, fn func()) ui.Element {
+	return ui.Row(c).Height(hChip).Padding(0, 7).Gap(5).Radius(rRow).AlignItems(ui.Center).MinWidth(0).Shrink(1).MaxWidth(240).
+		Background(bg).TextColor(fg).Children(fn)
+}
+
+// closeFocused closes what the user is in: the viewer while it has the
+// keyboard, else the pane, or the session with its last pane.
+func (a *App) closeFocused() {
+	s := a.session(a.selected)
+	if s == nil {
+		return
+	}
+	if a.side.focused && a.viewOf(s) != nil {
+		a.closeView(s)
+		return
+	}
+	a.closePane(s, a.focusOf(s), true)
+}
+
+// otherWorkspacePanes tells that a workspace the session does not show
+// holds panes.
+func otherWorkspacePanes(s *proto.Session) bool {
+	for _, w := range s.Workspaces {
+		if w.N != s.Workspace && w.Panes > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// emptyWorkspace fills the pane area of a workspace that holds no pane:
+// a card as a pane's, which says so and opens one.
+func (a *App) emptyWorkspace(c *ui.Context, pal *palette, bar ui.TitleBar, shown float32, s *proto.Session) {
+	card := paned(ui.Column(c.Key("ws-empty")).Grow(1).MinHeight(0).Radius(rPane).Background(pal.card), pal).Clip().Bind(a.paneRef("card-ws-empty"))
+	// With the sidebar hidden, its buttons and the workspace strip are the
+	// way out of an empty workspace, as in a pane's header.
+	strip, compact := a.stripRoom(c, s, "ws-empty")
+	card.Children(func() {
+		ui.Row(c).Height(headerH).Shrink(0).AlignItems(ui.Center).Padding(0, 10, 0, a.chrome.headerPad+strip).DragWindow().Children(func() {
+			a.sidebarButtons(c, pal, bar, shown, s, strip > 0, compact)
+			oneLine(c, s.DisplayName(a.set.SessionName), fsBody, wSemibold).TextColor(pal.text)
+			ui.Spacer(c)
+			a.controlsRoom(c, 0)
+		})
+		ui.Column(c).Grow(1).MinHeight(0).Children(func() {
+			emptyBlock(c, pal, terminalIcon, locales.WorkspaceEmptyTitle(s.Workspace), locales.WorkspaceEmptyDetail(), false, func() {
+				if button(c, "ws-empty-new", locales.WorkspaceNewPane(), a.keys("pane.new"), true, pal) {
+					a.splitPane(s, "", "")
+				}
+			})
+		})
+	})
+}
+
+// autoSplitDown reports which side a split with no side asked takes on
+// the host's session (client.AutoSplitDown); ok is false while the host
+// has no client.
+func (h *host) autoSplitDown(sid, pane string) (down, ok bool) {
+	if h == nil || h.cl == nil {
+		return false, false
+	}
+	return h.cl.AutoSplitDown(sid, pane)
+}
+
+// minPaneCols and minPaneRows are the least a split leaves each half.
+const (
+	minPaneCols = client.MinPaneCols
+	minPaneRows = client.MinPaneRows
+)
+
+// cellSize is a terminal cell in DIPs, for the font, text size and display
+// scale it was worked out for (fontCell).
+type cellSize struct {
+	w, h  float32
+	key   ui.Font
+	line  float32
+	scale float32
+}
+
+// fontCell is a terminal cell in DIPs, worked out from the font as the
+// terminal sizes its own cells (the terminal plugin's view.layout): the
+// widest advance of printable ASCII, and the font's line height times the
+// line height setting, each rounded up to whole device pixels.
+func (a *App) fontCell(size, scale float32) (float32, float32) {
+	f := ui.Font{Family: a.termFamily(), Size: size, Weight: a.set.FontWeight}
+	if strings.TrimSpace(f.Family) == "" {
+		f.Family = "monospace"
+	}
+	if f.Size <= 0 {
+		f.Size = 13
+	}
+	if f.Weight <= 0 {
+		f.Weight = 400
+	}
+	f.Weight = min(max(f.Weight, 100), 900)
+	line := a.set.LineHeight
+	if line <= 0 {
+		line = 1
+	}
+	if scale <= 0 {
+		scale = 1
+	}
+	if a.cell.key == f && a.cell.line == line && a.cell.scale == scale {
+		return a.cell.w, a.cell.h
+	}
+	adv := float32(0)
+	for _, g := range ui.Shape(asciiPrintable, f) {
+		adv = max(adv, g.Advance)
+	}
+	m := f.Metrics()
+	cw := float32(max(math.Ceil(float64(adv*scale-0.05)), 1)) / scale
+	ch := float32(max(math.Ceil(float64((m.Ascent+m.Descent+m.LineGap)*line*scale-0.05)), 1)) / scale
+	a.cell = cellSize{w: cw, h: ch, key: f, line: line, scale: scale}
+	return cw, ch
+}
+
+// asciiPrintable is the text the terminal measures its cell's width over.
+const asciiPrintable = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+
+// displayScale is the display's scale: as the app last painted, or before
+// it painted, that of the display the window is on.
+func (a *App) displayScale() float32 {
+	if a.paintScale > 0 {
+		return a.paintScale
+	}
+	if a.screenScale == 0 {
+		a.screenScale = 1
+		x, y := a.win.Position()
+		for i, d := range mygo.Screen.Displays() {
+			b := d.Bounds
+			if i == 0 || x >= b.X && x < b.X+b.Width && y >= b.Y && y < b.Y+b.Height {
+				a.screenScale = float32(d.ScaleFactor)
+			}
+		}
+	}
+	return a.screenScale
+}
+
+// reportGrid tells host the pane area's size in cells, when it changed: the
+// box tuios's layout engine lays the panes out in while no TUI shows the
+// session. area is the pane area, in DIPs.
+//
+// The cell comes from the font (fontCell), the same in every frame and in
+// every run, so the grid is known from the first frame, before any pane
+// shows. Measured from a terminal's box over its grid, it waited for two
+// still frames: panes a script opened before that went into the daemon's
+// 80 by 24 box, and the cell measured varied with the frames (8.3 to 8.8
+// DIPs for one window), so a layout came out by timing (QM-009). A cell
+// measured between a resize and the grid that follows it also grew the
+// layouts placed by rectangles past the window (QA-072).
+func (a *App) reportGrid(c *ui.Context, h *host, area ui.Rect) {
+	if area.W <= 0 || area.H <= 0 || h == nil {
+		return
+	}
+	cw, ch := a.fontCell(a.set.FontSize*c.Zoom(), a.displayScale())
+	g := [2]int{int(area.W / cw), int(area.H / ch)}
+	a.gridSeen = g
+	if g == a.grid || h.cl == nil {
+		// Before its host connects, the grid goes as it does (sendGrid).
+		return
+	}
+	a.sendGrid(h, g)
+}
+
+// sendGrid tells host the grid g, as reportGrid last worked it out, or
+// that one for a zero g: as the host connects, which no frame may follow
+// while the window is out of sight.
+func (a *App) sendGrid(h *host, g [2]int) {
+	if g == ([2]int{}) {
+		g = a.gridSeen
+	}
+	if g == ([2]int{}) || h.cl == nil {
+		return
+	}
+	a.grid = g
+	a.callOn(h, "grid", proto.GridParams{Cols: g[0], Rows: g[1]}, func(err error) {
+		if err != nil && a.grid == g {
+			a.grid = [2]int{}
+		}
+	})
+}
+
+// paneLabel is a pane's number over it while the labels show (the prefix
+// and Q): 1 for the first pane, 0 for the tenth.
+func (a *App) paneLabel(c *ui.Context, pal *palette, s *proto.Session, id string) {
+	n := -1
+	for i := range s.Panes {
+		if s.Panes[i].ID == id {
+			n = (i + 1) % 10
+		}
+	}
+	if n < 0 || len(s.Panes) > 10 {
+		return
+	}
+	ui.Box(c.Key("label")).Absolute().Left(0).Top(0).Right(0).Bottom(0).Center().Children(func() {
+		ui.Text(c, strconv.Itoa(n)).FontSize(64).FontWeight(700).TextColor(pal.accentInk).
+			Padding(4, 28).Radius(18).Background(pal.accentFill)
+	})
+}

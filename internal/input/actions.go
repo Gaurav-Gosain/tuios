@@ -337,6 +337,12 @@ func (d *ActionDispatcher) Register(action string, handler ActionHandler) {
 
 // Dispatch executes the handler for a given action
 func (d *ActionDispatcher) Dispatch(action string, msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return d.dispatch(action, msg, o, true)
+}
+
+// dispatch is Dispatch. toDaemon false runs a daemon action's handler here
+// even when the daemon runs it (see OS.SendsDaemonAction).
+func (d *ActionDispatcher) dispatch(action string, msg tea.KeyPressMsg, o *app.OS, toDaemon bool) (*app.OS, tea.Cmd) {
 	handler, ok := d.handlers[action]
 	// A [[keybindings.command]] entry is an action of its own, named after
 	// the entry. It has no handler in the table: the entry says what to run.
@@ -364,6 +370,13 @@ func (d *ActionDispatcher) Dispatch(action string, msg tea.KeyPressMsg, o *app.O
 			o.OnAction(action)
 		}
 		if o.LearnBlocksAction(action) {
+			return o, nil
+		}
+		// The batch A keys go to the daemon, which runs them on its own
+		// state. A routed one (RunActionByName) runs here: the daemon sent it
+		// to this client because it does not run it itself.
+		if toDaemon && o.SendsDaemonAction(action) {
+			o.SendDaemonAction(action)
 			return o, nil
 		}
 		// Inside a scratch group a layout key acts on the group's panes, since

@@ -56,14 +56,14 @@ var (
 	// exported so the CLI completes exactly this set.
 	EventTypeNames = []string{
 		EventWindowCreated, EventWindowClosed, EventWindowExit, EventWindowRetitled,
-		EventWindowFocused, EventWindowMoved, EventWindowMinimized, EventWindowRestored,
+		EventWindowFocused, EventWindowForeground, EventWindowCwd, EventWindowMoved, EventWindowMinimized, EventWindowRestored,
 		EventWorkspaceSwitched, EventWorkspaceRenamed, EventLayoutChanged, EventAgentState, EventAgentSeen, EventAgentMessage,
 		EventOutput, EventBell, EventNotification, EventModeChanged,
 		EventSessionCreated, EventSessionClosed, EventSessionLabelled, EventClientSessionChanged, EventGap, EventAttention,
 		EventHostChanged, EventPrompt, EventCommandStarted, EventCommandFinished,
 		EventAgentActivity, EventTranscript, EventTransfer, EventTransferProgress, EventTransferFile,
 		EventDaemonUpgraded,
-		EventTML, EventTMLSurface, EventTaskClaimed, EventTaskFinished, EventTaskChanged, EventTaskDispatch,
+		EventTML, EventTMLSurface, EventTaskClaimed, EventTaskFinished, EventTaskChanged, EventTaskDispatch, EventFanVerdict, EventOptionSet,
 		EventKeepAwake, EventWorktreeRemoved,
 	}
 	// knownEventTypes are the event types a subscribe filter can name.
@@ -134,6 +134,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbTaskHeld, "claim-task named a card another pane holds. Nothing changed. Claim another with next, or wait for task-changed released."},
 	{ErrVerbNoTask, "The task card named does not exist in the session, or claim-task next found no card to take: every open card is held or blocked. The hint points at tuios task ls."},
 	{ErrVerbQueueFull, "The pane's delivery queue holds as many messages as [agents.queue] max allows. Nothing was queued. Wait for the agent to take one, or drop one with cancel-queued."},
+	{ErrVerbEditUnreviewed, "An allow for a held edit was refused because edit_sha did not name the digest of the body the hold serves. Nothing was answered and the hold runs on. Read the body with get-approval, or answer in the pane."},
 	{ErrVerbRiskUnacknowledged, "An allow for an approval that matches a risk rule was refused because risk_ack did not name exactly the rules it matched. Nothing was answered. Read the rules with get-approval, or answer in the pane."},
 	{ErrVerbAgentsDisabled, "The verb is an agent feature, and the agent features are off: [agents] enabled = false. Nothing was done. Set agents.enabled = true in the config to use it."},
 	{ErrVerbBusy, "The daemon had no room for the request now: other large requests held its memory, the pane has not read the last large input, or another copy writes the path a transfer-start names. Nothing was done. Try again when the other work ends."},
@@ -153,6 +154,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbInvalidTML, "The TML document does not parse or does not validate. Nothing was opened or changed. The error lists each problem with a JSON Pointer to the node and the fix. Check a document with tuios tml validate."},
 	{ErrVerbNoSurface, "No open TML surface has that id. It closed, or the id is wrong. list-windows names the surface of each TML window."},
 	{ErrVerbTooManySurfaces, "The caller holds as many open TML surfaces as it may: 8 for a pane, and 32 per session for the callers outside the panes. Nothing was opened. Close one with tml-close."},
+	{ErrVerbNoRowIDs, "pane-history was asked of a pane whose emulator gives its history rows no ids. Nothing was read."},
 	{ErrVerbInternal, "Unexpected server-side failure."},
 }
 

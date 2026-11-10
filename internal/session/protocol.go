@@ -199,6 +199,11 @@ const (
 	// (PluginUIPayload), to the clients that read MsgPluginApprovals. See
 	// plugin_ui.go.
 	MsgPluginUI
+	// MsgScrollColumns carries one workspace's scrolling layout columns as a
+	// client just shaped them, as an op the daemon applies and versions. A
+	// client sends it only to a daemon whose welcome set ScrollColumnOps. See
+	// scroll_columns.go.
+	MsgScrollColumns
 )
 
 // DaemonUpgradingPayload is the body of MsgDaemonUpgrading: the version the
@@ -288,6 +293,18 @@ type HelloPayload struct {
 	// attached to a session the daemon turns the ops off for every client
 	// there. See Session.SetLayoutTreeOps.
 	LayoutTreeOps bool `json:"layout_tree_ops,omitempty"`
+	// DaemonActions says the client sends the keymap actions that are an op
+	// on session state (daemonActions) to the daemon as an intent, and takes
+	// their result from the state push. The daemon runs those actions itself
+	// only while every attached client says so; for a client that predates
+	// it they are routed to it as before. See daemon_actions.go.
+	DaemonActions bool `json:"daemon_actions,omitzero"`
+	// ScrollColumnOps says the client sends its scrolling layout columns as
+	// MsgScrollColumns ops and takes the session's columns from every state.
+	// The daemon then keeps the columns out of its pushes. A client that
+	// predates it sends them in its pushes, which the daemon takes as before.
+	// See scroll_columns.go.
+	ScrollColumnOps bool `json:"scroll_column_ops,omitzero"`
 	// ScratchWorkspaces says the client shows a scratch group from its own
 	// workspace (see scratch_workspace.go). A client that predates it leaves
 	// it false, and while such a client is attached the session makes the
@@ -391,6 +408,13 @@ type WelcomePayload struct {
 	// the rail is shown as session state. A client that does not see it keeps
 	// its rail to itself, as every client did before.
 	SidebarOps bool `json:"sidebar_ops,omitzero"`
+	// DaemonActions says the daemon runs the actions of daemonActions itself
+	// when an attached client sent DaemonActions in its hello. A client that
+	// does not see it runs them in its own state, as before.
+	DaemonActions bool `json:"daemon_actions,omitzero"`
+	// ScrollColumnOps says the daemon reads MsgScrollColumns. A client that
+	// does not see it sends its columns in its pushes, as before.
+	ScrollColumnOps bool `json:"scroll_column_ops,omitzero"`
 	// RequestIDs says the daemon reads tagged frames and tags its answer to a
 	// tagged request with the same id (see Message.ReqID). A client that does
 	// not see it matches replies by message type, as every client did before.

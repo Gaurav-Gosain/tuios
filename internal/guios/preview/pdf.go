@@ -1,0 +1,365 @@
+package preview
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"errors"
+	"image"
+	"strconv"
+	"strings"
+)
+
+// Doc is a PDF document open for its pages. Its methods are safe from any
+// goroutine; Render runs as long as a page takes to draw, so call it off the
+// UI thread.
+type Doc interface {
+	// Pages is the page count.
+	Pages() int
+	// PageSize is page i's size in points, as it shows (its rotation
+	// applied), i from 0.
+	PageSize(i int) (w, h float64)
+	// Render draws page i widthPx pixels wide.
+	Render(ctx context.Context, i, widthPx int) (image.Image, error)
+	// Words is page i's text, laid out as on the page.
+	Words(ctx context.Context, i int) (string, error)
+	// Engine names what draws the pages, for the viewer's details.
+	Engine() string
+	Close()
+}
+
+// nativePDF opens a PDF with the platform's renderer: Quartz on macOS.
+var nativePDF func(path string) (Doc, error)
+
+// MaxPagePx bounds a page's width in pixels, zoomed in as far as it goes.
+const MaxPagePx = 4096
+
+// OpenPDF opens the PDF at path: with the platform's renderer where there
+// is one, else with poppler's tools.
+func OpenPDF(ctx context.Context, path string) (Doc, error) {
+	if nativePDF != nil {
+		d, err := nativePDF(path)
+		if err == nil {
+			return d, nil
+		}
+		if Tool("pdfinfo") == "" {
+			return nil, err
+		}
+	}
+	return openPoppler(ctx, path)
+}
+
+// popplerDoc draws pages with pdftoppm, one run a page, and reads their
+// sizes with one run of pdfinfo.
+type popplerDoc struct {
+	path  string
+	pages int
+	sizes [][2]float64 // by page; the last size stands for the pages past it
+}
+
+// maxSizedPages bounds the pages whose sizes pdfinfo lists; the pages past
+// them take the last page's size.
+const maxSizedPages = 5000
+
+func openPoppler(ctx context.Context, path string) (Doc, error) {
+	if Tool("pdftoppm") == "" {
+		return nil, ErrNoTool("pdftoppm")
+	}
+	// One run says the count and each page's size: pdfinfo stops at the
+	// last page of a shorter range.
+	out, err := run(ctx, 16<<20, "pdfinfo", "-f", "1", "-l", strconv.Itoa(maxSizedPages), path)
+	if err != nil {
+		if _, ok := err.(ErrNoTool); ok {
+			return nil, err
+		}
+		return nil, pdfError(out, err)
+	}
+	d := &popplerDoc{path: path}
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if rest, ok := strings.CutPrefix(line, "Pages:"); ok {
+			d.pages, _ = strconv.Atoi(strings.TrimSpace(rest))
+		}
+	}
+	if d.pages <= 0 {
+		return nil, ErrNoPages
+	}
+	d.sizes = popplerSizes(out, min(d.pages, maxSizedPages))
+	if len(d.sizes) == 0 {
+		d.sizes = [][2]float64{{612, 792}}
+	}
+	return d, nil
+}
+
+// pdfError is what the viewer says of a PDF poppler could not open.
+func pdfError(out []byte, err error) error {
+	s := strings.ToLower(string(out))
+	if strings.Contains(s, "password") || strings.Contains(s, "encrypt") {
+		return ErrLocked
+	}
+	return ErrUnreadable
+}
+
+// popplerSizes reads "Page N size: W x H pts" and "Page N rot: R" lines.
+func popplerSizes(out []byte, n int) [][2]float64 {
+	sizes := make([][2]float64, 0, n)
+	sc := bufio.NewScanner(bytes.NewReader(out))
+	for sc.Scan() {
+		f := strings.Fields(sc.Text())
+		if len(f) < 4 || f[0] != "Page" {
+			continue
+		}
+		page, err := strconv.Atoi(f[1])
+		if err != nil || page < 1 || page > n {
+			continue
+		}
+		switch f[2] {
+		case "size:":
+			if len(f) < 6 {
+				continue
+			}
+			w, _ := strconv.ParseFloat(f[3], 64)
+			h, _ := strconv.ParseFloat(f[5], 64)
+			for len(sizes) < page {
+				sizes = append(sizes, [2]float64{w, h})
+			}
+			sizes[page-1] = [2]float64{w, h}
+		case "rot:":
+			if r, _ := strconv.Atoi(f[3]); (r/90)%2 == 1 && page <= len(sizes) {
+				s := &sizes[page-1]
+				s[0], s[1] = s[1], s[0]
+			}
+		}
+	}
+	return sizes
+}
+
+func (d *popplerDoc) Pages() int     { return d.pages }
+func (d *popplerDoc) Engine() string { return "poppler" }
+func (d *popplerDoc) Close()         {}
+
+func (d *popplerDoc) PageSize(i int) (w, h float64) {
+	s := d.sizes[min(max(i, 0), len(d.sizes)-1)]
+	return s[0], s[1]
+}
+
+func (d *popplerDoc) Render(ctx context.Context, i, widthPx int) (image.Image, error) {
+	widthPx = min(max(widthPx, 16), MaxPagePx)
+	p := strconv.Itoa(i + 1)
+	// PPM, as pdftoppm writes it with no format named: no compression to
+	// make and undo, five times faster than PNG for a page.
+	out, err := run(ctx, 160<<20, "pdftoppm", "-f", p, "-l", p, "-scale-to-x", strconv.Itoa(widthPx), "-scale-to-y", "-1",
+		"-aa", "yes", "-aaVector", "yes", "-singlefile", d.path)
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	if err != nil {
+		return nil, ErrPageFailed
+	}
+	img, err := decodePPM(out)
+	if err != nil {
+		return nil, ErrPageFailed
+	}
+	return img, nil
+}
+
+func (d *popplerDoc) Words(ctx context.Context, i int) (string, error) {
+	p := strconv.Itoa(i + 1)
+	out, err := run(ctx, 1<<20, "pdftotext", "-f", p, "-l", p, "-layout", d.path, "-")
+	if err != nil {
+		return "", err
+	}
+	return strings.ToValidUTF8(string(out), ""), nil
+}
+
+// isPNM reports whether b starts as a Netpbm picture: P1 to P6.
+func isPNM(b []byte) bool {
+	return len(b) > 3 && b[0] == 'P' && b[1] >= '1' && b[1] <= '6' && (b[2] == ' ' || b[2] == '\n' || b[2] == '\r' || b[2] == '\t' || b[2] == '#')
+}
+
+// decodePNM reads any Netpbm picture: bitmaps, gray and colour, plain or
+// binary, of 8 or 16 bits.
+func decodePNM(b []byte) (*image.RGBA, error) {
+	kind := b[1]
+	pos := 2
+	field := func() (int, bool) {
+		for pos < len(b) {
+			c := b[pos]
+			if c == '#' {
+				for pos < len(b) && b[pos] != '\n' {
+					pos++
+				}
+				continue
+			}
+			if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+				pos++
+				continue
+			}
+			break
+		}
+		start := pos
+		for pos < len(b) && b[pos] >= '0' && b[pos] <= '9' {
+			pos++
+		}
+		if start == pos {
+			return 0, false
+		}
+		n, err := strconv.Atoi(string(b[start:pos]))
+		return n, err == nil && n >= 0
+	}
+	w, ok1 := field()
+	h, ok2 := field()
+	if !ok1 || !ok2 || w <= 0 || h <= 0 || w*h > 100_000_000 {
+		return nil, errors.New("bad PNM")
+	}
+	maxval := 1
+	if kind != '1' && kind != '4' {
+		var ok bool
+		if maxval, ok = field(); !ok || maxval <= 0 || maxval > 65535 {
+			return nil, errors.New("bad PNM")
+		}
+	}
+	chans := 1
+	if kind == '3' || kind == '6' {
+		chans = 3
+	}
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	scale := func(v int) byte {
+		if kind == '1' || kind == '4' {
+			if v != 0 {
+				return 0
+			}
+			return 255
+		}
+		return byte(v * 255 / maxval)
+	}
+	set := func(i int, vals [3]byte) {
+		p := img.Pix[i*4:]
+		p[0], p[1], p[2], p[3] = vals[0], vals[1], vals[2], 255
+	}
+	switch kind {
+	case '1':
+		// A plain bitmap's digits need no space between them.
+		for i := 0; i < w*h; i++ {
+			for pos < len(b) && b[pos] != '0' && b[pos] != '1' {
+				if b[pos] == '#' {
+					for pos < len(b) && b[pos] != '\n' {
+						pos++
+					}
+					continue
+				}
+				pos++
+			}
+			if pos >= len(b) {
+				return nil, errors.New("short PNM")
+			}
+			g := scale(int(b[pos] - '0'))
+			pos++
+			set(i, [3]byte{g, g, g})
+		}
+	case '2', '3':
+		for i := 0; i < w*h; i++ {
+			var v [3]byte
+			for c := 0; c < chans; c++ {
+				n, ok := field()
+				if !ok {
+					return nil, errors.New("short PNM")
+				}
+				v[c] = scale(min(n, maxval))
+			}
+			if chans == 1 {
+				v[1], v[2] = v[0], v[0]
+			}
+			set(i, v)
+		}
+	case '4':
+		pos++
+		stride := (w + 7) / 8
+		if len(b)-pos < stride*h {
+			return nil, errors.New("short PNM")
+		}
+		for y := 0; y < h; y++ {
+			for x := 0; x < w; x++ {
+				bit := b[pos+y*stride+x/8] >> (7 - x%8) & 1
+				g := scale(int(bit))
+				set(y*w+x, [3]byte{g, g, g})
+			}
+		}
+	default: // 5, 6
+		pos++
+		size := 1
+		if maxval > 255 {
+			size = 2
+		}
+		if len(b)-pos < w*h*chans*size {
+			return nil, errors.New("short PNM")
+		}
+		src := b[pos:]
+		for i := 0; i < w*h; i++ {
+			var v [3]byte
+			for c := 0; c < chans; c++ {
+				k := (i*chans + c) * size
+				n := int(src[k])
+				if size == 2 {
+					n = n<<8 | int(src[k+1])
+				}
+				v[c] = scale(min(n, maxval))
+			}
+			if chans == 1 {
+				v[1], v[2] = v[0], v[0]
+			}
+			set(i, v)
+		}
+	}
+	return img, nil
+}
+
+// decodePPM reads a binary PPM (P6, maxval 255) into an RGBA picture.
+func decodePPM(b []byte) (*image.RGBA, error) {
+	var fields [4]int
+	pos := 0
+	field := func() (int, bool) {
+		for pos < len(b) {
+			switch c := b[pos]; {
+			case c == '#':
+				for pos < len(b) && b[pos] != '\n' {
+					pos++
+				}
+			case c == ' ' || c == '\t' || c == '\n' || c == '\r':
+				pos++
+			default:
+				goto num
+			}
+		}
+		return 0, false
+	num:
+		start := pos
+		for pos < len(b) && b[pos] >= '0' && b[pos] <= '9' {
+			pos++
+		}
+		n, err := strconv.Atoi(string(b[start:pos]))
+		return n, err == nil
+	}
+	if len(b) < 2 || b[0] != 'P' || b[1] != '6' {
+		return nil, errors.New("not a PPM")
+	}
+	pos = 2
+	for k := 1; k < 4; k++ {
+		n, ok := field()
+		if !ok {
+			return nil, errors.New("short PPM header")
+		}
+		fields[k] = n
+	}
+	w, h, maxval := fields[1], fields[2], fields[3]
+	pos++ // the one whitespace after maxval
+	if maxval != 255 || w <= 0 || h <= 0 || len(b)-pos < w*h*3 {
+		return nil, errors.New("bad PPM")
+	}
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	src := b[pos:]
+	dst := img.Pix
+	for p, q := 0, 0; p < w*h*3; p, q = p+3, q+4 {
+		dst[q], dst[q+1], dst[q+2], dst[q+3] = src[p], src[p+1], src[p+2], 255
+	}
+	return img, nil
+}

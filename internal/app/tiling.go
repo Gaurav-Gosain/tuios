@@ -260,100 +260,29 @@ func (m *OS) tileAllWindows() {
 		return
 	}
 
-	// Try to use BSP tree if available
+	// The tree of the workspace, brought in line with the panes on it: the
+	// panes no longer here leave it with the splits around them kept, since
+	// rebuilding the tree would throw the arrangement away whenever a pane
+	// closed while tiling was off. A tree left empty is made again with the
+	// configured scheme. The panes it lacks go in by layout.InsertMissing,
+	// the rule every client places such a pane by.
+	visibleIDs := make([]int, len(visibleWindows))
+	for i, win := range visibleWindows {
+		visibleIDs[i] = m.GetWindowIntID(win.ID)
+	}
 	tree := m.WorkspaceTrees[m.CurrentWorkspace]
-
-	// Check if tree is valid and in sync with visible windows
 	if tree != nil && !tree.IsEmpty() {
-		// First, check if tree has any stale windows (windows not in visibleWindows)
-		treeIDs := tree.GetAllWindowIDs()
-		visibleIDs := make(map[int]bool)
-		for _, win := range visibleWindows {
-			intID := m.GetWindowIntID(win.ID)
-			visibleIDs[intID] = true
-			if verboseLog() {
-				m.LogInfo("BSP: Visible window %s has int ID %d", shortID(win.ID), intID)
-			}
-		}
-		m.LogInfo("BSP: Tree has IDs: %v, visible IDs: %v", treeIDs, visibleIDs)
-
-		hasStaleWindows := false
-		for _, id := range treeIDs {
-			if !visibleIDs[id] {
-				hasStaleWindows = true
-				m.LogInfo("BSP: Tree has stale window ID %d, will rebuild", id)
-				break
-			}
-		}
-
-		// Drop the stale windows and keep the splits around them. Rebuilding
-		// the whole tree here would throw the arrangement away whenever a pane
-		// closed while tiling was off.
-		if hasStaleWindows {
-			m.LogInfo("BSP: Removing stale windows from the tree")
-			for _, id := range treeIDs {
-				if !visibleIDs[id] {
-					tree.RemoveWindow(id)
-				}
-			}
-			if tree.IsEmpty() {
-				m.WorkspaceTrees[m.CurrentWorkspace] = nil
-				tree = nil
-			}
+		m.LogInfo("BSP: Tree has IDs: %v, visible IDs: %v", tree.GetAllWindowIDs(), visibleIDs)
+		if tree.PruneTo(visibleIDs) && tree.IsEmpty() {
+			m.WorkspaceTrees[m.CurrentWorkspace] = nil
+			tree = nil
 		}
 	}
-
-	// If no tree or tree was cleared, create fresh one
 	if tree == nil || tree.IsEmpty() {
 		m.LogInfo("BSP: Creating fresh tree for %d windows", len(visibleWindows))
 		tree = m.GetOrCreateBSPTree()
-
-		bounds := m.GetBSPBounds()
-		var lastInsertedID = 0
-
-		for i, win := range visibleWindows {
-			windowIntID := m.GetWindowIntID(win.ID)
-			tree.InsertWindow(windowIntID, lastInsertedID, layout.SplitNone, 0.5, bounds, m.separatorGap())
-			lastInsertedID = windowIntID
-			m.LogInfo("BSP: Added window %d (int ID %d) with target %d", i+1, windowIntID, lastInsertedID)
-		}
-
-		m.ApplyBSPLayout()
-		return
 	}
-
-	// Tree exists and is valid. Check if all visible windows are in it
-	allInTree := true
-	for _, win := range visibleWindows {
-		windowIntID := m.GetWindowIntID(win.ID)
-		if !tree.HasWindow(windowIntID) {
-			allInTree = false
-			break
-		}
-	}
-
-	if allInTree {
-		m.ApplyBSPLayout()
-		return
-	}
-
-	// Some windows missing from tree: add them individually
-	m.LogInfo("BSP: Adding missing windows to existing tree")
-
-	for _, win := range visibleWindows {
-		windowIntID := m.GetWindowIntID(win.ID)
-		if !tree.HasWindow(windowIntID) {
-			existingIDs := tree.GetAllWindowIDs()
-			targetIntID := 0
-			if len(existingIDs) > 0 {
-				targetIntID = existingIDs[len(existingIDs)-1]
-			}
-
-			bounds := m.GetBSPBounds()
-			tree.InsertWindow(windowIntID, targetIntID, layout.SplitNone, 0.5, bounds, m.separatorGap())
-			m.LogInfo("BSP: Added missing window (int ID %d) with target %d", windowIntID, targetIntID)
-		}
-	}
+	tree.InsertMissing(visibleIDs, m.GetBSPBounds(), m.separatorGap())
 	m.ApplyBSPLayout()
 }
 
@@ -482,14 +411,15 @@ func (m *OS) bringPanesIntoView() {
 	if width <= 0 || height <= 0 {
 		return
 	}
+	region := layout.Rect{X: left, Y: top, W: width, H: height}
 	for _, w := range m.Windows {
 		// A floating pane was never under the tiler, and where it sits is where
 		// its user dragged it, edge and all.
 		if w.Minimized || w.IsFloating {
 			continue
 		}
-		x := min(max(w.X, left), left+max(width-w.Width, 0))
-		y := min(max(w.Y, top), top+max(height-w.Height, 0))
+		r := layout.IntoView(layout.Rect{X: w.X, Y: w.Y, W: w.Width, H: w.Height}, region)
+		x, y := r.X, r.Y
 		if x == w.X && y == w.Y {
 			continue
 		}

@@ -1,0 +1,5 @@
+build/
+resources/fonts/*.ttf
+resources/darwin-*/
+resources/linux-*/
+resources/windows-*/

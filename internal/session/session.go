@@ -944,6 +944,10 @@ type SessionState struct {
 	// Nil means unstated, and a client that receives nil keeps the columns it
 	// has, which is the behaviour that predates the field.
 	WorkspaceScrollColumns map[int][]SerializedScrollColumn `json:"workspace_scroll_columns,omitempty"`
+	// columnsByOp marks a push from a client that sends the columns as
+	// MsgScrollColumns ops: the merge keeps the session's columns over the
+	// push's. Set by the daemon on receipt, never on the wire.
+	columnsByOp bool
 }
 
 // SerializedScrollColumn is one column of the scrolling layout.
@@ -1243,6 +1247,9 @@ type PTY struct {
 	// noClients is set while no TUI client shows the pane's session. A fit
 	// lease sizes the pane only then. See pane_lease.go.
 	noClients atomic.Bool
+	// leadOwner is the viewer that holds latest in the pane's session, ""
+	// when none does. Guarded by streamMu. See viewer_latest.go.
+	leadOwner string
 	// leaseAt is when a lease last resized the pane, and leaseTimer the
 	// resize put off until leaseInterval has passed since. Both guarded by
 	// streamMu.
@@ -2905,7 +2912,7 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 				return
 			}
 			if pty.place.announce(raw) {
-				pty.owner().publishPlaceMove()
+				pty.owner().noteCwdMove(pty, pty.place.Cwd())
 			}
 		},
 		// Parked rather than applied: this fires with the terminal lock held, and
@@ -2969,6 +2976,14 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 		}
 		if response := kittyAnimationRefusal(cmd, remotePane, pty.owner().kittyAnimation.Load()); response != nil {
 			terminal.WriteResponse(response)
+		}
+		// The daemon's grid makes room for the image as the client's
+		// terminal does, so a snapshot of it (an attach, a guios resize)
+		// keeps the text under the picture where the client drew it, and
+		// shows where the picture is. The ghostty backend has no such
+		// method and keeps its grid as before.
+		if r, ok := terminal.(interface{ ReserveKittyPlacement(*vt.KittyCommand) }); ok {
+			r.ReserveKittyPlacement(cmd)
 		}
 		// With no client attached to this pane, nothing will read the object
 		// a shared memory frame names. See kitty_medium.go.
@@ -3795,6 +3810,9 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 			accepted = false
 		}
 		retainDaemonExclusive(state, prev)
+		if state.columnsByOp {
+			state.WorkspaceScrollColumns = prev.WorkspaceScrollColumns
+		}
 		// While a client too old for scratch workspaces is attached, a push
 		// cannot put the focus on one: that client would draw it nowhere.
 		if s.scratchWSOff {
@@ -4059,6 +4077,7 @@ func (s *Session) emitLifecycleLocked(before lifecycleSnapshot) {
 	// go here, in the change that closed it. See releasedTaskEvents.
 	events = append(events, releasedTaskEvents(s, s.state, events, time.Now().UnixNano())...)
 	moving := s.movingWindow
+	events = append(events, endedConversations(before, events, moving, s.Name())...)
 	s.movingWindow = ""
 	for _, ev := range events {
 		if moving != "" && ev.Window == moving {

@@ -1,0 +1,495 @@
+package main
+
+import (
+	"log"
+	"math"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
+
+	"github.com/Gaurav-Gosain/mygo/ui"
+
+	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
+	"github.com/Gaurav-Gosain/tuios/internal/guios/editreview"
+	"github.com/Gaurav-Gosain/tuios/internal/guios/proto"
+	"github.com/Gaurav-Gosain/tuios/internal/integration"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
+)
+
+// Held edits: the data path behind the edit card.
+//
+// A held Edit, MultiEdit or Write is marked held_edit on its item
+// (session.AttentionItem.HeldEdit), and the daemon allows it only when the
+// reply names edit_sha, the digest get-approval serves with the body
+// (edit_unreviewed otherwise). The item does not carry the digest.
+//
+// This file fetches the body, checks its digest, and turns it into the lines
+// the card draws (internal/guios/editreview): wrapped to the card's width,
+// never clipped, with tabs as spaces, trailing spaces marked, and a head on
+// each hunk that says what it does. The card draws those lines and nothing
+// else for the body, and reports every span it drew. An allow goes only once
+// every line was reported at the width the card draws now: a card that shows
+// part of a long body offers no allow until the person scrolled through all
+// of it.
+//
+// The card calls, on each frame it shows an edit item:
+//
+//	view := a.ckEditView(it, width) // fetches on the first call for a hold
+//	switch {
+//	case view.Loading: // draw "Reading the edit..."
+//	case view.Err != "": // draw view.Err and offer the pane
+//	default:
+//		// draw view.Lines[from:to] by Kind, one per row, as given
+//		a.ckEditShown(it, view.SHA, width, from, to)
+//		// view.Complete says whether an allow may be offered
+//	}
+//
+// A width change starts the count again, since the lines wrap differently.
+
+// ckEdit is the body get-approval served for one hold.
+type ckEdit struct {
+	requestID string
+	// sha is the edit_sha get-approval served with body, checked against
+	// the body's own digest.
+	sha     string
+	loading bool
+	body    *integration.EditBody
+	err     string
+	// lines and review are the body drawn at review's width, and which of
+	// those lines the card reported as shown.
+	lines  []editreview.Line
+	review *editreview.Review
+}
+
+// CkEditView is what the card draws for a held edit.
+type CkEditView struct {
+	Loading bool
+	// Err is why there is no body to draw. The card then sends the person
+	// to the pane.
+	Err string
+	// Lines are the body at the width asked for. The card draws them as they
+	// are: each fits the width and holds no tab or line break.
+	Lines []editreview.Line
+	// SHA is the edit_sha get-approval served, the body's own digest. The
+	// card passes it back to ckEditShown.
+	SHA string
+	// Complete says every line was shown at this width, so an allow may be
+	// offered. Left is how many lines were not shown yet.
+	Complete bool
+	Left     int
+}
+
+// ckEditTool reports whether tool edits a file (Edit, MultiEdit, Write):
+// its target is a path, never a command.
+func ckEditTool(tool string) bool { return slices.Contains(integration.EditTools, tool) }
+
+// ckIsEdit reports whether an item is a held edit.
+func ckIsEdit(it session.AttentionItem) bool {
+	return ckHeld(it) && it.Kind == session.AttentionApproval && it.HeldEdit
+}
+
+// ckEditView is the held edit it as a card of width cells draws it, and
+// starts the fetch the first time it is asked about a hold. It must be called
+// on the UI goroutine.
+func (a *App) ckEditView(it session.AttentionItem, width int) CkEditView {
+	if !ckIsEdit(it) {
+		return CkEditView{Err: "This is not a held edit."}
+	}
+	e := a.ck.edit
+	if e == nil || e.requestID != it.RequestID {
+		a.ckFetchEdit(it)
+		e = a.ck.edit
+	}
+	switch {
+	case e.loading:
+		return CkEditView{Loading: true}
+	case e.err != "":
+		return CkEditView{Err: e.err}
+	}
+	if e.review == nil || e.review.Width() != width {
+		e.lines = editreview.Lines(*e.body, width)
+		e.review = editreview.New(len(e.lines), width)
+	}
+	if e.lines == nil {
+		return CkEditView{Err: "The card is too narrow to show the edit. Open the pane to answer it."}
+	}
+	return CkEditView{Lines: e.lines, SHA: e.sha, Complete: e.review.Complete(), Left: e.review.Left()}
+}
+
+// ckEditShown records that the card drew lines from up to, not including,
+// to of the view at width. A span for another hold, another body or another
+// width counts for nothing.
+func (a *App) ckEditShown(it session.AttentionItem, sha string, width, from, to int) {
+	if e := a.ck.edit; e != nil && e.body != nil && e.requestID == it.RequestID && sha == e.sha {
+		e.review.Shown(width, from, to)
+	}
+}
+
+// ckEditAllowSHA is the edit_sha an allow of it carries, and false when no
+// allow may go: the body was not fetched or its digest did not check, or not
+// every line of it was shown at the width the card draws now.
+func (a *App) ckEditAllowSHA(it session.AttentionItem) (string, bool) {
+	e := a.ck.edit
+	if e == nil || e.body == nil || e.requestID != it.RequestID || !e.review.Complete() {
+		return "", false
+	}
+	return e.sha, true
+}
+
+// ckFetchEdit reads the body of a held edit with get-approval. The body is
+// kept only when its own digest is the edit_sha served with it and it is
+// showable, so the card never draws a body the allow would not name.
+func (a *App) ckFetchEdit(it session.AttentionItem) {
+	e := &ckEdit{requestID: it.RequestID, loading: true}
+	a.ck.edit = e
+	// A new body starts at its top.
+	a.ck.editScroll.Y = 0
+	cl := a.cockpitClient()
+	if cl == nil {
+		e.loading, e.err = false, "Not connected to the daemon."
+		return
+	}
+	params := map[string]any{"request_id": it.RequestID, "session": it.Session}
+	go func() {
+		// get-approval only reads, so it takes no nonce: a call that sent
+		// one was refused, and the card said it could not read the edit.
+		raw, err := cl.Verb("get-approval", params, false)
+		var d session.ApprovalDetail
+		if err == nil {
+			err = jsonUnmarshal(raw, &d)
+		}
+		a.update(func() {
+			if a.ck.edit != e {
+				return
+			}
+			e.loading = false
+			switch {
+			case err != nil:
+				log.Printf("Warning: get-approval %s: %v", it.RequestID, err)
+				e.err = "Could not read the edit. Open the pane to answer it."
+			case d.Edit == nil || d.EditSHA == "" || d.Edit.Digest() != d.EditSHA || !d.Edit.Showable():
+				e.err = "The edit changed. Open the pane to answer it."
+			default:
+				e.body, e.sha = d.Edit, d.EditSHA
+			}
+			a.refreshCockpit()
+		})
+	}()
+}
+
+// ckEditRows is the most rows of a held edit's body the card shows at once;
+// a longer body scrolls in them.
+const ckEditRows = 14
+
+// ckEditMinRows is the fewest rows the body gets in a short window, and
+// ckEditChrome the room the card's head, hint and answers take around it.
+const (
+	ckEditMinRows = 4
+	ckEditChrome  = 150
+)
+
+// ckEditBlock draws a held edit's body in the card: the lines editreview
+// gives for the card's width, one per row, as given, with the taken out
+// text on a red wash and the put in text on a green one, at 12 %, and a
+// mark beside each row that goes on from the row above. It reports to the
+// review exactly the rows that are inside both the body's own viewport and
+// the card's, so Allow comes only after the person had every line on
+// screen at this width.
+func (a *App) ckEditBlock(c *ui.Context, pal *palette, it session.AttentionItem) {
+	ck := &a.ck
+	mono := a.termFamily()
+	rowH := float32(fsCode) * 1.5
+	// The text column's width in cells: the box as the last frame laid it
+	// out, less its padding and the gutter of continuation marks, over one
+	// cell of the code font.
+	cell, _ := c.MeasureText(0, ui.Span{Text: "0000000000", Size: fsCode, Font: mono})
+	cell /= 10
+	width := 0
+	if bw := ck.editBoxW; bw > 0 && cell > 0 {
+		width = int((bw - 2*sp3 - ckEditGutter) / cell)
+	}
+	view := a.ckEditView(it, width)
+	if e := ck.edit; e != nil && e.requestID == it.RequestID && e.body != nil {
+		// Kept for the card once the hold ends (ckEndedEdit).
+		if ck.keptEdits == nil || len(ck.keptEdits) > 32 {
+			ck.keptEdits = map[string]*integration.EditBody{}
+		}
+		ck.keptEdits[ckPromptKey(it)] = e.body
+	}
+	// A Write's head says how it acts on the file: it is the card's words,
+	// not the file's, so it reads above the block, as text, and the block
+	// holds only the file (Mac round 4, visual S3). Its rows count as shown
+	// with the first row of the body.
+	write := false
+	if e := ck.edit; e != nil && e.requestID == it.RequestID && e.body != nil {
+		write = e.body.Tool == "Write"
+	}
+	leadOf := func(v CkEditView) int {
+		n := 0
+		for write && n < len(v.Lines) && v.Lines[n].Kind == editreview.KindHead {
+			n++
+		}
+		return n
+	}
+	if lead := leadOf(view); lead > 0 {
+		var words []string
+		for _, l := range view.Lines[:lead] {
+			words = append(words, strings.TrimSpace(l.Text))
+		}
+		ui.Text(c, strings.Join(words, " ")).FontSize(fsBody).TextColor(pal.textMuted)
+	}
+	box := ui.Column(c.Key("edit-box")).Radius(rControl).Background(ckCodeBg(pal)).Clip()
+	b := box.Bounds()
+	if b.W != ck.editBoxW {
+		// The box has a new width: count at it in this frame. With the
+		// last frame's width, the first frame the box had a width drew
+		// "too narrow" and asked for no frame, so a short edit was counted
+		// a frame later than its body showed, and in a window that builds
+		// frames only on input it kept its Allow hidden (Mac round 5,
+		// visual M1).
+		ck.editBoxW = b.W
+		width = 0
+		if b.W > 0 && cell > 0 {
+			width = int((b.W - 2*sp3 - ckEditGutter) / cell)
+		}
+		view = a.ckEditView(it, width)
+	}
+	lead := leadOf(view)
+	box.Children(func() {
+		switch {
+		case b.W <= 0:
+			// The first frame: the width is known in the next one.
+			c.AnimationFrame()
+			ui.Box(c).Height(rowH)
+		case view.Loading:
+			ui.Text(c, locales.CockpitEditReading()).FontSize(fsSmall).TextColor(pal.textMuted).Padding(sp2, sp3)
+		case view.Err != "":
+			ui.Text(c, view.Err).FontSize(fsSmall).TextColor(pal.textMuted).Padding(sp2, sp3).MaxLines(3)
+		default:
+			n := len(view.Lines) - lead
+			// As many rows as fit in the room the card may take, with its
+			// head and answers: the tab above gives way down to its least
+			// height. The body then scrolls inside the card rather than the
+			// card around a body taller than it.
+			// The room around the body is the card's, less the body, as the
+			// last frame laid them out: a guess at it gave a MultiEdit at
+			// 1100x700 four rows and hid Allow under a card that had room.
+			rows := ckEditRows
+			if room := ck.tabH + ck.gapH + ck.cardView.H - ck.tabMin; ck.cardView.H > 0 {
+				chrome := float32(ckEditChrome)
+				if lb := ck.editLast[0]; ck.cardH > 0 && lb.H > 0 && ck.cardH > lb.H {
+					chrome = ck.cardH - lb.H
+				}
+				rows = max(ckEditMinRows, min(ckEditRows, int((room-chrome)/rowH)))
+			}
+			sc := ui.Scroll(c.Key("edit-body")).TrackScroll(&ck.editScroll).Height(float32(min(n, rows)) * rowH)
+			// The rows on screen: inside the body's viewport, and inside
+			// the card's, which may scroll the body itself out of sight.
+			vb := sc.Bounds()
+			top, bottom := vb.Y, vb.Y+vb.H
+			if cv := ck.cardView; cv.H > 0 {
+				top, bottom = max(top, cv.Y), min(bottom, cv.Y+cv.H)
+			}
+			// A row's height as the frame laid the rows out: the content's
+			// height over its rows, so the rows counted are the ones drawn
+			// however the text sized them.
+			step := rowH
+			if total := ck.editScroll.MaxY + vb.H; vb.H > 0 && n > 0 && total > 0 {
+				step = total / float32(n)
+			}
+			if vb.H <= 0 || vb != ck.editLast[0] || ck.cardView != ck.editLast[1] {
+				// The bounds are the last frame's: while the body or the
+				// card still moves, draw again, or the rows the settled
+				// layout shows would count only once something else
+				// redraws the card.
+				ck.editLast = [2]ui.Rect{vb, ck.cardView}
+				// Invalidate in a build schedules no frame; this does.
+				c.AnimationFrame()
+			}
+			if vb.H > 0 && bottom > top {
+				// A row counts only when the whole of it is on screen.
+				from := int(math.Ceil(float64((top-vb.Y+ck.editScroll.Y)/step) - 0.01))
+				to := int((bottom - vb.Y + ck.editScroll.Y + 0.5) / step)
+				// The rows above the block count with the body's first.
+				if from > 0 {
+					from += lead
+				}
+				a.ckEditShown(it, view.SHA, width, from, min(to, n)+lead)
+			}
+			sc.Children(func() {
+				// The rows take the box's padding inside their wash, so a
+				// changed line's colour runs to the box's edges (Mac round
+				// 2, visual S5).
+				ui.Column(c).Children(func() {
+					for i := lead; i < len(view.Lines); i++ {
+						l := view.Lines[i]
+						ckEditRow(c, pal, mono, rowH, l)
+					}
+				})
+			})
+			if n > rows && ck.editScroll.Y < ck.editScroll.MaxY-0.5 {
+				// More below: the cut edge fades, so it reads as cut.
+				ui.Box(c.Key("edit-fade")).Absolute().Left(0).Right(0).Bottom(0).Height(24).PassThrough().
+					LinearGradient(ui.LinearGradient{Angle: 180, From: ckCodeBg(pal).Alpha(0), To: ckCodeBg(pal)})
+			}
+		}
+	})
+	// The count after this frame's rows were reported, as the answers
+	// under it read it.
+	view = a.ckEditView(it, width)
+	if !view.Loading && view.Err == "" && !view.Complete && view.Left > 0 {
+		// Why there is no Allow yet: the person has not seen all of it.
+		ui.Text(c, locales.CockpitEditLeft(view.Left)).FontSize(fsSmall).TextColor(pal.textMuted)
+	}
+}
+
+// ckEditGutter is the room left of an edit's rows for the continuation mark.
+const ckEditGutter = 14
+
+// ckEditRow is one row of a held edit's body.
+func ckEditRow(c *ui.Context, pal *palette, mono string, rowH float32, l editreview.Line) {
+	bg := ui.Transparent
+	fg := pal.text
+	switch l.Kind {
+	case editreview.KindOld:
+		bg = pal.danger.Alpha(0.12)
+	case editreview.KindNew:
+		bg = pal.done.Alpha(0.12)
+	case editreview.KindHead:
+		fg = pal.textMuted
+	case editreview.KindNote:
+		fg = pal.textFaint
+	}
+	ui.Row(c).Height(rowH).Padding(0, sp3).AlignItems(ui.Center).Background(bg).Children(func() {
+		ui.Box(c).Width(ckEditGutter).Shrink(0).Children(func() {
+			if l.Cont {
+				ui.Text(c, "↳").FontSize(fsCaption).TextColor(pal.textFaint)
+			}
+		})
+		t := ui.Text(c, l.Text).Font(mono).FontSize(fsCode).TextColor(fg).NoWrap()
+		if l.Kind == editreview.KindHead {
+			t.Font("").FontSize(fsSmall).FontWeight(wSemibold)
+		}
+	})
+}
+
+// ckEditTitle is what the card's title says about a held edit: the verb and
+// the file's name ("Edit backoff.go"), the folder it is in, shown relative
+// to the agent's folder when it is inside it and from home otherwise, and
+// the size of the change once the body is read: "+3 −1" for an Edit,
+// "3 edits · +5 −2" for a MultiEdit, "40 lines" for a Write. path is the
+// path the item names; the body's path wins once it is read.
+func (a *App) ckEditTitle(it session.AttentionItem, tool, path, cwd string) (title, folder, size string) {
+	var body *integration.EditBody
+	if e := a.ck.edit; e != nil && e.requestID == it.RequestID && e.body != nil {
+		body = e.body
+		tool, path = body.Tool, body.Path
+	} else if kept := a.ckKeptEdit(it); kept != nil {
+		body = kept
+		tool, path = body.Tool, body.Path
+	}
+	dir, file := filepath.Split(filepath.Clean(path))
+	if file == "" || file == "." {
+		file, dir = path, ""
+	}
+	switch tool {
+	case "Write":
+		title = locales.CockpitWriteFile(file)
+	case "MultiEdit":
+		// The rows and the pane chip say "Allow MultiEdit": one verb
+		// for one action (Mac round 3, visual S3).
+		title = locales.CockpitMultiEditFile(file)
+	default:
+		title = locales.CockpitEditFile(file)
+	}
+	dir = strings.TrimSuffix(dir, "/")
+	if cwd = strings.TrimSuffix(cwd, "/"); cwd != "" && (dir == cwd || strings.HasPrefix(dir, cwd+"/")) {
+		dir = strings.TrimPrefix(strings.TrimPrefix(dir, cwd), "/")
+	} else if dir != "" {
+		dir = proto.ShortDir(dir)
+	}
+	if dir != "" {
+		// "retry/", so the folder does not read as a second name.
+		folder = dir + "/"
+	}
+	if body == nil {
+		return title, folder, ""
+	}
+	lines := func(s string) int {
+		if s == "" {
+			return 0
+		}
+		return strings.Count(strings.TrimSuffix(s, "\n"), "\n") + 1
+	}
+	if tool == "Write" {
+		n := 0
+		for _, h := range body.Hunks {
+			n += lines(h.New)
+		}
+		return title, folder, locales.CockpitEditLines(n)
+	}
+	added, removed := 0, 0
+	for _, h := range body.Hunks {
+		added += lines(h.New)
+		removed += lines(h.Old)
+	}
+	size = "+" + strconv.Itoa(added) + " −" + strconv.Itoa(removed)
+	if len(body.Hunks) > 1 {
+		size = locales.CockpitEditCount(len(body.Hunks)) + " · " + size
+	}
+	return title, folder, size
+}
+
+// ckKeptEdit is the body of the held edit it was, once its hold ended, or
+// nil.
+func (a *App) ckKeptEdit(it session.AttentionItem) *integration.EditBody {
+	if !a.ckHoldEnded(it) {
+		return nil
+	}
+	return a.ck.keptEdits[ckPromptKey(it)]
+}
+
+// ckEndedEditRows is how many rows of its body an edit whose hold ended
+// keeps on its card.
+const ckEndedEditRows = 4
+
+// ckEndedEdit draws the body of an edit whose hold ended, read only: its
+// first rows and how many more, so the person still sees what the edit was
+// without opening the pane (Mac round 4, workflow S2). It reports whether
+// it drew one.
+func (a *App) ckEndedEdit(c *ui.Context, pal *palette, it session.AttentionItem) bool {
+	body := a.ckKeptEdit(it)
+	if body == nil {
+		return false
+	}
+	ck := &a.ck
+	mono := a.termFamily()
+	rowH := float32(fsCode) * 1.5
+	cell, _ := c.MeasureText(0, ui.Span{Text: "0000000000", Size: fsCode, Font: mono})
+	cell /= 10
+	width := editreview.MinWidth
+	if bw := ck.editBoxW; bw > 0 && cell > 0 {
+		width = max(width, int((bw-2*sp3-ckEditGutter)/cell))
+	}
+	var rows []editreview.Line
+	for _, l := range editreview.Lines(*body, width) {
+		if l.Kind != editreview.KindHead {
+			rows = append(rows, l)
+		}
+	}
+	if len(rows) == 0 {
+		return false
+	}
+	box := ui.Column(c.Key("edit-box")).Radius(rControl).Background(ckCodeBg(pal)).Clip()
+	ck.editBoxW = box.Bounds().W
+	box.Children(func() {
+		for _, l := range rows[:min(len(rows), ckEndedEditRows)] {
+			ckEditRow(c, pal, mono, rowH, l)
+		}
+	})
+	if left := len(rows) - ckEndedEditRows; left > 0 {
+		ui.Text(c, locales.CockpitMore(left)).FontSize(fsSmall).TextColor(pal.textMuted)
+	}
+	return true
+}

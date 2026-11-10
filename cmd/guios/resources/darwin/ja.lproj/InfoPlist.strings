@@ -1,0 +1,3 @@
+"NSMicrophoneUsageDescription" = "guios で実行中のプログラムがマイクを使おうとしています。";
+"NSCameraUsageDescription" = "guios で実行中のプログラムがカメラを使おうとしています。";
+"NSAppleEventsUsageDescription" = "guios で実行中のプログラムが他のアプリを操作しようとしています。";

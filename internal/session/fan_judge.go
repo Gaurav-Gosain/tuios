@@ -187,6 +187,9 @@ func (d *Daemon) verbSetFanVerdict(cs *connState, params json.RawMessage) (any, 
 			}
 			return nil
 		})
+		// Each attempt's session hears it, so a view of the fan reads the
+		// comparison again with no poll.
+		d.events.publish(streamEvent{Type: EventFanVerdict, Session: s.Name(), Title: p.Pick})
 	}
 	return map[string]any{"type": "fan_verdict", "group": info.Group, "pick": p.Pick, "by": by, "attempts": names}, nil
 }

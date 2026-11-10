@@ -23,8 +23,11 @@ func (s *Session) SetHostShownProbe(fn func() bool) {
 }
 
 // paneHasFocus reports whether windowID is the pane keys go to on a screen
-// someone could be looking at.
+// someone could be looking at, or a pane a stream shows focused.
 func (s *Session) paneHasFocus(windowID string) bool {
+	if s.viewerFocusOn(windowID) {
+		return true
+	}
 	probe := s.hostShown.Load()
 	if probe == nil || !(*probe)() {
 		return false
@@ -74,7 +77,12 @@ func (p *PTY) noteFocusReporting(on bool) {
 // sessionShown reports whether a session has an attached TUI client whose host
 // terminal has not reported losing focus. A terminal that never reports focus
 // counts as shown, as it does for sessionHostFocus.
+// A stream that shows one of its panes focused counts as such a client
+// (viewer_focus.go).
 func (d *Daemon) sessionShown(sessionID string) bool {
+	if s := d.manager.GetSessionByID(sessionID); s != nil && s.viewerFocusOn("") {
+		return true
+	}
 	d.clientsMu.RLock()
 	defer d.clientsMu.RUnlock()
 	for _, cs := range d.clients {

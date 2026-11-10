@@ -1,0 +1,3 @@
+"NSMicrophoneUsageDescription" = "在 guios 中运行的程序想要使用麦克风。";
+"NSCameraUsageDescription" = "在 guios 中运行的程序想要使用摄像头。";
+"NSAppleEventsUsageDescription" = "在 guios 中运行的程序想要控制其他应用。";

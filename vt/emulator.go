@@ -56,6 +56,9 @@ type Emulator struct {
 	// rather than on a Screen.
 	cursorStyle  CursorStyle
 	cursorSteady bool
+	// cursorStyled says a guest has sent DECSCUSR, or a snapshot restored a
+	// shape one sent. See CursorStyleSet.
+	cursorStyled bool
 
 	// Character sets, and the designator byte each was selected by. The sets
 	// themselves are maps and cannot be compared back to the set they came
@@ -233,6 +236,9 @@ type Emulator struct {
 
 	// semanticMarkers tracks OSC 133 shell integration markers
 	semanticMarkers *SemanticMarkerList
+	// historyDropped counts the lines the main screen's history let go of
+	// from its oldest end. See HistoryDropped.
+	historyDropped atomic.Int64
 
 	// onReflow is called after a reflow with where rows went.
 	onReflow func(remap func(absLine int) int)
@@ -317,6 +323,7 @@ func NewEmulator(w, h int) *Emulator {
 	// Wire scrollback trim to semantic markers adjustment
 	if sb := t.scrs[0].Scrollback(); sb != nil {
 		sb.SetOnTrim(func(n int) {
+			t.historyDropped.Add(int64(n))
 			t.semanticMarkers.AdjustForScrollbackTrim(n)
 		})
 	}
@@ -640,6 +647,15 @@ func (e *Emulator) ClearScrollback() {
 // ScrollbackLen returns the number of lines in the scrollback buffer.
 func (e *Emulator) ScrollbackLen() int {
 	return e.scrs[0].ScrollbackLen()
+}
+
+// HistoryDropped returns how many lines the main screen's history has let
+// go of from its oldest end since the emulator was made: lines the ring's
+// limit pushed out, and lines a clear or a reflow removed. History line
+// index plus HistoryDropped is a number the line keeps while newer lines
+// come and older ones go, until a reflow rewraps the lines.
+func (e *Emulator) HistoryDropped() int64 {
+	return e.historyDropped.Load()
 }
 
 // SemanticMarkers returns the list of OSC 133 semantic zone markers.
@@ -1112,6 +1128,14 @@ func (e *Emulator) CursorStyle() (CursorStyle, bool) {
 // without this the pane comes back as a block whatever the guest asked for.
 func (e *Emulator) RestoreCursorStyle(style CursorStyle, steady bool) {
 	e.cursorStyle, e.cursorSteady = style, steady
+	e.cursorStyled = true
+}
+
+// CursorStyleSet reports whether a guest has asked for a cursor shape. A pane
+// no program styled shows the default, and a client that has a cursor setting
+// of its own (guios's blink) applies that setting instead of the default.
+func (e *Emulator) CursorStyleSet() bool {
+	return e.cursorStyled
 }
 
 // GetModes returns a copy of the current terminal DEC private modes.

@@ -1,6 +1,4 @@
-go 1.26.8
-
-toolchain go1.27.3
+go 1.27.3
 
 use (
 	.
@@ -27,6 +25,6 @@ replace tuios.dev/sketch v0.4.1-0.20261106165743-fef8f8756257 => ./sketch
 
 replace tuios.dev/shot v0.2.2-0.20261108190511-f7dea1948570 => ./shot
 
-replace tuios.dev/vt v0.3.3-0.20261108211201-a85a7000ce0c => ./vt
+replace tuios.dev/vt v0.3.3-0.20261108225514-f94072158ac9 => ./vt
 
 replace tuios.dev/loom v0.2.3-0.20261109111216-ac9ad5f5c246 => ./loom

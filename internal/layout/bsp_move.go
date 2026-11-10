@@ -269,3 +269,65 @@ func (t *BSPTree) NudgeBorder(windowID int, side Side, amount float64) bool {
 	p.SplitRatio = r
 	return true
 }
+
+// GrowPane changes windowID's pane by delta, a share of the whole layout's
+// width (horizontal) or height (vertical): more for delta above 0, less below.
+// It moves the pane's far border, the right or the bottom one, or its near
+// border when the pane is at the far edge, so a grow grows and a shrink
+// shrinks wherever the pane is. That is the rule of the TUI's width and height
+// keys (tmux's resize-pane by cells). A pane that fills the axis changes
+// nothing. The split keeps to the tiler's ratio range. It reports whether a
+// ratio changed.
+func (t *BSPTree) GrowPane(windowID int, horizontal bool, delta float64) bool {
+	leaf := t.WindowToNode[windowID]
+	if leaf == nil || delta == 0 {
+		return false
+	}
+	axis := SplitHorizontal
+	if horizontal {
+		axis = SplitVertical
+	}
+	// The nearest split on the axis with the pane on its near side has the
+	// pane's far border; else the nearest with the pane on its far side has
+	// its near border.
+	var p *TileNode
+	near := false
+	for c := leaf; c.Parent != nil; c = c.Parent {
+		if q := c.Parent; q.SplitType == axis && q.Left == c {
+			p, near = q, true
+			break
+		}
+	}
+	if p == nil {
+		for c := leaf; c.Parent != nil; c = c.Parent {
+			if q := c.Parent; q.SplitType == axis && q.Right == c {
+				p = q
+				break
+			}
+		}
+	}
+	if p == nil {
+		return false
+	}
+	span := 1.0
+	for c := p; c.Parent != nil; c = c.Parent {
+		if q := c.Parent; q.SplitType == axis {
+			if q.Left == c {
+				span *= q.SplitRatio
+			} else {
+				span *= 1 - q.SplitRatio
+			}
+		}
+	}
+	d := delta / max(span, 0.01)
+	if !near {
+		// The pane is the split's far child: it grows as the ratio falls.
+		d = -d
+	}
+	r := clampSplitRatio(p.SplitRatio + d)
+	if r == p.SplitRatio {
+		return false
+	}
+	p.SplitRatio = r
+	return true
+}

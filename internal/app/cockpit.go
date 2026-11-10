@@ -1401,6 +1401,8 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		return m.InboxDismiss()
 	case "follow":
 		m.CockpitThreadBottom()
+	case "go":
+		return m.CockpitGo()
 	case "a", "A", "r":
 		// A click on the card's button is no typed text: it answers at
 		// once. On a risky call it asks, as a key does, and a second click

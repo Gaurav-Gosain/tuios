@@ -1,0 +1,2428 @@
+{
+  "@@locale": "en",
+  "actionSettings": "Settings…",
+  "actionInstallCli": "Install command line tool…",
+  "actionQuitAll": "Quit and end all sessions…",
+  "actionNewSession": "New session",
+  "actionNewSessionHome": "New session in home",
+  "actionNewSessionWorktree": "New session in worktree…",
+  "actionOpenProject": "Open project…",
+  "actionAttachMachine": "Attach to a machine…",
+  "actionGoToSession": "Command palette…",
+  "actionResumeConversation": "Resume conversation…",
+  "actionJumpToAttention": "Jump to session needing you",
+  "actionNextSession": "Next session",
+  "actionPreviousSession": "Previous session",
+  "actionRenameSession": "Rename session",
+  "actionRestartPane": "Restart pane",
+  "actionClose": "Close",
+  "actionCloseSession": "Close session",
+  "actionSplitRight": "Split right",
+  "actionSplitDown": "Split down",
+  "actionNewBrowser": "New browser pane",
+  "actionOpenLocation": "Open location…",
+  "actionZoomPane": "Zoom pane",
+  "actionFind": "Find…",
+  "actionFindNext": "Find next",
+  "actionFindPrevious": "Find previous",
+  "actionNextPane": "Next pane",
+  "actionPreviousPane": "Previous pane",
+  "actionPaneLeft": "Pane left",
+  "actionPaneRight": "Pane right",
+  "actionPaneAbove": "Pane above",
+  "actionPaneBelow": "Pane below",
+  "actionToggleSidebar": "Toggle sidebar",
+  "actionBigger": "Bigger",
+  "actionSmaller": "Smaller",
+  "actionActualSize": "Actual size",
+  "menuQuitApp": "Quit {app}",
+  "menuQuit": "Quit",
+  "menuQuitTip": "Sessions keep running",
+  "menuSession": "Session",
+  "menuPane": "Pane",
+  "menuView": "View",
+  "menuEdit": "Edit",
+  "menuApp": "App",
+  "commonSearch": "Search",
+  "commonNoResults": "No results",
+  "commonCancel": "Cancel",
+  "commonClose": "Close",
+  "commonRestart": "Restart",
+  "commonRestartService": "Restart daemon",
+  "commonTryAgain": "Try again",
+  "commonOpen": "Open",
+  "commonShow": "Show",
+  "commonShowIn": "Show in {app}",
+  "commonNone": "None",
+  "commonRemove": "Remove",
+  "commonSave": "Save",
+  "commonAdd": "Add",
+  "commonInstall": "Install",
+  "commonReinstall": "Reinstall",
+  "commonUpdate": "Update",
+  "closeTheMenu": "Close the menu",
+  "fileManagerFinder": "Finder",
+  "fileManagerExplorer": "File explorer",
+  "fileManagerFiles": "Files",
+  "windowMinimize": "Minimize",
+  "windowMaximize": "Maximize",
+  "windowRestore": "Restore down",
+  "toastCopied": "Copied",
+  "toastCopiedToClipboard": "Copied to clipboard",
+  "toastSaveSettingsFailed": "Couldn’t save the settings: {error}",
+  "toastPasteImageFailed": "Couldn’t paste the image: {error}. Try again, or drop the image file on the pane.",
+  "toastPasteImageDenied": "Couldn’t paste the image: guios can’t write to {dir}. Make it writable, or drop the image file on the pane.",
+  "toastPasteImageDiskFull": "Couldn’t paste the image: the disk is full. Free some space and try again.",
+  "toastPasteClipboardUnreadable": "Couldn’t read the clipboard. Copy it again and paste.",
+  "toastPasteImageUnsupported": "Couldn’t paste the image: {format} isn’t supported. Copy it as PNG or JPEG, or drop the image file on the pane.",
+  "toastConfigProblems": "{count, plural, one {Your config has # problem: see Settings › Advanced} other {Your config has # problems: see Settings › Advanced}}",
+  "@toastConfigProblems": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "toastNothingNeedsYou": "Nothing needs you",
+  "cliInstallFailed": "Couldn’t install the command line tool",
+  "cliInstalledIn": "Installed the tuios command in {dir}",
+  "cliAddedToPath": "Added the tuios command to your PATH: new terminals have it",
+  "notifyNeedsYouTitle": "{name} needs you",
+  "notifyWaitingBody": "Waiting for your answer",
+  "notifyFailedTitle": "{name} failed",
+  "notifyFailedBody": "{pane} stopped with an error",
+  "notifyDoneTitle": "{name} is done",
+  "notifyDoneBody": "{agent} finished in {dir}",
+  "openProjectTitle": "Open project",
+  "openProjectMessage": "Choose a folder: its sessions are grouped under its name.",
+  "confirmCloseTitle": "Close “{name}”?",
+  "confirmCloseAllSessionsTitle": "Close all sessions of “{name}”?",
+  "confirmCloseSessionDetail": "{process} is still running in it. Closing the session ends it.",
+  "confirmCloseProjectDetail": "{count, plural, one {This ends its # session, with what runs in it.} other {This ends its # sessions, with what runs in them.}}",
+  "@confirmCloseProjectDetail": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "confirmCloseAllSessionsDetail": "{count, plural, one {The project stays. Its # session ends, with what runs in it.} other {The project stays. Its # sessions end, with what runs in them.}}",
+  "@confirmCloseAllSessionsDetail": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "confirmClosePaneTitle": "Close this pane?",
+  "confirmClosePaneDetail": "{process} is still running in it. Closing the pane ends it.",
+  "confirmQuitAllTitle": "Quit and end all sessions?",
+  "confirmQuitAllDetail": "{count, plural, one {guios keeps sessions running when it quits. This ends the # session, with what runs in it.} other {guios keeps sessions running when it quits. This ends all # of them, with what runs in them.}}",
+  "@confirmQuitAllDetail": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "confirmQuitAllAction": "End sessions and quit",
+  "confirmRestartServiceTitle": "Restart the tuios daemon?",
+  "restartEarlierVersion": "an earlier version",
+  "restartRunning": "{count, plural, one {A program is running in # session} other {Programs are running in # sessions}}",
+  "@restartRunning": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "restartStaleDetail": "The service that runs your sessions is still guios {was}, and this is guios {version}. {running}: restarting ends them, and sessions start again where they were, with their history.",
+  "@restartStaleDetail": {
+    "placeholders": {
+      "was": {
+        "type": "String"
+      },
+      "version": {
+        "type": "String"
+      },
+      "running": {
+        "type": "String"
+      }
+    }
+  },
+  "restartServiceDetail": "The program in each pane ends. The shells start again in their folders, below their history.",
+  "sidebarOtherProject": "Other",
+  "sidebarHide": "Hide sidebar",
+  "sidebarShow": "Show sidebar",
+  "sidebarNoSessions": "No sessions",
+  "sidebarCollapse": "Collapse",
+  "sidebarExpand": "Expand",
+  "sidebarCloseProjectMenu": "Close project…",
+  "sidebarCloseProject": "Close project",
+  "sidebarCloseAllSessions": "Close all sessions",
+  "sidebarNeedsYou": "{count, plural, one {# needs you} other {# need you}}",
+  "@sidebarNeedsYou": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "newSessionIn": "New session in {project}",
+  "sessionRename": "Rename",
+  "sessionMarkRead": "Mark as read",
+  "sessionMoveToProject": "Move to project",
+  "sessionCopyId": "Copy session ID",
+  "sessionCopyDirectory": "Copy directory",
+  "sessionRevealIn": "Reveal in {app}",
+  "settingsTitle": "Settings",
+  "footerNeedsYou": "{count, plural, one {# session needs you} other {# sessions need you}}",
+  "@footerNeedsYou": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "footerWorking": "{count, plural, one {# session working} other {# sessions working}}",
+  "@footerWorking": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "footerDone": "{count, plural, one {# session done, unseen} other {# sessions done, unseen}}",
+  "@footerDone": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "footerGoToIt": "Go to it",
+  "footerServiceTip": "Sessions run in the tuios daemon, in the background: they keep running when you quit guios.",
+  "statusConnecting": "Connecting…",
+  "statusConnectingLabel": "Connecting",
+  "statusDisconnected": "Disconnected",
+  "statusWorking": "Working",
+  "statusNeedsYou": "Needs you",
+  "statusExited": "Exited",
+  "statusFailed": "Failed",
+  "statusDone": "Done",
+  "updateRestartTip": "The tuios daemon is from another version. Restart it to run this version.",
+  "updatedTitle": "guios was updated",
+  "updatedDetail": "The tuios daemon that runs your sessions is from another version. Restart it. Your sessions start again where they were, with their history.",
+  "connCantReach": "Can’t reach the tuios daemon",
+  "emptyTitle": "What should we work on?",
+  "emptyDetail": "Your sessions keep running when guios is closed.",
+  "emptyCardAgent": "New agent",
+  "emptyCardFolder": "Open folder",
+  "emptyCardMachine": "Attach to a machine",
+  "emptyCardResume": "Resume a conversation",
+  "paletteSettingsPage": "Settings: {page}",
+  "paletteRestartService": "Restart the tuios daemon",
+  "paletteRestartServiceDetail": "Sessions start again where they were",
+  "paletteOpenInBrowser": "Open in browser pane",
+  "paletteLabel": "Command palette",
+  "palettePlaceholder": "Find a session, a pane or a command…",
+  "paletteNoMatches": "No matches",
+  "paletteCommands": "Commands",
+  "paletteConversations": "Recent conversations",
+  "paletteConversationsLabel": "Resume conversation",
+  "paletteConversationsPlaceholder": "Find a conversation to resume…",
+  "paletteNoConversations": "No conversations yet. Agents’ conversations show here after you set up the tuios integration for them in Agents.",
+  "paletteConversationRunning": "running",
+  "paletteMinimizePane": "Minimize the pane",
+  "paletteRestorePanes": "Restore all panes",
+  "paletteCloseWorkspace": "Close the workspace",
+  "paletteLastWorkspace": "Go to the last workspace",
+  "paletteTextBigger": "Make the text bigger",
+  "paletteTextSmaller": "Make the text smaller",
+  "paletteTextReset": "Reset the text size",
+  "paletteAgents": "Show or hide the agents view",
+  "paletteSessions": "Sessions",
+  "palettePanes": "Panes",
+  "paletteWorkspace": "Workspace {n}",
+  "paletteViaTui": "The tuios TUI runs it",
+  "agoNow": "now",
+  "agoMinutes": "{n}m",
+  "@agoMinutes": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "agoHours": "{n}h",
+  "@agoHours": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "agoDays": "{n}d",
+  "@agoDays": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "agoWeeks": "{n}w",
+  "@agoWeeks": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "paneSplitLeft": "Split left",
+  "paneSplitUp": "Split up",
+  "paneSwap": "Swap panes",
+  "paneDragTip": "Drag to move this pane",
+  "paneShowAll": "Show all panes",
+  "paneNarrow": "{count, plural, one {# pane does not fit.} other {# panes do not fit.}}",
+  "paneNarrowNeeds": "{count, plural, one {# needs you.} other {# need you.}}",
+  "paneNarrowPick": "{count, plural, one {Select it to show it.} other {Select one to show it.}}",
+  "paneClose": "Close pane",
+  "paneNeedsPermission": "Needs your permission",
+  "paneHasQuestion": "Has a question",
+  "paneNeedsSignIn": "Needs you to sign in",
+  "paneExited": "Exited {code}",
+  "@paneExited": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "paneForegroundTip": "Running in the foreground",
+  "paneCantShow": "Can’t show this pane",
+  "railFromPane": "guios started from a tuios pane, so it cannot act as you or size your panes. Start it from the Dock or Finder.",
+  "paneAttaching": "Attaching",
+  "pageGeneral": "General",
+  "pageAppearance": "Appearance",
+  "pageTerminal": "Terminal",
+  "pageShell": "Shell",
+  "pageNotifications": "Notifications",
+  "pageKeyboard": "Keyboard",
+  "pageAgents": "Agents",
+  "pageAdvanced": "Advanced",
+  "svcNotRunning": "Not running",
+  "svcRunning": "Running, version {version} (pid {pid}) · {sessions, plural, one {# session} other {# sessions}}, {panes, plural, one {# pane} other {# panes}}",
+  "@svcRunning": {
+    "placeholders": {
+      "pid": {
+        "type": "String"
+      },
+      "version": {
+        "type": "String"
+      },
+      "sessions": {
+        "type": "int"
+      },
+      "panes": {
+        "type": "int"
+      }
+    }
+  },
+  "svcStale": " · still an earlier guios: restart it to update",
+  "durUnderMinute": "under a minute",
+  "durMinutes": "{n} min",
+  "@durMinutes": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "durHours": "{n} h",
+  "@durHours": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "durDays": "{n, plural, one {# day} other {# days}}",
+  "@durDays": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsOpenConfigLabel": "Open the config file",
+  "settingsOpenConfig": "Open config file",
+  "settingsSearchLabel": "Search settings",
+  "settingsClearSearch": "Clear the search",
+  "setSessions": "Sessions",
+  "setSessionsDetail": "Sessions keep running in the background when guios quits. {action} ends them.",
+  "setNewSessionsStartIn": "New sessions start in",
+  "setDirCurrent": "Current folder",
+  "setDirProject": "Project",
+  "setDirHome": "Home",
+  "setSessionName": "Name sessions after the folder of",
+  "setSessionNameDetail": "Until you or an agent name a session. A program in a pane never renames it.",
+  "setNameFocused": "Pane you’re in",
+  "setNameLead": "Pane that needs you",
+  "setNameFolder": "First pane",
+  "setSidebarRows": "Sidebar rows",
+  "setSidebarRowsDetail": "Detailed rows add two lines under each session’s name: what its agent said last, else what runs; and its branch and changes.",
+  "setRowsDetailed": "Detailed",
+  "setRowsCompact": "Compact",
+  "setFocusFollowsMouse": "Focus follows mouse",
+  "setFocusFollowsMouseDetail": "A pane takes the focus when the pointer moves into it, without a click.",
+  "setAskBeforeClosing": "Ask before closing a running program",
+  "setAskBeforeClosingDetail": "When a pane or session you close has a program other than the shell running.",
+  "setKeepHistory": "Keep pane history",
+  "setKeepHistoryDetail": "The tuios daemon saves each pane’s history with its session. After a restart, the history shows again above a new shell.",
+  "setResumeAgents": "Resume agents after a restart",
+  "setResumeAgentsDetail": "What the tuios daemon does with each agent’s conversation when it starts again. Ask puts an item in the Inbox. Auto resumes it.",
+  "setResumeAsk": "Ask",
+  "setResumeAuto": "Auto",
+  "setResumeOff": "Off",
+  "setStartup": "Startup",
+  "setOpenAtLogin": "Open guios at login",
+  "setLoginFailed": "Couldn’t change it: {error}",
+  "setAppIcon": "Show app icon",
+  "setAppIconBoth": "Dock and menu bar",
+  "setAppIconDock": "Dock only",
+  "setAppIconMenuBar": "Menu bar only",
+  "setAppIconDetail": "Closing the window keeps guios running in the menu bar.",
+  "trayOpen": "Open {app}",
+  "setVersionNoUpdate": " · this copy can’t update itself",
+  "setVersionNotChecked": " · not checked yet",
+  "setVersionLastChecked": " · last checked {duration} ago",
+  "setUpdates": "Updates",
+  "setVersion": "Version",
+  "setCheckForUpdates": "Check for updates",
+  "setAutoCheck": "Check for updates automatically",
+  "setAutoCheckDetail": "Once a day, while guios is open.",
+  "setAutoInstall": "Download and install updates automatically",
+  "setAutoInstallDetail": "They take effect the next time guios opens.",
+  "setAppearance": "Appearance",
+  "setThemeSystem": "System",
+  "setThemeLight": "Light",
+  "setThemeDark": "Dark",
+  "setLanguage": "Language",
+  "setLanguageSystem": "System",
+  "setTranslucent": "Translucent window",
+  "setTranslucentDetail": "Let the desktop show through the window’s background.",
+  "setDimUnfocused": "Dim unfocused terminals",
+  "setDimUnfocusedDetail": "When a session has several panes, the terminals you’re not in fade.",
+  "setBackground": "Theme",
+  "setText": "Text",
+  "setFont": "Font",
+  "setFontDetail": "JetBrains Mono with Nerd Fonts icons comes with guios. Any installed monospaced font works. To give more than one font, separate the names with commas. guios uses the first installed one.",
+  "setFontSystem": "System",
+  "setUseFont": "Use “{name}”",
+  "setSize": "Size",
+  "setSizeDetail": "{bigger} and {smaller} change it too.",
+  "setLineHeight": "Line height",
+  "setLineHeightDetail": "A multiple of the font's own line. At 1.00, rows are as the font draws them.",
+  "setWeight": "Weight",
+  "setWeightLight": "Light",
+  "setWeightRegular": "Regular",
+  "setWeightMedium": "Medium",
+  "setWeightSemibold": "Semibold",
+  "setLigatures": "Ligatures",
+  "setLigaturesDetail": "Join characters as the font draws them, as => and !=.",
+  "setThicken": "Thicken text",
+  "setThickenDetail": "A heavier stroke, as Ghostty’s font-thicken.",
+  "setColorsDetail": "The theme colors the window, the sidebar, the panes and the terminals. A theme you choose here is saved in tuios, so tuios uses it too.",
+  "setColorsOmarchy": " guios follows Omarchy when tuios does.",
+  "setThemeShared": "tuios and guios use this theme.",
+  "toastThemeNotSaved": "Couldn’t save the theme: {error}",
+  "setThemeSameAsTuios": "Same as tuios",
+  "setThemeFollowsNone": "tuios uses no theme. guios uses its own colors.",
+  "setThemeOwn": "Only guios uses this theme. tuios keeps its own theme.",
+  "setLightWindows": "Light windows",
+  "setDarkWindows": "Dark windows",
+  "setCursor": "Cursor",
+  "setShape": "Shape",
+  "setShapeDetail": "Programs may change it.",
+  "setCursorBlock": "Block",
+  "setCursorBar": "Bar",
+  "setCursorUnderline": "Underline",
+  "setBlink": "Blink",
+  "setInput": "Input",
+  "setOptionMeta": "Option is Meta",
+  "setOptionMetaDetail": "Option sends Alt to programs, as for Emacs and readline, instead of typing accents.",
+  "setCopyOnSelect": "Copy on select",
+  "setCopyOnSelectDetail": "What you select goes to the clipboard.",
+  "setRightClick": "Right click",
+  "setRightClickMenu": "Shows a menu",
+  "setRightClickPaste": "Pastes",
+  "setRightClickCopyOrPaste": "Copies, or pastes",
+  "setClipboardRead": "Programs reading the clipboard",
+  "setClipboardReadDetail": "As with OSC 52: agents asking for what you copied.",
+  "setScrolling": "Scrolling",
+  "setWheelScroll": "Mouse wheel",
+  "setWheelScrollDetail": "How far a notch of the wheel scrolls.",
+  "setScrollRows": "{count, plural, one {# row} other {# rows}}",
+  "@setScrollRows": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "setTrackpadScroll": "Trackpad",
+  "setTrackpadScrollDetail": "How fast scrolling with two fingers goes.",
+  "setAsk": "Ask",
+  "setAllow": "Allow",
+  "setDeny": "Deny",
+  "setShellGroup": "Shell",
+  "setShellGroupDetail": "Changes apply to new panes. The shell is in tuios’s config.toml, so the TUI uses it too.",
+  "setShell": "Shell",
+  "setShellDetail": "Empty: your login shell, {shell}.",
+  "setScrollback": "Scrollback",
+  "setScrollbackDetail": "How much history guios keeps for each pane it shows. The tuios daemon keeps the full history.",
+  "setEnvironment": "Environment",
+  "setEnvironmentDetail": "Added to every pane’s, over what guios sets (TERM, TUIOS_SESSION…).",
+  "setNotifyUnpackaged": "This build can’t post notifications: macOS shows those of packaged apps only.",
+  "setNotifyWhen": "Notify me when",
+  "setNotifyWaiting": "A session needs me",
+  "setNotifyWaitingDetail": "A program asks something, rings the bell, or reports it is blocked.",
+  "setNotifyDone": "An agent finishes",
+  "setNotifyDoneDetail": "While you look at another session, or another app.",
+  "setNotifyFailed": "A program fails",
+  "setNotifyFailedDetail": "One that reports an error (OSC 7501).",
+  "setHow": "How",
+  "setPlaySound": "Play a sound",
+  "setDockBadge": "Badge the Dock icon",
+  "setDockBadgeDetail": "With the number of sessions that need you.",
+  "setDockBounce": "Bounce the Dock icon",
+  "setDockBounceDetail": "Once, when a session comes to need you.",
+  "setTestNotification": "Send a test notification",
+  "setTestNotificationBody": "Notifications work.",
+  "setNotifyError": "Couldn’t notify: {error}",
+  "setCli": "Command line tool",
+  "setCliDetail": "Inside guios, every pane has the tuios command on its PATH already.",
+  "setCliNotInstalled": "Not installed: other terminals don’t know the tuios command.",
+  "setCliRow": "guios in your terminal",
+  "setSkills": "Agent integrations",
+  "setSkillsDetail": "The tuios integration tells the daemon what each agent does: working, waiting for you, or done. It also lets agents drive their panes.",
+  "setSkillInstalled": "Installed",
+  "setSkillOutdated": "Installed, from an older tuios",
+  "setSkillMissing": "Not installed",
+  "setProgramStatus": "Program status",
+  "setProgramStatusDetail": "Programs report what they do with OSC 7501, Superlogical’s program status protocol: the sidebar shows it, and notifies you.",
+  "setConfiguration": "Configuration",
+  "setConfigurationDetail": "Each setting here is a line of this file, as in Ghostty. Edit it in any editor. What you save applies at once.",
+  "setConfigFile": "Config file",
+  "setBackgroundService": "tuios daemon",
+  "setDaemon": "tuios daemon",
+  "setDaemonStatus": "Status",
+  "setBackgroundServiceDetail": "The tuios daemon runs your sessions. It keeps running when you quit guios.",
+  "setLog": "Log",
+  "setData": "Data",
+  "setDataDetail": "The settings and window state of guios. Sessions and their history are in the tuios daemon.",
+  "setFolder": "Folder",
+  "setReset": "Reset all settings",
+  "setResetDetail": "Back to how guios comes, shortcuts included.",
+  "setResetButton": "Reset…",
+  "setResetTitle": "Reset all settings?",
+  "setResetConfirmDetail": "Your sessions stay.",
+  "setResetAction": "Reset",
+  "setKeyboardSearch": "Search actions or shortcuts",
+  "setRestoreDefaults": "Restore defaults",
+  "setKeyboardHelp": "Click a shortcut, then type the new one. Press Delete to remove it. Press Escape to keep it.",
+  "setUseDefault": "Use the default, {keys}",
+  "setDefaultKeys": "Default: {keys}",
+  "setShortcutFor": "Shortcut for {action}",
+  "setTypeShortcut": "Type a shortcut",
+  "setShortcutNeedsMac": "A shortcut needs ⌘, ⌃ or ⌥, unless it is a function key.",
+  "setShortcutNeedsPc": "A shortcut needs Ctrl or Alt, unless it is a function key.",
+  "setShortcutTaken": "{keys} was {action}’s: it has none now.",
+  "findLabel": "Find in pane",
+  "findPlaceholder": "Find",
+  "findCount": "{selected} of {total}",
+  "findNoMatches": "No matches",
+  "findClose": "Close find bar",
+  "actionToggleChanges": "Toggle changes",
+  "sideChanges": "Changes",
+  "sideClose": "Close",
+  "sideFiles": "Files",
+  "actionToggleFiles": "Toggle files",
+  "actionToggleRightSidebar": "Toggle right sidebar",
+  "rightSidebarHide": "Hide right sidebar",
+  "rightSidebarShow": "Show right sidebar",
+  "changesShowDiffs": "Show diffs",
+  "filesNoFolder": "No folder to show",
+  "filesNoFolderDetail": "Open a session in a folder to see its files here.",
+  "filesCollapseFolders": "Collapse folders",
+  "filesCantReadFolder": "Can't read the folder",
+  "filesCantReadFile": "Can't read the file",
+  "filesGone": "The file is gone",
+  "filesNewFile": "New file…",
+  "filesNewFolder": "New folder…",
+  "filesRename": "Rename…",
+  "filesDeleteItem": "Delete…",
+  "filesDeleteFileTitle": "Delete “{name}”?",
+  "filesDeleteFolderTitle": "Delete the folder “{name}” and everything in it?",
+  "filesDeleteTrashDetail": "You can restore it from the Trash.",
+  "filesDeleteRecycleDetail": "You can restore it from the Recycle Bin.",
+  "filesDeleteForGoodDetail": "It's deleted for good: this host has no trash to move it to.",
+  "filesMoveToTrash": "Move to Trash",
+  "filesMoveToRecycleBin": "Move to Recycle Bin",
+  "filesDelete": "Delete",
+  "filesDeleteFailed": "Couldn't delete “{name}”: {error}",
+  "filesCreateFailed": "Couldn't create “{name}”: {error}",
+  "filesRenameFailed": "Couldn't rename “{name}”: {error}",
+  "filesBadName": "“{name}” can't be a name here",
+  "changesTurn": "Last turn",
+  "changesUncommitted": "Uncommitted",
+  "changesBranch": "Branch",
+  "changesTurnTip": "What the agent changed since it last started working",
+  "changesUncommittedTip": "What isn't committed, untracked files too",
+  "changesBranchTip": "What this branch changed since it left {branch}",
+  "changesFiles": "{count, plural, one {# file} other {# files}}",
+  "@changesFiles": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "changesSince": "since {base}",
+  "changesNone": "No changes",
+  "changesNoneTurn": "The agent hasn't changed any files since it started working.",
+  "changesNoneUncommitted": "Everything is committed.",
+  "changesNoneBranch": "Nothing changed since {branch}.",
+  "changesNoRepo": "Not a git repository",
+  "changesNoRepoDetail": "A session's changes show here while it works in a git repository.",
+  "changesGitOff": "Git status is off",
+  "changesGitOffDetail": "Turn on Show git status in Settings to see the changes here.",
+  "changesCantRead": "Can't read the changes",
+  "changesOpenFile": "Open file",
+  "changesUnified": "Unified",
+  "changesSplit": "Side by side",
+  "changesCollapseFiles": "Collapse all",
+  "changesExpandFiles": "Expand all",
+  "changesBinary": "Binary file",
+  "changesTooLarge": "Too large to show",
+  "changesRevert": "Revert",
+  "changesKeep": "Keep",
+  "changesRevertTip": "Put the old lines back in the file",
+  "changesKeepTip": "Mark this change as reviewed",
+  "changesRevertFailed": "Couldn't revert: {error}",
+  "viewerSaveFailed": "Couldn't save “{name}”: {error}",
+  "viewerUnsaved": "Unsaved changes",
+  "viewerSaveOne": "Do you want to save the changes you made to “{name}”?",
+  "viewerSaveMany": "{count, plural, one {Do you want to save the changes you made to # file?} other {Do you want to save the changes you made to # files?}}",
+  "@viewerSaveMany": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "viewerSaveDetail": "Your changes will be lost if you don't save them.",
+  "viewerSave": "Save",
+  "viewerDontSave": "Don't save",
+  "viewerConflictTitle": "“{name}” changed on disk",
+  "viewerConflictDetail": "It changed since you opened it. Overwrite it with your version, or discard your changes for the file as it is now.",
+  "viewerOverwrite": "Overwrite",
+  "viewerDiscard": "Discard changes",
+  "gitShowChanges": "Show changes",
+  "gitMerging": "merging",
+  "gitRebasing": "rebasing",
+  "gitCherryPicking": "cherry-picking",
+  "gitReverting": "reverting",
+  "setGit": "Git",
+  "setGitDetail": "Branches and changes of the repositories sessions work in.",
+  "setGitStatus": "Show git status",
+  "setGitStatusDetail": "Each session's branch and changes, by its panes' titles and in the sidebar.",
+  "setDiffLayout": "Diffs",
+  "setDiffLayoutDetail": "Auto shows diffs unified while their card is narrow, and side by side once it's wide.",
+  "setDiffAuto": "Auto",
+  "pageBrowser": "Browser",
+  "setAdBlocking": "Ad blocking",
+  "setBlockAds": "Block ads",
+  "setBlockAdsDetail": "Blocks ads and trackers with filter lists, which guios downloads and keeps up to date.",
+  "setAdListEasylist": "Ads, the list most blockers start from.",
+  "setAdListEasyprivacy": "Trackers and analytics.",
+  "setAdListPeterLowe": "Ad and tracker servers, by their domains.",
+  "setAdListEasylistChina": "Ads on Chinese sites.",
+  "setAdListFanboyCookie": "Cookie notices and consent banners.",
+  "setAdListFanboySocial": "Social media buttons and embeds.",
+  "setAdListFanboyAnnoyance": "Pop-ups, newsletter prompts and chat boxes, and the cookie and social lists' too.",
+  "setAdListsNote": "Lists hide more as they add up, and may break a page now and then. Lists of other URLs go in the configuration, as browser-filter-list.",
+  "changesUnmodified": "{count, plural, one {# unmodified line} other {# unmodified lines}}",
+  "@changesUnmodified": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "changesExpandUp": "Expand up",
+  "changesExpandDown": "Expand down",
+  "changesExpandAll": "Expand all",
+  "pageHosts": "Hosts",
+  "pageExperimental": "Experimental",
+  "hostThisComputer": "This computer",
+  "hostColor": "Color",
+  "hostColorAuto": "From its name",
+  "colorRed": "Red",
+  "colorOrange": "Orange",
+  "colorAmber": "Amber",
+  "colorGreen": "Green",
+  "colorTeal": "Teal",
+  "colorBlue": "Blue",
+  "colorPurple": "Purple",
+  "colorPink": "Pink",
+  "hostNotConnected": "Not connected to {host}",
+  "@hostNotConnected": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostReconnect": "Reconnect",
+  "hostReconnectTo": "Reconnect to {host}",
+  "@hostReconnectTo": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostReconnecting": "Reconnecting…",
+  "hostReconnectingTo": "Reconnecting to {host}…",
+  "@hostReconnectingTo": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostCantConnect": "Can't connect to {host}",
+  "@hostCantConnect": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostNotInstalled": "guios isn't installed on {host}",
+  "@hostNotInstalled": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostRefused": "{host} refused the connection",
+  "@hostRefused": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostReasonNoTuios": "tuios is not installed on this machine.",
+  "hostReasonRefused": "The machine refused the connection.",
+  "hostReasonTimeout": "The machine did not answer.",
+  "hostReasonAuth": "The machine did not accept the sign-in.",
+  "hostAuthHint": "guios signs in with your SSH keys and agent, and never asks for a password. To trust a host's key, run ssh {address} once in a terminal.",
+  "@hostAuthHint": {
+    "placeholders": {
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "hostAbout": "guios {version} on {platform} · {hostname}, as {user}",
+  "@hostAbout": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      },
+      "platform": {
+        "type": "String"
+      },
+      "hostname": {
+        "type": "String"
+      },
+      "user": {
+        "type": "String"
+      }
+    }
+  },
+  "hostConnected": "Connected: guios {version} on {platform} · {hostname}, as {user}",
+  "@hostConnected": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      },
+      "platform": {
+        "type": "String"
+      },
+      "hostname": {
+        "type": "String"
+      },
+      "user": {
+        "type": "String"
+      }
+    }
+  },
+  "hostSessions": "{count, plural, one {# session} other {# sessions}}",
+  "@hostSessions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "hostCopyAddress": "Copy address",
+  "hostSettings": "Host settings…",
+  "hostRemove": "Remove host…",
+  "hostEdit": "Edit host",
+  "hostRemoveTitle": "Remove {host}?",
+  "@hostRemoveTitle": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostRemoveDetail": "Its sessions keep running on {host}. Add the machine again to see them.",
+  "@hostRemoveDetail": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostInstall": "Install guios…",
+  "hostInstalling": "Installing tuios on {host}…",
+  "@hostInstalling": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostInstalled": "{host} runs tuios now.",
+  "@hostInstalled": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostInstallFailed": "Could not install tuios on {host}: {error}",
+  "@hostInstallFailed": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "hostUpdateAction": "Update tuios on {host}…",
+  "@hostUpdateAction": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostUpdateTitle": "Install tuios {version} on {host}?",
+  "@hostUpdateTitle": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "hostUpdateDetail": "guios copies the tuios of this computer to {host} and restarts its daemon. The programs in its panes stop.",
+  "@hostUpdateDetail": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostUpdateAppDetail": "The guios app on {host} updates and relaunches, then restarts its service. Sessions there start again where they were, with their history, and the programs running in them end.",
+  "@hostUpdateAppDetail": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostUpdating": "Updating tuios on {host}…",
+  "@hostUpdating": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostUpdated": "{host} runs tuios {version}",
+  "@hostUpdated": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "hostUpdateDev": "A development build of guios can't update a host. Run a released guios, or run tuios update on the host.",
+  "hostVersionTitle": "tuios on {host} is another version",
+  "@hostVersionTitle": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostVersionDetail": "{host} runs tuios {version}, and this computer runs tuios {app}. Update tuios there to see its sessions here.",
+  "@hostVersionDetail": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "version": {
+        "type": "String"
+      },
+      "app": {
+        "type": "String"
+      }
+    }
+  },
+  "hostDesktopDetail": "{host} runs the guios app, version {version}, and this is guios {app}. Update guios on {host}, or turn on Let them update guios there (Settings › Hosts) to update it from here.",
+  "@hostDesktopDetail": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "version": {
+        "type": "String"
+      },
+      "app": {
+        "type": "String"
+      }
+    }
+  },
+  "hostRestartAction": "Restart service on {host}…",
+  "@hostRestartAction": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostRestartTitle": "Restart the service on {host}?",
+  "@hostRestartTitle": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostRestartDetail": "Sessions on {host} start again where they were, with their history, and the programs running in them end.",
+  "@hostRestartDetail": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostRestarting": "Restarting the service on {host}…",
+  "@hostRestarting": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostStaleTip": "The service on {host} still runs guios {was}, and guios {version} is installed there: restart it to run the new version.",
+  "@hostStaleTip": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "was": {
+        "type": "String"
+      },
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "hostNoSuchFile": "There's no {path} on {host}",
+  "@hostNoSuchFile": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "pasteNotAFile": "guios pastes files into a pane on another machine, not folders: {name}",
+  "@pasteNotAFile": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "pasteTooLarge": "guios pastes at most {size} MB into a pane on another machine",
+  "@pasteTooLarge": {
+    "placeholders": {
+      "size": {
+        "type": "int"
+      }
+    }
+  },
+  "pasteUploading": "Copying to {host}…",
+  "@pasteUploading": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "pickerTitle": "Open project on {host}",
+  "@pickerTitle": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "pickerPlaceholder": "Filter folders, or type a path: ~/code",
+  "pickerShowHidden": "Show hidden",
+  "pickerHideHidden": "Hide hidden",
+  "pickerNoFolders": "No folders",
+  "pickerHint": "↩ go in · {open} open the folder chosen",
+  "@pickerHint": {
+    "placeholders": {
+      "open": {
+        "type": "String"
+      }
+    }
+  },
+  "setHosts": "Hosts",
+  "setHostsDetail": "The machines that the tuios daemon of this computer links over ssh. Their sessions show in the sidebar under Machines. The command tuios hosts shows the same list.",
+  "setHostsNone": "No hosts",
+  "setHostsNoneDetail": "Add a machine that you reach with ssh. If it has no tuios, guios offers to install it.",
+  "setHostsDocs": "Setting up hosts",
+  "setHostAdd": "Add a host",
+  "setHostAddDetail": "Type the ssh address, such as me@devbox, or a host name from your ~/.ssh/config. The name is what guios and tuios call the machine.",
+  "setHostAddressPlaceholder": "me@devbox",
+  "setHostNamePlaceholder": "Name: {name}",
+  "@setHostNamePlaceholder": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "setHostNameTaken": "There's a host named {name} already",
+  "@setHostNameTaken": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "setHostNeedsAddress": "Type the host's address",
+  "setListenTitle": "This computer as a host",
+  "setListen": "Let other machines connect",
+  "setListenDetail": "The tuios daemon listens at this computer's Tailscale addresses, for guios on your other machines. Only your Tailscale account may connect.",
+  "setListenOn": "Add this computer as a host on your other machines at this address. Only your Tailscale account may connect.",
+  "setListenNoTailscale": "Tailscale isn't running here: the tuios daemon listens once it is.",
+  "setRemoteUpdates": "Let them update guios here",
+  "setRemoteUpdatesDetail": "guios on your other machines can update this app to its version. The app relaunches, and the programs running in its sessions end.",
+  "setHostSettingsSplit": "A host's own settings",
+  "setHostSettingsSplitDetail": "The shell, environment, scrollback and session restore of a host's sessions come from its own configuration: run tuios config edit on the host. Appearance, keyboard and notifications are this app's.",
+  "setShellThisComputer": "These apply to this computer's sessions. Each host's come from its own configuration (Settings › Hosts).",
+  "confirmQuitAllHosts": "Sessions on other machines keep running.",
+  "hostInstallTitle": "Install tuios on {host}?",
+  "@hostInstallTitle": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostInstallDetail": "guios copies the tuios of this computer to {host} and starts its daemon. Nothing on {host} stops.",
+  "@hostInstallDetail": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostLinkRefused": "guios opens only web links of {host}, not {scheme} ones",
+  "@hostLinkRefused": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "scheme": {
+        "type": "String"
+      }
+    }
+  },
+  "hostManualDetail": "{host} runs guios {version}, and this app is guios {app}. Update guios on {host} as you installed it, then restart its service.",
+  "@hostManualDetail": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "version": {
+        "type": "String"
+      },
+      "app": {
+        "type": "String"
+      }
+    }
+  },
+  "hostNewerDetail": "{host} runs guios {version}, newer than this app's {app}. Update this app to see and start the host's sessions.",
+  "@hostNewerDetail": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "version": {
+        "type": "String"
+      },
+      "app": {
+        "type": "String"
+      }
+    }
+  },
+  "hostSameAs": "This host's the tuios daemon is {other}'s, which the app shows already",
+  "@hostSameAs": {
+    "placeholders": {
+      "other": {
+        "type": "String"
+      }
+    }
+  },
+  "browserCantShow": "Can’t show the page",
+  "browserBlank": "Type an address or a search above",
+  "browserBack": "Back",
+  "browserForward": "Forward",
+  "browserReload": "Reload",
+  "browserStop": "Stop",
+  "browserAddress": "Address or search",
+  "worktreeTitle": "New session in worktree",
+  "worktreeDetailDefault": "guios checks out a new branch from the default branch in a folder of its own, so the session’s agent works apart from the others.",
+  "worktreeDetailCurrent": "guios checks out a new branch from the current branch in a folder of its own, so the session’s agent works apart from the others.",
+  "worktreeBranch": "Branch name",
+  "worktreeCreate": "Create",
+  "worktreeRemoveTitle": "Remove the worktree of “{name}” too?",
+  "worktreeRemoveMerged": "Its folder {path} goes, and its branch {branch}, which is merged.",
+  "worktreeRemoveUnmerged": "Its folder {path} goes. Its branch {branch} stays, with its commits.",
+  "worktreeRemoveDirty": "{count, plural, one {# changed file} other {# changed files}} in {path} will be lost. Its branch {branch} stays, with its commits.",
+  "@worktreeRemoveDirty": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "worktreeRemove": "Remove worktree",
+  "worktreeKeep": "Keep worktree",
+  "worktreeRemoveAnyway": "Remove anyway",
+  "setSessionHistory": "Session history",
+  "setSessionHistoryDetail": "List the coding agents' ended conversations in the sidebar, to resume them later or archive them.",
+  "endedTitle": "Ended",
+  "endedArchived": "Archived",
+  "endedArchive": "Archive",
+  "endedShowAll": "Show all {n}",
+  "@endedShowAll": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "endedResume": "Resume",
+  "endedRestore": "Restore",
+  "endedDelete": "Delete",
+  "endedArchiveAll": "Archive all",
+  "endedDeleteAll": "Delete all…",
+  "endedDeleteAllTitle": "Delete {n} archived conversations?",
+  "@endedDeleteAllTitle": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "endedDeleteAllDetail": "guios forgets them. Each agent keeps its own history of the conversation.",
+  "endedSetUpSkill": "Set up the tuios integration for your agents to list their ended conversations here",
+  "actionQuickTerminal": "Quick terminal",
+  "scratchTerminal": "Scratch terminal",
+  "scratchHide": "hide",
+  "scratchNoSession": "Open a session to use the scratch terminal.",
+  "toastGlobalShortcutFailed": "Couldn’t use {keys} for the quick terminal: {error}",
+  "setShortcutGlobal": "Works in every app",
+  "menuWorkspace": "Workspace",
+  "menuMovePaneToWorkspace": "Move pane to workspace",
+  "actionNextWorkspace": "Next workspace",
+  "actionPreviousWorkspace": "Previous workspace",
+  "actionGoToWorkspace": "Go to workspace {n}",
+  "actionMovePaneToWorkspace": "Move pane to workspace {n}",
+  "workspaceNew": "New workspace",
+  "workspaceNewTip": "New workspace. Drop a pane here to move it to a new workspace.",
+  "workspaceTip": "{count, plural, one {Workspace {name}: # pane} other {Workspace {name}: # panes}}",
+  "actionAgents": "Agents",
+  "cockpitTitle": "Agents",
+  "cockpitAgentCount": "{count, plural, one {# agent} other {# agents}}",
+  "@cockpitAgentCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitAllowAlways": "Always allow",
+  "cockpitAllowOnce": "Allow once",
+  "cockpitAllowSession": "Allow for this session",
+  "cockpitAlwaysAllows": "Always allows: {scope}",
+  "cockpitApprovalsOff": "Turn on approvals to answer Claude Code prompts here. Until then, answer in the pane.",
+  "cockpitApprovalsTurnOn": "Turn on",
+  "cockpitApprovalsOn": "Approvals are on. The next prompt shows here with Allow and Reject.",
+  "cockpitKindApproval": "Approval",
+  "cockpitKindQuestion": "Question",
+  "cockpitStopped": "Stopped · {message}",
+  "cockpitThreadEmptyLine": "No messages yet. The agent's messages show here.",
+  "cockpitWaitsAtPromptShort": "Sent once its prompt is answered",
+  "cockpitDetailBranch": "Branch",
+  "cockpitDetailFolder": "Folder",
+  "cockpitDetailSince": "Since",
+  "cockpitAnswered": "{name}: {answer}",
+  "cockpitStoppedWaiting": "{name} stopped waiting. Open the pane to answer it.",
+  "cockpitStillWaits": "{name} still waits. Open the pane to answer it.",
+  "cockpitCallChanged": "{name} asks about another call now. Read the card again.",
+  "cockpitClose": "Close agents",
+  "cockpitCode": "code",
+  "cockpitCopy": "Copy",
+  "cockpitCountDone": "done",
+  "cockpitCountIdle": "idle",
+  "cockpitCountNeeds": "need you",
+  "cockpitCountReview": "to review",
+  "cockpitCountWorking": "working",
+  "cockpitDismiss": "Dismiss",
+  "cockpitEmptyTitle": "No agents yet",
+  "cockpitEmptyDetail": "Run claude, codex or another agent in any pane. tuios finds it and shows it here.",
+  "cockpitFailed": "Failed",
+  "cockpitFailedPill": "failed",
+  "cockpitGroupNeeds": "Needs you",
+  "cockpitGroupReview": "Ready for review",
+  "cockpitGroupWorking": "Working",
+  "cockpitGroupDone": "Done",
+  "cockpitGroupIdle": "Idle",
+  "cockpitGroupSettled": "Settled",
+  "cockpitGroupSnoozed": "Snoozed",
+  "cockpitHintOpen": "open pane",
+  "cockpitHintAllow": "allow",
+  "cockpitHintReply": "reply",
+  "cockpitHintSettle": "settle",
+  "cockpitHintSnooze": "snooze",
+  "cockpitHintFilter": "needs you only",
+  "cockpitHintTabs": "tabs",
+  "cockpitHintBack": "back",
+  "cockpitHintDetails": "details",
+  "cockpitBack": "Show the agents",
+  "cockpitIdle": "Idle",
+  "cockpitToReview": "To review",
+  "cockpitJustChanged": "This prompt just changed. Read it, then answer.",
+  "cockpitMail": "Mail",
+  "cockpitMore": "{count, plural, one {# more} other {# more}}",
+  "@cockpitMore": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitNoHarness": "agent",
+  "cockpitNoOutput": "No output.",
+  "cockpitNoPane": "This pane is gone.",
+  "cockpitNoReason": "This agent takes no reason with a reject. Press r to reject it.",
+  "cockpitNotApplied": "The answer was not sent: {reason}",
+  "cockpitNothingToUndo": "Nothing to undo.",
+  "cockpitNotHuman": "The daemon does not accept guios as you. Open guios outside every tuios pane.",
+  "cockpitNoTranscript": "No conversation to show",
+  "cockpitNoTranscriptDetail": "tuios has not found this agent's transcript. Install the integration for its harness, or wait for its first turn.",
+  "cockpitNoActivity": "No activity",
+  "cockpitNowRunning": "Running",
+  "cockpitNowEditing": "Editing",
+  "cockpitNowReading": "Reading",
+  "cockpitNowSearching": "Searching",
+  "cockpitNowFetching": "Fetching",
+  "cockpitNoReportFor": "No report for {age}",
+  "cockpitSilentMessage": "No report for {age} · {message}",
+  "cockpitOlder": "Show older messages",
+  "cockpitOpenPane": "Open pane",
+  "cockpitPickAgent": "Select an agent",
+  "cockpitPickAgentDetail": "Its conversation, changes and mail show here.",
+  "cockpitPlan": "Plan",
+  "cockpitReasonPlaceholder": "Type the reason, then press Enter to reject",
+  "cockpitReject": "Reject",
+  "cockpitRejectWhy": "Reject and say why",
+  "cockpitReply": "Reply",
+  "cockpitResult": "Result",
+  "cockpitRiskLine": "Risky: {rule}. {why}",
+  "cockpitRisky": "risky",
+  "cockpitRiskYours": "A rule in your config",
+  "cockpitScreenPrompt": "Answers the prompt on the pane's screen",
+  "cockpitSettle": "Settle",
+  "cockpitUnsettle": "Take off the Settled shelf",
+  "cockpitSettled": "{name} is settled. Press u to undo.",
+  "cockpitSettleOnlyAgent": "Only an agent can be settled. Dismiss or snooze this row.",
+  "cockpitShowAllLines": "{count, plural, one {Show all # line} other {Show all # lines}}",
+  "@cockpitShowAllLines": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitSnooze": "Snooze",
+  "cockpitWake": "Show again",
+  "cockpitSnoozeOnlyItem": "Only an Inbox item can be snoozed.",
+  "cockpitStateFrom": "state from {source}",
+  "cockpitTabThread": "Thread",
+  "cockpitTabChanges": "Changes",
+  "cockpitTabCheckpoints": "Checkpoints",
+  "cockpitTabMail": "Mail",
+  "cockpitTabBoard": "Board",
+  "cockpitThought": "Thinking",
+  "cockpitThreadEmpty": "No messages yet",
+  "cockpitTodos": "To-dos",
+  "cockpitTodosDone": "{done} of {total} done",
+  "@cockpitTodosDone": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitUnnamed": "unnamed",
+  "cockpitWaits": "{name} waits {age}",
+  "cockpitRunEdited": "{count, plural, one {edited # file} other {edited # files}}",
+  "cockpitRunRan": "{count, plural, one {ran # command} other {ran # commands}}",
+  "cockpitRunRead": "{count, plural, one {read or searched # time} other {read or searched # times}}",
+  "cockpitRunUsed": "{count, plural, one {used # tool} other {used # tools}}",
+  "cockpitRunAnd": " and ",
+  "cockpitWorkedFor": "Worked for {time}",
+  "cockpitWorkspace": "workspace {n}",
+  "@cockpitWorkspace": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitYou": "You",
+  "cockpitAnswerInPane": "guios cannot read this prompt on the screen. Open the pane to answer it.",
+  "cockpitHoldEnded": "The hold ended. Answer it in the pane.",
+  "cockpitAllowTool": "Allow {tool}",
+  "cockpitQuestion": "Answer the agent",
+  "cockpitQueued": "Queued",
+  "cockpitCancelQueued": "Drop",
+  "cockpitTo": "To",
+  "cockpitNextTurn": "Sent when the agent rests",
+  "cockpitReplyPlaceholder": "Write a reply. Paste or drop an image to add it.",
+  "cockpitHintImage": "image",
+  "cockpitHintNewLine": "new line",
+  "cockpitHintSendNow": "send now",
+  "cockpitSend": "Send",
+  "cockpitRemoveImage": "Remove the image",
+  "cockpitPastedImage": "Pasted image {n}",
+  "@cockpitPastedImage": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitNotImage": "{name} is not an image.",
+  "cockpitTooManyImages": "A message takes at most {n} images.",
+  "@cockpitTooManyImages": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitImageTooBig": "{name} is larger than 8 MB.",
+  "cockpitNowNoImages": "Images go only with a queued message. Press Enter to queue it.",
+  "cockpitSentNow": "Sent to {name}.",
+  "cockpitQueueFull": "The queue for {name} is full. Drop a message, or wait until {name} takes one.",
+  "cockpitQueuedFor": "Queued for {name}. It gets it when it rests.",
+  "cockpitSendNotes": "Send notes to the agent",
+  "cockpitDiffCut": "{count, plural, one {# changed line is not shown: too many for this view.} other {# changed lines are not shown: too many for this view.}}",
+  "tmlNotDrawn": "guios does not draw a {kind} yet.",
+  "tmlAllow": "Allow",
+  "tmlDoNotRun": "Do not run",
+  "tmlAskType": "This surface wants to type {text} into a pane.",
+  "tmlAskOpenShell": "This surface wants to open a pane with a shell.",
+  "tmlAskOpenCommand": "This surface wants to open a pane that runs: {command}",
+  "tmlAskRun": "This surface wants to run {verb}.",
+  "tmlRequired": "Fill in every required field first.",
+  "tmlTooManyActions": "One press can run at most {count} pane actions. Nothing ran.",
+  "tmlImageUnreadable": "guios cannot read this image.",
+  "tmlImageTooLarge": "This image is too large to show.",
+  "tmlMermaidFailed": "guios cannot draw this diagram: {reason}",
+  "cockpitNoChanges": "No changes",
+  "cockpitFilesChanged": "{count, plural, one {# file changed} other {# files changed}}",
+  "@cockpitFilesChanged": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitAgainst": "against {base}",
+  "cockpitNoteOn": "Line {line}",
+  "@cockpitNoteOn": {
+    "placeholders": {
+      "line": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitRemove": "Remove",
+  "cockpitNotePlaceholder": "Write a note for the agent, then press Enter",
+  "cockpitAddNote": "Add a note",
+  "cockpitNotesSent": "{name} gets the notes.",
+  "cockpitNoCheckpoints": "No checkpoints",
+  "cockpitNoCheckpointsDetail": "tuios keeps one when a turn ends in a git worktree.",
+  "cockpitTurn": "Turn {n}",
+  "@cockpitTurn": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitRestore": "Restore",
+  "cockpitRestoreConfirm": "Click again to restore",
+  "cockpitRestored": "Restored checkpoint {n}.",
+  "@cockpitRestored": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitNoMail": "No mail",
+  "cockpitNoMailDetail": "Mail to and from {name} shows here.",
+  "cockpitEveryone": "everyone",
+  "cockpitReplyAsYou": "Reply as you",
+  "cockpitMailTo": "Mail to {name}",
+  "cockpitMailReply": "Reply to message {id}",
+  "@cockpitMailReply": {
+    "placeholders": {
+      "id": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitSendMail": "Send mail",
+  "cockpitPassMail": "Pass the mail to the agent",
+  "cockpitStageTodo": "To do",
+  "cockpitStagePlan": "Plan",
+  "cockpitStageDoing": "Doing",
+  "cockpitStageVerify": "Verify",
+  "cockpitStageReview": "Review",
+  "cockpitStageShipped": "Shipped",
+  "cockpitStageDone": "Done",
+  "cockpitAttempt": "Attempt {letter}",
+  "cockpitNoBoard": "No task board",
+  "cockpitAddCard": "Add a card",
+  "cockpitMoreColumns": "Show more columns",
+  "cockpitCardPlaceholder": "New card",
+  "cockpitMoveTo": "Move to {stage}",
+  "cockpitTakeCard": "Give to the selected agent",
+  "cockpitBlocked": "Blocked",
+  "cockpitFree": "No agent",
+  "cockpitTakeNeedsAgent": "Select an agent of the card's session first.",
+  "cockpitCardFree": "No pane holds this card.",
+  "cockpitDetails": "Details",
+  "cockpitDetailModel": "Model",
+  "cockpitDetailSource": "From",
+  "cockpitDetailMail": "Unread mail",
+  "cockpitDetailQueued": "Waiting",
+  "cockpitSubagents": "Subagents",
+  "usageTitle": "Usage",
+  "usageShow": "Show usage",
+  "usageHide": "Hide usage",
+  "usageCPU": "CPU",
+  "usageMemory": "Memory",
+  "usageLoad": "Load",
+  "usageContext": "Context",
+  "usageCost": "Cost",
+  "usageMachine": "This machine",
+  "usageHosts": "Hosts",
+  "usagePanes": "Panes",
+  "usageNotSupported": "This system does not report the usage of panes.",
+  "usageNoDaemon": "The daemon does not report usage. Update tuios to see it.",
+  "usageReading": "Reading the usage.",
+  "usageCores": "{n} cores",
+  "@usageCores": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "usageOffline": "Not connected",
+  "usageNoPanes": "No pane runs here.",
+  "workspaceEmptyTitle": "Workspace {n} has no panes",
+  "@workspaceEmptyTitle": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "workspaceEmptyDetail": "Open a pane here, or go to another workspace.",
+  "workspaceNewPane": "New pane",
+  "setTuiosKeys": "Use tuios keys",
+  "setTuiosKeysDetail": "In a pane, press the tuios prefix key (Ctrl+B by default) to open the tuios menus. Press Ctrl+P to open the command palette. Your tuios config.toml sets the keys.",
+  "keysNeedTui": "Open this session in the tuios TUI to use this key.",
+  "keysNotInGuios": "This key is for the tuios TUI. guios does not use it.",
+  "keysMenuPrefix": "Prefix",
+  "keysMenuWorkspace": "Workspace",
+  "keysMenuWindow": "Pane",
+  "keysMenuLayout": "Layout",
+  "keysMenuMinimize": "Minimize",
+  "keysNextPrevPane": "Prev/next pane",
+  "keysJumpPane": "Jump to pane",
+  "keysRenamePane": "Rename pane",
+  "keysMinimizePane": "Minimize pane",
+  "keysRestorePane": "Restore pane",
+  "keysSnapPane": "Snap pane to a corner",
+  "keysPaneWidth": "Resize pane width (%)",
+  "keysPaneHeight": "Resize pane height (%)",
+  "keysGroupPanes": "Panes",
+  "keysEscape": "Press Esc to close.",
+  "setFontMissing": "{font} is not installed or not monospaced. guios uses its own font.",
+  "@setFontMissing": {
+    "placeholders": {
+      "font": {
+        "type": "String"
+      }
+    }
+  },
+  "machinesTitle": "Machines",
+  "machineAdd": "Add a machine",
+  "hostStartDaemon": "Start the daemon",
+  "hostInstallTuios": "Install tuios",
+  "hostSaved": "{host} has a new address.",
+  "@hostSaved": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostAdded": "{host} is added.",
+  "@hostAdded": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostStatusUp": "Connected",
+  "hostStatusSameMachine": "Same machine",
+  "hostSameMachineAs": "This is the same machine as {host}. Its sessions show under {host}.",
+  "hostStatusReconnecting": "Reconnecting",
+  "hostStatusNoDaemon": "No daemon",
+  "hostStatusNoTuios": "No tuios",
+  "hostStatusOtherVersion": "Other version",
+  "hostStatusSignIn": "Sign in",
+  "hostStatusUnreachable": "Not reachable",
+  "hostLoad": "Load {load} on {cores} cores",
+  "@hostLoad": {
+    "placeholders": {
+      "load": {
+        "type": "String"
+      },
+      "cores": {
+        "type": "int"
+      }
+    }
+  },
+  "hostLoadLabel": "Load {load}",
+  "@hostLoadLabel": {
+    "placeholders": {
+      "load": {
+        "type": "String"
+      }
+    }
+  },
+  "hostRunsTuios": "Runs tuios {version}",
+  "@hostRunsTuios": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "hostLastDrop": "Last drop: {reason}",
+  "@hostLastDrop": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "hostQueued": "{count, plural, one {# message waits} other {# messages wait}} for the link",
+  "@hostQueued": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "hostStarting": "Starting",
+  "hostStartingOn": "Starting the daemon on {host}…",
+  "@hostStartingOn": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostInstallingShort": "Installing",
+  "hostStartFailed": "Could not start the daemon on {host}: {error}",
+  "@hostStartFailed": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "hostSignIn": "Sign in",
+  "hostPaneReconnecting": "Reconnecting to {host}",
+  "@hostPaneReconnecting": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostPaneWaiting": "{host} is not connected",
+  "@hostPaneWaiting": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostCopyTo": "Copy to {host}",
+  "@hostCopyTo": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "hostCopyStarted": "Copying {name} to {host}",
+  "@hostCopyStarted": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "transfersTitle": "Transfers",
+  "transfersNone": "No transfers",
+  "transferDone": "{name} is on {host}.",
+  "@transferDone": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "transferFailed": "Could not copy {name}: {error}",
+  "@transferFailed": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "transferCancel": "Cancel",
+  "transferClear": "Clear finished",
+  "newPaneOn": "New pane on {host}",
+  "@newPaneOn": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "lookViewText": "Text",
+  "lookViewSource": "Source",
+  "lookViewHex": "Hex",
+  "lookViewDetails": "Details",
+  "lookViewPreview": "Preview",
+  "lookViewDrawing": "Drawing",
+  "lookViewTree": "Tree",
+  "lookViewTable": "Table",
+  "lookViewPages": "Pages",
+  "lookViewFilm": "Film",
+  "lookViewSpecimen": "Specimen",
+  "lookViewContents": "Contents",
+  "lookViewTip": "{name} (v)",
+  "lookKindText": "Text",
+  "lookKindMarkdown": "Markdown",
+  "lookKindImage": "Picture",
+  "lookKindAnimation": "Animation",
+  "lookKindSVG": "SVG drawing",
+  "lookKindPDF": "PDF document",
+  "lookKindVideo": "Film",
+  "lookKindAudio": "Sound",
+  "lookKindTable": "Table",
+  "lookKindJSON": "JSON",
+  "lookKindArchive": "Archive",
+  "lookKindFont": "Font",
+  "lookKindBinary": "Binary file",
+  "lookKindFile": "File",
+  "lookReading": "Reading {name}",
+  "lookCountingLines": "Counting lines",
+  "lookCountingSoFar": "Counting lines: {count} so far",
+  "lookTooLarge": "The file is too large to show.",
+  "lookUnreadable": "The file could not be read.",
+  "lookPictureUnreadable": "The picture could not be read.",
+  "lookNoDecoder": "This machine cannot read this picture. Install ImageMagick or ffmpeg.",
+  "lookEmpty": "The file is empty.",
+  "lookNoTool": "This machine has no {tool}.",
+  "lookNoPoppler": "This machine has no {tool} to draw PDF pages. Install poppler and open the file again.",
+  "lookNoFfmpeg": "This machine has no {tool}. Install ffmpeg to see this file.",
+  "lookNoBsdtar": "This machine has no {tool} to list this archive.",
+  "lookPDFLocked": "The PDF is locked with a password.",
+  "lookPDFNoPages": "The PDF has no pages.",
+  "lookPageFailed": "This page could not be drawn.",
+  "lookNoFrame": "No frame could be read here.",
+  "lookSVGUnsupported": "guios cannot draw this SVG. Its source is in the Source view.",
+  "lookNotJSON": "The file is not valid JSON.",
+  "lookCounting": "The lines are still being counted. Try again in a moment.",
+  "lookTableCapped": "Shows the first {count} rows. The file has more.",
+  "lookJSONCapped": "Shows the start of the file. It is too large to read whole.",
+  "lookArchiveSummary": "{entries}, {size} unpacked",
+  "lookArchiveCapped": "The listing stops there.",
+  "lookNoMoreMatches": "No more matches for “{query}”.",
+  "lookFind": "Find",
+  "lookFindHint": "Text to find. Lower case ignores case.",
+  "lookGoToLine": "Go to line",
+  "lookGoToLineHint": "A line number",
+  "lookPrevPage": "Previous page (K)",
+  "lookNextPage": "Next page (J)",
+  "lookGoToPage": "Go to a page (:)",
+  "lookPageOf": "Page {page} of {pages}",
+  "lookOfPages": "of {pages}",
+  "lookZoomOut": "Zoom out (-)",
+  "lookZoomIn": "Zoom in (+)",
+  "lookZoomFit": "Fit (0)",
+  "lookFitPage": "Fit the page (z)",
+  "lookFitWidth": "Fit the width (z)",
+  "lookHold": "Hold (space)",
+  "lookPlay": "Play (space)",
+  "lookPrevFrame": "Previous frame (K)",
+  "lookNextFrame": "Next frame (J)",
+  "lookFrames": "{count, plural, one {# frame} other {# frames}}",
+  "@lookFrames": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lookFrameOf": "Frame {frame} of {frames}",
+  "lookBack5": "Back 5 % (K)",
+  "lookOn5": "On 5 % (J)",
+  "lookShowStrip": "Show the filmstrip (t)",
+  "lookHideStrip": "Hide the filmstrip (t)",
+  "lookGoToTime": "Go to {time}",
+  "lookNoSound": "no sound",
+  "lookSound": "sound {codec}",
+  "lookFillWindow": "Fill the window (f)",
+  "lookBesidePanes": "Show beside the panes (f)",
+  "lookFactName": "Name",
+  "lookFactKind": "Kind",
+  "lookFactSize": "Size",
+  "lookFactModified": "Modified",
+  "lookFactPermissions": "Permissions",
+  "lookFactFolder": "Folder",
+  "lookFactDimensions": "Dimensions",
+  "lookFactFrames": "Frames",
+  "lookFactPages": "Pages",
+  "lookFactPageSize": "Page size",
+  "lookFactDrawnBy": "Drawn by",
+  "lookFactLength": "Length",
+  "lookFactFrameSize": "Frame size",
+  "lookFactReadBy": "Read by",
+  "lookFactRows": "Rows",
+  "lookFactColumns": "Columns",
+  "lookFactFamily": "Family",
+  "lookFactStyle": "Style",
+  "lookFactVersion": "Version",
+  "lookFactGlyphs": "Glyphs",
+  "lookFactFaces": "Fonts in the file",
+  "lookFactDesigner": "Designer",
+  "lookFactLicense": "License",
+  "lookFactCodec": "Codec",
+  "lookFactSampleRate": "Sample rate",
+  "lookFactChannels": "Channels",
+  "lookFactBitRate": "Bit rate",
+  "lookFactDate": "Date",
+  "lookFactTrack": "Track",
+  "lookFactGenre": "Genre",
+  "lookFactAlbumArtist": "Album artist",
+  "lookMono": "Mono",
+  "lookStereo": "Stereo",
+  "lookSizeBytes": "{size} ({bytes} bytes)",
+  "lookPixels": "{size} pixels",
+  "lookGlyphsCount": "{count} glyphs",
+  "lookVersionOf": "version {version}",
+  "lookRows": "{count, plural, one {# row} other {# rows}}",
+  "@lookRows": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lookColumns": "{count, plural, one {# column} other {# columns}}",
+  "@lookColumns": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lookEntries": "{count, plural, one {# entry} other {# entries}}",
+  "@lookEntries": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lookLines": "{count, plural, one {# line} other {# lines}}",
+  "@lookLines": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lookKeys": "{count, plural, one {# key} other {# keys}}",
+  "@lookKeys": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lookItems": "{count, plural, one {# item} other {# items}}",
+  "@lookItems": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lookAlertNote": "Note",
+  "lookAlertTip": "Tip",
+  "lookAlertImportant": "Important",
+  "lookAlertWarning": "Warning",
+  "lookAlertCaution": "Caution",
+  "lookHintClose": "closes",
+  "lookHintHalf": "half a screen",
+  "lookHintPage": "a page",
+  "lookHintFilm": "5 % of the film",
+  "lookHintFrame": "a frame",
+  "lookHintView": "the next view",
+  "lookHintBeside": "beside the panes",
+  "actionLayoutBsp": "Split tree layout",
+  "actionLayoutMaster": "Master and stack layout",
+  "actionLayoutScrolling": "Scrolling layout",
+  "actionLayoutFloating": "Floating layout",
+  "actionLayoutNext": "Next layout",
+  "actionLayoutTiling": "Turn tiling on or off",
+  "actionLayoutRotate": "Rotate split",
+  "actionLayoutEqualize": "Make splits equal",
+  "actionLayoutFloat": "Float or tile pane",
+  "actionLayoutMasterPosition": "Move masters to next side",
+  "actionLayoutMasterAdd": "Add a master",
+  "actionLayoutMasterRemove": "Remove a master",
+  "actionLayoutMasterSwap": "Swap with master",
+  "actionLayoutMasterFocus": "Go to master",
+  "actionLayoutScrollWidth": "Next column width",
+  "actionLayoutScrollMax": "Widest column",
+  "actionLayoutScrollConsume": "Pull next pane into column",
+  "actionLayoutScrollExpel": "Move last pane to own column",
+  "actionLayoutScrollMoveLeft": "Move column left",
+  "actionLayoutScrollMoveRight": "Move column right",
+  "actionLayoutSnapLeft": "Snap to left half",
+  "actionLayoutSnapRight": "Snap to right half",
+  "actionLayoutSnapFull": "Fill the pane area",
+  "actionLayoutSnapUnsnap": "Unsnap",
+  "menuLayout": "Layout",
+  "menuLayoutMaster": "Master and stack",
+  "menuLayoutScrolling": "Scrolling",
+  "menuLayoutFloating": "Floating",
+  "layoutSnapNeedsFloating": "Turn tiling off to snap a pane.",
+  "actionNewPane": "New pane",
+  "lookKindHTML": "HTML page",
+  "lookViewPage": "Page",
+  "cockpitReadingPrompt": "Reading the prompt on the pane’s screen…",
+  "cockpitAnswerFailed": "tuios could not send the answer. Open the pane to answer it.",
+  "toastPaneTooSmall": "This pane is too small to split. Close a pane or make the window wider.",
+  "toastLayoutTooSmall": "The panes would be too small for this layout. Close a pane or make the window larger.",
+  "copyModeLabel": "Copy mode",
+  "copyModeNormal": "Copy",
+  "copyModeVisual": "Visual",
+  "copyModeWhere": "Line {line} of {lines}, column {column}",
+  "@copyModeWhere": {
+    "placeholders": {
+      "line": {
+        "type": "int"
+      },
+      "lines": {
+        "type": "int"
+      },
+      "column": {
+        "type": "int"
+      }
+    }
+  },
+  "copyModeVisualLine": "Visual line",
+  "copyModeVisualBlock": "Visual block",
+  "copyModeHint": "Move with h, j, k and l. Press v to select and y to copy. Press q to leave.",
+  "copyModeNotFound": "\"{query}\" is not in the pane.",
+  "copyModeYanked": "Copied {n} characters.",
+  "helpTitle": "Keys",
+  "helpPlaceholder": "Find a key or what it does…",
+  "helpFooter": "Your tuios config.toml sets the tuios keys. Settings > Keyboard sets the guios keys. Press Esc to close.",
+  "promptRenamePane": "Rename the pane",
+  "promptRenamePaneDetail": "Every client shows this name. Leave it empty to show the program's title again.",
+  "promptRenameWorkspace": "Rename workspace {n}",
+  "promptRenameWorkspaceDetail": "The workspace keeps its number. Leave the name empty to show the number again.",
+  "promptNote": "Note for the session",
+  "promptNoteDetail": "One short line: what the session is for, or what comes next. Leave it empty to remove the note.",
+  "promptNotePlaceholder": "Write a note",
+  "promptSave": "Save",
+  "keysNoAgents": "No pane runs an agent.",
+  "keysNothingFinished": "No finished turn waits for you.",
+  "keysNoMessage": "No pane has a message.",
+  "keysNoImage": "The clipboard holds no image.",
+  "keysNoBuffer": "There is no paste buffer. A copy in copy mode makes one.",
+  "keysBuffersLabel": "Paste a buffer",
+  "keysScreenshotSaved": "Saved the screenshot to {path}.",
+  "keysPickPathTitle": "Type the path of a file",
+  "keysWorkspaceQuery": "workspace",
+  "keysNest": "Every key goes to the pane now, {leader} too. Press {key} to leave.",
+  "copyModeHints": "Hints",
+  "copyModeHintsHint": "Type a label to copy its text. With Shift it is also typed into the pane, with Ctrl or Cmd it is opened. Press Esc to leave.",
+  "copyModeNoHints": "Nothing on the screen to label.",
+  "keysSidebarLabel": "Sessions, by keyboard",
+  "keysNoTransfers": "No copies between machines yet. Copy a file to another machine from the Files tab.",
+  "keysCalmOn": "Calm mode is on. Nothing moves or blinks, and only what needs you notifies.",
+  "keysCalmOff": "Calm mode is off.",
+  "keysCalmOffHeld": "Calm mode is off. It held {n} notifications.",
+  "debugTitle": "Debug",
+  "debugFps": "Frames a second",
+  "debugFrame": "Build p50 · p99 · max",
+  "debugWakeups": "Wakeups",
+  "debugHeap": "Go heap",
+  "debugGoroutines": "Goroutines",
+  "debugTerminals": "Terminals",
+  "keysNoTapes": "There are no tapes in {dir}.",
+  "keysTapesLabel": "Play a tape",
+  "keysTapePlaying": "Playing {name}.",
+  "keysTapePlayed": "Played {name}.",
+  "keysTapeSkipped": "Played {name}. Commands only the TUI runs were left out: {n}.",
+  "scrollbackTitle": "Commands",
+  "scrollbackNoMarks": "This pane's shell does not mark its commands. Set up the tuios shell integration to use the scrollback browser.",
+  "scrollbackCopied": "Copied {n} characters.",
+  "scrollbackFooter": "j and k move. J and K scroll the output. y copies the output, c the command. Enter types the command again. / filters. Esc closes.",
+  "actionNewAgent": "New agent…",
+  "cockpitNewAgent": "New agent",
+  "cockpitHintNewAgent": "new agent",
+  "cockpitCompare": "Compare attempts",
+  "cockpitHintCompare": "compare",
+  "paletteNewAgent": "Start a new agent",
+  "spawnTitle": "New agent",
+  "spawnClose": "Close",
+  "spawnFrom": "from {repo}",
+  "spawnFromBranch": "from {repo} / {branch}",
+  "spawnIn": "in {folder}",
+  "spawnTask": "Task",
+  "spawnTaskPlaceholder": "What should the agent do?",
+  "spawnAgent": "Agent",
+  "spawnMoreAgents": "More",
+  "spawnNoAgentFound": "No agent found. Install one, such as claude or codex.",
+  "spawnAgentRunning": "{count} running",
+  "@spawnAgentRunning": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "spawnAgentInstalled": "Installed",
+  "spawnAgentMissing": "Not installed here",
+  "spawnModel": "Model",
+  "spawnModelDefault": "The agent's default",
+  "spawnModelPassed": "Goes as --model",
+  "spawnWhere": "Where it works",
+  "spawnNewWorktree": "New worktree",
+  "spawnThisFolder": "This folder",
+  "spawnBranch": "Branch",
+  "spawnFromTask": "From the task",
+  "spawnBase": "Base",
+  "spawnDirty": "{count, plural, one {# uncommitted file stays here} other {# uncommitted files stay here}}",
+  "@spawnDirty": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "spawnMachine": "Machine",
+  "spawnBestFit": "Best fit first",
+  "spawnNotConnected": "Not connected",
+  "spawnCoresWorking": "{cores} cores · {working} working",
+  "@spawnCoresWorking": {
+    "placeholders": {
+      "cores": {
+        "type": "int"
+      },
+      "working": {
+        "type": "int"
+      }
+    }
+  },
+  "spawnWorking": "{working} working",
+  "@spawnWorking": {
+    "placeholders": {
+      "working": {
+        "type": "int"
+      }
+    }
+  },
+  "spawnThisMachine": "this machine",
+  "spawnAgentReady": "{agent} ready",
+  "spawnOrderHolds": "The order stays the same while this sheet is open.",
+  "spawnAttempts": "Attempts",
+  "spawnFewer": "Fewer attempts",
+  "spawnMore": "More attempts",
+  "spawnOneAttempt": "One agent works on the task.",
+  "spawnManyAttempts": "{count} agents work on the task, each in its own worktree and branch.",
+  "@spawnManyAttempts": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "spawnAttemptChip": "Attempt {letter}: {agent}",
+  "spawnAttemptNext": "Click to use the next agent for this attempt.",
+  "spawnVary": "Vary agents",
+  "spawnHintStart": "start",
+  "spawnHintNext": "next field",
+  "spawnHintPreset": "remember for this folder",
+  "spawnStartOne": "Start agent",
+  "spawnStartMany": "Start {count} agents",
+  "@spawnStartMany": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "spawnSavedPreset": "This folder keeps these choices for the next agent.",
+  "spawnNoDaemon": "The tuios daemon is not connected. Start it, then try again.",
+  "spawnReading": "Reading the folder. Try again in a moment.",
+  "spawnReadingAll": "Reading the folder and the agents.",
+  "spawnNoRepo": "This folder is not in a git repository.",
+  "spawnNoOrigin": "The repository has no origin remote, so {host} cannot find it.",
+  "spawnFarWorktree": "On another machine, the agent works in a new worktree.",
+  "spawnStarting": "This sheet is starting its agents. Wait for the result.",
+  "spawnWriteTask": "Write the task first.",
+  "spawnNoAgent": "No agent is known on this machine.",
+  "spawnNotInstalled": "{agent} is not installed on this machine.",
+  "spawnBadModel": "A model name cannot start with -.",
+  "spawnWriteBranch": "Write a branch name.",
+  "spawnBranchChars": "A branch name can have only the letters A to Z and a to z, the digits 0 to 9, and / . _ -.",
+  "spawnBranchGit": "Git does not accept this branch name.",
+  "spawnBadBase": "A base cannot start with -.",
+  "spawnFarImages": "Images go only to an agent on this machine. Remove them, or pick this machine.",
+  "spawnImagesNotSaved": "The images were not saved: {why}",
+  "spawnStartingFolder": "Starting {agent} in this folder.",
+  "spawnStartingFan": "Starting {count} agents in new worktrees.",
+  "@spawnStartingFan": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "spawnStartingWorktree": "Starting {agent} in a new worktree.",
+  "spawnFailed": "The agent did not start: {why}. Press n in the agents view to change the sheet.",
+  "spawnStartedFan": "Started {count} agents on {group}.",
+  "@spawnStartedFan": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "spawnStartedWorktree": "Started {branch}. The task goes in when the agent is ready.",
+  "spawnNotReady": "{agent} did not show its prompt in time. Open the pane to see it.",
+  "spawnTaskNotSent": "{agent} started, but the task was not typed in. Open the pane to see it.",
+  "spawnStartedIn": "Started {agent} in {session}.",
+  "compareTitle": "Compare attempts",
+  "compareSelectAttempt": "Select an attempt of a fan to compare its attempts.",
+  "compareCannotRead": "tuios cannot compare the attempts now: {why}",
+  "compareChanged": "The attempts changed after the last read. Check them, then press k again.",
+  "compareOneLeft": "One attempt is left. There is nothing to judge.",
+  "compareJudgeFailed": "The judge did not start: {why}",
+  "compareJudgeNotReady": "The judge in {session} is not ready: {why}",
+  "compareJudgeStarted": "A judge reads the attempts in {session}. Its verdict shows here when it reports.",
+  "compareOldDaemon": "This daemon is older than guios. Restart it, then try again.",
+  "compareKeepFailed": "The attempt was not kept: {why}",
+  "compareKept": "{count, plural, one {Kept {letter}, {session}. Removed # other attempt. Its branch stays.} other {Kept {letter}, {session}. Removed # other attempts. Their branches stay.}}",
+  "@compareKept": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "compareKeptLeft": "{count} could not be removed. Run tuios worktree ls to see them.",
+  "@compareKeptLeft": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "compareNoPane": "The pane of {session} is not in the list.",
+  "compareFromBase": "{group} from {base}",
+  "compareBack": "Back",
+  "compareVerdictPick": "The judge picks {pick}",
+  "compareJudgePick": "Judge's pick",
+  "compareFiles": "{count, plural, one {# file} other {# files}}",
+  "@compareFiles": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "compareVerify": "Verify: {state}",
+  "compareNoChanges": "No changes yet.",
+  "compareGone": "Gone",
+  "compareDone": "Done",
+  "compareKeepWarn": "Press Enter to keep {letter}. This removes {others}. Their changes are stashed, and their branches stay. Press Esc to cancel.",
+  "compareKeepIgnored": "{count, plural, one {It also deletes # file that git ignores in them.} other {It also deletes # files that git ignores in them.}}",
+  "@compareKeepIgnored": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "compareIgnoredFailed": "tuios cannot list the ignored files of {list}. Press k to read them again.",
+  "compareHintPick": "pick",
+  "compareHintRead": "read again",
+  "compareJudge": "Judge",
+  "compareKeep": "Keep {letter}",
+  "compareKeepAgain": "Keep {letter} now",
+  "cockpitHintSend": "send",
+  "cockpitHintList": "back to the list",
+  "cockpitShowBoard": "Show the task board of every session (b)",
+  "cockpitShowMail": "Show the mail that agents sent to you (Shift+M)",
+  "cockpitHintColumns": "columns",
+  "cockpitHintMoveCard": "move card",
+  "cockpitHintAddCard": "add card",
+  "cockpitMailForYou": "Mail for you",
+  "cockpitNoMailForYou": "No mail for you",
+  "cockpitNoMailForYouDetail": "Mail that an agent sends to you shows here.",
+  "cockpitImage": "Image",
+  "cockpitImageOpen": "Show the image at full size (Space)",
+  "hostDaemonStopped": "The tuios daemon on {name} stopped.",
+  "@hostDaemonStopped": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "hostOtherProtocol": "The tuios daemon on {name} speaks another version of the control protocol. Update tuios on {name}.",
+  "@hostOtherProtocol": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "sidebarMoreAgents": "{count, plural, one {# more agent} other {# more agents}}",
+  "@sidebarMoreAgents": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sidebarAgentTip": "Click to show it in Agents. Double-click to open its pane.",
+  "cockpitSourceStall": "the screen, no report for 30 s",
+  "cockpitSourceScreen": "the screen",
+  "cockpitSourceOsc": "an escape sequence",
+  "cockpitSourceDetect": "the running program",
+  "cockpitSourceTranscript": "the transcript",
+  "cockpitSourceProgram": "the program's status",
+  "footerAgentsNeedYou": "{count, plural, one {# agent needs you} other {# agents need you}}",
+  "@footerAgentsNeedYou": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitThreadFailed": "The conversation did not load",
+  "cockpitNameAsks": "{name} asks",
+  "@cockpitNameAsks": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "cockpitAnswerByReply": "Write the answer in the reply box. Enter sends it.",
+  "cockpitQueuedWaiting": "Waits for the agent's prompt on the screen.",
+  "cockpitQueuedDelivering": "The agent is at its prompt. tuios types it now.",
+  "cockpitQueuedStalled": "The agent did not take it. Send it now or drop it.",
+  "cockpitSendNowButton": "Send now",
+  "usageOfCores": "of {n} cores",
+  "@usageOfCores": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "cockpitSendAs": "Send as",
+  "cockpitSendAsPrompt": "Prompt",
+  "cockpitSendAsMail": "Mail",
+  "cockpitMailInbox": "Goes to the inbox of {name}",
+  "@cockpitMailInbox": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "cockpitMailNoImages": "Mail takes text only. Send the image as a prompt.",
+  "cockpitMailSent": "Mail sent to {name}.",
+  "@cockpitMailSent": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "toastOpenFailed": "guios could not open it: {why}",
+  "toastTypeaheadLost": "The keys you typed before the pane opened did not reach it: {why}",
+  "spawnKeepsTask": "The sheet keeps the task you were writing. Clear it to use {id}.",
+  "spawnForCard": "card {id}",
+  "spawnHoldsCard": "It holds {id}.",
+  "spawnFanOnCard": "They work on {id}.",
+  "spawnCardLeftOut": "{id} was left out: {why}",
+  "cockpitStartOnCard": "Start an agent on it",
+  "cockpitKeysToList": "Keys go to the list. Press r to write.",
+  "cockpitWaitsAtPrompt": "This agent waits at a prompt on its screen. Text you send here waits for that.",
+  "cockpitYouTo": "You → {name}",
+  "@cockpitYouTo": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "cockpitMailReplyTo": "Reply to the mail of {name}",
+  "@cockpitMailReplyTo": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "setApprovals": "Approvals",
+  "setApprovalsRow": "Answer Claude Code's permission prompts in Agents",
+  "setApprovalsDetail": "A prompt waits in Agents until you allow or reject it, for up to 2 minutes. Then Claude Code asks in its pane. tuios saves this in its config.toml.",
+  "cockpitKeysToBoard": "Keys go to the board.",
+  "cockpitHintMove": "move",
+  "cockpitKeysToMail": "Keys go to the mail list. Press r to reply.",
+  "setApprovalsNeedsIntegration": "Needs the Claude Code integration. Install it to get the prompts here.",
+  "compareKeysHere": "Keys go to Compare, and typed text does nothing here. Press Esc to close it.",
+  "compareNothingToKeep": "{letter} has nothing to keep yet. Keep works when the attempt stops with changes.",
+  "cockpitThreadUnsupported": "tuios cannot show {harness} conversations yet",
+  "cockpitThreadUnsupportedDetail": "Open the pane to see it.",
+  "cockpitAskAllow": "Allow {target}?",
+  "cockpitAskAllowAlways": "Always allow {target}?",
+  "cockpitAskReject": "Reject {target}?",
+  "cockpitAskRejectWhy": "Reject {target} with this reason?",
+  "cockpitAskSettle": "Settle {name}?",
+  "cockpitAskUnsettle": "Take {name} off the shelf?",
+  "cockpitAskDismiss": "Dismiss this item of {name}?",
+  "cockpitAskPass": "Pass the held mail on to {name}?",
+  "cockpitClickAgain": "This command is risky. Click again to allow it.",
+  "spawnStartChord": "Press {keys} to start. A letter in the list opened this sheet, so Enter does not start it.",
+  "compareAskJudge": "Start a judge that reads the attempts? Press Enter to start it. Press Esc to cancel.",
+  "cockpitAskSnooze": "Snooze {name}?",
+  "cockpitAskWake": "Show {name} again?",
+  "cockpitNoSnoozeHeld": "A held approval cannot be snoozed. Answer it, or let it go back to the pane.",
+  "spawnMeantToReply": "Meant to reply? Press Esc to move this text to the reply box.",
+  "sidebarMorePanes": "{count, plural, one {# more pane} other {# more panes}}",
+  "sidebarPaneNumber": "pane {n}",
+  "@sidebarMorePanes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sidebarPanes": "{count, plural, one {# pane} other {# panes}}",
+  "@sidebarPanes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sidebarFilesTip": "Show the files of this session",
+  "cockpitKeysNeedAgent": "Select an agent to write to it.",
+  "cockpitHintReject": "reject",
+  "cockpitHintTypeKey": "Type",
+  "cockpitHintClaim": "give card",
+  "cockpitAddCardChord": "Press {keys} or Add to add the card.",
+  "cockpitAskGive": "Give {card} to {name}?",
+  "cockpitGiveWord": "Give",
+  "compareReadAgain": "Read again",
+  "keysAgentsGroup": "guios · Agents",
+  "keysTypeToReply": "Write to the selected agent",
+  "keysListMove": "Move in the list",
+  "keysUndoSettle": "Take back the last settle",
+  "keysNeedsOnly": "Show only the agents that need you",
+  "keysTabPrev": "Previous tab",
+  "keysTabNext": "Next tab",
+  "keysGiveCard": "Give the card to the selected agent",
+  "keysMoveCardLeft": "Move the card a column left",
+  "keysMoveCardRight": "Move the card a column right",
+  "keysKeepAttempt": "Keep the attempt",
+  "cockpitQueuedAnswerFirst": "Queued for {name}. Answer the call first.",
+  "cockpitWaitsForAnswer": "Waits until the call is answered.",
+  "cockpitHintQueue": "queue",
+  "cockpitNothingWaits": "Nothing waits for you.",
+  "cockpitApprovalsFirst": "Turn on approvals first.",
+  "sidebarSameName": "Another session has the same name. The line under it tells them apart.",
+  "cockpitTypeToReply": "Type to reply",
+  "cockpitTypeToAddCard": "Type to add a card",
+  "cockpitNothingToSnooze": "{name} has nothing to snooze.",
+  "cockpitQuestionTypeReply": "This is a question. Pick an answer, or type to reply.",
+  "paneZoomedHides": "Zoomed · {count, plural, one {# pane hidden} other {# panes hidden}}",
+  "paneZoomedEnd": "Show all panes",
+  "cockpitEditFile": "Edit {file}",
+  "cockpitWriteFile": "Write {file}",
+  "cockpitMultiEditFile": "MultiEdit {file}",
+  "cockpitEditCount": "{count, plural, one {# edit} other {# edits}}",
+  "cockpitEditLines": "{count, plural, one {# line} other {# lines}}",
+  "cockpitEditReading": "Reading the edit…",
+  "cockpitEditLeft": "{count, plural, one {Scroll through the edit to allow it: # line is not shown yet.} other {Scroll through the edit to allow it: # lines are not shown yet.}}",
+  "sidebarMinimized": "Minimized · {count}",
+  "sidebarRestorePane": "Restore {name}",
+  "sidebarMinimizedTip": "Panes minimized on this workspace. Click one to restore it.",
+  "workspaceMinimized": "{count} minimized",
+  "actionLayoutSave": "Save layout…",
+  "actionLayoutLoad": "Load layout…",
+  "promptSaveLayout": "Save layout",
+  "promptSaveLayoutDetail": "Keeps the panes of this workspace, their names, folders and splits, under a name. Load layout… puts them back.",
+  "promptSaveLayoutPlaceholder": "Layout name",
+  "layoutsLabel": "Load layout",
+  "layoutsNone": "There are no saved layouts. Save one with Layout › Save layout….",
+  "layoutPanes": "{count, plural, one {# pane} other {# panes}}",
+  "layoutLoad": "Load",
+  "layoutDelete": "Delete",
+  "confirmDeleteLayout": "Delete the layout {name}?",
+  "confirmDeleteLayoutDetail": "The layout's file is removed. The panes that show now stay.",
+  "toastLayoutSaved": "Saved layout {name}",
+  "toastLayoutLoaded": "Loaded layout {name}",
+  "toastLayoutDeleted": "Deleted layout {name}",
+  "hintTyped": "Copied {count} characters and typed them into the pane.",
+  "hintTypeFailed": "Copied the text. It could not be typed into the pane: {why}",
+  "hintOpenOff": "Opening is off in the tuios config (hints.open). The text is copied.",
+  "hintNotOpenable": "Hints open only links and paths. The text is copied.",
+  "@hintTyped": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "hintNoFile": "There is no file {path} from the pane's folder. The text is copied.",
+  "keysNoMenu": "There is no menu {name} in the tuios config ([keybindings.menus.{name}]).",
+  "launcherRow": "Run a program…",
+  "launcherLabel": "Programs",
+  "launcherNoSession": "Open a session first. A program runs in a pane of it.",
+  "launcherFailed": "The programs could not be listed.",
+  "launcherEmpty": "There are no programs on the PATH.",
+  "launcherRunFailed": "{name} could not start: {why}",
+  "commandEntryFailed": "{name} did not run: {why}",
+  "commandEntryRan": "Ran {name}.",
+  "pluginActionDetail": "plugin action",
+  "pluginPaneDetail": "plugin pane, {placement}",
+  "pluginNoDaemon": "The tuios daemon on this machine cannot be reached.",
+  "pluginNeedsLocal": "{name} is a plugin of this machine's daemon, and this session runs on another machine.",
+  "railPaneStopped": "Stopped",
+  "railPaneStartAgain": "Start again"
+}

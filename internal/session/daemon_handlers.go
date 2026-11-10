@@ -26,6 +26,8 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	cs.pluginAsks = payload.PluginApprovals
 	changed := cs.treeOps != payload.LayoutTreeOps || cs.scratchWS != payload.ScratchWorkspaces
 	cs.treeOps = payload.LayoutTreeOps
+	cs.daemonActions = payload.DaemonActions
+	cs.scrollOps = payload.ScrollColumnOps
 	cs.scratchWS = payload.ScratchWorkspaces
 	sizeCapChanged := cs.windowSizeCap != payload.WindowSize
 	cs.windowSizeCap = payload.WindowSize
@@ -97,6 +99,10 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		DirWatch: true,
 		// See sidebar_visibility.go.
 		SidebarOps: true,
+		// See daemon_actions.go.
+		DaemonActions: true,
+		// See scroll_columns.go.
+		ScrollColumnOps: true,
 		// See Message.ReqID.
 		RequestIDs: true,
 		// See ExecuteCommandPayload.FocusIfShown.
@@ -982,6 +988,11 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	clampPushedText(&state)
 	// Rectangles tiled in a box the session has moved on from are kept out.
 	// See layout_gen.go.
+	// A client that sends its columns as ops does not move them by a push.
+	// See scroll_columns.go.
+	cs.mu.Lock()
+	state.columnsByOp = cs.scrollOps
+	cs.mu.Unlock()
 	if session.keepRectsOfStaleLayout(&state) {
 		LogBasic("Kept the session's rectangles over a push from %s tiled in an older layout", cs.clientID)
 	}

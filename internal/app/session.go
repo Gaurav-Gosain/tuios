@@ -435,6 +435,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	if state.AutoTiling {
 		m.adoptScrollColumns(state.WorkspaceScrollColumns)
 	}
+	m.noteSessionColumns(state.WorkspaceScrollColumns)
 	m.ApplyLayoutModeName(state.LayoutMode)
 	m.LogInfo("[RESTORE] NextBSPWindowID=%d, TilingScheme=%d, LayoutMode=%s", m.NextBSPWindowID, m.TilingScheme, m.LayoutModeName())
 
@@ -808,6 +809,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 		focusAfter = m.Windows[m.FocusedWindow].ID
 	}
 	focusChanged := focusAfter != focusBefore
+	m.takeFocusEnter(focusChanged)
 
 	// The folded turns, now that the focus is the one this sync names.
 	for _, w := range m.turnsWithinSync {
@@ -918,8 +920,21 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	}
 	// The scrolling columns, on the same terms as the trees. Nil is a peer that
 	// did not say, which leaves this client's columns alone.
-	if adoptTopology && state.WorkspaceScrollColumns != nil && state.AutoTiling {
-		m.adoptScrollColumns(state.WorkspaceScrollColumns)
+	// With the columns as ops the session's are taken from every state, for
+	// each workspace that holds no unsent change of this client's. See
+	// scroll_columns_sync.go.
+	stripMoved := false
+	if state.WorkspaceScrollColumns != nil && state.AutoTiling {
+		switch {
+		case m.scrollOpsOn():
+			before := colsKey(m.scrollColumnsState()[m.CurrentWorkspace])
+			adopted := m.columnsToAdopt(state.WorkspaceScrollColumns)
+			m.adoptScrollColumns(adopted)
+			m.noteDerivedColumns(adopted)
+			stripMoved = colsKey(m.scrollColumnsState()[m.CurrentWorkspace]) != before
+		case adoptTopology:
+			m.adoptScrollColumns(state.WorkspaceScrollColumns)
+		}
 	}
 
 	// Mirror the structural half of a float toggled elsewhere. The peer that
@@ -1159,6 +1174,13 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 		if treeRetile || zoomRetile {
 			m.SyncStateToDaemon()
 		}
+	}
+	// The same for a strip the session changed on the workspace on screen:
+	// the daemon writes no rectangles for it while a TUI is attached
+	// (arrange_engine.go flush), so the ones this client laid it out at are
+	// sent, or list-windows reports the strip as it was.
+	if stripMoved && m.AutoTiling && m.UseScrollingLayout {
+		m.SyncStateToDaemon()
 	}
 
 	// A pane a switch to an empty workspace asked for has arrived.
@@ -1863,14 +1885,10 @@ func (m *OS) insertSyncedWindow(win *terminal.Window, focusBefore string) {
 	if !tree.HasWindow(targetIntID) {
 		return
 	}
-	if dir != layout.PreselectionNone {
-		tree.InsertWindowWithPreselection(windowIntID, targetIntID, dir, m.GetBSPBounds(), m.separatorGap())
-		if fromPreselection {
-			m.PreselectionDir = layout.PreselectionNone
-		}
-		return
+	tree.AddWindow(windowIntID, targetIntID, dir, m.GetBSPBounds(), m.separatorGap())
+	if dir != layout.PreselectionNone && fromPreselection {
+		m.PreselectionDir = layout.PreselectionNone
 	}
-	tree.InsertWindow(windowIntID, targetIntID, layout.SplitNone, 0.5, m.GetBSPBounds(), m.separatorGap())
 }
 
 // convertSessionBSPNode converts session.SerializedBSPNode to layout.SerializedNode
@@ -2422,6 +2440,13 @@ func (m *OS) SyncStateToDaemon() {
 		state.WorkspaceTrees = nil
 		state.WindowToBSPID = nil
 		state.NextBSPWindowID = 0
+	}
+	// The columns go the same way. See scroll_columns_sync.go.
+	if m.scrollOpsOn() {
+		if !m.sendScrollColumnOps() {
+			return
+		}
+		state.WorkspaceScrollColumns = nil
 	}
 	fp := session.StateFingerprint(state)
 	if m.syncedFPSet && m.syncedFP == fp {

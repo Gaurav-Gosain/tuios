@@ -376,7 +376,9 @@ const (
 // does not import). A test in cmd/tuios holds the two lists equal.
 var EventTypes = []string{
 	"window-created", "window-closed", "window-exit", "window-retitled",
-	"window-focused", "window-moved", "window-minimized", "window-restored",
+	"window-focused", "window-foreground", "window-moved", "window-minimized", "window-restored",
+	// A pane's working folder changed.
+	"window-cwd",
 	"workspace-switched", "workspace-renamed", "layout-changed", "agent-state", "agent-seen", "agent-message",
 	"output", "bell", "notification", "mode-changed",
 	"session-created", "session-closed", "session-labelled", "client-session-changed", "gap", "attention",
@@ -391,6 +393,10 @@ var EventTypes = []string{
 	"tml-surface",
 	// A session's task cards.
 	"task-claimed", "task-finished", "task-changed", "task-dispatch",
+	// A judge's verdict on a fan.
+	"fan-verdict",
+	// A session option set-option recorded. Opt-in.
+	"option-set",
 	// The daemon took or dropped its hold that keeps the machine awake.
 	"keep-awake",
 	// git removed a worktree tuios made.

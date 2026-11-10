@@ -451,16 +451,13 @@ func (m *OS) AddWindowToBSPTree(window *terminal.Window) {
 		m.LogInfo("BSP: Splitting int ID %d", targetIntID)
 	}
 
-	bounds := m.GetBSPBounds()
-
-	// Check for preselection
+	// A preselection is spent on this pane. See layout.AddWindow for where
+	// the pane goes without one.
 	if m.PreselectionDir != layout.PreselectionNone {
 		m.LogInfo("BSP: Inserting with preselection %d", m.PreselectionDir)
-		tree.InsertWindowWithPreselection(windowIntID, targetIntID, m.PreselectionDir, bounds, m.separatorGap())
-		m.PreselectionDir = layout.PreselectionNone // Clear preselection
-	} else {
-		tree.InsertWindow(windowIntID, targetIntID, layout.SplitNone, 0.5, bounds, m.separatorGap())
 	}
+	tree.AddWindow(windowIntID, targetIntID, m.PreselectionDir, m.GetBSPBounds(), m.separatorGap())
+	m.PreselectionDir = layout.PreselectionNone
 
 	m.LogInfo("BSP: Tree now has %d windows", tree.WindowCount())
 
@@ -475,7 +472,8 @@ func (m *OS) AddWindowToBSPTree(window *terminal.Window) {
 // bspSplitTarget is the tree leaf a new window splits: the pane named by
 // windowID when the tree holds it, else the last leaf. A new window splits the
 // focused pane, as in bspwm. The last leaf is only the fallback for a window
-// that arrives with no focused pane in this tree.
+// that arrives with no focused pane in this tree, and layout.AddWindow takes
+// the same fallback for a target the tree does not hold.
 func (m *OS) bspSplitTarget(tree *layout.BSPTree, windowID string) int {
 	if windowID != "" {
 		if id := m.GetWindowIntID(windowID); tree.HasWindow(id) {

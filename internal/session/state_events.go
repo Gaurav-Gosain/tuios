@@ -28,6 +28,8 @@ type lifecycleWindow struct {
 	ptyID      string
 	title      string
 	customName string
+	// foreground is the program the pane runs, for window-foreground.
+	foreground string
 	workspace  int
 	minimized  bool
 	agentState AgentState
@@ -59,6 +61,10 @@ type lifecycleWindow struct {
 	// id. The sink turns them into the approval root (windowApprovalRoot),
 	// off this snapshot, since that reads the file system.
 	worktree, agentSession string
+	// convHarness, convFlags and cwd ride along for the record of ended
+	// conversations: what a resume of agentSession needs (conversations.go).
+	convHarness, cwd string
+	convFlags        []string
 	// link rides along for the Inbox: the window's parent and root in a
 	// chain of agents. See attention_children.go.
 	link childLink
@@ -114,6 +120,7 @@ func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 			ptyID:         w.PTYID,
 			title:         w.Title,
 			customName:    w.CustomName,
+			foreground:    w.ForegroundCmd,
 			workspace:     w.Workspace,
 			minimized:     w.Minimized,
 			agentState:    w.AgentState,
@@ -128,6 +135,9 @@ func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 			program:       len(w.ProgramStatus) > 0,
 			worktree:      worktree,
 			agentSession:  w.AgentSessionID,
+			convHarness:   resumeHarnessOf(*w),
+			convFlags:     resumeFlagsOf(*w, resumeHarnessOf(*w)),
+			cwd:           w.Cwd,
 			link:          childLinkOf(w),
 			x:             w.X,
 			y:             w.Y,
@@ -194,6 +204,14 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 				Type:   EventWindowRetitled,
 				Window: w.id,
 				Title:  w.customName,
+			})
+		}
+		if w.foreground != prev.foreground {
+			events = append(events, SessionEvent{
+				Type:   EventWindowForeground,
+				Window: w.id,
+				PTYID:  w.ptyID,
+				Title:  w.foreground,
 			})
 		}
 		if w.workspace != prev.workspace {

@@ -111,6 +111,45 @@ func (a *attentionStore) riskOfLine(line, root, runDir string) []risk.Hit {
 	return hits
 }
 
+// recheckRisk matches the rules again on a running hold's call, for an allow
+// of it. The rules resolve links in a path, and a pane can put a link where a
+// file was after the hold opened, so what the hold matched then is not what
+// an allow would let through now. It reads the file system, so it runs
+// before the store's lock is taken. A plan has no call, and nothing is held
+// under requestID, both give nil.
+func (a *attentionStore) recheckRisk(requestID string) []risk.Hit {
+	h, _, ok := a.holdDetail(requestID)
+	if !ok || h.kind == AttentionPlan || (h.tool == "" && h.target == "") {
+		return nil
+	}
+	return a.riskOfCall(h.tool, h.target, h.summary, h.root, h.runDir)
+}
+
+// addHoldRiskLocked adds to a hold, and to its item, every rule in now the
+// hold does not have yet. The item's mark only grows (stickyRisk), so a
+// client shows the new rule and can acknowledge it. The caller holds mu.
+func (a *attentionStore) addHoldRiskLocked(h *approvalHold, now []risk.Hit) {
+	had := risk.Names(h.risk)
+	added := false
+	for _, hit := range now {
+		if !slices.Contains(had, hit.Rule) {
+			h.risk = append(h.risk, hit)
+			had = append(had, hit.Rule)
+			added = true
+		}
+	}
+	if !added {
+		return
+	}
+	if it, ok := a.items[h.itemID]; ok && it.RequestID == h.id {
+		a.rev++
+		it.Risk = stickyRisk(it.Risk, had)
+		it.Seq = a.rev
+		a.publish(attentionEvent(AttentionUpdated, *it))
+		a.changedLocked()
+	}
+}
+
 // stickyRisk is an open item's mark after a new one: the rules it had, then
 // any the new one adds. A rule is never taken off while the item is open.
 func stickyRisk(had, next []string) []string {

@@ -42,6 +42,7 @@ type GhosttyTerminal struct {
 	// CursorStyle() is the SGR pen, not this.
 	cursorStyle  CursorStyle
 	cursorSteady bool
+	cursorStyled bool // see Emulator.CursorStyleSet
 
 	// bufs shadow the two screens in uv cells; bufs[0] is main. active
 	// mirrors which one libghostty is drawing to. bufs[1] is nil until the

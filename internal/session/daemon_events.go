@@ -39,6 +39,13 @@ const (
 	// EventWorkspaceRenamed: a workspace's name was set, changed or cleared.
 	// Workspace is the workspace, and Title its new name, absent when cleared.
 	EventWorkspaceRenamed = "workspace-renamed"
+	// EventWindowForeground: the program a pane runs changed, as a command
+	// starting at the shell's prompt or ending. Title is the program's name,
+	// absent when the shell is back. It is opt-in.
+	EventWindowForeground = "window-foreground"
+	// EventWindowCwd: a pane's shell moved to another folder, as its OSC 7
+	// report or its process says. Title is the new folder. It is opt-in.
+	EventWindowCwd = "window-cwd"
 	// EventLayoutChanged: the panes on a workspace now sit differently. A
 	// pane opened, closed, moved, was minimized, zoomed or resized, or the
 	// session changed size. Workspace names it. It carries no rectangles: a
@@ -151,6 +158,16 @@ const (
 	EventTaskClaimed  = "task-claimed"
 	EventTaskFinished = "task-finished"
 	EventTaskChanged  = "task-changed"
+	// EventFanVerdict says a judge recorded its verdict on a fan: one event
+	// for each attempt's session, with Title the session the verdict picks.
+	// See fan_judge.go.
+	EventFanVerdict = "fan-verdict"
+	// EventOptionSet says set-option recorded a value for a session: Key is
+	// the option's path and Value the value. It fires whether or not a
+	// client applied it, so a client that draws the session without being
+	// its TUI (guios follows appearance.theme by it) sees the change. It
+	// reaches only a subscriber that names it in types.
+	EventOptionSet = "option-set"
 	// EventKeepAwake says the daemon took or dropped its hold that keeps the
 	// machine awake, or [daemon] keep_awake changed (keep_awake.go). Mode is
 	// off, on or agents, State is held or released, Working is the number of
@@ -266,6 +283,9 @@ type streamEvent struct {
 	TMLSurface *TMLSurfaceEvent `json:"tml_surface,omitempty"`
 	// Task is a task event's card, as list-tasks gives its row.
 	Task *TaskRow `json:"task,omitempty"`
+	// Key and Value are an option-set event's option path and value.
+	Key   string `json:"key,omitempty"`
+	Value string `json:"value,omitempty"`
 	// Dispatch is a task-dispatch event's status (task_dispatch.go).
 	Dispatch *DispatchStatus `json:"dispatch,omitempty"`
 	// Working is a keep-awake event's count of working agent panes.
@@ -355,6 +375,8 @@ type SessionEvent struct {
 	// gives it, and why it was let go (task.go).
 	taskRow    *TaskRow
 	taskReason string
+	// conversation is an eventConversationEnded's record (conversations.go).
+	conversation *Conversation
 }
 
 // eventCompletionSeen is raised when an attached client's state push shows it
@@ -461,7 +483,7 @@ func (f eventFilter) match(ev streamEvent) bool {
 // optInEventTypes are the event types a subscription receives only when its
 // types filter names them. They arrive at the speed an agent works rather
 // than the speed a person does.
-var optInEventTypes = map[string]bool{EventLayoutChanged: true, EventAgentActivity: true, EventTranscript: true, EventTransferProgress: true, EventTransferFile: true, EventTML: true, EventTMLSurface: true}
+var optInEventTypes = map[string]bool{EventLayoutChanged: true, EventWindowForeground: true, EventWindowCwd: true, EventAgentActivity: true, EventTranscript: true, EventTransferProgress: true, EventTransferFile: true, EventTML: true, EventTMLSurface: true, EventOptionSet: true}
 
 // admitsOutput reports whether the filter lets output events through, which
 // decides whether a resume can be exact: output events are not kept for replay.

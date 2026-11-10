@@ -84,6 +84,9 @@ type Terminal interface {
 	// CursorStyle returns the cursor shape DECSCUSR last set, and whether it
 	// is steady rather than blinking.
 	CursorStyle() (style CursorStyle, steady bool)
+	// CursorStyleSet reports whether a guest has sent DECSCUSR. Until one
+	// does, CursorStyle is the default, which a client may draw its own way.
+	CursorStyleSet() bool
 	// GuestCursorColor is the cursor colour the guest set with OSC 12 and
 	// has not reset with OSC 112, or nil when it set none. Unlike
 	// GuestColors it copies no palette, so a renderer can read it per frame.

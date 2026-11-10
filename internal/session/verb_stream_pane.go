@@ -35,12 +35,23 @@ import (
 //	    The stream goes on.
 //	'X' exit:     UTF-8 reason. The pane is gone, or the caller may no
 //	    longer read it, and the daemon closes the connection.
+//	'H' history:  u64 id of the first history row of the S frame that
+//	    follows, for pane-history (verb_pane_history.go). Sent only to a
+//	    stream opened with row_ids, and not for a pane whose emulator gives
+//	    no ids.
 //
 // From the client:
 //
 //	'I' input:  bytes for the pane, as typed, at most maxPaneInputFrame.
 //	    Checked as send-text is.
-//	'L' lease:  u16 cols, u16 rows, or 0,0 to release (pane_lease.go).
+//	'L' lease:  u16 cols, u16 rows, or 0,0 to release (pane_lease.go). Four
+//	    more bytes, u16 cell width and u16 cell height in pixels, set the
+//	    cell the pane takes while the lease sizes it.
+//	'V' viewer: JSON ViewerReport. It replaces the report the stream made, so
+//	    a theme change reaches OSC 10, 11 and 4 answers (pane_viewers.go).
+//	'F' shown:  one byte, how the client shows the pane: 0 hidden, 1 on
+//	    screen, 2 on screen and focused in a focused window. At 2 the stream
+//	    counts as a focused client that shows the pane (viewer_focus.go).
 //
 // The stream position is the pane's outputSeq: every byte it ever wrote,
 // counted from the daemon's start. A snapshot is taken from the daemon's
@@ -65,9 +76,14 @@ const (
 	paneFrameExit   = 'X'
 	paneFrameInput  = 'I'
 	paneFrameLease  = 'L'
+	paneFrameViewer = 'V'
+	paneFrameShown  = 'F'
 	// paneFrameInputAt is input with the stream offset it starts at, typed
 	// only at the offset the stream expects (queueInput).
 	paneFrameInputAt = 'J'
+	// paneFrameActivity says the viewer's window gained focus: it counts
+	// as the viewer's activity for latest (viewer_latest.go).
+	paneFrameActivity = 'A'
 )
 
 const (
@@ -124,10 +140,39 @@ type paneStream struct {
 	cols   int
 	rows   int
 	snap   *TerminalState // the snapshot to send first, nil in resume mode
+	// snapFirst is the id of the first history row snap carries, and
+	// snapIDs says the pane's emulator gives ids (verb_pane_history.go),
+	// and rowIDs that the client asked for them (row_ids).
+	snapFirst int64
+	snapIDs   bool
+	rowIDs    bool
 	// fit makes the stream's lease a viewer's, and viewer says the stream
 	// reported its terminal. See pane_lease.go and pane_viewers.go.
-	fit    bool
+	fit   bool
+	yield bool
+	// repaint answers a resize with a snapshot of the daemon's screen at
+	// the new size, not an 'R' frame. A client that reflowed its own copy
+	// at an 'R' laid the screen out by its emulator's rules, not the
+	// daemon's: a prompt the daemon's emulator keeps whole (OSC 133, see
+	// freezePrompt) reflowed there, and the shell's repaint, right for the
+	// daemon's screen, left the prompt on the client's twice (QA-011).
+	repaint bool
+	// keep says the lease never expires by paneLeaseTTL: a yielding lease
+	// over this machine's unix socket, which ends when the stream closes. A
+	// desktop app then holds a pane without a wakeup every few seconds, and
+	// a local socket does not die silently as a phone's network does.
+	keep   bool
 	viewer bool
+	// owner is the viewer this stream belongs to when it may contend for
+	// latest, "" otherwise. Set once. See viewer_latest.go.
+	owner string
+	// cellW and cellH are the client's cell in pixels, 0 when unknown.
+	// Guarded by leaseMu once the stream runs.
+	cellW, cellH int
+	// shown is the last F frame's value, and shownSess the session the
+	// stream counts as focused in. Guarded by leaseMu.
+	shown     byte
+	shownSess *Session
 	// viewerReport is the report the stream made, and viewerSess the
 	// session it is recorded in. A pane moved to another session takes its
 	// viewer with it (followHome). Guarded by leaseMu once the stream runs.
@@ -173,9 +218,20 @@ func (d *Daemon) verbStreamPane(cs *connState, params json.RawMessage) (any, *ve
 		// Fit makes the stream's lease a viewer's: it sizes the pane while
 		// no client shows the session. See pane_lease.go.
 		Fit bool `json:"fit"`
+		// Yield makes a fit lease give way to TUI clients completely.
+		Yield bool `json:"yield"`
+		// Repaint sends a snapshot where the pane changed size, in place of
+		// the 'R' frame. See paneStream.repaint.
+		Repaint bool `json:"repaint_on_resize"`
+		// CellWidth and CellHeight are the viewer's cell in pixels.
+		CellWidth  int `json:"cell_width"`
+		CellHeight int `json:"cell_height"`
 		// Viewer is the terminal the stream shows the pane in. See
 		// pane_viewers.go.
 		Viewer *ViewerReport `json:"viewer"`
+		// RowIDs asks for the H frame before each snapshot. A client that
+		// does not ask reads S first, as before H.
+		RowIDs bool `json:"row_ids"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -211,7 +267,7 @@ func (d *Daemon) verbStreamPane(cs *connState, params json.RawMessage) (any, *ve
 	}
 	win := state.Windows[idx]
 	ps := &paneStream{d: d, cs: cs, sess: sess, window: win.ID, pty: pty, subID: cs.clientID,
-		fit: p.Fit, quit: make(chan struct{})}
+		fit: p.Fit || p.Yield, yield: p.Yield, repaint: p.Repaint, rowIDs: p.RowIDs, keep: p.Yield && cs.peerUIDOK && !cs.viaLink, cellW: min(max(p.CellWidth, 0), maxLeaseDim), cellH: min(max(p.CellHeight, 0), maxLeaseDim), quit: make(chan struct{}), owner: d.viewerOwner(cs, p.Yield)}
 	if p.LeaseCols > 0 {
 		if verr := ps.admitLease(p.LeaseCols, p.LeaseRows); verr != nil {
 			return nil, verr
@@ -265,10 +321,12 @@ func (d *Daemon) verbStreamPane(cs *connState, params json.RawMessage) (any, *ve
 		"boot_id": boot,
 		// The stream takes J frames: input typed only at its offset.
 		"input_offsets": true,
-		"session":       sess.Name(),
-		"session_id":    sess.ID,
-		"window":        win.ID,
-		"title":         title,
+		// The stream takes A frames: the viewer's window gained focus.
+		"activity":   true,
+		"session":    sess.Name(),
+		"session_id": sess.ID,
+		"window":     win.ID,
+		"title":      title,
 	}, nil
 }
 
@@ -317,7 +375,7 @@ func (ps *paneStream) snapshotSubscribe() *verbError {
 		return newVerbError(ErrVerbBusy, "the daemon has no memory free for a snapshot of the pane now. Nothing was sent. Try again in a few seconds")
 	}
 	for attempt := 0; ; attempt++ {
-		st := ps.pty.GetTerminalState(paneStreamScrollback, 0)
+		st, first, ids := ps.pty.GetTerminalStateIDs(paneStreamScrollback)
 		if st == nil {
 			release()
 			return newVerbError(ErrVerbInternal, "the pane has no terminal to stream")
@@ -330,6 +388,7 @@ func (ps *paneStream) snapshotSubscribe() *verbError {
 		if ok && sub != nil {
 			ps.setSub(sub)
 			ps.snap, ps.snapRelease = st, release
+			ps.snapFirst, ps.snapIDs = first, ids
 			ps.pos = st.Seq
 			ps.cols, ps.rows = st.Width, st.Height
 			return nil
@@ -371,6 +430,7 @@ func (ps *paneStream) close() {
 		if ps.viewer && ps.viewerSess != nil {
 			ps.viewerSess.removeViewer(ps.subID)
 		}
+		ps.setShownLocked(0)
 		ps.leased, ps.closed = false, true
 		ps.leaseMu.Unlock()
 		close(ps.quit)
@@ -450,6 +510,9 @@ func (ps *paneStream) stream(gone <-chan struct{}) error {
 				return nil
 			}
 			ps.cols, ps.rows = c.width, c.height
+			if ps.repaint {
+				return ps.resnap()
+			}
 			return ps.writeResize()
 		}
 		data := takeChunk(nil, c, ps.sub)
@@ -564,10 +627,28 @@ func (ps *paneStream) recoverGap() error {
 	return ps.writeSnap()
 }
 
+// resnap sends the pane as the daemon's emulator shows it now, and goes
+// on from there: the subscription starts again where the snapshot was taken.
+func (ps *paneStream) resnap() error {
+	ps.pty.unsubscribeSub(ps.subID, ps.sub)
+	if verr := ps.snapshotSubscribe(); verr != nil {
+		if verr.Code == ErrVerbBusy {
+			return &paneExit{reason: "busy: " + verr.Message}
+		}
+		return ps.exitReason()
+	}
+	return ps.writeSnap()
+}
+
 // writeSnap sends the snapshot the stream holds, and forgets it.
 func (ps *paneStream) writeSnap() error {
 	st := ps.snap
 	defer ps.dropSnap()
+	if ps.snapIDs && ps.rowIDs {
+		if err := ps.writeHistoryID(); err != nil {
+			return err
+		}
+	}
 	body := SnapshotVT(st)
 	payload := make([]byte, 12, 12+len(body))
 	binary.BigEndian.PutUint64(payload[0:8], uint64(st.Seq))
@@ -665,11 +746,23 @@ func (ps *paneStream) readClient(br *bufio.Reader) {
 			}
 			if verr := ps.queueInput(at, data); verr != nil {
 				ps.writeError(verr)
+			} else if len(data) > 0 {
+				ps.noteActivity()
 			}
 		case paneFrameLease:
 			if verr := ps.lease(payload); verr != nil {
 				ps.writeError(verr)
 			}
+		case paneFrameViewer:
+			if verr := ps.report(payload); verr != nil {
+				ps.writeError(verr)
+			}
+		case paneFrameShown:
+			if verr := ps.show(payload); verr != nil {
+				ps.writeError(verr)
+			}
+		case paneFrameActivity:
+			ps.noteActivity()
 		default:
 			ps.writeError(newVerbError(ErrVerbInvalidRequest, fmt.Sprintf("frame type 0x%02x is not one a client sends; it was skipped", head[0])))
 		}
@@ -847,11 +940,17 @@ func (ps *paneStream) writeInput() {
 
 // lease reads an 'L' frame and sets or releases the stream's lease.
 func (ps *paneStream) lease(payload []byte) *verbError {
-	if len(payload) != 4 {
-		return newVerbError(ErrVerbInvalidRequest, "a lease frame is 4 bytes: cols and rows")
+	if len(payload) != 4 && len(payload) != 8 {
+		return newVerbError(ErrVerbInvalidRequest, "a lease frame is 4 bytes, cols and rows, or 8 with the cell width and height in pixels after them")
 	}
 	cols := int(binary.BigEndian.Uint16(payload[0:2]))
 	rows := int(binary.BigEndian.Uint16(payload[2:4]))
+	if len(payload) == 8 {
+		ps.leaseMu.Lock()
+		ps.cellW = min(int(binary.BigEndian.Uint16(payload[4:6])), maxLeaseDim)
+		ps.cellH = min(int(binary.BigEndian.Uint16(payload[6:8])), maxLeaseDim)
+		ps.leaseMu.Unlock()
+	}
 	if verr := checkLeaseSize(cols, rows); verr != nil {
 		return verr
 	}
@@ -889,7 +988,79 @@ func (ps *paneStream) setLease(cols, rows int) error {
 	if ps.fit {
 		ps.pty.setNoClients(home.tuiClients.Load() == 0)
 	}
-	return ps.pty.SetViewerLease(ps.subID, cols, rows, ps.fit)
+	ps.pty.noteLeadOwner(ps.d.viewerLeadOwner(home.ID))
+	return ps.pty.SetViewerLease(ps.subID, paneLease{width: cols, height: rows,
+		fit: ps.fit, yield: ps.yield, cellW: ps.cellW, cellH: ps.cellH, owner: ps.owner})
+}
+
+// noteActivity is the viewer's input or window focus: it may make the viewer
+// the latest in the pane's session (viewer_latest.go).
+func (ps *paneStream) noteActivity() {
+	if ps.owner == "" {
+		return
+	}
+	ps.d.noteViewerActivity(ps.home().ID, ps.owner)
+}
+
+// report reads a 'V' frame and makes it the stream's viewer report.
+func (ps *paneStream) report(payload []byte) *verbError {
+	var r ViewerReport
+	if err := jsonx.Unmarshal(payload, &r); err != nil {
+		return newVerbError(ErrVerbInvalidRequest, "a viewer frame is a JSON viewer report: "+err.Error())
+	}
+	ps.leaseMu.Lock()
+	defer ps.leaseMu.Unlock()
+	if ps.closed {
+		return nil
+	}
+	ps.viewer, ps.viewerReport = true, r
+	home := ps.home()
+	if ps.viewerSess != nil && ps.viewerSess != home {
+		ps.viewerSess.removeViewer(ps.subID)
+	}
+	ps.viewerSess = home
+	home.addViewer(ps.subID, r)
+	return nil
+}
+
+// show reads an 'F' frame: how the client shows the pane.
+func (ps *paneStream) show(payload []byte) *verbError {
+	if len(payload) != 1 || payload[0] > 2 {
+		return newVerbError(ErrVerbInvalidRequest, "a shown frame is one byte: 0 hidden, 1 on screen, 2 on screen and focused")
+	}
+	ps.leaseMu.Lock()
+	defer ps.leaseMu.Unlock()
+	if ps.closed {
+		return nil
+	}
+	ps.setShownLocked(payload[0])
+	return nil
+}
+
+// setShownLocked records how the client shows the pane. At 2 the stream counts
+// as a focused client that shows the pane, in the session the pane belongs to
+// now. leaseMu is held.
+func (ps *paneStream) setShownLocked(v byte) {
+	home := ps.home()
+	moved := v == 2 && (ps.shown != 2 || ps.shownSess != home)
+	if ps.shownSess != nil && (v != 2 || moved) {
+		ps.d.setViewerFocus(ps.shownSess, ps.subID, "")
+		ps.shownSess = nil
+	}
+	ps.shown = v
+	if v != 2 {
+		return
+	}
+	if moved {
+		ps.shownSess = home
+		ps.d.setViewerFocus(home, ps.subID, ps.window)
+	}
+	// Every F 2 is what a client's push with the pane focused is: it marks
+	// the pane's finished turn seen, and a move to the pane ends an approval
+	// hold, unless the caller may not act as the person (human_origin.go).
+	if ps.d.mayActAsHuman(ps.cs) {
+		home.noteViewerLooked(ps.window, moved)
+	}
 }
 
 // home is the session the pane belongs to now. A pane moved to another
@@ -921,7 +1092,7 @@ func (ps *paneStream) followHomeLocked() *Session {
 // lease_expired. An L frame sets the lease again.
 func (ps *paneStream) expireLease() {
 	ps.leaseMu.Lock()
-	if !ps.leased || ps.closed || time.Since(time.Unix(0, ps.leaseAt)) < paneLeaseTTL {
+	if !ps.leased || ps.closed || ps.keep || time.Since(time.Unix(0, ps.leaseAt)) < paneLeaseTTL {
 		ps.leaseMu.Unlock()
 		return
 	}

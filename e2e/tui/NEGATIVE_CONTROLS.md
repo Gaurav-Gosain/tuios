@@ -4356,6 +4356,12 @@ its session is killed. `TestStreamPaneLeaseOnTheDesktop` saves the frames
 attached client draws the leased pane at 30 by 6 in its full rectangle, and at
 58 by 36 again once the lease ends.
 
+On 2026-11-04 one more control ran against `TestStreamPaneYieldingLease`:
+
+| Control: what was put back | Test | Result |
+| --- | --- | --- |
+| `leasedSizeLocked` ignoring `yield`, so a yielding lease clamps as a fit lease does | `TestStreamPaneYieldingLease` | **caught**: "a yielding lease clamped the client's pane: 6x30, want 36x58" |
+
 ## stream-pane review fixes
 
 `e2e/tui/stream_pane_review_test.go` holds the fixes from the review of the
@@ -12957,6 +12963,32 @@ late, each was put right, and the board never showed it.
 | A client the new image cannot serve stops at the handshake's refusal | `session.ProtocolRefused(msg.err)` cut from `handleDaemonReconnectResult` | `TestAttachedClientIsToldToReattach`: "the client took 15.06s to exit after the upgrade: it waited for a daemon it cannot talk to instead of stopping at its answer" | **caught** |
 | A run removes the other-protocol build it made | the branch head before `runE2E` removed `otherProtocolDir` (fbe41763f), run on 2026-11-04 | `TestAttachedClientIsToldToReattach` passes and leaves a `tuios-e2e-other-protocol*` directory of about 64 MB in the temp directory: 10 before, 11 after. With the fix the count stays at 11 | **caught** (by the count, not by a test) |
 | `TestUpgradeReattachLeavesAltScreenPaneAlone` still holds the alternate-screen fix of #1463 when the first client follows the upgrade | the alternate-screen fix (bfbfb3d78) taken out of a build carrying this branch, run on 2026-11-03 | "the program heard winch 25 117 and winch 26 118", and the pane's grid changed | **caught** |
+
+## Ended conversations and set-layout-tree
+
+`TestEndedConversationResumes` in `e2e/tui/agent_resume_test.go` holds the list
+of ended conversations: a window that closes with a conversation and a pane
+whose agent leaves both go on it, the list survives `kill-server`, and
+`resume-agent` with `conversation` types the manifest's command in a new
+window. On 2026-11-04 the control below ran against it.
+
+| Control: what was put back | Test | Result |
+| --- | --- | --- |
+| The `endedConversations` call cut from `emitLifecycleLocked` (session.go) | `TestEndedConversationResumes` | **caught**: "the closed window's conversation is not listed" |
+
+`TestLayoutChangedFollowsASplit` also writes a tree with `set-layout-tree` and
+reads the attached client's screen: the first pane goes from 60 columns to 30
+at a ratio of 0.25. The rectangles in `list-windows` do not follow until the
+client pushes again, so the test reads the screen.
+
+It then turns tiling off and moves the first pane with `set-layout-state`:
+`layout-tree` reports `"tiling":false`, and the attached client draws the
+pane's corner at the rectangle it was given (4,3). On 2026-11-04 the control
+was a build of the branch base (ee08a49cf), which has no `set-layout-state`.
+
+| Control: what was put back | Test | Result |
+| --- | --- | --- |
+| A daemon with no `set-layout-state` verb | `TestLayoutChangedFollowsASplit` | **caught**: "set-layout-state: exit status 1", `unknown verb set-layout-state` |
 ## The rail in a jj workspace
 
 `TestRailGitJJ` and `TestRailGitJJProblems` read the git section on a pane in a
@@ -13419,6 +13451,23 @@ Run on 2026-11-05 on Linux. The fixed build passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestInboxRiskyApprovalTakesTwoPresses$' -v .`.
+
+## The text under a kitty image keeps its row through a reattach
+
+`TestKittyImageRowsSurviveAReattach` prints a line, draws an image with
+kitten icat (printf with `c=8,r=4` where icat is not installed), and prints
+a second line. It detaches, attaches a new client and resizes it. The two
+lines must stay on their rows after the reattach, and as far apart after
+the resize.
+
+Run on 2026-11-06 on Linux with kitten icat. The fixed build passes.
+
+| Control | Where it fails | Verdict |
+| --- | --- | --- |
+| The branch before the fix, where the client put the cursor at column 0 under the image | "after the reattach the lines are on rows 3 and 6, want 3 and 7" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestKittyImageRowsSurviveAReattach$' -v .`.
 ## tuios hosts setup --tailnet asks on a terminal
 
 `TestSetUpTailnetMachinesOnATerminal` runs `hosts setup --tailnet --install none
@@ -13538,6 +13587,148 @@ rule, which `file-walk` states. The test checks it and no control cuts it.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestQuickLookOnAFarFile$' -v .`.
+
+## An edit is allowed from the Inbox only by the digest of its body
+
+`TestGUIBridgeEditApprovalNeedsItsDigest` (`gui_bridge_edit_approval_test.go`)
+sends a Claude Code Edit through the real `tuios agent-hook`. The daemon holds
+it with its body, and the gui-bridge, which guios reads, carries `edit_sha` on
+the item. The test reads the body with `get-approval`, computes `edit_sha`
+itself from the encoding in docs/protocol.md, and checks that an allow with no
+`edit_sha` or a wrong one is refused with `edit_unreviewed` while the hook
+waits, and that the allow with the digest reaches the hook as a plain allow.
+Every allow carries `risk_ack`, because the test pane has no root and the path
+reads as outside the worktree, so `edit_sha` is the only thing the refused
+allows lack.
+
+Run on 2026-11-07 on macOS, branch guios/s1-edit-approvals. The steps and the
+hook's answer are saved as `edit-approval.json` under `TUIOS_E2E_FRAMES`.
+
+| Claim | Control | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| An allow of a held edit needs its `edit_sha` | the `hold.edit` check in `attentionStore.answer` made false | `ASSERTION: an allow with no edit_sha: ok=true code=""` | **caught** |
+
+`TestCockpitHeldEditIsReviewedInThePane` (`cockpit_edit_approval_test.go`)
+holds the same Edit through the real hook and opens the agents view. The row
+reads "Review Edit", the card "Review this edit in the pane" with Open the
+pane, Reject and Reject and say why, and no allow; `a` and `1` leave the edit
+held. The frame is saved as `cockpit-held-edit` (PNG and text).
+
+| Claim | Control | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| The TUI offers no allow on a held edit | `inboxIsEdit` made false | "the edit's card does not send the person to the pane" | **caught** |
+
+A first version of the test sent no `risk_ack` on the refused allows. Under
+the same control it still failed, but with `risk_unacknowledged`: the risk
+rule, not the digest, refused the allow. That run proved nothing about
+`edit_sha`, so the test now acknowledges the risk on every allow.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestGUIBridgeEditApprovalNeedsItsDigest$' -v .`.
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestAttachedClientFollowsDaemonUpgrade|TestAttachedClientIsToldToReattach)$' -v .`.
+## The paste preview
+
+`paste_preview_test.go` pastes an image through a fake clipboard (the
+`wl-paste` stand-in of `paste_image_test.go`, holding a real PNG). On a host
+with kitty graphics the card comes up, its picture is placed on the host in
+the card's first row, and the next key takes both down and still reaches the
+pane. Without graphics the picture is block glyphs in the card's cells. In one
+client, a paste with the card on puts it up, and a paste after
+`set-config appearance.paste_preview false` pastes the path alone.
+
+Run on 2026-11-06 on macOS (arm64). The branch passes all three tests. Four
+controls, each this branch with one change.
+
+| Control | Test | Failure | Verdict |
+| --- | --- | --- | --- |
+| `applyImagePasted` returns without `showPastePreview` | `TestAnImagePasteShowsTheImageInACard` | `no card, or no picture placed in it` | **caught** |
+| The card's clause in the fullscreen fast path (`fullscreenFastWindow`) removed | `TestAnImagePasteShowsTheImageInACard` | `no card, or no picture placed in it` | **caught** |
+| The key's `hidePastePreview` in `Update` removed | `TestAnImagePasteShowsTheImageInACard` | `the card or its picture outlived the next key, or the key did not reach the pane` (3 s, inside the card's own 6 s) | **caught** |
+| `showPastePreview` ignores `Settings.PastePreview` | `TestPastePreviewCanBeTurnedOff` | `paste_preview = false still put a card up` | **caught** |
+
+The second control is the bug the first test found: a paste into the only
+pane on screen took the fast path, which draws no overlay, so the card was up
+and never drawn.
+
+The frames, with the host's picture drawn in, are under `TUIOS_E2E_FRAMES`, in
+each test's folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'Paste(Preview|ShowsTheImage|WithoutGraphics)' -v .`.
+
+
+## Quick look wraps a row at whole characters
+
+`TestQuickLookWrapsWideCharactersWhole` and `TestQuickLookWrapsSoundMarksWhole` open `zzwrap.txt` with wrap on, at 140x40, where the code column is 81 cells. Line 1 is 321 wide characters: its rows must hold each of them once and in order, 40 to a row, and no row may end in "…". With `w` the line is cut to one row that does end in "…". Line 2 is sixty Latin letters, each with a halfwidth sound mark, then 140 ASCII characters: its rows must hold all of its ASCII in order, none may end in "…" or be empty, and each row but the last fills the code column. Line 3, ASCII alone, must show whole, and does on main. `TestQuickLookWrapKeepsColours` wraps a Go line with `w`: the `return` on its third row must have the colour of the `return` on line 1, which differs from the identifier `s`.
+
+Run on 2026-11-07 on Linux. Main (52fd515a9) is the control for the first two.
+
+| Control: what was cut | Test | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| Main's draw: the whole line handed to each row, cut at `k*codeW` | `TestQuickLookWrapsWideCharactersWhole` | "line 1 does not wrap whole: 8 rows holding [41 41 41 41 41 41 41 38] characters, rows [0 1 2 3 4 5 6] end in "…", characters [80 161 242] of 321 are on no row" | **caught** |
+| Main's draw: the whole line handed to each row, cut at `k*codeW` | `TestQuickLookWrapsSoundMarksWhole` | "line 2 does not wrap whole: its rows hold 183 of its 200 ASCII characters (...k028k029k03), rows [0 1] end in "…", rows [] are empty, rows [0 1] stop before the last cell" | **caught** |
+| The branch with the row given the whole line's spans (`sp` for `ql.rowSpans`) | `TestQuickLookWrapKeepsColours` | "cell 0 of the return on row 2 of line 2 is {Kind:1 Index:105 R:0 G:0 B:0}, want the keyword's {Kind:1 Index:171 R:0 G:0 B:0} (the identifier s is {Kind:1 Index:255 R:0 G:0 B:0})" | **caught** |
+
+`TestQuickLookWrapKeepsColours` passes on main, which keeps the whole line's colours when it cuts a row. Its control is the branch with one change: the row given the whole line's spans.
+
+The frames are `quick-look-wrap-wide`, `quick-look-wrap-marks` and `quick-look-wrap-colours` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestQuickLookWrap' -v .`.
+## The setup tail before the first output event
+
+`TestWorktreeSetupSyncHoldsAgent` waits for the setup record to show the
+setup's last lines while the setup waits on a gate. The setup prints its
+lines and then prints nothing until the gate opens. On CI the record showed no
+lines at all for 30 s, now and then: `followSetupTail` read the screen only
+after an output event, and it subscribed after the setup had started. Lines
+printed before the subscription brought no event, and the quiet wait brought
+none either. The fix reads the screen once when the follower starts.
+
+Run on 2026-11-07 on Linux (amd64). To make the race certain, both builds wait
+one second at the top of `followSetupTail` before they subscribe.
+
+| Control | Test | Failure | Verdict |
+| --- | --- | --- | --- |
+| The read on start removed (main), subscribe delayed 1 s | `TestWorktreeSetupSyncHoldsAgent` | `running with its last lines: the setup of repo-feat-sync never got there` | **caught** |
+
+The fixed build with the same delay passes. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorktreeSetupSyncHoldsAgent$' -v .`.
+
+## The terminals section stays when every pane is an agent
+
+`TestRailTerminalsKeepsItsHeaderWhenAllPanesAreAgents` uses the layout
+`sessions:20,terminals,agents` on a rail 28 columns wide. At 30 columns or less
+the rail lists an agent pane under agents and not under terminals. Before the
+fix, a session whose panes all ran agents had no terminals rows, so the section
+was dropped with its header and its "+", and the rail had no way to open a
+plain terminal. The test makes two panes, sets one as an agent and reads the
+other under terminals with no note. It then sets the second as an agent and
+waits for the terminals header with its "+" and the row "2 in agents" under it.
+A click on the "+" must open a pane and take the note away.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| `movedToAgents` in `sidebarPanelLinesForTree` left at 0, as before the fix | "with every pane an agent, the terminals header, its + or the \"2 in agents\" row is missing"; the rail shows sessions and agents only | **caught** |
+
+The frame is `terminals-all-agents` under the test's artifact folder. Repeat from
+`e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRailTerminalsKeepsItsHeaderWhenAllPanesAreAgents$' -v .`.
+
+## TestMailFromAPaneOfAnotherSession
+
+The test makes two sessions on one daemon and mails between their first panes
+with `--from` set to the sender's full window id, both ways. Before the fix the
+sender had to be a window of the recipient's session, so a lead in one session
+and its workers in another could not mail each other. It also checks that a
+window name from another session is still refused.
+
+Run on 2026-11-07 on macOS (arm64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| `true` passed to `sendAgentMessage` in `verbSendAgentMessage`, back to `false` | "a worker in team could not mail the lead in lead: exit status 1" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestMailFromAPaneOfAnotherSession$' -v .`.
 ## Pi subagent rows through the real hook
 
 `TestPiSubagentRowsThroughTheRealHook` drives the managed pi extension's v4
@@ -15849,6 +16040,30 @@ Run on 2026-11-09 on macOS (arm64). The branch passes both.
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestOpenMenuIn' -v .`.
 
+## TestStreamPaneViewerTakesLatest
+
+Under `window_size` latest a stream with a `yield` lease, from a caller that
+may act as the person, contends for the latest client
+(`internal/session/viewer_latest.go`). Its `I` input or an `A` frame must make
+its lease size the pane over an attached TUI client, input at the TUI client
+must take it back, and TUI input within the viewer's one-second hold must not
+resize the pane at once.
+
+The sizes it asserts are the ones the daemon announces on the stream (S and R
+frames); what stty reads in the pane is logged only. Asserted on stty, it
+failed about 1 run in 6 under load on macOS, where a window size write was
+lost on the shell's side of the tty after the daemon made it.
+
+Run on 2026-11-09 on macOS (arm64), as the Atlas helper user. The branch
+passes 30 of 30 under nice 19 with eight CPU burners.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `paneStream.noteActivity` returns at once (no viewer activity) | "after the viewer's I frame: the pane is 36x58" | **caught**, 6 of 6 |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestStreamPaneViewerTakesLatest$' -v .`.
+
 ## TestLeaderTakesTheCharacterAnOptionChordTyped
 
 The leader, then Option and 7 on a German Mac layout (discussion #850).
@@ -15868,6 +16083,29 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestLeaderTakesTheCharacterAnOptionChordTyped$' -v .`.
+
+## TestGuiosReapClosesOnlyExitedPanes
+
+The guios client (internal/guios/client) closes the window of a pane whose
+program exited, and only that one: a live pane and a keep_open pane stay.
+Every close writes a log line with the window, its PTY and the exit code.
+On 2026-11-09 a live claude pane vanished twice right after a guios showed
+its session.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The client of guios/land (59d71b2e5) | "no log line names the close" | **caught** (the old client closes the exited pane too, with no line) |
+| Every window counted exited | "no log line names the close" (the client ends the whole session, live pane included) | **caught** |
+| No reap | "the pane whose program exited was not closed" | **caught** |
+
+Not covered: a window-exit event that names a live window, which the old
+client took as that window's exit. No daemon path makes one on demand, so
+the test cannot send one; the branch no longer reads the event at all.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestGuiosReapClosesOnlyExitedPanes$' -v .`.
 
 ## A home reached through a symbolic link (TestFilesFollowAWindowOnAHost)
 
@@ -15903,6 +16141,60 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPaneGoneSaysWhyInTheLog$' -v .`.
+
+## TestHeadlessKeymapActions
+
+With no TUI client on a session, run-command runs the keymap actions that are
+only an op on session state (`internal/session/headless_actions.go`):
+select_window_N, last_pane, send_to_workspace_N, move_and_follow_N,
+break_pane, move_workspace_left/right, minimize_window, restore_all and
+close_workspace. Each step reads the daemon's state back with list-windows.
+
+Run on 2026-11-09 on macOS (arm64), as the Atlas helper user. The branch
+passes 3 of 3.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The Action case in `executeDaemonCommandEnv` answers `errNeedsClient` (before this step) | "select_window_1 still needs a client: command "Action" requires an attached client" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHeadlessKeymapActions$' -v .`.
+
+## TestHeadlessDirectionActions
+
+With no TUI client, run-command runs focus_up/down, terminal_focus_*,
+swap_* and resize_pane_*_5/20 on the daemon's own layout of the tree
+(`internal/session/headless_actions.go`, `layout.GrowPane`), in a | (b over
+c) split by split-window. Each step reads the rectangles back.
+
+Run on 2026-11-09 on macOS (arm64), as the Atlas helper user. The branch
+passes 3 of 3. The same commit's TestHeadlessKeymapActions also gains a
+step for the workspace switch's focus: with the step 1 build it fails at
+"SwitchWorkspace 1 focuses a pane of workspace 1".
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The direction actions left out of runHeadlessAction (before this step) | "focus_up still needs a client" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHeadlessDirectionActions$' -v .`.
+
+## TestGuiosBrowserPaneIsAWebWindow
+
+guios's New browser pane on a tuios daemon (guios polish wave 1, item 5): the
+guios client's split with a URL must make a window of kind web on that page,
+pane.page must move its uri (set-window uri), and the uri must come back
+after a daemon restart.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| guios/land (0460c4e72) | "the split with a URL: the session's native windows are [], want one of kind web" | **caught** |
+| The daemon without set-window uri | "the page the client reported: ... URI:https://example.com/first ... want ... second" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestGuiosBrowserPaneIsAWebWindow$' -v .`.
 ## The restore banner names the folder the shell started in
 
 `TestRestoredPaneShowsItsHistoryAboveTheDivider` restores two sessions. One
@@ -16014,6 +16306,24 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTMLSurfaceEventFollowsEachChange$' -v .`.
 
+## TestTMLSurfaceEventFollowsEachChange
+
+The daemon publishes a `tml-surface` event with each push of a TML surface,
+for a client that draws surfaces from verbs (guios): the open, a state patch
+with its JSON Patch and the next version, a replace with a new
+`doc_version`, and the close. Opt-in.
+
+Run on 2026-11-09 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (9f2063a87) | "subscribe [-s e2e-tml-surface --types tml-surface] did not acknowledge" (the type is unknown) | **caught** |
+| The event not opt-in | "a subscriber that named no types got a tml-surface event" | **caught** |
+| No ops in the event | "no tml-surface event for the patch" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTMLSurfaceEventFollowsEachChange$' -v .`.
+
 ## TestSetUpNamesAnUnknownHostKey
 
 `tuios hosts setup` to a machine whose host key ssh does not know. The reason
@@ -16028,6 +16338,194 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSetUpNamesAnUnknownHostKey$' -v .`.
+
+## TestArrangeVerb
+
+The daemon runs a layout change itself with the arrange verb
+(`internal/session/verb_arrange.go`, the engine in `arrange_engine.go`), one op
+per session at a time. Four callers on connections of their own send
+master.add at the same moment, and every one must land.
+
+Run on 2026-11-09 on macOS (arm64), as the Atlas helper user. The branch
+passes 4 of 4.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| No per-session lock in verbArrange (each op reads and writes while others do) | "four master.add at once took the masters from 1 to 3, want 5: a change was lost" (1 to 2 and 1 to 3 in the other runs) | **caught**, 3 of 3 |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestArrangeVerb$' -v .`.
+
+## TestArrangePlace
+
+The daemon puts a pane its split tree lacks into the tree (the arrange verb's
+place op, `internal/session/arrange_place.go`), on the side the caller asked
+for. With no client, two split panes get a third from new-window, which the
+tree lacks; place below the first pane must put it there.
+
+Run on 2026-11-09 on macOS (arm64), as the Atlas helper user. The branch
+passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| No place op in the engine | "arrange place: exit status 1" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestArrangePlace$' -v .`.
+
+## TestDaemonActionRunsOnceWithATUIAttached, TestDaemonActionsFromTwoClientsAtOnce, TestDaemonActionFromAPaneKeepsItsGrants
+
+Parity gap 1, step 4, batch A (`internal/session/daemon_actions.go`,
+`internal/app/daemon_actions.go`). The keymap actions that only change the
+focus, a pane's workspace or whether it is minimized run in the daemon with a
+TUI attached, and the TUI's key for one sends it to the daemon. T1 runs each by
+run-command with one TUI attached and needs `routed: false`. T3 has two clients
+press minimize_window at the same moment for ten rounds and needs two panes
+minimized each round. T6 has a pane with admin and not respond call the
+run-command verb, and needs a refusal with nothing changed.
+
+Run on 2026-11-09 on macOS (arm64), as the Atlas helper user. The branch
+passes all five batch A tests and the internal/session T7.
+
+| Test | Control | The test fails with | Result |
+|------|---------|---------------------|--------|
+| T1 | guios/land before batch A (cca32b56d) | "select_window_1: run-command answered routed true; the TUI ran it, not the daemon" | **caught** |
+| T3 | The TUI's key path off (`SendsDaemonAction` always false) | "round 0: two presses of minimize_window did not hold": one pane minimized | **caught** |
+| T3 | The key path on, `SetDaemonWindowMinimized` leaving the focus on the pane it hid | "round 0: two presses of minimize_window did not hold": the second press hid nothing | **caught** |
+| T6 | `refuseTapeTyping` returning "" | "run-command select_window_1 from a pane without respond was not refused": `routed: false` | **caught** |
+| T7 | `runsAction` ignoring the clients' hello | "waiting for RemoteCommand: ... i/o timeout": an old TUI was not routed the action | **caught** |
+
+T2 and T5 pass on the controls too: T5 holds since step 1, and T2's single key
+is not a race. T6 with a `read` or `read,write` pane passes on the control as
+well, because the admin check refuses run-command first, so the test uses an
+admin pane.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestDaemonAction' -v .`
+and `go test -count=1 -run TestDaemonActionsFollowTheClientsHello ./internal/session/`.
+
+## TestDaemonDirectionActionsRunWithATUIAttached, TestDaemonResizeFromTwoClientsAtOnce
+
+Parity gap 1, step 4, batch B. On a tiled workspace in the split layout the
+daemon runs the focus, swap and resize steps with a TUI attached, and the TUI's
+swap and resize keys send the step to the daemon. T1 runs terminal_focus_right,
+swap_left and resize_pane_right_5 by run-command and needs `routed: false`. In
+the scrolling layout swap_left must stay routed. T3 has two clients press
+resize_pane_right_5 at the same moment for three rounds and needs the root
+split of the session's tree to move by both steps each round. It reads the
+tree, not list-windows: with a client attached the daemon's rectangles are the
+last ones a client pushed and can lag the tree until the next push.
+
+Run on 2026-11-09 on macOS (arm64), as the Atlas helper user. The branch
+passes both.
+
+| Test | Control | The test fails with | Result |
+|------|---------|---------------------|--------|
+| T1 | guios/land before batch B (a3f2d17e9) | "terminal_focus_right: run-command answered routed true; the TUI ran it, not the daemon" | **caught** |
+| T3 | guios/land before batch B (a3f2d17e9): the key changes the client's tree and sends it as a tree op | "round 0: two presses of resize_pane_right_5 moved the root ratio from 0.5000 to 0.5458, want 0.5833: a press was lost" | **caught**, 5 of 5 |
+
+The existing TestTiledPanesMoveOneWay caught two faults in the first build of
+the swap key, and passes 3 of 3 on the branch:
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| headlessSwapSide through swapPanes, which waits on the TUI's connection for its push (settleRects) | "swap: the first pane ended at x=0, want it right of x=0" | **caught** |
+| The push after every input sent after a key that sent a daemon action | "close: the first pane's left edge only 0 values between 60 and 0: the pane was cut, not slid" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'TestDaemonDirectionActions|TestDaemonResizeFromTwo' -v .`.
+
+## TestDaemonLayoutActionsRunWithATUIAttached, TestDaemonMastersFromTwoClientsAtOnce
+
+Parity gap 1, step 4, batch C1 (`internal/session/daemon_actions_layout.go`).
+The layout shape actions run in the daemon through the arrange engine with a TUI
+attached, and the TUI's keys send them there. T1 runs rotate_split,
+equalize_splits, cycle_layout, add_master, remove_master, cycle_master_position,
+set_master_position_top and toggle_tiling twice by run-command and needs
+`routed: false` and each one's change in layout-tree. T3 has two clients press
+add_master at the same moment, then remove_master, for five rounds on six panes,
+and needs the count to move by two each time.
+
+Run on 2026-11-09 on macOS (arm64), as the Atlas helper user. The branch
+passes both.
+
+| Test | Control | The test fails with | Result |
+|------|---------|---------------------|--------|
+| T1 | guios/land before batch C1 (bc208570b) | "rotate_split: run-command answered routed true; the TUI ran it, not the daemon" | **caught** |
+| T3 | guios/land before batch C1 (bc208570b): the key sends the whole master shape (MsgMasterLayout) | "round 0, two add_master at once: 2 masters, want 3: a press was lost" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'TestDaemonLayoutActions|TestDaemonMastersFromTwo' -v .`.
+
+## TestDaemonHeightStepRunsWithATUIAttached
+
+Parity gap 1, step 4, batch C2. resize_height_grow runs in the daemon with a TUI
+attached in the split layout. (Its strip half, scroll_consume staying routed,
+was dropped when the strip ops' part 2 moved the strip keys to the daemon.)
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| guios/land before batch C2 (b86bd244a) | "resize_height_grow: run-command answered routed true in the split layout" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run TestDaemonHeightStepRuns -v .`.
+
+## TestDaemonKillSessionAction
+
+Parity gap 1, step 4, batch D. kill_session by run-command with no client runs as
+the kill-session verb; with a TUI attached it stays routed, so the TUI's close
+dialog asks the person first.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| guios/land before batch D (78d9d1a2d) | "run-command kill_session: exit status 1" (this action needs the tuios TUI) | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run TestDaemonKillSessionAction -v .`.
+
+## The scrolling strip as daemon state, part 1 (multiclient_strip_ops_test.go, scroll_columns_test.go)
+
+The scrolling columns travel as MsgScrollColumns ops (`internal/session/scroll_columns.go`,
+`internal/app/scroll_columns_sync.go`), a push from a client that offers them
+does not move the columns, and the arrange engine writes no pane rectangles
+for a strip change while a TUI is attached, so the TUI lays it out itself and
+slides it.
+
+Run on 2026-11-09 on macOS (arm64), as the Atlas helper user. The branch
+passes every test below.
+
+| Test | Control | The test fails with | Result |
+|------|---------|---------------------|--------|
+| S4c TestTwoStripChangesByTheDaemonAtOnce | guios/land before part 1 (924746b48) | "round 0: two scroll.consume at once left 5 columns, want 4: a change was lost" | **caught**, 3 of 3 |
+| S8 TestAStripChangeFromTheDaemonSlides | guios/land before part 1 (924746b48) | "the moved pane's left edge only 0 values between 0 and 0: the pane was cut, not slid" (it took the daemon's rectangle at once) | **caught** |
+| S7 TestScrollColumnsFollowTheClientsHello | the push merge without the columnsByOp rule | "a push from a client that sends ops moved the columns" | **caught** |
+
+S2 (TestAStripKeyReachesThePeer), S4 (TestStripChangeByTheDaemonOutlivesATUIPush),
+S4b (TestStripChangeByTheDaemonRacesATUIPush), S5 (TestAStripColumnWidthHolds) and S6
+(TestPanesComeAndGoInTheStrip) pass on the control too: they are guards that
+part 1 must not break. requireOneLayout does not fit the strip: its focus
+cycle scrolls it, so each client pushes rectangles for another offset;
+stripPushes compares the session's columns instead.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'Strip|TestPanesComeAndGo' -v .`
+and `go test -count=1 -run TestScrollColumnsFollowTheClientsHello ./internal/session/`.
+
+## The scrolling strip as daemon state, part 2 (TestStripActionsRunWithATUIAttached, TestStripKeysFromTwoClientsAtOnce)
+
+The strip actions run in the daemon through the arrange engine with a TUI
+attached, the TUI's strip keys send them there, and an action intent from a
+TUI runs off that TUI's read loop (`runIntent`, `internal/session/daemon_actions.go`).
+
+| Test | Control | The test fails with | Result |
+|------|---------|---------------------|--------|
+| S1 | guios/land before part 2 (95b8e1e26) | "scroll_consume: run-command answered routed true; the TUI ran it, not the daemon" | **caught** |
+| S3 | guios/land before part 2 (95b8e1e26): the key consumes in the client | "round 0: two scroll_consume at once left 5 columns, want 4: a press was lost" | **caught** |
+| S3 | part 2 with the Active row in the client's columns key (colsKey), under load (internal/app's tests running beside it) | "two scroll_consume at once left 5 columns, want 4" | **caught**, 3 of 10; the branch passes 10 of 10 under the same load |
+| S3 | part 2 with the intent run on the TUI's read loop | "round 1: two scroll_consume at once left 5 columns" and "the two clients draw different layouts"; the daemon log shows each consume finishing 10 s after its intent (the routed FocusWindow of revealFocus waited out its timeout on the blocked client) | **caught**, 2 of 2 |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'TestStripActionsRun|TestStripKeysFromTwo' -v .`.
 
 ## TestSetUpDryRunWithNoInstallChoice
 
@@ -16266,6 +16764,21 @@ Run on 2026-11-09 on macOS (arm64). The branch passes.
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestDockPillsAndRestoreNAgree$' -v .`.
 
+## TestArrangeRestoreByPaneAndOrder
+
+The arrange verb's restore, as guios sends it. Gamma then alpha are minimized:
+Delta 1 restores gamma, Pane restores that pane and hands the client its
+focus, and a Pane that is not minimized with no Delta restores every one.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| guios/land with main merged (095386beb), where restore counts in window order and takes no pane | "restore Delta 1 should restore gamma, minimized first; minimized now \"gamma\"" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestArrangeRestoreByPaneAndOrder$' -v .`.
+
 ## tuios's git and the index's optional lock
 
 `TestTuiosGitTakesNoOptionalLock` runs a review fan with an attached client,
@@ -16389,6 +16902,34 @@ Run on 2026-11-10 on macOS (arm64). The branch passes.
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTheLayoutPickerListsTheDaemonsLayouts$' -v .`.
 
+## TestGuiosSavesAndLoadsALayout
+
+The guios client, with no window, saves a two-pane workspace through
+layout.save, closes the second pane, loads the layout through layout.load,
+lists it (two panes and its time) and deletes it. The daemon holds a new
+second pane with its name and folder, and the file is gone.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The branch with the client's layout.* case taken out of its dispatch | "layout.save: unknown method \"layout.save\"" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestGuiosSavesAndLoadsALayout$' -v .`.
+
+## TestListProgramsNamesThePath
+
+The list-programs verb (`internal/session/verb_programs.go`), which guios's Run
+a program lists (parity gap 18).
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| guios/land before the verb (d9d943ffc) | "list-programs: exit status 1" (no such verb) | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run TestListProgramsNamesThePath -v .`.
+
 ## A client runs the build a live upgrade gave the daemon
 
 `TestAttachedClientRunsTheUpgradedBuild` attaches a client with
@@ -16410,3 +16951,20 @@ branch passes both cases on both.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAttachedClientRunsTheUpgradedBuild$' -v .`.
+
+## TestGuiosRailPaneIsTheTUIs
+
+The guios client, with no window, asks for the session's rail pane through
+rail.pane with a command line. The pane shows in its state as the session's
+RailPane keyed by that line. The rail-pane verb a TUI's rail calls with the
+same line gets the same window (created false), and the window shows what
+the command printed.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The branch with the client's rail.pane case taken out of its dispatch | "rail.pane: unknown method \"rail.pane\"" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestGuiosRailPaneIsTheTUIs$' -v .`.

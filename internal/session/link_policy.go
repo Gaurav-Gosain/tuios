@@ -156,6 +156,7 @@ var msgCapabilities = map[MessageType]linkCaps{
 	MsgUpdateState:       {config.LinkAllowWrite},
 	MsgLayoutTree:        {config.LinkAllowWrite},
 	MsgMasterLayout:      {config.LinkAllowWrite},
+	MsgScrollColumns:     {config.LinkAllowWrite},
 	MsgSidebarVisibility: {config.LinkAllowWrite},
 	MsgSessionUsed:       {config.LinkAllowWrite},
 	MsgExecuteCommand:    {config.LinkAllowWrite},

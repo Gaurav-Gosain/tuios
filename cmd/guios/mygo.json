@@ -1,0 +1,20 @@
+{
+  "name": "guios",
+  "slug": "guios",
+  "identifier": "dev.tuios.guios",
+  "version": "0.1.0",
+  "copyright": "© 2026 Gaurav Gosain",
+  "license": "MIT",
+  "out": "build",
+  "i18n": {
+    "dir": "locales",
+    "source": "en"
+  },
+  "macos": {
+    "infoPlist": {
+      "NSMicrophoneUsageDescription": "A program running in guios would like to use the microphone.",
+      "NSCameraUsageDescription": "A program running in guios would like to use the camera.",
+      "NSAppleEventsUsageDescription": "A program running in guios would like to control another app."
+    }
+  }
+}

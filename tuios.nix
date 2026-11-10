@@ -14,9 +14,9 @@ pkgs.buildGo127Module rec {
   ];
 
   # The build sandbox has no network, so Go cannot fetch a newer toolchain
-  # there: the nixpkgs Go must be at least the go line in go.mod (1.26.8).
+  # there: the nixpkgs Go must be at least the go line in go.mod (1.27.3).
   # buildGo127Module builds with go_1_27, which is 1.27.3 in the pinned
-  # nixpkgs, the same Go as the toolchain line. The default go there is still
+  # nixpkgs, the same Go as the go line. The default go there is still
   # 1.26. "local" makes a Go that is too old fail with that plain message
   # instead of a failed download.
   env.GOTOOLCHAIN = "local";
@@ -49,5 +49,5 @@ pkgs.buildGo127Module rec {
   '';
 
   # This has to be updated each time dependencies are updated.
-  vendorHash = "sha256-O4zh8r0SkNGrOTEu0RnR6Sg8jnzKBMn3RgjZZfuS+6A=";
+  vendorHash = "sha256-a6D6eeobozqyAW3vZ9IiZrLAM0cKymOKPkqfpajyoiM=";
 }

@@ -1,0 +1,1225 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/mygo/ui"
+
+	"github.com/Gaurav-Gosain/tuios/internal/diffview"
+	"github.com/Gaurav-Gosain/tuios/internal/guios/cli"
+	"github.com/Gaurav-Gosain/tuios/internal/guios/client"
+	"github.com/Gaurav-Gosain/tuios/internal/markdown"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
+
+	"github.com/Gaurav-Gosain/tuios/cmd/guios/locales"
+)
+
+// The thread: the selected agent's conversation, read with agent-transcript
+// (decoded by internal/transcriptview in the daemon) and drawn as a chat.
+// The person's prompts sit in bubbles on the right; the agent's answers are
+// Markdown (internal/markdown) with code highlighted by internal/diffview;
+// tool calls fold to one line each, consecutive reads and searches join one
+// row, and edits open on their diff.
+//
+// Cost: entries are read once and then only those after the cursor, when
+// the daemon tells the transcript grew. Markdown is parsed once per entry,
+// code highlighted once per block. The list builds only the items in view,
+// and nothing draws while nothing changes.
+
+// ckThreadKeep is how many agents' threads stay read, the TUI's 3.
+const ckThreadKeep = 3
+
+// ckThreadMax bounds the entries a thread keeps: the oldest go first.
+const ckThreadMax = 2000
+
+// ckThread is one agent's conversation as read.
+type ckThread struct {
+	agent   client.Agent
+	entries []transcriptview.Entry
+	cursor  string
+	older   string
+	more    bool
+	loading bool
+	// loadedAt is when the read under way started: one that never
+	// answers does not keep the thread blank (ckReadStuck).
+	loadedAt time.Time
+	err      string
+	// failed says the last read failed for a cause a retry can fix, not
+	// for want of a transcript.
+	failed bool
+	// unsupported says tuios cannot read this harness's transcripts: a
+	// retry cannot change that (council round 3, S7).
+	unsupported bool
+	usedAt      time.Time
+
+	items []ckItem
+	list  ui.ListState
+	// scroll moves the list on the frame clock (smoothScroll).
+	scroll smoothScroll
+	// open holds the tool items the person unfolded, by item key; shut the
+	// edits they folded.
+	open, shut map[string]bool
+	// md holds each text entry's blocks, parsed once, by entry id.
+	md map[string][]markdown.Block
+	// images holds the images read, by entry id (cockpit_image.go).
+	images map[string]*ckThreadImage
+}
+
+type ckItemKind uint8
+
+const (
+	ckItemUser ckItemKind = iota
+	ckItemText
+	ckItemThinking
+	ckItemTools // reads and searches joined
+	ckItemTool
+	ckItemEdit
+	ckItemTodos
+	ckItemPlan
+	ckItemError
+	ckItemOlder
+	ckItemImage  // an image in a prompt or an answer
+	ckItemRun    // a run of tool calls between two answers, folded into one line
+	ckItemWorked // how long a finished turn worked, under its last answer
+)
+
+// ckItem is one item of the chat: an entry, or several joined.
+type ckItem struct {
+	kind  ckItemKind
+	key   string
+	at    int64
+	e     transcriptview.Entry
+	calls []transcriptview.Entry // the joined reads and searches
+	res   *transcriptview.Entry  // a call's result
+	md    []markdown.Block
+	label bool     // the first of a turn's answers, which carries the agent's name
+	run   []ckItem // a run's calls, as their own items
+}
+
+// threadKey names an agent's thread.
+func threadKey(ag client.Agent) string { return ag.Session + "\x00" + ag.Window }
+
+// fetchThread reads the agent's conversation: all of it when fresh (the
+// newest page), else what came after the cursor.
+func (a *App) fetchThread(ag client.Agent, fresh bool) {
+	cl := a.cockpitClient()
+	if cl == nil || ag.Window == "" {
+		return
+	}
+	ck := &a.ck
+	if ck.threads == nil {
+		ck.threads = map[string]*ckThread{}
+	}
+	key := threadKey(ag)
+	th := ck.threads[key]
+	if th == nil {
+		// Used now: with no time, the new thread was the oldest, and
+		// dropOldThreads dropped it at once, so a fourth thread never
+		// kept a read and showed as having no conversation.
+		th = &ckThread{agent: ag, usedAt: time.Now(), open: map[string]bool{}, shut: map[string]bool{}, md: map[string][]markdown.Block{}}
+		th.list.FollowEnd = true
+		th.list.Key = func(i int) any { return th.items[i].key }
+		ck.threads[key] = th
+		a.dropOldThreads()
+		fresh = true
+	} else if fresh && th.cursor != "" && th.err == "" {
+		fresh = false
+	}
+	th.agent, th.usedAt = ag, time.Now()
+	if th.loading && time.Since(th.loadedAt) < ckReadStuck {
+		return
+	}
+	th.loading, th.loadedAt = true, time.Now()
+	p := map[string]any{"session": ag.Session, "window": ag.Window, "limit": 400}
+	if !fresh && th.cursor != "" {
+		p["after"] = th.cursor
+	}
+	go func() {
+		var page struct {
+			Entries []transcriptview.Entry `json:"entries"`
+			Cursor  string                 `json:"cursor"`
+			Reset   bool                   `json:"reset"`
+			More    bool                   `json:"more"`
+			Older   string                 `json:"older"`
+		}
+		err := cl.VerbInto("agent-transcript", p, true, &page)
+		a.update(func() {
+			th.loading = false
+			if err != nil {
+				th.err = ckTranscriptError(err)
+				th.unsupported = ckUnsupported(err)
+				th.failed = th.err != locales.CockpitNoTranscript() && !th.unsupported
+				return
+			}
+			th.err, th.failed, th.unsupported = "", false, false
+			if page.Reset || p["after"] == nil {
+				th.entries = page.Entries
+				th.older, th.more = page.Older, page.More
+			} else {
+				th.entries = append(th.entries, page.Entries...)
+			}
+			if n := len(th.entries); n > ckThreadMax {
+				th.entries = th.entries[n-ckThreadMax:]
+			}
+			if page.Cursor != "" {
+				th.cursor = page.Cursor
+			}
+			th.items = buildItems(th.entries, th.more, th.md, th.agent.State == "working")
+		})
+	}()
+}
+
+// fetchOlder reads the page before the oldest entry read.
+func (a *App) fetchOlder(th *ckThread) {
+	cl := a.cockpitClient()
+	if cl == nil || th.loading || th.older == "" {
+		return
+	}
+	th.loading = true
+	ag := th.agent
+	go func() {
+		var page struct {
+			Entries []transcriptview.Entry `json:"entries"`
+			More    bool                   `json:"more"`
+			Older   string                 `json:"older"`
+		}
+		err := cl.VerbInto("agent-transcript", map[string]any{"session": ag.Session, "window": ag.Window, "before": th.older, "limit": 400}, true, &page)
+		a.update(func() {
+			th.loading = false
+			if err != nil {
+				th.err = ckTranscriptError(err)
+				return
+			}
+			th.entries = append(page.Entries, th.entries...)
+			th.older, th.more = page.Older, page.More
+			th.items = buildItems(th.entries, th.more, th.md, th.agent.State == "working")
+		})
+	}()
+}
+
+// ckReadStuck is how long a read of a thread may go unanswered before
+// the next selection or event reads again.
+const ckReadStuck = 5 * time.Second
+
+// ckSpinFor is how long an empty thread shows a spinner while it reads.
+const ckSpinFor = time.Second
+
+// ckTranscriptError says why a thread cannot be read, in the app's words.
+//
+// Only the daemon's no_transcript answer says the agent has no
+// conversation; any other failure is a read that did not work, which the
+// thread offers to try again (threadView).
+func ckTranscriptError(err error) string {
+	if ve, ok := errors.AsType[*session.VerbCallError](err); ok {
+		switch ve.Code {
+		case session.ErrVerbNoTranscript:
+			return locales.CockpitNoTranscript()
+		case session.ErrVerbNotHuman:
+			return locales.CockpitNotHuman()
+		}
+	}
+	return err.Error()
+}
+
+// ckUnsupported reports whether a transcript read failed because tuios
+// cannot read the harness's transcripts.
+func ckUnsupported(err error) bool {
+	ve, ok := errors.AsType[*session.VerbCallError](err)
+	return ok && ve.Code == session.ErrVerbUnsupportedHarness
+}
+
+// dropOldThreads keeps the ckThreadKeep threads used last.
+func (a *App) dropOldThreads() {
+	for len(a.ck.threads) > ckThreadKeep {
+		var oldest string
+		var at time.Time
+		for k, th := range a.ck.threads {
+			if oldest == "" || th.usedAt.Before(at) {
+				oldest, at = k, th.usedAt
+			}
+		}
+		delete(a.ck.threads, oldest)
+	}
+}
+
+// ckFold reports whether a tool is a read or a search, which fold together.
+func ckFold(tool string) bool {
+	switch tool {
+	case "Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch", "read_file", "list_directory", "glob", "search_file_content", "grep", "read", "list", "view":
+		return true
+	}
+	return false
+}
+
+// buildItems turns entries into the chat's items: results join their calls,
+// reads and searches in a row join one item, two or more calls in a row
+// fold into one run (ckRuns), and a finished turn ends with how long it
+// worked. working says the agent's last turn has not finished.
+func buildItems(entries []transcriptview.Entry, more bool, mdc map[string][]markdown.Block, working bool) []ckItem {
+	parse := func(id, src string) []markdown.Block {
+		if b, ok := mdc[id]; ok && id != "" {
+			return b
+		}
+		b, _ := markdown.Parse(src)
+		if id != "" {
+			mdc[id] = b
+		}
+		return b
+	}
+	results := map[string]int{}
+	for i, e := range entries {
+		if e.Kind == transcriptview.KindToolResult && e.ToolID != "" {
+			results[e.ToolID] = i
+		}
+	}
+	calls := map[string]bool{}
+	for _, e := range entries {
+		if e.Kind != transcriptview.KindToolResult && e.ToolID != "" {
+			calls[e.ToolID] = true
+		}
+	}
+	var items []ckItem
+	if more {
+		items = append(items, ckItem{kind: ckItemOlder, key: "older"})
+	}
+	lastRole := ""
+	for i := range entries {
+		e := entries[i]
+		var it ckItem
+		it.e, it.key, it.at = e, e.ID, e.At
+		if it.key == "" {
+			it.key = fmt.Sprint("e", i)
+		}
+		switch {
+		case e.Kind == transcriptview.KindToolResult:
+			if calls[e.ToolID] {
+				// Drawn with its call.
+				continue
+			}
+			it.kind = ckItemTool
+		case e.Kind == transcriptview.KindText && e.Image != nil:
+			it.kind = ckItemImage
+		case e.Role == transcriptview.RoleUser && e.Kind == transcriptview.KindText:
+			it.kind = ckItemUser
+		case e.Kind == transcriptview.KindText:
+			it.kind = ckItemText
+			it.md = parse(e.ID, e.Text)
+			it.label = lastRole != "assistant"
+		case e.Kind == transcriptview.KindThinking && strings.TrimSpace(e.Text) == "":
+			// Claude Code writes its thinking redacted, a signature with no
+			// text: a row for it says nothing and splits every run.
+			continue
+		case e.Kind == transcriptview.KindThinking:
+			it.kind = ckItemThinking
+		case e.Kind == transcriptview.KindTodos:
+			it.kind = ckItemTodos
+		case e.Kind == transcriptview.KindPlan:
+			it.kind = ckItemPlan
+			it.md = parse(e.ID, e.Plan)
+		case e.Kind == transcriptview.KindError:
+			it.kind = ckItemError
+		case e.Kind == transcriptview.KindToolCall && e.Diff != nil:
+			it.kind = ckItemEdit
+		case e.Kind == transcriptview.KindToolCall && ckFold(e.Tool):
+			it.kind = ckItemTools
+			it.calls = []transcriptview.Entry{e}
+		default:
+			it.kind = ckItemTool
+		}
+		if e.ToolID != "" && e.Kind != transcriptview.KindToolResult {
+			if j, ok := results[e.ToolID]; ok {
+				r := entries[j]
+				it.res = &r
+				if it.kind == ckItemEdit && r.Diff != nil && it.e.Diff == nil {
+					it.e.Diff = r.Diff
+				}
+			}
+		}
+		if it.kind == ckItemTools && len(items) > 0 {
+			if prev := &items[len(items)-1]; prev.kind == ckItemTools {
+				prev.calls = append(prev.calls, e)
+				continue
+			}
+		}
+		if it.kind == ckItemUser || it.kind == ckItemImage && e.Role == transcriptview.RoleUser {
+			lastRole = "user"
+		} else {
+			lastRole = "assistant"
+		}
+		items = append(items, it)
+	}
+	return ckWorked(ckRuns(items), working)
+}
+
+// ckTooly reports whether an item is a tool call, which a run may hold.
+func ckTooly(it ckItem) bool {
+	return it.kind == ckItemTool || it.kind == ckItemTools || it.kind == ckItemEdit
+}
+
+// ckRuns folds two or more tool calls in a row into one run item, so a turn
+// reads as its answers with one line of work between them. Thinking between
+// the calls goes into the run, shown when it opens: an agent that thinks
+// before each call would otherwise leave no two calls in a row.
+func ckRuns(items []ckItem) []ckItem {
+	out := make([]ckItem, 0, len(items))
+	for i := 0; i < len(items); {
+		j, calls := i, 0
+		for j < len(items) && (ckTooly(items[j]) || items[j].kind == ckItemThinking) {
+			if ckTooly(items[j]) {
+				calls++
+			}
+			j++
+		}
+		if calls >= 2 {
+			run := slices.Clone(items[i:j])
+			out = append(out, ckItem{kind: ckItemRun, key: "run-" + items[i].key, at: items[i].at, run: run})
+			i = j
+			continue
+		}
+		out = append(out, items[i])
+		i++
+	}
+	return out
+}
+
+// ckWorked adds, under the last answer of each finished turn, how long the
+// turn worked: from the person's prompt to the turn's last entry. The last
+// turn counts as finished once the agent is no longer working.
+func ckWorked(items []ckItem, working bool) []ckItem {
+	out := make([]ckItem, 0, len(items)+4)
+	start, last := int64(0), int64(0)
+	flush := func() {
+		if start > 0 && last-start >= 1000 {
+			out = append(out, ckItem{kind: ckItemWorked, key: fmt.Sprint("worked-", start), at: last, e: transcriptview.Entry{At: last - start}})
+		}
+		start, last = 0, 0
+	}
+	for _, it := range items {
+		if it.kind == ckItemUser {
+			flush()
+			start = it.at
+		} else if it.at > last {
+			last = it.at
+		}
+		out = append(out, it)
+	}
+	if !working {
+		flush()
+	}
+	return out
+}
+
+// ckRunSummary is a run in words: "Edited 1 file and ran 2 commands".
+func ckRunSummary(run []ckItem) (string, bool) {
+	edits, commands, reads, others := 0, 0, 0, 0
+	failed := false
+	for _, it := range run {
+		if it.kind == ckItemThinking {
+			continue
+		}
+		if callStatus(&it) == transcriptview.StatusError {
+			failed = true
+		}
+		switch {
+		case it.kind == ckItemEdit:
+			edits++
+		case it.kind == ckItemTools:
+			reads += len(it.calls)
+		case ckCommand(it.e.Tool):
+			commands++
+		default:
+			others++
+		}
+	}
+	var parts []string
+	if edits > 0 {
+		parts = append(parts, locales.CockpitRunEdited(edits))
+	}
+	if commands > 0 {
+		parts = append(parts, locales.CockpitRunRan(commands))
+	}
+	if reads > 0 {
+		parts = append(parts, locales.CockpitRunRead(reads))
+	}
+	if others > 0 {
+		parts = append(parts, locales.CockpitRunUsed(others))
+	}
+	s := ""
+	switch len(parts) {
+	case 1:
+		s = parts[0]
+	default:
+		s = strings.Join(parts[:len(parts)-1], ", ") + locales.CockpitRunAnd() + parts[len(parts)-1]
+	}
+	if s != "" && s[0] >= 'a' && s[0] <= 'z' {
+		s = strings.ToUpper(s[:1]) + s[1:]
+	}
+	return s, failed
+}
+
+// ckRunRunning reports whether a run's last call has not finished.
+func ckRunRunning(run []ckItem) bool {
+	for i := len(run) - 1; i >= 0; i-- {
+		if ckTooly(run[i]) {
+			return callStatus(&run[i]) == transcriptview.StatusRunning
+		}
+	}
+	return false
+}
+
+// ckCommand reports whether a tool runs a shell command.
+func ckCommand(tool string) bool {
+	switch tool {
+	case "Bash", "shell", "run_shell_command", "bash", "exec_command", "local_shell":
+		return true
+	}
+	return false
+}
+
+// workedFor is a turn's length as "2m 42s", "48s", "1h 5m".
+func workedFor(ms int64) string {
+	d := time.Duration(ms) * time.Millisecond
+	h, m, s := int(d.Hours()), int(d.Minutes())%60, int(d.Seconds())%60
+	switch {
+	case h > 0:
+		return fmt.Sprintf("%dh %dm", h, m)
+	case m > 0:
+		return fmt.Sprintf("%dm %ds", m, s)
+	}
+	return fmt.Sprintf("%ds", s)
+}
+
+// threadView draws the selected agent's thread.
+func (a *App) threadView(c *ui.Context, pal *palette, ag client.Agent) {
+	th := a.ck.threads[threadKey(ag)]
+	if th == nil {
+		a.fetchThread(ag, true)
+		th = a.ck.threads[threadKey(ag)]
+	}
+	// Every thread with no messages shows the same empty state, with its
+	// icon tile, whatever the reason (council round 1, visual 6).
+	switch {
+	case a.ck.cardShown && (th == nil || len(th.items) == 0 && !th.unsupported && !th.failed):
+		// An empty thread over an approval card: the card is the message.
+		// One gap the same in every frame, read or not, so the card starts
+		// under the tabs and never moves as the read ends (Mac round 5,
+		// visual S1, feel S2).
+		ui.Box(c.Key("thread-card-gap")).Height(ckCardGap).Shrink(0)
+		if th != nil && th.loading {
+			c.After(ckSpinFor)
+		}
+		return
+	case th == nil:
+		// No read could start: the daemon is not connected.
+		ui.Column(c).Grow(1).Center().Children(func() { ui.Spinner(c) })
+		return
+	case len(th.items) == 0 && th.loading && time.Since(th.loadedAt) < ckSpinFor:
+		// A spinner for a read's first second only: past it the tab says
+		// what it holds, and the messages come in when the read ends (Mac
+		// round 1, visual S4).
+		c.After(ckSpinFor - time.Since(th.loadedAt))
+		ui.Column(c).Grow(1).Center().Children(func() { ui.Spinner(c) })
+		return
+	case len(th.items) == 0 && th.loading && time.Since(th.loadedAt) < ckReadStuck:
+		// Look again when the read would count as stuck.
+		c.After(ckReadStuck - time.Since(th.loadedAt))
+		a.ckEmptyThread(c, pal, locales.CockpitThreadEmpty(), "")
+		return
+	case len(th.items) == 0 && th.unsupported:
+		// No retry: the harness's transcripts are not read at all.
+		ui.Column(c.Key("thread-empty")).Grow(1).MinHeight(0).Children(func() {
+			emptyBlock(c, pal, threadIcon, locales.CockpitThreadUnsupported(harnessName(ag.Harness)), locales.CockpitThreadUnsupportedDetail(), false, func() {
+				if button(c, "open-pane", locales.CockpitOpenPane(), "↵", true, pal) {
+					a.goToAgent(ag)
+				}
+			})
+		})
+		return
+	case len(th.items) == 0 && (th.failed || th.loading):
+		// A read that failed says so, and offers another.
+		emptyBlock(c, pal, nil, locales.CockpitThreadFailed(), th.err, false, func() {
+			if button(c, "retry", locales.CommonTryAgain(), "", true, pal) {
+				a.fetchThread(ag, true)
+			}
+		})
+		return
+	case len(th.items) == 0 && th.err == locales.CockpitNoTranscript() && !a.integrationMissing(c, ag.Harness):
+		// The integration is in: the transcript comes with the agent's
+		// first turn, and the thread says what it said before the
+		// state changed (Mac round 3, workflow S3).
+		a.ckEmptyThread(c, pal, locales.CockpitThreadEmpty(), "")
+		return
+	case len(th.items) == 0 && th.err != "":
+		a.ckEmptyThread(c, pal, th.err, locales.CockpitNoTranscriptDetail())
+		return
+	case len(th.items) == 0:
+		a.ckEmptyThread(c, pal, locales.CockpitThreadEmpty(), "")
+		return
+	}
+	mono := a.termFamily()
+	list := ui.List(c.Key("thread-"+threadKey(ag)), &th.list, len(th.items))
+	th.scroll.track(c, list).Grow(1).MinHeight(0).Padding(18, a.ckSide(28), 22, a.ckSide(28)).Gap(14).Selectable().CopyData(copyThread).
+		Rows(func(r ui.ListRow) { a.itemView(r.Context, pal, th, &th.items[r.Index], mono) })
+}
+
+// ckCardGap is the room between the tabs and an approval card over an
+// empty thread.
+const ckCardGap = 16
+
+// threadIcon is a speech bubble, for a thread's empty state.
+var threadIcon = icon(`<path d="M3 3.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H8l-3 2.5v-2.5H3a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z"/>`)
+
+// ckEmptyThread is a thread's empty state: it fills the tab's room, so
+// that a thread with nothing to show is never a blank column.
+func (a *App) ckEmptyThread(c *ui.Context, pal *palette, title, detail string) {
+	col := ui.Column(c.Key("thread-empty")).Grow(1).MinHeight(0)
+	col.Children(func() {
+		emptyBlock(c, pal, threadIcon, title, detail, false, nil)
+	})
+}
+
+// itemView draws one chat item.
+func (a *App) itemView(c *ui.Context, pal *palette, th *ckThread, it *ckItem, mono string) {
+	switch it.kind {
+	case ckItemOlder:
+		ui.Row(c).Center().Children(func() {
+			if button(c, "older", locales.CockpitOlder(), "", false, pal) {
+				a.fetchOlder(th)
+			}
+		})
+	case ckItemUser:
+		// The person's prompt, in a bubble on the right.
+		ui.Column(c).AlignItems(ui.End).Gap(4).Children(func() {
+			ui.Row(c).Gap(6).Children(func() {
+				ui.Text(c, locales.CockpitYou()).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.textMuted)
+				ui.Text(c, clock(it.at)).FontSize(fsSmall).TextColor(pal.textFaint)
+			})
+			ui.Text(c, it.e.Text).FontSize(fsProse).LineHeight(1.55).TextColor(pal.text).MaxWidthPercent(82).
+				Padding(10, 14).Radius(14, 14, 4, 14).Background(pal.accent.Alpha(0.16))
+		})
+	case ckItemImage:
+		a.imageItem(c, pal, th, it)
+	case ckItemText:
+		ui.Column(c).Gap(8).Children(func() {
+			if it.label {
+				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+					ui.Icon(c, harnessIcon(th.agent.Harness)).Size(14, 14).TextColor(pal.textMuted)
+					ui.Text(c, harnessName(th.agent.Harness)).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.textMuted)
+					ui.Text(c, clock(it.at)).FontSize(fsSmall).TextColor(pal.textFaint)
+				})
+			}
+			a.markdownView(c, pal, it.md, mono)
+		})
+	case ckItemThinking:
+		a.foldItem(c, pal, th, it, func() {
+			ui.Text(c, locales.CockpitThought()).FontSize(fsSmall).Italic().TextColor(pal.textMuted)
+		}, func() {
+			ui.Text(c, it.e.Text).FontSize(fsSmall).Italic().LineHeight(1.5).TextColor(pal.textMuted)
+		})
+	case ckItemRun:
+		// One line for the run, which opens on a click to its calls, each
+		// as it is drawn alone. A run with a failed call opens by itself.
+		summary, failed := ckRunSummary(it.run)
+		if failed && !th.shut[it.key] && !th.open[it.key] {
+			th.open[it.key] = true
+		}
+		a.foldItem(c, pal, th, it, func() {
+			ui.Text(c, summary).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0)
+			switch {
+			case failed:
+				statusMark(c, pal, transcriptview.StatusError)
+			case ckRunRunning(it.run):
+				statusMark(c, pal, transcriptview.StatusRunning)
+			}
+		}, func() {
+			ui.Column(c).Gap(6).Children(func() {
+				for i := range it.run {
+					ui.Box(c.Key(it.run[i].key)).Children(func() { a.itemView(c, pal, th, &it.run[i], mono) })
+				}
+			})
+		})
+	case ckItemWorked:
+		ui.Text(c, locales.CockpitWorkedFor(workedFor(it.e.At))).FontSize(fsSmall).TextColor(pal.textFaint).FontFeatures("tnum")
+	case ckItemTools:
+		a.toolsItem(c, pal, th, it, mono)
+	case ckItemTool:
+		a.toolItem(c, pal, th, it, mono)
+	case ckItemEdit:
+		a.editItem(c, pal, th, it, mono)
+	case ckItemTodos:
+		a.todosItem(c, pal, it)
+	case ckItemPlan:
+		ui.Column(c).Gap(8).Padding(12, 14).Radius(rCard).Background(ckGround(pal)).Children(func() {
+			ui.Text(c, locales.CockpitPlan()).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.textMuted)
+			a.markdownView(c, pal, it.md, mono)
+		})
+	case ckItemError:
+		ui.Row(c).Gap(8).Padding(8, 12).Radius(rControl).Background(pal.danger.Alpha(0.12)).Children(func() {
+			ui.Text(c, "✕").FontSize(fsSmall).TextColor(pal.danger)
+			ui.Text(c, it.e.Text).FontSize(fsBody).TextColor(pal.text).Grow(1).MinWidth(0)
+		})
+	}
+}
+
+// foldItem is an item drawn as one line that a click opens.
+func (a *App) foldItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, head, body func()) {
+	open := th.open[it.key]
+	ui.Column(c).Gap(6).Children(func() {
+		row := ui.Row(c.Key("h")).Gap(7).AlignItems(ui.Center).Cursor(ui.CursorPointer).Unselectable()
+		if row.Clicked() {
+			c.Invalidate()
+			th.open[it.key] = !open
+		}
+		row.Children(func() {
+			ic := chevronIcon
+			if open {
+				ic = chevronDownIcon
+			}
+			ui.Icon(c, ic).Size(12, 12).TextColor(pal.textFaint)
+			head()
+		})
+		if open {
+			ui.Column(c).Padding(0, 0, 0, 17).Children(body)
+		}
+	})
+}
+
+// statusMark is a call's status: a check, a cross, or a dot while it runs.
+func statusMark(c *ui.Context, pal *palette, status string) {
+	switch status {
+	case transcriptview.StatusError:
+		ui.Text(c, "✕").FontSize(fsSmall).TextColor(pal.danger)
+	case transcriptview.StatusRunning:
+		ui.Text(c, "●").FontSize(fsCaption).TextColor(pal.accent)
+	case "":
+	default:
+		ui.Text(c, "✓").FontSize(fsSmall).TextColor(pal.done)
+	}
+}
+
+func callStatus(it *ckItem) string {
+	if it.res != nil {
+		return it.res.Status
+	}
+	return it.e.Status
+}
+
+// toolsItem is reads and searches in a row, joined to one line.
+func (a *App) toolsItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, mono string) {
+	counts := map[string]int{}
+	var order []string
+	var targets []string
+	for _, e := range it.calls {
+		if counts[e.Tool] == 0 {
+			order = append(order, e.Tool)
+		}
+		counts[e.Tool]++
+		targets = append(targets, ckRelPath(e.Target, th.agent.Cwd))
+	}
+	var head []string
+	for _, t := range order {
+		if counts[t] > 1 {
+			head = append(head, fmt.Sprintf("%s %d", t, counts[t]))
+		} else {
+			head = append(head, t)
+		}
+	}
+	a.foldItem(c, pal, th, it, func() {
+		ui.Text(c, strings.Join(head, " · ")).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.textMuted).Shrink(0)
+		ui.Text(c, strings.Join(targets, ", ")).Font(mono).FontSize(fsSmall).TextColor(pal.textFaint).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
+		statusMark(c, pal, transcriptview.StatusOK)
+	}, func() {
+		for _, e := range it.calls {
+			ui.Row(c).Gap(8).Children(func() {
+				ui.Text(c, e.Tool).FontSize(fsSmall).FontWeight(wSemibold).TextColor(pal.textMuted).Shrink(0)
+				ckPathText(c, e.Target, th.agent.Cwd).Font(mono).FontSize(fsSmall).TextColor(pal.text).MinWidth(0)
+			})
+		}
+	})
+}
+
+// toolItem is one call with its result: folded, except a failed one.
+func (a *App) toolItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, mono string) {
+	status := callStatus(it)
+	failed := status == transcriptview.StatusError
+	if failed && !th.shut[it.key] && !th.open[it.key] {
+		th.open[it.key] = true
+	}
+	tool := it.e.Tool
+	if tool == "" {
+		tool = locales.CockpitResult()
+	}
+	a.foldItem(c, pal, th, it, func() {
+		ui.Text(c, tool).FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text).Shrink(0)
+		ckPathText(c, it.e.Target, th.agent.Cwd).Font(mono).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
+		if failed {
+			ui.Text(c, locales.CockpitFailedPill()).FontSize(fsCaption).FontWeight(wSemibold).TextColor(pal.danger).Padding(1, 7).Radius(rChip).Background(pal.danger.Alpha(0.14))
+		} else {
+			statusMark(c, pal, status)
+		}
+	}, func() {
+		out := it.e.Text
+		if it.res != nil {
+			out = it.res.Text
+		}
+		if strings.TrimSpace(out) == "" {
+			ui.Text(c, locales.CockpitNoOutput()).FontSize(fsSmall).TextColor(pal.textFaint)
+			return
+		}
+		ui.ScrollHorizontal(c).Radius(rControl).Background(ckCodeBg(pal)).Children(func() {
+			ui.Text(c, strings.ReplaceAll(strings.TrimRight(out, "\n"), "\t", "    ")).Font(mono).FontSize(fsCode).LineHeight(1.5).NoWrap().TextColor(pal.text).Padding(10, 12)
+		})
+	})
+}
+
+// todosItem is a todo list as a checklist with its progress.
+func (a *App) todosItem(c *ui.Context, pal *palette, it *ckItem) {
+	done := 0
+	for _, t := range it.e.Todos {
+		if t.Status == "completed" {
+			done++
+		}
+	}
+	ui.Column(c).Gap(6).Padding(12, 14).Radius(rCard).Background(ckGround(pal)).Children(func() {
+		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, locales.CockpitTodos()).FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text)
+			ui.Text(c, locales.CockpitTodosDone(done, len(it.e.Todos))).FontSize(fsSmall).TextColor(pal.textMuted)
+			ui.Spacer(c)
+			frac := float32(0)
+			if n := len(it.e.Todos); n > 0 {
+				frac = float32(done) / float32(n)
+			}
+			ui.Box(c).Width(80).Height(4).Radius(rChip).Background(pal.divider).Draw(func(p *ui.Painter, r ui.Rect) {
+				p.Fill(ui.Rect{X: r.X, Y: r.Y, W: r.W * frac, H: r.H}, pal.accent, 2)
+			})
+		})
+		for _, t := range it.e.Todos {
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				switch t.Status {
+				case "completed":
+					ui.Text(c, "✓").FontSize(fsSmall).TextColor(pal.done).Width(14)
+					ui.Text(c, t.Text).FontSize(fsBody).TextColor(pal.textFaint).Strikethrough()
+				case "in_progress":
+					ui.Text(c, "●").FontSize(fsCaption).TextColor(pal.accent).Width(14)
+					ui.Text(c, t.Text).FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text)
+				default:
+					ui.Text(c, "○").FontSize(fsSmall).TextColor(pal.textFaint).Width(14)
+					ui.Text(c, t.Text).FontSize(fsBody).TextColor(pal.text)
+				}
+			})
+		}
+	})
+}
+
+// ckEditLines is how many diff lines an edit shows before "Show all".
+const ckEditLines = 12
+
+// editItem is an edit, open on its diff.
+func (a *App) editItem(c *ui.Context, pal *palette, th *ckThread, it *ckItem, mono string) {
+	d := it.e.Diff
+	open := !th.shut[it.key]
+	ui.Column(c).Radius(rControl).Background(ckCodeBg(pal)).Clip().Children(func() {
+		row := ui.Row(c.Key("h")).Gap(8).AlignItems(ui.Center).Padding(8, 12).Cursor(ui.CursorPointer).Unselectable()
+		if row.Clicked() {
+			c.Invalidate()
+			th.shut[it.key] = open
+		}
+		row.Children(func() {
+			ic := chevronIcon
+			if open {
+				ic = chevronDownIcon
+			}
+			ui.Icon(c, ic).Size(12, 12).TextColor(pal.textFaint)
+			ui.Text(c, it.e.Tool).FontSize(fsBody).FontWeight(wSemibold).TextColor(pal.text)
+			ckPathText(c, d.File, th.agent.Cwd).Font(mono).FontSize(fsSmall).TextColor(pal.textMuted).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
+			added, removed := a.diffColorsFor(pal)
+			if d.Added > 0 {
+				ui.Text(c, fmt.Sprint("+", d.Added)).Font(mono).FontSize(fsSmall).TextColor(added)
+			}
+			if d.Removed > 0 {
+				ui.Text(c, fmt.Sprint("−", d.Removed)).Font(mono).FontSize(fsSmall).TextColor(removed)
+			}
+			statusMark(c, pal, callStatus(it))
+		})
+		if open {
+			a.diffView(c, pal, d, th.open[it.key+"+all"], mono)
+			if n := diffLineCount(d); n > ckEditLines && !th.open[it.key+"+all"] {
+				r := ui.Row(c.Key("all")).Padding(5, 12).Cursor(ui.CursorPointer).Unselectable()
+				if r.Clicked() {
+					c.Invalidate()
+					th.open[it.key+"+all"] = true
+				}
+				r.Children(func() {
+					ui.Text(c, locales.CockpitShowAllLines(n)).FontSize(fsSmall).TextColor(pal.accent)
+				})
+			}
+		}
+	})
+}
+
+// diffWidthSeen asks for one more frame when a diff's width differs from
+// the one its rows were last sized to. The width is the last frame's, so
+// a diff's first frame has none: with nothing else to paint, an idle app
+// would keep rows that stop at their text (council round 3, visual S1).
+// A width that holds asks for nothing.
+func (a *App) diffWidthSeen(c *ui.Context, id uint64, w float32) {
+	if prev, ok := a.diffW[id]; ok && prev == w {
+		return
+	}
+	if a.diffW == nil || len(a.diffW) > 256 {
+		a.diffW = map[uint64]float32{}
+	}
+	a.diffW[id] = w
+	c.Invalidate()
+}
+
+func diffLineCount(d *transcriptview.Diff) int {
+	n := 0
+	for _, h := range d.Hunks {
+		n += len(h.Lines)
+	}
+	return n
+}
+
+// diffColorsFor is the added and removed colours.
+func (a *App) diffColorsFor(pal *palette) (ui.Color, ui.Color) {
+	added, removed, _ := a.diffColors(pal)
+	return added, removed
+}
+
+// diffView draws a diff's hunks: line numbers, the sign, the code
+// highlighted, the changed words lit.
+//
+// Every row is one line high (diffRowH), so the rows in view follow from
+// where the diff is in its page (a.diffClip, a.diffScrollY): only
+// those are built, with a margin of half a view above and below, and boxes of
+// the height of the rest. A checkpoint of 4,900 lines built every line, 3
+// elements each, every frame: 47.5 ms a frame and 56 MB of garbage while
+// scrolling, now 7.2 ms and 1.4 MB (Atlas, 2026-11-09). Rows are keyed by
+// line, so a row keeps its text layout as the range moves. The rows keep
+// the width of the longest line, so the sideways scroll does not change as
+// they come and go.
+func (a *App) diffView(c *ui.Context, pal *palette, d *transcriptview.Diff, all bool, mono string) {
+	added, removed := a.diffColorsFor(pal)
+	syn := a.syntaxColors(c, pal)
+	sc := ui.ScrollHorizontal(c)
+	// The lines' colors run the card's width, however short the lines:
+	// a percent of a sideways scroll's content is of the content.
+	view := sc.Bounds().W
+	a.diffWidthSeen(c, sc.ID(), view)
+	n := diffRows(d)
+	if !all {
+		n = min(n, ckEditLines+len(d.Hunks))
+	}
+	first, last := 0, n
+	if clip := a.diffClip; all && clip.H > 0 {
+		box := sc.Bounds()
+		was, seen := a.diffAt[d]
+		switch {
+		case box.H > 0 && seen:
+			// Where the diff starts in its page's content, from the last
+			// frame, and where the page is scrolled now: a jump (the scroll
+			// bar, End) builds the rows it lands on in the frame it lands.
+			top := box.Y - clip.Y + was.scrollY
+			at := a.diffScrollY - top
+			// Half a view of margin each side: a wheel step moves far less
+			// in a frame, and each row more is laid out every frame.
+			first = max(0, int((at-clip.H/2)/diffRowH))
+			last = min(n, int((at+clip.H*3/2)/diffRowH)+1)
+		default:
+			// The diff's first frame: where it lands is not known yet.
+			last = min(n, diffFirstRows)
+			c.Invalidate()
+		}
+		if last < first {
+			first, last = 0, 0
+		}
+		if a.diffAt == nil || len(a.diffAt) > 256 {
+			a.diffAt = map[*transcriptview.Diff]diffBuilt{}
+		}
+		a.diffAt[d] = diffBuilt{first: first, last: last, scrollY: a.diffScrollY}
+	}
+	sc.Children(func() {
+		col := ui.Column(c).Padding(0, 0, 6, 0).MinWidth(max(view, a.diffWidth(d))).AlignItems(ui.Stretch)
+		col.Children(func() {
+			if first > 0 {
+				ui.Box(c).Height(float32(first) * diffRowH).Shrink(0)
+			}
+			row := 0
+			shown := 0
+			for hi, h := range d.Hunks {
+				if row >= last {
+					break
+				}
+				if hi > 0 {
+					if row >= first {
+						ui.Text(c.Key(row), "⋯").FontSize(fsCaption).TextColor(pal.textFaint).Padding(0, 12).Height(diffRowH).Shrink(0)
+					}
+					row++
+				}
+				if row+len(h.Lines) <= first {
+					row += len(h.Lines)
+					shown += len(h.Lines)
+					continue
+				}
+				spans := cachedSpans(&d.Hunks[hi], func() [][]diffview.Span {
+					texts := make([]string, len(h.Lines))
+					for i, l := range h.Lines {
+						texts[i] = l.Text
+					}
+					return diffview.Highlight(d.File, texts)
+				})
+				oldN, newN := h.OldStart, h.NewStart
+				for i, l := range h.Lines {
+					if !all && shown >= ckEditLines {
+						return
+					}
+					shown++
+					num, sign, bg, word := newN, " ", ui.Transparent, ui.Transparent
+					switch l.Op {
+					case "+":
+						sign, bg, word = "+", added.Alpha(0.13), added.Alpha(0.32)
+						newN++
+					case "-":
+						num, sign, bg, word = oldN, "−", removed.Alpha(0.13), removed.Alpha(0.32)
+						oldN++
+					default:
+						oldN++
+						newN++
+					}
+					r := row
+					row++
+					if r < first {
+						continue
+					}
+					if r >= last {
+						break
+					}
+					var sp []diffview.Span
+					if i < len(spans) {
+						sp = spans[i]
+					}
+					runs := codeSpans(l.Text, sp, syn, pal.text)
+					runs = litWords(runs, l.Text, l.Words, word)
+					// Keyed by line, so a row keeps its element, and its text
+					// its layout, as the rows in view move.
+					ui.Row(c.Key(r)).Background(bg).Height(diffRowH).Shrink(0).AlignItems(ui.Center).Children(func() {
+						ui.Text(c, strconv.Itoa(num)).Font(mono).FontSize(fsSmall).TextColor(pal.textFaint).Width(40).TextAlign(ui.End).Padding(0, 8, 0, 0).FontFeatures("tnum").Unselectable()
+						ui.Text(c, sign).Font(mono).FontSize(fsSmall).TextColor(pal.textMuted).Width(16).Unselectable()
+						ui.RichText(c, detab(runs)...).Font(mono).FontSize(fsCode).LineHeight(1.5).NoWrap().Padding(0, 12, 0, 0)
+					})
+				}
+			}
+			if rest := n - max(last, first); rest > 0 {
+				ui.Box(c).Height(float32(rest) * diffRowH).Shrink(0)
+			}
+		})
+	})
+}
+
+const (
+	// diffRowH is the height of a diff row: one line of code at fsCode
+	// and line height 1.5.
+	diffRowH = fsCode * 1.5
+	// diffFirstRows is how many rows a diff builds before its first frame
+	// says where it is.
+	diffFirstRows = 200
+)
+
+// diffBuilt is the rows a diff built in a frame, and how far its page was
+// scrolled then.
+type diffBuilt struct {
+	first, last int
+	scrollY     float32
+}
+
+// diffRows is how many rows a diff draws: its lines, and a mark between
+// two hunks.
+func diffRows(d *transcriptview.Diff) int {
+	n := max(0, len(d.Hunks)-1)
+	for _, h := range d.Hunks {
+		n += len(h.Lines)
+	}
+	return n
+}
+
+// diffWidth is the width of d's longest line with its gutter, measured once
+// per diff: JetBrains Mono's advance is 0.6 em, and a tab draws as four
+// spaces (detab).
+func (a *App) diffWidth(d *transcriptview.Diff) float32 {
+	if w, ok := a.diffWide[d]; ok {
+		return w
+	}
+	cols := 0
+	for _, h := range d.Hunks {
+		for _, l := range h.Lines {
+			n := utf8.RuneCountInString(l.Text) + 3*strings.Count(l.Text, "\t")
+			cols = max(cols, n)
+		}
+	}
+	w := float32(40+16+12+12) + float32(cols)*fsCode*0.6
+	if a.diffWide == nil || len(a.diffWide) > 256 {
+		a.diffWide = map[*transcriptview.Diff]float32{}
+	}
+	a.diffWide[d] = w
+	return w
+}
+
+// syntaxColors are the colours of diffview's classes, from the code theme.
+func (a *App) syntaxColors(c *ui.Context, pal *palette) [diffview.NumClasses]ui.Color {
+	t := a.codeTheme(c, pal)
+	var out [diffview.NumClasses]ui.Color
+	for cl := range diffview.NumClasses {
+		out[cl] = pal.text
+	}
+	tok := func(k int) ui.Color {
+		if col := t.Tokens[k].Color; col.A > 0 {
+			return col
+		}
+		return pal.text
+	}
+	// diffview's classes as the editor's token kinds.
+	out[diffview.Keyword] = tok(1)
+	out[diffview.Type] = tok(2)
+	out[diffview.Func] = tok(3)
+	out[diffview.Builtin] = tok(3)
+	out[diffview.String] = tok(8)
+	out[diffview.Number] = tok(7)
+	out[diffview.Comment] = tok(11)
+	out[diffview.Operator] = tok(12)
+	out[diffview.Punct] = tok(13)
+	out[diffview.Preproc] = tok(16)
+	out[diffview.Tag] = tok(14)
+	out[diffview.Attr] = tok(15)
+	return out
+}
+
+// codeSpans cuts a line into runs by its highlight spans.
+func codeSpans(text string, spans []diffview.Span, syn [diffview.NumClasses]ui.Color, plain ui.Color) []ui.Span {
+	if text == "" {
+		return []ui.Span{{Text: " ", Color: plain}}
+	}
+	var out []ui.Span
+	at := 0
+	for _, s := range spans {
+		if s.Start < at || s.End > len(text) || s.Start >= s.End {
+			continue
+		}
+		if s.Start > at {
+			out = append(out, ui.Span{Text: text[at:s.Start], Color: plain})
+		}
+		out = append(out, ui.Span{Text: text[s.Start:s.End], Color: syn[s.Class]})
+		at = s.End
+	}
+	if at < len(text) {
+		out = append(out, ui.Span{Text: text[at:], Color: plain})
+	}
+	return out
+}
+
+// litWords puts a ground behind the changed words of a line. Words are in
+// UTF-16 code units of text.
+func litWords(runs []ui.Span, text string, words []transcriptview.Range, bg ui.Color) []ui.Span {
+	if len(words) == 0 {
+		return runs
+	}
+	// Byte offsets of each UTF-16 unit.
+	var at []int
+	for i, r := range text {
+		at = append(at, i)
+		if r >= 0x10000 {
+			at = append(at, i)
+		}
+	}
+	at = append(at, len(text))
+	lit := make([]bool, len(text)+1)
+	for _, w := range words {
+		s, e := w.S, w.E
+		if s < 0 || e > len(at)-1 || s >= e {
+			continue
+		}
+		for b := at[s]; b < at[e]; b++ {
+			lit[b] = true
+		}
+	}
+	var out []ui.Span
+	off := 0
+	for _, r := range runs {
+		start := 0
+		for i := 1; i <= len(r.Text); i++ {
+			if i == len(r.Text) || lit[off+i] != lit[off+start] {
+				s := r
+				s.Text = r.Text[start:i]
+				if lit[off+start] {
+					s.Background, s.Radius = bg, 3
+				}
+				out = append(out, s)
+				start = i
+			}
+		}
+		off += len(r.Text)
+	}
+	return out
+}
+
+// detab draws a tab as four spaces: the text engine gives a tab at the
+// start of a run no width.
+func detab(runs []ui.Span) []ui.Span {
+	for i := range runs {
+		if strings.Contains(runs[i].Text, "\t") {
+			runs[i].Text = strings.ReplaceAll(runs[i].Text, "\t", "    ")
+		}
+	}
+	return runs
+}
+
+// integrationMissing reports whether the harness's integration is known
+// to be missing on this machine, from tuios integration status, read off
+// the main thread at most every 30 seconds. Until the first read it is
+// not known, and reports false.
+func (a *App) integrationMissing(c *ui.Context, harness string) bool {
+	in := &a.integ
+	if now := c.Now(); !in.reading && now.Sub(in.at) > 30*time.Second {
+		in.at, in.reading = now, true
+		go func() {
+			missing := map[string]bool{}
+			for _, st := range cli.SkillStates() {
+				missing[st.Agent] = st.State == "missing"
+			}
+			a.update(func() { in.missing, in.reading = missing, false })
+		}()
+	}
+	return in.missing[harness]
+}
+
+// ckRelPath is a call's target as the thread shows it: a path under the
+// agent's folder from that folder ("api/retry.go"), as the TUI and
+// Conductor show it, anything else as it is.
+func ckRelPath(target, cwd string) string {
+	if cwd == "" || !filepath.IsAbs(target) {
+		return target
+	}
+	if r, err := filepath.Rel(cwd, target); err == nil && r != "." && !strings.HasPrefix(r, "..") {
+		return r
+	}
+	return target
+}
+
+// ckPathText is a target drawn short (ckRelPath), with the full path on
+// hover when it was cut.
+func ckPathText(c *ui.Context, target, cwd string) ui.Element {
+	short := ckRelPath(target, cwd)
+	t := ui.Text(c, short)
+	if short != target {
+		t.Tooltip(target)
+	}
+	return t
+}

@@ -313,7 +313,7 @@ func (m *OS) InboxAgentsBulkAllow() {
 	sheet := &bulkSheet{}
 	for _, it := range m.bulkHeld() {
 		if it.Kind != session.AttentionApproval || inboxRisky(it) || !inboxShowsWhole(it) ||
-			!slices.Contains(it.Options, session.ApprovalOnce) {
+			!slices.Contains(inboxOptions(it), session.ApprovalOnce) {
 			sheet.held = append(sheet.held, inboxWho(it))
 			continue
 		}

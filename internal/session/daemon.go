@@ -149,6 +149,9 @@ type Daemon struct {
 	display displayFollow
 	// latest is each session's latest client, for the latest policy.
 	latest latestState
+	// viewerLead is each session's viewer contender for latest. See
+	// viewer_latest.go.
+	viewerLead viewerLeadState
 	// attachCount hands out connState.attachSeq.
 	attachCount atomic.Uint64
 
@@ -338,6 +341,9 @@ type Daemon struct {
 	// replyHistory is what the person sent to each agent, in memory only.
 	// See reply_history.go.
 	replyHistory replyHistory
+	// conversations are the agent conversations that ended
+	// (conversations.go).
+	conversations conversationLog
 	// buffers holds the paste buffers every client and session shares. See
 	// verb_buffers.go.
 	buffers     *pastebuf.Store
@@ -481,6 +487,8 @@ type Daemon struct {
 	paneCreators sync.Map
 	// ports is list-ports' last reading of the system. See verb_ports.go.
 	ports portsCache
+	// usage is pane-usage's last reading. See verb_usage.go.
+	usage usageCache
 
 	// evidenceClock is the time the detection verbs measure evidence_age_ms
 	// against. Nil means time.Now; tests replace it. See agent_evidence.go.
@@ -668,6 +676,17 @@ type connState struct {
 	// treeOps says the client's hello offered MsgLayoutTree. Set once, at
 	// hello. See Daemon.refreshTreeOps.
 	treeOps bool
+	// daemonActions says the client's hello offered DaemonActions. Read
+	// under mu. See daemon_actions.go.
+	daemonActions bool
+	// intents runs this client's action intents in order, off its read loop
+	// (runIntent), started by intentOnce.
+	intents    chan func()
+	intentOnce sync.Once
+	// scrollOps says the client's hello offered ScrollColumnOps: its pushes
+	// do not move the scrolling columns. Read under mu. See
+	// scroll_columns.go.
+	scrollOps bool
 	// scratchWS says the client's hello offered scratch workspaces. See
 	// Daemon.refreshTreeOps.
 	scratchWS bool
@@ -1426,6 +1445,14 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		if (ev.Type == EventAgentState || ev.Type == eventAttentionDetail) && ev.hookKind == "approval" {
 			ev.hookRoot = s.windowApprovalRoot(ev.hookWorktree, ev.Window, ev.hookAgentSession)
 			ev.hookRunDir = resolvedRunDir(s.paneRunDir(ev.PTYID))
+		}
+		// An ended conversation goes on the list, off this path, since the
+		// list is saved to disk.
+		if ev.Type == eventConversationEnded {
+			if !d.agentsOff.Load() {
+				go d.conversations.add(*ev.conversation)
+			}
+			return
 		}
 		// A new layout is news for the stream only: no hook, Inbox, queue or
 		// activity ring reads it, and it fires on every step of a drag.
@@ -2517,6 +2544,8 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 		return d.handleLayoutTree(cs, msg)
 	case MsgMasterLayout:
 		return d.handleMasterLayout(cs, msg)
+	case MsgScrollColumns:
+		return d.handleScrollColumns(cs, msg)
 	case MsgSidebarVisibility:
 		return d.handleSidebarVisibility(cs, msg)
 	case MsgSessionUsed:
@@ -2528,6 +2557,15 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 	case MsgGetTerminalState:
 		return d.handleGetTerminalState(cs, msg)
 	case MsgExecuteCommand:
+		if d.tuiActionIntent(cs, msg) {
+			// Off this connection's read loop. See daemon_actions.go.
+			cs.runIntent(func() {
+				if err := d.handleExecuteCommand(cs, msg); err != nil {
+					LogError("An action from %s failed: %v", cs.clientID, err)
+				}
+			})
+			return nil
+		}
 		return d.handleExecuteCommand(cs, msg)
 	case MsgCommandResult:
 		return d.handleCommandResult(cs, msg)

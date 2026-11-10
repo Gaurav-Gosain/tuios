@@ -76,28 +76,29 @@ const (
 	BorderEdgeBottom
 )
 
-// SnapQuarter represents window snapping positions.
-type SnapQuarter int
+// SnapQuarter represents window snapping positions. The zones and the
+// rectangles are internal/layout's, which the desktop app reads too.
+type SnapQuarter = layout.Snap
 
 const (
 	// NoSnap indicates the window is not snapped.
-	NoSnap SnapQuarter = iota
+	NoSnap = layout.NoSnap
 	// SnapLeft snaps window to left half of screen.
-	SnapLeft
+	SnapLeft = layout.SnapLeft
 	// SnapRight snaps window to right half of screen.
-	SnapRight
+	SnapRight = layout.SnapRight
 	// SnapTopLeft snaps window to top-left quarter.
-	SnapTopLeft
+	SnapTopLeft = layout.SnapTopLeft
 	// SnapTopRight snaps window to top-right quarter.
-	SnapTopRight
+	SnapTopRight = layout.SnapTopRight
 	// SnapBottomLeft snaps window to bottom-left quarter.
-	SnapBottomLeft
+	SnapBottomLeft = layout.SnapBottomLeft
 	// SnapBottomRight snaps window to bottom-right quarter.
-	SnapBottomRight
+	SnapBottomRight = layout.SnapBottomRight
 	// SnapFullScreen maximizes window to full screen.
-	SnapFullScreen
+	SnapFullScreen = layout.SnapFullScreen
 	// Unsnap restores window to its previous position.
-	Unsnap
+	Unsnap = layout.Unsnap
 )
 
 // WindowLayout stores a window's position and size for workspace persistence
@@ -760,6 +761,16 @@ type OS struct {
 	// current workspace and session, for last_workspace and last_session.
 	lastWorkspace int
 	lastSession   lastSession
+	// focusEnterPending says a select_window key went to the daemon and the
+	// focus it moves enters terminal mode when its push lands. See
+	// daemon_actions.go.
+	focusEnterPending bool
+	// colsSeen keys the scrolling columns of each workspace as the session
+	// was last known to hold them. See scroll_columns_sync.go.
+	colsSeen map[int]string
+	// intentSent says the input being handled sent a daemon action, so the
+	// push after it is skipped. See TakeIntentSent.
+	intentSent bool
 	// shownOn is the session this client last showed on each machine, by
 	// machine name, for next_host and prev_host. See host_cycle.go.
 	shownOn map[string]string

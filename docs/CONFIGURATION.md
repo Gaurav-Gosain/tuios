@@ -2716,8 +2716,10 @@ hold_seconds = 120
 `enabled` names the harnesses, by id or alias: `claude-code` (or `claude`),
 `opencode`, `kilo` and `qwen` have a decision channel tuios can answer through. Other
 names are accepted and hold nothing. Even for these, only a call the Inbox can
-show whole on one line is held, such as a short shell command or a file read;
-an edit, an MCP tool or a long command is answered in the pane.
+show whole is held, such as a short shell command, a file read, or a Claude
+Code edit with its whole body; an edit the Inbox cannot show whole, an MCP
+tool or a long command is answered in the pane. The TUI does not draw an
+edit's diff, so it offers only reject and the pane for one.
 `hold_seconds` is how long a prompt waits for your answer before the harness
 asks in its pane after all: 120 when unset, kept between 10 and 300.
 

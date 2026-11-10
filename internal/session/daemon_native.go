@@ -38,20 +38,16 @@ func focusedWindowID(state *SessionState) (string, error) {
 	return "", errfmt.Errorf("session has no windows")
 }
 
-// executeDaemonCommand runs a structural tape command against daemon-owned
+// executeDaemonCommandEnv runs a structural tape command against daemon-owned
 // session state with no TUI client. onExit is wired into any PTY it spawns so
 // the daemon can notify clients when that shell exits. It returns result data
 // (for read verbs and NewWindow) or an error. Rendering-dependent verbs return
-// errNeedsClient.
-func (d *Daemon) executeDaemonCommand(sess *Session, commandType string, args []string, onExit func(ptyID string)) (map[string]any, error) {
-	return d.executeDaemonCommandEnv(sess, commandType, args, NewWindowOptions{}, onExit)
-}
-
-// executeDaemonCommandEnv is executeDaemonCommand with what a NewWindow takes
-// on top, in base: the directory it starts in, the workspace it goes on (zero
-// is the session's current one), environment entries its process gets on top
-// of an ordinary pane's, and the size its pane will have. An ssh split uses
-// Env for the agent socket; see SSHFollowArgv. Other commands ignore base.
+// errNeedsClient. base is what a NewWindow takes on top: the directory it
+// starts in, the workspace it goes on (zero is the session's current one),
+// environment entries its process gets on top of an ordinary pane's, and the
+// size its pane will have. An ssh split uses Env for the agent socket; see
+// SSHFollowArgv. base.caller is the connection that asked, for an Action that
+// runs as a layout op. Other commands ignore base.
 func (d *Daemon) executeDaemonCommandEnv(sess *Session, commandType string, args []string, base NewWindowOptions, onExit func(ptyID string)) (map[string]any, error) {
 	switch commandType {
 	case "NewWindow":
@@ -155,7 +151,7 @@ func (d *Daemon) executeDaemonCommandEnv(sess *Session, commandType string, args
 			return nil, err
 		}
 		if commandType == "MoveAndFollowWorkspace" {
-			return nil, sess.SwitchDaemonWorkspace(ws)
+			return nil, sess.FollowDaemonWindow(id)
 		}
 		return nil, nil
 
@@ -184,7 +180,18 @@ func (d *Daemon) executeDaemonCommandEnv(sess *Session, commandType string, args
 		}
 		return windowStateToData(state, idx), nil
 
+	case "Action":
+		// A keymap action by its name: the ones that are only an op on
+		// session state run here (headless_actions.go).
+		if len(args) != 1 {
+			return nil, errNeedsClient{verb: commandType}
+		}
+		return d.runHeadlessAction(sess, args[0], base)
+
 	default:
+		if action, ok := layoutTapeActions[commandType]; ok && len(args) == 0 {
+			return d.runHeadlessAction(sess, action, base)
+		}
 		return nil, errNeedsClient{verb: commandType}
 	}
 }
@@ -413,6 +420,13 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 	}
 	if w.AgentStateAt != 0 {
 		info["agent_state_at"] = w.AgentStateAt
+	}
+	// Why the state is shown as it is: "silent" for a hooked pane that
+	// reported working and then went quiet. agent_state stays the state the
+	// agent last gave, which is what a script that types into panes reads;
+	// a view shows a silent pane as list-agents does.
+	if w.AgentReason != "" {
+		info["agent_reason"] = w.AgentReason
 	}
 	// The grants the pane was given, omitted for a pane that holds the
 	// default, so the person sees in one listing which panes were narrowed.

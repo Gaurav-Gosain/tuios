@@ -222,7 +222,10 @@ func (p *inline) emphasis(s string, i, n, depth int, miss *misses) (end int, add
 	if miss.delim[ci][k] != 0 && i >= miss.delim[ci][k] {
 		return 0, 0, false
 	}
-	for j := i + n + 1; j < len(s); j++ {
+	// The closer is looked for from the first byte of the content on, so
+	// a code span that opens the content (**`x`**) hides its backticks too;
+	// a closer needs at least one byte of content before it.
+	for j := i + n; j < len(s); j++ {
 		switch s[j] {
 		case '\\':
 			j++
@@ -236,7 +239,7 @@ func (p *inline) emphasis(s string, i, n, depth int, miss *misses) (end int, add
 			}
 		case c:
 			m := run(s, j, c)
-			if m == k && rightFlanking(s, j, m) {
+			if j > i+n && m == k && rightFlanking(s, j, m) {
 				return j, add, true
 			}
 			j += m - 1

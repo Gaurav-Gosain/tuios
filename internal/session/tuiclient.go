@@ -253,6 +253,12 @@ type TUIClient struct {
 	// sidebarOps says the daemon's welcome offered MsgSidebarVisibility. See
 	// sidebar_visibility.go.
 	sidebarOps atomic.Bool
+	// daemonActions says the daemon's welcome offered DaemonActions. See
+	// daemon_actions.go.
+	daemonActions atomic.Bool
+	// scrollOps says the daemon's welcome offered ScrollColumnOps. See
+	// scroll_columns.go.
+	scrollOps atomic.Bool
 	// listingPush says the daemon's welcome offered ListingPush: it sends
 	// MsgSessionsChanged, and the listing needs no poll. See
 	// daemon_listing_push.go.
@@ -520,6 +526,8 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 		hello.Display = c.Display
 	}
 	hello.LayoutTreeOps = true
+	hello.DaemonActions = true
+	hello.ScrollColumnOps = true
 	hello.ScratchWorkspaces = true
 	hello.HoldOptions = true
 	hello.WindowSize = !legacyWindowSize()
@@ -587,6 +595,8 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	c.treeOps.Store(welcome.LayoutTreeOps)
 	c.masterOps.Store(welcome.MasterLayoutOps)
 	c.sidebarOps.Store(welcome.SidebarOps && !legacySidebar())
+	c.daemonActions.Store(welcome.DaemonActions)
+	c.scrollOps.Store(welcome.ScrollColumnOps)
 	c.sessionUsed.Store(welcome.SessionUsed)
 	c.listingPush.Store(welcome.ListingPush)
 	c.typeAtPromptSupported = welcome.TypeAtPrompt

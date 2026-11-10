@@ -494,8 +494,8 @@ func requestAnswer(out agentHookOutcome, hio agentHookIO, limit time.Duration) (
 	}
 	// The fields the risk rules, plans and deny reasons need go only to a
 	// daemon whose request-approval lists them. An older daemon would ignore
-	// them, which for a plan would hold it as a plain approval the person
-	// could allow without reading, so a plan is not sent to one at all.
+	// them, which for a plan or an edit would hold it as a plain approval the
+	// person could allow without reading, so neither is sent to one at all.
 	extra := map[string]any{}
 	if a := out.Approval; a.IsPlan() {
 		extra["kind"], extra["plan"] = integration.KindPlan, a.Plan
@@ -509,6 +509,9 @@ func requestAnswer(out agentHookOutcome, hio agentHookIO, limit time.Duration) (
 		if a.Cwd != "" {
 			extra["cwd"] = a.Cwd
 		}
+		if a.Edit != nil {
+			extra["edit"] = a.Edit
+		}
 	}
 	if out.Approval.DenyMessage {
 		extra["deny_message"] = true
@@ -521,6 +524,12 @@ func requestAnswer(out agentHookOutcome, hio agentHookIO, limit time.Duration) (
 		}
 		if out.Approval.IsPlan() && !known["plan"] {
 			trace.Error = "the running daemon predates plans in the Inbox, so the plan was left to the pane"
+			return "", "", trace
+		}
+		// An older daemon would hold an edit as a plain approval, allowed
+		// from its path alone, so an edit is not sent to one at all.
+		if out.Approval.Edit != nil && !known["edit"] {
+			trace.Error = "the running daemon predates edits in the Inbox, so the edit was left to the pane"
 			return "", "", trace
 		}
 		for k, v := range extra {

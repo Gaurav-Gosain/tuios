@@ -1416,7 +1416,7 @@ func buildVerbRegistry() map[string]verbEntry {
 		"list-windows": {
 			scope:       scopeRead,
 			link:        needList,
-			description: "List the windows in a session. The list carries shell, the base name of the shell a new pane in the session runs. Each window carries a host when its process runs on another machine, and omits it when the process is on this one. A window whose shell marks its commands with OSC 133 also carries at_prompt, command_seq, marks_commands (the shell has sent a command-start mark), prompt_marks_only when it ran a command without one, running_cmdline while a command runs, and last_cmdline, last_exit_code and last_duration_ms once one has finished. A pane given grants of its own carries them as grants; a pane on the default of [agents.permissions] omits it. A pane whose process runs on this machine carries pid, the process it started, and tty, its terminal device. A zoomed window carries zoomed, and a floating window carries floating.",
+			description: "List the windows in a session. The list carries shell, the base name of the shell a new pane in the session runs. Each window carries a host when its process runs on another machine, and omits it when the process is on this one. A window whose shell marks its commands with OSC 133 also carries at_prompt, command_seq, marks_commands (the shell has sent a command-start mark), prompt_marks_only when it ran a command without one, running_cmdline while a command runs, and last_cmdline, last_exit_code and last_duration_ms once one has finished. A pane given grants of its own carries them as grants; a pane on the default of [agents.permissions] omits it. A pane whose process runs on this machine carries pid, the process it started, and tty, its terminal device. A zoomed window carries zoomed, and a floating window carries floating. An exited window carries exited, exit_code and signal; one kept open after exit carries keep_open.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "rail", Type: "bool", Description: "Also list the rail pane, the pane a client draws in its rail's pane section. It carries rail, the command line it runs.", Default: "false"},
@@ -1480,6 +1480,8 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "kind", Type: "string", Description: "What draws the window: terminal, or view, web or app for a window a native renderer (tuios-gpui) draws itself. Such a window runs a placeholder that shows its uri in a terminal client.", Default: "terminal", Accepted: WindowKinds},
 				{Name: "uri", Type: "string", Description: "What a view, web or app window shows, such as tuios://review/<pane> or a page. Needed for those kinds."},
 				{Name: "env", Type: "object", Description: "Environment variables for the window's process, name to value, on top of the daemon's. TUIOS_ names, TMUX and TMUX_PANE are refused, and a call from another machine may not pass env. Not for a window on another machine. Not saved: a restored pane starts without it."},
+				{Name: "cols", Type: "int", Description: "With rows: the pane's start width in cells, at most the session's. 0 for the session's.", Default: "0"},
+				{Name: "rows", Type: "int", Description: "With cols: the start height.", Default: "0"},
 				{Name: "shell_integration", Type: "string", Description: "Whether the pane's bash or zsh starts with OSC 133 prompt marks on: auto or off. Omit it to use [shell] integration. Has no effect on a window that runs a command. Not saved: a restored pane uses the config.", Accepted: config.ShellIntegrationModes},
 			},
 			returns: []verbParam{
@@ -1917,12 +1919,13 @@ func buildVerbRegistry() map[string]verbEntry {
 		"set-window": {
 			scope:       scopeDeny,
 			link:        needWrite,
-			description: "Change a window's name or minimized state. Pass only the fields to change.",
+			description: "Change a window's name, minimized state, or the uri of a web, view or app window, as its renderer moves to another page. Pass only the fields to change.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "window", Type: "string", Description: "Window to change. Omit for the focused one."},
 				{Name: "name", Type: "string", Description: "New name. Pass an empty string to clear it and fall back to the shell's title."},
 				{Name: "minimized", Type: "bool", Description: "Minimize the window, or restore it."},
+				{Name: "uri", Type: "string", Description: "What a web, view or app window shows now, such as the page a browser pane moved to. At most 8 KiB, with no control character. A terminal or a TML window refuses it."},
 			},
 			returns: []verbParam{
 				{Name: "window_id", Type: "string", Description: "Id of the window that changed."},
@@ -1986,6 +1989,102 @@ func buildVerbRegistry() map[string]verbEntry {
 				`{"id":2,"verb":"set-layout","params":{"session":"work","master_position":"center","master_count":1}}`,
 			},
 			handler: (*Daemon).verbSetLayout,
+		},
+		"layout-tree": {
+			scope:       scopeRead,
+			link:        needList,
+			description: "Read a workspace's BSP tree and layout, for a client that draws the panes itself.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "workspace", Type: "int", Description: "The workspace. Omit it for the current one."},
+			},
+			returns: []verbParam{
+				{Name: "workspace", Type: "int", Description: "The workspace read."},
+				{Name: "version", Type: "int", Description: "The state version."},
+				{Name: "tree", Type: "object", Description: "root (window_id, split_type, split_ratio, left, right), auto_scheme, default_ratio; or null."},
+				{Name: "leaves", Type: "object", Description: "Leaf number to window id."},
+				{Name: "workspaces", Type: "object", Description: "Window id to workspace."},
+				{Name: "mode", Type: "string", Description: "bsp, master-stack, scrolling, or empty."},
+				{Name: "tiling", Type: "bool", Description: "Whether tiling is on."},
+				{Name: "box", Type: "object", Description: "x, y, w, h of the layout area."},
+				{Name: "gap", Type: "int", Description: "Cells between panes."},
+				{Name: "master", Type: "object", Description: "position, count, no_grid, ratio, stack_ratio, splits."},
+				{Name: "scroll", Type: "object", Description: "columns (windows, proportion, fixed_width, active), viewport_x, column_width."},
+				{Name: "z", Type: "object", Description: "Window id to stacking order."},
+				{Name: "unplaced", Type: "[]string", Description: "Windows no client has placed."},
+			},
+			examples: []string{`{"id":1,"verb":"layout-tree","params":{"session":"work","workspace":1}}`},
+			handler:  (*Daemon).verbLayoutTree,
+		},
+		"arrange": {
+			scope:       scopeDeny,
+			link:        needWrite,
+			description: "Change a workspace's layout by one step, worked out and written by the daemon: the layout mode, tiling, the master-stack shape, the scrolling strip, a pane's rectangle, float, snap, swap, minimize and restore. One op runs at a time per session, so two clients that change a layout at once both land. It runs the verbs it needs (layout-tree, set-layout-tree, set-layout-state, focus-window, set-window) for the caller. Fires layout-changed.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "workspace", Type: "int", Description: "The workspace. Omit it for the current one."},
+				{Name: "op", Type: "string", Description: "mode, next, tiling, rotate, equalize, master.position, master.add, master.remove, master.swap, master.ratio, scroll.left, scroll.right, scroll.width, scroll.max, scroll.consume, scroll.expel, scroll.moveLeft, scroll.moveRight, scroll.view, scroll.reveal, rect, snap, float, swap, move, split.ratio, place, minimize or restore."},
+				{Name: "mode", Type: "string", Description: "For mode: bsp, master-stack, scrolling or floating. For snap: left, right, top-left, top-right, bottom-left, bottom-right, full or unsnap. For master.position: the position. For move and place: the side, left, right, up or down."},
+				{Name: "pane", Type: "string", Description: "The pane it acts on. Omit it for the focused one."},
+				{Name: "target", Type: "string", Description: "For swap, move and split.ratio: the other pane. For place: the pane asked to split, or the one focused before the new panes."},
+				{Name: "rect", Type: "object", Description: "For rect: the pane's rectangle in cells, {x, y, w, h}."},
+				{Name: "at", Type: "object", Description: "For rect: where it was dropped, which snaps it at an edge."},
+				{Name: "ratio", Type: "float", Description: "For master.ratio: the masters' share."},
+				{Name: "delta", Type: "int", Description: "For scroll.view: cells. For restore: the nth minimized pane, 0 for all."},
+				{Name: "asked", Type: "bool", Description: "For place: target and mode name the split the caller asked for."},
+				{Name: "slot", Type: "object", Description: "For place: where pane tiled before it floated, {beside, row, first, ratio}."},
+				{Name: "cols", Type: "int", Description: "The caller's pane area in cells, the box with no TUI attached. Omit it for the daemon's."},
+				{Name: "rows", Type: "int", Description: "The caller's pane area in rows."},
+			},
+			returns: []verbParam{
+				{Name: "workspace", Type: "int", Description: "The workspace changed."},
+				{Name: "focus", Type: "string", Description: "The pane the change focused, empty for none."},
+			},
+			examples: []string{`{"id":1,"verb":"arrange","params":{"session":"work","op":"mode","mode":"master-stack"}}`},
+			handler:  (*Daemon).verbArrange,
+		},
+		"set-layout-tree": {
+			scope:       scopeDeny,
+			link:        needWrite,
+			description: "Replace a workspace's BSP tree for every client. Leaves of other workspaces are dropped. Fires layout-changed.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "workspace", Type: "int", Description: "The workspace. Omit it for the current one."},
+				{Name: "tree", Type: "object", Description: "The tree as layout-tree gives it; null removes it."},
+				{Name: "leaves", Type: "object", Description: "Leaf number to window id."},
+			},
+			returns: []verbParam{
+				{Name: "workspace", Type: "int", Description: "The workspace set."},
+				{Name: "changed", Type: "bool", Description: "Whether it changed."},
+			},
+			examples: []string{`{"id":1,"verb":"set-layout-tree","params":{"session":"work","workspace":1,"tree":null,"leaves":{}}}`},
+			handler:  (*Daemon).verbSetLayoutTree,
+		},
+		"set-layout-state": {
+			scope:       scopeDeny,
+			link:        needWrite,
+			description: "Set a workspace's layout mode, tiling, master-stack shape, scrolling strip, pane order and rectangles for every client. Fires layout-changed.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "workspace", Type: "int", Description: "The workspace. Omit it for the current one."},
+				{Name: "mode", Type: "string", Description: "bsp, master-stack or scrolling."},
+				{Name: "tiling", Type: "bool", Description: "Tiling on or off."},
+				{Name: "master_ratio", Type: "float", Description: "The masters' share, 0 for default."},
+				{Name: "stack_ratio", Type: "float", Description: "The first stack pane's share, 0 for equal."},
+				{Name: "master_splits", Type: "object", Description: "masters, stack, rows, cells, as layout-tree gives them."},
+				{Name: "master_position", Type: "string", Description: "Where the masters go."},
+				{Name: "master_count", Type: "int", Description: "How many panes are masters."},
+				{Name: "scroll_columns", Type: "array", Description: "Columns, as layout-tree gives them."},
+				{Name: "viewport_x", Type: "int", Description: "Strip scroll in cells; current workspace only."},
+				{Name: "order", Type: "[]string", Description: "Window ids in master-stack order."},
+				{Name: "windows", Type: "array", Description: "Rectangles: window, x, y, width, height, floating."},
+			},
+			returns: []verbParam{
+				{Name: "workspace", Type: "int", Description: "The workspace set."},
+				{Name: "changed", Type: "bool", Description: "Whether it changed."},
+			},
+			examples: []string{`{"id":1,"verb":"set-layout-state","params":{"session":"work","mode":"master-stack","tiling":true}}`},
+			handler:  (*Daemon).verbSetLayoutState,
 		},
 		"run-command": {
 			scope:       scopeDeny,
@@ -2106,7 +2205,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			// stream-pane reads a pane. Its input and lease frames are checked
 			// as send-text and resize, frame by frame, so they need write.
 			link:        needList,
-			description: "Stream one pane as bytes, for a client that is not tuios. The reply is one JSON line, and after it the connection carries binary frames both ways: a type byte, a 4-byte big-endian length, then the payload. From the daemon: S snapshot (u64 seq, u16 cols, u16 rows, then bytes that paint the pane on a fresh emulator of that size), O output (u64 seq after the frame's last byte, then the pane's bytes), R resize (u64 seq, u16 cols, u16 rows), E error (JSON code and message, for a refused frame or a lease that was not renewed; the stream goes on), X exit (the reason: exited N when the pane's program exited with status N, killed N when signal N ended it, closed when its window closed first, or refused: … when the caller may no longer read it; the connection then closes). From the client: I input (at most 64 KiB of bytes typed into the pane, checked as send-text is), L lease (u16 cols, u16 rows, 0 0 to release; send it again every 10 seconds, or the lease ends after 30). Skip a frame type you do not know: read its length and drop that many bytes. At most 4 I frames wait for a pane that does not read, and the next gets E busy. The stream never changes the pane's size or the session's. A lease holds the pane at most at its size while the stream is open, and the pane goes back to the size its clients asked for when the lease ends.",
+			description: "Stream one pane as bytes, for a client that is not tuios. The reply is one JSON line, and after it the connection carries binary frames both ways: a type byte, a 4-byte big-endian length, then the payload. From the daemon: S snapshot (u64 seq, u16 cols, u16 rows, then bytes that paint the pane on a fresh emulator of that size), O output (u64 seq after the frame's last byte, then the pane's bytes), R resize (u64 seq, u16 cols, u16 rows), E error (JSON code and message, for a refused frame or a lease that was not renewed; the stream goes on), H history (u64 id of the first history row of the next S, for pane-history), X exit (the reason: exited N when the pane's program exited with status N, killed N when signal N ended it, closed when its window closed first, or refused: … when the caller may no longer read it; the connection then closes). From the client: I input (at most 64 KiB of bytes typed into the pane, checked as send-text is), L lease (u16 cols, u16 rows, 0 0 to release, optional u16 cell width and height in pixels; send it again every 10 seconds, or the lease ends after 30), V viewer (viewer JSON), F shown (byte 0 hidden, 1 shown, 2 shown and focused, which counts as a focused client and marks a finished turn seen). Skip a frame type you do not know: read its length and drop that many bytes. At most 4 I frames wait for a pane that does not read, and the next gets E busy. The stream never changes the pane's size or the session's. A lease holds the pane at most at its size while the stream is open, and the pane goes back to the size its clients asked for when the lease ends.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "window", Type: "string", Description: "The pane to stream: a window id or name."},
@@ -2116,6 +2215,11 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "lease_rows", Type: "int", Description: "Hold the pane at most this many rows high while the stream is open. Needs lease_cols."},
 				{Name: "session_id", Type: "string", Description: "The session by its id, which a rename does not change. It wins over session. The reply carries it."},
 				{Name: "fit", Type: "bool", Description: "Make the lease a viewer's: while no TUI client shows the session, the pane takes the size of the largest fit lease held, and goes back to its own size when the last one ends. While a client shows the session, a fit lease only holds the pane smaller."},
+				{Name: "yield", Type: "bool", Description: "A fit lease that yields to a TUI client. On the local socket it lasts until the stream closes."},
+				{Name: "repaint_on_resize", Type: "bool", Description: "On a resize send an S snapshot in place of R.", Default: "false"},
+				{Name: "row_ids", Type: "bool", Description: "Send the H frame, the id of the snapshot's first history row for pane-history, before each S.", Default: "false"},
+				{Name: "cell_width", Type: "int", Description: "Viewer cell width in pixels, for a fit lease."},
+				{Name: "cell_height", Type: "int", Description: "Viewer cell height in pixels."},
 				{Name: "viewer", Type: "object", Description: "The terminal the stream shows the pane in: bg, fg (#rrggbb), palette (sixteen comma-separated #rrggbb), kitty and sixel (bool). While no TUI client shows the session, the daemon answers the pane's OSC 10, 11 and 4, DA1 and kitty graphics queries from the newest viewer's report."},
 			},
 			returns: []verbParam{
@@ -2134,6 +2238,26 @@ func buildVerbRegistry() map[string]verbEntry {
 				`{"id":1,"verb":"stream-pane","params":{"session":"work","window":"build","from_seq":48211,"boot_id":"<from the last reply>","lease_cols":45,"lease_rows":20}}`,
 			},
 			handler: (*Daemon).verbStreamPane,
+		},
+		"pane-history": {
+			scope: scopeRead,
+			// pane-history reads rows of a pane's history, as capture-pane.
+			link:        needList,
+			description: "Read a pane's history rows before a row id, as bytes that print them. Ids stay stable across output, trimming and resize; stream-pane's H frame gives the first id. Refused with no_row_ids when the emulator has no ids.",
+			params: []verbParam{
+				sessionParam,
+				windowParam,
+				{Name: "before", Type: "int", Description: "The oldest row id the caller holds."},
+				{Name: "count", Type: "int", Description: "Most rows to return, 1 to 2000.", Default: "500"},
+			},
+			returns: []verbParam{
+				{Name: "rows", Type: "string", Description: "Rows oldest first, with styles, each ending in CR LF unless it wraps."},
+				{Name: "first", Type: "int", Description: "The first row id returned."},
+				{Name: "count", Type: "int", Description: "Rows returned."},
+				{Name: "oldest", Type: "int", Description: "The oldest row id the pane holds."},
+			},
+			examples: []string{`{"id":1,"verb":"pane-history","params":{"session":"work","window":"build","before":10500,"count":500}}`},
+			handler:  (*Daemon).verbPaneHistory,
 		},
 		"attach-presence": {
 			// A restricted connection is automation, never the person.
@@ -2701,6 +2825,9 @@ func buildVerbRegistry() map[string]verbEntry {
 				sessionParam,
 				windowParam,
 				{Name: "dry_run", Type: "bool", Description: "Return the command without typing it."},
+				{Name: "conversation", Type: "string", Description: "An id from list-conversations, in place of window: resume it in a new window. The caller needs what new-window needs."},
+				{Name: "harness", Type: "string", Description: "The harness of conversation."},
+				{Name: "workspace", Type: "int", Description: "The new window's workspace."},
 			},
 			returns: []verbParam{
 				{Name: "window_id", Type: "string", Description: "The window resumed."},
@@ -2715,6 +2842,33 @@ func buildVerbRegistry() map[string]verbEntry {
 				`{"id":1,"verb":"resume-agent","params":{"session":"work","window":"build","dry_run":true}}`,
 			},
 			handler: (*Daemon).verbResumeAgent,
+		},
+		"list-conversations": {
+			scope:       scopeGlobal,
+			link:        needList,
+			description: "List ended agent conversations, newest first, at most 200. resume-agent with conversation starts one again.",
+			params: []verbParam{
+				{Name: "harness", Type: "string", Description: "Only this harness's conversations."},
+			},
+			returns: []verbParam{
+				{Name: "conversations", Type: "[]object", Description: "harness, id, cwd, title, session, flags, ended_at (unix ms)."},
+			},
+			examples: []string{`{"id":1,"verb":"list-conversations","params":{}}`},
+			handler:  (*Daemon).verbListConversations,
+		},
+		"forget-conversation": {
+			scope:       scopeDeny,
+			link:        needWrite,
+			description: "Remove an ended conversation from list-conversations.",
+			params: []verbParam{
+				{Name: "id", Type: "string", Description: "The conversation id."},
+				{Name: "harness", Type: "string", Description: "Only this harness."},
+			},
+			returns: []verbParam{
+				{Name: "forgotten", Type: "bool", Description: "Whether the list held it."},
+			},
+			examples: []string{`{"id":1,"verb":"forget-conversation","params":{"id":"0b4c2a"}}`},
+			handler:  (*Daemon).verbForgetConversation,
 		},
 		"get-agent-state": {
 			scope:       scopeRead,
@@ -3025,7 +3179,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "include_snoozed", Type: "bool", Description: "Also list the items the person snoozed, each with snoozed_until.", Default: "false"},
 			},
 			returns: []verbParam{
-				{Name: "items", Type: "[]object", Description: "One entry per item: id, kind, host, session, window, workspace, harness, name, summary, options, request_id, expires, always_scope, since, seq, thread, count, completion_seq, stale, seen_at. request_id, expires and always_scope are set only on an approval a hook holds on this machine (see request-approval); options is then the decisions reply-approval takes. An ask item carries request_id and options too: the question's id and its answers, which answer-ask takes. since is when the item started waiting, in unix nanoseconds. seq is the Inbox revision of its last change. summary is one line, with control characters removed, likely secrets masked and at most 160 bytes. thread is the mail thread, and count is the unread messages it stands for (mail) or the turns (finished). seen, on a mail item, is how many of count were seen with a peek and not read. host is empty for this machine; an item of a linked host has an id of the form host:id. stale is true for an item of a host whose link is down, and seen_at is when that host was last heard from, in unix nanoseconds. Additive fields, each absent when unset: snoozed_until on a snoozed item listed with include_snoozed (unix nanoseconds, -1 for until it changes), marked_unread on a finished item the person reopened, risk (the risk rules an approval matched), deny_message (the harness takes a reason with a deny), and plan_lines and plan_sha on a plan item."},
+				{Name: "items", Type: "[]object", Description: "One entry per item: id, kind, host, session, window, workspace, harness, name, summary, options, request_id, expires, always_scope, since, seq, thread, count, completion_seq, stale, seen_at. request_id, expires and always_scope are set only on an approval a hook holds on this machine (see request-approval); options is then the decisions reply-approval takes. An ask item carries request_id and options too: the question's id and its answers, which answer-ask takes. since is when the item started waiting, in unix nanoseconds. seq is the Inbox revision of its last change. summary is one line, with control characters removed, likely secrets masked and at most 160 bytes. thread is the mail thread, and count is the unread messages it stands for (mail) or the turns (finished). seen, on a mail item, is how many of count were seen with a peek and not read. host is empty for this machine; an item of a linked host has an id of the form host:id. stale is true for an item of a host whose link is down, and seen_at is when that host was last heard from, in unix nanoseconds. Additive fields, each absent when unset: snoozed_until on a snoozed item listed with include_snoozed (unix nanoseconds, -1 for until it changes), marked_unread on a finished item the person reopened, risk (the risk rules an approval matched), deny_message (the harness takes a reason with a deny), plan_lines and plan_sha on a plan item, and held_edit and edit_lines on an approval that holds an edit (an allow needs the edit_sha of get-approval)."},
 				{Name: "counts", Type: "object", Description: "Open items per kind over the whole Inbox, every machine included, before the session, kinds and host filters. Every kind is present."},
 				{Name: "total", Type: "int", Description: "How many items are listed."},
 				{Name: "seq", Type: "int", Description: "The event seq the answer is current to. Subscribe with after_seq set to it and the boot_id below, and every attention event after the listing is replayed."},
@@ -3133,6 +3287,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "target", Type: "string", Description: "What the tool acts on: the command line, or the path."},
 				{Name: "deny_message", Type: "bool", Description: "Whether the harness passes a reason with a deny to its model, so the Inbox may offer to type one.", Default: "false"},
 				{Name: "cwd", Type: "string", Description: "The folder the call runs in, as the harness sent it. The risk rules resolve a relative path against it. Omit it and the pane's own folder is used."},
+				{Name: "edit", Type: "object", Description: "Required for Edit, MultiEdit or Write: {tool, path, hunks: [{old, new, replace_all}]}, at most 32 KiB of printable UTF-8. tool and target must match it. An allow then needs edit_sha."},
 			},
 			returns: []verbParam{
 				{Name: "request_id", Type: "string", Description: "The hold's id, empty when nothing was held."},
@@ -3158,6 +3313,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "summary", Type: "string", Description: "The item's summary the decision was made from. Required for once and always: an allow without it is refused with invalid_params and nothing is answered. When the hold is now on another line, nothing is answered: applied is false with reason changed, and the hold runs on. A deny may leave it out."},
 				{Name: "risk_ack", Type: "[]string", Description: "For once or always on an item that matched risk rules: exactly the item's risk list, which says the person saw them. Without it such an allow is refused with risk_unacknowledged. A deny needs none."},
 				{Name: "plan_sha", Type: "string", Description: "For a plan item: the plan_sha of the plan that was shown. An answer without it, or for another plan, is not applied."},
+				{Name: "edit_sha", Type: "string", Description: "For once on a held_edit item: the edit_sha of the body shown. Without it the allow is refused with edit_unreviewed."},
 			},
 			returns: []verbParam{
 				{Name: "request_id", Type: "string", Description: "The hold that was answered."},
@@ -3416,6 +3572,8 @@ func buildVerbRegistry() map[string]verbEntry {
 	maps.Copy(table, shipVerbs())
 	// The paste buffer verbs. See verb_buffers.go.
 	maps.Copy(table, bufferVerbs())
+	// list-programs, for a launcher. See verb_programs.go.
+	maps.Copy(table, programVerbs())
 	// The file verbs, transfers, the drop folder and previews. See
 	// verb_files.go, transfer.go, drop_files.go and verb_preview.go.
 	maps.Copy(table, fileVerbs())

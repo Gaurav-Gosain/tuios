@@ -257,7 +257,16 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 		// Reserve space in guest terminal for the image placement
 		// Only move cursor when C=0 (default behavior), not when C=1 (no cursor move)
 		if result != nil && result.Rows > 0 && result.CursorMove == 0 {
-			win.Terminal.ReserveImageSpace(result.Rows, result.Cols)
+			// The cursor goes where kitty puts it: the image's last row,
+			// after its last column. The daemon's emulator lays the image
+			// out the same way (vt.Emulator.ReserveKittyPlacement), so the
+			// text under the picture stays on its row through a reattach
+			// or a resize snapshot. The ghostty backend keeps its own rule.
+			if k, ok := win.Terminal.(interface{ ReserveKittyImageSpace(rows, cols int) }); ok && result.Cols > 0 {
+				k.ReserveKittyImageSpace(result.Rows, result.Cols)
+			} else {
+				win.Terminal.ReserveImageSpace(result.Rows, result.Cols)
+			}
 		}
 	})
 }

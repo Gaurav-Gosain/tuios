@@ -98,12 +98,7 @@ func (m *OS) newPaneBox(placing *terminal.Window) (w, h int, tiled, ok bool) {
 	}
 	trial := tree.Serialize().Deserialize()
 	const probe = math.MaxInt32 // an int ID no window has
-	target := m.bspSplitTarget(trial, targetID)
-	if dir != layout.PreselectionNone {
-		trial.InsertWindowWithPreselection(probe, target, dir, bounds, gap)
-	} else {
-		trial.InsertWindow(probe, target, layout.SplitNone, 0.5, bounds, gap)
-	}
+	trial.AddWindow(probe, m.bspSplitTarget(trial, targetID), dir, bounds, gap)
 	rect, found := trial.ApplyLayout(bounds, gap)[probe]
 	if !found || rect.W <= 0 || rect.H <= 0 {
 		return 0, 0, false, false

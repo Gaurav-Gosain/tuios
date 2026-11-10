@@ -106,6 +106,7 @@ Every type, and what it reports:
 | `window-exit` | A pane's program exits |
 | `window-retitled`, `window-moved`, `window-focused` | A pane's title, workspace or focus changes |
 | `window-minimized`, `window-restored` | A pane is minimized or restored |
+| `window-foreground` | The program a pane runs changes. Opt-in |
 | `workspace-switched`, `workspace-renamed` | The workspace on screen, or a workspace name, changes |
 | `layout-changed` | The panes on a workspace sit differently. Opt-in |
 | `mode-changed` | A client switches between window and terminal mode |
@@ -127,6 +128,8 @@ Every type, and what it reports:
 | `task-claimed`, `task-finished` | A pane took a task card, or finished it: `task` is the card's row, `window` the pane (`tuios --skill tasks`) |
 | `task-changed` | A task card was `added`, `staged`, `blocked`, `unblocked`, `released` or `removed` (`action`). A release tuios made carries `reason`: `pane closed`, `agent left` or `restart` |
 | `tml-event` | A person ran an `emit` on a TML surface, or the surface closed: `tml` has `surface`, `name`, `value`, `reason` (on a close) and `version`. Opt-in |
+| `fan-verdict` | A judge recorded its verdict on a fan: one event per attempt, `session` is the attempt and `title` the session it picks. `tuios fan compare` shows the verdict |
+| `option-set` | `set-option` (`tuios set-config`) recorded a value for a session: `key` and `value`. Opt-in |
 | `tml-surface` | A TML surface opened, changed or closed: `tml_surface` has `surface`, `version`, `doc_version`, `ops` (the state patch, when small) and `closed`. For a client that draws surfaces from verbs. Opt-in |
 | `daemon-upgraded` | A live upgrade (`tuios daemon upgrade`) replaced the daemon: `title` is the build the panes came from, `body` the build that has them, `state` is `upgraded`, `fallback`, or `recovered` when the new image died and the previous binary took the panes back under a new daemon pid |
 | `gap` | Events were lost. See below |

@@ -1,0 +1,83 @@
+// Package cli is what the app needs of a command line: the agent
+// integrations and restarting the daemon. tuios has the command line, so this
+// package runs the tuios binary (Tuios) rather than carrying one of its own.
+package cli
+
+import (
+	"errors"
+	"os/exec"
+
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+)
+
+// Tuios is the tuios binary the app found, set at start.
+var Tuios = "tuios"
+
+// RestartDaemon restarts the tuios daemon. Every program in every pane
+// ends. Each session comes back with its layout, its history and new
+// shells, and the agents' conversations are offered for resume.
+func RestartDaemon() error { return run("restart-server", "--yes") }
+
+// SkillState is one harness's integration: Agent its id, Name what it is
+// called, Dir the file tuios writes, State current, outdated or missing.
+type SkillState struct {
+	Agent string
+	Name  string
+	Dir   string
+	State string
+}
+
+// SkillStates lists the integrations of the harnesses installed on this
+// machine, from `tuios integration status`.
+func SkillStates() []SkillState {
+	out, err := exec.Command(Tuios, "integration", "status", "--json").Output()
+	if err != nil {
+		return nil
+	}
+	var rows []struct {
+		Harness   string `json:"harness"`
+		Name      string `json:"name"`
+		Path      string `json:"path"`
+		Exists    bool   `json:"config_dir_exists"`
+		Installed bool   `json:"installed"`
+		Current   bool   `json:"current"`
+	}
+	if jsonx.Unmarshal(out, &rows) != nil {
+		return nil
+	}
+	var states []SkillState
+	for _, r := range rows {
+		if !r.Exists {
+			continue
+		}
+		st := "missing"
+		switch {
+		case r.Installed && r.Current:
+			st = "current"
+		case r.Installed:
+			st = "outdated"
+		}
+		states = append(states, SkillState{Agent: r.Harness, Name: r.Name, Dir: r.Path, State: st})
+	}
+	return states
+}
+
+// InstallSkill installs or updates one harness's integration.
+func InstallSkill(agent string) error { return run("integration", "install", agent) }
+
+// RemoveSkill removes one harness's integration.
+func RemoveSkill(agent string) error { return run("integration", "uninstall", agent) }
+
+func run(args ...string) error {
+	out, err := exec.Command(Tuios, args...).CombinedOutput()
+	if err != nil && len(out) > 0 {
+		return errors.New(string(out))
+	}
+	return err
+}
+
+// Output runs the tuios binary with args and returns what it printed, its
+// error output with it.
+func Output(args ...string) ([]byte, error) {
+	return exec.Command(Tuios, args...).CombinedOutput()
+}

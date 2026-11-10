@@ -342,6 +342,13 @@ type newWindowParams struct {
 	// Kind and URI make a window a renderer draws natively.
 	Kind string `json:"kind"`
 	URI  string `json:"uri"`
+	// Cols and Rows are the size the caller will give the pane, so its
+	// program starts at it: a shell that printed its prompt at the
+	// session's nominal size and was then narrowed redrew it, and the
+	// reflowed prompt stayed on the screen twice (QA-011). A split takes
+	// its own estimate when they are 0.
+	Cols int `json:"cols"`
+	Rows int `json:"rows"`
 	// ShellIntegration is auto or off for this pane's shell, "" for
 	// [shell] integration.
 	ShellIntegration string `json:"shell_integration"`
@@ -356,11 +363,17 @@ func (d *Daemon) openWindow(cs *connState, p *newWindowParams, split *splitAsk) 
 	if p.Kind != "" && p.Kind != "terminal" && p.URI == "" {
 		return nil, invalidParam("uri", "a "+p.Kind+" window needs uri, what it shows")
 	}
+	if why := windowURIProblem(p.URI); why != "" {
+		return nil, invalidParam("uri", why)
+	}
 	if p.KeepOpen && p.CloseOnExit {
 		return nil, invalidParam("keep_open", "keep_open and close_on_exit cannot be used together")
 	}
 	if p.Timeout < 0 {
 		return nil, invalidParam("timeout", "timeout is milliseconds, 0 for no limit")
+	}
+	if p.Cols < 0 || p.Rows < 0 {
+		return nil, invalidParam("cols", "cols and rows are the pane's size in cells, or 0 for the session's")
 	}
 	if p.ShellIntegration != "" && !slices.Contains(config.ShellIntegrationModes, p.ShellIntegration) {
 		return nil, invalidParam("shell_integration", "shell_integration is auto or off")
@@ -386,10 +399,14 @@ func (d *Daemon) openWindow(cs *connState, p *newWindowParams, split *splitAsk) 
 	// From inside a pane of this session, the default is the pane's own
 	// workspace (#1494). Outside every pane it stays the one the session shows.
 	var placement *SplitPlacement
-	var cols, rows int
+	cols, rows := p.Cols, p.Rows
 	if split != nil {
-		if placement, cols, rows, verr = d.splitTarget(cs, sess, p, split); verr != nil {
+		var splitCols, splitRows int
+		if placement, splitCols, splitRows, verr = d.splitTarget(cs, sess, p, split); verr != nil {
 			return nil, verr
+		}
+		if cols == 0 && rows == 0 {
+			cols, rows = splitCols, splitRows
 		}
 	}
 	if p.Workspace == 0 {
@@ -689,6 +706,12 @@ func (d *Daemon) verbPopup(cs *connState, params json.RawMessage) (any, *verbErr
 				p.Cwd = cwd
 			}
 		}
+		// A caller that names only cwd_from (guios's scratch) gets the
+		// session's start directory when the read gives none, as a new
+		// window from cwd_from does.
+		if p.Cwd == "" {
+			p.Cwd = sess.StartDir()
+		}
 	}
 	// The same refusal new-window makes, for the same reason: a directory that
 	// cannot be entered would leave the command running in the wrong place with
@@ -702,7 +725,10 @@ func (d *Daemon) verbPopup(cs *connState, params json.RawMessage) (any, *verbErr
 			return nil, invalidParam("cwd", echoName(p.Cwd)+" is not a directory")
 		}
 	}
-	if !d.hasTUIClient(sess) {
+	// A scratch terminal on a scratch workspace is a tiled pane, not a box
+	// on a screen: it waits for a client to show it, as a pane on another
+	// workspace does. guios opens one with no TUI attached.
+	if !d.hasTUIClient(sess) && (!p.Scratch || !sess.scratchWorkspacesOn()) {
 		return nil, hintedVerbError(ErrVerbNeedsClient,
 			"a popup is drawn on a screen, so it needs an attached client",
 			&VerbHint{

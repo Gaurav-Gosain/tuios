@@ -226,7 +226,7 @@ func (d *Daemon) verbMoveWindow(cs *connState, params json.RawMessage) (any, *ve
 		return nil, moveErr(err, sess, p.Workspace)
 	}
 	if p.Follow {
-		if err := sess.SwitchDaemonWorkspace(p.Workspace); err != nil {
+		if err := sess.FollowDaemonWindow(windowID); err != nil {
 			return nil, moveErr(err, sess, p.Workspace)
 		}
 	}
@@ -378,12 +378,21 @@ func (d *Daemon) verbSetWindow(cs *connState, params json.RawMessage) (any, *ver
 		Window    string  `json:"window"`
 		Name      *string `json:"name"`
 		Minimized *bool   `json:"minimized"`
+		URI       *string `json:"uri"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	if p.Name == nil && p.Minimized == nil {
-		return nil, invalidParam("name", "nothing to set: pass name, minimized, or both")
+	if p.Name == nil && p.Minimized == nil && p.URI == nil {
+		return nil, invalidParam("name", "nothing to set: pass name, minimized or uri")
+	}
+	if p.URI != nil {
+		if *p.URI == "" {
+			return nil, invalidParam("uri", "uri is what the window shows, and cannot be empty")
+		}
+		if why := windowURIProblem(*p.URI); why != "" {
+			return nil, invalidParam("uri", why)
+		}
 	}
 	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
@@ -412,6 +421,14 @@ func (d *Daemon) verbSetWindow(cs *connState, params json.RawMessage) (any, *ver
 	}
 	if p.Minimized != nil {
 		if err := sess.SetDaemonWindowMinimized(windowID, *p.Minimized); err != nil {
+			return nil, mapResolveErr(err, sess)
+		}
+	}
+	if p.URI != nil {
+		if err := sess.SetDaemonWindowURI(windowID, *p.URI); err != nil {
+			if errors.Is(err, errWindowHasNoURI) {
+				return nil, invalidParam("uri", err.Error())
+			}
 			return nil, mapResolveErr(err, sess)
 		}
 	}
@@ -1020,9 +1037,9 @@ func (d *Daemon) verbRunCommand(cs *connState, params json.RawMessage) (any, *ve
 	// The daemon-owned commands run here whether or not a client is attached, the
 	// same rule the CLI path follows, so the two cannot disagree about what a
 	// detached session can do.
-	if daemonOwnedCommands[p.Command] || !d.hasTUIClient(sess) {
+	if daemonOwnedCommands[p.Command] || !d.hasTUIClient(sess) || d.runsAction(sess, p.Command, p.Args) {
 		onExit := func(ptyID string) { d.notifyPTYClosed(sess.ID, ptyID) }
-		data, err := d.executeDaemonCommand(sess, p.Command, p.Args, onExit)
+		data, err := d.executeDaemonCommandEnv(sess, p.Command, p.Args, NewWindowOptions{caller: cs}, onExit)
 		if err != nil {
 			return nil, mapResolveErr(err, sess)
 		}

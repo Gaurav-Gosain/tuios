@@ -223,6 +223,15 @@ type at the same time, the session does not change size on each key. When one
 person stops, the session goes to the other client 1 second after the last
 key of the first.
 
+guios takes part in `latest` too, as the latest client of each session it
+shows. When you type in guios, or click its window to focus it, its panes take
+the size guios shows them at, and a TUI client attached to the same session
+shows those panes smaller in its own layout. Type in the TUI client to give
+it the size again. The same 1-second hold applies both ways. A click on a pane
+inside guios, when its window already has the focus, does not count. A guios
+that runs inside a tuios pane does not take part, because a program in a pane
+cannot act as you.
+
 The first client that attaches sets the size until another client has input.
 When the latest client leaves, by a detach, a switch or a disconnect, the
 session keeps its size until someone types at a client that is still attached.

@@ -278,6 +278,7 @@ func (d *Daemon) armLatestTimer(sessionID string, st *sessionLatest, after time.
 
 // forgetLatest drops a session's latest state when the session ends.
 func (d *Daemon) forgetLatest(sessionID string) {
+	d.forgetViewerLead(sessionID)
 	d.latest.mu.Lock()
 	defer d.latest.mu.Unlock()
 	if st := d.latest.sessions[sessionID]; st != nil {
@@ -370,6 +371,9 @@ func (d *Daemon) handleClientActivity(cs *connState) error {
 		// from who really typed last.
 		return nil
 	}
+	// Input at a TUI client takes latest back from a viewer that holds it
+	// (viewer_latest.go), whichever TUI client holds it among the clients.
+	d.viewerLeadTUIActivity(sessionID)
 	d.latest.mu.Lock()
 	holder := d.latest.get(sessionID).client
 	d.latest.mu.Unlock()
