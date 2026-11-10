@@ -1386,5 +1386,7 @@
   "pluginActionDetail": "プラグインのアクション",
   "pluginPaneDetail": "プラグインのペイン、{placement}",
   "pluginNoDaemon": "このマシンの tuios デーモンに接続できません。",
-  "pluginNeedsLocal": "{name} はこのマシンのデーモンのプラグインですが、このセッションは別のマシンで動いています。"
+  "pluginNeedsLocal": "{name} はこのマシンのデーモンのプラグインですが、このセッションは別のマシンで動いています。",
+  "railPaneStopped": "停止しました",
+  "railPaneStartAgain": "もう一度開始"
 }

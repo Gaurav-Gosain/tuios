@@ -207,9 +207,13 @@ const (
 )
 
 // DaemonUpgradingPayload is the body of MsgDaemonUpgrading: the version the
-// daemon is being upgraded to.
+// daemon is being upgraded to, and the path of the binary the person
+// confirmed for it. A local client runs that binary as its own new image, so
+// it is on the build the daemon is (see app/upgrade_follow.go). Binary is
+// empty from an older daemon, and gob drops it for an older client.
 type DaemonUpgradingPayload struct {
 	Version string
+	Binary  string
 }
 
 // WatchDirPayload is the body of MsgWatchDir. WindowID is the pane the folder

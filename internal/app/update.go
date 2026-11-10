@@ -324,6 +324,10 @@ const (
 	// ExitRestartFailed means a restart from the app failed after the old
 	// daemon stopped. RestartFailure says what to do next.
 	ExitRestartFailed
+	// ExitUpgradeFollowed means a live upgrade gave the daemon a newer build
+	// and this local client stops to run it. The entry point runs
+	// UpgradeExec. See upgrade_follow.go.
+	ExitUpgradeFollowed
 )
 
 // InputHandler is a function type that handles input messages.
@@ -2330,6 +2334,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// Said once, on the first frame that has a screen to say it on.
 			m.warnOnBuildMismatch()
 			m.announceRestart()
+			m.announceUpgradeFollowed()
 		}
 
 		// Notify daemon of our terminal size for multi-client size calculation

@@ -74,6 +74,14 @@ type OSOptions struct {
 	// the app, so the first frame says the session is back. See
 	// daemon_restart.go.
 	AfterRestart bool
+	// AfterUpgrade is the version this client was started to follow a live
+	// upgrade to, empty otherwise. See upgrade_follow.go.
+	AfterUpgrade string
+	// FollowUpgrades says the entry point runs UpgradeExec when the client
+	// ends with ExitUpgradeFollowed. Only a terminal client started by
+	// cmd/tuios does; the GUI bridge and the servers do not, so they keep
+	// their build. See upgrade_follow.go.
+	FollowUpgrades bool
 
 	// NumWorkspaces sets the number of workspaces (default: 9).
 	NumWorkspaces int
@@ -233,6 +241,8 @@ func NewOS(opts OSOptions) *OS {
 		ShowKeys:          opts.ShowKeys,
 		forceTerminalMode: opts.StartInTerminalMode,
 		afterRestart:      opts.AfterRestart,
+		followedUpgrade:   opts.AfterUpgrade,
+		followUpgrades:    opts.FollowUpgrades,
 		RecentKeys:        []KeyEvent{},
 		KeyHistoryMaxSize: 5,
 

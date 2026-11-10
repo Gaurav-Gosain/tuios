@@ -19,6 +19,7 @@ import (
 func tuiosHeld(dst *settings.Settings, src settings.Settings) {
 	dst.KeepHistory, dst.ResumeAgents, dst.Shell = src.KeepHistory, src.ResumeAgents, src.Shell
 	dst.Approvals, dst.ReplyRows = src.Approvals, src.ReplyRows
+	dst.RailSections, dst.RailCustom, dst.RailPane = src.RailSections, src.RailCustom, src.RailPane
 }
 
 // approvalsHarness is the harness the Approvals switch turns on: the one
@@ -46,6 +47,8 @@ func tuiosFromConfig(s *settings.Settings, cfg *config.UserConfig) {
 	}
 	s.Shell = cfg.Appearance.PreferredShell
 	s.Approvals = len(cfg.Agents.Approvals.Enabled) > 0
+	s.RailSections = cfg.Appearance.Sidebar.Sections
+	s.RailCustom, s.RailPane = cfg.Appearance.Sidebar.Custom, cfg.Appearance.Sidebar.Pane
 	s.ReplyRows = cfg.Agents.ReplyRowsOr(0)
 	s.HintsOpen = cfg.Hints.OpenEnabled()
 }

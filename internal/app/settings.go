@@ -749,6 +749,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("daemon.log_level"),
 			opt("daemon.window_size"),
 			opt("daemon.keep_awake"),
+			opt("daemon.client_follows_upgrade"),
 			opt("daemon.persist_scrollback"),
 			opt("daemon.persist_scrollback_lines"),
 			opt("daemon.persist_scrollback_kb"),

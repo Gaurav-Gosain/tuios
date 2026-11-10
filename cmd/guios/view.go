@@ -498,25 +498,7 @@ func (a *App) sidebar(c *ui.Context, pal *palette, bar ui.TitleBar) {
 	ui.Column(c.Key("sessions-wrap")).Grow(1).MinHeight(0).Children(func() {
 		ui.Scroll(c.Key("sessions")).Grow(1).MinHeight(0).Padding(0, 10, railFoot, 10).DragWindow().Children(func() {
 			a.railSearch(c, pal)
-			a.agentsRow(c, pal)
-			a.needsSection(c, pal)
-			n := 0  // the rows shown, for ⌘1–9 (Ctrl+1–9 elsewhere)
-			gi := 0 // the groups shown, the first of which sits higher
-			// This machine's projects first, unlabeled; then each host's,
-			// under its name.
-			if local := a.local(); local.loaded {
-				for _, g := range a.hostGroups(local) {
-					a.groupView(c, pal, g, gi, &n)
-					gi++
-				}
-				if len(a.st.Sessions) == 0 && local.conn == connReady && len(a.hosts) == 1 {
-					ui.Text(c, locales.SidebarNoSessions()).FontSize(fsSmall).TextColor(pal.textFaint).Padding(8, 10).MaxLines(2)
-				}
-			}
-			// Then the machines this machine's daemon links, each with its
-			// sessions under it.
-			a.machinesSection(c, pal, &gi, &n)
-			a.filesRow(c, pal)
+			a.railSections(c, pal)
 			if a.set.SessionHistory {
 				a.endedSections(c, pal)
 			}

@@ -174,7 +174,19 @@ func (m *OS) handleDaemonReconnectResult(msg daemonReconnectResultMsg) tea.Cmd {
 		return nil
 	}
 	if msg.err == nil && msg.client != nil {
+		// The new image holds the session. A client on an older build
+		// runs the new one instead of taking it back here.
+		if exec := m.upgradeToFollow(); exec != nil {
+			return m.followUpgrade(exec, msg.client)
+		}
 		return m.resumeOnNewDaemon(msg.client, msg.state)
+	}
+	// The new image answers in a protocol this build does not speak. The
+	// build it runs does.
+	if session.ProtocolRefused(msg.err) {
+		if exec := m.upgradeToFollow(); exec != nil {
+			return m.followUpgrade(exec, nil)
+		}
 	}
 	// A daemon that answers and does not hold the session, or does not speak
 	// this client's protocol, will not take it back by waiting.

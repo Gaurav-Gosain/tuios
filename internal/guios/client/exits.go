@@ -63,6 +63,11 @@ func exitedIn(wins []windowRow, shown int) (gone []exitedWindow, hide, end bool)
 			gone = append(gone, exitedWindow{id: w.ID, pty: w.PTY, code: w.ExitCode, signal: w.Signal})
 			continue
 		}
+		if w.Rail != "" {
+			// The rail pane is the rail's, not one of the session's panes:
+			// it keeps no session open.
+			continue
+		}
 		stays++
 		if w.Workspace == shown && !w.Scratch && w.Rail == "" && !w.Minimized {
 			staysShown = true

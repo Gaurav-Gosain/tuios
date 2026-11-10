@@ -2422,5 +2422,7 @@
   "pluginActionDetail": "plugin action",
   "pluginPaneDetail": "plugin pane, {placement}",
   "pluginNoDaemon": "The tuios daemon on this machine cannot be reached.",
-  "pluginNeedsLocal": "{name} is a plugin of this machine's daemon, and this session runs on another machine."
+  "pluginNeedsLocal": "{name} is a plugin of this machine's daemon, and this session runs on another machine.",
+  "railPaneStopped": "Stopped",
+  "railPaneStartAgain": "Start again"
 }

@@ -2714,9 +2714,25 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 		c.text(x+4, yy, x+w-4, ckSeg{t: lead, fg: pal.FgMute}, ckSeg{t: s, fg: pal.Fg})
 		yy++
 	}
-	for _, s := range detail {
+	// The reason line, when it is typed, is the detail's last lines: where
+	// its first line lands is kept for its caret and the mouse.
+	reason := st.approvals.answer.reason
+	reasonOpen := reason != nil && reason.ed != nil && m.InboxReasonOpen()
+	reasonFrom := 0
+	if reasonOpen {
+		_, n := reason.ed.FrameSize()
+		// Below 0 when the card cut the line's first rows.
+		reasonFrom = len(detail) - n
+		reason.wires.at.drawn, reason.wires.at.ok = false, false
+	}
+	for i, s := range detail {
 		if yy >= y1 {
 			break
+		}
+		if reasonOpen && i == max(reasonFrom, 0) {
+			top := max(-reasonFrom, 0)
+			at := &reason.wires.at
+			at.x, at.y, at.top, at.drawn = x+3, yy-top, top, true
 		}
 		if strings.Contains(s, "\x1b") {
 			c.draw(x+1, yy, w-2, s)

@@ -199,6 +199,8 @@ type inboxReasonLine struct {
 	// ed is the line, a one-line composer. It records a key that did not
 	// come from the keyboard, and such a draft is never sent.
 	ed *composer.Model
+	// wires holds where the line was drawn, for its caret and the mouse.
+	wires draftWires
 }
 
 // newLineEditor is a one-line composer of at most maxBytes, for an answer

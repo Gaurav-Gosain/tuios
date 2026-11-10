@@ -1386,5 +1386,7 @@
   "pluginActionDetail": "插件操作",
   "pluginPaneDetail": "插件窗格，{placement}",
   "pluginNoDaemon": "无法连接本机的 tuios 守护进程。",
-  "pluginNeedsLocal": "{name} 是本机守护进程的插件，而此会话运行在另一台机器上。"
+  "pluginNeedsLocal": "{name} 是本机守护进程的插件，而此会话运行在另一台机器上。",
+  "railPaneStopped": "已停止",
+  "railPaneStartAgain": "重新开始"
 }

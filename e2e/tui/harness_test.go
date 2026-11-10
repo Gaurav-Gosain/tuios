@@ -196,6 +196,9 @@ func runE2E(m *testing.M) int {
 		if otherProtocolDir != "" {
 			_ = os.RemoveAll(otherProtocolDir)
 		}
+		if newerDir != "" {
+			_ = os.RemoveAll(newerDir)
+		}
 	}()
 
 	if bin := os.Getenv("TUIOS_E2E_BIN"); bin != "" {

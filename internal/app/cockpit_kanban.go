@@ -496,11 +496,6 @@ func (m *OS) CockpitRelease(x, y int) (tea.Cmd, bool) {
 		return nil, true
 	}
 	ck := &m.Inbox.ck
-	if ck.ed.down {
-		// The end of a press in the reply editor: the selection stays.
-		ck.ed.down = false
-		return nil, true
-	}
 	d := ck.kb.drag
 	if d == nil {
 		return nil, false

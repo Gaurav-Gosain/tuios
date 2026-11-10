@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -202,6 +203,25 @@ func (c *Client) dispatch(method string, params any) (any, error) {
 			return nil, err
 		}
 		return c.arrangeOp(p)
+
+	case "rail.pane":
+		// The rail's pane section: the rail-pane verb the TUI's rail calls,
+		// so a TUI and guios on one session share the pane its command line
+		// keys.
+		p, err := decode[proto.RailPaneParams](params)
+		if err != nil {
+			return nil, err
+		}
+		args := map[string]any{"session": c.st.nameOf(p.Session), "key": p.Command,
+			"command": railArgv(p.Command), "width": p.Cols, "height": p.Rows}
+		if p.Dir != "" {
+			args["cwd"] = p.Dir
+		}
+		if _, err := c.verb("rail-pane", args); err != nil {
+			return nil, err
+		}
+		c.kickState()
+		return true, nil
 
 	case "scratch":
 		// The TUI's scratch terminal (toggle_scratch): the built-in scratch
@@ -740,4 +760,14 @@ func (c *Client) layoutTemplate(action string, p proto.LayoutTemplateParams) (an
 		out = append(out, s)
 	}
 	return out, nil
+}
+
+// railArgv is a rail pane's command line as the TUI starts it: through sh -c,
+// or cmd /C on Windows (internal/app's commandArgv with no environment).
+func railArgv(line string) []string {
+	line = strings.TrimSpace(line)
+	if runtime.GOOS == "windows" {
+		return []string{"cmd", "/C", line}
+	}
+	return []string{"env", "sh", "-c", line}
 }

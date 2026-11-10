@@ -71,6 +71,11 @@ func (m *OS) openDraft() (openDraft, bool) {
 	if tc := m.taskCapture; tc != nil && m.TaskCaptureOpen() && tc.field == tcTask {
 		return openDraft{comp: tc.ed, wires: &tc.wires, kind: overlayKindTaskCapture}, true
 	}
+	// The reason for a rejection, while it is typed: it has the keys over
+	// the reply under the card.
+	if r := m.Inbox.approvals.answer.reason; r != nil && r.ed != nil && m.ShowInbox && m.InboxReasonOpen() {
+		return openDraft{comp: r.ed, wires: &r.wires, kind: "inbox"}, true
+	}
 	// The New agent sheet's task, while it has the keys: the sheet is drawn
 	// over the reply area, so its draft comes first.
 	if sp := m.Inbox.ck.spawn; sp != nil && m.ShowInbox && sp.field == spTask && !sp.list {

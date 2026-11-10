@@ -16929,3 +16929,42 @@ a program lists (parity gap 18).
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run TestListProgramsNamesThePath -v .`.
+
+## A client runs the build a live upgrade gave the daemon
+
+`TestAttachedClientRunsTheUpgradedBuild` attaches a client with
+`--no-animations` to a session with a shell and upgrades the daemon to this
+tree built as v99.1.0. With the default option, the client's pid then runs
+that binary as `--no-animations=true attach --after-upgrade=v99.1.0 --
+SESSION`, says "The daemon was upgraded to v99.1.0. This window runs it
+too.", the shell keeps its pid, and a line typed reaches it. With
+`daemon.client_follows_upgrade = false` the client keeps its command line and
+reattaches as before.
+
+Run on 2026-11-10 on macOS (arm64), and in a Linux container
+(golang:1.27-alpine), where the image is also checked by /proc/PID/exe. The
+branch passes both cases on both.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (856b2ec19) as the client and the first daemon | follow=true: "the client never said \"The daemon was upgraded to v99.1.0. This window runs it too.\"", and the pid still runs the old binary's `attach --no-animations SESSION` | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAttachedClientRunsTheUpgradedBuild$' -v .`.
+
+## TestGuiosRailPaneIsTheTUIs
+
+The guios client, with no window, asks for the session's rail pane through
+rail.pane with a command line. The pane shows in its state as the session's
+RailPane keyed by that line. The rail-pane verb a TUI's rail calls with the
+same line gets the same window (created false), and the window shows what
+the command printed.
+
+Run on 2026-11-10 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The branch with the client's rail.pane case taken out of its dispatch | "rail.pane: unknown method \"rail.pane\"" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestGuiosRailPaneIsTheTUIs$' -v .`.
