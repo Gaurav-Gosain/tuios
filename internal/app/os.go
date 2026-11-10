@@ -259,9 +259,32 @@ type OS struct {
 	// last motion that did reach it, which is what the filter's "moved a
 	// cell" tests are written against, so the two cannot be one field. See
 	// NotePointerSeen.
-	pointerSeenX    int
-	pointerSeenY    int
-	ShowHelp        bool
+	pointerSeenX int
+	pointerSeenY int
+	ShowHelp     bool
+	// HelpMode is the hover help mode: the leader then h, or Shift+F1, enters it,
+	// esc leaves it. The mouse, or Shift+Tab and Shift+Up/Down, walk the
+	// components on screen and the pane explains the one under the cursor. It
+	// reads only the keys it binds, so every other key reaches the app and the
+	// pane redraws around the layout those keys leave. See help_mode.go.
+	HelpMode bool
+	// helpTarget is the id of the component help mode explains. Empty until
+	// the first component is selected.
+	helpTarget string
+	// helpShowKeys says the pane shows the selected component's whole
+	// keybinding set rather than the short account of it. h toggles it.
+	helpShowKeys bool
+	// helpPaneRect is where the pane was drawn on the last frame, in screen
+	// cells. Motion over the pane itself is ignored, so reading it does not
+	// select whatever the pane covers.
+	helpPaneRect image.Rectangle
+	// helpScroll is the first body line the pane shows when the explanation
+	// is taller than the screen allows. Up and Down move it; the title and the
+	// footer stay where they are.
+	helpScroll int
+	// helpComps is the component list the last frame drew. Motion and the
+	// Tab/arrow keys read it instead of rebuilding every row's help.
+	helpComps       []helpComponent
 	InteractionMode bool              // True when actively dragging/resizing
 	WindowExitChan  chan string       // Channel to signal window closure
 	windowExits     windowExitQueue   // Overflow for exits WindowExitChan could not take
@@ -445,14 +468,24 @@ type OS struct {
 	dockWorkspaceDrag      dockWorkspaceDragState        // the click-or-drag gesture on a workspace pill
 	dockItemHits           []dockItemHit                 // where the dock's minimized entries were drawn last frame
 	dockOverflowHit        dockOverflowHit               // where the entries' overflow marker was drawn last frame
-	dockSessionHits        []dockSessionHit              // where the dock's session controls were drawn last frame
-	notifDrawn             notifDrawn                    // what the last frame showed of the live message
-	dockSessionHover       DockSessionAction             // which session control the pointer is on, DockSessionNone for neither
-	dockCustomHits         []dockCustomHit               // where the custom components were drawn last frame
-	dockPlan               dockPlan                      // which components are on which side, in draw order
-	diagramsTold           map[string]bool               // the diagram types the person heard need the sketch plugin, this session
-	pluginCells            map[string]session.PluginCell // what plugins show on the dock, by name, nil until one does
-	dockEngine             *dockengine.Engine            // refresh scheduler for the components that move on their own
+	// dockHelpHits is every named cell the dock drew last frame, in draw order.
+	// It is what help mode walks: a cell a click ignores can still be worth
+	// explaining. It is separate from dockCustomHits, which records only the
+	// cells a click acts on.
+	dockHelpHits []dockCustomHit
+	// dockCenterLabels are the minimized-pane pills the centre drew, and
+	// dockCenterParts the centre components it drew, in draw order. The help
+	// pane lists both, so a bar that dropped entries can say what it kept.
+	dockCenterLabels []string
+	dockCenterParts  []string
+	dockSessionHits  []dockSessionHit              // where the dock's session controls were drawn last frame
+	notifDrawn       notifDrawn                    // what the last frame showed of the live message
+	dockSessionHover DockSessionAction             // which session control the pointer is on, DockSessionNone for neither
+	dockCustomHits   []dockCustomHit               // where the custom components were drawn last frame
+	dockPlan         dockPlan                      // which components are on which side, in draw order
+	diagramsTold     map[string]bool               // the diagram types the person heard need the sketch plugin, this session
+	pluginCells      map[string]session.PluginCell // what plugins show on the dock, by name, nil until one does
+	dockEngine       *dockengine.Engine            // refresh scheduler for the components that move on their own
 	// RemoteCommandChan carries a verb the daemon routed to this client, for
 	// the hosts that cannot Send into the program directly. See dock_remote.go.
 	RemoteCommandChan chan RemoteCommandMsg

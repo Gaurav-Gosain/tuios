@@ -29,6 +29,7 @@ missing = [
 ]
 notes = [
   "ctrl+c cancels the leader, so ctrl+a ctrl+c does not make a window. Press ctrl+a c.",
+  "ctrl+a h takes a screenshot, as it does in screen. Hover help is ctrl+a ctrl+g.",
   "Press ctrl+a a to send ctrl+a to the program in the pane.",
   "Copy mode uses vi keys. [[keybindings.copy_pipe]] pipes a copy through a command.",
 ]
@@ -60,6 +61,9 @@ prefix_split_vertical = ["|"]
 minimize_window = ["X"]
 prefix_screenshot = ["h"]
 prefix_help = ["?"]
+# h is screen's screenshot key, so hover help takes ctrl+g here. In the tuios
+# defaults, where h is free, it is the leader and h.
+prefix_help_mode = ["ctrl+g"]
 prefix_quit = ["\\"]
 prefix_command_palette = [":", "P"]
 prefix_selection = ["[", "esc"]
