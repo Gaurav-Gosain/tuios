@@ -272,14 +272,23 @@ func (sb *Scrollback) push(cells uv.Line, width int) {
 		// A slot truncate gave back still holds its line's storage.
 		buf = sb.lines[:len(sb.lines)+1][len(sb.lines)][:0]
 	}
-	if cap(buf) < len(cells)+sbLineSlack {
+	// A slot in use is kept while it holds the line's cells: the slack is
+	// room a new slot is given, not room an old one must still have.
+	if cap(buf) < len(cells)+sbLineSlack && (cap(buf) == 0 || cap(buf) < len(cells)) {
 		// Sized for a plain line up front, so the common line is one
 		// allocation rather than the run of doublings append would make
-		// from nothing. A styled or non-ASCII line grows past it once. A
-		// slot that held a line before gets room to spare, because a
-		// reflow pushes rows of other widths into the same slots each step.
+		// from nothing. A styled or non-ASCII line grows past it once.
+		//
+		// During a reflow a slot that held a line before gets room to spare,
+		// because the reflow pushes rows of other widths into the same slots
+		// at each step of a drag. Outside one it does not: in a full ring
+		// every push reuses the slot of the line it evicts, and doubling the
+		// slot whenever the new line is a few bytes longer left most slots of
+		// a busy pane at twice the size of their line, so a flood of log
+		// lines held 1.5 to 1.7 times the heap the same lines needed when
+		// the ring first filled.
 		size := len(cells) + sbLineSlack
-		if cap(buf) > 0 {
+		if cap(buf) > 0 && sb.holdTrims {
 			size = max(size, 2*cap(buf))
 		}
 		buf = make([]byte, 0, size)
