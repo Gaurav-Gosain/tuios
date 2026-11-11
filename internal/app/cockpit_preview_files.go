@@ -392,6 +392,16 @@ func (m *OS) kbPictureLines(l ckLook, f *kbFile, a session.TaskAttachment, width
 		return []ckLine{tip}
 	}
 	cols, rows := m.kbPreviewImageBox(f.img, width)
+	k := pixelsKey(f.img, cols, rows)
+	if mode == composer.PreviewCells {
+		k = p.cellsKey(f.img, cols, rows)
+	}
+	p.mu.Lock()
+	asked := p.asked[k]
+	p.mu.Unlock()
+	if !asked {
+		pv.picWant = true
+	}
 	var cells []string
 	switch mode {
 	case composer.PreviewPixels:

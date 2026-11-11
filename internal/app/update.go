@@ -1292,6 +1292,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case replyPreviewMsg:
 		m.applyReplyPreview(msg)
+		if m.kbPreviewShown() {
+			// The card preview draws pictures too, and its frame is kept
+			// until the board changes: a picture that came in is a change.
+			m.cockpitTouch()
+		}
 		return m, nil
 
 	case kbFileMsg:

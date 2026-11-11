@@ -543,6 +543,12 @@ func (m *OS) cockpitNoteCheckpoints(e sidebarAgentEntry) {
 // CockpitSideWanted is CockpitSideFetch when a frame found the checkpoints
 // on screen stale, nil otherwise. Update asks it after every message.
 func (m *OS) CockpitSideWanted() tea.Cmd {
+	if pv := &m.Inbox.ck.kb.pv; pv.picWant {
+		pv.picWant = false
+		if cmd := m.kbPreviewPictureCmd(); cmd != nil {
+			return tea.Batch(cmd, m.cockpitSideWantedRest())
+		}
+	}
 	if m.Inbox.ck.kb.pv.fileWant {
 		if cmd := m.kbPreviewFileFetch(); cmd != nil {
 			return tea.Batch(cmd, m.cockpitSideWantedRest())

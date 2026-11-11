@@ -16902,3 +16902,16 @@ Run on 2026-11-11 on macOS (arm64). The branch passes.
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
 | The branch before this one (the step scrolls by the last frame's rows) | "after ] the preview scrolled past \"· S t1\"" and "past \"Held by\"", and "the preview's head does not say how many lines are above" | **caught** |
+
+## The card preview draws the selected picture
+
+`TestCardPreviewDrawsTheSelectedPicture` selects a picture attachment in the
+preview (108x30, side panel 56 wide) on a host without graphics, where its
+rows must hold block glyphs, and on a host with kitty graphics, where the
+host must be given the picture.
+
+Run on 2026-11-11 on macOS (arm64). The branch passes both.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The branch before this one (the picture prepared only when its file came in) | "the picture's rows hold no block glyphs" and "the kitty host was given no picture for the selected attachment" | **caught** |

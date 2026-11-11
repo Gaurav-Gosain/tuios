@@ -71,6 +71,11 @@ type kbPreview struct {
 	files    kbFiles
 	fileWant bool
 	imgWidth int
+	// picWant says a frame drew a picture whose cells or kitty image are
+	// not prepared for the box it drew it in: the picture is prepared after
+	// the frame (kbPreviewPictureCmd). The width is known only once a frame
+	// drew the picture, so the file's arrival alone cannot prepare it.
+	picWant bool
 }
 
 // kbPreviewMode is where the preview goes on a view w cells wide:
