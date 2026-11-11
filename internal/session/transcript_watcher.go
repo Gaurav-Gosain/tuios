@@ -336,3 +336,60 @@ var errNoTranscriptWatcher = watcherUnavailable{}
 type watcherUnavailable struct{}
 
 func (watcherUnavailable) Error() string { return "no transcript watcher" }
+
+// lazyTranscriptWatcher is the daemon's transcript watcher, opened on the first
+// join that asks for it. A daemon with no watcher is a working daemon: every
+// join falls back to reading on its pane's own output, so a watcher that cannot
+// be opened is not reported, and the open is not tried again.
+type lazyTranscriptWatcher struct {
+	mu     sync.Mutex
+	w      *TranscriptWatcher
+	failed bool
+	closed bool
+}
+
+// open returns the watcher, opening it the first time.
+func (l *lazyTranscriptWatcher) open() *TranscriptWatcher {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.w == nil && !l.failed && !l.closed {
+		w, err := NewTranscriptWatcher()
+		if err != nil {
+			l.failed = true
+			return nil
+		}
+		l.w = w
+	}
+	return l.w
+}
+
+// Watch opens the watcher if it is not open yet and registers the callback.
+func (l *lazyTranscriptWatcher) Watch(path, key string, onChange func()) error {
+	w := l.open()
+	if w == nil {
+		return errNoTranscriptWatcher
+	}
+	return w.Watch(path, key, onChange)
+}
+
+// Unwatch drops a callback. A watcher that was never opened holds none.
+func (l *lazyTranscriptWatcher) Unwatch(path, key string) {
+	l.mu.Lock()
+	w := l.w
+	l.mu.Unlock()
+	if w != nil {
+		w.Unwatch(path, key)
+	}
+}
+
+// Close closes the watcher if it was opened, and keeps it from opening later.
+func (l *lazyTranscriptWatcher) Close() error {
+	l.mu.Lock()
+	l.closed = true
+	w := l.w
+	l.mu.Unlock()
+	if w == nil {
+		return nil
+	}
+	return w.Close()
+}

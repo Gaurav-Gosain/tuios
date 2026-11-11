@@ -495,10 +495,10 @@ type Daemon struct {
 	evidenceClock func() time.Time
 
 	// transcriptWatcher is the one filesystem notification the transcript source
-	// runs on, shared by every session. Nil when the kernel would not give the
-	// daemon one, in which case every join reads on its pane's own output
-	// instead and nothing else changes.
-	transcriptWatcher *TranscriptWatcher
+	// runs on, shared by every session. It opens on the first join. When the
+	// kernel will not give the daemon one, every join reads on its pane's own
+	// output instead and nothing else changes.
+	transcriptWatcher *lazyTranscriptWatcher
 
 	// resumeAgents is the resolved daemon.resume_agents mode: one of the
 	// resumeMode values. See agent_resume.go.
@@ -1189,13 +1189,10 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.loadHooks(cfg)
 	d.notify = newPushNotifier(d, cfg.Notify)
 
-	// A daemon with no watcher is a working daemon: every transcript join falls
-	// back to reading on its pane's own output. So the error is dropped rather
-	// than reported, and it is dropped rather than logged because the only thing
-	// fsnotify would say is which path it failed on.
-	if w, err := NewTranscriptWatcher(); err == nil {
-		d.transcriptWatcher = w
-	}
+	// The watcher opens on the first transcript join, not here: it is an
+	// inotify instance on Linux, and a daemon that is built and never run,
+	// as the tests build them, would hold it for nothing.
+	d.transcriptWatcher = &lazyTranscriptWatcher{}
 
 	if cfg.SocketPath != "" {
 		d.manager.SetSocketPath(cfg.SocketPath)
