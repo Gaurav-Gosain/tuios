@@ -32,6 +32,8 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/shquote"
+
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/spf13/cobra"
 )
@@ -223,7 +225,7 @@ func newDaemonAppInstallCommand() *cobra.Command {
 					return err
 				}
 				fmt.Fprintf(out, "Wrote %s. To start the app at login, run:\n", agent)
-				fmt.Fprintf(out, "  launchctl bootstrap gui/%d %s\n", os.Getuid(), shellQuote(agent))
+				fmt.Fprintf(out, "  launchctl bootstrap gui/%d %s\n", os.Getuid(), shquote.Quote(agent))
 			}
 			fmt.Fprintln(out)
 			fmt.Fprintln(out, "Next steps:")

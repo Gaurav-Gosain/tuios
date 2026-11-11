@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/shquote"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
@@ -228,7 +230,7 @@ func (m *OS) PlayTape(name, script string) (tea.Cmd, error) {
 func seedCommands(dir string) []tape.Command {
 	return []tape.Command{
 		{Type: tape.CommandTypeSleep, Delay: tapeSeedSettle},
-		{Type: tape.CommandTypeType, Args: []string{"cd " + shellSingleQuote(dir)}},
+		{Type: tape.CommandTypeType, Args: []string{"cd " + shquote.Quote(dir)}},
 		{Type: tape.CommandTypeEnter},
 		{Type: tape.CommandTypeSleep, Delay: 200 * time.Millisecond},
 	}
@@ -278,10 +280,4 @@ func sanitizeSessionName(s string) string {
 		}
 	}
 	return strings.Trim(b.String(), "-")
-}
-
-// shellSingleQuote wraps s in single quotes, escaping embedded single quotes,
-// so it survives as one argument when typed into a POSIX shell.
-func shellSingleQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

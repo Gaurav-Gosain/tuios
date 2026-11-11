@@ -34,6 +34,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/shquote"
 )
 
 // ErrUnsupported says this system has no service manager tuios knows.
@@ -142,7 +144,7 @@ func LoginCommand(shell, binary string) []string {
 	if !filepath.IsAbs(shell) || !loginShells[base] || (base == "fish" && strings.Contains(binary, `\`)) {
 		shell = "/bin/sh"
 	}
-	return []string{shell, "-l", "-c", "exec '" + strings.ReplaceAll(binary, "'", `'\''`) + "' daemon --service"}
+	return []string{shell, "-l", "-c", "exec " + shquote.Quote(binary) + " daemon --service"}
 }
 
 // readMarkers reads the socket and binary comment lines of a service file.

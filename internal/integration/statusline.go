@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/shquote"
+
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
@@ -177,20 +179,9 @@ func StatusLineForeign(harness string, getenv func(string) string) (string, bool
 func StatusLineCommand(tuios, then string) string {
 	cmd := shellWord(tuios) + " " + statusLineVerb + " " + ClaudeCode + " " + managedMarker + " " + strconv.Itoa(StatusLineVersion)
 	if then != "" {
-		cmd += " --then " + quoteWord(then)
+		cmd += " --then " + shquote.Word(then)
 	}
 	return cmd
-}
-
-// quoteWord quotes s as one POSIX shell word, and leaves a plain word alone.
-// It uses single quotes on Windows too: Claude Code runs its status line
-// through a POSIX shell there as well, where a double-quoted word would still
-// have its $ expanded.
-func quoteWord(s string) string {
-	if s != "" && !strings.ContainsAny(s, " \t\n'\"\\$`&|;<>()*?[]{}!#~") {
-		return s
-	}
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // managedStatusLine reads a statusLine command tuios wrote: the program it

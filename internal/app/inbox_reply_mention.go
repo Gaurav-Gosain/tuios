@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/shquote"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
@@ -194,16 +196,7 @@ func mentionAddress(label, id, name string) (shown, insert string) {
 	if sess == "" {
 		sess = id
 	}
-	return sess + "/" + name, shellWord(sess) + "/" + shellWord(name)
-}
-
-// shellWord is s as one shell word: as it is when it needs no quotes, and in
-// single quotes when it holds a space or a character the shell reads.
-func shellWord(s string) string {
-	if s != "" && !strings.ContainsAny(s, " \t\n'\"\\$`!*?[](){}<>|&;#~") {
-		return s
-	}
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+	return sess + "/" + name, shquote.Word(sess) + "/" + shquote.Word(name)
 }
 
 // replyMentionCmd reads the folder the open @ list needs, when it has not

@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/shquote"
+
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/hostsync"
 	"github.com/Gaurav-Gosain/tuios/internal/release"
@@ -162,7 +164,7 @@ func (s *Setup) personSSH(why, remote string) *PersonStep {
 	words = append(words, s.host.Addr)
 	return &PersonStep{
 		Why:  why,
-		Line: shellJoin(words) + " " + shellQuote(remote),
+		Line: shellJoin(words) + " " + shquote.Word(remote),
 		Argv: argv,
 	}
 }

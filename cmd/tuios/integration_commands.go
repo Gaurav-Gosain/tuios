@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/shquote"
+
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/spf13/cobra"
@@ -229,7 +231,7 @@ func installStatusLineFor(stdout, stderr io.Writer, t *integration.Target, env i
 	case errors.As(err, &owned):
 		fmt.Fprintf(stderr, "%s: status line: %v\n", t.Name, err)
 		if owned.Command != "" {
-			fmt.Fprintf(stderr, "  keep it and feed tuios with:\n    tuios integration install %s --statusline --then %s\n", t.ID, shellQuote(owned.Command))
+			fmt.Fprintf(stderr, "  keep it and feed tuios with:\n    tuios integration install %s --statusline --then %s\n", t.ID, shquote.Quote(owned.Command))
 		}
 		return false
 	case err != nil:
@@ -245,11 +247,6 @@ func installStatusLineFor(stdout, stderr io.Writer, t *integration.Target, env i
 		fmt.Fprintf(stdout, "%s: status line already installed and current in %s\n", t.Name, res.Path)
 	}
 	return true
-}
-
-// shellQuote quotes s as one POSIX shell word for a command the person copies.
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // installSkillFor writes the skill stub for one harness and says what it did.

@@ -16,6 +16,8 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/Gaurav-Gosain/tuios/internal/shquote"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
@@ -1404,15 +1406,9 @@ func (s *spawnSheet) spec(i int) string {
 	}
 	args, _ := harness.LaunchArgs(&harness.Manifest{DisplayName: cmd, Launch: s.launch()}, s.launchChoice())
 	for _, a := range args {
-		cmd += " " + spawnShellWord(a)
+		cmd += " " + shquote.Quote(a)
 	}
 	return cmd
-}
-
-// spawnShellWord quotes s as one POSIX shell word: single quotes, with each
-// single quote inside closed, escaped and opened again.
-func spawnShellWord(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // spawnStart checks the sheet and starts the agents. The sheet closes at once

@@ -5,6 +5,8 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/Gaurav-Gosain/tuios/internal/shquote"
+
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/spf13/cobra"
@@ -79,7 +81,7 @@ func runDisplayEnv(name string, jsonOut bool) error {
 		return printJSON(res)
 	}
 	for _, k := range slices.Sorted(maps.Keys(res.Env)) {
-		fmt.Printf("export %s=%s\n", k, shellQuote(res.Env[k]))
+		fmt.Printf("export %s=%s\n", k, shquote.Quote(res.Env[k]))
 	}
 	return nil
 }

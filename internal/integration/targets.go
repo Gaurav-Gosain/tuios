@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Gaurav-Gosain/tuios/internal/shquote"
+
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/tarpack"
@@ -550,13 +552,13 @@ func HookCommand(tuios, harnessID string, version int) string {
 // shellWord quotes a program path for the shell a harness runs its hook
 // commands through, and leaves a plain word alone.
 func shellWord(s string) string {
-	if s != "" && !strings.ContainsAny(s, " \t'\"\\$`&|;<>()*?[]{}!#~") {
-		return s
-	}
 	if runtime.GOOS == "windows" {
+		if s != "" && !strings.ContainsAny(s, " \t'\"\\$`&|;<>()*?[]{}!#~") {
+			return s
+		}
 		return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
 	}
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+	return shquote.Word(s)
 }
 
 // Result is what one install or uninstall did.

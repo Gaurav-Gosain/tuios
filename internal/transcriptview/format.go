@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/shquote"
+
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
@@ -369,22 +371,11 @@ func commandLine(a jobj) string {
 			break
 		}
 		for i, w := range argv {
-			argv[i] = shellQuote(w)
+			argv[i] = shquote.Word(w)
 		}
 		return strings.Join(argv, " ")
 	}
 	return command(a)
-}
-
-// shellQuote is w as one shell word: as it is when it holds nothing a shell
-// reads, else in single quotes.
-func shellQuote(w string) string {
-	if w != "" && strings.IndexFunc(w, func(r rune) bool {
-		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("_@%+=:,./-", r))
-	}) < 0 {
-		return w
-	}
-	return "'" + strings.ReplaceAll(w, "'", `'\''`) + "'"
 }
 
 // fileOf is the file a call acts on.

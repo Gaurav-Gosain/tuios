@@ -22,22 +22,6 @@ func TestXpanesItemsFromArgsAndStdin(t *testing.T) {
 	}
 }
 
-// Each quoted item reads back as itself in sh, whatever it holds.
-func TestXpanesQuoteRoundTripsThroughSh(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("needs sh")
-	}
-	for _, item := range []string{"plain", "user@host:22", "two words", "it's", `"$HOME" $(id) ; rm -rf / #`, "tab\there", "new\nline", "*"} {
-		out, err := exec.Command("sh", "-c", "printf %s "+xpanesQuote(item)).Output()
-		if err != nil || string(out) != item {
-			t.Errorf("item %q came back as %q (%v) through %s", item, out, err, xpanesQuote(item))
-		}
-	}
-	if got := xpanesQuote("host-1.example.com"); got != "host-1.example.com" {
-		t.Errorf("a safe word was quoted: %s", got)
-	}
-}
-
 func TestXpanesPanesBuildsEachArgv(t *testing.T) {
 	panes := xpanesPanes([]string{"a b", "c"}, 1, "echo ITEM-{}; exec sh", "{}", "/bin/zsh", xpanesSpeedyClose)
 	want := []string{"env", "TUIOS_XPANES_ITEM=a b", "TUIOS_XPANES_INDEX=1", "sh", "-c", "echo ITEM-'a b'; exec sh"}

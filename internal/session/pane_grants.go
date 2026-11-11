@@ -9,6 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/Gaurav-Gosain/tuios/internal/shquote"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
@@ -740,7 +742,7 @@ func grantForbidden(verb string, pa *paneAuth, why string) *verbError {
 	}
 	target := "-w " + shortWindowID(pa.window)
 	if pa.session != "" {
-		target = "-s " + cliWord(pa.session) + " " + target
+		target = "-s " + shquote.Word(pa.session) + " " + target
 	}
 	source := "the default of [agents.permissions]"
 	if pa.explicit {

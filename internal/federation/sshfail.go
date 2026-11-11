@@ -2,6 +2,8 @@ package federation
 
 import (
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/shquote"
 )
 
 // ssh fails in a handful of ways that need different fixes, and it says which
@@ -174,27 +176,7 @@ func (f SSHFailure) NeedsPerson() bool {
 func joinCommand(words []string) string {
 	out := make([]string, len(words))
 	for i, w := range words {
-		out[i] = shellWord(w)
+		out[i] = shquote.Word(w)
 	}
 	return strings.Join(out, " ")
-}
-
-// shellWord is w as sh reads it back unchanged.
-func shellWord(w string) string {
-	if w == "" {
-		return "''"
-	}
-	plain := true
-	for _, r := range w {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-		case strings.ContainsRune("@%+=:,./_-", r):
-		default:
-			plain = false
-		}
-	}
-	if plain {
-		return w
-	}
-	return "'" + strings.ReplaceAll(w, "'", `'\''`) + "'"
 }

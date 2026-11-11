@@ -5,10 +5,11 @@ import (
 	"errors"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/shquote"
 )
 
 // Asking the person a question, and getting the answer back.
@@ -309,17 +310,6 @@ func askLinePrintable(s string) bool {
 	return true
 }
 
-// askShellWord is s as one shell word for a hint command: as it is when it
-// holds only characters a shell leaves alone, else in single quotes.
-func askShellWord(s string) string {
-	if s != "" && strings.IndexFunc(s, func(r rune) bool {
-		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("-_.:/@%+=,", r))
-	}) < 0 {
-		return s
-	}
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
 // askResult is ask-human's answer.
 func askResult(requestID string, out askOutcome) map[string]any {
 	status := out.Reason
@@ -384,7 +374,7 @@ func (d *Daemon) verbAskHuman(cs *connState, params json.RawMessage) (any, *verb
 		// they go instead, with a command, rather than point at list-verbs.
 		mail := "tuios send-agent-message -w human \"<the details>\""
 		if sess, verr := d.resolveVerbSession(cs, p.Session); verr == nil {
-			mail = "tuios send-agent-message -s " + askShellWord(sess.Name()) + " -w human \"<the details>\""
+			mail = "tuios send-agent-message -s " + shquote.Word(sess.Name()) + " -w human \"<the details>\""
 		}
 		return nil, hintedVerbError(ErrVerbInvalidParams, "the question is "+strconv.Itoa(len(p.Question))+" bytes, and the limit is "+strconv.Itoa(attentionMaxSummary)+" bytes", &VerbHint{
 			Param:   "question",

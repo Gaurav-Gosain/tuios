@@ -7,6 +7,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/Gaurav-Gosain/tuios/internal/shquote"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
@@ -435,17 +437,6 @@ func windowChoices(state *SessionState) []string {
 	return out
 }
 
-// cliWord is s as one shell word for a hint command: as it is when it holds
-// only characters a shell leaves alone, else in single quotes.
-func cliWord(s string) string {
-	if s != "" && strings.IndexFunc(s, func(r rune) bool {
-		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("-_.:/@%+=,", r))
-	}) < 0 {
-		return s
-	}
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
 // sessionArg is "-s SESSION" for a hint command. Without it the command runs
 // against the most recently active session, which need not be the one the
 // failed call named.
@@ -453,7 +444,7 @@ func sessionArg(sess *Session) string {
 	if sess == nil {
 		return ""
 	}
-	return "-s " + cliWord(sess.Name())
+	return "-s " + shquote.Word(sess.Name())
 }
 
 // paneArgs is "-s SESSION -w WINDOW" for a hint command, so the command
@@ -471,7 +462,7 @@ func paneArgs(sess *Session, windowID string) string {
 			}
 		}
 	}
-	args := "-w " + cliWord(window)
+	args := "-w " + shquote.Word(window)
 	if s := sessionArg(sess); s != "" {
 		args = s + " " + args
 	}

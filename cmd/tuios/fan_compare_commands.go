@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/shquote"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
@@ -363,23 +365,9 @@ func fanVerifyCommandLine(words []string) string {
 	}
 	quoted := make([]string, len(words))
 	for i, w := range words {
-		quoted[i] = shellWord(w)
+		quoted[i] = shquote.Word(w)
 	}
 	return strings.Join(quoted, " ")
-}
-
-// shellWord is w as one POSIX shell word: bare when every byte is one the
-// shell passes through, single-quoted otherwise.
-func shellWord(w string) string {
-	if w == "" {
-		return "''"
-	}
-	for _, r := range w {
-		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("-_./:=@%+,", r)) {
-			return "'" + strings.ReplaceAll(w, "'", `'\''`) + "'"
-		}
-	}
-	return w
 }
 
 func runFanVerify(target, command string, timeout time.Duration, wait, jsonOutput bool) error {
