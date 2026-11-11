@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/radar/parser.ts at 8aff183be57021b533f319a29341a529be934b08.
+// Ported from pele src/diagrams/radar/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
 //
 // pele keeps the state of matchNumber and matchAccDescr in module variables and resets them
 // for each text. Here they are scanners, which the tokenizer makes once per text.

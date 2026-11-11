@@ -1,4 +1,4 @@
-// Ported from pele src/svg/edges.ts at 8aff183be57021b533f319a29341a529be934b08: the checks of
+// Ported from pele src/svg/edges.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac: the checks of
 // an edge against the fills a diagram's styles set, and the casing under an edge that crosses one.
 
 package svg

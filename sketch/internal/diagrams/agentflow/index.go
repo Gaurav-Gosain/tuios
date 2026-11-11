@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/agentflow/index.ts at 8aff183be57021b533f319a29341a529be934b08.
+// Ported from pele src/diagrams/agentflow/index.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
 
 // Package agentflow draws agentflow diagrams: the steps, tools, decisions and documents of
 // AI agents, in flows that nest, joined by sequence, reference and failure edges.

@@ -1,7 +1,7 @@
 package sketch
 
 // Ported from pele tests/support/inert.ts, tests/support/xml.ts and the flowchart
-// part of tests/render/security.test.ts, and the internal links of tests/util/url.test.ts, at 8aff183be57021b533f319a29341a529be934b08.
+// part of tests/render/security.test.ts, and the internal links of tests/util/url.test.ts, at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
 
 import (
 	"errors"

@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/git/db.ts at 8aff183be57021b533f319a29341a529be934b08.
+// Ported from pele src/diagrams/git/db.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
 //
 // pele's GitDbParseProvider is the closures of buildGit; the port keeps them as methods of
 // a builder. Maps that pele reads in insertion order keep that order in a slice beside them.

@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/common/outline.ts at 8aff183be57021b533f319a29341a529be934b08.
+// Ported from pele src/diagrams/common/outline.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
 //
 // The port reads UTF-8 bytes: offsets are byte offsets, and a character that may not be
 // ASCII is decoded where a pattern tells it apart. The tokenizer's closures are methods of

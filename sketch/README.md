@@ -6,7 +6,7 @@ It is a port of [pele](https://github.com/obsidianmd/pele), the Mermaid
 renderer by [kepano](https://github.com/kepano) of
 [Obsidian](https://obsidian.md), under the MIT licence. The layout, the
 shapes, the safety rules and the test corpus are pele's work. The port
-follows pele v1.12.0, commit `8aff183be57021b533f319a29341a529be934b08`.
+follows pele v1.13.0, commit `3a2f075ee0c3d914f0fad3545fc0f193693975ac`.
 [LICENSE](LICENSE) has the notice of pele and of the port.
 [raster/fonts/NOTICE](raster/fonts/NOTICE) has the licences of the fonts that
 sketch/raster draws text in: Arimo (SIL Open Font License 1.1) and Go Mono.
@@ -84,7 +84,8 @@ break hints, class rows, sankey gradients, state curves and quadrant labels of
 pele v1.9.0, and the comments, bare titles, sankey values and chart bounds of
 pele v1.10.0, and the new tests of pele v1.10.1 to v1.12.0: text colours on
 fills, casings, the `monospace` option, wrapped messages, treemap spacing and
-block edge labels. They match too.
+block edge labels, and the new tests of pele v1.13.0: subgraph ranks, labels
+in spanning blocks and quadrant font sizes. They match too.
 `testdata/errors` holds sources that pele refuses, and the error pele gives for
 each: the message, the code, and the line, column and snippet in the source as
 written. sketch gives the same errors.
@@ -126,6 +127,16 @@ A label on a fill that the diagram sets with `style`, `classDef`, or a
 sequence `rect` or `box` uses `--pele-fg-on-light` or `--pele-fg-on-dark`,
 whichever contrasts more with the fill. `Theme.FgOnLight` and `Theme.FgOnDark`
 set them.
+
+Mermaid's palette theme variables set a diagram's series colors: `pie1` to
+`pie8`, `git0` to `git7`, `cScale0` to `cScale7` (timeline, radar, treemap and
+mindmap), `venn1` to `venn8` and `xyChart.plotColorPalette`. They win over
+`Theme`. A value must be a hex or named color, or a color function such as
+`rgb()`, `oklch()`, `color-mix()` or `light-dark()`, and `var()` may read only
+`--pele-*` properties; any other value keeps the theme's color. A label on a
+palette color uses `--pele-fg-on-light` or `--pele-fg-on-dark` where its
+contrast is known. sketch/raster draws the colors it can read, and keeps the
+theme's color for one it cannot, such as `oklch()`.
 
 `svg.Type` is pele's name for the diagram type, such as `flowchart`.
 `svg.MermaidType` is the name Mermaid gives it, such as `flowchart-v2` for

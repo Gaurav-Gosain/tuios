@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/journey/index.ts at 8aff183be57021b533f319a29341a529be934b08.
+// Ported from pele src/diagrams/journey/index.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
 
 // Package journey draws Mermaid's user journey: tasks in order, each scored from 1 to 5
 // and done by some actors, grouped in sections.

@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/block/parser.ts at 8aff183be57021b533f319a29341a529be934b08.
+// Ported from pele src/diagrams/block/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
 //
 // pele's statement is a block or a list of them, and it flattens the lists when it
 // builds the hierarchy. Here a list of statements is flat from the start; only a
