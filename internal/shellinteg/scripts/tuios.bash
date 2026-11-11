@@ -39,14 +39,18 @@ if [[ $- == *i* && -z ${__tuios_marks+x} ]] &&
         # user who runs with set -u or set -e keeps it.
         builtin local -
         builtin set +eu -f
-        # What the user's setup sends before the prompt and the command: the
-        # prompt strings, PROMPT_COMMAND, and the functions it and any
-        # bash-preexec hooks call. Reading the functions takes a subshell, so
-        # it runs only when there are some.
+        # What the user's setup sends before the prompt: the prompt strings,
+        # PROMPT_COMMAND, and the functions it and the bash-preexec precmd
+        # hooks call. Reading the functions takes a subshell, so it runs only
+        # when there are some. The preexec hooks are left out: bash-preexec
+        # runs them from a DEBUG trap that another setup can displace, and a
+        # hook whose body names the C mark may never fire. WezTerm's
+        # /etc/profile.d script is one: a login bash read its A, B and D, and
+        # no C, and run refused the pane. C is read from PS0 alone, below.
         builtin local text="${PS1-}"$'\n'"${PS0-}"$'\n'"${PROMPT_COMMAND[*]-}"
         local -a names=()
         builtin local word
-        for word in ${PROMPT_COMMAND[*]//[;&|()]/ } ${precmd_functions[*]-} ${preexec_functions[*]-}; do
+        for word in ${PROMPT_COMMAND[*]//[;&|()]/ } ${precmd_functions[*]-}; do
             if builtin declare -F -- "$word" >/dev/null 2>&1; then
                 names+=("$word")
             fi
@@ -57,7 +61,14 @@ if [[ $- == *i* && -z ${__tuios_marks+x} ]] &&
         __tuios_marks=
         builtin local mark
         for mark in A B C D; do
-            if [[ $text != *"133;$mark"* ]]; then
+            if [[ $mark == C ]]; then
+                # Only PS0 is known to send C. A hook that sends it too sends
+                # a second C at the same place, which the daemon takes as the
+                # same command.
+                if [[ ${PS0-} != *'133;C'* ]]; then
+                    __tuios_marks+=$mark
+                fi
+            elif [[ $text != *"133;$mark"* ]]; then
                 __tuios_marks+=$mark
             fi
         done

@@ -118,6 +118,58 @@ func TestShellTrackFollowsMarks(t *testing.T) {
 			wantExit:   new(0),
 			wantLast:   "make",
 		},
+		// A mark that repeats the state the shell is in changes nothing. Two
+		// integrations at once (a shell's own, an rc file's, a terminal's
+		// injected script) send each mark twice, and tuios.bash sends C from
+		// PS0 even when another hook may send it too.
+		{
+			name:       "a doubled A is the same prompt",
+			marks:      []vt.SemanticMarker{mark(vt.MarkerPromptStart), mark(vt.MarkerPromptStart)},
+			wantEvents: []string{EventPrompt},
+			wantPrompt: true,
+			wantReady:  true,
+		},
+		{
+			name:       "a doubled B is the same prompt",
+			marks:      []vt.SemanticMarker{mark(vt.MarkerPromptStart), mark(vt.MarkerCommandStart), mark(vt.MarkerCommandStart)},
+			wantEvents: []string{EventPrompt},
+			wantPrompt: true,
+			wantReady:  true,
+		},
+		{
+			name:       "a doubled D ends the command once",
+			marks:      []vt.SemanticMarker{mark(vt.MarkerPromptStart), cmd("make"), done(3), done(3)},
+			wantEvents: []string{EventPrompt, EventCommandStarted, EventCommandFinished},
+			wantPrompt: true,
+			wantSeq:    1,
+			wantExit:   new(3),
+			wantLast:   "make",
+		},
+		{
+			name:       "C with no B still starts the command",
+			marks:      []vt.SemanticMarker{mark(vt.MarkerPromptStart), cmd("make"), done(0)},
+			wantEvents: []string{EventPrompt, EventCommandStarted, EventCommandFinished},
+			wantPrompt: true,
+			wantSeq:    1,
+			wantExit:   new(0),
+			wantLast:   "make",
+		},
+		{
+			name:       "D with no C ends nothing, however often it comes",
+			marks:      []vt.SemanticMarker{mark(vt.MarkerPromptStart), mark(vt.MarkerCommandStart), done(0), done(0)},
+			wantEvents: []string{EventPrompt},
+			wantPrompt: true,
+		},
+		{
+			name:       "a doubled C then a doubled D is one command",
+			marks:      []vt.SemanticMarker{mark(vt.MarkerPromptStart), mark(vt.MarkerCommandStart), cmd("make"), cmd(""), done(0), done(0), mark(vt.MarkerPromptStart)},
+			wantEvents: []string{EventPrompt, EventCommandStarted, EventCommandFinished, EventPrompt},
+			wantPrompt: true,
+			wantReady:  true,
+			wantSeq:    1,
+			wantExit:   new(0),
+			wantLast:   "make",
+		},
 		{
 			name:       "the command line is masked and kept to one line",
 			marks:      []vt.SemanticMarker{cmd("curl -H 'token=abc123'\n  x"), done(0)},
