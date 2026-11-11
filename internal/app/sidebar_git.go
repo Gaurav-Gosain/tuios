@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
@@ -22,11 +23,11 @@ import (
 // you are least likely to be surprised by: you know whether you have edited
 // something. See internal/gitstate for the cost model.
 
-// gitRefreshInterval is how often the section asks again about a directory it
+// The refresh interval is appearance.sidebar.git_refresh_ms (default 2000 ms),
+// read through gitRefreshInterval. It is how often the section asks again about a directory it
 // is already showing. The reading itself is nearly free, because gitstate only
 // spends a subprocess when the commits have moved, so this is about how soon a
 // commit shows up on the rail rather than about cost.
-const gitRefreshInterval = 2 * time.Second
 
 // gitView is what the section is showing.
 type gitView struct {
@@ -94,7 +95,7 @@ func (m *OS) GitSyncCmd() tea.Cmd {
 		}
 		return nil
 	}
-	if want == m.gitView.asked && time.Since(m.gitView.at) < gitRefreshInterval {
+	if want == m.gitView.asked && time.Since(m.gitView.at) < m.gitRefreshInterval() {
 		return nil
 	}
 	m.gitView.asked, m.gitView.at = want, time.Now()
@@ -316,4 +317,13 @@ func splitDivergence(text string) []divergencePart {
 		parts = append(parts, divergencePart{string(runes[start:]), behind})
 	}
 	return parts
+}
+
+// gitRefreshInterval is appearance.sidebar.git_refresh_ms.
+func (m *OS) gitRefreshInterval() time.Duration {
+	ms := m.Settings.SidebarGitRefreshMS
+	if ms <= 0 {
+		ms = config.SidebarGitRefreshMSDefault
+	}
+	return time.Duration(ms) * time.Millisecond
 }

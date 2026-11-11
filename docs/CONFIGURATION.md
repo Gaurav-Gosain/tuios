@@ -1827,6 +1827,28 @@ border back. You can also set it on the settings page, in the Advanced section,
 or with `tuios set-config appearance.zoom_borderless true`. The change applies
 at once.
 
+## Display options
+
+| Option | Default | Range | What it does |
+|--------|---------|-------|--------------|
+| `appearance.idle_fps` | `10` | 1 to 60 | How often tuios polls, per second, while nothing is moving. A lower number saves power on a laptop, and a higher one notices background work sooner. It sits beside `max_fps`, which sets the rate while something is moving. |
+| `appearance.sidebar.git_refresh_ms` | `2000` | 500 to 60000 | Milliseconds between the rail's git section's looks at a directory it is already showing. The look is cheap, because git is run only when the commits have moved; raise it for a very large repository. |
+| `debug.show_key_count` | `5` | 1 to 20 | How many recent keypresses the showkeys overlay keeps, for a screencast. |
+
+```toml
+[appearance]
+idle_fps = 4
+
+[appearance.sidebar]
+git_refresh_ms = 5000
+
+[debug]
+show_key_count = 8
+```
+
+A value of 0 is read as the default, and a value out of range moves to the
+nearest end of the range. All three are on the settings page and apply at once.
+
 ## Timing options
 
 These `[appearance]` options set how long the interface waits before it acts.

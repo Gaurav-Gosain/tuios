@@ -504,6 +504,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.sidebar.marquee"),
 			opt("appearance.sidebar.peek"),
 			opt("appearance.sidebar.tooltips"),
+			opt("appearance.sidebar.git_refresh_ms"),
 			// Filed here rather than under Appearance, which is where it used to
 			// sit: the registry already calls it a sidebar option, it counts paths
 			// for the rail's git section, and Appearance had no room for it.
@@ -651,6 +652,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.chord_timeout_ms"),
 			custom("appearance.max_fps", m.maxFPSItem()),
 			opt("appearance.cell_frames"),
+			opt("appearance.idle_fps"),
 			opt("appearance.preferred_shell"),
 			opt("shell.integration"),
 			opt("shell.login"),
@@ -742,6 +744,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.kitty_placeholders"),
 			opt("appearance.image_symbols"),
 			custom("debug.show_key_events", m.showKeysItem()),
+			opt("debug.show_key_count"),
 		}),
 	}
 

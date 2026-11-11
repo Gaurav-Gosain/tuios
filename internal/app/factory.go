@@ -243,7 +243,6 @@ func NewOS(opts OSOptions) *OS {
 		followedUpgrade:   opts.AfterUpgrade,
 		followUpgrades:    opts.FollowUpgrades,
 		RecentKeys:        []KeyEvent{},
-		KeyHistoryMaxSize: 5,
 
 		// Dimensions
 		Width:  opts.Width,

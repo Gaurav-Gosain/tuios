@@ -77,7 +77,7 @@ func (m *OS) CaptureKeyEvent(msg tea.KeyPressMsg) {
 	m.RecentKeys = append(m.RecentKeys, event)
 
 	// Maintain max history size (ring buffer)
-	if len(m.RecentKeys) > m.KeyHistoryMaxSize {
+	if len(m.RecentKeys) > m.showKeyCount() {
 		m.RecentKeys = m.RecentKeys[1:]
 	}
 }
@@ -289,4 +289,12 @@ func renderShowkeysFrom(recentKeys []KeyEvent, s *config.Settings) string {
 
 	// Return just the styled keys content
 	return keysContent
+}
+
+// showKeyCount is debug.show_key_count: how many recent keys the overlay keeps.
+func (m *OS) showKeyCount() int {
+	if n := m.Settings.ShowKeyCount; n > 0 {
+		return n
+	}
+	return config.ShowKeyCountDefault
 }

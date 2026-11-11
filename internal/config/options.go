@@ -1036,6 +1036,12 @@ var optionSpecs = []Option{
 		Min:         0,
 	},
 	{
+		Path: "appearance.sidebar.git_refresh_ms", Type: OptionInt, Section: "sidebar",
+		Description: "Milliseconds between the git section's looks at a directory it is showing. Raise it for a very large repository.",
+		Min:         SidebarGitRefreshMSMin, Max: SidebarGitRefreshMSMax,
+		Zero: ZeroIsDefault,
+	},
+	{
 		Path: "appearance.sidebar.show_windows", Type: OptionBool, Section: "sidebar",
 		Description: "Show the terminals section",
 		Default:     "true",
@@ -1588,6 +1594,12 @@ var optionSpecs = []Option{
 	},
 
 	{
+		Path: "appearance.idle_fps", Type: OptionInt, Section: "appearance",
+		Description: "Polls per second while nothing is moving. Lower saves power; higher notices background work sooner.",
+		Min:         IdleFPSMin, Max: IdleFPSMax,
+		Zero: ZeroIsDefault,
+	},
+	{
 		Path: "appearance.whichkey_delay_ms", Type: OptionInt, Section: "appearance",
 		Description: "Milliseconds after the leader key before the which-key panel opens. 0 opens it at once.",
 		Min:         WhichKeyDelayMSMin, Max: WhichKeyDelayMSMax,
@@ -1656,6 +1668,12 @@ var optionSpecs = []Option{
 	},
 
 	// [debug]
+	{
+		Path: "debug.show_key_count", Type: OptionInt, Section: "debug",
+		Description: "How many recent keypresses the showkeys overlay keeps",
+		Min:         ShowKeyCountMin, Max: ShowKeyCountMax,
+		Zero: ZeroIsDefault,
+	},
 	{
 		Path: "debug.show_key_events", Type: OptionBool, Section: "debug",
 		Description: "Show the on-screen keycast of recent keypresses",

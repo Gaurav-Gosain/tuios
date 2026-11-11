@@ -1234,9 +1234,8 @@ type OS struct {
 	ShowKeys bool // True when the showkeys overlay is enabled
 	// overrides are this run's flags over the config file. See
 	// OSOptions.Overrides.
-	overrides         config.Overrides
-	RecentKeys        []KeyEvent // Ring buffer of recently pressed keys
-	KeyHistoryMaxSize int        // Maximum number of keys to display (default: 5)
+	overrides  config.Overrides
+	RecentKeys []KeyEvent // Ring buffer of recently pressed keys
 	// crash is the recovered panic the crash overlay is showing, or nil.
 	//
 	// It is a snapshot and not a view: nothing in it points back into this

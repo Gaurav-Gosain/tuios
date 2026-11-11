@@ -48,7 +48,13 @@ type deadlineTickMsg struct {
 
 // tickPollPeriod is how soon the tick looks again at work the idle gate finds
 // by looking: the rate the idle tick ran at.
-var tickPollPeriod = time.Second / time.Duration(config.IdleFPS)
+func (m *OS) tickPollPeriod() time.Duration {
+	fps := m.Settings.IdleFPS
+	if fps <= 0 {
+		fps = config.IdleFPSDefault
+	}
+	return time.Second / time.Duration(fps)
+}
 
 // armTick arms the maintenance tick wait from now, and replaces any tick armed
 // before it.
@@ -152,7 +158,7 @@ func (m *OS) nextWake(now time.Time) (time.Time, bool) {
 	}
 	// What the idle gate finds by looking.
 	if m.tickPolledWork() {
-		at(now.Add(tickPollPeriod))
+		at(now.Add(m.tickPollPeriod()))
 	}
 	// Alerts held back go out at their due time.
 	for _, p := range m.pendingAgentAlerts {
@@ -193,7 +199,7 @@ func (m *OS) nextWake(now time.Time) (time.Time, bool) {
 	// A due already past is a job the last tick did not clear. It is looked
 	// at again at the old idle rate, never in a loop.
 	if !due.After(now) {
-		due = now.Add(tickPollPeriod)
+		due = now.Add(m.tickPollPeriod())
 	}
 	return due, true
 }
@@ -203,7 +209,7 @@ func (m *OS) nextWake(now time.Time) (time.Time, bool) {
 // message after that moment.
 func (m *OS) railReadsDue(at func(time.Time)) {
 	if m.gitView.asked != "" && m.gitSectionEnabled() {
-		at(m.gitView.at.Add(gitRefreshInterval))
+		at(m.gitView.at.Add(m.gitRefreshInterval()))
 	}
 	if v := m.filesView; v.Err != "" && !v.Loading && m.filesSectionEnabled() && v.Want == m.filesWantDir() {
 		at(v.ErrAt.Add(fileRetryInterval))

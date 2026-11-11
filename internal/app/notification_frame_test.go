@@ -245,7 +245,7 @@ func TestNotificationTickSleepsUntilTheBurnMoves(t *testing.T) {
 			t.Errorf("frame %d drew %d lit cells after %d; the burn skipped or repeated a cell", i, lits[i], lits[i-1])
 		}
 	}
-	idle := int(duration*time.Duration(config.IdleFPS)/time.Second) + 2
+	idle := int(duration*time.Duration(config.IdleFPSDefault)/time.Second) + 2
 	if ticks > frames+idle {
 		t.Errorf("a %v message took %d ticks for %d frames; the budget is the frames plus %d idle ticks",
 			duration, ticks, frames, idle)

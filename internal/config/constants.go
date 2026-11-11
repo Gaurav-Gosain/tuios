@@ -90,10 +90,6 @@ var (
 	// MinConfiguredFPS is the floor a configured max_fps is clamped to. Below it
 	// the UI stops feeling like it is responding to the keyboard at all.
 	MinConfiguredFPS = 10
-
-	// IdleFPS is the refresh rate when the terminal is idle (no output for ~500ms).
-	// Reduces CPU usage from ~10% to near-zero on idle.
-	IdleFPS = 10
 )
 
 // =============================================================================
@@ -816,6 +812,24 @@ const (
 	NiriScrollCellsMin     = 1
 	NiriScrollCellsMax     = 200
 	NiriScrollCellsDefault = 8
+)
+
+// The display options. IdleFPS is the rate the interface polls at when nothing
+// is moving; a lower number saves power and a higher one notices work sooner.
+// The rail's git section asks again about a directory it is showing every
+// GitRefreshMS. ShowKeyCount is how many keypresses the showkeys overlay keeps.
+const (
+	IdleFPSMin     = 1
+	IdleFPSMax     = 60
+	IdleFPSDefault = 10
+
+	SidebarGitRefreshMSMin     = 500
+	SidebarGitRefreshMSMax     = 60000
+	SidebarGitRefreshMSDefault = 2000
+
+	ShowKeyCountMin     = 1
+	ShowKeyCountMax     = 20
+	ShowKeyCountDefault = 5
 )
 
 // The timing options, in milliseconds. A delay of 0 shows the thing at once.

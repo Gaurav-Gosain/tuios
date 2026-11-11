@@ -743,11 +743,14 @@ type Settings struct {
 	// The timing options, in milliseconds. Set via appearance.whichkey_delay_ms,
 	// tooltip_delay_ms, zen_reveal_ms, paste_preview_ms and
 	// appearance.chord_timeout_ms.
-	WhichKeyDelayMS int `opt:"appearance.whichkey_delay_ms"`
-	TooltipDelayMS  int `opt:"appearance.tooltip_delay_ms"`
-	ZenRevealMS     int `opt:"appearance.zen_reveal_ms"`
-	PastePreviewMS  int `opt:"appearance.paste_preview_ms"`
-	ChordTimeoutMS  int `opt:"appearance.chord_timeout_ms"`
+	IdleFPS             int `opt:"appearance.idle_fps"`
+	SidebarGitRefreshMS int `opt:"appearance.sidebar.git_refresh_ms"`
+	ShowKeyCount        int `opt:"debug.show_key_count"`
+	WhichKeyDelayMS     int `opt:"appearance.whichkey_delay_ms"`
+	TooltipDelayMS      int `opt:"appearance.tooltip_delay_ms"`
+	ZenRevealMS         int `opt:"appearance.zen_reveal_ms"`
+	PastePreviewMS      int `opt:"appearance.paste_preview_ms"`
+	ChordTimeoutMS      int `opt:"appearance.chord_timeout_ms"`
 
 	// MouseDoubleClickMS is how long a second click may follow the first and
 	// still be a double click. Set via mouse.double_click_ms.
@@ -1155,6 +1158,9 @@ func DefaultSettings() Settings {
 		NiriReverseScroll:           false,
 		NiriScrollCells:             NiriScrollCellsDefault,
 		MouseDoubleClickMS:          MouseDoubleClickDefault,
+		IdleFPS:                     IdleFPSDefault,
+		SidebarGitRefreshMS:         SidebarGitRefreshMSDefault,
+		ShowKeyCount:                ShowKeyCountDefault,
 		WhichKeyDelayMS:             WhichKeyDelayMSDefault,
 		TooltipDelayMS:              TooltipDelayMSDefault,
 		ZenRevealMS:                 ZenRevealMSDefault,
