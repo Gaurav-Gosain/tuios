@@ -60,8 +60,10 @@ type AgentsConfig struct {
 	Presets map[string]AgentPreset `toml:"presets,omitempty"`
 	// HostProgramStatus says whether tuios reports its panes' agent states to
 	// the terminal it runs in, with OSC 7501 (the Program Status Protocol):
-	// "auto" (the default) asks the terminal at start and reports only when
-	// it answers, and "off" never asks. See docs/PROGRAM_STATUS.md.
+	// "auto" (the default) asks the terminal at start and reports each pane
+	// only when it answers, "session" asks the same way and reports one record
+	// for the attached session that counts its panes by state, and "off"
+	// never asks. See docs/PROGRAM_STATUS.md.
 	HostProgramStatus string `toml:"host_program_status,omitempty"`
 	// SilentAfter is how long a pane whose hooks reported working may go
 	// without another report before it shows as unknown with the reason
@@ -203,15 +205,17 @@ const (
 
 // The values of [agents] host_program_status.
 const (
-	HostProgramStatusAuto = "auto"
-	HostProgramStatusOff  = "off"
+	HostProgramStatusAuto    = "auto"
+	HostProgramStatusSession = "session"
+	HostProgramStatusOff     = "off"
 )
 
 // NormalizeHostProgramStatus reads an [agents] host_program_status value.
 // Empty and anything unrecognised mean the default, "auto".
 func NormalizeHostProgramStatus(v string) string {
-	if strings.ToLower(strings.TrimSpace(v)) == HostProgramStatusOff {
-		return HostProgramStatusOff
+	switch v = strings.ToLower(strings.TrimSpace(v)); v {
+	case HostProgramStatusOff, HostProgramStatusSession:
+		return v
 	}
 	return HostProgramStatusAuto
 }

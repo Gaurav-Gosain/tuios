@@ -3065,15 +3065,18 @@ Behavior tab, as "Reply rows".
 
 When tuios runs in a terminal that reads OSC 7501, the Program Status
 Protocol (Rex does), it reports the agent state of each pane there.
-`host_program_status` in `[agents]` turns this off:
+`host_program_status` in `[agents]` says how, or turns it off:
 
 ```toml
 [agents]
-host_program_status = "auto"   # auto (default), off
+host_program_status = "auto"   # auto (default), session, off
 ```
 
-`auto` asks the terminal when a client starts, and reports only when the
-terminal answers. `off` never asks. A client reads the value when it starts.
+`auto` asks the terminal when a client starts, and reports each pane only
+when the terminal answers. `session` asks the same way, and reports one
+record for the attached session instead: the most urgent state of its panes,
+and a message that counts them, such as "1 needs input, 2 working". `off`
+never asks. A client reads the value when it starts.
 An unknown value reads as `auto`, with a warning. See
 [PROGRAM_STATUS.md](PROGRAM_STATUS.md#tuios-inside-a-terminal-that-reads-osc-7501).
 

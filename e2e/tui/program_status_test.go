@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -523,5 +524,96 @@ func TestProgramStatusReachesTheHostTerminal(t *testing.T) {
 				t.Logf("save the host log: %v", err)
 			}
 		})
+	}
+}
+
+// TestProgramStatusSessionRollUp attaches from a stand-in host terminal that
+// supports OSC 7501, with host_program_status = "session", and reads the one
+// record tuios keeps there for the session.
+//
+// How it could pass wrongly, written down first:
+//   - The per-pane records could still go out beside the session record. No
+//     id under fwd/ may reach the host.
+//   - The roll-up could take the first pane's state. The working pane is the
+//     first window and the blocked one the second, so the record must say
+//     blocked, the more urgent of the two.
+//   - The counts could be read once and kept. They are read again after one
+//     pane ends its state, and the record must go to working with a count of
+//     one.
+//   - A session with nothing to report could keep its last record. When the
+//     last pane ends its state, the host must get a clear for fwd.
+//
+// The artifact is the host's log of what it read.
+//
+// Negative control: with "session" read as "auto" in
+// NormalizeHostProgramStatus, the host gets fwd/<pane> records and no fwd
+// record, and the test fails on the first wait.
+func TestProgramStatusSessionRollUp(t *testing.T) {
+	host := buildHostTerm(t)
+	base := t.TempDir()
+	killDaemon(t, base)
+	writeConfig(t, base, "[agents]\nhost_program_status = \"session\"\n")
+	hostLog := filepath.Join(t.TempDir(), "host.log")
+	const session = "fwd"
+	if out, err := tuiosCLI(t, base, "new", session, "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "set-window", "-s", session, "--name", "build"); err != nil {
+		t.Fatalf("name the first pane: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "new-window", "-s", session, "deploy", "--no-focus"); err != nil {
+		t.Fatalf("open the second pane: %v\n%s", err, out)
+	}
+	term := startIn(t, base, startOpts{args: []string{"attach", session}, wrap: []string{host, "run", "-log", hostLog, "-program-status", "--"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 2 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	hostLines := func() string {
+		data, _ := os.ReadFile(hostLog)
+		return string(data)
+	}
+	waitHost := func(what string, re *regexp.Regexp) string {
+		t.Helper()
+		var last string
+		waitUntil(t, fmt.Sprintf("%s: the host to get %s", what, re), uiTimeout, func() (bool, string) {
+			log := hostLines()
+			if m := re.FindAllString(log, -1); len(m) > 0 {
+				last = m[len(m)-1]
+				return true, ""
+			}
+			return false, log
+		})
+		return last
+	}
+	setState := func(pane string, args ...string) {
+		t.Helper()
+		full := append([]string{"set-agent-state", "-s", session, "-w", pane}, args...)
+		if out, err := tuiosCLI(t, base, full...); err != nil {
+			t.Fatalf("set-agent-state %v: %v\n%s", args, err, out)
+		}
+	}
+	defer func() {
+		if err := os.WriteFile(filepath.Join(artifactDir(t), "host.log"), []byte(hostLines()), 0o644); err != nil {
+			t.Logf("save the host log: %v", err)
+		}
+	}()
+
+	waitHost("the query", regexp.MustCompile(`7501 \?`))
+	setState("build", "working", "--message", "Compiling")
+	setState("deploy", "needs_input", "--kind", "approval", "--message", "Approve deploy?")
+	both := waitHost("the blocked session", regexp.MustCompile(`7501 state=blocked:id=fwd:kind=permission:[^\n]*msg=`+regexp.QuoteMeta(b64e("1 needs input, 1 working"))+`[^\n]*`))
+	if !strings.Contains(both, "app=tuios") || !strings.Contains(both, "title="+b64e(session)) {
+		t.Errorf("ASSERTION: the session record lacks app=tuios or the session's name: %s", both)
+	}
+	saveArtifact(t, term, artifactDir(t), "session-blocked")
+
+	setState("deploy", "none")
+	waitHost("the working session", regexp.MustCompile(`7501 state=working:id=fwd:[^\n]*msg=`+regexp.QuoteMeta(b64e("1 working"))))
+
+	setState("build", "none")
+	waitHost("the clear", regexp.MustCompile(`7501 state=clear:id=fwd\n`))
+
+	if m := regexp.MustCompile(`id=fwd/\S+`).FindString(hostLines()); m != "" {
+		t.Errorf("ASSERTION: a pane record reached the host in session mode (%s):\n%s", m, hostLines())
 	}
 }

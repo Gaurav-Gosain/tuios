@@ -225,6 +225,25 @@ another tab.
   terminal gets the clears over the connection, when the connection is still
   up.
 
+A terminal shows one record for the pane tuios runs in: the most urgent.
+With many agents that is one pane at a time. To see the whole session
+there, report it as one record:
+
+```toml
+[agents]
+host_program_status = "session"
+```
+
+- The record's id is the session's name, its title the session's name, and
+  its `app` is `tuios`.
+- Its state is the most urgent state of the session's panes: `blocked`,
+  then `error`, `done`, `working` and `idle`.
+- Its message counts the panes in each state, the most urgent first:
+  `1 needs input, 2 working, 1 idle`.
+- A blocked session has the `kind` of its blocked panes when they all wait
+  for the same kind of answer.
+- When no pane has a state, the record is cleared. No pane record is sent.
+
 To turn this off:
 
 ```toml

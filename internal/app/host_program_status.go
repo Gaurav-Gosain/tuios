@@ -2,6 +2,7 @@ package app
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,6 +28,12 @@ import (
 // is tuios's own report about that state, built here, inside the protocol's
 // limits. The host is asked first (OSC 7501 ; ?), and only a terminal that
 // answers gets reports. [agents] host_program_status = "off" turns it off.
+//
+// With host_program_status = "session" the terminal gets one record for the
+// attached session instead, under the id <session>: the most urgent state of
+// its panes, and a message that counts them, such as "1 needs input,
+// 2 working". A terminal that shows one record for tuios's pane then shows
+// the whole session, not the single most urgent pane.
 //
 // Reports are rate limited: a change is held for hostProgramStatusGap, and
 // everything that changed in that time goes out together, so a pane that
@@ -71,7 +78,15 @@ func (m *OS) hostProgramStatusOn() bool {
 	if m.Client != ClientLocal && m.Client != ClientSSH {
 		return false
 	}
-	return m.UserConfig == nil || config.NormalizeHostProgramStatus(m.UserConfig.Agents.HostProgramStatus) == config.HostProgramStatusAuto
+	return m.hostProgramStatusMode() != config.HostProgramStatusOff
+}
+
+// hostProgramStatusMode is [agents] host_program_status, read.
+func (m *OS) hostProgramStatusMode() string {
+	if m.UserConfig == nil {
+		return config.HostProgramStatusAuto
+	}
+	return config.NormalizeHostProgramStatus(m.UserConfig.Agents.HostProgramStatus)
 }
 
 // hostProgramStatusProbe asks the terminal whether it supports OSC 7501.
@@ -155,6 +170,9 @@ func (m *OS) hostProgramStatusFlush() tea.Cmd {
 // says anything about (unknown), has no record.
 func (m *OS) hostProgramStatusReports() map[string]string {
 	want := make(map[string]string)
+	// In session mode the pane reports are only counted.
+	rollUp := m.hostProgramStatusMode() == config.HostProgramStatusSession
+	var panes []progstatus.Report
 	session := progstatus.FitSegment(m.SessionName, progstatus.MaxSegment)
 	if m.SessionName == "" {
 		session = "local"
@@ -210,9 +228,72 @@ func (m *OS) hostProgramStatusReports() map[string]string {
 		}
 		r.Title = hostStatusText(m.railTitleShown(w), progstatus.MaxTitleDecoded)
 		r.Msg = hostStatusText(w.AgentMessage, progstatus.MaxMsgDecoded)
+		if rollUp {
+			panes = append(panes, r)
+			continue
+		}
+		want[r.ID] = progstatus.Encode(r)
+	}
+	if len(panes) > 0 {
+		r := sessionStatusReport(panes)
+		r.ID = session
+		name := m.SessionName
+		if name == "" {
+			name = session
+		}
+		r.Title = hostStatusText(name, progstatus.MaxTitleDecoded)
 		want[r.ID] = progstatus.Encode(r)
 	}
 	return want
+}
+
+// sessionStateWords are the words of the session record's message, by
+// state, in the order the message lists them: the most urgent first.
+var sessionStateWords = []struct {
+	state progstatus.State
+	word  string
+}{
+	{progstatus.Blocked, "needs input"},
+	{progstatus.Error, "errored"},
+	{progstatus.Done, "done"},
+	{progstatus.Working, "working"},
+	{progstatus.Idle, "idle"},
+}
+
+// sessionStatusReport rolls the reports of a session's panes into one: the
+// most urgent state, the kind when every blocked pane waits for the same
+// kind of answer, and a message that counts the panes in each state, such
+// as "1 needs input, 2 working". The app is tuios. panes is not empty.
+func sessionStatusReport(panes []progstatus.Report) progstatus.Report {
+	r := progstatus.Report{State: panes[0].State, Progress: progstatus.NoProgress, App: "tuios"}
+	counts := make(map[progstatus.State]int, len(sessionStateWords))
+	var kind progstatus.Kind
+	blocked, sameKind := 0, true
+	for _, p := range panes {
+		counts[p.State]++
+		if progstatus.Urgency(p.State) > progstatus.Urgency(r.State) {
+			r.State = p.State
+		}
+		if p.State == progstatus.Blocked {
+			if blocked == 0 {
+				kind = p.Kind
+			} else if p.Kind != kind {
+				sameKind = false
+			}
+			blocked++
+		}
+	}
+	if blocked > 0 && sameKind {
+		r.Kind = kind
+	}
+	parts := make([]string, 0, len(sessionStateWords))
+	for _, w := range sessionStateWords {
+		if n := counts[w.state]; n > 0 {
+			parts = append(parts, strconv.Itoa(n)+" "+w.word)
+		}
+	}
+	r.Msg = strings.Join(parts, ", ")
+	return r
 }
 
 // HostProgramStatusClear returns the reports that remove every record this
