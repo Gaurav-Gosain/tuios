@@ -13,9 +13,12 @@ import (
 )
 
 // plugins/ovnfs, the shipped folder. With no ovnfs on PATH an action says
-// how to install it and does nothing else. With TUIOS_E2E_OVNFS naming an
-// ovnfs binary, the test runs it for real, in a daemon of its own under the
-// test's folder:
+// how to install it and does nothing else. With an ovnfs older than 0.4.0 it
+// says to update and runs nothing but ovnfs version: from 0.3.0 on ovnfs rm
+// deletes a checkout's snapshots unless it gets --sticky-snapshots, which
+// older ones refuse. With TUIOS_E2E_OVNFS naming an ovnfs binary (0.4.0 or
+// newer), the test runs it for real, in a daemon of its own under the test's
+// folder:
 //
 //   - New checkout here opens a checkout of the focused pane's folder in a
 //     new pane, and writes nothing to the folder.
@@ -23,8 +26,10 @@ import (
 //     applies.
 //   - Apply asks for a typed yes, then merges the changes into the folder.
 //   - Removing a worktree that tuios made removes its checkout, and keeps the
-//     checkout's changes in a snapshot first. This needs the worktree-removed
-//     event: a build without it leaves the checkout.
+//     checkout's changes in a snapshot first: ovnfs new --from the snapshot
+//     opens them again. This needs the worktree-removed event (a build
+//     without it leaves the checkout), and --sticky-snapshots on the rm (on
+//     ovnfs 0.3.0 and newer the rm deletes the snapshot without it).
 //
 // ovnfs needs an NFS mount on macOS and FUSE on Linux, which CI does not
 // have, so the second part runs where a person sets the variable.
@@ -66,6 +71,48 @@ func TestPluginOvnfs(t *testing.T) {
 		savePNG(t, term.Screen(), hostPalette(t, ""), art, "ovnfs-not-installed")
 		if out, _ := tuiosCLI(t, base, "plugins", "log", "tuios.ovnfs"); strings.Contains(out, "ovnfs new") {
 			t.Errorf("the pane ran ovnfs with no ovnfs:\n%s", out)
+		}
+	})
+
+	t.Run("too old", func(t *testing.T) {
+		// An ovnfs that answers version with 0.2.3 and writes down every
+		// call, and jq. Nothing else of ovnfs may run.
+		bin := t.TempDir()
+		calls := filepath.Join(bin, "calls")
+		fake := "#!/bin/sh\necho \"$*\" >>" + calls + "\n" +
+			"case \"$*\" in *version*) echo '{\"version\":\"v0.2.3\",\"go\":\"go1.27\"}' ;; *) exit 3 ;; esac\n"
+		if err := os.WriteFile(filepath.Join(bin, "ovnfs"), []byte(fake), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if p, err := exec.LookPath("jq"); err == nil {
+			_ = os.Symlink(p, filepath.Join(bin, "jq"))
+		}
+		t.Setenv("PATH", bin+string(os.PathListSeparator)+"/usr/bin:/bin")
+		base := t.TempDir()
+		writeConfig(t, base, "")
+		killDaemon(t, base)
+		if out, err := tuiosCLI(t, base, "new", "ov", "--detach"); err != nil {
+			t.Fatalf("create session: %v\n%s", err, out)
+		}
+		if out, err := tuiosCLI(t, base, "plugins", "install", plugin, "--yes"); err != nil {
+			t.Fatalf("install: %v\n%s", err, out)
+		}
+		term := startIn(t, base, startOpts{args: []string{"attach", "ov"}})
+		if err := term.WaitForText("$", bootTimeout); err != nil {
+			t.Fatalf("attach: %v\n%s", err, term.Snapshot())
+		}
+		if out, err := tuiosCLI(t, base, "plugins", "open", "tuios.ovnfs", "new"); err != nil {
+			t.Fatalf("open new: %v\n%s", err, out)
+		}
+		if err := term.WaitForText("needs ovnfs 0.4.0 or newer", uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: no message about the old ovnfs: %v\n%s", err, term.Snapshot())
+		}
+		savePNG(t, term.Screen(), hostPalette(t, ""), art, "ovnfs-too-old")
+		b, _ := os.ReadFile(calls)
+		for line := range strings.SplitSeq(strings.TrimSpace(string(b)), "\n") {
+			if !strings.Contains(line, "version") {
+				t.Errorf("ASSERTION: the plugin ran ovnfs %q on an ovnfs older than 0.4.0", line)
+			}
 		}
 	})
 
@@ -327,13 +374,23 @@ func testPluginOvnfsReal(t *testing.T, plugin, ovnfs, art string) {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	kept := false
+	snap := ""
 	for _, s := range l.Snapshots {
 		if s.Checkout == "demo-wt" && s.Label == "worktree removed" {
-			kept = true
+			snap = s.ID
 		}
 	}
-	if !kept {
-		t.Errorf("no snapshot keeps the removed checkout's change: %+v", l.Snapshots)
+	if snap == "" {
+		t.Fatalf("ASSERTION: no snapshot keeps the removed checkout's change: %+v", l.Snapshots)
+	}
+	// The snapshot opens again with the change in it.
+	if out, err := ov("new", "--from", snap, "--name", "demo-back"); err != nil {
+		t.Fatalf("ASSERTION: ovnfs new --from %s: %v\n%s", snap, err, out)
+	}
+	if b, _ := os.ReadFile(filepath.Join(pathOf("demo-back"), "notes.txt")); string(b) != "wt\n" {
+		t.Errorf("ASSERTION: the snapshot of the removed checkout holds notes.txt %q, want %q", b, "wt\n")
+	}
+	if out, err := ov("rm", "demo-back"); err != nil {
+		t.Fatalf("ovnfs rm: %v\n%s", err, out)
 	}
 }

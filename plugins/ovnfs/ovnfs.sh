@@ -17,6 +17,10 @@ cmd=${1:-}
 [ $# -gt 0 ] && shift
 
 INSTALL="go install github.com/stencil-hq/ovnfs@latest"
+# MIN is the oldest ovnfs this plugin runs. From 0.3.0 on, ovnfs rm and prune
+# delete a checkout's snapshots unless they get --sticky-snapshots, which an
+# older ovnfs refuses. The plugin is tested against 0.4.0.
+MIN=0.4.0
 STATE=${TUIOS_PLUGIN_STATE_DIR:-${TMPDIR:-/tmp}}
 PANES="$STATE/panes"     # lines of "PANE NAME": the panes this plugin opened
 PENDING="$STATE/pending" # lines of "NAME": closed panes that left changes
@@ -47,13 +51,36 @@ need() {
 	msg="This plugin needs $missing on PATH."
 	case $missing in *ovnfs*) msg="$msg Install ovnfs with: $INSTALL" ;; esac
 	case $missing in *jq*) msg="$msg Install jq from your package manager." ;; esac
+	say_and_exit "$msg"
+}
+
+# say_and_exit tells the person msg in the pane, or as a message when the
+# command runs with no pane, and stops.
+say_and_exit() {
 	if [ -t 1 ]; then
-		printf '%s\n' "$msg"
+		printf '%s\n' "$1"
 		pause
 	else
-		notify warning "$msg"
+		notify warning "$1"
 	fi
 	exit 0
+}
+
+# version_ok stops when ovnfs is older than MIN, and says how to update it. A
+# version it cannot read, such as a build from a clone, is let through: every
+# removal passes --sticky-snapshots, which an ovnfs without it refuses, so the
+# worst case is a removal that fails and keeps the checkout.
+version_ok() {
+	v=$(ovnfs version --json 2>/dev/null | jq -r '.version // empty' 2>/dev/null)
+	v=${v#v}
+	case $v in
+	[0-9]*.[0-9]*.[0-9]*) ;;
+	*) return 0 ;;
+	esac
+	older=$(printf '%s\n%s\n' "$MIN" "${v%%[-+]*}" | sort -t. -k1,1n -k2,2n -k3,3n | head -n1)
+	[ "$older" = "$MIN" ] && return 0
+	is_hook && exit 0
+	say_and_exit "This plugin needs ovnfs $MIN or newer, and ovnfs $v is installed. Update it with: ovnfs update"
 }
 
 ov() { ovnfs "$@"; }
@@ -193,7 +220,8 @@ keep_and_remove() {
 			return 1
 		fi
 	fi
-	ov rm "$1" >/dev/null 2>&1 || { echo "ovnfs could not remove $1."; return 1; }
+	# --sticky-snapshots keeps the snapshots: without it ovnfs rm deletes them.
+	ov rm --sticky-snapshots "$1" >/dev/null 2>&1 || { echo "ovnfs could not remove $1."; return 1; }
 	if [ -n "$snap" ]; then
 		echo "Removed checkout $1. Its changes are in snapshot $snap: ovnfs new --from $snap opens them again."
 	elif [ "$before" != "no changes" ]; then
@@ -215,6 +243,7 @@ enter() {
 }
 
 need
+version_ok
 mkdir -p "$STATE"
 
 case $cmd in
@@ -279,15 +308,22 @@ checkouts)
 			read -r only || exit 0
 			flags="--idle $idle"
 			[ "$only" = n ] || flags="$flags --no-diff"
+			# A changed checkout's snapshots hold its work: keep them.
+			keep=""
+			[ "$only" = n ] && keep="--sticky-snapshots"
 			printf '\nThese checkouts match:\n'
 			# shellcheck disable=SC2086
 			table $flags
 			[ -n "$names" ] || { pause; continue; }
-			printf '\nType yes and press Enter to remove them. Their snapshots stay: '
+			if [ -n "$keep" ]; then
+				printf '\nType yes and press Enter to remove them. Their snapshots stay: '
+			else
+				printf '\nType yes and press Enter to remove them and their snapshots: '
+			fi
 			read -r yes || exit 0
 			if [ "$yes" = yes ]; then
 				# shellcheck disable=SC2086
-				ov prune $flags
+				ov prune $flags $keep
 				set_cell
 				pause
 			fi
@@ -399,7 +435,7 @@ attach)
 		printf '%s\n' "$hosts" | cut -f1 | sed 's/^/  /'
 		printf '\n'
 	fi
-	printf 'Host (a tuios host, an ssh host or an ovnfs mesh member): '
+	printf 'Host (a tuios host or an ssh host): '
 	read -r host || exit 0
 	[ -n "$host" ] || exit 0
 	tab=$(printf '\t')
@@ -410,13 +446,14 @@ attach)
 		pause
 		exit 0
 	fi
-	rpath=$(printf '%s' "$out" | jq -r '.remote.path // .path // .checkout.path // empty' 2>/dev/null)
+	rpath=$(printf '%s' "$out" | jq -r '.remote_path // empty' 2>/dev/null)
 	printf 'Attached %s to %s%s.\n' "$target" "$host" "${rpath:+ at $rpath}"
 	# A plugin opens no window on a host without the admin grant, so the
 	# person runs the line.
 	[ -n "$addr" ] && [ -n "$rpath" ] &&
 		printf 'Open a pane there with: tuios new-window --host %s --cwd %s\n' "$host" "$rpath"
 	printf 'Bring the edits made there back with: ovnfs pull %s\n' "$target"
+	printf 'Let it work there without this machine with: ovnfs push %s\n' "$target"
 	pause
 	;;
 

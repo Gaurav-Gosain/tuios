@@ -14902,6 +14902,21 @@ Run on 2026-11-08 on macOS (arm64). The branch passes.
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_OVNFS=/path/to/ovnfs go test -count=1 -run '^TestPluginOvnfs$' -v .`.
 
+### ovnfs 0.4.0
+
+From ovnfs 0.3.0 on, `ovnfs rm` and `prune` delete a checkout's snapshots
+unless they get `--sticky-snapshots`, so the plugin passes it wherever it keeps
+work in a snapshot, and refuses an ovnfs older than 0.4.0. The `too old`
+subtest runs everywhere: an ovnfs on PATH that answers version with 0.2.3 must
+get a message and no other call. The real-ovnfs subtest now also opens the
+kept snapshot again and reads the change back.
+
+Run on 2026-11-11 on macOS (arm64).
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The version check is not called (`version_ok` removed) | "no message about the old ovnfs" | **caught** |
+
 ## TestCockpitThreadToolRowsOpen
 
 A working turn's tool rows in the agents view: a long Bash call with output,

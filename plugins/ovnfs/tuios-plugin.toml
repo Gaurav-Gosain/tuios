@@ -1,7 +1,7 @@
 api = 1
 id = "tuios.ovnfs"
 name = "ovnfs"
-version = "0.1.0"
+version = "0.2.0"
 description = "Opens ovnfs checkouts of a folder in a pane, and shows, applies and cleans them up"
 min_tuios = "0.13.0"
 platforms = ["linux", "macos"]
