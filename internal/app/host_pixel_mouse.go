@@ -123,6 +123,9 @@ func (m *OS) paneWantsPixelMouse() bool {
 // handled: the state of 1016 and the cell size. A terminal that turned 1016 on
 // without saying its cell size cannot be read, so 1016 is turned off again.
 func (m *OS) noteHostPixelMouse(msg tea.Msg) tea.Cmd {
+	if mr, ok := msg.(tea.ModeReportMsg); ok && m.screen != nil {
+		m.screen.ModeReport(mr)
+	}
 	hp := &m.hostPixel
 	switch msg := msg.(type) {
 	case tea.ModeReportMsg:

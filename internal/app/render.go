@@ -697,6 +697,10 @@ func (m *OS) crashView() tea.View {
 	view.AltScreen = true
 	view.MouseMode = tea.MouseModeAllMotion
 	view.ReportFocus = true
+	if m.screen != nil {
+		m.screen.FrameString(view.Content, m.Width, m.Height)
+		m.screen.Flush(view, true)
+	}
 	return view
 }
 
@@ -733,6 +737,9 @@ func (m *OS) safeComposeFrame() (frame string, ok bool) {
 // composeFrame renders the full frame, using the fullscreen fast path when it is
 // eligible and falling back to the compositor otherwise.
 func (m *OS) composeFrame() string {
+	if m.screen != nil {
+		return m.screenFrame()
+	}
 	frame := m.composeFrameOnce()
 	// The frame a theme transition starts from. See theme_transition.go.
 	m.themeFx.lastFrame = frame
@@ -740,6 +747,17 @@ func (m *OS) composeFrame() string {
 }
 
 func (m *OS) composeFrameOnce() string {
+	canvas, frame := m.composeFrameParts()
+	if canvas == nil {
+		return frame
+	}
+	return canvas.Render()
+}
+
+// composeFrameParts composes the frame. It returns the canvas when the
+// compositor drew it, and the frame string with a nil canvas when the screen
+// saver or the fullscreen fast path did.
+func (m *OS) composeFrameParts() (*frameCanvas, string) {
 	// The ground a pane's program is told it is on, kept in step with the one
 	// it is drawn on. First, because every path below draws the panes. See
 	// background.go.
@@ -769,7 +787,7 @@ func (m *OS) composeFrameOnce() string {
 	if m.screensaver.active && m.screensaver.frame != "" {
 		m.OverlayHits = m.OverlayHits[:0]
 		m.SixelPassthrough.SetFrame(nil, 0, 0, 0, 0)
-		return m.screensaver.frame
+		return nil, m.screensaver.frame
 	}
 	// Hints mode whose pane went away, left the screen or lost focus ends
 	// here, before the fast path is judged. Its pass only runs when its pane
@@ -791,7 +809,7 @@ func (m *OS) composeFrameOnce() string {
 		// characters. The compositor replaces them, so it draws this frame.
 		if !strings.Contains(frame, vt.SixelMarkerLead) {
 			m.SixelPassthrough.SetFrame(nil, 0, 0, 0, 0)
-			return frame
+			return nil, frame
 		}
 	}
 	canvas := m.GetCanvas(true)
@@ -822,7 +840,7 @@ func (m *OS) composeFrameOnce() string {
 	// well copied the whole frame twice on a truecolor terminal and stripped
 	// every colour when this process's stdout was not a TTY.
 	m.canvasIsFrame = true
-	return canvas.Render()
+	return canvas, ""
 }
 
 // fullscreenFastWindow returns the single window that fills the content area with
@@ -1160,6 +1178,12 @@ func (m *OS) View() tea.View {
 	if notice := m.ExitNotice(); notice != "" {
 		view.SetContent(notice + "\n")
 		view.AltScreen = false
+		if m.screen != nil {
+			// The screen leaves the alternate screen; the reason stays
+			// below it on the terminal, as Bubble Tea's inline frame left it.
+			m.screen.Close()
+			m.screen.Print(view.Content)
+		}
 		return view
 	}
 
@@ -1308,7 +1332,9 @@ func (m *OS) View() tea.View {
 	// to the last, with the cursor where it was, has nothing to write: that
 	// is every frame a pane streaming kitty graphics composes, and asking
 	// for it cost a timer and a wakeup each.
-	if cur := cursorState(view.Cursor); composed || cur != m.frameRate.lastCursor {
+	if m.screen != nil {
+		m.screen.Flush(view, composed)
+	} else if cur := cursorState(view.Cursor); composed || cur != m.frameRate.lastCursor {
 		m.frameRate.lastCursor = cur
 		m.kickFlush()
 	}

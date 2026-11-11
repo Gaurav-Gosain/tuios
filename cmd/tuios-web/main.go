@@ -27,6 +27,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/served"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/termio"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/spf13/cobra"
 	"tuios.dev/vt"
@@ -469,20 +470,41 @@ func createTUIOSProgram(sess sip.Session) *tea.Program {
 		pty := sess.Pty()
 		return pty.Width, pty.Height
 	})
-	opts := append(sip.MakeOptions(sess), app.ProgramOptions(current)...)
+	slave := sess.PtySlave()
+	// The client's frames are diffed as cells and written by the model's own
+	// screen, which needs the slave raw as Bubble Tea's renderer made it.
+	// See app.UseScreen.
+	ownScreen := slave != nil && app.OwnScreenWanted()
+	restore := func() {}
+	if ownScreen {
+		r, err := termio.Raw(slave)
+		if err != nil {
+			log.Printf("Warning: web session keeps Bubble Tea's renderer: %v", err)
+			ownScreen = false
+		}
+		restore = r
+	}
+	opts := append(sip.MakeOptions(sess), app.ProgramOptions(current, app.WithOwnScreen(ownScreen))...)
 	// The renderer's writer, so the sixel images drawn on a frame go out
 	// after it in the same write. Graphics already share the PTY slave.
-	if slave := sess.PtySlave(); slave != nil {
+	if slave != nil {
 		frames := app.NewFrameHookFile(slave)
 		model.ConnectFrameWriter(frames)
 		opts = append(opts, tea.WithOutput(frames))
+		if ownScreen {
+			model.UseScreen(frames, []string{"TERM=xterm-256color", "COLORTERM=truecolor"}, colorprofile.TrueColor)
+		}
 	}
 	program := tea.NewProgram(started, opts...)
 	model.BindProgram(program)
 	// Tear down after the program has fully stopped, the way the SSH server
 	// does. Closing on the session context instead ran Cleanup while the last
 	// frames were still going out.
-	go cleanupAfterProgram(program, running, model.Cleanup)
+	go cleanupAfterProgram(program, running, func() {
+		model.CloseScreen()
+		restore()
+		model.Cleanup()
+	})
 	return program
 }
 

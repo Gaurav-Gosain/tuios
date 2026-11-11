@@ -329,7 +329,14 @@ func tuiosSessionMiddleware() wish.Middleware {
 				v := size.Load()
 				return int(v >> 32), int(uint32(v))
 			})
-			opts := append(bubbletea.MakeOptions(sess), app.ProgramOptions(current)...)
+			// The client's frames are diffed as cells and written by the
+			// model's own screen. See app.UseScreen.
+			ownScreen := app.OwnScreenWanted()
+			if ownScreen {
+				env := append(sess.Environ(), "TERM="+pty.Term)
+				model.UseScreen(frames, env, colorprofile.Env(env))
+			}
+			opts := append(bubbletea.MakeOptions(sess), app.ProgramOptions(current, app.WithOwnScreen(ownScreen))...)
 			opts = append(opts, tea.WithOutput(frames))
 			program := tea.NewProgram(model, opts...)
 			model.BindProgram(program)
@@ -355,6 +362,7 @@ func tuiosSessionMiddleware() wish.Middleware {
 			// the terminal state.
 			program.Kill()
 			cancel()
+			model.CloseScreen()
 			// An ssh client's terminal gets no reset when the session ends, so
 			// the OSC 7501 records this client left there are cleared here.
 			// A connection already gone takes the write as an error, and that

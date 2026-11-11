@@ -27,6 +27,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/termio"
 	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 	"github.com/Gaurav-Gosain/tuios/pkg/applist"
@@ -555,6 +556,10 @@ type OS struct {
 	cachedSeparatorColor color.Color // Rule colour the cached separator was styled in
 	cachedViewContent    string      // Cached full View() output to skip rendering on idle ticks
 	renderSkipped        bool        // True when frame-skip fired; View() returns cached content
+	// screen writes this client's frames when it has one; screenSeq counts
+	// the frames that changed a cell. See screen.go.
+	screen    *termio.Screen
+	screenSeq uint64
 	// keepHostPictures says this host has kitty graphics and is not the browser
 	// client, so a frame carries no ED 2. The render sets it and the frame writer reads it. See keepPicturesFrame.
 	keepHostPictures atomic.Bool

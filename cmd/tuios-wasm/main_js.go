@@ -16,6 +16,7 @@ import (
 	"syscall/js"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/xpty"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
@@ -169,7 +170,13 @@ func main() {
 	// session. The size has to be an option: with no TTY to ask, Bubble Tea
 	// otherwise starts at 0x0 and reports that after any WindowSizeMsg sent
 	// before Run.
-	opts := append(app.ProgramOptions(),
+	// The page's terminal gets the frames as cells diffed by the model's own
+	// screen. See app.UseScreen.
+	ownScreen := app.OwnScreenWanted()
+	if ownScreen {
+		osModel.UseScreen(bridge, []string{"TERM=xterm-256color", "COLORTERM=truecolor"}, colorprofile.TrueColor)
+	}
+	opts := append(app.ProgramOptions(app.WithOwnScreen(ownScreen)),
 		tea.WithInput(inputPipe),
 		tea.WithOutput(bridge),
 		tea.WithWindowSize(cols, rows),

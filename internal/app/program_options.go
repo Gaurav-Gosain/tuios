@@ -46,7 +46,7 @@ func ProgramOptions(opts ...ProgramOption) []tea.ProgramOption {
 	for _, opt := range opts {
 		opt(&setup)
 	}
-	return []tea.ProgramOption{
+	topts := []tea.ProgramOption{
 		// The default rate. bubbletea runs a standing ticker at this rate for
 		// the life of the program whether or not a frame is pending, so the
 		// number is the idle wake-up rate of every client: at 120 an idle
@@ -59,6 +59,10 @@ func ProgramOptions(opts ...ProgramOption) []tea.ProgramOption {
 		tea.WithoutSignalHandler(),
 		tea.WithFilter(sizeFilter(setup.currentSize, FilterMouseMotion)),
 	}
+	if setup.ownScreen {
+		topts = append(topts, tea.WithoutRenderer())
+	}
+	return topts
 }
 
 // ProgramOption is a part of ProgramOptions that one transport supplies.
@@ -66,6 +70,13 @@ type ProgramOption func(*programSetup)
 
 type programSetup struct {
 	currentSize func() (width, height int)
+	ownScreen   bool
+}
+
+// WithOwnScreen runs the program without Bubble Tea's renderer, for a model
+// that writes its own frames (OS.UseScreen). False leaves the renderer on.
+func WithOwnScreen(on bool) ProgramOption {
+	return func(s *programSetup) { s.ownScreen = on }
 }
 
 // WithCurrentSize names where a transport keeps the size its client's

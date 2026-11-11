@@ -2491,6 +2491,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, m.noteHostFocus(false)
 
 	case tea.ColorProfileMsg:
+		if m.screen != nil {
+			m.screen.SetColorProfile(msg.Profile)
+		}
 		// The colour profile the frame writer steps colours down to. The chrome
 		// is drawn for it rather than drawn in truecolor and stepped down, so it
 		// is learned from the same message the writer was configured from, and
