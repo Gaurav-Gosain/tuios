@@ -296,6 +296,11 @@ func TestALinkWriteLeavesFreeSpaceAndKeepsToItsCaps(t *testing.T) {
 	if code(fullErr) != "disk_full" || !strings.Contains(errString(fullErr), "files_min_free") {
 		t.Errorf("ASSERTION: a write that leaves less than files_min_free was not refused as disk_full naming the setting: %v", fullErr)
 	}
+	// The refusal travels to the hub, where "this machine" would be read as
+	// the hub, so it names the machine whose disk it is about.
+	if host, err := os.Hostname(); err != nil || !strings.Contains(errString(fullErr), "the disk on "+host+" would have less than") {
+		t.Errorf("ASSERTION: the refusal does not name the machine whose disk is short (%q): %v", host, fullErr)
+	}
 	if parts := partsIn(t, farHome); len(parts) != 0 {
 		t.Errorf("ASSERTION: the refused write left a part: %v", parts)
 	}

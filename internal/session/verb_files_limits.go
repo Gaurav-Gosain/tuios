@@ -263,7 +263,8 @@ func (d *Daemon) claimLinkWriteIn(cs *connState, path, part string, offset, leng
 			u.fsClaimed = map[string]int64{}
 		}
 		if free := diskFree(dir); free >= 0 && free-u.fsClaimed[fs]-grow < policy.FilesMinFree {
-			return none, newVerbError(ErrVerbDiskFull, "the disk on this machine would have less than "+sizeWords(policy.FilesMinFree)+" free after this file, so it was not written. Free space, or lower files_min_free in the config on this machine.")
+			me := thisMachineName()
+			return none, newVerbError(ErrVerbDiskFull, "the disk on "+me+" would have less than "+sizeWords(policy.FilesMinFree)+" free after this file, so it was not written. Free space there, or lower files_min_free in the config of "+me+".")
 		}
 	}
 
@@ -302,6 +303,17 @@ func (d *Daemon) claimLinkWriteIn(cs *connState, path, part string, offset, leng
 			u.mu.Unlock()
 		})
 	}, nil
+}
+
+// thisMachineName is how this daemon names its own machine in a refusal that
+// travels to another one, such as the hub, where "this machine" would be read
+// as the reader's. It is the machine's name, or "this machine" when it has
+// none.
+func thisMachineName() string {
+	if n := config.ThisMachine(); n != "" {
+		return n
+	}
+	return "this machine"
 }
 
 // peerName is a linked machine's name for a message.
