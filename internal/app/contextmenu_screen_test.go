@@ -276,7 +276,7 @@ func TestContextMenuHitTestWhileScrolled(t *testing.T) {
 // TestContextMenuScrollKeepsSelectionVisible: the arrows through a menu
 // taller than the screen keep the selected row on screen. A selection
 // scrolled out of view leaves enter running a row nobody can see. Negative
-// control: skip the scroll in ContextMenuMove.
+// control: pin the scroll to the top in contextMenuRows.
 func TestContextMenuScrollKeepsSelectionVisible(t *testing.T) {
 	f := apptest.New(t, apptest.Panes(1), apptest.Size(120, 12),
 		apptest.Config(func(c *config.UserConfig) { c.Appearance.FramePanels = true }))
@@ -369,7 +369,7 @@ func TestContextMenuHintFollowsRebind(t *testing.T) {
 // menu, while zoom and close, which always apply, are not. With tiling on and
 // a selection dragged in the pane, copy and the splits come alive. The
 // selection is made by a drag because that is the only kind the mouse
-// makes. Negative control: dim copy_selection unconditionally in paneMenu.
+// makes. Negative control: never dim copy_selection in paneMenu.
 func TestContextMenuDimsUnavailableActions(t *testing.T) {
 	f := apptest.New(t, apptest.Panes(1), apptest.Config(func(c *config.UserConfig) { c.Appearance.FramePanels = true }))
 	f.Output("hello world")
