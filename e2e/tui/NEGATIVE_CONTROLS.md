@@ -16624,3 +16624,25 @@ Run on 2026-11-11 on macOS (arm64). The branch passes, and so does
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestProgramStatusSessionRollUp$' -v .`.
+
+## pane-view reports the pane's agent state
+
+`TestPaneViewReportsTheAgentState` runs `pane-view` in the stand-in terminal
+of the pane-view tests, once answering the OSC 7501 query and once not. With
+the answer, a state set by `set-agent-state` (as a hook sets it) must reach
+the terminal as `pane-view`'s record, the pane's own report with `id=evil`
+must not, and a clear must follow when the state is cleared and when
+`pane-view` ends on SIGHUP. Without it, no record goes out. What each
+terminal read is kept under the test's artifact folder. The other
+`TestPaneView*` tests still pass.
+
+Run on 2026-11-11 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The filter passes the pane's OSC 7501 | "the pane's own OSC 7501 reached the terminal" | **caught** |
+| No clear when `pane-view` ends | "pane-view left its record on the terminal when it ended" | **caught** |
+| The status loop not started | "the pane's needs_input never reached the terminal" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPaneViewReportsTheAgentState$' -v .`.

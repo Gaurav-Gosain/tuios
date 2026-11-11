@@ -38,7 +38,10 @@ import (
 //   - TSP (Tern's surface protocol) reaching the outer terminal without the
 //     program having negotiated it with that terminal. It is dropped.
 type queryFilter struct {
-	state filterState
+	// dropStatus drops the pane's own OSC 7501, while pane-view reports
+	// the pane's state to the terminal itself (pane_view_status.go).
+	dropStatus bool
+	state      filterState
 	// head holds the sequence being read until it is decided.
 	head []byte
 	// esc is set while a string sequence has just read ESC.
@@ -203,6 +206,11 @@ func (f *queryFilter) stringByte(out []byte, c byte) []byte {
 		return out
 	}
 	f.head = append(f.head, c)
+	if f.dropStatus && bytes.Equal(f.head, []byte("\x1b]7501;")) {
+		f.state = fsDrop
+		f.head = f.head[:0]
+		return out
+	}
 	if decided, keep, seq := decideEarly(f.head); decided {
 		if keep {
 			out = append(out, seq...)

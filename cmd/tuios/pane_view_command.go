@@ -89,6 +89,10 @@ pane-view tells the daemon this terminal's colours and graphics, so a
 program in the pane that asks sees this terminal while no client shows the
 session.
 
+In a terminal that reads OSC 7501, such as Rex, pane-view reports the pane's
+agent state there as one record, and clears it when the state is gone and
+when pane-view ends. The pane's own OSC 7501 is then not passed through.
+
 Exit status: the status of the pane's program, 128 plus the signal that
 ended it, 3 when the pane's window closed with its program still running,
 and 1 for an error.`,
@@ -127,6 +131,15 @@ type paneView struct {
 	// pending is what was typed while the probe waited.
 	pending []byte
 
+	// outMu orders writes to out: the pane's output and the status record
+	// (pane_view_status.go). between says the output stands between whole
+	// sequences and characters. statusOn says the terminal reads OSC 7501;
+	// statusWant is the record it should have, statusSent the one it has,
+	// and statusTitle the pane's name for it.
+	outMu                               sync.Mutex
+	between, statusOn                   bool
+	statusWant, statusSent, statusTitle string
+
 	mu     sync.Mutex
 	stream *session.PaneStream
 	seq    uint64
@@ -151,7 +164,7 @@ func runPaneView(sessionName, window string, follow bool) error {
 	var restoreOnce sync.Once
 	restore := func() {
 		restoreOnce.Do(func() {
-			_, _ = io.WriteString(out, paneViewReset)
+			_, _ = io.WriteString(out, v.clearStatus()+paneViewReset)
 			_ = term.Restore(int(in.Fd()), old)
 		})
 	}
@@ -179,6 +192,12 @@ func runPaneView(sessionName, window string, follow bool) error {
 	v.session, v.sessionID, v.window = reply.Session, reply.SessionID, reply.Window
 	if reply.Title != "" {
 		_, _ = fmt.Fprintf(out, "\x1b]2;%s\x07", sanitizeTitle(reply.Title))
+	}
+	v.statusTitle = reply.Title
+	v.between = true
+	if v.statusOn {
+		v.filter.dropStatus = true
+		go v.followStatus()
 	}
 
 	go v.pumpInput()
@@ -253,7 +272,8 @@ func readKeys(in *os.File, keys chan<- []byte) {
 }
 
 // paneViewProbeQuery asks the terminal for its default colours, its sixteen,
-// its name and kitty graphics, and ends with DA1, which every terminal
+// its name, kitty graphics and the Program Status Protocol (OSC 7501), and
+// ends with DA1, which every terminal
 // answers and which says whether it draws sixel. The answers come back in
 // order, so DA1's marks the end.
 var paneViewProbeQuery = func() string {
@@ -262,7 +282,9 @@ var paneViewProbeQuery = func() string {
 	for i := range 16 {
 		fmt.Fprintf(&b, "\x1b]4;%d;?\x1b\\", i)
 	}
-	b.WriteString("\x1b[>q\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\\x1b[c")
+	b.WriteString("\x1b[>q\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\")
+	b.WriteString(paneViewStatusQuery)
+	b.WriteString("\x1b[c")
 	return b.String()
 }()
 
@@ -286,6 +308,7 @@ func (v *paneView) probe() *session.ViewerReport {
 			}
 			got = append(got, b...)
 			if loc := probeDA1.FindIndex(got); loc != nil {
+				v.statusOn = probeStatus(got[:loc[1]])
 				r := parseProbe(got[:loc[1]])
 				v.pending = stripProbe(got)
 				return r
@@ -435,14 +458,14 @@ func (v *paneView) pumpOutput() (string, error) {
 			seq, _ := session.PaneFrameSeq(payload)
 			v.setSeq(seq)
 			if len(payload) >= 12 {
-				_, _ = io.WriteString(v.out, paneViewClear)
-				v.filter = queryFilter{}
-				_, _ = v.out.Write(v.filter.Write(payload[12:]))
+				v.writeOut([]byte(paneViewClear))
+				v.filter = queryFilter{dropStatus: v.statusOn}
+				v.writeOut(v.filter.Write(payload[12:]))
 			}
 		case session.PaneFrameOutput:
 			seq, _ := session.PaneFrameSeq(payload)
 			if len(payload) >= 8 {
-				_, _ = v.out.Write(v.filter.Write(payload[8:]))
+				v.writeOut(v.filter.Write(payload[8:]))
 			}
 			v.setSeq(seq)
 		case session.PaneFrameResize:

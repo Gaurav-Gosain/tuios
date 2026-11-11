@@ -4081,6 +4081,15 @@ tells the daemon. While no tuios client shows the session, a program in the
 pane that asks (OSC 10, 11 and 4, DA1, the kitty graphics query) gets this
 terminal's answers.
 
+When this terminal reads OSC 7501, the Program Status Protocol (Rex does),
+`pane-view` reports the pane's agent state there as one record: working,
+needs input with its kind, done, errored or idle, with the agent's harness as
+`app`, the pane's title and the agent's message. A state that a harness hook
+reports, which the pane's output does not hold, reaches the terminal too.
+The pane's own OSC 7501 is not passed through then: the daemon reads it into
+the agent state, and the record is `pane-view`'s own. When the state is gone,
+and when `pane-view` ends, it clears the record.
+
 Close the terminal to stop viewing. The pane and its session keep running.
 After a daemon restart, `pane-view` resumes on the new daemon.
 

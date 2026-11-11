@@ -42,6 +42,8 @@ type fakeTermOpts struct {
 	fg, bg string // X11 rgb:rrrr/gggg/bbbb
 	sixel  bool
 	kitty  bool
+	// programStatus answers the OSC 7501 query, as Rex does.
+	programStatus bool
 	// silent answers nothing, as a terminal with no reports does.
 	silent bool
 	// env is added to the program's environment.
@@ -52,7 +54,7 @@ type fakeTermOpts struct {
 	bin string
 }
 
-var fakeTermQuery = regexp.MustCompile(`\x1b\](10|11|12|4;\d+);\?(?:\x07|\x1b\\)|\x1b\[c|\x1b\[>q|\x1b_Gi=31,[^\x1b]*a=q[^\x1b]*\x1b\\`)
+var fakeTermQuery = regexp.MustCompile(`\x1b\](10|11|12|4;\d+);\?(?:\x07|\x1b\\)|\x1b\]7501;\?\x1b\\|\x1b\[c|\x1b\[>q|\x1b_Gi=31,[^\x1b]*a=q[^\x1b]*\x1b\\`)
 
 // startFakeTerm runs tuios with args on a pty of cols by rows.
 func startFakeTerm(t *testing.T, base string, cols, rows int, opts fakeTermOpts, args ...string) *fakeTerm {
@@ -139,6 +141,10 @@ func (ft *fakeTerm) answer(q []byte) []byte {
 		return []byte("\x1b]11;" + ft.opts.bg + "\x1b\\")
 	case strings.HasPrefix(s, "\x1b]12;"):
 		return []byte("\x1b]12;" + ft.opts.fg + "\x1b\\")
+	case s == "\x1b]7501;?\x1b\\":
+		if ft.opts.programStatus {
+			return []byte(s)
+		}
 	case strings.HasPrefix(s, "\x1b]4;"):
 		idx := strings.TrimSuffix(strings.TrimSuffix(strings.TrimPrefix(s, "\x1b]4;"), "\x1b\\"), "\x07")
 		idx = strings.TrimSuffix(idx, ";?")
