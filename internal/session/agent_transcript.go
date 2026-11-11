@@ -599,7 +599,7 @@ func (s *Session) maintainAgentTranscripts(reg *harness.Registry, cwdOf func(pty
 			continue
 		}
 		id := cwdOf(p.ptyID)
-		if path, ok := searchTranscript(tr, id, transcriptOwner{window: p.windowID, started: id.started, taken: taken}); ok {
+		if path, ok := searchTranscript(tr, id, transcriptOwner{window: p.windowID, started: id.started, resumed: id.resumed, taken: taken}); ok {
 			if s.JoinAgentTranscriptAs(p.windowID, p.harnessID, tr.Reader, path, false) == nil && taken != nil {
 				if abs, err := filepath.Abs(path); err == nil {
 					taken[abs] = p.windowID
@@ -644,6 +644,9 @@ type agentIdentity struct {
 	pid int
 	// agent says a manifest identified the process as an agent.
 	agent bool
+	// resumed is the conversation the agent's command line resumes, by the
+	// manifest's [resume] argv, "" for a fresh start. See transcriptOwner.
+	resumed string
 }
 
 // searchTranscript is the hookless join: find the file in the harness's
@@ -676,12 +679,16 @@ func searchTranscript(tr *harness.Transcript, id agentIdentity, own transcriptOw
 //   - taken: a file another live pane of this daemon is joined to, in any
 //     session, belongs to that pane;
 //   - started: a file whose first record is older than the agent process was
-//     begun by another process. A resumed conversation writes to an older
-//     file; its hook gives the exact path, and without the hook it gets no
-//     join, which is the safe side (see searchTranscript).
+//     begun by another process, unless
+//   - resumed: the agent's command line resumes a conversation by id (the
+//     manifest's [resume] argv, "claude --resume ID"). Then its file is the
+//     one whose records carry that session id, however old its first record,
+//     and no other file is. A resume that names no id (claude --continue)
+//     joins through its hook; without one it gets no join, the safe side.
 type transcriptOwner struct {
 	window  string
 	started time.Time
+	resumed string
 	// taken maps a joined file's absolute path to its window. nil checks
 	// nothing.
 	taken map[string]string
@@ -693,13 +700,18 @@ type transcriptOwner struct {
 // starts, so a second covers the rounding.
 const transcriptStartSlack = 2 * time.Second
 
-// owns reports whether file f may be the owner's: not joined to another pane,
-// and not begun before the owner's process started.
-func (o transcriptOwner) owns(f string) bool {
+// owns reports whether file f, whose records say they belong to conversation
+// session, may be the owner's: not joined to another pane, and the resumed
+// conversation when the owner resumes one, else not begun before the
+// owner's process started.
+func (o transcriptOwner) owns(f, session string) bool {
 	if abs, err := filepath.Abs(f); err == nil {
 		if w, ok := o.taken[abs]; ok && w != o.window {
 			return false
 		}
+	}
+	if o.resumed != "" {
+		return session == o.resumed
 	}
 	if !o.started.IsZero() {
 		if first, ok := transcript.FirstRecordTime(f); ok && first.Before(o.started.Add(-transcriptStartSlack)) {
@@ -739,7 +751,7 @@ func searchOwnTranscriptIn(dir string, tr *harness.Transcript, cwd, version stri
 		if tr.Verifies("version") && (version == "" || obs.Version != version) {
 			continue
 		}
-		if !own.owns(f) {
+		if !own.owns(f, obs.SessionID) {
 			continue
 		}
 		if found != "" {

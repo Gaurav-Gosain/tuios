@@ -145,3 +145,124 @@ func TestStartAgentInItsParentsFolderShowsItsOwnQuestion(t *testing.T) {
 		t.Errorf("save the artifact: %v", err)
 	}
 }
+
+// ownTranscriptResumed is a Claude Code stand-in run as claude
+// resumed.sh --resume old-conv: it goes on with conversation old-conv,
+// appending a mid-turn record every second to that conversation's file,
+// whose first record is hours older than this process, as claude --resume
+// does.
+const ownTranscriptResumed = `cwd=$(pwd -P)
+dir="$CLAUDE_CONFIG_DIR/projects/$(printf %s "$cwd" | tr / -)"
+echo RESUMED-WORKING
+while :; do
+  printf '{"type":"assistant","sessionId":"old-conv","cwd":"%s","version":"claude","timestamp":"%s","message":{"stop_reason":"tool_use"}}\n' "$cwd" "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" >> "$dir/old-conv.jsonl"
+  sleep 1
+done
+`
+
+// ownTranscriptQuiet is a fresh Claude Code stand-in that writes no
+// transcript and prints one line.
+const ownTranscriptQuiet = `echo QUIET-AGENT
+exec sleep 600
+`
+
+// TestAResumedAgentReadsItsOwnOldTranscript: an agent resumed by id with no
+// hook (claude --resume old-conv) writes to a transcript whose first record is
+// hours older than its process. It must still be read from that file. A
+// second fresh agent in the same folder, which has written nothing, must not
+// be given it.
+//
+// How it could pass wrongly, written down first:
+//   - the resumed pane could read working from its screen or the detector,
+//     not the file: the test wants source transcript;
+//   - the file could be joined only because it is the only one: a second
+//     conversation file of the same folder and build is there too, and the
+//     resumed pane must be read from old-conv's (it says working while the
+//     other file says done);
+//   - the second pane could avoid the file only because the first holds it:
+//     it is started before the resumed one has been joined, so for a moment
+//     the file is free, and the first-record rule must keep it out.
+//
+// NEGATIVE CONTROL: with the resumed check taken out of transcriptOwner.owns
+// (the first-record rule alone, aba317483), the resumed pane never reads from
+// its transcript.
+func TestAResumedAgentReadsItsOwnOldTranscript(t *testing.T) {
+	fakeClaudeBin := filepath.Join(t.TempDir(), "claude")
+	if out, err := exec.Command("go", "build", "-o", fakeClaudeBin, "./testdata/fakeclaude").CombinedOutput(); err != nil {
+		t.Fatalf("build fakeclaude: %v\n%s", err, out)
+	}
+	base := t.TempDir()
+	bin := filepath.Join(base, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(fakeClaudeBin, filepath.Join(bin, "claude")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	claudeConfig := filepath.Join(base, "claude-config")
+	t.Setenv("CLAUDE_CONFIG_DIR", claudeConfig)
+	proj := filepath.Join(base, "proj")
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	real, err := filepath.EvalSymlinks(proj)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(claudeConfig, "projects", strings.ReplaceAll(real, "/", "-"))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// The resumed conversation began three hours ago and ended its turn; the
+	// other one began then too and is done.
+	old := time.Now().Add(-3 * time.Hour).UTC().Format("2006-01-02T15:04:05.000Z")
+	rec := func(session, stop string) string {
+		return `{"type":"assistant","sessionId":"` + session + `","cwd":"` + real + `","version":"claude","timestamp":"` + old + `","message":{"stop_reason":"` + stop + `"}}` + "\n"
+	}
+	for name, body := range map[string]string{"old-conv.jsonl": rec("old-conv", "end_turn"), "other-conv.jsonl": rec("other-conv", "end_turn")} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	resumed, quiet := filepath.Join(base, "resumed.sh"), filepath.Join(base, "quiet.sh")
+	for path, body := range map[string]string{resumed: ownTranscriptResumed, quiet: ownTranscriptQuiet} {
+		if err := os.WriteFile(path, []byte(body), 0o755); err != nil { //nolint:gosec // a pane runs it
+			t.Fatal(err)
+		}
+	}
+	writeConfig(t, base, "[daemon]\nagent_detect_seconds = 1\n")
+	killDaemon(t, base)
+	const sess = "resume"
+	if out, err := tuiosCLI(t, base, "new", sess, "--detach"); err != nil {
+		t.Fatalf("create %s: %v\n%s", sess, err, out)
+	}
+	type agentState struct {
+		State  string `json:"state"`
+		Source string `json:"source"`
+	}
+	stateOf := func(window string) (agentState, string) {
+		out, _ := tuiosCLI(t, base, "get-agent-state", "--json", "-s", sess, "-w", window)
+		var st agentState
+		_ = json.Unmarshal([]byte(out), &st)
+		return st, out
+	}
+	for _, w := range [][]string{{"fresh", "claude", quiet}, {"resumed", "claude", resumed, "--resume", "old-conv"}} {
+		args := append([]string{"new-window", "-s", sess, "--no-focus", "--cwd", proj, w[0], "--"}, w[1:]...)
+		if out, err := tuiosCLI(t, base, args...); err != nil {
+			t.Fatalf("start %s: %v\n%s", w[0], err, out)
+		}
+	}
+	waitUntil(t, "the resumed pane reads working from its own old transcript", 30*time.Second, func() (bool, string) {
+		st, out := stateOf("resumed")
+		return st.State == "working" && st.Source == "transcript", out
+	})
+	// The fresh pane has had as long as the resumed one to be given a file.
+	if st, raw := stateOf("fresh"); st.Source == "transcript" {
+		t.Errorf("ASSERTION: the fresh pane in the same folder reads from a transcript it never wrote:\n%s", raw)
+	}
+	raw, _ := tuiosCLI(t, base, "list-agents", "-s", sess, "--json")
+	if err := os.WriteFile(filepath.Join(artifactDir(t), "agents.json"), []byte(raw), 0o644); err != nil {
+		t.Errorf("save the artifact: %v", err)
+	}
+}

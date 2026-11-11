@@ -306,3 +306,45 @@ func (r *Registry) ResumeArgv(id, sessionID string, flags []string) ([]string, e
 func ResumeCommandLine(argv []string) string {
 	return strings.Join(argv, " ")
 }
+
+// ResumedSessionID is the conversation a process of harness id was told to
+// resume on its command line argv, read through the manifest's own [resume]
+// argv: the token after the flag that comes before {session_id}
+// ("--resume ID"), or the rest of a token that starts as the manifest's
+// does ("--resume=ID"). ok is false for a fresh start, a harness without a
+// resume command, or one that is not known. It is how the daemon knows
+// which transcript a resumed agent writes to without a hook: the one with
+// that session id, though its first record predates the process.
+func (r *Registry) ResumedSessionID(id string, argv []string) (string, bool) {
+	m := r.Lookup(id)
+	if m == nil || len(m.Resume.Argv) == 0 {
+		return "", false
+	}
+	for i, tok := range m.Resume.Argv {
+		at := strings.Index(tok, "{session_id}")
+		if at < 0 {
+			continue
+		}
+		if at > 0 {
+			// "--resume={session_id}": the same prefix on the process's token.
+			prefix := tok[:at]
+			for _, a := range argv {
+				if v, ok := strings.CutPrefix(a, prefix); ok && v != "" {
+					return v, true
+				}
+			}
+			return "", false
+		}
+		if i == 0 {
+			return "", false
+		}
+		flag := m.Resume.Argv[i-1]
+		for j := 0; j+1 < len(argv); j++ {
+			if argv[j] == flag && argv[j+1] != "" && !strings.HasPrefix(argv[j+1], "-") {
+				return argv[j+1], true
+			}
+		}
+		return "", false
+	}
+	return "", false
+}
