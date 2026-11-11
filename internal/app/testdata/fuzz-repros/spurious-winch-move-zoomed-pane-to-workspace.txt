@@ -1,0 +1,6 @@
+# A zoomed pane sent to another workspace with ctrl+b w and "!": the move retiled the workspace it left, switched to the one it joined and gave the pane the focus, and the zoom followed it, announcing the pane at the tile size and then at the zoom size. One settled size per pane now.
+workspace 0
+new-pane
+zoom
+chord "w"
+key "!"

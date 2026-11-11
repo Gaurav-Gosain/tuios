@@ -540,6 +540,17 @@ func (m *OS) MoveWindowToWorkspace(windowIndex int, workspace int) {
 
 // MoveWindowToWorkspaceAndFollow moves a window to the specified workspace and switches to that workspace.
 func (m *OS) MoveWindowToWorkspaceAndFollow(windowIndex int, workspace int) {
+	// One settled size per pane for the whole move. It retiles the workspace the
+	// pane leaves, switches to the one it joins and gives the pane the focus,
+	// and a zoom follows the focus: announced as each step went, the moved pane
+	// was told the size it had in the new workspace's tiling and then the size
+	// of its zoom.
+	m.settleSizes(func() { m.moveWindowToWorkspaceAndFollow(windowIndex, workspace) })
+}
+
+// moveWindowToWorkspaceAndFollow is MoveWindowToWorkspaceAndFollow with the
+// announcements already held.
+func (m *OS) moveWindowToWorkspaceAndFollow(windowIndex int, workspace int) {
 	if windowIndex < 0 || windowIndex >= len(m.Windows) {
 		return
 	}
