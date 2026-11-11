@@ -208,8 +208,8 @@ func (m *OS) ResizesWithTiling(w *terminal.Window) bool {
 type resizeOp func(m *OS, win *terminal.Window, width, height int)
 
 // resizeImmediate performs an immediate resize with PTY update
-func resizeImmediate(_ *OS, win *terminal.Window, width, height int) {
-	win.Resize(width, height)
+func resizeImmediate(m *OS, win *terminal.Window, width, height int) {
+	m.resizeNow(win, width, height)
 }
 
 // resizeVisual performs a visual-only resize, deferring PTY update

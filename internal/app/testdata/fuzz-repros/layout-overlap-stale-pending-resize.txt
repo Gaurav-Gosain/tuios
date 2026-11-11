@@ -1,0 +1,7 @@
+# Tiling off and on around a focus move, then a resize to 60x20, then a keyboard resize of the focused pane: the settle of the viewport resize applied a size recorded before the keyboard resize and the split overlapped by two columns. A stale PendingResizes entry outlived the resize it belonged to.
+tiling
+focus 1
+tiling
+resize 60 20
+text "."
+tick

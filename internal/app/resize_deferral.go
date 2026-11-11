@@ -82,6 +82,17 @@ func (m *OS) resizePane(win *terminal.Window, width, height int, deferring bool)
 		m.PendingResizes[win.ID] = [2]int{width, height}
 		return
 	}
+	m.resizeNow(win, width, height)
+}
+
+// resizeNow gives a pane its real size at once, through the full Resize that
+// tells its guest, and forgets any size an earlier deferred retile recorded for
+// it. A size left in PendingResizes outlives the resize that recorded it: the
+// settle that ends the deferral applies it later, over the layout this resize
+// has just made, and puts the pane back at a size the tiler no longer has for
+// it. The panes of a split then overlap by the difference.
+func (m *OS) resizeNow(win *terminal.Window, width, height int) {
+	delete(m.PendingResizes, win.ID)
 	win.Resize(width, height)
 }
 
