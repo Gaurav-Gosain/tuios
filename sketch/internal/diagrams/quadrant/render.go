@@ -36,6 +36,23 @@ func length(config types.Config, key string, fallback, max float64) float64 {
 	return fallback
 }
 
+// textSize is one of Mermaid's quadrantChart font size keys, between 4 and 72. Without it
+// the size follows fontSize.
+func textSize(config types.Config, key string, fallback float64) float64 {
+	if value, ok := setting(config, key).(float64); ok && !math.IsNaN(value) && !math.IsInf(value, 0) {
+		return math.Min(72, math.Max(4, value))
+	}
+	return fallback
+}
+
+// sizeAttr is a font-size attribute for own, when it differs from the size a label inherits.
+func sizeAttr(own, inherited float64) string {
+	if own == inherited {
+		return ""
+	}
+	return ` font-size="` + js.Num(own) + `"`
+}
+
 func hex(color string) string {
 	if strings.HasPrefix(color, "#") {
 		return color
@@ -46,8 +63,11 @@ func hex(color string) string {
 func renderQuadrant(model *QuadrantDb, config types.Config, options types.RenderOptions) types.Rendered {
 	num := svg.Num
 	size := types.Or(options.FontSize, 16)
-	axisSize := js.Round(size * 0.875)
-	pointSize := js.Round(size * 0.75)
+	titleSize := textSize(config, "titleFontSize", size)
+	quadrantSize := textSize(config, "quadrantLabelFontSize", size)
+	xAxisSize := textSize(config, "xAxisLabelFontSize", js.Round(size*0.875))
+	yAxisSize := textSize(config, "yAxisLabelFontSize", js.Round(size*0.875))
+	pointSize := textSize(config, "pointLabelFontSize", js.Round(size*0.75))
 	measurer := options.Measurer
 	if measurer == nil {
 		measurer = text.DefaultMeasurer(options.FontFamily, options.FontFamilyMono)
@@ -67,7 +87,7 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 		return text.LayoutLabel(t.text, t.typ == "markdown", measurer, fontSize, math.Max(max, 40), 0)
 	}
 
-	title := text.LayoutLabel(model.title, false, measurer, size, math.Max(width-float64(2*outer), 40), text.Bold)
+	title := text.LayoutLabel(model.title, false, measurer, titleSize, math.Max(width-float64(2*outer), 40), text.Bold)
 	titlePad := length(config, "titlePadding", 10, 200)
 	titleSpace := 0.0
 	if title.Height > 0 {
@@ -85,8 +105,8 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 	if model.xAxisRight != nil {
 		xLeftMax = side/2 - 16
 	}
-	xLeft := label(model.xAxisLeft, axisSize, xLeftMax)
-	xRight := label(model.xAxisRight, axisSize, side/2-16)
+	xLeft := label(model.xAxisLeft, xAxisSize, xLeftMax)
+	xRight := label(model.xAxisRight, xAxisSize, side/2-16)
 	xHeight := math.Max(xLeft.Height, xRight.Height)
 	xSpace := 0.0
 	if hasX {
@@ -97,8 +117,8 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 	if model.yAxisTop != nil {
 		yBottomMax = tall/2 - 16
 	}
-	yBottom := label(model.yAxisBottom, axisSize, yBottomMax)
-	yTop := label(model.yAxisTop, axisSize, tall/2-16)
+	yBottom := label(model.yAxisBottom, yAxisSize, yBottomMax)
+	yTop := label(model.yAxisTop, yAxisSize, tall/2-16)
 	yHeight := math.Max(yBottom.Height, yTop.Height)
 	ySpace := 0.0
 	if hasY {
@@ -149,7 +169,7 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 		if k >= 2 {
 			y = top + h - tileH
 		}
-		t := label(model.quadrants[k], size, tileW-16)
+		t := label(model.quadrants[k], quadrantSize, tileW-16)
 		if geo != nil {
 			geo.Quadrants[k] = plainLabel(t)
 		}
@@ -162,7 +182,7 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 		svg.WriteStrings(&quadrants, `<g class="pele-quadrant" data-id="`, strconv.Itoa(k+1), `">`,
 			`<rect x="`, num(x), `" y="`, num(y), `" width="`, num(tileW), `" height="`, num(tileH), `"`, svg.ROUNDED, `/>`,
 
-			svg.LabelSvg(t, cx, cy, ` class="pele-label" fill="var(--_fg)" stroke="none"`, nil), "</g>")
+			svg.LabelSvg(t, cx, cy, ` class="pele-label"`+sizeAttr(quadrantSize, size)+` fill="var(--_fg)" stroke="none"`, nil), "</g>")
 	}
 
 	var axes strings.Builder
@@ -184,7 +204,7 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 		}
 		turned := func(t text.Label, y float64) {
 			if t.Height > 0 {
-				svg.WriteStrings(&axes, `<g transform="translate(`, num(x), ",", num(y), `) rotate(-90)">`, svg.LabelSvg(t, 0, 0, "", nil), "</g>")
+				svg.WriteStrings(&axes, `<g transform="translate(`, num(x), ",", num(y), `) rotate(-90)"`, sizeAttr(yAxisSize, xAxisSize), `>`, svg.LabelSvg(t, 0, 0, "", nil), "</g>")
 			}
 		}
 		y := top + h - yBottom.Width/2
@@ -242,7 +262,8 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 		if hasStrokeWidth {
 			reach += math.Min(js.ParseIntPrefix(*strokeWidth, 10), 400) / 2
 		}
-		dots = append(dots, Dot{cx: cx, cy: cy, reach: reach, text: label(&point.text, pointSize, 200)})
+		// Mermaid keeps point labels on one line; wrap only what is wider than the plot.
+		dots = append(dots, Dot{cx: cx, cy: cy, reach: reach, text: label(&point.text, pointSize, w)})
 		if geo != nil {
 			geo.Points = append(geo.Points, types.GeoQPoint{X: point.x, Y: point.y, Label: plainLabel(dots[len(dots)-1].text)})
 		}
@@ -326,11 +347,11 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 
 	// Mermaid puts each new point under the ones before it.
 	parts := []string{
-		svg.LabelSvg(title, width/2, titlePad/2+title.Height/2, ` class="pele-title" font-weight="var(--_tw)"`, nil),
+		svg.LabelSvg(title, width/2, titlePad/2+title.Height/2, ` class="pele-title"`+sizeAttr(titleSize, size)+` font-weight="var(--_tw)"`, nil),
 		`<g class="pele-quadrants" fill="var(--_s)" stroke="var(--_b)">` + quadrants.String() + `</g>`,
 	}
 	if axes.Len() > 0 {
-		parts = append(parts, `<g class="pele-axis-labels" font-size="`+js.Num(axisSize)+`" fill="var(--_m)">`+axes.String()+`</g>`)
+		parts = append(parts, `<g class="pele-axis-labels" font-size="`+js.Num(xAxisSize)+`" fill="var(--_m)">`+axes.String()+`</g>`)
 	}
 	if len(dots) > 0 {
 		var b strings.Builder
