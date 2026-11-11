@@ -2,7 +2,6 @@ package app
 
 import (
 	"image/color"
-	"slices"
 	"strings"
 	"time"
 
@@ -509,7 +508,8 @@ func (m *OS) renderDockString() (string, int) {
 	// on the run path, not on the width, so their span is not something the rest
 	// of the layout can infer.
 	sessionStrip, sessionCells := m.buildDockSessionStrip()
-	barWidth := max(renderWidth-lipgloss.Width(sessionStrip), 0)
+	stripW := lipgloss.Width(sessionStrip)
+	barWidth := max(renderWidth-stripW, 0)
 
 	actualLeftWidth := lipgloss.Width(leftInfo)
 	centerWidth := lipgloss.Width(dockItemsStr.String())
@@ -635,22 +635,14 @@ func (m *OS) renderDockString() (string, int) {
 		}
 	}
 
-	paddedRightInfo := lipgloss.NewStyle().Width(rightWidth).Align(lipgloss.Right).Render(rightInfo)
-
-	dockBar := lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		leftInfo,
-		lipgloss.NewStyle().Width(leftSpacer).Render(""),
-		lipgloss.NewStyle().Render(dockItemsStr.String()),
-		lipgloss.NewStyle().Width(rightSpacer).Render(""),
-		paddedRightInfo,
-	)
+	dockBar, barW := assembleDockBar(leftInfo, actualLeftWidth, leftSpacer, dockItemsStr.String(), centerWidth,
+		rightSpacer, rightInfo, rightWidth)
 
 	// Backstop: whatever the parts add up to, the bar stops where the session
 	// controls begin. The controls are appended after it, so an overfull bar
 	// loses its own right-hand end and never the strip.
-	if lipgloss.Width(dockBar) > barWidth {
-		dockBar = truncateToWidth(dockBar, barWidth)
+	if barW > barWidth {
+		dockBar, barW = truncateToWidth(dockBar, barWidth), barWidth
 	}
 
 	// The strip's screen columns, now that the bar in front of it is drawn.
@@ -667,6 +659,7 @@ func (m *OS) renderDockString() (string, int) {
 		sessionX += c.Width
 	}
 	dockBar += sessionStrip
+	barW += stripW
 
 	// The styled hairline is kept until its width, glyph or colour changes.
 	// Keyed on the glyph as well as the width: the separator character follows
@@ -704,18 +697,55 @@ func (m *OS) renderDockString() (string, int) {
 			hairline.Render(strings.Repeat(sepChar, renderWidth-notifX0-ruleWidth))
 	}
 
+	// Every row is one line, and the bar is padded out to the screen's width
+	// as JoinVertical padded it: the hairline is always that wide.
+	// JoinVertical measured and split both rows again on every frame.
+	if !m.Settings.DockCompact {
+		if pad := renderWidth - barW; pad > 0 {
+			dockBar += strings.Repeat(" ", pad)
+		} else if pad < 0 {
+			separator += strings.Repeat(" ", -pad)
+		}
+	}
+
 	// A compact dock is the bar alone. The rule, and the burn a message draws
 	// on it, are not drawn.
 	dockbarYPos := m.GetRenderHeight() - m.Settings.DockHeight()
-	dockbarParts := []string{separator, dockBar}
-	if m.Settings.DockCompact {
-		dockbarParts = dockbarParts[1:]
+	switch {
+	case m.Settings.DockCompact:
+		if m.Settings.DockbarPosition == "top" {
+			dockbarYPos = 0
+		}
+		return dockBar, dockbarYPos
+	case m.Settings.DockbarPosition == "top":
+		return dockBar + "\n" + separator, 0
 	}
-	if m.Settings.DockbarPosition == "top" {
-		dockbarYPos = 0
-		slices.Reverse(dockbarParts)
-	}
+	return separator + "\n" + dockBar, dockbarYPos
+}
 
-	fullDock := lipgloss.JoinVertical(lipgloss.Left, dockbarParts...)
-	return fullDock, dockbarYPos
+// assembleDockBar lays the bar out as JoinHorizontal did for one-line parts:
+// the left block, a run of spaces, the dock items, a run of spaces, and the
+// right block right-aligned in its room. It returns the bar and its width,
+// which the callers' arithmetic already knows. A part holding a tab or a line
+// break goes through lipgloss, which lays those out.
+func assembleDockBar(left string, leftW, leftSpacer int, items string, itemsW, rightSpacer int, right string, rightW int) (string, int) {
+	if strings.ContainsAny(left+items+right, "\t\n") {
+		bar := lipgloss.JoinHorizontal(lipgloss.Top,
+			left,
+			lipgloss.NewStyle().Width(leftSpacer).Render(""),
+			lipgloss.NewStyle().Render(items),
+			lipgloss.NewStyle().Width(rightSpacer).Render(""),
+			lipgloss.NewStyle().Width(rightW).Align(lipgloss.Right).Render(right),
+		)
+		return bar, lipgloss.Width(bar)
+	}
+	rightPad := max(rightW-lipgloss.Width(right), 0)
+	var b strings.Builder
+	b.Grow(len(left) + len(items) + len(right) + leftSpacer + rightSpacer + rightPad)
+	b.WriteString(left)
+	b.WriteString(strings.Repeat(" ", leftSpacer))
+	b.WriteString(items)
+	b.WriteString(strings.Repeat(" ", rightSpacer+rightPad))
+	b.WriteString(right)
+	return b.String(), leftW + leftSpacer + itemsW + rightSpacer + rightPad + lipgloss.Width(right)
 }
