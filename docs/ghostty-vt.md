@@ -197,8 +197,24 @@ Three things bound that risk:
 
 What it buys: the conformance classes the pure emulator keeps paying for
 (CPR transposition, SO/SI, IRM, margins) cannot regress here, and the
-parser is 1.6x faster on full-screen truecolor repaints, 2.7x on
-editor-style redraws and 15x on plain scroll at the emulator level
-(`BenchmarkBackend*`, which runs against whichever backend the build
-selected). Running the real DOOM-fire game in a pane: ~260 fps pure,
-~330 fps ghostty on the same machine.
+parser is faster on large writes. Measured 2026-11 on libghostty-vt
+1.0.0, both builds with release flags, interleaved runs compared with
+benchstat:
+
+| Measure | ghostty against pure Go |
+|---------|-------------------------|
+| `BenchmarkBackend*`, 32 KiB writes, M3 Pro, n=6 | DOOM-fire repaint 1.45x, editor redraw (`BackendTUI`) 1.09x, scroll 3.2x, apt 3.3x faster |
+| Synthesized truecolor, editor and scroll streams at 4 KiB writes, i7-10700 (Linux), n=8 | truecolor 1.43x, editor redraw 1.33x, scroll 1.48x faster |
+| The same streams at 64-byte writes | 0.4x to 0.5x (slower): the adapter makes 14 cgo calls per write |
+| `cat` of a 17.5 MB log in a real daemon with a client attached, 207x55, time until done | 1.36x sooner (187 to 138 ms); 1.55x with nine panes printing at once, daemon CPU -42% |
+| Typed latency, 200 keys | the same (p50 3.72 ms on both) |
+
+The first row is `BenchmarkBackend*`, which runs against whichever backend
+the build selected. The end-to-end rows ran a scratch daemon with a real
+client attached, timing from the command to the marker printed after it,
+with the daemon and client CPU read from /proc. The same runs measured the
+costs: three to four times the memory per line of history,
+and copy-mode search, selection text, attach snapshots and OSC 133 marks
+that are slower on this backend today because of how the adapter reaches
+the library. Earlier versions of this page said 1.6x, 2.7x and 15x; those
+figures do not reproduce on the current pure emulator.
