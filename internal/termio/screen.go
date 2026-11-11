@@ -161,7 +161,7 @@ func (s *Screen) Frame(buf *uv.Buffer) bool {
 // FrameString is Frame for a frame drawn as a string, w by h cells.
 func (s *Screen) FrameString(content string, w, h int) bool {
 	w, h = max(w, 1), max(h, 1)
-	if s.scratch.Buffer == nil || s.scratch.Width() != w || s.scratch.Height() != h {
+	if s.scratch.RenderBuffer == nil || s.scratch.Width() != w || s.scratch.Height() != h {
 		s.scratch = uv.NewScreenBuffer(w, h)
 	}
 	s.scratch.Clear()

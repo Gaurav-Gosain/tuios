@@ -14,7 +14,9 @@ import (
 // every byte it made reached the terminal. An empty frame still makes a
 // write, for a writer behind it that clears a debt on each frame write.
 type writer struct {
-	out     io.Writer
+	out io.Writer
+	// wmu is held for a whole drain, so two drains never reorder bytes.
+	wmu     sync.Mutex
 	mu      sync.Mutex
 	pending []byte
 	queued  bool
@@ -62,6 +64,8 @@ func (w *writer) loop() {
 // drain writes what is queued, reusing buf, and returns buf for the next
 // call.
 func (w *writer) drain(buf []byte) []byte {
+	w.wmu.Lock()
+	defer w.wmu.Unlock()
 	w.mu.Lock()
 	if !w.queued {
 		w.mu.Unlock()
@@ -73,6 +77,9 @@ func (w *writer) drain(buf []byte) []byte {
 	_, _ = w.out.Write(buf)
 	return buf
 }
+
+// flush writes what is queued now, on the caller's goroutine.
+func (w *writer) flush() { w.drain(nil) }
 
 // stop writes what is queued and ends the goroutine.
 func (w *writer) stop() {
@@ -87,11 +94,14 @@ func (w *writer) stop() {
 	<-w.done
 }
 
-// writeNow writes b in place, after stop.
+// writeNow writes b in place, after anything queued.
 func (w *writer) writeNow(b []byte) {
-	if len(b) > 0 {
-		_, _ = w.out.Write(b)
+	if len(b) == 0 {
+		return
 	}
+	w.wmu.Lock()
+	defer w.wmu.Unlock()
+	_, _ = w.out.Write(b)
 }
 
 // Raw puts the terminal f in raw mode, as Bubble Tea does for its input when
