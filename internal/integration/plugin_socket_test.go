@@ -114,7 +114,7 @@ func runOpenCodePlugin(t *testing.T, socket string, events []map[string]any) (ca
 	}
 	tg := mustTarget(t, OpenCode)
 	plugin := filepath.Join(dir, "plugin.mjs")
-	if err := os.WriteFile(plugin, tg.format.(ownedFile).render(tg, fake), 0o644); err != nil {
+	if err := os.WriteFile(plugin, tg.format.(ownedFile).render(tg, Runner{Program: fake}), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	replied = filepath.Join(dir, "replied")

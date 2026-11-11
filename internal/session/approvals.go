@@ -710,7 +710,12 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 	}
 
 	var gone <-chan struct{}
-	if cs != nil && cs.conn != nil {
+	switch {
+	case cs != nil && cs.forwardedHook.Load():
+		var stop func()
+		gone, stop = watchPeerProcess(cs.peerPID)
+		defer stop()
+	case cs != nil && cs.conn != nil:
 		var stop func()
 		gone, stop = watchPeerGone(cs.conn)
 		defer stop()
@@ -995,6 +1000,41 @@ func watchPeerGone(conn net.Conn) (<-chan struct{}, func()) {
 		_ = conn.SetReadDeadline(time.Now())
 		<-finished
 		_ = conn.SetReadDeadline(time.Time{})
+	}
+}
+
+// peerProcessPoll is how often a hold whose caller closed its sending half
+// checks that the caller's process is still there.
+const peerProcessPoll = 500 * time.Millisecond
+
+// watchPeerProcess is watchPeerGone for a caller that has closed its sending
+// half, a hook forwarder: gone closes when the process ends, which is what
+// the harness does to a hook it stops waiting for. A pid the kernel reuses
+// for another process counts as gone.
+func watchPeerProcess(pid int) (<-chan struct{}, func()) {
+	gone := make(chan struct{})
+	quit := make(chan struct{})
+	finished := make(chan struct{})
+	start, ok := procinfo.StartTime(pid)
+	go func() {
+		defer close(finished)
+		tick := time.NewTicker(peerProcessPoll)
+		defer tick.Stop()
+		for {
+			select {
+			case <-quit:
+				return
+			case <-tick.C:
+			}
+			if now, alive := procinfo.StartTime(pid); !ok || !alive || now != start {
+				close(gone)
+				return
+			}
+		}
+	}()
+	return gone, func() {
+		close(quit)
+		<-finished
 	}
 }
 

@@ -132,7 +132,7 @@ func (f yamlListItem) has(lines []string, p yamlListPlace) int {
 	return -1
 }
 
-func (f yamlListItem) apply(_ *Target, have []byte, _ string, install bool) ([]byte, bool, bool, error) {
+func (f yamlListItem) apply(_ *Target, have []byte, _ Runner, install bool) ([]byte, bool, bool, error) {
 	if !install && have == nil {
 		return nil, false, false, nil
 	}
@@ -190,7 +190,7 @@ func insertLines(lines []string, at int, add ...string) []string {
 	return append(out, lines[at:]...)
 }
 
-func (f yamlListItem) state(_ *Target, have []byte, _ string) (bool, bool, int, error) {
+func (f yamlListItem) state(_ *Target, have []byte, _ Runner) (bool, bool, int, error) {
 	if have == nil {
 		return false, false, 0, nil
 	}

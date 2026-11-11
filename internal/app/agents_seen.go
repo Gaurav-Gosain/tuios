@@ -116,6 +116,10 @@ func (m *OS) checkAgentIntegrationCmd() tea.Cmd {
 	}
 	return func() tea.Msg {
 		env := integration.SystemEnv()
+		// Only Installed is read, and it needs no hook socket tool. Finding
+		// one runs nc or socat against a probe socket, a few hundred ms the
+		// menu's Agents section would wait for.
+		env.HookSocket = nil
 		for _, t := range integration.Targets() {
 			if fi, err := os.Stat(t.ConfigDir(env)); err != nil || !fi.IsDir() {
 				continue

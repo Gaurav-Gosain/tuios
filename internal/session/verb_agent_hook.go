@@ -32,11 +32,13 @@ import (
 // verbAgentHookEvent handles agent-hook-event.
 func (d *Daemon) verbAgentHookEvent(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Harness string            `json:"harness"`
-		Event   string            `json:"event"`
-		Payload *string           `json:"payload"`
-		Env     map[string]string `json:"env"`
-		Explain bool              `json:"explain"`
+		Harness     string            `json:"harness"`
+		Event       string            `json:"event"`
+		Payload     *string           `json:"payload"`
+		PayloadJSON json.RawMessage   `json:"payload_json"`
+		Env         map[string]string `json:"env"`
+		Explain     bool              `json:"explain"`
+		Forwarder   bool              `json:"forwarder"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -48,6 +50,13 @@ func (d *Daemon) verbAgentHookEvent(cs *connState, params json.RawMessage) (any,
 		if !slices.Contains(integration.HookEnv, name) {
 			return nil, invalidParam("env", "the hook reads no variable "+echoName(name), integration.HookEnv...)
 		}
+	}
+	if len(p.PayloadJSON) > 0 {
+		if p.Payload != nil {
+			return nil, invalidParam("payload_json", "pass the payload once: as payload or as payload_json")
+		}
+		text := string(p.PayloadJSON)
+		p.Payload = &text
 	}
 	if p.Payload != nil && len(*p.Payload) > agenthook.MaxPayload {
 		return nil, invalidParam("payload", "the payload is larger than a hook reads")
@@ -84,6 +93,10 @@ func (d *Daemon) verbAgentHookEvent(cs *connState, params json.RawMessage) (any,
 	if p.Payload != nil {
 		stdin = strings.NewReader(*p.Payload)
 	}
+	if p.Forwarder {
+		cs.forwardedHook.Store(true)
+		defer cs.forwardedHook.Store(false)
+	}
 	var stdout, stderr bytes.Buffer
 	agenthook.Run(agenthook.Options{Explain: p.Explain}, args, agenthook.IO{
 		Stdin:    stdin,
@@ -101,6 +114,18 @@ func (d *Daemon) verbAgentHookEvent(cs *connState, params json.RawMessage) (any,
 		},
 		Now: time.Now,
 	})
+	if p.Forwarder {
+		// A forwarder is a line of shell that cannot decode JSON. It gets
+		// the marker line and the hook's stdout as it is, and the
+		// connection ends.
+		if _, _, ok := cs.verbCall.take(); ok {
+			cs.sendMu.Lock()
+			_ = cs.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			_, _ = cs.conn.Write(append([]byte(forwardedReplyMark), stdout.Bytes()...))
+			cs.sendMu.Unlock()
+		}
+		return nil, nil
+	}
 	res := map[string]any{"stdout": stdout.String()}
 	if p.Explain {
 		var explain any
@@ -137,3 +162,8 @@ func (c inProcessCaller) Call(verb string, params any) (json.RawMessage, error) 
 func (c inProcessCaller) CallWithTimeout(verb string, params any, _ time.Duration) (json.RawMessage, error) {
 	return c.Call(verb, params)
 }
+
+// forwardedReplyMark starts a forwarder's reply. A forwarder prints what
+// follows it, and runs tuios agent-hook when a reply lacks it: an older
+// daemon answers the call with a JSON error line instead.
+const forwardedReplyMark = "TUIOS-HOOK-OK\n"

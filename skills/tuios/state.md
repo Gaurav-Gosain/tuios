@@ -154,8 +154,11 @@ person can answer it from the Inbox. An agent that reports to herdr through
 `"$HERDR_BIN_PATH" pane report-agent` reaches tuios the same way
 (`tuios --skill herdr`).
 
-Each installed hook runs `tuios agent-hook <harness>`, which reads the hook
-payload on stdin and reports for the pane it runs in: a prompt or tool call is
+Each installed hook runs `tuios agent-hook <harness>`, or, where the machine
+has `nc -U` or `socat`, a line of sh that hands the same payload to the daemon
+(verb `agent-hook-event`) without starting tuios and falls back to `tuios
+agent-hook` for a daemon without the verb. Either reads the hook payload on
+stdin and reports for the pane it runs in: a prompt or tool call is
 `working`, a permission request is `needs_input` with kind `approval`, the tool
 finishing after an approval is `working` again, the end of the turn is `done`
 with the first line of what the agent said last, and the harness's session id

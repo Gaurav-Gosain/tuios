@@ -22,11 +22,11 @@ type fileFormat interface {
 	// (install) or with it removed. changed says the content differs from
 	// have; remove says the file should be deleted rather than written. have
 	// is nil when the file does not exist.
-	apply(t *Target, have []byte, tuios string, install bool) (out []byte, changed, remove bool, err error)
+	apply(t *Target, have []byte, run Runner, install bool) (out []byte, changed, remove bool, err error)
 	// state reads what is installed: whether any of tuios's part is there,
 	// whether it is exactly what tuios would install, and the integration
 	// version it carries (0 when it names none).
-	state(t *Target, have []byte, tuios string) (installed, current bool, version int, err error)
+	state(t *Target, have []byte, run Runner) (installed, current bool, version int, err error)
 	// owned reports whether tuios owns the whole file, so there is no user
 	// content in it to back up.
 	owned() bool
@@ -52,19 +52,19 @@ type nestedHooks struct {
 	matcher string
 }
 
-func (f nestedHooks) apply(t *Target, have []byte, tuios string, install bool) ([]byte, bool, bool, error) {
+func (f nestedHooks) apply(t *Target, have []byte, run Runner, install bool) ([]byte, bool, bool, error) {
 	if !install && have == nil {
 		return nil, false, false, nil
 	}
 	cmd := ""
 	if install {
-		cmd = HookCommand(tuios, t.ID, t.Version)
+		cmd = run.command(t.ID, t.Version)
 	}
 	out, changed, err := editHooks(have, t.Events, cmd, install, f.matcher)
 	return out, changed, false, err
 }
 
-func (nestedHooks) state(t *Target, have []byte, tuios string) (bool, bool, int, error) {
+func (nestedHooks) state(t *Target, have []byte, run Runner) (bool, bool, int, error) {
 	if have == nil {
 		return false, false, 0, nil
 	}
@@ -78,7 +78,7 @@ func (nestedHooks) state(t *Target, have []byte, tuios string) (bool, bool, int,
 			version = v
 		}
 	}
-	return len(entries) > 0, managedCurrent(entries, t.Events, HookCommand(tuios, t.ID, t.Version)), version, nil
+	return len(entries) > 0, managedCurrent(entries, t.Events, run.command(t.ID, t.Version)), version, nil
 }
 
 func (nestedHooks) owned() bool { return false }
@@ -120,7 +120,7 @@ func flatManaged(root *orderedObject) ([]managedEntry, error) {
 	return out, nil
 }
 
-func (f flatHooks) apply(t *Target, have []byte, tuios string, install bool) ([]byte, bool, bool, error) {
+func (f flatHooks) apply(t *Target, have []byte, run Runner, install bool) ([]byte, bool, bool, error) {
 	if !install && have == nil {
 		return nil, false, false, nil
 	}
@@ -163,7 +163,7 @@ func (f flatHooks) apply(t *Target, have []byte, tuios string, install bool) ([]
 		hooks.set(event, joinArray(kept))
 	}
 	if install {
-		cmd := HookCommand(tuios, t.ID, t.Version)
+		cmd := run.command(t.ID, t.Version)
 		for _, ev := range t.Events {
 			entry, err := marshalPlain(f.entry(cmd, ev))
 			if err != nil {
@@ -196,7 +196,7 @@ func (f flatHooks) apply(t *Target, have []byte, tuios string, install bool) ([]
 	return out, !sameJSON(have, out), false, nil
 }
 
-func (flatHooks) state(t *Target, have []byte, tuios string) (bool, bool, int, error) {
+func (flatHooks) state(t *Target, have []byte, run Runner) (bool, bool, int, error) {
 	if have == nil {
 		return false, false, 0, nil
 	}
@@ -214,7 +214,7 @@ func (flatHooks) state(t *Target, have []byte, tuios string) (bool, bool, int, e
 			version = v
 		}
 	}
-	return len(entries) > 0, managedCurrent(entries, t.Events, HookCommand(tuios, t.ID, t.Version)), version, nil
+	return len(entries) > 0, managedCurrent(entries, t.Events, run.command(t.ID, t.Version)), version, nil
 }
 
 func (flatHooks) owned() bool { return false }
@@ -223,7 +223,7 @@ func (flatHooks) owned() bool { return false }
 // file in a directory the harness merges. A file at the path that tuios did
 // not write is refused and never removed.
 type ownedFile struct {
-	render func(t *Target, tuios string) []byte
+	render func(t *Target, run Runner) []byte
 }
 
 // isManagedFile reports whether a file is one tuios wrote: a plugin carries
@@ -244,7 +244,7 @@ func isManagedFile(data []byte) bool {
 // managedCommandRe finds an agent-hook command with its version marker.
 var managedCommandRe = lazyre.New(` agent-hook [a-z-]+ ` + managedMarker + ` \d+`)
 
-func (f ownedFile) apply(t *Target, have []byte, tuios string, install bool) ([]byte, bool, bool, error) {
+func (f ownedFile) apply(t *Target, have []byte, run Runner, install bool) ([]byte, bool, bool, error) {
 	if have != nil && !isManagedFile(have) {
 		if install {
 			return nil, false, false, errNotOurs
@@ -254,15 +254,15 @@ func (f ownedFile) apply(t *Target, have []byte, tuios string, install bool) ([]
 	if !install {
 		return nil, have != nil, have != nil, nil
 	}
-	want := f.render(t, tuios)
+	want := f.render(t, run)
 	return want, !bytes.Equal(have, want), false, nil
 }
 
-func (f ownedFile) state(t *Target, have []byte, tuios string) (bool, bool, int, error) {
+func (f ownedFile) state(t *Target, have []byte, run Runner) (bool, bool, int, error) {
 	if have == nil || !isManagedFile(have) {
 		return false, false, 0, nil
 	}
-	return true, bytes.Equal(have, f.render(t, tuios)), maxVersion(have), nil
+	return true, bytes.Equal(have, f.render(t, run)), maxVersion(have), nil
 }
 
 func (ownedFile) owned() bool { return true }
@@ -277,8 +277,8 @@ type namedBlock struct {
 	key string
 }
 
-func (f namedBlock) block(t *Target, tuios string) (json.RawMessage, error) {
-	cmd := HookCommand(tuios, t.ID, t.Version)
+func (f namedBlock) block(t *Target, run Runner) (json.RawMessage, error) {
+	cmd := run.command(t.ID, t.Version)
 	b := newObject()
 	for _, ev := range t.Events {
 		h, err := marshalPlain([]map[string]any{{"type": "command", "command": cmd, "timeout": ev.Timeout}})
@@ -290,7 +290,7 @@ func (f namedBlock) block(t *Target, tuios string) (json.RawMessage, error) {
 	return b.compact(), nil
 }
 
-func (f namedBlock) apply(t *Target, have []byte, tuios string, install bool) ([]byte, bool, bool, error) {
+func (f namedBlock) apply(t *Target, have []byte, run Runner, install bool) ([]byte, bool, bool, error) {
 	if !install && have == nil {
 		return nil, false, false, nil
 	}
@@ -306,7 +306,7 @@ func (f namedBlock) apply(t *Target, have []byte, tuios string, install bool) ([
 		return nil, false, false, errfmt.Errorf("its %q entry was not written by tuios, so it is left alone", f.key)
 	}
 	if install {
-		want, err := f.block(t, tuios)
+		want, err := f.block(t, run)
 		if err != nil {
 			return nil, false, false, err
 		}
@@ -321,7 +321,7 @@ func (f namedBlock) apply(t *Target, have []byte, tuios string, install bool) ([
 	return out, !sameJSON(have, out), false, nil
 }
 
-func (f namedBlock) state(t *Target, have []byte, tuios string) (bool, bool, int, error) {
+func (f namedBlock) state(t *Target, have []byte, run Runner) (bool, bool, int, error) {
 	if have == nil {
 		return false, false, 0, nil
 	}
@@ -333,7 +333,7 @@ func (f namedBlock) state(t *Target, have []byte, tuios string) (bool, bool, int
 	if !ok || !isManagedFile(cur) {
 		return false, false, 0, nil
 	}
-	want, err := f.block(t, tuios)
+	want, err := f.block(t, run)
 	if err != nil {
 		return false, false, 0, err
 	}
@@ -380,8 +380,8 @@ func tomlString(s string) string {
 	return b.String()
 }
 
-func (tomlBlock) block(t *Target, tuios string) string {
-	cmd := HookCommand(tuios, t.ID, t.Version)
+func (tomlBlock) block(t *Target, run Runner) string {
+	cmd := run.command(t.ID, t.Version)
 	var b strings.Builder
 	b.WriteString(tomlBlockBegin + "\n")
 	for _, ev := range t.Events {
@@ -395,7 +395,7 @@ func (tomlBlock) block(t *Target, tuios string) string {
 // cannot be added to.
 var inlineHooksRe = lazyre.New(`(?m)^\s*hooks\s*=`)
 
-func (f tomlBlock) apply(t *Target, have []byte, tuios string, install bool) ([]byte, bool, bool, error) {
+func (f tomlBlock) apply(t *Target, have []byte, run Runner, install bool) ([]byte, bool, bool, error) {
 	if !install && have == nil {
 		return nil, false, false, nil
 	}
@@ -412,17 +412,17 @@ func (f tomlBlock) apply(t *Target, have []byte, tuios string, install bool) ([]
 		if trimmed != "" {
 			trimmed += "\n\n"
 		}
-		out = trimmed + f.block(t, tuios)
+		out = trimmed + f.block(t, run)
 	}
 	return []byte(out), out != string(have), false, nil
 }
 
-func (f tomlBlock) state(t *Target, have []byte, tuios string) (bool, bool, int, error) {
+func (f tomlBlock) state(t *Target, have []byte, run Runner) (bool, bool, int, error) {
 	_, block, err := splitBlock(string(have), tomlBlockBegin, tomlBlockEnd)
 	if err != nil || block == "" {
 		return false, false, 0, err
 	}
-	return true, block == f.block(t, tuios), maxVersion([]byte(block)), nil
+	return true, block == f.block(t, run), maxVersion([]byte(block)), nil
 }
 
 func (tomlBlock) owned() bool { return false }

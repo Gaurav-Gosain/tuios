@@ -837,8 +837,10 @@ func TestAgentsSettingsAbsentOverSSH(t *testing.T) {
 	}
 	// The menu's Agents section is there, since the installed integration
 	// counts as an agent seen, so the missing line is the one key's absence.
-	if !strings.Contains(term.Screen().Text(), "Oldest waiting") {
-		t.Fatalf("the prefix menu over ssh has no Agents section to read\n%s", term.Snapshot())
+	// The client finds the integration in a scan it starts at Init, which
+	// can land after the menu first draws, so the section is waited for.
+	if err := term.WaitForText("Oldest waiting", uiTimeout); err != nil {
+		t.Fatalf("the prefix menu over ssh has no Agents section to read: %v\n%s", err, term.Snapshot())
 	}
 	if strings.Contains(term.Screen().Text(), "Agents settings") {
 		t.Fatalf("ASSERTION: the prefix menu lists the Agents settings key over ssh\n%s", term.Snapshot())

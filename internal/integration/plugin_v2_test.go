@@ -35,7 +35,7 @@ func TestOpenCodeV2WireCompatibility(t *testing.T) {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		data := file.format.(ownedFile).render(tg, fake)
+		data := file.format.(ownedFile).render(tg, Runner{Program: fake})
 		if err := os.WriteFile(path, data, 0o644); err != nil {
 			t.Fatal(err)
 		}

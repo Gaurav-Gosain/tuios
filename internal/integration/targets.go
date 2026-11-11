@@ -63,12 +63,19 @@ type Env struct {
 	Home     string
 	Getenv   func(string) string
 	LookPath func(string) (string, error)
+	// HookSocket reports the socket tool hook commands forward events
+	// through (DetectHookSocket), nil for none: the hooks then start tuios
+	// for each event.
+	HookSocket func() string
 }
+
+// systemHookSocket is DetectHookSocket on this machine, run once.
+var systemHookSocket = sync.OnceValue(func() string { return DetectHookSocket(exec.LookPath) })
 
 // SystemEnv is the running process's own environment.
 func SystemEnv() Env {
 	home, _ := os.UserHomeDir()
-	return Env{Home: home, Getenv: os.Getenv, LookPath: exec.LookPath}
+	return Env{Home: home, Getenv: os.Getenv, LookPath: exec.LookPath, HookSocket: systemHookSocket}
 }
 
 func (e Env) env(name string) string {
@@ -169,9 +176,9 @@ func (t *Target) files(env Env) []extraFile {
 
 // renderTemplate fills a plugin template: the program to run, the version,
 // and for the opencode template, which Kilo shares, the harness.
-func renderTemplate(name string) func(t *Target, tuios string) []byte {
-	return func(t *Target, tuios string) []byte {
-		return renderSource(assets()[name], t, tuios)
+func renderTemplate(name string) func(t *Target, run Runner) []byte {
+	return func(t *Target, run Runner) []byte {
+		return renderSource(assets()[name], t, run.Program)
 	}
 }
 
@@ -195,8 +202,8 @@ func renderSource(src []byte, t *Target, tuios string) []byte {
 // renderOpenCodePlugin keeps the legacy entrypoint at its installed path. V1
 // calls server; V2 accepts the definition but reports only from the CLI plugin,
 // since a shared server's environment does not identify the caller's pane.
-func renderOpenCodePlugin(t *Target, tuios string) []byte {
-	out := renderTemplate(openCodePluginTemplate)(t, tuios)
+func renderOpenCodePlugin(t *Target, run Runner) []byte {
+	out := renderTemplate(openCodePluginTemplate)(t, run)
 	return append(out, []byte(`
 export default {
   id: "tuios-agent-state-v1",
@@ -208,9 +215,9 @@ export default {
 
 // renderJSON renders a hook file tuios owns whole, from its events. build
 // makes the object for one event.
-func renderJSON(top map[string]any, build func(command string, ev HookEvent) any) func(t *Target, tuios string) []byte {
-	return func(t *Target, tuios string) []byte {
-		cmd := HookCommand(tuios, t.ID, t.Version)
+func renderJSON(top map[string]any, build func(command string, ev HookEvent) any) func(t *Target, run Runner) []byte {
+	return func(t *Target, run Runner) []byte {
+		cmd := run.command(t.ID, t.Version)
 		hooks := newObject()
 		for _, ev := range t.Events {
 			v, _ := marshalPlain([]any{build(cmd, ev)})
@@ -603,7 +610,7 @@ func (t *Target) plan(env Env, tuios string, install bool) ([]filePlan, error) {
 		if err != nil {
 			return nil, err
 		}
-		out, changed, remove, err := f.format.apply(t, have, tuios, install)
+		out, changed, remove, err := f.format.apply(t, have, t.runner(env, tuios), install)
 		switch {
 		case errors.Is(err, errNotOurs):
 			return nil, errfmt.Errorf("%s %w", path, err)
@@ -833,7 +840,7 @@ func (t *Target) Status(env Env, tuios string) Status {
 func (t *Target) stateOf(env Env, files [][]byte, tuios string) (installed, current bool, version int, err error) {
 	allCurrent := true
 	for i, f := range t.files(env) {
-		ins, cur, v, err := f.format.state(t, files[i], tuios)
+		ins, cur, v, err := f.format.state(t, files[i], t.runner(env, tuios))
 		if err != nil {
 			return false, false, 0, errfmt.Errorf("cannot parse %s: %w", filepath.Join(t.ConfigDir(env), f.file), err)
 		}
@@ -848,9 +855,10 @@ func (t *Target) stateOf(env Env, files [][]byte, tuios string) (installed, curr
 
 // installedPrograms lists the programs the integration's files name for its
 // hooks, in the order found: the program word before "agent-hook <id>
-// --integration" in a hook command, and the TUIOS constant a plugin sets.
+// --integration" in a hook command (in a forwarder line, its last fallback),
+// and the TUIOS constant a plugin sets.
 func installedPrograms(t *Target, files [][]byte) []string {
-	hook := regexp.MustCompile(`"((?:[^"\\]|\\.)*?) agent-hook ` + regexp.QuoteMeta(t.ID) + ` ` + managedMarker + ` \d+"`)
+	hook := regexp.MustCompile(`"((?:[^"\\]|\\.)*? agent-hook ` + regexp.QuoteMeta(t.ID) + ` ` + managedMarker + ` \d+'?)"`)
 	var out []string
 	add := func(p string) {
 		p = unshellWord(strings.TrimPrefix(p, "& "))
@@ -866,13 +874,33 @@ func installedPrograms(t *Target, files [][]byte) []string {
 			}
 		}
 		for _, m := range hook.FindAllSubmatch(data, -1) {
-			var p string
-			if jsonx.Unmarshal([]byte(`"`+string(m[1])+`"`), &p) == nil {
-				add(p)
+			var cmd string
+			if jsonx.Unmarshal([]byte(`"`+string(m[1])+`"`), &cmd) == nil {
+				add(hookProgram(cmd, t.ID))
 			}
 		}
 	}
 	return out
+}
+
+// hookProgram is the program a managed hook command runs tuios as, still
+// quoted for the shell: the word before "agent-hook <id>", or, in a forwarder
+// line (sh -c '<script>'), that word in the script's last fallback.
+func hookProgram(cmd, id string) string {
+	if strings.HasPrefix(cmd, "sh -c ") {
+		words, err := splitWords(cmd)
+		if err != nil || len(words) < 3 {
+			return ""
+		}
+		cmd = words[2]
+		if i := strings.LastIndex(cmd, "| exec "); i >= 0 {
+			cmd = cmd[i+len("| exec "):]
+		}
+	}
+	if i := strings.LastIndex(cmd, " agent-hook "+id+" "); i >= 0 {
+		return cmd[:i]
+	}
+	return ""
 }
 
 // pluginProgramRe finds the program a plugin template was rendered with.
@@ -952,4 +980,13 @@ func codexHooksDisabled(toml string) bool {
 		}
 	}
 	return false
+}
+
+// runner is how t's hooks run tuios on env's machine.
+func (t *Target) runner(env Env, tuios string) Runner {
+	run := Runner{Program: tuios}
+	if env.HookSocket != nil {
+		run.Socket = env.HookSocket()
+	}
+	return run
 }

@@ -39,7 +39,7 @@ func TestOpenCodePluginFeedsUsage(t *testing.T) {
 	}
 	tg := mustTarget(t, OpenCode)
 	plugin := filepath.Join(dir, "plugin.mjs")
-	if err := os.WriteFile(plugin, tg.format.(ownedFile).render(tg, fake), 0o644); err != nil {
+	if err := os.WriteFile(plugin, tg.format.(ownedFile).render(tg, Runner{Program: fake}), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	driver := filepath.Join(dir, "drive.mjs")

@@ -738,6 +738,11 @@ type connState struct {
 	// agentRefused says this connection's ssh agent socket was refused and
 	// the refusal logged, so it is not logged again. See ssh_agent_follow.go.
 	agentRefused atomic.Bool
+	// forwardedHook is set while an agent-hook-event call from a hook
+	// forwarder runs (see verb_agent_hook.go). Such a caller closes its
+	// sending half once its call is sent, so an EOF on the connection does
+	// not mean it left; its process ending does.
+	forwardedHook atomic.Bool
 	// displayRefused is agentRefused for the display the client sent. See
 	// display_follow.go.
 	displayRefused atomic.Bool

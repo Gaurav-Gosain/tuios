@@ -57,8 +57,10 @@ func agentWorkVerbs() map[string]verbEntry {
 				{Name: "harness", Type: "string", Required: true, Description: "The harness whose hook fired, by id or alias, as tuios agent-hook takes it: claude-code, codex, gemini-cli and so on."},
 				{Name: "event", Type: "string", Description: "The event, for a harness whose payload does not name it. Omit it when the payload does."},
 				{Name: "payload", Type: "string", Description: "The hook's JSON payload as the harness wrote it, as a string. Omit it for an event with none."},
+				{Name: "payload_json", Type: "object", Description: "The payload as JSON rather than a string, for a caller that cannot quote it. Pass payload or payload_json, not both."},
 				{Name: "env", Type: "object", Description: "The variables of the hook process the mapping reads, by name. Only these are taken: " + strings.Join(integration.HookEnv, ", ") + ". The pane's own variables are always read from the calling process."},
 				{Name: "explain", Type: "bool", Description: "Also return what was decided and why, as tuios agent-hook --explain prints it."},
+				{Name: "forwarder", Type: "bool", Description: "The call comes from the shell line tuios integration installs, which closes its sending half once the call is sent and cannot read JSON. The reply is then the line TUIOS-HOOK-OK and the hook's stdout as it is, with no JSON response, and the connection ends. A hold for the Inbox ends when the caller's process does, not at the end of its input."},
 			},
 			returns: []verbParam{
 				{Name: "stdout", Type: "string", Description: "What the hook prints for the harness to read: an empty object for a harness that parses its hook's output as JSON, the lines a session start adds to the agent's context, the line about unread mail, or a permission decision. Empty for most events."},

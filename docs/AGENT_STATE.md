@@ -3957,8 +3957,24 @@ comments and order; a `plugins.enabled` written as an inline list with items in
 it is refused, with the line to add by hand. Uninstall leaves an emptied list as
 `enabled: []`.
 
-Every hook entry runs `tuios agent-hook <harness> --integration <version>`. The
-version marker is how a later install replaces an older entry, how uninstall
+Every hook entry runs `tuios agent-hook <harness> --integration <version>`, or
+a line of sh that forwards the event to the daemon instead of starting tuios.
+The install writes the line when the machine has a program that speaks to a
+unix socket and waits for the answer after its input ends (`nc -U`, as macOS and
+OpenBSD netcat have it, else `socat`; GNU netcat has no `-U`). The line sends
+the payload to the daemon's `agent-hook-event` verb over `TUIOS_SOCKET`, with
+the variables the mapping reads, and prints what the daemon answers, which is
+what `tuios agent-hook` would print. It runs `tuios agent-hook` itself when
+`TUIOS_SOCKET` is unset, the payload is empty, the program is gone, or the
+daemon answers anything but its mark: a daemon older than the verb answers with
+a JSON error. It waits 2 seconds for the daemon, and 330 for an event that may
+hold for the Inbox (a payload naming `PermissionRequest`). A hold it asked for
+ends when the line's process does, not at the end of its input. The tool is
+found when the integration is installed, and `tuios integration status` reads an
+install whose line differs from what this machine would get as out of date. On
+Windows the entry is always `tuios agent-hook`.
+
+The version marker is how a later install replaces an older entry, how uninstall
 finds exactly what tuios wrote, and how status tells current from out of date.
 The installer keeps everything else in the file, in its order and with the
 user's own text as written (`&&`, `<` and `>` in a hook command are not
