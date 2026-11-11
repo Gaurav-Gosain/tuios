@@ -183,7 +183,7 @@ Some values come from tuios facts:
 |---------|--------------------|
 | `split-window` | Opens a pane on the target pane's workspace (`new-window` verb). `-d` leaves the focus where it is, `-c` sets the directory, `-e` the environment, `-P -F` prints the new pane. Where the pane goes is the tuios layout's answer: `-h`, `-v`, `-b`, `-f`, `-l` and `-p` are accepted and do not change it |
 | `new-window` | Opens a pane on the lowest empty workspace, or the one `-t` names (it must be empty). `-n` names the workspace |
-| `send-keys` | Types into a pane (`send-text`). Key names (`Enter`, `C-c`, `M-x`, `Up`, `F1`, `BSpace`...) become the bytes a terminal sends; anything else is typed as text. `-l` types every argument as text, `-H` takes hex bytes, `-N` repeats |
+| `send-keys` | Types into a pane. Key names (`Enter`, `C-c`, `M-x`, `S-Tab`, `C-Up`, `Up`, `F1`, `BSpace`...) go to the daemon's `send-keys`, which encodes them for the pane's modes as tmux does: `Up` is `ESC O A` once the program turned on application cursor keys. Anything else is typed as text (`send-text`). `-l` types every argument as text, `-H` takes hex bytes, `-N` repeats |
 | `capture-pane -p` | Prints a pane (`capture-pane`). `-S` and `-E` take tmux line numbers (0 is the top of the screen, negative is history, `-` is either end), `-e` keeps the colours. Without `-p` it fails |
 | `display-message` | With `-p`, prints a format for the target pane. Without `-p` there is no status line to show it on, so it does nothing |
 | `list-panes`, `list-windows`, `list-sessions` | List the panes of a workspace (`-s`: of the session, `-a`: of every session), the workspaces that hold panes (`-a`: in every session), and the sessions |

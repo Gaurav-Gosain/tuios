@@ -192,7 +192,7 @@ func (f *fakeDaemon) Call(verb string, params any) (json.RawMessage, error) {
 		}
 		w.name = str("name")
 		out = map[string]any{}
-	case "send-text":
+	case "send-text", "send-keys":
 		if _, err := win(); err != nil {
 			return nil, err
 		}

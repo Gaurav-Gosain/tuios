@@ -642,7 +642,8 @@ func (s *Shim) newWindow(name string, args []string) (string, []string, error) {
 	return outcomeFor(detail), detail, nil
 }
 
-// sendKeys writes keys to a pane as text.
+// sendKeys writes keys to a pane: text through send-text, and keys through
+// the daemon's send-keys, which encodes them for the pane's modes.
 func (s *Shim) sendKeys(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {
@@ -652,7 +653,7 @@ func (s *Shim) sendKeys(name string, args []string) (string, []string, error) {
 	if p.Has('R') {
 		detail = append(detail, "send-keys -R (reset the terminal) ignored")
 	}
-	text, err := sendKeysText(p.Args, p.Has('l'), p.Has('H'))
+	runs, err := sendKeysRuns(p.Args, p.Has('l'), p.Has('H'))
 	if err != nil {
 		return OutcomeError, detail, err
 	}
@@ -661,7 +662,7 @@ func (s *Shim) sendKeys(name string, args []string) (string, []string, error) {
 		if err != nil || count < 1 || count > 10000 {
 			return OutcomeError, detail, errfmt.Errorf("send-keys: repeat count %q is not 1 to 10000", n)
 		}
-		text = strings.Repeat(text, count)
+		runs = repeatRuns(runs, count)
 	}
 	v, err := s.loadView()
 	if err != nil {
@@ -672,11 +673,14 @@ func (s *Shim) sendKeys(name string, args []string) (string, []string, error) {
 	if err != nil {
 		return OutcomeError, detail, err
 	}
-	if text == "" {
-		return outcomeFor(detail), detail, nil
-	}
-	if _, err := s.Caller.Call("send-text", map[string]any{"session": target.sess.name, "window": target.ID, "text": text}); err != nil {
-		return OutcomeError, detail, err
+	for _, r := range runs {
+		verb, params := "send-text", map[string]any{"session": target.sess.name, "window": target.ID, "text": r.text}
+		if r.keys != nil {
+			verb, params = "send-keys", map[string]any{"session": target.sess.name, "window": target.ID, "keys": strings.Join(r.keys, " ")}
+		}
+		if _, err := s.Caller.Call(verb, params); err != nil {
+			return OutcomeError, detail, err
+		}
 	}
 	return outcomeFor(detail), detail, nil
 }

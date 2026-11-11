@@ -139,7 +139,7 @@ func TestTargetsStayInTheCallersSession(t *testing.T) {
 		if len(h.fake.foreign) > 0 {
 			t.Errorf("%v called verbs on sessions %v", args, h.fake.foreign)
 		}
-		for _, v := range []string{"send-text", "close-window", "new-window"} {
+		for _, v := range []string{"send-text", "send-keys", "close-window", "new-window"} {
 			if h.fake.called(v) {
 				t.Errorf("%v reached %s", args, v)
 			}
@@ -240,19 +240,29 @@ func TestLogRedactsFailedCalls(t *testing.T) {
 	}
 }
 
+// TestSendKeys checks how the shim reads tmux's send-keys arguments into
+// calls: text as send-text, and keys as the daemon's send-keys tokens, in the
+// order given. The bytes of a key are the daemon's (see the e2e
+// TestTmuxShimKeysFollowTheCursorKeyMode); the shim must not write them.
 func TestSendKeys(t *testing.T) {
 	cases := []struct {
 		args []string
-		want string
+		want []string // "text:..." for send-text, "keys:..." for send-keys
 	}{
-		{[]string{"echo hi", "Enter"}, "echo hi\r"},
-		{[]string{"-l", "Enter"}, "Enter"},
-		{[]string{"C-c"}, "\x03"},
-		{[]string{"^D"}, "\x04"},
-		{[]string{"M-x"}, "\x1bx"},
-		{[]string{"Escape", "Up", "BSpace", "Tab", "Space"}, "\x1b\x1b[A\x7f\t "},
-		{[]string{"-H", "41", "0a"}, "A\n"},
-		{[]string{"-N", "3", "x"}, "xxx"},
+		{[]string{"echo hi", "Enter"}, []string{"text:echo hi", "keys:Enter"}},
+		{[]string{"-l", "Enter"}, []string{"text:Enter"}},
+		{[]string{"C-c"}, []string{"keys:ctrl+c"}},
+		{[]string{"^D"}, []string{"keys:ctrl+D"}},
+		{[]string{"M-x"}, []string{"keys:alt+x"}},
+		{[]string{"M-,", "C-Space"}, []string{"keys:alt+Comma ctrl+Space"}},
+		{[]string{"C-Up", "S-Tab"}, []string{"keys:ctrl+Up shift+Tab"}},
+		{[]string{"Escape", "Up", "BSpace", "Tab", "Space"}, []string{"keys:Escape Up Backspace Tab Space"}},
+		{[]string{"ppage", "NPage", "IC", "dc"}, []string{"keys:PageUp PageDown Insert Delete"}},
+		{[]string{"-H", "41", "0a"}, []string{"text:A\n"}},
+		{[]string{"-N", "3", "x"}, []string{"text:xxx"}},
+		{[]string{"-N", "2", "Up"}, []string{"keys:Up Up"}},
+		{[]string{"-N", "2", "a", "Enter"}, []string{"text:a", "keys:Enter", "text:a", "keys:Enter"}},
+		{[]string{"C-Nothing", "", "x"}, []string{"text:C-Nothingx"}},
 	}
 	for _, c := range cases {
 		h := newHarness(t)
@@ -261,9 +271,22 @@ func TestSendKeys(t *testing.T) {
 			t.Errorf("%v failed: %s", c.args, h.err)
 			continue
 		}
-		st := h.fake.last("send-text")
-		if st["text"] != c.want || st["window"] != "leader-0001" {
-			t.Errorf("send-keys %v sent %q to %v, want %q", c.args, st["text"], st["window"], c.want)
+		var got []string
+		for _, call := range h.fake.calls {
+			switch call.verb {
+			case "send-text":
+				got = append(got, "text:"+call.params["text"].(string))
+			case "send-keys":
+				got = append(got, "keys:"+call.params["keys"].(string))
+			default:
+				continue
+			}
+			if call.params["window"] != "leader-0001" {
+				t.Errorf("send-keys %v: %s went to %v", c.args, call.verb, call.params["window"])
+			}
+		}
+		if !slices.Equal(got, c.want) {
+			t.Errorf("send-keys %v made calls %q, want %q", c.args, got, c.want)
 		}
 	}
 }

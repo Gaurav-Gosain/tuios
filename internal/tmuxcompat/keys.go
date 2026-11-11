@@ -1,147 +1,191 @@
 package tmuxcompat
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// send-keys: tmux key names to the bytes a terminal sends for them.
+// send-keys: tmux key names, read into the daemon's send-keys calls.
 //
 // Without -l, tmux looks each argument up as a key name first and sends it as
-// literal text only when it is not one. The shim does the same lookup and
-// writes the bytes itself, rather than passing names to tuios send-keys, whose
-// key syntax is its own ("ctrl+c", comma separated) and would read tmux text
-// differently.
+// literal text only when it is not one. The shim does the same lookup, then
+// hands each key to the daemon's send-keys verb as a token in its own syntax
+// ("ctrl+c", "alt+Up"), and each run of text to send-text. send-keys encodes
+// a key for the pane's modes, as real tmux does: Up is ESC O A once the program
+// has turned on application cursor keys, and a modified character follows the
+// pane's kitty keyboard or modifyOtherKeys mode. The shim knows only which
+// words tmux reads as keys; the bytes are send-keys' alone.
 
-var namedKeys = map[string]string{
-	"enter":    "\r",
-	"tab":      "\t",
-	"btab":     "\x1b[Z",
-	"space":    " ",
-	"escape":   "\x1b",
-	"bspace":   "\x7f",
-	"up":       "\x1b[A",
-	"down":     "\x1b[B",
-	"right":    "\x1b[C",
-	"left":     "\x1b[D",
-	"home":     "\x1b[H",
-	"end":      "\x1b[F",
-	"ic":       "\x1b[2~",
-	"insert":   "\x1b[2~",
-	"dc":       "\x1b[3~",
-	"delete":   "\x1b[3~",
-	"ppage":    "\x1b[5~",
-	"pageup":   "\x1b[5~",
-	"pgup":     "\x1b[5~",
-	"npage":    "\x1b[6~",
-	"pagedown": "\x1b[6~",
-	"pgdn":     "\x1b[6~",
-	"f1":       "\x1bOP",
-	"f2":       "\x1bOQ",
-	"f3":       "\x1bOR",
-	"f4":       "\x1bOS",
-	"f5":       "\x1b[15~",
-	"f6":       "\x1b[17~",
-	"f7":       "\x1b[18~",
-	"f8":       "\x1b[19~",
-	"f9":       "\x1b[20~",
-	"f10":      "\x1b[21~",
-	"f11":      "\x1b[23~",
-	"f12":      "\x1b[24~",
+// tmuxKeyNames are the words tmux reads as key names, lower-cased, each with
+// the send-keys name it is.
+var tmuxKeyNames = map[string]string{
+	"enter":    "Enter",
+	"tab":      "Tab",
+	"btab":     "BTab",
+	"space":    "Space",
+	"escape":   "Escape",
+	"bspace":   "Backspace",
+	"up":       "Up",
+	"down":     "Down",
+	"right":    "Right",
+	"left":     "Left",
+	"home":     "Home",
+	"end":      "End",
+	"ic":       "Insert",
+	"insert":   "Insert",
+	"dc":       "Delete",
+	"delete":   "Delete",
+	"ppage":    "PageUp",
+	"pageup":   "PageUp",
+	"pgup":     "PageUp",
+	"npage":    "PageDown",
+	"pagedown": "PageDown",
+	"pgdn":     "PageDown",
+	"f1":       "F1",
+	"f2":       "F2",
+	"f3":       "F3",
+	"f4":       "F4",
+	"f5":       "F5",
+	"f6":       "F6",
+	"f7":       "F7",
+	"f8":       "F8",
+	"f9":       "F9",
+	"f10":      "F10",
+	"f11":      "F11",
+	"f12":      "F12",
 }
 
-// keyBytes returns the bytes for one send-keys argument read as a key name,
-// and false when it is not a key name (it is then sent as text).
-func keyBytes(arg string) (string, bool) {
+// keyToken reads one send-keys argument as a tmux key and returns it as a
+// send-keys token, and false when it is not a key (it is then sent as text).
+// A key is a name, or a name or one character after C- (or ^x), M- and S-.
+func keyToken(arg string) (string, bool) {
 	if arg == "" {
 		return "", false
 	}
-	if b, ok := namedKeys[strings.ToLower(arg)]; ok {
-		return b, true
+	if name, ok := tmuxKeyNames[strings.ToLower(arg)]; ok {
+		return name, true
 	}
-	// Modifier prefixes: C- (or ^x), M-, S-. S- is accepted only where it
-	// changes nothing the shim can express (S-Tab is BTab).
-	meta := false
+	var mods strings.Builder
 	rest := arg
-	ctrl := false
 	for {
 		switch {
 		case len(rest) > 2 && (strings.HasPrefix(rest, "C-") || strings.HasPrefix(rest, "c-")):
-			ctrl = true
+			mods.WriteString("ctrl+")
 			rest = rest[2:]
 			continue
 		case len(rest) > 2 && (strings.HasPrefix(rest, "M-") || strings.HasPrefix(rest, "m-")):
-			meta = true
+			mods.WriteString("alt+")
+			rest = rest[2:]
+			continue
+		case len(rest) > 2 && (strings.HasPrefix(rest, "S-") || strings.HasPrefix(rest, "s-")):
+			mods.WriteString("shift+")
 			rest = rest[2:]
 			continue
 		case len(rest) == 2 && rest[0] == '^':
-			ctrl = true
+			mods.WriteString("ctrl+")
 			rest = rest[1:]
 			continue
 		}
 		break
 	}
-	if !ctrl && !meta {
+	if mods.Len() == 0 {
 		return "", false
 	}
-	var base string
-	switch {
-	case len(rest) == 1:
-		base = rest
-	default:
-		b, ok := namedKeys[strings.ToLower(rest)]
-		if !ok {
-			return "", false
-		}
-		base = b
+	if name, ok := tmuxKeyNames[strings.ToLower(rest)]; ok {
+		return mods.String() + name, true
 	}
-	if ctrl {
-		if len(base) != 1 {
-			return "", false
-		}
-		c := base[0]
-		switch {
-		case c >= 'a' && c <= 'z':
-			base = string(c - 'a' + 1)
-		case c >= '@' && c <= '_':
-			base = string(c - '@')
-		case c == ' ' || c == '2':
-			base = "\x00"
-		case c == '?':
-			base = "\x7f"
-		default:
-			return "", false
-		}
+	if len(rest) != 1 {
+		return "", false
 	}
-	if meta {
-		base = "\x1b" + base
+	// send-keys splits its keys on spaces and commas, so those two go by name.
+	switch rest {
+	case " ":
+		rest = "Space"
+	case ",":
+		rest = "Comma"
 	}
-	return base, true
+	return mods.String() + rest, true
 }
 
-// sendKeysText builds the text send-keys writes for its arguments. literal is
-// -l; hex is -H, where every argument is a hex byte.
-func sendKeysText(args []string, literal, hex bool) (string, error) {
-	var b strings.Builder
+// keyRun is one call the shim makes for send-keys: keys for the daemon's
+// send-keys verb, or text for send-text.
+type keyRun struct {
+	keys []string
+	text string
+}
+
+// sendKeysRuns reads send-keys arguments into the calls that send them, in
+// order. literal is -l; hex is -H, where every argument is a hex byte. Both
+// send text only.
+func sendKeysRuns(args []string, literal, hex bool) ([]keyRun, error) {
+	var runs []keyRun
+	addText := func(t string) {
+		if n := len(runs); n > 0 && runs[n-1].keys == nil {
+			runs[n-1].text += t
+			return
+		}
+		runs = append(runs, keyRun{text: t})
+	}
 	for _, a := range args {
 		switch {
 		case hex:
 			n, err := strconv.ParseUint(strings.TrimPrefix(strings.ToLower(a), "0x"), 16, 8)
 			if err != nil {
-				return "", logAs{err: errfmt.Errorf("send-keys: invalid hex key %q", a), log: "send-keys: invalid hex key"}
+				return nil, logAs{err: errfmt.Errorf("send-keys: invalid hex key %q", a), log: "send-keys: invalid hex key"}
 			}
-			b.WriteByte(byte(n))
+			addText(string([]byte{byte(n)}))
 		case literal:
-			b.WriteString(a)
+			addText(a)
 		default:
-			if k, ok := keyBytes(a); ok {
-				b.WriteString(k)
-			} else {
-				b.WriteString(a)
+			tok, ok := keyToken(a)
+			if !ok {
+				addText(a)
+				continue
 			}
+			if n := len(runs); n > 0 && runs[n-1].keys != nil {
+				runs[n-1].keys = append(runs[n-1].keys, tok)
+				continue
+			}
+			runs = append(runs, keyRun{keys: []string{tok}})
 		}
 	}
-	return b.String(), nil
+	// An empty argument adds no text.
+	return slices.DeleteFunc(runs, func(r keyRun) bool { return r.keys == nil && r.text == "" }), nil
+}
+
+// repeatRuns is runs sent count times, with the runs of one kind that meet
+// joined into one call.
+func repeatRuns(runs []keyRun, count int) []keyRun {
+	if count <= 1 || len(runs) == 0 {
+		return runs
+	}
+	if len(runs) == 1 {
+		r := runs[0]
+		if r.keys != nil {
+			keys := make([]string, 0, len(r.keys)*count)
+			for range count {
+				keys = append(keys, r.keys...)
+			}
+			return []keyRun{{keys: keys}}
+		}
+		return []keyRun{{text: strings.Repeat(r.text, count)}}
+	}
+	out := make([]keyRun, 0, len(runs)*count)
+	for range count {
+		for _, r := range runs {
+			if n := len(out); n > 0 && (out[n-1].keys == nil) == (r.keys == nil) {
+				if r.keys != nil {
+					out[n-1].keys = append(slices.Clip(out[n-1].keys), r.keys...)
+				} else {
+					out[n-1].text += r.text
+				}
+				continue
+			}
+			out = append(out, keyRun{keys: slices.Clone(r.keys), text: r.text})
+		}
+	}
+	return out
 }

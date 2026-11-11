@@ -252,8 +252,11 @@ func TestControlModeWritableAndCC(t *testing.T) {
 	if body, end := c.block("1"); end != "%end" || !reflect.DeepEqual(body, []string{"work"}) {
 		t.Errorf("display-message block = %q %s", body, end)
 	}
-	if st := h.fake.last("send-text"); st["text"] != "echo hi\r" {
+	if st := h.fake.last("send-text"); st["text"] != "echo hi" {
 		t.Errorf("send-text = %v", st)
+	}
+	if sk := h.fake.last("send-keys"); sk["keys"] != "Enter" {
+		t.Errorf("send-keys = %v", sk)
 	}
 	c.send("detach-client")
 	c.block("1")
