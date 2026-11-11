@@ -136,13 +136,30 @@ func Draw(svg string, opt Options) (*image.RGBA, error) {
 func newRenderer(root *node, dst *image.RGBA, theme *sketch.Theme, m matrix) (*renderer, state) {
 	r := &renderer{env: map[string]string{}, dst: dst, budget: 300_000_000, base: m}
 	style, _ := root.attr("style")
+	// sketch writes the series colors that the diagram's theme variables set after the
+	// font. They are the diagram's own, so they win over the theme here as they do in the
+	// SVG.
+	var palette [][2]string
+	afterFont := false
 	for _, d := range declarations(style) {
-		if strings.HasPrefix(d[0], "--") {
+		switch {
+		case afterFont && strings.HasPrefix(d[0], "--pele-series-"):
+			palette = append(palette, d)
+		case strings.HasPrefix(d[0], "--"):
 			r.env[d[0]] = d[1]
+		case d[0] == "font-family":
+			afterFont = true
 		}
 	}
 	for _, v := range theme.Vars() {
 		r.env[v[0]] = v[1]
+	}
+	// A color this package cannot read, such as oklch(), leaves the series in the
+	// theme's color, where a browser would show it.
+	for _, d := range palette {
+		if _, ok := parseColor(r.resolve(d[1])); ok {
+			r.env[d[0]] = d[1]
+		}
 	}
 	st := state{
 		fill:          paint{c: color.NRGBA{0, 0, 0, 255}},
