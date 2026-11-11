@@ -6,7 +6,8 @@ import (
 )
 
 // The cases pele 1.8.0 added to tests/layout/compound.test.ts: route crossings and the
-// order of groups and their ports from a layout of the whole drawing.
+// order of groups and their ports from a layout of the whole drawing. pele 1.13.0 added the
+// cases on border ports and bends that bring an edge into line.
 
 var testOptions = LayeredOptions{NodeSep: 40, EdgeSep: 16, RankSep: 48, PortSep: 20}
 
@@ -207,5 +208,69 @@ func TestRowOfGroupsIsOrderedAsOne(t *testing.T) {
 	CompoundLayout(nodes, edges, "LR", testOptions)
 	if got := RouteCrossings(nodes, edges, StyleCurved); got != 0 {
 		t.Errorf("%d crossings, want 0", got)
+	}
+}
+
+// closeTo is vitest's toBeCloseTo(want, 5).
+func closeTo(got, want float64) bool { return math.Abs(got-want) < 0.5e-5 }
+
+func TestEdgeRunsStraightAcrossTheBorderGap(t *testing.T) {
+	// pele 6043f6c: runs an edge straight across the gap between a group border and the node
+	// it meets inside
+	for _, dir := range []Dir{"TB", "LR"} {
+		nodes := []*CNode{testGroup(100), testGroup(101)}
+		var from, to []int
+		for i := 0; i < 3; i++ {
+			from = append(from, len(nodes))
+			nodes = append(nodes, Cnode(60, 30, 0))
+		}
+		for i := 0; i < 5; i++ {
+			to = append(to, len(nodes))
+			nodes = append(nodes, Cnode(60, 30, 1))
+		}
+		for i, node := range nodes {
+			if node.IsGroup {
+				continue
+			}
+			node.Seq = i
+			node.Span = math.Min(node.W, node.H) - 8
+		}
+		var edges []*CEdge
+		for _, b := range to {
+			for _, a := range from {
+				e := testEdge(a, b)
+				e.LabelW, e.LabelH = 40, 16
+				edges = append(edges, e)
+			}
+		}
+		CompoundLayout(nodes, edges, dir, testOptions)
+		across := 0
+		if dir == "LR" {
+			across = 1
+		}
+		for i, e := range edges {
+			r := e.Route
+			last := len(r) - 3
+			k := 0
+			for k < last && !onBorder(nodes[1], r[k], r[k+1]) {
+				k += 3
+			}
+			if k >= last {
+				t.Fatalf("%s edge %d does not enter its group", dir, i)
+			}
+			if !closeTo(r[k+across], r[last+across]) {
+				t.Errorf("%s edge %d enters at %v, its end is at %v", dir, i, r[k+across], r[last+across])
+			}
+			k = last
+			for k > 0 && !onBorder(nodes[0], r[k], r[k+1]) {
+				k -= 3
+			}
+			if k <= 0 {
+				t.Fatalf("%s edge %d does not leave its group", dir, i)
+			}
+			if !closeTo(r[k+across], r[across]) {
+				t.Errorf("%s edge %d leaves at %v, its start is at %v", dir, i, r[k+across], r[across])
+			}
+		}
 	}
 }

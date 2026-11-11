@@ -776,6 +776,8 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 		}
 	}
 
+	alignPorts(g, xs, empty)
+
 	// A rank that holds nothing but the bends of edges is only there because some other edge has a
 	// label or a twin. Its bends move onto the straight line between the ends of their edges, and
 	// one that gets there is left out of the route, so that the edge is drawn as a single curve.
@@ -1478,6 +1480,58 @@ func follow(g *Graph, empty []uint8, e int, side int) int {
 		}
 	}
 	return e
+}
+
+// Aligns border ports with the ends on their nodes so edges run straight across the gap.
+// Ports are kept `edgeSep` apart while placed, more than ends on a short side get, so
+// without this an edge turns outside the border and again in the gap.
+// Leaves a rank alone unless every port can move without passing or meeting its neighbors.
+func alignPorts(g *Graph, xs []float64, empty []uint8) {
+	var to []float64
+	for pass := 0; pass < 2; pass++ {
+		r, kind := 0, KindStartPort
+		if pass == 1 {
+			r, kind = g.maxRank, KindEndPort
+		}
+		s := g.layerStart[r]
+		end := g.layerStart[r+1]
+		to = to[:0]
+		start := kind == KindStartPort
+		for i := s; i < end; i++ {
+			v := g.order[i]
+			if g.KIND[v] != kind {
+				break
+			}
+			var e int
+			if start {
+				if g.succStart[v+1]-g.succStart[v] != 1 {
+					break
+				}
+				e = follow(g, empty, g.succE[g.succStart[v]], 1)
+			} else {
+				if g.predStart[v+1]-g.predStart[v] != 1 {
+					break
+				}
+				e = follow(g, empty, g.predE[g.predStart[v]], 0)
+			}
+			var at float64
+			if start {
+				at = xs[g.ET[e]] + g.ETD[e]
+			} else {
+				at = xs[g.EF[e]] + g.EFD[e]
+			}
+			if len(to) > 0 && at < to[len(to)-1]+IN_LINE {
+				break
+			}
+			to = append(to, at)
+		}
+		if len(to) == 0 || len(to) != end-s {
+			continue
+		}
+		for i := s; i < end; i++ {
+			xs[g.order[i]] = to[i-s]
+		}
+	}
 }
 
 // How many ends that may move along it each node has on the side its edges arrive at, and on
