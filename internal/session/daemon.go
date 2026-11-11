@@ -500,6 +500,8 @@ type Daemon struct {
 	// one sweep of the stored files at a time. See task_attach.go.
 	attachLimit atomic.Pointer[attachLimits]
 	attachSweep attachSweeper
+	// prLinks keeps the state of the pull request links on cards.
+	prLinks prLinkCache
 	// openedKeep is DaemonConfig.OpenedCopyKeep.
 	openedKeep time.Duration
 

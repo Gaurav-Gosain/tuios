@@ -2,6 +2,7 @@ package session
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -16,10 +17,12 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/ghpr"
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
@@ -217,9 +220,6 @@ func looksLikeDiff(data []byte) bool {
 	return bytes.HasPrefix(head, []byte("--- ")) && bytes.Contains(head, []byte("\n+++ ")) && bytes.Contains(head, []byte("\n@@ "))
 }
 
-// prURLRE is a GitHub pull request's address.
-var prURLRE = regexp.MustCompile(`^https://github\.com/[^/]+/[^/]+/pull/[0-9]+/?$`)
-
 // linkAttachment checks raw as a link and returns its kind.
 func linkAttachment(raw string) (string, *verbError) {
 	if len(raw) > attachMaxURL || invisible.Strip(raw) != raw || strings.ContainsAny(raw, " \t\r\n") {
@@ -229,7 +229,7 @@ func linkAttachment(raw string) (string, *verbError) {
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
 		return "", invalidParam("link", "link must be an http or https address")
 	}
-	if prURLRE.MatchString(raw) {
+	if ghpr.IsURL(raw) {
 		return AttachPR, nil
 	}
 	return AttachLink, nil
@@ -290,6 +290,86 @@ type attachTaskParams struct {
 	Link       string `json:"link"`
 	Replace    bool   `json:"replace"`
 	HumanNonce string `json:"human_nonce"`
+	// Screenshot and Capture name a pane of the card's session whose
+	// picture or text the daemon takes and attaches.
+	Screenshot *attachPaneParams `json:"screenshot"`
+	Capture    *attachPaneParams `json:"capture"`
+	// Host is the machine that owns the card: the attach is passed on to
+	// it for the calling pane, which holds the card there.
+	Host string `json:"host"`
+	remoteClaim
+}
+
+// attachPaneParams name the pane a picture or a text is taken of.
+type attachPaneParams struct {
+	Window     string `json:"window"`
+	Scrollback bool   `json:"scrollback"`
+	Lines      int    `json:"lines"`
+}
+
+// attachCaptureLines is how many lines a capture keeps when none are asked
+// for.
+const attachCaptureLines = 2000
+
+// takeFromPane takes the picture (shot) or the text of the pane pp names in
+// sess for a card, and the name it is attached by when none was given. A pane
+// that calls needs the read grant, as screenshot and capture-pane do; the
+// pane is one of the card's session, which a pane with the task grant
+// reaches.
+func (d *Daemon) takeFromPane(cs *connState, caller taskCaller, sess *Session, pp *attachPaneParams, shot bool) ([]byte, string, *verbError) {
+	param := "capture"
+	if shot {
+		param = "screenshot"
+	}
+	if pp.Window == "" {
+		return nil, "", invalidParam(param, param+" needs window: the pane to take")
+	}
+	if caller.window != "" && !caller.any {
+		if pa := d.paneAuthority(cs); pa == nil || !pa.grants.Has(GrantRead) {
+			return nil, "", hintedVerbError(ErrVerbForbidden, "attach-task with "+param+" is refused: taking a pane needs the read grant", &VerbHint{
+				Param:  param,
+				Detail: "Nothing was attached. Attach a file instead, or ask the person for the read grant.",
+			})
+		}
+	}
+	label := ""
+	if w, ok := findWindowState(sess.GetState(), pp.Window); ok {
+		label = windowLabelOf(w)
+	}
+	if shot {
+		pic, verr := d.renderPaneShot(cs, sess, pp.Window, paneShotOptions{format: "png", scrollback: pp.Scrollback, lines: pp.Lines})
+		if verr != nil {
+			return nil, "", verr
+		}
+		return pic.data, "screenshot " + cmpOrString(label, shortWindowID(pp.Window)) + ".png", nil
+	}
+	_, pty, verr := d.resolveWindowPTY(sess, pp.Window)
+	if verr != nil {
+		return nil, "", verr
+	}
+	content, _ := pty.CaptureContentMeta(pp.Scrollback, false, true)
+	lines := pp.Lines
+	if lines <= 0 {
+		lines = attachCaptureLines
+	}
+	content = sliceCaptureLines(trimCapture(content), 0, 0, lines)
+	return []byte(content), "capture " + cmpOrString(label, shortWindowID(pp.Window)) + ".txt", nil
+}
+
+// cmpOrPane is a when set, else b.
+func cmpOrPane(a, b *attachPaneParams) *attachPaneParams {
+	if a != nil {
+		return a
+	}
+	return b
+}
+
+// cmpOrString is a when set, else b.
+func cmpOrString(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
 
 // tooLarge is the refusal of a file or a session over a limit.
@@ -315,20 +395,54 @@ func (d *Daemon) verbAttachTask(cs *connState, params json.RawMessage) (any, *ve
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
+	if p.Host != "" {
+		return d.forwardAttach(cs, p)
+	}
 	sess, verr := d.sessionForTaskID(cs, p.Session, p.ID)
 	if verr != nil {
 		return nil, verr
 	}
-	caller, verr := d.taskCallerOf(cs, "attach-task", sess, p.HumanNonce)
+	caller, verr := d.taskCallerFor(cs, "attach-task", sess, p.HumanNonce, p.remoteClaim)
 	if verr != nil {
 		return nil, verr
+	}
+	if (p.Screenshot != nil || p.Capture != nil) && p.RemoteWindow != "" {
+		return nil, invalidParam("screenshot", "a pane on another machine sends what it took as content")
 	}
 	lim := d.attachLimits()
 	att := TaskAttachment{Note: invisible.Strip(printableClaim(p.Note, attachMaxNote)), By: caller.by}
 	var data []byte
+	sources := 0
+	for _, set := range []bool{p.Link != "", p.Content != "", p.Screenshot != nil, p.Capture != nil} {
+		if set {
+			sources++
+		}
+	}
 	switch {
-	case p.Link != "" && p.Content != "":
-		return nil, invalidParam("link", "pass content or link, not both")
+	case sources > 1:
+		return nil, invalidParam("content", "pass one of content, link, screenshot and capture")
+	case p.Screenshot != nil || p.Capture != nil:
+		// Refused before the pane is taken, so a pane that may not change
+		// the card costs no picture.
+		st := sess.GetState()
+		if i := taskIndex(st.Tasks, p.ID); i < 0 {
+			return nil, noTask(sess, p.ID)
+		} else if verr := caller.mayAttach("attach-task", &st.Tasks[i]); verr != nil {
+			return nil, verr
+		}
+		taken, name, verr := d.takeFromPane(cs, caller, sess, cmpOrPane(p.Screenshot, p.Capture), p.Screenshot != nil)
+		if verr != nil {
+			return nil, verr
+		}
+		if int64(len(taken)) > lim.maxBytes {
+			return nil, tooLarge("what the pane gave", int64(len(taken)), lim.maxBytes, "attachment_max_mib")
+		}
+		if p.Name == "" {
+			p.Name = name
+		}
+		data = taken
+		att.Kind, att.MediaType = classifyCardFile(p.Name, data)
+		att.Size = int64(len(data))
 	case p.Link != "":
 		kind, verr := linkAttachment(p.Link)
 		if verr != nil {
@@ -352,7 +466,7 @@ func (d *Daemon) verbAttachTask(cs *connState, params json.RawMessage) (any, *ve
 		att.Kind, att.MediaType = classifyCardFile(p.Name, data)
 		att.Size = int64(len(data))
 	default:
-		return nil, invalidParam("content", "attach-task needs content, the file base64 encoded, or link")
+		return nil, invalidParam("content", "attach-task needs content (the file, base64 encoded), link, screenshot or capture")
 	}
 	if att.Name = attachName(p.Name); att.Name == "" {
 		return nil, invalidParam("name", "name is required: the name the card shows the attachment by")
@@ -425,6 +539,7 @@ type detachTaskParams struct {
 	ID         string `json:"id"`
 	Name       string `json:"name"`
 	HumanNonce string `json:"human_nonce"`
+	remoteClaim
 }
 
 // noAttachment is the refusal for a name the card has no attachment by.
@@ -447,7 +562,7 @@ func (d *Daemon) verbDetachTask(cs *connState, params json.RawMessage) (any, *ve
 	if verr != nil {
 		return nil, verr
 	}
-	caller, verr := d.taskCallerOf(cs, "detach-task", sess, p.HumanNonce)
+	caller, verr := d.taskCallerFor(cs, "detach-task", sess, p.HumanNonce, p.remoteClaim)
 	if verr != nil {
 		return nil, verr
 	}
@@ -499,6 +614,14 @@ func (d *Daemon) verbGetTaskAttachment(cs *connState, params json.RawMessage) (a
 	}
 	att := tk.Attachments[i]
 	out := map[string]any{"type": "task_attachment", "attachment": att}
+	if att.Kind == AttachPR {
+		pr, err := d.prLinks.read(d.ctx, att.URL)
+		if err != nil {
+			out["pr_error"] = err.Error()
+		} else {
+			out["pr"] = pr
+		}
+	}
 	if att.Hash != "" {
 		data, err := readAttachment(att.Hash)
 		if err != nil {
@@ -635,4 +758,124 @@ func (d *Daemon) attachmentsInUse() (map[string]bool, bool) {
 		note(saved.Tasks)
 	}
 	return used, true
+}
+
+// attachForwardMax bounds a file passed on to another machine: a linked
+// daemon reads at most 4 MiB in one answer line, and the call holds the
+// link's one control stream while it crosses.
+const attachForwardMax = 3 << 20
+
+// forwardAttach passes an attach on to host, the machine that owns the card,
+// for the calling pane, which holds the card there. A picture or a text of a
+// pane is taken here, where the pane is, and crosses as content.
+func (d *Daemon) forwardAttach(cs *connState, p attachTaskParams) (any, *verbError) {
+	if cs != nil && cs.viaLink {
+		return nil, invalidParam("host", "a call that came over the link is not passed on again")
+	}
+	pa := d.paneAuthority(cs)
+	if pa == nil || !pa.inPane() || pa.hosted || pa.window == unplacedWindow {
+		return nil, hintedVerbError(ErrVerbInvalidParams, "attach-task with host is for a pane: the pane on this machine that holds the card", &VerbHint{
+			Param:  "host",
+			Detail: "Nothing changed. Run it in the agent's pane, or let the person attach on " + echoName(p.Host) + ".",
+		})
+	}
+	if p.Session == "" {
+		return nil, invalidParam("session", "attach-task with host names the card's session on "+echoName(p.Host)+": list-tasks with project and hosts gives it")
+	}
+	if d.federation == nil {
+		return nil, invalidParam("host", "host "+echoName(p.Host)+" is not a linked machine: this daemon has no [hosts]")
+	}
+	params := map[string]any{"session": p.Session, "id": p.ID, "note": p.Note, "replace": p.Replace, "remote_window": pa.window}
+	name := p.Name
+	switch {
+	case p.Screenshot != nil || p.Capture != nil:
+		own := d.manager.GetSession(pa.session)
+		if own == nil {
+			return nil, newVerbError(ErrVerbInternal, "the calling pane's session is gone")
+		}
+		data, taken, verr := d.takeFromPane(cs, taskCaller{by: pa.window, window: pa.window}, own, cmpOrPane(p.Screenshot, p.Capture), p.Screenshot != nil)
+		if verr != nil {
+			return nil, verr
+		}
+		name = cmpOrString(name, taken)
+		params["content"] = base64.StdEncoding.EncodeToString(data)
+	case p.Link != "":
+		params["link"] = p.Link
+	default:
+		params["content"] = p.Content
+	}
+	if c, _ := params["content"].(string); base64.StdEncoding.DecodedLen(len(c)) > attachForwardMax+2 {
+		return nil, tooLarge("a file for another machine", int64(base64.StdEncoding.DecodedLen(len(c))), attachForwardMax, "attachment_max_mib (and 3 MiB over a link)")
+	}
+	if name != "" {
+		params["name"] = name
+	}
+	ctx, cancel := context.WithTimeout(d.ctx, federationVerbBudget)
+	defer cancel()
+	raw, err := d.federation.Call(ctx, p.Host, "attach-task", params)
+	if err != nil {
+		return nil, federationTaskErr("attach-task", p.Host, err)
+	}
+	var res struct {
+		Attachment TaskAttachment `json:"attachment"`
+		Task       TaskRow        `json:"task"`
+	}
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return nil, newVerbError(ErrVerbInternal, "read "+p.Host+"'s answer: "+err.Error())
+	}
+	res.Task.Host = p.Host
+	return map[string]any{"type": "task_attached", "attachment": res.Attachment, "task": res.Task}, nil
+}
+
+// prLinkFresh is how long a pull request link's state is kept before gh is
+// asked again.
+const prLinkFresh = time.Minute
+
+// prLinkCache keeps the state of the pull request links the board shows, so
+// a preview that comes back to a card asks gh at most once a minute. Only a
+// get-task-attachment of a pr link reads it; nothing polls.
+type prLinkCache struct {
+	mu sync.Mutex
+	m  map[string]prLinkEntry
+}
+
+// prLinkEntry is one link's last answer.
+type prLinkEntry struct {
+	pr  ghpr.PR
+	err error
+	at  time.Time
+}
+
+// prLinkMax bounds the links kept: the oldest answer goes first.
+const prLinkMax = 256
+
+// read is the state of the pull request at url, from gh when the kept answer
+// is older than prLinkFresh. gh runs outside the lock, so a slow answer for
+// one link holds no other.
+func (c *prLinkCache) read(ctx context.Context, url string) (ghpr.PR, error) {
+	c.mu.Lock()
+	if e, ok := c.m[url]; ok && time.Since(e.at) < prLinkFresh {
+		c.mu.Unlock()
+		return e.pr, e.err
+	}
+	c.mu.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	pr, err := ghpr.ViewURL(ctx, url)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.m == nil {
+		c.m = map[string]prLinkEntry{}
+	}
+	c.m[url] = prLinkEntry{pr: pr, err: err, at: time.Now()}
+	for len(c.m) > prLinkMax {
+		oldest, at := "", time.Time{}
+		for u, e := range c.m {
+			if oldest == "" || e.at.Before(at) {
+				oldest, at = u, e.at
+			}
+		}
+		delete(c.m, oldest)
+	}
+	return pr, err
 }
