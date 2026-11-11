@@ -16859,3 +16859,19 @@ Run on 2026-11-11 on macOS (arm64). The branch passes.
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
 | The branch before this one (no worktree line) | "waiting for the pull request in the preview: tuitest: WaitForDesc timed out" | **caught** |
+
+## Several files are one change, and the same file again is a no-op
+
+`TestTaskAttachSeveralFilesIsOneChange` attaches three files with one
+`tuios task attach`, then the same three again, then a link. The card holds
+four attachments and its history two `attached` entries; the retry says each
+file is on the card already; `--note` with several files is refused; the link
+is named by its host and path. `TestTaskAttachmentsSurviveARestartAndGoWithTheCard`
+now checks the same file again is a no-op and another file under its name is
+refused with `--replace` named.
+
+Run on 2026-11-11 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The CLI sending one call per file | "the history holds 4 attached entries, want 2" | **caught** |

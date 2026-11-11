@@ -50,8 +50,8 @@ const (
 	// moveVerified lands a verify result on a card still in verify with
 	// the run's token.
 	moveVerified
-	// moveAttach puts attachment on the card, in the place of one with its
-	// name.
+	// moveAttach puts attachments on the card, each in the place of one
+	// with its name.
 	moveAttach
 	// moveDetach takes the attachment named reason off the card.
 	moveDetach
@@ -74,8 +74,8 @@ type cardMove struct {
 	auto              taskMove  // Auto
 	token             int64     // Verified
 	verify            *TaskVerify
-	note              string          // BlockErrored, Verified: the card's note
-	attachment        *TaskAttachment // Attach
+	note              string           // BlockErrored, Verified: the card's note
+	attachments       []TaskAttachment // Attach
 }
 
 // apply makes m on the card at now. It returns the action the history and
@@ -190,9 +190,14 @@ func (tk *TaskState) apply(m cardMove, now int64) (action, holder string, verr *
 		action, evHolder = TaskActionVerified, ""
 
 	case moveAttach:
-		// A new slice: a snapshot shares the old one.
-		list := slices.DeleteFunc(slices.Clone(tk.Attachments), func(a TaskAttachment) bool { return a.Name == m.attachment.Name })
-		tk.Attachments = append(list, *m.attachment)
+		// A new slice: a snapshot shares the old one. An attachment takes
+		// the place of the one with its name.
+		list := slices.Clone(tk.Attachments)
+		for _, a := range m.attachments {
+			list = slices.DeleteFunc(list, func(b TaskAttachment) bool { return b.Name == a.Name })
+			list = append(list, a)
+		}
+		tk.Attachments = list
 		action = TaskActionAttached
 
 	case moveDetach:

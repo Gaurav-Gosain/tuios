@@ -294,6 +294,8 @@ type attachTaskParams struct {
 	// picture or text the daemon takes and attaches.
 	Screenshot *attachPaneParams `json:"screenshot"`
 	Capture    *attachPaneParams `json:"capture"`
+	// Files are several files put on the card in one change.
+	Files []attachFileParam `json:"files"`
 	// Host is the machine that owns the card: the attach is passed on to
 	// it for the calling pane, which holds the card there.
 	Host string `json:"host"`
@@ -388,8 +390,83 @@ func attachMiB(n int64) string {
 	return strconv.FormatFloat(float64(n)/(1<<20), 'f', 1, 64) + " MiB"
 }
 
-// verbAttachTask answers attach-task: a file's bytes, or a link, put on a
-// card.
+// attachItem is one attachment an attach-task call puts on a card, with its
+// bytes for a file.
+type attachItem struct {
+	att  TaskAttachment
+	data []byte
+}
+
+// attachFileParam is one file of attach-task's files.
+type attachFileParam struct {
+	Name    string `json:"name"`
+	Content string `json:"content"`
+}
+
+// decodeAttachContent decodes one file's base64 and holds it to the limit.
+func decodeAttachContent(content string, lim attachLimits) ([]byte, *verbError) {
+	if int64(base64.StdEncoding.DecodedLen(len(content))) > lim.maxBytes+2 {
+		return nil, tooLarge("the file", int64(base64.StdEncoding.DecodedLen(len(content))), lim.maxBytes, "attachment_max_mib")
+	}
+	data, err := base64.StdEncoding.DecodeString(content)
+	if err != nil {
+		return nil, invalidParam("content", "content is not base64")
+	}
+	if int64(len(data)) > lim.maxBytes {
+		return nil, tooLarge("the file", int64(len(data)), lim.maxBytes, "attachment_max_mib")
+	}
+	return data, nil
+}
+
+// fileItem is the attachment of a file named name.
+func fileItem(name string, data []byte, base TaskAttachment) (attachItem, *verbError) {
+	it := attachItem{att: base, data: data}
+	it.att.Kind, it.att.MediaType = classifyCardFile(name, data)
+	it.att.Size = int64(len(data))
+	if it.att.Name = attachName(name); it.att.Name == "" {
+		return it, invalidParam("name", "name is required: the name the card shows the attachment by")
+	}
+	return it, nil
+}
+
+// linkName is a link's name when the caller gave none: "PR #N" for a pull
+// request, else its host and path, short enough to read in a list.
+func linkName(kind, raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	path := strings.TrimSuffix(u.Path, "/")
+	if kind == AttachPR {
+		if i := strings.LastIndexByte(path, '/'); i >= 0 {
+			return "PR #" + path[i+1:]
+		}
+	}
+	name := u.Host + path
+	if r := []rune(name); len(r) > 60 {
+		name = string(r[:59]) + "…"
+	}
+	return name
+}
+
+// attachReason is what a card's history says an attach put on it: the
+// names, at most three, and how many more.
+func attachReason(items []attachItem) string {
+	var names []string
+	for i, it := range items {
+		if i == 3 {
+			names = append(names, "and "+strconv.Itoa(len(items)-3)+" more")
+			break
+		}
+		names = append(names, it.att.Name)
+	}
+	return strings.Join(names, ", ")
+}
+
+// verbAttachTask answers attach-task: files, a link, or a pane the daemon
+// takes, put on a card in one change, which the card's history records as
+// one entry. An attachment whose name and bytes the card holds already is
+// left as it is, so a retry after a lost answer succeeds.
 func (d *Daemon) verbAttachTask(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p attachTaskParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -410,17 +487,43 @@ func (d *Daemon) verbAttachTask(cs *connState, params json.RawMessage) (any, *ve
 		return nil, invalidParam("screenshot", "a pane on another machine sends what it took as content")
 	}
 	lim := d.attachLimits()
-	att := TaskAttachment{Note: invisible.Strip(printableClaim(p.Note, attachMaxNote)), By: caller.by}
-	var data []byte
+	base := TaskAttachment{Note: invisible.Strip(printableClaim(p.Note, attachMaxNote)), By: caller.by}
 	sources := 0
-	for _, set := range []bool{p.Link != "", p.Content != "", p.Screenshot != nil, p.Capture != nil} {
+	for _, set := range []bool{p.Link != "", p.Content != "", p.Screenshot != nil, p.Capture != nil, len(p.Files) > 0} {
 		if set {
 			sources++
 		}
 	}
+	var items []attachItem
 	switch {
 	case sources > 1:
-		return nil, invalidParam("content", "pass one of content, link, screenshot and capture")
+		return nil, invalidParam("content", "pass one of content, files, link, screenshot and capture")
+	case len(p.Files) > 0:
+		if p.Name != "" {
+			return nil, invalidParam("name", "files name each file; leave name out")
+		}
+		if len(p.Files) > lim.perCard {
+			return nil, hintedVerbError(ErrVerbAttachmentLimit, strconv.Itoa(len(p.Files))+" files is more than a card holds", &VerbHint{
+				Param:  "files",
+				Detail: "Nothing was attached. The limit is [tasks] attachments_per_card.",
+			})
+		}
+		seen := map[string]bool{}
+		for _, f := range p.Files {
+			data, verr := decodeAttachContent(f.Content, lim)
+			if verr != nil {
+				return nil, verr
+			}
+			it, verr := fileItem(f.Name, data, base)
+			if verr != nil {
+				return nil, verr
+			}
+			if seen[it.att.Name] {
+				return nil, invalidParam("files", "two files are called "+echoName(it.att.Name)+"; give each its own name")
+			}
+			seen[it.att.Name] = true
+			items = append(items, it)
+		}
 	case p.Screenshot != nil || p.Capture != nil:
 		// Refused before the pane is taken, so a pane that may not change
 		// the card costs no picture.
@@ -437,100 +540,149 @@ func (d *Daemon) verbAttachTask(cs *connState, params json.RawMessage) (any, *ve
 		if int64(len(taken)) > lim.maxBytes {
 			return nil, tooLarge("what the pane gave", int64(len(taken)), lim.maxBytes, "attachment_max_mib")
 		}
-		if p.Name == "" {
-			p.Name = name
+		it, verr := fileItem(cmpOrString(p.Name, name), taken, base)
+		if verr != nil {
+			return nil, verr
 		}
-		data = taken
-		att.Kind, att.MediaType = classifyCardFile(p.Name, data)
-		att.Size = int64(len(data))
+		items = append(items, it)
 	case p.Link != "":
 		kind, verr := linkAttachment(p.Link)
 		if verr != nil {
 			return nil, verr
 		}
-		att.Kind, att.URL = kind, p.Link
-		if p.Name == "" {
-			p.Name = p.Link
+		it := attachItem{att: base}
+		it.att.Kind, it.att.URL = kind, p.Link
+		if it.att.Name = attachName(cmpOrString(p.Name, linkName(kind, p.Link))); it.att.Name == "" {
+			return nil, invalidParam("name", "name is required: the name the card shows the attachment by")
 		}
+		items = append(items, it)
 	case p.Content != "":
-		if int64(base64.StdEncoding.DecodedLen(len(p.Content))) > lim.maxBytes+2 {
-			return nil, tooLarge("the file", int64(base64.StdEncoding.DecodedLen(len(p.Content))), lim.maxBytes, "attachment_max_mib")
+		data, verr := decodeAttachContent(p.Content, lim)
+		if verr != nil {
+			return nil, verr
 		}
-		var err error
-		if data, err = base64.StdEncoding.DecodeString(p.Content); err != nil {
-			return nil, invalidParam("content", "content is not base64")
+		it, verr := fileItem(p.Name, data, base)
+		if verr != nil {
+			return nil, verr
 		}
-		if int64(len(data)) > lim.maxBytes {
-			return nil, tooLarge("the file", int64(len(data)), lim.maxBytes, "attachment_max_mib")
-		}
-		att.Kind, att.MediaType = classifyCardFile(p.Name, data)
-		att.Size = int64(len(data))
+		items = append(items, it)
 	default:
-		return nil, invalidParam("content", "attach-task needs content (the file, base64 encoded), link, screenshot or capture")
+		return nil, invalidParam("content", "attach-task needs content (a file, base64 encoded), files, link, screenshot or capture")
 	}
-	if att.Name = attachName(p.Name); att.Name == "" {
-		return nil, invalidParam("name", "name is required: the name the card shows the attachment by")
-	}
-	if data != nil {
-		att.Hash = attachHash(data)
-		d.attachSweep.hold(att.Hash)
-		if err := storeAttachment(att.Hash, data); err != nil {
-			d.attachSweep.drop(att.Hash)
+	// Deferred first, so it runs last: a sweep starts after every hold
+	// below is dropped, and so sees the files no card names.
+	var sweep []string
+	defer func() {
+		if len(sweep) > 0 {
+			d.sweepAttachments(sweep...)
+		}
+	}()
+	var held []string
+	defer func() {
+		// The card names the files now, or the attach was refused and they
+		// may be no card's.
+		for _, h := range held {
+			d.attachSweep.drop(h)
+		}
+	}()
+	for i := range items {
+		it := &items[i]
+		if it.data == nil {
+			continue
+		}
+		it.att.Hash = attachHash(it.data)
+		d.attachSweep.hold(it.att.Hash)
+		held = append(held, it.att.Hash)
+		if err := storeAttachment(it.att.Hash, it.data); err != nil {
+			sweep = append(sweep, held...)
 			return nil, newVerbError(ErrVerbInternal, "could not store the attachment: "+err.Error())
 		}
 	}
-	var old string
+	var olds, same []string
+	var added []attachItem
 	row, action, verr := d.changeTask(sess, p.ID, func(st *SessionState, tk *TaskState, now int64) (string, *verbError) {
+		olds, same, added = nil, nil, nil
 		if verr := caller.mayAttach("attach-task", tk); verr != nil {
 			return "", verr
 		}
-		i := attachIndex(tk, att.Name)
-		switch {
-		case i >= 0 && !p.Replace:
-			return "", hintedVerbError(ErrVerbInvalidParams, "task card "+tk.ID+" has an attachment called "+echoName(att.Name)+" already", &VerbHint{
-				Param:  "name",
-				Detail: "Nothing was attached. Pass replace to put this one in its place, or give it another name.",
-			})
-		case i < 0 && len(tk.Attachments) >= lim.perCard:
-			return "", hintedVerbError(ErrVerbAttachmentLimit, "task card "+tk.ID+" holds "+strconv.Itoa(len(tk.Attachments))+" attachments, the limit", &VerbHint{
+		fresh := 0
+		var newBytes int64
+		for _, it := range items {
+			i := attachIndex(tk, it.att.Name)
+			if i >= 0 {
+				had := tk.Attachments[i]
+				if had.Hash == it.att.Hash && had.URL == it.att.URL {
+					same = append(same, it.att.Name)
+					continue
+				}
+				if !p.Replace {
+					return "", hintedVerbError(ErrVerbInvalidParams, "task card "+tk.ID+" has another attachment called "+echoName(it.att.Name)+" already", &VerbHint{
+						Param:  "name",
+						Detail: "Nothing was attached. Pass replace (tuios task attach --replace) to put this one in its place, or give it another name (--name).",
+					})
+				}
+				olds = append(olds, had.Hash)
+			} else {
+				fresh++
+			}
+			if it.att.Hash != "" && !slices.ContainsFunc(st.Tasks, func(t TaskState) bool {
+				return slices.ContainsFunc(t.Attachments, func(a TaskAttachment) bool { return a.Hash == it.att.Hash })
+			}) {
+				newBytes += it.att.Size
+			}
+			added = append(added, it)
+		}
+		if n := len(tk.Attachments) + fresh; n > lim.perCard {
+			return "", hintedVerbError(ErrVerbAttachmentLimit, "task card "+tk.ID+" would hold "+strconv.Itoa(n)+" attachments, over the limit of "+strconv.Itoa(lim.perCard), &VerbHint{
 				Command: "tuios task detach " + tk.ID + " NAME",
 				Detail:  "Nothing was attached. The limit is [tasks] attachments_per_card. Detach one first.",
 			})
 		}
-		if i >= 0 {
-			old = tk.Attachments[i].Hash
+		if used := sessionAttachBytes(st); newBytes > 0 && used+newBytes > lim.sessionBytes {
+			return "", tooLarge("the session's attachments with these", used+newBytes, lim.sessionBytes, "attachment_session_mib")
 		}
-		if att.Hash != "" {
-			used := sessionAttachBytes(st)
-			if !slices.ContainsFunc(st.Tasks, func(t TaskState) bool {
-				return slices.ContainsFunc(t.Attachments, func(a TaskAttachment) bool { return a.Hash == att.Hash })
-			}) && used+att.Size > lim.sessionBytes {
-				return "", tooLarge("the session's attachments with this one", used+att.Size, lim.sessionBytes, "attachment_session_mib")
-			}
+		if len(added) == 0 {
+			return "", nil
 		}
-		att.At = now
-		action, _, _ := sess.moveCard(tk, cardMove{kind: moveAttach, by: caller.by, reason: att.Name, attachment: &att}, now)
+		list := make([]TaskAttachment, len(added))
+		for i := range added {
+			added[i].att.At = now
+			list[i] = added[i].att
+		}
+		action, _, _ := sess.moveCard(tk, cardMove{kind: moveAttach, by: caller.by, reason: attachReason(added), attachments: list}, now)
 		return action, nil
 	})
-	if att.Hash != "" {
-		// The card names the file now, or the attach was refused and the
-		// file may be no card's.
-		d.attachSweep.drop(att.Hash)
-	}
 	if verr != nil {
-		if att.Hash != "" {
-			d.sweepAttachments(att.Hash)
+		for _, it := range items {
+			if it.att.Hash != "" {
+				sweep = append(sweep, it.att.Hash)
+			}
 		}
 		return nil, verr
 	}
-	if old != "" && old != att.Hash {
-		d.sweepAttachments(old)
+	for _, h := range olds {
+		if !slices.ContainsFunc(items, func(it attachItem) bool { return it.att.Hash == h }) {
+			sweep = append(sweep, h)
+		}
 	}
 	if action != "" {
-		LogBasic("Attached %s to task %s in session %s", att.Name, p.ID, sess.Name())
-		d.publishTask(sess, EventTaskChanged, action, "", att.Name, row)
+		LogBasic("Attached %s to task %s in session %s", attachReason(added), p.ID, sess.Name())
+		d.publishTask(sess, EventTaskChanged, action, "", attachReason(added), row)
 	}
-	return map[string]any{"type": "task_attached", "attachment": att, "task": row}, nil
+	out := make([]TaskAttachment, len(items))
+	for i, it := range items {
+		out[i] = it.att
+	}
+	res := map[string]any{"type": "task_attached", "attachment": out[0], "attachments": out, "unchanged": cmpOrEmpty(same), "task": row}
+	return res, nil
+}
+
+// cmpOrEmpty is s, or an empty list for nil, so a caller reads a list.
+func cmpOrEmpty(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }
 
 // detachTaskParams are what detach-task and get-task-attachment take.
@@ -801,11 +953,18 @@ func (d *Daemon) forwardAttach(cs *connState, p attachTaskParams) (any, *verbErr
 		params["content"] = base64.StdEncoding.EncodeToString(data)
 	case p.Link != "":
 		params["link"] = p.Link
+	case len(p.Files) > 0:
+		params["files"] = p.Files
 	default:
 		params["content"] = p.Content
 	}
-	if c, _ := params["content"].(string); base64.StdEncoding.DecodedLen(len(c)) > attachForwardMax+2 {
-		return nil, tooLarge("a file for another machine", int64(base64.StdEncoding.DecodedLen(len(c))), attachForwardMax, "attachment_max_mib (and 3 MiB over a link)")
+	crossing, _ := params["content"].(string)
+	size := base64.StdEncoding.DecodedLen(len(crossing))
+	for _, f := range p.Files {
+		size += base64.StdEncoding.DecodedLen(len(f.Content))
+	}
+	if size > attachForwardMax+2 {
+		return nil, tooLarge("what goes to another machine", int64(size), attachForwardMax, "attachment_max_mib (and 3 MiB over a link)")
 	}
 	if name != "" {
 		params["name"] = name
@@ -817,14 +976,21 @@ func (d *Daemon) forwardAttach(cs *connState, p attachTaskParams) (any, *verbErr
 		return nil, federationTaskErr("attach-task", p.Host, err)
 	}
 	var res struct {
-		Attachment TaskAttachment `json:"attachment"`
-		Task       TaskRow        `json:"task"`
+		Attachment  TaskAttachment   `json:"attachment"`
+		Attachments []TaskAttachment `json:"attachments"`
+		Unchanged   []string         `json:"unchanged"`
+		Task        TaskRow          `json:"task"`
 	}
 	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return nil, newVerbError(ErrVerbInternal, "read "+p.Host+"'s answer: "+err.Error())
 	}
 	res.Task.Host = p.Host
-	return map[string]any{"type": "task_attached", "attachment": res.Attachment, "task": res.Task}, nil
+	if res.Attachments == nil {
+		// A daemon from before files answers with one attachment.
+		res.Attachments = []TaskAttachment{res.Attachment}
+	}
+	return map[string]any{"type": "task_attached", "attachment": res.Attachment, "attachments": res.Attachments,
+		"unchanged": cmpOrEmpty(res.Unchanged), "task": res.Task}, nil
 }
 
 // prLinkFresh is how long a pull request link's state is kept before gh is
