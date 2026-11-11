@@ -2502,7 +2502,7 @@ the head row counts the columns past each edge.
 | `j` `k`, `up` `down` | Go to the card above or below |
 | `H` `L`, `shift+left` `shift+right` | Move the card to the stage before or after |
 | `enter` | Go to the holder's pane. On a free card, open the New agent sheet on it |
-| `space` | Show the card's preview: its prompt as Markdown, its attachments and its history. It follows the cursor and a click on a card. It names the pull request of the card's worktree session. `J` `K` scroll it, `[` `]` step the attachments, one row each, and open the selected one under its row with its note (a picture, Markdown, a diff or a text highlighted, a Mermaid diagram drawn by the sketch plugin, a pull request with its state and checks), `o` shows a picture whole, `Z` shows it over the whole view, `space` or `esc` closes it. A drag on its edge sets its width, and a click outside the sheet closes the sheet |
+| `space` | Show the card's preview, or close it. See [Card preview and attachments](#card-preview-and-attachments) |
 | `n` | Add a card to the column under the cursor. Type the title, then press `enter` |
 | `t` | Take the card for the pane behind the agents view |
 | `F` | Fold or open the column. Done starts folded |
@@ -2546,6 +2546,101 @@ shows ([CONFIGURATION.md](CONFIGURATION.md#the-task-board)). The board
 lists this machine's cards: under the scope of another machine it is empty
 and says so. A daemon older than the board says so too, and the agents view
 works as before.
+
+#### Card preview and attachments
+
+`space` on a card of the board's columns shows the card whole without leaving
+the board. The preview follows the cursor, and a click on another card shows
+that card. It shows:
+
+- the title, the stage and how long the card has been in it, its session and id;
+- who holds it, or that it is free, its block and its lifecycle (verify,
+  review, attempts and the last note);
+- the pull request of the session the card's work is in, with its state,
+  checks and branch;
+- the prompt, drawn as Markdown;
+- the attachments, one row each: the name, then the kind, size, who put it
+  there and when;
+- the history, newest first, and the end of a failed verify's output.
+
+On a screen 140 columns or wider that keeps three columns beside it, the
+preview is a panel on the right of the columns. Otherwise it is a sheet over
+them. `[agents] card_preview` chooses: `auto` (the default), `side`, `sheet`
+or `off`. `card_preview_width` sets the panel's width, in cells or as a share
+of the view ([CONFIGURATION.md](CONFIGURATION.md#the-agent-list)).
+
+| Keys | What it does |
+|---|---|
+| `space`, `esc` | Close the preview |
+| `J` `K`, `ctrl+d` `ctrl+u` | Scroll it by half its height |
+| `[` `]` | Select the attachment before or after, and open it under its row |
+| `o` | Show the selected picture whole, in the image view |
+| `Z` | Show the preview over the whole view, or beside the columns again |
+
+The keys are the agents view's own bindings (`inbox_peek`,
+`inbox_detail_down`, `inbox_tab_next`, `inbox_artifact`, `inbox_zoom`), so
+`[keybindings.inbox]` changes them. With the mouse, the wheel over the
+preview scrolls it, a click on an attachment selects it, a click on a picture
+opens it, a drag on the panel's edge sets its width (a double click gives it
+back to the config), and a click outside the sheet closes the sheet.
+
+The selected attachment opens under its row, with its note:
+
+| Kind | The preview shows |
+|---|---|
+| `image` (PNG, JPEG, GIF, WebP) | The picture, through kitty graphics where the terminal has them, block glyphs where it does not, and its size in words at 16 colours |
+| `markdown` | The file drawn as Markdown |
+| `diff`, `text` | The file highlighted, the first 400 lines |
+| `mermaid` | The diagram drawn as text by the sketch plugin, or its source when the plugin is not installed |
+| `pr` | The pull request's number, state, title and checks, read through your `gh` at most once a minute |
+| `link` | The address |
+| `file` | Its name and size only. `tuios task attachment get` saves it |
+
+The card is read when the preview first shows it, and each file the first
+time it is selected, after the frame is drawn. A file is kept by its hash, at
+most 32 MiB in all, so a card that comes back reads nothing again. Nothing
+runs on a timer. An attachment is only shown: it is never typed into a pane
+or given to an agent.
+
+Agents and scripts put files on a card with `tuios task attach`
+([CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-task)):
+
+```sh
+tuios task attach t3 after.png --note 'the layout after the fix'
+tuios task attach t3 build.log test-output.txt     # one change, one history entry
+tuios task attach t3 --screenshot -w build         # the daemon takes the picture
+tuios task attach t3 --capture -w build --scrollback --lines 300
+tuios task attach t3 --link https://github.com/o/r/pull/12   # named PR #12
+tuios task attachments t3
+tuios task attachment get t3 build.log -o build.log
+tuios task detach t3 build.log
+```
+
+- **Where the files are.** The command sends the file's bytes, and the daemon
+  never opens a path a caller names. The daemon stores each file once, by its
+  sha256, in `attachments/` beside the saved sessions in its state folder,
+  and the card keeps a reference. The files come back with the card after a
+  restart and a live upgrade. A file goes when no card of a running or a
+  saved session names it: after a detach, a replace, a card's removal, and at
+  the daemon's start. A state push never carries them; a card's row says how
+  many it has.
+- **Names.** A name is unique on a card. The same file again under its name
+  changes nothing, so a retry is safe. Another file under a name in use is
+  refused unless `--replace`. A pull request link is named `PR #N`, another
+  link its host and path, unless `--name` says otherwise.
+- **Limits.** `[tasks] attachment_max_mib` (8 by default, at most 8),
+  `attachments_per_card` (20) and `attachment_session_mib` (256). A refusal
+  names the option.
+- **Who may attach.** A pane attaches to the card it holds, and to the card
+  it finished while that card waits in `verify` or `review`, since `tuios
+  task done` lets the card go. `--screenshot` and `--capture` also need the
+  read grant. A pane holding admin, you, a shell outside every pane, a plugin
+  and a linked machine attach to any card. `detach` follows the same rule.
+- **Another machine.** On a project card another machine owns, the pane that
+  holds it attaches with `-s HOST:SESSION`. Its daemon takes a screenshot or a
+  capture there and passes the bytes on over the link, at most 3 MiB.
+- **The capture sheet.** An image pasted into `ctrl+b +` is attached to the
+  new card, and the prompt names it as `NAME (attached)`.
 
 The Artifacts tab lists what the agent has shown you, newest first: the TML
 documents its pane opened with `tuios tml show`, open or closed, and the
