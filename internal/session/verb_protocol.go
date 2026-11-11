@@ -2385,7 +2385,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "prefix", Type: "string", Description: `Only options whose path starts with this, e.g. "appearance.sidebar.".`},
 			},
 			returns: []verbParam{
-				{Name: "options", Type: "[]object", Description: "One row per option: path, type, section, description, default, and accepted/min/max/deprecated where they apply. session_value is present only where this session carries an override."},
+				{Name: "options", Type: "[]object", Description: "One row per option: path, type, section, description, default, and accepted/min/max/unit/deprecated where they apply (unit is what a number counts: ms, s, cells, %). session_value is present only where this session carries an override."},
 				{Name: "sections", Type: "[]string", Description: "Every section name, whatever the filter matched."},
 				{Name: "total", Type: "int", Description: "How many options the filter matched."},
 			},

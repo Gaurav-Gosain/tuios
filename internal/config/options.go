@@ -103,6 +103,12 @@ type Option struct {
 	// variable is laid over the file by WithEnv, so it wins over the file.
 	Env      string `json:"env,omitempty"`
 	Fallback string `json:"-"`
+	// Unit is what an int option's number counts, such as "ms", "s",
+	// "cells" or "MiB", shown after the value on the settings page and in
+	// list-options. An entry whose path ends in a unit (_ms, _seconds,
+	// _hours, _mb ...) gets it from the path when it names none, and a
+	// Percent option gets "%". Empty means a plain count.
+	Unit string `json:"unit,omitempty"`
 	// Normalize is what the option's reader does to a value before it
 	// compares it with Accepted, such as trimming spaces or folding case. The
 	// load check does the same, so it warns only about a value the reader
@@ -454,6 +460,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.border_gradient_angle", Type: OptionInt, Section: "appearance",
+		Unit:        "degrees",
 		Description: "Direction of the focused border's gradient in degrees: 0 runs left to right, 90 top to bottom",
 		Default:     "45", Min: 0, Max: 359,
 	},
@@ -472,6 +479,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.zoom_max_width", Type: OptionInt, Section: "appearance",
+		Unit:        "cells",
 		Description: "Width in cells of a zoomed pane. 0 fills the screen.",
 		Min:         0,
 		Flag:        "zoom-max-width",
@@ -529,6 +537,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.gap", Type: OptionInt, Section: "appearance",
+		Unit:        "cells",
 		Description: "Cells of empty ground kept between two neighbouring tiled panes",
 		Min:         0, Max: PaneGapMax,
 	},
@@ -605,6 +614,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.theme_transition_duration", Type: OptionInt, Section: "appearance",
+		Unit:        "ms",
 		Description: "Milliseconds a theme transition takes at animation speed 100",
 		Min:         ThemeTransitionMsMin, Max: ThemeTransitionMsMax,
 		Zero: ZeroIsDefault,
@@ -700,11 +710,13 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.prefix_repeat_time", Type: OptionInt, Section: "appearance",
+		Unit:        "ms",
 		Description: "Milliseconds the prefix stays armed after a repeatable command. 0 turns it off.",
 		Min:         PrefixRepeatTimeMin, Max: PrefixRepeatTimeMax,
 	},
 	{
 		Path: "appearance.panel_padding", Type: OptionInt, Section: "appearance",
+		Unit:        "columns",
 		Description: "Columns of padding each side of an overlay panel's content",
 		Min:         1, Max: overlay.MaxPanelPadding,
 	},
@@ -773,6 +785,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.sidebar_width", Type: OptionInt, Section: "appearance",
+		Unit:        "columns",
 		Description: "Preferred rail width in columns",
 		Min:         0,
 		Deprecated:  "folded into [appearance.sidebar] on load; set appearance.sidebar.width",
@@ -819,6 +832,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.dock_workspace_label_max", Type: OptionInt, Section: "dock",
+		Unit:        "cells",
 		Description: "Cells a workspace pill's label may span before the pill cuts it (0 draws the whole name and scrolls the strip instead)",
 		Default:     "12", Min: 0, Max: 200,
 	},
@@ -1010,6 +1024,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.sidebar.width", Type: OptionInt, Section: "sidebar",
+		Unit:        "columns",
 		Description: "Preferred rail width in columns on a wide screen",
 		Min:         0,
 	},
@@ -1157,6 +1172,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.sidebar.subagent_max_rows", Type: OptionInt, Section: "sidebar",
+		Unit:        "lines",
 		Description: "The most lines one agent's subagents take, the +N more line included. 0 is no limit.",
 		Min:         0, Max: SidebarSubagentMaxRowsMax,
 	},
@@ -1236,6 +1252,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "agents.reply_rows", Type: OptionInt, Section: "agents",
+		Unit:        "rows",
 		Description: "The most rows a multi-line editor grows to before it scrolls: a reply to an agent or to many, a mail draft and a new agent's task. 0 keeps each editor's own: 8 for a reply, 6 for mail, 3 for a task. An editor never takes more rows than its view has, and alt+m in it takes all of them.",
 		Min:         0, Max: ReplyRowsMax,
 	},
@@ -1381,16 +1398,19 @@ var optionSpecs = []Option{
 	// [notifications]
 	{
 		Path: "notifications.duration", Type: OptionInt, Section: "notifications",
+		Unit:        "s",
 		Description: "Seconds an info message stays up. 0 uses the default, 2.",
 		Min:         0, Max: 3600,
 	},
 	{
 		Path: "notifications.warning_duration", Type: OptionInt, Section: "notifications",
+		Unit:        "s",
 		Description: "Seconds a warning stays up. 0 uses the default, 8.",
 		Min:         0, Max: 3600,
 	},
 	{
 		Path: "notifications.error_duration", Type: OptionInt, Section: "notifications",
+		Unit:        "s",
 		Description: "Seconds an error stays up when error_sticky is false. 0 uses the default, 15.",
 		Min:         0, Max: 3600,
 	},
@@ -1605,11 +1625,13 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "screenshot.padding", Type: OptionInt, Section: "screenshot",
+		Unit:        "px",
 		Description: "Space around the card in pixels",
 		Default:     "48", Min: 0, Max: ScreenshotMaxPadding,
 	},
 	{
 		Path: "screenshot.radius", Type: OptionInt, Section: "screenshot",
+		Unit:        "px",
 		Description: "Card corner radius in pixels",
 		Default:     "10", Min: 0, Max: ScreenshotMaxRadius,
 	},
@@ -1689,6 +1711,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "spotlight.radius", Type: OptionInt, Section: "spotlight",
+		Unit:        "rows",
 		Description: "Half the beam's height, in rows",
 		Min:         SpotlightMinRadius, Max: SpotlightMaxRadius,
 	},
@@ -1712,11 +1735,13 @@ var optionSpecs = []Option{
 	// client-local like the spotlight.
 	{
 		Path: "pip.width", Type: OptionInt, Section: "pip",
+		Unit:        "cells",
 		Description: "Width of the picture-in-picture view, border included, in cells",
 		Min:         PiPMinWidth, Max: PiPMaxWidth,
 	},
 	{
 		Path: "pip.height", Type: OptionInt, Section: "pip",
+		Unit:        "cells",
 		Description: "Height of the picture-in-picture view, border included, in cells",
 		Min:         PiPMinHeight, Max: PiPMaxHeight,
 	},
@@ -1930,6 +1955,9 @@ var optionIndex = sync.OnceValue(func() map[string]Option {
 // written.
 func deriveOptionDefaults(specs []Option, defaults *UserConfig) {
 	for i := range specs {
+		if specs[i].Unit == "" {
+			specs[i].Unit = unitFromPath(specs[i])
+		}
 		field, ok := resolveOptionField(defaults, specs[i].Path)
 		if !ok {
 			continue
@@ -1938,6 +1966,51 @@ func deriveOptionDefaults(specs []Option, defaults *UserConfig) {
 			specs[i].Default = text
 		}
 	}
+}
+
+// pathUnits are the path endings that name an int option's unit.
+var pathUnits = []struct{ suffix, unit string }{
+	{"_ms", "ms"}, {"_seconds", "s"}, {"_minutes", "min"}, {"_hours", "h"},
+	{"_days", "days"}, {"_mb", "MiB"}, {"_kb", "KiB"}, {"_lines", "lines"},
+	{"_cells", "cells"},
+}
+
+// unitFromPath is the unit an int option's path or Percent flag names, or "".
+func unitFromPath(o Option) string {
+	if o.Type != OptionInt {
+		return ""
+	}
+	if o.Percent {
+		return "%"
+	}
+	for _, pu := range pathUnits {
+		if strings.HasSuffix(o.Path, pu.suffix) {
+			return pu.unit
+		}
+	}
+	return ""
+}
+
+// WithUnit is text, an int option's value, followed by its unit: "2000 ms",
+// "45%", "1 cell". text is returned as it is when the option has no unit or text is not
+// a number, such as "auto".
+func (o Option) WithUnit(text string) string {
+	if o.Unit == "" {
+		return text
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(text))
+	if err != nil {
+		return text
+	}
+	unit := o.Unit
+	switch {
+	case unit == "%":
+		return text + "%"
+	case (n == 1 || n == -1) && len(unit) > 2 && strings.HasSuffix(unit, "s"):
+		// A word unit reads in the singular for one: "1 cell", "1 day".
+		unit = strings.TrimSuffix(unit, "s")
+	}
+	return text + " " + unit
 }
 
 // Options returns every settable option, sorted by path.

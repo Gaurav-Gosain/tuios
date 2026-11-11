@@ -16721,3 +16721,16 @@ Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHostSwitchBackKeepsTheLocalSessionsWindows$' -v .`,
 and from the root with
 `go test -count=1 -run '^TestUpdateStateDropsAnotherSessionsWindows$' ./internal/session/`.
+
+## Option units
+
+`e2e/tui/option_units_test.go` `TestOptionsSayTheirUnit` reads
+`tuios list-options --json` and the text form for motion.layout_ms (a unit
+from the path), appearance.gap (a unit the entry names), appearance.master_ratio
+(a percent) and appearance.master_count (no unit).
+
+Run on 2026-11-11 on branch `untangle/t50-option-units` (arch-btw).
+
+| Control: what was cut | Where it failed | Verdict |
+| --- | --- | --- |
+| `row["unit"]` in the list-options verb (`internal/session/verb_options.go`), the branch's first version, which had it missing | "list-options --json gives motion.layout_ms the unit \"\", want \"ms\"", and the same for gap and master_ratio | **caught** |

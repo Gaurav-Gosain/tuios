@@ -110,7 +110,7 @@ func printOptionSearch(w io.Writer, raw json.RawMessage, query string, jsonOutpu
 	}
 	for _, h := range hits {
 		o := rows[h.index]
-		fmt.Fprintf(w, "%-*s  %-6s  default %s\n", width, o.Path, o.Type, orNone(o.Default))
+		fmt.Fprintf(w, "%-*s  %-6s  default %s\n", width, o.Path, o.Type, withUnit(orNone(o.Default), o.Unit))
 		fmt.Fprintf(w, "%-*s  %s\n", width, "", o.Description)
 		if o.SessionVal != "" {
 			fmt.Fprintf(w, "%-*s  this session: %s\n", width, "", o.SessionVal)

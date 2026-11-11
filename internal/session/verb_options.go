@@ -75,6 +75,9 @@ func (d *Daemon) verbListOptions(cs *connState, params json.RawMessage) (any, *v
 			row["min"] = opt.Min
 			row["max"] = opt.Max
 		}
+		if opt.Unit != "" {
+			row["unit"] = opt.Unit
+		}
 		if opt.Auto {
 			row["auto"] = true
 		}

@@ -447,11 +447,7 @@ func (m *OS) registryItem(path string) settingItem {
 		}
 		item.Control = controlInt
 		item.value = func(m *OS) string {
-			text := strconv.Itoa(m.optionInt(path))
-			if o.Percent {
-				text += "%"
-			}
-			return text
+			return o.WithUnit(strconv.Itoa(m.optionInt(path)))
 		}
 		item.adjust = func(m *OS, dir int) {
 			m.setOption(path, strconv.Itoa(clampInt(m.optionInt(path)+dir*step, lo, hi)))

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -91,7 +92,7 @@ func printOptionList(w io.Writer, options []optionRow, sections []string, total 
 		if opt.Deprecated != "" {
 			deprecated = "  (deprecated)"
 		}
-		fmt.Fprintf(w, "  %-*s  %-6s  default %s%s\n", width, opt.Path, opt.Type, orNone(opt.Default), deprecated)
+		fmt.Fprintf(w, "  %-*s  %-6s  default %s%s\n", width, opt.Path, opt.Type, withUnit(orNone(opt.Default), opt.Unit), deprecated)
 		fmt.Fprintf(w, "  %-*s  %s\n", width, "", opt.Description)
 		if len(opt.Accepted) > 0 {
 			fmt.Fprintf(w, "  %-*s  one of: %s\n", width, "", strings.Join(opt.Accepted, ", "))
@@ -101,7 +102,7 @@ func printOptionList(w io.Writer, options []optionRow, sections []string, total 
 			if opt.Auto {
 				auto = ", or auto"
 			}
-			fmt.Fprintf(w, "  %-*s  range: %d to %d%s\n", width, "", opt.Min, opt.Max, auto)
+			fmt.Fprintf(w, "  %-*s  range: %d to %s%s\n", width, "", opt.Min, withUnit(strconv.Itoa(opt.Max), opt.Unit), auto)
 		}
 		if opt.SessionVal != "" {
 			fmt.Fprintf(w, "  %-*s  this session: %s\n", width, "", opt.SessionVal)
@@ -304,4 +305,10 @@ func getConfigValueCompletions(path, _ string) []string {
 		return []string{"right", "left"}
 	}
 	return nil
+}
+
+// withUnit is a number from list-options followed by its unit, as the
+// settings page shows it: "2000 ms", "45%". Anything else is returned as it is.
+func withUnit(text, unit string) string {
+	return config.Option{Unit: unit}.WithUnit(text)
 }

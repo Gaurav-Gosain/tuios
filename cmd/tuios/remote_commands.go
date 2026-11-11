@@ -275,6 +275,7 @@ type optionRow struct {
 	Accepted    []string `json:"accepted"`
 	Min         int      `json:"min"`
 	Max         int      `json:"max"`
+	Unit        string   `json:"unit"`
 	Auto        bool     `json:"auto"`
 	Deprecated  string   `json:"deprecated"`
 	SessionVal  string   `json:"session_value"`

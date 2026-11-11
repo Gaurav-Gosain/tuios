@@ -4749,7 +4749,7 @@ there.
 
 | Command | What it does |
 |---------|--------------|
-| `tuios list-options [prefix]` | List every settable configuration option, with its type, default and accepted values. `--section NAME` lists one group, such as `sidebar` or `dock` |
+| `tuios list-options [prefix]` | List every settable configuration option, with its type, default and accepted values or range, and the unit of a number (`ms`, `cells`, `%`). `--section NAME` lists one group, such as `sidebar` or `dock` |
 | `tuios list-options --search <query>` | The options matching a fuzzy query on path, value or description, best first, as the settings page searches |
 | `tuios get-config <path>` | Read a configuration option from a running session. `-s` names the session. `--json` adds the source: `session`, `config` or `default` |
 | `tuios list-themes [theme]` | List the themes, and describe one. `--filter TEXT` lists only the ids that contain it, such as `gruvbox` |
