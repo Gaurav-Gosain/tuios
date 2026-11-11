@@ -505,7 +505,7 @@ var optionSpecs = []Option{
 		Description: "Which clients write their frames as diffed cells instead of through Bubble Tea's renderer, " +
 			"which turns each frame into text and back. served: clients over SSH and the web. " +
 			"all: this terminal as well. off: none. TUIOS_CELL_FRAME=1 means all and 0 means off",
-		Accepted: CellFrameModes, Default: CellFramesServed,
+		Accepted: CellFrameModes, Default: CellFramesAll,
 	},
 	{
 		Path: "appearance.session_colors", Type: OptionBool, Section: "appearance",

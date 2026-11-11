@@ -818,20 +818,26 @@ frame.
 
 ```toml
 [appearance]
-cell_frames = "served"   # the default
-# cell_frames = "all"    # this terminal as well
+cell_frames = "all"      # the default
+# cell_frames = "served" # only clients over SSH and the web
 # cell_frames = "off"    # no client
 ```
 
 | Value | Clients that write cells |
 | --- | --- |
-| `"served"` | Clients over `tuios ssh`, `tuios-web` and the browser tour. This is the default. |
-| `"all"` | Those, and the terminal you run `tuios` in. Not on Windows. |
+| `"served"` | Clients over `tuios ssh`, `tuios-web` and the browser tour. |
+| `"all"` | Those, and the terminal you run `tuios` in, except on Windows. This is the default. |
 | `"off"` | None. |
 
 The environment variable `TUIOS_CELL_FRAME` overrides the option: `1` means
 `all` and `0` means `off`. A change to the option applies to the next client
 that starts.
+
+If the screen looks wrong, for example text in the wrong place or stale cells
+after a redraw, set `cell_frames = "off"` or start tuios with
+`TUIOS_CELL_FRAME=0`. That brings back the way frames were sent before the
+default became `all`. Please report the problem with your terminal's name and
+version.
 
 **What limits the frames you see.** tuios sends a frame to your terminal. The
 terminal then draws the frame on its own schedule. kitty and ghostty draw at

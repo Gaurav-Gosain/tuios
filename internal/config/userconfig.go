@@ -1245,7 +1245,7 @@ func DefaultConfig() *UserConfig {
 		},
 		Appearance: AppearanceConfig{
 			BorderStyle:              "rounded",
-			CellFrames:               CellFramesServed,
+			CellFrames:               CellFramesAll,
 			ZenMode:                  ZenModeDisabled,
 			Links:                    LinksAll,
 			LinkClick:                LinkClickBoth,

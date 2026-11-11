@@ -87,6 +87,7 @@ jobs:
     outputs:
       shards: ${{ steps.shards.outputs.shards }}
       total: ${{ steps.shards.outputs.total }}
+      frames: ${{ steps.frames.outputs.frames }}
     # actions: read lets scripts/e2e-select.sh download the newest test map.
     permissions:
       contents: read
@@ -130,6 +131,19 @@ jobs:
       # itself below. A shard with no test does not start, so a small change
       # takes two or three runners instead of fourteen. When the plan finds no
       # shard for a selection that holds tests, every shard starts.
+      # The frame paths the shards run on (appearance.cell_frames). A pull
+      # request runs the default path, cells. A push to main, and a run by
+      # hand, also run every shard on Bubble Tea's renderer, the other path,
+      # so it cannot break unseen while both paths exist.
+      - name: Choose the frame paths
+        id: frames
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            echo 'frames=["cells"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'frames=["cells","string"]' >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Choose the shards that run
         id: shards
         working-directory: e2e/tui
@@ -201,14 +215,18 @@ jobs:
       fail-fast: false
       matrix:
         shard: ${{ fromJSON(needs.shard-plan.outputs.shards) }}
-    name: e2e-tui (shard ${{ matrix.shard }} of ${{ needs.shard-plan.outputs.total }})
+        frame: ${{ fromJSON(needs.shard-plan.outputs.frames) }}
+    # The default path keeps the name the checks have always had.
+    name: e2e-tui (shard ${{ matrix.shard }} of ${{ needs.shard-plan.outputs.total }})${{ matrix.frame == 'string' && ', string frames' || '' }}
     needs: [tested, shard-plan]
     # tested is skipped on a pull request, so the shards must not wait for its
     # success. A draft skips the shards.
     if: ${{ !cancelled() && needs.shard-plan.result == 'success' && needs.shard-plan.outputs.shards != '[]' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     timeout-minutes: 20
     env:
-      TESTED_URL: ${{ needs.tested.outputs.url }}
+      # A pull request runs only the cells path, so a pass there says nothing
+      # about the string path.
+      TESTED_URL: ${{ matrix.frame == 'cells' && needs.tested.outputs.url || '' }}
 
     steps:
       - name: Already passed on the pull request
@@ -329,6 +347,9 @@ jobs:
           # log and makes the artifact obvious.
           TUIOS_E2E_BIN: ${{ runner.temp }}/tuios
           SHARD: ${{ matrix.shard }}
+          # The harness forwards it to every client: 0 is Bubble Tea's
+          # renderer, and empty leaves the default, cells.
+          TUIOS_CELL_FRAME: ${{ matrix.frame == 'string' && '0' || '' }}
         # -count=1 defeats Go's test cache, which otherwise can replay a stale
         # result across a change of binary. -race is deliberately absent: the
         # program under test is a child process, so the detector would

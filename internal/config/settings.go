@@ -1206,7 +1206,7 @@ var CellFrameModes = []string{CellFramesServed, CellFramesAll, CellFramesOff}
 // CellFramesFor reports whether a client writes its frames as diffed cells:
 // a served one (SSH, web, the browser build) or this terminal's. The
 // environment's TUIOS_CELL_FRAME, 1 or 0, overrides the option; an empty or
-// unknown value reads as served.
+// unknown value reads as the default, all.
 func (s *Settings) CellFramesFor(served bool) bool {
 	mode := s.CellFrames
 	switch os.Getenv("TUIOS_CELL_FRAME") {
@@ -1216,10 +1216,10 @@ func (s *Settings) CellFramesFor(served bool) bool {
 		mode = CellFramesOff
 	}
 	switch mode {
-	case CellFramesAll:
-		return true
+	case CellFramesServed:
+		return served
 	case CellFramesOff:
 		return false
 	}
-	return served
+	return true
 }
