@@ -21,11 +21,11 @@ import (
 // at full screen the circle went out every 17.1 to 17.5 ms, and a 60 Hz
 // recording showed held frames.
 //
-// Negative controls: dropping the expireThemeTransition term from
-// handleMotionFrame fails the "still runs" check, and dropping t.old = nil
-// from end fails the "kept frame" check. Arming the motion timer for want
-// again, in motionCmd or in nextMotionWait, fails the grid checks. Dropping
-// the wait > -want/4 bound fails the stall check.
+// Negative controls: making the transition's step report no frame fails the
+// "still runs" check, and dropping t.old = nil from end fails the "kept
+// frame" check. Counting the next frame from now instead of from the last
+// due, in nextDue, fails the grid checks. Dropping its quarter interval bound
+// fails the stall check.
 func TestAThemeTransitionEndsAndLetsTheClockLapse(t *testing.T) {
 	prev := theme.CurrentThemeID()
 	t.Cleanup(func() { _ = theme.Initialize(prev) })
@@ -36,11 +36,11 @@ func TestAThemeTransitionEndsAndLetsTheClockLapse(t *testing.T) {
 	_ = theme.Initialize("catppuccin_latte")
 	m.motionCmd()
 	m.composeView()
-	idle := m.motionInterval()
+	idle := motionEvery(m)
 
 	m.applyTheme("tokyonight")
 	m.motionCmd()
-	if got := m.motionInterval(); got != m.themeTransitionFrame() {
+	if got := motionEvery(m); got != m.themeTransitionFrame() {
 		t.Fatalf("a theme change asks the motion clock for a frame every %v, want %v", got, m.themeTransitionFrame())
 	}
 	m.composeView()
@@ -51,6 +51,7 @@ func TestAThemeTransitionEndsAndLetsTheClockLapse(t *testing.T) {
 	// A frame mid-way draws; the frame after the end draws once more and
 	// the clock stops.
 	m.renderSkipped = true
+	dueNow(m)
 	m.handleMotionFrame(motionFrameMsg{gen: m.motion.gen})
 	if m.renderSkipped {
 		t.Error("a motion frame during the transition was skipped")
@@ -60,22 +61,21 @@ func TestAThemeTransitionEndsAndLetsTheClockLapse(t *testing.T) {
 	// late that one was handled.
 	frame := m.themeTransitionFrame()
 	late := time.Now().Add(-frame / 2)
-	m.motion.due = late
-	m.motionCmd()
-	if want := late.Add(frame); !m.motion.due.Equal(want) {
+	i := effectIndex("theme transition")
+	m.motion.due[i] = late
+	m.handleMotionFrame(motionFrameMsg{gen: m.motion.gen})
+	if want := late.Add(frame); !m.motion.due[i].Equal(want) {
 		t.Errorf("a frame handled %v late put the next one at %v past the last, want %v",
-			frame/2, m.motion.due.Sub(late), frame)
+			frame/2, m.motion.due[i].Sub(late), frame)
 	}
 	// A second of frames, each handled 4 ms after it was due, is still a
 	// second of frames at the full rate.
-	var mo motionState
 	start := time.Now()
-	at := start.Add(mo.nextMotionWait(start, frame))
+	at := start.Add(frame)
 	n := 0
 	for at.Before(start.Add(time.Second)) {
 		n++
-		handled := at.Add(4 * time.Millisecond)
-		at = handled.Add(mo.nextMotionWait(handled, frame))
+		at = nextDue(at, at.Add(4*time.Millisecond), frame)
 	}
 	if rate := int(time.Second / frame); n < rate-1 {
 		t.Errorf("frames handled 4 ms late came %d times a second, want %d", n, rate)
@@ -83,19 +83,21 @@ func TestAThemeTransitionEndsAndLetsTheClockLapse(t *testing.T) {
 	// A stall does not make the clock catch up: the frames it missed are
 	// gone, and the next waits a whole interval from a new grid.
 	stalled := at.Add(time.Second)
-	for i := range 3 {
-		if wait := mo.nextMotionWait(stalled, frame); wait != frame {
-			t.Fatalf("frame %d after a one second stall waits %v, want %v", i, wait, frame)
+	for k := range 3 {
+		next := nextDue(at, stalled, frame)
+		if wait := next.Sub(stalled); wait != frame {
+			t.Fatalf("frame %d after a one second stall waits %v, want %v", k, wait, frame)
 		}
-		stalled = stalled.Add(frame)
+		at, stalled = next, next
 	}
 	m.themeFx.start = time.Now().Add(-time.Hour)
 	m.renderSkipped = true
+	dueNow(m)
 	m.handleMotionFrame(motionFrameMsg{gen: m.motion.gen})
 	if m.renderSkipped {
 		t.Error("the frame that ends the transition was skipped, so the old theme stays on the screen")
 	}
-	if got := m.motionInterval(); got != idle {
+	if got := motionEvery(m); got != idle {
 		t.Errorf("the motion clock runs every %v after the transition, want %v as before it", got, idle)
 	}
 	if m.themeFx.old != nil {

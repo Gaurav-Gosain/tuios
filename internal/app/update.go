@@ -1466,20 +1466,8 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.handleLearnQuit()
 		return m, nil
 
-	case celebrateFrameMsg:
-		// A running celebration asking for its next frame. Like the saver it
-		// drives itself and stops asking once its last particle is gone.
-		return m, m.handleCelebrateFrame(msg.at)
-
-	case screensaverFrameMsg:
-		// The running saver asking for its next frame. It drives itself rather
-		// than riding the maintenance tick, which is what keeps the idle path
-		// untouched while it is merely armed.
-		return m, m.handleScreensaverFrame()
-
 	case motionFrameMsg:
-		m.handleMotionFrame(msg)
-		return m, nil
+		return m, m.handleMotionFrame(msg)
 
 	case ckHoldMsg:
 		m.cockpitSettleHold(time.Now())

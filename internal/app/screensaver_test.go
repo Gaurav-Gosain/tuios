@@ -70,8 +70,8 @@ func TestScreensaverFrameMessageDoesNotResurrectADismissedSaver(t *testing.T) {
 	m := newTestOS(win)
 	m.UserConfig = enabledScreensaverConfig(t, 10)
 
-	if cmd := m.handleScreensaverFrame(); cmd != nil {
-		t.Error("a frame message for a dismissed saver scheduled another frame")
+	if cmd := m.handleMotionFrame(motionFrameMsg{gen: m.motion.gen}); cmd != nil {
+		t.Error("a motion frame after the saver was dismissed scheduled more")
 	}
 	if m.screensaver.active {
 		t.Error("a frame message brought a dismissed saver back")

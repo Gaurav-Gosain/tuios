@@ -439,19 +439,20 @@ func TestAWholeRowSelectionIsSweptOverItsText(t *testing.T) {
 // sweep now keeps the motion clock at the frame rate, and each of its frames
 // marks the pane and draws.
 //
-// Negative control: dropping the copyFlash term from motionInterval fails the
-// first check, and dropping the flash term from handleMotionFrame the second.
+// Negative control: dropping the copy sweep from effects fails the first
+// check, and dropping markCopyFlashPane from its step the second.
 func TestTheSweepRunsOnTheMotionClock(t *testing.T) {
 	m := flashOS(t)
 	w := selectedWindow()
 	m.Windows = []*terminal.Window{w}
 	m.NoteCopyFlash(w)
 
-	if got := m.motionInterval(); got != config.OverlayFadeFrame {
+	if got := motionEvery(m); got != config.OverlayFadeFrame {
 		t.Fatalf("a running sweep asks the motion clock for a frame every %v, want %v", got, config.OverlayFadeFrame)
 	}
 	w.ContentDirty = false
 	m.renderSkipped = true
+	dueNow(m)
 	m.handleMotionFrame(motionFrameMsg{gen: m.motion.gen})
 	if m.renderSkipped || !w.ContentDirty {
 		t.Errorf("a motion frame during the sweep did not draw the pane (skipped=%v, dirty=%v)",
@@ -462,11 +463,12 @@ func TestTheSweepRunsOnTheMotionClock(t *testing.T) {
 	// then the clock stops.
 	m.copyFlash.At = time.Now().Add(-time.Hour)
 	m.renderSkipped = true
+	dueNow(m)
 	m.handleMotionFrame(motionFrameMsg{gen: m.motion.gen})
 	if m.renderSkipped {
 		t.Error("the frame that ends the sweep was skipped, so its light stays on the screen")
 	}
-	if got := m.motionInterval(); got != 0 {
+	if got := motionEvery(m); got != 0 {
 		t.Errorf("the motion clock still runs every %v after the sweep", got)
 	}
 }
@@ -629,7 +631,7 @@ func TestASweepWithNothingToLightEnds(t *testing.T) {
 			m := newTestOS(win)
 			m.Settings.CopyFlash, m.Settings.CopyFlashMs = true, config.CopyFlashMsDefault
 			m.copyFlash = &copyFlash{WindowID: win.ID, At: time.Now(), Start: start, End: end}
-			if m.motionInterval() == 0 {
+			if motionEvery(m) == 0 {
 				t.Fatal("ASSERTION: a running sweep does not hold the motion clock")
 			}
 
@@ -641,7 +643,7 @@ func TestASweepWithNothingToLightEnds(t *testing.T) {
 			if m.copyFlash != nil {
 				t.Error("the sweep kept running with nothing to light")
 			}
-			if got := m.motionInterval(); got != 0 {
+			if got := motionEvery(m); got != 0 {
 				t.Errorf("the motion clock still runs every %v", got)
 			}
 		})

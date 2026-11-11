@@ -31,9 +31,6 @@ import (
 // is why the handler re-checks the elapsed time.
 type screensaverArmMsg struct{}
 
-// screensaverFrameMsg asks the running saver for its next frame.
-type screensaverFrameMsg struct{}
-
 // screensaverState is everything the saver needs. The zero value is a saver
 // that is off and unarmed.
 type screensaverState struct {
@@ -128,13 +125,6 @@ func screensaverRate(s *config.Settings) int {
 	return s.NormalFPS
 }
 
-// screensaverFrameCmd schedules the next animation frame.
-func screensaverFrameCmd(s *config.Settings) tea.Cmd {
-	return tea.Tick(time.Second/time.Duration(screensaverRate(s)), func(time.Time) tea.Msg {
-		return screensaverFrameMsg{}
-	})
-}
-
 // handleScreensaverArm runs when the deferred timer fires. It starts the saver
 // only if the session really has been quiet for the whole delay; otherwise it
 // re-arms for whatever is left, which is what keeps one timer serving any
@@ -160,7 +150,7 @@ func (m *OS) handleScreensaverArm() tea.Cmd {
 		m.screensaver.armed = true
 		return m.screensaverArmCmd(delay)
 	}
-	return m.nextSaverFrameCmd()
+	return m.motionCmd()
 }
 
 // StartScreensaverNow runs the saver because the user asked for it.
@@ -177,7 +167,7 @@ func (m *OS) StartScreensaverNow() tea.Cmd {
 		m.ShowNotification("The screen saver could not start here.", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
-	return m.nextSaverFrameCmd()
+	return m.motionCmd()
 }
 
 // screensaverMayStart reports whether it is polite to cover the screen now.
@@ -362,37 +352,39 @@ func screensaverCells(g *shot.Grid) [][]tfx.InputCell {
 	return cells
 }
 
-// handleScreensaverFrame advances the animation by one frame. An effect that
+// stepScreensaver advances the animation by one frame. An effect that
 // finished restarts, so the saver keeps going until someone dismisses it.
-func (m *OS) handleScreensaverFrame() tea.Cmd {
-	if !m.screensaver.active {
-		// A stale frame message from a saver that was already dismissed. Drop
-		// it without re-arming, or the timer would outlive the animation.
-		return nil
-	}
+func (m *OS) stepScreensaver(time.Time) (bool, tea.Cmd) {
 	// A resize while the saver runs invalidates the capture it was built from.
 	// Rebuilding needs a screen to capture, and the screen is the animation, so
 	// the honest answer is to stop and let the idle timer bring it back.
 	if m.GetRenderWidth() != m.screensaver.width || m.GetRenderHeight() != m.screensaver.height {
 		m.stopScreensaver()
-		return m.armScreensaver()
+		return true, m.armScreensaver()
 	}
 	if p := m.screensaver.player; p != nil {
 		p.at = (p.at + 1) % len(p.frames)
 		m.screensaver.frame = p.show(p.at)
-		m.renderSkipped = false
-		return m.nextSaverFrameCmd()
+		return true, nil
 	}
 	if !m.screensaver.effect.Advance(m.screensaver.engine) {
 		if !m.restartScreensaverEffect() {
 			m.stopScreensaver()
-			return m.armScreensaver()
+			return true, m.armScreensaver()
 		}
 	} else {
 		m.screensaver.frame = m.screensaver.engine.Frame()
 	}
-	m.renderSkipped = false
-	return screensaverFrameCmd(&m.Settings)
+	return true, nil
+}
+
+// saverFrameEvery is how long the frame on screen stays: a frames file's own
+// time for it, or one frame at the effect rate.
+func (m *OS) saverFrameEvery() time.Duration {
+	if p := m.screensaver.player; p != nil {
+		return p.delays[p.at]
+	}
+	return time.Second / time.Duration(screensaverRate(&m.Settings))
 }
 
 // restartScreensaverEffect builds a fresh effect over the same capture, so an

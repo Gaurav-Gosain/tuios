@@ -90,7 +90,7 @@ func (m *OS) NoteCopyFlashRegion(window *terminal.Window, start, end terminal.Po
 	m.copyFlashMore = nil
 	// Nothing in the pane changed, so nothing else is going to ask for a
 	// frame. The first one is asked for here and the motion clock keeps them
-	// coming while the sweep runs; see motionInterval.
+	// coming while the sweep runs; see effects.go.
 	window.ContentDirty = true
 }
 

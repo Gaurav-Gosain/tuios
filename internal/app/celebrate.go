@@ -39,10 +39,6 @@ import (
 // linear drag, plus a small sideways wobble), so a dropped or late frame never
 // changes the path, and a test can ask for any instant directly.
 
-// celebrateFrameMsg asks a running celebration for its next frame. at is when
-// the timer fired, which is the instant the frame is drawn for.
-type celebrateFrameMsg struct{ at time.Time }
-
 // CelebrateOptions says what kind of burst to draw.
 type CelebrateOptions struct {
 	// Big is a larger finale: more particles, a wider spray, and two follow-up
@@ -116,9 +112,6 @@ type celebrationState struct {
 	particles []celebrateParticle
 	// at is the instant the next draw renders.
 	at time.Time
-	// ticking is true while a frame timer is in flight, so a second burst fired
-	// during the first joins the one chain rather than starting another.
-	ticking bool
 }
 
 // active reports whether anything is left to draw.
@@ -180,7 +173,9 @@ func (m *OS) CelebrateAt(x, y int, opts CelebrateOptions) tea.Cmd {
 		c.particles = c.particles[n-celebrateMaxParticles:]
 	}
 	m.renderSkipped = false
-	return m.celebrateTick()
+	// The motion clock draws it; the command arms the clock for a caller
+	// whose Update is not this model's (learn's page commands).
+	return m.motionCmd()
 }
 
 // celebrateOrigin is the middle of a window's box, or of the screen.
@@ -193,34 +188,27 @@ func (m *OS) celebrateOrigin(w *terminal.Window) (int, int) {
 	return m.GetRenderWidth() / 2, m.GetRenderHeight() / 2
 }
 
-// celebrateTick schedules the next frame, unless one is in flight or nothing
-// is left. A burst of still particles needs one frame to show and one timer to
-// clear, so it waits for its last particle rather than ticking at a frame rate.
-func (m *OS) celebrateTick() tea.Cmd {
+// celebrateEvery is how long the burst waits for its next frame: the
+// confetti's rate, or the session's when that is lower. A burst of still
+// particles needs one frame to show and one to clear, so it waits for its
+// last particle rather than ticking at a frame rate.
+func (m *OS) celebrateEvery() time.Duration {
 	c := &m.celebration
-	if c.ticking || !c.active() {
-		return nil
+	if !c.moving() {
+		return max(c.lastDeath().Sub(c.at), time.Millisecond)
 	}
 	interval := time.Second / celebrateFPS
 	if fps := m.Settings.NormalFPS; fps > 0 && fps < celebrateFPS {
 		interval = time.Second / time.Duration(fps)
 	}
-	if !c.moving() {
-		interval = max(c.lastDeath().Sub(c.at), time.Millisecond)
-	}
-	c.ticking = true
-	return tea.Tick(interval, func(t time.Time) tea.Msg { return celebrateFrameMsg{at: t} })
+	return interval
 }
 
-// handleCelebrateFrame advances the burst to now and asks for the next frame
-// while anything is left. The frame after the last particle dies draws the
-// screen without confetti, and no further timer is scheduled.
-func (m *OS) handleCelebrateFrame(now time.Time) tea.Cmd {
+// stepCelebration advances the burst to now. The frame after the last
+// particle dies draws the screen without confetti, and the effect is then no
+// longer live.
+func (m *OS) stepCelebration(now time.Time) (bool, tea.Cmd) {
 	c := &m.celebration
-	c.ticking = false
-	if !c.active() {
-		return nil
-	}
 	c.at = now
 	alive := c.particles[:0]
 	for _, p := range c.particles {
@@ -233,8 +221,7 @@ func (m *OS) handleCelebrateFrame(now time.Time) tea.Cmd {
 	if len(alive) == 0 {
 		c.particles = nil
 	}
-	m.renderSkipped = false
-	return m.celebrateTick()
+	return true, nil
 }
 
 // moving reports whether any particle needs frames to move.

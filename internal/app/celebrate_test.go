@@ -49,7 +49,7 @@ func TestCelebrationDrawsOverTheFrameAndLeavesItWhole(t *testing.T) {
 	start := m.celebration.at
 
 	// A quarter second in, every particle is born and in flight.
-	if next := m.handleCelebrateFrame(start.Add(250 * time.Millisecond)); next == nil {
+	if m.stepCelebration(start.Add(250 * time.Millisecond)); !m.celebration.active() {
 		t.Fatal("a burst still in flight stopped asking for frames")
 	}
 	mid := string(m.composeView())
@@ -61,9 +61,7 @@ func TestCelebrationDrawsOverTheFrameAndLeavesItWhole(t *testing.T) {
 	}
 
 	// Past every particle's life the burst is over.
-	if next := m.handleCelebrateFrame(start.Add(3 * time.Second)); next != nil {
-		t.Error("a finished burst scheduled another frame")
-	}
+	m.stepCelebration(start.Add(3 * time.Second))
 	if m.celebration.active() {
 		t.Fatal("the burst is still active after every particle's life")
 	}
@@ -84,15 +82,14 @@ func TestCelebrationIsFreeWhenIdle(t *testing.T) {
 	if m.celebration.active() {
 		t.Fatal("a new OS has a celebration running")
 	}
-	if cmd := m.handleCelebrateFrame(time.Now()); cmd != nil {
-		t.Error("a frame message with no burst running scheduled another frame")
+	if cmd := m.motionCmd(); cmd != nil {
+		t.Error("the motion clock armed a timer with no burst running")
 	}
-	_, cmd := m.Update(celebrateFrameMsg{at: time.Now()})
-	if cmd != nil {
-		t.Error("Update scheduled work for a stray celebration frame")
+	if cmd := m.handleMotionFrame(motionFrameMsg{gen: m.motion.gen}); cmd != nil || !m.renderSkipped {
+		t.Error("a stray motion frame with no burst running drew or scheduled work")
 	}
-	if m.celebration.ticking {
-		t.Error("an idle celebration holds a timer")
+	if m.motion.ticking {
+		t.Error("an idle client holds a motion timer")
 	}
 }
 
@@ -124,8 +121,8 @@ func TestCelebrationStillWhenAnimationsAreOff(t *testing.T) {
 	if got := celebrateGlyphCount(string(m.composeView())); got == 0 {
 		t.Error("the still sparkle drew nothing")
 	}
-	if m.handleCelebrateFrame(m.celebration.at.Add(time.Second)) != nil {
-		t.Error("the sparkle scheduled a frame after it was cleared")
+	if m.stepCelebration(m.celebration.at.Add(time.Second)); m.celebration.active() {
+		t.Error("the sparkle is still up after its life")
 	}
 	if string(m.composeView()) != before {
 		t.Error("the frame after the sparkle differs from the frame before it")

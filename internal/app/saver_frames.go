@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/charmbracelet/x/ansi"
@@ -335,15 +334,6 @@ func (m *OS) startFramesSaver(name string, width, height int) bool {
 	m.screensaver.frame = p.show(0)
 	m.renderSkipped = false
 	return true
-}
-
-// nextSaverFrameCmd schedules the next frame: at a frames file's own time,
-// or at the effect rate.
-func (m *OS) nextSaverFrameCmd() tea.Cmd {
-	if p := m.screensaver.player; p != nil {
-		return tea.Tick(p.delays[p.at], func(time.Time) tea.Msg { return screensaverFrameMsg{} })
-	}
-	return screensaverFrameCmd(&m.Settings)
 }
 
 // CheckSaverFile says what is wrong with a frames file, for tuios plugins

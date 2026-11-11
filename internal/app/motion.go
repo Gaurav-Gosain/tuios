@@ -45,16 +45,17 @@ type motionState struct {
 	// is one comparison.
 	fading int
 
-	// ticking says a motionFrameMsg is on its way. gen names the one that
-	// counts: re-arming at a shorter interval bumps it, and a frame carrying
-	// an older number is dropped, so there is never more than one live timer.
-	ticking  bool
-	gen      uint64
-	interval time.Duration
-	// due is when the frame on its way, or the last one delivered, was due.
-	// The next is due one interval after it, not one interval after the
-	// frame was handled. See nextMotionWait.
-	due time.Time
+	// ticking says a motionFrameMsg is on its way, for wake. gen names the
+	// one that counts: re-arming for an earlier wake bumps it, and a frame
+	// carrying an older number is dropped, so there is never more than one
+	// live timer.
+	ticking bool
+	gen     uint64
+	wake    time.Time
+	// due is when each clocked effect's next frame is due, zero while it is
+	// not live. An effect's frames keep to a grid of its own interval, so a
+	// frame handled late does not push every later one back.
+	due []time.Time
 	// drawn is when the last motion frame asked for a draw. A frame composed
 	// after it, for any other reason, already carried the shimmer.
 	drawn time.Time
@@ -76,107 +77,123 @@ type motionFrameMsg struct{ gen uint64 }
 
 // motionCmd runs after every Update. It notices the overlays that opened since
 // the last message and starts their fades, then makes sure a motion frame is
-// on its way if anything is moving. It returns nil when nothing needs a timer,
-// which is the case on every message of an idle session.
+// on its way for the earliest effect that is due one. It returns nil when no
+// effect moves, which is the case on every message of an idle session.
 func (m *OS) motionCmd() tea.Cmd {
 	m.trackModalOverlays()
 	m.noticeThemeChange()
-	want := m.motionInterval()
-	if want == 0 {
+	now := time.Now()
+	wake, ok := m.nextEffectFrame(now)
+	if !ok {
 		return nil
 	}
 	mo := &m.motion
-	if mo.ticking && mo.interval <= want {
+	if mo.ticking && !mo.wake.After(wake) {
 		return nil
 	}
 	mo.gen++
-	mo.ticking, mo.interval = true, want
+	mo.ticking, mo.wake = true, wake
 	gen := mo.gen
-	return tea.Tick(mo.nextMotionWait(time.Now(), want), func(time.Time) tea.Msg { return motionFrameMsg{gen: gen} })
+	return tea.Tick(max(wake.Sub(now), 0), func(time.Time) tea.Msg { return motionFrameMsg{gen: gen} })
 }
 
-// nextMotionWait is how long the next motion frame waits, and it moves due
-// on to that frame.
-//
-// The frames keep to a grid of one interval. A timer armed for a whole
-// interval after each frame was handled ran slow by however long the handling
-// took: the theme circle at full screen went out every 17.1 ms, not every
-// 16.7, and against a 60 Hz display one frame in about forty had no new frame
-// to show, which a recording shows as a held frame. A frame handled late now
-// waits less, so the late part is not added to every frame after it. A clock
-// that lapsed, or fell a whole interval behind, starts a new grid from now.
-func (mo *motionState) nextMotionWait(now time.Time, want time.Duration) time.Duration {
-	next := mo.due.Add(want)
-	wait := next.Sub(now)
-	if !mo.due.IsZero() && wait <= want && wait > -want/4 {
-		// On the grid, or just past due: then the frame goes now and the
-		// grid stays.
-		mo.due = next
-		return max(wait, 0)
+// nextEffectFrame is when the earliest live clocked effect wants its next
+// frame. An effect that has just gone live is due one interval from now.
+func (m *OS) nextEffectFrame(now time.Time) (time.Time, bool) {
+	if len(m.motion.due) != len(effects) {
+		m.motion.due = make([]time.Time, len(effects))
 	}
-	mo.due = now.Add(want)
-	return want
+	var wake time.Time
+	for i := range effects {
+		e := &effects[i]
+		if e.every == nil {
+			continue
+		}
+		if !e.live(m) {
+			m.motion.due[i] = time.Time{}
+			continue
+		}
+		if m.motion.due[i].IsZero() {
+			m.motion.due[i] = now.Add(e.every(m))
+		}
+		if wake.IsZero() || m.motion.due[i].Before(wake) {
+			wake = m.motion.due[i]
+		}
+	}
+	return wake, !wake.IsZero()
 }
 
-// motionInterval is how soon the next motion frame is needed: a fade's frame
-// while one runs, a shimmer frame while a working row is on screen, and zero
-// when nothing moves.
-func (m *OS) motionInterval() time.Duration {
-	if m.motion.fading > 0 {
-		return config.OverlayFadeFrame
+// nextDue is when an effect's frame after the one due at due comes, handled at
+// now: one interval after due, so the frames keep to the effect's grid and a
+// frame handled late does not push every later one back. When now has fallen
+// more than a quarter interval past that, a new grid starts at now: the
+// frames a stall missed are gone, not caught up.
+func nextDue(due, now time.Time, every time.Duration) time.Time {
+	next := due.Add(every)
+	if now.Sub(next) > every/4 {
+		return now.Add(every)
 	}
-	if m.themeFx.running() {
-		return m.themeTransitionFrame()
-	}
-	if m.wsSlide.running() {
-		return m.slideFrameInterval()
-	}
-	// A copy sweep, at the fade's rate: it crosses the block in under half a
-	// second, and at the maintenance tick's idle rate that was four frames.
-	if m.copyFlash != nil {
-		return config.OverlayFadeFrame
-	}
-	if m.shimmerActive() {
-		return config.ShimmerFrame
-	}
-	return 0
+	return next
 }
 
-// handleMotionFrame is one frame of the motion clock: it retires the fades
-// that have run their course and asks for a frame if anything moved. The
+// handleMotionFrame is one frame of the motion clock: every live effect whose
+// frame is due steps to now, and a frame is drawn if any of them moved. The
 // post-Update hook re-arms the clock, or lets it lapse.
-func (m *OS) handleMotionFrame(msg motionFrameMsg) {
+//
+// Each effect keeps to its own grid (nextDue). A frame is taken up to a
+// quarter interval early, so two effects on nearly the same beat share a
+// timer.
+func (m *OS) handleMotionFrame(msg motionFrameMsg) tea.Cmd {
 	m.tickStats.Motion++
 	if msg.gen != m.motion.gen {
-		// Superseded by a timer armed at a shorter interval. Drawing for it
+		// Superseded by a timer armed for an earlier wake. Drawing for it
 		// would draw the same frame twice.
 		m.renderSkipped = true
-		return
+		return nil
 	}
 	m.motion.ticking = false
-	// Marks the swept pane, so it draws rather than serving its cached frame,
-	// and asks for one last frame when the sweep has just ended so its light
-	// does not stay on the screen.
-	flash := m.markCopyFlashPane()
 	now := time.Now()
-	shimmer := m.shimmerActive()
-	// A shimmer frame is cheap to compute and dear to send. When a pane's
-	// output drew a frame within the last interval, that frame carried the
-	// band already, so this tick draws nothing.
-	coalesce := shimmer && m.motion.fading == 0 && !flash && !m.themeFx.running() &&
-		!m.wsSlide.running() && m.copyFlash == nil && m.shimmerCovered(now)
-	need := m.motion.fading > 0 || (shimmer && !coalesce) || flash
+	need := false
+	var cmds []tea.Cmd
+	if len(m.motion.due) != len(effects) {
+		m.motion.due = make([]time.Time, len(effects))
+	}
+	for i := range effects {
+		e := &effects[i]
+		if e.every == nil {
+			continue
+		}
+		if !e.live(m) {
+			m.motion.due[i] = time.Time{}
+			continue
+		}
+		due := m.motion.due[i]
+		if due.IsZero() {
+			// Gone live since the clock last looked: its first frame is now.
+			due = now
+		}
+		every := e.every(m)
+		if now.Before(due.Add(-every / 4)) {
+			continue
+		}
+		redraw, cmd := e.step(m, now)
+		need = need || redraw
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		if !e.live(m) {
+			m.motion.due[i] = time.Time{}
+			continue
+		}
+		// After the step: a frames file says how long the frame now on
+		// screen stays.
+		m.motion.due[i] = nextDue(due, now, e.every(m))
+	}
 	if need {
 		m.motion.drawn = now
 	}
-	// A transition still asks for a frame on the tick it ends, so the last
-	// one drawn is the new theme on the whole screen.
-	need = m.expireThemeTransition(time.Now()) || need
-	need = m.expireWorkspaceSlide(time.Now()) || need
-	if m.motion.fading > 0 {
-		m.retireFades(time.Now())
-	}
 	m.renderSkipped = !need
+	return tea.Batch(cmds...)
 }
 
 // shimmerCovered reports whether a frame that something else asked for was
