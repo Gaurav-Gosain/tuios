@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // subprocessHarness lists the packages that isolate by a different mechanism
@@ -199,4 +200,35 @@ func TestGoDirsStayOutsideTheTree(t *testing.T) {
 			t.Errorf("%s is %s, inside the throwaway tree %s", name, v, tree)
 		}
 	}
+}
+
+// TestSettledWatchersWaitsForAClose holds the end-of-run watcher count to what
+// it must tell apart: an instance that its owner closes a moment after the last
+// test (a web session ending) is not a leak, and one that stays open is. The
+// count read 1 for a few milliseconds after the last test of cmd/tuios-web on a
+// busy machine, and failed a run that had leaked nothing.
+func TestSettledWatchersWaitsForAClose(t *testing.T) {
+	t.Run("closes soon", func(t *testing.T) {
+		closeAt := time.Now().Add(30 * time.Millisecond)
+		count := func() int {
+			if time.Now().Before(closeAt) {
+				return 4
+			}
+			return 3
+		}
+		if left := settledWatchers(count, 3, 5*time.Second); left != 0 {
+			t.Errorf("left = %d, want 0: the instance closed before the wait ended", left)
+		}
+	})
+	t.Run("stays open", func(t *testing.T) {
+		if left := settledWatchers(func() int { return 4 }, 3, 40*time.Millisecond); left != 1 {
+			t.Errorf("left = %d, want 1: an instance that stays open is a leak", left)
+		}
+	})
+	t.Run("already at the start", func(t *testing.T) {
+		start := time.Now()
+		if left := settledWatchers(func() int { return 3 }, 3, 5*time.Second); left != 0 || time.Since(start) > time.Second {
+			t.Errorf("left = %d after %v, want 0 at once", left, time.Since(start))
+		}
+	})
 }

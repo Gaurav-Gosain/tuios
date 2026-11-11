@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/sound"
@@ -218,6 +219,25 @@ func stillRedirected(tmp string) error {
 		tmp, strings.Join(escaped, "\n"))
 }
 
+// watcherSettle is how long the end-of-run count waits for a watcher that is
+// still being closed. A package with no leak does not wait: the first count
+// already matches.
+const watcherSettle = 3 * time.Second
+
+// settledWatchers returns how many more watchers count reports than start,
+// polling until that is none or wait has passed. It waits on the condition: a
+// count that is already at the start returns at once.
+func settledWatchers(count func() int, start int, wait time.Duration) int {
+	deadline := time.Now().Add(wait)
+	for {
+		left := count() - start
+		if left <= 0 || !time.Now().Before(deadline) {
+			return left
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+}
+
 // RunIsolated runs the package's tests against a throwaway XDG tree and
 // returns the exit code to hand to os.Exit.
 //
@@ -242,8 +262,11 @@ func RunIsolated(m *testing.M, setup ...func(dir string)) int {
 	// A watcher a test opens and never closes is an inotify instance on
 	// Linux, and the kernel allows 128 per user by default, across every
 	// test binary running at once. A package that leaks them makes another
-	// package's watcher fail to open, far from the cause.
-	if left := watcherInstances() - watchers; left > 0 {
+	// package's watcher fail to open, far from the cause. A watcher its owner
+	// is closing on another goroutine, such as a web session that ends after
+	// the last test, is open for a moment more and is not a leak, so the count
+	// waits for the instances to come back to the start.
+	if left := settledWatchers(watcherInstances, watchers, watcherSettle); left > 0 {
 		fmt.Fprintf(os.Stderr, "\nthe tests left %d %s open (%d at the start, %d at the end): "+
 			"a watcher was opened and never closed\n", left, watcherKind, watchers, watchers+left)
 		if code == 0 {
