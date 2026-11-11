@@ -613,7 +613,7 @@ type SearchCache struct {
 	// What the search was made over, so the next one can tell whether it
 	// may search only the lines this one matched. See narrowedLines in
 	// internal/input. CaseSensitive is the setting it ran with. Capped is
-	// set when it stopped at MaxSearchMatches, so Matches may not be all
+	// set when it stopped at the match limit, so Matches may not be all
 	// of them. HistoryGen and HistoryLen are the history's generation and
 	// length.
 	CaseSensitive bool
@@ -687,17 +687,12 @@ type CopyMode struct {
 	Implicit bool
 }
 
-// MaxSearchMatches bounds how many matches one copy-mode search keeps. The
-// renderer walks every match on every frame, so the bound keeps a one-letter
-// query over a full scrollback cheap.
-const MaxSearchMatches = 1000
-
 // SearchMatchCount is the match count as the search prompt shows it: "1000+"
-// when the search stopped at MaxSearchMatches, so a capped count does not read
-// as the whole count.
-func SearchMatchCount(n int) string {
-	if n >= MaxSearchMatches {
-		return fmt.Sprintf("%d+", MaxSearchMatches)
+// when the search stopped at limit matches (appearance.copy_search_max_matches),
+// so a capped count does not read as the whole count.
+func SearchMatchCount(n, limit int) string {
+	if n >= limit {
+		return fmt.Sprintf("%d+", limit)
 	}
 	return fmt.Sprint(n)
 }

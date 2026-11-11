@@ -102,7 +102,7 @@ func TestFinishedScriptExitDrawsOnce(t *testing.T) {
 	m := newTestOS(win)
 	m.Width, m.Height = 120, 40
 	m.ScriptMode = true
-	m.ScriptFinishedTime = time.Now().Add(-2 * scriptDoneLinger)
+	m.ScriptFinishedTime = time.Now().Add(-2 * m.scriptDoneLinger())
 
 	if _, _ = m.Update(TickerMsg(time.Now())); m.renderSkipped {
 		t.Fatal("the tick that left script mode skipped the frame; the DONE indicator would stay on screen")

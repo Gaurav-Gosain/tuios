@@ -308,22 +308,22 @@ func TestCopyModeSearchActions(t *testing.T) {
 // from the prompt still finds the nearest match above it.
 func TestCopyModeSearchLimitKeepsNewestMatches(t *testing.T) {
 	var b strings.Builder
-	for i := range maxSearchMatches + 500 {
+	for i := range searchCap + 500 {
 		fmt.Fprintf(&b, "hit %04d\r\n", i)
 	}
 	b.WriteString("$ ")
 	o, w := entryOS(t, b.String())
 	o.EnterCopyModeFocused()
 	typeCopyKeys(o, w, "?", "hit", "enter")
-	want := fmt.Sprintf("hit %04d", maxSearchMatches+499)
+	want := fmt.Sprintf("hit %04d", searchCap+499)
 	if got := cursorLine(t, w); got != want {
 		t.Fatalf("?hit from the prompt lands on %q, want the newest match %q", got, want)
 	}
-	if n := len(w.CopyMode.SearchMatches); n != maxSearchMatches {
-		t.Errorf("the search kept %d matches, want %d", n, maxSearchMatches)
+	if n := len(w.CopyMode.SearchMatches); n != searchCap {
+		t.Errorf("the search kept %d matches, want %d", n, searchCap)
 	}
-	if msg := lastNotification(o); !strings.Contains(msg, fmt.Sprintf("%d+ matches", maxSearchMatches)) {
-		t.Errorf("a capped search says %q, want it to say %d+ matches", msg, maxSearchMatches)
+	if msg := lastNotification(o); !strings.Contains(msg, fmt.Sprintf("%d+ matches", searchCap)) {
+		t.Errorf("a capped search says %q, want it to say %d+ matches", msg, searchCap)
 	}
 	for i := 1; i < len(w.CopyMode.SearchMatches); i++ {
 		if w.CopyMode.SearchMatches[i].Line <= w.CopyMode.SearchMatches[i-1].Line {
@@ -518,3 +518,6 @@ func TestCopyModeSearchActionKeyInCopyMode(t *testing.T) {
 		})
 	}
 }
+
+// searchCap is the default appearance.copy_search_max_matches.
+const searchCap = config.SearchMaxMatchesDefault

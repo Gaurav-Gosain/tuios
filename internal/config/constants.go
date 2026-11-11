@@ -854,6 +854,33 @@ const (
 	DockMeterIntervalMSDefault = 2000
 )
 
+// Notification and search limits, and the tape's banner timings. A guest that
+// spams OSC 9 or BEL must not flood the notification stack, so a second one
+// within the rate limit is dropped (0 keeps all). A copy mode search keeps at
+// most SearchMaxMatches matches, because the renderer walks every match on
+// every frame.
+const (
+	NotifyRateLimitMSMin     = 0
+	NotifyRateLimitMSMax     = 10000
+	NotifyRateLimitMSDefault = 500
+
+	BellRateLimitMSMin     = 0
+	BellRateLimitMSMax     = 10000
+	BellRateLimitMSDefault = 200
+
+	SearchMaxMatchesMin     = 100
+	SearchMaxMatchesMax     = 100000
+	SearchMaxMatchesDefault = 1000
+
+	TapeBannerMSMin     = 1000
+	TapeBannerMSMax     = 60000
+	TapeBannerMSDefault = 8000
+
+	TapeDoneLingerMSMin     = 500
+	TapeDoneLingerMSMax     = 30000
+	TapeDoneLingerMSDefault = 2000
+)
+
 // The timing options, in milliseconds. A delay of 0 shows the thing at once.
 const (
 	// WhichKeyDelayMS is the pause after the leader before the which-key panel

@@ -173,6 +173,12 @@ func (n NotificationsConfig) MachineOfferOn() bool {
 // absent means "use the built-in default", which is the value documented on the
 // corresponding package var in constants.go.
 type NotificationsConfig struct {
+	// RateLimitMS and BellRateLimitMS drop a guest notification or bell that
+	// follows another within that many milliseconds. 0 keeps every one
+	// (defaults: 500 and 200, max: 10000).
+	RateLimitMS     int `toml:"rate_limit_ms"`
+	BellRateLimitMS int `toml:"bell_rate_limit_ms"`
+
 	// Duration is how long an info or success message stays up, in seconds.
 	Duration int `toml:"duration"`
 
@@ -311,6 +317,11 @@ type TapeConfig struct {
 	// a tape plays. Nil means shown. A recording made with a tape turns it off,
 	// so the frames show the app and not the player.
 	ShowStatus *bool `toml:"show_status"`
+	// BannerMS is how long the "project tape found" banner stays on screen, and
+	// DoneLingerMS how long the DONE indicator stays after a tape finishes, in
+	// milliseconds (defaults: 8000 and 2000).
+	BannerMS     int `toml:"banner_ms"`
+	DoneLingerMS int `toml:"done_linger_ms"`
 }
 
 // TapeStatusShown reports whether a playing tape shows its status pill.
@@ -567,20 +578,21 @@ type AppearanceConfig struct {
 	BorderFocusedGradient string `toml:"border_focused_gradient"`
 	// BorderGradientAngle is the gradient's direction in degrees.
 	BorderGradientAngle  *int   `toml:"border_gradient_angle"`
-	BorderUnfocusedColor string `toml:"border_unfocused_color"` // Hex color for unfocused pane border (e.g., "#585b70")
-	WindowTitleFormat    string `toml:"window_title_format"`    // Format string for window titles: {title}, {index}, {cwd}
-	HostTitle            string `toml:"host_title"`             // Format string for the host terminal's title: {title}, {index}, {cwd}, {session}, {workspace}
-	ZoomMaxWidth         int    `toml:"zoom_max_width"`         // Max width in cells for zoom mode (0 = fullscreen, e.g. 120 centers at 120 cols)
-	NiriReverseScroll    bool   `toml:"niri_reverse_scroll"`    // Reverse mouse scroll direction in niri scrolling mode (default: false)
-	MultiCopyDim         int    `toml:"multi_copy_dim"`         // Percent a pane multi copy mode parked is dimmed (default: 45, min: 0, max: 90)
-	IdleFPS              int    `toml:"idle_fps"`               // Polls per second while nothing is moving (default: 10, min: 1, max: 60)
-	WhichKeyDelayMS      int    `toml:"whichkey_delay_ms"`      // Milliseconds after the leader before which-key opens (default: 500, min: 0, max: 5000)
-	TooltipDelayMS       int    `toml:"tooltip_delay_ms"`       // Milliseconds the pointer rests on a control before its tooltip shows (default: 350, min: 0, max: 5000)
-	ZenRevealMS          int    `toml:"zen_reveal_ms"`          // Milliseconds the pointer sits still before zen mode (mouse) hides the borders (default: 2000, min: 200, max: 30000)
-	ChordTimeoutMS       int    `toml:"chord_timeout_ms"`       // Milliseconds the first key of a two-key chord (gg) waits for the second (default: 500, min: 100, max: 3000)
-	PastePreviewMS       int    `toml:"paste_preview_ms"`       // Milliseconds the paste card stays up (default: 6000, min: 500, max: 60000)
-	NiriScrollCells      int    `toml:"niri_scroll_cells"`      // Cells the niri viewport moves per mouse wheel event (default: 8, min: 1, max: 200)
-	NiriScrollSnap       bool   `toml:"niri_scroll_snap"`       // Snap the strip to the nearest column when a wheel or a drag stops (default: false)
+	BorderUnfocusedColor string `toml:"border_unfocused_color"`  // Hex color for unfocused pane border (e.g., "#585b70")
+	WindowTitleFormat    string `toml:"window_title_format"`     // Format string for window titles: {title}, {index}, {cwd}
+	HostTitle            string `toml:"host_title"`              // Format string for the host terminal's title: {title}, {index}, {cwd}, {session}, {workspace}
+	ZoomMaxWidth         int    `toml:"zoom_max_width"`          // Max width in cells for zoom mode (0 = fullscreen, e.g. 120 centers at 120 cols)
+	NiriReverseScroll    bool   `toml:"niri_reverse_scroll"`     // Reverse mouse scroll direction in niri scrolling mode (default: false)
+	SearchMaxMatches     int    `toml:"copy_search_max_matches"` // Matches one copy mode search keeps (default: 1000, min: 100, max: 100000)
+	MultiCopyDim         int    `toml:"multi_copy_dim"`          // Percent a pane multi copy mode parked is dimmed (default: 45, min: 0, max: 90)
+	IdleFPS              int    `toml:"idle_fps"`                // Polls per second while nothing is moving (default: 10, min: 1, max: 60)
+	WhichKeyDelayMS      int    `toml:"whichkey_delay_ms"`       // Milliseconds after the leader before which-key opens (default: 500, min: 0, max: 5000)
+	TooltipDelayMS       int    `toml:"tooltip_delay_ms"`        // Milliseconds the pointer rests on a control before its tooltip shows (default: 350, min: 0, max: 5000)
+	ZenRevealMS          int    `toml:"zen_reveal_ms"`           // Milliseconds the pointer sits still before zen mode (mouse) hides the borders (default: 2000, min: 200, max: 30000)
+	ChordTimeoutMS       int    `toml:"chord_timeout_ms"`        // Milliseconds the first key of a two-key chord (gg) waits for the second (default: 500, min: 100, max: 3000)
+	PastePreviewMS       int    `toml:"paste_preview_ms"`        // Milliseconds the paste card stays up (default: 6000, min: 500, max: 60000)
+	NiriScrollCells      int    `toml:"niri_scroll_cells"`       // Cells the niri viewport moves per mouse wheel event (default: 8, min: 1, max: 200)
+	NiriScrollSnap       bool   `toml:"niri_scroll_snap"`        // Snap the strip to the nearest column when a wheel or a drag stops (default: false)
 	// PrefixRepeatTime is how long the prefix stays armed after a repeatable
 	// prefix command, in milliseconds, so ctrl+b then left left left walks
 	// three columns. Zero turns it off. This is tmux's repeat-time.
@@ -1328,6 +1340,7 @@ func DefaultConfig() *UserConfig {
 			NiriScrollCells:          NiriScrollCellsDefault,
 			IdleFPS:                  IdleFPSDefault,
 			MultiCopyDim:             MultiCopyDimDefault,
+			SearchMaxMatches:         SearchMaxMatchesDefault,
 			WhichKeyDelayMS:          WhichKeyDelayMSDefault,
 			TooltipDelayMS:           TooltipDelayMSDefault,
 			ZenRevealMS:              ZenRevealMSDefault,
@@ -1400,12 +1413,15 @@ func DefaultConfig() *UserConfig {
 			Layout:              LayoutModeBSP,
 			Daemon:              true,
 		},
-		Mouse: MouseConfig{DoubleClickMS: MouseDoubleClickDefault, DragThreshold: MouseDragThresholdDefault},
-		Debug: DebugConfig{ShowKeyCount: ShowKeyCountDefault},
-		Dock:  DockConfig{MeterIntervalMS: DockMeterIntervalMSDefault},
+		Mouse:         MouseConfig{DoubleClickMS: MouseDoubleClickDefault, DragThreshold: MouseDragThresholdDefault},
+		Debug:         DebugConfig{ShowKeyCount: ShowKeyCountDefault},
+		Notifications: NotificationsConfig{RateLimitMS: NotifyRateLimitMSDefault, BellRateLimitMS: BellRateLimitMSDefault},
+		Dock:          DockConfig{MeterIntervalMS: DockMeterIntervalMSDefault},
 		Tape: TapeConfig{
-			Autorun:    TapeAutorunAsk,
-			AutoReview: false,
+			BannerMS:     TapeBannerMSDefault,
+			DoneLingerMS: TapeDoneLingerMSDefault,
+			Autorun:      TapeAutorunAsk,
+			AutoReview:   false,
 		},
 		Screenshot:   defaultScreenshotConfig(),
 		Screensaver:  defaultScreensaverConfig(),

@@ -510,7 +510,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	showScriptIndicator := m.tapeStatusShown()
 	if m.ScriptMode && !m.ScriptFinishedTime.IsZero() {
 		elapsed := time.Since(m.ScriptFinishedTime)
-		if elapsed > scriptDoneLinger {
+		if elapsed > m.scriptDoneLinger() {
 			showScriptIndicator = false
 		}
 	}
@@ -677,7 +677,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		switch {
 		case matchCount > 0:
 			body += overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).
-				Render(fmt.Sprintf(" [%d/%s]", currentMatch+1, terminal.SearchMatchCount(matchCount)))
+				Render(fmt.Sprintf(" [%d/%s]", currentMatch+1, terminal.SearchMatchCount(matchCount, m.Settings.SearchMaxMatches)))
 		case searchQuery != "":
 			body += overlay.Style(bg).Foreground(pal.FgMute).Render(" [0]")
 		}

@@ -1446,6 +1446,16 @@ var optionSpecs = []Option{
 
 	// [notifications]
 	{
+		Path: "notifications.rate_limit_ms", Type: OptionInt, Section: "notifications",
+		Description: "Milliseconds in which a second desktop notification from a pane is dropped. 0 keeps every one.",
+		Min:         NotifyRateLimitMSMin, Max: NotifyRateLimitMSMax,
+	},
+	{
+		Path: "notifications.bell_rate_limit_ms", Type: OptionInt, Section: "notifications",
+		Description: "Milliseconds in which a second bell from a pane is dropped. 0 keeps every one.",
+		Min:         BellRateLimitMSMin, Max: BellRateLimitMSMax,
+	},
+	{
 		Path: "notifications.duration", Type: OptionInt, Section: "notifications",
 		Unit:        "s",
 		Description: "Seconds an info message stays up. 0 uses the default, 2.",
@@ -1605,6 +1615,12 @@ var optionSpecs = []Option{
 	},
 
 	{
+		Path: "appearance.copy_search_max_matches", Type: OptionInt, Section: "appearance",
+		Description: "Matches one copy mode search keeps. The renderer walks every match on every frame, so a very high value slows a one-letter query over a long scrollback.",
+		Min:         SearchMaxMatchesMin, Max: SearchMaxMatchesMax,
+		Zero: ZeroIsDefault,
+	},
+	{
 		Path: "appearance.multi_copy_dim", Type: OptionInt, Section: "appearance",
 		Description: "Percent a pane is dimmed when multi copy mode's search found nothing in it. 0 leaves it undimmed.",
 		Min:         MultiCopyDimMin, Max: MultiCopyDimMax,
@@ -1657,6 +1673,18 @@ var optionSpecs = []Option{
 		Zero: ZeroIsDefault,
 	},
 	// [tape]
+	{
+		Path: "tape.banner_ms", Type: OptionInt, Section: "tape",
+		Description: "Milliseconds the \"project tape found\" banner stays on screen",
+		Min:         TapeBannerMSMin, Max: TapeBannerMSMax,
+		Zero: ZeroIsDefault,
+	},
+	{
+		Path: "tape.done_linger_ms", Type: OptionInt, Section: "tape",
+		Description: "Milliseconds the DONE indicator stays on screen after a tape finishes",
+		Min:         TapeDoneLingerMSMin, Max: TapeDoneLingerMSMax,
+		Zero: ZeroIsDefault,
+	},
 	{
 		Path: "tape.autorun", Type: OptionString, Section: "tape",
 		Description: "What happens on entering a directory with a project tape",

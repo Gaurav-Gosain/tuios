@@ -324,7 +324,7 @@ func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 		cm.State = terminal.CopyModeNormal
 		matchInfo := ""
 		if len(cm.SearchMatches) > 0 {
-			matchInfo = fmt.Sprintf(" (%s matches)", terminal.SearchMatchCount(len(cm.SearchMatches)))
+			matchInfo = fmt.Sprintf(" (%s matches)", terminal.SearchMatchCount(len(cm.SearchMatches), s.SearchMaxMatches))
 		}
 		fx.ShowNotification(fmt.Sprintf("%s%s%s", searchPrefix, cm.SearchQuery(), matchInfo), "info", s.NotificationDuration)
 	case tea.KeyEscape:
@@ -338,7 +338,7 @@ func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 	default:
 		changed, consumed := cm.Search.Edit(msg.String(), key.Text, textedit.LineOpts{AllowClear: true})
 		if changed {
-			executeSearch(cm, grid)
+			executeSearch(cm, grid, s.SearchMaxMatches)
 		}
 		if changed || consumed {
 			fx.ShowNotification(searchPrefix+searchLineText(&cm.Search), "info", 0)

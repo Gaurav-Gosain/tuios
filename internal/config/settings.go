@@ -743,6 +743,11 @@ type Settings struct {
 	// The timing options, in milliseconds. Set via appearance.whichkey_delay_ms,
 	// tooltip_delay_ms, zen_reveal_ms, paste_preview_ms and
 	// appearance.chord_timeout_ms.
+	NotifyRateLimitMS   int `opt:"notifications.rate_limit_ms"`
+	BellRateLimitMS     int `opt:"notifications.bell_rate_limit_ms"`
+	SearchMaxMatches    int `opt:"appearance.copy_search_max_matches"`
+	TapeBannerMS        int `opt:"tape.banner_ms"`
+	TapeDoneLingerMS    int `opt:"tape.done_linger_ms"`
 	MultiCopyDim        int `opt:"appearance.multi_copy_dim"`
 	MarqueePauseMS      int `opt:"appearance.sidebar.marquee_pause_ms"`
 	MarqueeStepMS       int `opt:"appearance.sidebar.marquee_step_ms"`
@@ -1162,6 +1167,11 @@ func DefaultSettings() Settings {
 		NiriReverseScroll:           false,
 		NiriScrollCells:             NiriScrollCellsDefault,
 		MouseDoubleClickMS:          MouseDoubleClickDefault,
+		NotifyRateLimitMS:           NotifyRateLimitMSDefault,
+		BellRateLimitMS:             BellRateLimitMSDefault,
+		SearchMaxMatches:            SearchMaxMatchesDefault,
+		TapeBannerMS:                TapeBannerMSDefault,
+		TapeDoneLingerMS:            TapeDoneLingerMSDefault,
 		MultiCopyDim:                MultiCopyDimDefault,
 		MarqueePauseMS:              MarqueePauseMSDefault,
 		MarqueeStepMS:               MarqueeStepMSDefault,

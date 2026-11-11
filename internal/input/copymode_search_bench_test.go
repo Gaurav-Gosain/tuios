@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"tuios.dev/vt"
 )
@@ -33,7 +34,7 @@ func BenchmarkCopyModeSearchKey(b *testing.B) {
 	for b.Loop() {
 		cm.SearchCache.Valid = false
 		cm.Search.Set("module_042/file_")
-		executeSearch(cm, w)
+		executeSearch(cm, w, config.SearchMaxMatchesDefault)
 	}
 	if len(cm.SearchMatches) == 0 {
 		b.Fatal("no matches")
@@ -51,7 +52,7 @@ func BenchmarkCopyModeSearchTyping(b *testing.B) {
 		cm.SearchCache = terminal.SearchCache{}
 		for i := 1; i <= len(query); i++ {
 			cm.Search.Set(query[:i])
-			executeSearch(cm, w)
+			executeSearch(cm, w, config.SearchMaxMatchesDefault)
 		}
 	}
 	if len(cm.SearchMatches) == 0 {

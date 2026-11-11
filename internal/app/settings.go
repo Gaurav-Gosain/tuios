@@ -434,6 +434,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.scroll_column_max"),
 			opt("appearance.dim_unfocused"),
 			opt("appearance.multi_copy_dim"),
+			opt("appearance.copy_search_max_matches"),
 			opt("appearance.dim_foreground"),
 			opt("appearance.dim_multifocus"),
 			opt("appearance.modal_dim"),
@@ -688,6 +689,8 @@ func (m *OS) settingsCategories() []settingsCategory {
 		opt("notifications.warning_duration"),
 		opt("notifications.error_duration"),
 		opt("notifications.error_sticky"),
+		opt("notifications.rate_limit_ms"),
+		opt("notifications.bell_rate_limit_ms"),
 		opt("notifications.bell"),
 		opt("notifications.style"),
 		opt("notifications.level"),
@@ -824,6 +827,8 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("tape.autorun"),
 			opt("tape.auto_review"),
 			opt("tape.show_status"),
+			opt("tape.banner_ms"),
+			opt("tape.done_linger_ms"),
 		}),
 	}
 

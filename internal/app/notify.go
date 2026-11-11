@@ -9,13 +9,17 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// Rate limits for guest-driven notifications. A guest that spams OSC 9 or BEL
-// (for example `yes` piped to a terminal that beeps) must not flood the in-app
-// notification stack or the host terminal.
-const (
-	notifyRateLimit = 500 * time.Millisecond
-	bellRateLimit   = 200 * time.Millisecond
-)
+// Rate limits for guest-driven notifications (notifications.rate_limit_ms and
+// bell_rate_limit_ms). A guest that spams OSC 9 or BEL (for example `yes` piped
+// to a terminal that beeps) must not flood the in-app notification stack or the
+// host terminal.
+func (m *OS) notifyRateLimit() time.Duration {
+	return time.Duration(m.Settings.NotifyRateLimitMS) * time.Millisecond
+}
+
+func (m *OS) bellRateLimit() time.Duration {
+	return time.Duration(m.Settings.BellRateLimitMS) * time.Millisecond
+}
 
 // NotificationMsg carries a guest desktop notification or bell from a window's
 // PTY writer goroutine to the bubbletea Update loop, which calls ShowNotification.
@@ -80,7 +84,7 @@ func (m *OS) setupNotificationPassthrough(window *terminal.Window) {
 
 	window.NotifyFunc = func(title, body string) {
 		mu.Lock()
-		if time.Since(lastNotify) < notifyRateLimit {
+		if time.Since(lastNotify) < m.notifyRateLimit() {
 			mu.Unlock()
 			return
 		}
@@ -129,7 +133,7 @@ func (m *OS) setupNotificationPassthrough(window *terminal.Window) {
 
 	window.BellFunc = func() {
 		mu.Lock()
-		if time.Since(lastBell) < bellRateLimit {
+		if time.Since(lastBell) < m.bellRateLimit() {
 			mu.Unlock()
 			return
 		}

@@ -1827,6 +1827,31 @@ border back. You can also set it on the settings page, in the Advanced section,
 or with `tuios set-config appearance.zoom_borderless true`. The change applies
 at once.
 
+## Limits and banners
+
+| Option | Default | Range | What it does |
+|--------|---------|-------|--------------|
+| `notifications.rate_limit_ms` | `500` | 0 to 10000 | A second desktop notification from a pane within this many milliseconds is dropped, so a pane that spams OSC 9 cannot flood the stack. `0` keeps every one. |
+| `notifications.bell_rate_limit_ms` | `200` | 0 to 10000 | The same for the bell. `0` keeps every one. |
+| `appearance.copy_search_max_matches` | `1000` | 100 to 100000 | Matches one copy mode search keeps. The renderer walks every match on every frame, so a very high value slows a one-letter query over a long scrollback. A search that stops at the limit shows `1000+`. |
+| `tape.banner_ms` | `8000` | 1000 to 60000 | How long the "project tape found" banner stays on screen. |
+| `tape.done_linger_ms` | `2000` | 500 to 30000 | How long the DONE indicator stays after a tape finishes. |
+
+```toml
+[notifications]
+rate_limit_ms = 1000
+
+[appearance]
+copy_search_max_matches = 5000
+
+[tape]
+banner_ms = 4000
+```
+
+A value of 0 on `copy_search_max_matches`, `banner_ms` or `done_linger_ms` is read
+as the default, and a value out of range moves to the nearest end of the range.
+All five are on the settings page and apply at once.
+
 ## More display options
 
 | Option | Default | Range | What it does |

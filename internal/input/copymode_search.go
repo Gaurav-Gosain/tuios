@@ -14,10 +14,6 @@ import (
 
 // Search-related functions for copy mode (/, ?, n, N, etc.)
 
-// maxSearchMatches bounds how many matches one search keeps. See
-// terminal.MaxSearchMatches.
-const maxSearchMatches = terminal.MaxSearchMatches
-
 // searchBlock is how many history lines the search reads at a time. The
 // history is read oldest first and searched newest first, so a block is read
 // and then walked backwards.
@@ -197,7 +193,7 @@ func narrowedLines(cm *terminal.CopyMode, gen uint64, sbLen int) ([]int, bool) {
 }
 
 // executeSearch performs a search operation and updates matches
-func executeSearch(cm *terminal.CopyMode, grid terminal.CopyGrid) {
+func executeSearch(cm *terminal.CopyMode, grid terminal.CopyGrid, maxSearchMatches int) {
 	// Check cache
 	if cm.SearchQuery() != "" && cm.SearchQuery() == cm.SearchCache.Query && cm.SearchCache.Valid {
 		cm.SearchMatches = cm.SearchCache.Matches

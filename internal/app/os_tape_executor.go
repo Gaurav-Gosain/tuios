@@ -20,14 +20,16 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// scriptDoneLinger is how long the "DONE" completion indicator stays on screen
+// scriptDoneLinger is how long (tape.done_linger_ms) the "DONE" completion indicator stays on screen
 // after a tape script finishes. Once it elapses, script mode is left entirely
 // (see maybeExitFinishedScript). It matches the auto-hide window used by the
 // script indicator renderer.
-const scriptDoneLinger = 2 * time.Second
+func (m *OS) scriptDoneLinger() time.Duration {
+	return time.Duration(m.Settings.TapeDoneLingerMS) * time.Millisecond
+}
 
 // maybeExitFinishedScript leaves script mode once a finished tape's completion
-// indicator has been shown for scriptDoneLinger. This is what re-arms Ctrl+P:
+// indicator has been shown for tape.done_linger_ms. This is what re-arms Ctrl+P:
 // while ScriptMode is set, Ctrl+P is intercepted for script pause/resume
 // (internal/input/handler.go) and never reaches the command palette. Neither the
 // local playback finish path nor the remote-exec done path cleared ScriptMode,
@@ -42,7 +44,7 @@ func (m *OS) maybeExitFinishedScript() bool {
 	if !m.ScriptMode || m.ScriptFinishedTime.IsZero() {
 		return false
 	}
-	if time.Since(m.ScriptFinishedTime) < scriptDoneLinger {
+	if time.Since(m.ScriptFinishedTime) < m.scriptDoneLinger() {
 		return false
 	}
 	m.exitScriptMode()

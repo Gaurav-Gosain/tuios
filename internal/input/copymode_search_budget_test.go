@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"tuios.dev/vt"
 )
@@ -30,7 +31,7 @@ func TestCopyModeSearchKeyBudget(t *testing.T) {
 		return ms.TotalAlloc
 	}
 	before := allocated()
-	executeSearch(cm, w)
+	executeSearch(cm, w, config.SearchMaxMatchesDefault)
 	used := allocated() - before
 	if len(cm.SearchMatches) < 100 {
 		t.Fatalf("the search found %d matches, want one per 97 lines", len(cm.SearchMatches))

@@ -21,9 +21,11 @@ import (
 const tapeDetectDebounce = 400 * time.Millisecond
 
 // tapeBannerDuration is how long the passive "project tape found" banner stays
-// on screen. It is longer than an ordinary notification because it is
-// informational, not a prompt, and must never steal focus.
-const tapeBannerDuration = 8 * time.Second
+// on screen (tape.banner_ms). It is longer than an ordinary notification because
+// it is informational, not a prompt, and must never steal focus.
+func (m *OS) tapeBannerDuration() time.Duration {
+	return time.Duration(m.Settings.TapeBannerMS) * time.Millisecond
+}
 
 // CwdChangedMsg carries an OSC 7 working-directory change from a window's PTY
 // writer goroutine to the Update loop, which decides (on the focused window
@@ -282,7 +284,7 @@ func (m *OS) evaluateTapeDir(dir string) {
 	}
 
 	message, notifType := tapeBanner(res, &m.Settings)
-	m.ShowNotification(message, notifType, tapeBannerDuration)
+	m.ShowNotification(message, notifType, m.tapeBannerDuration())
 }
 
 // tapeStatusShown reports whether a playing tape draws its status pill and
@@ -341,7 +343,7 @@ func (m *OS) ensureTapeTrust() *trust.Store {
 	}
 	if store.Warning != "" {
 		m.LogWarn("%s", store.Warning)
-		m.ShowNotification(store.Warning, "warning", tapeBannerDuration)
+		m.ShowNotification(store.Warning, "warning", m.tapeBannerDuration())
 	}
 	m.tapeDetect.store = store
 	return store

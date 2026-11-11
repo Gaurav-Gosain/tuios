@@ -38,7 +38,7 @@ type clipboardAsk struct {
 	windowID string
 	// raised is when the ask last put a message on the dock. A pane whose
 	// message the user dismissed raises a new one at most once per
-	// notifyRateLimit, the limit guest notifications keep.
+	// notifications.rate_limit_ms, the limit guest notifications keep.
 	raised time.Time
 	// shown is when the message last showed this text: when it was raised,
 	// or when a newer write changed its text in place. A click sooner than
@@ -155,7 +155,7 @@ func (m *OS) askClipboardWrite(msg ClipboardSetMsg) {
 			return
 		}
 	}
-	if !ask.raised.IsZero() && time.Since(ask.raised) < notifyRateLimit {
+	if !ask.raised.IsZero() && time.Since(ask.raised) < m.notifyRateLimit() {
 		return
 	}
 	ask.raised = time.Now()
