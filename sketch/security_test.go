@@ -165,6 +165,7 @@ var (
 		"text-decoration", "letter-spacing", "word-spacing", "max-width")
 	rootStyles   = setOf("height:auto", "color:var(--_fg)", "text-transform:none", "direction:ltr")
 	reRootFont   = regexp.MustCompile(`^font:\d+(?:\.\d+)?(?:e[-+]?\d+)?px sans-serif$`)
+	reRootSeries = regexp.MustCompile(`^--pele-series-[1-8]$`)
 	numericAttrs = setOf("x", "y", "width", "height", "r", "cx", "cy", "rx", "ry", "x1", "x2", "offset")
 	// The only values pele writes for the label attributes of pele 1.9.0.
 	fixedValues = map[string]map[string]bool{
@@ -237,7 +238,7 @@ func inertProblem(svg string) string {
 						cut = len(decl) - 1
 					}
 					prop := js.Trim(decl[:cut])
-					root := el.name == "svg" && (rootStyles[trimmed] || reRootFont.MatchString(trimmed))
+					root := el.name == "svg" && (rootStyles[trimmed] || reRootFont.MatchString(trimmed) || reRootSeries.MatchString(prop))
 					if !root && !styleProps[prop] && !strings.HasPrefix(prop, "--_") {
 						return "style property " + prop
 					}

@@ -95,6 +95,11 @@ type RenderOptions struct {
 	// Theme sets the --pele-* tokens on the root element. It is not part of pele:
 	// nil gives pele's output, byte for byte.
 	Theme *Theme
+	// Palette is owned by the render, not the caller: it is the series colors that the
+	// diagram's theme variables set, such as pie1 or cScale0, worked out from the diagram's
+	// config. The render always replaces it, so a value set here has no effect. It is not
+	// part of pele's options.
+	Palette *Palette
 	// Geometry, when set, receives the layout the renderer worked out. It is not
 	// part of pele and does not change the SVG.
 	Geometry *Geometry
@@ -146,4 +151,33 @@ func Or[T any](p *T, def T) T {
 		return def
 	}
 	return *p
+}
+
+// Palette is the series colors that a diagram's theme variables set, checked as safe CSS
+// colors, and the label color for text on each one where its contrast is known. Only
+// svg.NewPalette makes one with colors in it.
+type Palette struct {
+	style string
+	inks  [8]string
+}
+
+// NewPalette is a palette with the root style declarations style and the label colors inks.
+func NewPalette(style string, inks [8]string) *Palette {
+	return &Palette{style: style, inks: inks}
+}
+
+// Style is the --pele-series-* declarations for the root element, escaped, or "".
+func (p *Palette) Style() string {
+	if p == nil {
+		return ""
+	}
+	return p.style
+}
+
+// Ink is the label color for text on series i, or "" when the palette leaves it unknown.
+func (p *Palette) Ink(i int) string {
+	if p == nil {
+		return ""
+	}
+	return p.inks[((i%8)+8)%8]
 }

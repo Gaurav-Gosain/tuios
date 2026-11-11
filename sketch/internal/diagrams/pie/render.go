@@ -222,7 +222,7 @@ func draw(model *PieModel, config types.Config, options types.RenderOptions, rad
 			outside += `<text x="` + num(x) + `" y="` + num(y+float64(small*0.35)) + `">` + txt + `</text>`
 		} else {
 			r := radius * textPosition
-			labels += `<text x="` + num(js.Sin(mid)*r) + `" y="` + num(float64(-js.Cos(mid)*r)+float64(small*0.35)) + `">` + txt + `</text>`
+			labels += `<text x="` + num(js.Sin(mid)*r) + `" y="` + num(float64(-js.Cos(mid)*r)+float64(small*0.35)) + `"` + svg.SeriesInkFill(options.Palette, index) + `>` + txt + `</text>`
 		}
 		angle = end
 	}

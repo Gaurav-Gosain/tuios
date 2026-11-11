@@ -156,7 +156,13 @@ func renderTreemap(model *TreemapModel, config types.Config, options types.Rende
 		if style.Italic {
 			textStyle |= text.Italic
 		}
-		ink := svg.InkFill(style, "")
+		// A fill the style sets decides the label color; else the palette's color for the series.
+		var ink string
+		if svg.SetsFill(style.Shape) {
+			ink = svg.InkFill(style, "")
+		} else {
+			ink = svg.SeriesInkFill(options.Palette, b.series)
+		}
 
 		if node.section {
 			drawn, drawnOK := "", false

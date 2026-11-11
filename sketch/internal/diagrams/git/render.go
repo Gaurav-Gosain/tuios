@@ -330,7 +330,7 @@ func draw(model *GitModel, config types.Config, options types.RenderOptions, dir
 				grow(cx-w/2, cy-h/2, cx+w/2, cy+h/2)
 				svg.WriteStrings(&branches, `<rect x="`, num(cx-w/2), `" y="`, num(cy-h/2), `" width="`, num(w), `" height="`, num(h), `" fill="`, color, `"`, svg.ROUNDED, `/>`,
 
-					svg.LabelSvg(name, cx, cy, ` class="pele-label" fill="var(--_bg)"`, nil))
+					svg.LabelSvg(name, cx, cy, branchLabelAttrs(options.Palette, i), nil))
 			}
 			branches.WriteString("</g>")
 		}
@@ -614,4 +614,13 @@ func draw(model *GitModel, config types.Config, options types.RenderOptions, dir
 		Height:   height,
 		Links:    []types.LinkInfo{},
 	}
+}
+
+// branchLabelAttrs are the attributes of the name of branch i: in the background color, or in
+// the label color that the palette's color for the branch needs.
+func branchLabelAttrs(p *types.Palette, i int) string {
+	if ink := svg.SeriesInkFill(p, i); ink != "" {
+		return ` class="pele-label"` + ink
+	}
+	return ` class="pele-label" fill="var(--_bg)"`
 }

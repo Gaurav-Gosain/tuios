@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"tuios.dev/sketch/internal/js"
+	"tuios.dev/sketch/internal/svg"
 	"tuios.dev/sketch/internal/text"
 	"tuios.dev/sketch/internal/types"
 )
@@ -299,6 +300,7 @@ func render(p parsed, options RenderOptions) SVG {
 		icons = func(name string) string { return resolve(text.DecodeEntities(name)) }
 	}
 	options.Icons = icons
+	options.Palette = svg.NewPalette(string(p.typ), p.config)
 	m := options.Measurer
 	if m == nil {
 		m = text.DefaultMeasurer(options.FontFamily, options.FontFamilyMono)

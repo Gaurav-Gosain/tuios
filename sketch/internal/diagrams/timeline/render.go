@@ -147,17 +147,35 @@ func draw(model *TimelineDb, config types.Config, options types.RenderOptions, v
 	eventW := eventTextW() + 2*PAD_X
 	chipHeight := func(label text.Label) float64 { return math.Max(label.Height, lineHeight) + 2*PAD_Y }
 	eventHeight := func(label text.Label) float64 { return math.Max(label.Height, js.Round(small*1.5)) + 2*PAD_Y }
-	colorOf := func(group Group, period int) string {
+	// seriesOf is the series of a period's color, or -1 for the muted color of a period
+	// outside the sections of a timeline that has them.
+	seriesOf := func(group Group, period int) int {
 		if group.section >= 0 {
-			return svg.SeriesColor(group.section)
+			return group.section
 		}
 		if hasSections {
-			return "var(--_m)"
+			return -1
 		}
 		if multicolor {
-			return svg.SeriesColor(period)
+			return period
 		}
-		return svg.SeriesColor(0)
+		return 0
+	}
+	colorOf := func(group Group, period int) string {
+		if series := seriesOf(group, period); series >= 0 {
+			return svg.SeriesColor(series)
+		}
+		return "var(--_m)"
+	}
+	// onColor is the fill of a label on the color of series, ON_COLOR unless the palette
+	// sets a color that needs another.
+	onColor := func(series int) string {
+		if series >= 0 {
+			if ink := svg.SeriesInkFill(options.Palette, series); ink != "" {
+				return ink
+			}
+		}
+		return ON_COLOR
 	}
 
 	hasEvents := false
@@ -202,11 +220,11 @@ func draw(model *TimelineDb, config types.Config, options types.RenderOptions, v
 	var body strings.Builder
 	header := func(group Group, label text.Label, x, y, w, h float64) {
 		box(&body, x, y, w, h, ` fill="`+svg.SeriesColor(group.section)+`"`)
-		body.WriteString(svg.LabelSvg(label, x+w/2, y+h/2, ` font-weight="var(--_hw)"`+ON_COLOR, nil))
+		body.WriteString(svg.LabelSvg(label, x+w/2, y+h/2, ` font-weight="var(--_hw)"`+onColor(group.section), nil))
 	}
-	period := func(i int, color string, x, y, h float64) {
+	period := func(i int, group Group, color string, x, y, h float64) {
 		box(&body, x, y, colW, h, ` fill="`+color+`"`)
-		body.WriteString(svg.LabelSvg(periodLabels[i], x+colW/2, y+h/2, ON_COLOR, nil))
+		body.WriteString(svg.LabelSvg(periodLabels[i], x+colW/2, y+h/2, onColor(seriesOf(group, i)), nil))
 	}
 	event := func(b *strings.Builder, label text.Label, color string, x, y, h float64) {
 		b.WriteString(`<g class="pele-node pele-event">`)
@@ -268,7 +286,7 @@ func draw(model *TimelineDb, config types.Config, options types.RenderOptions, v
 					svg.WriteStrings(&d, "M", num(axisX), ",", num(cy), "H", num(spineX), "V", num(last))
 				}
 				openPeriod(i)
-				period(i, color, left, cy-h/2, h)
+				period(i, group, color, left, cy-h/2, h)
 				svg.WriteStrings(&body, `<path class="pele-edge" d="`, d.String(), `"`, LINE, `/>`)
 				dot(axisX, cy, color)
 				svg.WriteStrings(&body, cards.String(), "</g>")
@@ -350,7 +368,7 @@ func draw(model *TimelineDb, config types.Config, options types.RenderOptions, v
 				}
 				bottom = math.Max(bottom, ey-EVENT_GAP)
 				openPeriod(i)
-				period(i, color, x, periodsY, chipH)
+				period(i, group, color, x, periodsY, chipH)
 				svg.WriteStrings(&body, `<path class="pele-edge" d="`, d.String(), `"`, LINE, `/>`)
 				dot(cx, axisY, color)
 				svg.WriteStrings(&body, cards.String(), "</g>")

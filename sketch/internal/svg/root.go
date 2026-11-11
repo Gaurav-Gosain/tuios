@@ -109,7 +109,8 @@ func SvgDocument(typ string, width, height, fontSize float64, options types.Rend
 	writeJSNum(&b, fontSize)
 	WriteStrings(&b, "px sans-serif;letter-spacing:normal;word-spacing:normal;text-transform:none;direction:ltr;font-family:var(--pele-font,",
 		Esc(families(options.FontFamily, "sans-serif")),
-		`)" fill="var(--_fg)" role="graphics-document document" aria-roledescription="`, typ, `"`, aria, `>`, head)
+		")", options.Palette.Style(),
+		`" fill="var(--_fg)" role="graphics-document document" aria-roledescription="`, typ, `"`, aria, `>`, head)
 	for _, part := range parts {
 		b.WriteString(part)
 	}

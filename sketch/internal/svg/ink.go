@@ -138,6 +138,13 @@ func colorArgs(body string, hsl bool) []string {
 	return nil
 }
 
+// PlainColor reports whether raw is a hex color or one of CSS's named colors.
+func PlainColor(raw string) bool {
+	value := strings.ToLower(js.Trim(raw))
+	name := strings.Replace(value, "grey", "gray", 1)
+	return reHex.MatchString(value) || listed(inkDark, name) || listed(inkLight, name) || value == "transparent" || value == "currentcolor"
+}
+
 // Luminance and alpha; named colors use 0 or 1 to preserve the contrast choice.
 func parseInkColor(raw string) (lum, alpha float64, ok bool) {
 	value := strings.ToLower(js.Trim(raw))
