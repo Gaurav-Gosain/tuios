@@ -1868,10 +1868,13 @@ func replyMentions(t *testing.T, plain bool, env []string) {
 			line := s.Line(r)
 			for _, badge := range []string{"agent ", "pane  "} {
 				before, after, ok := strings.Cut(line, badge)
-				// The fleet column, when the view has one, ends at a rule.
+				// The fleet column, when the view has one, ends at a rule,
+				// and the reply editor's rows start at its focus edge.
 				lead := before
-				if i := strings.LastIndex(lead, "│"); i >= 0 {
-					lead = lead[i+len("│"):]
+				for _, edge := range []string{"│", "▌"} {
+					if i := strings.LastIndex(lead, edge); i >= 0 {
+						lead = lead[i+len(edge):]
+					}
 				}
 				if !ok || strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(lead), "›")) != "" {
 					continue
