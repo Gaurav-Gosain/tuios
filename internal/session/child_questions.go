@@ -98,7 +98,9 @@ func (d *Daemon) childQuestionLook(window string) {
 // parentMayRespond reports whether the pane window may answer target's
 // prompt as its parent: target is a child agent it started, and the prompt is
 // a question, not an approval or an auth prompt. respond still reads the live
-// prompt and checks its kind again before it answers.
+// prompt and checks its kind again before it answers, and gives the right only
+// while [agents.mail] questions_to_parent is on: with it off nothing is
+// mailed to the parent, and the parent answers nothing.
 func parentMayRespond(window string, target WindowState) bool {
 	return window != "" && target.AgentLink != nil && target.StartedBy != nil &&
 		target.StartedBy.Window == window && agentBlockedBy(target) == harness.PromptKindQuestion

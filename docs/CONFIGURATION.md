@@ -3288,7 +3288,9 @@ ready_timeout = 180000
   apply` from outside tuios, or a restart. See
   [AGENT_STATE.md](AGENT_STATE.md#mail-that-wakes-an-agent-at-rest).
 - `[agents.mail]` `questions_to_parent` sends a question from a child agent
-  that `tuios delegate` started to its parent agent by mail first. The Inbox
+  that `tuios delegate` or `tuios start-agent` started to its parent agent by
+  mail first, and lets the parent answer it with `tuios respond`. With it off
+  nothing is mailed, and the parent has no right to answer. The Inbox
   shows the question as "With the parent agent" for 10 minutes, and does not
   count it or alert on it. After that, it is a normal Inbox item. It is true by
   default. Set it to false to send every such question to the Inbox at once.

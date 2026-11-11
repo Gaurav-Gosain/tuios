@@ -434,7 +434,7 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 	if !asPerson {
 		// A parent may answer its own child's question, with no respond
 		// grant: it started the child for this work (child_questions.go).
-		if pa := d.paneAuthority(cs); pa != nil && parentMayRespond(pa.window, w) {
+		if pa := d.paneAuthority(cs); pa != nil && d.attention.parentFirst.Load() && parentMayRespond(pa.window, w) {
 			asParent, byPane = true, pa.window
 		}
 	}
