@@ -243,6 +243,7 @@ func (m *OS) renumberLocalWorkspaces(newOf map[int]int) {
 	m.WorkspaceScrollingLayouts = session.RenumberWorkspaceMap(m.WorkspaceScrollingLayouts, newOf)
 	m.pendingScrollColumns = session.RenumberWorkspaceMap(m.pendingScrollColumns, newOf)
 	m.workspaceMarkSet = session.RenumberWorkspaceMap(m.workspaceMarkSet, newOf)
+	m.focusOnlyHidden = session.RenumberWorkspaceMap(m.focusOnlyHidden, newOf)
 	m.reconcilePaneStreams()
 }
 

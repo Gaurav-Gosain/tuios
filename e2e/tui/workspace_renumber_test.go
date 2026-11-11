@@ -824,3 +824,62 @@ func TestWorkspaceMoveRenumbersInboxItems(t *testing.T) {
 	}
 	alive(t, term, "after moving a workspace with an Inbox item")
 }
+
+// minimizedOn is how many panes of the renumber session are minimized on
+// workspace ws, by the daemon's list-windows.
+func minimizedOn(t *testing.T, base string, ws int) int {
+	t.Helper()
+	out, err := tuiosOut(base, "list-windows", "-s", renumberSession, "--json")
+	if err != nil {
+		t.Fatalf("list-windows: %v", err)
+	}
+	var payload struct {
+		Windows []struct {
+			Workspace int  `json:"workspace"`
+			Minimized bool `json:"minimized"`
+		} `json:"windows"`
+	}
+	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+		t.Fatalf("list-windows output: %v\n%s", err, out)
+	}
+	n := 0
+	for _, w := range payload.Windows {
+		if w.Workspace == ws && w.Minimized {
+			n++
+		}
+	}
+	return n
+}
+
+// waitMinimizedOn waits until workspace ws holds want minimized panes.
+func waitMinimizedOn(t *testing.T, term *tuitest.Terminal, base string, ws, want int, what string) {
+	t.Helper()
+	deadline := time.Now().Add(uiTimeout)
+	for time.Now().Before(deadline) {
+		if minimizedOn(t, base, ws) == want {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("ASSERTION: %s: workspace %d holds %d minimized panes, want %d\n%s", what, ws, minimizedOn(t, base, ws), want, term.Snapshot())
+}
+
+// TestFocusOnlyFollowsAMovedWorkspace: ctrl+b m f remembers, per workspace
+// number, the panes it hid. Moving the workspace renumbers it, and the second
+// press on its new number has to bring those panes back. The client kept the
+// list under the old number, so the press found nothing and hid again.
+func TestFocusOnlyFollowsAMovedWorkspace(t *testing.T) {
+	term, base := renumberSetup(t)
+	altReaches(t, term, '3', "DPLY")
+
+	sendKeys(t, term, tuitest.Ctrl('b'), "m", "f")
+	waitMinimizedOn(t, term, base, 3, 2, "focus only hid the other two panes of DPLY")
+
+	moveWorkspaceKey(t, term, "<")
+	waitPills(t, term, "1·EDIT", "2·DPLY", "3·REVW")
+	wantPanesOn(t, base, map[int]string{1: "EDIT", 2: "DPLY", 3: "REVW"})
+
+	sendKeys(t, term, tuitest.Ctrl('b'), "m", "f")
+	waitMinimizedOn(t, term, base, 2, 0, "the press after the move brought back the panes it hid")
+	alive(t, term, "after focus only on a moved workspace")
+}
