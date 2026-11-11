@@ -716,7 +716,7 @@ func (c *TUIClient) takeAttachReply(resp *Message) (*SessionState, error) {
 	// With the read loop running, routeReply counted this attach as it read
 	// the reply. See AttachGeneration.
 	if !c.readLoopRunning {
-		c.attachGen.Add(1)
+		c.attachGen.Store(attachCounter.Add(1))
 	}
 	c.startPushes()
 	c.appliedSeq.Store(stateSeq(payload.State))
@@ -1745,7 +1745,14 @@ func (c *TUIClient) startPushes() {
 	c.pushSeq.Store(0)
 }
 
-// AttachGeneration counts this client's attaches. SnapshotSeq numbers are the
+// attachCounter hands out attach generations. It is shared by every TUIClient
+// in the process, so no two connections ever hold the same generation.
+var attachCounter atomic.Uint64
+
+// AttachGeneration identifies this client's current attach. It is unique in
+// the process, not a per-client count: a client that switched machines holds a
+// new connection, and a message the left connection queued must not carry a
+// stamp equal to the new one's. Zero means no stamp. SnapshotSeq numbers are the
 // attached session's own and start over in another session or after a daemon
 // restart, both of which take a new attach, so two snapshots are comparable by
 // SnapshotSeq only when they arrived under the same generation.
@@ -2946,7 +2953,7 @@ func (c *TUIClient) routeReply(msg *Message) replyRoute {
 	// Every message read after this one belongs to the session it attaches
 	// to. See AttachGeneration.
 	if msg.Type == MsgAttached {
-		c.attachGen.Add(1)
+		c.attachGen.Store(attachCounter.Add(1))
 	}
 	select {
 	case p.ch <- msg:

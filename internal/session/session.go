@@ -1566,6 +1566,11 @@ type Session struct {
 	// client whose entry went missing would take every broadcast for one that
 	// predates its own push until it next pushed.
 	pushSeen map[string]uint64
+	// refusedOrigin is the push origin whose last dropped push was logged,
+	// guarded by stateMu. A client that shows another session's windows pushes
+	// them on every keystroke; the line is written for the first drop and not
+	// again while that origin keeps being dropped. See foreignPushLocked.
+	refusedOrigin string
 	// focusMovedVersion is the Version of the last daemon mutation that moved
 	// the focus or the workspace, or that a focus verb made, guarded by
 	// stateMu. A stale push built at or after it keeps its own focus. See
@@ -3746,6 +3751,9 @@ func (s *Session) ForgetPush(origin string) {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 	delete(s.pushSeen, origin)
+	if s.refusedOrigin == origin {
+		s.refusedOrigin = ""
+	}
 	delete(s.clientFocusMoved, origin)
 	delete(s.askedFocusMoved, origin)
 }
@@ -3798,6 +3806,20 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 				keepClientFocus(state, mine)
 			}
 			accepted = false
+		} else if s.foreignPushLocked(state, prev) {
+			// The push names windows of another session and none of this
+			// one's: a client slip. The session keeps its state and the
+			// sender is answered with it.
+			if origin == "" || s.refusedOrigin != origin {
+				s.refusedOrigin = origin
+				LogError("Refused a state update to %s: it names none of the session's windows", s.Name())
+			}
+			return false, behind, s.changeSeq
+		}
+		// A push from this origin is taken, by either path: a later slip
+		// from it is logged again.
+		if s.refusedOrigin == origin {
+			s.refusedOrigin = ""
 		}
 		// A push built before a renumber keys its workspace maps by the old
 		// numbers. The windows and the focus were taken from the session
@@ -3876,6 +3898,29 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 	s.noteStateChangeLocked()
 	s.emitLifecycleLocked(before)
 	return accepted, behind, s.changeSeq
+}
+
+// foreignPushLocked reports whether a push taken as sent names another
+// session's windows: prev holds a window, the push names at least one, and none
+// of the push's windows is one prev holds or has a live PTY of this session.
+// It copies nothing and stops at the first window prev holds. The caller holds
+// stateMu.
+func (s *Session) foreignPushLocked(state, prev *SessionState) bool {
+	if len(prev.Windows) == 0 || len(state.Windows) == 0 {
+		return false
+	}
+	for i := range state.Windows {
+		w := &state.Windows[i]
+		for j := range prev.Windows {
+			if prev.Windows[j].ID == w.ID {
+				return false
+			}
+		}
+		if w.PTYID != "" && s.hasLivePTY(w.PTYID) {
+			return false
+		}
+	}
+	return true
 }
 
 // pushOwnsFocusLocked reports whether a stale push from origin, built at base,

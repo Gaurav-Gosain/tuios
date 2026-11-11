@@ -16686,3 +16686,38 @@ The control was run on 2026-11-11 on branch `untangle/r2-2-handler-table`
 
 The unit test `TestTheDispatcherHandlesEveryAction` in `internal/input`, from
 the same branch, fails naming `new_window` when its `Register` line is cut.
+## A session keeps its own windows after a switch to a linked host and back
+
+`TestHostSwitchBackKeepsTheLocalSessionsWindows` (issue #1837) links this
+machine one way to a second daemon, `build`, keeps that daemon busy with four
+loops of `set-agent-state` on `far`, and clicks the rail from `home` to `far`
+and back eight times. After every round `home` must list the windows it
+started with; after the last, the local daemon's log must hold no line "it
+names none of the session's windows" (the client never sent another session's
+list), `far` must keep its windows, and the client must show the text home's
+panes printed.
+`TestUpdateStateDropsAnotherSessionsWindows` (internal/session) has a real
+client push a list naming none of the session's windows, built on a version
+above the session's: the session keeps its windows, version and focus, the
+push is counted, the sender is answered with a "reconcile" state listing the
+session's own windows, and the log names the session. A mixed list, an empty
+list and a list naming only a new window on a live pane of the session are
+each taken. A second foreign push from the same client adds no second log
+line, and a push built on a version behind the session's, naming none of its
+windows, is merged by the stale path: the session keeps its windows, takes the
+master ratio the push carries, and the log holds no refusal.
+
+Run on 2026-11-11 on Linux (amd64), go1.27.4. The branch passes both tests.
+
+| Control | Test | The test fails with | Result |
+|---------|------|---------------------|--------|
+| Main | `TestHostSwitchBackKeepsTheLocalSessionsWindows` (row a) | `host_switch_stale_sync_test.go:89: ASSERTION: after round 1 of 8 home lists the windows [025b...,f067...], it started with [d5d1...,faed...] (far's are [025b...,f067...])` | **caught** |
+| The daemon check cut (`} else if false && s.foreignPushLocked(state, prev) {`) | `TestUpdateStateDropsAnotherSessionsWindows` (row a); `TestHostSwitchBackKeepsTheLocalSessionsWindows` passes, the client part alone keeps the push from being sent | `update_state_foreign_test.go:63: the session lists [far-window-one=far-pty-one far-window-two=far-pty-two] after the foreign push, want its own [271d3253-8888-429e-a13f-b4ac8fa23750=a387d6fa-de04-4a26-9826-1b8cd89c0b1a]`, then `:69: the session's focus is "far-window-one" after the foreign push, want "271d3253-8888-429e-a13f-b4ac8fa23750"` and `:71: no "reconcile" state sync within 5s` | **caught** |
+| The process-wide attach count cut back to a count per client (`c.attachGen.Store(attachCounter.Add(1))` to `c.attachGen.Add(1)` at both sites) | `TestHostSwitchBackKeepsTheLocalSessionsWindows`: row (b), and row (c) may fail too | `host_switch_stale_sync_test.go:102: ASSERTION: the client pushed a window list naming none of home's windows: 2026-11-11T12:24:42.008 [errors] [ERROR] Refused a state update to home: it names none of the session's windows`, then `host_switch_stale_sync_test.go:109: ASSERTION: no pane shows "HOME-42": tuitest: WaitForDesc timed out after 10s waiting for custom condition` | **caught** |
+| The same drop also taken before the stale merge (`if s.foreignPushLocked(state, prev) { LogError(...); return false, behind, s.changeSeq }` before the stale branch) | `TestUpdateStateDropsAnotherSessionsWindows` (row b4); the unit test row a2 fails as well | `update_state_foreign_test.go:123: the session's master ratio is 0 after a stale push that set 0.7, want the push's`, then `:126: the log holds "Refused a state update to foreign-stale: it names none of the session's windows" for a stale push, which the stale merge answers` | **caught** |
+| The refusal logged for every drop (`if origin == "" || s.refusedOrigin != origin {` to `if true {`) | `TestUpdateStateDropsAnotherSessionsWindows` (row a2) | `update_state_foreign_test.go:96: the log holds 2 lines "Refused a state update to foreign-once: it names none of the session's windows" after two foreign pushes from one client, want 1` | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHostSwitchBackKeepsTheLocalSessionsWindows$' -v .`,
+and from the root with
+`go test -count=1 -run '^TestUpdateStateDropsAnotherSessionsWindows$' ./internal/session/`.
