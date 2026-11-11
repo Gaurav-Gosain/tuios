@@ -11,7 +11,7 @@ import (
 // and agent mail looked like in a capture.
 func TestMessageTypeNameCoversEveryType(t *testing.T) {
 	seen := make(map[string]MessageType)
-	for mt := MsgHello; mt <= MsgLayoutTree; mt++ {
+	for mt := MsgHello; mt < msgTypeEnd; mt++ {
 		name := MessageTypeName(mt)
 		if name == "" || strings.HasPrefix(name, "Unknown") {
 			t.Errorf("message type %d has no name, got %q", mt, name)

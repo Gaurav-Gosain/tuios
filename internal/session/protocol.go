@@ -199,6 +199,10 @@ const (
 	// (PluginUIPayload), to the clients that read MsgPluginApprovals. See
 	// plugin_ui.go.
 	MsgPluginUI
+
+	// msgTypeEnd is one past the last message type. It stays last: a type
+	// added above it is walked by the tests that sweep every type.
+	msgTypeEnd
 )
 
 // DaemonUpgradingPayload is the body of MsgDaemonUpgrading: the version the
