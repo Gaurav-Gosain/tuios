@@ -27,6 +27,19 @@ func (m *OS) listStepSkip(cur, delta, n int, rest func(int) bool) int {
 	return listnav.StepSkip(cur, delta, n, m.listWraps(), rest)
 }
 
+// listDelta reads a list movement key of [keybindings.lists], with its letter
+// keys (k, j, g and G by default) as a list with no filter reads them, and
+// returns how many rows it moves: page for a page key, further than any list
+// for Home and End. It reports false for any other key. A list that clamps at
+// its ends rather than wrapping clamps the delta itself.
+func listDelta(keys *listnav.Keymap, key string, page int) (int, bool) {
+	motion := keys.Keys(key, true)
+	if motion == listnav.None {
+		return 0, false
+	}
+	return listnav.Delta(motion, page), true
+}
+
 // listKeymap is the keys [keybindings.lists] gives each list motion. An action
 // the section does not name keeps its default keys, and one set to [] has none.
 func listKeymap(cfg *config.UserConfig) *listnav.Keymap {

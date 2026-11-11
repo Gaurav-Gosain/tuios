@@ -237,3 +237,31 @@ func TestPickersShareTheEditorAndTheListKeys(t *testing.T) {
 		})
 	}
 }
+
+// TestListsWithoutAFilterTakeTheConfiguredKeys: a list that used to hard-code
+// up, k, down and j now moves on the keys [keybindings.lists] gives. The
+// accent picker stands for them, as the one a person opens with a key; the
+// dropdown, the integration question, the copy dialog and the task form read
+// the same keys through listDelta.
+//
+// How it could pass wrongly: a screen that does not change at all would make
+// the first half pass, so the second half needs the rebound key to change it.
+func TestListsWithoutAFilterTakeTheConfiguredKeys(t *testing.T) {
+	f := apptest.New(t, apptest.Size(120, 40), apptest.Colors16(), apptest.Panes(1),
+		apptest.Config(func(c *config.UserConfig) {
+			if c.Keybindings.Lists == nil {
+				c.Keybindings.Lists = map[string][]string{}
+			}
+			c.Keybindings.Lists[config.ActionListDown] = []string{"ctrl+j"}
+		}))
+	f.Action("set_accent")
+	before := f.Text()
+	f.Keys("down")
+	if got := f.Text(); got != before {
+		t.Errorf("ASSERTION: down moved the accent picker though list_down is only ctrl+j:\n%s", got)
+	}
+	f.Keys("ctrl+j")
+	if got := f.Text(); got == before {
+		t.Errorf("ASSERTION: ctrl+j, the configured list_down, did not move the accent picker:\n%s", got)
+	}
+}

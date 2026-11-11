@@ -83,12 +83,18 @@ func (m *OS) IntegrationAskKey(key string) tea.Cmd {
 	if !a.open || !m.integrationAskSettled() || m.ProcessingRemoteKeys || m.pressingTapeKeys {
 		return nil
 	}
+	// The list keys of [keybindings.lists] move the cursor; it stops at the
+	// ends.
+	if delta, ok := listDelta(m.ListKeys, key, integrationRows); ok {
+		a.selected = min(max(a.selected+delta, 0), integrationRows-1)
+		return nil
+	}
 	switch key {
 	case "esc", "q", "n":
 		m.CloseIntegrationAsk()
-	case "up", "k", "shift+tab":
+	case "shift+tab":
 		a.selected = max(a.selected-1, 0)
-	case "down", "j", "tab":
+	case "tab":
 		a.selected = min(a.selected+1, integrationRows-1)
 	case "enter":
 		return m.IntegrationAskActivate(a.selected)

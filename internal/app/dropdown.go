@@ -3,6 +3,7 @@ package app
 import (
 	"strconv"
 
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
@@ -81,18 +82,19 @@ const (
 // a row's key picks it, esc closes. With closeOthers any other key closes the
 // list too; without it, the key is the host's to handle (ddKeyMoved with no
 // move is returned and the list stays).
-func (d *dropdown) Key(key string, closeOthers bool) (int, ddKey) {
+//
+// The movement keys are the lists' of [keybindings.lists] (keys). The list
+// stops at its ends.
+func (d *dropdown) Key(key string, closeOthers bool, keys *listnav.Keymap) (int, ddKey) {
 	n := len(d.items)
 	if n == 0 {
 		return -1, ddKeyClosed
 	}
+	if delta, ok := listDelta(keys, key, listOverlayRows); ok {
+		d.cursor, d.hover = min(max(d.cursor+delta, 0), n-1), -1
+		return -1, ddKeyMoved
+	}
 	switch key {
-	case "up", "k":
-		d.cursor, d.hover = max(d.cursor-1, 0), -1
-		return -1, ddKeyMoved
-	case "down", "j":
-		d.cursor, d.hover = min(d.cursor+1, n-1), -1
-		return -1, ddKeyMoved
 	case "enter", "space":
 		return d.cursor, ddKeyPicked
 	case "esc":

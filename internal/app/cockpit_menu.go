@@ -123,7 +123,7 @@ func (m *OS) CockpitMenuKey(key string) tea.Cmd {
 	if mn == nil {
 		return nil
 	}
-	i, what := mn.dd.Key(key, true)
+	i, what := mn.dd.Key(key, true, m.ListKeys)
 	switch what {
 	case ddKeyPicked:
 		return m.cockpitMenuPick(i)

@@ -2,7 +2,9 @@ package input
 
 import (
 	tea "charm.land/bubbletea/v2"
+
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 )
 
 // handleAccentPickerInput drives the colour picker. Tab walks the controls (the
@@ -16,6 +18,16 @@ import (
 // Which axis a motion key moves is the picker's business, not this handler's:
 // it takes the step and hands it over.
 func handleAccentPickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	// Up and down step the lightness by the list keys of [keybindings.lists]:
+	// up and down by default, k and j too.
+	switch o.ListKeys.Keys(msg.String(), true) {
+	case listnav.Up:
+		o.AccentPickerMove(0, -1)
+		return o, nil
+	case listnav.Down:
+		o.AccentPickerMove(0, 1)
+		return o, nil
+	}
 	switch msg.String() {
 	case "esc":
 		o.CloseAccentPicker()
@@ -36,12 +48,6 @@ func handleAccentPickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 		return o, nil
 	case "right", "l":
 		o.AccentPickerMove(1, 0)
-		return o, nil
-	case "up", "k":
-		o.AccentPickerMove(0, -1)
-		return o, nil
-	case "down", "j":
-		o.AccentPickerMove(0, 1)
 		return o, nil
 	case "shift+left":
 		o.AccentPickerMoveShift(-1, 0)

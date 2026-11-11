@@ -12,14 +12,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
-
 	tea "charm.land/bubbletea/v2"
-
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
@@ -331,10 +330,14 @@ func (m *OS) TaskCaptureKey(msg tea.KeyPressMsg) tea.Cmd {
 		d = 1
 	case "enter":
 		return m.taskCaptureFile(false)
-	case "up", "k":
+	}
+	// The list keys of [keybindings.lists] move between the fields: up and
+	// down by default, k and j too.
+	switch motion := m.ListKeys.Keys(key, true); motion {
+	case listnav.Up:
 		s.field--
 		return nil
-	case "down", "j":
+	case listnav.Down:
 		s.field = min(s.field+1, s.lastField())
 		return nil
 	}

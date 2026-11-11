@@ -152,7 +152,7 @@ func (m *OS) CopyDialogMove(delta int) {
 	if n == 0 {
 		return
 	}
-	d.selected = ((d.selected+delta)%n + n) % n
+	d.selected = m.listStep(d.selected, delta, n)
 }
 
 // CopyDialogSelect puts the cursor on row idx.
@@ -188,10 +188,14 @@ func (m *OS) CopyDialogKey(key, text string) tea.Cmd {
 		}
 		return nil
 	}
+	if delta, ok := listDelta(m.ListKeys, key, listOverlayRows); ok {
+		m.CopyDialogMove(delta)
+		return nil
+	}
 	switch key {
-	case "up", "k", "shift+tab":
+	case "shift+tab":
 		m.CopyDialogMove(-1)
-	case "down", "j", "tab":
+	case "tab":
 		m.CopyDialogMove(1)
 	case "space":
 		if d.kind == copyDialogConflict && d.row.ConflictCount > 1 {

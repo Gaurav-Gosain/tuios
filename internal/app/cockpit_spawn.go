@@ -1205,7 +1205,7 @@ func (m *OS) spawnListKey(s *spawnSheet, key string) tea.Cmd {
 		s.list = false
 		return nil
 	}
-	switch i, what := s.dd.Key(key, false); what {
+	switch i, what := s.dd.Key(key, false, m.ListKeys); what {
 	case ddKeyPicked:
 		m.pickList(s, i)
 	case ddKeyClosed:
