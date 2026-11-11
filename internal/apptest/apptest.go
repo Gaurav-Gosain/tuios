@@ -15,6 +15,7 @@ package apptest
 
 import (
 	"fmt"
+	"image/color"
 	"maps"
 	"os/exec"
 	"reflect"
@@ -328,6 +329,46 @@ func (f *Fixture) Wheel(x, y, dy int) {
 	for range dy {
 		f.Send(tea.MouseWheelMsg(tea.Mouse{X: x, Y: y, Button: button}))
 	}
+}
+
+// Output writes guest output into the focused pane's emulator, as the pane's
+// stream delivers it, so a test can put text and a cursor in the pane.
+func (f *Fixture) Output(data string) {
+	f.t.Helper()
+	w := f.M.GetFocusedWindow()
+	if w == nil {
+		f.t.Fatal("apptest: no focused pane to write output into")
+	}
+	w.WriteOutput([]byte(data))
+}
+
+// Cursor is where the frame puts the terminal's own cursor, and false when
+// it hides it.
+func (f *Fixture) Cursor() (x, y int, ok bool) {
+	f.t.Helper()
+	c := f.M.View().Cursor
+	if c == nil {
+		return 0, 0, false
+	}
+	return c.X, c.Y, true
+}
+
+// Cell is one cell of the screen: what it shows and how.
+type Cell struct {
+	Content string
+	FG, BG  color.Color
+	// Attrs are the cell's ultraviolet attributes (bold, reverse, ...).
+	Attrs uint8
+}
+
+// Cell reads one cell of the screen.
+func (f *Fixture) Cell(x, y int) Cell {
+	f.t.Helper()
+	c := f.draw().CellAt(x, y)
+	if c == nil {
+		return Cell{}
+	}
+	return Cell{Content: c.Content, FG: c.Style.Fg, BG: c.Style.Bg, Attrs: c.Style.Attrs}
 }
 
 // frame is the frame the model hands Bubble Tea, styled.

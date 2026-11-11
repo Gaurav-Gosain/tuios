@@ -1,6 +1,7 @@
 package app
 
 import (
+	"regexp"
 	"testing"
 
 	"tuios.dev/vt"
@@ -89,4 +90,15 @@ func TestNativeCursorVisibilityTransition(t *testing.T) {
 			t.Log("software fallback rendered without native ownership")
 		})
 	}
+}
+
+// countFakeCursors counts the cells the cell loop painted as a cursor.
+//
+// It looks for a foreground and a background set in one sequence, which is what
+// the cursor cell emits and what an unstyled prompt does not. The obvious probe
+// is reverse video, and the resize test next door used it, but the cursor cell
+// has never been drawn that way: it swaps the two colours explicitly, so
+// counting ESC[7m could not fail and never did.
+func countFakeCursors(render string) int {
+	return len(regexp.MustCompile(`\x1b\[38;2;[0-9;]*;48;2;[0-9;]*m`).FindAllString(render, -1))
 }
