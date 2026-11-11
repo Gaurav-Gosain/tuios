@@ -16888,3 +16888,17 @@ Run on 2026-11-11 on macOS (arm64). The branch passes.
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
 | The branch before this one (two rows each, body under the list, unaligned block) | "task get's attachment kinds start at columns [14 15 ... 23]" and "the last attachment did not open under its row, on screen" | **caught** |
+
+## The card preview keeps its top when an attachment opens
+
+`TestCardPreviewKeepsItsTopWhenAnAttachmentOpens` (the docs worker's scene:
+108x30, a side panel 56 cells wide, a host with kitty graphics) opens a held
+card's picture, then its diff, the picture again and the diff again. The
+diff's row is in view, so the preview must not scroll: the stage line and
+the holder stay. After `J` the head must say how many lines are above.
+
+Run on 2026-11-11 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The branch before this one (the step scrolls by the last frame's rows) | "after ] the preview scrolled past \"· S t1\"" and "past \"Held by\"", and "the preview's head does not say how many lines are above" | **caught** |
