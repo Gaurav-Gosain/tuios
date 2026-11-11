@@ -67,6 +67,26 @@ fails with `no_shell_integration` and types nothing. Then use `send-text`.
 `ask-human` prints the answer, or exits 2 when the time runs out. `--timeout`
 is in milliseconds. Use `wait-for`, not a loop of `sleep` and `capture-pane`.
 
+A pane keeps the last 10,000 lines of output (`appearance.scrollback_lines`).
+Older lines go without a notice. When a command prints more than that, or
+when you need all of it, send its output to a file and read the file:
+`tuios run -s "$TUIOS_SESSION" -w build -- sh -c 'make test > /tmp/test.log 2>&1'`.
+
+## Name your work
+
+On the first request that says what the work is, name your pane after the
+task: two to four words, such as `fix login redirect`. Name it again when the
+task changes.
+
+```sh
+tuios set-window -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID" --name 'fix login redirect'
+```
+
+Label the session too only when you started it or you are the only agent in
+it: `tuios set-session-name 'login fix'`. The label changes what the sidebar
+shows, not the session's name, so `$TUIOS_SESSION` and every script still
+work. Do not rename a session with `rename-session` unless the person asks.
+
 ## Talk to another agent
 
 | Command | Use it when | What it does |
@@ -87,6 +107,41 @@ tuios read-agent-messages -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID" --unread
 ```
 
 Reply with `--reply-to ID`, where `ID` is the message id.
+
+## Here, or where the person looks
+
+`$TUIOS_PANE_ID` and `$TUIOS_SESSION` say where you run. The person may look
+at another pane, another workspace or another session. Pick the target from
+the request:
+
+- "Here", "beside you", or no place at all: your own pane and session.
+  `split-window` splits your pane.
+- "The pane I am in", "the focused pane", "this workspace": what the person
+  sees. Read it, do not guess:
+  `tuios list-windows -s "$TUIOS_SESSION" --json | jq -r '.focused_window_id, .current_workspace'`.
+  `tuios list-clients --json` says which session each attached client shows.
+- A pane, a workspace or a session by name: that one. A name the person gives
+  wins over where you run and over the focus.
+
+The ids in your start context were right when the pane started. When a
+target is not found, list again (`list-windows`, `list-workspaces`, `ls`)
+before you report that it is gone. Do not move the person's focus or switch
+their client (`focus-window`, `select-workspace`, `switch-session`) unless
+they ask for it.
+
+## The person's words
+
+| The person says | In tuios | Run |
+| --- | --- | --- |
+| Session, project | A session | `tuios new api` |
+| Tab, desktop, workspace 2 | A workspace, 1 to 9 | `tuios new-window -s "$TUIOS_SESSION" logs --workspace 2 --no-focus` |
+| Pane, terminal, window | A window | `tuios list-windows -s "$TUIOS_SESSION"` |
+| Split, beside, below | A split of a pane | `tuios split-window -s "$TUIOS_SESSION" down --no-focus -- tail -f app.log` |
+| Maximize, full screen | Zoom | `tuios zoom-window -s "$TUIOS_SESSION" -w logs --on`, `--off` to end it |
+| Rename the tab | Name the workspace | `tuios set-workspace-name -s "$TUIOS_SESSION" 2 logs` |
+| Rename the pane | Name the window | `tuios set-window -s "$TUIOS_SESSION" -w logs --name 'api logs'` |
+| Show me, go to | Move the focus | `tuios focus-window -s "$TUIOS_SESSION" logs` |
+| Another machine, the server | A host | `tuios --skill hosts` |
 
 ## JSON
 
@@ -122,6 +177,16 @@ to run next. A retry without a change fails the same way. A `timeout` does
 not undo what the command sent. Read the pane with `capture-pane` before you
 send the text again. `tuios --skill errors` lists every code. After
 `agents_disabled`, stop the agent commands and tell the person.
+
+## Verify, then report
+
+Check the result before you report it. Read the pane with `capture-pane`,
+take the exit code from `run` or `new-window --wait`, or list the windows to
+see a layout change. A `timeout` does not say whether the work failed.
+
+Then report in the person's words: "Opened a logs pane below the editor on
+workspace 2", not the commands you ran. Say what did not work and what that
+leaves undone. Name the host when the work ran on another machine.
 
 ## Topics
 
