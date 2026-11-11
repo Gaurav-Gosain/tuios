@@ -399,6 +399,11 @@ func (d *Daemon) sendAttachReply(cs *connState, req *Message, payload *AttachedP
 // broadcastToSession sends a message to all TUI clients attached to a session.
 // If excludeClientID is non-empty, that client is excluded from the broadcast.
 func (d *Daemon) broadcastToSession(sessionID string, msgType MessageType, payload any, excludeClientID string) {
+	// A session with no member skips the encode, which for a state push is the
+	// whole session. Any member, attached or not, takes the path below.
+	if !d.sessionHasMember(sessionID, excludeClientID) {
+		return
+	}
 	// Encoded once. Every client speaks the one codec there is, and a state
 	// push is the whole session, so encoding it on each client's goroutine
 	// was the same gob of the same state as many times as there were peers.
@@ -408,6 +413,26 @@ func (d *Daemon) broadcastToSession(sessionID string, msgType MessageType, paylo
 		return
 	}
 	d.broadcastEncodedToSession(sessionID, msg, excludeClientID)
+}
+
+// sessionHasMember reports whether any client is attached to the session or
+// still attaching, by broadcastEncodedToSession's test, and writes nothing. A
+// state push is held under the session's pushMu across the sink, and the
+// attach handler takes that lock (forgetBroadcast) before the snapshot its
+// reply carries, so a client not yet a member gets the change in that reply;
+// for the other broadcasts such a client was not reached before either.
+func (d *Daemon) sessionHasMember(sessionID, excludeClientID string) bool {
+	d.clientsMu.RLock()
+	defer d.clientsMu.RUnlock()
+	for _, cs := range d.clients {
+		cs.mu.Lock()
+		member := cs.sessionID == sessionID && cs.isTUIClient && cs.clientID != excludeClientID
+		cs.mu.Unlock()
+		if member {
+			return true
+		}
+	}
+	return false
 }
 
 // broadcastEncodedToSession is broadcastToSession for a message already

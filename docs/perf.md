@@ -6007,7 +6007,7 @@ nothing copied. TestStatePushLeavesCardBodies holds it: a state of 1000 long
 cards stays under a 256 KiB push, the decoded cards equal the state's cards
 minus those three bodies, and the state itself keeps every body.
 
-Numbers, on arch-btw (Ryzen 5 5600, Linux x86_64, go1.27.3), one core,
+Numbers, on a Ryzen 5 5600 (Linux x86_64, go1.27.3), one core,
 `NewMessage(MsgStateSync, ...)` per call, n=10 interleaved, benchstat means.
 Cards of 500 B prompts and 5 history entries, no verify record; the last row
 is 1000 cards of 16 KiB prompts, 13 history entries and a failed verify with
@@ -6042,3 +6042,52 @@ one verify record when it has one) in place of encoding its bodies.
 
 The binary grows by 8,192 B on linux/amd64 and 16,512 B on darwin/arm64
 (tuios-web: 8,192 B and 0).
+
+## 2026-11 a state push to a session nobody is attached to is not encoded
+
+`broadcastToSession` encoded its message before it looked for a client to send
+it to, so a daemon with no client attached to a session still encoded the
+whole state on every change to it (an agent changing its state overnight, a
+headless host). It now looks first and returns when no client is attached or
+attaching. A client that is attaching counts as present, so a change made
+while it attaches is encoded and marked for its attach repair as before.
+TestBroadcastToAnUnwatchedSessionIsNotEncoded holds it: a publish to a session
+with no client stays within a fixed allocation and byte budget, a client that
+is attached still receives the publish, and a lone client that is attaching
+still receives the change.
+
+Numbers, on a Ryzen 5 5600 (Linux x86_64, go1.27.4), one core, a
+session with no client, 100 windows and 50 cards unless the row says
+otherwise (10 and 1000 windows with 5 and 500 cards), n=10 interleaved,
+benchstat means, per call. `publishState` is the daemon's own state sink with
+a rising change count; the verb is `SetDisplayName`, a real change made
+through `mutateState`:
+
+| Windows | Publish time main | Publish time branch | Allocations main | Allocations branch | Bytes main | Bytes branch |
+|---------|-------------------|---------------------|------------------|--------------------|------------|--------------|
+| 10 | 80.0 us | 0.23 us | 101 | 2 | 39,928 | 96 |
+| 100 | 187.0 us | 1.34 us | 154 | 2 | 137,480 | 96 |
+| 1000 | 1192.3 us | 12.6 us | 612 | 2 | 1,086,890 | 96 |
+
+| Windows | Verb time main | Verb time branch | Allocations main | Allocations branch | Bytes main | Bytes branch |
+|---------|----------------|------------------|------------------|--------------------|------------|--------------|
+| 10 | 96.3 us | 13.3 us (-86%) | 138 | 39 | 61.8 KiB | 22.9 KiB (-63%) |
+| 100 | 281.5 us | 87.7 us (-69%) | 203 | 51 | 333.0 KiB | 198.8 KiB (-40%) |
+| 1000 | 2.08 ms | 0.88 ms (-58%) | 685 | 75 | 2.96 MiB | 1.92 MiB (-35%) |
+
+A publish to a session with one client attached (100 windows, the client
+reading every push) is the same on both: 3,068 allocations and 399.2 KiB on
+main, 3,063 and 398.4 KiB on the branch (-0.2%), and the time is 509.6 us and
+507.0 us, not significant.
+
+The slice these ran on was not throttled during the runs (the throttled count
+did not move). The macOS arm64 numbers were not measured.
+
+What remains: a change made through a verb such as `set-session-name` (it
+calls `SetDisplayName`) on an unwatched session at 100 windows and 50 cards
+falls from 340,975 B to 203,580 B (-40%),
+from 203 to 51 allocations and from 281.5 us to 87.7 us. What stays
+is the snapshot of the state, which the verb takes for its own use and which
+alone is 99,104 B, 5 allocations and 33.3 us at this size, and the rest of
+the change (about 104 KB of the 204 KB). A session with a client pays what it
+paid before plus one walk of the clients.

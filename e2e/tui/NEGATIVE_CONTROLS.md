@@ -16646,3 +16646,25 @@ Run on 2026-11-11 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPaneViewReportsTheAgentState$' -v .`.
+## A session nobody is attached to does not encode its pushes
+
+`TestBroadcastToAnUnwatchedSessionIsNotEncoded` (internal/session) runs three
+rows on a daemon, each on its own session with 100 windows and 50 cards and no
+pane behind them. With no client, 50 publishes of the session's state through
+the daemon's own state sink, each one change above the last, must take at most
+16 allocations and 8 KiB a publish (runtime.MemStats, the lowest of 5 runs).
+With one client attached, a publish carrying a name only it holds must reach
+the client as an "update" state sync. With one client attaching and no other,
+a daemon-side rename made between the attach reply's snapshot and the reply
+must reach the client after the reply.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main | "ASSERTION: a publish to a session nobody is attached to took 154 allocations and 137480 bytes (lowest of 5 runs of 50), want at most 16 and 8192: the state is still encoded for nobody" (subtest `no_client`; the other two pass) | **caught** |
+| The look cut, so every push is encoded | "ASSERTION: a publish to a session nobody is attached to took 154 allocations and 137480 bytes (lowest of 5 runs of 50), want at most 16 and 8192: the state is still encoded for nobody" (subtest `no_client`; the other two pass) | **caught** |
+| The look counts only attached clients, so a client still attaching is taken for nobody | "ASSERTION: a daemon-side change made while the only client was attaching never reached it: no state sync named \"changed while attaching\" within 5s" (subtest `one_client_attaching`; `no_client` passes) | **caught** |
+
+Run on 2026-11-11 on Linux (amd64), go1.27.4. The branch passes 3 of 3 runs in one process (`-count=3`), and each control fails in all 3.
+
+Repeat with
+`go test -count=3 -run '^TestBroadcastToAnUnwatchedSessionIsNotEncoded$' -v ./internal/session/`.
