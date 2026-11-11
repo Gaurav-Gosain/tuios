@@ -49,6 +49,7 @@ func TestScreenDrawsStringFramesAsTheirCells(t *testing.T) {
 				frame := fmt.Sprintf("\x1b[1;38;2;200;80;10mframe %d\x1b[m\nsecond \x1b[44mline\x1b[m %d\n\n漢字 wide %d", i, i*7, i)
 				s.FrameString(frame, w, h)
 				s.Flush(tea.View{AltScreen: true}, true)
+				s.Commit()
 				s.out.flush()
 				written := term.take()
 				if !out.Raw {

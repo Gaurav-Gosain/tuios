@@ -400,6 +400,11 @@ func flushCmd() tea.Msg { return flushMsg{} }
 // handleFlush writes the frame kickFlush asked for, if it asked, and anything
 // Bubble Tea queued while the ticker is stopped.
 func (m *OS) handleFlush() {
+	// A client with a screen writes the frame View staged now, merged with
+	// any composed after it, as Bubble Tea's renderer wrote the view it held.
+	if m.screen != nil {
+		m.screen.Commit()
+	}
 	if !m.frameRate.kickWanted && !m.frameRate.idle {
 		return
 	}

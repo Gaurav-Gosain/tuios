@@ -43,9 +43,13 @@ type Screen struct {
 	// start. syncd: the terminal has synchronized output.
 	started, query, syncd bool
 	pre                   bytes.Buffer
-	// diffed: body holds the diff of the frame composed last, not yet
-	// written.
-	diffed bool
+	// staged is the frame composed last, not yet diffed, and shown a copy
+	// of the frame last diffed: what the terminal shows. view and framed
+	// are what the next Commit writes the modes, the cursor and the debt by.
+	staged *uv.Buffer
+	shown  uv.Buffer
+	view   *tea.View
+	framed bool
 
 	last   *tea.View
 	closed bool
@@ -156,36 +160,17 @@ func (s *Screen) start() {
 	s.scr.Erase()
 }
 
-// Frame diffs buf against what the terminal shows and reports whether the
-// terminal needs any of it. A frame that diffs to nothing is a frame equal to
-// the last one.
+// Frame takes a newly composed frame and reports whether it differs from the
+// frame last written. Nothing is diffed or written yet: Commit does that, so
+// frames composed before the write merge into one, as Bubble Tea's renderer
+// wrote only the view it held when its flush came. buf must stay as composed
+// until Commit, or be composed again.
 func (s *Screen) Frame(buf *uv.Buffer) bool {
 	if s.closed || s.released {
 		return false
 	}
-	s.start()
-	w, h := buf.Width(), buf.Height()
-	if w != s.w || h != s.h {
-		if s.w != 0 {
-			s.scr.Resize(w, h)
-			s.scr.Erase()
-		}
-		s.w, s.h = w, h
-	}
-	s.rb.Buffer = buf
-	if len(s.touched) != h {
-		s.touched = make([]uv.LineData, h)
-		s.rb.Touched = make([]*uv.LineData, h)
-	}
-	for i := range s.rb.Touched {
-		s.touched[i] = uv.LineData{FirstCell: 0, LastCell: w}
-		s.rb.Touched[i] = &s.touched[i]
-	}
-	n := s.body.Len()
-	s.scr.Render(&s.rb)
-	_ = s.scr.Flush()
-	s.diffed = true
-	return s.body.Len() > n
+	s.staged = buf
+	return !sameCells(buf, &s.shown)
 }
 
 // FrameString is Frame for a frame drawn as a string, w by h cells.
@@ -199,22 +184,41 @@ func (s *Screen) FrameString(content string, w, h int) bool {
 	return s.Frame(s.scratch.Buffer)
 }
 
-// Flush writes what changed since the last flush: the modes v asks for, the
-// cells Frame diffed, and the cursor. framed says a frame was composed since
-// the last flush; such a write goes out even when empty, because the writer
-// behind it may owe graphics to a frame write.
+// Flush takes the modes v asks for and the cursor, for the next Commit.
+// framed says a frame was composed for it: that write goes out even when
+// empty, because the writer behind it may owe graphics to a frame write.
 func (s *Screen) Flush(v tea.View, framed bool) {
 	if s.closed || s.released {
 		return
 	}
-	if !framed && !s.diffed && s.pre.Len() == 0 && s.body.Len() == 0 && modesEqual(s.last, &v) {
+	keep := v
+	keep.Content = ""
+	s.view = &keep
+	s.framed = s.framed || framed
+}
+
+// Commit writes what changed since the last Commit: the modes, the cells of
+// the frame staged last, and the cursor. Called once a flush is due (Bubble
+// Tea's flush message), so everything composed before it goes out in one
+// write.
+func (s *Screen) Commit() {
+	if s.closed || s.released || s.view == nil {
+		return
+	}
+	v := s.view
+	if !s.framed && s.staged == nil && s.pre.Len() == 0 && modesEqual(s.last, v) {
+		s.view = nil
 		return
 	}
 	s.start()
+	if buf := s.staged; buf != nil {
+		s.diff(buf)
+		s.staged = nil
+	}
 	lv := s.last
 	first := lv == nil
 	var modes, post bytes.Buffer
-	writeModes(&modes, lv, &v)
+	writeModes(&modes, lv, v)
 
 	if v.Cursor != nil {
 		s.scr.MoveTo(v.Cursor.X, v.Cursor.Y)
@@ -240,15 +244,65 @@ func (s *Screen) Flush(v tea.View, framed bool) {
 	out = append(out, modes.Bytes()...)
 	out = append(out, s.body.Bytes()...)
 	out = append(out, post.Bytes()...)
-	if len(out) > 0 || framed {
+	if len(out) > 0 || s.framed {
 		s.out.enqueue(out)
 	}
 	s.pre.Reset()
 	s.body.Reset()
-	s.diffed = false
-	keep := v
-	keep.Content = ""
-	s.last = &keep
+	s.framed = false
+	s.last = v
+	s.view = nil
+}
+
+// diff renders buf against what the terminal shows into body, and keeps a
+// copy of it as the frame shown.
+func (s *Screen) diff(buf *uv.Buffer) {
+	w, h := buf.Width(), buf.Height()
+	if w != s.w || h != s.h {
+		if s.w != 0 {
+			s.scr.Resize(w, h)
+			s.scr.Erase()
+		}
+		s.w, s.h = w, h
+	}
+	s.rb.Buffer = buf
+	if len(s.touched) != h {
+		s.touched = make([]uv.LineData, h)
+		s.rb.Touched = make([]*uv.LineData, h)
+	}
+	for i := range s.rb.Touched {
+		s.touched[i] = uv.LineData{FirstCell: 0, LastCell: w}
+		s.rb.Touched[i] = &s.touched[i]
+	}
+	s.scr.Render(&s.rb)
+	_ = s.scr.Flush()
+	copyCells(&s.shown, buf)
+}
+
+// sameCells reports whether a and b hold the same cells.
+func sameCells(a, b *uv.Buffer) bool {
+	if a.Width() != b.Width() || a.Height() != b.Height() {
+		return false
+	}
+	for y := range a.Lines {
+		la, lb := a.Lines[y], b.Lines[y]
+		for x := range la {
+			if !la[x].Equal(&lb[x]) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// copyCells makes dst a copy of src, reusing its lines where it can.
+func copyCells(dst, src *uv.Buffer) {
+	if dst.Width() != src.Width() || dst.Height() != src.Height() {
+		*dst = *uv.NewBuffer(src.Width(), src.Height())
+	}
+	for y := range src.Lines {
+		copy(dst.Lines[y], src.Lines[y])
+	}
 }
 
 // Close puts the terminal back the way Bubble Tea's renderer does when an
@@ -290,6 +344,8 @@ func (s *Screen) Restore() {
 	s.started = false
 	s.last = nil
 	s.w, s.h = 0, 0
+	s.shown = uv.Buffer{}
+	s.staged, s.view = nil, nil
 	s.scr = s.freshRenderer()
 }
 

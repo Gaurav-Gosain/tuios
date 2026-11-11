@@ -700,6 +700,7 @@ func (m *OS) crashView() tea.View {
 	if m.screen != nil {
 		m.screen.FrameString(view.Content, m.Width, m.Height)
 		m.screen.Flush(view, true)
+		m.screen.Commit()
 	}
 	return view
 }
@@ -795,7 +796,10 @@ func (m *OS) composeFrameParts() (*frameCanvas, string) {
 	// and the fast path off, for good.
 	m.closeStaleHints()
 	m.PaneLabelsOpen()
-	if window, ok := m.fullscreenFastWindow(); ok && !fastPathDisabled {
+	// A client with a screen composes a lone pane on the canvas too: the
+	// fast path's frame is a string, which the screen would parse back into
+	// cells, the round trip the screen exists to skip.
+	if window, ok := m.fullscreenFastWindow(); ok && !fastPathDisabled && m.screen == nil {
 		// The fast path draws no rail, so no working row is on screen and the
 		// shimmer's clock must not go on asking for frames.
 		m.motion.rail = m.motion.rail[:0]
