@@ -274,3 +274,31 @@ func TestEdgeRunsStraightAcrossTheBorderGap(t *testing.T) {
 		}
 	}
 }
+
+func TestEdgesStayStraightWhenEndsAreLessThanATwinApart(t *testing.T) {
+	// pele 52a4521: keeps edges straight when their ends on a node are less than a twin apart
+	nodes := []*CNode{testGroup(100), Cnode(48, 48, 0), Cnode(70, 66, 0), Cnode(48, 48, -1)}
+	for i := 1; i < len(nodes); i++ {
+		nodes[i].Seq = i
+	}
+	nodes[1].Span = 24
+	nodes[2].Span = 0.995
+	nodes[3].Span = 24
+	labelled := testEdge(1, 2)
+	labelled.LabelW, labelled.LabelH = 40, 16
+	edges := []*CEdge{labelled, testEdge(2, 3), testEdge(3, 2)}
+	CompoundLayout(nodes, edges, "TB", testOptions)
+	for i, e := range edges[1:] {
+		var xs []float64
+		for k := 0; k < len(e.Route); k += 3 {
+			xs = append(xs, e.Route[k])
+		}
+		lo := math.Min(xs[0], xs[len(xs)-1])
+		hi := math.Max(xs[0], xs[len(xs)-1])
+		for _, x := range xs {
+			if x < lo-1 || x > hi+1 {
+				t.Errorf("edge %d bends to x %v, outside its ends %v to %v", i+1, x, lo, hi)
+			}
+		}
+	}
+}

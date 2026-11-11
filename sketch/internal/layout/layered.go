@@ -184,6 +184,9 @@ const CROSSED_SLOPE = 0.5
 // How far out of line two points may be and still count as in line.
 const IN_LINE = 0.5
 
+// How far apart two edges may be at both ends and still count as twins.
+const TWIN = 1
+
 // A node, with whatever it is already in line with, moves this far at most to bring one more of
 // its edges into line.
 const SNAP = 12
@@ -1520,7 +1523,7 @@ func alignPorts(g *Graph, xs []float64, empty []uint8) {
 			} else {
 				at = xs[g.EF[e]] + g.EFD[e]
 			}
-			if len(to) > 0 && at < to[len(to)-1]+IN_LINE {
+			if len(to) > 0 && at < to[len(to)-1]+TWIN {
 				break
 			}
 			to = append(to, at)
@@ -2419,7 +2422,7 @@ func straighten(g *Graph, xs []float64, empty []uint8, firstDummy []int, span []
 		for i := 0; i < len(row); {
 			twins = twins[:0]
 			j := i
-			for ; j < len(row) && math.Abs(from[row[j]]-from[row[i]]) < 1 && math.Abs(to[row[j]]-to[row[i]]) < 1; j++ {
+			for ; j < len(row) && math.Abs(from[row[j]]-from[row[i]]) < TWIN && math.Abs(to[row[j]]-to[row[i]]) < TWIN; j++ {
 				twins = append(twins, row[j])
 			}
 			// The twins keep the order the rank gave them, so that two edges do not swap sides on the way.
