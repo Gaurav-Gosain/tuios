@@ -555,6 +555,15 @@ func checkGuestCellsAreNotPaintedOver(f *fuzzOS) []fuzz.Violation {
 		if w.InCopyMode() {
 			continue
 		}
+		// A pane squeezed below the box its own border needs has no cell of its
+		// own to own: its title bar and the neighbours' share the rows. New panes
+		// are not refused for lack of room (only a split asked for is, see
+		// SplitRefusal), so a region that cannot hold them all leaves some at
+		// one or two rows, and the layout rule says the same of it by excusing
+		// panes at the floor.
+		if !w.Tiled && (w.Width < 3 || w.Height < 3) {
+			continue
+		}
 		// A pane the user stacked another one on top of. With auto-tiling off the
 		// panes are free-floating windows that may be deliberately overlapped, so
 		// whichever draws later owns the cell and the marker underneath it is

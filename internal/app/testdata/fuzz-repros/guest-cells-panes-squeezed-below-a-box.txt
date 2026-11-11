@@ -1,0 +1,10 @@
+# New panes while one is zoomed on a 60x25 screen: seven panes in 23 rows leave two at one and two rows, under the three a bordered box needs, so their title bars share rows. Not a pane the rule can ask for cells: the region cannot hold them (a split the person asks for is refused in this case, a plain new pane is not).
+resize 60 25
+chord "z"
+new-pane
+sidebar-collapse
+new-pane
+new-pane
+focus 0
+zoom
+new-pane
