@@ -1,0 +1,37 @@
+[
+ {
+  "src": "flowchart LR\nsubgraph S\n  A\n  B --> G\nend\nD\nE --> A\nD --> F\nF --> C\nB --> C\nstyle S fill:white"
+ },
+ {
+  "src": "flowchart TB\n  subgraph S\n    a\n    b\n    c\n  end\n  x --> a"
+ },
+ {
+  "src": "block\n  1[\"Something\"]\n  2[\"Something long long long long long long\"]:2\n  3[\"Something long long long long long long\"]:5\n  4[\"Something long long long long long long\"]:2\n  5[\"Something\"]"
+ },
+ {
+  "src": "block\n  a((\"Something long long long long long long\")) c{\"Something long long long long long long\"} d[\"Something long long long long long long\"]:5"
+ },
+ {
+  "src": "block\n  a[\"Something long long long long long long<br>tail\"]:5 b c d e"
+ },
+ {
+  "src": "quadrantChart\n  title Garden plan\n  x-axis Low effort --> High effort\n  y-axis Low value --> High value\n  quadrant-1 Big bets\n  Herb spiral: [0.3, 0.7]",
+  "fontSize": 16
+ },
+ {
+  "src": "---\nconfig:\n  quadrantChart:\n    titleFontSize: 30\n    quadrantLabelFontSize: 20\n    xAxisLabelFontSize: 11\n    yAxisLabelFontSize: 13\n    pointLabelFontSize: 9\n---\nquadrantChart\n  title Garden plan\n  x-axis Low effort --> High effort\n  y-axis Low value --> High value\n  quadrant-1 Big bets\n  Herb spiral: [0.3, 0.7]",
+  "fontSize": 16
+ },
+ {
+  "src": "---\nconfig:\n  quadrantChart:\n    titleFontSize: \"big\"\n---\nquadrantChart\n  title Garden plan\n  x-axis Low effort --> High effort\n  y-axis Low value --> High value\n  quadrant-1 Big bets\n  Herb spiral: [0.3, 0.7]",
+  "fontSize": 16
+ },
+ {
+  "src": "---\nconfig:\n  quadrantChart:\n    pointLabelFontSize: 0\n---\nquadrantChart\n  title Garden plan\n  x-axis Low effort --> High effort\n  y-axis Low value --> High value\n  quadrant-1 Big bets\n  Herb spiral: [0.3, 0.7]",
+  "fontSize": 16
+ },
+ {
+  "src": "quadrantChart\n Drip irrigation for the whole orchard and the vegetable beds: [0.5, 0.5]",
+  "fontSize": 22
+ }
+]
