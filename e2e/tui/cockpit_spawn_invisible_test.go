@@ -103,9 +103,8 @@ func TestNewAgentSheetStopsOnInvisibleCharacters(t *testing.T) {
 	// opens a new sheet and not this one's draft.
 	promptOf := func(id string) string {
 		t.Helper()
-		deadline := time.Now().Add(invisibleStartTimeout)
-		pane := ""
-		for time.Now().Before(deadline) {
+		pane, prompt := "", ""
+		waitUntil(t, "an agent that holds "+id+" writes its first prompt", invisibleStartTimeout, func() (bool, string) {
 			for _, tk := range listTasks(t, base, "S").Tasks {
 				if tk.ID == id && tk.Holder != nil {
 					pane = tk.Holder.Window
@@ -113,16 +112,16 @@ func TestNewAgentSheetStopsOnInvisibleCharacters(t *testing.T) {
 			}
 			for _, l := range lines() {
 				if pane != "" && l[0] == pane {
-					// The start answers after the agent read its prompt, and
-					// a notice of an earlier start is gone by then.
-					waitTextFor(t, term, "the start of "+id+" to answer", invisibleStartTimeout, "Started codex in S")
-					return l[1]
+					prompt = l[1]
+					return true, ""
 				}
 			}
-			time.Sleep(100 * time.Millisecond)
-		}
-		t.Fatalf("ASSERTION: no agent that holds %s wrote its first prompt (holder %q)\n%s", id, pane, term.Snapshot())
-		return ""
+			return false, fmt.Sprintf("holder %q\n%s", pane, term.Snapshot())
+		})
+		// The start answers after the agent read its prompt, and a notice of
+		// an earlier start is gone by then.
+		waitTextFor(t, term, "the start of "+id+" to answer", invisibleStartTimeout, "Started codex in S")
+		return prompt
 	}
 	// sheet waits for the sheet with want in its task, then picks This folder
 	// and waits until the folder and the agents are read.
