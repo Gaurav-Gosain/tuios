@@ -416,6 +416,16 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 	// come, so a lost key says whether the client ever read it.
 	eventsLog := filepath.Join(t.TempDir(), "events.log")
 	env = append(env, "TUIOS_EVENTS_LOG="+eventsLog)
+	// Every client checks the rail it serves from its cache against a fresh
+	// build (internal/app/rail_check.go). A miss is an input the cache key
+	// does not hold, and fails the test that drew it.
+	railCheck := filepath.Join(t.TempDir(), "rail-check.log")
+	env = append(env, "TUIOS_RAIL_CHECK="+railCheck)
+	t.Cleanup(func() {
+		if b, err := os.ReadFile(railCheck); err == nil && len(b) > 0 {
+			t.Errorf("the rail cache served a stale rail:\n%s", b)
+		}
+	})
 	env = append(env, o.env...)
 
 	cols, rows := o.cols, o.rows

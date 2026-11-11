@@ -44,6 +44,10 @@ type gitView struct {
 	// has already left can be dropped.
 	asked string
 	at    time.Time
+
+	// gen counts the readings taken in, for the rail's cache key: a reading
+	// changes what the section draws with nothing else moving.
+	gen uint64
 }
 
 // GitStateMsg carries a reading back from the goroutine that took it.
@@ -129,6 +133,7 @@ func (m *OS) ApplyGitState(msg GitStateMsg) {
 	}
 	m.gitView.Dir, m.gitView.State, m.gitView.Found = msg.Dir, msg.State, msg.Found
 	m.gitView.Dirty = msg.Dirty
+	m.gitView.gen++
 }
 
 // gitRowKind is what a row of the section is.

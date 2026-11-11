@@ -3,6 +3,8 @@ package app
 import (
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // sidebarRenderCache holds a fully styled rail so a frame composed for an
@@ -59,6 +61,7 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 	animating := m.SidebarMarqueeKey != "" || m.SidebarDrag.Dragging
 	sig := m.sidebarSignature()
 	if !animating && m.sidebarCache.valid && m.sidebarCache.sig == sig {
+		m.checkRailCache()
 		// Restore the per-frame side effects the mouse handlers read; the model
 		// truncates and refills these buffers on a real rebuild, so hand back copies.
 		m.SidebarHits = append(m.SidebarHits[:0], m.sidebarCache.hits...)
@@ -121,6 +124,13 @@ func (m *OS) sidebarSignature() uint64 {
 			h *= prime
 		}
 	}
+
+	// The colours every row is drawn in. The rail's palette is built on the
+	// host terminal's own ground when no theme is set, and the host's colours
+	// arrive on their own reply, after the first frames; a theme, or a live
+	// one's new colours, changes it too. Both count their changes.
+	mixU(m.host.gen)
+	mixU(theme.Generation())
 
 	// Geometry and layout knobs.
 	mixI(m.GetSidebarWidth())
@@ -237,6 +247,9 @@ func (m *OS) sidebarSignature() uint64 {
 	// The git section scrolls like the others once it is given fewer lines
 	// than its two rows.
 	mixI(m.SidebarScroll[sidebarSectionGit])
+	// A reading of the repository changes the section's rows. It arrives on
+	// its own message, with nothing else moving.
+	mixU(m.gitView.gen)
 
 	// The agents section's two controls decide which rows it holds and in what
 	// order, so both are drawn state and both are folded. The tokens themselves
@@ -413,6 +426,16 @@ func (m *OS) sidebarSignature() uint64 {
 	// same reason: the rows come from a stored snapshot, and a new snapshot is
 	// the only thing that can change them.
 	mixU(m.federationGen)
+	// A machine that is down says when it was last heard from, "seen 28s
+	// ago", and that text moves with the clock while the snapshot stays the
+	// same. The label is folded as the header draws it, so the key moves
+	// exactly when the words do.
+	if len(m.FederationHosts) > 0 {
+		now := time.Now()
+		for _, h := range m.FederationHosts {
+			mixS(hostDownLabel(h.Status, h.LastOK, now))
+		}
+	}
 
 	// A rename in flight is not folded in: the buffer lives in its own dialog
 	// and the rail keeps drawing the old name, so typing no longer rebuilds the
@@ -445,6 +468,10 @@ func (m *OS) sidebarSignature() uint64 {
 		mixS(m.SessionAccent)
 	}
 
+	// The attached session's row is labelled by its agent's title as the pane
+	// reports it now, not by the rail's debounced copy below, so the label is
+	// folded on its own.
+	mixS(m.sessionTitle(m.SessionName))
 	// Live windows in row order: id, label, agent state, harness, workspace,
 	// accent.
 	for _, w := range m.Windows {
