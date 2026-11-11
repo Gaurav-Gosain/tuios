@@ -433,7 +433,7 @@ func (m *OS) drawKanbanPreview(c *ckCanvas, l ckLook, x, w, y0, y1, top int, she
 		if strings.HasPrefix(ln.hit, "pimg:") {
 			// A picture's row: a click opens it, and the kitty picture is
 			// placed from these hits (kbPreviewPlacements).
-			m.Inbox.ck.hits = append(m.Inbox.ck.hits, ckHit{x0: ix, y0: top + y, x1: ix + inner, y1: top + y + 1, kind: ckHitAction, action: ln.hit})
+			m.Inbox.ck.hits = append(m.Inbox.ck.hits, ckHit{x0: ix + ln.indent, y0: top + y, x1: ix + inner, y1: top + y + 1, kind: ckHitAction, action: ln.hit})
 		}
 		drawCkLineAt(c, ix, y, inner, ln)
 	}
@@ -519,26 +519,31 @@ func (m *OS) ckCardBody(l ckLook, r ckRow, card session.TaskRow, width int, now 
 	if len(d.attachments) > 0 {
 		gap()
 		line(ckSeg{t: "Attachments", fg: pal.FgDim, attrs: ckBold}, ckSeg{t: "  " + strconv.Itoa(len(d.attachments)), fg: pal.FgMute})
+		// One row each: the name, and what it is, who put it there and
+		// when on the right. In the preview the selected one opens under
+		// its row, with its note; the list's Card tab only lists them.
+		sel, selOK := m.kbPreviewSelected()
 		for i, a := range d.attachments {
-			name := ckTrunc(printableTitle(a.Name), max(width-24, 8))
+			meta := ckAttachWhat(a) + sepWord() + m.ckHistoryBy(a.By) + ", " + units.Waited(a.At, now)
+			name := ckTrunc(printableTitle(a.Name), max(width-ansi.StringWidth(meta)-2, 8))
 			out = append(out, ckLine{
 				hit:   "pv-att:" + strconv.Itoa(i),
 				segs:  []ckSeg{{t: name, fg: pal.Fg, attrs: ckBold}},
-				right: []ckSeg{{t: ckAttachWhat(a), fg: pal.FgMute}},
+				right: []ckSeg{{t: meta, fg: pal.FgMute}},
 			})
-			meta := m.ckHistoryBy(a.By) + ", " + units.Waited(a.At, now)
+			if !head || !selOK || i != m.Inbox.ck.kb.pv.att || sel.Name != a.Name {
+				continue
+			}
 			if a.Note != "" {
-				meta += sepWord() + printableTitle(a.Note)
+				for _, s := range strings.Split(ansi.Wordwrap(printableTitle(a.Note), max(width-2, 8), ""), "\n") {
+					out = append(out, ckLine{indent: 2, segs: []ckSeg{{t: s, fg: pal.FgDim}}})
+				}
 			}
-			for _, s := range strings.Split(ansi.Wordwrap(meta, max(width-2, 8), ""), "\n") {
-				out = append(out, ckLine{indent: 2, segs: []ckSeg{{t: s, fg: pal.FgDim}}})
+			for _, ln := range m.ckAttachmentBody(l, a, width-2) {
+				ln.indent += 2
+				out = append(out, ln)
 			}
-		}
-		// The selected attachment's body, in the preview only: the Card tab
-		// of the list lists them.
-		if a, ok := m.kbPreviewSelected(); ok && head {
-			gap()
-			out = append(out, m.ckAttachmentBody(l, a, width)...)
+			out = append(out, ckLine{})
 		}
 	}
 	if len(d.history) > 0 {

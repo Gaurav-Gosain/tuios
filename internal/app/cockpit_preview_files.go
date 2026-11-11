@@ -280,8 +280,7 @@ func (m *OS) kbPreviewPictureCmd() tea.Cmd {
 func (m *OS) ckAttachmentBody(l ckLook, a session.TaskAttachment, width int) []ckLine {
 	pal := l.pal
 	pv := &m.Inbox.ck.kb.pv
-	head := ckLine{segs: []ckSeg{{t: ckTrunc(printableTitle(a.Name), width), fg: pal.Accent, attrs: ckBold}}}
-	out := []ckLine{head}
+	var out []ckLine
 	note := func(s string) []ckLine { return append(out, ckLine{segs: []ckSeg{{t: s, fg: pal.FgMute}}}) }
 	if a.Kind == session.AttachLink {
 		return append(out, ckLine{segs: []ckSeg{{t: printableTitle(a.URL), fg: pal.Accent}}})

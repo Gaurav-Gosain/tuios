@@ -352,18 +352,25 @@ func writeAttachments(w io.Writer, list []taskAttachment) error {
 	return tw.Flush()
 }
 
-// describeAttachments is the Attachments block of task get.
+// describeAttachments is the Attachments block of task get, in columns.
 func describeAttachments(b *strings.Builder, list []taskAttachment) {
 	if len(list) == 0 {
 		return
 	}
 	b.WriteString("\nAttachments:\n")
+	var rows strings.Builder
+	tw := tabwriter.NewWriter(&rows, 0, 0, 2, ' ', 0)
 	for _, a := range list {
-		line := fmt.Sprintf("  %s  %s  %s by %s", plainLine(a.Name), attachWhat(a), agoOf(a.At), byLabel(a.By))
-		if a.Note != "" {
-			line += ": " + plainLine(a.Note)
+		what := plainLine(a.Kind) + ", " + humanBytes(a.Size)
+		if a.URL != "" {
+			what = plainLine(a.Kind) + ", " + plainLine(a.URL)
 		}
-		b.WriteString(line)
+		fmt.Fprintf(tw, "  %s\t%s\t%s by %s\t%s\n", plainLine(a.Name), what, agoOf(a.At), byLabel(a.By), plainLine(a.Note))
+	}
+	_ = tw.Flush()
+	// A row with no note ends in the padding of its last column.
+	for line := range strings.SplitSeq(strings.TrimRight(rows.String(), "\n"), "\n") {
+		b.WriteString(strings.TrimRight(line, " "))
 		b.WriteByte('\n')
 	}
 }

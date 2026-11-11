@@ -16694,3 +16694,16 @@ Run on 2026-11-11 on macOS (arm64). The branch passes.
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
 | The CLI sending one call per file | "the history holds 4 attached entries, want 2" | **caught** |
+
+## The selected attachment opens under its row
+
+`TestCardPreviewOpensTheSelectedAttachmentUnderItsRow` puts eleven
+attachments on a card, steps to the last with `[`, and needs its note on the
+row under it and its body right after, on a 40-row screen. It also needs
+`tuios task get` to start each attachment's kind in one column.
+
+Run on 2026-11-11 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The branch before this one (two rows each, body under the list, unaligned block) | "task get's attachment kinds start at columns [14 15 ... 23]" and "the last attachment did not open under its row, on screen" | **caught** |
