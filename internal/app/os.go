@@ -448,6 +448,7 @@ type OS struct {
 	notifHit               notifHitZones                 // where the message block was drawn last frame
 	dockWorkspaceHits      []dockWorkspaceHit            // where the dock's workspace pills were drawn last frame
 	dockWorkspaceArrowHits []dockWorkspaceArrowHit       // where the strip's overflow arrows were drawn last frame
+	dockStrip              dockStripMemo                 // the last workspace strip drawn and its key
 	dockWorkspaceScroll    int                           // index of the first workspace pill the strip draws
 	dockWorkspaceScrollFor int                           // the workspace that offset was last pulled into view for
 	dockWorkspaceScrollAt  int                           // the viewport width it was pulled into view at

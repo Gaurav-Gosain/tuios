@@ -2,6 +2,8 @@ package app
 
 import (
 	"image/color"
+	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -56,7 +58,7 @@ func dockStripArrowFg(pal overlay.Palette) color.Color {
 // The label is passed in rather than derived: the tab that carries it also
 // carries the width the hit rectangle was cut to, and the two must be the same
 // string.
-func workspacePill(label string, active, dragged bool, t *config.DockTabsConfig, pal overlay.Palette, s *config.Settings, ink color.Color) string {
+func workspacePill(label string, active, dragged bool, t *config.DockTabsConfig, pal overlay.Palette, caps dockCaps, ink color.Color) string {
 	fg, ground := tabColor(t.InactiveFg, &pal), tabColor(t.InactiveBg, &pal)
 	if active {
 		fg, ground = tabColor(t.ActiveFg, &pal), tabColor(t.ActiveBg, &pal)
@@ -89,7 +91,7 @@ func workspacePill(label string, active, dragged bool, t *config.DockTabsConfig,
 	// The caps take the fill's colour as their foreground, which is how a half
 	// circle reads as the rounded end of the pill rather than as a glyph beside
 	// it.
-	return capTab(body.Render(" "+label+" "), ground, s)
+	return capTab(body.Render(" "+label+" "), ground, caps)
 }
 
 // capTab puts the dock's workspace caps either side of a rendered tab, drawn in
@@ -101,16 +103,16 @@ func workspacePill(label string, active, dragged bool, t *config.DockTabsConfig,
 // drawn in the default ink it would read as a bracket round the label. The caps
 // become blanks of the same width, so the strip's geometry and its hit boxes do
 // not change with the depth or the colours.
-func capTab(tab string, ground color.Color, s *config.Settings) string {
-	lc, rc := s.GetDockWorkspaceCapLeft(), s.GetDockWorkspaceCapRight()
+func capTab(tab string, ground color.Color, caps dockCaps) string {
+	lc, rc := caps.Left, caps.Right
 	if lc == "" && rc == "" {
 		return tab
 	}
 	if ground == nil || overlay.IsNoColor(ground) {
 		return strings.Repeat(" ", lipgloss.Width(lc)) + tab + strings.Repeat(" ", lipgloss.Width(rc))
 	}
-	caps := lipgloss.NewStyle().Foreground(ground)
-	return caps.Render(lc) + tab + caps.Render(rc)
+	ink := lipgloss.NewStyle().Foreground(ground)
+	return ink.Render(lc) + tab + ink.Render(rc)
 }
 
 // tabColor is a configured [dock.tabs] colour on the dock's palette, or nil
@@ -133,12 +135,12 @@ func tabColor(s string, pal *overlay.Palette) color.Color {
 //
 // With caps on, the tab takes the pills' rounded ends in its own ground (see
 // capTab), and active_underline underlines the current tab.
-func flatWorkspaceTab(label string, active, dragged bool, t *config.DockTabsConfig, pal overlay.Palette, s *config.Settings, ink color.Color) string {
+func flatWorkspaceTab(label string, active, dragged bool, t *config.DockTabsConfig, pal overlay.Palette, caps dockCaps, ink color.Color) string {
 	tab, ground := flatTabBody(label, active, dragged, t, pal, ink)
 	if !t.Caps {
 		return tab
 	}
-	return capTab(tab, ground, s)
+	return capTab(tab, ground, caps)
 }
 
 // flatTabBody is a flat tab without its caps, and the ground it is drawn on:
@@ -213,7 +215,7 @@ func dockTabGapText(t *config.DockTabsConfig, pal overlay.Palette) string {
 }
 
 // dockTab renders one tab in whichever style [dock.tabs] asks for.
-func (m *OS) dockTab(t *config.DockTabsConfig, label string, active, dragged, attention bool, pal overlay.Palette) string {
+func dockTab(t *config.DockTabsConfig, label string, active, dragged, attention bool, pal overlay.Palette, caps dockCaps) string {
 	// A workspace that wants a person takes [dock.tabs] attention_fg as its
 	// ink. Only a tab that is not current is marked: the current one is on
 	// screen already.
@@ -222,44 +224,149 @@ func (m *OS) dockTab(t *config.DockTabsConfig, label string, active, dragged, at
 		ink = tabColor(t.AttentionFg, &pal)
 	}
 	if t.Flat() {
-		return flatWorkspaceTab(label, active, dragged, t, pal, &m.Settings, ink)
+		return flatWorkspaceTab(label, active, dragged, t, pal, caps, ink)
 	}
-	return workspacePill(label, active, dragged, t, pal, &m.Settings, ink)
+	return workspacePill(label, active, dragged, t, pal, caps, ink)
+}
+
+// dockCaps are the glyphs either end of a workspace tab, from
+// [dock] workspace caps. ASCII mode makes both empty.
+type dockCaps struct{ Left, Right string }
+
+func dockCapsOf(s *config.Settings) dockCaps {
+	return dockCaps{s.GetDockWorkspaceCapLeft(), s.GetDockWorkspaceCapRight()}
+}
+
+// dockStripKey is everything the workspace strip is drawn from. The strip is
+// drawn by drawDockWorkspaceStrip, which takes nothing else, so an input that
+// is missing here is one the draw cannot read. The colour depth is here
+// because the readable inks are measured at the depth the overlay package
+// holds.
+type dockStripKey struct {
+	pills []dockWorkspaceTab
+	tabs  config.DockTabsConfig
+	look  dockStripLook
+}
+
+// dockStripLook is the part of the key Go can compare with ==.
+type dockStripLook struct {
+	pal       overlay.Palette
+	depth     overlay.Depth
+	caps      dockCaps
+	moreLeft  string
+	moreRight string
+	add       dockWorkspaceTab
+	hasAdd    bool
+	moreL     bool
+	moreR     bool
+	scrolls   bool
+	inner     int
+}
+
+// same reports whether k and o draw the same strip. The pills are compared by
+// value; the [dock.tabs] table holds a pointer and a slice, so it goes
+// through reflect, which allocates only when one of those is set.
+func (k *dockStripKey) same(o *dockStripKey) bool {
+	return k.look == o.look && slices.Equal(k.pills, o.pills) &&
+		reflect.DeepEqual(&k.tabs, &o.tabs)
+}
+
+// newDockStripKey reads the key from the planned strip and the strip's
+// settings.
+func newDockStripKey(s dockWorkspaceStrip, tabs config.DockTabsConfig, look dockStripLook) dockStripKey {
+	look.moreL, look.moreR, look.scrolls, look.inner = s.MoreLeft, s.MoreRight, s.Scrolls, s.Inner
+	if s.Add != nil {
+		look.add, look.hasAdd = *s.Add, true
+	}
+	return dockStripKey{pills: s.Pills, tabs: tabs, look: look}
+}
+
+// clone is k with nothing shared with the state it was read from, so a later
+// change to that state in place cannot make the kept key equal the new one.
+func (k dockStripKey) clone() dockStripKey {
+	k.pills = slices.Clone(k.pills)
+	if k.tabs.ActiveUnderline != nil {
+		u := *k.tabs.ActiveUnderline
+		k.tabs.ActiveUnderline = &u
+	}
+	k.tabs.NumberGlyphs = slices.Clone(k.tabs.NumberGlyphs)
+	return k
+}
+
+// dockStripDrawn is a drawn strip and the targets in it, in columns from the
+// strip's first column.
+type dockStripDrawn struct {
+	text   string
+	hits   []dockWorkspaceHit
+	arrows []dockWorkspaceArrowHit
+}
+
+// dockStripMemo keeps the last strip drawn and the key it was drawn from. A
+// keystroke in a pane changes nothing the strip shows, and the strip was most
+// of the dock's cost on such a frame.
+type dockStripMemo struct {
+	ok    bool
+	key   dockStripKey
+	drawn dockStripDrawn
+	// next is the key read this frame. It lives here, and is compared through
+	// pointers, so the comparison copies neither key to the heap.
+	next dockStripKey
 }
 
 // renderDockWorkspaceStrip draws the strip starting at column startX and records
 // every pill and arrow it draws into m.dockWorkspaceHits and
-// m.dockWorkspaceArrowHits.
-//
-// The layout is: a bare column, the left gutter, the run of pills, the right
-// gutter, then the "+". The gutters exist only while the strip scrolls, and
-// hold their columns whether or not there is anything that way, so an arrow
-// appearing does not shift the pill under the pointer.
+// m.dockWorkspaceArrowHits. The strip is drawn again only when its key
+// changes.
 func (m *OS) renderDockWorkspaceStrip(s dockWorkspaceStrip, startX int) string {
 	m.dockWorkspaceHits = m.dockWorkspaceHits[:0]
 	m.dockWorkspaceArrowHits = m.dockWorkspaceArrowHits[:0]
 	if len(s.Pills) == 0 && s.Add == nil {
 		return ""
 	}
-
-	pal := m.groundUI()
-	style := m.dockTabs()
+	memo := &m.dockStrip
+	memo.next = newDockStripKey(s, m.dockTabs(), dockStripLook{
+		pal: m.groundUI(), depth: theme.Depth(), caps: dockCapsOf(&m.Settings),
+		moreLeft: m.Settings.GetDockWorkspaceMoreLeft(), moreRight: m.Settings.GetDockWorkspaceMoreRight(),
+	})
+	if !memo.ok || !memo.key.same(&memo.next) {
+		memo.key, memo.drawn, memo.ok = memo.next.clone(), drawDockWorkspaceStrip(&memo.next), true
+	}
 	y := m.GetDockbarContentYPosition()
+	for _, h := range memo.drawn.hits {
+		h.X0, h.X1, h.Y = h.X0+startX, h.X1+startX, y
+		m.dockWorkspaceHits = append(m.dockWorkspaceHits, h)
+	}
+	for _, h := range memo.drawn.arrows {
+		h.X0, h.X1, h.Y = h.X0+startX, h.X1+startX, y
+		m.dockWorkspaceArrowHits = append(m.dockWorkspaceArrowHits, h)
+	}
+	return memo.drawn.text
+}
+
+// drawDockWorkspaceStrip draws the strip from k alone.
+//
+// The layout is: a bare column, the left gutter, the run of pills, the right
+// gutter, then the "+". The gutters exist only while the strip scrolls, and
+// hold their columns whether or not there is anything that way, so an arrow
+// appearing does not shift the pill under the pointer.
+func drawDockWorkspaceStrip(k *dockStripKey) dockStripDrawn {
+	l, pal, style := &k.look, k.look.pal, &k.tabs
+	var d dockStripDrawn
 	arrow := lipgloss.NewStyle().Foreground(dockStripArrowFg(pal))
 
 	var b strings.Builder
 	b.WriteString(" ")
-	x := startX + 1
+	x := 1
 
 	gutter := func(glyph string, live bool, delta int) {
-		if !s.Scrolls {
+		if !l.scrolls {
 			return
 		}
 		if live {
 			b.WriteString(arrow.Render(glyph))
 			b.WriteString(" ")
-			m.dockWorkspaceArrowHits = append(m.dockWorkspaceArrowHits, dockWorkspaceArrowHit{
-				X0: x, X1: x + dockWorkspaceArrowWidth, Y: y, Delta: delta,
+			d.arrows = append(d.arrows, dockWorkspaceArrowHit{
+				X0: x, X1: x + dockWorkspaceArrowWidth, Delta: delta,
 			})
 		} else {
 			b.WriteString(strings.Repeat(" ", dockWorkspaceArrowWidth))
@@ -267,41 +374,38 @@ func (m *OS) renderDockWorkspaceStrip(s dockWorkspaceStrip, startX int) string {
 		x += dockWorkspaceArrowWidth
 	}
 
-	gutter(m.Settings.GetDockWorkspaceMoreLeft(), s.MoreLeft, -1)
+	gutter(l.moreLeft, l.moreL, -1)
 
 	drawn := 0
-	gapText := dockTabGapText(&style, pal)
-	for i, t := range s.Pills {
+	gapText := dockTabGapText(style, pal)
+	for i, t := range k.pills {
 		if i > 0 {
 			b.WriteString(gapText)
 			x, drawn = x+t.Gap, drawn+t.Gap
 		}
-		b.WriteString(m.dockTab(&style, t.Label, t.Active, t.Dragged, t.Attention, pal))
-		m.dockWorkspaceHits = append(m.dockWorkspaceHits, dockWorkspaceHit{
-			X0: x, X1: x + t.Width, Y: y, Workspace: t.Workspace,
-		})
+		b.WriteString(dockTab(style, t.Label, t.Active, t.Dragged, t.Attention, pal, l.caps))
+		d.hits = append(d.hits, dockWorkspaceHit{X0: x, X1: x + t.Width, Workspace: t.Workspace})
 		x, drawn = x+t.Width, drawn+t.Width
 	}
 	// A scrolling strip holds its viewport open, so the "+" and the readout
 	// behind it stay put as the pills move under them.
-	if s.Scrolls && drawn < s.Inner {
-		b.WriteString(strings.Repeat(" ", s.Inner-drawn))
-		x += s.Inner - drawn
+	if l.scrolls && drawn < l.inner {
+		b.WriteString(strings.Repeat(" ", l.inner-drawn))
+		x += l.inner - drawn
 	}
 
-	gutter(m.Settings.GetDockWorkspaceMoreRight(), s.MoreRight, 1)
+	gutter(l.moreRight, l.moreR, 1)
 
-	if s.Add != nil {
-		if len(s.Pills) > 0 {
+	if l.hasAdd {
+		if len(k.pills) > 0 {
 			b.WriteString(gapText)
-			x += s.Add.Gap
+			x += l.add.Gap
 		}
-		b.WriteString(m.dockTab(&style, s.Add.Label, false, false, false, pal))
-		m.dockWorkspaceHits = append(m.dockWorkspaceHits, dockWorkspaceHit{
-			X0: x, X1: x + s.Add.Width, Y: y, Workspace: 0,
-		})
+		b.WriteString(dockTab(style, l.add.Label, false, false, false, pal, l.caps))
+		d.hits = append(d.hits, dockWorkspaceHit{X0: x, X1: x + l.add.Width, Workspace: 0})
 	}
-	return b.String()
+	d.text = b.String()
+	return d
 }
 
 func (m *OS) renderDock() *lipgloss.Layer {
