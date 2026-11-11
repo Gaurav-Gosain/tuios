@@ -181,23 +181,6 @@ func TestSetOptionValueRoundTrips(t *testing.T) {
 	}
 }
 
-// TestOptionDefaultsMatchDefaultConfig pins each entry's Default to what the
-// app actually starts with, so a mistyped default is a failure rather than a
-// wrong answer to a caller asking what a setting is.
-func TestOptionDefaultsMatchDefaultConfig(t *testing.T) {
-	cfg := DefaultConfig()
-	for _, opt := range Options() {
-		got, ok := GetOptionValue(cfg, opt.Path)
-		if !ok {
-			t.Errorf("%s: not readable from a default config", opt.Path)
-			continue
-		}
-		if got != opt.Default {
-			t.Errorf("%s: default config holds %q, registry says %q", opt.Path, got, opt.Default)
-		}
-	}
-}
-
 // TestOptionSpecsAreWellFormed checks the parts of an entry that only a human
 // writes, since nothing else reads them closely enough to notice a blank one.
 func TestOptionSpecsAreWellFormed(t *testing.T) {
@@ -207,7 +190,7 @@ func TestOptionSpecsAreWellFormed(t *testing.T) {
 		"screenshot", "screensaver", "spotlight", "hints", "panes", "scratch", "pip", "mermaid", "launcher",
 		"agents", "workspaces", "worktree", "review", "files",
 	}
-	for _, opt := range optionSpecs {
+	for _, opt := range Options() {
 		if opt.Description == "" {
 			t.Errorf("%s: no description", opt.Path)
 		}
