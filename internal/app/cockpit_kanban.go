@@ -47,6 +47,8 @@ type ckKanban struct {
 	drag *kbDrag
 	// add is the line a new card's title is typed into, nil when closed.
 	add *kbNewCard
+	// pv is the card preview (cockpit_preview.go).
+	pv kbPreview
 }
 
 // kbCol is a column as the last frame drew it, in screen cells.
@@ -408,7 +410,12 @@ func (m *OS) kanbanKey(action string) (tea.Cmd, bool) {
 	if !m.kanbanOn() {
 		return nil, false
 	}
+	if cmd, ok := m.kanbanPreviewKey(action); ok {
+		return cmd, true
+	}
 	switch action {
+	case config.ActionInboxPeek:
+		return m.kanbanPreviewToggle(), true
 	case config.ActionInboxBack:
 		m.kanbanMoveColumn(-1)
 	case config.ActionInboxOpen:
@@ -493,7 +500,7 @@ func (m *OS) kanbanDragTo(x, y int) bool {
 // card to its stage. handled is false when no drag was under way, and the
 // release goes on as before.
 func (m *OS) CockpitRelease(x, y int) (tea.Cmd, bool) {
-	if m.cockpitDividerRelease() {
+	if m.cockpitDividerRelease() || m.kanbanPreviewRelease() {
 		return nil, true
 	}
 	ck := &m.Inbox.ck
@@ -521,7 +528,10 @@ func (m *OS) CockpitRelease(x, y int) (tea.Cmd, bool) {
 
 // kanbanWheel scrolls the column under the pointer by a card. It reports
 // whether the columns took the wheel.
-func (m *OS) kanbanWheel(x, _ int, up bool) bool {
+func (m *OS) kanbanWheel(x, y int, up bool) bool {
+	if m.kanbanPreviewWheel(x, y, up) {
+		return true
+	}
 	if !m.kanbanOn() {
 		return false
 	}
@@ -550,6 +560,10 @@ func (m *OS) kanbanHints() []overlay.Hint {
 	if ck.kb.add != nil {
 		return []overlay.Hint{{Key: overlay.EnterKey(), Label: "add card"}, {Key: "esc", Label: "cancel", Priority: overlay.HintEssential}}
 	}
+	if m.kbPreviewShown() {
+		// esc closes the preview, which the peek key's hint already says.
+		return m.kanbanPreviewHints()
+	}
 	var hints []overlay.Hint
 	r, ok := m.cockpitSelected()
 	switch {
@@ -568,6 +582,9 @@ func (m *OS) kanbanHints() []overlay.Hint {
 		}
 		if win := m.ckTakeWindow(c); win != "" && (c.Holder == nil || c.Holder.Window != win) && c.Stage != session.TaskStageDone {
 			hints = append(hints, m.keyHints(config.ActionInboxTake, "take")...)
+		}
+		if m.kbPreviewMode(m.GetRenderWidth()) != config.CardPreviewOff {
+			hints = append(hints, m.keyHints(config.ActionInboxPeek, "preview")...)
 		}
 		hints = append(hints, m.ckLifeHints(c)...)
 	case ok && r.folded:
@@ -698,7 +715,7 @@ func (m *OS) kanbanPlace(heads []ckRow, cur, w int) (places []kbPlace, left, rig
 }
 
 // drawKanban draws the columns between rows y0 and y1.
-func (m *OS) drawKanban(c *ckCanvas, l ckLook, y0, y1, top int) {
+func (m *OS) drawKanban(c *ckCanvas, l ckLook, y0, y1, top, width int) {
 	ck := &m.Inbox.ck
 	kb := &ck.kb
 	pal := l.pal
@@ -724,7 +741,7 @@ func (m *OS) drawKanban(c *ckCanvas, l ckLook, y0, y1, top int) {
 			cur = i
 		}
 	}
-	places, left, right := m.kanbanPlace(heads, cur, c.w)
+	places, left, right := m.kanbanPlace(heads, cur, width)
 	kb.cols = kb.cols[:0]
 	if kb.scroll == nil {
 		kb.scroll = map[string]int{}
@@ -742,8 +759,8 @@ func (m *OS) drawKanban(c *ckCanvas, l ckLook, y0, y1, top int) {
 		ck.hits = append(ck.hits, ckHit{x0: 0, y0: top + y0, x1: x, y1: top + y0 + 1, kind: ckHitColumn, group: heads[places[0].i-1].group})
 	}
 	if right > 0 {
-		x := c.textR(c.w, y0, ckSeg{t: strconv.Itoa(right) + arrowR, fg: pal.AccentBright, attrs: ckBold})
-		ck.hits = append(ck.hits, ckHit{x0: x, y0: top + y0, x1: c.w, y1: top + y0 + 1, kind: ckHitColumn, group: heads[places[len(places)-1].i+1].group})
+		x := c.textR(width, y0, ckSeg{t: strconv.Itoa(right) + arrowR, fg: pal.AccentBright, attrs: ckBold})
+		ck.hits = append(ck.hits, ckHit{x0: x, y0: top + y0, x1: width, y1: top + y0 + 1, kind: ckHitColumn, group: heads[places[len(places)-1].i+1].group})
 	}
 	drag := kb.drag
 	if drag != nil && !drag.moving {

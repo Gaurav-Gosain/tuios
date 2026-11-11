@@ -647,6 +647,8 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("agents.fold_working"),
 			opt("agents.view_list"),
 			opt("agents.list_width"),
+			opt("agents.card_preview"),
+			opt("agents.card_preview_width"),
 			opt("agents.reply_rows"),
 			opt("review.focus"),
 			opt("review.scope"),

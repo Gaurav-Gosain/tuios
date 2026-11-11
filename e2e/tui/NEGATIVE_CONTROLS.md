@@ -16602,3 +16602,20 @@ Run on 2026-11-11 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskAttachTakesAPaneAndReadsAPullRequest$' -v .`.
+
+## The task board previews the focused card
+
+`TestTaskBoardPreviewsTheFocusedCard` opens the preview with space on the
+board's columns, checks the side panel at 200 cells and the sheet at 110, that
+it follows the cursor and a click, and that space, esc and a click outside the
+sheet close it.
+
+Run on 2026-11-11 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `kanbanKey` without the peek key | "waiting for the preview of t1: tuitest: WaitForDesc timed out" | **caught** |
+| The branch before this one (no preview) | the same | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskBoardPreviewsTheFocusedCard$' -v .`.

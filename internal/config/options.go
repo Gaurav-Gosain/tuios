@@ -1207,6 +1207,17 @@ var optionSpecs = []Option{
 		Fallback:    AgentsViewListColumn, Normalize: trimLower,
 	},
 	{
+		Path: "agents.card_preview", Type: OptionString, Section: "agents",
+		Description: "Where the task board shows the focused card's preview: beside the columns, over them, beside them on a wide screen and over them otherwise, or never. Space on a card opens and closes it.",
+		Accepted:    CardPreviews,
+		Default:     CardPreviewAuto,
+	},
+	{
+		Path: "agents.card_preview_width", Type: OptionString, Section: "agents",
+		Description: "The width of the task board's preview panel: a number of cells, such as 70, or a share of the view, such as 40%. Empty is 40%, at least 44 and at most 96 cells. A drag on the edge of the panel changes it, and the view keeps that choice.",
+		Default:     "",
+	},
+	{
 		Path: "agents.list_width", Type: OptionString, Section: "agents",
 		Description: "The width of the agents view's list: a number of cells, such as 52, or a share of the view, such as 30%. Empty follows the screen. The < and > keys and a drag on the edge of the list change it, and the view keeps that choice.",
 	},

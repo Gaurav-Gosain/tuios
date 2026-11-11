@@ -1315,7 +1315,7 @@ func DefaultConfig() *UserConfig {
 		Panes:        defaultPanesConfig(),
 		PasteBuffers: defaultPasteBuffersConfig(),
 		Review:       defaultReviewConfig(),
-		Agents:       AgentsConfig{ViewList: AgentsViewListColumn},
+		Agents:       AgentsConfig{ViewList: AgentsViewListColumn, CardPreview: CardPreviewAuto},
 		Tasks: TasksConfig{
 			AttachmentMaxMiB: AttachmentMaxMiBDefault, AttachmentsPerCard: AttachmentsPerCardDefault,
 			AttachmentSessionMiB: AttachmentSessionMiBDefault,
