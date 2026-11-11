@@ -23,7 +23,7 @@ func copyPipeKey(msg tea.KeyPressMsg, o *app.OS, cm *terminal.CopyMode) (config.
 	if o == nil || o.UserConfig == nil || cm == nil || len(o.UserConfig.Keybindings.CopyPipe) == 0 {
 		return config.CopyPipeBinding{}, false
 	}
-	if cm.State == terminal.CopyModeSearch || cm.PendingCharSearch {
+	if cm.State == terminal.CopyModeSearch || waitingForChar(cm) {
 		return config.CopyPipeBinding{}, false
 	}
 	return o.UserConfig.Keybindings.CopyPipeFor(commandKey(msg))

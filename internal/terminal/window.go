@@ -618,6 +618,19 @@ type SearchCache struct {
 	HistoryLen    int
 }
 
+// CopyPending is the second key a copy-mode command waits for. At most one
+// is pending: a key that is not the one waited for ends the wait.
+type CopyPending uint8
+
+const (
+	// CopyPendingNone waits for nothing.
+	CopyPendingNone CopyPending = iota
+	// CopyPendingG waits for the second g of gg.
+	CopyPendingG
+	// CopyPendingChar waits for the character after f, F, t or T.
+	CopyPendingChar
+)
+
 // CopyMode holds all state for vim-style copy/scrollback mode
 type CopyMode struct {
 	Active       bool          // True when copy mode is active
@@ -631,14 +644,17 @@ type CopyMode struct {
 	VisualEnd   Position // Selection end (absolute coordinates)
 
 	// Search state
-	SearchQuery     string        // Current search query
-	SearchMatches   []SearchMatch // All search results
-	CurrentMatch    int           // Index of current match
-	CaseSensitive   bool          // Case-sensitive search
-	SearchBackward  bool          // True for ? (backward), false for / (forward)
-	SearchCache     SearchCache   // Cached search results (exported for copymode package)
-	PendingGCount   bool          // Waiting for second 'g' in 'gg'
-	LastCommandTime time.Time     // For detecting 'gg' sequence
+	SearchQuery    string        // Current search query
+	SearchMatches  []SearchMatch // All search results
+	CurrentMatch   int           // Index of current match
+	CaseSensitive  bool          // Case-sensitive search
+	SearchBackward bool          // True for ? (backward), false for / (forward)
+	SearchCache    SearchCache   // Cached search results (exported for copymode package)
+
+	// Pending is the second key a two-key command waits for: the second g of
+	// gg, or the character of f, F, t or T. PendingSince is when it began.
+	Pending      CopyPending
+	PendingSince time.Time
 
 	// SearchOrigin is where the cursor was when the search prompt opened.
 	// Each key typed into the prompt searches again from here, not from the
@@ -646,7 +662,6 @@ type CopyMode struct {
 	SearchOrigin SearchOrigin
 
 	// Character search state (f/F/t/T commands)
-	PendingCharSearch  bool // Waiting for character after f/F/t/T
 	PendingCharCount   int  // The count typed before f/F/t/T, 1 when none
 	LastCharSearch     rune // Last searched character
 	LastCharSearchDir  int  // 1 for forward (f/t), -1 for backward (F/T)

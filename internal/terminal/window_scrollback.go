@@ -106,7 +106,7 @@ func (w *Window) enterCopyMode(x, y int) {
 	w.CopyMode.SearchMatches = nil
 	w.CopyMode.CurrentMatch = 0
 	w.CopyMode.CaseSensitive = false
-	w.CopyMode.PendingGCount = false
+	w.CopyMode.Pending = CopyPendingNone
 	w.CopyMode.Implicit = false
 
 	// Sync with window scrollback

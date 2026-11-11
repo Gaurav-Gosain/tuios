@@ -52,7 +52,7 @@ func handleMultiCopyKey(msg tea.KeyPressMsg, o *app.OS, focused *terminal.Window
 	// pending f/t character take every key as text, so they are left alone. A
 	// count typed before them means nothing to them and is dropped in every
 	// pane: "1y" is a yank of every selection, not a count handed to one pane.
-	if leadState != terminal.CopyModeSearch && !lcm.PendingCharSearch {
+	if leadState != terminal.CopyModeSearch && !waitingForChar(lcm) {
 		inVisual := leadState.InVisual()
 		pipe, isPipe := copyPipeKey(msg, o, lcm)
 		// copy_mode_exit from a selection is y on the whole set, then a

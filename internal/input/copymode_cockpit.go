@@ -25,7 +25,7 @@ func handleCockpitCopyKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 	fx := &copyModeEffects{}
-	if msg.String() == "Y" && cm.State != terminal.CopyModeSearch && !cm.PendingCharSearch {
+	if msg.String() == "Y" && cm.State != terminal.CopyModeSearch && !waitingForChar(cm) {
 		y0 := grid.ScrollbackLen() - cm.ScrollOffset + cm.CursorY
 		y1 := y0
 		if cm.State.InVisual() {

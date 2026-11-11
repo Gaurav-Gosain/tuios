@@ -104,7 +104,9 @@ func runCopyMotion(action string, cm *terminal.CopyMode, grid terminal.CopyGrid,
 		return false
 	}
 	dropStaleCount(cm, fx)
-	cm.PendingGCount = false
+	if cm.Pending == terminal.CopyPendingG {
+		cm.Pending = terminal.CopyPendingNone
+	}
 	motion(cm, grid, cm.PendingCount)
 	if cm.PendingCount != 0 {
 		cm.PendingCount = 0

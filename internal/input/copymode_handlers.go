@@ -4,7 +4,6 @@ import (
 	"unicode/utf8"
 
 	"fmt"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
@@ -69,7 +68,7 @@ func HandleCopyModeKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Window) 
 // checked: Ctrl+B is copy mode's page up.
 func copyModeFocusKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Window) (tea.Cmd, bool) {
 	cm := window.CopyMode
-	if o.KeybindRegistry == nil || cm.State == terminal.CopyModeSearch || cm.PendingCharSearch {
+	if o.KeybindRegistry == nil || cm.State == terminal.CopyModeSearch || waitingForChar(cm) {
 		return nil, false
 	}
 	if o.MultiCopy.Has(window.ID) && o.MultiCopy.Save != nil {
@@ -119,7 +118,7 @@ func runCopyModeKey(msg tea.KeyPressMsg, action string, cm *terminal.CopyMode, g
 	// the way tmux's copy-mode-vi takes Enter: leaving would lose it. The
 	// search prompt and a pending f/t character take the key as their own:
 	// enter runs the search.
-	if action == config.ActionCopyModeExit && cm.State != terminal.CopyModeSearch && !cm.PendingCharSearch {
+	if action == config.ActionCopyModeExit && cm.State != terminal.CopyModeSearch && !waitingForChar(cm) {
 		cm.PendingCount = 0
 		msg := "Left copy mode"
 		if cm.State.InVisual() {
@@ -140,7 +139,7 @@ func runCopyModeKey(msg tea.KeyPressMsg, action string, cm *terminal.CopyMode, g
 	// Ctrl+C leaves copy mode from every state, the search prompt and a
 	// pending f/t character too, and copies nothing, as in tmux's vi mode.
 	if commandKey(msg) == "ctrl+c" {
-		cm.PendingCharSearch = false
+		cm.Pending = terminal.CopyPendingNone
 		fx.ExitCopyMode()
 		fx.ShowNotification("Left copy mode", "info", s.NotificationDuration)
 		return
@@ -162,7 +161,7 @@ func runCopyModeKey(msg tea.KeyPressMsg, action string, cm *terminal.CopyMode, g
 // there. A count typed before the key is dropped by the line motions, which
 // ignore it as 0 and $ do, and runs the word motions count times.
 func runCopyModeAction(action string, cm *terminal.CopyMode, grid terminal.CopyGrid, fx *copyModeEffects) bool {
-	if cm.State == terminal.CopyModeSearch || cm.PendingCharSearch {
+	if cm.State == terminal.CopyModeSearch || waitingForChar(cm) {
 		return false
 	}
 	if action == config.ActionHints {
@@ -190,37 +189,16 @@ func runCopyModeAction(action string, cm *terminal.CopyMode, grid terminal.CopyG
 func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal.CopyGrid, fx *copyModeEffects, s *config.Settings) {
 	keyStr := msg.String()
 
-	// Handle pending character search (f/F/t/T followed by character)
-	if cm.PendingCharSearch {
-		// Check for escape to cancel
-		if keyStr == "esc" {
-			cm.PendingCharSearch = false
-			fx.ShowNotification("", "info", 0)
-			return
-		}
-
-		cm.PendingCharSearch = false
-		// Get the character from the key press
-		if len(keyStr) == 1 && keyStr[0] >= 32 && keyStr[0] <= 126 {
-			// Only accept printable ASCII characters
-			char := rune(keyStr[0])
-			cm.LastCharSearch = char
-			findCharCount(cm, grid, char, max(cm.PendingCharCount, 1))
-			fx.InvalidateCache()
-			fx.ShowNotification("", "info", 0) // Clear notification
-		} else {
-			// Invalid character, cancel search
-			fx.ShowNotification("", "info", 0)
-		}
+	// A pending f, F, t or T takes this key as its character.
+	if waitingForChar(cm) {
+		takeSearchChar(keyStr, cm, grid, fx)
 		return
 	}
 	// The pending search above takes the typed character. A command key falls
 	// back to the base-layout key. See commandKey.
 	keyStr = commandKey(msg)
 
-	// A pending g is for the very next key: g j g is not gg.
-	pendingG := cm.PendingGCount
-	cm.PendingGCount = false
+	finishesGG := takePendingG(cm)
 	dropStaleCount(cm, fx)
 
 	// Handle digit keys for count prefix (1-9, 0 only if already has count)
@@ -273,46 +251,11 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 
 	// Navigation: jump to top/bottom
 	case "g":
-		// Handle 'gg' sequence
-		if pendingG && time.Since(cm.LastCommandTime) < 500*time.Millisecond {
-			moveToTop(cm, grid)
-		} else {
-			cm.PendingGCount = true
-			cm.LastCommandTime = time.Now()
-		}
+		pressG(cm, grid, finishesGG)
 
 	// Character search (f/F/t/T)
-	case "f":
-		// Find character forward on current line
-		cm.PendingCharSearch = true
-		cm.PendingCharCount = count
-		cm.LastCharSearchDir = 1
-		cm.LastCharSearchTill = false
-		fx.ShowNotification("f", "info", 0)
-		return
-	case "F":
-		// Find character backward on current line
-		cm.PendingCharSearch = true
-		cm.PendingCharCount = count
-		cm.LastCharSearchDir = -1
-		cm.LastCharSearchTill = false
-		fx.ShowNotification("F", "info", 0)
-		return
-	case "t":
-		// Till character forward (stop before)
-		cm.PendingCharSearch = true
-		cm.PendingCharCount = count
-		cm.LastCharSearchDir = 1
-		cm.LastCharSearchTill = true
-		fx.ShowNotification("t", "info", 0)
-		return
-	case "T":
-		// Till character backward (stop before)
-		cm.PendingCharSearch = true
-		cm.PendingCharCount = count
-		cm.LastCharSearchDir = -1
-		cm.LastCharSearchTill = true
-		fx.ShowNotification("T", "info", 0)
+	case "f", "F", "t", "T":
+		armCharSearch(cm, keyStr, count, fx)
 		return
 
 	// Search
@@ -429,36 +372,14 @@ const visualBlockMessage = "VISUAL BLOCK"
 func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal.CopyGrid, fx *copyModeEffects, s *config.Settings) {
 	keyStr := msg.String()
 
-	// Handle pending character search (f/F/t/T followed by character)
-	if cm.PendingCharSearch {
-		// Check for escape to cancel
-		if keyStr == "esc" {
-			cm.PendingCharSearch = false
-			fx.ShowNotification("", "info", 0)
-			return
-		}
-
-		cm.PendingCharSearch = false
-		// Get the character from the key press
-		if len(keyStr) == 1 && keyStr[0] >= 32 && keyStr[0] <= 126 {
-			// Only accept printable ASCII characters
-			char := rune(keyStr[0])
-			cm.LastCharSearch = char
-			findCharCount(cm, grid, char, max(cm.PendingCharCount, 1))
-			updateVisualEnd(cm, grid)
-			fx.InvalidateCache()
-			fx.ShowNotification("", "info", 0) // Clear notification
-		} else {
-			// Invalid character, cancel search
-			fx.ShowNotification("", "info", 0)
-		}
+	// A pending f, F, t or T takes this key as its character.
+	if waitingForChar(cm) {
+		takeSearchChar(keyStr, cm, grid, fx)
 		return
 	}
 	keyStr = commandKey(msg)
 
-	// A pending g is for the very next key: g j g is not gg.
-	pendingG := cm.PendingGCount
-	cm.PendingGCount = false
+	finishesGG := takePendingG(cm)
 	dropStaleCount(cm, fx)
 
 	// Handle digit keys for count prefix in visual mode
@@ -507,33 +428,8 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 		return
 
 	// Character search (f/F/t/T)
-	case "f":
-		cm.PendingCharSearch = true
-		cm.PendingCharCount = count
-		cm.LastCharSearchDir = 1
-		cm.LastCharSearchTill = false
-		fx.ShowNotification("f", "info", 0)
-		return
-	case "F":
-		cm.PendingCharSearch = true
-		cm.PendingCharCount = count
-		cm.LastCharSearchDir = -1
-		cm.LastCharSearchTill = false
-		fx.ShowNotification("F", "info", 0)
-		return
-	case "t":
-		cm.PendingCharSearch = true
-		cm.PendingCharCount = count
-		cm.LastCharSearchDir = 1
-		cm.LastCharSearchTill = true
-		fx.ShowNotification("t", "info", 0)
-		return
-	case "T":
-		cm.PendingCharSearch = true
-		cm.PendingCharCount = count
-		cm.LastCharSearchDir = -1
-		cm.LastCharSearchTill = true
-		fx.ShowNotification("T", "info", 0)
+	case "f", "F", "t", "T":
+		armCharSearch(cm, keyStr, count, fx)
 		return
 
 	// 0 is the line start when no count is pending. See handleNormalInput.
@@ -544,15 +440,7 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 
 	// Jump movement
 	case "g":
-		// Detect the 'gg' sequence. Keys arrive singly, so a literal "gg" case
-		// never matches; mirror the pending-g state used in normal mode.
-		if pendingG && time.Since(cm.LastCommandTime) < 500*time.Millisecond {
-			moveToTop(cm, grid)
-			updateVisualEnd(cm, grid)
-		} else {
-			cm.PendingGCount = true
-			cm.LastCommandTime = time.Now()
-		}
+		pressG(cm, grid, finishesGG)
 
 	// Go to the other end of the selection
 	case "o":

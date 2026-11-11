@@ -34,7 +34,7 @@ func handleCopyModeSearchBackward(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 func copyModeSearchActionKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Window) (*app.OS, tea.Cmd, bool) {
 	cm := window.CopyMode
 	if cm == nil || cm.State != terminal.CopyModeNormal ||
-		cm.PendingCharSearch || cm.PendingGCount || cm.PendingCount > 0 {
+		cm.Pending != terminal.CopyPendingNone || cm.PendingCount > 0 {
 		return o, nil, false
 	}
 	isSearchAction := func(a string) bool {
