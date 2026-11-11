@@ -140,6 +140,12 @@ type WindowState struct {
 	// snapshot and never stored. See remote_pane.go.
 	HostLink      string `json:"host_link,omitempty"`
 	HostLinkUntil int64  `json:"host_link_until,omitempty"`
+	// ScreenStopped is set while the daemon has stopped feeding the pane's
+	// terminal emulator after it failed again and again: the program runs
+	// and the clients draw its output, but a new client, capture-pane and
+	// find see the screen from before. A live fact, like HostLink. See
+	// pane_vt_fault.go.
+	ScreenStopped bool `json:"screen_stopped,omitempty"`
 	// Cwd is the working directory of the window's shell process, captured on the
 	// daemon side when saving resurrection state. On cold-start restore a fresh
 	// shell is respawned here. Empty for live state syncs (clients do not set it).
@@ -1215,6 +1221,9 @@ type PTY struct {
 	// Single-goroutine VT writer channel. Closed by readOutput on exit so
 	// vtWriter's range terminates.
 	vtWriteChan chan vtChunk
+	// screenStopped is set when vtWriter stops feeding the emulator after
+	// repeated faults. See pane_vt_fault.go.
+	screenStopped atomic.Bool
 	// focusReporting is whether the guest had focus reporting on after the
 	// last write to the emulator. Only vtWriter reads and writes it. See
 	// focus_report.go.
@@ -3151,6 +3160,10 @@ func (s *Session) fillLiveFacts(state *SessionState) {
 				state.Windows[i].HostLinkUntil = link.until
 			}
 		}
+	}
+	stopped := s.stoppedScreens()
+	for i := range state.Windows {
+		state.Windows[i].ScreenStopped = stopped[state.Windows[i].PTYID]
 	}
 }
 

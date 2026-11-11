@@ -1,7 +1,9 @@
 package tuie2e
 
 import (
+	"encoding/json"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -83,7 +85,52 @@ func TestEmulatorPanicKeepsTheDaemonAndOtherPanes(t *testing.T) {
 	if now := helloImage(t, base).PID; now != pid {
 		t.Fatalf("ASSERTION: the daemon's pid changed from %d to %d after three faults", pid, now)
 	}
+
+	// The stopped screen says so where a person and a script look: the
+	// listing and the pane's row on the rail.
+	out, err := tuiosCLI(t, base, "list-windows", "-s", sess, "--json")
+	if err != nil {
+		t.Fatalf("list-windows: %v: %s", err, out)
+	}
+	var listing struct {
+		Windows []struct {
+			ID      string `json:"window_id"`
+			Stopped bool   `json:"screen_stopped"`
+		} `json:"windows"`
+	}
+	if err := json.Unmarshal([]byte(out), &listing); err != nil {
+		t.Fatalf("list-windows json: %v: %s", err, out)
+	}
+	for _, w := range listing.Windows {
+		if want := w.ID == a; w.Stopped != want {
+			t.Errorf("ASSERTION: list-windows says screen_stopped=%v for window %s, want %v", w.Stopped, w.ID, want)
+		}
+	}
+	showRail(t, client)
+	if err := client.WaitForText(sidebarScreenStoppedTag, uiTimeout); err != nil {
+		t.Errorf("ASSERTION: the rail does not say the pane's screen stopped: %v\n%s", err, client.Snapshot())
+	}
+
+	// The pane can still be closed, and the daemon and the other pane live on.
+	if out, err := tuiosCLI(t, base, "close-window", "-s", sess, a); err != nil {
+		t.Fatalf("ASSERTION: close-window on the stopped pane: %v\n%s", err, out)
+	}
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(100 * time.Millisecond) {
+		ids := windowIDs(t, base, sess)
+		if !slices.Contains(ids, a) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: the stopped pane is still listed 10s after close-window: %v", ids)
+		}
+	}
+	send(b, "last")
+	waitHandoffPane(t, base, sess, b, regexp.MustCompile(`^got-last`), 10*time.Second)
 }
+
+// sidebarScreenStoppedTag is what the rail row of a stopped screen says
+// (internal/app/render_sidebar.go, sidebarScreenStopped).
+const sidebarScreenStoppedTag = "screen stopped"
 
 // waitNoticeOrDeath waits for the fault notice in the pane, and fails at once
 // when the daemon stops answering instead.

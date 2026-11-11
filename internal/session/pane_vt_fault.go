@@ -98,6 +98,10 @@ func (p *PTY) vtFault(chunk vtChunk, fault any, stack []byte, faults []time.Time
 	p.rebuildTerminal(size[0], size[1], chunk.seq)
 	notice := vtFaultNotice
 	if frozen {
+		p.screenStopped.Store(true)
+		if s := p.owner(); s != nil {
+			s.PublishLiveFacts()
+		}
 		notice = vtFrozenNotice
 		log.Printf("Warning: pane %s: the terminal emulator failed %d times in %v; the daemon stops feeding it", p.ID, len(recent), vtFaultWindow)
 	}
@@ -151,4 +155,21 @@ func (p *PTY) injectStream(data []byte) {
 	case p.vtWriteChan <- vtChunk{data: data, seq: seq, notice: true}:
 	case <-p.ctx.Done():
 	}
+}
+
+// stoppedScreens is the set of panes, by PTY id, whose emulator the daemon
+// stopped feeding.
+func (s *Session) stoppedScreens() map[string]bool {
+	s.ptysMu.RLock()
+	defer s.ptysMu.RUnlock()
+	var out map[string]bool
+	for id, p := range s.ptys {
+		if p.screenStopped.Load() {
+			if out == nil {
+				out = make(map[string]bool)
+			}
+			out[id] = true
+		}
+	}
+	return out
 }

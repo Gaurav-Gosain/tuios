@@ -555,6 +555,9 @@ type Window struct {
 	// says so in words, because a pane whose screen stopped moving looks the
 	// same as one whose process has nothing to say.
 	HostLink string
+	// ScreenStopped is set while the daemon has stopped feeding this pane's
+	// terminal emulator after it failed again and again. The rail says so.
+	ScreenStopped bool
 
 	KittyPassthroughFunc func(cmd *vt.KittyCommand, rawData []byte)
 	SixelPassthroughFunc func(cmd *vt.SixelCommand, cursorX, cursorY, absLine int)

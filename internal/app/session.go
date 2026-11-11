@@ -1354,6 +1354,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	m.takeDaemonCwd(w, ws)
 	m.takeDaemonDnD(w, ws)
 	w.HostLink = ws.HostLink
+	w.ScreenStopped = ws.ScreenStopped
 	w.CustomName = ws.CustomName
 	if adoptGeometry {
 		w.X = ws.X
@@ -1571,6 +1572,7 @@ func (m *OS) newWindowFromState(ws *session.WindowState) *terminal.Window {
 	m.takeDaemonCwd(window, ws)
 	m.takeDaemonDnD(window, ws)
 	window.HostLink = ws.HostLink
+	window.ScreenStopped = ws.ScreenStopped
 
 	caps := m.hostCaps()
 	if caps.CellWidth > 0 && caps.CellHeight > 0 {

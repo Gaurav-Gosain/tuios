@@ -396,6 +396,11 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 	}
 	// Set only while the link to that machine is lost and the pane is being
 	// reattached: reconnecting, and when the far machine stops keeping it.
+	// Set while the daemon has stopped feeding the pane's emulator after it
+	// failed again and again. Omitted otherwise.
+	if w.ScreenStopped {
+		info["screen_stopped"] = true
+	}
 	if w.HostLink != "" {
 		info["host_link"] = w.HostLink
 		info["host_link_until"] = w.HostLinkUntil

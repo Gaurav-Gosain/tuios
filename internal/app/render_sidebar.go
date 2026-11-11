@@ -2768,6 +2768,11 @@ func (m *OS) sidebarTerminals(sessions []sessiontree.Node, sessionID string) []s
 		if win.Host != "" {
 			e.HostLink = win.HostLink
 		}
+		// So does a pane whose screen the daemon stopped following after
+		// its terminal emulator failed again and again.
+		if win.ScreenStopped {
+			e.HostLink = sidebarScreenStopped
+		}
 		if node.IsCurrent {
 			e.WindowIndex = m.windowIndexByID(win.ID)
 		}
@@ -3449,6 +3454,11 @@ func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Pale
 	return sidebarComposeRow(gutter, sidebarGlyph(e.State, e.DoneSeen, e.Subagents, rowBg, pal, &m.Settings), name, right, cw, rowBg)
 }
 
+// sidebarScreenStopped is the tag of a pane row whose screen the daemon
+// stopped following after the pane's terminal emulator failed again and
+// again: its program still runs. See internal/session/pane_vt_fault.go.
+const sidebarScreenStopped = "screen stopped"
+
 // sidebarTerminalHostLabel is what a pane row says about its machine: the
 // machine, and beside it the link's state while the link is not up. When both
 // do not fit with sidebarHostTagFloor cells of the pane's own name, as on the
@@ -3456,8 +3466,11 @@ func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Pale
 // has stopped, which matters more than which machine it stopped on, and the
 // pane's frame still names the machine.
 func sidebarTerminalHostLabel(e sidebarTerminalEntry, cw int) string {
-	if e.Host == "" || e.HostLink == "" {
+	if e.HostLink == "" {
 		return e.Host
+	}
+	if e.Host == "" {
+		return e.HostLink
 	}
 	full := e.Host + " " + e.HostLink
 	if sidebarNameAvail(cw, lipgloss.Width(full)) >= sidebarHostTagFloor {

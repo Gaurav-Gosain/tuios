@@ -152,6 +152,9 @@ type Node struct {
 	// HostLink, on a window node, is "reconnecting" while the link to the
 	// machine its process runs on is lost. Empty everywhere else.
 	HostLink string
+	// ScreenStopped, on a window node, is set while the daemon has stopped
+	// feeding the pane's terminal emulator after repeated faults.
+	ScreenStopped bool
 	// HostStatus is a KindHost header's link state, as the federation package
 	// names it ("up", "unreachable", "no_daemon", "no_tuios", "incompatible",
 	// "connecting"). Empty on every other node.
@@ -301,6 +304,9 @@ type WindowInput struct {
 	// HostLink is "reconnecting" while the link to Host is lost, empty
 	// otherwise.
 	HostLink string
+	// ScreenStopped is set while the daemon has stopped feeding the pane's
+	// terminal emulator after repeated faults.
+	ScreenStopped bool
 }
 
 // SessionInput is the caller's per-session data. Windows may be nil for a
@@ -415,30 +421,31 @@ func BuildSession(s SessionInput) Node {
 	bestRank := 0
 	for _, w := range s.Windows {
 		children = append(children, Node{
-			Kind:         KindWindow,
-			agentUnnamed: w.AgentUnnamed,
-			ID:           w.ID,
-			Title:        w.Title,
-			AgentState:   w.AgentState,
-			DoneSeen:     w.DoneSeen,
-			StateAt:      w.StateAt,
-			Harness:      w.Harness,
-			Message:      w.Message,
-			Reason:       w.Reason,
-			AgentKind:    w.AgentKind,
-			Meta:         w.Meta,
-			Queued:       w.Queued,
-			DraftHeld:    w.DraftHeld,
-			Settled:      w.Settled,
-			Quiet:        w.Quiet,
-			Subagents:    w.Subagents,
-			SubagentList: w.SubagentList,
-			Program:      w.Program,
-			Parent:       w.Parent,
-			IsCurrent:    w.Focused,
-			Workspace:    w.Workspace,
-			Host:         w.Host,
-			HostLink:     w.HostLink,
+			Kind:          KindWindow,
+			agentUnnamed:  w.AgentUnnamed,
+			ID:            w.ID,
+			Title:         w.Title,
+			AgentState:    w.AgentState,
+			DoneSeen:      w.DoneSeen,
+			StateAt:       w.StateAt,
+			Harness:       w.Harness,
+			Message:       w.Message,
+			Reason:        w.Reason,
+			AgentKind:     w.AgentKind,
+			Meta:          w.Meta,
+			Queued:        w.Queued,
+			DraftHeld:     w.DraftHeld,
+			Settled:       w.Settled,
+			Quiet:         w.Quiet,
+			Subagents:     w.Subagents,
+			SubagentList:  w.SubagentList,
+			Program:       w.Program,
+			Parent:        w.Parent,
+			IsCurrent:     w.Focused,
+			Workspace:     w.Workspace,
+			Host:          w.Host,
+			HostLink:      w.HostLink,
+			ScreenStopped: w.ScreenStopped,
 		})
 		if r := AgentRank(w.AgentState, w.DoneSeen); r > bestRank {
 			node.AgentState, node.DoneSeen, node.Subagents, bestRank = w.AgentState, w.DoneSeen, w.Subagents, r
