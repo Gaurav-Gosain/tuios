@@ -932,11 +932,8 @@ func (ps *paneStream) expireLease() {
 		LogBasic("Pane %s: an expired lease could not resize the pane: %v", shortWindowID(ps.window), err)
 	}
 	LogBasic("Client %s let its lease on pane %s expire", ps.cs.clientID, shortWindowID(ps.window))
-	ps.writeError(newVerbError(errLeaseExpired, fmt.Sprintf("the lease was not renewed for %s and was released. Send an L frame to hold the pane again", paneLeaseTTL)))
+	ps.writeError(newVerbError(ErrVerbLeaseExpired, fmt.Sprintf("the lease was not renewed for %s and was released. Send an L frame to hold the pane again", paneLeaseTTL)))
 }
-
-// errLeaseExpired is the E frame code of a lease the client did not renew.
-const errLeaseExpired = "lease_expired"
 
 // subscribeAt subscribes clientID from exactly fromSeq. It subscribes
 // nothing and reports false when the ring no longer holds the bytes from

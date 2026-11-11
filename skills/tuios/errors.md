@@ -10,6 +10,8 @@ out tells you to capture the pane. Read the whole error before retrying.
 Over the socket every failure carries a stable code in the error envelope:
 `invalid_request`, `unknown_verb`, `invalid_params`, `session_not_found`,
 `session_exists`, `window_not_found`, `no_windows`, `pty_not_found`,
+`lease_expired`, `plugin_needs_approval`, `plugin_admin_not_approved`,
+`plugin_id_shadowed`,
 `needs_client`, `option_not_found`, `command_failed`, `timeout`, `not_ready`,
 `agent_blocked`, `prompt_stalled`, `loop_refused`, `rate_limited`,
 `no_keyboard`, `forbidden`, `not_human`, `prompt_changed`, `not_resumable`,
@@ -43,6 +45,10 @@ A retry without a change fails the same way, except for `busy`, `too_many_connec
 | `window_not_found` | The `-w` target matched no pane. The hint lists the panes. Run `tuios list-windows -s "$TUIOS_SESSION"` and use a name or an id from it. |
 | `no_windows` | The session has no panes. Open one with `tuios new-window`. |
 | `pty_not_found` | The pane's program has exited, so nothing can read or type there. Close the pane, or open a new one. |
+| `lease_expired` | An E frame on a `stream-pane` connection: you sent no L frame within the lease time, so the pane went back to the size its clients ask for. Send an L frame to hold the size again, and keep sending one before the lease runs out. |
+| `plugin_needs_approval` | A plugin's error in `tuios plugins list` or `tuios plugins info`: it waits for the person's approval on this machine and does not run. Ask the person (`tuios ask-human`); only they approve a plugin. |
+| `plugin_admin_not_approved` | A plugin's error: the approval does not cover its admin grant, or the files its commands name changed. Ask the person to run `tuios plugins approve ID --grant admin` in a terminal outside tuios. |
+| `plugin_id_shadowed` | A plugin's error: another plugin with the same id was found first, so this copy does not run. Remove one of the two, or give one a new id. |
 | `command_failed` | The attached client could not do what the verb asked. The message says why. |
 | `timeout` | A `wait-for` condition did not match in time. Read the pane with `capture-pane` before you wait again, then wait with a larger `--timeout`. |
 | `risk_unacknowledged` | An allow for an approval that matches a risk rule did not name those rules in `risk_ack`. Nothing was answered. Read the rules with `get-approval`, or let the person answer. |

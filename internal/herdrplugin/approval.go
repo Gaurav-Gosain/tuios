@@ -183,13 +183,13 @@ func applyApproval(d Dirs, p *Plugin, lock *LockEntry) *Error {
 	switch {
 	case x == nil:
 		p.Approval = ApprovalWaiting
-		return errf("plugin_needs_approval", "%s waits for your approval on this machine. Allow it in tuios, or run tuios plugins approve %s", p.PluginID, p.PluginID)
+		return errf(ErrPluginNeedsApproval, "%s waits for your approval on this machine. Allow it in tuios, or run tuios plugins approve %s", p.PluginID, p.PluginID)
 	case x.Denied:
 		p.Approval = ApprovalDenied
 		return errf("plugin_denied", "you denied %s on this machine. To allow it, run tuios plugins approve %s", p.PluginID, p.PluginID)
 	case slices.Contains(grants, "admin") && (!slices.Contains(x.Grants, "admin") || x.Code != CodeHash(p)):
 		p.Approval = ApprovalWaiting
-		return errf("plugin_admin_not_approved", "%s holds the admin grant only when you approve it on this machine. Run tuios plugins approve %s --grant admin, from a terminal outside tuios", p.PluginID, p.PluginID)
+		return errf(ErrPluginAdminNotApproved, "%s holds the admin grant only when you approve it on this machine. Run tuios plugins approve %s --grant admin, from a terminal outside tuios", p.PluginID, p.PluginID)
 	}
 	p.Approval = ApprovalAllowed
 	p.Held = slices.Clone(grants)

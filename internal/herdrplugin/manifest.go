@@ -47,6 +47,14 @@ type Error struct {
 
 func (e *Error) Error() string { return e.Code + ": " + e.Msg }
 
+// Error codes of a plugin that does not run. list-verbs lists them in its
+// error_codes, with the verb error codes.
+const (
+	ErrPluginNeedsApproval    = "plugin_needs_approval"     // the person has not approved it on this machine
+	ErrPluginAdminNotApproved = "plugin_admin_not_approved" // the approval does not cover its admin grant
+	ErrPluginIDShadowed       = "plugin_id_shadowed"        // another plugin with its id was found first
+)
+
 //go:noinline
 func errf(code, format string, args ...any) *Error {
 	return &Error{Code: code, Msg: fmt.Sprintf(format, args...)}

@@ -211,7 +211,7 @@ func Discover(d Dirs, enabled []string) []Entry {
 				e.Err = applyApproval(d, p, lock)
 			}
 			if byID[p.PluginID] {
-				e.Err = errf("plugin_id_shadowed", "another plugin with id %s was found first. This copy does not run", p.PluginID)
+				e.Err = errf(ErrPluginIDShadowed, "another plugin with id %s was found first. This copy does not run", p.PluginID)
 			}
 			byID[p.PluginID] = true
 		}
@@ -308,7 +308,7 @@ func FindAction(entries []Entry, actionID string) []*Entry {
 // Find is the entry for id that runs, the first found, or nil.
 func Find(entries []Entry, id string) *Entry {
 	for i := range entries {
-		if entries[i].ID == id && (entries[i].Err == nil || entries[i].Err.Code != "plugin_id_shadowed") {
+		if entries[i].ID == id && (entries[i].Err == nil || entries[i].Err.Code != ErrPluginIDShadowed) {
 			return &entries[i]
 		}
 	}

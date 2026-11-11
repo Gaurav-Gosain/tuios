@@ -12,15 +12,31 @@ import (
 )
 
 // TestErrorCodeCatalogHasEveryErrVerbConstant reads the package source for
-// every ErrVerb* constant and requires its code in the list-verbs catalogue. A
-// code defined next to the verbs that raise it, such as the worktree ones, is
-// easy to leave out of the catalogue, and list-verbs then never publishes it.
+// every ErrVerb* constant, and internal/herdrplugin for every ErrPlugin*
+// constant (the errors a plugin that does not run carries), and requires each
+// code in the list-verbs catalogue. A code defined next to the code that
+// raises it, such as the worktree ones, is easy to leave out of the catalogue,
+// and list-verbs then never publishes it.
 func TestErrorCodeCatalogHasEveryErrVerbConstant(t *testing.T) {
-	files, err := filepath.Glob("*.go")
-	if err != nil {
-		t.Fatal(err)
-	}
 	catalogued := VerbErrorCodes()
+	for _, src := range []struct{ glob, prefix string }{
+		{"*.go", "ErrVerb"},
+		{"../herdrplugin/*.go", "ErrPlugin"},
+	} {
+		files, err := filepath.Glob(src.glob)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if found := catalogueScan(t, files, src.prefix, catalogued); found == 0 {
+			t.Fatalf("found no %s constants in %s, so the source scan is broken", src.prefix, src.glob)
+		}
+	}
+}
+
+// catalogueScan parses files and reports each string constant named with
+// prefix whose code is not in catalogued. It returns how many it found.
+func catalogueScan(t *testing.T, files []string, prefix string, catalogued []string) int {
+	t.Helper()
 	fset := token.NewFileSet()
 	found := 0
 	for _, name := range files {
@@ -39,7 +55,7 @@ func TestErrorCodeCatalogHasEveryErrVerbConstant(t *testing.T) {
 			for _, spec := range gen.Specs {
 				vs := spec.(*ast.ValueSpec)
 				for i, ident := range vs.Names {
-					if !strings.HasPrefix(ident.Name, "ErrVerb") || i >= len(vs.Values) {
+					if !strings.HasPrefix(ident.Name, prefix) || i >= len(vs.Values) {
 						continue
 					}
 					lit, ok := vs.Values[i].(*ast.BasicLit)
@@ -58,9 +74,7 @@ func TestErrorCodeCatalogHasEveryErrVerbConstant(t *testing.T) {
 			}
 		}
 	}
-	if found == 0 {
-		t.Fatal("found no ErrVerb constants, so the source scan is broken")
-	}
+	return found
 }
 
 // TestListVerbsAcceptedValuesMatchTheImplementation guards the one way a schema

@@ -59,6 +59,7 @@ const (
 	ErrVerbWindowNotFound  = "window_not_found"  // window target did not resolve
 	ErrVerbNoWindows       = "no_windows"        // session has no windows to act on
 	ErrVerbPTYNotFound     = "pty_not_found"     // the target window has no live PTY
+	ErrVerbLeaseExpired    = "lease_expired"     // a stream-pane client did not renew its lease (an E frame)
 	ErrVerbNeedsClient     = "needs_client"      // verb needs a live renderer that is not attached
 	ErrVerbOptionNotFound  = "option_not_found"  // get-option key was never set
 	ErrVerbCommandFailed   = "command_failed"    // a verb routed to the attached client came back failed

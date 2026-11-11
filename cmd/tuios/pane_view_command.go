@@ -452,7 +452,7 @@ func (v *paneView) pumpOutput() (string, error) {
 			var e struct {
 				Code string `json:"code"`
 			}
-			if jsonx.Unmarshal(payload, &e) == nil && e.Code == "lease_expired" {
+			if jsonx.Unmarshal(payload, &e) == nil && e.Code == session.ErrVerbLeaseExpired {
 				cols, rows := v.size()
 				_ = stream.Lease(cols, rows)
 			}

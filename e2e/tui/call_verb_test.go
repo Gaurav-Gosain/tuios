@@ -247,3 +247,28 @@ func TestCallVerbFromAPane(t *testing.T) {
 		t.Fatalf("ASSERTION: from a pane, attach-presence must be forbidden and respond not_human, each exiting 1:\n%s", got)
 	}
 }
+
+// wantCatalogued fails the test unless list-verbs' error_codes holds code,
+// which a test saw the daemon send: a client learns every code it can get from
+// that list.
+func wantCatalogued(t *testing.T, base, code, what string) {
+	t.Helper()
+	out, err := tuiosCLI(t, base, "call", "list-verbs")
+	if err != nil {
+		t.Fatalf("list-verbs: %v: %.300s", err, out)
+	}
+	var list struct {
+		ErrorCodes []struct {
+			Code string `json:"code"`
+		} `json:"error_codes"`
+	}
+	if err := json.Unmarshal([]byte(out), &list); err != nil || len(list.ErrorCodes) == 0 {
+		t.Fatalf("list-verbs has no error_codes: %v: %.300s", err, out)
+	}
+	for _, c := range list.ErrorCodes {
+		if c.Code == code {
+			return
+		}
+	}
+	t.Errorf("ASSERTION: %s carries the code %q, which list-verbs' error_codes does not list", what, code)
+}

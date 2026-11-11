@@ -1777,6 +1777,10 @@ catalog.
 | `window_not_found` | The window target did not resolve to a window. |
 | `no_windows` | The session has no windows to act on. |
 | `pty_not_found` | The target window has no live PTY. |
+| `lease_expired` | On a `stream-pane` connection, as an E frame: no L frame came within the lease time, so the lease on the pane's size was released. |
+| `plugin_needs_approval` | In a plugin's error (`tuios plugins list` and `tuios plugins info`): the plugin waits for the person's approval on this machine. |
+| `plugin_admin_not_approved` | In a plugin's error: the approval on this machine does not cover the plugin's admin grant. |
+| `plugin_id_shadowed` | In a plugin's error: another plugin with the same id was found first, so this copy does not run. |
 | `needs_client` | The verb needs a live renderer that is not attached. |
 | `option_not_found` | No option by that path exists. The hint carries the closest match. |
 | `command_failed` | A verb routed to the attached client came back failed or timed out. |

@@ -226,6 +226,9 @@ func TestNativePluginGrants(t *testing.T) {
 		if !strings.Contains(info, want) {
 			t.Errorf("%s: plugins info lacks %q:\n%s", why, want, info)
 		}
+		if strings.HasPrefix(want, "plugin_") {
+			wantCatalogued(t, base, want, "the error of a plugin that does not run")
+		}
 	}
 	// The approval covers the files the commands name: a changed probe.sh
 	// needs a new one.

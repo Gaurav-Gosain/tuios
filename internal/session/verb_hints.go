@@ -10,6 +10,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/shquote"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 )
 
 // This file carries the machine-readable remedy surface of the verb protocol.
@@ -87,6 +88,10 @@ var errorCodeCatalog = []struct {
 	{ErrVerbFanExists, "fan was given the name of a fan that exists in the repository. Choose another name, or pass join with a session of that fan to add attempts to it on purpose."},
 	{ErrVerbWindowNotFound, "The window target did not resolve. The hint lists the addressable windows."},
 	{ErrVerbNoWindows, "The session exists but holds no windows to act on."},
+	{ErrVerbLeaseExpired, "On a stream-pane connection, as an E frame: the client sent no L frame within the lease time, so its lease on the pane's size was released. Send an L frame to hold the pane again."},
+	{herdrplugin.ErrPluginNeedsApproval, "In a plugin's error, as tuios plugins list and plugins info report it: the plugin waits for the person's approval on this machine, so it does not run. tuios plugins approve ID gives it."},
+	{herdrplugin.ErrPluginAdminNotApproved, "In a plugin's error: the plugin asks for the admin grant, and the approval on this machine does not cover it or the files its commands name changed. tuios plugins approve ID --grant admin, from a terminal outside tuios, gives it."},
+	{herdrplugin.ErrPluginIDShadowed, "In a plugin's error: another plugin with the same id was found first, so this copy does not run."},
 	{ErrVerbPTYNotFound, "The target window has no live PTY. Its shell has already exited."},
 	{ErrVerbNeedsClient, "The verb needs an attached client to render it, and none is attached."},
 	{ErrVerbOptionNotFound, "No option by that path exists. The hint carries the closest match and the full path list. list-options describes them."},

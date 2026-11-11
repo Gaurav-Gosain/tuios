@@ -58,7 +58,7 @@ func pluginAsksOf(entries []herdrplugin.Entry) []PluginApprovalAsk {
 		if !e.Enabled || p == nil || p.Format != herdrplugin.FormatTuios || p.Approval != herdrplugin.ApprovalWaiting {
 			continue
 		}
-		if e.Err != nil && e.Err.Code != "plugin_needs_approval" && e.Err.Code != "plugin_admin_not_approved" {
+		if e.Err != nil && e.Err.Code != herdrplugin.ErrPluginNeedsApproval && e.Err.Code != herdrplugin.ErrPluginAdminNotApproved {
 			// A shadowed copy, or one that does not run for another
 			// reason: an answer would not make it run.
 			continue

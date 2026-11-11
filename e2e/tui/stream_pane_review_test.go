@@ -96,7 +96,7 @@ func TestPresenceNonceScope(t *testing.T) {
 // lease after the documented 30 seconds, and the pane goes back to the size
 // its clients asked for. A client that renews keeps its lease.
 func TestStreamPaneLeaseExpires(t *testing.T) {
-	_, link, ctl, w1, w2 := limitsDaemon(t)
+	base, link, ctl, w1, w2 := limitsDaemon(t)
 	for _, w := range []string{w1, w2} {
 		if _, verr := ctl.call(t, "resize", map[string]any{"session": streamSession, "window": w, "width": 80, "height": 24}); verr != nil {
 			t.Fatalf("resize: %v", verr)
@@ -111,6 +111,7 @@ func TestStreamPaneLeaseExpires(t *testing.T) {
 	// Read the silent stream's frames while the renewing one sends an L
 	// frame every 10 seconds.
 	expired := make(chan time.Duration, 1)
+	var expiredCode string
 	go func() {
 		for {
 			typ, payload, err := silent.frameWithin(45 * time.Second)
@@ -118,6 +119,11 @@ func TestStreamPaneLeaseExpires(t *testing.T) {
 				return
 			}
 			if typ == 'E' && strings.Contains(string(payload), "lease_expired") {
+				var e struct {
+					Code string `json:"code"`
+				}
+				_ = json.Unmarshal(payload, &e)
+				expiredCode = e.Code
 				expired <- time.Since(start)
 				return
 			}
@@ -145,6 +151,8 @@ wait:
 			t.Fatalf("the lease of a silent client did not end within 40s")
 		}
 	}
+	// A client learns the code from list-verbs, like a verb error's.
+	wantCatalogued(t, base, expiredCode, "the E frame of an expired lease")
 	if took < 29*time.Second || took > 33*time.Second {
 		t.Fatalf("the lease ended %s after the stream opened, want 30s", took.Round(time.Second))
 	}
