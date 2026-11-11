@@ -298,9 +298,9 @@ func ResolvePush(ctx context.Context, dir, branch, remote string) (PushTarget, e
 		return t, err
 	}
 	remotes := strings.Fields(out)
-	if len(remotes) == 0 {
-		return t, ErrNoRemote
-	}
+	// The remotes ovnfs adds for its checkouts are not where a branch ships,
+	// so the choice below leaves them out. Named, or followed, they still work.
+	shippable := slices.DeleteFunc(slices.Clone(remotes), isCheckoutRemote)
 	configured, _ := runCtx(ctx, dir, nil, "config", "--get", "branch."+branch+".remote")
 	configured = strings.TrimSpace(configured)
 	switch {
@@ -308,12 +308,14 @@ func ResolvePush(ctx context.Context, dir, branch, remote string) (PushTarget, e
 		t.Remote = remote
 	case configured != "" && slices.Contains(remotes, configured):
 		t.Remote = configured
-	case len(remotes) == 1:
-		t.Remote = remotes[0]
-	case slices.Contains(remotes, "origin"):
+	case len(shippable) == 0:
+		return t, ErrNoRemote
+	case len(shippable) == 1:
+		t.Remote = shippable[0]
+	case slices.Contains(shippable, "origin"):
 		t.Remote = "origin"
 	default:
-		return t, errfmt.Errorf("the repository has %d remotes (%s) and branch %s follows none of them", len(remotes), strings.Join(remotes, ", "), branch)
+		return t, errfmt.Errorf("the repository has %d remotes (%s) and branch %s follows none of them", len(shippable), strings.Join(shippable, ", "), branch)
 	}
 	if !slices.Contains(remotes, t.Remote) {
 		return t, errfmt.Errorf("the repository has no remote %q", t.Remote)
@@ -392,3 +394,8 @@ func Subjects(ctx context.Context, dir, base, tip string, limit int) ([]string, 
 	}
 	return subjects, nil
 }
+
+// isCheckoutRemote reports whether name is a remote ovnfs adds to a repository
+// for one of its checkouts, ovnfs/NAME. ovnfs 0.4.0 adds one per live checkout
+// by default, pointing at the checkout's private git folder.
+func isCheckoutRemote(name string) bool { return strings.HasPrefix(name, "ovnfs/") }

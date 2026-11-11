@@ -16531,3 +16531,22 @@ Run on 2026-11-11 on macOS (arm64). The branch passes 3 of 3 runs.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHoverFocusReachesTheDaemon$' -v .`.
+
+## ship push leaves ovnfs checkout remotes out
+
+`TestShipPushLeavesOvnfsCheckoutRemotesOut` writes `.git/ovnfs-remotes` and
+its include the way ovnfs 0.4.0 does (a remote `ovnfs/demo` pointing at a bare
+repository that stands in for the checkout's git folder). With one other
+remote, `upstream`, ship push must push there; with no other remote it must
+refuse and leave the checkout's git folder alone.
+
+Run on 2026-11-11 on macOS (arm64). The branch passes, and so do the other
+`TestShip*` tests.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (f3b696fce), upstream and the checkout remote | "the repository has 2 remotes (ovnfs/demo, upstream) and branch feat/ship follows none of them" | **caught** |
+| Main, only the checkout remote (the first case cut from the test) | "ship push with only an ovnfs checkout remote succeeded", "ship push sent feat/ship into the checkout's git folder" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestShipPushLeavesOvnfsCheckoutRemotesOut$' -v .`.
