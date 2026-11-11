@@ -77,7 +77,7 @@ Name any session of the fan. HOST:SESSION compares a fan on another machine.`,
 			return runFanCompare(target, !noChanges, jsonOut)
 		},
 	}
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output result as JSON")
+	addJSONFlag(cmd, &jsonOut)
 	cmd.Flags().BoolVar(&noChanges, "no-changes", false, "Skip counting each attempt's changes, which runs git in every worktree")
 	return cmd
 }
@@ -342,7 +342,7 @@ returns once they are started. 'tuios fan compare' shows how they end.`,
 			return fanVerifyRun(args[0], fanVerifyCommandLine(args[1:]), timeout, !noWait, jsonOut)
 		},
 	}
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output result as JSON")
+	addJSONFlag(cmd, &jsonOut)
 	cmd.Flags().BoolVar(&noWait, "no-wait", false, "Return once the checks are started")
 	cmd.Flags().DurationVar(&timeout, "timeout", 0, "Count a check that runs longer than this as failed, and close its window (default: no limit)")
 	return cmd
@@ -579,7 +579,7 @@ refused.`,
 	cmd.Flags().StringVar(&summary, "summary", "", "The verdict in a sentence or two (required)")
 	cmd.Flags().StringArrayVar(&reasons, "reason", nil, "One reason. Repeatable")
 	cmd.Flags().StringArrayVar(&notes, "note", nil, "A note on one attempt, as SESSION=TEXT. Repeatable")
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output result as JSON")
+	addJSONFlag(cmd, &jsonOut)
 	_ = cmd.MarkFlagRequired("pick")
 	_ = cmd.MarkFlagRequired("summary")
 	return cmd

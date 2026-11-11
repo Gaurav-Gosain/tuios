@@ -295,12 +295,11 @@ change.`,
 		},
 	}
 	cmd.Flags().StringVar(&selector, "select", "", "Only the items a selector matches: space-separated key:value terms, such as 'harness:codex needs:you'")
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Only this session on this machine, or on --host (default: every session)")
+	addSessionFlag(cmd, &sessionName, "Only this session on this machine, or on --host (default: every session)")
 	cmd.Flags().StringVar(&host, "host", "", "Only this machine: local, or a linked host by name (default: every machine)")
 	cmd.Flags().StringSliceVar(&kinds, "kind", nil, "Only these kinds: "+strings.Join(session.AttentionKindNames, ", "))
 	cmd.Flags().BoolVar(&snoozed, "snoozed", false, "Also list the items snoozed in the Inbox, after the rest")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addJSONFlag(cmd, &jsonOutput)
 	_ = cmd.RegisterFlagCompletionFunc("kind", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 		return session.AttentionKindNames, cobra.ShellCompDirectiveNoFileComp
 	})

@@ -125,8 +125,7 @@ Use --print to write the comment to stdout. tuios then opens nothing.`,
 	cmd.Flags().StringVar(&name, "name", "", "The name of the look")
 	cmd.Flags().StringVar(&author, "author", "", "The author of the look (default: your GitHub login)")
 	cmd.Flags().BoolVar(&printOnly, "print", false, "Write the comment to stdout and open nothing")
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "The session to capture (default: this pane's session, else the most recent)")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addSessionFlag(cmd, &sessionName, "The session to capture (default: this pane's session, else the most recent)")
 	return cmd
 }
 

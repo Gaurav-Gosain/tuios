@@ -59,10 +59,9 @@ reads ls or rm, put -- before it.`,
 			return runQueuePrompt(sessionName, window, strings.Join(args, " "), jsonOutput)
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Session of the pane (default: this pane's, else the most recently active)")
-	cmd.Flags().StringVarP(&window, "window", "w", "", "The agent's pane, by name or id (default: the focused pane)")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addSessionFlag(cmd, &sessionName)
+	addWindowFlag(cmd, &window, "The agent's pane, by name or id (default: the focused pane)")
+	addJSONFlag(cmd, &jsonOutput)
 	cmd.AddCommand(newQueueListCommand(), newQueueRemoveCommand())
 	return cmd
 }
@@ -83,10 +82,9 @@ link:HOST), its age, the pane, and the first line of the message.`,
 			return runQueueList(os.Stdout, sessionName, window, jsonOutput)
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Session to list (default: this pane's, else the most recently active)")
-	cmd.Flags().StringVarP(&window, "window", "w", "", "Only this pane, by name or id")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addSessionFlag(cmd, &sessionName, "Session to list (default: this pane's, else the most recently active)")
+	addWindowFlag(cmd, &window, "Only this pane, by name or id")
+	addJSONFlag(cmd, &jsonOutput)
 	return cmd
 }
 
@@ -118,11 +116,10 @@ Inbox, which only the attached client can drop.`,
 			return runQueueRemove(sessionName, window, id, all, jsonOutput)
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Session of the pane (default: this pane's, else the most recently active)")
-	cmd.Flags().StringVarP(&window, "window", "w", "", "The pane, by name or id")
+	addSessionFlag(cmd, &sessionName)
+	addWindowFlag(cmd, &window, "The pane, by name or id")
 	cmd.Flags().BoolVar(&all, "all", false, "Drop every message queued for the pane that you may drop")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addJSONFlag(cmd, &jsonOutput)
 	return cmd
 }
 

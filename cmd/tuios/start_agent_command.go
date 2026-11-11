@@ -156,7 +156,7 @@ the id printed when the agent is not ready, and the command exits non-zero.`,
 			}, jsonOutput)
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Session to open the pane in, HOST:SESSION for another machine. Created when it does not exist (default: this pane's session, else the most recently active)")
+	addSessionFlag(cmd, &sessionName, "Session to open the pane in, HOST:SESSION for another machine. Created when it does not exist (default: this pane's session, else the most recently active)")
 	cmd.Flags().StringVar(&name, "name", "", "The pane's name, which list-agents shows and -w takes")
 	cmd.Flags().StringVar(&cwd, "cwd", "", "The directory the agent starts in (default: the calling pane's, else the focused pane's)")
 	cmd.Flags().StringVar(&repo, "repo", "", "A directory inside a repository: the agent starts in its main checkout")
@@ -176,8 +176,7 @@ the id printed when the agent is not ready, and the command exits non-zero.`,
 	cmd.Flags().StringSliceVar(&grants, "grants", nil, "What the agent may do through tuios, comma separated: read, write, fan, files, task, respond, admin, or none (default: [agents.permissions], or the calling pane's own)")
 	cmd.Flags().StringVar(&preset, "preset", "", "Start from [agents.presets.NAME] of your config; the agent may then be left out")
 	cmd.Flags().BoolVar(&printID, "print-id", false, "Print only the new pane's full id")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addJSONFlag(cmd, &jsonOutput)
 	_ = cmd.RegisterFlagCompletionFunc("grants", completeGrantNames)
 	return cmd
 }

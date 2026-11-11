@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
@@ -35,19 +34,15 @@ with -s. The command fails when ssh_agent is not "follow".`,
   tuios ssh-agent-path -s work --json`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			name := sessionName
-			if name == "" {
-				name = os.Getenv("TUIOS_SESSION")
-			}
+			name := paneSessionOr(sessionName)
 			if name == "" {
 				return errfmt.Errorf("name the session with -s. Outside a pane there is no session to use")
 			}
 			return runSSHAgentPath(name, jsonOut)
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Session whose link to print (default: the pane's session)")
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output as JSON, with the socket the link points at")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addSessionFlag(cmd, &sessionName, "Session whose link to print (default: the pane's session)")
+	addJSONFlag(cmd, &jsonOut, "Output as JSON, with the socket the link points at")
 	return cmd
 }
 

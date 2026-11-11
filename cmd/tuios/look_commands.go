@@ -123,7 +123,7 @@ take-over keeps your newer value, and tuios names it.`,
 			return nil
 		},
 	}
-	keysCmd.Flags().BoolVar(&keysJSON, "json", false, "Print the keys and their types as JSON")
+	addJSONFlag(keysCmd, &keysJSON, "Print the keys and their types as JSON")
 
 	var listJSON bool
 	listCmd := &cobra.Command{
@@ -140,7 +140,7 @@ each look. Give the id to "tuios look apply".`,
 			return printLookList(cmd.OutOrStdout(), looks, listJSON)
 		},
 	}
-	listCmd.Flags().BoolVar(&listJSON, "json", false, "Print the looks as JSON, with the colours of each theme")
+	addJSONFlag(listCmd, &listJSON, "Print the looks as JSON, with the colours of each theme")
 
 	var pickTakeOver, pickHold bool
 	pickCmd := &cobra.Command{

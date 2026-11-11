@@ -92,10 +92,9 @@ the agent was doing when the daemon stopped did not finish.`,
 			return runResumeAgent(sessionName, windowTarget, dryRun, jsonOutput)
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
-	cmd.Flags().StringVarP(&windowTarget, "window", "w", "", "Target window by name or ID (default: focused)")
+	addSessionFlag(cmd, &sessionName)
+	addWindowFlag(cmd, &windowTarget)
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print the command without typing it")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addJSONFlag(cmd, &jsonOutput)
 	return cmd
 }

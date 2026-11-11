@@ -162,7 +162,7 @@ down. It needs the daemon and the link up.`,
 	testCmd.Flags().BoolVar(&testOpts.speed, "speed", false, "Measure the daemon's link to the host: round trip, and bytes a second each way")
 	testCmd.Flags().BoolVar(&testOpts.start, "start", false, "Start the daemon on the host when it does not run")
 	testCmd.Flags().BoolVar(&testOpts.dryRun, "dry-run", false, "Show what --start would do and change nothing")
-	testCmd.Flags().BoolVar(&testOpts.json, "json", false, "Print the result as JSON")
+	addJSONFlag(testCmd, &testOpts.json)
 
 	return []*cobra.Command{addCmd, removeCmd, testCmd, newHostsTailnetCommand(), newHostsSyncCommand(), newHostsSigninCommand(), newHostsSetupCommand()}
 }

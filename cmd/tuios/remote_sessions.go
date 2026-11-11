@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -110,9 +109,7 @@ func printSessionInfo(raw json.RawMessage) error {
 // session given it renames the session of the pane it runs in, and never
 // guesses one outside a pane.
 func runRenameSession(target, name string) error {
-	if target == "" {
-		target = os.Getenv("TUIOS_SESSION")
-	}
+	target = paneSessionOr(target)
 	if target == "" {
 		return errors.New("name the session to rename: tuios rename-session <session> <new-name>")
 	}

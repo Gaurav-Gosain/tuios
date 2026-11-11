@@ -46,7 +46,7 @@ copies that pane started, and the other commands act only on those.`,
 			return runTransfersList(jsonOut)
 		},
 	}
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "Print the rows as JSON")
+	addJSONFlag(cmd, &jsonOut, "Print the rows as JSON")
 	control := func(verb, use, short, done string) *cobra.Command {
 		var j bool
 		c := &cobra.Command{
@@ -57,7 +57,7 @@ copies that pane started, and the other commands act only on those.`,
 				return runTransfersControl(verb, done, args, j)
 			},
 		}
-		c.Flags().BoolVar(&j, "json", false, "Print the rows as JSON")
+		addJSONFlag(c, &j, "Print the rows as JSON")
 		return c
 	}
 	var waitOpts struct {
@@ -89,7 +89,7 @@ and differs always gives exit 3, as with the default policy of tuios cp.`,
 			return runTransfersWait(args, waitOpts.json, waitOpts.quiet)
 		},
 	}
-	wait.Flags().BoolVar(&waitOpts.json, "json", false, "Print the copies' events as JSON lines")
+	addJSONFlag(wait, &waitOpts.json, "Print the copies' events as JSON lines")
 	wait.Flags().BoolVarP(&waitOpts.quiet, "quiet", "q", false, "Print only errors")
 	var clearJSON bool
 	clear := &cobra.Command{
@@ -99,7 +99,7 @@ and differs always gives exit 3, as with the default policy of tuios cp.`,
 			return runTransfersClear(args, clearJSON)
 		},
 	}
-	clear.Flags().BoolVar(&clearJSON, "json", false, "Print the result as JSON")
+	addJSONFlag(clear, &clearJSON)
 	clearOpened := &cobra.Command{
 		Use:   "clear-opened",
 		Short: "Delete the copies that o in the rail made of files on other machines",

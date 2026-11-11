@@ -127,7 +127,7 @@ you what it could not do.`,
 	f.BoolVar(&o.ssh, "ssh", false, "Run ssh with the item in each pane. The same as -s -c 'ssh -- {}'")
 	f.BoolVar(&o.noSync, "no-sync", false, "Do not turn multifocus on")
 	f.BoolVar(&o.force, "force", false, fmt.Sprintf("Open more than %d panes", xpanesMaxPanes))
-	f.BoolVar(&o.jsonOutput, "json", false, "Output result as JSON")
+	addJSONFlag(cmd, &o.jsonOutput)
 	cmd.MarkFlagsMutuallyExclusive("command", "ssh")
 	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	_ = cmd.RegisterFlagCompletionFunc("layout", cobra.FixedCompletions(layout.Arrangements, cobra.ShellCompDirectiveNoFileComp))
@@ -405,10 +405,7 @@ func runXpanes(o xpanesOptions, items []string) error {
 		return errors.New("--interval must be 0 or more seconds")
 	}
 	interval := time.Duration(o.interval * float64(time.Second))
-	sessionName := o.session
-	if sessionName == "" {
-		sessionName = os.Getenv("TUIOS_SESSION")
-	}
+	sessionName := paneSessionOr(o.session)
 	host, _, _, err := resolveTarget(sessionName, "")
 	if err != nil {
 		return err

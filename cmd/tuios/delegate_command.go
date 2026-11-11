@@ -111,7 +111,7 @@ From outside every pane, name the parent agent with --parent, or pass --wait.`,
 			return runDelegate(sessionName, params, wait, readyTimeout, jsonOutput)
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Session to open the child in (default: the parent's session)")
+	addSessionFlag(cmd, &sessionName, "Session to open the child in (default: the parent's session)")
 	cmd.Flags().StringVar(&agent, "agent", "", "The child agent, such as claude or \"codex --model o5\" (default: your own harness)")
 	cmd.Flags().StringVar(&role, "role", "", "The job: implementation, research, review, design, test or general (default general)")
 	cmd.Flags().StringVar(&isolation, "isolation", "", "shared: your folder. worktree: a new worktree from your commit (default shared)")
@@ -122,8 +122,7 @@ From outside every pane, name the parent agent with --parent, or pass --wait.`,
 	cmd.Flags().IntVar(&readyTimeout, "ready-timeout", 0, "Milliseconds to wait for the child to be ready (default 120000)")
 	cmd.Flags().StringArrayVar(&env, "env", nil, "Pass a variable to the agent: NAME for your own value, NAME=VALUE to set one. Repeatable")
 	cmd.Flags().StringSliceVar(&grants, "grants", nil, "What the child may do through tuios, comma separated (default: read for research and review, else your own)")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addJSONFlag(cmd, &jsonOutput)
 	_ = cmd.RegisterFlagCompletionFunc("grants", completeGrantNames)
 	_ = cmd.RegisterFlagCompletionFunc("role", cobra.FixedCompletions([]string{"implementation", "research", "review", "design", "test", "general"}, cobra.ShellCompDirectiveNoFileComp))
 	_ = cmd.RegisterFlagCompletionFunc("isolation", cobra.FixedCompletions([]string{"shared", "worktree"}, cobra.ShellCompDirectiveNoFileComp))

@@ -218,7 +218,7 @@ scripts/install.sh ghostty.`,
 	f.BoolVar(&opts.service, "service", false, "Install the daemon service on each host that has none")
 	f.BoolVarP(&opts.yes, "yes", "y", false, "Restart without a question. Needed for --restart without a terminal")
 	f.BoolVar(&opts.dryRun, "dry-run", false, "Show the plan and change nothing")
-	f.BoolVar(&opts.json, "json", false, "Print the result as JSON")
+	addJSONFlag(cmd, &opts.json)
 	f.BoolVar(&opts.local, "local", false, "Sync this machine too")
 	f.BoolVar(&opts.ghostty, "ghostty", false, "Ask for the ghostty backend. sync refuses it, because it cannot be cross-compiled")
 	return cmd

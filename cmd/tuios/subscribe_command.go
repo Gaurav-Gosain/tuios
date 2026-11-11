@@ -114,8 +114,8 @@ trusting that you saw every change.`,
 			return runSubscribe(opts, os.Stdout)
 		},
 	}
-	cmd.Flags().StringVarP(&opts.session, "session", "s", "", "Only events from this session (default: every session)")
-	cmd.Flags().StringVarP(&opts.window, "window", "w", "", "Only events about this window id")
+	addSessionFlag(cmd, &opts.session, "Only events from this session (default: every session)")
+	addWindowFlag(cmd, &opts.window, "Only events about this window id")
 	cmd.Flags().StringSliceVar(&opts.types, "types", nil, "Only these event types, comma-separated (default: all)")
 	cmd.Flags().Uint64Var(&opts.afterSeq, "after-seq", 0, "Replay the retained events after this seq before streaming live")
 	cmd.Flags().StringVar(&opts.bootID, "boot-id", "", "The boot_id the --after-seq came with, so a daemon restart shows as a gap")
@@ -125,7 +125,6 @@ trusting that you saw every change.`,
 	cmd.Flags().StringVar(&opts.format, "format", "json", "Output format: json (one JSON object per line) or text (one readable line per event)")
 	cmd.Flags().StringSliceVar(&opts.states, "state", nil, "Only agent-state events with these new states, comma-separated. Sets --types agent-state when --types is not given")
 	cmd.Flags().IntVar(&opts.timeout, "timeout", 0, "Stop after this many milliseconds. Exit 1 if --once or --count is not met by then (default: no limit)")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	_ = cmd.RegisterFlagCompletionFunc("format", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 		return []string{"json", "text"}, cobra.ShellCompDirectiveNoFileComp
 	})

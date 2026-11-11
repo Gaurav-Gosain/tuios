@@ -76,12 +76,11 @@ directory its windows start in.`,
 			return runSwitchSession(target.Session, host, fromSession, clientID, create, cwd, jsonOut)
 		},
 	}
-	cmd.Flags().StringVarP(&fromSession, "session", "s", "", "Switch the client that shows this session")
+	addSessionFlag(cmd, &fromSession, "Switch the client that shows this session")
 	cmd.Flags().StringVar(&clientID, "client", "", "Switch the client with this id, from tuios list-clients")
 	cmd.Flags().BoolVarP(&create, "create", "c", false, "Create the session if it does not exist")
 	cmd.Flags().StringVar(&cwd, "cwd", "", "With --create, the directory the new session's windows start in")
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addJSONFlag(cmd, &jsonOut)
 	return cmd
 }
 

@@ -111,7 +111,7 @@ the daemon"), from the version notice, and from the Daemon tab of the settings.`
 	}
 	cmd.Flags().BoolVarP(&opts.yes, "yes", "y", false, "Restart without a question")
 	cmd.Flags().BoolVar(&opts.dryRun, "dry-run", false, "Show what a restart stops, and change nothing")
-	cmd.Flags().BoolVar(&opts.json, "json", false, "Write one JSON object per line for each step")
+	addJSONFlag(cmd, &opts.json, "Write one JSON object per line for each step")
 	cmd.Flags().BoolVar(&opts.last, "last", false, "Show the steps of the last restart")
 	cmd.Flags().StringVar(&opts.expect, "expect", "", "Refuse unless the plan has this digest, the one the app showed")
 	cmd.Flags().StringVar(&opts.worker, "worker", "", "Run the restart of this plan, detached")

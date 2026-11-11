@@ -89,7 +89,7 @@ connection into a stream, or holds it for a peer, is refused here.`,
 		},
 	}
 	cmd.Flags().BoolVar(&pretty, "pretty", false, "Indent the JSON")
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "Print bad input and transport errors as JSON too")
+	addJSONFlag(cmd, &jsonOut, "Print bad input and transport errors as JSON too")
 	cmd.Flags().DurationVar(&timeout, "timeout", 0, "How long to wait for the reply (default: 30s, or the verb's own timeout and 10s)")
 	return cmd
 }

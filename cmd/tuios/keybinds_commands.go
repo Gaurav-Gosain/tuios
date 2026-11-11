@@ -69,7 +69,7 @@ Use --json to get the same rows as a JSON array.`,
 			return listKeybindings(keybindsListJSON)
 		},
 	}
-	keybindsListCmd.Flags().BoolVar(&keybindsListJSON, "json", false, "print the rows as a JSON array")
+	addJSONFlag(keybindsListCmd, &keybindsListJSON, "print the rows as a JSON array")
 	return keybindsListCmd
 }
 
@@ -109,7 +109,7 @@ manager shows.`,
 			return keybindsDoctor(keybindsJSON, keybindsGuest)
 		},
 	}
-	keybindsDoctorCmd.Flags().BoolVar(&keybindsJSON, "json", false, "emit the report as JSON")
+	addJSONFlag(keybindsDoctorCmd, &keybindsJSON, "emit the report as JSON")
 	keybindsDoctorCmd.Flags().StringVar(&keybindsGuest, "guest", "", "treat this program as the one running in the pane")
 
 	return keybindsDoctorCmd
@@ -136,7 +136,7 @@ shows the same answer.`,
 			return keybindsExplain(args[0], keybindsJSON, keybindsGuest)
 		},
 	}
-	keybindsExplainCmd.Flags().BoolVar(&keybindsJSON, "json", false, "emit the answer as JSON")
+	addJSONFlag(keybindsExplainCmd, &keybindsJSON, "emit the answer as JSON")
 	keybindsExplainCmd.Flags().StringVar(&keybindsGuest, "guest", "", "treat this program as the one running in the pane")
 
 	return keybindsExplainCmd
@@ -264,7 +264,7 @@ use.`,
 			return keybindsCheatSheet(name, cheatSheetJSON)
 		},
 	}
-	keybindsCheatSheetCmd.Flags().BoolVar(&cheatSheetJSON, "json", false, "Output as JSON")
+	addJSONFlag(keybindsCheatSheetCmd, &cheatSheetJSON)
 
 	return keybindsCheatSheetCmd
 }

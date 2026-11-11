@@ -78,11 +78,10 @@ leaves an open question open, so mark workers before they ask.`,
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
-	cmd.Flags().StringVarP(&window, "window", "w", "", "Window to mark by name or ID (default: focused)")
+	addSessionFlag(cmd, &sessionName)
+	addWindowFlag(cmd, &window, "Window to mark by name or ID (default: focused)")
 	cmd.Flags().BoolVar(&off, "off", false, "Clear the mark")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addJSONFlag(cmd, &jsonOutput)
 	return cmd
 }
 

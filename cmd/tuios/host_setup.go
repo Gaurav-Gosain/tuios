@@ -131,7 +131,7 @@ tuios never takes a password. It never accepts a changed host key.`,
 	f.StringVar(&o.as, "as", "", "This machine's name on the other machine, with --both-ways (default: its tailnet or host name)")
 	f.BoolVarP(&o.yes, "yes", "y", false, "Agree to every step the flags name")
 	f.BoolVar(&o.dryRun, "dry-run", false, "Test ssh and print the plan. Change nothing")
-	f.BoolVar(&o.json, "json", false, "Print the steps and the result as JSON")
+	addJSONFlag(cmd, &o.json, "Print the steps and the result as JSON")
 	f.BoolVar(&o.keep, "keep", false, "Keep the machine in the list when its link does not come up")
 	f.StringArrayVar(&o.sshOptions, "ssh-option", nil, "One extra argument for ssh. Repeat the flag for each one")
 	f.BoolVar(&o.tailnet, "tailnet", false, "Set up machines on your tailnet")

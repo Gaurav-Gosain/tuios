@@ -145,7 +145,7 @@ that names a missing file or makes a cycle.`,
 			return runConfigFiles(cmd.OutOrStdout(), configFilesJSON)
 		},
 	}
-	configFilesCmd.Flags().BoolVar(&configFilesJSON, "json", false, "Print the files as JSON")
+	addJSONFlag(configFilesCmd, &configFilesJSON, "Print the files as JSON")
 	return configFilesCmd
 }
 
@@ -175,7 +175,7 @@ value.`,
 			return runConfigOrigin(cmd.OutOrStdout(), key, configOriginJSON)
 		},
 	}
-	configOriginCmd.Flags().BoolVar(&configOriginJSON, "json", false, "Print the keys as JSON")
+	addJSONFlag(configOriginCmd, &configOriginJSON, "Print the keys as JSON")
 	return configOriginCmd
 }
 

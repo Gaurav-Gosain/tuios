@@ -139,13 +139,12 @@ without one (dismissed, superseded, or its pane closed).`,
 			return runAskHuman(o)
 		},
 	}
-	cmd.Flags().StringVarP(&o.session, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
-	cmd.Flags().StringVarP(&o.window, "window", "w", "", "The pane asking, where a late answer is mailed (default: your own pane)")
+	addSessionFlag(cmd, &o.session)
+	addWindowFlag(cmd, &o.window, "The pane asking, where a late answer is mailed (default: your own pane)")
 	cmd.Flags().StringArrayVarP(&o.options, "option", "o", nil, "An answer the person can pick. Give 1 to 9")
 	cmd.Flags().IntVar(&o.timeout, "timeout", 0, "Milliseconds to wait for the answer (default: 120000, at most one hour)")
 	cmd.Flags().BoolVar(&o.noWait, "no-wait", false, "Ask and return at once. The answer arrives as mail")
 	cmd.Flags().StringVar(&o.requestID, "request-id", "", "Come back for a question already asked")
-	cmd.Flags().BoolVar(&o.jsonOut, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addJSONFlag(cmd, &o.jsonOut)
 	return cmd
 }

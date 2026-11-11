@@ -57,10 +57,9 @@ type shipFlags struct {
 }
 
 func (f *shipFlags) add(cmd *cobra.Command) {
-	cmd.Flags().StringVarP(&f.session, "session", "s", "", "Session of the pane (default: this pane's, else the most recently active)")
-	cmd.Flags().StringVarP(&f.window, "window", "w", "", "The pane, by name or id (default: the focused pane)")
-	cmd.Flags().BoolVar(&f.json, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addSessionFlag(cmd, &f.session)
+	addWindowFlag(cmd, &f.window)
+	addJSONFlag(cmd, &f.json)
 }
 
 // dialShip connects for a ship verb, on this machine only.

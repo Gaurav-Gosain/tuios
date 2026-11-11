@@ -154,7 +154,7 @@ Type tuios help [path to command] for full details.
 		},
 	}
 	cmd.Flags().BoolVarP(&interactive, "interactive", "i", false, "Open the command tree in an explorer you can search")
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "Print the command tree as JSON")
+	addJSONFlag(cmd, &jsonOut, "Print the command tree as JSON")
 	return cmd
 }
 
@@ -239,8 +239,7 @@ It needs a running daemon. Press q or esc to leave it.`,
 			return explore.Run(configExplorer(sessionName, opts))
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addSessionFlag(cmd, &sessionName)
 	return cmd
 }
 

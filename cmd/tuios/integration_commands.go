@@ -363,7 +363,7 @@ current install runs, for a tuios that is not on PATH.`,
 			return printIntegrationStatus(os.Stdout, statuses, asJSON)
 		},
 	}
-	cmd.Flags().BoolVar(&asJSON, "json", false, "Print the report as JSON")
+	addJSONFlag(cmd, &asJSON, "Print the report as JSON")
 	cmd.Flags().StringVar(&command, "command", "tuios", "Program a current install runs")
 	return cmd
 }

@@ -39,7 +39,7 @@ environment. The output never shows a token or a full address.`,
 			return runNotifyTest(cmd.Context(), cmd.OutOrStdout(), jsonOutput)
 		},
 	}
-	test.Flags().BoolVar(&jsonOutput, "json", false, "Output the result per provider as JSON")
+	addJSONFlag(test, &jsonOutput, "Output the result per provider as JSON")
 	cmd.AddCommand(test, newNotifyPushCommand())
 	return cmd
 }

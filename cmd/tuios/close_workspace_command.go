@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
@@ -44,16 +43,13 @@ A pane that runs this command needs the admin grant.`,
 			return runCloseWorkspace(sessionName, ws, jsonOutput)
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addSessionFlag(cmd, &sessionName)
+	addJSONFlag(cmd, &jsonOutput)
 	return cmd
 }
 
 func runCloseWorkspace(sessionName string, ws int, jsonOutput bool) error {
-	if sessionName == "" {
-		sessionName = os.Getenv("TUIOS_SESSION")
-	}
+	sessionName = paneSessionOr(sessionName)
 	t, err := dialSessionTarget(sessionName)
 	if err != nil {
 		return err

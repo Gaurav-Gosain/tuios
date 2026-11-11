@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"maps"
-	"os"
 	"slices"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
@@ -42,19 +41,15 @@ with -s.`,
   tuios display-env -s work --json`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			name := sessionName
-			if name == "" {
-				name = os.Getenv("TUIOS_SESSION")
-			}
+			name := paneSessionOr(sessionName)
 			if name == "" {
 				return errfmt.Errorf("name the session with -s. Outside a pane there is no session to use")
 			}
 			return runDisplayEnv(name, jsonOut)
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Session whose display to print (default: the pane's session)")
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output as JSON, with the link and the socket it points at")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addSessionFlag(cmd, &sessionName, "Session whose display to print (default: the pane's session)")
+	addJSONFlag(cmd, &jsonOut, "Output as JSON, with the link and the socket it points at")
 	return cmd
 }
 

@@ -108,8 +108,8 @@ once a command has run there, and run refuses it.`,
 			return printDoctorShell(os.Stdout, report, asJSON)
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Only this session (default: every session)")
-	cmd.Flags().BoolVar(&asJSON, "json", false, "Print the report as JSON")
+	addSessionFlag(cmd, &sessionName, "Only this session (default: every session)")
+	addJSONFlag(cmd, &asJSON, "Print the report as JSON")
 	return cmd
 }
 

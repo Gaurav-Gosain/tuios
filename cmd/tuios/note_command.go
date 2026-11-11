@@ -41,9 +41,8 @@ one pane.`,
 
 // noteFlags adds the -s and -w flags every note command takes.
 func noteFlags(cmd *cobra.Command, sessionName, window *string) {
-	cmd.Flags().StringVarP(sessionName, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
-	cmd.Flags().StringVarP(window, "window", "w", "", "A pane by name or id, for the pane's note (default: the session's note)")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addSessionFlag(cmd, sessionName)
+	addWindowFlag(cmd, window, "A pane by name or id, for the pane's note (default: the session's note)")
 }
 
 func newNoteSetCommand() *cobra.Command {
@@ -62,7 +61,7 @@ spaces. Newlines become spaces, and the note is cut to 200 bytes.`,
 		},
 	}
 	noteFlags(cmd, &sessionName, &window)
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
+	addJSONFlag(cmd, &jsonOutput)
 	return cmd
 }
 
@@ -79,7 +78,7 @@ func newNoteGetCommand() *cobra.Command {
 		},
 	}
 	noteFlags(cmd, &sessionName, &window)
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
+	addJSONFlag(cmd, &jsonOutput)
 	return cmd
 }
 
@@ -96,7 +95,7 @@ func newNoteClearCommand() *cobra.Command {
 		},
 	}
 	noteFlags(cmd, &sessionName, &window)
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
+	addJSONFlag(cmd, &jsonOutput)
 	return cmd
 }
 

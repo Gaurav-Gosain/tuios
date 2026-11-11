@@ -65,7 +65,7 @@ oldest go.
 			return runListBuffers(jsonOutput)
 		},
 	}
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
+	addJSONFlag(cmd, &jsonOutput)
 	return cmd
 }
 
@@ -90,7 +90,7 @@ func newShowBufferCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&name, "buffer", "b", "", "The buffer (default: the newest)")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
+	addJSONFlag(cmd, &jsonOutput)
 	_ = cmd.RegisterFlagCompletionFunc("buffer", completeBufferNames)
 	return cmd
 }
@@ -144,7 +144,7 @@ is yours. A buffer a pane without admin sets is that pane's own.
 	}
 	cmd.Flags().StringVarP(&name, "buffer", "b", "", "The buffer to set (default: a new buffer)")
 	cmd.Flags().BoolVarP(&appendTo, "append", "a", false, "Add the text to the end of the buffer")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
+	addJSONFlag(cmd, &jsonOutput)
 	_ = cmd.RegisterFlagCompletionFunc("buffer", completeBufferNames)
 	return cmd
 }
@@ -169,7 +169,7 @@ func newDeleteBufferCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&name, "buffer", "b", "", "The buffer (default: the newest)")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
+	addJSONFlag(cmd, &jsonOutput)
 	_ = cmd.RegisterFlagCompletionFunc("buffer", completeBufferNames)
 	return cmd
 }
@@ -208,12 +208,11 @@ and types it. A pane does not paste into another pane that waits on a prompt
 	}
 	cmd.Flags().BoolVarP(&raw, "raw", "r", false, "Keep each line feed instead of turning it into a carriage return")
 	cmd.Flags().StringVarP(&name, "buffer", "b", "", "The buffer (default: the newest)")
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
-	cmd.Flags().StringVarP(&window, "window", "w", "", "Target window by name or ID (default: focused)")
+	addSessionFlag(cmd, &sessionName)
+	addWindowFlag(cmd, &window)
 	cmd.Flags().BoolVarP(&del, "delete", "d", false, "Delete the buffer after the paste")
 	cmd.Flags().BoolVar(&allowBlocked, "allow-blocked", false, "From a pane, paste into a pane that waits on a prompt. Read the prompt first")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addJSONFlag(cmd, &jsonOutput)
 	_ = cmd.RegisterFlagCompletionFunc("buffer", completeBufferNames)
 	return cmd
 }

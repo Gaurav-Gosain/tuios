@@ -83,7 +83,7 @@ minutes after that. A sign-in page that expired is replaced by a new one.`,
 		},
 	}
 	cmd.Flags().BoolVar(&printOnly, "print", false, "Print the address and do not open a browser")
-	cmd.Flags().BoolVar(&asJSON, "json", false, "Print the result as JSON")
+	addJSONFlag(cmd, &asJSON)
 	return cmd
 }
 

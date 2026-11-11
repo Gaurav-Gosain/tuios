@@ -147,8 +147,8 @@ goes wrong on the tuios side.`,
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&o.session, "session", "s", "", "Session of the pane to report for (default: TUIOS_SESSION)")
-	cmd.Flags().StringVarP(&o.window, "window", "w", "", "Pane to report for (default: TUIOS_PANE_ID, then the controlling terminal, then the parent processes)")
+	addSessionFlag(cmd, &o.session, "Session of the pane to report for (default: TUIOS_SESSION)")
+	addWindowFlag(cmd, &o.window, "Pane to report for (default: TUIOS_PANE_ID, then the controlling terminal, then the parent processes)")
 	cmd.Flags().StringVar(&o.then, "then", "", "Your own status line command: run with the same stdin, its output printed unchanged")
 	cmd.Flags().BoolVar(&o.explain, "explain", false, "Print what was decided and why to stderr")
 	cmd.Flags().BoolVar(&o.turnEnd, "turn-end", false, "The turn just ended: send changed values now, whatever the interval")

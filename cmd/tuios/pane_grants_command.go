@@ -51,7 +51,7 @@ to nothing new.`,
 			return runPaneGrants(jsonOutput)
 		},
 	}
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
+	addJSONFlag(cmd, &jsonOutput)
 	return cmd
 }
 
@@ -96,12 +96,11 @@ TUIOS_PANE_GRANTS its process started with is not rewritten.`,
 			return runSetPaneGrants(sessionName, window, grants, reset, jsonOutput)
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Session of the pane (default: this pane's, else the most recently active)")
-	cmd.Flags().StringVarP(&window, "window", "w", "", "The pane, by name or id (default: this pane)")
+	addSessionFlag(cmd, &sessionName)
+	addWindowFlag(cmd, &window, "The pane, by name or id (default: this pane)")
 	cmd.Flags().StringSliceVar(&grants, "grants", nil, "The grants, comma separated: read, write, fan, files, task, respond, admin, or none")
 	cmd.Flags().BoolVar(&reset, "reset", false, "Give the pane the default of [agents.permissions]")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addJSONFlag(cmd, &jsonOutput)
 	_ = cmd.RegisterFlagCompletionFunc("grants", completeGrantNames)
 	return cmd
 }

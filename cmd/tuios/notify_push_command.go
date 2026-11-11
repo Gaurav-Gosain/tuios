@@ -101,7 +101,7 @@ an object with endpoint, p256dh and auth.`,
 		},
 	}
 	for _, c := range []*cobra.Command{register, ls, rm} {
-		c.Flags().BoolVar(&jsonOutput, "json", false, "Output the daemon's reply as JSON")
+		addJSONFlag(c, &jsonOutput, "Output the daemon's reply as JSON")
 		c.Flags().StringVar(&nonce, "human-nonce", "", "Use this nonce instead of a presence of this command's own")
 		cmd.AddCommand(c)
 	}

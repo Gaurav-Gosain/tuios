@@ -65,16 +65,15 @@ outside every pane. Works with no client attached, and turns tiling on.`,
 			})
 		},
 	}
+	addSessionFlag(cmd, &sessionName)
+	addWindowFlag(cmd, &window, "Pane to split by name or ID (default: this pane, else the focused one)")
+	addJSONFlag(cmd, &jsonOutput)
 	f := cmd.Flags()
-	f.StringVarP(&sessionName, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
-	f.StringVarP(&window, "window", "w", "", "Pane to split by name or ID (default: this pane, else the focused one)")
 	f.StringVar(&name, "name", "", "Name for the new pane")
 	f.StringVar(&cwd, "cwd", "", "Directory to start in (default: your directory in a pane, else the focused pane's)")
 	f.IntVar(&ratio, "ratio", 0, "The new pane's share of the space, in percent (default: half)")
 	f.BoolVar(&noFocus, "no-focus", false, "Leave the focus where it is")
 	f.BoolVar(&keepOpen, "keep-open", false, "Keep the pane after its program exits")
-	f.BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	return cmd
 }
 
@@ -93,11 +92,9 @@ func newLayoutCommands() []*cobra.Command {
 			}
 			return runLayoutVerb(c.Name(), sessionName, window, p, jsonOutput, layoutLine)
 		}
-		f := c.Flags()
-		f.StringVarP(&sessionName, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
-		f.StringVarP(&window, "window", "w", "", "Pane by name or ID (default: this pane, else the focused one)")
-		f.BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-		_ = c.RegisterFlagCompletionFunc("session", completeSessionNames)
+		addSessionFlag(c, &sessionName)
+		addWindowFlag(c, &window, "Pane by name or ID (default: this pane, else the focused one)")
+		addJSONFlag(c, &jsonOutput)
 		cmds = append(cmds, c)
 	}
 	add("zoom-window", "Zoom a pane to fill its workspace, or end the zoom",
@@ -198,9 +195,8 @@ split tree. Works with no client attached. Load it with 'tuios layout load'.`,
 			})
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addSessionFlag(cmd, &sessionName)
+	addJSONFlag(cmd, &jsonOutput)
 	return cmd
 }
 
@@ -225,9 +221,8 @@ A bsp layout gets its split tree back. Works with no client attached.`,
 			})
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addSessionFlag(cmd, &sessionName)
+	addJSONFlag(cmd, &jsonOutput)
 	return cmd
 }
 

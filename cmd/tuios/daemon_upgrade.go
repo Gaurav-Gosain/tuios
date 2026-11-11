@@ -173,7 +173,7 @@ upgrade a named daemon.`,
 		},
 	}
 	cmd.Flags().StringVar(&binary, "binary", "", "The tuios binary to run the daemon as. Defaults to this tuios")
-	cmd.Flags().BoolVar(&asJSON, "json", false, "Print the outcome as one JSON object")
+	addJSONFlag(cmd, &asJSON, "Print the outcome as one JSON object")
 	cmd.Flags().BoolVar(&orRestart, "or-restart", false, "When the daemon cannot be upgraded live, restart it with the binary instead, which ends running programs. Start one when none runs")
 	return cmd
 }

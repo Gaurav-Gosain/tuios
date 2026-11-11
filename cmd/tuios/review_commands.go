@@ -72,16 +72,15 @@ past that are listed with their counts only.`,
 			}, jsonOutput)
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Session of the pane (default: this pane's, else the most recently active)")
-	cmd.Flags().StringVarP(&window, "window", "w", "", "The pane, by name or id (default: the focused pane)")
+	addSessionFlag(cmd, &sessionName)
+	addWindowFlag(cmd, &window)
 	cmd.Flags().StringVar(&base, "base", "", "Diff against this branch, tag or commit instead of the worktree's base")
 	cmd.Flags().StringVar(&against, "against", "", "Diff against another attempt of the same fan, by session")
 	cmd.Flags().StringArrayVar(&paths, "path", nil, "Only this path, relative to the repository root. Repeatable")
 	cmd.Flags().BoolVar(&uncommitted, "uncommitted", false, "Only what is not committed yet")
 	cmd.Flags().BoolVar(&stat, "stat", false, "List the changed files with their counts, without the diff")
 	cmd.Flags().IntVar(&context, "context", 3, "Lines of context around each change, 0 to 20")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addJSONFlag(cmd, &jsonOutput)
 	_ = cmd.RegisterFlagCompletionFunc("against", completeWorktreeSessions)
 	cmd.AddCommand(newReviewNoteCommand(), newReviewNotesCommand(), newReviewSendCommand())
 	return cmd
@@ -410,14 +409,13 @@ the ones left from the attached client.`,
 			return runReviewNote(os.Stdout, sessionName, window, params, jsonOutput)
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Session of the pane (default: this pane's, else the most recently active)")
-	cmd.Flags().StringVarP(&window, "window", "w", "", "The pane the note is for, by name or id (default: the focused pane)")
+	addSessionFlag(cmd, &sessionName)
+	addWindowFlag(cmd, &window, "The pane the note is for, by name or id (default: the focused pane)")
 	cmd.Flags().StringVar(&side, "side", "", "new (default) or old: which side of the diff LINE is on")
 	cmd.Flags().StringVar(&hunk, "hunk", "", "Put the note on the whole hunk with this header")
 	cmd.Flags().StringVar(&edit, "edit", "", "Replace the text of the note with this id")
 	cmd.Flags().StringVar(&remove, "remove", "", "Remove the note with this id")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addJSONFlag(cmd, &jsonOutput)
 	return cmd
 }
 
@@ -443,11 +441,10 @@ remove.`,
 			return runReviewNote(os.Stdout, sessionName, window, map[string]any{"action": action}, jsonOutput)
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Session of the pane (default: this pane's, else the most recently active)")
-	cmd.Flags().StringVarP(&window, "window", "w", "", "The pane, by name or id (default: the focused pane)")
+	addSessionFlag(cmd, &sessionName)
+	addWindowFlag(cmd, &window)
 	cmd.Flags().BoolVar(&clearAll, "clear", false, "Remove every note you may remove")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addJSONFlag(cmd, &jsonOutput)
 	return cmd
 }
 
@@ -548,12 +545,11 @@ one. It says "from the person" only when sent from the attached client.`,
 			return runReviewSend(os.Stdout, sessionName, window, ids, now, jsonOutput)
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Session of the pane (default: this pane's, else the most recently active)")
-	cmd.Flags().StringVarP(&window, "window", "w", "", "The agent's pane, by name or id (default: the focused pane)")
+	addSessionFlag(cmd, &sessionName)
+	addWindowFlag(cmd, &window, "The agent's pane, by name or id (default: the focused pane)")
 	cmd.Flags().StringArrayVar(&ids, "id", nil, "Send only this note. Repeatable")
 	cmd.Flags().BoolVar(&now, "now", false, "Send only if the agent is at rest now. Never queue")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addJSONFlag(cmd, &jsonOutput)
 	return cmd
 }
 

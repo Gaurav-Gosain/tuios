@@ -64,9 +64,8 @@ type taskFlags struct {
 }
 
 func (f *taskFlags) register(cmd *cobra.Command) {
-	cmd.Flags().StringVarP(&f.session, "session", "s", "", "Session of the cards (default: this pane's, else the most recently active)")
-	cmd.Flags().BoolVar(&f.json, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addSessionFlag(cmd, &f.session, "Session of the cards (default: this pane's, else the most recently active)")
+	addJSONFlag(cmd, &f.json)
 }
 
 // taskRow is one card as the task verbs return it.
@@ -560,7 +559,7 @@ nothing to take, it fails with no_task.`,
 	}
 	f.register(cmd)
 	cmd.Flags().BoolVar(&next, "next", false, "Take the oldest open card no pane holds")
-	cmd.Flags().StringVarP(&window, "window", "w", "", "The pane that takes the card, by name or id (default: this pane)")
+	addWindowFlag(cmd, &window, "The pane that takes the card, by name or id (default: this pane)")
 	return cmd
 }
 

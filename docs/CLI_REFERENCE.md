@@ -3192,7 +3192,7 @@ tuios checkpoint restore N [-s <session>] [-w <window>] [--force] [--json]
 ```
 
 **Flags:**
-- `-s, --session <name>`: Session of the pane (default: this pane's, else the most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `-w, --window <target>`: The pane, by name or ID (default: the focused pane)
 - `--stat` (`diff`): The list of changed files with their counts, without the diff
 - `--path <path>` (`diff`): Only this path, relative to the repository root. Repeatable
@@ -3223,7 +3223,7 @@ tuios ship status [-s <session>] [-w <window>] [--refresh] [--json]
 ```
 
 **Flags:**
-- `-s, --session <name>`: Session of the pane (default: this pane's, else the most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `-w, --window <target>`: The pane, by name or ID (default: the pane this runs in, else the focused pane)
 - `-m, --message <text>` (`commit`): The commit message. The default is the pane's last prompt, or the line its last turn ended with
 - `--force` (`commit`): Commit while the agent is working or waiting on a prompt

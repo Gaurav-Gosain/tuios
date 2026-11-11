@@ -198,7 +198,7 @@ code and the fingerprint on the phone with the ones here before you accept.`,
 	f.BoolVar(&o.listenAll, "listen-all", false, "Let the listener use every interface (0.0.0.0 or [::]) or a public address")
 	f.BoolVar(&o.acceptLocal, "accept-local", false, "Accept a request from this machine, for an emulator or a userspace tailscaled. Programs here that can read the code can then pair")
 	f.DurationVar(&o.timeout, "timeout", 5*time.Minute, "Time the code works")
-	f.BoolVar(&o.jsonOut, "json", false, "Print the link and the result as JSON lines")
+	addJSONFlag(cmd, &o.jsonOut, "Print the link and the result as JSON lines")
 	f.StringSliceVar(&o.advertiseSSH, "advertise-ssh", nil, "The ssh addresses for the phone, as HOST:PORT. They replace the addresses tuios finds")
 	f.StringSliceVar(&o.advertisePair, "advertise-pair", nil, "The pairing addresses for the phone, as HOST:PORT. They replace the addresses tuios finds")
 	f.StringVar(&o.hostKey, "host-key", "", "The ssh host public key to give the phone (default the first of /etc/ssh/ssh_host_{ed25519,ecdsa,rsa}_key.pub)")

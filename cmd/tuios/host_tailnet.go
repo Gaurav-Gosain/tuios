@@ -90,7 +90,7 @@ does not dial a tailnet address itself.
 			return runHostsTailnet(asJSON)
 		},
 	}
-	cmd.Flags().BoolVar(&asJSON, "json", false, "Output as JSON")
+	addJSONFlag(cmd, &asJSON)
 	return cmd
 }
 

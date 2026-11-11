@@ -103,13 +103,12 @@ what the agent last said, and its state now. The test commands are
 			return runAgentLog(o, os.Stdout)
 		},
 	}
-	cmd.Flags().StringVarP(&o.session, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
-	cmd.Flags().StringVarP(&o.window, "window", "w", "", "Target window by name or ID (default: focused)")
+	addSessionFlag(cmd, &o.session)
+	addWindowFlag(cmd, &o.window)
 	cmd.Flags().DurationVar(&o.since, "since", 0, "Only what happened in this long, such as 30m (default: everything the daemon kept)")
 	cmd.Flags().IntVar(&o.limit, "limit", 64, "Show at most this many entries, the newest, up to 256")
 	cmd.Flags().BoolVar(&o.recap, "recap", false, "Print a summary instead of the entries")
-	cmd.Flags().BoolVar(&o.json, "json", false, "Output the result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addJSONFlag(cmd, &o.json)
 	return cmd
 }
 

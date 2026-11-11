@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -36,18 +35,15 @@ full-screen program, such as an editor, uses the pane.`,
 			return runClearHistory(sessionName, window, screen, jsonOutput)
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
-	cmd.Flags().StringVarP(&window, "window", "w", "", "Target window by name or ID (default: the focused pane)")
+	addSessionFlag(cmd, &sessionName)
+	addWindowFlag(cmd, &window, "Target window by name or ID (default: the focused pane)")
 	cmd.Flags().BoolVar(&screen, "screen", false, "Also remove the rows above the prompt")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addJSONFlag(cmd, &jsonOutput)
 	return cmd
 }
 
 func runClearHistory(sessionName, window string, screen, jsonOutput bool) error {
-	if sessionName == "" {
-		sessionName = os.Getenv("TUIOS_SESSION")
-	}
+	sessionName = paneSessionOr(sessionName)
 	t, err := dialTarget(sessionName, window)
 	if err != nil {
 		return err

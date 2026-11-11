@@ -166,7 +166,7 @@ directory on the host instead.`,
 	newCmd.Flags().StringVar(&newName, "name", "", "Session name (default: <repo>-<branch>)")
 	newCmd.Flags().StringVar(&newAgent, "agent", "", "Start this agent CLI in the session instead of a shell")
 	newCmd.Flags().BoolVarP(&newDetach, "detach", "d", false, "Create the session headless without attaching a client")
-	newCmd.Flags().BoolVar(&newJSON, "json", false, "Output result as JSON")
+	addJSONFlag(newCmd, &newJSON)
 	newCmd.Flags().StringVar(&newHost, "host", "", "Make the worktree on this machine from the [hosts] table")
 	newCmd.Flags().BoolVar(&newClone, "clone", false, "With --host, clone the repository there when the host has no checkout")
 	newSetup.add(newCmd)
@@ -201,7 +201,7 @@ the daemon's answer alone.`,
 	}
 	lsCmd.Flags().StringVar(&lsRepo, "repo", "", "Only worktrees of this repository, by name")
 	lsCmd.Flags().StringVar(&lsGroup, "group", "", "Only the sessions of one fan-out, by its branch stem")
-	lsCmd.Flags().BoolVar(&lsJSON, "json", false, "Output as JSON")
+	addJSONFlag(lsCmd, &lsJSON)
 	lsCmd.Flags().BoolVar(&lsFast, "fast", false, "Skip the git walk behind the change columns, which is the slow part of the listing")
 	lsCmd.Flags().StringVar(&lsHost, "host", "", "List the worktree sessions on this machine from the [hosts] table")
 	_ = lsCmd.RegisterFlagCompletionFunc("host", completeConfiguredHosts)
@@ -238,7 +238,7 @@ HOST:SESSION removes a worktree session on another machine.`,
 	rmCmd.Flags().BoolVar(&rmStash, "stash", false, "Keep uncommitted changes in git stash before removing")
 	rmCmd.Flags().BoolVar(&rmForce, "force", false, "Discard uncommitted changes")
 	rmCmd.Flags().BoolVar(&rmKeepSession, "keep-session", false, "Leave the session running after the worktree is removed")
-	rmCmd.Flags().BoolVar(&rmJSON, "json", false, "Output result as JSON")
+	addJSONFlag(rmCmd, &rmJSON)
 
 	var diffStat bool
 	diffCmd := &cobra.Command{
@@ -293,7 +293,7 @@ branch that already exists here is refused, so nothing is overwritten.`,
 	pullCmd.Flags().StringVar(&pullBranch, "branch", "", "Name of the branch here (default: the branch's name there)")
 	pullCmd.Flags().StringVar(&pullName, "name", "", "Session name (default: <repo>-<branch>)")
 	pullCmd.Flags().BoolVarP(&pullDetach, "detach", "d", false, "Create the session headless without attaching a client")
-	pullCmd.Flags().BoolVar(&pullJSON, "json", false, "Output result as JSON")
+	addJSONFlag(pullCmd, &pullJSON)
 
 	worktreeCmd.AddCommand(newCmd, lsCmd, rmCmd, diffCmd, pullCmd)
 	return worktreeCmd
@@ -425,7 +425,7 @@ pull HOST:SESSION' brings its work here.`,
 	fanCmd.Flags().StringVar(&fanTask, "task", "", "The task card the fan works on, such as t3")
 	fanCmd.Flags().StringVar(&fanTaskSession, "task-session", "", "The session of --task (default: this pane's session, else the most recently active)")
 	fanCmd.Flags().BoolVar(&fanWait, "wait", false, "Return only when every prompt is sent or given up on")
-	fanCmd.Flags().BoolVar(&fanJSON, "json", false, "Output result as JSON")
+	addJSONFlag(fanCmd, &fanJSON)
 	fanCmd.Flags().StringVar(&fanHost, "host", "", "Run the fan-out on this machine from the [hosts] table, or any for the machine with the most room (place-agent)")
 	fanCmd.Flags().BoolVar(&fanClone, "clone", false, "With --host, clone the repository there when the host has no checkout")
 	fanCmd.Flags().StringSliceVar(&fanGrants, "grants", nil, "What every agent may do through tuios, comma separated: read, write, fan, files, task, respond, admin, or none (default: [agents.permissions], or the calling pane's own)")
@@ -473,7 +473,7 @@ its siblings there.`,
 	}
 	keepCmd.Flags().BoolVar(&keepStash, "stash", false, "Keep every sibling's uncommitted changes in git stash before removing it")
 	keepCmd.Flags().BoolVar(&keepForce, "force", false, "Discard every sibling's uncommitted changes")
-	keepCmd.Flags().BoolVar(&keepJSON, "json", false, "Output result as JSON")
+	addJSONFlag(keepCmd, &keepJSON)
 	keepCmd.Flags().BoolVar(&keepMerge, "merge", false, "First merge the kept session's branch into its base in the main checkout")
 	keepCmd.Flags().BoolVar(&keepSquash, "squash", false, "With --merge: make one commit with the branch's change")
 	keepCmd.Flags().BoolVar(&keepFFOnly, "ff-only", false, "With --merge: only fast-forward")

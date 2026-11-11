@@ -151,14 +151,13 @@ last 1 MiB. --cwd sets the folder on that machine (default: its home).`,
 			return runInPane(sessionName, windowTarget, args, timeout, lines, jsonOutput)
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
-	cmd.Flags().StringVarP(&windowTarget, "window", "w", "", "Target window by name or ID (default: focused)")
+	addSessionFlag(cmd, &sessionName)
+	addWindowFlag(cmd, &windowTarget)
 	cmd.Flags().IntVar(&timeout, "timeout", 0, "Milliseconds to wait for the command (default: 30000)")
 	cmd.Flags().IntVar(&lines, "lines", 0, "Keep only the last N lines of the output (0 keeps all)")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
+	addJSONFlag(cmd, &jsonOutput)
 	cmd.Flags().StringVar(&host, "host", "", "Run on this linked machine, with no pane")
 	cmd.Flags().StringVar(&cwd, "cwd", "", "With --host: the folder to run in on that machine (default: its home)")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	_ = cmd.RegisterFlagCompletionFunc("host", completeConfiguredHosts)
 	return cmd
 }

@@ -43,10 +43,9 @@ client, and a detach forgets it. Set its size and corner in the [pip] table.`,
 			return runPiP(session, window, off, jsonOutput)
 		},
 	}
-	cmd.Flags().StringVarP(&session, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
+	addSessionFlag(cmd, &session)
 	cmd.Flags().BoolVar(&off, "off", false, "Unpin whatever is pinned")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addJSONFlag(cmd, &jsonOutput)
 	return cmd
 }
 

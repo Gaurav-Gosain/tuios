@@ -142,7 +142,7 @@ folder and the hosts' home folders.`,
 	f.BoolVarP(&o.force, "force", "f", false, "The same as --conflict replace")
 	f.BoolVarP(&o.keepBoth, "keep-both", "b", false, "The same as --conflict keep-both")
 	f.BoolVar(&o.contents, "contents", false, "Copy what is inside a SRC folder, not the folder itself")
-	f.BoolVar(&o.json, "json", false, "Print the copy's events as JSON lines on stdout")
+	addJSONFlag(cmd, &o.json, "Print the copy's events as JSON lines on stdout")
 	f.BoolVarP(&o.quiet, "quiet", "q", false, "Print only errors")
 	f.BoolVar(&o.detach, "detach", false, "Start the copy, print its id, and return")
 	f.BoolVar(&o.noPerms, "no-perms", false, "Do not copy permission bits")

@@ -57,7 +57,7 @@ SetThreadExecutionState.`,
 			return runKeepAwake(cmd.OutOrStdout(), args, jsonOut)
 		},
 	}
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output as JSON")
+	addJSONFlag(cmd, &jsonOut)
 	return cmd
 }
 

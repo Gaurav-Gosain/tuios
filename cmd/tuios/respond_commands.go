@@ -184,10 +184,9 @@ A window on another machine is named HOST:SESSION:WINDOW.`,
 			return runPeekPrompt(sessionName, window, jsonOutput)
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
-	cmd.Flags().StringVarP(&window, "window", "w", "", "The blocked pane, by name or ID, or HOST:SESSION:WINDOW")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addSessionFlag(cmd, &sessionName)
+	addWindowFlag(cmd, &window, "The blocked pane, by name or ID, or HOST:SESSION:WINDOW")
+	addJSONFlag(cmd, &jsonOutput)
 	return cmd
 }
 
@@ -232,12 +231,11 @@ not_human.`,
 			return runRespond(sessionName, window, args[0], value, promptID, timeout, jsonOutput)
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
-	cmd.Flags().StringVarP(&window, "window", "w", "", "The blocked pane, by name or ID, or HOST:SESSION:WINDOW")
+	addSessionFlag(cmd, &sessionName)
+	addWindowFlag(cmd, &window, "The blocked pane, by name or ID, or HOST:SESSION:WINDOW")
 	cmd.Flags().StringVar(&promptID, "prompt-id", "", "The prompt id peek-prompt printed. A prompt that changed since is refused")
 	cmd.Flags().IntVar(&timeout, "timeout", 0, "Milliseconds to wait for the pane to move on (default 5000, at most 30000)")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addJSONFlag(cmd, &jsonOutput)
 	cmd.ValidArgsFunction = func(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 		if len(args) == 0 {
 			return harness.AnswerActions, cobra.ShellCompDirectiveNoFileComp

@@ -198,7 +198,7 @@ func newDaemonServiceStatusCommand() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&asJSON, "json", false, "Print the status as JSON")
+	addJSONFlag(cmd, &asJSON, "Print the status as JSON")
 	return cmd
 }
 

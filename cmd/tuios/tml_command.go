@@ -94,7 +94,7 @@ patch or tuios tml replace. That makes the script the surface's owner.`,
 			return runTMLShow(args[0], o, os.Stdin, os.Stdout)
 		},
 	}
-	cmd.Flags().StringVarP(&o.session, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
+	addSessionFlag(cmd, &o.session)
 	cmd.Flags().BoolVar(&o.popup, "popup", false, "Show it as a popup (the default)")
 	cmd.Flags().BoolVar(&o.pane, "pane", false, "Show it as a tiled pane")
 	cmd.Flags().StringVar(&o.name, "name", "", "Name for the window (default: the document's title)")
@@ -103,11 +103,10 @@ patch or tuios tml replace. That makes the script the surface's owner.`,
 	cmd.Flags().IntVar(&o.workspace, "workspace", 0, "Workspace to open it on (default: the current one)")
 	cmd.Flags().BoolVar(&o.wait, "wait", false, "Stay open until the surface closes, and print its value")
 	cmd.Flags().IntVar(&o.timeout, "timeout", 0, "With --wait: milliseconds to wait (default: as long as it is open)")
-	cmd.Flags().BoolVar(&o.jsonOut, "json", false, "Output the result as JSON")
+	addJSONFlag(cmd, &o.jsonOut)
 	cmd.Flags().BoolVar(&o.events, "events", false, "Print the surface's events as JSON lines until it closes")
 	cmd.MarkFlagsMutuallyExclusive("popup", "pane")
 	cmd.MarkFlagsMutuallyExclusive("wait", "events")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	return cmd
 }
 
@@ -268,7 +267,7 @@ it from the person's answer. Without VALUE it prints null.`,
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output the result as JSON")
+	addJSONFlag(cmd, &jsonOut)
 	return cmd
 }
 
@@ -416,7 +415,6 @@ func newTMLListCommand() *cobra.Command {
 			return tmlCall("tml-list", params)
 		},
 	}
-	cmd.Flags().StringVarP(&sess, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addSessionFlag(cmd, &sess)
 	return cmd
 }

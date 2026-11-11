@@ -178,7 +178,7 @@ func newPluginsListCommand() *cobra.Command {
 			return tw.Flush()
 		},
 	}
-	cmd.Flags().BoolVar(&asJSON, "json", false, "Print JSON")
+	addJSONFlag(cmd, &asJSON)
 	return cmd
 }
 
@@ -211,7 +211,7 @@ func newPluginsInfoCommand() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&asJSON, "json", false, "Print JSON")
+	addJSONFlag(cmd, &asJSON)
 	return cmd
 }
 
@@ -597,7 +597,7 @@ func newPluginsLogCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().IntVar(&limit, "limit", 50, "How many runs to show, from 1 to 200")
-	cmd.Flags().BoolVar(&asJSON, "json", false, "Print JSON")
+	addJSONFlag(cmd, &asJSON)
 	return cmd
 }
 
@@ -663,7 +663,7 @@ func newPluginsStatsCommand() *cobra.Command {
 			return tw.Flush()
 		},
 	}
-	cmd.Flags().BoolVar(&asJSON, "json", false, "Print JSON")
+	addJSONFlag(cmd, &asJSON)
 	return cmd
 }
 

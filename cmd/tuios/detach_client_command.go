@@ -51,10 +51,9 @@ From a pane, this command needs the admin grant.`,
 		},
 	}
 	cmd.Flags().StringVar(&clientID, "client", "", "Detach the client with this id, from tuios list-clients")
-	cmd.Flags().StringVarP(&fromSession, "session", "s", "", "Detach every client of this session")
+	addSessionFlag(cmd, &fromSession, "Detach every client of this session")
 	cmd.Flags().BoolVarP(&allOther, "all-other", "a", false, "Keep one client and detach every other client of its session")
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addJSONFlag(cmd, &jsonOut)
 	return cmd
 }
 

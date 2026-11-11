@@ -121,8 +121,8 @@ given.`,
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&o.Session, "session", "s", "", "Session of the pane to report for (default: TUIOS_SESSION)")
-	cmd.Flags().StringVarP(&o.Window, "window", "w", "", "Pane to report for, by window id or name (default: TUIOS_PANE_ID, then the controlling terminal, then the parent processes)")
+	addSessionFlag(cmd, &o.Session, "Session of the pane to report for (default: TUIOS_SESSION)")
+	addWindowFlag(cmd, &o.Window, "Pane to report for, by window id or name (default: TUIOS_PANE_ID, then the controlling terminal, then the parent processes)")
 	cmd.Flags().BoolVar(&o.Explain, "explain", false, "Print what was decided and why to stderr")
 	cmd.Flags().DurationVar(&o.Timeout, "timeout", agenthook.Deadline, "Give up after this long")
 	cmd.Flags().IntVar(&o.Integration, "integration", 0, "Version marker of a managed hook entry. tuios ignores it")

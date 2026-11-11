@@ -192,7 +192,7 @@ time each one last changed. 'tuios tape dir' prints the directory.`,
 			return listTapeFiles(tapeListJSON)
 		},
 	}
-	tapeListCmd.Flags().BoolVar(&tapeListJSON, "json", false, "Output as JSON")
+	addJSONFlag(tapeListCmd, &tapeListJSON)
 
 	tapeDirCmd := &cobra.Command{
 		Use:   "dir",
@@ -537,14 +537,13 @@ it matched.`,
 			return runSendKeys(sendKeysSession, args[0], sendKeysLiteral, sendKeysRaw, sendKeysWindow, sendKeysRepeat, sendKeysAllowBlocked, sendKeysJSON)
 		},
 	}
-	sendKeysCmd.Flags().StringVarP(&sendKeysSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
+	addSessionFlag(sendKeysCmd, &sendKeysSession)
 	sendKeysCmd.Flags().BoolVarP(&sendKeysLiteral, "literal", "l", false, "Write the argument to the window's terminal unchanged, with no key names")
 	sendKeysCmd.Flags().BoolVarP(&sendKeysRaw, "raw", "r", false, "Treat each character as a separate key (no splitting on space/comma)")
-	sendKeysCmd.Flags().StringVarP(&sendKeysWindow, "window", "w", "", "Target window: id, index, name or id prefix (default: the attached client, else the focused window)")
+	addWindowFlag(sendKeysCmd, &sendKeysWindow, "Target window: id, index, name or id prefix (default: the attached client, else the focused window)")
 	sendKeysCmd.Flags().IntVarP(&sendKeysRepeat, "repeat", "N", 1, "Send the whole sequence this many times (1 to 1000)")
-	sendKeysCmd.Flags().BoolVar(&sendKeysJSON, "json", false, "Output result as JSON")
+	addJSONFlag(sendKeysCmd, &sendKeysJSON)
 	sendKeysCmd.Flags().BoolVar(&sendKeysAllowBlocked, "allow-blocked", false, "From a pane, send keys into a pane that waits on a prompt. Read the prompt first")
-	_ = sendKeysCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	// Add completion for send-keys
 	sendKeysCmd.ValidArgsFunction = func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -602,10 +601,9 @@ exists: get-window and list-windows read windows with the read grant.`,
 			return runCommand(runCommandSession, args[0], args[1:], runCommandJSON)
 		},
 	}
-	runCommandCmd.Flags().StringVarP(&runCommandSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
+	addSessionFlag(runCommandCmd, &runCommandSession)
 	runCommandCmd.Flags().BoolVar(&runCommandList, "list", false, "List all available commands")
-	runCommandCmd.Flags().BoolVar(&runCommandJSON, "json", false, "Output result as JSON (for scripting)")
-	_ = runCommandCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addJSONFlag(runCommandCmd, &runCommandJSON, "Output result as JSON (for scripting)")
 
 	// Add completion for run-command
 	runCommandCmd.ValidArgsFunction = func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -665,10 +663,9 @@ agents.enabled is the person's switch. A process in a pane cannot set it.
 			return runSetConfig(setConfigSession, args[0], args[1], setConfigJSON, setConfigNoSave)
 		},
 	}
-	setConfigCmd.Flags().StringVarP(&setConfigSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
-	setConfigCmd.Flags().BoolVar(&setConfigJSON, "json", false, "Output result as JSON, with applied and the reason when it is false")
+	addSessionFlag(setConfigCmd, &setConfigSession)
+	addJSONFlag(setConfigCmd, &setConfigJSON, "Output result as JSON, with applied and the reason when it is false")
 	setConfigCmd.Flags().BoolVar(&setConfigNoSave, "no-save", false, "Apply the value and keep it out of the config files until the client exits")
-	_ = setConfigCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	var getConfigSession string
 	var getConfigJSON bool
@@ -697,7 +694,7 @@ Run 'tuios list-options' to see every path.`,
 			return runGetConfig(getConfigSession, args[0], getConfigJSON)
 		},
 	}
-	getConfigCmd.Flags().BoolVar(&getConfigJSON, "json", false, "Output as JSON, with the value's source and default")
+	addJSONFlag(getConfigCmd, &getConfigJSON, "Output as JSON, with the value's source and default")
 	setAgentStateCmd := newSetAgentStateCommand()
 
 	setAgentMetaCmd := newSetAgentMetaCommand()
@@ -797,7 +794,7 @@ popup. Omit it to follow the config (default: 0); --dim 0 disables dimming.`,
 	popupCmd.Flags().BoolVar(&popupWait, "wait", false, "Stay open until the command exits, and exit with its status")
 	popupCmd.Flags().BoolVar(&popupCapture, "capture-stdout", false, "Print the command's standard output here instead of in the popup (implies --wait)")
 	popupCmd.Flags().IntVar(&popupTimeout, "timeout", 0, "With --wait: milliseconds to wait (default: as long as the popup is open)")
-	popupCmd.Flags().StringVarP(&popupSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
+	addSessionFlag(popupCmd, &popupSession)
 	// Spelled out, with no shorthands. -w is the window selector in every other
 	// tuios command and -h is cobra's help, so both of the short forms a reader
 	// would reach for already mean something else here.
@@ -807,8 +804,7 @@ popup. Omit it to follow the config (default: 0); --dim 0 disables dimming.`,
 	popupCmd.Flags().StringVar(&popupName, "name", "", "Name for the popup")
 	popupCmd.Flags().StringVar(&popupCwd, "cwd", "", "Directory to run the command in (default: the daemon's)")
 	popupCmd.Flags().IntVar(&popupWorkspace, "workspace", 0, "Workspace to open the popup on (default: the current one)")
-	popupCmd.Flags().BoolVar(&popupJSON, "json", false, "Output result as JSON")
-	_ = popupCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addJSONFlag(popupCmd, &popupJSON)
 
 	focusWindowCmd := newFocusWindowCommand()
 
@@ -857,7 +853,7 @@ matugen with a post_hook.`,
 			return runThemeReload(themeReloadJSON)
 		},
 	}
-	themeReloadCmd.Flags().BoolVar(&themeReloadJSON, "json", false, "Output as JSON")
+	addJSONFlag(themeReloadCmd, &themeReloadJSON)
 	themeCmd.AddCommand(themeReloadCmd)
 
 	completeThemeID := func(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
@@ -929,8 +925,7 @@ directory holds only the colours that are different from its base.`,
 
 	setWorkspaceNameCmd := newSetWorkspaceNameCommand()
 
-	getConfigCmd.Flags().StringVarP(&getConfigSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
-	_ = getConfigCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addSessionFlag(getConfigCmd, &getConfigSession)
 	getConfigCmd.ValidArgsFunction = func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		if len(args) == 0 {
 			return getConfigPathCompletions(toComplete), cobra.ShellCompDirectiveNoFileComp
@@ -975,9 +970,8 @@ For single tape commands, use: tuios run-command <Command> [args...]`,
 			return runTapeExec(tapeExecSession, args[0], tapeExecTimeout)
 		},
 	}
-	tapeExecCmd.Flags().StringVarP(&tapeExecSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
+	addSessionFlag(tapeExecCmd, &tapeExecSession)
 	tapeExecCmd.Flags().DurationVar(&tapeExecTimeout, "timeout", 30*time.Minute, "How long to wait for the tape to end")
-	_ = tapeExecCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	// Add exec to tape command group
 	tapeCmd.AddCommand(tapeExecCmd)
@@ -1085,7 +1079,7 @@ The template itself is a JSON file in the directory 'tuios layout dir' prints.`,
 			return nil
 		},
 	}
-	layoutListCmd.Flags().BoolVar(&layoutListJSON, "json", false, "Output as JSON")
+	addJSONFlag(layoutListCmd, &layoutListJSON)
 	layoutCmd.AddCommand(layoutListCmd, newLayoutSaveCommand(), newLayoutLoadCommand(), layoutDeleteCmd, layoutDirCmd, layoutExportCmd)
 
 	// The interface flags ride only the commands that draw the interface. They

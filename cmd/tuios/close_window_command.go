@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/spf13/cobra"
@@ -35,16 +34,13 @@ list-windows until something closes it.`,
 			return runCloseWindow(sessionName, args[0], jsonOutput)
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	addSessionFlag(cmd, &sessionName)
+	addJSONFlag(cmd, &jsonOutput)
 	return cmd
 }
 
 func runCloseWindow(sessionName, window string, jsonOutput bool) error {
-	if sessionName == "" {
-		sessionName = os.Getenv("TUIOS_SESSION")
-	}
+	sessionName = paneSessionOr(sessionName)
 	// The window goes through dialTarget like -w does everywhere, so a host
 	// prefix resolves. params fills the window key from the target: an empty
 	// one would close the focused pane.
