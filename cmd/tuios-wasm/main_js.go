@@ -25,6 +25,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/learn"
 	"github.com/Gaurav-Gosain/tuios/internal/learn/lessons"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
+	"github.com/Gaurav-Gosain/tuios/internal/termio"
 	"github.com/Gaurav-Gosain/tuios/internal/webshell"
 )
 
@@ -174,7 +175,7 @@ func main() {
 	// screen. See app.UseScreen.
 	ownScreen := app.OwnScreenWanted()
 	if ownScreen {
-		osModel.UseScreen(bridge, []string{"TERM=xterm-256color", "COLORTERM=truecolor"}, colorprofile.TrueColor)
+		osModel.UseScreen(bridge, []string{"TERM=xterm-256color", "COLORTERM=truecolor"}, colorprofile.TrueColor, termio.Output{Raw: false})
 	}
 	opts := append(app.ProgramOptions(app.WithOwnScreen(ownScreen)),
 		tea.WithInput(inputPipe),

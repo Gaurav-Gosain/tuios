@@ -492,7 +492,7 @@ func createTUIOSProgram(sess sip.Session) *tea.Program {
 		model.ConnectFrameWriter(frames)
 		opts = append(opts, tea.WithOutput(frames))
 		if ownScreen {
-			model.UseScreen(frames, []string{"TERM=xterm-256color", "COLORTERM=truecolor"}, colorprofile.TrueColor)
+			model.UseScreen(frames, []string{"TERM=xterm-256color", "COLORTERM=truecolor"}, colorprofile.TrueColor, termio.Output{Raw: true})
 		}
 	}
 	program := tea.NewProgram(started, opts...)

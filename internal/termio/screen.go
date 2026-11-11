@@ -50,18 +50,29 @@ type Screen struct {
 	closed bool
 }
 
+// Output says how the bytes reach the terminal, which decides how the diff
+// may move the cursor. Bubble Tea derives both from its input.
+type Output struct {
+	// Raw: the program's input is a terminal it puts in raw mode, so the
+	// output is not post-processed. When it is not a terminal (an SSH
+	// channel with no real PTY, the browser build), a newline reaches the
+	// terminal as CR LF, and backspace is not trusted to move the cursor.
+	Raw bool
+}
+
 // New makes the Screen for a terminal reached through out. environ is the
 // program's environment: TERM decides which sequences the diff may use, as it
 // does for Bubble Tea's renderer.
-func New(out io.Writer, environ []string, profile colorprofile.Profile) *Screen {
+func New(out io.Writer, environ []string, profile colorprofile.Profile, o Output) *Screen {
 	s := &Screen{out: newWriter(out)}
 	s.scr = uv.NewTerminalRenderer(&s.body, environ)
 	s.scr.SetColorProfile(profile)
 	// Hard tabs stay off: tmux drops the background under one. Backspace
-	// may move the cursor on Linux, whose termios leaves BS0 set, as
-	// Bubble Tea finds it there.
+	// moves the cursor on a raw Linux terminal, whose termios leaves BS0
+	// set, as Bubble Tea finds it there.
 	s.scr.SetTabStops(-1)
-	s.scr.SetBackspace(runtime.GOOS == "linux")
+	s.scr.SetBackspace(o.Raw && runtime.GOOS == "linux")
+	s.scr.SetMapNewline(!o.Raw && runtime.GOOS != "windows")
 	s.scr.SetScrollOptim(true)
 	s.query = shouldQuerySync(environ)
 	return s

@@ -28,6 +28,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/served"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/termio"
 )
 
 // SSHServerConfig holds configuration for the SSH server.
@@ -334,7 +335,8 @@ func tuiosSessionMiddleware() wish.Middleware {
 			ownScreen := app.OwnScreenWanted()
 			if ownScreen {
 				env := append(sess.Environ(), "TERM="+pty.Term)
-				model.UseScreen(frames, env, colorprofile.Env(env))
+				// No server-side PTY: the channel is not a terminal.
+				model.UseScreen(frames, env, colorprofile.Env(env), termio.Output{Raw: false})
 			}
 			opts := append(bubbletea.MakeOptions(sess), app.ProgramOptions(current, app.WithOwnScreen(ownScreen))...)
 			opts = append(opts, tea.WithOutput(frames))

@@ -20,10 +20,10 @@ import (
 func OwnScreenWanted() bool { return os.Getenv("TUIOS_CELL_FRAME") != "0" }
 
 // UseScreen gives this client a screen that writes to out. environ is the
-// client terminal's environment and profile its colour profile. The program
-// must take WithOwnScreen(true).
-func (m *OS) UseScreen(out io.Writer, environ []string, profile colorprofile.Profile) {
-	m.screen = termio.New(out, environ, profile)
+// client terminal's environment, profile its colour profile, and o how its
+// output is carried. The program must take WithOwnScreen(true).
+func (m *OS) UseScreen(out io.Writer, environ []string, profile colorprofile.Profile, o termio.Output) {
+	m.screen = termio.New(out, environ, profile, o)
 }
 
 // CloseScreen puts the client's terminal back once its program has ended.
