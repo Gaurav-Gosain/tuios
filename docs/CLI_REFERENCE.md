@@ -181,6 +181,14 @@ it if it is gone. `startup.window` also focuses one pane in it. See
   A modifier pressed on its own is not shown: it is named in the chord it is
   part of, such as `Cmd + k` (`Super + k` off macOS).
 - `--border-style <style>`: Window border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block, glyphs (default: from config or rounded)
+
+  This flag and the appearance flags below it, up to `--shared-borders`
+  and except `--no-animations`, each set one `appearance` option for this run, such as
+  `appearance.border_style`. A flag takes the values its option takes, and a
+  value the option does not take stops tuios before it starts, with the
+  message `tuios set-config` gives. A switch flag also takes a value:
+  `--show-clock=false`. The config file is not changed.
+
 - `--dockbar-position <pos>`: Dockbar position: bottom, top, hidden (default: from config or top)
 - `--hide-window-buttons`: Hide window control buttons (minimize, maximize, close)
 - `--window-button-style <style>`: How the window controls are drawn: `dots` (default, macOS traffic lights) or `pill`. On the left, the pill puts close at the outer corner: close, zoom, minimize. On the right it is minimize, zoom, close

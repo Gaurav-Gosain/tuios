@@ -363,6 +363,16 @@ func styleExample(c *cobra.Command, line string, indent bool, styles Codeblock) 
 	)
 }
 
+// FlagUsage is f's help line. A flag whose value builds its own help line is
+// asked for it, so a line that costs work to build, such as an option flag's,
+// which names the option's default, is built only when help is shown.
+func FlagUsage(f *pflag.Flag) string {
+	if u, ok := f.Value.(interface{ HelpUsage() string }); ok {
+		return u.HelpUsage()
+	}
+	return f.Usage
+}
+
 func evalFlags(c *cobra.Command, styles Styles) (map[string]string, []string) {
 	flags := map[string]string{}
 	keys := []string{}
@@ -386,7 +396,7 @@ func evalFlags(c *cobra.Command, styles Styles) (map[string]string, []string) {
 
 		// Handle multiline flag descriptions by processing each line separately
 		// to preserve the transform while maintaining line breaks
-		usage := f.Usage
+		usage := FlagUsage(f)
 		noTransform := styles.FlagDescription.UnsetTransform()
 		var helpLines []string
 		for i, line := range strings.Split(usage, "\n") {

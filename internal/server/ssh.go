@@ -123,11 +123,11 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 		// exists so such a reader never probes this server's own stdin.
 		app.SetClientCapabilities(&app.HostCapabilities{TrueColor: true})
 
-		if userConfig != nil {
-			config.ApplyAppearanceConfig(userConfig, &config.Global)
-		}
 		// Flags over file, the same order loadAndApplyConfig gives every
 		// other entrypoint.
+		if userConfig != nil || len(cfg.Overrides.Sets) > 0 {
+			config.ApplyAppearanceConfig(cfg.Overrides.Config(userConfig), &config.Global)
+		}
 		config.ApplyOverrides(cfg.Overrides, &config.Global)
 	})
 

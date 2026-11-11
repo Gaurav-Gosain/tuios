@@ -46,6 +46,8 @@
 package tuios
 
 import (
+	"strconv"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -294,30 +296,38 @@ func newModel(options Options) *Model {
 		}
 	}
 
-	// LoadUserConfig does not apply the appearance globals itself, so apply
-	// them here exactly once, and pass the config into NewOS so it does not
-	// re-load and re-apply.
-	//
-	// This runs BEFORE the embed options below, not after: ApplyAppearanceConfig
-	// covers border style, dock position, the hide toggles, scrollback and
-	// the theme, so applying the options first would let the user's config file
-	// silently overrule what the embedder asked for. Options are the outer
-	// layer here, exactly as CLI flags are in cmd/tuios.
-	config.ApplyAppearanceConfig(userConfig, &config.Global)
-
-	// The embed options, layered the way every other entrypoint layers its
-	// CLI flags. A zero value leaves the config's value standing.
-	config.ApplyOverrides(config.Overrides{
-		ASCIIOnly:            options.ASCIIOnly,
-		BorderStyle:          options.BorderStyle,
-		DockbarPosition:      options.DockbarPosition,
-		HideWindowButtons:    options.HideWindowButtons,
-		WindowButtonStyle:    options.WindowButtonStyle,
-		WindowButtonPosition: options.WindowButtonPosition,
-		ScrollbackLines:      options.ScrollbackLines,
-		NoAnimations:         !options.Animations,
-		ThemeName:            options.Theme,
-	}, &config.Global)
+	// The embed options are the outer layer over the user's config file,
+	// exactly as CLI flags are in cmd/tuios: the option values are laid over
+	// a copy of the file, and the rest are applied after it. A zero value
+	// leaves the config's value standing.
+	embed := config.Overrides{
+		ASCIIOnly:    options.ASCIIOnly,
+		NoAnimations: !options.Animations,
+		ThemeName:    options.Theme,
+	}
+	set := func(path, value string) {
+		embed.Sets = append(embed.Sets, config.OptionSet{Path: path, Value: value})
+	}
+	if options.BorderStyle != "" {
+		set("appearance.border_style", options.BorderStyle)
+	}
+	if options.DockbarPosition != "" {
+		set("appearance.dockbar_position", options.DockbarPosition)
+	}
+	if options.HideWindowButtons {
+		set("appearance.hide_window_buttons", "true")
+	}
+	if options.WindowButtonStyle != "" {
+		set("appearance.window_button_style", options.WindowButtonStyle)
+	}
+	if options.WindowButtonPosition != "" {
+		set("appearance.window_button_position", options.WindowButtonPosition)
+	}
+	if options.ScrollbackLines > 0 {
+		set("appearance.scrollback_lines", strconv.Itoa(options.ScrollbackLines))
+	}
+	config.ApplyAppearanceConfig(embed.Config(userConfig), &config.Global)
+	config.ApplyOverrides(embed, &config.Global)
 
 	// Create keybind registry
 	keybindRegistry := config.NewKeybindRegistry(userConfig)

@@ -7,62 +7,52 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// Overrides contains CLI flag values that can override user config.
-// Zero values indicate the flag was not set and should use the user config default.
+// OptionSet is one option value set from outside the config file: a CLI
+// flag, or an option of an embedding program. It goes through
+// SetOptionValue, so it is checked as a value sent with set-config is.
+type OptionSet struct {
+	Path  string
+	Value string
+}
+
+// Overrides are the values a program lays over the config file for one run:
+// the CLI flags, or an embedder's options. They change the settings a
+// session starts from, never the loaded config, which the settings page
+// saves back to the file.
 type Overrides struct {
-	// ASCIIOnly uses ASCII characters instead of Nerd Font icons
+	// Sets are option values laid over the file before the settings are
+	// resolved, in order. See Config.
+	Sets []OptionSet
+
+	// ASCIIOnly uses ASCII characters instead of Nerd Font icons.
 	ASCIIOnly bool
 
-	// BorderStyle overrides the window border style
-	BorderStyle string
-
-	// DockbarPosition overrides the dockbar position
-	DockbarPosition string
-
-	// HideWindowButtons overrides hiding window control buttons
-	HideWindowButtons bool
-
-	// HideScrollbar overrides hiding the scrollbar thumb
-	HideScrollbar bool
-
-	// WindowButtonStyle overrides how the window controls are drawn
-	WindowButtonStyle string
-
-	// WindowButtonPosition overrides which end of the title bar they sit on
-	WindowButtonPosition string
-
-	// WindowTitlePosition overrides the window title position
-	WindowTitlePosition string
-
-	// HideClock overrides hiding the clock (deprecated, use ShowClock)
-	HideClock bool
-
-	// ShowClock enables the clock overlay
-	ShowClock bool
-
-	// ShowCPU enables the CPU graph in the dock
-	ShowCPU bool
-
-	// ShowRAM enables the RAM usage in the dock
-	ShowRAM bool
-
-	// SharedBorders enables shared borders between tiled windows
-	SharedBorders bool
-
-	// ScrollbackLines overrides the scrollback buffer size (0 means use default)
-	ScrollbackLines int
-
-	// NoAnimations disables UI animations
+	// NoAnimations turns every animation off for this run.
 	NoAnimations bool
 
-	// ConfirmQuit always shows quit confirmation dialog
-	ConfirmQuit bool
-
-	// ThemeName is the theme to load
+	// ThemeName is the theme to load.
 	ThemeName string
+}
 
-	// ZoomMaxWidth caps the zoom mode width (0 = fullscreen)
-	ZoomMaxWidth int
+// Config is cfg with the Sets applied, as a copy, so the caller's config
+// keeps the file's values. SetOptionValue allocates every pointer field it
+// writes, so the copy shares no value it changes with cfg. A set that
+// fails, which a flag cannot do because it is checked when it is parsed, is
+// logged and skipped. With no Sets it is cfg itself.
+func (ov Overrides) Config(cfg *UserConfig) *UserConfig {
+	if len(ov.Sets) == 0 {
+		return cfg
+	}
+	if cfg == nil {
+		cfg = DefaultConfig()
+	}
+	c := *cfg
+	for _, set := range ov.Sets {
+		if err := SetOptionValue(&c, set.Path, set.Value); err != nil {
+			log.Printf("Warning: %v", err)
+		}
+	}
+	return &c
 }
 
 // themeFlag is the last --theme name ApplyOverrides applied, or "".
@@ -80,70 +70,24 @@ func flagTheme() string {
 	return ""
 }
 
-// ApplyOverrides layers explicit CLI flag values over the globals that
-// ApplyAppearanceConfig set. Every entrypoint applies the config funnel
-// first; a zero value here means the flag was not given and the config's
-// value stands. Any new setting belongs in ApplyAppearanceConfig, and only
-// needs a line here if a CLI flag can override it.
+// ApplyOverrides applies the overrides that are not config options: ASCII
+// glyphs, no animations and the theme. The Sets are applied before the
+// settings are resolved, through Config, so every entrypoint resolves with
+// ApplyAppearanceConfig(ov.Config(cfg), s) and then calls this.
 func ApplyOverrides(overrides Overrides, s *Settings) {
 	if overrides.ASCIIOnly {
 		s.ASCIIRequested = true
 		s.UseASCIIOnly = true
 	}
-	if overrides.BorderStyle != "" {
-		s.BorderStyle = overrides.BorderStyle
-	}
-	if overrides.DockbarPosition != "" {
-		s.DockbarPosition = overrides.DockbarPosition
-	}
-	if overrides.HideWindowButtons {
-		s.HideWindowButtons = true
-	}
-	if overrides.WindowButtonStyle != "" {
-		s.WindowButtonStyle = overrides.WindowButtonStyle
-	}
-	if overrides.WindowButtonPosition != "" {
-		s.WindowButtonPosition = overrides.WindowButtonPosition
-	}
-	if overrides.HideScrollbar {
-		s.HideScrollbar = true
-	}
-	if overrides.WindowTitlePosition != "" {
-		s.WindowTitlePosition = overrides.WindowTitlePosition
-	}
-	if overrides.HideClock {
-		s.HideClock = true
-	}
-	if overrides.ShowClock {
-		s.ShowClock = true
-	}
-	if overrides.ShowCPU {
-		s.ShowCPU = true
-	}
-	if overrides.ShowRAM {
-		s.ShowRAM = true
-	}
-	if overrides.SharedBorders {
-		s.SharedBorders = true
-	}
-	if overrides.ScrollbackLines > 0 {
-		s.ScrollbackLines = min(max(overrides.ScrollbackLines, 100), 1000000)
-	}
 	if overrides.NoAnimations {
 		s.NoAnimationsFlag = true
 		s.Motion = MotionNone
-	}
-	if overrides.ConfirmQuit {
-		s.AlwaysConfirmQuit = true
 	}
 	if overrides.ThemeName != "" {
 		themeFlag.Store(&overrides.ThemeName)
 		if err := theme.Initialize(overrides.ThemeName); err != nil {
 			log.Printf("Warning: Failed to load theme '%s': %v", overrides.ThemeName, err)
 		}
-	}
-	if overrides.ZoomMaxWidth > 0 {
-		s.ZoomMaxWidth = overrides.ZoomMaxWidth
 	}
 }
 
@@ -157,8 +101,8 @@ func ApplyOverrides(overrides Overrides, s *Settings) {
 // an empty one, so the overrides still apply.
 func AppearanceFrom(cfg *UserConfig, ov Overrides) Settings {
 	s := DefaultSettings()
-	if cfg != nil {
-		ApplyAppearanceConfig(cfg, &s)
+	if cfg != nil || len(ov.Sets) > 0 {
+		ApplyAppearanceConfig(ov.Config(cfg), &s)
 	}
 	ApplyOverrides(ov, &s)
 	return s

@@ -90,6 +90,10 @@ type Option struct {
 	Auto bool `json:"auto,omitempty"`
 	// Fallback is the word a load warning gives for what a value outside
 	// Accepted is read as. Empty means "default".
+	// Flag is the name of the CLI flag that sets this option for one run of
+	// tuios, tuios ssh and tuios-web, such as "border-style". Empty means no
+	// flag. The flag takes its type, help and check from this entry.
+	Flag     string `json:"-"`
 	Fallback string `json:"-"`
 	// Normalize is what the option's reader does to a value before it
 	// compares it with Accepted, such as trimming spaces or folding case. The
@@ -175,6 +179,7 @@ var optionSpecs = []Option{
 		Path: "appearance.border_style", Type: OptionString, Section: "appearance",
 		Description: "Border style drawn around every pane",
 		Accepted:    BorderStyles,
+		Flag:        "border-style",
 	},
 	{
 		Path: "appearance.frame_panels", Type: OptionBool, Section: "appearance",
@@ -226,25 +231,30 @@ var optionSpecs = []Option{
 	{
 		Path: "appearance.hide_window_buttons", Type: OptionBool, Section: "appearance",
 		Description: "Hide the minimize, maximize and close buttons",
+		Flag:        "hide-window-buttons",
 	},
 	{
 		Path: "appearance.window_button_style", Type: OptionString, Section: "appearance",
 		Description: "Window controls as a filled pill or as macOS traffic lights",
 		Accepted:    WindowButtonStyles,
+		Flag:        "window-button-style",
 	},
 	{
 		Path: "appearance.window_button_position", Type: OptionString, Section: "appearance",
 		Description: "Which end of the title bar the window controls sit on",
 		Accepted:    WindowButtonPositions,
+		Flag:        "window-button-position",
 	},
 	{
 		Path: "appearance.hide_scrollbar", Type: OptionBool, Section: "appearance",
 		Description: "Hide the scrollbar thumb on the pane border",
+		Flag:        "hide-scrollbar",
 	},
 	{
 		Path: "appearance.scrollback_lines", Type: OptionInt, Section: "appearance",
 		Description: "Lines each pane keeps in its scrollback. A pane takes the value when it is made. The daemon reads it when it starts",
 		Min:         100, Max: 1000000,
+		Flag: "scrollback-lines",
 	},
 	{
 		Path: "appearance.scroll_lines", Type: OptionInt, Section: "appearance",
@@ -366,6 +376,7 @@ var optionSpecs = []Option{
 		Path: "appearance.confirm_quit", Type: OptionBool, Section: "appearance",
 		Description: "Always confirm on quit, not only when processes are running",
 		Default:     "false",
+		Flag:        "confirm-quit",
 	},
 	{
 		Path: "appearance.whichkey_enabled", Type: OptionBool, Section: "appearance",
@@ -386,6 +397,7 @@ var optionSpecs = []Option{
 		Path: "appearance.window_title_position", Type: OptionString, Section: "appearance",
 		Description: "Edge of the pane the title is drawn on",
 		Accepted:    WindowTitlePositions,
+		Flag:        "window-title-position",
 	},
 	{
 		Path: "appearance.window_title_style", Type: OptionString, Section: "appearance",
@@ -411,6 +423,7 @@ var optionSpecs = []Option{
 		Path: "appearance.shared_borders", Type: OptionBool, Section: "appearance",
 		Description: "Draw one border between neighbouring tiled panes, in every layout",
 		Default:     "false",
+		Flag:        "shared-borders",
 	},
 	{
 		Path: "appearance.border_focused_color", Type: OptionString, Section: "appearance",
@@ -453,6 +466,7 @@ var optionSpecs = []Option{
 		Path: "appearance.zoom_max_width", Type: OptionInt, Section: "appearance",
 		Description: "Width in cells of a zoomed pane. 0 fills the screen.",
 		Min:         0,
+		Flag:        "zoom-max-width",
 	},
 	{
 		Path: "appearance.niri_reverse_scroll", Type: OptionBool, Section: "appearance",
@@ -773,6 +787,7 @@ var optionSpecs = []Option{
 		Path: "appearance.dockbar_position", Type: OptionString, Section: "dock",
 		Description: "Edge the dock sits on, or hidden",
 		Accepted:    DockbarPositions,
+		Flag:        "dockbar-position",
 	},
 	{
 		Path: "appearance.dock_workspace_tabs", Type: OptionBool, Section: "dock",
@@ -835,19 +850,23 @@ var optionSpecs = []Option{
 	{
 		Path: "appearance.show_clock", Type: OptionBool, Section: "dock",
 		Description: "Show the clock overlay",
+		Flag:        "show-clock",
 	},
 	{
 		Path: "appearance.hide_clock", Type: OptionBool, Section: "dock",
 		Description: "Hide the clock overlay",
 		Deprecated:  "superseded by appearance.show_clock, which says the same thing the right way round",
+		Flag:        "hide-clock",
 	},
 	{
 		Path: "appearance.show_cpu", Type: OptionBool, Section: "dock",
 		Description: "Show the CPU graph in the dock",
+		Flag:        "show-cpu",
 	},
 	{
 		Path: "appearance.show_ram", Type: OptionBool, Section: "dock",
 		Description: "Show RAM usage in the dock",
+		Flag:        "show-ram",
 	},
 
 	// [appearance.scrollbar]. The glyphs and the tint take values no closed set
@@ -1834,6 +1853,22 @@ func LookupOption(path string) (Option, bool) {
 	return opt, ok
 }
 
+// OptionFlags returns the options that have a CLI flag, sorted by flag name.
+// It reads the registry without filling the derived defaults (see
+// optionIndex), because every run of tuios registers the flags, and most runs
+// read no option: Default is left out of the result for that reason.
+func OptionFlags() []Option {
+	var out []Option
+	for _, opt := range optionSpecs {
+		if opt.Flag != "" {
+			opt.Default = ""
+			out = append(out, opt)
+		}
+	}
+	sortx.SortFunc(out, func(a, b Option) int { return strings.Compare(a.Flag, b.Flag) })
+	return out
+}
+
 // OptionPaths returns every path, sorted, for a did-you-mean hint on a typo.
 func OptionPaths() []string {
 	paths := make([]string, 0, len(optionSpecs))
@@ -2102,18 +2137,18 @@ func optionKind(field reflect.Value) reflect.Kind {
 	return fieldType.Kind()
 }
 
-// optionTarget is the value to write into, allocating a nil pointer first.
-// Those fields are pointers so an explicitly set value survives a reload that a
-// zero value would be indistinguishable from, and writing through the pointer
-// is what preserves that.
+// optionTarget is the value to write into. A pointer field gets a new value
+// of its own: the pointer is what tells an explicitly set value from an unset
+// one across a reload, and writing through the old pointer would also change
+// every config that shares it, such as a copy of this one (see
+// Overrides.Config).
 func optionTarget(field reflect.Value) reflect.Value {
 	if field.Kind() != reflect.Pointer {
 		return field
 	}
-	if field.IsNil() {
-		field.Set(reflect.New(field.Type().Elem()))
-	}
-	return field.Elem()
+	fresh := reflect.New(field.Type().Elem())
+	field.Set(fresh)
+	return fresh.Elem()
 }
 
 // optionBoolWords are the spellings of true and false a caller may send. A

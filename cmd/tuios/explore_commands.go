@@ -9,6 +9,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/explore"
+	"github.com/Gaurav-Gosain/tuios/internal/fang"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/spf13/cobra"
@@ -73,7 +74,7 @@ func commandDocs(c *cobra.Command) []commandDoc {
 			if f.Hidden || f.Name == "help" {
 				return
 			}
-			fd := flagDoc{Name: f.Name, Shorthand: f.Shorthand, Type: f.Value.Type(), Usage: f.Usage}
+			fd := flagDoc{Name: f.Name, Shorthand: f.Shorthand, Type: f.Value.Type(), Usage: fang.FlagUsage(f)}
 			if f.DefValue != "" && f.DefValue != "false" && f.DefValue != "[]" && f.DefValue != "0" {
 				fd.Default = f.DefValue
 			}

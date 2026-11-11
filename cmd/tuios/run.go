@@ -46,11 +46,11 @@ func loadAndApplyConfig() *config.UserConfig {
 		log.Printf("glyphs: %s, so the chrome is drawn with %s glyphs unless a glyph set or --ascii-only is chosen", why, env)
 	}
 
-	// Appearance globals are the baseline; CLI flags win. LoadUserConfig does not
-	// apply globals itself, so this must run before ApplyOverrides.
-	config.ApplyAppearanceConfig(userConfig, &config.Global)
-
-	config.ApplyOverrides(flagOverrides(), &config.Global)
+	// The file is the baseline and the CLI flags win: the option flags are laid
+	// over a copy of the file, and the rest are applied after it.
+	flags := flagOverrides()
+	config.ApplyAppearanceConfig(flags.Config(userConfig), &config.Global)
+	config.ApplyOverrides(flags, &config.Global)
 
 	return userConfig
 }

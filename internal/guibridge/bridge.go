@@ -569,9 +569,11 @@ func newModel(opts app.OSOptions) *app.OS {
 // chromeOverrides turn off the chrome the renderer draws itself: the dock,
 // the borders between panes and the animations. The sidebar goes too.
 var chromeOverrides = config.Overrides{
-	DockbarPosition: "hidden",
-	SharedBorders:   true,
-	NoAnimations:    true,
+	Sets: []config.OptionSet{
+		{Path: "appearance.dockbar_position", Value: "hidden"},
+		{Path: "appearance.shared_borders", Value: "true"},
+	},
+	NoAnimations: true,
 }
 
 // withOwnChrome is a reloaded config with the chrome the renderer draws
@@ -581,10 +583,8 @@ var chromeOverrides = config.Overrides{
 // two rows for every client, and the renderer drew them short. A change to
 // any option, or a host added, reloads the file. Only the copy changes.
 func withOwnChrome(cfg *config.UserConfig) *config.UserConfig {
-	c := *cfg
-	on, off := true, false
-	c.Appearance.DockbarPosition = chromeOverrides.DockbarPosition
-	c.Appearance.SharedBorders = &on
+	c := *chromeOverrides.Config(cfg)
+	off := false
 	c.Appearance.Sidebar.Enabled = &off
 	return &c
 }

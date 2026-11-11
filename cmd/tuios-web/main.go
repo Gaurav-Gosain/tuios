@@ -359,11 +359,11 @@ func runWebServer() error {
 	// hooks, agent alerts, keybindings) still apply, and the half-applied
 	// config looks like a rendering bug.
 	//
-	// The file is the baseline; CLI flags win. Order matters: ApplyOverrides
-	// layers the flags on top of what this leaves behind.
-	config.ApplyAppearanceConfig(userConfig, &config.Global)
-
-	config.ApplyOverrides(webAppearanceOverrides(), &config.Global)
+	// The file is the baseline; CLI flags win. The option flags are laid over a
+	// copy of the file, and ApplyOverrides applies the rest after it.
+	flags := webAppearanceOverrides()
+	config.ApplyAppearanceConfig(flags.Config(userConfig), &config.Global)
+	config.ApplyOverrides(flags, &config.Global)
 
 	// Create sip server
 	sipConfig := sip.DefaultConfig()
