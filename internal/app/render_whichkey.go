@@ -462,26 +462,19 @@ func (m *OS) whichKeyMenu() (string, []config.KeybindingGroup) {
 			return m.Menu, nil
 		}
 		return kb.MenuTitle(m.Menu), config.MenuKeybindingGroups(kb, m.Menu)
-	case m.SubMenu == SubMenuWorkspace:
-		return "Workspace", menu("workspace")
 	case m.SubMenu == SubMenuMinimize:
+		// The restore row counts the minimized windows.
 		minimizedCount := 0
 		for _, win := range m.Windows {
 			if win.Minimized && win.Workspace == m.CurrentWorkspace && !win.IsScratch {
 				minimizedCount++
 			}
 		}
-		return "Minimize", config.PrefixMenuGroups(m.KeybindRegistry, "minimize", config.MenuState{Minimized: minimizedCount})
-	case m.SubMenu == SubMenuTiling:
-		return "Window", menu("window")
-	case m.SubMenu == SubMenuDebug:
-		return "Debug", menu("debug")
-	case m.SubMenu == SubMenuTape:
-		return "Tape", menu("tape")
-	case m.SubMenu == SubMenuLayout:
-		return "Layout", menu("layout")
-	case m.SubMenu == SubMenuTuios:
-		return "tuios", menu("tuios")
+		sub := subMenus[SubMenuMinimize]
+		return sub.title, config.PrefixMenuGroups(m.KeybindRegistry, sub.name, config.MenuState{Minimized: minimizedCount})
+	case m.SubMenu != SubMenuNone:
+		sub := subMenus[m.SubMenu]
+		return sub.title, menu(sub.name)
 	}
 	return "Prefix", m.prefixMenuGroups()
 }

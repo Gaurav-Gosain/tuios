@@ -62,7 +62,20 @@ const (
 	SubMenuTape
 	SubMenuTuios
 	SubMenuLayout
+	numSubMenus
 )
+
+// subMenus describes each leader sub-menu: the title of its which-key panel,
+// and the name its keybinding table and the verbose log give it.
+var subMenus = [numSubMenus]struct{ title, name string }{
+	SubMenuWorkspace: {"Workspace", "workspace"},
+	SubMenuMinimize:  {"Minimize", "minimize"},
+	SubMenuTiling:    {"Window", "window"},
+	SubMenuDebug:     {"Debug", "debug"},
+	SubMenuTape:      {"Tape", "tape"},
+	SubMenuTuios:     {"tuios", "tuios"},
+	SubMenuLayout:    {"Layout", "layout"},
+}
 
 // MenuState returns the leader menu that waits for a key now.
 func (m *OS) MenuState() MenuState {

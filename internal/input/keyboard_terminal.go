@@ -119,44 +119,8 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// Handle workspace prefix commands (Ctrl+B, w, ...)
-	if o.SubMenu == app.SubMenuWorkspace {
-		return HandleWorkspacePrefixCommand(msg, o)
-	}
-
-	// Handle minimize prefix commands (Ctrl+B, m, ...)
-	if o.SubMenu == app.SubMenuMinimize {
-		return HandleMinimizePrefixCommand(msg, o)
-	}
-
-	// Handle tiling prefix commands (Ctrl+B, t, ...)
-	if o.SubMenu == app.SubMenuTiling {
-		return HandleTilingPrefixCommand(msg, o)
-	}
-
-	// Handle debug prefix commands (Ctrl+B, D, ...)
-	if o.SubMenu == app.SubMenuDebug {
-		return HandleDebugPrefixCommand(msg, o)
-	}
-
-	// Handle tape prefix commands (Ctrl+B, T, ...)
-	if o.SubMenu == app.SubMenuTape {
-		return HandleTapePrefixCommand(msg, o)
-	}
-
-	// The tuios menu: the tuios keys a preset moved.
-	if o.SubMenu == app.SubMenuTuios {
-		return HandleTuiosPrefixCommand(msg, o)
-	}
-
-	// A declared menu (Ctrl+B, then the key that opens it, ...)
-	if o.Menu != "" {
-		return HandleMenuCommand(msg, o)
-	}
-
-	// Handle layout prefix commands (Ctrl+B, L, ...)
-	if o.SubMenu == app.SubMenuLayout {
-		return handleTerminalLayoutPrefix(msg, o)
+	if out, cmd, ok := routeMenuKey(msg, o); ok {
+		return out, cmd
 	}
 
 	// Handle prefix commands in terminal mode

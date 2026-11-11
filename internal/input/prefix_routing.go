@@ -230,3 +230,31 @@ func forwardKeyToFocusedWindow(msg tea.KeyPressMsg, o *app.OS) {
 		_ = focused.SendInput(rawInput)
 	}
 }
+
+// subMenuKeys is the key handler of each leader sub-menu. Window mode and
+// terminal mode both route through routeMenuKey, so a sub-menu takes the same
+// keys in either.
+var subMenuKeys = map[app.SubMenu]func(tea.KeyPressMsg, *app.OS) (*app.OS, tea.Cmd){
+	app.SubMenuWorkspace: HandleWorkspacePrefixCommand,
+	app.SubMenuMinimize:  HandleMinimizePrefixCommand,
+	app.SubMenuTiling:    HandleTilingPrefixCommand,
+	app.SubMenuDebug:     HandleDebugPrefixCommand,
+	app.SubMenuTape:      HandleTapePrefixCommand,
+	app.SubMenuTuios:     HandleTuiosPrefixCommand,
+	app.SubMenuLayout:    handleTerminalLayoutPrefix,
+}
+
+// routeMenuKey gives a key to the open leader sub-menu, or to the open
+// declared menu. ok is false when neither is open. At most one of them is
+// open at a time (see app.MenuState).
+func routeMenuKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, bool) {
+	if handle, ok := subMenuKeys[o.SubMenu]; ok {
+		out, cmd := handle(msg, o)
+		return out, cmd, true
+	}
+	if o.Menu != "" {
+		out, cmd := HandleMenuCommand(msg, o)
+		return out, cmd, true
+	}
+	return o, nil, false
+}

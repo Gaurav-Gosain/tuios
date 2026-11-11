@@ -77,19 +77,13 @@ func (m *OS) setMenus(s MenuState, arm bool, cause string) {
 	}
 }
 
-// subMenuNames name the sub-menus in the verbose log.
-var subMenuNames = map[SubMenu]string{
-	SubMenuWorkspace: "workspace", SubMenuMinimize: "minimize", SubMenuTiling: "window",
-	SubMenuDebug: "debug", SubMenuTape: "tape", SubMenuTuios: "tuios", SubMenuLayout: "layout",
-}
-
 // menuStateName is s as the verbose log says it.
 func menuStateName(s MenuState) string {
 	switch {
 	case s.Menu != "":
 		return "menu " + s.Menu
 	case s.Sub != SubMenuNone:
-		return "sub-menu " + subMenuNames[s.Sub]
+		return "sub-menu " + subMenus[s.Sub].name
 	case s.Prefix:
 		return "leader"
 	}
