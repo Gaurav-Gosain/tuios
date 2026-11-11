@@ -33,25 +33,25 @@ func TestLogViewerScrollReachesTheNewestEntries(t *testing.T) {
 					return
 				}
 				newest := len(o.LogMessages) - 1
-				if o.LogSelected != newest {
-					t.Fatalf("opening left the cursor on %d, want the newest %d", o.LogSelected, newest)
+				if o.LogViewerCursor() != newest {
+					t.Fatalf("opening left the cursor on %d, want the newest %d", o.LogViewerCursor(), newest)
 				}
 				o.View() // the renderer clamps the scroll to the rows it draws
-				if o.LogScrollOffset > o.LogSelected {
-					t.Fatalf("the newest entry %d is above the first drawn row %d", o.LogSelected, o.LogScrollOffset)
+				if o.LogViewerScroll() > o.LogViewerCursor() {
+					t.Fatalf("the newest entry %d is above the first drawn row %d", o.LogViewerCursor(), o.LogViewerScroll())
 				}
 
 				out, _ := handleLogViewerKey(tea.KeyPressMsg{Code: 'g'}, o)
-				if out.LogSelected != 0 || out.LogScrollOffset != 0 {
-					t.Fatalf("g left the cursor on %d at offset %d, want 0 at 0", out.LogSelected, out.LogScrollOffset)
+				if out.LogViewerCursor() != 0 || out.LogViewerScroll() != 0 {
+					t.Fatalf("g left the cursor on %d at offset %d, want 0 at 0", out.LogViewerCursor(), out.LogViewerScroll())
 				}
 				out, _ = handleLogViewerKey(tea.KeyPressMsg{Code: tea.KeyEnd}, o)
-				if out.LogSelected != newest {
-					t.Fatalf("end left the cursor on %d, want %d", out.LogSelected, newest)
+				if out.LogViewerCursor() != newest {
+					t.Fatalf("end left the cursor on %d, want %d", out.LogViewerCursor(), newest)
 				}
 				out.View()
-				if out.LogScrollOffset > newest {
-					t.Fatalf("end scrolled past the newest entry: offset %d", out.LogScrollOffset)
+				if out.LogViewerScroll() > newest {
+					t.Fatalf("end scrolled past the newest entry: offset %d", out.LogViewerScroll())
 				}
 			})
 		}

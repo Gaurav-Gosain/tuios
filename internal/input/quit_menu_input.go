@@ -25,7 +25,7 @@ func handleQuitMenuKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case "tab":
 		o.QuitMenuMove(1)
 	case "enter", "space":
-		return o, o.QuitMenuActivate(o.QuitMenuSelected)
+		return o, o.QuitMenuActivate(o.QuitMenuCursor())
 	case "q":
 		return o, o.QuitMenuActivate(0)
 	case "d":

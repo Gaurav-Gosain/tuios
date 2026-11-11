@@ -257,7 +257,7 @@ func (m *OS) OpenSessionCloseForWindow(i int) {
 	m.SessionCloseTarget = ""
 	m.SessionCloseWorkspace = 0
 	m.SessionCloseWindow = m.Windows[i].ID
-	m.SessionCloseSelected = SessionCloseRowCancel
+	m.closeList = listnav.State{Cursor: SessionCloseRowCancel}
 	m.ShowSessionClose = true
 }
 
@@ -275,7 +275,7 @@ func (m *OS) OpenSessionCloseFor(sessionID string) tea.Cmd {
 	}
 	m.SessionCloseWindow = ""
 	m.SessionCloseTarget = sessionID
-	m.SessionCloseSelected = SessionCloseRowCancel
+	m.closeList = listnav.State{Cursor: SessionCloseRowCancel}
 	m.SessionCloseWorktreeToll = nil
 	m.ShowSessionClose = true
 	// The delete row's toll is a round trip away, so the fetch starts now and
@@ -292,7 +292,7 @@ func (m *OS) CloseSessionClose() {
 	m.SessionCloseTarget = ""
 	m.SessionCloseWorkspace = 0
 	m.SessionCloseWindow = ""
-	m.SessionCloseSelected = SessionCloseRowCancel
+	m.closeList = listnav.State{Cursor: SessionCloseRowCancel}
 	m.SessionCloseWorktreeToll = nil
 }
 
@@ -302,8 +302,12 @@ func (m *OS) CloseSessionClose() {
 // Cancel, and up from Cancel landing on the row that kills the session is a
 // keystroke that walks onto the destructive answer without meaning to.
 func (m *OS) SessionCloseMove(delta int) {
-	m.SessionCloseSelected = listnav.Step(m.SessionCloseSelected, delta, m.sessionCloseRowCount(), false)
+	n := m.sessionCloseRowCount()
+	m.closeList.Move(delta, n, n, false, nil)
 }
+
+// SessionCloseCursor is the dialog's row under the cursor.
+func (m *OS) SessionCloseCursor() int { return m.closeList.Cursor }
 
 // SessionCloseActivate runs the row at idx and dismisses the dialog. Closing
 // the attached session goes through QuitSession, which is the one

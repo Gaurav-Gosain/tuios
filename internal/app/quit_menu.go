@@ -49,16 +49,14 @@ func (m *OS) OpenQuitMenu() {
 	others := m.otherSessionNames()
 	m.QuitMenuItems = m.buildQuitMenuItems(others, m.anyForegroundProcess())
 	m.QuitMenuOtherSessions = others
-	m.QuitMenuSelected = 0
-	m.QuitMenuScroll = 0
+	m.quitList.Reset()
 	m.ShowQuitMenu = true
 }
 
 // CloseQuitMenu dismisses the quit menu without running anything.
 func (m *OS) CloseQuitMenu() {
 	m.ShowQuitMenu = false
-	m.QuitMenuSelected = 0
-	m.QuitMenuScroll = 0
+	m.quitList.Reset()
 	m.QuitMenuItems = nil
 	m.QuitMenuOtherSessions = nil
 }
@@ -141,8 +139,11 @@ func (m *OS) buildQuitMenuItems(others []string, busy bool) []QuitMenuItem {
 
 // QuitMenuMove moves the quit menu selection by delta under the list rule.
 func (m *OS) QuitMenuMove(delta int) {
-	m.moveListSelection(&m.QuitMenuSelected, &m.QuitMenuScroll, len(m.QuitMenuItems), listOverlayRows, delta)
+	m.quitList.Move(delta, len(m.QuitMenuItems), listOverlayRows, m.listWraps(), nil)
 }
+
+// QuitMenuCursor is the quit menu's row under the cursor.
+func (m *OS) QuitMenuCursor() int { return m.quitList.Cursor }
 
 // QuitMenuIndexOfKind returns the first row matching any of the given kinds,
 // or -1. Used by the accelerator keys, which address rows by what they do.

@@ -20,10 +20,10 @@ func sessionCloseOS(t testing.TB) *OS {
 // would run on the frame the dialog first draws.
 func TestSessionCloseOpensOnCancel(t *testing.T) {
 	m := sessionCloseOS(t)
-	m.SessionCloseSelected = SessionCloseRowClose
+	m.closeList.Cursor = SessionCloseRowClose
 	m.OpenSessionClose()
-	if m.SessionCloseSelected != SessionCloseRowCancel {
-		t.Fatalf("the dialog opened on row %d, want the cancel row %d", m.SessionCloseSelected, SessionCloseRowCancel)
+	if m.closeList.Cursor != SessionCloseRowCancel {
+		t.Fatalf("the dialog opened on row %d, want the cancel row %d", m.closeList.Cursor, SessionCloseRowCancel)
 	}
 	if !m.ShowSessionClose {
 		t.Fatal("OpenSessionClose did not raise the dialog")

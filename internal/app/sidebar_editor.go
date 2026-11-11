@@ -71,15 +71,15 @@ func (m *OS) OpenSectionEditor() {
 		m.ConfigReadOnly = true
 	}
 	m.ShowSectionEditor = true
-	m.SectionEditorScroll = 0
+	m.sectionList.Scroll = 0
 	m.SectionEditorOriginal = m.sectionLayoutRaw()
 
 	// Land on the first entry rather than on the heading, so the first keystroke
 	// does something.
-	m.SectionEditorSelected = 0
+	m.sectionList.Cursor = 0
 	for i, row := range m.sectionEditorRows() {
 		if row.Kind != railRowHeader {
-			m.SectionEditorSelected = i
+			m.sectionList.Cursor = i
 			break
 		}
 	}
@@ -172,6 +172,9 @@ func (m *OS) sectionEditorRows() []railEditorRow {
 	return rows
 }
 
+// SectionEditorCursor is the section editor's row under the cursor.
+func (m *OS) SectionEditorCursor() int { return m.sectionList.Cursor }
+
 // SectionEditorMove moves the selection by delta, skipping the headings: a
 // heading is a label, and stopping on one costs a keystroke on the way past.
 func (m *OS) SectionEditorMove(delta int) {
@@ -179,15 +182,9 @@ func (m *OS) SectionEditorMove(delta int) {
 	if len(rows) == 0 {
 		return
 	}
-	m.SectionEditorSelected = m.listStepSkip(m.SectionEditorSelected, delta, len(rows),
-		func(i int) bool { return rows[i].Kind != railRowHeader })
-	m.scrollSectionEditor(len(rows))
-}
-
-// scrollSectionEditor keeps the selection inside the visible window.
-func (m *OS) scrollSectionEditor(total int) {
 	_, visible, _ := m.sectionEditorLayout()
-	m.SectionEditorScroll = scrollWindow(m.SectionEditorScroll, m.SectionEditorSelected, total, visible)
+	m.sectionList.Move(delta, len(rows), visible, m.listWraps(),
+		func(i int) bool { return rows[i].Kind != railRowHeader })
 }
 
 // SectionEditorShift moves the selected entry one place up or down the rail.
@@ -197,10 +194,10 @@ func (m *OS) scrollSectionEditor(total int) {
 // one, and past its end there is nothing to move into.
 func (m *OS) SectionEditorShift(dir int) tea.Cmd {
 	rows := m.sectionEditorRows()
-	if m.SectionEditorSelected < 0 || m.SectionEditorSelected >= len(rows) {
+	if m.sectionList.Cursor < 0 || m.sectionList.Cursor >= len(rows) {
 		return nil
 	}
-	row := rows[m.SectionEditorSelected]
+	row := rows[m.sectionList.Cursor]
 	if row.Kind != railRowPlaced {
 		return nil
 	}
@@ -210,7 +207,7 @@ func (m *OS) SectionEditorShift(dir int) tea.Cmd {
 		return nil
 	}
 	entries[row.Index], entries[target] = entries[target], entries[row.Index]
-	m.SectionEditorSelected += dir
+	m.sectionList.Cursor += dir
 	return m.commitSectionLayout(entries)
 }
 
@@ -218,10 +215,10 @@ func (m *OS) SectionEditorShift(dir int) tea.Cmd {
 // on the spacer row adds one more spacer. Bound to Enter and to a click.
 func (m *OS) SectionEditorToggle() tea.Cmd {
 	rows := m.sectionEditorRows()
-	if m.SectionEditorSelected < 0 || m.SectionEditorSelected >= len(rows) {
+	if m.sectionList.Cursor < 0 || m.sectionList.Cursor >= len(rows) {
 		return nil
 	}
-	row := rows[m.SectionEditorSelected]
+	row := rows[m.sectionList.Cursor]
 	entries := m.sectionEntries()
 
 	switch row.Kind {
@@ -257,10 +254,10 @@ func (m *OS) SectionEditorToggle() tea.Cmd {
 // of the rail.
 func (m *OS) SectionEditorShare(delta int) tea.Cmd {
 	rows := m.sectionEditorRows()
-	if m.SectionEditorSelected < 0 || m.SectionEditorSelected >= len(rows) {
+	if m.sectionList.Cursor < 0 || m.sectionList.Cursor >= len(rows) {
 		return nil
 	}
-	row := rows[m.SectionEditorSelected]
+	row := rows[m.sectionList.Cursor]
 	if row.Kind != railRowPlaced {
 		return nil
 	}
@@ -282,7 +279,7 @@ const sectionShareStep = 5
 // SectionEditorReset puts the layout back to the one the rail ships with.
 func (m *OS) SectionEditorReset() tea.Cmd {
 	cmd := m.commitSectionLayout(config.ParseSidebarSections(config.SidebarDefaultSections))
-	m.SectionEditorSelected, m.SectionEditorScroll = 0, 0
+	m.sectionList.Reset()
 	m.SectionEditorMove(1)
 	return cmd
 }
@@ -324,13 +321,13 @@ func (m *OS) selectSectionRow(name string, added bool) {
 	rows := m.sectionEditorRows()
 	for i, row := range rows {
 		if row.Name == name && row.Kind == want {
-			m.SectionEditorSelected = i
-			m.scrollSectionEditor(len(rows))
+			_, visible, _ := m.sectionEditorLayout()
+			m.sectionList.Select(i, len(rows), visible)
 			return
 		}
 	}
-	m.SectionEditorSelected = clampInt(m.SectionEditorSelected, 0, max(len(rows)-1, 0))
-	m.scrollSectionEditor(len(rows))
+	_, visible, _ := m.sectionEditorLayout()
+	m.sectionList.Fit(len(rows), visible)
 }
 
 // commitSectionLayout writes the layout, applies it and hands back the save.

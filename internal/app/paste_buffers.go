@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -54,13 +55,13 @@ type PasteBufferItem struct {
 
 // bufferChooser is the state of the buffer chooser overlay.
 type bufferChooser struct {
-	open     bool
-	items    []PasteBufferItem
-	selected int
-	scroll   int
-	loading  bool
-	err      string
-	gen      uint64
+	open  bool
+	items []PasteBufferItem
+	// list is the chooser's cursor and window.
+	list    listnav.State
+	loading bool
+	err     string
+	gen     uint64
 	// target is the pane focused when the chooser opened, which its paste
 	// goes to.
 	target string
@@ -499,7 +500,7 @@ func (m *OS) handlePasteBuffersLoaded(msg PasteBuffersLoadedMsg) {
 		return
 	}
 	m.buffers.items = msg.Items
-	m.buffers.selected = clampInt(m.buffers.selected, 0, max(len(msg.Items)-1, 0))
+	m.buffers.list.Cursor = clampInt(m.buffers.list.Cursor, 0, max(len(msg.Items)-1, 0))
 }
 
 // BufferChooserOpen reports whether the buffer chooser is up.
@@ -511,20 +512,20 @@ func (m *OS) CloseBufferChooser() {
 }
 
 // BufferChooserSelected is the chooser's selected row.
-func (m *OS) BufferChooserSelected() int { return m.buffers.selected }
+func (m *OS) BufferChooserSelected() int { return m.buffers.list.Cursor }
 
 // BufferChooserItems is the chooser's rows.
 func (m *OS) BufferChooserItems() []PasteBufferItem { return m.buffers.items }
 
 // BufferChooserMove steps the chooser's selection.
 func (m *OS) BufferChooserMove(delta int) {
-	m.moveListSelection(&m.buffers.selected, &m.buffers.scroll, len(m.buffers.items), bufferChooserRows, delta)
+	m.buffers.list.Move(delta, len(m.buffers.items), bufferChooserRows, m.listWraps(), nil)
 }
 
 // BufferChooserSelect puts the chooser's selection on row idx.
 func (m *OS) BufferChooserSelect(idx int) {
 	if idx >= 0 && idx < len(m.buffers.items) {
-		m.buffers.selected = idx
+		m.buffers.list.Cursor = idx
 	}
 }
 
@@ -544,7 +545,7 @@ func (m *OS) BufferChooserActivate(idx int) tea.Cmd {
 
 // BufferChooserDelete deletes the buffer on the selected row.
 func (m *OS) BufferChooserDelete() tea.Cmd {
-	idx := m.buffers.selected
+	idx := m.buffers.list.Cursor
 	if idx < 0 || idx >= len(m.buffers.items) {
 		return nil
 	}
@@ -552,7 +553,7 @@ func (m *OS) BufferChooserDelete() tea.Cmd {
 	// list loaded stays.
 	name, version := m.buffers.items[idx].Name, m.buffers.items[idx].Version
 	m.buffers.items = append(m.buffers.items[:idx:idx], m.buffers.items[idx+1:]...)
-	m.buffers.selected = clampInt(idx, 0, max(len(m.buffers.items)-1, 0))
+	m.buffers.list.Cursor = clampInt(idx, 0, max(len(m.buffers.items)-1, 0))
 	if !m.buffersInDaemon() {
 		_, err := m.localBuffers().Delete(name, version, nil)
 		m.handlePasteBufferDeleted(PasteBufferDeletedMsg{Name: name, Err: err})
@@ -583,7 +584,7 @@ func (m *OS) handlePasteBufferDeleted(msg PasteBufferDeletedMsg) {
 func (m *OS) renderBufferChooser() (string, overlay.Geometry, []overlayRowHit) {
 	items := m.buffers.items
 	if len(items) > 0 {
-		m.buffers.selected = clampInt(m.buffers.selected, 0, len(items)-1)
+		m.buffers.list.Cursor = clampInt(m.buffers.list.Cursor, 0, len(items)-1)
 	}
 	empty := "No paste buffers. A yank in copy mode adds one."
 	if m.buffers.err != "" {
@@ -594,8 +595,8 @@ func (m *OS) renderBufferChooser() (string, overlay.Geometry, []overlayRowHit) {
 		Width:      bufferChooserWidth,
 		MaxVisible: bufferChooserRows,
 		Count:      len(items),
-		Selected:   m.buffers.selected,
-		Scroll:     &m.buffers.scroll,
+		Selected:   m.buffers.list.Cursor,
+		Scroll:     &m.buffers.list.Scroll,
 		EmptyMsg:   empty,
 		Pending:    m.buffers.loading,
 		Hints: []overlay.Hint{

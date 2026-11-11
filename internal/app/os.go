@@ -436,8 +436,7 @@ type OS struct {
 	sessionLayoutMode      string                        // The mode the session was created with, the fallback for a workspace the state did not count
 	ShowLogs               bool                          // True when showing log overlay
 	LogMessages            []LogMessage                  // Store log messages
-	LogScrollOffset        int                           // first log row the viewer draws
-	LogSelected            int                           // the log entry the viewer's cursor is on
+	logList                listnav.State                 // the log viewer's cursor and its first drawn row
 	msgView                messageViewState              // the message view, see message_view.go
 	recentMessages         []messageEntry                // the newest messages the dock showed, for prefix+N
 	notifHoverAt           time.Time                     // when the pointer came onto the message block; zero when it is not on it
@@ -480,9 +479,9 @@ type OS struct {
 	// as kind "quit" so hover, click and click-away routing come from the same
 	// machinery as every other overlay. Items are built once per open (see
 	// OpenQuitMenu) so the rows reflect the session state at that moment.
-	ShowQuitMenu          bool
-	QuitMenuSelected      int
-	QuitMenuScroll        int
+	ShowQuitMenu bool
+	// quitList is the quit menu's cursor and window.
+	quitList              listnav.State
 	QuitMenuItems         []QuitMenuItem
 	QuitMenuOtherSessions []string // non-current sessions at open time; [0] is the kill-and-go-next target
 	// Close-session confirmation, the micro-dialog the dock's recessed control
@@ -506,8 +505,9 @@ type OS struct {
 
 	// focusOnlyHidden is, per workspace, the panes the last focus-only press
 	// minimized, by id. See focus_only.go.
-	focusOnlyHidden      map[int][]string
-	SessionCloseSelected int
+	focusOnlyHidden map[int][]string
+	// closeList is the close-session dialog's cursor.
+	closeList listnav.State
 	// SessionCloseWorktreeToll is what the delete-worktree row would take, read
 	// by a round trip after the dialog opened. Nil, or Loaded false, is a toll
 	// that has not landed yet, and the dialog says nothing about the worktree
@@ -1687,16 +1687,16 @@ type OS struct {
 
 	// Dock layout editor state. The dock is three ordered lists, which is the
 	// one thing on the settings page no row can express.
-	ShowDockEditor     bool
-	DockEditorSelected int
-	DockEditorScroll   int
+	ShowDockEditor bool
+	// dockList is the dock editor's cursor and window.
+	dockList           listnav.State
 	DockEditorOriginal dockLists // the lists when it opened, for cancel
 
 	// Rail layout editor state. The rail's sections are one ordered list with a
 	// percent on each entry, which no settings row can hold either.
-	ShowSectionEditor     bool
-	SectionEditorSelected int
-	SectionEditorScroll   int
+	ShowSectionEditor bool
+	// sectionList is the rail section editor's cursor and window.
+	sectionList           listnav.State
 	SectionEditorOriginal string // the layout when it opened, for undo
 
 	// Floating overlay placement + mouse hit-testing. Each overlay kind keeps

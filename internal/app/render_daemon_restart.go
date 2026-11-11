@@ -66,8 +66,8 @@ func (m *OS) renderDaemonRestart() (string, overlay.Geometry, []overlayRowHit) {
 			}
 		}
 		rows = append(rows,
-			dialogAnswerRow("Restart the daemon", r.selected == RestartRowRestart, true, width, pal),
-			dialogAnswerRow("Cancel", r.selected == RestartRowCancel, false, width, pal))
+			dialogAnswerRow("Restart the daemon", r.list.Cursor == RestartRowRestart, true, width, pal),
+			dialogAnswerRow("Cancel", r.list.Cursor == RestartRowCancel, false, width, pal))
 		hints = []overlay.Hint{{Key: "r", Label: "restart"}, cancel}
 
 	case restartStopping, restartStarting, restartReattaching:

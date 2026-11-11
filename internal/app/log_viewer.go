@@ -45,8 +45,8 @@ func (m *OS) logViewerList() listOverlay {
 		Width:      logViewerWidth,
 		MaxVisible: max(n, minPanelRows),
 		Count:      n,
-		Selected:   m.LogSelected,
-		Scroll:     &m.LogScrollOffset,
+		Selected:   m.logList.Cursor,
+		Scroll:     &m.logList.Scroll,
 		EmptyMsg:   "The log is empty.",
 		EmptyHint:  overlay.Hint{Key: "q", Label: "close"},
 		Hints:      logViewerHints(),
@@ -55,7 +55,7 @@ func (m *OS) logViewerList() listOverlay {
 			if n == 0 {
 				return nil
 			}
-			return m.logDetail(m.LogMessages[max(0, min(m.LogSelected, n-1))].Message, width)
+			return m.logDetail(m.LogMessages[max(0, min(m.logList.Cursor, n-1))].Message, width)
 		},
 	}
 }
@@ -102,9 +102,15 @@ func (m *OS) logViewerRows() int {
 	return rows
 }
 
+// LogViewerCursor is the log entry under the viewer's cursor.
+func (m *OS) LogViewerCursor() int { return m.logList.Cursor }
+
+// LogViewerScroll is the first log entry the viewer draws.
+func (m *OS) LogViewerScroll() int { return m.logList.Scroll }
+
 // LogViewerMove moves the viewer's cursor by delta entries.
 func (m *OS) LogViewerMove(delta int) {
-	m.moveListSelection(&m.LogSelected, &m.LogScrollOffset, len(m.LogMessages), m.logViewerRows(), delta)
+	m.logList.Move(delta, len(m.LogMessages), m.logViewerRows(), m.listWraps(), nil)
 }
 
 // LogViewerPage is the rows a page key moves the cursor by.
@@ -115,8 +121,8 @@ func (m *OS) LogViewerOpenSelected() {
 	if len(m.LogMessages) == 0 {
 		return
 	}
-	m.LogSelected = max(0, min(m.LogSelected, len(m.LogMessages)-1))
-	m.openMessageView(logEntry(m.LogMessages[m.LogSelected]))
+	m.logList.Cursor = max(0, min(m.logList.Cursor, len(m.LogMessages)-1))
+	m.openMessageView(logEntry(m.LogMessages[m.logList.Cursor]))
 }
 
 // CloseLogViewer closes the viewer.

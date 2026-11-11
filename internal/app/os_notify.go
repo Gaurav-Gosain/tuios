@@ -32,7 +32,7 @@ func (m *OS) Log(level, format string, args ...any) {
 // the log is opened to find.
 func (m *OS) appendLog(entry LogMessage) {
 	entry.Message = capText(entry.Message, logTextCap)
-	atNewest := m.LogSelected >= len(m.LogMessages)-1
+	atNewest := m.logList.Cursor >= len(m.LogMessages)-1
 	m.LogMessages = append(m.LogMessages, entry)
 	for len(m.LogMessages) > config.MaxLogMessages {
 		drop := 0
@@ -43,16 +43,16 @@ func (m *OS) appendLog(entry LogMessage) {
 			}
 		}
 		m.LogMessages = append(m.LogMessages[:drop], m.LogMessages[drop+1:]...)
-		if drop < m.LogSelected {
-			m.LogSelected--
+		if drop < m.logList.Cursor {
+			m.logList.Cursor--
 		}
-		if drop < m.LogScrollOffset {
-			m.LogScrollOffset--
+		if drop < m.logList.Scroll {
+			m.logList.Scroll--
 		}
 	}
-	m.LogSelected = max(m.LogSelected, 0)
+	m.logList.Cursor = max(m.logList.Cursor, 0)
 	if atNewest {
-		m.LogSelected = len(m.LogMessages) - 1
+		m.logList.Cursor = len(m.LogMessages) - 1
 	}
 }
 
@@ -328,8 +328,8 @@ func (m *OS) showNotification(message, notifType, agentState string, duration ti
 func (m *OS) ToggleLogViewer() {
 	m.ShowLogs = !m.ShowLogs
 	if m.ShowLogs {
-		m.LogSelected = max(len(m.LogMessages)-1, 0)
-		m.LogScrollOffset = m.LogSelected
+		m.logList.Cursor = max(len(m.LogMessages)-1, 0)
+		m.logList.Scroll = m.logList.Cursor
 	}
 }
 

@@ -30,9 +30,9 @@ func TestSectionEditorTakesKeysBeforeTheRailDoes(t *testing.T) {
 	o := app.NewOS(app.OSOptions{UserConfig: config.DefaultConfig(), Width: 120, Height: 40})
 	o.ConfigReadOnly = true
 	o.OpenSectionEditor()
-	first := o.SectionEditorSelected
+	first := o.SectionEditorCursor()
 
-	if _, _ = wmPress(o, "j"); o.SectionEditorSelected == first {
+	if _, _ = wmPress(o, "j"); o.SectionEditorCursor() == first {
 		t.Errorf("j did not reach the editor; the selection is still %d", first)
 	}
 

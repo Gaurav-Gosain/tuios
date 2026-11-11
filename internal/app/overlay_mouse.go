@@ -212,9 +212,9 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 	case "themeeditor":
 		m.themeEditor.cursor[m.themeEditor.tab] = idx
 	case "dockeditor":
-		m.DockEditorSelected = idx
+		m.dockList.Cursor = idx
 	case "sectioneditor":
-		m.SectionEditorSelected = idx
+		m.sectionList.Cursor = idx
 	case "agentmail":
 		m.AgentMailSelect(idx)
 	case "inbox":
@@ -232,20 +232,20 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 	case "navigator":
 		m.NavigatorSelect(idx)
 	case "quit":
-		m.QuitMenuSelected = idx
+		m.quitList.Select(idx, len(m.QuitMenuItems), listOverlayRows)
 	case "sessionclose":
-		m.SessionCloseSelected = idx
+		m.closeList.Select(idx, m.sessionCloseRowCount(), m.sessionCloseRowCount())
 	case overlayKindRestart:
 		if m.restart.phase == restartConfirm {
-			m.restart.selected = idx
+			m.restart.list.Cursor = idx
 		}
 	case overlayKindLogs:
-		m.LogSelected = idx
+		m.logList.Cursor = idx
 	case "filedialog":
 		// Hover moves the cursor onto the answer under the pointer. It cannot
 		// run one: the dialog is answered by a click or by enter, and a pointer
 		// crossing the rows on its way somewhere else must not delete a file.
-		m.filePrompt.Selected = idx
+		m.filePrompt.List.Cursor = idx
 	}
 }
 
@@ -418,10 +418,10 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 		m.themeEditor.cursor[m.themeEditor.tab] = row.Idx
 		m.ThemeEditorPick()
 	case "dockeditor":
-		m.DockEditorSelected = row.Idx
+		m.dockList.Cursor = row.Idx
 		return m.DockEditorToggle()
 	case "sectioneditor":
-		m.SectionEditorSelected = row.Idx
+		m.sectionList.Cursor = row.Idx
 		return m.SectionEditorToggle()
 	case "agentmail":
 		// A click opens, exactly like enter on the selected row.
@@ -470,19 +470,19 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 			return m.TakeSidebarCmd()
 		}
 	case "quit":
-		m.QuitMenuSelected = row.Idx
+		m.quitList.Select(row.Idx, len(m.QuitMenuItems), listOverlayRows)
 		return m.QuitMenuActivate(row.Idx)
 	case "sessionclose":
-		m.SessionCloseSelected = row.Idx
+		m.closeList.Select(row.Idx, m.sessionCloseRowCount(), m.sessionCloseRowCount())
 		return m.SessionCloseActivate(row.Idx)
 	case overlayKindRestart:
 		return m.DaemonRestartActivate(row.Idx)
 	case "filedialog":
-		m.filePrompt.Selected = row.Idx
+		m.filePrompt.List.Cursor = row.Idx
 		return m.FileConfirmActivate(row.Idx)
 	case overlayKindLogs:
 		// A click opens the entry in full, exactly like enter on it.
-		m.LogSelected = row.Idx
+		m.logList.Cursor = row.Idx
 		m.LogViewerOpenSelected()
 	}
 	return nil

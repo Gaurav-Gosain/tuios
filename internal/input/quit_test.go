@@ -38,8 +38,8 @@ func TestRequestQuitConfirmsOnlyWhenThereIsSomethingToLose(t *testing.T) {
 		if !m.ShowQuitMenu {
 			t.Fatal("quit menu not shown")
 		}
-		if m.QuitMenuSelected != 0 {
-			t.Fatalf("menu selection = %d, want 0 (the default row)", m.QuitMenuSelected)
+		if m.QuitMenuCursor() != 0 {
+			t.Fatalf("menu selection = %d, want 0 (the default row)", m.QuitMenuCursor())
 		}
 	})
 

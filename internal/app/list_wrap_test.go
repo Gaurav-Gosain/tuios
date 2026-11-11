@@ -47,8 +47,8 @@ func wrapCases(t *testing.T) []wrapCase {
 				m.QuitMenuItems = []QuitMenuItem{{Label: "a"}, {Label: "b"}, {Label: "c"}}
 			},
 			move:   (*OS).QuitMenuMove,
-			cursor: func(m *OS) int { return m.QuitMenuSelected },
-			set:    func(m *OS, i int) { m.QuitMenuSelected = i },
+			cursor: func(m *OS) int { return m.quitList.Cursor },
+			set:    func(m *OS, i int) { m.quitList.Cursor = i },
 			first:  0, last: 2,
 		},
 	}
@@ -111,14 +111,14 @@ func TestConfirmationsDoNotWrap(t *testing.T) {
 	m := wrapOS()
 	m.OpenSessionCloseFor("")
 	m.SessionCloseMove(-1)
-	if m.SessionCloseSelected != SessionCloseRowCancel {
-		t.Errorf("up from Cancel in the close-session dialog went to row %d", m.SessionCloseSelected)
+	if m.closeList.Cursor != SessionCloseRowCancel {
+		t.Errorf("up from Cancel in the close-session dialog went to row %d", m.closeList.Cursor)
 	}
 
 	m.filePrompt.Kind = filePromptConfirm
-	m.filePrompt.Selected = fileConfirmRowCancel
+	m.filePrompt.List.Cursor = fileConfirmRowCancel
 	m.FileConfirmMove(-1)
-	if m.filePrompt.Selected != fileConfirmRowCancel {
-		t.Errorf("up from Cancel in the file dialog went to row %d", m.filePrompt.Selected)
+	if m.filePrompt.List.Cursor != fileConfirmRowCancel {
+		t.Errorf("up from Cancel in the file dialog went to row %d", m.filePrompt.List.Cursor)
 	}
 }

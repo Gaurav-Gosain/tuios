@@ -22,7 +22,7 @@ func (m *OS) renderSessionClose() (string, overlay.Geometry, []overlayRowHit) {
 	bg := pal.Canvas
 	width := overlay.DialogFitWidth(sessionCloseInnerWidth, m.modalRoomWidth())
 	rows := m.sessionCloseRowCount()
-	m.SessionCloseSelected = clampInt(m.SessionCloseSelected, 0, rows-1)
+	m.closeList.Fit(rows, rows)
 
 	toll := m.SessionTollFor(m.SessionCloseTarget)
 	if m.SessionCloseWindow != "" {
@@ -109,7 +109,7 @@ func (m *OS) sessionCloseRow(idx, width int, pal overlay.Palette) string {
 	case SessionCloseRowDeleteWorktree:
 		label, destructive = "Delete worktree too", true
 	}
-	return dialogAnswerRow(label, m.SessionCloseSelected == idx, destructive, width, pal)
+	return dialogAnswerRow(label, m.closeList.Cursor == idx, destructive, width, pal)
 }
 
 // dialogAnswerRow draws one answer of a confirmation. The destructive row

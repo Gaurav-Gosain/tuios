@@ -141,7 +141,7 @@ func (m *OS) renderFileConfirm() (string, overlay.Geometry, []overlayRowHit) {
 	pal := m.overlayUI()
 	bg := pal.Canvas
 	width := overlay.DialogFitWidth(fileDialogWidth, m.modalRoomWidth())
-	m.filePrompt.Selected = clampInt(m.filePrompt.Selected, 0, fileConfirmRowCount-1)
+	m.filePrompt.List.Cursor = clampInt(m.filePrompt.List.Cursor, 0, fileConfirmRowCount-1)
 
 	// The path is cut from the front, like the rail's own header: the tail is
 	// the file being deleted and the head is the disk it is on. A confirmation
@@ -201,7 +201,7 @@ func (m *OS) renderFileConfirm() (string, overlay.Geometry, []overlayRowHit) {
 // close-session dialog already uses.
 func (m *OS) fileConfirmRow(idx, width int, pal overlay.Palette) string {
 	bg := pal.Canvas
-	cursor := m.filePrompt.Selected == idx
+	cursor := m.filePrompt.List.Cursor == idx
 	if cursor {
 		bg = pal.Surface
 	}

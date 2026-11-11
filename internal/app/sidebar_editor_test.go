@@ -28,7 +28,7 @@ func selectRow(t *testing.T, m *OS, name string, kind railRowKind) {
 	t.Helper()
 	for i, row := range m.sectionEditorRows() {
 		if row.Name == name && row.Kind == kind {
-			m.SectionEditorSelected = i
+			m.sectionList.Cursor = i
 			return
 		}
 	}
@@ -126,9 +126,9 @@ func TestSectionEditorClickHitsTheRowItDrew(t *testing.T) {
 		m.SectionEditorToggle()
 	}
 	rows := m.sectionEditorRows()
-	m.SectionEditorSelected = len(rows) - 1
+	m.sectionList.Cursor = len(rows) - 1
 	_, geo, hits := m.renderSectionEditor()
-	if m.SectionEditorScroll == 0 {
+	if m.sectionList.Scroll == 0 {
 		t.Fatalf("the panel did not scroll with %d rows; the test premise is wrong", len(rows))
 	}
 	// The first rectangle is on the panel's first body line and points at the
@@ -137,9 +137,9 @@ func TestSectionEditorClickHitsTheRowItDrew(t *testing.T) {
 		t.Errorf("the first rectangle is at %d, want the panel's first body line %d",
 			hits[0].Rect.Y0, geo.BodyY)
 	}
-	if hits[0].Idx < m.SectionEditorScroll {
+	if hits[0].Idx < m.sectionList.Scroll {
 		t.Errorf("the first rectangle points at row %d, above the scroll at %d",
-			hits[0].Idx, m.SectionEditorScroll)
+			hits[0].Idx, m.sectionList.Scroll)
 	}
 	if len(hits) == 0 {
 		t.Fatal("the editor recorded no clickable rows")
@@ -170,7 +170,7 @@ func TestSectionEditorClickHitsTheRowItDrew(t *testing.T) {
 			target = h
 		}
 	}
-	m.SectionEditorSelected = target.Idx
+	m.sectionList.Cursor = target.Idx
 	m.SectionEditorToggle()
 	if got := m.sectionLayout(); strings.Contains(got, "files") {
 		t.Errorf("the rectangle for the files row left it on the rail: %q", got)

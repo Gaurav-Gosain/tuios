@@ -47,19 +47,14 @@ func (m *OS) renderDockEditor() (string, overlay.Geometry, []overlayRowHit) {
 	pal := m.overlayUI()
 	bg := pal.Surface
 
-	if len(rows) > 0 {
-		m.DockEditorSelected = clampInt(m.DockEditorSelected, 0, len(rows)-1)
-	} else {
-		m.DockEditorSelected = 0
-	}
 	width, visible, hints := m.dockEditorLayout()
-	m.DockEditorScroll = scrollWindow(m.DockEditorScroll, m.DockEditorSelected, len(rows), visible)
+	m.dockList.Fit(len(rows), visible)
 
 	var lines []string
-	start := m.DockEditorScroll
+	start := m.dockList.Scroll
 	end := min(start+visible, len(rows))
 	for i := start; i < end; i++ {
-		lines = append(lines, pal.Row(m.dockEditorLine(rows[i], i == m.DockEditorSelected, pal, width), width, overlay.RowState{Cursor: i == m.DockEditorSelected, Focused: true}, pal.Surface))
+		lines = append(lines, pal.Row(m.dockEditorLine(rows[i], i == m.dockList.Cursor, pal, width), width, overlay.RowState{Cursor: i == m.dockList.Cursor, Focused: true}, pal.Surface))
 	}
 	for shown := end - start; shown < visible; shown++ {
 		lines = append(lines, overlay.Style(bg).Render(" "))
@@ -154,10 +149,10 @@ func (m *OS) dockEditorLine(row dockEditorRow, selected bool, pal overlay.Palett
 // and what can be done to it.
 func (m *OS) dockEditorDetail(rows []dockEditorRow, pal overlay.Palette, width int) string {
 	bg := pal.Surface
-	if m.DockEditorSelected < 0 || m.DockEditorSelected >= len(rows) {
+	if m.dockList.Cursor < 0 || m.dockList.Cursor >= len(rows) {
 		return overlay.Style(bg).Render(" ")
 	}
-	row := rows[m.DockEditorSelected]
+	row := rows[m.dockList.Cursor]
 
 	var text string
 	switch {

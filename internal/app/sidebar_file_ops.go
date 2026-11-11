@@ -106,8 +106,8 @@ type filePromptState struct {
 	// Trash says the delete goes to the trash rather than being permanent. It
 	// decides the sentence the dialog shows and the operation that runs.
 	Trash bool
-	// Selected is the confirmation's cursor row.
-	Selected int
+	// List is the confirmation's cursor row.
+	List listnav.State
 	// Busy is true while an operation is running. It closes the dialog and
 	// stops a second operation starting on top of the first.
 	Busy bool
@@ -311,11 +311,11 @@ func (m *OS) SidebarFileDelete(permanent bool) {
 		return
 	}
 	m.filePrompt = filePromptState{
-		Kind:     filePromptConfirm,
-		Dir:      filepath.Dir(path),
-		Paths:    []string{path},
-		Trash:    !permanent && m.Settings.SidebarFileDelete == config.SidebarFileDeleteTrash && trashAvailable(),
-		Selected: fileConfirmRowCancel,
+		Kind:  filePromptConfirm,
+		Dir:   filepath.Dir(path),
+		Paths: []string{path},
+		Trash: !permanent && m.Settings.SidebarFileDelete == config.SidebarFileDeleteTrash && trashAvailable(),
+		List:  listnav.State{Cursor: fileConfirmRowCancel},
 	}
 }
 
@@ -645,7 +645,7 @@ func (m *OS) FileConfirmMove(delta int) {
 	if m.filePrompt.Kind != filePromptConfirm {
 		return
 	}
-	m.filePrompt.Selected = listnav.Step(m.filePrompt.Selected, delta, fileConfirmRowCount, false)
+	m.filePrompt.List.Move(delta, fileConfirmRowCount, fileConfirmRowCount, false, nil)
 }
 
 // FilePromptSubmit runs what the open dialog asks for.
@@ -658,7 +658,7 @@ func (m *OS) FilePromptSubmit() tea.Cmd {
 	p := m.filePrompt
 	switch p.Kind {
 	case filePromptConfirm:
-		return m.FileConfirmActivate(p.Selected)
+		return m.FileConfirmActivate(p.List.Cursor)
 	case filePromptCreate:
 		if _, err := relativeUnder(trimTrailingSeparators(p.Input)); err != nil {
 			m.filePrompt.Err = fileOpError(err)

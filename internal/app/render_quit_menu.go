@@ -24,8 +24,8 @@ func (m *OS) renderQuitMenu() (string, overlay.Geometry, []overlayRowHit) {
 		Width:      quitMenuInnerWidth,
 		MaxVisible: max(len(items), 1),
 		Count:      len(items),
-		Selected:   m.QuitMenuSelected,
-		Scroll:     &m.QuitMenuScroll,
+		Selected:   m.quitList.Cursor,
+		Scroll:     &m.quitList.Scroll,
 		EmptyMsg:   "Nothing to quit",
 		Hints: []overlay.Hint{
 			{Key: overlay.EnterGlyph, Label: "run"},

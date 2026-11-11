@@ -16,6 +16,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/release"
 	"github.com/Gaurav-Gosain/tuios/internal/restartplan"
@@ -96,9 +97,10 @@ type restartReport = restartplan.Report
 type daemonRestart struct {
 	phase restartPhase
 	// gen makes a message from an abandoned dialog ignorable.
-	gen      int
-	selected int
-	plan     restartReport
+	gen int
+	// list is the cursor on the two answers.
+	list listnav.State
+	plan restartReport
 	// done is the restart's result, once the command wrote it.
 	done *restartReport
 	// err and fix are what a failure says.
@@ -172,7 +174,7 @@ func (m *OS) OpenDaemonRestart() {
 	if m.restart.running() {
 		return
 	}
-	m.restart = daemonRestart{phase: restartReading, gen: m.restart.gen + 1, selected: RestartRowCancel}
+	m.restart = daemonRestart{phase: restartReading, gen: m.restart.gen + 1, list: listnav.State{Cursor: RestartRowCancel}}
 }
 
 // restartPlanCmd reads the plan for a dialog that has just opened. It runs
@@ -209,7 +211,7 @@ func (m *OS) DaemonRestartMove(delta int) {
 	if m.restart.phase != restartConfirm {
 		return
 	}
-	m.restart.selected = clampInt(m.restart.selected+delta, 0, restartRowCount-1)
+	m.restart.list.Move(delta, restartRowCount, restartRowCount, false, nil)
 }
 
 // DaemonRestartActivate runs the row at idx: in the question, restart or
@@ -439,7 +441,7 @@ func plainOneLine(s string) string {
 }
 
 // DaemonRestartSelected is the row under the cursor.
-func (m *OS) DaemonRestartSelected() int { return m.restart.selected }
+func (m *OS) DaemonRestartSelected() int { return m.restart.list.Cursor }
 
 // restartDaemonItem is the Daemon tab's row: the version the daemon runs, in
 // the warning colour when it is not this window's, and enter or a click opens

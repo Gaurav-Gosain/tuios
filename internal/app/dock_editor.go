@@ -54,15 +54,15 @@ func (m *OS) OpenDockEditor() {
 		m.ConfigReadOnly = true
 	}
 	m.ShowDockEditor = true
-	m.DockEditorScroll = 0
+	m.dockList.Scroll = 0
 	m.DockEditorOriginal = m.dockLists()
 
 	// Land on the first component rather than on the first header, so the first
 	// keystroke does something.
-	m.DockEditorSelected = 0
+	m.dockList.Cursor = 0
 	for i, row := range m.dockEditorRows() {
 		if row.Kind == dockRowComponent {
-			m.DockEditorSelected = i
+			m.dockList.Cursor = i
 			break
 		}
 	}
@@ -229,6 +229,9 @@ func (m *OS) dockEditorRows() []dockEditorRow {
 // dockAvailableSide is the pseudo-region holding what is not on the bar.
 const dockAvailableSide = "available"
 
+// DockEditorCursor is the dock editor's row under the cursor.
+func (m *OS) DockEditorCursor() int { return m.dockList.Cursor }
+
 // DockEditorMove moves the selection by delta, skipping the header lines: a
 // header is a label, and stopping on one costs a keystroke on the way past.
 func (m *OS) DockEditorMove(delta int) {
@@ -236,15 +239,9 @@ func (m *OS) DockEditorMove(delta int) {
 	if len(rows) == 0 {
 		return
 	}
-	m.DockEditorSelected = m.listStepSkip(m.DockEditorSelected, delta, len(rows),
-		func(i int) bool { return rows[i].Kind != dockRowHeader })
-	m.scrollDockEditor(len(rows))
-}
-
-// scrollDockEditor keeps the selection inside the visible window.
-func (m *OS) scrollDockEditor(total int) {
 	_, visible, _ := m.dockEditorLayout()
-	m.DockEditorScroll = scrollWindow(m.DockEditorScroll, m.DockEditorSelected, total, visible)
+	m.dockList.Move(delta, len(rows), visible, m.listWraps(),
+		func(i int) bool { return rows[i].Kind != dockRowHeader })
 }
 
 // DockEditorShift moves the selected component one place in the given direction,
@@ -255,10 +252,10 @@ func (m *OS) scrollDockEditor(total int) {
 // and an ordering rather than one gesture.
 func (m *OS) DockEditorShift(dir int) tea.Cmd {
 	rows := m.dockEditorRows()
-	if m.DockEditorSelected < 0 || m.DockEditorSelected >= len(rows) {
+	if m.dockList.Cursor < 0 || m.dockList.Cursor >= len(rows) {
 		return nil
 	}
-	row := rows[m.DockEditorSelected]
+	row := rows[m.dockList.Cursor]
 	if row.Kind != dockRowComponent {
 		return nil
 	}
@@ -309,10 +306,10 @@ func (m *OS) DockEditorShift(dir int) tea.Cmd {
 // one back on it. Bound to Enter and to a click.
 func (m *OS) DockEditorToggle() tea.Cmd {
 	rows := m.dockEditorRows()
-	if m.DockEditorSelected < 0 || m.DockEditorSelected >= len(rows) {
+	if m.dockList.Cursor < 0 || m.dockList.Cursor >= len(rows) {
 		return nil
 	}
-	row := rows[m.DockEditorSelected]
+	row := rows[m.dockList.Cursor]
 
 	switch row.Kind {
 	case dockRowComponent:
@@ -345,8 +342,8 @@ func (m *OS) DockEditorReset() tea.Cmd {
 	m.writeSide("left", config.DefaultDockLeft())
 	m.writeSide("center", config.DefaultDockCenter())
 	m.writeSide("right", config.DefaultDockRight())
-	m.DockEditorSelected = 0
-	m.DockEditorScroll = 0
+	m.dockList.Cursor = 0
+	m.dockList.Scroll = 0
 	m.DockEditorMove(1)
 	return m.commitDockLists(true)
 }
@@ -354,10 +351,11 @@ func (m *OS) DockEditorReset() tea.Cmd {
 // selectDockComponent puts the selection back on a component after the lists
 // moved under it, so the row a person is dragging stays under the cursor.
 func (m *OS) selectDockComponent(name string) {
-	for i, row := range m.dockEditorRows() {
+	rows := m.dockEditorRows()
+	for i, row := range rows {
 		if row.Name == name && row.Kind != dockRowHeader {
-			m.DockEditorSelected = i
-			m.scrollDockEditor(len(m.dockEditorRows()))
+			_, visible, _ := m.dockEditorLayout()
+			m.dockList.Select(i, len(rows), visible)
 			return
 		}
 	}

@@ -76,7 +76,7 @@ func TestEveryListTakesTheSameMovementKeys(t *testing.T) {
 				o.QuitMenuItems = []app.QuitMenuItem{{Label: "a"}, {Label: "b"}, {Label: "c"}}
 			},
 			handle:  handleQuitMenuKey,
-			cursor:  func(o *app.OS) int { return o.QuitMenuSelected },
+			cursor:  func(o *app.OS) int { return o.QuitMenuCursor() },
 			n:       func(*app.OS) int { return 3 },
 			letters: true,
 		},
@@ -84,7 +84,7 @@ func TestEveryListTakesTheSameMovementKeys(t *testing.T) {
 			name:    "dock editor",
 			open:    func(o *app.OS) { o.OpenDockEditor() },
 			handle:  handleDockEditorInput,
-			cursor:  func(o *app.OS) int { return o.DockEditorSelected },
+			cursor:  func(o *app.OS) int { return o.DockEditorCursor() },
 			n:       nil,
 			letters: true,
 		},

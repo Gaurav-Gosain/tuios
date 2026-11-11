@@ -44,19 +44,14 @@ func (m *OS) renderSectionEditor() (string, overlay.Geometry, []overlayRowHit) {
 	pal := m.overlayUI()
 	bg := pal.Surface
 
-	if len(rows) > 0 {
-		m.SectionEditorSelected = clampInt(m.SectionEditorSelected, 0, len(rows)-1)
-	} else {
-		m.SectionEditorSelected = 0
-	}
 	width, visible, hints := m.sectionEditorLayout()
-	m.SectionEditorScroll = scrollWindow(m.SectionEditorScroll, m.SectionEditorSelected, len(rows), visible)
+	m.sectionList.Fit(len(rows), visible)
 
 	var lines []string
-	start := m.SectionEditorScroll
+	start := m.sectionList.Scroll
 	end := min(start+visible, len(rows))
 	for i := start; i < end; i++ {
-		lines = append(lines, pal.Row(m.sectionEditorLine(rows[i], i == m.SectionEditorSelected, pal, width), width, overlay.RowState{Cursor: i == m.SectionEditorSelected, Focused: true}, pal.Surface))
+		lines = append(lines, pal.Row(m.sectionEditorLine(rows[i], i == m.sectionList.Cursor, pal, width), width, overlay.RowState{Cursor: i == m.sectionList.Cursor, Focused: true}, pal.Surface))
 	}
 	for shown := end - start; shown < visible; shown++ {
 		lines = append(lines, overlay.Style(bg).Render(" "))
@@ -171,10 +166,10 @@ func (m *OS) sectionEditorLine(row railEditorRow, selected bool, pal overlay.Pal
 // the entry asks for, a bare spacer takes what nothing else needs, and a
 // section's share is a ceiling and is spelled "at most".
 func (m *OS) sectionEditorDetail(rows []railEditorRow, pal overlay.Palette, width int) string {
-	if m.SectionEditorSelected < 0 || m.SectionEditorSelected >= len(rows) {
+	if m.sectionList.Cursor < 0 || m.sectionList.Cursor >= len(rows) {
 		return overlay.Style(pal.Surface).Render(" ")
 	}
-	return m.sectionEditorDetailFor(rows[m.SectionEditorSelected], pal, width)
+	return m.sectionEditorDetailFor(rows[m.sectionList.Cursor], pal, width)
 }
 
 // sectionEditorDetailFor is the description of one row, split out so a test can
