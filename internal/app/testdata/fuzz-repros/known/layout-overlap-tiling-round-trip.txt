@@ -1,6 +1,0 @@
-# An overlay open, tiling off, l, rail toggle, tiling on: two tiled panes overlap by two rows. Not read yet.
-overlay-open 1
-tiling
-key "l"
-sidebar
-tiling

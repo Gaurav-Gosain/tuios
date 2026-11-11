@@ -1,0 +1,6 @@
+# An overlay open, tiling off, l, rail toggle, tiling on. The l steps a setting in the overlay and turns motion on, so the retile starts a slide and the panes are at their starting rectangles until it lands. Not a product bug: the oracle judged a frame in the middle of a slide.
+overlay-open 1
+tiling
+key "l"
+sidebar
+tiling

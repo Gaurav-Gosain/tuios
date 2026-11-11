@@ -10,6 +10,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/fuzz"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/ui"
 	"github.com/charmbracelet/x/ansi"
 	"tuios.dev/vt"
 )
@@ -288,6 +289,17 @@ func checkLayoutIsDisjoint(f *fuzzOS) []fuzz.Violation {
 	// comes up, over whatever it passes.
 	if f.m.Dragging || f.m.Resizing {
 		return nil
+	}
+	// A pane sliding to its slot is drawn between two layouts, and the panes
+	// of a split can overlap on the way. The slide ends at the slot, so the
+	// layout is judged when it has landed. A run can turn motion on in the
+	// middle (a settings overlay stepping its value), which is how a retile
+	// after that left the panes at their starting rectangles in this model,
+	// whose clock does not advance a slide.
+	for _, anim := range f.m.Animations {
+		if anim.Type == ui.AnimationSnap {
+			return nil
+		}
 	}
 	wins := tiledRects(f.m)
 	for _, w := range wins {
