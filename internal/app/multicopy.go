@@ -11,6 +11,8 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -428,31 +430,6 @@ func (m *OS) CancelMultiCopySave() {
 	m.ShowNotification("Save cancelled. Nothing was written.", "info", m.Settings.NotificationDuration)
 }
 
-// expandHome turns a leading ~ into the home directory.
-func expandHome(p string) (string, error) {
-	if p != "~" && !strings.HasPrefix(p, "~/") {
-		return p, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, strings.TrimPrefix(p, "~")), nil
-}
-
-// homeRelative writes a path under the home directory with ~, so the dock can
-// show the file name.
-func homeRelative(p string) string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return p
-	}
-	if rel, ok := strings.CutPrefix(p, home+string(filepath.Separator)); ok {
-		return "~/" + filepath.ToSlash(rel)
-	}
-	return p
-}
-
 // MultiCopySaveType adds text to the save prompt's path. A paste arrives
 // here: control characters and line breaks are removed, so a pasted path with
 // a newline stays a path and never reaches a shell.
@@ -495,7 +472,7 @@ func (m *OS) MultiCopySaveResolved() (string, error) {
 	if raw == "" {
 		return "", errors.New("empty path")
 	}
-	path, err := expandHome(raw)
+	path, err := pathroot.ExpandHomeStrict(raw)
 	if err != nil {
 		return "", err
 	}
@@ -543,12 +520,12 @@ func (m *OS) CommitMultiCopySave() bool {
 		return false
 	}
 	if info, err := os.Stat(path); err == nil && info.IsDir() {
-		s.Err = homeRelative(path) + " is a folder. Type a file name."
+		s.Err = pathroot.ContractUserHome(path) + " is a folder. Type a file name."
 		return false
 	}
 	dir := filepath.Dir(path)
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-		s.Err = "The folder " + homeRelative(dir) + " does not exist."
+		s.Err = "The folder " + pathroot.ContractUserHome(dir) + " does not exist."
 		return false
 	}
 	f, err := multiCopyCreate(path)
@@ -557,7 +534,7 @@ func (m *OS) CommitMultiCopySave() bool {
 		s.Err = "A file is already at this path. Type a different path."
 		return false
 	case errors.Is(err, fs.ErrPermission):
-		s.Err = "You cannot write to " + homeRelative(dir) + "."
+		s.Err = "You cannot write to " + pathroot.ContractUserHome(dir) + "."
 		return false
 	case err != nil:
 		s.Err = "Cannot save: " + err.Error()
@@ -574,7 +551,7 @@ func (m *OS) CommitMultiCopySave() bool {
 		return false
 	}
 	mc.Save = nil
-	m.ShowNotification(fmt.Sprintf("Saved to %s%s (%s, %s).", homeRelative(path), m.multiCopySaveHost(), paneCount(len(s.Panes)), mc.Format),
+	m.ShowNotification(fmt.Sprintf("Saved to %s%s (%s, %s).", pathroot.ContractUserHome(path), m.multiCopySaveHost(), paneCount(len(s.Panes)), mc.Format),
 		"success", 2*m.Settings.NotificationDuration)
 	return true
 }

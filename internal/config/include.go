@@ -11,6 +11,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
+
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
@@ -398,23 +400,11 @@ func includeList(v any) ([]string, error) {
 // resolveInclude makes an include path absolute: ~ is the home directory, and
 // a relative path is relative to the directory of the file that names it.
 func resolveInclude(from, name string) string {
-	name = expandHome(name)
+	name = pathroot.ExpandHome(name)
 	if !filepath.IsAbs(name) {
 		name = filepath.Join(filepath.Dir(from), name)
 	}
 	return filepath.Clean(name)
-}
-
-// expandHome replaces a leading ~ with the home directory.
-func expandHome(p string) string {
-	if p != "~" && !strings.HasPrefix(p, "~/") && !strings.HasPrefix(p, `~\`) {
-		return p
-	}
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return p
-	}
-	return filepath.Join(home, p[1:])
 }
 
 // absPath is p made absolute and clean. A path that cannot be made absolute

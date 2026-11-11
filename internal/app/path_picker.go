@@ -178,21 +178,6 @@ func pathPickerHome(local bool, client *session.TUIClient, origin string) string
 	return filepath.Clean(listing.Dir)
 }
 
-// homeShort writes a path under home as ~/..., the way a shell prompt shows
-// it. With no home it is the path as it is.
-func homeShort(path, home string) string {
-	if home == "" || home == "/" {
-		return path
-	}
-	if path == home {
-		return "~"
-	}
-	if rest, ok := strings.CutPrefix(path, home+"/"); ok {
-		return "~/" + rest
-	}
-	return path
-}
-
 // pathPickerBase is the folder the picker opens on. For a local pane it is
 // the shell's folder as the kernel holds it, spelled the way the pane's OSC 7
 // report spells it when the two are the same folder. It runs off the update

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -578,7 +580,7 @@ func readListing(client *session.TUIClient, host, origin, dir string, pinned boo
 		// is the same disk it would have read.
 	}
 	spoofed := wasSpoofed || cwdIsSpoofed(pgid, dir)
-	items, capped, err := readDirFunc(session.ExpandHome(dir), fileViewMaxEntries)
+	items, capped, err := readDirFunc(pathroot.ExpandHome(dir), fileViewMaxEntries)
 	if err != nil {
 		return fileListMsg{Dir: dir, Err: session.DirReadError(err), Spoofed: spoofed}
 	}

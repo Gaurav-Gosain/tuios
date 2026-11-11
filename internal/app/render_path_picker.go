@@ -4,6 +4,8 @@ import (
 	"image"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
+
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -198,7 +200,7 @@ func (m *OS) renderPathPicker(p *pathPicker, width, rows int) (string, overlay.G
 // pane's machine as ~/..., cut from the left so the end of the path, the part
 // that tells folders apart, stays.
 func (m *OS) pathPickerTitle(p *pathPicker, room int) string {
-	dir := printableTitle(homeShort(p.dir, p.home))
+	dir := printableTitle(pathroot.ContractHome(p.dir, p.home))
 	if p.loading {
 		dir += " " + overlay.Ellipsis()
 	}

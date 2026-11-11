@@ -127,9 +127,6 @@ func (d Dirs) PluginRoot(e LockEntry, dir string) string {
 // dataDir is tuios's data folder, the parent of worktrees/ and repos/.
 func dataDir() string { return filepath.Join(xdg.DataHome, "tuios") }
 
-// ExpandHome expands a leading ~ to the home folder.
-func ExpandHome(p string) string { return expandHome(p) }
-
 // Inside reports whether file is in dir once both have their links
 // resolved. A manifest that is a link to a file elsewhere is not inside.
 func Inside(file, dir string) bool {

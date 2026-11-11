@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
+
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
@@ -273,7 +275,7 @@ func (d *Daemon) verbReadDir(cs *connState, params json.RawMessage) (any, *verbE
 	if p.Dir == "" {
 		return nil, invalidParam("dir", "read-dir needs a directory to list.")
 	}
-	dir := ExpandHome(filepath.Clean(p.Dir))
+	dir := pathroot.ExpandHome(filepath.Clean(p.Dir))
 	if verr := d.checkLinkRead(cs, dir); verr != nil {
 		return nil, verr
 	}

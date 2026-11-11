@@ -14,6 +14,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/spf13/cobra"
@@ -304,7 +306,7 @@ func runLookRemove(w io.Writer, prompt lookPrompt) error {
 	}
 	if plan.SavedErr != nil {
 		fmt.Fprintf(w, "%v.\n", plan.SavedErr)
-		fmt.Fprintf(w, "tuios can remove the look without them. It moves the file to %s.\n\n", homeShort(plan.BrokenPath))
+		fmt.Fprintf(w, "tuios can remove the look without them. It moves the file to %s.\n\n", pathroot.ContractUserHome(plan.BrokenPath))
 		question = "Remove the look without the saved values?"
 	}
 	ok, err := prompt.confirm(w, question)
@@ -320,7 +322,7 @@ func runLookRemove(w io.Writer, prompt lookPrompt) error {
 	}
 	switch r := plan.Restore; {
 	case r != nil && len(r.Kept) > 0:
-		fmt.Fprintf(w, "tuios keeps the values it cannot put back in %s.\n", homeShort(config.LookSavedPath(plan.Main)))
+		fmt.Fprintf(w, "tuios keeps the values it cannot put back in %s.\n", pathroot.ContractUserHome(config.LookSavedPath(plan.Main)))
 		fmt.Fprintln(w, `The look stays. Fix the files above, then run "tuios look remove" again.`)
 	case plan.Current == nil:
 		fmt.Fprintln(w, "tuios put back the saved values.")
@@ -353,10 +355,10 @@ func runLookShow(w io.Writer) error {
 	row("look", il.Name)
 	src := il.Source
 	if !strings.HasPrefix(src, "https://") {
-		src = homeShort(src)
+		src = pathroot.ContractUserHome(src)
 	}
 	row("source", src)
-	row("file", homeShort(il.Path))
+	row("file", pathroot.ContractUserHome(il.Path))
 	row("theme", il.Theme)
 	row("glyphs", il.Glyphs)
 	_ = tw.Flush()
@@ -384,13 +386,13 @@ func printLookPlan(w io.Writer, p *config.LookPlan) {
 		fmt.Fprintf(tw, "Look\t%s\n", name)
 		src := p.Source
 		if !strings.HasPrefix(src, "https://") {
-			src = homeShort(src)
+			src = pathroot.ContractUserHome(src)
 		}
 		fmt.Fprintf(tw, "Source\t%s\n", src)
 	} else if c := p.Current; c != nil && c.Name != "" {
 		fmt.Fprintf(tw, "Look\t%s\n", c.Name)
 	}
-	fmt.Fprintf(tw, "File\t%s\n", homeShort(config.LookPath(p.Main)))
+	fmt.Fprintf(tw, "File\t%s\n", pathroot.ContractUserHome(config.LookPath(p.Main)))
 	_ = tw.Flush()
 
 	fmt.Fprintln(w)
@@ -484,18 +486,6 @@ func lookShown(v string) string {
 		return `""`
 	}
 	return v
-}
-
-// homeShort writes a path under the home directory with ~.
-func homeShort(p string) string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return p
-	}
-	if rel, err := filepath.Rel(home, p); err == nil && !strings.HasPrefix(rel, "..") {
-		return filepath.Join("~", rel)
-	}
-	return p
 }
 
 // readLookSource returns the look at source and the source as the look file

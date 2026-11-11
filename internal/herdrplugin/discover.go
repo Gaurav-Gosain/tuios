@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
+
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/winpath"
 )
@@ -220,7 +222,7 @@ func Discover(d Dirs, enabled []string) []Entry {
 		out = append(out, e)
 	}
 	for _, p := range d.Extra {
-		add(OriginConfig, expandHome(p), nil, nil, "", nil)
+		add(OriginConfig, pathroot.ExpandHome(p), nil, nil, "", nil)
 	}
 	for _, dir := range subdirs(d.PluginsDir()) {
 		if HasManifest(dir) {
@@ -341,15 +343,6 @@ func fileExists(p string) bool {
 	return err == nil && !info.IsDir()
 }
 
-func expandHome(p string) string {
-	if p == "~" || strings.HasPrefix(p, "~/") || filepath.Separator == '\\' && strings.HasPrefix(p, `~\`) {
-		if home, err := os.UserHomeDir(); err == nil {
-			return filepath.Join(home, strings.TrimPrefix(p, "~"))
-		}
-	}
-	return p
-}
-
 // SamePath reports whether two plugin paths name the same file: each with
 // ~ expanded, made absolute, and with its links resolved where it exists.
 func SamePath(a, b string) bool {
@@ -360,7 +353,7 @@ func SamePath(a, b string) bool {
 // resolved, so an entry written with it and the plain path of the same file
 // compare equal (issue #654). EvalSymlinks can add the prefix back.
 func canonical(p string) string {
-	p = winpath.StripExtended(expandHome(p))
+	p = winpath.StripExtended(pathroot.ExpandHome(p))
 	if abs, err := filepath.Abs(p); err == nil {
 		p = abs
 	}

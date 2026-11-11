@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
@@ -171,7 +173,7 @@ func (d *Daemon) addDirArgs(launch agentLaunch, dirs []string) ([]string, *verbE
 	}
 	out := make([]string, 0, 2*len(dirs))
 	for _, dir := range dirs {
-		out = append(out, flag, ExpandHome(dir))
+		out = append(out, flag, pathroot.ExpandHome(dir))
 	}
 	return out, nil
 }

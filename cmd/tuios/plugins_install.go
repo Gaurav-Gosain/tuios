@@ -19,6 +19,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
@@ -102,7 +104,7 @@ func shownSource(src string) string {
 // SOURCE.
 func parsePluginSource(arg string, o installOpts) (pluginSource, error) {
 	var s pluginSource
-	p := herdrplugin.ExpandHome(arg)
+	p := pathroot.ExpandHome(arg)
 	_, statErr := os.Stat(p)
 	// On a release build a name of the release is the release's plugin, also
 	// when a folder of that name is in this folder; give the folder as ./NAME.

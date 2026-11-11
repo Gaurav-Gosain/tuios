@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
+
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
@@ -346,7 +348,7 @@ func ResolveSecret(inline Secret, env, file string) (string, error) {
 		return strings.TrimSpace(v), nil
 	}
 	if file != "" {
-		path := ExpandHome(file)
+		path := pathroot.ExpandHome(file)
 		info, err := os.Stat(path)
 		if err != nil {
 			return "", errfmt.Errorf("cannot read the secret file %s: %w", file, errors.Unwrap(err))
@@ -365,16 +367,6 @@ func ResolveSecret(inline Secret, env, file string) (string, error) {
 		return v, nil
 	}
 	return "", nil
-}
-
-// ExpandHome replaces a leading ~/ with the home directory.
-func ExpandHome(p string) string {
-	if p == "~" || strings.HasPrefix(p, "~/") {
-		if home, err := os.UserHomeDir(); err == nil {
-			return home + p[1:]
-		}
-	}
-	return p
 }
 
 // checkNotifyURL says what is wrong with a provider address, or "".

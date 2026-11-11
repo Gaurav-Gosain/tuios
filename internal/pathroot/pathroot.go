@@ -1,4 +1,5 @@
-// Package pathroot answers whether a path is inside a folder.
+// Package pathroot answers questions about where a path is: whether it is
+// inside a folder, and what a leading ~ stands for.
 package pathroot
 
 import "path/filepath"

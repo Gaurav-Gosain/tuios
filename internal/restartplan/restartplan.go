@@ -11,9 +11,10 @@ package restartplan
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"os"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
 )
 
 // Steps, in the order `tuios restart-server --json` writes them.
@@ -139,7 +140,7 @@ func Lines(r *Report, window string) []Line {
 	}
 	after := r.Version
 	if r.Binary != "" {
-		after += "   (from " + homeShort(r.Binary) + ")"
+		after += "   (from " + pathroot.ContractUserHome(r.Binary) + ")"
 	}
 	out := []Line{{Kind: KindRow, Label: "Daemon now", Text: now}, {Kind: KindRow, Label: "After restart", Text: after}}
 	if window != "" && window != r.Version {
@@ -200,16 +201,6 @@ func resumeNote(mode string) string {
 		return "Run 'tuios resume-agent' in a pane to resume it."
 	}
 	return "The Inbox offers to resume each one."
-}
-
-// homeShort writes a path under the home folder with ~.
-func homeShort(p string) string {
-	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		if rest, ok := strings.CutPrefix(p, home+string(os.PathSeparator)); ok {
-			return "~" + string(os.PathSeparator) + rest
-		}
-	}
-	return p
 }
 
 // Text is the plan as a terminal prints it: rows aligned, lists indented.
