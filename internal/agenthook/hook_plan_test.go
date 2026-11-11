@@ -1,4 +1,4 @@
-package main
+package agenthook
 
 import (
 	"encoding/json"
@@ -45,7 +45,7 @@ const claudePlan = `{"hook_event_name":"PermissionRequest","session_id":"s1","to
 func TestAgentHookLeavesAPlanToAnOlderDaemon(t *testing.T) {
 	d := &planDaemon{}
 	d.answer = answerWith("once", "answered", "")
-	out, explain := runHold(t, &d.holdDaemon, func() (verbCaller, error) { return d, nil }, "claude-code", claudePlan, 0)
+	out, explain := runHold(t, &d.holdDaemon, func() (Caller, error) { return d, nil }, "claude-code", claudePlan, 0)
 	if out != "" {
 		t.Errorf("printed %q to an older daemon", out)
 	}
@@ -60,7 +60,7 @@ func TestAgentHookLeavesAPlanToAnOlderDaemon(t *testing.T) {
 func TestAgentHookNamesToolAndTarget(t *testing.T) {
 	d := &planDaemon{takes: requestApprovalFields}
 	d.answer = answerWith("once", "answered", "")
-	_, _ = runHold(t, &d.holdDaemon, func() (verbCaller, error) { return d, nil }, "claude-code", claudeBash, 0)
+	_, _ = runHold(t, &d.holdDaemon, func() (Caller, error) { return d, nil }, "claude-code", claudeBash, 0)
 	h := d.holdCalls()
 	if len(h) != 1 || h[0]["tool"] != "Bash" || h[0]["target"] != "go test ./..." || h[0]["deny_message"] != true {
 		t.Fatalf("request-approval params %v", h)
@@ -72,7 +72,7 @@ func TestAgentHookNamesToolAndTarget(t *testing.T) {
 	// A daemon that takes only some of them gets only those.
 	d = &planDaemon{takes: []string{"tool"}}
 	d.answer = answerWith("once", "answered", "")
-	_, _ = runHold(t, &d.holdDaemon, func() (verbCaller, error) { return d, nil }, "claude-code", claudeBash, 0)
+	_, _ = runHold(t, &d.holdDaemon, func() (Caller, error) { return d, nil }, "claude-code", claudeBash, 0)
 	h = d.holdCalls()
 	if len(h) != 1 || h[0]["tool"] != "Bash" {
 		t.Fatalf("request-approval params %v", h)

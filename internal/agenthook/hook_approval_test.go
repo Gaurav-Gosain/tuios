@@ -1,4 +1,4 @@
-package main
+package agenthook
 
 import (
 	"bytes"
@@ -59,21 +59,21 @@ func (h *holdDaemon) holdCalls() []map[string]any {
 
 // runHold runs one hook event against d and returns what it printed and the
 // explain line.
-func runHold(t *testing.T, d *holdDaemon, dial func() (verbCaller, error), harness, payload string, holdMax time.Duration) (string, string) {
+func runHold(t *testing.T, d *holdDaemon, dial func() (Caller, error), harness, payload string, holdMax time.Duration) (string, string) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
 	if dial == nil {
-		dial = func() (verbCaller, error) { return d, nil }
+		dial = func() (Caller, error) { return d, nil }
 	}
-	runAgentHook(agentHookOptions{explain: true}, []string{harness}, agentHookIO{
-		stdin:      strings.NewReader(payload),
-		stdout:     &stdout,
-		stderr:     &stderr,
-		getenv:     func(k string) string { return map[string]string{"TUIOS_PANE_ID": "w7", "TUIOS_SESSION": "work"}[k] },
-		dial:       dial,
-		self:       func() (int, []int) { return 4242, []int{4250, 4242} },
-		harnessPID: func(ancestors []int) int { return ancestors[0] },
-		holdMax:    holdMax,
+	Run(Options{Explain: true}, []string{harness}, IO{
+		Stdin:      strings.NewReader(payload),
+		Stdout:     &stdout,
+		Stderr:     &stderr,
+		Getenv:     func(k string) string { return map[string]string{"TUIOS_PANE_ID": "w7", "TUIOS_SESSION": "work"}[k] },
+		Dial:       dial,
+		Self:       func() (int, []int) { return 4242, []int{4250, 4242} },
+		HarnessPID: func(ancestors []int) int { return ancestors[0] },
+		HoldMax:    holdMax,
 	})
 	return stdout.String(), stderr.String()
 }
@@ -102,7 +102,7 @@ func TestAgentHookPrintsNothingWithoutADecision(t *testing.T) {
 		name    string
 		payload string
 		d       *holdDaemon
-		dial    func(d *holdDaemon) func() (verbCaller, error)
+		dial    func(d *holdDaemon) func() (Caller, error)
 	}{
 		{name: "the hold ended with no answer", payload: claudeBash, d: &holdDaemon{answer: answerWith("", "timeout", "")}},
 		{name: "approvals are off", payload: claudeBash, d: &holdDaemon{answer: answerWith("", "disabled", "")}},
@@ -117,8 +117,8 @@ func TestAgentHookPrintsNothingWithoutADecision(t *testing.T) {
 		{name: "a word that is not a decision", payload: claudeBash, d: &holdDaemon{answer: answerWith("yes", "answered", "")}},
 		{name: "ask is not a decision", payload: claudeBash, d: &holdDaemon{answer: answerWith("ask", "handed_back", "")}},
 		{name: "the second dial fails", payload: claudeBash, d: &holdDaemon{answer: answerWith("once", "answered", "")},
-			dial: func(d *holdDaemon) func() (verbCaller, error) {
-				return func() (verbCaller, error) {
+			dial: func(d *holdDaemon) func() (Caller, error) {
+				return func() (Caller, error) {
 					dialMu.Lock()
 					defer dialMu.Unlock()
 					dialCount++
@@ -131,7 +131,7 @@ func TestAgentHookPrintsNothingWithoutADecision(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			var dial func() (verbCaller, error)
+			var dial func() (Caller, error)
 			if tc.dial != nil {
 				dial = tc.dial(tc.d)
 			}
@@ -156,15 +156,15 @@ func TestAgentHookGivesUpOnADaemonThatNeverAnswers(t *testing.T) {
 	}}
 	var stdout, stderr bytes.Buffer
 	start := time.Now()
-	runAgentHook(agentHookOptions{explain: true}, []string{"claude-code"}, agentHookIO{
-		stdin:      strings.NewReader(claudeBash),
-		stdout:     &stdout,
-		stderr:     &stderr,
-		getenv:     func(k string) string { return map[string]string{"TUIOS_PANE_ID": "w7"}[k] },
-		dial:       func() (verbCaller, error) { return d, nil },
-		self:       func() (int, []int) { return 0, nil },
-		harnessPID: func([]int) int { return 0 },
-		holdMax:    50 * time.Millisecond,
+	Run(Options{Explain: true}, []string{"claude-code"}, IO{
+		Stdin:      strings.NewReader(claudeBash),
+		Stdout:     &stdout,
+		Stderr:     &stderr,
+		Getenv:     func(k string) string { return map[string]string{"TUIOS_PANE_ID": "w7"}[k] },
+		Dial:       func() (Caller, error) { return d, nil },
+		Self:       func() (int, []int) { return 0, nil },
+		HarnessPID: func([]int) int { return 0 },
+		HoldMax:    50 * time.Millisecond,
 	})
 	if took := time.Since(start); took > 3*time.Second {
 		t.Fatalf("the hook took %s", took)

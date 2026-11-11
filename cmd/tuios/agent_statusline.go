@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -18,7 +17,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
+	"github.com/Gaurav-Gosain/tuios/internal/agenthook"
+
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -269,7 +269,7 @@ func reportStatusLine(o agentStatusLineOptions, harness string, payload []byte, 
 		}
 		noPane := ""
 		if stampDir != "" {
-			noPane = filepath.Join(stampDir, statusLineStampName("nopane", strconv.Itoa(sid)))
+			noPane = filepath.Join(stampDir, agenthook.StampName("nopane", strconv.Itoa(sid)))
 			if fi, err := os.Stat(noPane); err == nil && now().Sub(fi.ModTime()) < statusLineNoPaneWait {
 				out.Skip = "no pane found for this process in the last minute"
 				return out
@@ -281,7 +281,7 @@ func reportStatusLine(o agentStatusLineOptions, harness string, payload []byte, 
 			return out
 		}
 		client = dialed
-		out.Session, out.Window, out.PaneBy, err = resolveHookPane(agentHookOptions{}, agentHookIO{getenv: getenv}, client, sid, ancestors)
+		out.Session, out.Window, out.PaneBy, err = agenthook.ResolvePane(agenthook.Options{}, agenthook.IO{Getenv: getenv}, client, sid, ancestors)
 		if err != nil {
 			if noPane != "" {
 				_ = os.WriteFile(noPane, nil, 0o600)
@@ -293,10 +293,10 @@ func reportStatusLine(o agentStatusLineOptions, harness string, payload []byte, 
 	}
 
 	stampPath := ""
-	var prev *statusLineStamp
+	var prev *agenthook.Stamp
 	if stampDir != "" {
-		stampPath = filepath.Join(stampDir, statusLineStampName(out.Session, out.Window))
-		prev = readStatusLineStamp(stampPath)
+		stampPath = filepath.Join(stampDir, agenthook.StampName(out.Session, out.Window))
+		prev = agenthook.ReadStamp(stampPath)
 	}
 	if due, why := statusLineDue(prev, values, now(), o.turnEnd); !due {
 		out.Skip = why
@@ -305,7 +305,7 @@ func reportStatusLine(o agentStatusLineOptions, harness string, payload []byte, 
 		// only while the conversation changes, and the last values of a
 		// turn are usually the ones held.
 		if stampPath != "" && statusLineChanged(prev, values) {
-			writeStatusLinePending(stampPath, prev, values)
+			agenthook.WritePending(stampPath, prev, values)
 		}
 		return out
 	}
@@ -341,28 +341,13 @@ func reportStatusLine(o agentStatusLineOptions, harness string, payload []byte, 
 	}
 	out.Sent = true
 	if stampPath != "" {
-		writeStatusLineStamp(stampPath, prev, values.Session, tokens, now())
+		agenthook.WriteStamp(stampPath, prev, values.Session, tokens, now())
 	}
 	return out
 }
 
-// statusLineStamp is the last values sent for one pane, and when.
-type statusLineStamp struct {
-	Session string            `json:"session,omitempty"`
-	Values  map[string]string `json:"values"`
-	// At is when they were sent, in Unix milliseconds.
-	At int64 `json:"at"`
-	// Pending is what a run the interval held back saw and did not send.
-	// The next run that is due sends it, and so does the harness's turn
-	// end (flushStatusLine).
-	Pending map[string]string `json:"pending,omitempty"`
-	// RestAt is when the harness's turn last ended, in Unix milliseconds. A
-	// change after a turn ended and before the next report goes at once.
-	RestAt int64 `json:"rest_at,omitempty"`
-}
-
 // statusLineChanged reports whether values differ from what was last sent.
-func statusLineChanged(prev *statusLineStamp, values integration.StatusLineValues) bool {
+func statusLineChanged(prev *agenthook.Stamp, values integration.StatusLineValues) bool {
 	if prev == nil || values.Session != prev.Session {
 		return true
 	}
@@ -377,7 +362,7 @@ func statusLineChanged(prev *statusLineStamp, values integration.StatusLineValue
 // statusLineDue says whether values should be sent now, given what was sent
 // last, and why not when they should not. turnEnd sends changed values at
 // once, so a turn's last cost is not held until the next turn.
-func statusLineDue(prev *statusLineStamp, values integration.StatusLineValues, now time.Time, turnEnd bool) (bool, string) {
+func statusLineDue(prev *agenthook.Stamp, values integration.StatusLineValues, now time.Time, turnEnd bool) (bool, string) {
 	if prev == nil {
 		return true, ""
 	}
@@ -419,24 +404,6 @@ func warned(context string) bool {
 	return err == nil && n >= contextWarnAt
 }
 
-// statusLineStampName is the stamp file for one pane. Anything but letters,
-// digits, '-' and '_' becomes '_', so a name cannot leave the directory.
-func statusLineStampName(sessionName, window string) string {
-	safe := func(s string) string {
-		var b strings.Builder
-		for _, r := range s {
-			switch {
-			case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
-				b.WriteRune(r)
-			default:
-				b.WriteByte('_')
-			}
-		}
-		return b.String()
-	}
-	return "statusline-" + safe(sessionName) + "-" + safe(window) + ".json"
-}
-
 // statusLineStampDir is the directory of the daemon's socket, which is per
 // user, 0700, and cleared with the boot on the systems that have
 // XDG_RUNTIME_DIR.
@@ -446,111 +413,6 @@ func statusLineStampDir() (string, error) {
 		return "", err
 	}
 	return filepath.Dir(sock), nil
-}
-
-func readStatusLineStamp(path string) *statusLineStamp {
-	data, err := os.ReadFile(path)
-	if err != nil || len(data) > 64<<10 {
-		return nil
-	}
-	var st statusLineStamp
-	if jsonx.Unmarshal(data, &st) != nil {
-		return nil
-	}
-	return &st
-}
-
-// writeStatusLineStamp records what was sent, merged over what was sent
-// before, since a payload that leaves a field out does not clear it. Nothing
-// is pending after a send.
-func writeStatusLineStamp(path string, prev *statusLineStamp, convo string, sent map[string]string, now time.Time) {
-	st := statusLineStamp{Session: convo, Values: map[string]string{}, At: now.UnixMilli()}
-	if prev != nil && prev.Session == convo {
-		maps.Copy(st.Values, prev.Values)
-		st.RestAt = prev.RestAt
-	}
-	maps.Copy(st.Values, sent)
-	saveStatusLineStamp(path, st)
-}
-
-// writeStatusLinePending records values a run was not due to send, over
-// what earlier held runs left. The stamp's time is left alone, so the
-// interval still counts from the last report.
-func writeStatusLinePending(path string, prev *statusLineStamp, values integration.StatusLineValues) {
-	st := statusLineStamp{Session: values.Session, Values: map[string]string{}, Pending: map[string]string{}}
-	if prev != nil {
-		st.At, st.RestAt = prev.At, prev.RestAt
-		if prev.Session == values.Session {
-			maps.Copy(st.Values, prev.Values)
-			maps.Copy(st.Pending, prev.Pending)
-		}
-	}
-	next := values.Tokens()
-	if prev != nil && prev.Session == values.Session {
-		same := true
-		for k, v := range next {
-			if prev.Pending[k] != v {
-				same = false
-				break
-			}
-		}
-		if same {
-			// Already recorded: a status line runs several times a
-			// second, and the file need not be written for each.
-			return
-		}
-	}
-	maps.Copy(st.Pending, next)
-	saveStatusLineStamp(path, st)
-}
-
-// flushStatusLine is the harness's turn end for its status line feed: what a
-// run held back for the pane is sent now, and the stamp records that the
-// turn ended, so the first change after it goes at once too. A pane with no
-// stamp has no status line feed and is left alone. It reports whether
-// set-agent-meta was called and answered.
-func flushStatusLine(client verbCaller, sessionName, window, dir string, now time.Time) (bool, error) {
-	if dir == "" || window == "" {
-		return false, nil
-	}
-	path := filepath.Join(dir, statusLineStampName(sessionName, window))
-	st := readStatusLineStamp(path)
-	if st == nil {
-		return false, nil
-	}
-	sent := false
-	if len(st.Pending) > 0 {
-		params := map[string]any{
-			"window": window,
-			"tokens": st.Pending,
-			"source": integration.StatusLineSource,
-		}
-		if sessionName != "" {
-			params["session"] = sessionName
-		}
-		if _, err := client.Call("set-agent-meta", params); err != nil {
-			return false, err
-		}
-		if st.Values == nil {
-			st.Values = map[string]string{}
-		}
-		maps.Copy(st.Values, st.Pending)
-		st.Pending = nil
-		st.At = now.UnixMilli()
-		sent = true
-	}
-	st.RestAt = now.UnixMilli()
-	saveStatusLineStamp(path, *st)
-	return sent, nil
-}
-
-// saveStatusLineStamp writes a stamp file, 0600, replaced whole.
-func saveStatusLineStamp(path string, st statusLineStamp) {
-	data, err := jsonx.Marshal(st)
-	if err != nil {
-		return
-	}
-	_ = atomicfile.Write(path, data, 0o600, false)
 }
 
 // runStatusLineThen runs the person's status line command through the shell,

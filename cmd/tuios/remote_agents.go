@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/agenthook"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
@@ -120,7 +121,7 @@ func runSetAgentState(sessionName, windowTarget, state, message, source, harness
 	// know instead of refusing it, so --if-state is checked first: applied
 	// without its condition, the report would do what the caller ruled out.
 	if extra.ifState != "" {
-		if err := requireIfState(client); err != nil {
+		if err := agenthook.RequireIfState(client); err != nil {
 			return err
 		}
 	}
