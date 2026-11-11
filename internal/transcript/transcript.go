@@ -393,3 +393,43 @@ func FirstRecordTime(path string) (time.Time, bool) {
 	}
 	return time.Time{}, false
 }
+
+// LastRecordBefore is the timestamp of the newest record written before t,
+// read from the file's last tailWindow bytes, and its first record when the
+// tail holds none from before t. It is when the conversation was last used
+// before a process started at t went on with it. ok is false when no record
+// before t is found.
+func LastRecordBefore(path string, t time.Time) (time.Time, bool) {
+	f, err := os.Open(path) //nolint:gosec // a transcript path the harness manifest names
+	if err != nil {
+		return time.Time{}, false
+	}
+	defer func() { _ = f.Close() }()
+	st, err := f.Stat()
+	if err != nil {
+		return time.Time{}, false
+	}
+	start := max(st.Size()-tailWindow, 0)
+	buf := make([]byte, st.Size()-start)
+	n, _ := f.ReadAt(buf, start)
+	var best time.Time
+	for line := range bytes.SplitSeq(buf[:n], []byte{'\n'}) {
+		var rec struct {
+			Timestamp string `json:"timestamp"`
+		}
+		if jsonx.Unmarshal(line, &rec) != nil || rec.Timestamp == "" {
+			continue
+		}
+		at, err := time.Parse(time.RFC3339Nano, rec.Timestamp)
+		if err == nil && at.Before(t) && at.After(best) {
+			best = at
+		}
+	}
+	if !best.IsZero() {
+		return best, true
+	}
+	if first, ok := FirstRecordTime(path); ok && first.Before(t) {
+		return first, true
+	}
+	return time.Time{}, false
+}

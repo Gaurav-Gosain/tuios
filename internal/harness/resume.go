@@ -50,6 +50,11 @@ type Resume struct {
 	KeepRisky []string `toml:"keep_risky"`
 	// KeepSource is where the flag names came from, in words.
 	KeepSource string `toml:"keep_source"`
+	// Continue are the flags that start the harness on its most recent
+	// conversation in the folder without naming it (claude --continue). The
+	// daemon reads them off an agent's command line to find the transcript a
+	// hookless agent goes on writing to (see Registry.Continues).
+	Continue []string `toml:"continue"`
 }
 
 // ResumePlaceholder is the token part a resume command's session id replaces.
@@ -347,4 +352,21 @@ func (r *Registry) ResumedSessionID(id string, argv []string) (string, bool) {
 		return "", false
 	}
 	return "", false
+}
+
+// Continues reports whether argv, the command line of a process of harness
+// id, starts it on its most recent conversation in the folder without naming
+// one: a token is one of the manifest's [resume] continue flags. false for a
+// harness that lists none, or is not known.
+func (r *Registry) Continues(id string, argv []string) bool {
+	m := r.Lookup(id)
+	if m == nil || len(m.Resume.Continue) == 0 {
+		return false
+	}
+	for _, a := range argv {
+		if slices.Contains(m.Resume.Continue, a) {
+			return true
+		}
+	}
+	return false
 }

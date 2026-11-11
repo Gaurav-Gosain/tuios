@@ -2912,6 +2912,7 @@ func (d *Daemon) paneAgentIdentifier(sess *Session) func(ptyID string) agentIden
 		id.agent = ok
 		if ok && d.agentMatcher.registry != nil {
 			id.resumed, _ = d.agentMatcher.registry.ResumedSessionID(det.harness, info.argv)
+			id.continued = id.resumed == "" && d.agentMatcher.registry.Continues(det.harness, info.argv)
 		}
 		return id
 	}

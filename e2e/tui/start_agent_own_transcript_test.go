@@ -266,3 +266,114 @@ func TestAResumedAgentReadsItsOwnOldTranscript(t *testing.T) {
 		t.Errorf("save the artifact: %v", err)
 	}
 }
+
+// ownTranscriptContinued is a Claude Code stand-in run as claude cont.sh
+// --continue: it goes on with the folder's most recent conversation,
+// recent-conv, appending a mid-turn record every second to its file, as
+// claude --continue does.
+const ownTranscriptContinued = `cwd=$(pwd -P)
+dir="$CLAUDE_CONFIG_DIR/projects/$(printf %s "$cwd" | tr / -)"
+echo CONTINUED-WORKING
+while :; do
+  printf '{"type":"assistant","sessionId":"recent-conv","cwd":"%s","version":"claude","timestamp":"%s","message":{"stop_reason":"tool_use"}}\n' "$cwd" "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" >> "$dir/recent-conv.jsonl"
+  sleep 1
+done
+`
+
+// TestAContinuedAgentReadsTheMostRecentConversation: an agent started with
+// --continue and no hook goes on with the folder's most recent conversation
+// without naming it. It must be read from that conversation's file: of two old
+// conversations, the one whose last record is newer. A fresh agent in the same
+// folder must not be given either.
+//
+// How it could pass wrongly, written down first:
+//   - the newer file could win because it is written now, not because it was
+//     the most recent before the process: the older conversation's file is
+//     touched (its mtime set to now) before the agent starts, so mtime alone
+//     would pick it;
+//   - the pane could read working from its screen or the detector: the test
+//     wants source transcript.
+//
+// NEGATIVE CONTROL: with id.continued never set (the resume rule alone), the
+// continued pane never reads from its transcript.
+func TestAContinuedAgentReadsTheMostRecentConversation(t *testing.T) {
+	fakeClaudeBin := filepath.Join(t.TempDir(), "claude")
+	if out, err := exec.Command("go", "build", "-o", fakeClaudeBin, "./testdata/fakeclaude").CombinedOutput(); err != nil {
+		t.Fatalf("build fakeclaude: %v\n%s", err, out)
+	}
+	base := t.TempDir()
+	bin := filepath.Join(base, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(fakeClaudeBin, filepath.Join(bin, "claude")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	claudeConfig := filepath.Join(base, "claude-config")
+	t.Setenv("CLAUDE_CONFIG_DIR", claudeConfig)
+	proj := filepath.Join(base, "proj")
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	real, err := filepath.EvalSymlinks(proj)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(claudeConfig, "projects", strings.ReplaceAll(real, "/", "-"))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rec := func(session string, ago time.Duration) string {
+		at := time.Now().Add(-ago).UTC().Format("2006-01-02T15:04:05.000Z")
+		return `{"type":"assistant","sessionId":"` + session + `","cwd":"` + real + `","version":"claude","timestamp":"` + at + `","message":{"stop_reason":"end_turn"}}` + "\n"
+	}
+	// recent-conv was used an hour ago, older-conv three hours ago; older-conv's
+	// file is the one touched last.
+	if err := os.WriteFile(filepath.Join(dir, "recent-conv.jsonl"), []byte(rec("recent-conv", 2*time.Hour)+rec("recent-conv", time.Hour)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	older := filepath.Join(dir, "older-conv.jsonl")
+	if err := os.WriteFile(older, []byte(rec("older-conv", 3*time.Hour)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	if err := os.Chtimes(older, now, now); err != nil {
+		t.Fatal(err)
+	}
+	cont, quiet := filepath.Join(base, "cont.sh"), filepath.Join(base, "quiet.sh")
+	for path, body := range map[string]string{cont: ownTranscriptContinued, quiet: ownTranscriptQuiet} {
+		if err := os.WriteFile(path, []byte(body), 0o755); err != nil { //nolint:gosec // a pane runs it
+			t.Fatal(err)
+		}
+	}
+	writeConfig(t, base, "[daemon]\nagent_detect_seconds = 1\n")
+	killDaemon(t, base)
+	const sess = "continue"
+	if out, err := tuiosCLI(t, base, "new", sess, "--detach"); err != nil {
+		t.Fatalf("create %s: %v\n%s", sess, err, out)
+	}
+	type agentState struct {
+		State  string `json:"state"`
+		Source string `json:"source"`
+	}
+	stateOf := func(window string) (agentState, string) {
+		out, _ := tuiosCLI(t, base, "get-agent-state", "--json", "-s", sess, "-w", window)
+		var st agentState
+		_ = json.Unmarshal([]byte(out), &st)
+		return st, out
+	}
+	for _, w := range [][]string{{"fresh", "claude", quiet}, {"continued", "claude", cont, "--continue"}} {
+		args := append([]string{"new-window", "-s", sess, "--no-focus", "--cwd", proj, w[0], "--"}, w[1:]...)
+		if out, err := tuiosCLI(t, base, args...); err != nil {
+			t.Fatalf("start %s: %v\n%s", w[0], err, out)
+		}
+	}
+	waitUntil(t, "the continued pane reads working from the most recent conversation", 30*time.Second, func() (bool, string) {
+		st, out := stateOf("continued")
+		return st.State == "working" && st.Source == "transcript", out
+	})
+	if st, raw := stateOf("fresh"); st.Source == "transcript" {
+		t.Errorf("ASSERTION: the fresh pane in the same folder reads from a transcript it never wrote:\n%s", raw)
+	}
+}

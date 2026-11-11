@@ -599,7 +599,7 @@ func (s *Session) maintainAgentTranscripts(reg *harness.Registry, cwdOf func(pty
 			continue
 		}
 		id := cwdOf(p.ptyID)
-		if path, ok := searchTranscript(tr, id, transcriptOwner{window: p.windowID, started: id.started, resumed: id.resumed, taken: taken}); ok {
+		if path, ok := searchTranscript(tr, id, transcriptOwner{window: p.windowID, started: id.started, resumed: id.resumed, continued: id.continued, taken: taken}); ok {
 			if s.JoinAgentTranscriptAs(p.windowID, p.harnessID, tr.Reader, path, false) == nil && taken != nil {
 				if abs, err := filepath.Abs(path); err == nil {
 					taken[abs] = p.windowID
@@ -647,6 +647,9 @@ type agentIdentity struct {
 	// resumed is the conversation the agent's command line resumes, by the
 	// manifest's [resume] argv, "" for a fresh start. See transcriptOwner.
 	resumed string
+	// continued says the command line goes on with the most recent
+	// conversation without naming it (the manifest's [resume] continue).
+	continued bool
 }
 
 // searchTranscript is the hookless join: find the file in the harness's
@@ -683,12 +686,21 @@ func searchTranscript(tr *harness.Transcript, id agentIdentity, own transcriptOw
 //   - resumed: the agent's command line resumes a conversation by id (the
 //     manifest's [resume] argv, "claude --resume ID"). Then its file is the
 //     one whose records carry that session id, however old its first record,
-//     and no other file is. A resume that names no id (claude --continue)
-//     joins through its hook; without one it gets no join, the safe side.
+//     and no other file is; or
+//   - continued: the command line goes on with the folder's most recent
+//     conversation without naming it (claude --continue). Then its file is the
+//     one no live pane holds whose last record before the process started is
+//     the newest (continuedPick).
 type transcriptOwner struct {
 	window  string
 	started time.Time
 	resumed string
+	// continued says the agent's command line goes on with the folder's most
+	// recent conversation without naming it (claude --continue, the manifest's
+	// [resume] continue flags): its file is the one no live pane holds whose
+	// last record before the process started is the newest, or a file it began
+	// itself when there was none to go on with.
+	continued bool
 	// taken maps a joined file's absolute path to its window. nil checks
 	// nothing.
 	taken map[string]string
@@ -712,6 +724,11 @@ func (o transcriptOwner) owns(f, session string) bool {
 	}
 	if o.resumed != "" {
 		return session == o.resumed
+	}
+	if o.continued {
+		// Any conversation may be the one it went on with; the search picks
+		// the most recent (continuedPick).
+		return true
 	}
 	if !o.started.IsZero() {
 		if first, ok := transcript.FirstRecordTime(f); ok && first.Before(o.started.Add(-transcriptStartSlack)) {
@@ -739,6 +756,7 @@ func searchOwnTranscriptIn(dir string, tr *harness.Transcript, cwd, version stri
 		return "", false
 	}
 	var found string
+	var continuedFiles []string
 	for _, f := range files {
 		r := transcript.NewReader(f)
 		obs, ok, err := r.Read()
@@ -754,13 +772,58 @@ func searchOwnTranscriptIn(dir string, tr *harness.Transcript, cwd, version stri
 		if !own.owns(f, obs.SessionID) {
 			continue
 		}
+		if own.continued {
+			continuedFiles = append(continuedFiles, f)
+			continue
+		}
 		if found != "" {
 			// Two candidates survived verification. Refuse.
 			return "", false
 		}
 		found = f
 	}
+	if own.continued {
+		return continuedPick(continuedFiles, own.started)
+	}
 	return found, found != ""
+}
+
+// continuedPick is the file a continued agent writes to, from the files that
+// verify and no live pane holds: one it began itself (its first record is not
+// older than its process), else the one whose last record before the process
+// started is the newest. Two that tie, two it began, or none, give no join:
+// the screen tier stands, which is the safe side.
+func continuedPick(files []string, started time.Time) (string, bool) {
+	if started.IsZero() || len(files) == 0 {
+		return "", false
+	}
+	var fresh []string
+	var best string
+	var bestAt time.Time
+	tie := false
+	for _, f := range files {
+		if first, ok := transcript.FirstRecordTime(f); ok && !first.Before(started.Add(-transcriptStartSlack)) {
+			fresh = append(fresh, f)
+			continue
+		}
+		at, ok := transcript.LastRecordBefore(f, started)
+		if !ok {
+			continue
+		}
+		switch {
+		case at.After(bestAt):
+			best, bestAt, tie = f, at, false
+		case at.Equal(bestAt):
+			tie = true
+		}
+	}
+	switch {
+	case len(fresh) == 1:
+		return fresh[0], true
+	case len(fresh) > 1 || tie || best == "":
+		return "", false
+	}
+	return best, true
 }
 
 // paneAgentIdentity reports the working directory and the version string of the

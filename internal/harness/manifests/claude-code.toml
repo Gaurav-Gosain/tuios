@@ -407,6 +407,9 @@ images_source   = "a paste that is only an image path attaches the image; not me
 [resume]
 argv   = ["claude", "--resume", "{session_id}"]
 source = "claude --help: -r, --resume [value] resumes a conversation by session id; herdr src/agent_resume.rs"
+# The flags that go on with the folder's most recent conversation without
+# naming it, read off a running claude's command line to find its transcript.
+continue = ["--continue", "-c"]
 # The flags a resume carries over from the command line the agent was started
 # with. Each name is from claude --help (Claude Code 2.1.312). -p/--print, a
 # prompt, -c/--continue and --resume are left behind.
