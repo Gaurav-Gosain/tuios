@@ -55,6 +55,8 @@ type PR struct {
 	Pending int `json:"pending,omitempty"`
 	// Branch is the branch the pull request is for.
 	Branch string `json:"branch,omitempty"`
+	// Title is the pull request's title, read by ViewURL only.
+	Title string `json:"title,omitempty"`
 	// CheckedAt is when gh was last asked, in Unix nanoseconds.
 	CheckedAt int64 `json:"checked_at,omitempty"`
 }
@@ -190,12 +192,33 @@ func View(ctx context.Context, dir, branch string) (PR, error) {
 	return pr, nil
 }
 
-// Parse reads gh pr view --json state,statusCheckRollup,url,number.
+// prURLRE is a GitHub pull request's address, as ViewURL takes it.
+var prURLRE = regexp.MustCompile(`^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[0-9]+/?$`)
+
+// IsURL reports whether s is a GitHub pull request's address.
+func IsURL(s string) bool { return prURLRE.MatchString(s) }
+
+// ViewURL reads the pull request at url, a GitHub pull request's address,
+// with its title. It needs no repository: gh reads the address.
+func ViewURL(ctx context.Context, url string) (PR, error) {
+	if !prURLRE.MatchString(url) {
+		return PR{}, errfmt.Errorf("%q is not a GitHub pull request address", url)
+	}
+	out, err := run(ctx, os.TempDir(), "pr", "view", url, "--json", viewFields+",title")
+	if err != nil {
+		return PR{}, err
+	}
+	return Parse([]byte(out))
+}
+
+// Parse reads gh pr view --json state,statusCheckRollup,url,number and,
+// when asked for, title.
 func Parse(data []byte) (PR, error) {
 	var raw struct {
 		Number int    `json:"number"`
 		URL    string `json:"url"`
 		State  string `json:"state"`
+		Title  string `json:"title"`
 		Checks []struct {
 			Typename   string `json:"__typename"`
 			Status     string `json:"status"`
@@ -209,7 +232,7 @@ func Parse(data []byte) (PR, error) {
 	if raw.Number <= 0 {
 		return PR{}, errors.New("gh printed a pull request with no number")
 	}
-	pr := PR{Number: raw.Number, URL: raw.URL, State: strings.ToLower(raw.State)}
+	pr := PR{Number: raw.Number, URL: raw.URL, State: strings.ToLower(raw.State), Title: raw.Title}
 	for _, c := range raw.Checks {
 		switch checkOutcome(c.Typename, c.Status, c.Conclusion, c.State) {
 		case ChecksPass:

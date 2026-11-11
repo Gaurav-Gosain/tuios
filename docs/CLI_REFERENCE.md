@@ -2949,6 +2949,7 @@ tuios task release ID [flags]
 tuios task rm ID [flags]
 tuios task attach ID FILE... [--name N] [--note TEXT] [--replace] [flags]
 tuios task attach ID --link URL [--name N] [--note TEXT] [flags]
+tuios task attach ID --screenshot -w PANE | --capture -w PANE [--scrollback] [--lines N] [flags]
 tuios task attachments ID [flags]
 tuios task detach ID NAME [flags]
 tuios task attachment get ID NAME -o FILE|- [flags]
@@ -2971,6 +2972,8 @@ tuios task dispatch [status | pause | resume | mode manual|pull|auto | preset | 
 - `--note <text>` (`attach`): A line about the attachment
 - `--link <url>` (`attach`): Attach an http or https address instead of a file. A GitHub pull request's address is kind `pr`
 - `--replace` (`attach`): Put it in the place of the attachment with the same name. Without it a name in use is refused
+- `--screenshot`, `--capture` (`attach`): Have the daemon take a PNG, or the text, of the pane `-w` names in the card's session, and attach it as `screenshot NAME.png` or `capture NAME.txt`. From a pane this needs the read grant
+- `--scrollback`, `--lines <n>` (`attach`): With `--screenshot` or `--capture`, take the history above the screen too, at most n lines (`--capture` keeps 2000 by default)
 - `-o, --output <file>` (`attachment get`): Where to save it, or `-` for standard output. An existing file is not written over
 - `--verify-timeout <seconds>` (`dispatch verify`): The verify command's time limit, at most 3600 (default 600)
 - `--json`: Output the verb result as JSON
@@ -2987,7 +2990,11 @@ request. The command reads each file and sends its bytes; the daemon stores
 them once by their sha256 under its state folder and keeps them until the card
 is removed or they are detached, also after a restart. The kind (`image`,
 `markdown`, `mermaid`, `diff`, `text`, `link`, `pr`, `file`) is read from the
-content, then the name. `task get` lists them under Attachments. A pane
+content, then the name. `task get` lists them under Attachments, and `attachment
+get --json` on a pull request link adds its state, title and checks, read
+through your `gh` at most once a minute. On a project card another machine
+owns, `-s HOST:SESSION` from the pane that holds it passes the attach on, at
+most 3 MiB. A pane
 attaches to the card it holds, and to the card it finished while that card
 waits in `verify` or `review`. The limits are `[tasks] attachment_max_mib`,
 `attachments_per_card` and `attachment_session_mib`

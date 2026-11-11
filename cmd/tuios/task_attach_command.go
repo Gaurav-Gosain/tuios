@@ -36,15 +36,20 @@ const attachMaxFileBytes = 8 << 20
 // newTaskAttachCommand builds `tuios task attach`.
 func newTaskAttachCommand() *cobra.Command {
 	var f taskFlags
-	var name, note, link string
-	var replace bool
+	var name, note, link, window string
+	var replace, screenshot, capture, scrollback bool
+	var lines int
 	cmd := &cobra.Command{
-		Use:   "attach ID [FILE...] [--name N] [--note TEXT] [--link URL] [--replace]",
+		Use:   "attach ID [FILE... | --link URL | --screenshot -w PANE | --capture -w PANE] [--name N] [--note TEXT] [--replace]",
 		Short: "Put files or a link on a task card",
 		Long: `Put files or a link on a task card, so the board shows them beside the card:
 a screenshot, a log, a diff, a Markdown note, a Mermaid diagram, or the pull
 request. This command reads each file and sends its bytes. The card keeps them
 until it is removed or they are detached, also after a restart.
+
+--screenshot -w PANE and --capture -w PANE have the daemon take a picture or
+the text of a pane of the card's session and attach it. From inside a pane
+that needs the read grant, as tuios screenshot and capture-pane do.
 
 A name already on the card is refused unless --replace. The limits are [tasks]
 attachment_max_mib (8 MiB a file by default), attachments_per_card and
@@ -54,17 +59,39 @@ From inside a pane, a pane attaches to the card it holds, and to the card it
 finished while that card waits in verify or review.`,
 		Example: `  tuios task attach t3 after.png --note 'the layout after the fix'
   tuios task attach t3 build.log test-output.txt
-  tuios task attach t3 --link https://github.com/o/r/pull/12`,
+  tuios task attach t3 --link https://github.com/o/r/pull/12
+  tuios task attach t3 --screenshot -w build
+  tuios task attach t3 --capture -w build --scrollback --lines 500`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			id, files := args[0], args[1:]
+			sources := len(files)
+			for _, set := range []bool{link != "", screenshot, capture} {
+				if set {
+					sources++
+				}
+			}
 			switch {
-			case link != "" && len(files) > 0:
-				return errors.New("pass files or --link, not both")
-			case link == "" && len(files) == 0:
-				return errors.New("name a file to attach, or pass --link URL")
+			case sources == 0:
+				return errors.New("name a file to attach, or pass --link URL, --screenshot -w PANE or --capture -w PANE")
+			case len(files) == 0 && sources > 1, len(files) > 0 && sources > len(files):
+				return errors.New("pass files, --link, --screenshot or --capture, one of them")
 			case name != "" && len(files) > 1:
 				return errors.New("--name names one file; attach the files one at a time to name each")
+			case (screenshot || capture) && window == "":
+				return errors.New("name the pane to take with -w PANE")
+			case window != "" && !screenshot && !capture:
+				return errors.New("-w names the pane for --screenshot or --capture")
+			}
+			if screenshot || capture {
+				params := map[string]any{"id": id, "replace": replace}
+				if name != "" {
+					params["name"] = name
+				}
+				if note != "" {
+					params["note"] = note
+				}
+				return attachFromPane(f, params, window, screenshot, map[string]any{"scrollback": scrollback, "lines": lines})
 			}
 			if link != "" {
 				params := map[string]any{"id": id, "link": link, "replace": replace}
@@ -100,7 +127,29 @@ finished while that card waits in verify or review.`,
 	cmd.Flags().StringVar(&note, "note", "", "A line about it")
 	cmd.Flags().StringVar(&link, "link", "", "Attach an http or https address instead of a file")
 	cmd.Flags().BoolVar(&replace, "replace", false, "Put it in the place of the attachment with the same name")
+	cmd.Flags().BoolVar(&screenshot, "screenshot", false, "Attach a picture of the pane -w names, taken by the daemon")
+	cmd.Flags().BoolVar(&capture, "capture", false, "Attach the text of the pane -w names, taken by the daemon")
+	cmd.Flags().StringVarP(&window, "window", "w", "", "The pane --screenshot or --capture takes, in the card's session")
+	cmd.Flags().BoolVar(&scrollback, "scrollback", false, "With --screenshot or --capture, take the history above the screen too")
+	cmd.Flags().IntVar(&lines, "lines", 0, "With --scrollback, the most lines to take (--capture keeps 2000 by default)")
 	return cmd
+}
+
+// attachFromPane has the daemon take the picture or the text of window and
+// attach it. The window is resolved in the card's session.
+func attachFromPane(f taskFlags, params map[string]any, window string, screenshot bool, opts map[string]any) error {
+	t, err := dialTarget(f.session, window)
+	if err != nil {
+		return err
+	}
+	t.Close()
+	opts["window"] = t.window
+	key := "capture"
+	if screenshot {
+		key = "screenshot"
+	}
+	params[key] = opts
+	return attachCall(f, params)
 }
 
 // cmpOr is a when set, else b.
@@ -136,8 +185,13 @@ func readAttachFile(path string) ([]byte, error) {
 	return data, nil
 }
 
-// attachCall sends one attach-task and prints what it put on the card.
+// attachCall sends one attach-task and prints what it put on the card. A
+// card another machine owns is attached through this machine's daemon, for
+// the pane the command runs in, as a claim is.
 func attachCall(f taskFlags, params map[string]any) error {
+	if host, sess, _, err := resolveTarget(f.session, ""); err == nil && host != "" && os.Getenv("TUIOS_PANE_ID") != "" {
+		return attachForward(f, host, sess, params)
+	}
 	t, err := dialSessionTarget(f.session)
 	if err != nil {
 		return err
@@ -159,6 +213,37 @@ func attachCall(f taskFlags, params map[string]any) error {
 	}
 	a := res.Attachment
 	fmt.Printf("Attached %s to %s%s (%s).\n", plainLine(a.Name), plainLine(res.Task.ID), t.on(), attachWhat(a))
+	return nil
+}
+
+// attachForward sends attach-task to this machine's daemon with host, which
+// passes it on for the calling pane.
+func attachForward(f taskFlags, host, sess string, params map[string]any) error {
+	if sess == "" {
+		return errfmt.Errorf("name the session of the card on %s: -s %s:SESSION (tuios task ls --project . --hosts lists them)", host, host)
+	}
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	params["host"], params["session"] = host, sess
+	raw, err := client.Call("attach-task", params)
+	if err != nil {
+		return reportVerbError(explainVerbError("attach-task", err), f.json)
+	}
+	if f.json {
+		_, err := os.Stdout.Write(append(raw, '\n'))
+		return err
+	}
+	var res struct {
+		Attachment taskAttachment `json:"attachment"`
+		Task       taskRow        `json:"task"`
+	}
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
+	}
+	fmt.Printf("Attached %s to %s on %s (%s).\n", plainLine(res.Attachment.Name), plainLine(res.Task.ID), plainLine(host), attachWhat(res.Attachment))
 	return nil
 }
 

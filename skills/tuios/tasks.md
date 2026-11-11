@@ -106,8 +106,8 @@ not done.
 Put what shows the work on the card, so the person sees it on the board:
 
 ```sh
-tuios screenshot -w "$TUIOS_PANE_ID" -o /tmp/after.png
-tuios task attach t3 /tmp/after.png --note 'the layout after the fix'
+tuios task attach t3 --screenshot -w "$TUIOS_PANE_ID" --note 'the layout after the fix'
+tuios task attach t3 --capture -w build --scrollback --lines 300
 tuios task attach t3 test-output.txt
 tuios task attach t3 --link https://github.com/o/r/pull/12
 tuios task attachments t3
@@ -115,7 +115,7 @@ tuios task attachment get t3 test-output.txt -o -
 ```
 
 You attach to the card you hold, and to the card you finished while it waits
-in `verify` or `review`. The command sends the file's bytes; the card keeps
+in `verify` or `review`. `--screenshot` and `--capture` need the read grant. The command sends the file's bytes; the card keeps
 them after a restart. A name already on the card is refused unless
 `--replace`; `tuios task detach t3 NAME` takes one off. A file over
 `[tasks] attachment_max_mib` (8 MiB by default) is refused with

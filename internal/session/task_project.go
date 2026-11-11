@@ -325,22 +325,7 @@ func (d *Daemon) forwardTaskFor(paneSession, window, verb, host, sessionName, id
 	defer cancel()
 	raw, err := d.federation.Call(ctx, host, verb, params)
 	if err != nil {
-		// A daemon from before remote_window reads the call as one from
-		// outside every pane, and asks for a window.
-		if rerr, ok := errors.AsType[*federation.RemoteError](err); ok {
-			if strings.Contains(rerr.Message, "window is required") {
-				return nil, newVerbError(ErrVerbInvalidParams, host+" runs a tuios that cannot hand its cards to another machine. Update tuios there")
-			}
-			// host answered and refused: its words, with its code.
-			return nil, &verbError{Code: rerr.Code, Message: "on " + host + ": " + rerr.Message}
-		}
-		if _, ok := errors.AsType[*federation.RefusedError](err); ok {
-			return nil, newVerbError(ErrVerbForbidden, verb+" on "+host+" is refused by the link: "+err.Error())
-		}
-		return nil, hintedVerbError(ErrVerbInternal, verb+" on "+echoName(host)+" did not answer: "+err.Error(), &VerbHint{
-			Param:  "host",
-			Detail: "The change may or may not have been made there. Run it again: a claim by the same pane is taken once.",
-		})
+		return nil, federationTaskErr(verb, host, err)
 	}
 	var row TaskRow
 	if err := jsonx.Unmarshal(raw, &row); err != nil {
@@ -350,6 +335,27 @@ func (d *Daemon) forwardTaskFor(paneSession, window, verb, host, sessionName, id
 	h := remoteHold{host: host, session: firstNonEmpty(row.Session, sessionName), id: firstNonEmpty(row.ID, id)}
 	d.remoteHolds.note(window, h, verb == "claim-task")
 	return row, nil
+}
+
+// federationTaskErr is the refusal of a task verb passed on to host that
+// failed there or on the way.
+func federationTaskErr(verb, host string, err error) *verbError {
+	if rerr, ok := errors.AsType[*federation.RemoteError](err); ok {
+		// A daemon from before remote_window reads the call as one from
+		// outside every pane, and asks for a window.
+		if strings.Contains(rerr.Message, "window is required") {
+			return newVerbError(ErrVerbInvalidParams, host+" runs a tuios that cannot hand its cards to another machine. Update tuios there")
+		}
+		// host answered and refused: its words, with its code.
+		return &verbError{Code: rerr.Code, Message: "on " + host + ": " + rerr.Message}
+	}
+	if _, ok := errors.AsType[*federation.RefusedError](err); ok {
+		return newVerbError(ErrVerbForbidden, verb+" on "+host+" is refused by the link: "+err.Error())
+	}
+	return hintedVerbError(ErrVerbInternal, verb+" on "+echoName(host)+" did not answer: "+err.Error(), &VerbHint{
+		Param:  "host",
+		Detail: "The change may or may not have been made there. Run it again: a claim by the same pane is taken once, and an attach with the same name is refused or, with replace, made once.",
+	})
 }
 
 // projectRows lists the cards of project from every session of this daemon.

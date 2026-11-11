@@ -16587,3 +16587,18 @@ a card's attachments never ride a state push.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskAttachmentsSurviveARestartAndGoWithTheCard$' -v .`.
+
+## The daemon takes a pane for a card, and reads a pull request link
+
+`TestTaskAttachTakesAPaneAndReadsAPullRequest` has the daemon attach a PNG
+and the text of a pane to a card, refuses a pane that holds the card with the
+task grant alone, and reads a pull request link's state through a stub `gh`.
+
+Run on 2026-11-11 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `takeFromPane` without the read grant check | "a pane without the read grant had the daemon take a pane: Attached worker.png to t1 (image, 80.8 KB). EXIT=0" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskAttachTakesAPaneAndReadsAPullRequest$' -v .`.

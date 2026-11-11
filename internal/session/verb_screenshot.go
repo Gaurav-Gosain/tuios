@@ -72,52 +72,13 @@ func (d *Daemon) verbScreenshot(cs *connState, params json.RawMessage) (any, *ve
 	if verr != nil {
 		return nil, verr
 	}
-	pty, err := d.resolvePTYForTarget(sess, p.Window)
-	if err != nil {
-		return nil, mapResolveErr(err, sess)
+	pic, verr := d.renderPaneShot(cs, sess, p.Window, paneShotOptions{
+		format: p.Format, theme: p.Theme, frame: p.Frame, cursor: p.Cursor, scrollback: p.Scrollback, lines: p.Lines,
+	})
+	if verr != nil {
+		return nil, verr
 	}
-
-	settings, warnings := d.screenshotSettings(cs, sess, p.Theme)
-	if p.Format != "" {
-		settings.Format, _ = shot.ParseFormat(p.Format)
-	}
-	if p.Frame != "" {
-		settings.Frame = p.Frame
-	}
-	if p.Cursor {
-		settings.Cursor = true
-	}
-
-	palette, warn := capture.Palette(settings.ThemeID)
-	if warn != "" {
-		warnings = append(warnings, warn)
-	}
-	// The pane as the session draws it: a painted pane background is the
-	// ground its default cells sit on.
-	palette = capture.WithPaneBackground(palette, settings.PaneBackground, settings.ThemeID)
-
-	// lines bounds the history above the screen. Without --scrollback there is
-	// no history in the picture at all, which is what a plain capture means.
-	rows := 0
-	if p.Scrollback {
-		rows = -1 // everything the pane holds
-		if p.Lines > 0 {
-			rows = p.Lines
-		}
-	}
-	grid := pty.screenshotGrid(palette, rows, settings.Cursor)
-	if grid == nil {
-		return nil, newVerbError(ErrVerbCommandFailed, "the pane has no screen to capture")
-	}
-
-	settings.Title = d.screenshotTitle(cs, sess, p.Window, settings.Title)
-	frame, frameWarnings := capture.Frame(settings, palette, grid, false)
-	warnings = append(warnings, frameWarnings...)
-
-	data, err := shot.Render(settings.Format, grid, frame)
-	if err != nil {
-		return nil, newVerbError(ErrVerbCommandFailed, err.Error())
-	}
+	settings, data, grid, warnings := pic.settings, pic.data, pic.grid, pic.warnings
 	path, err := capture.ResolvePath(p.Out, settings.Directory, settings.Title, settings.Format, time.Now())
 	if err != nil {
 		return nil, newVerbError(ErrVerbCommandFailed, err.Error())
@@ -139,6 +100,77 @@ func (d *Daemon) verbScreenshot(cs *connState, params json.RawMessage) (any, *ve
 		// read it without checking whether the key exists.
 		"warnings": warningsOrEmpty(warnings),
 	}, nil
+}
+
+// paneShotOptions are what a picture of a pane may change from the
+// [screenshot] settings.
+type paneShotOptions struct {
+	format, theme, frame string
+	cursor, scrollback   bool
+	lines                int
+}
+
+// paneShot is a picture of a pane: the bytes, the settings it was made with,
+// the grid's size and what the settings could not do.
+type paneShot struct {
+	data     []byte
+	settings capture.Settings
+	grid     struct{ Cols, Rows int }
+	warnings []string
+}
+
+// renderPaneShot draws the pane window of sess as a picture, in memory. The
+// screenshot verb writes it to a file, and attach-task puts it on a card.
+func (d *Daemon) renderPaneShot(cs *connState, sess *Session, window string, o paneShotOptions) (paneShot, *verbError) {
+	var out paneShot
+	pty, err := d.resolvePTYForTarget(sess, window)
+	if err != nil {
+		return out, mapResolveErr(err, sess)
+	}
+	settings, warnings := d.screenshotSettings(cs, sess, o.theme)
+	if o.format != "" {
+		settings.Format, _ = shot.ParseFormat(o.format)
+	}
+	if o.frame != "" {
+		settings.Frame = o.frame
+	}
+	if o.cursor {
+		settings.Cursor = true
+	}
+
+	palette, warn := capture.Palette(settings.ThemeID)
+	if warn != "" {
+		warnings = append(warnings, warn)
+	}
+	// The pane as the session draws it: a painted pane background is the
+	// ground its default cells sit on.
+	palette = capture.WithPaneBackground(palette, settings.PaneBackground, settings.ThemeID)
+
+	// lines bounds the history above the screen. Without scrollback there is
+	// no history in the picture at all, which is what a plain capture means.
+	rows := 0
+	if o.scrollback {
+		rows = -1 // everything the pane holds
+		if o.lines > 0 {
+			rows = o.lines
+		}
+	}
+	grid := pty.screenshotGrid(palette, rows, settings.Cursor)
+	if grid == nil {
+		return out, newVerbError(ErrVerbCommandFailed, "the pane has no screen to capture")
+	}
+
+	settings.Title = d.screenshotTitle(cs, sess, window, settings.Title)
+	frame, frameWarnings := capture.Frame(settings, palette, grid, false)
+	warnings = append(warnings, frameWarnings...)
+
+	data, err := shot.Render(settings.Format, grid, frame)
+	if err != nil {
+		return out, newVerbError(ErrVerbCommandFailed, err.Error())
+	}
+	out.data, out.settings, out.warnings = data, settings, warnings
+	out.grid.Cols, out.grid.Rows = grid.Cols, grid.Rows
+	return out, nil
 }
 
 func warningsOrEmpty(w []string) []string {

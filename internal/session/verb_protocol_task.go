@@ -40,15 +40,18 @@ func taskVerbs() map[string]verbEntry {
 			scope:       scopeTask,
 			link:        needWrite,
 			description: "Put a file or a link on a task card. The caller sends the file's bytes; the daemon never reads a path. A file is stored once by its sha256 and goes when no card names it. The kind is read from the content, then the name. The limits are [tasks] attachment_max_mib, attachments_per_card and attachment_session_mib." + attachRule,
-			params: []verbParam{
+			params: append([]verbParam{
 				sessionParam, id,
 				{Name: "name", Type: "string", Description: "The name the card shows it by, at most 120 bytes; control and invisible characters are dropped. Required with content; a link defaults to its address."},
 				{Name: "content", Type: "string", Description: "The file, base64 encoded. Pass content or link."},
 				{Name: "link", Type: "string", Description: "An http or https address. A GitHub pull request's address is kind pr."},
 				{Name: "note", Type: "string", Description: "A line about it, at most 500 bytes."},
 				{Name: "replace", Type: "bool", Description: "Put it in the place of the attachment with the same name. Without it a name in use is refused.", Default: "false"},
+				{Name: "screenshot", Type: "object", Description: "window (a pane of the card's session), scrollback and lines: the daemon takes a PNG of the pane and attaches it, named after the pane. A pane that calls needs the read grant."},
+				{Name: "capture", Type: "object", Description: "window, scrollback and lines (default 2000): the daemon takes the pane's text and attaches it. A pane that calls needs the read grant."},
+				{Name: "host", Type: "string", Description: "The machine that owns the card, for a project card from the pane that holds it there. The attach is passed on over the link; a picture or a text is taken here first. At most 3 MiB crosses."},
 				humanNonce,
-			},
+			}, remote...),
 			returns: []verbParam{attachment, {Name: "task", Type: "object", Description: "The card's row after the attach."}},
 			examples: []string{
 				`{"id":1,"verb":"attach-task","params":{"session":"work","id":"t1","name":"after.png","content":"iVBORw0KGgo=","note":"the fixed layout"}}`,
@@ -60,7 +63,7 @@ func taskVerbs() map[string]verbEntry {
 			scope:       scopeTask,
 			link:        needWrite,
 			description: "Take an attachment off a task card. Its file goes when no card names it." + attachRule,
-			params:      []verbParam{sessionParam, id, attachName, humanNonce},
+			params:      append([]verbParam{sessionParam, id, attachName, humanNonce}, remote...),
 			returns:     row,
 			examples: []string{
 				`{"id":1,"verb":"detach-task","params":{"session":"work","id":"t1","name":"after.png"}}`,
@@ -75,6 +78,8 @@ func taskVerbs() map[string]verbEntry {
 			returns: []verbParam{
 				attachment,
 				{Name: "content", Type: "string", Description: "The file, base64 encoded. Absent for a link."},
+				{Name: "pr", Type: "object", Description: "For a pr link: number, url, state (open, merged or closed), title and checks (pass, fail or pending, with passed, failed and pending), read through gh at most once a minute."},
+				{Name: "pr_error", Type: "string", Description: "For a pr link gh could not read: why, such as gh not installed or not logged in."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"get-task-attachment","params":{"session":"work","id":"t1","name":"after.png"}}`,
