@@ -2030,7 +2030,7 @@ What a restricted connection may call:
 | open | `hello`, `list-verbs`, `unsubscribe`, `restrict-connection` | allowed | allowed |
 | across sessions | `list-sessions`, `list-clients`, `list-attention`, `list-worktrees`, `list-hosts`, `list-host-sessions`, `list-host-agents`, `list-themes`, `list-glyphs`, `list-hooks`, `get-keep-awake` | `forbidden` | allowed |
 | read one session | `session-info`, `list-windows`, `get-window`, `list-workspaces`, `capture-pane`, `get-agent-state`, `list-agents`, `wait-for`, `subscribe`, `peek-prompt`, `read-agent-messages`, `explain-agent-screen`, `list-options`, `get-option`, `stash-list`, `stash-get`, `ssh-agent-path`, `display-env` | session in reach | allowed |
-| own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `agent-hook-event`, `report-program-status`, `agent-mail-notice`, `ask-human` | own pane only | allowed |
+| own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `agent-hook-event`, `agent-statusline-event`, `report-program-status`, `agent-mail-notice`, `ask-human` | own pane only | allowed |
 | mail and stash | `send-agent-message`, `stash-put` | session in reach, sent as the own pane | allowed |
 | type into a pane | `send-text`, `send-keys`, `ask-agent`, `respond`, `run` | session in reach | `forbidden` |
 | start sessions | `fan`, `start-agent` | needs a pane; `start-agent` opens its pane in a session in reach | `forbidden` |
@@ -5591,6 +5591,18 @@ reports nothing. Each report the event makes is a `set-agent-state`,
 `set-agent-session`, `report-agent-activity`, `set-agent-meta`,
 `agent-mail-notice` or `request-approval` call on the caller's own connection,
 checked as that call would be.
+
+### agent-statusline-event
+
+Runs one status line payload in the daemon, the way `tuios agent-statusline`
+runs it without `--then`: the model, context use and cost go to the caller's
+pane as agent metadata, at most once every 15 seconds while they change.
+Params: `harness`, `payload` or `payload_json`, `env` (the same variables as
+`agent-hook-event`), `turn_end` and `explain`. The result is `sent`, `skip` and,
+when finding the pane or writing failed, `error`. The pane is found from the
+calling process as for `agent-hook-event`, and the one write is a
+`set-agent-meta` on the caller's connection. With `forwarder` the reply is the
+line `TUIOS-HOOK-OK` and the connection ends.
 
 ### report-agent-activity
 

@@ -62,7 +62,7 @@ var agentOnlyVerbs = []string{
 	"explain-agent-detect", "explain-agent-screen",
 	// Agent state, as a pane reports it and as a reader reads it.
 	"set-agent-state", "set-agent-session", "set-agent-meta", "set-agent-quiet",
-	"get-agent-state", "report-agent-activity", "agent-activity", "agent-hook-event",
+	"get-agent-state", "report-agent-activity", "agent-activity", "agent-hook-event", "agent-statusline-event",
 	"agent-transcript",
 	// Mail.
 	"send-agent-message", "release-agent-message", "read-agent-messages", "agent-mail-notice",

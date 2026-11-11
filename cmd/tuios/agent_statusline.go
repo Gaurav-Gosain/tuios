@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -12,8 +11,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -30,23 +27,6 @@ import (
 // the payload, finding the pane and reporting. Claude Code runs the command
 // on every change to the conversation, so a slow daemon must not hold it.
 const agentStatusLineDeadline = 300 * time.Millisecond
-
-// statusLineInterval is the shortest gap between two reports for one pane
-// while the values keep changing. A status line runs up to three times a
-// second during a turn, and the rail has no use for every one.
-const statusLineInterval = 15 * time.Second
-
-// statusLineRefresh is how long unchanged values go before they are sent
-// again, so a daemon that restarted gets them back.
-const statusLineRefresh = 10 * time.Minute
-
-// statusLineNoPaneWait is how long a process no pane was found for waits
-// before it asks the daemon again.
-const statusLineNoPaneWait = time.Minute
-
-// contextWarnAt is the context use the rail warns at. Crossing it is reported
-// at once, whatever the interval.
-const contextWarnAt = 80
 
 // agentStatusLineOptions are the flags of tuios agent-statusline.
 type agentStatusLineOptions struct {
@@ -158,19 +138,6 @@ goes wrong on the tuios side.`,
 	return cmd
 }
 
-// statusLineOutcome is what --explain prints.
-type statusLineOutcome struct {
-	Harness string                        `json:"harness"`
-	Values  *integration.StatusLineValues `json:"values,omitempty"`
-	Session string                        `json:"session,omitempty"`
-	Window  string                        `json:"window,omitempty"`
-	PaneBy  string                        `json:"pane_by,omitempty"`
-	// Sent says set-agent-meta was called and answered.
-	Sent  bool   `json:"sent"`
-	Skip  string `json:"skip,omitempty"`
-	Error string `json:"error,omitempty"`
-}
-
 // runAgentStatusLine runs one status line and returns the exit code: the
 // chained command's, or 0.
 func runAgentStatusLine(o agentStatusLineOptions, harness string, sio agentStatusLineIO) int {
@@ -192,216 +159,22 @@ func runAgentStatusLine(o agentStatusLineOptions, harness string, sio agentStatu
 	if timeout <= 0 {
 		timeout = agentStatusLineDeadline
 	}
-	done := make(chan statusLineOutcome, 1)
-	go func() { done <- reportStatusLine(o, harness, payload, sio) }()
-	var out statusLineOutcome
+	done := make(chan agenthook.StatusLineOutcome, 1)
+	go func() {
+		done <- agenthook.ReportStatusLine(agenthook.StatusLineOptions{Session: o.session, Window: o.window, TurnEnd: o.turnEnd}, harness, payload,
+			agenthook.IO{Getenv: sio.getenv, Dial: sio.dial, Self: sio.self, StampDir: sio.stampDir, Now: sio.now})
+	}()
+	var out agenthook.StatusLineOutcome
 	select {
 	case out = <-done:
 	case <-time.After(timeout):
-		out = statusLineOutcome{Harness: harness, Error: "gave up after " + timeout.String()}
+		out = agenthook.StatusLineOutcome{Harness: harness, Error: "gave up after " + timeout.String()}
 	}
 	if o.explain && sio.stderr != nil {
 		line, _ := jsonx.Marshal(out)
 		fmt.Fprintln(sio.stderr, string(line))
 	}
 	return <-thenDone
-}
-
-// reportStatusLine reads the payload and, when the values are due, writes
-// them to the pane.
-func reportStatusLine(o agentStatusLineOptions, harness string, payload []byte, sio agentStatusLineIO) statusLineOutcome {
-	out := statusLineOutcome{Harness: harness}
-	if len(bytes.TrimSpace(payload)) == 0 {
-		out.Skip = "empty payload"
-		return out
-	}
-	if owner, foreign := integration.StatusLineForeign(harness, sio.getenv); foreign {
-		out.Skip = "foreign harness: " + integration.AgentHintEnv + " names " + owner
-		return out
-	}
-	values, err := integration.ParseStatusLine(harness, payload)
-	if err != nil {
-		out.Skip = err.Error()
-		return out
-	}
-	out.Values = &values
-	if values.Empty() {
-		out.Skip = "the payload names no model, context or cost"
-		return out
-	}
-
-	var client verbCaller
-	closeClient := func() {
-		if c, ok := client.(io.Closer); ok {
-			_ = c.Close()
-		}
-	}
-	defer closeClient()
-	getenv := sio.getenv
-	if getenv == nil {
-		getenv = func(string) string { return "" }
-	}
-	now := time.Now
-	if sio.now != nil {
-		now = sio.now
-	}
-	stampDir := ""
-	if sio.stampDir != nil {
-		if dir, err := sio.stampDir(); err == nil {
-			stampDir = dir
-		}
-	}
-	out.Session = cmp.Or(o.session, getenv("TUIOS_SESSION"))
-	switch {
-	case o.window != "":
-		out.Window, out.PaneBy = o.window, "flag"
-	case getenv("TUIOS_PANE_ID") != "":
-		out.Window, out.PaneBy = getenv("TUIOS_PANE_ID"), "env"
-	default:
-		// No pane named: ask the daemon which pane this process runs in,
-		// the way agent-hook does. A status line runs several times a
-		// second, so a process in no pane (a harness outside tuios) asks
-		// at most once a minute.
-		var sid int
-		var ancestors []int
-		if sio.self != nil {
-			sid, ancestors = sio.self()
-		}
-		noPane := ""
-		if stampDir != "" {
-			noPane = filepath.Join(stampDir, agenthook.StampName("nopane", strconv.Itoa(sid)))
-			if fi, err := os.Stat(noPane); err == nil && now().Sub(fi.ModTime()) < statusLineNoPaneWait {
-				out.Skip = "no pane found for this process in the last minute"
-				return out
-			}
-		}
-		dialed, err := sio.dial()
-		if err != nil {
-			out.Error = err.Error()
-			return out
-		}
-		client = dialed
-		out.Session, out.Window, out.PaneBy, err = agenthook.ResolvePane(agenthook.Options{}, agenthook.IO{Getenv: getenv}, client, sid, ancestors)
-		if err != nil {
-			if noPane != "" {
-				_ = os.WriteFile(noPane, nil, 0o600)
-				_ = os.Chtimes(noPane, now(), now())
-			}
-			out.Error = err.Error()
-			return out
-		}
-	}
-
-	stampPath := ""
-	var prev *agenthook.Stamp
-	if stampDir != "" {
-		stampPath = filepath.Join(stampDir, agenthook.StampName(out.Session, out.Window))
-		prev = agenthook.ReadStamp(stampPath)
-	}
-	if due, why := statusLineDue(prev, values, now(), o.turnEnd); !due {
-		out.Skip = why
-		// A change held back by the interval is kept as pending, so the
-		// end of the turn can send it: Claude Code runs the status line
-		// only while the conversation changes, and the last values of a
-		// turn are usually the ones held.
-		if stampPath != "" && statusLineChanged(prev, values) {
-			agenthook.WritePending(stampPath, prev, values)
-		}
-		return out
-	}
-
-	if client == nil {
-		dialed, err := sio.dial()
-		if err != nil {
-			out.Error = err.Error()
-			return out
-		}
-		client = dialed
-	}
-	tokens := values.Tokens()
-	if prev != nil && prev.Session == values.Session {
-		// What a held run saw and this payload leaves out goes too.
-		for k, v := range prev.Pending {
-			if _, ok := tokens[k]; !ok {
-				tokens[k] = v
-			}
-		}
-	}
-	params := map[string]any{
-		"window": out.Window,
-		"tokens": tokens,
-		"source": integration.StatusLineSource,
-	}
-	if out.Session != "" {
-		params["session"] = out.Session
-	}
-	if _, err := client.Call("set-agent-meta", params); err != nil {
-		out.Error = err.Error()
-		return out
-	}
-	out.Sent = true
-	if stampPath != "" {
-		agenthook.WriteStamp(stampPath, prev, values.Session, tokens, now())
-	}
-	return out
-}
-
-// statusLineChanged reports whether values differ from what was last sent.
-func statusLineChanged(prev *agenthook.Stamp, values integration.StatusLineValues) bool {
-	if prev == nil || values.Session != prev.Session {
-		return true
-	}
-	for k, v := range values.Tokens() {
-		if prev.Values[k] != v {
-			return true
-		}
-	}
-	return false
-}
-
-// statusLineDue says whether values should be sent now, given what was sent
-// last, and why not when they should not. turnEnd sends changed values at
-// once, so a turn's last cost is not held until the next turn.
-func statusLineDue(prev *agenthook.Stamp, values integration.StatusLineValues, now time.Time, turnEnd bool) (bool, string) {
-	if prev == nil {
-		return true, ""
-	}
-	if values.Session != prev.Session {
-		return true, ""
-	}
-	since := now.Sub(time.UnixMilli(prev.At))
-	if since < 0 {
-		// The clock went back: treat the stamp as old.
-		return true, ""
-	}
-	next := values.Tokens()
-	if !statusLineChanged(prev, values) {
-		if since >= statusLineRefresh {
-			return true, ""
-		}
-		return false, "unchanged since the last report"
-	}
-	if next[integration.MetaModel] != "" && next[integration.MetaModel] != prev.Values[integration.MetaModel] {
-		return true, ""
-	}
-	if warned(prev.Values[integration.MetaContext]) != warned(next[integration.MetaContext]) && next[integration.MetaContext] != "" {
-		return true, ""
-	}
-	if since >= statusLineInterval || turnEnd {
-		return true, ""
-	}
-	if prev.RestAt != 0 && prev.RestAt >= prev.At {
-		// The turn ended after the last report: the values a run after
-		// the end brings are the turn's last, so they go now.
-		return true, ""
-	}
-	return false, "changed, but reported " + since.Round(time.Millisecond).String() + " ago"
-}
-
-// warned reports whether a context value is at or over the rail's warning.
-func warned(context string) bool {
-	n, err := strconv.Atoi(strings.TrimSuffix(context, "%"))
-	return err == nil && n >= contextWarnAt
 }
 
 // statusLineStampDir is the directory of the daemon's socket, which is per

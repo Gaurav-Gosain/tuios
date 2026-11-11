@@ -151,3 +151,73 @@ func TestAgentHookEventReportsForTheCallingPane(t *testing.T) {
 		t.Fatalf("a call from outside every pane moved pane 0: %v", st)
 	}
 }
+
+// TestAgentStatusLineEventFeedsTheCallingPane: agent-statusline-event from
+// inside a pane writes that pane's model and context, and from outside every
+// pane writes none.
+//
+// How this could pass wrongly, written down first:
+//   - The metadata could come from elsewhere. The panes are plain shells, and
+//     the model named is one no harness would set.
+//   - A call from outside every pane could still land on one. It must report
+//     an error naming no pane, and the pane's metadata must stay as it was.
+func TestAgentStatusLineEventFeedsTheCallingPane(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	const sess = "e2e-slev"
+	if out, err := tuiosCLI(t, base, "new", sess, "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "SL", "--no-focus"); err != nil {
+		t.Fatalf("open the pane: %v\n%s", err, out)
+	}
+	win := windowID(t, base, sess, "SL")
+	dir := t.TempDir()
+	params := filepath.Join(dir, "params.json")
+	result := filepath.Join(dir, "result.txt")
+	call := `{"harness":"claude-code","payload_json":{"model":{"display_name":"E2E-Model-7"},"context_window":{"used_percentage":42}}}`
+	if err := os.WriteFile(params, []byte(call), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	statusScript := filepath.Join(dir, "status.sh")
+	if err := os.WriteFile(statusScript, []byte(strings.Replace(hookEventScript, "agent-hook-event", "agent-statusline-event", 1)), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	line := "TUIOS_E2E_CLI=" + tuiosBin + " sh " + statusScript + " " + params + " " + result + "\n"
+	if o, err := tuiosCLI(t, base, "send-text", "-s", sess, "-w", "SL", line); err != nil {
+		t.Fatalf("type the call: %v\n%s", err, o)
+	}
+	var res []byte
+	waitUntil(t, "the call from the pane finishes", uiTimeout, func() (bool, string) {
+		var err error
+		if res, err = os.ReadFile(result); err != nil {
+			return false, err.Error()
+		}
+		return true, ""
+	})
+	if !strings.Contains(string(res), `"sent":true`) {
+		t.Fatalf("the call from the pane did not send: %s", res)
+	}
+	meta := func() string {
+		out, err := tuiosCLI(t, base, "get-agent-state", "--json", "-s", sess, "-w", win)
+		if err != nil {
+			t.Fatalf("get-agent-state: %v\n%s", err, out)
+		}
+		return out
+	}
+	if m := meta(); !strings.Contains(m, "E2E-Model-7") || !strings.Contains(m, "42%") {
+		t.Fatalf("the pane's metadata lacks the model and context:\n%s", m)
+	}
+
+	out, err := tuiosCLI(t, base, "call", "agent-statusline-event",
+		`{"harness":"claude-code","payload_json":{"model":{"display_name":"Outside-Model"}},"turn_end":true}`)
+	if err != nil {
+		t.Fatalf("the call from outside every pane failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "no pane") || strings.Contains(out, `"sent": true`) {
+		t.Fatalf("the call from outside every pane found a pane:\n%s", out)
+	}
+	if m := meta(); strings.Contains(m, "Outside-Model") {
+		t.Fatalf("a call from outside every pane wrote the pane's metadata:\n%s", m)
+	}
+}

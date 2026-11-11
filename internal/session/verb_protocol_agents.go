@@ -71,6 +71,32 @@ func agentWorkVerbs() map[string]verbEntry {
 			},
 			handler: (*Daemon).verbAgentHookEvent,
 		},
+		"agent-statusline-event": {
+			// It writes the caller's own pane's agent metadata, with the same
+			// set-agent-meta call tuios agent-statusline makes.
+			scope:       scopeSelf,
+			link:        needWrite,
+			description: "Run one status line payload in the daemon, as tuios agent-statusline runs it without --then: the model, context use and cost it names go to the pane the caller runs in, as agent metadata, at most once every 15 seconds while they change. The pane is found from the process that sent the call, never from a param. It prints nothing; a caller with a status line of its own runs that itself.",
+			params: []verbParam{
+				{Name: "harness", Type: "string", Required: true, Description: "The harness whose status line ran, such as claude-code."},
+				{Name: "payload", Type: "string", Description: "The status line payload as the harness wrote it, as a string."},
+				{Name: "payload_json", Type: "object", Description: "The payload as JSON rather than a string. Pass payload or payload_json, not both."},
+				{Name: "env", Type: "object", Description: "The variables of the calling process the mapping reads, by name. Only these are taken: " + strings.Join(integration.HookEnv, ", ") + "."},
+				{Name: "turn_end", Type: "bool", Description: "The harness's turn just ended: changed values go now, whatever the interval, as tuios agent-statusline --turn-end."},
+				{Name: "explain", Type: "bool", Description: "Also return what was decided and why."},
+				{Name: "forwarder", Type: "bool", Description: "The call comes from the shell line tuios integration installs. The reply is then the line TUIOS-HOOK-OK, with no JSON response, and the connection ends."},
+			},
+			returns: []verbParam{
+				{Name: "sent", Type: "bool", Description: "Whether the values went to the pane."},
+				{Name: "skip", Type: "string", Description: "Why nothing was sent, such as unchanged values or the interval. Empty when sent."},
+				{Name: "error", Type: "string", Description: "What went wrong finding the pane or writing to it. Absent when nothing did."},
+				{Name: "explain", Type: "object", Nullable: true, Description: "With explain: the values read, the pane and how it was found."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"agent-statusline-event","params":{"harness":"claude-code","payload_json":{"model":{"display_name":"Opus"},"context_window":{"used_percentage":42}}}}`,
+			},
+			handler: (*Daemon).verbAgentStatusLineEvent,
+		},
 		// verb_agent_transcript.go
 		"agent-transcript": {
 			// The conversation is the person's to read. A restricted connection is
