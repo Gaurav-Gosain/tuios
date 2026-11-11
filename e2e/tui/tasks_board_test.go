@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -424,18 +423,13 @@ func checkColumns(t *testing.T, term *tuitest.Terminal, heads ...string) {
 // waitStage waits for the daemon to list card id in stage.
 func waitStage(t *testing.T, term *tuitest.Terminal, base, id, stage, what string) {
 	t.Helper()
-	deadline := time.Now().Add(uiTimeout)
-	got := ""
-	for time.Now().Before(deadline) {
+	waitUntil(t, fmt.Sprintf("after %s, %s is not in %q", what, id, stage), uiTimeout, func() (bool, string) {
+		got := ""
 		for _, tk := range listTasks(t, base, "S").Tasks {
 			if tk.ID == id {
 				got = tk.Stage
 			}
 		}
-		if got == stage {
-			return
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	t.Fatalf("ASSERTION: after %s, %s is in %q, want %q\n%s", what, id, got, stage, term.Snapshot())
+		return got == stage, fmt.Sprintf("%s is in %q\n%s", id, got, term.Snapshot())
+	})
 }

@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -61,17 +62,10 @@ func linkTypingFixture(t *testing.T, farAllow string) (base, remote string, env 
 // want, and returns the capture.
 func waitForCaptureOn(t *testing.T, base, sess, window, want string) string {
 	t.Helper()
-	deadline := time.Now().Add(uiTimeout)
-	var out string
-	for time.Now().Before(deadline) {
-		out, _ = tuiosCLI(t, base, "capture-pane", "-s", sess, "-w", window)
-		if strings.Contains(out, want) {
-			return out
-		}
-		time.Sleep(150 * time.Millisecond)
-	}
-	t.Fatalf("pane %s in %s never showed %q:\n%s", window, sess, want, out)
-	return out
+	return waitTextOf(t, fmt.Sprintf("pane %s in %s never showed %q", window, sess, want), uiTimeout, func() string {
+		out, _ := tuiosCLI(t, base, "capture-pane", "-s", sess, "-w", window)
+		return out
+	}, func(out string) bool { return strings.Contains(out, want) })
 }
 
 // typeFromAHubPane runs send-text in a pane on the hub, aimed at the prompted

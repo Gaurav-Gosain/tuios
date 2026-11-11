@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -19,17 +20,10 @@ import (
 // waitForAttention polls this machine's list-attention until it holds want.
 func waitForAttention(t *testing.T, base string, env []string, want ...string) string {
 	t.Helper()
-	deadline := time.Now().Add(uiTimeout * 3)
-	var out string
-	for time.Now().Before(deadline) {
-		out, _ = tuiosCLIEnv(t, base, env, "list-attention")
-		if containsAll(out, want...) {
-			return out
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
-	t.Fatalf("list-attention never held %q:\n%s", want, out)
-	return out
+	return waitTextOf(t, fmt.Sprintf("list-attention never held %q", want), uiTimeout*3, func() string {
+		out, _ := tuiosCLIEnv(t, base, env, "list-attention")
+		return out
+	}, func(out string) bool { return containsAll(out, want...) })
 }
 
 // TestAnAgentOnAnotherMachineReachesThisInbox is P17: an agent on build that

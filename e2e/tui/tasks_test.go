@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 // taskListing is tuios task ls --json as the test reads it.
@@ -136,21 +135,9 @@ func TestTaskCardsAreClaimedOnceAndSurviveARestart(t *testing.T) {
 // and returns it.
 func waitForTaskText(t *testing.T, base, session, id string, want ...string) string {
 	t.Helper()
-	deadline := time.Now().Add(uiTimeout)
-	var got string
-	for time.Now().Before(deadline) {
-		got = mustCLI(t, base, "task", "get", "-s", session, id)
-		ok := true
-		for _, w := range want {
-			ok = ok && strings.Contains(got, w)
-		}
-		if ok {
-			return got
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	t.Fatalf("ASSERTION: %s never read %q:\n%s", id, want, got)
-	return got
+	return waitTextOf(t, fmt.Sprintf("%s never read %q", id, want), uiTimeout, func() string {
+		return mustCLI(t, base, "task", "get", "-s", session, id)
+	}, func(got string) bool { return containsAll(got, want...) })
 }
 
 // agentWindows is list-agents --json's windows, by id.

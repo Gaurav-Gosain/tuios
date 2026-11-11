@@ -48,17 +48,10 @@ func tuiosCLIEnv(t *testing.T, base string, env []string, args ...string) (strin
 // waitForHostListing polls `tuios hosts` until the output satisfies want.
 func waitForHostListing(t *testing.T, base string, want func(string) bool, why string) string {
 	t.Helper()
-	deadline := time.Now().Add(30 * time.Second)
-	var out string
-	for time.Now().Before(deadline) {
-		out, _ = tuiosCLI(t, base, "hosts")
-		if want(out) {
-			return out
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
-	t.Fatalf("ASSERTION: %s\nThe last listing was:\n%s", why, out)
-	return out
+	return waitTextOf(t, why, 30*time.Second, func() string {
+		out, _ := tuiosCLI(t, base, "hosts")
+		return out
+	}, want)
 }
 
 // TestAddingAHostReachesTheRunningDaemon is add, test and remove, in the order

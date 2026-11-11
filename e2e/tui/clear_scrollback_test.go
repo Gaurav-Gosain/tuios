@@ -175,17 +175,10 @@ func waitPaneCapture(t *testing.T, base, sess string, scrollback bool, ok func(s
 	if scrollback {
 		args = append(args, "--scrollback")
 	}
-	deadline := time.Now().Add(shellTimeout)
-	for {
+	return waitTextOf(t, "the capture of "+sess+" never matched", shellTimeout, func() string {
 		out, _ := tuiosOut(base, args...)
-		if ok(out) {
-			return out
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the capture of %s never matched\n%s", sess, out)
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+		return out
+	}, ok)
 }
 
 // firstRowMatching is the first screen row re matches, or -1.

@@ -57,17 +57,13 @@ func lifeCards(t *testing.T, base, session string) (map[string]lifeCard, string)
 // waitLife polls the cards until ok, within limit.
 func waitLife(t *testing.T, base, session string, limit time.Duration, why string, ok func(map[string]lifeCard) bool) (map[string]lifeCard, string) {
 	t.Helper()
-	deadline := time.Now().Add(limit)
-	for {
-		cards, raw := lifeCards(t, base, session)
-		if ok(cards) {
-			return cards, raw
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("ASSERTION: %s\n%s", why, raw)
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	var cards map[string]lifeCard
+	var raw string
+	waitUntil(t, why, limit, func() (bool, string) {
+		cards, raw = lifeCards(t, base, session)
+		return ok(cards), raw
+	})
+	return cards, raw
 }
 
 // inPane runs a tuios command line from inside pane w, as its agent would,

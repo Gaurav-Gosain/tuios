@@ -284,20 +284,18 @@ func watchMoveNotice(term *tuitest.Terminal, frame, want string, deny ...string)
 // waitMoveCapture waits until the pane's capture holds want, and returns it.
 func waitMoveCapture(t *testing.T, call func(string, map[string]any) (map[string]any, error), session, window, want string) string {
 	t.Helper()
-	deadline := time.Now().Add(15 * time.Second)
-	var last map[string]any
-	for time.Now().Before(deadline) {
+	var content string
+	waitUntil(t, fmt.Sprintf("%s in session %s never showed %q", window, session, want), 15*time.Second, func() (bool, string) {
 		res, err := call("capture-pane", map[string]any{"session": session, "window": window, "source": "recent"})
-		last = res
 		if err == nil {
 			if s, _ := res["content"].(string); strings.Contains(s, want) {
-				return s
+				content = s
+				return true, s
 			}
 		}
-		time.Sleep(200 * time.Millisecond)
-	}
-	t.Fatalf("ASSERTION: %s in session %s never showed %q: %v", window, session, want, last)
-	return ""
+		return false, fmt.Sprint(res)
+	})
+	return content
 }
 
 // errCode is the error code of a verb reply printed by tuios call.

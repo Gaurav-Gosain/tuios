@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -69,17 +70,11 @@ func waitPaneWidth(t *testing.T, base, session string, pred func(w, h int) bool,
 // waitDaemonText waits for want in the daemon's history plus screen.
 func waitDaemonText(t *testing.T, base, session, window, want string) {
 	t.Helper()
-	deadline := time.Now().Add(shellTimeout)
-	for {
+	waitUntil(t, fmt.Sprintf("the pane never printed %q", want), shellTimeout, func() (bool, string) {
 		hist, err := daemonScrollback(base, session, window, 5000)
-		if err == nil && strings.Contains(strings.Join(hist, "\n"), want) {
-			return
-		}
-		if !time.Now().Before(deadline) {
-			t.Fatalf("the pane never printed %q", want)
-		}
-		time.Sleep(150 * time.Millisecond)
-	}
+		text := strings.Join(hist, "\n")
+		return err == nil && strings.Contains(text, want), text
+	})
 }
 
 const longBody = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-abcdefghijklmnopqrst"

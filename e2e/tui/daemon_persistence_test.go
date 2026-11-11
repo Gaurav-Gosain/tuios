@@ -259,25 +259,23 @@ type sessionInfo struct {
 // so a test never races the daemon's own start.
 func waitForSessionInfo(t *testing.T, base, name string) sessionInfo {
 	t.Helper()
-	deadline := time.Now().Add(bootTimeout)
-	var last string
-	for time.Now().Before(deadline) {
+	var found sessionInfo
+	waitUntil(t, fmt.Sprintf("session %q never appeared in the listing (ls --json)", name), bootTimeout, func() (bool, string) {
 		out, err := tuiosCLI(t, base, "ls", "--json")
-		last = out
 		if err == nil {
 			var sessions []sessionInfo
 			if json.Unmarshal([]byte(out), &sessions) == nil {
 				for _, s := range sessions {
 					if s.Name == name {
-						return s
+						found = s
+						return true, out
 					}
 				}
 			}
 		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	t.Fatalf("session %q never appeared in the listing; last ls --json:\n%s", name, last)
-	return sessionInfo{}
+		return false, out
+	})
+	return found
 }
 
 // restartMidVersion stamps the build the client starts as in

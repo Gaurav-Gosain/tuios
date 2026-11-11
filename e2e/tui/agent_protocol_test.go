@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -25,18 +26,10 @@ func buildFakeACP(t *testing.T) string {
 // waitCapture polls capture-pane until every marker is in the pane.
 func waitCapture(t *testing.T, base, session, window string, markers ...string) string {
 	t.Helper()
-	deadline := time.Now().Add(uiTimeout)
-	var out string
-	for {
-		out, _ = tuiosCLI(t, base, "capture-pane", "-s", session, "-w", window)
-		if containsAll(out, markers...) {
-			return out
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the pane never showed %v:\n%s", markers, out)
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	return waitTextOf(t, fmt.Sprintf("the pane never showed %v", markers), uiTimeout, func() string {
+		out, _ := tuiosCLI(t, base, "capture-pane", "-s", session, "-w", window)
+		return out
+	}, func(out string) bool { return containsAll(out, markers...) })
 }
 
 // TestProtocolPaneTurnAndInboxApproval runs an ACP agent headless with

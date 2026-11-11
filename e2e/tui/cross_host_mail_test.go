@@ -3,12 +3,12 @@ package tuie2e
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -327,17 +327,10 @@ func TestVerbsTakeAHostQualifiedTarget(t *testing.T) {
 // pane shows want.
 func waitForCapture(t *testing.T, base string, env, target []string, want string) {
 	t.Helper()
-	deadline := time.Now().Add(shellTimeout)
-	var out string
-	for time.Now().Before(deadline) {
-		args := append([]string{"capture-pane"}, target...)
-		out, _ = tuiosCLIEnv(t, base, env, args...)
-		if strings.Contains(out, want) {
-			return
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
-	t.Fatalf("ASSERTION: the pane never showed %q:\n%s", want, out)
+	waitTextOf(t, fmt.Sprintf("the pane never showed %q", want), shellTimeout, func() string {
+		out, _ := tuiosCLIEnv(t, base, env, append([]string{"capture-pane"}, target...)...)
+		return out
+	}, func(out string) bool { return strings.Contains(out, want) })
 }
 
 // TestAFileCrossesTheLinkThroughTheStash is path in, path out: a file here
