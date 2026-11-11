@@ -556,9 +556,7 @@ func (m *OS) screenshotSettings() capture.Settings {
 // owns, but capture.Frame reads a font file, so it is inside the command.
 func (m *OS) renderScreenshot(grid *shot.Grid, label string, plain bool, pieces []shotPiece) tea.Cmd {
 	settings := m.screenshotSettings()
-	if settings.Title != "" {
-		settings.Title = m.Settings.FormatWindowTitle(label, m.FocusedWindow+1, "")
-	}
+	settings.Title = m.Settings.FormatScreenshotTitle(settings.Title, label, m.FocusedWindow+1, m.focusedCWD())
 	// The serial is bumped before the panel is filled in, so the panel carries
 	// the number that says which capture it is showing.
 	m.shotCaptures++
@@ -1095,4 +1093,13 @@ type screenshotPlacementState struct {
 	// flush drew nothing. So the size the picture was drawn at is part of what
 	// makes a drawn picture this one.
 	hostW, hostH int
+}
+
+// focusedCWD is the focused window's folder, for a screenshot title's {cwd},
+// or "" when no window has the focus.
+func (m *OS) focusedCWD() string {
+	if w := m.GetFocusedWindow(); w != nil {
+		return w.CWD()
+	}
+	return ""
 }

@@ -416,8 +416,9 @@ func validateAppearance(cfg *UserConfig, result *ValidationResult) {
 			Message: fmt.Sprintf("'%s' is not a duration such as 120ms, or 0; read as %s", cfg.Appearance.DropPreviewDelay, DefaultDropPreviewDelay),
 		})
 	}
-	validateTitleFormat("window_title_format", cfg.Appearance.WindowTitleFormat, knownTitlePlaceholders, result)
-	validateTitleFormat("host_title", cfg.Appearance.HostTitle, knownHostTitlePlaceholders, result)
+	validateTitleFormat("appearance", "window_title_format", cfg.Appearance.WindowTitleFormat, knownTitlePlaceholders, result)
+	validateTitleFormat("appearance", "host_title", cfg.Appearance.HostTitle, knownHostTitlePlaceholders, result)
+	validateTitleFormat("screenshot", "title_format", cfg.Screenshot.TitleFormat, knownTitlePlaceholders, result)
 	validateGlyphSet(cfg, result)
 	validateOmarchyTheme(cfg, result)
 	validateClockFormat(cfg.Appearance.ClockFormat, result)
@@ -711,13 +712,13 @@ var knownHostTitlePlaceholders = append(slices.Clone(knownTitlePlaceholders), "{
 // like {name} can be reported instead of being rendered literally in the title.
 var titlePlaceholderPattern = lazyre.New(`\{[^{}]*\}`)
 
-func validateTitleFormat(key, format string, allowed []string, result *ValidationResult) {
+func validateTitleFormat(field, key, format string, allowed []string, result *ValidationResult) {
 	for _, placeholder := range titlePlaceholderPattern().FindAllString(format, -1) {
 		if slices.Contains(allowed, placeholder) {
 			continue
 		}
 		result.Warnings = append(result.Warnings, ValidationError{
-			Field: "appearance",
+			Field: field,
 			Key:   key,
 			Message: fmt.Sprintf("'%s' is not a known placeholder (allowed: %s); it will be shown literally",
 				placeholder, strings.Join(allowed, ", ")),

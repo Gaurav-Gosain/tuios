@@ -1672,7 +1672,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "screenshot.title_format", Type: OptionString, Section: "screenshot",
-		Description: "Title bar text, with {title}, {index} and {cwd} tokens",
+		Description: "Title bar text of a screenshot: {title} (the window title as its title bar shows it), {index} and {cwd}",
 	},
 	{
 		Path: "screenshot.font_family", Type: OptionString, Section: "screenshot",

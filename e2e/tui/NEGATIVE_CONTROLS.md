@@ -16931,3 +16931,17 @@ Run on 2026-11-11 on Linux (arch-btw). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAllWindowsShowsAndFindsEachPanesFolder$' -v .`.
+
+## Screenshot title tokens (B14)
+
+`e2e/tui/screenshot_test.go` `TestScreenshotTitleFormatExpandsItsTokens` sets
+`screenshot.title_format = 'SHOT{index}|{title}|{cwd}'` with a
+`window_title_format` of its own, starts the session in a folder named
+shot-cwd-mark, and reads the title out of the SVG the screenshot verb writes.
+
+Run on 2026-11-12 on branch `untangle/t48-title-format` (arch-btw). The log is
+`~/.cache/agent-tmp/un-inputcfg-t48-neg.log` there.
+
+| Control | Where it failed | Verdict |
+| --- | --- | --- |
+| origin/main, where the format only switched the title on | "the picture's title does not start SHOT1\|WIN-build\|" and "has no {cwd}" | **caught** |

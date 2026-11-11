@@ -646,6 +646,17 @@ func (s *Settings) FormatWindowTitle(title string, index int, cwd string) string
 	return expandTitle(s.WindowTitleFormat, title, index, cwd)
 }
 
+// FormatScreenshotTitle expands format, screenshot.title_format, for a
+// window: {title} is the window's title as its title bar shows it (title
+// through window_title_format), {index} its place from 1, and {cwd} its
+// folder. An empty format is no title.
+func (s *Settings) FormatScreenshotTitle(format, title string, index int, cwd string) string {
+	if format == "" {
+		return ""
+	}
+	return expandTitle(format, s.FormatWindowTitle(title, index, cwd), index, cwd)
+}
+
 // FormatHostTitle expands HostTitle for the focused window: the placeholders of
 // FormatWindowTitle, plus {session} (the session's name) and {workspace} (the
 // workspace's name, or its number).

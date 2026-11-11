@@ -69,9 +69,7 @@ func (m *OS) ShareLook(name, author, requestID string) tea.Cmd {
 	grid, pieces := m.composedShot(0, 0, m.GetRenderWidth(), m.GetRenderHeight())
 	settings := m.screenshotSettings()
 	settings.Format = shot.FormatPNG
-	if settings.Title != "" {
-		settings.Title = m.Settings.FormatWindowTitle("screen", m.FocusedWindow+1, "")
-	}
+	settings.Title = m.Settings.FormatScreenshotTitle(settings.Title, "screen", m.FocusedWindow+1, m.focusedCWD())
 	req := lookShareRequest{name: name, author: author, requestID: requestID, grid: grid, pieces: pieces, settings: settings}
 	if author != "" {
 		return m.handleLookShareAuthor(lookShareAuthorMsg{req: req, author: author})

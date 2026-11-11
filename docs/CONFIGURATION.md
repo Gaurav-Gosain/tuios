@@ -1604,6 +1604,28 @@ window_title_align = "center"
 settings page, in the Appearance section, and `tuios set-config` applies them
 at once.
 
+### The title of a screenshot
+
+A screenshot with a frame draws a title bar. `screenshot.title_format` sets its
+text, with three tokens:
+
+| Token | Becomes |
+|---|---|
+| `{title}` | The window's title as its title bar shows it: the pane's name through `appearance.window_title_format` |
+| `{index}` | The window's place, from 1 |
+| `{cwd}` | The window's folder |
+
+```toml
+[screenshot]
+title_format = "{title} in {cwd}"
+```
+
+The default is `{title}`, the same title the window has on screen. An empty
+format draws no title. In a capture of the whole screen or of a region,
+`{title}` is "screen" or "region", and `{index}` and `{cwd}` are the focused
+window's. An unknown token, such as `{name}`, is shown as written, and tuios warns about
+it when it loads the file.
+
 ## Host terminal title
 
 `appearance.host_title` sets the title of the terminal tuios runs in, such as

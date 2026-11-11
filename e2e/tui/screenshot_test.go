@@ -369,3 +369,46 @@ func TestScreenshotVerbTitlesThePaneByTheWindowTitleFormat(t *testing.T) {
 		t.Errorf("the picture's title is not WIN1-build, the window title format applied to the pane's name")
 	}
 }
+
+// TestScreenshotTitleFormatExpandsItsTokens is B14: screenshot.title_format
+// documents {title}, {index} and {cwd}, and the format was read only to say
+// whether to draw a title at all. The title was always the window title
+// format's, so a format such as "shot {index}: {title}" drew the same title
+// as the default.
+//
+// How this could pass wrongly, written down first:
+//   - The tokens could come from window_title_format. That format is set too
+//     and names none of the marks the screenshot format adds.
+//   - {cwd} could expand to an empty string and still match a loose check.
+//     The test wants the session's folder, which it chose, in the title.
+func TestScreenshotTitleFormatExpandsItsTokens(t *testing.T) {
+	base := t.TempDir()
+	dir := filepath.Join(base, "shot-cwd-mark")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeConfig(t, base, "[appearance]\nwindow_title_format = 'WIN-{title}'\n\n"+
+		"[screenshot]\ntitle_format = 'SHOT{index}|{title}|{cwd}'\n")
+	killDaemon(t, base)
+	if out, err := tuiosCLIInDir(t, base, dir, nil, "new", "e2e-shot-tokens", "--detach"); err != nil {
+		t.Fatalf("new: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "set-window", "-s", "e2e-shot-tokens", "--name", "build"); err != nil {
+		t.Fatalf("name: %v\n%s", err, out)
+	}
+	out := filepath.Join(shotDir(t, base), "tokens.svg")
+	if cliOut, err := tuiosCLI(t, base, "screenshot", "-s", "e2e-shot-tokens",
+		"--format", "svg", "--out", out, "--no-copy"); err != nil {
+		t.Fatalf("tuios screenshot: %v\n%s", err, cliOut)
+	}
+	svg, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("the verb wrote no file: %v", err)
+	}
+	if !strings.Contains(string(svg), "SHOT1|WIN-build|") {
+		t.Errorf("ASSERTION: the picture's title does not start SHOT1|WIN-build|, screenshot.title_format with {index} and {title} expanded")
+	}
+	if !strings.Contains(string(svg), "shot-cwd-mark") {
+		t.Errorf("ASSERTION: the picture's title has no {cwd}: the session's folder shot-cwd-mark is missing")
+	}
+}

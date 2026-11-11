@@ -263,5 +263,5 @@ func (d *Daemon) screenshotTitle(cs *connState, sess *Session, target, format st
 	// rest of the screenshot's settings are, not the process's global: the
 	// daemon never fills that one.
 	titles := config.Settings{WindowTitleFormat: d.optionsFor(cs, sess).get("appearance.window_title_format")}
-	return titles.FormatWindowTitle(title, idx+1, w.Cwd)
+	return titles.FormatScreenshotTitle(format, title, idx+1, w.Cwd)
 }
