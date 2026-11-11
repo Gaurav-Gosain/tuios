@@ -31,8 +31,12 @@ type Lesson struct {
 	Index int
 	// Pressed is how many of the step's keys were pressed in order.
 	Pressed int
-	Wrong   int
-	Hinted  bool
+	// DonePressed is Pressed at the event that finished the last step, which
+	// Advance then resets. A step whose rule finishes before its last key is
+	// down lights fewer caps than it lists.
+	DonePressed int
+	Wrong       int
+	Hinted      bool
 	// WrongMode is set when the last key was a step key in the other mode.
 	WrongMode bool
 	// KeysSeen counts the keys tuios read this step, and AltSeen says
@@ -163,6 +167,7 @@ func (l *Lesson) Feed(e Event, now time.Time) bool {
 		l.Ctx.LastAction = str(e.Data["name"])
 	}
 	if step.Explainer == nil && step.Done != nil && step.Done.Match(e, &l.Ctx) {
+		l.DonePressed = l.Pressed
 		r := Clean
 		if l.Hinted {
 			r = Hinted

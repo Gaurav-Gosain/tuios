@@ -176,7 +176,6 @@
       "title": "Widen a column",
       "note": "The strip scrolls to keep it in view.",
       "keys": [
-        ">",
         ">"
       ],
       "needs": "window",

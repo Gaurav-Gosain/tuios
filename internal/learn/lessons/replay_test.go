@@ -126,3 +126,92 @@ func verdict(step, press int, r Result) string {
 	b, _ := json.Marshal([]any{step, press, r})
 	return string(b)
 }
+
+// earlyFinish lists the steps that may finish with keys of their list still
+// to press, with the reason. Every other step lists as many presses as its
+// rule needs, so the card never marks a key done that the person was never
+// asked to press (the ratio and column-width steps listed > twice and
+// finished on the first).
+var earlyFinish = map[string]string{
+	// The recorded runs of these two steps predate the answer flow that asks
+	// on a key and sends on enter, so their events end on the first key. The
+	// steps list both keys, as the app needs. Record the cockpit run again to
+	// drop these two.
+	"cockpit/allow":  "the log predates ask then enter",
+	"cockpit/answer": "the log predates ask then enter",
+	// The step needs window mode, and its own first key leaves it, so the
+	// engine counts the next keys as pressed in the wrong mode and lights no
+	// cap. The rule finishes on the mode changes and is right.
+	"from-tmux/window-mode": "the step leaves the mode it needs",
+	// esc closes the menu after the move and is not part of it.
+	"from-zellij/focus": "esc only closes the menu",
+}
+
+// TestNoStepFinishesBeforeItsLastKey replays every recorded run and fails
+// when a step's rule is done while keys of its list are still unpressed. The
+// runs are "show me" runs, which press every listed key in order, so a step
+// that finishes early there lists a key its rule does not need. A step whose
+// last item is typed text is left out: the text is checked as a whole when
+// the shell reports the command, after the keys that came before it.
+func TestNoStepFinishesBeforeItsLastKey(t *testing.T) {
+	f, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths, _ := filepath.Glob("testdata/replay/*.json")
+	if len(paths) == 0 {
+		t.Fatal("no replay logs")
+	}
+	checked := 0
+	for _, p := range paths {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var log replayLog
+		if err := json.Unmarshal(b, &log); err != nil {
+			t.Fatal(err)
+		}
+		track := f.Find(log.Track)
+		if track == nil {
+			t.Fatalf("no track %q", log.Track)
+		}
+		base := time.UnixMilli(0)
+		l := Start(track, base)
+		for _, e := range log.Events {
+			now := base.Add(time.Duration(e.T) * time.Millisecond)
+			switch e.Type {
+			case "lesson.showMe":
+				l.MarkHinted()
+				continue
+			case "lesson.next", "lesson.skip":
+				r := Clean
+				if e.Type == "lesson.skip" {
+					r = Skipped
+				}
+				l.Advance(r, now)
+				continue
+			}
+			before := l.Index
+			if !l.Feed(e.Event, now) {
+				continue
+			}
+			step := track.Steps[before]
+			if len(step.Keys) == 0 || step.Keys[len(step.Keys)-1].Text != "" {
+				continue
+			}
+			checked++
+			id := track.ID + "/" + step.ID
+			if l.DonePressed < len(step.Keys) {
+				if _, ok := earlyFinish[id]; !ok {
+					t.Errorf("%s: the rule was done with %d of %d keys pressed: list only the keys the rule needs, or give it a rule that waits for the last one", id, l.DonePressed, len(step.Keys))
+				}
+			} else if _, ok := earlyFinish[id]; ok {
+				t.Errorf("%s no longer finishes early: remove it from earlyFinish", id)
+			}
+		}
+	}
+	if checked < 50 {
+		t.Fatalf("checked %d steps, want most of the tracks: the replay is not reaching them", checked)
+	}
+}
