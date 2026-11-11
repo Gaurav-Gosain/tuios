@@ -90,3 +90,49 @@ func TestNewWindowKeepOpenWaitReportsTheExitStatus(t *testing.T) {
 		t.Fatalf("a killed program reported exit_code 0: %v", killed)
 	}
 }
+
+// TestClosingAWindowLeavesNothingOfItsAgentStores: every per-pane store the
+// session keeps for an agent is dropped when the window closes, whether or not
+// the agent detector runs to sweep them. Only the claim, the harness process
+// and the shared guard were dropped there; the turn, the subagents, the seen
+// completion, the folders its agents started in and a shown question stayed for
+// the life of the session.
+func TestClosingAWindowLeavesNothingOfItsAgentStores(t *testing.T) {
+	d, _ := startTestDaemon(t)
+	sess, a, _ := twoWindowSession(t, d, "work")
+
+	sess.noteAgentStartDir(a, "agent-sid", "/work/project")
+	sess.showAsk(a, "req-1", "Ship it?")
+	sess.stateMu.Lock()
+	sess.agentTurns = map[string]agentTurn{a: {since: 1}}
+	sess.agentSubagents = map[string]*paneSubagents{a: {}}
+	sess.completionSeen = map[string]uint64{a: 3}
+	sess.agentClaims = map[string]agentClaim{a: {}}
+	sess.stateMu.Unlock()
+	sess.startDirs.Store(a, "/work")
+
+	if _, err := sess.CloseDaemonWindow(a, "a test"); err != nil {
+		t.Fatalf("CloseDaemonWindow: %v", err)
+	}
+
+	sess.stateMu.RLock()
+	defer sess.stateMu.RUnlock()
+	left := map[string]int{
+		"agentClaims":    len(sess.agentClaims),
+		"agentTurns":     len(sess.agentTurns),
+		"agentSubagents": len(sess.agentSubagents),
+		"completionSeen": len(sess.completionSeen),
+		"askShows":       len(sess.askShows),
+	}
+	sess.agentDirsMu.Lock()
+	left["agentDirs"] = len(sess.agentDirs)
+	sess.agentDirsMu.Unlock()
+	if _, ok := sess.startDirs.Load(a); ok {
+		left["startDirs"] = 1
+	}
+	for name, n := range left {
+		if n != 0 {
+			t.Errorf("%s still holds %d entries for a window that closed", name, n)
+		}
+	}
+}

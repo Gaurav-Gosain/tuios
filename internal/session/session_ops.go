@@ -703,14 +703,13 @@ func (s *Session) CloseDaemonWindow(target, by string) (string, error) {
 		// The window is gone, so nothing owns its agent state any more. The
 		// detector sweeps stale claims on its own tick too, but only when it is
 		// running, and a claim can now come from a source that is not the detector.
-		delete(s.agentClaims, closed.ID)
-		delete(s.agentHarnessPIDs, closed.ID)
-		delete(s.agentSharedGuards, closed.ID)
+		s.dropPaneStatesLocked(closed.ID)
 		return nil
 	})
 	if err != nil {
 		return "", err
 	}
+	s.dropPaneStores(closed.ID)
 
 	if by == "" {
 		by = "an unnamed caller"
@@ -722,6 +721,34 @@ func (s *Session) CloseDaemonWindow(target, by string) (string, error) {
 		_ = s.ClosePTY(closed.PTYID)
 	}
 	return closed.ID, nil
+}
+
+// dropPaneStatesLocked drops what the session keeps for a window under
+// stateMu once the window is gone: its agent claim, harness process, shared
+// guard, the question it showed, its turn, its subagents and the completion it
+// last saw. The caller holds stateMu, inside a mutation. Whether the agent
+// detector runs makes no difference: it sweeps the first three on its own tick
+// too, and it is the only thing that does.
+func (s *Session) dropPaneStatesLocked(id string) {
+	delete(s.agentClaims, id)
+	delete(s.agentHarnessPIDs, id)
+	delete(s.agentSharedGuards, id)
+	delete(s.askShows, id)
+	delete(s.agentTurns, id)
+	delete(s.agentSubagents, id)
+	delete(s.completionSeen, id)
+}
+
+// dropPaneStores drops what the session keeps for a closed window under its
+// own locks: a held state, the idle gate, the folders its agents started in
+// and the start folder. The caller does not hold stateMu.
+func (s *Session) dropPaneStores(id string) {
+	s.dropAgentHold(id)
+	s.idle.forget(id)
+	s.startDirs.Delete(id)
+	s.agentDirsMu.Lock()
+	delete(s.agentDirs, id)
+	s.agentDirsMu.Unlock()
 }
 
 // removeWindowLocked takes the window at idx out of the window set, repairs
