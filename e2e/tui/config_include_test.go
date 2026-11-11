@@ -52,19 +52,7 @@ func readFileString(t *testing.T, path string) string {
 // waitForFileText polls path until want accepts its content.
 func waitForFileText(t *testing.T, path string, want func(string) bool, why string) string {
 	t.Helper()
-	deadline := time.Now().Add(configWatchTimeout)
-	var got string
-	for time.Now().Before(deadline) {
-		if data, err := os.ReadFile(path); err == nil { //nolint:gosec // a file of this test's own
-			got = string(data)
-			if want(got) {
-				return got
-			}
-		}
-		time.Sleep(150 * time.Millisecond)
-	}
-	t.Fatalf("ASSERTION: %s\n%s now holds:\n%s", why, path, got)
-	return got
+	return waitFileHas(t, path, why, configWatchTimeout, want)
 }
 
 // pressUntilFile presses the chord until its marker appears.

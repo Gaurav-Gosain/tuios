@@ -249,16 +249,10 @@ func pressChord(t *testing.T, term *tuitest.Terminal, k rune) {
 
 func waitForFile(t *testing.T, term *tuitest.Terminal, path, what string) {
 	t.Helper()
-	deadline := time.Now().Add(uiTimeout)
-	for {
-		if _, err := os.Stat(path); err == nil {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("%s did not fire\n%s", what, term.Snapshot())
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	waitUntil(t, what+" did not fire", uiTimeout, func() (bool, string) {
+		_, err := os.Stat(path)
+		return err == nil, term.Snapshot()
+	})
 }
 
 // TestBrokenConfigOnDiskKeepsWhatIsRunning. A file caught half written, or one

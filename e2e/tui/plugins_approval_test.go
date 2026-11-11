@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -517,17 +518,8 @@ func TestPluginApprovalDialogFits(t *testing.T) {
 // waitFileText waits until the file at path holds want.
 func waitFileText(t *testing.T, path, want string) string {
 	t.Helper()
-	deadline := time.Now().Add(2 * uiTimeout)
-	for {
-		b, _ := os.ReadFile(path)
-		if strings.Contains(string(b), want) {
-			return string(b)
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("%s never held %q. It holds:\n%s", path, want, b)
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	return waitFileHas(t, path, "the file never held "+strconv.Quote(want), 2*uiTimeout,
+		func(got string) bool { return strings.Contains(got, want) })
 }
 
 // holdScript connects to the daemon as a plugin process, then leaves the

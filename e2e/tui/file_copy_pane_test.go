@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -91,18 +92,16 @@ func waitPaneScreen(t *testing.T, base, session, pane string, timeout time.Durat
 // waitExit waits for a file the pane's shell writes an exit code into.
 func waitExitFile(t *testing.T, path string, timeout time.Duration) int {
 	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if b, err := os.ReadFile(path); err == nil && strings.HasSuffix(string(b), "\n") {
-			n, err := strconv.Atoi(strings.TrimSpace(string(b)))
-			if err == nil {
-				return n
-			}
+	n := -1
+	waitFileHas(t, path, fmt.Sprintf("the command in the pane did not end in %v", timeout), timeout, func(text string) bool {
+		if !strings.HasSuffix(text, "\n") {
+			return false
 		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	t.Fatalf("ASSERTION: the command in the pane did not end in %v", timeout)
-	return -1
+		v, err := strconv.Atoi(strings.TrimSpace(text))
+		n = v
+		return err == nil
+	})
+	return n
 }
 
 // waitPaneExit is waitExitFile for a command typed into a pane: on a timeout

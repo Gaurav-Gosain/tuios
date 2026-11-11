@@ -87,17 +87,9 @@ func readPluginFile(base, id, name string) string {
 // waitPluginFile waits until a file a stand-in writes holds want.
 func waitPluginFile(t *testing.T, base, id, name, want string) string {
 	t.Helper()
-	deadline := time.Now().Add(2 * uiTimeout)
-	for {
-		got := readPluginFile(base, id, name)
-		if strings.Contains(got, want) {
-			return got
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("%s of %s never held %q. It holds:\n%s", name, id, want, got)
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	return waitTextOf(t, name+" of "+id+" never held "+strconv.Quote(want), 2*uiTimeout,
+		func() string { return readPluginFile(base, id, name) },
+		func(got string) bool { return strings.Contains(got, want) })
 }
 
 // savePluginArtifact keeps a file a stand-in wrote beside the frames.

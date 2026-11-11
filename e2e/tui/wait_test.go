@@ -165,3 +165,36 @@ func TestWaitsFailWithTheirAssertionAndLastState(t *testing.T) {
 		t.Errorf("a true condition failed: %s", msg)
 	}
 }
+
+// waitTextOf polls read until ok accepts what it returns, and returns it. The
+// failure prints what the source held last, so a test that waits on a file, a
+// listing or a capture says what it saw. It is the one shape behind the
+// wait helpers that poll text.
+func waitTextOf(t failer, what string, timeout time.Duration, read func() string, ok func(string) bool) string {
+	t.Helper()
+	var got string
+	waitUntil(t, what, timeout, func() (bool, string) {
+		got = read()
+		return ok(got), got
+	})
+	return got
+}
+
+// waitFileHas waits until the file at path exists and ok accepts its text, and
+// returns the text. A file that is not there yet reads as empty.
+func waitFileHas(t failer, path, what string, timeout time.Duration, ok func(string) bool) string {
+	t.Helper()
+	return waitTextOf(t, what+" ("+path+")", timeout, func() string {
+		data, _ := os.ReadFile(path) //nolint:gosec // a file of the calling test's own
+		return string(data)
+	}, ok)
+}
+
+// waitFileExists waits until path exists.
+func waitFileExists(t failer, path, what string, timeout time.Duration) {
+	t.Helper()
+	waitUntil(t, what, timeout, func() (bool, string) {
+		_, err := os.Stat(path)
+		return err == nil, path + " is not there yet"
+	})
+}

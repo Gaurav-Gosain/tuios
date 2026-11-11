@@ -170,17 +170,7 @@ func newPaneRunning(t *testing.T, base, session, name string, argv ...string) st
 // waitFile waits for a file to hold text that satisfies ok, and returns it.
 func waitFile(t *testing.T, path string, ok func(string) bool, what string) string {
 	t.Helper()
-	deadline := time.Now().Add(shellTimeout)
-	for {
-		data, _ := os.ReadFile(path)
-		if ok(string(data)) {
-			return string(data)
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("%s: %s holds %q", what, path, data)
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
+	return waitFileHas(t, path, what, shellTimeout, ok)
 }
 
 // questionAgent is a Claude Code question as the pane shows it: the

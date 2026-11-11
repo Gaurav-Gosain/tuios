@@ -46,16 +46,7 @@ func pidAlive(t *testing.T, path string) bool {
 // waitForPidFile waits until path exists.
 func waitForPidFile(t *testing.T, path string) {
 	t.Helper()
-	deadline := time.Now().Add(15 * time.Second)
-	for {
-		if _, err := os.Stat(path); err == nil {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("%s never appeared", path)
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
+	waitFileExists(t, path, "the pid file never appeared", 15*time.Second)
 }
 
 // TestRunOnAHostPrintsItsOutputAndExitsWithItsStatus runs one command on a
