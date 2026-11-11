@@ -209,12 +209,12 @@ set_cell() {
 # removes it. The snapshot keeps the work: ovnfs new --from SNAP opens it again.
 keep_and_remove() {
 	snap=""
-	# dirty is a change since the last snapshot. An apply takes a snapshot
-	# too, so a clean checkout can still differ from its base: its last
-	# snapshot holds that, and rm keeps the snapshots.
-	before=$(summary "$1")
-	if dirty "$1"; then
-		snap=$(ovj snap "$1" -m "$2" 2>/dev/null | jq -r '.snapshot.id // .id // empty')
+	# A checkout that differs from its base gets a snapshot of its own first,
+	# whether or not ovnfs calls it dirty: dirty is a change since the last
+	# snapshot, and since ovnfs 0.3.0 a successful apply releases the
+	# snapshot it took. A diff that fails counts as changes.
+	if [ "$(summary "$1")" != "no changes" ]; then
+		snap=$(ovj snap "$1" -m "$2" 2>/dev/null | jq -r '.snapshot.id // empty')
 		if [ -z "$snap" ]; then
 			echo "The snapshot of $1 failed, so it was not removed."
 			return 1
@@ -224,8 +224,6 @@ keep_and_remove() {
 	ov rm --sticky-snapshots "$1" >/dev/null 2>&1 || { echo "ovnfs could not remove $1."; return 1; }
 	if [ -n "$snap" ]; then
 		echo "Removed checkout $1. Its changes are in snapshot $snap: ovnfs new --from $snap opens them again."
-	elif [ "$before" != "no changes" ]; then
-		echo "Removed checkout $1. Its changes are in its last snapshot: ovnfs ls lists it."
 	else
 		echo "Removed checkout $1. It had no changes."
 	fi
@@ -348,7 +346,7 @@ checkouts)
 				pause
 				;;
 			x)
-				if dirty "$name"; then
+				if [ "$(summary "$name")" != "no changes" ]; then
 					printf '%s has changes. Type yes and press Enter to keep them in a snapshot and remove the checkout: ' "$name"
 				else
 					printf 'Type yes and press Enter to remove %s: ' "$name"
