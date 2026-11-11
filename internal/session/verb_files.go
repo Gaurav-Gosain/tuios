@@ -1530,6 +1530,7 @@ func fileVerbs() map[string]verbEntry {
 			handler:  (*Daemon).verbFileHash,
 		},
 		"file-walk": {
+			stream:      &verbStream{Param: "stream", Values: []string{"true"}},
 			scope:       scopeDeny,
 			link:        needFiles,
 			description: "List every file and folder under a folder on this machine, for a folder copy. At most 20000 entries in one reply; with stream, up to 1000000 entries, one JSON line each after the reply, and a last line {end, bytes, skipped, skipped_count, denied} or {end, code, error}. Links are not followed: a link, a named pipe, a socket and a device are not copied, and skipped names them. Over a link, an entry in the read deny list is left out and not named, and denied counts it.",
@@ -1548,6 +1549,7 @@ func fileVerbs() map[string]verbEntry {
 			handler:  (*Daemon).verbFileWalk,
 		},
 		"open-file-stream": {
+			stream:      &verbStream{},
 			scope:       scopeDeny,
 			link:        needFiles,
 			description: "Turn this connection into the bytes of one file. mode read: after the reply the connection carries the file from offset to size, then closes. mode write: the part file beside path is cut to offset, then the connection takes length bytes into it, answers one line {part_size, written, error} and closes. file-commit puts the part in place.",

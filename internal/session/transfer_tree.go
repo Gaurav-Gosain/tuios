@@ -1112,6 +1112,7 @@ func treeVerbs() map[string]verbEntry {
 			handler:  (*Daemon).verbFileCheck,
 		},
 		"open-tree-stream": {
+			stream:      &verbStream{},
 			scope:       scopeDeny,
 			link:        needFiles,
 			description: "Turn this connection into a tree stream: many files of a folder in one stream. mode read: the caller writes one line {rel, size, mtime} per file and {end}, and gets one record per file and {end}. mode write: the caller writes records, and gets one ack {rel, path, sha256, skipped} or {rel, code, error} per file and {end}. A record is a header line {rel, kind, size, perm, mtime, z, conflict, label}, the bytes (one flate stream when z), and a trailer line {sha256}. docs/protocol.md has the whole format.",

@@ -208,7 +208,8 @@ func (d *Daemon) speedDown(ctx context.Context, host string, n int64) (time.Dura
 func speedVerbs() map[string]verbEntry {
 	return map[string]verbEntry{
 		"speed-test": {
-			scope: scopeDeny,
+			stream: &verbStream{Param: "mode", Values: []string{"sink", "source"}},
+			scope:  scopeDeny,
 			// A speed test moves bytes that are no file's, and it is how a person
 			// learns what a copy would get.
 			link:        needFiles,

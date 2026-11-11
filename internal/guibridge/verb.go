@@ -42,9 +42,10 @@ var personVerbs = map[string]bool{
 	"review-stage": true,
 }
 
-// streamVerbs never answer with one reply, so the proxy refuses them.
-var streamVerbs = map[string]bool{
-	"subscribe":        true,
+// heldVerbs answer once, but only when the person decides, which can be
+// never within a proxied call, so the proxy refuses them. The verbs that keep
+// the connection after the reply are read from the verb table.
+var heldVerbs = map[string]bool{
 	"request-approval": true,
 }
 
@@ -125,8 +126,12 @@ func runVerb(out *frameWriter, version, nonce string, c Command) {
 		res.Error = "name the verb"
 		return
 	}
-	if streamVerbs[c.Verb] {
-		res.Code, res.Error = "unsupported", fmt.Sprintf("%s streams its answer; the bridge proxies only verbs with one reply", c.Verb)
+	if doc, ok := session.LookupVerbDoc(c.Verb); ok && doc.HoldsConnection(c.Params) {
+		res.Code, res.Error = "unsupported", fmt.Sprintf("%s keeps the connection after its reply; the bridge proxies only verbs with one reply", c.Verb)
+		return
+	}
+	if heldVerbs[c.Verb] {
+		res.Code, res.Error = "unsupported", fmt.Sprintf("%s answers only when the person decides; the bridge proxies only verbs that answer promptly", c.Verb)
 		return
 	}
 	if personOnlyVerbs[c.Verb] {

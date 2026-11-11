@@ -23,17 +23,11 @@ import (
 // call as it checks any other: a pane is held to its grants, and the verbs
 // only the person may call stay refused from a pane.
 
-// streamVerbs turn the connection into a stream after their reply, or hold
-// it open for a peer, which a one-shot call would cut off. The value names
-// the command that handles the verb, when there is one.
-var streamVerbs = map[string]string{
-	"subscribe":            "tuios subscribe",
-	"stream-pane":          "",
-	"open-file-stream":     "",
-	"open-pane":            "",
-	"pane-calls":           "",
-	"link-peer":            "",
-	"open-host-connection": "",
+// streamCommands names the command that handles a verb which keeps its
+// connection after the reply, when there is one. Which verbs keep it is read
+// from the verb table (session.VerbDoc.HoldsConnection).
+var streamCommands = map[string]string{
+	"subscribe": "tuios subscribe",
 }
 
 // Exit statuses of tuios call.
@@ -121,14 +115,6 @@ func (e *callError) Unwrap() error   { return e.err }
 func (e *callError) ExitStatus() int { return e.status }
 
 func runCall(out io.Writer, in io.Reader, verb, rawParams string, o callOptions) error {
-	if use, ok := streamVerbs[verb]; ok {
-		how := "Write JSON to $TUIOS_SOCKET for it (tuios --skill events)"
-		if use != "" {
-			how = "Use " + use
-		}
-		return callFail(out, o, callExitInput, "invalid_input",
-			errfmt.Errorf("%s holds the connection open after its reply, so call cannot send it. %s", verb, how))
-	}
 	var params map[string]any
 	if rawParams == "-" {
 		b, err := io.ReadAll(io.LimitReader(in, 16<<20))
@@ -141,6 +127,15 @@ func runCall(out io.Writer, in io.Reader, verb, rawParams string, o callOptions)
 		if err := jsonx.Unmarshal([]byte(rawParams), &params); err != nil {
 			return callFail(out, o, callExitInput, "invalid_input", errfmt.Errorf("params must be a JSON object: %w", err))
 		}
+	}
+
+	if doc, ok := session.LookupVerbDoc(verb); ok && doc.HoldsConnection(params) {
+		how := "Write JSON to $TUIOS_SOCKET for it (tuios --skill events)"
+		if use := streamCommands[verb]; use != "" {
+			how = "Use " + use
+		}
+		return callFail(out, o, callExitInput, "invalid_input",
+			errfmt.Errorf("%s holds the connection open after its reply, so call cannot send it. %s", verb, how))
 	}
 
 	timeout := o.timeout

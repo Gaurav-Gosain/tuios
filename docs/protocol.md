@@ -1753,6 +1753,14 @@ same lists the handlers enforce, so they cannot drift from the implementation.
 A verb's `returns` use the same shape. A returned field that can be `null` as
 well as its type carries `"nullable": true`, as `evidence_age_ms` does.
 
+A verb that keeps the connection after its reply, as an event stream, a byte
+stream or a connection to something else, carries `stream`. `"stream": {}`
+means it always does, as `subscribe` and `stream-pane` do. With `param` it
+does only when that param is one of `values`, a bool param as `"true"`:
+`speed-test` has `{"param": "mode", "values": ["sink", "source"]}`. A caller
+that sends one request and reads one reply, such as `tuios call`, cannot make
+such a call.
+
 From the shell, `tuios list-verbs` and `tuios list-verbs --json` render the same
 catalog.
 

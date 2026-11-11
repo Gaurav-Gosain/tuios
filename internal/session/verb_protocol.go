@@ -11,6 +11,7 @@ import (
 	"os"
 	"runtime"
 	"slices"
+	"strconv"
 	"sync"
 	"time"
 
@@ -236,6 +237,19 @@ type verbEntry struct {
 	// needNothing for nothing. An entry that names none is refused over every
 	// link, and a test fails on it.
 	link linkNeed
+	// stream is set on a verb that keeps its connection after the reply, as
+	// an event stream, a byte stream or a connection to something else. A
+	// one-shot caller such as tuios call reads it to refuse the verb, and
+	// list-verbs publishes it.
+	stream *verbStream
+}
+
+// verbStream says when a verb keeps its connection after the reply. With no
+// Param it always does. With Param, it does when that param is one of Values,
+// a bool param as "true".
+type verbStream struct {
+	Param  string   `json:"param,omitempty"`
+	Values []string `json:"values,omitempty"`
 }
 
 // verbDoc is the serialized form of a verbEntry in the list-verbs result.
@@ -245,6 +259,35 @@ type verbDoc struct {
 	Params      []verbParam `json:"params"`
 	Returns     []verbParam `json:"returns,omitempty"`
 	Examples    []string    `json:"examples,omitempty"`
+	// Stream is present on a verb that keeps the connection after its reply.
+	Stream *verbStream `json:"stream,omitempty"`
+}
+
+// HoldsConnection reports whether a call of the verb with params keeps the
+// connection after its reply, so a caller that sends one request and reads
+// one reply cannot make it.
+func (doc verbDoc) HoldsConnection(params map[string]any) bool {
+	st := doc.Stream
+	if st == nil {
+		return false
+	}
+	if st.Param == "" {
+		return true
+	}
+	v, ok := params[st.Param]
+	if !ok {
+		return false
+	}
+	var got string
+	switch v := v.(type) {
+	case string:
+		got = v
+	case bool:
+		got = strconv.FormatBool(v)
+	default:
+		return false
+	}
+	return slices.Contains(st.Values, got)
 }
 
 // identityReturn, confidenceReturn and evidenceAgeReturn are the three
@@ -1126,6 +1169,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbRetryHost,
 		},
 		"open-host-connection": {
+			stream:      &verbStream{},
 			scope:       scopeDeny,
 			link:        needRelay,
 			description: "Turn this connection into a connection to the daemon on one host. After the reply, every byte written here reaches that daemon and every byte it writes comes back. Send nothing until the reply has arrived.",
@@ -1142,6 +1186,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbOpenHostConnection,
 		},
 		"open-pane": {
+			stream:      &verbStream{},
 			scope:       scopeDeny,
 			link:        needOpen,
 			description: "Spawn a process on this machine and turn this connection into its pty. After the reply, every byte written here reaches the process and every byte it writes comes back. Send nothing until the reply has arrived. This is the far half of a global session: the pane belongs to the session on the daemon that asked, which draws it and sizes it; this machine supplies the process and nothing else.",
@@ -1187,6 +1232,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbClosePane,
 		},
 		"link-peer": {
+			stream: &verbStream{},
 			// From the host policy and dropped-link work: the link handshake,
 			// ending a hosted pane, and passing on held mail are for a link
 			// connection or the person's client, never a restricted caller.
@@ -1303,6 +1349,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbPastePaneImage,
 		},
 		"pane-calls": {
+			stream:      &verbStream{},
 			scope:       scopeDeny,
 			link:        needOpen,
 			description: "Open the report channel of a pane this machine runs for another machine. Only the daemon that owns the window holds the token. After the reply this machine writes one request line per report the pane's process sends naming its pane ({\"id\",\"verb\",\"params\"}: set-agent-state, set-agent-meta, set-agent-session, read-agent-messages, send-agent-message, or wait-for agent-message), and the owner answers each with {\"id\",\"result\"} or {\"id\",\"error\"}. The owner runs every request as its own window, whatever it says.",
@@ -1317,7 +1364,8 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbPaneCalls,
 		},
 		"pane-kitty-medium": {
-			scope: scopeDeny,
+			stream: &verbStream{},
+			scope:  scopeDeny,
 			// pane-kitty-medium carries the bytes of a file a hosted pane named in a
 			// kitty graphics command: a file read, so it needs files.
 			link:        needFiles,
@@ -1541,6 +1589,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbPopup,
 		},
 		"tml-open": {
+			stream: &verbStream{Param: "events", Values: []string{"true"}},
 			// A pane opens, changes and closes a TML surface with the write grant,
 			// in its own session, and only its own surfaces (tmlOwnerCheck). The
 			// input verb acts as the person.
@@ -2102,7 +2151,8 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbRun,
 		},
 		"stream-pane": {
-			scope: scopeRead,
+			stream: &verbStream{},
+			scope:  scopeRead,
 			// stream-pane reads a pane. Its input and lease frames are checked
 			// as send-text and resize, frame by frame, so they need write.
 			link:        needList,
@@ -2436,6 +2486,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbGetOption,
 		},
 		"subscribe": {
+			stream:      &verbStream{},
 			scope:       scopeRead,
 			link:        needList,
 			description: "Open a long-lived event stream on this connection. Without after_seq, events start at the moment of subscription. With after_seq, the stream first replays the retained events after that seq, so a reconnecting subscriber gets what it missed, and sends a gap marker with a reason when it cannot.",
@@ -3860,6 +3911,16 @@ func VerbDocs() []VerbDoc {
 	return out
 }
 
+// LookupVerbDoc returns one verb as list-verbs describes it, and false for a
+// verb this build does not know.
+func LookupVerbDoc(name string) (VerbDoc, bool) {
+	entry, ok := verbRegistry()[name]
+	if !ok {
+		return VerbDoc{}, false
+	}
+	return describeVerb(name, entry), true
+}
+
 // describeVerb renders one registry entry as its documented form.
 func describeVerb(name string, entry verbEntry) verbDoc {
 	params := entry.params
@@ -3872,6 +3933,7 @@ func describeVerb(name string, entry verbEntry) verbDoc {
 		Params:      params,
 		Returns:     entry.returns,
 		Examples:    entry.examples,
+		Stream:      entry.stream,
 	}
 }
 
