@@ -17004,3 +17004,28 @@ branch passes 3 of 3 runs. Logs: `~/.cache/agent-tmp/vtbench/recover/` on arch-b
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestEmulatorPanicKeepsTheDaemonAndOtherPanes$' -v .`.
+## The New agent sheet stops on invisible characters
+
+`TestNewAgentSheetStopsOnInvisibleCharacters` adds three cards from the CLI
+and starts an agent on each from the board's New agent sheet, with a fake
+`codex` first on the PATH that logs its pane id and the first line typed
+into it. Card t1's prompt and card t2's title end in 45 Unicode tag
+characters. n on t1 (after the Card tab read its prompt) and enter on t2 in
+the columns each open the sheet; the first Start must start nothing and show
+"Removed 45 invisible characters" once on the screen, and enter in the task
+must start the agent with a first prompt that has no tag character. The
+plain card t3 starts on the first Start, on main too.
+
+Run on 2026-11-11 on Linux (x86_64). The branch passes.
+
+| Control | Row | The test fails with | Result |
+|---------|-----|---------------------|--------|
+| Main (6fe2c0df9) | prompt (t1) | "cockpit_spawn_invisible_test.go:209: waiting for the sheet's notice after the first Start on t1: tuitest: WaitForDesc timed out after 10.003s waiting for custom condition" | **caught** |
+| The Submit call in spawnStart cut | prompt (t1) | "cockpit_spawn_invisible_test.go:209: waiting for the sheet's notice after the first Start on t1: tuitest: WaitForDesc timed out after 10.001s waiting for custom condition" | **caught** |
+| The check skipped on the second sheet only (the first sheet still stops) | title (t2) | "cockpit_spawn_invisible_test.go:223: waiting for the sheet's notice after the first Start on t2: tuitest: WaitForDesc timed out after 10.005s waiting for custom condition" | **caught** |
+| The composer's notice copied to the sheet's notice line too | exactly once | "cockpit_spawn_invisible_test.go:209: ASSERTION: the screen shows \"Removed 45 invisible characters\" 2 times, want once" | **caught** |
+
+The sheet after each first Start is saved under `TUIOS_E2E_FRAMES`, and each
+agent's first prompt in `first-prompts.txt` in the test's artifact folder.
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestNewAgentSheetStopsOnInvisibleCharacters$' -v .`.

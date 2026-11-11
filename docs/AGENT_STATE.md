@@ -4912,7 +4912,9 @@ daemon with `tuios kill-server`.
 Before it sends, the editor removes invisible characters (Unicode tags, bidi
 controls, zero-width spaces). When it removed any, it does not send and says
 `Removed 3 invisible characters. Read the message and press enter to send.`
-Text pasted from a web page can hide instructions in them.
+Text pasted from a web page can hide instructions in them. The New agent
+sheet's Start stops the same way when its task holds any, a task filled from a
+card included: the agent starts on the next Start, with the task as shown.
 
 `esc` closes the editor and keeps the draft: `r` on the same pane opens it
 again.

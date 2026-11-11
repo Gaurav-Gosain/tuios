@@ -1419,13 +1419,18 @@ func (m *OS) spawnStart() tea.Cmd {
 	if s == nil {
 		return nil
 	}
-	task := strings.TrimSpace(s.task.Text())
-	branch := strings.TrimSpace(s.branch.Text())
 	fail := func(f spawnField, why string) tea.Cmd {
 		s.field, s.notice, s.list = f, why, false
 		s.placed, s.placedHost, s.placedTaskHost = false, "", ""
 		return nil
 	}
+	if _, ok := s.task.Submit(); !ok {
+		// Invisible characters were removed before any machine is asked;
+		// the task field says so, and the next Start sends what it shows.
+		return fail(spTask, "")
+	}
+	task := strings.TrimSpace(s.task.Text())
+	branch := strings.TrimSpace(s.branch.Text())
 	if s.anyPicked() && !s.anyHere() && !s.placed {
 		// The daemon picks the machine first, then Start goes on there.
 		switch {

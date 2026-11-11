@@ -23,6 +23,11 @@ tuios task get "$id" --json | jq -r .prompt
 tuios task done "$id"
 ```
 
+`--json` gives the prompt as stored, invisible characters (Unicode tags, bidi
+controls, zero-width spaces) included, while plain `tuios task get "$id"`
+removes them and prints the whole card, with the prompt under `Prompt:` and
+each of its lines indented two spaces: read a prompt you will act on there.
+
 `claim --next` takes the oldest card that no pane holds and that is not blocked,
 done, or added with `--ask-first`: such a card waits to be started by its id
 (`tuios task claim t3`), as task dispatch leaves it too. Two panes that claim at the same moment get two different cards.
