@@ -2968,10 +2968,10 @@ tuios task dispatch [status | pause | resume | mode manual|pull|auto | preset | 
 - `--next` (`claim`): Take the oldest card no pane holds that is not blocked or done, and that no fan of another session works on
 - `-w, --window <target>` (`claim`): The pane that takes the card (default: this pane; required outside a pane)
 - `--clear` (`block`): Lift the block
-- `--name <name>` (`attach`): The name the card shows (default: the file's name, or the link). One file only
-- `--note <text>` (`attach`): A line about the attachment
+- `--name <name>` (`attach`): The name the card shows (default: the file's name; `PR #N` for a pull request link, else the link's host and path). One file only
+- `--note <text>` (`attach`): A line about the attachment. One file only
 - `--link <url>` (`attach`): Attach an http or https address instead of a file. A GitHub pull request's address is kind `pr`
-- `--replace` (`attach`): Put it in the place of the attachment with the same name. Without it a name in use is refused
+- `--replace` (`attach`): Put it in the place of the attachment with the same name. Without it a name in use with other content is refused; the same file again is left as it is, so a retry succeeds
 - `--screenshot`, `--capture` (`attach`): Have the daemon take a PNG, or the text, of the pane `-w` names in the card's session, and attach it as `screenshot NAME.png` or `capture NAME.txt`. From a pane this needs the read grant
 - `--scrollback`, `--lines <n>` (`attach`): With `--screenshot` or `--capture`, take the history above the screen too, at most n lines (`--capture` keeps 2000 by default)
 - `-o, --output <file>` (`attachment get`): Where to save it, or `-` for standard output. An existing file is not written over
@@ -2984,7 +2984,8 @@ its age, and its title. `claim` prints the card's id and title on its first
 line, so a script can read the id with `cut -d' ' -f1`; with nothing to take it
 fails with `no_task`, and a card another pane holds fails with `task_held`.
 
-`attach` puts files or a link on a card, so the board shows them beside it: a
+`attach` puts files or a link on a card, so the board shows them beside it.
+Several files go in one change, one entry in the card's history: a
 screenshot, a log, a diff, a Markdown note, a Mermaid diagram, the pull
 request. The command reads each file and sends its bytes; the daemon stores
 them once by their sha256 under its state folder and keeps them until the card

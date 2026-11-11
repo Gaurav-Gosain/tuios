@@ -7703,7 +7703,7 @@ they make anything: a refusal names `task` in its hint.
 | `add-task` | Add a card: `title` (required, at most 200 bytes), `prompt` (at most 16 KiB), `stage` (default `todo`), `project` (the repository's origin URL) | `task`, own session | `write` | `task_added` |
 | `list-tasks` | The session's cards, oldest first. `stage`, `holder` and `open` (leave out `done`) narrow it. `all_sessions` lists every session's, in session name order, and takes no `session` or `holder`. `project` lists one repository's cards from every session; `hosts` with it also asks each linked machine for its own, and `hosts` with `all_sessions` adds every linked machine's project cards | `read` | `list` | `task_list` |
 | `get-task` | One card with its `prompt`, `history` and `attachments` | `read` | `list` | `task` |
-| `attach-task` | Put a file (`content`, base64, with `name`), a `link`, or a pane the daemon takes (`screenshot` or `capture`, each with `window`, `scrollback`, `lines`) on the card, with `note`; `host` passes it on to the machine that owns a project card; `replace` puts it in the place of one with the same name. Refusals: `attachment_too_large`, `attachment_limit` | `task`; the card it holds, or the card it finished while it waits in `verify` or `review` | `write` | `task_attached` with `attachment` and `task` |
+| `attach-task` | Put a file (`content`, base64, with `name`), several (`files`, each `name` and `content`, one change and one history entry), a `link`, or a pane the daemon takes (`screenshot` or `capture`, each with `window`, `scrollback`, `lines`) on the card, with `note`; `host` passes it on to the machine that owns a project card; `replace` puts it in the place of one with the same name. Refusals: `attachment_too_large`, `attachment_limit` | `task`; the card it holds, or the card it finished while it waits in `verify` or `review` | `write` | `task_attached` with `attachment` and `task` |
 | `detach-task` | Take the attachment `name` off the card; its file goes when no card names it | as `attach-task` | `write` | `task_changed` |
 | `get-task-attachment` | One attachment by `name`, with the file in `content` (base64); a link has none. A `pr` link adds `pr` (number, state, title, checks) or `pr_error`, read through `gh` at most once a minute. Refusal: `no_attachment` | `read` | `list` | `task_attachment` |
 | `claim-task` | Take the card `id`, or with `next` the oldest card no pane holds that is not blocked or done, for `window` | `task`; for itself only | `write` | `task_claimed` |
@@ -7783,8 +7783,9 @@ or blocked is `invalid_params`.
 path. A file over `[tasks] attachment_max_mib`, or one that takes the
 session's card files over `attachment_session_mib`, is
 `attachment_too_large`, and a card that holds `attachments_per_card` already
-is `attachment_limit`. A `name` already on the card is `invalid_params` unless
-`replace` is set. A name the card does not have is `no_attachment`. A state
+is `attachment_limit`. A `name` already on the card with other content is
+`invalid_params` unless `replace` is set; with the same content it is left as
+it is and named in `unchanged`, so a retry succeeds. A name the card does not have is `no_attachment`. A state
 push never carries a card's attachments; the row's `attachment_count` says how
 many there are, and `get-task` lists them.
 

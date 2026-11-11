@@ -18,8 +18,9 @@ import (
 // restart-server, and the stored files go when the card goes.
 //
 // It checks, in order: a PNG, a Markdown file and a pull request link are
-// attached and classified as image, markdown and pr; the same name again is
-// refused without --replace; a file over [tasks] attachment_max_mib is
+// attached and classified as image, markdown and pr, the link named PR #12;
+// the same file again is a no-op, and another file under its name is refused
+// with --replace named; a file over [tasks] attachment_max_mib is
 // refused with an error that names the option; a pane that does not hold the
 // card is refused, and the same pane may attach once it claims the card;
 // task get lists the attachments; after restart-server each file comes back
@@ -90,8 +91,13 @@ func TestTaskAttachmentsSurviveARestartAndGoWithTheCard(t *testing.T) {
 	if out, err := run("task", "attach", "-s", sess, "t1", "--link", pr); err != nil {
 		t.Fatalf("ASSERTION: attaching the link failed: %v\n%s", err, out)
 	}
-	if out, err := run("task", "attach", "-s", sess, "t1", pic); err == nil || !strings.Contains(out, "replace") {
-		t.Errorf("ASSERTION: the same name again was not refused with a word on replace: %v\n%s", err, out)
+	// The same file again is left as it is; another file under its name is
+	// refused, with the flag that would replace it.
+	if out, err := run("task", "attach", "-s", sess, "t1", pic); err != nil || !strings.Contains(out, "already, with the same content") {
+		t.Errorf("ASSERTION: the same file again was not taken as a no-op: %v\n%s", err, out)
+	}
+	if out, err := run("task", "attach", "-s", sess, "t1", note, "--name", "after.png"); err == nil || !strings.Contains(out, "--replace") {
+		t.Errorf("ASSERTION: another file under a name in use was not refused with --replace named: %v\n%s", err, out)
 	}
 	if out, err := run("task", "attach", "-s", sess, "t1", pic, "--replace", "--note", "the layout after the fix"); err != nil {
 		t.Errorf("ASSERTION: --replace was refused: %v\n%s", err, out)
@@ -119,7 +125,7 @@ func TestTaskAttachmentsSurviveARestartAndGoWithTheCard(t *testing.T) {
 	}
 
 	detail, _ := run("task", "get", "-s", sess, "t1")
-	for _, want := range []string{"Attachments:", "after.png", "image", "notes.md", "markdown", pr, "the layout after the fix", "from-pane.md"} {
+	for _, want := range []string{"Attachments:", "after.png", "image", "notes.md", "markdown", "PR #12", pr, "the layout after the fix", "from-pane.md"} {
 		if !strings.Contains(detail, want) {
 			t.Errorf("ASSERTION: task get does not show %q:\n%s", want, detail)
 		}
@@ -143,7 +149,7 @@ func TestTaskAttachmentsSurviveARestartAndGoWithTheCard(t *testing.T) {
 	for _, a := range listed.Attachments {
 		kinds[a.Name] = a.Kind
 	}
-	want := map[string]string{"after.png": "image", "notes.md": "markdown", pr: "pr", "from-pane.md": "markdown"}
+	want := map[string]string{"after.png": "image", "notes.md": "markdown", "PR #12": "pr", "from-pane.md": "markdown"}
 	for name, kind := range want {
 		if kinds[name] != kind {
 			t.Errorf("ASSERTION: after the restart %s is %q, want %q (all: %v)", name, kinds[name], kind, kinds)
@@ -159,7 +165,7 @@ func TestTaskAttachmentsSurviveARestartAndGoWithTheCard(t *testing.T) {
 			t.Errorf("ASSERTION: %s came back with sha256 %s, want %s", name, b, a)
 		}
 	}
-	link, _ := run("task", "attachment", "get", "-s", sess, "t1", pr, "-o", "-")
+	link, _ := run("task", "attachment", "get", "-s", sess, "t1", "PR #12", "-o", "-")
 	if strings.TrimSpace(link) != pr {
 		t.Errorf("ASSERTION: the link came back as %q, want %q", link, pr)
 	}

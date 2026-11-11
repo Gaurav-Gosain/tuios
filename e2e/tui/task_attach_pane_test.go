@@ -111,7 +111,7 @@ func TestTaskAttachTakesAPaneAndReadsAPullRequest(t *testing.T) {
 		} `json:"pr"`
 		PRError string `json:"pr_error"`
 	}
-	raw = mustCLI(t, base, "task", "attachment", "get", "-s", sess, "t1", pr, "--json")
+	raw = mustCLI(t, base, "task", "attachment", "get", "-s", sess, "t1", "PR #7", "--json")
 	if err := json.Unmarshal([]byte(raw), &res); err != nil {
 		t.Fatalf("attachment get --json: %v\n%s", err, raw)
 	}

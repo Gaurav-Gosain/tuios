@@ -33,6 +33,10 @@ type taskAttachment struct {
 // refused here, before it is read whole.
 const attachMaxFileBytes = 8 << 20
 
+// attachBatchBytes bounds the base64 of the files one attach call carries:
+// a request line holds 12 MiB.
+const attachBatchBytes = 11 << 20
+
 // newTaskAttachCommand builds `tuios task attach`.
 func newTaskAttachCommand() *cobra.Command {
 	var f taskFlags
@@ -78,6 +82,8 @@ finished while that card waits in verify or review.`,
 				return errors.New("pass files, --link, --screenshot or --capture, one of them")
 			case name != "" && len(files) > 1:
 				return errors.New("--name names one file; attach the files one at a time to name each")
+			case note != "" && len(files) > 1:
+				return errors.New("--note says one thing about one file; attach the files one at a time to note each")
 			case (screenshot || capture) && window == "":
 				return errors.New("name the pane to take with -w PANE")
 			case window != "" && !screenshot && !capture:
@@ -103,23 +109,47 @@ finished while that card waits in verify or review.`,
 				}
 				return attachCall(f, params)
 			}
-			for _, file := range files {
-				data, err := readAttachFile(file)
+			if len(files) == 1 {
+				data, err := readAttachFile(files[0])
 				if err != nil {
 					return err
 				}
 				params := map[string]any{
-					"id": id, "name": cmpOr(name, filepath.Base(file)), "replace": replace,
+					"id": id, "name": cmpOr(name, filepath.Base(files[0])), "replace": replace,
 					"content": base64.StdEncoding.EncodeToString(data),
 				}
 				if note != "" {
 					params["note"] = note
 				}
-				if err := attachCall(f, params); err != nil {
+				return attachCall(f, params)
+			}
+			// Several files go in as few calls as fit one request line each,
+			// so the card's history has one entry per call, not per file.
+			var batch []map[string]any
+			size := 0
+			flush := func() error {
+				if len(batch) == 0 {
+					return nil
+				}
+				err := attachCall(f, map[string]any{"id": id, "replace": replace, "files": batch})
+				batch, size = nil, 0
+				return err
+			}
+			for _, file := range files {
+				data, err := readAttachFile(file)
+				if err != nil {
 					return err
 				}
+				enc := base64.StdEncoding.EncodeToString(data)
+				if size+len(enc) > attachBatchBytes {
+					if err := flush(); err != nil {
+						return err
+					}
+				}
+				batch = append(batch, map[string]any{"name": filepath.Base(file), "content": enc})
+				size += len(enc)
 			}
-			return nil
+			return flush()
 		},
 	}
 	f.register(cmd)
@@ -204,15 +234,35 @@ func attachCall(f taskFlags, params map[string]any) error {
 	if f.json {
 		return printVerbResultOn(t, raw, true)
 	}
+	return printAttached(raw, t.on())
+}
+
+// printAttached says what an attach-task answer put on the card, one line
+// per attachment, and which ones the card held as they were.
+func printAttached(raw []byte, on string) error {
 	var res struct {
-		Attachment taskAttachment `json:"attachment"`
-		Task       taskRow        `json:"task"`
+		Attachment  taskAttachment   `json:"attachment"`
+		Attachments []taskAttachment `json:"attachments"`
+		Unchanged   []string         `json:"unchanged"`
+		Task        taskRow          `json:"task"`
 	}
 	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return errfmt.Errorf("failed to parse response: %w", err)
 	}
-	a := res.Attachment
-	fmt.Printf("Attached %s to %s%s (%s).\n", plainLine(a.Name), plainLine(res.Task.ID), t.on(), attachWhat(a))
+	if res.Attachments == nil {
+		res.Attachments = []taskAttachment{res.Attachment}
+	}
+	same := map[string]bool{}
+	for _, n := range res.Unchanged {
+		same[n] = true
+	}
+	for _, a := range res.Attachments {
+		if same[a.Name] {
+			fmt.Printf("%s is on %s%s already, with the same content.\n", plainLine(a.Name), plainLine(res.Task.ID), on)
+			continue
+		}
+		fmt.Printf("Attached %s to %s%s (%s).\n", plainLine(a.Name), plainLine(res.Task.ID), on, attachWhat(a))
+	}
 	return nil
 }
 
@@ -236,15 +286,7 @@ func attachForward(f taskFlags, host, sess string, params map[string]any) error 
 		_, err := os.Stdout.Write(append(raw, '\n'))
 		return err
 	}
-	var res struct {
-		Attachment taskAttachment `json:"attachment"`
-		Task       taskRow        `json:"task"`
-	}
-	if err := jsonx.Unmarshal(raw, &res); err != nil {
-		return errfmt.Errorf("failed to parse response: %w", err)
-	}
-	fmt.Printf("Attached %s to %s on %s (%s).\n", plainLine(res.Attachment.Name), plainLine(res.Task.ID), plainLine(host), attachWhat(res.Attachment))
-	return nil
+	return printAttached(raw, " on "+plainLine(host))
 }
 
 // attachWhat is an attachment's kind and size, or its address.
