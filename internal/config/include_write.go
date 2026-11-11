@@ -141,7 +141,10 @@ func parseLayered(lc *LayeredConfig) (*UserConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	cfg.LoadWarnings = append(append(append([]string(nil), lc.Warnings...), UnknownKeybindTables(lc)...), StartupLayoutWarnings(lc, cfg)...)
+	warnings := append([]string(nil), lc.Warnings...)
+	warnings = append(warnings, UnknownKeybindTables(lc)...)
+	warnings = append(warnings, UnknownKeybindActions(lc)...)
+	cfg.LoadWarnings = append(warnings, StartupLayoutWarnings(lc, cfg)...)
 	return cfg, nil
 }
 

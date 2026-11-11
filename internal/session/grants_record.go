@@ -156,7 +156,10 @@ func (d *Daemon) verbApplyConfig(cs *connState, params json.RawMessage) (any, *v
 	// person is told which.
 	// A table under [keybindings] that tuios does not have is listed with
 	// them: the decoder drops it, and every binding in it (issue #1734).
-	dropped := append(config.UnknownKeybindTables(lc), config.DroppedWarnings(config.DropUnreadableKeys(cfg, lc))...)
+	// So is an action name in a keybinding table that no action has: the
+	// registry skips it, and its keys do nothing.
+	dropped := append(config.UnknownKeybindTables(lc), config.UnknownKeybindActions(lc)...)
+	dropped = append(dropped, config.DroppedWarnings(config.DropUnreadableKeys(cfg, lc))...)
 	// Keys tuios reads but that do not do what they say, such as a
 	// [startup] layout with tiling off.
 	notices := config.StartupLayoutWarnings(lc, cfg)

@@ -16668,3 +16668,21 @@ Run on 2026-11-11 on Linux (amd64), go1.27.4. The branch passes 3 of 3 runs in o
 
 Repeat with
 `go test -count=3 -run '^TestBroadcastToAnUnwatchedSessionIsNotEncoded$' -v ./internal/session/`.
+
+## Unknown action names in a keybinding table
+
+`e2e/tui/config_unknown_table_test.go` `TestUnknownKeybindActionIsNamed` binds
+`copy_mode_wrod` (a typo) and the real `copy_mode_word_end` under
+`[keybindings.copy_mode]`, and wants the log viewer and `tuios config apply`
+to name the first, suggest a `copy_mode_word_` action, and not name the
+second.
+
+The control was run on 2026-11-11 on branch `untangle/r2-2-handler-table`
+(arch-btw). The log is `~/.cache/agent-tmp/un-inputcfg-neg-r2-2.log` there.
+
+| Control: what was cut | Where it failed | Verdict |
+| --- | --- | --- |
+| `UnknownKeybindActions` in the load warnings (`include_write.go`) and in `config apply` (`grants_record.go`) | "the client does not say that copy_mode_wrod is not an action" | **caught** |
+
+The unit test `TestTheDispatcherHandlesEveryAction` in `internal/input`, from
+the same branch, fails naming `new_window` when its `Register` line is cut.

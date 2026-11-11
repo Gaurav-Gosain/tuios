@@ -51,3 +51,56 @@ func TestUnknownKeybindTableIsNamed(t *testing.T) {
 	}
 	alive(t, term, "after config apply with an unknown table")
 }
+
+// TestUnknownKeybindActionIsNamed: a misspelled action name inside a real
+// keybinding table, such as copy_mode_wrod for copy_mode_word_forward, was
+// skipped without a word, so its keys did nothing and the binding looked
+// broken. The client must list it in its config problems with the action
+// that was meant, and tuios config apply must too.
+//
+// How this could pass wrongly, written down first:
+//   - The name could be reported for another reason. The table is a real
+//     one, so only the action name can be wrong.
+//   - A warning for a correct name would pass the first check. The file also
+//     binds copy_mode_word_end, a real action, and the test fails if that one
+//     is named.
+func TestUnknownKeybindActionIsNamed(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[keybindings.copy_mode]\ncopy_mode_wrod = ['w']\ncopy_mode_word_end = ['e']\n")
+	killDaemon(t, base)
+
+	term := startIn(t, base, startOpts{args: []string{"new", "e2e-unknown-action"}})
+	if err := term.WaitForText(welcomeHint, bootTimeout); err != nil {
+		t.Fatalf("tuios never booted: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Ctrl('b'), "D", "l"); err != nil {
+		t.Fatalf("open the log viewer: %v", err)
+	}
+	if err := term.WaitForText("copy errors", uiTimeout); err != nil {
+		t.Fatalf("the log viewer did not open: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.WaitForText("copy_mode_wrod", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the client does not say that copy_mode_wrod is not an action: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "unknown-action-log")
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("close the log viewer: %v", err)
+	}
+
+	out, err := tuiosCLI(t, base, "config", "apply")
+	if err != nil {
+		t.Fatalf("tuios config apply: %v\n%s", err, out)
+	}
+	for _, want := range []string{
+		"config.toml: [keybindings.copy_mode] copy_mode_wrod is not an action, so its keys do nothing.",
+		"Did you mean copy_mode_word_",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("ASSERTION: tuios config apply does not say %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "copy_mode_word_end is not an action") {
+		t.Fatalf("ASSERTION: tuios config apply names copy_mode_word_end, a real action:\n%s", out)
+	}
+	alive(t, term, "after config apply with an unknown action")
+}

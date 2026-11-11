@@ -59,11 +59,13 @@ func StartupLayoutWarnings(lc *LayeredConfig, cfg *UserConfig) []string {
 }
 
 // KeyWarnings is every warning about the keys of a loaded config file: tables
-// tuios does not have, a [startup] layout that is not used, and keys tuios
+// tuios does not have, action names no action has, a [startup] layout that is
+// not used, and keys tuios
 // cannot read and drops. Reloading the file and applying it through the daemon
 // both report them, so a person reads the same list from either.
 func KeyWarnings(lc *LayeredConfig, cfg *UserConfig) []string {
 	out := UnknownKeybindTables(lc)
+	out = append(out, UnknownKeybindActions(lc)...)
 	out = append(out, StartupLayoutWarnings(lc, cfg)...)
 	return append(out, DroppedWarnings(DropUnreadableKeys(cfg, lc))...)
 }
