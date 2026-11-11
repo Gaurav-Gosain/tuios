@@ -40,9 +40,17 @@ let activeChild;
 let idle;
 let lastSelection = "";
 
+let activeAbort;
+
 // send reports one event: over the daemon's socket, else through tuios.
 async function send(payload) {
-  if ((await hookViaSocket("pi", payload, 2000)) !== null) return;
+  const abort = new AbortController();
+  activeAbort = abort;
+  try {
+    if ((await hookViaSocket("pi", payload, 2000, abort.signal)) !== null) return;
+  } finally {
+    if (activeAbort === abort) activeAbort = undefined;
+  }
   await spawnSend(payload);
 }
 
@@ -107,6 +115,7 @@ async function drain() {
   clearTimeout(timer);
   idle = undefined;
   queue.length = 0;
+  activeAbort?.abort(); // the report on the daemon's socket, if one is out
   activeChild?.kill(); // only our reporting child, never the daemon or Pi
 }
 

@@ -661,6 +661,14 @@ func realNode() (string, error) {
 // starts it under the driver script, which knows each harness's API shape.
 func startPlugin(t *testing.T, base, harness, session, window string, reportCommand ...string) *pluginDriver {
 	t.Helper()
+	return startPluginWith(t, base, harness, session, window, nil, reportCommand...)
+}
+
+// startPluginWith is startPlugin with variables set for the driver alone, such
+// as TUIOS_SOCKET= to send every report through the report command rather
+// than the daemon's socket.
+func startPluginWith(t *testing.T, base, harness, session, window string, driverEnv []string, reportCommand ...string) *pluginDriver {
+	t.Helper()
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node is not installed")
 	}
@@ -727,7 +735,7 @@ func startPlugin(t *testing.T, base, harness, session, window string, reportComm
 	for _, key := range xdgKeys {
 		words = append(words, quote(key+"="+xdgDir(base, key)))
 	}
-	for _, kv := range append(env, "TUIOS_ENV=1") {
+	for _, kv := range append(append(env, driverEnv...), "TUIOS_ENV=1") {
 		words = append(words, quote(kv))
 	}
 	words = append(words, quote(node), quote(driver), quote(harness), quote(file),
@@ -825,7 +833,10 @@ func TestOpenCodeV2PluginReportsOnlyItsSession(t *testing.T) {
 	if err := os.WriteFile(slow, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	d := startPlugin(t, base, "opencode-v2", "e2e-agent", win, slow)
+	// The slow start is the report process's, so the plugin is kept off the
+	// daemon's socket. Over the socket each report waits for the daemon's
+	// answer before the next leaves, so the order holds by construction.
+	d := startPluginWith(t, base, "opencode-v2", "e2e-agent", win, []string{"TUIOS_SOCKET="}, slow)
 	log := &stateLog{name: "opencode-v2-session-isolation"}
 	steps := []struct {
 		typeName string

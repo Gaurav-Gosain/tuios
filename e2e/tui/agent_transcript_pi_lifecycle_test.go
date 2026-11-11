@@ -1,12 +1,15 @@
 package tuie2e
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -247,87 +250,145 @@ func TestPiTranscriptExtension(t *testing.T) {
 			return len(strings.FieldsFunc(string(b), func(r rune) bool { return r == '\n' }))
 		}
 	}
-	t.Run("a slow daemon cannot hold up shutdown", func(t *testing.T) {
-		r := newATRig(t, "pi-report-drain.txt", 1)
-		path := piFixture(t, r)
-		command, count := slowReporter(t, "0.3")
-		d := startPlugin(t, r.base, "pi", transcriptSession, r.wins[0], command)
-		d.emit(t, map[string]any{"type": "session_start", "sessionFile": path, "sessionId": "pi-fixture", "leaf": "a3", "mode": "tui"})
-		// State reports are never merged, so ten of them are a backlog of ten slow
-		// children: three seconds of work for a drain that gives a second.
-		for range 10 {
-			d.emit(t, map[string]any{"type": "agent_start", "idle": false})
-		}
-		start := time.Now()
-		d.emit(t, map[string]any{"type": "session_shutdown", "ack": "bounded-drain"})
-		d.waitAck(t, "bounded-drain")
-		if took := time.Since(start); took > 2*time.Second {
-			t.Fatalf("report backlog made Pi shutdown take %v, past the total drain budget", took)
-		}
-		r.art.add("shutdown drain", time.Since(start).String())
-		// The bound is only worth something if reports were being sent.
-		if n := count(); n < 2 {
-			t.Fatalf("the slow daemon was sent %d reports, so the backlog was never built", n)
-		}
-	})
-	t.Run("selections that supersede one another are merged", func(t *testing.T) {
-		r := newATRig(t, "pi-report-merge.txt", 1)
-		path := piFixture(t, r)
-		command, count := slowReporter(t, "0.2")
-		d := startPlugin(t, r.base, "pi", transcriptSession, r.wins[0], command)
-		d.emit(t, map[string]any{"type": "session_start", "sessionFile": path, "sessionId": "pi-fixture", "leaf": "a3", "mode": "tui"})
-		// Only the newest of ten selections made while a report is out matters.
-		for i := range 10 {
-			d.emit(t, map[string]any{"type": "session_tree", "leaf": fmt.Sprintf("branch%d", i)})
-		}
-		time.Sleep(3 * time.Second)
-		if n := count(); n < 2 || n > 3 {
-			t.Fatalf("want the start and one merged selection, got %d reports", n)
-		}
-	})
-	// Each report is a process, so the extension tells the daemon only what it
-	// does not have: the end of a turn, or a repeated selection, spawns nothing.
-	t.Run("a selection already reported spawns nothing", func(t *testing.T) {
-		r := newATRig(t, "pi-ext-spawns.txt", 1)
-		path := piFixture(t, r)
-		log := filepath.Join(r.base, "spawns.log")
-		wrapper := filepath.Join(t.TempDir(), "count-spawn")
-		if err := os.WriteFile(wrapper, []byte("#!/bin/sh\necho spawn >> '"+log+"'\nexec '"+tuiosBin+"' \"$@\"\n"), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		d := startPlugin(t, r.base, "pi", transcriptSession, r.wins[0], wrapper)
-		spawns := func() int {
-			b, _ := os.ReadFile(log)
-			return strings.Count(string(b), "\n")
-		}
-		// settle waits until the extension has sent everything it is going to.
-		settle := func() int {
-			last := -1
-			for {
-				time.Sleep(300 * time.Millisecond)
-				if n := spawns(); n == last {
-					return n
-				} else {
-					last = n
+	// Each bound holds on both ways a report leaves: a report process (the
+	// socket off, as for a daemon older than agent-hook-event) and the
+	// daemon's socket. reporter gives the driver's variables and the report
+	// command for one way, and counts the reports that left.
+	type reporter func(t *testing.T, delay time.Duration) (env []string, command string, count func() int)
+	ways := []struct {
+		name string
+		make reporter
+	}{
+		{"spawned", func(t *testing.T, delay time.Duration) ([]string, string, func() int) {
+			command, count := slowReporter(t, fmt.Sprintf("%.1f", delay.Seconds()))
+			return []string{"TUIOS_SOCKET="}, command, count
+		}},
+		{"socket", func(t *testing.T, delay time.Duration) ([]string, string, func() int) {
+			sock, count := fakeReportSocket(t, delay)
+			return []string{"TUIOS_SOCKET=" + sock}, "", count
+		}},
+	}
+	for _, way := range ways {
+		t.Run("a slow daemon cannot hold up shutdown/"+way.name, func(t *testing.T) {
+			r := newATRig(t, "pi-report-drain-"+way.name+".txt", 1)
+			path := piFixture(t, r)
+			env, command, count := way.make(t, 300*time.Millisecond)
+			d := startPluginWith(t, r.base, "pi", transcriptSession, r.wins[0], env, command)
+			d.emit(t, map[string]any{"type": "session_start", "sessionFile": path, "sessionId": "pi-fixture", "leaf": "a3", "mode": "tui"})
+			// State reports are never merged, so ten of them are a backlog of ten
+			// slow reports: three seconds of work for a drain that gives a second.
+			for range 10 {
+				d.emit(t, map[string]any{"type": "agent_start", "idle": false})
+			}
+			start := time.Now()
+			d.emit(t, map[string]any{"type": "session_shutdown", "ack": "bounded-drain"})
+			d.waitAck(t, "bounded-drain")
+			if took := time.Since(start); took > 2*time.Second {
+				t.Fatalf("report backlog made Pi shutdown take %v, past the total drain budget", took)
+			}
+			r.art.add("shutdown drain", time.Since(start).String())
+			// The bound is only worth something if reports were being sent.
+			if n := count(); n < 2 {
+				t.Fatalf("the slow daemon was sent %d reports, so the backlog was never built", n)
+			}
+		})
+		t.Run("selections that supersede one another are merged/"+way.name, func(t *testing.T) {
+			r := newATRig(t, "pi-report-merge-"+way.name+".txt", 1)
+			path := piFixture(t, r)
+			env, command, count := way.make(t, 200*time.Millisecond)
+			d := startPluginWith(t, r.base, "pi", transcriptSession, r.wins[0], env, command)
+			d.emit(t, map[string]any{"type": "session_start", "sessionFile": path, "sessionId": "pi-fixture", "leaf": "a3", "mode": "tui"})
+			// Only the newest of ten selections made while a report is out matters.
+			for i := range 10 {
+				d.emit(t, map[string]any{"type": "session_tree", "leaf": fmt.Sprintf("branch%d", i)})
+			}
+			time.Sleep(3 * time.Second)
+			if n := count(); n < 2 || n > 3 {
+				t.Fatalf("want the start and one merged selection, got %d reports", n)
+			}
+		})
+		// The extension tells the daemon only what it does not have: the end
+		// of a turn, or a repeated selection, sends nothing.
+		t.Run("a selection already reported sends nothing/"+way.name, func(t *testing.T) {
+			r := newATRig(t, "pi-ext-sends-"+way.name+".txt", 1)
+			path := piFixture(t, r)
+			env, command, sent := way.make(t, 0)
+			d := startPluginWith(t, r.base, "pi", transcriptSession, r.wins[0], env, command)
+			// settle waits until the extension has sent everything it is going to.
+			settle := func() int {
+				last := -1
+				for {
+					time.Sleep(300 * time.Millisecond)
+					if n := sent(); n == last {
+						return n
+					} else {
+						last = n
+					}
 				}
 			}
+			d.emit(t, map[string]any{"type": "session_start", "sessionFile": path, "sessionId": "pi-fixture", "leaf": "a3", "mode": "tui"})
+			start := settle()
+			record := map[string]any{"type": "message", "id": "late", "parentId": "a3", "message": map[string]any{"role": "assistant", "content": "x"}}
+			d.emit(t, map[string]any{"type": "persist_only", "persistLeaf": "late", "persistRecord": record})
+			appended := settle()
+			if appended != start+1 {
+				t.Fatalf("an append reported %d times, want once", appended-start)
+			}
+			d.emit(t, map[string]any{"type": "turn_end"})
+			d.emit(t, map[string]any{"type": "session_tree"})
+			if got := settle(); got != appended {
+				t.Fatalf("the entry the last report named was reported again %d times", got-appended)
+			}
+			d.emit(t, map[string]any{"type": "session_tree", "leaf": "old"})
+			if got := settle(); got != appended+1 {
+				t.Fatalf("a different selection reported %d times, want once", got-appended)
+			}
+		})
+	}
+}
+
+// fakeReportSocket stands in for the daemon's socket with one that answers
+// each call after delay and keeps a count of them, so a test can count what an
+// extension sent over the socket. The extension runs in a pane, which does not
+// share this process's environment, so the path goes to it as a variable.
+func fakeReportSocket(t *testing.T, delay time.Duration) (path string, count func() int) {
+	t.Helper()
+	// Unix socket paths are short on macOS; a test's temp folder is too long.
+	dir, err := os.MkdirTemp("/tmp", "tsk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	path = filepath.Join(dir, "s")
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	var mu sync.Mutex
+	calls := 0
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer func() { _ = conn.Close() }()
+				if _, err := bufio.NewReader(conn).ReadBytes('\n'); err != nil {
+					return
+				}
+				mu.Lock()
+				calls++
+				mu.Unlock()
+				time.Sleep(delay)
+				_, _ = conn.Write([]byte(`{"id":1,"result":{"stdout":""}}` + "\n"))
+			}()
 		}
-		d.emit(t, map[string]any{"type": "session_start", "sessionFile": path, "sessionId": "pi-fixture", "leaf": "a3", "mode": "tui"})
-		start := settle()
-		record := map[string]any{"type": "message", "id": "late", "parentId": "a3", "message": map[string]any{"role": "assistant", "content": "x"}}
-		d.emit(t, map[string]any{"type": "persist_only", "persistLeaf": "late", "persistRecord": record})
-		appended := settle()
-		if appended != start+1 {
-			t.Fatalf("an append reported %d times, want once", appended-start)
-		}
-		d.emit(t, map[string]any{"type": "turn_end"})
-		d.emit(t, map[string]any{"type": "session_tree"})
-		if got := settle(); got != appended {
-			t.Fatalf("the entry the last report named was reported again %d times", got-appended)
-		}
-		d.emit(t, map[string]any{"type": "session_tree", "leaf": "old"})
-		if got := settle(); got != appended+1 {
-			t.Fatalf("a different selection reported %d times, want once", got-appended)
-		}
-	})
+	}()
+	return path, func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return calls
+	}
 }
