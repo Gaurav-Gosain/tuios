@@ -23,10 +23,21 @@ import (
 // background. Anything else is drawn by renderTerminal, as before.
 
 // directPane is a lone pane being drawn from its emulator this frame. Its IO
-// read lock is held from the choice until its cells are copied.
+// read lock is held from the choice until its cells are copied. held says the
+// guest has a synchronized update open: the cells copied last time are drawn
+// again, so a half-drawn screen is never shown.
 type directPane struct {
 	w      *terminal.Window
 	locked bool
+	held   bool
+}
+
+// paneHold is the cells the direct pane last drew, for a frame composed while
+// its guest has a synchronized update open (DEC 2026).
+type paneHold struct {
+	id    string
+	w, h  int
+	cells []uv.Cell
 }
 
 // chooseDirectPane picks the pane to draw from its emulator this frame, or
@@ -58,9 +69,18 @@ func (m *OS) chooseDirectPane() directPane {
 	d := directPane{w: w, locked: true}
 	screen := w.Terminal
 	fake := native == nil && !m.Resizing && focused && m.Mode == TerminalMode && !screen.IsCursorHidden()
-	if fake || screen.IsSyncActive() || m.findsLinksIn(screen, w) {
+	if fake || m.findsLinksIn(screen, w) {
 		d.release()
 		return directPane{}
+	}
+	if screen.IsSyncActive() {
+		// Mid-update: draw the last complete frame, if this path drew it.
+		h := &m.directHold
+		if h.id != w.ID || h.w != w.ContentWidth() || h.h != w.ContentHeight() || h.cells == nil {
+			d.release()
+			return directPane{}
+		}
+		d.held = true
 	}
 	return d
 }
@@ -123,15 +143,29 @@ func (m *OS) copyDirectPane(canvas *frameCanvas, d *directPane) {
 	defer d.release()
 	w, screen := d.w, d.w.Terminal
 	r := paneContentRect(w).Intersect(canvas.Bounds())
-	rows, cols := min(r.Dy(), screen.Height()), min(r.Dx(), screen.Width())
+	h := &m.directHold
+	if d.held {
+		cw := h.w
+		for y := range min(r.Dy(), h.h) {
+			copy(canvas.Lines[r.Min.Y+y][r.Min.X:r.Max.X], h.cells[y*cw:y*cw+min(cw, r.Dx())])
+		}
+		return
+	}
+	cw, ch := w.ContentWidth(), w.ContentHeight()
+	if h.id != w.ID || h.w != cw || h.h != ch {
+		h.id, h.w, h.h = w.ID, cw, ch
+		h.cells = make([]uv.Cell, cw*ch)
+	}
+	rows, cols := min(r.Dy(), screen.Height(), ch), min(r.Dx(), screen.Width(), cw)
 	for y := range rows {
 		line := canvas.Lines[r.Min.Y+y]
 		for x := range cols {
-			if c := screen.CellAt(x, y); c != nil {
-				line[r.Min.X+x] = *c
-			} else {
-				line[r.Min.X+x] = uv.EmptyCell
+			c := screen.CellAt(x, y)
+			if c == nil {
+				c = &uv.EmptyCell
 			}
+			line[r.Min.X+x] = *c
+			h.cells[y*cw+x] = *c
 		}
 	}
 	w.RenderedCols, w.RenderedRows = w.ContentWidth(), w.ContentHeight()

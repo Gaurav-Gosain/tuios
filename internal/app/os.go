@@ -566,6 +566,8 @@ type OS struct {
 		s    string
 		w, h int
 	}
+	// hold is the cells the direct pane last drew. See pane_cells.go.
+	directHold paneHold
 	// keepHostPictures says this host has kitty graphics and is not the browser
 	// client, so a frame carries no ED 2. The render sets it and the frame writer reads it. See keepPicturesFrame.
 	keepHostPictures atomic.Bool
