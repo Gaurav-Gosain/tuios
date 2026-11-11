@@ -246,3 +246,46 @@ func TestTaskCardsAreReleasedWithTheirPane(t *testing.T) {
 		}
 	}
 }
+
+// TestClaimNextLeavesAskFirstCards: claim --next takes the oldest open card
+// that was not added with --ask-first, and with only such a card left it takes
+// none. A worker took a card the lead had added with --ask-first this way.
+// Claiming that card by its id still works: --ask-first means someone decides
+// to start it, not that no one may.
+//
+// How it could pass wrongly: the ask-first card is added first, so a claim
+// that ignored --ask-first would take it (the oldest); and the second claim
+// must fail and leave t1 unheld, not succeed on some other card.
+//
+// Negative control: without the AskFirst check in nextFreeTask
+// (internal/session/task.go), the first claim takes t1.
+func TestClaimNextLeavesAskFirstCards(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	const sess = "e2e-ask-first"
+	mustCLI(t, base, "new", sess, "--detach")
+	waitForSessionInfo(t, base, sess)
+	mustCLI(t, base, "task", "add", "-s", sess, "--ask-first", "-p", "ask first", "decided card")
+	mustCLI(t, base, "task", "add", "-s", sess, "-p", "anyone", "open card")
+	a := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", sess, "worker-a", "--no-focus", "--print-id"))
+	b := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", sess, "worker-b", "--no-focus", "--print-id"))
+
+	got := mustCLI(t, base, "task", "claim", "--next", "-s", sess, "-w", a)
+	if card, _, _ := strings.Cut(strings.TrimSpace(got), " "); card != "t2" {
+		t.Fatalf("ASSERTION: claim --next took %q, want t2 (t1 was added with --ask-first):\n%s", card, got)
+	}
+	if out, err := tuiosCLI(t, base, "task", "claim", "--next", "-s", sess, "-w", b); err == nil {
+		t.Fatalf("ASSERTION: with only an ask-first card left, claim --next took a card:\n%s", out)
+	}
+	for _, tk := range listTasks(t, base, sess).Tasks {
+		if tk.ID == "t1" && tk.Holder != nil {
+			t.Fatalf("ASSERTION: claim --next left t1 held by %s", tk.Holder.Window)
+		}
+	}
+	got = mustCLI(t, base, "task", "claim", "t1", "-s", sess, "-w", b)
+	if card, _, _ := strings.Cut(strings.TrimSpace(got), " "); card != "t1" {
+		t.Fatalf("ASSERTION: claiming t1 by its id took %q:\n%s", card, got)
+	}
+	raw, _ := json.MarshalIndent(listTasks(t, base, sess), "", "  ")
+	saveText(t, "claim-next-ask-first", string(raw))
+}

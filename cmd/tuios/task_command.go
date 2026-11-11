@@ -558,7 +558,7 @@ nothing to take, it fails with no_task.`,
 		},
 	}
 	f.register(cmd)
-	cmd.Flags().BoolVar(&next, "next", false, "Take the oldest open card no pane holds")
+	cmd.Flags().BoolVar(&next, "next", false, "Take the oldest open card no pane holds, leaving out the cards added with --ask-first")
 	addWindowFlag(cmd, &window, "The pane that takes the card, by name or id (default: this pane)")
 	return cmd
 }

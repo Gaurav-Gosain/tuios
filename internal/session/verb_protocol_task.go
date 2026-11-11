@@ -102,7 +102,7 @@ func taskVerbs() map[string]verbEntry {
 			params: append([]verbParam{
 				sessionParam,
 				{Name: "id", Type: "string", Description: "The card to take. Not with next."},
-				{Name: "next", Type: "bool", Description: "Take the oldest open card no pane holds. Not with id. With none to take, the call fails with no_task.", Default: "false"},
+				{Name: "next", Type: "bool", Description: "Take the oldest open card no pane holds and that is not ask_first. Not with id. With none to take, the call fails with no_task.", Default: "false"},
 				{Name: "window", Type: "string", Description: "The pane that takes the card, by id or name. From a pane, omit it to claim for that pane. Required outside a pane."},
 				humanNonce,
 				host,

@@ -203,9 +203,9 @@ func taskIndex(tasks []TaskState, id string) int {
 }
 
 // nextFreeTask is the index of the card claim-task next takes: the oldest
-// one no pane holds, not blocked and not done. A card a live fan works on
-// from outside it (fan task=) is skipped too: its attempts hold it, though no
-// one pane does. liveFans names the fans that still have a session. Cards are
+// one no pane holds, not blocked, not done and not ask_first. A card a live
+// fan works on from outside it (fan task=) is skipped too: its attempts hold
+// it, though no one pane does. liveFans names the fans that still have a session. Cards are
 // appended as they are added, so the first free one is the oldest. -1 when
 // there is none.
 func nextFreeTask(st *SessionState, liveFans map[string]bool) int {
@@ -217,7 +217,10 @@ func nextFreeTask(st *SessionState, liveFans map[string]bool) int {
 		if tk.FanID != "" && tk.FanID != own && liveFans[tk.FanID] {
 			return false
 		}
-		return tk.Holder == "" && tk.Blocked == nil && tk.Stage != TaskStageDone
+		// A card added with ask_first waits for someone to start it by its
+		// id, as dispatch leaves it (task_dispatch.go). claim --next takes
+		// the oldest card nobody has to decide on.
+		return tk.Holder == "" && tk.Blocked == nil && tk.Stage != TaskStageDone && !tk.AskFirst
 	})
 }
 
