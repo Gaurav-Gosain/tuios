@@ -530,6 +530,32 @@ func finishKey(msg tea.KeyPressMsg, name string) tea.KeyPressMsg {
 	return msg
 }
 
+// Click is a left button press and release at a cell.
+func (f *Fixture) Click(x, y int) {
+	f.t.Helper()
+	m := tea.Mouse{X: x, Y: y, Button: tea.MouseLeft}
+	f.Send(tea.MouseClickMsg(m))
+	f.Send(tea.MouseReleaseMsg(m))
+}
+
+// Hover moves the pointer to a cell with no button held. Motion draws at
+// most once a frame period, and the frame it held back comes on the next
+// tick, so Hover sends that tick too: the screen after it shows the hover.
+func (f *Fixture) Hover(x, y int) {
+	f.t.Helper()
+	f.Send(tea.MouseMotionMsg(tea.Mouse{X: x, Y: y, Button: tea.MouseNone}))
+	f.Send(app.TickerMsg(time.Now()))
+}
+
+// Drag presses the left button at one cell, moves to another with it held,
+// and lets go there, as a selection or a move is made.
+func (f *Fixture) Drag(x0, y0, x1, y1 int) {
+	f.t.Helper()
+	f.Send(tea.MouseClickMsg(tea.Mouse{X: x0, Y: y0, Button: tea.MouseLeft}))
+	f.Send(tea.MouseMotionMsg(tea.Mouse{X: x1, Y: y1, Button: tea.MouseLeft}))
+	f.Send(tea.MouseReleaseMsg(tea.Mouse{X: x1, Y: y1, Button: tea.MouseLeft}))
+}
+
 // RightClick is a right button press at a cell. Send it, then a release, or
 // use it alone where a press is what opens a menu.
 func RightClick(x, y int) tea.MouseClickMsg {
