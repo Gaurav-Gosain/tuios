@@ -26,6 +26,7 @@ import (
 // TestEveryDaemonKeyReachesTheDaemon holds this to every key in the section.
 func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg := &DaemonConfig{}
+	cfg.setTimings(uc)
 	if uc == nil {
 		// No file was read, which is not the same as a file turning the
 		// risk rules off: the approval table's defaults stand, the shipped
@@ -40,8 +41,6 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	// [agents] enabled = false turns every agent feature off.
 	cfg.AgentsOff = !uc.Agents.On()
 	cfg.MachineOfferOff = !uc.Notifications.MachineOfferOn()
-	cfg.AgentAutoDetect = uc.Daemon.AgentAutoDetect
-	cfg.AgentDetectInterval = time.Duration(uc.Daemon.AgentDetectSeconds) * time.Second
 	cfg.AgentBinaries = uc.Daemon.AgentBinaries
 	cfg.RespondFromShell = uc.Daemon.RespondFromShell
 	cfg.ResumeAgents = uc.Daemon.ResumeAgents
@@ -162,4 +161,25 @@ func HostsFromConfig(cfg *config.UserConfig) []federation.Host {
 // to inherit.
 func newWindowInheritCwd(uc *config.UserConfig) bool {
 	return uc.Appearance.NewWindowInheritCwd == nil || *uc.Appearance.NewWindowInheritCwd
+}
+
+// setTimings fills the daemon's [daemon] timings and agent detection from uc
+// with the environment laid over it (config.WithEnv), so a variable such as
+// TUIOS_CLEANUP_SECONDS wins over the file. With a nil uc the environment
+// still applies, over the default config. The values are read once, when
+// the daemon starts. With no file and no variable set, they stay zero, which
+// NewDaemon reads as the defaults.
+func (cfg *DaemonConfig) setTimings(uc *config.UserConfig) {
+	uc = config.WithEnv(uc)
+	if uc == nil {
+		return
+	}
+	cfg.AgentAutoDetect = uc.Daemon.AgentAutoDetect
+	cfg.AgentDetectInterval = optionSeconds(uc, "daemon.agent_detect_seconds")
+	cfg.AgentStallTimeout = optionSeconds(uc, "daemon.agent_stall_seconds")
+	cfg.SubagentFade = optionSeconds(uc, "daemon.subagent_fade_seconds")
+	cfg.CleanupEvery = optionSeconds(uc, "daemon.cleanup_seconds")
+	cfg.PRPollEvery = optionSeconds(uc, "daemon.pr_poll_seconds")
+	cfg.TransferKeep = optionSeconds(uc, "daemon.transfer_keep_seconds")
+	cfg.DispatchReady = optionSeconds(uc, "daemon.dispatch_ready_seconds")
 }

@@ -7100,7 +7100,8 @@ TUIOS_AGENT=claude-code docker run -it sandbox claude
 
 `TUIOS_AGENT_AUTODETECT`, `TUIOS_AGENT_DETECT_SECONDS`,
 `TUIOS_AGENT_BINARIES` and `TUIOS_AGENT_STALL_SECONDS`, read by the daemon as
-it starts. See
+it starts. Each but `TUIOS_AGENT_BINARIES` sets the `[daemon]` option of the
+same name and wins over the file. See
 [Turning detection off or widening it](AGENT_STATE.md#turning-detection-off-or-widening-it)
 and [The stall heuristic](AGENT_STATE.md#the-stall-heuristic).
 

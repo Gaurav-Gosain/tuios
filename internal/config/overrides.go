@@ -2,6 +2,8 @@ package config
 
 import (
 	"log"
+	"os"
+	"strconv"
 	"sync/atomic"
 
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -53,6 +55,48 @@ func (ov Overrides) Config(cfg *UserConfig) *UserConfig {
 		}
 	}
 	return &c
+}
+
+// EnvSets are the options the environment sets: one for each option with an
+// Env whose variable is set and not empty, in registry order.
+func EnvSets() []OptionSet {
+	var sets []OptionSet
+	for _, opt := range optionSpecs {
+		if opt.Env == "" {
+			continue
+		}
+		if v := os.Getenv(opt.Env); v != "" {
+			sets = append(sets, OptionSet{Path: opt.Path, Value: v})
+		}
+	}
+	return sets
+}
+
+// WithEnv is cfg with the environment's options laid over it, as Config lays
+// a run's Sets: a copy when a variable is set, cfg itself when none is. A
+// value the option does not take is logged and skipped, so the file's value
+// stands.
+func WithEnv(cfg *UserConfig) *UserConfig {
+	return Overrides{Sets: EnvSets()}.Config(cfg)
+}
+
+// IntValue is the int option at path as a reader uses it: 0 under
+// ZeroIsDefault reads as the default, and a value outside Min to Max moves to
+// the nearer end. A nil cfg is the default config. A path the registry does
+// not carry reads as 0.
+func IntValue(cfg *UserConfig, path string) int {
+	if cfg == nil {
+		cfg = DefaultConfig()
+	}
+	opt, ok := LookupOption(path)
+	if !ok {
+		return 0
+	}
+	text, _ := GetOptionValue(cfg, path)
+	if _, err := strconv.Atoi(text); err != nil {
+		return 0
+	}
+	return opt.resolveInt(text)
 }
 
 // themeFlag is the last --theme name ApplyOverrides applied, or "".

@@ -3,8 +3,6 @@ package session
 import (
 	"context"
 	"errors"
-	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -34,17 +32,6 @@ const prViewGap = time.Second
 
 // prPollMax bounds the pull requests one round reads.
 const prPollMax = 32
-
-// prPollEvery is the poll interval: TUIOS_PR_POLL_SECONDS when set, for
-// tests, else prPollInterval.
-func prPollEvery() time.Duration {
-	if s := os.Getenv("TUIOS_PR_POLL_SECONDS"); s != "" {
-		if n, err := strconv.Atoi(s); err == nil && n > 0 {
-			return time.Duration(n) * time.Second
-		}
-	}
-	return prPollInterval
-}
 
 // prPoller is the daemon's pull request poll. The zero value is idle.
 type prPoller struct {
@@ -158,7 +145,7 @@ func (d *Daemon) kickPRPoll() {
 // runPRPoll reads every open pull request once per interval, until none is
 // open or no client is attached.
 func (d *Daemon) runPRPoll() {
-	every := prPollEvery()
+	every := d.prPollEvery
 	timer := time.NewTimer(every)
 	defer timer.Stop()
 	stop := func() {

@@ -4696,6 +4696,7 @@ wiring cut and runs `TestSubagentListFromHooks` against it. The logs are in
 | The guard for `subagent_update`: `verbReportAgentActivity` records it whatever the reason | "launched": the first subagent's `now` is `Bash: FOREIGN-TOOL`, another conversation's call | **caught** |
 | The `subagentFlush.arm` call in `applyActivityMeta` | "tools": the four calls that came at once stay held | **caught** |
 | The fade (`subagentFade` set to 1000 hours) | "faded": the four finished subagents stay | **caught** |
+| The fade from the config file: `cfg.SubagentFade = optionSeconds(uc, "daemon.subagent_fade_seconds")` in `DaemonConfigFromUser` (run 2026-11-11, branch `untangle/r3-7-daemon-timings`, log `~/.cache/agent-tmp/un-inputcfg-neg-r3-7.log` on arch-btw) | "faded": the pane never got there | **caught** |
 
 The "tools" step is there for the flush control. Without it, the `Stop` after
 the four calls changes descriptions, which pushes the whole list, held calls

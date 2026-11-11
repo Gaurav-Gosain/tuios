@@ -1,10 +1,6 @@
 package session
 
 import (
-	"os"
-	"strconv"
-	"strings"
-	"sync"
 	"time"
 )
 
@@ -22,17 +18,6 @@ import (
 // the list, by transfer-clear or by its expiry.
 const transferRemoved = "removed"
 
-// transferKeep is transferKeepDone, or TUIOS_TRANSFER_KEEP_SECONDS when it is
-// a positive number, which a test uses to see the expiry in seconds.
-var transferKeep = sync.OnceValue(func() time.Duration {
-	if s := strings.TrimSpace(os.Getenv("TUIOS_TRANSFER_KEEP_SECONDS")); s != "" {
-		if n, err := strconv.Atoi(s); err == nil && n > 0 {
-			return time.Duration(n) * time.Second
-		}
-	}
-	return transferKeepDone
-})
-
 // expireLater arms the timer that takes a copy that ended out of the list
 // once it is due. The timer prunes every due copy, so one that was retried
 // in between, and so has not ended, stays.
@@ -43,7 +28,7 @@ func (m *transferManager) expireLater(j *transferJob) {
 	if ended.IsZero() {
 		return
 	}
-	wait := max(transferKeep()-time.Since(ended), 0) + 50*time.Millisecond
+	wait := max(m.keep-time.Since(ended), 0) + 50*time.Millisecond
 	time.AfterFunc(wait, func() {
 		m.mu.Lock()
 		m.pruneLocked()

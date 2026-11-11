@@ -428,9 +428,17 @@ type Daemon struct {
 
 	// agentStallTimeout is how long a pane may report working while producing no
 	// output before the stall heuristic demotes it to idle. Zero disables the
-	// heuristic. It is resolved once in NewDaemon from config or the
-	// TUIOS_AGENT_STALL_SECONDS environment override.
+	// heuristic. It is resolved once in NewDaemon from
+	// daemon.agent_stall_seconds.
 	agentStallTimeout time.Duration
+
+	// cleanupEvery is how often cleanupLoop runs, prPollEvery how often the
+	// pull request poll runs, and dispatchReady how long a dispatched task
+	// waits for its agent (0 is start-agent's own wait). NewDaemon sets them
+	// once from the [daemon] options.
+	cleanupEvery  time.Duration
+	prPollEvery   time.Duration
+	dispatchReady time.Duration
 
 	// silent is [agents] silent_after: how long a pane whose hooks reported
 	// working may go without a report before it shows as silent. See
@@ -439,8 +447,8 @@ type Daemon struct {
 
 	// agentDetectInterval is how often the foreground-process auto-detector polls
 	// each pane to mark or clear a running agent. Zero disables auto-detection. It
-	// is resolved once in NewDaemon from config or the TUIOS_AGENT_DETECT_SECONDS
-	// environment override.
+	// is resolved once in NewDaemon from daemon.agent_autodetect and
+	// daemon.agent_detect_seconds.
 	agentDetectInterval time.Duration
 
 	// agentMatcher decides whether a pane's foreground process is a known agent
@@ -979,20 +987,26 @@ type DaemonConfig struct {
 	WorktreeSetup      string
 	WorktreeSetupAsync bool
 	// AgentStallTimeout overrides how long a pane may report working with no
-	// output before the stall heuristic demotes it to idle. Zero falls back to
-	// the TUIOS_AGENT_STALL_SECONDS environment override, then to the default; a
-	// negative value disables the heuristic.
+	// output before the stall heuristic demotes it to idle. Zero uses the
+	// default; a negative value disables the heuristic.
 	AgentStallTimeout time.Duration
+	// CleanupEvery, PRPollEvery, SubagentFade and TransferKeep are the
+	// [daemon] timings of the same names. Zero or less uses the default.
+	CleanupEvery time.Duration
+	PRPollEvery  time.Duration
+	SubagentFade time.Duration
+	TransferKeep time.Duration
+	// DispatchReady is how long a dispatched task waits for its agent to be
+	// ready, at most 600 seconds. Zero uses start-agent's own wait.
+	DispatchReady time.Duration
 	// AgentSilentAfter is [agents] silent_after. Zero means
 	// config.DefaultSilentAfter and a negative value turns it off.
 	AgentSilentAfter time.Duration
 	// AgentAutoDetect toggles the foreground-process agent auto-detector. Nil
-	// falls back to the TUIOS_AGENT_AUTODETECT environment override, then to
-	// enabled. A non-nil false disables it.
+	// means enabled. A non-nil false disables it.
 	AgentAutoDetect *bool
-	// AgentDetectInterval overrides the auto-detector's poll interval. Zero falls
-	// back to the TUIOS_AGENT_DETECT_SECONDS environment override, then to the
-	// default; a negative value disables auto-detection.
+	// AgentDetectInterval overrides the auto-detector's poll interval. Zero
+	// uses the default; a negative value disables auto-detection.
 	AgentDetectInterval time.Duration
 	// AgentBinaries are extra binary names to treat as agents, merged with the
 	// built-in defaults. It also picks up the TUIOS_AGENT_BINARIES environment
@@ -1132,6 +1146,9 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 		foreground:         cfg.Foreground,
 		logFile:            cfg.LogFile,
 		agentStallTimeout:  resolveAgentStallTimeout(cfg.AgentStallTimeout),
+		cleanupEvery:       positiveOr(cfg.CleanupEvery, defaultCleanupEvery),
+		prPollEvery:        positiveOr(cfg.PRPollEvery, prPollInterval),
+		dispatchReady:      min(max(cfg.DispatchReady, 0), dispatchReadyMax),
 		agentMatcher:       newAgentMatcher(resolveAgentBinaries(cfg.AgentBinaries)),
 		respondFromShell:   cfg.RespondFromShell,
 		resumeAgents:       resolveResumeMode(cfg.ResumeAgents),
@@ -1168,7 +1185,8 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	// The socket path is read through a closure rather than copied, because the
 	// line below may still change it and the stash root is derived from it.
 	d.stash = newStashStore(func() string { return d.manager.SocketPath() })
-	d.transfers = newTransferManager(d)
+	d.transfers = newTransferManager(d, positiveOr(cfg.TransferKeep, transferKeepDone))
+	d.manager.SetSubagentFade(positiveOr(cfg.SubagentFade, defaultSubagentFade))
 	d.pastes = newPasteStore(func() string { return d.manager.SocketPath() })
 	d.buffers = pastebuf.New(cfg.pasteBufferLimit(), cfg.PasteBufferMaxBytes)
 	d.manager.SetScrollbackLines(cfg.ScrollbackLines)
@@ -2559,16 +2577,33 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 	}
 }
 
-// CleanupEvery is how often cleanupLoop runs: TUIOS_CLEANUP_SECONDS when
-// set, for tests, else 30 seconds. A client releases its own emulators'
-// buffers at the same interval.
+// defaultCleanupEvery is how often cleanupLoop runs when
+// daemon.cleanup_seconds is not set.
+const defaultCleanupEvery = 30 * time.Second
+
+// dispatchReadyMax is the longest daemon.dispatch_ready_seconds wait.
+const dispatchReadyMax = 600 * time.Second
+
+// optionSeconds is the int option at path of uc, in seconds, as a duration.
+func optionSeconds(uc *config.UserConfig, path string) time.Duration {
+	return time.Duration(config.IntValue(uc, path)) * time.Second
+}
+
+// CleanupEvery is the cleanup interval a client releases its own emulators'
+// buffers at: daemon.cleanup_seconds as the environment sets it
+// (TUIOS_CLEANUP_SECONDS), else the default. The client does not read the
+// daemon's config file, so a test gives the client and the daemon their own
+// interval through the environment.
 func CleanupEvery() time.Duration {
-	if s := os.Getenv("TUIOS_CLEANUP_SECONDS"); s != "" {
-		if n, err := strconv.Atoi(s); err == nil && n > 0 {
-			return time.Duration(n) * time.Second
-		}
+	return positiveOr(optionSeconds(config.WithEnv(nil), "daemon.cleanup_seconds"), defaultCleanupEvery)
+}
+
+// positiveOr is d, or def when d is zero or less.
+func positiveOr(d, def time.Duration) time.Duration {
+	if d <= 0 {
+		return def
 	}
-	return 30 * time.Second
+	return d
 }
 
 // cleanupLoop releases what activity leaves behind and expires routed
@@ -2581,7 +2616,7 @@ func CleanupEvery() time.Duration {
 // the last one until the latch goes up again, so the loop runs at most twice
 // after the last activity and then arms no timer.
 func (d *Daemon) cleanupLoop() {
-	every := CleanupEvery()
+	every := d.cleanupEvery
 	timer := time.NewTimer(every)
 	defer timer.Stop()
 	asleep := false
@@ -2638,26 +2673,14 @@ func (d *Daemon) cleanupOnce() bool {
 	return waiting
 }
 
-// resolveAgentStallTimeout picks the stall heuristic's silence window: an
-// explicit positive config wins, a negative config disables the heuristic, and a
-// zero config falls back to the TUIOS_AGENT_STALL_SECONDS environment override
-// (0 or less there disables it) and finally to the default.
+// resolveAgentStallTimeout picks the stall heuristic's silence window: a
+// positive config wins, a negative one disables the heuristic, and zero is the
+// default.
 func resolveAgentStallTimeout(cfg time.Duration) time.Duration {
-	if cfg > 0 {
-		return cfg
-	}
 	if cfg < 0 {
 		return 0
 	}
-	if s := os.Getenv("TUIOS_AGENT_STALL_SECONDS"); s != "" {
-		if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil {
-			if n <= 0 {
-				return 0
-			}
-			return time.Duration(n) * time.Second
-		}
-	}
-	return defaultAgentStallTimeout
+	return positiveOr(cfg, defaultAgentStallTimeout)
 }
 
 // resolveAgentBinaries returns the extra agent binary names to merge with the
@@ -2676,38 +2699,14 @@ func resolveAgentBinaries(cfg []string) []string {
 }
 
 // resolveAgentDetectInterval picks the auto-detector's poll interval and, with
-// it, whether auto-detection runs at all. An explicit enable/disable from config
-// wins; then an explicit positive interval wins; a negative interval disables it;
-// a zero interval falls back to the TUIOS_AGENT_DETECT_SECONDS environment
-// override (0 or less there disables it), and finally to the default. A returned
-// zero means auto-detection is off.
+// it, whether auto-detection runs at all. A false enabled turns it off, a
+// positive interval wins, a negative one turns it off, and zero is the
+// default. A returned zero means auto-detection is off.
 func resolveAgentDetectInterval(enabled *bool, cfg time.Duration) time.Duration {
-	if enabled != nil && !*enabled {
+	if (enabled != nil && !*enabled) || cfg < 0 {
 		return 0
 	}
-	if enabled == nil {
-		if v := strings.TrimSpace(os.Getenv("TUIOS_AGENT_AUTODETECT")); v != "" {
-			switch strings.ToLower(v) {
-			case "0", "false", "no", "off":
-				return 0
-			}
-		}
-	}
-	if cfg > 0 {
-		return cfg
-	}
-	if cfg < 0 {
-		return 0
-	}
-	if s := os.Getenv("TUIOS_AGENT_DETECT_SECONDS"); s != "" {
-		if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil {
-			if n <= 0 {
-				return 0
-			}
-			return time.Duration(n) * time.Second
-		}
-	}
-	return defaultAgentDetectInterval
+	return positiveOr(cfg, defaultAgentDetectInterval)
 }
 
 // agentMonitor periodically resolves the foreground process of every pane and

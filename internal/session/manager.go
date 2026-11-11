@@ -57,6 +57,9 @@ type Manager struct {
 	// dragAndDrop is [panes] drag_and_drop. Every session reads it through
 	// DragAndDrop. See dnd_registration.go.
 	dragAndDrop atomic.Bool
+	// subagentFade is daemon.subagent_fade_seconds, stamped on every
+	// session's config. Zero is the default.
+	subagentFade time.Duration
 	// sshAgentFollow is [daemon] ssh_agent = "follow": a new pane gets
 	// SSH_AUTH_SOCK naming its session's agent link. See ssh_agent_follow.go.
 	sshAgentFollow atomic.Bool
@@ -202,6 +205,15 @@ func (m *Manager) SetReturnWhenEmpty(on bool) {
 // ReturnWhenEmpty is what SetReturnWhenEmpty last set, true when nothing did.
 func (m *Manager) ReturnWhenEmpty() bool {
 	return !m.stayOnEmpty.Load()
+}
+
+// SetSubagentFade sets how long a finished subagent stays on the list, for
+// every session created after it. The daemon calls it once, before any
+// session exists.
+func (m *Manager) SetSubagentFade(d time.Duration) {
+	m.mu.Lock()
+	m.subagentFade = d
+	m.mu.Unlock()
 }
 
 // SetDragAndDrop sets panes.drag_and_drop for every session.
@@ -354,6 +366,9 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	}
 	if cfg.DragAndDrop == nil {
 		cfg.DragAndDrop = m.DragAndDrop
+	}
+	if cfg.SubagentFade == 0 {
+		cfg.SubagentFade = m.subagentFade
 	}
 	if cfg.HerdrEnv == nil {
 		cfg.HerdrEnv = m.HerdrEnv

@@ -1304,15 +1304,15 @@ read when the daemon starts, change that:
 ```toml
 [daemon]
 agent_autodetect = false         # off: only a harness's own reports mark a pane
-agent_detect_seconds = 5         # poll interval; 0 is the default, negative is off
+agent_detect_seconds = 5         # poll interval; 0 is the default (2), negative is off
 agent_binaries = ["myagent"]     # more names to treat as agents, added to the built-in list
 ```
 
 Each has an environment variable the daemon reads as it starts.
-`TUIOS_AGENT_AUTODETECT` (`0`, `false`, `no` or `off` turns detection off) and
-`TUIOS_AGENT_DETECT_SECONDS` (`0` or less turns it off) count only when the
-option is unset; `TUIOS_AGENT_BINARIES`, comma separated, is added to the
-option's list. A name
+`TUIOS_AGENT_AUTODETECT` (`false`, `no`, `off` or `0` turns detection off) and
+`TUIOS_AGENT_DETECT_SECONDS` (a negative number turns it off, `0` is the
+default) win over the file; `TUIOS_AGENT_BINARIES`, comma separated, is added
+to the option's list. A name
 from `agent_binaries` marks the pane as an agent by its process name alone,
 with no manifest behind it, so it gets no screen or title rules; a manifest in
 the user directory (see [Your own manifests](#your-own-manifests)) is the way to
@@ -1694,9 +1694,10 @@ The fallback is strictly secondary to explicit reporting:
   can be demoted, and output keeps a pane looking busy.
 - It never promotes a pane into `working`; only an explicit report does that.
 
-The silence window defaults to 30 seconds. Override it with the
-`TUIOS_AGENT_STALL_SECONDS` environment variable when starting the daemon; set it
-to `0` (or a negative value) to disable the heuristic entirely.
+The silence window defaults to 30 seconds. Set it with `agent_stall_seconds` in
+`[daemon]`, or with the `TUIOS_AGENT_STALL_SECONDS` environment variable when
+starting the daemon, which wins over the file. A negative value disables the
+heuristic entirely; `0` is the default.
 
 ## Silent agents
 

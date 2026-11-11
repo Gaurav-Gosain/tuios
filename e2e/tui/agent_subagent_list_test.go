@@ -272,10 +272,12 @@ func waitSubagents(t *testing.T, base, session string, log *stateLog, step strin
 func TestSubagentListFromHooks(t *testing.T) {
 	log := &stateLog{name: "subagent-list"}
 	defer log.save(t)
-	t.Setenv("TUIOS_SUBAGENT_FADE_SECONDS", "2")
 	base := t.TempDir()
 	// The count alone on the row, as an older client draws it beside this one.
-	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\nsubagent_rows = \"count\"\n")
+	// The fade is two seconds through the config file, which is the path a
+	// person uses; the other timing tests set theirs through the environment.
+	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\nsubagent_rows = \"count\"\n\n"+
+		"[daemon]\nsubagent_fade_seconds = 2\n")
 	killDaemon(t, base)
 	if out, err := tuiosCLI(t, base, "new", "e2e-sub", "--detach"); err != nil {
 		t.Fatalf("create the session: %v\n%s", err, out)

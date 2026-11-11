@@ -1995,6 +1995,10 @@ type SessionConfig struct {
 	// time so a reload applies. Off, the daemon neither records what a
 	// pane's program says about drag and drop nor answers its query.
 	DragAndDrop func() bool
+	// SubagentFade is how long a finished subagent that was done or stopped
+	// stays on the list. Zero is defaultSubagentFade. The manager stamps it
+	// from daemon.subagent_fade_seconds.
+	SubagentFade time.Duration
 	// HerdrEnv returns the herdr protocol variables a pane with the given
 	// window id that runs the given command is started with, nil for none.
 	// See Manager.HerdrEnv.

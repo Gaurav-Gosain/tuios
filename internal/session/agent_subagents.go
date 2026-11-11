@@ -3,11 +3,8 @@ package session
 import (
 	"cmp"
 	"maps"
-	"os"
 	"slices"
 	"strconv"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
@@ -89,17 +86,6 @@ const subagentQuiet = time.Hour
 // defaultSubagentFade is how long a finished subagent that was done or
 // stopped stays on the list. A failed one stays five times as long.
 const defaultSubagentFade = 60 * time.Second
-
-// subagentFade is defaultSubagentFade, or TUIOS_SUBAGENT_FADE_SECONDS when it
-// is a positive number, which a test uses to see the fade in seconds.
-var subagentFade = sync.OnceValue(func() time.Duration {
-	if s := strings.TrimSpace(os.Getenv("TUIOS_SUBAGENT_FADE_SECONDS")); s != "" {
-		if n, err := strconv.Atoi(s); err == nil && n > 0 {
-			return time.Duration(n) * time.Second
-		}
-	}
-	return defaultSubagentFade
-})
 
 // Subagent states, the values of SubagentInfo.State.
 const (
@@ -682,11 +668,14 @@ func (s *Session) forgetSubagentsLocked(st *SessionState) {
 
 // subagentDue is when sa next needs the prune: when it goes quiet while it
 // runs, when it fades once it ended.
-func subagentDue(sa *subagent) int64 {
+func (s *Session) subagentDue(sa *subagent) int64 {
 	if sa.endedAt == 0 {
 		return sa.seen + int64(subagentQuiet)
 	}
-	fade := subagentFade()
+	fade := defaultSubagentFade
+	if s.config != nil && s.config.SubagentFade > 0 {
+		fade = s.config.SubagentFade
+	}
 	if sa.state == SubagentFailed {
 		fade *= 5
 	}
@@ -700,7 +689,7 @@ func (s *Session) subagentExpiryLocked() int64 {
 	var at int64
 	for _, ps := range s.agentSubagents {
 		for _, sa := range ps.byID {
-			if due := subagentDue(sa); at == 0 || due < at {
+			if due := s.subagentDue(sa); at == 0 || due < at {
 				at = due
 			}
 		}
@@ -726,7 +715,7 @@ func (s *Session) expireSubagents(now time.Time) int {
 			}
 			gone := 0
 			for id, sa := range ps.byID {
-				if subagentDue(sa) <= at {
+				if s.subagentDue(sa) <= at {
 					delete(ps.byID, id)
 					gone++
 				}

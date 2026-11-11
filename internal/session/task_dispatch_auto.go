@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -440,9 +439,10 @@ func (d *Daemon) autoStart(c autoCard, agent string, preset DispatchPreset, plac
 	if place.Host != "" {
 		params["task_host"] = place.TaskHost
 	}
-	if n, _ := strconv.Atoi(os.Getenv("TUIOS_DISPATCH_READY_SECONDS")); n > 0 {
-		// Tests shorten the wait for an agent that never comes up.
-		params["ready_timeout"] = min(n, 600) * 1000
+	if d.dispatchReady > 0 {
+		// daemon.dispatch_ready_seconds: tests shorten the wait for an agent
+		// that never comes up.
+		params["ready_timeout"] = int(d.dispatchReady.Milliseconds())
 	}
 	res, verr := call("start-agent", params)
 	switch outcome, _ := res["outcome"].(string); {

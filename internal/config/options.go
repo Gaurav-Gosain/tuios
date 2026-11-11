@@ -97,7 +97,11 @@ type Option struct {
 	// Flag is the name of the CLI flag that sets this option for one run of
 	// tuios, tuios ssh and tuios-web, such as "border-style". Empty means no
 	// flag. The flag takes its type, help and check from this entry.
-	Flag     string `json:"-"`
+	Flag string `json:"-"`
+	// Env is the environment variable that sets this option for the
+	// process, such as "TUIOS_PR_POLL_SECONDS". Empty means none. A set
+	// variable is laid over the file by WithEnv, so it wins over the file.
+	Env      string `json:"env,omitempty"`
 	Fallback string `json:"-"`
 	// Normalize is what the option's reader does to a value before it
 	// compares it with Accepted, such as trimming spaces or folding case. The
@@ -1257,10 +1261,49 @@ var optionSpecs = []Option{
 		Path: "daemon.agent_autodetect", Type: OptionBool, Section: "daemon",
 		Description: "Detect a pane's foreground agent CLI and set its state glyph",
 		Default:     "true",
+		Env:         "TUIOS_AGENT_AUTODETECT",
 	},
 	{
 		Path: "daemon.agent_detect_seconds", Type: OptionInt, Section: "daemon",
 		Description: "Seconds between checks. 0 uses 2. A negative number turns checks off.",
+		Zero:        ZeroIsDefault,
+		Env:         "TUIOS_AGENT_DETECT_SECONDS",
+	},
+	{
+		Path: "daemon.agent_stall_seconds", Type: OptionInt, Section: "daemon",
+		Description: "Seconds of silence after which a working agent shows as unknown. 0 uses 30. A negative number turns it off.",
+		Zero:        ZeroIsDefault,
+		Env:         "TUIOS_AGENT_STALL_SECONDS",
+	},
+	{
+		Path: "daemon.subagent_fade_seconds", Type: OptionInt, Section: "daemon",
+		Description: "Seconds a finished subagent stays in the list. 0 uses 60.",
+		Zero:        ZeroIsDefault,
+		Env:         "TUIOS_SUBAGENT_FADE_SECONDS",
+	},
+	{
+		Path: "daemon.cleanup_seconds", Type: OptionInt, Section: "daemon",
+		Description: "Seconds between releases of the memory that pane output leaves behind. 0 uses 30.",
+		Zero:        ZeroIsDefault,
+		Env:         "TUIOS_CLEANUP_SECONDS",
+	},
+	{
+		Path: "daemon.pr_poll_seconds", Type: OptionInt, Section: "daemon",
+		Description: "Seconds between checks of the pull requests the sidebar shows. 0 uses 60.",
+		Zero:        ZeroIsDefault,
+		Env:         "TUIOS_PR_POLL_SECONDS",
+	},
+	{
+		Path: "daemon.transfer_keep_seconds", Type: OptionInt, Section: "daemon",
+		Description: "Seconds a finished file transfer stays in the list. 0 uses 1800.",
+		Zero:        ZeroIsDefault,
+		Env:         "TUIOS_TRANSFER_KEEP_SECONDS",
+	},
+	{
+		Path: "daemon.dispatch_ready_seconds", Type: OptionInt, Section: "daemon",
+		Description: "Seconds a dispatched task waits for its agent to be ready, at most 600. 0 uses the start-agent wait.",
+		Zero:        ZeroIsDefault,
+		Env:         "TUIOS_DISPATCH_READY_SECONDS",
 	},
 	{
 		Path: "daemon.keep_awake", Type: OptionString, Section: "daemon",

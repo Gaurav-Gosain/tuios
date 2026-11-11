@@ -302,6 +302,24 @@ type DaemonConfig struct {
 	// AgentDetectSeconds overrides how often the auto-detector polls each pane, in
 	// seconds. Zero uses the default (2s); a negative value disables detection.
 	AgentDetectSeconds int `toml:"agent_detect_seconds"`
+	// AgentStallSeconds is how long a working agent may print nothing before
+	// it shows as unknown. Zero uses 30; a negative value turns it off.
+	AgentStallSeconds int `toml:"agent_stall_seconds"`
+	// SubagentFadeSeconds is how long a finished subagent stays in the list.
+	// Zero uses 60.
+	SubagentFadeSeconds int `toml:"subagent_fade_seconds"`
+	// CleanupSeconds is how often the daemon releases what pane output leaves
+	// behind and expires routed requests. Zero uses 30.
+	CleanupSeconds int `toml:"cleanup_seconds"`
+	// PRPollSeconds is how often the daemon checks the pull requests of the
+	// worktrees it shows. Zero uses 60.
+	PRPollSeconds int `toml:"pr_poll_seconds"`
+	// TransferKeepSeconds is how long a finished file transfer stays in the
+	// list. Zero uses 1800.
+	TransferKeepSeconds int `toml:"transfer_keep_seconds"`
+	// DispatchReadySeconds is how long a dispatched task waits for its agent
+	// to be ready, at most 600. Zero uses the start-agent wait.
+	DispatchReadySeconds int `toml:"dispatch_ready_seconds"`
 	// AgentBinaries lists extra binary names to treat as agents, merged with the
 	// built-in defaults (not replacing them).
 	AgentBinaries []string `toml:"agent_binaries"`
@@ -1287,11 +1305,17 @@ func DefaultConfig() *UserConfig {
 			},
 		},
 		Daemon: DaemonConfig{
-			LogLevel:     "off",
-			ResumeAgents: ResumeAgentsAsk,
-			WindowSize:   WindowSizeLatest,
-			Display:      DisplayFollow,
-			KeepAwake:    KeepAwakeOff,
+			LogLevel:            "off",
+			ResumeAgents:        ResumeAgentsAsk,
+			WindowSize:          WindowSizeLatest,
+			Display:             DisplayFollow,
+			KeepAwake:           KeepAwakeOff,
+			AgentDetectSeconds:  2,
+			AgentStallSeconds:   30,
+			SubagentFadeSeconds: 60,
+			CleanupSeconds:      30,
+			PRPollSeconds:       60,
+			TransferKeepSeconds: 1800,
 		},
 		Startup: StartupConfig{
 			OpenDefaultWindow:   false,

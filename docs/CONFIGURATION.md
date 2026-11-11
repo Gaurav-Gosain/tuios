@@ -448,6 +448,23 @@ The tmux shim always wraps, as tmux does, and does not read this option.
 
 `persist_scrollback` in `[daemon]` (default `true`) saves each pane's history with its session. After a daemon restart or a reboot, the restored pane shows that history above a dim divider, and the new shell starts under it. `persist_scrollback_lines` (default 1000) and `persist_scrollback_kb` (default 2048) set the most lines and the most KiB one pane saves. The files hold what your panes printed, secrets included. Set `persist_scrollback = false` to stop this. The next time the daemon starts, it deletes the history it saved before. See [SESSIONS.md](SESSIONS.md#pane-history).
 
+The daemon's timings are in `[daemon]` as whole seconds. `0` is the default.
+The daemon reads them when it starts, and each has an environment variable,
+read at the same time, that wins over the file:
+
+| Option | Default | Variable | What it sets |
+|--------|---------|----------|--------------|
+| `agent_detect_seconds` | 2 | `TUIOS_AGENT_DETECT_SECONDS` | How often agent detection checks each pane. A negative value turns it off. |
+| `agent_stall_seconds` | 30 | `TUIOS_AGENT_STALL_SECONDS` | How long a working agent may print nothing before it shows as unknown. A negative value turns it off. |
+| `subagent_fade_seconds` | 60 | `TUIOS_SUBAGENT_FADE_SECONDS` | How long a finished subagent stays in the list. A failed one stays five times as long. |
+| `cleanup_seconds` | 30 | `TUIOS_CLEANUP_SECONDS` | How often the daemon releases the memory pane output leaves behind. |
+| `pr_poll_seconds` | 60 | `TUIOS_PR_POLL_SECONDS` | How often the daemon checks the pull requests the sidebar shows. |
+| `transfer_keep_seconds` | 1800 | `TUIOS_TRANSFER_KEEP_SECONDS` | How long a finished file transfer stays in the list. |
+| `dispatch_ready_seconds` | the start-agent wait | `TUIOS_DISPATCH_READY_SECONDS` | How long a dispatched task waits for its agent to be ready, at most 600. |
+
+`agent_autodetect` reads `TUIOS_AGENT_AUTODETECT` the same way. A client reads
+`TUIOS_CLEANUP_SECONDS` too, for its own buffers.
+
 `client_follows_upgrade` in `[daemon]` (default `true`) makes a client on this machine follow a live upgrade (`tuios daemon upgrade`). When the new image takes the session back and its build is newer than the client's, the client runs the binary the upgrade named, as `tuios attach` on the same terminal. The session, its panes and the flags you started the client with stay. A client of another machine, over ssh or in a browser, keeps its build. Set it to `false` to keep the old client running; it then says that it still runs the old build.
 
 `window_size` in `[daemon]` sets the size of a session that has more than one client. The names are the names of the tmux `window-size` option. See [SESSIONS.md](SESSIONS.md#session-size-with-more-than-one-client).

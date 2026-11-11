@@ -1,6 +1,7 @@
 package app
 
 import (
+	"sync"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
@@ -11,7 +12,7 @@ import (
 // emulator buffers. It is the daemon's cleanup interval, and the daemon's sweep
 // drops the same reflow scratch and alternate screen for the same panes. It
 // does not drop the decoded scrollback lines, which only the client releases.
-var emulatorReleaseEvery = session.CleanupEvery()
+var emulatorReleaseEvery = sync.OnceValue(session.CleanupEvery)
 
 // releaseEmulatorScratch drops, at most once every emulatorReleaseEvery, the
 // buffers each pane's emulator keeps that nothing on screen reads: the reflow
@@ -30,7 +31,7 @@ var emulatorReleaseEvery = session.CleanupEvery()
 // not grow while nothing is drawn, so an idle client releases once and then
 // sleeps. A pane whose lock was busy keeps the release pending.
 func (m *OS) releaseEmulatorScratch(now time.Time) {
-	if !m.emulatorReleasePending || now.Sub(m.emulatorReleasedAt) < emulatorReleaseEvery {
+	if !m.emulatorReleasePending || now.Sub(m.emulatorReleasedAt) < emulatorReleaseEvery() {
 		return
 	}
 	m.emulatorReleasedAt = now
@@ -50,5 +51,5 @@ func (m *OS) emulatorReleaseDue() (time.Time, bool) {
 	if !m.emulatorReleasePending {
 		return time.Time{}, false
 	}
-	return m.emulatorReleasedAt.Add(emulatorReleaseEvery), true
+	return m.emulatorReleasedAt.Add(emulatorReleaseEvery()), true
 }

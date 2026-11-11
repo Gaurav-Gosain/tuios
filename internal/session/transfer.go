@@ -67,7 +67,7 @@ import (
 const transferMaxRunning = 3
 
 // transferKeepDone is how long a finished job stays in the list, unless
-// TUIOS_TRANSFER_KEEP_SECONDS says otherwise (transfer_expiry.go).
+// daemon.transfer_keep_seconds says otherwise.
 const transferKeepDone = 30 * time.Minute
 
 // transferTailCheck is the range a resume compares before it trusts a part.
@@ -329,6 +329,9 @@ type ConflictItem struct {
 // transferManager holds the jobs.
 type transferManager struct {
 	d *Daemon
+	// keep is how long a finished job stays in the list:
+	// daemon.transfer_keep_seconds.
+	keep time.Duration
 	// parts is the folders this daemon wrote part files in.
 	parts *partDirs
 	// sums is the hashes write streams took as their bytes landed.
@@ -342,8 +345,8 @@ type transferManager struct {
 	journalMu sync.Mutex
 }
 
-func newTransferManager(d *Daemon) *transferManager {
-	return &transferManager{d: d, parts: newPartDirs(), jobs: map[string]*transferJob{}, running: make(chan struct{}, transferMaxRunning)}
+func newTransferManager(d *Daemon, keep time.Duration) *transferManager {
+	return &transferManager{d: d, keep: keep, parts: newPartDirs(), jobs: map[string]*transferJob{}, running: make(chan struct{}, transferMaxRunning)}
 }
 
 func newTransferID() string {
@@ -471,7 +474,7 @@ func (m *transferManager) get(id string) *transferJob {
 // that leaves the list takes its parts and its journal entry with it: nothing
 // can resume it after that.
 func (m *transferManager) pruneLocked() {
-	keep := transferKeep()
+	keep := m.keep
 	m.dropLocked(func(j *transferJob) bool {
 		return !j.ended.IsZero() && time.Since(j.ended) >= keep
 	})

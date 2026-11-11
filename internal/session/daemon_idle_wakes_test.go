@@ -56,16 +56,18 @@ func equalInt64s(a, b []int64) bool {
 
 func TestDaemonIdleArmsNoTimers(t *testing.T) {
 	t.Setenv("SHELL", "/bin/sh")
-	// One second, so the loop runs, runs once more and sleeps inside the
-	// settle wait.
-	t.Setenv("TUIOS_CLEANUP_SECONDS", "1")
 	prevBound := agentDetectQuietBound
 	agentDetectQuietBound = 300 * time.Millisecond
 	t.Cleanup(func() { agentDetectQuietBound = prevBound })
 	const interval = 100 * time.Millisecond
 
 	const stall = 600 * time.Millisecond
-	d, _ := startTestDaemonWith(t, &DaemonConfig{AgentDetectInterval: interval, AgentStallTimeout: stall})
+	d, _ := startTestDaemonWith(t, &DaemonConfig{
+		AgentDetectInterval: interval, AgentStallTimeout: stall,
+		// One second, so the cleanup loop runs, runs once more and sleeps
+		// inside the settle wait.
+		CleanupEvery: time.Second,
+	})
 	sess, err := d.manager.CreateSession("idle", &SessionConfig{}, 80, 24)
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
