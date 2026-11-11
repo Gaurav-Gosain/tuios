@@ -191,7 +191,7 @@ jobs:
           fi
 
   cross-vet:
-    name: go vet (darwin, windows, freebsd, openbsd)
+    name: go vet (every OS but linux)
     if: inputs.vet != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -211,7 +211,7 @@ jobs:
       - name: Vet
         run: |
           status=0
-          for goos in darwin windows freebsd openbsd; do
+          for goos in $(grep -v '^#' scripts/platforms.txt | grep -vx linux); do
             echo "::group::go vet (GOOS=$goos)"
             if ! GOOS=$goos go vet ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/...; then
               status=1
