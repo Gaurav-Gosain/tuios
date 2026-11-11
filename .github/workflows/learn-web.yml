@@ -38,13 +38,13 @@ jobs:
 
       - name: Tools for compressing the wasm and the fonts
         run: |
-          sudo apt-get update
-          sudo apt-get install -y brotli
+          .github/scripts/apt-install.sh brotli
 
       # The build is the long step. The Go tests and the browser download run
       # beside it, because neither needs its output. The browser download comes
       # after the tools step on purpose: both call apt-get, and two apt-get
-      # processes at once fail on the dpkg lock.
+      # processes at once fail on the dpkg lock. The tools step also repairs
+      # the apt sources, which the browser's own apt call then uses.
       - parallel:
           - name: Tests of the browser build's Go side
             run: go test -count=1 ./internal/webshell/ ./internal/learn/...

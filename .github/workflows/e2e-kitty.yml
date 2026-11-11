@@ -30,8 +30,7 @@ jobs:
           cache-id: e2e-kitty
       - name: Install the display, the pointer and kitty's libraries
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends xvfb xdotool xclip imagemagick \
+          .github/scripts/apt-install.sh xvfb xdotool xclip imagemagick \
             libxcb-xkb1 libxkbcommon-x11-0 libgl1 libegl1 libfontconfig1 fonts-dejavu-core unzip
       - name: Install kitty ${{ env.KITTY_VERSION }}
         env:

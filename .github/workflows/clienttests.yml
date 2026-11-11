@@ -52,6 +52,7 @@ jobs:
         run: |
           chrome="$(command -v google-chrome || command -v google-chrome-stable || true)"
           if [ -z "$chrome" ]; then
+            .github/scripts/apt-install.sh
             npx --prefix clienttests playwright install --with-deps chromium
             chrome="$(find "$HOME/.cache/ms-playwright" -type f -name chrome -path '*chrome-linux*' | head -n 1)"
           fi
