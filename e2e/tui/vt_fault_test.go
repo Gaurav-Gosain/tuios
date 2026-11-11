@@ -76,10 +76,13 @@ func TestEmulatorPanicKeepsTheDaemonAndOtherPanes(t *testing.T) {
 	if err := client.WaitForText("got-frozen", uiTimeout); err != nil {
 		t.Errorf("ASSERTION: the client stopped drawing the pane's stream after the emulator froze: %v\n%s", err, client.Snapshot())
 	}
-	time.Sleep(300 * time.Millisecond)
-	if lines, _ := daemonPane(base, sess, a); strings.Contains(strings.Join(lines, "\n"), "got-frozen") {
-		t.Errorf("ASSERTION: the daemon still feeds a pane whose emulator failed three times in a minute")
-	}
+	// The client drew the line; the daemon's copy of the screen must not
+	// get it, now or a moment later.
+	stayTrue(t, "the daemon does not feed a pane whose emulator failed three times in a minute", 300*time.Millisecond, func() (bool, string) {
+		lines, _ := daemonPane(base, sess, a)
+		text := strings.Join(lines, "\n")
+		return !strings.Contains(text, "got-frozen"), text
+	})
 	send(b, "still")
 	waitHandoffPane(t, base, sess, b, regexp.MustCompile(`^got-still`), 10*time.Second)
 	if now := helloImage(t, base).PID; now != pid {
@@ -115,15 +118,10 @@ func TestEmulatorPanicKeepsTheDaemonAndOtherPanes(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "close-window", "-s", sess, a); err != nil {
 		t.Fatalf("ASSERTION: close-window on the stopped pane: %v\n%s", err, out)
 	}
-	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(100 * time.Millisecond) {
+	waitUntil(t, "the stopped pane is gone after close-window", 10*time.Second, func() (bool, string) {
 		ids := windowIDs(t, base, sess)
-		if !slices.Contains(ids, a) {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("ASSERTION: the stopped pane is still listed 10s after close-window: %v", ids)
-		}
-	}
+		return !slices.Contains(ids, a), strings.Join(ids, " ")
+	})
 	send(b, "last")
 	waitHandoffPane(t, base, sess, b, regexp.MustCompile(`^got-last`), 10*time.Second)
 }
@@ -136,13 +134,12 @@ const sidebarScreenStoppedTag = "screen stopped"
 // when the daemon stops answering instead.
 func waitNoticeOrDeath(t *testing.T, base, sess, window string) {
 	t.Helper()
-	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+	waitUntil(t, "the pane shows the fault notice", 10*time.Second, func() (bool, string) {
 		if _, err := callVerb(t, base, "hello", map[string]any{}); err != nil {
 			t.Fatalf("ASSERTION: the daemon is gone after one pane's emulator panicked: %v", err)
 		}
-		if lines, err := daemonPane(base, sess, window); err == nil && vtFaultNoticeRE.MatchString(strings.Join(lines, "\n")) {
-			return
-		}
-	}
-	t.Fatalf("ASSERTION: the pane never showed the fault notice")
+		lines, err := daemonPane(base, sess, window)
+		text := strings.Join(lines, "\n")
+		return err == nil && vtFaultNoticeRE.MatchString(text), text
+	})
 }
