@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -647,21 +648,22 @@ func generateCopyModeBindings(registry *config.KeybindRegistry, s *config.Settin
 	return out
 }
 
-// copyModeMotionRows are the help rows of copy mode's motions. A row lists the
-// keys of each of its actions in order, an action's keys joined by "/", as in
-// "h/left, j/down, k/up, l/right". fixed are the keys copy mode reads itself
-// that do the same as an action of the row, shown with that action's keys.
-// lead is a fixed key the row starts with.
+// copyModeMotionRows are the help rows of copy mode's motions. A row lists
+// one key for each of its actions, in order, as in "h, j, k, l". When its
+// actions have more keys, a second row lists the next key of each, as in
+// "left, down, up, right", under desc2 (desc when empty). fixed are the keys
+// copy mode reads itself that do the same as an action of the row; they come
+// first. lead is a fixed key the row starts with.
 var copyModeMotionRows = []struct {
-	actions []string
-	fixed   map[string]string
-	lead    string
-	desc    string
+	actions     []string
+	fixed       map[string]string
+	lead        string
+	desc, desc2 string
 }{
 	{actions: []string{config.ActionCopyModeLeft, config.ActionCopyModeDown, config.ActionCopyModeUp, config.ActionCopyModeRight}, desc: "Move cursor"},
-	{actions: []string{config.ActionCopyModeWordForward, config.ActionCopyModeWordBackward, config.ActionCopyModeWordEnd}, fixed: map[string]string{config.ActionCopyModeWordForward: "w", config.ActionCopyModeWordBackward: "b"}, desc: "Word fwd/back/end"},
-	{actions: []string{config.ActionCopyModeBigWordForward, config.ActionCopyModeBigWordBackward, config.ActionCopyModeBigWordEnd}, desc: "Word fwd/back/end, words split only at spaces"},
-	{actions: []string{config.ActionCopyModeLineStart, config.ActionCopyModeFirstNonBlank, config.ActionCopyModeLineEnd}, fixed: map[string]string{config.ActionCopyModeLineStart: "0", config.ActionCopyModeFirstNonBlank: "^", config.ActionCopyModeLineEnd: "$"}, desc: "Line start/first/end"},
+	{actions: []string{config.ActionCopyModeWordForward, config.ActionCopyModeWordBackward, config.ActionCopyModeWordEnd}, fixed: map[string]string{config.ActionCopyModeWordForward: "w", config.ActionCopyModeWordBackward: "b"}, desc: "Word fwd/back/end", desc2: "Word fwd/back"},
+	{actions: []string{config.ActionCopyModeBigWordForward, config.ActionCopyModeBigWordBackward, config.ActionCopyModeBigWordEnd}, desc: "Word fwd/back/end, split only at spaces"},
+	{actions: []string{config.ActionCopyModeLineStart, config.ActionCopyModeFirstNonBlank, config.ActionCopyModeLineEnd}, fixed: map[string]string{config.ActionCopyModeLineStart: "0", config.ActionCopyModeFirstNonBlank: "^", config.ActionCopyModeLineEnd: "$"}, desc: "Line start/first/end", desc2: "Line start/end"},
 	{actions: []string{config.ActionCopyModeBottom}, lead: "gg", desc: "Jump top/bottom"},
 	{actions: []string{config.ActionCopyModeHalfPageUp, config.ActionCopyModeHalfPageDown}, desc: "Half page up/down"},
 	{actions: []string{config.ActionCopyModePageUp, config.ActionCopyModePageDown}, fixed: map[string]string{config.ActionCopyModePageUp: "ctrl+b"}, desc: "Page up/down"},
@@ -676,9 +678,9 @@ var copyModeMotionRows = []struct {
 func copyModeMotionBindings(registry *config.KeybindRegistry) []HelpBinding {
 	var out []HelpBinding
 	for _, row := range copyModeMotionRows {
-		var parts []string
+		var first, second []string
 		if row.lead != "" {
-			parts = append(parts, row.lead)
+			first = append(first, row.lead)
 		}
 		for _, action := range row.actions {
 			keys := registry.Keys(config.TableCopyMode, action)
@@ -686,13 +688,19 @@ func copyModeMotionBindings(registry *config.KeybindRegistry) []HelpBinding {
 				keys = append([]string{f}, keys...)
 			}
 			if len(keys) > 0 {
-				parts = append(parts, strings.Join(keys, "/"))
+				first = append(first, keys[0])
+			}
+			if len(keys) > 1 {
+				second = append(second, keys[1])
 			}
 		}
-		if len(parts) == 0 {
+		if len(first) == 0 {
 			continue
 		}
-		out = append(out, HelpBinding{Action: row.actions[0], Keys: []string{strings.Join(parts, ", ")}, Description: row.desc, Category: HelpCategoryCopyMode})
+		out = append(out, HelpBinding{Action: row.actions[0], Keys: []string{strings.Join(first, ", ")}, Description: row.desc, Category: HelpCategoryCopyMode})
+		if len(second) > 0 {
+			out = append(out, HelpBinding{Action: row.actions[0], Keys: []string{strings.Join(second, ", ")}, Description: cmp.Or(row.desc2, row.desc), Category: HelpCategoryCopyMode})
+		}
 	}
 	return out
 }

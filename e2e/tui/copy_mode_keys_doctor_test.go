@@ -114,8 +114,7 @@ func TestKeybindsDoctorNamesACopyModeKeyUsedTwice(t *testing.T) {
 }
 
 // TestHelpListsHomeAndEndWithTheLineKeys opens the help overlay on its copy
-// mode section and requires the line motions row to name Home with 0 and End
-// with $, the keys that do the same.
+// mode section and requires the Home and End row right after the 0, ^, $ row.
 func TestHelpListsHomeAndEndWithTheLineKeys(t *testing.T) {
 	base := t.TempDir()
 	writeConfig(t, base, copyCursorConfig)
@@ -146,9 +145,15 @@ func TestHelpListsHomeAndEndWithTheLineKeys(t *testing.T) {
 	if r < 0 {
 		t.Fatalf("no category of the help overlay lists the 0, ^, $ row\n%s", term.Snapshot())
 	}
-	row := strings.Split(s.Text(), "\n")[r]
-	if !strings.Contains(row, "0/home") || !strings.Contains(row, "$/end") {
-		t.Fatalf("the line motions row is %q, want 0/home and $/end on it\n%s", row, term.Snapshot())
+	var next string
+	for _, line := range strings.Split(s.Text(), "\n")[r+1:] {
+		if strings.TrimSpace(strings.Trim(line, "│| ")) != "" {
+			next = line
+			break
+		}
+	}
+	if !strings.Contains(next, "home") || !strings.Contains(next, "end") || !strings.Contains(next, "Line start/end") {
+		t.Fatalf("the row after the 0, ^, $ row is %q, want the home and end row\n%s", next, term.Snapshot())
 	}
 	alive(t, term, "after the help overlay")
 }
