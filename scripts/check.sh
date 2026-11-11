@@ -12,7 +12,8 @@
 # fails the gate):
 #
 #   fmt        gofmt -l and goimports -l
-#   vet        go vet, plus -tags ghostty when libghostty-vt is built
+#   vet        go vet, plus -tags ghostty when libghostty-vt is built for
+#              the pinned release (in $GHOSTTY_VT_CACHE or .ghostty-vt)
 #   lint       golangci-lint with .golangci.yml (staticcheck, errcheck, govet,
 #              ineffassign, unused, gosec); the CI version unless
 #              GOLANGCI_LINT names another command
@@ -79,11 +80,21 @@ GOIMPORTS=${GOIMPORTS:-go run golang.org/x/tools/cmd/goimports@v0.52.0}
 GOPLS=${GOPLS:-go run golang.org/x/tools/gopls@v0.24.0}
 DEADCODE=${DEADCODE:-go run golang.org/x/tools/cmd/deadcode@v0.52.0}
 
-# libghostty-vt, for the -tags ghostty build. A worktree finds the one the
-# main checkout built.
+# libghostty-vt, for the -tags ghostty build. GHOSTTY_VT_CACHE names the
+# folder scripts/ghostty-lib.sh built it in, as it does for that script and
+# for just ghostty-test. Otherwise a worktree finds the one the main checkout
+# built. A build stamped with another version than the one ghostty-lib.sh pins
+# is skipped: the binding compiles against the pinned headers, so an old build
+# fails vet on every branch with errors that name no file of the branch.
 ghostty_pc=""
-for dir in "$root/.ghostty-vt/native/pkgconfig" "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)/../.ghostty-vt/native/pkgconfig"; do
+ghostty_stale=""
+ghostty_want="$(sed -n 's/^GHOSTTY_VT_VERSION=//p' "$root/scripts/ghostty-lib.sh") baseline"
+for dir in ${GHOSTTY_VT_CACHE:+"$GHOSTTY_VT_CACHE/native/pkgconfig"} "$root/.ghostty-vt/native/pkgconfig" "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)/../.ghostty-vt/native/pkgconfig"; do
 	if [ -f "$dir/libghostty-vt-static.pc" ]; then
+		if [ "$(cat "$dir/../.commit" 2>/dev/null)" != "$ghostty_want" ]; then
+			ghostty_stale=${ghostty_stale:-$(cd "$dir/.." && pwd)}
+			continue
+		fi
 		ghostty_pc=$(cd "$dir" && pwd)
 		break
 	fi
@@ -412,7 +423,12 @@ if [ "$changed" = 1 ]; then
 else
 	echo "check: every module"
 fi
-[ -z "$ghostty_pc" ] && echo "check: libghostty-vt is not built, so the ghostty build is skipped"
+if [ -z "$ghostty_pc" ] && [ -n "$ghostty_stale" ]; then
+	echo "check: libghostty-vt in $ghostty_stale is not $ghostty_want, so the ghostty build is skipped." \
+		"Rebuild it with GHOSTTY_VT_CACHE=${ghostty_stale%/native} scripts/ghostty-lib.sh native"
+elif [ -z "$ghostty_pc" ]; then
+	echo "check: libghostty-vt is not built, so the ghostty build is skipped"
+fi
 
 run fmt gate check_fmt
 run vet gate check_vet

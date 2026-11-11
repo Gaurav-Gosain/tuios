@@ -86,7 +86,7 @@ Run `just check --changed` before you mark a pull request ready. It runs
 | Check | What it runs | Fails the gate |
 |-------|--------------|----------------|
 | `fmt` | `gofmt -l` and `goimports -l` | yes |
-| `vet` | `go vet`, also with `-tags ghostty` when libghostty-vt is built | yes |
+| `vet` | `go vet`, also with `-tags ghostty` when libghostty-vt is built for the pinned release, in `$GHOSTTY_VT_CACHE` or `.ghostty-vt` | yes |
 | `lint` | `golangci-lint` with `.golangci.yml`, at the CI version | yes |
 | `tuioslint` | the `internal/lint` tests | yes |
 | `vuln` | `govulncheck`, for each module the branch touched | yes |
