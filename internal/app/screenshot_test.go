@@ -223,14 +223,14 @@ func TestClosingThePreviewForgetsTheUpload(t *testing.T) {
 }
 
 // TestFrameToGridDoesNotCascadeRows is the regression guard for a bug the
-// visual pass caught and no unit test on the renderer could have: composeFrame
+// visual pass caught and no unit test on the renderer could have: composeView
 // separates rows with a bare newline, an emulator in its default mode reads
 // that as "down one row, same column", and the whole full-screen capture came
 // out as a diagonal smear. Rows shorter than the viewport are what expose it,
 // because a full-width row wraps to column zero on its own.
 //
 // Negative control: replacing the ReplaceAll in frameToGrid with a plain
-// composeFrame put "beta" at column 5 and "gamma" at column 9, and this failed
+// composeView put "beta" at column 5 and "gamma" at column 9, and this failed
 // on both.
 func TestFrameToGridDoesNotCascadeRows(t *testing.T) {
 	frame := "alpha\nbeta\ngamma"

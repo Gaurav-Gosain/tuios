@@ -33,23 +33,22 @@ func (m *OS) CloseScreen() {
 // screenFrame takes a composed frame into the screen and returns the token
 // View compares to decide whether the frame is new: it changes only when the
 // frame changed a cell, as the frame string did.
-func (m *OS) screenFrame() string {
+func (m *OS) screenFrame() viewContent {
 	canvas, frame := m.composeFrameParts()
 	changed := false
 	if canvas != nil {
 		changed = m.screen.Frame(&canvas.Buffer)
 		// The theme transition and the workspace slide copy the old frame
-		// from the canvas (canvasIsFrame); the string is only their way of
-		// asking whether anything was drawn yet.
-		frame = "canvas"
+		// from the canvas (canvasIsFrame), so there is no text to keep.
+		frame = ""
 	} else {
 		changed = m.screen.FrameString(frame, m.GetRenderWidth(), m.GetRenderHeight())
 	}
-	m.themeFx.lastFrame = frame
+	m.themeFx.lastText, m.themeFx.drawn = frame, true
 	if changed {
 		m.screenSeq++
 	}
-	return "\x00frame" + strconv.FormatUint(m.screenSeq, 10)
+	return viewContent("\x00frame" + strconv.FormatUint(m.screenSeq, 10))
 }
 
 // screenReleaseMsg hands the terminal to a program execProcess runs, and

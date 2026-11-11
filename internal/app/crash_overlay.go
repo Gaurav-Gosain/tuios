@@ -8,8 +8,8 @@ import (
 // not have reached.
 //
 // It is not one of the pickers, and the difference is the point. Every other
-// overlay is drawn by renderOverlays, inside composeFrame, out of the model's
-// live state. This one is drawn by View before composeFrame is called at all,
+// overlay is drawn by renderOverlays, inside composeView, out of the model's
+// live state. This one is drawn by View before composeView is called at all,
 // from a snapshot that was taken before anything was drawn. That is what makes
 // it safe to show after the compositor itself has panicked: if it went through
 // the normal path it would re-enter the code that just failed, panic again, and
@@ -102,7 +102,7 @@ func (m *OS) NoteCrash(where string, panicValue any, stack []byte) {
 // DismissCrash takes the crash overlay off the screen.
 //
 // It is always allowed, even for a panic in the render path, and that is safe
-// rather than merely permitted: dismissing lets View try composeFrame again,
+// rather than merely permitted: dismissing lets View try composeView again,
 // and if the frame still cannot be drawn the render barrier catches it and puts
 // the overlay straight back. The worst case is a screen that will not clear,
 // which is what the user already had.

@@ -92,7 +92,7 @@ func BenchmarkKeystrokeFrameCells(b *testing.B) {
 						if path == "cells" {
 							return cells.emit(composeCells(b, m))
 						}
-						return str.emit(m.composeFrame())
+						return str.emit(string(m.composeView()))
 					}
 					frame()
 					focused := m.Windows[0]
@@ -133,7 +133,7 @@ func BenchmarkClientFrameCells(b *testing.B) {
 					if path == "cells" {
 						out = cells.emit(composeCells(b, m))
 					} else {
-						out = str.emit(m.composeFrame())
+						out = str.emit(string(m.composeView()))
 					}
 				}
 				b.ReportMetric(float64(out), "bytes/frame")
@@ -290,11 +290,11 @@ func BenchmarkLonePaneKeystroke(b *testing.B) {
 			}
 			frame := func() {
 				if path == "cells" {
-					_ = m.composeFrame()
+					_ = string(m.composeView())
 					m.screen.Commit()
 					return
 				}
-				str.emit(m.composeFrame())
+				str.emit(string(m.composeView()))
 			}
 			win.MarkContentDirty()
 			frame()

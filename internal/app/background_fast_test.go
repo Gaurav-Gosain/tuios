@@ -76,14 +76,14 @@ func fastAndComposed(t *testing.T, m *OS, wantFast bool) (fast, composed uv.Scre
 	for _, w := range m.Windows {
 		w.MarkContentDirty()
 	}
-	fastFrame := m.composeFrame()
+	fastFrame := string(m.composeView())
 	prev := fastPathDisabled
 	fastPathDisabled = true
 	defer func() { fastPathDisabled = prev }()
 	for _, w := range m.Windows {
 		w.MarkContentDirty()
 	}
-	composedFrame := m.composeFrame()
+	composedFrame := string(m.composeView())
 	rw, rh := m.GetRenderWidth(), m.GetRenderHeight()
 	return hostCells(fastFrame, rw, rh), hostCells(composedFrame, rw, rh)
 }

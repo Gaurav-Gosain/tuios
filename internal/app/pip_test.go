@@ -439,7 +439,7 @@ func TestPiPFastPathMatchesTheCompositor(t *testing.T) {
 	if _, ok := m.fullscreenFastWindow(); !ok {
 		t.Fatal("a lone full-screen pane with the view up does not take the fast path")
 	}
-	fast := m.composeFrame()
+	fast := string(m.composeView())
 	if m.pip.rect.Empty() {
 		t.Fatal("the fast path did not record the view's box")
 	}
@@ -448,7 +448,7 @@ func TestPiPFastPathMatchesTheCompositor(t *testing.T) {
 	prev := fastPathDisabled
 	fastPathDisabled = true
 	a.MarkContentDirty()
-	slow := m.composeFrame()
+	slow := string(m.composeView())
 	fastPathDisabled = prev
 
 	grid := func(frame string) *frameCanvas {

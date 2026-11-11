@@ -18,7 +18,7 @@ func TestTheSaverFrameIsTheWholeFrame(t *testing.T) {
 	m.screensaver.active = true
 	m.screensaver.frame = marker
 
-	got := m.composeFrame()
+	got := string(m.composeView())
 
 	if got != marker {
 		t.Errorf("the frame is %d cells of composed screen, want the saver's own frame",
@@ -48,7 +48,7 @@ func TestASaverWithNoFrameYetStillComposes(t *testing.T) {
 	m.screensaver.active = true
 	m.screensaver.frame = ""
 
-	if got := m.composeFrame(); got == "" {
+	if got := string(m.composeView()); got == "" {
 		t.Error("a saver with no frame yet blanked the screen")
 	}
 }

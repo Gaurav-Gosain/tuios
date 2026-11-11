@@ -53,7 +53,7 @@ var crashLead = []string{
 //
 // It returns a block width by height cells, ready to be handed straight to
 // tea.View, because that is where it goes: View returns this instead of calling
-// composeFrame, so nothing in the normal render path runs. A caller with no
+// composeView, so nothing in the normal render path runs. A caller with no
 // size yet gets a small block rather than nothing.
 func RenderCrashScreen(report *CrashReport, notice string, width, height int) string {
 	pal := theme.UI()

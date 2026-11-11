@@ -35,12 +35,12 @@ func BenchmarkModalScrimFrame(b *testing.B) {
 			m.UserConfig = config.DefaultConfig()
 			m.Settings.ModalDim = dim
 			m.ShowCommandPalette = true
-			m.composeFrame()
+			m.composeView()
 			b.ReportAllocs()
 			b.ResetTimer()
 			for b.Loop() {
 				m.Windows[0].MarkContentDirty()
-				_ = m.composeFrame()
+				_ = string(m.composeView())
 			}
 		})
 	}
@@ -120,7 +120,7 @@ func BenchmarkWorkspaceSlideFrame(b *testing.B) {
 				m.Windows = append(m.Windows, win)
 			}
 		}
-		m.composeFrame()
+		m.composeView()
 		return m
 	}
 	rng := rand.New(rand.NewSource(2))
@@ -137,12 +137,12 @@ func BenchmarkWorkspaceSlideFrame(b *testing.B) {
 	b.Run("cut", func(b *testing.B) {
 		m := setup(b)
 		m.CurrentWorkspace = 2
-		m.composeFrame()
+		m.composeView()
 		b.ReportAllocs()
 		b.ResetTimer()
 		for b.Loop() {
 			flood(b, m)
-			_ = m.composeFrame()
+			_ = string(m.composeView())
 		}
 	})
 	b.Run("slide", func(b *testing.B) {
@@ -153,14 +153,14 @@ func BenchmarkWorkspaceSlideFrame(b *testing.B) {
 		}
 		m.CurrentWorkspace = 2
 		m.wsSlide.dur = time.Hour
-		m.composeFrame()
+		m.composeView()
 		b.ReportAllocs()
 		b.ResetTimer()
 		for b.Loop() {
 			// Half way, every frame, so each one draws both workspaces.
 			m.wsSlide.start = time.Now().Add(-time.Hour / 5)
 			flood(b, m)
-			_ = m.composeFrame()
+			_ = string(m.composeView())
 		}
 		if !m.wsSlide.running() {
 			b.Fatal("the slide ended during the run")
@@ -177,13 +177,13 @@ func BenchmarkWorkspaceSlideFrame(b *testing.B) {
 		}
 		m.CurrentWorkspace = 2
 		m.wsSlide.dur = time.Hour
-		m.composeFrame()
+		m.composeView()
 		b.ReportAllocs()
 		b.ResetTimer()
 		for b.Loop() {
 			m.wsSlide.start = time.Now().Add(-time.Hour / 5)
 			flood(b, m)
-			_ = m.composeFrame()
+			_ = string(m.composeView())
 		}
 	})
 	b.Run("begin", func(b *testing.B) {

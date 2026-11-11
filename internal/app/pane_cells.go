@@ -22,8 +22,8 @@ import (
 //
 // Only a pane whose cells are what the emulator holds takes this path: no
 // marks, dim, link under the pointer, copy sweep, drawn cursor, open
-// synchronized update or TML surface, no bare URL to link, and no painted
-// background. Anything else is drawn by renderTerminal, as before.
+// synchronized update or TML surface, no bare URL to link, no painted
+// background, and no picture-in-picture view over it. Anything else is drawn by renderTerminal, as before.
 
 // directPane is a lone pane being drawn from its emulator this frame. Its IO
 // read lock is held from the choice until its cells are copied. held says the
@@ -63,7 +63,11 @@ func (m *OS) directBoxLayer(id, box string, x, y, z int) *lipgloss.Layer {
 // chooseDirectPane picks the pane to draw from its emulator this frame, or
 // none. A chosen pane's read lock is held: copyDirectPane releases it.
 func (m *OS) chooseDirectPane() directPane {
-	if m.screen == nil || fastPathDisabled || m.fastPathPaints() {
+	// The pane's cells are copied after every layer is composed, so a layer
+	// drawn over the pane would be drawn under them. The overlays already keep
+	// a lone pane off this path (fullscreenFastWindow); the picture-in-picture
+	// view is the one layer that can sit on top of it, so it does too.
+	if m.screen == nil || fastPathDisabled || m.fastPathPaints() || m.pipWanted() {
 		return directPane{}
 	}
 	w, ok := m.fullscreenFastWindow()

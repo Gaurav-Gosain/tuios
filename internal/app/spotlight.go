@@ -19,7 +19,7 @@ import (
 //
 // Four decisions are load-bearing, and each of them was a measurement.
 //
-// Where it runs. The pass mutates m.renderCanvas in composeFrame, after
+// Where it runs. The pass mutates m.renderCanvas in composeView, after
 // GetCanvas has consumed every pane's cached layer and before Render turns the
 // canvas into a string. The canvas's CellAt hands back a pointer into the
 // buffer, so the pass edits in place and no cache upstream is invalidated. That
@@ -70,7 +70,7 @@ import (
 // It is client-local, like the showkeys overlay. Nothing crosses the wire and a
 // peer attached to the same session sees its own screen unchanged. The screen
 // saver suspends the pass, the crash overlay never reaches it (View draws that
-// before composeFrame), and everything else in the canvas (popups, pickers,
+// before composeView), and everything else in the canvas (popups, pickers,
 // panels) dims with the rest, because they are composed before the pass runs.
 
 const (
@@ -263,7 +263,7 @@ type cellCanvas interface {
 	CellAt(x, y int) *uv.Cell
 }
 
-// applySpotlight runs the pass over the composed canvas. composeFrame calls it
+// applySpotlight runs the pass over the composed canvas. composeView calls it
 // between GetCanvas and Render, and nowhere else does.
 func (m *OS) applySpotlight(canvas cellCanvas) {
 	cfg := m.spotlightConfig()

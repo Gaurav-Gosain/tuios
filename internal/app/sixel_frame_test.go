@@ -50,7 +50,7 @@ func sixelOS(t *testing.T, mode sixelMode) (*OS, *terminal.Window) {
 }
 
 func (m *OS) testFrame() []sixelRect {
-	_ = m.composeFrame()
+	_ = string(m.composeView())
 	m.SixelPassthrough.mu.Lock()
 	defer m.SixelPassthrough.mu.Unlock()
 	return append([]sixelRect(nil), m.SixelPassthrough.frame.rects...)
@@ -298,7 +298,7 @@ func TestSixelFallbackModes(t *testing.T) {
 	win.WriteOutput([]byte("top\r\n"))
 	win.WriteOutput(sixelTestImage(10, 3))
 	win.MarkContentDirty()
-	frame := m.composeFrame()
+	frame := string(m.composeView())
 	if !strings.Contains(frame, "┌") || !strings.Contains(frame, "image") {
 		t.Fatalf("no placeholder box in the frame")
 	}
@@ -379,7 +379,7 @@ func TestSixelUnknownCellsAreBlank(t *testing.T) {
 	win.WriteOutput([]byte("top\r\n"))
 	win.WriteOutput(sixelTestImage(10, 2))
 	win.MarkContentDirty()
-	frame := m.composeFrame()
+	frame := string(m.composeView())
 	for _, bad := range []string{"·", "┌", vt.SixelMarkerLead} {
 		if strings.Contains(frame, bad) {
 			t.Fatalf("unknown image cells drew %q", bad)

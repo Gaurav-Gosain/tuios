@@ -37,7 +37,7 @@ func celebrateGlyphCount(frame string) int {
 // and the first frame after it ends is byte for byte the frame from before.
 func TestCelebrationDrawsOverTheFrameAndLeavesItWhole(t *testing.T) {
 	m := celebrateTestOS(t)
-	before := m.composeFrame()
+	before := string(m.composeView())
 	if celebrateGlyphCount(before) != 0 {
 		t.Fatal("the frame has confetti glyphs in it before any burst")
 	}
@@ -52,7 +52,7 @@ func TestCelebrationDrawsOverTheFrameAndLeavesItWhole(t *testing.T) {
 	if next := m.handleCelebrateFrame(start.Add(250 * time.Millisecond)); next == nil {
 		t.Fatal("a burst still in flight stopped asking for frames")
 	}
-	mid := m.composeFrame()
+	mid := string(m.composeView())
 	if got := celebrateGlyphCount(mid); got < 10 {
 		t.Errorf("mid-burst frame has %d particle glyphs, want at least 10", got)
 	}
@@ -67,7 +67,7 @@ func TestCelebrationDrawsOverTheFrameAndLeavesItWhole(t *testing.T) {
 	if m.celebration.active() {
 		t.Fatal("the burst is still active after every particle's life")
 	}
-	after := m.composeFrame()
+	after := string(m.composeView())
 	if after != before {
 		t.Error("the frame after the burst differs from the frame before it")
 	}
@@ -114,20 +114,20 @@ func TestCelebrationBurstsShareOneTimer(t *testing.T) {
 func TestCelebrationStillWhenAnimationsAreOff(t *testing.T) {
 	m := celebrateTestOS(t)
 	m.Settings.Motion = config.MotionNone
-	before := m.composeFrame()
+	before := string(m.composeView())
 	if m.Celebrate(CelebrateOptions{}) == nil {
 		t.Fatal("the sparkle scheduled nothing to clear it")
 	}
 	if m.celebration.moving() {
 		t.Error("a celebration with animations off has moving particles")
 	}
-	if got := celebrateGlyphCount(m.composeFrame()); got == 0 {
+	if got := celebrateGlyphCount(string(m.composeView())); got == 0 {
 		t.Error("the still sparkle drew nothing")
 	}
 	if m.handleCelebrateFrame(m.celebration.at.Add(time.Second)) != nil {
 		t.Error("the sparkle scheduled a frame after it was cleared")
 	}
-	if m.composeFrame() != before {
+	if string(m.composeView()) != before {
 		t.Error("the frame after the sparkle differs from the frame before it")
 	}
 }

@@ -164,7 +164,7 @@ func BenchmarkClientFrame(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
 				dirty()
-				_ = m.composeFrame()
+				_ = string(m.composeView())
 			}
 		})
 
@@ -172,11 +172,11 @@ func BenchmarkClientFrame(b *testing.B) {
 			// Two real frames, so what is measured is a frame-to-frame diff
 			// rather than a first paint.
 			dirty()
-			first := m.composeFrame()
+			first := string(m.composeView())
 			sink.emit(first)
 			repaint()
 			dirty()
-			second := m.composeFrame()
+			second := string(m.composeView())
 
 			var out int
 			b.ReportAllocs()
@@ -195,7 +195,7 @@ func BenchmarkClientFrame(b *testing.B) {
 			for b.Loop() {
 				repaint()
 				dirty()
-				out = sink.emit(m.composeFrame())
+				out = sink.emit(string(m.composeView()))
 			}
 			b.ReportMetric(float64(out), "bytes/frame")
 		})
@@ -211,7 +211,7 @@ func TestFrameSinkEmitsTheFrame(t *testing.T) {
 	m := floodOS(t, 1, 80, 24)
 	sink := newFrameSink(80, 24)
 
-	first := m.composeFrame()
+	first := string(m.composeView())
 	if n := sink.emit(first); n == 0 {
 		t.Fatal("the first frame emitted no bytes")
 	}
@@ -222,7 +222,7 @@ func TestFrameSinkEmitsTheFrame(t *testing.T) {
 		w.InvalidateCache()
 		w.MarkContentDirty()
 	}
-	changed := sink.emit(m.composeFrame())
+	changed := sink.emit(string(m.composeView()))
 
 	if repeat >= changed {
 		t.Errorf("an unchanged frame emitted %d bytes and a repainted one %d; the diff is not diffing",

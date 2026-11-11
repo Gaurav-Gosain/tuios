@@ -358,7 +358,7 @@ func (m *OS) composedGrid(x0, y0, x1, y1 int) *shot.Grid {
 	if x1-x0 < 1 || y1-y0 < 1 || w <= 0 || h <= 0 {
 		return nil
 	}
-	g := frameToGrid(m.composeFrame(), w, h, m.shotPalette())
+	g := frameToGrid(m.composedFrame().Text(), w, h, m.shotPalette())
 	if g == nil {
 		return nil
 	}
@@ -374,7 +374,7 @@ func (m *OS) composedShot(x0, y0, x1, y1 int) (*shot.Grid, []shotPiece) {
 	if x1-x0 < 1 || y1-y0 < 1 || w <= 0 || h <= 0 {
 		return nil, nil
 	}
-	g, hits := frameToGridHits(m.composeFrame(), w, h, m.shotPalette(), true)
+	g, hits := frameToGridHits(m.composedFrame().Text(), w, h, m.shotPalette(), true)
 	if g == nil {
 		return nil, nil
 	}
@@ -386,7 +386,7 @@ func (m *OS) composedShot(x0, y0, x1, y1 int) (*shot.Grid, []shotPiece) {
 // returns its cells.
 //
 // The newline substitution is the whole reason this is its own function.
-// composeFrame separates rows with a bare newline, because that is what
+// composedFrame().Text() separates rows with a bare newline, because that is what
 // lipgloss joins with and what a host terminal's line discipline turns into a
 // full return. An emulator in the default mode reads a bare line feed as "down
 // one row, same column", so a frame whose rows are not padded to the full

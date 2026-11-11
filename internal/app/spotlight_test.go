@@ -307,12 +307,12 @@ func BenchmarkSpotlightFrame(b *testing.B) {
 			m := benchOS(b, 9)
 			m.UserConfig = config.DefaultConfig()
 			m.spotlight.on = on
-			m.composeFrame()
+			m.composeView()
 			b.ReportAllocs()
 			b.ResetTimer()
 			for b.Loop() {
 				m.Windows[0].MarkContentDirty()
-				_ = m.composeFrame()
+				_ = string(m.composeView())
 			}
 		})
 	}
@@ -456,11 +456,11 @@ func TestSpotlightYieldsToTheScreensaver(t *testing.T) {
 	m.spotlight.on = true
 
 	m.screensaver.active = true
-	quiet := m.composeFrame()
+	quiet := string(m.composeView())
 	m.MarkAllDirty()
 	m.screensaver.active = false
 	m.spotlight = spotlightState{on: true}
-	lit := m.composeFrame()
+	lit := string(m.composeView())
 
 	if quiet == lit {
 		t.Error("the frame was the same with the saver running and with it off; the pass did not yield")

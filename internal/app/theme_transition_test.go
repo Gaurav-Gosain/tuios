@@ -35,7 +35,7 @@ func TestAThemeTransitionEndsAndLetsTheClockLapse(t *testing.T) {
 	m.Settings.ThemeTransition = config.ThemeTransitionCircle
 	_ = theme.Initialize("catppuccin_latte")
 	m.motionCmd()
-	m.composeFrame()
+	m.composeView()
 	idle := m.motionInterval()
 
 	m.applyTheme("tokyonight")
@@ -43,7 +43,7 @@ func TestAThemeTransitionEndsAndLetsTheClockLapse(t *testing.T) {
 	if got := m.motionInterval(); got != m.themeTransitionFrame() {
 		t.Fatalf("a theme change asks the motion clock for a frame every %v, want %v", got, m.themeTransitionFrame())
 	}
-	m.composeFrame()
+	m.composeView()
 	if m.themeFx.old == nil || m.themeFx.pending {
 		t.Fatal("the first frame after the change did not keep the old one")
 	}

@@ -37,7 +37,7 @@ func BenchmarkSymbolImageFrame(b *testing.B) {
 			w.WriteOutput(sixelTestImage(60, 16))
 			w.MarkContentDirty()
 			sink := newFrameSink(realCols, realRows)
-			sink.emit(m.composeFrame())
+			sink.emit(string(m.composeView()))
 			var out, i int
 			b.ReportAllocs()
 			for b.Loop() {
@@ -45,7 +45,7 @@ func BenchmarkSymbolImageFrame(b *testing.B) {
 				_, _ = w.Terminal.Write(fmt.Appendf(nil, "\x1b[20;3H%c", 'a'+byte(i%26)))
 				w.UnlockIO()
 				w.MarkContentDirty()
-				out = sink.emit(m.composeFrame())
+				out = sink.emit(string(m.composeView()))
 				i++
 			}
 			b.ReportMetric(float64(out), "bytes/frame")

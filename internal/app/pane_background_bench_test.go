@@ -31,7 +31,7 @@ func BenchmarkBackgrounds(b *testing.B) {
 			w.MarkPositionDirty()
 			sink := newFrameSink(realCols, realRows)
 			w.MarkContentDirty()
-			sink.emit(m.composeFrame())
+			sink.emit(string(m.composeView()))
 			i := 0
 			b.ReportAllocs()
 			for b.Loop() {
@@ -39,7 +39,7 @@ func BenchmarkBackgrounds(b *testing.B) {
 				_, _ = w.Terminal.Write(fmt.Appendf(nil, "\x1b[2;3H%c", 'a'+byte(i%26)))
 				w.UnlockIO()
 				w.MarkContentDirty()
-				sink.emit(m.composeFrame())
+				sink.emit(string(m.composeView()))
 				i++
 			}
 		})
@@ -53,7 +53,7 @@ func BenchmarkBackgrounds(b *testing.B) {
 				for _, w := range m.Windows {
 					w.MarkContentDirty()
 				}
-				sink.emit(m.composeFrame())
+				sink.emit(string(m.composeView()))
 				focused := m.Windows[0]
 				i := 0
 				b.ReportAllocs()
@@ -62,7 +62,7 @@ func BenchmarkBackgrounds(b *testing.B) {
 					_, _ = focused.Terminal.Write(fmt.Appendf(nil, "\x1b[2;3H%c", 'a'+byte(i%26)))
 					focused.UnlockIO()
 					focused.MarkContentDirty()
-					sink.emit(m.composeFrame())
+					sink.emit(string(m.composeView()))
 					i++
 				}
 			})
@@ -113,7 +113,7 @@ func BenchmarkPaneBackground(b *testing.B) {
 				for _, w := range m.Windows {
 					w.MarkContentDirty()
 				}
-				sink.emit(m.composeFrame())
+				sink.emit(string(m.composeView()))
 				focused := m.Windows[0]
 				i := 0
 				b.ReportAllocs()
@@ -122,7 +122,7 @@ func BenchmarkPaneBackground(b *testing.B) {
 					_, _ = focused.Terminal.Write(fmt.Appendf(nil, "\x1b[2;3H%c", 'a'+byte(i%26)))
 					focused.UnlockIO()
 					focused.MarkContentDirty()
-					sink.emit(m.composeFrame())
+					sink.emit(string(m.composeView()))
 					i++
 				}
 			})

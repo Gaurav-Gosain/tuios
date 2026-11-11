@@ -18,7 +18,7 @@ import (
 // composed frame. It is for a guided tour that wants to mark a finished step,
 // and nothing in tuios starts one on its own.
 //
-// Where it draws. composeFrame runs draw over the canvas after the spotlight
+// Where it draws. composeView runs draw over the canvas after the spotlight
 // pass and before Render, the same place and for the same reason as the beam:
 // the canvas is rebuilt from the pane caches on every frame, so writing glyphs
 // into it touches no cache, the panes keep updating underneath, and the first
@@ -31,7 +31,7 @@ import (
 // wants a handful of positions and nothing else, so it is written out here.
 //
 // What it costs. Nothing while idle: no tick, no term in tickNeedsWork, and a
-// length check in composeFrame and in the fast path test. While a burst is on
+// length check in composeView and in the fast path test. While a burst is on
 // screen it drives its own frames at celebrateFPS and stops asking for them
 // once every particle is gone.
 //

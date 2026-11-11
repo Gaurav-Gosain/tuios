@@ -554,7 +554,7 @@ type OS struct {
 	cachedSeparatorWidth int         // Width of cached separator
 	cachedSeparatorChar  string      // Glyph the cached separator was built from
 	cachedSeparatorColor color.Color // Rule colour the cached separator was styled in
-	cachedViewContent    string      // Cached full View() output to skip rendering on idle ticks
+	cachedViewContent    viewContent // Cached full View() output to skip rendering on idle ticks
 	renderSkipped        bool        // True when frame-skip fired; View() returns cached content
 	// screen writes this client's frames when it has one; screenSeq counts
 	// the frames that changed a cell. See screen.go.

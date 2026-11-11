@@ -341,7 +341,7 @@ func TestBackgroundsAndTheFullscreenFastPath(t *testing.T) {
 			if _, ok := m.fullscreenFastWindow(); ok != tc.fast {
 				t.Errorf("fast path taken = %v, want %v", ok, tc.fast)
 			}
-			frame := m.composeFrame()
+			frame := string(m.composeView())
 			if painted := strings.Contains(frame, "48;2;42;27;61"); painted == (tc.name == "all off" || tc.name == "desktop" || tc.name == "sidebar") {
 				t.Errorf("the frame carries the ground = %v", painted)
 			}
@@ -408,7 +408,7 @@ func TestPaneBackgroundAnswersOSC11(t *testing.T) {
 		}
 		return ""
 	}
-	_ = m.composeFrame()
+	_ = string(m.composeView())
 	before := ask("\x1b]11;?\x1b\\")
 	themeBg, themeFg := colorHex(theme.TerminalBg()), colorHex(theme.TerminalFg())
 	if state := m.BuildSessionState(); state.PaneReportBg != themeBg || state.PaneReportFg != themeFg {
@@ -417,7 +417,7 @@ func TestPaneBackgroundAnswersOSC11(t *testing.T) {
 	}
 
 	m.Settings.Background = paneBgHex
-	_ = m.composeFrame()
+	_ = string(m.composeView())
 	if got := ask("\x1b]11;?\x1b\\"); !strings.Contains(got, "rgb:1212/3434/5656") {
 		t.Errorf("OSC 11 answered %q, want the painted rgb:1212/3434/5656", got)
 	}
@@ -433,7 +433,7 @@ func TestPaneBackgroundAnswersOSC11(t *testing.T) {
 
 	// The pane's own off wins over the default for every surface.
 	m.Settings.PaneBackground = config.BackgroundOff
-	_ = m.composeFrame()
+	_ = string(m.composeView())
 	if got := ask("\x1b]11;?\x1b\\"); got != before {
 		t.Errorf("with the pane background off again OSC 11 answered %q, want the original %q", got, before)
 	}

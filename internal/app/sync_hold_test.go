@@ -166,7 +166,7 @@ func TestFullscreenFastPathHoldsMidUpdate(t *testing.T) {
 	}
 
 	paintCompleteFrame(t, win)
-	if frame := ansi.Strip(m.composeFrame()); !strings.Contains(frame, "OLDLINETWO") {
+	if frame := ansi.Strip(string(m.composeView())); !strings.Contains(frame, "OLDLINETWO") {
 		t.Fatalf("setup:\n%s", frame)
 	}
 
@@ -175,7 +175,7 @@ func TestFullscreenFastPathHoldsMidUpdate(t *testing.T) {
 		t.Fatal("an open synchronized update still disqualifies the fast path")
 	}
 
-	frame := ansi.Strip(m.composeFrame())
+	frame := ansi.Strip(string(m.composeView()))
 	if strings.Contains(frame, "NEWLINEONE") {
 		t.Errorf("the fast path composed a frame from the middle of the update:\n%s", frame)
 	}
@@ -184,7 +184,7 @@ func TestFullscreenFastPathHoldsMidUpdate(t *testing.T) {
 	}
 
 	closeUpdate(t, win)
-	if frame := ansi.Strip(m.composeFrame()); !strings.Contains(frame, "NEWLINETWO") {
+	if frame := ansi.Strip(string(m.composeView())); !strings.Contains(frame, "NEWLINETWO") {
 		t.Errorf("the closed update never reached the fast path's frame:\n%s", frame)
 	}
 }

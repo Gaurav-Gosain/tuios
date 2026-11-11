@@ -150,7 +150,7 @@ func TestPaneBackgroundOnTheFullscreenFastPath(t *testing.T) {
 	if _, ok := m.fullscreenFastWindow(); !ok {
 		t.Skip("the fixture does not qualify for the fast path, so this proves nothing")
 	}
-	if frame := m.composeFrame(); strings.Contains(frame, "48;2;18;52;86") {
+	if frame := string(m.composeView()); strings.Contains(frame, "48;2;18;52;86") {
 		t.Fatal("the fast path painted a ground with the option off")
 	}
 	m.Settings.PaneBackground = paneBgHex
@@ -158,7 +158,7 @@ func TestPaneBackgroundOnTheFullscreenFastPath(t *testing.T) {
 		t.Error("the fullscreen fast path stands down for a pane background")
 	}
 	win.MarkContentDirty()
-	if frame := m.composeFrame(); !strings.Contains(frame, "48;2;18;52;86") {
+	if frame := string(m.composeView()); !strings.Contains(frame, "48;2;18;52;86") {
 		t.Error("the fast path's frame carries no pane background")
 	}
 }

@@ -16,7 +16,7 @@ package app
 // What every number here INCLUDES: the client's write to the daemon socket, the
 // daemon's read and PTY write, the guest, the daemon's ring append and
 // broadcast, the client's read loop, the outputWriter batch into the client
-// emulator, the render coalescer, and composeFrame.
+// emulator, the render coalescer, and composeView.
 //
 // What every number here EXCLUDES: the host terminal's own input handling,
 // bubbletea's stdin decode into a KeyPressMsg, and the final write of the diff
@@ -105,7 +105,7 @@ func latencyRig(t *testing.T) *rig {
 // even though the frame draws the line correctly.
 func frame(m *OS) string {
 	m.View()
-	return ansi.Strip(m.cachedViewContent)
+	return ansi.Strip(string(m.cachedViewContent))
 }
 
 // pumpUntil drives the client the way the bubbletea event loop does: block on

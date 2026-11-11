@@ -155,7 +155,7 @@ func (m *OS) slideDur() time.Duration {
 
 // slideAllowed reports whether a switch made now slides.
 func (m *OS) slideAllowed() bool {
-	if m.Settings.WorkspaceTransitionStyle() == config.WorkspaceTransitionNone || m.screensaver.active || m.themeFx.lastFrame == "" {
+	if m.Settings.WorkspaceTransitionStyle() == config.WorkspaceTransitionNone || m.screensaver.active || !m.themeFx.drawn {
 		return false
 	}
 	// A fade mixes colours, which 16 colours cannot show: it is a cut.

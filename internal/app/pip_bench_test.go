@@ -67,13 +67,13 @@ func BenchmarkPiPFlood(b *testing.B) {
 		b.Run(tc.name, func(b *testing.B) {
 			tc.setup(b)
 			m, flood := pipFloodOS(b, tc.pinned)
-			_ = m.composeFrame()
+			_ = string(m.composeView())
 			b.ReportAllocs()
 			b.ResetTimer()
 			for b.Loop() {
 				flood()
 				m.MarkTerminalsWithNewContent()
-				_ = m.composeFrame()
+				_ = string(m.composeView())
 			}
 		})
 	}
@@ -111,13 +111,13 @@ func BenchmarkPiPQuietFrame(b *testing.B) {
 			tc.setup(b)
 			m, _ := pipFloodOS(b, tc.pinned)
 			focused := m.Windows[0]
-			_ = m.composeFrame()
+			_ = string(m.composeView())
 			b.ReportAllocs()
 			b.ResetTimer()
 			for b.Loop() {
 				focused.WriteOutput([]byte("x"))
 				m.MarkTerminalsWithNewContent()
-				_ = m.composeFrame()
+				_ = string(m.composeView())
 			}
 		})
 	}

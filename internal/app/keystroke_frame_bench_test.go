@@ -53,7 +53,7 @@ func BenchmarkKeystrokeFrame(b *testing.B) {
 			for _, w := range m.Windows {
 				w.MarkContentDirty()
 			}
-			sink.emit(m.composeFrame())
+			sink.emit(string(m.composeView()))
 			focused := m.Windows[0]
 			var out int
 			i := 0
@@ -63,7 +63,7 @@ func BenchmarkKeystrokeFrame(b *testing.B) {
 				_, _ = focused.Terminal.Write(fmt.Appendf(nil, "\x1b[2;3H%c", 'a'+byte(i%26)))
 				focused.UnlockIO()
 				focused.MarkContentDirty()
-				out = sink.emit(m.composeFrame())
+				out = sink.emit(string(m.composeView()))
 				i++
 			}
 			b.ReportMetric(float64(out), "bytes/frame")
@@ -123,7 +123,7 @@ func BenchmarkKeystrokeFrameTiled(b *testing.B) {
 			for _, w := range m.Windows {
 				w.MarkContentDirty()
 			}
-			sink.emit(m.composeFrame())
+			sink.emit(string(m.composeView()))
 			focused := m.Windows[0]
 			var out int
 			i := 0
@@ -133,7 +133,7 @@ func BenchmarkKeystrokeFrameTiled(b *testing.B) {
 				_, _ = focused.Terminal.Write(fmt.Appendf(nil, "\x1b[2;3H%c", 'a'+byte(i%26)))
 				focused.UnlockIO()
 				focused.MarkContentDirty()
-				out = sink.emit(m.composeFrame())
+				out = sink.emit(string(m.composeView()))
 				i++
 			}
 			b.ReportMetric(float64(out), "bytes/frame")

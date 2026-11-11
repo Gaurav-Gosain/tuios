@@ -737,7 +737,7 @@ func (m *OS) crashView() tea.View {
 //
 // This is the gap the crash overlay was built to close, and it was a real one.
 // Update has had a per-event barrier for a while and the graphics flush has had
-// its render-side twin, but between them sat composeFrame, which is the whole
+// its render-side twin, but between them sat composeView, which is the whole
 // of the text render: the compositor, every pane's border box, the sidebar, the
 // dock and every overlay. A panic in any of that escaped View into bubbletea,
 // which recovers at the top of Program.Run, prints "Caught panic" and a Go
@@ -750,7 +750,7 @@ func (m *OS) crashView() tea.View {
 // Catching it here turns that into a frame that says what happened. The model
 // is not repaired and is not claimed to be: the barrier reports failure, View
 // draws the overlay instead of a frame, and the panes keep running underneath.
-func (m *OS) safeComposeFrame() (frame string, ok bool) {
+func (m *OS) safeComposeFrame() (frame viewContent, ok bool) {
 	defer func() {
 		if r := recover(); r != nil {
 			stack := debug.Stack()
@@ -759,27 +759,49 @@ func (m *OS) safeComposeFrame() (frame string, ok bool) {
 			frame, ok = "", false
 		}
 	}()
-	return m.composeFrame(), true
+	return m.composeView(), true
 }
 
-// composeFrame renders the full frame, using the fullscreen fast path when it is
+// composeView renders the full frame for View, using the fullscreen fast path when it is
 // eligible and falling back to the compositor otherwise.
-func (m *OS) composeFrame() string {
+func (m *OS) composeView() viewContent {
 	if m.screen != nil {
 		return m.screenFrame()
 	}
-	frame := m.composeFrameOnce()
+	frame := m.composedFrame().Text()
 	// The frame a theme transition starts from. See theme_transition.go.
-	m.themeFx.lastFrame = frame
-	return frame
+	m.themeFx.lastText, m.themeFx.drawn = frame, true
+	return viewContent(frame)
 }
 
-func (m *OS) composeFrameOnce() string {
-	canvas, frame := m.composeFrameParts()
-	if canvas == nil {
-		return frame
+// viewContent is what View hands Bubble Tea as the frame. On a client
+// without a screen it is the frame's text. On a client with one it is a
+// token that changes when the frame changed a cell, and the cells went to
+// the screen. It is a type of its own so it cannot be read as the frame's
+// text by mistake: a reader that wants the text takes composedFrame.
+type viewContent string
+
+// composed is one composed frame: the canvas the compositor drew, or the
+// text the screen saver or the fullscreen fast path drew instead.
+type composed struct {
+	canvas *frameCanvas
+	text   string
+}
+
+// composedFrame composes a frame for a reader of its cells or text, such as
+// a screenshot or an effect that starts from the screen. It does not touch
+// the screen or the frame View last sent.
+func (m *OS) composedFrame() composed {
+	canvas, text := m.composeFrameParts()
+	return composed{canvas: canvas, text: text}
+}
+
+// Text is the frame as a string of styled rows.
+func (c composed) Text() string {
+	if c.canvas != nil {
+		return c.canvas.Render()
 	}
-	return canvas.Render()
+	return c.text
 }
 
 // composeFrameParts composes the frame. It returns the canvas when the
@@ -1221,12 +1243,12 @@ func (m *OS) View() tea.View {
 	// The crash overlay, drawn before anything else and instead of everything
 	// else.
 	//
-	// It is placed here, above the frame cache and above composeFrame, because
+	// It is placed here, above the frame cache and above composeView, because
 	// this is the only point in the render path that is independent of the state
 	// that broke. RenderCrashScreen takes a snapshot and two ints and reads no
 	// model at all, so it draws the same whether the compositor is sound or is
 	// the thing that just panicked. Routing it through renderOverlays instead,
-	// the way every picker goes, would put it back inside composeFrame and it
+	// the way every picker goes, would put it back inside composeView and it
 	// would panic on the way to reporting a panic.
 	//
 	// m.Width and m.Height rather than GetRenderWidth and GetRenderHeight for
@@ -1295,7 +1317,7 @@ func (m *OS) View() tea.View {
 		m.pointerMotionPending = false
 		m.lastInteractionRender = time.Now()
 		m.zenHidden = m.zenBordersHidden(false)
-		view.SetContent(content)
+		view.SetContent(string(content))
 		return true
 	}
 
@@ -1307,7 +1329,7 @@ func (m *OS) View() tea.View {
 	// cursor was. Such a frame is composed again rather than reused: the box
 	// must never cover the cursor the same frame shows.
 	if cur, _ := m.viewCursor(); m.renderSkipped && m.cachedViewContent != "" && !m.pipCoversCursor(cur) {
-		view.SetContent(m.cachedViewContent)
+		view.SetContent(string(m.cachedViewContent))
 	} else if !compose() {
 		return m.crashView()
 	}

@@ -21,7 +21,7 @@ import (
 // so it is kept: a copy of the last composed canvas, or the last frame string
 // parsed back to cells when the fast path drew it. While the transition runs,
 // every frame is composed as usual in the new theme, and a pass at the end of
-// composeFrame puts the old frame's cells back outside the circle. What is
+// composeView puts the old frame's cells back outside the circle. What is
 // outside the circle is therefore the screen as it was, frozen for the few
 // hundred milliseconds the circle takes to cover it.
 //
@@ -54,7 +54,7 @@ type themeTransition struct {
 	// or "" for none.
 	style string
 	// pending is set when the theme changed and the old frame has not been
-	// kept yet. The next composeFrame keeps it and starts the clock.
+	// kept yet. The next composeView keeps it and starts the clock.
 	pending bool
 	// asked is when the change was noticed, so a transition whose frame is
 	// never composed still ends.
@@ -66,10 +66,12 @@ type themeTransition struct {
 	// at 256 or 16 colours a blend snaps between unrelated colours.
 	soft bool
 
-	// lastFrame is the last frame composeFrame returned. It is the old
-	// frame when the fast path drew it, which leaves no canvas. Holding it
-	// costs nothing: it is the string the renderer already holds.
-	lastFrame string
+	// drawn says View has sent a frame. lastText is that frame's text when
+	// the fast path or the saver drew it, which leaves no canvas, and ""
+	// when the canvas holds it (canvasIsFrame). Holding it costs nothing: it
+	// is the string the renderer already holds.
+	drawn    bool
+	lastText string
 	// old is the frame in the old theme.
 	old *frameCanvas
 	// mix holds the blends made so far, keyed on the two colours (24 bits
@@ -114,7 +116,7 @@ func (m *OS) noticeThemeChange() {
 	// theme set at startup lands here. Generation itself is no guide, since
 	// it is still zero after a start with no theme, and the first theme
 	// picked after that must animate like any other.
-	if t.lastFrame == "" {
+	if !t.drawn {
 		return
 	}
 	style := m.Settings.ThemeTransitionStyle()
@@ -168,7 +170,7 @@ func (m *OS) expireThemeTransition(now time.Time) bool {
 }
 
 // keepThemeFrame keeps the frame on screen as the old theme's. It runs at
-// the top of composeFrame, before the canvas is cleared for the new frame.
+// the top of composeView, before the canvas is cleared for the new frame.
 func (m *OS) keepThemeFrame() {
 	t := &m.themeFx
 	t.pending = false
@@ -194,7 +196,7 @@ func (m *OS) keepThemeFrame() {
 		// behind. The frame string is the same cells.
 		old.Resize(w, h)
 		old.Clear()
-		uv.NewStyledString(t.lastFrame).Draw(old, uv.Rect(0, 0, w, h))
+		uv.NewStyledString(t.lastText).Draw(old, uv.Rect(0, 0, w, h))
 	}
 	t.start = time.Now()
 }
