@@ -81,15 +81,16 @@ const (
 	sidebarActJumpPrefix = "jump_"
 )
 
-// ActionDispatcher maps action names to handler functions
+// ActionDispatcher runs the actions of the action table that the dispatcher
+// runs (config.RunDispatch), by name.
 type ActionDispatcher struct {
-	handlers map[string]ActionHandler
+	handlers *config.HandlerTable[ActionHandler]
 }
 
 // NewActionDispatcher creates a new action dispatcher with all handlers registered
 func NewActionDispatcher() *ActionDispatcher {
 	d := &ActionDispatcher{
-		handlers: make(map[string]ActionHandler),
+		handlers: config.NewHandlerTable[ActionHandler](config.RunDispatch),
 	}
 	d.registerHandlers()
 	return d
@@ -328,16 +329,17 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.registerPrefixHandlers()
 }
 
-// Register adds an action handler
+// Register binds handler to action, which must be a RunDispatch entry of
+// the action table (see config.HandlerTable.Bind).
 //
 //go:noinline
 func (d *ActionDispatcher) Register(action string, handler ActionHandler) {
-	d.handlers[action] = handler
+	d.handlers.Bind(action, handler)
 }
 
 // Dispatch executes the handler for a given action
 func (d *ActionDispatcher) Dispatch(action string, msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	handler, ok := d.handlers[action]
+	handler, ok := d.handlers.Lookup(action)
 	// A [[keybindings.command]] entry is an action of its own, named after
 	// the entry. It has no handler in the table: the entry says what to run.
 	if !ok && strings.HasPrefix(action, config.CommandActionPrefix) {
@@ -376,7 +378,7 @@ func (d *ActionDispatcher) Dispatch(action string, msg tea.KeyPressMsg, o *app.O
 
 // HasAction checks if an action is registered
 func (d *ActionDispatcher) HasAction(action string) bool {
-	_, ok := d.handlers[action]
+	_, ok := d.handlers.Lookup(action)
 	return ok || strings.HasPrefix(action, config.CommandActionPrefix) || strings.HasPrefix(action, config.OpenMenuPrefix)
 }
 

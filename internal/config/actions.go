@@ -1,6 +1,7 @@
 package config
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,8 +24,8 @@ const (
 )
 
 // ActionSpec is one action: its name and the line that describes it. It is
-// the one declaration of the action. ActionDescriptions, LookupAction and
-// Actions are derived from the table.
+// the one declaration of the action. ActionDescriptions, LookupAction,
+// Actions and the handler tables (HandlerTable) are derived from it.
 //
 // It holds only constants and literals, so the compiler emits actionTable as
 // data with no init code. A func or a computed value in it breaks that.
@@ -536,6 +537,32 @@ var actionTable = [...]ActionSpec{
 	{Name: "window_prefix_float", Desc: "Float the pane or tile it. A TML popup becomes a pane, and a TML pane a popup"},
 	{Name: "prefix_tuios", Desc: "Open the tuios menu: the tuios keys a preset moved"},
 	{Name: "open_keybind_presets", Desc: "Choose the keys: tuios, tmux, screen or zellij"},
+	// The names the dispatcher runs that have no description of their own:
+	// the prefix sub-menus' copies of window and workspace actions, and the
+	// scrolling layout's keys. A key bound to one in config.toml runs it,
+	// and a tape may name it, but no list shows it.
+	{Name: "minimize_prefix_cancel", Hidden: true},
+	{Name: "minimize_prefix_focus_only", Hidden: true},
+	{Name: "minimize_prefix_focused", Hidden: true},
+	{Name: "minimize_prefix_restore_", Count: 9, Hidden: true},
+	{Name: "minimize_prefix_restore_all", Hidden: true},
+	{Name: "repo_new_worktree", Hidden: true},
+	{Name: "repo_toggle_fold", Hidden: true},
+	{Name: "restore_minimized_", Count: 9, Hidden: true},
+	{Name: "scroll_consume", Hidden: true},
+	{Name: "scroll_cycle_width", Hidden: true},
+	{Name: "scroll_expel", Hidden: true},
+	{Name: "scroll_focus_left", Hidden: true},
+	{Name: "scroll_focus_right", Hidden: true},
+	{Name: "scroll_maximize", Hidden: true},
+	{Name: "scroll_move_left", Hidden: true},
+	{Name: "scroll_move_right", Hidden: true},
+	{Name: "session_new_worktree", Hidden: true},
+	{Name: "smart_split", Hidden: true},
+	{Name: "window_prefix_cancel", Hidden: true},
+	{Name: "workspace_prefix_cancel", Hidden: true},
+	{Name: "workspace_prefix_move_", Count: 9, Hidden: true},
+	{Name: "workspace_prefix_switch_", Count: 9, Hidden: true},
 }
 
 // Actions returns the table, with each numbered family as one entry.
@@ -567,12 +594,63 @@ var actionIndex = sync.OnceValue(func() map[string]ActionSpec {
 	return idx
 })
 
-// actionDescriptions is ActionDescriptions: every name and its line.
+// actionDescriptions is ActionDescriptions: every name and its line, for the
+// actions that are not Hidden.
 func actionDescriptions() map[string]string {
 	idx := actionIndex()
 	out := make(map[string]string, len(idx))
 	for name, spec := range idx {
-		out[name] = spec.Desc
+		if !spec.Hidden {
+			out[name] = spec.Desc
+		}
 	}
 	return out
+}
+
+// HandlerTable binds a function to each action of one RunScope. Bind panics
+// on a name that is not in the action table or not of the table's scope, so
+// a handler cannot be bound under a name nothing else knows. Missing lists
+// the actions of the scope that have no function.
+type HandlerTable[H any] struct {
+	scope RunScope
+	fns   map[Action]H
+}
+
+// NewHandlerTable returns an empty table for the actions of scope.
+func NewHandlerTable[H any](scope RunScope) *HandlerTable[H] {
+	return &HandlerTable[H]{scope: scope, fns: make(map[Action]H)}
+}
+
+// Bind binds fn to the action a, a table entry or one member of a numbered
+// family.
+func (t *HandlerTable[H]) Bind(a Action, fn H) {
+	spec, ok := LookupAction(a)
+	if !ok {
+		panic("config: action " + a + " is bound to a handler but is not in the action table")
+	}
+	if spec.Run != t.scope {
+		panic("config: action " + a + " is bound in a handler table of another scope")
+	}
+	t.fns[a] = fn
+}
+
+// Lookup returns the function bound to name.
+func (t *HandlerTable[H]) Lookup(name string) (H, bool) {
+	fn, ok := t.fns[name]
+	return fn, ok
+}
+
+// Missing lists, sorted, the actions of the table's scope with no function.
+func (t *HandlerTable[H]) Missing() []Action {
+	var missing []Action
+	for name, spec := range actionIndex() {
+		if spec.Run != t.scope {
+			continue
+		}
+		if _, ok := t.fns[name]; !ok {
+			missing = append(missing, name)
+		}
+	}
+	slices.Sort(missing)
+	return missing
 }

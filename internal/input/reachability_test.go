@@ -629,7 +629,7 @@ func TestEveryRegisteredActionIsBoundOrListed(t *testing.T) {
 			bound[action] = true
 		}
 	}
-	for action := range GetDispatcher().handlers {
+	for _, action := range dispatchActions() {
 		if bound[action] {
 			if _, listed := actionsWithNoDefaultBinding[action]; listed {
 				t.Errorf("%q has a default binding now: drop it from actionsWithNoDefaultBinding", action)
@@ -824,14 +824,25 @@ func modeName(m app.Mode) string {
 	return "window"
 }
 
-// TestEveryDescribedActionIsHandled holds the description catalogue to the
-// code that runs actions. A description for an action nothing handles is a row
-// in help, which-key and the keybind manager that names something no key can
+// TestTheDispatcherHandlesEveryAction holds the dispatcher to the action
+// table: every entry the dispatcher runs (config.RunDispatch) has a handler.
+// The other way round, a handler bound under a name the table does not hold,
+// panics when the dispatcher is built.
+func TestTheDispatcherHandlesEveryAction(t *testing.T) {
+	if missing := GetDispatcher().handlers.Missing(); len(missing) > 0 {
+		t.Errorf("the action table says the dispatcher runs these, and it has no handler for them: %v", missing)
+	}
+}
+
+// TestEveryDescribedActionIsHandled holds the actions a view runs to the code
+// that runs them. A description for an action nothing handles is a row in
+// help, which-key and the keybind manager that names something no key can
 // run: toggle_showkeys and prefix_logs sat there while the live actions were
-// debug_prefix_showkeys and debug_prefix_logs.
+// debug_prefix_showkeys and debug_prefix_logs. The dispatcher's own actions
+// are held by TestTheDispatcherHandlesEveryAction.
 //
 // Both sides come from the code. The catalogue is config.ActionDescriptions.
-// The handled set is the dispatcher's table plus every action this package
+// The handled set is every action this package
 // names by string in a handler that takes it by section instead: the terminal
 // mode's own keys, the script keys, the global binds. The hold layer's held
 // key is read through its constant. The Inbox, its peek and the mailbox name
@@ -848,7 +859,6 @@ func TestEveryDescribedActionIsHandled(t *testing.T) {
 			handled[action] = true
 		}
 	}
-	d := GetDispatcher()
 	files, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)
@@ -873,8 +883,31 @@ func TestEveryDescribedActionIsHandled(t *testing.T) {
 		})
 	}
 	for action := range config.ActionDescriptions {
-		if !d.HasAction(action) && !handled[action] {
+		if spec, _ := config.LookupAction(action); spec.Run == config.RunDispatch {
+			continue
+		}
+		if !handled[action] {
 			t.Errorf("ActionDescriptions names %q, which nothing in this package handles; the row describes an action no key can run", action)
 		}
 	}
+}
+
+// dispatchActions lists every action of the table the dispatcher runs, each
+// member of a numbered family on its own. TestTheDispatcherHandlesEveryAction
+// holds the dispatcher to having a handler for each.
+func dispatchActions() []string {
+	var names []string
+	for _, spec := range config.Actions() {
+		if spec.Run != config.RunDispatch {
+			continue
+		}
+		if spec.Count == 0 {
+			names = append(names, spec.Name)
+			continue
+		}
+		for n := 1; n <= int(spec.Count); n++ {
+			names = append(names, spec.Name+strconv.Itoa(n))
+		}
+	}
+	return names
 }

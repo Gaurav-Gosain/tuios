@@ -48,7 +48,7 @@ func (m *OS) RunAction(name string) error {
 	}
 	handled, cmd := (*r)(name, m)
 	if !handled {
-		if _, known := config.ActionDescriptions[name]; known {
+		if spec, known := config.LookupAction(name); known && spec.Run != config.RunDispatch {
 			return errfmt.Errorf("%s is a key of its own view, such as the agents view, mail or the rail, and runs only there. Open the view, then use Press", name)
 		}
 		return errfmt.Errorf("%q is not an action. Run 'tuios keybinds list' for the action names", name)

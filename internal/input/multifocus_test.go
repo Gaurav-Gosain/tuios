@@ -321,19 +321,6 @@ func TestMultifocusToggleActionsByKey(t *testing.T) {
 	}
 }
 
-// The actions are in the registry's descriptions, so help, the keybind list
-// and the palette's "#" search can name them.
-func TestMultifocusActionsDescribed(t *testing.T) {
-	for _, a := range []string{"toggle_multifocus_active", "toggle_multifocus_all"} {
-		if config.ActionDescriptions[a] == "" {
-			t.Errorf("%s has no description", a)
-		}
-		if !GetDispatcher().HasAction(a) {
-			t.Errorf("%s has no handler", a)
-		}
-	}
-}
-
 // A paste broadcast to the multifocus set is sanitized in every pane, so a
 // clipboard holding ESC[201~ cannot end the bracketed paste early in any of
 // them.
