@@ -9,6 +9,7 @@
 schema_version = 1
 id             = "cursor-agent"
 display_name   = "Cursor Agent"
+aliases        = ["cursor"]
 priority       = 50
 
 [detect]

@@ -13,6 +13,7 @@
 schema_version = 1
 id             = "antigravity"
 display_name   = "Antigravity"
+aliases        = ["antigravity-cli", "agy"]
 priority       = 50
 
 # Google Antigravity's CLI is a native binary named agy; there is no npm or

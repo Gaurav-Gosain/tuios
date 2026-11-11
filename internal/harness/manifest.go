@@ -30,6 +30,12 @@ type Manifest struct {
 	SchemaVersion int    `toml:"schema_version"`
 	ID            string `toml:"id"`
 	DisplayName   string `toml:"display_name"`
+	// Aliases are other names a person or a config may use for the harness,
+	// such as "claude" for claude-code. The id is always a name too. An alias
+	// another manifest already uses as its id or an alias is dropped, with a
+	// load error. Names resolve through the bundled manifests only (see
+	// BundledCanonical).
+	Aliases []string `toml:"aliases"`
 	// Priority breaks a tie when two manifests match the same process. Higher
 	// wins; equal priorities fall back to the id so the answer is stable.
 	Priority int `toml:"priority"`
@@ -361,6 +367,13 @@ func parseManifest(name string, data []byte) (*Manifest, error) {
 	if m.ID = strings.TrimSpace(m.ID); m.ID == "" {
 		return nil, errfmt.Errorf("%s: no id", name)
 	}
+	aliases := m.Aliases[:0]
+	for _, a := range m.Aliases {
+		if a = strings.ToLower(strings.TrimSpace(a)); a != "" && a != m.ID {
+			aliases = append(aliases, a)
+		}
+	}
+	m.Aliases = aliases
 	m.Detect.normalize()
 	if !m.Detect.any() {
 		return nil, errfmt.Errorf("%s: manifest %q matches nothing", name, m.ID)

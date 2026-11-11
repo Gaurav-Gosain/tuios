@@ -1,6 +1,7 @@
 schema_version = 1
 id             = "gemini-cli"
 display_name   = "Gemini CLI"
+aliases        = ["gemini"]
 priority       = 50
 
 [detect]

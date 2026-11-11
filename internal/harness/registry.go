@@ -163,7 +163,48 @@ func Load(dirs ...string) (*Registry, []LoadError) {
 		}
 		return r.manifests[i].ID < r.manifests[j].ID
 	})
+	errs = append(errs, r.dropTakenAliases()...)
 	return r, errs
+}
+
+// dropTakenAliases keeps every name pointing at one harness: an alias that is
+// another manifest's id, or that a manifest earlier in lookup order already
+// uses, is dropped with an error naming both.
+func (r *Registry) dropTakenAliases() []LoadError {
+	var errs []LoadError
+	owner := make(map[string]string, len(r.manifests))
+	for _, m := range r.manifests {
+		owner[m.ID] = m.ID
+	}
+	for _, m := range r.manifests {
+		kept := m.Aliases[:0]
+		for _, a := range m.Aliases {
+			if id, taken := owner[a]; taken && id != m.ID {
+				errs = append(errs, LoadError{Source: m.source, Err: errfmt.Errorf("manifest %q: alias %q is already %q's", m.ID, a, id)})
+				continue
+			}
+			owner[a] = m.ID
+			kept = append(kept, a)
+		}
+		m.Aliases = kept
+	}
+	return errs
+}
+
+// BundledCanonical resolves a name (a bundled manifest's id or one of its
+// aliases, in any case, with spaces around it) to the harness id. It reads
+// the table go generate writes from the bundled manifests (names_gen.go), so
+// a short-lived process such as the agent hook resolves a name without
+// reading the archive. A user's manifests are not consulted.
+func BundledCanonical(name string) (string, bool) {
+	name = strings.ToLower(strings.TrimSpace(name))
+	i, found := slices.BinarySearchFunc(bundledNameTable[:], name, func(e struct{ name, id string }, n string) int {
+		return strings.Compare(e.name, n)
+	})
+	if !found {
+		return "", false
+	}
+	return bundledNameTable[i].id, true
 }
 
 // UserDir is where a user's own manifests live. It follows XDG, so a manifest

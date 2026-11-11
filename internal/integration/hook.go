@@ -14,9 +14,9 @@
 package integration
 
 import (
+	"slices"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
@@ -45,53 +45,14 @@ const (
 	Qwen        = "qwen"
 )
 
-// harnessAliases maps the names a person or a config types to a harness id.
-// Every id maps to itself; the rest are the program names and the names
-// other tools use for the same harness.
-var harnessAliases = map[string]string{
-	"claude":          ClaudeCode,
-	"claude-code":     ClaudeCode,
-	"claudecode":      ClaudeCode,
-	"codex":           Codex,
-	"gemini":          GeminiCLI,
-	"gemini-cli":      GeminiCLI,
-	"opencode":        OpenCode,
-	"amp":             Amp,
-	"antigravity":     Antigravity,
-	"antigravity-cli": Antigravity,
-	"agy":             Antigravity,
-	"copilot":         Copilot,
-	"copilot-cli":     Copilot,
-	"crush":           Crush,
-	"cursor-agent":    CursorAgent,
-	"cursor":          CursorAgent,
-	"devin":           Devin,
-	"droid":           Droid,
-	"factory":         Droid,
-	"grok":            Grok,
-	"grok-cli":        Grok,
-	"hermes":          Hermes,
-	"hermes-agent":    Hermes,
-	"kilo":            Kilo,
-	"kilo-code":       Kilo,
-	"kilocode":        Kilo,
-	"kimi":            Kimi,
-	"kimi-cli":        Kimi,
-	"kimi-code":       Kimi,
-	"pi":              Pi,
-	"omp":             OMP,
-	"oh-my-pi":        OMP,
-	"qoder":           Qoder,
-	"qodercli":        Qoder,
-	"qwen":            Qwen,
-	"qwen-code":       Qwen,
-}
-
 // Canonical resolves a harness name to the id this package knows it by,
-// reporting whether it knows it at all.
+// reporting whether the harness has a hook mapping here. A name is an id or
+// an alias from the harness's manifest (internal/harness/manifests).
 func Canonical(name string) (string, bool) {
-	id, ok := harnessAliases[strings.ToLower(strings.TrimSpace(name))]
-	return id, ok
+	if id, ok := harness.BundledCanonical(name); ok && slices.Contains(HarnessIDs(), id) {
+		return id, true
+	}
+	return "", false
 }
 
 // HarnessIDs lists the harnesses with a hook mapping, in a stable order.
@@ -103,30 +64,14 @@ func HarnessIDs() []string {
 	}
 }
 
-// manifestIDs lists every harness the bundled manifests describe, with or
-// without a hook mapping. A TUIOS_AGENT naming one of them names the pane's
-// owner even when that owner has no integration, so a hook from any other
-// harness in the pane is foreign. It reads the manifests, so a harness added
-// there is known here.
-var manifestIDs = sync.OnceValue(func() []string {
-	reg, _ := harness.Load()
-	return reg.IDs()
-})
-
-// hintOwner resolves a TUIOS_AGENT value to a harness id: an alias this
-// package knows, else a bundled manifest id. It reports false for a name
-// neither knows, which says nothing about who owns the pane.
+// hintOwner resolves a TUIOS_AGENT value to a harness id: any harness the
+// bundled manifests describe, with or without a hook mapping here. A
+// TUIOS_AGENT naming one of them names the pane's owner even when that owner
+// has no integration, so a hook from any other harness in the pane is
+// foreign. It reports false for a name no manifest knows, which says nothing
+// about who owns the pane.
 func hintOwner(hint string) (string, bool) {
-	if id, ok := Canonical(hint); ok {
-		return id, true
-	}
-	hint = strings.ToLower(strings.TrimSpace(hint))
-	for _, id := range manifestIDs() {
-		if id == hint {
-			return id, true
-		}
-	}
-	return "", false
+	return harness.BundledCanonical(hint)
 }
 
 // Report is one set-agent-state call, in the verb's own field names, or with

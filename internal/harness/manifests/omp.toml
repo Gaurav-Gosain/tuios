@@ -1,6 +1,7 @@
 schema_version = 1
 id             = "omp"
 display_name   = "oh-my-pi"
+aliases        = ["oh-my-pi"]
 priority       = 60
 
 # Measured on omp 18.4.2: comm and argv[0] are "omp", and the executable is

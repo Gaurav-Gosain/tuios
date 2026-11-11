@@ -1123,6 +1123,12 @@ A manifest in `internal/harness/manifests` matches on any of them. `comm` and
 `argv_path` matches a package name in the path of the script an interpreter
 runs.
 
+A manifest's top-level `aliases` lists the other names a person or a config uses
+for the harness, such as `claude` and `claudecode` for `claude-code`. Wherever
+tuios takes a harness name (`tuios integration`, an approval policy, the hook
+shim's `TUIOS_AGENT`), the id and every alias of a bundled manifest name the same
+harness. An alias another manifest already uses is dropped with a load error.
+
 ### A directory name is not a program name
 
 Only the process's own identity counts: its name, its `argv[0]`, its

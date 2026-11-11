@@ -10,6 +10,7 @@
 schema_version = 1
 id             = "hermes"
 display_name   = "Hermes"
+aliases        = ["hermes-agent"]
 priority       = 50
 
 # Nous Research's installer symlinks ~/.local/bin/hermes to a Python program

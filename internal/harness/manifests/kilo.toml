@@ -9,6 +9,7 @@
 schema_version = 1
 id             = "kilo"
 display_name   = "Kilo Code"
+aliases        = ["kilo-code", "kilocode"]
 priority       = 50
 
 # npm @kilocode/cli is a node shim (bins kilo and kilocode) that spawns a

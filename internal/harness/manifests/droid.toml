@@ -10,6 +10,7 @@
 schema_version = 1
 id             = "droid"
 display_name   = "Droid"
+aliases        = ["factory"]
 priority       = 50
 
 [detect]

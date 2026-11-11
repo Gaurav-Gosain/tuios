@@ -8,6 +8,7 @@
 schema_version = 1
 id             = "copilot"
 display_name   = "GitHub Copilot"
+aliases        = ["copilot-cli"]
 priority       = 50
 
 # npm @github/copilot is a node loader that spawns a platform binary named

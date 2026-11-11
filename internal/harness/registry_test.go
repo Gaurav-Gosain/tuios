@@ -2,6 +2,7 @@ package harness
 
 import (
 	"bytes"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -191,4 +192,44 @@ func TestBundledArchiveMatchesFiles(t *testing.T) {
 			t.Errorf("%s differs from its copy in the archive; run go generate ./internal/harness", p)
 		}
 	}
+
+	// The name table holds each id, then each alias not already taken, from
+	// the same files (the rule gen.go writes it by).
+	type entry = struct{ name, id string }
+	var ids, aliases []entry
+	for _, p := range paths {
+		m, err := parseManifest(p, mustRead(t, p))
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, entry{m.ID, m.ID})
+		for _, a := range m.Aliases {
+			aliases = append(aliases, entry{a, m.ID})
+		}
+	}
+	want := map[string]string{}
+	for _, e := range append(ids, aliases...) {
+		if _, taken := want[e.name]; !taken {
+			want[e.name] = e.id
+		}
+	}
+	got := map[string]string{}
+	for i, e := range bundledNameTable {
+		if i > 0 && bundledNameTable[i-1].name >= e.name {
+			t.Fatalf("names_gen.go is not sorted at %q; run go generate ./internal/harness", e.name)
+		}
+		got[e.name] = e.id
+	}
+	if !maps.Equal(got, want) {
+		t.Fatalf("names_gen.go does not match the manifests; run go generate ./internal/harness\ngot  %v\nwant %v", got, want)
+	}
+}
+
+func mustRead(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
 }

@@ -1,6 +1,7 @@
 schema_version = 1
 id             = "claude-code"
 display_name   = "Claude Code"
+aliases        = ["claude", "claudecode"]
 priority       = 50
 
 [detect]

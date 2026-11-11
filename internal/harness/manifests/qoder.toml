@@ -8,6 +8,7 @@
 schema_version = 1
 id             = "qoder"
 display_name   = "Qoder"
+aliases        = ["qodercli"]
 priority       = 50
 
 # npm @qoder-ai/qodercli is a pure node bundle (bins qoder and qodercli); the

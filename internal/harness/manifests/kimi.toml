@@ -7,6 +7,7 @@
 schema_version = 1
 id             = "kimi"
 display_name   = "Kimi"
+aliases        = ["kimi-cli", "kimi-code"]
 priority       = 50
 
 # Moonshot ships three shapes: a self-contained native binary at

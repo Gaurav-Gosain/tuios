@@ -15,6 +15,7 @@
 schema_version = 1
 id             = "qwen"
 display_name   = "Qwen Code"
+aliases        = ["qwen-code"]
 priority       = 50
 
 # npm @qwen-code/qwen-code is pure JS whose entry point is a generic

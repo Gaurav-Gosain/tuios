@@ -17,6 +17,7 @@
 schema_version = 1
 id             = "grok"
 display_name   = "Grok"
+aliases        = ["grok-cli"]
 priority       = 50
 
 # xAI's installer (x.ai/cli) puts a native binary at ~/.grok/bin/grok; the npm
