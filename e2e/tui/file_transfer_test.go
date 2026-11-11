@@ -238,10 +238,15 @@ func hubWithFileHost(t *testing.T, base, remote, ssh string) []string {
 	// proxy never starts one. Unless the test already wrote a policy, build
 	// lets a linked machine write anywhere in its home folder, which is what
 	// these tests about other properties assume; the roots themselves are
-	// tested on their own.
+	// tested on their own. The policy also turns the free-space reserve off:
+	// the default keeps 1 GiB free where the copy lands, and the test's
+	// folder is on whatever disk holds the temp dir, so a box with less than
+	// that (arch's tmpfs /tmp at 96%) refused every copy and the tests said
+	// nothing about the property they check. files_min_free has its own tests,
+	// which write their own policy first.
 	cfg := filepath.Join(xdgDir(remote, "XDG_CONFIG_HOME"), "tuios", "config.toml")
 	if _, err := os.Stat(cfg); errors.Is(err, os.ErrNotExist) {
-		writeRemoteConfig(t, remote, "[hosts.\"*\"]\nfiles_roots = [\"~\"]\n")
+		writeRemoteConfig(t, remote, "[hosts.\"*\"]\nfiles_roots = [\"~\"]\nfiles_min_free = \"0\"\n")
 	}
 	if out, err := tuiosCLI(t, remote, "new", "far", "--detach"); err != nil {
 		t.Fatalf("start build's daemon: %v\n%s", err, out)
