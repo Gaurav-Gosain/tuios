@@ -153,7 +153,6 @@ var sleepAllowance = map[string]int{
 	"gui_bridge_files_test.go":                       1,
 	"gui_bridge_idle_test.go":                        5,
 	"gui_bridge_inbox_test.go":                       6,
-	"gui_bridge_test.go":                             26,
 	"gui_bridge_wave3b_test.go":                      2,
 	"gui_bridge_wave4_test.go":                       14,
 	"handoff_freeze_test.go":                         7,

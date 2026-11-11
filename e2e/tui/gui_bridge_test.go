@@ -1122,7 +1122,7 @@ func TestGUIBridgeInputTakesTheSession(t *testing.T) {
 	// key (latestHold), and the loop above may have pressed one more after
 	// the switch. The hand-over is tested past the hold, as in
 	// window_size_test.go.
-	time.Sleep(1500 * time.Millisecond)
+	pastLatestHold(t)
 	b.input(pty, "echo TYPED-IN-THE-GUI\r")
 	b.waitState(func(s *wireState) bool { return s.SessionSize.Cols == 160 }, "the session back at the bridge's size after input through it")
 	if err := term.WaitForText("Part of session", shellTimeout); err != nil {
@@ -1131,18 +1131,15 @@ func TestGUIBridgeInputTakesTheSession(t *testing.T) {
 
 	// A command the renderer runs itself, such as a click that moves the focus,
 	// is the person using the renderer too.
-	time.Sleep(1500 * time.Millisecond)
-	for deadline := time.Now().Add(shellTimeout); time.Now().Before(deadline); time.Sleep(300 * time.Millisecond) {
+	pastLatestHold(t)
+	waitUntil(t, "the terminal client took the session back to its size", shellTimeout, func() (bool, string) {
 		_ = term.SendKeys(tuitest.Alt(tuitest.Esc))
 		b.mu.Lock()
-		small := b.state != nil && b.state.SessionSize.Cols <= 80
-		b.mu.Unlock()
-		if small {
-			break
-		}
-	}
+		defer b.mu.Unlock()
+		return b.state != nil && b.state.SessionSize.Cols <= 80, fmt.Sprintf("session %+v", b.state)
+	})
 	st = b.waitState(func(s *wireState) bool { return s.SessionSize.Cols <= 80 }, "the session at the terminal client's size again")
-	time.Sleep(1500 * time.Millisecond)
+	pastLatestHold(t)
 	b.send(map[string]any{"cmd": "focus", "window": st.Focused})
 	b.waitState(func(s *wireState) bool { return s.SessionSize.Cols == 160 }, "the session back at the bridge's size after a focus command")
 	b.saveLog("input-takes-the-session")
@@ -1156,17 +1153,12 @@ func TestGUIBridgeInputTakesTheSession(t *testing.T) {
 func smallClientTakesTheSession(t *testing.T, b *guiBridge, base, session string) (*tuitest.Terminal, *wireState) {
 	t.Helper()
 	term := startIn(t, base, startOpts{cols: 80, rows: 24, args: []string{"attach", session}})
-	deadline := time.Now().Add(shellTimeout)
-	for {
+	waitUntil(t, "the small terminal client took the session", shellTimeout, func() (bool, string) {
 		_ = term.SendKeys(tuitest.Alt(tuitest.Esc))
 		b.mu.Lock()
-		small := b.state != nil && b.state.SessionSize.Cols > 0 && b.state.SessionSize.Cols <= 80
-		b.mu.Unlock()
-		if small || time.Now().After(deadline) {
-			break
-		}
-		time.Sleep(300 * time.Millisecond)
-	}
+		defer b.mu.Unlock()
+		return b.state != nil && b.state.SessionSize.Cols > 0 && b.state.SessionSize.Cols <= 80, fmt.Sprintf("session %+v", b.state)
+	})
 	st := b.waitState(func(s *wireState) bool {
 		return s.SessionSize.Cols > 0 && s.SessionSize.Cols <= 80
 	}, "the session at the terminal client's size after its input")
@@ -1187,9 +1179,9 @@ func TestGUIBridgeResizeTakesTheSession(t *testing.T) {
 	term, _ := smallClientTakesTheSession(t, b, base, "gb")
 	// Past the terminal client's hold (latestHold), so only the kept size
 	// stands between the bridge and the session.
-	time.Sleep(1500 * time.Millisecond)
+	pastLatestHold(t)
 	_ = term.Close()
-	time.Sleep(1500 * time.Millisecond)
+	pause(t, "the daemon sees the terminal client go", 1500*time.Millisecond)
 	b.mu.Lock()
 	var size wireSize
 	if b.state != nil {
@@ -1228,9 +1220,9 @@ func TestGUIBridgeFillsATerminalSession(t *testing.T) {
 		t.Fatalf("the terminal client never drew its pane: %v\n%s", err, term.Snapshot())
 	}
 	_ = term.SendKeys(tuitest.Alt(tuitest.Esc))
-	time.Sleep(500 * time.Millisecond)
+	pause(t, "the terminal client takes the mode switch", 500*time.Millisecond)
 	_ = term.Close()
-	time.Sleep(1500 * time.Millisecond)
+	pause(t, "the daemon sees the terminal client go", 1500*time.Millisecond)
 
 	// The renderer keeps 20 px across and 40 px down of each pane's slot for
 	// its own frame. The slot is the pane's cells and one gap cell, so the
@@ -1260,7 +1252,7 @@ func TestGUIBridgeFillsATerminalSession(t *testing.T) {
 				delete(b.outputs, w.PTY)
 				b.mu.Unlock()
 				b.input(w.PTY, "echo SIZE-$(stty size | tr ' ' -)\r")
-				time.Sleep(500 * time.Millisecond)
+				pause(t, "the guest's stty answer reaches the bridge", 500*time.Millisecond)
 				b.mu.Lock()
 				if got := said.FindAll(b.outputs[w.PTY], -1); len(got) > 0 {
 					last = string(got[len(got)-1])
@@ -1280,7 +1272,7 @@ func TestGUIBridgeFillsATerminalSession(t *testing.T) {
 	// gives each guest its whole rectangle. Once the renderer has the session
 	// back, the bridge gives the panes its own sizes again.
 	_, st := smallClientTakesTheSession(t, b, base, "gb")
-	time.Sleep(1500 * time.Millisecond)
+	pastLatestHold(t)
 	b.input(st.Windows[0].PTY, "\r")
 	// A new pane moves the rectangles. The bridge resizes the PTYs first, and
 	// the terminal client second, when the bridge's state reaches it. So the
@@ -1348,12 +1340,19 @@ func paneBoxes(t *testing.T, base, session string) string {
 func waitPaneBoxes(t *testing.T, base, session, want string) string {
 	t.Helper()
 	got := ""
-	for deadline := time.Now().Add(shellTimeout); time.Now().Before(deadline); time.Sleep(300 * time.Millisecond) {
-		if got = paneBoxes(t, base, session); got == want {
-			break
-		}
-	}
+	waitUntil(t, "the panes laid out as wanted", shellTimeout, func() (bool, string) {
+		got = paneBoxes(t, base, session)
+		return got == want, fmt.Sprintf("got  %s\nwant %s", got, want)
+	})
 	return got
+}
+
+// pastLatestHold waits out the terminal client's hold on the session after its
+// last key (latestHold), so the hand-over that follows is tested past the hold,
+// as in window_size_test.go. The end of the hold is not on screen.
+func pastLatestHold(t *testing.T) {
+	t.Helper()
+	pause(t, "the terminal client holds the session for latestHold after its last key", 1500*time.Millisecond)
 }
 
 // TestGUIBridgeLeavesATerminalSessionAsItWas: a renderer leaves no lasting
@@ -1384,7 +1383,7 @@ func TestGUIBridgeLeavesATerminalSessionAsItWas(t *testing.T) {
 			if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 2 }, bootTimeout); err != nil {
 				t.Fatalf("the terminal client never drew its second pane: %v\n%s", err, term.Snapshot())
 			}
-			time.Sleep(time.Second)
+			pause(t, "the second pane's layout settles", time.Second)
 			before := paneBoxes(t, base, "gb")
 			if before == "" || !strings.Contains(before, ";") {
 				t.Fatalf("could not read two panes: %q", before)
@@ -1401,12 +1400,12 @@ func TestGUIBridgeLeavesATerminalSessionAsItWas(t *testing.T) {
 			}
 
 			_ = term.Close()
-			time.Sleep(1500 * time.Millisecond)
+			pause(t, "the daemon sees the terminal client go", 1500*time.Millisecond)
 			b := bridge()
 			hasSession(b)
 			_ = b.in.Close()
 			b.waitFor(func() bool { return b.closed }, shellTimeout, "the bridge to leave")
-			time.Sleep(500 * time.Millisecond)
+			pause(t, "the daemon settles after the bridge leaves", 500*time.Millisecond)
 			term = startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"attach", "gb"}})
 			if got := waitPaneBoxes(t, base, "gb", before); got != before {
 				t.Errorf("the terminal client came back after the bridge left:\n got %s\nwant %s", got, before)
@@ -1420,11 +1419,11 @@ func TestGUIBridgeLeavesATerminalSessionAsItWas(t *testing.T) {
 			b.waitState(func(s *wireState) bool {
 				return s.SessionSize == wireSize{Cols: tc.cols, Rows: tc.rows}
 			}, "the session at the bridge's size")
-			time.Sleep(time.Second)
+			pause(t, "the first of two one-second windows in which resizes are counted", time.Second)
 			b.mu.Lock()
 			seen := b.resizes
 			b.mu.Unlock()
-			time.Sleep(time.Second)
+			pause(t, "the one-second window in which resizes are counted", time.Second)
 			b.mu.Lock()
 			seen = b.resizes - seen
 			b.mu.Unlock()
@@ -1433,7 +1432,7 @@ func TestGUIBridgeLeavesATerminalSessionAsItWas(t *testing.T) {
 			}
 			_ = b.in.Close()
 			b.waitFor(func() bool { return b.closed }, shellTimeout, "the bridge to leave")
-			time.Sleep(500 * time.Millisecond)
+			pause(t, "the daemon settles after the bridge leaves", 500*time.Millisecond)
 			_ = term.SendKeys(tuitest.Alt(tuitest.Esc))
 			if got := waitPaneBoxes(t, base, "gb", before); got != before {
 				t.Errorf("the terminal client stayed attached while the bridge came and went:\n got %s\nwant %s", got, before)
@@ -1468,7 +1467,7 @@ func TestGUIBridgeAttachTakesTheSession(t *testing.T) {
 	smallClientTakesTheSession(t, first, base, "gb")
 	_ = first.in.Close()
 	// Past the terminal client's hold (latestHold).
-	time.Sleep(1500 * time.Millisecond)
+	pastLatestHold(t)
 	b := startBridgeWith(t, base, bridgeOpts{args: []string{"--session", "gb"}, cols: 170, rows: 52, keepDaemon: true, name: "gb-second"})
 	b.waitState(func(s *wireState) bool {
 		return s.SessionSize == wireSize{Cols: 170, Rows: 52}
@@ -1491,17 +1490,17 @@ func TestGUIBridgesLeaveAPaneAlone(t *testing.T) {
 	a.waitState(func(s *wireState) bool {
 		return s.SessionSize == wireSize{Cols: 119, Rows: 40}
 	}, "the session at the width of one bridge and the height of the other")
-	time.Sleep(time.Second)
+	pause(t, "the two bridges' resizes settle before the count starts", time.Second)
 	count := func() int {
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		return a.resizes
 	}
 	before := count()
-	time.Sleep(time.Second)
-	if n := count() - before; n > 0 {
-		t.Errorf("the pane's PTY was resized %d times in one second with nothing changing", n)
-	}
+	stayTrue(t, "the pane's PTY is not resized for a second with nothing changing", time.Second, func() (bool, string) {
+		n := count() - before
+		return n == 0, fmt.Sprintf("resized %d times", n)
+	})
 }
 
 // TestGUIBridgeSessionName: a switch made from inside the session moves the
@@ -1587,7 +1586,7 @@ func TestGUIBridgeSplitRefusesSmallPanes(t *testing.T) {
 		t.Fatalf("%s on a %d-cell pane: ok=%v error=%q; want a refusal that says the pane is too small", splitAcross(root.Axis), want, r.OK, r.Error)
 	}
 	// Give a split that slipped through time to arrive.
-	time.Sleep(500 * time.Millisecond)
+	pause(t, "a split that slipped through has time to arrive", 500*time.Millisecond)
 	if st = b.waitState(func(*wireState) bool { return true }, "a state"); len(st.Windows) != 2 {
 		t.Fatalf("the refused split still made a pane: %d panes", len(st.Windows))
 	}
@@ -1693,7 +1692,7 @@ func TestGUIBridgeZoomKeepsHiddenPanes(t *testing.T) {
 	term := attachIn(t, base, "gb", startOpts{cols: 120, rows: 40, env: []string{"XDG_CONFIG_HOME=" + termHome}})
 	// The attach can resize the panes once. Wait for that to pass before
 	// the programs start listening.
-	time.Sleep(time.Second)
+	pause(t, "the attach can resize the panes once; the programs start listening after it", time.Second)
 	st := b.waitState(func(*wireState) bool { return true }, "a state")
 	for i, id := range ids {
 		w := st.window(id)
@@ -1701,7 +1700,7 @@ func TestGUIBridgeZoomKeepsHiddenPanes(t *testing.T) {
 		// unworked, so only a resize puts the number on screen.
 		b.input(w.PTY, fmt.Sprintf("clear; sh -c 'trap \"echo SIG\\$((40+%d))\" WINCH; while :; do sleep 0.2; done'\r", i))
 	}
-	time.Sleep(time.Second)
+	pause(t, "the shells start their WINCH traps", time.Second)
 	b.send(map[string]any{"cmd": "focus", "window": ids[0]})
 	b.waitState(func(s *wireState) bool { return s.Focused == ids[0] }, "focus on the first pane")
 	b.mustCall(map[string]any{"cmd": "action", "name": "toggle_zoom"})
@@ -1710,11 +1709,11 @@ func TestGUIBridgeZoomKeepsHiddenPanes(t *testing.T) {
 		t.Fatalf("the zoomed pane never saw its resize: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "gui-bridge-zoom-zoomed")
-	time.Sleep(time.Second)
+	pause(t, "the zoomed frame settles before the zoom toggles back", time.Second)
 	b.mustCall(map[string]any{"cmd": "action", "name": "toggle_zoom"})
 	b.waitState(func(s *wireState) bool { return s.Zoomed == "" }, "no pane zoomed")
 	// The hidden panes' programs wake every 200 ms. A second is five of them.
-	time.Sleep(1500 * time.Millisecond)
+	pause(t, "the hidden panes programs wake every 200 ms, so this lets five of them run", 1500*time.Millisecond)
 	snap := term.Snapshot()
 	saveFrame(t, term, "gui-bridge-zoom-after")
 	for i, name := range []string{"SIG41", "SIG42"} {
