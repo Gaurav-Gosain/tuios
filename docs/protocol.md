@@ -192,6 +192,12 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
+**Task cards carry attachments.** `get-task` gains `attachments`, a card's row
+gains `attachment_count`, a card's history and `task-changed` gain the actions
+`attached` and `detached`, and `attach-task`, `detach-task` and
+`get-task-attachment` are new ([Task verbs](#task-verbs)). A daemon from
+before this answers the new verbs with `unknown_verb`.
+
 **`agent-transcript` over a link needs `transcripts`, which the default
 grants.** The person's own client attached through a host reads the
 conversation of an agent on that host. Before, the call over a link needed
@@ -6988,10 +6994,10 @@ the one before. The configuration is in
 | Capability | Verbs |
 | --- | --- |
 | none | `hello`, `list-verbs`, `link-peer`, `restrict-connection`, `pane-grants` (which says no pane grants apply over a link) |
-| `list` | `list-*`, `session-info`, `ssh-agent-path`, `display-env`, `get-keep-awake`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval`, `file-stat`, `file-list`, `list-tasks`, `get-task` |
+| `list` | `list-*`, `session-info`, `ssh-agent-path`, `display-env`, `get-keep-awake`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval`, `file-stat`, `file-list`, `list-tasks`, `get-task`, `get-task-attachment` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `agent-mail-notice`, `stash-put`, `stash-list`, `stash-get` |
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
-| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `zoom-window`, `swap-window`, `resize-window`, `resize`, `set-option`, `set-keep-awake`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `review-stage`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan`, `add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`, `remove-task` |
+| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `zoom-window`, `swap-window`, `resize-window`, `resize`, `set-option`, `set-keep-awake`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `review-stage`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan`, `add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`, `remove-task`, `attach-task`, `detach-task` |
 | `open` and `write` | `verify-fan` |
 | `open` and `files` | `paste-pane-image` |
 | `write` and `files` | `paste-image` |
@@ -7700,7 +7706,10 @@ they make anything: a refusal names `task` in its hint.
 | --- | --- | --- | --- | --- |
 | `add-task` | Add a card: `title` (required, at most 200 bytes), `prompt` (at most 16 KiB), `stage` (default `todo`), `project` (the repository's origin URL) | `task`, own session | `write` | `task_added` |
 | `list-tasks` | The session's cards, oldest first. `stage`, `holder` and `open` (leave out `done`) narrow it. `all_sessions` lists every session's, in session name order, and takes no `session` or `holder`. `project` lists one repository's cards from every session; `hosts` with it also asks each linked machine for its own, and `hosts` with `all_sessions` adds every linked machine's project cards | `read` | `list` | `task_list` |
-| `get-task` | One card with its `prompt` and `history` | `read` | `list` | `task` |
+| `get-task` | One card with its `prompt`, `history` and `attachments` | `read` | `list` | `task` |
+| `attach-task` | Put a file (`content`, base64, with `name`) or a `link` on the card, with `note`; `replace` puts it in the place of one with the same name. Refusals: `attachment_too_large`, `attachment_limit` | `task`; the card it holds, or the card it finished while it waits in `verify` or `review` | `write` | `task_attached` with `attachment` and `task` |
+| `detach-task` | Take the attachment `name` off the card; its file goes when no card names it | as `attach-task` | `write` | `task_changed` |
+| `get-task-attachment` | One attachment by `name`, with the file in `content` (base64); a link has none. Refusal: `no_attachment` | `read` | `list` | `task_attachment` |
 | `claim-task` | Take the card `id`, or with `next` the oldest card no pane holds that is not blocked or done, for `window` | `task`; for itself only | `write` | `task_claimed` |
 | `finish-task` | Mark the card done. From the pane that holds it, the card is let go and goes to `verify` or `review` instead | `task`; only the card it holds | `write` | `task_finished` |
 | `run-task-verify` | Run a board's verify `command` in the worktree of `window`, a pane here, for the machine that owns the card; with `probe`, only say whether the pane is here (`here`) | refused | `open` | `task_verify` with `exit`, `note`, `tail` |
@@ -7774,6 +7783,15 @@ A refusal from the owner keeps its code, with the message prefixed `on HOST:`.
 `next` with nothing open to take, is `no_task`. Claiming a card that is done
 or blocked is `invalid_params`.
 
+`attach-task` sends the file's bytes in `content`; the daemon never reads a
+path. A file over `[tasks] attachment_max_mib`, or one that takes the
+session's card files over `attachment_session_mib`, is
+`attachment_too_large`, and a card that holds `attachments_per_card` already
+is `attachment_limit`. A `name` already on the card is `invalid_params` unless
+`replace` is set. A name the card does not have is `no_attachment`. A state
+push never carries a card's attachments; the row's `attachment_count` says how
+many there are, and `get-task` lists them.
+
 ```json
 {"id":1,"verb":"add-task","params":{"session":"work","title":"make the backoff jitter configurable","prompt":"Read api/retry.go and add a jitter option, with a test."}}
 {"id":1,"result":{"type":"task_added","id":"t1","session":"work","title":"make the backoff jitter configurable","preview":"Read api/retry.go and add a jitter option, with a test.","stage":"todo","stage_at":1793000355960400000,"holder":null,"by":"shell","at":1793000355960400000,"blocked":null}}
@@ -7841,7 +7859,7 @@ Event types:
 | `transfer-file` | One file of a copy ended. `action` and `file.state` are `done` (copied and checked), `same` (there already with the same bytes), `skipped` (there and different, left as it was), `conflict` (made there during the copy, left as it was) or `failed`. `file` has `id`, `pane`, `rel`, `state`, `sha256`, `code` and `error`. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `action`, `file` |
 | `task-claimed` | A pane took a task card. `task` is the card's row as `list-tasks` gives it, and `window` the pane that took it. See [Task verbs](#task-verbs). | `session`, `window`, `task` |
 | `task-finished` | A task card was marked done. `window` is the pane that held it, empty when none did. | `session`, `window`, `task` |
-| `task-changed` | A task card was `added`, `staged`, `blocked`, `unblocked`, `released` or `removed` (`action`). A release tuios made on its own carries `reason`: `pane closed`, `agent left` or `restart`; a stage move it made on its own carries the fact (see [Task verbs](#task-verbs)); a block carries its reason too. `removed` carries the card's last row. | `session`, `action`, `reason`, `task` |
+| `task-changed` | A task card was `added`, `staged`, `blocked`, `unblocked`, `released`, `attached`, `detached` or `removed` (`action`). An attach or a detach carries the attachment's name in `reason`. A release tuios made on its own carries `reason`: `pane closed`, `agent left` or `restart`; a stage move it made on its own carries the fact (see [Task verbs](#task-verbs)); a block carries its reason too. `removed` carries the card's last row. | `session`, `action`, `reason`, `task` |
 | `task-dispatch` | A board's dispatch mode or a switch changed, or dispatch stopped on its own (`action` `stopped`, `reason` such as `3 failures in a row` or `usage limit reported by claude-code`). `dispatch` is the whole status as `get-task-dispatch` gives it. It names no session. | `action`, `reason`, `dispatch` |
 | `keep-awake` | The daemon took or dropped its hold that keeps the machine awake, the number of working agent panes changed while `keep_awake` is `agents`, or `keep_awake` changed. `mode` is `off`, `on` or `agents`, `state` is `held` or `released`, `working` counts the working agent panes on this machine, and `reason` says why the machine could not be held awake, when it could not. See [get-keep-awake](#get-keep-awake). It names no session. | `mode`, `state`, `working`, `reason` |
 | `tml-event` | What a person did on a TML surface that its owner hears: an `emit` action in the document, or the close, which is the surface's last event. `tml` has `surface`, `name` (the emit's name, or `close`), `value` (absent when null), `reason` (on a close: `closed`, `program` or `dismissed`) and `version`. `window` is the TML window. Opt-in: only a subscription whose `types` names it receives it, and a `tml-open` with `events` gets the events of its own surface. | `tml` |

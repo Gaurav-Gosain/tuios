@@ -125,7 +125,7 @@ Every type, and what it reports:
 | `transfer`, `transfer-progress` | A copy the daemon runs is created, changes state, ends, or leaves the list (`action` `removed`, after `transfer-clear` or 30 minutes after it ended); its progress, opt-in (`tuios --skill files`) |
 | `transfer-file` | One file of a copy ended: `file` has `id`, `rel`, `state` (`done`, `same`, `skipped`, `conflict` or `failed`), `sha256`, `code`, `error`. Opt-in |
 | `task-claimed`, `task-finished` | A pane took a task card, or finished it: `task` is the card's row, `window` the pane (`tuios --skill tasks`) |
-| `task-changed` | A task card was `added`, `staged`, `blocked`, `unblocked`, `released` or `removed` (`action`). A release tuios made carries `reason`: `pane closed`, `agent left` or `restart` |
+| `task-changed` | A task card was `added`, `staged`, `blocked`, `unblocked`, `released`, `attached`, `detached` or `removed` (`action`). A release tuios made carries `reason`: `pane closed`, `agent left` or `restart`; an attach or a detach carries the attachment's name |
 | `tml-event` | A person ran an `emit` on a TML surface, or the surface closed: `tml` has `surface`, `name`, `value`, `reason` (on a close) and `version`. Opt-in |
 | `tml-surface` | A TML surface opened, changed or closed: `tml_surface` has `surface`, `version`, `doc_version`, `ops` (the state patch, when small) and `closed`. For a client that draws surfaces from verbs. Opt-in |
 | `daemon-upgraded` | A live upgrade (`tuios daemon upgrade`) replaced the daemon: `title` is the build the panes came from, `body` the build that has them, `state` is `upgraded`, `fallback`, or `recovered` when the new image died and the previous binary took the panes back under a new daemon pid |

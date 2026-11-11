@@ -790,6 +790,9 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("daemon.resume_agents"),
 			opt("tasks.auto_stage"),
 			opt("tasks.machine_cap"),
+			opt("tasks.attachment_max_mib"),
+			opt("tasks.attachments_per_card"),
+			opt("tasks.attachment_session_mib"),
 		}), daemon.Items[2:]...)...)
 	}
 	// The restart row leads the tab, where a person who came to the daemon's

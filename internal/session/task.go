@@ -142,6 +142,9 @@ type TaskState struct {
 	// command on it. Both are only ever replaced, never changed in place.
 	Work   *TaskWork   `json:"work,omitempty"`
 	Verify *TaskVerify `json:"verify,omitempty"`
+	// Attachments are the files and links put on the card, in the order
+	// they were added (task_attach.go). A state push leaves them out.
+	Attachments []TaskAttachment `json:"attachments,omitempty"`
 	// History is every change to the card, oldest first, at most
 	// taskMaxHistory entries: the first is kept and the oldest after it go.
 	History []TaskEvent `json:"history,omitempty"`

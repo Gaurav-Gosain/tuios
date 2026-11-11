@@ -200,6 +200,7 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	d.taskAutoOff.Store(!cfg.Tasks.AutoStageOn())
 	d.lifecycleOff.Store(!cfg.Tasks.LifecycleOn())
 	d.machineCap.Store(int64(max(cfg.Tasks.MachineCap, 0)))
+	d.setAttachLimits(cfg.Tasks)
 	// A new notification destination waits like a new host does.
 	d.notify.reload(cfg.Notify, byPerson)
 	perms := PanePermissionsFromConfig(cfg.Agents.Permissions)

@@ -16747,3 +16747,24 @@ is `~/.cache/agent-tmp/un-inputcfg-neg-r2-4.log` there.
 | Control: what was cut | Where it failed | Verdict |
 | --- | --- | --- |
 | The `theme_picker` handler in `internal/input/palette_actions.go` | "prefix+Y bound to theme_picker did not open the theme picker" | **caught** |
+
+## Task card attachments survive a restart and go with the card
+
+`TestTaskAttachmentsSurviveARestartAndGoWithTheCard` attaches a PNG, a
+Markdown file and a pull request link to a card, checks the refusals (a name
+in use, a file over `[tasks] attachment_max_mib`, a pane that does not hold
+the card), reads each file back after `restart-server` and compares its
+sha256, and checks the store drops a file when its card or its last name on a
+card goes.
+
+Run on 2026-11-11 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `verbRemoveTask` without `sweepAttachments` | "the notes' file stayed after its card was removed: .../XDG_STATE_HOME/tuios/attachments/08/0874b7af... is still there" | **caught** |
+
+`TestStatePushLeavesCardBodies` in `internal/session` holds the push rule:
+a card's attachments never ride a state push.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskAttachmentsSurviveARestartAndGoWithTheCard$' -v .`.

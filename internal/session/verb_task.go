@@ -128,6 +128,9 @@ type TaskRow struct {
 	Note     string      `json:"note,omitempty"`
 	Work     *TaskWork   `json:"work,omitempty"`
 	Verify   *TaskVerify `json:"verify,omitempty"`
+	// AttachmentCount is how many attachments the card has. get-task
+	// lists them.
+	AttachmentCount int `json:"attachment_count,omitempty"`
 }
 
 // TaskHolder is the pane that holds a card. Name, Harness and State are read
@@ -148,11 +151,13 @@ type TaskFan struct {
 	FanID string `json:"fan_id"`
 }
 
-// taskDetail is get-task's result: the row, the prompt and the history.
+// taskDetail is get-task's result: the row, the prompt, the history and the
+// attachments.
 type taskDetail struct {
 	TaskRow
-	Prompt  string      `json:"prompt"`
-	History []TaskEvent `json:"history"`
+	Prompt      string           `json:"prompt"`
+	History     []TaskEvent      `json:"history"`
+	Attachments []TaskAttachment `json:"attachments"`
 }
 
 // taskRow is tk as list-tasks gives it, its holder read from st.
@@ -172,6 +177,7 @@ func taskRow(sess *Session, st *SessionState, tk *TaskState) TaskRow {
 	row.Harness, row.AskFirst, row.Dispatched = tk.Harness, tk.AskFirst, tk.Dispatched
 	row.Machine = tk.Machine
 	row.Attempts, row.Note, row.Work, row.Verify = tk.Attempts, tk.Note, tk.Work, tk.Verify
+	row.AttachmentCount = len(tk.Attachments)
 	if host, window, ok := splitRemoteHolder(tk.Holder); ok {
 		row.Holder = &TaskHolder{Window: window, Host: host, HeldAt: tk.HeldAt, Name: tk.HolderName, Harness: tk.HolderHarness}
 	} else if tk.Holder != "" {
@@ -516,7 +522,8 @@ func (d *Daemon) verbGetTask(cs *connState, params json.RawMessage) (any, *verbE
 		return nil, noTask(sess, p.ID)
 	}
 	tk := &st.Tasks[i]
-	return taskDetail{TaskRow: taskRow(sess, st, tk).typed("task"), Prompt: tk.Prompt, History: tk.History}, nil
+	return taskDetail{TaskRow: taskRow(sess, st, tk).typed("task"), Prompt: tk.Prompt, History: tk.History,
+		Attachments: append([]TaskAttachment{}, tk.Attachments...)}, nil
 }
 
 // claimTaskParams are what claim-task takes.
@@ -860,6 +867,7 @@ func (d *Daemon) verbRemoveTask(cs *connState, params json.RawMessage) (any, *ve
 		})
 	}
 	var row TaskRow
+	var hashes []string
 	err := sess.mutateState(func(st *SessionState) error {
 		i := taskIndex(st.Tasks, p.ID)
 		if i < 0 {
@@ -867,6 +875,11 @@ func (d *Daemon) verbRemoveTask(cs *connState, params json.RawMessage) (any, *ve
 			return errTaskRefused
 		}
 		row = taskRow(sess, st, &st.Tasks[i])
+		for _, a := range st.Tasks[i].Attachments {
+			if a.Hash != "" {
+				hashes = append(hashes, a.Hash)
+			}
+		}
 		st.Tasks = slices.Delete(st.Tasks, i, i+1)
 		return nil
 	})
@@ -877,6 +890,9 @@ func (d *Daemon) verbRemoveTask(cs *connState, params json.RawMessage) (any, *ve
 		return nil, newVerbError(ErrVerbInternal, "could not remove the card: "+err.Error())
 	}
 	LogBasic("Removed task %s from session %s", p.ID, sess.Name())
+	if len(hashes) > 0 {
+		d.sweepAttachments(hashes...)
+	}
 	d.publishTask(sess, EventTaskChanged, TaskActionRemoved, "", "", row)
 	return map[string]any{"type": "task_removed", "id": p.ID}, nil
 }

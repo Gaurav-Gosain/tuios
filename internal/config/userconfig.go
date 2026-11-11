@@ -1369,6 +1369,10 @@ func DefaultConfig() *UserConfig {
 			AskWaitSeconds:    DefaultAskWaitSeconds,
 			UndoWindowSeconds: DefaultUndoWindowSeconds,
 		},
+		Tasks: TasksConfig{
+			AttachmentMaxMiB: AttachmentMaxMiBDefault, AttachmentsPerCard: AttachmentsPerCardDefault,
+			AttachmentSessionMiB: AttachmentSessionMiBDefault,
+		},
 		Shell: ShellConfig{Integration: ShellIntegrationAuto},
 		Files: FilesConfig{
 			OpenCopyAskMB:    DefaultOpenCopyAskMB,
