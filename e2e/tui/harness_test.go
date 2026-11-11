@@ -226,6 +226,15 @@ func runE2E(m *testing.M) int {
 		}
 	}
 
+	// A bare tuios in a pane or a stand-in's script is the build under test
+	// (own_tuios_test.go).
+	unown, err := ownTuiosOnPath()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "e2e: %v\n", err)
+		return 1
+	}
+	defer unown()
+
 	return m.Run()
 }
 
@@ -382,6 +391,8 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 	// A client given its own config home reads that one, so that is the
 	// one pinned.
 	configHome := xdgDir(base, "XDG_CONFIG_HOME")
+	ownTuiosGuard(t, os.Getenv("PATH"))
+	ownTuiosEnvGuard(t, o.env)
 	for _, kv := range o.env {
 		agentPathGuard(t, kv)
 		if v, ok := strings.CutPrefix(kv, "XDG_CONFIG_HOME="); ok {
@@ -1027,6 +1038,7 @@ func tuiosCLI(t *testing.T, base string, args ...string) (string, error) {
 	for _, key := range xdgKeys {
 		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
 	}
+	ownTuiosEnvGuard(t, cmd.Env)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
