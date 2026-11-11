@@ -12,10 +12,12 @@ package app
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"math/rand"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/termio"
 	"github.com/charmbracelet/colorprofile"
 	uv "github.com/charmbracelet/ultraviolet"
 	"tuios.dev/vt"
@@ -224,4 +226,44 @@ func firstCellDiff(a, b *vt.Emulator) string {
 		}
 	}
 	return ""
+}
+
+// TestDirectPaneMatchesItsText is a wire compatibility check: a lone pane
+// drawn from its emulator's cells (pane_cells.go) must leave the canvas with
+// exactly the cells the pane's text, from renderTerminal, parses to. The
+// content carries colours, attributes, a curly underline, wide characters and
+// erased runs, with the dock above and below.
+func TestDirectPaneMatchesItsText(t *testing.T) {
+	for _, dock := range []string{"bottom", "top"} {
+		t.Run(dock, func(t *testing.T) {
+			m, win := fastPathOS(t, dock)
+			m.UseScreen(io.Discard, []string{"TERM=xterm-256color"}, colorprofile.TrueColor, termio.Output{Raw: true})
+			d := m.chooseDirectPane()
+			if d.w == nil {
+				t.Fatal("the lone pane was not drawn from its cells")
+			}
+			d.release()
+
+			win.MarkContentDirty()
+			c, _ := m.composeFrameParts()
+			direct := uv.NewBuffer(c.Width(), c.Height())
+			for y := range c.Lines {
+				copy(direct.Lines[y], c.Lines[y])
+			}
+
+			prev := fastPathDisabled
+			fastPathDisabled = true
+			t.Cleanup(func() { fastPathDisabled = prev })
+			win.MarkContentDirty()
+			ref, _ := m.composeFrameParts()
+			for y := range ref.Lines {
+				for x := range ref.Lines[y] {
+					a, b := &direct.Lines[y][x], &ref.Lines[y][x]
+					if !a.Equal(b) {
+						t.Fatalf("cell %d,%d: from the emulator %q %+v, from the text %q %+v", x, y, a.Content, a.Style, b.Content, b.Style)
+					}
+				}
+			}
+		})
+	}
 }

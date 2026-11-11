@@ -58,6 +58,14 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 	layers := (*layersPtr)[:0]
 	defer pool.PutLayerSlice(layersPtr)
 
+	// A lone pane drawn from its emulator's cells (pane_cells.go). Its read
+	// lock is held from here until its cells are copied in.
+	var direct directPane
+	if render {
+		direct = m.chooseDirectPane()
+	}
+	defer direct.release()
+
 	// Scrollbar hit rects are recorded as the bars are drawn below, so the
 	// previous frame's go first: a bar that has returned to the live tail or
 	// slid under the rail must stop being grabbable with it.
@@ -294,7 +302,15 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 			continue
 		}
 
-		boxContent := m.renderWindowBox(window, i, isFocused, borderColorObj)
+		var boxContent string
+		if window == direct.w {
+			// Its box around a blank body: the same string every frame, so
+			// the compositor keeps its cells. The body is copied in below.
+			window.RenderedCols, window.RenderedRows = window.ContentWidth(), window.ContentHeight()
+			boxContent = m.windowBox(window, isFocused, borderColorObj, m.blankBody(window.ContentWidth(), window.ContentHeight()))
+		} else {
+			boxContent = m.renderWindowBox(window, i, isFocused, borderColorObj)
+		}
 
 		// A window inside the viewport has nothing to clip: its box is drawn to
 		// its own rectangle (fitToContentBox), so clipWindowContent would split
@@ -437,6 +453,7 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 	}
 
 	m.composeLayersIn(canvas, layers, paneLayers)
+	m.copyDirectPane(canvas, &direct)
 
 	return canvas
 }
@@ -567,7 +584,11 @@ func rendersBorderless(window *terminal.Window) bool {
 // window is borderless. Shared by the compositor path and the fullscreen fast
 // path so both produce identical output.
 func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool, borderColorObj color.Color) string {
-	content := m.renderTerminal(window, isFocused, m.Mode == TerminalMode)
+	return m.windowBox(window, isFocused, borderColorObj, m.renderTerminal(window, isFocused, m.Mode == TerminalMode))
+}
+
+// windowBox is a pane's box around content, its body.
+func (m *OS) windowBox(window *terminal.Window, isFocused bool, borderColorObj color.Color, content string) string {
 	if m.isTMLPopup(window) {
 		// A TML popup is a dialog, with a frame of its own. See tml_chrome.go.
 		return m.renderTMLDialogBox(window, fitToContentBox(content, window.ContentWidth(), window.ContentHeight()))

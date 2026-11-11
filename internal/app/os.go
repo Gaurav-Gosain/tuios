@@ -560,6 +560,12 @@ type OS struct {
 	// the frames that changed a cell. See screen.go.
 	screen    *termio.Screen
 	screenSeq uint64
+	// blank is the blank pane body a lone pane drawn from its emulator is
+	// boxed around, kept for its size. See pane_cells.go.
+	blank struct {
+		s    string
+		w, h int
+	}
 	// keepHostPictures says this host has kitty graphics and is not the browser
 	// client, so a frame carries no ED 2. The render sets it and the frame writer reads it. See keepPicturesFrame.
 	keepHostPictures atomic.Bool
