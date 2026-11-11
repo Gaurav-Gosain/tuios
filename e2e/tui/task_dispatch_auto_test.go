@@ -454,8 +454,9 @@ func TestAutoDispatchFailedStartsLeaveNothingBehind(t *testing.T) {
 	note("%s", mustCLI(t, base, "task", "dispatch", "mode", "auto", "--agent", "claude", "-s", "home"))
 	cards, _ := waitAutoCards(t, base, "home", "auto did not start t1", func(c map[string]autoCard) bool { return held(c, "t1") })
 	first := cards["t1"].Holder.Window
-	waitUntil(t, 30*time.Second, "the agent of t1 never came up", func() bool {
-		return claudeAgents(t, mustCLI(t, base, "list-agents", "--json")) == 1
+	waitUntil(t, "the agent of t1 never came up", 30*time.Second, func() (bool, string) {
+		n := claudeAgents(t, mustCLI(t, base, "list-agents", "--json"))
+		return n == 1, fmt.Sprintf("%d claude agents", n)
 	})
 	mustCLI(t, base, "set-agent-state", "-s", "api-task-fix-the-retry", "-w", first, "errored", "--harness", "claude-code", "-m", "the API said no")
 	time.Sleep(8 * time.Second) // longer than a start of the fake agent takes
@@ -480,9 +481,9 @@ func TestAutoDispatchFailedStartsLeaveNothingBehind(t *testing.T) {
 	// A start that never comes up: nothing it opened is left.
 	note("%s", mustCLI(t, base, "task", "dispatch", "preset", "--agent", "codex", "-s", "home"))
 	mustCLI(t, base, "task", "add", "-s", "home", "-p", "Stalls.", "Never comes up") // t2
-	waitUntil(t, 90*time.Second, "t2 was never let go after its agent did not come up", func() bool {
+	waitUntil(t, "t2 was never let go after its agent did not come up", 90*time.Second, func() (bool, string) {
 		c, _ := cardOf("t2")
-		return c.Stage == "doing" && c.Holder == nil
+		return c.Stage == "doing" && c.Holder == nil, fmt.Sprintf("stage %q, holder %v", c.Stage, c.Holder)
 	})
 	// The start ends at its ready timeout (3 s here); give it room.
 	deadline := time.Now().Add(20 * time.Second)
@@ -515,17 +516,5 @@ func TestAutoDispatchFailedStartsLeaveNothingBehind(t *testing.T) {
 	}
 	if strings.Contains(string(ps), "sleep 987") {
 		t.Errorf("ASSERTION: the agent auto started for t2 still runs after its start failed")
-	}
-}
-
-// waitUntil polls ok until it holds, within limit.
-func waitUntil(t *testing.T, limit time.Duration, why string, ok func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(limit)
-	for !ok() {
-		if time.Now().After(deadline) {
-			t.Fatalf("ASSERTION: %s", why)
-		}
-		time.Sleep(200 * time.Millisecond)
 	}
 }
