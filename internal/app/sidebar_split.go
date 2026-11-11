@@ -91,10 +91,6 @@ func (g sidebarSplitGeom) sidebarSplitShareFor(y int) int {
 	return best
 }
 
-// sidebarSplitDoubleClick is how long after a press on the divider a second
-// press still reads as a double-click.
-const sidebarSplitDoubleClick = 300 * time.Millisecond
-
 // sidebarSplitStep is what one keypress moves the share by, in percent.
 const sidebarSplitStep = 5
 
@@ -178,7 +174,7 @@ func (m *OS) SidebarSplitActive() bool { return m.sidebarSplit.Active }
 // press is the second half of a double-click.
 func (m *OS) sidebarSplitPress() {
 	now := time.Now()
-	if !m.sidebarSplit.PressAt.IsZero() && now.Sub(m.sidebarSplit.PressAt) <= sidebarSplitDoubleClick {
+	if !m.sidebarSplit.PressAt.IsZero() && now.Sub(m.sidebarSplit.PressAt) <= m.DoubleClickWindow() {
 		m.sidebarSplit = sidebarSplitState{}
 		m.SidebarResetSplit()
 		return

@@ -612,7 +612,7 @@ const multiClickAttempts = 3
 //
 // This exists because a test that sends three clicks is not thereby a test of
 // what tuios does with a triple click. A click joins the gesture in progress
-// only if it arrives within internal/input.multiClickInterval of the last one,
+// only if it arrives within mouse.double_click_ms (300 ms by default) of the last one,
 // measured in tuios at the moment it processes the press. The harness cannot
 // control that: it can only put the bytes in the pty and hope tuios is not
 // busy. When it is, the third press lands outside the window, tuios reads a
@@ -669,7 +669,7 @@ func selectByMultiClick(t *testing.T, term *tuitest.Terminal, out *lockedBuffer,
 		}
 		t.Logf("attempt %d: %d clicks at (%d,%d) selected %s rather than %s, so tuios read them "+
 			"as a shorter gesture; the harness lost the race against "+
-			"internal/input.multiClickInterval, re-sending", attempt, n, col, row, got, want)
+			"mouse.double_click_ms (300 ms by default), re-sending", attempt, n, col, row, got, want)
 		// Long enough that the retry's first press cannot join the gesture that
 		// just ended, and that any deferred write the short gesture did produce
 		// has landed before the next baseline is taken.

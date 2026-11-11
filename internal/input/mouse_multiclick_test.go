@@ -86,7 +86,7 @@ func TestASlowTripleClickStillResolvesToTheLine(t *testing.T) {
 	// tuios mishandled a slow triple-click when all that happened is that the
 	// test was descheduled. Backdating asserts the same thing, and the interval
 	// tuios reads is then the one the test asked for.
-	win.LastClickTime = time.Now().Add(-multiClickInterval * 2 / 3)
+	win.LastClickTime = time.Now().Add(-testClickInterval * 2 / 3)
 
 	pressAt(o, 6, 0)
 	if got := o.PendingCopyText(); got != "" {

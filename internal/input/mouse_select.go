@@ -13,7 +13,8 @@ import (
 	"tuios.dev/vt"
 )
 
-// multiClickInterval is how long after a click a second one still counts as
+// The interval is mouse.double_click_ms (default 300 ms), read by o.DoubleClickWindow.
+// It is how long after a click a second one still counts as
 // part of the same gesture, and therefore how long a multi-click selection's
 // clipboard write waits before it can be trusted.
 //
@@ -32,7 +33,6 @@ import (
 // every copy. The cost of being wrong is asymmetric but small either way, a
 // deliberate triple-click read as a double plus a single, and the user can see
 // what got selected before it lands.
-const multiClickInterval = 300 * time.Millisecond
 
 // multiClickSlop is how far the pointer may drift between clicks of one
 // gesture, in cells. Requiring the exact same cell reads as an intermittent
@@ -44,9 +44,9 @@ const multiClickSlop = 1
 // and returns how many clicks this one makes: 1, 2, or 3. A fourth click starts
 // a new gesture rather than continuing to climb, so click-click-click-click is
 // character, word, line, character.
-func registerClick(win *terminal.Window, termX, termY int) int {
+func registerClick(win *terminal.Window, termX, termY int, interval time.Duration) int {
 	near := termY == win.LastClickY && abs(termX-win.LastClickX) <= multiClickSlop
-	if !near || time.Since(win.LastClickTime) > multiClickInterval || win.ClickCount >= 3 {
+	if !near || time.Since(win.LastClickTime) > interval || win.ClickCount >= 3 {
 		win.ClickCount = 1
 	} else {
 		win.ClickCount++
@@ -208,7 +208,7 @@ func finishMouseSelection(o *app.OS, window *terminal.Window) tea.Cmd {
 		// write keeps it when it lands (app.HandlePendingCopy).
 		return tea.Batch(o.CopyToClipboard(text), o.SaveToPasteBuffers(text))
 	}
-	return o.DeferCopyToClipboard(text, remainingClickWindow(window))
+	return o.DeferCopyToClipboard(text, remainingClickWindow(window, o.DoubleClickWindow()))
 }
 
 // selectionText is the text of a pane's current selection, or "" when it holds
@@ -235,8 +235,8 @@ func selectionText(window *terminal.Window) string {
 // button was held for. Anchoring it to the release would add the hold time on
 // top, so a deliberate press-and-hold would sit there with a stale clipboard
 // for as long as the user leaned on the button.
-func remainingClickWindow(window *terminal.Window) time.Duration {
-	return multiClickInterval - time.Since(window.LastClickTime)
+func remainingClickWindow(window *terminal.Window, interval time.Duration) time.Duration {
+	return interval - time.Since(window.LastClickTime)
 }
 
 // endImplicitSelection drops a copy-mode session that only existed to carry a

@@ -1168,7 +1168,7 @@ const (
 	// multiClickHold is how long a button of a multi-click gesture stays down,
 	// and multiClickGap is the pause before the next one goes down. Together
 	// they set the press-to-press interval, which is the figure that has to stay
-	// inside internal/input.multiClickInterval for tuios to read the clicks as
+	// inside mouse.double_click_ms (300 ms by default) for tuios to read the clicks as
 	// one gesture: 40ms against a 300ms window.
 	//
 	// They are shorter than mouseGap, and deliberately so. mouseGap is spaced

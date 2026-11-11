@@ -33,6 +33,7 @@ type UserConfig struct {
 	Daemon        DaemonConfig        `toml:"daemon"`
 	Startup       StartupConfig       `toml:"startup"`
 	Tape          TapeConfig          `toml:"tape"`
+	Mouse         MouseConfig         `toml:"mouse"`
 	Hooks         HooksConfig         `toml:"hooks"`
 	Debug         DebugConfig         `toml:"debug"`
 	// Screenshot is the [screenshot] table: how a capture renders and where
@@ -291,6 +292,16 @@ type StartupConfig struct {
 // once / Trust and run / Never / Not now, and it never auto-opens for a denied
 // tape, an already-handled directory this session, or (in auto mode) a
 // trusted-unedited tape that runs on its own.
+// MouseConfig is the [mouse] table: how the pointer's gestures are read.
+type MouseConfig struct {
+	// DoubleClickMS is how long after a click a second one still counts as a
+	// double click, in milliseconds (default: 300, min: 100, max: 1000).
+	DoubleClickMS int `toml:"double_click_ms"`
+	// DragThreshold is how far the pointer moves, in cells, before a press is
+	// a drag and not a click (default: 5, min: 1, max: 50).
+	DragThreshold int `toml:"drag_threshold"`
+}
+
 type TapeConfig struct {
 	Autorun    string `toml:"autorun"`     // off | ask | auto (default: ask)
 	AutoReview bool   `toml:"auto_review"` // auto-open the review dialog on detection (default: false)
@@ -1367,6 +1378,7 @@ func DefaultConfig() *UserConfig {
 			Layout:              LayoutModeBSP,
 			Daemon:              true,
 		},
+		Mouse: MouseConfig{DoubleClickMS: MouseDoubleClickDefault, DragThreshold: MouseDragThresholdDefault},
 		Tape: TapeConfig{
 			Autorun:    TapeAutorunAsk,
 			AutoReview: false,

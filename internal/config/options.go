@@ -1587,6 +1587,19 @@ var optionSpecs = []Option{
 		Default:     "false",
 	},
 
+	// [mouse]
+	{
+		Path: "mouse.double_click_ms", Type: OptionInt, Section: "mouse",
+		Description: "Milliseconds after a click in which a second one counts as a double click, in a pane, on the rail divider and in the Agents list",
+		Min:         MouseDoubleClickMin, Max: MouseDoubleClickMax,
+		Zero: ZeroIsDefault,
+	},
+	{
+		Path: "mouse.drag_threshold", Type: OptionInt, Section: "mouse",
+		Description: "Cells the pointer moves before a press is a drag and not a click",
+		Min:         MouseDragThresholdMin, Max: MouseDragThresholdMax,
+		Zero: ZeroIsDefault,
+	},
 	// [tape]
 	{
 		Path: "tape.autorun", Type: OptionString, Section: "tape",

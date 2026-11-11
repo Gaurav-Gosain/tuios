@@ -195,7 +195,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			}
 			return o, nil
 		}
-		if abs(mouse.X-o.DragStartX)+abs(mouse.Y-o.DragStartY) >= ctrlDragThreshold {
+		if abs(mouse.X-o.DragStartX)+abs(mouse.Y-o.DragStartY) >= o.DragThreshold() {
 			o.CtrlDragPending = false
 			o.CtrlClickLink = ""
 			o.CtrlDragging = true

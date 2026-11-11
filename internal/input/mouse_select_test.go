@@ -148,30 +148,30 @@ func TestMultiClickCountingWrapsAndTimesOut(t *testing.T) {
 	_, win := selectPane(t, "alpha bravo charlie")
 
 	for want := 1; want <= 3; want++ {
-		if got := registerClick(win, 4, 0); got != want {
+		if got := registerClick(win, 4, 0, testClickInterval); got != want {
 			t.Fatalf("click %d counted as %d", want, got)
 		}
 	}
-	if got := registerClick(win, 4, 0); got != 1 {
+	if got := registerClick(win, 4, 0, testClickInterval); got != 1 {
 		t.Errorf("a fourth click counted as %d, want 1: the gesture should start over", got)
 	}
 
-	win.LastClickTime = time.Now().Add(-2 * multiClickInterval)
-	if got := registerClick(win, 4, 0); got != 1 {
-		t.Errorf("a click %v after the last counted as %d, want 1", 2*multiClickInterval, got)
+	win.LastClickTime = time.Now().Add(-2 * testClickInterval)
+	if got := registerClick(win, 4, 0, testClickInterval); got != 1 {
+		t.Errorf("a click %v after the last counted as %d, want 1", 2*testClickInterval, got)
 	}
 
 	// A cell of pointer drift between clicks is a double-click, not two
 	// singles: one cell is a handful of pixels.
 	win.ClickCount = 0
 	win.LastClickTime = time.Time{}
-	if got := registerClick(win, 4, 0); got != 1 {
+	if got := registerClick(win, 4, 0, testClickInterval); got != 1 {
 		t.Fatalf("first click of a fresh gesture counted as %d", got)
 	}
-	if got := registerClick(win, 5, 0); got != 2 {
+	if got := registerClick(win, 5, 0, testClickInterval); got != 2 {
 		t.Errorf("a click one cell over counted as %d, want 2", got)
 	}
-	if got := registerClick(win, 9, 0); got != 1 {
+	if got := registerClick(win, 9, 0, testClickInterval); got != 1 {
 		t.Errorf("a click five cells over counted as %d, want 1", got)
 	}
 }
@@ -264,3 +264,6 @@ func TestTypingClearsAMouseSelection(t *testing.T) {
 		t.Error("typing left the selection and its copy-mode session in place")
 	}
 }
+
+// testClickInterval is the default mouse.double_click_ms.
+const testClickInterval = time.Duration(config.MouseDoubleClickDefault) * time.Millisecond

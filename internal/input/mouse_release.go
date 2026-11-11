@@ -170,7 +170,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.RightClickPending {
 		o.RightClickPending = false
 		mouse := msg.Mouse()
-		if abs(mouse.X-o.RightPressX)+abs(mouse.Y-o.RightPressY) < rightClickDragThreshold {
+		if abs(mouse.X-o.RightPressX)+abs(mouse.Y-o.RightPressY) < o.DragThreshold() {
 			cancelRightClickResize(o)
 			o.OpenContextMenu(o.RightPressX, o.RightPressY)
 			return o, nil
@@ -186,7 +186,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ClickToTypePending = false
 		mouse := msg.Mouse()
 		if mouse.Button == tea.MouseLeft && o.Mode == app.WindowManagementMode &&
-			abs(mouse.X-o.DragStartX)+abs(mouse.Y-o.DragStartY) < clickToTypeDragThreshold {
+			abs(mouse.X-o.DragStartX)+abs(mouse.Y-o.DragStartY) < o.DragThreshold() {
 			enterTerminalOnRelease = true
 		}
 	}
@@ -328,9 +328,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.Dragging && !o.AutoTiling && o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
 		mouse := msg.Mouse()
 		dragDistance := abs(mouse.X-o.DragStartX) + abs(mouse.Y-o.DragStartY)
-		const dragThreshold = 5
-
-		if dragDistance >= dragThreshold {
+		if dragDistance >= o.DragThreshold() {
 			// Detect edge zones for snapping
 			// The zone rule lives with the bounds rule in internal/app, so the
 			// region the zones sit on and the region a snap fills cannot disagree.
@@ -489,15 +487,6 @@ func tiledDragDistance(o *app.OS, x, y int) int {
 func snapBack(o *app.OS, win *terminal.Window) {
 	o.ReturnToDragSlot(win)
 }
-
-// rightClickDragThreshold and clickToTypeDragThreshold separate a click from a
-// drag, in summed cell movement, matching the drag threshold the left-button
-// window drag already uses.
-const (
-	rightClickDragThreshold  = 5
-	clickToTypeDragThreshold = 5
-	ctrlDragThreshold        = 5
-)
 
 // cancelRightClickResize unwinds the resize a plain right press set up, so the
 // release can open the context menu instead. The press may have applied a few

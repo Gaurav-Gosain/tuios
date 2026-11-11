@@ -548,7 +548,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.CancelPendingCopy()
 			o.SelectionDragged = false
 			beginMouseSelection(clickedWindow.CopyMode, clickedWindow, X, Y,
-				registerClick(clickedWindow, terminalX, terminalY), &o.Settings)
+				registerClick(clickedWindow, terminalX, terminalY, o.DoubleClickWindow()), &o.Settings)
 			o.Dragging = true
 			o.DraggedWindowIndex = clickedWindowIndex
 			o.InteractionMode = true
@@ -596,7 +596,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if termX, termY, inContent := clickedWindow.ScreenToTerminal(X, Y); inContent {
 			arm := true
 			if o.Settings.ClickToType == config.ClickToTypeDouble {
-				arm = registerClick(clickedWindow, termX, termY) >= 2
+				arm = registerClick(clickedWindow, termX, termY, o.DoubleClickWindow()) >= 2
 				if arm {
 					clickedWindow.ClickCount = 0
 				}

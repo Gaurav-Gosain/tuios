@@ -740,6 +740,13 @@ type Settings struct {
 	// Set via appearance.niri_scroll_cells config
 	NiriScrollCells int `opt:"appearance.niri_scroll_cells"`
 
+	// MouseDoubleClickMS is how long a second click may follow the first and
+	// still be a double click. Set via mouse.double_click_ms.
+	MouseDoubleClickMS int `opt:"mouse.double_click_ms"`
+	// MouseDragThreshold is the summed cell movement that makes a press a
+	// drag. Set via mouse.drag_threshold.
+	MouseDragThreshold int `opt:"mouse.drag_threshold"`
+
 	// NiriScrollSnap lines the strip up on the nearest column once a wheel,
 	// a trackpad or a finger has stopped moving it, as niri does at the end
 	// of a gesture. Set via appearance.niri_scroll_snap config
@@ -1138,6 +1145,8 @@ func DefaultSettings() Settings {
 		WordCharacters:              `@-./_~?&=%+#`,
 		NiriReverseScroll:           false,
 		NiriScrollCells:             NiriScrollCellsDefault,
+		MouseDoubleClickMS:          MouseDoubleClickDefault,
+		MouseDragThreshold:          MouseDragThresholdDefault,
 		PrefixRepeatTime:            PrefixRepeatTimeDefault,
 		LeaderKey:                   DefaultLeaderKey,
 		PaneGap:                     0,

@@ -60,10 +60,6 @@ const ckFoldAt = 8
 // ckChildMax is how many subagent rows an agent shows under it.
 const ckChildMax = 3
 
-// ckDoubleClick is how long after a click on a row a second click on it still
-// reads as a double-click.
-const ckDoubleClick = 400 * time.Millisecond
-
 // ckHold is how long an agent's new group must last before its row moves
 // there, so a hook that flips working, needs you, working in a moment does
 // not move the row twice.
@@ -1350,7 +1346,7 @@ func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 				m.CockpitCompareClose()
 			}
 			now := time.Now()
-			double := ck.lastClickKey == h.key && now.Sub(ck.lastClick) <= ckDoubleClick
+			double := ck.lastClickKey == h.key && now.Sub(ck.lastClick) <= m.DoubleClickWindow()
 			ck.lastClick, ck.lastClickKey = now, h.key
 			m.cockpitSelectKey(h.key)
 			m.cockpitReplyFollow()

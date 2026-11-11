@@ -31,7 +31,7 @@ func clickPane(o *app.OS, x, y int) {
 // agePane pushes a pane's last click far enough into the past that the next one
 // starts a new gesture, without sleeping for it.
 func agePane(win *terminal.Window) {
-	win.LastClickTime = time.Now().Add(-2 * multiClickInterval)
+	win.LastClickTime = time.Now().Add(-2 * testClickInterval)
 }
 
 // TestClickToTypeSingleEntersTerminalMode is the default, and the behaviour

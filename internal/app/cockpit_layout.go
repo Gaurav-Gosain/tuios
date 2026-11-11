@@ -118,7 +118,7 @@ func (m *OS) CockpitToggleZoom() {
 }
 
 // cockpitDividerPress takes a press on the edge of the list: it starts a
-// drag, and a second press within ckDoubleClick gives the width back to
+// drag, and a second press within the double-click interval gives the width back to
 // the config. It reports whether the press was on the edge.
 func (m *OS) cockpitDividerPress(x, y int) bool {
 	ck := &m.Inbox.ck
@@ -126,7 +126,7 @@ func (m *OS) cockpitDividerPress(x, y int) bool {
 		return false
 	}
 	now := time.Now()
-	if now.Sub(ck.div.lastClick) <= ckDoubleClick {
+	if now.Sub(ck.div.lastClick) <= m.DoubleClickWindow() {
 		ck.div.lastClick = time.Time{}
 		ck.div.drag = false
 		ck.listWidth = 0

@@ -259,7 +259,7 @@ func (m *OS) kanbanPreviewClick(x, y int) bool {
 	}
 	if pv.edge.has(x, y) {
 		now := time.Now()
-		if now.Sub(pv.edge.lastClick) <= ckDoubleClick {
+		if now.Sub(pv.edge.lastClick) <= m.DoubleClickWindow() {
 			pv.edge.lastClick, pv.edge.drag, pv.width = time.Time{}, false, 0
 			m.saveSidebarState()
 		} else {

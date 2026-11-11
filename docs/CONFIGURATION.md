@@ -1827,6 +1827,27 @@ border back. You can also set it on the settings page, in the Advanced section,
 or with `tuios set-config appearance.zoom_borderless true`. The change applies
 at once.
 
+## Mouse
+
+The `[mouse]` table sets how tuios reads the pointer's gestures.
+
+| Option | Default | Range | What it does |
+|--------|---------|-------|--------------|
+| `mouse.double_click_ms` | `300` | 100 to 1000 | Milliseconds after a click in which a second click counts as a double click. A pane's text selection, the rail divider, the Agents list and the draft editor all read it. |
+| `mouse.drag_threshold` | `5` | 1 to 50 | Cells the pointer moves before a press is a drag and not a click. It applies to the right button, to click-to-type and to Ctrl drag. |
+
+```toml
+[mouse]
+double_click_ms = 450
+drag_threshold = 8
+```
+
+Raise `double_click_ms` for a slow hand or a trackpad that spaces its clicks.
+The Agents list used 400 ms before this option; it now follows the same value
+as the pane, 300 ms by default. Both options are on the settings page, in the
+Behavior section, and apply at once. A value of 0 or a value out of range is
+read as the default or moved to the nearest end of the range.
+
 ## Shell integration
 
 tuios turns on OSC 133 prompt marks in the bash and zsh shells that it starts

@@ -821,6 +821,22 @@ const (
 	NiriScrollCellsDefault = 8
 )
 
+// The mouse options. The click interval is the one every double-click detector
+// reads: a text selection in a pane, the rail divider and the Agents list.
+// 300 ms was the pane's value; the Agents list used 400, and one number is
+// easier to tune for a slow hand or a trackpad.
+const (
+	MouseDoubleClickMin     = 100
+	MouseDoubleClickMax     = 1000
+	MouseDoubleClickDefault = 300
+
+	// MouseDragThreshold is the summed cell movement that turns a press and
+	// release into a drag, for the right button, click-to-type and Ctrl-drag.
+	MouseDragThresholdMin     = 1
+	MouseDragThresholdMax     = 50
+	MouseDragThresholdDefault = 5
+)
+
 // DimUnfocusedMax caps it. The cap is not a legibility floor (content is the
 // user's own text and they may quiet it as far as they like). It only stops a
 // pane from being erased outright, where there is nothing left to show the

@@ -88,6 +88,8 @@ var settingLabels = map[string]string{
 	"appearance.drop_preview_delay":       "Drop preview delay",
 	"appearance.niri_reverse_scroll":      "Reverse scroll",
 	"appearance.niri_scroll_cells":        "Strip scroll step",
+	"mouse.double_click_ms":               "Double click interval",
+	"mouse.drag_threshold":                "Drag threshold",
 	"appearance.niri_scroll_snap":         "Strip snap",
 	"appearance.scroll_column_max":        "Column width cap",
 	"appearance.niri_click_reveals":       "Click reveals column",

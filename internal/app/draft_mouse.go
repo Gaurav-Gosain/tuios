@@ -65,7 +65,7 @@ func (m *OS) draftClick(kind string, x, y int) bool {
 	}
 	p := &m.draftMouse
 	now := time.Now()
-	if p.comp == d.comp && now.Sub(p.at) <= ckDoubleClick && y == p.y && abs(x-p.x) <= 1 && p.count < 3 {
+	if p.comp == d.comp && now.Sub(p.at) <= m.DoubleClickWindow() && y == p.y && abs(x-p.x) <= 1 && p.count < 3 {
 		p.count++
 	} else {
 		p.count = 1
