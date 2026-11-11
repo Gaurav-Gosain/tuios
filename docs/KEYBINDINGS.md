@@ -2,7 +2,7 @@
 
 The keybinding reference lives on the docs site: https://tuios.dev/docs/keybindings
 
-Every binding lives in one of the 24 sections under `[keybindings]` in `config.toml` and is rebindable; the site page lists each section's defaults, the prefix chords, copy mode, and the key syntax.
+Every binding lives in one of the sections under `[keybindings]` in `config.toml` and is rebindable; the site page lists each section's defaults, the prefix chords, copy mode, and the key syntax.
 
 To send the leader to the program in the pane, press it two times in terminal
 mode. The pane gets the leader that `leader_key` names, such as `ctrl+a`,
