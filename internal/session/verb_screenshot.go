@@ -110,7 +110,7 @@ func (d *Daemon) verbScreenshot(cs *connState, params json.RawMessage) (any, *ve
 		return nil, newVerbError(ErrVerbCommandFailed, "the pane has no screen to capture")
 	}
 
-	settings.Title = d.screenshotTitle(sess, p.Window, settings.Title)
+	settings.Title = d.screenshotTitle(cs, sess, p.Window, settings.Title)
 	frame, frameWarnings := capture.Frame(settings, palette, grid, false)
 	warnings = append(warnings, frameWarnings...)
 
@@ -201,7 +201,7 @@ func (d *Daemon) screenshotSettings(cs *connState, sess *Session, themeOverride 
 // screenshotTitle renders the title bar text from the window's own name
 // through the configured template, so the picture carries the same title the
 // window carries on screen.
-func (d *Daemon) screenshotTitle(sess *Session, target, format string) string {
+func (d *Daemon) screenshotTitle(cs *connState, sess *Session, target, format string) string {
 	if sess == nil || format == "" {
 		return ""
 	}
@@ -227,5 +227,9 @@ func (d *Daemon) screenshotTitle(sess *Session, target, format string) string {
 	if title == "" {
 		title = w.Title
 	}
-	return config.Global.FormatWindowTitle(title, idx+1, w.Cwd)
+	// The window title format is the session's own option, read the way the
+	// rest of the screenshot's settings are, not the process's global: the
+	// daemon never fills that one.
+	titles := config.Settings{WindowTitleFormat: d.optionsFor(cs, sess).get("appearance.window_title_format")}
+	return titles.FormatWindowTitle(title, idx+1, w.Cwd)
 }

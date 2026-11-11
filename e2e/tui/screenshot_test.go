@@ -337,3 +337,35 @@ func TestScreenshotRunCommandCapturesTheFocusedWindow(t *testing.T) {
 	}
 	alive(t, term, "after run-command Screenshot")
 }
+
+// TestScreenshotVerbTitlesThePaneByTheWindowTitleFormat: the daemon draws the
+// picture, so the title bar has to come from the session's
+// appearance.window_title_format, as the pane's title does on screen. The
+// daemon never filled the process's global settings, so the title came out as
+// the bare name.
+//
+// Negative control: reading the format from the process's default settings
+// again gave the title "build" and failed this.
+func TestScreenshotVerbTitlesThePaneByTheWindowTitleFormat(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[appearance]\nwindow_title_format = 'WIN{index}-{title}'\n")
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "new", "e2e-title", "--detach"); err != nil {
+		t.Fatalf("new: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "set-window", "-s", "e2e-title", "--name", "build"); err != nil {
+		t.Fatalf("name: %v\n%s", err, out)
+	}
+	out := filepath.Join(shotDir(t, base), "title.svg")
+	if cliOut, err := tuiosCLI(t, base, "screenshot", "-s", "e2e-title",
+		"--format", "svg", "--out", out, "--no-copy"); err != nil {
+		t.Fatalf("tuios screenshot: %v\n%s", err, cliOut)
+	}
+	svg, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("the verb wrote no file: %v", err)
+	}
+	if !strings.Contains(string(svg), ">WIN1-build<") {
+		t.Errorf("the picture's title is not WIN1-build, the window title format applied to the pane's name")
+	}
+}
