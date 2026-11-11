@@ -13,7 +13,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/layouttmpl"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 )
 
 // LayoutTemplate is a saved layout, kept by internal/layouttmpl in
@@ -236,9 +238,7 @@ func (m *OS) OpenLayoutPicker() tea.Cmd {
 	m.ShowLayoutPicker = true
 	m.LayoutPickerMode = "load"
 	m.LayoutPickerItems = nil
-	m.LayoutPickerQuery = ""
-	m.LayoutPickerSelected = 0
-	m.LayoutPickerScroll = 0
+	m.layoutList.Reset()
 	m.LayoutPickerLoading = true
 	return m.withLayoutTemplates(m.fillLayoutPicker)
 }
@@ -250,10 +250,88 @@ func (m *OS) fillLayoutPicker(ts []LayoutTemplate) tea.Cmd {
 		return nil
 	}
 	m.LayoutPickerItems = ts
-	if m.LayoutPickerSelected >= len(ts) {
-		m.LayoutPickerSelected = max(len(ts)-1, 0)
-	}
+	m.layoutList.Fit(len(m.layoutPickerRows()), listOverlayRows)
 	return nil
+}
+
+// layoutPickerRows is the saved layouts as the query filters them.
+func (m *OS) layoutPickerRows() []LayoutTemplate {
+	return FilterLayoutTemplates(m.LayoutPickerItems, m.layoutList.Query.String())
+}
+
+// layoutPicker is the layout picker's list behaviour, in its load mode. See
+// list_picker.go. Its save mode is one name field (LayoutSaveKey).
+func layoutPicker() *listPicker {
+	return &listPicker{
+		kind:  "layout",
+		state: func(m *OS) *listnav.State { return &m.layoutList },
+		count: func(m *OS) int { return len(m.layoutPickerRows()) },
+		keys: func(m *OS, key string) (tea.Cmd, bool) {
+			// Deleting a layout is behind a modifier, which is where the session
+			// switcher and the keybind manager put theirs. A bare "d" would fire
+			// in the state the picker opens in: typing "docs" to filter would
+			// delete the selected layout and then filter on "ocs". A filter
+			// keystroke must never destroy saved state.
+			if key != "ctrl+d" {
+				return nil, false
+			}
+			rows := m.layoutPickerRows()
+			if c := m.layoutList.Cursor; c >= 0 && c < len(rows) {
+				return m.DeleteLayoutFromPicker(rows[c].Name), true
+			}
+			return nil, true
+		},
+		accept: func(m *OS) tea.Cmd {
+			m.layoutPickerActivate(m.layoutList.Cursor)
+			return nil
+		},
+		close:    func(m *OS) { m.CloseLayoutPicker() },
+		clearKey: true,
+	}
+}
+
+// CloseLayoutPicker puts the layout picker away, in either mode, and forgets
+// what was typed.
+func (m *OS) CloseLayoutPicker() {
+	m.ShowLayoutPicker = false
+	m.layoutList.Reset()
+	m.layoutSaveName.Set("")
+}
+
+// OpenLayoutSave opens the layout picker on the name to save the layout
+// under.
+func (m *OS) OpenLayoutSave() {
+	m.CloseLayoutPicker()
+	m.ShowLayoutPicker = true
+	m.LayoutPickerMode = "save"
+}
+
+// LayoutSaveKey reads a key press in the save mode: enter saves under the name,
+// esc closes, and any other key edits the name.
+func (m *OS) LayoutSaveKey(msg tea.KeyPressMsg) {
+	switch msg.String() {
+	case "esc":
+		m.CloseLayoutPicker()
+	case "enter":
+		name := m.layoutSaveName.String()
+		if name == "" {
+			m.ShowNotification("Layout name cannot be empty", "warning", m.Settings.NotificationDuration)
+			return
+		}
+		if err := SaveLayoutTemplate(name, m); err != nil {
+			m.ShowNotification("Failed to save layout: "+err.Error(), "error", m.Settings.NotificationDuration)
+		} else {
+			m.ShowNotification("Layout saved: "+name, "success", m.Settings.NotificationDuration)
+		}
+		m.CloseLayoutPicker()
+	default:
+		m.layoutSaveName.Edit(msg.String(), msg.Text, textedit.LineOpts{AllowClear: true})
+	}
+}
+
+// LayoutSavePaste types a paste into the name the layout is saved under.
+func (m *OS) LayoutSavePaste(s string) {
+	m.layoutSaveName.Insert(s)
 }
 
 // DeleteLayoutFromPicker deletes the layout called name, from the daemon's

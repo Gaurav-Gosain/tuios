@@ -36,9 +36,9 @@ func wrapCases(t *testing.T) []wrapCase {
 			setup: func(m *OS) {
 				m.LayoutPickerItems = []LayoutTemplate{{Name: "a"}, {Name: "b"}, {Name: "c"}}
 			},
-			move:   (*OS).LayoutPickerMove,
-			cursor: func(m *OS) int { return m.LayoutPickerSelected },
-			set:    func(m *OS, i int) { m.LayoutPickerSelected = i },
+			move:   func(m *OS, d int) { layoutPicker().move(m, d) },
+			cursor: func(m *OS) int { return m.layoutList.Cursor },
+			set:    func(m *OS, i int) { m.layoutList.Cursor = i },
 			first:  0, last: 2,
 		},
 		{
@@ -46,9 +46,9 @@ func wrapCases(t *testing.T) []wrapCase {
 			setup: func(m *OS) {
 				m.HostPickerItems = []HostPickerItem{{Name: "", Label: "here"}, {Name: "b", Label: "b"}, {Name: "c", Label: "c"}}
 			},
-			move:   (*OS).HostPickerMove,
-			cursor: func(m *OS) int { return m.HostPickerSelected },
-			set:    func(m *OS, i int) { m.HostPickerSelected = i },
+			move:   func(m *OS, d int) { hostPicker().move(m, d) },
+			cursor: func(m *OS) int { return m.hostList.Cursor },
+			set:    func(m *OS, i int) { m.hostList.Cursor = i },
 			first:  0, last: 2,
 		},
 		{

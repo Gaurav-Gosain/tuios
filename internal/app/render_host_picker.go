@@ -12,20 +12,18 @@ const hostPickerWidth = 48
 
 // renderHostPicker draws the machine picker on the shared list grammar.
 func (m *OS) renderHostPicker() (string, overlay.Geometry, []overlayRowHit) {
-	filtered := FilterHostPickerItems(m.HostPickerItems, m.HostPickerQuery)
-	if len(filtered) > 0 {
-		m.HostPickerSelected = clampInt(m.HostPickerSelected, 0, len(filtered)-1)
-	}
+	filtered := m.hostPickerRows()
+	m.hostList.Fit(len(filtered), listOverlayRows)
 
 	return m.renderListOverlay(listOverlay{
 		Title:      hostPickerTitle(m.HostPickerPurpose),
 		Width:      hostPickerWidth,
 		MaxVisible: 10,
 		Search:     true,
-		Query:      m.HostPickerQuery,
+		SearchLine: func(width int) string { return hostPicker().searchLine(m, width) },
 		Count:      len(filtered),
-		Selected:   m.HostPickerSelected,
-		Scroll:     &m.HostPickerScroll,
+		Selected:   m.hostList.Cursor,
+		Scroll:     &m.hostList.Scroll,
 		EmptyMsg:   "No machine matches",
 		Hints: []overlay.Hint{
 			{Key: overlay.EnterGlyph, Label: "open"},

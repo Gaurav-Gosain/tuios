@@ -56,26 +56,17 @@ func (m *OS) renderEffectPicker() (string, overlay.Geometry, []overlayRowHit) {
 	pal := m.overlayUI()
 	bg := pal.Surface
 
-	if len(items) > 0 {
-		m.EffectPickerSelected = clampInt(m.EffectPickerSelected, 0, len(items)-1)
-	} else {
-		m.EffectPickerSelected = 0
-	}
 	width, visible, hints := m.effectPickerLayout()
-	m.EffectPickerScroll = scrollWindow(m.EffectPickerScroll, m.EffectPickerSelected, len(items), visible)
+	m.effectList.Fit(len(items), visible)
 
 	var lines []string
+	lines = append(lines, effectPicker().searchLine(m, width), overlay.Rule(width, bg, pal))
 
-	cursor := overlay.Style(bg).Foreground(pal.Accent).Render("█")
-	search := overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render("› ") +
-		overlay.Style(bg).Foreground(pal.Fg).Render(m.EffectPickerQuery) + cursor
-	lines = append(lines, search, overlay.Rule(width, bg, pal))
-
-	start := m.EffectPickerScroll
+	start := m.effectList.Scroll
 	end := min(start+visible, len(items))
 	shown := 0
 	for i := start; i < end; i++ {
-		lines = append(lines, m.effectRow(items[i], i == m.EffectPickerSelected, pal, width))
+		lines = append(lines, m.effectRow(items[i], i == m.effectList.Cursor, pal, width))
 		shown++
 	}
 	if len(items) == 0 {
@@ -208,10 +199,10 @@ func effectOpeningSentence(band effectOpeningBand) string {
 // the cycler it replaced.
 func (m *OS) effectPickerDetail(items []string, pal overlay.Palette, width int) []string {
 	bg := pal.Surface
-	if m.EffectPickerSelected < 0 || m.EffectPickerSelected >= len(items) {
+	if m.effectList.Cursor < 0 || m.effectList.Cursor >= len(items) {
 		return blankLines(bg, effectPickerDetailRows+1)
 	}
-	name := items[m.EffectPickerSelected]
+	name := items[m.effectList.Cursor]
 
 	description, status := m.effectDetailText(name)
 	lines := settingsDescription(description, width, effectPickerDetailRows, pal)

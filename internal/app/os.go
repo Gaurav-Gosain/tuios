@@ -28,6 +28,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 	"github.com/Gaurav-Gosain/tuios/pkg/applist"
 	"github.com/google/uuid"
@@ -1588,10 +1589,9 @@ type OS struct {
 	// HostPickerPurpose is what the machine picker was opened for: a window or
 	// a session. The list and the keys are the same; only the title and what
 	// enter does differ. See host_picker.go.
-	HostPickerPurpose  HostPickerPurpose
-	HostPickerQuery    string
-	HostPickerSelected int
-	HostPickerScroll   int
+	HostPickerPurpose HostPickerPurpose
+	// hostList is the picker's filter, cursor and window. See list_picker.go.
+	hostList listnav.State
 	// HostPickerItems is the list as it stood when the picker opened. It is
 	// held rather than rebuilt per keystroke so the rows cannot move under the
 	// cursor while somebody is typing: a link coming up mid-search would
@@ -1621,12 +1621,12 @@ type OS struct {
 	pendingScrollColumns map[int][]session.SerializedScrollColumn
 	LayoutPickerItems    []LayoutTemplate
 	// LayoutPickerLoading is true while the picker waits on the daemon's list.
-	LayoutPickerLoading  bool
-	LayoutPickerSelected int
-	LayoutPickerScroll   int
-	LayoutPickerQuery    string
-	LayoutPickerMode     string // "load" or "save"
-	LayoutSaveBuffer     string // Buffer for layout name when saving
+	LayoutPickerLoading bool
+	LayoutPickerMode    string // "load" or "save"
+	// layoutList is the list's filter, cursor and window, and layoutSaveName
+	// the name the layout is saved under. See list_picker.go.
+	layoutList     listnav.State
+	layoutSaveName textedit.Line
 
 	// Settings overlay state.
 	ShowSettings       bool
@@ -1697,10 +1697,9 @@ type OS struct {
 
 	// Screen saver effect picker state. The third of the family, and the one
 	// whose preview is an animation rather than a still: see effect_picker.go.
-	ShowEffectPicker     bool
-	EffectPickerQuery    string
-	EffectPickerSelected int
-	EffectPickerScroll   int
+	ShowEffectPicker bool
+	// effectList is the picker's filter, cursor and window. See list_picker.go.
+	effectList           listnav.State
 	EffectPickerOriginal string // effect set when the picker opened
 	// effectPreview is the animation behind the panel. Unexported for the same
 	// reason the saver's state is: nothing outside this package drives it, and

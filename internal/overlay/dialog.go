@@ -261,3 +261,35 @@ func (d Dialog) Render(pal Palette) (string, Geometry) {
 		Hints:      hintRects,
 	}
 }
+
+// FieldLine draws a one-line text field with its caret, at most width cells:
+// before is the text before the caret, at the character under it ("" at the
+// end) and after the rest. A text wider than the room scrolls so the caret
+// stays in view: the start of before goes first, then the end of after.
+func FieldLine(before, at, after string, width int, bg, fg color.Color) string {
+	if width <= 0 {
+		return ""
+	}
+	caret := at
+	if caret == "" {
+		caret = " "
+	}
+	room := width - ansi.StringWidth(caret)
+	for room >= 0 && ansi.StringWidth(before) > room && before != "" {
+		_, size := firstRune(before)
+		before = before[size:]
+	}
+	after = ansi.Truncate(after, max(room-ansi.StringWidth(before), 0), "")
+	text := Style(bg).Foreground(fg)
+	return text.Render(before) + Cursor(caret, bg, fg) + text.Render(after)
+}
+
+// firstRune is the first character of s and its size in bytes.
+func firstRune(s string) (string, int) {
+	for i := range s {
+		if i > 0 {
+			return s[:i], i
+		}
+	}
+	return s, len(s)
+}

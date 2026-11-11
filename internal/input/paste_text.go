@@ -167,7 +167,7 @@ func settingsFieldPaste(o *app.OS) (paste func(string) tea.Cmd, ok bool) {
 			o.GlyphPickerRefilter()
 		}), true
 	case o.ShowEffectPicker:
-		return o.EffectPickerType, true
+		return listPickerPaste(o), true
 	case o.ShowSectionEditor, o.ShowDockEditor:
 		return nil, true
 	case o.ShowKeybindManager:
@@ -190,18 +190,23 @@ func settingsFieldPaste(o *app.OS) (paste func(string) tea.Cmd, ok bool) {
 		}
 		return nil, true
 	case o.ShowLayoutPicker:
-		return typed(func(s string) {
-			o.LayoutPickerQuery += s
-			o.LayoutPickerSelected = 0
-			o.LayoutPickerScroll = 0
-		}), true
+		if o.LayoutPickerMode == "save" {
+			return typed(o.LayoutSavePaste), true
+		}
+		return listPickerPaste(o), true
 	case o.ShowHostPicker:
-		return typed(func(s string) {
-			o.HostPickerQuery += s
-			o.HostPickerSelected = app.FirstPickableHostRow(app.FilterHostPickerItems(o.HostPickerItems, o.HostPickerQuery))
-		}), true
+		return listPickerPaste(o), true
 	}
 	return nil, false
+}
+
+// listPickerPaste types a paste into the filter of the list picker the
+// keyboard is on.
+func listPickerPaste(o *app.OS) func(string) tea.Cmd {
+	return func(s string) tea.Cmd {
+		cmd, _ := o.ListPickerPaste(s)
+		return cmd
+	}
 }
 
 // scrollbackSearchPaste is the scrollback browser's search line, in either of

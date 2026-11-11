@@ -144,8 +144,7 @@ func (m *OS) applyAttachedHosts(msg AttachedHostsMsg) {
 		return
 	}
 	m.HostPickerItems = m.buildHostPickerItems()
-	m.HostPickerSelected = FirstPickableHostRow(FilterHostPickerItems(m.HostPickerItems, m.HostPickerQuery))
-	m.HostPickerScroll = 0
+	m.hostList.Refiltered(FirstPickableHostRow(m.hostPickerRows()))
 }
 
 // attachedView is the view for the machine attached now, and whether there

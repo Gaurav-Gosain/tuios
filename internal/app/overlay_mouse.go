@@ -199,6 +199,11 @@ func (m *OS) OverlayMouseMotion(x, y int) bool {
 // only, never activates: the theme picker's live preview counts as selection
 // because that is what its keyboard selection does too.
 func (m *OS) overlayRowHover(kind string, idx int) {
+	if p := listPickerOfKind(kind); p != nil {
+		// A hover cannot return a command; a preview runs its own frames.
+		_ = p.hover(m, idx)
+		return
+	}
 	switch kind {
 	case "settings":
 		m.SettingsSelected = idx
@@ -217,13 +222,6 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 	case "glyphpicker":
 		if idx != m.GlyphPickerSelected {
 			m.GlyphPickerMove(idx - m.GlyphPickerSelected)
-		}
-	case "effectpicker":
-		// Hover previews, as it does in the other two pickers. The command the
-		// move returns is dropped: hover cannot return one, and the preview is
-		// already running its own chain of frames, so there is nothing to start.
-		if idx != m.EffectPickerSelected {
-			_ = m.EffectPickerMove(idx - m.EffectPickerSelected)
 		}
 	case "dockeditor":
 		m.DockEditorSelected = idx
@@ -253,10 +251,6 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		m.NavigatorSelect(idx)
 	case "aggregate":
 		m.AggregateViewSelected = idx
-	case "layout":
-		m.LayoutPickerSelected = idx
-	case "hostpicker":
-		m.HostPickerSelected = idx
 	case "quit":
 		m.QuitMenuSelected = idx
 	case "sessionclose":
@@ -297,6 +291,10 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 	// A wheel move stops at the ends of a list. See listWraps.
 	m.wheelMoving = true
 	defer func() { m.wheelMoving = false }()
+	if p := listPickerOfKind(h.Kind); p != nil {
+		_ = p.wheel(m, up)
+		return true
+	}
 	switch h.Kind {
 	case "help":
 		if up {
@@ -316,8 +314,6 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 		m.ThemePickerMove(wheelDelta(up))
 	case "glyphpicker":
 		m.GlyphPickerMove(wheelDelta(up))
-	case "effectpicker":
-		_ = m.EffectPickerMove(wheelDelta(up))
 	case "dockeditor":
 		m.DockEditorMove(wheelDelta(up))
 	case "sectioneditor":
@@ -339,10 +335,6 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 		m.TransfersMove(wheelDelta(up))
 	case "navigator":
 		m.NavigatorMove(wheelDelta(up))
-	case "layout":
-		m.LayoutPickerMove(wheelDelta(up))
-	case "hostpicker":
-		m.HostPickerMove(wheelDelta(up))
 	case "aggregate":
 		// The one list overlay the wheel did nothing on.
 		m.AggregateViewMove(wheelDelta(up))
@@ -419,6 +411,9 @@ func (m *OS) stepOverlayTab(kind string, delta int) {
 
 // overlayRowClick handles a click on a body row of the given overlay.
 func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd {
+	if p := listPickerOfKind(kind); p != nil {
+		return p.click(m, row.Idx)
+	}
 	switch kind {
 	case "settings":
 		m.SettingsSelected = row.Idx
@@ -475,9 +470,6 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case "glyphpicker":
 		m.GlyphPickerSelected = row.Idx
 		return m.GlyphPickerApplySelection()
-	case "effectpicker":
-		m.EffectPickerSelected = row.Idx
-		return m.EffectPickerApplySelection()
 	case "dockeditor":
 		m.DockEditorSelected = row.Idx
 		return m.DockEditorToggle()
@@ -551,12 +543,6 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 		// clicked.
 		m.AggregateViewSelected = row.Idx
 		m.AggregateViewJump(row.Idx)
-	case "layout":
-		m.LayoutPickerSelected = row.Idx
-		m.layoutPickerActivate(row.Idx)
-	case "hostpicker":
-		m.HostPickerSelected = row.Idx
-		return m.hostPickerActivate(row.Idx)
 	case "quit":
 		m.QuitMenuSelected = row.Idx
 		return m.QuitMenuActivate(row.Idx)
@@ -610,18 +596,22 @@ func (m *OS) sessionSwitcherActivate(idx int) {
 // layoutPickerActivate applies the layout at the given index of the filtered
 // picker list and closes the picker, mirroring its Enter binding.
 func (m *OS) layoutPickerActivate(idx int) {
-	filtered := FilterLayoutTemplates(m.LayoutPickerItems, m.LayoutPickerQuery)
+	filtered := m.layoutPickerRows()
 	if idx < 0 || idx >= len(filtered) {
 		return
 	}
 	selected := filtered[idx]
 	ApplyLayoutTemplate(selected, m)
 	m.ShowNotification("Layout applied: "+selected.Name, "success", m.Settings.NotificationDuration)
-	m.closeOverlay("layout")
+	m.CloseLayoutPicker()
 }
 
 // closeOverlay dismisses a specific floating overlay by kind.
 func (m *OS) closeOverlay(kind string) {
+	if p := listPickerOfKind(kind); p != nil {
+		p.close(m)
+		return
+	}
 	switch kind {
 	case "help":
 		m.ShowHelp = false
@@ -643,11 +633,6 @@ func (m *OS) closeOverlay(kind string) {
 	case "glyphpicker":
 		// Click-away leaves the previewed set reverted, matching Esc.
 		m.CancelGlyphPicker()
-	case "effectpicker":
-		// Click-away closes without changing the row, matching Esc. There is no
-		// preview to revert: this picker previews by animating rather than by
-		// applying, so nothing was written on the way through.
-		m.CancelEffectPicker()
 	case "dockeditor":
 		// Click-away closes and keeps, matching Esc: the layout is already
 		// applied and saved.
@@ -691,10 +676,6 @@ func (m *OS) closeOverlay(kind string) {
 		// lands outside a panel is as often a miss as an intention, and a
 		// deleted screenshot cannot be got back.
 		m.CloseScreenshotPreview(false)
-	case "layout":
-		m.ShowLayoutPicker = false
-	case "hostpicker":
-		m.CloseHostPicker()
 	case "accent":
 		m.CloseAccentPicker()
 	case "aggregate":

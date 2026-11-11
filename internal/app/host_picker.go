@@ -11,6 +11,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -145,9 +146,8 @@ func (m *OS) OpenHostPicker() {
 			"info", m.Settings.NotificationDuration)
 		return
 	}
-	m.HostPickerQuery = ""
-	m.HostPickerSelected = FirstPickableHostRow(m.HostPickerItems)
-	m.HostPickerScroll = 0
+	m.hostList.Reset()
+	m.hostList.Cursor = FirstPickableHostRow(m.HostPickerItems)
 	m.ShowHostPicker = true
 }
 
@@ -183,9 +183,8 @@ func (m *OS) OpenNewSessionPicker() {
 	m.HostPickerPurpose = HostPickerNewSession
 	m.HostPickerItems = m.buildHostPickerItems()
 
-	m.HostPickerQuery = ""
-	m.HostPickerSelected = FirstPickableHostRow(m.HostPickerItems)
-	m.HostPickerScroll = 0
+	m.hostList.Reset()
+	m.hostList.Cursor = FirstPickableHostRow(m.HostPickerItems)
 	m.ShowHostPicker = true
 }
 
@@ -252,7 +251,7 @@ type NewWindowOnHostMsg struct {
 // since then would otherwise be dialled with a timeout on the end of it.
 func (m *OS) ChooseHostForNewWindow(item HostPickerItem) tea.Cmd {
 	m.ShowHostPicker = false
-	m.HostPickerQuery = ""
+	m.hostList.Reset()
 	if item.Pending {
 		m.CancelPendingSplit()
 		m.ShowNotification("The list of machines is still loading. Try again", "info",
@@ -358,11 +357,38 @@ func (m *OS) ApplyNewWindowOnHost(msg NewWindowOnHostMsg) {
 // as enter does, so a click in the session picker makes a session, not a
 // window.
 func (m *OS) hostPickerActivate(idx int) tea.Cmd {
-	filtered := FilterHostPickerItems(m.HostPickerItems, m.HostPickerQuery)
+	filtered := m.hostPickerRows()
 	if idx < 0 || idx >= len(filtered) {
 		return nil
 	}
 	return m.ChooseHost(filtered[idx])
+}
+
+// hostPickerRows is the machine list as the query filters it.
+func (m *OS) hostPickerRows() []HostPickerItem {
+	return FilterHostPickerItems(m.HostPickerItems, m.hostList.Query.String())
+}
+
+// hostPicker is the machine picker's list behaviour. See list_picker.go.
+func hostPicker() *listPicker {
+	return &listPicker{
+		kind:  "hostpicker",
+		state: func(m *OS) *listnav.State { return &m.hostList },
+		count: func(m *OS) int { return len(m.hostPickerRows()) },
+		// The cursor starts on the first machine that is up, as the picker
+		// opens on it.
+		first: func(m *OS) int { return FirstPickableHostRow(m.hostPickerRows()) },
+		keys: func(m *OS, key string) (tea.Cmd, bool) {
+			if key == "ctrl+c" {
+				m.CloseHostPicker()
+				return nil, true
+			}
+			return nil, false
+		},
+		accept:   func(m *OS) tea.Cmd { return m.hostPickerActivate(m.hostList.Cursor) },
+		close:    func(m *OS) { m.CloseHostPicker() },
+		clearKey: true,
+	}
 }
 
 // GlobalSessionName is the session that holds panes from more than one
@@ -423,7 +449,7 @@ func (m *OS) inGlobalSession() bool {
 // against a pane the user has since forgotten about.
 func (m *OS) CloseHostPicker() {
 	m.ShowHostPicker = false
-	m.HostPickerQuery = ""
+	m.hostList.Reset()
 	m.CancelPendingSplit()
 }
 

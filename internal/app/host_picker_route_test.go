@@ -204,7 +204,7 @@ func TestThePickerCursorStartsOnAMachineThatCanBePicked(t *testing.T) {
 	if !m.ShowHostPicker {
 		t.Fatal("the picker did not open")
 	}
-	if it := m.HostPickerItems[m.HostPickerSelected]; !it.Up {
+	if it := m.HostPickerItems[m.hostList.Cursor]; !it.Up {
 		t.Errorf("ASSERTION: the cursor starts on a row that cannot be picked: %+v", it)
 	}
 }

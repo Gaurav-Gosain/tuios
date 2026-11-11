@@ -272,14 +272,14 @@ func TestEffectPreviewDoesNotMoveTheScreen(t *testing.T) {
 	}
 
 	items := m.effectPickerItems()
-	m.EffectPickerSelected = -1
+	m.effectList.Cursor = -1
 	for i, id := range items {
 		if id == anchorTestEffect {
-			m.EffectPickerSelected = i
+			m.effectList.Cursor = i
 			break
 		}
 	}
-	if m.EffectPickerSelected < 0 {
+	if m.effectList.Cursor < 0 {
 		t.Fatalf("the picker no longer offers %s", anchorTestEffect)
 	}
 	m.buildEffectPreview()

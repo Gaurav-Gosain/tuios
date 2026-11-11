@@ -16,9 +16,9 @@ func (m *OS) renderLayoutPicker() (string, overlay.Geometry, []overlayRowHit) {
 		pal := m.overlayUI()
 		bg := pal.Surface
 		width := m.panelWidth(layoutPickerWidth)
+		before, at, after := m.layoutSaveName.Parts()
 		input := overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render("Name  ") +
-			overlay.Style(bg).Foreground(pal.Fg).Render(overlay.Truncate(m.LayoutSaveBuffer, max(width-7, 1))) +
-			overlay.Style(bg).Foreground(pal.Accent).Render("█")
+			overlay.FieldLine(before, at, after, max(width-6, 1), bg, pal.Fg)
 		panel := overlay.Panel{
 			Title: "Save layout",
 			Width: width,
@@ -29,24 +29,22 @@ func (m *OS) renderLayoutPicker() (string, overlay.Geometry, []overlayRowHit) {
 		return content, geo, nil
 	}
 
-	filtered := FilterLayoutTemplates(m.LayoutPickerItems, m.LayoutPickerQuery)
+	filtered := m.layoutPickerRows()
 	empty := "No saved layouts"
 	if m.LayoutPickerLoading {
 		empty = "Reading the layouts..."
 	}
-	if len(filtered) > 0 {
-		m.LayoutPickerSelected = clampInt(m.LayoutPickerSelected, 0, len(filtered)-1)
-	}
+	m.layoutList.Fit(len(filtered), listOverlayRows)
 
 	return m.renderListOverlay(listOverlay{
 		Title:      "Load layout",
 		Width:      layoutPickerWidth,
 		MaxVisible: 10,
 		Search:     true,
-		Query:      m.LayoutPickerQuery,
+		SearchLine: func(width int) string { return layoutPicker().searchLine(m, width) },
 		Count:      len(filtered),
-		Selected:   m.LayoutPickerSelected,
-		Scroll:     &m.LayoutPickerScroll,
+		Selected:   m.layoutList.Cursor,
+		Scroll:     &m.layoutList.Scroll,
 		EmptyMsg:   empty,
 		Hints: []overlay.Hint{
 			{Key: overlay.EnterGlyph, Label: "apply"},

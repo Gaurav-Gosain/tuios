@@ -7,36 +7,9 @@ import (
 )
 
 // handleHostPickerInput drives the machine picker: which machine a new
-// window's process runs on.
+// window's process runs on. The picker's keys are the list picker's (see
+// app/list_picker.go); ctrl+c closes it as esc does.
 func handleHostPickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	filtered := app.FilterHostPickerItems(o.HostPickerItems, o.HostPickerQuery)
-
-	switch commandKey(msg) {
-	case "esc", "ctrl+c":
-		o.CloseHostPicker()
-		return o, nil
-
-	case "enter":
-		if len(filtered) == 0 {
-			return o, nil
-		}
-		if o.HostPickerSelected < 0 || o.HostPickerSelected >= len(filtered) {
-			return o, nil
-		}
-		return o, o.ChooseHost(filtered[o.HostPickerSelected])
-
-	}
-	if listKey(o, commandKey(msg), false, listPage, o.HostPickerMove) {
-		return o, nil
-	}
-
-	// A space and any typed rune, the way the session switcher takes them. The
-	// gate here was printable ASCII only, so a machine with a space in its
-	// name could not be searched for past its first word.
-	if changed, _ := editFilterQuery(msg, &o.HostPickerQuery, true); changed {
-		// The list changes with the query, so the cursor goes back to the top
-		// rather than staying on a row that may no longer be there.
-		o.HostPickerSelected = app.FirstPickableHostRow(app.FilterHostPickerItems(o.HostPickerItems, o.HostPickerQuery))
-	}
-	return o, nil
+	cmd, _ := o.ListPickerKey(commandKey(msg), msg)
+	return o, cmd
 }

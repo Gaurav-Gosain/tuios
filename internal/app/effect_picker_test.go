@@ -271,7 +271,7 @@ func TestEffectPreviewFrameChainDoesNotDouble(t *testing.T) {
 	gen := m.effectPreview.gen
 
 	// A move while a frame is in flight rides the chain that exists.
-	if cmd := m.EffectPickerMove(1); cmd != nil {
+	if cmd := effectPicker().move(m, 1); cmd != nil {
 		t.Error("a move started a second chain of frames alongside the live one")
 	}
 	// The frame in flight arrives and schedules the next one.
@@ -369,7 +369,7 @@ func TestEffectPickerCommitsOnEnterAndLeavesItAloneOnEsc(t *testing.T) {
 
 	_ = m.OpenEffectPicker()
 	idx := effectRowIndex(m, "expand")
-	_ = m.EffectPickerMove(idx - m.EffectPickerSelected)
+	_ = effectPicker().move(m, idx-m.effectList.Cursor)
 	_ = m.EffectPickerApplySelection()
 
 	if m.ShowEffectPicker {
@@ -382,7 +382,7 @@ func TestEffectPickerCommitsOnEnterAndLeavesItAloneOnEsc(t *testing.T) {
 	// Esc changes nothing, however far the selection moved.
 	_ = m.OpenEffectPicker()
 	idx = effectRowIndex(m, "matrix")
-	_ = m.EffectPickerMove(idx - m.EffectPickerSelected)
+	_ = effectPicker().move(m, idx-m.effectList.Cursor)
 	m.CancelEffectPicker()
 	if m.ShowEffectPicker {
 		t.Error("Esc did not close the picker")
@@ -404,7 +404,7 @@ func TestEffectPickerFiltersAndRefusesAnEmptyApply(t *testing.T) {
 	m, _ := effectPickerOS(t, 100, 30)
 	_ = m.OpenEffectPicker()
 
-	_ = m.EffectPickerType("matr")
+	_ = effectPicker().paste(m, "matr")
 	items := m.effectPickerItems()
 	if len(items) == 0 || !slices.Contains(items, "matrix") {
 		t.Fatalf("the query matr found %v, want matrix among them", items)
@@ -413,12 +413,13 @@ func TestEffectPickerFiltersAndRefusesAnEmptyApply(t *testing.T) {
 		t.Error("the query filtered nothing out")
 	}
 
-	_ = m.EffectPickerSetQuery("")
+	m.effectList.Query.Set("")
+	_ = effectPicker().refilter(m)
 	if len(m.effectPickerItems()) != len(config.ScreensaverEffects) {
 		t.Error("clearing the query did not put the whole list back")
 	}
 
-	_ = m.EffectPickerType("zzzznotaneffect")
+	_ = effectPicker().paste(m, "zzzznotaneffect")
 	if len(m.effectPickerItems()) != 0 {
 		t.Fatal("setup: the nonsense query still matched something")
 	}

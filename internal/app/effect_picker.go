@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	tfx "github.com/Gaurav-Gosain/tuiffects"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
@@ -73,7 +74,7 @@ type effectPreview struct {
 // query. "random" is always first, as it is in the registry's accepted list.
 func (m *OS) effectPickerItems() []string {
 	all := config.ScreensaverEffects
-	q := strings.ToLower(strings.TrimSpace(m.EffectPickerQuery))
+	q := strings.ToLower(strings.TrimSpace(m.effectList.Query.String()))
 	if q == "" {
 		return all
 	}
@@ -87,14 +88,11 @@ func (m *OS) effectPickerItems() []string {
 
 // OpenEffectPicker shows the searchable effect picker and starts its preview.
 func (m *OS) OpenEffectPicker() tea.Cmd {
-	m.EffectPickerQuery = ""
-	m.EffectPickerScroll = 0
+	m.effectList.Reset()
 	m.EffectPickerOriginal = m.screensaverConfig().EffectName()
-
-	m.EffectPickerSelected = 0
 	for i, id := range m.effectPickerItems() {
 		if id == m.EffectPickerOriginal {
-			m.EffectPickerSelected = i
+			m.effectList.Cursor = i
 			break
 		}
 	}
@@ -152,13 +150,13 @@ func (m *OS) buildEffectPreview() {
 		return
 	}
 	items := m.effectPickerItems()
-	if m.EffectPickerSelected < 0 || m.EffectPickerSelected >= len(items) {
+	if m.effectList.Cursor < 0 || m.effectList.Cursor >= len(items) {
 		return
 	}
 	// Through the saver's own resolver and builder, not a copy of them: an
 	// effect that previews differently from the way it runs is a preview of
 	// nothing. random resolves here exactly as it does at start-up.
-	name, effect, fill := screensaverEffect(items[m.EffectPickerSelected])
+	name, effect, fill := screensaverEffect(items[m.effectList.Cursor])
 	if effect == nil {
 		return
 	}
@@ -235,49 +233,36 @@ func (m *OS) stopEffectPreview() {
 	p.canvasWidth, p.canvasHeight = 0, 0
 }
 
-// EffectPickerMove moves the selection by delta and previews the new row.
-func (m *OS) EffectPickerMove(delta int) tea.Cmd {
-	items := m.effectPickerItems()
-	if len(items) == 0 {
-		return nil
-	}
-	next := m.listStep(m.EffectPickerSelected, delta, len(items))
-	if next == m.EffectPickerSelected {
-		return nil
-	}
-	m.EffectPickerSelected = next
-	_, visible, _ := m.effectPickerLayout()
-	m.EffectPickerScroll = scrollWindow(m.EffectPickerScroll, m.EffectPickerSelected, len(items), visible)
+// effectPickerPreview previews the row under the cursor, after a move or a
+// refilter.
+func (m *OS) effectPickerPreview() tea.Cmd {
 	m.buildEffectPreview()
 	return m.effectPreviewTick()
 }
 
-// EffectPickerRefilter resets the selection after the query changes and
-// previews the new top result.
-func (m *OS) EffectPickerRefilter() tea.Cmd {
-	m.EffectPickerSelected = 0
-	m.EffectPickerScroll = 0
-	m.buildEffectPreview()
-	return m.effectPreviewTick()
-}
-
-// EffectPickerType adds text to the query and refilters.
-func (m *OS) EffectPickerType(s string) tea.Cmd {
-	m.EffectPickerQuery += s
-	return m.EffectPickerRefilter()
-}
-
-// EffectPickerSetQuery replaces the query and refilters. The input layer applies
-// the shared edit rule (editFilterQuery) and hands the result here.
-func (m *OS) EffectPickerSetQuery(q string) tea.Cmd {
-	m.EffectPickerQuery = q
-	return m.EffectPickerRefilter()
+// effectPicker is the effect picker's list behaviour. See list_picker.go.
+// Every move previews the new row, so it returns the preview's first frame.
+func effectPicker() *listPicker {
+	return &listPicker{
+		kind:  "effectpicker",
+		state: func(m *OS) *listnav.State { return &m.effectList },
+		count: func(m *OS) int { return len(m.effectPickerItems()) },
+		visible: func(m *OS) int {
+			_, visible, _ := m.effectPickerLayout()
+			return visible
+		},
+		accept:     func(m *OS) tea.Cmd { return m.EffectPickerApplySelection() },
+		moved:      func(m *OS) tea.Cmd { return m.effectPickerPreview() },
+		refiltered: func(m *OS) tea.Cmd { return m.effectPickerPreview() },
+		close:      func(m *OS) { m.CancelEffectPicker() },
+		clearKey:   true,
+	}
 }
 
 // CloseEffectPicker hides the picker and takes the animation off the screen.
 func (m *OS) CloseEffectPicker() {
 	m.ShowEffectPicker = false
-	m.EffectPickerQuery = ""
+	m.effectList.Reset()
 	m.stopEffectPreview()
 	m.effectPreview.resized = false
 	// The panes under the animation have not drawn for as long as it was up.
@@ -301,15 +286,15 @@ func (m *OS) CancelEffectPicker() {
 // closes.
 func (m *OS) EffectPickerApplySelection() tea.Cmd {
 	items := m.effectPickerItems()
-	if m.EffectPickerSelected < 0 || m.EffectPickerSelected >= len(items) {
+	if m.effectList.Cursor < 0 || m.effectList.Cursor >= len(items) {
 		// Nothing to commit, so nothing is closed. Closing here would take away
 		// the query that found nothing along with the only key that gets back
 		// to a list, which is the trap the other two pickers name.
-		m.ShowNotification("No effect matches "+m.EffectPickerQuery,
+		m.ShowNotification("No effect matches "+m.effectList.Query.String(),
 			"info", m.Settings.NotificationDuration)
 		return nil
 	}
-	m.setOption("screensaver.effect", items[m.EffectPickerSelected])
+	m.setOption("screensaver.effect", items[m.effectList.Cursor])
 	save := m.persistSettings()
 	m.CloseEffectPicker()
 	return save

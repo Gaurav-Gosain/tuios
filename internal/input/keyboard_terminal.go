@@ -292,12 +292,7 @@ func handleLayoutPrefixLoad(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 // handleLayoutPrefixSave opens the layout picker to name and save the layout.
 func handleLayoutPrefixSave(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.ShowLayoutPicker = true
-	o.LayoutPickerMode = "save"
-	o.LayoutSaveBuffer = ""
-	o.LayoutPickerQuery = ""
-	o.LayoutPickerSelected = 0
-	o.LayoutPickerScroll = 0
+	o.OpenLayoutSave()
 	return o, nil
 }
 
