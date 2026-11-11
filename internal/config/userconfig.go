@@ -1193,13 +1193,6 @@ type KeybindingsConfig struct {
 	GUI map[string][]string `toml:"gui"`
 }
 
-// defaultPrefixRepeatTime is addressable so DefaultConfig can point at it.
-// Zero is a real value for this key, so it is a pointer; see the field.
-var defaultPrefixRepeatTime = PrefixRepeatTimeDefault
-
-// defaultCopyFlash is addressable so DefaultConfig can point at it.
-var defaultCopyFlash = true
-
 // DefaultConfig returns the default configuration
 func DefaultConfig() *UserConfig {
 	cfg := &UserConfig{
@@ -1255,7 +1248,7 @@ func DefaultConfig() *UserConfig {
 			ConfirmClose:             ConfirmCloseNever,
 			ThemeTransitionMs:        ThemeTransitionMsDefault,
 			NiriScrollCells:          NiriScrollCellsDefault,
-			PrefixRepeatTime:         &defaultPrefixRepeatTime,
+			PrefixRepeatTime:         new(PrefixRepeatTimeDefault),
 			Scrollbar:                ScrollbarConfig{Style: ScrollbarStyleTrack, Tint: ScrollbarTintQuiet},
 			Background:               BackgroundOff,
 			Selection: SelectionConfig{
@@ -1263,7 +1256,7 @@ func DefaultConfig() *UserConfig {
 				SearchBg: DefaultSearchBg, SearchFg: DefaultSearchFg,
 				MatchBg: DefaultMatchBg, MatchFg: DefaultMatchFg,
 				CursorBg: DefaultCopyCursorBg, CursorFg: DefaultCopyCursorFg,
-				Flash: &defaultCopyFlash, FlashMs: CopyFlashMsDefault,
+				Flash: new(true), FlashMs: CopyFlashMsDefault,
 				FlashColor: DefaultCopyFlashColor, FlashStyle: DefaultCopyFlashStyle,
 				MultiFormat: MultiCopyFormatPlain, CopyEntry: CopyEntryCursor,
 				OSC52Write: OSC52WriteFocused,
