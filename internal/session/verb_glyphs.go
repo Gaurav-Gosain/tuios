@@ -131,10 +131,16 @@ func describeGlyphSet(id string, render glyphRenderSettings) map[string]any {
 	// another goroutine could read the borrowed border style mid-flight. A
 	// local value has no such window.
 	//
+	// They start from the built-in defaults, not from any process value:
+	// the answer is what the set draws under the session's border and
+	// scrollbar options on a capable terminal (Nerd Font, no ASCII fallback).
+	// The daemon never draws, and ASCII fallback is each client's terminal,
+	// which the daemon cannot know.
+	//
 	// The glyph set itself is still borrowed, because theme keeps it in a
 	// package global that has no per-call form yet; describeMu still guards
 	// that half.
-	settings := config.Global
+	settings := config.DefaultSettings()
 	settings.BorderStyle = render.borderStyle
 	settings.ScrollbarStyle = render.scrollbarStyle
 	settings.ScrollbarThumb, settings.ScrollbarTrack = render.scrollbarThumb, render.scrollbarTrack

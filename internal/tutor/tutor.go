@@ -140,8 +140,7 @@ func Run(opts Options) error {
 	// The shipped defaults, the screen a person sees after installing tuios.
 	cfg := learn.Config()
 	app.SetInputHandler(input.HandleInput)
-	config.ApplyAppearanceConfig(cfg, &config.Global)
-	seed := config.AppearanceFrom(cfg, config.Overrides{ASCIIOnly: opts.ASCII})
+	seed := config.Resolve(cfg, config.Overrides{ASCIIOnly: opts.ASCII})
 	o := app.NewOS(app.OSOptions{
 		Client:          app.ClientLocal,
 		LearnMode:       true,

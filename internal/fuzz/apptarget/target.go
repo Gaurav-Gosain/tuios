@@ -38,12 +38,8 @@ import (
 type Target struct {
 	m    *app.OS
 	told map[string]*announcedSize
-	// saved is the resting state of the globals, taken once at construction so
-	// Close puts back what the process started with rather than what the
-	// previous Reset left.
-	saved configSnapshot
-	dir   string
-	seq   int
+	dir  string
+	seq  int
 	// lastAction is carried into Check so a violation can name what caused it.
 	lastAction fuzz.Action
 	// prevStateHome is the XDG state root to put back on Close. See Reset.
@@ -63,36 +59,6 @@ type announcedSize struct {
 	calls int
 }
 
-// configSnapshot is every package-global the action alphabet can move. Missing
-// one makes a finding unreproducible, so the list is exhaustive over the
-// setting table and the sidebar and border actions rather than over what a given
-// run happens to touch.
-type configSnapshot struct {
-	shared, ascii, sessionColors     bool
-	anim                             string
-	sidebarOn                        bool
-	borderStyle, dockPos, sidebarPos string
-	sidebarWidth                     int
-}
-
-func snapshotConfig() configSnapshot {
-	return configSnapshot{
-		shared: config.Global.SharedBorders, anim: config.Global.Motion,
-		ascii: config.Global.UseASCIIOnly, sessionColors: config.Global.SessionColors,
-		sidebarOn: config.Global.SidebarEnabled, borderStyle: config.Global.BorderStyle,
-		dockPos: config.Global.DockbarPosition, sidebarPos: config.Global.SidebarPosition,
-		sidebarWidth: config.Global.SidebarWidth,
-	}
-}
-
-func (c configSnapshot) restore() {
-	config.Global.SharedBorders, config.Global.Motion = c.shared, c.anim
-	config.Global.UseASCIIOnly, config.Global.SessionColors = c.ascii, c.sessionColors
-	config.Global.SidebarEnabled, config.Global.BorderStyle = c.sidebarOn, c.borderStyle
-	config.Global.DockbarPosition, config.Global.SidebarPosition = c.dockPos, c.sidebarPos
-	config.Global.SidebarWidth = c.sidebarWidth
-}
-
 // New builds a target. stateDir is a scratch directory the app's XDG state root
 // is pointed at for the life of the target, so a run never writes the
 // developer's own sidebar state or crash dumps.
@@ -100,7 +66,7 @@ func New(stateDir string) (*Target, error) {
 	if stateDir == "" {
 		return nil, errors.New("apptarget: a state directory is required, or the run writes the developer's own")
 	}
-	return &Target{saved: snapshotConfig(), dir: stateDir}, nil
+	return &Target{dir: stateDir}, nil
 }
 
 const (
@@ -115,17 +81,19 @@ const (
 // sequence replays exactly.
 func (t *Target) Reset() error {
 	t.releaseWindows()
-	t.saved.restore()
 
-	config.Global.Motion = config.MotionNone
-	config.Global.SharedBorders = false
-	config.Global.UseASCIIOnly = false
-	config.Global.BorderStyle = "rounded"
-	config.Global.DockbarPosition = "bottom"
-	config.Global.SidebarEnabled = true
-	config.Global.SidebarPosition = "left"
-	config.Global.SidebarWidth = config.SidebarDefaultWidth
-	config.Global.SessionColors = true
+	// The settings every run starts from. The model takes its own copy, so a
+	// run changes nothing outside the target.
+	seed := config.DefaultSettings()
+	seed.Motion = config.MotionNone
+	seed.SharedBorders = false
+	seed.UseASCIIOnly = false
+	seed.BorderStyle = "rounded"
+	seed.DockbarPosition = "bottom"
+	seed.SidebarEnabled = true
+	seed.SidebarPosition = "left"
+	seed.SidebarWidth = config.SidebarDefaultWidth
+	seed.SessionColors = true
 
 	// Redirected for the life of the target, not just for this call: the rail
 	// persists a collapse, a drag order and a width, and it does so from inside
@@ -164,6 +132,7 @@ func (t *Target) Reset() error {
 	m := app.NewOS(app.OSOptions{
 		KeybindRegistry: config.NewKeybindRegistry(cfg),
 		UserConfig:      cfg,
+		Settings:        &seed,
 		NumWorkspaces:   9,
 		Width:           hostWidth,
 		Height:          hostHeight,
@@ -231,7 +200,6 @@ func (t *Target) Close() {
 	}
 	t.closed = true
 	t.releaseWindows()
-	t.saved.restore()
 	app.SetInputHandler(nil)
 	if t.unsandbox != nil {
 		t.unsandbox()

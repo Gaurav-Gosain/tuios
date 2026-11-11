@@ -24,7 +24,7 @@ import (
 // the appearance seed with the server's flags ov laid over it.
 //
 // The config is read per session so one that connects after an edit follows
-// the file. See config.AppearanceFrom.
+// the file. See config.Resolve.
 func NewModel(opts app.OSOptions, ov config.Overrides) *app.OS {
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
@@ -34,7 +34,7 @@ func NewModel(opts app.OSOptions, ov config.Overrides) *app.OS {
 
 	app.SetInputHandler(input.HandleInput)
 
-	seed := config.AppearanceFrom(userConfig, ov)
+	seed := config.Resolve(userConfig, ov)
 	opts.KeybindRegistry = config.NewKeybindRegistry(userConfig)
 	opts.Overrides = ov
 	opts.UserConfig = userConfig

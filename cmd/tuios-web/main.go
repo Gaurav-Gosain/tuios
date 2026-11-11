@@ -40,6 +40,11 @@ var (
 	builtBy = "unknown"
 )
 
+// webSettings is the Settings the server resolved at start from the config
+// file and its flags, for what a connection's hello carries before its model
+// exists. Each connection resolves its own (see served.NewModel).
+var webSettings config.Settings
+
 // Command-line flags
 var (
 	webPort           string
@@ -361,9 +366,7 @@ func runWebServer() error {
 	//
 	// The file is the baseline; CLI flags win. The option flags are laid over a
 	// copy of the file, and ApplyOverrides applies the rest after it.
-	flags := webAppearanceOverrides()
-	config.ApplyAppearanceConfig(flags.Config(userConfig), &config.Global)
-	config.ApplyOverrides(flags, &config.Global)
+	webSettings = config.Resolve(userConfig, webAppearanceOverrides())
 
 	// Create sip server
 	sipConfig := sip.DefaultConfig()
@@ -394,7 +397,7 @@ func runWebServer() error {
 	// The touch key bar is server-wide while the keys it carries are user
 	// settings, so it is built from the startup config read above rather than
 	// from a second load that could disagree with the globals.
-	leader := config.Global.LeaderKey
+	leader := webSettings.LeaderKey
 	if userConfig.Keybindings.LeaderKey != "" {
 		leader = userConfig.Keybindings.LeaderKey
 	}
@@ -733,7 +736,7 @@ func createTUIOSHandler(sess sip.Session) *app.OS {
 	daemonOpts.SessionName = webServerConfig.defaultSession
 	daemonOpts.ViewOnly = webReadOnly
 	daemonOpts.OpenInboxItem = sessionInboxItem(sess.Context())
-	model, err := served.Attach(daemonOpts, webAppearanceOverrides(), version, app.ClientCapabilitiesOf(hostCaps), pickWebSession)
+	model, err := served.Attach(daemonOpts, webAppearanceOverrides(), version, app.ClientCapabilitiesOf(hostCaps, webSettings.ImageSymbols), pickWebSession)
 	if err != nil {
 		log.Printf("Warning: Failed to connect to daemon, using ephemeral mode: %v", err)
 		return served.NewModel(opts, webAppearanceOverrides())
@@ -801,7 +804,7 @@ func cellSize(pty sip.Pty) (cellWidth, cellHeight int) {
 // webAppearanceOverrides is the interface flags this server layers over the
 // config file. It is built per call so a session that connects after an edit
 // gets the file as it is now with these flags on top of it, rather than the
-// file the server loaded when it started. See config.AppearanceFrom.
+// file the server loaded when it started. See config.Resolve.
 func webAppearanceOverrides() config.Overrides {
 	return interfaceFlags.Overrides()
 }

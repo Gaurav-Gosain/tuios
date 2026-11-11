@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"charm.land/ssh"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 func TestClientToHostCapabilities_NeverForwardsFiles(t *testing.T) {
@@ -11,7 +13,7 @@ func TestClientToHostCapabilities_NeverForwardsFiles(t *testing.T) {
 	// capabilities projected for the passthrough must always report
 	// KittyFileTransfer=false so file-medium transmissions are re-encoded as
 	// direct data.
-	in := buildClientCapabilities("xterm-kitty", nil, ssh.Window{Width: 80, Height: 24, WidthPixels: 800, HeightPixels: 480})
+	in := buildClientCapabilities("xterm-kitty", nil, ssh.Window{Width: 80, Height: 24, WidthPixels: 800, HeightPixels: 480}, config.ImageSymbolsAuto)
 	host := clientToHostCapabilities(in)
 	if host == nil {
 		t.Fatal("expected non-nil host capabilities")

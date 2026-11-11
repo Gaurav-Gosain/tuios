@@ -1171,11 +1171,9 @@ func (s *Settings) GetNestExitKey() string {
 	return s.NestExitKey
 }
 
-// Global is the process seed: the config file and the CLI flags are applied to
-// it once at startup, single-threaded, and every session copies it at
-// construction. Nothing that serves a client writes to it after that, which is
-// what stops one client's settings page reaching another client's frame.
-//
-// Read it directly only where there is no session in reach: an entrypoint doing
-// startup, or a harness with no OS.
+// Global is the seed app.NewOS uses when it is given no Settings: what tests
+// set before they build a model. Production code builds its Settings with
+// Resolve and passes them in; internal/lint rejects a read of Global outside
+// test files and app.NewOS. The tests move to passing Settings with the app
+// test fixture, and Global goes then.
 var Global = DefaultSettings()

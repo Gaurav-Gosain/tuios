@@ -120,8 +120,7 @@ func main() {
 	// The shipped defaults, the screen a person sees after installing tuios.
 	cfg := learn.Config()
 	app.SetInputHandler(input.HandleInput)
-	config.ApplyAppearanceConfig(cfg, &config.Global)
-	seed := config.AppearanceFrom(cfg, config.Overrides{})
+	seed := config.Resolve(cfg, config.Overrides{})
 	osModel := app.NewOS(app.OSOptions{
 		Client:          app.ClientBrowser,
 		LearnMode:       true,

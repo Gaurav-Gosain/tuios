@@ -5,7 +5,6 @@ import (
 
 	"charm.land/ssh"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/charmbracelet/colorprofile"
 )
@@ -38,14 +37,14 @@ var sixelCapableTerminals = map[string]bool{
 // with the pty-req. It never writes a query to the session or reads its input,
 // because the bubbletea program owns the session's input stream and a second
 // reader on the same SSH channel would steal bytes from it.
-func detectClientGraphics(sshSession ssh.Session) *session.ClientCapabilities {
+func detectClientGraphics(sshSession ssh.Session, imageSymbols string) *session.ClientCapabilities {
 	pty, _, _ := sshSession.Pty()
-	return buildClientCapabilities(pty.Term, sshSession.Environ(), pty.Window)
+	return buildClientCapabilities(pty.Term, sshSession.Environ(), pty.Window, imageSymbols)
 }
 
 // buildClientCapabilities is the pure decision function behind
 // detectClientGraphics, split out so it can be tested without an SSH handshake.
-func buildClientCapabilities(term string, environ []string, win ssh.Window) *session.ClientCapabilities {
+func buildClientCapabilities(term string, environ []string, win ssh.Window, imageSymbols string) *session.ClientCapabilities {
 	env := parseEnviron(environ)
 	name := terminalName(term, env)
 
@@ -92,7 +91,7 @@ func buildClientCapabilities(term string, environ []string, win ssh.Window) *ses
 	// the daemon then tells its panes they can draw sixel. The hello says
 	// so; without it a pane on a plain SSH client was told no sixel. The
 	// colour profile is the one wish derives for this client's renderer.
-	caps.SymbolImages = app.DrawsSymbols(config.Global.ImageSymbols,
+	caps.SymbolImages = app.DrawsSymbols(imageSymbols,
 		&app.HostCapabilities{SixelGraphics: caps.SixelGraphics, KittyGraphics: caps.KittyGraphics, Term: term},
 		colorprofile.Env(append(environ, "TERM="+term)))
 

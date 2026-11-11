@@ -21,12 +21,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// loadAndApplyConfig loads the user config (falling back to defaults on error),
-// applies the appearance globals as the baseline, then applies the CLI-flag
-// overrides on top. Every run path bootstraps through here, so standalone,
-// daemon (tuios new), and ssh all honor the same overrides instead of each
-// wiring its own set and drifting apart.
-func loadAndApplyConfig() *config.UserConfig {
+// loadAndApplyConfig loads the user config (falling back to defaults on error)
+// and resolves the Settings the client starts from: this terminal's glyph
+// environment, the file, then the CLI flags. Every run path bootstraps through
+// here, so standalone, daemon (tuios new), and ssh all honor the same
+// overrides instead of each wiring its own set and drifting apart.
+func loadAndApplyConfig() (*config.UserConfig, *config.Settings) {
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
 		log.Printf("Warning: Failed to load config, using defaults: %v", err)
@@ -41,18 +41,16 @@ func loadAndApplyConfig() *config.UserConfig {
 	// the glyphs when the config chose no set and --ascii-only was not given;
 	// ApplyAppearanceConfig folds it in. See config.DetectGlyphEnv.
 	env, why := config.DetectGlyphEnv(os.Getenv)
-	config.Global.GlyphEnv = env
+	seed := config.DefaultSettings()
+	seed.GlyphEnv = env
 	if why != "" {
 		log.Printf("glyphs: %s, so the chrome is drawn with %s glyphs unless a glyph set or --ascii-only is chosen", why, env)
 	}
 
 	// The file is the baseline and the CLI flags win: the option flags are laid
 	// over a copy of the file, and the rest are applied after it.
-	flags := flagOverrides()
-	config.ApplyAppearanceConfig(flags.Config(userConfig), &config.Global)
-	config.ApplyOverrides(flags, &config.Global)
-
-	return userConfig
+	settings := config.ResolveFrom(seed, userConfig, flagOverrides())
+	return userConfig, &settings
 }
 
 // flagOverrides collects every interface CLI flag into one Overrides value, so
@@ -86,7 +84,7 @@ func runLocal() error {
 		}
 	}
 
-	userConfig := loadAndApplyConfig()
+	userConfig, settings := loadAndApplyConfig()
 
 	// A session should outlive the terminal window it was started in, without
 	// anybody typing "tuios attach" every time. The decision sits here, after
@@ -143,6 +141,7 @@ func runLocal() error {
 		UserConfig:      userConfig,
 		ShowKeys:        interfaceFlags.ShowKeys,
 		Overrides:       flagOverrides(),
+		Settings:        settings,
 		IsDaemonSession: isDaemonSession,
 		// One writer for the terminal: frames, kitty and sixel sequences all
 		// serialize on it. Left nil, the passthroughs open their own /dev/tty

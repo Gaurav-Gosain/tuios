@@ -91,16 +91,21 @@ func ApplyOverrides(overrides Overrides, s *Settings) {
 	}
 }
 
-// AppearanceFrom builds the appearance settings a newly served session starts
-// from: the built-in defaults, the config file as it is now, then the caller's
-// flag overrides.
-//
-// It is the same order the process globals get once at server startup, run per
-// connection instead of once, so a session that connects after an edit follows
-// the file rather than the copy the server loaded when it started. A nil cfg is
-// an empty one, so the overrides still apply.
-func AppearanceFrom(cfg *UserConfig, ov Overrides) Settings {
-	s := DefaultSettings()
+// Resolve is the Settings a session starts from: the built-in defaults, the
+// config file, then the run's overrides. It is the one constructor of
+// Settings: every entrypoint calls it (or ResolveFrom) and hands the result to
+// app.NewOS, and a served session calls it per connection, so a session that
+// connects after an edit follows the file. A nil cfg is the default config,
+// so the overrides still apply.
+func Resolve(cfg *UserConfig, ov Overrides) Settings {
+	return ResolveFrom(DefaultSettings(), cfg, ov)
+}
+
+// ResolveFrom is Resolve starting from seed instead of the built-in defaults,
+// for a caller that knows something about the terminal first, such as its
+// glyph environment (see DetectGlyphEnv).
+func ResolveFrom(seed Settings, cfg *UserConfig, ov Overrides) Settings {
+	s := seed
 	if cfg != nil || len(ov.Sets) > 0 {
 		ApplyAppearanceConfig(ov.Config(cfg), &s)
 	}

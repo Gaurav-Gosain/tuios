@@ -424,7 +424,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		fmt.Println("Debug mode enabled")
 	}
 
-	userConfig := loadAndApplyConfig()
+	userConfig, settings := loadAndApplyConfig()
 
 	app.SetInputHandler(input.HandleInput)
 
@@ -434,7 +434,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	hostCaps := app.GetHostCapabilities()
 
 	// Build client capabilities from detected host capabilities
-	clientCaps := app.ClientCapabilitiesOf(hostCaps)
+	clientCaps := app.ClientCapabilitiesOf(hostCaps, settings.ImageSymbols)
 	clientLogf("[CLIENT] Capabilities: cell=%dx%d, kitty=%v, sixel=%v, term=%s",
 		clientCaps.CellWidth, clientCaps.CellHeight, clientCaps.KittyGraphics, clientCaps.SixelGraphics, clientCaps.TerminalName)
 
@@ -550,6 +550,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		UserConfig:      userConfig,
 		ShowKeys:        interfaceFlags.ShowKeys,
 		Overrides:       flagOverrides(),
+		Settings:        settings,
 		// The size this client told the daemon, so the restored windows are
 		// tiled into a real box rather than a zero one the first WindowSizeMsg
 		// then has to undo. The servers have always passed theirs.

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -317,12 +316,15 @@ func (m *OS) rebuildForSessionOn(state *session.SessionState, savedWidth, savedH
 
 // clientCapabilities is this client's terminal, as the daemon wants it told.
 func (m *OS) clientCapabilities() *session.ClientCapabilities {
-	return ClientCapabilitiesOf(m.hostCaps())
+	return ClientCapabilitiesOf(m.hostCaps(), m.Settings.ImageSymbols)
 }
 
 // ClientCapabilitiesOf is a host terminal's capabilities in the form the hello
-// hands them to the daemon. It returns nil for nil.
-func ClientCapabilitiesOf(caps *HostCapabilities) *session.ClientCapabilities {
+// hands them to the daemon. imageSymbols is appearance.image_symbols, which
+// decides whether this client draws a pane's images as block glyphs: the
+// hello is built before any OS exists, so the caller passes it. It returns nil
+// for nil.
+func ClientCapabilitiesOf(caps *HostCapabilities, imageSymbols string) *session.ClientCapabilities {
 	if caps == nil {
 		return nil
 	}
@@ -337,9 +339,8 @@ func ClientCapabilitiesOf(caps *HostCapabilities) *session.ClientCapabilities {
 		// The daemon answers a frame edit a host cannot make, so the
 		// refusal reaches the guest in order. See Session.SetKittyAnimation.
 		KittyAnimation: caps.KittyAnimation,
-		// Read from the process's settings: the hello is built before
-		// any OS exists. See drawsSymbols.
-		SymbolImages: drawsSymbols(config.Global.ImageSymbols, caps),
+		// See drawsSymbols.
+		SymbolImages: drawsSymbols(imageSymbols, caps),
 		Term:         caps.Term,
 	}
 }

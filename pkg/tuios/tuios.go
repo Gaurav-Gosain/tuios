@@ -326,8 +326,7 @@ func newModel(options Options) *Model {
 	if options.ScrollbackLines > 0 {
 		set("appearance.scrollback_lines", strconv.Itoa(options.ScrollbackLines))
 	}
-	config.ApplyAppearanceConfig(embed.Config(userConfig), &config.Global)
-	config.ApplyOverrides(embed, &config.Global)
+	settings := config.Resolve(userConfig, embed)
 
 	// Create keybind registry
 	keybindRegistry := config.NewKeybindRegistry(userConfig)
@@ -342,6 +341,7 @@ func newModel(options Options) *Model {
 		Client:          kind,
 		KeybindRegistry: keybindRegistry,
 		UserConfig:      userConfig,
+		Settings:        &settings,
 		ShowKeys:        options.ShowKeys,
 		Overrides:       embed,
 		NumWorkspaces:   options.Workspaces,

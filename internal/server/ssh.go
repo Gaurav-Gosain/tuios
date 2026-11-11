@@ -32,6 +32,10 @@ import (
 
 // SSHServerConfig holds configuration for the SSH server.
 type SSHServerConfig struct {
+	// imageSymbols is appearance.image_symbols as the server resolved it at
+	// start. See buildClientCapabilities.
+	imageSymbols string
+
 	Host           string
 	Port           string
 	KeyPath        string
@@ -124,11 +128,10 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 		app.SetClientCapabilities(&app.HostCapabilities{TrueColor: true})
 
 		// Flags over file, the same order loadAndApplyConfig gives every
-		// other entrypoint.
-		if userConfig != nil || len(cfg.Overrides.Sets) > 0 {
-			config.ApplyAppearanceConfig(cfg.Overrides.Config(userConfig), &config.Global)
-		}
-		config.ApplyOverrides(cfg.Overrides, &config.Global)
+		// other entrypoint. Each connection resolves its own Settings (see
+		// served.NewModel); this one is the server's, for the capabilities
+		// a connection's hello carries before its model exists.
+		cfg.imageSymbols = config.Resolve(userConfig, cfg.Overrides).ImageSymbols
 	})
 
 	// Determine host key path
@@ -391,7 +394,7 @@ func buildSessionModel(sshSession ssh.Session, graphicsOut io.Writer) (*app.OS, 
 	// them as its own (app.OSOptions.Caps), which is what every consumer inside
 	// it reads. The process global is not rewritten per connection: that was
 	// last writer wins across clients, and StartSSHServer seeds it once.
-	clientCaps := detectClientGraphics(sshSession)
+	clientCaps := detectClientGraphics(sshSession, cfg.imageSymbols)
 	hostCaps := clientToHostCapabilities(clientCaps)
 	// An explicit TUIOS_SIXEL_GRAPHICS from the client is final; otherwise
 	// the client's DA1 answer replaces the guess once the program runs.

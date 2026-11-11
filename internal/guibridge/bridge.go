@@ -413,7 +413,9 @@ func Run(opts Options) error {
 	// images. The daemon is told so, so it answers a guest's kitty query
 	// and lists sixel in DA1. The model here draws nothing, so caps stays
 	// without graphics and its passthrough stays off.
-	hello := app.ClientCapabilitiesOf(caps)
+	// The bridge's model draws nothing, so image_symbols is left at its
+	// default, as the process value it used to read always was here.
+	hello := app.ClientCapabilitiesOf(caps, config.ImageSymbolsAuto)
 	hello.KittyGraphics, hello.SixelGraphics, hello.KittyAnimation = true, true, true
 	client := session.NewTUIClient()
 	// The size is the renderer's window, not this process's terminal, which
@@ -545,9 +547,9 @@ func newModel(opts app.OSOptions) *app.OS {
 		userConfig = config.DefaultConfig()
 	}
 	app.SetInputHandler(input.HandleInput)
-	seed := config.AppearanceFrom(userConfig, chromeOverrides)
+	seed := config.Resolve(userConfig, chromeOverrides)
 	seed.SidebarEnabled = false
-	sessionBorders := config.AppearanceFrom(userConfig, config.Overrides{}).SharedBorders
+	sessionBorders := config.Resolve(userConfig, config.Overrides{}).SharedBorders
 	opts.KeybindRegistry = config.NewKeybindRegistry(userConfig)
 	opts.UserConfig = userConfig
 	opts.Settings = &seed

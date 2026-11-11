@@ -162,15 +162,11 @@ type OSOptions struct {
 	// wants and what a server falls back to when it detected nothing.
 	Caps *HostCapabilities
 
-	// Settings is the appearance seed this session starts from. Nil uses
-	// config.Global, which is what every entrypoint that applies the file and
-	// the flags to the globals before building a session wants: the local
-	// client, and the tests.
-	//
-	// A server that holds several sessions across config edits builds a fresh
-	// seed per connection instead (see config.AppearanceFrom), so a session that
-	// connects after an edit follows the file rather than the copy the server
-	// loaded when it started.
+	// Settings is the appearance this session starts from, built by
+	// config.Resolve from the config file and the run's overrides. Every
+	// entrypoint passes it; a server builds one per connection, so a session
+	// that connects after an edit follows the file. Nil uses config.Global,
+	// the seed tests set before building a model.
 	Settings *config.Settings
 }
 
@@ -197,9 +193,7 @@ func NewOS(opts OSOptions) *OS {
 		caps = GetHostCapabilities()
 	}
 
-	// The appearance seed for this session. Nil means the process globals; a
-	// server hands in a seed built per connection so a session that connects
-	// after a config edit follows the file. See OSOptions.Settings.
+	// The appearance seed for this session. See OSOptions.Settings.
 	seed := config.Global
 	if opts.Settings != nil {
 		seed = *opts.Settings
@@ -266,10 +260,7 @@ func NewOS(opts OSOptions) *OS {
 		RemoteClient:    opts.RemoteClient,
 		Caps:            caps,
 
-		// One struct copy of the process seed, and from here on this session's
-		// own. The entrypoints have already applied the config file and the
-		// flags to config.Global, single-threaded, before any connection was
-		// served; nothing writes it after that.
+		// One struct copy of the seed, and from here on this session's own.
 		Settings: seed,
 
 		// Daemon connection

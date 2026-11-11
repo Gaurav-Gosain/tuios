@@ -47,15 +47,15 @@ func ProgramOptions(opts ...ProgramOption) []tea.ProgramOption {
 		opt(&setup)
 	}
 	return []tea.ProgramOption{
-		// The user's max_fps, read at program start, and not the ceiling it
-		// is clamped to. bubbletea runs a standing ticker at this rate for
+		// The default rate. bubbletea runs a standing ticker at this rate for
 		// the life of the program whether or not a frame is pending, so the
 		// number is the idle wake-up rate of every client: at 120 an idle
 		// tuios woke 590 times a second and spent 1.0% of a core doing
-		// nothing; at the default 60 it is 370 and 0.6%. bubbletea clamps
-		// this to 120; OS.BindProgram sets the ticker past that, and moves
-		// it whenever max_fps changes.
-		tea.WithFPS(config.Global.NormalFPS),
+		// nothing; at the default 60 it is 370 and 0.6%. Every program calls
+		// OS.BindProgram right after NewProgram, which sets the ticker to the
+		// model's own max_fps (past bubbletea's clamp of 120) before the
+		// first frame, and moves it whenever max_fps changes.
+		tea.WithFPS(config.DefaultFPS),
 		tea.WithoutSignalHandler(),
 		tea.WithFilter(sizeFilter(setup.currentSize, FilterMouseMotion)),
 	}

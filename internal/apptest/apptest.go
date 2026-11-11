@@ -120,10 +120,8 @@ func New(t testing.TB, opts ...Option) *Fixture {
 		t.Setenv("SHELL", shell)
 	}
 
-	// Some draw code reads the globals rather than the model's settings, so
-	// the globals carry the fixture's too, and go back afterwards.
-	prevGlobal := config.Global
-	config.Global = settings
+	// The colour profile is a process global the draw code reads, so it
+	// carries the fixture's, and goes back afterwards.
 	prevProfile := theme.ColorProfile()
 	theme.SetColorProfile(s.profile)
 	app.SetInputHandler(input.HandleInput)
@@ -147,7 +145,6 @@ func New(t testing.TB, opts ...Option) *Fixture {
 		m.Cleanup()
 		app.SetInputHandler(nil)
 		theme.SetColorProfile(prevProfile)
-		config.Global = prevGlobal
 	})
 
 	f.attach(s)
