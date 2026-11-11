@@ -294,3 +294,78 @@ func (r ghosttyLockedReader) lineSoftWrapped(absLine int) bool {
 }
 
 func (t *GhosttyTerminal) readerNoLock() markerGridReader { return ghosttyLockedReader{t} }
+
+// ghosttyMarkReader is ghosttyLockedReader for the command text an OSC 133 C
+// mark captures: it reads the few cells of the command straight from the
+// library instead of syncing the shadow grid first, which at every mark was a
+// render-state update and a copy of every dirty row for one or two rows of
+// text. The caller holds the terminal's lock.
+type ghosttyMarkReader struct{ t *GhosttyTerminal }
+
+func (r ghosttyMarkReader) Width() int                       { return r.t.width }
+func (r ghosttyMarkReader) Height() int                      { return r.t.height }
+func (r ghosttyMarkReader) ScrollbackLen() int               { return r.t.scrollbackLenLocked() }
+func (r ghosttyMarkReader) ScrollbackLine(index int) uv.Line { return r.t.scrollbackLineLocked(index) }
+func (r ghosttyMarkReader) lineSoftWrapped(absLine int) bool {
+	return ghosttyLockedReader(r).lineSoftWrapped(absLine)
+}
+
+// CellAt reads the text of one cell of the active screen from the library.
+// Only Content is filled: the command text needs nothing else.
+func (r ghosttyMarkReader) CellAt(x, y int) *uv.Cell {
+	t := r.t
+	if t.closed.Load() || x < 0 || y < 0 || x >= t.width || y >= t.height {
+		return nil
+	}
+	ref, err := t.term.GridRef(gh.Point{Tag: gh.PointTagActive, X: uint16(x), Y: uint32(y)})
+	if err != nil || ref == nil {
+		return nil
+	}
+	cell, err := ref.Cell()
+	if err != nil || cell == nil {
+		return nil
+	}
+	var dc decodedCell
+	if t.dec.ok {
+		dc = t.dec.decode(cell.PackedValue())
+	} else {
+		dc = decodeCellSlow(cell)
+	}
+	// As the shadow grid holds them: the second half of a wide character is
+	// an empty placeholder, a spacer at the end of a row a blank.
+	switch dc.wide {
+	case gh.CellWideSpacerTail:
+		return &uv.Cell{}
+	case gh.CellWideSpacerHead:
+		return &uv.Cell{Content: " ", Width: 1}
+	}
+	out := &uv.Cell{Width: 1}
+	if dc.wide == gh.CellWideWide {
+		out.Width = 2
+	}
+	// The same switch as readHistoryLine and syncRowLocked, so a blank cell
+	// reads as a space here as it does from the shadow grid.
+	switch dc.tag {
+	case gh.CellContentCodepoint:
+		out.Content = " "
+		if dc.cp != 0 {
+			out.Content = string(dc.cp)
+		} else {
+			out.Width = 1
+		}
+	case gh.CellContentCodepointGrapheme:
+		out.Content = string(dc.cp)
+		if cps, err := ref.Graphemes(); err == nil && len(cps) > 0 {
+			b := make([]rune, 0, len(cps))
+			for _, cp := range cps {
+				b = append(b, rune(cp))
+			}
+			out.Content = string(b)
+		}
+	default:
+		// Background-only cells carry no text.
+		out.Content = " "
+		out.Width = 1
+	}
+	return out
+}

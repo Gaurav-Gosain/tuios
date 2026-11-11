@@ -653,7 +653,13 @@ func (t *GhosttyTerminal) handleSemanticZoneOSC(payload []byte) {
 	default:
 		return
 	}
-	curX, curY := t.cursorLocked()
+	// The library's own cursor: the scanner hands the library every byte
+	// before this sequence ahead of this hook, so it is current, and reading
+	// it costs two calls where syncing the shadow grid for it cost a
+	// render-state update and a copy of every dirty row, at every mark.
+	cx, _ := t.term.CursorX()
+	cy, _ := t.term.CursorY()
+	curX, curY := int(cx), int(cy)
 	absLine := t.scrollbackLenLocked() + curY
 
 	exitCode := -1
@@ -675,7 +681,7 @@ func (t *GhosttyTerminal) handleSemanticZoneOSC(payload []byte) {
 	}
 	if subCmd == 'C' {
 		if bMarker := t.semanticMarkers.Last(MarkerCommandStart); bMarker != nil {
-			marker.CapturedText = extractCommandTextFrom(t.readerNoLock(), bMarker.AbsLine, bMarker.Col, absLine)
+			marker.CapturedText = extractCommandTextFrom(ghosttyMarkReader{t}, bMarker.AbsLine, bMarker.Col, absLine)
 		}
 	}
 	t.semanticMarkers.Add(marker)
