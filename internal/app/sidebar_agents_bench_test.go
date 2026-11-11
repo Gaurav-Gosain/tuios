@@ -1,10 +1,12 @@
 package app
 
 import (
+	"slices"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/agentstate"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -12,7 +14,7 @@ import (
 
 // benchAgentStates cycles through every state a rail row can be in, so the
 // benchmarks below pay for each branch of the row renderer.
-var benchAgentStates = []string{"working", "needs_input", "done", "idle", "errored", "unknown"}
+var benchAgentStates = slices.DeleteFunc(agentstate.Names(), func(n string) bool { return n == agentstate.None.Name() })
 
 // benchAgentOS is a rail watching twelve agents in the attached session, in
 // every state, with harnesses and notes, which is the fleet the agents section

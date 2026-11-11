@@ -1,9 +1,11 @@
 package app
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/agentstate"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -11,9 +13,9 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// agentMarkStates are the states that draw a mark, in the order the docs list
-// them.
-var agentMarkStates = []string{"working", "needs_input", "idle", "done", "errored", "unknown"}
+// agentMarkStates are the states that draw a mark: every agent state but none,
+// read from agentstate so a new state is tested here too.
+var agentMarkStates = slices.DeleteFunc(agentstate.Names(), func(n string) bool { return n == agentstate.None.Name() })
 
 // inGlyphMode runs f with ASCII-only rendering set to on, and puts it back
 // after.
