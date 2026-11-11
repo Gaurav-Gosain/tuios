@@ -618,11 +618,12 @@ func generateListBindings() []HelpBinding {
 	}
 }
 
-// generateCopyModeBindings lists copy mode's fixed keys, then the keys the
-// [keybindings.copy_mode] section binds, read from the config.
+// generateCopyModeBindings lists copy mode's keys: the motions and the
+// [keybindings.copy_mode] actions with the keys the config binds now, then
+// the keys copy mode reads itself.
 func generateCopyModeBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
 	if registry == nil {
-		return copyModeKeys(s.LeaderKey + ", [")
+		registry = config.NewKeybindRegistry(config.DefaultConfig())
 	}
 	// The row that enters copy mode shows the keys prefix_selection is bound
 	// to now, not the default "[", and goes when nothing binds it.
@@ -630,59 +631,85 @@ func generateCopyModeBindings(registry *config.KeybindRegistry, s *config.Settin
 	for _, key := range registry.GetConfig().Keybindings.PrefixMode["prefix_selection"] {
 		enter = append(enter, s.LeaderKey+", "+key)
 	}
-	fixed := copyModeKeys(enter...)
-	var bound []HelpBinding
+	out := copyModeKeys(enter...)
+	// The motions go after the row that enters copy mode.
+	at := min(len(enter), 1)
+	out = slices.Insert(out, at, copyModeMotionBindings(registry)...)
 	for _, row := range []struct{ action, desc string }{
-		{config.ActionCopyModeLineStart, "Line start"},
-		{config.ActionCopyModeFirstNonBlank, "First nonblank"},
-		{config.ActionCopyModeLineEnd, "Line end"},
 		{config.ActionCopyModeExit, "Leave copy mode"},
-		{config.ActionCopyModeWordForward, "Next word"},
-		{config.ActionCopyModeWordBackward, "Previous word"},
+		{config.ActionEditScrollback, "Open the scrollback in the editor"},
+		{config.ActionHints, "Label the text in view to copy it"},
 	} {
 		if keys := registry.Keys(config.TableCopyMode, row.action); len(keys) > 0 {
-			bound = append(bound, HelpBinding{Action: row.action, Keys: keys, Description: row.desc, Category: HelpCategoryCopyMode})
+			out = append(out, HelpBinding{Action: row.action, Keys: keys, Description: row.desc, Category: HelpCategoryCopyMode})
 		}
-	}
-	// The bound line keys go next to the fixed ones that do the same.
-	at := len(fixed)
-	for i, b := range fixed {
-		if len(b.Keys) > 0 && b.Keys[0] == copyModeLineKeys {
-			at = i + 1
-			break
-		}
-	}
-	out := slices.Insert(fixed, at, bound...)
-	if keys := registry.Keys(config.TableCopyMode, config.ActionEditScrollback); len(keys) > 0 {
-		out = append(out, HelpBinding{Action: config.ActionEditScrollback, Keys: keys, Description: "Open the scrollback in the editor", Category: HelpCategoryCopyMode})
-	}
-	if keys := registry.Keys(config.TableCopyMode, config.ActionHints); len(keys) > 0 {
-		out = append(out, HelpBinding{Action: config.ActionHints, Keys: keys, Description: "Label the text in view to copy it", Category: HelpCategoryCopyMode})
 	}
 	return out
 }
 
-// copyModeLineKeys is the row of copy mode's fixed line motions.
-const copyModeLineKeys = "0, ^, $"
+// copyModeMotionRows are the help rows of copy mode's motions. A row lists the
+// keys of each of its actions in order, an action's keys joined by "/", as in
+// "h/left, j/down, k/up, l/right". fixed are the keys copy mode reads itself
+// that do the same as an action of the row, shown with that action's keys.
+// lead is a fixed key the row starts with.
+var copyModeMotionRows = []struct {
+	actions []string
+	fixed   map[string]string
+	lead    string
+	desc    string
+}{
+	{actions: []string{config.ActionCopyModeLeft, config.ActionCopyModeDown, config.ActionCopyModeUp, config.ActionCopyModeRight}, desc: "Move cursor"},
+	{actions: []string{config.ActionCopyModeWordForward, config.ActionCopyModeWordBackward, config.ActionCopyModeWordEnd}, fixed: map[string]string{config.ActionCopyModeWordForward: "w", config.ActionCopyModeWordBackward: "b"}, desc: "Word fwd/back/end"},
+	{actions: []string{config.ActionCopyModeBigWordForward, config.ActionCopyModeBigWordBackward, config.ActionCopyModeBigWordEnd}, desc: "Word fwd/back/end, words split only at spaces"},
+	{actions: []string{config.ActionCopyModeLineStart, config.ActionCopyModeFirstNonBlank, config.ActionCopyModeLineEnd}, fixed: map[string]string{config.ActionCopyModeLineStart: "0", config.ActionCopyModeFirstNonBlank: "^", config.ActionCopyModeLineEnd: "$"}, desc: "Line start/first/end"},
+	{actions: []string{config.ActionCopyModeBottom}, lead: "gg", desc: "Jump top/bottom"},
+	{actions: []string{config.ActionCopyModeHalfPageUp, config.ActionCopyModeHalfPageDown}, desc: "Half page up/down"},
+	{actions: []string{config.ActionCopyModePageUp, config.ActionCopyModePageDown}, fixed: map[string]string{config.ActionCopyModePageUp: "ctrl+b"}, desc: "Page up/down"},
+	{actions: []string{config.ActionCopyModeScreenTop, config.ActionCopyModeScreenMiddle, config.ActionCopyModeScreenBottom}, desc: "Top/middle/bottom of the view"},
+	{actions: []string{config.ActionCopyModeParagraphUp, config.ActionCopyModeParagraphDown}, desc: "Paragraph up/down"},
+	{actions: []string{config.ActionCopyModeMatchingBracket}, desc: "Matching bracket"},
+	{actions: []string{config.ActionCopyModeRepeatCharSearch, config.ActionCopyModeRepeatCharSearchBack}, desc: "Repeat the last f/F/t/T forward/back"},
+}
 
-// copyModeKeys are copy mode's keys. When enter names the keys that open copy
-// mode, a row for them comes first. The others are not bindings: copy mode
-// reads them itself (see internal/input/copymode_handlers.go).
+// copyModeMotionBindings are the motion rows with the keys registry binds. A
+// row none of whose actions has a key, and no fixed key, is left out.
+func copyModeMotionBindings(registry *config.KeybindRegistry) []HelpBinding {
+	var out []HelpBinding
+	for _, row := range copyModeMotionRows {
+		var parts []string
+		if row.lead != "" {
+			parts = append(parts, row.lead)
+		}
+		for _, action := range row.actions {
+			keys := registry.Keys(config.TableCopyMode, action)
+			if f := row.fixed[action]; f != "" {
+				keys = append([]string{f}, keys...)
+			}
+			if len(keys) > 0 {
+				parts = append(parts, strings.Join(keys, "/"))
+			}
+		}
+		if len(parts) == 0 {
+			continue
+		}
+		out = append(out, HelpBinding{Action: row.actions[0], Keys: []string{strings.Join(parts, ", ")}, Description: row.desc, Category: HelpCategoryCopyMode})
+	}
+	return out
+}
+
+// copyModeKeys are the keys copy mode reads itself. When enter names the keys
+// that open copy mode, a row for them comes first. The motions are bindings,
+// listed by copyModeMotionBindings.
 func copyModeKeys(enter ...string) []HelpBinding {
 	var out []HelpBinding
 	if len(enter) > 0 {
 		out = append(out, HelpBinding{Keys: enter, Description: "Enter copy mode", Category: "Copy Mode"})
 	}
 	return append(out, []HelpBinding{
-		{Keys: []string{"h, j, k, l"}, Description: "Move cursor", Category: "Copy Mode"},
-		{Keys: []string{"w, b, e"}, Description: "Word fwd/back/end", Category: "Copy Mode"},
 		{Keys: []string{"f, F, t, T"}, Description: "Jump to a character on the line", Category: "Copy Mode"},
-		{Keys: []string{"%"}, Description: "Matching bracket", Category: "Copy Mode"},
-		{Keys: []string{copyModeLineKeys}, Description: "Line start/first/end", Category: "Copy Mode"},
-		{Keys: []string{"gg, G"}, Description: "Jump top/bottom", Category: "Copy Mode"},
-		{Keys: []string{"ctrl+u, ctrl+d"}, Description: "Half page up/down", Category: "Copy Mode"},
 		{Keys: []string{"/, ?"}, Description: "Search forward/backward", Category: "Copy Mode"},
 		{Keys: []string{"n, N"}, Description: "Repeat search/reverse", Category: "Copy Mode"},
+		{Keys: []string{"ctrl+l"}, Description: "Clear the search highlights", Category: "Copy Mode"},
 		{Keys: []string{"v, V"}, Description: "Visual char/line", Category: "Copy Mode"},
 		{Keys: []string{"ctrl+v"}, Description: "Visual block", Category: "Copy Mode"},
 		{Keys: []string{"o"}, Description: "Other end of selection, the opposite corner of a block", Category: "Copy Mode"},

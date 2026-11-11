@@ -1600,6 +1600,31 @@ terminal_focus_right = ["alt+l"]
 A key under the leader does not work in copy mode, because copy mode uses
 `Ctrl+B` for page up. `Ctrl+B` and then an arrow key does not move focus there.
 
+### Motions
+
+The cursor motions are bindings in the `copy_mode` section. In a `v`, `V` or
+`Ctrl+V` selection they move the end of the selection. A count typed before
+the key repeats a motion that steps, such as `3j`, in a selection too. `10G`
+goes to line 10.
+
+| Action | Default key |
+| --- | --- |
+| `copy_mode_left`, `copy_mode_down`, `copy_mode_up`, `copy_mode_right` | `h` `Left`, `j` `Down`, `k` `Up`, `l` `Right` |
+| `copy_mode_word_end` | `e` |
+| `copy_mode_big_word_forward`, `copy_mode_big_word_backward`, `copy_mode_big_word_end` | `W`, `B`, `E` |
+| `copy_mode_half_page_up`, `copy_mode_half_page_down` | `Ctrl+U`, `Ctrl+D` |
+| `copy_mode_page_up`, `copy_mode_page_down` | `PgUp`, `Ctrl+F` `PgDown` |
+| `copy_mode_bottom` | `G` |
+| `copy_mode_screen_top`, `copy_mode_screen_middle`, `copy_mode_screen_bottom` | `H`, `M`, `L` |
+| `copy_mode_paragraph_up`, `copy_mode_paragraph_down` | `{`, `}` |
+| `copy_mode_matching_bracket` | `%` |
+| `copy_mode_repeat_char_search`, `copy_mode_repeat_char_search_back` | `;`, `,` |
+
+`0`, `^`, `$`, `w`, `b`, `Ctrl+B` and `gg` are fixed keys. They do what
+`copy_mode_line_start`, `copy_mode_first_nonblank`, `copy_mode_line_end`,
+`copy_mode_word_forward`, `copy_mode_word_backward`, `copy_mode_page_up` and
+the top of the scrollback do, and you cannot rebind them.
+
 ### Line start and line end
 
 `Home` moves the copy cursor to column zero of the line, as `0` does. `End`

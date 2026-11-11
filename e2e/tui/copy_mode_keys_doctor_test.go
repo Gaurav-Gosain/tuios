@@ -68,20 +68,20 @@ func TestKeybindsDoctorNamesACopyModeKeyUsedTwice(t *testing.T) {
 	})
 
 	// At startup only the binding that never runs is a config problem (#1291).
-	// H and L taken from copy mode work as bound, and window mode is still
+	// w and b taken from copy mode work as bound, and window mode is still
 	// entered from the leader's exit key, so neither is warned about. The
-	// doctor still names H and L. The copy pipe key in the same config is the
+	// doctor still names w and b. The copy pipe key in the same config is the
 	// positive half: it must still be warned about, so a log that shows no
 	// config problem at all is not mistaken for the fix.
 	t.Run("startup", func(t *testing.T) {
 		base := t.TempDir()
 		writeConfig(t, base, "[[keybindings.copy_pipe]]\nkey = \"p\"\ncommand = \"cat\"\n\n"+
-			"[keybindings.copy_mode]\ncopy_mode_line_start = [\"H\"]\ncopy_mode_line_end = [\"L\", \"p\"]\n\n"+
+			"[keybindings.copy_mode]\ncopy_mode_line_start = [\"w\"]\ncopy_mode_line_end = [\"b\", \"p\"]\n\n"+
 			"[keybindings.mode_control]\nenter_window_mode = []\n\n"+
 			"[keybindings.prefix_mode]\nprefix_exit_mode = [\"ctrl+e\", \"esc\"]\n")
 		probs, text := doctor(t, base)
 		if len(probs) != 3 {
-			t.Errorf("the doctor reports %d copy mode keys, want 3 (H, L and p)\n%+v\n%s", len(probs), probs, text)
+			t.Errorf("the doctor reports %d copy mode keys, want 3 (w, b and p)\n%+v\n%s", len(probs), probs, text)
 		}
 
 		term := startIn(t, base, startOpts{cols: 160, rows: 40})
@@ -96,7 +96,7 @@ func TestKeybindsDoctorNamesACopyModeKeyUsedTwice(t *testing.T) {
 		screen := term.Screen().Text()
 		// The log viewer cuts long lines, so each warning is told by its
 		// field and key, which come first.
-		for _, unwanted := range []string{"copy_mode_line_start] H", "copy_mode_line_end] L", "enter_window_mode", "config problems"} {
+		for _, unwanted := range []string{"copy_mode_line_start] w", "copy_mode_line_end] b", "enter_window_mode", "config problems"} {
 			if strings.Contains(screen, unwanted) {
 				t.Errorf("the startup log warns %q about a binding that works:\n%s", unwanted, term.Snapshot())
 			}
@@ -114,7 +114,8 @@ func TestKeybindsDoctorNamesACopyModeKeyUsedTwice(t *testing.T) {
 }
 
 // TestHelpListsHomeAndEndWithTheLineKeys opens the help overlay on its copy
-// mode section and requires the Home and End rows right after the 0, ^, $ row.
+// mode section and requires the line motions row to name Home with 0 and End
+// with $, the keys that do the same.
 func TestHelpListsHomeAndEndWithTheLineKeys(t *testing.T) {
 	base := t.TempDir()
 	writeConfig(t, base, copyCursorConfig)
@@ -145,18 +146,9 @@ func TestHelpListsHomeAndEndWithTheLineKeys(t *testing.T) {
 	if r < 0 {
 		t.Fatalf("no category of the help overlay lists the 0, ^, $ row\n%s", term.Snapshot())
 	}
-	var rows []string
-	for _, line := range strings.Split(s.Text(), "\n")[r+1:] {
-		if strings.TrimSpace(strings.Trim(line, "│| ")) != "" {
-			rows = append(rows, line)
-		}
-		if len(rows) == 2 {
-			break
-		}
-	}
-	if len(rows) < 2 || !strings.Contains(rows[0], "home") || !strings.Contains(rows[0], "Line start") ||
-		!strings.Contains(rows[1], "end") || !strings.Contains(rows[1], "Line end") {
-		t.Fatalf("the two rows after the 0, ^, $ row are %q, want the home and end rows\n%s", rows, term.Snapshot())
+	row := strings.Split(s.Text(), "\n")[r]
+	if !strings.Contains(row, "0/home") || !strings.Contains(row, "$/end") {
+		t.Fatalf("the line motions row is %q, want 0/home and $/end on it\n%s", row, term.Snapshot())
 	}
 	alive(t, term, "after the help overlay")
 }

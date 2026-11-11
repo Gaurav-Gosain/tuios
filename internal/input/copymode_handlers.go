@@ -179,34 +179,9 @@ func runCopyModeAction(action string, cm *terminal.CopyMode, grid terminal.CopyG
 		fx.action = action
 		return true
 	}
-	dropStaleCount(cm, fx)
-	// A pending g waits for the g of gg. This key is not that, so the
-	// prefix goes rather than firing on the next g.
-	cm.PendingGCount = false
-	switch action {
-	case config.ActionCopyModeLineStart:
-		cm.CursorX = 0
-	case config.ActionCopyModeFirstNonBlank:
-		cm.CursorX = firstNonBlankCol(cm, grid)
-	case config.ActionCopyModeLineEnd:
-		cm.CursorX = lastTextCol(cm, grid)
-	case config.ActionCopyModeWordForward, config.ActionCopyModeWordBackward:
-		move := moveWordForward
-		if action == config.ActionCopyModeWordBackward {
-			move = moveWordBackward
-		}
-		repeatMotion(max(cm.PendingCount, 1), cm, func() { move(cm, grid) })
-	default:
+	if !runCopyMotion(action, cm, grid, fx) {
 		return false
 	}
-	if cm.PendingCount != 0 {
-		cm.PendingCount = 0
-		fx.ShowNotification("", "info", 0)
-	}
-	if cm.State.InVisual() {
-		updateVisualEnd(cm, grid)
-	}
-	fx.InvalidateCache()
 	fx.action = action
 	return true
 }
@@ -287,47 +262,14 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 		fx.EnterTerminalMode()
 		return
 
-	// Navigation: basic movement
-	case "h", "left":
-		repeatMotion(count, cm, func() { moveLeft(cm, grid) })
-	case "l", "right":
-		repeatMotion(count, cm, func() { moveRight(cm, grid) })
-	case "j", "down":
-		repeatMotion(count, cm, func() { moveDown(cm, grid) })
-	case "k", "up":
-		repeatMotion(count, cm, func() { moveUp(cm, grid) })
-
-	// Navigation: word movement
-	case "w":
-		repeatMotion(count, cm, func() { moveWordForward(cm, grid) })
-	case "b":
-		repeatMotion(count, cm, func() { moveWordBackward(cm, grid) })
-	case "e":
-		repeatMotion(count, cm, func() { moveWordEnd(cm, grid) })
-	case "W":
-		repeatMotion(count, cm, func() { moveWordForwardBig(cm, grid) })
-	case "B":
-		repeatMotion(count, cm, func() { moveWordBackwardBig(cm, grid) })
-	case "E":
-		repeatMotion(count, cm, func() { moveWordEndBig(cm, grid) })
-
-	// Navigation: line movement
+	// 0 is the line start when no count is pending. It is read here, not
+	// bound, because after a count it is a digit.
 	case "0":
-		cm.CursorX = 0
-	case "^":
-		cm.CursorX = firstNonBlankCol(cm, grid)
-	case "$":
-		cm.CursorX = lastTextCol(cm, grid)
-
-	// Navigation: page movement
-	case "ctrl+u":
-		repeatMotion(count, cm, func() { moveHalfPageUp(cm, grid) })
-	case "ctrl+d":
-		repeatMotion(count, cm, func() { moveHalfPageDown(cm, grid) })
-	case "ctrl+b", "pgup":
-		repeatMotion(count, cm, func() { movePageUp(cm, grid) })
-	case "ctrl+f", "pgdown":
-		repeatMotion(count, cm, func() { movePageDown(cm, grid) })
+		runCopyMotion(fixedCopyMotions["0"], cm, grid, fx)
+	// ctrl+b, ^, $, w and b run their motions without being bound. See
+	// config.ActionCopyModeLeft.
+	case "ctrl+b", "^", "$", "w", "b":
+		runCopyMotion(fixedCopyMotions[keyStr], cm, grid, fx)
 
 	// Navigation: jump to top/bottom
 	case "g":
@@ -338,53 +280,6 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 			cm.PendingGCount = true
 			cm.LastCommandTime = time.Now()
 		}
-	case "G":
-		// count + G goes to specific line (e.g., 10G goes to line 10)
-		if count > 1 {
-			// Go to specific line number (count is the line number)
-			scrollbackLen := grid.ScrollbackLen()
-			targetAbsY := count - 1 // Convert from 1-indexed to 0-indexed
-			totalLines := scrollbackLen + grid.Text().Height()
-			if targetAbsY >= totalLines {
-				targetAbsY = totalLines - 1
-			}
-
-			// Move to target line using step-by-step movement
-			currentAbsY := getAbsoluteY(cm, grid)
-			diff := targetAbsY - currentAbsY
-			if diff > 0 {
-				for range diff {
-					moveDown(cm, grid)
-				}
-			} else if diff < 0 {
-				for range -diff {
-					moveUp(cm, grid)
-				}
-			}
-		} else {
-			moveToBottom(cm, grid)
-		}
-
-	// Navigation: screen position
-	case "H":
-		// Move to top of screen
-		cm.CursorY = 0
-	case "M":
-		// Move to middle of screen
-		cm.CursorY = grid.ViewHeight() / 2
-	case "L":
-		// Move to bottom of screen
-		cm.CursorY = grid.LastContentRow()
-
-	// Navigation: paragraph movement
-	case "{":
-		repeatMotion(count, cm, func() { moveParagraphUp(cm, grid) })
-	case "}":
-		repeatMotion(count, cm, func() { moveParagraphDown(cm, grid) })
-
-	// Navigation: matching bracket
-	case "%":
-		moveToMatchingBracket(cm, grid)
 
 	// Character search (f/F/t/T)
 	case "f":
@@ -419,12 +314,6 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 		cm.LastCharSearchTill = true
 		fx.ShowNotification("T", "info", 0)
 		return
-	case ";":
-		// Repeat last character search
-		repeatMotion(count, cm, func() { repeatCharSearch(cm, grid, false) })
-	case ",":
-		// Repeat last character search in opposite direction
-		repeatMotion(count, cm, func() { repeatCharSearch(cm, grid, true) })
 
 	// Search
 	case "/", "?":
@@ -617,40 +506,6 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 		fx.SetClipboard(text)
 		return
 
-	// Movement in visual mode extends selection: basic
-	case "h", "left":
-		repeatMotion(count, cm, func() { moveLeft(cm, grid) })
-		updateVisualEnd(cm, grid)
-	case "l", "right":
-		repeatMotion(count, cm, func() { moveRight(cm, grid) })
-		updateVisualEnd(cm, grid)
-	case "j", "down":
-		repeatMotion(count, cm, func() { moveDown(cm, grid) })
-		updateVisualEnd(cm, grid)
-	case "k", "up":
-		repeatMotion(count, cm, func() { moveUp(cm, grid) })
-		updateVisualEnd(cm, grid)
-
-	// Word movement
-	case "w":
-		repeatMotion(count, cm, func() { moveWordForward(cm, grid) })
-		updateVisualEnd(cm, grid)
-	case "b":
-		repeatMotion(count, cm, func() { moveWordBackward(cm, grid) })
-		updateVisualEnd(cm, grid)
-	case "e":
-		repeatMotion(count, cm, func() { moveWordEnd(cm, grid) })
-		updateVisualEnd(cm, grid)
-	case "W":
-		repeatMotion(count, cm, func() { moveWordForwardBig(cm, grid) })
-		updateVisualEnd(cm, grid)
-	case "B":
-		repeatMotion(count, cm, func() { moveWordBackwardBig(cm, grid) })
-		updateVisualEnd(cm, grid)
-	case "E":
-		repeatMotion(count, cm, func() { moveWordEndBig(cm, grid) })
-		updateVisualEnd(cm, grid)
-
 	// Character search (f/F/t/T)
 	case "f":
 		cm.PendingCharSearch = true
@@ -680,37 +535,12 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 		cm.LastCharSearchTill = true
 		fx.ShowNotification("T", "info", 0)
 		return
-	case ";":
-		repeatCharSearch(cm, grid, false)
-		updateVisualEnd(cm, grid)
-	case ",":
-		repeatCharSearch(cm, grid, true)
-		updateVisualEnd(cm, grid)
 
-	// Line movement
+	// 0 is the line start when no count is pending. See handleNormalInput.
 	case "0":
-		cm.CursorX = 0
-		updateVisualEnd(cm, grid)
-	case "^":
-		cm.CursorX = firstNonBlankCol(cm, grid)
-		updateVisualEnd(cm, grid)
-	case "$":
-		cm.CursorX = lastTextCol(cm, grid)
-		updateVisualEnd(cm, grid)
-
-	// Page movement
-	case "ctrl+u":
-		moveHalfPageUp(cm, grid)
-		updateVisualEnd(cm, grid)
-	case "ctrl+d":
-		moveHalfPageDown(cm, grid)
-		updateVisualEnd(cm, grid)
-	case "ctrl+b", "pgup":
-		movePageUp(cm, grid)
-		updateVisualEnd(cm, grid)
-	case "ctrl+f", "pgdown":
-		movePageDown(cm, grid)
-		updateVisualEnd(cm, grid)
+		runCopyMotion(fixedCopyMotions["0"], cm, grid, fx)
+	case "ctrl+b", "^", "$", "w", "b":
+		runCopyMotion(fixedCopyMotions[keyStr], cm, grid, fx)
 
 	// Jump movement
 	case "g":
@@ -723,33 +553,6 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 			cm.PendingGCount = true
 			cm.LastCommandTime = time.Now()
 		}
-	case "G":
-		moveToBottom(cm, grid)
-		updateVisualEnd(cm, grid)
-
-	// Screen position
-	case "H":
-		cm.CursorY = 0
-		updateVisualEnd(cm, grid)
-	case "M":
-		cm.CursorY = grid.ViewHeight() / 2
-		updateVisualEnd(cm, grid)
-	case "L":
-		cm.CursorY = grid.LastContentRow()
-		updateVisualEnd(cm, grid)
-
-	// Paragraph movement
-	case "{":
-		moveParagraphUp(cm, grid)
-		updateVisualEnd(cm, grid)
-	case "}":
-		moveParagraphDown(cm, grid)
-		updateVisualEnd(cm, grid)
-
-	// Bracket matching
-	case "%":
-		moveToMatchingBracket(cm, grid)
-		updateVisualEnd(cm, grid)
 
 	// Go to the other end of the selection
 	case "o":

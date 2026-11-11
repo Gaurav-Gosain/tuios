@@ -14,18 +14,46 @@ const (
 	ActionCopyModeSearchBackward = "copy_mode_search_backward"
 )
 
-// The copy-mode motions a config can bind, in [keybindings.copy_mode]. They
-// are live only while a pane is in copy mode, in normal and visual selection.
-// The vim keys 0, ^ and $ do the same as the line motions and are not bindings:
-// copy mode reads them itself, with the other vim motions. The line end and ^ go
-// to the last and first nonblank characters of the row, not to the pane edge.
-// Word motions jump between words like w and b.
+// The copy-mode motions, in [keybindings.copy_mode]. They are live only while
+// a pane is in copy mode: in normal mode they move the cursor, and in a visual
+// selection they move the selection's end with it. A count typed before the
+// key repeats a motion that steps (3j), and is the line number for
+// copy_mode_bottom (10G). The line end and ^ go to the last and first
+// nonblank characters of the row, not to the pane edge.
+//
+// A few keys run these motions without being bindings, and copy mode reads
+// them itself, with gg, the search keys and the selection keys: 0 (after a
+// count it is a digit), ctrl+b (the default leader, read where copy mode comes
+// before the leader), and ^, $, w and b. The four line and word actions were
+// bindable before the other motions, for extra keys beside those fixed vim
+// keys, and a config that lists their keys must not lose the vim key.
 const (
-	ActionCopyModeLineStart     = "copy_mode_line_start"
-	ActionCopyModeFirstNonBlank = "copy_mode_first_nonblank"
-	ActionCopyModeLineEnd       = "copy_mode_line_end"
-	ActionCopyModeWordForward   = "copy_mode_word_forward"
-	ActionCopyModeWordBackward  = "copy_mode_word_backward"
+	ActionCopyModeLeft                 = "copy_mode_left"
+	ActionCopyModeRight                = "copy_mode_right"
+	ActionCopyModeUp                   = "copy_mode_up"
+	ActionCopyModeDown                 = "copy_mode_down"
+	ActionCopyModeLineStart            = "copy_mode_line_start"
+	ActionCopyModeFirstNonBlank        = "copy_mode_first_nonblank"
+	ActionCopyModeLineEnd              = "copy_mode_line_end"
+	ActionCopyModeWordForward          = "copy_mode_word_forward"
+	ActionCopyModeWordBackward         = "copy_mode_word_backward"
+	ActionCopyModeWordEnd              = "copy_mode_word_end"
+	ActionCopyModeBigWordForward       = "copy_mode_big_word_forward"
+	ActionCopyModeBigWordBackward      = "copy_mode_big_word_backward"
+	ActionCopyModeBigWordEnd           = "copy_mode_big_word_end"
+	ActionCopyModeHalfPageUp           = "copy_mode_half_page_up"
+	ActionCopyModeHalfPageDown         = "copy_mode_half_page_down"
+	ActionCopyModePageUp               = "copy_mode_page_up"
+	ActionCopyModePageDown             = "copy_mode_page_down"
+	ActionCopyModeBottom               = "copy_mode_bottom"
+	ActionCopyModeScreenTop            = "copy_mode_screen_top"
+	ActionCopyModeScreenMiddle         = "copy_mode_screen_middle"
+	ActionCopyModeScreenBottom         = "copy_mode_screen_bottom"
+	ActionCopyModeParagraphUp          = "copy_mode_paragraph_up"
+	ActionCopyModeParagraphDown        = "copy_mode_paragraph_down"
+	ActionCopyModeMatchingBracket      = "copy_mode_matching_bracket"
+	ActionCopyModeRepeatCharSearch     = "copy_mode_repeat_char_search"
+	ActionCopyModeRepeatCharSearchBack = "copy_mode_repeat_char_search_back"
 )
 
 // ActionCopyModeExit leaves copy mode and gives the pane the keyboard back,
@@ -60,15 +88,11 @@ const ActionClearScrollback = "clear_scrollback"
 // digits of a count. A [keybindings.copy_mode] binding on one of them takes
 // the key from copy mode.
 var copyModeFixedKeys = map[string]bool{
-	"h": true, "j": true, "k": true, "l": true,
-	"left": true, "down": true, "up": true, "right": true,
-	"w": true, "b": true, "e": true, "W": true, "B": true, "E": true,
-	"0": true, "^": true, "$": true, "g": true, "G": true,
-	"H": true, "M": true, "L": true, "{": true, "}": true, "%": true,
-	"f": true, "F": true, "t": true, "T": true, ";": true, ",": true,
-	"ctrl+u": true, "ctrl+d": true, "ctrl+b": true, "ctrl+f": true,
-	"pgup": true, "pgdown": true, "ctrl+l": true,
-	"/": true, "?": true, "n": true, "N": true,
+	"0": true, "^": true, "$": true, "w": true, "b": true,
+	"g": true, "ctrl+b": true,
+	"f": true, "F": true, "t": true, "T": true,
+	"ctrl+l": true,
+	"/":      true, "?": true, "n": true, "N": true,
 	"v": true, "V": true, "ctrl+v": true, "o": true, "y": true, "Y": true, "c": true,
 	"i": true, "q": true, "esc": true, "ctrl+c": true, "tab": true,
 }
@@ -141,12 +165,33 @@ func validateCopyModeKeys(cfg *UserConfig, result *ValidationResult) {
 // leader, but F is the backward character search here.
 func getDefaultCopyModeKeybinds() map[string][]string {
 	return map[string][]string{
-		ActionCopyModeLineStart:    {"home"},
-		ActionCopyModeLineEnd:      {"end"},
-		ActionCopyModeExit:         {"enter"},
-		ActionCopyModeWordForward:  {"shift+right"},
-		ActionCopyModeWordBackward: {"shift+left"},
-		ActionEditScrollback:       {"ctrl+g"},
-		ActionHints:                {"s"},
+		ActionCopyModeLeft:                 {"h", "left"},
+		ActionCopyModeRight:                {"l", "right"},
+		ActionCopyModeUp:                   {"k", "up"},
+		ActionCopyModeDown:                 {"j", "down"},
+		ActionCopyModeLineStart:            {"home"},
+		ActionCopyModeLineEnd:              {"end"},
+		ActionCopyModeWordForward:          {"shift+right"},
+		ActionCopyModeWordBackward:         {"shift+left"},
+		ActionCopyModeWordEnd:              {"e"},
+		ActionCopyModeBigWordForward:       {"W"},
+		ActionCopyModeBigWordBackward:      {"B"},
+		ActionCopyModeBigWordEnd:           {"E"},
+		ActionCopyModeHalfPageUp:           {"ctrl+u"},
+		ActionCopyModeHalfPageDown:         {"ctrl+d"},
+		ActionCopyModePageUp:               {"pgup"},
+		ActionCopyModePageDown:             {"ctrl+f", "pgdown"},
+		ActionCopyModeBottom:               {"G"},
+		ActionCopyModeScreenTop:            {"H"},
+		ActionCopyModeScreenMiddle:         {"M"},
+		ActionCopyModeScreenBottom:         {"L"},
+		ActionCopyModeParagraphUp:          {"{"},
+		ActionCopyModeParagraphDown:        {"}"},
+		ActionCopyModeMatchingBracket:      {"%"},
+		ActionCopyModeRepeatCharSearch:     {";"},
+		ActionCopyModeRepeatCharSearchBack: {","},
+		ActionCopyModeExit:                 {"enter"},
+		ActionEditScrollback:               {"ctrl+g"},
+		ActionHints:                        {"s"},
 	}
 }
