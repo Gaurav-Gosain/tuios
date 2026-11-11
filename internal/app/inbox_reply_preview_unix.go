@@ -65,6 +65,7 @@ func (m *OS) flushReplyPreviewForFrame() {
 		want = append(want, pl)
 	}
 	want = m.threadImagePlacements(want)
+	want = m.kbPreviewPlacements(want)
 	if m.previewResizing() {
 		want = nil
 	}

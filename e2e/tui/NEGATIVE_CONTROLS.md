@@ -16800,3 +16800,20 @@ Run on 2026-11-11 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskBoardPreviewsTheFocusedCard$' -v .`.
+
+## The card preview shows each kind of attachment
+
+`TestTaskBoardPreviewShowsEachAttachment` steps a card's attachments with `]`
+in the preview: a picture with its size, Markdown, a diff, a Mermaid diagram
+drawn as a picture, and a pull request with its state from a stub `gh`. `o`
+opens the picture in the image view.
+
+Run on 2026-11-11 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `ckCardBody` without `ckAttachmentBody` | "waiting for the picture: tuitest: WaitForDesc timed out" | **caught** |
+
+The frames are text grids: a kitty picture is placed after the frame and is
+not in them. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskBoardPreviewShowsEachAttachment$' -v .`.
