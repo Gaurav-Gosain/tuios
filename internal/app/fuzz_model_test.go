@@ -1,8 +1,10 @@
 package app
 
 import (
+	"fmt"
 	"os"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -70,6 +72,8 @@ func runFuzzSeeds(t *testing.T, first uint64, count, steps int) {
 	minW := envInt(t, "TUIOS_FUZZ_FLOOR_W", fuzzFloorW)
 	minH := envInt(t, "TUIOS_FUZZ_FLOOR_H", fuzzFloorH)
 	deadline := time.Now().Add(fuzzBudget(t))
+	flaky := 0
+	defer func() { checkFlakyRuns(t, flaky) }()
 	for i := range uint64(count) {
 		seed := first + i
 		res, err := fuzz.Run(func() (fuzz.Target, error) { return newFuzzTarget(dir) },
@@ -77,8 +81,8 @@ func runFuzzSeeds(t *testing.T, first uint64, count, steps int) {
 		if err != nil {
 			t.Fatalf("seed %d: %v", seed, err)
 		}
-		if res.Failed {
-			t.Errorf("seed %d broke %s\n%s", seed, res.Violations[0].Rule, res.Repro())
+		if fuzzVerdict(t, fmt.Sprintf("seed %d", seed), res) {
+			flaky++
 		}
 		if time.Now().After(deadline) {
 			t.Logf("stopped after %d seeds on the time budget", i+1)
@@ -121,6 +125,10 @@ func FuzzModel(f *testing.F) {
 	// it, so without the redirect every worker wrote reports into the
 	// developer's own state directory.
 	dir := fuzzScratch(f)
+	// Counted across the corpus entries of one run; the engine's own
+	// campaign runs workers in other processes, which this does not see.
+	var flaky atomic.Int32
+	f.Cleanup(func() { checkFlakyRuns(f, int(flaky.Load())) })
 	f.Fuzz(func(t *testing.T, in []byte) {
 		// The corpus entry decides the run; the seed is carried only so a
 		// finding can be re-run through the seeded loop as well.
@@ -138,8 +146,8 @@ func FuzzModel(f *testing.F) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if res.Failed {
-			t.Fatalf("broke %s\n%s", res.Violations[0].Rule, res.Repro())
+		if fuzzVerdict(t, "the corpus entry", res) {
+			flaky.Add(1)
 		}
 	})
 }

@@ -88,6 +88,9 @@ func (t *Target) Rules() []fuzz.RuleInfo {
 // oracle recovers one here and reports it, which also lets the shrinker minimise
 // it instead of the run dying with the binary.
 func (t *Target) Check() (found []fuzz.Violation) {
+	if t.m.QuitRequested {
+		return nil // see Apply
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			found = vio("render-panic", "%v (after %s, %d panes, %dx%d)",
@@ -187,6 +190,11 @@ func checkLayoutIsDisjoint(t *Target) []fuzz.Violation {
 	// scrolling layout is a strip wider than the viewport that is scrolled along
 	// rather than a partition of it.
 	if !m.AutoTiling || m.LayoutModeName() == app.LayoutModeScrolling || !t.hasRoomToDraw() {
+		return nil
+	}
+	// A pane being moved or resized follows the pointer until the button
+	// comes up, over whatever it passes.
+	if m.Dragging || m.Resizing {
 		return nil
 	}
 	wins := tiledRects(m)

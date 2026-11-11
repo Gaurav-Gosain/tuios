@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -49,7 +50,9 @@ type fuzzOS struct {
 	settledCalls      map[string]int
 	// prevStateDir is the sidebar state directory to put back on Close. See Reset.
 	prevStateDir func() string
-	closed       bool
+	// unsandbox undoes fuzz.Sandbox on Close.
+	unsandbox func()
+	closed    bool
 }
 
 // configSnapshot is every package-global the action alphabet can move. Missing
@@ -124,6 +127,19 @@ func (f *fuzzOS) Reset() error {
 	}
 	sidebarStateDir = f.dir
 
+	// Keys and the mouse go through the real input handler, so an action can
+	// do whatever a person can; the sandbox keeps that off this machine.
+	if fuzzInput == nil {
+		return errors.New("no input handler: fuzz_input_test.go hands it over at init")
+	}
+	if f.unsandbox == nil {
+		undo, err := fuzz.Sandbox(f.dir())
+		if err != nil {
+			return err
+		}
+		f.unsandbox = undo
+	}
+
 	cfg := config.DefaultConfig()
 	// No daemon client, on purpose. The panes are daemon-backed windows, which
 	// is what gives them an emulator and a resize hook without forking a shell,
@@ -139,7 +155,9 @@ func (f *fuzzOS) Reset() error {
 		Width:           fuzzWidth,
 		Height:          fuzzHeight,
 		SessionName:     "fuzz",
+		ConfigReadOnly:  true,
 	})
+	SetInputHandler(fuzzInput)
 	m.AutoTiling = true
 	m.UseBSPLayout = true
 	m.CurrentWorkspace = 1
@@ -205,6 +223,11 @@ func (f *fuzzOS) Close() {
 	f.closed = true
 	f.releaseWindows()
 	f.saved.restore()
+	SetInputHandler(nil)
+	if f.unsandbox != nil {
+		f.unsandbox()
+		f.unsandbox = nil
+	}
 	if f.prevStateDir != nil {
 		sidebarStateDir = f.prevStateDir
 		f.prevStateDir = nil
@@ -230,6 +253,12 @@ func (f *fuzzOS) send(msg tea.Msg) {
 // same entry points the daemon paths call.
 func (f *fuzzOS) Apply(a fuzz.Action) error {
 	f.lastAction = a
+	// A person can quit through the routed keys, and then the program ends.
+	// The harness does not run the quit command, so the model is left closed
+	// down; nothing after it is a run worth checking.
+	if f.m.QuitRequested {
+		return nil
+	}
 	f.drawable, f.calls = drawableSizes(f.m), callCounts(f.told)
 	m := f.m
 
@@ -249,6 +278,10 @@ func (f *fuzzOS) Apply(a fuzz.Action) error {
 		f.send(tea.MouseMotionMsg{X: a.A, Y: a.B, Button: mouseButton(a.C)})
 	case fuzz.MouseRelease:
 		f.send(tea.MouseReleaseMsg{X: a.A, Y: a.B, Button: mouseButton(a.C)})
+		// A finished resize leaves InteractionMode on and arms a 150 ms timer
+		// that turns it off (InteractionSettleCmd). The harness runs no
+		// commands, so it delivers what the timer would, once the button is up.
+		f.send(InteractionSettledMsg{})
 	case fuzz.MouseWheel:
 		b := tea.MouseWheelUp
 		if a.C != 0 {

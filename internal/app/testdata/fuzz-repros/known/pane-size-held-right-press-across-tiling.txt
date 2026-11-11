@@ -1,0 +1,15 @@
+# A right press held across tiling switches and shared borders: a pane's emulator ends two cells smaller than its drawable. Not read yet.
+workspace 0
+shared-borders
+chord "m"
+press 0 0 2
+overlay-open 1
+press 8 27 1
+new-pane
+shared-borders
+tiling
+key "ctrl+c"
+key "left"
+tiling
+shared-borders
+release 0 0 1

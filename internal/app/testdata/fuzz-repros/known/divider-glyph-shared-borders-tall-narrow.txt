@@ -1,0 +1,6 @@
+# Shared borders at 60x53 after ctrl+b e and a layout change: a divider cell draws a blank. Not read yet.
+shared-borders
+sidebar
+resize 60 53
+chord "e"
+layout 0

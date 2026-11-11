@@ -27,6 +27,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/fuzz"
+	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/adrg/xdg"
 )
@@ -48,7 +49,9 @@ type Target struct {
 	// prevStateHome is the XDG state root to put back on Close. See Reset.
 	prevStateHome string
 	redirected    bool
-	closed        bool
+	// unsandbox undoes fuzz.Sandbox on Close.
+	unsandbox func()
+	closed    bool
 }
 
 // announcedSize is the last size a pane's daemon PTY was told, recorded through
@@ -133,6 +136,15 @@ func (t *Target) Reset() error {
 		t.prevStateHome, t.redirected = xdg.StateHome, true
 	}
 	xdg.StateHome = t.dir
+	// Keys and the mouse go through the real input handler, so an action can
+	// do whatever a person can; the sandbox keeps that off this machine.
+	if t.unsandbox == nil {
+		undo, err := fuzz.Sandbox(t.dir)
+		if err != nil {
+			return err
+		}
+		t.unsandbox = undo
+	}
 	// Cleared, not just redirected. Every replay of a shrink candidate shares
 	// this directory, so a run that dragged the rail wider persisted that width
 	// and the next replay loaded it back at construction and started somewhere
@@ -156,7 +168,11 @@ func (t *Target) Reset() error {
 		Width:           hostWidth,
 		Height:          hostHeight,
 		SessionName:     "fuzz",
+		ConfigReadOnly:  true,
 	})
+	// Without it Update drops every key and mouse event before any routing
+	// runs, and the fuzzer never reaches the input layer at all.
+	app.SetInputHandler(input.HandleInput)
 	m.AutoTiling = true
 	m.UseBSPLayout = true
 	m.CurrentWorkspace = 1
@@ -212,6 +228,11 @@ func (t *Target) Close() {
 	t.closed = true
 	t.releaseWindows()
 	t.saved.restore()
+	app.SetInputHandler(nil)
+	if t.unsandbox != nil {
+		t.unsandbox()
+		t.unsandbox = nil
+	}
 	if t.redirected {
 		xdg.StateHome, t.redirected = t.prevStateHome, false
 	}
@@ -247,6 +268,12 @@ func (t *Target) send(msg tea.Msg) {
 // behind them call the same entry points the daemon paths call.
 func (t *Target) Apply(a fuzz.Action) error {
 	t.lastAction = a
+	// A person can quit through the routed keys, and then the program ends.
+	// The harness does not run the quit command, so the model is left closed
+	// down; nothing after it is a run worth checking.
+	if t.m.QuitRequested {
+		return nil
+	}
 	m := t.m
 
 	switch a.Kind {
@@ -265,6 +292,10 @@ func (t *Target) Apply(a fuzz.Action) error {
 		t.send(tea.MouseMotionMsg{X: a.A, Y: a.B, Button: mouseButton(a.C)})
 	case fuzz.MouseRelease:
 		t.send(tea.MouseReleaseMsg{X: a.A, Y: a.B, Button: mouseButton(a.C)})
+		// A finished resize leaves InteractionMode on and arms a 150 ms timer
+		// that turns it off (InteractionSettleCmd). The harness runs no
+		// commands, so it delivers what the timer would, once the button is up.
+		t.send(app.InteractionSettledMsg{})
 	case fuzz.MouseWheel:
 		b := tea.MouseWheelUp
 		if a.C != 0 {

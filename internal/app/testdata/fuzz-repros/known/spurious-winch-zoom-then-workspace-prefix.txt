@@ -1,0 +1,6 @@
+# A zoomed pane, ctrl+b w, then "!": the pane's drawable size does not change and its PTY is resized twice. Not read yet.
+workspace 0
+new-pane
+zoom
+chord "w"
+key "!"

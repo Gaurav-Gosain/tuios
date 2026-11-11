@@ -1,0 +1,10 @@
+# New panes while one is zoomed on a 60x25 screen: a pane's top-left cell shows another pane's title bar. Not read yet.
+resize 60 25
+chord "z"
+new-pane
+sidebar-collapse
+new-pane
+new-pane
+focus 0
+zoom
+new-pane

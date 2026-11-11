@@ -1,0 +1,7 @@
+# Tiling off and on around a focus move, then a resize to 60x20: two tiled panes overlap. The same rule as layout-overlap-tiling-round-trip.
+tiling
+focus 1
+tiling
+resize 60 20
+text "."
+tick

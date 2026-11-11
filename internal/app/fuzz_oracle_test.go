@@ -136,6 +136,9 @@ func (f *fuzzOS) Rules() []fuzz.RuleInfo {
 // the oracle recovers one here and reports it, which also lets the shrinker
 // minimise it instead of the run dying with the binary.
 func (f *fuzzOS) Check() (found []fuzz.Violation) {
+	if f.m.QuitRequested {
+		return nil // see Apply
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			found = vio("render-panic", "%v (after %s, %d panes, %dx%d)",
@@ -279,6 +282,11 @@ func checkLayoutIsDisjoint(f *fuzzOS) []fuzz.Violation {
 	// scrolling layout is a strip wider than the viewport that is scrolled
 	// along rather than a partition of it.
 	if !f.m.AutoTiling || f.m.LayoutModeName() == LayoutModeScrolling || !f.hasRoomToDraw() {
+		return nil
+	}
+	// A pane being moved or resized follows the pointer until the button
+	// comes up, over whatever it passes.
+	if f.m.Dragging || f.m.Resizing {
 		return nil
 	}
 	wins := tiledRects(f.m)
@@ -522,6 +530,11 @@ func checkGuestCellsAreNotPaintedOver(f *fuzzOS) []fuzz.Violation {
 		if !paneCellsAreOnScreen(m, x, y, n) {
 			continue
 		}
+		// A pane in copy mode shows its scrollback, not the screen the
+		// marker was written to.
+		if w.InCopyMode() {
+			continue
+		}
 		// A pane the user stacked another one on top of. With auto-tiling off the
 		// panes are free-floating windows that may be deliberately overlapped, so
 		// whichever draws later owns the cell and the marker underneath it is
@@ -695,7 +708,15 @@ func (f *fuzzOS) framePaintsPanes() bool {
 	// callers want and what its one production caller pairs with
 	// ContextMenuActive. The context menu is drawn over the panes like the rest,
 	// so this rule needs the same pair rather than the panel half alone.
-	if !f.hasRoomToDraw() || m.AnyOverlayOpen() || m.ContextMenuActive() || m.ShowHelp || m.ShowLogs {
+	// A held move or resize draws the panes it is moving without their
+	// content until the button comes up.
+	if !f.hasRoomToDraw() || m.AnyOverlayOpen() || m.ContextMenuActive() || m.ShowHelp || m.ShowLogs ||
+		m.Dragging || m.Resizing ||
+		// The rename dialog, the screensaver and a pinned picture-in-picture
+		// view draw over the panes too.
+		// Rename is not one of eachOverlayGate's kinds, so AnyOverlayOpen
+		// does not report it.
+		m.Renaming() || m.ScreensaverActive() || m.pipWanted() {
 		return false
 	}
 	if m.LayoutModeName() == LayoutModeScrolling {

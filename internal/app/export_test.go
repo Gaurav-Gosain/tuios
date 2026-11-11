@@ -10,6 +10,14 @@ import (
 
 // Seams the tests reach for. Production code calls the functions these wrap.
 
+// fuzzInput is the input handler FuzzModel routes keys and the mouse
+// through. This package cannot import internal/input, which imports it, so
+// the external test package hands it over at init (fuzz_input_test.go).
+var fuzzInput InputHandler
+
+// SetFuzzInput is how fuzz_input_test.go hands it over.
+func SetFuzzInput(h InputHandler) { fuzzInput = h }
+
 // prefixMenuBindings is prefixMenuGroups as one list.
 func (m *OS) prefixMenuBindings() []config.Keybinding {
 	var out []config.Keybinding
