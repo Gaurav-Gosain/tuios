@@ -1,3 +1,0 @@
-# A zoomed pane takes a line of coloured text: its drawable size does not change and its PTY is resized anyway. The same rule as spurious-winch-zoom-then-workspace-prefix.
-zoom
-text "\x1b[31mred\x1b[0m"

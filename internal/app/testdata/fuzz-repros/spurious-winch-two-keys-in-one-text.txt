@@ -1,0 +1,3 @@
+# zoom, then a text of two keys (3, 1) that move the zoom to another pane and back. Not a product bug: each key resizes the panes it really changes, and the oracle saw one action with no change. It now looks between the keys of an action.
+zoom
+text "\x1b[31mred\x1b[0m"

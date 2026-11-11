@@ -267,10 +267,12 @@ func (f *fuzzOS) Apply(a fuzz.Action) error {
 		f.send(keyMsg(a.S))
 	case fuzz.Chord:
 		f.send(keyMsg(m.Settings.LeaderKey))
+		f.noteMoves()
 		f.send(keyMsg(a.S))
 	case fuzz.Text:
 		for _, r := range a.S {
 			f.send(tea.KeyPressMsg{Code: r, Text: string(r)})
+			f.noteMoves()
 		}
 	case fuzz.MousePress:
 		f.send(tea.MouseClickMsg{X: a.A, Y: a.B, Button: mouseButton(a.C)})

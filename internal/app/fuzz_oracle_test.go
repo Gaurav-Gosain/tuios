@@ -232,6 +232,23 @@ func checkPaneSizeAgreement(f *fuzzOS) []fuzz.Violation {
 	return nil
 }
 
+// noteMoves records the panes whose drawable size has left the settled
+// baseline. It is called after every action, deferral or not, and between the
+// keys of one action that sends several. A host resize away and back leaves the
+// pane the size it started at, and the announcements it took in between were
+// each for a size it really had; comparing only the two settled endpoints sees
+// no change at all and charges both as spurious. Recording the excursion as it
+// happens is what tells the two apart. A text of two keys that move a zoom to
+// another pane and back is the same excursion in one action: without a look
+// between the keys it passed for a pane told twice with nothing changed.
+func (f *fuzzOS) noteMoves() {
+	for id, size := range drawableSizes(f.m) {
+		if before, ok := f.settledDrawable[id]; ok && size != before {
+			f.movedSinceSettled[id] = true
+		}
+	}
+}
+
 // Generalised from a unit test that checked a workspace switch alone (now
 // removed; e2e workspace_switch_replay covers the switch): not just a
 // workspace switch, but any action at all. A pane whose drawable size did not
@@ -243,16 +260,7 @@ func checkPaneSizeAgreement(f *fuzzOS) []fuzz.Violation {
 // as spurious every time, which is the opposite of what the rule is for.
 func checkNoSpuriousResize(f *fuzzOS) []fuzz.Violation {
 	now := drawableSizes(f.m)
-	// Watched on every action, deferral or not. A host resize away and back
-	// leaves the pane the size it started at, and the announcements it took in
-	// between were each for a size it really had; comparing only the two settled
-	// endpoints sees no change at all and charges both as spurious. Recording the
-	// excursion as it happens is what tells the two apart.
-	for id, size := range now {
-		if before, ok := f.settledDrawable[id]; ok && size != before {
-			f.movedSinceSettled[id] = true
-		}
-	}
+	f.noteMoves()
 	if f.deferring() {
 		return nil
 	}
