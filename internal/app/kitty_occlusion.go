@@ -206,17 +206,3 @@ func (kp *KittyPassthrough) occludersAboveInto(
 ) []cellRect {
 	return occludersAboveInto(dst, windowZ, allWindows, excludeWindowID)
 }
-
-// sameSlices reports whether two slice lists describe the same drawing, so a
-// pass that changed nothing emits nothing.
-func sameSlices(a, b []placementSlice) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}

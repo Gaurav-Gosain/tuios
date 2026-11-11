@@ -58,7 +58,7 @@ func (m *OS) CaptureKeyEvent(msg tea.KeyPressMsg) {
 	if len(m.RecentKeys) > 0 {
 		lastKey := m.RecentKeys[len(m.RecentKeys)-1]
 		// Check if key is the same AND modifiers match
-		if lastKey.Key == displayKey && modifiersMatch(lastKey.Modifiers, modifiers) {
+		if lastKey.Key == displayKey && slices.Equal(lastKey.Modifiers, modifiers) {
 			// Same key with same modifiers pressed again, increment count
 			m.RecentKeys[len(m.RecentKeys)-1].Count++
 			m.RecentKeys[len(m.RecentKeys)-1].Timestamp = time.Now()
@@ -107,19 +107,6 @@ func superLabel() string {
 // isSingleLetter checks if a key string is a single letter (for shift detection)
 func isSingleLetter(keyStr string) bool {
 	return len(keyStr) == 1 && ((keyStr[0] >= 'a' && keyStr[0] <= 'z') || (keyStr[0] >= 'A' && keyStr[0] <= 'Z'))
-}
-
-// modifiersMatch checks if two modifier slices are equal
-func modifiersMatch(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 // formatKeyDisplay formats a key string for display in the showkeys overlay.

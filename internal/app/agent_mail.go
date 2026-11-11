@@ -2,7 +2,6 @@ package app
 
 import (
 	"errors"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -825,19 +824,6 @@ func (m *OS) agentMailReplyTarget() (inbox string, replyTo uint64, ok bool) {
 	return "", replyTo, true
 }
 
-// thisMachineName is the name this client signs a reply with when the ring
-// is on another machine.
-func thisMachineName() string {
-	if h := os.Getenv("TUIOS_HOST"); h != "" {
-		return h
-	}
-	h, err := os.Hostname()
-	if err != nil {
-		return ""
-	}
-	return h
-}
-
 // AgentMailStartReply opens the reply line under the open thread.
 func (m *OS) AgentMailStartReply() bool {
 	st := &m.AgentMail
@@ -1123,7 +1109,7 @@ func agentMailReplyParams(remote bool, sessionName, inbox string, replyTo uint64
 		params["reply_to"] = replyTo
 	}
 	if remote {
-		params["from_host"] = thisMachineName()
+		params["from_host"] = config.ThisMachine()
 	}
 	if nonce != "" {
 		params["human_nonce"] = nonce

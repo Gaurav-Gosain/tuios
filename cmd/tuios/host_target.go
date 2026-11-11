@@ -60,20 +60,6 @@ func splitHostSession(arg string) (host, name string) {
 	return host, st.Session
 }
 
-// configuredReposRoot is [hosts.NAME] repos_root from this machine's config,
-// or "" when it is not set or the config cannot be read.
-func configuredReposRoot(host string) string {
-	path, err := config.GetConfigPath()
-	if err != nil {
-		return ""
-	}
-	hosts, err := config.HostsInFile(path)
-	if err != nil {
-		return ""
-	}
-	return hosts[host].ReposRoot
-}
-
 // repoParams is the repository part of a worktree or agent call. On this
 // machine it is the directory, --repo or the current one. On a host it is
 // --repo as a directory on the host, or else the origin URL of the
@@ -101,7 +87,7 @@ func repoParams(host, repo string, clone bool) (map[string]any, error) {
 		return nil, err
 	}
 	params := map[string]any{"repo_url": url}
-	if root := configuredReposRoot(host); root != "" {
+	if root := config.HostReposRoot(host); root != "" {
 		params["repos_root"] = root
 	}
 	if clone {

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
@@ -499,7 +501,7 @@ func (m *OS) taskCaptureFile(start bool) tea.Cmd {
 					where = " on " + host
 					sp["task"], sp["task_host"], sp["task_session"] = row.ID, ans.TaskHost, sess
 					sp["repo_url"] = project
-					if root := spawnReposRoot(host); root != "" {
+					if root := config.HostReposRoot(host); root != "" {
 						sp["repos_root"] = root
 					}
 					if ans.Clone {

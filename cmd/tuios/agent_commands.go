@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
@@ -320,7 +322,7 @@ func runSendAgentMessage(sessionName, to, from, subject, text string, replyTo ui
 		// The far daemon keeps this as the sender's claim about where it is,
 		// and shows it beside the message. It is the one thing a reader
 		// there has to tell this machine's agents from its own.
-		params["from_host"] = thisMachine()
+		params["from_host"] = config.ThisMachine()
 	}
 	if subject != "" {
 		params["subject"] = subject
@@ -732,7 +734,7 @@ func runAskAgent(sessionName, windowTarget, from, text string, readyTimeout, set
 		params["from"] = from
 	}
 	if t.host != "" {
-		params["from_host"] = thisMachine()
+		params["from_host"] = config.ThisMachine()
 	}
 	for name, v := range map[string]int{
 		"ready_timeout": readyTimeout, "settle": settle, "timeout": timeout, "lines": lines,

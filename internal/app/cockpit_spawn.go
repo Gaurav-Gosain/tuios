@@ -1568,7 +1568,7 @@ func (m *OS) spawnStart() tea.Cmd {
 	}
 	return func() tea.Msg {
 		if host != "" {
-			if root := spawnReposRoot(host); root != "" {
+			if root := config.HostReposRoot(host); root != "" {
 				params["repos_root"] = root
 			}
 			call = hostCaller(host, build)
@@ -1645,19 +1645,6 @@ func (m *OS) spawnStart() tea.Cmd {
 		}
 		return spawnStartedMsg{sheet: s, text: "Started " + what + " in " + res.Session + where + "." + held}
 	}
-}
-
-// spawnReposRoot is [hosts.NAME] repos_root from this machine's config.
-func spawnReposRoot(host string) string {
-	path, err := config.GetConfigPath()
-	if err != nil {
-		return ""
-	}
-	hosts, err := config.HostsInFile(path)
-	if err != nil {
-		return ""
-	}
-	return hosts[host].ReposRoot
 }
 
 // applySpawnStarted says what became of a start. A start that worked drops

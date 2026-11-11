@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
@@ -240,21 +239,6 @@ func explainTargetConnectError(host, sessionFlag, windowFlag string, err error) 
 		d.Extra = append(d.Extra, fmt.Sprintf("For a window on this machine named %q, write -w %q.", windowFlag, federation.LocalHostName+"::"+windowFlag))
 	}
 	return d
-}
-
-// thisMachine is the name this machine gives itself when it sends something
-// to another: TUIOS_HOST inside a pane, which the daemon set from the
-// hostname, else the hostname. It is a claim the far side cannot check, and
-// it is shown there as one.
-func thisMachine() string {
-	if h := os.Getenv("TUIOS_HOST"); h != "" {
-		return h
-	}
-	h, err := os.Hostname()
-	if err != nil {
-		return ""
-	}
-	return h
 }
 
 // printVerbResultOn is printVerbResult with the host added to the JSON.

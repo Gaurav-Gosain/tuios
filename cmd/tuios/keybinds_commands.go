@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -481,7 +482,7 @@ func findCustomizations(userCfg, defaultCfg *config.UserConfig) []Customization 
 				continue
 			}
 
-			if !stringSlicesEqual(userKeys, defaultKeys) {
+			if !slices.Equal(userKeys, defaultKeys) {
 				customizations = append(customizations, Customization{
 					Action:      formatActionName(action),
 					DefaultKeys: strings.Join(defaultKeys, ", "),
@@ -496,20 +497,6 @@ func findCustomizations(userCfg, defaultCfg *config.UserConfig) []Customization 
 	}
 
 	return customizations
-}
-
-// stringSlicesEqual reports whether two string slices contain the exact same elements
-// in the exact same order.
-func stringSlicesEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 // formatActionName translates an action identifier into a human-readable description

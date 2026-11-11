@@ -319,7 +319,7 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		// A placement has placementStride host ids for its slices.
 		sliceLimit := min(maxVisibleSlices+3*len(kp.chromeOccluders), int(placementStride))
 		// Reused for every image in this window, and across frames.
-		slices := kp.sliceScratch[:0]
+		pieces := kp.sliceScratch[:0]
 
 		// Collect IDs to delete (for altscreen cleanup)
 		var idsToDelete []placementKey
@@ -492,7 +492,7 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 			// they are the same thing: a smaller rectangle of the same image.
 			// See kitty_occlusion.go for what one placement can and cannot
 			// show.
-			slices = slices[:0]
+			pieces = pieces[:0]
 			if anyPartVisible {
 				whole := cellRect{newHostX, newHostY, imageCellWidth, imageCellHeight}
 				region, exact := clearRegion(kp.regionScratch[:0], whole, blockers, sliceLimit)
@@ -512,7 +512,7 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 					anyPartVisible = false
 				} else {
 					for _, r := range region {
-						slices = append(slices, placementSlice{
+						pieces = append(pieces, placementSlice{
 							HostX:      r.X,
 							HostY:      r.Y,
 							ClipTop:    clipTop + r.Y - newHostY,
@@ -524,10 +524,10 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 					}
 					// The first slice also answers for the placement as a
 					// whole, so the fields every other path reads stay true.
-					newHostX, newHostY = slices[0].HostX, slices[0].HostY
-					clipTop, clipLeft = slices[0].ClipTop, slices[0].ClipLeft
-					clipBottom = slices[0].ClipBottom
-					maxShowableCols, maxShowableRows = slices[0].Cols, slices[0].Rows
+					newHostX, newHostY = pieces[0].HostX, pieces[0].HostY
+					clipTop, clipLeft = pieces[0].ClipTop, pieces[0].ClipLeft
+					clipBottom = pieces[0].ClipBottom
+					maxShowableCols, maxShowableRows = pieces[0].Cols, pieces[0].Rows
 				}
 			}
 
@@ -559,11 +559,11 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 				// this pass would draw, it is not sent again.
 				if p.sentAsIs {
 					p.sentAsIs = false
-					if !replaceAll && !p.Hidden && !p.DataDirty && len(slices) == 1 &&
+					if !replaceAll && !p.Hidden && !p.DataDirty && len(pieces) == 1 &&
 						clipTop == 0 && clipBottom == 0 && clipLeft == 0 &&
 						newHostX == p.HostX && newHostY == p.HostY &&
 						maxShowableCols == p.Cols && maxShowableRows == p.DisplayRows {
-						p.Slices = append(p.Slices[:0], slices...)
+						p.Slices = append(p.Slices[:0], pieces...)
 						p.MaxShowable, p.MaxShowableCols = maxShowableRows, maxShowableCols
 						p.placedSlices = 1
 						continue
@@ -572,9 +572,9 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 				posChanged := replaceAll || p.Hidden || p.DataDirty || p.HostX != newHostX || p.HostY != newHostY ||
 					p.ClipTop != clipTop || p.ClipBottom != clipBottom || p.ClipLeft != clipLeft ||
 					p.MaxShowable != maxShowableRows || p.MaxShowableCols != maxShowableCols ||
-					!sameSlices(p.Slices, slices)
+					!slices.Equal(p.Slices, pieces)
 				if posChanged {
-					p.Slices = append(p.Slices[:0], slices...)
+					p.Slices = append(p.Slices[:0], pieces...)
 					p.HostX = newHostX
 					p.HostY = newHostY
 					p.ClipTop = clipTop

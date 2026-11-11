@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
@@ -175,7 +177,7 @@ func runStashPut(sessionName, path string, jsonOutput bool) error {
 			return err
 		}
 		abs, _ := filepath.Abs(path)
-		params["path"] = thisMachine() + ":" + abs
+		params["path"] = config.ThisMachine() + ":" + abs
 		params["content"] = content
 	}
 	raw, err := t.client.Call("stash-put", params)
@@ -240,7 +242,7 @@ func stashAttachmentsWith(paths []string, farRoot, host string, notes io.Writer,
 			return nil, err
 		}
 		abs, _ := filepath.Abs(path)
-		raw, err := put(map[string]any{"path": thisMachine() + ":" + abs, "content": content})
+		raw, err := put(map[string]any{"path": config.ThisMachine() + ":" + abs, "content": content})
 		if err != nil {
 			return nil, err
 		}

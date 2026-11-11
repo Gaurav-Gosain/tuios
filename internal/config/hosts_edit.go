@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -211,7 +212,7 @@ func findTableBlock(lines []string, want []string) (start, end int, found bool) 
 			// The next header of any kind ends the block.
 			return start, i, true
 		}
-		if samePath(path, want) {
+		if slices.Equal(path, want) {
 			start, found = i, true
 		}
 	}
@@ -307,18 +308,6 @@ func unquoteKey(s string) string {
 		return s[1 : len(s)-1]
 	}
 	return s
-}
-
-func samePath(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 // renderHostBlock is one [hosts.NAME] table as text. Only the fields that were
