@@ -25,9 +25,9 @@ import (
 // 0 having printed nothing, which a harness reads as "no opinion".
 const Deadline = 500 * time.Millisecond
 
-// agentHookMaxPayload caps what is read from stdin. A payload is a few
+// MaxPayload caps what is read from stdin. A payload is a few
 // kilobytes; the cap only guards against a harness piping something else.
-const agentHookMaxPayload = 4 << 20
+const MaxPayload = 4 << 20
 
 // agentHookHoldMax bounds the wait for an answer from the Inbox. The daemon
 // ends every hold within 300 seconds; this only guards against a daemon that
@@ -449,7 +449,7 @@ func agentHook(o Options, args []string, hio IO) agentHookOutcome {
 		in.Event = rest[0]
 	}
 	if in.Payload == nil && hio.Stdin != nil && !hio.StdinTTY {
-		data, err := io.ReadAll(io.LimitReader(hio.Stdin, agentHookMaxPayload))
+		data, err := io.ReadAll(io.LimitReader(hio.Stdin, MaxPayload))
 		if err != nil {
 			return agentHookOutcome{Decision: integration.Decision{Harness: args[0], Event: in.Event}, Error: "reading stdin: " + err.Error()}
 		}

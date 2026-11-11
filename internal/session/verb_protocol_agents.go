@@ -2,6 +2,9 @@ package session
 
 import (
 	"slices"
+	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/integration"
 )
 
 // The verbs of the agent work: reviewing what an agent changed and sending it
@@ -42,6 +45,30 @@ var (
 func agentWorkVerbs() map[string]verbEntry {
 	humanNonce := verbParam{Name: "human_nonce", Type: "string", Description: "The nonce from the attach reply of a client attached now. The TUI sends its own. Without a live one the call is not the person's."}
 	return map[string]verbEntry{
+		// verb_agent_hook.go
+		"agent-hook-event": {
+			// It reports for the caller's own pane, through the same
+			// set-agent-state and report-agent-activity calls a hook makes, each
+			// checked on this connection.
+			scope:       scopeSelf,
+			link:        needWrite,
+			description: "Run one harness hook event in the daemon, as tuios agent-hook runs it in a process of its own: the payload is read, the event mapped to the state it reports, and the report made for the pane the caller runs in. The pane is found from the process that sent the call (its TUIOS_PANE_ID, or its terminal session and ancestors), never from a param. The result holds what the hook would print for the harness to read. A call that waits on the Inbox for a permission prompt answers when the person does, or when the hold ends.",
+			params: []verbParam{
+				{Name: "harness", Type: "string", Required: true, Description: "The harness whose hook fired, by id or alias, as tuios agent-hook takes it: claude-code, codex, gemini-cli and so on."},
+				{Name: "event", Type: "string", Description: "The event, for a harness whose payload does not name it. Omit it when the payload does."},
+				{Name: "payload", Type: "string", Description: "The hook's JSON payload as the harness wrote it, as a string. Omit it for an event with none."},
+				{Name: "env", Type: "object", Description: "The variables of the hook process the mapping reads, by name. Only these are taken: " + strings.Join(integration.HookEnv, ", ") + ". The pane's own variables are always read from the calling process."},
+				{Name: "explain", Type: "bool", Description: "Also return what was decided and why, as tuios agent-hook --explain prints it."},
+			},
+			returns: []verbParam{
+				{Name: "stdout", Type: "string", Description: "What the hook prints for the harness to read: an empty object for a harness that parses its hook's output as JSON, the lines a session start adds to the agent's context, the line about unread mail, or a permission decision. Empty for most events."},
+				{Name: "explain", Type: "object", Nullable: true, Description: "With explain: the decision, the pane it went to and how it was found, what the daemon answered, and any error."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"agent-hook-event","params":{"harness":"claude-code","payload":"{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"s1\",\"prompt\":\"fix the build\"}"}}`,
+			},
+			handler: (*Daemon).verbAgentHookEvent,
+		},
 		// verb_agent_transcript.go
 		"agent-transcript": {
 			// The conversation is the person's to read. A restricted connection is

@@ -318,8 +318,14 @@ type Input struct {
 	Getenv  func(string) string
 }
 
+// HookEnv lists the variables Translate reads from the hook process's
+// environment, and env reads no other. The daemon takes exactly these from a
+// hook event it is handed (agent-hook-event), since it cannot always read the
+// environment of the process that sent it.
+var HookEnv = []string{AgentHintEnv, "CODEX_THREAD_ID", "CURSOR_VERSION", "GROK_SESSION_ID", "CRUSH_SESSION_ID"}
+
 func (in Input) env(name string) string {
-	if in.Getenv == nil {
+	if in.Getenv == nil || !slices.Contains(HookEnv, name) {
 		return ""
 	}
 	return in.Getenv(name)

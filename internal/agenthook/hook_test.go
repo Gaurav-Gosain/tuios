@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // fakeDaemon records the verbs a hook calls and answers them.
@@ -47,7 +45,7 @@ func (f *fakeDaemon) Call(verb string, params any) (json.RawMessage, error) {
 	switch verb {
 	case "resolve-pane":
 		if f.resolved == nil {
-			return nil, &session.VerbCallError{Code: session.ErrVerbWindowNotFound, Message: "no pane"}
+			return nil, &testVerbError{code: "window_not_found", message: "no pane"}
 		}
 		out, _ := json.Marshal(f.resolved)
 		return out, nil
@@ -99,7 +97,7 @@ func (f *fakeDaemon) Call(verb string, params any) (json.RawMessage, error) {
 		}
 		return json.RawMessage(`{"applied":true,"agent_session_id":"` + p["agent_session_id"].(string) + `"}`), nil
 	}
-	return nil, &session.VerbCallError{Code: session.ErrVerbUnknownVerb, Message: verb}
+	return nil, &testVerbError{code: codeUnknownVerb, message: verb}
 }
 
 // Wire compatibility: an empty selected leaf must survive as an explicit
@@ -474,3 +472,10 @@ func TestAgentHookFindsThePaneWithoutItsEnvironment(t *testing.T) {
 		t.Fatalf("report went to %v", r[0])
 	}
 }
+
+// testVerbError stands in for the daemon's verb error, with its stable code,
+// as session.VerbCallError carries one.
+type testVerbError struct{ code, message string }
+
+func (e *testVerbError) Error() string     { return e.code + ": " + e.message }
+func (e *testVerbError) ErrorCode() string { return e.code }

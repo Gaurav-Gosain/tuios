@@ -8,8 +8,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // holdDaemon is a fakeDaemon that also answers request-approval.
@@ -40,7 +38,7 @@ func (h *holdDaemon) CallWithTimeout(verb string, params any, timeout time.Durat
 		h.timeout = timeout
 		h.mu.Unlock()
 		if h.answer == nil {
-			return nil, &session.VerbCallError{Code: session.ErrVerbUnknownVerb, Message: verb}
+			return nil, &testVerbError{code: codeUnknownVerb, message: verb}
 		}
 		return h.answer(p)
 	case "set-agent-state":

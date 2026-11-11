@@ -19,13 +19,30 @@ const maxAncestors = 32
 // daemon's resolve-pane verb matches either against the shells it started.
 // A platform with no way to read them reports zero and nil.
 func SelfProcess() (sid int, ancestors []int) {
-	sid = selfSID()
+	return selfSID(), ancestorsFrom(parentPID(0))
+}
+
+// ProcessOf is SelfProcess for another process, such as a daemon's view of
+// the process at the other end of its socket: its session id and its
+// ancestors, nearest first.
+func ProcessOf(pid int) (sid int, ancestors []int) {
+	if pid <= 1 {
+		return 0, nil
+	}
+	sid, _ = procinfo.SessionID(pid)
+	return sid, ancestorsFrom(parentPID(pid))
+}
+
+// ancestorsFrom walks up from pid, nearest first, to the first process at or
+// below init.
+func ancestorsFrom(pid int) []int {
+	var ancestors []int
 	seen := map[int]bool{}
-	for pid := parentPID(0); pid > 1 && len(ancestors) < maxAncestors && !seen[pid]; pid = parentPID(pid) {
+	for ; pid > 1 && len(ancestors) < maxAncestors && !seen[pid]; pid = parentPID(pid) {
 		seen[pid] = true
 		ancestors = append(ancestors, pid)
 	}
-	return sid, ancestors
+	return ancestors
 }
 
 // parentPID returns the parent of pid, and the current process's parent for
