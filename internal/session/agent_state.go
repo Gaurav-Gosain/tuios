@@ -466,6 +466,11 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 			override = true
 		}
 		next := agentClaim{source: r.Source, harness: harnessAfterReport(w, r), auto: claim.auto, misses: claim.misses, event: r.event}
+		// A transcript cannot say that a prompt is up: Claude Code's reads
+		// working while a permission or folder-trust question waits on the
+		// screen. So a prompt the daemon's own look sees takes its claim at
+		// once (blockerOverridesClaim), and gives it back when the prompt goes.
+		next.screenWins = r.Source == AgentSourceTranscript && r.State == AgentStateWorking
 		// sawProcess is carried over too, for the same reason auto is: it is
 		// what lets the detector clear a claim it does not own once the agent
 		// has left the pane. Claude Code clears its progress bar as it exits,

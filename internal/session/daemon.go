@@ -2821,18 +2821,28 @@ func (d *Daemon) agentDetectScan() bool {
 	reg := d.agentMatcher.registry
 	now := time.Now().UnixNano()
 	pending := false
-	for _, sess := range d.manager.AllSessions() {
+	sessions := d.manager.AllSessions()
+	// The files every window is joined to, across sessions: a search never
+	// gives one of them to another pane (transcriptOwner).
+	taken := map[string]string{}
+	for _, sess := range sessions {
+		sess.addJoinedTranscripts(taken)
+	}
+	for _, sess := range sessions {
 		due := func(ptyID string) bool {
 			pty := sess.GetPTY(ptyID)
 			return pty == nil || pty.sshOffer.waiting() || pty.detectScanDue(now, quietTicks)
 		}
 		sess.scanAgentDetection(d.foregroundResolver(sess), d.agentMatcher.identifyKept, due)
+		for _, ptyID := range sess.takeHarnessNamed() {
+			sess.scanPaneForAgent(ptyID, reg)
+		}
 		// The transcript joins ride this tick rather than one of their
 		// own. It runs only for a pane already known to be running a
 		// harness that has a transcript and that has no join yet, so a
 		// session that is fully joined, or that runs no agent at all,
 		// does nothing here.
-		sess.maintainAgentTranscripts(reg, d.paneAgentIdentifier(sess))
+		sess.maintainAgentTranscripts(reg, d.paneAgentIdentifier(sess), taken)
 		if d.noteSessionScanned(sess) {
 			break
 		}

@@ -39,6 +39,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
@@ -360,4 +361,35 @@ func (r record) turn() (Turn, bool) {
 	default:
 		return TurnUnknown, false
 	}
+}
+
+// firstRecordWindow bounds how much of a file FirstRecordTime reads. A
+// transcript's first records are small: the first one carrying a timestamp is
+// in the first few kilobytes.
+const firstRecordWindow = 64 << 10
+
+// FirstRecordTime is the timestamp of the first record in the file that has
+// one, which is when the agent that writes the file began it. ok is false when
+// the first window of the file holds no record with a timestamp that parses.
+// It reads only the timestamp field.
+func FirstRecordTime(path string) (time.Time, bool) {
+	f, err := os.Open(path) //nolint:gosec // a transcript path the harness manifest names
+	if err != nil {
+		return time.Time{}, false
+	}
+	defer func() { _ = f.Close() }()
+	buf := make([]byte, firstRecordWindow)
+	n, _ := io.ReadFull(f, buf)
+	for line := range bytes.SplitSeq(buf[:n], []byte{'\n'}) {
+		var rec struct {
+			Timestamp string `json:"timestamp"`
+		}
+		if jsonx.Unmarshal(line, &rec) != nil || rec.Timestamp == "" {
+			continue
+		}
+		if at, err := time.Parse(time.RFC3339Nano, rec.Timestamp); err == nil {
+			return at, true
+		}
+	}
+	return time.Time{}, false
 }

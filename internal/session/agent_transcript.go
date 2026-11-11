@@ -541,7 +541,7 @@ func (s *Session) hasTranscriptJoin(windowID string) bool {
 // with a transcript and no join yet. The search is throttled per window and only
 // ever runs for a window that is missing one, so a fully joined session does no
 // work here at all.
-func (s *Session) maintainAgentTranscripts(reg *harness.Registry, cwdOf func(ptyID string) agentIdentity) {
+func (s *Session) maintainAgentTranscripts(reg *harness.Registry, cwdOf func(ptyID string) agentIdentity, taken map[string]string) {
 	if reg == nil {
 		return
 	}
@@ -599,9 +599,23 @@ func (s *Session) maintainAgentTranscripts(reg *harness.Registry, cwdOf func(pty
 			continue
 		}
 		id := cwdOf(p.ptyID)
-		if path, ok := searchTranscript(tr, id); ok {
-			_ = s.JoinAgentTranscriptAs(p.windowID, p.harnessID, tr.Reader, path, false)
+		if path, ok := searchTranscript(tr, id, transcriptOwner{window: p.windowID, started: id.started, taken: taken}); ok {
+			if s.JoinAgentTranscriptAs(p.windowID, p.harnessID, tr.Reader, path, false) == nil && taken != nil {
+				if abs, err := filepath.Abs(path); err == nil {
+					taken[abs] = p.windowID
+				}
+			}
 		}
+	}
+}
+
+// addJoinedTranscripts records every file a window of this session is
+// joined to, by absolute path, into taken. See transcriptOwner.
+func (s *Session) addJoinedTranscripts(taken map[string]string) {
+	s.transcripts.mu.Lock()
+	defer s.transcripts.mu.Unlock()
+	for id, j := range s.transcripts.joins {
+		taken[j.reader.Path()] = id
 	}
 }
 
@@ -646,14 +660,65 @@ type agentIdentity struct {
 // answer to that, and this is what runs until someone installs it.
 //
 // The other formats are searched for by Daemon.searchViewTranscripts.
-func searchTranscript(tr *harness.Transcript, id agentIdentity) (string, bool) {
-	return searchTranscriptIn(tr.ExpandDir(id.cwd), tr, id.cwd, id.version)
+func searchTranscript(tr *harness.Transcript, id agentIdentity, own transcriptOwner) (string, bool) {
+	return searchOwnTranscriptIn(tr.ExpandDir(id.cwd), tr, id.cwd, id.version, own)
+}
+
+// transcriptOwner is what tells a pane's own transcript from another agent's
+// in the same folder on the same build, which cwd and version cannot.
+//
+// A child agent started in its parent's folder searches before it has
+// written a file of its own, so the parent's file is the only candidate and
+// verifies. Joined to it, the child read working for as long as the parent
+// worked, and a folder-trust question on the child's screen never showed
+// (lead-holes item 11). Two rules close it:
+//
+//   - taken: a file another live pane of this daemon is joined to, in any
+//     session, belongs to that pane;
+//   - started: a file whose first record is older than the agent process was
+//     begun by another process. A resumed conversation writes to an older
+//     file; its hook gives the exact path, and without the hook it gets no
+//     join, which is the safe side (see searchTranscript).
+type transcriptOwner struct {
+	window  string
+	started time.Time
+	// taken maps a joined file's absolute path to its window. nil checks
+	// nothing.
+	taken map[string]string
+}
+
+// transcriptStartSlack is how much earlier than the process's start a file's
+// first record may be and still be its own. The start time is read in whole
+// seconds on some systems, and the first record is written after the process
+// starts, so a second covers the rounding.
+const transcriptStartSlack = 2 * time.Second
+
+// owns reports whether file f may be the owner's: not joined to another pane,
+// and not begun before the owner's process started.
+func (o transcriptOwner) owns(f string) bool {
+	if abs, err := filepath.Abs(f); err == nil {
+		if w, ok := o.taken[abs]; ok && w != o.window {
+			return false
+		}
+	}
+	if !o.started.IsZero() {
+		if first, ok := transcript.FirstRecordTime(f); ok && first.Before(o.started.Add(-transcriptStartSlack)) {
+			return false
+		}
+	}
+	return true
 }
 
 // searchTranscriptIn is searchTranscript with the directory already resolved, so
 // the verification rules can be tested without a manifest pointing at a real
 // home directory.
 func searchTranscriptIn(dir string, tr *harness.Transcript, cwd, version string) (string, bool) {
+	return searchOwnTranscriptIn(dir, tr, cwd, version, transcriptOwner{})
+}
+
+// searchOwnTranscriptIn is searchTranscriptIn that also leaves out the files
+// own says are another agent's (transcriptOwner).
+func searchOwnTranscriptIn(dir string, tr *harness.Transcript, cwd, version string, own transcriptOwner) (string, bool) {
 	if dir == "" {
 		return "", false
 	}
@@ -672,6 +737,9 @@ func searchTranscriptIn(dir string, tr *harness.Transcript, cwd, version string)
 			continue
 		}
 		if tr.Verifies("version") && (version == "" || obs.Version != version) {
+			continue
+		}
+		if !own.owns(f) {
 			continue
 		}
 		if found != "" {

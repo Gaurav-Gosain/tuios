@@ -606,6 +606,10 @@ type detectOutcome struct {
 	changed     int
 	labels      int
 	bookkeeping bool
+	// named are the PTYs whose harness the pass named for the first time.
+	// Their screen was last read with no harness, so with no rules; see
+	// takeHarnessNamed.
+	named []string
 }
 
 // scanAgentDetection reconciles each window's agent state with the foreground
@@ -724,16 +728,35 @@ func (s *Session) scanAgentDetection(
 	}
 
 	changed := 0
+	var named []string
 	_ = s.mutateState(func(st *SessionState) error {
 		out := s.detectionPass(st, readings, shell, now, true)
-		changed = out.changed
+		changed, named = out.changed, out.named
 		if out.changed == 0 && out.labels == 0 {
 			// Nothing moved after all: skip the version bump and client push.
 			return errNoAgentDetectChange
 		}
 		return nil
 	})
+	if len(named) > 0 {
+		s.harnessNamedMu.Lock()
+		s.harnessNamed = append(s.harnessNamed, named...)
+		s.harnessNamedMu.Unlock()
+	}
 	return changed
+}
+
+// takeHarnessNamed returns, and forgets, the PTYs whose harness detection
+// named since the last call. Their screen was read before, while the pane had
+// no harness and so no rules, and a prompt that is painted once and then sits
+// still, as a folder-trust question does, writes nothing that would bring
+// another look. The daemon reads each once more with the harness's rules.
+func (s *Session) takeHarnessNamed() []string {
+	s.harnessNamedMu.Lock()
+	defer s.harnessNamedMu.Unlock()
+	named := s.harnessNamed
+	s.harnessNamed = nil
+	return named
 }
 
 // detectionPass reconciles each window with its reading. With write false it
@@ -840,6 +863,9 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 				clearAgentNote(w)
 				w.AgentHarness = det.harness
 				w.AgentStateAt = now
+				if det.harness != "" {
+					out.named = append(out.named, w.PTYID)
+				}
 				s.setAgentClaim(w.ID, agentClaim{
 					source: AgentSourceDetect, harness: det.harness, identity: det.tier, auto: true,
 				})
@@ -856,6 +882,7 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 					continue
 				}
 				w.AgentHarness = det.harness
+				out.named = append(out.named, w.PTYID)
 			}
 		case detected && owned:
 			// A program can clear its status and then report idle without
@@ -867,6 +894,7 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 					w.AgentHarness = det.harness
 					claim.harness, claim.identity = det.harness, det.tier
 					s.setAgentClaim(w.ID, claim)
+					out.named = append(out.named, w.PTYID)
 				}
 			}
 			// Still here. A miss count from an editor it opened is forgotten.

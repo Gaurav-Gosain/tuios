@@ -1800,6 +1800,10 @@ type Session struct {
 	// conversation; the guard must not, so the detector forgets it when the
 	// pane goes back to its shell. Daemon memory only, under stateMu.
 	agentSharedGuards map[string]sharedGuard
+	// harnessNamed are the PTYs whose harness the detector named, waiting for
+	// one look at their screen with that harness's rules (takeHarnessNamed).
+	harnessNamed   []string
+	harnessNamedMu sync.Mutex
 
 	// agentSubagents records, by window ID, the subagents the window's agent
 	// is running or ran a moment ago, and the launches whose subagent has not
