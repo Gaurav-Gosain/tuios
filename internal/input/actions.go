@@ -352,6 +352,10 @@ func (d *ActionDispatcher) Dispatch(action string, msg tea.KeyPressMsg, o *app.O
 	if !ok && strings.HasPrefix(action, config.OpenMenuPrefix) {
 		handler, ok = handleOpenMenu(action), true
 	}
+	// user:NAME runs an [[actions]] entry, or the command entry of that name.
+	if !ok && strings.HasPrefix(action, config.UserActionPrefix) {
+		handler, ok = handleUserAction(action), true
+	}
 	if ok {
 		// Record the action if tape recording is active
 		if o.TapeRecorder != nil && o.TapeRecorder.IsRecording() {
@@ -382,7 +386,22 @@ func (d *ActionDispatcher) Dispatch(action string, msg tea.KeyPressMsg, o *app.O
 // HasAction checks if an action is registered
 func (d *ActionDispatcher) HasAction(action string) bool {
 	_, ok := d.handlers.Lookup(action)
-	return ok || strings.HasPrefix(action, config.CommandActionPrefix) || strings.HasPrefix(action, config.OpenMenuPrefix)
+	return ok || strings.HasPrefix(action, config.CommandActionPrefix) || strings.HasPrefix(action, config.OpenMenuPrefix) ||
+		strings.HasPrefix(action, config.UserActionPrefix)
+}
+
+// handleUserAction runs the user action behind action, with the selection of
+// the focused pane, which only the input side reads.
+func handleUserAction(action string) ActionHandler {
+	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		extra := map[string]string{}
+		if w := o.GetFocusedWindow(); w != nil {
+			if text := selectionText(w); text != "" {
+				extra["selection"] = text
+			}
+		}
+		return o, o.RunUserAction(action, extra)
+	}
 }
 
 // handleCommandBinding runs the [[keybindings.command]] entry behind action.

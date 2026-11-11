@@ -489,19 +489,20 @@ func (r *KeybindRegistry) Bindings() []Binding {
 					}
 				}
 			}
-			// The command entries of this section come after its own
-			// actions and never win a key: see withCommands.
-			for _, c := range kb.Commands() {
-				if c.Section() != name {
+			// The command entries and keyed user actions of this section
+			// come after its own actions and never win a key: see
+			// withCommands.
+			for _, e := range r.config.keyedEntries() {
+				if e.section != name {
 					continue
 				}
-				key := c.BareKey()
+				key := e.key
 				idx := len(out)
 				out = append(out, Binding{
 					Scope:   scope.ID,
-					Section: SectionCommand,
-					Action:  c.Action(),
-					Desc:    c.Label(),
+					Section: e.report,
+					Action:  e.action,
+					Desc:    e.desc,
 					Key:     key,
 					Press:   press(scope.Chord, key),
 				})
@@ -562,6 +563,10 @@ func typesCharacter(key string) bool {
 // SectionCommand is the section name a command entry's binding reports: the
 // [[keybindings.command]] table.
 const SectionCommand = "command"
+
+// SectionAction is the section name a keyed user action's binding reports:
+// the [[actions]] table.
+const SectionAction = "actions"
 
 // lookupForm is the shape two key spellings are compared in by the report,
 // explain, free and unbind: CanonicalKey, so opt+f12, option+f12 and alt+f12

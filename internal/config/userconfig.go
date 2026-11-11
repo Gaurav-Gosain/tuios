@@ -121,6 +121,9 @@ type UserConfig struct {
 	// It sits outside the option registry for the same reason [hooks] and
 	// [keybindings] do, being file-plane config rather than a settable option.
 	Dock DockConfig `toml:"dock"`
+	// Actions are the [[actions]] entries: user actions a key, a menu or
+	// tuios actions run starts. See user_actions.go.
+	Actions []UserAction `toml:"actions,omitempty"`
 	// Hosts is the [hosts.NAME] set: the other machines this daemon may ask for
 	// listings. Outside the option registry for the same reason as the tables
 	// above. See hosts.go.

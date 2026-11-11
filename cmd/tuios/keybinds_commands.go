@@ -321,6 +321,8 @@ func groupKeybindRows(rows []keybindRow) []keybindGroup {
 		switch {
 		case r.Section == config.SectionCommand:
 			add("\x00command", "Commands ([[keybindings.command]])", r)
+		case r.Section == config.SectionAction:
+			add("\x00actions", "Your actions ([[actions]], tuios actions list)", r)
 		case r.Scope == keybindScopeUnbound:
 			add(r.Scope, "No key (bind one in config.toml, or run it from the command palette)", r)
 		case r.Chord != "":

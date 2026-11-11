@@ -69,15 +69,7 @@ func (m *OS) RunCommandBinding(action string) tea.Cmd {
 	if !ok {
 		return nil
 	}
-	var dir string
-	if m.AttachedHost != "" {
-		// Every pane is on the session's machine, so the folder is the
-		// focused pane's own path there, and this machine's home means
-		// nothing. scratchDir is not asked: it stats a folder here.
-		dir = m.remotePaneDir()
-	} else {
-		dir = m.scratchDir()
-	}
+	dir := m.commandDir()
 	env := m.commandEnv(dir)
 	// scratch, popup and pane run on the session's machine, so their line is
 	// built for its OS. A shell entry runs here.
@@ -85,7 +77,24 @@ func (m *OS) RunCommandBinding(action string) tea.Cmd {
 	if c.ResolvedType() == config.CommandTypeShell {
 		argv = commandArgv(c.Command, env)
 	}
+	return m.runCommandEntry(c, dir, argv)
+}
 
+// commandDir is the folder a command entry or a user action starts in: the
+// focused pane's, on the session's machine.
+func (m *OS) commandDir() string {
+	if m.AttachedHost != "" {
+		// Every pane is on the session's machine, so the folder is the
+		// focused pane's own path there, and this machine's home means
+		// nothing. scratchDir is not asked: it stats a folder here.
+		return m.remotePaneDir()
+	}
+	return m.scratchDir()
+}
+
+// runCommandEntry runs argv the way the entry c says: in a scratch pane, a
+// popup, a pane of the layout, silently here, or as a plugin action.
+func (m *OS) runCommandEntry(c config.CommandBinding, dir string, argv []string) tea.Cmd {
 	switch c.ResolvedType() {
 	case config.CommandTypeScratch:
 		return m.toggleScratch(m.commandScratchSpec(c, argv))

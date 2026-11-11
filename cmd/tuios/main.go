@@ -1101,7 +1101,7 @@ The template itself is a JSON file in the directory 'tuios layout dir' prints.`,
 
 	stdioProxyCmd := newStdioProxyCommand()
 
-	rootCmd.AddCommand(sshCmd, configCmd, newLookCommand(), keybindsCmd, tapeCmd, layoutCmd, updateCmd)
+	rootCmd.AddCommand(sshCmd, configCmd, newLookCommand(), keybindsCmd, newActionsCommand(), tapeCmd, layoutCmd, updateCmd)
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, listClientsCmd, killSessionCmd, resurrectCmd)
 	rootCmd.AddCommand(newSwitchSessionCmd())
 	rootCmd.AddCommand(newDetachClientCmd())

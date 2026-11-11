@@ -197,11 +197,11 @@ func (r *KeybindRegistry) withCommands(keyMap map[string]string, section string)
 	kb := &r.config.Keybindings
 	// Config order, the order Bindings reports them in: of two entries on one
 	// key, the first in the file runs.
-	for _, c := range kb.Commands() {
-		if c.Section() != section || kb.isLeader(c.BareKey()) {
+	for _, e := range r.config.keyedEntries() {
+		if e.section != section || kb.isLeader(e.key) {
 			continue
 		}
-		r.expandInto(keyMap, c.Action(), []string{c.BareKey()})
+		r.expandInto(keyMap, e.action, []string{e.key})
 	}
 	return keyMap
 }

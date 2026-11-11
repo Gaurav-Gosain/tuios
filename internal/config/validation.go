@@ -148,6 +148,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validateAgentWork(cfg, result)
 	validateWorktree(cfg, result)
 	validateTasks(cfg, result)
+	validateUserActions(cfg, result)
 
 	// Validate the notifications section (warn on a duration tuios cannot use)
 	validateNotificationsConfig(cfg, result)

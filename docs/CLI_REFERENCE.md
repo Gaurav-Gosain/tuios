@@ -6430,6 +6430,25 @@ tuios config reset
 
 ---
 
+### `tuios actions`
+
+Your actions: the `[[actions]]` entries of config.toml and the
+`[[keybindings.command]]` entries, each the action `user:NAME`
+([KEYBINDINGS.md](KEYBINDINGS.md#your-actions)).
+
+```
+tuios actions list [NAME] [--json]
+tuios actions run NAME [-s SESSION] [--dry-run [-w PANE]] [--json]
+```
+
+`list` prints each action's name, key, source (`actions` or `command key`) and
+what it runs; with NAME, that one action, and for an entry tuios ignores, why. `run` runs it as its key would, in the
+client attached to the session, on the focused pane, through `run-command`:
+from inside a pane it needs the respond grant. `--dry-run` runs nothing and
+prints the arguments the action would run, with the placeholders filled from
+the pane `-w` names (default: the focused pane), each argument quoted on its
+own line.
+
 ### `tuios keybinds`
 
 List the keybindings, check them for conflicts, and change them in

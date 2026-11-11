@@ -205,10 +205,18 @@ func commandProblem(c CommandBinding, normalizer *KeyNormalizer) string {
 	case c.ResolvedName() == DefaultScratchName:
 		return "The name scratch belongs to the built-in scratch terminal. Use a different name."
 	}
-	if ok, msg := normalizer.ValidateKey(c.BareKey()); !ok {
-		return msg
+	return keyAndBoxProblem(normalizer, c.BareKey(), c.Width, c.Height)
+}
+
+// keyAndBoxProblem checks the key and the box size a command entry or a
+// user action has. An empty key is not checked: a user action may have none.
+func keyAndBoxProblem(normalizer *KeyNormalizer, bareKey, width, height string) string {
+	if bareKey != "" {
+		if ok, msg := normalizer.ValidateKey(bareKey); !ok {
+			return msg
+		}
 	}
-	for _, f := range []struct{ key, spec string }{{"width", c.Width}, {"height", c.Height}} {
+	for _, f := range []struct{ key, spec string }{{"width", width}, {"height", height}} {
 		if strings.TrimSpace(f.spec) == "" {
 			continue
 		}

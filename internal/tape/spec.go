@@ -130,10 +130,13 @@ func checkAction(name string) error {
 }
 
 // IsActionName reports whether name is a keybinding action a tape may run:
-// an entry of the action table, hidden ones included, or a
-// [[keybindings.command]] entry.
+// an entry of the action table, hidden ones included, a
+// [[keybindings.command]] entry, or a user action.
 func IsActionName(name string) bool {
 	if strings.HasPrefix(name, config.CommandActionPrefix) && len(name) > len(config.CommandActionPrefix) {
+		return true
+	}
+	if strings.HasPrefix(name, config.UserActionPrefix) && len(name) > len(config.UserActionPrefix) {
 		return true
 	}
 	_, ok := config.LookupAction(name)

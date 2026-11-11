@@ -17041,3 +17041,18 @@ heavy.sh.
 | --- | --- | --- |
 | origin/main 689fd9dde, before one name per action | "keybinds list still has a row named prefix_settings" and "0 rows give open_settings the key Y" | **caught** |
 | The branch with the empty canonical entry cut from `canonicalizeTable` | "terminal_focus_up = [] in the file left focus_up on alt+up" (scope terminal) | **caught** |
+
+## Your actions run from a key and the CLI, and pane text stays one argument
+
+`TestUserActionsRunFromAKeyAndTheCLI` declares `[[actions]]` entries and a
+`[[keybindings.command]]` entry, runs them from a key and from `tuios actions
+run`, and checks a pane title holding `$(touch ...)` and quotes reaches a
+command as one argument and nothing in it runs. It also checks that an action
+with a placeholder in a shell's `-c` script is ignored with a reason, the dry
+run, the list, and that a pane with only the read grant is refused.
+
+Run on 2026-11-11 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `RunUserAction` joining the arguments into one `sh -c` line | "the key never ran the action": the title's quote breaks the line, so the command never writes its file | **caught** |

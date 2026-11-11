@@ -1235,6 +1235,63 @@ command = "printf %s \"$TUIOS_ACTIVE_PANE_CWD\" | (pbcopy || wl-copy || xclip -s
 description = "Copy pane folder"
 ```
 
+## Your actions
+
+An `[[actions]]` entry in config.toml is an action of your own, `user:NAME`.
+A key, a menu row or `tuios actions run` runs it on the focused pane. It runs
+one of three things:
+
+| Field | Runs |
+|---|---|
+| `action = "new_window"` | A built-in action, as its key does |
+| `run = ["code", "{pane.cwd}"]` with `in` | A program and its arguments, in a `popup` (the default), a `pane`, a `scratch` pane, or `silent`ly |
+| `plugin = "id.action"` | A plugin action |
+
+```toml
+[[actions]]
+name = "open-in-editor"
+label = "Open the folder in the editor"
+key = "prefix+alt+e"
+run = ["code", "{pane.cwd}"]
+in = "silent"
+```
+
+`key` is written as a [command key](#command-keys): `prefix+` puts it after the
+leader, and any other key acts in window and terminal mode. You can also bind
+`user:NAME` in any `[keybindings.*]` table.
+
+A placeholder fills one argument from the focused pane: `{pane.id}`,
+`{pane.cwd}`, `{pane.title}`, `{pane.program}`, `{session}`, `{workspace}`,
+`{selection}` and `{host}`. Its text goes into the argument as it is. No shell
+reads it, and a placeholder in it is not filled again, so a title such as
+`$(rm -rf ~)` is only text. When you write a shell into `run`, tuios refuses a
+placeholder inside the shell's script: put it after the script and read it as
+`$1`.
+
+```toml
+[[actions]]
+name = "save-title"
+run = ["/bin/sh", "-c", "printf '%s\\n' \"$1\" >> ~/titles.txt", "save-title", "{pane.title}"]
+in = "silent"
+```
+
+A command runs where a command key does: a popup, a pane and a scratch pane on
+the session's machine, a silent command on this one. It has the command key
+variables too (`TUIOS_SESSION`, `TUIOS_ACTIVE_PANE_ID` and the others).
+
+A `[[keybindings.command]]` entry is an action of this kind as well:
+`user:NAME` runs the command entry called NAME when no `[[actions]]` entry has
+that name.
+
+User actions are read from config.toml only. `tuios set-option`, which a pane
+can call, cannot add or change one. From inside a pane, `tuios actions run`
+needs the respond grant.
+
+`tuios actions list` lists your actions, `tuios actions list NAME` shows one
+(and why tuios ignores it, when it does), and `tuios actions run NAME --dry-run` prints the arguments it would
+run, with the placeholders filled ([CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-actions)).
+A mistake in an entry is a warning, and tuios ignores that entry.
+
 ## Master-stack layout
 
 The layout prefix (`Ctrl+B L`) has keys for the master-stack layout. They act

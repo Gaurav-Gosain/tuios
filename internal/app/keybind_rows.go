@@ -73,7 +73,7 @@ func KeybindRows(cfg *config.UserConfig) []KeybindRow {
 		i, ok := index[id]
 		if !ok {
 			desc := config.ScopedDescription(b.Scope, b.Action)
-			if b.Section == config.SectionCommand {
+			if b.Section == config.SectionCommand || b.Section == config.SectionAction {
 				desc = b.Desc
 			}
 			i = len(rows)
