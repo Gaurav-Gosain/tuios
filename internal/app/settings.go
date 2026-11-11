@@ -643,6 +643,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.niri_hover_reveals"),
 			opt("appearance.prefix_repeat_time"),
 			custom("appearance.max_fps", m.maxFPSItem()),
+			opt("appearance.cell_frames"),
 			opt("appearance.preferred_shell"),
 			opt("shell.integration"),
 			opt("shell.login"),
