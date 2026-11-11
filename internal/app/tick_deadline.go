@@ -165,7 +165,7 @@ func (m *OS) nextWake(now time.Time) (time.Time, bool) {
 	}
 	// The zen reveal and a gesture's announcement hold run out with no event.
 	if m.Settings.ZenMode == config.ZenModeMouse && m.pointerRecentlyMoved() {
-		at(m.lastPointerAt.Add(zenModeMouseIdleTimeout + time.Millisecond))
+		at(m.lastPointerAt.Add(m.Settings.ZenReveal() + time.Millisecond))
 	}
 	if m.announceGestureHeld && m.pointerDown && !m.lastPointerAt.IsZero() {
 		at(m.lastPointerAt.Add(announceHoldTimeout + time.Millisecond))

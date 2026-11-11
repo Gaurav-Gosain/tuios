@@ -3,11 +3,9 @@ package input
 import (
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
-
-// ggWindow is how soon the second g of gg must follow the first.
-const ggWindow = 500 * time.Millisecond
 
 // waitingForChar reports whether f, F, t or T waits for its character, which
 // takes the next key as text.
@@ -17,12 +15,12 @@ func waitingForChar(cm *terminal.CopyMode) bool {
 
 // takePendingG reports whether a g pressed now finishes gg, and ends a
 // pending g either way: it is for the very next key only, so g j g is not gg.
-func takePendingG(cm *terminal.CopyMode) bool {
+func takePendingG(cm *terminal.CopyMode, s *config.Settings) bool {
 	if cm.Pending != terminal.CopyPendingG {
 		return false
 	}
 	cm.Pending = terminal.CopyPendingNone
-	return time.Since(cm.PendingSince) < ggWindow
+	return time.Since(cm.PendingSince) < s.ChordTimeout()
 }
 
 // pressG runs g: the second g of gg goes to the top, and a first g waits for

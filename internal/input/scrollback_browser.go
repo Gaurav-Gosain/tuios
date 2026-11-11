@@ -268,7 +268,7 @@ func handleBrowserOutputModeKey(msg tea.KeyPressMsg, keyStr string, browser *scr
 
 	// The g of gg. A pending g is for the very next key only, so g j g is
 	// not gg, as in copy mode.
-	finishesGG := vim.PendingG && time.Since(vim.LastGTime) < ggWindow
+	finishesGG := vim.PendingG && time.Since(vim.LastGTime) < o.Settings.ChordTimeout()
 	vim.PendingG = false
 	if keyStr == "g" {
 		if !finishesGG {

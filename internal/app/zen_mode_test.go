@@ -25,7 +25,7 @@ func TestZenMouseTickMeltsAndConverges(t *testing.T) {
 
 	m := &OS{Settings: config.Global}
 	m.zenHidden = false
-	m.lastPointerAt = time.Now().Add(-(zenModeMouseIdleTimeout + time.Second))
+	m.lastPointerAt = time.Now().Add(-(m.Settings.ZenReveal() + time.Second))
 
 	// Crossing: work due.
 	if !m.tickNeedsWork() {
@@ -60,7 +60,7 @@ func TestZenMouseTickForcesRenderOnCrossing(t *testing.T) {
 	// The last composed frame had the borders visible (zenHidden=false) and
 	// the pointer has sat still past the reveal window, so the melt is due.
 	m.zenHidden = false
-	m.lastPointerAt = time.Now().Add(-(zenModeMouseIdleTimeout + time.Second))
+	m.lastPointerAt = time.Now().Add(-(m.Settings.ZenReveal() + time.Second))
 
 	if !m.tickNeedsWork() {
 		t.Fatal("tickNeedsWork = false at the idle crossing; the melt would never be scheduled")
@@ -92,7 +92,7 @@ func TestZenPointerRevealMarksDirty(t *testing.T) {
 
 	// The melt already happened: the composed frame has the borders hidden.
 	m.zenHidden = true
-	m.lastPointerAt = time.Now().Add(-(zenModeMouseIdleTimeout + time.Second))
+	m.lastPointerAt = time.Now().Add(-(m.Settings.ZenReveal() + time.Second))
 
 	// Clear dirty flags so we can see who the reveal marks.
 	win.ClearDirtyFlags()

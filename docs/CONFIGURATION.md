@@ -1827,6 +1827,28 @@ border back. You can also set it on the settings page, in the Advanced section,
 or with `tuios set-config appearance.zoom_borderless true`. The change applies
 at once.
 
+## Timing options
+
+These `[appearance]` options set how long the interface waits before it acts.
+Each is in milliseconds, applies at once, and is on the settings page.
+
+| Option | Default | Range | What it does |
+|--------|---------|-------|--------------|
+| `appearance.whichkey_delay_ms` | `500` | 0 to 5000 | The pause after the leader key before the which-key panel opens. `0` opens it at once. |
+| `appearance.tooltip_delay_ms` | `350` | 0 to 5000 | How long the pointer rests on a control before its tooltip shows. `0` shows it at once. |
+| `appearance.zen_reveal_ms` | `2000` | 200 to 30000 | How long the pointer may sit still before zen mode (`mouse`) hides the borders again. |
+| `appearance.paste_preview_ms` | `6000` | 500 to 60000 | How long the paste card stays up with nothing pressed. |
+| `appearance.chord_timeout_ms` | `500` | 100 to 3000 | How long the first key of a two-key chord (`gg` in copy mode and in the scrollback browser) waits for the second. |
+
+```toml
+[appearance]
+whichkey_delay_ms = 1000
+chord_timeout_ms = 800
+```
+
+A value of 0 on `zen_reveal_ms`, `paste_preview_ms` or `chord_timeout_ms` is read
+as the default, and a value out of range moves to the nearest end of the range.
+
 ## Mouse
 
 The `[mouse]` table sets how tuios reads the pointer's gestures.

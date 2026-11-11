@@ -65,9 +65,6 @@ const (
 
 	// ProcessWaitDelay is the delay when waiting for process cleanup
 	ProcessWaitDelay = 50 * time.Millisecond
-
-	// WhichKeyDelay is the delay before showing which-key style overlay
-	WhichKeyDelay = 500 * time.Millisecond
 )
 
 // =============================================================================
@@ -819,6 +816,38 @@ const (
 	NiriScrollCellsMin     = 1
 	NiriScrollCellsMax     = 200
 	NiriScrollCellsDefault = 8
+)
+
+// The timing options, in milliseconds. A delay of 0 shows the thing at once.
+const (
+	// WhichKeyDelayMS is the pause after the leader before the which-key panel
+	// opens, so a fast chord never draws it.
+	WhichKeyDelayMSMin     = 0
+	WhichKeyDelayMSMax     = 5000
+	WhichKeyDelayMSDefault = 500
+
+	// TooltipDelayMS is how long the pointer rests on a control before its
+	// tooltip shows.
+	TooltipDelayMSMin     = 0
+	TooltipDelayMSMax     = 5000
+	TooltipDelayMSDefault = 350
+
+	// ZenRevealMS is how long the pointer may sit still before zen mode (mouse)
+	// hides the borders again.
+	ZenRevealMSMin     = 200
+	ZenRevealMSMax     = 30000
+	ZenRevealMSDefault = 2000
+
+	// PastePreviewMS is how long the paste card stays up with nothing pressed.
+	PastePreviewMSMin     = 500
+	PastePreviewMSMax     = 60000
+	PastePreviewMSDefault = 6000
+
+	// ChordTimeoutMS is how long the first key of a two-key chord (gg in copy
+	// mode and in the scrollback browser) waits for the second.
+	ChordTimeoutMSMin     = 100
+	ChordTimeoutMSMax     = 3000
+	ChordTimeoutMSDefault = 500
 )
 
 // The mouse options. The click interval is the one every double-click detector

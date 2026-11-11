@@ -1587,6 +1587,34 @@ var optionSpecs = []Option{
 		Default:     "false",
 	},
 
+	{
+		Path: "appearance.whichkey_delay_ms", Type: OptionInt, Section: "appearance",
+		Description: "Milliseconds after the leader key before the which-key panel opens. 0 opens it at once.",
+		Min:         WhichKeyDelayMSMin, Max: WhichKeyDelayMSMax,
+	},
+	{
+		Path: "appearance.tooltip_delay_ms", Type: OptionInt, Section: "appearance",
+		Description: "Milliseconds the pointer rests on a control before its tooltip shows. 0 shows it at once.",
+		Min:         TooltipDelayMSMin, Max: TooltipDelayMSMax,
+	},
+	{
+		Path: "appearance.zen_reveal_ms", Type: OptionInt, Section: "appearance",
+		Description: "Milliseconds the pointer sits still before zen mode (mouse) hides the borders again",
+		Min:         ZenRevealMSMin, Max: ZenRevealMSMax,
+		Zero: ZeroIsDefault,
+	},
+	{
+		Path: "appearance.paste_preview_ms", Type: OptionInt, Section: "appearance",
+		Description: "Milliseconds the paste card stays up with nothing pressed",
+		Min:         PastePreviewMSMin, Max: PastePreviewMSMax,
+		Zero: ZeroIsDefault,
+	},
+	{
+		Path: "appearance.chord_timeout_ms", Type: OptionInt, Section: "appearance",
+		Description: "Milliseconds the first key of a two-key chord (gg in copy mode and the scrollback browser) waits for the second",
+		Min:         ChordTimeoutMSMin, Max: ChordTimeoutMSMax,
+		Zero: ZeroIsDefault,
+	},
 	// [mouse]
 	{
 		Path: "mouse.double_click_ms", Type: OptionInt, Section: "mouse",

@@ -25,9 +25,6 @@ import (
 // the next key or press takes it down and still goes where it was going, and
 // so does the timer, a closed pane, or a pane that is no longer on screen.
 
-// pastePreviewDuration is how long the card stays up with nothing pressed.
-const pastePreviewDuration = 6 * time.Second
-
 // The picture's largest box, in cells. The card is a glance at what was
 // pasted, not a viewer.
 const (
@@ -65,7 +62,7 @@ func (m *OS) showPastePreview(window, path string, data []byte) tea.Cmd {
 	gen := m.pastePreview.gen + 1
 	m.pastePreview = pastePreviewState{img: img, window: window, path: path, gen: gen}
 	m.renderSkipped = false
-	return tea.Batch(m.pastePreviewPicture(), tea.Tick(pastePreviewDuration, func(time.Time) tea.Msg {
+	return tea.Batch(m.pastePreviewPicture(), tea.Tick(m.Settings.PastePreviewDuration(), func(time.Time) tea.Msg {
 		return pastePreviewExpireMsg{gen: gen}
 	}))
 }

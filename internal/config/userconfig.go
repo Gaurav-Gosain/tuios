@@ -570,6 +570,11 @@ type AppearanceConfig struct {
 	HostTitle            string `toml:"host_title"`             // Format string for the host terminal's title: {title}, {index}, {cwd}, {session}, {workspace}
 	ZoomMaxWidth         int    `toml:"zoom_max_width"`         // Max width in cells for zoom mode (0 = fullscreen, e.g. 120 centers at 120 cols)
 	NiriReverseScroll    bool   `toml:"niri_reverse_scroll"`    // Reverse mouse scroll direction in niri scrolling mode (default: false)
+	WhichKeyDelayMS      int    `toml:"whichkey_delay_ms"`      // Milliseconds after the leader before which-key opens (default: 500, min: 0, max: 5000)
+	TooltipDelayMS       int    `toml:"tooltip_delay_ms"`       // Milliseconds the pointer rests on a control before its tooltip shows (default: 350, min: 0, max: 5000)
+	ZenRevealMS          int    `toml:"zen_reveal_ms"`          // Milliseconds the pointer sits still before zen mode (mouse) hides the borders (default: 2000, min: 200, max: 30000)
+	ChordTimeoutMS       int    `toml:"chord_timeout_ms"`       // Milliseconds the first key of a two-key chord (gg) waits for the second (default: 500, min: 100, max: 3000)
+	PastePreviewMS       int    `toml:"paste_preview_ms"`       // Milliseconds the paste card stays up (default: 6000, min: 500, max: 60000)
 	NiriScrollCells      int    `toml:"niri_scroll_cells"`      // Cells the niri viewport moves per mouse wheel event (default: 8, min: 1, max: 200)
 	NiriScrollSnap       bool   `toml:"niri_scroll_snap"`       // Snap the strip to the nearest column when a wheel or a drag stops (default: false)
 	// PrefixRepeatTime is how long the prefix stays armed after a repeatable
@@ -1314,6 +1319,11 @@ func DefaultConfig() *UserConfig {
 			ConfirmClose:             ConfirmCloseNever,
 			ThemeTransitionMs:        ThemeTransitionMsDefault,
 			NiriScrollCells:          NiriScrollCellsDefault,
+			WhichKeyDelayMS:          WhichKeyDelayMSDefault,
+			TooltipDelayMS:           TooltipDelayMSDefault,
+			ZenRevealMS:              ZenRevealMSDefault,
+			PastePreviewMS:           PastePreviewMSDefault,
+			ChordTimeoutMS:           ChordTimeoutMSDefault,
 			PrefixRepeatTime:         new(PrefixRepeatTimeDefault),
 			Scrollbar:                ScrollbarConfig{Style: ScrollbarStyleTrack, Tint: ScrollbarTintQuiet},
 			Background:               BackgroundOff,

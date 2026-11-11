@@ -196,7 +196,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 	// back to the base-layout key. See commandKey.
 	keyStr = commandKey(msg)
 
-	finishesGG := takePendingG(cm)
+	finishesGG := takePendingG(cm, s)
 	dropStaleCount(cm, fx)
 
 	// Handle digit keys for count prefix (1-9, 0 only if already has count)
@@ -372,7 +372,7 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 	}
 	keyStr = commandKey(msg)
 
-	finishesGG := takePendingG(cm)
+	finishesGG := takePendingG(cm, s)
 	dropStaleCount(cm, fx)
 
 	// Handle digit keys for count prefix in visual mode

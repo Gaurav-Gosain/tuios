@@ -740,6 +740,15 @@ type Settings struct {
 	// Set via appearance.niri_scroll_cells config
 	NiriScrollCells int `opt:"appearance.niri_scroll_cells"`
 
+	// The timing options, in milliseconds. Set via appearance.whichkey_delay_ms,
+	// tooltip_delay_ms, zen_reveal_ms, paste_preview_ms and
+	// appearance.chord_timeout_ms.
+	WhichKeyDelayMS int `opt:"appearance.whichkey_delay_ms"`
+	TooltipDelayMS  int `opt:"appearance.tooltip_delay_ms"`
+	ZenRevealMS     int `opt:"appearance.zen_reveal_ms"`
+	PastePreviewMS  int `opt:"appearance.paste_preview_ms"`
+	ChordTimeoutMS  int `opt:"appearance.chord_timeout_ms"`
+
 	// MouseDoubleClickMS is how long a second click may follow the first and
 	// still be a double click. Set via mouse.double_click_ms.
 	MouseDoubleClickMS int `opt:"mouse.double_click_ms"`
@@ -1146,6 +1155,11 @@ func DefaultSettings() Settings {
 		NiriReverseScroll:           false,
 		NiriScrollCells:             NiriScrollCellsDefault,
 		MouseDoubleClickMS:          MouseDoubleClickDefault,
+		WhichKeyDelayMS:             WhichKeyDelayMSDefault,
+		TooltipDelayMS:              TooltipDelayMSDefault,
+		ZenRevealMS:                 ZenRevealMSDefault,
+		PastePreviewMS:              PastePreviewMSDefault,
+		ChordTimeoutMS:              ChordTimeoutMSDefault,
 		MouseDragThreshold:          MouseDragThresholdDefault,
 		PrefixRepeatTime:            PrefixRepeatTimeDefault,
 		LeaderKey:                   DefaultLeaderKey,

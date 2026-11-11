@@ -27,10 +27,6 @@ import (
 // last frame with nothing driving it.
 
 const (
-	// tooltipDelay is how long the pointer has to rest on a control before the
-	// label appears. Long enough that crossing one on the way somewhere else
-	// pops nothing.
-	tooltipDelay = 350 * time.Millisecond
 	// tooltipPad is the cell of air on each side of the text. A border would
 	// make the label three rows tall and turn a glance into furniture.
 	tooltipPad = 1
@@ -137,7 +133,7 @@ func (m *OS) tooltipVisible(src tooltipSource) bool {
 	if m.Tooltip.Source != src || !m.tooltipsEnabled(src) {
 		return false
 	}
-	return m.Tooltip.Shown || time.Since(m.Tooltip.At) >= tooltipDelay
+	return m.Tooltip.Shown || time.Since(m.Tooltip.At) >= m.Settings.TooltipDelay()
 }
 
 // TooltipPending reports whether a label is waiting to be drawn, which is the

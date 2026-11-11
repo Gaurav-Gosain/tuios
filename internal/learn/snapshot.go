@@ -265,7 +265,7 @@ func take(o *app.OS) Snapshot {
 	ov := s.Overlays
 	ov[OverlayHelp] = o.ShowHelp
 	ov[OverlayWhichKey] = o.PrefixActive && !o.ShowHelp && o.Settings.WhichKeyEnabled &&
-		time.Since(o.LastPrefixTime) > config.WhichKeyDelay
+		time.Since(o.LastPrefixTime) > o.Settings.WhichKeyDelay()
 	ov[OverlayCommandPalette] = o.ShowCommandPalette
 	ov[OverlayLauncher] = o.ShowLauncher
 	ov[OverlaySettings] = o.ShowSettings

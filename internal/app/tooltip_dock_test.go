@@ -23,7 +23,7 @@ func dockTooltipAt(t *testing.T, m *OS, a DockSessionAction) (*lipgloss.Layer, d
 		if !m.TooltipPending() {
 			t.Fatalf("hovering %v armed no label", a)
 		}
-		m.Tooltip.At = time.Now().Add(-2 * tooltipDelay)
+		m.Tooltip.At = time.Now().Add(-2 * m.Settings.TooltipDelay())
 		return m.renderTooltip(), h
 	}
 	t.Fatalf("the dock drew no control for %v", a)

@@ -531,10 +531,6 @@ func fitToContentBox(content string, w, h int) string {
 	return lipgloss.NewStyle().MaxWidth(w).MaxHeight(h).Render(content)
 }
 
-// zenModeMouseIdleTimeout is how long the pointer may sit still before zen mode
-// (mouse) hides the borders again.
-const zenModeMouseIdleTimeout = 2 * time.Second
-
 // zenBordersHidden reports whether zen mode wants the border of a window with
 // the given focus state hidden. The focused window always keeps its frame so
 // the user retains an anchor; zen mode melts the unfocused frames away.
@@ -558,7 +554,7 @@ func (m *OS) zenBordersHidden(isFocused bool) bool {
 // pointerRecentlyMoved reports whether a mouse event arrived within the zen
 // mode reveal window.
 func (m *OS) pointerRecentlyMoved() bool {
-	return !m.lastPointerAt.IsZero() && time.Since(m.lastPointerAt) <= zenModeMouseIdleTimeout
+	return !m.lastPointerAt.IsZero() && time.Since(m.lastPointerAt) <= m.Settings.ZenReveal()
 }
 
 // rendersBorderless reports whether window is drawn with no border box of its

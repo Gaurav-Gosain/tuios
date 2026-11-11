@@ -71,7 +71,7 @@ func hoverPill(t *testing.T, m *OS, ws int) (before, after []string, rect dockWo
 	if !m.DockWorkspaceHoverAt(rect.X0, rect.Y) {
 		t.Fatalf("the pointer on column %d was not on workspace %d's pill", rect.X0, ws)
 	}
-	m.Tooltip.At = time.Now().Add(-2 * tooltipDelay)
+	m.Tooltip.At = time.Now().Add(-2 * m.Settings.TooltipDelay())
 	return before, pillFrame(m), rect
 }
 
@@ -110,7 +110,7 @@ func TestWorkspacePillTooltipLeavesTheStripWhereItWas(t *testing.T) {
 	before := pillFrame(m)
 
 	m.DockWorkspaceHoverAt(rect.X0, rect.Y)
-	m.Tooltip.At = time.Now().Add(-2 * tooltipDelay)
+	m.Tooltip.At = time.Now().Add(-2 * m.Settings.TooltipDelay())
 	after := pillFrame(m)
 
 	if got := pillHits(m); len(got) != len(was) {
@@ -199,7 +199,7 @@ func TestWorkspacePillTooltipCostsNoIdleTick(t *testing.T) {
 	if !m.TooltipPending() {
 		t.Fatal("hovering a clipped pill armed nothing")
 	}
-	m.Tooltip.At = time.Now().Add(-2 * tooltipDelay)
+	m.Tooltip.At = time.Now().Add(-2 * m.Settings.TooltipDelay())
 	_ = pillFrame(m)
 	if m.TooltipPending() {
 		t.Error("the label has been drawn and is still holding the tick open")

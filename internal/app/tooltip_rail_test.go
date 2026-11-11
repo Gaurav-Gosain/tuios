@@ -46,7 +46,7 @@ func TestTooltipPendsOnlyDuringALiveHover(t *testing.T) {
 	}
 
 	// The delay elapses and the frame that draws it closes the gate.
-	m.Tooltip.At = time.Now().Add(-2 * tooltipDelay)
+	m.Tooltip.At = time.Now().Add(-2 * m.Settings.TooltipDelay())
 	if !m.tooltipVisible(tooltipRailStrip) {
 		t.Fatal("the tooltip never became visible")
 	}
@@ -74,7 +74,7 @@ func TestTooltipPendingClosesOnASilentRow(t *testing.T) {
 	for i := range m.sidebarStripRows {
 		m.sidebarStripRows[i].Label = ""
 	}
-	m.Tooltip.At = time.Now().Add(-2 * tooltipDelay)
+	m.Tooltip.At = time.Now().Add(-2 * m.Settings.TooltipDelay())
 
 	if m.renderRailTooltip() != nil {
 		t.Fatal("a row with no label drew one anyway")
