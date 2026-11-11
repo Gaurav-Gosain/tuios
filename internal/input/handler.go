@@ -104,8 +104,15 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 			// Don't sync motion events
 			return result, cmd
 		}
-		// Don't sync on motion: too frequent
-		return handleMouseMotion(msg, o)
+		// Motion does not sync, since it is too frequent. A hover that moved
+		// the focus (focus_follows_mouse) is the exception: the daemon must
+		// know, or its next state push gives the old pane the focus back.
+		prev := o.FocusedWindow
+		moved, cmd := handleMouseMotion(msg, o)
+		if moved != nil && moved.IsDaemonSession && moved.FocusedWindow != prev {
+			moved.SyncStateToDaemon()
+		}
+		return moved, cmd
 	case tea.MouseReleaseMsg:
 		if o.CaptureActive() {
 			result, cmd = handleCaptureMouseRelease(o)

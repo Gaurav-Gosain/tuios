@@ -16499,3 +16499,20 @@ with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestQuickLookCutKeepsTheEllipsis$' -v .`,
 and from the root with
 `go test -count=1 -run '^TestQuickLookCutLineBytes$' ./internal/app/`.
+
+## A hover that moves the focus tells the daemon
+
+`TestHoverFocusReachesTheDaemon` (issue #1842) turns on
+`appearance.focus_follows_mouse`, tiles two panes and hovers each half. The
+daemon's `list-windows` must name the hovered pane as focused after each hover,
+and still name it after `set-window --name` on the other pane makes the daemon
+push its state to the client.
+
+Run on 2026-11-11 on macOS (arm64). The branch passes 3 of 3 runs.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (6fe2c0df9), where motion never syncs | "after a hover over the other pane: the daemon still names ... as the focused window" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHoverFocusReachesTheDaemon$' -v .`.
