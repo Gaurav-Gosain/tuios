@@ -20,14 +20,6 @@ func plistPath(name string) string {
 	return filepath.Join(passwdHome(), "Library", "LaunchAgents", label(name)+".plist")
 }
 
-func passwdHome() string {
-	if u, err := user.Current(); err == nil && u.HomeDir != "" {
-		return u.HomeDir
-	}
-	home, _ := os.UserHomeDir()
-	return home
-}
-
 func domain() string { return fmt.Sprintf("gui/%d", os.Getuid()) }
 
 func launchctl(args ...string) error {

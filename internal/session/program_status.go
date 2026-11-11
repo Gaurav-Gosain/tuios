@@ -398,7 +398,7 @@ func (p *PTY) endProgramStatusOfEndedGroups(info foregroundInfo, running bool) {
 		if remote {
 			return running && info.pid > 0 && info.pid == info.shellPID && info.pid != group
 		}
-		return !processGroupAlive(group)
+		return !ProcessGroupAlive(group)
 	}
 	if p.progStatus.DropEnded(ended) {
 		p.progStatusDirty.Store(true)

@@ -16,16 +16,6 @@ import (
 // unitFile is the unit's file name.
 func unitFile(name string) string { return name + ".service" }
 
-// passwdHome is the home folder the account database names. The user's
-// service manager runs with it, whatever HOME this process has.
-func passwdHome() string {
-	if u, err := user.Current(); err == nil && u.HomeDir != "" {
-		return u.HomeDir
-	}
-	home, _ := os.UserHomeDir()
-	return home
-}
-
 // unitDirs are the folders a user unit of tuios may be in: the manager's
 // usual one first, and the one this process's XDG_CONFIG_HOME names.
 func unitDirs() []string {
