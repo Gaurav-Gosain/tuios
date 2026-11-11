@@ -6,7 +6,8 @@
 // TUIOS_INTEGRATION_VERSION=__TUIOS_VERSION__
 //
 // Reports __TUIOS_NAME__'s session state to the tuios pane it runs in, through
-// `tuios agent-hook __TUIOS_HARNESS__`. The event names are opencode's bus events
+// the daemon's agent-hook-event verb on its socket, or `tuios agent-hook
+// __TUIOS_HARNESS__` where the daemon has no such verb. The event names are opencode's bus events
 // (https://opencode.ai/docs/plugins/), handled the way herdr's plugin handles
 // them. Events from child sessions, the subagents opencode starts, are dropped
 // so a subagent finishing cannot mark the pane done mid-turn.
@@ -30,6 +31,8 @@
 // it, and the hook takes whichever of the two comes first.
 
 import { spawn } from "node:child_process";
+
+__TUIOS_HOOK_SOCKET__
 
 const TUIOS = __TUIOS_COMMAND__;
 const ARGS = ["agent-hook", "__TUIOS_HARNESS__", "--integration", "__TUIOS_VERSION__"];
@@ -70,7 +73,12 @@ function payloadFor(event, sessionID, extra) {
 }
 
 function report(event, sessionID, extra) {
-  run(ARGS, payloadFor(event, sessionID, extra));
+  const payload = payloadFor(event, sessionID, extra);
+  after(() =>
+    hookViaSocket("__TUIOS_HARNESS__", payload, REPORT_LIMIT_MS).then((out) => {
+      if (out === null) return spawnOnce(ARGS, payload);
+    }),
+  );
 }
 
 // Reports leave one at a time, in the order of their events: each starts when
@@ -90,7 +98,13 @@ function after(start) {
 
 // run queues tuios with args and input on its stdin, and does not wait.
 function run(args, input) {
-  after(() => new Promise((resolve) => {
+  after(() => spawnOnce(args, input));
+}
+
+// spawnOnce runs tuios with args and input on its stdin, and resolves when it
+// has exited.
+function spawnOnce(args, input) {
+  return new Promise((resolve) => {
     try {
       const child = spawn(TUIOS, args, {
         stdio: ["pipe", "ignore", "ignore"],
@@ -105,7 +119,7 @@ function run(args, input) {
       // A report that cannot be sent must never break opencode.
       resolve();
     }
-  }));
+  });
 }
 
 // noteUsage takes an assistant message's model and cost.
@@ -175,7 +189,29 @@ function ask(event, sessionID, extra, signal) {
     // The request goes out after the reports before it, so it cannot land
     // ahead of the busy status of its own turn. The reports after it do not
     // wait for the person's answer: they wait only for its start.
+    const payload = payloadFor(event, sessionID, extra);
+    const parse = (text) => {
+      try {
+        const value = JSON.parse(text.trim());
+        if (value && REPLIES.includes(value.reply)) {
+          done(value);
+          return;
+        }
+      } catch {}
+      done(null);
+    };
     after(() => {
+      if (settled) return;
+      // Not returned: the reports after this one wait only for its start.
+      hookViaSocket("__TUIOS_HARNESS__", payload, HOLD_LIMIT_MS, signal).then((printed) => {
+        if (printed === null) {
+          viaProcess();
+          return;
+        }
+        parse(printed);
+      });
+    });
+    const viaProcess = () => {
       if (settled) return;
       try {
         child = spawn(TUIOS, ARGS, {
@@ -198,18 +234,9 @@ function ask(event, sessionID, extra, signal) {
       child.stdout.on("data", (chunk) => {
         if (out.length < 65536) out += chunk;
       });
-      child.on("close", () => {
-        try {
-          const value = JSON.parse(out.trim());
-          if (value && REPLIES.includes(value.reply)) {
-            done(value);
-            return;
-          }
-        } catch {}
-        done(null);
-      });
-      child.stdin.end(payloadFor(event, sessionID, extra));
-    });
+      child.on("close", () => parse(out));
+      child.stdin.end(payload);
+    };
   });
 }
 

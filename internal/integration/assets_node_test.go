@@ -1,7 +1,6 @@
 package integration
 
 import (
-	"bytes"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -146,17 +145,6 @@ await sleep(300);
 process.exit(0);
 `
 
-// renderPiTemplate fills an extension source the way renderTemplate does:
-// the program to spawn, JSON-quoted, and the integration version. It takes
-// the source as an argument because renderTemplate reads the embedded
-// archive only, and the negative controls run the pre-fix asset from git;
-// the pi template carries no other placeholders.
-func renderPiTemplate(src []byte, tuios string, version string) []byte {
-	cmd, _ := json.Marshal(tuios)
-	out := bytes.ReplaceAll(src, []byte("__TUIOS_COMMAND__"), cmd)
-	return bytes.ReplaceAll(out, []byte("__TUIOS_VERSION__"), []byte(version))
-}
-
 // TestPiExtensionSubagentEventsInANodeHarness runs the managed pi extension
 // (assets/pi/tuios-agent-state.ts) under node against pi-subagents 0.84.0
 // event shapes. The e2e feeds `tuios agent-hook pi` by hand and so never
@@ -225,7 +213,7 @@ func TestPiExtensionSubagentEventsInANodeHarness(t *testing.T) {
 	}
 	write(recorder, []byte(recorderScript), true)
 	write(driver, []byte(driverScript), false)
-	write(ext, renderPiTemplate(source, recorder, strconv.Itoa(piTargetOf().Version)), false)
+	write(ext, renderSource(source, piTargetOf(), recorder), false)
 
 	cmd := exec.Command(node, append(flags, driver, ext, sessionFile, log)...)
 	cmd.Env = append(os.Environ(),

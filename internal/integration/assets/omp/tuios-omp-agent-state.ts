@@ -6,6 +6,9 @@
 // TUIOS_INTEGRATION_VERSION=__TUIOS_VERSION__
 // @ts-nocheck
 //
+// It reports through the daemon's agent-hook-event verb, or `tuios agent-hook
+// omp` where the daemon has no such verb.
+//
 // OMP loads extensions from its agent directory, not Pi's. Its agent_end
 // event marks a settled turn unless an automatic continuation is scheduled;
 // tool approval events bracket the native permission dialog. Extension UI
@@ -14,6 +17,10 @@
 import { spawn } from "node:child_process";
 
 const TUIOS = __TUIOS_COMMAND__;
+// A report the daemon has not answered by then prints nothing.
+const REPORT_LIMIT_MS = 5000;
+
+__TUIOS_HOOK_SOCKET__
 
 function report(event, ctx, extra = {}) {
   let sessionID = "";
@@ -32,17 +39,20 @@ function report(event, ctx, extra = {}) {
     transcript_path: sessionFile,
     ...extra,
   });
-  try {
-    const child = spawn(TUIOS, ["agent-hook", "omp", "--integration", "__TUIOS_VERSION__"], {
-      stdio: ["pipe", "ignore", "ignore"],
-      windowsHide: true,
-    });
-    child.on("error", () => {});
-    child.stdin.on("error", () => {});
-    child.stdin.end(payload);
-  } catch {
-    // Reporting must not interrupt OMP.
-  }
+  hookViaSocket("omp", payload, REPORT_LIMIT_MS).then((out) => {
+    if (out !== null) return;
+    try {
+      const child = spawn(TUIOS, ["agent-hook", "omp", "--integration", "__TUIOS_VERSION__"], {
+        stdio: ["pipe", "ignore", "ignore"],
+        windowsHide: true,
+      });
+      child.on("error", () => {});
+      child.stdin.on("error", () => {});
+      child.stdin.end(payload);
+    } catch {
+      // Reporting must not interrupt OMP.
+    }
+  });
 }
 
 export default function (pi) {

@@ -5,8 +5,9 @@
 // TUIOS_INTEGRATION_ID=amp
 // TUIOS_INTEGRATION_VERSION=__TUIOS_VERSION__
 //
-// Reports Amp's turns to the tuios pane it runs in, through
-// `tuios agent-hook amp`: a prompt starts work, the end of a turn says whether
+// Reports Amp's turns to the tuios pane it runs in, through the daemon's
+// agent-hook-event verb, or `tuios agent-hook amp` where the daemon has no
+// such verb: a prompt starts work, the end of a turn says whether
 // it finished, failed or was cancelled, and a new thread names itself. A
 // question Amp asks the person with its ask_user_choice tool blocks the pane
 // until the tool's result comes back. See https://ampcode.com/manual/plugin-api.
@@ -30,6 +31,10 @@ export const description = "Report Amp's turns to the tuios pane it runs in";
 const TUIOS = __TUIOS_COMMAND__;
 const SELF = "tuios-agent-state.ts";
 const QUESTION_TOOL = "ask_user_choice";
+// A report the daemon has not answered by then prints nothing.
+const REPORT_LIMIT_MS = 5000;
+
+__TUIOS_HOOK_SOCKET__
 
 function report(event: string, threadID: unknown, extra: Record<string, unknown>) {
   const payload = JSON.stringify({
@@ -37,17 +42,20 @@ function report(event: string, threadID: unknown, extra: Record<string, unknown>
     session_id: typeof threadID === "string" ? threadID : "",
     ...extra,
   });
-  try {
-    const child = spawn(TUIOS, ["agent-hook", "amp", "--integration", "__TUIOS_VERSION__"], {
-      stdio: ["pipe", "ignore", "ignore"],
-      windowsHide: true,
-    });
-    child.on("error", () => {});
-    child.stdin.on("error", () => {});
-    child.stdin.end(payload);
-  } catch {
-    // A report that cannot be sent must never break Amp.
-  }
+  hookViaSocket("amp", payload, REPORT_LIMIT_MS).then((out) => {
+    if (out !== null) return;
+    try {
+      const child = spawn(TUIOS, ["agent-hook", "amp", "--integration", "__TUIOS_VERSION__"], {
+        stdio: ["pipe", "ignore", "ignore"],
+        windowsHide: true,
+      });
+      child.on("error", () => {});
+      child.stdin.on("error", () => {});
+      child.stdin.end(payload);
+    } catch {
+      // A report that cannot be sent must never break Amp.
+    }
+  });
 }
 
 // setting reads a setting by its dotted name, whether the configuration

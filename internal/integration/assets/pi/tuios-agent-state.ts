@@ -6,8 +6,9 @@
 // TUIOS_INTEGRATION_VERSION=__TUIOS_VERSION__
 // @ts-nocheck
 //
-// Reports Pi's turns to the tuios pane it runs in, through
-// `tuios agent-hook pi`: session_start names the session, agent_start starts
+// Reports Pi's turns to the tuios pane it runs in, through the daemon's
+// agent-hook-event verb, or `tuios agent-hook pi` where the daemon has no
+// such verb: session_start names the session, agent_start starts
 // work and agent_settled ends it. ui_prompt_start says Pi is waiting on the
 // person in a blocking prompt (a confirm, a choice, a line of input), and
 // ui_prompt_end that the prompt was answered; both say whether a turn is
@@ -25,6 +26,8 @@ import { homedir } from "node:os";
 
 const TUIOS = __TUIOS_COMMAND__;
 
+__TUIOS_HOOK_SOCKET__
+
 // Delivery is best-effort, bounded and FIFO for retained state reports. Keep
 // only the newest adjacent metadata update; a slow daemon must not accumulate
 // an unbounded promise chain or make /reload wait for every obsolete leaf.
@@ -37,7 +40,13 @@ let activeChild;
 let idle;
 let lastSelection = "";
 
-function send(payload) {
+// send reports one event: over the daemon's socket, else through tuios.
+async function send(payload) {
+  if ((await hookViaSocket("pi", payload, 2000)) !== null) return;
+  await spawnSend(payload);
+}
+
+function spawnSend(payload) {
   return new Promise(resolve => {
     try {
       const child = spawn(TUIOS, ["agent-hook", "pi", "--integration", "__TUIOS_VERSION__"], {

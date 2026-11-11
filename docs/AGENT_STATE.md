@@ -3876,6 +3876,15 @@ rewrite it, and refuses when the harness's configuration directory does not
 exist yet (run the harness once first). `--command` names the program the hooks
 run when `tuios` is not on the harness's PATH.
 
+The plugin integrations (opencode and Kilo version 6, Amp version 3, Pi version
+5, oh-my-pi version 2) run inside the harness, so they start no process for an
+event: each event goes to the daemon's `agent-hook-event` verb over the socket
+in `TUIOS_SOCKET`, which runs it exactly as `tuios agent-hook` would and finds
+the pane from the harness process. A plugin starts `tuios agent-hook` instead
+when the socket cannot be reached or the daemon is older than the verb (it
+answers `unknown_verb`), and from then on for every event. Hermes reports once
+a session and still starts tuios.
+
 The Claude Code integration is version 3, which adds `SubagentStart` and
 `SubagentStop` entries for the pane's `subagents` count. `tuios integration
 status` reads a version 2 install as out of date, `tuios integration install

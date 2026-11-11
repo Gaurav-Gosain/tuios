@@ -48,7 +48,11 @@ const (
 	piExtensionTemplate     = "assets/pi/tuios-agent-state.ts"
 	ompExtensionTemplate    = "assets/omp/tuios-omp-agent-state.ts"
 	hermesPluginTemplate    = "assets/hermes/__init__.py"
-	hermesManifestTemplate  = "assets/hermes/plugin.yaml"
+	// hookSocketSnippet is the JavaScript a plugin template takes in place
+	// of __TUIOS_HOOK_SOCKET__: hookViaSocket, which sends a hook event to
+	// the daemon's agent-hook-event verb instead of starting tuios.
+	hookSocketSnippet      = "assets/common/hook_socket.js"
+	hermesManifestTemplate = "assets/hermes/plugin.yaml"
 )
 
 // Env is what the installers read from the machine, so a test can point them
@@ -165,13 +169,25 @@ func (t *Target) files(env Env) []extraFile {
 // and for the opencode template, which Kilo shares, the harness.
 func renderTemplate(name string) func(t *Target, tuios string) []byte {
 	return func(t *Target, tuios string) []byte {
-		cmd, _ := jsonx.Marshal(tuios)
-		out := strings.ReplaceAll(string(assets()[name]), "__TUIOS_COMMAND__", string(cmd))
-		out = strings.ReplaceAll(out, "__TUIOS_VERSION__", strconv.Itoa(t.Version))
-		out = strings.ReplaceAll(out, "__TUIOS_HARNESS__", t.ID)
-		out = strings.ReplaceAll(out, "__TUIOS_NAME__", t.Name)
-		return []byte(out)
+		return renderSource(assets()[name], t, tuios)
 	}
+}
+
+// renderSource fills a plugin template's placeholders: the tuios command,
+// JSON-quoted, the integration version, the harness id and name, and the
+// socket client (__TUIOS_HOOK_SOCKET__) with the variables it forwards.
+func renderSource(src []byte, t *Target, tuios string) []byte {
+	cmd, _ := jsonx.Marshal(tuios)
+	out := strings.ReplaceAll(string(src), "__TUIOS_COMMAND__", string(cmd))
+	out = strings.ReplaceAll(out, "__TUIOS_VERSION__", strconv.Itoa(t.Version))
+	out = strings.ReplaceAll(out, "__TUIOS_HARNESS__", t.ID)
+	out = strings.ReplaceAll(out, "__TUIOS_NAME__", t.Name)
+	if strings.Contains(out, "__TUIOS_HOOK_SOCKET__") {
+		env, _ := jsonx.Marshal(HookEnv)
+		socket := strings.ReplaceAll(string(assets()[hookSocketSnippet]), "__TUIOS_HOOK_ENV__", string(env))
+		out = strings.Replace(out, "__TUIOS_HOOK_SOCKET__", socket, 1)
+	}
+	return []byte(out)
 }
 
 // renderOpenCodePlugin keeps the legacy entrypoint at its installed path. V1
@@ -275,7 +291,9 @@ var targets = []*Target{
 		// on session.status idle, which replaces the deprecated session.idle,
 		// and says why a retry is waiting. Version 5 supports OpenCode V2 with
 		// a client plugin, where the environment identifies the correct pane.
-		ID: OpenCode, Name: "opencode", Binary: "opencode", Version: 5, Reports: ReportsState,
+		// Version 6 sends each event to the daemon's agent-hook-event verb over its
+		// socket and starts tuios agent-hook only for a daemon without it.
+		ID: OpenCode, Name: "opencode", Binary: "opencode", Version: 6, Reports: ReportsState,
 		Source:    "https://opencode.ai/v2/docs/cli/plugins (V2 CLI plugin; V1 server entrypoint requires 1.18.29+)",
 		ConfigDir: func(e Env) string { return e.xdgConfig("opencode") },
 		File:      filepath.Join("plugins", "tuios-agent-state.js"),
@@ -290,7 +308,9 @@ var targets = []*Target{
 		// Version 2 reports a question asked with ask_user_choice as
 		// needs_input, when its tool.call answer cannot change what Amp
 		// permits.
-		ID: Amp, Name: "Amp", Binary: "amp", Version: 2, Reports: ReportsState,
+		// Version 3 sends each event to the daemon's agent-hook-event verb over its
+		// socket and starts tuios agent-hook only for a daemon without it.
+		ID: Amp, Name: "Amp", Binary: "amp", Version: 3, Reports: ReportsState,
 		Source:    "https://ampcode.com/manual/plugin-api (TypeScript plugins run by Bun from ~/.config/amp/plugins; session.start, agent.start, agent.end, tool.call, tool.result)",
 		ConfigDir: func(e Env) string { return e.xdgConfig("amp") },
 		File:      filepath.Join("plugins", "tuios-agent-state.ts"),
@@ -405,7 +425,9 @@ var targets = []*Target{
 		// to the Inbox. Version 3: it feeds the model and cost. Version 4: it
 		// ends a turn on session.status idle. Version 5 updates the shared
 		// template with optional cancellation for the OpenCode V2 client.
-		ID: Kilo, Name: "Kilo", Binary: "kilo", Version: 5, Reports: ReportsState,
+		// Version 6 sends each event to the daemon's agent-hook-event verb over its
+		// socket and starts tuios agent-hook only for a daemon without it.
+		ID: Kilo, Name: "Kilo", Binary: "kilo", Version: 6, Reports: ReportsState,
 		Source:    "herdr src/integration/assets/kilo (Kilo Code CLI is an opencode fork; plugins load from ~/.config/kilo/plugin)",
 		ConfigDir: func(e Env) string { return e.xdgConfig("kilo") },
 		File:      filepath.Join("plugin", "tuios-agent-state.js"),
@@ -433,8 +455,9 @@ var targets = []*Target{
 		// reports nothing (its rows ride the async and child-status events),
 		// a foreground run's id keeps to the daemon's id alphabet, and a
 		// subagent report does not suppress the parent transcript_update
-		// behind it.
-		ID: Pi, Name: "Pi", Binary: "pi", Version: 4, Reports: ReportsState,
+		// behind it. Version 5 sends each event to the daemon's agent-hook-event verb over its
+		// socket and starts tuios agent-hook only for a daemon without it.
+		ID: Pi, Name: "Pi", Binary: "pi", Version: 5, Reports: ReportsState,
 		Source:    "herdr src/integration/assets/pi (TypeScript extensions load from ~/.pi/agent/extensions, or PI_CODING_AGENT_DIR/extensions)",
 		ConfigDir: func(e Env) string { return e.dirFromEnv("PI_CODING_AGENT_DIR", ".pi", "agent") },
 		File:      filepath.Join("extensions", "tuios-agent-state.ts"),
@@ -443,7 +466,9 @@ var targets = []*Target{
 	{
 		// OMP uses Pi's extension shape but its own directory and lifecycle
 		// events. A Pi install must not be overwritten by an OMP install.
-		ID: OMP, Name: "oh-my-pi", Binary: "omp", Version: 1, Reports: ReportsState,
+		// Version 2 sends each event to the daemon's agent-hook-event verb over its
+		// socket and starts tuios agent-hook only for a daemon without it.
+		ID: OMP, Name: "oh-my-pi", Binary: "omp", Version: 2, Reports: ReportsState,
 		Source:    "https://github.com/can1357/oh-my-pi/blob/main/docs/extension-loading.md (TypeScript extensions load from ~/.omp/agent/extensions, or PI_CODING_AGENT_DIR/extensions)",
 		ConfigDir: func(e Env) string { return e.dirFromEnv("PI_CODING_AGENT_DIR", ".omp", "agent") },
 		File:      filepath.Join("extensions", "tuios-omp-agent-state.ts"),
