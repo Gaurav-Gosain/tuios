@@ -117,14 +117,7 @@ func longTapeFiles(t *testing.T) {
 // knownCut lists the panels the test finds cut today, by screen and door.
 // Each is a bug: the case runs and must fail, so a fix that makes it pass
 // has to take it off this list.
-//
-// The tape manager is centred on the whole screen rather than below the top
-// dock, so on a short screen its top edge and title row go under the dock
-// while rows below it stay free.
-var knownCut = map[string]bool{
-	"very-short/tape manager":        true,
-	"wide-picker-short/tape manager": true,
-}
+var knownCut = map[string]bool{}
 
 // TestPanelsFitTheScreen opens every panel at each screen size, as a person
 // opens it, and checks the panel's frame is whole on screen: four corners and

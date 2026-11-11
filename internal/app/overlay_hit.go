@@ -218,11 +218,35 @@ func (m *OS) setOverlayOffset(kind string, x, y int) {
 }
 
 // centerOrigin returns the top-left screen cell that centers a w by h block on
-// the whole screen. Every modal surface lands here: a dialog the user is being
+// the screen. Every modal surface lands here: a dialog the user is being
 // asked to answer belongs where they are already looking, and the screen centre
-// is the only spot that means the same thing at every terminal size.
+// is the only spot that means the same thing at every terminal size. On a
+// screen too short to centre it clear of the docks it moves into the rows
+// between them, as the panels do (modalBand): the tape manager, centred on
+// the whole screen, put its top edge and title under the top dock while rows
+// below it stayed free.
 func (m *OS) centerOrigin(w, h int) (int, int) {
-	return max((m.GetRenderWidth()-w)/2, 0), max((m.GetRenderHeight()-h)/2, 0)
+	top, room := m.modalBand(h)
+	y := max(min(top+(room-h)/2, m.GetRenderHeight()-h), 0)
+	return max((m.GetRenderWidth()-w)/2, 0), y
+}
+
+// modalBand is the rows a modal surface h rows tall is centred in: the whole
+// screen, unless centring there would put it under a dock. Then it is the
+// rows between the docks, starting below the top one, and the rows above the
+// bottom dock as well when it fits between them.
+func (m *OS) modalBand(h int) (top, room int) {
+	rh := m.GetRenderHeight()
+	r := m.viewReserve()
+	top, room = 0, rh
+	if mid := (rh - h) / 2; (r.Top > 0 && mid < r.Top+1) || (r.Bottom > 0 && mid+h > rh-r.Bottom-1) {
+		top = min(r.Top, max(rh-h, 0))
+		room = rh - top
+		if h <= rh-r.Top-r.Bottom {
+			room -= r.Bottom
+		}
+	}
+	return top, room
 }
 
 // overlayOrigin returns the top-left screen cell for an overlay panel: centered,
@@ -266,15 +290,7 @@ func (m *OS) screenOrigin(kind string, geo overlay.Geometry) (int, int) {
 	rw, rh := m.GetRenderWidth(), m.GetRenderHeight()
 	off := m.overlayOffset(kind)
 	x := (rw-geo.Width)/2 + off[0]
-	r := m.viewReserve()
-	top, room := 0, rh
-	if mid := (rh - geo.Height) / 2; (r.Top > 0 && mid < r.Top+1) || (r.Bottom > 0 && mid+geo.Height > rh-r.Bottom-1) {
-		top = min(r.Top, max(rh-geo.Height, 0))
-		room = rh - top
-		if geo.Height <= rh-r.Top-r.Bottom {
-			room -= r.Bottom
-		}
-	}
+	top, room := m.modalBand(geo.Height)
 	y := top + m.overlayAnchorY(kind, geo.Height, room) + off[1]
 	x = max(min(x, rw-geo.Width), 0)
 	y = max(min(y, rh-geo.Height), 0)
