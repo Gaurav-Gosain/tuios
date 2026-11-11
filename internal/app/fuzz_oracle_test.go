@@ -194,6 +194,16 @@ func checkModelIndexes(f *fuzzOS) []fuzz.Violation {
 	return nil
 }
 
+// slidingPane reports whether a snap animation is in flight for w.
+func slidingPane(m *OS, w *terminal.Window) bool {
+	for _, anim := range m.Animations {
+		if anim.Type == ui.AnimationSnap && anim.Window == w {
+			return true
+		}
+	}
+	return false
+}
+
 // The three-way size agreement, generalised off the matrix in
 // pane_size_announce_test.go: whatever the arrangement, a guest is told the
 // size it can draw in, the emulator holds that grid, and the frame the pane
@@ -208,6 +218,14 @@ func checkPaneSizeAgreement(f *fuzzOS) []fuzz.Violation {
 		return nil
 	}
 	for _, w := range visibleFuzzPanes(m) {
+		// A pane sliding to its slot keeps the emulator at the size it had when
+		// the slide started and catches up in one resize when it lands (see
+		// landSnapAnimations). The model's clock does not advance a slide, and a
+		// run can turn motion on in the middle (a settings overlay stepping its
+		// value), so the frame can be one the slide has not finished.
+		if slidingPane(m, w) {
+			continue
+		}
 		cw, ch := w.ContentWidth(), w.ContentHeight()
 		if cw <= 0 || ch <= 0 {
 			// A pane with no room to draw is a legitimate state on a viewport

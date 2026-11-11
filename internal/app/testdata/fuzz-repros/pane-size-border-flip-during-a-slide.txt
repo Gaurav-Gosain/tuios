@@ -1,0 +1,15 @@
+# A held right press, a settings overlay that steps a value (turning motion on), and shared borders toggled with tiling on: the retile starts a slide, and the pane keeps its emulator at the old size until the slide lands, two cells under its drawable. Not a product bug: the model clock does not advance a slide, and the oracle judged the frame in the middle of it.
+workspace 0
+shared-borders
+chord "m"
+press 0 0 2
+overlay-open 1
+press 8 27 1
+new-pane
+shared-borders
+tiling
+key "ctrl+c"
+key "left"
+tiling
+shared-borders
+release 0 0 1
