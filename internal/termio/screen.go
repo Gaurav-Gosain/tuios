@@ -525,3 +525,12 @@ func (s *Screen) Print(str string) {
 		s.out.writeNow([]byte(str))
 	}
 }
+
+// Shown is the frame the terminal shows: the cells last written, nil before
+// the first. The caller must not change it.
+func (s *Screen) Shown() *uv.Buffer {
+	if s.shown.Width() == 0 {
+		return nil
+	}
+	return &s.shown
+}

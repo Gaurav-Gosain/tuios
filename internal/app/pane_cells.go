@@ -1,7 +1,10 @@
 package app
 
 import (
+	"image"
 	"strings"
+
+	"charm.land/lipgloss/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -32,12 +35,29 @@ type directPane struct {
 	held   bool
 }
 
-// paneHold is the cells the direct pane last drew, for a frame composed while
-// its guest has a synchronized update open (DEC 2026).
+// paneHold is what the direct pane keeps between frames: the layer of its
+// blank box, and the rectangle its cells were last drawn in, for a frame
+// composed while its guest has a synchronized update open (DEC 2026). Those
+// cells are read back from the frame the screen last wrote.
 type paneHold struct {
 	id    string
-	w, h  int
-	cells []uv.Cell
+	rect  image.Rectangle
+	drawn bool
+
+	box      string
+	boxLayer *lipgloss.Layer
+}
+
+// directBoxLayer is the layer of the direct pane's blank box, kept while the
+// box and its place are the same.
+func (m *OS) directBoxLayer(id, box string, x, y, z int) *lipgloss.Layer {
+	h := &m.directHold
+	if l := h.boxLayer; l != nil && h.box == box && l.GetID() == id && l.GetX() == x && l.GetY() == y && l.GetZ() == z {
+		return l
+	}
+	h.box = box
+	h.boxLayer = lipgloss.NewLayer(box).X(x).Y(y).Z(z).ID(id)
+	return h.boxLayer
 }
 
 // chooseDirectPane picks the pane to draw from its emulator this frame, or
@@ -76,7 +96,7 @@ func (m *OS) chooseDirectPane() directPane {
 	if screen.IsSyncActive() {
 		// Mid-update: draw the last complete frame, if this path drew it.
 		h := &m.directHold
-		if h.id != w.ID || h.w != w.ContentWidth() || h.h != w.ContentHeight() || h.cells == nil {
+		if !h.drawn || h.id != w.ID || h.rect != paneContentRect(w) || m.screen.Shown() == nil {
 			d.release()
 			return directPane{}
 		}
@@ -145,27 +165,24 @@ func (m *OS) copyDirectPane(canvas *frameCanvas, d *directPane) {
 	r := paneContentRect(w).Intersect(canvas.Bounds())
 	h := &m.directHold
 	if d.held {
-		cw := h.w
-		for y := range min(r.Dy(), h.h) {
-			copy(canvas.Lines[r.Min.Y+y][r.Min.X:r.Max.X], h.cells[y*cw:y*cw+min(cw, r.Dx())])
+		// The cells this rectangle had in the frame the screen last wrote.
+		if shown := m.screen.Shown(); shown.Bounds().Eq(canvas.Bounds()) {
+			for y := r.Min.Y; y < r.Max.Y; y++ {
+				copy(canvas.Lines[y][r.Min.X:r.Max.X], shown.Lines[y][r.Min.X:r.Max.X])
+			}
 		}
 		return
 	}
-	cw, ch := w.ContentWidth(), w.ContentHeight()
-	if h.id != w.ID || h.w != cw || h.h != ch {
-		h.id, h.w, h.h = w.ID, cw, ch
-		h.cells = make([]uv.Cell, cw*ch)
-	}
-	rows, cols := min(r.Dy(), screen.Height(), ch), min(r.Dx(), screen.Width(), cw)
+	h.id, h.rect, h.drawn = w.ID, paneContentRect(w), true
+	rows, cols := min(r.Dy(), screen.Height()), min(r.Dx(), screen.Width())
 	for y := range rows {
 		line := canvas.Lines[r.Min.Y+y]
 		for x := range cols {
-			c := screen.CellAt(x, y)
-			if c == nil {
-				c = &uv.EmptyCell
+			if c := screen.CellAt(x, y); c != nil {
+				line[r.Min.X+x] = *c
+			} else {
+				line[r.Min.X+x] = uv.EmptyCell
 			}
-			line[r.Min.X+x] = *c
-			h.cells[y*cw+x] = *c
 		}
 	}
 	w.RenderedCols, w.RenderedRows = w.ContentWidth(), w.ContentHeight()

@@ -343,7 +343,13 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 				window.X, window.Y, finalX, finalY, zIndex, clipR, clipB)
 		}
 
-		window.CachedLayer = lipgloss.NewLayer(clippedContent).X(finalX).Y(finalY).Z(zIndex).ID(window.ID)
+		if window == direct.w {
+			// The same blank box frame after frame: the layer is kept, and
+			// lipgloss does not measure its 11k cells again.
+			window.CachedLayer = m.directBoxLayer(window.ID, clippedContent, finalX, finalY, zIndex)
+		} else {
+			window.CachedLayer = lipgloss.NewLayer(clippedContent).X(finalX).Y(finalY).Z(zIndex).ID(window.ID)
+		}
 		window.CachedLayerBorder = borderColorObj
 		layers = append(layers, window.CachedLayer)
 
