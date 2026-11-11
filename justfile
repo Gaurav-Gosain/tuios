@@ -366,8 +366,8 @@ size *targets:
 
 # ---------------------------------------------------------------- check
 
-# golangci-lint at the CI version, go vet for linux, darwin, windows,
-# freebsd and openbsd, and the internal/lint checks.
+# golangci-lint at the CI version, go vet for every OS in scripts/platforms.txt,
+# and the internal/lint checks.
 # Run the linters and go vet for every OS
 [group('check')]
 lint:
@@ -376,7 +376,7 @@ lint:
     cd {{ quote(root) }}
     {{ NICE }} {{ TASKSET }} {{ GOLANGCI_LINT }} run --timeout 20m
     for dir in progstatus vt swatch shot tml plot loom sketch; do (cd "$dir" && {{ NICE }} {{ TASKSET }} {{ GOLANGCI_LINT }} run --timeout 10m); done
-    for goos in linux darwin windows freebsd openbsd; do
+    for goos in $(grep -v '^#' scripts/platforms.txt); do
         echo "go vet ($goos)"
         GOOS=$goos {{ NICE }} {{ TASKSET }} go vet ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/...
     done

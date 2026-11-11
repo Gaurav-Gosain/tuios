@@ -22,7 +22,7 @@
 #              go fix -diff ./... prints them as patches
 #   gopls      gopls check on the Go files the branch changed
 #   tidy       go mod tidy -diff for every module, and library-pins.sh check
-#   cross      go build for linux, darwin, windows and freebsd
+#   cross      go build for every OS in scripts/platforms.txt
 #   deadcode   unreachable functions (report)
 #
 # Each check writes its full output under $CHECK_LOG_DIR (default
@@ -33,7 +33,7 @@ cd "$(dirname "$0")/.."
 root=$PWD
 
 modules=(. e2e/tui progstatus vt swatch shot tml plot loom sketch)
-cross_goos=(linux darwin windows freebsd)
+mapfile -t cross_goos < <(grep -v '^#' scripts/platforms.txt)
 
 changed=0
 base=origin/main

@@ -1,0 +1,8 @@
+# The operating systems tuios builds and vets for, one per line. check.sh,
+# the justfile and lint.yml read this file. .goreleaser.yml names the same
+# list in its goos entries and cannot read it, so change both together.
+linux
+darwin
+windows
+freebsd
+openbsd
