@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/ghpr"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/units"
@@ -485,6 +486,20 @@ func (m *OS) ckCardBody(l ckLook, r ckRow, card session.TaskRow, width int, now 
 	if b := card.Blocked; b != nil {
 		line(ckSeg{t: "Blocked ", fg: pal.Warn, attrs: ckBold}, ckSeg{t: printableTitle(b.Reason), fg: pal.FgDim})
 	}
+	if wt := m.ckCardWorktree(card); wt != nil && wt.PR != nil && wt.PR.Number > 0 {
+		segs := []ckSeg{{t: "Pull request ", fg: pal.FgDim}, {t: "#" + strconv.Itoa(wt.PR.Number) + " " + wt.PR.State, fg: pal.Fg, attrs: ckBold}}
+		if wt.PR.Checks != "" && wt.PR.State == ghpr.StateOpen {
+			ink := pal.FgDim
+			if wt.PR.Checks == ghpr.ChecksFail {
+				ink = pal.Warn
+			}
+			segs = append(segs, ckSeg{t: sepWord() + "checks " + wt.PR.Checks, fg: ink})
+		}
+		if wt.Branch != "" {
+			segs = append(segs, ckSeg{t: sepWord() + printableTitle(wt.Branch), fg: pal.FgMute})
+		}
+		line(segs...)
+	}
 	d := m.Inbox.ck.card
 	switch {
 	case d == nil || d.key != ckTaskKey(card) || d.loading:
@@ -560,4 +575,24 @@ func ckAttachWhat(a session.TaskAttachment) string {
 		return "link"
 	}
 	return a.Kind + sepWord() + ckBytes(int(a.Size))
+}
+
+// ckCardWorktree is the work tree of the session a card's work is in, as the
+// daemon pushed it: the session its agent did the work in, else the card's
+// own. Nil for a card of another machine, or a session with no work tree.
+func (m *OS) ckCardWorktree(card session.TaskRow) *session.WorktreeInfo {
+	if card.Host != "" {
+		return nil
+	}
+	sess := card.Session
+	if w := card.Work; w != nil && w.Host == "" && w.Session != "" {
+		sess = w.Session
+	}
+	if sess == m.SessionName {
+		return m.SessionWorktree
+	}
+	if m.DaemonClient == nil {
+		return nil
+	}
+	return m.DaemonClient.SessionWorktree(sess)
 }
