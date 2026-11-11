@@ -231,7 +231,10 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Handle copy mode mouse release
 	if o.Dragging && o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
 		draggedWindow := o.Windows[o.DraggedWindowIndex]
-		if draggedWindow.InCopyMode() {
+		// A text selection never marks its pane as being moved; a move by the
+		// title bar does, and a pane in copy mode can be moved too. That move
+		// goes on to the drop below like any other.
+		if draggedWindow.InCopyMode() && !draggedWindow.IsBeingManipulated {
 			// Selection is complete: copy it if the user wants that, then clean
 			// up drag state and stop auto-scroll.
 			cmd := finishMouseSelection(o, draggedWindow)

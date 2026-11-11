@@ -1,0 +1,16 @@
+# A pane scrolled back into copy mode, then moved by its title bar and let go
+# off the pane. The release took the copy-mode selection branch, which ends a
+# text selection and returns, so the move never finished and the pane kept
+# IsBeingManipulated: it stopped drawing new output and kept the idle tick
+# busy. A selection never sets that mark, so the branch now takes only a
+# gesture that did not move the pane.
+focus 2
+zoom
+layout 2
+zoom
+focus 0
+move 1
+burst 75 1
+wheel 36 2 0
+press 25 0 1
+release 0 0 1
