@@ -116,7 +116,7 @@ while IFS= read -r p; do
 	scripts/ci-changes.sh | scripts/go-test-affected.sh | scripts/go-test-lanes.sh | scripts/go-test-lanes-test.sh | scripts/retry-flaky.sh) everything "$p changed" ;;
 	scripts/library-pins.sh) f[pins]=1 f[go]=1 pkg=no ;;
 	scripts/binary-size.sh | scripts/binary-size-report.sh) f[binary_size]=1 pkg=no ;;
-	scripts/check.sh) f[go]=1 pkg=no ;;
+	scripts/check.sh | scripts/platforms.txt | scripts/tool-versions.env) f[go]=1 pkg=no ;;
 	scripts/ghostty-lib.sh | scripts/minisign/*) f[ghostty]=1 pkg=no ;;
 	scripts/e2e-*.sh | scripts/fuzz-target.sh | scripts/contributors*.sh | scripts/contributors-mosaic.go | scripts/star-history.sh | scripts/rebase.sh | scripts/vt-rename.sh | scripts/install.sh | scripts/zigcc/*) pkg=no ;;
 	scripts/*) everything "$p is a script no rule names" ;;

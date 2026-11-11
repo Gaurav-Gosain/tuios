@@ -26,9 +26,9 @@ PREFIX := env("TUIOS_PREFIX", home_directory() / ".local/bin")
 # daemon to those machines.
 CONFIG := ""
 
-# The golangci-lint that lint runs: the version in .github/workflows/lint.yml,
+# The golangci-lint that lint runs: the version in scripts/tool-versions.env,
 # built with the local Go. A binary built with an older Go fails to type-check.
-GOLANGCI_LINT := "go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0"
+GOLANGCI_LINT := "go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@" + trim(replace_regex(read(root + "/scripts/tool-versions.env"), "(?s).*GOLANGCI_LINT_VERSION=(\\S+).*", "$1"))
 
 # How many times bench-save runs each benchmark.
 BENCH_COUNT := "6"
@@ -366,8 +366,8 @@ size *targets:
 
 # ---------------------------------------------------------------- check
 
-# golangci-lint at the CI version, go vet for linux, darwin, windows,
-# freebsd and openbsd, and the internal/lint checks.
+# golangci-lint at the CI version, go vet for every OS in scripts/platforms.txt,
+# and the internal/lint checks.
 # Run the linters and go vet for every OS
 [group('check')]
 lint:
@@ -376,7 +376,7 @@ lint:
     cd {{ quote(root) }}
     {{ NICE }} {{ TASKSET }} {{ GOLANGCI_LINT }} run --timeout 20m
     for dir in progstatus vt swatch shot tml plot loom sketch; do (cd "$dir" && {{ NICE }} {{ TASKSET }} {{ GOLANGCI_LINT }} run --timeout 10m); done
-    for goos in linux darwin windows freebsd openbsd; do
+    for goos in $(grep -v '^#' scripts/platforms.txt); do
         echo "go vet ($goos)"
         GOOS=$goos {{ NICE }} {{ TASKSET }} go vet ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/...
     done

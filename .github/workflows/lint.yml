@@ -42,6 +42,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Read the tool versions
+        id: tools
+        run: cat scripts/tool-versions.env >> "$GITHUB_OUTPUT"
+
       - uses: ./.github/actions/setup-go
         with:
           go-version-file: go.mod
@@ -49,9 +53,8 @@ jobs:
 
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          # Pinned, so a new linter release cannot fail a pull request that
-          # changed nothing. Bump it on purpose.
-          version: v2.14.0
+          # Pinned in scripts/tool-versions.env.
+          version: ${{ steps.tools.outputs.GOLANGCI_LINT_VERSION }}
           args: --timeout 20m
 
       # ./... stops at a nested module, so each Go library of this repository
@@ -60,7 +63,7 @@ jobs:
         if: inputs.lint_libs == '' || inputs.lint_libs == 'all' || contains(format(' {0} ', inputs.lint_libs), ' progstatus ')
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          version: v2.14.0
+          version: ${{ steps.tools.outputs.GOLANGCI_LINT_VERSION }}
           working-directory: progstatus
           args: --timeout 10m
 
@@ -68,7 +71,7 @@ jobs:
         if: inputs.lint_libs == '' || inputs.lint_libs == 'all' || contains(format(' {0} ', inputs.lint_libs), ' vt ')
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          version: v2.14.0
+          version: ${{ steps.tools.outputs.GOLANGCI_LINT_VERSION }}
           working-directory: vt
           args: --timeout 10m
 
@@ -76,7 +79,7 @@ jobs:
         if: inputs.lint_libs == '' || inputs.lint_libs == 'all' || contains(format(' {0} ', inputs.lint_libs), ' swatch ')
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          version: v2.14.0
+          version: ${{ steps.tools.outputs.GOLANGCI_LINT_VERSION }}
           working-directory: swatch
           args: --timeout 10m
 
@@ -84,7 +87,7 @@ jobs:
         if: inputs.lint_libs == '' || inputs.lint_libs == 'all' || contains(format(' {0} ', inputs.lint_libs), ' shot ')
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          version: v2.14.0
+          version: ${{ steps.tools.outputs.GOLANGCI_LINT_VERSION }}
           working-directory: shot
           args: --timeout 10m
 
@@ -92,7 +95,7 @@ jobs:
         if: inputs.lint_libs == '' || inputs.lint_libs == 'all' || contains(format(' {0} ', inputs.lint_libs), ' tml ')
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          version: v2.14.0
+          version: ${{ steps.tools.outputs.GOLANGCI_LINT_VERSION }}
           working-directory: tml
           args: --timeout 10m
 
@@ -100,7 +103,7 @@ jobs:
         if: inputs.lint_libs == '' || inputs.lint_libs == 'all' || contains(format(' {0} ', inputs.lint_libs), ' plot ')
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          version: v2.14.0
+          version: ${{ steps.tools.outputs.GOLANGCI_LINT_VERSION }}
           working-directory: plot
           args: --timeout 10m
 
@@ -108,7 +111,7 @@ jobs:
         if: inputs.lint_libs == '' || inputs.lint_libs == 'all' || contains(format(' {0} ', inputs.lint_libs), ' loom ')
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          version: v2.14.0
+          version: ${{ steps.tools.outputs.GOLANGCI_LINT_VERSION }}
           working-directory: loom
           args: --timeout 10m
 
@@ -116,7 +119,7 @@ jobs:
         if: inputs.lint_libs == '' || inputs.lint_libs == 'all' || contains(format(' {0} ', inputs.lint_libs), ' sketch ')
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          version: v2.14.0
+          version: ${{ steps.tools.outputs.GOLANGCI_LINT_VERSION }}
           working-directory: sketch
           args: --timeout 10m
 
@@ -144,6 +147,10 @@ jobs:
           # The merge base with the target branch decides what changed.
           fetch-depth: 0
 
+      - name: Read the tool versions
+        id: tools
+        run: cat scripts/tool-versions.env >> "$GITHUB_OUTPUT"
+
       # Go refuses a U+FEFF anywhere but the first bytes of a file ("illegal
       # byte order mark"). Some editors and agent tools turn a \uFEFF escape
       # into the literal character, so this names the file before the build
@@ -167,7 +174,7 @@ jobs:
 
       - name: govulncheck
         if: ${{ !cancelled() && inputs.vet != 'false' }}
-        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@${{ steps.tools.outputs.GOVULNCHECK_VERSION }} ./...
 
       - name: Check the changed files
         if: ${{ !cancelled() }}
@@ -191,7 +198,7 @@ jobs:
           fi
 
   cross-vet:
-    name: go vet (darwin, windows, freebsd, openbsd)
+    name: go vet (every OS but linux)
     if: inputs.vet != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -211,7 +218,7 @@ jobs:
       - name: Vet
         run: |
           status=0
-          for goos in darwin windows freebsd openbsd; do
+          for goos in $(grep -v '^#' scripts/platforms.txt | grep -vx linux); do
             echo "::group::go vet (GOOS=$goos)"
             if ! GOOS=$goos go vet ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/...; then
               status=1
