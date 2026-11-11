@@ -180,7 +180,7 @@ type Settings struct {
 	// PaneOverlays draws dialogs and panels like pane windows: framed in the
 	// focused pane's border colour, on the ground an empty pane cell shows.
 	// Set via appearance.pane_overlays.
-	PaneOverlays bool
+	PaneOverlays bool `opt:"appearance.pane_overlays"`
 
 	// OverlayBorderColor is the colour every overlay frame is drawn in. Empty
 	// keeps the overlay's own, or the focused pane's border under
@@ -207,7 +207,7 @@ type Settings struct {
 
 	// LinkClick is the click that opens a link: one of the LinkClick*
 	// constants. Set via appearance.link_click.
-	LinkClick string
+	LinkClick string `opt:"appearance.link_click,keep"`
 
 	// LinkHover is the hover highlight policy: one of the LinkHover*
 	// constants. Set via appearance.link_hover.
@@ -254,7 +254,7 @@ type Settings struct {
 	SidebarShowGlyphs bool `opt:"appearance.sidebar.show_glyphs,keep"`
 
 	// SidebarShowCounts draws the window count on each session row.
-	SidebarShowCounts bool
+	SidebarShowCounts bool `opt:"appearance.sidebar.show_counts,keep"`
 
 	// SidebarShowNumbers draws the switch number ahead of each session name.
 	// Off by default: the quiet rail is the default, and the people who want
@@ -262,7 +262,7 @@ type Settings struct {
 	SidebarShowNumbers bool `opt:"appearance.sidebar.show_numbers,keep"`
 
 	// SidebarMarquee scrolls a hovered row's title when it overflows its columns.
-	SidebarMarquee bool
+	SidebarMarquee bool `opt:"appearance.sidebar.marquee,keep"`
 
 	// SidebarPerSession keeps the rail's shown or hidden state per session,
 	// as before issue 589. Off (the default), showing or hiding the rail
@@ -289,7 +289,7 @@ type Settings struct {
 	// SidebarFileIconColors draws each of those icons in its own file type's
 	// colour, the way yeetui does. It needs the icons under it, so it draws
 	// nothing when they are off or the terminal is running in ASCII.
-	SidebarFileIconColors bool
+	SidebarFileIconColors bool `opt:"appearance.sidebar.file_icon_colors,keep"`
 
 	// SidebarFolderClick is what a click on a folder row does: walk the listing
 	// into it, tell the pane to cd there, or both.
@@ -354,7 +354,7 @@ type Settings struct {
 	// Tooltips pops a one-row label naming whatever icon-only control the
 	// pointer is over: a row of the collapsed rail, or one of the dock's session
 	// controls. A glyph is enough to steer by and not enough to read.
-	Tooltips bool
+	Tooltips bool `opt:"appearance.sidebar.tooltips,keep"`
 
 	// SessionColors gives every session a colour of its own and marks it on the
 	// surfaces that show more than one session at once: the rail's sessions and
@@ -398,9 +398,9 @@ type Settings struct {
 	//
 	// It does nothing unless appearance.focus_follows_mouse is on, since
 	// nothing focuses on hover otherwise.
-	NiriHoverReveals bool
+	NiriHoverReveals bool `opt:"appearance.niri_hover_reveals,keep"`
 
-	SidebarGitDirty bool
+	SidebarGitDirty bool `opt:"appearance.git_dirty,keep"`
 
 	SessionBorder bool `opt:"appearance.session_border,keep"`
 
@@ -411,7 +411,7 @@ type Settings struct {
 	// An ordinary session is the machine it is on, and a new pane in it is a
 	// pane there, with nothing to ask about. The global session is the one
 	// place the question is worth putting, so it is the one place it is asked.
-	GlobalSession bool
+	GlobalSession bool `opt:"appearance.global_session,keep"`
 
 	SessionColors bool `opt:"appearance.session_colors,keep"`
 
@@ -443,7 +443,7 @@ type Settings struct {
 	// tiling icon in the mode pill. On by default. Off, the pill is the icon
 	// alone. With the default icons that is as wide as the leader's pill, so
 	// pressing the leader no longer moves the workspace tabs.
-	DockModeSplitLetter bool
+	DockModeSplitLetter bool `opt:"appearance.dock_mode_split_letter,keep"`
 
 	// DockPrefixIndicator is where an armed leader shows: "pill" colours the
 	// dock's mode pill, "badge" draws the floating PREFIX badge. The badge is
@@ -484,7 +484,7 @@ type Settings struct {
 
 	// WindowButtonPosition selects which end of the title bar the window controls
 	// sit on. See appearance.window_button_position.
-	WindowButtonPosition string
+	WindowButtonPosition string `opt:"appearance.window_button_position,keep"`
 
 	// ScrollbarStyle selects how a scrolled-back pane draws its position. See
 	// appearance.scrollbar.style.
@@ -492,7 +492,7 @@ type Settings struct {
 
 	ScrollbarThumb string `opt:"appearance.scrollbar.thumb"`
 
-	ScrollbarTrack string
+	ScrollbarTrack string `opt:"appearance.scrollbar.track"`
 
 	ScrollbarTint string `opt:"appearance.scrollbar.tint"`
 
@@ -515,7 +515,7 @@ type Settings struct {
 	CopyFlashMs    int
 	CopyFlashColor string `opt:"appearance.selection.flash_color,keep"`
 	// CopyFlashStyle is the shape the sweep takes. One of CopyFlashStyles.
-	CopyFlashStyle string
+	CopyFlashStyle string `opt:"appearance.selection.flash_style,keep"`
 	// MultiCopyFormat is the format multi copy mode starts in: one of
 	// MultiCopyFormats.
 	MultiCopyFormat string
@@ -564,7 +564,7 @@ type Settings struct {
 
 	// ShowClock controls whether the clock overlay is shown (default: hidden).
 	// Set via --show-clock flag or appearance.show_clock config
-	ShowClock bool
+	ShowClock bool `opt:"appearance.show_clock"`
 
 	// ShowCPU controls whether the CPU graph is shown in the dock (default: hidden).
 	// Set via --show-cpu flag or appearance.show_cpu config
@@ -572,7 +572,7 @@ type Settings struct {
 
 	// ShowRAM controls whether RAM usage is shown in the dock (default: hidden).
 	// Set via --show-ram flag or appearance.show_ram config
-	ShowRAM bool
+	ShowRAM bool `opt:"appearance.show_ram"`
 
 	// ScrollbackLines controls the number of lines to keep in scrollback buffer
 	// Set via --scrollback-lines flag or appearance.scrollback_lines config
@@ -592,7 +592,7 @@ type Settings struct {
 	// NvimNavigation lets tuios and the optional tuios-nvim-navigator plugin
 	// negotiate terminal focus keys through OSC 7777. It is off by default.
 	// Set via appearance.nvim_navigation config.
-	NvimNavigation bool
+	NvimNavigation bool `opt:"appearance.nvim_navigation,keep"`
 
 	// FocusWrap lets a directional focus key in a tiled layout wrap to the far
 	// side of the layout when no pane lies that way. It is off by default.
@@ -710,7 +710,7 @@ type Settings struct {
 	// pane runs the same ssh. Off by default, so a split is a local shell
 	// unless the person asks for the ssh version by its own key.
 	// Set via appearance.new_window_follow_ssh config.
-	NewWindowFollowSSH bool
+	NewWindowFollowSSH bool `opt:"appearance.new_window_follow_ssh,keep"`
 
 	// WordCharacters lists the punctuation that counts as part of a word when a
 	// double-click selects one, on top of letters and digits, which always do.
@@ -732,17 +732,17 @@ type Settings struct {
 	// scrolling layout. See NiriScrollCellsDefault for why it is a flat count
 	// and not a share of the screen.
 	// Set via appearance.niri_scroll_cells config
-	NiriScrollCells int
+	NiriScrollCells int `opt:"appearance.niri_scroll_cells"`
 
 	// NiriScrollSnap lines the strip up on the nearest column once a wheel,
 	// a trackpad or a finger has stopped moving it, as niri does at the end
 	// of a gesture. Set via appearance.niri_scroll_snap config
-	NiriScrollSnap bool
+	NiriScrollSnap bool `opt:"appearance.niri_scroll_snap"`
 
 	// PrefixRepeatTime is how long the prefix stays armed after a repeatable
 	// prefix command, in milliseconds. Zero turns it off. See
 	// PrefixRepeatTimeDefault.
-	PrefixRepeatTime int
+	PrefixRepeatTime int `opt:"appearance.prefix_repeat_time,keep"`
 
 	// LeaderKey is the prefix key for commands (default: ctrl+b)
 	// Set via appearance.leader_key config
@@ -767,14 +767,14 @@ type Settings struct {
 	// sidebar's width, the dock's height, every overlay's placement and every mouse
 	// hit test are measured against, so a margin the sidebar already draws one of
 	// would cost a move of the whole frame.
-	PaneGap int
+	PaneGap int `opt:"appearance.gap"`
 
 	// MasterRatioPercent is how much of the screen the master pane takes in the
 	// master-stack layout, as a percent. It is the value a new session starts at;
 	// once a session is running the ratio is the session's, moved by the resize
 	// keys and settled across every attached client, because it decides how many
 	// columns a pane gets and a PTY has exactly one size.
-	MasterRatioPercent int
+	MasterRatioPercent int `opt:"appearance.master_ratio"`
 
 	// MasterPosition, MasterCount and MasterNoGrid are the master-stack shape
 	// a workspace starts with: the side the masters take (one of
@@ -810,7 +810,7 @@ type Settings struct {
 	// Read it through GetScrollColumnMax, never directly: a Settings built by
 	// hand carries a zero here, and a clamp against zero pins every column to
 	// the floor.
-	ScrollColumnMax int
+	ScrollColumnMax int `opt:"appearance.scroll_column_max"`
 
 	// ScrollColumnPresets are the widths scroll_cycle_width steps through, as
 	// ascending fractions of the screen, from appearance.scroll_column_presets.
@@ -829,7 +829,7 @@ type Settings struct {
 	// ones it actually has.
 	//
 	// Read it through GetZoomSize, never directly.
-	ZoomSize int
+	ZoomSize int `opt:"appearance.zoom_size"`
 
 	// WindowButtonZoom draws the third title bar control on a tiled pane, where
 	// it toggles the zoom.
@@ -837,7 +837,7 @@ type Settings struct {
 	// On a tiled pane a maximize means zoom, since the tiler owns the
 	// rectangle, and a tiled pane is exactly where a zoom is worth reaching
 	// for. The green disc is the control everybody already knows.
-	WindowButtonZoom bool
+	WindowButtonZoom bool `opt:"appearance.window_button_zoom,keep"`
 
 	// ZoomFollowsFocus hands the zoom to the pane the focus lands on.
 	//
@@ -850,7 +850,7 @@ type Settings struct {
 
 	// AnimationSpeed is the percent window animations run at: 100 is as
 	// shipped, 200 twice as fast, 50 half as fast.
-	AnimationSpeed int
+	AnimationSpeed int `opt:"appearance.animation_speed"`
 
 	// ThemeTransition is how a change of theme is shown: ThemeTransitionNone
 	// swaps the colours in one frame, ThemeTransitionFade crosses the whole
@@ -860,7 +860,7 @@ type Settings struct {
 	ThemeTransition string
 	// ThemeTransitionMs is how long the transition takes at animation speed
 	// 100. Read it through ThemeTransitionDuration.
-	ThemeTransitionMs int
+	ThemeTransitionMs int `opt:"appearance.theme_transition_duration"`
 
 	// WorkspaceTransition is how a workspace switch is shown: slide, fade or
 	// none. Read it through WorkspaceTransitionStyle, which also honours
@@ -886,7 +886,7 @@ type Settings struct {
 	// rotating the hue of somebody else's program output is a novelty rather than a
 	// thing a rice wants. One number is also the only form that says the same thing
 	// on a light theme as on a dark one.
-	DimUnfocused int
+	DimUnfocused int `opt:"appearance.dim_unfocused"`
 
 	// DimForeground lets DimUnfocused carry a pane's text toward its ground,
 	// the same as its background. True, the default, dims both; false keeps
@@ -912,11 +912,11 @@ type Settings struct {
 	// or a piece of chrome chose wins. See ResolveBackground and the
 	// *BackgroundResolved methods.
 	Background             string `opt:"appearance.background"`
-	PaneBackground         string
+	PaneBackground         string `opt:"appearance.pane_background"`
 	DesktopBackground      string `opt:"appearance.desktop_background"`
-	WindowChromeBackground string
+	WindowChromeBackground string `opt:"appearance.window_chrome_background"`
 	DockBackground         string `opt:"appearance.dock_background"`
-	SidebarBackground      string
+	SidebarBackground      string `opt:"appearance.sidebar.background"`
 
 	// SidebarCursorBackground is the ground of the rail's cursor row while
 	// the rail has the keyboard. Empty keeps the palette's Surface. It is

@@ -90,6 +90,10 @@ type Option struct {
 	Auto bool `json:"auto,omitempty"`
 	// Fallback is the word a load warning gives for what a value outside
 	// Accepted is read as. Empty means "default".
+	// Zero says what 0 in the file means for an int option: a value
+	// (ZeroIsValue, the default) or "not set" (ZeroIsDefault), which reads as
+	// the option's default.
+	Zero ZeroRule `json:"-"`
 	// Flag is the name of the CLI flag that sets this option for one run of
 	// tuios, tuios ssh and tuios-web, such as "border-style". Empty means no
 	// flag. The flag takes its type, help and check from this entry.
@@ -534,6 +538,7 @@ var optionSpecs = []Option{
 		Description: "Width of the master pane in the master-stack layout, as a percent of the screen",
 		Min:         MasterRatioMin, Max: MasterRatioMax,
 		Percent: true,
+		Zero:    ZeroIsDefault,
 	},
 	{
 		Path: "appearance.master_position", Type: OptionString, Section: "appearance",
@@ -561,6 +566,7 @@ var optionSpecs = []Option{
 		Description: "How much of the screen a zoomed pane takes, as a percent. Below 100 the layout around it stays visible at the edges.",
 		Min:         ZoomSizeMin, Max: ZoomSizeMax,
 		Percent: true,
+		Zero:    ZeroIsDefault,
 	},
 	{
 		Path: "appearance.window_button_zoom", Type: OptionBool, Section: "appearance",
@@ -586,6 +592,7 @@ var optionSpecs = []Option{
 		Description: "Percent window animations run at: 100 as shipped, 200 twice as fast, 50 half as fast",
 		Min:         AnimationSpeedMin, Max: AnimationSpeedMax,
 		Percent: true,
+		Zero:    ZeroIsDefault,
 	},
 	{
 		Path: "appearance.theme_transition", Type: OptionString, Section: "appearance",
@@ -596,6 +603,7 @@ var optionSpecs = []Option{
 		Path: "appearance.theme_transition_duration", Type: OptionInt, Section: "appearance",
 		Description: "Milliseconds a theme transition takes at animation speed 100",
 		Min:         ThemeTransitionMsMin, Max: ThemeTransitionMsMax,
+		Zero: ZeroIsDefault,
 	},
 	{
 		Path: "appearance.workspace_transition", Type: OptionString, Section: "appearance",
@@ -678,11 +686,13 @@ var optionSpecs = []Option{
 		Description: "Highest a column's width may be set to in the scrolling layout, as a percent. 100 lets a column fill the screen, at the cost of the next one peeking in at the edge.",
 		Min:         ScrollColumnWidthMin, Max: ScrollColumnWidthCeiling,
 		Percent: true,
+		Zero:    ZeroIsDefault,
 	},
 	{
 		Path: "appearance.niri_scroll_cells", Type: OptionInt, Section: "appearance",
 		Description: "Cells the scrolling layout's strip moves per mouse wheel event",
 		Min:         NiriScrollCellsMin, Max: NiriScrollCellsMax,
+		Zero: ZeroIsDefault,
 	},
 	{
 		Path: "appearance.prefix_repeat_time", Type: OptionInt, Section: "appearance",
@@ -2166,6 +2176,17 @@ func parseOptionBool(value string) (bool, error) {
 	}
 	return parsed, nil
 }
+
+// ZeroRule is what 0 means for an int option. See Option.Zero.
+type ZeroRule uint8
+
+const (
+	// ZeroIsValue: 0 is a value like any other, such as a gap of 0.
+	ZeroIsValue ZeroRule = iota
+	// ZeroIsDefault: 0 is what an option the file leaves out holds, so it
+	// reads as the default, such as a master ratio of 0.
+	ZeroIsDefault
+)
 
 // trimLower is the Normalize of an option whose reader trims spaces and
 // ignores case.

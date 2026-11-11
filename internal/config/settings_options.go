@@ -3,6 +3,7 @@ package config
 import (
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -44,7 +45,7 @@ var settingsOptions = sync.OnceValue(func() []settingsOption {
 		if !found {
 			panic(errfmt.Errorf("config: Settings.%s: opt tag %q names no option", t.Field(i).Name, path))
 		}
-		want := map[string]reflect.Kind{OptionBool: reflect.Bool, OptionString: reflect.String}[opt.Type]
+		want := map[string]reflect.Kind{OptionBool: reflect.Bool, OptionString: reflect.String, OptionInt: reflect.Int}[opt.Type]
 		if t.Field(i).Type.Kind() != want {
 			panic(errfmt.Errorf("config: Settings.%s: option %s is %s, the field is %s", t.Field(i).Name, path, opt.Type, t.Field(i).Type.Kind()))
 		}
@@ -82,12 +83,29 @@ func applyOptionFields(cfg *UserConfig, s *Settings) {
 				}
 			}
 			v.Field(f.index).SetString(text)
+		case OptionInt:
+			v.Field(f.index).SetInt(int64(f.opt.resolveInt(text)))
 		}
 	}
 }
 
-// optionUnset reports whether cfg leaves o unset: a nil pointer, or an empty
-// string.
+// resolveInt is an int option's value as the session uses it: 0 under
+// ZeroIsDefault, and anything that is not a number, reads as the default, and
+// a value outside Min to Max is moved to the nearer end. ValidateConfig warns
+// about both.
+func (o Option) resolveInt(text string) int {
+	n, err := strconv.Atoi(text)
+	if err != nil || (n == 0 && o.Zero == ZeroIsDefault) {
+		n, _ = strconv.Atoi(o.Default)
+	}
+	if o.Max > 0 {
+		n = min(max(n, o.Min), o.Max)
+	}
+	return n
+}
+
+// optionUnset reports whether cfg leaves o unset: a nil pointer, an empty
+// string, or 0 for an int option whose 0 means unset.
 func optionUnset(cfg *UserConfig, o Option) bool {
 	field, ok := resolveOptionField(cfg, o.Path)
 	if !ok {
@@ -96,5 +114,11 @@ func optionUnset(cfg *UserConfig, o Option) bool {
 	if field.Kind() == reflect.Pointer {
 		return field.IsNil()
 	}
-	return field.Kind() == reflect.String && field.String() == ""
+	switch field.Kind() {
+	case reflect.String:
+		return field.String() == ""
+	case reflect.Int:
+		return field.Int() == 0 && o.Zero == ZeroIsDefault
+	}
+	return false
 }
