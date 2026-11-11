@@ -457,8 +457,10 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 	}
 
 	// A frame with a direct pane and no pass over the canvas after the
-	// compositor's may keep the canvas the last frame left.
-	keepable := direct.w != nil && !m.spotlight.on && !m.celebration.active() && !m.themeFx.running() && !m.imagesOnScreen()
+	// compositor's may keep the canvas the last frame left. A live effect
+	// keeps the direct pane off already (loneWindow); it is asked again so
+	// that a pass added to effects cannot draw over a kept canvas.
+	keepable := direct.w != nil && !m.anyEffectLive() && !m.imagesOnScreen()
 	if len(m.frameRows) != canvas.Height() {
 		m.frameRows = make([]bool, canvas.Height())
 		m.frameRowsAll = true
@@ -873,21 +875,10 @@ func (m *OS) composeFrameParts() (*frameCanvas, string) {
 	// Image glyphs before the spotlight, so the beam shades them like text.
 	// A frame with a modal had them drawn before its scrim (compose.go).
 	m.drawImageSymbols(canvas)
-	// The spotlight goes here and nowhere else: after every pane's cached layer
-	// has been consumed, before the canvas becomes a string. The saver owns the
-	// whole screen while it runs, so the two never draw in one frame.
-	if m.spotlight.on && !m.screensaver.active {
-		m.applySpotlight(canvas)
-	}
-	// The confetti goes after the beam, so a burst is never dimmed by it.
-	if m.celebration.active() {
-		m.celebration.draw(canvas)
-	}
-	// The old theme outside the circle, over everything drawn in the new
-	// one.
-	if m.themeFx.running() {
-		m.applyThemeTransition(canvas, time.Now())
-	}
+	// The effects' passes (effects.go) go here and nowhere else: after every
+	// pane's cached layer has been consumed, before the canvas becomes a
+	// string.
+	m.drawEffects(canvas, time.Now())
 	// Last, so the images are cut by everything drawn over the panes.
 	m.scanSixelFrame(canvas)
 	// The frame goes out as the canvas wrote it. The bubbletea renderer
@@ -914,18 +905,14 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 // and be a borderless tiled pane when no divider is drawn. The fast path,
 // which draws no rail and no divider, asks without.
 func (m *OS) loneWindow(direct bool) (*terminal.Window, bool) {
-	if len(m.Animations) > 0 || m.Renaming() {
+	// Every effect changes the frame on its own, and most are passes over
+	// the canvas this path does not build. See effects.go.
+	if m.anyEffectLive() || m.Renaming() {
 		return nil, false
 	}
 	// A gradient border is a pass over the canvas, which this path does not
 	// build. Only when one is configured.
 	if m.Settings.BorderFocusedGradient != "" && m.gradientOn() {
-		return nil, false
-	}
-	// The screen saver is a compositor overlay, and the fast path skips
-	// renderOverlays entirely. A lone fullscreen pane is exactly the case the
-	// saver is most likely to find, so without this it would never be drawn.
-	if m.screensaver.active {
 		return nil, false
 	}
 	// Every panel is drawn by renderOverlays, which the fast path skips. The
@@ -948,38 +935,6 @@ func (m *OS) loneWindow(direct bool) (*terminal.Window, bool) {
 	// Only fall back while there are keys to show; an empty history draws nothing, so
 	// the fast path stays eligible when the overlay is idle.
 	if m.ShowKeys && len(m.RecentKeys) > 0 {
-		return nil, false
-	}
-	// The spotlight is a pass over the composed canvas, and the fast path
-	// builds no canvas to pass over. Falling back is what a lone fullscreen
-	// pane pays for the beam, and the keycast above already pays most of it on
-	// a recording. The saver needs no mention here: it took the fast path away
-	// several checks above, and it suspends the pass anyway.
-	if m.spotlight.on {
-		return nil, false
-	}
-	// Hints mode is a canvas pass too (hints_render.go), for as long as the
-	// labels are up.
-	if m.hints != nil {
-		return nil, false
-	}
-	// So are the pane labels (pane_labels_render.go).
-	if m.paneLabels != nil {
-		return nil, false
-	}
-	// The celebration is a pass over the canvas too, for the second or so it
-	// is on screen.
-	if m.celebration.active() {
-		return nil, false
-	}
-	// And the theme transition, which keeps the old frame's cells outside
-	// its circle.
-	if m.themeFx.running() {
-		return nil, false
-	}
-	// And the workspace slide, which shifts the panes and keeps the old
-	// workspace's cells beside them.
-	if m.wsSlide.running() {
 		return nil, false
 	}
 	// A hover label is a layer the fast path does not compose. The dock's
