@@ -363,7 +363,24 @@ func (m *OS) drawCockpit(c *ckCanvas, l ckLook, top int, now time.Time) {
 	m.drawCockpitHeader(c, l, hdrY, top)
 
 	if m.kanbanOn() && m.kanbanDrawable() {
-		m.drawKanban(c, l, colTop, colBot, top)
+		pv := &ck.kb.pv
+		pv.box, pv.edge.x0, pv.edge.x1 = overlay.Rect{}, 0, 0
+		pw, side := m.kbPreviewSide(c.w)
+		kw := c.w
+		if side {
+			kw = c.w - pw - 1
+		}
+		m.drawKanban(c, l, colTop, colBot, top, kw)
+		if m.kbPreviewShown() {
+			sheet := !side
+			if pv.zoom {
+				// Zoomed: the whole body, as a panel from the left edge.
+				m.drawKanbanPreview(c, l, 1, c.w-1, colTop, colBot, top, false, now)
+				pv.edge.x0, pv.edge.x1 = 0, 0
+			} else {
+				m.drawKanbanPreview(c, l, kw+1, pw, colTop, colBot, top, sheet, now)
+			}
+		}
 		m.drawCockpitHints(c, l, hintsY, now)
 		return
 	}

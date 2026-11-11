@@ -11,7 +11,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
@@ -30,19 +29,21 @@ import (
 
 // ckTaskDetail is the Card tab's detail of one card.
 type ckTaskDetail struct {
-	key     string
-	prompt  string
-	history []session.TaskEvent
-	err     string
-	loading bool
+	key         string
+	prompt      string
+	history     []session.TaskEvent
+	attachments []session.TaskAttachment
+	err         string
+	loading     bool
 }
 
 // ckTaskMsg is a get-task reply.
 type ckTaskMsg struct {
-	key     string
-	prompt  string
-	history []session.TaskEvent
-	err     error
+	key         string
+	prompt      string
+	history     []session.TaskEvent
+	attachments []session.TaskAttachment
+	err         error
 }
 
 // ckTakeMsg is a claim-task reply.
@@ -446,6 +447,9 @@ func ckTaskKey(c session.TaskRow) string {
 	if c.Blocked != nil {
 		k += "/b" + strconv.FormatInt(c.Blocked.At, 10)
 	}
+	if c.AttachmentCount > 0 {
+		k += "/a" + strconv.Itoa(c.AttachmentCount)
+	}
 	return k
 }
 
@@ -455,7 +459,7 @@ func (m *OS) cockpitCardFetch() tea.Cmd {
 	ck := &m.Inbox.ck
 	ck.cardWant = false
 	_, c, ok := m.cockpitCard()
-	if !ok || m.cockpitTab() != "Card" || (m.DaemonClient == nil && m.Inbox.call == nil) {
+	if !ok || (m.cockpitTab() != "Card" && !m.kbPreviewShown()) || (m.DaemonClient == nil && m.Inbox.call == nil) {
 		return nil
 	}
 	key := ckTaskKey(c)
@@ -474,11 +478,12 @@ func (m *OS) cockpitCardFetch() tea.Cmd {
 		msg := ckTaskMsg{key: key, err: err}
 		if err == nil {
 			var res struct {
-				Prompt  string              `json:"prompt"`
-				History []session.TaskEvent `json:"history"`
+				Prompt      string                   `json:"prompt"`
+				History     []session.TaskEvent      `json:"history"`
+				Attachments []session.TaskAttachment `json:"attachments"`
 			}
 			msg.err = jsonx.Unmarshal(raw, &res)
-			msg.prompt, msg.history = res.Prompt, res.History
+			msg.prompt, msg.history, msg.attachments = res.Prompt, res.History, res.Attachments
 		}
 		return msg
 	}
@@ -499,7 +504,7 @@ func (m *OS) applyCard(msg ckTaskMsg) {
 		return
 	}
 	d.loading = false
-	d.prompt, d.history, d.err = msg.prompt, msg.history, ""
+	d.prompt, d.history, d.attachments, d.err = msg.prompt, msg.history, msg.attachments, ""
 	if msg.err != nil {
 		verr, ok := errors.AsType[*session.VerbCallError](msg.err)
 		switch {
@@ -704,67 +709,14 @@ func (m *OS) drawCardFocus(c *ckCanvas, l ckLook, r ckRow, card session.TaskRow,
 	if c.h < 30 {
 		by = rule + 1
 	}
-	line := func(segs ...ckSeg) {
-		if by < y1 {
-			c.text(x, by, right, segs...)
+	for _, ln := range m.ckCardBody(l, r, card, w, now, false) {
+		if by >= y1 {
+			break
 		}
+		drawCkLineAt(c, x, by, w, ln)
 		by++
-	}
-	switch {
-	case card.Holder != nil:
-		who := printableTitle(card.Holder.Name)
-		if who == "" {
-			who = shortWindowLabel(card.Holder.Window)
-		}
-		line(ckSeg{t: "Held by ", fg: pal.FgDim}, ckSeg{t: who, fg: pal.Fg, attrs: ckBold},
-			ckSeg{t: "  " + units.Waited(card.Holder.HeldAt, now), fg: pal.FgMute})
-	case card.Stage == session.TaskStageVerify || card.Stage == session.TaskStageReview:
-		// Let go by its agent: the lifecycle lines below say where it is.
-	case card.Stage != session.TaskStageDone && card.Blocked == nil:
-		line(ckSeg{t: "Free. ", fg: pal.FgDim}, ckSeg{t: m.ckFreeWords(card), fg: pal.FgMute})
-	}
-	for _, segs := range m.ckLifeFocus(pal, card) {
-		line(segs...)
-	}
-	if b := card.Blocked; b != nil {
-		line(ckSeg{t: "Blocked ", fg: pal.Warn, attrs: ckBold}, ckSeg{t: printableTitle(b.Reason), fg: pal.FgDim})
 	}
 	m.cockpitNoteCard(card)
-	d := st.ck.card
-	if d == nil || d.key != ckTaskKey(card) || d.loading {
-		by++
-		line(ckSeg{t: "Reading...", fg: pal.FgMute})
-		return
-	}
-	if d.err != "" {
-		by++
-		line(ckSeg{t: d.err, fg: pal.Warning})
-		return
-	}
-	if d.prompt != "" {
-		by++
-		line(ckSeg{t: "Prompt", fg: pal.FgDim, attrs: ckBold})
-		for para := range strings.SplitSeq(d.prompt, "\n") {
-			for s := range strings.SplitSeq(ansi.Wordwrap(printableTitle(para), max(w, 8), ""), "\n") {
-				line(ckSeg{t: s, fg: pal.Fg})
-			}
-		}
-	}
-	if len(d.history) > 0 {
-		by++
-		line(ckSeg{t: "History", fg: pal.FgDim, attrs: ckBold})
-		for _, ev := range slices.Backward(d.history) {
-			words := ev.Action
-			switch {
-			case ev.Stage != "" && ev.Action == session.TaskActionStaged:
-				words += " to " + ev.Stage
-			case ev.Reason != "":
-				words += ", " + printableTitle(ev.Reason)
-			}
-			line(ckSeg{t: ckPad(units.Waited(ev.At, now), 5), fg: pal.FgMute}, ckSeg{t: words, fg: pal.Fg},
-				ckSeg{t: "  " + m.ckHistoryBy(ev.By), fg: pal.FgMute})
-		}
-	}
 }
 
 // ckHistoryBy is who made a history entry, as the person reads it. The

@@ -42,6 +42,8 @@ var settingLabels = map[string]string{
 	"agents.fold_working":                 "Fold Working",
 	"agents.view_list":                    "Agent list",
 	"agents.list_width":                   "Agent list width",
+	"agents.card_preview":                 "Task card preview",
+	"agents.card_preview_width":           "Task card preview width",
 	"agents.reply_rows":                   "Reply rows",
 	"tasks.auto_stage":                    "Move task cards",
 	"tasks.machine_cap":                   "Agents before Any machine looks elsewhere",

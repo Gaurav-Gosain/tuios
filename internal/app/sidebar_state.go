@@ -109,6 +109,9 @@ type sidebarStateFile struct {
 	// AgentsListWidth is the agents view's list width in cells the person
 	// chose with < > or a drag. Absent means [agents] list_width decides.
 	AgentsListWidth int `json:"agents_list_width,omitempty"`
+	// AgentsCardPreviewWidth is the task board's preview panel width in
+	// cells the person dragged it to, 0 for none.
+	AgentsCardPreviewWidth int `json:"agents_card_preview_width,omitempty"`
 	// AgentsSideHidden says the person hid the agents view's side column
 	// with w.
 	AgentsSideHidden bool `json:"agents_side_hidden,omitempty"`
@@ -172,6 +175,7 @@ func (m *OS) loadSidebarState() {
 		m.Inbox.ck.listMode = st.AgentsList
 	}
 	m.Inbox.ck.listWidth = max(st.AgentsListWidth, 0)
+	m.Inbox.ck.kb.pv.width = max(st.AgentsCardPreviewWidth, 0)
 	m.Inbox.ck.sideHidden = st.AgentsSideHidden
 	switch st.AgentsGroup {
 	case ckGroupSession, ckGroupMachine, ckGroupProject:
@@ -270,34 +274,35 @@ func (m *OS) saveSidebarState() {
 	// change to the shipped width never reached a rail that had saved any state
 	// at all.
 	data, err := jsonx.Marshal(sidebarStateFile{
-		Order:                 m.SidebarOrder,
-		Width:                 m.SidebarWidthPref,
-		DragWidth:             true,
-		Accents:               slots,
-		AccentColors:          colors,
-		AgentSeen:             m.SidebarAgentSeen,
-		AgentSeenSeq:          m.SidebarAgentSeenSeq,
-		AgentSeenAt:           m.SidebarAgentSeenAt,
-		AgentViewed:           m.SidebarAgentViewed,
-		AgentsFilter:          m.SidebarAgentFilter,
-		AgentsSort:            m.SidebarAgentSort,
-		AgentsSeen:            m.SidebarAgentsSeen,
-		SpawnPreset:           m.Inbox.ck.spawnPreset,
-		AgentsFolds:           m.Inbox.ck.ckFoldsToFile(),
-		BoardList:             m.Inbox.ck.boardList,
-		AgentsList:            m.Inbox.ck.listMode,
-		AgentsListWidth:       m.Inbox.ck.listWidth,
-		AgentsSideHidden:      m.Inbox.ck.sideHidden,
-		AgentsGroup:           m.Inbox.ck.groupBy,
-		AgentNoticesDismissed: collapsedRepoList(m.agentNoticesDismissed),
-		MachineOffersNever:    collapsedRepoList(m.machineOffersNever),
-		Collapsed:             m.SidebarCollapsed,
-		SectionSplit:          m.SidebarSectionSplit,
-		ReposCollapsed:        collapsedRepoList(m.SidebarCollapsedRepos),
-		HostsOrder:            m.SidebarHostOrder,
-		HostsCollapsed:        collapsedRepoList(m.SidebarCollapsedHosts),
-		HostSessionOrder:      m.SidebarHostSessionOrder,
-		Socket:                m.sidebarStateSocket,
+		Order:                  m.SidebarOrder,
+		Width:                  m.SidebarWidthPref,
+		DragWidth:              true,
+		Accents:                slots,
+		AccentColors:           colors,
+		AgentSeen:              m.SidebarAgentSeen,
+		AgentSeenSeq:           m.SidebarAgentSeenSeq,
+		AgentSeenAt:            m.SidebarAgentSeenAt,
+		AgentViewed:            m.SidebarAgentViewed,
+		AgentsFilter:           m.SidebarAgentFilter,
+		AgentsSort:             m.SidebarAgentSort,
+		AgentsSeen:             m.SidebarAgentsSeen,
+		SpawnPreset:            m.Inbox.ck.spawnPreset,
+		AgentsFolds:            m.Inbox.ck.ckFoldsToFile(),
+		BoardList:              m.Inbox.ck.boardList,
+		AgentsList:             m.Inbox.ck.listMode,
+		AgentsListWidth:        m.Inbox.ck.listWidth,
+		AgentsCardPreviewWidth: m.Inbox.ck.kb.pv.width,
+		AgentsSideHidden:       m.Inbox.ck.sideHidden,
+		AgentsGroup:            m.Inbox.ck.groupBy,
+		AgentNoticesDismissed:  collapsedRepoList(m.agentNoticesDismissed),
+		MachineOffersNever:     collapsedRepoList(m.machineOffersNever),
+		Collapsed:              m.SidebarCollapsed,
+		SectionSplit:           m.SidebarSectionSplit,
+		ReposCollapsed:         collapsedRepoList(m.SidebarCollapsedRepos),
+		HostsOrder:             m.SidebarHostOrder,
+		HostsCollapsed:         collapsedRepoList(m.SidebarCollapsedHosts),
+		HostSessionOrder:       m.SidebarHostSessionOrder,
+		Socket:                 m.sidebarStateSocket,
 	})
 	if err != nil {
 		return

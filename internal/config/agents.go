@@ -105,6 +105,43 @@ type AgentsConfig struct {
 	// or a queued reply, u takes it back. The daemon and the client read it
 	// both. Zero uses 10.
 	UndoWindowSeconds int `toml:"undo_window_seconds,omitempty"`
+	// CardPreview is where the task board shows the focused card's preview:
+	// "side" in a panel beside the columns, "sheet" over them, "auto" (the
+	// default) beside them on a wide screen and over them otherwise, and
+	// "off" never. See NormalizeCardPreview.
+	CardPreview string `toml:"card_preview,omitempty"`
+	// CardPreviewWidth is the side panel's width, as list_width is written:
+	// cells ("70") or a share of the view ("40%"). Empty is 40% of the view,
+	// at least 44 and at most 96 cells. A drag on the panel's edge changes
+	// it, and the view keeps that width. See CardPreviewCells.
+	CardPreviewWidth string `toml:"card_preview_width,omitempty"`
+}
+
+// The values of [agents] card_preview.
+const (
+	CardPreviewAuto  = "auto"
+	CardPreviewSide  = "side"
+	CardPreviewSheet = "sheet"
+	CardPreviewOff   = "off"
+)
+
+// CardPreviews is every value [agents] card_preview accepts.
+var CardPreviews = []string{CardPreviewAuto, CardPreviewSide, CardPreviewSheet, CardPreviewOff}
+
+// NormalizeCardPreview reads an [agents] card_preview value. Empty and
+// anything unrecognised mean the default, "auto".
+func NormalizeCardPreview(v string) string {
+	switch v = strings.ToLower(strings.TrimSpace(v)); v {
+	case CardPreviewSide, CardPreviewSheet, CardPreviewOff:
+		return v
+	}
+	return CardPreviewAuto
+}
+
+// CardPreviewCells is card_preview_width for a view total cells wide, and 0
+// when it is empty or does not parse.
+func (a AgentsConfig) CardPreviewCells(total int) int {
+	return AgentsConfig{ListWidth: a.CardPreviewWidth}.ListWidthCells(total)
 }
 
 // ReplyRowsMax bounds reply_rows. No view is taller.

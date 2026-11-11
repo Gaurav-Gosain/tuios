@@ -2027,7 +2027,7 @@ Inside it:
 | `r`, `i` | With no approval waiting: write a reply to the agent, or to the mail |
 | `tab` `shift+tab` | Give the keys to the next or the previous region: the list, the focus, the reply, the side column. A region the screen does not show is skipped. See below |
 | `N` | Go to the next agent that needs you, and from the top again after the last |
-| `space` | Read an approval's or a question's prompt and answer it here |
+| `space` | Read an approval's or a question's prompt and answer it here. On a card of the board's columns: show the card whole, its prompt, attachments and history, beside the columns or over them. It follows the cursor; `J` `K` scroll it, `[` `]` step its attachments, `Z` zooms it, and `space` or `esc` closes it |
 | `n` | Open the New agent sheet. See below |
 | `c` | On an attempt of a fan: compare the attempts. See below |
 | `b` | Show the task board, the cards grouped by stage, or the agents again |

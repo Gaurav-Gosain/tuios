@@ -3025,7 +3025,17 @@ of agents as a column beside the focus. `view_list` sets that layout:
 [agents]
 view_list = "column"   # default; "strip" or "auto"
 list_width = ""        # cells ("52") or a share ("30%"); empty follows the screen
+card_preview = "auto"  # the board's card preview: "side", "sheet", "auto" or "off"
+card_preview_width = "" # the side panel: cells ("70") or a share ("40%"); empty is 40%
 ```
+
+`space` on a card of the task board's columns shows the card whole.
+`card_preview` says where: `side` in a panel beside the columns, `sheet` over
+them, `auto` beside them on a screen 140 columns or wider that keeps three
+columns and over them otherwise, and `off` never. The panel is 40% of the
+view by default, at least 44 and at most 96 cells. A drag on its edge sets
+the width, and the view keeps it; a double click on the edge gives it back to
+`card_preview_width`.
 
 | Value | What the view shows |
 |---|---|

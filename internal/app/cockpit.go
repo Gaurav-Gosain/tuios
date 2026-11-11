@@ -1328,7 +1328,7 @@ func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 		ck.art.focus = false
 		m.cockpitTouch()
 	}
-	if m.cockpitDividerPress(x, y) {
+	if m.cockpitDividerPress(x, y) || m.kanbanPreviewClick(x, y) {
 		return nil, true
 	}
 	m.cockpitFocusRegionAt(x, y)
@@ -1378,6 +1378,9 @@ func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 
 // cockpitAction runs a button's action.
 func (m *OS) cockpitAction(action string) tea.Cmd {
+	if cmd, ok := m.kanbanPreviewAction(action); ok {
+		return cmd
+	}
 	switch action {
 	case "new":
 		return m.CockpitNewAgent()
@@ -1521,7 +1524,7 @@ func (m *OS) CockpitHover(x, y int) {
 	if m.cockpitMenuHover(x, y) {
 		return
 	}
-	if m.cockpitDividerMotion(x, y) {
+	if m.cockpitDividerMotion(x, y) || m.kanbanPreviewMotion(x, y) {
 		return
 	}
 	if m.kanbanDragTo(x, y) {
