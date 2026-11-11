@@ -214,6 +214,10 @@ func (f *fuzzOS) releaseWindows() {
 		w.Close()
 	}
 	f.m.Windows = nil
+	// The model goes with its panes: a new one is built on every Reset, and
+	// what the old one started (the rail's directory watch above all, an
+	// inotify instance on Linux) is stopped only by Cleanup.
+	f.m.Cleanup()
 }
 
 func (f *fuzzOS) Close() {

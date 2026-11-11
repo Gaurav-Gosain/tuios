@@ -219,6 +219,10 @@ func (t *Target) releaseWindows() {
 		w.Close()
 	}
 	t.m.Windows = nil
+	// The model goes with its panes: a new one is built on every Reset, and
+	// what the old one started (the rail's directory watch above all, an
+	// inotify instance on Linux) is stopped only by Cleanup.
+	t.m.Cleanup()
 }
 
 func (t *Target) Close() {
