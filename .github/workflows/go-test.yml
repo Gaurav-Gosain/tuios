@@ -386,6 +386,20 @@ jobs:
             fi
           done
 
+      - name: Test Ctrl+C in a pane of a daemon
+        # The daemon starts in a process group of its own, which turns Ctrl+C
+        # off for every pane it starts (issue #1668). The test runs a child
+        # the same way and checks that ping in its pane ignores Ctrl+C without
+        # ptyspawn.AllowCtrlC and stops with it. It must print its PASS line,
+        # so a rename or a skip fails the step.
+        shell: bash
+        run: |
+          go test -count=1 -timeout 5m -v -run '^TestPaneGetsCtrlCInANewProcessGroup$' ./internal/ptyspawn/ | tee "$RUNNER_TEMP/ctrlc-tests.log"
+          if ! grep -q -- "^--- PASS: TestPaneGetsCtrlCInANewProcessGroup " "$RUNNER_TEMP/ctrlc-tests.log"; then
+            echo "::error::TestPaneGetsCtrlCInANewProcessGroup did not run and pass"
+            exit 1
+          fi
+
       - name: Test tuios.exe on a console with TERM unset
         # The rest of cmd/tuios has never run on Windows, so only this test
         # runs here. It must print its PASS line, so a rename or a skip fails

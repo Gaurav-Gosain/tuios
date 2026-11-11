@@ -25,6 +25,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/openedcopy"
 	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
+	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/google/uuid"
 )
 
@@ -1679,6 +1680,13 @@ func (d *Daemon) Start() error {
 	}
 
 	log.Printf("TUIOS daemon started on %s (PID %d)", socketPath, os.Getpid())
+
+	// On Windows the daemon starts in a process group of its own, which turns
+	// Ctrl+C off for it and for every pane it starts. Turn it back on before
+	// any pane starts, so Ctrl+C in a pane reaches the pane's program.
+	if err := ptyspawn.AllowCtrlC(); err != nil {
+		log.Printf("Warning: Ctrl+C could not be turned on for the panes, so a pane's program may ignore it: %v", err)
+	}
 
 	// The binary this image runs, kept for a live upgrade to fall back to,
 	// before an installer can put another in its place. A daemon inside
