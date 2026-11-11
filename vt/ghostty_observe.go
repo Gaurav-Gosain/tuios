@@ -49,6 +49,9 @@ func (t *GhosttyTerminal) observeCtrl(b byte) {
 }
 
 func (t *GhosttyTerminal) observeESC(inter, final byte) {
+	if final == 'c' && inter == 0 {
+		t.modesDirty = true
+	}
 	switch inter {
 	case '(', ')', '*', '+':
 		// The library has US ASCII, the UK set and DEC special graphics,
@@ -146,6 +149,9 @@ func (t *GhosttyTerminal) softResetShadowLocked() {
 }
 
 func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
+	if final == 'h' || final == 'l' || (final == 'p' && inter == '!') || (prefix == '?' && (final == 'r' || final == 's')) {
+		t.modesDirty = true
+	}
 	switch {
 	case final == 'r' && prefix == 0 && inter == 0:
 		// DECSTBM. Empty params reset to the full screen. The library

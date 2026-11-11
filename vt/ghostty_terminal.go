@@ -62,6 +62,12 @@ type GhosttyTerminal struct {
 	// mainSbLen shadows the MAIN screen's history length; the library only
 	// reports the active screen's, and the alternate screen has none.
 	mainSbLen int
+	// modesDirty is set when the scanner sees a sequence that can change a
+	// mode refreshCachesLocked caches (SM/RM, DECSET/DECRST, DECSTR, RIS,
+	// XTRESTORE) or a restore runs; the caches are re-read only then. The
+	// scanner sees every CSI and ESC the library is given, so no other
+	// sequence reaches those modes.
+	modesDirty bool
 	// altHistory is a decoded snapshot switched to the main screen, for
 	// history line reads while the alternate screen is active.
 	altHistory    *gh.Terminal
@@ -206,6 +212,7 @@ func newGhosttyTerminal(w, h, maxLines int) *GhosttyTerminal {
 		maxLines = DefaultScrollbackSize
 	}
 	t := &GhosttyTerminal{
+		modesDirty:      true,
 		width:           w,
 		height:          h,
 		cellW:           defaultCellWidth,
@@ -621,33 +628,42 @@ func (t *GhosttyTerminal) SetScreenClearFunc(f func()) {
 }
 
 // refreshCachesLocked refreshes the atomic caches lock-free getters read.
-// Runs after every write; each query is one cheap library call.
+// Runs after every write. The 12 mode queries run only when modesDirty says a
+// sequence that can change a mode went by: each is a cgo call, and asking all
+// of them after every write was most of the cost of a small write (14 calls a
+// write, against 2 now). The history length is still read every time.
 func (t *GhosttyTerminal) refreshCachesLocked() {
 	if t.closed.Load() {
 		return
 	}
-	x10, _ := t.term.Mode(gh.ModeMouseEventX10)
-	normal, _ := t.term.Mode(gh.ModeMouseEventNormal)
-	button, _ := t.term.Mode(gh.ModeMouseEventButton)
-	any, _ := t.term.Mode(gh.ModeMouseEventAny)
-	t.cachedHasMouse.Store(x10 || normal || button || any)
-	t.cachedAllMotion.Store(any)
-	t.cachedCellMotion.Store(button)
-	sgr, _ := t.term.Mode(gh.ModeMouseFormatSGR)
-	px, _ := t.term.Mode(gh.ModeMouseFormatSGRPixels)
-	t.cachedMouseSGR.Store(sgr)
-	t.cachedMousePx.Store(px)
-	utf8Mouse, _ := t.term.Mode(gh.ModeMouseFormatUTF8)
-	urxvt, _ := t.term.Mode(gh.ModeMouseFormatURxvt)
-	t.cachedMouseUTF8.Store(utf8Mouse)
-	t.cachedMouseURXVT.Store(urxvt)
-	t.cachedMouseX10.Store(x10 && !normal && !button && !any)
+	isAlt := t.cachedAltScreen.Load()
+	if t.modesDirty {
+		t.modesDirty = false
+		x10, _ := t.term.Mode(gh.ModeMouseEventX10)
+		normal, _ := t.term.Mode(gh.ModeMouseEventNormal)
+		button, _ := t.term.Mode(gh.ModeMouseEventButton)
+		any, _ := t.term.Mode(gh.ModeMouseEventAny)
+		t.cachedHasMouse.Store(x10 || normal || button || any)
+		t.cachedAllMotion.Store(any)
+		t.cachedCellMotion.Store(button)
+		sgr, _ := t.term.Mode(gh.ModeMouseFormatSGR)
+		px, _ := t.term.Mode(gh.ModeMouseFormatSGRPixels)
+		t.cachedMouseSGR.Store(sgr)
+		t.cachedMousePx.Store(px)
+		utf8Mouse, _ := t.term.Mode(gh.ModeMouseFormatUTF8)
+		urxvt, _ := t.term.Mode(gh.ModeMouseFormatURxvt)
+		t.cachedMouseUTF8.Store(utf8Mouse)
+		t.cachedMouseURXVT.Store(urxvt)
+		t.cachedMouseX10.Store(x10 && !normal && !button && !any)
 
-	alt47, _ := t.term.Mode(gh.ModeAltScreenLegacy)
-	alt1047, _ := t.term.Mode(gh.ModeAltScreen)
-	alt1049, _ := t.term.Mode(gh.ModeAltScreenSaveCursorClearEnter)
-	isAlt := alt47 || alt1047 || alt1049
-	t.cachedAltScreen.Store(isAlt)
+		alt47, _ := t.term.Mode(gh.ModeAltScreenLegacy)
+		alt1047, _ := t.term.Mode(gh.ModeAltScreen)
+		alt1049, _ := t.term.Mode(gh.ModeAltScreenSaveCursorClearEnter)
+		isAlt = alt47 || alt1047 || alt1049
+		t.cachedAltScreen.Store(isAlt)
+		sync, _ := t.term.Mode(gh.ModeSynchronizedOutput)
+		t.noteSyncOutput(sync)
+	}
 	if !isAlt {
 		if t.pendingMainSbClear {
 			t.pendingMainSbClear = false
@@ -659,9 +675,6 @@ func (t *GhosttyTerminal) refreshCachesLocked() {
 			t.mainSbLen = int(n)
 		}
 	}
-
-	sync, _ := t.term.Mode(gh.ModeSynchronizedOutput)
-	t.noteSyncOutput(sync)
 
 	t.cachedKittyFlags.Store(int32(t.kittyKbd.CurrentFlags()))
 }

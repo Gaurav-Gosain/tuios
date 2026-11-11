@@ -293,6 +293,7 @@ func (t *GhosttyTerminal) RestorePendingInput(p []byte) {
 	t.scanner.Scan(p)
 	t.gridStale = true
 	t.scrollGeneration++
+	t.modesDirty = true
 	t.refreshCachesLocked()
 	q := t.takeQueue()
 	t.mu.Unlock()

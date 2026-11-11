@@ -523,6 +523,7 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 	t.gridStale = true
 	t.scrollGeneration++
 	t.markAllDirtyLocked()
+	t.modesDirty = true
 	t.refreshCachesLocked()
 }
 
