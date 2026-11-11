@@ -294,6 +294,7 @@ func handleLayoutPrefixLoad(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleLayoutPrefixSave(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.ShowLayoutPicker = true
 	o.LayoutPickerMode = "save"
+	o.LayoutSaveBuffer = ""
 	o.LayoutPickerQuery = ""
 	o.LayoutPickerSelected = 0
 	o.LayoutPickerScroll = 0

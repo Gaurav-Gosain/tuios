@@ -6,7 +6,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
@@ -119,9 +118,14 @@ type CommandPaletteItem struct {
 	// Bind names the keybind action the row runs, when it has one. The palette
 	// then shows that action's live key in Shortcut (see liveShortcuts), so a
 	// key moved or unbound in config.toml does not go on showing its default.
-	// Shortcut on such a row is only the fallback for a model with no registry.
-	Bind     string
-	Category string // "Window", "Layout", "Session", "Navigation", "Clipboard"
+	// A Bind row spells no key in Shortcut: defaultShortcuts fills it from the
+	// shipped keymap. Its Shortcut holds only a note, for an action with no
+	// default key ("drag to select").
+	Bind string
+	// shortcutIsKey marks a Shortcut that defaultShortcuts filled with a key,
+	// which liveShortcuts may replace, as opposed to a note it keeps.
+	shortcutIsKey bool
+	Category      string // "Window", "Layout", "Session", "Navigation", "Clipboard"
 	// Match holds the byte offsets in Name that the live query matched, filled
 	// in by FilterCommandPalette so the renderer can underline them without
 	// running the matcher a second time. Nil when nothing was typed, and for a
@@ -161,7 +165,6 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		// other (see launcher.go).
 		{
 			Name:     "Run a program",
-			Shortcut: "alt+space",
 			Bind:     "launcher",
 			Category: PaletteCategoryRun,
 		},
@@ -171,13 +174,11 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		// one.
 		{
 			Name:     "Start the screen saver",
-			Shortcut: "S",
 			Bind:     "start_screensaver",
 			Category: "View",
 		},
 		{
 			Name:     "Screenshot this window",
-			Shortcut: "prefix+C",
 			Bind:     "prefix_screenshot",
 			Category: "Window",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -188,21 +189,15 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Name:     "Screenshot a region",
 			Shortcut: "drag to select",
 			Category: "Window",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.BeginCapture(false)
-				return m, nil
-			},
+			Bind:     "screenshot",
 		},
 		{
 			Name:     "Screenshot the screen",
 			Category: "Window",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				return m, m.ScreenshotScreen()
-			},
+			Bind:     "screenshot_screen",
 		},
 		{
 			Name:     "Paste the clipboard image as a file path",
-			Shortcut: "prefix+V",
 			Bind:     "paste_image",
 			Category: "Clipboard",
 		},
@@ -210,18 +205,13 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		// Window management
 		{
 			Name:     "New window",
-			Shortcut: "prefix+c",
 			Bind:     "prefix_new_window",
 			Category: "Window",
 		},
 		{
 			Name:     "New window that runs the focused pane's ssh",
-			Shortcut: "",
 			Category: "Window",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.NewWindowSSH()
-				return m, nil
-			},
+			Bind:     "new_window_ssh",
 		},
 		{
 			Name:     "New window on another machine",
@@ -234,37 +224,31 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		},
 		{
 			Name:     "Close window",
-			Shortcut: "prefix+x",
 			Bind:     "prefix_close_window",
 			Category: "Window",
 		},
 		{
 			Name:     "Rename window",
-			Shortcut: "prefix+r",
 			Bind:     "prefix_rename_window",
 			Category: "Window",
 		},
 		{
 			Name:     "Toggle zoom",
-			Shortcut: "prefix+z",
 			Bind:     "prefix_fullscreen",
 			Category: "Window",
 		},
 		{
 			Name:     "Minimize window",
-			Shortcut: "prefix+m m",
 			Bind:     "minimize_prefix_focused",
 			Category: "Window",
 		},
 		{
 			Name:     "Restore all minimized",
-			Shortcut: "prefix+m M",
 			Bind:     "minimize_prefix_restore_all",
 			Category: "Window",
 		},
 		{
 			Name:     "Focus only: minimize the other windows",
-			Shortcut: "prefix+m f",
 			Bind:     "minimize_prefix_focus_only",
 			Category: "Window",
 		},
@@ -272,7 +256,6 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		// Layout
 		{
 			Name:     "Toggle tiling",
-			Shortcut: "prefix+space",
 			Bind:     "prefix_toggle_tiling",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -287,51 +270,28 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		},
 		{
 			Name:     "Split horizontal",
-			Shortcut: "prefix+-",
 			Bind:     "prefix_split_horizontal",
 			Category: "Layout",
 		},
 		{
 			Name:     "Split horizontal, and run the focused pane's ssh",
-			Shortcut: "",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				if m.AutoTiling {
-					m.SplitFocusedHorizontalSSH()
-					m.ShowNotification("Split horizontal", "info", s.NotificationDuration)
-				}
-				return m, nil
-			},
+			Bind:     "split_ssh_horizontal",
 		},
 		{
 			Name:     "Split vertical",
-			Shortcut: "prefix+|",
 			Bind:     "prefix_split_vertical",
 			Category: "Layout",
 		},
 		{
 			Name:     "Split vertical, and run the focused pane's ssh",
-			Shortcut: "",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				if m.AutoTiling {
-					m.SplitFocusedVerticalSSH()
-					m.ShowNotification("Split vertical", "info", s.NotificationDuration)
-				}
-				return m, nil
-			},
+			Bind:     "split_ssh_vertical",
 		},
 		{
 			Name:     "Smart split",
-			Shortcut: "",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				if m.AutoTiling {
-					m.SmartSplitFocused()
-					m.ShowNotification("Smart split", "info", s.NotificationDuration)
-				}
-				return m, nil
-			},
+			Bind:     "smart_split",
 		},
 		{
 			Name:     "Toggle shared borders",
@@ -352,81 +312,43 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		},
 		{
 			Name:     "Rotate split",
-			Shortcut: "prefix+R",
 			Bind:     "prefix_rotate_split",
 			Category: "Layout",
 		},
 		{
 			Name:     "Equalize splits",
-			Shortcut: "prefix+=",
 			Bind:     "prefix_equalize_splits",
 			Category: "Layout",
 		},
 		{
 			Name:     "Cycle tiling scheme",
-			Shortcut: "",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				if scheme := m.CycleTilingScheme(); scheme != "" {
-					m.ShowNotification("Tiling scheme: "+TilingSchemeLabel(scheme), "info", s.NotificationDuration)
-				}
-				return m, nil
-			},
+			Bind:     "cycle_tiling_scheme",
 		},
 		{
 			Name:     "Set tiling scheme: spiral",
-			Shortcut: "",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				if m.SetTilingScheme(layout.SchemeSpiral) {
-					m.ShowNotification("Tiling scheme: spiral", "info", s.NotificationDuration)
-				}
-				return m, nil
-			},
+			Bind:     "set_tiling_scheme_spiral",
 		},
 		{
 			Name:     "Set tiling scheme: longest side",
-			Shortcut: "",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				if m.SetTilingScheme(layout.SchemeLongestSide) {
-					m.ShowNotification("Tiling scheme: longest side", "info", s.NotificationDuration)
-				}
-				return m, nil
-			},
+			Bind:     "set_tiling_scheme_longest_side",
 		},
 		{
 			Name:     "Set tiling scheme: alternate",
-			Shortcut: "",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				if m.SetTilingScheme(layout.SchemeAlternate) {
-					m.ShowNotification("Tiling scheme: alternate", "info", s.NotificationDuration)
-				}
-				return m, nil
-			},
+			Bind:     "set_tiling_scheme_alternate",
 		},
 		{
 			Name:     "Set tiling scheme: smart split",
-			Shortcut: "",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				if m.SetTilingScheme(layout.SchemeSmartSplit) {
-					m.ShowNotification("Tiling scheme: smart split", "info", s.NotificationDuration)
-				}
-				return m, nil
-			},
+			Bind:     "set_tiling_scheme_smart_split",
 		},
 		{
 			Name:     "Cycle master position",
-			Shortcut: "",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				if pos := m.CycleMasterPosition(); pos != "" {
-					m.ShowNotification(MasterPositionMessage(m, pos), "info", s.NotificationDuration)
-				}
-				return m, nil
-			},
+			Bind:     "cycle_master_position",
 		},
 	}
 	for _, pos := range config.MasterPositions {
@@ -441,50 +363,29 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		})
 	}
-	return append(items, []CommandPaletteItem{
+	items = append(items, []CommandPaletteItem{
 		{
 			Name:     "Add a master pane",
-			Shortcut: "",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				if n := m.AddMaster(); n > 0 {
-					m.ShowNotification(MasterCountMessage(m, n), "info", s.NotificationDuration)
-				}
-				return m, nil
-			},
+			Bind:     "add_master",
 		},
 		{
 			Name:     "Remove a master pane",
-			Shortcut: "",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				if n := m.RemoveMaster(); n > 0 {
-					m.ShowNotification(MasterCountMessage(m, n), "info", s.NotificationDuration)
-				}
-				return m, nil
-			},
+			Bind:     "remove_master",
 		},
 		{
 			Name:     "Swap with master pane",
-			Shortcut: "",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.SwapWithMaster()
-				return m, nil
-			},
+			Bind:     "swap_with_master",
 		},
 		{
 			Name:     "Focus master pane",
-			Shortcut: "",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.FocusMaster()
-				return m, nil
-			},
+			Bind:     "focus_master",
 		},
 		{
 			Name:     "Snap fullscreen",
-			Shortcut: "prefix+z",
 			Bind:     "prefix_fullscreen",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -498,18 +399,11 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		// Layout templates
 		{
 			Name:     "Save layout",
-			Shortcut: "",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.ShowLayoutPicker = true
-				m.LayoutPickerMode = "save"
-				m.LayoutSaveBuffer = ""
-				return m, nil
-			},
+			Bind:     "layout_prefix_save",
 		},
 		{
 			Name:     "Load layout",
-			Shortcut: "prefix+L",
 			Bind:     "prefix_layout",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -520,85 +414,68 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		// Navigation
 		{
 			Name:     "Next window",
-			Shortcut: "prefix+n",
 			Bind:     "prefix_next_window",
 			Category: "Navigation",
 		},
 		{
 			Name:     "Previous window",
-			Shortcut: "prefix+p",
 			Bind:     "prefix_prev_window",
 			Category: "Navigation",
 		},
 		{
 			Name:     "Workspace 1",
-			Shortcut: "prefix+w 1",
 			Bind:     "workspace_prefix_switch_1",
 			Category: "Navigation",
 		},
 		{
 			Name:     "Workspace 2",
-			Shortcut: "prefix+w 2",
 			Bind:     "workspace_prefix_switch_2",
 			Category: "Navigation",
 		},
 		{
 			Name:     "Workspace 3",
-			Shortcut: "prefix+w 3",
 			Bind:     "workspace_prefix_switch_3",
 			Category: "Navigation",
 		},
 		{
 			Name:     "Workspace 4",
-			Shortcut: "prefix+w 4",
 			Bind:     "workspace_prefix_switch_4",
 			Category: "Navigation",
 		},
 		{
 			Name:     "Workspace 5",
-			Shortcut: "prefix+w 5",
 			Bind:     "workspace_prefix_switch_5",
 			Category: "Navigation",
 		},
 		{
 			Name:     "Workspace 6",
-			Shortcut: "prefix+w 6",
 			Bind:     "workspace_prefix_switch_6",
 			Category: "Navigation",
 		},
 		{
 			Name:     "Workspace 7",
-			Shortcut: "prefix+w 7",
 			Bind:     "workspace_prefix_switch_7",
 			Category: "Navigation",
 		},
 		{
 			Name:     "Workspace 8",
-			Shortcut: "prefix+w 8",
 			Bind:     "workspace_prefix_switch_8",
 			Category: "Navigation",
 		},
 		{
 			Name:     "Workspace 9",
-			Shortcut: "prefix+w 9",
 			Bind:     "workspace_prefix_switch_9",
 			Category: "Navigation",
 		},
 		{
 			Name:     "Next workspace",
 			Category: "Navigation",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.NextWorkspace()
-				return m, nil
-			},
+			Bind:     "next_workspace",
 		},
 		{
 			Name:     "Previous workspace",
 			Category: "Navigation",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.PrevWorkspace()
-				return m, nil
-			},
+			Bind:     "prev_workspace",
 		},
 
 		// Layout
@@ -619,26 +496,17 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		{
 			Name:     "Toggle multifocus",
 			Category: "Window",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.ToggleMultifocus(m.FocusedWindow)
-				return m, nil
-			},
+			Bind:     "toggle_multifocus_active",
 		},
 		{
 			Name:     "Toggle multifocus on all panes",
 			Category: "Window",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.ToggleMultifocusAll()
-				return m, nil
-			},
+			Bind:     "toggle_multifocus_all",
 		},
 		{
 			Name:     "Close workspace",
 			Category: "Window",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.OpenWorkspaceClose()
-				return m, nil
-			},
+			Bind:     "close_workspace",
 		},
 		{
 			Name:     "Clear multifocus",
@@ -685,47 +553,26 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		{
 			Name:     "Scroll: cycle column width",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				if m.UseScrollingLayout {
-					m.ScrollingCycleWidth()
-				}
-				return m, nil
-			},
+			Bind:     "scroll_cycle_width",
 		},
 		{
 			Name:     "Scroll: maximize column width",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				if m.UseScrollingLayout {
-					m.ScrollingMaximizeColumn()
-				}
-				return m, nil
-			},
+			Bind:     "scroll_maximize",
 		},
 		{
 			Name:     "Scroll: move window into the column below",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				if m.UseScrollingLayout {
-					m.ScrollingConsumeWindow()
-				}
-				return m, nil
-			},
+			Bind:     "scroll_consume",
 		},
 		{
 			Name:     "Scroll: move window out to its own column",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				if m.UseScrollingLayout {
-					m.ScrollingExpelWindow()
-				}
-				return m, nil
-			},
+			Bind:     "scroll_expel",
 		},
 		// Scrollback
 		{
 			Name:     "Edit the scrollback in the editor",
-			Shortcut: "prefix+E",
 			Bind:     config.ActionEditScrollback,
 			Category: "Window",
 		},
@@ -738,10 +585,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		{
 			Name:     "Toggle floating",
 			Category: "Window",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.ToggleFloating()
-				return m, nil
-			},
+			Bind:     "window_prefix_float",
 		},
 		// Navigation
 		{
@@ -764,14 +608,10 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			// always open.
 			Name:     "New session",
 			Category: "Session",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.OpenNewSessionPicker()
-				return m, nil
-			},
+			Bind:     "new_session",
 		},
 		{
 			Name:     "Settings",
-			Shortcut: "prefix+,",
 			Bind:     "prefix_settings",
 			Category: "Session",
 		},
@@ -779,7 +619,6 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			// The Agents tab, where each harness's integration is shown,
 			// installed and updated. Left out while the tab is.
 			Name:     paletteAgentsSettingsName,
-			Shortcut: "prefix+A",
 			Bind:     "prefix_agents_settings",
 			Category: "Session",
 		},
@@ -825,7 +664,6 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		// would ever tell the user about.
 		{
 			Name:     "Keybind manager",
-			Shortcut: "prefix+k",
 			Bind:     "prefix_keybinds",
 			Category: PaletteCategoryKeybind,
 		},
@@ -833,10 +671,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Name:     "Rebind a key",
 			Shortcut: "or type #close",
 			Category: PaletteCategoryKeybind,
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.OpenKeybindManager()
-				return m, nil
-			},
+			Bind:     "prefix_keybinds",
 		},
 		{
 			Name:     "Unbind a key",
@@ -858,13 +693,10 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		{
 			Name:     "Reload config",
 			Category: "Session",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				return m, m.ReloadConfigFromDisk()
-			},
+			Bind:     "reload_config",
 		},
 		{
 			Name:     "Toggle sidebar",
-			Shortcut: "prefix+b",
 			Bind:     "prefix_toggle_sidebar",
 			Category: "Session",
 		},
@@ -883,7 +715,6 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		},
 		{
 			Name:     "Switch session",
-			Shortcut: "prefix+S",
 			Bind:     "prefix_session_switcher",
 			Category: "Session",
 		},
@@ -937,7 +768,6 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		{
 			// The Inbox: everything waiting for the person, in every session.
 			Name:     "Agents: what needs you",
-			Shortcut: "prefix+i",
 			Bind:     "prefix_inbox",
 			Category: paletteCategoryAgents,
 		},
@@ -960,7 +790,6 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		{
 			// The copies between machines: the Copies panel.
 			Name:     "Copies between machines",
-			Shortcut: "prefix+u",
 			Bind:     "prefix_transfers",
 			Category: "Files",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -969,20 +798,17 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		},
 		{
 			Name:     "Agents: go to the oldest waiting",
-			Shortcut: "prefix+o",
 			Bind:     "prefix_next_attention",
 			Category: paletteCategoryAgents,
 		},
 		{
 			// The agent panes in the rail's order, across sessions.
 			Name:     "Agents: next agent",
-			Shortcut: "alt+shift+j",
 			Bind:     "next_agent",
 			Category: paletteCategoryAgents,
 		},
 		{
 			Name:     "Agents: previous agent",
-			Shortcut: "alt+shift+k",
 			Bind:     "prev_agent",
 			Category: paletteCategoryAgents,
 		},
@@ -990,7 +816,6 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			// The review overlay on the focused pane's changes. The word
 			// "review" finds it, like "Review changes" in the prefix menu.
 			Name:     paletteReviewName,
-			Shortcut: "prefix+v",
 			Bind:     "prefix_review",
 			Category: paletteCategoryAgents,
 		},
@@ -998,135 +823,111 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			// prefix+M had no palette row; "open mailbox" above opens a
 			// different view, every thread rather than mail for you.
 			Name:     "Agents: mail for you",
-			Shortcut: "prefix+M",
 			Bind:     "prefix_mail",
 			Category: paletteCategoryAgents,
 		},
 		{
 			Name:     "Show help",
-			Shortcut: "prefix+?",
 			Bind:     "prefix_help",
 			Category: "Session",
 		},
 		{
 			Name:     "Show logs",
-			Shortcut: "prefix+D l",
 			Bind:     "debug_prefix_logs",
 			Category: "Session",
 		},
 		{
 			Name:     "Toggle scrollback browser",
-			Shortcut: "prefix+s",
 			Bind:     "prefix_scrollback",
 			Category: "Session",
 		},
 		{
 			Name:     "Panes: find a pane in every session",
-			Shortcut: "prefix+/",
 			Bind:     "choose_tree",
 			Category: "Session",
 		},
 		{
 			Name:     "Go to: an agent, session, workspace or pane",
-			Shortcut: "prefix+G",
 			Bind:     "goto_picker",
 			Category: "Session",
 		},
 		{
 			Name:     "Session note: what this session is for or what comes next",
-			Shortcut: "prefix+I",
 			Bind:     "set_note",
 			Category: "Session",
 		},
 		{
 			Name:     "New worktree: a branch and a session in this pane's repository",
-			Shortcut: "prefix+U",
 			Bind:     "new_worktree",
 			Category: "Session",
 		},
 		{
 			Name:     "Hints: label text on the pane to copy it",
-			Shortcut: "prefix+F",
 			Bind:     "hints",
 			Category: "Session",
 		},
 		{
 			Name:     "Calm mode: stop motion and quiet messages",
-			Shortcut: "prefix+Z",
 			Bind:     "toggle_calm",
 			Category: "View",
 		},
 		{
 			Name:     "Scratch: show or hide the scratch terminal",
-			Shortcut: "prefix+g",
 			Bind:     "toggle_scratch",
 			Category: "Session",
 		},
 		{
 			Name:     "Path: pick a file or folder and type its path",
-			Shortcut: "alt+;",
 			Bind:     "pick_path",
 			Category: "Session",
 		},
 		{
 			Name:     "Panes: label the panes and focus one",
-			Shortcut: "prefix+Q",
 			Bind:     "display_panes",
 			Category: "Session",
 		},
 		{
 			Name:     "Hints: label text on all panes to copy it",
 			Category: "Session",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.OpenHintsAllPanes()
-				return m, nil
-			},
+			Bind:     "hints_all_panes",
 		},
 		{
 			Name:     "Toggle show keys",
-			Shortcut: "prefix+D k",
 			Bind:     "debug_prefix_showkeys",
 			Category: "Session",
 		},
 		{
 			Name:     "Picture in picture: pin or unpin the focused pane",
-			Shortcut: "p",
 			Bind:     "toggle_pip",
 			Category: "Session",
 		},
 		{
 			Name:     "Toggle spotlight",
-			Shortcut: "B",
 			Bind:     "toggle_spotlight",
 			Category: "Session",
 		},
 		{
 			Name:     "Toggle animations",
-			Shortcut: "prefix+D a",
 			Bind:     "debug_prefix_animations",
 			Category: "Session",
 		},
 		{
 			Name:     "Window management mode",
-			Shortcut: "prefix+esc",
 			Bind:     "prefix_exit_mode",
 			Category: "Session",
 		},
 		{
 			Name:     "Tape: review the project tape",
-			Shortcut: "prefix+T t",
 			Bind:     "tape_prefix_review",
 			Category: "Session",
 		},
 		{
 			Name:     "Open the tape manager",
-			Shortcut: "prefix+T m",
 			Bind:     "tape_prefix_manager",
 			Category: "Session",
 		},
 		{
 			Name:     "Enter copy mode",
-			Shortcut: "prefix+[",
 			Bind:     "prefix_selection",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -1154,7 +955,6 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		},
 		{
 			Name:     paletteMultiCopyName,
-			Shortcut: "prefix+[",
 			Bind:     "prefix_selection",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -1163,6 +963,8 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 	}...)
+	defaultShortcuts(items)
+	return items
 }
 
 // paletteStateTokens are the states a leading "@" token narrows the palette to.
@@ -1357,10 +1159,28 @@ func matchPaletteItems(items []CommandPaletteItem, query string) []CommandPalett
 	return out
 }
 
+// defaultShortcuts gives each row that names a keybind action and has no
+// Shortcut text of its own the key the shipped keymap binds that action to,
+// so no row spells a key that can drift from the keymap. A client with no
+// keymap of its own, such as the GUI bridge, shows these.
+func defaultShortcuts(items []CommandPaletteItem) {
+	presses := config.PressesByAction(config.DefaultKeybindRegistry())
+	for i := range items {
+		if items[i].Bind == "" || items[i].Shortcut != "" {
+			continue
+		}
+		if p := presses[items[i].Bind]; len(p) > 0 {
+			items[i].Shortcut = paletteShortcut(p[0], config.DefaultLeaderKey)
+			items[i].shortcutIsKey = true
+		}
+	}
+}
+
 // liveShortcuts sets the Shortcut of every row that names a keybind action to
 // the key the config binds that action to now. It runs each time the palette
 // list is built, so a reloaded config shows on the next open. A row whose
-// action has no live key shows no shortcut.
+// action has a default key but no live key shows no shortcut. A row with a
+// note of its own keeps it, such as "drag to select".
 func (m *OS) liveShortcuts(items []CommandPaletteItem) {
 	reg := m.KeybindRegistry
 	if reg == nil {
@@ -1372,15 +1192,15 @@ func (m *OS) liveShortcuts(items []CommandPaletteItem) {
 		leader = config.DefaultLeaderKey
 	}
 	for i := range items {
-		if items[i].Bind == "" {
+		if items[i].Bind == "" || (items[i].Shortcut != "" && !items[i].shortcutIsKey) {
 			continue
 		}
-		items[i].Shortcut = ""
 		// The first press is the one to show: presses come in scope order,
 		// so a global key (launcher's alt+space) wins over its prefix chord,
 		// and the chord shows when the global key is unbound.
+		items[i].Shortcut, items[i].shortcutIsKey = "", false
 		if p := presses[items[i].Bind]; len(p) > 0 {
-			items[i].Shortcut = paletteShortcut(p[0], leader)
+			items[i].Shortcut, items[i].shortcutIsKey = paletteShortcut(p[0], leader), true
 		}
 	}
 }

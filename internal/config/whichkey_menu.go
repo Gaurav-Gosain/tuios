@@ -653,3 +653,7 @@ func (r *KeybindRegistry) liveScope(scope string) *liveScope {
 var defaultMenuRegistry = sync.OnceValue(func() *KeybindRegistry {
 	return NewKeybindRegistry(DefaultConfig())
 })
+
+// DefaultKeybindRegistry is the registry of the shipped keymap, built once,
+// for a caller that needs the default key of an action, not the user's.
+func DefaultKeybindRegistry() *KeybindRegistry { return defaultMenuRegistry() }

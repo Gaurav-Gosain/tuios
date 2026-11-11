@@ -26,7 +26,7 @@ func TestUnbindIsFindableByItsOwnWord(t *testing.T) {
 			t.Errorf("nothing in the palette answers to %q", word)
 			continue
 		}
-		if hits[0].Action == nil {
+		if hits[0].Action == nil && hits[0].Bind == "" {
 			t.Errorf("the first hit for %q does nothing", word)
 		}
 	}
