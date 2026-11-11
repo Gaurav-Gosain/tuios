@@ -32,7 +32,6 @@ import (
 	"crypto/sha256"
 	_ "embed"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -41,6 +40,8 @@ import (
 	"slices"
 	"strings"
 	"sync"
+
+	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/adrg/xdg"
@@ -190,22 +191,7 @@ func install(dir string) error {
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			return errfmt.Errorf("failed to make the shell integration folder: %w", err)
 		}
-		tmp, err := os.CreateTemp(filepath.Dir(path), ".tmp-*")
-		if err != nil {
-			return errfmt.Errorf("failed to write the shell integration: %w", err)
-		}
-		_, werr := tmp.Write(f.data)
-		cerr := tmp.Close()
-		if err := errors.Join(werr, cerr); err != nil {
-			_ = os.Remove(tmp.Name())
-			return errfmt.Errorf("failed to write the shell integration: %w", err)
-		}
-		if err := os.Chmod(tmp.Name(), 0o600); err != nil {
-			_ = os.Remove(tmp.Name())
-			return errfmt.Errorf("failed to write the shell integration: %w", err)
-		}
-		if err := os.Rename(tmp.Name(), path); err != nil {
-			_ = os.Remove(tmp.Name())
+		if err := atomicfile.Write(path, f.data, 0o600, false); err != nil {
 			return errfmt.Errorf("failed to write the shell integration: %w", err)
 		}
 	}

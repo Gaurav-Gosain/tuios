@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
+
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
@@ -105,21 +107,7 @@ func (s *progressStore) save() error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(dir, ".tutor-*.json")
-	if err != nil {
-		return err
-	}
-	_, werr := f.Write(append(raw, '\n'))
-	cerr := f.Close()
-	if err := errors.Join(werr, cerr); err != nil {
-		_ = os.Remove(f.Name())
-		return err
-	}
-	if err := os.Rename(f.Name(), s.path); err != nil {
-		_ = os.Remove(f.Name())
-		return err
-	}
-	return nil
+	return atomicfile.Write(s.path, append(raw, '\n'), 0o600, false)
 }
 
 // resetProgress removes the file. A file that is not there is no error.

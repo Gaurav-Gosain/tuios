@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
+
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 	"github.com/Gaurav-Gosain/tuios/skills"
@@ -258,24 +260,9 @@ func writeOwned(path string, data []byte) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // a skills directory, made the way the harness makes it
 		return errfmt.Errorf("failed to create %s: %w", dir, err)
 	}
-	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tuios-*")
-	if err != nil {
+	//nolint:gosec // a skill file the harness and the person read, like the files beside it
+	if err := atomicfile.Write(path, data, 0o644, false); err != nil {
 		return errfmt.Errorf("failed to write %s: %w", path, err)
-	}
-	name := tmp.Name()
-	defer func() { _ = os.Remove(name) }()
-	_, werr := tmp.Write(data)
-	if cerr := tmp.Close(); werr == nil {
-		werr = cerr
-	}
-	if werr == nil {
-		werr = os.Chmod(name, 0o644) //nolint:gosec // a skill file the harness and the person read, like the files beside it
-	}
-	if werr == nil {
-		werr = os.Rename(name, path)
-	}
-	if werr != nil {
-		return errfmt.Errorf("failed to write %s: %w", path, werr)
 	}
 	return nil
 }

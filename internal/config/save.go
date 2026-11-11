@@ -10,6 +10,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
+
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -201,25 +203,8 @@ func writeConfigBytes(data []byte, configPath string) error {
 	if info, err := os.Stat(target); err == nil {
 		mode = info.Mode().Perm()
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(target), ".config.toml.*")
-	if err != nil {
-		return errfmt.Errorf("failed to write config file: %w", err)
-	}
-	tmpPath := tmp.Name()
-	_, werr := tmp.Write(data)
-	if werr == nil {
-		werr = tmp.Chmod(mode)
-	}
-	if cerr := tmp.Close(); werr == nil {
-		werr = cerr
-	}
-	if werr != nil {
-		_ = os.Remove(tmpPath)
-		return errfmt.Errorf("failed to write config file: %w", werr)
-	}
 	noteSelfWrite(data)
-	if err := os.Rename(tmpPath, target); err != nil {
-		_ = os.Remove(tmpPath)
+	if err := atomicfile.Write(target, data, mode, false); err != nil {
 		return errfmt.Errorf("failed to write config file: %w", err)
 	}
 	return nil
