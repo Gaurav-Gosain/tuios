@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // herdr's key grammar, read into send-keys calls.
@@ -38,13 +40,20 @@ var herdrKeyNames = map[string]string{
 	"insert": "Insert", "delete": "Delete",
 }
 
-// herdrKeyMods are herdr's modifier words and the send-keys prefix of each.
-// cmd, super and hyper have no byte encoding in a terminal without a
-// keyboard protocol, so a key that holds one is refused.
-var herdrKeyMods = map[string]string{
-	"ctrl": "ctrl", "control": "ctrl", "shift": "shift",
-	"alt": "alt", "option": "alt", "meta": "alt",
-	"cmd": "", "command": "", "super": "", "hyper": "",
+// herdrKeyMod is the send-keys prefix of one of herdr's modifier words, read
+// by the spellings every key reader shares (config.ParseModifier). super and
+// hyper have no byte encoding in a terminal without a keyboard protocol, so a
+// key that holds one is refused: refused is true.
+func herdrKeyMod(word string) (prefix string, isMod, refused bool) {
+	name, ok := config.ParseModifier(word)
+	if !ok {
+		return "", false, false
+	}
+	switch name {
+	case config.ModCtrl, config.ModAlt, config.ModShift:
+		return name, true, false
+	}
+	return "", true, true
 }
 
 // herdrKeyRuns reads herdr keys into send-keys runs. It returns the first key
@@ -91,8 +100,8 @@ func herdrKeyToken(key string) (string, bool, bool) {
 		if part == "" {
 			return "", false, false
 		}
-		if prefix, isMod := herdrKeyMods[strings.ToLower(part)]; isMod {
-			if prefix == "" {
+		if prefix, isMod, refused := herdrKeyMod(part); isMod {
+			if refused {
 				return "", false, false
 			}
 			if !slices.Contains(mods, prefix) {

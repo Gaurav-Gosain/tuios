@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
@@ -313,12 +314,13 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 			return errMissingArg("key combo", "a combination such as ctrl+b")
 		}
 		comboStr := cmd.Args[0]
-		// Handle Alt+N / alt+N for workspace switching (case-insensitive)
-		lowerCombo := strings.ToLower(comboStr)
-		if len(lowerCombo) >= 5 && (lowerCombo[:4] == "alt+" || lowerCombo[:4] == "opt+") {
-			ws := 0
-			if _, err := fmt.Sscanf(comboStr[4:], "%d", &ws); err == nil && ws >= 1 && ws <= 9 {
-				return ce.executor.SwitchWorkspace(ws)
+		// Alt+N, in any spelling of Alt, switches to workspace N.
+		if mod, rest, ok := strings.Cut(comboStr, "+"); ok {
+			if name, isMod := config.ParseModifier(mod); isMod && name == config.ModAlt {
+				ws := 0
+				if _, err := fmt.Sscanf(rest, "%d", &ws); err == nil && ws >= 1 && ws <= 9 {
+					return ce.executor.SwitchWorkspace(ws)
+				}
 			}
 		}
 		// For other key combos, convert to proper bytes and send to the focused window
@@ -538,12 +540,13 @@ func convertKeyComboToBytes(comboStr string) []byte {
 	// Parse modifiers and key
 	for i := range len(parts) {
 		part := strings.TrimSpace(parts[i])
-		switch strings.ToLower(part) {
-		case "ctrl":
+		name, isMod := config.ParseModifier(part)
+		switch {
+		case isMod && name == config.ModCtrl:
 			ctrlModifier = true
-		case "alt", "opt":
+		case isMod && name == config.ModAlt:
 			altModifier = true
-		case "shift":
+		case isMod && name == config.ModShift:
 			shiftModifier = true
 		default:
 			keyStr = part

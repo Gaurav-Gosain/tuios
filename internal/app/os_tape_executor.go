@@ -1350,19 +1350,22 @@ func (m *OS) parseKeyToMessage(key string) tea.KeyPressMsg {
 
 		for _, part := range parts {
 			part = strings.TrimSpace(part)
-			switch strings.ToLower(part) {
-			case "ctrl":
-				mod |= tea.ModCtrl
-			case "alt", "opt":
-				mod |= tea.ModAlt
-			case "shift":
-				mod |= tea.ModShift
-			case "super", "cmd", "win":
-				mod |= tea.ModSuper
-			case "meta":
-				mod |= tea.ModMeta
-			default:
+			name, isMod := config.ParseModifier(part)
+			if !isMod {
 				keyPart = part
+				continue
+			}
+			switch name {
+			case config.ModCtrl:
+				mod |= tea.ModCtrl
+			case config.ModAlt:
+				mod |= tea.ModAlt
+			case config.ModShift:
+				mod |= tea.ModShift
+			case config.ModSuper:
+				mod |= tea.ModSuper
+			case config.ModHyper:
+				mod |= tea.ModHyper
 			}
 		}
 		key = keyPart

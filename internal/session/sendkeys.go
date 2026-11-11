@@ -8,6 +8,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/charmbracelet/x/ansi"
 	"tuios.dev/vt"
@@ -550,15 +551,18 @@ func splitKeyMods(tok string) (mods keyMods, rest string, hasMods bool, err erro
 	}
 	key := ""
 	for _, p := range parts {
-		switch strings.ToLower(strings.TrimSpace(p)) {
-		case "ctrl", "control", "ctl":
+		name, isMod := config.ParseModifier(p)
+		switch {
+		case isMod && name == config.ModCtrl:
 			mods.ctrl = true
-		case "alt", "opt", "option", "meta":
+		case isMod && name == config.ModAlt:
 			mods.alt = true
-		case "shift":
+		case isMod && name == config.ModShift:
 			mods.shift = true
-		case "super", "cmd", "win":
+		case isMod && name == config.ModSuper:
 			mods.super = true
+		case isMod:
+			return keyMods{}, tok, false, errfmt.Errorf("unsupported modifier in %q: a terminal has no encoding for %s. Use ctrl, alt or shift", tok, name)
 		default:
 			if key != "" {
 				return keyMods{}, tok, false, errUnknownKey{token: tok}
@@ -760,16 +764,29 @@ func (p *PTY) keyModes() paneKeyModes {
 }
 
 // keyModifiers are the modifiers a send-keys token can carry, each with every
-// spelling the parser takes (splitKeyMods and parseKeyToken). list-keys
-// reports them.
-var keyModifiers = []struct {
+// spelling the parser takes: the spellings every key reader shares
+// (config.ModifierSpellings), and tmux's prefixes. list-keys reports them.
+var keyModifiers = func() []keyModifier {
+	tmux := map[string][]string{
+		config.ModCtrl:  {"C-", "^"},
+		config.ModAlt:   {"M-"},
+		config.ModShift: {"S-"},
+	}
+	var out []keyModifier
+	for _, name := range []string{config.ModCtrl, config.ModAlt, config.ModShift, config.ModSuper} {
+		var spellings []string
+		for _, s := range config.ModifierSpellings(name) {
+			spellings = append(spellings, s+"+")
+		}
+		out = append(out, keyModifier{Name: name, Spellings: append(spellings, tmux[name]...)})
+	}
+	return out
+}()
+
+// keyModifier is one entry of keyModifiers.
+type keyModifier struct {
 	Name      string   `json:"name"`
 	Spellings []string `json:"spellings"`
-}{
-	{"ctrl", []string{"ctrl+", "control+", "ctl+", "C-", "^"}},
-	{"alt", []string{"alt+", "opt+", "option+", "meta+", "M-"}},
-	{"shift", []string{"shift+", "S-"}},
-	{"super", []string{"super+", "cmd+", "win+"}},
 }
 
 // ctrlCharacters are the characters other than letters that ctrl combines

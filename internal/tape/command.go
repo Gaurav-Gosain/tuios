@@ -7,6 +7,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
@@ -395,15 +396,18 @@ func ParseKeyCombo(s string) (*KeyCombo, error) {
 
 	// All parts before the last are modifiers (case-insensitive)
 	for i := range len(parts) - 1 {
-		switch strings.ToLower(parts[i]) {
-		case "ctrl":
+		name, ok := config.ParseModifier(parts[i])
+		switch {
+		case !ok:
+			return nil, errfmt.Errorf("unknown modifier: %s", parts[i])
+		case name == config.ModCtrl:
 			kc.Ctrl = true
-		case "alt", "opt":
+		case name == config.ModAlt:
 			kc.Alt = true
-		case "shift":
+		case name == config.ModShift:
 			kc.Shift = true
 		default:
-			return nil, errfmt.Errorf("unknown modifier: %s", parts[i])
+			return nil, errfmt.Errorf("modifier %s has no encoding in a terminal: use ctrl, alt or shift", parts[i])
 		}
 	}
 

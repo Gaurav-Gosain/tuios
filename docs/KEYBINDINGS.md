@@ -385,13 +385,15 @@ file_search = ["ctrl+f"]
 
 ## Modifier spellings
 
-A key in `config.toml` can spell a modifier in more than one way. tuios reads each spelling as the same key.
+A key in `config.toml` can spell a modifier in more than one way. tuios reads each spelling as the same key. `tuios send-keys`, herdr keys and a tape take the same spellings.
 
 | Write | tuios reads it as | Where |
 |---|---|---|
-| `opt+`, `option+` | `alt+` | all platforms |
-| `cmd+`, `command+` | `super+` | all platforms |
-| `control+` | `ctrl+` | all platforms |
+| `opt+`, `option+`, `meta+` | `alt+` | all platforms |
+| `cmd+`, `command+`, `win+` | `super+` | all platforms |
+| `control+`, `ctl+` | `ctrl+` | all platforms |
+
+`meta` is Alt, as it is to tmux, emacs and readline. A kitty keyboard Meta key is a different key, and no spelling names it.
 
 The order of the modifiers does not matter, so `shift+ctrl+x` is `ctrl+shift+x`. This applies to `leader_key`, to every binding table, and to `tuios keybinds explain`, `free` and `unbind`. `tuios keybinds explain opt+f12` shows `opt+f12 (tuios reads it as alt+f12)`. `tuios keybinds doctor` lists each key that tuios cannot read.
 

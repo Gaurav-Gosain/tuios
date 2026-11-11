@@ -18,7 +18,11 @@ func TestValidateKeyModifiersOnEachPlatform(t *testing.T) {
 		{"ctrl+alt+shift+super+x", "", ""},
 		{"opt+a", "", ""},
 		{"option+a", "", ""},
-		{"meta+a", "invalid modifier: meta", "invalid modifier: meta"},
+		// meta is Alt in every key reader, so a binding may spell it.
+		{"meta+a", "", ""},
+		{"alt+meta+a", "duplicate modifier: meta", "duplicate modifier: meta"},
+		{"ctl+a", "", ""},
+		{"win+v", "", ""},
 		{"hyper+a", "invalid modifier: hyper", "invalid modifier: hyper"},
 		{"ctrl+ctrl+a", "duplicate modifier: ctrl", "duplicate modifier: ctrl"},
 		{"ctrl+", "key combination incomplete (ends with +)", "key combination incomplete (ends with +)"},

@@ -3165,7 +3165,10 @@ Modifiers go in front of a named key or of one character:
 | ctrl | `ctrl+`, `control+`, `ctl+`, `C-`, and `^` before one character (`^C`) |
 | alt | `alt+`, `opt+`, `option+`, `meta+`, `M-` |
 | shift | `shift+`, `S-` |
-| super | `super+`, `cmd+`, `win+`. Only the window manager of an attached client takes it. A pane refuses it |
+| super | `super+`, `cmd+`, `command+`, `win+`. Only the window manager of an attached client takes it. A pane refuses it |
+
+The spellings are the ones config.toml, herdr keys and a tape take too. `meta`
+is Alt everywhere, as it is to tmux, emacs and readline.
 
 ctrl combines with a letter, and with `@`, `[`, `\`, `]`, `^`, `_`, `?`,
 `Space`, `2`, `6` and `-`. Modifiers on a named key are sent the xterm way,

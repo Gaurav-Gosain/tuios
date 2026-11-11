@@ -38,23 +38,59 @@ func isSingleRuneLetter(s string) bool {
 	return unicode.IsLetter(r)
 }
 
-// modifierAliases maps every modifier spelling tuios accepts in config.toml to
-// the name Bubble Tea gives the modifier in a key event. opt and option are the
-// macOS names for Alt, cmd and command the macOS names for Super.
-var modifierAliases = map[string]string{
-	"ctrl": "ctrl", "control": "ctrl",
-	"alt": "alt", "opt": "alt", "option": "alt",
-	"shift": "shift",
-	"meta":  "meta",
-	"hyper": "hyper",
-	"super": "super", "cmd": "super", "command": "super",
+// Modifier names, as Bubble Tea writes them in a key event's string.
+const (
+	ModCtrl  = "ctrl"
+	ModAlt   = "alt"
+	ModShift = "shift"
+	ModSuper = "super"
+	ModHyper = "hyper"
+)
+
+// modifierSpellings is every spelling of a modifier tuios reads, wherever a
+// key is written: config.toml, send-keys, herdr keys, a tape and the web
+// client's key buttons. Each maps to the modifier's name. opt and option are
+// the macOS names for Alt, cmd and command the macOS names for Super, and win
+// the Windows name for Super.
+//
+// meta is Alt. That is what it means to a terminal program (tmux's M-, emacs
+// and readline's Meta, xterm's metaSendsEscape) and what send-keys and herdr
+// keys always sent. A kitty keyboard Meta key is a separate key Bubble Tea
+// reports as "meta"; no spelling here names it.
+var modifierSpellings = map[string]string{
+	"ctrl": ModCtrl, "control": ModCtrl, "ctl": ModCtrl,
+	"alt": ModAlt, "opt": ModAlt, "option": ModAlt, "meta": ModAlt,
+	"shift": ModShift,
+	"super": ModSuper, "cmd": ModSuper, "command": ModSuper, "win": ModSuper,
+	"hyper": ModHyper,
+}
+
+// ParseModifier reads one spelling of a modifier, in any case, and returns
+// its name: ModCtrl, ModAlt, ModShift, ModSuper or ModHyper. ok is false for a
+// word that is not a modifier.
+func ParseModifier(word string) (name string, ok bool) {
+	name, ok = modifierSpellings[strings.ToLower(strings.TrimSpace(word))]
+	return name, ok
+}
+
+// ModifierSpellings lists the spellings of the modifier name, sorted, for
+// help and list-keys.
+func ModifierSpellings(name string) []string {
+	var out []string
+	for spelling, n := range modifierSpellings {
+		if n == name {
+			out = append(out, spelling)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // modifierOrder is the order Bubble Tea writes modifiers in a key event's
 // string (ultraviolet's Key.Keystroke). A binding spelled in any other order
 // has to be put in this one, or "shift+ctrl+x" never equals the "ctrl+shift+x"
 // a key press produces.
-var modifierOrder = []string{"ctrl", "alt", "shift", "meta", "hyper", "super"}
+var modifierOrder = []string{ModCtrl, ModAlt, ModShift, ModHyper, ModSuper}
 
 // splitKeyChord splits a lowercased chord into its modifiers and its base key.
 // A trailing "++" is the plus key itself, so "ctrl++" is ctrl and "+". ok is
@@ -110,7 +146,7 @@ func CanonicalKey(key string) string {
 	}
 	have := make(map[string]bool, len(mods))
 	for _, m := range mods {
-		name, known := modifierAliases[m]
+		name, known := ParseModifier(m)
 		if !known {
 			return lower
 		}
@@ -649,7 +685,7 @@ func (kn *KeyNormalizer) ValidateKey(key string) (bool, string) {
 		// stand for, so alt+opt+x names Alt twice.
 		modSet := make(map[string]bool)
 		for _, mod := range modifiers {
-			name := modifierAliases[mod]
+			name, _ := ParseModifier(mod)
 			if modSet[name] {
 				return false, "duplicate modifier: " + mod
 			}
@@ -691,7 +727,7 @@ func (kn *KeyNormalizer) ValidateSectionKey(section, key string) (bool, string) 
 	}
 	seen := make(map[string]bool)
 	for _, mod := range parts[:len(parts)-1] {
-		name := modifierAliases[mod]
+		name, _ := ParseModifier(mod)
 		switch name {
 		case "ctrl", "alt", "shift":
 		default:
@@ -732,15 +768,11 @@ var validSpecialKeys = map[string]bool{
 // terminals. Super only reaches a terminal that has negotiated the Kitty
 // keyboard protocol, but the input path has always acted on super+v and
 // shift+super+v for the host paste, so rejecting it would make the working
-// default unwritable the moment it became a binding. control is an alias for
-// ctrl, cmd and command are aliases for super, and opt and option are
-// aliases for alt on every platform.
+// default unwritable the moment it became a binding. Hyper is refused: no
+// terminal tuios supports reports it reliably.
 func validModifier(mod string) bool {
-	switch mod {
-	case "ctrl", "control", "alt", "opt", "option", "shift", "super", "cmd", "command":
-		return true
-	}
-	return false
+	name, ok := ParseModifier(mod)
+	return ok && name != ModHyper
 }
 
 // leaderSet is the expanded form of one leader spelling, cached so the input
