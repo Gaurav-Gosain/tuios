@@ -199,3 +199,47 @@ func TestAskHumanRefusesWhatTheInboxCannotShow(t *testing.T) {
 		}
 	}
 }
+
+// TestAskShowFollowsAMovedPane: a pane that waits on ask-human shows the
+// question as its state. When the pane moves to another session while it
+// waits, the answer must still put back what was beneath the question there.
+// The record of the shown question stayed behind in the first session, so the
+// pane kept showing a question nobody waited on.
+func TestAskShowFollowsAMovedPane(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	src, a, _ := twoWindowSession(t, d, "work")
+	dst := makeSessionWithWindow(t, d, "other")
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a })
+	c := dialVerb(t, sp)
+
+	stateOf := func(s *Session) AgentState {
+		for _, w := range s.GetState().Windows {
+			if w.ID == a {
+				return w.AgentState
+			}
+		}
+		return "(no such window)"
+	}
+	done := askAsync(t, sp, map[string]any{"session": "work", "window": a, "question": "Ship it?", "options": []string{"yes", "no"}, "timeout": 20000})
+	item := awaitAskItem(t, c)
+	id, _ := item["request_id"].(string)
+	waitUntil(t, func() bool { return stateOf(src) == AgentStateNeedsInput }, "the pane shows the question")
+
+	if _, err := d.moveWindowToSession(src, dst, a, 1, false); err != nil {
+		t.Fatalf("move: %v", err)
+	}
+	if got := stateOf(dst); got != AgentStateNeedsInput {
+		t.Fatalf("the moved pane shows %q, want the question still shown", got)
+	}
+
+	tui := attachTUI(t, sp, "other")
+	if res := result(t, answerAskCall(t, c, id, "yes", tui.HumanNonce())); res["applied"] != true {
+		t.Fatalf("answer-ask = %v, want applied", res)
+	}
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the ask did not return after the answer")
+	}
+	waitUntil(t, func() bool { return stateOf(dst) != AgentStateNeedsInput }, "the answer put back the state beneath the question")
+}

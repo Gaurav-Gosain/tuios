@@ -487,7 +487,14 @@ func (d *Daemon) awaitAsk(cs *connState, hold *askHold, timeout time.Duration, f
 	if fromPane && hold.window != "" {
 		if sess, _ := d.manager.ResolveSession(hold.session); sess != nil {
 			sess.showAsk(hold.window, hold.id, hold.question)
-			defer sess.endAskShow(hold.window, hold.id)
+			// The pane may have moved to another session while it waited, and
+			// the question moved with it, so the end looks in every session. A
+			// session that does not show this request ignores the call.
+			defer func() {
+				for _, s := range d.manager.AllSessions() {
+					s.endAskShow(hold.window, hold.id)
+				}
+			}()
 		}
 	}
 	timer := time.NewTimer(timeout)

@@ -90,6 +90,7 @@ type paneTransfer struct {
 	subagents *paneSubagents
 	turn      *agentTurn
 	seen      *uint64
+	askShow   *askShow
 	hold      *agentHold
 	startDir  any
 	agentDirs map[string]string
@@ -207,6 +208,12 @@ func (s *Session) releaseWindow(windowID, to string) (*paneTransfer, error) {
 		if seen, ok := s.completionSeen[id]; ok {
 			t.seen = &seen
 			delete(s.completionSeen, id)
+		}
+		// A question the pane shows goes with it: the ask-human call that put it
+		// there ends it in whichever session the pane is in by then.
+		if a, ok := s.askShows[id]; ok {
+			t.askShow = &a
+			delete(s.askShows, id)
 		}
 		s.movingWindow = id
 		return nil
@@ -337,6 +344,12 @@ func (s *Session) adoptWindow(t *paneTransfer, workspace int, focus bool) (Windo
 				s.completionSeen = make(map[string]uint64)
 			}
 			s.completionSeen[id] = *t.seen
+		}
+		if t.askShow != nil {
+			if s.askShows == nil {
+				s.askShows = make(map[string]askShow)
+			}
+			s.askShows[id] = *t.askShow
 		}
 		if state.WorkspaceFocus == nil {
 			state.WorkspaceFocus = make(map[int]string)
