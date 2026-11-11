@@ -2,7 +2,9 @@ package session
 
 import (
 	"slices"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -39,8 +41,9 @@ func TestUpdateStateDropsAnotherSessionsWindows(t *testing.T) {
 	d, _ := startTestDaemon(t)
 
 	t.Run("a list naming none of the session's windows is answered with the session's state", func(t *testing.T) {
-		sess := makeSessionWithWindow(t, d, "foreign-drop")
-		c := attachTestClient(t, "foreign-drop")
+		name := foreignSessionName("foreign-drop")
+		sess := makeSessionWithWindow(t, d, name)
+		c := attachTestClient(t, name)
 		syncs := takeSyncs(c)
 		before := sess.GetState()
 		held := windowPTYs(before.Windows)
@@ -81,8 +84,9 @@ func TestUpdateStateDropsAnotherSessionsWindows(t *testing.T) {
 	})
 
 	t.Run("a second foreign push from the same client is logged once", func(t *testing.T) {
-		sess := makeSessionWithWindow(t, d, "foreign-once")
-		c := attachTestClient(t, "foreign-once")
+		name := foreignSessionName("foreign-once")
+		sess := makeSessionWithWindow(t, d, name)
+		c := attachTestClient(t, name)
 		before := sess.GetState()
 		for range 2 {
 			push := sess.GetState()
@@ -98,8 +102,9 @@ func TestUpdateStateDropsAnotherSessionsWindows(t *testing.T) {
 	})
 
 	t.Run("a stale push naming none of the session's windows is merged, not refused", func(t *testing.T) {
-		sess := makeSessionWithWindow(t, d, "foreign-stale")
-		c := attachTestClient(t, "foreign-stale")
+		name := foreignSessionName("foreign-stale")
+		sess := makeSessionWithWindow(t, d, name)
+		c := attachTestClient(t, name)
 		takeSyncs(c)
 		if err := sess.SetDisplayName("first"); err != nil {
 			t.Fatal(err)
@@ -128,8 +133,9 @@ func TestUpdateStateDropsAnotherSessionsWindows(t *testing.T) {
 	})
 
 	t.Run("a list naming a held window and an unknown one is taken", func(t *testing.T) {
-		sess := makeSessionWithWindow(t, d, "foreign-mixed")
-		c := attachTestClient(t, "foreign-mixed")
+		name := foreignSessionName("foreign-mixed")
+		sess := makeSessionWithWindow(t, d, name)
+		c := attachTestClient(t, name)
 		before := sess.GetState()
 		push := sess.GetState()
 		push.Windows = append(push.Windows, WindowState{ID: "mixed-window", PTYID: "mixed-pty", Title: "mixed", Workspace: 1, X: 40, Width: 40, Height: 12})
@@ -146,8 +152,9 @@ func TestUpdateStateDropsAnotherSessionsWindows(t *testing.T) {
 	})
 
 	t.Run("a list with no windows is taken", func(t *testing.T) {
-		sess := makeSessionWithWindow(t, d, "foreign-empty")
-		c := attachTestClient(t, "foreign-empty")
+		name := foreignSessionName("foreign-empty")
+		sess := makeSessionWithWindow(t, d, name)
+		c := attachTestClient(t, name)
 		before := sess.GetState()
 		push := sess.GetState()
 		push.Windows = nil
@@ -164,8 +171,9 @@ func TestUpdateStateDropsAnotherSessionsWindows(t *testing.T) {
 	})
 
 	t.Run("a list naming only a new window on a live pane of the session is taken", func(t *testing.T) {
-		sess := makeSessionWithWindow(t, d, "foreign-live")
-		c := attachTestClient(t, "foreign-live")
+		name := foreignSessionName("foreign-live")
+		sess := makeSessionWithWindow(t, d, name)
+		c := attachTestClient(t, name)
 		before := sess.GetState()
 		pty, err := sess.CreatePTY("live-window", 40, 12, nil)
 		if err != nil {
@@ -185,6 +193,16 @@ func TestUpdateStateDropsAnotherSessionsWindows(t *testing.T) {
 			t.Errorf("the log holds %q for a push naming a live pane", foreignRefusalLine(sess.Name()))
 		}
 	})
+}
+
+// foreignSessionCounter numbers the sessions this file's tests make.
+var foreignSessionCounter atomic.Uint64
+
+// foreignSessionName is stem with a number that no other call in the process
+// has returned. The log buffer is the process's, so a fixed session name would
+// count the refusal lines of an earlier run of the same test.
+func foreignSessionName(stem string) string {
+	return stem + "-" + strconv.FormatUint(foreignSessionCounter.Add(1), 10)
 }
 
 // pushFrom sends state as c's next push and returns the push's count.
