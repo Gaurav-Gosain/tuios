@@ -287,6 +287,12 @@
     "skip": "comes from Grok"
   },
   {
+    "name": "TUIOS_AGENT names Letta, a bundled harness with no integration",
+    "env": {"TUIOS_AGENT": "letta"},
+    "payload": {"hook_event_name": "Stop", "session_id": "sess-1"},
+    "skip": "foreign harness: TUIOS_AGENT names letta"
+  },
+  {
     "name": "TUIOS_AGENT names a harness with no integration",
     "env": {"TUIOS_AGENT": "aider"},
     "payload": {"hook_event_name": "Stop", "session_id": "sess-1"},

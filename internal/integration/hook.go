@@ -16,7 +16,9 @@ package integration
 import (
 	"strconv"
 	"strings"
+	"sync"
 
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
@@ -101,15 +103,15 @@ func HarnessIDs() []string {
 	}
 }
 
-// ManifestIDs lists every harness the bundled manifests describe, with or
+// manifestIDs lists every harness the bundled manifests describe, with or
 // without a hook mapping. A TUIOS_AGENT naming one of them names the pane's
 // owner even when that owner has no integration, so a hook from any other
-// harness in the pane is foreign. A test holds this to the manifests.
-var ManifestIDs = []string{
-	"aider", "amp", "antigravity", "claude-code", "cline", "codex", "copilot",
-	"crush", "cursor-agent", "devin", "droid", "gemini-cli", "goose", "grok",
-	"hermes", "kilo", "kimi", "kiro", "maki", "omp", "opencode", "pi", "qoder", "qwen",
-}
+// harness in the pane is foreign. It reads the manifests, so a harness added
+// there is known here.
+var manifestIDs = sync.OnceValue(func() []string {
+	reg, _ := harness.Load()
+	return reg.IDs()
+})
 
 // hintOwner resolves a TUIOS_AGENT value to a harness id: an alias this
 // package knows, else a bundled manifest id. It reports false for a name
@@ -119,7 +121,7 @@ func hintOwner(hint string) (string, bool) {
 		return id, true
 	}
 	hint = strings.ToLower(strings.TrimSpace(hint))
-	for _, id := range ManifestIDs {
+	for _, id := range manifestIDs() {
 		if id == hint {
 			return id, true
 		}
