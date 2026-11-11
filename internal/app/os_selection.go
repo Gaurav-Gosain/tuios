@@ -177,7 +177,7 @@ func (m *OS) openScrollbackEditor(msg scrollbackFileMsg) tea.Cmd {
 	dir := msg.dir
 	// SGR-pixel reports go off first: the editor does not expect them, and
 	// the terminal comes back in SGR cells.
-	return tea.Sequence(m.releaseHostPixelMouse(), tea.ExecProcess(c, func(err error) tea.Msg {
+	return tea.Sequence(m.releaseHostPixelMouse(), m.execProcess(c, func(err error) tea.Msg {
 		return scrollbackEditorDoneMsg{dir: dir, err: err}
 	}))
 }

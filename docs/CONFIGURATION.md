@@ -807,6 +807,32 @@ The settings page offers Auto, 30, 60, 90, 120, 144, 165 and 240. With Auto
 selected, the row shows the rate in use, for example `Auto (144)`. A change
 applies at once, with no restart.
 
+## How frames reach the terminal
+
+`appearance.cell_frames` picks which clients write their frames as cells. Such
+a client compares each frame with the last one and sends the terminal only the
+cells that changed. The other clients turn each frame into text, and Bubble
+Tea turns the text back into cells before it compares. The result on the
+screen is the same; the cell way takes about half the CPU of a keystroke's
+frame.
+
+```toml
+[appearance]
+cell_frames = "served"   # the default
+# cell_frames = "all"    # this terminal as well
+# cell_frames = "off"    # no client
+```
+
+| Value | Clients that write cells |
+| --- | --- |
+| `"served"` | Clients over `tuios ssh`, `tuios-web` and the browser tour. This is the default. |
+| `"all"` | Those, and the terminal you run `tuios` in. Not on Windows. |
+| `"off"` | None. |
+
+The environment variable `TUIOS_CELL_FRAME` overrides the option: `1` means
+`all` and `0` means `off`. A change to the option applies to the next client
+that starts.
+
 **What limits the frames you see.** tuios sends a frame to your terminal. The
 terminal then draws the frame on its own schedule. kitty and ghostty draw at
 most once for each refresh of the monitor, so a 60 Hz monitor shows at most 60

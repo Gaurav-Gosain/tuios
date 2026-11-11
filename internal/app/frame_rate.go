@@ -180,6 +180,9 @@ func (m *OS) rendererRestarted(msg tea.Msg) {
 		m.frameRate.idle = false
 		m.frameRate.lastFrame = time.Now()
 	}
+	if _, ok := msg.(tea.ResumeMsg); ok {
+		m.takeScreenBack()
+	}
 }
 
 // flushWhileIdle reports whether Update must ask for a flush after msg

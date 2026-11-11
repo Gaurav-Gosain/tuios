@@ -402,6 +402,11 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 	// test against a tuios built with -cover, and a client that never sees the
 	// directory writes no coverage, which would make the test look like it
 	// never reached the client code.
+	// TUIOS_CELL_FRAME is forwarded so the suite can run every client on
+	// either frame path (appearance.cell_frames): 1 is all, 0 is off.
+	if v := os.Getenv("TUIOS_CELL_FRAME"); v != "" {
+		env = append(env, "TUIOS_CELL_FRAME="+v)
+	}
 	if dir := os.Getenv("GOCOVERDIR"); dir != "" {
 		env = append(env, "GOCOVERDIR="+dir)
 	}

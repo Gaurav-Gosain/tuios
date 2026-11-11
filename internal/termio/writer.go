@@ -104,16 +104,16 @@ func (w *writer) writeNow(b []byte) {
 	_, _ = w.out.Write(b)
 }
 
-// Raw puts the terminal f in raw mode, as Bubble Tea does for its input when
-// it runs a renderer, and returns what puts it back. A file that is not a
-// terminal is left alone.
-func Raw(f *os.File) (restore func(), err error) {
+// makeRaw puts the terminal f in raw mode, as Bubble Tea does for its input
+// when it runs a renderer, and returns what puts it back. A nil file, or one
+// that is not a terminal, is left alone.
+func makeRaw(f *os.File) (restore func()) {
 	if f == nil || !term.IsTerminal(f.Fd()) {
-		return func() {}, nil
+		return func() {}
 	}
 	state, err := term.MakeRaw(f.Fd())
 	if err != nil {
-		return func() {}, err
+		return func() {}
 	}
-	return func() { _ = term.Restore(f.Fd(), state) }, nil
+	return func() { _ = term.Restore(f.Fd(), state) }
 }

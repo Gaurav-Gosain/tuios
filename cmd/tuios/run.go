@@ -154,8 +154,10 @@ func runLocal() error {
 
 	// The shared list, then the one option that is this transport's: the
 	// writer every frame and every graphics sequence serialize on.
-	p := tea.NewProgram(initialOS, append(app.ProgramOptions(), tea.WithOutput(prw))...)
+	screenOpts, screenStarted, screenEnded := localScreen(initialOS, prw)
+	p := tea.NewProgram(initialOS, append(app.ProgramOptions(screenOpts...), tea.WithOutput(prw))...)
 	initialOS.BindProgram(p)
+	screenStarted(p)
 
 	// A quit the event loop cannot carry out still has to end the process: a
 	// force-killed ssh client leaves a pty nobody drains, and the frame write
@@ -169,6 +171,7 @@ func runLocal() error {
 	finalModel, err := p.Run()
 	runReturned()
 	restoreTabs()
+	screenEnded()
 
 	if finalOS, ok := finalModel.(*app.OS); ok {
 		finalOS.DumpTickStats()

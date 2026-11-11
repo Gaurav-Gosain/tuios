@@ -173,7 +173,7 @@ func main() {
 	// before Run.
 	// The page's terminal gets the frames as cells diffed by the model's own
 	// screen. See app.UseScreen.
-	ownScreen := app.OwnScreenWanted()
+	ownScreen := osModel.Settings.CellFramesFor(true)
 	if ownScreen {
 		osModel.UseScreen(bridge, []string{"TERM=xterm-256color", "COLORTERM=truecolor"}, colorprofile.TrueColor, termio.Output{Raw: false})
 	}

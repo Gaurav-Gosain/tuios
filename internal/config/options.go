@@ -501,6 +501,13 @@ var optionSpecs = []Option{
 		Default: "0", Min: 0, Max: MaxFPSCap, Auto: true,
 	},
 	{
+		Path: "appearance.cell_frames", Type: OptionString, Section: "appearance",
+		Description: "Which clients write their frames as diffed cells instead of through Bubble Tea's renderer, " +
+			"which turns each frame into text and back. served: clients over SSH and the web. " +
+			"all: this terminal as well. off: none. TUIOS_CELL_FRAME=1 means all and 0 means off",
+		Accepted: CellFrameModes, Default: CellFramesServed,
+	},
+	{
 		Path: "appearance.session_colors", Type: OptionBool, Section: "appearance",
 		Description: "Give each session its own colour on the rail and in the switcher",
 		Default:     "true",

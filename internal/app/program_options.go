@@ -62,6 +62,9 @@ func ProgramOptions(opts ...ProgramOption) []tea.ProgramOption {
 	if setup.ownScreen {
 		topts = append(topts, tea.WithoutRenderer())
 	}
+	if setup.startW > 0 && setup.startH > 0 {
+		topts = append(topts, tea.WithWindowSize(setup.startW, setup.startH))
+	}
 	return topts
 }
 
@@ -69,8 +72,15 @@ func ProgramOptions(opts ...ProgramOption) []tea.ProgramOption {
 type ProgramOption func(*programSetup)
 
 type programSetup struct {
-	currentSize func() (width, height int)
-	ownScreen   bool
+	currentSize    func() (width, height int)
+	ownScreen      bool
+	startW, startH int
+}
+
+// WithStartSize is the terminal's size when the program starts, for a
+// program with no renderer to ask: Bubble Tea otherwise starts at 0x0.
+func WithStartSize(width, height int) ProgramOption {
+	return func(s *programSetup) { s.startW, s.startH = width, height }
 }
 
 // WithOwnScreen runs the program without Bubble Tea's renderer, for a model
@@ -210,6 +220,11 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		// There is no process at the far end to suspend. wish and sip answer
 		// this the same way, and this filter stands in their slot.
 		return tea.ResumeMsg{}
+	}
+	if _, ok := msg.(tea.SuspendMsg); ok && m.screen != nil {
+		// The shell gets the terminal back as Bubble Tea's renderer would
+		// leave it; ResumeMsg takes it again (rendererRestarted).
+		m.screen.Release()
 	}
 
 	mm, ok := msg.(tea.MouseMotionMsg)

@@ -1231,6 +1231,14 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 		return m, listen
 
+	case screenReleaseMsg:
+		m.screen.Release()
+		return m, nil
+
+	case screenBackMsg:
+		m.takeScreenBack()
+		return m.Update(msg.inner)
+
 	case frameDueMsg:
 		m.frameRate.dueArmed = false
 		_, changed, due := m.takePaneOutput(time.Now())

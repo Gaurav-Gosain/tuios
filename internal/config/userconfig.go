@@ -552,6 +552,7 @@ type AppearanceConfig struct {
 	// three columns. Zero turns it off. This is tmux's repeat-time.
 	PrefixRepeatTime       *int     `toml:"prefix_repeat_time"`
 	MaxFPS                 FPSLimit `toml:"max_fps"`                   // Maximum render FPS: 0 uses 60, "auto" follows the display, otherwise 10 to 240
+	CellFrames             string   `toml:"cell_frames"`               // Which clients write their frames as diffed cells: served, all or off (default: served)
 	DockWorkspaceTabs      *bool    `toml:"dock_workspace_tabs"`       // Clickable workspace strip in the dock (default: true)
 	DockWorkspaceTabFormat string   `toml:"dock_workspace_tab_format"` // Format string for workspace tabs: {index}, {name} (default: "{name}")
 	DockWorkspaceTooltip   *bool    `toml:"dock_workspace_tooltip"`    // Show the workspace name on hover when the pill cuts or omits it (default: true)
@@ -1244,6 +1245,7 @@ func DefaultConfig() *UserConfig {
 		},
 		Appearance: AppearanceConfig{
 			BorderStyle:              "rounded",
+			CellFrames:               CellFramesServed,
 			ZenMode:                  ZenModeDisabled,
 			Links:                    LinksAll,
 			LinkClick:                LinkClickBoth,
@@ -3075,6 +3077,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.ScrollbackLines = cfg.Appearance.ScrollbackLines
 	}
 
+	s.CellFrames = cfg.Appearance.CellFrames
 	s.MaxFPSAuto = cfg.Appearance.MaxFPS.IsAuto()
 	if s.MaxFPSAuto {
 		s.NormalFPS = AutoFPS(s.DisplayFPS)

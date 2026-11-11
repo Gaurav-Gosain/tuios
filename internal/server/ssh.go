@@ -332,7 +332,7 @@ func tuiosSessionMiddleware() wish.Middleware {
 			})
 			// The client's frames are diffed as cells and written by the
 			// model's own screen. See app.UseScreen.
-			ownScreen := app.OwnScreenWanted()
+			ownScreen := model.Settings.CellFramesFor(true)
 			if ownScreen {
 				env := append(sess.Environ(), "TERM="+pty.Term)
 				// No server-side PTY: the channel is not a terminal.

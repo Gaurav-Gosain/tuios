@@ -167,7 +167,7 @@ func (m *OS) replyEditorCmd(comp *composer.Model) tea.Cmd {
 		argv = []string{"vi"}
 	}
 	c := m.editorCommand(exec.Command(argv[0], append(argv[1:], path)...)) //nolint:gosec // the person's own editor
-	return tea.Sequence(m.releaseHostPixelMouse(), tea.ExecProcess(c, func(err error) tea.Msg {
+	return tea.Sequence(m.releaseHostPixelMouse(), m.execProcess(c, func(err error) tea.Msg {
 		return replyEditorDoneMsg{comp: comp, dir: dir, path: path, err: err}
 	}))
 }

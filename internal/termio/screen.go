@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"image/color"
 	"io"
+	"os"
 	"runtime"
 	"strings"
 
@@ -48,6 +49,16 @@ type Screen struct {
 
 	last   *tea.View
 	closed bool
+
+	console  *os.File
+	restore  func()
+	released bool
+
+	// What a fresh terminal renderer is made from, for Restore.
+	environ   []string
+	profile   colorprofile.Profile
+	output    Output
+	graphemes bool
 }
 
 // Output says how the bytes reach the terminal, which decides how the diff
@@ -58,24 +69,39 @@ type Output struct {
 	// channel with no real PTY, the browser build), a newline reaches the
 	// terminal as CR LF, and backspace is not trusted to move the cursor.
 	Raw bool
+	// Console is that terminal: the Screen puts it in raw mode from New,
+	// and back while it is released and when it is closed, as Bubble Tea
+	// does for its input when it runs a renderer.
+	Console *os.File
 }
 
 // New makes the Screen for a terminal reached through out. environ is the
 // program's environment: TERM decides which sequences the diff may use, as it
 // does for Bubble Tea's renderer.
 func New(out io.Writer, environ []string, profile colorprofile.Profile, o Output) *Screen {
-	s := &Screen{out: newWriter(out)}
-	s.scr = uv.NewTerminalRenderer(&s.body, environ)
-	s.scr.SetColorProfile(profile)
+	s := &Screen{out: newWriter(out), console: o.Console,
+		environ: environ, profile: profile, output: o}
+	s.restore = makeRaw(o.Console)
+	s.scr = s.freshRenderer()
+	s.query = shouldQuerySync(environ)
+	return s
+}
+
+// freshRenderer is a terminal renderer that knows nothing of the screen yet.
+func (s *Screen) freshRenderer() *uv.TerminalRenderer {
+	r := uv.NewTerminalRenderer(&s.body, s.environ)
+	r.SetColorProfile(s.profile)
 	// Hard tabs stay off: tmux drops the background under one. Backspace
 	// moves the cursor on a raw Linux terminal, whose termios leaves BS0
 	// set, as Bubble Tea finds it there.
-	s.scr.SetTabStops(-1)
-	s.scr.SetBackspace(o.Raw && runtime.GOOS == "linux")
-	s.scr.SetMapNewline(!o.Raw && runtime.GOOS != "windows")
-	s.scr.SetScrollOptim(true)
-	s.query = shouldQuerySync(environ)
-	return s
+	r.SetTabStops(-1)
+	r.SetBackspace(s.output.Raw && runtime.GOOS == "linux")
+	r.SetMapNewline(!s.output.Raw && runtime.GOOS != "windows")
+	r.SetScrollOptim(true)
+	if s.graphemes {
+		r.SetWidthMethod(ansi.GraphemeWidth)
+	}
+	return r
 }
 
 // shouldQuerySync is Bubble Tea's rule for asking a terminal about
@@ -94,7 +120,10 @@ func shouldQuerySync(environ []string) bool {
 }
 
 // SetColorProfile sets the profile the diff steps colours down to.
-func (s *Screen) SetColorProfile(p colorprofile.Profile) { s.scr.SetColorProfile(p) }
+func (s *Screen) SetColorProfile(p colorprofile.Profile) {
+	s.profile = p
+	s.scr.SetColorProfile(p)
+}
 
 // ModeReport takes the terminal's answers to the start query.
 func (s *Screen) ModeReport(msg tea.ModeReportMsg) {
@@ -105,6 +134,7 @@ func (s *Screen) ModeReport(msg tea.ModeReportMsg) {
 		}
 	case ansi.ModeUnicodeCore:
 		if msg.Value == ansi.ModeReset || msg.Value == ansi.ModeSet || msg.Value == ansi.ModePermanentlySet {
+			s.graphemes = true
 			s.scr.SetWidthMethod(ansi.GraphemeWidth)
 		}
 	}
@@ -130,7 +160,7 @@ func (s *Screen) start() {
 // terminal needs any of it. A frame that diffs to nothing is a frame equal to
 // the last one.
 func (s *Screen) Frame(buf *uv.Buffer) bool {
-	if s.closed {
+	if s.closed || s.released {
 		return false
 	}
 	s.start()
@@ -174,7 +204,7 @@ func (s *Screen) FrameString(content string, w, h int) bool {
 // the last flush; such a write goes out even when empty, because the writer
 // behind it may owe graphics to a frame write.
 func (s *Screen) Flush(v tea.View, framed bool) {
-	if s.closed {
+	if s.closed || s.released {
 		return
 	}
 	if !framed && !s.diffed && s.pre.Len() == 0 && s.body.Len() == 0 && modesEqual(s.last, &v) {
@@ -230,9 +260,45 @@ func (s *Screen) Close() {
 	}
 	s.closed = true
 	s.out.stop()
+	if !s.released {
+		s.out.writeNow(s.leave())
+		s.restore()
+	}
+}
+
+// Release hands the terminal to another program (an editor, or the shell
+// on a suspend): the queued frames go out, the modes are put back, the
+// alternate screen is left and the console leaves raw mode.
+func (s *Screen) Release() {
+	if s.closed || s.released || !s.started {
+		return
+	}
+	s.released = true
+	s.out.flush()
+	s.out.writeNow(s.leave())
+	s.restore()
+}
+
+// Restore takes the terminal back after Release. The next frame enters the
+// alternate screen again, writes every mode and redraws every cell.
+func (s *Screen) Restore() {
+	if s.closed || !s.released {
+		return
+	}
+	s.released = false
+	s.restore = makeRaw(s.console)
+	s.started = false
+	s.last = nil
+	s.w, s.h = 0, 0
+	s.scr = s.freshRenderer()
+}
+
+// leave is the sequences that undo what the frames set, for the modes of the
+// last frame. It moves the terminal renderer's cursor to the last row.
+func (s *Screen) leave() []byte {
 	lv := s.last
 	if lv == nil {
-		return
+		return nil
 	}
 	var b bytes.Buffer
 	b.WriteString(ansi.ResetModifyOtherKeys)
@@ -263,7 +329,7 @@ func (s *Screen) Close() {
 	if lv.Cursor != nil && lv.Cursor.Color != nil {
 		b.WriteString(ansi.ResetCursorColor)
 	}
-	s.out.writeNow(b.Bytes())
+	return b.Bytes()
 }
 
 // writeModes appends the mode changes from lv to v, in Bubble Tea's order.

@@ -474,16 +474,7 @@ func createTUIOSProgram(sess sip.Session) *tea.Program {
 	// The client's frames are diffed as cells and written by the model's own
 	// screen, which needs the slave raw as Bubble Tea's renderer made it.
 	// See app.UseScreen.
-	ownScreen := slave != nil && app.OwnScreenWanted()
-	restore := func() {}
-	if ownScreen {
-		r, err := termio.Raw(slave)
-		if err != nil {
-			log.Printf("Warning: web session keeps Bubble Tea's renderer: %v", err)
-			ownScreen = false
-		}
-		restore = r
-	}
+	ownScreen := slave != nil && model.Settings.CellFramesFor(true)
 	opts := append(sip.MakeOptions(sess), app.ProgramOptions(current, app.WithOwnScreen(ownScreen))...)
 	// The renderer's writer, so the sixel images drawn on a frame go out
 	// after it in the same write. Graphics already share the PTY slave.
@@ -492,7 +483,10 @@ func createTUIOSProgram(sess sip.Session) *tea.Program {
 		model.ConnectFrameWriter(frames)
 		opts = append(opts, tea.WithOutput(frames))
 		if ownScreen {
-			model.UseScreen(frames, []string{"TERM=xterm-256color", "COLORTERM=truecolor"}, colorprofile.TrueColor, termio.Output{Raw: true})
+			// The slave is the screen's console: it is raw while the screen
+			// draws, as Bubble Tea's renderer kept it.
+			model.UseScreen(frames, []string{"TERM=xterm-256color", "COLORTERM=truecolor"}, colorprofile.TrueColor,
+				termio.Output{Raw: true, Console: slave})
 		}
 	}
 	program := tea.NewProgram(started, opts...)
@@ -502,7 +496,6 @@ func createTUIOSProgram(sess sip.Session) *tea.Program {
 	// frames were still going out.
 	go cleanupAfterProgram(program, running, func() {
 		model.CloseScreen()
-		restore()
 		model.Cleanup()
 	})
 	return program
