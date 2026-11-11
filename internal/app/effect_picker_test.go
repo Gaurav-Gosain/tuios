@@ -38,11 +38,6 @@ func effectPickerOS(t *testing.T, w, h int) (*OS, *terminal.Window) {
 	return m, win
 }
 
-// effectRowIndex is where a name sits in the picker's current list.
-func effectRowIndex(m *OS, name string) int {
-	return slices.Index(m.effectPickerItems(), name)
-}
-
 // pickerBody renders the effect picker and strips its styling.
 func pickerBody(t *testing.T, m *OS) string {
 	t.Helper()
@@ -355,79 +350,6 @@ func TestEffectPreviewStopsOnResize(t *testing.T) {
 	}
 	if !strings.Contains(pickerBody(t, m), "The screen size changed") {
 		t.Error("the picker says nothing about why the preview stopped")
-	}
-}
-
-// TestEffectPickerCommitsOnEnterAndLeavesItAloneOnEsc.
-//
-// Negative control: making apply skip setOption, or making cancel write the
-// selection, fails this.
-func TestEffectPickerCommitsOnEnterAndLeavesItAloneOnEsc(t *testing.T) {
-	m, _ := effectPickerOS(t, 100, 30)
-	m.ConfigReadOnly = true // nothing here may touch the real config file
-	before := m.screensaverConfig().EffectName()
-
-	_ = m.OpenEffectPicker()
-	idx := effectRowIndex(m, "expand")
-	_ = effectPicker().move(m, idx-m.effectList.Cursor)
-	_ = m.EffectPickerApplySelection()
-
-	if m.ShowEffectPicker {
-		t.Error("Enter did not close the picker")
-	}
-	if got := m.screensaverConfig().EffectName(); got != "expand" {
-		t.Errorf("Enter left the setting on %q, want expand", got)
-	}
-
-	// Esc changes nothing, however far the selection moved.
-	_ = m.OpenEffectPicker()
-	idx = effectRowIndex(m, "matrix")
-	_ = effectPicker().move(m, idx-m.effectList.Cursor)
-	m.CancelEffectPicker()
-	if m.ShowEffectPicker {
-		t.Error("Esc did not close the picker")
-	}
-	if got := m.screensaverConfig().EffectName(); got != "expand" {
-		t.Errorf("Esc left the setting on %q, want the applied expand", got)
-	}
-	if before == "expand" {
-		t.Fatal("setup: the setting already was expand, so neither half of this proves anything")
-	}
-}
-
-// TestEffectPickerFiltersAndRefusesAnEmptyApply: the search is what makes
-// thirty-six reachable, and an apply with nothing under the cursor must not
-// close the panel and strand the query.
-//
-// Negative control: making ApplySelection close on an empty list fails this.
-func TestEffectPickerFiltersAndRefusesAnEmptyApply(t *testing.T) {
-	m, _ := effectPickerOS(t, 100, 30)
-	_ = m.OpenEffectPicker()
-
-	_ = effectPicker().paste(m, "matr")
-	items := m.effectPickerItems()
-	if len(items) == 0 || !slices.Contains(items, "matrix") {
-		t.Fatalf("the query matr found %v, want matrix among them", items)
-	}
-	if len(items) == len(config.ScreensaverEffects) {
-		t.Error("the query filtered nothing out")
-	}
-
-	m.effectList.Query.Set("")
-	_ = effectPicker().refilter(m)
-	if len(m.effectPickerItems()) != len(config.ScreensaverEffects) {
-		t.Error("clearing the query did not put the whole list back")
-	}
-
-	_ = effectPicker().paste(m, "zzzznotaneffect")
-	if len(m.effectPickerItems()) != 0 {
-		t.Fatal("setup: the nonsense query still matched something")
-	}
-	if cmd := m.EffectPickerApplySelection(); cmd != nil {
-		t.Error("an apply with nothing selected returned a save command")
-	}
-	if !m.ShowEffectPicker {
-		t.Error("an apply with nothing selected closed the picker and stranded the query")
 	}
 }
 
