@@ -743,6 +743,10 @@ type Settings struct {
 	// The timing options, in milliseconds. Set via appearance.whichkey_delay_ms,
 	// tooltip_delay_ms, zen_reveal_ms, paste_preview_ms and
 	// appearance.chord_timeout_ms.
+	MultiCopyDim        int `opt:"appearance.multi_copy_dim"`
+	MarqueePauseMS      int `opt:"appearance.sidebar.marquee_pause_ms"`
+	MarqueeStepMS       int `opt:"appearance.sidebar.marquee_step_ms"`
+	DockMeterIntervalMS int `opt:"dock.meter_interval_ms"`
 	IdleFPS             int `opt:"appearance.idle_fps"`
 	SidebarGitRefreshMS int `opt:"appearance.sidebar.git_refresh_ms"`
 	ShowKeyCount        int `opt:"debug.show_key_count"`
@@ -1158,6 +1162,10 @@ func DefaultSettings() Settings {
 		NiriReverseScroll:           false,
 		NiriScrollCells:             NiriScrollCellsDefault,
 		MouseDoubleClickMS:          MouseDoubleClickDefault,
+		MultiCopyDim:                MultiCopyDimDefault,
+		MarqueePauseMS:              MarqueePauseMSDefault,
+		MarqueeStepMS:               MarqueeStepMSDefault,
+		DockMeterIntervalMS:         DockMeterIntervalMSDefault,
 		IdleFPS:                     IdleFPSDefault,
 		SidebarGitRefreshMS:         SidebarGitRefreshMSDefault,
 		ShowKeyCount:                ShowKeyCountDefault,

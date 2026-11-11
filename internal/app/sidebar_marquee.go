@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
@@ -18,12 +19,6 @@ const (
 	// sidebarMarqueeGap is the blank run between the tail and the wrapped head,
 	// so the text reads as a loop rather than a jump.
 	sidebarMarqueeGap = 4
-	// sidebarMarqueeStartPause holds the row still when hover first lands, so a
-	// glance at a row is legible before it starts moving.
-	sidebarMarqueeStartPause = 900 * time.Millisecond
-	// sidebarMarqueeCellInterval is how long each one-cell step is held; larger
-	// is slower.
-	sidebarMarqueeCellInterval = 220 * time.Millisecond
 )
 
 // SidebarMarqueeActive reports whether a row is currently scrolling, so the
@@ -52,9 +47,9 @@ func (m *OS) sidebarMarquee(key, s string, avail int, hovered bool) string {
 	}
 
 	shift := 0
-	if e := time.Since(m.SidebarMarqueeStart) - sidebarMarqueeStartPause; e > 0 {
+	if e := time.Since(m.SidebarMarqueeStart) - m.marqueePause(); e > 0 {
 		cycle := lipgloss.Width(s) + sidebarMarqueeGap
-		shift = int(e/sidebarMarqueeCellInterval) % cycle
+		shift = int(e/m.marqueeStep()) % cycle
 	}
 	return sidebarMarqueeWindow(s, avail, shift)
 }
@@ -72,4 +67,21 @@ func sidebarMarqueeWindow(s string, avail, shift int) string {
 		i++
 	}
 	return lipgloss.NewStyle().MaxWidth(avail).Render(string(runes[i:]))
+}
+
+// marqueePause is how long a hovered row holds still when hover first lands, so
+// a glance at a row is legible before it starts moving
+// (appearance.sidebar.marquee_pause_ms).
+func (m *OS) marqueePause() time.Duration {
+	return time.Duration(m.Settings.MarqueePauseMS) * time.Millisecond
+}
+
+// marqueeStep is how long each one-cell step is held; larger is slower
+// (appearance.sidebar.marquee_step_ms).
+func (m *OS) marqueeStep() time.Duration {
+	ms := m.Settings.MarqueeStepMS
+	if ms <= 0 {
+		ms = config.MarqueeStepMSDefault
+	}
+	return time.Duration(ms) * time.Millisecond
 }

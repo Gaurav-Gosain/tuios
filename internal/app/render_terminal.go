@@ -210,7 +210,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// A pane the last multi copy mode search found nothing in is dimmed, so
 	// the panes that will take part in the selection stand out.
 	if m.MultiCopyParked(window.ID) {
-		dim = max(dim, multiCopyParkedDim)
+		dim = max(dim, m.Settings.MultiCopyDim)
 	}
 
 	cacheUsable := window.CachedContent != "" && window.CachedContentDim() == dim

@@ -832,6 +832,28 @@ const (
 	ShowKeyCountDefault = 5
 )
 
+// More display options. Multi copy mode dims a pane its search found nothing
+// in by MultiCopyDim percent. The rail's marquee holds a hovered row still for
+// MarqueePauseMS and then moves it one cell every MarqueeStepMS. The dock
+// re-measures its CPU and RAM readouts every MeterIntervalMS.
+const (
+	MultiCopyDimMin     = 0
+	MultiCopyDimMax     = 90
+	MultiCopyDimDefault = 45
+
+	MarqueePauseMSMin     = 0
+	MarqueePauseMSMax     = 10000
+	MarqueePauseMSDefault = 900
+
+	MarqueeStepMSMin     = 20
+	MarqueeStepMSMax     = 2000
+	MarqueeStepMSDefault = 220
+
+	DockMeterIntervalMSMin     = 500
+	DockMeterIntervalMSMax     = 60000
+	DockMeterIntervalMSDefault = 2000
+)
+
 // The timing options, in milliseconds. A delay of 0 shows the thing at once.
 const (
 	// WhichKeyDelayMS is the pause after the leader before the which-key panel

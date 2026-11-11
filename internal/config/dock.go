@@ -135,6 +135,10 @@ type DockConfig struct {
 	Center *[]string `toml:"center,omitempty"`
 	Right  *[]string `toml:"right,omitempty"`
 
+	// MeterIntervalMS is how often the CPU and RAM readouts are measured again,
+	// in milliseconds (default: 2000, min: 500, max: 60000).
+	MeterIntervalMS int `toml:"meter_interval_ms"`
+
 	// Clock is [dock.clock]: the format the clock component and the status
 	// badge both render. Empty means the built-in default.
 	Clock DockClockConfig `toml:"clock"`

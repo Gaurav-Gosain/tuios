@@ -1036,6 +1036,17 @@ var optionSpecs = []Option{
 		Min:         0,
 	},
 	{
+		Path: "appearance.sidebar.marquee_pause_ms", Type: OptionInt, Section: "sidebar",
+		Description: "Milliseconds a hovered row holds still before its overflowing title starts to move",
+		Min:         MarqueePauseMSMin, Max: MarqueePauseMSMax,
+	},
+	{
+		Path: "appearance.sidebar.marquee_step_ms", Type: OptionInt, Section: "sidebar",
+		Description: "Milliseconds each one-cell step of the rail's marquee is held. Larger is slower.",
+		Min:         MarqueeStepMSMin, Max: MarqueeStepMSMax,
+		Zero: ZeroIsDefault,
+	},
+	{
 		Path: "appearance.sidebar.git_refresh_ms", Type: OptionInt, Section: "sidebar",
 		Description: "Milliseconds between the git section's looks at a directory it is showing. Raise it for a very large repository.",
 		Min:         SidebarGitRefreshMSMin, Max: SidebarGitRefreshMSMax,
@@ -1594,6 +1605,11 @@ var optionSpecs = []Option{
 	},
 
 	{
+		Path: "appearance.multi_copy_dim", Type: OptionInt, Section: "appearance",
+		Description: "Percent a pane is dimmed when multi copy mode's search found nothing in it. 0 leaves it undimmed.",
+		Min:         MultiCopyDimMin, Max: MultiCopyDimMax,
+	},
+	{
 		Path: "appearance.idle_fps", Type: OptionInt, Section: "appearance",
 		Description: "Polls per second while nothing is moving. Lower saves power; higher notices background work sooner.",
 		Min:         IdleFPSMin, Max: IdleFPSMax,
@@ -1661,6 +1677,12 @@ var optionSpecs = []Option{
 	// reason [keybindings] and [hooks] are: they are ordered lists and free-form
 	// tables, which a set-by-path verb cannot spell. The clock's format is a
 	// plain scalar, so it belongs here.
+	{
+		Path: "dock.meter_interval_ms", Type: OptionInt, Section: "dock",
+		Description: "Milliseconds between measurements of the dock's CPU and RAM readouts",
+		Min:         DockMeterIntervalMSMin, Max: DockMeterIntervalMSMax,
+		Zero: ZeroIsDefault,
+	},
 	{
 		Path: "dock.clock.format", Type: OptionString, Section: "dock",
 		Description: "Go time layout the clock renders in (empty means " + DefaultClockFormat +

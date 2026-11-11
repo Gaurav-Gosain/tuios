@@ -1827,6 +1827,31 @@ border back. You can also set it on the settings page, in the Advanced section,
 or with `tuios set-config appearance.zoom_borderless true`. The change applies
 at once.
 
+## More display options
+
+| Option | Default | Range | What it does |
+|--------|---------|-------|--------------|
+| `appearance.multi_copy_dim` | `45` | 0 to 90 | Percent a pane is dimmed when multi copy mode's search found nothing in it, so the panes that take part in the selection stand out. `0` leaves it undimmed. |
+| `appearance.sidebar.marquee_pause_ms` | `900` | 0 to 10000 | Milliseconds a hovered rail row holds still before its overflowing title starts to move. `0` starts at once. |
+| `appearance.sidebar.marquee_step_ms` | `220` | 20 to 2000 | Milliseconds each one-cell step of the marquee is held. Larger is slower. |
+| `dock.meter_interval_ms` | `2000` | 500 to 60000 | Milliseconds between measurements of the dock's CPU and RAM readouts. |
+
+```toml
+[appearance]
+multi_copy_dim = 60
+
+[appearance.sidebar]
+marquee_pause_ms = 400
+marquee_step_ms = 150
+
+[dock]
+meter_interval_ms = 5000
+```
+
+A value of 0 on `marquee_step_ms` or `meter_interval_ms` is read as the default,
+and a value out of range moves to the nearest end of the range. All four are on
+the settings page and apply at once.
+
 ## Display options
 
 | Option | Default | Range | What it does |

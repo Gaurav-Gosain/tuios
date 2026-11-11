@@ -39,10 +39,6 @@ import (
 // paletteMultiCopyName is the palette entry that starts multi copy mode.
 const paletteMultiCopyName = "Multi copy mode"
 
-// multiCopyParkedDim is how far, in percent, a parked pane is dimmed toward
-// its ground.
-const multiCopyParkedDim = 45
-
 // multiCopyLargeYank is the size, in bytes, past which a yank warns that the
 // terminal may cut the OSC 52 write.
 const multiCopyLargeYank = 100 * 1024

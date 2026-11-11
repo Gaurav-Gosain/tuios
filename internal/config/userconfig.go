@@ -572,6 +572,7 @@ type AppearanceConfig struct {
 	HostTitle            string `toml:"host_title"`             // Format string for the host terminal's title: {title}, {index}, {cwd}, {session}, {workspace}
 	ZoomMaxWidth         int    `toml:"zoom_max_width"`         // Max width in cells for zoom mode (0 = fullscreen, e.g. 120 centers at 120 cols)
 	NiriReverseScroll    bool   `toml:"niri_reverse_scroll"`    // Reverse mouse scroll direction in niri scrolling mode (default: false)
+	MultiCopyDim         int    `toml:"multi_copy_dim"`         // Percent a pane multi copy mode parked is dimmed (default: 45, min: 0, max: 90)
 	IdleFPS              int    `toml:"idle_fps"`               // Polls per second while nothing is moving (default: 10, min: 1, max: 60)
 	WhichKeyDelayMS      int    `toml:"whichkey_delay_ms"`      // Milliseconds after the leader before which-key opens (default: 500, min: 0, max: 5000)
 	TooltipDelayMS       int    `toml:"tooltip_delay_ms"`       // Milliseconds the pointer rests on a control before its tooltip shows (default: 350, min: 0, max: 5000)
@@ -1003,16 +1004,18 @@ type SelectionConfig struct {
 // vertical session rail. Each toggle is a pointer so nil can mean "unset, use
 // the default" and an explicit false survives a reload.
 type SidebarConfig struct {
-	Enabled      *bool  `toml:"enabled"`        // Show the rail (default: true)
-	PerSession   *bool  `toml:"per_session"`    // Each session keeps its own shown or hidden rail; off, a toggle applies to every session (default: false)
-	Position     string `toml:"position"`       // Edge: left, right, hidden (default: right)
-	Width        int    `toml:"width"`          // Preferred width in columns for a wide screen (default: 24)
-	GitRefreshMS int    `toml:"git_refresh_ms"` // Milliseconds between the git section's looks at a directory it shows (default: 2000, min: 500, max: 60000)
-	ShowWindows  *bool  `toml:"show_windows"`   // The terminals section (default: true)
-	ShowGlyphs   *bool  `toml:"show_glyphs"`    // Agent-state glyph on each row (default: true)
-	ShowCounts   *bool  `toml:"show_counts"`    // Window count on each session row (default: true)
-	ShowNumbers  *bool  `toml:"show_numbers"`   // Switch number ahead of each session name (default: false)
-	ShowAgents   *bool  `toml:"show_agents"`    // Agents section at the rail's bottom (default: true)
+	Enabled        *bool  `toml:"enabled"`          // Show the rail (default: true)
+	PerSession     *bool  `toml:"per_session"`      // Each session keeps its own shown or hidden rail; off, a toggle applies to every session (default: false)
+	Position       string `toml:"position"`         // Edge: left, right, hidden (default: right)
+	Width          int    `toml:"width"`            // Preferred width in columns for a wide screen (default: 24)
+	MarqueePauseMS int    `toml:"marquee_pause_ms"` // Milliseconds a hovered row holds still before its title moves (default: 900, min: 0, max: 10000)
+	MarqueeStepMS  int    `toml:"marquee_step_ms"`  // Milliseconds each one-cell step of the marquee is held (default: 220, min: 20, max: 2000)
+	GitRefreshMS   int    `toml:"git_refresh_ms"`   // Milliseconds between the git section's looks at a directory it shows (default: 2000, min: 500, max: 60000)
+	ShowWindows    *bool  `toml:"show_windows"`     // The terminals section (default: true)
+	ShowGlyphs     *bool  `toml:"show_glyphs"`      // Agent-state glyph on each row (default: true)
+	ShowCounts     *bool  `toml:"show_counts"`      // Window count on each session row (default: true)
+	ShowNumbers    *bool  `toml:"show_numbers"`     // Switch number ahead of each session name (default: false)
+	ShowAgents     *bool  `toml:"show_agents"`      // Agents section at the rail's bottom (default: true)
 	// Workspaces named the workspace chip band, which the rail no longer draws:
 	// panes say which workspace they are on with a tag of their own, and
 	// switching stays on the dock and alt+1..9. Still parsed so an existing
@@ -1324,6 +1327,7 @@ func DefaultConfig() *UserConfig {
 			ThemeTransitionMs:        ThemeTransitionMsDefault,
 			NiriScrollCells:          NiriScrollCellsDefault,
 			IdleFPS:                  IdleFPSDefault,
+			MultiCopyDim:             MultiCopyDimDefault,
 			WhichKeyDelayMS:          WhichKeyDelayMSDefault,
 			TooltipDelayMS:           TooltipDelayMSDefault,
 			ZenRevealMS:              ZenRevealMSDefault,
@@ -1347,20 +1351,22 @@ func DefaultConfig() *UserConfig {
 			Sidebar: SidebarConfig{
 				// A fresh pointer per call, so a caller that flips it in place
 				// cannot change the next DefaultConfig.
-				Enabled:       new(true),
-				Position:      DefaultSidebarPosition,
-				Width:         SidebarDefaultWidth,
-				GitRefreshMS:  SidebarGitRefreshMSDefault,
-				Sections:      SidebarDefaultSections,
-				FolderClick:   SidebarFolderClickNavigate,
-				FilesStyle:    SidebarFilesList,
-				HeaderCase:    RailHeaderLowercase,
-				RowStyle:      RailRowBar,
-				HeaderStyle:   RailHeaderAuto,
-				Density:       RailDensityNormal,
-				FileDelete:    SidebarFileDeleteTrash,
-				AgentRestFold: "1h",
-				SubagentRows:  SidebarSubagentRowsRows,
+				Enabled:        new(true),
+				Position:       DefaultSidebarPosition,
+				Width:          SidebarDefaultWidth,
+				GitRefreshMS:   SidebarGitRefreshMSDefault,
+				MarqueePauseMS: MarqueePauseMSDefault,
+				MarqueeStepMS:  MarqueeStepMSDefault,
+				Sections:       SidebarDefaultSections,
+				FolderClick:    SidebarFolderClickNavigate,
+				FilesStyle:     SidebarFilesList,
+				HeaderCase:     RailHeaderLowercase,
+				RowStyle:       RailRowBar,
+				HeaderStyle:    RailHeaderAuto,
+				Density:        RailDensityNormal,
+				FileDelete:     SidebarFileDeleteTrash,
+				AgentRestFold:  "1h",
+				SubagentRows:   SidebarSubagentRowsRows,
 				// The other subagent keys as they ship: no heading line, the
 				// row's four fields, no cap and no early hide.
 				SubagentCollapse:     SidebarSubagentCollapseOff,
@@ -1396,6 +1402,7 @@ func DefaultConfig() *UserConfig {
 		},
 		Mouse: MouseConfig{DoubleClickMS: MouseDoubleClickDefault, DragThreshold: MouseDragThresholdDefault},
 		Debug: DebugConfig{ShowKeyCount: ShowKeyCountDefault},
+		Dock:  DockConfig{MeterIntervalMS: DockMeterIntervalMSDefault},
 		Tape: TapeConfig{
 			Autorun:    TapeAutorunAsk,
 			AutoReview: false,

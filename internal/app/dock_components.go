@@ -124,14 +124,14 @@ func dockRefreshableComponents(cfg *config.UserConfig, plan dockPlan, showClock 
 		comps = append(comps, &dockengine.Component{
 			Name:    config.DockComponentCPU,
 			Builtin: true,
-			Refresh: config.DockRefresh{Kind: config.DockRefreshInterval, Interval: dockMeterInterval},
+			Refresh: config.DockRefresh{Kind: config.DockRefreshInterval, Interval: time.Duration(s.DockMeterIntervalMS) * time.Millisecond},
 		})
 	}
 	if plan.Has(config.DockComponentRAM) && s.ShowRAM {
 		comps = append(comps, &dockengine.Component{
 			Name:    config.DockComponentRAM,
 			Builtin: true,
-			Refresh: config.DockRefresh{Kind: config.DockRefreshInterval, Interval: dockMeterInterval},
+			Refresh: config.DockRefresh{Kind: config.DockRefreshInterval, Interval: time.Duration(s.DockMeterIntervalMS) * time.Millisecond},
 		})
 	}
 
@@ -164,10 +164,9 @@ func dockRefreshableComponents(cfg *config.UserConfig, plan dockPlan, showClock 
 	return comps
 }
 
-// dockMeterInterval is how often the CPU and RAM readouts are re-measured. The
-// RAM figure already self-throttled to this, and the CPU graph has one bar per
-// sample, so a faster cadence only moved the graph off the screen sooner.
-const dockMeterInterval = 2 * time.Second
+// The CPU and RAM readouts are re-measured every dock.meter_interval_ms. The
+// RAM figure self-throttles to this, and the CPU graph has one bar per sample, so
+// a faster cadence only moves the graph off the screen sooner.
 
 // dockCustomHit is where a custom cell was drawn, recorded by the renderer as
 // it draws for the reason every other dock rect is: a handler that worked the
