@@ -16831,3 +16831,19 @@ tests. On arch-btw both fail on main and on the branch at the e2e PATH guard
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
 | The branch before this one (stash path in the prompt) | "the card's prompt \"It fails one run in ten. /tmp/.../stash/....png\" is not the second line and the attached image's name" and "the pasted image is not attached to t1" | **caught** |
+
+## A pane attaches to a card another machine owns
+
+`TestAttachToACardOnAnotherMachine` links home and build, has a pane on home
+claim a project card build owns, and attach a file and a screenshot of a
+home pane to it. build lists both and gives back the same bytes; a second
+pane on home is refused, and a 4 MiB file is refused with the link's limit.
+
+Run on 2026-11-11 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `forwardAttach` without `remote_window` | "a pane that does not hold the card attached to it on build: Attached other.md to t1 on build" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAttachToACardOnAnotherMachine$' -v .`.
