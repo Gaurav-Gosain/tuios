@@ -16582,3 +16582,24 @@ The control was run on 2026-11-11 on branch `untangle/cfg-daemon`. The log is
 | Control: what was cut | Where it failed | Verdict |
 | --- | --- | --- |
 | `cfg.ExecTimeout = optionSeconds(uc, "daemon.exec_timeout_seconds")` in `DaemonConfigFromUser` | the command ran its 20 seconds and exited 0 | **caught** |
+
+## whoami reports the ids that exist now
+
+`TestWhoamiReportsTheIDsThatExistNow` runs `tuios whoami --json` in a pane of
+a real daemon with a client attached: as the pane started, after
+`rename-session`, with a false `TUIOS_PANE_ID`, and from outside every pane.
+Each run must name the pane and session the daemon places the caller in, the
+focused pane apart from the caller, and the attached client under the
+session's current name, and must list each out-of-date variable under
+`stale_env`. The four JSON documents and the screen are kept under the test's
+artifact folder.
+
+Run on 2026-11-11 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `staleEnv` returns nothing | "TUIOS_SESSION still holds \"e2e-ctrlp\", but stale_env is []" | **caught** |
+| The session taken from `TUIOS_SESSION`, not from `pane-grants` | "after the rename whoami says session \"e2e-ctrlp\", want \"e2e-whoami\"" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWhoamiReportsTheIDsThatExistNow$' -v .`.

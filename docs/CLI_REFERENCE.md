@@ -4678,6 +4678,7 @@ every pane acts on the focused pane.
 | `tuios tmux <tmux arguments>` | The shim asked for by name: answer one tmux command line (`tuios tmux display-message -p '#{pane_id}'`). In a pane, it answers in the caller's session. Outside a pane, every tuios session is a tmux session. A tmux session is a tuios session, a window `@N` is workspace N, a pane `%N` is a tuios window. See [The tmux shim](TMUX_SHIM.md#commands) for the commands it answers |
 | `herdr <herdr arguments>` | tuios run through the `herdr` link that the daemon makes beside its socket, which every pane gets as `HERDR_BIN_PATH`. It answers herdr's command line (`pane`, `tab`, `workspace`, `agent`, `worktree`, `notification show`, `api snapshot`), so tools built for herdr work in a tuios pane: `"$HERDR_BIN_PATH" pane split --pane "$HERDR_PANE_ID" --direction right`. It prints herdr's JSON and uses herdr's exit codes. `tuios pane ...` and `tuios notification ...` answer the same two groups. See [herdr's command line](AGENT_STATE.md#herdrs-command-line) |
 | `tuios pane-grants` | Show the pane this runs in and what it may do through tuios. See [below](#tuios-pane-grants) |
+| `tuios whoami` | Show the pane, session, grants, daemon and host this runs in, as the daemon sees them now, with the focused pane, the workspace shown and the attached clients, and the `TUIOS_*` variables that are out of date (`--json`). See [below](#tuios-whoami) |
 | `tuios set-pane-grants` | Give a pane grants (`--grants read,write`), or the default back (`--reset`). See [below](#tuios-pane-grants) |
 | `tuios stash put <file>` | Copy a file into the session store and print the stored path |
 | `tuios stash get <stored-path> [file]` | Copy a stashed file out of the session store, across a link |
@@ -5533,6 +5534,44 @@ tuios set-pane-grants --grants read,write && exec claude
 ## Scripting Examples
 
 These remote control and inspection commands enable powerful scripting workflows.
+
+### `tuios whoami`
+
+Show where this command runs, as the daemon sees it now.
+
+**Usage:**
+```bash
+tuios whoami [--json]
+```
+
+The daemon finds the caller's pane from the kernel's record of the process,
+not from its environment, so every id whoami prints exists now. It prints the
+pane (its id, name and workspace), the session, the grants the pane holds, the
+focused pane and the workspace the session shows, the clients attached to the
+session, the daemon (version, pid, socket, and the server name of a named
+daemon) and the host. Outside every pane it says so, and lists every attached
+client.
+
+The `TUIOS_*` variables a pane starts with are never rewritten. After a
+`rename-session`, `TUIOS_SESSION` still holds the old name. `stale_env` lists
+each of `TUIOS_PANE_ID`, `TUIOS_WINDOW_ID`, `TUIOS_SESSION` and
+`TUIOS_SOCKET` that is set and no longer matches, so a script can use the ids
+whoami printed instead.
+
+```bash
+tuios whoami --json | jq -r '.session'
+tuios whoami --json | jq -r '.focused_window_id'
+```
+
+```json
+{"success": true, "message": "whoami", "in_pane": true,
+ "window_id": "3a42ab8f-...", "short_id": "3a42ab8f", "name": "worker",
+ "workspace": 1, "session": "work", "grants": ["admin"],
+ "focused_window_id": "9c1d...", "focused_name": "editor", "current_workspace": 1,
+ "clients": [{"client_id": "client-17...", "pid": 4242, "session": "work"}],
+ "daemon": {"version": "v0.12.0", "pid": 811, "socket": "/tmp/tuios-501/tuios.sock"},
+ "host": "devbox", "stale_env": []}
+```
 
 ### Create and Focus Windows
 

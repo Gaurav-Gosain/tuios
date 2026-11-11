@@ -32,6 +32,22 @@ before you call one that does:
 tuios list-clients --json | jq -e --arg s "$TUIOS_SESSION" 'any(.[]; .session == $s)'
 ```
 
+## Where you run, and who looks
+
+`tuios whoami` asks the daemon where your command runs now: your pane, its
+name and workspace, your session, your grants, the focused pane and the
+workspace the session shows, and the clients attached to it. Every id in it
+exists now. Your `TUIOS_*` variables do not change after a start: after a
+`rename-session`, `TUIOS_SESSION` holds the old name, and `stale_env` says so.
+When a target is not found, run it before anything else.
+
+```sh
+tuios whoami
+tuios whoami --json | jq -r '.session, .focused_window_id'
+```
+
+An empty `clients` list means nobody sees the session now.
+
 ## Switching a client to another session
 
 `tuios switch-session` moves an attached client to another session in place,
