@@ -94,7 +94,13 @@ func (f *childBoundsFixture) agentShell(name, parent string) string {
 	if parent == "" {
 		id = strings.TrimSpace(mustCLI(f.t, f.base, "new-window", "-s", f.sess, name, "--no-focus", "--print-id"))
 	} else {
-		id = strings.TrimSpace(mustCLI(f.t, f.base, "start-agent", "sh", "-s", f.sess, "--name", name, "--parent", parent, "--ready-timeout", "2000", "--print-id"))
+		// A shell never reports a state of its own, so start-agent comes back
+		// not ready, non-zero, with the id on its first line.
+		out, _ := tuiosCLI(f.t, f.base, "start-agent", "sh", "-s", f.sess, "--name", name, "--parent", parent, "--ready-timeout", "2000", "--print-id")
+		id, _, _ = strings.Cut(strings.TrimSpace(out), "\n")
+		if len(id) < 8 {
+			f.t.Fatalf("start-agent %s printed no id:\n%s", name, out)
+		}
 	}
 	f.typeIn(id, "tuios set-agent-state idle --harness claude-code -m "+name)
 	waitUntil(f.t, name+" reads as an agent", 20*time.Second, func() (bool, string) {
