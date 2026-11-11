@@ -2502,7 +2502,7 @@ the head row counts the columns past each edge.
 | `j` `k`, `up` `down` | Go to the card above or below |
 | `H` `L`, `shift+left` `shift+right` | Move the card to the stage before or after |
 | `enter` | Go to the holder's pane. On a free card, open the New agent sheet on it |
-| `space` | Show the card's preview: its prompt as Markdown, its attachments and its history. It follows the cursor and a click on a card. It names the pull request of the card's worktree session. `J` `K` scroll it, `[` `]` step the attachments and show the selected one under the list (a picture, Markdown, a diff or a text highlighted, a Mermaid diagram drawn by the sketch plugin, a pull request with its state and checks), `o` shows a picture whole, `Z` shows it over the whole view, `space` or `esc` closes it. A drag on its edge sets its width, and a click outside the sheet closes the sheet |
+| `space` | Show the card's preview: its prompt as Markdown, its attachments and its history. It follows the cursor and a click on a card. It names the pull request of the card's worktree session. `J` `K` scroll it, `[` `]` step the attachments, one row each, and open the selected one under its row with its note (a picture, Markdown, a diff or a text highlighted, a Mermaid diagram drawn by the sketch plugin, a pull request with its state and checks), `o` shows a picture whole, `Z` shows it over the whole view, `space` or `esc` closes it. A drag on its edge sets its width, and a click outside the sheet closes the sheet |
 | `n` | Add a card to the column under the cursor. Type the title, then press `enter` |
 | `t` | Take the card for the pane behind the agents view |
 | `F` | Fold or open the column. Done starts folded |
