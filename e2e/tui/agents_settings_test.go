@@ -78,7 +78,7 @@ func agentsFixtureWith(t *testing.T, o agentsFixture) (string, string) {
 	}
 	// The system directories and nothing else of the person's own, so the
 	// harnesses on the machine running the suite stay out of the page.
-	t.Setenv("PATH", strings.Join([]string{bin, "/usr/bin", "/bin"}, string(os.PathListSeparator)))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+agentFreePath("/usr/bin", "/bin"))
 
 	cfg := configPathIn(base)
 	if err := os.MkdirAll(filepath.Dir(cfg), 0o700); err != nil {

@@ -1443,7 +1443,7 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 			if err := os.MkdirAll(bin, 0o755); err != nil {
 				t.Fatal(err)
 			}
-			t.Setenv("PATH", strings.Join([]string{bin, "/usr/bin", "/bin"}, string(os.PathListSeparator)))
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+agentFreePath("/usr/bin", "/bin"))
 			writeConfig(t, base, fmt.Sprintf("[appearance.sidebar]\nenabled = true\nposition = \"right\"\nwidth = %d\n", width))
 			killDaemon(t, base)
 			const session = "e2e-exit"

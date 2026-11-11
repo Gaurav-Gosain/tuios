@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -240,7 +241,8 @@ func writeBareSetupSSH(t *testing.T, here, far string) string {
 	for _, dir := range []string{"/usr/bin", "/bin"} {
 		entries, _ := os.ReadDir(dir)
 		for _, e := range entries {
-			if skip[e.Name()] {
+			// No agent CLI either: the suite runs none (agent_stubs_test.go).
+			if skip[e.Name()] || slices.Contains(agentNames, e.Name()) {
 				continue
 			}
 			_ = os.Symlink(filepath.Join(dir, e.Name()), filepath.Join(bin, e.Name()))

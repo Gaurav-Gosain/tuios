@@ -117,7 +117,7 @@ func TestHostsSyncLocalUpgradesTheNamedServerLive(t *testing.T) {
 	binDir := filepath.Join(f.here, "localbin")
 	local := filepath.Join(binDir, "tuios")
 	installCopy(t, tuiosBin, local)
-	env := append(slices.Clone(f.env), "PATH="+binDir+":/usr/bin:/bin", "TUIOS_PANE_ID=")
+	env := append(slices.Clone(f.env), "PATH="+binDir+string(os.PathListSeparator)+agentFreePath("/usr/bin", "/bin"), "TUIOS_PANE_ID=")
 	stopServerAtEnd(t, f.here, server)
 
 	for _, args := range [][]string{
@@ -357,7 +357,7 @@ func TestHostsSyncInAPaneLeavesADaemonItCannotUpgrade(t *testing.T) {
 	binDir := filepath.Join(f.here, "localbin")
 	local := filepath.Join(binDir, "tuios")
 	installCopy(t, baseline, local)
-	env := append(slices.Clone(f.env), "PATH="+binDir+":/usr/bin:/bin")
+	env := append(slices.Clone(f.env), "PATH="+binDir+string(os.PathListSeparator)+agentFreePath("/usr/bin", "/bin"))
 	for _, args := range [][]string{{"new", "work", "--detach"}, {"new-window", "sleeper", "-s", "work", "--", "sleep", "600"}} {
 		if out, err := runBinaryIn(t, f.here, local, append(slices.Clone(env), "TUIOS_PANE_ID="), args...); err != nil {
 			t.Fatalf("%v: %v\n%s", args, err, out)

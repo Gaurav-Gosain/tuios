@@ -48,7 +48,7 @@ func TestPluginOvnfs(t *testing.T) {
 				_ = os.Symlink(p, filepath.Join(bin, tool))
 			}
 		}
-		t.Setenv("PATH", bin+string(os.PathListSeparator)+"/usr/bin:/bin")
+		t.Setenv("PATH", bin+string(os.PathListSeparator)+agentFreePath("/usr/bin", "/bin"))
 		base := t.TempDir()
 		writeConfig(t, base, "")
 		killDaemon(t, base)
@@ -87,7 +87,7 @@ func TestPluginOvnfs(t *testing.T) {
 		if p, err := exec.LookPath("jq"); err == nil {
 			_ = os.Symlink(p, filepath.Join(bin, "jq"))
 		}
-		t.Setenv("PATH", bin+string(os.PathListSeparator)+"/usr/bin:/bin")
+		t.Setenv("PATH", bin+string(os.PathListSeparator)+agentFreePath("/usr/bin", "/bin"))
 		base := t.TempDir()
 		writeConfig(t, base, "")
 		killDaemon(t, base)

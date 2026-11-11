@@ -596,7 +596,7 @@ func TestLauncherTypesOutIntoASpawningPane(t *testing.T) {
 		args: []string{"--standalone"},
 		// The wrapper execs the harness's own /bin/sh, which every machine
 		// this runs on has.
-		env: []string{"PATH=" + dir + ":/usr/bin:/bin", "PS1=" + typeOutPrompt + " ",
+		env: []string{"PATH=" + dir + string(os.PathListSeparator) + agentFreePath("/usr/bin", "/bin"), "PS1=" + typeOutPrompt + " ",
 			"SHELL=" + heldShell(t, hold)},
 	})
 	waitBoot(t, term)
@@ -649,7 +649,7 @@ func TestLauncherTypesOutIntoADaemonPane(t *testing.T) {
 	}
 	term := startIn(t, base, startOpts{
 		args: []string{"attach", "e2e-type"},
-		env:  []string{"PATH=" + dir + ":/usr/bin:/bin"},
+		env:  []string{"PATH=" + dir + string(os.PathListSeparator) + agentFreePath("/usr/bin", "/bin")},
 	})
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return countWindows(s) == 1
@@ -744,7 +744,7 @@ func TestLauncherLeavesTheRightModeBehind(t *testing.T) {
 	dir := writeArgProbe(t)
 	term, _ := start(t, startOpts{
 		args: []string{"--standalone"},
-		env:  []string{"PATH=" + dir + ":/usr/bin:/bin", "PS1=" + typeOutPrompt + " "},
+		env:  []string{"PATH=" + dir + string(os.PathListSeparator) + agentFreePath("/usr/bin", "/bin"), "PS1=" + typeOutPrompt + " "},
 	})
 	waitBoot(t, term)
 
@@ -845,7 +845,7 @@ func TestVerbBeforeTheScanLands(t *testing.T) {
 			term, _ := start(t, startOpts{
 				cols: 160, rows: 45,
 				args: []string{"--standalone"},
-				env: []string{"PATH=" + dir + ":/usr/bin:/bin",
+				env: []string{"PATH=" + dir + string(os.PathListSeparator) + agentFreePath("/usr/bin", "/bin"),
 					"PS1=" + typeOutPrompt + " ", holdEnv},
 			})
 			waitBoot(t, term)
@@ -907,7 +907,7 @@ func TestVerbOnAQueryThatMatchesNothing(t *testing.T) {
 	term, _ := start(t, startOpts{
 		cols: 160, rows: 45,
 		args: []string{"--standalone"},
-		env:  []string{"PATH=" + dir + ":/usr/bin:/bin"},
+		env:  []string{"PATH=" + dir + string(os.PathListSeparator) + agentFreePath("/usr/bin", "/bin")},
 	})
 	waitBoot(t, term)
 	queryProbe(t, term) // lands the scan, so the list is full

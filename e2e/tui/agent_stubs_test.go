@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
@@ -45,6 +46,14 @@ import (
 var (
 	agentStubDir  string
 	realAgentDirs = map[string]bool{}
+	// agentShadows maps a folder that holds a real agent program to its
+	// shadow, the folder of links to everything else in it. agentShadowRoot
+	// is where a shadow made later goes, and agentNames are the programs a
+	// shadow leaves out. agentShadowMu guards all three after the start.
+	agentShadows    = map[string]string{}
+	agentShadowRoot string
+	agentNames      []string
+	agentShadowMu   sync.Mutex
 )
 
 // agentStubExit is how a stub exits when a test runs it as an agent.
@@ -110,6 +119,7 @@ func installAgentStubs() (func(), error) {
 		cleanup()
 		return nil, err
 	}
+	agentNames, agentShadowRoot = names, root
 	isAgent := func(n string) bool { return slices.Contains(names, n) }
 	var stubbed []string
 
@@ -148,6 +158,7 @@ func installAgentStubs() (func(), error) {
 			}
 			_ = os.Symlink(filepath.Join(dir, e.Name()), filepath.Join(shadow, e.Name()))
 		}
+		agentShadows[filepath.Clean(dir)] = shadow
 		dirs = append(dirs, shadow)
 	}
 	path := strings.Join(dirs, string(os.PathListSeparator))
@@ -166,6 +177,46 @@ func installAgentStubs() (func(), error) {
 		}
 	}
 	return cleanup, nil
+}
+
+// agentFreePath is a PATH of dirs with no agent program on it, the way a CI
+// runner's is: a folder that holds a real agent CLI is replaced by its shadow,
+// and the stubs are left out, so no harness looks installed. A test that wants
+// "no agent on the PATH" builds its PATH with it instead of naming /usr/bin and
+// /bin, which on some machines hold one (crush is in /usr/bin on Arch), and
+// which agentPathGuard refuses. A folder the suite did not shadow at the start,
+// such as /bin when only /usr/bin was on PATH, is checked and shadowed here.
+func agentFreePath(dirs ...string) string {
+	agentShadowMu.Lock()
+	defer agentShadowMu.Unlock()
+	var out []string
+	for _, dir := range dirs {
+		dir = filepath.Clean(dir)
+		if dir == "." || dir == filepath.Clean(agentStubDir) {
+			continue
+		}
+		if shadow, ok := agentShadows[dir]; ok {
+			out = append(out, shadow)
+			continue
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil || !slices.ContainsFunc(entries, func(e os.DirEntry) bool { return slices.Contains(agentNames, e.Name()) }) {
+			out = append(out, dir)
+			continue
+		}
+		shadow := filepath.Join(agentShadowRoot, fmt.Sprintf("free-%02d", len(agentShadows)))
+		if err := os.MkdirAll(shadow, 0o755); err != nil {
+			panic("e2e: make an agent-free shadow of " + dir + ": " + err.Error())
+		}
+		for _, e := range entries {
+			if !slices.Contains(agentNames, e.Name()) {
+				_ = os.Symlink(filepath.Join(dir, e.Name()), filepath.Join(shadow, e.Name()))
+			}
+		}
+		agentShadows[dir], realAgentDirs[dir] = shadow, true
+		out = append(out, shadow)
+	}
+	return strings.Join(out, string(os.PathListSeparator))
 }
 
 // agentPathGuard fails the test when kv sets a PATH that names a folder

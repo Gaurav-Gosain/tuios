@@ -1,6 +1,8 @@
 package tuie2e
 
 import (
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -183,8 +185,12 @@ func TestSpawnSheetListIsTheDropdown(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "new", "home", "--detach"); err != nil {
 		t.Fatalf("create session home: %v\n%s", err, out)
 	}
+	// No agent on the PATH, as on CI: the list's order follows what is
+	// installed, and on a machine with eight agent CLIs (stubbed by the
+	// suite, so each looks installed) aider was ranked past the ninth row and
+	// had no key, which the check below reads as no list.
 	term := startIn(t, base, startOpts{args: []string{"attach", "home"}, cols: 160, rows: 48, shippedLooks: true,
-		env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}})
+		env: []string{"TERM=xterm-256color", "COLORTERM=truecolor", "PATH=" + agentFreePath(filepath.SplitList(os.Getenv("PATH"))...)}})
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}

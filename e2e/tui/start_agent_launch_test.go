@@ -86,7 +86,7 @@ func TestStartAgentLaunchChoiceAndReadiness(t *testing.T) {
 		}
 		return folder, argv
 	}
-	sysPath := "/usr/bin:/bin"
+	sysPath := agentFreePath("/usr/bin", "/bin")
 
 	readiness := func(path string) (installed bool, signedIn string, raw string) {
 		t.Helper()

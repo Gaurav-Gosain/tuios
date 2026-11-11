@@ -40,7 +40,7 @@ func TestRestoredShellKeepsTerminalIdentity(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(fakeClaude), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", strings.Join([]string{bin, "/usr/bin", "/bin"}, string(os.PathListSeparator)))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+agentFreePath("/usr/bin", "/bin"))
 	t.Setenv("TERM_PROGRAM", "e2e-outer")
 	writeConfig(t, base, "[daemon]\nresume_agents = 'auto'\n")
 

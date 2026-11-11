@@ -99,7 +99,7 @@ func TestLauncherIsNotTheCommandPalette(t *testing.T) {
 	dir := writeProbe(t)
 	term, _ := start(t, startOpts{
 		args: []string{"--standalone"},
-		env:  []string{"PATH=" + dir + ":/usr/bin:/bin"},
+		env:  []string{"PATH=" + dir + string(os.PathListSeparator) + agentFreePath("/usr/bin", "/bin")},
 	})
 	waitBoot(t, term)
 
@@ -148,7 +148,7 @@ func TestLauncherTypesTheCommandOut(t *testing.T) {
 	dir := writeProbe(t)
 	term, _ := start(t, startOpts{
 		args: []string{"--standalone"},
-		env:  []string{"PATH=" + dir + ":/usr/bin:/bin", "PS1=" + typeOutPrompt + " "},
+		env:  []string{"PATH=" + dir + string(os.PathListSeparator) + agentFreePath("/usr/bin", "/bin"), "PS1=" + typeOutPrompt + " "},
 	})
 	waitBoot(t, term)
 	queryProbe(t, term)
@@ -174,7 +174,7 @@ func TestRunAnythingExecsLocalPane(t *testing.T) {
 	dir := writeProbe(t)
 	term, _ := start(t, startOpts{
 		args: []string{"--standalone"},
-		env:  []string{"PATH=" + dir + ":/usr/bin:/bin"},
+		env:  []string{"PATH=" + dir + string(os.PathListSeparator) + agentFreePath("/usr/bin", "/bin")},
 	})
 	waitBoot(t, term)
 	launchProbe(t, term)
@@ -221,7 +221,7 @@ func TestRunAnythingExecsDaemonPane(t *testing.T) {
 			}
 			term := startIn(t, base, startOpts{
 				args: []string{"attach", "e2e-run"},
-				env:  []string{"PATH=" + dir + ":/usr/bin:/bin"},
+				env:  []string{"PATH=" + dir + string(os.PathListSeparator) + agentFreePath("/usr/bin", "/bin")},
 			})
 			if err := term.WaitFor(func(s tuitest.Screen) bool {
 				return countWindows(s) == 1

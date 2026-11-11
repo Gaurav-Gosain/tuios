@@ -83,7 +83,7 @@ func TestListAgentsDropsAPaneWhoseAgentEnded(t *testing.T) {
 			if err := os.Symlink(fakeClaudeBin, filepath.Join(bin, "claude")); err != nil {
 				t.Fatal(err)
 			}
-			t.Setenv("PATH", strings.Join([]string{bin, "/usr/bin", "/bin"}, string(os.PathListSeparator)))
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+agentFreePath("/usr/bin", "/bin"))
 			killDaemon(t, base)
 			const session = "e2e-leftover"
 			if out, err := tuiosCLI(t, base, "new", session, "--detach"); err != nil {

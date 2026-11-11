@@ -159,7 +159,7 @@ func TestAgentSignalsOnAnExitedAgentsPane(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			t.Setenv("PATH", strings.Join([]string{bin, "/usr/bin", "/bin"}, string(os.PathListSeparator)))
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+agentFreePath("/usr/bin", "/bin"))
 			script := filepath.Join(base, "fake-claude.sh")
 			if err := os.WriteFile(script, []byte(strings.ReplaceAll(progressAgentScript, "__TUIOS__", tuiosBin)), 0o755); err != nil {
 				t.Fatal(err)

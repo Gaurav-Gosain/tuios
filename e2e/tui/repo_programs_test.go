@@ -146,7 +146,7 @@ func TestGitRunsNoProgramOfThePaneRepository(t *testing.T) {
 // and Start runs the post-checkout hook in the daemon.
 func TestSpawnSheetIgnoresAReportedFolder(t *testing.T) {
 	base, repo := fanFixture(t)
-	t.Setenv("PATH", strings.SplitN(os.Getenv("PATH"), string(os.PathListSeparator), 2)[0]+string(os.PathListSeparator)+"/usr/bin:/bin")
+	t.Setenv("PATH", strings.SplitN(os.Getenv("PATH"), string(os.PathListSeparator), 2)[0]+string(os.PathListSeparator)+agentFreePath("/usr/bin", "/bin"))
 	marker := filepath.Join(base, "ran")
 	other := filepath.Join(base, "otherrepo")
 	if err := os.MkdirAll(other, 0o755); err != nil {

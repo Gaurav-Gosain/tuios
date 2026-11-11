@@ -42,7 +42,7 @@ func shotGraphicsEnv() []string {
 		"TUIOS_KITTY_GRAPHICS=1",
 		"TUIOS_SIXEL_GRAPHICS=0",
 		fmt.Sprintf("TUIOS_CELL_SIZE=%dx%d", shotCellW, shotCellH),
-		"PATH=/usr/bin:/bin",
+		"PATH=" + agentFreePath("/usr/bin", "/bin"),
 	}
 }
 

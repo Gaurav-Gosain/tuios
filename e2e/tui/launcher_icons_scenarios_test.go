@@ -153,7 +153,7 @@ func iconEnv(base string, extra ...string) []string {
 		"TUIOS_KITTY_GRAPHICS=1",
 		"TUIOS_SIXEL_GRAPHICS=0",
 		"XDG_DATA_DIRS=" + filepath.Join(base, "no-such-data-dir"),
-		"PATH=/usr/bin:/bin",
+		"PATH=" + agentFreePath("/usr/bin", "/bin"),
 	}, extra...)
 }
 

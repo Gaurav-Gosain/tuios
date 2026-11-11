@@ -198,7 +198,7 @@ func fakeHyprland(t *testing.T, base string, rates ...string) []string {
 		t.Fatalf("write hyprctl: %v", err)
 	}
 	return []string{
-		"PATH=" + bin + ":/usr/bin:/bin",
+		"PATH=" + bin + string(os.PathListSeparator) + agentFreePath("/usr/bin", "/bin"),
 		"WAYLAND_DISPLAY=wayland-e2e",
 		"HYPRLAND_INSTANCE_SIGNATURE=e2e",
 	}

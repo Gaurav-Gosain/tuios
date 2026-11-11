@@ -77,7 +77,7 @@ func agentsViewContrast(t *testing.T, run chromeRun) {
 		// No agent on the PATH: the sheet draws an agent that is not
 		// installed in its quiet ink, and the machine row warns. A machine
 		// with claude installed showed neither, and CI, with none, did.
-		env: append([]string{"TUIOS_KITTY_GRAPHICS=0", "PATH=/usr/bin:/bin"}, run.depth.env...)})
+		env: append([]string{"TUIOS_KITTY_GRAPHICS=0", "PATH=" + agentFreePath("/usr/bin", "/bin")}, run.depth.env...)})
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}

@@ -2334,7 +2334,7 @@ func TestCockpitSpawnSheet(t *testing.T) {
 	base, repo := fanFixture(t)
 	// Only the fake claude: an agent installed on this machine must never
 	// start from a test.
-	t.Setenv("PATH", strings.SplitN(os.Getenv("PATH"), string(os.PathListSeparator), 2)[0]+string(os.PathListSeparator)+"/usr/bin:/bin")
+	t.Setenv("PATH", strings.SplitN(os.Getenv("PATH"), string(os.PathListSeparator), 2)[0]+string(os.PathListSeparator)+agentFreePath("/usr/bin", "/bin"))
 	useShippedLooks(base)
 	for _, s := range []string{"home", "frames0", "frames1", "frames2"} {
 		if out, err := tuiosCLI(t, base, "new", s, "--detach", "--cwd", repo); err != nil {

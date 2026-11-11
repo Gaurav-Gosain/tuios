@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -23,7 +24,7 @@ func tabEncodingCase(t *testing.T, name string, keys ...string) {
 		term, _ := start(t, startOpts{
 			cols: 160, rows: 45,
 			args: []string{"--standalone"},
-			env:  []string{"PATH=" + dir + ":/usr/bin:/bin", "PS1=" + typeOutPrompt + " "},
+			env:  []string{"PATH=" + dir + string(os.PathListSeparator) + agentFreePath("/usr/bin", "/bin"), "PS1=" + typeOutPrompt + " "},
 		})
 		waitBoot(t, term)
 		queryProbe(t, term)

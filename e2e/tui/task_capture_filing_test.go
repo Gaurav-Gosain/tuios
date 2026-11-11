@@ -65,7 +65,7 @@ func TestTaskCaptureLateAnswerKeepsTheNextSheet(t *testing.T) {
 		t.Fatal(err)
 	}
 	term := startIn(t, base, startOpts{args: []string{"attach", "home"}, cols: 120, rows: 36, shippedLooks: true,
-		env: []string{"PATH=" + bin + ":/usr/bin:/bin", "TERM=xterm-256color", "COLORTERM=truecolor", "TUIOS_KITTY_GRAPHICS=0"}})
+		env: []string{"PATH=" + bin + string(os.PathListSeparator) + agentFreePath("/usr/bin", "/bin"), "TERM=xterm-256color", "COLORTERM=truecolor", "TUIOS_KITTY_GRAPHICS=0"}})
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}

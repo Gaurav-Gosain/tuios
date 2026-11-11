@@ -85,7 +85,7 @@ func TestNewAgentSheetChoicesAndReadiness(t *testing.T) {
 	open := func(path string) *tuitest.Terminal {
 		t.Helper()
 		term := startIn(t, base, startOpts{args: []string{"attach", "home"}, cols: 200, rows: 55, shippedLooks: true,
-			env: []string{"PATH=" + path + ":/usr/bin:/bin", "TERM=xterm-256color", "COLORTERM=truecolor", "TUIOS_KITTY_GRAPHICS=0"}})
+			env: []string{"PATH=" + path + string(os.PathListSeparator) + agentFreePath("/usr/bin", "/bin"), "TERM=xterm-256color", "COLORTERM=truecolor", "TUIOS_KITTY_GRAPHICS=0"}})
 		if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
 			t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 		}

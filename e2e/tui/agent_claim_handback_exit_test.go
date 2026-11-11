@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
@@ -87,7 +86,7 @@ func TestAgentClaimHandedBackAsTheAgentExits(t *testing.T) {
 			if err := os.Symlink(fakeClaudeBin, filepath.Join(bin, "claude")); err != nil {
 				t.Fatal(err)
 			}
-			t.Setenv("PATH", strings.Join([]string{bin, "/usr/bin", "/bin"}, string(os.PathListSeparator)))
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+agentFreePath("/usr/bin", "/bin"))
 			script := filepath.Join(base, "agent.sh")
 			if err := os.WriteFile(script, []byte(handbackExitScript), 0o755); err != nil {
 				t.Fatal(err)

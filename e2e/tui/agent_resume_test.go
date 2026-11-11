@@ -78,7 +78,7 @@ argv = ["echo", "resumed-{session_id}"]
 	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(fakeClaude), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", strings.Join([]string{bin, "/usr/bin", "/bin"}, string(os.PathListSeparator)))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+agentFreePath("/usr/bin", "/bin"))
 
 	// Five agents, each with its own conversation: two are picked with x and
 	// resumed with y, one is resumed alone with y, and * then y resumes the
@@ -405,7 +405,7 @@ func TestAutoResumeLeavesApprovalsOffToThePerson(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(fakeClaude), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", strings.Join([]string{bin, "/usr/bin", "/bin"}, string(os.PathListSeparator)))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+agentFreePath("/usr/bin", "/bin"))
 	writeConfig(t, base, "[daemon]\nresume_agents = 'auto'\n")
 
 	agents := []struct{ session, conv, flags string }{
