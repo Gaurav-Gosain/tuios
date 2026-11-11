@@ -166,9 +166,15 @@ type fileWatchSpec struct {
 // fileWatchTarget is where the watch should be: the folder the section is
 // showing, when it was read cleanly. A folder on another machine is watched by
 // the daemon, when there is one to ask.
+//
+// A model nobody named (ClientUnknown, which is what the tests and the
+// benchmarks build) watches nothing, as it follows no config file (see
+// watchesConfig): a watch is an inotify instance on Linux, the kernel allows
+// 128 per user, and a test that draws the rail and never ends its model would
+// hold its two until the binary exits.
 func (m *OS) fileWatchTarget() fileWatchSpec {
 	v := m.filesView
-	if v.Dir == "" || v.Err != "" {
+	if v.Dir == "" || v.Err != "" || m.Client == ClientUnknown {
 		return fileWatchSpec{}
 	}
 	if v.Host == "" && m.AttachedHost == "" {
