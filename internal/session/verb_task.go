@@ -217,13 +217,17 @@ var errTaskRefused = errors.New("task change refused")
 
 // changeTask runs fn on the card id of sess inside one mutateState, so two
 // callers cannot both act on the same card at once. fn returns the action to
-// publish, "" for none, or the refusal. The card's row after the change is
-// returned with the session state it was read from.
-func (d *Daemon) changeTask(sess *Session, id string, fn func(st *SessionState, tk *TaskState, now int64) (string, *verbError)) (TaskRow, string, *verbError) {
+// publish, "" for none, or the refusal. event names the task event the action
+// stands for, and is called once the row is worked out, in the same change: the
+// event leaves under the state lock, so events leave in the order of the
+// changes that made them. The card's row after the change is returned with the
+// action and the event published.
+func (d *Daemon) changeTask(sess *Session, id string, fn func(st *SessionState, tk *TaskState, now int64) (string, *verbError), event func(action string) taskEventSpec) (TaskRow, string, taskEventSpec, *verbError) {
 	var (
 		verr   *verbError
 		action string
 		row    TaskRow
+		spec   taskEventSpec
 	)
 	err := sess.mutateState(func(st *SessionState) error {
 		i := taskIndex(st.Tasks, id)
@@ -237,21 +241,40 @@ func (d *Daemon) changeTask(sess *Session, id string, fn func(st *SessionState, 
 			return errTaskRefused
 		}
 		row = taskRow(sess, st, tk)
+		if spec = event(action); spec.typ != "" {
+			d.taskEvent(sess, spec.typ, spec.action, spec.window, spec.reason, row)
+		}
 		return nil
 	})
 	if verr != nil {
-		return TaskRow{}, "", verr
+		return TaskRow{}, "", taskEventSpec{}, verr
 	}
 	if err != nil {
-		return TaskRow{}, "", newVerbError(ErrVerbInternal, "could not change the card: "+err.Error())
+		return TaskRow{}, "", taskEventSpec{}, newVerbError(ErrVerbInternal, "could not change the card: "+err.Error())
 	}
-	return row, action, nil
+	return row, action, spec, nil
 }
 
-// publishTask sends a task event for row.
-func (d *Daemon) publishTask(sess *Session, typ, action, window, reason string, row TaskRow) {
+// taskEventSpec is a task event a change publishes: its type, action, window
+// and reason. The zero value is no event.
+type taskEventSpec struct{ typ, action, window, reason string }
+
+// taskEvent puts a task event for row on the event stream and does nothing
+// else. It is called inside the state change that made the card's row, as that
+// change's last step, so a session's task events leave in the order of its
+// changes. The hub only takes its own lock and does non-blocking sends, so it
+// is safe under the state lock. What dispatch does with the event is
+// afterTaskEvent, after the change.
+func (d *Daemon) taskEvent(sess *Session, typ, action, window, reason string, row TaskRow) {
 	d.events.publish(streamEvent{Type: typ, Session: sess.Name(), Window: window, Action: action, Reason: reason, Task: &row})
-	d.afterTaskEvent(sess, action, window, reason, row)
+}
+
+// afterTaskSpec runs afterTaskEvent for the event spec of a change that
+// published one.
+func (d *Daemon) afterTaskSpec(sess *Session, spec taskEventSpec, row TaskRow) {
+	if spec.typ != "" {
+		d.afterTaskEvent(sess, spec.action, spec.window, spec.reason, row)
+	}
 }
 
 // taskStageParam checks a stage parameter.
@@ -347,6 +370,7 @@ func (d *Daemon) verbAddTask(cs *connState, params json.RawMessage) (any, *verbE
 		tk.note(TaskEvent{Action: TaskActionAdded, By: caller.by, At: now, Stage: tk.Stage})
 		st.Tasks = append(st.Tasks, tk)
 		row = taskRow(sess, st, &st.Tasks[len(st.Tasks)-1])
+		d.taskEvent(sess, EventTaskChanged, TaskActionAdded, "", "", row)
 		return nil
 	})
 	if verr != nil {
@@ -356,7 +380,7 @@ func (d *Daemon) verbAddTask(cs *connState, params json.RawMessage) (any, *verbE
 		return nil, newVerbError(ErrVerbInternal, "could not add the card: "+err.Error())
 	}
 	LogBasic("Added task %s in session %s", row.ID, sess.Name())
-	d.publishTask(sess, EventTaskChanged, TaskActionAdded, "", "", row)
+	d.afterTaskEvent(sess, TaskActionAdded, "", "", row)
 	return row.typed("task_added"), nil
 }
 
@@ -621,6 +645,7 @@ func (d *Daemon) verbClaimTask(cs *connState, params json.RawMessage) (any, *ver
 			return errTaskRefused
 		}
 		row = taskRow(sess, st, tk)
+		d.taskEvent(sess, EventTaskClaimed, TaskActionClaimed, window, "", row)
 		return nil
 	})
 	if missing != nil {
@@ -633,7 +658,7 @@ func (d *Daemon) verbClaimTask(cs *connState, params json.RawMessage) (any, *ver
 		return nil, newVerbError(ErrVerbInternal, "could not claim the card: "+err.Error())
 	}
 	LogBasic("Window %s claimed task %s in session %s", shortWindowID(window), row.ID, sess.Name())
-	d.publishTask(sess, EventTaskClaimed, TaskActionClaimed, window, "", row)
+	d.afterTaskEvent(sess, TaskActionClaimed, window, "", row)
 	return row.typed("task_claimed"), nil
 }
 
@@ -663,7 +688,7 @@ func (d *Daemon) verbFinishTask(cs *connState, params json.RawMessage) (any, *ve
 		work = d.workOf(caller.window)
 	}
 	var holder string
-	row, action, verr := d.changeTask(sess, p.ID, func(_ *SessionState, tk *TaskState, now int64) (string, *verbError) {
+	row, action, spec, verr := d.changeTask(sess, p.ID, func(_ *SessionState, tk *TaskState, now int64) (string, *verbError) {
 		if verr := caller.mayTouch("finish-task", tk); verr != nil {
 			return "", verr
 		}
@@ -676,12 +701,17 @@ func (d *Daemon) verbFinishTask(cs *connState, params json.RawMessage) (any, *ve
 		var action string
 		action, holder, _ = sess.moveCard(tk, move, now)
 		return action, nil
+	}, func(action string) taskEventSpec {
+		if action == "" {
+			return taskEventSpec{}
+		}
+		return taskEventSpec{EventTaskFinished, TaskActionFinished, holder, ""}
 	})
 	if verr != nil {
 		return nil, verr
 	}
 	if action != "" {
-		d.publishTask(sess, EventTaskFinished, TaskActionFinished, holder, "", row)
+		d.afterTaskSpec(sess, spec, row)
 		d.startTaskVerify(sess, row.ID)
 	}
 	return row.typed("task_finished"), nil
@@ -728,7 +758,7 @@ func (d *Daemon) verbSetTaskStage(cs *connState, params json.RawMessage) (any, *
 		}
 	}
 	var holder string
-	row, action, verr := d.changeTask(sess, p.ID, func(_ *SessionState, tk *TaskState, now int64) (string, *verbError) {
+	row, action, spec, verr := d.changeTask(sess, p.ID, func(_ *SessionState, tk *TaskState, now int64) (string, *verbError) {
 		if verr := caller.mayTouch("set-task-stage", tk); verr != nil {
 			return "", verr
 		}
@@ -745,15 +775,20 @@ func (d *Daemon) verbSetTaskStage(cs *connState, params json.RawMessage) (any, *
 		var action string
 		action, holder, _ = sess.moveCard(tk, move, now)
 		return action, nil
+	}, func(action string) taskEventSpec {
+		switch action {
+		case TaskActionFinished:
+			return taskEventSpec{EventTaskFinished, TaskActionFinished, holder, ""}
+		case TaskActionStaged:
+			return taskEventSpec{EventTaskChanged, TaskActionStaged, "", ""}
+		}
+		return taskEventSpec{}
 	})
 	if verr != nil {
 		return nil, verr
 	}
-	switch action {
-	case TaskActionFinished:
-		d.publishTask(sess, EventTaskFinished, TaskActionFinished, holder, "", row)
-	case TaskActionStaged:
-		d.publishTask(sess, EventTaskChanged, TaskActionStaged, "", "", row)
+	d.afterTaskSpec(sess, spec, row)
+	if action == TaskActionStaged {
 		d.startTaskVerify(sess, row.ID)
 	}
 	return row.typed("task_changed"), nil
@@ -791,7 +826,7 @@ func (d *Daemon) verbBlockTask(cs *connState, params json.RawMessage) (any, *ver
 	if verr != nil {
 		return nil, verr
 	}
-	row, action, verr := d.changeTask(sess, p.ID, func(_ *SessionState, tk *TaskState, now int64) (string, *verbError) {
+	row, _, spec, verr := d.changeTask(sess, p.ID, func(_ *SessionState, tk *TaskState, now int64) (string, *verbError) {
 		if verr := caller.mayTouch("block-task", tk); verr != nil {
 			return "", verr
 		}
@@ -801,13 +836,16 @@ func (d *Daemon) verbBlockTask(cs *connState, params json.RawMessage) (any, *ver
 		}
 		action, _, _ := sess.moveCard(tk, move, now)
 		return action, nil
+	}, func(action string) taskEventSpec {
+		if action == "" {
+			return taskEventSpec{}
+		}
+		return taskEventSpec{EventTaskChanged, action, "", reason}
 	})
 	if verr != nil {
 		return nil, verr
 	}
-	if action != "" {
-		d.publishTask(sess, EventTaskChanged, action, "", reason, row)
-	}
+	d.afterTaskSpec(sess, spec, row)
 	return row.typed("task_changed"), nil
 }
 
@@ -829,7 +867,7 @@ func (d *Daemon) verbReleaseTask(cs *connState, params json.RawMessage) (any, *v
 	if verr != nil {
 		return nil, verr
 	}
-	row, _, verr := d.changeTask(sess, p.ID, func(_ *SessionState, tk *TaskState, now int64) (string, *verbError) {
+	row, _, spec, verr := d.changeTask(sess, p.ID, func(_ *SessionState, tk *TaskState, now int64) (string, *verbError) {
 		if verr := caller.mayTouch("release-task", tk); verr != nil {
 			return "", verr
 		}
@@ -838,11 +876,13 @@ func (d *Daemon) verbReleaseTask(cs *connState, params json.RawMessage) (any, *v
 		}
 		action, _, _ := sess.moveCard(tk, cardMove{kind: moveRelease, by: caller.by}, now)
 		return action, nil
+	}, func(string) taskEventSpec {
+		return taskEventSpec{EventTaskChanged, TaskActionReleased, "", ""}
 	})
 	if verr != nil {
 		return nil, verr
 	}
-	d.publishTask(sess, EventTaskChanged, TaskActionReleased, "", "", row)
+	d.afterTaskSpec(sess, spec, row)
 	return row.typed("task_changed"), nil
 }
 
@@ -881,6 +921,7 @@ func (d *Daemon) verbRemoveTask(cs *connState, params json.RawMessage) (any, *ve
 			}
 		}
 		st.Tasks = slices.Delete(st.Tasks, i, i+1)
+		d.taskEvent(sess, EventTaskChanged, TaskActionRemoved, "", "", row)
 		return nil
 	})
 	if verr != nil {
@@ -893,7 +934,7 @@ func (d *Daemon) verbRemoveTask(cs *connState, params json.RawMessage) (any, *ve
 	if len(hashes) > 0 {
 		d.sweepAttachments(hashes...)
 	}
-	d.publishTask(sess, EventTaskChanged, TaskActionRemoved, "", "", row)
+	d.afterTaskEvent(sess, TaskActionRemoved, "", "", row)
 	return map[string]any{"type": "task_removed", "id": p.ID}, nil
 }
 
@@ -908,12 +949,15 @@ func (d *Daemon) restoreTasks(sess *Session, tasks []TaskState, next uint64) {
 	if err := sess.mutateState(func(st *SessionState) error {
 		st.Tasks, st.NextTaskID = slices.Clone(tasks), next
 		rows = releasedRows(sess, st, func(string) bool { return true }, taskReleaseRestart)
+		for _, row := range rows {
+			d.taskEvent(sess, EventTaskChanged, TaskActionReleased, "", taskReleaseRestart, row)
+		}
 		return nil
 	}); err != nil {
 		LogBasic("Could not restore the task cards of session %s: %v", sess.Name(), err)
 		return
 	}
-	d.publishReleased(sess, rows, taskReleaseRestart)
+	d.afterReleased(sess, rows, taskReleaseRestart)
 	if d.dispatch.loaded() {
 		// A session resurrected later; at the start the daemon resumes
 		// them once the boards are read.
@@ -932,11 +976,22 @@ func releasedRows(sess *Session, st *SessionState, held func(holder string) bool
 	return rows
 }
 
+// afterReleased is what follows the release events of rows, published inside
+// the change that released them: the log line and afterTaskEvent for each.
+func (d *Daemon) afterReleased(sess *Session, rows []TaskRow, reason string) {
+	for _, row := range rows {
+		LogBasic("Released task %s in session %s: %s", row.ID, sess.Name(), reason)
+		d.afterTaskEvent(sess, TaskActionReleased, "", reason, row)
+	}
+}
+
 // publishReleased says on the event stream that the cards of rows were
-// released for reason.
+// released for reason. It is called only from the session's event sink, which
+// runs under the state lock of the change that released them.
 func (d *Daemon) publishReleased(sess *Session, rows []TaskRow, reason string) {
 	for _, row := range rows {
 		LogBasic("Released task %s in session %s: %s", row.ID, sess.Name(), reason)
-		d.publishTask(sess, EventTaskChanged, TaskActionReleased, "", reason, row)
+		d.taskEvent(sess, EventTaskChanged, TaskActionReleased, "", reason, row)
+		d.afterTaskEvent(sess, TaskActionReleased, "", reason, row)
 	}
 }

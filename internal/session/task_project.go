@@ -264,9 +264,12 @@ func (d *Daemon) releaseHeld(sess *Session, window, reason string) {
 		if len(rel) == 0 {
 			return errNoTaskMove
 		}
+		for _, row := range rows {
+			d.taskEvent(sess, EventTaskChanged, TaskActionReleased, "", reason, row)
+		}
 		return nil
 	})
-	d.publishReleased(sess, rows, reason)
+	d.afterReleased(sess, rows, reason)
 }
 
 // cardSessions are the sessions whose cards window may hold: its own, and
@@ -460,6 +463,7 @@ func (d *Daemon) claimForRemote(cs *connState, p claimTaskParams) (any, *verbErr
 			return errTaskRefused
 		}
 		row = taskRow(sess, st, tk)
+		d.taskEvent(sess, EventTaskClaimed, TaskActionClaimed, holder, "", row)
 		return nil
 	})
 	if verr != nil {
@@ -469,6 +473,6 @@ func (d *Daemon) claimForRemote(cs *connState, p claimTaskParams) (any, *verbErr
 		return nil, newVerbError(ErrVerbInternal, "could not claim the card: "+err.Error())
 	}
 	LogBasic("A pane on %s claimed task %s in session %s", strings.TrimPrefix(caller.by, queueByLinkPrefix), row.ID, sess.Name())
-	d.publishTask(sess, EventTaskClaimed, TaskActionClaimed, holder, "", row)
+	d.afterTaskEvent(sess, TaskActionClaimed, holder, "", row)
 	return row.typed("task_claimed"), nil
 }

@@ -137,11 +137,14 @@ func (d *Daemon) autoStage(sess *Session, match func(*TaskState) bool, mv taskMo
 		for i := range moved {
 			rows = append(rows, taskRow(sess, st, &moved[i]))
 		}
+		for _, row := range rows {
+			d.taskEvent(sess, EventTaskChanged, TaskActionStaged, "", reason, row)
+		}
 		return nil
 	})
 	for _, row := range rows {
 		LogBasic("Moved task %s in session %s to %s: %s", row.ID, sess.Name(), row.Stage, reason)
-		d.publishTask(sess, EventTaskChanged, TaskActionStaged, "", reason, row)
+		d.afterTaskEvent(sess, TaskActionStaged, "", reason, row)
 	}
 }
 
@@ -344,10 +347,13 @@ func (d *Daemon) stampFan(tp *taskParam, stem, fanID string) (TaskRow, bool) {
 			moved = action != ""
 		}
 		row = taskRow(tp.sess, st, tk)
+		if moved {
+			d.taskEvent(tp.sess, EventTaskChanged, TaskActionStaged, "", reason, row)
+		}
 		return nil
 	})
 	if moved {
-		d.publishTask(tp.sess, EventTaskChanged, TaskActionStaged, "", reason, row)
+		d.afterTaskEvent(tp.sess, TaskActionStaged, "", reason, row)
 	}
 	return row, found
 }
@@ -357,10 +363,15 @@ func (d *Daemon) stampFan(tp *taskParam, stem, fanID string) (TaskRow, bool) {
 // session cannot read it, and its close lets the card go (remoteHolds).
 func (d *Daemon) claimForPane(tp *taskParam, window, name, harness string, cross bool) (TaskRow, *verbError) {
 	auto := d.auto.expects(tp.sess.Name(), tp.id, false)
-	row, action, verr := d.changeTask(tp.sess, tp.id, func(_ *SessionState, tk *TaskState, now int64) (string, *verbError) {
+	row, action, spec, verr := d.changeTask(tp.sess, tp.id, func(_ *SessionState, tk *TaskState, now int64) (string, *verbError) {
 		action, _, verr := tp.sess.moveCard(tk, cardMove{kind: moveClaim, by: cmp.Or(auto, tp.caller.by), window: window,
 			dispatched: auto != "", names: cross, name: name, harness: harness}, now)
 		return action, verr
+	}, func(action string) taskEventSpec {
+		if action == "" {
+			return taskEventSpec{}
+		}
+		return taskEventSpec{EventTaskClaimed, TaskActionClaimed, window, ""}
 	})
 	if verr == nil && cross {
 		d.remoteHolds.note(window, remoteHold{session: tp.sess.Name(), id: tp.id}, true)
@@ -370,7 +381,7 @@ func (d *Daemon) claimForPane(tp *taskParam, window, name, harness string, cross
 	}
 	if action != "" {
 		LogBasic("Window %s claimed task %s in session %s as it started", shortWindowID(window), row.ID, tp.sess.Name())
-		d.publishTask(tp.sess, EventTaskClaimed, TaskActionClaimed, window, "", row)
+		d.afterTaskSpec(tp.sess, spec, row)
 	}
 	return row, nil
 }

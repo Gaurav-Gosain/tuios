@@ -600,7 +600,7 @@ func (d *Daemon) verbAttachTask(cs *connState, params json.RawMessage) (any, *ve
 	}
 	var olds, same []string
 	var added []attachItem
-	row, action, verr := d.changeTask(sess, p.ID, func(st *SessionState, tk *TaskState, now int64) (string, *verbError) {
+	row, action, spec, verr := d.changeTask(sess, p.ID, func(st *SessionState, tk *TaskState, now int64) (string, *verbError) {
 		olds, same, added = nil, nil, nil
 		if verr := caller.mayAttach("attach-task", tk); verr != nil {
 			return "", verr
@@ -651,6 +651,11 @@ func (d *Daemon) verbAttachTask(cs *connState, params json.RawMessage) (any, *ve
 		}
 		action, _, _ := sess.moveCard(tk, cardMove{kind: moveAttach, by: caller.by, reason: attachReason(added), attachments: list}, now)
 		return action, nil
+	}, func(action string) taskEventSpec {
+		if action == "" {
+			return taskEventSpec{}
+		}
+		return taskEventSpec{EventTaskChanged, action, "", attachReason(added)}
 	})
 	if verr != nil {
 		for _, it := range items {
@@ -667,7 +672,7 @@ func (d *Daemon) verbAttachTask(cs *connState, params json.RawMessage) (any, *ve
 	}
 	if action != "" {
 		LogBasic("Attached %s to task %s in session %s", attachReason(added), p.ID, sess.Name())
-		d.publishTask(sess, EventTaskChanged, action, "", attachReason(added), row)
+		d.afterTaskSpec(sess, spec, row)
 	}
 	out := make([]TaskAttachment, len(items))
 	for i, it := range items {
@@ -719,7 +724,7 @@ func (d *Daemon) verbDetachTask(cs *connState, params json.RawMessage) (any, *ve
 		return nil, verr
 	}
 	var hash string
-	row, action, verr := d.changeTask(sess, p.ID, func(_ *SessionState, tk *TaskState, now int64) (string, *verbError) {
+	row, action, spec, verr := d.changeTask(sess, p.ID, func(_ *SessionState, tk *TaskState, now int64) (string, *verbError) {
 		if verr := caller.mayAttach("detach-task", tk); verr != nil {
 			return "", verr
 		}
@@ -730,6 +735,11 @@ func (d *Daemon) verbDetachTask(cs *connState, params json.RawMessage) (any, *ve
 		hash = tk.Attachments[i].Hash
 		action, _, _ := sess.moveCard(tk, cardMove{kind: moveDetach, by: caller.by, reason: p.Name}, now)
 		return action, nil
+	}, func(action string) taskEventSpec {
+		if action == "" {
+			return taskEventSpec{}
+		}
+		return taskEventSpec{EventTaskChanged, action, "", p.Name}
 	})
 	if verr != nil {
 		return nil, verr
@@ -738,7 +748,7 @@ func (d *Daemon) verbDetachTask(cs *connState, params json.RawMessage) (any, *ve
 		d.sweepAttachments(hash)
 	}
 	if action != "" {
-		d.publishTask(sess, EventTaskChanged, action, "", p.Name, row)
+		d.afterTaskSpec(sess, spec, row)
 	}
 	return row.typed("task_changed"), nil
 }

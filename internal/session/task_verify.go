@@ -409,12 +409,13 @@ func (d *Daemon) applyVerify(sess *Session, id string, token int64, res verifyRe
 			return errNoTaskMove
 		}
 		row = taskRow(sess, st, tk)
+		d.taskEvent(sess, EventTaskChanged, TaskActionVerified, "", reason, row)
 		return nil
 	}) != nil {
 		return
 	}
 	LogBasic("Task %s in session %s: %s", id, sess.Name(), reason)
-	d.publishTask(sess, EventTaskChanged, TaskActionVerified, "", reason, row)
+	d.afterTaskEvent(sess, TaskActionVerified, "", reason, row)
 }
 
 // verifyFailNote is a failed run as a card's note: the exit status or why it

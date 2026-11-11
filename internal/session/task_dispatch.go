@@ -550,11 +550,14 @@ func (d *Daemon) blockErrored(sess *Session, window, last string) {
 		if len(rows) == 0 {
 			return errNoTaskMove
 		}
+		for _, row := range rows {
+			d.taskEvent(sess, EventTaskChanged, TaskActionBlocked, "", reason, row)
+		}
 		return nil
 	})
 	for _, row := range rows {
 		LogBasic("Task %s in session %s blocked: %s", row.ID, sess.Name(), reason)
-		d.publishTask(sess, EventTaskChanged, TaskActionBlocked, "", reason, row)
+		d.afterTaskEvent(sess, TaskActionBlocked, "", reason, row)
 	}
 }
 
@@ -579,10 +582,13 @@ func (d *Daemon) unblockErrored(sess *Session, window string) {
 		if len(rows) == 0 {
 			return errNoTaskMove
 		}
+		for _, row := range rows {
+			d.taskEvent(sess, EventTaskChanged, TaskActionUnblocked, "", "the agent works again", row)
+		}
 		return nil
 	})
 	for _, row := range rows {
-		d.publishTask(sess, EventTaskChanged, TaskActionUnblocked, "", "the agent works again", row)
+		d.afterTaskEvent(sess, TaskActionUnblocked, "", "the agent works again", row)
 	}
 }
 
@@ -635,13 +641,14 @@ func (d *Daemon) pullNext(sess *Session, window, board, project string, notOwn b
 			return errNoTaskMove
 		}
 		row, prompt, label = taskRow(sess, st, tk), tk.Prompt, windowLabelOf(w)
+		d.taskEvent(sess, EventTaskClaimed, TaskActionClaimed, window, "dispatch", row)
 		return nil
 	})
 	if err != nil {
 		return
 	}
 	LogBasic("Task dispatch gave task %s in session %s to window %s", row.ID, sess.Name(), shortWindowID(window))
-	d.publishTask(sess, EventTaskClaimed, TaskActionClaimed, window, "dispatch", row)
+	d.afterTaskEvent(sess, TaskActionClaimed, window, "dispatch", row)
 	d.mailDispatched(sess, window, label, row, prompt, "")
 }
 

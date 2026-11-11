@@ -16945,3 +16945,42 @@ Run on 2026-11-12 on branch `untangle/t48-title-format` (arch-btw). The log is
 | Control | Where it failed | Verdict |
 | --- | --- | --- |
 | origin/main, where the format only switched the title on | "the picture's title does not start SHOT1\|WIN-build\|" and "has no {cwd}" | **caught** |
+
+## A task event leaves in the order of its change
+
+`TestTaskEventsLeaveInTheOrderOfTheirChanges` (internal/session, a
+deterministic race regression) makes two changes to one card on a session of
+its own. A state sink parks the first snapshot that carries change A, the sink
+is set to nil, change B is made and answers, and then A is let go. Each row
+(add, claim, finish, stage, block and unblock, and release)
+asserts one task event per change, A's before B's by stream sequence, and the
+last event's row against the card the session holds. A refused release, a
+stage move of a card that does not exist, and a finish of a card already in
+done publish nothing; the accepted stage moves and the first finish beside
+them publish one event each, and the stream carries exactly those, in order.
+Two changes made one after the other arrive in order. Those two subtests pass
+on main by design.
+`TestTaskEventsArePublishedInsideTheirChange` (internal/lint) rejects a task
+event built outside `Daemon.taskEvent`, a `taskEvent` call outside a function
+literal passed to `mutateState` or `mutateStateLocked`, `publishReleased`
+called outside daemon.go, and `publishTask`. Its self-check,
+`TestTaskEventLintCatchesAPublishAfterTheChange`, feeds the lint its own
+source and passes on main.
+
+Run on 2026-11-11 on a Ryzen 5 5600 (Linux x86_64, go1.27.4). The branch passes 3 of 3 runs of each test, with and without `-race` for the first.
+
+| Control | Test | The test fails with | Result |
+|---------|------|---------------------|--------|
+| Main (b6c019d7c), the five `internal/session` code files | `TestTaskEventsLeaveInTheOrderOfTheirChanges` | "change B's event (seq 2) left before change A's (seq 3): the events left in the reverse order of their changes"; "the last task event (task-changed added) says stage todo, holder \"\", blocked false; the session holds stage plan, holder \"\", blocked false" (add, claim, finish, stage, block and unblock, release: each fails, 3 of 3 runs) | **caught** |
+| Main (b6c019d7c), the five `internal/session` code files | `TestTaskEventsArePublishedInsideTheirChange` | "a task event is published outside the state change that made it; call Daemon.taskEvent inside the mutateState closure, as its last step:" (3 of 3 runs) | **caught** |
+| The `taskEvent` call in `changeTask` moved after its `mutateState` | `TestTaskEventsLeaveInTheOrderOfTheirChanges` | "change B's event (seq 15) left before change A's (seq 16): the events left in the reverse order of their changes"; "the last task event (task-finished finished) says stage done, holder \"\", blocked false; the session holds stage review, holder \"\", blocked false" (finish, stage, block and unblock, release; 3 of 3 runs) | **caught** |
+| The `taskEvent` call in `changeTask` moved after its `mutateState` | `TestTaskEventsArePublishedInsideTheirChange` | "a task event is published outside the state change that made it; call Daemon.taskEvent inside the mutateState closure, as its last step:" (3 of 3 runs) | **caught** |
+| The `taskEvent` call of claim-task moved after its `mutateState` | `TestTaskEventsLeaveInTheOrderOfTheirChanges` | "change B's event (seq 9) left before change A's (seq 10): the events left in the reverse order of their changes"; "the last task event (task-claimed claimed) says stage doing, holder \"ae57660a-5ded-49cc-9c4c-477973999eb6\", blocked false; the session holds stage review, holder \"ae57660a-5ded-49cc-9c4c-477973999eb6\", blocked false" (claim; 3 of 3 runs) | **caught** |
+| The `taskEvent` call of claim-task moved after its `mutateState` | `TestTaskEventsArePublishedInsideTheirChange` | "a task event is published outside the state change that made it; call Daemon.taskEvent inside the mutateState closure, as its last step:" (3 of 3 runs) | **caught** |
+| The `taskEvent` call of `autoStage` moved after its `mutateState` | `TestTaskEventsArePublishedInsideTheirChange` | "a task event is published outside the state change that made it; call Daemon.taskEvent inside the mutateState closure, as its last step:" (3 of 3 runs; no row reaches `autoStage`, so the order test passes) | **caught** |
+| The finish event function yields an event for the empty action (`if action == "" { return taskEventSpec{} }` deleted from `verbFinishTask`) | `TestTaskEventsLeaveInTheOrderOfTheirChanges` | "the next task event after the finish is  [38 task-finished finished done], want the marker stage move to review: a finish that moved nothing published" (subtest "refused changes publish nothing"; 3 of 3 runs) | **caught** |
+
+Repeat from the repository root with
+`go test -count=3 -run '^TestTaskEventsLeaveInTheOrderOfTheirChanges$' -v ./internal/session/`
+and
+`go test -count=1 -run '^TestTaskEvent' -v ./internal/lint/`.
