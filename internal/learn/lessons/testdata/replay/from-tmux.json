@@ -46,8 +46,8 @@
 {"press":29,"index":8,"pressed":5,"wrong":0,"wrongMode":false,"hinted":true},
 {"press":30,"index":8,"pressed":6,"wrong":0,"wrongMode":false,"hinted":true},
 {"press":31,"index":9,"pressed":1,"wrong":0,"wrongMode":false,"hinted":true},
-{"press":32,"index":9,"pressed":0,"wrong":1,"wrongMode":true,"hinted":true},
-{"press":33,"index":9,"pressed":0,"wrong":2,"wrongMode":true,"hinted":true}
+{"press":32,"index":9,"pressed":2,"wrong":0,"wrongMode":false,"hinted":true},
+{"press":33,"index":9,"pressed":3,"wrong":0,"wrongMode":false,"hinted":true}
 ],
 "events":[
 {"t":0,"type":"lesson.showMe"},

@@ -133,16 +133,6 @@ func verdict(step, press int, r Result) string {
 // asked to press (the ratio and column-width steps listed > twice and
 // finished on the first).
 var earlyFinish = map[string]string{
-	// The recorded runs of these two steps predate the answer flow that asks
-	// on a key and sends on enter, so their events end on the first key. The
-	// steps list both keys, as the app needs. Record the cockpit run again to
-	// drop these two.
-	"cockpit/allow":  "the log predates ask then enter",
-	"cockpit/answer": "the log predates ask then enter",
-	// The step needs window mode, and its own first key leaves it, so the
-	// engine counts the next keys as pressed in the wrong mode and lights no
-	// cap. The rule finishes on the mode changes and is right.
-	"from-tmux/window-mode": "the step leaves the mode it needs",
 	// esc closes the menu after the move and is not part of it.
 	"from-zellij/focus": "esc only closes the menu",
 }

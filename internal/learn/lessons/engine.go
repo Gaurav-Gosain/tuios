@@ -184,7 +184,9 @@ func (l *Lesson) Feed(e Event, now time.Time) bool {
 // to it.
 func (l *Lesson) trackKey(step *Step, key, mode string, now time.Time) {
 	// A step key pressed in the other mode went to the wrong place: in
-	// typing mode, "n" is a letter for the shell.
+	// typing mode, "n" is a letter for the shell. Needs is the mode the step
+	// starts in, so it holds the first key only: a step may leave the mode
+	// itself, as i does when it goes to typing.
 	isStepKey := false
 	for _, k := range step.Keys {
 		if k.Text == "" && SameChord(key, k.Chord) {
@@ -192,7 +194,7 @@ func (l *Lesson) trackKey(step *Step, key, mode string, now time.Time) {
 			break
 		}
 	}
-	if step.Needs != "" && mode != "" && mode != step.Needs && isStepKey {
+	if step.Needs != "" && mode != "" && mode != step.Needs && isStepKey && l.Pressed == 0 {
 		l.Pressed, l.WrongMode, l.Hinted = 0, true, true
 		l.Wrong++
 		return
