@@ -216,29 +216,8 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 
 		isFocused := m.FocusedWindow == i && m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows)
 		isMultifocused := len(m.MultifocusSet) > 0 && m.MultifocusSet[window.ID]
-		var borderColorObj color.Color
-		_, _, quietTint, tinted := m.sessionBorderTint()
-		var stateColor color.Color
-		if isFocused {
-			stateColor = m.focusedStateBorder(window)
-		}
-		switch {
-		case isFocused:
-			borderColorObj = m.focusedBorderColor(stateColor)
-		case m.MultiCopyParked(window.ID):
-			// A pane multi copy mode's search found nothing in drops the
-			// multifocus colour: it is out of the selection until a search
-			// finds something in it.
-			borderColorObj = theme.BorderUnfocusedOn(m.host.bg)
-		case isMultifocused:
-			// Multifocused windows get a distinct border color (yellow/orange)
-			borderColorObj = theme.BorderMultifocus()
-		case tinted:
-			borderColorObj = quietTint
-		default:
-			borderColorObj = theme.BorderUnfocusedOn(m.host.bg)
-		}
-		if gradient && isFocused && stateColor == nil && !rendersBorderless(window) && !m.zenBordersHidden(true) {
+		borderColorObj, byState := m.paneBorderColor(window, isFocused, isMultifocused)
+		if gradient && isFocused && !byState && !rendersBorderless(window) && !m.zenBordersHidden(true) {
 			m.markGradient(window.ID, image.Rect(window.X, window.Y, window.X+window.Width, window.Y+window.Height), borderColorObj)
 		}
 
@@ -1035,6 +1014,38 @@ func (m *OS) focusedBorderColor(state color.Color) color.Color {
 	return theme.BorderFocusedWindowOn(m.host.bg)
 }
 
+// paneBorderColor is the colour a pane's border is drawn in: the one rule the
+// compositor and the fullscreen fast path share. The focused pane wears its
+// state, mode or session colour; a pane multi copy parked drops the
+// multifocus colour; a multifocused pane wears the multifocus colour; and any
+// other pane wears the session's quiet tint when the session has one. byState
+// says the colour is the focused pane's state colour, which no gradient
+// replaces.
+func (m *OS) paneBorderColor(window *terminal.Window, isFocused, isMultifocused bool) (c color.Color, byState bool) {
+	switch {
+	case isFocused:
+		state := m.focusedStateBorder(window)
+		return m.focusedBorderColor(state), state != nil
+	case m.MultiCopyParked(window.ID):
+		// A pane multi copy mode's search found nothing in drops the
+		// multifocus colour: it is out of the selection until a search
+		// finds something in it.
+		return theme.BorderUnfocusedOn(m.host.bg), false
+	case isMultifocused:
+		return theme.BorderMultifocus(), false
+	}
+	return m.unfocusedBorderColor(), false
+}
+
+// unfocusedBorderColor is the border of a pane that is not focused: the
+// session's quiet tint when the session has one, else the theme's colour.
+func (m *OS) unfocusedBorderColor() color.Color {
+	if _, _, quiet, tinted := m.sessionBorderTint(); tinted {
+		return quiet
+	}
+	return theme.BorderUnfocusedOn(m.host.bg)
+}
+
 // focusedStateBorder is the focused pane's border for a state with a colour
 // of its own: border.copy in copy mode, the info colour in nest mode,
 // status.attention while the pane's agent waits for input. Nil when the pane
@@ -1071,21 +1082,8 @@ func (m *OS) buildFullscreenFrame(window *terminal.Window) string {
 	m.pruneWindowButtonRects()
 
 	isFocused := m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) && m.Windows[m.FocusedWindow] == window
-	var borderColorObj color.Color
-	var stateColor color.Color
-	if isFocused {
-		stateColor = m.focusedStateBorder(window)
-	}
-	switch {
-	case stateColor != nil:
-		borderColorObj = stateColor
-	case isFocused && m.Mode == TerminalMode:
-		borderColorObj = theme.BorderFocusedTerminalOn(m.host.bg)
-	case isFocused:
-		borderColorObj = theme.BorderFocusedWindowOn(m.host.bg)
-	default:
-		borderColorObj = theme.BorderUnfocusedOn(m.host.bg)
-	}
+	isMultifocused := len(m.MultifocusSet) > 0 && m.MultifocusSet[window.ID]
+	borderColorObj, _ := m.paneBorderColor(window, isFocused, isMultifocused)
 
 	windowIndex := -1
 	for i := range m.Windows {

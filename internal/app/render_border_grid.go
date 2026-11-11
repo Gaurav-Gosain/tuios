@@ -14,7 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // separatorSplits returns the divider lines for the layout that placed the
@@ -397,14 +396,10 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 	// The focused perimeter is drawn bold as well as tinted so the signal
 	// survives themes where the two border colors are close, and so it is not
 	// carried by hue alone.
-	unfocusedStr := sgrForeground(theme.BorderUnfocusedOn(m.host.bg))
-	focusColor := theme.BorderFocusedWindowOn(m.host.bg)
-	if m.Mode == TerminalMode {
-		focusColor = theme.BorderFocusedTerminalOn(m.host.bg)
-	}
-	if c := m.focusedStateBorder(m.GetFocusedWindow()); c != nil {
-		focusColor = c
-	} else if focus.ok && m.gradientOn() {
+	unfocusedStr := sgrForeground(m.unfocusedBorderColor())
+	state := m.focusedStateBorder(m.GetFocusedWindow())
+	focusColor := m.focusedBorderColor(state)
+	if state == nil && focus.ok && m.gradientOn() {
 		// The shared frame runs one cell outside the pane.
 		m.markGradient("", image.Rect(focus.left, focus.top, focus.right+1, focus.bottom+1), focusColor)
 	}

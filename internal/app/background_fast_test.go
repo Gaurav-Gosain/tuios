@@ -49,6 +49,15 @@ func fastPathOS(t *testing.T, dockPos string) (*OS, *terminal.Window) {
 	return m, win
 }
 
+// sessionBorderOn gives the session a colour and turns on appearance
+// session_border, so every border carries the session's tint.
+func sessionBorderOn(m *OS, _ *terminal.Window) {
+	m.Settings.SessionBorder, m.Settings.SessionColors = true, true
+	m.SessionName = "work"
+	a, _ := ParseAccent("#e05030")
+	m.sessionColors = map[string]Accent{"work": a}
+}
+
 // hostCells parses a frame the way the host's renderer does.
 func hostCells(frame string, w, h int) uv.ScreenBuffer {
 	buf := uv.NewScreenBuffer(w, h)
@@ -155,6 +164,11 @@ func TestFastPathPaintMatchesTheCompositor(t *testing.T) {
 		{name: "unfocused", dock: "bottom", wantFast: true, prepare: func(m *OS, _ *terminal.Window) {
 			// The emulator's own Render, and the lipgloss border box around it
 			// when its rows are ragged.
+			m.FocusedWindow = -1
+		}},
+		{name: "session border, focused", dock: "bottom", wantFast: true, prepare: sessionBorderOn},
+		{name: "session border, unfocused", dock: "bottom", wantFast: true, prepare: func(m *OS, w *terminal.Window) {
+			sessionBorderOn(m, w)
 			m.FocusedWindow = -1
 		}},
 		{name: "unfocused and dimmed", dock: "bottom", wantFast: true, prepare: func(m *OS, _ *terminal.Window) {

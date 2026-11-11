@@ -265,3 +265,25 @@ func TestSeparatorOverlayMemoFollowsItsInputs(t *testing.T) {
 		prev = got
 	}
 }
+
+// TestSharedBorderDividersWearTheSessionTint: with appearance.session_border
+// on, the dividers between tiled panes carry the session's colour as pane
+// borders do. They were drawn in the plain mode colours, so a borderless tiled
+// layout ignored the setting.
+func TestSharedBorderDividersWearTheSessionTint(t *testing.T) {
+	m := sharedBorderOS(t, 3)
+	plainAll, plainFocused := separatorText(t, m)
+
+	m.Settings.SessionBorder, m.Settings.SessionColors = true, true
+	m.SessionName = "work"
+	a, _ := ParseAccent("#e05030")
+	m.sessionColors = map[string]Accent{"work": a}
+	tintedAll, tintedFocused := separatorText(t, m)
+
+	if tintedAll == plainAll {
+		t.Error("the unfocused dividers are the same with and without the session tint")
+	}
+	if tintedFocused == plainFocused {
+		t.Error("the focused divider run is the same with and without the session tint")
+	}
+}
