@@ -157,9 +157,10 @@
     {
       "id": "allow",
       "title": "Allow the edit",
-      "note": "Press a to allow it once. Press shift+a to always allow it. Press r to reject it, or shift+r to give a reason.",
+      "note": "Press a to ask to allow it once, then enter to send it. shift+a asks to always allow it. r asks to reject it, and shift+r to give a reason. Any key but enter drops the ask.",
       "keys": [
-        "a"
+        "a",
+        "enter"
       ],
       "after": [
         {
@@ -178,7 +179,7 @@
           "data.to": "working"
         }
       },
-      "hint": "Press a. claude goes back to work.",
+      "hint": "Press a, then enter. claude goes back to work.",
       "learned": "allow"
     },
     {
@@ -198,9 +199,10 @@
     {
       "id": "answer",
       "title": "Pick an answer",
-      "note": "The number of an option answers. tuios presses it in gemini's pane.",
+      "note": "The number of an option asks to answer with it. Enter sends it, and tuios presses it in gemini's pane.",
       "keys": [
-        "2"
+        "2",
+        "enter"
       ],
       "done": {
         "on": "agent",
@@ -209,7 +211,7 @@
           "data.to": "working"
         }
       },
-      "hint": "Press 2 for Tokyo Night.",
+      "hint": "Press 2 for Tokyo Night, then enter.",
       "learned": "answer"
     },
     {

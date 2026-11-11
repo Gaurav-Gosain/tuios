@@ -12,6 +12,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
+	"github.com/Gaurav-Gosain/tuios/internal/learn/lessons"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -463,3 +464,71 @@ func TestSetLookItems(t *testing.T) {
 		t.Errorf("layout %q, %d notifications, want master-stack and %d", o.LayoutModeName(), len(o.Notifications), before)
 	}
 }
+
+// TestCockpitAllowIsAskThenEnter holds the cockpit lesson's allow step to the
+// app. The step keys are a then enter: a only asks, and enter sends the
+// answer, so claude goes back to work after the second key and not the
+// first. The step said a alone once, and the lesson never finished.
+func TestCockpitAllowIsAskThenEnter(t *testing.T) {
+	f, err := lessons.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var keys []string
+	for _, k := range f.Find("cockpit").Steps[3].Keys {
+		keys = append(keys, k.Chord)
+	}
+	if want := []string{"a", "enter"}; !slices.Equal(keys, want) {
+		t.Fatalf("the allow step keys are %v, want %v", keys, want)
+	}
+	tr := newTour(t)
+	tr.run(tr.m.Init())
+	tr.update(CommandMsg{Name: "newWindow"})
+	tr.waitFor("window.open", nil)
+	tr.update(CommandMsg{Name: "mode", Args: []string{"terminal"}})
+	tr.update(CommandMsg{Name: "type", Args: []string{"claude\r"}})
+	tr.waitFor("shell.start", nil)
+	tr.waitFor("agent", func(e Event) bool { return data(e, "to") == "needs_input" })
+	tr.update(CommandMsg{Name: "mode", Args: []string{"window"}})
+	tr.press(key("ctrl+b"), key("i"))
+	tr.waitFor("agents.select", func(e Event) bool { return data(e, "harness") == "claude-code" })
+	// An answer key is refused until the prompt has been drawn long enough to
+	// read, so draw frames and press a until it asks.
+	deadline := time.Now().Add(10 * time.Second)
+	asked := false
+	for !asked && time.Now().Before(deadline) {
+		tr.pump()
+		tr.m.View()
+		tr.mu.Lock()
+		before := len(tr.ev)
+		tr.mu.Unlock()
+		tr.press(key("a"))
+		tr.mu.Lock()
+		refused := false
+		for _, e := range tr.ev[before:] {
+			if e.Type == "notification" && strings.Contains(strings.ToLower(str(data(e, "message"))), "just changed") {
+				refused = true
+			}
+		}
+		tr.mu.Unlock()
+		asked = !refused
+		if !asked {
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	if !asked {
+		t.Fatal("the prompt never took a")
+	}
+	tr.mu.Lock()
+	later := slices.Clone(tr.ev[tr.seen:])
+	tr.mu.Unlock()
+	for _, e := range later {
+		if e.Type == "agent" && data(e, "harness") == "claude-code" && data(e, "to") == "working" {
+			t.Fatal("claude went back to work on a alone: the step needs only a again")
+		}
+	}
+	tr.press(key("enter"))
+	tr.waitFor("agent", func(e Event) bool { return data(e, "harness") == "claude-code" && data(e, "to") == "working" })
+}
+
+func str(v any) string { s, _ := v.(string); return s }

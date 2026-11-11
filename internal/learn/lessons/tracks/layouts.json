@@ -138,7 +138,6 @@
       "title": "Grow the master",
       "note": "> grows it, < shrinks it.",
       "keys": [
-        ">",
         ">"
       ],
       "needs": "window",
