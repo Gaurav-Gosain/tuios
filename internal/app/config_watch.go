@@ -149,12 +149,20 @@ func (h *configWatchHub) reloadThemeFiles() {
 	}
 }
 
-// unsubscribe drops one session. The watcher is stopped outside the lock:
-// its goroutine takes the lock to deliver, and a Stop that waited for it
-// under the lock would wait for ever.
+// unsubscribe drops one session. The hub holding the subscription is the one
+// owner of its channels, so a release acts once: a second one, a stale one
+// from before the watcher started again, or one for a channel the hub never
+// held, finds nothing and does nothing. A cleanup that runs twice must never
+// take a client down. The watcher is stopped outside the lock: its goroutine
+// takes the lock to deliver, and a Stop that waited for it under the lock
+// would wait for ever.
 func (h *configWatchHub) unsubscribe(ch chan tea.Msg) {
 	h.mu.Lock()
-	themes := h.subs[ch]
+	themes, held := h.subs[ch]
+	if !held {
+		h.mu.Unlock()
+		return
+	}
 	delete(h.subs, ch)
 	// Closed so the listener the session armed returns instead of waiting on
 	// a channel nothing will ever send on again.

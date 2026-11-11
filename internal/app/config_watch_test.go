@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -173,4 +174,88 @@ func TestLastSessionOutStopsTheWatcher(t *testing.T) {
 	if configWatch.watcher != nil {
 		t.Fatal("the last session out left the watcher open")
 	}
+}
+
+// chanClosed reports whether a subscription's channel was closed. An open one
+// has nothing to read and says so at once.
+func chanClosed(ch <-chan tea.Msg) bool {
+	select {
+	case _, ok := <-ch:
+		return !ok
+	default:
+		return false
+	}
+}
+
+// TestReleasingASubscriptionTwiceIsHarmless holds the hub's release to the ways
+// a cleanup runs more than once or late. A cleanup that runs twice must never
+// take a client down, and must not touch the sessions that are still there:
+//
+//   - the same release twice in a row (a model cleaned up by two owners);
+//   - the same release from several goroutines at once;
+//   - a release that comes after the watcher stopped and a new session
+//     started it again (a stale cleanup must not close the new session's
+//     channels, or stop its watcher);
+//   - a channel the hub never held.
+func TestReleasingASubscriptionTwiceIsHarmless(t *testing.T) {
+	watchTempConfig(t)
+	t.Run("twice in a row", func(t *testing.T) {
+		var h configWatchHub
+		_, _, relA := h.subscribe()
+		chB, _, relB := h.subscribe()
+		relA()
+		relA()
+		if chanClosed(chB) || h.watcher == nil {
+			t.Fatal("the second release of one session took the other down")
+		}
+		relB()
+	})
+	t.Run("at once from several goroutines", func(t *testing.T) {
+		var h configWatchHub
+		_, _, rel := h.subscribe()
+		var wg sync.WaitGroup
+		for range 8 {
+			wg.Go(rel)
+		}
+		wg.Wait()
+		if h.watcher != nil || len(h.subs) != 0 {
+			t.Fatal("the last release did not leave the hub empty")
+		}
+	})
+	t.Run("late, after the watcher started again", func(t *testing.T) {
+		var h configWatchHub
+		_, _, old := h.subscribe()
+		old()
+		if h.watcher != nil {
+			t.Fatal("the last session out left the watcher open")
+		}
+		chNew, _, relNew := h.subscribe()
+		old()
+		if chanClosed(chNew) || h.watcher == nil {
+			t.Fatal("a stale release closed the new session or stopped its watcher")
+		}
+		relNew()
+		if h.watcher != nil {
+			t.Fatal("the new session's own release did not stop the watcher")
+		}
+	})
+	t.Run("a channel the hub never held", func(t *testing.T) {
+		var h configWatchHub
+		ch, _, rel := h.subscribe()
+		h.unsubscribe(make(chan tea.Msg, 1))
+		if chanClosed(ch) || h.watcher == nil {
+			t.Fatal("a release of a stranger took a session down")
+		}
+		rel()
+	})
+	t.Run("OS.Cleanup twice", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		o := NewOS(OSOptions{Client: ClientBrowser, UserConfig: cfg, KeybindRegistry: config.NewKeybindRegistry(cfg)})
+		o.startConfigWatch()
+		o.Cleanup()
+		o.Cleanup()
+		if configWatch.watcher != nil {
+			t.Fatal("the cleanup left the watcher open")
+		}
+	})
 }
