@@ -417,7 +417,7 @@ changed while tuios asked its questions, tuios stops and changes nothing.
 `tuios look export` prints the look in force as a look file.
 `tuios look apply` takes the file unchanged.
 
-- `-o FILE` writes the file instead of stdout.
+- `-o FILE` or `--output FILE` writes the file instead of stdout.
 - `--name` sets the name. `--author` sets the author. The author is your
   GitHub login when `gh` is signed in.
 - The file sets the keys that differ from the defaults. `--all` sets every
@@ -904,7 +904,7 @@ with a warning.
 **Usage:**
 ```bash
 tuios worktree new <branch> [--repo <dir>] [--base <ref>] [--name <session>] [--agent <cli>] [--setup <command> [--setup-async]] [--host <host> [--clone]] [--detach]
-tuios worktree ls [--repo <name>] [--group <stem>] [--host <host>] [--json]
+tuios worktree ls [--repo <name>] [--group <stem>] [--host <host>] [--fast] [--json]
 tuios worktree rm [<host>:]<session> [--stash | --force] [--keep-session]
 tuios worktree diff <session> [--stat]
 tuios worktree pull <host>:<session> [--repo <dir>] [--branch <name>] [--name <session>] [--detach] [--json]
@@ -937,6 +937,8 @@ new worktree and the branch it made, if they hold no change and no commit. The
 session stays with the setup window open. `--setup-async` starts the agent at
 once, and a failed setup then keeps the worktree and the branch. The SETUP
 column of `worktree ls` shows the state, and the exit status of a failure.
+`worktree ls --fast` skips the git walk behind the change columns, which is the
+slow part of the listing, and leaves those columns empty.
 
 `worktree rm` refuses a worktree with uncommitted changes and removes nothing.
 `--stash` keeps the changes in git stash as `tuios: <branch>`. `--force`
@@ -1163,8 +1165,11 @@ is ready for a prompt.
 
 **Usage:**
 ```bash
-tuios start-agent [<agent>] [--preset <name>] [-s [<host>|any:]<session>] [--name <name>] [--cwd <dir> | --repo <dir> | --clone] [--workspace <n>] [--focus] [--prompt <prompt>] [--ready-timeout <ms>] [--protocol acp|codex] [--env NAME[=VALUE]]... [--grants <grant>[,<grant>...]] [--task <id>] [--model <model>] [--effort <level>] [--permission-mode <mode>] [--print-id] [--json] [-- <args>...]
+tuios start-agent [<agent>] [--preset <name>] [-s [<host>|any:]<session>] [--name <name>] [--cwd <dir> | --repo <dir> | --clone] [--workspace <n>] [--focus] [--prompt <prompt>] [--ready-timeout <ms>] [--protocol acp|codex] [--env NAME[=VALUE]]... [--grants <grant>[,<grant>...]] [--task <id>] [--parent <window-id>] [--model <model>] [--effort <level>] [--permission-mode <mode>] [--print-id] [--json] [-- <args>...]
 ```
+
+`--parent` names the agent pane the new agent reports to, by window id. It
+defaults to the agent pane the command runs in.
 
 `--model`, `--effort` and `--permission-mode` pass the harness's own flags for
 them, as the `[launch]` table of its manifest names them. For Claude Code they
@@ -1856,8 +1861,10 @@ holding on to the id.
 
 **Usage:**
 ```bash
-tuios new-window [name] [command...] [flags]
+tuios new-window [name] [command...] [--kind view|web|app --uri <uri>] [flags]
 ```
+
+`--uri` is what a `--kind` window shows, such as `tuios://review/<pane>`.
 
 Words after the name are the argv the window runs instead of a shell, with no
 shell in between: `tuios new-window htop /usr/bin/htop`. Put `--` before a
@@ -2018,8 +2025,8 @@ line of stdin, when stdin is not a terminal. tuios ignores empty lines.
 
 **Flags:**
 - `-c, --command <cmd>`: Command for each pane. tuios replaces `{}` with the item, in shell quotes
-- `-s`: Speedy mode. The pane runs the command with `sh -c`, with no interactive shell, and stays until you press Enter
-- `-ss`: Speedy mode. The pane closes when the command stops
+- `-s, --speedy`: Speedy mode. The pane runs the command with `sh -c`, with no interactive shell, and stays until you press Enter
+- `-ss` (`--speedy` twice): Speedy mode. The pane closes when the command stops
 - `--interval <seconds>`: Time to wait between the panes, for example `0.5`
 - `-I, --replace <text>`: Text that tuios replaces with the item (default: `{}`)
 - `--ssh`: Run `ssh` with the item in each pane. This is the same as `-s -c 'ssh -- {}'`. The `--` makes sure that ssh does not read an item that starts with `-` as an option. Add `-ss` to close each pane when its ssh stops
@@ -4110,6 +4117,7 @@ tuios list-windows [flags]
 - `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `--json`: Output as JSON (default is human-readable table)
 - `--all`: List the panes of every session on this machine, one row each
+- `--rail`: Also list the pane the rail draws in its pane section
 - `--all-hosts`: Also list the panes of every session on each host in `[hosts]`
 - `--text <N>`: Add the last N lines of each pane's screen, up to 200
 
@@ -5032,7 +5040,12 @@ tuios hosts setup gaurav@buildbox --name build --install copy --yes   # install,
 tuios hosts setup gaurav@buildbox --install copy --service --both-ways --yes --json
 tuios hosts setup --tailnet --dry-run                                 # the tailnet and each machine's state
 tuios hosts setup --tailnet --all --install copy --yes                # every machine that can be set up
+tuios hosts setup gaurav@buildbox --no-service --one-way --yes        # no start at boot, this side only
 ```
+
+`--no-service` does not start tuios at boot on the other machine. `--one-way` does
+not add this machine on the other machine. `--ssh-option` passes one extra
+argument to ssh, and you repeat the flag for each one.
 
 The steps:
 
@@ -5395,7 +5408,14 @@ tuios transfers resume ID... [--json]
 tuios transfers cancel ID... [--json]
 tuios transfers wait [ID...] [--json] [-q]
 tuios transfers clear [ID...] [--json]
+tuios transfers clear-opened
 ```
+
+`tuios transfers clear-opened` deletes the copies that `o` in the rail made of files
+on other machines. `o` copies the file to the user cache and opens the copy. tuios
+deletes a copy that nobody opened for 7 days when the daemon starts, or after the
+days in `[files] open_copy_keep_days`; this command deletes all of them now. Close
+the programs that have a copy open first.
 
 The list has the copies that `tuios cp` started and the copies that other
 clients started. A copy that ended stays in the list for 30 minutes, or until
@@ -5741,10 +5761,12 @@ Draw the Mermaid diagrams of a file in the terminal, or save them as SVG or PNG.
 
 **Usage:**
 ```bash
-tuios mermaid FILE [--format svg|png|kitty|text] [-o FILE] [--diagram N] [--theme NAME] [--background theme|none] [--fit]
+tuios mermaid FILE [--format svg|png|kitty|text] [-o FILE] [--diagram N] [--theme NAME] [--background theme|none] [--fit] [--kitty-medium auto|file|direct]
 ```
 
 FILE is a Mermaid source (`.mmd`), a Markdown file, or `-` for standard input.
+`--kitty-medium` says how frames reach the terminal with `--format kitty`: `auto`
+(the default), `file` or `direct`.
 A Markdown file gives each of its `mermaid` code blocks.
 
 | Output | When |
@@ -6441,6 +6463,35 @@ That is not the same as leaving the action out of the file. An action the file
 does not mention gets its default back the next time tuios starts. An empty list
 stays empty.
 
+#### `tuios keybinds doctor`
+
+Report each key that two actions claim, each key that tuios takes from the pane,
+and each of those keys that a common program uses. Each finding names its
+evidence: `certain` comes from the tuios key routing, `observed` comes from a
+pane, and `reference` comes from a list of common program defaults and is not
+detection. `--json` prints the same report the keybind manager shows.
+
+```bash
+tuios keybinds doctor
+tuios keybinds doctor --guest vim
+```
+
+`--guest PROGRAM` treats that program as the one running in the pane.
+
+#### `tuios keybinds explain`
+
+Show each scope that a key acts in, and whether the program in the pane gets the
+key. It also shows the key that the terminal sends the same way, and the common
+programs that use the key. The key recorder in the keybind manager shows the
+same answer.
+
+```bash
+tuios keybinds explain ctrl+p
+tuios keybinds explain alt+left --guest vim --json
+```
+
+`--guest PROGRAM` treats that program as the one running in the pane.
+
 #### `tuios keybinds free`
 
 Take one key off every action in every scope, so the program in your pane
@@ -6643,6 +6694,8 @@ Manage saved layout templates.
 
 **Subcommands:**
 - `tuios layout list`: List all saved layout templates (`--json` for a script: `name`, `windows`, `tiled`, `created_at`)
+- `tuios layout save <name>`: Save the panes of the workspace a session shows as a layout template
+- `tuios layout load <name>`: Load a layout template into the workspace a session shows
 - `tuios layout delete <name>`: Delete a saved layout template
 - `tuios layout dir`: Print the layout templates directory path
 - `tuios layout export <name>`: Print a layout template as a tape script
@@ -6654,6 +6707,41 @@ List all saved layout templates.
 **Example:**
 ```bash
 tuios layout list
+```
+
+#### `tuios layout save`
+
+Save the panes of the workspace a session shows as a layout template: where
+each pane is, its name and folder, and how the workspace is tiled, with its
+split tree. Works with no client attached.
+
+**Usage:**
+```bash
+tuios layout save <name> [-s <session>] [--json]
+```
+
+**Example:**
+```bash
+tuios layout save three-up
+tuios layout save review -s api
+```
+
+#### `tuios layout load`
+
+Load a layout template into the workspace a session shows. The panes there are
+reused in order, the ones the layout lacks are opened in their folder with their
+name and command, and the ones it does not name are minimized. A `bsp` layout
+gets its split tree back. Works with no client attached.
+
+**Usage:**
+```bash
+tuios layout load <name> [-s <session>] [--json]
+```
+
+**Example:**
+```bash
+tuios layout load three-up
+tuios layout load review -s api
 ```
 
 #### `tuios layout delete`
