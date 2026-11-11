@@ -16666,3 +16666,15 @@ Run on 2026-11-11 on macOS (arm64). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAttachToACardOnAnotherMachine$' -v .`.
+
+## The card preview shows the worktree's pull request
+
+`TestCardPreviewShowsTheWorktreePullRequest` adds a card to a worktree
+session whose pull request a stub `gh` gives as open with passing checks, and
+reads "Pull request #7 open", "checks pass" and the branch in the preview.
+
+Run on 2026-11-11 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The branch before this one (no worktree line) | "waiting for the pull request in the preview: tuitest: WaitForDesc timed out" | **caught** |
