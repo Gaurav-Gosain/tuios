@@ -143,6 +143,9 @@ func Scroll(scroll, selected, n, visible int) int {
 type Keymap struct {
 	keys    map[string]Motion
 	letters map[string]Motion
+	// order is each motion's keys in the order they were given, for a
+	// footer that names them. See Names.
+	order map[Motion][]string
 }
 
 // defaults are the keys a list moves on when nothing has been configured:
@@ -169,7 +172,7 @@ var defaultKeymap = NewKeymap(nil)
 // otherwise to the later motion. Both passes walk the motions in order, so the
 // answer never depends on map iteration.
 func NewKeymap(bindings map[Motion][]string) *Keymap {
-	k := &Keymap{keys: map[string]Motion{}, letters: map[string]Motion{}}
+	k := &Keymap{keys: map[string]Motion{}, letters: map[string]Motion{}, order: map[Motion][]string{}}
 	for _, configured := range [...]bool{false, true} {
 		for m := Up; m <= End; m++ {
 			keys, ok := bindings[m]
@@ -182,6 +185,7 @@ func NewKeymap(bindings map[Motion][]string) *Keymap {
 			for _, key := range keys {
 				k.add(key, m)
 			}
+			k.order[m] = keys
 		}
 	}
 	return k
@@ -204,6 +208,29 @@ func (k *Keymap) add(key string, m Motion) {
 func isLetter(key string) bool {
 	r, n := utf8.DecodeRuneInString(key)
 	return n == len(key) && r != utf8.RuneError && unicode.IsPrint(r) && r != ' '
+}
+
+// Names is the keys that move a list by motion m now, in the order the config
+// gave them, for a footer that names them. With letters unset it leaves out
+// the letter keys, which a list with a filter does not read. A key another
+// motion took over is left out too.
+func (k *Keymap) Names(m Motion, letters bool) []string {
+	if k == nil {
+		k = defaultKeymap
+	}
+	var out []string
+	for _, key := range k.order[m] {
+		if isLetter(key) {
+			if letters && k.letters[key] == m {
+				out = append(out, key)
+			}
+			continue
+		}
+		if k.keys[key] == m {
+			out = append(out, key)
+		}
+	}
+	return out
 }
 
 // Keys reads the list movement keys. With letters set it also reads the

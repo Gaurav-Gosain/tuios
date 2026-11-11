@@ -384,9 +384,10 @@ func readBrowserLook(s tuitest.Screen, b overlayBox) (browserLook, bool) {
 	if sy >= 0 {
 		sx = rowCol(s, sy, "echo two")
 	}
-	hx, hy := -1, rowWith(s, "j/k")
+	// The footer's first key pill names the list keys, the arrows by default.
+	hx, hy := -1, rowWith(s, "↑↓")
 	if hy >= 0 {
-		hx = rowCol(s, hy, "j/k")
+		hx = rowCol(s, hy, "↑↓")
 	}
 	if sx < 0 || hx < 0 {
 		fmt.Fprintf(&r, "selected row at (%d,%d), first key pill at (%d,%d): not drawn yet\n", sx, sy, hx, hy)

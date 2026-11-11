@@ -31,7 +31,7 @@ const (
 // Naming both in the footer is the only place the second one can be
 // discovered, and it is the reason it does not need to be a setting.
 var launcherHints = []overlay.Hint{
-	{Key: "↑↓", Label: "move"},
+	{Key: hintListMove, Label: "move"},
 	{Key: overlay.EnterGlyph, Label: "run"},
 	{Key: "⇥", Label: "type it out"},
 	{Key: "esc", Label: "close"},

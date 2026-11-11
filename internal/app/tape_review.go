@@ -186,18 +186,13 @@ func (m *OS) HandleTapeReviewInput(key string) bool {
 		return false
 	}
 
-	// Scrolling is available in every mode.
+	// Scrolling is available in every mode, on the list keys, letters
+	// included: no answer of the dialog is a list letter by default.
+	if delta, ok := listDelta(m.ListKeys, key, listOverlayRows); ok {
+		r.Scroll = min(max(r.Scroll+delta, 0), m.tapeReviewMaxScroll())
+		return true
+	}
 	switch key {
-	case "up", "k":
-		if r.Scroll > 0 {
-			r.Scroll--
-		}
-		return true
-	case "down", "j":
-		if r.Scroll < m.tapeReviewMaxScroll() {
-			r.Scroll++
-		}
-		return true
 	case "esc", "q":
 		m.CloseTapeReview()
 		return true

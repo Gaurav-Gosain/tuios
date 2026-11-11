@@ -34,7 +34,7 @@ const (
 // settingsHints is the settings footer, shared by the renderer and the sizing
 // helper so both measure the same panel.
 var settingsHints = []overlay.Hint{
-	{Key: "↑↓", Label: "move"},
+	{Key: hintListMove, Label: "move"},
 	{Key: "←→", Label: "change"},
 	{Key: "tab", Label: "section"},
 	{Key: "/", Label: "search"},
@@ -45,7 +45,7 @@ var settingsHints = []overlay.Hint{
 // the row's own tab rather than the next one, and esc clears the search before
 // it closes anything.
 var settingsSearchHints = []overlay.Hint{
-	{Key: "↑↓", Label: "move"},
+	{Key: hintListMove, Label: "move"},
 	{Key: "←→", Label: "change"},
 	{Key: "tab", Label: "go to tab"},
 	{Key: "esc", Label: "clear search"},

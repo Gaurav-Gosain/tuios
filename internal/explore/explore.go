@@ -20,6 +20,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -69,6 +70,9 @@ type Config struct {
 	Edit *Edit
 	// Query starts the search with this text.
 	Query string
+	// Lists is the [keybindings.lists] keymap the list moves by. Nil is the
+	// default keys.
+	Lists *listnav.Keymap
 }
 
 // Run opens the explorer and returns when the person leaves it.
@@ -356,23 +360,24 @@ func (m *model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	// The list keys of [keybindings.lists] move the list, letters included:
+	// this list has no filter on its keys, its search line takes the focus
+	// with /.
+	page := max(m.listRows-1, 1)
+	if motion := m.cfg.Lists.Keys(s, true); motion != listnav.None {
+		m.move(listnav.Delta(motion, page))
+		return m, nil
+	}
 	switch s {
 	case "q", "esc", "ctrl+c":
 		return m, tea.Quit
 	case "/":
 		m.focus = focusSearch
-	case "up", "k":
-		m.move(-1)
-	case "down", "j":
-		m.move(1)
-	case "pgup", "ctrl+b":
-		m.move(-max(m.listRows-1, 1))
-	case "pgdown", "ctrl+f", "space":
-		m.move(max(m.listRows-1, 1))
-	case "home", "g":
-		m.move(-len(m.shown))
-	case "end", "G":
-		m.move(len(m.shown))
+	// The pager keys of less, besides the list keys.
+	case "ctrl+b":
+		m.move(-page)
+	case "ctrl+f", "space":
+		m.move(page)
 	case "tab", "right", "l":
 		m.setGroup(m.group + 1)
 	case "shift+tab", "left", "h":

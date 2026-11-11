@@ -15,7 +15,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/hostsetup"
 	"github.com/Gaurav-Gosain/tuios/internal/hostsync"
-	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 )
 
@@ -597,11 +596,8 @@ func (m *OS) msPickKey(msg tea.KeyPressMsg) tea.Cmd {
 			p.addr, p.name, p.tab = p.aliases[p.aliasCur], "", msTabAddress
 			return m.msStart()
 		}
-		switch key {
-		case "up", "k":
-			p.aliasCur = listnav.Step(p.aliasCur, -1, len(p.aliases), true)
-		case "down", "j":
-			p.aliasCur = listnav.Step(p.aliasCur, 1, len(p.aliases), true)
+		if delta, ok := listDelta(m.ListKeys, key, listOverlayRows); ok {
+			p.aliasCur = m.listStep(p.aliasCur, delta, len(p.aliases))
 		}
 	case msTabTailnet:
 		switch {

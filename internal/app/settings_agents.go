@@ -379,14 +379,14 @@ func (m *OS) SettingsBack() bool {
 // esc goes back from the action rows.
 var (
 	agentsHints = []overlay.Hint{
-		{Key: "↑↓", Label: "move"},
+		{Key: hintListMove, Label: "move"},
 		{Key: "enter", Label: "choose"},
 		{Key: "tab", Label: "section"},
 		{Key: "/", Label: "search"},
 		{Key: "esc", Label: "close"},
 	}
 	agentsActionHints = []overlay.Hint{
-		{Key: "↑↓", Label: "move"},
+		{Key: hintListMove, Label: "move"},
 		{Key: "enter", Label: "confirm"},
 		{Key: "tab", Label: "section"},
 		{Key: "esc", Label: "back"},

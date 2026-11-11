@@ -27,7 +27,7 @@ const logDetailLines = 3
 // logViewerHints is the footer the log viewer advertises.
 func logViewerHints() []overlay.Hint {
 	return []overlay.Hint{
-		{Key: "j/k", Label: "move"},
+		{Key: hintListMoveLetters, Label: "move"},
 		{Key: "enter", Label: "show all"},
 		{Key: "E", Label: "copy errors"},
 		{Key: "A", Label: "copy all"},

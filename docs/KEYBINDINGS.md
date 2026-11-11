@@ -639,8 +639,13 @@ is letters, digits and `_`, and a blank, `/`, `.` or `-` ends one. So
 `src/dir1/dir2` becomes `src/dir1/`, then `src/`, then nothing. Every short text
 field in tuios takes them, the rename, file and new worktree dialogs among them.
 
-The movement keys are the `[keybindings.lists]` section. Each action takes the
-keys that do it:
+The movement keys are the `[keybindings.lists]` section. Every list in tuios
+moves on them: the pickers and dialogs, the review panel, the scrollback
+browser's command list, the composer's paste pager, the spawn sheet, and the
+explorers behind `tuios keybinds browse`, `tuios config browse` and
+`tuios help -i`. The agents view's compare keeps `j` and `k` for its judge and
+keep answers and moves with left and right; only its page keys come from this
+section. Each action takes the keys that do it:
 
 | Action | Default keys |
 |---|---|

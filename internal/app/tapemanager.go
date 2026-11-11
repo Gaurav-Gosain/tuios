@@ -439,7 +439,7 @@ func (m *OS) RenderTapeManager() string {
 
 	case TapeManagerList:
 		hints = []overlay.Hint{
-			{Key: "↑↓", Label: "select"},
+			{Key: hintListMoveLetters, Label: "select"},
 			{Key: overlay.EnterKey(), Label: "play"},
 			{Key: "r", Label: "record"},
 			{Key: "d", Label: "delete"},

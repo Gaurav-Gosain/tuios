@@ -27,7 +27,7 @@ const (
 // paletteHints is the palette footer, shared by the renderer and the sizing
 // helper so both measure the same panel.
 var paletteHints = []overlay.Hint{
-	{Key: "↑↓", Label: "move"},
+	{Key: hintListMove, Label: "move"},
 	{Key: overlay.EnterGlyph, Label: "run"},
 	// The action search and the state filter are tokens typed into the search
 	// field rather than keys, so the footer is the only place they can announce

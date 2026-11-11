@@ -65,21 +65,21 @@ func (m *Model) pagerKey(msg tea.KeyPressMsg) Event {
 		return EventNone
 	}
 	page := m.pagerRows()
+	// The list keys scroll the block, letters included: a block is read
+	// only, so no key of its is typed.
+	if delta, ok := m.listKey(msg.String(), page); ok {
+		p.top += delta
+		p.top = min(max(p.top, 0), max(len(p.lines)-page, 0))
+		return EventNone
+	}
 	switch msg.String() {
 	case "esc", "q", "ctrl+o", "enter":
 		m.pager = nil
-	case "up", "k":
-		p.top--
-	case "down", "j":
-		p.top++
-	case "pgup", "b":
+	// The pager keys of less, besides the list keys.
+	case "b":
 		p.top -= page
-	case "pgdown", "space", "f":
+	case "space", "f":
 		p.top += page
-	case "home", "g":
-		p.top = 0
-	case "end", "G":
-		p.top = len(p.lines)
 	case "ctrl+e":
 		m.Expand()
 	case "backspace", "delete":
@@ -147,4 +147,30 @@ func breakLines(text string, width int) []string {
 		out = append(out, line)
 	}
 	return out
+}
+
+// pagerJump is how far home and end move: further than any block is long.
+const pagerJump = 1 << 30
+
+// listKey is Options.ListKey, or the default list keys when the host gave
+// none.
+func (m *Model) listKey(key string, page int) (int, bool) {
+	if m.opt.ListKey != nil {
+		return m.opt.ListKey(key, page)
+	}
+	switch key {
+	case "up", "k":
+		return -1, true
+	case "down", "j":
+		return 1, true
+	case "pgup":
+		return -page, true
+	case "pgdown":
+		return page, true
+	case "home", "g":
+		return -pagerJump, true
+	case "end", "G":
+		return pagerJump, true
+	}
+	return 0, false
 }

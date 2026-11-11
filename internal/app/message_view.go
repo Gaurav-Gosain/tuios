@@ -225,7 +225,7 @@ func (m *OS) wrapCached(text string, width int) []string {
 // messageViewHints is the view's footer.
 func (m *OS) messageViewHints() []overlay.Hint {
 	hints := []overlay.Hint{
-		{Key: "j/k", Label: "scroll"},
+		{Key: hintListMoveLetters, Label: "scroll"},
 		{Key: "y", Label: "copy"},
 	}
 	if e := m.msgView.entry; e.goesSomewhere() {

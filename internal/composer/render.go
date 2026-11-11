@@ -384,8 +384,12 @@ func (o Options) hints(k hintsKey) []Hint {
 	ascii := k.ascii
 	switch k.state {
 	case hintsPager:
+		move := arrowKeys(ascii)
+		if o.ListKeyHint != nil {
+			move = o.ListKeyHint()
+		}
 		return []Hint{
-			{Key: arrowKeys(ascii), Label: "scroll"},
+			{Key: move, Label: "scroll"},
 			{Key: "ctrl+e", Label: "expand"},
 			{Key: "backspace", Label: "remove"},
 			{Key: "esc", Label: "back"},

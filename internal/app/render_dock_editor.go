@@ -16,7 +16,7 @@ const (
 // dockEditorHints is the footer, shared by the renderer and the sizing helper
 // so both measure the same panel.
 var dockEditorHints = []overlay.Hint{
-	{Key: "↑↓", Label: "select"},
+	{Key: hintListMoveLetters, Label: "select"},
 	{Key: "⇧↑↓", Label: "move"},
 	{Key: overlay.EnterGlyph, Label: "add/remove"},
 	{Key: "r", Label: "reset"},

@@ -33,7 +33,7 @@ const (
 // so both measure the same panel.
 var effectPickerHints = []overlay.Hint{
 	{Key: "type", Label: "filter"},
-	{Key: "↑↓", Label: "preview"},
+	{Key: hintListMove, Label: "preview"},
 	{Key: overlay.EnterGlyph, Label: "apply"},
 	{Key: "esc", Label: "cancel"},
 }

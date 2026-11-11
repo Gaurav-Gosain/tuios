@@ -57,6 +57,16 @@ type Options struct {
 	// rather than add a new line. The reply to an agent uses it: enter
 	// queues while the agent works, alt+enter types it at once.
 	SendNow bool
+	// ListKey reads a list movement key for an open paste block: how many
+	// rows it moves, given a page of page rows, and whether key is one. The
+	// host fills it from its own list keymap ([keybindings.lists] in tuios).
+	// Nil is the arrows, j and k, home and end, page up and page down. It is
+	// a function rather than a keymap so this package imports nothing of
+	// its host's.
+	ListKey func(key string, page int) (delta int, ok bool)
+	// ListKeyHint names the keys ListKey moves up and down on, for the open
+	// block's footer. Nil names the arrows.
+	ListKeyHint func() string
 }
 
 // Event is what a key asks the host to do.

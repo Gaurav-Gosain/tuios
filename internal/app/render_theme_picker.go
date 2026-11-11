@@ -21,7 +21,7 @@ const (
 // preview by applying (see previewsLive), so its arrows only move.
 var themePickerHints = []overlay.Hint{
 	{Key: "type", Label: "filter"},
-	{Key: "↑↓", Label: "preview"},
+	{Key: hintListMove, Label: "preview"},
 	{Key: overlay.EnterGlyph, Label: "apply"},
 	{Key: "esc", Label: "cancel"},
 }
@@ -39,7 +39,7 @@ var themePickerCommands = []overlay.Hint{
 
 var themePickerServedHints = []overlay.Hint{
 	{Key: "type", Label: "filter"},
-	{Key: "↑↓", Label: "move"},
+	{Key: hintListMove, Label: "move"},
 	{Key: overlay.EnterGlyph, Label: "apply"},
 	{Key: "esc", Label: "cancel"},
 }

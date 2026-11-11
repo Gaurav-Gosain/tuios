@@ -243,7 +243,7 @@ func (m *OS) InboxAgentsBulkReply() tea.Cmd {
 	comp := m.Inbox.reply.bulkDraft
 	m.Inbox.reply.bulkDraft = nil
 	if comp == nil {
-		comp = composer.New(composer.Options{MaxRows: m.composerRows(inboxReplyRows), Placeholder: "Type the reply to send to each.", Images: true})
+		comp = composer.New(composer.Options{MaxRows: m.composerRows(inboxReplyRows), Placeholder: "Type the reply to send to each.", Images: true, ListKey: m.composerListKey, ListKeyHint: m.composerListKeyHint})
 	}
 	// No history: the targets each keep their own.
 	wires := m.wireDraft(comp, targets[0].session, targets[0].window, false)

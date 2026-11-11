@@ -261,7 +261,7 @@ func (m *OS) openInboxReply(sessionID, windowID, who, context string, closeAfter
 	m.answerEnd(answerArmed, "reply")
 	comp := m.takeInboxDraft(sessionID, windowID)
 	if comp == nil {
-		comp = composer.New(composer.Options{MaxRows: m.composerRows(inboxReplyRows), Placeholder: "Type your reply.", Images: true, SendNow: true})
+		comp = composer.New(composer.Options{MaxRows: m.composerRows(inboxReplyRows), Placeholder: "Type your reply.", Images: true, SendNow: true, ListKey: m.composerListKey, ListKeyHint: m.composerListKeyHint})
 	}
 	m.Inbox.reply.editor = &inboxReplyEditor{
 		draftWires: m.wireDraft(comp, sessionID, windowID, true),
@@ -289,7 +289,7 @@ func (m *OS) openHostReply(host, sessionID, windowID, who, context string) bool 
 	m.answerEnd(answerArmed, "reply")
 	comp := m.takeInboxDraft(sessionID, windowID)
 	if comp == nil {
-		comp = composer.New(composer.Options{MaxRows: m.composerRows(inboxReplyRows), Placeholder: "Type your reply.", Images: true})
+		comp = composer.New(composer.Options{MaxRows: m.composerRows(inboxReplyRows), Placeholder: "Type your reply.", Images: true, ListKey: m.composerListKey, ListKeyHint: m.composerListKeyHint})
 	}
 	// The @ list offers no files of the far pane's folder. The history is
 	// kept under the far pane, as before.

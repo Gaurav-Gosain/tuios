@@ -20,7 +20,7 @@ const (
 // so both measure the same panel.
 var glyphPickerHints = []overlay.Hint{
 	{Key: "type", Label: "filter"},
-	{Key: "↑↓", Label: "preview"},
+	{Key: hintListMove, Label: "preview"},
 	{Key: overlay.EnterGlyph, Label: "apply"},
 	{Key: "esc", Label: "cancel"},
 }

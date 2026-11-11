@@ -4,6 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 )
 
@@ -67,11 +68,12 @@ func handleReviewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, o.ReviewCompareConfirm(key == "y" || key == "Y")
 	}
 	if o.ReviewCompareShown() {
+		// The attempts list moves on the list keys, letters included. Its
+		// own K (keep) is not a list key by default.
+		if listKey(o, key, true, listPage, o.ReviewCompareMove) {
+			return o, nil
+		}
 		switch key {
-		case "j", "down":
-			o.ReviewCompareMove(1)
-		case "k", "up":
-			o.ReviewCompareMove(-1)
 		case "enter":
 			return o, o.ReviewCompareOpen()
 		case "m":
@@ -114,19 +116,34 @@ func handleReviewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.NoteAction(action)
 		return o, cmd
 	}
-	switch key {
-	case "j", "down":
-		o.ReviewMove(1)
-	case "k", "up":
+	// The diff moves on the list keys, letters included; a page is the rows
+	// the panel shows.
+	switch o.ListKeys.Keys(key, true) {
+	case listnav.Up:
 		o.ReviewMove(-1)
-	case "pgdown", "ctrl+d", "space":
-		o.ReviewPage(1)
-	case "pgup", "ctrl+u":
+		return o, nil
+	case listnav.Down:
+		o.ReviewMove(1)
+		return o, nil
+	case listnav.PageUp:
 		o.ReviewPage(-1)
-	case "g", "home":
+		return o, nil
+	case listnav.PageDown:
+		o.ReviewPage(1)
+		return o, nil
+	case listnav.Home:
 		o.ReviewEdge(false)
-	case "G", "end":
+		return o, nil
+	case listnav.End:
 		o.ReviewEdge(true)
+		return o, nil
+	}
+	switch key {
+	// Half a page, as in vim and less, besides the list's page keys.
+	case "ctrl+d", "space":
+		o.ReviewPage(1)
+	case "ctrl+u":
+		o.ReviewPage(-1)
 	case "tab":
 		o.ReviewToggleFocus()
 	case "enter":

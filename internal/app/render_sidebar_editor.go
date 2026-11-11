@@ -19,7 +19,7 @@ const (
 // The keys are the dock editor's, plus the one control the rail has that the
 // dock does not: the share.
 var sectionEditorHints = []overlay.Hint{
-	{Key: "↑↓", Label: "select"},
+	{Key: hintListMoveLetters, Label: "select"},
 	{Key: "⇧↑↓", Label: "move"},
 	{Key: "←→", Label: "share"},
 	{Key: overlay.EnterGlyph, Label: "on/off"},

@@ -28,6 +28,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
@@ -232,7 +233,7 @@ func (m *OS) CockpitNewAgent() tea.Cmd {
 	ck.spawnDraft = nil
 	if s == nil {
 		s = &spawnSheet{
-			task:     composer.New(composer.Options{MaxRows: m.composerRows(spawnTaskRows), Placeholder: "What should the agent do?", Images: true}),
+			task:     composer.New(composer.Options{MaxRows: m.composerRows(spawnTaskRows), Placeholder: "What should the agent do?", Images: true, ListKey: m.composerListKey, ListKeyHint: m.composerListKeyHint}),
 			model:    composer.New(composer.Options{MaxRows: 1, SingleLine: true, Placeholder: "The agent's default"}),
 			branch:   composer.New(composer.Options{MaxRows: 1, SingleLine: true}),
 			base:     composer.New(composer.Options{MaxRows: 1, SingleLine: true}),
@@ -945,6 +946,10 @@ func (m *OS) spawnKey(s *spawnSheet, msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	left, right := key == "left" || key == "h" || key == "-", key == "right" || key == "l" || key == "+" || key == "="
+	// Up and down are the list keys of [keybindings.lists], letters included:
+	// a field that types text took its keys above.
+	motion := m.ListKeys.Keys(key, true)
+	up, down := motion == listnav.Up, motion == listnav.Down
 	switch s.field {
 	case spAgent:
 		switch {
@@ -952,7 +957,7 @@ func (m *OS) spawnKey(s *spawnSheet, msg tea.KeyPressMsg) tea.Cmd {
 			s.agent = (s.agent - 1 + len(s.agents)) % max(len(s.agents), 1)
 		case right:
 			s.agent = (s.agent + 1) % max(len(s.agents), 1)
-		case key == "space" || key == "down" || key == "j":
+		case key == "space" || down:
 			s.openList(spAgent)
 		}
 	case spEffort, spPermission:
@@ -961,7 +966,7 @@ func (m *OS) spawnKey(s *spawnSheet, msg tea.KeyPressMsg) tea.Cmd {
 			s.cycleChoice(s.field, -1)
 		case right:
 			s.cycleChoice(s.field, 1)
-		case key == "space" || key == "down" || key == "j":
+		case key == "space" || down:
 			s.openList(s.field)
 			return nil
 		}
@@ -970,10 +975,10 @@ func (m *OS) spawnKey(s *spawnSheet, msg tea.KeyPressMsg) tea.Cmd {
 			m.spawnSetWorktree(s, !s.worktree)
 		}
 	case spMachine:
-		switch key {
-		case "up", "k":
+		switch {
+		case up:
 			m.spawnPickMachine(s, s.machine-1)
-		case "down", "j":
+		case down:
 			m.spawnPickMachine(s, s.machine+1)
 		}
 	case spAttempts:
@@ -1008,11 +1013,13 @@ func (m *OS) spawnKey(s *spawnSheet, msg tea.KeyPressMsg) tea.Cmd {
 		case spStart:
 			return m.spawnStart()
 		}
-	case "up", "k":
+	}
+	switch {
+	case up:
 		if s.field != spMachine {
 			s.step(-1)
 		}
-	case "down", "j":
+	case down:
 		if s.field != spMachine && s.field != spAgent && s.field != spEffort && s.field != spPermission {
 			s.step(1)
 		}

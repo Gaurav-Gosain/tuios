@@ -150,7 +150,7 @@ Type tuios help [path to command] for full details.
 				fmt.Println(string(out))
 				return
 			}
-			cobra.CheckErr(explore.Run(helpExplorer(docs)))
+			cobra.CheckErr(runExplorer(helpExplorer(docs)))
 		},
 	}
 	cmd.Flags().BoolVarP(&interactive, "interactive", "i", false, "Open the command tree in an explorer you can search")
@@ -236,7 +236,7 @@ It needs a running daemon. Press q or esc to leave it.`,
 			if err != nil {
 				return err
 			}
-			return explore.Run(configExplorer(sessionName, opts))
+			return runExplorer(configExplorer(sessionName, opts))
 		},
 	}
 	addSessionFlag(cmd, &sessionName)
@@ -402,6 +402,7 @@ tab to show one scope. Press q or esc to leave it.`,
 			}
 			c := keybindsExplorer(keybindRows(cfg))
 			c.Query = strings.Join(args, " ")
+			c.Lists = config.ListKeymap(cfg)
 			return explore.Run(c)
 		},
 	}
@@ -453,4 +454,13 @@ func keybindsExplorer(rows []keybindRow) explore.Config {
 		})
 	}
 	return explore.Config{Title: "tuios keybindings", Items: items, Groups: groups, NameWidth: 28}
+}
+
+// runExplorer runs an explorer that moves by the [keybindings.lists] keys of
+// the person's config, or by the default keys when it cannot be read.
+func runExplorer(c explore.Config) error {
+	if cfg, err := config.LoadUserConfig(); err == nil {
+		c.Lists = config.ListKeymap(cfg)
+	}
+	return explore.Run(c)
 }

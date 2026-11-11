@@ -28,7 +28,7 @@ import (
 // left unbound) rather than the state before it.
 func (m *OS) keybindApply() tea.Cmd {
 	m.KeybindRegistry.Reload(m.UserConfig)
-	m.ListKeys = listKeymap(m.UserConfig)
+	m.ListKeys = config.ListKeymap(m.UserConfig)
 	m.keybinds.report = m.buildKeybindReport()
 	m.keybinds.filtered = nil
 	return m.persistSettings()

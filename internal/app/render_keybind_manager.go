@@ -28,7 +28,7 @@ const (
 // both measure the same panel.
 var keybindHints = []overlay.Hint{
 	{Key: "tab", Label: "section"},
-	{Key: "↑↓", Label: "move"},
+	{Key: hintListMove, Label: "move"},
 	{Key: "/", Label: "filter"},
 	{Key: "ctrl+r", Label: "record"},
 	{Key: "ctrl+d", Label: "unbind"},

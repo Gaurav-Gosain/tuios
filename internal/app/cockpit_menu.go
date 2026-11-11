@@ -193,13 +193,10 @@ func (m *OS) inboxAgentsSortName() string {
 
 // cockpitMenuHints are the menu's keys for the key bar.
 func (m *OS) cockpitMenuHints() []overlay.Hint {
-	move := "↑↓"
-	if overlay.UseASCII() {
-		move = "up/down"
-	}
-	return []overlay.Hint{
-		{Key: move, Label: "move"},
+	// The menu moves on the list keys, letters included.
+	return m.listHints([]overlay.Hint{
+		{Key: hintListMoveLetters, Label: "move"},
 		{Key: overlay.EnterKey(), Label: "choose"},
 		{Key: "esc", Label: "close", Priority: overlay.HintEssential},
-	}
+	})
 }

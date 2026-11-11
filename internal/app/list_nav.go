@@ -1,8 +1,8 @@
 package app
 
 import (
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
 // listWraps reports whether a single step off the end of a list wraps to the
@@ -40,25 +40,67 @@ func listDelta(keys *listnav.Keymap, key string, page int) (int, bool) {
 	return listnav.Delta(motion, page), true
 }
 
-// listKeymap is the keys [keybindings.lists] gives each list motion. An action
-// the section does not name keeps its default keys, and one set to [] has none.
-func listKeymap(cfg *config.UserConfig) *listnav.Keymap {
-	if cfg == nil {
-		return nil
+// composerListKey is composer.Options.ListKey for this session: the list keys
+// of [keybindings.lists], letters included, since a paste block is read only.
+func (m *OS) composerListKey(key string, page int) (int, bool) {
+	return listDelta(m.ListKeys, key, page)
+}
+
+// The hint keys a list footer gives for moving the cursor, filled in from the
+// session's [keybindings.lists] when the footer is drawn (see listHints). A
+// footer that wrote "↑↓" or "j/k" itself named keys the person may have
+// unbound. hintListMove is for a list with a filter, which reads no letter
+// keys; hintListMoveLetters for one without.
+const (
+	hintListMove        = "\x00list-move"
+	hintListMoveLetters = "\x00list-move-letters"
+)
+
+// listMoveKeys is how a footer names the keys that move a list up and down:
+// the arrows as ↑↓ ("up/down" in ASCII) when they are the first keys bound,
+// otherwise the first up key and the first down key, as "ctrl+k/ctrl+j".
+// It is "" when either motion has no key, and the hint is then left out.
+func (m *OS) listMoveKeys(letters bool) string {
+	up := m.ListKeys.Names(listnav.Up, letters)
+	down := m.ListKeys.Names(listnav.Down, letters)
+	if len(up) == 0 || len(down) == 0 {
+		return ""
 	}
-	lists := cfg.Keybindings.Lists
-	bindings := map[listnav.Motion][]string{}
-	for action, motion := range map[string]listnav.Motion{
-		config.ActionListUp:       listnav.Up,
-		config.ActionListDown:     listnav.Down,
-		config.ActionListPageUp:   listnav.PageUp,
-		config.ActionListPageDown: listnav.PageDown,
-		config.ActionListFirst:    listnav.Home,
-		config.ActionListLast:     listnav.End,
-	} {
-		if keys, ok := lists[action]; ok {
-			bindings[motion] = keys
+	if up[0] == "up" && down[0] == "down" {
+		if overlay.UseASCII() {
+			return "up/down"
+		}
+		return "↑↓"
+	}
+	return up[0] + "/" + down[0]
+}
+
+// listHints fills the list movement hint keys in with the keys the session's
+// keymap holds, and drops a hint whose motion has no key.
+func (m *OS) listHints(hints []overlay.Hint) []overlay.Hint {
+	var out []overlay.Hint
+	for i, h := range hints {
+		switch h.Key {
+		case hintListMove, hintListMoveLetters:
+		default:
+			if out != nil {
+				out = append(out, h)
+			}
+			continue
+		}
+		if out == nil {
+			out = append(make([]overlay.Hint, 0, len(hints)), hints[:i]...)
+		}
+		if keys := m.listMoveKeys(h.Key == hintListMoveLetters); keys != "" {
+			h.Key = keys
+			out = append(out, h)
 		}
 	}
-	return listnav.NewKeymap(bindings)
+	if out == nil {
+		return hints
+	}
+	return out
 }
+
+// composerListKeyHint is composer.Options.ListKeyHint for this session.
+func (m *OS) composerListKeyHint() string { return m.listMoveKeys(true) }

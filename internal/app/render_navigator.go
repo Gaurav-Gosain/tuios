@@ -58,14 +58,14 @@ func (m *OS) navigatorHints() []overlay.Hint {
 	if m.navigator.searching {
 		return []overlay.Hint{
 			{Key: overlay.EnterGlyph, Label: "go"},
-			{Key: "↑↓", Label: "move"},
+			{Key: hintListMove, Label: "move"},
 			{Key: "esc", Label: "stop search"},
 		}
 	}
 	hints := []overlay.Hint{
 		{Key: overlay.EnterGlyph, Label: "go"},
 		{Key: "/", Label: "search"},
-		{Key: "j/k", Label: "move"},
+		{Key: hintListMoveLetters, Label: "move"},
 	}
 	if !m.navFlat() {
 		hints = append(hints, overlay.Hint{Key: "h/l", Label: "fold"})

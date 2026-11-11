@@ -87,6 +87,8 @@ func panelChrome(extra, width int, tabs []string, hints []overlay.Hint) int {
 // goes: the keys it names are still on the keyboard, whereas a body squeezed
 // below three rows stops being a list.
 func (m *OS) panelBody(preferred, extra, width int, tabs []string, hints []overlay.Hint) (int, []overlay.Hint) {
+	// The list movement hints name the keys the session's keymap holds.
+	hints = m.listHints(hints)
 	rows := m.panelBodyRows(preferred, extra, width, tabs, hints)
 	rh := m.panelRoomHeight()
 	if rh <= 0 || len(hints) == 0 || rows+panelChrome(extra, width, tabs, hints) <= rh {

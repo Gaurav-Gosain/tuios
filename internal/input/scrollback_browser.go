@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/scrollback"
 	"tuios.dev/vt"
 )
@@ -66,6 +67,12 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		return handleBrowserOutputModeKey(msg, keyStr, browser, o)
 	}
 
+	// The list keys of [keybindings.lists] move the command list, letters
+	// included: the list has no filter on its keys, / opens the search.
+	if browserListKey(o, keyStr, browser) {
+		return o, nil
+	}
+
 	// Normal mode keybindings
 	switch keyStr {
 	// Close
@@ -74,34 +81,11 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		o.ScrollbackBrowser = nil
 		return o, nil
 
-	// Navigation
-	case "j", "down":
-		browser.Next()
-	case "k", "up":
-		browser.Prev()
+	// Half a page, as in vim and less, besides the list's page keys.
 	case "ctrl+d":
-		browser.PageDown(10)
+		browser.PageDown(listPage)
 	case "ctrl+u":
-		browser.PageUp(10)
-	case "g":
-		// Go to top (gg pattern: single g goes to top in this context)
-		browser.SelectedIdx = 0
-		browser.PreviewScroll = 0
-	case "G":
-		// Go to bottom
-		var count int
-		switch browser.Mode {
-		case scrollback.ModeJSON:
-			count = len(browser.FilteredJSON)
-		case scrollback.ModePaths:
-			count = len(browser.FilteredPaths)
-		default:
-			count = len(browser.FilteredIdx)
-		}
-		if count > 0 {
-			browser.SelectedIdx = count - 1
-		}
-		browser.PreviewScroll = 0
+		browser.PageUp(listPage)
 
 	// Enter output mode
 	case "l", "right":
@@ -683,4 +667,41 @@ var browserMotions = map[string]browserMotion{
 		}
 		v.MoveToBottom()
 	}},
+}
+
+// browserListKey moves the scrollback browser's list for a key of
+// [keybindings.lists], and reports whether the key was one.
+func browserListKey(o *app.OS, key string, browser *scrollback.Browser) bool {
+	switch o.ListKeys.Keys(key, true) {
+	case listnav.None:
+		return false
+	case listnav.Up:
+		browser.Prev()
+	case listnav.Down:
+		browser.Next()
+	case listnav.PageUp:
+		browser.PageUp(listPage)
+	case listnav.PageDown:
+		browser.PageDown(listPage)
+	case listnav.Home:
+		browser.SelectedIdx = 0
+		browser.PreviewScroll = 0
+	case listnav.End:
+		if n := browserListLen(browser); n > 0 {
+			browser.SelectedIdx = n - 1
+		}
+		browser.PreviewScroll = 0
+	}
+	return true
+}
+
+// browserListLen is how many rows the browser's list holds in its mode now.
+func browserListLen(browser *scrollback.Browser) int {
+	switch browser.Mode {
+	case scrollback.ModeJSON:
+		return len(browser.FilteredJSON)
+	case scrollback.ModePaths:
+		return len(browser.FilteredPaths)
+	}
+	return len(browser.FilteredIdx)
 }

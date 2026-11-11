@@ -916,7 +916,7 @@ const agentMailMaxDraft = 1 << 20
 // wired as the Inbox reply is: image previews, the @ list and the pane's
 // history. An empty windowID, a sender on another machine, keeps no history.
 func (m *OS) newMailDraft(windowID string) *composer.Model {
-	comp := composer.New(composer.Options{MaxRows: m.composerRows(agentMailDraftRows), MaxBytes: agentMailMaxDraft, Placeholder: "Type the message.", Images: true})
+	comp := composer.New(composer.Options{MaxRows: m.composerRows(agentMailDraftRows), MaxBytes: agentMailMaxDraft, Placeholder: "Type the message.", Images: true, ListKey: m.composerListKey, ListKeyHint: m.composerListKeyHint})
 	m.AgentMail.wires = m.wireDraft(comp, m.sidebarCurrentSessionID(), windowID, windowID != "")
 	return comp
 }

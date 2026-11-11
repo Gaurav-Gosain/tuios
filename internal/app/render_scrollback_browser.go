@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"image/color"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -175,6 +176,8 @@ func (m *OS) renderScrollbackBrowser() string {
 	// === FOOTER ===
 	lines = append(lines, styled(dimFg, false, strings.Repeat("─", innerW)))
 
+	// The command list moves on the list keys, letters included.
+	nav := m.listMoveKeys(true)
 	var hints []browserHint
 	if browser.OutputMode {
 		hints = []browserHint{
@@ -190,7 +193,7 @@ func (m *OS) renderScrollbackBrowser() string {
 		switch browser.Mode {
 		case scrollback.ModeCommands:
 			hints = []browserHint{
-				{"j/k", "nav"},
+				{nav, "nav"},
 				{"l", "output"},
 				{"J/K", "scroll"},
 				{"y", "copy"},
@@ -202,7 +205,7 @@ func (m *OS) renderScrollbackBrowser() string {
 			}
 		case scrollback.ModeJSON:
 			hints = []browserHint{
-				{"j/k", "nav"},
+				{nav, "nav"},
 				{"l", "output"},
 				{"y", "copy"},
 				{"/", "search"},
@@ -211,7 +214,7 @@ func (m *OS) renderScrollbackBrowser() string {
 			}
 		case scrollback.ModePaths:
 			hints = []browserHint{
-				{"j/k", "nav"},
+				{nav, "nav"},
 				{"l", "output"},
 				{"y", "copy"},
 				{"Enter", "paste"},
@@ -221,6 +224,8 @@ func (m *OS) renderScrollbackBrowser() string {
 			}
 		}
 	}
+	// A motion the keymap left with no key has no hint.
+	hints = slices.DeleteFunc(hints, func(h browserHint) bool { return h.key == "" })
 	lines = append(lines, fitLine(browserFooterHints(hints, innerW, &m.Settings, pal), innerW))
 
 	// Pad to exact height

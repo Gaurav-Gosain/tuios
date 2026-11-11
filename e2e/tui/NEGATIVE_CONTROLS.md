@@ -16819,3 +16819,26 @@ that call `hubWithFileHost` (115 s, no failure).
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTwoCopiesToOnePathKeepTheirParts$' -v .`.
+
+## Rebound list keys move every list
+
+`TestReboundListKeysMoveEveryList` sets `[keybindings.lists]` to
+`list_down = ["ctrl+j"]` and `list_up = ["ctrl+k"]`, then presses each key
+once in the command palette, the review panel and the scrollback browser, and
+checks that the cursor row changed. It also checks that the palette's and the
+browser's footers name ctrl+k/ctrl+j. A list that does not move, or a footer
+that names other keys, is reported and the test goes on, so one run names
+every list that ignores the config.
+
+Run on 2026-11-12, on Linux (arch-btw) and macOS. The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The R7 5a tip (bd59b56ac), where the review panel and the scrollback browser read their own up, down, j and k, on arch-btw | "review ctrl+j did not move the cursor", "review ctrl+k did not move the cursor", "browser ctrl+j did not move the cursor off cmd-three", "browser ctrl+k did not move the cursor off cmd-three" | **caught** |
+| main at 5330f65cf, which holds 5a, on macOS, once the footer checks were added | the four above, and "the palette footer does not name ctrl+k/ctrl+j", "the scrollback browser footer does not name ctrl+k/ctrl+j", "the scrollback browser footer still names j/k" | **caught** |
+
+The palette moves on the control too: it has read the list keymap since R7
+PR 2. Its footer is what the control catches there.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestReboundListKeysMoveEveryList$' -v .`.

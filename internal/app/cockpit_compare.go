@@ -9,6 +9,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
@@ -290,10 +291,23 @@ func (m *OS) CockpitCompareKey(key string) tea.Cmd {
 	if cp.res != nil {
 		n = len(cp.res.Rows)
 	}
-	switch key {
-	case "k", "up", "down":
+	// This view keeps its own keys rather than the list keys of
+	// [keybindings.lists]: j and k are its judge and keep answers, left and
+	// right move between attempts, and up and down scroll the warnings. Only
+	// the page keys come from the list keymap, and they page by listPage rows.
+	motion := m.ListKeys.Keys(key, false)
+	switch {
+	case key == "k", key == "up", key == "down", motion == listnav.PageUp, motion == listnav.PageDown:
 	default:
 		cp.armed = ""
+	}
+	switch motion {
+	case listnav.PageUp:
+		cp.warnScroll = max(cp.warnScroll-listOverlayRows, 0)
+		return nil
+	case listnav.PageDown:
+		cp.warnScroll += listOverlayRows
+		return nil
 	}
 	switch key {
 	case "esc", "q", "backspace":

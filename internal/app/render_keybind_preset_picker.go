@@ -12,7 +12,7 @@ import (
 const presetPickerWidth = 64
 
 var presetPickerHints = []overlay.Hint{
-	{Key: "↑↓", Label: "move"},
+	{Key: hintListMoveLetters, Label: "move"},
 	{Key: overlay.EnterGlyph, Label: "use"},
 	{Key: "esc", Label: "cancel"},
 }
