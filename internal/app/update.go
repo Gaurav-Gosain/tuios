@@ -1294,6 +1294,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyReplyPreview(msg)
 		return m, nil
 
+	case kbFileMsg:
+		return m, m.applyKBFile(msg)
+
 	case quickLookMsg:
 		cmd := m.applyQuickLook(msg)
 		m.renderSkipped = false

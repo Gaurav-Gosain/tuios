@@ -61,6 +61,12 @@ type kbPreview struct {
 	// says it was a sheet.
 	box   overlay.Rect
 	sheet bool
+	// files are the attachments' contents read so far, fileWant says a
+	// frame found the selected one not read, and imgWidth is the width the
+	// last frame drew its picture at (cockpit_preview_files.go).
+	files    kbFiles
+	fileWant bool
+	imgWidth int
 }
 
 // kbPreviewMode is where the preview goes on a view w cells wide:
@@ -175,6 +181,9 @@ func (m *OS) kanbanPreviewKey(action string) (tea.Cmd, bool) {
 		m.kbPreviewScroll(step)
 	case config.ActionInboxTabNext, config.ActionInboxTabPrev:
 		m.kbPreviewStepAttachment(action == config.ActionInboxTabNext)
+		return m.kbPreviewFileFetch(), true
+	case config.ActionInboxArtifact:
+		return m.kbPreviewOpen(), true
 	default:
 		return nil, false
 	}
@@ -302,6 +311,8 @@ func (m *OS) kanbanPreviewAction(action string) (tea.Cmd, bool) {
 	switch {
 	case action == "pv-close":
 		m.kanbanPreviewClose()
+	case strings.HasPrefix(action, "pimg:"):
+		return m.kbPreviewOpen(), true
 	case strings.HasPrefix(action, "pv-att:"):
 		i, err := strconv.Atoi(strings.TrimPrefix(action, "pv-att:"))
 		if err != nil || i < 0 || i >= len(pv.attAt) {
@@ -309,6 +320,7 @@ func (m *OS) kanbanPreviewAction(action string) (tea.Cmd, bool) {
 		}
 		pv.att = i
 		m.cockpitTouch()
+		return m.kbPreviewFileFetch(), true
 	default:
 		return nil, false
 	}
@@ -324,6 +336,11 @@ func (m *OS) kanbanPreviewHints() []overlay.Hint {
 	}
 	if len(pv.attAt) > 1 {
 		hints = append(hints, m.keyHints(config.ActionInboxTabNext, "attachment")...)
+	}
+	if a, ok := m.kbPreviewSelected(); ok {
+		if f := pv.files.m[kbFileKey(a)]; f != nil && f.img != nil {
+			hints = append(hints, m.keyHints(config.ActionInboxArtifact, "view picture")...)
+		}
 	}
 	word := "zoom"
 	if pv.zoom {
@@ -412,6 +429,11 @@ func (m *OS) drawKanbanPreview(c *ckCanvas, l ckLook, x, w, y0, y1, top int, she
 			}
 			m.Inbox.ck.hits = append(m.Inbox.ck.hits, ckHit{x0: ix - 1, y0: top + y, x1: ix + inner + 1, y1: top + y + 1, kind: ckHitAction, action: ln.hit})
 		}
+		if strings.HasPrefix(ln.hit, "pimg:") {
+			// A picture's row: a click opens it, and the kitty picture is
+			// placed from these hits (kbPreviewPlacements).
+			m.Inbox.ck.hits = append(m.Inbox.ck.hits, ckHit{x0: ix, y0: top + y, x1: ix + inner, y1: top + y + 1, kind: ckHitAction, action: ln.hit})
+		}
 		drawCkLineAt(c, ix, y, inner, ln)
 	}
 	if more := pv.lines - pv.scroll - pv.rows; more > 0 {
@@ -496,6 +518,12 @@ func (m *OS) ckCardBody(l ckLook, r ckRow, card session.TaskRow, width int, now 
 			for _, s := range strings.Split(ansi.Wordwrap(meta, max(width-2, 8), ""), "\n") {
 				out = append(out, ckLine{indent: 2, segs: []ckSeg{{t: s, fg: pal.FgDim}}})
 			}
+		}
+		// The selected attachment's body, in the preview only: the Card tab
+		// of the list lists them.
+		if a, ok := m.kbPreviewSelected(); ok && head {
+			gap()
+			out = append(out, m.ckAttachmentBody(l, a, width)...)
 		}
 	}
 	if len(d.history) > 0 {
