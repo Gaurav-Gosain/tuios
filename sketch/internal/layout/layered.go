@@ -1261,6 +1261,12 @@ func Rank(nodes []*LNode, edges []*LEdge, step int) {
 	}
 
 	r := make([]int, n)
+	// Start ports go above every node later, so they don't push their targets down a rank.
+	for i := 0; i < n; i++ {
+		if nodes[i].Kind == KindStartPort {
+			r[i] = -step
+		}
+	}
 	indeg := make([]int, n)
 	for i := 0; i < n; i++ {
 		indeg[i] = inStart[i+1] - inStart[i]
