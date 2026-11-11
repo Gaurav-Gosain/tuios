@@ -1,0 +1,6 @@
+# Shared borders at 60x53, the rail reached from the keyboard while hidden, ctrl+b e and a layout change. The rail is drawn over the panes without a reserved column, so it covers the divider cell at (0,25). Not a product bug: the oracle judged a frame the rail draws over.
+shared-borders
+sidebar
+resize 60 53
+chord "e"
+layout 0

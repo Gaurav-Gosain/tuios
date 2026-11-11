@@ -739,6 +739,12 @@ func (f *fuzzOS) framePaintsPanes() bool {
 		m.Renaming() || m.ScreensaverActive() || m.pipWanted() {
 		return false
 	}
+	// A rail the keyboard reached while it was hidden is drawn over the panes
+	// without taking a column from them (SidebarRevealedForFocus), so it covers
+	// whatever is under it, a divider included.
+	if m.SidebarRevealedForFocus {
+		return false
+	}
 	if m.LayoutModeName() == LayoutModeScrolling {
 		return false
 	}
