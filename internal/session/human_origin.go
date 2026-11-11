@@ -4,6 +4,7 @@ import (
 	"net"
 	"os"
 
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
@@ -157,12 +158,12 @@ func (d *Daemon) paneOriginWith(pid int, env procinfo.Env, envOK bool) (bool, st
 	// TUIOS_WINDOW_ID is also what the client's hooks are started with, so a
 	// hook command, which is automation and not the person, is placed the same
 	// way as a pane.
-	for _, name := range []string{"TUIOS_PANE_ID", "TUIOS_WINDOW_ID"} {
+	for _, name := range []string{envvars.PaneID, envvars.WindowID} {
 		if id, ok := env.Get(name); envOK && ok && id != "" && d.holdsWindow(id) {
 			return true, paneOriginEnv
 		}
 	}
-	if sock, ok := env.Get("TUIOS_SOCKET"); envOK && ok && sock != "" && sock == d.manager.SocketPath() {
+	if sock, ok := env.Get(envvars.Socket); envOK && ok && sock != "" && sock == d.manager.SocketPath() {
 		return true, paneOriginEnv
 	}
 	return false, ""

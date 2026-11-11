@@ -13,6 +13,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/winpath"
 )
@@ -274,7 +275,7 @@ func (m *OS) commandScratchSpec(c config.CommandBinding, argv []string) scratchS
 // commandEnv is the variables a command entry runs with.
 func (m *OS) commandEnv(dir string) map[string]string {
 	env := map[string]string{
-		"TUIOS_SESSION":         m.SessionName,
+		envvars.Session:         m.SessionName,
 		"TUIOS_ACTIVE_PANE_CWD": dir,
 	}
 	if w := m.GetFocusedWindow(); w != nil {

@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/spf13/cobra"
@@ -52,7 +53,7 @@ A pane that runs this command needs the admin grant.`,
 
 func runCloseWorkspace(sessionName string, ws int, jsonOutput bool) error {
 	if sessionName == "" {
-		sessionName = os.Getenv("TUIOS_SESSION")
+		sessionName = os.Getenv(envvars.Session)
 	}
 	t, err := dialSessionTarget(sessionName)
 	if err != nil {

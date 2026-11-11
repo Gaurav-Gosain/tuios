@@ -5,6 +5,8 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 )
 
 // newClearHistoryCommand builds `tuios clear-history`: drop a pane's
@@ -46,7 +48,7 @@ full-screen program, such as an editor, uses the pane.`,
 
 func runClearHistory(sessionName, window string, screen, jsonOutput bool) error {
 	if sessionName == "" {
-		sessionName = os.Getenv("TUIOS_SESSION")
+		sessionName = os.Getenv(envvars.Session)
 	}
 	t, err := dialTarget(sessionName, window)
 	if err != nil {

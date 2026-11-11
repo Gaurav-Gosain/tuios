@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/spf13/cobra"
@@ -37,7 +38,7 @@ with -s. The command fails when ssh_agent is not "follow".`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			name := sessionName
 			if name == "" {
-				name = os.Getenv("TUIOS_SESSION")
+				name = os.Getenv(envvars.Session)
 			}
 			if name == "" {
 				return errfmt.Errorf("name the session with -s. Outside a pane there is no session to use")

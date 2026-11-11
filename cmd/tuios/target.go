@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
@@ -247,7 +248,7 @@ func explainTargetConnectError(host, sessionFlag, windowFlag string, err error) 
 // hostname, else the hostname. It is a claim the far side cannot check, and
 // it is shown there as one.
 func thisMachine() string {
-	if h := os.Getenv("TUIOS_HOST"); h != "" {
+	if h := os.Getenv(envvars.Host); h != "" {
 		return h
 	}
 	h, err := os.Hostname()

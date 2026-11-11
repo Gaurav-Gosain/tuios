@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 )
 
 // TUIOS_SOCKET is set in every pane to the socket of the daemon that runs it.
@@ -27,7 +29,7 @@ import (
 // nothing changes.
 
 // SocketEnv is the variable a pane is given its daemon's socket in.
-const SocketEnv = "TUIOS_SOCKET"
+const SocketEnv = envvars.Socket
 
 // SocketEnvError is the refusal checkSocketEnv returns. It is complete on its
 // own: it names the variable, both sockets and what to set instead.

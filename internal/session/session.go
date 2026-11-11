@@ -9,6 +9,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	"github.com/Gaurav-Gosain/tuios/internal/dnd"
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 
 	"log"
@@ -4438,30 +4439,30 @@ func (s *Session) buildEnvFor(windowID string, workspace int, restored bool, ext
 	kitty, sixel := s.GraphicsCapabilities()
 	env = append(env, "TERM_PROGRAM="+guestenv.TermProgramFor(command, kitty, sixel))
 	env = append(env, "TERM_PROGRAM_VERSION="+guestenv.TermProgramVersion())
-	env = append(env, "TUIOS_SESSION="+s.Name())
+	env = append(env, envvars.Session+"="+s.Name())
 	// TUIOS_HOST names the machine this pane runs on. A pane is always local
 	// to the daemon that made it, so this is the daemon's own hostname, on
 	// every machine: a program that wants to know where it is reads it, and a
 	// program that sends mail to another machine signs with it.
 	if s.config != nil && s.config.HostName != "" {
-		env = append(env, "TUIOS_HOST="+s.config.HostName)
+		env = append(env, envvars.Host+"="+s.config.HostName)
 	}
 	if windowID != "" {
-		env = append(env, "TUIOS_WINDOW_ID="+windowID)
+		env = append(env, envvars.WindowID+"="+windowID)
 		// TUIOS_PANE_ID is an alias a state-reporting shim guards on, mirroring
 		// the pane-id contract other multiplexers' agent integrations use.
-		env = append(env, "TUIOS_PANE_ID="+windowID)
+		env = append(env, envvars.PaneID+"="+windowID)
 		// TUIOS_PANE_TOKEN proves the pane id to restrict-connection where
 		// the kernel cannot name the caller's pane. See pane_token.go.
 		if s.config != nil && s.config.PaneToken != nil {
 			if tok := s.config.PaneToken(windowID); tok != "" {
-				env = append(env, "TUIOS_PANE_TOKEN="+tok)
+				env = append(env, envvars.PaneToken+"="+tok)
 			}
 		}
 		// TUIOS_PANE_GRANTS says what the pane may do through tuios as it
 		// starts. pane-grants gives the current answer. See pane_grants.go.
 		if s.config != nil && s.config.grants != nil {
-			env = append(env, "TUIOS_PANE_GRANTS="+s.config.grants.envValue(windowID))
+			env = append(env, envvars.PaneGrants+"="+s.config.grants.envValue(windowID))
 		}
 	}
 	// TUIOS_ENV marks a process as running under tuios, and TUIOS_SOCKET tells a
@@ -4470,7 +4471,7 @@ func (s *Session) buildEnvFor(windowID string, workspace int, restored bool, ext
 	// report to when they are unset and no-ops.
 	env = append(env, "TUIOS_ENV=1")
 	if s.config != nil && s.config.SocketPath != "" {
-		env = append(env, "TUIOS_SOCKET="+s.config.SocketPath)
+		env = append(env, envvars.Socket+"="+s.config.SocketPath)
 	}
 	// TUIOS_SERVER names this daemon's server, so a tuios run in the pane
 	// reaches this daemon. It is set here rather than inherited, because the

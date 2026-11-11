@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -111,7 +112,7 @@ func printSessionInfo(raw json.RawMessage) error {
 // guesses one outside a pane.
 func runRenameSession(target, name string) error {
 	if target == "" {
-		target = os.Getenv("TUIOS_SESSION")
+		target = os.Getenv(envvars.Session)
 	}
 	if target == "" {
 		return errors.New("name the session to rename: tuios rename-session <session> <new-name>")

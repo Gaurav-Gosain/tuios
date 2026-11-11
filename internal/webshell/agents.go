@@ -4,6 +4,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 )
 
 // The record each pretend agent keeps of its run: the conversation as entries
@@ -168,7 +170,7 @@ const EventAgentChanged = "agent.changed"
 
 // startAgent records a new agent in t's pane.
 func startAgent(t *TTY, name, harness string) *Agent {
-	a := &Agent{Window: t.env["TUIOS_WINDOW_ID"], Name: name, Harness: harness, pty: t.pty}
+	a := &Agent{Window: t.env[envvars.WindowID], Name: name, Harness: harness, pty: t.pty}
 	if a.Window != "" {
 		agentsMu.Lock()
 		agentsBy[a.Window] = a

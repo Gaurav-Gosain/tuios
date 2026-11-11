@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/mcp"
@@ -71,8 +72,8 @@ tuios integration install <harness> --mcp registers it with a harness.`,
 				Version:   version,
 				Write:     write,
 				ScopeAll:  scope == session.ScopeAll,
-				PaneID:    os.Getenv("TUIOS_PANE_ID"),
-				PaneToken: os.Getenv("TUIOS_PANE_TOKEN"),
+				PaneID:    os.Getenv(envvars.PaneID),
+				PaneToken: os.Getenv(envvars.PaneToken),
 				Dial:      dialMCPConn,
 				Verbs:     mcpVerbDocs(),
 				Leave:     mcpLeaveAgentTools(),
@@ -108,7 +109,7 @@ func mcpVerbDocs() []mcp.VerbDoc {
 // comes first. Without it, the socket is the one every command uses, which
 // finds the daemon under /run/user when XDG_RUNTIME_DIR is unset.
 func mcpSocketPath() (string, error) {
-	if s := os.Getenv("TUIOS_SOCKET"); s != "" {
+	if s := os.Getenv(envvars.Socket); s != "" {
 		return s, nil
 	}
 	return session.GetSocketPath()

@@ -14,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/server"
@@ -133,7 +134,7 @@ func runLocal() error {
 		log.Printf("Configuration: %s", configPath)
 	}
 
-	isDaemonSession := os.Getenv("TUIOS_SESSION") != ""
+	isDaemonSession := os.Getenv(envvars.Session) != ""
 
 	prw := app.NewPostRenderWriter(os.Stdout)
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
@@ -61,7 +62,7 @@ const AllowNestedEnv = "TUIOS_ALLOW_NESTED"
 // PaneTTYEnv is set in every local pane to the path of the pane's terminal,
 // so the client's own check can tell the pane's terminal from one it only
 // inherited the pane's variables into.
-const PaneTTYEnv = "TUIOS_PANE_TTY"
+const PaneTTYEnv = envvars.PaneTTY
 
 // NestedAttachError is the refusal of an attach that would show a session
 // inside itself.
@@ -125,7 +126,7 @@ func NestedAllowedByEnv() bool { return os.Getenv(AllowNestedEnv) == "1" }
 // would reach. The daemon repeats the check with the tests that still hold
 // when the environment was cleared.
 func CheckNestedAttach(target string) error {
-	inside := os.Getenv("TUIOS_SESSION")
+	inside := os.Getenv(envvars.Session)
 	sock := os.Getenv(SocketEnv)
 	paneTTY := os.Getenv(PaneTTYEnv)
 	if inside == "" || sock == "" || paneTTY == "" {
@@ -324,7 +325,7 @@ func (d *Daemon) paneSession(pid int) (*Session, string) {
 		}
 		cur = next
 	}
-	for _, name := range []string{"TUIOS_PANE_ID", "TUIOS_WINDOW_ID"} {
+	for _, name := range []string{envvars.PaneID, envvars.WindowID} {
 		id, ok := procinfo.EnvVar(pid, name)
 		if !ok || id == "" {
 			continue
@@ -336,7 +337,7 @@ func (d *Daemon) paneSession(pid int) (*Session, string) {
 		}
 	}
 	if sock, ok := procinfo.EnvVar(pid, SocketEnv); ok && sock != "" && sock == d.manager.SocketPath() {
-		if name, ok := procinfo.EnvVar(pid, "TUIOS_SESSION"); ok && name != "" {
+		if name, ok := procinfo.EnvVar(pid, envvars.Session); ok && name != "" {
 			// A pane started before a rename holds the old name.
 			if sess, _ := d.manager.ResolveSession(name); sess != nil {
 				return sess, paneOriginEnv

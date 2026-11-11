@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/spf13/cobra"
 )
@@ -43,7 +44,7 @@ list-windows until something closes it.`,
 
 func runCloseWindow(sessionName, window string, jsonOutput bool) error {
 	if sessionName == "" {
-		sessionName = os.Getenv("TUIOS_SESSION")
+		sessionName = os.Getenv(envvars.Session)
 	}
 	// The window goes through dialTarget like -w does everywhere, so a host
 	// prefix resolves. params fills the window key from the target: an empty

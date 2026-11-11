@@ -9,6 +9,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
@@ -136,7 +137,7 @@ func callTask(f taskFlags, window, verb string, params map[string]any, describe 
 	if err != nil {
 		return err
 	}
-	if host != "" && window == "" && heldOverLink(verb) && os.Getenv("TUIOS_PANE_ID") != "" {
+	if host != "" && window == "" && heldOverLink(verb) && os.Getenv(envvars.PaneID) != "" {
 		// A pane takes or lets go of a card another machine owns through
 		// its own daemon, which records the hold for the pane.
 		return forwardTaskCall(f, host, sess, verb, params, describe)

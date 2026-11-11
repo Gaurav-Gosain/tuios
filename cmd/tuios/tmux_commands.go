@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tmuxcompat"
@@ -164,7 +165,7 @@ func runTmuxShim(args []string, dir string) int {
 			holderEnv = append(holderEnv, k+"="+v)
 		}
 	}
-	sess, window := os.Getenv("TUIOS_SESSION"), os.Getenv("TUIOS_PANE_ID")
+	sess, window := os.Getenv(envvars.Session), os.Getenv(envvars.PaneID)
 	shim := &tmuxcompat.Shim{
 		Caller:  caller,
 		Session: sess,
@@ -306,8 +307,8 @@ available on Windows.`,
 			if runtime.GOOS == "windows" {
 				return errors.New("tuios tmux-shim is not available on Windows")
 			}
-			window := os.Getenv("TUIOS_PANE_ID")
-			if os.Getenv("TUIOS_SESSION") == "" || window == "" {
+			window := os.Getenv(envvars.PaneID)
+			if os.Getenv(envvars.Session) == "" || window == "" {
 				return errors.New("tuios tmux-shim runs in a tuios pane: TUIOS_SESSION and TUIOS_PANE_ID are not set here")
 			}
 			dir, err := tmuxShimDir()
@@ -362,7 +363,7 @@ func newTmuxPaneCommand() *cobra.Command {
 			if dir == "" {
 				return errors.New("--dir is required")
 			}
-			window := os.Getenv("TUIOS_PANE_ID")
+			window := os.Getenv(envvars.PaneID)
 			os.Exit(tmuxcompat.RunPane(tmuxcompat.PaneOptions{
 				Dir:     dir,
 				Window:  window,

@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/x/xpty"
 	"github.com/google/uuid"
 
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 )
@@ -335,10 +336,10 @@ func hostedPaneEnv(d *Daemon, spec hostedPaneSpec, hp *hostedPane) []string {
 	// none at all. TUIOS_SESSION_REMOTE carries it for anything that wants to
 	// know where the pane came from, under a name nothing addresses with.
 	if spec.Session != "" {
-		env = append(env, "TUIOS_SESSION_REMOTE="+spec.Session)
+		env = append(env, envvars.SessionRemote+"="+spec.Session)
 	}
 	if host := d.hostedPaneHostName(); host != "" {
-		env = append(env, "TUIOS_HOST="+host)
+		env = append(env, envvars.Host+"="+host)
 	}
 	// TUIOS_PANE_HOSTED tells a program in the pane that its terminal is on
 	// another machine, and that most of the usual per-pane variables are
@@ -350,7 +351,7 @@ func hostedPaneEnv(d *Daemon, spec hostedPaneSpec, hp *hostedPane) []string {
 	// mean something on the machine the session is on.
 	env = append(env, "TUIOS_PANE_HOSTED=1")
 	if hp != nil && hp.window != "" {
-		env = append(env, "TUIOS_PANE_ID="+hp.window)
+		env = append(env, envvars.PaneID+"="+hp.window)
 	}
 	return env
 }

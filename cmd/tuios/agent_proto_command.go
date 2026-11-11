@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/agentproto"
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
@@ -142,9 +143,9 @@ func runAgentProto(o agentProtoOptions, argv []string) int {
 	}
 	agent, _ := agentproto.NewAgent(o.protocol, proc.Stdout, proc.Stdin, version, s.Emit)
 	s.Agent = agent
-	if window := os.Getenv("TUIOS_PANE_ID"); window != "" {
+	if window := os.Getenv(envvars.PaneID); window != "" {
 		r := &paneReporter{
-			session: os.Getenv("TUIOS_SESSION"),
+			session: os.Getenv(envvars.Session),
 			window:  window,
 			harness: harness,
 			dial:    func() (*session.VerbClient, error) { return session.DialVerbClientAs(version) },

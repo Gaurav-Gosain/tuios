@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
@@ -407,7 +408,7 @@ func runXpanes(o xpanesOptions, items []string) error {
 	interval := time.Duration(o.interval * float64(time.Second))
 	sessionName := o.session
 	if sessionName == "" {
-		sessionName = os.Getenv("TUIOS_SESSION")
+		sessionName = os.Getenv(envvars.Session)
 	}
 	host, _, _, err := resolveTarget(sessionName, "")
 	if err != nil {
@@ -432,7 +433,7 @@ func runXpanes(o xpanesOptions, items []string) error {
 	ws, name, current, err := 0, "", 0, error(nil)
 	// Run from a pane of a scratch group, the panes join that group: the
 	// group is a workspace of its own, on the screen already.
-	paneWS, inScratch := xpanesPaneWorkspace(t, os.Getenv("TUIOS_PANE_ID"))
+	paneWS, inScratch := xpanesPaneWorkspace(t, os.Getenv(envvars.PaneID))
 	scratchWS := 0
 	if o.workspace == 0 && inScratch {
 		scratchWS = paneWS

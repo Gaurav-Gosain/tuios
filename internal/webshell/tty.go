@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 )
 
 // Event is something a guest did that a guided tour may want to know about,
@@ -170,5 +172,5 @@ func (t *TTY) Printf(format string, args ...any) { t.Print(fmt.Sprintf(format, a
 
 // Emit reports an event from this guest's window.
 func (t *TTY) Emit(typ string, data map[string]any) {
-	emit(Event{Type: typ, WindowID: t.env["TUIOS_WINDOW_ID"], Data: data})
+	emit(Event{Type: typ, WindowID: t.env[envvars.WindowID], Data: data})
 }

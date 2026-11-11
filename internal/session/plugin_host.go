@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
@@ -386,7 +387,7 @@ func (h *pluginHost) baseEnv(p *herdrplugin.Plugin, dirs herdrplugin.Dirs) []str
 		// Without it a service that a startup command leaves behind, once
 		// its parent exits, has no tie to the daemon, and it could enable
 		// plugins or answer as the person.
-		"TUIOS_SOCKET=" + h.d.manager.SocketPath(),
+		envvars.Socket + "=" + h.d.manager.SocketPath(),
 		"HERDR_ENV=1",
 		"HERDR_SOCKET_PATH=" + sock,
 		"HERDR_PLUGIN_ID=" + p.PluginID,

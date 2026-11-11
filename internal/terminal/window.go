@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/dnd"
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 
 	uv "github.com/charmbracelet/ultraviolet"
 
@@ -904,7 +905,7 @@ func NewWindowInCell(dir, id, title string, x, y, width, height, z int, exitChan
 			"COLORTERM="+colorTerm,
 			"TERM_PROGRAM="+guestTermProgram(command),             // Terminal identity guests can act on
 			"TERM_PROGRAM_VERSION="+guestenv.TermProgramVersion(), // Version for compatibility checking
-			"TUIOS_WINDOW_ID="+id,
+			envvars.WindowID+"="+id,
 			guestKittyAnimation(), // whether a=f frame edits reach the host
 		)
 		// The shell starts with the prompt marks on, as a daemon pane's does.

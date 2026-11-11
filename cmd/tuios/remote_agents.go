@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/agenthook"
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
@@ -103,9 +104,9 @@ func runSetAgentState(sessionName, windowTarget, state, message, source, harness
 	// Run in a pane with no --window, the report is about that pane, not the
 	// focused one. A daemon that places the caller does the same. This covers
 	// one that does not.
-	if windowTarget == "" && (sessionName == "" || sessionName == os.Getenv("TUIOS_SESSION")) {
-		if pane := os.Getenv("TUIOS_PANE_ID"); pane != "" && os.Getenv("TUIOS_SESSION") != "" {
-			windowTarget, sessionName = pane, os.Getenv("TUIOS_SESSION")
+	if windowTarget == "" && (sessionName == "" || sessionName == os.Getenv(envvars.Session)) {
+		if pane := os.Getenv(envvars.PaneID); pane != "" && os.Getenv(envvars.Session) != "" {
+			windowTarget, sessionName = pane, os.Getenv(envvars.Session)
 		}
 	}
 	params := map[string]any{

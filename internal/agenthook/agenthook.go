@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
@@ -636,10 +637,10 @@ func flushAtTurnEnd(out agentHookOutcome, res hookReportResult, client Caller, h
 // session and its ancestors.
 func ResolvePane(o Options, hio IO, client Caller, sid int, ancestors []int) (sess, window, by string, err error) {
 	if o.Window != "" {
-		return cmp.Or(o.Session, hio.Getenv("TUIOS_SESSION")), o.Window, "flag", nil
+		return cmp.Or(o.Session, hio.Getenv(envvars.Session)), o.Window, "flag", nil
 	}
-	if id := hio.Getenv("TUIOS_PANE_ID"); id != "" {
-		return cmp.Or(o.Session, hio.Getenv("TUIOS_SESSION")), id, "env", nil
+	if id := hio.Getenv(envvars.PaneID); id != "" {
+		return cmp.Or(o.Session, hio.Getenv(envvars.Session)), id, "env", nil
 	}
 	if sid <= 1 && len(ancestors) == 0 {
 		return "", "", "", errors.New("no pane: TUIOS_PANE_ID is unset")

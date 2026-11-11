@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
@@ -189,8 +190,8 @@ func writeStatusSequence(w, errw io.Writer, seq string, toStdout bool) error {
 			cerr := tty.Close()
 			return errors.Join(werr, cerr)
 		}
-		if pane := os.Getenv("TUIOS_PANE_ID"); pane != "" {
-			err := reportStatusToDaemon(pane, os.Getenv("TUIOS_SESSION"), seq)
+		if pane := os.Getenv(envvars.PaneID); pane != "" {
+			err := reportStatusToDaemon(pane, os.Getenv(envvars.Session), seq)
 			if err == nil {
 				return nil
 			}

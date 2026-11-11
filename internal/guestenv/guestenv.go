@@ -6,6 +6,8 @@ package guestenv
 import (
 	"strings"
 	"sync/atomic"
+
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 )
 
 // buildVersion is the version TERM_PROGRAM_VERSION names. The main package
@@ -188,9 +190,9 @@ func KittyAnimationVar(supported bool) string {
 // that reads them would log to the daemon's journal or report to its unit.
 var hostMultiplexerVars = []string{
 	"TMUX", "TMUX_PANE", "HERDR_ENV", "HERDR_PANE_ID", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID", "HERDR_BIN_PATH",
-	"TUIOS_SESSION", "TUIOS_SESSION_REMOTE", "TUIOS_SOCKET", "TUIOS_PANE_ID", "TUIOS_WINDOW_ID",
-	"TUIOS_WINDOW_NAME", "TUIOS_PANE_TOKEN", "TUIOS_PANE_GRANTS", "TUIOS_PANE_HOSTED",
-	"TUIOS_PANE_TTY", "TUIOS_RESTORED",
+	envvars.Session, envvars.SessionRemote, envvars.Socket, envvars.PaneID, envvars.WindowID,
+	envvars.WindowName, envvars.PaneToken, envvars.PaneGrants, envvars.PaneHosted,
+	envvars.PaneTTY, envvars.Restored,
 	"TERN_PANE", "TERN_PANE_SOCKET", "TERN_WINDOW_KEY", "TERN_WINDOW_SOCKET", "TERN_WINDOW_PANE",
 	"TERN_IDENTITY", "TERN_LENSES", "TERN_COMPLETE", "TERN_ACP",
 	"KITTY_WINDOW_ID", "KITTY_PID",

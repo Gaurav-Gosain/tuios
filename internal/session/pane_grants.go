@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
@@ -689,7 +690,7 @@ func (d *Daemon) placePaneWindow(cs *connState) (window, via string) {
 		// A process in a pane whose window is not recorded yet names it in
 		// its environment. Only a pane the grant table holds counts, which
 		// is every local pane from before its process started.
-		if id, ok := procinfo.EnvVar(cs.peerPID, "TUIOS_PANE_ID"); ok && id != "" {
+		if id, ok := procinfo.EnvVar(cs.peerPID, envvars.PaneID); ok && id != "" {
 			if _, known := d.manager.grants.lookup(id); known {
 				return id, "env"
 			}

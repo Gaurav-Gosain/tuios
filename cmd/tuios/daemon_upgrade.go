@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/hostsync"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
@@ -283,7 +284,7 @@ func upgradeDaemon(say func(string, ...any), binary string, orRestart bool) (upg
 	// From a pane, kill-server ends the pane and this command in it before
 	// start-server runs, which leaves no daemon at all. So whatever stopped
 	// the live upgrade, a running daemon is left as it is.
-	if notLive.unconfirmed || notLive.running && os.Getenv("TUIOS_PANE_ID") != "" {
+	if notLive.unconfirmed || notLive.running && os.Getenv(envvars.PaneID) != "" {
 		say("The daemon was not restarted, because a restart would end the pane this command runs in. It still runs %s.\n", cmp.Or(notLive.from, "the old version"))
 		return upgradeOutcome{Action: upgradeActionRefused, Binary: binary, From: notLive.from, Reason: notLive.reason, Unconfirmed: notLive.unconfirmed}, err
 	}
@@ -350,7 +351,7 @@ func upgradeLive(say func(string, ...any), binary string) (upgradeOutcome, error
 			},
 		}
 	}
-	if os.Getenv("TUIOS_PANE_ID") != "" {
+	if os.Getenv(envvars.PaneID) != "" {
 		say("Asking you to confirm the upgrade in the tuios dialog...\n")
 	}
 	say("Checking %s (%s) accepts this daemon's state (handoff v%d)... ", binary, acc.Version, session.HandoffVersion)

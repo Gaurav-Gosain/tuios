@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
@@ -77,7 +78,7 @@ func (d *Daemon) harnessOutsidePane(cs *connState, sess *Session, target string,
 	if cs != nil && cs.peerPID > 1 && !selfOrAncestor(harnessPID, cs.peerPID) {
 		harnessPID = cs.peerPID
 	}
-	if id, ok := readEnvVarOf(harnessPID, "TUIOS_PANE_ID"); !ok || id != windowID {
+	if id, ok := readEnvVarOf(harnessPID, envvars.PaneID); !ok || id != windowID {
 		return false
 	}
 	if harnessPID == root || onPaneTerminal(harnessPID, root) {

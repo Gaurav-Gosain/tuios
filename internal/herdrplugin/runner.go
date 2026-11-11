@@ -15,6 +15,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 )
 
 // Bounds on what plugins run, as herdr has them where herdr has one.
@@ -478,7 +480,7 @@ func cleanEnv(env []string) []string {
 	out := env[:0:0]
 	for _, kv := range env {
 		k, _, _ := strings.Cut(kv, "=")
-		if strings.HasPrefix(k, "HERDR_") || k == "TUIOS_PANE_ID" || k == "TUIOS_WINDOW_ID" || k == "TUIOS_PANE_TOKEN" || k == "TUIOS_SESSION" || k == "TUIOS_SOCKET" || k == "TUIOS_PLUGIN_ID" || k == "TUIOS_PLUGIN_TOKEN" {
+		if strings.HasPrefix(k, "HERDR_") || k == envvars.PaneID || k == envvars.WindowID || k == envvars.PaneToken || k == envvars.Session || k == envvars.Socket || k == "TUIOS_PLUGIN_ID" || k == "TUIOS_PLUGIN_TOKEN" {
 			continue
 		}
 		out = append(out, kv)

@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sound"
@@ -828,7 +829,7 @@ func (m *OS) agentMailReplyTarget() (inbox string, replyTo uint64, ok bool) {
 // thisMachineName is the name this client signs a reply with when the ring
 // is on another machine.
 func thisMachineName() string {
-	if h := os.Getenv("TUIOS_HOST"); h != "" {
+	if h := os.Getenv(envvars.Host); h != "" {
 		return h
 	}
 	h, err := os.Hostname()

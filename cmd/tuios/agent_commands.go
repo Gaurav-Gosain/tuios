@@ -12,6 +12,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
@@ -292,7 +293,7 @@ func senderPane(from string) string {
 	if from != "" {
 		return from
 	}
-	return os.Getenv("TUIOS_PANE_ID")
+	return os.Getenv(envvars.PaneID)
 }
 
 // runSendAgentMessage queues a message for another agent.

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
@@ -155,7 +156,7 @@ func (c *VerbClient) presentPaneToken(kernelPlaces bool, getenv func(string) str
 	// Only to the plugin's own daemon, whose socket the plugin's processes
 	// get as TUIOS_SOCKET: another daemon cannot prove the token, and a
 	// call there with --server must not fail for it.
-	if id, tok := getenv("TUIOS_PLUGIN_ID"), getenv("TUIOS_PLUGIN_TOKEN"); (id != "" || tok != "") && sameSocket(getenv("TUIOS_SOCKET"), socketPath) {
+	if id, tok := getenv("TUIOS_PLUGIN_ID"), getenv("TUIOS_PLUGIN_TOKEN"); (id != "" || tok != "") && sameSocket(getenv(envvars.Socket), socketPath) {
 		if _, err := c.Call("pane-grants", map[string]any{"plugin_id": id, "plugin_token": tok}); err != nil {
 			return errfmt.Errorf("this process belongs to plugin %s, and the daemon did not take its token: %w", id, err)
 		}
@@ -163,7 +164,7 @@ func (c *VerbClient) presentPaneToken(kernelPlaces bool, getenv func(string) str
 	if kernelPlaces {
 		return nil
 	}
-	id, tok := getenv("TUIOS_PANE_ID"), getenv("TUIOS_PANE_TOKEN")
+	id, tok := getenv(envvars.PaneID), getenv(envvars.PaneToken)
 	if id == "" || tok == "" {
 		return nil
 	}

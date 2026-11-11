@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrcli"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
@@ -72,7 +73,7 @@ func discoverPlugins() ([]herdrplugin.Entry, string, error) {
 
 // inPane reports whether this command runs inside a tuios pane.
 func inPane() bool {
-	return os.Getenv("TUIOS_PANE_ID") != "" || os.Getenv("TUIOS_WINDOW_ID") != ""
+	return os.Getenv(envvars.PaneID) != "" || os.Getenv(envvars.WindowID) != ""
 }
 
 // errFromPane is the refusal of a trust change from inside a pane.
@@ -452,7 +453,7 @@ func buildEnv(env []string) []string {
 	out := env[:0:0]
 	for _, kv := range env {
 		k, _, _ := strings.Cut(kv, "=")
-		if strings.HasPrefix(k, "HERDR_") || strings.HasPrefix(k, "TUIOS_PANE") || k == "TUIOS_WINDOW_ID" || k == "TUIOS_SESSION" {
+		if strings.HasPrefix(k, "HERDR_") || strings.HasPrefix(k, "TUIOS_PANE") || k == envvars.WindowID || k == envvars.Session {
 			continue
 		}
 		out = append(out, kv)

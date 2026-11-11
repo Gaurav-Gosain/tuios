@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
@@ -201,7 +202,7 @@ func Plan(t *Target, src *Source, opts PlanOptions) {
 		t.Res.RestartCommand = restartCommand(t, src)
 		if opts.Restart {
 			switch {
-			case t.Local && os.Getenv("TUIOS_PANE_ID") != "":
+			case t.Local && os.Getenv(envvars.PaneID) != "":
 				// A live upgrade keeps this command's pane and this command;
 				// a restart would end both halfway.
 				t.Restart, t.LiveOnly = true, true

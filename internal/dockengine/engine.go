@@ -18,6 +18,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/crashexit"
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -616,7 +617,7 @@ func (e *Engine) baseEnv() []string {
 	e.mu.Lock()
 	session, socket := e.session, e.socket
 	e.mu.Unlock()
-	return append(os.Environ(), "TUIOS_SESSION="+session, "TUIOS_SOCKET="+socket)
+	return append(os.Environ(), envvars.Session+"="+session, envvars.Socket+"="+socket)
 }
 
 // dockKillGrace bounds how long a wait may go on after the kill.

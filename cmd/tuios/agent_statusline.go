@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/agenthook"
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
@@ -251,12 +252,12 @@ func reportStatusLine(o agentStatusLineOptions, harness string, payload []byte, 
 			stampDir = dir
 		}
 	}
-	out.Session = cmp.Or(o.session, getenv("TUIOS_SESSION"))
+	out.Session = cmp.Or(o.session, getenv(envvars.Session))
 	switch {
 	case o.window != "":
 		out.Window, out.PaneBy = o.window, "flag"
-	case getenv("TUIOS_PANE_ID") != "":
-		out.Window, out.PaneBy = getenv("TUIOS_PANE_ID"), "env"
+	case getenv(envvars.PaneID) != "":
+		out.Window, out.PaneBy = getenv(envvars.PaneID), "env"
 	default:
 		// No pane named: ask the daemon which pane this process runs in,
 		// the way agent-hook does. A status line runs several times a

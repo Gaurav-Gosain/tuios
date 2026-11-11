@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/agenthook"
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
@@ -59,7 +60,7 @@ func (d *Daemon) verbAgentHookEvent(cs *connState, params json.RawMessage) (any,
 	peerEnv, peerEnvOK := procinfo.Environ(pid)
 	getenv := func(name string) string {
 		switch name {
-		case "TUIOS_PANE_ID", "TUIOS_SESSION":
+		case envvars.PaneID, envvars.Session:
 			// Where the event comes from: only the process's own
 			// environment, never the call.
 			if v, ok := peerEnv.Get(name); peerEnvOK && ok {

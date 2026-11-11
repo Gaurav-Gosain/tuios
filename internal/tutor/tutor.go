@@ -35,6 +35,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/learn"
@@ -115,7 +116,7 @@ func Run(opts Options) error {
 
 	// Read before the sandbox moves them.
 	progressPath := ProgressPath()
-	nested := os.Getenv("TUIOS_PANE_ID") != "" || os.Getenv("TUIOS_WINDOW_ID") != "" || os.Getenv("TUIOS_SESSION") != ""
+	nested := os.Getenv(envvars.PaneID) != "" || os.Getenv(envvars.WindowID) != "" || os.Getenv(envvars.Session) != ""
 	box, err := enterSandbox()
 	if err != nil {
 		return errfmt.Errorf("make the tutor's temp dir: %w", err)

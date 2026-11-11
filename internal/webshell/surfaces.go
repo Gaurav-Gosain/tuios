@@ -14,6 +14,7 @@ import (
 	"tuios.dev/loom"
 	"tuios.dev/tml"
 
+	"github.com/Gaurav-Gosain/tuios/internal/envvars"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/tmldraw"
@@ -265,7 +266,7 @@ func tmlShow(s *shell, in []string) int {
 	}
 	opened, err := host(SurfaceRequest{
 		Doc: src, Pane: a.has("pane"), Name: a.flags["name"],
-		Width: a.flags["width"], Height: a.flags["height"], Window: t.env["TUIOS_WINDOW_ID"],
+		Width: a.flags["width"], Height: a.flags["height"], Window: t.env[envvars.WindowID],
 	})
 	if err != nil {
 		return s.fail("tuios tml show: " + err.Error())
