@@ -212,7 +212,16 @@ type AgentMessage struct {
 	// from the request. Both false on a message not from human, and on one
 	// stored by an older daemon, which verified nothing.
 	VerifiedHuman bool `json:"verified_human,omitempty"`
-	ClaimedHuman  bool `json:"claimed_human,omitempty"`
+	// FromProven says the daemon placed the sending connection in the pane
+	// From names, rather than taking From as the sender's claim. Only a proven
+	// sender can be a reader's lead (FromLead).
+	FromProven bool `json:"from_proven,omitempty"`
+	// FromLead is set on a read, never stored: From is the pane that started
+	// the reader (start-agent's parent link), that pane is still live, and the
+	// send was proven to come from it. Mail from your lead directs your work
+	// within the task you were started for; it grants nothing.
+	FromLead     bool `json:"from_lead,omitempty"`
+	ClaimedHuman bool `json:"claimed_human,omitempty"`
 	// Undeliverable is resolved at read time and means the recipient window is
 	// gone. A message is never re-homed onto a new pane that happens to carry
 	// the old one's name, because that pane is a different agent holding

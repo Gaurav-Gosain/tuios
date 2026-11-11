@@ -446,6 +446,7 @@ type agentMessageRow struct {
 	Kind           string          `json:"kind"`
 	From           string          `json:"from"`
 	FromLabel      string          `json:"from_label"`
+	FromLead       bool            `json:"from_lead"`
 	To             string          `json:"to"`
 	ToLabel        string          `json:"to_label"`
 	Subject        string          `json:"subject"`
@@ -544,6 +545,9 @@ func printAgentMessages(w io.Writer, raw json.RawMessage, on string) error {
 			fmt.Fprintln(w)
 		}
 		who := senderOf(m, on)
+		if m.FromLead {
+			who = "your lead " + who
+		}
 		head := fmt.Sprintf("#%d  %s  from %s  %s", m.ID, m.Kind, who, agoOf(m.SentAt))
 		if m.ReplyTo != 0 {
 			head += fmt.Sprintf("  reply to #%d", m.ReplyTo)

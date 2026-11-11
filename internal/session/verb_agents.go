@@ -589,6 +589,9 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 			return nil, senderNotFound(err, sess)
 		}
 		msg.From, msg.FromLabel = id, label
+		if pa := d.paneAuthority(cs); pa != nil && pa.window == id {
+			msg.FromProven = true
+		}
 	}
 
 	// A process inside a pane of this daemon cannot speak as the person at
@@ -906,6 +909,13 @@ func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (a
 	q.live = func(id string) bool { return live[id] }
 
 	res := d.agents.read(sess.Name(), q)
+	if lead := d.liveLeadOf(q.inbox); lead != "" {
+		for i := range res.Messages {
+			if res.Messages[i].FromProven && res.Messages[i].From == lead {
+				res.Messages[i].FromLead = true
+			}
+		}
+	}
 
 	// A read that marked something read is news to the attached clients: the
 	// unread count they draw beside a pane just changed, and nothing else would
@@ -1781,4 +1791,23 @@ func closed(ch <-chan struct{}) bool {
 // askCallerGoneError ends an ask whose caller went away before it typed.
 func askCallerGoneError() *verbError {
 	return newVerbError(ErrVerbInternal, "the caller went away before the question was typed, so nothing was typed")
+}
+
+// liveLeadOf is the pane that started window with start-agent (its parent
+// link), when that pane is still live on this daemon, "" otherwise. It is read
+// when mail is read, so a lead that closed stops being one, and nothing a
+// message carries can make its sender a lead.
+func (d *Daemon) liveLeadOf(window string) string {
+	if window == "" || window == AgentInboxHuman {
+		return ""
+	}
+	sess := d.sessionHoldingWindow(window)
+	if sess == nil {
+		return ""
+	}
+	w, ok := findWindowState(sess.GetState(), window)
+	if !ok || w.StartedBy == nil || w.AgentLink == nil || d.sessionHoldingWindow(w.StartedBy.Window) == nil {
+		return ""
+	}
+	return w.StartedBy.Window
 }
