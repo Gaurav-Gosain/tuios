@@ -236,7 +236,19 @@ func RunIsolated(m *testing.M, setup ...func(dir string)) int {
 	for _, fn := range setup {
 		fn(dir)
 	}
+	watchers := inotifyInstances()
 	code := m.Run()
+	// A watcher a test opens and never closes is an inotify instance on
+	// Linux, and the kernel allows 128 per user by default, across every
+	// test binary running at once. A package that leaks them makes another
+	// package's watcher fail to open, far from the cause.
+	if left := inotifyInstances() - watchers; left > 0 {
+		fmt.Fprintf(os.Stderr, "\nthe tests left %d inotify instances open (%d at the start, %d at the end): "+
+			"a watcher was opened and never closed\n", left, watchers, watchers+left)
+		if code == 0 {
+			code = 1
+		}
+	}
 	if err := check(); err != nil {
 		fmt.Fprintf(os.Stderr, "\n%v\n", err)
 		if code == 0 {
