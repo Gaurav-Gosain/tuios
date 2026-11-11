@@ -50,9 +50,12 @@ type kbPreview struct {
 	// lines and the rows it had in the last frame, for the clamp.
 	scroll, lines, rows int
 	// att is the selected attachment, by its place on the card, and attAt
-	// the body line of each attachment's row in the last frame.
-	att   int
-	attAt []int
+	// the body line of each attachment's row in the last frame. reveal asks
+	// the next frame to scroll the selected row into view, with that frame's
+	// own lines: the last frame's are stale once another attachment closed.
+	att    int
+	attAt  []int
+	reveal bool
 	// key is the card the scroll and the selection are for.
 	key string
 	// width is the panel's width a drag set, 0 for the config's.
@@ -211,7 +214,7 @@ func (m *OS) kbPreviewStepAttachment(next bool) {
 	} else {
 		pv.att = (pv.att + n - 1) % n
 	}
-	m.kbPreviewReveal(pv.attAt[pv.att])
+	pv.reveal = true
 	m.cockpitTouch()
 }
 
@@ -413,7 +416,20 @@ func (m *OS) drawKanbanPreview(c *ckCanvas, l ckLook, x, w, y0, y1, top int, she
 	}
 	by0 := y0 + 2
 	pv.rows, pv.lines = max(y1-by0, 0), len(body)
+	if pv.reveal && pv.att < len(pv.attAt) {
+		pv.reveal = false
+		m.kbPreviewReveal(pv.attAt[pv.att])
+	}
 	pv.scroll = min(pv.scroll, max(pv.lines-pv.rows, 0))
+	if pv.scroll > 0 {
+		// Scrolled: the head says what is above, so a preview that starts
+		// past its title does not read as one that lost it.
+		up := "↑"
+		if l.ascii {
+			up = "^"
+		}
+		c.textR(cx-2, y0, ckSeg{t: up + " " + strconv.Itoa(pv.scroll) + " above", fg: pal.AccentBright})
+	}
 	for i := pv.scroll; i < len(body) && by0+i-pv.scroll < y1; i++ {
 		ln, y := body[i], by0+i-pv.scroll
 		if strings.HasPrefix(ln.hit, "pv-att:") {
