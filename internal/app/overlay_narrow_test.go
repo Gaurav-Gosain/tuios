@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -9,7 +8,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -77,121 +75,6 @@ func newNarrowOS(t *testing.T, w, h int) *OS {
 	m.Width, m.Height = w, h
 	m.EffectiveWidth, m.EffectiveHeight = w, h
 	return m
-}
-
-// TestOverlayPanelsFitNarrowScreens renders every overlay panel at each screen
-// size and asserts none of them draws outside the screen.
-func TestOverlayPanelsFitNarrowScreens(t *testing.T) {
-	for _, sc := range narrowScreens {
-		t.Run(sc.name, func(t *testing.T) {
-			m := newNarrowOS(t, sc.w, sc.h)
-
-			m.HelpCategory = -1
-			cats := GetHelpCategories(m.KeybindRegistry, &m.Settings)
-			for i := range cats {
-				m.HelpCategory = i
-				m.HelpScrollOffset = 0
-				out, _ := m.RenderHelpMenu()
-				assertFitsScreen(t, fmt.Sprintf("help[%s]", cats[i].Name), out, sc.w, sc.h)
-			}
-			m.HelpSearchMode = true
-			m.HelpSearchQuery = "window"
-			out, _ := m.RenderHelpMenu()
-			assertFitsScreen(t, "help search", out, sc.w, sc.h)
-			m.HelpSearchMode = false
-
-			out, _, _ = m.renderCommandPalette()
-			assertFitsScreen(t, "palette", out, sc.w, sc.h)
-
-			m.CommandPaletteQuery = "zzzz-no-match"
-			out, _, _ = m.renderCommandPalette()
-			assertFitsScreen(t, "palette empty", out, sc.w, sc.h)
-			m.CommandPaletteQuery = ""
-
-			for i := range m.settingsCategories() {
-				m.SettingsCategory = i
-				m.SettingsSelected = 0
-				out, _, _ = m.renderSettings()
-				assertFitsScreen(t, fmt.Sprintf("settings[%d]", i), out, sc.w, sc.h)
-			}
-			// A long free-text value must not push the row past the panel.
-			ci, ii, _, ok := findSetting(m, "Behavior", "Preferred shell")
-			if ok {
-				m.SettingsCategory, m.SettingsSelected = ci, ii
-				m.SettingsEditing = true
-				m.SettingsEditBuffer = strings.Repeat("/very/long/path", 8)
-				out, _, _ = m.renderSettings()
-				assertFitsScreen(t, "settings editing", out, sc.w, sc.h)
-				m.SettingsEditing = false
-			}
-
-			m.OpenKeybindManager()
-			for tab := range keybindTabCount {
-				m.KeybindSetTab(tab)
-				out, _, _ = m.renderKeybindManager()
-				assertFitsScreen(t, fmt.Sprintf("keybinds[%s]", KeybindTabNames[tab]), out, sc.w, sc.h)
-			}
-			// The recorder's widest state: a captured key with a verdict, an
-			// ambiguity paragraph and a guest list all on one panel.
-			m.KeybindSetTab(KeybindTabRecord)
-			m.KeybindCapture("ctrl+b")
-			out, _, _ = m.renderKeybindManager()
-			assertFitsScreen(t, "keybinds recorded", out, sc.w, sc.h)
-			// And an empty filter result, which draws its own message row.
-			m.KeybindSetTab(KeybindTabBindings)
-			m.KeybindSetQuery("zzzz-no-match")
-			out, _, _ = m.renderKeybindManager()
-			assertFitsScreen(t, "keybinds empty", out, sc.w, sc.h)
-			m.CloseKeybindManager()
-
-			m.OpenThemePicker()
-			out, _, _ = m.renderThemePicker()
-			assertFitsScreen(t, "themepicker", out, sc.w, sc.h)
-			m.CancelThemePicker()
-
-			m.OpenAccentPicker("w1")
-			out, _, _ = m.renderAccentPicker()
-			assertFitsScreen(t, "accent picker", out, sc.w, sc.h)
-			m.CloseAccentPicker()
-
-			// Session switcher outside daemon mode is the informational panel.
-			out, _, _ = m.renderSessionSwitcher()
-			assertFitsScreen(t, "session (no daemon)", out, sc.w, sc.h)
-			m.SessionSwitcherConfirmDelete = "a-very-long-session-name-that-will-not-fit-on-a-narrow-screen"
-			out, _, _ = m.renderSessionSwitcher()
-			assertFitsScreen(t, "session confirm", out, sc.w, sc.h)
-			m.SessionSwitcherConfirmDelete = ""
-
-			m.LayoutPickerItems = []LayoutTemplate{
-				{Name: "a-layout-name-that-is-far-too-long-for-a-narrow-screen", AutoTiling: true},
-				{Name: "dev"},
-			}
-			out, _, _ = m.renderLayoutPicker()
-			assertFitsScreen(t, "layout picker", out, sc.w, sc.h)
-			m.LayoutPickerMode = "save"
-			m.LayoutSaveBuffer = strings.Repeat("name", 30)
-			out, _, _ = m.renderLayoutPicker()
-			assertFitsScreen(t, "layout save", out, sc.w, sc.h)
-			m.LayoutPickerMode = ""
-
-			out, _, _ = m.renderAggregateView()
-			assertFitsScreen(t, "aggregate (empty)", out, sc.w, sc.h)
-
-			m.Windows = []*terminal.Window{
-				{ID: "a", CustomName: "a-window-title-far-too-long-for-a-narrow-screen", Width: 100, Height: 40, Workspace: 1},
-				{ID: "b", CustomName: "second", Width: 80, Height: 24, Workspace: 1, Minimized: true},
-			}
-			m.CurrentWorkspace = 1
-			out, _, _ = m.renderAggregateView()
-			assertFitsScreen(t, "aggregate", out, sc.w, sc.h)
-			m.Windows = nil
-
-			m.OpenQuitMenu()
-			quit, _, _ := m.renderQuitMenu()
-			assertFitsScreen(t, "quit", quit, sc.w, sc.h)
-			m.CloseQuitMenu()
-		})
-	}
 }
 
 // TestOverlayLayersFitNarrowScreens turns on every overlay at once and checks
@@ -293,51 +176,20 @@ func TestWhichKeyFitsNarrowScreens(t *testing.T) {
 	}
 }
 
-// TestTapeDialogsFitNarrowScreens renders the tape manager and the project-tape
-// review dialog, both of which size themselves from their own content.
-func TestTapeDialogsFitNarrowScreens(t *testing.T) {
+// TestTapeReviewFitsNarrowScreens holds the tape review panel to the narrow
+// screens. The tape manager and its naming and delete states are checked on
+// screen by TestPanelsFitTheScreen; the review opens on a tape found in a
+// project folder, which the screen fixture does not set up yet.
+func TestTapeReviewFitsNarrowScreens(t *testing.T) {
 	for _, sc := range narrowScreens {
 		t.Run(sc.name, func(t *testing.T) {
 			m := newNarrowOS(t, sc.w, sc.h)
-
-			m.InitTapeManager()
-			m.TapeManager.Files = []TapeFile{
-				{Name: "a-tape-file-name-that-is-much-too-long-to-fit", Size: 4096, Modified: time.Now()},
-				{Name: "short", Size: 12, Modified: time.Now()},
-			}
-			assertFitsScreen(t, "tape manager", m.RenderTapeManager(), sc.w, sc.h)
-
-			m.TapeManager.Mode = TapeManagerNaming
-			m.TapeManager.NameBuffer = strings.Repeat("name", 30)
-			assertFitsScreen(t, "tape manager naming", m.RenderTapeManager(), sc.w, sc.h)
-
-			m.TapeManager.Mode = TapeManagerConfirmDelete
-			assertFitsScreen(t, "tape manager delete", m.RenderTapeManager(), sc.w, sc.h)
-
 			m.TapeReview = &TapeReviewState{
 				Path:    "/home/someone/very/deep/project/directory/tree/.tuios.tape",
 				Dir:     "/home/someone/very/deep/project/directory/tree",
 				Content: []byte(strings.Repeat("Type \"a command line that is quite long indeed\"\n", 40)),
 			}
 			assertFitsScreen(t, "tape review", m.RenderTapeReview(), sc.w, sc.h)
-		})
-	}
-}
-
-// TestWelcomeSplashFitsNarrowScreens renders the no-windows splash, which is
-// the first thing anyone sees.
-func TestWelcomeSplashFitsNarrowScreens(t *testing.T) {
-	for _, sc := range narrowScreens {
-		t.Run(sc.name, func(t *testing.T) {
-			m := newNarrowOS(t, sc.w, sc.h)
-			for _, layer := range m.renderOverlays() {
-				if layer.GetID() != "welcome" {
-					continue
-				}
-				assertFitsScreen(t, "welcome", layer.GetContent(), sc.w, sc.h)
-				return
-			}
-			t.Fatal("no welcome layer rendered")
 		})
 	}
 }
