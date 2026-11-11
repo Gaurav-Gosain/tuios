@@ -96,11 +96,6 @@ function after(start) {
   sending = sending.then(start).catch(() => {});
 }
 
-// run queues tuios with args and input on its stdin, and does not wait.
-function run(args, input) {
-  after(() => spawnOnce(args, input));
-}
-
 // spawnOnce runs tuios with args and input on its stdin, and resolves when it
 // has exited.
 function spawnOnce(args, input) {
@@ -158,7 +153,13 @@ function sendUsage(sessionID, turnEnd) {
   if (!turnEnd && key === u.sent) return;
   if (key === "|") return;
   u.sent = key;
-  run(turnEnd ? [...STATUS_ARGS, "--turn-end"] : STATUS_ARGS, JSON.stringify(payload));
+  const input = JSON.stringify(payload);
+  const args = turnEnd ? [...STATUS_ARGS, "--turn-end"] : STATUS_ARGS;
+  after(() =>
+    hookViaSocket("__TUIOS_HARNESS__", input, REPORT_LIMIT_MS, undefined, "agent-statusline-event", turnEnd ? { turn_end: true } : {}).then((out) => {
+      if (out === null) return spawnOnce(args, input);
+    }),
+  );
 }
 
 // ask runs the hook for a permission request and resolves to the reply it

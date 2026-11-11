@@ -142,6 +142,7 @@ await new Promise((r) => setTimeout(r, 1500));
 }
 
 var openCodeSocketEvents = []map[string]any{
+	{"type": "message.updated", "properties": map[string]any{"info": map[string]any{"id": "m1", "sessionID": "ses_1", "role": "assistant", "modelID": "claude-sonnet-4-6", "cost": 0.1}}},
 	{"type": "session.status", "properties": map[string]any{"sessionID": "ses_1", "status": map[string]any{"type": "busy"}}},
 	{"type": "permission.asked", "properties": map[string]any{"sessionID": "ses_1", "id": "per_1", "permission": "bash", "title": "run ls"}},
 	{"type": "session.status", "properties": map[string]any{"sessionID": "ses_1", "status": map[string]any{"type": "idle"}}},
@@ -160,13 +161,23 @@ func TestOpenCodePluginReportsOverTheSocket(t *testing.T) {
 	})
 	calls, replied := runOpenCodePlugin(t, socket, openCodeSocketEvents)
 
-	if got := readCalls(t, calls, "agent-hook"); len(got) != 0 {
-		t.Fatalf("tuios agent-hook ran although the daemon answered:\n%s", strings.Join(got, "\n"))
+	if got := readCalls(t, calls, "agent-"); len(got) != 0 {
+		t.Fatalf("tuios ran although the daemon answered:\n%s", strings.Join(got, "\n"))
 	}
 	_, got := d.snapshot()
 	var events []string
+	usage := 0
 	for _, call := range got {
 		params, _ := call["params"].(map[string]any)
+		if call["verb"] == "agent-statusline-event" {
+			// The model and cost the plugin feeds, once at the message
+			// and once at the turn's end.
+			if payload, _ := params["payload"].(string); params["harness"] != "opencode" || !strings.Contains(payload, `"modelID":"claude-sonnet-4-6"`) {
+				t.Errorf("status line call %v, want opencode's model and cost", call)
+			}
+			usage++
+			continue
+		}
 		if call["verb"] != "agent-hook-event" || params["harness"] != "opencode" {
 			t.Errorf("call %v, want agent-hook-event for opencode", call)
 		}
@@ -186,6 +197,9 @@ func TestOpenCodePluginReportsOverTheSocket(t *testing.T) {
 	slices.Sort(sorted)
 	if len(events) != 3 || events[0] != "session.status" || strings.Join(sorted, ",") != "permission.asked,session.status,session.status" {
 		t.Errorf("events over the socket %v, want session.status first, then permission.asked and session.status", events)
+	}
+	if usage != 2 {
+		t.Errorf("%d status line calls over the socket, want 2 (the message and the turn's end)", usage)
 	}
 	data, err := os.ReadFile(replied)
 	if err != nil || !strings.Contains(string(data), `"reply":"once"`) {

@@ -302,7 +302,8 @@ var targets = []*Target{
 		// a client plugin, where the environment identifies the correct pane.
 		// Version 6 sends each event to the daemon's agent-hook-event verb over its
 		// socket and starts tuios agent-hook only for a daemon without it.
-		ID: OpenCode, Name: "opencode", Binary: "opencode", Version: 6, Reports: ReportsState,
+		// Version 7 sends the model and cost the same way (agent-statusline-event).
+		ID: OpenCode, Name: "opencode", Binary: "opencode", Version: 7, Reports: ReportsState,
 		Source:    "https://opencode.ai/v2/docs/cli/plugins (V2 CLI plugin; V1 server entrypoint requires 1.18.29+)",
 		ConfigDir: func(e Env) string { return e.xdgConfig("opencode") },
 		File:      filepath.Join("plugins", "tuios-agent-state.js"),
@@ -436,7 +437,8 @@ var targets = []*Target{
 		// template with optional cancellation for the OpenCode V2 client.
 		// Version 6 sends each event to the daemon's agent-hook-event verb over its
 		// socket and starts tuios agent-hook only for a daemon without it.
-		ID: Kilo, Name: "Kilo", Binary: "kilo", Version: 6, Reports: ReportsState,
+		// Version 7 sends the model and cost the same way (agent-statusline-event).
+		ID: Kilo, Name: "Kilo", Binary: "kilo", Version: 7, Reports: ReportsState,
 		Source:    "herdr src/integration/assets/kilo (Kilo Code CLI is an opencode fork; plugins load from ~/.config/kilo/plugin)",
 		ConfigDir: func(e Env) string { return e.xdgConfig("kilo") },
 		File:      filepath.Join("plugin", "tuios-agent-state.js"),

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/shquote"
 )
 
 // A hook command that does not start tuios.
@@ -77,27 +78,60 @@ func (run Runner) command(harnessID string, version int) string {
 	if conn == "" || runtime.GOOS == "windows" {
 		return plain
 	}
-	var envJSON strings.Builder
-	for i, name := range HookEnv {
-		if i > 0 {
-			envJSON.WriteString(" ")
-		}
-		envJSON.WriteString(name)
-	}
-	// The script is one sh -c argument, quoted by shellWord. The payload goes into the JSON line as JSON (payload_json), on one line:
-	// JSON has no raw newline inside a string, so removing newlines keeps it
-	// the same value. A variable whose value needs JSON escaping is left out;
+	// The script is one sh -c argument, quoted by shellWord. The payload goes
+	// into the JSON line as JSON (payload_json), as the harness wrote it: on
+	// one line. One with a newline in it breaks the JSON line, and the line
+	// then runs tuios agent-hook, which costs a start and never a wrong
+	// report; not stripping newlines saves a process for every event. A
+	// variable whose value needs JSON escaping is left out;
 	// the daemon reads it from the process when it can. The reply's trailing
 	// newlines are kept by the dot after it. Every case pattern opens with
 	// its own parenthesis, so a pattern inside $(...) does not end it.
 	script := `p=$(cat); if [ -n "$TUIOS_SOCKET" ] && [ -n "$p" ]; then ` +
 		`case $p in (*PermissionRequest*) w=` + strconv.Itoa(forwarderHoldWait) + `;; (*) w=` + strconv.Itoa(forwarderShortWait) + `;; esac; ` +
 		`o=$({ printf "{\"id\":1,\"verb\":\"agent-hook-event\",\"params\":{\"harness\":\"%s\",\"forwarder\":true,\"env\":{" ` + harnessID + `; ` +
-		`s=; for v in ` + envJSON.String() + `; do eval "x=\${$v-}"; case $x in ("") ;; (*[!A-Za-z0-9._:/@+=-]*) ;; (*) printf "%s\"%s\":\"%s\"" "$s" "$v" "$x"; s=,;; esac; done; ` +
-		`printf "},\"payload_json\":"; printf "%s" "$p" | tr -d "\r\n"; printf "}}\n"; } | ` + conn + ` 2>/dev/null; echo .); ` +
+		forwardEnvLoop() +
+		`printf "},\"payload_json\":"; printf "%s" "$p"; printf "}}\n"; } | ` + conn + ` 2>/dev/null; echo .); ` +
 		`o=${o%.}; case $o in (` + forwarderMark + `?*) printf "%s" "${o#` + forwarderMark + `?}"; exit 0;; esac; fi; ` +
 		`printf "%s" "$p" | exec ` + plain
 	return "sh -c " + shellWord(script)
+}
+
+// statusLineArg0 is the $0 a status line forwarder's sh -c runs as, and how
+// managedStatusLine knows the line is one tuios wrote.
+const statusLineArg0 = "tuios-statusline"
+
+// statusLineCommand is the status line command run installs: the forwarder
+// line, or tuios agent-statusline itself when there is no socket tool. The
+// person's own command (then) is the line's $1, run after the forward with
+// the same stdin, its output and exit status the line's own (a pipeline's
+// last command is a subshell, so each branch ends in exit $?). Without a
+// socket the line runs tuios agent-statusline --then as it always did.
+func (run Runner) statusLineCommand(then string) string {
+	conn := connector(run.Socket)
+	if conn == "" || runtime.GOOS == "windows" {
+		return StatusLineCommand(run.Program, then)
+	}
+	plain := shellWord(run.Program) + " " + statusLineVerb + " " + ClaudeCode + " " + managedMarker + " " + strconv.Itoa(StatusLineVersion)
+	script := `p=$(cat); if [ -n "$TUIOS_SOCKET" ] && [ -n "$p" ]; then w=` + strconv.Itoa(forwarderShortWait) + `; ` +
+		`o=$({ printf "{\"id\":1,\"verb\":\"agent-statusline-event\",\"params\":{\"harness\":\"%s\",\"forwarder\":true,\"env\":{" ` + ClaudeCode + `; ` +
+		forwardEnvLoop() +
+		`printf "},\"payload_json\":"; printf "%s" "$p"; printf "}}\n"; } | ` + conn + ` 2>/dev/null; echo .); ` +
+		`case $o in (` + forwarderMark + `*) ;; (*) printf "%s" "$p" | ` + plain + ` >/dev/null 2>&1;; esac; ` +
+		`if [ -n "$1" ]; then printf "%s" "$p" | sh -c "$1"; exit $?; fi; exit 0; fi; ` +
+		`if [ -n "$1" ]; then printf "%s" "$p" | ` + plain + ` --then "$1"; exit $?; fi; ` +
+		`printf "%s" "$p" | exec ` + plain
+	cmd := "sh -c " + shquote.Word(script) + " " + statusLineArg0
+	if then != "" {
+		cmd += " " + shquote.Word(then)
+	}
+	return cmd
+}
+
+// forwardEnvLoop is the sh that prints the forwarded variables as JSON
+// members: each of HookEnv that is set and needs no JSON escaping.
+func forwardEnvLoop() string {
+	return `s=; for v in ` + strings.Join(HookEnv, " ") + `; do eval "x=\${$v-}"; case $x in ("") ;; (*[!A-Za-z0-9._:/@+=-]*) ;; (*) printf "%s\"%s\":\"%s\"" "$s" "$v" "$x"; s=,;; esac; done; `
 }
 
 // DetectHookSocket reports the socket tool a forwarder line can use on this

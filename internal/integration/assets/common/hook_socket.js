@@ -14,7 +14,9 @@ import { connect as tuiosConnect } from "node:net";
 const TUIOS_HOOK_ENV = __TUIOS_HOOK_ENV__;
 let tuiosSocketOff = !process.env.TUIOS_SOCKET;
 
-function hookViaSocket(harness, payload, limitMs, signal) {
+// verb is agent-hook-event unless named (agent-statusline-event for a status
+// line run), and extra holds that verb's own params.
+function hookViaSocket(harness, payload, limitMs, signal, verb = "agent-hook-event", extra = {}) {
   if (tuiosSocketOff) return Promise.resolve(null);
   if (signal?.aborted) return Promise.resolve("");
   return new Promise((resolve) => {
@@ -53,7 +55,7 @@ function hookViaSocket(harness, payload, limitMs, signal) {
     sock.setEncoding("utf8");
     sock.on("connect", () => {
       connected = true;
-      sock.write(JSON.stringify({ id: 1, verb: "agent-hook-event", params: { harness, payload, env } }) + "\n");
+      sock.write(JSON.stringify({ id: 1, verb, params: { ...extra, harness, payload, env } }) + "\n");
     });
     sock.on("data", (chunk) => {
       buf += chunk;

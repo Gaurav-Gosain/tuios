@@ -188,7 +188,26 @@ func StatusLineCommand(tuios, then string) string {
 // runs, the version, and the chained command. ok is false for anything else.
 func managedStatusLine(cmd string) (program string, version int, then string, ok bool) {
 	words, err := splitWords(cmd)
-	if err != nil || len(words) < 5 {
+	if err != nil || len(words) < 4 {
+		return "", 0, "", false
+	}
+	if words[0] == "sh" && words[1] == "-c" && words[3] == statusLineArg0 && len(words) <= 5 {
+		// A forwarder line: the plain command is its last fallback.
+		script := words[2]
+		i := strings.LastIndex(script, "| exec ")
+		if i < 0 {
+			return "", 0, "", false
+		}
+		program, version, _, ok = managedStatusLine(script[i+len("| exec "):])
+		if !ok {
+			return "", 0, "", false
+		}
+		if len(words) == 5 {
+			then = words[4]
+		}
+		return program, version, then, true
+	}
+	if len(words) < 5 {
 		return "", 0, "", false
 	}
 	if words[1] != statusLineVerb || words[2] != ClaudeCode || words[3] != managedMarker {
@@ -329,7 +348,7 @@ func readStatusLineSlot(root *orderedObject) statusLineSlot {
 // editStatusLine installs or removes the managed statusLine entry. It keeps
 // every other key of the settings file, and every key of the entry but its
 // command, byte for byte.
-func editStatusLine(path string, have []byte, tuios, then string, install bool) ([]byte, error) {
+func editStatusLine(path string, have []byte, run Runner, then string, install bool) ([]byte, error) {
 	root, err := parseObject(have)
 	if err != nil {
 		return nil, err
@@ -375,7 +394,7 @@ func editStatusLine(path string, have []byte, tuios, then string, install bool) 
 		}
 		return nil, &StatusLineOwnedError{Path: path, Command: cmd}
 	}
-	cmd, _ := marshalPlain(StatusLineCommand(tuios, then))
+	cmd, _ := marshalPlain(run.statusLineCommand(then))
 	slot.obj.set("command", cmd)
 	root.set("statusLine", slot.obj.compact())
 	return renderIfChanged(root, have)
@@ -425,7 +444,7 @@ func (t *Target) writeStatusLine(env Env, res *Result, tuios, then string, insta
 	if !install && have == nil {
 		return *res, nil
 	}
-	out, err := editStatusLine(path, have, tuios, then, install)
+	out, err := editStatusLine(path, have, t.runner(env, tuios), then, install)
 	if err != nil {
 		if _, ok := errors.AsType[*StatusLineOwnedError](err); ok {
 			return *res, err
@@ -468,7 +487,7 @@ func (t *Target) StatusLineState(env Env, tuios string) StatusLineStatus {
 	if slot.isCmd {
 		if program, version, then, ok := managedStatusLine(slot.command); ok {
 			st.Installed, st.Version, st.Then = true, version, then
-			st.Current = program == tuios && version == StatusLineVersion
+			st.Current = program == tuios && version == StatusLineVersion && slot.command == t.runner(env, tuios).statusLineCommand(then)
 			return st
 		}
 		st.Command = slot.command

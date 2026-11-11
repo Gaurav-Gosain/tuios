@@ -4128,6 +4128,15 @@ line is empty unless it chains.
   your command back when it chained.
 - `integration status` reports it (`status_line` in `--json`).
 
+Where the machine has `nc -U` or `socat` (as for the hooks), the command is
+instead a line of sh, `sh -c '...' tuios-statusline '<your command>'`: it hands
+the payload to the daemon's `agent-statusline-event` verb over `TUIOS_SOCKET`,
+which does what the wrapper does, then runs your command with the same stdin
+and ends with its output and exit status. It runs `tuios agent-statusline` with
+your `--then` as before when there is no socket or the payload is empty, and
+runs the wrapper for the tuios half when the daemon is older than the verb.
+Install, status and uninstall read your command back from either form.
+
 The wrapper finds its pane as `agent-hook` does and calls only
 `set-agent-meta` for it. It reads at most 1 MiB of stdin, gives up on the
 daemon after 300ms, exits 0 whatever goes wrong on the tuios side (with

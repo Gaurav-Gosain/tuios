@@ -218,3 +218,109 @@ func TestInstalledForwarderMatchesTheHook(t *testing.T) {
 		t.Errorf("the forwarder's pane started tuios %d times, want %d (only for an empty or broken payload)", fromNew, wantStarts)
 	}
 }
+
+// TestInstalledStatusLineForwarder installs the Claude Code status line with
+// a status line of the person's own, then runs the installed command in a
+// pane the way Claude Code runs it.
+//
+// How this could pass wrongly, written down first:
+//   - The line could still start tuios. The installed program is a wrapper
+//     that records each start; the pane must start none.
+//   - The person's status line could be dropped. The line must print what
+//     their command prints, and exit with its status.
+//   - The metadata could be written by something else. The model named is
+//     one only this payload carries.
+//   - A second install could lose the person's command, or status could call
+//     the line out of date. The second install must keep it, and status must
+//     read it as current.
+func TestInstalledStatusLineForwarder(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	const sess = "e2e-slfwd"
+	if out, err := tuiosCLI(t, base, "new", sess, "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "SL", "--no-focus"); err != nil {
+		t.Fatalf("open the pane: %v\n%s", err, out)
+	}
+	win := windowID(t, base, sess, "SL")
+
+	home := filepath.Join(base, "sl-home")
+	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	starts := filepath.Join(base, "tuios-starts")
+	wrapper := filepath.Join(base, "tuios-wrapper")
+	if err := os.WriteFile(wrapper, []byte("#!/bin/sh\necho \"$TUIOS_PANE_ID\" >> "+starts+"\nexec "+tuiosBin+" \"$@\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	install := func() string {
+		t.Helper()
+		if out, err := tuiosCLIEnv(t, base, []string{"HOME=" + home}, "integration", "install", "claude-code", "--command", wrapper, "--then", "printf MYLINE; exit 3"); err != nil {
+			t.Fatalf("integration install --then: %v\n%s", err, out)
+		}
+		data, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var cfg struct {
+			StatusLine struct {
+				Command string `json:"command"`
+			} `json:"statusLine"`
+		}
+		if err := json.Unmarshal(data, &cfg); err != nil {
+			t.Fatal(err)
+		}
+		return cfg.StatusLine.Command
+	}
+	installed := install()
+	if !strings.Contains(installed, "agent-statusline-event") {
+		t.Skipf("no nc -U or socat on this machine, so the install wrote the plain command: %s", installed)
+	}
+	if again := install(); again != installed {
+		t.Fatalf("a second install changed the line:\n%s\n%s", installed, again)
+	}
+	if out, err := tuiosCLIEnv(t, base, []string{"HOME=" + home}, "integration", "status", "claude-code", "--command", wrapper); err != nil || !strings.Contains(out, "printf MYLINE") || strings.Contains(strings.ToLower(out), "out of date") {
+		t.Fatalf("integration status after the install: %v\n%s", err, out)
+	}
+
+	dir := t.TempDir()
+	cmdFile := filepath.Join(dir, "statusline.cmd")
+	if err := os.WriteFile(cmdFile, []byte(installed+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	payload := filepath.Join(dir, "payload.json")
+	if err := os.WriteFile(payload, []byte(`{"session_id":"sl-1","model":{"display_name":"E2E-Status-9"},"context_window":{"used_percentage":55}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(dir, "run.sh")
+	if err := os.WriteFile(script, []byte(forwarderScript), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	result := filepath.Join(dir, "out")
+	empty := filepath.Join(dir, "env")
+	if err := os.WriteFile(empty, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	line := "sh " + script + " " + payload + " " + result + " " + empty + " " + cmdFile + "\n"
+	if o, err := tuiosCLI(t, base, "send-text", "-s", sess, "-w", "SL", line); err != nil {
+		t.Fatalf("type into the pane: %v\n%s", err, o)
+	}
+	var out []byte
+	waitUntil(t, "the status line finishes", uiTimeout, func() (bool, string) {
+		var err error
+		if out, err = os.ReadFile(result); err != nil {
+			return false, err.Error()
+		}
+		return true, ""
+	})
+	if string(out) != "MYLINEexit=3\n" {
+		t.Fatalf("the status line printed and exited %q, want the person's MYLINE and exit 3", out)
+	}
+	if st, err := tuiosCLI(t, base, "get-agent-state", "--json", "-s", sess, "-w", win); err != nil || !strings.Contains(st, "E2E-Status-9") || !strings.Contains(st, "55%") {
+		t.Fatalf("the pane's metadata lacks the status line's model and context: %v\n%s", err, st)
+	}
+	if data, _ := os.ReadFile(starts); strings.Contains(string(data), win) {
+		t.Fatalf("the status line started tuios from the pane:\n%s", data)
+	}
+}
