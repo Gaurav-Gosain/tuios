@@ -157,6 +157,9 @@ func (d *Daemon) verbApplyConfig(cs *connState, params json.RawMessage) (any, *v
 	// A table under [keybindings] that tuios does not have is listed with
 	// them: the decoder drops it, and every binding in it (issue #1734).
 	dropped := append(config.UnknownKeybindTables(lc), config.DroppedWarnings(config.DropUnreadableKeys(cfg, lc))...)
+	// Keys tuios reads but that do not do what they say, such as a
+	// [startup] layout with tiling off.
+	notices := config.StartupLayoutWarnings(lc, cfg)
 
 	before := d.configSnapshot()
 	if p.Host != "" {
@@ -175,6 +178,7 @@ func (d *Daemon) verbApplyConfig(cs *connState, params json.RawMessage) (any, *v
 		"changes":        describeConfigChanges(before, after),
 		"still_waiting":  d.configWaiting(),
 		"dropped_keys":   dropped,
+		"notices":        notices,
 	}
 	if p.Host != "" {
 		out["host"] = p.Host

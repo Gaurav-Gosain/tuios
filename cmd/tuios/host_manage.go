@@ -626,6 +626,7 @@ func describeConfigApplied(raw []byte) string {
 		DefaultGrants []string `json:"default_grants"`
 		Changes       []string `json:"changes"`
 		DroppedKeys   []string `json:"dropped_keys"`
+		Notices       []string `json:"notices"`
 	}
 	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return "The daemon applied config.toml.\n"
@@ -652,6 +653,11 @@ func describeConfigApplied(raw []byte) string {
 			b.WriteString("\n")
 		}
 	}
+	for _, n := range res.Notices {
+		b.WriteString(plainLine(n))
+		b.WriteString("\n")
+	}
+
 	return b.String()
 }
 
