@@ -21,7 +21,7 @@ func paletteOS(t *testing.T) *OS {
 // Negative control: delete the "Unbind a key" row and this fails.
 func TestUnbindIsFindableByItsOwnWord(t *testing.T) {
 	for _, word := range []string{"unbind", "rebind"} {
-		hits := FilterCommandPalette(GetCommandPaletteItems(&config.Global), word)
+		hits := FilterCommandPalette(GetCommandPaletteItems(), word)
 		if len(hits) == 0 {
 			t.Errorf("nothing in the palette answers to %q", word)
 			continue

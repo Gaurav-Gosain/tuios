@@ -16734,3 +16734,16 @@ Run on 2026-11-11 on branch `untangle/t50-option-units` (arch-btw).
 | Control: what was cut | Where it failed | Verdict |
 | --- | --- | --- |
 | `row["unit"]` in the list-options verb (`internal/session/verb_options.go`), the branch's first version, which had it missing | "list-options --json gives motion.layout_ms the unit \"\", want \"ms\"", and the same for gap and master_ratio | **caught** |
+
+## Palette rows as actions
+
+`e2e/tui/palette_actions_test.go` `TestAPaletteRowIsAnActionAKeyCanRun` binds
+`theme_picker` to prefix+Y in config.toml, opens the theme picker by the key,
+closes it, then opens it from the palette's Theme picker row.
+
+Run on 2026-11-11 on branch `untangle/r2-4-palette-table` (arch-btw). The log
+is `~/.cache/agent-tmp/un-inputcfg-neg-r2-4.log` there.
+
+| Control: what was cut | Where it failed | Verdict |
+| --- | --- | --- |
+| The `theme_picker` handler in `internal/input/palette_actions.go` | "prefix+Y bound to theme_picker did not open the theme picker" | **caught** |

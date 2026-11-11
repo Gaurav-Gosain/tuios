@@ -3,14 +3,12 @@ package app
 import (
 	"strings"
 	"testing"
-
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // TestPaletteFindsAgentActionsByWord: typing "agent" lists the agent actions
 // first. It found "Window management mode", which fuzzy-matches the letters.
 func TestPaletteFindsAgentActionsByWord(t *testing.T) {
-	got := FilterCommandPalette(GetCommandPaletteItems(&config.Global), "agent")
+	got := FilterCommandPalette(GetCommandPaletteItems(), "agent")
 	if len(got) < 4 {
 		t.Fatalf("\"agent\" found %d entries", len(got))
 	}
@@ -21,7 +19,7 @@ func TestPaletteFindsAgentActionsByWord(t *testing.T) {
 	}
 	// The overlays' own words still find them.
 	for _, q := range []string{"needs you", "mailbox"} {
-		if res := FilterCommandPalette(GetCommandPaletteItems(&config.Global), q); len(res) == 0 || !strings.HasPrefix(res[0].Name, "Agents: ") {
+		if res := FilterCommandPalette(GetCommandPaletteItems(), q); len(res) == 0 || !strings.HasPrefix(res[0].Name, "Agents: ") {
 			t.Errorf("%q no longer finds its agent entry first: %v", q, res)
 		}
 	}

@@ -613,6 +613,29 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"set_master_position_bottom": "palette row, user binding",
 	"set_master_position_center": "palette row, user binding",
 
+	// Command palette rows that became actions (R2-4). The palette runs them
+	// by name; a person may bind one.
+	"new_window_on_host":         "palette row, user binding",
+	"toggle_shared_borders":      "palette row, user binding",
+	"next_saved_layout":          "palette row, user binding",
+	"prev_saved_layout":          "palette row, user binding",
+	"clear_multifocus":           "palette row, user binding",
+	"layout_bsp":                 "palette row, user binding",
+	"layout_master_stack":        "palette row, user binding",
+	"layout_scrolling":           "palette row, user binding",
+	"layout_off":                 "palette row, user binding",
+	"all_windows":                "palette row, user binding",
+	"theme_picker":               "palette row, user binding",
+	"look_picker":                "palette row, user binding",
+	"share_look":                 "palette row, user binding",
+	"edit_theme":                 "palette row, user binding",
+	"toggle_focus_follows_mouse": "palette row, user binding",
+	"add_machine":                "palette row, user binding",
+	"open_mailbox":               "palette row, user binding",
+	"dispatch_pause":             "palette row, user binding",
+	"dispatch_resume":            "palette row, user binding",
+	"multi_copy_mode":            "palette row, user binding",
+
 	// Two of the three screenshot verbs. The picker is the one with a key.
 	"screenshot":        "run-command verb, user binding",
 	"screenshot_screen": "run-command verb, user binding",

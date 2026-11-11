@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -142,7 +141,7 @@ func TestPaletteStateFilterFindsWhoNeedsYou(t *testing.T) {
 // TestPaletteStateFilterDropsCommands: filtering by state is a question about
 // panes, so the static commands go whatever their names say.
 func TestPaletteStateFilterDropsCommands(t *testing.T) {
-	items := append(GetCommandPaletteItems(&config.Global),
+	items := append(GetCommandPaletteItems(),
 		CommandPaletteItem{Name: "Window: idle-looking", Category: "Sessions", AgentState: "working"})
 	got := FilterCommandPalette(items, "@w")
 	if len(got) != 1 || !strings.Contains(got[0].Name, "idle-looking") {
@@ -164,7 +163,7 @@ func TestPaletteQueryWithoutATokenIsUnchanged(t *testing.T) {
 	stateful := CommandPaletteItem{
 		Name: "Split a working pane", Category: "Sessions", AgentState: "working",
 	}
-	items := append(GetCommandPaletteItems(&config.Global), stateful)
+	items := append(GetCommandPaletteItems(), stateful)
 
 	got := FilterCommandPalette(items, "split")
 	if len(got) == 0 {

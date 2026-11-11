@@ -20,7 +20,7 @@ import (
 // out. The rows the palette builds from the session (panes, sessions, the
 // keybind and settings rows) are not here: the renderer builds its own.
 func (m *OS) BridgePaletteItems() []CommandPaletteItem {
-	items := GetCommandPaletteItems(&m.Settings)
+	items := GetCommandPaletteItems()
 	if !m.agentsSeen() {
 		items = slices.DeleteFunc(items, func(it CommandPaletteItem) bool { return it.Category == paletteCategoryAgents })
 	}

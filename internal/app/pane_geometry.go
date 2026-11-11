@@ -3,6 +3,7 @@ package app
 import (
 	"strconv"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -35,6 +36,19 @@ func (m *OS) SetSharedBordersSetting(v bool) {
 	m.lastConfigSharedBorders = v
 	m.setAppearance(func(a *config.AppearanceConfig) { a.SharedBorders = new(v) })
 	m.applyAppearanceLive(true)
+}
+
+// ToggleSharedBorders turns shared borders on or off, says so, and saves the
+// choice. It is the toggle_shared_borders action.
+func (m *OS) ToggleSharedBorders() tea.Cmd {
+	m.SetSharedBordersSetting(!m.SharedBorders)
+	save := m.persistSettings()
+	if m.SharedBorders {
+		m.ShowNotification("Shared borders on", "success", m.Settings.NotificationDuration)
+	} else {
+		m.ShowNotification("Shared borders off", "info", m.Settings.NotificationDuration)
+	}
+	return save
 }
 
 // SetPaneGapSetting is SetSharedBordersSetting for the pane gap.

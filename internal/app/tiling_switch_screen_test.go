@@ -53,9 +53,16 @@ func tilingDoors(t *testing.T) []tilingDoor {
 	if tapeDoors < 3 {
 		t.Fatalf("reflection found %d tape tiling commands, the tree has at least ToggleTiling, EnableTiling and DisableTiling", tapeDoors)
 	}
+	// The palette rows that change the layout mode as a whole, which is
+	// what a door here is. The other Layout rows split, swap or resize panes.
+	layoutModeRows := map[string]bool{
+		"toggle_tiling": true, "toggle_shared_borders": true, "snap_fullscreen": true,
+		"layout_prefix_load": true, "next_saved_layout": true, "prev_saved_layout": true,
+		"layout_bsp": true, "layout_master_stack": true, "layout_scrolling": true, "layout_off": true,
+	}
 	paletteDoors := 0
-	for _, item := range app.GetCommandPaletteItems(&config.Global) {
-		if item.Category != "Layout" || item.Action == nil {
+	for _, item := range app.GetCommandPaletteItems() {
+		if item.Category != "Layout" || !(layoutModeRows[item.Bind] || strings.HasPrefix(item.Bind, "set_master_position_")) {
 			continue
 		}
 		paletteDoors++

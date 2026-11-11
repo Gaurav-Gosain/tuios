@@ -327,6 +327,7 @@ func (d *ActionDispatcher) registerHandlers() {
 
 	// Prefix-chord and terminal-mode actions (see prefix_actions.go)
 	d.registerPrefixHandlers()
+	d.registerPaletteHandlers()
 }
 
 // Register binds handler to action, which must be a RunDispatch entry of

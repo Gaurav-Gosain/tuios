@@ -157,7 +157,7 @@ type CommandPaletteItem struct {
 }
 
 // GetCommandPaletteItems returns all available commands for the command palette.
-func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
+func GetCommandPaletteItems() []CommandPaletteItem {
 	items := []CommandPaletteItem{
 		// The launcher is its own overlay, and this is the row that opens it.
 		// It is the bridge that keeps "one box finds everything" true as an
@@ -179,11 +179,8 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		},
 		{
 			Name:     "Screenshot this window",
-			Bind:     "prefix_screenshot",
+			Bind:     "screenshot_window",
 			Category: "Window",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				return m, m.ScreenshotFocusedWindow()
-			},
 		},
 		{
 			Name:     "Screenshot a region",
@@ -216,11 +213,8 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		{
 			Name:     "New window on another machine",
 			Shortcut: "",
+			Bind:     "new_window_on_host",
 			Category: "Window",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.OpenHostPicker()
-				return m, nil
-			},
 		},
 		{
 			Name:     "Close window",
@@ -256,17 +250,8 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		// Layout
 		{
 			Name:     "Toggle tiling",
-			Bind:     "prefix_toggle_tiling",
+			Bind:     "toggle_tiling",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.ToggleAutoTiling()
-				if m.AutoTiling {
-					m.ShowNotification("Tiling on", "success", s.NotificationDuration)
-				} else {
-					m.ShowNotification("Tiling off", "info", s.NotificationDuration)
-				}
-				return m, nil
-			},
 		},
 		{
 			Name:     "Split horizontal",
@@ -295,20 +280,8 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		},
 		{
 			Name:     "Toggle shared borders",
+			Bind:     "toggle_shared_borders",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				// Flip the session's value, not the config global: after a
-				// peer's setting has been adopted the two can differ, and the
-				// toggle has to move the one the layout is using.
-				m.SetSharedBordersSetting(!m.SharedBorders)
-				save := m.persistSettings()
-				if m.SharedBorders {
-					m.ShowNotification("Shared borders on", "success", s.NotificationDuration)
-				} else {
-					m.ShowNotification("Shared borders off", "info", s.NotificationDuration)
-				}
-				return m, save
-			},
 		},
 		{
 			Name:     "Rotate split",
@@ -354,13 +327,8 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 	for _, pos := range config.MasterPositions {
 		items = append(items, CommandPaletteItem{
 			Name:     "Set master position: " + pos,
+			Bind:     "set_master_position_" + pos,
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				if m.SetMasterPosition(pos) {
-					m.ShowNotification(MasterPositionMessage(m, pos), "info", s.NotificationDuration)
-				}
-				return m, nil
-			},
 		})
 	}
 	items = append(items, []CommandPaletteItem{
@@ -386,14 +354,8 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		},
 		{
 			Name:     "Snap fullscreen",
-			Bind:     "prefix_fullscreen",
+			Bind:     "snap_fullscreen",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				if !m.AutoTiling && len(m.Windows) > 0 && m.FocusedWindow >= 0 {
-					m.Snap(m.FocusedWindow, SnapFullScreen)
-				}
-				return m, nil
-			},
 		},
 
 		// Layout templates
@@ -404,11 +366,8 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		},
 		{
 			Name:     "Load layout",
-			Bind:     "prefix_layout",
+			Bind:     "layout_prefix_load",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				return m, m.OpenLayoutPicker()
-			},
 		},
 
 		// Navigation
@@ -481,17 +440,13 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		// Layout
 		{
 			Name:     "Next layout",
+			Bind:     "next_saved_layout",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				return m, m.NextLayout()
-			},
 		},
 		{
 			Name:     "Previous layout",
+			Bind:     "prev_saved_layout",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				return m, m.PrevLayout()
-			},
 		},
 		{
 			Name:     "Toggle multifocus",
@@ -510,44 +465,29 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		},
 		{
 			Name:     "Clear multifocus",
+			Bind:     "clear_multifocus",
 			Category: "Window",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.ClearMultifocus()
-				return m, nil
-			},
 		},
 		// Layout mode: individual commands
 		{
 			Name:     "Layout: BSP tiling",
+			Bind:     "layout_bsp",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.EnableBSPLayout()
-				return m, nil
-			},
 		},
 		{
 			Name:     "Layout: master-stack",
+			Bind:     "layout_master_stack",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.EnableMasterStackLayout()
-				return m, nil
-			},
 		},
 		{
 			Name:     "Layout: scrolling (niri-style)",
+			Bind:     "layout_scrolling",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.EnableScrollingLayout()
-				return m, nil
-			},
 		},
 		{
 			Name:     "Layout: disable tiling",
+			Bind:     "layout_off",
 			Category: "Layout",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.DisableAllTiling()
-				return m, nil
-			},
 		},
 		// Scrolling-specific actions
 		{
@@ -592,14 +532,8 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			// No Shortcut: the aggregate view has no default binding and is
 			// reached from this palette (or a user binding) only.
 			Name:     "All windows",
+			Bind:     "all_windows",
 			Category: "Navigation",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.ShowAggregateView = true
-				m.AggregateViewQuery = ""
-				m.AggregateViewSelected = 0
-				m.AggregateViewScroll = 0
-				return m, nil
-			},
 		},
 		// Session & Config
 		{
@@ -629,33 +563,23 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		},
 		{
 			Name:     "Theme picker",
+			Bind:     "theme_picker",
 			Category: "Session",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.OpenThemePicker()
-				return m, nil
-			},
 		},
 		{
 			Name:     "Choose a look",
+			Bind:     "look_picker",
 			Category: "Session",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				return m, m.OpenLookPicker()
-			},
 		},
 		{
 			Name:     "Share my look",
+			Bind:     "share_look",
 			Category: "Session",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				return m, m.ShareLook("", "", "")
-			},
 		},
 		{
 			Name:     "Edit theme",
+			Bind:     "edit_theme",
 			Category: "Session",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.OpenThemeEditor(theme.CurrentThemeID(), false, "")
-				return m, nil
-			},
 		},
 		// Keybinds. Three rows onto one overlay, because "change a key" and
 		// "stop tuios taking a key" are the two things people come here for and
@@ -676,11 +600,8 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		{
 			Name:     "Unbind a key",
 			Shortcut: "or type #close",
+			Bind:     "prefix_keybinds",
 			Category: PaletteCategoryKeybind,
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.OpenKeybindManager()
-				return m, nil
-			},
 		},
 		{
 			// The way to move the daemon to the build an update installed.
@@ -702,16 +623,8 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		},
 		{
 			Name:     "Toggle focus follows mouse",
+			Bind:     "toggle_focus_follows_mouse",
 			Category: "Session",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				save := m.ToggleFocusFollowsMouse()
-				state := "off"
-				if s.FocusFollowsMouse {
-					state = "on"
-				}
-				m.ShowNotification("Focus follows mouse "+state, "success", s.NotificationDuration)
-				return m, save
-			},
 		},
 		{
 			Name:     "Switch session",
@@ -723,18 +636,13 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Name:     "New task",
 			Category: "Session",
 			Bind:     "prefix_new_task",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				return m, m.OpenTaskCapture()
-			},
 		},
 		{
 			// The add sheet: test a machine over ssh, install tuios there,
 			// and add it. See machine_sheet.go.
 			Name:     "Add a machine",
+			Bind:     "add_machine",
 			Category: "Session",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				return m, m.OpenMachineSheet("")
-			},
 		},
 		{
 			// The machines in the rail's order, as next_host and prev_host
@@ -760,10 +668,8 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			// letters, and nothing to do with agents. Each keeps the word its
 			// overlay is called by (Inbox, mailbox), so those still find them.
 			Name:     "Agents: open mailbox",
+			Bind:     "open_mailbox",
 			Category: paletteCategoryAgents,
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				return m, m.OpenAgentMail()
-			},
 		},
 		{
 			// The Inbox: everything waiting for the person, in every session.
@@ -775,26 +681,19 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			// Task dispatch: stop every card going to agents at once, or
 			// start it again (cockpit_dispatch.go).
 			Name:     "Agents: pause all task dispatch",
+			Bind:     "dispatch_pause",
 			Category: paletteCategoryAgents,
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				return m, m.DispatchSet("pause")
-			},
 		},
 		{
 			Name:     "Agents: start task dispatch again",
+			Bind:     "dispatch_resume",
 			Category: paletteCategoryAgents,
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				return m, m.DispatchSet("resume")
-			},
 		},
 		{
 			// The copies between machines: the Copies panel.
 			Name:     "Copies between machines",
 			Bind:     "prefix_transfers",
 			Category: "Files",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				return m, m.OpenTransfers()
-			},
 		},
 		{
 			Name:     "Agents: go to the oldest waiting",
@@ -930,37 +829,23 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Name:     "Enter copy mode",
 			Bind:     "prefix_selection",
 			Category: "Session",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.EnterCopyModeFocused()
-				return m, nil
-			},
 		},
 		{
 			// No Shortcut: copy_mode_search_forward has no default binding.
 			Name:     "Copy mode: search forward",
+			Bind:     "copy_mode_search_forward",
 			Category: "Session",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.EnterCopyModeSearch(false)
-				return m, nil
-			},
 		},
 		{
 			// No Shortcut: copy_mode_search_backward has no default binding.
 			Name:     "Copy mode: search backward",
+			Bind:     "copy_mode_search_backward",
 			Category: "Session",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.EnterCopyModeSearch(true)
-				return m, nil
-			},
 		},
 		{
 			Name:     paletteMultiCopyName,
-			Bind:     "prefix_selection",
+			Bind:     "multi_copy_mode",
 			Category: "Session",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.EnterMultiCopyMode()
-				return m, nil
-			},
 		},
 	}...)
 	defaultShortcuts(items)

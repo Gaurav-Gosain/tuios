@@ -537,6 +537,29 @@ var actionTable = [...]ActionSpec{
 	{Name: "window_prefix_float", Desc: "Float the pane or tile it. A TML popup becomes a pane, and a TML pane a popup"},
 	{Name: "prefix_tuios", Desc: "Open the tuios menu: the tuios keys a preset moved"},
 	{Name: "open_keybind_presets", Desc: "Choose the keys: tuios, tmux, screen or zellij"},
+	// Command palette rows that had their own code and no action. As actions
+	// they can be bound to a key and named in a tape. None has a default key.
+	{Name: "new_window_on_host", Desc: "Open a new window on another machine"},
+	{Name: "toggle_shared_borders", Desc: "Toggle shared borders between neighbouring panes"},
+	{Name: "next_saved_layout", Desc: "Load the next saved layout"},
+	{Name: "prev_saved_layout", Desc: "Load the previous saved layout"},
+	{Name: "clear_multifocus", Desc: "Take every pane out of multifocus"},
+	{Name: "layout_bsp", Desc: "Tile the workspace as a BSP tree"},
+	{Name: "layout_master_stack", Desc: "Tile the workspace as master and stack"},
+	{Name: "layout_scrolling", Desc: "Tile the workspace as scrolling columns"},
+	{Name: "layout_off", Desc: "Turn tiling off on the workspace"},
+	{Name: "all_windows", Desc: "Show every window of every workspace"},
+	{Name: "theme_picker", Desc: "Choose a theme"},
+	{Name: "look_picker", Desc: "Choose a look: a theme with its borders and dock"},
+	{Name: "share_look", Desc: "Share my look"},
+	{Name: "edit_theme", Desc: "Edit the current theme"},
+	{Name: "toggle_focus_follows_mouse", Desc: "Toggle focus follows mouse"},
+	{Name: "add_machine", Desc: "Add a machine"},
+	{Name: "open_mailbox", Desc: "Open the agents' mailbox"},
+	{Name: "dispatch_pause", Desc: "Pause all task dispatch"},
+	{Name: "dispatch_resume", Desc: "Start task dispatch again"},
+	{Name: "multi_copy_mode", Desc: "Copy mode in every pane of the multifocus set"},
+
 	// The names the dispatcher runs that have no description of their own:
 	// the prefix sub-menus' copies of window and workspace actions, and the
 	// scrolling layout's keys. A key bound to one in config.toml runs it,

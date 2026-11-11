@@ -89,7 +89,7 @@ func TestPaletteRenameOpensWithTitlesHidden(t *testing.T) {
 // runPaletteCommandForTest runs a command-palette row by name.
 func runPaletteCommandForTest(t *testing.T, o *app.OS, name string) *app.OS {
 	t.Helper()
-	for _, c := range app.GetCommandPaletteItems(&o.Settings) {
+	for _, c := range app.GetCommandPaletteItems() {
 		if c.Name == name {
 			out, _ := c.Run(o)
 			return out
