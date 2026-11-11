@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -115,22 +116,20 @@ func TestHostSwitchBackKeepsTheLocalSessionsWindows(t *testing.T) {
 // sorted. It waits until list-windows answers.
 func windowIDsOf(t *testing.T, base, session string) []string {
 	t.Helper()
-	deadline := time.Now().Add(uiTimeout)
-	for {
+	var ids []string
+	waitUntil(t, "list-windows -s "+session+" answers", uiTimeout, func() (bool, string) {
 		wl, err := daemonWindows(base, session)
-		if err == nil {
-			ids := make([]string, 0, len(wl.Windows))
-			for _, w := range wl.Windows {
-				ids = append(ids, w.ID)
-			}
-			slices.Sort(ids)
-			return ids
+		if err != nil {
+			return false, err.Error()
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("list-windows -s %s never answered: %v", session, err)
+		ids = make([]string, 0, len(wl.Windows))
+		for _, w := range wl.Windows {
+			ids = append(ids, w.ID)
 		}
-		time.Sleep(50 * time.Millisecond)
-	}
+		slices.Sort(ids)
+		return true, ""
+	})
+	return ids
 }
 
 // waitBackOnLocal blocks until the rail marks a session under this machine
@@ -140,19 +139,14 @@ func windowIDsOf(t *testing.T, base, session string) []string {
 // to home is row (a)'s to report, not a wait's.
 func waitBackOnLocal(t *testing.T, term *tuitest.Terminal, base string, want []string, round int) {
 	t.Helper()
-	deadline := time.Now().Add(uiTimeout)
-	for {
+	what := fmt.Sprintf("round %d: the rail marks a session under local as the attached one, or home lists other windows than %v", round, want)
+	waitUntil(t, what, uiTimeout, func() (bool, string) {
 		if railMarksALocalRow(term.Screen()) {
-			return
+			return true, ""
 		}
-		if got := windowIDsOf(t, base, "home"); !slices.Equal(got, want) {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("ASSERTION: round %d: the rail never marked a session under local as the attached one, and home still lists %v:\n%s", round, want, term.Snapshot())
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
+		got := windowIDsOf(t, base, "home")
+		return !slices.Equal(got, want), term.Snapshot()
+	})
 }
 
 // railMarksUnder reports whether the rail marks name, in host's group, as
