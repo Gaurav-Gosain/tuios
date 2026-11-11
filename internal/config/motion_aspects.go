@@ -32,9 +32,6 @@ const (
 	numAspects
 )
 
-// aspectKeys are the [motion] keys, in aspect order.
-var aspectKeys = [numAspects]string{"workspace", "layout", "zoom", "overlays", "sidebar", "scroll", "copy", "confetti"}
-
 // aspectLevels is the least appearance.motion level each aspect runs at.
 // Decoration needs full. Motion that says where something went needs basic.
 var aspectLevels = [numAspects]string{MotionBasic, MotionBasic, MotionBasic, MotionFull, MotionFull, MotionBasic, MotionBasic, MotionFull}

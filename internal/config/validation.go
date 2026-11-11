@@ -1,8 +1,10 @@
 package config
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -134,23 +136,16 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	}
 	validateMenus(cfg, result)
 
-	// Validate enum appearance options (warn on unknown values; they fall back to defaults)
-	validateAppearanceEnums(cfg, result)
+	// Every option's closed set and range, from its entry in the registry.
+	validateOptions(cfg, result)
+	validateAppearance(cfg, result)
 	validateMotion(cfg, result)
-
-	// Validate the tape section (warn on an unknown autorun mode)
-	validateTapeConfig(cfg, result)
-	validateResumeAgents(cfg, result)
-	validateWindowSize(cfg, result)
 	validateSSHAgent(cfg, result)
 	validateSSH(cfg, result)
 	validateDisplay(cfg, result)
-	validateKeepAwake(cfg, result)
-	warnEnum(result, "shell", "integration", cfg.Shell.Integration, ShellIntegrationModes, ShellIntegrationAuto)
 	validateLinkPolicies(cfg, result)
 	validatePanePermissions(cfg, result)
 	validateAgentWork(cfg, result)
-	validatePasteBuffers(cfg, result)
 	validateWorktree(cfg, result)
 	validateTasks(cfg, result)
 
@@ -254,18 +249,10 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validateHints(cfg, result)
 	validateLinks(cfg, result)
 	validatePanes(cfg, result)
-	validateReview(cfg, result)
 	validateScratch(cfg, result)
 	validateFilesOpen(cfg, result)
 
 	return result
-}
-
-// validateTapeConfig warns when tape.autorun holds a value outside its allowed
-// set. An unknown value silently falls back to the safe default ("ask"), so a
-// typo would otherwise go unnoticed. An empty value is left to the default.
-func validateTapeConfig(cfg *UserConfig, result *ValidationResult) {
-	warnEnum(result, "tape", "autorun", cfg.Tape.Autorun, TapeAutorunModes, "default")
 }
 
 // validatePrefixRepeat warns about a keybindings.repeat entry that no key
@@ -285,6 +272,55 @@ func validatePrefixRepeat(cfg *UserConfig, result *ValidationResult) {
 	}
 }
 
+// validateOptions checks each registry option's value against its entry: a
+// string option against its closed set (Accepted), an int option against its
+// range (Min to Max). Such values are not used as written, so a typo would
+// otherwise go unnoticed. An empty string is left to the default, and so is 0
+// for an int option whose range starts above 0. A colour option takes a
+// keyword or a literal, so its keywords are not a closed set here; the colour
+// checks below read it.
+func validateOptions(cfg *UserConfig, result *ValidationResult) {
+	for _, o := range Options() {
+		if o.Color || o.Deprecated != "" {
+			continue
+		}
+		value, ok := GetOptionValue(cfg, o.Path)
+		if !ok {
+			continue
+		}
+		field, key := optionWarningPlace(o)
+		switch {
+		case o.Type == OptionString && len(o.Accepted) > 0:
+			if o.Normalize != nil {
+				value = o.Normalize(value)
+			}
+			warnEnum(result, field, key, value, o.Accepted, cmp.Or(o.Fallback, "default"))
+		case o.Type == OptionInt && o.Max > 0:
+			n, err := strconv.Atoi(value)
+			if err != nil || (n == 0 && o.Min > 0) || (n >= o.Min && n <= o.Max) {
+				continue
+			}
+			result.Warnings = append(result.Warnings, ValidationError{
+				Field:   field,
+				Key:     key,
+				Message: fmt.Sprintf("%d is not in the range %d to %d. Use a value in this range.", n, o.Min, o.Max),
+			})
+		}
+	}
+}
+
+// optionWarningPlace is where a warning about o is filed: the table a person
+// writes it in, and its key there. The closed sets of [appearance] were
+// always filed under appearance with the rest of the path as the key, so
+// they stay there.
+func optionWarningPlace(o Option) (field, key string) {
+	if rest, ok := strings.CutPrefix(o.Path, "appearance."); ok && o.Type == OptionString && len(o.Accepted) > 0 {
+		return "appearance", rest
+	}
+	i := strings.LastIndex(o.Path, ".")
+	return o.Path[:i], o.Path[i+1:]
+}
+
 // warnEnum warns when field.key holds a value outside allowed, and names the
 // value it falls back to. An empty value is left to the default.
 func warnEnum(result *ValidationResult, field, key, value string, allowed []string, fallback string) {
@@ -296,19 +332,6 @@ func warnEnum(result *ValidationResult, field, key, value string, allowed []stri
 		Key:     key,
 		Message: fmt.Sprintf("'%s' is not a valid value (allowed: %s); falling back to %s", value, strings.Join(allowed, ", "), fallback),
 	})
-}
-
-// validateResumeAgents warns when daemon.resume_agents holds a value outside
-// its allowed set. An unknown value falls back to "ask", so a typo of "auto"
-// would otherwise go unnoticed until a restart asked instead of resuming.
-func validateResumeAgents(cfg *UserConfig, result *ValidationResult) {
-	warnEnum(result, "daemon", "resume_agents", cfg.Daemon.ResumeAgents, ResumeAgentsModes, "ask")
-}
-
-// validateWindowSize warns when daemon.window_size holds a value outside its
-// allowed set. An unknown value falls back to latest, the default.
-func validateWindowSize(cfg *UserConfig, result *ValidationResult) {
-	warnEnum(result, "daemon", "window_size", cfg.Daemon.WindowSize, WindowSizeModes, WindowSizeLatest)
 }
 
 // validateSSHAgent warns when daemon.ssh_agent holds a value outside its
@@ -323,67 +346,17 @@ func validateDisplay(cfg *UserConfig, result *ValidationResult) {
 	warnEnum(result, "daemon", "display", cfg.Daemon.Display, DisplayModes, DisplayOff)
 }
 
-// validateKeepAwake warns when daemon.keep_awake holds a value outside its
-// allowed set. An unknown value is off, so a typo of "agents" would otherwise
-// let the machine sleep with no word about why.
-func validateKeepAwake(cfg *UserConfig, result *ValidationResult) {
-	warnEnum(result, "daemon", "keep_awake", cfg.Daemon.KeepAwake, KeepAwakeModes, KeepAwakeOff)
-}
-
-// validateNotificationsConfig warns about a message lifetime tuios cannot use.
-// A short lifetime is the user's choice and is not reported. Zero means "use
-// the default". A negative value is ignored and the default stays, and a value
-// past the registry's Max is cut to it, which also keeps the seconds-to-
-// Duration conversion from overflowing.
+// validateNotificationsConfig warns about the notification values one option's
+// set or range does not cover: the quiet hours and the mail switches. The
+// lifetimes, bell, style, level and the agent sound keys are checked from
+// their registry entries (validateOptions).
 func validateNotificationsConfig(cfg *UserConfig, result *ValidationResult) {
-	check := func(key string, seconds int) {
-		limit := notificationDurationMax(key)
-		var msg string
-		switch {
-		case seconds < 0:
-			msg = fmt.Sprintf("%d is less than 0. tuios uses the default.", seconds)
-		case seconds > limit:
-			msg = fmt.Sprintf("%d is more than %d. tuios uses %d.", seconds, limit, limit)
-		default:
-			return
-		}
-		result.Warnings = append(result.Warnings, ValidationError{Field: "notifications", Key: key, Message: msg})
-	}
-	check("duration", cfg.Notifications.Duration)
-	check("warning_duration", cfg.Notifications.WarningDuration)
-	check("error_duration", cfg.Notifications.ErrorDuration)
-	warnEnum(result, "notifications", "bell", cfg.Notifications.Bell, BellModes, BellToast)
-	warnEnum(result, "notifications", "style", cfg.Notifications.Style, NotificationStyles, NotificationStyleFull)
-	warnEnum(result, "notifications", "level", cfg.Notifications.Level, NotificationLevels, NotificationLevelInfo)
-
 	agent := &cfg.Notifications.Agent
 	if _, _, err := ParseQuietHours(agent.QuietHours); err != nil {
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field:   "notifications.agent",
 			Key:     "quiet_hours",
 			Message: fmt.Sprintf("%v; ignored, so alerts are never silenced by the clock", err),
-		})
-	}
-	if _, ok := ParseAgentSoundMode(agent.SoundMode); !ok {
-		result.Warnings = append(result.Warnings, ValidationError{
-			Field: "notifications.agent",
-			Key:   "sound_mode",
-			Message: fmt.Sprintf("%q is not one of %s; falling back to %q",
-				agent.SoundMode, strings.Join(AgentSoundModeNames, ", "), defaultAgentSoundMode),
-		})
-	}
-	if agent.SoundCooldownSeconds != nil && *agent.SoundCooldownSeconds < 0 {
-		result.Warnings = append(result.Warnings, ValidationError{
-			Field:   "notifications.agent",
-			Key:     "sound_cooldown_seconds",
-			Message: "a negative gap is not a thing; falling back to the default",
-		})
-	}
-	if agent.SettleSeconds != nil && *agent.SettleSeconds < 0 {
-		result.Warnings = append(result.Warnings, ValidationError{
-			Field:   "notifications.agent",
-			Key:     "settle_seconds",
-			Message: "a negative wait is not a thing; falling back to the default",
 		})
 	}
 
@@ -399,25 +372,10 @@ func validateNotificationsConfig(cfg *UserConfig, result *ValidationResult) {
 	}
 }
 
-// validateAppearanceEnums warns when an enum appearance option holds a value
-// outside its allowed set. Such values silently fall back to defaults, so a
-// typo would otherwise go unnoticed. Empty values are left to the defaults.
-func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
-	// Every closed set of [appearance] comes from the option spec, so an
-	// option that gains Accepted is checked here with no line of its own.
-	// Colour options take a keyword or a literal, and deprecated ones are
-	// folded into their new name on load, so neither is a closed set here.
-	// focus_follows_mouse_pause falls back to off and is checked below.
-	for _, o := range Options() {
-		key, ok := strings.CutPrefix(o.Path, "appearance.")
-		if !ok || len(o.Accepted) == 0 || o.Color || o.Type != OptionString || o.Deprecated != "" || key == "focus_follows_mouse_pause" {
-			continue
-		}
-		if value, ok := GetOptionValue(cfg, o.Path); ok {
-			warnEnum(result, "appearance", key, value, o.Accepted, "default")
-		}
-	}
-
+// validateAppearance warns about the [appearance] values one option's set or
+// range does not cover. The closed sets and ranges are checked from the
+// registry (validateOptions).
+func validateAppearance(cfg *UserConfig, result *ValidationResult) {
 	if !cfg.Appearance.MaxFPS.Valid() {
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field:   "appearance",
@@ -451,7 +409,6 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 			Message: "no longer used: panes name their own workspace, and switching lives on the dock and alt+1..9",
 		})
 	}
-	warnEnum(result, "appearance", "focus_follows_mouse_pause", cfg.Appearance.FocusFollowsMousePause, FocusFollowsMousePauseKeys, "off")
 	if _, ok := ParseDropPreviewDelay(cfg.Appearance.DropPreviewDelay); !ok {
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field:   "appearance",
@@ -1091,27 +1048,10 @@ func defaultKeybindingPairs() map[string]bool {
 	return out
 }
 
-// validateMotion warns about a [motion] value outside its set or range. The
-// old appearance.workspace_transition is checked as well, since a file may
-// still carry it.
+// validateMotion warns about the old appearance.workspace_transition, which a
+// file may still carry. Its entry is deprecated and has no closed set of its
+// own, so validateOptions does not check it. The [motion] keys are checked
+// from their entries.
 func validateMotion(cfg *UserConfig, result *ValidationResult) {
 	warnEnum(result, "appearance", "workspace_transition", cfg.Appearance.WorkspaceTransition, WorkspaceTransitions, "default")
-	sw, ms := cfg.Motion.fields()
-	for i := range sw {
-		ok := MotionSwitches
-		if MotionAspect(i) == AspectWorkspace {
-			ok = WorkspaceTransitions
-		}
-		warnEnum(result, "motion", aspectKeys[i], *sw[i], ok, "default")
-		if ms[i] == nil || *ms[i] == nil {
-			continue
-		}
-		if v := **ms[i]; v < 0 || v > MotionMsMax {
-			result.Warnings = append(result.Warnings, ValidationError{
-				Field:   "motion",
-				Key:     aspectKeys[i] + "_ms",
-				Message: fmt.Sprintf("%d is outside 0 to %d; read as %d", v, MotionMsMax, min(max(v, 0), MotionMsMax)),
-			})
-		}
-	}
 }

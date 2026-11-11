@@ -1,8 +1,6 @@
 package config
 
 import (
-	"fmt"
-
 	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
 )
 
@@ -44,23 +42,4 @@ func (c PasteBuffersConfig) Resolved() (limit, maxBytes int) {
 		maxBytes = min(c.MaxKB, MaxPasteBufferKB) << 10
 	}
 	return limit, maxBytes
-}
-
-// validatePasteBuffers warns about [paste_buffers] values past their bounds.
-func validatePasteBuffers(cfg *UserConfig, result *ValidationResult) {
-	c := cfg.PasteBuffers
-	if c.MaxKB < 0 || c.MaxKB > MaxPasteBufferKB {
-		_, maxBytes := c.Resolved()
-		result.Warnings = append(result.Warnings, ValidationError{
-			Field: "paste_buffers", Key: "max_kb",
-			Message: fmt.Sprintf("%d is outside 0 to %d (256 MiB); read as %d", c.MaxKB, MaxPasteBufferKB, maxBytes>>10),
-		})
-	}
-	if c.Limit != nil && (*c.Limit < 0 || *c.Limit > pastebuf.MaxLimit) {
-		limit, _ := c.Resolved()
-		result.Warnings = append(result.Warnings, ValidationError{
-			Field: "paste_buffers", Key: "limit",
-			Message: fmt.Sprintf("%d is outside 0 to %d; read as %d", *c.Limit, pastebuf.MaxLimit, limit),
-		})
-	}
 }

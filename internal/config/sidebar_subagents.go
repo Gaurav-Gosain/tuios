@@ -241,11 +241,16 @@ func sidebarSubagentProblems(k sidebarSubagentKeys) map[string]string {
 // validateSidebarSubagents warns about the subagent keys of
 // [appearance.sidebar] and of each edge table.
 func validateSidebarSubagents(sb SidebarConfig, result *ValidationResult) {
+	// The rows, collapse and max_rows keys of [appearance.sidebar] have
+	// registry entries, so validateOptions checks them. The edge tables have
+	// none, so they are checked here.
+	main := sb.subagentKeys()
+	main.rows, main.collapse, main.maxRows = "", "", nil
 	tables := []struct {
 		field string
 		keys  sidebarSubagentKeys
 	}{
-		{"appearance.sidebar", sb.subagentKeys()},
+		{"appearance.sidebar", main},
 		{"appearance.sidebar.left", sb.Left.subagentKeys()},
 		{"appearance.sidebar.right", sb.Right.subagentKeys()},
 	}

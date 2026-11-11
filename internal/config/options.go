@@ -88,6 +88,14 @@ type Option struct {
 	// Auto marks an int option that also takes the word "auto". Its config
 	// field is a string type, such as FPSLimit, that can hold either.
 	Auto bool `json:"auto,omitempty"`
+	// Fallback is the word a load warning gives for what a value outside
+	// Accepted is read as. Empty means "default".
+	Fallback string `json:"-"`
+	// Normalize is what the option's reader does to a value before it
+	// compares it with Accepted, such as trimming spaces or folding case. The
+	// load check does the same, so it warns only about a value the reader
+	// does not take. Nil compares the value as written.
+	Normalize func(string) string `json:"-"`
 	// Check rejects a value of an open string option that does not parse,
 	// such as a duration or a field list, at set time rather than as a
 	// warning on the next load. Nil checks nothing beyond the rest.
@@ -265,6 +273,7 @@ var optionSpecs = []Option{
 		Path: "appearance.focus_follows_mouse_pause", Type: OptionString, Section: "appearance",
 		Description: "Hold this key to keep the focus on the current pane as the mouse moves: off, ctrl, alt",
 		Accepted:    FocusFollowsMousePauseKeys,
+		Fallback:    "off",
 	},
 	{
 		Path: "appearance.paste_preview", Type: OptionBool, Section: "appearance",
@@ -1100,11 +1109,13 @@ var optionSpecs = []Option{
 		Path: "appearance.sidebar.subagent_rows", Type: OptionString, Section: "sidebar",
 		Description: "How an agent row shows its subagents: a row for each under it, the rows on tree lines, or the count alone",
 		Accepted:    SidebarSubagentRowsValues,
+		Fallback:    SidebarSubagentRowsRows,
 	},
 	{
 		Path: "appearance.sidebar.subagent_collapse", Type: OptionString, Section: "sidebar",
 		Description: "A heading line over each agent's subagents that opens and shuts their rows: off, or on and expanded or collapsed at the start",
 		Accepted:    SidebarSubagentCollapseValues,
+		Fallback:    SidebarSubagentCollapseOff,
 	},
 	{
 		Path: "appearance.sidebar.subagent_fields", Type: OptionString, Section: "sidebar",
@@ -1174,6 +1185,7 @@ var optionSpecs = []Option{
 		Path: "agents.view_list", Type: OptionString, Section: "agents",
 		Description: "How the agents view shows its list on a wide screen: a column beside the focus, a strip of chips above it, or a strip for two agents or fewer. The \\ key switches it, and the view keeps that choice.",
 		Accepted:    AgentsViewLists,
+		Fallback:    AgentsViewListColumn, Normalize: trimLower,
 	},
 	{
 		Path: "agents.list_width", Type: OptionString, Section: "agents",
@@ -1210,6 +1222,7 @@ var optionSpecs = []Option{
 		Path: "daemon.window_size", Type: OptionString, Section: "daemon",
 		Description: "The size of a session with more than one client: the client that last had input, the smallest client, or the largest client",
 		Accepted:    WindowSizeModes,
+		Fallback:    WindowSizeLatest,
 	},
 	{
 		Path: "daemon.agent_autodetect", Type: OptionBool, Section: "daemon",
@@ -1224,11 +1237,13 @@ var optionSpecs = []Option{
 		Path: "daemon.keep_awake", Type: OptionString, Section: "daemon",
 		Description: "Keep the machine from sleeping: while an agent works on this machine, while the daemon runs, or never. The display can still lock.",
 		Accepted:    KeepAwakeModes,
+		Fallback:    KeepAwakeOff,
 	},
 	{
 		Path: "daemon.resume_agents", Type: OptionString, Section: "daemon",
 		Description: "After a daemon restart, ask to resume each pane's agent conversation, resume it, or do neither",
 		Accepted:    ResumeAgentsModes,
+		Fallback:    "ask",
 	},
 	{
 		Path: "daemon.persist_scrollback", Type: OptionBool, Section: "daemon",
@@ -1276,16 +1291,19 @@ var optionSpecs = []Option{
 		Path: "notifications.bell", Type: OptionString, Section: "notifications",
 		Description: "What a pane's bell does: a dock message, a bell in your terminal, both, or nothing",
 		Accepted:    BellModes,
+		Fallback:    BellToast,
 	},
 	{
 		Path: "notifications.style", Type: OptionString, Section: "notifications",
 		Description: "How a dock message looks: full shows a side bar and a countdown line, plain shows the icon and the text only",
 		Accepted:    NotificationStyles,
+		Fallback:    NotificationStyleFull,
 	},
 	{
 		Path: "notifications.level", Type: OptionString, Section: "notifications",
 		Description: "The least severe tuios message the dock shows: info shows every message, warning only warnings and errors, error only errors. Agent and pane alerts do not use this level",
 		Accepted:    NotificationLevels,
+		Fallback:    NotificationLevelInfo,
 	},
 	{
 		Path: "notifications.log_hidden", Type: OptionBool, Section: "notifications",
@@ -1319,6 +1337,7 @@ var optionSpecs = []Option{
 		Path: "notifications.agent.sound_mode", Type: OptionString, Section: "notifications",
 		Description: "How an alert sounds: a cue, a BEL, or both",
 		Accepted:    AgentSoundModeNames,
+		Fallback:    string(defaultAgentSoundMode), Normalize: strings.TrimSpace,
 	},
 	{
 		Path: "notifications.agent.sound_cooldown_seconds", Type: OptionInt, Section: "notifications",
@@ -1647,6 +1666,7 @@ var optionSpecs = []Option{
 		Path: "panes.navigator_layout", Type: OptionString, Section: "panes",
 		Description: "How the pane navigator lists the panes when it opens",
 		Accepted:    NavigatorLayouts,
+		Fallback:    NavigatorLayoutTree, Normalize: trimLower,
 	},
 	{
 		Path: "panes.navigator_search", Type: OptionBool, Section: "panes",
@@ -1694,6 +1714,7 @@ var optionSpecs = []Option{
 		Path: "shell.integration", Type: OptionString, Section: "appearance",
 		Description: "Turn on prompt marks in the bash and zsh shells that new panes start. Your files do not change. off starts each shell as it is",
 		Accepted:    ShellIntegrationModes,
+		Fallback:    ShellIntegrationAuto,
 	},
 	{
 		Path: "shell.login", Type: OptionBool, Section: "appearance",
@@ -1734,11 +1755,13 @@ var optionSpecs = []Option{
 		Path: "review.focus", Type: OptionString, Section: "review",
 		Description: "Which side of the review overlay has the keys when a review opens: the diff or the file list",
 		Accepted:    ReviewFocuses,
+		Fallback:    ReviewOpenOnDiff, Normalize: trimLower,
 	},
 	{
 		Path: "review.scope", Type: OptionString, Section: "review",
 		Description: "What a review shows when it opens: the changes since the base, or only the uncommitted changes. u switches between them",
 		Accepted:    ReviewScopes,
+		Fallback:    ReviewScopeBase, Normalize: trimLower,
 	},
 	// [files]: o on a file of another machine. Read each time o is pressed;
 	// the daemon reads the keep at its start.
@@ -2108,3 +2131,7 @@ func parseOptionBool(value string) (bool, error) {
 	}
 	return parsed, nil
 }
+
+// trimLower is the Normalize of an option whose reader trims spaces and
+// ignores case.
+func trimLower(s string) string { return strings.ToLower(strings.TrimSpace(s)) }

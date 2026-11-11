@@ -118,13 +118,6 @@ func (p PanesConfig) LabelKeysInUse() string { return NormalizePaneLabelKeys(p.L
 // lose characters. Without a warning the labels would look as if they
 // ignored the config.
 func validatePanes(cfg *UserConfig, result *ValidationResult) {
-	if l := strings.TrimSpace(cfg.Panes.NavigatorLayout); l != "" && cfg.Panes.NavigatorLayoutInUse() != strings.ToLower(l) {
-		result.Warnings = append(result.Warnings, ValidationError{
-			Field:   "panes",
-			Key:     "navigator_layout",
-			Message: fmt.Sprintf("The navigator layout %q is not tree, flat or cards. The navigator uses tree.", l),
-		})
-	}
 	keys := strings.TrimSpace(cfg.Panes.LabelKeys)
 	if keys == "" {
 		return

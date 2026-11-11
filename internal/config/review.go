@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -71,24 +70,5 @@ func fillMissingReview(cfg, defaultCfg *UserConfig) {
 	}
 	if strings.TrimSpace(cfg.Review.Scope) == "" {
 		cfg.Review.Scope = defaultCfg.Review.Scope
-	}
-}
-
-// validateReview warns about a focus or a scope that falls back to its
-// default.
-func validateReview(cfg *UserConfig, result *ValidationResult) {
-	if f := strings.TrimSpace(cfg.Review.Focus); f != "" && cfg.Review.FocusInUse() != strings.ToLower(f) {
-		result.Warnings = append(result.Warnings, ValidationError{
-			Field:   "review",
-			Key:     "focus",
-			Message: fmt.Sprintf("The review focus %q is not diff or files. A review opens on the diff.", f),
-		})
-	}
-	if sc := strings.TrimSpace(cfg.Review.Scope); sc != "" && !cfg.Review.OpensUncommitted() && !strings.EqualFold(sc, ReviewScopeBase) {
-		result.Warnings = append(result.Warnings, ValidationError{
-			Field:   "review",
-			Key:     "scope",
-			Message: fmt.Sprintf("The review scope %q is not base or uncommitted. A review opens on the changes since the base.", sc),
-		})
 	}
 }
