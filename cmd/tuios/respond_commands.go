@@ -14,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // Peek and respond on the command line: read the prompt an agent is blocked
@@ -81,7 +82,7 @@ func printPromptPeek(w io.Writer, raw json.RawMessage) error {
 	case harness.PromptKindAuth:
 		what = "a login"
 	}
-	fmt.Fprintf(w, "%s has waited %s on %s.\n", who, waitedFor(time.Now().Add(-time.Duration(p.WaitingMS)*time.Millisecond).UnixNano(), time.Now()), what)
+	fmt.Fprintf(w, "%s has waited %s on %s.\n", who, units.Waited(time.Now().Add(-time.Duration(p.WaitingMS)*time.Millisecond).UnixNano(), time.Now()), what)
 	if !p.Found {
 		fmt.Fprintf(w, "%s. Look at the pane with: tuios capture-pane -w %s\n", capitalFirst(plainLine(p.Reason)), shortWindowID(p.Window))
 		return nil

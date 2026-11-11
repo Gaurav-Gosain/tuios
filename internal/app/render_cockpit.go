@@ -17,6 +17,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/risk"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // Widths of the cockpit's columns, by the width of the screen. See
@@ -1189,7 +1190,7 @@ func (m *OS) ckRowFacts(r ckRow, e sidebarAgentEntry) (name, harness, place, wai
 		harness = ckHarness(e.Harness)
 		place = m.ckPlace(e)
 		if e.StateAt > 0 {
-			wait = inboxWait(e.StateAt, now)
+			wait = units.Waited(e.StateAt, now)
 		}
 	}
 	if r.hasItem {
@@ -1198,7 +1199,7 @@ func (m *OS) ckRowFacts(r ckRow, e sidebarAgentEntry) (name, harness, place, wai
 			name, harness = inboxWho(it), ckHarness(it.Harness)
 			place = m.inboxWhere(it)
 		}
-		wait = inboxWait(it.Since, now)
+		wait = units.Waited(it.Since, now)
 		switch {
 		case it.Stale:
 			wait = inboxSeen(it.SeenAt, now)
@@ -2655,9 +2656,9 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 		ty, by = cy, cy+1
 	}
 	tx := c.text(x+3, ty, x+w-2, ckSeg{t: g + " ", fg: gInk}, ckSeg{t: title, fg: pal.Fg, attrs: ckBold})
-	when := " waits " + inboxWait(it.Since, now)
+	when := " waits " + units.Waited(it.Since, now)
 	if !held {
-		when = sepWord() + inboxWait(it.Since, now)
+		when = sepWord() + units.Waited(it.Since, now)
 	}
 	switch {
 	case it.Stale:

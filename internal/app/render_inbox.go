@@ -13,6 +13,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // inboxWidth is the Inbox overlay's preferred inner width: a row carries a
@@ -119,7 +120,7 @@ func (m *OS) renderInboxPeek(p *inboxPeek, now time.Time) (string, overlay.Geome
 	if pk != nil && !pk.Blocked {
 		what = "is " + sidebarStateWords(pk.State) + " now, not waiting on a prompt"
 	}
-	add(pal.Fg, inboxWho(it)+" in "+m.inboxWhere(it)+" "+what+sepWord()+"waited "+inboxWait(since, now))
+	add(pal.Fg, inboxWho(it)+" in "+m.inboxWhere(it)+" "+what+sepWord()+"waited "+units.Waited(since, now))
 	if it.Host == "" {
 		if facts := m.agentFactsLine(it.Session, it.Window, it.Harness); facts != "" {
 			add(pal.FgDim, facts)

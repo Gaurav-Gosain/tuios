@@ -11,6 +11,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/diffview"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -257,7 +258,7 @@ func reviewNoteLines(n review.Note, placed bool, width int, now time.Time) []str
 	}
 	text := label + ": " + reviewText(strings.ReplaceAll(n.Text, "\n", " "))
 	if n.SentAt > 0 {
-		text += "  sent " + inboxWait(n.SentAt, now)
+		text += "  sent " + units.Waited(n.SentAt, now)
 	}
 	width = max(width, 8)
 	return strings.Split(ansi.Wrap(text, width, ""), "\n")

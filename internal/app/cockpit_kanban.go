@@ -15,6 +15,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // The board as columns: one column per stage [tasks] shows, side by side,
@@ -917,7 +918,7 @@ func (m *OS) drawKanbanCard(c *ckCanvas, l ckLook, r ckRow, title []string, x, y
 		c.text(x+2, y+i, right, ckSeg{t: t, fg: ink(pal.Fg), attrs: ckBold})
 	}
 	my := y + h - 1
-	rx := c.textR(right, my, ckSeg{t: card.ID, fg: ink(pal.FgMute)}, ckSeg{t: "  " + inboxWait(card.StageAt, time.Now()), fg: ink(pal.FgMute)}) - 1
+	rx := c.textR(right, my, ckSeg{t: card.ID, fg: ink(pal.FgMute)}, ckSeg{t: "  " + units.Waited(card.StageAt, time.Now()), fg: ink(pal.FgMute)}) - 1
 	var e sidebarAgentEntry
 	if r.agent >= 0 {
 		e = ck.agents[r.agent]

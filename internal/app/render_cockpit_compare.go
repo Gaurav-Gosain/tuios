@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // ckCompareColMin is the narrowest an attempt's column is drawn. Fewer
@@ -243,7 +244,7 @@ func (m *OS) drawJudgeCard(c *ckCanvas, l ckLook, x, y, w, top int, now time.Tim
 			}
 		}
 		if v.At > 0 {
-			meta += sepWord() + inboxWait(v.At, now) + " ago"
+			meta += sepWord() + units.Waited(v.At, now) + " ago"
 		}
 		lines = append(lines, line{segs: []ckSeg{{t: "Judge", fg: pal.FgDim, attrs: ckBold}, {t: "   " + meta, fg: pal.FgMute}}})
 		summary := printableTitle(v.Summary)

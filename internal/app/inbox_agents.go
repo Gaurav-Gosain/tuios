@@ -12,6 +12,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
@@ -324,7 +325,7 @@ func (m *OS) InboxAgentsReply() tea.Cmd {
 	}
 	ctx := sidebarStateWords(e.State)
 	if e.StateAt > 0 {
-		ctx += " " + inboxWait(e.StateAt, time.Now())
+		ctx += " " + units.Waited(e.StateAt, time.Now())
 	}
 	if e.Host != "" {
 		if e.State == "needs_input" {

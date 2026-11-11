@@ -16,6 +16,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // Replying to an agent: the composer under the Inbox list (internal/composer)
@@ -230,7 +231,7 @@ func (m *OS) inboxReplyAgent(it session.AttentionItem) (cmd tea.Cmd, ok bool) {
 	if it.Kind == session.AttentionErrored {
 		context = "errored"
 	}
-	context += " " + inboxWait(it.Since, time.Now())
+	context += " " + units.Waited(it.Since, time.Now())
 	if it.Host != "" {
 		m.openHostReply(it.Host, it.Session, it.Window, inboxWho(it), context)
 		return nil, true

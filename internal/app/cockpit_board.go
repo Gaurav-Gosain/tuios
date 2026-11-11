@@ -18,6 +18,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
@@ -604,7 +605,7 @@ func (m *OS) drawCardRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x, 
 	if r.lines != 1 || w >= 48 {
 		nx = max(nx, x+5)
 	}
-	rx := c.textR(right, y, ckSeg{t: inboxWait(card.StageAt, time.Now()), fg: ink(pal.FgMute)})
+	rx := c.textR(right, y, ckSeg{t: units.Waited(card.StageAt, time.Now()), fg: ink(pal.FgMute)})
 	title := printableTitle(card.Title)
 	if r.lines == 1 {
 		// One line: the title to a fixed width, then the holder.
@@ -689,7 +690,7 @@ func (m *OS) drawCardFocus(c *ckCanvas, l ckLook, r ckRow, card session.TaskRow,
 	right := x + w
 	c.text(x, y, right, ckSeg{t: printableTitle(card.Title), fg: pal.Fg, attrs: ckBold})
 	c.text(x, y+1, right, ckSeg{t: ckStageTitle(r.group), fg: pal.FgDim},
-		ckSeg{t: sepWord() + inboxWait(card.StageAt, now) + sepWord() + printableTitle(card.Session) + " " + card.ID, fg: pal.FgMute})
+		ckSeg{t: sepWord() + units.Waited(card.StageAt, now) + sepWord() + printableTitle(card.Session) + " " + card.ID, fg: pal.FgMute})
 	rule := y + 3
 	if c.h < 30 {
 		rule = y + 2
@@ -716,7 +717,7 @@ func (m *OS) drawCardFocus(c *ckCanvas, l ckLook, r ckRow, card session.TaskRow,
 			who = shortWindowLabel(card.Holder.Window)
 		}
 		line(ckSeg{t: "Held by ", fg: pal.FgDim}, ckSeg{t: who, fg: pal.Fg, attrs: ckBold},
-			ckSeg{t: "  " + inboxWait(card.Holder.HeldAt, now), fg: pal.FgMute})
+			ckSeg{t: "  " + units.Waited(card.Holder.HeldAt, now), fg: pal.FgMute})
 	case card.Stage == session.TaskStageVerify || card.Stage == session.TaskStageReview:
 		// Let go by its agent: the lifecycle lines below say where it is.
 	case card.Stage != session.TaskStageDone && card.Blocked == nil:
@@ -760,7 +761,7 @@ func (m *OS) drawCardFocus(c *ckCanvas, l ckLook, r ckRow, card session.TaskRow,
 			case ev.Reason != "":
 				words += ", " + printableTitle(ev.Reason)
 			}
-			line(ckSeg{t: ckPad(inboxWait(ev.At, now), 5), fg: pal.FgMute}, ckSeg{t: words, fg: pal.Fg},
+			line(ckSeg{t: ckPad(units.Waited(ev.At, now), 5), fg: pal.FgMute}, ckSeg{t: words, fg: pal.Fg},
 				ckSeg{t: "  " + m.ckHistoryBy(ev.By), fg: pal.FgMute})
 		}
 	}

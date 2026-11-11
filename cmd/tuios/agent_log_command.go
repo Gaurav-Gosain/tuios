@@ -16,6 +16,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // `tuios agent-log`: what the agent in a pane has been doing, read from the
@@ -322,7 +323,7 @@ func printAgentRecap(w io.Writer, raw json.RawMessage, now time.Time) error {
 		return errors.New("the daemon sent no recap")
 	}
 	if rc.Since > 0 {
-		fmt.Fprintf(w, "Since %s (%s ago)\n", time.Unix(0, rc.Since).Format("15:04"), waitedFor(rc.Since, now))
+		fmt.Fprintf(w, "Since %s (%s ago)\n", time.Unix(0, rc.Since).Format("15:04"), units.Waited(rc.Since, now))
 	} else {
 		fmt.Fprintln(w, "No activity recorded for this pane.")
 	}
@@ -333,7 +334,7 @@ func printAgentRecap(w io.Writer, raw json.RawMessage, now time.Time) error {
 	fmt.Fprintln(w, line)
 	line = plural.CountAs(rc.Commands, "command", "commands") + "."
 	if rc.Tests != nil {
-		ago := waitedFor(rc.Tests.At, now)
+		ago := units.Waited(rc.Tests.At, now)
 		switch {
 		case rc.Tests.OK == nil:
 			line += fmt.Sprintf(" Tests: %s ran %s ago, and nothing said how", plainLine(rc.Tests.Cmdline), ago)

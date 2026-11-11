@@ -14,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // The Inbox on the command line: what is waiting for the person, in every
@@ -87,25 +88,6 @@ func attentionGroupTitle(kind string) string {
 		return "Waiting to send"
 	}
 	return kind
-}
-
-// waitedFor is how long an item has waited, in words short enough for a
-// column: 40s, 12m, 3h, 2d.
-func waitedFor(since int64, now time.Time) string {
-	if since <= 0 {
-		return "?"
-	}
-	d := max(now.Sub(time.Unix(0, since)), 0)
-	switch {
-	case d < time.Minute:
-		return strconv.Itoa(int(d.Seconds())) + "s"
-	case d < time.Hour:
-		return strconv.Itoa(int(d.Minutes())) + "m"
-	case d < 24*time.Hour:
-		return strconv.Itoa(int(d.Hours())) + "h"
-	default:
-		return strconv.Itoa(int(d.Hours())/24) + "d"
-	}
 }
 
 func runListAttention(sessionName, host string, kinds []string, selector string, snoozed, jsonOutput bool) error {
@@ -198,7 +180,7 @@ func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 		if it.Kind == session.AttentionMail && it.Seen > 0 {
 			summary = strings.TrimSpace(summary + fmt.Sprintf(" [%d seen]", it.Seen))
 		}
-		fmt.Fprintf(w, "  %4s  %-6s %s", waitedFor(it.Since, now), "#"+it.ID, where)
+		fmt.Fprintf(w, "  %4s  %-6s %s", units.Waited(it.Since, now), "#"+it.ID, where)
 		if summary != "" {
 			fmt.Fprintf(w, "  %s", summary)
 		}
@@ -220,13 +202,13 @@ func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 			// waitedFor measures back from now, so the time left is put
 			// that far back.
 			left := max(it.WithParentUntil-now.UnixNano(), 0)
-			fmt.Fprintf(w, "  [with the parent agent, comes to you in %s]", waitedFor(now.UnixNano()-left, now))
+			fmt.Fprintf(w, "  [with the parent agent, comes to you in %s]", units.Waited(now.UnixNano()-left, now))
 		}
 		if it.Stale {
 			// What that machine said last. Nobody can check it now.
 			seen := "never"
 			if it.SeenAt > 0 {
-				seen = waitedFor(it.SeenAt, now) + " ago"
+				seen = units.Waited(it.SeenAt, now) + " ago"
 			}
 			fmt.Fprintf(w, "  [unreachable, seen %s]", seen)
 		}

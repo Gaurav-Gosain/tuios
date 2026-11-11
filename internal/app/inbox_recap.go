@@ -14,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // The away recap: what an agent did while the person was looking at
@@ -424,7 +425,7 @@ func agentReturnLine(r agentReturn, rc *session.AgentActivityRecap, now time.Tim
 	if where := agentReturnState(state); where != "" {
 		parts = append(parts, where)
 	}
-	return r.who + " while you were away (" + inboxWait(r.since, now) + "): " + strings.Join(parts, ", ")
+	return r.who + " while you were away (" + units.Waited(r.since, now) + "): " + strings.Join(parts, ", ")
 }
 
 // agentReturnState says where an agent is now, in the words the dock line
@@ -444,9 +445,9 @@ func agentReturnState(state string) string {
 func recapSentences(rc *session.AgentActivityRecap, since int64, now time.Time, root string) []string {
 	var out []string
 	if since > 0 {
-		out = append(out, "While you were away ("+inboxWait(since, now)+")")
+		out = append(out, "While you were away ("+units.Waited(since, now)+")")
 	} else if rc.Since > 0 {
-		out = append(out, "Since "+time.Unix(0, rc.Since).Format("15:04")+" ("+inboxWait(rc.Since, now)+" ago)")
+		out = append(out, "Since "+time.Unix(0, rc.Since).Format("15:04")+" ("+units.Waited(rc.Since, now)+" ago)")
 	}
 	line := recapCount(int(rc.Turns), "turn", "turns") + "."
 	if rc.FilesTotal > 0 {
@@ -455,7 +456,7 @@ func recapSentences(rc *session.AgentActivityRecap, since int64, now time.Time, 
 	out = append(out, line)
 	line = recapCount(rc.Commands, "command", "commands") + "."
 	if t := rc.Tests; t != nil {
-		line += " Tests: " + recapTestCommand(t.Cmdline) + " " + recapTestWord(t.OK) + " " + inboxWait(t.At, now) + " ago"
+		line += " Tests: " + recapTestCommand(t.Cmdline) + " " + recapTestWord(t.OK) + " " + units.Waited(t.At, now) + " ago"
 	}
 	out = append(out, line)
 	if rc.LastSaid != "" {

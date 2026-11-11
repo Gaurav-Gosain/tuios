@@ -11,6 +11,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -528,7 +529,7 @@ func reviewCheckAge(row reviewFanRow, now time.Time) string {
 	if at == 0 {
 		return "-"
 	}
-	return inboxWait(at, now)
+	return units.Waited(at, now)
 }
 
 // reviewCheckColor colours a check by how it went.
