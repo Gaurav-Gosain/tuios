@@ -124,9 +124,17 @@ type UserConfig struct {
 	// Actions are the [[actions]] entries: user actions a key, a menu or
 	// tuios actions run starts. See user_actions.go.
 	Actions []UserAction `toml:"actions,omitempty"`
-	// Menus are the [menus.NAME] tables: the right-click menus a person
-	// changes, and submenus. See menus_config.go.
+	// Menus are the [menus.NAME] tables, every menu a person declares: the
+	// which-key menus a key opens, and the shipped right-click menus they
+	// change. See menus_config.go.
 	Menus map[string]MenuSpec `toml:"menus,omitempty"`
+
+	// foldedMenus names the Keybindings.Menus the loader made from
+	// [menus.NAME], which a save leaves out, and shadowedMenus keeps the
+	// [keybindings.menus.NAME] one of them took the place of, which a save
+	// keeps.
+	foldedMenus   map[string]bool
+	shadowedMenus map[string]MenuConfig
 	// Hosts is the [hosts.NAME] set: the other machines this daemon may ask for
 	// listings. Outside the option registry for the same reason as the tables
 	// above. See hosts.go.
@@ -1163,9 +1171,11 @@ type KeybindingsConfig struct {
 	// preset puts the tuios features whose keys it takes here. Empty without
 	// a preset.
 	TuiosPrefix map[string][]string `toml:"tuios_prefix,omitempty"`
-	// Menus are prefix menus the user declares, each opened by binding the
-	// action open_menu:NAME in any section, so menus nest as deep as the
-	// config does. None ships: see menus.go.
+	// Menus are the which-key menus, each opened by binding the action
+	// open_menu:NAME in any section, so menus nest as deep as the config
+	// does. None ships: see menus.go. The loader adds the [menus.NAME]
+	// tables with keyed rows (menus_config.go); [keybindings.menus.NAME] is
+	// the older spelling of a menu, read as it was.
 	Menus        map[string]MenuConfig `toml:"menus,omitempty"`
 	TerminalMode map[string][]string   `toml:"terminal_mode"` // Direct keybinds in terminal mode (no prefix required)
 	// Global binds are consulted in window mode and in terminal mode alike, so
@@ -2556,6 +2566,7 @@ func parseUserConfigOnce(data []byte) (*UserConfig, error) {
 	fillMissingPiP(&cfg, defaultCfg)
 	fillMissingPanes(&cfg, defaultCfg)
 	fillMissingReview(&cfg, defaultCfg)
+	cfg.foldMenus()
 	return &cfg, nil
 }
 

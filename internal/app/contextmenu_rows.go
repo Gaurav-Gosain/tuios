@@ -22,8 +22,9 @@ import (
 // a built-in action that the target ships keeps that row's glyph, label and
 // conditions; another built-in action reads its description; user:NAME reads
 // the action's label, and shows only on a target the action is offered on,
-// when its when matches. A { menu = "NAME" } row opens the submenu NAME in the
-// menu's place.
+// when its when matches. A { menu = "NAME" } row, the action open_menu:NAME,
+// opens that menu in the menu's place: a [menus.NAME], or the older
+// [keybindings.menus.NAME] read as rows.
 //
 // The facts are bits and a condition is two masks, not a func: a func per
 // condition cost about 20 KB of binary in closures and their line tables.
@@ -94,13 +95,14 @@ func (c rowCond) holds(f menuFact) bool {
 }
 
 // menuRow is one row. An action of config.MenuSeparator is a separator. The
-// zero show always shows, and the zero dim never dims. when is a user
-// action's when table.
+// zero show always shows, and the zero dim never dims. when are the when
+// tables of a row from config, the action's and the row's own, which all
+// have to match.
 type menuRow struct {
 	action, icon, label string
 	show, dim           rowCond
 	warn                bool
-	when                map[string]any
+	when                []map[string]any
 }
 
 // sep is a separator row.
@@ -234,11 +236,14 @@ func shippedRows(name string) []menuRow {
 const menuDepthMax = 8
 
 // menuRowsFor is the rows of the menu name before the facts: the shipped
-// rows with the person's table applied, or a submenu's rows.
+// rows with the person's table applied, or a declared menu's rows.
 func (m *OS) menuRowsFor(name string) []menuRow {
 	rows := shippedRows(name)
 	if m.UserConfig == nil {
 		return rows
+	}
+	if entries, _, ok := m.UserConfig.MenuRows(name); ok {
+		return m.menuRowsOf(name, entries)
 	}
 	spec, ok := m.UserConfig.Menus[name]
 	if !ok {
@@ -271,30 +276,40 @@ func (m *OS) menuRowsOf(name string, entries []config.MenuEntry) []menuRow {
 			out = append(out, sep)
 			continue
 		}
-		if e.Menu != "" {
-			label := m.UserConfig.Menus[e.Menu].Title
+		n := len(out)
+		switch {
+		case e.Menu != "":
+			_, label, _ := m.UserConfig.MenuRows(e.Menu)
 			if label == "" {
 				label = e.Menu
 			}
-			out = append(out, menuRow{action: config.MenuRowPrefix + e.Menu, icon: glyphSwitch, label: invisible.Strip(printableTitle(label)) + " >"})
-			continue
-		}
-		if strings.HasPrefix(e.Action, config.UserActionPrefix) {
+			out = append(out, menuRow{action: e.RowAction(), icon: glyphSwitch, label: label + " >"})
+		case strings.HasPrefix(e.Action, config.UserActionPrefix):
 			out = m.appendUserRow(out, name, e.Action)
-			continue
-		}
-		n := len(out)
-		for _, r := range shippedRows(name) {
-			if strings.TrimSuffix(r.action, "{pos}") == e.Action {
-				out = append(out, r)
+		default:
+			for _, r := range shippedRows(name) {
+				if strings.TrimSuffix(r.action, "{pos}") == e.Action {
+					out = append(out, r)
+				}
+			}
+			if spec, ok := config.LookupAction(e.Action); len(out) == n && ok {
+				label := spec.Desc
+				if label == "" {
+					label = e.Action
+				}
+				out = append(out, menuRow{action: e.Action, label: label})
 			}
 		}
-		if spec, ok := config.LookupAction(e.Action); len(out) == n && ok {
-			label := spec.Desc
-			if label == "" {
-				label = e.Action
+		// The row's own label and when apply to what it became. A label from
+		// config passes the invisible-character strip, as every label here.
+		for i := n; i < len(out); i++ {
+			if e.Label != "" {
+				out[i].label = e.Label
 			}
-			out = append(out, menuRow{action: e.Action, label: label})
+			out[i].label = invisible.Strip(printableTitle(out[i].label))
+			if e.When != nil {
+				out[i].when = append(slices.Clone(out[i].when), e.When)
+			}
 		}
 	}
 	return out
@@ -320,7 +335,11 @@ func (m *OS) appendUserRow(out []menuRow, name, action string) []menuRow {
 	if config.IsMenuTarget(name) && !slices.Contains(targets, name) {
 		return out
 	}
-	return append(out, menuRow{action: action, label: invisible.Strip(printableTitle(a.DisplayLabel())), when: a.When})
+	r := menuRow{action: action, label: a.DisplayLabel()}
+	if a.When != nil {
+		r.when = []map[string]any{a.When}
+	}
+	return append(out, r)
 }
 
 // buildMenu makes the rows of the menu name for the facts f: the rows that
@@ -332,13 +351,11 @@ func (m *OS) buildMenu(name string, f menuFacts) []ContextMenuItem {
 		if !r.show.holds(f.bits) {
 			continue
 		}
-		if r.when != nil {
-			if user == nil {
-				user = m.userFacts()
-			}
-			if !config.WhenMatches(r.when, user) {
-				continue
-			}
+		if r.when != nil && user == nil {
+			user = m.userFacts()
+		}
+		if slices.ContainsFunc(r.when, func(w map[string]any) bool { return !config.WhenMatches(w, user) }) {
+			continue
 		}
 		if r.action == config.MenuSeparator {
 			if len(out) > 0 && !out[len(out)-1].Sep {
@@ -397,15 +414,15 @@ func (m *OS) OpenSubmenu(name string) {
 	if from == nil || m.UserConfig == nil || from.depth >= menuDepthMax || config.IsMenuTarget(name) {
 		return
 	}
-	spec, ok := m.UserConfig.Menus[name]
+	_, title, ok := m.UserConfig.MenuRows(name)
 	if !ok {
 		return
 	}
 	cm := *from
 	cm.depth++
 	cm.Title = name
-	if spec.Title != "" {
-		cm.Title = invisible.Strip(printableTitle(spec.Title))
+	if title != "" {
+		cm.Title = invisible.Strip(printableTitle(title))
 	}
 	cm.Items = m.menu(name, 0)
 	cm.Scroll, cm.ScrollFrom = 0, 0

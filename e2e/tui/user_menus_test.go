@@ -13,12 +13,16 @@ import (
 // TestMenusFromConfigAddRemoveAndOpenASubmenu: a [menus.pane] table changes
 // the shipped pane menu without copying it, a user action shows only on the
 // targets it names and while its when matches, and a { menu = "NAME" } row
-// opens a submenu whose row runs on the pane the first menu was opened on.
+// opens a submenu whose row runs on the pane the first menu was opened on. The
+// same [menus.NAME] is the which-key panel a key opens, and a menu in the
+// older [keybindings.menus.NAME] spelling opens as a right-click submenu.
 //
 // It checks: the added rows sit after Zoom and before Minimize; the removed
 // row is gone; an action offered only on the desktop and an action whose when
 // names a program the pane does not run are left out; the submenu opens under
-// its title and its row runs, writing the pane's name whole.
+// its title and its row runs, writing the pane's name whole; leader t u opens
+// the same menu as a which-key panel whose s runs the row again; the older
+// spelling's menu opens as a submenu with its keyed row.
 //
 // How it could pass wrongly: a menu that never read the config would still
 // show the shipped rows, so each added row is looked for by its own label and
@@ -27,8 +31,10 @@ import (
 //
 // Artifact: the pane menu and the submenu as text, and the file the row wrote.
 //
-// Negative control: with userActionRow not reading the action's targets, the
-// desktop-only row shows on the pane menu and the check fails.
+// Negative controls: with appendUserRow not reading the action's targets, the
+// desktop-only row shows on the pane menu. With foldMenus not run, leader t u
+// opens nothing. With MenuRows not reading [keybindings.menus], the old
+// spelling's row is left out of the pane menu.
 func TestMenusFromConfigAddRemoveAndOpenASubmenu(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -58,13 +64,22 @@ when = { program = ["vim", "nvim"] }
 action = "toggle_zoom"
 
 [menus.pane]
-add = ["user:keep-folder", "user:desk-only", "user:in-vim", { menu = "tools" }]
+add = ["user:keep-folder", "user:desk-only", "user:in-vim", { menu = "tools" }, { menu = "legacy" }]
 after = "toggle_zoom"
 remove = ["screenshot_window"]
 
 [menus.tools]
 title = "My tools"
-items = ["user:save-name", "---", "new_window"]
+items = [{ action = "user:save-name", key = "s" }, "---", "new_window"]
+
+[keybindings.window_prefix]
+"open_menu:tools" = ["u"]
+
+[keybindings.menus.legacy]
+title = "Old spelling"
+
+[keybindings.menus.legacy.keys]
+toggle_zoom = ["z"]
 `
 	writeConfig(t, base, cfg)
 	var log strings.Builder
@@ -114,6 +129,36 @@ items = ["user:save-name", "---", "new_window"]
 	fmt.Fprintf(&log, "== %s\n%s\n", out, got)
 	if got != name {
 		t.Errorf("ASSERTION: the submenu row wrote %q, want the pane name %q whole", got, name)
+	}
+
+	// The same menu from a key: leader t u is its which-key panel, which
+	// shows the keyed row under the action's label, and s runs it.
+	if err := os.Remove(out); err != nil {
+		t.Fatalf("remove %s: %v", out, err)
+	}
+	if err := term.SendKeys(tuitest.Ctrl('b'), "t", "u"); err != nil {
+		t.Fatalf("send leader t u: %v", err)
+	}
+	waitMenu(t, term, "which-key", "my tools", "Save the pane name", "Cancel")
+	fmt.Fprintf(&log, "== which-key\n%s\n", term.Screen().Text())
+	if err := term.SendKeys("s"); err != nil {
+		t.Fatalf("send s: %v", err)
+	}
+	if got := waitForFileText(t, out, func(s string) bool { return s != "" }, "the which-key row never ran its action"); got != name {
+		t.Errorf("ASSERTION: the which-key row wrote %q, want the pane name %q whole", got, name)
+	}
+
+	// A menu in the older [keybindings.menus.NAME] spelling is a submenu of a
+	// right-click menu too, under its title, with its rows.
+	shiftRightClick(t, term, 20, 10)
+	waitMenu(t, term, "pane again", "Old spelling >")
+	s = term.Screen()
+	oldX, oldY, _ := dockCellFind(s, "Old spelling >")
+	leftClick(t, term, oldX+2, oldY)
+	waitMenu(t, term, "old spelling submenu", "Old spelling", "Toggle zoom (fullscreen)")
+	fmt.Fprintf(&log, "== old spelling\n%s\n", term.Screen().Text())
+	if strings.Contains(term.Screen().Text(), "Keep this folder") {
+		t.Errorf("ASSERTION: the old spelling did not open as a submenu:\n%s", term.Screen().Text())
 	}
 	alive(t, term, "after running a submenu row")
 }

@@ -167,6 +167,7 @@ func renderConfigFile(cfg *UserConfig, configPath string) ([]byte, error) {
 // TOML, which is how max_fps comes out as a bare 144 or a quoted "auto" from
 // one field. toml.Marshal would quote both.
 func MarshalUserConfig(cfg *UserConfig) ([]byte, error) {
+	cfg = cfg.withoutFoldedMenus()
 	var buf bytes.Buffer
 	enc := toml.NewEncoder(&buf).SetIndentSymbol("  ").EnableMarshalerInterface()
 	if err := enc.Encode(cfg); err != nil {

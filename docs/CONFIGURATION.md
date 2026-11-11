@@ -676,7 +676,7 @@ file_drag = false
 
 `[[actions]]` declares an action of your own, `user:NAME`: a built-in action, a program with its arguments (placeholders such as `{pane.cwd}` fill one argument each, and no shell reads them), or a plugin action. A key, a menu row or `tuios actions run` runs it. See [KEYBINDINGS.md](KEYBINDINGS.md#your-actions).
 
-`[menus.TARGET]` changes the right-click menu of a target (`pane`, `session`, `file` and the others): `add` puts rows after the row `after` names, `remove` takes rows out, and `items` replaces them. `{ menu = "NAME" }` opens the submenu `[menus.NAME]`. An action's `targets` and `when` decide where its row shows. See [KEYBINDINGS.md](KEYBINDINGS.md#your-menus).
+`[menus.NAME]` declares a menu: a title and a list of rows, each an action or a submenu with an optional `key`, `label` and `when`. `open_menu:NAME` opens it, as a which-key panel from a key and in place from a right-click menu. The target names (`pane`, `session`, `file` and the others) are the shipped right-click menus: `add` puts rows after the row `after` names, `remove` takes rows out, and `items` replaces them. An action's `targets` and `when` decide where its row shows. See [KEYBINDINGS.md](KEYBINDINGS.md#your-menus).
 
 ## Animation speed
 

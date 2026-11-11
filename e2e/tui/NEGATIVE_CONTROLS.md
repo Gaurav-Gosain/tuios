@@ -17063,10 +17063,14 @@ Run on 2026-11-11 on macOS (arm64). The branch passes.
 after Zoom, removes one, adds a submenu, and checks that a user action shows
 only on its targets and while its `when` matches. It opens the submenu and
 runs its row, which writes the pane's name, holding `$(...)` and quotes,
-whole.
+whole. It then opens the same `[menus.tools]` from a key (leader `t u`) as a
+which-key panel and runs its keyed row, and opens a menu in the older
+`[keybindings.menus.NAME]` spelling as a right-click submenu.
 
-Run on 2026-11-11 on macOS (arm64). The branch passes.
+Run on 2026-11-12 on macOS (arm64), on main 448e9bf1d. The branch passes.
 
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
-| `userActionRow` not reading the action's `targets` | `the pane menu shows "Desktop only row"` | **caught** |
+| `appendUserRow` not reading the action's `targets` | `the pane menu shows "Desktop only row"` | **caught** |
+| `foldMenus` not run, so `[menus]` keyed rows are not which-key menus | `which-key: context menu never showed [my tools Save the pane name Cancel]` | **caught** |
+| `MenuRows` not reading `[keybindings.menus.NAME]` | `pane again: context menu never showed [Old spelling >]` | **caught** |

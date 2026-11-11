@@ -1294,9 +1294,15 @@ A mistake in an entry is a warning, and tuios ignores that entry.
 
 ### Your menus
 
-A `[menus.TARGET]` table changes the right-click menu of a target: `pane`,
-`selection`, `desktop`, `dock`, `dock_item`, `workspace`, `session`, `repo`,
-`machine` or `file`. You change the shipped rows. You do not copy them.
+A menu is a `[menus.NAME]` table: a title and a list of rows. One menu shows
+two ways. `open_menu:NAME` on a key opens it as a which-key panel of the rows
+that have a `key` ([Menus nested under the leader](#menus-nested-under-the-leader)).
+The same action as a row of a right-click menu opens it in that menu's place.
+
+The target names are reserved: `pane`, `selection`, `desktop`, `dock`,
+`dock_item`, `workspace`, `session`, `repo`, `machine` and `file` are the
+right-click menus tuios ships. Their table changes the shipped rows. You do
+not copy them.
 
 ```toml
 [menus.pane]
@@ -1313,14 +1319,23 @@ items = ["user:deploy", "---", "new_window"]
 |---|---|
 | `add` | Puts the rows after the row whose action is `after`, or at the end |
 | `remove` | Removes the rows with these actions |
-| `items` | Replaces all the rows |
-| `title` | Names a submenu |
+| `items` | Replaces all the rows (the rows of any other menu) |
+| `title` | Heads a menu that is not a target's |
+| `sticky` | Keeps the which-key panel open after a key runs |
 
-A row is an action name, `"---"` for a separator, or `{ menu = "NAME" }`,
-which opens the submenu `[menus.NAME]` in the place of the menu. A submenu row
-acts on the target of the first menu. A shipped action keeps its label and
-its state (a dimmed row stays dimmed). Another built-in action shows its
-description.
+A row is an action name, `"---"` for a separator, or a table:
+
+| Row key | Is |
+|---|---|
+| `action` or `menu` | What the row runs: an action, or the menu `NAME` (`open_menu:NAME`) |
+| `key` | The key in the which-key panel, or a list of keys |
+| `label` | The row's text, in the place of the action's |
+| `when` | Shows the row only while the focused pane matches (see below) |
+
+A submenu row acts on the target of the first menu. A shipped action keeps
+its label and its state (a dimmed row stays dimmed). Another built-in action
+shows its description. A key on a target's row is not read: a target's menu
+opens on its target.
 
 A `user:NAME` row shows only on the targets in the action's `targets` (a pane
 when it has none), and only while its `when` matches the focused pane:
@@ -1335,7 +1350,8 @@ action = "copy_selection"
 
 `when` reads `agent_state`, `harness`, `program`, `host` and `has_selection`
 (`"true"` or `"false"`). Each value is a string or a list of strings, and the
-fact must equal one of them.
+fact must equal one of them. A row's own `when` works the same way, in a
+right-click menu. The which-key panel shows every row that has a key.
 
 ## Master-stack layout
 
@@ -1579,31 +1595,32 @@ join_marked_right = ["J"]
 ## Menus nested under the leader
 
 A key in a prefix menu can open a menu of your own, so a keymap can nest as
-deep as a tmux which-key tree. You declare the menu, then bind the action
-`open_menu:NAME` to the key that opens it. tuios has no menus of this kind
-until you declare one, and it binds no new key for them.
+deep as a tmux which-key tree. You declare the menu ([Your menus](#your-menus)),
+give its rows a `key`, then bind the action `open_menu:NAME` to the key that
+opens it. tuios has no menus of this kind until you declare one, and it binds
+no new key for them.
 
 ```toml
 [keybindings.window_prefix]
 "open_menu:split" = ["s"]
 
-[keybindings.menus.split]
+[menus.split]
 title = "Split"
+items = [
+  { action = "split_vertical", key = "y" },
+  { action = "split_horizontal", key = "x" },
+  { menu = "resize", key = "R" },
+]
 
-[keybindings.menus.split.keys]
-split_vertical = ["y"]
-split_horizontal = ["x"]
-"open_menu:resize" = ["R"]
-
-[keybindings.menus.resize]
+[menus.resize]
 title = "Resize"
 sticky = true
-
-[keybindings.menus.resize.keys]
-resize_pane_left_5 = ["h"]
-resize_pane_down_5 = ["j"]
-resize_pane_up_5 = ["k"]
-resize_pane_right_5 = ["l"]
+items = [
+  { action = "resize_pane_left_5", key = "h" },
+  { action = "resize_pane_down_5", key = "j" },
+  { action = "resize_pane_up_5", key = "k" },
+  { action = "resize_pane_right_5", key = "l" },
+]
 ```
 
 `Ctrl+B t s y` splits the pane. `Ctrl+B t s R h h h` narrows it by three steps.
@@ -1621,9 +1638,13 @@ resize_pane_right_5 = ["l"]
 - The which-key panel lists the keys the menu has. Menus come first, with a
   `+`.
 - `tuios keybinds list`, `doctor`, `unbind` and `free` read the menus as they
-  read any other section. A config warning names a key that opens a menu that
-  is not declared, a menu that no key opens, and a menu key whose action
-  the overlay it opens over does not have (see below).
+  read any other section, named `menus.NAME`. A config warning names a key
+  that opens a menu that is not declared, a menu that nothing opens, and a
+  menu key whose action the overlay it opens over does not have (see below).
+- `[keybindings.menus.NAME]`, with `title`, `sticky` and a `keys` table of
+  `action = ["key"]`, is the older spelling of a menu and is still read: its
+  keys are the rows. When both spellings declare one name, tuios uses
+  `[menus.NAME]` and warns.
 
 ### Menus in the rail, the Inbox and the other overlays
 
@@ -1637,13 +1658,13 @@ same section.
 [keybindings.inbox]
 "open_menu:triage" = ["x"]
 
-[keybindings.menus.triage]
+[menus.triage]
 title = "Triage"
-
-[keybindings.menus.triage.keys]
-inbox_dismiss = ["d"]
-inbox_snooze = ["s"]
-inbox_close = ["c"]
+items = [
+  { action = "inbox_dismiss", key = "d" },
+  { action = "inbox_snooze", key = "s" },
+  { action = "inbox_close", key = "c" },
+]
 ```
 
 In the Inbox, `x d` dismisses the selected item and `x c` closes the Inbox.

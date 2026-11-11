@@ -7,23 +7,26 @@ import (
 	"strings"
 )
 
-// User-declared prefix menus, for keymaps that nest as deep as a tmux
-// which-key tree. A menu is a table of its own, and any section binds the
-// action open_menu:NAME to open it, so a menu can sit under the leader, under
-// another menu, or on a key of its own:
+// Which-key menus: the menus a key opens, for keymaps that nest as deep as a
+// tmux which-key tree. A menu is a [menus.NAME] table (menus_config.go) whose
+// rows have keys, and any section binds the action open_menu:NAME to open
+// it, so a menu can sit under the leader, under another menu, or on a key of
+// its own:
 //
-//	[keybindings.menus.split]
+//	[menus.split]
 //	title = "Split"
-//
-//	[keybindings.menus.split.keys]
-//	split_vertical   = ["y"]
-//	split_horizontal = ["x"]
+//	items = [
+//	  { action = "split_vertical", key = "y" },
+//	  { action = "split_horizontal", key = "x" },
+//	]
 //
 //	[keybindings.window_prefix]
 //	"open_menu:split" = ["s"]
 //
-// leader, t, s, y then splits. Nothing here ships bound: a menu exists only
-// when a config declares it.
+// leader, t, s, y then splits. The older spelling, [keybindings.menus.NAME]
+// with a keys table of action = [keys], is read as it always was; the loader
+// adds the [menus.NAME] ones to KeybindingsConfig.Menus. Nothing here ships
+// bound: a menu exists only when a config declares it.
 
 // OpenMenuPrefix starts the action that opens a declared menu.
 const OpenMenuPrefix = "open_menu:"
@@ -32,7 +35,8 @@ const OpenMenuPrefix = "open_menu:"
 // report, doctor and unbind name the table: "menus.split".
 const MenuSectionPrefix = "menus."
 
-// MenuConfig is one [keybindings.menus.NAME] table.
+// MenuConfig is one which-key menu: a [menus.NAME] with keyed rows, or a
+// [keybindings.menus.NAME] table.
 type MenuConfig struct {
 	// Title heads the which-key panel. The menu's name when empty.
 	Title string `toml:"title,omitempty"`
@@ -42,6 +46,10 @@ type MenuConfig struct {
 	Sticky bool `toml:"sticky,omitempty"`
 	// Keys binds actions to keys, as every other section does.
 	Keys map[string][]string `toml:"keys,omitempty"`
+
+	// labels are the rows' own labels of a [menus.NAME], which the panel
+	// shows in the place of the action's description.
+	labels map[string]string
 }
 
 // OpenMenuAction is the action that opens the menu called name.
@@ -204,6 +212,9 @@ func MenuKeybindingGroups(kb *KeybindingsConfig, name string) []KeybindingGroup 
 			escBound = true
 		}
 		row := Keybinding{Key: strings.Join(keys, "/"), Description: menuRowDescription(kb, action), Action: action}
+		if l := menu.labels[action]; l != "" {
+			row.Description = l
+		}
 		if target, ok := MenuNameOf(action); ok {
 			row.Description, row.Submenu = kb.MenuTitle(target), true
 		}
@@ -240,7 +251,7 @@ func validateMenus(cfg *UserConfig, result *ValidationResult) {
 	for name := range kb.Menus {
 		if !validMenuName(name) {
 			result.Warnings = append(result.Warnings, ValidationError{
-				Field: "keybindings.menus", Key: name,
+				Field: "menus", Key: name,
 				Message: fmt.Sprintf("The menu name %q is not usable and the menu is ignored. Use lowercase letters, digits, - and _.", name),
 			})
 		}
@@ -255,7 +266,7 @@ func validateMenus(cfg *UserConfig, result *ValidationResult) {
 			if _, declared := kb.Menu(target); !declared {
 				result.Warnings = append(result.Warnings, ValidationError{
 					Field: section, Key: action,
-					Message: fmt.Sprintf("%s opens a menu that is not declared, so the key does nothing. Add a [keybindings.menus.%s] table.", action, target),
+					Message: fmt.Sprintf("%s opens a menu that is not declared, so the key does nothing. Add a [menus.%s] table with items.", action, target),
 				})
 				continue
 			}
@@ -266,9 +277,11 @@ func validateMenus(cfg *UserConfig, result *ValidationResult) {
 		check(section.name, section.keys)
 	}
 	for _, name := range kb.MenuNames() {
-		if !opened[name] {
+		// A [menus.NAME] may be opened by a right-click row, so only a
+		// [keybindings.menus.NAME] that no key opens is unused.
+		if !opened[name] && !cfg.foldedMenus[name] {
 			result.Warnings = append(result.Warnings, ValidationError{
-				Field: "keybindings.menus", Key: name,
+				Field: "menus", Key: name,
 				Message: fmt.Sprintf("Nothing opens the menu %s. Bind %s in a section, for example [keybindings.prefix_mode].", name, OpenMenuAction(name)),
 			})
 		}
