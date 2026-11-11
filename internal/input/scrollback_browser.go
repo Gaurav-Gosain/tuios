@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/scrollback"
 	"tuios.dev/vt"
 )
@@ -283,59 +284,51 @@ func handleBrowserOutputModeKey(msg tea.KeyPressMsg, keyStr string, browser *scr
 	center := false
 	isVisual := vim.Mode == scrollback.VimVisualChar || vim.Mode == scrollback.VimVisualLine
 
+	// The g of gg. A pending g is for the very next key only, so g j g is
+	// not gg, as in copy mode.
+	finishesGG := vim.PendingG && time.Since(vim.LastGTime) < ggWindow
+	vim.PendingG = false
+	if keyStr == "g" {
+		if !finishesGG {
+			vim.PendingG, vim.LastGTime = true, time.Now()
+			return o, nil
+		}
+		vim.MoveToTop()
+		vim.EnsureVisible()
+		return o, nil
+	}
+
+	// The motions take copy mode's keys: the [keybindings.copy_mode] actions
+	// and the keys copy mode reads itself, so a key rebound there moves here
+	// too.
+	action := fixedCopyMotions[keyStr]
+	if action == "" {
+		action = copyModeAction(msg, o)
+	}
+	if m, ok := browserMotions[action]; ok {
+		n := 1
+		switch m.steps {
+		case stepsVertical:
+			n = vCount
+		case stepsHorizontal:
+			n = hCount
+		}
+		if m.byCount != nil {
+			m.byCount(vim, count)
+		} else {
+			for range n {
+				m.move(vim)
+			}
+		}
+		if m.center {
+			vim.CenterView()
+		} else {
+			vim.EnsureVisible()
+		}
+		return o, nil
+	}
+
 	switch keyStr {
-	// Basic movement
-	case "j", "down":
-		for range vCount {
-			vim.MoveDown()
-		}
-	case "k", "up":
-		for range vCount {
-			vim.MoveUp()
-		}
-	case "h":
-		for range hCount {
-			vim.MoveLeft()
-		}
-	case "l":
-		for range hCount {
-			vim.MoveRight()
-		}
-
-	// Line position
-	case "0":
-		vim.MoveToLineStart()
-	case "^":
-		vim.MoveToFirstNonBlank()
-	case "$":
-		vim.MoveToLineEnd()
-
-	// Word movement
-	case "w":
-		for range vCount {
-			vim.WordForward()
-		}
-	case "b":
-		for range vCount {
-			vim.WordBackward()
-		}
-	case "e":
-		for range vCount {
-			vim.WordEnd()
-		}
-	case "W":
-		for range vCount {
-			vim.WORDForward()
-		}
-	case "B":
-		for range vCount {
-			vim.WORDBackward()
-		}
-	case "E":
-		for range vCount {
-			vim.WORDEnd()
-		}
-
 	// Character search
 	case "f":
 		vim.PendingCharSearch = true
@@ -357,67 +350,6 @@ func handleBrowserOutputModeKey(msg tea.KeyPressMsg, keyStr string, browser *scr
 		vim.LastCharSearchDir = -1
 		vim.LastCharSearchTill = true
 		return o, nil
-	case ";":
-		for range hCount {
-			vim.RepeatCharSearch(false)
-		}
-	case ",":
-		for range hCount {
-			vim.RepeatCharSearch(true)
-		}
-
-	// Jump
-	case "g":
-		if vim.PendingG && time.Since(vim.LastGTime) < 500*time.Millisecond {
-			vim.MoveToTop()
-			vim.PendingG = false
-		} else {
-			vim.PendingG = true
-			vim.LastGTime = time.Now()
-			return o, nil
-		}
-	case "G":
-		if count > 1 {
-			vim.MoveToLine(count)
-		} else {
-			vim.MoveToBottom()
-		}
-
-	// Screen position
-	case "H":
-		vim.MoveToScreenTop()
-	case "M":
-		vim.MoveToScreenMiddle()
-	case "L":
-		vim.MoveToScreenBottom()
-
-	// Page movement
-	case "ctrl+d":
-		vim.HalfPageDown()
-		center = true
-	case "ctrl+u":
-		vim.HalfPageUp()
-		center = true
-	case "ctrl+f":
-		vim.PageDown()
-		center = true
-	case "ctrl+b":
-		vim.PageUp()
-		center = true
-
-	// Paragraph
-	case "{":
-		for range vCount {
-			vim.ParagraphUp()
-		}
-	case "}":
-		for range vCount {
-			vim.ParagraphDown()
-		}
-
-	// Bracket matching
-	case "%":
-		vim.MatchBracket()
 
 	// Search
 	case "/":
@@ -480,14 +412,6 @@ func handleBrowserOutputModeKey(msg tea.KeyPressMsg, keyStr string, browser *scr
 		} else {
 			browser.ExitOutputMode()
 			return o, nil
-		}
-	case "left":
-		for range hCount {
-			vim.MoveLeft()
-		}
-	case "right":
-		for range hCount {
-			vim.MoveRight()
 		}
 	}
 
@@ -698,4 +622,65 @@ func truncateForNotif(s string, maxLen int) string {
 		return string(runes[:maxLen])
 	}
 	return string(runes[:maxLen-3]) + "..."
+}
+
+// browserMotion is a copy-mode motion as the scrollback browser runs it on its
+// own text. steps says which count repeats it; byCount takes the count itself.
+type browserMotion struct {
+	move    func(*scrollback.VimState)
+	byCount func(v *scrollback.VimState, count int)
+	steps   motionSteps
+	center  bool
+}
+
+// motionSteps is how a count repeats a motion: by lines, which a count may
+// repeat up to the line count, by columns, capped at maxHorizCount, or not
+// at all.
+type motionSteps uint8
+
+const (
+	stepsOnce motionSteps = iota
+	stepsVertical
+	stepsHorizontal
+)
+
+// browserMotions are the scrollback browser's motions, by the copy-mode
+// action whose keys run them.
+var browserMotions = map[string]browserMotion{
+	config.ActionCopyModeLeft:            {move: (*scrollback.VimState).MoveLeft, steps: stepsHorizontal},
+	config.ActionCopyModeRight:           {move: (*scrollback.VimState).MoveRight, steps: stepsHorizontal},
+	config.ActionCopyModeUp:              {move: (*scrollback.VimState).MoveUp, steps: stepsVertical},
+	config.ActionCopyModeDown:            {move: (*scrollback.VimState).MoveDown, steps: stepsVertical},
+	config.ActionCopyModeLineStart:       {move: (*scrollback.VimState).MoveToLineStart},
+	config.ActionCopyModeFirstNonBlank:   {move: (*scrollback.VimState).MoveToFirstNonBlank},
+	config.ActionCopyModeLineEnd:         {move: (*scrollback.VimState).MoveToLineEnd},
+	config.ActionCopyModeWordForward:     {move: (*scrollback.VimState).WordForward, steps: stepsVertical},
+	config.ActionCopyModeWordBackward:    {move: (*scrollback.VimState).WordBackward, steps: stepsVertical},
+	config.ActionCopyModeWordEnd:         {move: (*scrollback.VimState).WordEnd, steps: stepsVertical},
+	config.ActionCopyModeBigWordForward:  {move: (*scrollback.VimState).WORDForward, steps: stepsVertical},
+	config.ActionCopyModeBigWordBackward: {move: (*scrollback.VimState).WORDBackward, steps: stepsVertical},
+	config.ActionCopyModeBigWordEnd:      {move: (*scrollback.VimState).WORDEnd, steps: stepsVertical},
+	config.ActionCopyModeHalfPageUp:      {move: (*scrollback.VimState).HalfPageUp, center: true},
+	config.ActionCopyModeHalfPageDown:    {move: (*scrollback.VimState).HalfPageDown, center: true},
+	config.ActionCopyModePageUp:          {move: (*scrollback.VimState).PageUp, center: true},
+	config.ActionCopyModePageDown:        {move: (*scrollback.VimState).PageDown, center: true},
+	config.ActionCopyModeScreenTop:       {move: (*scrollback.VimState).MoveToScreenTop},
+	config.ActionCopyModeScreenMiddle:    {move: (*scrollback.VimState).MoveToScreenMiddle},
+	config.ActionCopyModeScreenBottom:    {move: (*scrollback.VimState).MoveToScreenBottom},
+	config.ActionCopyModeParagraphUp:     {move: (*scrollback.VimState).ParagraphUp, steps: stepsVertical},
+	config.ActionCopyModeParagraphDown:   {move: (*scrollback.VimState).ParagraphDown, steps: stepsVertical},
+	config.ActionCopyModeMatchingBracket: {move: (*scrollback.VimState).MatchBracket},
+	config.ActionCopyModeRepeatCharSearch: {steps: stepsHorizontal, move: func(v *scrollback.VimState) {
+		v.RepeatCharSearch(false)
+	}},
+	config.ActionCopyModeRepeatCharSearchBack: {steps: stepsHorizontal, move: func(v *scrollback.VimState) {
+		v.RepeatCharSearch(true)
+	}},
+	config.ActionCopyModeBottom: {byCount: func(v *scrollback.VimState, count int) {
+		if count > 1 {
+			v.MoveToLine(count)
+			return
+		}
+		v.MoveToBottom()
+	}},
 }

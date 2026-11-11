@@ -16550,3 +16550,19 @@ Run on 2026-11-11 on macOS (arm64). The branch passes, and so do the other
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestShipPushLeavesOvnfsCheckoutRemotesOut$' -v .`.
+
+## The scrollback browser takes copy mode's keys
+
+`TestScrollbackBrowserTakesCopyModeKeys` rebinds `copy_mode_down` to `ctrl+n`,
+opens the scrollback browser's output view on 200 lines, and checks that
+`ctrl+n` moves the cursor, that `j` no longer does, that `g k g` does not go to
+the top, and that `gg` does.
+
+Run on 2026-11-11 on Linux (arch-btw). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The branch before the change (0a79bd295), where the browser reads its own literal keys | "ctrl+n, bound to copy_mode_down: the cursor is on line 1 of 200, want 2" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestScrollbackBrowserTakesCopyModeKeys$' -v .`.
