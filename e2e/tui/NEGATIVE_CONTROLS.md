@@ -16636,3 +16636,17 @@ Run on 2026-11-11 on macOS (arm64). The branch passes.
 The frames are text grids: a kitty picture is placed after the frame and is
 not in them. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskBoardPreviewShowsEachAttachment$' -v .`.
+
+## The capture sheet attaches its images to the card
+
+`TestTaskCaptureFromAnywhere` now reads the pasted image back from the card
+with `tuios task attachment get` and compares its bytes, and checks the prompt
+names it as `retry-log.png (attached)`.
+
+Run on 2026-11-11 on macOS (arm64). The branch passes the `TestTaskCapture`
+tests. On arch-btw both fail on main and on the branch at the e2e PATH guard
+(`/usr/bin` holds a real agent CLI there), before they reach tuios.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The branch before this one (stash path in the prompt) | "the card's prompt \"It fails one run in ten. /tmp/.../stash/....png\" is not the second line and the attached image's name" and "the pasted image is not attached to t1" | **caught** |
