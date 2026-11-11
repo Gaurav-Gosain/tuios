@@ -2809,10 +2809,58 @@ func (m *OS) sidebarTerminals(sessions []sessiontree.Node, sessionID string) []s
 	// dragging a pill in the dock rearranges the panes under it here too. Two
 	// surfaces grouping the same panes into a different sequence would be the one
 	// disagreement a single display order exists to rule out.
+	//
+	// Inside a workspace, a scrolling strip's panes are listed left to right
+	// (top to bottom within a stacked column), the order they are drawn in.
+	// Without that the rows follow the order the panes were created in, which a
+	// move in the strip never changes. Only the attached session has a strip
+	// this client can read; another session's panes keep the daemon's order.
+	var strip map[string]int
+	if node.IsCurrent {
+		strip = m.scrollStripRanks()
+	}
+	stripRank := func(e sidebarTerminalEntry) int {
+		if r, ok := strip[e.WindowID]; ok {
+			return r
+		}
+		return len(strip)
+	}
 	sort.SliceStable(out, func(a, b int) bool {
-		return m.workspaceRank(out[a].workspace) < m.workspaceRank(out[b].workspace)
+		if ra, rb := m.workspaceRank(out[a].workspace), m.workspaceRank(out[b].workspace); ra != rb {
+			return ra < rb
+		}
+		return stripRank(out[a]) < stripRank(out[b])
 	})
 	return out
+}
+
+// scrollStripRanks maps each window id that sits in a scrolling strip to its
+// place in that strip, counted column by column from the left and down each
+// column. Nil outside the tiled scrolling layout. Ranks are only compared
+// between panes of one workspace, so each workspace's strip counts from zero.
+// It only reads: it neither creates a strip for a workspace that has none yet
+// nor assigns an id to a window that has none, so a pane the strip has not
+// met ranks after every pane it has.
+func (m *OS) scrollStripRanks() map[string]int {
+	if !m.UseScrollingLayout || !m.AutoTiling {
+		return nil
+	}
+	ranks := make(map[string]int)
+	for _, sl := range m.WorkspaceScrollingLayouts {
+		if sl == nil {
+			continue
+		}
+		n := 0
+		for _, col := range sl.Columns {
+			for _, id := range col.WindowIDs {
+				if wid, ok := m.BSPIDToWindowID[id]; ok {
+					ranks[wid] = n
+					n++
+				}
+			}
+		}
+	}
+	return ranks
 }
 
 // sidebarCompactWidth is the widest rail the compact rule applies to. The

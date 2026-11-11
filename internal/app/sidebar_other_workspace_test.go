@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
@@ -33,5 +34,62 @@ func TestUnknownWorkspaceTagsNothing(t *testing.T) {
 		if e.Tag != "" {
 			t.Errorf("pane %q was tagged %q off a listing that says nothing about workspaces", e.WindowID, e.Tag)
 		}
+	}
+}
+
+// TestTerminalsFollowStripOrder: in the tiled scrolling layout the terminals
+// section lists a workspace's panes in the order the strip draws them, not in
+// the order they were created. Moving a column changes the strip and nothing
+// about creation order, so a rail that ignored the strip looked shuffled.
+func TestTerminalsFollowStripOrder(t *testing.T) {
+	m, _ := sectionsTestOS(t, 120, 30)
+	m.UseScrollingLayout, m.AutoTiling = true, true
+	m.SessionName = "api"
+	// Created a, b, c, d; the strip holds them c, a, (d over b stacked).
+	ids := map[string]int{"aaaaaaaa1111": 1, "bbbbbbbb2222": 2, "cccccccc3333": 3, "dddddddd4444": 4}
+	m.BSPIDToWindowID = map[int]string{}
+	for w, n := range ids {
+		m.BSPIDToWindowID[n] = w
+	}
+	m.WorkspaceScrollingLayouts = map[int]*layout.ScrollingLayout{
+		1: {Columns: []layout.ScrollColumn{{WindowIDs: []int{3}}, {WindowIDs: []int{1}}, {WindowIDs: []int{4, 2}}}},
+	}
+	tree := sessiontree.Build([]sessiontree.SessionInput{
+		{Name: "api", IsCurrent: true, CurrentWorkspace: 1, Windows: []sessiontree.WindowInput{
+			{ID: "aaaaaaaa1111", Title: "a", Workspace: 1},
+			{ID: "bbbbbbbb2222", Title: "b", Workspace: 1},
+			{ID: "cccccccc3333", Title: "c", Workspace: 1},
+			{ID: "dddddddd4444", Title: "d", Workspace: 1},
+		}},
+	})
+	var got []string
+	for _, e := range m.sidebarTerminals(tree.Sessions, "api") {
+		got = append(got, e.WindowID[:1])
+	}
+	if want := "cadb"; strings.Join(got, "") != want {
+		t.Errorf("terminals order = %v, want %q", got, want)
+	}
+
+	// Moving a column in the strip or disabling scrolling layout moves the rail
+	// signature so cached frames do not serve stale pane ordering.
+	sigScrolling := m.sidebarSignature()
+	m.WorkspaceScrollingLayouts[1] = &layout.ScrollingLayout{
+		Columns: []layout.ScrollColumn{{WindowIDs: []int{1}}, {WindowIDs: []int{3}}, {WindowIDs: []int{4, 2}}},
+	}
+	if sigRearranged := m.sidebarSignature(); sigRearranged == sigScrolling {
+		t.Error("sidebarSignature did not move when strip columns rearranged")
+	}
+
+	// Outside the scrolling layout the creation order stands.
+	m.UseScrollingLayout = false
+	if sigDisabled := m.sidebarSignature(); sigDisabled == sigScrolling {
+		t.Error("sidebarSignature did not move when scrolling layout disabled")
+	}
+	got = got[:0]
+	for _, e := range m.sidebarTerminals(tree.Sessions, "api") {
+		got = append(got, e.WindowID[:1])
+	}
+	if want := "abcd"; strings.Join(got, "") != want {
+		t.Errorf("terminals order outside scrolling = %v, want %q", got, want)
 	}
 }

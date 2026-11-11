@@ -349,6 +349,34 @@ func (m *OS) sidebarSignature() uint64 {
 	}
 	mixU(wsFold)
 
+	// In the tiled scrolling layout the terminals section lists a workspace's
+	// panes in strip order rather than creation order. Both the layout switch
+	// and each workspace's column sequence decide which rows are drawn where.
+	// Order-independent across workspaces, order-dependent along each strip.
+	mixB(m.UseScrollingLayout && m.AutoTiling)
+	var stripFold uint64
+	if m.UseScrollingLayout && m.AutoTiling {
+		for ws, sl := range m.WorkspaceScrollingLayouts {
+			if sl == nil {
+				continue
+			}
+			e := uint64(1469598103934665603) ^ uint64(ws)
+			e *= prime
+			for _, col := range sl.Columns {
+				for _, id := range col.WindowIDs {
+					if _, ok := m.BSPIDToWindowID[id]; ok {
+						e ^= uint64(id)
+						e *= prime
+					}
+				}
+				e ^= 0x3f
+				e *= prime
+			}
+			stripFold ^= e
+		}
+	}
+	mixU(stripFold)
+
 	// Session identity and the user's drag-defined order, and whose order
 	// the rail draws: the daemon's, or this client's while a move of its own
 	// is on its way (see session_order.go). A failed move flips the second
