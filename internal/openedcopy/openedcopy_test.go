@@ -1,6 +1,7 @@
 package openedcopy
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -54,4 +55,28 @@ func FuzzPlaceStaysInside(f *testing.F) {
 			}
 		}
 	})
+}
+
+// TestWriteRecordDoesNotWriteThroughAPlantedTempLink is a security boundary: a
+// link planted at the old fixed temporary name must not make WriteRecord write
+// into the file the link names.
+func TestWriteRecordDoesNotWriteThroughAPlantedTempLink(t *testing.T) {
+	dir := t.TempDir()
+	victim := filepath.Join(dir, "victim")
+	if err := os.WriteFile(victim, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "record.json")
+	if err := os.Symlink(victim, path+".tmp"); err != nil {
+		t.Skipf("no symlinks here: %v", err)
+	}
+	if err := WriteRecord(path, Record{Host: "h", Path: "/p"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(victim); string(got) != "keep" {
+		t.Errorf("WriteRecord wrote through the planted link: the victim now holds %d bytes", len(got))
+	}
+	if _, ok := ReadRecord(path); !ok {
+		t.Error("the record was not written")
+	}
 }

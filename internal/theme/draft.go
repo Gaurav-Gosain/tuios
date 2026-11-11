@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"charm.land/tone"
+	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	tint "github.com/lrstanley/bubbletint/v2"
@@ -271,12 +272,7 @@ func (d *Draft) save(force bool) (string, error) {
 	doc := themeDoc{ID: d.ID, DisplayName: d.Name, Base: d.Base, Dark: d.Dark, Colours: d.Colours}
 	copy(doc.Chrome[:], d.Chrome[:])
 	body := doc.encode(true)
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, body, 0o600); err != nil {
-		return "", errfmt.Errorf("write %s: %w", path, err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
+	if err := atomicfile.Write(path, body, 0o600, false); err != nil {
 		return "", errfmt.Errorf("write %s: %w", path, err)
 	}
 	d.src.path, d.src.disk = path, body
