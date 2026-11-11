@@ -93,6 +93,14 @@ type AgentsConfig struct {
 	// whatever this says, and alt+m in it takes all of them. See
 	// ReplyRowsOr.
 	ReplyRows int `toml:"reply_rows,omitempty"`
+	// AskWaitSeconds is how long ask-human waits for the person's answer
+	// when the caller names no timeout. The question stays after the wait.
+	// Zero uses 120.
+	AskWaitSeconds int `toml:"ask_wait_seconds,omitempty"`
+	// UndoWindowSeconds is how long after a dismiss or a snooze in the Inbox,
+	// or a queued reply, u takes it back. The daemon and the client read it
+	// both. Zero uses 10.
+	UndoWindowSeconds int `toml:"undo_window_seconds,omitempty"`
 }
 
 // ReplyRowsMax bounds reply_rows. No view is taller.

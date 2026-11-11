@@ -320,6 +320,25 @@ type DaemonConfig struct {
 	// DispatchReadySeconds is how long a dispatched task waits for its agent
 	// to be ready, at most 600. Zero uses the start-agent wait.
 	DispatchReadySeconds int `toml:"dispatch_ready_seconds"`
+	// SaveSeconds is the longest a session whose panes printed waits to be
+	// saved, which keeps each pane's folder current for a restore. Zero
+	// uses 30, and less than 10 reads as 10.
+	SaveSeconds int `toml:"save_seconds"`
+	// ExecTimeoutSeconds is how long a command run with tuios exec may take
+	// when the caller names no timeout. Zero uses 30.
+	ExecTimeoutSeconds int `toml:"exec_timeout_seconds"`
+	// HostHeartbeatSeconds is how long a link to another machine may carry
+	// nothing before the daemon pings it. Zero uses 15.
+	HostHeartbeatSeconds int `toml:"host_heartbeat_seconds"`
+	// HostHeartbeatTimeoutSeconds is how long one ping waits for its reply.
+	// Zero uses 5.
+	HostHeartbeatTimeoutSeconds int `toml:"host_heartbeat_timeout_seconds"`
+	// HostCallTimeoutSeconds is how long one listing over a live link may
+	// take before the link is torn down and dialed again. Zero uses 8.
+	HostCallTimeoutSeconds int `toml:"host_call_timeout_seconds"`
+	// ReconnectSeconds is how long a client waits for a restarted daemon
+	// before it gives up. Zero uses 15.
+	ReconnectSeconds int `toml:"reconnect_seconds"`
 	// AgentBinaries lists extra binary names to treat as agents, merged with the
 	// built-in defaults (not replacing them).
 	AgentBinaries []string `toml:"agent_binaries"`
@@ -1305,17 +1324,23 @@ func DefaultConfig() *UserConfig {
 			},
 		},
 		Daemon: DaemonConfig{
-			LogLevel:            "off",
-			ResumeAgents:        ResumeAgentsAsk,
-			WindowSize:          WindowSizeLatest,
-			Display:             DisplayFollow,
-			KeepAwake:           KeepAwakeOff,
-			AgentDetectSeconds:  2,
-			AgentStallSeconds:   30,
-			SubagentFadeSeconds: 60,
-			CleanupSeconds:      30,
-			PRPollSeconds:       60,
-			TransferKeepSeconds: 1800,
+			LogLevel:                    "off",
+			ResumeAgents:                ResumeAgentsAsk,
+			WindowSize:                  WindowSizeLatest,
+			Display:                     DisplayFollow,
+			KeepAwake:                   KeepAwakeOff,
+			AgentDetectSeconds:          2,
+			AgentStallSeconds:           30,
+			SubagentFadeSeconds:         60,
+			CleanupSeconds:              30,
+			PRPollSeconds:               60,
+			TransferKeepSeconds:         1800,
+			SaveSeconds:                 DefaultSaveSeconds,
+			ExecTimeoutSeconds:          DefaultExecTimeoutSeconds,
+			HostHeartbeatSeconds:        DefaultHostHeartbeatSeconds,
+			HostHeartbeatTimeoutSeconds: DefaultHostHeartbeatTimeoutSeconds,
+			HostCallTimeoutSeconds:      DefaultHostCallTimeoutSeconds,
+			ReconnectSeconds:            DefaultReconnectSeconds,
 		},
 		Startup: StartupConfig{
 			OpenDefaultWindow:   false,
@@ -1339,12 +1364,18 @@ func DefaultConfig() *UserConfig {
 		Panes:        defaultPanesConfig(),
 		PasteBuffers: defaultPasteBuffersConfig(),
 		Review:       defaultReviewConfig(),
-		Agents:       AgentsConfig{ViewList: AgentsViewListColumn},
-		Shell:        ShellConfig{Integration: ShellIntegrationAuto},
+		Agents: AgentsConfig{
+			ViewList:          AgentsViewListColumn,
+			AskWaitSeconds:    DefaultAskWaitSeconds,
+			UndoWindowSeconds: DefaultUndoWindowSeconds,
+		},
+		Shell: ShellConfig{Integration: ShellIntegrationAuto},
 		Files: FilesConfig{
 			OpenCopyAskMB:    DefaultOpenCopyAskMB,
 			OpenCopyMaxMB:    DefaultOpenCopyMaxMB,
 			OpenCopyKeepDays: DefaultOpenCopyKeepDays,
+			DropKeepHours:    DefaultDropKeepHours,
+			DropKeepMB:       DefaultDropKeepMB,
 		},
 		Keybindings: KeybindingsConfig{
 			LeaderKey: "ctrl+b",

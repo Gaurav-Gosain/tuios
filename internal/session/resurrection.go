@@ -412,7 +412,7 @@ func RemoveResurrectionState(sessionName string) {
 //
 // The first look comes resurrectionDirtyInterval after the start, as the old
 // ticker's did, so a session made dirty before its saver ran is written.
-func startPeriodicSaveWith(getState func() *SessionState, dirty, stale *wakeLatch, wakes *atomic.Int64, save func(*SessionState) error) func() {
+func startPeriodicSaveWith(every time.Duration, getState func() *SessionState, dirty, stale *wakeLatch, wakes *atomic.Int64, save func(*SessionState) error) func() {
 	stopCh := make(chan struct{})
 	done := make(chan struct{})
 
@@ -434,7 +434,7 @@ func startPeriodicSaveWith(getState func() *SessionState, dirty, stale *wakeLatc
 		}
 		// staleDue is when a stale session is next written.
 		staleDue := func(now time.Time) time.Time {
-			at := lastSave.Add(resurrectionInterval)
+			at := lastSave.Add(every)
 			if soon := now.Add(resurrectionDirtyInterval); at.Before(soon) {
 				return soon
 			}
@@ -461,7 +461,7 @@ func startPeriodicSaveWith(getState func() *SessionState, dirty, stale *wakeLatc
 					wakes.Add(1)
 				}
 				isDirty := dirty.Take()
-				if !isDirty && !(stale.Up() && now.Sub(lastSave) >= resurrectionInterval) {
+				if !isDirty && !(stale.Up() && now.Sub(lastSave) >= every) {
 					if stale.Up() {
 						arm(staleDue(now))
 					}

@@ -37,7 +37,7 @@ import (
 // never answers a prompt, which the daemon checks again right before it types.
 //
 // x on a rail row with a queue drops the newest message still waiting. A drop
-// of a message this client queued can be undone for inboxUndoWindow with u on
+// of a message this client queued can be undone for inboxUndoWindow() with u on
 // the same row, which queues its text again.
 //
 // A key that did not come from the keyboard never sends: a draft send-keys
@@ -929,7 +929,7 @@ func (m *OS) applyInboxQueueDropped(msg InboxQueueDroppedMsg) {
 func (m *OS) sidebarAgentUndoDrop(sessionID, windowID string) (tea.Cmd, bool) {
 	st := &m.Inbox.reply
 	d := st.dropped
-	if d == nil || time.Since(d.at) >= inboxUndoWindow || d.window != windowID || (sessionID != "" && d.session != sessionID) {
+	if d == nil || time.Since(d.at) >= m.inboxUndoWindow() || d.window != windowID || (sessionID != "" && d.session != sessionID) {
 		return nil, false
 	}
 	// The undo queues the text as the person, with the attach nonce, so a

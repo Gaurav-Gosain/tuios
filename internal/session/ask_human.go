@@ -356,7 +356,7 @@ func (d *Daemon) verbAskHuman(cs *connState, params json.RawMessage) (any, *verb
 		return nil, invalidParam("timeout", "timeout is milliseconds and cannot be negative")
 	}
 	wait := p.Wait == nil || *p.Wait
-	timeout := defaultAskWait
+	timeout := d.askWait
 	if p.Timeout > 0 {
 		timeout = min(time.Duration(p.Timeout)*time.Millisecond, maxAskWait)
 	}

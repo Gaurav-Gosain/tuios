@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"slices"
 	"sort"
 	"strconv"
@@ -24,9 +25,11 @@ import (
 // item wakes on the daemon, which publishes it open again, and the mirror
 // takes it back into the list from that event.
 
-// inboxUndoWindow is how long after a dismiss or a snooze u restores it. It is
-// the daemon's window too.
-const inboxUndoWindow = 10 * time.Second
+// inboxUndoWindow is how long after a dismiss or a snooze u restores it:
+// agents.undo_window_seconds, which the daemon keeps as well.
+func (m *OS) inboxUndoWindow() time.Duration {
+	return time.Duration(cmp.Or(max(m.Settings.UndoWindowSeconds, 0), config.DefaultUndoWindowSeconds)) * time.Second
+}
 
 // inboxUndoNotice is how long, at least, the dock says a dismiss or a snooze
 // can be undone. The dock's own floor may keep it up longer.
@@ -389,7 +392,7 @@ func (m *OS) rememberInboxUndo(id, who string) {
 	life := &m.Inbox.life
 	now := time.Now()
 	life.undo = slices.DeleteFunc(life.undo, func(u inboxUndoEntry) bool {
-		return u.id == id || now.Sub(u.at) >= inboxUndoWindow
+		return u.id == id || now.Sub(u.at) >= m.inboxUndoWindow()
 	})
 	life.undo = append(life.undo, inboxUndoEntry{id: id, who: who, at: now})
 	if len(life.undo) > inboxUndoMax {
@@ -511,7 +514,7 @@ func (m *OS) InboxUndo() (tea.Cmd, bool) {
 	}
 	life := &m.Inbox.life
 	now := time.Now()
-	life.undo = slices.DeleteFunc(life.undo, func(u inboxUndoEntry) bool { return now.Sub(u.at) >= inboxUndoWindow })
+	life.undo = slices.DeleteFunc(life.undo, func(u inboxUndoEntry) bool { return now.Sub(u.at) >= m.inboxUndoWindow() })
 	if len(life.undo) == 0 {
 		m.ShowNotification("Nothing to undo: a dismiss, a snooze or a settle can be undone for 10 seconds", "warning", m.Settings.NotificationDuration)
 		return nil, true

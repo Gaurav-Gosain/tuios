@@ -294,6 +294,9 @@ type AttentionItem struct {
 // sink may call into it with the session's state lock held.
 type attentionStore struct {
 	mu sync.Mutex
+	// undoWindow is agents.undo_window_seconds. NewDaemon sets it before
+	// the store is used; zero is attentionUndoWindow.
+	undoWindow time.Duration
 	// heldDismissed is, per machine, the held-mail count the person
 	// dismissed. The item stays closed until the count changes.
 	heldDismissed map[string]int

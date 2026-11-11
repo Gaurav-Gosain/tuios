@@ -50,7 +50,7 @@ func (d *Daemon) dropRoot() (string, error) {
 
 // pruneDrops removes whole drops, oldest first, until the folder holds no
 // drop older than dropKeepAge and at most keep bytes.
-func pruneDrops(root string, keep int64, now time.Time) {
+func pruneDrops(root string, keep int64, maxAge time.Duration, now time.Time) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return
@@ -85,7 +85,7 @@ func pruneDrops(root string, keep int64, now time.Time) {
 	}
 	sort.Slice(drops, func(i, j int) bool { return drops[i].at.Before(drops[j].at) })
 	for _, dr := range drops {
-		if now.Sub(dr.at) <= dropKeepAge && total <= keep {
+		if now.Sub(dr.at) <= maxAge && total <= keep {
 			break
 		}
 		if os.RemoveAll(dr.path) == nil {
@@ -110,8 +110,8 @@ func (d *Daemon) verbFileDropDir(cs *connState, params json.RawMessage) (any, *v
 	// Room for this drop comes out of what the older drops may keep. A caller
 	// that names more bytes than the folder ever holds would otherwise prune
 	// every older drop, so the claim is clamped.
-	want := min(max(p.Bytes, 0), dropKeepBytes)
-	pruneDrops(root, dropKeepBytes-want, time.Now())
+	want := min(max(p.Bytes, 0), d.dropKeepBytes)
+	pruneDrops(root, d.dropKeepBytes-want, d.dropKeepAge, time.Now())
 	var b [6]byte
 	_, _ = rand.Read(b[:])
 	dir := filepath.Join(root, time.Now().Format("20060102-150405")+"-"+hex.EncodeToString(b[:]))
@@ -121,7 +121,7 @@ func (d *Daemon) verbFileDropDir(cs *connState, params json.RawMessage) (any, *v
 	if err := os.Mkdir(dir, 0o700); err != nil {
 		return nil, fileError("make the drop folder", dir, err)
 	}
-	return map[string]any{"dir": dir, "keep_bytes": dropKeepBytes, "keep_hours": int(dropKeepAge / time.Hour)}, nil
+	return map[string]any{"dir": dir, "keep_bytes": d.dropKeepBytes, "keep_hours": int(d.dropKeepAge / time.Hour)}, nil
 }
 
 // verbDropFiles gives a pane on a machine the paths of files that are on this

@@ -769,6 +769,15 @@ type Settings struct {
 	// would cost a move of the whole frame.
 	PaneGap int `opt:"appearance.gap"`
 
+	// UndoWindowSeconds is agents.undo_window_seconds: how long u takes back
+	// an Inbox dismiss, a snooze or a queued reply. The daemon keeps the same
+	// window.
+	UndoWindowSeconds int `opt:"agents.undo_window_seconds"`
+
+	// ReconnectSeconds is daemon.reconnect_seconds: how long the client waits
+	// for a restarted daemon.
+	ReconnectSeconds int `opt:"daemon.reconnect_seconds"`
+
 	// MasterRatioPercent is how much of the screen the master pane takes in the
 	// master-stack layout, as a percent. It is the value a new session starts at;
 	// once a session is running the ratio is the session's, moved by the resize

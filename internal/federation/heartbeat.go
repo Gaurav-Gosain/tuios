@@ -19,7 +19,7 @@ import (
 // up.
 //
 // So the link checks itself. While the link is up, it asks the far daemon for
-// a hello on a stream of its own every heartbeatInterval, but only when no
+// a hello on a stream of its own every heartbeat (Options.Heartbeat), but only when no
 // frame came off the pipe in that time: a link that carries traffic is alive,
 // and an idle one costs one small round trip per interval. A reply of any
 // kind, an error included, proves the far side is there. A frame of any kind
@@ -33,12 +33,13 @@ import (
 // heartbeatMisses in a row end it.
 
 const (
-	// heartbeatInterval is how long a link may carry no frame before the
-	// heartbeat pings it. It is also how often a link that waits to dial
-	// again checks for a wake from sleep.
-	heartbeatInterval = 15 * time.Second
-	// heartbeatTimeout is how long one ping waits for its reply.
-	heartbeatTimeout = 5 * time.Second
+	// DefaultHeartbeat is how long a link may carry no frame before the
+	// heartbeat pings it (Options.Heartbeat). It is also how often a link
+	// that waits to dial again checks for a wake from sleep.
+	DefaultHeartbeat = 15 * time.Second
+	// DefaultHeartbeatTimeout is how long one ping waits for its reply
+	// (Options.HeartbeatTimeout).
+	DefaultHeartbeatTimeout = 5 * time.Second
 	// heartbeatRetry is the wait before the next ping after a miss.
 	heartbeatRetry = time.Second
 	// heartbeatMisses is how many pings in a row may miss before the link
@@ -47,10 +48,11 @@ const (
 	// sleepJump is how far the wall clock must run ahead of the monotonic
 	// clock across one tick for the tick to count as a wake from sleep.
 	sleepJump = 5 * time.Second
-	// loadMaxAge is how old the far machine's load may get. A link that
+	// loadMaxAgeBeats is how old the far machine's load may get, in
+	// heartbeats. A link that
 	// carries traffic is not pinged, so it is pinged for the load once its
 	// load is older than this: one small round trip a minute at most.
-	loadMaxAge = 4 * heartbeatInterval
+	loadMaxAgeBeats = 4
 )
 
 // sleepWatch finds a wake from sleep between two calls of slept.
@@ -102,7 +104,7 @@ func (l *link) heartbeat(ctx context.Context, m *mux, closed <-chan struct{}, te
 	var p pinger
 	defer p.close()
 	clock := newSleepWatch()
-	t := time.NewTimer(heartbeatInterval)
+	t := time.NewTimer(l.opts.Heartbeat)
 	defer t.Stop()
 	misses := 0
 	for {
@@ -125,22 +127,22 @@ func (l *link) heartbeat(ctx context.Context, m *mux, closed <-chan struct{}, te
 		if !asked && !woke && misses == 0 && !l.loadStale() {
 			// A frame in the last interval proves the pipe. The next
 			// check is one interval after that frame, so a pipe that goes
-			// quiet is pinged heartbeatInterval later, not up to twice
+			// quiet is pinged one heartbeat later, not up to twice
 			// that.
-			if next := m.quietCheckIn(heartbeatInterval); next > 0 {
+			if next := m.quietCheckIn(l.opts.Heartbeat); next > 0 {
 				t.Reset(next)
 				continue
 			}
 		}
 		start := time.Now().UnixNano()
-		ok, load, rtt, held := p.ping(ctx, m)
+		ok, load, rtt, held := p.ping(ctx, m, l.opts.HeartbeatTimeout)
 		l.noteHello(load, rtt)
 		if ok {
 			l.noteMailHeld(held)
 		}
 		if ok || m.readSince(start) {
 			misses = 0
-			t.Reset(heartbeatInterval)
+			t.Reset(l.opts.Heartbeat)
 			continue
 		}
 		misses++
@@ -183,10 +185,10 @@ type pinger struct {
 }
 
 // ping sends one hello on the heartbeat's stream and reports whether an
-// answer came within heartbeatTimeout, with the load the answer carried and
+// answer came within timeout, with the load the answer carried and
 // its round trip. The hello names no client, so the far daemon does not log
 // it.
-func (p *pinger) ping(ctx context.Context, m *mux) (bool, *Load, time.Duration, MailHeld) {
+func (p *pinger) ping(ctx context.Context, m *mux, timeout time.Duration) (bool, *Load, time.Duration, MailHeld) {
 	type answer struct {
 		ok   bool
 		load *Load
@@ -209,7 +211,7 @@ func (p *pinger) ping(ctx context.Context, m *mux) (bool, *Load, time.Duration, 
 			}
 			p.c = newCaller(s)
 		}
-		callCtx, cancel := context.WithTimeout(ctx, heartbeatTimeout)
+		callCtx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 		at := time.Now()
 		raw, err := p.c.call(callCtx, "hello", nil)
@@ -233,7 +235,7 @@ func (p *pinger) ping(ctx context.Context, m *mux) (bool, *Load, time.Duration, 
 		p.c = nil
 		done <- answer{}
 	}()
-	t := time.NewTimer(heartbeatTimeout + time.Second)
+	t := time.NewTimer(timeout + time.Second)
 	defer t.Stop()
 	select {
 	case a := <-done:

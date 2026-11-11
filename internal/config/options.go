@@ -1225,6 +1225,16 @@ var optionSpecs = []Option{
 		Description: "The width of the agents view's list: a number of cells, such as 52, or a share of the view, such as 30%. Empty follows the screen. The < and > keys and a drag on the edge of the list change it, and the view keeps that choice.",
 	},
 	{
+		Path: "agents.ask_wait_seconds", Type: OptionInt, Section: "agents",
+		Description: "Seconds ask-human waits for your answer when the agent names no timeout. The question stays after the wait. 0 uses 120",
+		Min:         0, Max: 3600, Zero: ZeroIsDefault,
+	},
+	{
+		Path: "agents.undo_window_seconds", Type: OptionInt, Section: "agents",
+		Description: "Seconds after a dismiss, a snooze or a queued reply that u takes it back. 0 uses 10",
+		Min:         0, Max: 300, Zero: ZeroIsDefault,
+	},
+	{
 		Path: "agents.reply_rows", Type: OptionInt, Section: "agents",
 		Description: "The most rows a multi-line editor grows to before it scrolls: a reply to an agent or to many, a mail draft and a new agent's task. 0 keeps each editor's own: 8 for a reply, 6 for mail, 3 for a task. An editor never takes more rows than its view has, and alt+m in it takes all of them.",
 		Min:         0, Max: ReplyRowsMax,
@@ -1298,6 +1308,36 @@ var optionSpecs = []Option{
 		Description: "Seconds a finished file transfer stays in the list. 0 uses 1800.",
 		Zero:        ZeroIsDefault,
 		Env:         "TUIOS_TRANSFER_KEEP_SECONDS",
+	},
+	{
+		Path: "daemon.save_seconds", Type: OptionInt, Section: "daemon",
+		Description: "Most seconds a session whose panes printed waits to be saved, which keeps each pane's folder current for a restore",
+		Min:         10, Max: 600, Zero: ZeroIsDefault,
+	},
+	{
+		Path: "daemon.exec_timeout_seconds", Type: OptionInt, Section: "daemon",
+		Description: "Seconds a command run with tuios exec may take when the caller names no timeout. 0 uses 30",
+		Min:         0, Max: 3600, Zero: ZeroIsDefault,
+	},
+	{
+		Path: "daemon.host_heartbeat_seconds", Type: OptionInt, Section: "daemon",
+		Description: "Seconds a link to another machine may carry nothing before the daemon pings it. 0 uses 15",
+		Min:         0, Max: 300, Zero: ZeroIsDefault,
+	},
+	{
+		Path: "daemon.host_heartbeat_timeout_seconds", Type: OptionInt, Section: "daemon",
+		Description: "Seconds one ping to another machine waits for its reply. Two misses end the link. 0 uses 5",
+		Min:         0, Max: 60, Zero: ZeroIsDefault,
+	},
+	{
+		Path: "daemon.host_call_timeout_seconds", Type: OptionInt, Section: "daemon",
+		Description: "Seconds one listing over a live link may take before the link is dialed again. 0 uses 8",
+		Min:         0, Max: 120, Zero: ZeroIsDefault,
+	},
+	{
+		Path: "daemon.reconnect_seconds", Type: OptionInt, Section: "daemon",
+		Description: "Seconds a client waits for a restarted daemon before it gives up. 0 uses 15",
+		Min:         0, Max: 300, Zero: ZeroIsDefault,
 	},
 	{
 		Path: "daemon.dispatch_ready_seconds", Type: OptionInt, Section: "daemon",
@@ -1846,6 +1886,16 @@ var optionSpecs = []Option{
 		Path: "files.open_copy_max_mb", Type: OptionInt, Section: "files",
 		Description: "Above this size in MiB, o on a file of another machine does not copy it here. 0 uses 4096",
 		Min:         0, Max: 1 << 20,
+	},
+	{
+		Path: "files.drop_keep_hours", Type: OptionInt, Section: "files",
+		Description: "Hours a file dropped into a pane of another machine stays in that machine's drop folder. 0 uses 24",
+		Min:         0, Max: 8760, Zero: ZeroIsDefault,
+	},
+	{
+		Path: "files.drop_keep_mb", Type: OptionInt, Section: "files",
+		Description: "Most MiB the drop folder holds. A drop that does not fit is refused. 0 uses 256",
+		Min:         0, Max: 1 << 16, Zero: ZeroIsDefault,
 	},
 	{
 		Path: "files.open_copy_keep_days", Type: OptionInt, Section: "files",

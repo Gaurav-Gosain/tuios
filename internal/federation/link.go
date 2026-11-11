@@ -181,7 +181,7 @@ type link struct {
 	wake chan struct{}
 	// probe asks the heartbeat of a link that is up to ping now. Retry sends
 	// on it, so a person who asks for a host that looks up but is not finds
-	// out in heartbeatTimeout instead of KeepaliveWindow.
+	// out in the heartbeat timeout instead of KeepaliveWindow.
 	probe chan struct{}
 	// lastProbe is when Retry last sent on probe.
 	lastProbe time.Time
@@ -327,13 +327,14 @@ func (l *link) noteMailHeld(h MailHeld) {
 	}
 }
 
-// loadStale reports whether the load is older than loadMaxAge, so the
+// loadStale reports whether the load is older than loadMaxAgeBeats
+// heartbeats, so the
 // heartbeat pings a busy link for a new one.
 func (l *link) loadStale() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	// A daemon whose hello carries no load is not asked again for one.
-	return !l.loadAt.IsZero() && time.Since(l.loadAt) > loadMaxAge
+	return !l.loadAt.IsZero() && time.Since(l.loadAt) > loadMaxAgeBeats*l.opts.Heartbeat
 }
 
 // report snapshots the link for a listing.
@@ -417,13 +418,13 @@ func (l *link) supervise(ctx context.Context) {
 // does a wake from sleep: the monotonic clock the wait runs on stops while
 // the machine sleeps, so without the check a link that was waiting a minute
 // before the sleep still waits out the rest of it after the wake. The wait
-// is cut into heartbeatInterval pieces to check the clocks, which costs a
+// is cut into heartbeat pieces to check the clocks, which costs a
 // link that is down four wakeups a minute and a link that is up none. It
 // reports false when ctx ends.
 func (l *link) waitToDial(ctx context.Context, wait time.Duration) bool {
 	clock := newSleepWatch()
 	deadline := time.Now().Add(wait)
-	t := time.NewTimer(min(wait, heartbeatInterval))
+	t := time.NewTimer(min(wait, l.opts.Heartbeat))
 	defer t.Stop()
 	for {
 		select {
@@ -446,7 +447,7 @@ func (l *link) waitToDial(ctx context.Context, wait time.Duration) bool {
 		if left <= 0 {
 			return true
 		}
-		t.Reset(min(left, heartbeatInterval))
+		t.Reset(min(left, l.opts.Heartbeat))
 	}
 }
 
@@ -877,7 +878,7 @@ func (l *link) waitForDaemon(ctx context.Context, m *mux, muxDone <-chan struct{
 		var answered chan struct{}
 		clock := newSleepWatch()
 		deadline := time.Now().Add(backoff)
-		t := time.NewTimer(min(backoff, heartbeatInterval))
+		t := time.NewTimer(min(backoff, l.opts.Heartbeat))
 	wait:
 		for {
 			select {
@@ -900,7 +901,7 @@ func (l *link) waitForDaemon(ctx context.Context, m *mux, muxDone <-chan struct{
 			if left <= 0 {
 				break wait
 			}
-			t.Reset(min(left, heartbeatInterval))
+			t.Reset(min(left, l.opts.Heartbeat))
 		}
 		t.Stop()
 

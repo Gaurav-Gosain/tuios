@@ -163,7 +163,7 @@ func newWindowInheritCwd(uc *config.UserConfig) bool {
 	return uc.Appearance.NewWindowInheritCwd == nil || *uc.Appearance.NewWindowInheritCwd
 }
 
-// setTimings fills the daemon's [daemon] timings and agent detection from uc
+// setTimings fills the daemon's timings and agent detection from uc
 // with the environment laid over it (config.WithEnv), so a variable such as
 // TUIOS_CLEANUP_SECONDS wins over the file. With a nil uc the environment
 // still applies, over the default config. The values are read once, when
@@ -182,4 +182,13 @@ func (cfg *DaemonConfig) setTimings(uc *config.UserConfig) {
 	cfg.PRPollEvery = optionSeconds(uc, "daemon.pr_poll_seconds")
 	cfg.TransferKeep = optionSeconds(uc, "daemon.transfer_keep_seconds")
 	cfg.DispatchReady = optionSeconds(uc, "daemon.dispatch_ready_seconds")
+	cfg.SaveEvery = optionSeconds(uc, "daemon.save_seconds")
+	cfg.ExecTimeout = optionSeconds(uc, "daemon.exec_timeout_seconds")
+	cfg.AskWait = optionSeconds(uc, "agents.ask_wait_seconds")
+	cfg.UndoWindow = optionSeconds(uc, "agents.undo_window_seconds")
+	cfg.DropKeepAge = time.Duration(config.IntValue(uc, "files.drop_keep_hours")) * time.Hour
+	cfg.DropKeepBytes = int64(config.IntValue(uc, "files.drop_keep_mb")) << 20
+	cfg.HostHeartbeat = optionSeconds(uc, "daemon.host_heartbeat_seconds")
+	cfg.HostHeartbeatTimeout = optionSeconds(uc, "daemon.host_heartbeat_timeout_seconds")
+	cfg.HostCallTimeout = optionSeconds(uc, "daemon.host_call_timeout_seconds")
 }

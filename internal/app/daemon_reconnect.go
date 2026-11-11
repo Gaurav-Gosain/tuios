@@ -1,10 +1,12 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -41,10 +43,15 @@ import (
 // counts from its goodbye and has room for the save, the stop and the start.
 // After a drop it did not announce (a crash) the wait is shorter: a new daemon
 // may not come at all.
-const (
-	daemonRestartBudget = 15 * time.Second
-	daemonDropBudget    = 6 * time.Second
-)
+//
+// The restart budget is daemon.reconnect_seconds. The drop budget is never
+// longer than it.
+const daemonDropBudget = 6 * time.Second
+
+// daemonRestartBudget is daemon.reconnect_seconds.
+func (m *OS) daemonRestartBudget() time.Duration {
+	return time.Duration(cmp.Or(max(m.Settings.ReconnectSeconds, 0), config.DefaultReconnectSeconds)) * time.Second
+}
 
 // daemonDialTimeout bounds one dial's handshake. A daemon that is still
 // starting does not hold the dial for the 30 seconds an attach is given.
@@ -90,14 +97,14 @@ func (m *OS) beginDaemonReconnect() tea.Cmd {
 	if bye := m.DaemonClient.Goodbye(); bye != nil && bye.Reason == session.GoodbyeStop {
 		return nil
 	}
-	since, budget := time.Now(), daemonDropBudget
+	since, budget := time.Now(), min(daemonDropBudget, m.daemonRestartBudget())
 	if bye := m.DaemonClient.Goodbye(); bye != nil && bye.Reason == session.GoodbyeRestart {
-		since, budget = bye.At, daemonRestartBudget
+		since, budget = bye.At, m.daemonRestartBudget()
 	}
 	// A live upgrade said it as it dropped this client: the new image comes,
 	// as a restarted daemon does.
 	if m.droppedByUpgrade() {
-		budget = daemonRestartBudget
+		budget = m.daemonRestartBudget()
 	}
 	m.daemonReconnectGen++
 	m.daemonReconnect = &daemonReconnect{

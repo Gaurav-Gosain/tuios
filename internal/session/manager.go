@@ -60,6 +60,9 @@ type Manager struct {
 	// subagentFade is daemon.subagent_fade_seconds, stamped on every
 	// session's config. Zero is the default.
 	subagentFade time.Duration
+	// saveEvery is daemon.save_seconds, stamped on every session's config.
+	// Zero is resurrectionInterval.
+	saveEvery time.Duration
 	// sshAgentFollow is [daemon] ssh_agent = "follow": a new pane gets
 	// SSH_AUTH_SOCK naming its session's agent link. See ssh_agent_follow.go.
 	sshAgentFollow atomic.Bool
@@ -216,6 +219,15 @@ func (m *Manager) SetSubagentFade(d time.Duration) {
 	m.mu.Unlock()
 }
 
+// SetSaveEvery sets the longest a session whose panes printed waits to be
+// saved, for every session created after it. The daemon calls it once,
+// before any session exists.
+func (m *Manager) SetSaveEvery(d time.Duration) {
+	m.mu.Lock()
+	m.saveEvery = d
+	m.mu.Unlock()
+}
+
 // SetDragAndDrop sets panes.drag_and_drop for every session.
 func (m *Manager) SetDragAndDrop(on bool) { m.dragAndDrop.Store(on) }
 
@@ -369,6 +381,9 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	}
 	if cfg.SubagentFade == 0 {
 		cfg.SubagentFade = m.subagentFade
+	}
+	if cfg.SaveEvery == 0 {
+		cfg.SaveEvery = m.saveEvery
 	}
 	if cfg.HerdrEnv == nil {
 		cfg.HerdrEnv = m.HerdrEnv

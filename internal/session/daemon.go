@@ -2,6 +2,7 @@ package session
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -439,6 +440,18 @@ type Daemon struct {
 	cleanupEvery  time.Duration
 	prPollEvery   time.Duration
 	dispatchReady time.Duration
+	// execTimeout is daemon.exec_timeout_seconds, askWait
+	// agents.ask_wait_seconds, and dropKeepAge and dropKeepBytes the
+	// files.drop_keep_* options. NewDaemon sets them once.
+	execTimeout   time.Duration
+	askWait       time.Duration
+	dropKeepAge   time.Duration
+	dropKeepBytes int64
+	// hostHeartbeat, hostHeartbeatTimeout and hostCallTimeout are the
+	// daemon.host_* options, handed to the link layer. Zero is its default.
+	hostHeartbeat        time.Duration
+	hostHeartbeatTimeout time.Duration
+	hostCallTimeout      time.Duration
 
 	// silent is [agents] silent_after: how long a pane whose hooks reported
 	// working may go without a report before it shows as silent. See
@@ -999,6 +1012,18 @@ type DaemonConfig struct {
 	// DispatchReady is how long a dispatched task waits for its agent to be
 	// ready, at most 600 seconds. Zero uses start-agent's own wait.
 	DispatchReady time.Duration
+	// SaveEvery, ExecTimeout, AskWait, UndoWindow, DropKeepAge,
+	// DropKeepBytes, HostHeartbeat, HostHeartbeatTimeout and HostCallTimeout
+	// are the options of the same names. Zero or less uses the default.
+	SaveEvery            time.Duration
+	ExecTimeout          time.Duration
+	AskWait              time.Duration
+	UndoWindow           time.Duration
+	DropKeepAge          time.Duration
+	DropKeepBytes        int64
+	HostHeartbeat        time.Duration
+	HostHeartbeatTimeout time.Duration
+	HostCallTimeout      time.Duration
 	// AgentSilentAfter is [agents] silent_after. Zero means
 	// config.DefaultSilentAfter and a negative value turns it off.
 	AgentSilentAfter time.Duration
@@ -1133,27 +1158,34 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	d := &Daemon{
-		manager:            NewManager(),
-		instance:           uuid.NewString(),
-		ctx:                ctx,
-		cancel:             cancel,
-		clients:            make(map[string]*connState),
-		pendingRequests:    make(map[string]*pendingRequest),
-		events:             newEventHub(),
-		agents:             newAgentBus(),
-		version:            cfg.Version,
-		disableAutoRestore: cfg.DisableAutoRestore,
-		foreground:         cfg.Foreground,
-		logFile:            cfg.LogFile,
-		agentStallTimeout:  resolveAgentStallTimeout(cfg.AgentStallTimeout),
-		cleanupEvery:       positiveOr(cfg.CleanupEvery, defaultCleanupEvery),
-		prPollEvery:        positiveOr(cfg.PRPollEvery, prPollInterval),
-		dispatchReady:      min(max(cfg.DispatchReady, 0), dispatchReadyMax),
-		agentMatcher:       newAgentMatcher(resolveAgentBinaries(cfg.AgentBinaries)),
-		respondFromShell:   cfg.RespondFromShell,
-		resumeAgents:       resolveResumeMode(cfg.ResumeAgents),
-		windowSize:         windowSizePolicy(cfg.WindowSize),
-		handoffArgs:        cfg.HandoffArgs,
+		manager:              NewManager(),
+		instance:             uuid.NewString(),
+		ctx:                  ctx,
+		cancel:               cancel,
+		clients:              make(map[string]*connState),
+		pendingRequests:      make(map[string]*pendingRequest),
+		events:               newEventHub(),
+		agents:               newAgentBus(),
+		version:              cfg.Version,
+		disableAutoRestore:   cfg.DisableAutoRestore,
+		foreground:           cfg.Foreground,
+		logFile:              cfg.LogFile,
+		agentStallTimeout:    resolveAgentStallTimeout(cfg.AgentStallTimeout),
+		cleanupEvery:         positiveOr(cfg.CleanupEvery, defaultCleanupEvery),
+		prPollEvery:          positiveOr(cfg.PRPollEvery, prPollInterval),
+		dispatchReady:        min(max(cfg.DispatchReady, 0), dispatchReadyMax),
+		execTimeout:          positiveOr(cfg.ExecTimeout, execDefaultTimeout),
+		askWait:              min(positiveOr(cfg.AskWait, defaultAskWait), maxAskWait),
+		dropKeepAge:          positiveOr(cfg.DropKeepAge, dropKeepAge),
+		dropKeepBytes:        cmp.Or(max(cfg.DropKeepBytes, 0), dropKeepBytes),
+		hostHeartbeat:        cfg.HostHeartbeat,
+		hostHeartbeatTimeout: cfg.HostHeartbeatTimeout,
+		hostCallTimeout:      cfg.HostCallTimeout,
+		agentMatcher:         newAgentMatcher(resolveAgentBinaries(cfg.AgentBinaries)),
+		respondFromShell:     cfg.RespondFromShell,
+		resumeAgents:         resolveResumeMode(cfg.ResumeAgents),
+		windowSize:           windowSizePolicy(cfg.WindowSize),
+		handoffArgs:          cfg.HandoffArgs,
 	}
 	d.singleClient.Store(cfg.SingleClient)
 	d.SetSSHAgent(cfg.SSHAgent)
@@ -1187,6 +1219,8 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.stash = newStashStore(func() string { return d.manager.SocketPath() })
 	d.transfers = newTransferManager(d, positiveOr(cfg.TransferKeep, transferKeepDone))
 	d.manager.SetSubagentFade(positiveOr(cfg.SubagentFade, defaultSubagentFade))
+	d.manager.SetSaveEvery(positiveOr(cfg.SaveEvery, resurrectionInterval))
+	d.attention.undoWindow = positiveOr(cfg.UndoWindow, attentionUndoWindow)
 	d.pastes = newPasteStore(func() string { return d.manager.SocketPath() })
 	d.buffers = pastebuf.New(cfg.pasteBufferLimit(), cfg.PasteBufferMaxBytes)
 	d.manager.SetScrollbackLines(cfg.ScrollbackLines)
@@ -1263,8 +1297,11 @@ func (d *Daemon) setupFederation(hosts []federation.Host) {
 		Log: func(format string, args ...any) {
 			log.Printf("[FEDERATION] "+format, args...)
 		},
-		OnStatus:   d.fleet.onStatus,
-		OnMailHeld: d.onMailHeld,
+		OnStatus:         d.fleet.onStatus,
+		OnMailHeld:       d.onMailHeld,
+		Heartbeat:        d.hostHeartbeat,
+		HeartbeatTimeout: d.hostHeartbeatTimeout,
+		CallTimeout:      d.hostCallTimeout,
 	})
 }
 

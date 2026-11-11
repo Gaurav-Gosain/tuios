@@ -25,6 +25,12 @@ type FilesConfig struct {
 	// stays. 0 or absent is 7, and a negative number keeps every copy until
 	// tuios transfers clear-opened.
 	OpenCopyKeepDays int `toml:"open_copy_keep_days"`
+
+	// DropKeepHours is how long a file dropped into a pane of another
+	// machine stays in that machine's drop folder. Zero uses 24.
+	DropKeepHours int `toml:"drop_keep_hours"`
+	// DropKeepMB is the most the drop folder holds, in MiB. Zero uses 256.
+	DropKeepMB int `toml:"drop_keep_mb"`
 }
 
 // The defaults of the open-a-copy limits, and the counts of files a folder
@@ -34,6 +40,8 @@ const (
 	DefaultOpenCopyAskMB    = 200
 	DefaultOpenCopyMaxMB    = 4096
 	DefaultOpenCopyKeepDays = 7
+	DefaultDropKeepHours    = 24
+	DefaultDropKeepMB       = 256
 	OpenCopyAskFiles        = 1000
 	OpenCopyMaxFiles        = 20000
 )

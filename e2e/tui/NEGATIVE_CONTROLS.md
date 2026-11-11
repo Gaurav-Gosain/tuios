@@ -16567,3 +16567,18 @@ Run on 2026-11-11 on Linux (arch-btw). The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestScrollbackBrowserTakesCopyModeKeys$' -v .`.
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestScreenshotVerbTitlesWithTheWindowTitleFormat$' -v .`.
+
+## Exec timeout option
+
+`e2e/tui/exec_timeout_option_test.go` writes `[daemon] exec_timeout_seconds =
+2` to the config file, starts a daemon from it, and runs `sleep 20` through
+the `exec` verb with no timeout. `TestExecTimeoutIsAnOption` wants the reply
+to say `timed_out` with no exit status, within 10 seconds.
+
+The control was run on 2026-11-11 on branch `untangle/cfg-daemon`. The log is
+`~/.cache/agent-tmp/un-inputcfg-neg-cfg-daemon.log` on arch-btw.
+
+| Control: what was cut | Where it failed | Verdict |
+| --- | --- | --- |
+| `cfg.ExecTimeout = optionSeconds(uc, "daemon.exec_timeout_seconds")` in `DaemonConfigFromUser` | the command ran its 20 seconds and exited 0 | **caught** |

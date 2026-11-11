@@ -32,7 +32,7 @@ func (s *Session) applyAgentDetection(
 func StartPeriodicSave(getState func() *SessionState, dirty, stale *wakeLatch, wakes *atomic.Int64) func() {
 	dirty.init()
 	stale.init()
-	return startPeriodicSaveWith(getState, dirty, stale, wakes, SaveSessionForResurrection)
+	return startPeriodicSaveWith(resurrectionInterval, getState, dirty, stale, wakes, SaveSessionForResurrection)
 }
 
 // setResurrectionDirOverride redirects resurrection state, and returns the value

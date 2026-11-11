@@ -97,7 +97,7 @@ func (d *Daemon) verbExec(cs *connState, params json.RawMessage) (any, *verbErro
 	if len(p.Line) > execMaxLine {
 		return nil, invalidParam("line", "line is longer than "+strconv.Itoa(execMaxLine)+" bytes. Put a long script in a file and run the file")
 	}
-	timeout := execDefaultTimeout
+	timeout := d.execTimeout
 	if p.TimeoutMS < 0 {
 		return nil, invalidParam("timeout_ms", "timeout_ms is milliseconds and cannot be negative")
 	}

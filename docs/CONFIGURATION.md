@@ -465,6 +465,27 @@ read at the same time, that wins over the file:
 `agent_autodetect` reads `TUIOS_AGENT_AUTODETECT` the same way. A client reads
 `TUIOS_CLEANUP_SECONDS` too, for its own buffers.
 
+These timings and limits have no environment variable. `0` is the default, and
+a value outside the range moves to the nearer end.
+
+| Option | Default | Range | What it sets |
+|--------|---------|-------|--------------|
+| `[daemon] save_seconds` | 30 | 10 to 600 | The longest a session whose panes printed waits to be saved. It keeps each pane's folder current for a restore. A change to the layout is saved within 2 seconds either way. |
+| `[daemon] exec_timeout_seconds` | 30 | 0 to 3600 | How long a command run with `tuios exec` may take when the caller names no timeout. |
+| `[daemon] reconnect_seconds` | 15 | 0 to 300 | How long a client waits for a restarted daemon before it gives up. A daemon that stopped without saying so is waited on for at most 6 seconds. |
+| `[daemon] host_heartbeat_seconds` | 15 | 0 to 300 | How long a link to another machine may carry nothing before the daemon pings it. |
+| `[daemon] host_heartbeat_timeout_seconds` | 5 | 0 to 60 | How long one ping waits for its reply. Two misses in a row end the link. |
+| `[daemon] host_call_timeout_seconds` | 8 | 0 to 120 | How long one listing over a live link may take before the link is dialed again. |
+| `[agents] ask_wait_seconds` | 120 | 0 to 3600 | How long `tuios ask-human` waits for your answer when the agent names no timeout. The question stays in the Inbox after the wait. |
+| `[agents] undo_window_seconds` | 10 | 0 to 300 | How long after a dismiss, a snooze or a queued reply `u` takes it back. |
+| `[files] drop_keep_hours` | 24 | 0 to 8760 | How long a file dropped into a pane of another machine stays in that machine's drop folder. |
+| `[files] drop_keep_mb` | 256 | 0 to 65536 | The most MiB the drop folder holds. A drop that does not fit is refused. |
+
+The daemon reads them when it starts. The client reads `reconnect_seconds` and
+`undo_window_seconds` from its own config, and a change applies at once. The
+time a dial to one machine may take is `connect_timeout` in that machine's
+`[hosts.NAME]` table.
+
 `client_follows_upgrade` in `[daemon]` (default `true`) makes a client on this machine follow a live upgrade (`tuios daemon upgrade`). When the new image takes the session back and its build is newer than the client's, the client runs the binary the upgrade named, as `tuios attach` on the same terminal. The session, its panes and the flags you started the client with stay. A client of another machine, over ssh or in a browser, keeps its build. Set it to `false` to keep the old client running; it then says that it still runs the old build.
 
 `window_size` in `[daemon]` sets the size of a session that has more than one client. The names are the names of the tmux `window-size` option. See [SESSIONS.md](SESSIONS.md#session-size-with-more-than-one-client).

@@ -29,6 +29,11 @@ type Options struct {
 	// CallTimeout bounds one call on a live link. Zero means
 	// DefaultCallTimeout.
 	CallTimeout time.Duration
+	// Heartbeat is how long a link may carry no frame before it is pinged,
+	// and HeartbeatTimeout how long one ping waits for its reply. Zero means
+	// DefaultHeartbeat and DefaultHeartbeatTimeout.
+	Heartbeat        time.Duration
+	HeartbeatTimeout time.Duration
 	// InitialBackoff and MaxBackoff bound the redial cycle.
 	InitialBackoff time.Duration
 	MaxBackoff     time.Duration
@@ -88,6 +93,12 @@ func (o Options) withDefaults() Options {
 	}
 	if o.CallTimeout <= 0 {
 		o.CallTimeout = DefaultCallTimeout
+	}
+	if o.Heartbeat <= 0 {
+		o.Heartbeat = DefaultHeartbeat
+	}
+	if o.HeartbeatTimeout <= 0 {
+		o.HeartbeatTimeout = DefaultHeartbeatTimeout
 	}
 	if o.InitialBackoff <= 0 {
 		o.InitialBackoff = time.Second

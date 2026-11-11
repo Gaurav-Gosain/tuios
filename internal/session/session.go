@@ -1999,6 +1999,10 @@ type SessionConfig struct {
 	// stays on the list. Zero is defaultSubagentFade. The manager stamps it
 	// from daemon.subagent_fade_seconds.
 	SubagentFade time.Duration
+	// SaveEvery is the longest the session waits to be saved after its
+	// panes printed. Zero is resurrectionInterval. The manager stamps it
+	// from daemon.save_seconds.
+	SaveEvery time.Duration
 	// HerdrEnv returns the herdr protocol variables a pane with the given
 	// window id that runs the given command is started with, nil for none.
 	// See Manager.HerdrEnv.
@@ -2268,7 +2272,11 @@ func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, e
 	// Start periodic resurrection saving
 	session.stateDirty.init()
 	session.saveStale.init()
-	session.stopResurrection = startPeriodicSaveWith(
+	saveEvery := resurrectionInterval
+	if cfg != nil && cfg.SaveEvery > 0 {
+		saveEvery = cfg.SaveEvery
+	}
+	session.stopResurrection = startPeriodicSaveWith(saveEvery,
 		func() *SessionState { return session.ResurrectionState() },
 		&session.stateDirty, &session.saveStale, &session.saverWakes,
 		session.persist,

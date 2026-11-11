@@ -34,6 +34,12 @@ import (
 // changes rather than until a time.
 const SnoozeUntilChange int64 = -1
 
+// undoSpan is the store's undo window: agents.undo_window_seconds, or
+// attentionUndoWindow for a store the daemon did not set.
+func (a *attentionStore) undoSpan() time.Duration {
+	return positiveOr(a.undoWindow, attentionUndoWindow)
+}
+
 // attentionUndoWindow is how long after a dismiss or a snooze the person can
 // restore the item.
 const attentionUndoWindow = 10 * time.Second
@@ -366,7 +372,7 @@ func (a *attentionStore) rememberUndoLocked(it AttentionItem, reason string) {
 	}
 	now := a.clock()
 	a.undo = slices.DeleteFunc(a.undo, func(u attentionUndo) bool {
-		return u.item.ID == it.ID || now.Sub(u.at) >= attentionUndoWindow
+		return u.item.ID == it.ID || now.Sub(u.at) >= a.undoSpan()
 	})
 	it.RequestID, it.Options, it.Expires, it.AlwaysScope = "", nil, 0, nil
 	// A restored item of this machine has no hold, so, as when a hold ends
@@ -396,7 +402,7 @@ func (a *attentionStore) undoEntry(id string) (attentionUndo, bool) {
 func (a *attentionStore) undoEntryLocked(id string) (attentionUndo, bool) {
 	now := a.clock()
 	for _, u := range a.undo {
-		if u.item.ID == id && now.Sub(u.at) < attentionUndoWindow {
+		if u.item.ID == id && now.Sub(u.at) < a.undoSpan() {
 			return u, true
 		}
 	}
