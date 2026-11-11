@@ -62,8 +62,11 @@ type childLink struct {
 	parent, root PaneRef
 	// linked says the window is a child agent: parent and root are set.
 	linked bool
-	// delegated says a delegated task with a parent to answer to is under
-	// way in the window, so its question goes to the parent first.
+	// asksParent says the window's question goes to its parent agent first:
+	// a delegated task with a parent to answer to is under way in it, or it
+	// is a child a parent started with start-agent (child_questions.go).
+	asksParent bool
+	// delegated says the first of those: delegate mails the question.
 	delegated bool
 }
 
@@ -76,6 +79,7 @@ func childLinkOf(w *WindowState) childLink {
 	if r := w.Delegation; r != nil && r.Parent != nil && !delegateFinished(r.State) {
 		l.delegated = true
 	}
+	l.asksParent = l.delegated || l.linked
 	return l
 }
 

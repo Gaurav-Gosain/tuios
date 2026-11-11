@@ -430,7 +430,15 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 	// sessions it may write to. See pane_grants.go.
 	byPane := ""
 	asPerson := d.mayRespond(cs, p.HumanNonce, sess.ID)
+	asParent := false
 	if !asPerson {
+		// A parent may answer its own child's question, with no respond
+		// grant: it started the child for this work (child_questions.go).
+		if pa := d.paneAuthority(cs); pa != nil && parentMayRespond(pa.window, w) {
+			asParent, byPane = true, pa.window
+		}
+	}
+	if !asPerson && !asParent {
 		if !d.paneMayRespond(cs, sess.Name()) {
 			return nil, hintedVerbError(ErrVerbNotHuman, "respond is for the person at an attached client", &VerbHint{
 				Param:  "human_nonce",
@@ -473,6 +481,9 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 	// attention_children.go.
 	if !asPerson && look.window.AgentLink != nil && look.window.ID != byPane && look.prompt.Kind == harness.PromptKindApproval {
 		return nil, childApprovalForbidden("window " + shortWindowID(look.window.ID) + " is a child agent, and its screen shows an approval. Only the person answers it")
+	}
+	if asParent && look.prompt.Kind != "" && look.prompt.Kind != harness.PromptKindQuestion {
+		return nil, childApprovalForbidden("window " + shortWindowID(look.window.ID) + " is your child agent, but its screen shows a " + look.prompt.Kind + " prompt, which only the person answers")
 	}
 	reply, err := look.prompt.Resolve(p.Action, p.Value)
 	if err != nil {

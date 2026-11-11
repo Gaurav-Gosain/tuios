@@ -369,6 +369,9 @@ type Daemon struct {
 	// delegates are the delegated children the daemon waits on, for their
 	// answer or their question. See verb_delegate.go.
 	delegates delegates
+	// childAsks are the questions of start-agent children already mailed to
+	// their parents (child_questions.go).
+	childAsks childAskTable
 	// askTurns keeps one ask-agent typing at a pane at a time. See
 	// ask_turns.go.
 	askTurns askTurns
@@ -1572,6 +1575,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		}
 		d.noteMailWakeEvent(ev)
 		d.noteDelegateEvent(ev)
+		d.noteChildQuestionEvent(ev)
 		d.events.publish(streamEvent{
 			Type:       ev.Type,
 			Session:    name,

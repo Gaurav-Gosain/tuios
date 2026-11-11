@@ -746,7 +746,7 @@ func (a *attentionStore) noteAgentState(sessionName string, ev SessionEvent) {
 			it.Risk = risk.Names(a.riskOfLine(ev.hookMessage, ev.hookRoot, ev.hookRunDir))
 		}
 		it.Summary = attentionText(ev.hookMessage, attentionMaxSummary)
-		if it.Kind == AttentionQuestion && ev.link.delegated && !AgentKindReachesPerson(ev.hookKind) && a.parentFirst.Load() {
+		if it.Kind == AttentionQuestion && ev.link.asksParent && !AgentKindReachesPerson(ev.hookKind) && a.parentFirst.Load() {
 			it.WithParentUntil = a.parentHoldUntilLocked(attentionKey(AttentionQuestion, sessionName, ev.Window, 0))
 		}
 		a.upsertLocked(it)

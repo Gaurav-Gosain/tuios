@@ -147,6 +147,19 @@ still show under `done` or `idle`. When a worker is quiet too long, look:
 tuios capture-pane -s crew-api -w api-docs --trim
 ```
 
+A worker you started that asks a question (not an approval) mails it to you,
+with the prompt as `peek-prompt` reads it, and the Inbox holds it for you for
+ten minutes before the person is asked. Answer it yourself; you need no
+`respond` grant for your own worker's question:
+
+```sh
+tuios peek-prompt -s crew-api -w api-docs
+tuios respond -s crew-api -w api-docs choose 2
+```
+
+An approval, a folder trust question or a sign-in is never yours: it goes to
+the person at once, and `respond` refuses it from your pane.
+
 To unstick it:
 
 - An approval or a form the person must answer: tell the person which pane

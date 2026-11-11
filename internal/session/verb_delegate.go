@@ -435,11 +435,20 @@ func (d *Daemon) delegateTranscriptAnswer(sess *Session, window string) (string,
 // for an answer, which the parent's wake line counts, and "" for a question.
 // It returns the message id, 0 when the parent is gone.
 func (d *Daemon) delegateMail(rec *Delegation, sess *Session, child WindowState, subject, body, stashName, finished string) uint64 {
-	parentSess := d.sessionHoldingWindow(rec.Parent.Window)
+	return d.mailParent(*rec.Parent, rec.By, sess, child, subject, body, stashName, finished)
+}
+
+// mailParent sends a child's mail to its parent pane: subject and body from
+// child, a body longer than one message stashed under stashName when one is
+// given. by is the pane that started the work, whose authority the mail wake
+// types with, "" for the daemon's own. It returns the message id, 0 when the
+// parent pane is gone.
+func (d *Daemon) mailParent(parent PaneRef, by string, sess *Session, child WindowState, subject, body, stashName, finished string) uint64 {
+	parentSess := d.sessionHoldingWindow(parent.Window)
 	if parentSess == nil {
 		return 0
 	}
-	pw, ok := findWindowState(parentSess.GetState(), rec.Parent.Window)
+	pw, ok := findWindowState(parentSess.GetState(), parent.Window)
 	if !ok {
 		return 0
 	}
@@ -475,8 +484,8 @@ func (d *Daemon) delegateMail(rec *Delegation, sess *Session, child WindowState,
 	d.broadcastToSession(parentSess.ID, MsgAgentMail, &AgentMailPayload{Message: stored}, "")
 	d.events.publish(streamEvent{Type: EventAgentMessage, Session: parentSess.Name(), Window: stored.To})
 	origin := queueOrigin{kind: queueByShell}
-	if rec.By != "" {
-		origin = queueOrigin{kind: "pane", window: rec.By, session: d.sessionOfWindow(rec.By)}
+	if by != "" {
+		origin = queueOrigin{kind: "pane", window: by, session: d.sessionOfWindow(by)}
 	}
 	d.noteMailSentAs(parentSess.Name(), pw.ID, stored.ID, origin, finished)
 	return stored.ID
