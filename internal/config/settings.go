@@ -147,11 +147,11 @@ type Settings struct {
 	// AlwaysConfirmQuit controls whether the quit confirmation dialog is shown
 	// every time, regardless of whether there are active foreground processes.
 	// Set via confirm_quit config option.
-	AlwaysConfirmQuit bool
+	AlwaysConfirmQuit bool `opt:"appearance.confirm_quit,keep"`
 
 	// WhichKeyEnabled controls whether the which-key popup is shown after pressing leader key
 	// Set via appearance.whichkey_enabled config
-	WhichKeyEnabled bool
+	WhichKeyEnabled bool `opt:"appearance.whichkey_enabled,keep"`
 
 	// WhichKeyPosition controls where the which-key popup appears
 	// Options: bottom-right, bottom-left, top-right, top-left, center
@@ -161,21 +161,21 @@ type Settings struct {
 	// WrapLists makes a single step off either end of a list land on the other
 	// end: up on the first row goes to the last. Set via appearance.wrap_lists.
 	// See internal/listnav.
-	WrapLists bool
+	WrapLists bool `opt:"appearance.wrap_lists,keep"`
 
 	// SharedBorders controls whether adjacent tiled windows share a single border
 	// instead of having two separate borders side by side.
 	// Set via --shared-borders flag or appearance.shared_borders config
 	// Default: false (disabled, opt-in)
-	SharedBorders bool
+	SharedBorders bool `opt:"appearance.shared_borders,keep"`
 
 	// BorderStyle controls which border style to use for windows
 	// Set via --border-style flag or appearance.border_style config
-	BorderStyle string
+	BorderStyle string `opt:"appearance.border_style,keep"`
 
 	// FramePanels frames every overlay panel in OverlayBorder, not only the
 	// panels at 16 colours that need a frame. Set via appearance.frame_panels.
-	FramePanels bool
+	FramePanels bool `opt:"appearance.frame_panels"`
 
 	// PaneOverlays draws dialogs and panels like pane windows: framed in the
 	// focused pane's border colour, on the ground an empty pane cell shows.
@@ -185,7 +185,7 @@ type Settings struct {
 	// OverlayBorderColor is the colour every overlay frame is drawn in. Empty
 	// keeps the overlay's own, or the focused pane's border under
 	// PaneOverlays. Set via appearance.overlay_border_color.
-	OverlayBorderColor string
+	OverlayBorderColor string `opt:"appearance.overlay_border_color"`
 
 	// TilingScheme is the BSP insertion scheme a workspace starts with the
 	// first time it is tiled: one of the TilingScheme* constants (spiral,
@@ -193,17 +193,17 @@ type Settings struct {
 	// GetOrCreateBSPTree reads this only when a workspace has no tree yet; a
 	// workspace that is already tiled keeps its own scheme regardless of this
 	// value.
-	TilingScheme string
+	TilingScheme string `opt:"appearance.tiling_scheme,keep"`
 
 	// ZenMode controls when window borders are hidden. Valid values are the
 	// ZenMode* constants: disabled (always visible), always (always hidden) or
 	// mouse (hidden while the pointer is idle). Set via appearance.zen_mode.
-	ZenMode string
+	ZenMode string `opt:"appearance.zen_mode,keep"`
 
 	// Links controls what tuios treats as a link in pane content. Valid values are
 	// the Links* constants: off, marked (OSC 8 only) or all (bare URLs too). Set
 	// via appearance.links.
-	Links string
+	Links string `opt:"appearance.links,keep"`
 
 	// LinkClick is the click that opens a link: one of the LinkClick*
 	// constants. Set via appearance.link_click.
@@ -211,7 +211,7 @@ type Settings struct {
 
 	// LinkHover is the hover highlight policy: one of the LinkHover*
 	// constants. Set via appearance.link_hover.
-	LinkHover string
+	LinkHover string `opt:"appearance.link_hover,keep"`
 
 	// LinkRules are the compiled [[links.rules]]: plain text that is turned
 	// into a link with a target built from the match. Nil when there are
@@ -233,13 +233,17 @@ type Settings struct {
 
 	// DockbarPosition controls the position of the dockbar
 	// Set via --dockbar-position flag or appearance.dockbar_position config
-	DockbarPosition string
+	DockbarPosition string `opt:"appearance.dockbar_position,keep"`
 
-	// SidebarEnabled turns the sidebar on. Default on since v0.8.0.
+	// SidebarEnabled turns the sidebar on. Default on since v0.8.0. It has
+	// no opt tag: ApplyAppearanceConfig folds an explicit left or right edge
+	// into it first, so it is not the file's appearance.sidebar.enabled.
 	SidebarEnabled bool
 
 	// SidebarPosition is which edge the sidebar reserves: "left", "right", or
-	// "hidden" (reserves nothing even when enabled).
+	// "hidden" (reserves nothing even when enabled). It has no opt tag for the
+	// same reason: under position = "hidden", an enabled explicit edge
+	// becomes the rail's position.
 	SidebarPosition string
 
 	// SidebarWidth is the preferred sidebar width in columns for a wide screen.
@@ -247,7 +251,7 @@ type Settings struct {
 	SidebarWidth int
 
 	// SidebarShowGlyphs draws the agent-state glyph on each row.
-	SidebarShowGlyphs bool
+	SidebarShowGlyphs bool `opt:"appearance.sidebar.show_glyphs,keep"`
 
 	// SidebarShowCounts draws the window count on each session row.
 	SidebarShowCounts bool
@@ -255,7 +259,7 @@ type Settings struct {
 	// SidebarShowNumbers draws the switch number ahead of each session name.
 	// Off by default: the quiet rail is the default, and the people who want
 	// the numbers set show_numbers in [appearance.sidebar].
-	SidebarShowNumbers bool
+	SidebarShowNumbers bool `opt:"appearance.sidebar.show_numbers,keep"`
 
 	// SidebarMarquee scrolls a hovered row's title when it overflows its columns.
 	SidebarMarquee bool
@@ -280,7 +284,7 @@ type Settings struct {
 	// SidebarFileIcons draws a nerd font icon per file type in the files
 	// section. Off, and on a terminal running in ASCII, the section falls back
 	// to the glyph set's folder, parent and file marks.
-	SidebarFileIcons bool
+	SidebarFileIcons bool `opt:"appearance.sidebar.file_icons,keep"`
 
 	// SidebarFileIconColors draws each of those icons in its own file type's
 	// colour, the way yeetui does. It needs the icons under it, so it draws
@@ -289,10 +293,10 @@ type Settings struct {
 
 	// SidebarFolderClick is what a click on a folder row does: walk the listing
 	// into it, tell the pane to cd there, or both.
-	SidebarFolderClick string
+	SidebarFolderClick string `opt:"appearance.sidebar.folder_click,keep"`
 	// SidebarFileDrag lets a row of the files section be dragged into a pane
 	// to paste its path.
-	SidebarFileDrag bool
+	SidebarFileDrag bool `opt:"appearance.sidebar.file_drag,keep"`
 	// SidebarFilesStyle is how the files section draws: "list", one folder at
 	// a time, or "tree", folders opened in place under one root.
 	SidebarFilesStyle string
@@ -300,7 +304,7 @@ type Settings struct {
 	// keeps the quiet furniture look they have always had, "uppercase" draws
 	// the heading treatment (bold, secondary ink, the rule glyph and the
 	// uppercase label). Set via appearance.sidebar.header_case.
-	RailHeaderCase string
+	RailHeaderCase string `opt:"appearance.sidebar.header_case,keep"`
 	// RailRowStyle is how the rail marks the row you are on. Set via
 	// appearance.sidebar.row_style; read it through GetRailRowStyle.
 	RailRowStyle string
@@ -311,7 +315,7 @@ type Settings struct {
 	// the first. Set via appearance.sidebar.density = "roomy".
 	RailRoomy bool
 	// SidebarEditor is the terminal editor command; empty uses the environment.
-	SidebarEditor string
+	SidebarEditor string `opt:"appearance.sidebar.editor"`
 
 	// SidebarFileActions lets the files section create, rename, delete, copy,
 	// cut and paste. On leaves the listing exactly as it was until a key is
@@ -321,7 +325,7 @@ type Settings struct {
 	// of one. A file manager is a place somebody went; a rail is a place they
 	// are, and not everybody wants the folder they are looking at to be one they
 	// can delete from by mistake.
-	SidebarFileActions bool
+	SidebarFileActions bool `opt:"appearance.sidebar.file_actions,keep"`
 
 	// SidebarAgentRestFold is how long an agent row rests (idle, unknown, or
 	// done and seen) before the rail folds it into one line with the others.
@@ -331,7 +335,7 @@ type Settings struct {
 	// SidebarGroupMain gives each repository a row of its own, with the main
 	// checkout under it. Off, the main checkout's row is the repository's row.
 	// From appearance.sidebar.group_main.
-	SidebarGroupMain bool
+	SidebarGroupMain bool `opt:"appearance.sidebar.group_main,keep"`
 
 	// SidebarSubagents is how the rail draws the subagents under an agent
 	// row: rows or the count, tree lines, the heading line that folds them,
@@ -341,7 +345,7 @@ type Settings struct {
 	SidebarSubagents SidebarSubagentView
 
 	// SidebarFileDelete is where a deleted file goes: the trash, or nowhere.
-	SidebarFileDelete string
+	SidebarFileDelete string `opt:"appearance.sidebar.file_delete,keep"`
 
 	// SidebarAgentRow is what an agent row draws and how each token is inked,
 	// from [appearance.sidebar.agent_row]. See sidebar_agent_row.go.
@@ -382,7 +386,7 @@ type Settings struct {
 	// strip, so they follow the least-scroll rule.
 	// Clicking a column that is half off the edge is a statement: you picked
 	// that pane to work in, so the strip brings all of it to you.
-	NiriClickReveals bool
+	NiriClickReveals bool `opt:"appearance.niri_click_reveals,keep"`
 
 	// NiriHoverReveals brings the column under the pointer fully on screen in
 	// the scrolling layout, while focus-follows-mouse is on.
@@ -398,7 +402,7 @@ type Settings struct {
 
 	SidebarGitDirty bool
 
-	SessionBorder bool
+	SessionBorder bool `opt:"appearance.session_border,keep"`
 
 	// GlobalSession offers a session that holds panes from more than one
 	// machine, listed in the rail once a second machine is reachable.
@@ -409,22 +413,22 @@ type Settings struct {
 	// place the question is worth putting, so it is the one place it is asked.
 	GlobalSession bool
 
-	SessionColors bool
+	SessionColors bool `opt:"appearance.session_colors,keep"`
 
 	// DockWorkspaceTabs draws the dock's clickable workspace strip. Off leaves the
 	// dock exactly as it was before the strip existed.
-	DockWorkspaceTabs bool
+	DockWorkspaceTabs bool `opt:"appearance.dock_workspace_tabs,keep"`
 
 	// DockWorkspaceTabFormat is the format string for each workspace tab in the
 	// dock strip. Placeholders: {index} (the workspace number) and {name} (the
 	// workspace name, or its number when it has no name). Empty means "{name}",
 	// the historic rendering.
-	DockWorkspaceTabFormat string
+	DockWorkspaceTabFormat string `opt:"appearance.dock_workspace_tab_format"`
 
 	// DockWorkspaceTooltip pops the whole name of a workspace whose pill does not
 	// show it: the pill had to cut it short, or the tab format has no {name}.
 	// Off, the name stays cut or hidden with no way to read it from the dock.
-	DockWorkspaceTooltip bool
+	DockWorkspaceTooltip bool `opt:"appearance.dock_workspace_tooltip,keep"`
 
 	// DockWorkspaceLabelMax caps a workspace pill's label in cells. 0 draws the
 	// whole name and lets the strip's scroll arithmetic handle the width.
@@ -433,7 +437,7 @@ type Settings struct {
 	// DockPillCaps puts powerline half-circle caps on the dock's mode chip,
 	// workspace tabs and minimized-window pills. On by default. Off, each is a
 	// flat filled cell, for anyone who reads a row of caps as a row of beads.
-	DockPillCaps bool
+	DockPillCaps bool `opt:"appearance.dock_pill_caps,keep"`
 
 	// DockModeSplitLetter shows the next split's direction, V or H, after the
 	// tiling icon in the mode pill. On by default. Off, the pill is the icon
@@ -455,7 +459,7 @@ type Settings struct {
 	// BorderFocusedGradient and BorderGradientAngle are
 	// appearance.border_focused_gradient and border_gradient_angle. Read the
 	// stops through BorderGradientStops.
-	BorderFocusedGradient string
+	BorderFocusedGradient string `opt:"appearance.border_focused_gradient"`
 	BorderGradientAngle   int
 
 	// DockModeIconWindow, DockModeIconTerminal and DockModeIconTiling are the
@@ -468,15 +472,15 @@ type Settings struct {
 
 	// DockCompact draws the dock as one row: the pills without the rule above
 	// or below them. The panes get the row back. Off by default.
-	DockCompact bool
+	DockCompact bool `opt:"appearance.dock_compact"`
 
 	// HideWindowButtons controls whether to hide window control buttons
 	// Set via --hide-window-buttons flag or appearance.hide_window_buttons config
-	HideWindowButtons bool
+	HideWindowButtons bool `opt:"appearance.hide_window_buttons"`
 
 	// WindowButtonStyle selects how the window controls are drawn. See
 	// appearance.window_button_style.
-	WindowButtonStyle string
+	WindowButtonStyle string `opt:"appearance.window_button_style,keep"`
 
 	// WindowButtonPosition selects which end of the title bar the window controls
 	// sit on. See appearance.window_button_position.
@@ -484,32 +488,32 @@ type Settings struct {
 
 	// ScrollbarStyle selects how a scrolled-back pane draws its position. See
 	// appearance.scrollbar.style.
-	ScrollbarStyle string
+	ScrollbarStyle string `opt:"appearance.scrollbar.style,keep"`
 
-	ScrollbarThumb string
+	ScrollbarThumb string `opt:"appearance.scrollbar.thumb"`
 
 	ScrollbarTrack string
 
-	ScrollbarTint string
+	ScrollbarTint string `opt:"appearance.scrollbar.tint"`
 
 	// The colours a pane paints over its own output to mark text. See
 	// SelectionConfig. An empty foreground leaves the text the colour the
 	// program wrote it in and tints only the background.
-	SelectionBg   string
-	SelectionFg   string
-	SelectionBold bool
-	SearchBg      string
-	SearchFg      string
-	MatchBg       string
-	MatchFg       string
-	CopyCursorBg  string
-	CopyCursorFg  string
+	SelectionBg   string `opt:"appearance.selection.bg,keep"`
+	SelectionFg   string `opt:"appearance.selection.fg"`
+	SelectionBold bool   `opt:"appearance.selection.bold,keep"`
+	SearchBg      string `opt:"appearance.selection.search_bg,keep"`
+	SearchFg      string `opt:"appearance.selection.search_fg"`
+	MatchBg       string `opt:"appearance.selection.match_bg,keep"`
+	MatchFg       string `opt:"appearance.selection.match_fg"`
+	CopyCursorBg  string `opt:"appearance.selection.cursor_bg,keep"`
+	CopyCursorFg  string `opt:"appearance.selection.cursor_fg"`
 
 	// CopyFlash sweeps a band of light over text that was just copied.
 	// CopyFlashMs is how long one sweep takes and CopyFlashColor is the light.
-	CopyFlash      bool
+	CopyFlash      bool `opt:"appearance.selection.flash,keep"`
 	CopyFlashMs    int
-	CopyFlashColor string
+	CopyFlashColor string `opt:"appearance.selection.flash_color,keep"`
 	// CopyFlashStyle is the shape the sweep takes. One of CopyFlashStyles.
 	CopyFlashStyle string
 	// MultiCopyFormat is the format multi copy mode starts in: one of
@@ -529,12 +533,12 @@ type Settings struct {
 	// Automatically treated as true when BorderStyle == "hidden" since there is
 	// no border to draw the thumb on in that mode.
 	// Set via --hide-scrollbar flag or appearance.hide_scrollbar config
-	HideScrollbar bool
+	HideScrollbar bool `opt:"appearance.hide_scrollbar"`
 
 	// WindowTitlePosition controls where window titles are displayed
 	// Options: bottom, top, hidden
 	// Set via --window-title-position flag or appearance.window_title_position config
-	WindowTitlePosition string
+	WindowTitlePosition string `opt:"appearance.window_title_position,keep"`
 
 	// WindowTitleStyle and WindowTitleAlign are appearance.window_title_style
 	// and window_title_align.
@@ -545,18 +549,18 @@ type Settings struct {
 	// Empty (the default) means the title is shown as-is. See FormatWindowTitle for
 	// the supported placeholders.
 	// Set via appearance.window_title_format config
-	WindowTitleFormat string
+	WindowTitleFormat string `opt:"appearance.window_title_format"`
 
 	// HostTitle is the template for the title of the terminal tuios runs in,
 	// built from the focused pane. Empty (the default) sets none. See
 	// FormatHostTitle for the supported placeholders.
 	// Set via appearance.host_title config
-	HostTitle string
+	HostTitle string `opt:"appearance.host_title"`
 
 	// HideClock controls whether the clock overlay is hidden
 	// Set via --hide-clock flag or appearance.hide_clock config
 	// Deprecated: Use ShowClock instead. HideClock takes precedence when true.
-	HideClock bool
+	HideClock bool `opt:"appearance.hide_clock"`
 
 	// ShowClock controls whether the clock overlay is shown (default: hidden).
 	// Set via --show-clock flag or appearance.show_clock config
@@ -564,7 +568,7 @@ type Settings struct {
 
 	// ShowCPU controls whether the CPU graph is shown in the dock (default: hidden).
 	// Set via --show-cpu flag or appearance.show_cpu config
-	ShowCPU bool
+	ShowCPU bool `opt:"appearance.show_cpu"`
 
 	// ShowRAM controls whether RAM usage is shown in the dock (default: hidden).
 	// Set via --show-ram flag or appearance.show_ram config
@@ -583,7 +587,7 @@ type Settings struct {
 	// released, the way X11's primary selection and kitty's copy_on_select do.
 	// Turn it off to keep the clipboard until an explicit yank.
 	// Set via appearance.copy_on_select config.
-	CopyOnSelect bool
+	CopyOnSelect bool `opt:"appearance.copy_on_select,keep"`
 
 	// NvimNavigation lets tuios and the optional tuios-nvim-navigator plugin
 	// negotiate terminal focus keys through OSC 7777. It is off by default.
@@ -593,16 +597,16 @@ type Settings struct {
 	// FocusWrap lets a directional focus key in a tiled layout wrap to the far
 	// side of the layout when no pane lies that way. It is off by default.
 	// Set via appearance.focus_wrap config.
-	FocusWrap bool
+	FocusWrap bool `opt:"appearance.focus_wrap,keep"`
 
 	// FocusFollowsMouse focuses the pane under the cursor as the mouse moves over
 	// it, without a click and without entering terminal mode. It is a divisive
 	// window-manager habit, so it defaults off and users opt in.
 	// Set via appearance.focus_follows_mouse config.
-	FocusFollowsMouse bool
+	FocusFollowsMouse bool `opt:"appearance.focus_follows_mouse,keep"`
 	// PastePreview shows the image an image paste turned into a path, in a
 	// card at the pane's cursor for a few seconds.
-	PastePreview bool
+	PastePreview bool `opt:"appearance.paste_preview,keep"`
 
 	// FocusFollowsMousePause is the modifier, "ctrl" or "alt", that pauses
 	// FocusFollowsMouse while it is held. Empty never pauses. tuios learns the
@@ -618,7 +622,7 @@ type Settings struct {
 	// it. Alt + right-drag resizes either way, since that is the ordinary
 	// right-press resize with alt only keeping the menu out of the way.
 	// Set via appearance.alt_drag config.
-	AltDrag bool
+	AltDrag bool `opt:"appearance.alt_drag,keep"`
 
 	// AutoEnterTerminalOnFocus enters terminal mode when a window-management
 	// keyboard command actually moves focus to another pane. Hover-focus and
@@ -648,7 +652,7 @@ type Settings struct {
 	// someone who lives in mouse-mode apps and still wants the mouse to be a
 	// pointer first.
 	// Set via appearance.click_to_type config.
-	ClickToType string
+	ClickToType string `opt:"appearance.click_to_type,keep"`
 
 	// RightClickOpensMenu makes a plain right-click on a pane's content open the
 	// pane menu while the keyboard is typing in it, instead of reserving the
@@ -660,7 +664,7 @@ type Settings struct {
 	// Turning this on is how someone makes the menu's Paste row one plain click
 	// away, without selecting anything first.
 	// Set via appearance.right_click_opens_menu config.
-	RightClickOpensMenu bool
+	RightClickOpensMenu bool `opt:"appearance.right_click_opens_menu,keep"`
 
 	// KittyPlaceholders decides whether images an application positions with
 	// kitty Unicode placeholders are drawn.
@@ -699,7 +703,7 @@ type Settings struct {
 	// and anything that cannot be read falls back to the default directory
 	// rather than failing to open a window.
 	// Set via appearance.new_window_inherit_cwd config.
-	NewWindowInheritCwd bool
+	NewWindowInheritCwd bool `opt:"appearance.new_window_inherit_cwd,keep"`
 
 	// NewWindowFollowSSH makes the ordinary split and new-window actions
 	// behave like their ssh versions: when the focused pane runs ssh, the new
@@ -717,12 +721,12 @@ type Settings struct {
 	// every punctuation mark. A colon is deliberately absent, so host:port and
 	// file:line select as their parts.
 	// Set via appearance.word_characters config.
-	WordCharacters string
+	WordCharacters string `opt:"appearance.word_characters,keep"`
 
 	// NiriReverseScroll reverses mouse scroll direction in niri scrolling mode.
 	// When true, scroll-up moves viewport right and scroll-down moves left.
 	// Set via appearance.niri_reverse_scroll config
-	NiriReverseScroll bool
+	NiriReverseScroll bool `opt:"appearance.niri_reverse_scroll"`
 
 	// NiriScrollCells is how many cells one wheel event walks the strip in the
 	// scrolling layout. See NiriScrollCellsDefault for why it is a flat count
@@ -842,7 +846,7 @@ type Settings struct {
 	// the box, and keys would go to a pane nobody can see. The zoom is the
 	// statement that you want one pane and the whole region for it; a focus
 	// move is the statement of which pane.
-	ZoomFollowsFocus bool
+	ZoomFollowsFocus bool `opt:"appearance.zoom_follows_focus,keep"`
 
 	// AnimationSpeed is the percent window animations run at: 100 is as
 	// shipped, 200 twice as fast, 50 half as fast.
@@ -870,7 +874,7 @@ type Settings struct {
 	// zoomed pane drops its border and title bar, and its guest is told the
 	// full size of the region. zoom_size and zoom_max_width do not apply while
 	// it is on, since a pane with no border has nothing to show around it.
-	ZoomBorderless bool
+	ZoomBorderless bool `opt:"appearance.zoom_borderless"`
 
 	// DimUnfocused is how far an unfocused pane's content is carried toward the
 	// pane's own ground, as a percentage. Zero, the default, draws every pane's
@@ -894,7 +898,7 @@ type Settings struct {
 	// DimMultifocus dims the panes in the multifocus set like every other
 	// unfocused pane. False, the default, leaves them undimmed: they take the
 	// keys the user types, and full-strength content is what says so.
-	DimMultifocus bool
+	DimMultifocus bool `opt:"appearance.dim_multifocus"`
 
 	// Background is the ground painted on every surface that does not set
 	// its own: "off", the default, leaves the default background transparent
@@ -907,18 +911,18 @@ type Settings struct {
 	// left on the default background are painted, so a background a program
 	// or a piece of chrome chose wins. See ResolveBackground and the
 	// *BackgroundResolved methods.
-	Background             string
+	Background             string `opt:"appearance.background"`
 	PaneBackground         string
-	DesktopBackground      string
+	DesktopBackground      string `opt:"appearance.desktop_background"`
 	WindowChromeBackground string
-	DockBackground         string
+	DockBackground         string `opt:"appearance.dock_background"`
 	SidebarBackground      string
 
 	// SidebarCursorBackground is the ground of the rail's cursor row while
 	// the rail has the keyboard. Empty keeps the palette's Surface. It is
 	// a colour only, with no off or theme: the row is a band on the rail,
 	// not a surface of its own. See sidebarRowBg.
-	SidebarCursorBackground string
+	SidebarCursorBackground string `opt:"appearance.sidebar.cursor_background"`
 
 	// ClockFormat is the Go time layout the clock overlay draws with. Empty takes
 	// DefaultClockFormat.
@@ -926,7 +930,7 @@ type Settings struct {
 	// A layout rather than a set of toggles, for the reason window_title_format is
 	// one: "seconds on or off" is two of the questions people actually have about a
 	// clock, and the standard library already has a spelling for all of them.
-	ClockFormat string
+	ClockFormat string `opt:"appearance.clock_format"`
 
 	// ZoomMaxWidth is the maximum width in cells for zoom/zen mode.
 	// 0 means fullscreen (no max width cap). When set (e.g., 120), the zoomed
@@ -935,7 +939,7 @@ type Settings struct {
 
 	// GlyphSet names the chrome glyph set, or "default" for the shipped one. It is
 	// the shape half of a rice, beside Theme's colour half.
-	GlyphSet string
+	GlyphSet string `opt:"appearance.glyphs"`
 }
 
 // DefaultSettings is tuios as it ships, before any config file, any flag and

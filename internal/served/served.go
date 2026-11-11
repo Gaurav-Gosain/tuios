@@ -36,6 +36,7 @@ func NewModel(opts app.OSOptions, ov config.Overrides) *app.OS {
 
 	seed := config.AppearanceFrom(userConfig, ov)
 	opts.KeybindRegistry = config.NewKeybindRegistry(userConfig)
+	opts.Overrides = ov
 	opts.UserConfig = userConfig
 	opts.Settings = &seed
 	return app.NewOS(opts)

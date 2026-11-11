@@ -1214,7 +1214,10 @@ type OS struct {
 	// Showkeys overlay: a bottom-right, dock-aware keycast that shows the last
 	// few keypresses as styled pills and expires them after a short timeout. It
 	// renders purely from ShowKeys plus RecentKeys, gated on nothing else.
-	ShowKeys          bool       // True when the showkeys overlay is enabled
+	ShowKeys bool // True when the showkeys overlay is enabled
+	// overrides are this run's flags over the config file. See
+	// OSOptions.Overrides.
+	overrides         config.Overrides
 	RecentKeys        []KeyEvent // Ring buffer of recently pressed keys
 	KeyHistoryMaxSize int        // Maximum number of keys to display (default: 5)
 	// crash is the recovered panic the crash overlay is showing, or nil.

@@ -549,6 +549,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		KeybindRegistry: keybindRegistry,
 		UserConfig:      userConfig,
 		ShowKeys:        interfaceFlags.ShowKeys,
+		Overrides:       flagOverrides(),
 		// The size this client told the daemon, so the restored windows are
 		// tiled into a real box rather than a zero one the first WindowSizeMsg
 		// then has to undo. The servers have always passed theirs.

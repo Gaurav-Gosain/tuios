@@ -57,7 +57,7 @@ func (m *OS) ApplyReloadedConfig(cfg *config.UserConfig) tea.Cmd {
 	// until the client exits or the option is saved. See config/hold.go.
 	cfg.KeepHolds(m.UserConfig)
 	themeBefore := theme.Generation()
-	config.ApplyAppearanceConfig(cfg, &m.Settings)
+	config.ApplyAppearanceConfig(m.overrides.Config(cfg), &m.Settings)
 	m.ListKeys = listKeymap(cfg)
 	// ApplyAppearanceConfig switches the theme package, which recolours the
 	// chrome, but each pane's emulator holds its own copy of the palette. The

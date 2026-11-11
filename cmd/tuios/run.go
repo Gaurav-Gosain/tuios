@@ -142,6 +142,7 @@ func runLocal() error {
 		KeybindRegistry: keybindRegistry,
 		UserConfig:      userConfig,
 		ShowKeys:        interfaceFlags.ShowKeys,
+		Overrides:       flagOverrides(),
 		IsDaemonSession: isDaemonSession,
 		// One writer for the terminal: frames, kitty and sixel sequences all
 		// serialize on it. Left nil, the passthroughs open their own /dev/tty

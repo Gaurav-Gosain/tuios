@@ -343,6 +343,7 @@ func newModel(options Options) *Model {
 		KeybindRegistry: keybindRegistry,
 		UserConfig:      userConfig,
 		ShowKeys:        options.ShowKeys,
+		Overrides:       embed,
 		NumWorkspaces:   options.Workspaces,
 		Width:           options.Width,
 		Height:          options.Height,

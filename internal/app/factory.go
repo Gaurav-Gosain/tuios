@@ -67,6 +67,10 @@ type OSOptions struct {
 
 	// ShowKeys enables the key display overlay.
 	ShowKeys bool
+	// Overrides are this run's CLI flags or embed options over the config
+	// file. A config reload lays them over the reloaded file again, so a flag
+	// lasts the run.
+	Overrides config.Overrides
 	// StartInTerminalMode starts the client in terminal mode on the focused
 	// pane, whatever [startup] says and whether the session is new or not.
 	StartInTerminalMode bool
@@ -239,6 +243,7 @@ func NewOS(opts OSOptions) *OS {
 		BrowserClient:     opts.BrowserClient,
 		LearnMode:         opts.LearnMode,
 		ShowKeys:          opts.ShowKeys,
+		overrides:         opts.Overrides,
 		forceTerminalMode: opts.StartInTerminalMode,
 		afterRestart:      opts.AfterRestart,
 		followedUpgrade:   opts.AfterUpgrade,

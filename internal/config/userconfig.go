@@ -2794,28 +2794,23 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 // mapped only in ApplyOverrides would be dropped for them. ApplyOverrides still layers CLI flags on top, so flags
 // keep winning where they are set.
 func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
+	applyOptionFields(cfg, s)
+	if cfg.Appearance.WhichKeyPosition != "" {
+		s.WhichKeyPosition = cfg.Appearance.WhichKeyPosition
+	}
 	// BorderStyle defaults to rounded. Empty means "not configured", so the
 	// current value (a flag, or the default) stands.
-	if cfg.Appearance.BorderStyle != "" {
-		s.BorderStyle = cfg.Appearance.BorderStyle
-	}
-	s.FramePanels = cfg.Appearance.FramePanels
 	s.PaneOverlays = cfg.Appearance.PaneOverlays
-	s.OverlayBorderColor = cfg.Appearance.OverlayBorderColor
 
 	// ZenMode only takes one of its three values, so a typo in the config lands
 	// on the default the validator warned it would fall back to.
-	s.ZenMode = closedSetValue(cfg.Appearance.ZenMode, ZenModeModes, s.ZenMode, ZenModeDisabled)
 
 	// TilingScheme takes the same shape: a typo falls back to spiral, which is
 	// what a new workspace already defaulted to before this setting existed.
-	s.TilingScheme = closedSetValue(cfg.Appearance.TilingScheme, TilingSchemes, s.TilingScheme, TilingSchemeSpiral)
 
 	// Links takes the same shape: a typo falls back to the default rather than
 	// leaving the pointer with no policy at all.
-	s.Links = closedSetValue(cfg.Appearance.Links, LinkModes, s.Links, LinksAll)
 	s.LinkClick = closedSetValue(cfg.Appearance.LinkClick, LinkClickModes, s.LinkClick, LinkClickBoth)
-	s.LinkHover = closedSetValue(cfg.Appearance.LinkHover, LinkHoverModes, s.LinkHover, LinkHoverSafe)
 	// Rules that do not compile are skipped here and reported by the
 	// validator, so a reload with a typo keeps the rest working.
 	s.LinkRules, _ = hints.CompileLinkRules(cfg.Links.Specs())
@@ -2831,7 +2826,6 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// DockbarPosition defaults to top. A typo lands on that default, which is
 	// what the validator says it falls back to; left as written, the renderer
 	// would treat it as bottom.
-	s.DockbarPosition = closedSetValue(cfg.Appearance.DockbarPosition, DockbarPositions, s.DockbarPosition, DefaultDockbarPosition)
 
 	// Sidebar. Also runs for a config that never went through LoadUserConfig (the
 	// settings page builds one in memory), so an old flat key reaches the globals
@@ -2882,18 +2876,18 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.SidebarEnabled = *sb.Enabled
 	}
 	s.SidebarPerSession = sb.PerSession != nil && *sb.PerSession
-	s.SidebarPosition = closedSetValue(sb.Position, SidebarPositions, s.SidebarPosition, DefaultSidebarPosition)
+	// An unknown position reads as the default; an unset one keeps the
+	// session's.
+	if slices.Contains(SidebarPositions, sb.Position) {
+		s.SidebarPosition = sb.Position
+	} else if sb.Position != "" {
+		s.SidebarPosition = DefaultSidebarPosition
+	}
 	if sb.Width > 0 {
 		s.SidebarWidth = sb.Width
 	}
-	if sb.ShowGlyphs != nil {
-		s.SidebarShowGlyphs = *sb.ShowGlyphs
-	}
 	if sb.ShowCounts != nil {
 		s.SidebarShowCounts = *sb.ShowCounts
-	}
-	if sb.ShowNumbers != nil {
-		s.SidebarShowNumbers = *sb.ShowNumbers
 	}
 	if sb.Marquee != nil {
 		s.SidebarMarquee = *sb.Marquee
@@ -2914,17 +2908,8 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if sb.Sections != "" {
 		s.SidebarSections = sb.Sections
 	}
-	if sb.FileIcons != nil {
-		s.SidebarFileIcons = *sb.FileIcons
-	}
 	if sb.FileIconColors != nil {
 		s.SidebarFileIconColors = *sb.FileIconColors
-	}
-	if sb.FolderClick != "" {
-		s.SidebarFolderClick = sb.FolderClick
-	}
-	if sb.FileDrag != nil {
-		s.SidebarFileDrag = *sb.FileDrag
 	}
 	// A typo reads as the default, the same contract the other enum options
 	// keep, and the validator says so.
@@ -2934,7 +2919,6 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 	// A typo reads as the default, the same contract the other enum options
 	// keep.
-	s.RailHeaderCase = closedSetValue(sb.HeaderCase, RailHeaderCases, s.RailHeaderCase, RailHeaderLowercase)
 	s.RailRowStyle = RailRowBar
 	if slices.Contains(RailRowStyles, sb.RowStyle) {
 		s.RailRowStyle = sb.RowStyle
@@ -2944,39 +2928,19 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.RailHeaderStyle = sb.HeaderStyle
 	}
 	s.RailRoomy = sb.Density == RailDensityRoomy
-	s.SidebarEditor = sb.Editor
-	if sb.FileActions != nil {
-		s.SidebarFileActions = *sb.FileActions
-	}
-	if sb.FileDelete != "" {
-		s.SidebarFileDelete = sb.FileDelete
-	}
 	s.SidebarAgentRow = ParseSidebarAgentRow(sb.AgentRow)
 	// Assigned whatever the file says, so a value removed from it goes back
 	// to the default. A bad value reads as the default and validation says so.
 	s.SidebarAgentRestFold, _ = ParseAgentRestFold(sb.AgentRestFold)
 	// Anything but count draws rows, the default; validation names a typo.
 	s.SidebarSubagents = ResolveSidebarSubagentView(cfg.Appearance.Sidebar, primary)
-	if sb.GroupMain != nil {
-		s.SidebarGroupMain = *sb.GroupMain
-	}
 	if sb.Tooltips != nil {
 		s.Tooltips = *sb.Tooltips
 	}
-	if cfg.Appearance.DockWorkspaceTabs != nil {
-		s.DockWorkspaceTabs = *cfg.Appearance.DockWorkspaceTabs
-	}
 	// DockWorkspaceTabFormat is assigned unconditionally: an empty string is the
 	// "{name}" default, and clearing it on reload has to be possible too.
-	s.DockWorkspaceTabFormat = cfg.Appearance.DockWorkspaceTabFormat
-	if cfg.Appearance.DockWorkspaceTooltip != nil {
-		s.DockWorkspaceTooltip = *cfg.Appearance.DockWorkspaceTooltip
-	}
 	if cfg.Appearance.DockWorkspaceLabelMax != nil {
 		s.DockWorkspaceLabelMax = max(*cfg.Appearance.DockWorkspaceLabelMax, 0)
-	}
-	if cfg.Appearance.DockPillCaps != nil {
-		s.DockPillCaps = *cfg.Appearance.DockPillCaps
 	}
 	if cfg.Appearance.DockModeSplitLetter != nil {
 		s.DockModeSplitLetter = *cfg.Appearance.DockModeSplitLetter
@@ -2993,58 +2957,37 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	} else {
 		s.DockModePill = DefaultDockModePill
 	}
-	s.DockCompact = cfg.Appearance.DockCompact
 	// The mode icons are pointers so an empty string can hide the icon, which is
 	// different from unset. They are assigned unconditionally so a key removed
 	// from the file goes back to the built-in on reload.
 	s.DockModeIconWindow = cfg.Appearance.DockModeIconWindow
 	s.DockModeIconTerminal = cfg.Appearance.DockModeIconTerminal
 	s.DockModeIconTiling = cfg.Appearance.DockModeIconTiling
-	if cfg.Appearance.SessionColors != nil {
-		s.SessionColors = *cfg.Appearance.SessionColors
-	}
 	if cfg.Appearance.GlobalSession != nil {
 		s.GlobalSession = *cfg.Appearance.GlobalSession
-	}
-	if cfg.Appearance.SessionBorder != nil {
-		s.SessionBorder = *cfg.Appearance.SessionBorder
 	}
 	if cfg.Appearance.SidebarGitDirty != nil {
 		s.SidebarGitDirty = *cfg.Appearance.SidebarGitDirty
 	}
-	if cfg.Appearance.NiriClickReveals != nil {
-		s.NiriClickReveals = *cfg.Appearance.NiriClickReveals
-	}
 	if cfg.Appearance.NiriHoverReveals != nil {
 		s.NiriHoverReveals = *cfg.Appearance.NiriHoverReveals
-	}
-	s.ZoomBorderless = cfg.Appearance.ZoomBorderless
-	if cfg.Appearance.ZoomFollowsFocus != nil {
-		s.ZoomFollowsFocus = *cfg.Appearance.ZoomFollowsFocus
 	}
 	if cfg.Appearance.WindowButtonZoom != nil {
 		s.WindowButtonZoom = *cfg.Appearance.WindowButtonZoom
 	}
 	// A typo lands on the default, as the validator says; left as written, the
 	// renderer would draw it as thin.
-	s.ScrollbarStyle = closedSetValue(cfg.Appearance.Scrollbar.Style, ScrollbarStyles, s.ScrollbarStyle, ScrollbarStyleTrack)
 	// The glyph and tint keys are assigned as written, empty included: empty is
 	// the "use the style's default" state, and the getters below resolve it. A
 	// value that does not measure one cell is rejected there too, so an edit
 	// made live in the settings page cannot slip past the file's validation.
-	s.ScrollbarThumb = cfg.Appearance.Scrollbar.Thumb
 	s.ScrollbarTrack = cfg.Appearance.Scrollbar.Track
-	s.ScrollbarTint = cfg.Appearance.Scrollbar.Tint
 	// Assigned as written, for the tint's reason: ResolveBackground settles a
 	// typo to off and empty to the default for every surface, so an edit made
 	// live cannot paint a colour the file's validation would have refused.
-	s.Background = cfg.Appearance.Background
 	s.PaneBackground = cfg.Appearance.PaneBackground
-	s.DesktopBackground = cfg.Appearance.DesktopBackground
 	s.WindowChromeBackground = cfg.Appearance.WindowChromeBackground
-	s.DockBackground = cfg.Appearance.DockBackground
 	s.SidebarBackground = cfg.Appearance.Sidebar.Background
-	s.SidebarCursorBackground = cfg.Appearance.Sidebar.CursorBackground
 
 	// A pointer because zero is a real value here: it turns the repeat window
 	// off, and a plain int could not tell that from an absent key.
@@ -3057,33 +3000,8 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// selection at all. A foreground that is empty is a decision: it means
 	// keep the colour the program wrote the text in, so it is assigned as
 	// written.
-	if cfg.Appearance.Selection.Bg != "" {
-		s.SelectionBg = cfg.Appearance.Selection.Bg
-	}
-	s.SelectionFg = cfg.Appearance.Selection.Fg
-	if cfg.Appearance.Selection.Bold != nil {
-		s.SelectionBold = *cfg.Appearance.Selection.Bold
-	}
-	if cfg.Appearance.Selection.SearchBg != "" {
-		s.SearchBg = cfg.Appearance.Selection.SearchBg
-	}
-	s.SearchFg = cfg.Appearance.Selection.SearchFg
-	if cfg.Appearance.Selection.MatchBg != "" {
-		s.MatchBg = cfg.Appearance.Selection.MatchBg
-	}
-	s.MatchFg = cfg.Appearance.Selection.MatchFg
-	if cfg.Appearance.Selection.CursorBg != "" {
-		s.CopyCursorBg = cfg.Appearance.Selection.CursorBg
-	}
-	s.CopyCursorFg = cfg.Appearance.Selection.CursorFg
-	if cfg.Appearance.Selection.Flash != nil {
-		s.CopyFlash = *cfg.Appearance.Selection.Flash
-	}
 	if cfg.Appearance.Selection.FlashMs > 0 {
 		s.CopyFlashMs = cfg.Appearance.Selection.FlashMs
-	}
-	if cfg.Appearance.Selection.FlashColor != "" {
-		s.CopyFlashColor = cfg.Appearance.Selection.FlashColor
 	}
 	if cfg.Appearance.Selection.FlashStyle != "" {
 		s.CopyFlashStyle = cfg.Appearance.Selection.FlashStyle
@@ -3103,16 +3021,10 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// The hide/show toggles are plain bools with no "unset" state, so they are
 	// assigned unconditionally: turning one off in the settings page has to
 	// survive a reload just as turning it on does.
-	s.HideWindowButtons = cfg.Appearance.HideWindowButtons
-	if cfg.Appearance.WindowButtonStyle != "" {
-		s.WindowButtonStyle = cfg.Appearance.WindowButtonStyle
-	}
 	if cfg.Appearance.WindowButtonPosition != "" {
 		s.WindowButtonPosition = cfg.Appearance.WindowButtonPosition
 	}
-	s.HideScrollbar = cfg.Appearance.HideScrollbar
 	s.ShowClock = cfg.Appearance.ShowClock
-	s.ClockFormat = cfg.Appearance.ClockFormat
 	s.PaneGap = min(max(cfg.Appearance.Gap, 0), PaneGapMax)
 	s.MasterRatioPercent = clampPercent(cfg.Appearance.MasterRatio, MasterRatioMin, MasterRatioMax, MasterRatioDefault)
 	// A typo in the position falls back to left, and an unset count to one,
@@ -3137,22 +3049,18 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// DimForeground defaults to true, so it is a pointer: an unset key has to
 	// read as on, and only an explicit false turns it off.
 	s.DimForeground = cfg.Appearance.DimForeground == nil || *cfg.Appearance.DimForeground
-	s.DimMultifocus = cfg.Appearance.DimMultifocus
 	overlay.SetPanelPadding(cfg.Appearance.PanelPadding)
 	// The glyph set is selected here rather than beside the theme, because it
 	// is read through the config globals the render path already goes to and
 	// this is the one funnel those come through. Re-selecting an unchanged id
 	// costs a resolve of a handful of strings.
-	s.GlyphSet = cfg.Appearance.Glyphs
 	if s.GlyphSet == "" {
 		s.GlyphSet = theme.GlyphSetNone
 	}
 	// The terminal's own limits, when the config chose no set. See
 	// DetectGlyphEnv.
 	theme.SetActiveGlyphs(s.applyGlyphEnv())
-	s.ShowCPU = cfg.Appearance.ShowCPU
 	s.ShowRAM = cfg.Appearance.ShowRAM
-	s.NiriReverseScroll = cfg.Appearance.NiriReverseScroll
 	s.NiriScrollSnap = cfg.Appearance.NiriScrollSnap
 	s.NiriScrollCells = clampPercent(cfg.Appearance.NiriScrollCells, NiriScrollCellsMin, NiriScrollCellsMax, NiriScrollCellsDefault)
 
@@ -3207,33 +3115,17 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 
 	// ConfirmQuit defaults to false (nil means use default)
-	if cfg.Appearance.ConfirmQuit != nil {
-		s.AlwaysConfirmQuit = *cfg.Appearance.ConfirmQuit
-	}
 
 	// SharedBorders defaults to true (nil means use default)
-	if cfg.Appearance.SharedBorders != nil {
-		s.SharedBorders = *cfg.Appearance.SharedBorders
-	}
 
 	// WhichKeyEnabled defaults to true (nil means use default)
-	if cfg.Appearance.WhichKeyEnabled != nil {
-		s.WhichKeyEnabled = *cfg.Appearance.WhichKeyEnabled
-	}
 
 	// WrapLists defaults to true (nil means use default)
-	if cfg.Appearance.WrapLists != nil {
-		s.WrapLists = *cfg.Appearance.WrapLists
-	}
 
 	// WhichKeyPosition defaults to bottom-right
-	if cfg.Appearance.WhichKeyPosition != "" {
-		s.WhichKeyPosition = cfg.Appearance.WhichKeyPosition
-	}
 
 	// WindowTitlePosition defaults to top, and a typo lands there too; left as
 	// written, the renderer would draw it at the bottom.
-	s.WindowTitlePosition = closedSetValue(cfg.Appearance.WindowTitlePosition, WindowTitlePositions, s.WindowTitlePosition, DefaultWindowTitlePosition)
 
 	s.WindowTitleStyle = DefaultWindowTitleStyle
 	if slices.Contains(WindowTitleStyles, cfg.Appearance.WindowTitleStyle) {
@@ -3245,16 +3137,13 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 
 	// HideClock defaults to false
-	s.HideClock = cfg.Appearance.HideClock
 
 	// WindowTitleFormat defaults to empty, meaning the title is shown as-is.
 	// An empty string in the config also clears a previously set format on
 	// reload, which is why it is assigned unconditionally.
-	s.WindowTitleFormat = cfg.Appearance.WindowTitleFormat
 
 	// HostTitle defaults to empty, which sets no title. Assigned
 	// unconditionally for the same reason as above.
-	s.HostTitle = cfg.Appearance.HostTitle
 
 	// ScrollLines (lines per wheel notch)
 	if cfg.Appearance.ScrollLines > 0 {
@@ -3262,25 +3151,13 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 
 	// CopyOnSelect defaults to true (nil means use default)
-	if cfg.Appearance.CopyOnSelect != nil {
-		s.CopyOnSelect = *cfg.Appearance.CopyOnSelect
-	}
 	if cfg.Appearance.NvimNavigation != nil {
 		s.NvimNavigation = *cfg.Appearance.NvimNavigation
-	}
-	if cfg.Appearance.FocusWrap != nil {
-		s.FocusWrap = *cfg.Appearance.FocusWrap
 	}
 
 	// FocusFollowsMouse defaults to false; a pointer so turning it off in the
 	// settings page survives a reload just as turning it on does.
-	if cfg.Appearance.FocusFollowsMouse != nil {
-		s.FocusFollowsMouse = *cfg.Appearance.FocusFollowsMouse
-	}
 	// PastePreview defaults to true; a pointer so turning it off survives.
-	if cfg.Appearance.PastePreview != nil {
-		s.PastePreview = *cfg.Appearance.PastePreview
-	}
 	// The pause key keeps only ctrl or alt. Off, empty and a typo all leave
 	// hover focus unpaused, which is what the validator warns a typo becomes.
 	switch cfg.Appearance.FocusFollowsMousePause {
@@ -3292,15 +3169,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 
 	// AltDrag defaults to true; a pointer so an explicit false in the config
 	// survives the default being on.
-	if cfg.Appearance.AltDrag != nil {
-		s.AltDrag = *cfg.Appearance.AltDrag
-	}
 
 	// RightClickOpensMenu defaults to false. A pointer so an explicit true in
 	// the config is what turns the plain right-click into the pane menu.
-	if cfg.Appearance.RightClickOpensMenu != nil {
-		s.RightClickOpensMenu = *cfg.Appearance.RightClickOpensMenu
-	}
 
 	// KittyPlaceholders takes one of three words; anything else is the
 	// default, which is to decide from the host terminal.
@@ -3316,9 +3187,6 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 
 	// NewWindowInheritCwd defaults to true. A pointer so an explicit false in
 	// the config is what puts new windows back in the daemon's directory.
-	if cfg.Appearance.NewWindowInheritCwd != nil {
-		s.NewWindowInheritCwd = *cfg.Appearance.NewWindowInheritCwd
-	}
 	if cfg.Appearance.NewWindowFollowSSH != nil {
 		s.NewWindowFollowSSH = *cfg.Appearance.NewWindowFollowSSH
 	}
@@ -3335,13 +3203,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 
 	// ClickToType only takes one of its three values, so a typo in the config
 	// lands on the default the validator warned it would fall back to.
-	s.ClickToType = closedSetValue(cfg.Appearance.ClickToType, ClickToTypeModes, s.ClickToType, ClickToTypeDouble)
 
 	// WordCharacters is a pointer so an explicitly empty string can mean "no
 	// punctuation is part of a word", which is different from "unset".
-	if cfg.Appearance.WordCharacters != nil {
-		s.WordCharacters = *cfg.Appearance.WordCharacters
-	}
 
 	// ZoomMaxWidth (0 = fullscreen)
 	if cfg.Appearance.ZoomMaxWidth > 0 {
@@ -3373,7 +3237,6 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// clear any override and restore theme colors. This runs after the theme
 	// switch above, which resets the derived colors.
 	theme.SetBorderOverrides(cfg.Appearance.BorderOverrides())
-	s.BorderFocusedGradient = cfg.Appearance.BorderFocusedGradient
 	s.BorderGradientAngle = DefaultBorderGradientAngle
 	if a := cfg.Appearance.BorderGradientAngle; a != nil {
 		s.BorderGradientAngle = ((*a % 360) + 360) % 360
