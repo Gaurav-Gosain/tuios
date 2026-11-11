@@ -302,3 +302,28 @@ func TestEdgesStayStraightWhenEndsAreLessThanATwinApart(t *testing.T) {
 		}
 	}
 }
+
+func TestEdgeIntoAGroupRunsStraightWhenOnlyItsBendsMove(t *testing.T) {
+	// pele bdbad5d: runs an edge into a group straight when only its bends need to move
+	nodes := []*CNode{testGroup(100), testGroup(101)}
+	leaf := func(parent int) int {
+		v := len(nodes)
+		nodes = append(nodes, Cnode(54, 48, parent))
+		nodes[v].Seq = v
+		nodes[v].Span = 24
+		return v
+	}
+	a1, a2, a3, b1, b2, c, d := leaf(0), leaf(0), leaf(0), leaf(1), leaf(1), leaf(-1), leaf(-1)
+	edges := []*CEdge{
+		testEdge(a1, a2), testEdge(a1, a3), testEdge(b1, b2), testEdge(a2, b1), testEdge(a3, b1),
+		testEdge(b2, a1), testEdge(c, 0), testEdge(c, 1), testEdge(0, d), testEdge(1, d),
+	}
+	CompoundLayout(nodes, edges, "TB", testOptions)
+	route := edges[7].Route
+	x := route[len(route)-3]
+	for k := 0; k < len(route); k += 3 {
+		if route[k+1] > nodes[c].Y+nodes[c].H/2+24 && !closeTo(route[k], x) {
+			t.Errorf("point %d of the edge into the group is at x %v, its end at %v", k/3, route[k], x)
+		}
+	}
+}

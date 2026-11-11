@@ -191,6 +191,9 @@ const TWIN = 1
 // its edges into line.
 const SNAP = 12
 
+// Bends with no node in line with them move this far at most to bring an edge into line.
+const BEND_SNAP = 24
+
 // An end that cannot be brought into line leans towards where its edge goes, but keeps this far
 // from the ends of the part of its side that edges spread along. On a narrow node that leaves
 // it in the middle.
@@ -1867,8 +1870,18 @@ func settle(g *Graph, nodes []*LNode, xs []float64, EFK, ETK []End, free [2][]in
 	}
 }
 
-// Brings edges that are nearly straight into line, by moving a node a little across the flow
-// along with everything it is in line with already, where the nodes beside them leave room.
+// allDummies reports whether every node of a block is a bend.
+func allDummies(g *Graph, block []int) bool {
+	for _, v := range block {
+		if g.KIND[v] != KindDummy {
+			return false
+		}
+	}
+	return true
+}
+
+// Brings edges that are nearly straight into line, by moving a node or bend a little across the
+// flow along with everything it is in line with already, where the nodes beside them leave room.
 // What is in line stays in line, so each move leaves one more edge straight.
 func snap(g *Graph, xs []float64, empty []uint8, opt LayeredOptions) {
 	n, KIND, RANK, EF, ET, EFD, ETD := g.n, g.KIND, g.RANK, g.EF, g.ET, g.EFD, g.ETD
@@ -1915,7 +1928,7 @@ func snap(g *Graph, xs []float64, empty []uint8, opt LayeredOptions) {
 		d := math.Abs(off(k))
 		if d < 0.01 {
 			join(a[k], b[k])
-		} else if d <= SNAP {
+		} else if d <= BEND_SNAP {
 			near = append(near, k)
 		}
 	}
@@ -1945,7 +1958,7 @@ func snap(g *Graph, xs []float64, empty []uint8, opt LayeredOptions) {
 			join(a[k], b[k])
 			continue
 		}
-		if math.Abs(d) > SNAP || block[a[k]] == block[b[k]] {
+		if math.Abs(d) > BEND_SNAP || block[a[k]] == block[b[k]] {
 			continue
 		}
 		// The smaller of the two blocks moves, if it can; else the other.
@@ -1963,6 +1976,9 @@ func snap(g *Graph, xs []float64, empty []uint8, opt LayeredOptions) {
 			shift := -d
 			if id == upper {
 				shift = d
+			}
+			if math.Abs(d) > SNAP && !allDummies(g, members[id]) {
+				continue
 			}
 			if !free(id, shift) {
 				continue
