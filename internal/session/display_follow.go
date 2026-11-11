@@ -12,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
+	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 	"github.com/Gaurav-Gosain/tuios/internal/sockpath"
 	"github.com/google/uuid"
 )
@@ -178,7 +179,7 @@ func x11SocketOK(display string) bool {
 		return false
 	}
 	me := os.Geteuid()
-	if uid, ok := fileOwner(fi); !ok || (uid != me && uid != 0) {
+	if uid, ok := procinfo.FileOwner(fi); !ok || (uid != me && uid != 0) {
 		return false
 	}
 	return safeFolders(filepath.Dir(path), me)
@@ -211,7 +212,7 @@ func resolveXAuthority(path string) (string, bool) {
 		return "", false
 	}
 	me := os.Geteuid()
-	if uid, ok := fileOwner(fi); !ok || uid != me {
+	if uid, ok := procinfo.FileOwner(fi); !ok || uid != me {
 		return "", false
 	}
 	if !safeFolders(filepath.Dir(resolved), me) {

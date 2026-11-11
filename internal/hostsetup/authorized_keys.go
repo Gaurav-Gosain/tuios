@@ -12,6 +12,7 @@ import (
 	"charm.land/ssh"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
+	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
 // AuthorizedKeysHas reports whether the file holds pub on any line, whatever
@@ -81,7 +82,7 @@ func CheckAuthorizedKeysModes(path string, stderr io.Writer) error {
 		if mode&0o002 != 0 {
 			return errfmt.Errorf("anyone can write to %s (mode %04o). sshd does not use keys under it. Run chmod o-w %s", p, mode, p)
 		}
-		if owner, ok := fileOwner(fi); ok && owner != 0 && int(owner) != uid {
+		if owner, ok := procinfo.FileOwner(fi); ok && owner != 0 && owner != uid {
 			return errfmt.Errorf("another user owns %s. sshd does not use keys under it. Make it yours or use another --authorized-keys file", p)
 		}
 		if mode&0o020 != 0 {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
 // Following a pane into ssh.
@@ -136,7 +137,7 @@ func ownedSocket(path string) (string, bool) {
 	if err != nil || fi.Mode()&os.ModeSocket == 0 {
 		return "", false
 	}
-	if uid, ok := fileOwner(fi); !ok || uid != me {
+	if uid, ok := procinfo.FileOwner(fi); !ok || uid != me {
 		return "", false
 	}
 	for dir := folder; ; dir = filepath.Dir(dir) {
@@ -165,7 +166,7 @@ func safeFolder(dir string, me int) bool {
 	if err != nil || !fi.IsDir() {
 		return false
 	}
-	uid, ok := fileOwner(fi)
+	uid, ok := procinfo.FileOwner(fi)
 	if !ok || (uid != me && uid != 0) {
 		return false
 	}

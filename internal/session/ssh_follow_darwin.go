@@ -4,8 +4,6 @@ package session
 
 import (
 	"encoding/binary"
-	"os"
-	"syscall"
 
 	"golang.org/x/sys/unix"
 )
@@ -55,13 +53,4 @@ func readArgvExact(pid int) []string {
 		rest = rest[end+1:]
 	}
 	return argv
-}
-
-// fileOwner is the uid that owns a file.
-func fileOwner(fi os.FileInfo) (int, bool) {
-	st, ok := fi.Sys().(*syscall.Stat_t)
-	if !ok {
-		return 0, false
-	}
-	return int(st.Uid), true
 }

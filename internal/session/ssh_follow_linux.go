@@ -44,12 +44,3 @@ func readArgvExact(pid int) []string {
 	}
 	return strings.Split(s, "\x00")
 }
-
-// fileOwner is the uid that owns a file.
-func fileOwner(fi os.FileInfo) (int, bool) {
-	st, ok := fi.Sys().(*syscall.Stat_t)
-	if !ok {
-		return 0, false
-	}
-	return int(st.Uid), true
-}
