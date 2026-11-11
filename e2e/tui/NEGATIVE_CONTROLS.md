@@ -16984,3 +16984,23 @@ Repeat from the repository root with
 `go test -count=3 -run '^TestTaskEventsLeaveInTheOrderOfTheirChanges$' -v ./internal/session/`
 and
 `go test -count=1 -run '^TestTaskEvent' -v ./internal/lint/`.
+
+## A panic in a pane's emulator
+
+`e2e/tui/vt_fault_test.go` starts a daemon with `TUIOS_TEST_VT_PANIC=VTZPANIC`,
+so the emulator loop panics on a chunk that holds the marker. Two panes and an
+attached client; one pane prints the marker. `TestEmulatorPanicKeepsTheDaemonAndOtherPanes`
+wants the daemon's pid unchanged, the notice in that pane and on the client, both
+panes answering input, a client attaching later showing the reset screen, and
+after three faults in a minute the daemon no longer feeding that pane while the
+client still draws its stream.
+
+Run on 2026-11-11 on Linux (arch-btw), branch `untangle/vt-loop-recover`. The
+branch passes 3 of 3 runs. Logs: `~/.cache/agent-tmp/vtbench/recover/` on arch-btw.
+
+| Control: what was cut | Where it failed | Verdict |
+| --- | --- | --- |
+| the `recover()` in `feedVT` (internal/session/pane_vt_fault.go) | the daemon died on the first marker; the capture of the pane came back empty | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestEmulatorPanicKeepsTheDaemonAndOtherPanes$' -v .`.

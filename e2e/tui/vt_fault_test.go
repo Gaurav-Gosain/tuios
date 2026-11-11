@@ -12,9 +12,9 @@ import (
 // that holds the marker (internal/session/pane_vt_fault.go). The failure
 // modes this checks are in the untangle notes, design/vt-loop-recover.md.
 //
-// NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Emulator fault"): with
-// the recover in feedVT removed, the daemon dies on the first marker and the
-// test fails at the pid check.
+// NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "A panic in a pane's
+// emulator"): with the recover in feedVT removed, the daemon dies on the first
+// marker and waitNoticeOrDeath fails.
 
 const vtPanicMarker = "VTZPANIC"
 
@@ -41,7 +41,7 @@ func TestEmulatorPanicKeepsTheDaemonAndOtherPanes(t *testing.T) {
 
 	// One fault: the pane's screen is reset with a notice, everywhere.
 	send(a, vtPanicMarker)
-	waitHandoffPane(t, base, sess, a, vtFaultNoticeRE, 10*time.Second)
+	waitNoticeOrDeath(t, base, sess, a)
 	if now := helloImage(t, base).PID; now != pid {
 		t.Fatalf("ASSERTION: the daemon's pid changed from %d to %d: a pane's emulator fault ended it", pid, now)
 	}
@@ -83,4 +83,19 @@ func TestEmulatorPanicKeepsTheDaemonAndOtherPanes(t *testing.T) {
 	if now := helloImage(t, base).PID; now != pid {
 		t.Fatalf("ASSERTION: the daemon's pid changed from %d to %d after three faults", pid, now)
 	}
+}
+
+// waitNoticeOrDeath waits for the fault notice in the pane, and fails at once
+// when the daemon stops answering instead.
+func waitNoticeOrDeath(t *testing.T, base, sess, window string) {
+	t.Helper()
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		if _, err := callVerb(t, base, "hello", map[string]any{}); err != nil {
+			t.Fatalf("ASSERTION: the daemon is gone after one pane's emulator panicked: %v", err)
+		}
+		if lines, err := daemonPane(base, sess, window); err == nil && vtFaultNoticeRE.MatchString(strings.Join(lines, "\n")) {
+			return
+		}
+	}
+	t.Fatalf("ASSERTION: the pane never showed the fault notice")
 }
