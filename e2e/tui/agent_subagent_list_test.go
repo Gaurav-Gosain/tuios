@@ -23,7 +23,10 @@ import (
 //	wait LABEL     print "FAKE-AT LABEL" and wait for a line on the terminal
 //	late {...}     a payload run once the stand-in has exited, by a process
 //	               it leaves behind in the pane, as a harness's hook that
-//	               reaches the daemon after the harness quit
+//	               reaches the daemon after the harness quit. What it prints
+//	               goes to the log: it would land in the pane after the shell
+//	               is back, and a SessionStart hint taller than the pane
+//	               scrolls off what the test waits to see there
 //
 // Every hook runs with --explain, and what it decided goes to the log, which
 // the test keeps as its artifact.
@@ -37,7 +40,7 @@ while IFS= read -r line <&3; do
 	'wait '*) wait; printf 'FAKE-AT %s\n' "${line#wait }"; read -r _ ;;
 	'join') wait ;;
 	'& '*) hook "${line#& }" & ;;
-	'late '*) x=${line#late }; harness=$PPID; ( (while kill -0 "$harness" 2>/dev/null; do sleep 0.1; done; hook "$x") & ) ;;
+	'late '*) x=${line#late }; harness=$PPID; ( (while kill -0 "$harness" 2>/dev/null; do sleep 0.1; done; hook "$x" >>"$log") & ) ;;
 	*) hook "$line" ;;
 	esac
 done 3<"$scenario"
