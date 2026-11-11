@@ -1,6 +1,8 @@
 package app
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -47,9 +49,14 @@ func TestFuzzKnownBugs(t *testing.T) {
 	}
 }
 
+// reproFiles lists the repro scripts in dir. A missing dir has none: git
+// keeps no empty folder, so the known folder goes away with its last bug.
 func reproFiles(t *testing.T, dir string) []string {
 	t.Helper()
 	entries, err := os.ReadDir(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
