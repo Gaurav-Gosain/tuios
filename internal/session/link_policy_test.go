@@ -749,6 +749,7 @@ func TestNoLowClassVerbTakesAPathOrReturnsAFile(t *testing.T) {
 		"send-agent-message.attachments": "over a link only a stashed file may be attached",
 		"link-peer.ssh_auth_sock":        "an agent socket, followed only for a link that may act as the person",
 		"stash-get.content":              "the bytes of a stash entry, which a link fills only with content",
+		"get-task-attachment.content":    "the bytes a caller sent to a card as content; the store opens only its own files, named by hash",
 		"capture-pane.content":           "pane text, which list reaches",
 		"peek-prompt.lines":              "pane text, which list reaches",
 		"show-buffer.data":               "a paste buffer, which list reaches as it reaches the panes",

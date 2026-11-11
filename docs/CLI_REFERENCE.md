@@ -2947,6 +2947,11 @@ tuios task stage ID STAGE [flags]
 tuios task block ID REASON... | --clear [flags]
 tuios task release ID [flags]
 tuios task rm ID [flags]
+tuios task attach ID FILE... [--name N] [--note TEXT] [--replace] [flags]
+tuios task attach ID --link URL [--name N] [--note TEXT] [flags]
+tuios task attachments ID [flags]
+tuios task detach ID NAME [flags]
+tuios task attachment get ID NAME -o FILE|- [flags]
 tuios task dispatch [status | pause | resume | mode manual|pull|auto | preset | cap N | quiet SPAN|off | verify COMMAND|off] [--project URL] [flags]
 ```
 
@@ -2962,6 +2967,11 @@ tuios task dispatch [status | pause | resume | mode manual|pull|auto | preset | 
 - `--next` (`claim`): Take the oldest card no pane holds that is not blocked or done, and that no fan of another session works on
 - `-w, --window <target>` (`claim`): The pane that takes the card (default: this pane; required outside a pane)
 - `--clear` (`block`): Lift the block
+- `--name <name>` (`attach`): The name the card shows (default: the file's name, or the link). One file only
+- `--note <text>` (`attach`): A line about the attachment
+- `--link <url>` (`attach`): Attach an http or https address instead of a file. A GitHub pull request's address is kind `pr`
+- `--replace` (`attach`): Put it in the place of the attachment with the same name. Without it a name in use is refused
+- `-o, --output <file>` (`attachment get`): Where to save it, or `-` for standard output. An existing file is not written over
 - `--verify-timeout <seconds>` (`dispatch verify`): The verify command's time limit, at most 3600 (default 600)
 - `--json`: Output the verb result as JSON
 
@@ -2970,6 +2980,18 @@ per card: its id, stage (with `!` when it is blocked), the pane that holds it,
 its age, and its title. `claim` prints the card's id and title on its first
 line, so a script can read the id with `cut -d' ' -f1`; with nothing to take it
 fails with `no_task`, and a card another pane holds fails with `task_held`.
+
+`attach` puts files or a link on a card, so the board shows them beside it: a
+screenshot, a log, a diff, a Markdown note, a Mermaid diagram, the pull
+request. The command reads each file and sends its bytes; the daemon stores
+them once by their sha256 under its state folder and keeps them until the card
+is removed or they are detached, also after a restart. The kind (`image`,
+`markdown`, `mermaid`, `diff`, `text`, `link`, `pr`, `file`) is read from the
+content, then the name. `task get` lists them under Attachments. A pane
+attaches to the card it holds, and to the card it finished while that card
+waits in `verify` or `review`. The limits are `[tasks] attachment_max_mib`,
+`attachments_per_card` and `attachment_session_mib`
+([CONFIGURATION.md](CONFIGURATION.md#the-task-board)).
 
 A card with a project shows on that repository's board in every session and on
 every linked machine. The machine where it was added owns it. A pane on

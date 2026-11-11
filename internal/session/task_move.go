@@ -9,7 +9,8 @@ import (
 
 // The task card lifecycle as one transition function. A card's lifecycle
 // fields (Stage, StageAt, Holder, HeldAt, HolderName, HolderHarness,
-// Dispatched, Blocked, Attempts, Note, Work and Verify) are written here and
+// Dispatched, Blocked, Attempts, Note, Work, Verify and Attachments) are
+// written here and
 // nowhere else: internal/lint TestOnlyTaskMoveWritesACardsLifecycle holds it.
 // A verb keeps its own checks (who may touch the card, the pane refusals, the
 // verify command rules) and asks for a move; Session.moveCard makes it,
@@ -49,6 +50,11 @@ const (
 	// moveVerified lands a verify result on a card still in verify with
 	// the run's token.
 	moveVerified
+	// moveAttach puts attachment on the card, in the place of one with its
+	// name.
+	moveAttach
+	// moveDetach takes the attachment named reason off the card.
+	moveDetach
 )
 
 // cardMove is one move and what it needs.
@@ -68,7 +74,8 @@ type cardMove struct {
 	auto              taskMove  // Auto
 	token             int64     // Verified
 	verify            *TaskVerify
-	note              string // BlockErrored, Verified: the card's note
+	note              string          // BlockErrored, Verified: the card's note
+	attachment        *TaskAttachment // Attach
 }
 
 // apply makes m on the card at now. It returns the action the history and
@@ -182,6 +189,20 @@ func (tk *TaskState) apply(m cardMove, now int64) (action, holder string, verr *
 		tk.Verify, to = m.verify, m.stage
 		action, evHolder = TaskActionVerified, ""
 
+	case moveAttach:
+		// A new slice: a snapshot shares the old one.
+		list := slices.DeleteFunc(slices.Clone(tk.Attachments), func(a TaskAttachment) bool { return a.Name == m.attachment.Name })
+		tk.Attachments = append(list, *m.attachment)
+		action = TaskActionAttached
+
+	case moveDetach:
+		i := slices.IndexFunc(tk.Attachments, func(a TaskAttachment) bool { return a.Name == m.reason })
+		if i < 0 {
+			return "", holder, nil
+		}
+		tk.Attachments = slices.Delete(slices.Clone(tk.Attachments), i, i+1)
+		action = TaskActionDetached
+
 	default:
 		return "", holder, nil
 	}
@@ -289,6 +310,7 @@ func (tk *TaskState) blockedOnErrored() bool {
 func (tk TaskState) pushCopy() TaskState {
 	tk.Prompt = ""
 	tk.History = nil
+	tk.Attachments = nil
 	if tk.Verify != nil {
 		v := *tk.Verify
 		v.Tail = ""

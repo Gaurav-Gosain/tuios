@@ -48,6 +48,10 @@ func pushCards(n int) *SessionState {
 			Attempts: 1,
 			Note:     "exit 3: not ok yet",
 			History:  hist,
+			Attachments: []TaskAttachment{{
+				Name: "after.png", Kind: AttachImage, MediaType: "image/png", Size: 1 << 20,
+				Hash: strings.Repeat("ab", 32), Note: "the layout after the fix", By: "cli", At: at,
+			}},
 			Verify: &TaskVerify{
 				State: "failed", Exit: &exit, Note: "exit 3: not ok yet",
 				Tail: pushTail, StartedAt: at, FinishedAt: at + 5,
@@ -127,12 +131,13 @@ func TestStatePushLeavesCardBodies(t *testing.T) {
 				wantCard := want
 				wantCard.Prompt = ""
 				wantCard.History = nil
+				wantCard.Attachments = nil
 				v := *want.Verify
 				v.Tail = ""
 				wantCard.Verify = &v
-				if tk.Prompt != "" || len(tk.History) != 0 || tk.Verify.Tail != "" {
-					t.Fatalf("ASSERTION: the %s's card %s carries its bodies: prompt %d bytes, %d history entries, tail %d bytes",
-						name, tk.ID, len(tk.Prompt), len(tk.History), len(tk.Verify.Tail))
+				if tk.Prompt != "" || len(tk.History) != 0 || tk.Verify.Tail != "" || len(tk.Attachments) != 0 {
+					t.Fatalf("ASSERTION: the %s's card %s carries its bodies: prompt %d bytes, %d history entries, tail %d bytes, %d attachments",
+						name, tk.ID, len(tk.Prompt), len(tk.History), len(tk.Verify.Tail), len(tk.Attachments))
 				}
 				if !reflect.DeepEqual(tk, wantCard) {
 					t.Fatalf("ASSERTION: the %s's card %d is %+v (verify %+v), want %+v (verify %+v)",

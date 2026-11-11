@@ -3342,6 +3342,21 @@ started yet all count. Each machine reads its own cap and says it when asked.
 machine_cap = 4
 ```
 
+`tuios task attach` puts files and links on a card
+([CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-task)). The daemon stores each file
+once under its state folder and removes it when no card names it.
+`attachment_max_mib` is the largest file in MiB (default 8, at most 8: the
+file travels in one request), `attachments_per_card` the most one card holds
+(default 20), and `attachment_session_mib` the most the files of one
+session's cards take together (default 256). A file over a limit is refused
+with an error that names the option.
+
+```toml
+[tasks]
+attachment_max_mib = 4
+attachments_per_card = 10
+```
+
 ## What a pane may do
 
 Every pane holds grants that say what a process in it may do through tuios:

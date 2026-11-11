@@ -1227,6 +1227,21 @@ var optionSpecs = []Option{
 		Description: "How many agents may work on this machine before Any machine starts a new one on another machine. Agents that work, agents that start, and picks not yet started count. 0 is no cap.",
 		Min:         0, Max: 1024,
 	},
+	{
+		Path: "tasks.attachment_max_mib", Type: OptionInt, Section: "agents",
+		Description: "The largest file, in MiB, that tuios task attach puts on a card. A larger file is refused with an error that names this option.",
+		Default:     "8", Min: 1, Max: AttachmentMaxMiBMax,
+	},
+	{
+		Path: "tasks.attachments_per_card", Type: OptionInt, Section: "agents",
+		Description: "The most attachments one task card holds.",
+		Default:     "20", Min: 1, Max: AttachmentsPerCardMax,
+	},
+	{
+		Path: "tasks.attachment_session_mib", Type: OptionInt, Section: "agents",
+		Description: "The most MiB the files on one session's task cards take together.",
+		Default:     "256", Min: 1, Max: AttachmentSessionMiBMax,
+	},
 
 	// [daemon]. agent_binaries is absent: it is a list, and a value that arrives
 	// as one string has no unambiguous spelling for a list. respond_from_shell

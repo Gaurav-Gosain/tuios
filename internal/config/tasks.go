@@ -35,6 +35,37 @@ type TasksConfig struct {
 	// machine" places a new one elsewhere: working agents, agents still
 	// starting and picks not yet started count. Zero or less is no cap.
 	MachineCap int `toml:"machine_cap,omitempty"`
+	// AttachmentMaxMiB bounds one file put on a card, AttachmentsPerCard
+	// the attachments of one card, and AttachmentSessionMiB the files of
+	// one session's cards together. Zero is the default.
+	AttachmentMaxMiB     int `toml:"attachment_max_mib,omitempty"`
+	AttachmentsPerCard   int `toml:"attachments_per_card,omitempty"`
+	AttachmentSessionMiB int `toml:"attachment_session_mib,omitempty"`
+}
+
+// The attachment limits' defaults and bounds. A file travels base64 in one
+// request line, so AttachmentMaxMiBMax is the most one line holds.
+const (
+	AttachmentMaxMiBDefault     = 8
+	AttachmentMaxMiBMax         = 8
+	AttachmentsPerCardDefault   = 20
+	AttachmentsPerCardMax       = 200
+	AttachmentSessionMiBDefault = 256
+	AttachmentSessionMiBMax     = 65536
+)
+
+// AttachLimits are the attachment limits in bytes and a count, each
+// default for zero and kept within its bounds.
+func (c TasksConfig) AttachLimits() (maxBytes, sessionBytes int64, perCard int) {
+	pick := func(v, def, hi int) int {
+		if v <= 0 {
+			return def
+		}
+		return min(v, hi)
+	}
+	maxBytes = int64(pick(c.AttachmentMaxMiB, AttachmentMaxMiBDefault, AttachmentMaxMiBMax)) << 20
+	sessionBytes = int64(pick(c.AttachmentSessionMiB, AttachmentSessionMiBDefault, AttachmentSessionMiBMax)) << 20
+	return maxBytes, sessionBytes, pick(c.AttachmentsPerCard, AttachmentsPerCardDefault, AttachmentsPerCardMax)
 }
 
 // AutoStageOn reports whether the daemon moves cards on its own.

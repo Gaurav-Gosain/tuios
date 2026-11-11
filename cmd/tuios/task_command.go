@@ -53,6 +53,7 @@ for itself, and it changes only the card it holds unless it holds admin.`,
 		newTaskAddCommand(), newTaskListCommand(), newTaskGetCommand(), newTaskClaimCommand(),
 		newTaskDoneCommand(), newTaskStageCommand(), newTaskBlockCommand(), newTaskReleaseCommand(),
 		newTaskRemoveCommand(), newTaskDispatchCommand(),
+		newTaskAttachCommand(), newTaskAttachmentsCommand(), newTaskDetachCommand(), newTaskAttachmentCommand(),
 	)
 	return cmd
 }
@@ -90,11 +91,12 @@ type taskRow struct {
 		Reason string `json:"reason"`
 		By     string `json:"by"`
 	} `json:"blocked"`
-	Attempts int                 `json:"attempts"`
-	Note     string              `json:"note"`
-	Verify   *session.TaskVerify `json:"verify"`
-	Prompt   string              `json:"prompt"`
-	History  []struct {
+	Attempts    int                 `json:"attempts"`
+	Note        string              `json:"note"`
+	Verify      *session.TaskVerify `json:"verify"`
+	Prompt      string              `json:"prompt"`
+	Attachments []taskAttachment    `json:"attachments"`
+	History     []struct {
 		Action string `json:"action"`
 		By     string `json:"by"`
 		At     int64  `json:"at"`
@@ -469,7 +471,7 @@ func newTaskGetCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get ID",
 		Short: "Show one task card whole",
-		Long:  `Show one task card: its stage, holder, block, prompt and history.`,
+		Long:  `Show one task card: its stage, holder, block, prompt, attachments and history.`,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			return callTask(f, "", "get-task", map[string]any{"id": args[0]}, describeTask)
@@ -504,6 +506,7 @@ func describeTask(r taskRow, on string) string {
 			fmt.Fprintf(&b, "  %s\n", plainLine(line))
 		}
 	}
+	describeAttachments(&b, r.Attachments)
 	if len(r.History) > 0 {
 		b.WriteString("\nHistory:\n")
 		for _, h := range r.History {

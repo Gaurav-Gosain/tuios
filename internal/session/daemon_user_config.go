@@ -114,6 +114,7 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg.TaskLifecycleOff = !uc.Tasks.LifecycleOn()
 	// The daemon answers placement for this machine, so it reads its cap.
 	cfg.MachineCap = uc.Tasks.MachineCap
+	cfg.Tasks = uc.Tasks
 	// The daemon removes the old copies of far files at its start.
 	cfg.OpenedCopyKeep = uc.Files.OpenCopyKeep()
 	// The daemon takes every checkpoint, so it reads whether to.

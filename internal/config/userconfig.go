@@ -1316,7 +1316,11 @@ func DefaultConfig() *UserConfig {
 		PasteBuffers: defaultPasteBuffersConfig(),
 		Review:       defaultReviewConfig(),
 		Agents:       AgentsConfig{ViewList: AgentsViewListColumn},
-		Shell:        ShellConfig{Integration: ShellIntegrationAuto},
+		Tasks: TasksConfig{
+			AttachmentMaxMiB: AttachmentMaxMiBDefault, AttachmentsPerCard: AttachmentsPerCardDefault,
+			AttachmentSessionMiB: AttachmentSessionMiBDefault,
+		},
+		Shell: ShellConfig{Integration: ShellIntegrationAuto},
 		Files: FilesConfig{
 			OpenCopyAskMB:    DefaultOpenCopyAskMB,
 			OpenCopyMaxMB:    DefaultOpenCopyMaxMB,

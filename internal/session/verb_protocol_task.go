@@ -2,6 +2,7 @@ package session
 
 import (
 	"slices"
+	"strings"
 )
 
 // taskVerbs are the registry entries of the task verbs (verb_task.go).
@@ -22,6 +23,7 @@ func taskVerbs() map[string]verbEntry {
 		{Name: "at", Type: "int", Description: "When it was added, Unix nanoseconds."},
 		{Name: "blocked", Type: "object", Description: "reason, by and at when the card is blocked, else null."},
 		{Name: "fan", Type: "object", Description: "fan and fan_id, for a card added in a fan's session."},
+		{Name: "attachment_count", Type: "int", Description: "How many attachments the card has. Absent for none."},
 	}
 	host := verbParam{Name: "host", Type: "string", Description: "The machine that owns the card, for a project card claimed, released or finished from the pane that works on it here. The call is passed on over the link for this pane."}
 	remote := []verbParam{
@@ -30,7 +32,55 @@ func taskVerbs() map[string]verbEntry {
 		{Name: "remote_harness", Type: "string", Description: "Over the link only: the agent that window runs."},
 	}
 	ownership := " A pane changes only the card it holds unless it holds admin; the person, a shell, a link and a plugin change any card."
+	attachRule := " A pane changes the attachments of the card it holds, and of the card it finished while that card waits in verify or review; admin, the person, a shell, a link and a plugin change any card's."
+	attachment := verbParam{Name: "attachment", Type: "object", Description: "name, kind (" + strings.Join(AttachKinds, ", ") + "), media_type, size, hash, url (a link), note, by and at."}
+	attachName := verbParam{Name: "name", Type: "string", Required: true, Description: "The attachment's name on the card."}
 	return map[string]verbEntry{
+		"attach-task": {
+			scope:       scopeTask,
+			link:        needWrite,
+			description: "Put a file or a link on a task card. The caller sends the file's bytes; the daemon never reads a path. A file is stored once by its sha256 and goes when no card names it. The kind is read from the content, then the name. The limits are [tasks] attachment_max_mib, attachments_per_card and attachment_session_mib." + attachRule,
+			params: []verbParam{
+				sessionParam, id,
+				{Name: "name", Type: "string", Description: "The name the card shows it by, at most 120 bytes; control and invisible characters are dropped. Required with content; a link defaults to its address."},
+				{Name: "content", Type: "string", Description: "The file, base64 encoded. Pass content or link."},
+				{Name: "link", Type: "string", Description: "An http or https address. A GitHub pull request's address is kind pr."},
+				{Name: "note", Type: "string", Description: "A line about it, at most 500 bytes."},
+				{Name: "replace", Type: "bool", Description: "Put it in the place of the attachment with the same name. Without it a name in use is refused.", Default: "false"},
+				humanNonce,
+			},
+			returns: []verbParam{attachment, {Name: "task", Type: "object", Description: "The card's row after the attach."}},
+			examples: []string{
+				`{"id":1,"verb":"attach-task","params":{"session":"work","id":"t1","name":"after.png","content":"iVBORw0KGgo=","note":"the fixed layout"}}`,
+				`{"id":1,"verb":"attach-task","params":{"session":"work","id":"t1","link":"https://github.com/o/r/pull/12"}}`,
+			},
+			handler: (*Daemon).verbAttachTask,
+		},
+		"detach-task": {
+			scope:       scopeTask,
+			link:        needWrite,
+			description: "Take an attachment off a task card. Its file goes when no card names it." + attachRule,
+			params:      []verbParam{sessionParam, id, attachName, humanNonce},
+			returns:     row,
+			examples: []string{
+				`{"id":1,"verb":"detach-task","params":{"session":"work","id":"t1","name":"after.png"}}`,
+			},
+			handler: (*Daemon).verbDetachTask,
+		},
+		"get-task-attachment": {
+			scope:       scopeRead,
+			link:        needList,
+			description: "Read one attachment of a task card, with the file's bytes for a file.",
+			params:      []verbParam{sessionParam, id, attachName},
+			returns: []verbParam{
+				attachment,
+				{Name: "content", Type: "string", Description: "The file, base64 encoded. Absent for a link."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"get-task-attachment","params":{"session":"work","id":"t1","name":"after.png"}}`,
+			},
+			handler: (*Daemon).verbGetTaskAttachment,
+		},
 		"add-task": {
 			scope:       scopeTask,
 			link:        needWrite,
@@ -88,7 +138,8 @@ func taskVerbs() map[string]verbEntry {
 			params:      []verbParam{sessionParam, id},
 			returns: slices.Concat(row, []verbParam{
 				{Name: "prompt", Type: "string", Description: "The prompt, as added."},
-				{Name: "history", Type: "[]object", Description: "Every change, oldest first, at most 100 (the first is kept): action (added, claimed, finished, staged, blocked, unblocked, released), by, at, stage, holder and reason. A release the daemon made has by tuios and reason pane closed, agent left or restart. A stage the daemon moved on its own ([tasks] auto_stage) has by tuios and a reason naming the fact: plan held for approval, agent working, fan check started, fan check failed in every attempt, or the pull request opened, merged or closed."},
+				{Name: "attachments", Type: "[]object", Description: "The files and links on the card, in the order they were added: name, kind, media_type, size, hash, url (a link), note, by and at. get-task-attachment reads one."},
+				{Name: "history", Type: "[]object", Description: "Every change, oldest first, at most 100 (the first is kept): action (added, claimed, finished, staged, blocked, unblocked, released, attached, detached), by, at, stage, holder and reason. A release the daemon made has by tuios and reason pane closed, agent left or restart. A stage the daemon moved on its own ([tasks] auto_stage) has by tuios and a reason naming the fact: plan held for approval, agent working, fan check started, fan check failed in every attempt, or the pull request opened, merged or closed."},
 			}),
 			examples: []string{
 				`{"id":1,"verb":"get-task","params":{"session":"work","id":"t1"}}`,

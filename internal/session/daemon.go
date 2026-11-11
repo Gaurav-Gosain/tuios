@@ -475,6 +475,10 @@ type Daemon struct {
 	// pool_place.go.
 	machineCap atomic.Int64
 	pool       poolState
+	// attachLimit is the [tasks] attachment limits, and attachSweep runs
+	// one sweep of the stored files at a time. See task_attach.go.
+	attachLimit atomic.Pointer[attachLimits]
+	attachSweep attachSweeper
 	// openedKeep is DaemonConfig.OpenedCopyKeep.
 	openedKeep time.Duration
 
@@ -1088,6 +1092,8 @@ type DaemonConfig struct {
 	// MachineCap is [tasks] machine_cap: how many agents may work here
 	// before placement looks elsewhere. Zero is no cap. See pool_place.go.
 	MachineCap int
+	// Tasks is [tasks], for the attachment limits. See task_attach.go.
+	Tasks config.TasksConfig
 	// OpenedCopyKeep is [files] open_copy_keep_days: how long a copy the
 	// rail's o made of a far file stays when it is not opened again. Zero
 	// keeps them all. See internal/openedcopy.
@@ -1161,6 +1167,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.taskAutoOff.Store(cfg.TaskAutoStageOff)
 	d.lifecycleOff.Store(cfg.TaskLifecycleOff)
 	d.machineCap.Store(int64(max(cfg.MachineCap, 0)))
+	d.setAttachLimits(cfg.Tasks)
 	d.openedKeep = cfg.OpenedCopyKeep
 	d.SetCheckpoints(cfg.Checkpoints)
 	d.SetAgentPresets(cfg.AgentPresets)
@@ -1762,6 +1769,9 @@ func (d *Daemon) loadStores(adopted bool) {
 	// and before auto runs.
 	d.rebuildTaskHolds()
 	d.kickAuto()
+	// Stored card files no card names any more, after the sessions are
+	// back (task_attach.go).
+	d.sweepAttachments()
 	// Review notes come back for the panes that came back.
 	d.reviewNotes.load(reviewNotesPath(), func(window string) bool { return d.sessionOfWindow(window) != "" })
 }
