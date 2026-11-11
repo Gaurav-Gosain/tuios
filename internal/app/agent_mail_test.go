@@ -146,8 +146,7 @@ func TestPaletteListsAThreadWaitingForThePerson(t *testing.T) {
 	m := mailOS(t)
 	m.noteAgentMail(session.AgentMailPayload{Message: mail(5, "cccccccc3333", "build", session.AgentInboxHuman, "human", "which retry policy?", "exponential or fixed?")})
 	m.OpenCommandPalette()
-	m.CommandPaletteQuery = "retry policy"
-	m.CommandPaletteSelected = 0
+	m.paletteList.Query.Set("retry policy")
 	filtered := m.filteredPaletteItems()
 	if len(filtered) == 0 || !strings.Contains(filtered[0].Name, "Mail #5 build → you: which retry policy?") {
 		t.Fatalf("the palette does not list the unread thread:\n%s", paletteNames(filtered))

@@ -70,12 +70,12 @@ func TestLatinCtrlUClearsAField(t *testing.T) {
 	_ = o.OpenCommandPalette()
 	o, _ = HandleKeyPress(press("a"), o)
 	o, _ = HandleKeyPress(press("b"), o)
-	if o.CommandPaletteQuery != "ab" {
-		t.Fatalf("typed query is %q, want ab", o.CommandPaletteQuery)
+	if paletteQuery(o) != "ab" {
+		t.Fatalf("typed query is %q, want ab", paletteQuery(o))
 	}
 	o, _ = HandleKeyPress(ctrlOn('u', 'f'), o)
-	if o.CommandPaletteQuery != "" {
-		t.Fatalf("Ctrl+U left the query as %q", o.CommandPaletteQuery)
+	if paletteQuery(o) != "" {
+		t.Fatalf("Ctrl+U left the query as %q", paletteQuery(o))
 	}
 }
 

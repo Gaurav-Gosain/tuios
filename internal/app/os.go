@@ -1386,16 +1386,16 @@ type OS struct {
 	ShowScrollbackBrowser bool
 	ScrollbackBrowser     any // *scrollback.Browser, typed as any to avoid import cycle
 	// Command palette overlay
-	ShowCommandPalette     bool
-	fileSearch             bool
-	fileSearchGen          uint64
-	fileSearchCancel       *atomic.Bool
-	fileSearchScanning     bool
-	fileSearchTruncated    bool
-	fileSearchErr          string
-	CommandPaletteQuery    string
-	CommandPaletteSelected int
-	CommandPaletteScroll   int
+	ShowCommandPalette  bool
+	fileSearch          bool
+	fileSearchGen       uint64
+	fileSearchCancel    *atomic.Bool
+	fileSearchScanning  bool
+	fileSearchTruncated bool
+	fileSearchErr       string
+	// paletteList is the palette's filter, cursor and window. Its window
+	// counts list rows, headings included. See list_picker.go.
+	paletteList listnav.State
 	// PaletteSessionItems holds the session/window entries built from the
 	// session tree when the palette opens. Built once per open, not per frame:
 	// BuildSessionTree does a blocking daemon round trip in daemon mode, and the
@@ -1417,10 +1417,10 @@ type OS struct {
 	PaletteSettingItems []CommandPaletteItem
 	// Launcher overlay: the programs a session can start, which is a separate
 	// list from the palette's commands (see launcher.go for why).
-	ShowLauncher     bool
-	LauncherQuery    string
-	LauncherSelected int
-	LauncherScroll   int
+	ShowLauncher bool
+	// launcherList is the launcher's filter, cursor and window. See
+	// list_picker.go.
+	launcherList listnav.State
 	// LauncherItems holds one row per known program, rebuilt when a scan lands
 	// rather than per frame: with a few thousand programs on $PATH, rebuilding
 	// per frame is the difference between an overlay that costs nothing to
@@ -1657,11 +1657,10 @@ type OS struct {
 	ShowThemePicker bool
 	// presetPicker is the keybind preset picker, and presetHint the welcome
 	// row's suggestion, read from the home folder once.
-	presetPicker        presetPickerState
-	presetHint          *presetSuggestion
-	ThemePickerQuery    string
-	ThemePickerSelected int
-	ThemePickerScroll   int
+	presetPicker presetPickerState
+	presetHint   *presetSuggestion
+	// themeList is the picker's filter, cursor and window. See list_picker.go.
+	themeList           listnav.State
 	ThemePickerOriginal string // theme active when the picker opened, for cancel
 	// ThemePickerShade lists all themes, only dark ones or only light ones.
 	ThemePickerShade int
@@ -1685,10 +1684,9 @@ type OS struct {
 	workspaceMarkSet map[int]uint8
 
 	// Glyph picker overlay state, the theme picker's opposite number.
-	ShowGlyphPicker     bool
-	GlyphPickerQuery    string
-	GlyphPickerSelected int
-	GlyphPickerScroll   int
+	ShowGlyphPicker bool
+	// glyphList is the picker's filter, cursor and window. See list_picker.go.
+	glyphList           listnav.State
 	GlyphPickerOriginal string // set active when the picker opened, for cancel
 	// GlyphPickerSamples is one preview per set, built when the picker opens.
 	// Each borrows the active selection to read what its set draws, which is

@@ -158,6 +158,5 @@ func (m *OS) handleFileSearch(msg fileSearchMsg) {
 		})
 	}
 	m.PaletteItems = items
-	m.CommandPaletteSelected = 0
-	m.CommandPaletteScroll = 0
+	m.paletteList.Refiltered(0)
 }

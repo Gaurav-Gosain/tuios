@@ -285,7 +285,10 @@ func layoutPicker() *listPicker {
 			m.layoutPickerActivate(m.layoutList.Cursor)
 			return nil
 		},
-		close:    func(m *OS) { m.CloseLayoutPicker() },
+		close: func(m *OS) tea.Cmd {
+			m.CloseLayoutPicker()
+			return nil
+		},
 		clearKey: true,
 	}
 }

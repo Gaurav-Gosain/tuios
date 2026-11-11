@@ -207,22 +207,10 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 	switch kind {
 	case "settings":
 		m.SettingsSelected = idx
-	case "palette":
-		m.CommandPaletteSelected = idx
 	case "keybinds":
 		m.KeybindMove(idx - m.KeybindSelected())
-	case "launcher":
-		m.LauncherSelected = idx
-	case "themepicker":
-		if idx != m.ThemePickerSelected {
-			m.ThemePickerMove(idx - m.ThemePickerSelected)
-		}
 	case "themeeditor":
 		m.themeEditor.cursor[m.themeEditor.tab] = idx
-	case "glyphpicker":
-		if idx != m.GlyphPickerSelected {
-			m.GlyphPickerMove(idx - m.GlyphPickerSelected)
-		}
 	case "dockeditor":
 		m.DockEditorSelected = idx
 	case "sectioneditor":
@@ -304,16 +292,8 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 		}
 	case "settings":
 		m.SettingsMove(wheelDelta(up))
-	case "palette":
-		m.PaletteMove(wheelDelta(up))
 	case "keybinds":
 		m.KeybindMove(wheelDelta(up))
-	case "launcher":
-		m.LauncherMove(wheelDelta(up))
-	case "themepicker":
-		m.ThemePickerMove(wheelDelta(up))
-	case "glyphpicker":
-		m.GlyphPickerMove(wheelDelta(up))
 	case "dockeditor":
 		m.DockEditorMove(wheelDelta(up))
 	case "sectioneditor":
@@ -447,29 +427,14 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 			// activate hook (the Theme row opens the picker).
 			return m.SettingsActivate()
 		}
-	case "palette":
-		m.CommandPaletteSelected = row.Idx
-		return m.ActivateCommandPalette()
 	case "keybinds":
 		// Selecting only. Every row here is a finding to read, and the detail box
 		// under the list is the thing a click is asking for; there is no action to
 		// activate and nothing a stray click could change.
 		m.KeybindMove(row.Idx - m.KeybindSelected())
-	case "launcher":
-		// A click runs the row. Typing it out instead is a keyboard choice: the
-		// row has no second control to aim at, and inventing one would put a
-		// hit target on every line of a list a few thousand rows long.
-		m.LauncherSelected = row.Idx
-		return m.LauncherRun(row.Idx)
-	case "themepicker":
-		m.ThemePickerSelected = row.Idx
-		return m.ThemePickerApplySelection()
 	case "themeeditor":
 		m.themeEditor.cursor[m.themeEditor.tab] = row.Idx
 		m.ThemeEditorPick()
-	case "glyphpicker":
-		m.GlyphPickerSelected = row.Idx
-		return m.GlyphPickerApplySelection()
 	case "dockeditor":
 		m.DockEditorSelected = row.Idx
 		return m.DockEditorToggle()
@@ -609,7 +574,9 @@ func (m *OS) layoutPickerActivate(idx int) {
 // closeOverlay dismisses a specific floating overlay by kind.
 func (m *OS) closeOverlay(kind string) {
 	if p := listPickerOfKind(kind); p != nil {
-		p.close(m)
+		// A click away has nowhere to return a command; the save a cancel
+		// returns is the same file the next save writes.
+		_ = p.close(m)
 		return
 	}
 	switch kind {
@@ -623,16 +590,6 @@ func (m *OS) closeOverlay(kind string) {
 		m.CloseSettings()
 	case "keybinds":
 		m.CloseKeybindManager()
-	case "palette":
-		m.CloseCommandPalette()
-	case "launcher":
-		m.CloseLauncher()
-	case "themepicker":
-		// Click-away leaves the previewed theme reverted, matching Esc.
-		m.CancelThemePicker()
-	case "glyphpicker":
-		// Click-away leaves the previewed set reverted, matching Esc.
-		m.CancelGlyphPicker()
 	case "dockeditor":
 		// Click-away closes and keeps, matching Esc: the layout is already
 		// applied and saved.

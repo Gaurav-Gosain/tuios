@@ -7,6 +7,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/textedit"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // A list picker is an overlay that lists rows, filters them as you type, and
@@ -38,6 +39,12 @@ type listPicker struct {
 	count func(m *OS) int
 	// visible is how many rows the picker shows. nil: listOverlayRows.
 	visible func(m *OS) int
+	// page is how many rows a page key moves. nil: listOverlayRows.
+	page func(m *OS) int
+	// rescroll puts the window where the picker's own layout wants it after
+	// the cursor moved, for a list whose rows are not one line each. nil:
+	// listnav.Scroll over the rows, which State.Move already did.
+	rescroll func(m *OS)
 	// rest reports whether row i can hold the cursor. nil: every row can.
 	rest func(m *OS, i int) bool
 	// first is the row the cursor goes to after a refilter. nil: row 0.
@@ -51,8 +58,10 @@ type listPicker struct {
 	moved func(m *OS) tea.Cmd
 	// refiltered runs after the query changed the rows. nil: nothing more.
 	refiltered func(m *OS) tea.Cmd
-	// close puts the picker away without accepting: esc and a click away.
-	close func(m *OS)
+	// close puts the picker away without accepting: esc and a click away. A
+	// picker that previews by applying puts the old value back, and returns
+	// the command that saves it.
+	close func(m *OS) tea.Cmd
 	// clearKey lets ctrl+u clear the filter.
 	clearKey bool
 }
@@ -74,6 +83,9 @@ func (p *listPicker) restFor(m *OS) func(int) bool {
 }
 
 func (p *listPicker) afterMove(m *OS, moved bool) tea.Cmd {
+	if moved && p.rescroll != nil {
+		p.rescroll(m)
+	}
 	if !moved || p.moved == nil {
 		return nil
 	}
@@ -105,13 +117,16 @@ func (p *listPicker) key(m *OS, key string, msg tea.KeyPressMsg) (tea.Cmd, bool)
 	st := p.state(m)
 	switch key {
 	case "esc":
-		p.close(m)
-		return nil, true
+		return p.close(m), true
 	case "enter":
 		return p.accept(m), true
 	}
 	if motion := m.ListKeys.Keys(key, false); motion != listnav.None {
-		return p.move(m, listnav.Delta(motion, listOverlayRows)), true
+		page := listOverlayRows
+		if p.page != nil {
+			page = p.page(m)
+		}
+		return p.move(m, listnav.Delta(motion, page)), true
 	}
 	changed, consumed := st.Query.Edit(msg.String(), msg.Text, textedit.LineOpts{AllowClear: p.clearKey})
 	if changed {
@@ -160,10 +175,16 @@ func (p *listPicker) click(m *OS, i int) tea.Cmd {
 
 // searchLine draws the filter line with its caret, after the sigil.
 func (p *listPicker) searchLine(m *OS, width int) string {
-	pal := m.overlayUI()
+	return searchLine(p.state(m), width, m.overlayUI())
+}
+
+// searchLine draws a list's filter line with its caret, after the sigil.
+func searchLine(st *listnav.State, width int, pal overlay.Palette) string {
 	bg := pal.Surface
-	sigil := overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(overlay.Sigil())
-	before, at, after := p.state(m).Query.Parts()
+	// The accent is the theme's and the panel's ground is not, so the sigil is
+	// measured against the ground.
+	sigil := overlay.Style(bg).Foreground(theme.Readable(pal.AccentBright, bg)).Bold(true).Render(overlay.Sigil())
+	before, at, after := st.Query.Parts()
 	return sigil + overlay.FieldLine(before, at, after, max(width-lipgloss.Width(overlay.Sigil()), 1), bg, pal.Fg)
 }
 
@@ -171,6 +192,14 @@ func (p *listPicker) searchLine(m *OS, width int) string {
 // is open. The order is the order overlay_keys.go routes keys in.
 func (m *OS) openListPicker() *listPicker {
 	switch {
+	case m.ShowCommandPalette:
+		return palettePicker()
+	case m.ShowLauncher:
+		return launcherPicker()
+	case m.ShowThemePicker:
+		return themePicker()
+	case m.ShowGlyphPicker:
+		return glyphPicker()
 	case m.ShowEffectPicker:
 		return effectPicker()
 	case m.ShowLayoutPicker && m.LayoutPickerMode != "save":
@@ -190,6 +219,14 @@ func (m *OS) openListPicker() *listPicker {
 // and building the small struct per event costs nothing worth keeping.
 func listPickerOfKind(kind string) *listPicker {
 	switch kind {
+	case "palette":
+		return palettePicker()
+	case "launcher":
+		return launcherPicker()
+	case "themepicker":
+		return themePicker()
+	case "glyphpicker":
+		return glyphPicker()
 	case "effectpicker":
 		return effectPicker()
 	case "layout":
@@ -220,4 +257,15 @@ func (m *OS) ListPickerPaste(s string) (tea.Cmd, bool) {
 		return nil, false
 	}
 	return p.paste(m, s), true
+}
+
+// ListPickerShows is the filter and the cursor row of the list picker the
+// keyboard is on, or "" and -1 when none is open.
+func (m *OS) ListPickerShows() (query string, cursor int) {
+	p := m.openListPicker()
+	if p == nil {
+		return "", -1
+	}
+	st := p.state(m)
+	return st.Query.String(), st.Cursor
 }

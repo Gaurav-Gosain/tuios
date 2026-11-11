@@ -4,6 +4,8 @@ import (
 	"slices"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 )
 
 // allPaletteItems returns the merged palette list: the static commands, and the
@@ -58,9 +60,9 @@ func (m *OS) rebuildPaletteItems() {
 // query.
 func (m *OS) filteredPaletteItems() []CommandPaletteItem {
 	if m.fileSearch {
-		return matchPaletteItems(m.allPaletteItems(), m.CommandPaletteQuery)
+		return matchPaletteItems(m.allPaletteItems(), m.paletteList.Query.String())
 	}
-	return FilterCommandPalette(m.allPaletteItems(), m.CommandPaletteQuery)
+	return FilterCommandPalette(m.allPaletteItems(), m.paletteList.Query.String())
 }
 
 // OpenCommandPalette opens the palette and rebuilds its session/window entries
@@ -69,9 +71,7 @@ func (m *OS) filteredPaletteItems() []CommandPaletteItem {
 // open rather than once per frame.
 func (m *OS) OpenCommandPalette() tea.Cmd {
 	m.ShowCommandPalette = true
-	m.CommandPaletteQuery = ""
-	m.CommandPaletteSelected = 0
-	m.CommandPaletteScroll = 0
+	m.paletteList.Reset()
 	if m.fileSearch {
 		m.PaletteItems = []CommandPaletteItem{}
 		return nil
@@ -88,20 +88,47 @@ func (m *OS) OpenCommandPalette() tea.Cmd {
 }
 
 // PaletteMove moves the command-palette selection by delta and keeps the scroll
-// window in view. Shared by keyboard arrows and the mouse wheel.
-func (m *OS) PaletteMove(delta int) {
+// window in view.
+func (m *OS) PaletteMove(delta int) { _ = palettePicker().move(m, delta) }
+
+// paletteRescroll keeps the cursor's row in view. The window counts list rows,
+// headings included, so it is kept against the rows the renderer lays out
+// rather than against the commands alone.
+func (m *OS) paletteRescroll() {
 	filtered := m.filteredPaletteItems()
-	n := len(filtered)
-	if n == 0 {
-		m.CommandPaletteSelected = 0
-		return
-	}
-	m.CommandPaletteSelected = m.listStep(m.CommandPaletteSelected, delta, n)
 	_, visible, _ := m.paletteLayout()
-	// The scroll counts list rows, headers included, so it is kept against the
-	// rows the renderer lays out rather than against the commands alone.
-	lines := paletteLines(filtered, paletteGrouped(m.CommandPaletteQuery) && !m.fileSearch)
-	m.CommandPaletteScroll = paletteScroll(m.CommandPaletteScroll, lines, m.CommandPaletteSelected, visible)
+	lines := paletteLines(filtered, paletteGrouped(m.paletteList.Query.String()) && !m.fileSearch)
+	m.paletteList.Scroll = paletteScroll(m.paletteList.Scroll, lines, m.paletteList.Cursor, visible)
+}
+
+// palettePicker is the command palette's list behaviour. See list_picker.go.
+// A page is the rows on screen. The rebind key edits the binding of the
+// action under the cursor.
+func palettePicker() *listPicker {
+	return &listPicker{
+		kind:  "palette",
+		state: func(m *OS) *listnav.State { return &m.paletteList },
+		count: func(m *OS) int { return len(m.filteredPaletteItems()) },
+		visible: func(m *OS) int {
+			_, visible, _ := m.paletteLayout()
+			return visible
+		},
+		page:     func(m *OS) int { return m.PalettePageRows() },
+		rescroll: func(m *OS) { m.paletteRescroll() },
+		keys: func(m *OS, key string) (tea.Cmd, bool) {
+			if key == PaletteRebindKey {
+				m.RebindPaletteSelection()
+				return nil, true
+			}
+			return nil, false
+		},
+		accept: func(m *OS) tea.Cmd { return m.ActivateCommandPalette() },
+		close: func(m *OS) tea.Cmd {
+			m.CloseCommandPalette()
+			return nil
+		},
+		clearKey: true,
+	}
 }
 
 // PalettePageRows is how many rows a page key moves the palette by.
@@ -120,9 +147,7 @@ func (m *OS) CloseCommandPalette() {
 		m.fileSearch = false
 		m.fileSearchGen++
 	}
-	m.CommandPaletteQuery = ""
-	m.CommandPaletteSelected = 0
-	m.CommandPaletteScroll = 0
+	m.paletteList.Reset()
 	// Nothing reads the merged list while the palette is shut, and it is rebuilt
 	// on the next open, so dropping it costs nothing but that rebuild.
 	m.PaletteItems = nil
@@ -157,20 +182,20 @@ func getSettingPaletteItems(m *OS) []CommandPaletteItem {
 // palette, returning its command. Shared by keyboard Enter and mouse click.
 func (m *OS) ActivateCommandPalette() tea.Cmd {
 	filtered := m.filteredPaletteItems()
-	if m.CommandPaletteSelected < 0 || m.CommandPaletteSelected >= len(filtered) {
+	if m.paletteList.Cursor < 0 || m.paletteList.Cursor >= len(filtered) {
 		// Nothing to run. Closing here would dismiss the panel and throw away
 		// the query that narrowed it to nothing, which answers the key with
 		// silence and cannot be told from the key not being bound. The query is
 		// what the user is part way through typing, so it stays and so does the
 		// panel.
 		if m.fileSearch {
-			m.ShowNotification("No file matches "+m.CommandPaletteQuery, "info", m.Settings.NotificationDuration)
+			m.ShowNotification("No file matches "+m.paletteList.Query.String(), "info", m.Settings.NotificationDuration)
 		} else {
-			m.ShowNotification("Nothing to run: no command matches "+m.CommandPaletteQuery, "info", m.Settings.NotificationDuration)
+			m.ShowNotification("Nothing to run: no command matches "+m.paletteList.Query.String(), "info", m.Settings.NotificationDuration)
 		}
 		return nil
 	}
-	item := filtered[m.CommandPaletteSelected]
+	item := filtered[m.paletteList.Cursor]
 	m.CloseCommandPalette()
 	over, before := m.ShowInbox, m.focusSpot()
 	_, cmd := item.Run(m)

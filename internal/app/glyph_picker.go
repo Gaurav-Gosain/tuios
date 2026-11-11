@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
@@ -42,7 +43,7 @@ type glyphSample struct {
 // glyphPickerItems returns the set ids offered, filtered by the current query.
 func (m *OS) glyphPickerItems() []string {
 	all := theme.AvailableGlyphSets()
-	q := strings.ToLower(strings.TrimSpace(m.GlyphPickerQuery))
+	q := strings.ToLower(strings.TrimSpace(m.glyphList.Query.String()))
 	if q == "" {
 		return all
 	}
@@ -61,8 +62,7 @@ func (m *OS) OpenGlyphPicker() {
 	// restart, which is what makes authoring one worth doing.
 	theme.ReloadGlyphSets()
 	m.ShowGlyphPicker = true
-	m.GlyphPickerQuery = ""
-	m.GlyphPickerScroll = 0
+	m.glyphList.Reset()
 	m.GlyphPickerOriginal = theme.ActiveGlyphSetID()
 
 	// Sampled once here rather than per frame: each sample borrows the active
@@ -70,10 +70,9 @@ func (m *OS) OpenGlyphPicker() {
 	// frame would be churning global state under the renderer.
 	m.buildGlyphSamples()
 
-	m.GlyphPickerSelected = 0
 	for i, id := range m.glyphPickerItems() {
 		if id == m.GlyphPickerOriginal {
-			m.GlyphPickerSelected = i
+			m.glyphList.Cursor = i
 			break
 		}
 	}
@@ -169,7 +168,7 @@ func isASCII(s string) bool {
 // CloseGlyphPicker hides the picker without changing the applied set.
 func (m *OS) CloseGlyphPicker() {
 	m.ShowGlyphPicker = false
-	m.GlyphPickerQuery = ""
+	m.glyphList.Reset()
 }
 
 // CancelGlyphPicker restores the set that was active when the picker opened and
@@ -199,42 +198,50 @@ func (m *OS) applyGlyphSet(id string) {
 	m.setOption("appearance.glyphs", id)
 }
 
-// GlyphPickerMove moves the selection by delta, keeping the scroll window in
-// view, and live-previews the newly selected set.
-func (m *OS) GlyphPickerMove(delta int) {
+// glyphPickerPreview applies the set under the cursor, when previews are
+// live, after a move or a refilter.
+func (m *OS) glyphPickerPreview() tea.Cmd {
 	items := m.glyphPickerItems()
-	_, visible, _ := m.glyphPickerLayout()
-	if !livePickerMove(&m.GlyphPickerSelected, &m.GlyphPickerScroll, delta, len(items), visible, m.listWraps()) {
-		return
+	if c := m.glyphList.Cursor; c >= 0 && c < len(items) && m.previewsLive() {
+		m.applyGlyphSet(items[c])
 	}
-	if m.previewsLive() {
-		m.applyGlyphSet(items[m.GlyphPickerSelected])
-	}
+	return nil
 }
 
-// GlyphPickerRefilter resets the selection after the query changes and previews
-// the new top result.
-func (m *OS) GlyphPickerRefilter() {
-	m.GlyphPickerSelected = 0
-	m.GlyphPickerScroll = 0
-	if items := m.glyphPickerItems(); len(items) > 0 && m.previewsLive() {
-		m.applyGlyphSet(items[0])
+// GlyphPickerMove moves the selection by delta and previews the new row.
+func (m *OS) GlyphPickerMove(delta int) { glyphPicker().move(m, delta) }
+
+// glyphPicker is the glyph-set picker's list behaviour. See list_picker.go.
+func glyphPicker() *listPicker {
+	return &listPicker{
+		kind:  "glyphpicker",
+		state: func(m *OS) *listnav.State { return &m.glyphList },
+		count: func(m *OS) int { return len(m.glyphPickerItems()) },
+		visible: func(m *OS) int {
+			_, visible, _ := m.glyphPickerLayout()
+			return visible
+		},
+		accept:     func(m *OS) tea.Cmd { return m.GlyphPickerApplySelection() },
+		moved:      func(m *OS) tea.Cmd { return m.glyphPickerPreview() },
+		refiltered: func(m *OS) tea.Cmd { return m.glyphPickerPreview() },
+		close:      func(m *OS) tea.Cmd { return m.CancelGlyphPicker() },
+		clearKey:   true,
 	}
 }
 
 // GlyphPickerApplySelection commits the selected set, persists it, and closes.
 func (m *OS) GlyphPickerApplySelection() tea.Cmd {
 	items := m.glyphPickerItems()
-	if m.GlyphPickerSelected < 0 || m.GlyphPickerSelected >= len(items) {
+	if m.glyphList.Cursor < 0 || m.glyphList.Cursor >= len(items) {
 		// Nothing to commit, so nothing is closed. Closing here would leave the
 		// preview from the last query that did match on screen, unpersisted,
 		// with the picker gone and no Esc left to press to get back to it.
 		// Staying up keeps both the query and the escape route that reverts.
-		m.ShowNotification("No glyph set matches "+m.GlyphPickerQuery,
+		m.ShowNotification("No glyph set matches "+m.glyphList.Query.String(),
 			"info", m.Settings.NotificationDuration)
 		return nil
 	}
-	m.applyGlyphSet(items[m.GlyphPickerSelected])
+	m.applyGlyphSet(items[m.glyphList.Cursor])
 	save := m.persistSettings()
 	m.CloseGlyphPicker()
 	return save

@@ -9,16 +9,39 @@ import (
 )
 
 // paletteRowShortcut returns the shortcut the palette shows on the row named
-// name, and whether the row is on screen. The row is the name, the shortcut
-// (when there is one) and then the category. The query line also starts with
-// the name, and is told apart by its cursor block.
+// name, and whether the row is on screen. A palette row is the name, the
+// shortcut (when there is one) and then the category, left to right.
+//
+// Only the lines under the search line's rule are rows. The search line above
+// the rule holds the typed name too, and its caret is a reverse-video cell
+// with no glyph of its own, so nothing on that line tells it apart from a row.
+// The panel's frame (│) is not part of any field.
 func paletteRowShortcut(s tuitest.Screen, name, category string) (string, bool) {
-	for line := range strings.SplitSeq(s.Text(), "\n") {
-		_, after, ok := strings.Cut(line, name)
-		if !ok || strings.Contains(line, "█") {
+	lines := strings.Split(s.Text(), "\n")
+	rule := -1
+	for i, line := range lines {
+		if !strings.Contains(line, name) {
 			continue
 		}
-		fields := strings.Fields(after)
+		// The first line with the name is the search line; its rule is the
+		// next line drawn as a rule.
+		for j := i + 1; j < len(lines); j++ {
+			if strings.Contains(lines[j], "──────────") {
+				rule = j
+				break
+			}
+		}
+		break
+	}
+	if rule < 0 {
+		return "", false
+	}
+	for _, line := range lines[rule+1:] {
+		_, after, ok := strings.Cut(line, name)
+		if !ok {
+			continue
+		}
+		fields := strings.Fields(strings.ReplaceAll(after, "│", " "))
 		if len(fields) == 0 {
 			continue
 		}

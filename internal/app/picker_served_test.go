@@ -46,8 +46,8 @@ func TestServedPickersDoNotPreviewForEveryone(t *testing.T) {
 			m.UserConfig = config.DefaultConfig()
 
 			m.OpenThemePicker()
-			m.ThemePickerQuery = "nord"
-			m.ThemePickerRefilter()
+			m.themeList.Query.Set("nord")
+			_ = themePicker().refilter(m)
 			m.ThemePickerMove(1)
 			if changed := theme.CurrentThemeID() != "dracula"; changed != tc.changes {
 				t.Errorf("theme after moving the picker is %q; changed = %v, want %v",
@@ -113,8 +113,8 @@ func TestServedPickerCannotDeleteThemeFiles(t *testing.T) {
 				ConfigReadOnly: tc.kind.Remote()}
 			m.UserConfig = config.DefaultConfig()
 			m.OpenThemePicker()
-			m.ThemePickerQuery = "doomed"
-			m.ThemePickerRefilter()
+			m.themeList.Query.Set("doomed")
+			_ = themePicker().refilter(m)
 			m.ThemePickerAskDelete()
 			m.ThemePickerConfirmDelete(true)
 

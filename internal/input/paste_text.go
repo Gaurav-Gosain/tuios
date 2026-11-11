@@ -126,17 +126,9 @@ func textFieldPaste(o *app.OS) func(string) tea.Cmd {
 			o.AggregateViewScroll = 0
 		})
 	case o.ShowCommandPalette:
-		return typed(func(s string) {
-			o.CommandPaletteQuery += s
-			o.CommandPaletteSelected = 0
-			o.CommandPaletteScroll = 0
-		})
+		return listPickerPaste(o)
 	case o.ShowLauncher:
-		return func(s string) tea.Cmd {
-			o.LauncherQuery += s
-			o.LauncherRefilter()
-			return o.LauncherIconWork()
-		}
+		return listPickerPaste(o)
 	case o.AnyOverlayOpen(), o.ShowLogs, o.ShowCacheStats:
 		return nil
 	case o.ShowScrollbackBrowser:
@@ -155,17 +147,11 @@ func settingsFieldPaste(o *app.OS) (paste func(string) tea.Cmd, ok bool) {
 		}
 		return nil, true
 	case o.ShowThemePicker:
-		return typed(func(s string) {
-			o.ThemePickerQuery += s
-			o.ThemePickerRefilter()
-		}), true
+		return listPickerPaste(o), true
 	case o.PresetPickerOpen():
 		return nil, true
 	case o.ShowGlyphPicker:
-		return typed(func(s string) {
-			o.GlyphPickerQuery += s
-			o.GlyphPickerRefilter()
-		}), true
+		return listPickerPaste(o), true
 	case o.ShowEffectPicker:
 		return listPickerPaste(o), true
 	case o.ShowSectionEditor, o.ShowDockEditor:

@@ -45,9 +45,7 @@ type LauncherItem struct {
 // found is already on screen in the meantime.
 func (m *OS) OpenLauncher() tea.Cmd {
 	m.ShowLauncher = true
-	m.LauncherQuery = ""
-	m.LauncherSelected = 0
-	m.LauncherScroll = 0
+	m.launcherList.Reset()
 	m.rebuildLauncherItems()
 	m.LauncherOpenedAt = time.Now()
 	return tea.Batch(m.ScanPathApps(), m.LauncherIconWork())
@@ -74,9 +72,7 @@ func (m *OS) LauncherIconWork() tea.Cmd {
 // open, so dropping them costs only that rebuild.
 func (m *OS) CloseLauncher() {
 	m.ShowLauncher = false
-	m.LauncherQuery = ""
-	m.LauncherSelected = 0
-	m.LauncherScroll = 0
+	m.launcherList.Reset()
 	m.LauncherItems = nil
 	// A drawn icon outlives the panel that placed it, so it is taken down here
 	// rather than left for the next frame to paint over.
@@ -218,21 +214,12 @@ func orderByHistory(items []LauncherItem, hist *applist.Frecency) []LauncherItem
 
 // filteredLauncherItems returns the rows matching the current query.
 func (m *OS) filteredLauncherItems() []LauncherItem {
-	return FilterLauncherItems(m.launcherItems(), m.LauncherQuery, m.launchHistory)
+	return FilterLauncherItems(m.launcherItems(), m.launcherList.Query.String(), m.launchHistory)
 }
 
 // LauncherMove moves the selection by delta and keeps the scroll window in
-// view. Shared by the keyboard arrows and the mouse wheel.
-func (m *OS) LauncherMove(delta int) {
-	n := len(m.filteredLauncherItems())
-	if n == 0 {
-		m.LauncherSelected = 0
-		return
-	}
-	m.LauncherSelected = m.listStep(m.LauncherSelected, delta, n)
-	_, visible, _ := m.launcherLayout()
-	m.LauncherScroll = listnav.Scroll(m.LauncherScroll, m.LauncherSelected, n, visible)
-}
+// view.
+func (m *OS) LauncherMove(delta int) { _ = launcherPicker().move(m, delta) }
 
 // LauncherPageRows is how many rows a page key moves the launcher by.
 func (m *OS) LauncherPageRows() int {
@@ -240,10 +227,38 @@ func (m *OS) LauncherPageRows() int {
 	return max(visible, 1)
 }
 
-// LauncherRefilter resets the selection after the query changes.
-func (m *OS) LauncherRefilter() {
-	m.LauncherSelected = 0
-	m.LauncherScroll = 0
+// launcherPicker is the launcher's list behaviour. See list_picker.go. Enter
+// execs the program as the new pane's process, and Tab opens a shell pane with
+// the command line waiting to be added to: Tab rather than a modifier on Enter,
+// because a modified Enter is not expressible under the legacy keyboard
+// encoding, and Tab already means "give me the rest of this to finish". A
+// move or a refilter changes which rows are on screen, so it asks for their
+// icons.
+func launcherPicker() *listPicker {
+	return &listPicker{
+		kind:  "launcher",
+		state: func(m *OS) *listnav.State { return &m.launcherList },
+		count: func(m *OS) int { return len(m.filteredLauncherItems()) },
+		visible: func(m *OS) int {
+			_, visible, _ := m.launcherLayout()
+			return visible
+		},
+		page: func(m *OS) int { return m.LauncherPageRows() },
+		keys: func(m *OS, key string) (tea.Cmd, bool) {
+			if key == "tab" {
+				return m.LauncherType(m.launcherList.Cursor), true
+			}
+			return nil, false
+		},
+		accept:     func(m *OS) tea.Cmd { return m.LauncherRun(m.launcherList.Cursor) },
+		moved:      func(m *OS) tea.Cmd { return m.LauncherIconWork() },
+		refiltered: func(m *OS) tea.Cmd { return m.LauncherIconWork() },
+		close: func(m *OS) tea.Cmd {
+			m.CloseLauncher()
+			return nil
+		},
+		clearKey: true,
+	}
 }
 
 // launcherSelection returns the entry under the cursor.
@@ -291,7 +306,7 @@ func (m *OS) launcherEmptyReason() string {
 	if len(m.LauncherItems) == 0 {
 		return "Still finding the programs on this machine"
 	}
-	return "Nothing to launch: no program matches " + m.LauncherQuery
+	return "Nothing to launch: no program matches " + m.launcherList.Query.String()
 }
 
 // LauncherRun starts the selected program in a new pane and closes the

@@ -254,8 +254,11 @@ func effectPicker() *listPicker {
 		accept:     func(m *OS) tea.Cmd { return m.EffectPickerApplySelection() },
 		moved:      func(m *OS) tea.Cmd { return m.effectPickerPreview() },
 		refiltered: func(m *OS) tea.Cmd { return m.effectPickerPreview() },
-		close:      func(m *OS) { m.CancelEffectPicker() },
-		clearKey:   true,
+		close: func(m *OS) tea.Cmd {
+			m.CancelEffectPicker()
+			return nil
+		},
+		clearKey: true,
 	}
 }
 

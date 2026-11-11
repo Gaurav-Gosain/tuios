@@ -385,8 +385,11 @@ func hostPicker() *listPicker {
 			}
 			return nil, false
 		},
-		accept:   func(m *OS) tea.Cmd { return m.hostPickerActivate(m.hostList.Cursor) },
-		close:    func(m *OS) { m.CloseHostPicker() },
+		accept: func(m *OS) tea.Cmd { return m.hostPickerActivate(m.hostList.Cursor) },
+		close: func(m *OS) tea.Cmd {
+			m.CloseHostPicker()
+			return nil
+		},
 		clearKey: true,
 	}
 }

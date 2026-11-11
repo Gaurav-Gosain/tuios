@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
@@ -22,9 +23,9 @@ import (
 
 // presetPickerState is the picker's state, kept on the OS.
 type presetPickerState struct {
-	open     bool
-	selected int
-	scroll   int
+	open bool
+	// list is the cursor and window. The picker has no filter.
+	list listnav.State
 	// loses is, for each preset, the keys a pane would lose to it that it
 	// does not lose today. Built when the picker opens, not per frame.
 	loses map[string][]string
@@ -50,7 +51,7 @@ type keybindPresetSavedMsg struct {
 func (m *OS) OpenKeybindPresets() {
 	p := &m.presetPicker
 	p.open = true
-	p.scroll = 0
+	p.list.Scroll = 0
 	p.loses = presetLosses(m.currentPreset())
 	names := config.Presets()
 	p.about, p.leaders = make([]config.PresetAbout, len(names)), make([]string, len(names))
@@ -58,9 +59,9 @@ func (m *OS) OpenKeybindPresets() {
 		p.about[i], _ = config.PresetInfo(name)
 		p.leaders[i] = config.DefaultKeybindingsFor(name).LeaderKey
 	}
-	p.selected = max(slices.Index(names, m.currentPreset()), 0)
+	p.list.Cursor = max(slices.Index(names, m.currentPreset()), 0)
 	if s := m.presetSuggestion(); s.preset != "" {
-		p.selected = max(slices.Index(names, s.preset), 0)
+		p.list.Cursor = max(slices.Index(names, s.preset), 0)
 		p.leader = s.leader
 	}
 }
@@ -75,7 +76,7 @@ func (m *OS) PresetPickerOpen() bool { return m.presetPicker.open }
 func (m *OS) PresetPickerMove(delta int) {
 	p := &m.presetPicker
 	_, visible, _ := m.presetPickerLayout()
-	livePickerMove(&p.selected, &p.scroll, delta, len(config.Presets()), visible, m.listWraps())
+	p.list.Move(delta, len(config.Presets()), visible, m.listWraps(), nil)
 }
 
 // PresetPickerApply writes the highlighted preset and reloads the config. A
@@ -83,20 +84,20 @@ func (m *OS) PresetPickerMove(delta int) {
 func (m *OS) PresetPickerApply() tea.Cmd {
 	p := &m.presetPicker
 	names := config.Presets()
-	if p.selected < 0 || p.selected >= len(names) || m.UserConfig == nil {
+	if p.list.Cursor < 0 || p.list.Cursor >= len(names) || m.UserConfig == nil {
 		return nil
 	}
 	if m.LearnMode {
 		// The tour has no config file to write. The preset changes the keys
 		// of this tab, so a lesson can show them at work.
 		p.open = false
-		return m.LearnApplyPreset(names[p.selected])
+		return m.LearnApplyPreset(names[p.list.Cursor])
 	}
 	if m.ConfigReadOnly {
 		m.ShowNotification("This client cannot change the keys. Run tuios keybinds preset on the server.", "warning", m.Settings.NotificationWarningDuration)
 		return nil
 	}
-	name := names[p.selected]
+	name := names[p.list.Cursor]
 	p.open = false
 	if name == m.currentPreset() {
 		return nil

@@ -58,7 +58,7 @@ func (m *OS) paletteFooter() []overlay.Hint {
 	if !m.agentsSeen() {
 		hints = slices.Delete(hints, paletteStateHint, paletteStateHint+1)
 	}
-	switch keybinds, _ := splitPaletteKeybinds(m.CommandPaletteQuery); {
+	switch keybinds, _ := splitPaletteKeybinds(m.paletteList.Query.String()); {
 	case m.fileSearch:
 		hints = slices.Delete(hints, paletteActionsHint, paletteActionsHint+1)
 	case keybinds:
@@ -151,29 +151,19 @@ func paletteMetaWidth(filtered []CommandPaletteItem, grouped bool, width int) in
 func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) {
 	items := m.allPaletteItems()
 	filtered := m.filteredPaletteItems()
-	grouped := paletteGrouped(m.CommandPaletteQuery) && !m.fileSearch
+	grouped := paletteGrouped(m.paletteList.Query.String()) && !m.fileSearch
 
 	pal := m.overlayUI()
 	bg := pal.Surface
 
 	width, visible, hints := m.paletteLayout()
 	list := paletteLines(filtered, grouped)
-	m.CommandPaletteScroll = paletteScroll(m.CommandPaletteScroll, list, m.CommandPaletteSelected, visible)
+	m.paletteList.Scroll = paletteScroll(m.paletteList.Scroll, list, m.paletteList.Cursor, visible)
 	metaW := paletteMetaWidth(filtered, grouped, width)
 
 	var lines []string
 
-	// Search input.
-	// The accent is the theme's and the panel's ground is not, so both are
-	// measured against it. The cursor is a block, so the mark floor is enough.
-	cursorInk := theme.ReadableAt(pal.Accent, bg, theme.MarkFloor)
-	cursor := overlay.Style(bg).Foreground(cursorInk).Render("█")
-	if overlay.UseASCII() {
-		// A full block is not ASCII; a reversed blank draws the same block.
-		cursor = overlay.Cursor(" ", bg, cursorInk)
-	}
-	search := overlay.Style(bg).Foreground(theme.Readable(pal.AccentBright, bg)).Bold(true).Render(overlay.Sigil()) +
-		overlay.Style(bg).Foreground(pal.Fg).Render(m.CommandPaletteQuery) + cursor
+	search := palettePicker().searchLine(m, width)
 	count := ""
 	if len(filtered) > 0 && len(list) > visible {
 		// Counted against the rows this query could reach, not against every
@@ -184,7 +174,7 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 		if m.fileSearch {
 			kind = "files"
 		}
-		total := paletteReachable(items, m.CommandPaletteQuery)
+		total := paletteReachable(items, m.paletteList.Query.String())
 		if m.fileSearch {
 			total = len(items)
 		}
@@ -192,7 +182,7 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 	}
 	lines = append(lines, searchWithCount(search, count, width, bg, pal), overlay.Rule(width, bg, pal))
 
-	start := m.CommandPaletteScroll
+	start := m.paletteList.Scroll
 	end := min(start+visible, len(list))
 	if len(filtered) == 0 {
 		empty := overlay.Empty{Message: "No matching commands", Hint: overlay.Hint{Key: "esc", Label: "close"}}
@@ -209,7 +199,7 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 		// A "#" search that found nothing needs to say it was a search over
 		// actions. "No matching commands" under a token the user has just been
 		// taught reads as the token not working.
-		if keybinds, rest := splitPaletteKeybinds(m.CommandPaletteQuery); keybinds && !m.fileSearch {
+		if keybinds, rest := splitPaletteKeybinds(m.paletteList.Query.String()); keybinds && !m.fileSearch {
 			empty.Message = keybindPaletteHint(rest)
 		}
 		// The empty state takes the rows the list would have, so the panel
@@ -222,7 +212,7 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 				lines = append(lines, headerStyle.Render(overlay.Truncate(l.header, width)))
 				continue
 			}
-			st := overlay.RowState{Cursor: l.item == m.CommandPaletteSelected, Focused: true}
+			st := overlay.RowState{Cursor: l.item == m.paletteList.Cursor, Focused: true}
 			lines = append(lines, pal.Row(paletteRow(filtered[l.item], st.Cursor, pal, width, metaW), width, st, bg))
 		}
 		for len(lines) < visible+2 {

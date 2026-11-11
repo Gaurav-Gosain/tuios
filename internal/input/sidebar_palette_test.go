@@ -34,8 +34,8 @@ func TestRailSlashOpensThePaletteAndKeepsItsKeys(t *testing.T) {
 	// "j" is the rail's cursor-down. With the palette in front it is a character
 	// of the query.
 	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'j', Text: "j"}, o)
-	if o.CommandPaletteQuery != "j" {
-		t.Errorf("the palette query is %q: the rail swallowed the keystroke", o.CommandPaletteQuery)
+	if paletteQuery(o) != "j" {
+		t.Errorf("the palette query is %q: the rail swallowed the keystroke", paletteQuery(o))
 	}
 
 	// esc closes the palette and leaves the keyboard with the rail, which is

@@ -25,8 +25,8 @@ func newGlyphPickerOS(t *testing.T) *OS {
 // the live preview applied with no way back to it.
 func TestGlyphPickerKeepsTheQueryWhenNothingMatches(t *testing.T) {
 	m := newGlyphPickerOS(t)
-	m.GlyphPickerQuery = "no-such-glyph-set"
-	m.GlyphPickerRefilter()
+	m.glyphList.Query.Set("no-such-glyph-set")
+	_ = glyphPicker().refilter(m)
 
 	if got := len(m.glyphPickerItems()); got != 0 {
 		t.Fatalf("fixture matched %d sets; the test needs a query that matches none", got)
@@ -37,8 +37,8 @@ func TestGlyphPickerKeepsTheQueryWhenNothingMatches(t *testing.T) {
 	if !m.ShowGlyphPicker {
 		t.Error("the picker closed with nothing selected, discarding the query")
 	}
-	if m.GlyphPickerQuery != "no-such-glyph-set" {
-		t.Errorf("the query was discarded: %q", m.GlyphPickerQuery)
+	if m.glyphList.Query.String() != "no-such-glyph-set" {
+		t.Errorf("the query was discarded: %q", m.glyphList.Query.String())
 	}
 }
 
@@ -89,7 +89,7 @@ func TestGlyphPickerApplyWritesTheConfig(t *testing.T) {
 	}
 	for i, id := range items {
 		if id == target {
-			m.GlyphPickerSelected = i
+			m.glyphList.Cursor = i
 		}
 	}
 	m.GlyphPickerApplySelection()

@@ -40,16 +40,14 @@ func (m *OS) renderGlyphPicker() (string, overlay.Geometry, []overlayRowHit) {
 	items := m.glyphPickerItems()
 	width, visible, hints := m.glyphPickerLayout()
 	return m.renderLivePicker(livePickerPanel{
-		Title:    "Glyph set",
-		Query:    m.GlyphPickerQuery,
-		Items:    items,
-		Selected: &m.GlyphPickerSelected,
-		Scroll:   &m.GlyphPickerScroll,
-		Width:    width,
-		Visible:  visible,
-		Hints:    hints,
-		Empty:    "No matching glyph sets",
-		Row:      m.glyphRow,
+		Title:   "Glyph set",
+		Items:   items,
+		List:    &m.glyphList,
+		Width:   width,
+		Visible: visible,
+		Hints:   hints,
+		Empty:   "No matching glyph sets",
+		Row:     m.glyphRow,
 		Footer: func(pal overlay.Palette) []string {
 			return m.glyphPickerDetail(items, pal, width)
 		},
@@ -100,10 +98,10 @@ func (m *OS) glyphRow(id string, selected bool, pal overlay.Palette, width int) 
 func (m *OS) glyphPickerDetail(items []string, pal overlay.Palette, width int) []string {
 	bg := pal.Surface
 	blank := overlay.Style(bg).Render(" ")
-	if m.GlyphPickerSelected < 0 || m.GlyphPickerSelected >= len(items) {
+	if m.glyphList.Cursor < 0 || m.glyphList.Cursor >= len(items) {
 		return []string{blank, blank}
 	}
-	id := items[m.GlyphPickerSelected]
+	id := items[m.glyphList.Cursor]
 	sample := m.GlyphPickerSamples[id]
 
 	var summary string

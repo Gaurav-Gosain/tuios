@@ -33,14 +33,13 @@ func (m *OS) renderPresetPicker() (string, overlay.Geometry, []overlayRowHit) {
 	names := config.Presets()
 	current := m.currentPreset()
 	return m.renderLivePicker(livePickerPanel{
-		Title:    "Keybind preset",
-		Items:    names,
-		Selected: &p.selected,
-		Scroll:   &p.scroll,
-		Width:    width,
-		Visible:  visible,
-		Hints:    hints,
-		Empty:    "No presets",
+		Title:   "Keybind preset",
+		Items:   names,
+		List:    &p.list,
+		Width:   width,
+		Visible: visible,
+		Hints:   hints,
+		Empty:   "No presets",
 		Row: func(name string, selected bool, pal overlay.Palette, width int) string {
 			st := overlay.RowState{Cursor: selected, Focused: true}
 			bg := pal.Ground(st, pal.Surface)
@@ -74,17 +73,17 @@ func (m *OS) renderPresetPicker() (string, overlay.Geometry, []overlayRowHit) {
 		Footer: func(pal overlay.Palette) []string {
 			bg := pal.Surface
 			dim := overlay.Style(bg).Foreground(pal.FgDim)
-			if p.selected < 0 || p.selected >= len(names) {
+			if p.list.Cursor < 0 || p.list.Cursor >= len(names) {
 				return nil
 			}
-			name := names[p.selected]
+			name := names[p.list.Cursor]
 			loses := "Your shell loses: nothing new."
 			if keys := p.loses[name]; len(keys) > 0 {
 				loses = "Your shell loses: " + strings.Join(keys, ", ") + "."
 			}
 			menu := ""
-			if name != config.PresetTuios && p.selected < len(p.leaders) {
-				menu = p.leaders[p.selected] + " ctrl+t opens the tuios keys " + name + " moved."
+			if name != config.PresetTuios && p.list.Cursor < len(p.leaders) {
+				menu = p.leaders[p.list.Cursor] + " ctrl+t opens the tuios keys " + name + " moved."
 			}
 			return []string{
 				"",

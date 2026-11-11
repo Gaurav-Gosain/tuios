@@ -34,20 +34,27 @@ import (
 func openEffectPicker(t *testing.T, opts ...apptest.Option) *apptest.Fixture {
 	t.Helper()
 	f := apptest.New(t, append([]apptest.Option{apptest.Size(120, 40), apptest.Colors16()}, opts...)...)
+	openFromSettings(t, f, "Effect", "Screen saver effect")
+	return f
+}
+
+// openFromSettings opens the picker behind a settings row, found by search.
+// marker is text the picker shows and the settings page does not.
+func openFromSettings(t *testing.T, f *apptest.Fixture, row, marker string) {
+	t.Helper()
 	f.Action("open_settings")
 	f.Keys("/")
-	f.Type("Effect")
+	f.Type(row)
 	// The first enter leaves the search on the row it found; the row's own
 	// enter opens the picker. The search may take one more, so press until
 	// the picker is there, at most three times.
 	for range 3 {
 		f.Keys("enter")
-		if _, _, ok := f.Find("Screen saver effect"); ok {
-			return f
+		if _, _, ok := f.Find(marker); ok {
+			return
 		}
 	}
-	t.Fatalf("the effect picker did not open:\n%s", f.Text())
-	return nil
+	t.Fatalf("the %s picker did not open:\n%s", row, f.Text())
 }
 
 // highlighted is the cursor row's text, trimmed.
@@ -172,5 +179,61 @@ func TestLayoutSaveNameEditsAtTheCaret(t *testing.T) {
 	f.Keys("enter")
 	if _, err := os.Stat(layouttmpl.Path("work")); err != nil {
 		t.Errorf("ASSERTION: enter did not save the layout as work: %v", err)
+	}
+}
+
+// TestPickersShareTheEditorAndTheListKeys runs the same two checks on every
+// picker that rides the shared list state: the filter edits at the caret and
+// ctrl+u clears it, and the cursor moves on the list key [keybindings.lists]
+// gives and not on the default it replaced.
+func TestPickersShareTheEditorAndTheListKeys(t *testing.T) {
+	doors := []struct {
+		name    string
+		prepare func(t *testing.T)
+		open    func(t *testing.T, f *apptest.Fixture)
+	}{
+		{name: "command palette", open: func(t *testing.T, f *apptest.Fixture) { f.Action("command_palette") }},
+		{name: "launcher", prepare: programsOnPath, open: func(t *testing.T, f *apptest.Fixture) { f.Action("launcher") }},
+		{name: "theme picker", open: func(t *testing.T, f *apptest.Fixture) { openFromSettings(t, f, "Theme", "preview") }},
+		{name: "glyph picker", open: func(t *testing.T, f *apptest.Fixture) { openFromSettings(t, f, "Glyph set", "preview") }},
+		{name: "effect picker", open: func(t *testing.T, f *apptest.Fixture) {
+			openFromSettings(t, f, "Effect", "Screen saver effect")
+		}},
+	}
+	for _, d := range doors {
+		t.Run(d.name, func(t *testing.T) {
+			if d.prepare != nil {
+				d.prepare(t)
+			}
+			f := apptest.New(t, apptest.Size(120, 40), apptest.Colors16(),
+				apptest.Config(func(c *config.UserConfig) {
+					if c.Keybindings.Lists == nil {
+						c.Keybindings.Lists = map[string][]string{}
+					}
+					c.Keybindings.Lists[config.ActionListDown] = []string{"ctrl+j"}
+				}))
+			d.open(t, f)
+			f.Keys("home")
+			first := f.Highlighted()
+			f.Keys("down")
+			if got := f.Highlighted(); !slices.Equal(got, first) {
+				t.Errorf("ASSERTION: down moved the cursor to %q though list_down is only ctrl+j", got)
+			}
+			f.Keys("ctrl+j")
+			if got := f.Highlighted(); slices.Equal(got, first) {
+				t.Errorf("ASSERTION: ctrl+j, the configured list_down, did not move the cursor from %q", first)
+			}
+
+			f.Type("qz")
+			f.Keys("left")
+			f.Type("x")
+			if _, _, ok := f.Find("qxz"); !ok {
+				t.Fatalf("ASSERTION: typing x after moving the caret back one did not give qxz:\n%s", f.Text())
+			}
+			f.Keys("ctrl+u")
+			if _, _, ok := f.Find("qxz"); ok {
+				t.Errorf("ASSERTION: ctrl+u left the filter on screen:\n%s", f.Text())
+			}
+		})
 	}
 }

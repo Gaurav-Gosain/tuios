@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
@@ -24,7 +25,7 @@ func (m *OS) themePickerItems() []string {
 		}
 		all = kept
 	}
-	q := strings.ToLower(strings.TrimSpace(m.ThemePickerQuery))
+	q := strings.ToLower(strings.TrimSpace(m.themeList.Query.String()))
 	if q == "" {
 		return all
 	}
@@ -41,9 +42,8 @@ func (m *OS) themePickerItems() []string {
 func (m *OS) OpenThemePicker() {
 	theme.EnsureRegistry()
 	m.ShowThemePicker = true
-	m.ThemePickerQuery = ""
+	m.themeList.Reset()
 	m.ThemePickerShade, m.ThemePickerDelete, m.ThemePickerPair = themeShadeAll, "", ""
-	m.ThemePickerScroll = 0
 	current := theme.CurrentThemeID()
 	if current == "" {
 		current = themeNone
@@ -51,10 +51,9 @@ func (m *OS) OpenThemePicker() {
 	m.ThemePickerOriginal = current
 
 	// Position the selection on the current theme.
-	m.ThemePickerSelected = 0
 	for i, id := range m.themePickerItems() {
 		if id == current {
-			m.ThemePickerSelected = i
+			m.themeList.Cursor = i
 			break
 		}
 	}
@@ -70,7 +69,7 @@ func (m *OS) OpenThemePicker() {
 // CloseThemePicker hides the picker without changing the applied theme.
 func (m *OS) CloseThemePicker() {
 	m.ShowThemePicker = false
-	m.ThemePickerQuery = ""
+	m.themeList.Reset()
 }
 
 // CancelThemePicker restores the theme that was active when the picker opened
@@ -96,42 +95,86 @@ func (m *OS) CancelThemePicker() tea.Cmd {
 	return save
 }
 
-// ThemePickerMove moves the selection by delta, keeping the scroll window in
-// view, and live-previews the newly selected theme.
-func (m *OS) ThemePickerMove(delta int) {
+// themePickerPreview applies the theme under the cursor, when previews are
+// live, after a move or a refilter.
+func (m *OS) themePickerPreview() {
 	items := m.themePickerItems()
-	_, visible, _ := m.themePickerLayout()
-	if !livePickerMove(&m.ThemePickerSelected, &m.ThemePickerScroll, delta, len(items), visible, m.listWraps()) {
-		return
-	}
-	if m.previewsLive() {
-		m.applyTheme(items[m.ThemePickerSelected])
+	if c := m.themeList.Cursor; c >= 0 && c < len(items) && m.previewsLive() {
+		m.applyTheme(items[c])
 	}
 }
 
-// ThemePickerRefilter resets the selection after the query changes and previews
-// the new top result.
-func (m *OS) ThemePickerRefilter() {
-	m.ThemePickerSelected = 0
-	m.ThemePickerScroll = 0
-	if items := m.themePickerItems(); len(items) > 0 && m.previewsLive() {
-		m.applyTheme(items[0])
+// ThemePickerMove moves the selection by delta and previews the new row.
+func (m *OS) ThemePickerMove(delta int) { themePicker().move(m, delta) }
+
+// themePicker is the theme picker's list behaviour. See list_picker.go.
+func themePicker() *listPicker {
+	return &listPicker{
+		kind:  "themepicker",
+		state: func(m *OS) *listnav.State { return &m.themeList },
+		count: func(m *OS) int { return len(m.themePickerItems()) },
+		visible: func(m *OS) int {
+			_, visible, _ := m.themePickerLayout()
+			return visible
+		},
+		keys:   themePickerKeys,
+		accept: func(m *OS) tea.Cmd { return m.ThemePickerApplySelection() },
+		moved: func(m *OS) tea.Cmd {
+			m.themePickerPreview()
+			return nil
+		},
+		refiltered: func(m *OS) tea.Cmd {
+			m.themePickerPreview()
+			return nil
+		},
+		close:    func(m *OS) tea.Cmd { return m.CancelThemePicker() },
+		clearKey: true,
 	}
+}
+
+// themePickerKeys are the picker's own keys. A pick with a light and dark
+// pair set waits for d, l or b, and a delete waits for y: any other key goes
+// back to the list and is used up. The commands are ctrl chords, because a
+// typed letter filters.
+func themePickerKeys(m *OS, key string) (tea.Cmd, bool) {
+	if m.ThemePickerPair != "" {
+		return m.ThemePickerAnswerPair(key), true
+	}
+	if m.ThemePickerDelete != "" {
+		return m.ThemePickerConfirmDelete(key == "y"), true
+	}
+	switch key {
+	case "ctrl+f":
+		m.ThemePickerCycleShade()
+	case "ctrl+r":
+		m.ThemePickerShuffle()
+	case "ctrl+y":
+		return m.ThemePickerCopyID(), true
+	case "ctrl+d":
+		m.ThemePickerAskDelete()
+	case "ctrl+e":
+		m.ThemePickerEdit(false)
+	case "ctrl+o":
+		m.ThemePickerEdit(true)
+	default:
+		return nil, false
+	}
+	return nil, true
 }
 
 // ThemePickerApplySelection commits the selected theme, persists it, and closes.
 func (m *OS) ThemePickerApplySelection() tea.Cmd {
 	items := m.themePickerItems()
-	if m.ThemePickerSelected < 0 || m.ThemePickerSelected >= len(items) {
+	if m.themeList.Cursor < 0 || m.themeList.Cursor >= len(items) {
 		// Nothing to commit, so nothing is closed. CloseThemePicker leaves the
 		// applied theme alone, so closing here would leave the live preview
 		// from the last query that did match rows on the screen, unpersisted,
 		// with no Esc left to press. Staying up keeps both the query and the
 		// escape route that reverts.
-		m.ShowNotification("Nothing to apply: no theme matches "+m.ThemePickerQuery, "info", m.Settings.NotificationDuration)
+		m.ShowNotification("Nothing to apply: no theme matches "+m.themeList.Query.String(), "info", m.Settings.NotificationDuration)
 		return nil
 	}
-	sel := items[m.ThemePickerSelected]
+	sel := items[m.themeList.Cursor]
 	// With a light and dark pair set, the pick is for one of the two, or
 	// both. The picker asks before it writes. See ThemePickerAnswerPair.
 	// A client that cannot write the config has nothing to ask: the pick
@@ -235,7 +278,7 @@ var themeShadeNames = [...]string{"all", "dark", "light"}
 // ones, and back.
 func (m *OS) ThemePickerCycleShade() {
 	m.ThemePickerShade = (m.ThemePickerShade + 1) % len(themeShadeNames)
-	m.ThemePickerRefilter()
+	_ = themePicker().refilter(m)
 }
 
 // ThemePickerShuffle jumps to a random theme of those listed, and previews
@@ -263,10 +306,10 @@ func (m *OS) ThemePickerCopyID() tea.Cmd {
 // themePickerHighlighted is the theme under the cursor.
 func (m *OS) themePickerHighlighted() (string, bool) {
 	items := m.themePickerItems()
-	if m.ThemePickerSelected < 0 || m.ThemePickerSelected >= len(items) {
+	if m.themeList.Cursor < 0 || m.themeList.Cursor >= len(items) {
 		return "", false
 	}
-	return items[m.ThemePickerSelected], true
+	return items[m.themeList.Cursor], true
 }
 
 // ThemePickerAskDelete asks to delete the highlighted theme, if it is a file
@@ -323,6 +366,6 @@ func (m *OS) ThemePickerConfirmDelete(yes bool) tea.Cmd {
 		m.ShowNotification("Deleted the theme "+id, "success", m.Settings.NotificationDuration)
 	}
 	items := m.themePickerItems()
-	m.ThemePickerSelected = min(m.ThemePickerSelected, max(len(items)-1, 0))
+	m.themeList.Cursor = min(m.themeList.Cursor, max(len(items)-1, 0))
 	return nil
 }

@@ -29,7 +29,7 @@ func TestServedPresetPickerDoesNotWrite(t *testing.T) {
 				t.Error("a served client was offered a preset from the operator's home folder")
 			}
 			m.OpenKeybindPresets()
-			m.presetPicker.selected = slices.Index(config.Presets(), "tmux")
+			m.presetPicker.list.Cursor = slices.Index(config.Presets(), "tmux")
 			cmd := m.PresetPickerApply()
 			if wrote := cmd != nil || m.UserConfig.Keybindings.Preset == "tmux"; wrote != tc.writes {
 				t.Errorf("applying tmux: wrote = %v, want %v", wrote, tc.writes)

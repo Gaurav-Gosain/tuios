@@ -5,31 +5,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
 
-// handleCommandPaletteInput handles keyboard input when the command palette is open.
+// handleCommandPaletteInput handles keyboard input when the command palette is
+// open, through the list picker's keys (see app/list_picker.go). A page is the
+// rows on screen, and the rebind key edits the binding of the row's action.
 func handleCommandPaletteInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	keyStr := msg.String()
-
-	if listKey(o, keyStr, false, o.PalettePageRows(), o.PaletteMove) {
-		return o, nil
-	}
-
-	switch keyStr {
-	case "esc":
-		o.CloseCommandPalette()
-		return o, nil
-
-	case "enter":
-		return o, o.ActivateCommandPalette()
-
-	case app.PaletteRebindKey:
-		o.RebindPaletteSelection()
-		return o, nil
-
-	default:
-		if changed, _ := editFilterQuery(msg, &o.CommandPaletteQuery, true); changed {
-			o.CommandPaletteSelected = 0
-			o.CommandPaletteScroll = 0
-		}
-		return o, nil
-	}
+	cmd, _ := o.ListPickerKey(msg.String(), msg)
+	return o, cmd
 }

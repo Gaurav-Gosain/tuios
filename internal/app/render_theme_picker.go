@@ -68,21 +68,19 @@ func (m *OS) renderThemePicker() (string, overlay.Geometry, []overlayRowHit) {
 		title += " · " + themeShadeNames[m.ThemePickerShade]
 	}
 	return m.renderLivePicker(livePickerPanel{
-		Title:    title,
-		Query:    m.ThemePickerQuery,
-		Items:    items,
-		Selected: &m.ThemePickerSelected,
-		Scroll:   &m.ThemePickerScroll,
-		Width:    width,
-		Visible:  visible,
-		Hints:    hints,
-		Empty:    "No matching themes",
-		Row:      m.themeRow,
+		Title:   title,
+		Items:   items,
+		List:    &m.themeList,
+		Width:   width,
+		Visible: visible,
+		Hints:   hints,
+		Empty:   "No matching themes",
+		Row:     m.themeRow,
 		Footer: func(pal overlay.Palette) []string {
 			bg := pal.Surface
 			count := overlay.Style(bg).Render(" ")
 			if len(items) > visible {
-				info := lipgloss.Sprintf("%d of %d themes", m.ThemePickerSelected+1, len(items))
+				info := lipgloss.Sprintf("%d of %d themes", m.themeList.Cursor+1, len(items))
 				count = overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  " + info)
 			}
 			if id := m.ThemePickerDelete; id != "" {
@@ -103,10 +101,10 @@ func (m *OS) renderThemePicker() (string, overlay.Geometry, []overlayRowHit) {
 			}
 			strip, _ := overlay.FitHintStrip(commands, width, bg, pal)
 			lines := []string{count, strip}
-			if m.previewsLive() || m.ThemePickerSelected < 0 || m.ThemePickerSelected >= len(items) {
+			if m.previewsLive() || m.themeList.Cursor < 0 || m.themeList.Cursor >= len(items) {
 				return lines
 			}
-			return append([]string{themeSpecimen(items[m.ThemePickerSelected], width, pal)}, lines...)
+			return append([]string{themeSpecimen(items[m.themeList.Cursor], width, pal)}, lines...)
 		},
 	})
 }

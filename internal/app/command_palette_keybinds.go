@@ -145,10 +145,10 @@ func (m *OS) runPaletteAction(name string) (cmd tea.Cmd, handled bool) {
 // on that action's bindings and nothing else.
 func (m *OS) RebindPaletteSelection() {
 	filtered := m.filteredPaletteItems()
-	if m.CommandPaletteSelected < 0 || m.CommandPaletteSelected >= len(filtered) || !filtered[m.CommandPaletteSelected].Keybind {
+	if m.paletteList.Cursor < 0 || m.paletteList.Cursor >= len(filtered) || !filtered[m.paletteList.Cursor].Keybind {
 		return
 	}
-	action := filtered[m.CommandPaletteSelected].Bind
+	action := filtered[m.paletteList.Cursor].Bind
 	m.CloseCommandPalette()
 	m.OpenKeybindManagerWith(action)
 }

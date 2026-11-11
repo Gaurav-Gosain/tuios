@@ -67,7 +67,7 @@ func TestEveryListTakesTheSameMovementKeys(t *testing.T) {
 				o.PaletteItems = []app.CommandPaletteItem{{Name: "one"}, {Name: "two"}, {Name: "three"}, {Name: "four"}}
 			},
 			handle: handleCommandPaletteInput,
-			cursor: func(o *app.OS) int { return o.CommandPaletteSelected },
+			cursor: func(o *app.OS) int { return paletteCursor(o) },
 			n:      func(*app.OS) int { return 4 },
 		},
 		{
@@ -137,7 +137,18 @@ func TestAFilteredListKeepsItsLetters(t *testing.T) {
 	o.ShowCommandPalette = true
 	o.PaletteItems = []app.CommandPaletteItem{{Name: "one"}, {Name: "gone"}}
 	o, _ = handleCommandPaletteInput(press("g"), o)
-	if o.CommandPaletteQuery != "g" {
-		t.Errorf("g in the palette left the query %q, want it typed", o.CommandPaletteQuery)
+	if paletteQuery(o) != "g" {
+		t.Errorf("g in the palette left the query %q, want it typed", paletteQuery(o))
 	}
+}
+
+// paletteQuery and paletteCursor read the open palette's filter and cursor.
+func paletteQuery(o *app.OS) string {
+	q, _ := o.ListPickerShows()
+	return q
+}
+
+func paletteCursor(o *app.OS) int {
+	_, c := o.ListPickerShows()
+	return c
 }

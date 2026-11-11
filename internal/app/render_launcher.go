@@ -68,22 +68,20 @@ func (m *OS) launcherIconWidth() int {
 // cells blank and flushLauncherIcons fills them in after the frame.
 func (m *OS) renderLauncher() (string, overlay.Geometry, []overlayRowHit) {
 	items := m.launcherItems()
-	filtered := FilterLauncherItems(items, m.LauncherQuery, m.launchHistory)
+	filtered := FilterLauncherItems(items, m.launcherList.Query.String(), m.launchHistory)
 
 	pal := m.overlayUI()
 	bg := pal.Surface
 
 	width, visible, hints := m.launcherLayout()
 	iconW := m.launcherIconWidth()
-	m.LauncherScroll = scrollWindow(m.LauncherScroll, m.LauncherSelected, len(filtered), visible)
+	m.launcherList.Fit(len(filtered), visible)
 
 	var lines []string
 
 	// The accent is the theme's and the panel's ground is not, so both are
 	// measured against it. The cursor is a block, so the mark floor is enough.
-	cursor := overlay.Style(bg).Foreground(theme.ReadableAt(pal.Accent, bg, theme.MarkFloor)).Render("█")
-	search := overlay.Style(bg).Foreground(theme.Readable(pal.AccentBright, bg)).Bold(true).Render("› ") +
-		overlay.Style(bg).Foreground(pal.Fg).Render(m.LauncherQuery) + cursor
+	search := launcherPicker().searchLine(m, width)
 	count := ""
 	if len(filtered) > visible {
 		count = fmt.Sprintf("%d of %d programs", len(filtered), len(items))
@@ -99,10 +97,10 @@ func (m *OS) renderLauncher() (string, overlay.Geometry, []overlayRowHit) {
 			lines = append(lines, overlay.Style(bg).Render(" "))
 		}
 	} else {
-		start = m.LauncherScroll
+		start = m.launcherList.Scroll
 		end = min(start+visible, len(filtered))
 		for i := start; i < end; i++ {
-			lines = append(lines, launcherRow(filtered[i], i == m.LauncherSelected, pal, width, iconW))
+			lines = append(lines, launcherRow(filtered[i], i == m.launcherList.Cursor, pal, width, iconW))
 		}
 		for len(lines) < visible+2 {
 			lines = append(lines, overlay.Style(bg).Render(" "))
@@ -149,7 +147,7 @@ func (m *OS) LauncherVisibleIcons() []string {
 	}
 	filtered := m.filteredLauncherItems()
 	_, visible, _ := m.launcherLayout()
-	start := scrollWindow(m.LauncherScroll, m.LauncherSelected, len(filtered), visible)
+	start := scrollWindow(m.launcherList.Scroll, m.launcherList.Cursor, len(filtered), visible)
 	end := min(start+visible, len(filtered))
 	out := make([]string, 0, max(end-start, 0))
 	for i := start; i < end; i++ {
