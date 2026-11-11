@@ -2829,13 +2829,6 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 // ptysMu. createPTY and adoptPTY differ only in where the device and the
 // process came from.
 func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id string, ptyInstance paneIO, cmd *exec.Cmd, width, height int, sp ptySpawn, terminal vt.Terminal) *PTY {
-	// A local pane on Windows runs on a ConPTY, which cannot carry the kitty
-	// keyboard protocol (see vt.Emulator.DisableKittyKeyboardProtocol). A
-	// remote pane runs on a real PTY at the far end and keeps it.
-	if sp.host == "" && ptyspawn.HostIsConPTY() {
-		terminal.DisableKittyKeyboardProtocol()
-	}
-
 	pty := &PTY{
 		ID:          id,
 		sessionID:   s.ID,
@@ -2865,9 +2858,6 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 		// the same cell writes nothing to the pty.
 		cellWidth:  sp.cellWidth,
 		cellHeight: sp.cellHeight,
-	}
-	if sp.cellWidth > 0 && sp.cellHeight > 0 {
-		terminal.SetCellSize(sp.cellWidth, sp.cellHeight)
 	}
 	if sp.keepOpen {
 		pty.keepOpen = newExitNote()
@@ -2899,104 +2889,7 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 		}
 	}
 
-	// Raise control-plane events from the daemon-side VT emulator: bell, an
-	// app-driven title change, and alt-screen mode toggles. These fire from the
-	// single vtWriter goroutine; the emitter only does a non-blocking hub publish,
-	// so it never re-enters the terminal lock held during Write.
-	pty.marks = terminal.SemanticMarkers()
-	terminal.SetCallbacks(vt.Callbacks{
-		Bell: func() { pty.emit(SessionEvent{Type: EventBell}) },
-		Title: func(title string) {
-			pty.title.Store(&title)
-			pty.emit(SessionEvent{Type: EventWindowRetitled, Title: title})
-		},
-		AltScreen: func(on bool) {
-			pty.emit(SessionEvent{Type: EventModeChanged, Mode: "alt-screen", Enabled: on})
-		},
-		// Recorded, not applied: this fires with the terminal lock held, and
-		// the record is two atomics plus one branch read on its own goroutine.
-		//
-		// A pane on another machine keeps the plain record, for the session's
-		// label. Its shell reports a folder on that machine, which this side
-		// would read as a shell that went somewhere else; the machine running
-		// it says where it is instead (remotePane.Cwd).
-		WorkingDirectory: func(raw string) {
-			if _, remote := pty.pty.(*remotePane); remote {
-				pty.place.setCwd(raw)
-				return
-			}
-			if pty.place.announce(raw) {
-				pty.owner().publishPlaceMove()
-			}
-		},
-		// Parked rather than applied: this fires with the terminal lock held, and
-		// applying it mutates session state. The read goroutine picks it up on the
-		// output event carrying these same bytes.
-		Progress: func(state vt.ProgressState, percent int) {
-			pty.storeAgentProgress(state, percent)
-		},
-		// A desktop notification: published at once, like the bell, and parked
-		// for the read goroutine to match against the harness's rules, like the
-		// progress report.
-		Notify: func(title, body string) {
-			title, body = capNotifyText(title), capNotifyText(body)
-			pty.storeAgentNotify(title, body)
-			pty.emit(SessionEvent{Type: EventNotification, Title: title, Body: body})
-		},
-		// A shell's OSC 133 marks: recorded under the track's own leaf lock
-		// and published at once, like the bell. See shell_commands.go. A
-		// prompt also ends the working and blocked OSC 7501 records.
-		SemanticMark: func(m vt.SemanticMarker) {
-			pty.noteProgramStatusMark(m)
-			pty.noteShellMark(m)
-		},
-		// An OSC 7501 report, or a full reset: stored at once, in order with
-		// the prompt marks, and handed on by the vtWriter after the write.
-		ProgramStatus: pty.noteProgramStatus,
-		// A drag and drop registration is kept for the clients that attach
-		// later, and a query is answered here, once. Not for a pane on
-		// another machine: the daemon that runs its program answers there,
-		// and an answer from here would be a second one. See
-		// dnd_registration.go.
-		PrivateOSC: func(cmd int, data []byte) {
-			if cmd != dnd.Code || sp.host != "" || !s.dragAndDrop() {
-				return
-			}
-			if reply := pty.dnd.note(data, func() int { return ForegroundGroup(pty.ShellPID()) }); reply != nil {
-				terminal.WriteResponse(reply)
-			}
-		},
-	})
-
-	// DA1 and XTSMGRAPHICS answer from what the attached clients can show.
-	terminal.SetSixelAdvertised(func() bool { return pty.owner().SixelAdvertised() })
-
-	// Handle kitty graphics queries on the daemon side for low-latency
-	// responses. All other commands flow through the raw PTY broadcast.
-	// The daemon reads only the control keys, so it does not decode the
-	// payload of a frame that only the clients draw.
-	remotePane := sp.host != ""
-	terminal.SetKittyHeaderOnly(true)
-	// A file a pane on another machine names for an upload is a path over
-	// there. Checked here, the answer would tell that pane what files this
-	// machine has.
-	terminal.SetKittyFilesElsewhere(remotePane)
-	terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
-		if cmd.Action == vt.KittyActionQuery {
-			if response := pty.owner().kittyQueryResponse(cmd, remotePane); response != nil {
-				terminal.WriteResponse(response)
-			}
-			return
-		}
-		if response := kittyAnimationRefusal(cmd, remotePane, pty.owner().kittyAnimation.Load()); response != nil {
-			terminal.WriteResponse(response)
-		}
-		// With no client attached to this pane, nothing will read the object
-		// a shared memory frame names. See kitty_medium.go.
-		if !remotePane && pty.subscriberCount.Load() == 0 {
-			releaseUnreadKittyMedium(cmd)
-		}
-	})
+	s.setUpPaneTerminal(pty, terminal)
 
 	// The shell's first directory is known before it prints a prompt, so the
 	// pane has a place from the start even under a shell that never reports
@@ -5681,6 +5574,126 @@ type vtChunk struct {
 	// ack, when set, marks no output: vtWriter closes it once every chunk
 	// queued before it is written. See PTY.Quiesce.
 	ack chan struct{}
+	// notice marks the line tuios puts into the stream after an emulator
+	// fault, which is written even to a pane the daemon stopped feeding.
+	// See pane_vt_fault.go.
+	notice bool
+}
+
+// setUpPaneTerminal gives a pane's emulator everything the daemon needs from
+// it: the callbacks that raise the pane's events, the kitty and sixel
+// settings, the cell size, and the semantic marks the pane reads. A pane's
+// first emulator and one rebuilt after a fault (rebuildTerminal) go through
+// here, so the two cannot differ.
+func (s *Session) setUpPaneTerminal(pty *PTY, terminal vt.Terminal) {
+	// A local pane on Windows runs on a ConPTY, which cannot carry the kitty
+	// keyboard protocol (see vt.Emulator.DisableKittyKeyboardProtocol). A
+	// remote pane runs on a real PTY at the far end and keeps it.
+	if pty.host == "" && ptyspawn.HostIsConPTY() {
+		terminal.DisableKittyKeyboardProtocol()
+	}
+	if pty.cellWidth > 0 && pty.cellHeight > 0 {
+		terminal.SetCellSize(pty.cellWidth, pty.cellHeight)
+	}
+
+	// Raise control-plane events from the daemon-side VT emulator: bell, an
+	// app-driven title change, and alt-screen mode toggles. These fire from the
+	// single vtWriter goroutine; the emitter only does a non-blocking hub publish,
+	// so it never re-enters the terminal lock held during Write.
+	pty.marks = terminal.SemanticMarkers()
+	terminal.SetCallbacks(vt.Callbacks{
+		Bell: func() { pty.emit(SessionEvent{Type: EventBell}) },
+		Title: func(title string) {
+			pty.title.Store(&title)
+			pty.emit(SessionEvent{Type: EventWindowRetitled, Title: title})
+		},
+		AltScreen: func(on bool) {
+			pty.emit(SessionEvent{Type: EventModeChanged, Mode: "alt-screen", Enabled: on})
+		},
+		// Recorded, not applied: this fires with the terminal lock held, and
+		// the record is two atomics plus one branch read on its own goroutine.
+		//
+		// A pane on another machine keeps the plain record, for the session's
+		// label. Its shell reports a folder on that machine, which this side
+		// would read as a shell that went somewhere else; the machine running
+		// it says where it is instead (remotePane.Cwd).
+		WorkingDirectory: func(raw string) {
+			if _, remote := pty.pty.(*remotePane); remote {
+				pty.place.setCwd(raw)
+				return
+			}
+			if pty.place.announce(raw) {
+				pty.owner().publishPlaceMove()
+			}
+		},
+		// Parked rather than applied: this fires with the terminal lock held, and
+		// applying it mutates session state. The read goroutine picks it up on the
+		// output event carrying these same bytes.
+		Progress: func(state vt.ProgressState, percent int) {
+			pty.storeAgentProgress(state, percent)
+		},
+		// A desktop notification: published at once, like the bell, and parked
+		// for the read goroutine to match against the harness's rules, like the
+		// progress report.
+		Notify: func(title, body string) {
+			title, body = capNotifyText(title), capNotifyText(body)
+			pty.storeAgentNotify(title, body)
+			pty.emit(SessionEvent{Type: EventNotification, Title: title, Body: body})
+		},
+		// A shell's OSC 133 marks: recorded under the track's own leaf lock
+		// and published at once, like the bell. See shell_commands.go. A
+		// prompt also ends the working and blocked OSC 7501 records.
+		SemanticMark: func(m vt.SemanticMarker) {
+			pty.noteProgramStatusMark(m)
+			pty.noteShellMark(m)
+		},
+		// An OSC 7501 report, or a full reset: stored at once, in order with
+		// the prompt marks, and handed on by the vtWriter after the write.
+		ProgramStatus: pty.noteProgramStatus,
+		// A drag and drop registration is kept for the clients that attach
+		// later, and a query is answered here, once. Not for a pane on
+		// another machine: the daemon that runs its program answers there,
+		// and an answer from here would be a second one. See
+		// dnd_registration.go.
+		PrivateOSC: func(cmd int, data []byte) {
+			if cmd != dnd.Code || pty.host != "" || !s.dragAndDrop() {
+				return
+			}
+			if reply := pty.dnd.note(data, func() int { return ForegroundGroup(pty.ShellPID()) }); reply != nil {
+				terminal.WriteResponse(reply)
+			}
+		},
+	})
+
+	// DA1 and XTSMGRAPHICS answer from what the attached clients can show.
+	terminal.SetSixelAdvertised(func() bool { return pty.owner().SixelAdvertised() })
+
+	// Handle kitty graphics queries on the daemon side for low-latency
+	// responses. All other commands flow through the raw PTY broadcast.
+	// The daemon reads only the control keys, so it does not decode the
+	// payload of a frame that only the clients draw.
+	remotePane := pty.host != ""
+	terminal.SetKittyHeaderOnly(true)
+	// A file a pane on another machine names for an upload is a path over
+	// there. Checked here, the answer would tell that pane what files this
+	// machine has.
+	terminal.SetKittyFilesElsewhere(remotePane)
+	terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
+		if cmd.Action == vt.KittyActionQuery {
+			if response := pty.owner().kittyQueryResponse(cmd, remotePane); response != nil {
+				terminal.WriteResponse(response)
+			}
+			return
+		}
+		if response := kittyAnimationRefusal(cmd, remotePane, pty.owner().kittyAnimation.Load()); response != nil {
+			terminal.WriteResponse(response)
+		}
+		// With no client attached to this pane, nothing will read the object
+		// a shared memory frame names. See kitty_medium.go.
+		if !remotePane && pty.subscriberCount.Load() == 0 {
+			releaseUnreadKittyMedium(cmd)
+		}
+	})
 }
 
 // vtWriter is a single persistent goroutine that feeds the daemon's VT
@@ -5690,41 +5703,33 @@ func (p *PTY) vtWriter() {
 	if p.vtDone != nil {
 		defer close(p.vtDone)
 	}
+	// The emulator's size, for a rebuild after a fault: the old emulator is
+	// not asked again once it has panicked.
+	var size [2]int
+	p.terminalMu.Lock()
+	if p.terminal != nil {
+		size = [2]int{p.terminal.Width(), p.terminal.Height()}
+	}
+	p.terminalMu.Unlock()
+	var faults []time.Time
+	frozen := false
 	for chunk := range p.vtWriteChan {
 		if chunk.ack != nil {
 			close(chunk.ack)
 			continue
 		}
-		if chunk.width > 0 && chunk.height > 0 {
-			// The pane's size and its emulator move together, so a snapshot
-			// can never report a width the grid it serializes is not at.
-			//
-			// Skipped at the size the emulator already has, exactly as the
-			// client skips it (applyStreamResize): a same-size resize resets
-			// the scroll region and the tab stops, and one side doing that
-			// while the other declines is a divergence the guest never asked
-			// for.
-			p.terminalMu.Lock()
-			if p.terminal != nil && (p.terminal.Width() != chunk.width || p.terminal.Height() != chunk.height) {
-				p.terminal.Resize(chunk.width, chunk.height)
-				p.vtResizes++
-			}
-			p.terminalMu.Unlock()
+		resize := chunk.width > 0 && chunk.height > 0
+		if resize {
+			size = [2]int{chunk.width, chunk.height}
+		}
+		focusOn, fault, stack := p.feedVT(chunk, frozen)
+		if fault != nil {
+			faults, frozen = p.vtFault(chunk, fault, stack, faults, size)
 			continue
 		}
-		p.terminalMu.Lock()
-		p.chunkGroup.Store(chunk.group)
-		if p.terminal != nil {
-			_, _ = p.terminal.Write(chunk.data)
+		if resize {
+			continue
 		}
-		p.chunkGroup.Store(0)
-		// Recorded under the same lock the emulator is written and read under,
-		// so a state snapshot and the position it was taken at can never
-		// disagree. That pairing is what lets a client be resumed exactly where
-		// the snapshot it was handed ends.
-		p.vtSeq = chunk.seq
-		focusOn := p.terminal != nil && p.terminal.FocusReportingEnabled()
-		p.terminalMu.Unlock()
 		p.noteFocusReporting(focusOn)
 		p.flushProgramStatus()
 	}
