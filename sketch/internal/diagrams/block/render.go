@@ -119,6 +119,24 @@ type Route struct {
 	ly     float64
 }
 
+// spanLabel is the label of a block drawn in its cell. A label that wraps in a block that spans
+// columns and is drawn wider than it needs wraps again in the room the cell gives, without
+// changing the size of the block or the routes worked out from it. A fixed shape keeps its
+// label.
+func spanLabel(v *View, measurer text.TextMeasurer) text.Label {
+	if v.span <= 1 || v.label.Width <= 0 || len(v.label.Lines) <= 1 || v.bw <= v.nw || v.kind != Arrow && isFixed(v.shape) {
+		return v.label
+	}
+	textStyle := 0
+	if v.style.Bold {
+		textStyle |= text.Bold
+	}
+	if v.style.Italic {
+		textStyle |= text.Italic
+	}
+	return text.LayoutLabel(v.block.label, false, measurer, v.label.Size, v.label.Width+(v.bw-v.nw), textStyle)
+}
+
 func isRound(v *View) bool {
 	return v.kind == Leaf && (v.shape == "circle" || v.shape == "dbl-circ")
 }
@@ -1073,7 +1091,7 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 		if arrow || svg.ShapeFilled(v.shape) {
 			ink = svg.InkFill(v.style, "")
 		}
-		svg.WriteStrings(&nodes, svg.LabelSvg(v.label, v.dx, v.dy, ` class="pele-label"`+ink+v.style.Text, icons), `</g>`)
+		svg.WriteStrings(&nodes, svg.LabelSvg(spanLabel(v, measurer), v.dx, v.dy, ` class="pele-label"`+ink+v.style.Text, icons), `</g>`)
 	}
 
 	var casings, edges, labels strings.Builder
