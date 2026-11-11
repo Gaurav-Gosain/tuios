@@ -35,7 +35,7 @@ const fastPathContent = "plain default\r\n" +
 
 // fastPathOS is a lone pane filling the region, which is the shape the fast
 // path takes, holding fastPathContent.
-func fastPathOS(t *testing.T, dockPos string) (*OS, *terminal.Window) {
+func fastPathOS(t testing.TB, dockPos string) (*OS, *terminal.Window) {
 	t.Helper()
 	m := keystrokeOS(t, 1, 80, 24)
 	m.Settings.SidebarEnabled = false

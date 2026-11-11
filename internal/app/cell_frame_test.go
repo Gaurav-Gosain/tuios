@@ -267,3 +267,47 @@ func TestDirectPaneMatchesItsText(t *testing.T) {
 		})
 	}
 }
+
+// BenchmarkLonePaneKeystroke is the frame a key typed into a lone fullscreen
+// pane composes, on the cell path (a screen: the pane drawn from its
+// emulator, pane_cells.go) and on the string path, compose and the write's
+// diff together.
+func BenchmarkLonePaneKeystroke(b *testing.B) {
+	orig := config.Global.Motion
+	config.Global.Motion = config.MotionNone
+	b.Cleanup(func() { config.Global.Motion = orig })
+	for _, path := range []string{"string", "cells"} {
+		b.Run(path, func(b *testing.B) {
+			m, win := fastPathOS(b, "bottom")
+			win.Resize(realCols, realRows-2)
+			m.Width, m.Height = realCols, realRows
+			win.X, win.Y, win.Width, win.Height = 0, m.GetTopMargin(), m.GetRenderWidth(), m.GetUsableHeight()
+			win.Resize(win.Width, win.Height)
+			fillWindow(b, win, win.ContentWidth(), win.ContentHeight())
+			str := newFrameSink(m.GetRenderWidth(), m.GetRenderHeight())
+			if path == "cells" {
+				m.UseScreen(io.Discard, []string{"TERM=xterm-256color"}, colorprofile.TrueColor, termio.Output{Raw: true})
+			}
+			frame := func() {
+				if path == "cells" {
+					_ = m.composeFrame()
+					m.screen.Commit()
+					return
+				}
+				str.emit(m.composeFrame())
+			}
+			win.MarkContentDirty()
+			frame()
+			i := 0
+			b.ReportAllocs()
+			for b.Loop() {
+				win.LockIO()
+				_, _ = win.Terminal.Write(fmt.Appendf(nil, "\x1b[2;3H%c", 'a'+byte(i%26)))
+				win.UnlockIO()
+				win.MarkContentDirty()
+				frame()
+				i++
+			}
+		})
+	}
+}
