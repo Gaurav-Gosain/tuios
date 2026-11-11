@@ -26,9 +26,9 @@ PREFIX := env("TUIOS_PREFIX", home_directory() / ".local/bin")
 # daemon to those machines.
 CONFIG := ""
 
-# The golangci-lint that lint runs: the version in .github/workflows/lint.yml,
+# The golangci-lint that lint runs: the version in scripts/tool-versions.env,
 # built with the local Go. A binary built with an older Go fails to type-check.
-GOLANGCI_LINT := "go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0"
+GOLANGCI_LINT := "go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@" + trim(replace_regex(read(root + "/scripts/tool-versions.env"), "(?s).*GOLANGCI_LINT_VERSION=(\\S+).*", "$1"))
 
 # How many times bench-save runs each benchmark.
 BENCH_COUNT := "6"

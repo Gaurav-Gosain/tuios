@@ -70,11 +70,11 @@ rm -f "$log_dir"/*.log
 # The tools run through `go run` at a pinned version, so they are built with
 # the local Go. A binary on PATH built with an older Go than go.mod asks for
 # fails to type-check the tree, or misses newer syntax. An environment
-# variable of the same name overrides each one. golangci-lint follows the
-# version in the lint workflow.
-lint_version=$(sed -n 's/^ *version: \(v[0-9.]*\)$/\1/p' .github/workflows/lint.yml | head -1)
-GOLANGCI_LINT=${GOLANGCI_LINT:-go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${lint_version:-v2.14.0}}
-GOVULNCHECK=${GOVULNCHECK:-go run golang.org/x/vuln/cmd/govulncheck@v1.9.0}
+# variable of the same name overrides each one. golangci-lint and govulncheck
+# take their versions from scripts/tool-versions.env, which CI reads too.
+. scripts/tool-versions.env
+GOLANGCI_LINT=${GOLANGCI_LINT:-go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$GOLANGCI_LINT_VERSION}
+GOVULNCHECK=${GOVULNCHECK:-go run golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VERSION}
 GOIMPORTS=${GOIMPORTS:-go run golang.org/x/tools/cmd/goimports@v0.52.0}
 GOPLS=${GOPLS:-go run golang.org/x/tools/gopls@v0.24.0}
 DEADCODE=${DEADCODE:-go run golang.org/x/tools/cmd/deadcode@v0.52.0}
