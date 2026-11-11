@@ -377,7 +377,7 @@ func sessionPaletteLabel(prefix, name, agentState string, doneSeen bool, running
 // getSessionPaletteItems walks the unified session tree and returns one palette
 // entry per session and one per window of every session, not only the attached
 // one. This is what lets the palette jump straight to a session or a pane by
-// name instead of going through the session switcher first; the sidebar, the
+// name instead of going through go-to first; the sidebar, the
 // switcher, and this list all read the same tree so they can never disagree
 // about what exists or which one is current.
 //

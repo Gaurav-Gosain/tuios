@@ -189,7 +189,7 @@ var leaderSessionRows = []menuRow{
 	// The worktree key shares the switcher's row: a row more makes the
 	// leader's menu too tall for a 120x40 screen.
 	{parts: []menuPart{{"prefix_session_switcher", "Sessions"}, {"new_worktree", "New worktree"}}, desc: "Sessions/new worktree"},
-	// The session note shares the workspace switcher's row, for the same
+	// The session note shares the workspaces row, for the same
 	// height reason.
 	{parts: []menuPart{{"prefix_workspace_switcher", "Workspaces"}, {"set_note", "Session note"}}, desc: "Workspaces/session note"},
 	{parts: []menuPart{{"choose_tree", "Find a pane"}}, desc: "Find a pane"},

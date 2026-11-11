@@ -430,7 +430,7 @@ func (m *OS) renderDockString() (string, int) {
 		if layout.TruncatedCount > 0 {
 			marker := " ..."
 			// Drawn in the same ink as the strip's overflow arrows: it wears no
-			// fill and, now that it opens the aggregate view, it is a control
+			// fill and, now that it opens go-to on the panes, it is a control
 			// rather than a separator. FgMute measured 2.60:1 against the bare
 			// canvas.
 			dockItemsStr.WriteString(lipgloss.NewStyle().Foreground(dockStripArrowFg(pal)).Render(marker))

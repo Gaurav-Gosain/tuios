@@ -265,3 +265,80 @@ func TestListsWithoutAFilterTakeTheConfiguredKeys(t *testing.T) {
 		t.Errorf("ASSERTION: ctrl+j, the configured list_down, did not move the accent picker:\n%s", got)
 	}
 }
+
+// TestTheOldSwitchersOpenGoto: the keys and entries that opened the session
+// switcher, the workspace switcher and the window list open the go-to picker
+// with the filter that lists the same places, and goto does what the
+// switchers did with a row.
+//
+// How it could pass wrongly: goto could open with an empty query, which also
+// lists sessions and workspaces among everything else, so the query on
+// screen is checked, not only the title.
+func TestTheOldSwitchersOpenGoto(t *testing.T) {
+	open := func(t *testing.T) *apptest.Fixture {
+		t.Helper()
+		return apptest.New(t, apptest.Size(120, 40), apptest.Colors16(),
+			apptest.Workspaces(map[int]int{1: 1, 2: 1}))
+	}
+	queryLine := func(f *apptest.Fixture) string {
+		for _, row := range f.Screen() {
+			if strings.Contains(row, "› ") && !strings.Contains(row, "Go to") {
+				return row
+			}
+		}
+		return ""
+	}
+
+	t.Run("the session switcher's key lists the sessions", func(t *testing.T) {
+		f := open(t)
+		f.Action("prefix_session_switcher")
+		if _, _, ok := f.Find("Go to"); !ok || !strings.Contains(queryLine(f), "#") {
+			t.Fatalf("ASSERTION: prefix_session_switcher did not open go-to on #:\n%s", f.Text())
+		}
+		// A name nothing has: enter makes that session, and the list says so.
+		f.Type("newsess")
+		if _, _, ok := f.Find("No session 'newsess': enter makes it"); !ok {
+			t.Errorf("ASSERTION: a session name nothing has does not say enter makes it:\n%s", f.Text())
+		}
+		// ctrl+d on the session the client shows is refused, as before.
+		f.Keys("ctrl+u")
+		f.Type("# ")
+		f.Keys("ctrl+d")
+		if _, _, ok := f.Find("Cannot delete the current session"); !ok {
+			t.Errorf("ASSERTION: ctrl+d on the current session was not refused:\n%s", f.Text())
+		}
+	})
+
+	t.Run("the workspace switcher's key lists this session's workspaces", func(t *testing.T) {
+		f := open(t)
+		f.Action("prefix_workspace_switcher")
+		if !strings.Contains(queryLine(f), "!") {
+			t.Fatalf("ASSERTION: prefix_workspace_switcher did not open go-to on !:\n%s", f.Text())
+		}
+		// ctrl+r renames the workspace under the cursor. The rename takes the
+		// keys, and go-to stays open under it, as the switcher did. The row
+		// reading the new name needs a daemon: the e2e rename test checks it.
+		f.Keys("ctrl+r")
+		f.Type("deploys")
+		f.Keys("enter")
+		if f.M.Renaming() {
+			t.Fatalf("ASSERTION: enter did not commit the workspace rename:\n%s", f.Text())
+		}
+		if _, _, ok := f.Find("Go to"); !ok {
+			t.Errorf("ASSERTION: the rename closed go-to:\n%s", f.Text())
+		}
+		if strings.Contains(queryLine(f), "deploys") {
+			t.Errorf("ASSERTION: the rename's keys reached go-to's query:\n%s", f.Text())
+		}
+	})
+
+	t.Run("the window list lists this session's panes", func(t *testing.T) {
+		f := open(t)
+		f.Action("command_palette")
+		f.Type("All windows")
+		f.Keys("enter")
+		if !strings.Contains(queryLine(f), "kind:pane") {
+			t.Fatalf("ASSERTION: All windows did not open go-to on kind:pane:\n%s", f.Text())
+		}
+	})
+}

@@ -441,8 +441,8 @@ func herdrZoomedIn(st *SessionState, ws int) string {
 // herdrWorkspaceFocus shows a session on the client the caller is shown
 // on: the client of the caller's own session for a caller in a pane, else
 // the client of the session herdr calls the active workspace. The client
-// switches to the session, as it does when the person picks it in the
-// session switcher.
+// switches to the session, as it does when the person picks it in
+// go-to.
 func (d *Daemon) herdrWorkspaceFocus(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	sess, ierr := d.herdrFindSession(in.WorkspaceID)
 	if ierr != nil {
@@ -464,7 +464,7 @@ func (d *Daemon) herdrWorkspaceFocus(cs *connState, in *herdrIn) (*herdrResult, 
 // herdrShowSession has an attached client show sess, as herdr's active
 // workspace follows workspace.focus and pane.focus. The client moved is the
 // one that shows the caller's own session, else the one that shows the
-// active workspace, and it switches the way the session switcher does. It
+// active workspace, and it switches the way go-to does. It
 // reports whether a client shows sess afterwards: false when none is
 // attached to move.
 func (d *Daemon) herdrShowSession(cs *connState, sess *Session, fail string) (bool, *herdrError) {

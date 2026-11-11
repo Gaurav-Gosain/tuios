@@ -130,7 +130,7 @@ Events come in a fixed order for one key press: `key` first, then any
 
 Overlay names: `help`, `whichkey`, `commandPalette`, `launcher`, `settings`,
 `themePicker`, `keybinds`, `copyMode`, `search` (copy mode or scrollback
-search), `scrollback`, `quitMenu`, `workspaceSwitcher`, `layoutPicker`,
+search), `scrollback`, `quitMenu`, `layoutPicker`,
 `sidebar`, `logs`, `screensaver`, `agents` (the agents view), `mail`,
 `presets` (the keybind preset picker), `goto` (the go-to picker), `hints`,
 `paneLabels`, `spotlight`, `scratch` (the scratch pane is up), and over the
@@ -144,7 +144,7 @@ files, `ctrl+b f`), `review` (the review overlay, `ctrl+b v`) and
 `themePicker`, `themeEditor`, `glyphPicker` (the settings page's glyph set
 picker, which previews each set as the cursor moves: a `setting` event for
 `glyphs` comes before the picker closes), `keybinds`, `copyMode`, `search`
-(copy mode or scrollback search), `scrollback`, `quitMenu`, `workspaceSwitcher`,
+(copy mode or scrollback search), `scrollback`, `quitMenu`,
 `layoutPicker`, `sidebar`, `logs`, `screensaver`, `agents` (the agents view),
 `mail`, `presets` (the keybind preset picker), `goto` (the go-to picker),
 `hints`, `paneLabels`, `spotlight` and `scratch` (the scratch pane is up).

@@ -111,7 +111,7 @@ type dockItemHit struct {
 // dockOverflowHit is where the entries' overflow marker was drawn, and whether
 // there was one. The marker stands for the panes the bar had no room for, and
 // with no rectangle of its own it was the only object on the dock that could be
-// seen and not clicked. It opens the aggregate view, which lists them all.
+// seen and not clicked. It opens go-to on this session's panes, which lists them all.
 type dockOverflowHit struct {
 	Active     bool
 	X0, X1, Y  int

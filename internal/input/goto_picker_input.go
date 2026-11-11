@@ -11,24 +11,10 @@ func handleGotoPicker(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleGotoPickerInput takes a key while the go-to picker is up, in either
-// mode. It is driven like the session and workspace switchers: the shared
-// list keys move, enter goes, esc closes, and every other key is query text.
+// handleGotoPickerInput takes a key while the go-to picker is up, through the
+// list picker's keys (see app/list_picker.go), with its row actions read
+// first.
 func handleGotoPickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	keyStr := msg.String()
-	if listKey(o, keyStr, false, listPage, o.GotoPickerMove) {
-		return o, nil
-	}
-	switch keyStr {
-	case "esc":
-		o.CloseGotoPicker()
-	case "enter":
-		o.GotoPickerActivate()
-	default:
-		q := o.GotoPickerQuery()
-		if changed, _ := editFilterQuery(msg, &q, true); changed {
-			o.SetGotoPickerQuery(q)
-		}
-	}
-	return o, nil
+	cmd, _ := o.ListPickerKey(msg.String(), msg)
+	return o, cmd
 }

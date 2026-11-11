@@ -13,7 +13,7 @@ import (
 // Sessions and settings for the renderer (plan 2.11 and 2.14).
 //
 // switch-session moves this bridge to another session in place, the way the
-// terminal client's session switcher does: one attach, no new process, and
+// terminal client's go-to does: one attach, no new process, and
 // the panes of the new session arrive as snapshots. It can make the session,
 // or restore it from its saved state first.
 //

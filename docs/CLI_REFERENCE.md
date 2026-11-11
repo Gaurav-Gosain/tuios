@@ -625,8 +625,8 @@ inner client exits. A forced attach also stays at 20x6 or more.
 
 ### `tuios switch-session`
 
-Switch an attached client to a different session, in place. This is what the
-session switcher does. Nothing is nested.
+Switch an attached client to a different session, in place. This is what
+go-to does. Nothing is nested.
 
 **Usage:**
 ```bash
@@ -3768,7 +3768,7 @@ tuios set-session-space
 
 ### `tuios set-session-order`
 
-Put the sessions in an order. Every client attached to the daemon lists them in it, at once: the sidebar, the session switcher and `tuios ls`. Moving a session up or down on the sidebar does the same. The order survives a daemon restart.
+Put the sessions in an order. Every client attached to the daemon lists them in it, at once: the sidebar, go-to and `tuios ls`. Moving a session up or down on the sidebar does the same. The order survives a daemon restart.
 
 Every name must be a live session. A session you leave out, and one made later, goes after the named ones in creation order.
 
@@ -6177,8 +6177,8 @@ tuios-web [flags]
 
 **Who can connect:**
 
-Every browser that opens tuios-web gets a shell on this machine, and the
-session switcher reaches every session. Set a password to control who
+Every browser that opens tuios-web gets a shell on this machine, and
+go-to reaches every session. Set a password to control who
 connects. The browser asks for the user name and the password.
 
 - `--random-password`: tuios-web makes a new password at start and prints it

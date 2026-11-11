@@ -708,7 +708,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			// their sessions: client-level actions, like attach.
 			scope:       scopeDeny,
 			link:        needWrite,
-			description: "Switch an attached client to another session in place, as the session switcher does. The client is the one named by client, else the one showing session, else the one showing the caller's own session from a pane, else the only one attached.",
+			description: "Switch an attached client to another session in place, as go-to does. The client is the one named by client, else the one showing session, else the one showing the caller's own session from a pane, else the only one attached.",
 			params: []verbParam{
 				{Name: "name", Type: "string", Description: "Session to switch to."},
 				{Name: "host", Type: "string", Description: "Machine from the client's [hosts] table that holds the session. Omit, or local, for this daemon."},
@@ -2631,7 +2631,7 @@ func buildVerbRegistry() map[string]verbEntry {
 		"set-session-order": {
 			scope:       scopeDeny,
 			link:        needWrite,
-			description: "Put the sessions in an order. Every client lists them in it: the rail, the session switcher, tuios ls. It survives a daemon restart. A session the list leaves out, and one made later, goes after the named ones in creation order.",
+			description: "Put the sessions in an order. Every client lists them in it: the rail, go-to, tuios ls. It survives a daemon restart. A session the list leaves out, and one made later, goes after the named ones in creation order.",
 			params: []verbParam{
 				{Name: "order", Type: "[]string", Required: true, Description: "Session names in their new order. Every name must be a live session, or nothing changes. Repeats are dropped."},
 				{Name: "skip_missing", Type: "bool", Description: "Leave out a name that is no live session, rather than refusing the order. The result lists them as missing."},

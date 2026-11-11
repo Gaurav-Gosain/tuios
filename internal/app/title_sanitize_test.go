@@ -3,8 +3,6 @@ package app
 import (
 	"strings"
 	"testing"
-
-	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
 // TestPrintableTitleDropsDecorative asserts the shared sanitizer strips the
@@ -93,13 +91,6 @@ func TestOverlayTitlesStripDecorative(t *testing.T) {
 		}
 	}
 
-	t.Run("session switcher", func(t *testing.T) {
-		m := daemonRailOS(t, 80, 24)
-		m.SessionSwitcherItems = []sessiontree.Node{{ID: "s1", Title: decorativeTitle}}
-		out, _, _ := m.renderSessionSwitcher()
-		laundered(t, "the session switcher", out)
-	})
-
 	t.Run("quit menu", func(t *testing.T) {
 		m := ctxMenuOS(t, 80, 24)
 		m.IsDaemonSession, m.SessionName = true, decorativeTitle
@@ -107,10 +98,11 @@ func TestOverlayTitlesStripDecorative(t *testing.T) {
 		laundered(t, "the quit menu", out)
 	})
 
-	t.Run("aggregate view", func(t *testing.T) {
+	t.Run("go-to on the panes", func(t *testing.T) {
 		m := ctxMenuOS(t, 80, 24)
 		m.Windows[0].CustomName = decorativeTitle
-		out, _, _ := m.renderAggregateView()
-		laundered(t, "the aggregate view", out)
+		m.OpenAggregateView()
+		out, _, _ := m.renderGotoPicker()
+		laundered(t, "go-to", out)
 	})
 }

@@ -10,7 +10,7 @@ import (
 )
 
 // switch-session moves an attached client to another session in place, the
-// way the session switcher does. It is the CLI's route to what herdr's
+// way go-to does. It is the CLI's route to what herdr's
 // workspace.focus already did, and it reaches the other machines the
 // switcher and the rail reach.
 //

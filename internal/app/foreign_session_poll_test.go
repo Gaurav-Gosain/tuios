@@ -33,13 +33,13 @@ func TestForeignSessionRefreshPlan(t *testing.T) {
 		{"lone session, sidebar on", session.NewTUIClient(), true, false, true, true},
 		{"lone session, nothing visible", session.NewTUIClient(), false, false, false, false},
 		{"multi, sidebar on", multiSessionClient(), true, false, true, true},
-		{"multi, switcher open", multiSessionClient(), false, true, true, true},
+		{"multi, go-to open", multiSessionClient(), false, true, true, true},
 		{"multi, nothing visible", multiSessionClient(), false, false, true, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			withSidebar(t, tc.sidebar, "left", config.SidebarDefaultWidth)
-			m := &OS{Settings: config.Global, Width: 120, DaemonClient: tc.client, ShowSessionSwitcher: tc.switcher}
+			m := &OS{Settings: config.Global, Width: 120, DaemonClient: tc.client, gotoPicker: gotoPickerState{open: tc.switcher}}
 			after, refresh := m.foreignSessionRefreshPlan()
 			if refresh != tc.wantRefresh {
 				t.Fatalf("refresh = %v, want %v", refresh, tc.wantRefresh)

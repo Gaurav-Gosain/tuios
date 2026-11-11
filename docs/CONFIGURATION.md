@@ -1254,7 +1254,7 @@ in these cases:
 The start folder is the folder that `tuios new --cwd` gave.
 
 A pane opens only when you switch: with a workspace key, a click on the
-dock, the workspace switcher, the pane navigator or the command palette.
+dock, go-to, the pane navigator or the command palette.
 These switches do not open a pane:
 
 - `move_and_follow` and other moves that take a pane with them.

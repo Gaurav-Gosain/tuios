@@ -16,7 +16,7 @@ import (
 // picker, when one of them is open. It reports whether an overlay took the key.
 //
 // Both modes check these overlays first and in this order. The overlays after
-// them (palette, launcher, switchers, mail, aggregate view) are checked in a
+// them (palette, launcher, go-to, mail) are checked in a
 // different order in each mode, and several panels can be open at once, so
 // those stay in the mode handlers.
 func routeSettingsOverlayKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, bool) {
@@ -184,8 +184,6 @@ func overlayKey(kind string, msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, 
 		out, cmd = handleCommandPaletteInput(msg, o)
 	case "launcher":
 		out, cmd = handleLauncherInput(msg, o)
-	case "session":
-		out, cmd = handleSessionSwitcherInput(msg, o)
 	case "agentmail":
 		out, cmd = handleAgentMailInput(msg, o)
 	case "inbox":
@@ -201,12 +199,8 @@ func overlayKey(kind string, msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, 
 		out, cmd = handleNavigatorInput(msg, o)
 	case "goto":
 		out, cmd = handleGotoPickerInput(msg, o)
-	case "workspace":
-		out, cmd = handleWorkspaceSwitcherInput(msg, o)
 	case "buffers":
 		out, cmd = handleBufferChooserInput(msg, o)
-	case "aggregate":
-		out, cmd = handleAggregateViewInput(msg, o)
 	case "message":
 		if !viewerTakesKey(msg, o) {
 			return o, nil, false

@@ -187,7 +187,7 @@ func (m *OS) federationRefreshPlan() (after time.Duration, refresh bool) {
 	if m.federationPushed && m.AttachedHost == "" {
 		return hostRefreshPushed, true
 	}
-	if m.SidebarActive() || m.ShowSessionSwitcher {
+	if m.SidebarActive() || m.gotoPicker.open {
 		return hostRefreshActive, true
 	}
 	return hostRefreshIdle, true

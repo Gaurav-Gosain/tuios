@@ -173,15 +173,6 @@ func (m *OS) DockOverflowAt(x, y int) bool {
 	return h.Active && y == h.Y && x >= h.X0 && x < h.X1
 }
 
-// OpenAggregateView shows the all-windows panel, which is where the panes the
-// dock could not fit are listed.
-func (m *OS) OpenAggregateView() {
-	m.ShowAggregateView = true
-	m.AggregateViewQuery = ""
-	m.AggregateViewSelected = 0
-	m.AggregateViewScroll = 0
-}
-
 // minimizedPosition returns the position of a window among the minimized
 // windows of the current workspace, counting from zero, or -1 when it is not
 // minimized. This is the index the restore_minimized_N actions count in,
@@ -309,7 +300,7 @@ func (m *OS) dockItemMenu(windowIndex int) (string, []ContextMenuItem) {
 
 // workspacePillMenu is the menu for one workspace tab in the dock's strip. It
 // is where renaming a workspace became findable: the feature existed but was
-// reachable only from inside the workspace switcher, which is not where a user
+// reachable only from inside a workspace list, which is not where a user
 // looks for it when the thing they want to rename is on screen in front of
 // them.
 //
@@ -409,8 +400,8 @@ func (m *OS) sessionMenu(sessionID string) (string, []ContextMenuItem) {
 		m.item(glyphRename, "Note...", "set_note", false),
 		m.item(glyphDetach, "Detach", "prefix_detach", !attached),
 		m.item(glyphSwitch, "Switch session...", "prefix_session_switcher", false),
-		// Dimmed off the attached session for the same reason detach is: the
-		// workspace switcher steers the session this client is in, and there is
+		// Dimmed off the attached session for the same reason detach is: go-to
+		// opens on the workspaces of the session this client is in, and there is
 		// only one of those. Offered live on another session's row it read as
 		// "this session's workspaces" and opened the attached session's,
 		// which is a row naming one session and acting on another.

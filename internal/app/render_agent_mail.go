@@ -13,8 +13,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// agentMailWidth is the mail overlay's preferred inner width. Wider than the
-// session switcher because a row carries two names and a subject.
+// agentMailWidth is the mail overlay's preferred inner width. Wider than most
+// lists because a row carries two names and a subject.
 const agentMailWidth = 66
 
 // agentMailRows is how many conversation lines the thread view prefers to

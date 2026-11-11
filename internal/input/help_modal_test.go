@@ -13,36 +13,34 @@ import (
 // Comparing the whole struct means a key that fires anything at all is caught,
 // not only the three actions that were demonstrated on screen.
 type osState struct {
-	windows       int
-	focused       int
-	mode          app.Mode
-	autoTiling    bool
-	showHelp      bool
-	showSettings  bool
-	showPalette   bool
-	showLayout    bool
-	showAggregate bool
-	showSessions  bool
-	workspace     int
-	renaming      bool
-	prefixActive  bool
+	windows      int
+	focused      int
+	mode         app.Mode
+	autoTiling   bool
+	showHelp     bool
+	showSettings bool
+	showPalette  bool
+	showLayout   bool
+	showGoto     bool
+	workspace    int
+	renaming     bool
+	prefixActive bool
 }
 
 func snapshotOS(o *app.OS) osState {
 	return osState{
-		windows:       len(o.Windows),
-		focused:       o.FocusedWindow,
-		mode:          o.Mode,
-		autoTiling:    o.AutoTiling,
-		showHelp:      o.ShowHelp,
-		showSettings:  o.ShowSettings,
-		showPalette:   o.ShowCommandPalette,
-		showLayout:    o.ShowLayoutPicker,
-		showAggregate: o.ShowAggregateView,
-		showSessions:  o.ShowSessionSwitcher,
-		workspace:     o.CurrentWorkspace,
-		renaming:      o.Renaming(),
-		prefixActive:  o.PrefixActive,
+		windows:      len(o.Windows),
+		focused:      o.FocusedWindow,
+		mode:         o.Mode,
+		autoTiling:   o.AutoTiling,
+		showHelp:     o.ShowHelp,
+		showSettings: o.ShowSettings,
+		showPalette:  o.ShowCommandPalette,
+		showLayout:   o.ShowLayoutPicker,
+		showGoto:     o.GotoPickerOpen(),
+		workspace:    o.CurrentWorkspace,
+		renaming:     o.Renaming(),
+		prefixActive: o.PrefixActive,
 	}
 }
 

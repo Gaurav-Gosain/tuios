@@ -1530,7 +1530,7 @@ func newSetSessionOrderCommand() *cobra.Command {
 		Use:   "set-session-order <session>...",
 		Short: "Put the sessions in an order every client lists",
 		Long: `Put the sessions in an order. Every client attached to the daemon lists
-them in it, at once: the sidebar, the session switcher and 'tuios ls'. Moving
+them in it, at once: the sidebar, go-to and 'tuios ls'. Moving
 a session up or down on the sidebar does the same. The order survives a
 daemon restart.
 

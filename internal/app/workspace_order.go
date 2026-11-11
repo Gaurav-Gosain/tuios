@@ -19,7 +19,7 @@ import (
 // the same one. Between the drop and the state that carries it, the strip keeps
 // drawing the dropped order (pendingWorkspaceOrder), so the pills do not snap
 // back for the length of the round trip. workspaceDisplayOrder is where that
-// order and a drag's draft are applied: the dock strip, the workspace switcher
+// order and a drag's draft are applied: the dock strip, go-to's workspace rows
 // and the rail's terminals section all arrange through it.
 
 // dockWorkspaceDragState is the click-or-drag gesture on a dock workspace pill,

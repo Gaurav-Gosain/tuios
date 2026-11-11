@@ -68,7 +68,6 @@ func TestFloatingWindowsStayBelowEveryOverlay(t *testing.T) {
 		"which-key":         config.ZIndexWhichKey,
 		"scrollback":        config.ZIndexScrollbackBrowser,
 		"palette":           config.ZIndexCommandPalette,
-		"session switcher":  config.ZIndexSessionSwitcher,
 		"layout picker":     config.ZIndexLayoutPicker,
 		"overlay panels":    config.ZIndexOverlayBase,
 		"context menu":      config.ZIndexContextMenu,

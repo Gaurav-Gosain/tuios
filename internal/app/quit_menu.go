@@ -15,7 +15,7 @@ type QuitMenuKind int
 const (
 	// QuitDetach leaves the session running and quits this client.
 	QuitDetach QuitMenuKind = iota
-	// QuitSwitchSession closes the menu and opens the session switcher.
+	// QuitSwitchSession closes the menu and opens go-to on the sessions.
 	QuitSwitchSession
 	// QuitKillGoNext kills the current session after switching to the next one,
 	// so this client keeps running.

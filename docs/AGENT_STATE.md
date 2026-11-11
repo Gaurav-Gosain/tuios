@@ -703,7 +703,7 @@ A refused call answers error `forbidden`, and nothing changes.
 | `workspace.create` | `new-session`, `set-session-name` | `label` is the display name. `focus` does nothing |
 | `workspace.rename` | `set-session-name` | sends one `workspace_renamed` with the new label |
 | `workspace.close` | `kill-session` | |
-| `workspace.focus` | `select-workspace` grant, then the attached client | the client shows the session, as the session switcher does. The client is the one that shows the caller's session, else the one that shows the active workspace. Without a client it fails with `no_client` |
+| `workspace.focus` | `select-workspace` grant, then the attached client | the client shows the session, as go-to does. The client is the one that shows the caller's session, else the one that shows the active workspace. Without a client it fails with `no_client` |
 | `tab.list`, `tab.get` | `list-windows` | |
 | `tab.create` | `new-window`, `set-workspace-name` | uses the first workspace that is not a tab. Fails with `tab_create_failed` when all are in use |
 | `tab.rename` | `set-workspace-name` | sends `tab_renamed` when the name changes |
@@ -1811,8 +1811,7 @@ Inbox.
 
 tuios draws a mark for each pane's state. It is the same mark, in the same
 colour, on every surface that shows a state: the rail and its collapsed strip,
-the window title, the command palette, the session switcher, the aggregate
-view, the Inbox and the dock's notifications. The cockpit draws marks of its
+the window title, the command palette, go-to, the Inbox and the dock's notifications. The cockpit draws marks of its
 own design.
 
 | State                     | Mark      | Colour   | `--ascii-only` |
@@ -1949,7 +1948,7 @@ changes when an earlier pane closes.
 Colour is never the only signal. Every state has its own glyph (the table
 above), and a finished pane you have looked at draws `○`, idle's glyph, where it
 used to draw `■` in a muted colour: read and unread finished panes differed only
-in ink. The title bar, the palette, the session switcher and the aggregate view
+in ink. The title bar, the palette and go-to
 follow the same rule; they drew `■` for a read finished pane until the agent UI
 polish pass.
 

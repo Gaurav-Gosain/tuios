@@ -71,13 +71,11 @@ type modalOverlay struct {
 var modalOverlays = [...]modalOverlay{
 	{id: "palette", open: func(m *OS) bool { return m.ShowCommandPalette }, scrim: true},
 	{id: "launcher", open: func(m *OS) bool { return m.ShowLauncher }, scrim: true},
-	{id: "session", open: func(m *OS) bool { return m.ShowSessionSwitcher }, scrim: true},
 	{id: "goto", open: func(m *OS) bool { return m.gotoPicker.open }, scrim: true},
 	{id: "agentmail", open: func(m *OS) bool { return m.ShowAgentMail }, scrim: true},
 	// The agents view covers the pane area and is a view, not a question:
 	// dimmed, the dock and the rail beside it read as muddy, so they stay lit.
 	{id: "inbox", open: func(m *OS) bool { return m.ShowInbox }},
-	{id: "workspace", open: func(m *OS) bool { return m.ShowWorkspaceSwitcher }, scrim: true},
 	{id: overlayKindBuffers, open: func(m *OS) bool { return m.buffers.open }, scrim: true},
 	{id: overlayKindTransfers, open: func(m *OS) bool { return m.transfers.open }, scrim: true},
 	{id: "navigator", open: func(m *OS) bool { return m.navigator.open }, scrim: true},
@@ -95,7 +93,6 @@ var modalOverlays = [...]modalOverlay{
 	{id: "effectpicker", open: func(m *OS) bool { return m.ShowEffectPicker }},
 	{id: "accent", open: func(m *OS) bool { return m.ShowAccentPicker }},
 	{id: "rename", open: func(m *OS) bool { return m.Renaming() }, scrim: true},
-	{id: "aggregate", open: func(m *OS) bool { return m.ShowAggregateView }, scrim: true},
 	{id: overlayKindShot, open: func(m *OS) bool { return m.ShotPreview.Open }, scrim: true},
 	{id: "quit", open: func(m *OS) bool { return m.ShowQuitMenu }, scrim: true},
 	{id: "sessionclose", open: func(m *OS) bool { return m.ShowSessionClose }, scrim: true},

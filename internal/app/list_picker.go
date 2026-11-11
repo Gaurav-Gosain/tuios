@@ -192,6 +192,8 @@ func searchLine(st *listnav.State, width int, pal overlay.Palette) string {
 // is open. The order is the order overlay_keys.go routes keys in.
 func (m *OS) openListPicker() *listPicker {
 	switch {
+	case m.gotoPicker.open:
+		return gotoPicker()
 	case m.ShowCommandPalette:
 		return palettePicker()
 	case m.ShowLauncher:
@@ -219,6 +221,8 @@ func (m *OS) openListPicker() *listPicker {
 // and building the small struct per event costs nothing worth keeping.
 func listPickerOfKind(kind string) *listPicker {
 	switch kind {
+	case "goto":
+		return gotoPicker()
 	case "palette":
 		return palettePicker()
 	case "launcher":

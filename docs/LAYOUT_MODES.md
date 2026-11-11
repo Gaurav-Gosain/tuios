@@ -12,7 +12,7 @@ view and multifocus. This document covers all of them.
 - [The Three Layout Modes](#the-three-layout-modes)
 - [Master-Stack Layout](#master-stack-layout)
 - [Scrolling Layout](#scrolling-layout)
-- [Aggregate View](#aggregate-view)
+- [Every window](#every-window)
 - [Multifocus](#multifocus)
   - [Multi copy mode](#multi-copy-mode)
 
@@ -301,37 +301,19 @@ does nothing, because the windows in a column always share its height evenly.
 - **Transitions always animate.** The viewport slide is kept even when
   animations are disabled, because the jump is disorienting without it.
 
-## Aggregate View
+## Every window
 
-The aggregate view is a searchable list of **every window across every
-workspace**, with a short preview of each window's content. It is the fastest
-way to find a pane when you have windows spread over several workspaces.
+The command palette's "All windows" entry, and a click on the dock's marker
+for the panes it has no room for, open the go-to picker on the panes of this
+session: the query starts as `kind:pane session:NAME`. Each row ends with the
+pane's working directory. Type to narrow it, by name or by folder,
+`Enter` goes to the pane, and deleting the `session:` term lists the panes of
+every session on this machine. See
+[Go to anything](KEYBINDINGS.md#go-to-anything) for the rest of its keys and
+terms.
 
-Open it from the command palette: `Ctrl+P`, then "All windows".
-It has no default keybinding.
-
-| Key | Action |
-|---|---|
-| Type | Fuzzy-filter by title, workspace number or preview text |
-| `Up` / `Down`, `Ctrl+P` / `Ctrl+N` | Move the selection |
-| `Enter` | Jump to the selected window |
-| `Backspace` | Delete a character from the query |
-| `Ctrl+U` | Clear the query |
-| `Esc`, `Ctrl+C` | Close |
-
-Jumping switches to the window's workspace, restores it if it was minimized, and
+Going to a pane switches to its workspace, restores it if it was minimized, and
 focuses it.
-
-The preview is the first three non-empty lines of the window's current screen,
-joined with ` | ` and truncated to 80 characters. It is a snapshot taken when the
-list is built, not a live view.
-
-Each entry carries the window's working directory, so searching by directory
-works. The directory is read from the shell's process on Linux (procfs) and
-macOS (libproc); on other platforms it is empty.
-
-Limitations: minimized and floating windows are included and marked rather than
-filtered out.
 
 ## Multifocus
 

@@ -24,8 +24,7 @@ import (
 //
 // A mark is one or two cells. A row that leads with a mark follows it with
 // agentMarkGap, so the text after it starts in one column whatever the set
-// draws; a column of marks that ends on the row's right edge pads them with
-// agentMarkCellRight.
+// draws.
 func agentStateIndicator(state string) string {
 	return config.AgentStateMark(state, overlay.UseASCII())
 }
@@ -53,20 +52,9 @@ func agentMarkGap(mark string) string {
 	return strings.Repeat(" ", max(agentMarkLead()-lipgloss.Width(mark), 1))
 }
 
-// agentMarkCellRight pads a mark at the end of a right-aligned column to
-// agentMarkWidth: the padding goes in front, so the marks end on the row's
-// edge and the figures before them stay in their own column. The column is as
-// wide as the widest mark.
-func agentMarkCellRight(mark string) string {
-	if d := agentMarkWidth() - lipgloss.Width(mark); d > 0 {
-		return strings.Repeat(" ", d) + mark
-	}
-	return mark
-}
-
 // agentMark is the mark and the colour one pane's agent state wears, and every
 // surface that shows a state draws it from here: the rail and its strip, the
-// title bars, the palette, the session switcher, the aggregate view, the Inbox
+// title bars, the palette, go-to, the Inbox
 // and the dock. One shape per state and one colour per state, so a state reads
 // the same wherever it is seen and a monochrome capture still tells them apart.
 //

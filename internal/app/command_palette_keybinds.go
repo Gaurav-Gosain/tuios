@@ -14,7 +14,7 @@ const PaletteCategoryKeybind = "Keybind"
 
 // PaletteRebindKey opens the keybind manager on the action under the cursor,
 // which is what enter did on these rows before it ran the action. ctrl+ and a
-// letter, like the session switcher's ctrl+r, because a printable key is part
+// letter, like go-to's ctrl+r, because a printable key is part
 // of the query and tab reads as completion.
 const PaletteRebindKey = "ctrl+e"
 

@@ -180,7 +180,6 @@ func (m *Model) reset() {
 	o.ShowSettings = false
 	o.ShowThemePicker = false
 	o.ShowKeybindManager = false
-	o.ShowWorkspaceSwitcher = false
 	o.ShowLayoutPicker = false
 	o.ShowScrollbackBrowser = false
 	o.ShowLogs = false

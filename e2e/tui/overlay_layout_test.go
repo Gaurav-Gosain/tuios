@@ -138,7 +138,7 @@ func TestOverlayLayouts(t *testing.T) {
 
 			// Filtering.
 			sendKeys(t, term, "w", "i", "n")
-			waitScreen(t, term, "the palette never filtered", "win█", "Navigation")
+			waitScreen(t, term, "the palette never filtered", "› win", "Navigation")
 			shot("palette-filtered")
 			checkPaletteFiltered(t, term)
 
@@ -161,16 +161,16 @@ func TestOverlayLayouts(t *testing.T) {
 			sendKeys(t, term, tuitest.Esc)
 			waitGone(t, term, "which-key", "+Workspace")
 
-			// An empty list overlay: the session switcher with a query nothing
-			// matches.
+			// An empty list overlay: go-to on the sessions with a name nothing
+			// has, which says enter makes it.
 			sendKeys(t, term, tuitest.Ctrl('b'), "S")
-			waitScreen(t, term, "the session switcher never opened", "e2e-layout")
+			waitScreen(t, term, "go-to never opened on the sessions", "Go to", "e2e-layout")
 			sendKeys(t, term, "q", "q", "q", "q")
-			waitScreen(t, term, "the switcher never emptied", "No match")
+			waitScreen(t, term, "go-to never emptied", "enter makes it")
 			shot("switcher-empty")
-			checkCentredEmpty(t, term, "No match", "create it")
+			checkCentredEmpty(t, term, "No session 'qqqq': enter makes it", "esc close")
 			sendKeys(t, term, tuitest.Esc)
-			waitGone(t, term, "the session switcher", "No match")
+			waitGone(t, term, "go-to", "enter makes it")
 			t.Logf("frames in %s", dir)
 		})
 	}
@@ -411,21 +411,19 @@ func checkWhichKeyFramed(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
-// TestHintFootersShortenInTiers opens the session switcher on screens too
-// narrow for its footer and holds the footer to one row, shortened in the
-// documented order: modifiers first (ctrl+r is ^r), then the labels from the
-// end. The last tier, whole hints dropped for an ellipsis, needs a body
-// narrower than the keys alone, which no screen tuios draws a panel on
-// reaches for this footer.
+// TestHintFootersShortenInTiers opens go-to on the sessions (ctrl+b S) on
+// screens too narrow for its footer and holds the footer to one row,
+// shortened in the documented order: modifiers first (ctrl+r is ^r), then the
+// hints of least weight as a whole, and "esc close" always keeps its label.
 //
-// The switcher's footer is "↵ switch   ctrl+r rename   ctrl+d delete   esc
-// close", 52 cells. At 50 columns the panel's body is 46 wide, so the short
-// modifiers are enough; at 44 it is 40 wide, and "esc" loses its label; at 40
-// it is 36, and "^d" loses its label too.
+// The footer is "↵ go   @ # ! filter   ctrl+r rename   ctrl+d delete   esc
+// close", 63 cells. At 50 columns the panel's body is 46 wide: the short
+// modifiers and dropping "^d delete" are enough. At 44 and 40 "^r rename"
+// goes too.
 //
 // How this could pass wrongly, written down first:
-//   - The footer could be read off a stale frame: it is read once the
-//     switcher's own session row is drawn.
+//   - The footer could be read off a stale frame: it is read once go-to's
+//     own session row is drawn.
 //   - A wrapped second footer row could be missed: the row under the footer
 //     is required to hold none of the hint keys.
 //
@@ -437,11 +435,11 @@ func TestHintFootersShortenInTiers(t *testing.T) {
 		cols       int
 		want, gone []string
 	}{
-		{cols: 50, want: []string{"^r rename", "^d delete", "esc close"}, gone: []string{"ctrl+"}},
+		{cols: 50, want: []string{"^r rename", "esc close"}, gone: []string{"ctrl+", "^d"}},
 		// Narrower, a whole low-priority hint goes before any label does, and
 		// "esc close" always keeps its label: no key is left standing bare.
-		{cols: 44, want: []string{"^r rename", "esc close"}, gone: []string{"ctrl+", "^d"}},
-		{cols: 40, want: []string{"^r rename", "esc close"}, gone: []string{"ctrl+", "^d"}},
+		{cols: 44, want: []string{"@ # ! filter", "esc close"}, gone: []string{"ctrl+", "^d", "^r"}},
+		{cols: 40, want: []string{"@ # ! filter", "esc close"}, gone: []string{"ctrl+", "^d", "^r"}},
 	}
 	for _, c := range cases {
 		t.Run(itoa(c.cols)+"cols", func(t *testing.T) {
@@ -457,7 +455,8 @@ func TestHintFootersShortenInTiers(t *testing.T) {
 			// The prefix works from either mode, and the status line that says
 			// which mode is in force does not fit on a screen this narrow.
 			sendKeys(t, term, tuitest.Ctrl('b'), "S")
-			waitScreen(t, term, "the session switcher never opened", "e2e-hints", "switch")
+			// At 40 columns the row cuts the name to "e2e-hi…".
+			waitScreen(t, term, "go-to never opened on the sessions", "Go to", "e2e-hi", "esc close")
 			if err := term.WaitStable(uiTimeout); err != nil {
 				t.Fatalf("the screen never settled: %v", err)
 			}
@@ -466,12 +465,11 @@ func TestHintFootersShortenInTiers(t *testing.T) {
 			s := term.Screen()
 			savePNG(t, s, hostPalette(t, ""), dir, "switcher")
 
-			y := rowWith(s, "switch")
-			// "switch" is also the session switcher's own title word; the
-			// footer is the last row holding it.
+			y := rowWith(s, "esc close")
+			// The footer is the last row holding "esc close".
 			_, rows := s.Size()
 			for r := rows - 1; r > y; r-- {
-				if strings.Contains(s.Line(r), "switch") {
+				if strings.Contains(s.Line(r), "esc close") {
 					y = r
 					break
 				}

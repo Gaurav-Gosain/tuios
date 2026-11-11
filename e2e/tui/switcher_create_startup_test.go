@@ -37,7 +37,7 @@ func TestSwitcherCreateAppliesStartup(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "S"); err != nil {
 		t.Fatalf("open the session switcher: %v", err)
 	}
-	if err := term.WaitForText("Sessions", uiTimeout); err != nil {
+	if err := term.WaitForText("Go to", uiTimeout); err != nil {
 		t.Fatalf("the session switcher did not open: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys("fresh"); err != nil {

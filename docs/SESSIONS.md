@@ -292,10 +292,13 @@ itself.
 
 ### In-app session switching
 
-`Ctrl+B` `S` opens the session switcher. Type to fuzzy-filter, `Enter` to switch
-to the highlighted session, `Ctrl+D` to delete one (with a confirmation prompt,
-and never the session you are currently on). If your query matches no existing
-session, `Enter` creates a session with that name and switches to it.
+`Ctrl+B` `S` opens the go-to picker on the sessions: the query starts as `# `.
+Type to fuzzy-filter, `Enter` to switch to the highlighted session, `Ctrl+D` to
+delete one (with a confirmation prompt, and never the session you are currently
+on). If your query is `# NAME` and matches no session, `Enter` creates a
+session with that name and switches to it. `Ctrl+B` `W` opens it on the
+workspaces of this session in the same way. See
+[Go to anything](KEYBINDINGS.md#go-to-anything).
 
 `Ctrl+R` renames the highlighted session. The rename changes the session's
 name in the daemon, so `tuios ls`, `tuios attach` and every client show the
@@ -306,9 +309,8 @@ commands from them still reach the session. `tuios attach` and
 stream on the session keeps its events under the new name. A name that another
 session has is refused. A name that a saved session has is refused too.
 
-With remote hosts in `[hosts]`, the switcher also lists the sessions on your
-other machines. A remote session shows as `name @ host`, and the filter
-matches that text. `Enter` switches to it, and back again, in either
+With remote hosts in `[hosts]`, go-to also lists the sessions on your
+other machines, with the machine's name on the row. `Enter` switches to it, and back again, in either
 direction. The rail, the palette and session cycling switch across machines
 the same way. Rename and delete work only on sessions on the machine you are
 on.
@@ -526,7 +528,7 @@ tuios note set next: run the migration
 
 When you attach or switch to the session, the dock shows `Note: next: run the
 migration`. The sidebar shows the note after the session name, in place of the
-branch. The session switcher shows it after the label. The focus of the Inbox
+branch. Go-to shows it after the label. The focus of the Inbox
 shows the note of the pane, else the note of its session.
 
 `Ctrl+B I` edits the note of the session in the app. An agent can leave a note

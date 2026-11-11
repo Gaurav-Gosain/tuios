@@ -1,6 +1,7 @@
 package input
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -38,8 +39,8 @@ func TestBaseLayoutKeyRunsWindowModeBinding(t *testing.T) {
 func TestShiftedBaseLayoutKeyRunsPrefixBinding(t *testing.T) {
 	o, pty := osWithFocusedPane(t, config.DefaultConfig(), app.TerminalMode)
 	o = leader(o, ukrShift('і', 'І', 's'))
-	if !o.ShowSessionSwitcher {
-		t.Fatalf("leader then Shift+і on the S key did not open the session switcher (pane got %q)", pty.got)
+	if !o.GotoPickerOpen() || !strings.HasPrefix(o.GotoPickerQuery(), "#") {
+		t.Fatalf("leader then Shift+і on the S key did not open the sessions in go-to (pane got %q)", pty.got)
 	}
 }
 
@@ -121,8 +122,8 @@ func TestModifierPressKeepsPrefix(t *testing.T) {
 		t.Fatalf("a bare Shift press ended the prefix (pane got %q)", pty.got)
 	}
 	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 's', ShiftedCode: 'S', Text: "S", Mod: tea.ModShift}, o)
-	if !o.ShowSessionSwitcher {
-		t.Fatal("leader, Shift, S did not open the session switcher")
+	if !o.GotoPickerOpen() || !strings.HasPrefix(o.GotoPickerQuery(), "#") {
+		t.Fatal("leader, Shift, S did not open the sessions in go-to")
 	}
 }
 

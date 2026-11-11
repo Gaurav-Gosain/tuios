@@ -215,16 +215,10 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		m.DockEditorSelected = idx
 	case "sectioneditor":
 		m.SectionEditorSelected = idx
-	case "session":
-		m.SessionSwitcherSelected = idx
 	case "agentmail":
 		m.AgentMailSelect(idx)
 	case "inbox":
 		m.InboxSelect(idx)
-	case "workspace":
-		m.WorkspaceSwitcherSelected = idx
-	case "goto":
-		m.GotoPickerSelect(idx)
 	case overlayKindBuffers:
 		m.BufferChooserSelect(idx)
 	case overlayKindTransfers:
@@ -237,8 +231,6 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		m.IntegrationAskSelect(idx)
 	case "navigator":
 		m.NavigatorSelect(idx)
-	case "aggregate":
-		m.AggregateViewSelected = idx
 	case "quit":
 		m.QuitMenuSelected = idx
 	case "sessionclose":
@@ -298,26 +290,16 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 		m.DockEditorMove(wheelDelta(up))
 	case "sectioneditor":
 		m.SectionEditorMove(wheelDelta(up))
-	case "session":
-		m.SessionSwitcherMove(wheelDelta(up))
 	case "agentmail":
 		m.AgentMailMove(wheelDelta(up))
 	case "inbox":
 		m.CockpitWheel(x, y, up)
-	case "workspace":
-		n := len(FilterWorkspaceItems(m.WorkspaceSwitcherItems, m.WorkspaceSwitcherQuery))
-		m.WorkspaceSwitcherMove(wheelDelta(up), n)
-	case "goto":
-		m.GotoPickerMove(wheelDelta(up))
 	case overlayKindBuffers:
 		m.BufferChooserMove(wheelDelta(up))
 	case overlayKindTransfers:
 		m.TransfersMove(wheelDelta(up))
 	case "navigator":
 		m.NavigatorMove(wheelDelta(up))
-	case "aggregate":
-		// The one list overlay the wheel did nothing on.
-		m.AggregateViewMove(wheelDelta(up))
 	case "sessionclose":
 		m.SessionCloseMove(wheelDelta(up))
 	case overlayKindRestart:
@@ -441,15 +423,6 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case "sectioneditor":
 		m.SectionEditorSelected = row.Idx
 		return m.SectionEditorToggle()
-	case "session":
-		// A click activates, exactly like Enter on the selected row. Selecting
-		// only, as this used to, made the switcher the one list where a click
-		// did nothing visible, and it is why "clicking a session does not
-		// switch" was reportable at all.
-		m.SessionSwitcherSelected = row.Idx
-		m.sessionSwitcherActivate(row.Idx)
-		// A session on another machine opens off the Update goroutine.
-		return m.TakeSidebarCmd()
 	case "agentmail":
 		// A click opens, exactly like enter on the selected row.
 		m.AgentMailSelect(row.Idx)
@@ -472,12 +445,6 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 		}
 		m.InboxSelect(row.Idx)
 		return m.InboxActivate()
-	case "workspace":
-		m.WorkspaceSwitcherSelected = row.Idx
-		m.WorkspaceSwitcherActivate(row.Idx)
-	case "goto":
-		m.GotoPickerSelect(row.Idx)
-		m.GotoPickerActivate()
 	case overlayKindBuffers:
 		return m.BufferChooserActivate(row.Idx)
 	case overlayKindTransfers:
@@ -502,12 +469,6 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 			// A session on another machine opens off the Update goroutine.
 			return m.TakeSidebarCmd()
 		}
-	case "aggregate":
-		// The picker used to return no hit rows at all, so the one overlay whose
-		// entire purpose is choosing a window was the one that could not be
-		// clicked.
-		m.AggregateViewSelected = row.Idx
-		m.AggregateViewJump(row.Idx)
 	case "quit":
 		m.QuitMenuSelected = row.Idx
 		return m.QuitMenuActivate(row.Idx)
@@ -539,23 +500,6 @@ func settingsControlSpanContains(row overlayRowHit, lx, ly int) bool {
 		return false
 	}
 	return ly >= left.Y0 && ly < left.Y1 && lx >= left.X0 && lx < row.Inc.X1
-}
-
-// sessionSwitcherActivate switches to the session at the given index of the
-// filtered switcher list and closes the switcher, mirroring its Enter binding.
-func (m *OS) sessionSwitcherActivate(idx int) {
-	selected, ok := m.SessionSwitcherTarget(idx)
-	if !ok {
-		return
-	}
-	if selected.IsCurrent {
-		m.ShowNotification("Already on this session", "info", m.Settings.NotificationDuration)
-	} else {
-		// By node, never by ID: a row under another machine carries a rail
-		// identity for an ID, and OpenSessionNode picks the connection. See #196.
-		m.OpenSessionNode(selected)
-	}
-	m.closeOverlay("session")
 }
 
 // layoutPickerActivate applies the layout at the given index of the filtered
@@ -597,19 +541,10 @@ func (m *OS) closeOverlay(kind string) {
 	case "sectioneditor":
 		// Click-away closes and keeps, for the same reason.
 		m.CloseSectionEditor()
-	case "session":
-		m.ShowSessionSwitcher = false
-		m.SessionSwitcherQuery = ""
-		m.SessionSwitcherSelected = 0
-		m.SessionSwitcherScroll = 0
 	case "agentmail":
 		m.CloseAgentMail()
 	case "inbox":
 		m.CloseInbox()
-	case "workspace":
-		m.CloseWorkspaceSwitcher()
-	case "goto":
-		m.CloseGotoPicker()
 	case overlayKindBuffers:
 		m.CloseBufferChooser()
 	case overlayKindTransfers:
@@ -635,8 +570,6 @@ func (m *OS) closeOverlay(kind string) {
 		m.CloseScreenshotPreview(false)
 	case "accent":
 		m.CloseAccentPicker()
-	case "aggregate":
-		m.ShowAggregateView = false
 	case "quit":
 		m.CloseQuitMenu()
 	case "sessionclose":

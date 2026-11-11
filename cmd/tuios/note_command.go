@@ -16,7 +16,7 @@ func newNoteCommand() *cobra.Command {
 		Short: "Set, read or clear the return note of a session or a pane",
 		Long: `A note is one short line on a session or a pane. It says what the session
 is for or what comes next. tuios shows it in the dock when you come back to
-the session, in the sidebar, in the session switcher and in the Inbox.
+the session, in the sidebar, in go-to and in the Inbox.
 
 The note is kept with the session. It survives a detach and a daemon restart.
 A note is at most 200 bytes on one line.

@@ -391,9 +391,8 @@ func markLeads(t *testing.T, term *tuitest.Terminal, s tuitest.Screen, list stri
 	}
 }
 
-// TestAgentMarksLineUpInEveryList: the navigator and the aggregate view lead
-// their pane rows with the agent mark the way the rail does, so with ✋ in the
-// set their names sit in one column whether the row wears ✋, a one-cell mark
+// TestAgentMarksLineUpInEveryList: the navigator leads its pane rows with the agent mark the way the rail does, so with ✋ in the
+// set the names sit in one column whether the row wears ✋, a one-cell mark
 // or no mark: three cells after the start of the mark column, the widest mark
 // and one blank. The navigator's preview puts its location line under the
 // name in its header. The frames are saved under artifactDir, as text and
@@ -401,9 +400,8 @@ func markLeads(t *testing.T, term *tuitest.Terminal, s tuitest.Screen, list stri
 //
 // How this could pass wrongly, written down first:
 //   - A name could be read off the rail, a title bar or the preview rather
-//     than the list. Each list is read only inside its own box: the
-//     navigator's Panes box, left of its Preview box, and the aggregate
-//     view's rows between its title and its hint, left of the rail.
+//     than the list. The list is read only inside the navigator's Panes
+//     box, left of its Preview box.
 //   - The names could share a column because every row wears the same kind
 //     of mark. The list has to hold a ✋ row, two one-cell rows (◆ and ○) and
 //     a row with no mark at all (plain-a, a pane with no agent), and the cell
@@ -430,7 +428,7 @@ func TestAgentMarksLineUpInEveryList(t *testing.T) {
 	openNavigator(t, term, names...)
 	railShot(t, term, "agent-marks-navigator")
 	s := term.Screen()
-	cols, rows := s.Size()
+	_, rows := s.Size()
 	panes, preview := markedAt(s, "─ Panes ─"), markedAt(s, "╭─ Preview")
 	if len(panes) != 1 || len(preview) != 1 {
 		t.Fatalf("the navigator's Panes and Preview boxes are not on screen: %v %v\n%s", panes, preview, term.Snapshot())
@@ -458,27 +456,7 @@ func TestAgentMarksLineUpInEveryList(t *testing.T) {
 		t.Errorf("ASSERTION: the preview's location line starts at column %d and its header's name at %d\n%s", got, nameCol, term.Snapshot())
 	}
 
-	sendKeys(t, term, tuitest.Esc)
-	windowManagementMode(t, term)
-	openAggregateView(t, term)
-	railShot(t, term, "agent-marks-aggregate")
-	s = term.Screen()
-	title, hint := markedAt(s, aggregateTitle), markedAt(s, "↵ jump")
-	if len(title) == 0 || len(hint) == 0 {
-		t.Fatalf("the aggregate view's title and hint are not on screen\n%s", term.Snapshot())
-	}
-	top := -1
-	for _, at := range title {
-		if at[0] < hint[0][0] {
-			top = at[0]
-		}
-	}
-	right := railColumn(s)
-	if right < 0 {
-		right = cols
-	}
-	markLeads(t, term, s, "aggregate view", namesInBox(s, top, hint[0][0], -1, right, names...), marks)
-	alive(t, term, "after the navigator and the aggregate view drew the set's marks")
+	alive(t, term, "after the navigator drew the set's marks")
 }
 
 // TestAgentMarksKeepTheirDefaults: with no glyph set the rail draws the

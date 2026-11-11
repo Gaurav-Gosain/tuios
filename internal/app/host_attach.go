@@ -479,7 +479,7 @@ func (m *OS) openSession(host, name string) bool {
 
 // OpenOrCreateSession switches to the session name on the machine the client
 // is attached to. The daemon makes the session when no session has the name.
-// It is the session switcher's Enter on a name that matches no row, and it
+// It is go-to's Enter on a session name that matches no row, and it
 // runs openSession, so [startup] applies to the new session as it does to
 // every other switch. It reports a failure itself.
 func (m *OS) OpenOrCreateSession(name string) bool {

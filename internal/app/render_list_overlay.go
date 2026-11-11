@@ -13,7 +13,7 @@ import (
 )
 
 // listOverlay configures the shared search-and-list overlay used by the command
-// palette, session switcher, layout picker and theme picker. It renders a panel
+// palette, go-to, layout picker and theme picker. It renders a panel
 // with an optional search line, a scrolling list of rows, a scroll indicator,
 // and returns the per-row hit rects for mouse routing.
 type listOverlay struct {
@@ -291,23 +291,6 @@ func (m *OS) moveListSelection(selected, scroll *int, count, maxVisible, delta i
 	}
 	*selected = m.listStep(*selected, delta, count)
 	*scroll = listnav.Scroll(*scroll, *selected, count, maxVisible)
-}
-
-// SessionSwitcherMove moves the session switcher's selection by delta.
-func (m *OS) SessionSwitcherMove(delta int) {
-	n := len(FilterSessionItems(m.SessionSwitcherItems, m.SessionSwitcherQuery))
-	m.moveListSelection(&m.SessionSwitcherSelected, &m.SessionSwitcherScroll, n, listOverlayRows, delta)
-}
-
-// AggregateViewMove moves the window picker's selection by delta. The renderer
-// keeps it in view.
-func (m *OS) AggregateViewMove(delta int) {
-	n := len(FilterAggregateViewItems(m.GetAggregateViewItems(), m.AggregateViewQuery))
-	if n == 0 {
-		m.AggregateViewSelected = 0
-		return
-	}
-	m.AggregateViewSelected = m.listStep(m.AggregateViewSelected, delta, n)
 }
 
 // listOverlayRows is the page the list overlays scroll by before the renderer

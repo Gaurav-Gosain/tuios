@@ -95,15 +95,8 @@ func textFieldPaste(o *app.OS) func(string) tea.Cmd {
 		return paste
 	}
 	switch {
-	case o.ShowSessionSwitcher:
-		if o.SessionSwitcherConfirmDelete != "" {
-			return nil
-		}
-		return typed(func(s string) {
-			o.SessionSwitcherQuery += s
-			o.SessionSwitcherSelected = 0
-			o.SessionSwitcherScroll = 0
-		})
+	case o.GotoPickerOpen():
+		return listPickerPaste(o)
 	case o.ShowAgentMail, o.ShowInbox:
 		return nil
 	case o.NavigatorOpen():
@@ -111,20 +104,8 @@ func textFieldPaste(o *app.OS) func(string) tea.Cmd {
 			return nil
 		}
 		return typed(func(s string) { o.NavigatorSetQuery(o.NavigatorQuery() + s) })
-	case o.ShowWorkspaceSwitcher:
-		return typed(func(s string) {
-			o.WorkspaceSwitcherQuery += s
-			o.WorkspaceSwitcherSelected = 0
-			o.WorkspaceSwitcherScroll = 0
-		})
 	case o.BufferChooserOpen():
 		return nil
-	case o.ShowAggregateView:
-		return typed(func(s string) {
-			o.AggregateViewQuery += s
-			o.AggregateViewSelected = 0
-			o.AggregateViewScroll = 0
-		})
 	case o.ShowCommandPalette:
 		return listPickerPaste(o)
 	case o.ShowLauncher:

@@ -170,7 +170,7 @@ func (m *OS) applySessionOrderResult(msg SessionOrderAppliedMsg) tea.Cmd {
 		m.setSidebarSessionOrder(host, nil)
 		m.saveSidebarState()
 	}
-	m.refreshSwitcherItems()
+	m.refreshGotoRows()
 	return nil
 }
 

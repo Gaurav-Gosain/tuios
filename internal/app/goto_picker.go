@@ -1,6 +1,8 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
+
 	"cmp"
 	"errors"
 	"os"
@@ -9,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
+	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
@@ -88,8 +92,12 @@ type gotoRow struct {
 	wsLabel      string
 	window       string
 	title        string
-	panes        int
-	current      bool
+	// dir is a pane's working directory with the home folder as ~, for a
+	// pane of the attached session whose folder the client can read. Empty
+	// otherwise.
+	dir     string
+	panes   int
+	current bool
 	// The agent's state, for an agent row.
 	state, harness, message, agentKind string
 	doneSeen                           bool
@@ -105,11 +113,16 @@ func (r gotoRow) needsYou() bool {
 // gotoPickerState is the picker while it is up, and the places the client has
 // been, which outlive it.
 type gotoPickerState struct {
-	open     bool
-	query    string
-	selected int
-	scroll   int
-	rows     []gotoRow
+	open bool
+	// list is the filter, cursor and window. See list_picker.go.
+	list listnav.State
+	// killing is the session a ctrl+d asked to kill, waiting for y.
+	killing gotoRow
+	// tallest is the most rows the list has shown since it opened. The list
+	// grows to fit more matches and does not shrink while it is open, so
+	// typing a filter does not move the search line.
+	tallest int
+	rows    []gotoRow
 	// filtered is the rows the query keeps, in order, built for filteredFor.
 	filtered    []gotoRow
 	filteredFor string
@@ -128,15 +141,24 @@ type gotoPickerState struct {
 func (m *OS) GotoPickerOpen() bool { return m.gotoPicker.open }
 
 // GotoPickerQuery is what is typed in the picker.
-func (m *OS) GotoPickerQuery() string { return m.gotoPicker.query }
+func (m *OS) GotoPickerQuery() string { return m.gotoPicker.list.Query.String() }
 
 // OpenGotoPicker is the goto_picker action. Learn mode opens it too: the tab
 // has one session, but its workspaces and panes are real places to go.
-func (m *OS) OpenGotoPicker() {
+func (m *OS) OpenGotoPicker() { m.OpenGotoPickerWith("") }
+
+// OpenGotoPickerWith opens the picker with query already typed. The keys
+// that opened the session switcher, the workspace switcher and the window
+// list open it on "# ", "! " and the panes of this session, so each finds
+// what it found before in the one list.
+func (m *OS) OpenGotoPickerWith(query string) {
 	m.noteGotoPlace()
 	g := &m.gotoPicker
 	g.open = true
-	g.query, g.selected, g.scroll = "", 0, 0
+	g.list.Reset()
+	g.list.Query.Set(query)
+	g.killing = gotoRow{}
+	g.tallest = 0
 	g.rows, g.sig = m.gotoRows(), m.sidebarSignature()
 	g.built = false
 }
@@ -145,42 +167,148 @@ func (m *OS) OpenGotoPicker() {
 func (m *OS) CloseGotoPicker() {
 	g := &m.gotoPicker
 	g.open = false
-	g.query, g.selected, g.scroll = "", 0, 0
+	g.list.Reset()
+	g.killing = gotoRow{}
 	g.rows, g.filtered, g.built = nil, nil, false
 }
 
 // SetGotoPickerQuery replaces the query and puts the cursor on the first row.
 func (m *OS) SetGotoPickerQuery(q string) {
 	g := &m.gotoPicker
-	g.query, g.selected, g.scroll = q, 0, 0
+	g.list.Query.Set(q)
+	g.list.Refiltered(0)
 }
 
 // GotoPickerCount is how many rows the query keeps.
 func (m *OS) GotoPickerCount() int { return len(m.gotoFiltered()) }
 
 // GotoPickerMove steps the cursor by delta.
-func (m *OS) GotoPickerMove(delta int) {
-	g := &m.gotoPicker
-	m.moveListSelection(&g.selected, &g.scroll, len(m.gotoFiltered()), listOverlayRows, delta)
-}
+func (m *OS) GotoPickerMove(delta int) { _ = gotoPicker().move(m, delta) }
 
 // GotoPickerSelect puts the cursor on row idx of the filtered list.
 func (m *OS) GotoPickerSelect(idx int) {
-	if idx >= 0 && idx < len(m.gotoFiltered()) {
-		m.gotoPicker.selected = idx
-	}
+	m.gotoPicker.list.Select(idx, len(m.gotoFiltered()), m.gotoVisible())
 }
 
 // GotoPickerActivate goes to the selected row and closes the picker.
 func (m *OS) GotoPickerActivate() {
 	rows := m.gotoFiltered()
 	g := &m.gotoPicker
-	if g.selected < 0 || g.selected >= len(rows) {
+	if g.list.Cursor < 0 || g.list.Cursor >= len(rows) {
+		// Nothing matches. A query that asks for a session by a name nothing
+		// has makes that session, as the session switcher did.
+		if name, ok := gotoNewSessionName(g.list.Query.String()); ok {
+			m.CloseGotoPicker()
+			m.OpenOrCreateSession(name)
+			return
+		}
+		// Otherwise the picker stays, with the query, and says why the key
+		// did nothing.
+		m.ShowNotification("Nothing to go to: no place matches "+strings.TrimSpace(g.list.Query.String()), "info", m.Settings.NotificationDuration)
 		return
 	}
-	r := rows[g.selected]
+	r := rows[g.list.Cursor]
 	m.CloseGotoPicker()
 	m.gotoRow(r)
+}
+
+// gotoNewSessionName is the session name a query asks for: "# name" or
+// "kind:session name", with nothing else in it.
+func gotoNewSessionName(query string) (string, bool) {
+	q := strings.TrimSpace(query)
+	switch {
+	case strings.HasPrefix(q, "#"):
+		q = strings.TrimSpace(q[1:])
+	case strings.HasPrefix(q, "kind:session "):
+		q = strings.TrimSpace(strings.TrimPrefix(q, "kind:session "))
+	default:
+		return "", false
+	}
+	if q == "" || strings.ContainsAny(q, ":#@!") {
+		return "", false
+	}
+	return q, true
+}
+
+// gotoPicker is the go-to picker's list behaviour. See list_picker.go.
+//
+// Besides going, it does what the session and workspace switchers it
+// replaced did with a row: ctrl+r renames a session or a workspace, and
+// ctrl+d kills a session after a y. A session on another machine is renamed
+// or killed there, so the picker says to switch to it first.
+func gotoPicker() *listPicker {
+	return &listPicker{
+		kind:    "goto",
+		state:   func(m *OS) *listnav.State { return &m.gotoPicker.list },
+		count:   func(m *OS) int { return len(m.gotoFiltered()) },
+		visible: (*OS).gotoVisible,
+		keys:    gotoPickerKeys,
+		accept: func(m *OS) tea.Cmd {
+			m.GotoPickerActivate()
+			// A session on another machine opens off the Update goroutine.
+			return m.TakeSidebarCmd()
+		},
+		close: func(m *OS) tea.Cmd {
+			m.CloseGotoPicker()
+			return nil
+		},
+		clearKey: true,
+	}
+}
+
+// gotoPickerKeys reads the picker's own keys: the answer to a kill, and the
+// row actions.
+func gotoPickerKeys(m *OS, key string) (tea.Cmd, bool) {
+	g := &m.gotoPicker
+	if g.killing.node.ID != "" {
+		switch key {
+		case "y", "Y", "enter":
+			id := g.killing.node.ID
+			g.killing = gotoRow{}
+			m.KillOtherSession(id)
+		case "n", "N", "esc":
+			g.killing = gotoRow{}
+		}
+		// Every other key waits for the answer.
+		return nil, true
+	}
+	if key != "ctrl+r" && key != "ctrl+d" {
+		return nil, false
+	}
+	rows := m.gotoFiltered()
+	if g.list.Cursor < 0 || g.list.Cursor >= len(rows) {
+		return nil, true
+	}
+	r := rows[g.list.Cursor]
+	note := func(s string) { m.ShowNotification(s, "info", m.Settings.NotificationDuration) }
+	switch {
+	case key == "ctrl+r" && r.kind == gotoSession:
+		if r.host != "" {
+			// Renames go to the daemon this client is connected to, which
+			// does not hold another machine's session.
+			note("Switch to " + r.host + " to rename this session")
+			return nil, true
+		}
+		// The picker stays open under the rename dialog, and its row reads
+		// the new name once the daemon's push lands.
+		m.BeginRenameSession(r.node.ID)
+	case key == "ctrl+r" && r.kind == gotoWorkspace:
+		if r.session != m.sidebarCurrentSessionID() {
+			note("Switch to the session to rename its workspace")
+			return nil, true
+		}
+		m.BeginRenameWorkspace(r.ws)
+	case key == "ctrl+d" && r.kind == gotoSession:
+		switch {
+		case r.host != "":
+			note("Switch to " + r.host + " to delete this session")
+		case r.current:
+			m.ShowNotification("Cannot delete the current session", "warning", m.Settings.NotificationDuration)
+		default:
+			g.killing = r
+		}
+	}
+	return nil, true
 }
 
 // gotoRow goes to a row's place.
@@ -271,6 +399,17 @@ func (m *OS) gotoRows() []gotoRow {
 			continue
 		}
 		count := map[int]int{}
+		// The folder of a pane is read from its shell, which only the
+		// attached session's windows carry.
+		var dirOf map[string]string
+		if s.IsCurrent {
+			dirOf = make(map[string]string, len(m.Windows))
+			for _, w := range m.Windows {
+				if d := w.CWD(); d != "" {
+					dirOf[w.ID] = pathroot.ContractUserHome(d)
+				}
+			}
+		}
 		for _, w := range s.Children {
 			count[w.Workspace]++
 			if agentPane["\x00"+s.ID+"\x00"+w.ID] {
@@ -278,7 +417,7 @@ func (m *OS) gotoRows() []gotoRow {
 			}
 			r := gotoSessionRow(s)
 			r.kind = gotoPane
-			r.window, r.title = w.ID, w.Title
+			r.window, r.title, r.dir = w.ID, w.Title, dirOf[w.ID]
 			r.ws, r.wsLabel = w.Workspace, m.gotoWsLabel(s, w.Workspace)
 			r.current = s.IsCurrent && w.IsCurrent
 			panes = append(panes, r)
@@ -311,15 +450,11 @@ func gotoSessionRow(s sessiontree.Node) gotoRow {
 }
 
 // gotoWorkspaces is a session's workspaces worth going to: for the attached
-// session the workspace switcher's, in the dock's order, and for another
+// session gotoThisSessionWorkspaces, and for another
 // session the ones holding a pane.
 func (m *OS) gotoWorkspaces(s sessiontree.Node, count map[int]int) []int {
 	if s.IsCurrent {
-		var out []int
-		for _, w := range m.buildWorkspaceItems() {
-			out = append(out, w.Number)
-		}
-		return out
+		return m.gotoThisSessionWorkspaces()
 	}
 	out := make([]int, 0, len(count))
 	for n := range count {
@@ -493,7 +628,7 @@ func gotoSearchText(r gotoRow) string {
 	case gotoWorkspace:
 		return r.sessionLabel + " " + r.wsLabel
 	}
-	return r.sessionLabel + " " + r.wsLabel + " " + r.title
+	return r.sessionLabel + " " + r.wsLabel + " " + r.title + " " + r.dir
 }
 
 // gotoFiltered is the rows the query keeps, in the order they are listed.
@@ -502,17 +637,17 @@ func (m *OS) gotoFiltered() []gotoRow {
 	if sig := m.sidebarSignature(); sig != g.sig {
 		g.rows, g.sig, g.built = m.gotoRows(), sig, false
 	}
-	if g.built && g.filteredFor == g.query {
+	if g.built && g.filteredFor == g.list.Query.String() {
 		return g.filtered
 	}
 	g.filtered, g.parseErr = nil, ""
-	g.filteredFor, g.built = g.query, true
-	q, err := parseGotoQuery(g.query)
+	g.filteredFor, g.built = g.list.Query.String(), true
+	q, err := parseGotoQuery(g.list.Query.String())
 	if err != nil {
 		g.parseErr = err.Error()
 		return nil
 	}
-	everything := strings.TrimSpace(g.query) == ""
+	everything := strings.TrimSpace(g.list.Query.String()) == ""
 	type scored struct {
 		row   gotoRow
 		rank  gotoRankKey

@@ -4,11 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // #196: every surface that switches sessions has to send the switch to the
@@ -46,16 +43,20 @@ func hostsOS(t *testing.T, away bool) *OS {
 	return m
 }
 
-// switcherIndex is the switcher row whose title is want, or fails.
-func switcherIndex(t *testing.T, m *OS, want string) int {
+// goToSession opens go-to on the sessions and goes to the row titled want,
+// as enter or a click on it does, or fails.
+func goToSession(t *testing.T, m *OS, want string) {
 	t.Helper()
-	for i, n := range m.SessionSwitcherItems {
-		if n.Title == want {
-			return i
+	m.OpenSessionSwitcher()
+	rows := m.gotoFiltered()
+	for i, r := range rows {
+		if r.kind == gotoSession && r.node.Title == want {
+			m.gotoPicker.list.Cursor = i
+			m.GotoPickerActivate()
+			return
 		}
 	}
-	t.Fatalf("the switcher does not list %q: %+v", want, m.SessionSwitcherItems)
-	return -1
+	t.Fatalf("go-to does not list the session %q: %+v", want, rows)
 }
 
 func wantOneSwitch(t *testing.T, calls []switchCall, want switchCall) {
@@ -70,15 +71,13 @@ func wantOneSwitch(t *testing.T, calls []switchCall, want switchCall) {
 
 // TestSwitcherNeverListsAMachineHeader. The header "local" was the row the
 // report selected: listed as a session, its Enter asked for "\x00host/local".
-//
-// Negative control: listing BuildSessionTree().Sessions as it was puts the
-// local header in the list and this fails.
 func TestSwitcherNeverListsAMachineHeader(t *testing.T) {
 	for _, away := range []bool{false, true} {
 		m := hostsOS(t, away)
-		for _, n := range m.sessionSwitcherItems() {
-			if n.Kind == sessiontree.KindHost {
-				t.Errorf("ASSERTION: away=%v: the switcher lists the machine header %q as a session", away, n.Title)
+		m.OpenSessionSwitcher()
+		for _, r := range m.gotoFiltered() {
+			if r.node.Kind == sessiontree.KindHost {
+				t.Errorf("ASSERTION: away=%v: go-to lists the machine header %q as a session", away, r.node.Title)
 			}
 		}
 	}
@@ -86,15 +85,11 @@ func TestSwitcherNeverListsAMachineHeader(t *testing.T) {
 
 // TestSwitcherClickReachesThisMachineFromARemoteSession is the report: on a
 // remote session, a click on this machine's session in the switcher.
-//
-// Negative control: restoring SwitchToSession(selected.ID) in
-// sessionSwitcherActivate sends no call through the hook and this fails.
+
 func TestSwitcherClickReachesThisMachineFromARemoteSession(t *testing.T) {
 	m := hostsOS(t, true)
 	calls := recordSwitches(m)
-	m.SessionSwitcherItems = m.sessionSwitcherItems()
-
-	m.sessionSwitcherActivate(switcherIndex(t, m, "home"))
+	goToSession(t, m, "home")
 	wantOneSwitch(t, *calls, switchCall{federation.LocalHostName, "home"})
 }
 
@@ -103,9 +98,7 @@ func TestSwitcherClickReachesThisMachineFromARemoteSession(t *testing.T) {
 func TestSwitcherClickReachesARemoteSessionFromHere(t *testing.T) {
 	m := hostsOS(t, false)
 	calls := recordSwitches(m)
-	m.SessionSwitcherItems = m.sessionSwitcherItems()
-
-	m.sessionSwitcherActivate(switcherIndex(t, m, "api"))
+	goToSession(t, m, "api")
 	wantOneSwitch(t, *calls, switchCall{"build", "api"})
 }
 
@@ -119,24 +112,8 @@ func TestSwitcherReachesOneRemoteFromAnother(t *testing.T) {
 		Sessions: []FederationSession{{Name: "train", WindowCount: 1}},
 	})
 	calls := recordSwitches(m)
-	m.SessionSwitcherItems = m.sessionSwitcherItems()
-
-	m.sessionSwitcherActivate(switcherIndex(t, m, "train"))
+	goToSession(t, m, "train")
 	wantOneSwitch(t, *calls, switchCall{"gpu", "train"})
-}
-
-// TestSwitcherLocalSessionStaysOnTheConnection: a session on the attached
-// machine is switched over the current connection, by its own name.
-func TestSwitcherLocalSessionStaysOnTheConnection(t *testing.T) {
-	m := hostsOS(t, false)
-	calls := recordSwitches(m)
-	m.SessionSwitcherItems = []sessiontree.Node{
-		sessiontree.BuildSession(sessiontree.SessionInput{Name: "home", IsCurrent: true}),
-		sessiontree.BuildSession(sessiontree.SessionInput{Name: "notes"}),
-	}
-
-	m.sessionSwitcherActivate(1)
-	wantOneSwitch(t, *calls, switchCall{"", "notes"})
 }
 
 // TestSwitcherToADownHostWaitsForTheLink: the switcher opens a session on a
@@ -145,9 +122,7 @@ func TestSwitcherLocalSessionStaysOnTheConnection(t *testing.T) {
 func TestSwitcherToADownHostWaitsForTheLink(t *testing.T) {
 	m := hostsOS(t, false)
 	m.FederationHosts[1].Status = string(federation.StatusReconnecting)
-	m.SessionSwitcherItems = m.sessionSwitcherItems()
-
-	m.sessionSwitcherActivate(switcherIndex(t, m, "api"))
+	goToSession(t, m, "api")
 	if p := m.hostOpen; p == nil || p.host != "build" || p.name != "api" || p.dialing {
 		t.Fatalf("ASSERTION: the switcher did not wait for build's link: %+v", m.hostOpen)
 	}
@@ -234,134 +209,4 @@ func TestRailLocalRowStaysOnTheConnection(t *testing.T) {
 	*calls = nil
 	m.sidebarFocusWindow(sidebarRowHit{Kind: sidebarRowWindow, SessionID: "notes", WindowID: "zz-not-here", WindowIndex: -1})
 	wantOneSwitch(t, *calls, switchCall{"", "notes"})
-}
-
-// TestSwitcherRowNamesTheMachine: a row under another machine reads as its
-// name there and its machine, never as the rail identity.
-func TestSwitcherRowNamesTheMachine(t *testing.T) {
-	m := hostsOS(t, true)
-	m.Settings = config.Global
-	var node sessiontree.Node
-	for _, n := range m.sessionSwitcherItems() {
-		if n.Title == "home" {
-			node = n
-		}
-	}
-	pal := theme.UI()
-	plain := ansi.Strip(m.sessionSwitcherRow(node, false, nil, pal, 58))
-	if !strings.Contains(plain, "home @ local") {
-		t.Errorf("ASSERTION: the row does not name the machine: %q", plain)
-	}
-	if strings.Contains(plain, "host/") {
-		t.Errorf("ASSERTION: the row shows the rail identity: %q", plain)
-	}
-}
-
-// TestSwitcherSearchFindsTheShownLabel: typing the label a remote row shows
-// finds that row, and Enter on it switches to it. Matching only the title and
-// the rail identity found nothing for "api @ build", and Enter then created a
-// local session with that name.
-//
-// Negative control: matching item.Title and item.ID only, as before, leaves
-// the filtered list empty and this fails.
-func TestSwitcherSearchFindsTheShownLabel(t *testing.T) {
-	m := hostsOS(t, false)
-	calls := recordSwitches(m)
-	m.SessionSwitcherItems = m.sessionSwitcherItems()
-
-	for _, q := range []string{"api @ build", "API @ BUILD", "build"} {
-		got := FilterSessionItems(m.SessionSwitcherItems, q)
-		if len(got) != 1 || got[0].Title != "api" || got[0].Host != "build" {
-			t.Fatalf("ASSERTION: %q found %+v, want only api on build", q, got)
-		}
-	}
-
-	m.SessionSwitcherQuery = "api @ build"
-	m.sessionSwitcherActivate(0)
-	wantOneSwitch(t, *calls, switchCall{"build", "api"})
-}
-
-// TestSwitcherSearchIgnoresTheRailIdentity: the hidden rail identity is not
-// something a person typed, so its pieces must not match every remote row.
-func TestSwitcherSearchIgnoresTheRailIdentity(t *testing.T) {
-	m := hostsOS(t, false)
-	items := m.sessionSwitcherItems()
-	for _, q := range []string{"host", "/", ":", "\x00"} {
-		for _, n := range FilterSessionItems(items, q) {
-			if n.Host != "" {
-				t.Errorf("ASSERTION: %q matched the remote row %q through its rail identity", q, n.Title)
-			}
-		}
-	}
-}
-
-// TestSwitcherSearchPutsAnExactLabelFirst: when one label contains another,
-// typing the shorter one exactly selects its row, not the longer one listed
-// before it.
-func TestSwitcherSearchPutsAnExactLabelFirst(t *testing.T) {
-	items := []sessiontree.Node{
-		{Kind: sessiontree.KindSession, ID: hostNodeID("buildbox") + ":api", Title: "api", Host: "buildbox"},
-		{Kind: sessiontree.KindSession, ID: hostNodeID("build") + ":api", Title: "api", Host: "build"},
-	}
-	got := FilterSessionItems(items, "api @ build")
-	if len(got) != 2 || got[0].Host != "build" {
-		t.Fatalf("ASSERTION: the exact label is not first: %+v", got)
-	}
-}
-
-// TestSwitcherHintsDropRenameAndDeleteOnARemoteRow: the footer offers only
-// what the selected row can do.
-func TestSwitcherHintsDropRenameAndDeleteOnARemoteRow(t *testing.T) {
-	m := hostsOS(t, false)
-	items := m.sessionSwitcherItems()
-	keys := func(sel int) string {
-		var out []string
-		for _, h := range sessionSwitcherHints(items, sel) {
-			out = append(out, h.Key)
-		}
-		return strings.Join(out, " ")
-	}
-	local, remote := switcherIndexIn(t, items, "home"), switcherIndexIn(t, items, "api")
-	if k := keys(local); !strings.Contains(k, "ctrl+r") || !strings.Contains(k, "ctrl+d") {
-		t.Errorf("ASSERTION: a local row lost its rename and delete hints: %q", k)
-	}
-	if k := keys(remote); strings.Contains(k, "ctrl+r") || strings.Contains(k, "ctrl+d") {
-		t.Errorf("ASSERTION: a remote row offers rename or delete: %q", k)
-	}
-}
-
-// TestSwitcherMutesADownHostsRows: a row under a machine that is not up is
-// drawn muted and without its agent glyph, as the rail draws it.
-func TestSwitcherMutesADownHostsRows(t *testing.T) {
-	m := hostsOS(t, false)
-	m.Settings = config.Global
-	node := sessiontree.Node{Kind: sessiontree.KindSession, ID: hostNodeID("build") + ":api",
-		Title: "api", Host: "build", WindowCount: 1, AgentState: "needs_input"}
-	pal := theme.UI()
-
-	up := m.sessionSwitcherRow(node, false, nil, pal, 58)
-	m.FederationHosts[1].Status = string(federation.StatusReconnecting)
-	down := m.sessionSwitcherRow(node, false, nil, pal, 58)
-
-	glyph := agentStateIndicator(sidebarGlyphState(node.AgentState, false))
-	if glyph == "" || !strings.Contains(ansi.Strip(up), glyph) {
-		t.Fatalf("the up row has no agent glyph %q to lose, so this proves nothing: %q", glyph, ansi.Strip(up))
-	}
-	if strings.Contains(ansi.Strip(down), glyph) {
-		t.Errorf("ASSERTION: a down host's row still wears its agent glyph: %q", ansi.Strip(down))
-	}
-	if up == down {
-		t.Errorf("ASSERTION: a down host's row is drawn the same as an up host's")
-	}
-}
-
-func switcherIndexIn(t *testing.T, items []sessiontree.Node, title string) int {
-	t.Helper()
-	for i, n := range items {
-		if n.Title == title {
-			return i
-		}
-	}
-	t.Fatalf("no row %q in %+v", title, items)
-	return -1
 }

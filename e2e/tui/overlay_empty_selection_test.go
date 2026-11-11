@@ -120,8 +120,9 @@ func TestWorkspaceSwitcherEnterOnNoMatch(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "W"); err != nil {
 		t.Fatalf("open the workspace switcher: %v", err)
 	}
-	if err := term.WaitForText("Workspaces", uiTimeout); err != nil {
-		t.Fatalf("the workspace switcher did not open: %v\n%s", err, term.Snapshot())
+	// The workspaces are the go-to picker's "!" filter.
+	if err := term.WaitForText("Go to", uiTimeout); err != nil {
+		t.Fatalf("the workspace list did not open: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys(noMatchQuery); err != nil {
 		t.Fatalf("type: %v", err)
@@ -129,8 +130,8 @@ func TestWorkspaceSwitcherEnterOnNoMatch(t *testing.T) {
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("enter: %v", err)
 	}
-	if err := term.WaitForText("Nothing to switch to: no workspace matches", uiTimeout); err != nil {
+	if err := term.WaitForText("Nothing to go to: no place matches", uiTimeout); err != nil {
 		t.Fatalf("nothing said why the key did nothing: %v\n%s", err, term.Snapshot())
 	}
-	requireStillOpen(t, term, "Workspaces", "enter on a query matching no workspace")
+	requireStillOpen(t, term, "Go to", "enter on a query matching no workspace")
 }

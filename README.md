@@ -33,7 +33,7 @@ What changed in v0.10.1 is in the [release notes](docs/release-notes/v0.10.1.md)
 - **[Getting Started](https://tuios.dev/docs/getting-started)**: Install and first session
 - **[Keybindings](docs/KEYBINDINGS.md)**: Default keys and how to rebind them
 - **[BSP Tiling](docs/BSP_TILING.md)**: Tiling with preselection and split control
-- **[Layout Modes](docs/LAYOUT_MODES.md)**: BSP, master-stack and scrolling layouts, aggregate view, multifocus
+- **[Layout Modes](docs/LAYOUT_MODES.md)**: BSP, master-stack and scrolling layouts, every window, multifocus
 - **[Configuration](docs/CONFIGURATION.md)**: Customize keybindings, themes, and behavior
 - **[Hooks](docs/HOOKS.md)**: Run shell commands on window, session and agent events
 - **[Themes](docs/THEMES.md)**: Built-in themes and custom theme JSON
@@ -234,7 +234,7 @@ The guide is [docs/AGENT_STATE.md](docs/AGENT_STATE.md).
 ### Session Management
 - **Daemon Mode**: Persistent sessions with detach/reattach (like tmux)
 - **Session Resurrection**: Sessions come back after a daemon restart or reboot with their structure and working directories ([docs](docs/SESSIONS.md))
-- **Session Switcher**: In-app session list (<kbd>Prefix</kbd>+<kbd>S</kbd>)
+- **Go to anything**: One list of agents, sessions, workspaces and panes (<kbd>Prefix</kbd>+<kbd>G</kbd>; <kbd>Prefix</kbd>+<kbd>S</kbd> opens it on the sessions)
 - **Layout Templates**: Save/load window arrangements with working directories and startup commands
 - **Layout CLI**: `tuios layout list`, `tuios layout delete`, `tuios layout export`
 
@@ -248,7 +248,6 @@ The guide is [docs/AGENT_STATE.md](docs/AGENT_STATE.md).
 - **Which-Key Popup**: Hold the prefix key to see the chords available (`appearance.whichkey_enabled`, [docs](docs/KEYBINDINGS.md))
 - **App Launcher**: <kbd>Alt</kbd>+<kbd>Space</kbd> runs anything on `$PATH`, frecency-ranked, with desktop-entry names and icons
 - **Keybind Manager**: <kbd>Prefix</kbd>+<kbd>k</kbd> in-app, or `tuios keybinds doctor` and `tuios keybinds explain <key>` from the shell
-- **Aggregate View**: Searchable list of every window across every workspace, with previews ([docs](docs/LAYOUT_MODES.md#aggregate-view))
 - **Multifocus**: Broadcast typing to several panes at once, `Ctrl`+`Shift`+click to select ([docs](docs/LAYOUT_MODES.md#multifocus))
 
 ### More
@@ -292,7 +291,7 @@ terminal window it started in. New panes are tiled. See
 | <kbd>z</kbd> (WM) or <kbd>Prefix</kbd>+<kbd>z</kbd> | Toggle pane zoom |
 | <kbd>Prefix</kbd>+<kbd>Space</kbd> | Toggle BSP tiling |
 | <kbd>Prefix</kbd>+<kbd>[</kbd> | Enter copy mode (vim scrollback) |
-| <kbd>Prefix</kbd>+<kbd>S</kbd> | Session switcher |
+| <kbd>Prefix</kbd>+<kbd>S</kbd> | Go to a session |
 | <kbd>Prefix</kbd>+<kbd>L</kbd> then <kbd>l</kbd>/<kbd>s</kbd> | Load/Save layout template |
 | <kbd>Prefix</kbd>+<kbd>?</kbd> | Help overlay |
 | <kbd>Prefix</kbd>+<kbd>q</kbd> | Quit |

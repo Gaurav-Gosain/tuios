@@ -225,11 +225,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = m.placeOverlayPanel(layers, "launcher", content, geo, rows)
 	}
 
-	if m.ShowSessionSwitcher {
-		content, geo, rows := m.renderSessionSwitcher()
-		layers = m.placeOverlayPanel(layers, "session", content, geo, rows)
-	}
-
 	if m.ShowAgentMail {
 		content, geo, rows := m.renderAgentMail()
 		layers = m.placeOverlayPanel(layers, "agentmail", content, geo, rows)
@@ -248,11 +243,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	if m.gotoPicker.open {
 		content, geo, rows := m.renderGotoPicker()
 		layers = m.placeOverlayPanel(layers, "goto", content, geo, rows)
-	}
-
-	if m.ShowWorkspaceSwitcher {
-		content, geo, rows := m.renderWorkspaceSwitcher()
-		layers = m.placeOverlayPanel(layers, "workspace", content, geo, rows)
 	}
 
 	if m.buffers.open {
@@ -350,11 +340,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		}
 		layers = append(layers, lipgloss.NewLayer(content).
 			X(x).Y(y).Z(config.ZIndexOverlayBase).ID("rename"))
-	}
-
-	if m.ShowAggregateView {
-		content, geo, rows := m.renderAggregateView()
-		layers = m.placeOverlayPanel(layers, "aggregate", content, geo, rows)
 	}
 
 	if m.ShowScrollbackBrowser {

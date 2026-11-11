@@ -1,6 +1,8 @@
 package tuie2e
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -8,11 +10,12 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// aggregateTitle is the header the all-windows picker draws, and aggregateHint
-// the one string on screen that only the open picker produces.
+// aggregateTitle is the header the all-windows list draws, and aggregateHint
+// the one string on screen that only the open list produces. The list is the
+// go-to picker filtered to this session's panes.
 const (
-	aggregateTitle = "Windows"
-	aggregateHint  = "jump"
+	aggregateTitle = "Go to"
+	aggregateHint  = "@ # !"
 )
 
 // openAggregateView opens the all-windows picker through the command palette,
@@ -195,4 +198,71 @@ func TestAggregateViewFitsAShortScreen(t *testing.T) {
 	}
 
 	alive(t, term, "after opening the aggregate view on a short screen")
+}
+
+// TestAllWindowsShowsAndFindsEachPanesFolder: a pane row in go-to ends with
+// the pane's working directory, as the old window list did, and typing a
+// folder name keeps the panes in it.
+//
+// How this could pass wrongly, written down first:
+//   - The folder could be read off the rail's files section or a title bar
+//     rather than the row. It is looked for only on the row whose
+//     breadcrumb ends in the pane's name ("› north"), which the rail and the
+//     title bars never draw.
+//   - The filter could keep north by its name, not its folder. The word typed
+//     is in north's folder and in neither pane's name.
+//   - The filter could keep every row. south's folder lacks the word, and its
+//     row has to go.
+//   - Both panes could share one folder and show it by chance. Each is opened
+//     in a folder of its own.
+func TestAllWindowsShowsAndFindsEachPanesFolder(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "new", "e2e-dirs", "--detach"); err != nil {
+		t.Fatalf("create session: %v\n%s", err, out)
+	}
+	for _, p := range []struct{ name, dir string }{{"north", "cwd-kestrel"}, {"south", "cwd-osprey"}} {
+		dir := filepath.Join(base, p.dir)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+		if out, err := tuiosCLI(t, base, "new-window", "-s", "e2e-dirs", p.name, "--cwd", dir, "--no-focus"); err != nil {
+			t.Fatalf("open %s: %v\n%s", p.name, err, out)
+		}
+	}
+	term := startIn(t, base, startOpts{args: []string{"attach", "e2e-dirs"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 3 }, bootTimeout); err != nil {
+		t.Fatalf("the client never drew the session's three panes: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+
+	rowOf := func(s tuitest.Screen, name string) string {
+		_, rows := s.Size()
+		for r := range rows {
+			if line := s.Line(r); strings.Contains(line, "› "+name) {
+				return line
+			}
+		}
+		return ""
+	}
+	openAggregateView(t, term)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(rowOf(s, "north"), "kestrel") && strings.Contains(rowOf(s, "south"), "osprey")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the pane rows do not end with their folders: %v\n%s", err, term.Snapshot())
+	}
+	dir := artifactDir(t)
+	saveArtifact(t, term, dir, "all-windows")
+	savePNG(t, term.Screen(), hostPalette(t, ""), dir, "all-windows")
+
+	if err := term.SendKeys("kestrel"); err != nil {
+		t.Fatalf("type the folder name: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(rowOf(s, "north"), "kestrel") && rowOf(s, "south") == ""
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: typing north's folder did not keep north alone: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, dir, "all-windows-filtered")
+	alive(t, term, "after filtering go-to by a folder")
 }

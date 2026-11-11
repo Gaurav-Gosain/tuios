@@ -8,13 +8,13 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// TestWorkspaceSwitcherRowKeepsItsFacts: a workspace named past the row's budget
+// TestGotoWorkspaceRowKeepsItsFacts: a workspace named past the row's budget
 // used to be handed to the panel over-wide, and the panel's backstop then cut
 // the right-hand end, taking the pane count and the "current" marker with it.
 // The label is what gives way now, so the facts on the right always survive.
-func TestWorkspaceSwitcherRowKeepsItsFacts(t *testing.T) {
+func TestGotoWorkspaceRowKeepsItsFacts(t *testing.T) {
 	for _, term := range []int{51, 100, 190} {
-		m := newNarrowOS(t, term, 40)
+		m := daemonRailOS(t, term, 40)
 		m.CurrentWorkspace = 1
 		m.Windows = []*terminal.Window{
 			{ID: "a", CustomName: "one", Width: 80, Height: 24, Workspace: 1},
@@ -24,13 +24,14 @@ func TestWorkspaceSwitcherRowKeepsItsFacts(t *testing.T) {
 			1: strings.Repeat("long-workspace-name", 3),
 			2: "short",
 		}
-		m.WorkspaceSwitcherItems = m.buildWorkspaceItems()
+		m.OpenWorkspaceSwitcher()
 
-		content, geo, _ := m.renderWorkspaceSwitcher()
+		content, geo, _ := m.renderGotoPicker()
 		lines := strings.Split(content, "\n")
 		var row string
+		// The long name gives way, so the row is found by its number.
 		for _, ln := range lines {
-			if strings.Contains(ln, "long-workspace-name") {
+			if strings.Contains(ansiEscape.ReplaceAllString(ln, ""), "› 1 · ") {
 				row = ln
 				break
 			}

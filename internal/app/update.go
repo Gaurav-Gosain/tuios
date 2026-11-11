@@ -857,7 +857,7 @@ func (m *OS) foreignSessionReplanCmd() tea.Cmd {
 
 // foreignSessionRefreshPlan decides whether the next poll should hit the daemon
 // and how long to wait before re-arming. A consumer is on screen when the
-// sidebar reserves columns or the session switcher or the go-to picker is open;
+// sidebar reserves columns or the go-to picker is open;
 // poll fast then, even for a lone session, because the listing is where the
 // rail reads the titles of windows this client has unsubscribed from. Off screen, fall back to a slow
 // cache-warming poll while foreign sessions exist, and do nothing at all for a
@@ -866,7 +866,7 @@ func (m *OS) foreignSessionRefreshPlan() (after time.Duration, refresh bool) {
 	if m.DaemonClient == nil {
 		return foreignSessionRefreshIdle, false
 	}
-	if m.SidebarActive() || m.ShowSessionSwitcher || m.gotoPicker.open {
+	if m.SidebarActive() || m.gotoPicker.open {
 		return foreignSessionRefreshActive, true
 	}
 	if m.DaemonClient.SessionCount() <= 1 {
@@ -1713,14 +1713,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		} else {
 			m.ShowNotification("Killed session: "+msg.Label, "success", m.Settings.NotificationDuration)
 		}
-		// The switcher lists a snapshot, so the row of a session that no longer
-		// exists would sit there until the overlay was reopened.
-		if m.ShowSessionSwitcher {
-			m.SessionSwitcherItems = m.sessionSwitcherItems()
-			if m.SessionSwitcherSelected >= len(m.SessionSwitcherItems) && m.SessionSwitcherSelected > 0 {
-				m.SessionSwitcherSelected--
-			}
-		}
+		// Go-to lists a snapshot, so the row of a session that no longer
+		// exists would sit there until the picker was reopened.
+		m.refreshGotoRows()
 		return m, cmd
 
 	case ClipboardSetMsg:
@@ -2591,7 +2586,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 				// A rename by this client or any other arrives on this push, so
 				// an open switcher follows it without being reopened.
-				m.refreshSwitcherItems()
+				m.refreshGotoRows()
 				// A sync can have folded, shown or hidden this client's rail,
 				// which is chrome the session's reserve is settled from.
 				// settleChrome says so once the sync is applied, outside it,
@@ -2658,7 +2653,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// the rail and the switcher read is refreshed off this goroutine, and
 		// the switcher is rebuilt again once it lands: rebuilt only now, it
 		// kept a row for the old name beside the new one.
-		m.refreshSwitcherItems()
+		m.refreshGotoRows()
 		return m, m.refreshListingCmd()
 
 	case SessionOrderAppliedMsg:
@@ -2678,7 +2673,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case listingRefreshedMsg:
-		m.refreshSwitcherItems()
+		m.refreshGotoRows()
 		return m, nil
 
 	case ClientJoinedMsg:

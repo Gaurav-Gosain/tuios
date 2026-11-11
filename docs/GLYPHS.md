@@ -166,7 +166,7 @@ drawn as `█` instead (`#` under `--ascii-only`), so it still shows.
 
 The `state_*` roles are the marks a pane's agent state wears on every surface
 that shows one: the rail and its collapsed strip, the window title, the command
-palette, the session switcher, the aggregate view, the Inbox, the cockpit and
+palette, go-to, the Inbox, the cockpit and
 the dock's notifications. A role the set leaves alone keeps the mark TUIOS
 ships (`●` working, `▲` needs you, `○` idle, `■` done, `×` errored, `□`
 unknown, `◊` waiting), and the cockpit keeps its own design for it. Of the
@@ -191,7 +191,7 @@ that is two cells: a mark and one blank. A set with a two-cell mark such as
 two. The column follows the set rather than the rows on screen, so a pane
 changing state never moves the names of the others. The names after the marks
 therefore start in one column, on the rail and its subagent rows, in the
-navigator, the aggregate view, the palette, the Inbox and the cockpit; a row
+navigator, go-to, the palette, the Inbox and the cockpit; a row
 with no mark leaves the whole column blank. The cockpit keeps two blanks after
 a one-cell mark where it has room, and a two-cell mark takes the first of them,
 so its names stay where the shipped marks put them:
@@ -202,10 +202,9 @@ so its names stay where the shipped marks put them:
  ○  rest-pane
 ```
 
-Where a mark does not lead a row, it is measured. A column of marks that ends
-on a row's right edge, as in the session switcher, is as wide as the widest
-mark the set draws; a title, a count beside a mark, the cockpit's header and a
-dock message are measured with the mark they carry, and keep a space after it.
+Where a mark does not lead a row, it is measured: a title, a count beside a
+mark, the cockpit's header and a dock message are measured with the mark they
+carry, and keep a space after it.
 The collapsed strip has one column for a mark, so a two-cell mark there takes
 the gutter cell beside it as well, and the strip's alarm badge keeps its count
 and drops the mark when both do not fit.

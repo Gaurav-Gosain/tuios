@@ -46,7 +46,7 @@ uses that leader. The offer changes nothing until you press `U` and Enter.
 | `tuios` | `ctrl+b` | The tuios keys. This is the default |
 | `tmux` | `ctrl+b` | tmux 3.8's keys after the leader |
 | `screen` | `ctrl+a` | GNU screen's keys after the leader, also on the control variant (`ctrl+a ctrl+n`). `ctrl+a ctrl+a` goes to the last workspace. `ctrl+a a` sends `ctrl+a` to the pane |
-| `zellij` | `ctrl+g` | zellij's unlock-first keys. After `ctrl+g`, `p` opens pane mode (the window menu), `t` tab mode (the workspace menu), `s` copy mode and `o` the session switcher. The next key runs one action. In pane mode `r` splits right, `d` splits down, `f` zooms, `h` `j` `k` `l` move focus and `c` renames. In tab mode `n` opens a workspace, `x` closes it, and `h` and `l` go to the previous and next. It turns on [lock mode](#lock-mode) |
+| `zellij` | `ctrl+g` | zellij's unlock-first keys. After `ctrl+g`, `p` opens pane mode (the window menu), `t` tab mode (the workspace menu), `s` copy mode and `o` go-to on the sessions. The next key runs one action. In pane mode `r` splits right, `d` splits down, `f` zooms, `h` `j` `k` `l` move focus and `c` renames. In tab mode `n` opens a workspace, `x` closes it, and `h` and `l` go to the previous and next. It turns on [lock mode](#lock-mode) |
 
 - A tmux window is a workspace here. A tmux pane is a window here. So `c`,
   `n`, `p`, `l`, `0` to `9`, `,` and `&` act on workspaces.
@@ -552,12 +552,14 @@ Each row starts with its kind, then says where the place is:
 agent      claude · payments › 1 › api    needs you: approve Bash ●
 session    payments [space: surge]                          3 panes
 workspace  payments › 2 · api-tests                          1 pane
-pane       payments › 1 › nvim
+pane       payments › 1 › nvim                ~/src/payments
 ```
+
+A pane of the session you are attached to ends with its working directory, with your home folder as `~`. On a narrow screen the folder is cut in the middle, and it is left out before the name gives way. `current` stays last.
 
 With nothing typed, the first row is the place you were on last, so `Ctrl+B G` and `enter` take you back to where you were. The agents that need you come right after it, the one waiting longest first, then the other places you were on recently, the most recent first, then every agent, session and workspace. Panes are listed once you type something. A session has many panes, and the ones you were just on are already in the recent places.
 
-Typed words are a fuzzy search over the names a row shows: the session, the workspace, the pane, and for an agent its harness and its last message. A `key:value` term narrows the rows instead, and every term has to match. The terms are the selector the agents view takes (`harness:`, `state:`, `needs:you`, `session:`, `group:`, `host:`, `name:`), and three more:
+Typed words are a fuzzy search over the names a row shows: the session, the workspace, the pane and its folder, and for an agent its harness and its last message. A `key:value` term narrows the rows instead, and every term has to match. The terms are the selector the agents view takes (`harness:`, `state:`, `needs:you`, `session:`, `group:`, `host:`, `name:`), and three more:
 
 | Term | Keeps |
 |---|---|
@@ -574,6 +576,11 @@ A value is a glob, and commas between values mean any of them, as in `kind:sessi
 | `@`, `#`, `!` first | Filter to agents, sessions or workspaces. The picker's hint shows them as `@ # ! filter` |
 | `ctrl+u` | Clear the query |
 | `esc` | Close the picker |
+
+| `ctrl+r` | Rename the session or workspace on the row. The picker stays open under the rename |
+| `ctrl+d` | Delete the session on the row, after a `y`. Never the session you are on |
+
+The keys that opened the old lists open this picker with the filter typed: `Ctrl+B S` on `# ` (the sessions), `Ctrl+B W` on `! session:NAME` (this session's workspaces), and the palette's "All windows" on `kind:pane session:NAME` (this session's panes). With `# NAME` typed and no session called NAME, `enter` makes that session.
 
 Workspaces and panes are listed for the sessions on the machine you are attached to. A session on another machine is listed, and its agents are, and `enter` on it attaches that machine as the rail does. A workspace of a session you are not attached to shows its number, because its name is not sent to your client.
 

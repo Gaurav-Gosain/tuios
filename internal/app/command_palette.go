@@ -529,8 +529,8 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		},
 		// Navigation
 		{
-			// No Shortcut: the aggregate view has no default binding and is
-			// reached from this palette (or a user binding) only.
+			// No Shortcut: go-to on this session's panes has no binding of
+			// its own and is reached from this palette.
 			Name:     "All windows",
 			Bind:     "all_windows",
 			Category: "Navigation",

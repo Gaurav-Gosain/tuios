@@ -16915,3 +16915,19 @@ Run on 2026-11-11 on macOS (arm64). The branch passes both.
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
 | The branch before this one (the picture prepared only when its file came in) | "the picture's rows hold no block glyphs" and "the kitty host was given no picture for the selected attachment" | **caught** |
+
+## Go-to's pane rows show and find their folder
+
+`TestAllWindowsShowsAndFindsEachPanesFolder` opens two panes in folders of
+their own, opens "All windows" (go-to on this session's panes), and checks that
+each pane's row ends with its folder, and that typing one folder's name keeps
+only the pane in it.
+
+Run on 2026-11-11 on Linux (arch-btw). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The branch with the folder left off the pane rows (`r.dir` not set in `gotoRows`) | "the pane rows do not end with their folders" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAllWindowsShowsAndFindsEachPanesFolder$' -v .`.

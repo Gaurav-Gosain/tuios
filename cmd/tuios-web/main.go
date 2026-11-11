@@ -747,7 +747,7 @@ func createTUIOSHandler(sess sip.Session) *app.OS {
 // pickWebSession is the session a browser gets when --default-session names
 // none: a dedicated one called "web", created when missing. Picking one of the
 // existing sessions instead was arbitrary and changed as sessions came and
-// went. The session switcher reaches the others from inside tuios.
+// went. Go-to reaches the others from inside tuios.
 func pickWebSession([]string) string { return "web" }
 
 // webHostCaps is the browser terminal one connection draws to. sip's page

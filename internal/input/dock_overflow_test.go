@@ -2,6 +2,7 @@ package input
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
@@ -44,7 +45,7 @@ func TestDockOverflowMarkerOpensTheListOfWhatItHides(t *testing.T) {
 	}
 
 	o, cmd := handleMouseClick(clickAt(x, y), o)
-	if !o.ShowAggregateView {
+	if !o.GotoPickerOpen() || !strings.HasPrefix(o.GotoPickerQuery(), "kind:pane") {
 		t.Error("clicking the marker did not open the list of windows it stands for")
 	}
 	if cmd != nil {

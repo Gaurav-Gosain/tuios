@@ -25,7 +25,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/textedit"
@@ -1494,13 +1493,6 @@ type OS struct {
 	// agentsSwitchedOff is the agent switch as applyAgentsSwitch last saw
 	// it, so a config change that did not touch it does nothing.
 	agentsSwitchedOff bool
-	// Session switcher overlay
-	ShowSessionSwitcher          bool
-	SessionSwitcherQuery         string
-	SessionSwitcherSelected      int
-	SessionSwitcherScroll        int
-	SessionSwitcherItems         []sessiontree.Node
-	SessionSwitcherConfirmDelete string // non-empty = confirming deletion of this session name
 
 	// FederationHosts is what the daemon last said about the machines in the
 	// [hosts] config table, with the sessions each holds. The rail reads it and
@@ -1559,12 +1551,6 @@ type OS struct {
 	// navLayoutPick is the navigator layout the v key last chose, kept for
 	// the next time the navigator opens. Empty is the configured one.
 	navLayoutPick string
-	// Workspace switcher overlay, scoped to the attached session
-	ShowWorkspaceSwitcher     bool
-	WorkspaceSwitcherQuery    string
-	WorkspaceSwitcherSelected int
-	WorkspaceSwitcherScroll   int
-	WorkspaceSwitcherItems    []WorkspaceItem
 	// buffers is the paste buffer chooser, and pasteBufs the store of a
 	// client with no daemon. See paste_buffers.go.
 	buffers   bufferChooser
@@ -1575,11 +1561,6 @@ type OS struct {
 	// pasteHold holds the keys typed while a paste reads its buffer from
 	// the daemon. See holdKeyForPaste.
 	pasteHold pasteHold
-	// Aggregate view overlay (all windows across workspaces)
-	ShowAggregateView     bool
-	AggregateViewQuery    string
-	AggregateViewSelected int
-	AggregateViewScroll   int
 	// Machine picker overlay: which machine a new window's process runs on.
 	//
 	// A session can hold windows from several machines, and the only way to

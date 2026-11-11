@@ -78,11 +78,11 @@ func TestRenameRefusesUnprintable(t *testing.T) {
 }
 
 // TestSessionSearchCanSpellASpacedName closes the loop the rename opens: a
-// session called "Payments API" is only findable if the switcher's search field
+// session called "Payments API" is only findable if go-to's search field
 // takes the same characters the rename editor now does.
 func TestSessionSearchCanSpellASpacedName(t *testing.T) {
 	o := twoPaneOS(t)
-	o.ShowSessionSwitcher = true
+	o.OpenGotoPicker()
 
 	for _, r := range "payments api" {
 		msg := tea.KeyPressMsg{Code: r, Text: string(r)}
@@ -91,24 +91,24 @@ func TestSessionSearchCanSpellASpacedName(t *testing.T) {
 		}
 		o, _ = HandleKeyPress(msg, o)
 	}
-	if o.SessionSwitcherQuery != "payments api" {
-		t.Fatalf("search query = %q, want %q", o.SessionSwitcherQuery, "payments api")
+	if o.GotoPickerQuery() != "payments api" {
+		t.Fatalf("search query = %q, want %q", o.GotoPickerQuery(), "payments api")
 	}
 
 	// And a multi-byte one, backspaced back off a rune at a time.
-	o.SessionSwitcherQuery = ""
+	o.SetGotoPickerQuery("")
 	for _, r := range "café" {
 		o, _ = HandleKeyPress(tea.KeyPressMsg{Code: r, Text: string(r)}, o)
 	}
-	if o.SessionSwitcherQuery != "café" {
-		t.Fatalf("search query = %q, want café", o.SessionSwitcherQuery)
+	if o.GotoPickerQuery() != "café" {
+		t.Fatalf("search query = %q, want café", o.GotoPickerQuery())
 	}
 	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: tea.KeyBackspace}, o)
-	if o.SessionSwitcherQuery != "caf" {
-		t.Fatalf("backspace left %q, want caf", o.SessionSwitcherQuery)
+	if o.GotoPickerQuery() != "caf" {
+		t.Fatalf("backspace left %q, want caf", o.GotoPickerQuery())
 	}
-	if !utf8.ValidString(o.SessionSwitcherQuery) {
-		t.Fatalf("backspace broke the encoding: %q", o.SessionSwitcherQuery)
+	if !utf8.ValidString(o.GotoPickerQuery()) {
+		t.Fatalf("backspace broke the encoding: %q", o.GotoPickerQuery())
 	}
 }
 

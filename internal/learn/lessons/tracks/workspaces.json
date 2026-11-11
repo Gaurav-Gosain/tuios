@@ -182,7 +182,7 @@
     {
       "id": "switcher",
       "title": "See every workspace",
-      "note": "A picker with a preview of each one.",
+      "note": "Go to opens on the workspaces of this session.",
       "keys": [
         "ctrl+b",
         "W",
@@ -191,14 +191,14 @@
       "done": {
         "seq": [
           {
-            "opened": "workspaceSwitcher"
+            "opened": "goto"
           },
           {
-            "closed": "workspaceSwitcher"
+            "closed": "goto"
           }
         ]
       },
-      "hint": "ctrl+b, then shift+w. Arrows pick one, enter goes there.",
+      "hint": "ctrl+b, then shift+w. Go to opens on ! and this session. Arrows pick one, enter goes there.",
       "learned": "workspace switcher"
     },
     {

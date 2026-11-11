@@ -13,7 +13,7 @@ import (
 )
 
 // newSwitchSessionCmd is tuios switch-session: move an attached client to
-// another session in place, as the session switcher does. From a pane it
+// another session in place, as go-to does. From a pane it
 // moves the client that shows the pane's session, which is what a popup
 // command key needs for a sessionizer.
 func newSwitchSessionCmd() *cobra.Command {
@@ -27,8 +27,8 @@ func newSwitchSessionCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "switch-session [HOST:]NAME",
 		Short: "Switch an attached client to another session",
-		Long: `Switch an attached client to another session in place, the way the
-session switcher does. Nothing is nested.
+		Long: `Switch an attached client to another session in place, the way
+go-to does. Nothing is nested.
 
 The client to switch is:
   - the client given with --client, from tuios list-clients

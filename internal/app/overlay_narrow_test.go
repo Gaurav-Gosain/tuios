@@ -87,7 +87,7 @@ func TestOverlayLayersFitNarrowScreens(t *testing.T) {
 			m.HelpCategory = -1
 			m.ShowCommandPalette = true
 			m.ShowSettings = true
-			m.ShowSessionSwitcher = true
+			m.OpenGotoPicker()
 			m.ShowLayoutPicker = true
 			m.OpenQuitMenu()
 			m.ShowLogs = true

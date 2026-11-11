@@ -1381,9 +1381,9 @@ func (m *OS) flushGraphicsForView() {
 	// been told the new size yet, so it smears across the panes for the length
 	// of the drag. Hiding keeps the image data resident, so the gesture ending
 	// puts it back with no round trip to whatever drew it.
-	hideImages := m.Resizing || m.ShowHelp || m.ShowCommandPalette || m.ShowLauncher || m.ShowSessionSwitcher || m.ShowAgentMail || m.ShowInbox ||
-		m.ShowWorkspaceSwitcher || m.gotoPicker.open || m.buffers.open || m.navigator.open || m.ShowLayoutPicker || m.ShowHostPicker || m.ShowQuitMenu || m.DaemonRestartOpen() || m.ShowScrollbackBrowser ||
-		m.ShowLogs || m.msgView.open || m.ShowCacheStats || m.ShowAggregateView ||
+	hideImages := m.Resizing || m.ShowHelp || m.ShowCommandPalette || m.ShowLauncher || m.ShowAgentMail || m.ShowInbox ||
+		m.gotoPicker.open || m.buffers.open || m.navigator.open || m.ShowLayoutPicker || m.ShowHostPicker || m.ShowQuitMenu || m.DaemonRestartOpen() || m.ShowScrollbackBrowser ||
+		m.ShowLogs || m.msgView.open || m.ShowCacheStats ||
 		m.ShowSettings || m.ShowThemePicker || m.themeEditor.open || m.presetPicker.open || m.ShowKeybindManager || m.ShowAccentPicker || m.ShowTapeManager || m.ShowTapeReview ||
 		m.ShotPreview.Open || m.review.open || m.quickLook.open
 	if m.KittyPassthrough != nil {

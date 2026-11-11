@@ -15,7 +15,7 @@ import (
 // daemon restart.
 
 // noteLine is the screen line that holds every marker, or "" when none does.
-// A rail row and a switcher row each sit on one line, so a marker pair on one
+// A rail row and a go-to row each sit on one line, so a marker pair on one
 // line ties a note to the session it is drawn for.
 func noteLine(s tuitest.Screen, markers ...string) string {
 	for line := range strings.SplitSeq(s.Text(), "\n") {
@@ -55,7 +55,7 @@ func notePNG(t *testing.T, term *tuitest.Terminal, name string) {
 
 // TestReturnNotesComeBackWithTheSession sets a note on a detached session and
 // on one of its panes with the CLI, then reads them where a person comes
-// back: the dock on attach, the rail row, the session switcher and the Inbox
+// back: the dock on attach, the rail row, go-to and the Inbox
 // focus. The daemon restarts and the notes are still there. A clear takes the
 // note off the rail, and a note changed while attached is not announced.
 //
@@ -165,10 +165,10 @@ func TestReturnNotesComeBackWithTheSession(t *testing.T) {
 	}
 	notePNG(t, term, "rail")
 
-	// The session switcher.
+	// Go-to on the sessions (ctrl+b S).
 	sendKeys(t, term, tuitest.Ctrl('b'), "S")
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return noteLine(s, "e2e-note", note) != "" }, uiTimeout); err != nil {
-		t.Fatalf("ASSERTION: the switcher row of e2e-note does not show its note: %v\n%s", err, term.Snapshot())
+		t.Fatalf("ASSERTION: the go-to row of e2e-note does not show its note: %v\n%s", err, term.Snapshot())
 	}
 	notePNG(t, term, "switcher")
 	sendKeys(t, term, tuitest.Esc)

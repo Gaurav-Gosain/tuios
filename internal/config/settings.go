@@ -358,7 +358,7 @@ type Settings struct {
 
 	// SessionColors gives every session a colour of its own and marks it on the
 	// surfaces that show more than one session at once: the rail's sessions and
-	// agents sections, and the session switcher. Off leaves each of those
+	// agents sections. Off leaves each of those
 	// without a session colour.
 	// SessionBorder carries the session's colour on every pane border, not only
 	// on the rail. It is off by default because it changes the look of every

@@ -48,7 +48,7 @@ func TestSessionPickerRenameReachesLs(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "S"); err != nil {
 		t.Fatalf("open the session picker: %v", err)
 	}
-	if err := term.WaitForText("Sessions", uiTimeout); err != nil {
+	if err := term.WaitForText("Go to", uiTimeout); err != nil {
 		t.Fatalf("the session picker did not open: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys(tuitest.Ctrl('r')); err != nil {

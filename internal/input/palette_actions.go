@@ -44,11 +44,9 @@ func (d *ActionDispatcher) registerPaletteHandlers() {
 		o.DisableAllTiling()
 		return o, nil
 	})
+	// Go-to on the panes of this session, as the dock's overflow marker opens it.
 	d.Register("all_windows", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-		o.ShowAggregateView = true
-		o.AggregateViewQuery = ""
-		o.AggregateViewSelected = 0
-		o.AggregateViewScroll = 0
+		o.OpenAggregateView()
 		return o, nil
 	})
 	d.Register("theme_picker", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

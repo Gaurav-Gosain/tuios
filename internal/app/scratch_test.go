@@ -229,8 +229,9 @@ func TestSecondGroupReplacesTheFirst(t *testing.T) {
 func TestScratchGroupIsInNoList(t *testing.T) {
 	m := scratchOS(t, false)
 	w := addScratch(m, scratchName, "s1")
-	for _, it := range m.GetAggregateViewItems() {
-		if it.Window == w {
+	m.OpenAggregateView()
+	for _, r := range m.gotoFiltered() {
+		if r.window == w.ID {
 			t.Fatal("the window list shows a scratch pane")
 		}
 	}

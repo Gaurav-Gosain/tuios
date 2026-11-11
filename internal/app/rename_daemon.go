@@ -84,13 +84,13 @@ func (m *OS) refreshListingCmd() tea.Cmd {
 	}
 }
 
-// refreshSwitcherItems rebuilds whichever switcher is open, so a rename (this
-// client's or another client's) shows up in the list it was made from.
-func (m *OS) refreshSwitcherItems() {
-	if m.ShowSessionSwitcher {
-		m.SessionSwitcherItems = m.sessionSwitcherItems()
+// refreshGotoRows rebuilds the go-to picker's places while it is open, so a
+// rename (this client's or another client's) shows up in the list it was made
+// from.
+func (m *OS) refreshGotoRows() {
+	g := &m.gotoPicker
+	if !g.open {
+		return
 	}
-	if m.ShowWorkspaceSwitcher {
-		m.WorkspaceSwitcherItems = m.buildWorkspaceItems()
-	}
+	g.rows, g.sig, g.built = m.gotoRows(), m.sidebarSignature(), false
 }

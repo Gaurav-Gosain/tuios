@@ -22,7 +22,7 @@ var EventTypes = []string{
 var OverlayNames = []string{
 	OverlayHelp, OverlayWhichKey, OverlayCommandPalette, OverlayLauncher,
 	OverlaySettings, OverlayThemePicker, OverlayCopyMode, OverlaySearch,
-	OverlayScrollback, OverlayKeybinds, OverlayQuitMenu, OverlayWorkspaceSwitcher,
+	OverlayScrollback, OverlayKeybinds, OverlayQuitMenu,
 	OverlayLayoutPicker, OverlaySidebar, OverlayLogs, OverlayScreensaver,
 	OverlayAgents, OverlayMail, OverlayPresets, OverlayGoto, OverlayHints,
 	OverlaySpotlight, OverlayScratch, OverlayPaneLabels, OverlayPeek,

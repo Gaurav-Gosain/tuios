@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
 // wrapCase is one list: how to put rows in it, how to move it, and where its
@@ -21,16 +20,7 @@ type wrapCase struct {
 
 func wrapCases(t *testing.T) []wrapCase {
 	t.Helper()
-	sessions := []sessiontree.Node{{ID: "a", Title: "a"}, {ID: "b", Title: "b"}, {ID: "c", Title: "c"}}
 	return []wrapCase{
-		{
-			name:   "session switcher",
-			setup:  func(m *OS) { m.SessionSwitcherItems = sessions },
-			move:   (*OS).SessionSwitcherMove,
-			cursor: func(m *OS) int { return m.SessionSwitcherSelected },
-			set:    func(m *OS, i int) { m.SessionSwitcherSelected = i },
-			first:  0, last: 2,
-		},
 		{
 			name: "layout picker",
 			setup: func(m *OS) {
