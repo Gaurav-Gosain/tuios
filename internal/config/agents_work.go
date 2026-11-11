@@ -250,9 +250,9 @@ func validateAgentWork(cfg *UserConfig, result *ValidationResult) {
 		warn("agents", "herdr_protocol", fmt.Sprintf("'%s' is not a valid value (allowed: %s, %s, %s); read as %s",
 			cfg.Agents.HerdrProtocol, HerdrProtocolAlways, HerdrProtocolAgents, HerdrProtocolOff, HerdrProtocolAlways))
 	}
-	if h := strings.ToLower(strings.TrimSpace(cfg.Agents.HostProgramStatus)); h != "" && h != NormalizeHostProgramStatus(h) {
+	if h := strings.ToLower(strings.TrimSpace(cfg.Agents.HostProgramStatus)); h != "" && h != HostProgramStatusAuto && h != NormalizeHostProgramStatus(h) {
 		warn("agents", "host_program_status", fmt.Sprintf("'%s' is not a valid value (allowed: %s, %s, %s); read as %s",
-			cfg.Agents.HostProgramStatus, HostProgramStatusAuto, HostProgramStatusSession, HostProgramStatusOff, HostProgramStatusAuto))
+			cfg.Agents.HostProgramStatus, HostProgramStatusSession, HostProgramStatusPanes, HostProgramStatusOff, HostProgramStatusSession))
 	}
 	if v := strings.ToLower(strings.TrimSpace(cfg.Agents.SilentAfter)); v != "" && v != "off" {
 		if _, err := time.ParseDuration(v); err != nil {

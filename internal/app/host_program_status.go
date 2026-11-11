@@ -18,22 +18,23 @@ import (
 //
 // A terminal that supports the Program Status Protocol (OSC 7501), such as
 // ghostty or Rex, shows what the programs in it are doing. Inside tuios the
-// program is tuios, so tuios reports its panes' agent states there, one record
-// per pane under the id <session>/<pane>, with the pane's name as the title.
-// The terminal then shows that a pane in tuios waits on you even while tuios
-// is in another tab.
+// program is tuios, so tuios reports its panes' agent states there. The
+// terminal then shows that a pane in tuios waits on you even while tuios is in
+// another tab.
+//
+// By default (host_program_status = "session") the terminal gets one record
+// for the attached session, under the id <session>: the most urgent state of
+// its panes, and a message that counts them, such as "1 needs input,
+// 2 working". A terminal shows one record for each of its own panes, the most
+// urgent, so one record per tuios pane would show only the single most urgent
+// pane. With "panes" it gets one record per pane instead, under the id
+// <session>/<pane>, with the pane's name as the title.
 //
 // Nothing a pane wrote is passed through. A pane's own OSC 7501 is read by its
 // emulator and becomes the pane's agent state; what reaches the host terminal
 // is tuios's own report about that state, built here, inside the protocol's
 // limits. The host is asked first (OSC 7501 ; ?), and only a terminal that
 // answers gets reports. [agents] host_program_status = "off" turns it off.
-//
-// With host_program_status = "session" the terminal gets one record for the
-// attached session instead, under the id <session>: the most urgent state of
-// its panes, and a message that counts them, such as "1 needs input,
-// 2 working". A terminal that shows one record for tuios's pane then shows
-// the whole session, not the single most urgent pane.
 //
 // Reports are rate limited: a change is held for hostProgramStatusGap, and
 // everything that changed in that time goes out together, so a pane that
@@ -84,7 +85,7 @@ func (m *OS) hostProgramStatusOn() bool {
 // hostProgramStatusMode is [agents] host_program_status, read.
 func (m *OS) hostProgramStatusMode() string {
 	if m.UserConfig == nil {
-		return config.HostProgramStatusAuto
+		return config.HostProgramStatusSession
 	}
 	return config.NormalizeHostProgramStatus(m.UserConfig.Agents.HostProgramStatus)
 }
@@ -170,7 +171,7 @@ func (m *OS) hostProgramStatusFlush() tea.Cmd {
 // says anything about (unknown), has no record.
 func (m *OS) hostProgramStatusReports() map[string]string {
 	want := make(map[string]string)
-	// In session mode the pane reports are only counted.
+	// In session mode, the default, the pane reports are only counted.
 	rollUp := m.hostProgramStatusMode() == config.HostProgramStatusSession
 	var panes []progstatus.Report
 	session := progstatus.FitSegment(m.SessionName, progstatus.MaxSegment)

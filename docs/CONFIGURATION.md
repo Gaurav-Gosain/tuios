@@ -3069,14 +3069,16 @@ Protocol (Rex does), it reports the agent state of each pane there.
 
 ```toml
 [agents]
-host_program_status = "auto"   # auto (default), session, off
+host_program_status = "session"   # session (default), panes, off
 ```
 
-`auto` asks the terminal when a client starts, and reports each pane only
-when the terminal answers. `session` asks the same way, and reports one
-record for the attached session instead: the most urgent state of its panes,
-and a message that counts them, such as "1 needs input, 2 working". `off`
-never asks. A client reads the value when it starts.
+`session` asks the terminal when a client starts and, when the terminal
+answers, reports one record for the attached session: the most urgent state
+of its panes, and a message that counts them, such as "1 needs input,
+2 working". A terminal shows one record for each of its own panes, so this is
+the whole session in the pane tuios runs in. `panes` asks the same way and
+reports one record for each pane. `off` never asks. `auto`, the old name of
+the default, still reads as `session`. A client reads the value when it starts.
 An unknown value reads as `auto`, with a warning. See
 [PROGRAM_STATUS.md](PROGRAM_STATUS.md#tuios-inside-a-terminal-that-reads-osc-7501).
 

@@ -393,7 +393,8 @@ func TestProgramStatusQueryStandalone(t *testing.T) {
 }
 
 // TestProgramStatusReachesTheHostTerminal attaches from a stand-in host
-// terminal that supports OSC 7501, and reads what tuios reports to it.
+// terminal that supports OSC 7501, with host_program_status = "panes", and
+// reads what tuios reports to it for each pane.
 //
 // How this could pass wrongly: the report could be the pane's own sequence
 // passed through. The pane reports id=evil; the host must see only tuios's
@@ -409,7 +410,7 @@ func TestProgramStatusReachesTheHostTerminal(t *testing.T) {
 		reports bool
 		queried bool
 	}{
-		{"supported", true, "", true, true},
+		{"supported", true, "[agents]\nhost_program_status = \"panes\"\n", true, true},
 		{"host does not answer", false, "", false, true},
 		{"off in the config", true, "[agents]\nhost_program_status = \"off\"\n", false, false},
 	} {
@@ -528,8 +529,8 @@ func TestProgramStatusReachesTheHostTerminal(t *testing.T) {
 }
 
 // TestProgramStatusSessionRollUp attaches from a stand-in host terminal that
-// supports OSC 7501, with host_program_status = "session", and reads the one
-// record tuios keeps there for the session.
+// supports OSC 7501, with no config, and reads the one record tuios keeps
+// there for the session: the default, host_program_status = "session".
 //
 // How it could pass wrongly, written down first:
 //   - The per-pane records could still go out beside the session record. No
@@ -545,14 +546,13 @@ func TestProgramStatusReachesTheHostTerminal(t *testing.T) {
 //
 // The artifact is the host's log of what it read.
 //
-// Negative control: with "session" read as "auto" in
+// Negative control: with the default read as "panes" in
 // NormalizeHostProgramStatus, the host gets fwd/<pane> records and no fwd
 // record, and the test fails on the first wait.
 func TestProgramStatusSessionRollUp(t *testing.T) {
 	host := buildHostTerm(t)
 	base := t.TempDir()
 	killDaemon(t, base)
-	writeConfig(t, base, "[agents]\nhost_program_status = \"session\"\n")
 	hostLog := filepath.Join(t.TempDir(), "host.log")
 	const session = "fwd"
 	if out, err := tuiosCLI(t, base, "new", session, "--detach"); err != nil {

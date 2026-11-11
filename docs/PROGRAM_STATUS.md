@@ -211,44 +211,42 @@ another tab.
 
 - At start, each local or ssh client asks its terminal `OSC 7501 ; ?`. It
   reports only when the terminal answers.
-- Each pane of the attached session has one record, with the id
-  `<session>/<pane>`. The title is the pane's name. The `app` is the agent's
-  harness, or the pane's own `app`. The message is the pane's agent message.
-- A pane with no agent state, or one in the `unknown` state, has no record.
-  A finished turn that you saw is reported as `idle`.
+- A terminal shows one record for each of its own panes: the most urgent.
+  So by default tuios reports the attached session as one record, which shows
+  the whole session in the pane tuios runs in:
+  - The record's id is the session's name, its title the session's name, and
+    its `app` is `tuios`.
+  - Its state is the most urgent state of the session's panes: `blocked`,
+    then `error`, `done`, `working` and `idle`.
+  - Its message counts the panes in each state, the most urgent first:
+    `1 needs input, 2 working, 1 idle`.
+  - A blocked session has the `kind` of its blocked panes when they all wait
+    for the same kind of answer.
+  - When no pane has a state, the record is cleared.
+- A pane with no agent state, or one in the `unknown` state, is not counted.
+  A finished turn that you saw counts as `idle`.
 - tuios sends only the records that changed, at most once in 250 milliseconds.
-  It keeps at most 64 records on the terminal.
 - tuios never passes a pane's own sequence through. What the terminal gets is
-  tuios's own report, built from the pane's agent state.
+  tuios's own report, built from the panes' agent states.
 - When a client exits or detaches, it sends `state=clear` for each record it
   left. A local client then also resets the terminal. An ssh client's
   terminal gets the clears over the connection, when the connection is still
   up.
 
-A terminal shows one record for the pane tuios runs in: the most urgent.
-With many agents that is one pane at a time. To see the whole session
-there, report it as one record:
+For one record per pane instead, with the id `<session>/<pane>`, the pane's
+name as the title, the agent's harness or the pane's own `app` as `app`, and
+the pane's agent message, at most 64 records:
 
 ```toml
 [agents]
-host_program_status = "session"
+host_program_status = "panes"
 ```
-
-- The record's id is the session's name, its title the session's name, and
-  its `app` is `tuios`.
-- Its state is the most urgent state of the session's panes: `blocked`,
-  then `error`, `done`, `working` and `idle`.
-- Its message counts the panes in each state, the most urgent first:
-  `1 needs input, 2 working, 1 idle`.
-- A blocked session has the `kind` of its blocked panes when they all wait
-  for the same kind of answer.
-- When no pane has a state, the record is cleared. No pane record is sent.
 
 To turn this off:
 
 ```toml
 [agents]
-host_program_status = "off"   # "auto" is the default
+host_program_status = "off"   # "session" is the default
 ```
 
 A browser client of `tuios-web` does not ask.

@@ -16607,7 +16607,8 @@ Repeat from `e2e/tui` with
 ## The session record on a host terminal
 
 `TestProgramStatusSessionRollUp` attaches from the stand-in host terminal
-that answers OSC 7501, with `host_program_status = "session"`, in a session
+that answers OSC 7501, with no config (`host_program_status = "session"` is
+the default), in a session
 with a working pane before a blocked one. The host must get one record under
 the session's id: blocked with kind permission and "1 needs input, 1
 working", then working with "1 working" once the blocked pane ends its
@@ -16619,7 +16620,7 @@ Run on 2026-11-11 on macOS (arm64). The branch passes, and so does
 
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
-| `NormalizeHostProgramStatus` reads `session` as `auto` | "the blocked session: the host never got 7501 state=blocked:id=fwd:kind=permission:..." | **caught** |
+| `NormalizeHostProgramStatus` reads the default as `panes` (run again after the default changed) | "the blocked session: the host never got 7501 state=blocked:id=fwd:kind=permission:..." | **caught** |
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestProgramStatusSessionRollUp$' -v .`.

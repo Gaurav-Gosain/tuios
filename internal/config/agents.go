@@ -58,12 +58,14 @@ type AgentsConfig struct {
 	// Presets are the [agents.presets.NAME] tables: a named start-agent,
 	// for start-agent --preset NAME. See AgentPreset.
 	Presets map[string]AgentPreset `toml:"presets,omitempty"`
-	// HostProgramStatus says whether tuios reports its panes' agent states to
-	// the terminal it runs in, with OSC 7501 (the Program Status Protocol):
-	// "auto" (the default) asks the terminal at start and reports each pane
-	// only when it answers, "session" asks the same way and reports one record
-	// for the attached session that counts its panes by state, and "off"
-	// never asks. See docs/PROGRAM_STATUS.md.
+	// HostProgramStatus says whether and how tuios reports its panes' agent
+	// states to the terminal it runs in, with OSC 7501 (the Program Status
+	// Protocol). Each value but "off" asks the terminal at start and reports
+	// only when it answers. "session" (the default) reports one record for
+	// the attached session that counts its panes by state, since a terminal
+	// shows one record per pane of its own; "panes" reports one record per
+	// pane; "off" never asks. "auto", the old name of the default, reads as
+	// the default. See docs/PROGRAM_STATUS.md.
 	HostProgramStatus string `toml:"host_program_status,omitempty"`
 	// SilentAfter is how long a pane whose hooks reported working may go
 	// without another report before it shows as unknown with the reason
@@ -205,19 +207,21 @@ const (
 
 // The values of [agents] host_program_status.
 const (
-	HostProgramStatusAuto    = "auto"
 	HostProgramStatusSession = "session"
+	HostProgramStatusPanes   = "panes"
 	HostProgramStatusOff     = "off"
+	// HostProgramStatusAuto is the old name of the default, still read.
+	HostProgramStatusAuto = "auto"
 )
 
 // NormalizeHostProgramStatus reads an [agents] host_program_status value.
-// Empty and anything unrecognised mean the default, "auto".
+// Empty, "auto" and anything unrecognised mean the default, "session".
 func NormalizeHostProgramStatus(v string) string {
 	switch v = strings.ToLower(strings.TrimSpace(v)); v {
-	case HostProgramStatusOff, HostProgramStatusSession:
+	case HostProgramStatusOff, HostProgramStatusPanes:
 		return v
 	}
-	return HostProgramStatusAuto
+	return HostProgramStatusSession
 }
 
 // NormalizeHerdrProtocol reads an [agents] herdr_protocol value. Empty and
