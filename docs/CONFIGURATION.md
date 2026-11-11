@@ -676,6 +676,8 @@ file_drag = false
 
 `[[actions]]` declares an action of your own, `user:NAME`: a built-in action, a program with its arguments (placeholders such as `{pane.cwd}` fill one argument each, and no shell reads them), or a plugin action. A key, a menu row or `tuios actions run` runs it. See [KEYBINDINGS.md](KEYBINDINGS.md#your-actions).
 
+`[menus.TARGET]` changes the right-click menu of a target (`pane`, `session`, `file` and the others): `add` puts rows after the row `after` names, `remove` takes rows out, and `items` replaces them. `{ menu = "NAME" }` opens the submenu `[menus.NAME]`. An action's `targets` and `when` decide where its row shows. See [KEYBINDINGS.md](KEYBINDINGS.md#your-menus).
+
 ## Animation speed
 
 `appearance.animation_speed` is the percent window animations run at: minimize

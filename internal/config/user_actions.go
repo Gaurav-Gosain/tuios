@@ -2,9 +2,11 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
@@ -57,9 +59,13 @@ const (
 // UserActionIns is every value in accepts.
 var UserActionIns = []string{UserActionInPopup, UserActionInPane, UserActionInScratch, UserActionInSilent}
 
-// The targets an action is offered on. A1 runs every action on the focused
-// pane; the menus of later changes offer an action only on its targets.
-var UserActionTargets = []string{"pane", "session", "workspace", "rail_row", "card", "file", "selection", "desktop"}
+// UserActionTargets are the targets an action is offered on: the menus
+// (MenuTargets), and a task card.
+var UserActionTargets = append(slices.Clone(MenuTargets), "card")
+
+// UserActionWhenKeys are the facts a when condition reads about the focused
+// pane.
+var UserActionWhenKeys = []string{"agent_state", "harness", "program", "host", "has_selection"}
 
 // UserActionPlaceholders are the placeholders a run argument may hold.
 var UserActionPlaceholders = []string{
@@ -83,6 +89,10 @@ type UserAction struct {
 	Key string `toml:"key,omitempty"`
 	// Targets are where the action is offered. Empty means a pane.
 	Targets []string `toml:"targets,omitempty"`
+	// When offers the action in a menu only while the focused pane matches:
+	// each key (UserActionWhenKeys) names a fact, and its value is a string
+	// or a list of strings, one of which the fact must equal.
+	When map[string]any `toml:"when,omitempty"`
 	// Trusted lets an action that sends text to an agent and submits it run
 	// without asking first.
 	Trusted bool `toml:"trusted,omitempty"`
@@ -201,6 +211,9 @@ func userActionProblem(a UserAction, normalizer *KeyNormalizer, builtin func(str
 		}
 	} else if a.In != "" {
 		return "The value in is only for run. Remove it."
+	}
+	if p := whenProblem(a.When); p != "" {
+		return p
 	}
 	for _, t := range a.Targets {
 		if !slices.Contains(UserActionTargets, t) {
@@ -347,4 +360,52 @@ func (c *UserConfig) keyedEntries() []keyedEntry {
 		out = append(out, keyedEntry{section: cb.Section(), key: cb.BareKey(), action: a.ActionName(), desc: a.DisplayLabel(), report: SectionAction})
 	}
 	return out
+}
+
+// whenProblem is why a when table cannot be read, or "".
+func whenProblem(when map[string]any) string {
+	for _, k := range slices.Sorted(maps.Keys(when)) {
+		if !slices.Contains(UserActionWhenKeys, k) {
+			return fmt.Sprintf("The when key %q is not known. Use %s.", k, strings.Join(UserActionWhenKeys, ", "))
+		}
+		if _, ok := whenValues(when[k]); !ok {
+			return fmt.Sprintf("The when value of %q is not a string or a list of strings.", k)
+		}
+	}
+	return ""
+}
+
+// whenValues is a when value as its strings.
+func whenValues(v any) ([]string, bool) {
+	switch v := v.(type) {
+	case string:
+		return []string{v}, true
+	case bool:
+		return []string{strconv.FormatBool(v)}, true
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, e := range v {
+			s, ok := e.(string)
+			if !ok {
+				return nil, false
+			}
+			out = append(out, s)
+		}
+		return out, len(out) > 0
+	case []string:
+		return v, len(v) > 0
+	}
+	return nil, false
+}
+
+// WhenMatches reports whether facts meet every condition of when. An empty
+// when always matches, and a condition tuios cannot read never does.
+func WhenMatches(when map[string]any, facts map[string]string) bool {
+	for k, v := range when {
+		vals, ok := whenValues(v)
+		if !ok || !slices.Contains(vals, facts[k]) {
+			return false
+		}
+	}
+	return true
 }

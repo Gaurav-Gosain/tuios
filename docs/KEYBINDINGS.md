@@ -1292,6 +1292,51 @@ needs the respond grant.
 run, with the placeholders filled ([CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-actions)).
 A mistake in an entry is a warning, and tuios ignores that entry.
 
+### Your menus
+
+A `[menus.TARGET]` table changes the right-click menu of a target: `pane`,
+`selection`, `desktop`, `dock`, `dock_item`, `workspace`, `session`, `repo`,
+`machine` or `file`. You change the shipped rows. You do not copy them.
+
+```toml
+[menus.pane]
+add = ["user:open-in-editor", { menu = "tools" }]
+after = "toggle_zoom"
+remove = ["screenshot_window"]
+
+[menus.tools]
+title = "Tools"
+items = ["user:deploy", "---", "new_window"]
+```
+
+| Key | Does |
+|---|---|
+| `add` | Puts the rows after the row whose action is `after`, or at the end |
+| `remove` | Removes the rows with these actions |
+| `items` | Replaces all the rows |
+| `title` | Names a submenu |
+
+A row is an action name, `"---"` for a separator, or `{ menu = "NAME" }`,
+which opens the submenu `[menus.NAME]` in the place of the menu. A submenu row
+acts on the target of the first menu. A shipped action keeps its label and
+its state (a dimmed row stays dimmed). Another built-in action shows its
+description.
+
+A `user:NAME` row shows only on the targets in the action's `targets` (a pane
+when it has none), and only while its `when` matches the focused pane:
+
+```toml
+[[actions]]
+name = "explain-error"
+targets = ["pane", "selection"]
+when = { agent_state = ["idle", "done"], program = "claude" }
+action = "copy_selection"
+```
+
+`when` reads `agent_state`, `harness`, `program`, `host` and `has_selection`
+(`"true"` or `"false"`). Each value is a string or a list of strings, and the
+fact must equal one of them.
+
 ## Master-stack layout
 
 The layout prefix (`Ctrl+B L`) has keys for the master-stack layout. They act

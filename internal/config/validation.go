@@ -149,6 +149,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validateWorktree(cfg, result)
 	validateTasks(cfg, result)
 	validateUserActions(cfg, result)
+	validateMenusConfig(cfg, result)
 
 	// Validate the notifications section (warn on a duration tuios cannot use)
 	validateNotificationsConfig(cfg, result)

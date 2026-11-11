@@ -1,8 +1,11 @@
 package input
 
 import (
+	"strings"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // runContextMenuAction dispatches an action chosen from a context menu.
@@ -14,6 +17,8 @@ import (
 // there is already one popup in this codebase describing keys from a
 // hand-written table rather than from the registry.
 //
+// A menu:NAME row opens the submenu NAME where the menu was.
+//
 // An empty action means the click landed on the menu but not on a runnable row,
 // or that the menu was dismissed; either way nothing runs.
 //
@@ -23,6 +28,11 @@ import (
 // menu offers.
 func runContextMenuAction(action string, o *app.OS) (*app.OS, tea.Cmd) {
 	if action == "" {
+		return o, nil
+	}
+	if name, ok := strings.CutPrefix(action, config.MenuRowPrefix); ok {
+		o.OpenSubmenu(name)
+		o.ClearMenuTarget()
 		return o, nil
 	}
 	dispatcher := GetDispatcher()

@@ -243,7 +243,6 @@ func (m *OS) paneMenu(windowIndex int) (string, []ContextMenuItem) {
 		win = m.Windows[windowIndex]
 	}
 
-	hasSelection := win.HasSelection()
 	// Pasting reaches the shell only from terminal mode; the clipboard reply is
 	// dropped in every other mode. Dimming says so rather than letting the row
 	// look live and do nothing.
@@ -251,32 +250,17 @@ func (m *OS) paneMenu(windowIndex int) (string, []ContextMenuItem) {
 	// A browser tab never sends the clipboard at all, so the row is dimmed there
 	// in every mode. It read as fully live and did nothing when clicked, which
 	// is the inert control this project forbids. See ClipboardReadUnsupportedReason.
-	canPaste := m.Mode == TerminalMode && m.ClipboardReadUnsupportedReason() == ""
-	canSplit := m.AutoTiling
+	//
 	// A scratch pane splits and zooms inside its group. It is not minimized:
-	// the scratch key hides the whole group.
-	scratch := isScratch(win)
-
-	closeItem := m.item(glyphClose, "Close pane", "close_window", false)
-	closeItem.Warn = true
-
-	return contextMenuWindowName(m, windowIndex, "Pane"), []ContextMenuItem{
-		m.item(glyphCopy, "Copy selection", "copy_selection", !hasSelection),
-		m.item(glyphPaste, "Paste", "paste_clipboard", !canPaste),
-		separator(),
-		m.item(glyphSplitV, "Split right", "split_vertical", !canSplit),
-		m.item(glyphSplitH, "Split down", "split_horizontal", !canSplit),
-		separator(),
-		// Never dimmed for a hidden title bar: the editor is a centred dialog and
-		// draws its own frame wherever the name happens to show.
-		m.item(glyphRename, "Rename", "rename_window", false),
-		// An accent shows on the rail, so there is nothing to set without one.
-		m.item(glyphPalette, "Accent color", "set_accent", !m.SidebarActive()),
-		m.item(glyphZoom, "Zoom", "toggle_zoom", false),
-		m.item(glyphCopy, "Screenshot this window", "screenshot_window", false),
-		m.item(glyphMinimize, "Minimize", "minimize_window", scratch),
-		closeItem,
-	}
+	// the scratch key hides the whole group. An accent shows on the rail, so
+	// there is nothing to set without one. Rename is never dimmed for a hidden
+	// title bar: the editor is a centred dialog.
+	return contextMenuWindowName(m, windowIndex, "Pane"), m.menu("pane",
+		is(win.HasSelection(), mfSelection)|
+			is(m.Mode == TerminalMode && m.ClipboardReadUnsupportedReason() == "", mfCanPaste)|
+			is(m.AutoTiling, mfCanSplit)|
+			is(isScratch(win), mfScratch)|
+			is(m.SidebarActive(), mfSidebar))
 }
 
 // dockItemMenu is the menu for one minimized window in the dock.
@@ -284,18 +268,7 @@ func (m *OS) paneMenu(windowIndex int) (string, []ContextMenuItem) {
 // Restoring the nth minimized window is only an action for the first nine of
 // them, so a tenth entry shows the row dimmed rather than pretending.
 func (m *OS) dockItemMenu(windowIndex int) (string, []ContextMenuItem) {
-	title := contextMenuWindowName(m, windowIndex, "Window")
-
-	pos := m.minimizedPosition(windowIndex)
-	action := ""
-	if pos >= 0 && pos < 9 {
-		action = "restore_minimized_" + string(rune('1'+pos))
-	}
-
-	return title, []ContextMenuItem{
-		m.item(glyphRestore, "Restore", action, action == ""),
-		m.item(glyphRestore, "Restore all", "restore_all", false),
-	}
+	return contextMenuWindowName(m, windowIndex, "Window"), m.dockItemRows(m.minimizedPosition(windowIndex))
 }
 
 // workspacePillMenu is the menu for one workspace tab in the dock's strip. It
@@ -309,36 +282,18 @@ func (m *OS) dockItemMenu(windowIndex int) (string, []ContextMenuItem) {
 // tab's workspace, Close included: it raises close_workspace's confirmation for
 // this workspace, and is dimmed when the workspace has no pane to close.
 func (m *OS) workspacePillMenu(ws int) (string, []ContextMenuItem) {
-	closeItem := m.item(glyphClose, "Close", "close_workspace", len(m.workspacePanes(ws)) == 0)
-	closeItem.Warn = true
-	return printableTitle(m.WorkspaceLabel(ws)), []ContextMenuItem{
-		m.item(glyphSwitch, "Switch to", "workspace_pill_switch", ws == m.CurrentWorkspace),
-		m.item(glyphRename, "Rename", "workspace_prefix_rename", false),
-		separator(),
-		closeItem,
-	}
+	return printableTitle(m.WorkspaceLabel(ws)), m.menu("workspace", is(ws == m.CurrentWorkspace, mfWsCurrent)|is(len(m.workspacePanes(ws)) == 0, mfWsEmpty))
 }
 
 // dockMenu is the menu for the dock away from any of its entries.
 func (m *OS) dockMenu() (string, []ContextMenuItem) {
-	return "Dock", []ContextMenuItem{
-		m.item(glyphNew, "New window", "new_window", false),
-		m.item(glyphTiling, "Toggle tiling", "toggle_tiling", false),
-		m.item(glyphRestore, "Restore all", "restore_all", !m.HasMinimizedWindows()),
-	}
+	return "Dock", m.menu("dock", is(m.HasMinimizedWindows(), mfMinimized))
 }
 
 // desktopMenu is the menu for empty space: making something appear, and the
 // session-wide overlays.
 func (m *OS) desktopMenu() (string, []ContextMenuItem) {
-	return "Desktop", []ContextMenuItem{
-		m.item(glyphNew, "New window", "new_window", false),
-		m.item(glyphTiling, "Toggle tiling", "toggle_tiling", false),
-		separator(),
-		m.item(glyphPalette, "Command palette", "command_palette", false),
-		m.item(glyphSettings, "Settings", "open_settings", false),
-		m.item(glyphHelp, "Help", "toggle_help", false),
-	}
+	return "Desktop", m.menu("desktop", 0)
 }
 
 // sessionMenu mirrors the quit menu's rows for a sidebar session row: the
@@ -368,55 +323,24 @@ func (m *OS) sessionMenu(sessionID string) (string, []ContextMenuItem) {
 	if sessionID == "" {
 		sessionID = m.SessionName
 	}
-	attached := sessionID == m.SessionName
-	hasOthers := len(m.otherSessionNames()) > 0
-
-	kill := []ContextMenuItem{m.item(glyphClose, "Kill session", "kill_session", false)}
-	if attached {
-		killNext := m.item(glyphClose, "Kill session, go to next", "kill_session_next", !hasOthers)
-		killQuitAction := "kill_session_quit"
-		if m.sessionDeletableWorktree(m.SessionName) != nil {
-			killQuitAction = "prefix_close_session"
-		}
-		killQuit := m.item(glyphClose, "Kill session and quit", killQuitAction, false)
-		kill = []ContextMenuItem{killNext, killQuit}
-	}
-	for i := range kill {
-		kill[i].Warn = true
-	}
-
 	// The menu heads with what the session is called, which is its display name
 	// once it has one.
 	title := m.SessionLabel(sessionID)
 	if title == "" {
 		title = "Session"
 	}
-	rows := []ContextMenuItem{
-		// Renaming and colouring both belong to the row's own session, so both
-		// are offered on every row and both read the menu's target rather than
-		// the attached session.
-		m.item(glyphRename, "Rename", "rename_session", false),
-		m.item(glyphPalette, "Session color", "set_session_accent", false),
-		m.item(glyphRename, "Note...", "set_note", false),
-		m.item(glyphDetach, "Detach", "prefix_detach", !attached),
-		m.item(glyphSwitch, "Switch session...", "prefix_session_switcher", false),
-		// Dimmed off the attached session for the same reason detach is: go-to
-		// opens on the workspaces of the session this client is in, and there is
-		// only one of those. Offered live on another session's row it read as
-		// "this session's workspaces" and opened the attached session's,
-		// which is a row naming one session and acting on another.
-		m.item(glyphSwitch, "Switch workspace...", "prefix_workspace_switcher", !attached),
-		// A worktree of the session's repository. The dialog and the verb behind
-		// it need the repository's main checkout, which the rail only knows for
-		// a session in a worktree or in the main checkout, so those are the rows
-		// it is live on — dimmed elsewhere, saying the action exists, the way the
-		// pane menu dims a paste it cannot reach.
-		m.item(glyphNew, "New worktree...", "session_new_worktree", m.sessionWorktreeInfo(sessionID) == nil),
-	}
-	if repo := m.sidebarHeadRepo(sessionID); repo != "" {
-		rows = append(rows, m.repoFoldItem(repo))
-	}
-	return title, append(append(rows, separator()), kill...)
+	attached := sessionID == m.SessionName
+	repo := m.sidebarHeadRepo(sessionID)
+	// A worktree of the session's repository needs the repository's main
+	// checkout, which the rail only knows for a session in a worktree or in
+	// the main checkout.
+	return title, m.menu("session",
+		is(attached, mfAttached)|
+			is(len(m.otherSessionNames()) > 0, mfOthers)|
+			is(attached && m.sessionDeletableWorktree(m.SessionName) != nil, mfDeletable)|
+			is(m.sessionWorktreeInfo(sessionID) == nil, mfNoWorktree)|
+			is(repo != "", mfHeadRepo)|
+			is(repo != "" && m.SidebarRepoCollapsed(repo), mfCollapsed))
 }
 
 // repoHeaderMenu is the menu for a repository's group header on the rail: the
@@ -429,21 +353,8 @@ func (m *OS) repoHeaderMenu(repo string) (string, []ContextMenuItem) {
 	if title == "" {
 		title = "Repository"
 	}
-	return title, []ContextMenuItem{
-		// Live only while some cached session names the repository, which for a
-		// header on screen is every moment but the one where the listing changed
-		// since it was drawn.
-		m.item(glyphNew, "New worktree...", "repo_new_worktree", m.worktreeRepoRoot(repo) == ""),
-		m.repoFoldItem(repo),
-	}
-}
-
-// repoFoldItem is the menu row that folds or opens a repository's group.
-func (m *OS) repoFoldItem(repo string) ContextMenuItem {
-	if m.SidebarRepoCollapsed(repo) {
-		return m.item(glyphDown, "Unfold group", "repo_toggle_fold", false)
-	}
-	return m.item(glyphUp, "Fold group", "repo_toggle_fold", false)
+	// New worktree is live only while some cached session names the repository.
+	return title, m.menu("repo", mfHeadRepo|is(m.worktreeRepoRoot(repo) == "", mfNoRepoRoot)|is(m.SidebarRepoCollapsed(repo), mfCollapsed))
 }
 
 // OpenSelectionMenu opens the small terminal-mode selection menu: what you can
@@ -461,11 +372,7 @@ func (m *OS) OpenSelectionMenu(x, y, windowIndex int) {
 		ItemH:       1,
 	}
 	cm.Title = "Selection"
-	cm.Items = []ContextMenuItem{
-		m.item(glyphCopy, "Copy selection", "copy_selection", false),
-		m.item(glyphPaste, "Paste", "paste_clipboard", false),
-		m.item(glyphClear, "Clear selection", "clear_selection", false),
-	}
+	cm.Items = m.menu("selection", 0)
 	cm.Selected = cm.Next(1)
 	m.ContextMenu = cm
 }
@@ -501,15 +408,8 @@ func (m *OS) machineMenu(host string) (string, []ContextMenuItem) {
 	if title == "" {
 		title = "Machine"
 	}
-	items := []ContextMenuItem{
-		m.item(glyphUp, "Move up", "reorder_up", first),
-		m.item(glyphDown, "Move down", "reorder_down", last),
-	}
 	// This machine's daemon is the one this client can restart.
-	if host == federation.LocalHostName && m.DaemonRestartAvailable() {
-		items = append(items, separator(), m.item(glyphRestore, "Restart the daemon", "restart_daemon", false))
-	}
-	return title, items
+	return title, m.menu("machine", is(first, mfFirst)|is(last, mfLast)|is(host == federation.LocalHostName && m.DaemonRestartAvailable(), mfRestart))
 }
 
 // ============================================================================
@@ -551,59 +451,10 @@ func (m *OS) fileRowMenu(t fileMenuTarget) (string, []ContextMenuItem) {
 	// are allowed, so it asks only that the section is up.
 	canOpen := m.filesOn() && (t.Name != "" || t.Up)
 
-	open := m.item(glyphFile, "Open", "file_open", true)
-	switch {
-	case t.Up:
-		open = m.item(glyphUp, "Go up", "file_open", !canOpen)
-	case t.IsDir && t.Name != "":
-		open = m.item(glyphFolder, "Open folder", "file_open", !canOpen)
-	case t.Name != "":
-		open = m.item(glyphCopy, "Copy path", "file_open", !canOpen)
-	}
-
-	del := m.item(glyphClose, "Delete", "file_delete", !hasTarget)
-	del.Warn = true
-	forever := m.item(glyphClose, "Delete for good", "file_delete_forever", !hasTarget)
-	forever.Warn = true
-
-	rows := []ContextMenuItem{open}
-	// Preview only reads, so it is gated the way Open is. The ".." row names
-	// the folder above, which quick look has nothing to show for.
-	if t.Name != "" && !t.Up {
-		rows = append(rows, m.item(glyphPalette, "Preview", "file_quick_look", !canOpen))
-	}
-	if t.Name != "" && !t.IsDir && !t.Up {
-		rows = append(rows, m.item(glyphFile, "Edit", "file_edit", !canOpen))
-	}
-	// Live on a far listing too, so the row says why it can not open there
-	// instead of being a dimmed row with no reason.
-	if t.Name != "" && !t.Up {
-		rows = append(rows, m.item(glyphFile, "Open with system", "file_open_system", !canOpen))
-	}
-	// A file's first row already copies its path. A folder's opens it, so the
-	// copy is a row of its own (issue #414).
-	if t.Name != "" && t.IsDir && !t.Up {
-		rows = append(rows, m.item(glyphCopy, "Copy path", "file_copy_path", !canOpen))
-	}
-	return fileMenuTitle(t), append(rows,
-		separator(),
-		m.item(glyphCopy, "Copy", "file_copy", !hasTarget),
-		m.item(glyphCut, "Cut", "file_cut", !hasTarget),
-		// Paste puts the clipboard into the folder on screen, so it needs a
-		// clipboard and not a target. It overwrites nothing, which is why it is
-		// live here with no dialog behind it; see SidebarFilePaste.
-		m.item(glyphPaste, "Paste", "file_paste", !on || m.fileClip.Empty()),
-		// Send copies the row to another machine, after it asks which one
-		// and which folder there. See transfers_dialog.go.
-		m.item(glyphCopy, "Send to host", "file_send", !hasTarget),
-		// The keyboard and menu form of dragging the row onto a pane.
-		m.item(glyphPaste, "Paste path in pane", "file_insert_path", t.Name == "" || t.Up || m.GetFocusedWindow() == nil),
-		separator(),
-		m.item(glyphNew, "New file or folder", "file_create", !on),
-		m.item(glyphRename, "Rename", "file_rename", !hasTarget),
-		del,
-		forever,
-	)
+	return fileMenuTitle(t), m.menu("file",
+		is(t.Up, mfUp)|is(t.IsDir, mfDir)|is(t.Name != "", mfNamed)|
+			is(on, mfOn)|is(hasTarget, mfTarget)|is(canOpen, mfCanOpen)|
+			is(m.fileClip.Empty(), mfClipEmpty)|is(m.GetFocusedWindow() == nil, mfNoFocus))
 }
 
 // fileMenuTitle heads the menu with what it will act on: the name for a row of

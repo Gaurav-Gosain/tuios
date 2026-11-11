@@ -2160,6 +2160,9 @@ type OS struct {
 	// gap between the menu closing and its row's action being dispatched. See
 	// TakeMenuWorkspace.
 	menuWorkspace int
+	// menuFrom is the menu a row was taken from, so a submenu row opens the
+	// submenu at its anchor and on its target. See OpenSubmenu.
+	menuFrom *ContextMenu
 	// menuSession carries the session a rail row's menu was opened on, the same
 	// way menuWorkspace carries a pill's. See TakeMenuSession.
 	menuSession string

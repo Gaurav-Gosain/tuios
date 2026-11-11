@@ -154,6 +154,9 @@ type ContextMenu struct {
 	// user can see, not against a scroll offset that may have moved since.
 	Scroll     int
 	ScrollFrom int
+
+	// depth counts the submenus opened in a row to reach this menu.
+	depth int
 }
 
 // selectable reports whether row i can be highlighted and run.
@@ -251,6 +254,7 @@ func (m *OS) ContextMenuSelectedAction() string {
 // being taken. See TakeMenuWorkspace.
 func (m *OS) carryMenuTarget(cm *ContextMenu) {
 	m.menuWorkspace, m.menuSession, m.menuRepo, m.menuFile = cm.Workspace, cm.SessionID, cm.Repo, cm.File
+	m.menuFrom = cm
 }
 
 // TakeMenuWorkspace returns the workspace whose pill menu produced the action
@@ -273,6 +277,7 @@ func (m *OS) TakeMenuRepo() string { return m.menuRepo }
 // menu row.
 func (m *OS) ClearMenuTarget() {
 	m.menuWorkspace, m.menuSession, m.menuRepo, m.menuFile = 0, "", "", fileMenuTarget{}
+	m.menuFrom = nil
 }
 
 // ContextMenuMove moves the selection by delta, skipping separators and dimmed

@@ -17056,3 +17056,17 @@ Run on 2026-11-11 on macOS (arm64). The branch passes.
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
 | `RunUserAction` joining the arguments into one `sh -c` line | "the key never ran the action": the title's quote breaks the line, so the command never writes its file | **caught** |
+
+## Menus from config add, remove and open a submenu
+
+`TestMenusFromConfigAddRemoveAndOpenASubmenu` adds rows to the pane menu
+after Zoom, removes one, adds a submenu, and checks that a user action shows
+only on its targets and while its `when` matches. It opens the submenu and
+runs its row, which writes the pane's name, holding `$(...)` and quotes,
+whole.
+
+Run on 2026-11-11 on macOS (arm64). The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `userActionRow` not reading the action's `targets` | `the pane menu shows "Desktop only row"` | **caught** |
