@@ -40,6 +40,24 @@ type ActionSpec struct {
 	Run   RunScope
 	// Hidden keeps the action out of the lists a person reads.
 	Hidden bool
+	// GUI lets the GUI bridge's action command run it (see
+	// internal/guibridge). The bridge has no screen, so these are the actions
+	// that change the session: its panes, their layout, the workspaces and
+	// the focus.
+	GUI bool
+	// Repeat keeps the prefix armed after the action when
+	// keybindings.repeat is unset (DefaultPrefixRepeat): the same key again
+	// continues.
+	Repeat bool
+	// Mobile puts the action on the web client's phone bar.
+	Mobile MobileButton
+}
+
+// MobileButton is an action's button on the web client's phone bar: its
+// label, and its place from the left. A zero Order means no button.
+type MobileButton struct {
+	Label string
+	Order uint8
 }
 
 // actionTable is every action tuios knows. A new action is one entry here.
@@ -199,114 +217,114 @@ var actionTable = [...]ActionSpec{
 	{Name: "reorder_down", Desc: "Rail: move this session or machine down"},
 
 	// Window Management
-	{Name: "new_window", Desc: "New window"},
+	{Name: "new_window", Desc: "New window", GUI: true},
 	{Name: "new_window_ssh", Desc: "New window that runs the focused pane's ssh"},
-	{Name: "close_window", Desc: "Close window"},
+	{Name: "close_window", Desc: "Close window", GUI: true},
 	{Name: "rename_window", Desc: "Rename window"},
 	{Name: "set_accent", Desc: "Accent color"},
 	// Reached from the rail's session row and its menu; the row carries which
 	// session, so it has no key of its own.
 	{Name: "set_session_accent", Desc: "Session color"},
 	{Name: "set_note", Desc: "Write a note for the session: what it is for or what comes next"},
-	{Name: "minimize_window", Desc: "Minimize window"},
-	{Name: "restore_all", Desc: "Restore all minimized"},
-	{Name: "toggle_zoom", Desc: "Toggle zoom (fullscreen)"},
+	{Name: "minimize_window", Desc: "Minimize window", GUI: true},
+	{Name: "restore_all", Desc: "Restore all minimized", GUI: true},
+	{Name: "toggle_zoom", Desc: "Toggle zoom (fullscreen)", GUI: true},
 	{Name: "toggle_pip", Desc: "Pin or unpin the picture-in-picture view"},
 	{Name: "focus_rail_pane", Desc: "Type into the pane in the rail"},
 	{Name: "start_screensaver", Desc: "Start the screen saver now"},
 	{Name: "screenshot", Desc: "Pick what to screenshot"},
 	{Name: "screenshot_window", Desc: "Screenshot this window"},
 	{Name: "screenshot_screen", Desc: "Screenshot the whole screen"},
-	{Name: "next_window", Desc: "Next window"},
-	{Name: "prev_window", Desc: "Previous window"},
-	{Name: "last_pane", Desc: "Back to the previous pane"},
-	{Name: "select_window_", Desc: "Select window %d", Count: 9},
+	{Name: "next_window", Desc: "Next window", GUI: true, Repeat: true},
+	{Name: "prev_window", Desc: "Previous window", GUI: true, Repeat: true},
+	{Name: "last_pane", Desc: "Back to the previous pane", GUI: true},
+	{Name: "select_window_", Desc: "Select window %d", Count: 9, GUI: true},
 
 	// Multifocus. Neither action has a default key.
-	{Name: "toggle_multifocus_active", Desc: "Add or remove the focused pane from multifocus"},
-	{Name: "toggle_multifocus_all", Desc: "Add all panes on the workspace to multifocus, or clear it"},
+	{Name: "toggle_multifocus_active", Desc: "Add or remove the focused pane from multifocus", GUI: true},
+	{Name: "toggle_multifocus_all", Desc: "Add all panes on the workspace to multifocus, or clear it", GUI: true},
 	{Name: "close_workspace", Desc: "Close every pane on a workspace, after a confirmation"},
 
 	// Workspaces
-	{Name: "next_workspace", Desc: "Switch to the next workspace that has panes"},
-	{Name: "prev_workspace", Desc: "Switch to the previous workspace that has panes"},
-	{Name: "switch_workspace_", Desc: "Switch to workspace %d", Count: 9},
-	{Name: "move_and_follow_", Desc: "Move to workspace %d and follow", Count: 9},
+	{Name: "next_workspace", Desc: "Switch to the next workspace that has panes", Repeat: true},
+	{Name: "prev_workspace", Desc: "Switch to the previous workspace that has panes", Repeat: true},
+	{Name: "switch_workspace_", Desc: "Switch to workspace %d", Count: 9, GUI: true},
+	{Name: "move_and_follow_", Desc: "Move to workspace %d and follow", Count: 9, GUI: true},
 	// Reached by the chord and by a dock pill's menu, so both name it the same.
 	{Name: "workspace_prefix_rename", Desc: "Rename workspace"},
 	{Name: "workspace_pill_switch", Desc: "Switch to workspace"},
 
 	// Layout
-	{Name: "snap_left", Desc: "Snap or focus left"},
-	{Name: "snap_right", Desc: "Snap or focus right"},
-	{Name: "focus_up", Desc: "Focus the window above"},
-	{Name: "focus_down", Desc: "Focus the window below"},
-	{Name: "snap_fullscreen", Desc: "Fullscreen"},
-	{Name: "unsnap", Desc: "Unsnap"},
-	{Name: "snap_corner_1", Desc: "Snap to top-left"},
-	{Name: "snap_corner_2", Desc: "Snap to top-right"},
-	{Name: "snap_corner_3", Desc: "Snap to bottom-left"},
-	{Name: "snap_corner_4", Desc: "Snap to bottom-right"},
-	{Name: "toggle_tiling", Desc: "Toggle tiling mode"},
-	{Name: "swap_left", Desc: "Swap left"},
-	{Name: "swap_right", Desc: "Swap right"},
-	{Name: "swap_up", Desc: "Swap up"},
-	{Name: "swap_down", Desc: "Swap down"},
-	{Name: "resize_master_shrink", Desc: "Decrease pane width"},
-	{Name: "resize_master_grow", Desc: "Increase pane width"},
-	{Name: "resize_height_shrink", Desc: "Decrease focused window height"},
-	{Name: "resize_height_grow", Desc: "Increase focused window height"},
-	{Name: "resize_master_shrink_left", Desc: "Decrease pane width from left edge"},
-	{Name: "resize_master_grow_left", Desc: "Increase pane width from left edge"},
-	{Name: "resize_height_shrink_top", Desc: "Decrease focused window height from top edge"},
-	{Name: "resize_height_grow_top", Desc: "Increase focused window height from top edge"},
-	{Name: "resize_width_10", Desc: "Set focused window width to 10%"},
-	{Name: "resize_width_20", Desc: "Set focused window width to 20%"},
-	{Name: "resize_width_30", Desc: "Set focused window width to 30%"},
-	{Name: "resize_width_40", Desc: "Set focused window width to 40%"},
-	{Name: "resize_width_50", Desc: "Set focused window width to 50%"},
-	{Name: "resize_width_60", Desc: "Set focused window width to 60%"},
-	{Name: "resize_width_70", Desc: "Set focused window width to 70%"},
-	{Name: "resize_width_80", Desc: "Set focused window width to 80%"},
-	{Name: "resize_width_90", Desc: "Set focused window width to 90%"},
-	{Name: "resize_height_10", Desc: "Set focused window height to 10%"},
-	{Name: "resize_height_20", Desc: "Set focused window height to 20%"},
-	{Name: "resize_height_30", Desc: "Set focused window height to 30%"},
-	{Name: "resize_height_40", Desc: "Set focused window height to 40%"},
-	{Name: "resize_height_50", Desc: "Set focused window height to 50%"},
-	{Name: "resize_height_60", Desc: "Set focused window height to 60%"},
-	{Name: "resize_height_70", Desc: "Set focused window height to 70%"},
-	{Name: "resize_height_80", Desc: "Set focused window height to 80%"},
-	{Name: "resize_height_90", Desc: "Set focused window height to 90%"},
+	{Name: "snap_left", Desc: "Snap or focus left", GUI: true},
+	{Name: "snap_right", Desc: "Snap or focus right", GUI: true},
+	{Name: "focus_up", Desc: "Focus the window above", GUI: true, Repeat: true},
+	{Name: "focus_down", Desc: "Focus the window below", GUI: true, Repeat: true},
+	{Name: "snap_fullscreen", Desc: "Fullscreen", GUI: true},
+	{Name: "unsnap", Desc: "Unsnap", GUI: true},
+	{Name: "snap_corner_1", Desc: "Snap to top-left", GUI: true},
+	{Name: "snap_corner_2", Desc: "Snap to top-right", GUI: true},
+	{Name: "snap_corner_3", Desc: "Snap to bottom-left", GUI: true},
+	{Name: "snap_corner_4", Desc: "Snap to bottom-right", GUI: true},
+	{Name: "toggle_tiling", Desc: "Toggle tiling mode", GUI: true},
+	{Name: "swap_left", Desc: "Swap left", GUI: true},
+	{Name: "swap_right", Desc: "Swap right", GUI: true},
+	{Name: "swap_up", Desc: "Swap up", GUI: true},
+	{Name: "swap_down", Desc: "Swap down", GUI: true},
+	{Name: "resize_master_shrink", Desc: "Decrease pane width", GUI: true, Repeat: true},
+	{Name: "resize_master_grow", Desc: "Increase pane width", GUI: true, Repeat: true},
+	{Name: "resize_height_shrink", Desc: "Decrease focused window height", GUI: true, Repeat: true},
+	{Name: "resize_height_grow", Desc: "Increase focused window height", GUI: true, Repeat: true},
+	{Name: "resize_master_shrink_left", Desc: "Decrease pane width from left edge", GUI: true, Repeat: true},
+	{Name: "resize_master_grow_left", Desc: "Increase pane width from left edge", GUI: true, Repeat: true},
+	{Name: "resize_height_shrink_top", Desc: "Decrease focused window height from top edge", GUI: true, Repeat: true},
+	{Name: "resize_height_grow_top", Desc: "Increase focused window height from top edge", GUI: true, Repeat: true},
+	{Name: "resize_width_10", Desc: "Set focused window width to 10%", GUI: true},
+	{Name: "resize_width_20", Desc: "Set focused window width to 20%", GUI: true},
+	{Name: "resize_width_30", Desc: "Set focused window width to 30%", GUI: true},
+	{Name: "resize_width_40", Desc: "Set focused window width to 40%", GUI: true},
+	{Name: "resize_width_50", Desc: "Set focused window width to 50%", GUI: true},
+	{Name: "resize_width_60", Desc: "Set focused window width to 60%", GUI: true},
+	{Name: "resize_width_70", Desc: "Set focused window width to 70%", GUI: true},
+	{Name: "resize_width_80", Desc: "Set focused window width to 80%", GUI: true},
+	{Name: "resize_width_90", Desc: "Set focused window width to 90%", GUI: true},
+	{Name: "resize_height_10", Desc: "Set focused window height to 10%", GUI: true},
+	{Name: "resize_height_20", Desc: "Set focused window height to 20%", GUI: true},
+	{Name: "resize_height_30", Desc: "Set focused window height to 30%", GUI: true},
+	{Name: "resize_height_40", Desc: "Set focused window height to 40%", GUI: true},
+	{Name: "resize_height_50", Desc: "Set focused window height to 50%", GUI: true},
+	{Name: "resize_height_60", Desc: "Set focused window height to 60%", GUI: true},
+	{Name: "resize_height_70", Desc: "Set focused window height to 70%", GUI: true},
+	{Name: "resize_height_80", Desc: "Set focused window height to 80%", GUI: true},
+	{Name: "resize_height_90", Desc: "Set focused window height to 90%", GUI: true},
 
 	// BSP Tiling
-	{Name: "split_horizontal", Desc: "Split window horizontally (top/bottom)"},
-	{Name: "split_vertical", Desc: "Split window vertically (left/right)"},
+	{Name: "split_horizontal", Desc: "Split window horizontally (top/bottom)", GUI: true},
+	{Name: "split_vertical", Desc: "Split window vertically (left/right)", GUI: true},
 	{Name: "split_ssh_horizontal", Desc: "Split top/bottom, and run the focused pane's ssh in the new pane"},
 	{Name: "split_ssh_vertical", Desc: "Split left/right, and run the focused pane's ssh in the new pane"},
-	{Name: "rotate_split", Desc: "Rotate split"},
-	{Name: "equalize_splits", Desc: "Equalize all split ratios"},
-	{Name: "preselect_left", Desc: "Preselect left for next window"},
-	{Name: "preselect_right", Desc: "Preselect right for next window"},
-	{Name: "preselect_up", Desc: "Preselect up for next window"},
-	{Name: "preselect_down", Desc: "Preselect down for next window"},
-	{Name: "cycle_tiling_scheme", Desc: "Cycle the workspace's tiling scheme: spiral, longest side, alternate, smart split"},
-	{Name: "set_tiling_scheme_spiral", Desc: "Set the workspace's tiling scheme to spiral"},
-	{Name: "set_tiling_scheme_longest_side", Desc: "Set the workspace's tiling scheme to longest side"},
-	{Name: "set_tiling_scheme_alternate", Desc: "Set the workspace's tiling scheme to alternate"},
-	{Name: "set_tiling_scheme_smart_split", Desc: "Set the workspace's tiling scheme to smart split"},
+	{Name: "rotate_split", Desc: "Rotate split", GUI: true},
+	{Name: "equalize_splits", Desc: "Equalize all split ratios", GUI: true},
+	{Name: "preselect_left", Desc: "Preselect left for next window", GUI: true},
+	{Name: "preselect_right", Desc: "Preselect right for next window", GUI: true},
+	{Name: "preselect_up", Desc: "Preselect up for next window", GUI: true},
+	{Name: "preselect_down", Desc: "Preselect down for next window", GUI: true},
+	{Name: "cycle_tiling_scheme", Desc: "Cycle the workspace's tiling scheme: spiral, longest side, alternate, smart split", GUI: true},
+	{Name: "set_tiling_scheme_spiral", Desc: "Set the workspace's tiling scheme to spiral", GUI: true},
+	{Name: "set_tiling_scheme_longest_side", Desc: "Set the workspace's tiling scheme to longest side", GUI: true},
+	{Name: "set_tiling_scheme_alternate", Desc: "Set the workspace's tiling scheme to alternate", GUI: true},
+	{Name: "set_tiling_scheme_smart_split", Desc: "Set the workspace's tiling scheme to smart split", GUI: true},
 
 	// Master-stack
-	{Name: "cycle_master_position", Desc: "Move the master panes to the next side: left, right, top, bottom, center"},
-	{Name: "set_master_position_left", Desc: "Put the master panes on the left"},
-	{Name: "set_master_position_right", Desc: "Put the master panes on the right"},
-	{Name: "set_master_position_top", Desc: "Put the master panes at the top"},
-	{Name: "set_master_position_bottom", Desc: "Put the master panes at the bottom"},
-	{Name: "set_master_position_center", Desc: "Put the master panes in the center, with the stack on both sides"},
-	{Name: "add_master", Desc: "Make one more pane a master pane"},
-	{Name: "remove_master", Desc: "Make one pane fewer a master pane"},
-	{Name: "swap_with_master", Desc: "Swap the focused pane with the master pane"},
-	{Name: "focus_master", Desc: "Focus the master pane"},
+	{Name: "cycle_master_position", Desc: "Move the master panes to the next side: left, right, top, bottom, center", GUI: true},
+	{Name: "set_master_position_left", Desc: "Put the master panes on the left", GUI: true},
+	{Name: "set_master_position_right", Desc: "Put the master panes on the right", GUI: true},
+	{Name: "set_master_position_top", Desc: "Put the master panes at the top", GUI: true},
+	{Name: "set_master_position_bottom", Desc: "Put the master panes at the bottom", GUI: true},
+	{Name: "set_master_position_center", Desc: "Put the master panes in the center, with the stack on both sides", GUI: true},
+	{Name: "add_master", Desc: "Make one more pane a master pane", GUI: true},
+	{Name: "remove_master", Desc: "Make one pane fewer a master pane", GUI: true},
+	{Name: "swap_with_master", Desc: "Swap the focused pane with the master pane", GUI: true},
+	{Name: "focus_master", Desc: "Focus the master pane", GUI: true},
 
 	// Mode Control
 	{Name: "enter_terminal_mode", Desc: "Enter terminal mode"},
@@ -316,13 +334,13 @@ var actionTable = [...]ActionSpec{
 	{Name: "open_settings", Desc: "Open settings"},
 	{Name: "quit", Desc: "Quit"},
 	{Name: "focus_sidebar", Desc: "Focus sidebar"},
-	{Name: "next_session", Desc: "Next session"},
-	{Name: "prev_session", Desc: "Previous session"},
+	{Name: "next_session", Desc: "Next session", GUI: true},
+	{Name: "prev_session", Desc: "Previous session", GUI: true},
 	{Name: "next_host", Desc: "Go to the next machine"},
 	{Name: "prev_host", Desc: "Go to the previous machine"},
-	{Name: "next_agent", Desc: "Next agent pane, in the rail's order"},
-	{Name: "prev_agent", Desc: "Previous agent pane, in the rail's order"},
-	{Name: "switch_session_", Desc: "Switch to session %d", Count: 9},
+	{Name: "next_agent", Desc: "Next agent pane, in the rail's order", GUI: true},
+	{Name: "prev_agent", Desc: "Previous agent pane, in the rail's order", GUI: true},
+	{Name: "switch_session_", Desc: "Switch to session %d", Count: 9, GUI: true},
 
 	// Clipboard
 	{Name: "copy_selection", Desc: "Copy selection to clipboard"},
@@ -334,7 +352,7 @@ var actionTable = [...]ActionSpec{
 	{Name: "hints", Desc: "Label the text on the pane to copy it"},
 	{Name: "display_panes", Desc: "Label the panes and focus one by its label"},
 	{Name: "pick_path", Desc: "Pick a file or folder and type its path at the cursor"},
-	{Name: "toggle_scratch", Desc: "Show or hide the scratch terminal"},
+	{Name: "toggle_scratch", Desc: "Show or hide the scratch terminal", GUI: true},
 	{Name: "toggle_calm", Desc: "Calm mode"},
 	{Name: "hints_all_panes", Desc: "Label the text on all panes to copy it"},
 
@@ -400,24 +418,24 @@ var actionTable = [...]ActionSpec{
 	{Name: "toggle_spotlight", Desc: "Toggle spotlight"},
 
 	// Prefix Mode
-	{Name: "prefix_new_window", Desc: "Create new window"},
-	{Name: "prefix_close_window", Desc: "Close current window"},
+	{Name: "prefix_new_window", Desc: "Create new window", GUI: true, Mobile: MobileButton{Label: "new", Order: 1}},
+	{Name: "prefix_close_window", Desc: "Close current window", GUI: true, Mobile: MobileButton{Label: "close", Order: 2}},
 	{Name: "prefix_rename_window", Desc: "Rename window"},
-	{Name: "prefix_settings", Desc: "Open settings"},
+	{Name: "prefix_settings", Desc: "Open settings", Mobile: MobileButton{Label: "config", Order: 10}},
 	{Name: "prefix_keybinds", Desc: "Open the keybind manager"},
-	{Name: "prefix_next_window", Desc: "Next window"},
-	{Name: "prefix_prev_window", Desc: "Previous window"},
-	{Name: "prefix_select_0", Desc: "Jump to window 0"},
-	{Name: "prefix_select_1", Desc: "Jump to window 1"},
-	{Name: "prefix_select_2", Desc: "Jump to window 2"},
-	{Name: "prefix_select_3", Desc: "Jump to window 3"},
-	{Name: "prefix_select_4", Desc: "Jump to window 4"},
-	{Name: "prefix_select_5", Desc: "Jump to window 5"},
-	{Name: "prefix_select_6", Desc: "Jump to window 6"},
-	{Name: "prefix_select_7", Desc: "Jump to window 7"},
-	{Name: "prefix_select_8", Desc: "Jump to window 8"},
-	{Name: "prefix_select_9", Desc: "Jump to window 9"},
-	{Name: "prefix_toggle_tiling", Desc: "Toggle tiling mode"},
+	{Name: "prefix_next_window", Desc: "Next window", GUI: true, Mobile: MobileButton{Label: "next", Order: 3}},
+	{Name: "prefix_prev_window", Desc: "Previous window", GUI: true, Mobile: MobileButton{Label: "prev", Order: 4}},
+	{Name: "prefix_select_0", Desc: "Jump to window 0", GUI: true},
+	{Name: "prefix_select_1", Desc: "Jump to window 1", GUI: true},
+	{Name: "prefix_select_2", Desc: "Jump to window 2", GUI: true},
+	{Name: "prefix_select_3", Desc: "Jump to window 3", GUI: true},
+	{Name: "prefix_select_4", Desc: "Jump to window 4", GUI: true},
+	{Name: "prefix_select_5", Desc: "Jump to window 5", GUI: true},
+	{Name: "prefix_select_6", Desc: "Jump to window 6", GUI: true},
+	{Name: "prefix_select_7", Desc: "Jump to window 7", GUI: true},
+	{Name: "prefix_select_8", Desc: "Jump to window 8", GUI: true},
+	{Name: "prefix_select_9", Desc: "Jump to window 9", GUI: true},
+	{Name: "prefix_toggle_tiling", Desc: "Toggle tiling mode", GUI: true, Mobile: MobileButton{Label: "tile", Order: 7}},
 	{Name: "prefix_workspace", Desc: "Enter workspace prefix"},
 	{Name: "prefix_minimize", Desc: "Enter minimize prefix"},
 	{Name: "prefix_window", Desc: "Enter window prefix"},
@@ -425,26 +443,26 @@ var actionTable = [...]ActionSpec{
 	{Name: "prefix_close_session", Desc: "Close session and panes"},
 	{Name: "prefix_exit_mode", Desc: "Leave terminal mode"},
 	{Name: "prefix_selection", Desc: "Enter copy/scrollback mode"},
-	{Name: "prefix_help", Desc: "Toggle help"},
+	{Name: "prefix_help", Desc: "Toggle help", Mobile: MobileButton{Label: "help", Order: 11}},
 	{Name: "prefix_debug", Desc: "Enter debug prefix"},
 	{Name: "prefix_tape", Desc: "Enter tape manager prefix"},
 	{Name: "prefix_quit", Desc: "Quit (daemon: kills session)"},
-	{Name: "prefix_fullscreen", Desc: "Fullscreen current window"},
-	{Name: "prefix_split_horizontal", Desc: "Split window horizontally"},
-	{Name: "prefix_split_vertical", Desc: "Split window vertically"},
+	{Name: "prefix_fullscreen", Desc: "Fullscreen current window", GUI: true, Mobile: MobileButton{Label: "zoom", Order: 5}},
+	{Name: "prefix_split_horizontal", Desc: "Split window horizontally", GUI: true, Mobile: MobileButton{Label: "hsplit", Order: 9}},
+	{Name: "prefix_split_vertical", Desc: "Split window vertically", GUI: true, Mobile: MobileButton{Label: "vsplit", Order: 8}},
 	{Name: "mark_pane", Desc: "Mark the focused pane, or clear the mark"},
 	{Name: "join_marked_left", Desc: "Join the marked pane left of this one"},
 	{Name: "join_marked_right", Desc: "Join the marked pane right of this one"},
 	{Name: "join_marked_up", Desc: "Join the marked pane above this one"},
 	{Name: "join_marked_down", Desc: "Join the marked pane below this one"},
-	{Name: "resize_pane_left_5", Desc: "Narrow the focused pane by 5"},
-	{Name: "resize_pane_right_5", Desc: "Widen the focused pane by 5"},
-	{Name: "resize_pane_up_5", Desc: "Shorten the focused pane by 5"},
-	{Name: "resize_pane_down_5", Desc: "Heighten the focused pane by 5"},
-	{Name: "resize_pane_left_20", Desc: "Narrow the focused pane by 20"},
-	{Name: "resize_pane_right_20", Desc: "Widen the focused pane by 20"},
-	{Name: "resize_pane_up_20", Desc: "Shorten the focused pane by 20"},
-	{Name: "resize_pane_down_20", Desc: "Heighten the focused pane by 20"},
+	{Name: "resize_pane_left_5", Desc: "Narrow the focused pane by 5", Repeat: true},
+	{Name: "resize_pane_right_5", Desc: "Widen the focused pane by 5", Repeat: true},
+	{Name: "resize_pane_up_5", Desc: "Shorten the focused pane by 5", Repeat: true},
+	{Name: "resize_pane_down_5", Desc: "Heighten the focused pane by 5", Repeat: true},
+	{Name: "resize_pane_left_20", Desc: "Narrow the focused pane by 20", Repeat: true},
+	{Name: "resize_pane_right_20", Desc: "Widen the focused pane by 20", Repeat: true},
+	{Name: "resize_pane_up_20", Desc: "Shorten the focused pane by 20", Repeat: true},
+	{Name: "resize_pane_down_20", Desc: "Heighten the focused pane by 20", Repeat: true},
 	{Name: "new_workspace", Desc: "Go to the first empty workspace"},
 	{Name: "last_workspace", Desc: "Go back to the last workspace"},
 	{Name: "break_pane", Desc: "Move the focused pane to the first empty workspace, and follow it"},
@@ -453,15 +471,15 @@ var actionTable = [...]ActionSpec{
 	{Name: "nest", Desc: "Send every key to the pane, the leader too, until nest_exit_key"},
 	{Name: "move_workspace_left", Desc: "Swap this workspace with the one before it"},
 	{Name: "move_workspace_right", Desc: "Swap this workspace with the one after it"},
-	{Name: "send_to_workspace_", Desc: "Send the focused pane to workspace %d", Count: 9},
+	{Name: "send_to_workspace_", Desc: "Send the focused pane to workspace %d", Count: 9, GUI: true},
 	{Name: "reload_config", Desc: "Reload the config file"},
 	{Name: "toggle_mouse", Desc: "Turn mouse capture off or on (off: the terminal selects text)"},
 	{Name: "cycle_layout", Desc: "Cycle the layout: BSP, master-stack, scrolling"},
-	{Name: "prefix_rotate_split", Desc: "Rotate split"},
-	{Name: "prefix_equalize_splits", Desc: "Equalize all splits"},
+	{Name: "prefix_rotate_split", Desc: "Rotate split", GUI: true},
+	{Name: "prefix_equalize_splits", Desc: "Equalize all splits", GUI: true},
 	{Name: "prefix_scrollback", Desc: "Open the scrollback browser"},
 	{Name: "prefix_screenshot", Desc: "Take a screenshot"},
-	{Name: "prefix_command_palette", Desc: "Open the command palette"},
+	{Name: "prefix_command_palette", Desc: "Open the command palette", Mobile: MobileButton{Label: "cmds", Order: 6}},
 	{Name: "prefix_file_search", Desc: "Search files below the focused pane's directory"},
 	{Name: "prefix_toggle_sidebar", Desc: "Toggle the session sidebar"},
 	{Name: "prefix_toggle_other_rail", Desc: "Toggle the opposite sidebar"},
@@ -472,9 +490,9 @@ var actionTable = [...]ActionSpec{
 	{Name: "prefix_mail", Desc: "Open the agents view on the mail for you"},
 	{Name: "prefix_inbox", Desc: "Open the agents view"},
 	{Name: "prefix_transfers", Desc: "Show the copies between machines"},
-	{Name: "prefix_next_attention", Desc: "Jump to the oldest item needing you"},
+	{Name: "prefix_next_attention", Desc: "Jump to the oldest item needing you", GUI: true, Repeat: true},
 	{Name: "prefix_review", Desc: "Review the focused pane's changes"},
-	{Name: "prefix_next_finished", Desc: "Jump to the newest unseen finished turn"},
+	{Name: "prefix_next_finished", Desc: "Jump to the newest unseen finished turn", GUI: true, Repeat: true},
 	{Name: "prefix_agents_settings", Desc: "Open the Agents settings"},
 	{Name: "prefix_session_switcher", Desc: "Go to a session"},
 	{Name: "prefix_new_task", Desc: "Write a new task card"},
@@ -503,13 +521,13 @@ var actionTable = [...]ActionSpec{
 	{Name: "debug_prefix_cancel", Desc: "Cancel debug prefix"},
 
 	// Terminal Mode (direct keybinds, no prefix required)
-	{Name: "terminal_next_window", Desc: "Next window (terminal mode)"},
-	{Name: "terminal_prev_window", Desc: "Previous window (terminal mode)"},
+	{Name: "terminal_next_window", Desc: "Next window (terminal mode)", Repeat: true},
+	{Name: "terminal_prev_window", Desc: "Previous window (terminal mode)", Repeat: true},
 	{Name: "terminal_exit_mode", Desc: "Exit terminal mode (to window mode)"},
-	{Name: "terminal_focus_left", Desc: "Focus the pane to the left"},
-	{Name: "terminal_focus_right", Desc: "Focus the pane to the right"},
-	{Name: "terminal_focus_up", Desc: "Focus the pane above"},
-	{Name: "terminal_focus_down", Desc: "Focus the pane below"},
+	{Name: "terminal_focus_left", Desc: "Focus the pane to the left", GUI: true, Repeat: true},
+	{Name: "terminal_focus_right", Desc: "Focus the pane to the right", GUI: true, Repeat: true},
+	{Name: "terminal_focus_up", Desc: "Focus the pane above", GUI: true, Repeat: true},
+	{Name: "terminal_focus_down", Desc: "Focus the pane below", GUI: true, Repeat: true},
 	{Name: "terminal_scroll_up", Desc: "Scroll into the pane's scrollback", Run: RunView},
 	{Name: "terminal_scroll_down", Desc: "Scroll back down toward live output", Run: RunView},
 	{Name: "terminal_scroll_page_up", Desc: "Scroll up one page", Run: RunView},
@@ -528,13 +546,13 @@ var actionTable = [...]ActionSpec{
 	{Name: "layout_prefix_load", Desc: "Open the layout picker"},
 	{Name: "layout_prefix_save", Desc: "Save the current layout"},
 	{Name: "layout_prefix_cancel", Desc: "Cancel layout prefix"},
-	{Name: "window_prefix_new", Desc: "Create a window"},
-	{Name: "window_prefix_close", Desc: "Close the window"},
+	{Name: "window_prefix_new", Desc: "Create a window", GUI: true},
+	{Name: "window_prefix_close", Desc: "Close the window", GUI: true},
 	{Name: "window_prefix_rename", Desc: "Rename the window"},
-	{Name: "window_prefix_next", Desc: "Focus the next window"},
-	{Name: "window_prefix_prev", Desc: "Focus the previous window"},
-	{Name: "window_prefix_tiling", Desc: "Turn tiling on or off"},
-	{Name: "window_prefix_float", Desc: "Float the pane or tile it. A TML popup becomes a pane, and a TML pane a popup"},
+	{Name: "window_prefix_next", Desc: "Focus the next window", GUI: true},
+	{Name: "window_prefix_prev", Desc: "Focus the previous window", GUI: true},
+	{Name: "window_prefix_tiling", Desc: "Turn tiling on or off", GUI: true},
+	{Name: "window_prefix_float", Desc: "Float the pane or tile it. A TML popup becomes a pane, and a TML pane a popup", GUI: true},
 	{Name: "prefix_tuios", Desc: "Open the tuios menu: the tuios keys a preset moved"},
 	{Name: "open_keybind_presets", Desc: "Choose the keys: tuios, tmux, screen or zellij"},
 	// Command palette rows that had their own code and no action. As actions
@@ -565,27 +583,27 @@ var actionTable = [...]ActionSpec{
 	// scrolling layout's keys. A key bound to one in config.toml runs it,
 	// and a tape may name it, but no list shows it.
 	{Name: "minimize_prefix_cancel", Hidden: true},
-	{Name: "minimize_prefix_focus_only", Hidden: true},
-	{Name: "minimize_prefix_focused", Hidden: true},
-	{Name: "minimize_prefix_restore_", Count: 9, Hidden: true},
-	{Name: "minimize_prefix_restore_all", Hidden: true},
+	{Name: "minimize_prefix_focus_only", Hidden: true, GUI: true},
+	{Name: "minimize_prefix_focused", Hidden: true, GUI: true},
+	{Name: "minimize_prefix_restore_", Count: 9, Hidden: true, GUI: true},
+	{Name: "minimize_prefix_restore_all", Hidden: true, GUI: true},
 	{Name: "repo_new_worktree", Hidden: true},
 	{Name: "repo_toggle_fold", Hidden: true},
-	{Name: "restore_minimized_", Count: 9, Hidden: true},
+	{Name: "restore_minimized_", Count: 9, Hidden: true, GUI: true},
 	{Name: "scroll_consume", Hidden: true},
-	{Name: "scroll_cycle_width", Hidden: true},
+	{Name: "scroll_cycle_width", Hidden: true, Repeat: true},
 	{Name: "scroll_expel", Hidden: true},
-	{Name: "scroll_focus_left", Hidden: true},
-	{Name: "scroll_focus_right", Hidden: true},
+	{Name: "scroll_focus_left", Hidden: true, Repeat: true},
+	{Name: "scroll_focus_right", Hidden: true, Repeat: true},
 	{Name: "scroll_maximize", Hidden: true},
-	{Name: "scroll_move_left", Hidden: true},
-	{Name: "scroll_move_right", Hidden: true},
+	{Name: "scroll_move_left", Hidden: true, Repeat: true},
+	{Name: "scroll_move_right", Hidden: true, Repeat: true},
 	{Name: "session_new_worktree", Hidden: true},
 	{Name: "smart_split", Hidden: true},
 	{Name: "window_prefix_cancel", Hidden: true},
 	{Name: "workspace_prefix_cancel", Hidden: true},
-	{Name: "workspace_prefix_move_", Count: 9, Hidden: true},
-	{Name: "workspace_prefix_switch_", Count: 9, Hidden: true},
+	{Name: "workspace_prefix_move_", Count: 9, Hidden: true, GUI: true},
+	{Name: "workspace_prefix_switch_", Count: 9, Hidden: true, GUI: true},
 }
 
 // Actions returns the table, with each numbered family as one entry.
@@ -616,6 +634,54 @@ var actionIndex = sync.OnceValue(func() map[string]ActionSpec {
 	}
 	return idx
 })
+
+// GUIRunnable reports whether the GUI bridge's action command runs name: an
+// action of the table, or a member of a numbered family, with GUI set.
+func GUIRunnable(name string) bool {
+	spec, ok := LookupAction(name)
+	return ok && spec.GUI
+}
+
+// prefixRepeatActions is DefaultPrefixRepeat: the actions with Repeat set,
+// family members included, in table order.
+func prefixRepeatActions() []string {
+	var names []string
+	for _, spec := range actionTable {
+		if !spec.Repeat {
+			continue
+		}
+		if spec.Count == 0 {
+			names = append(names, spec.Name)
+			continue
+		}
+		for n := 1; n <= int(spec.Count); n++ {
+			names = append(names, spec.Name+strconv.Itoa(n))
+		}
+	}
+	return names
+}
+
+// MobileCommand is one button of the web client's phone bar.
+type MobileCommand struct {
+	Label, Action string
+}
+
+// MobileCommands are the phone bar's buttons, left to right: the actions
+// with a Mobile button, by its Order.
+func MobileCommands() []MobileCommand {
+	var spec []ActionSpec
+	for _, s := range actionTable {
+		if s.Mobile.Order > 0 {
+			spec = append(spec, s)
+		}
+	}
+	slices.SortFunc(spec, func(a, b ActionSpec) int { return int(a.Mobile.Order) - int(b.Mobile.Order) })
+	out := make([]MobileCommand, len(spec))
+	for i, s := range spec {
+		out[i] = MobileCommand{Label: s.Mobile.Label, Action: s.Name}
+	}
+	return out
+}
 
 // actionDescriptions is ActionDescriptions: every name and its line, for the
 // actions that are not Hidden.

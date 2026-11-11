@@ -24,19 +24,10 @@ import (
 // everything that did not fit. The layout commands and the two overlays are
 // behind a pan, which is the right place for what a phone reaches for once a
 // session rather than once a minute.
-var mobileCommands = []struct{ label, action string }{
-	{"new", "prefix_new_window"},
-	{"close", "prefix_close_window"},
-	{"next", "prefix_next_window"},
-	{"prev", "prefix_prev_window"},
-	{"zoom", "prefix_fullscreen"},
-	{"cmds", "prefix_command_palette"},
-	{"tile", "prefix_toggle_tiling"},
-	{"vsplit", "prefix_split_vertical"},
-	{"hsplit", "prefix_split_horizontal"},
-	{"config", "prefix_settings"},
-	{"help", "prefix_help"},
-}
+//
+// The buttons are the action table's: each entry with a Mobile button, by
+// its Order (config.MobileCommands).
+var mobileCommands = config.MobileCommands()
 
 // mobileBar builds the touch key bar: the leader the chords hang off, and the
 // rows drawn top to bottom.
@@ -76,7 +67,7 @@ func commandKeys(reg *config.KeybindRegistry, leader string) []sip.MobileKey {
 		Prefix: true,
 	}}
 	for _, cmd := range mobileCommands {
-		if key, ok := commandKey(reg, cmd.label, cmd.action, leader); ok {
+		if key, ok := commandKey(reg, cmd.Label, cmd.Action, leader); ok {
 			keys = append(keys, key)
 		}
 	}

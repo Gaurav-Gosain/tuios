@@ -17029,3 +17029,16 @@ The sheet after each first Start is saved under `TUIOS_E2E_FRAMES`, and each
 agent's first prompt in `first-prompts.txt` in the test's artifact folder.
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestNewAgentSheetStopsOnInvisibleCharacters$' -v .`.
+
+## GUI bridge actions from the table
+
+`e2e/tui/gui_bridge_table_actions_test.go` `TestGUIBridgeRunsTheActionsTheTableMarks`
+opens two panes through the bridge, runs resize_width_70 and wants a pane 60
+or more columns wide, then wants nav_left refused with the bridge's own words.
+
+Run on 2026-11-12 on branch `untangle/r2-6-table-fields` (arch-btw). The log
+is `~/.cache/agent-tmp/un-inputcfg-r26-new.log` there.
+
+| Control | Where it failed | Verdict |
+| --- | --- | --- |
+| origin/main 1b7900dbe, the hand-written allow list | "the bridge refused resize_width_70: resize_width_70 shows something only a screen can show" | **caught** |
