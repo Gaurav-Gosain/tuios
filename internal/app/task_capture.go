@@ -1,9 +1,14 @@
 package app
 
 import (
+	"cmp"
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,9 +32,9 @@ import (
 // enter files the card and closes; ctrl+enter files it and starts the agent
 // on it now, which holds the card from the start (start-agent with task);
 // esc closes and keeps the draft for the next open. The first line is the
-// title, and the rest, with the images as their stored paths, is the prompt.
-// An image goes to the card's session's file store, which lives as long as
-// the session does.
+// title, and the rest is the prompt. An image is attached to the card
+// (attach-task), which keeps it as long as the card, also after a restart,
+// and the prompt names it by its attachment's name.
 //
 // A file is two calls. While add-task is out the draft waits in tcFiling and
 // the sheet does not open, so a refusal can give the draft back and the
@@ -436,14 +441,9 @@ func (m *OS) taskCaptureFile(start bool) tea.Cmd {
 	m.closeTaskCapture(false)
 	m.tcFiling = s
 	return func() tea.Msg {
-		// The images go to the session's store, and the prompt names them.
-		prompt, err := spawnStashImages(call, sess, promptParts)
-		if err != nil {
-			return tcFiledMsg{s: s, err: err}
-		}
-		if prompt == "" {
-			prompt = strings.TrimSpace(composer.JoinParts(promptParts))
-		}
+		// The images are attached once the card is added, and the prompt
+		// names them.
+		prompt, images := tcAttachmentParts(promptParts)
 		params := map[string]any{"session": sess, "title": title, "stage": stage, "human_nonce": nonce}
 		if prompt != "" {
 			params["prompt"] = prompt
@@ -462,7 +462,16 @@ func (m *OS) taskCaptureFile(start bool) tea.Cmd {
 		if err := jsonx.Unmarshal(raw, &row); err != nil || row.ID == "" {
 			return tcFiledMsg{s: s, err: errfmt.Errorf("read the add-task answer: no card id")}
 		}
-		filed := "Added " + row.ID + " to " + where + "."
+		var b strings.Builder
+		fmt.Fprintf(&b, "Added %s to %s.", row.ID, where)
+		for _, im := range images {
+			ap := map[string]any{"session": sess, "id": row.ID, "name": im.name, "human_nonce": nonce,
+				"content": base64.StdEncoding.EncodeToString(im.data)}
+			if _, err := call("attach-task", ap, 30*time.Second); err != nil {
+				fmt.Fprintf(&b, " The image %s could not be attached: %s", im.name, printableTitle(err.Error()))
+			}
+		}
+		filed := b.String()
 		if !start {
 			return tcFiledMsg{s: s, text: filed}
 		}
@@ -569,4 +578,41 @@ func tcVerbMessage(err error) string {
 		return printableTitle(callErr.Message)
 	}
 	return printableTitle(err.Error())
+}
+
+// tcImage is an image of a task to attach to its card.
+type tcImage struct {
+	name string
+	data []byte
+}
+
+// tcAttachmentParts is a task's prompt with each image named by the name it
+// is attached by, and the images. Two images never share a name.
+func tcAttachmentParts(parts []composer.Part) (string, []tcImage) {
+	var b strings.Builder
+	var images []tcImage
+	used := map[string]bool{}
+	for i, p := range parts {
+		if p.Kind != composer.PartImage || p.Image == nil {
+			b.WriteString(p.Text)
+			continue
+		}
+		name := p.Image.Name
+		if name == "" {
+			name = "image-" + strconv.Itoa(i+1) + "." + cmp.Or(p.Image.Format, "png")
+		}
+		ext := filepath.Ext(name)
+		base := strings.TrimSuffix(name, ext)
+		for n := 2; used[name]; n++ {
+			name = base + "-" + strconv.Itoa(n) + ext
+		}
+		used[name] = true
+		images = append(images, tcImage{name: name, data: p.Image.Data})
+		if t := b.String(); t != "" && !strings.HasSuffix(t, " ") && !strings.HasSuffix(t, "\n") {
+			b.WriteByte(' ')
+		}
+		b.WriteString(name)
+		b.WriteString(" (attached) ")
+	}
+	return strings.TrimSpace(b.String()), images
 }

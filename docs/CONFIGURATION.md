@@ -3365,8 +3365,8 @@ stages = ["todo", "doing", "verify"]
 ```
 
 `ctrl+b +`, or "New task" in the palette, adds a card from anywhere
-([KEYBINDINGS.md](KEYBINDINGS.md#new-task)). An image in it goes to the
-session's file store and the prompt names its stored path.
+([KEYBINDINGS.md](KEYBINDINGS.md#new-task)). An image in it is attached to
+the card, and the prompt names it.
 
 tuios moves a card on its own when it records a fact about the card's work: a
 plan held for approval and then approved, a fan check, a pull request

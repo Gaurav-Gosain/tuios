@@ -20,8 +20,9 @@ import (
 //   - ctrl+b + opens the sheet in window management mode and in terminal
 //     mode, and "New task" opens it from the palette;
 //   - esc closes it and keeps the draft for the next open;
-//   - enter files the card: the first line is the title, the rest and the
-//     pasted image (as its stored path) the prompt, in the current session;
+//   - enter files the card: the first line is the title, the rest the
+//     prompt, which names the pasted image, and the image is attached to the
+//     card, in the current session;
 //   - the Project pill is the repository of the pane's folder, so the card
 //     carries that project, and Right turns it to a card of the session only;
 //   - ctrl+enter on a Plan card files it and starts the agent in its plan
@@ -33,7 +34,8 @@ import (
 //     is read back with list-tasks and get-task.
 //   - A key could reach the pane under the sheet. The pane's shell would
 //     run it; the test checks the card text is whole and the pane quiet.
-//   - The stored image could be another file. Its bytes are compared.
+//   - The attached image could be another file. Its bytes are read back with
+//     tuios task attachment get and compared.
 //   - The pill could show the repository and the card not carry it: each
 //     card's project is read back, and the second card must have none.
 //
@@ -138,16 +140,14 @@ func TestTaskCaptureFromAnywhere(t *testing.T) {
 		t.Fatalf("ASSERTION: home holds %v, want one todo card titled \"Fix the flaky retry test\" of project example.com/acme/api", got)
 	}
 	p := prompt("home", "t1")
-	stored := ""
-	for f := range strings.FieldsSeq(p) {
-		if strings.HasSuffix(f, ".png") && filepath.IsAbs(f) {
-			stored = f
-		}
+	if !strings.HasPrefix(p, "It fails one run in ten.") || !strings.Contains(p, "retry-log.png (attached)") {
+		t.Errorf("ASSERTION: the card's prompt %q is not the second line and the attached image's name", p)
 	}
-	if !strings.HasPrefix(p, "It fails one run in ten.") || stored == "" {
-		t.Errorf("ASSERTION: the card's prompt %q is not the second line and the stored image", p)
+	stored := filepath.Join(t.TempDir(), "back.png")
+	if out, err := tuiosCLI(t, base, "task", "attachment", "get", "-s", "home", "t1", "retry-log.png", "-o", stored); err != nil {
+		t.Errorf("ASSERTION: the pasted image is not attached to t1: %v\n%s", err, out)
 	} else if b, err := os.ReadFile(stored); err != nil || !bytes.Equal(b, img) {
-		t.Errorf("ASSERTION: the stored image %s does not hold the pasted image (err %v)", stored, err)
+		t.Errorf("ASSERTION: the attached image does not hold the pasted image (err %v)", err)
 	}
 
 	// The palette, then a Plan card started at once with ctrl+enter.
