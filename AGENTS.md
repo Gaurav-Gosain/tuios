@@ -754,7 +754,7 @@ go run ./cmd/tuios tape play examples/demo.tape
 ### Keybind Registry
 
 - Leader key configurable but defaults to `ctrl+b`
-- Check action descriptions in `internal/config/registry.go`
+- Every action is one entry of `actionTable` in `internal/config/actions.go`, with its description; `ActionDescriptions` and `LookupAction` are derived from it
 - Key normalization handles `opt+` → `alt+` conversion on macOS
 
 ## Important Files to Know
