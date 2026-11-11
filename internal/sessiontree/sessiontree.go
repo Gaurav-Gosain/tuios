@@ -10,7 +10,11 @@
 // package only decides the rolled-up state string, in one place.
 package sessiontree
 
-import "strconv"
+import (
+	"strconv"
+
+	"github.com/Gaurav-Gosain/tuios/internal/agentstate"
+)
 
 // Subagent is one subagent of a pane's agent, as the daemon reported it:
 // what it was asked to do, the tool it runs, and once it ended, how.
@@ -353,39 +357,9 @@ type SessionInput struct {
 // moment it is seen. That decay is what stops a finished agent from sitting in
 // the rail as permanent green noise.
 //
-// Order: errored > needs_input > done-unseen > working > done-seen > idle > none.
+// The order is agentstate's (Info.Rank and RankSeen).
 func AgentRank(state string, doneSeen bool) int {
-	// The numbers are spaced so a state can be added between two others
-	// without renumbering every caller's expectations. Only the order is
-	// meaningful; nothing compares a rank to a literal.
-	switch state {
-	case "errored":
-		return 12
-	case "needs_input":
-		return 10
-	case "done":
-		if doneSeen {
-			return 4
-		}
-		return 8
-	case "working":
-		return 6
-	case "idle":
-		return 2
-	case "unknown":
-		// An agent whose state the daemon cannot read. It ranks above nothing
-		// and below idle: there is something in that pane, which is more than
-		// "none" says, and it is not a claim that the agent is waiting, which
-		// is what idle says.
-		//
-		// It ranked zero, the same as none, so a session whose only agent was
-		// in this state rolled up to nothing and the rail showed the quiet
-		// dot. That is the state the stall timer writes for any agent with no
-		// screen rules, so it was not a rare case.
-		return 1
-	default: // "none" and any value this build does not know
-		return 0
-	}
+	return agentstate.State(state).RankFor(doneSeen)
 }
 
 // RollUpState returns the highest-priority state among the given raw states,

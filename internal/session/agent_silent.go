@@ -51,7 +51,7 @@ func (s *Session) silentCandidate(w *WindowState) bool {
 		return false
 	}
 	claim, held := s.agentClaims[w.ID]
-	return held && claim.source.rank() == AgentSourceReport.rank() && !claim.blocker
+	return held && claim.source.Rank() == AgentSourceReport.Rank() && !claim.blocker
 }
 
 // lastHeardLocked is when the agent of a window last reported: the later of
@@ -66,7 +66,7 @@ func (s *Session) lastHeardLocked(w *WindowState) int64 {
 // publish. Only a report the identity guard lets through counts. The caller
 // holds stateMu.
 func (s *Session) noteHeardLocked(w *WindowState, claim agentClaim, held bool, r AgentReport) bool {
-	if r.Source != AgentSourceReport || !held || claim.source.rank() != AgentSourceReport.rank() ||
+	if r.Source != AgentSourceReport || !held || claim.source.Rank() != AgentSourceReport.Rank() ||
 		sessionGuard(w, claim, held, s.agentHarnessPIDs[w.ID].pid, s.agentSharedGuards[w.ID], r) != "" {
 		return false
 	}

@@ -5,6 +5,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/agentstate"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
@@ -21,100 +22,26 @@ func clearAgentNote(w *WindowState) {
 // long-running process) running in a window's pane. It is daemon-owned per-window
 // state: a pane reports its own state through the set-agent-state verb, and the
 // daemon syncs it to attached clients alongside the rest of the window state.
-//
-// The zero value is AgentStateNone, which is also what a pane not running an
-// agent reports. Storing none as the empty string keeps it out of serialized
-// state entirely (omitempty), so older on-disk state and older clients that never
-// heard of agent state read back as none, which is exactly the pre-existing
-// behavior.
-type AgentState string
+// The type, its names and its ranks are in internal/agentstate.
+type AgentState = agentstate.State
 
+// The states, under the names this package has always used.
 const (
-	// AgentStateNone is the default: the pane is not running an agent, or is not
-	// reporting. It serializes as the empty string so it is omitted from state.
-	AgentStateNone AgentState = ""
-	// AgentStateWorking means the agent is actively working on a task.
-	AgentStateWorking AgentState = "working"
-	// AgentStateNeedsInput means the agent is blocked waiting for the user.
-	AgentStateNeedsInput AgentState = "needs_input"
-	// AgentStateIdle means the agent is not working and not blocked; it is the
-	// state the output-stall heuristic assigns to a pane that went quiet.
-	AgentStateIdle AgentState = "idle"
-	// AgentStateDone means the agent finished its task.
-	AgentStateDone AgentState = "done"
-	// AgentStateErrored means the agent stopped because of an error.
-	AgentStateErrored AgentState = "errored"
-	// AgentStateUnknown means an agent is present and nothing says what it is
-	// doing. It is what the silence timer writes when the screen tier looked
-	// and found nothing, in place of idle: idle says nothing needs you, and a
-	// pane that went quiet on a prompt no rule knows would be lying.
-	AgentStateUnknown AgentState = "unknown"
+	AgentStateNone       = agentstate.None
+	AgentStateWorking    = agentstate.Working
+	AgentStateNeedsInput = agentstate.NeedsInput
+	AgentStateIdle       = agentstate.Idle
+	AgentStateDone       = agentstate.Done
+	AgentStateErrored    = agentstate.Errored
+	AgentStateUnknown    = agentstate.Unknown
 )
 
-// agentStateByName maps every accepted wire value to its AgentState. "none" is
-// the explicit spelling a caller uses to clear the state; it maps to the empty
-// AgentStateNone.
-var agentStateByName = map[string]AgentState{
-	"none":        AgentStateNone,
-	"working":     AgentStateWorking,
-	"needs_input": AgentStateNeedsInput,
-	"idle":        AgentStateIdle,
-	"done":        AgentStateDone,
-	"errored":     AgentStateErrored,
-	"unknown":     AgentStateUnknown,
-}
-
 // AgentStateNames lists the accepted wire values in a stable order, for the
-// verb's accepted-value schema and for input validation. It is part of the
-// public protocol surface; keep the values stable.
-var AgentStateNames = []string{"none", "working", "needs_input", "idle", "done", "errored", "unknown"}
+// verb's accepted-value schema and for input validation.
+var AgentStateNames = agentstate.Names()
 
-// ParseAgentState resolves a wire value to an AgentState, reporting whether the
-// value was one of the accepted names. An empty input is not accepted here: the
-// verb requires the caller to name a state, and "none" is the spelling that
-// clears it.
-func ParseAgentState(s string) (AgentState, bool) {
-	if s == "" {
-		return AgentStateNone, false
-	}
-	v, ok := agentStateByName[s]
-	return v, ok
-}
-
-// Name returns the wire spelling of the state, mapping the empty AgentStateNone
-// back to "none" so a reader always gets an explicit value.
-func (a AgentState) Name() string {
-	if a == AgentStateNone {
-		return "none"
-	}
-	return string(a)
-}
-
-// NeedsYou reports whether a person has to act on the pane now. It is the
-// question every consumer of agent state is really asking, answered in one
-// place so the rail, the alert policy and a script all agree on which states
-// mean it: a blocked agent and one that stopped on an error.
-func (a AgentState) NeedsYou() bool {
-	return a == AgentStateNeedsInput || a == AgentStateErrored
-}
-
-// Activity is the coarse reading of a state: what the agent is doing, with the
-// reason for a block left to the message. It is the shape the states reduce to
-// when a reader wants "working, waiting, or at rest" and not the full enum.
-func (a AgentState) Activity() string {
-	switch a {
-	case AgentStateWorking:
-		return "working"
-	case AgentStateNeedsInput:
-		return "waiting"
-	case AgentStateIdle, AgentStateDone, AgentStateErrored:
-		return "resting"
-	case AgentStateUnknown:
-		return "unknown"
-	default:
-		return "none"
-	}
-}
+// ParseAgentState resolves a wire value to an AgentState. See agentstate.Parse.
+func ParseAgentState(s string) (AgentState, bool) { return agentstate.Parse(s) }
 
 // AgentReport is one source's claim on a window's agent state. Source empty
 // means AgentSourceReport, so the zero value is an explicit report, which is
@@ -525,7 +452,7 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 		override := false
 		// held, not the zero claim's rank: a window nobody has claimed is open to
 		// any source, including the weakest.
-		if held && r.Source.rank() < claim.source.rank() && !eventClaimStale(claim, w, r) {
+		if held && r.Source.Rank() < claim.source.Rank() && !eventClaimStale(claim, w, r) {
 			if !blockerOverridesClaim(w, r, claim, time.Now()) {
 				effective = w.AgentState
 				if screenNamesPrompt(claim, w, r) {
@@ -892,7 +819,7 @@ func blockerOverridesClaim(w *WindowState, r AgentReport, claim agentClaim, now 
 // look at the pane (the title or the screen) rather than a guess from the
 // detector or the silence timer. See AgentReport.event.
 func eventClaimStale(claim agentClaim, w *WindowState, r AgentReport) bool {
-	return claim.event && r.paneWroteAt > w.AgentStateAt && r.Source.rank() >= AgentSourceScreen.rank()
+	return claim.event && r.paneWroteAt > w.AgentStateAt && r.Source.Rank() >= AgentSourceScreen.Rank()
 }
 
 // hookPromptHolds reports whether r must leave alone the prompt a hook
@@ -917,7 +844,7 @@ func hookPromptHolds(claim agentClaim, held bool, w *WindowState, r AgentReport)
 	if !held || w.AgentState != AgentStateNeedsInput || !claim.hookEventPrompt() {
 		return false
 	}
-	if r.Source.rank() >= AgentSourceReport.rank() || r.promptGone || r.State == AgentStateNone {
+	if r.Source.Rank() >= AgentSourceReport.Rank() || r.promptGone || r.State == AgentStateNone {
 		return false
 	}
 	return r.Source != AgentSourceScreen || !agentStateBlocks(r.State) || r.paneWroteAt == 0

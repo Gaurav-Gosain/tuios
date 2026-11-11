@@ -356,7 +356,7 @@ func (s *Session) yieldNoneClaim(windowID string) {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 	claim, held := s.agentClaims[windowID]
-	if !held || claim.source.rank() <= AgentSourceProgram.rank() {
+	if !held || claim.source.Rank() <= AgentSourceProgram.Rank() {
 		return
 	}
 	if idx, err := findWindowStateIndex(s.state.Windows, windowID); err == nil &&

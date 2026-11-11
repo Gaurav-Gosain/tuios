@@ -1068,7 +1068,7 @@ func (s *Session) reconcileAgentOnOutput(
 				// activity, which cannot tell working from a redraw while
 				// waiting for the user.
 				quiet := w.AgentState == AgentStateIdle || w.AgentState == AgentStateUnknown
-				if !quiet || claim.source.rank() > AgentSourceDetect.rank() {
+				if !quiet || claim.source.Rank() > AgentSourceDetect.Rank() {
 					return errNoAgentDetectChange
 				}
 				w.AgentState = AgentStateWorking

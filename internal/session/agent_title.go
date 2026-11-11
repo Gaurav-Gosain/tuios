@@ -222,7 +222,7 @@ func (s *Session) applyIdleVerdict(winID, ptyID string, reg *harness.Registry, v
 		s.idle.cancel(winID)
 		return false
 	}
-	if held && claim.source.rank() > v.source.rank() && !s.eventClaimWrittenOver(winID, claim, wrote) {
+	if held && claim.source.Rank() > v.source.Rank() && !s.eventClaimWrittenOver(winID, claim, wrote) {
 		s.idle.cancel(winID)
 		return false
 	}
