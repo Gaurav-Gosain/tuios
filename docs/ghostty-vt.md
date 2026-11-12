@@ -92,7 +92,7 @@ install.
 PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" go build -tags ghostty ./...
 ```
 
-`ghostty-lib.sh` pins a libghostty-vt release (1.0.0 now). It downloads
+`ghostty-lib.sh` pins a libghostty-vt release (1.0.1 now). It downloads
 the release's source tarball and its dependency tarball from
 `release.files.ghostty.org`, checks the SHA-256 it pins for each and their
 minisign signatures against the libghostty-vt release key
