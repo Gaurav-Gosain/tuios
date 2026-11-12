@@ -434,7 +434,11 @@ func TestSubagentRowsOnTheRail(t *testing.T) {
 func TestChildAgentRowsNestUnderTheirParent(t *testing.T) {
 	base := t.TempDir()
 	useShippedLooks(base)
-	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\nposition = \"left\"\nwidth = 50\n")
+	// The fake children report working and then print nothing. The stall
+	// heuristic would show them idle 30 seconds later, and the cockpit's
+	// pills are read about that long after the children start, so the
+	// heuristic is off: the states read are the ones the children reported.
+	writeConfig(t, base, "[daemon]\nagent_stall_seconds = -1\n\n[appearance.sidebar]\nenabled = true\nposition = \"left\"\nwidth = 50\n")
 	killDaemon(t, base)
 	const sess = "e2e-nest"
 	if out, err := tuiosCLI(t, base, "new", sess, "--detach"); err != nil {
