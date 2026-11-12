@@ -97,8 +97,11 @@ func TestCockpitThreadCopyMode(t *testing.T) {
 			t.Fatalf("ASSERTION: copy mode did not start: %v\n%s", err, term.Snapshot())
 		}
 	}
-	// search moves the cursor to text.
-	search := func(text string) {
+	// search moves the cursor to text, and is the frame that enter drew.
+	// Enter puts "/text (1 matches)" in the dock in the same update that
+	// ends the search, so the frame that shows it has the cursor on the
+	// match.
+	search := func(text string) tuitest.Screen {
 		t.Helper()
 		if err := term.SendKeys("/"); err != nil {
 			t.Fatal(err)
@@ -109,15 +112,18 @@ func TestCockpitThreadCopyMode(t *testing.T) {
 		if err := term.SendKeys(tuitest.Enter); err != nil {
 			t.Fatal(err)
 		}
-		_ = term.WaitStable(uiTimeout)
+		done := "/" + text + " ("
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), done) }, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: the search for %q did not end: %v\n%s", text, err, term.Snapshot())
+		}
+		return term.Screen()
 	}
 	// lineSelect selects the rows from the one with first to the one with
 	// last, and yanks them with key.
 	lineSelect := func(first, last, key string) string {
 		t.Helper()
-		search(first)
-		s := term.Screen()
-		r0, r1 := rowWith(s, first), rowWith(s, last)
+		s := search(first)
+		r0, r1 := threadRowWith(s, first), threadRowWith(s, last)
 		if r0 < 0 || r1 < r0 {
 			t.Fatalf("rows of %q and %q: %d %d\n%s", first, last, r0, r1, term.Snapshot())
 		}
@@ -187,6 +193,10 @@ func TestCockpitThreadCopyMode(t *testing.T) {
 	if err := term.SendKeys("y"); err != nil {
 		t.Fatal(err)
 	}
+	if err := term.WaitForText("Copy mode. v selects", uiTimeout); err != nil {
+		saveCockpitFrames(t, term, "cockpit-copy-missing")
+		t.Fatalf("ASSERTION: y in the focus region did not start copy mode: %v\n%s", err, term.Snapshot())
+	}
 	if got := lineSelect("gave up after the third", "from the server.", "y"); got != copyParagraph {
 		t.Fatalf("ASSERTION: y in the focus region did not start copy mode; the yank is\n%q", got)
 	}
@@ -203,6 +213,24 @@ func TestCockpitThreadCopyMode(t *testing.T) {
 		t.Fatalf("ASSERTION: the second esc did not reach the view, so copy mode did not end: %v\n%s", err, term.Snapshot())
 	}
 	alive(t, term, "after copy mode")
+}
+
+// threadRowWith is the first row of the thread that holds needle, -1 for
+// none. The rows above the thread's tabs do not count: the dock shows a copy
+// mode search as a notification, "/text (1 matches)", for two seconds, and a
+// row read there sends the selection a screen too far.
+func threadRowWith(s tuitest.Screen, needle string) int {
+	tabs := rowWith(s, "Checkpoints")
+	if tabs < 0 {
+		return -1
+	}
+	_, rows := s.Size()
+	for r := tabs + 1; r < rows; r++ {
+		if strings.Contains(s.Line(r), needle) {
+			return r
+		}
+	}
+	return -1
 }
 
 // mustCLIOr is the output of a tuios command, "" when it fails.
