@@ -62,7 +62,8 @@ func (c *wkColumn) width() int {
 	return w
 }
 
-// wkDescWidth is a line's description as drawn: a submenu carries a leading +.
+// wkDescWidth is a line's description as drawn: a submenu carries the
+// chevron at the right of its column, one cell, as the + it replaced did.
 func wkDescWidth(b *config.Keybinding) int {
 	w := lipgloss.Width(b.Description)
 	if b.Submenu {
@@ -522,7 +523,12 @@ func (m *OS) renderWhichKey() (string, int, int) {
 			key := keyStyle.Render(l.bind.Key) +
 				overlay.Style(bg).Render(strings.Repeat(" ", c.keyW-lipgloss.Width(l.bind.Key)+whichKeyKeyGap))
 			if l.bind.Submenu {
-				return overlay.Fill(key+subStyle.Render(overlay.Truncate("+"+l.bind.Description, descW)), w, bg)
+				// The label in line with the others, and the chevron at the
+				// right edge, as a right-click menu marks a submenu.
+				mark := chevron(&m.Settings)
+				desc := overlay.Truncate(l.bind.Description, max(descW-1, 1))
+				pad := max(descW-lipgloss.Width(desc)-lipgloss.Width(mark), 0)
+				return overlay.Fill(key+subStyle.Render(desc)+overlay.Style(bg).Render(strings.Repeat(" ", pad))+subStyle.Render(mark), w, bg)
 			}
 			return overlay.Fill(key+descStyle.Render(overlay.Truncate(l.bind.Description, descW)), w, bg)
 		case l.header != "":

@@ -1635,8 +1635,8 @@ items = [
   menu and are never sent to the pane.
 - A key that the menu does not bind closes it, and a menu that is not sticky
   drops the key, as the other prefix menus do.
-- The which-key panel lists the keys the menu has. Menus come first, with a
-  `+`.
+- The which-key panel lists the keys the menu has. Menus come first, marked
+  with `›` at the right, as a right-click menu marks a row that opens a menu.
 - `tuios keybinds list`, `doctor`, `unbind` and `free` read the menus as they
   read any other section, named `menus.NAME`. A config warning names a key
   that opens a menu that is not declared, a menu that nothing opens, and a

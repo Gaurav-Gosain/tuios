@@ -283,7 +283,7 @@ func (m *OS) menuRowsOf(name string, entries []config.MenuEntry) []menuRow {
 			if label == "" {
 				label = e.Menu
 			}
-			out = append(out, menuRow{action: e.RowAction(), icon: glyphSwitch, label: label + " >"})
+			out = append(out, menuRow{action: e.RowAction(), icon: glyphSwitch, label: label})
 		case strings.HasPrefix(e.Action, config.UserActionPrefix):
 			out = m.appendUserRow(out, name, e.Action)
 		default:
@@ -378,6 +378,11 @@ func (m *OS) buildMenu(name string, f menuFacts) []ContextMenuItem {
 		}
 		it := m.item(icon, r.label, action, r.dim != rowCond{} && r.dim.holds(f.bits))
 		it.Warn = r.warn
+		// A row that opens a menu says so in the right column, with the
+		// cursor's chevron, where the other rows have their key.
+		if _, sub := config.MenuNameOf(action); sub {
+			it.Hint = chevron(&m.Settings)
+		}
 		out = append(out, it)
 	}
 	if n := len(out); n > 0 && out[n-1].Sep {

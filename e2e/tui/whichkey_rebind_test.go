@@ -117,7 +117,7 @@ func TestWhichKeyShowsTheConfiguredKeys(t *testing.T) {
 
 			// The leader's own menu reads the config too.
 			sendKeys(t, term, tuitest.Ctrl('b'))
-			waitScreen(t, term, "the leader menu never drew", "Toggle zoom", "+Workspace")
+			waitScreen(t, term, "the leader menu never drew", "Toggle zoom", "Workspace")
 			waitKeys("the leader menu after a rebind", map[string]string{"Toggle zoom": "Z"})
 			sendKeys(t, term, tuitest.Esc)
 			waitGone(t, term, "the leader menu", "Toggle zoom")
@@ -137,7 +137,7 @@ func TestWhichKeyShowsTheConfiguredKeys(t *testing.T) {
 			closeMenu()
 
 			sendKeys(t, term, tuitest.Ctrl('b'))
-			waitScreen(t, term, "the leader menu never drew", "Toggle zoom", "+Workspace")
+			waitScreen(t, term, "the leader menu never drew", "Toggle zoom", "Workspace")
 			waitKeys("the leader menu after the zoom key went back to its default", map[string]string{"Toggle zoom": "z"})
 			sendKeys(t, term, tuitest.Esc)
 			waitGone(t, term, "the leader menu", "Toggle zoom")

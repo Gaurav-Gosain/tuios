@@ -138,10 +138,7 @@ func (m *OS) contextMenuRow(it ContextMenuItem, selected bool, width int, bg col
 
 	marker := "  "
 	if selected && !it.Dim {
-		marker = "› "
-		if m.Settings.UseASCIIOnly {
-			marker = "> "
-		}
+		marker = chevron(&m.Settings) + " "
 	}
 
 	left := overlay.Style(rowBg).Foreground(pal.Accent).Bold(true).Render(marker)
@@ -215,4 +212,13 @@ func (m *OS) placeContextMenu(layers []*lipgloss.Layer) []*lipgloss.Layer {
 
 	return append(layers, lipgloss.NewLayer(content).
 		X(x).Y(y).Z(config.ZIndexContextMenu).ID("context-menu"))
+}
+
+// chevron is the mark of the cursor in a menu, and of a row that opens a
+// submenu, where it stands in the right column with the key hints.
+func chevron(s *config.Settings) string {
+	if s.UseASCIIOnly {
+		return ">"
+	}
+	return "›"
 }

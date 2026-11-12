@@ -97,7 +97,7 @@ toggle_zoom = ["z"]
 	enableTiling(t, term)
 
 	shiftRightClick(t, term, 20, 10)
-	waitMenu(t, term, "pane", "Keep this folder", "My tools >", "Minimize")
+	waitMenu(t, term, "pane", "Keep this folder", "My tools", "Minimize")
 	s := term.Screen()
 	fmt.Fprintf(&log, "== pane menu\n%s\n", s.Text())
 	for _, gone := range []string{"Screenshot this window", "Desktop only row", "Only inside vim"} {
@@ -107,7 +107,12 @@ toggle_zoom = ["z"]
 	}
 	_, zoomY, _ := dockCellFind(s, "Zoom")
 	_, keepY, _ := dockCellFind(s, "Keep this folder")
-	toolsX, toolsY, _ := dockCellFind(s, "My tools >")
+	toolsX, toolsY, _ := dockCellFind(s, "My tools")
+	// The submenu row's label lines up with the others, and its mark is the
+	// cursor's chevron in the right column, where the key hints are.
+	if line := s.Line(toolsY); strings.Contains(line, "My tools >") || !strings.Contains(line[strings.Index(line, "My tools"):], "\u203a") {
+		t.Errorf("ASSERTION: the submenu row is not marked with the chevron in the right column: %q", line)
+	}
 	_, minY, _ := dockCellFind(s, "Minimize")
 	if !(zoomY < keepY && keepY < toolsY && toolsY < minY) {
 		t.Errorf("ASSERTION: the added rows are not between Zoom and Minimize: zoom %d, keep %d, tools %d, minimize %d", zoomY, keepY, toolsY, minY)
@@ -151,9 +156,9 @@ toggle_zoom = ["z"]
 	// A menu in the older [keybindings.menus.NAME] spelling is a submenu of a
 	// right-click menu too, under its title, with its rows.
 	shiftRightClick(t, term, 20, 10)
-	waitMenu(t, term, "pane again", "Old spelling >")
+	waitMenu(t, term, "pane again", "Old spelling")
 	s = term.Screen()
-	oldX, oldY, _ := dockCellFind(s, "Old spelling >")
+	oldX, oldY, _ := dockCellFind(s, "Old spelling")
 	leftClick(t, term, oldX+2, oldY)
 	waitMenu(t, term, "old spelling submenu", "Old spelling", "Toggle zoom (fullscreen)")
 	fmt.Fprintf(&log, "== old spelling\n%s\n", term.Screen().Text())

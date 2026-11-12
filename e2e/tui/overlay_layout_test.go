@@ -77,7 +77,7 @@ func runeCol(line, needle string) int {
 //   - Palette, no match: "No matching commands" is centred in the body with
 //     "esc close" under it.
 //   - Which-key: sections with headings, at least two headings on one row, the
-//     submenus marked with a leading +, no "..." anywhere, and no "+N more" at
+//     submenus marked with the chevron after the label, no "..." anywhere, and no "+N more" at
 //     either size. At 120x40 the menu takes at most 16 rows, where it took 36
 //     as one column.
 //   - Which-key at 16 colours: a hairline frame round it. Its surface is the
@@ -92,7 +92,7 @@ func runeCol(line, needle string) int {
 //     Headers are found by their exact category text at the body's edge, and
 //     names by their known text.
 //   - The which-key height could be measured on a partial frame. It is read
-//     once "+Workspace" and "Help" are both on screen, a middle column and the
+//     once "Workspace" and "Help" are both on screen, a middle column and the
 //     last one. The headings are not waited for, so a menu drawn without them
 //     fails the heading check rather than the wait.
 //
@@ -151,7 +151,7 @@ func TestOverlayLayouts(t *testing.T) {
 
 			// Which-key.
 			sendKeys(t, term, tuitest.Ctrl('b'))
-			waitScreen(t, term, "which-key never drew", "prefix", "+Workspace", "Help")
+			waitScreen(t, term, "which-key never drew", "prefix", "Workspace", "Help")
 			shot("which-key")
 			checkWhichKey(t, term, run.cols >= 120)
 			if strings.HasSuffix(run.name, "-16") {
@@ -159,7 +159,7 @@ func TestOverlayLayouts(t *testing.T) {
 				checkSlotInk(t, term)
 			}
 			sendKeys(t, term, tuitest.Esc)
-			waitGone(t, term, "which-key", "+Workspace")
+			waitGone(t, term, "which-key", "Equalize splits")
 
 			// An empty list overlay: go-to on the sessions with a name nothing
 			// has, which says enter makes it.
@@ -310,16 +310,28 @@ func checkWhichKey(t *testing.T, term *tuitest.Terminal, wide bool) {
 	if strings.Contains(text, " more") {
 		t.Errorf("which-key left keys out\n%s", term.Snapshot())
 	}
-	for _, sub := range []string{"+Workspace", "+Minimize", "+Window", "+Layout", "+Tape", "+Debug"} {
-		if !strings.Contains(text, sub) {
-			t.Errorf("which-key does not mark the %s submenu\n%s", sub, term.Snapshot())
+	// A submenu's label lines up with the other labels, and the chevron the
+	// cursor uses marks it at the right of its column.
+	for _, sub := range []string{"Workspace", "Minimize", "Window", "Layout", "Tape", "Debug"} {
+		marked := false
+		_, rows := s.Size()
+		for y := range rows {
+			line := s.Line(y)
+			at := strings.Index(line, sub)
+			if at >= 0 && strings.Contains(line[at:], "›") && !strings.Contains(line, "+"+sub) {
+				marked = true
+				break
+			}
+		}
+		if !marked {
+			t.Errorf("which-key does not mark the %s submenu with the chevron\n%s", sub, term.Snapshot())
 		}
 	}
 	top := rowWith(s, "prefix")
 	_, rows := s.Size()
 	bottom := top
 	for y := top; y < rows; y++ {
-		for _, w := range []string{"Create window", "Equalize splits", "Quit", "Focus sidebar", "+Debug", "Help"} {
+		for _, w := range []string{"Create window", "Equalize splits", "Quit", "Focus sidebar", "Debug", "Help"} {
 			if strings.Contains(s.Line(y), w) {
 				bottom = max(bottom, y)
 			}
