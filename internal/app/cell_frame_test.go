@@ -232,12 +232,43 @@ func firstCellDiff(a, b *vt.Emulator) string {
 // drawn from its emulator's cells (pane_cells.go) must leave the canvas with
 // exactly the cells the pane's text, from renderTerminal, parses to. The
 // content carries colours, attributes, a curly underline, wide characters and
-// erased runs, with the dock above and below.
+// erased runs, with the dock above and below, and beside the rail.
 func TestDirectPaneMatchesItsText(t *testing.T) {
-	for _, dock := range []string{"bottom", "top"} {
-		t.Run(dock, func(t *testing.T) {
-			m, win := fastPathOS(t, dock)
-			m.UseScreen(io.Discard, []string{"TERM=xterm-256color"}, colorprofile.TrueColor, termio.Output{Raw: true})
+	for _, tc := range []struct {
+		dock        string
+		rail, tiled bool
+	}{{"bottom", false, false}, {"top", false, false}, {"bottom", true, false}, {"bottom", true, true}} {
+		name := tc.dock
+		if tc.rail {
+			name += "-rail"
+		}
+		if tc.tiled {
+			name += "-tiled"
+		}
+		t.Run(name, func(t *testing.T) {
+			m, win := fastPathOS(t, tc.dock)
+			if tc.tiled {
+				// The shipped layout: a lone borderless tiled pane.
+				m = keyPaneOS(t, io.Discard)
+				win = m.Windows[0]
+				win.WriteOutput([]byte("\x1b[2J\x1b[H" + fastPathContent))
+				win.MarkContentDirty()
+			} else if tc.rail {
+				m.Settings.SidebarEnabled = true
+				m.Settings.SidebarPosition = "left"
+				m.Settings.SidebarWidth = config.SidebarDefaultWidth
+				m.SessionName = "work"
+				win.X, win.Width = m.GetLeftMargin(), m.GetContentWidth()
+				win.Resize(win.Width, win.Height)
+				win.WriteOutput([]byte("\x1b[2J\x1b[H" + fastPathContent))
+				win.MarkPositionDirty()
+				if m.GetSidebarWidth() == 0 {
+					t.Fatal("the rail is not shown")
+				}
+			}
+			if m.screen == nil {
+				m.UseScreen(io.Discard, []string{"TERM=xterm-256color"}, colorprofile.TrueColor, termio.Output{Raw: true})
+			}
 			d := m.chooseDirectPane()
 			if d.w == nil {
 				t.Fatal("the lone pane was not drawn from its cells")

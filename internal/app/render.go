@@ -897,6 +897,15 @@ func (m *OS) composeFrameParts() (*frameCanvas, string) {
 // visible windows, any overlay, separators, graphics, or active manipulation or
 // animation. Pure: it does not mutate render state.
 func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
+	return m.loneWindow(false)
+}
+
+// loneWindow is fullscreenFastWindow. With direct it is the window a client
+// with a screen draws from its emulator (pane_cells.go) while the compositor
+// draws everything else, so it may also fill the content area beside a rail,
+// and be a borderless tiled pane when no divider is drawn. The fast path,
+// which draws no rail and no divider, asks without.
+func (m *OS) loneWindow(direct bool) (*terminal.Window, bool) {
 	if len(m.Animations) > 0 || m.Renaming() {
 		return nil, false
 	}
@@ -972,7 +981,14 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 		return nil, false
 	}
 	if m.panesBorderless() {
-		return nil, false
+		if !direct {
+			return nil, false
+		}
+		// The dividers and stack bars are layers between the panes, which a
+		// lone pane's copy would be written over.
+		if splits, stack := m.dividerLines(m.GetBSPBounds()); len(splits) > 0 || len(stack) > 0 {
+			return nil, false
+		}
 	}
 	// A view of a larger or smaller session is the compositor's: the fast
 	// path draws the pane at the origin of the screen, unshifted, and draws
@@ -996,7 +1012,7 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	// it reserves any columns a lone window no longer fills the screen, so fall
 	// back to the compositor (which draws the sidebar and clips the pane to the
 	// content region). Cheapest correct v1; can be optimised later.
-	if m.GetSidebarWidth() > 0 || m.secondarySidebarWidth() > 0 {
+	if !direct && (m.GetSidebarWidth() > 0 || m.secondarySidebarWidth() > 0) {
 		return nil, false
 	}
 	if m.KittyPassthrough != nil && m.KittyPassthrough.HasPlacements() {
@@ -1035,8 +1051,12 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if own := m.OwnLayoutReserve(); m.GetTopMargin() != own.Top || m.GetBottomMargin() != own.Bottom {
 		return nil, false
 	}
-	rw, topMargin, usableH := m.GetRenderWidth(), m.GetTopMargin(), m.GetUsableHeight()
-	if window.X != 0 || window.Y != topMargin || window.Width != rw || window.Height != usableH {
+	// The content area: the whole width, or the columns the rails leave.
+	left, cw, topMargin, usableH := 0, m.GetRenderWidth(), m.GetTopMargin(), m.GetUsableHeight()
+	if direct {
+		left, cw = m.GetLeftMargin(), m.GetContentWidth()
+	}
+	if window.X != left || window.Y != topMargin || window.Width != cw || window.Height != usableH {
 		return nil, false
 	}
 	// The pane, chrome and dock backgrounds are painted into the frame string

@@ -12,8 +12,9 @@ import (
 	"tuios.dev/vt"
 )
 
-// A lone fullscreen pane on a client with a screen is drawn from its
-// emulator's cells straight into the canvas. The fast path the string frame
+// A lone pane that fills the content area, beside the rails or not, on a
+// client with a screen is drawn from its emulator's cells straight into the
+// canvas. The fast path the string frame
 // takes for it builds the pane as text, and the screen would parse that text
 // back into cells, which cost a lone pane about half a millisecond a frame.
 // Here the pane's box is built around a blank body, which is the same string
@@ -65,12 +66,14 @@ func (m *OS) directBoxLayer(id, box string, x, y, z int) *lipgloss.Layer {
 func (m *OS) chooseDirectPane() directPane {
 	// The pane's cells are copied after every layer is composed, so a layer
 	// drawn over the pane would be drawn under them. The overlays already keep
-	// a lone pane off this path (fullscreenFastWindow); the picture-in-picture
-	// view is the one layer that can sit on top of it, so it does too.
+	// a lone pane off this path (loneWindow); the rails and the dock are
+	// reserved regions beside the content area, which the pane fills and
+	// does not cross; the picture-in-picture view is the one layer that can
+	// sit on top of it, so it does too.
 	if m.screen == nil || fastPathDisabled || m.fastPathPaints() || m.pipWanted() {
 		return directPane{}
 	}
-	w, ok := m.fullscreenFastWindow()
+	w, ok := m.loneWindow(true)
 	if !ok || w.Terminal == nil || m.DrawsTML(w) || w.CopyMode != nil || w.ScrollbackOffset > 0 {
 		return directPane{}
 	}
