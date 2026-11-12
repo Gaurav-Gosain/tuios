@@ -296,11 +296,16 @@ type keptLayer struct {
 }
 
 // keepRequest is how GetCanvas asks composeLayers for its frame: the ground
-// to clear the canvas to, and whether the frame may keep the canvas (a
-// direct pane is drawn and no pass outside the compositor runs).
+// to clear the canvas to, the direct pane, and whether the frame may keep the
+// canvas (a direct pane is drawn and no pass outside the compositor runs).
+//
+// The direct pane's cells are copied right after its box layer is drawn, at
+// the pane's own depth, so every layer above it (a drag's label, quick look,
+// a menu) is drawn over its cells, as it would be over the pane's text.
 type keepRequest struct {
 	ground   ground
 	keepable bool
+	pane     *directPane
 }
 
 // matches reports whether the ordered layers, with their cells already
@@ -401,18 +406,43 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer, paneLa
 	fading := m.motion.fading > 0
 	shimmer := len(m.motion.rail) > 0
 
+	// The direct pane, drawn into the canvas from its emulator after its
+	// box layer.
+	var pane *directPane
+	var paneID string
+	var paneRect image.Rectangle
+	if keep != nil && keep.pane != nil && keep.pane.w != nil {
+		pane, paneID, paneRect = keep.pane, keep.pane.w.ID, paneContentRect(keep.pane.w)
+	}
+
 	// Whether this frame draws its layers and nothing over them: no pass
-	// below runs, and every layer is drawn from its cells.
-	plain := keep != nil && keep.keepable && !sliding && !view.on && popup == "" && !fading && !shimmer &&
+	// below runs (quiet), every layer is drawn from its cells, and no layer
+	// above the direct pane covers any of it (plain). The pane's cells are
+	// copied again on a kept canvas, so a layer over them would be written
+	// over.
+	quiet := keep != nil && keep.keepable && !sliding && !view.on && popup == "" && !fading && !shimmer &&
 		!m.gradient.on && m.hints == nil && m.paneLabels == nil && !m.dropZoneShown && !m.dropRingOn()
+	if quiet && m.Settings.ModalDim > 0 {
+		for i := range ordered {
+			if l := ordered[i].layer; l != nil && scrimBehind(l.GetID()) {
+				quiet = false
+				break
+			}
+		}
+	}
+	plain := quiet
 	drawn, reparsed := ordered[:0:0], false
 	if plain {
 		drawn = ordered[1:]
+		abovePane := false
 		for i := range drawn {
 			e := &drawn[i]
-			if e.layer == nil || e.cells == nil || (m.Settings.ModalDim > 0 && scrimBehind(e.layer.GetID())) {
+			if e.layer == nil || e.cells == nil || (abovePane && e.bounds.Overlaps(paneRect)) {
 				plain = false
 				break
+			}
+			if e.layer.GetID() == paneID {
+				abovePane = true
 			}
 			var fill layerFill
 			if painted {
@@ -436,6 +466,13 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer, paneLa
 	}
 
 	area := canvas.Bounds()
+	paneDrawn := false
+	drawPane := func(id string) {
+		if pane != nil && !paneDrawn && id == paneID {
+			m.copyDirectPane(canvas, pane, kept)
+			paneDrawn = true
+		}
+	}
 	for _, cl := range ordered {
 		if kept {
 			break
@@ -454,6 +491,7 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer, paneLa
 				scrimmed, chromeScrim = true, true
 			}
 			m.drawPaneLayer(canvas, cl, at, view.clip, painted, &grounds)
+			drawPane(cl.layer.GetID())
 			if chromeScrim && dialogScrim && cl.layer.GetID() == popup {
 				m.scrimDialogGround(canvas, at.Intersect(view.clip), popupDim)
 			}
@@ -495,6 +533,7 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer, paneLa
 			scrimmed = true
 		}
 		m.drawComposedLayer(canvas, cl, painted, &grounds, area)
+		drawPane(cl.layer.GetID())
 		if chromeScrim && scrimmedChrome(cl.layer.GetID()) {
 			m.applyScrimIn(canvas, cl.bounds, popupDim)
 		}
@@ -529,6 +568,14 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer, paneLa
 
 	if !slideDrawn {
 		m.drawSlideOld(canvas, slide)
+	}
+	// A kept canvas, or a pane whose layer was not drawn: its cells go on
+	// last, as nothing is drawn over them.
+	if pane != nil && !paneDrawn {
+		m.copyDirectPane(canvas, pane, kept)
+	}
+	if quiet {
+		m.checkFrame(canvas, ordered, painted, &grounds, ground, pane, kept)
 	}
 
 	// A cached layer that was not on this frame is dropped. A pane on another

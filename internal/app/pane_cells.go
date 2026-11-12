@@ -162,8 +162,9 @@ func (m *OS) blankBody(w, h int) string {
 }
 
 // copyDirectPane copies the pane's emulator cells into its content rectangle
-// on the canvas and lets go of its lock. The pane's text cache is dropped, so
-// a frame drawn the usual way reads the emulator again.
+// on the canvas. composeLayers calls it right after the pane's box layer is
+// drawn; the lock is let go when GetCanvas returns. The pane's text cache is
+// dropped, so a frame drawn the usual way reads the emulator again.
 //
 // On a frame that kept the canvas the rectangle holds the cells copied last
 // time, so a cell is written only where it differs, and each row written is
@@ -172,10 +173,31 @@ func (m *OS) copyDirectPane(canvas *frameCanvas, d *directPane, kept bool) {
 	if d.w == nil {
 		return
 	}
-	defer d.release()
+	m.paneCells(canvas, d, kept, m.frameRows)
+	if d.held {
+		return
+	}
+	w := d.w
+	m.directHold.id, m.directHold.rect, m.directHold.drawn = w.ID, paneContentRect(w), true
+	w.RenderedCols, w.RenderedRows = w.ContentWidth(), w.ContentHeight()
+	w.CachedContent = ""
+	w.CachedContentCols, w.CachedContentRows = 0, 0
+	w.CachedLayer = nil
+}
+
+// paneCells writes the direct pane's cells into its content rectangle on
+// canvas: the emulator's, or for a held pane the ones the screen last wrote.
+// With kept a cell is written only where it differs. Each row written is
+// marked in rows when rows is not nil. It changes nothing else, so the frame
+// check (frame_check.go) draws the pane with it too.
+func (m *OS) paneCells(canvas *frameCanvas, d *directPane, kept bool, rows []bool) {
 	w, screen := d.w, d.w.Terminal
 	r := paneContentRect(w).Intersect(canvas.Bounds())
-	h := &m.directHold
+	mark := func(y int) {
+		if y < len(rows) {
+			rows[y] = true
+		}
+	}
 	if d.held {
 		// The cells this rectangle had in the frame the screen last wrote.
 		if shown := m.screen.Shown(); shown.Bounds().Eq(canvas.Bounds()) {
@@ -185,14 +207,13 @@ func (m *OS) copyDirectPane(canvas *frameCanvas, d *directPane, kept bool) {
 					continue
 				}
 				copy(dst, src)
-				m.frameRows[y] = true
+				mark(y)
 			}
 		}
 		return
 	}
-	h.id, h.rect, h.drawn = w.ID, paneContentRect(w), true
-	rows, cols := min(r.Dy(), screen.Height()), min(r.Dx(), screen.Width())
-	for y := range rows {
+	n, cols := min(r.Dy(), screen.Height()), min(r.Dx(), screen.Width())
+	for y := range n {
 		line := canvas.Lines[r.Min.Y+y]
 		changed := false
 		for x := range cols {
@@ -208,11 +229,7 @@ func (m *OS) copyDirectPane(canvas *frameCanvas, d *directPane, kept bool) {
 			changed = true
 		}
 		if changed {
-			m.frameRows[r.Min.Y+y] = true
+			mark(r.Min.Y + y)
 		}
 	}
-	w.RenderedCols, w.RenderedRows = w.ContentWidth(), w.ContentHeight()
-	w.CachedContent = ""
-	w.CachedContentCols, w.CachedContentRows = 0, 0
-	w.CachedLayer = nil
 }

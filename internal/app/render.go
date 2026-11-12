@@ -459,18 +459,14 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 	// A frame with a direct pane and no pass over the canvas after the
 	// compositor's may keep the canvas the last frame left.
 	keepable := direct.w != nil && !m.spotlight.on && !m.celebration.active() && !m.themeFx.running() && !m.imagesOnScreen()
-	kept := m.composeLayers(canvas, layers, paneLayers, &keepRequest{ground: desktop, keepable: keepable})
-	m.canvasKept = kept
 	if len(m.frameRows) != canvas.Height() {
 		m.frameRows = make([]bool, canvas.Height())
 		m.frameRowsAll = true
 	}
+	kept := m.composeLayers(canvas, layers, paneLayers, &keepRequest{ground: desktop, keepable: keepable, pane: &direct})
+	m.canvasKept = kept
 	if !kept {
 		m.frameRowsAll = true
-	}
-	m.copyDirectPane(canvas, &direct, kept)
-	if kept {
-		m.checkKeptFrame(canvas, layers, paneLayers, desktop)
 	}
 
 	return canvas

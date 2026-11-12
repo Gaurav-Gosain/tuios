@@ -437,14 +437,15 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 			t.Errorf("the rail cache served a stale rail:\n%s", b)
 		}
 	})
-	// And every frame that keeps its canvas against a fresh compose
-	// (internal/app/frame_check.go). A miss is a write to the canvas the
-	// keep rule does not know of.
+	// And every frame that draws a pane from its emulator, kept or not,
+	// against a fresh compose (internal/app/frame_check.go). A miss is a
+	// write to the canvas the keep rule does not know of, or a layer drawn
+	// under the pane's cells.
 	frameCheck := filepath.Join(t.TempDir(), "frame-check.log")
 	env = append(env, "TUIOS_FRAME_CHECK="+frameCheck)
 	t.Cleanup(func() {
 		if b, err := os.ReadFile(frameCheck); err == nil && len(b) > 0 {
-			t.Errorf("a frame kept a stale canvas:\n%s", b)
+			t.Errorf("a frame differs from a fresh compose:\n%s", b)
 		}
 	})
 	env = append(env, o.env...)
