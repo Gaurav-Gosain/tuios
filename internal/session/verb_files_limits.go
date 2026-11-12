@@ -91,8 +91,8 @@ func (u *linkFileUsage) takeEntries(peer string, n int, limit int64, now time.Ti
 // tooManyEntries is the refusal of a file or folder past files_max_entries.
 // It is busy, so a copy waits and tries again.
 func tooManyEntries(policy config.LinkPolicy) *verbError {
-	return hintedVerbError(ErrVerbBusy, peerName(policy.Peer)+" made too many new files and folders on this machine. It may make "+strconv.FormatInt(policy.FilesMaxEntries, 10)+" in ten minutes (files_max_entries). Nothing was written.", &VerbHint{
-		Detail: "Wait a few minutes, then try again. To allow more, raise files_max_entries in the config on this machine.",
+	return hintedVerbError(ErrVerbBusy, peerName(policy.Peer)+" made too many new files and folders on "+thisMachineName()+". It may make "+strconv.FormatInt(policy.FilesMaxEntries, 10)+" in ten minutes (files_max_entries). Nothing was written.", &VerbHint{
+		Detail: "Wait a few minutes, then try again. To allow more, raise files_max_entries in the config of " + thisMachineName() + ".",
 	})
 }
 
@@ -198,7 +198,7 @@ func (d *Daemon) claimLinkStream(cs *connState) (release func(), verr *verbError
 		u.streams, u.parts = map[string]int{}, map[string]map[string]bool{}
 	}
 	if u.streams[peer] >= linkWriteStreamsMax {
-		return none, newVerbError(ErrVerbBusy, "this machine already takes "+strconv.Itoa(linkWriteStreamsMax)+" copies at once from "+peerName(d.linkPolicy(cs).Peer)+". Wait for one to end, then try again.")
+		return none, newVerbError(ErrVerbBusy, thisMachineName()+" already takes "+strconv.Itoa(linkWriteStreamsMax)+" copies at once from "+peerName(d.linkPolicy(cs).Peer)+". Wait for one to end, then try again.")
 	}
 	u.streams[peer]++
 	var once sync.Once
@@ -234,7 +234,7 @@ func (d *Daemon) claimLinkWriteIn(cs *connState, path, part string, offset, leng
 		u.streams, u.parts = map[string]int{}, map[string]map[string]bool{}
 	}
 	if stream && u.streams[peer] >= linkWriteStreamsMax {
-		return none, newVerbError(ErrVerbBusy, "this machine already takes "+strconv.Itoa(linkWriteStreamsMax)+" copies at once from "+peerName(policy.Peer)+". Wait for one to end, then try again.")
+		return none, newVerbError(ErrVerbBusy, thisMachineName()+" already takes "+strconv.Itoa(linkWriteStreamsMax)+" copies at once from "+peerName(policy.Peer)+". Wait for one to end, then try again.")
 	}
 	if u.parts[peer] == nil {
 		u.parts[peer] = map[string]bool{}
@@ -245,7 +245,7 @@ func (d *Daemon) claimLinkWriteIn(cs *connState, path, part string, offset, leng
 		}
 	}
 	if !partExists && !u.parts[peer][part] && len(u.parts[peer]) >= linkPartsMax {
-		return none, newVerbError(ErrVerbBusy, peerName(policy.Peer)+" has "+strconv.Itoa(linkPartsMax)+" unfinished copies on this machine. Finish or cancel some, then try again.")
+		return none, newVerbError(ErrVerbBusy, peerName(policy.Peer)+" has "+strconv.Itoa(linkPartsMax)+" unfinished copies on "+thisMachineName()+". Finish or cancel some, then try again.")
 	}
 
 	inDrop := false

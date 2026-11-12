@@ -328,6 +328,12 @@ func TestALinkWriteLeavesFreeSpaceAndKeepsToItsCaps(t *testing.T) {
 	if opened != 8 || code(streamErr) != "busy" {
 		t.Errorf("ASSERTION: opened %d write streams, want 8 and then busy: %v", opened, streamErr)
 	}
+	// The refusals travel to the hub, where "this machine" would be read as
+	// the hub, so they name the machine they are about.
+	host, _ := os.Hostname()
+	if !strings.Contains(errString(streamErr), host+" already takes 8 copies at once") {
+		t.Errorf("ASSERTION: the stream refusal does not name the machine that takes the copies (%q): %v", host, streamErr)
+	}
 	for _, c := range held {
 		_ = c.conn.Close()
 	}
@@ -349,6 +355,9 @@ func TestALinkWriteLeavesFreeSpaceAndKeepsToItsCaps(t *testing.T) {
 	record["the part refusal"] = errString(partErr)
 	if parts != 64 || code(partErr) != "busy" {
 		t.Errorf("ASSERTION: %d parts were made, want 64 and then busy: %v", parts, partErr)
+	}
+	if !strings.Contains(errString(partErr), "unfinished copies on "+host+".") {
+		t.Errorf("ASSERTION: the part refusal does not name the machine that holds the copies (%q): %v", host, partErr)
 	}
 	saveTransferArtifact(t, "link-write-limits", record)
 }
@@ -521,6 +530,9 @@ func TestALinkMakesABoundedNumberOfNewFiles(t *testing.T) {
 	}
 	if code(refusal) != "busy" || !strings.Contains(errString(refusal), "files_max_entries") {
 		t.Errorf("ASSERTION: the file past the bound was not refused as busy naming files_max_entries: %v", refusal)
+	}
+	if host, _ := os.Hostname(); !strings.Contains(errString(refusal), "new files and folders on "+host+".") {
+		t.Errorf("ASSERTION: the refusal does not name the machine that took the files (%q): %v", host, refusal)
 	}
 	if entries, _ := os.ReadDir(recv); len(entries) != made {
 		t.Errorf("ASSERTION: the receive folder holds %d entries, want the %d files made", len(entries), made)
