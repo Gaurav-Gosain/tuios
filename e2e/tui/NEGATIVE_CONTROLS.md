@@ -17248,3 +17248,28 @@ failed in all three runs.
 
 Repeat from the root with
 `go test -count=3 -run '^TestLayoutTreeOpNamingNoneOfTheSessionsWindowsIsRefused$' ./internal/session/`.
+
+## A long task board column sorted by its keys
+
+`TestBoardSortsALongColumnByItsKeys` (internal/app) holds the sort of a board
+column. Its budget subtest times boardStageItems on one Done column of 2000
+cards in two sessions, stage times shuffled, and wants the fastest of 5 runs
+under 10 ms. Its order subtest gives a Done column of 24, 25 and 1000
+cards, out of id order, with all three ranks, four cards to a stage time and a
+card of the last rank older than a blocked one, and wants the rows blocked
+first, then those whose holder needs the person, then the rest, each oldest
+first and in the order given on a tie. Its third subtest counts allocations at
+24 and 25 rows of the same column and wants at least 2 more at 25, where the
+sort by keys starts.
+
+Run on 2026-11-12 on a Ryzen 5 5600 (Linux x86_64, go1.27.4), branch `perf/board-column-key-sort`, each control under `-count=3` and failing in every run. The
+test passes on the branch.
+
+| Control | Subtest | The test fails with | Result |
+| --- | --- | --- | --- |
+| The code of main (every column sorted in place by insertion) | `budget`, `long_path_from_25_rows` | `sorting a Done column of 2000 cards took 91.92085ms at best, want at most 10ms`; `a Done column of 25 rows allocates 235 times and one of 24 rows 234: want at least 2 more at 25, where the sort by keys starts` | **caught** (3 of 3 runs) |
+| The key sort cut, the keys left in the order of the rows | `order/25_rows`, `order/1000_rows` | `a Done column of 25 cards is in the order` (the two lists follow); `a Done column of 1000 cards is in the order` | **caught** (3 of 3 runs) |
+| The cutoff removed, every column sorted by its keys | `long_path_from_25_rows` | `a Done column of 25 rows allocates 237 times and one of 24 rows 236: want at least 2 more at 25, where the sort by keys starts` | **caught** (3 of 3 runs) |
+
+Repeat from the repository root with
+`go test -count=1 -run '^TestBoardSortsALongColumnByItsKeys$' -v ./internal/app`.

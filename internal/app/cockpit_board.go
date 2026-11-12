@@ -200,6 +200,9 @@ func (m *OS) ckStageShows(stage string) bool {
 	return m.UserConfig == nil || m.UserConfig.Tasks.Shows(stage)
 }
 
+// boardShortSort is the longest column sorted by insertion over whole rows.
+const boardShortSort = 24
+
 // boardStageItems groups the cards by stage, each stage in its order. A card
 // shows when its holder is in list, which the selector and the search have
 // narrowed, or with no selector when the search matches its own words.
@@ -258,10 +261,31 @@ func (m *OS) boardStageItems(list []sidebarAgentEntry) [][]ckRow {
 		}
 		return 2
 	}
-	for _, items := range stages {
-		sortx.ShortStableFunc(items, func(a, b ckRow) int {
-			return cmp.Or(cmp.Compare(rank(a), rank(b)), cmp.Compare(ck.cards[a.card].StageAt, ck.cards[b.card].StageAt))
+	// A long column sorts small keys and moves each row once.
+	type boardKey struct {
+		rank int
+		at   int64
+		i    int
+	}
+	for g, items := range stages {
+		if len(items) <= boardShortSort {
+			sortx.ShortStableFunc(items, func(a, b ckRow) int {
+				return cmp.Or(cmp.Compare(rank(a), rank(b)), cmp.Compare(ck.cards[a.card].StageAt, ck.cards[b.card].StageAt))
+			})
+			continue
+		}
+		keys := make([]boardKey, len(items))
+		for i, r := range items {
+			keys[i] = boardKey{rank(r), ck.cards[r.card].StageAt, i}
+		}
+		slices.SortStableFunc(keys, func(a, b boardKey) int {
+			return cmp.Or(cmp.Compare(a.rank, b.rank), cmp.Compare(a.at, b.at))
 		})
+		sorted := make([]ckRow, len(items))
+		for k, key := range keys {
+			sorted[k] = items[key.i]
+		}
+		stages[g] = sorted
 	}
 	return stages
 }

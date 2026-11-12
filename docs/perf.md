@@ -6266,3 +6266,78 @@ renderer's allocations per render (5 KB). Several panes are not covered: the
 focused pane among many still goes the string way.
 
 Binary size: +20,480 bytes linux/amd64, +16,944 darwin/arm64.
+
+## 2026-11 a long task board column is sorted by its keys
+
+`boardStageItems` sorted each stage's rows with `sortx.ShortStableFunc`, an
+insertion sort over whole `ckRow` values (about 750 bytes each), a sort the
+package keeps for tens of elements. A column can hold far more: a session
+holds up to 1000 cards, the board lists every session's, and Done only grows.
+The rows are built again on every task event, every change of the agents or
+the Inbox and every minute, so a Done column of 2000 cards cost 92 ms a build
+on one core. A column of 24 rows or fewer still takes that sort. A longer
+column now builds one small key per row (its rank, its stage time and its
+place), sorts the keys with `slices.SortStableFunc` and places each row once in
+a new slice. The keys are sorted with `slices.SortStableFunc` and not through
+`internal/sortx` because this file keeps the generic sort for a list that can
+hold thousands of elements, and the doc of `internal/sortx` keeps `slices` on
+anything an event burst runs; a board column is both.
+
+TestBoardSortsALongColumnByItsKeys holds it: one Done column of 2000 cards
+stays within 10 ms (fastest of 5 runs, skipped under `-race` and `-short`), the
+order is checked against a rule written in the test at 24, 25 and 1000 rows,
+and the allocation count steps up at 25 rows, so the long path starts there and
+not later.
+
+Numbers, on a Ryzen 5 5600 (Linux x86_64, go1.27.4), one core (`taskset -c 3`,
+`-test.cpu 1`), n=10 interleaved, benchstat medians. `Stage` is
+`boardStageItems` alone, `Event` is one task event plus one frame of the board
+drawn as columns.
+`spread` puts the cards over every stage, `done70` puts 7 in 10 in Done,
+`alldone` all of them; the number is the card count:
+
+| Cards | Stage main | Stage branch | Event main | Event branch |
+|-------|------------|--------------|------------|--------------|
+| 10 spread | 15.90 us | 15.67 us (~) | 64.20 us | 65.15 us (~) |
+| 24 spread | 28.79 us | 28.46 us (~) | 87.00 us | 86.48 us (~) |
+| 24 alldone | 50.97 us | 51.28 us (~) | 96.59 us | 98.17 us (~) |
+| 25 alldone | 55.75 us | 34.90 us (-37%) | 102.01 us | 83.24 us (-18%) |
+| 100 spread | 134.0 us | 133.7 us (~) | 250.5 us | 242.5 us (~) |
+| 100 done70 | 263.14 us | 93.07 us (-65%) | 348.7 us | 175.7 us (-50%) |
+| 1000 spread | 5.99 ms | 0.79 ms (-87%) | 7.952 ms | 1.305 ms (-84%) |
+| 1000 done70 | 19.43 ms | 0.92 ms (-95%) | 21.837 ms | 1.325 ms (-94%) |
+| 2000 alldone | 91.55 ms | 2.38 ms (-97%) | 96.629 ms | 2.774 ms (-97%) |
+
+| Cards | Stage main | Stage branch | Event main | Event branch |
+|-------|------------|--------------|------------|--------------|
+| 10 spread | 21.09 KiB | 21.09 KiB | 46.95 KiB | 46.91 KiB (~) |
+| 24 spread | 50.07 KiB | 50.07 KiB | 102.5 KiB | 102.6 KiB (~) |
+| 24 alldone | 61.82 KiB | 61.82 KiB | 74.46 KiB | 74.41 KiB (~) |
+| 25 alldone | 61.82 KiB | 82.45 KiB (+33%) | 74.42 KiB | 95.02 KiB (+28%) |
+| 100 spread | 188.0 KiB | 188.0 KiB | 408.7 KiB | 408.7 KiB |
+| 100 done70 | 172.0 KiB | 229.8 KiB (+34%) | 280.7 KiB | 338.3 KiB (+21%) |
+| 1000 spread | 1.521 MiB | 2.310 MiB (+52%) | 3.065 MiB | 3.840 MiB (+25%) |
+| 1000 done70 | 2.013 MiB | 2.804 MiB (+39%) | 2.898 MiB | 3.661 MiB (+26%) |
+| 2000 alldone | 5.786 MiB | 7.333 MiB (+27%) | 5.858 MiB | 7.347 MiB (+25%) |
+
+| Cards | Stage main | Stage branch | Event main | Event branch |
+|-------|------------|--------------|------------|--------------|
+| 10 spread | 224 | 224 | 240 | 240 |
+| 24 spread | 249 | 249 | 265 | 265 |
+| 24 alldone | 234 | 234 | 248 | 248 |
+| 25 alldone | 235 | 237 | 249 | 251 |
+| 100 spread | 339 | 339 | 359 | 359 |
+| 100 done70 | 332 | 334 | 350.5 | 352 |
+| 1000 spread | 1,260 | 1,274 | 1,357 | 1,308 |
+| 1000 done70 | 1,254 | 1,268 | 1,434 | 1,298 |
+| 2000 alldone | 2,218 | 2,220 | 2,333 | 2,237 |
+
+A column of 24 rows or fewer is the same on both: no row at 24 or under
+differs in time (`~` is not significant at p<0.05), and none differs in bytes
+or allocations. The slice was not throttled during the runs (the throttled
+count did not move). The macOS arm64 numbers were not measured.
+
+What remains: a column over 24 rows pays for its keys and a second slice of
+rows, so it allocates 20% to 52% more bytes a build (1.5 MiB more at 2000 rows
+in Done) and two more allocations at 25 rows, in exchange for 18% to 97% less
+time. A column of 24 rows or under pays nothing.
