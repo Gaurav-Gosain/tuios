@@ -317,7 +317,7 @@ jobs:
       - name: Install fish and zsh for the shards that need them
         if: env.TESTED_URL == '' && steps.plan.outputs.run == 'true'
         run: |
-          if grep -qxE 'TestDropPreviewLooks|TestDnDBetweenPanes|TestHerdrFrontAgentStartQuotesForTheShell|TestRailFileDragIntoPane|TestShellIntegrationZshByDefault|TestShellIntegrationLeavesAMarkingSetupAlone' "$RUNNER_TEMP/names.txt"; then
+          if grep -qxE 'TestDropPreviewLooks|TestDnDBetweenPanes|TestHerdrFrontAgentStartQuotesForTheShell|TestPastedPathReadsBackBehindTmux|TestRailFileDragIntoPane|TestShellIntegrationZshByDefault|TestShellIntegrationLeavesAMarkingSetupAlone' "$RUNNER_TEMP/names.txt"; then
             start=$(date +%s)
             .github/scripts/apt-install.sh fish zsh
             echo "Installed fish and zsh in $(( $(date +%s) - start )) s"
