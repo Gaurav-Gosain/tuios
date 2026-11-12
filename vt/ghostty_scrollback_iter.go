@@ -65,8 +65,8 @@ func (t *GhosttyTerminal) ScrollbackText(from, end int, fn func(index, width int
 	var cells []TextCell
 	var text []byte
 	var ends []int
-	for i := from; i < end; i++ {
-		line := t.readHistoryLineLocked(src, i)
+	// Text and widths only, which is all the formatter path is exact about.
+	t.eachHistoryText(src, from, end, t.width, func(i int, line uv.Line) bool {
 		// The contents go into one buffer per line, and the cells are cut
 		// from it once it has stopped growing.
 		text, ends = text[:0], ends[:0]
@@ -80,10 +80,8 @@ func (t *GhosttyTerminal) ScrollbackText(from, end int, fn func(index, width int
 			cells = append(cells, TextCell{Content: text[at:ends[x]:ends[x]], Width: line[x].Width})
 			at = ends[x]
 		}
-		if !fn(i, len(line), cells) {
-			return
-		}
-	}
+		return fn(i, len(line), cells)
+	})
 }
 
 // CopyScrollback implements Terminal.CopyScrollback. The library has no copy
