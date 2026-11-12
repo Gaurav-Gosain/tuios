@@ -40,7 +40,7 @@ concurrency:
 # estimate is over E2E_LANE_LIMIT, which leaves a wide margin under the 12
 # minute go test timeout. The shard plan job makes the matrix from E2E_SHARDS.
 env:
-  E2E_SHARDS: "14"
+  E2E_SHARDS: "16"
   E2E_LANES: "2"
   E2E_LANE_LIMIT: 6m
   # A partial selection fills lanes to about this much each and leaves the
@@ -129,7 +129,7 @@ jobs:
 
       # The shards that get a test, by the same plan each shard makes for
       # itself below. A shard with no test does not start, so a small change
-      # takes two or three runners instead of fourteen. When the plan finds no
+      # takes two or three runners instead of sixteen. When the plan finds no
       # shard for a selection that holds tests, every shard starts.
       # The frame paths the shards run on (appearance.cell_frames). A pull
       # request runs the default path, cells. A push to main, and a run by
@@ -206,8 +206,9 @@ jobs:
     # The split was a hash of the test name until seven shards ran between 525
     # and 1054 seconds, and the long one crossed the 1080 second timeout. A
     # hash balances the count of tests, and a few tests take a minute or two.
-    # The split is now by measured time, with fourteen shards of two lanes near
-    # four minutes each (twelve until the suite outgrew them, 2026-11-09).
+    # The split is now by measured time, with sixteen shards of two lanes near
+    # five minutes each (twelve until the suite outgrew them, 2026-11-09, and
+    # fourteen until 2026-11-12, when the lanes were within seconds of the limit).
     #
     # The shard plan job names the shards that get a test, and only those
     # start. Each one still selects and packs its own tests.

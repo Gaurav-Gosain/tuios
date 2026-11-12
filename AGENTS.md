@@ -583,6 +583,13 @@ cd e2e/tui && TUIOS_E2E=1 go test -list '^Test' . |
   go run ./testselect -base origin/main -map ../../.dev/map/testmap.txt
 ```
 
+The whole suite is split into E2E_SHARDS shards of E2E_LANES lanes by the
+measured times in `e2e/tui/shardplan/durations.txt`, and the shard plan job
+fails when a lane is over E2E_LANE_LIMIT. Refresh the file (its header has the
+command) when that job fails, or when it reports more than about 50 tests
+without a measured time; a new test counts at the mean until then. Add a shard
+when a fresh file still leaves lanes within a minute of the limit.
+
 A test that claims to cover a bug must fail on a build with the fix removed.
 `e2e/tui/NEGATIVE_CONTROLS.md` records those runs and the rules for them.
 
