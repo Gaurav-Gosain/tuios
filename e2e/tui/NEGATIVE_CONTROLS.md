@@ -16875,3 +16875,25 @@ before, in an array. It is the regression half of the test.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestThemeEditorWrapsAndKeepsEachTabsPlace$' -v .`.
+
+## A live upgrade and panes on another machine
+
+`e2e/tui/upgrade_remote_panes_test.go` links the daemon to a second one as
+`build`. `TestUpgradeClosesAnExitedPaneOnAnotherMachine` opens a kept-open
+window on build whose program exits, upgrades live, and wants the upgrade to
+go ahead, name the window it closed before the new binary starts, count it in
+the result line, and keep the local pane's process.
+`TestUpgradeRefusalNamesEveryPaneOnAnotherMachine` runs a pane on build in
+each of two sessions and wants one refusal that names both.
+
+Run on 2026-11-12 on macOS, branch `untangle/upgrade-remote-panes`. Both tests
+pass on the branch.
+
+| Control | Test | The test fails with | Result |
+| --- | --- | --- | --- |
+| An exited pane counted as running in remotePaneRefusal | `TestUpgradeClosesAnExitedPaneOnAnotherMachine` | "ASSERTION: the upgrade was refused over an exited pane on another machine: exit status 1" | **caught** |
+| remotePaneRefusal names only the first running pane | `TestUpgradeRefusalNamesEveryPaneOnAnotherMachine` | "ASSERTION: the refusal does not name both running panes on build at once" | **caught** |
+
+The upgrade's output is in `handoff.json` in each test's artifact folder.
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'OnAnotherMachine$' -v .`.
