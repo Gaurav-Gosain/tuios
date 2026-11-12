@@ -14,6 +14,7 @@
 package apptest
 
 import (
+	"bytes"
 	"fmt"
 	"image/color"
 	"maps"
@@ -21,6 +22,7 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
+	"runtime/pprof"
 	"slices"
 	"strings"
 	"testing"
@@ -243,6 +245,42 @@ const cmdLimit = 5 * time.Second
 // maxCmdDepth bounds a chain of commands answering with more commands.
 const maxCmdDepth = 16
 
+// goroutineDump is the stacks of every goroutine, as the runtime prints them.
+func goroutineDump() string {
+	var buf bytes.Buffer
+	_ = pprof.Lookup("goroutine").WriteTo(&buf, 2)
+	return buf.String()
+}
+
+// stuckMessage is the failure for a command that did not answer in time. It
+// carries the stacks of the goroutines that are in the command's own code, so a
+// slow machine's failure says what the command was waiting in (a lock, a file
+// read, a process) and not only that it was slow. dump is the goroutine dump.
+func stuckMessage(name string, limit time.Duration, dump string) string {
+	msg := fmt.Sprintf("apptest: command %s has not answered after %v; if it waits by design, add it to parked", name, limit)
+	// A goroutine's stack is a block of lines between blank lines. The command's
+	// is the one that names its function; the base name drops the closure
+	// suffix, so a command and the helper it calls both show.
+	base := name
+	for {
+		i := strings.LastIndex(base, ".func")
+		if i < 0 {
+			break
+		}
+		base = base[:i]
+	}
+	var found []string
+	for block := range strings.SplitSeq(dump, "\n\n") {
+		if strings.Contains(block, base) && !strings.Contains(block, "apptest.stuckMessage") && !strings.Contains(block, "apptest.goroutineDump") {
+			found = append(found, strings.TrimSpace(block))
+		}
+	}
+	if len(found) == 0 {
+		return msg + "\nno goroutine is in its code any more: it finished just after the limit"
+	}
+	return msg + "\ngoroutines in it:\n\n" + strings.Join(found, "\n\n")
+}
+
 func cmdName(cmd tea.Cmd) string {
 	if fn := runtime.FuncForPC(reflect.ValueOf(cmd).Pointer()); fn != nil {
 		return fn.Name()
@@ -270,7 +308,7 @@ func (f *Fixture) run(cmd tea.Cmd, depth int) {
 	select {
 	case msg = <-done:
 	case <-time.After(cmdLimit):
-		f.t.Fatalf("apptest: command %s has not answered after %v; if it waits by design, add it to parked", name, cmdLimit)
+		f.t.Fatalf("%s", stuckMessage(name, cmdLimit, goroutineDump()))
 	}
 	switch msg := msg.(type) {
 	case nil, tea.QuitMsg:

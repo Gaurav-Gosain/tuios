@@ -16897,3 +16897,45 @@ pass on the branch.
 The upgrade's output is in `handoff.json` in each test's artifact folder.
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'OnAnotherMachine$' -v .`.
+
+## A silent pane stays silent when the shell is slow to silence it
+
+`TestAskFailsWithPromptStalledOnASilentPane` (internal/session) silences a
+pane's shell with `stty -echo; exec cat >/dev/null`, asks it a question, and
+wants `prompt_stalled`. The helper waited for the tty's echo of that command
+and 300 ms of quiet. The tty echoes what is typed before the shell has read it,
+so on a loaded machine the shell could still be starting the command when the
+question was typed; the echo of the question was output after Enter, the gate
+counted it as the pane taking the question, and the ask returned a reply. The
+helper now has the shell print a marker (typed in two pieces, so its echo does
+not hold it) after `stty -echo`, and waits for the marker.
+
+Run on 2026-11-12 on Linux (x86_64, arch-btw), branch `untangle/load-tests`.
+The branch passes (1.7 s; 2.7 s with the shell made slow).
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The old helper, with `sleep 1;` before `stty -echo` in the command (a slow shell) | "prompt_gate_test.go:126: expected error, got: map[... reply:are you there reply_source:screen settled_by:idle ...]" | **caught** |
+
+The same slow shell with the new helper passes, and so does the normal shell
+with either helper (10 runs each): the case is made by slowing the shell, which
+load did not do in 120 runs at 48 processes on 4 cores.
+
+Repeat from the repository root with
+`go test -count=1 -run '^TestAskFailsWithPromptStalledOnASilentPane$' -v ./internal/session`.
+
+## A command that does not answer in apptest says where it is
+
+`TestStuckMessageSaysWhereTheCommandIsBlocked` (internal/apptest). A fixture
+that waited five seconds for a command and failed said only that it had not
+answered, so a failure on a loaded machine (the launcher's scan, at load 13)
+could not be told from a slow machine. The failure now carries the stacks of
+the goroutines in the command's own code, or says that none is left.
+
+Run on 2026-11-12 on Linux (x86_64, arch-btw), branch `untangle/load-tests`.
+The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The message built with no stacks | "the message has no stack of the blocked command" and the closure case | **caught** |
+| The message built with every goroutine in it | "the message has the stack of a goroutine in other code" and "a command with no goroutine was not said to have finished" | **caught** |

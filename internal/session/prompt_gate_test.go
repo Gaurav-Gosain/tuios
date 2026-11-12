@@ -16,16 +16,20 @@ func silenceWindow(t *testing.T, d *Daemon, sess *Session, windowID string) *PTY
 		t.Fatalf("resolvePTYForTarget: %v", err)
 	}
 	waitForQuiet(t, pty, 300*time.Millisecond, 5*time.Second)
-	written := time.Now().UnixNano()
-	if _, err := pty.Write([]byte("stty -echo; exec cat >/dev/null\r")); err != nil {
+	// The shell prints a marker once echo is off, and then becomes cat. The
+	// marker is typed in two pieces, so the tty's echo of the command line does
+	// not contain it: only the shell running the command prints it whole. The
+	// tty echoes what is typed at once, before the shell has read it, so seeing
+	// the command echoed says nothing about the shell having run it, and a shell
+	// a loaded machine is slow to start the command in would still echo the
+	// question the test types next, which a silent pane must not.
+	if _, err := pty.Write([]byte("stty -echo; printf '%s%s\\n' SIL ENCED; exec cat >/dev/null\r")); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	// Wait for the shell to have echoed the command, so the quiet that follows
-	// is after it ran and not the prompt's from before.
-	deadline := time.Now().Add(5 * time.Second)
-	for pty.LastOutput() <= written || !strings.Contains(pty.CaptureContent(true, false), "/dev/null") {
+	deadline := time.Now().Add(30 * time.Second)
+	for !strings.Contains(pty.CaptureContent(true, false), "SILENCED") {
 		if time.Now().After(deadline) {
-			t.Fatal("the shell did not echo the command that silences it")
+			t.Fatal("the shell did not run the command that silences it")
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
