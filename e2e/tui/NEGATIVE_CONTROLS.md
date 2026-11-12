@@ -17293,3 +17293,35 @@ branch with one change.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSessionStartHintFollowsNameHint$' -v .`.
+
+## ACP version 2 in a protocol pane
+
+`agent_protocol_v2_test.go` runs the stand-in agent in `testdata/fakeacp`
+with `-versions=1`, `2`, `1,2` or `none`, in a pane start-agent --protocol acp
+opens, with `[agents] acp_version = 2` in the config, and once with the
+default. The tests check that a version 2 turn ends on the agent's idle state
+after its reply, a command permission reads needs_input and is answered in the
+pane, a whole message that replaces a streamed one is shown again, the plan,
+notice, compaction, commands and an unknown update kind each show, a cancel
+ends the turn after the agent's last words, requires_action with no question
+reads needs_input, a question the agent withdraws leaves the pane, a version 1
+agent asked for 2 is spoken to as version 1 on one connection, an agent that
+refuses both versions is started again for version 1 and both refusals are
+named, and a version 2 agent with the default says how to turn version 2 on.
+
+Run on 2026-11-13 on macOS (arm64). The branch passes all four tests. Five
+controls, each this branch with one change.
+
+| Control | Test | Failure | Verdict |
+| --- | --- | --- | --- |
+| `Session.Prompt` in `internal/acp` returns end_turn on the version 2 prompt answer | `TestProtocolPaneACPv2TurnAndPermission` | `the turn ended before its reply`, then `the agent never read needs_input` | **caught** |
+| `acp.Connect` gives up after the version 2 refusal, with no fresh connection for 1 | `TestProtocolPaneACPVersionNegotiation` | `the pane never showed ... the agent refused ACP version 2 \| and version 1` | **caught** |
+| The ACP adapter never watches `PermissionRequest.Withdrawn` | `TestProtocolPaneACPv2CancelAndWait` | `the pane never showed answered: cancelled (the agent withdrew the question) \| WITHDRAWN: cancelled` | **caught** |
+| `Session.onAgentState` ignores requires_action | `TestProtocolPaneACPv2CancelAndWait` | `the agent never read needs_input` | **caught** |
+| A whole agent_message is appended like a chunk | `TestProtocolPaneACPv2TurnAndPermission` | `the pane never showed Draft ans \| the agent replaced its message: \| FINAL ANSWER: the bug is fixed` | **caught** |
+
+The wire shapes of both versions, the echo of version 2 by a version 1 agent,
+`-32022`, a stale idle and an idle before the prompt answer are held by the
+golden files in `internal/acp/testdata/golden`. The frames are under
+`TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestProtocolPaneACP' -v .`.
