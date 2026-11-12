@@ -423,6 +423,18 @@ jobs:
             ../../scripts/retry-flaky.sh "$RUNNER_TEMP/e2e.log" ./...
           fi
 
+      # A failed test copies its frames to /tmp/tuios-e2e-artifacts/TESTNAME
+      # (keepFailedArtifacts in e2e/tui). Keep that folder when the shard
+      # fails, so the screens that failed can be read without a rerun.
+      - name: Keep the frames of the failed tests
+        if: failure() && env.TESTED_URL == '' && steps.plan.outputs.run == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-tui-frames-shard-${{ matrix.shard }}-${{ matrix.frame }}
+          path: /tmp/tuios-e2e-artifacts
+          if-no-files-found: ignore
+          retention-days: 3
+
       - name: Reap any surviving daemons
         # The harness tears down its own process groups, but a hard job failure
         # can leave one behind, and a leaked daemon would poison a self-hosted
