@@ -353,7 +353,7 @@ func TestPasteBufferVerbsFollowPaneGrants(t *testing.T) {
 	grant("read")
 	// Only the part of the refusal that names the grant reaches the pane:
 	// the whole message is long enough to scroll HUNTER2 off a small pane.
-	runInShell(t, term, "clear; "+bin+" show-buffer | tr a-z A-Z; echo; e=$(mktemp); "+bin+" set-buffer x 2>\"$e\"; s=$?; grep -o 'needs the [a-z]* grant' \"$e\"; echo READ_SET=$s", "READ_SET=1", shellTimeout)
+	runInShell(t, term, "clear; "+bin+" show-buffer | tr a-z A-Z; echo; e=$(mktemp); "+bin+" set-buffer x 2>\"$e\"; s=$?; grep -o 'needs the [a-z]* grant' \"$e\"; rm -f \"$e\"; echo READ_SET=$s", "READ_SET=1", shellTimeout)
 	text := term.Screen().Text()
 	if !strings.Contains(text, "HUNTER2") {
 		t.Fatalf("a pane with read could not read the buffer\n%s", term.Snapshot())
@@ -365,7 +365,7 @@ func TestPasteBufferVerbsFollowPaneGrants(t *testing.T) {
 	// write alone: setting is served, reading and pasting are refused. The
 	// refusal is cut to its grant again, or it scrolls WRITE_SET off.
 	grant("write")
-	runInShell(t, term, "clear; "+bin+" set-buffer mine-x; echo WRITE_SET=$?; e=$(mktemp); "+bin+" paste-buffer 2>\"$e\"; s=$?; grep -o 'needs the [a-z]* grant' \"$e\"; echo WRITE_PASTE=$s", "WRITE_PASTE=1", shellTimeout)
+	runInShell(t, term, "clear; "+bin+" set-buffer mine-x; echo WRITE_SET=$?; e=$(mktemp); "+bin+" paste-buffer 2>\"$e\"; s=$?; grep -o 'needs the [a-z]* grant' \"$e\"; rm -f \"$e\"; echo WRITE_PASTE=$s", "WRITE_PASTE=1", shellTimeout)
 	text = term.Screen().Text()
 	if !strings.Contains(text, "WRITE_SET=0") {
 		t.Fatalf("a pane with write could not set a buffer\n%s", term.Snapshot())

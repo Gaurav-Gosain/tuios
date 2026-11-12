@@ -103,7 +103,7 @@ func finishRunTemp(code int) int {
 	if len(left) == 0 {
 		return code
 	}
-	fmt.Fprintf(os.Stderr, "\ne2e: the tests left %d folders in %s. A test that makes a folder with os.MkdirTemp removes it, or uses t.TempDir:\n%s\n", len(left), runTempRoot, strings.Join(left, "\n"))
+	fmt.Fprintf(os.Stderr, "\ne2e: the tests left %d entries in %s. A test or a shell command it runs that makes one (os.MkdirTemp, mktemp) removes it, or uses t.TempDir:\n%s\n", len(left), runTempRoot, strings.Join(left, "\n"))
 	if code == 0 {
 		return 1
 	}
@@ -130,7 +130,7 @@ func leftInRunTemp(root string) []string {
 			continue
 		}
 		size := folderBytes(path)
-		items = append(items, item{fmt.Sprintf("  %s (%s)", e.Name(), byteWords(size)), size})
+		items = append(items, item{fmt.Sprintf("  %s (%s)%s", e.Name(), byteWords(size), leakedPreview(path, e)), size})
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].size > items[j].size })
 	out := make([]string, len(items))
@@ -138,6 +138,46 @@ func leftInRunTemp(root string) []string {
 		out[i] = it.line
 	}
 	return out
+}
+
+// leakedPreview shows what a small leaked file holds, its first lines, or the
+// first names in a leaked folder, so the leak names the program that made it.
+func leakedPreview(path string, e fs.DirEntry) string {
+	const maxBytes, maxLines, maxWidth = 4096, 3, 120
+	if e.IsDir() {
+		names, _ := os.ReadDir(path)
+		var list []string
+		for i, n := range names {
+			if i == 5 {
+				list = append(list, "...")
+				break
+			}
+			list = append(list, n.Name())
+		}
+		if len(list) == 0 {
+			return ": empty folder"
+		}
+		return ": holds " + strings.Join(list, ", ")
+	}
+	info, err := e.Info()
+	if err != nil || info.Size() == 0 || info.Size() > maxBytes {
+		return ""
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var out strings.Builder
+	for i, line := range strings.Split(strings.TrimRight(string(b), "\n"), "\n") {
+		if i == maxLines {
+			break
+		}
+		if len(line) > maxWidth {
+			line = line[:maxWidth] + "..."
+		}
+		out.WriteString("\n      | " + strings.ToValidUTF8(line, "?"))
+	}
+	return out.String()
 }
 
 func folderBytes(path string) int64 {

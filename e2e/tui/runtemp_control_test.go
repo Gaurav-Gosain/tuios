@@ -26,6 +26,13 @@ func TestRunTempLeak(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "f"), make([]byte, 2048), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	// A small file shows its first lines in the report.
+	f, err := os.CreateTemp("", "leaked-file-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = f.WriteString("needs the respond grant\nsecond line\n")
+	_ = f.Close()
 	if mode == "stuck" {
 		if err := os.Chmod(dir, 0o500); err != nil {
 			t.Fatal(err)
@@ -90,6 +97,9 @@ func TestRunTempGuard(t *testing.T) {
 			}
 			if !strings.Contains(out, "leaked-on-purpose") {
 				t.Fatalf("the guard did not name the leaked folder:\n%s", out)
+			}
+			if !strings.Contains(out, "| needs the respond grant") || !strings.Contains(out, "| second line") {
+				t.Fatalf("the guard did not show what the leaked file holds:\n%s", out)
 			}
 			if strings.Contains(out, filepath.Base(other)) {
 				t.Fatalf("the guard blamed a folder of another run:\n%s", out)

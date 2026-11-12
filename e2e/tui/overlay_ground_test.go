@@ -58,7 +58,9 @@ import (
 // artifactDir is where a test's frames are kept: $TUIOS_E2E_FRAMES when that
 // is set, in a directory named for the test. Without it the frames go to a
 // folder of the test's own that is removed when the test ends, so an ordinary
-// run leaves nothing in the temp dir.
+// run leaves nothing in the temp dir. A test that fails first copies its folder
+// to failedArtifactRoot, outside the run's folder, so the frames of a failure
+// survive the run and a person can open them.
 func artifactDir(t *testing.T) string {
 	t.Helper()
 	name := regexp.MustCompile(`[^A-Za-z0-9_.-]+`).ReplaceAllString(t.Name(), "_")
@@ -87,12 +89,38 @@ func scratchArtifactDir(t *testing.T, name string) string {
 	}
 	dir := t.TempDir()
 	scratchArtifactDirs[name] = dir
+	// Cleanups run last in, first out: this one runs before t.TempDir removes dir.
 	t.Cleanup(func() {
 		scratchArtifactMu.Lock()
 		delete(scratchArtifactDirs, name)
 		scratchArtifactMu.Unlock()
+		if t.Failed() {
+			keepFailedArtifacts(t, dir, name)
+		}
 	})
 	return dir
+}
+
+// failedArtifactRoot is where the frames of a failed test are kept when
+// TUIOS_E2E_FRAMES is not set. It is not under the run's folder, which the run
+// removes, and a later run replaces the folder of a test with the same name.
+const failedArtifactRoot = "/tmp/tuios-e2e-artifacts"
+
+// keepFailedArtifacts copies dir to failedArtifactRoot/name and says where.
+func keepFailedArtifacts(t *testing.T, dir, name string) {
+	if entries, err := os.ReadDir(dir); err != nil || len(entries) == 0 {
+		return
+	}
+	dst := filepath.Join(failedArtifactRoot, name)
+	if err := os.RemoveAll(dst); err != nil {
+		t.Logf("keep the frames of %s: %v", name, err)
+		return
+	}
+	if err := os.CopyFS(dst, os.DirFS(dir)); err != nil {
+		t.Logf("keep the frames of %s: %v", name, err)
+		return
+	}
+	t.Logf("frames of the failed test kept in %s", dst)
 }
 
 // saveArtifact writes the screen, plain and styled, into dir.

@@ -324,7 +324,7 @@ func TestAgentsOffRespondGrantStillHolds(t *testing.T) {
 	// The quotes keep the typed line itself from matching the marker.
 	// Only the part of the refusal that names the grant reaches the pane:
 	// the whole message is long enough to scroll it off a small pane.
-	answer := "e=$(mktemp); " + tuiosBin + " send-keys -s rail -w PROMPTPANE 'y Enter' 2>\"$e\"; s=$?; grep -o 'needs the [a-z]* grant' \"$e\"; echo RESP_\"EXIT\"=$s\n"
+	answer := "e=$(mktemp); " + tuiosBin + " send-keys -s rail -w PROMPTPANE 'y Enter' 2>\"$e\"; s=$?; grep -o 'needs the [a-z]* grant' \"$e\"; rm -f \"$e\"; echo RESP_\"EXIT\"=$s\n"
 	if out, err := tuiosCLI(t, base, "send-text", "-s", "rail", "-w", "AGENTPANE", answer); err != nil {
 		t.Fatalf("send-text into A: %v\n%s", err, out)
 	}
