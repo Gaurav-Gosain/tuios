@@ -1493,10 +1493,10 @@ func DefaultConfig() *UserConfig {
 				"restore_minimized_9": {"shift+9", "("},
 			},
 			PrefixMode: map[string][]string{
-				"prefix_new_window":    {"c"},
-				"prefix_close_window":  {"x"},
+				"new_window":           {"c"},
+				"close_window":         {"x"},
 				"prefix_rename_window": {"r"},
-				"prefix_settings":      {","},
+				"open_settings":        {","},
 				"prefix_keybinds":      {"k"},
 				"prefix_next_window":   {"n", "tab"},
 				"prefix_prev_window":   {"p", "shift+tab"},
@@ -1518,8 +1518,8 @@ func DefaultConfig() *UserConfig {
 				// in internal/input/prefix_repeat.go.
 				"terminal_focus_left":  {"left"},
 				"terminal_focus_right": {"right"},
-				"terminal_focus_up":    {"up"},
-				"terminal_focus_down":  {"down"},
+				"focus_up":             {"up"},
+				"focus_down":           {"down"},
 				// Stepping through sessions, which tmux puts on the same pair
 				// of brackets. The direct chords are alt+shift+n and
 				// alt+shift+p, and the first of those is dead on macOS: the
@@ -1553,31 +1553,31 @@ func DefaultConfig() *UserConfig {
 				// Capital X, one shift away from the x that closes a single pane.
 				// The two verbs sound alike and only one of them is recoverable, so
 				// the slip that matters costs a pane and never the session.
-				"prefix_close_session":    {"X"},
-				"prefix_exit_mode":        {"esc"},
-				"prefix_selection":        {"["},
-				"prefix_help":             {"?"},
-				"prefix_debug":            {"D"},
-				"prefix_tape":             {"T"},
-				"prefix_quit":             {"q"},
-				"prefix_fullscreen":       {"z"},
-				"prefix_split_horizontal": {"-"},
-				"prefix_split_vertical":   {"|", "\\"},
-				"prefix_rotate_split":     {"R"},
-				"prefix_equalize_splits":  {"="},
-				"prefix_scrollback":       {"s"},
+				"prefix_close_session": {"X"},
+				"prefix_exit_mode":     {"esc"},
+				"prefix_selection":     {"["},
+				"toggle_help":          {"?"},
+				"prefix_debug":         {"D"},
+				"prefix_tape":          {"T"},
+				"prefix_quit":          {"q"},
+				"prefix_fullscreen":    {"z"},
+				"split_horizontal":     {"-"},
+				"split_vertical":       {"|", "\\"},
+				"rotate_split":         {"R"},
+				"equalize_splits":      {"="},
+				"prefix_scrollback":    {"s"},
 				// s is the scrollback browser, so the capture takes capital C,
 				// one shift away from the c that creates a window. Nothing here
 				// is destructive either way.
 				"prefix_screenshot":        {"C"},
-				"prefix_command_palette":   {"P"},
+				"command_palette":          {"P"},
 				"prefix_file_search":       {"f"},
 				"prefix_toggle_sidebar":    {"b"},
 				"prefix_toggle_other_rail": {"H"},
 				// B turns the spotlight on and off from either mode. In
 				// terminal mode it is the way out of the beam, since esc
 				// belongs to the program in the pane there.
-				"prefix_toggle_spotlight": {"B"},
+				"toggle_spotlight":        {"B"},
 				"prefix_session_switcher": {"S"},
 				// + adds a task card from anywhere. N, the design's first
 				// pick, is the last message.
@@ -1658,29 +1658,29 @@ func DefaultConfig() *UserConfig {
 				"set_note": {"I"},
 			},
 			WindowPrefix: map[string][]string{
-				"window_prefix_new":    {"n"},
-				"window_prefix_close":  {"x"},
+				"new_window":           {"n"},
+				"close_window":         {"x"},
 				"window_prefix_rename": {"r"},
-				"window_prefix_next":   {"tab"},
-				"window_prefix_prev":   {"shift+tab"},
-				"window_prefix_tiling": {"t"},
+				"prefix_next_window":   {"tab"},
+				"prefix_prev_window":   {"shift+tab"},
+				"toggle_tiling":        {"t"},
 				"window_prefix_float":  {"f"},
-				"window_prefix_cancel": {"esc"},
+				"prefix_cancel":        {"esc"},
 			},
 			MinimizePrefix: map[string][]string{
-				"minimize_prefix_focused":     {"m"},
-				"minimize_prefix_restore_1":   {"1"},
-				"minimize_prefix_restore_2":   {"2"},
-				"minimize_prefix_restore_3":   {"3"},
-				"minimize_prefix_restore_4":   {"4"},
-				"minimize_prefix_restore_5":   {"5"},
-				"minimize_prefix_restore_6":   {"6"},
-				"minimize_prefix_restore_7":   {"7"},
-				"minimize_prefix_restore_8":   {"8"},
-				"minimize_prefix_restore_9":   {"9"},
-				"minimize_prefix_restore_all": {"M"},
-				"minimize_prefix_focus_only":  {"f"},
-				"minimize_prefix_cancel":      {"esc"},
+				"minimize_prefix_focused":    {"m"},
+				"minimize_prefix_restore_1":  {"1"},
+				"minimize_prefix_restore_2":  {"2"},
+				"minimize_prefix_restore_3":  {"3"},
+				"minimize_prefix_restore_4":  {"4"},
+				"minimize_prefix_restore_5":  {"5"},
+				"minimize_prefix_restore_6":  {"6"},
+				"minimize_prefix_restore_7":  {"7"},
+				"minimize_prefix_restore_8":  {"8"},
+				"minimize_prefix_restore_9":  {"9"},
+				"restore_all":                {"M"},
+				"minimize_prefix_focus_only": {"f"},
+				"prefix_cancel":              {"esc"},
 			},
 			WorkspacePrefix: map[string][]string{
 				"workspace_prefix_switch_1": {"1"},
@@ -1702,26 +1702,26 @@ func DefaultConfig() *UserConfig {
 				"workspace_prefix_move_8":   {"*"},
 				"workspace_prefix_move_9":   {"("},
 				"workspace_prefix_rename":   {"r"},
-				"workspace_prefix_cancel":   {"esc"},
+				"prefix_cancel":             {"esc"},
 			},
 			DebugPrefix: map[string][]string{
 				"debug_prefix_logs":       {"l"},
 				"debug_prefix_cache":      {"c"},
 				"debug_prefix_animations": {"a"},
 				"debug_prefix_showkeys":   {"k"},
-				"debug_prefix_cancel":     {"esc"},
+				"prefix_cancel":           {"esc"},
 			},
 			TapePrefix: map[string][]string{
-				"tape_prefix_manager": {"m"},
+				"toggle_tape_manager": {"m"},
 				"tape_prefix_review":  {"t"},
 				"tape_prefix_record":  {"r"},
 				"tape_prefix_stop":    {"s"},
-				"tape_prefix_cancel":  {"esc"},
+				"prefix_cancel":       {"esc"},
 			},
 			LayoutPrefix: map[string][]string{
-				"layout_prefix_load":   {"l"},
-				"layout_prefix_save":   {"s"},
-				"layout_prefix_cancel": {"esc"},
+				"layout_prefix_load": {"l"},
+				"layout_prefix_save": {"s"},
+				"prefix_cancel":      {"esc"},
 				// Corner snapping lives here rather than on the bare digits in
 				// window mode, where it would shadow select_window_1 through
 				// _4. See getDefaultLayoutKeybinds for why it lost that contest.
@@ -2261,8 +2261,8 @@ func getDefaultTerminalModeKeybinds() map[string][]string {
 			"terminal_exit_mode":        {"opt+esc"},
 			"terminal_focus_left":       {"alt+left"},
 			"terminal_focus_right":      {"alt+right"},
-			"terminal_focus_up":         {"alt+up"},
-			"terminal_focus_down":       {"alt+down"},
+			"focus_up":                  {"alt+up"},
+			"focus_down":                {"alt+down"},
 			"terminal_scroll_up":        {"shift+up"},
 			"terminal_scroll_down":      {"shift+down"},
 			"terminal_scroll_page_up":   {"shift+pgup"},
@@ -2282,8 +2282,8 @@ func getDefaultTerminalModeKeybinds() map[string][]string {
 		// can set to [] to hand back. See docs/KEYBINDINGS.md.
 		"terminal_focus_left":       {"alt+left"},
 		"terminal_focus_right":      {"alt+right"},
-		"terminal_focus_up":         {"alt+up"},
-		"terminal_focus_down":       {"alt+down"},
+		"focus_up":                  {"alt+up"},
+		"focus_down":                {"alt+down"},
 		"terminal_scroll_up":        {"shift+up"},
 		"terminal_scroll_down":      {"shift+down"},
 		"terminal_scroll_page_up":   {"shift+pgup"},
@@ -3608,6 +3608,10 @@ type RetiredKeybind struct {
 
 // fillMissingKeybinds fills in any missing keybindings with defaults
 func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
+	// An older action name in the user's tables becomes the action's own
+	// name first, so it replaces the default's keys as it always did rather
+	// than adding to them.
+	canonicalizeKeybindings(&cfg.Keybindings)
 	// A preset is applied to the defaults first, so everything below fills
 	// from it. The user's keys after the leader and in terminal mode win over
 	// the preset's: there the fill yields.
@@ -3618,6 +3622,7 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	if p := cfg.Keybindings.Preset; p != "" && p != PresetTuios {
 		kb := defaultCfg.Keybindings
 		if applyPreset(&kb, p) == nil {
+			canonicalizeKeybindings(&kb)
 			shadows := dropPresetShadows(cfg.Keybindings.PrefixMode, defaultCfg.Keybindings.PrefixMode, kb.PrefixMode) +
 				dropPresetShadows(cfg.Keybindings.TerminalMode, defaultCfg.Keybindings.TerminalMode, kb.TerminalMode) +
 				dropPresetShadows(cfg.Keybindings.WindowPrefix, defaultCfg.Keybindings.WindowPrefix, kb.WindowPrefix) +
@@ -3959,7 +3964,7 @@ func fillMapDefaults(target, defaults map[string][]string) {
 // taken is not added.
 //
 // It is not the rule for every section, because some sections reclaim a key
-// on purpose: prefix_settings takes "," back from a config written when ","
+// on purpose: open_settings takes "," back from a config written when ","
 // was a second key for prefix_rename_window (see the migration below), and
 // that needs the default filled in first.
 func fillMapDefaultsYielding(target, defaults map[string][]string) []YieldedDefault {
@@ -4031,7 +4036,7 @@ func keybindSectionPairs(cfg, defaultCfg *UserConfig) []keybindSection {
 // behind in every config written before the move: the file already names the
 // old action with the key, and fillMapDefaults only adds the new action, so
 // both end up on it. That is how "," ended up on prefix_rename_window and
-// prefix_settings at once, which made the leader chord a coin flip between
+// open_settings at once, which made the leader chord a coin flip between
 // renaming a pane and opening settings. Dropping the key from the action whose
 // own default no longer lists it leaves the binding a fresh config would have.
 //

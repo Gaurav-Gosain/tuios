@@ -17026,3 +17026,18 @@ Run on 2026-11-12 on macOS. The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestKeybindManagerTabsKeepTheirPlace$' -v .`.
+
+## Older action names
+
+`e2e/tui/action_alias_test.go` `TestAnOlderActionNameStillBindsTheAction`
+binds the settings page under its older name prefix_settings to ctrl+b Y and
+unbinds terminal_focus_up, an older name of focus_up, with an empty list. It
+reads `tuios keybinds list --json` and presses ctrl+b Y.
+
+Run on 2026-11-12 on branch `untangle/r2-3-aliases`, on the Mac through
+heavy.sh.
+
+| Control | Where it failed | Verdict |
+| --- | --- | --- |
+| origin/main 689fd9dde, before one name per action | "keybinds list still has a row named prefix_settings" and "0 rows give open_settings the key Y" | **caught** |
+| The branch with the empty canonical entry cut from `canonicalizeTable` | "terminal_focus_up = [] in the file left focus_up on alt+up" (scope terminal) | **caught** |

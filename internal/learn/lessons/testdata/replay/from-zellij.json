@@ -117,7 +117,7 @@
 {"t":12632,"type":"overlay.close","data":{"name":"whichkey"},"state":{"mode":"terminal","windows":3,"totalWindows":3,"pip":"","glyphs":"default","windowList":[{"id":"5d05be72-1368-4682-a6c2-c32f8e4cd50e","agent":"","kind":""},{"id":"19cfcf41-faed-43af-bce0-5c7ba4d1741b","agent":"","kind":""},{"id":"ae973448-9b13-41de-8b90-a89011edf417","agent":"","kind":""}]}},
 {"t":13143,"type":"overlay.open","data":{"name":"whichkey"},"state":{"mode":"terminal","windows":3,"totalWindows":3,"pip":"","glyphs":"default","windowList":[{"id":"5d05be72-1368-4682-a6c2-c32f8e4cd50e","agent":"","kind":""},{"id":"19cfcf41-faed-43af-bce0-5c7ba4d1741b","agent":"","kind":""},{"id":"ae973448-9b13-41de-8b90-a89011edf417","agent":"","kind":""}]}},
 {"t":13267,"type":"key","data":{"key":"k","mode":"terminal"},"state":{"windowList":[]}},
-{"t":13268,"type":"action","data":{"name":"terminal_focus_up","mode":"terminal"},"state":{"windowList":[]}},
+{"t":13268,"type":"action","data":{"name":"focus_up","mode":"terminal"},"state":{"windowList":[]}},
 {"t":13269,"type":"window.focus","data":{"title":"Terminal 19cfcf41","from":"ae973448-9b13-41de-8b90-a89011edf417","to":"19cfcf41-faed-43af-bce0-5c7ba4d1741b"},"state":{"mode":"terminal","windows":3,"totalWindows":3,"pip":"","glyphs":"default","windowList":[{"id":"5d05be72-1368-4682-a6c2-c32f8e4cd50e","agent":"","kind":""},{"id":"19cfcf41-faed-43af-bce0-5c7ba4d1741b","agent":"","kind":""},{"id":"ae973448-9b13-41de-8b90-a89011edf417","agent":"","kind":""}]}},
 {"t":14525,"type":"lesson.showMe"},
 {"t":14530,"type":"key","data":{"key":"ctrl+g","mode":"terminal"},"state":{"windowList":[]}},

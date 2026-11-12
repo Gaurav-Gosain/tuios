@@ -225,10 +225,11 @@ func TestContextMenuFitsAtScreenEdges(t *testing.T) {
 			waitMenu(t, term, tc.name, "New window", "Command palette")
 
 			// Every row of the menu has to be complete. "Command palette" is the
-			// longest label plus the longest hint, so it is the row that goes
-			// missing first if the menu is hanging off an edge.
+			// longest label, so its row is the one that goes missing first if the
+			// menu is hanging off an edge: its key hint, whatever key the mode
+			// shows for it, has to be on the line after the label.
 			screen := term.Screen()
-			if !strings.Contains(screen.Text(), "ctrl+b") {
+			if !rowHasHint(screen, "Command palette") {
 				t.Fatalf("%s: the menu's key hints are drawn off the screen edge\n%s",
 					tc.name, term.Snapshot())
 			}
@@ -566,4 +567,19 @@ func TestContextMenuReachesTopWindowRowWithTopDock(t *testing.T) {
 			top, term.Snapshot())
 	}
 	alive(t, term, "after opening the pane menu on the top window row")
+}
+
+// rowHasHint reports whether the menu row with label shows a key hint after
+// it on the same line, inside the menu's frame.
+func rowHasHint(s tuitest.Screen, label string) bool {
+	_, rows := s.Size()
+	for r := range rows {
+		_, after, ok := strings.Cut(s.Line(r), label)
+		if !ok {
+			continue
+		}
+		after = strings.TrimRight(after, " │")
+		return strings.TrimSpace(after) != ""
+	}
+	return false
 }

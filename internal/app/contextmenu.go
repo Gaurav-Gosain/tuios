@@ -1,7 +1,7 @@
 package app
 
 import (
-	"strings"
+	"slices"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
@@ -331,49 +331,84 @@ func (m *OS) ContextMenuHover(x, y int) {
 // Hints, read from the keybind registry
 // ============================================================================
 
-// subPrefixEntry maps an action name prefix to the action that enters the
-// prefix mode it lives in. A sub-prefix action's own key is only the last
-// keystroke of its chord, so the keys of the actions that lead there have to be
-// looked up too. Both lookups go through the registry, so the whole chord
-// follows a rebind.
-var subPrefixEntry = map[string]string{
-	"window_prefix_":    "prefix_window",
-	"minimize_prefix_":  "prefix_minimize",
-	"workspace_prefix_": "prefix_workspace",
-	"debug_prefix_":     "prefix_debug",
-	"tape_prefix_":      "prefix_tape",
+// subPrefixTables maps each sub-prefix table to the action that opens it. A
+// sub-prefix action's own key is only the last keystroke of its chord, so the
+// key of the action that leads there is looked up too. Both lookups go
+// through the registry, so the whole chord follows a rebind.
+var subPrefixTables = []struct {
+	table config.Table
+	entry string
+}{
+	{config.TableWindowPrefix, "prefix_window"},
+	{config.TableMinimizePrefix, "prefix_minimize"},
+	{config.TableWorkspacePrefix, "prefix_workspace"},
+	{config.TableDebugPrefix, "prefix_debug"},
+	{config.TableTapePrefix, "prefix_tape"},
+	{config.TableLayoutPrefix, "prefix_layout"},
 }
 
-// contextMenuHint returns the key currently bound to an action, formatted the
-// way a user would type it. It reads the live registry, so a rebound action
-// shows its new key and an unbound one shows no hint at all.
+// windowModeTables are the tables window management mode reads its keys from.
+var windowModeTables = []config.Table{
+	config.TableWindowManagement, config.TableWorkspaces, config.TableLayout,
+	config.TableModeControl, config.TableSystem, config.TableNavigation,
+	config.TableRestoreMinimized,
+}
+
+// contextMenuHint returns the one key that runs action in mode, formatted the
+// way a person types it. It reads the live registry, so a rebound action shows
+// its new key and an unbound one shows no hint at all.
 //
-// Prefix-mode actions are stored under their bare chord key ("c"), because the
-// leader is what got the user into prefix mode in the first place. The leader,
-// and for a sub-prefix action the key that opens that sub-prefix, are prepended
-// here so the hint is the whole thing a user has to press.
-func contextMenuHint(registry *config.KeybindRegistry, action string, s *config.Settings) string {
+// A key of the mode itself comes first (window mode's tables, or terminal
+// mode's), then the global keys, then the prefix chord, which works in either
+// mode: the leader, for a sub-prefix action the key that opens its sub-prefix,
+// then the action's own key. The rail's keys come last (see firstKey). An
+// action with none of these in terminal mode, such as rename_window, shows no
+// hint there: its window-mode key would reach the pane. An
+// action has one name now, and new_window has a window-mode key as well as a
+// prefix one, so the mode is what picks between them; the name no longer can.
+func contextMenuHint(registry *config.KeybindRegistry, action string, s *config.Settings, mode Mode) string {
 	if registry == nil || action == "" {
 		return ""
 	}
-	key := firstKey(registry, action)
-	if key == "" {
+	first := func(tables ...config.Table) string {
+		for _, t := range tables {
+			if keys := registry.Keys(t, action); len(keys) > 0 {
+				return keys[0]
+			}
+		}
 		return ""
 	}
-	for name, entry := range subPrefixEntry {
-		if !strings.HasPrefix(action, name) {
+	own := windowModeTables
+	if mode == TerminalMode {
+		own = []config.Table{config.TableTerminalMode}
+	}
+	if k := first(append(slices.Clone(own), config.TableGlobal)...); k != "" {
+		return k
+	}
+	if k := first(config.TablePrefixMode); k != "" {
+		return s.LeaderKey + " " + k
+	}
+	for _, sp := range subPrefixTables {
+		k := first(sp.table)
+		if k == "" {
 			continue
 		}
-		entryKey := firstKey(registry, entry)
-		if entryKey == "" {
+		entry := registry.Keys(config.TablePrefixMode, sp.entry)
+		if len(entry) == 0 {
 			return "" // no way in, so there is no chord to show
 		}
-		return s.LeaderKey + " " + entryKey + " " + key
+		return s.LeaderKey + " " + entry[0] + " " + k
 	}
-	if strings.HasPrefix(action, "prefix_") {
-		return s.LeaderKey + " " + key
+	// In window mode any other table's key still works (GetKeys sweeps
+	// them). In terminal mode it would be typed into the pane, so only the
+	// rail's own keys, which act while the rail has the keyboard, are left.
+	if mode != TerminalMode {
+		return firstKey(registry, action)
 	}
-	return key
+	if k := first(config.TableSidebarFiles, config.TableSidebar); k != "" {
+		return k
+	}
+	return ""
 }
 
 // firstKey returns the first key bound to an action, or "".

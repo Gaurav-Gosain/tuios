@@ -73,7 +73,7 @@ uses that leader. The offer changes nothing until you press `U` and Enter.
   the last workspace. The screen preset sets `last_workspace`. `ctrl+c` still
   cancels the leader under every preset.
 - A `prefix_mode` binding on the leader key wins over `leader_twice`. With
-  `leader_key = "ctrl+j"` and `terminal_focus_down = ["ctrl+j"]`, the leader
+  `leader_key = "ctrl+j"` and `focus_down = ["ctrl+j"]`, the leader
   pressed two times focuses the pane below.
 
 `tuios keybinds cheatsheet tmux` shows the keys in three groups: the keys that
@@ -171,6 +171,34 @@ default key. Bind one in `config.toml`, or run it from the command palette.
 `scope`, `scope_name`, `chord`, `section`, `action`, `keys` and `description`.
 A fixed key has `fixed: true`. An action with no key has `unbound: true`. A key
 that a different action takes first is in `shadowed`.
+An action that also has older names lists them in `also`.
+
+### Older action names
+
+Some actions had two or more names, one per menu, such as `prefix_new_window`
+and `window_prefix_new` for `new_window`. Each action has one name now. The
+older names still work in `config.toml`, in a preset, in a tape and over the
+protocol: tuios reads them as the action's own name. `tuios keybinds list`
+shows the older names after the action's description, as "(also: ...)".
+
+| Action | Older names |
+|---|---|
+| `new_window` | `prefix_new_window`, `window_prefix_new` |
+| `close_window` | `prefix_close_window`, `window_prefix_close` |
+| `toggle_tiling` | `window_prefix_tiling` |
+| `split_vertical`, `split_horizontal` | `prefix_split_vertical`, `prefix_split_horizontal` |
+| `rotate_split`, `equalize_splits` | `prefix_rotate_split`, `prefix_equalize_splits` |
+| `focus_up`, `focus_down` | `terminal_focus_up`, `terminal_focus_down` |
+| `restore_all` | `minimize_prefix_restore_all` |
+| `prefix_next_window`, `prefix_prev_window` | `window_prefix_next`, `window_prefix_prev` |
+| `open_settings` | `prefix_settings` |
+| `command_palette` | `prefix_command_palette` |
+| `toggle_help` | `prefix_help` |
+| `toggle_spotlight` | `prefix_toggle_spotlight` |
+| `toggle_tape_manager` | `tape_prefix_manager` |
+| `prefix_cancel` | `debug_prefix_cancel`, `layout_prefix_cancel`, `minimize_prefix_cancel`, `tape_prefix_cancel`, `window_prefix_cancel`, `workspace_prefix_cancel` |
+
+A table that names one action by two names keeps the keys of both.
 
 ```sh
 tuios keybinds list --json | jq -r '.[] | select(.action == "toggle_tiling") | .keys[]'
@@ -596,7 +624,7 @@ in shells and other programs.
 
 By default, both projects use `alt+left`, `alt+down`, `alt+up` and
 `alt+right`. If either side is customized, its four mappings must match the
-`terminal_focus_left`, `terminal_focus_down`, `terminal_focus_up` and
+`terminal_focus_left`, `focus_down`, `focus_up` and
 `terminal_focus_right` bindings in TUIOS.
 
 The plugin uses the private OSC 7777 messages below. They are consumed by
@@ -892,7 +920,7 @@ turns it off:
 In terminal mode `Esc` goes to the program in the pane, so vim and other
 programs get it. An open dialog, menu or popup closes before `Esc` turns the
 spotlight off. The actions are `toggle_spotlight` and
-`prefix_toggle_spotlight`, and `[spotlight]` sets the size and the dimming.
+`toggle_spotlight`, and `[spotlight]` sets the size and the dimming.
 The key was `b` in earlier versions.
 
 ## Pick a path
@@ -1219,7 +1247,7 @@ on the workspace on screen.
 | `Ctrl+B L m` | `focus_master` | Focus the master pane |
 | `Ctrl+B L i` | `add_master` | Make one more pane a master pane |
 | `Ctrl+B L d` | `remove_master` | Make one pane fewer a master pane |
-| `Ctrl+B =`, or `=` in window mode | `prefix_equalize_splits`, `equalize_splits` | Give the master panes and the stack their default sizes again |
+| `Ctrl+B =`, or `=` in window mode | `equalize_splits`, `equalize_splits` | Give the master panes and the stack their default sizes again |
 
 The resize keys move the divider between the master panes and the stack. With
 the master on the left, the right or in the center, the width keys move it,
@@ -1240,7 +1268,7 @@ See [LAYOUT_MODES.md](LAYOUT_MODES.md#master-stack-layout).
 
 ## Ask before a pane closes
 
-`x` in window mode (`close_window`), `Ctrl+B x` (`prefix_close_window`), the
+`x` in window mode (`close_window`), `Ctrl+B x` (`close_window`), the
 pane menu's `Close pane` and the close control in the title bar close the pane
 at once. To get a question first, set `appearance.confirm_close`:
 
@@ -1461,8 +1489,8 @@ until you declare one, and it binds no new key for them.
 title = "Split"
 
 [keybindings.menus.split.keys]
-prefix_split_vertical = ["y"]
-prefix_split_horizontal = ["x"]
+split_vertical = ["y"]
+split_horizontal = ["x"]
 "open_menu:resize" = ["R"]
 
 [keybindings.menus.resize]
@@ -1621,8 +1649,8 @@ When a search finds more than 1000 matches, the prompt shows `1000+`.
 
 ### Focus keys in copy mode
 
-The `terminal_focus_left`, `terminal_focus_right`, `terminal_focus_up` and
-`terminal_focus_down` keys also work in copy mode. In window mode, the
+The `terminal_focus_left`, `terminal_focus_right`, `focus_up` and
+`focus_down` keys also work in copy mode. In window mode, the
 window-mode focus keys work. Focus moves to the next pane. The old pane stays
 in copy mode, as in tmux. When you go back to it, the copy cursor is where you
 left it.
@@ -1955,7 +1983,7 @@ the splits key and give `=` to the list:
 
 ```toml
 [keybindings.prefix_mode]
-prefix_equalize_splits = ["E"]
+equalize_splits = ["E"]
 choose_buffer = ["="]
 ```
 
@@ -2723,8 +2751,8 @@ replaces the default list. An empty list turns repeat off:
 ```toml
 [keybindings]
 # n and p switch workspaces once, so the next n or p you type reaches the shell
-repeat = ["terminal_focus_left", "terminal_focus_right", "terminal_focus_up",
-          "terminal_focus_down"]
+repeat = ["terminal_focus_left", "terminal_focus_right", "focus_up",
+          "focus_down"]
 
 [keybindings.prefix_mode]
 next_workspace = ["n"]

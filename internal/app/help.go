@@ -37,7 +37,7 @@ func GetHelpCategories(registry *config.KeybindRegistry, s *config.Settings) []H
 				"next_window", "prev_window",
 				"terminal_next_window", "terminal_prev_window",
 				"terminal_focus_left", "terminal_focus_right",
-				"terminal_focus_up", "terminal_focus_down",
+				"focus_up", "focus_down",
 				"copy_selection", "focus_sidebar",
 				"next_session", "prev_session", "next_host", "prev_host",
 				"next_agent", "prev_agent",
@@ -399,7 +399,7 @@ func generateWorkspaceBindings(registry *config.KeybindRegistry, s *config.Setti
 
 	// Renaming a workspace is a chord rather than a plain key, so its row is
 	// built from the same whole-chord hint the pill menu shows.
-	if chord := contextMenuHint(registry, "workspace_prefix_rename", s); chord != "" {
+	if chord := contextMenuHint(registry, "workspace_prefix_rename", s, WindowManagementMode); chord != "" {
 		bindings = append(bindings, HelpBinding{
 			Action:      "workspace_prefix_rename",
 			Keys:        []string{chord},
@@ -811,7 +811,7 @@ func generateTapeBindings(s *config.Settings) []HelpBinding {
 func generateSpotlightOffBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
 	fixed := spotlightOffKeys()
 	out := []HelpBinding{fixed[0]}
-	if keys := registry.GetKeys("prefix_toggle_spotlight"); len(keys) > 0 {
+	if keys := registry.GetKeys("toggle_spotlight"); len(keys) > 0 {
 		out = append(out, HelpBinding{
 			Action:      "spotlight_off",
 			Keys:        []string{s.LeaderKey + ", " + keys[0]},
@@ -878,19 +878,19 @@ func generatePrefixBindings(registry *config.KeybindRegistry, s *config.Settings
 
 	// Get all prefix actions from the config
 	prefixActions := []string{
-		"prefix_new_window", "prefix_close_window", "prefix_rename_window",
+		"new_window", "close_window", "prefix_rename_window",
 		"prefix_next_window", "prefix_prev_window",
 		"prefix_select_0", "prefix_select_1", "prefix_select_2",
 		"prefix_select_3", "prefix_select_4", "prefix_select_5",
 		"prefix_select_6", "prefix_select_7", "prefix_select_8", "prefix_select_9",
 		"prefix_toggle_tiling", "prefix_workspace", "prefix_minimize",
 		"prefix_window", "prefix_detach", "prefix_close_session", "prefix_selection",
-		"prefix_help", "prefix_quit", "prefix_fullscreen", "prefix_settings",
-		"prefix_split_horizontal", "prefix_split_vertical", "prefix_rotate_split",
-		"prefix_equalize_splits", "prefix_layout",
-		"prefix_scrollback", "prefix_screenshot", "prefix_command_palette", "prefix_session_switcher",
+		"toggle_help", "prefix_quit", "prefix_fullscreen", "open_settings",
+		"split_horizontal", "split_vertical", "rotate_split",
+		"equalize_splits", "prefix_layout",
+		"prefix_scrollback", "prefix_screenshot", "command_palette", "prefix_session_switcher",
 		"prefix_workspace_switcher", "choose_tree", "goto_picker", "new_worktree", "set_note",
-		"prefix_toggle_sidebar", "prefix_toggle_spotlight", "prefix_explore",
+		"prefix_toggle_sidebar", "toggle_spotlight", "prefix_explore",
 		"prefix_jump_notif", "prefix_last_message", "prefix_mail", "prefix_inbox", "prefix_next_attention",
 		"toggle_scratch", "toggle_calm", "paste_image", "paste_buffer", "choose_buffer", "prefix_transfers",
 		config.ActionEditScrollback, config.ActionClearScrollback,

@@ -84,7 +84,7 @@
       ],
       "done": {
         "via": [
-          "prefix_split_vertical"
+          "split_vertical"
         ],
         "then": {
           "on": "window.open"

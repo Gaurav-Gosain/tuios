@@ -33,7 +33,7 @@ func presetConfig(t *testing.T, preset, body string) *UserConfig {
 // and requires no clash in any scope and no key that is ambiguous on the
 // wire. The tuios row is the positive half: the defaults pass the same check.
 //
-// Negative control: binding prefix_new_window to "c" in the tmux preset (the
+// Negative control: binding new_window to "c" in the tmux preset (the
 // key new_workspace has) fails it with a collision.
 func TestEveryPresetLoadsCleanly(t *testing.T) {
 	for _, mac := range []bool{false, true} {
@@ -150,8 +150,8 @@ func TestEveryDisplacedFeatureMoves(t *testing.T) {
 // keys stay the tuios ones rather than half of a preset.
 func TestAnUnknownPresetKeepsTheTuiosKeys(t *testing.T) {
 	cfg := presetConfig(t, "tmx", "")
-	if got := NewKeybindRegistry(cfg).Action(TablePrefixMode, "c"); got != "prefix_new_window" {
-		t.Errorf("c runs %q under an unknown preset, want the tuios prefix_new_window", got)
+	if got := NewKeybindRegistry(cfg).Action(TablePrefixMode, "c"); got != "new_window" {
+		t.Errorf("c runs %q under an unknown preset, want the tuios new_window", got)
 	}
 	warned := false
 	for _, w := range ValidateConfig(cfg).Warnings {

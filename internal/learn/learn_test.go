@@ -216,7 +216,7 @@ func TestEventContract(t *testing.T) {
 	tr.press(key("ctrl+b"))
 	tr.waitFor(EventPrefix, func(e Event) bool { return data(e, "to") == "prefix" })
 	tr.press(key("c"))
-	tr.waitFor(EventAction, func(e Event) bool { return data(e, "name") == "prefix_new_window" })
+	tr.waitFor(EventAction, func(e Event) bool { return data(e, "name") == "new_window" })
 	second := tr.waitFor(EventWindowOpen, nil).WindowID
 	tr.waitFor(EventWindowFocus, func(e Event) bool { return data(e, "to") == second })
 

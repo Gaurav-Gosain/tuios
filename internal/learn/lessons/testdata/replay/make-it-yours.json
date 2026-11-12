@@ -231,7 +231,7 @@
 {"t":15713,"type":"prefix","data":{"from":"","to":"prefix"},"state":{"mode":"window","windows":2,"totalWindows":2,"pip":"","glyphs":"default","windowList":[{"id":"2f385348-e40a-46bb-876a-e774fda43d28","agent":"","kind":""},{"id":"e2088875-53f4-4ce7-a47e-6e79a279d778","agent":"","kind":""}]}},
 {"t":16215,"type":"overlay.open","data":{"name":"whichkey"},"state":{"mode":"window","windows":2,"totalWindows":2,"pip":"","glyphs":"default","windowList":[{"id":"2f385348-e40a-46bb-876a-e774fda43d28","agent":"","kind":""},{"id":"e2088875-53f4-4ce7-a47e-6e79a279d778","agent":"","kind":""}]}},
 {"t":16381,"type":"key","data":{"key":",","mode":"window"},"state":{"windowList":[]}},
-{"t":16382,"type":"action","data":{"name":"prefix_settings","mode":"window"},"state":{"windowList":[]}},
+{"t":16382,"type":"action","data":{"name":"open_settings","mode":"window"},"state":{"windowList":[]}},
 {"t":16383,"type":"prefix","data":{"from":"prefix","to":""},"state":{"mode":"window","windows":2,"totalWindows":2,"pip":"","glyphs":"default","windowList":[{"id":"2f385348-e40a-46bb-876a-e774fda43d28","agent":"","kind":""},{"id":"e2088875-53f4-4ce7-a47e-6e79a279d778","agent":"","kind":""}]}},
 {"t":16383,"type":"overlay.open","data":{"name":"settings"},"state":{"mode":"window","windows":2,"totalWindows":2,"pip":"","glyphs":"default","windowList":[{"id":"2f385348-e40a-46bb-876a-e774fda43d28","agent":"","kind":""},{"id":"e2088875-53f4-4ce7-a47e-6e79a279d778","agent":"","kind":""}]}},
 {"t":16383,"type":"overlay.close","data":{"name":"whichkey"},"state":{"mode":"window","windows":2,"totalWindows":2,"pip":"","glyphs":"default","windowList":[{"id":"2f385348-e40a-46bb-876a-e774fda43d28","agent":"","kind":""},{"id":"e2088875-53f4-4ce7-a47e-6e79a279d778","agent":"","kind":""}]}},

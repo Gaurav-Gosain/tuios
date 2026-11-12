@@ -192,7 +192,7 @@ func runTerminalModeBinds(msg tea.KeyPressMsg, o *app.OS) (tea.Cmd, bool) {
 
 func isTerminalFocusAction(action string) bool {
 	return action == "terminal_focus_left" || action == "terminal_focus_right" ||
-		action == "terminal_focus_up" || action == "terminal_focus_down"
+		action == "focus_up" || action == "focus_down"
 }
 
 func nvimNavigationDirection(action string) string {

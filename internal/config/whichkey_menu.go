@@ -75,7 +75,7 @@ var workspaceMenuRows = []menuRow{
 	{parts: []menuPart{{"close_workspace", "Close workspace"}}, desc: "Close workspace"},
 	{parts: []menuPart{{"prev_workspace", "Previous workspace"}, {"next_workspace", "Next workspace"}}, desc: "Prev/next workspace"},
 	{parts: []menuPart{{"last_workspace", "Last workspace"}}, desc: "Last workspace"},
-	{parts: []menuPart{{"workspace_prefix_cancel", "Cancel"}}, desc: "Cancel"},
+	{parts: []menuPart{{"prefix_cancel", "Cancel"}}, desc: "Cancel"},
 }
 
 // minimizeMenuRows is the minimize menu (leader m). Row 1 says how many
@@ -83,26 +83,26 @@ var workspaceMenuRows = []menuRow{
 var minimizeMenuRows = []menuRow{
 	{parts: []menuPart{{"minimize_prefix_focused", "Minimize focused window"}}, desc: "Minimize focused window"},
 	{parts: []menuPart{{"minimize_prefix_restore_1", "Restore window"}, {"minimize_prefix_restore_2", "Restore window"}, {"minimize_prefix_restore_3", "Restore window"}, {"minimize_prefix_restore_4", "Restore window"}, {"minimize_prefix_restore_5", "Restore window"}, {"minimize_prefix_restore_6", "Restore window"}, {"minimize_prefix_restore_7", "Restore window"}, {"minimize_prefix_restore_8", "Restore window"}, {"minimize_prefix_restore_9", "Restore window"}}, desc: "Restore window", numbered: true},
-	{parts: []menuPart{{"minimize_prefix_restore_all", "Restore all"}}, desc: "Restore all"},
+	{parts: []menuPart{{"restore_all", "Restore all"}}, desc: "Restore all"},
 	{parts: []menuPart{{"minimize_prefix_focus_only", "Focus only"}}, desc: "Focus only"},
-	{parts: []menuPart{{"minimize_prefix_cancel", "Cancel"}}, desc: "Cancel"},
+	{parts: []menuPart{{"prefix_cancel", "Cancel"}}, desc: "Cancel"},
 }
 
 // windowMenuRows is the window menu (leader t). The rows after tiling are bound
 // by a preset whose pane mode opens this menu (zellij).
 var windowMenuRows = []menuRow{
-	{parts: []menuPart{{"window_prefix_new", "New window"}}, desc: "New window"},
-	{parts: []menuPart{{"window_prefix_close", "Close window"}}, desc: "Close window"},
+	{parts: []menuPart{{"new_window", "New window"}}, desc: "New window"},
+	{parts: []menuPart{{"close_window", "Close window"}}, desc: "Close window"},
 	{parts: []menuPart{{"window_prefix_rename", "Rename window"}}, desc: "Rename window"},
-	{parts: []menuPart{{"window_prefix_next", "Next window"}}, desc: "Next window"},
-	{parts: []menuPart{{"window_prefix_prev", "Previous window"}}, desc: "Previous window"},
-	{parts: []menuPart{{"window_prefix_tiling", "Toggle tiling mode"}}, desc: "Toggle tiling mode"},
+	{parts: []menuPart{{"prefix_next_window", "Next window"}}, desc: "Next window"},
+	{parts: []menuPart{{"prefix_prev_window", "Previous window"}}, desc: "Previous window"},
+	{parts: []menuPart{{"toggle_tiling", "Toggle tiling mode"}}, desc: "Toggle tiling mode"},
 	{parts: []menuPart{{"window_prefix_float", "Float or tile the pane"}}, desc: "Float or tile the pane"},
 	{parts: []menuPart{{"split_vertical", "Split right"}}, desc: "Split right"},
 	{parts: []menuPart{{"split_horizontal", "Split down"}}, desc: "Split down"},
 	{parts: []menuPart{{"prefix_fullscreen", "Toggle zoom"}}, desc: "Toggle zoom"},
-	{parts: []menuPart{{"terminal_focus_left", "Focus pane left"}, {"terminal_focus_down", "Focus pane down"}, {"terminal_focus_up", "Focus pane up"}, {"terminal_focus_right", "Focus pane right"}}, desc: "Focus pane"},
-	{parts: []menuPart{{"window_prefix_cancel", "Cancel"}}, desc: "Cancel"},
+	{parts: []menuPart{{"terminal_focus_left", "Focus pane left"}, {"focus_down", "Focus pane down"}, {"focus_up", "Focus pane up"}, {"terminal_focus_right", "Focus pane right"}}, desc: "Focus pane"},
+	{parts: []menuPart{{"prefix_cancel", "Cancel"}}, desc: "Cancel"},
 }
 
 // debugMenuRows is the debug menu (leader D).
@@ -111,16 +111,16 @@ var debugMenuRows = []menuRow{
 	{parts: []menuPart{{"debug_prefix_cache", "Toggle cache statistics"}}, desc: "Toggle cache statistics"},
 	{parts: []menuPart{{"debug_prefix_showkeys", "Toggle showkeys overlay"}}, desc: "Toggle showkeys overlay"},
 	{parts: []menuPart{{"debug_prefix_animations", "Toggle animations"}}, desc: "Toggle animations"},
-	{parts: []menuPart{{"debug_prefix_cancel", "Cancel"}}, desc: "Cancel"},
+	{parts: []menuPart{{"prefix_cancel", "Cancel"}}, desc: "Cancel"},
 }
 
 // tapeMenuRows is the tape menu (leader T).
 var tapeMenuRows = []menuRow{
-	{parts: []menuPart{{"tape_prefix_manager", "Open tape manager"}}, desc: "Open tape manager"},
+	{parts: []menuPart{{"toggle_tape_manager", "Open tape manager"}}, desc: "Open tape manager"},
 	{parts: []menuPart{{"tape_prefix_review", "Review project tape"}}, desc: "Review project tape"},
 	{parts: []menuPart{{"tape_prefix_record", "Start recording"}}, desc: "Start recording"},
 	{parts: []menuPart{{"tape_prefix_stop", "Stop recording"}}, desc: "Stop recording"},
-	{parts: []menuPart{{"tape_prefix_cancel", "Cancel"}}, desc: "Cancel"},
+	{parts: []menuPart{{"prefix_cancel", "Cancel"}}, desc: "Cancel"},
 }
 
 // layoutMenuRows is the layout menu (leader L).
@@ -134,7 +134,7 @@ var layoutMenuRows = []menuRow{
 	{parts: []menuPart{{"swap_with_master", "Swap with master"}}, desc: "Swap with master"},
 	{parts: []menuPart{{"focus_master", "Focus master"}}, desc: "Focus master"},
 	{parts: []menuPart{{"add_master", "Add master"}, {"remove_master", "Remove master"}}, desc: "Add/remove master"},
-	{parts: []menuPart{{"layout_prefix_cancel", "Cancel"}}, desc: "Cancel"},
+	{parts: []menuPart{{"prefix_cancel", "Cancel"}}, desc: "Cancel"},
 }
 
 // leaderWorkspaceRows is the leader menu's Workspaces section. A preset
@@ -152,8 +152,8 @@ var leaderWorkspaceRows = []menuRow{
 
 // leaderWindowRows is the leader menu's Windows section.
 var leaderWindowRows = []menuRow{
-	{parts: []menuPart{{"prefix_new_window", "Create window"}}, desc: "Create window"},
-	{parts: []menuPart{{"prefix_close_window", "Close window"}}, desc: "Close window"},
+	{parts: []menuPart{{"new_window", "Create window"}}, desc: "Create window"},
+	{parts: []menuPart{{"close_window", "Close window"}}, desc: "Close window"},
 	{parts: []menuPart{{"prefix_rename_window", "Rename window"}}, desc: "Rename window"},
 	{parts: []menuPart{{"prefix_next_window", "Next window"}, {"prefix_prev_window", "Previous window"}}, desc: "Next/prev window"},
 	{parts: []menuPart{{"prefix_select_0", "Jump to window"}, {"prefix_select_1", "Jump to window"}, {"prefix_select_2", "Jump to window"}, {"prefix_select_3", "Jump to window"}, {"prefix_select_4", "Jump to window"}, {"prefix_select_5", "Jump to window"}, {"prefix_select_6", "Jump to window"}, {"prefix_select_7", "Jump to window"}, {"prefix_select_8", "Jump to window"}, {"prefix_select_9", "Jump to window"}}, desc: "Jump to window", numbered: true},
@@ -167,12 +167,12 @@ var leaderWindowRows = []menuRow{
 // labels share the hints row: one row more made the panel reach the pane's
 // top border at 80x24.
 var leaderPaneRows = []menuRow{
-	{parts: []menuPart{{"terminal_focus_left", "Focus pane left"}, {"terminal_focus_up", "Focus pane up"}, {"terminal_focus_down", "Focus pane down"}, {"terminal_focus_right", "Focus pane right"}}, desc: "Focus pane"},
+	{parts: []menuPart{{"terminal_focus_left", "Focus pane left"}, {"focus_up", "Focus pane up"}, {"focus_down", "Focus pane down"}, {"terminal_focus_right", "Focus pane right"}}, desc: "Focus pane"},
 	{parts: []menuPart{{"prefix_toggle_tiling", "Toggle tiling"}}, desc: "Toggle tiling"},
-	{parts: []menuPart{{"prefix_split_horizontal", "Split horizontal"}}, desc: "Split horizontal"},
-	{parts: []menuPart{{"prefix_split_vertical", "Split vertical"}}, desc: "Split vertical"},
-	{parts: []menuPart{{"prefix_rotate_split", "Rotate split"}}, desc: "Rotate split"},
-	{parts: []menuPart{{"prefix_equalize_splits", "Equalize splits"}}, desc: "Equalize splits"},
+	{parts: []menuPart{{"split_horizontal", "Split horizontal"}}, desc: "Split horizontal"},
+	{parts: []menuPart{{"split_vertical", "Split vertical"}}, desc: "Split vertical"},
+	{parts: []menuPart{{"rotate_split", "Rotate split"}}, desc: "Rotate split"},
+	{parts: []menuPart{{"equalize_splits", "Equalize splits"}}, desc: "Equalize splits"},
 	// The path picker shares the row too. Its key goes in a column whose keys
 	// are already five cells wide, so the menu still fits an 80x24 screen.
 	{parts: []menuPart{{"hints", "Hints"}, {"display_panes", "Pane labels"}, {"pick_path", "Pick a path"}}, desc: "Hints, labels, paths"},
@@ -214,17 +214,17 @@ var leaderMenuRows = []menuRow{
 
 // leaderToolRows is the leader menu's Tools section.
 var leaderToolRows = []menuRow{
-	{parts: []menuPart{{"prefix_command_palette", "Command palette"}}, desc: "Command palette"},
+	{parts: []menuPart{{"command_palette", "Command palette"}}, desc: "Command palette"},
 	{parts: []menuPart{{"reload_config", "Reload config"}}, desc: "Reload config"},
 	{parts: []menuPart{{"send_prefix", "Send the leader"}}, desc: "Send the leader"},
 	{parts: []menuPart{{"launcher", "Launcher"}}, desc: "Launcher"},
-	{parts: []menuPart{{"prefix_settings", "Settings"}}, desc: "Settings"},
+	{parts: []menuPart{{"open_settings", "Settings"}}, desc: "Settings"},
 	{parts: []menuPart{{"prefix_keybinds", "Keybindings"}}, desc: "Keybindings"},
 	{parts: []menuPart{{"prefix_screenshot", "Screenshot"}}, desc: "Screenshot"},
 	{parts: []menuPart{{"prefix_transfers", "Copies"}}, desc: "Copies"},
 	{parts: []menuPart{{"prefix_jump_notif", "Newest message"}}, desc: "Newest message"},
 	{parts: []menuPart{{"prefix_last_message", "Show last message"}}, desc: "Show last message"},
-	{parts: []menuPart{{"prefix_help", "Help"}}, desc: "Help"},
+	{parts: []menuPart{{"toggle_help", "Help"}}, desc: "Help"},
 }
 
 // leaderAgentRows is the leader menu's Agents section.
@@ -291,7 +291,7 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 		copyRow.desc = fmt.Sprintf("Multi copy (%d)/paste image/buffer", st.MultiCopy)
 		copyRow.parts[0].desc = fmt.Sprintf("Multi copy (%d)", st.MultiCopy)
 	}
-	sidebarRow := pair("Sidebar/other/spotlight", part("prefix_toggle_sidebar", "Sidebar"), part("prefix_toggle_other_rail", "Other rail"), part("prefix_toggle_spotlight", "Spotlight"))
+	sidebarRow := pair("Sidebar/other/spotlight", part("prefix_toggle_sidebar", "Sidebar"), part("prefix_toggle_other_rail", "Other rail"), part("toggle_spotlight", "Spotlight"))
 	if st.Spotlight {
 		// While the beam is on, its row says the key turns it off.
 		sidebarRow.desc = "Sidebar/other/spotlight off"

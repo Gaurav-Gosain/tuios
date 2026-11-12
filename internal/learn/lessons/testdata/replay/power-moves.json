@@ -88,7 +88,7 @@
 {"t":3379,"type":"overlay.close","data":{"name":"whichkey"},"state":{"mode":"terminal","windows":1,"totalWindows":1,"pip":"","glyphs":"default","windowList":[{"id":"13a41378-1604-404f-a8f3-9c3e0e0ef62e","agent":"","kind":""}]}},
 {"t":3882,"type":"overlay.open","data":{"name":"whichkey"},"state":{"mode":"terminal","windows":1,"totalWindows":1,"pip":"","glyphs":"default","windowList":[{"id":"13a41378-1604-404f-a8f3-9c3e0e0ef62e","agent":"","kind":""}]}},
 {"t":4063,"type":"key","data":{"key":"esc","mode":"terminal"},"state":{"windowList":[]}},
-{"t":4064,"type":"action","data":{"mode":"terminal","name":"window_prefix_cancel"},"state":{"windowList":[]}},
+{"t":4064,"type":"action","data":{"mode":"terminal","name":"prefix_cancel"},"state":{"windowList":[]}},
 {"t":4065,"type":"prefix","data":{"from":"window","to":""},"state":{"mode":"terminal","windows":1,"totalWindows":1,"pip":"","glyphs":"default","windowList":[{"id":"13a41378-1604-404f-a8f3-9c3e0e0ef62e","agent":"","kind":""}]}},
 {"t":5320,"type":"lesson.showMe"},
 {"t":5322,"type":"key","data":{"key":"ctrl+p","mode":"terminal"},"state":{"windowList":[]}},

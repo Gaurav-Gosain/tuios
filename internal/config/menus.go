@@ -16,8 +16,8 @@ import (
 //	title = "Split"
 //
 //	[keybindings.menus.split.keys]
-//	prefix_split_vertical   = ["y"]
-//	prefix_split_horizontal = ["x"]
+//	split_vertical   = ["y"]
+//	split_horizontal = ["x"]
 //
 //	[keybindings.window_prefix]
 //	"open_menu:split" = ["s"]

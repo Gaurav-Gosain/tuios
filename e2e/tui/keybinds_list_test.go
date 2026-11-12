@@ -49,9 +49,9 @@ func TestKeybindsListShowsEveryScope(t *testing.T) {
 		r := rows[i]
 		return r.Scope == "sidebar.files" && r.Action == "file_copy_path" && len(r.Keys) == 1 && r.Keys[0] == "Y"
 	})
-	has("window_prefix_new on ctrl+b t n with a description", func(i int) bool {
+	has("new_window on ctrl+b t n with a description", func(i int) bool {
 		r := rows[i]
-		return r.Scope == "prefix.window" && r.Chord == "ctrl+b t" && r.Action == "window_prefix_new" &&
+		return r.Scope == "prefix.window" && r.Chord == "ctrl+b t" && r.Action == "new_window" &&
 			len(r.Keys) == 1 && r.Keys[0] == "ctrl+b t n" && r.Description == "New window"
 	})
 	has("close_workspace with no key", func(i int) bool {

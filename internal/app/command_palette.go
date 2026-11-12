@@ -202,7 +202,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		// Window management
 		{
 			Name:     "New window",
-			Bind:     "prefix_new_window",
+			Bind:     "new_window",
 			Category: "Window",
 		},
 		{
@@ -218,7 +218,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		},
 		{
 			Name:     "Close window",
-			Bind:     "prefix_close_window",
+			Bind:     "close_window",
 			Category: "Window",
 		},
 		{
@@ -238,7 +238,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		},
 		{
 			Name:     "Restore all minimized",
-			Bind:     "minimize_prefix_restore_all",
+			Bind:     "restore_all",
 			Category: "Window",
 		},
 		{
@@ -255,7 +255,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		},
 		{
 			Name:     "Split horizontal",
-			Bind:     "prefix_split_horizontal",
+			Bind:     "split_horizontal",
 			Category: "Layout",
 		},
 		{
@@ -265,7 +265,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		},
 		{
 			Name:     "Split vertical",
-			Bind:     "prefix_split_vertical",
+			Bind:     "split_vertical",
 			Category: "Layout",
 		},
 		{
@@ -285,12 +285,12 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		},
 		{
 			Name:     "Rotate split",
-			Bind:     "prefix_rotate_split",
+			Bind:     "rotate_split",
 			Category: "Layout",
 		},
 		{
 			Name:     "Equalize splits",
-			Bind:     "prefix_equalize_splits",
+			Bind:     "equalize_splits",
 			Category: "Layout",
 		},
 		{
@@ -546,7 +546,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		},
 		{
 			Name:     "Settings",
-			Bind:     "prefix_settings",
+			Bind:     "open_settings",
 			Category: "Session",
 		},
 		{
@@ -727,7 +727,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		},
 		{
 			Name:     "Show help",
-			Bind:     "prefix_help",
+			Bind:     "toggle_help",
 			Category: "Session",
 		},
 		{
@@ -822,7 +822,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		},
 		{
 			Name:     "Open the tape manager",
-			Bind:     "tape_prefix_manager",
+			Bind:     "toggle_tape_manager",
 			Category: "Session",
 		},
 		{

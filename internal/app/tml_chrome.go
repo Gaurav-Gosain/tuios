@@ -162,7 +162,7 @@ func (m *OS) renderTMLDialogBox(window *terminal.Window, content string) string 
 
 	// Bottom border: the key tuios answers for in every popup.
 	hints := []overlay.Hint{{Key: "esc", Label: "close", Priority: overlay.HintEssential}}
-	if key := contextMenuHint(m.KeybindRegistry, "window_prefix_float", &m.Settings); key != "" {
+	if key := contextMenuHint(m.KeybindRegistry, "window_prefix_float", &m.Settings, m.Mode); key != "" {
 		hints = append(hints, overlay.Hint{Key: key, Label: "dock as a pane"})
 	}
 	strip, stripW := overlay.FitHintStrip(hints, max(w-3, 0), bg, pal)

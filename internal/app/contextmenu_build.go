@@ -219,7 +219,7 @@ func (m *OS) item(icon, label, action string, dim bool) ContextMenuItem {
 		Icon:   icon,
 		Label:  label,
 		Action: action,
-		Hint:   contextMenuHint(m.KeybindRegistry, action, &m.Settings),
+		Hint:   contextMenuHint(m.KeybindRegistry, action, &m.Settings, m.Mode),
 		Dim:    dim,
 	}
 }
@@ -335,8 +335,8 @@ func (m *OS) desktopMenu() (string, []ContextMenuItem) {
 		m.item(glyphNew, "New window", "new_window", false),
 		m.item(glyphTiling, "Toggle tiling", "toggle_tiling", false),
 		separator(),
-		m.item(glyphPalette, "Command palette", "prefix_command_palette", false),
-		m.item(glyphSettings, "Settings", "prefix_settings", false),
+		m.item(glyphPalette, "Command palette", "command_palette", false),
+		m.item(glyphSettings, "Settings", "open_settings", false),
 		m.item(glyphHelp, "Help", "toggle_help", false),
 	}
 }

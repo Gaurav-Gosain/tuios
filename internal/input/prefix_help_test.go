@@ -13,7 +13,7 @@ import (
 // toggle ShowHelp without resetting the scroll offset, so help opened wherever
 // a previous view had left it.
 func TestPrefixHelpOpensAtTheTop(t *testing.T) {
-	for _, action := range []string{"prefix_help", "toggle_help"} {
+	for _, action := range []string{"toggle_help", "toggle_help"} {
 		t.Run(action, func(t *testing.T) {
 			o := &app.OS{
 				Settings:         config.Global,

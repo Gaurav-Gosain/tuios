@@ -116,7 +116,9 @@ func TestDirectionalTieGoesToTheEarlierPane(t *testing.T) {
 func TestEachAltArrowIsDisabledIndependently(t *testing.T) {
 	for _, dir := range []string{"left", "right", "up", "down"} {
 		t.Run(dir, func(t *testing.T) {
-			action := "terminal_focus_" + dir
+			// The tables hold each action by its own name: up and down are
+			// focus_up and focus_down, terminal_focus_up is an older name.
+			action := config.CanonicalAction("terminal_focus_" + dir)
 
 			// What the shell gets when nothing intercepts the key.
 			cfg := config.DefaultConfig()
@@ -223,7 +225,7 @@ func TestUnboundAltArrowReachesTheShellUnchanged(t *testing.T) {
 		"down":  "\x1b[1;3B",
 	} {
 		cfg := config.DefaultConfig()
-		cfg.Keybindings.TerminalMode["terminal_focus_"+dir] = []string{}
+		cfg.Keybindings.TerminalMode[config.CanonicalAction("terminal_focus_"+dir)] = []string{}
 		o, pty := osWithFocusedPane(t, cfg, app.TerminalMode)
 
 		if _, _ = HandleKeyPress(altArrow(dir), o); string(pty.got) != want {
@@ -243,8 +245,8 @@ func TestAltArrowsResolveInAConfigPredatingThem(t *testing.T) {
 	for dir, want := range map[string]string{
 		"left":  "terminal_focus_left",
 		"right": "terminal_focus_right",
-		"up":    "terminal_focus_up",
-		"down":  "terminal_focus_down",
+		"up":    "focus_up",
+		"down":  "focus_down",
 	} {
 		if got := r.Action(config.TableTerminalMode, "alt+"+dir); got != want {
 			t.Errorf("alt+%s resolved to %q, want %q", dir, got, want)

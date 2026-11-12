@@ -12,12 +12,12 @@ import (
 
 // TestSettingsKeyReclaimedFromLegacyRename is the config half of the leader-","
 // bug. "," used to be a second binding for prefix_rename_window; it became the
-// binding for prefix_settings, and prefix_rename_window kept "r". A config
+// binding for open_settings, and prefix_rename_window kept "r". A config
 // written before that move still names "," under rename, and filling defaults
-// adds prefix_settings on the same key, so both claim it. Whichever wins, the
+// adds open_settings on the same key, so both claim it. Whichever wins, the
 // user has lost one of the two commands.
 //
-// The first case is a config from before prefix_settings existed. The second is
+// The first case is a config from before open_settings existed. The second is
 // the state that config is left in once it has been saved back with the filled
 // default, which is what a long-lived config looks like on disk.
 func TestSettingsKeyReclaimedFromLegacyRename(t *testing.T) {
@@ -26,7 +26,7 @@ func TestSettingsKeyReclaimedFromLegacyRename(t *testing.T) {
 		src  string
 	}{
 		{
-			name: "before prefix_settings existed",
+			name: "before open_settings existed",
 			src: "[keybindings]\nleader_key = \"ctrl+b\"\n\n" +
 				"[keybindings.prefix_mode]\nprefix_rename_window = [\",\", \"r\"]\n",
 		},
@@ -43,8 +43,8 @@ func TestSettingsKeyReclaimedFromLegacyRename(t *testing.T) {
 			r := config.NewKeybindRegistry(cfg)
 
 			for range 50 {
-				if got := r.Action(config.TablePrefixMode, ","); got != "prefix_settings" {
-					t.Fatalf("Action(TablePrefixMode, \",\") = %q, want prefix_settings", got)
+				if got := r.Action(config.TablePrefixMode, ","); got != "open_settings" {
+					t.Fatalf("Action(TablePrefixMode, \",\") = %q, want open_settings", got)
 				}
 			}
 			// The rename chord keeps the key it was re-homed onto.
@@ -65,7 +65,7 @@ func TestUserOwnedDuplicateKeyIsLeftAlone(t *testing.T) {
 	cfg := writeConfig(t, "[keybindings]\nleader_key = \"ctrl+b\"\n\n"+
 		"[keybindings.prefix_mode]\nprefix_help = [\"g\"]\nprefix_scrollback = [\"g\"]\n")
 
-	for _, action := range []string{"prefix_help", "prefix_scrollback"} {
+	for _, action := range []string{"toggle_help", "prefix_scrollback"} {
 		if keys := cfg.Keybindings.PrefixMode[action]; !slices.Contains(keys, "g") {
 			t.Fatalf("%s lost its user-set \"g\": %v", action, keys)
 		}

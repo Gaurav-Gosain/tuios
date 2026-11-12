@@ -35,6 +35,9 @@ type KeybindRow struct {
 	Fixed bool `json:"fixed,omitempty"`
 	// Unbound marks an action that has no key. Keys is empty.
 	Unbound bool `json:"unbound,omitempty"`
+	// Also are the action's older names, which config files, tapes and the
+	// protocol may still use.
+	Also []string `json:"also,omitempty"`
 	// Shadowed are keys the config gives this action that another action in
 	// the scope takes first. They do not run this action.
 	Shadowed []string `json:"shadowed,omitempty"`
@@ -83,6 +86,7 @@ func KeybindRows(cfg *config.UserConfig) []KeybindRow {
 				Action:      b.Action,
 				Keys:        []string{},
 				Description: desc,
+				Also:        config.ActionAliases(b.Action),
 			})
 		}
 		switch {
@@ -154,6 +158,7 @@ func KeybindRows(cfg *config.UserConfig) []KeybindRow {
 			Keys:        []string{},
 			Description: config.ActionDescriptions[action],
 			Unbound:     true,
+			Also:        config.ActionAliases(action),
 		})
 	}
 	return rows

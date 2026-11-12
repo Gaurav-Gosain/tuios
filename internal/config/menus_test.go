@@ -14,7 +14,7 @@ const nestedMenusTOML = `
 title = "Split"
 
 [keybindings.menus.split.keys]
-prefix_split_vertical = ["y"]
+split_vertical = ["y"]
 "open_menu:resize" = ["R"]
 
 [keybindings.menus.resize]
@@ -28,8 +28,8 @@ func TestDeclaredMenusReadFromConfig(t *testing.T) {
 	cfg := loadTOML(t, nestedMenusTOML)
 	r := NewKeybindRegistry(cfg)
 
-	if got := r.GetMenuAction("split", "y"); got != "prefix_split_vertical" {
-		t.Errorf("split y = %q, want prefix_split_vertical", got)
+	if got := r.GetMenuAction("split", "y"); got != "split_vertical" {
+		t.Errorf("split y = %q, want split_vertical", got)
 	}
 	if got := r.GetMenuAction("resize", "h"); got != "resize_pane_left_5" {
 		t.Errorf("resize h = %q, want resize_pane_left_5", got)
@@ -72,10 +72,10 @@ func TestMenuKeyProblemsAreWarnedAbout(t *testing.T) {
 "open_menu:ghost" = ["Z"]
 
 [keybindings.menus.unopened.keys]
-prefix_split_vertical = ["y"]
+split_vertical = ["y"]
 
 [keybindings.menus."Bad Name".keys]
-prefix_split_vertical = ["y"]
+split_vertical = ["y"]
 `)
 	var msgs []string
 	for _, w := range ValidateConfig(cfg).Warnings {
@@ -121,7 +121,7 @@ func TestMenuPanelListsMenusFirstAndCancelLast(t *testing.T) {
 func TestFreeKeyReachesDeclaredMenus(t *testing.T) {
 	cfg := loadTOML(t, nestedMenusTOML)
 	cfg.Keybindings.FreeKey("y")
-	if keys := cfg.Keybindings.Menus["split"].Keys["prefix_split_vertical"]; slices.Contains(keys, "y") {
+	if keys := cfg.Keybindings.Menus["split"].Keys["split_vertical"]; slices.Contains(keys, "y") {
 		t.Errorf("y still bound in the split menu: %v", keys)
 	}
 }

@@ -121,7 +121,7 @@ func TestLeaderBoundInPrefixRunsItsAction(t *testing.T) {
 		t.Fatalf("send the second Ctrl+A: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 2 }, uiTimeout); err != nil {
-		t.Fatalf("the leader two times did not run prefix_new_window, bound to ctrl+a: %v\n%s", err, term.Snapshot())
+		t.Fatalf("the leader two times did not run new_window, bound to ctrl+a: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "leader-bound-in-prefix")
 }

@@ -87,7 +87,10 @@ func commandKeys(reg *config.KeybindRegistry, leader string) []sip.MobileKey {
 // prefixed key with the modifiers the button declares, so a command bound to
 // ctrl+p behind the leader arrives as ctrl+p and not as a bare p.
 func commandKey(reg *config.KeybindRegistry, label, action, leader string) (sip.MobileKey, bool) {
-	for _, bound := range reg.GetKeys(action) {
+	// The bar sends the leader first, so the key is the prefix table's. An
+	// action such as new_window also has a window-mode key, which GetKeys
+	// would find first.
+	for _, bound := range reg.Keys(config.TablePrefixMode, action) {
 		spec, ok := resolveKey(bound)
 		if !ok {
 			continue

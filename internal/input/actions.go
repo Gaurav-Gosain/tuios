@@ -309,7 +309,6 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("toggle_logs", handleToggleLogs)
 	d.Register("toggle_cache_stats", handleToggleCacheStats)
 	d.Register("toggle_spotlight", handleToggleSpotlight)
-	d.Register("prefix_toggle_spotlight", handleToggleSpotlight)
 	d.Register("toggle_pip", handleTogglePiP)
 	d.Register("focus_rail_pane", handleFocusRailPane)
 
@@ -340,6 +339,9 @@ func (d *ActionDispatcher) Register(action string, handler ActionHandler) {
 
 // Dispatch executes the handler for a given action
 func (d *ActionDispatcher) Dispatch(action string, msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	// An older name (an alias) runs, records and is heard as the action's
+	// own name, so a tape, a crash note and Learn mode see one name.
+	action = config.CanonicalAction(action)
 	handler, ok := d.handlers.Lookup(action)
 	// A [[keybindings.command]] entry is an action of its own, named after
 	// the entry. It has no handler in the table: the entry says what to run.

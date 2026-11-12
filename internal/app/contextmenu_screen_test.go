@@ -2,6 +2,7 @@ package app_test
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"unicode"
@@ -336,15 +337,28 @@ func TestContextMenuHintsMatchRegistry(t *testing.T) {
 				}
 				continue
 			}
-			keys := f.M.KeybindRegistry.GetKeys(it.Action)
+			reg := f.M.KeybindRegistry
+			keys := allBoundKeys(reg, it.Action)
+			last := r.hint[strings.LastIndex(r.hint, " ")+1:]
 			switch {
 			case len(keys) == 0 && r.hint != "":
 				t.Errorf("%s: row %q has nothing bound but shows %q", title, r.label, r.hint)
-			case len(keys) > 0 && !strings.Contains(r.hint, keys[0]):
-				t.Errorf("%s: row %q is bound to %q but shows %q", title, r.label, keys[0], r.hint)
+			case r.hint == "" && f.M.Mode == app.TerminalMode &&
+				len(reg.Keys(config.TableTerminalMode, it.Action)) == 0 &&
+				len(reg.Keys(config.TableGlobal, it.Action)) == 0 &&
+				len(reg.Keys(config.TablePrefixMode, it.Action)) == 0:
+				// No key of terminal mode, global or prefix runs it; its
+				// window-mode key would reach the pane, so no hint is right.
+			case len(keys) > 0 && !slices.Contains(keys, last):
+				t.Errorf("%s: row %q shows %q, whose key %q the registry does not bind to %s (%v)", title, r.label, r.hint, last, it.Action, keys)
 			}
-			if strings.HasPrefix(it.Action, "prefix_") && !strings.HasPrefix(r.hint, leader+" ") {
-				t.Errorf("%s: row %q runs %s behind the leader, but shows %q, not %q first", title, r.label, it.Action, r.hint, leader)
+			// In terminal mode a window-mode key would be typed into the
+			// pane: an action with no key of terminal mode's own, or a
+			// global one, shows the chord behind the leader.
+			if f.M.Mode == app.TerminalMode && r.hint != "" &&
+				len(reg.Keys(config.TableTerminalMode, it.Action)) == 0 && len(reg.Keys(config.TableGlobal, it.Action)) == 0 &&
+				!strings.HasPrefix(r.hint, leader+" ") {
+				t.Errorf("%s: in terminal mode row %q shows %q, a key that would reach the pane, not %q first", title, r.label, r.hint, leader)
 			}
 		}
 		f.Keys("esc")
@@ -354,14 +368,36 @@ func TestContextMenuHintsMatchRegistry(t *testing.T) {
 // TestContextMenuHintFollowsRebind: an action rebound in the config shows
 // its new key, which a hand-written table would not. Negative control: as
 // for TestContextMenuHintsMatchRegistry.
+//
+// The hint is the key of the mode the menu opens in: window mode shows the
+// rebound ctrl+t, and terminal mode, where ctrl+t would reach the pane, shows
+// the prefix chord for the same action.
 func TestContextMenuHintFollowsRebind(t *testing.T) {
 	f := menuFixture(t, apptest.Config(func(c *config.UserConfig) {
 		c.Keybindings.WindowManagement["new_window"] = []string{"ctrl+t"}
+		c.Keybindings.PrefixMode["new_window"] = []string{"C"}
 	}))
 	_, _, rows := menuOnScreen(t, f)
-	if r := rowLabeled(t, rows, "New window"); r.hint != "ctrl+t" {
-		t.Errorf("after rebinding new_window to ctrl+t, the menu shows %q", r.hint)
+	if r := rowLabeled(t, rows, "New window"); r.hint != f.M.Settings.LeaderKey+" C" {
+		t.Errorf("in terminal mode, after rebinding new_window to prefix C, the menu shows %q", r.hint)
 	}
+	f.Keys("esc")
+	windowMode(f)
+	dx, dy := desktopCell(t, f)
+	openMenu(f, dx, dy)
+	_, _, rows = menuOnScreen(t, f)
+	if r := rowLabeled(t, rows, "New window"); r.hint != "ctrl+t" {
+		t.Errorf("in window mode, after rebinding new_window to ctrl+t, the menu shows %q", r.hint)
+	}
+}
+
+// allBoundKeys are the keys every table of the registry binds to action.
+func allBoundKeys(reg *config.KeybindRegistry, action string) []string {
+	var keys []string
+	for t := config.TableWindowManagement; t <= config.TableLists; t++ {
+		keys = append(keys, reg.Keys(t, action)...)
+	}
+	return keys
 }
 
 // TestContextMenuDimsUnavailableActions: in window management, with tiling

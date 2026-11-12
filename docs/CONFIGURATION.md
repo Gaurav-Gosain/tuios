@@ -747,7 +747,7 @@ wins.
 ## Confirm a pane close
 
 `appearance.confirm_close` sets when closing a pane by hand asks first: with
-`close_window`, `prefix_close_window`, the pane menu's `Close pane` or the
+`close_window`, `close_window`, the pane menu's `Close pane` or the
 close control in the title bar.
 
 - `never` closes the pane at once. This is the default.

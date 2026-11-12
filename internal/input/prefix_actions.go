@@ -27,11 +27,11 @@ import (
 // registerPrefixHandlers registers the handlers for every action reachable
 // through a prefix chord.
 func (d *ActionDispatcher) registerPrefixHandlers() {
+	// Every sub-menu's cancel key: prefix_cancel, prefix_cancel and
+	// the rest are aliases of it.
+	d.Register("prefix_cancel", handlePrefixCancel)
 	// Main prefix (leader, ...)
-	d.Register("prefix_new_window", handleNewWindow)
-	d.Register("prefix_close_window", handleCloseWindow)
 	d.Register("prefix_rename_window", handlePrefixRenameWindow)
-	d.Register("prefix_settings", handleOpenSettings)
 	d.Register("prefix_keybinds", handlePrefixKeybinds)
 	d.Register("prefix_next_window", handlePrefixNextWindow)
 	d.Register("prefix_prev_window", handlePrefixPrevWindow)
@@ -40,15 +40,9 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	}
 	d.Register("prefix_toggle_tiling", handlePrefixToggleTiling)
 	d.Register("prefix_fullscreen", handlePrefixFullscreen)
-	d.Register("prefix_split_horizontal", handleSplitHorizontal)
-	d.Register("prefix_split_vertical", handleSplitVertical)
-	d.Register("prefix_rotate_split", handleRotateSplit)
-	d.Register("prefix_equalize_splits", handleEqualizeSplits)
 	d.Register("prefix_selection", handlePrefixSelection)
 	d.Register("prefix_scrollback", handlePrefixScrollback)
 	d.Register("prefix_screenshot", handlePrefixScreenshot)
-	d.Register("prefix_help", handleToggleHelp)
-	d.Register("prefix_command_palette", handleOpenCommandPalette)
 	d.Register("prefix_file_search", handleOpenFileSearch)
 	d.Register("prefix_toggle_sidebar", handlePrefixToggleSidebar)
 	d.Register("prefix_toggle_other_rail", handlePrefixToggleOtherSidebar)
@@ -93,14 +87,8 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_tuios", makeSubPrefixHandler(app.SubMenuTuios))
 
 	// Window prefix (leader, t, ...)
-	d.Register("window_prefix_new", handleNewWindow)
-	d.Register("window_prefix_close", handleCloseWindow)
 	d.Register("window_prefix_rename", handleWindowPrefixRename)
-	d.Register("window_prefix_next", handlePrefixNextWindow)
-	d.Register("window_prefix_prev", handlePrefixPrevWindow)
-	d.Register("window_prefix_tiling", handleToggleTiling)
 	d.Register("window_prefix_float", handleToggleFloating)
-	d.Register("window_prefix_cancel", handlePrefixCancel)
 	d.registerPrefixTreeHandlers()
 
 	// Minimize prefix (leader, m, ...)
@@ -108,9 +96,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	for i := 1; i <= 9; i++ {
 		d.Register("minimize_prefix_restore_"+string(rune('0'+i)), makeRestoreMinimizedByPositionHandler(i))
 	}
-	d.Register("minimize_prefix_restore_all", handleRestoreAll)
 	d.Register("minimize_prefix_focus_only", handleFocusOnly)
-	d.Register("minimize_prefix_cancel", handlePrefixCancel)
 
 	// Workspace prefix (leader, w, ...)
 	for i := 1; i <= 9; i++ {
@@ -119,21 +105,17 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	}
 	d.Register("workspace_prefix_rename", handleWorkspaceRename)
 	d.Register("workspace_pill_switch", handleWorkspacePillSwitch)
-	d.Register("workspace_prefix_cancel", handlePrefixCancel)
 
 	// Debug prefix (leader, D, ...)
 	d.Register("debug_prefix_logs", handleDebugLogs)
 	d.Register("debug_prefix_cache", handleDebugCache)
 	d.Register("debug_prefix_showkeys", handleDebugShowkeys)
 	d.Register("debug_prefix_animations", handleDebugAnimations)
-	d.Register("debug_prefix_cancel", handlePrefixCancel)
 
 	// Tape prefix (leader, T, ...)
-	d.Register("tape_prefix_manager", handleToggleTapeManager)
 	d.Register("tape_prefix_review", handleTapeReview)
 	d.Register("tape_prefix_record", handleTapeRecord)
 	d.Register("tape_prefix_stop", handleTapeStop)
-	d.Register("tape_prefix_cancel", handlePrefixCancel)
 
 	// Layout prefix (leader, L, ...). Load and save used to be a hand-written
 	// switch in handleTerminalLayoutPrefix while every other key in the section
@@ -141,7 +123,6 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	// section drift; now there is one.
 	d.Register("layout_prefix_load", handleLayoutPrefixLoad)
 	d.Register("layout_prefix_save", handleLayoutPrefixSave)
-	d.Register("layout_prefix_cancel", handlePrefixCancel)
 
 	// Terminal mode direct binds (no prefix)
 	d.Register("terminal_next_window", handleTerminalNextWindow)
@@ -149,8 +130,6 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("terminal_exit_mode", handleTerminalExitMode)
 	d.Register("terminal_focus_left", handleTerminalFocusDirection("left"))
 	d.Register("terminal_focus_right", handleTerminalFocusDirection("right"))
-	d.Register("terminal_focus_up", handleTerminalFocusDirection("up"))
-	d.Register("terminal_focus_down", handleTerminalFocusDirection("down"))
 }
 
 // handleTerminalFocusDirection moves focus to the neighbouring pane in one

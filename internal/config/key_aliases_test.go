@@ -109,7 +109,7 @@ func TestAliasBindingsMatchInEveryTable(t *testing.T) {
 		cfg := config.DefaultConfig()
 		kb := &cfg.Keybindings
 		kb.WindowManagement["new_window"] = []string{"cmd+f5"}
-		kb.PrefixMode["prefix_new_window"] = []string{"shift+ctrl+f6"}
+		kb.PrefixMode["new_window"] = []string{"shift+ctrl+f6"}
 		kb.TerminalMode["terminal_exit_mode"] = []string{"control+f7"}
 		kb.Global["command_palette"] = []string{"command+f8"}
 		if mac {
@@ -124,7 +124,7 @@ func TestAliasBindingsMatchInEveryTable(t *testing.T) {
 			}
 		}
 		check("window_management", reg.GetAction("super+f5"), "new_window", "super+f5")
-		check("prefix_mode", reg.Action(config.TablePrefixMode, "ctrl+shift+f6"), "prefix_new_window", "ctrl+shift+f6")
+		check("prefix_mode", reg.Action(config.TablePrefixMode, "ctrl+shift+f6"), "new_window", "ctrl+shift+f6")
 		check("terminal_mode", reg.Action(config.TableTerminalMode, "ctrl+f7"), "terminal_exit_mode", "ctrl+f7")
 		check("global", reg.Action(config.TableGlobal, "super+f8"), "command_palette", "super+f8")
 		if mac {
@@ -231,13 +231,13 @@ func TestDoctorNamesTheLeaderSpellingAndBadKeys(t *testing.T) {
 		defer restore()
 		cfg := config.DefaultConfig()
 		cfg.Keybindings.LeaderKey = "ctrl+nope"
-		cfg.Keybindings.PrefixMode["prefix_new_window"] = []string{"hyper+x"}
+		cfg.Keybindings.PrefixMode["new_window"] = []string{"hyper+x"}
 		rep := config.NewKeybindRegistry(cfg).Report(config.PaneFacts{})
 		got := map[string]bool{}
 		for _, p := range rep.KeyProblems {
 			got[p.Section+"."+p.Action+"="+p.Key] = true
 		}
-		for _, want := range []string{"keybindings.leader_key=ctrl+nope", "prefix_mode.prefix_new_window=hyper+x"} {
+		for _, want := range []string{"keybindings.leader_key=ctrl+nope", "prefix_mode.new_window=hyper+x"} {
 			if !got[want] {
 				t.Errorf("doctor does not report %s; got %+v", want, rep.KeyProblems)
 			}

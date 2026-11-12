@@ -851,7 +851,7 @@ func isConfiguredKey(msg tea.KeyPressMsg, s *config.Settings, base rune, is func
 // leaderBoundInPrefix reports whether the leader, pressed with the prefix
 // already active, has a binding of its own in the prefix_mode table. That
 // binding wins over what the leader pressed two times does by default
-// (leader_twice), so leader_key = "ctrl+j" with terminal_focus_down on
+// (leader_twice), so leader_key = "ctrl+j" with focus_down on
 // "ctrl+j" focuses down on ctrl+j ctrl+j (issue #866). No default and no
 // preset binds the leader there, so the binding is always the user's, and
 // without one the leader pressed two times keeps its leader_twice meaning.

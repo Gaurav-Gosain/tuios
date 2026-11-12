@@ -59,7 +59,7 @@ func TestActionRowsStayOutOfAnOrdinarySearch(t *testing.T) {
 }
 
 // TestTokenFindsAnActionByEitherName. A user who read config.toml searches for
-// "prefix_close_window"; a user who read the overlay searches for "close". Both
+// "close_window"; a user who read the overlay searches for "close". Both
 // have to work, or the row is only findable by people who already know where it
 // came from.
 //
@@ -70,7 +70,7 @@ func TestTokenFindsAnActionByEitherName(t *testing.T) {
 	m.PaletteKeybindItems = getKeybindPaletteItems(m)
 	m.rebuildPaletteItems()
 
-	for _, query := range []string{"#prefix_close_window", "#close window"} {
+	for _, query := range []string{"#close_window", "#close window"} {
 		hits := FilterCommandPalette(m.allPaletteItems(), query)
 		if len(hits) == 0 {
 			t.Errorf("%q found nothing", query)

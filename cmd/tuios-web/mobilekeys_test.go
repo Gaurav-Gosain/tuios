@@ -27,9 +27,9 @@ func findKey(keys []sip.MobileKey, label string) (sip.MobileKey, bool) {
 // around has to get buttons that still do what they say.
 func TestMobileBarFollowsRebinds(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Keybindings.PrefixMode["prefix_new_window"] = []string{"w"}
-	cfg.Keybindings.PrefixMode["prefix_close_window"] = []string{"f4"}
-	cfg.Keybindings.PrefixMode["prefix_command_palette"] = []string{"ctrl+p"}
+	cfg.Keybindings.PrefixMode["new_window"] = []string{"w"}
+	cfg.Keybindings.PrefixMode["close_window"] = []string{"f4"}
+	cfg.Keybindings.PrefixMode["command_palette"] = []string{"ctrl+p"}
 
 	_, rows := mobileBar(config.NewKeybindRegistry(cfg), "ctrl+a")
 	keys := rows[0].Keys

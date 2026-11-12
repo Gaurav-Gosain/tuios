@@ -18,7 +18,7 @@ const menusConfig = `
 title = "Split"
 
 [keybindings.menus.split.keys]
-prefix_split_vertical = ["y"]
+split_vertical = ["y"]
 "open_menu:resize" = ["R"]
 
 [keybindings.menus.resize]

@@ -94,7 +94,7 @@ func getKeybindPaletteItems(m *OS) []CommandPaletteItem {
 		action, runs := e.action, e.runs
 		items = append(items, CommandPaletteItem{
 			// The action name is in the row so the fuzzy filter finds it: a user
-			// who read config.toml searches for "prefix_close_window", not for
+			// who read config.toml searches for "close_window", not for
 			// "Close current window".
 			Name:     e.desc + "  " + action,
 			Shortcut: shortcut,

@@ -33,8 +33,8 @@ swap_right = ['shift+right', 'x']
 	if err != nil {
 		t.Fatalf("keybinds explain: %v\n%s", err, out)
 	}
-	if !strings.Contains(out, `"prefix_settings"`) {
-		t.Fatalf("explain does not say , runs prefix_settings after the prefix:\n%s", out)
+	if !strings.Contains(out, `"open_settings"`) {
+		t.Fatalf("explain does not say , runs open_settings after the prefix:\n%s", out)
 	}
 
 	type retired struct {
@@ -65,11 +65,11 @@ swap_right = ['shift+right', 'x']
 			}
 			got = append(got, r.Action+" "+r.Keys[0])
 			if r.Action == "swap_down" && slices.Equal(r.Keys, []string{","}) {
-				found = strings.Contains(r.Note, `"," is the default key of prefix_settings`)
+				found = strings.Contains(r.Note, `"," is the default key of open_settings`)
 			}
 		}
 		if !found {
-			t.Fatalf("the doctor does not report , taken from swap_down by prefix_settings:\n%s", out)
+			t.Fatalf("the doctor does not report , taken from swap_down by open_settings:\n%s", out)
 		}
 		if !slices.Equal(got, want) {
 			t.Fatalf("run %d: the dropped keys are %q, want %q in that order", run+1, got, want)

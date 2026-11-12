@@ -396,7 +396,11 @@ func keybindTableRows(rows []keybindRow) [][]string {
 		case r.Fixed && action == "":
 			action = "-"
 		}
-		out = append(out, []string{keys, action, r.Description})
+		desc := r.Description
+		if len(r.Also) > 0 {
+			desc += " (also: " + strings.Join(r.Also, ", ") + ")"
+		}
+		out = append(out, []string{keys, action, desc})
 	}
 	return out
 }

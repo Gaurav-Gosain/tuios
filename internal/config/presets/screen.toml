@@ -10,7 +10,7 @@ leader_key = "ctrl+a"
 # C-a C-a goes to the last window in screen. a sends a literal C-a.
 leader_twice = "last_workspace"
 repeat = [
-  "terminal_focus_left", "terminal_focus_right", "terminal_focus_up", "terminal_focus_down",
+  "terminal_focus_left", "terminal_focus_right", "focus_up", "focus_down",
 ]
 
 [about]
@@ -18,7 +18,7 @@ name = "screen"
 summary = "for GNU screen users"
 samples = ["c", "S", "a"]
 model = "A screen window is a workspace here. A screen region is a window here."
-same = ["prefix_help", "prefix_selection", "paste_buffer", "prefix_detach"]
+same = ["toggle_help", "prefix_selection", "paste_buffer", "prefix_detach"]
 missing = [
   "H: log the window to a file",
   "M, _: monitor activity or silence. The Inbox covers agents only",
@@ -50,23 +50,23 @@ switch_workspace_8 = ["8"]
 switch_workspace_9 = ["9"]
 rename_workspace = ["A"]
 prefix_detach = ["d", "ctrl+d"]
-prefix_close_window = ["k", "ctrl+k"]
+close_window = ["k", "ctrl+k"]
 prefix_next_window = ["tab"]
 prefix_prev_window = []
 prefix_last_message = ["m"]
 prefix_fullscreen = ["Q", "z"]
-prefix_split_horizontal = ["S", "-"]
-prefix_split_vertical = ["|"]
+split_horizontal = ["S", "-"]
+split_vertical = ["|"]
 minimize_window = ["X"]
 prefix_screenshot = ["h"]
-prefix_help = ["?"]
+toggle_help = ["?"]
 prefix_quit = ["\\"]
-prefix_command_palette = [":", "P"]
+command_palette = [":", "P"]
 prefix_selection = ["[", "esc"]
 paste_buffer = ["]"]
 prefix_tuios = ["ctrl+t"]
 # The tuios features screen takes the keys of, in the tuios menu below.
-prefix_new_window = []
+new_window = []
 prefix_keybinds = []
 prefix_minimize = []
 prefix_workspace = []
@@ -89,7 +89,7 @@ prefix_select_8 = []
 prefix_select_9 = []
 
 [tuios_prefix]
-prefix_new_window = ["c"]
+new_window = ["c"]
 prefix_keybinds = ["k"]
 prefix_minimize = ["m"]
 prefix_workspace = ["w"]

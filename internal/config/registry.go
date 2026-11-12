@@ -126,7 +126,7 @@ func (r *KeybindRegistry) addSection(section map[string][]string) {
 // A Go map iterates in a different order every time, so when two actions in one
 // section bind the same key, last-write-wins made the key resolve to a
 // different action on each press: a config that kept prefix_rename_window on
-// "," after the default moved to prefix_settings opened settings on roughly one
+// "," after the default moved to open_settings opened settings on roughly one
 // press in five. Duplicates are repaired at load (see dropStaleDuplicateKeys);
 // this makes whatever survives behave the same way every time.
 func (r *KeybindRegistry) sectionKeyMap(section map[string][]string) map[string]string {
@@ -221,7 +221,7 @@ func (r *KeybindRegistry) LeaderTwiceGoesBack() bool {
 // PrefixRepeats reports whether action stays armed after the leader. See
 // KeybindingsConfig.Repeat.
 func (r *KeybindRegistry) PrefixRepeats(action string) bool {
-	return r.repeat[action]
+	return r.repeat[CanonicalAction(action)]
 }
 
 // GetMenuAction returns the action name for a given key in the declared menu
@@ -253,7 +253,7 @@ func (r *KeybindRegistry) Action(t Table, key string) string {
 // GetKeys searches the window-mode tables only; this reads one table, for the
 // key hints and the help overlay of a scope with its own action names.
 func (r *KeybindRegistry) Keys(t Table, action string) []string {
-	return (*keybindTables[t].field(&r.config.Keybindings))[action]
+	return (*keybindTables[t].field(&r.config.Keybindings))[CanonicalAction(action)]
 }
 
 // lookupKey performs the actual key lookup with case handling
@@ -308,6 +308,9 @@ func bareGlyphTierFilled(layout, glyphs string) bool {
 // as launcher (global alt+space and prefix a), answers with one of them only.
 // Use PressesByAction to show a binding to a person.
 func (r *KeybindRegistry) GetKeys(action string) []string {
+	// The config's tables hold each action by its own name (see
+	// canonicalizeKeybindings), so an alias asks for that name.
+	action = CanonicalAction(action)
 	// Search through all sections
 	sections := []map[string][]string{
 		r.config.Keybindings.WindowManagement,

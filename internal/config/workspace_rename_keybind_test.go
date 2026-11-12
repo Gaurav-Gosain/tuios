@@ -15,7 +15,7 @@ func TestOlderConfigStillResolvesTheWorkspaceRenameKey(t *testing.T) {
 	cfg.Keybindings.WorkspacePrefix = map[string][]string{
 		"workspace_prefix_switch_1": {"1"},
 		"workspace_prefix_switch_2": {"2"},
-		"workspace_prefix_cancel":   {"esc"},
+		"prefix_cancel":             {"esc"},
 	}
 
 	fillMissingKeybinds(cfg, DefaultConfig())

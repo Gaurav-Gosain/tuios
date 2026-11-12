@@ -67,7 +67,7 @@
       ],
       "done": {
         "via": [
-          "prefix_split_vertical"
+          "split_vertical"
         ],
         "then": {
           "on": "window.open"
@@ -86,7 +86,7 @@
       ],
       "done": {
         "via": [
-          "prefix_split_horizontal"
+          "split_horizontal"
         ],
         "then": {
           "on": "window.open"
@@ -107,8 +107,8 @@
         "via": [
           "terminal_focus_left",
           "terminal_focus_right",
-          "terminal_focus_up",
-          "terminal_focus_down"
+          "focus_up",
+          "focus_down"
         ],
         "then": {
           "on": "window.focus"

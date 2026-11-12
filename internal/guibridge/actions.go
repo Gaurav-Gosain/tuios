@@ -45,16 +45,17 @@ func checkAction(name string) error {
 
 // splitActions are the actions that split the focused pane, and the side the
 // new pane goes on.
+// An alias (prefix_split_vertical) is looked up by the action's own name.
 var splitActions = map[string]layout.PreselectionDir{
-	"split_vertical": layout.PreselectionRight, "prefix_split_vertical": layout.PreselectionRight,
-	"split_horizontal": layout.PreselectionDown, "prefix_split_horizontal": layout.PreselectionDown,
+	"split_vertical":   layout.PreselectionRight,
+	"split_horizontal": layout.PreselectionDown,
 }
 
 // splitRefusal says why a split action will not run, or nil. The model
 // refuses a split that leaves a pane under the smallest size and only shows a
 // notification, which the renderer never sees, so the result says it.
 func (m *model) splitRefusal(name string) error {
-	dir, ok := splitActions[name]
+	dir, ok := splitActions[config.CanonicalAction(name)]
 	if !ok {
 		return nil
 	}

@@ -25,7 +25,7 @@ import (
 // esc twice out of habit, and Claude Code and readline give a double esc a
 // meaning of their own, so the beam would go off in the middle of a demo and
 // the program would lose its key. The terminal-mode way out is the leader
-// chord prefix_toggle_spotlight (leader, B), which the chip names in that mode.
+// chord toggle_spotlight (leader, B), which the chip names in that mode.
 
 // spotlightChipHit is where the chip was drawn last frame, in screen cells.
 type spotlightChipHit struct {
@@ -42,7 +42,7 @@ func (m *OS) spotlightOffChord() string {
 	if m.KeybindRegistry == nil {
 		return ""
 	}
-	keys := m.KeybindRegistry.GetKeys("prefix_toggle_spotlight")
+	keys := m.KeybindRegistry.GetKeys("toggle_spotlight")
 	if len(keys) == 0 {
 		return ""
 	}

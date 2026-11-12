@@ -85,7 +85,7 @@ Events come in a fixed order for one key press: `key` first, then any
 |---|---|---|
 | `ready` | `{}` | the program started. Carries `state` |
 | `key` | `{key, mode}` | a key press, before tuios handles it. `key` is Bubble Tea's name for it (`"ctrl+b"`, `"n"`, `"enter"`), `mode` is `"window"` or `"terminal"` |
-| `action` | `{name, mode}` | the exact keybinding action a key, a prefix chord, a menu row or `command("action")` ran, such as `"prefix_new_window"` or `"toggle_tiling"`. The keys of the agents view and its peek send theirs too, such as `"inbox_allow"` or `"peek_back"`. Also sent for an action Learn mode turns off |
+| `action` | `{name, mode}` | the exact keybinding action a key, a prefix chord, a menu row or `command("action")` ran, such as `"new_window"` or `"toggle_tiling"`. The keys of the agents view and its peek send theirs too, such as `"inbox_allow"` or `"peek_back"`. Also sent for an action Learn mode turns off |
 | `mode` | `{from, to}` | `"window"` or `"terminal"` |
 | `prefix` | `{from, to}` | the prefix state: `""`, `"prefix"`, `"workspace"`, `"window"`, `"minimize"`, `"layout"`, `"debug"` or `"tape"`. The leader key gives `to: "prefix"` |
 | `window.open` | `{id, title, workspace, count}` | a window opened. `count` is the total over every workspace |

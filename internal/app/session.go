@@ -2498,7 +2498,7 @@ func (m *OS) warnOnBuildMismatch() {
 	// target, and draws underlined for it; the key is the jump key as it is
 	// bound now.
 	how := "Click it to restart it."
-	if key := contextMenuHint(m.KeybindRegistry, "prefix_jump_notif", &m.Settings); key != "" {
+	if key := contextMenuHint(m.KeybindRegistry, "prefix_jump_notif", &m.Settings, m.Mode); key != "" {
 		how = key + " restarts it."
 	}
 	m.ShowNotificationFrom("The daemon runs "+daemonBuild+". "+how, "warning", 0, NotifTarget{DaemonRestart: true})

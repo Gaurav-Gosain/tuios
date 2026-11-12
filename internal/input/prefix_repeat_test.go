@@ -52,7 +52,7 @@ func TestAOneShotCommandDoesNotLeaveThePrefixArmed(t *testing.T) {
 	m := repeatOS(t)
 	m.PrefixActive = true
 
-	key, ok := prefixKeyFor(t, m, "prefix_new_window")
+	key, ok := prefixKeyFor(t, m, "new_window")
 	if !ok {
 		t.Fatal("ASSERTION: no prefix binding for making a window, so this proves nothing")
 	}

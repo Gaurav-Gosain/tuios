@@ -79,7 +79,7 @@
       ],
       "done": {
         "via": [
-          "prefix_split_horizontal"
+          "split_horizontal"
         ],
         "then": {
           "on": "window.open"

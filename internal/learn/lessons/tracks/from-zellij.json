@@ -133,8 +133,8 @@
         "via": [
           "terminal_focus_left",
           "terminal_focus_right",
-          "terminal_focus_up",
-          "terminal_focus_down"
+          "focus_up",
+          "focus_down"
         ],
         "then": {
           "on": "window.focus"

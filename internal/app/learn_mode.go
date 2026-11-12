@@ -66,7 +66,6 @@ var learnUnavailable = map[string]string{
 	"screenshot_screen":       learnNoteShot,
 	"prefix_screenshot":       learnNoteShot,
 	"toggle_tape_manager":     learnNoteTapes,
-	"tape_prefix_manager":     learnNoteTapes,
 	"tape_prefix_review":      learnNoteTapes,
 	"tape_prefix_record":      learnNoteRecord,
 	"layout_prefix_save":      learnNoteFiles,

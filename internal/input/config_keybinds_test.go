@@ -59,7 +59,7 @@ func TestRebindingAPrefixKeyTakesEffect(t *testing.T) {
 		{
 			name: "prefix_mode",
 			override: func(k *config.KeybindingsConfig) {
-				k.PrefixMode["prefix_help"] = []string{"g"}
+				k.PrefixMode["toggle_help"] = []string{"g"}
 				delete(k.PrefixMode, "prefix_scrollback") // "s" would still be bound
 			},
 			arm:    func(o *app.OS) { o.PrefixActive = true },
@@ -70,7 +70,7 @@ func TestRebindingAPrefixKeyTakesEffect(t *testing.T) {
 		{
 			name: "window_prefix",
 			override: func(k *config.KeybindingsConfig) {
-				k.WindowPrefix["window_prefix_tiling"] = []string{"g"}
+				k.WindowPrefix["toggle_tiling"] = []string{"g"}
 			},
 			arm:    func(o *app.OS) { o.SubMenu = app.SubMenuTiling },
 			route:  HandleTilingPrefixCommand,
@@ -100,7 +100,7 @@ func TestRebindingAPrefixKeyTakesEffect(t *testing.T) {
 		{
 			name: "tape_prefix",
 			override: func(k *config.KeybindingsConfig) {
-				k.TapePrefix["tape_prefix_manager"] = []string{"g"}
+				k.TapePrefix["toggle_tape_manager"] = []string{"g"}
 			},
 			arm:    func(o *app.OS) { o.SubMenu = app.SubMenuTape },
 			route:  HandleTapePrefixCommand,

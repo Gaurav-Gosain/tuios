@@ -68,7 +68,7 @@
 {"t":5231,"type":"prefix","data":{"from":"","to":"prefix"},"state":{"mode":"terminal","windows":1,"totalWindows":1,"pip":"","glyphs":"default","windowList":[{"id":"27a9cc4b-5c11-443b-b890-c7d2b1e85a8d","agent":"","kind":""}]}},
 {"t":5803,"type":"overlay.open","data":{"name":"whichkey"},"state":{"mode":"terminal","windows":1,"totalWindows":1,"pip":"","glyphs":"default","windowList":[{"id":"27a9cc4b-5c11-443b-b890-c7d2b1e85a8d","agent":"","kind":""}]}},
 {"t":5955,"type":"key","data":{"key":"|","mode":"terminal"},"state":{"windowList":[]}},
-{"t":5956,"type":"action","data":{"name":"prefix_split_vertical","mode":"terminal"},"state":{"windowList":[]}},
+{"t":5956,"type":"action","data":{"name":"split_vertical","mode":"terminal"},"state":{"windowList":[]}},
 {"t":5961,"type":"notification","data":{"message":"Split vertical","level":"info"},"state":{"windowList":[]}},
 {"t":5963,"type":"prefix","data":{"from":"prefix","to":""},"state":{"mode":"terminal","windows":2,"totalWindows":2,"pip":"","glyphs":"default","windowList":[{"id":"27a9cc4b-5c11-443b-b890-c7d2b1e85a8d","agent":"","kind":""},{"id":"a1b93666-2fb5-4b31-93bf-17afc23e8eb4","agent":"","kind":""}]}},
 {"t":5963,"type":"window.open","data":{"workspace":1,"count":2,"id":"a1b93666-2fb5-4b31-93bf-17afc23e8eb4","title":"Terminal a1b93666"},"state":{"mode":"terminal","windows":2,"totalWindows":2,"pip":"","glyphs":"default","windowList":[{"id":"27a9cc4b-5c11-443b-b890-c7d2b1e85a8d","agent":"","kind":""},{"id":"a1b93666-2fb5-4b31-93bf-17afc23e8eb4","agent":"","kind":""}]}},

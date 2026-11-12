@@ -40,6 +40,11 @@ type ActionSpec struct {
 	Run   RunScope
 	// Hidden keeps the action out of the lists a person reads.
 	Hidden bool
+	// Aliases are the action's older names. Config, presets, tapes and the
+	// protocol may still use one: the loader rewrites a keybinding to Name,
+	// and LookupAction, the dispatcher and the registry answer an alias as
+	// the action itself.
+	Aliases []Action
 	// GUI lets the GUI bridge's action command run it (see
 	// internal/guibridge). The bridge has no screen, so these are the actions
 	// that change the session: its panes, their layout, the workspaces and
@@ -217,9 +222,9 @@ var actionTable = [...]ActionSpec{
 	{Name: "reorder_down", Desc: "Rail: move this session or machine down"},
 
 	// Window Management
-	{Name: "new_window", Desc: "New window", GUI: true},
+	{Name: "new_window", Desc: "New window", GUI: true, Mobile: MobileButton{Label: "new", Order: 1}, Aliases: []Action{"prefix_new_window", "window_prefix_new"}},
 	{Name: "new_window_ssh", Desc: "New window that runs the focused pane's ssh"},
-	{Name: "close_window", Desc: "Close window", GUI: true},
+	{Name: "close_window", Desc: "Close window", GUI: true, Mobile: MobileButton{Label: "close", Order: 2}, Aliases: []Action{"prefix_close_window", "window_prefix_close"}},
 	{Name: "rename_window", Desc: "Rename window"},
 	{Name: "set_accent", Desc: "Accent color"},
 	// Reached from the rail's session row and its menu; the row carries which
@@ -227,7 +232,7 @@ var actionTable = [...]ActionSpec{
 	{Name: "set_session_accent", Desc: "Session color"},
 	{Name: "set_note", Desc: "Write a note for the session: what it is for or what comes next"},
 	{Name: "minimize_window", Desc: "Minimize window", GUI: true},
-	{Name: "restore_all", Desc: "Restore all minimized", GUI: true},
+	{Name: "restore_all", Desc: "Restore all minimized", GUI: true, Aliases: []Action{"minimize_prefix_restore_all"}},
 	{Name: "toggle_zoom", Desc: "Toggle zoom (fullscreen)", GUI: true},
 	{Name: "toggle_pip", Desc: "Pin or unpin the picture-in-picture view"},
 	{Name: "focus_rail_pane", Desc: "Type into the pane in the rail"},
@@ -257,15 +262,15 @@ var actionTable = [...]ActionSpec{
 	// Layout
 	{Name: "snap_left", Desc: "Snap or focus left", GUI: true},
 	{Name: "snap_right", Desc: "Snap or focus right", GUI: true},
-	{Name: "focus_up", Desc: "Focus the window above", GUI: true, Repeat: true},
-	{Name: "focus_down", Desc: "Focus the window below", GUI: true, Repeat: true},
+	{Name: "focus_up", Desc: "Focus the pane above", GUI: true, Repeat: true, Aliases: []Action{"terminal_focus_up"}},
+	{Name: "focus_down", Desc: "Focus the pane below", GUI: true, Repeat: true, Aliases: []Action{"terminal_focus_down"}},
 	{Name: "snap_fullscreen", Desc: "Fullscreen", GUI: true},
 	{Name: "unsnap", Desc: "Unsnap", GUI: true},
 	{Name: "snap_corner_1", Desc: "Snap to top-left", GUI: true},
 	{Name: "snap_corner_2", Desc: "Snap to top-right", GUI: true},
 	{Name: "snap_corner_3", Desc: "Snap to bottom-left", GUI: true},
 	{Name: "snap_corner_4", Desc: "Snap to bottom-right", GUI: true},
-	{Name: "toggle_tiling", Desc: "Toggle tiling mode", GUI: true},
+	{Name: "toggle_tiling", Desc: "Toggle tiling mode", GUI: true, Aliases: []Action{"window_prefix_tiling"}},
 	{Name: "swap_left", Desc: "Swap left", GUI: true},
 	{Name: "swap_right", Desc: "Swap right", GUI: true},
 	{Name: "swap_up", Desc: "Swap up", GUI: true},
@@ -298,12 +303,12 @@ var actionTable = [...]ActionSpec{
 	{Name: "resize_height_90", Desc: "Set focused window height to 90%", GUI: true},
 
 	// BSP Tiling
-	{Name: "split_horizontal", Desc: "Split window horizontally (top/bottom)", GUI: true},
-	{Name: "split_vertical", Desc: "Split window vertically (left/right)", GUI: true},
+	{Name: "split_horizontal", Desc: "Split the window horizontally (top/bottom)", GUI: true, Mobile: MobileButton{Label: "hsplit", Order: 9}, Aliases: []Action{"prefix_split_horizontal"}},
+	{Name: "split_vertical", Desc: "Split the window vertically (left/right)", GUI: true, Mobile: MobileButton{Label: "vsplit", Order: 8}, Aliases: []Action{"prefix_split_vertical"}},
 	{Name: "split_ssh_horizontal", Desc: "Split top/bottom, and run the focused pane's ssh in the new pane"},
 	{Name: "split_ssh_vertical", Desc: "Split left/right, and run the focused pane's ssh in the new pane"},
-	{Name: "rotate_split", Desc: "Rotate split", GUI: true},
-	{Name: "equalize_splits", Desc: "Equalize all split ratios", GUI: true},
+	{Name: "rotate_split", Desc: "Rotate split", GUI: true, Aliases: []Action{"prefix_rotate_split"}},
+	{Name: "equalize_splits", Desc: "Equalize all split ratios", GUI: true, Aliases: []Action{"prefix_equalize_splits"}},
 	{Name: "preselect_left", Desc: "Preselect left for next window", GUI: true},
 	{Name: "preselect_right", Desc: "Preselect right for next window", GUI: true},
 	{Name: "preselect_up", Desc: "Preselect up for next window", GUI: true},
@@ -330,8 +335,8 @@ var actionTable = [...]ActionSpec{
 	{Name: "enter_terminal_mode", Desc: "Enter terminal mode"},
 	{Name: "enter_window_mode", Desc: "Enter window management mode"},
 	{Name: "hold_window_mode", Desc: "Hold for window management mode", Run: RunView},
-	{Name: "toggle_help", Desc: "Toggle help"},
-	{Name: "open_settings", Desc: "Open settings"},
+	{Name: "toggle_help", Desc: "Toggle help", Mobile: MobileButton{Label: "help", Order: 11}, Aliases: []Action{"prefix_help"}},
+	{Name: "open_settings", Desc: "Open settings", Mobile: MobileButton{Label: "config", Order: 10}, Aliases: []Action{"prefix_settings"}},
 	{Name: "quit", Desc: "Quit"},
 	{Name: "focus_sidebar", Desc: "Focus sidebar"},
 	{Name: "next_session", Desc: "Next session", GUI: true},
@@ -415,16 +420,13 @@ var actionTable = [...]ActionSpec{
 	// System
 	{Name: "toggle_logs", Desc: "Toggle log viewer"},
 	{Name: "toggle_cache_stats", Desc: "Toggle cache statistics"},
-	{Name: "toggle_spotlight", Desc: "Toggle spotlight"},
+	{Name: "toggle_spotlight", Desc: "Toggle spotlight", Aliases: []Action{"prefix_toggle_spotlight"}},
 
 	// Prefix Mode
-	{Name: "prefix_new_window", Desc: "Create new window", GUI: true, Mobile: MobileButton{Label: "new", Order: 1}},
-	{Name: "prefix_close_window", Desc: "Close current window", GUI: true, Mobile: MobileButton{Label: "close", Order: 2}},
 	{Name: "prefix_rename_window", Desc: "Rename window"},
-	{Name: "prefix_settings", Desc: "Open settings", Mobile: MobileButton{Label: "config", Order: 10}},
 	{Name: "prefix_keybinds", Desc: "Open the keybind manager"},
-	{Name: "prefix_next_window", Desc: "Next window", GUI: true, Mobile: MobileButton{Label: "next", Order: 3}},
-	{Name: "prefix_prev_window", Desc: "Previous window", GUI: true, Mobile: MobileButton{Label: "prev", Order: 4}},
+	{Name: "prefix_next_window", Desc: "Next window", GUI: true, Mobile: MobileButton{Label: "next", Order: 3}, Aliases: []Action{"window_prefix_next"}},
+	{Name: "prefix_prev_window", Desc: "Previous window", GUI: true, Mobile: MobileButton{Label: "prev", Order: 4}, Aliases: []Action{"window_prefix_prev"}},
 	{Name: "prefix_select_0", Desc: "Jump to window 0", GUI: true},
 	{Name: "prefix_select_1", Desc: "Jump to window 1", GUI: true},
 	{Name: "prefix_select_2", Desc: "Jump to window 2", GUI: true},
@@ -443,13 +445,10 @@ var actionTable = [...]ActionSpec{
 	{Name: "prefix_close_session", Desc: "Close session and panes"},
 	{Name: "prefix_exit_mode", Desc: "Leave terminal mode"},
 	{Name: "prefix_selection", Desc: "Enter copy/scrollback mode"},
-	{Name: "prefix_help", Desc: "Toggle help", Mobile: MobileButton{Label: "help", Order: 11}},
 	{Name: "prefix_debug", Desc: "Enter debug prefix"},
 	{Name: "prefix_tape", Desc: "Enter tape manager prefix"},
 	{Name: "prefix_quit", Desc: "Quit (daemon: kills session)"},
 	{Name: "prefix_fullscreen", Desc: "Fullscreen current window", GUI: true, Mobile: MobileButton{Label: "zoom", Order: 5}},
-	{Name: "prefix_split_horizontal", Desc: "Split window horizontally", GUI: true, Mobile: MobileButton{Label: "hsplit", Order: 9}},
-	{Name: "prefix_split_vertical", Desc: "Split window vertically", GUI: true, Mobile: MobileButton{Label: "vsplit", Order: 8}},
 	{Name: "mark_pane", Desc: "Mark the focused pane, or clear the mark"},
 	{Name: "join_marked_left", Desc: "Join the marked pane left of this one"},
 	{Name: "join_marked_right", Desc: "Join the marked pane right of this one"},
@@ -475,15 +474,11 @@ var actionTable = [...]ActionSpec{
 	{Name: "reload_config", Desc: "Reload the config file"},
 	{Name: "toggle_mouse", Desc: "Turn mouse capture off or on (off: the terminal selects text)"},
 	{Name: "cycle_layout", Desc: "Cycle the layout: BSP, master-stack, scrolling"},
-	{Name: "prefix_rotate_split", Desc: "Rotate split", GUI: true},
-	{Name: "prefix_equalize_splits", Desc: "Equalize all splits", GUI: true},
 	{Name: "prefix_scrollback", Desc: "Open the scrollback browser"},
 	{Name: "prefix_screenshot", Desc: "Take a screenshot"},
-	{Name: "prefix_command_palette", Desc: "Open the command palette", Mobile: MobileButton{Label: "cmds", Order: 6}},
 	{Name: "prefix_file_search", Desc: "Search files below the focused pane's directory"},
 	{Name: "prefix_toggle_sidebar", Desc: "Toggle the session sidebar"},
 	{Name: "prefix_toggle_other_rail", Desc: "Toggle the opposite sidebar"},
-	{Name: "prefix_toggle_spotlight", Desc: "Toggle spotlight"},
 	{Name: "prefix_explore", Desc: "Focus/leave sidebar"},
 	{Name: "prefix_jump_notif", Desc: "Jump to newest message"},
 	{Name: "prefix_last_message", Desc: "Show the last message in full"},
@@ -503,14 +498,13 @@ var actionTable = [...]ActionSpec{
 	{Name: "prefix_layout", Desc: "Enter layout prefix"},
 
 	// Tape Prefix
-	{Name: "tape_prefix_manager", Desc: "Open tape manager"},
+	{Name: "prefix_cancel", Desc: "Leave the prefix menu", Aliases: []Action{"debug_prefix_cancel", "layout_prefix_cancel", "minimize_prefix_cancel", "tape_prefix_cancel", "window_prefix_cancel", "workspace_prefix_cancel"}},
 	{Name: "tape_prefix_review", Desc: "Review project tape"},
 	{Name: "tape_prefix_record", Desc: "Start recording"},
 	{Name: "tape_prefix_stop", Desc: "Stop recording"},
-	{Name: "tape_prefix_cancel", Desc: "Cancel tape prefix"},
 
 	// Tape Actions
-	{Name: "toggle_tape_manager", Desc: "Toggle tape manager"},
+	{Name: "toggle_tape_manager", Desc: "Toggle tape manager", Aliases: []Action{"tape_prefix_manager"}},
 	{Name: "stop_recording", Desc: "Stop tape recording"},
 
 	// Debug Prefix
@@ -518,7 +512,6 @@ var actionTable = [...]ActionSpec{
 	{Name: "debug_prefix_cache", Desc: "Toggle cache statistics"},
 	{Name: "debug_prefix_animations", Desc: "Toggle animations"},
 	{Name: "debug_prefix_showkeys", Desc: "Toggle showkeys overlay"},
-	{Name: "debug_prefix_cancel", Desc: "Cancel debug prefix"},
 
 	// Terminal Mode (direct keybinds, no prefix required)
 	{Name: "terminal_next_window", Desc: "Next window (terminal mode)", Repeat: true},
@@ -526,8 +519,6 @@ var actionTable = [...]ActionSpec{
 	{Name: "terminal_exit_mode", Desc: "Exit terminal mode (to window mode)"},
 	{Name: "terminal_focus_left", Desc: "Focus the pane to the left", GUI: true, Repeat: true},
 	{Name: "terminal_focus_right", Desc: "Focus the pane to the right", GUI: true, Repeat: true},
-	{Name: "terminal_focus_up", Desc: "Focus the pane above", GUI: true, Repeat: true},
-	{Name: "terminal_focus_down", Desc: "Focus the pane below", GUI: true, Repeat: true},
 	{Name: "terminal_scroll_up", Desc: "Scroll into the pane's scrollback", Run: RunView},
 	{Name: "terminal_scroll_down", Desc: "Scroll back down toward live output", Run: RunView},
 	{Name: "terminal_scroll_page_up", Desc: "Scroll up one page", Run: RunView},
@@ -535,7 +526,7 @@ var actionTable = [...]ActionSpec{
 	{Name: "terminal_paste_host", Desc: "Paste from the host clipboard", Run: RunView},
 
 	// Global (window mode and terminal mode alike)
-	{Name: "command_palette", Desc: "Open the command palette"},
+	{Name: "command_palette", Desc: "Open the command palette", Mobile: MobileButton{Label: "cmds", Order: 6}, Aliases: []Action{"prefix_command_palette"}},
 	{Name: "launcher", Desc: "Open the app launcher"},
 	{Name: "new_session", Desc: "Make a session, asking which machine"},
 
@@ -545,13 +536,7 @@ var actionTable = [...]ActionSpec{
 	// Layout Prefix
 	{Name: "layout_prefix_load", Desc: "Open the layout picker"},
 	{Name: "layout_prefix_save", Desc: "Save the current layout"},
-	{Name: "layout_prefix_cancel", Desc: "Cancel layout prefix"},
-	{Name: "window_prefix_new", Desc: "Create a window", GUI: true},
-	{Name: "window_prefix_close", Desc: "Close the window", GUI: true},
 	{Name: "window_prefix_rename", Desc: "Rename the window"},
-	{Name: "window_prefix_next", Desc: "Focus the next window", GUI: true},
-	{Name: "window_prefix_prev", Desc: "Focus the previous window", GUI: true},
-	{Name: "window_prefix_tiling", Desc: "Turn tiling on or off", GUI: true},
 	{Name: "window_prefix_float", Desc: "Float the pane or tile it. A TML popup becomes a pane, and a TML pane a popup", GUI: true},
 	{Name: "prefix_tuios", Desc: "Open the tuios menu: the tuios keys a preset moved"},
 	{Name: "open_keybind_presets", Desc: "Choose the keys: tuios, tmux, screen or zellij"},
@@ -582,11 +567,9 @@ var actionTable = [...]ActionSpec{
 	// the prefix sub-menus' copies of window and workspace actions, and the
 	// scrolling layout's keys. A key bound to one in config.toml runs it,
 	// and a tape may name it, but no list shows it.
-	{Name: "minimize_prefix_cancel", Hidden: true},
 	{Name: "minimize_prefix_focus_only", Hidden: true, GUI: true},
 	{Name: "minimize_prefix_focused", Hidden: true, GUI: true},
 	{Name: "minimize_prefix_restore_", Count: 9, Hidden: true, GUI: true},
-	{Name: "minimize_prefix_restore_all", Hidden: true, GUI: true},
 	{Name: "repo_new_worktree", Hidden: true},
 	{Name: "repo_toggle_fold", Hidden: true},
 	{Name: "restore_minimized_", Count: 9, Hidden: true, GUI: true},
@@ -600,8 +583,6 @@ var actionTable = [...]ActionSpec{
 	{Name: "scroll_move_right", Hidden: true, Repeat: true},
 	{Name: "session_new_worktree", Hidden: true},
 	{Name: "smart_split", Hidden: true},
-	{Name: "window_prefix_cancel", Hidden: true},
-	{Name: "workspace_prefix_cancel", Hidden: true},
 	{Name: "workspace_prefix_move_", Count: 9, Hidden: true, GUI: true},
 	{Name: "workspace_prefix_switch_", Count: 9, Hidden: true, GUI: true},
 }
@@ -609,11 +590,31 @@ var actionTable = [...]ActionSpec{
 // Actions returns the table, with each numbered family as one entry.
 func Actions() []ActionSpec { return actionTable[:] }
 
-// LookupAction returns the action a name names: an entry of the table, or
-// one member of a numbered family, with its number in Desc.
+// LookupAction returns the action a name names: an entry of the table, one
+// of its aliases (the spec is the action's, with its own Name), or one member
+// of a numbered family, with its number in Desc.
 func LookupAction(name string) (ActionSpec, bool) {
 	spec, ok := actionIndex()[name]
 	return spec, ok
+}
+
+// ActionAliases are the older names of the action name names, or nil.
+func ActionAliases(name string) []Action {
+	spec, ok := LookupAction(name)
+	if !ok {
+		return nil
+	}
+	return spec.Aliases
+}
+
+// CanonicalAction is the name of the action name names: the name itself, or
+// for an alias the action's own name. A name the table does not hold is
+// returned as it is.
+func CanonicalAction(name string) string {
+	if spec, ok := LookupAction(name); ok && spec.Count == 0 {
+		return spec.Name
+	}
+	return name
 }
 
 // actionIndex maps every action name, family members included, to its spec.
@@ -622,6 +623,9 @@ var actionIndex = sync.OnceValue(func() map[string]ActionSpec {
 	for _, spec := range actionTable {
 		if spec.Count == 0 {
 			idx[spec.Name] = spec
+			for _, alias := range spec.Aliases {
+				idx[alias] = spec
+			}
 			continue
 		}
 		for n := 1; n <= int(spec.Count); n++ {
@@ -689,7 +693,7 @@ func actionDescriptions() map[string]string {
 	idx := actionIndex()
 	out := make(map[string]string, len(idx))
 	for name, spec := range idx {
-		if !spec.Hidden {
+		if !spec.Hidden && name == spec.Name {
 			out[name] = spec.Desc
 		}
 	}
@@ -717,15 +721,19 @@ func (t *HandlerTable[H]) Bind(a Action, fn H) {
 	if !ok {
 		panic("config: action " + a + " is bound to a handler but is not in the action table")
 	}
+	if spec.Name != a {
+		panic("config: action " + a + " is an alias of " + spec.Name + "; bind the action by its name")
+	}
 	if spec.Run != t.scope {
 		panic("config: action " + a + " is bound in a handler table of another scope")
 	}
 	t.fns[a] = fn
 }
 
-// Lookup returns the function bound to name.
+// Lookup returns the function bound to name or to the action name is an
+// alias of.
 func (t *HandlerTable[H]) Lookup(name string) (H, bool) {
-	fn, ok := t.fns[name]
+	fn, ok := t.fns[CanonicalAction(name)]
 	return fn, ok
 }
 
@@ -733,7 +741,7 @@ func (t *HandlerTable[H]) Lookup(name string) (H, bool) {
 func (t *HandlerTable[H]) Missing() []Action {
 	var missing []Action
 	for name, spec := range actionIndex() {
-		if spec.Run != t.scope {
+		if spec.Run != t.scope || name != spec.Name && spec.Count == 0 {
 			continue
 		}
 		if _, ok := t.fns[name]; !ok {

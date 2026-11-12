@@ -288,7 +288,7 @@ func (m *OS) agentIntegrationNotice(st integration.Status) string {
 	// The key comes right after the state, as in the version notice, so the
 	// dock shows it even when it cuts the file.
 	how := "Click it to " + verb + " it in " + where + "."
-	if key := contextMenuHint(m.KeybindRegistry, "prefix_jump_notif", &m.Settings); key != "" {
+	if key := contextMenuHint(m.KeybindRegistry, "prefix_jump_notif", &m.Settings, m.Mode); key != "" {
 		how = key + " " + verb + "s it in " + where + "."
 	}
 	if verb == "update" {

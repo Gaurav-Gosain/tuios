@@ -68,7 +68,7 @@ func TestBaseLayoutKeyAnswersQuitMenu(t *testing.T) {
 // A binding on the produced character wins over the base-layout key.
 func TestProducedKeyBindingWinsOverBaseLayoutKey(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Keybindings.PrefixMode["prefix_help"] = []string{"?", "ш"}
+	cfg.Keybindings.PrefixMode["toggle_help"] = []string{"?", "ш"}
 	o, _ := osWithFocusedPane(t, cfg, app.TerminalMode)
 	o = leader(o, ukr('ш', 'i'))
 	if o.ShowInbox {

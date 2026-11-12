@@ -132,8 +132,8 @@ func TestScratchDefaultKeyYields(t *testing.T) {
 	if got := cfg.Keybindings.PrefixMode["toggle_scratch"]; len(got) != 0 {
 		t.Fatalf("toggle_scratch took g from the user's binding: %v", got)
 	}
-	if got := cfg.Keybindings.PrefixMode["prefix_help"]; len(got) != 1 || got[0] != "g" {
-		t.Fatalf("prefix_help lost g: %v", got)
+	if got := cfg.Keybindings.PrefixMode["toggle_help"]; len(got) != 1 || got[0] != "g" {
+		t.Fatalf("toggle_help lost g: %v", got)
 	}
 }
 

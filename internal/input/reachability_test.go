@@ -504,10 +504,9 @@ var actionsWithNoDefaultBinding = map[string]string{
 
 	// Debug and tape surfaces reached from their own prefix, whose actions are
 	// separate names. These are the bodies both share.
-	"toggle_logs":         "shared body, reached as debug_prefix_logs",
-	"toggle_cache_stats":  "shared body, reached as debug_prefix_cache",
-	"toggle_tape_manager": "shared body, reached as tape_prefix_manager",
-	"stop_recording":      "shared body, reached as tape_prefix_stop",
+	"toggle_logs":        "shared body, reached as debug_prefix_logs",
+	"toggle_cache_stats": "shared body, reached as debug_prefix_cache",
+	"stop_recording":     "shared body, reached as tape_prefix_stop",
 
 	// Sizes the layout chord does not ship a key for. 50 to 90 are bound; the
 	// small half is there for a user who wants it.
