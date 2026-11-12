@@ -17091,3 +17091,24 @@ Run on 2026-11-12 on macOS (arm64), on main 994c781fd. The branch passes.
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
 | `M.setup` building the actions with `M.actions(nil)`, the fallback, whatever tuios answers | "Rex's actions are not tuios's list" and "the start form's harnesses are not tuios's" | **caught** |
+
+## The rail check and rail pane output no pass has taken in
+
+The rail check (`TUIOS_RAIL_CHECK`) failed `TestRailPaneSection` in CI on
+main 1a66047b1: the rail pane's first line blank in the cached rail and the
+program's next output in the check's rebuild. The cause was the check, not
+the key. The pane's output lands on the window's writer goroutine. A blank
+render is never cached, so after the program clears its screen the pane
+stays content dirty, and output that lands before the next pass takes the
+window's output flag is in the rebuild and not in the key. The check now
+compares only when the pane has begun no write since a pass read its noted
+writes (`terminal.Window.EmulatorWrites`).
+
+Run on 2026-11-12 on arch-btw (linux amd64), `TestRailPaneSection` with
+`-count=60` under `heavy.sh`, and the unit regression on macOS (arm64).
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| main 1a66047b1, `TestRailPaneSection` 60 times | 4 of 60: `the rail cache served a stale rail`, row 29 blank cached and `SZ 8 27` built | **caught** |
+| the fix, `TestRailPaneSection` 60 times, then 120 more | 0 of 60, 0 of 120 | passes |
+| `railCacheMiss` not comparing the pane's writes, `TestRailCheckIgnoresPaneOutputTheFrameHasNotTakenIn` | `the check reported output no pass has taken in as a key miss`, row 33 blank cached and `l` built: the CI shape | **caught** |
