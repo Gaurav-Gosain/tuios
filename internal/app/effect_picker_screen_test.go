@@ -16,18 +16,6 @@ import (
 
 const effectPickerTitle = "Screen saver effect"
 
-// openEffectPicker opens the picker from the Effect row of settings, found
-// through the palette.
-func openEffectPicker(t *testing.T, f *apptest.Fixture) {
-	t.Helper()
-	f.Keys("ctrl+p")
-	f.Type("effect")
-	f.Keys("enter", "enter")
-	if !effectPickerOpen(f) {
-		t.Fatalf("the effect picker did not open:\n%s", f.Text())
-	}
-}
-
 func effectPickerOpen(f *apptest.Fixture) bool {
 	_, _, ok := f.Find(effectPickerTitle)
 	return ok
@@ -60,12 +48,12 @@ func effectPickerRows(t *testing.T, f *apptest.Fixture) []string {
 	return nil
 }
 
-// effectFixture frames the panels, so the picker's rows can be read apart
-// from the settings page under it.
+// effectFixture opens the picker (openEffectPicker in
+// list_picker_screen_test.go) with framed panels, so the picker's rows can be
+// read apart from the settings page under it.
 func effectFixture(t *testing.T) *apptest.Fixture {
 	t.Helper()
-	return apptest.New(t, apptest.Panes(1),
-		apptest.Config(func(c *config.UserConfig) { c.Appearance.FramePanels = true }))
+	return openEffectPicker(t, apptest.Config(func(c *config.UserConfig) { c.Appearance.FramePanels = true }))
 }
 
 // TestEffectPickerCommitsOnEnterAndLeavesItAloneOnEsc: enter sets the effect
@@ -78,7 +66,6 @@ func TestEffectPickerCommitsOnEnterAndLeavesItAloneOnEsc(t *testing.T) {
 		t.Fatal("the setting already is expand, so neither half of this proves anything")
 	}
 
-	openEffectPicker(t, f)
 	f.Type("expand")
 	f.Keys("enter")
 	if effectPickerOpen(f) {
@@ -92,7 +79,7 @@ func TestEffectPickerCommitsOnEnterAndLeavesItAloneOnEsc(t *testing.T) {
 	if _, _, ok := f.Find("Settings"); ok {
 		t.Fatalf("settings did not close:\n%s", f.Text())
 	}
-	openEffectPicker(t, f)
+	openFromSettings(t, f, "Effect", effectPickerTitle)
 	f.Keys("down", "down", "down")
 	f.Keys("esc")
 	if effectPickerOpen(f) {
@@ -110,7 +97,6 @@ func TestEffectPickerCommitsOnEnterAndLeavesItAloneOnEsc(t *testing.T) {
 // empty list.
 func TestEffectPickerFiltersAndRefusesAnEmptyApply(t *testing.T) {
 	f := effectFixture(t)
-	openEffectPicker(t, f)
 	whole := effectPickerRows(t, f)
 
 	f.Type("matr")
