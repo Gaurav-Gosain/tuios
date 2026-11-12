@@ -2179,6 +2179,52 @@ tuios clear-history
 tuios clear-history -w build --screen
 ```
 
+### `tuios record-pane`
+
+Record a pane to an asciicast v2 file (`.cast`) that `asciinema play`, `agg`,
+`reel` and the inspector at inspector.getsteep.dev open. The recording starts
+with the screen the pane shows, its history included, then holds every output
+and every resize at its real time. It runs in the daemon until `stop`, the
+`--for` duration, the `--max-size` cap or the end of the pane.
+
+A recording holds everything the pane prints while it runs. Nothing is
+recorded unless you ask, the file is made readable by you only, and the keys
+typed into the pane are not recorded. See [PANE_RECORDING.md](PANE_RECORDING.md).
+
+**Usage:**
+```bash
+tuios record-pane start -o FILE [flags]
+tuios record-pane stop [flags]
+tuios record-pane mark <label> [flags]
+tuios record-pane list [--json]
+```
+
+**Flags of start:**
+- `-s, --session <name>`: Target session (default: the session of this pane, else the most recently active)
+- `-w, --window <window>`: Target window by name or ID (default: the focused pane)
+- `-o, --output <file>`: The .cast file to write (required). A relative path is taken from the current folder
+- `--for <duration>`: Stop after this long (default: until stopped)
+- `--max-size <size>`: Stop when the file reaches this size, such as `8MiB` (default 64MiB, at most 1GiB)
+- `--title <text>`: The title players show
+- `--overwrite`: Replace the file when it exists. Without it an existing file is refused
+- `--json`: Output the result as JSON
+
+`stop` and `mark` take `-s`, `-w` and `--json`. `stop` returns when the file
+is complete and says how many events it holds and why the recording ended.
+
+**Examples:**
+```bash
+# Record the pane named build for a minute
+tuios record-pane start -w build -o build.cast --for 1m
+
+# Label a moment, then stop
+tuios record-pane mark -w build "tests start"
+tuios record-pane stop -w build
+
+# Play it
+asciinema play build.cast
+```
+
 ### `tuios close-workspace`
 
 Close every pane on a workspace, like tmux `kill-window`. Without a number,

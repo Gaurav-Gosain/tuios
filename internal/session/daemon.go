@@ -41,6 +41,9 @@ type Daemon struct {
 	tml tmlHost
 	// artifacts is what each pane has shown the person. See artifacts.go.
 	artifacts artifactLog
+	// recordings are the panes being written to asciicast files. See
+	// pane_record.go.
+	recordings recordings
 	// instance names this daemon run, fresh on every start. hello reports
 	// it, and a hub records it for each host, so a client attached to a
 	// session on another machine can tell which of that machine's hosts is
@@ -2067,6 +2070,9 @@ func (d *Daemon) shutdown() error {
 		log.Println("Shutting down daemon...")
 		// The clients hear why before anything closes under them.
 		d.sayGoodbye()
+
+		// A recording's last second is in its file before the panes close.
+		d.stopRecordings("daemon stopped")
 
 		// The machine may sleep once the daemon has gone.
 		d.awake.stop()

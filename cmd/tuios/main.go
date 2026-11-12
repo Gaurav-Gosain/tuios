@@ -1123,7 +1123,7 @@ The template itself is a JSON file in the directory 'tuios layout dir' prints.`,
 	rootCmd.AddCommand(hostsCmd, stdioProxyCmd, newGUIBridgeCommand())
 	rootCmd.AddCommand(newStashCommand(), newPaneGrantsCommand(), newSetPaneGrantsCommand(), newWhoamiCommand())
 	rootCmd.AddCommand(newBufferCommands()...)
-	rootCmd.AddCommand(newWorktreeCommand(), newFanCommand(), newStartAgentCommand(), newDelegateCommand(), newXpanesCommand(), newCloseWorkspaceCommand(), newCloseWindowCommand(), newClearHistoryCommand())
+	rootCmd.AddCommand(newWorktreeCommand(), newFanCommand(), newStartAgentCommand(), newDelegateCommand(), newXpanesCommand(), newCloseWorkspaceCommand(), newCloseWindowCommand(), newClearHistoryCommand(), newRecordPaneCommand())
 	rootCmd.AddCommand(newAgentHookCommand(), newAgentStatusLineCommand(), newIntegrationCommand(), newDoctorCommand(), newMCPCommand())
 	rootCmd.AddCommand(newTmuxCommand(), newTmuxShimCommand(), newTmuxPaneCommand())
 	rootCmd.AddCommand(newAgentProtoCommand(), newAgentLogCommand(), newNotifyCommand(), newStatusCommand(), newPairCommand())

@@ -17325,3 +17325,27 @@ The wire shapes of both versions, the echo of version 2 by a version 1 agent,
 golden files in `internal/acp/testdata/golden`. The frames are under
 `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestProtocolPaneACP' -v .`.
+
+## A pane recorded to an asciicast file replays to its screen
+
+`TestRecordPaneWritesACastThatReplaysToTheScreen` prints rows in a detached
+pane, starts `tuios record-pane`, prints text around a one second sleep,
+marks the moment, resizes the pane to 50x12, prints a line longer than 50
+columns, takes the daemon's capture, marks again and lets the shell exit. It
+parses the .cast, replays every event up to the second marker through
+tuios.dev/vt (an r event resizes the emulator), and wants the screen the
+capture holds, with the rows from before the start on it.
+
+Run on 2026-11-13 on macOS (arm64, go1.27.4), branch `untangle/cast-export`.
+The test passes on the branch. Two controls, each a one-line change to
+`internal/session/pane_record.go`:
+
+| Control | The test fails with | Result |
+| --- | --- | --- |
+| The `writeSnap` call left out of `verbRecordPane`, so the cast starts with live output | `the replayed screen differs from the capture` | **caught** |
+| The resize branch of `paneRecorder.take` returning before it writes the r event | `no r event for the resize to 50x12` | **caught** |
+
+The .cast and `transcript.txt` (header, every event, the replayed screen and
+the capture) are under `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from
+`e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRecordPaneWritesACastThatReplaysToTheScreen$' -v .`.

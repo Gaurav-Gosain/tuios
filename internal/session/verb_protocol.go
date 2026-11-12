@@ -3483,6 +3483,8 @@ func buildVerbRegistry() map[string]verbEntry {
 	// search-panes, command-history and list-ports. See verb_find.go and
 	// verb_ports.go.
 	maps.Copy(table, findVerbs())
+	// record-pane and the verbs around it. See pane_record.go.
+	maps.Copy(table, recordVerbs())
 	return table
 }
 

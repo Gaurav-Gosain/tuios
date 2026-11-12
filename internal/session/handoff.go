@@ -309,6 +309,11 @@ func (r *handoffRun) prepare() error {
 	// now, the last change before the sessions are written down. A pane on
 	// another machine has no master here; once its process has exited there
 	// is nothing to hand over, and its window would come back with no pane.
+	// A recording holds an open file and a subscription the new image does
+	// not get, so it ends here, with a marker that says why. Its file is
+	// complete. A handoff put back does not start it again.
+	d.stopRecordings("daemon upgrade")
+
 	closed, err := closeExitedRemotes(d.manager.AllSessions(), r.req.shownExited)
 	if err != nil {
 		return err

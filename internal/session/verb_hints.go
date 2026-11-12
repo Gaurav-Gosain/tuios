@@ -138,6 +138,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbIndexChanged, "review-stage did not undo the call: the index changed after it. Nothing was changed. Read the diff again with review-diff."},
 	{ErrVerbWholeFileOnly, "review-stage stages a rename, a binary file or a very large file only whole. Nothing was changed. Leave hunk and lines out."},
 	{ErrVerbNoNotes, "send-review found no unsent review notes for the pane, so nothing was sent. Add one with review-note first."},
+	{ErrVerbNoRecording, "stop-recording or mark-recording named a pane that is not being recorded, or whose recording ended. Nothing changed. list-recordings shows the recordings that run."},
 	{ErrVerbNoBuffer, "No paste buffer has the name given, or there are no paste buffers when none was named. Nothing was read, pasted or deleted. list-buffers shows the names."},
 	{ErrVerbTaskHeld, "claim-task named a card another pane holds. Nothing changed. Claim another with next, or wait for task-changed released."},
 	{ErrVerbAttachmentTooLarge, "attach-task refused a file over [tasks] attachment_max_mib, or one that would take the session's card files over attachment_session_mib. Nothing was attached. The message names the size and the limit."},

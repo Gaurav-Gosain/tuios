@@ -215,6 +215,22 @@ theme; `--frame` takes `window`, `plain` or `none`. The file can be attached to 
 message. `capture-pane --ansi --resolved` gives colours as 24-bit RGB against
 xterm's palette or the 16 values you pass to `--palette`.
 
+## Recording a pane
+
+`record-pane` writes what a pane does to an asciicast file (`.cast`) that
+asciinema, agg and reel play. It starts from the pane's current screen and
+runs in the daemon until you stop it or the pane ends. Mark the moments a
+reader will want to find:
+
+```sh
+tuios record-pane start -w build -o /tmp/build.cast
+tuios record-pane mark -w build 'tests start'
+tuios record-pane stop -w build      # prints events, bytes and why it ended
+```
+
+A recording holds everything the pane prints, secrets included. Record only
+when the person asked for it, and tell them where the file is.
+
 ## Typing into a pane
 
 ```sh
