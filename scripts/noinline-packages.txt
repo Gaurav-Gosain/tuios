@@ -21,6 +21,7 @@ github.com/spf13/cobra
 github.com/spf13/pflag
 
 # Run on request, never per frame or per byte.
+github.com/Gaurav-Gosain/tuios/internal/acp
 github.com/Gaurav-Gosain/tuios/internal/agentproto
 github.com/Gaurav-Gosain/tuios/internal/herdrplugin
 github.com/Gaurav-Gosain/tuios/internal/integration
