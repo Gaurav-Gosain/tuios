@@ -263,12 +263,7 @@ func TestIntegrationInstallRex(t *testing.T) {
 // whatever tuios answers (M.actions(nil)), the "from the binary" case fails
 // on the list of actions. Recorded in NEGATIVE_CONTROLS.md.
 func TestRexActionsComeFromTuios(t *testing.T) {
-	lua, err := exec.LookPath("luajit")
-	if err != nil {
-		if lua, err = exec.LookPath("lua"); err != nil {
-			t.Skip("no luajit or lua on PATH")
-		}
-	}
+	lua := needTool(t, "lua")
 	loader, err := filepath.Abs(filepath.Join("testdata", "rex-load.lua"))
 	if err != nil {
 		t.Fatal(err)
@@ -537,12 +532,7 @@ func TestRexActionsComeFromTuios(t *testing.T) {
 // check fails on user:mark-it. With M.rex_name mapping a user action to
 // "tuios_" .. name, Rex has no tuios_user_mark_it and the run fails.
 func TestRexOffersYourOwnActions(t *testing.T) {
-	lua, err := exec.LookPath("luajit")
-	if err != nil {
-		if lua, err = exec.LookPath("lua"); err != nil {
-			t.Skip("no luajit or lua on PATH")
-		}
-	}
+	lua := needTool(t, "lua")
 	loader, err := filepath.Abs(filepath.Join("testdata", "rex-load.lua"))
 	if err != nil {
 		t.Fatal(err)

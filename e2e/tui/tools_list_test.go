@@ -16,7 +16,7 @@ import (
 
 // managedTools are the tools the workflow installs on the shard that holds a
 // test needing them. The rest (bash, tmux, git) are on every runner.
-var managedTools = []string{"fish", "zsh"}
+var managedTools = []string{"fish", "lua", "zsh"}
 
 // TestToolsListMatchesTheTests keeps tools.txt whole. The CI workflow reads
 // that file to decide which shard installs fish, zsh or Lua. A hand-kept list
@@ -78,7 +78,7 @@ func TestToolsListMatchesTheTests(t *testing.T) {
 						break
 					}
 					for _, l := range lits {
-						if slices.Contains(managedTools, l) {
+						if slices.Contains(managedTools, l) || l == "luajit" || l == "lua5.1" {
 							t.Errorf("%s: exec.LookPath(%q) skips on CI; use needTool or requireOnCI", fset.Position(call.Pos()), l)
 						}
 					}

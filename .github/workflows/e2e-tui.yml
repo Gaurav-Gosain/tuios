@@ -310,7 +310,7 @@ jobs:
             echo "This shard runs no tests: the change reaches none of the tests it would run." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # A test that needs fish or zsh is named in e2e/tui/tools.txt, which
+      # A test that needs fish, zsh or Lua is named in e2e/tui/tools.txt, which
       # TestToolsListMatchesTheTests checks against the source, so no list of
       # names lives here. Only a shard that holds one of those tests pays for
       # its packages. The test step sets TUIOS_E2E_REQUIRE_TOOLS, so a tool
@@ -325,6 +325,8 @@ jobs:
             case $tool in
             fish) pkgs+=(fish) ;;
             zsh) pkgs+=(zsh) ;;
+            # Lua 5.1, the version Rex embeds. The package puts lua on PATH.
+            lua) pkgs+=(lua5.1) ;;
             *) echo "e2e/tui/tools.txt names the tool $tool, which this step does not know how to install" >&2; exit 1 ;;
             esac
           done
