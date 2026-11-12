@@ -8,26 +8,122 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/spf13/cobra"
 )
 
-// newActionsCommand builds `tuios actions`: the user actions of config.toml,
-// listed, explained and run.
+// newActionsCommand builds `tuios actions`: the actions a program outside
+// tuios offers, such as Rex's command palette, and the user actions of
+// config.toml, listed, explained and run.
 func newActionsCommand() *cobra.Command {
+	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "actions",
-		Short: "List, explain and run your actions",
-		Long: `Your actions: the [[actions]] and [[keybindings.command]] entries of
-config.toml, each the action user:NAME. See KEYBINDINGS.md, "Your actions".`,
-		Example: `  tuios actions list
+		Short: "List the actions a launcher can offer, and your own actions",
+		Long: `With no subcommand: the rows of tuios's command palette that run as a key
+would, for a launcher outside tuios to offer, such as Rex's palette
+(docs/REX.md). Each runs in the client that shows the session with
+tuios run-command -s SESSION Action NAME. --json adds the agent harnesses
+tuios start-agent knows. It reads only this binary and your harness
+manifests, so it needs no daemon.
+
+list and run: your actions, the [[actions]] and [[keybindings.command]]
+entries of config.toml, each the action user:NAME. See KEYBINDINGS.md,
+"Your actions".`,
+		Example: `  tuios actions --json
+  tuios actions list
   tuios actions list open-in-editor
   tuios actions run open-in-editor --dry-run`,
+		Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			list := outsideActions()
+			if asJSON {
+				data, err := jsonx.Marshal(outsideList{Actions: list, Harnesses: outsideHarnesses()})
+				if err != nil {
+					return err
+				}
+				_, err = os.Stdout.Write(append(data, '\n'))
+				return err
+			}
+			tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(tw, "NAME\tCATEGORY\tTITLE")
+			for _, a := range list {
+				fmt.Fprintf(tw, "%s\t%s\t%s\n", a.Name, a.Category, a.Title)
+			}
+			return tw.Flush()
+		},
 	}
+	cmd.Flags().BoolVar(&asJSON, "json", false, "Output as JSON, with the harnesses")
 	cmd.AddCommand(newActionsListCommand(), newActionsRunCommand())
 	return cmd
+}
+
+// outsideList is tuios actions --json.
+type outsideList struct {
+	Actions   []outsideAction  `json:"actions"`
+	Harnesses []outsideHarness `json:"harnesses"`
+}
+
+// outsideAction is one action a launcher outside tuios offers.
+type outsideAction struct {
+	// Name is the action as run-command's Action takes it.
+	Name string `json:"name"`
+	// Title is the command palette's row, Category its section.
+	Title    string `json:"title"`
+	Category string `json:"category"`
+	// Description is the action table's line for it.
+	Description string `json:"description"`
+}
+
+// outsideHarness is one agent tuios start-agent knows by its manifest.
+type outsideHarness struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Command string `json:"command"`
+}
+
+// outsideActions are the command palette's static rows that the dispatcher
+// runs, in the palette's order, one per action. A row that opens a view's
+// own key (RunView) or names nothing in the action table is left out, since
+// run-command cannot run it from outside the view.
+func outsideActions() []outsideAction {
+	seen := map[string]bool{}
+	var out []outsideAction
+	for _, it := range app.GetCommandPaletteItems() {
+		spec, ok := config.LookupAction(it.Bind)
+		if it.Bind == "" || !ok || spec.Run != config.RunDispatch {
+			continue
+		}
+		name := config.CanonicalAction(it.Bind)
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		desc := spec.Desc
+		if desc == "" {
+			desc = it.Name
+		}
+		out = append(out, outsideAction{Name: name, Title: it.Name, Category: it.Category, Description: desc})
+	}
+	return out
+}
+
+// outsideHarnesses are the bundled and the person's harness manifests.
+func outsideHarnesses() []outsideHarness {
+	out := []outsideHarness{}
+	reg, _ := harness.Load(harness.UserDir())
+	if reg == nil {
+		return out
+	}
+	for _, id := range reg.IDs() {
+		m := reg.Lookup(id)
+		out = append(out, outsideHarness{ID: id, Name: m.DisplayName, Command: m.Command()})
+	}
+	return out
 }
 
 // actionRow is one action as tuios actions list gives it.

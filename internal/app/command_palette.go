@@ -678,6 +678,11 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Category: paletteCategoryAgents,
 		},
 		{
+			Name:     "Agents: start an agent",
+			Bind:     "new_agent",
+			Category: paletteCategoryAgents,
+		},
+		{
 			// Task dispatch: stop every card going to agents at once, or
 			// start it again (cockpit_dispatch.go).
 			Name:     "Agents: pause all task dispatch",

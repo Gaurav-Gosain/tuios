@@ -56,6 +56,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_last_message", handlePrefixLastMessage)
 	d.Register("prefix_mail", handlePrefixMail)
 	d.Register("prefix_inbox", handlePrefixInbox)
+	d.Register("new_agent", handleNewAgent)
 	d.Register("prefix_transfers", handlePrefixTransfers)
 	d.Register("prefix_next_attention", handlePrefixNextAttention)
 	d.Register("prefix_review", handlePrefixReview)
@@ -427,6 +428,16 @@ func handlePrefixMail(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handlePrefixInbox(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.OpenInbox("")
 	return o, nil
+}
+
+// handleNewAgent opens the agents view with its New agent sheet up, the form
+// with every field start-agent takes.
+func handleNewAgent(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.OpenInbox("")
+	if !o.ShowInbox {
+		return o, nil
+	}
+	return o, o.CockpitNewAgent()
 }
 
 // handlePrefixAgentsSettings opens the settings page on its Agents tab.

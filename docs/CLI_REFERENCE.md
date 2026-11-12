@@ -6447,9 +6447,19 @@ Your actions: the `[[actions]]` entries of config.toml and the
 ([KEYBINDINGS.md](KEYBINDINGS.md#your-actions)).
 
 ```
+tuios actions [--json]
 tuios actions list [NAME] [--json]
 tuios actions run NAME [-s SESSION] [--dry-run [-w PANE]] [--json]
 ```
+
+With no subcommand, `tuios actions` lists the built-in actions a launcher
+outside tuios can offer: the rows of the command palette that run as a key
+would, each with its name, palette title and section. A launcher runs one with
+`tuios run-command -s SESSION Action NAME`. `--json` gives `actions` (`name`,
+`title`, `category`, `description`) and `harnesses` (`id`, `name`, `command`),
+the agents `tuios start-agent` knows. It reads only the binary and your
+harness manifests, with no daemon. Rex's `tuios.lua` reads it at each config
+load ([REX.md](REX.md)).
 
 `list` prints each action's name, key, source (`actions` or `command key`) and
 what it runs; with NAME, that one action, and for an entry tuios ignores, why. `run` runs it as its key would, in the

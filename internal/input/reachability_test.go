@@ -631,6 +631,7 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"toggle_focus_follows_mouse": "palette row, user binding",
 	"add_machine":                "palette row, user binding",
 	"open_mailbox":               "palette row, user binding",
+	"new_agent":                  "palette row, Rex's Start an Agent, user binding",
 	"dispatch_pause":             "palette row, user binding",
 	"dispatch_resume":            "palette row, user binding",
 	"multi_copy_mode":            "palette row, user binding",

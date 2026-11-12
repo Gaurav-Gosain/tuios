@@ -491,6 +491,7 @@ var actionTable = [...]ActionSpec{
 	{Name: "prefix_agents_settings", Desc: "Open the Agents settings"},
 	{Name: "prefix_session_switcher", Desc: "Go to a session"},
 	{Name: "prefix_new_task", Desc: "Write a new task card"},
+	{Name: "new_agent", Desc: "Start an agent: open the New agent sheet of the agents view"},
 	{Name: "prefix_workspace_switcher", Desc: "Go to a workspace of this session"},
 	{Name: "choose_tree", Desc: "Find a pane in every session and go to it"},
 	{Name: "goto_picker", Desc: "Go to an agent, session, workspace or pane"},
