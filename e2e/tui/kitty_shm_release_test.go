@@ -325,7 +325,7 @@ func forwardedShmNames(stream []byte) map[string]bool {
 func buildShmStream(t *testing.T) string {
 	t.Helper()
 	shmStreamOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "shmstream")
+		dir, err := runScratchDir("shmstream")
 		if err != nil {
 			shmStreamErr = err
 			return

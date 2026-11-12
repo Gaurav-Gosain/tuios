@@ -307,7 +307,7 @@ func readGuestLog(path string) map[int]int64 {
 func buildFramepace(t *testing.T) string {
 	t.Helper()
 	framepaceOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "framepace")
+		dir, err := runScratchDir("framepace")
 		if err != nil {
 			framepaceErr = err
 			return

@@ -2,7 +2,6 @@ package tuie2e
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -109,7 +108,7 @@ func lastPlacementIn(cmds []wireCmd, phase string) (wireCmd, []string) {
 func buildOneAxis(t *testing.T) string {
 	t.Helper()
 	oneAxisOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "oneaxis")
+		dir, err := runScratchDir("oneaxis")
 		if err != nil {
 			oneAxisErr = err
 			return

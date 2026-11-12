@@ -163,7 +163,7 @@ var (
 func newerTuios(t *testing.T) string {
 	t.Helper()
 	newerOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "tuios-e2e-newer")
+		dir, err := runScratchDir("tuios-e2e-newer")
 		if err != nil {
 			newerErr = err
 			return

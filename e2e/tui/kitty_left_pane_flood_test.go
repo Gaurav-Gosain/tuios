@@ -115,7 +115,7 @@ func answerKittyProbe(t *testing.T, term *tuitest.Terminal, probe <-chan struct{
 func buildFrameloop(t *testing.T) string {
 	t.Helper()
 	frameloopOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "frameloop")
+		dir, err := runScratchDir("frameloop")
 		if err != nil {
 			frameloopErr = err
 			return

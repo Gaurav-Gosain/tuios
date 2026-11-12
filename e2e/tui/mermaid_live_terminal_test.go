@@ -409,7 +409,7 @@ var (
 func buildCellsize(t *testing.T) string {
 	t.Helper()
 	cellsizeOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "cellsize")
+		dir, err := runScratchDir("cellsize")
 		if err != nil {
 			cellsizeErr = err
 			return

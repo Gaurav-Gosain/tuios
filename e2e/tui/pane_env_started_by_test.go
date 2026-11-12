@@ -60,10 +60,10 @@ func TestPanesDoNotInheritTheAgentThatStartedTheDaemon(t *testing.T) {
 	const session = "e2e-started-by"
 	base := t.TempDir()
 	killDaemon(t, base)
-	// The folders are under a short directory in /tmp because a pane is 80
-	// columns wide, and a line holding a path under t.TempDir wraps, so it
-	// would not read back as one line.
-	home, err := os.MkdirTemp("/tmp", "tuios-env-")
+	// The folders have a short name under the run's temp folder (/tmp/tuios-e2e-run-PID)
+	// because a pane is 80 columns wide, and a line holding a path under
+	// t.TempDir wraps, so it would not read back as one line.
+	home, err := os.MkdirTemp("", "e-")
 	if err != nil {
 		t.Fatal(err)
 	}

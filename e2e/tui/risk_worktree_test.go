@@ -338,7 +338,7 @@ func TestRiskLineClipOnlyAtEnd(t *testing.T) {
 	// and still be clipped after it: t.TempDir() is long, and so is the temp
 	// folder on macOS.
 	repo := testutil.GitRepo(t)
-	dir, err := os.MkdirTemp("/tmp", "p")
+	dir, err := os.MkdirTemp("", "p")
 	if err != nil {
 		t.Fatal(err)
 	}

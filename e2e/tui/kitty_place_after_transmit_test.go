@@ -3,7 +3,6 @@ package tuie2e
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -130,7 +129,7 @@ func assertPlacedAndKept(t *testing.T, stream []byte) {
 func buildPlaceOnce(t *testing.T) string {
 	t.Helper()
 	placeOnceOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "placeonce")
+		dir, err := runScratchDir("placeonce")
 		if err != nil {
 			placeOnceErr = err
 			return

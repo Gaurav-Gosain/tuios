@@ -43,7 +43,7 @@ var (
 func syncNextBinary(t *testing.T) string {
 	t.Helper()
 	syncNextOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "tuios-e2e-sync-next")
+		dir, err := runScratchDir("tuios-e2e-sync-next")
 		if err != nil {
 			syncNextErr = err
 			return

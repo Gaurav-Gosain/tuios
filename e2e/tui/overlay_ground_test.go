@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -55,18 +56,42 @@ import (
 // clients leaving hard tabs on, the stream check fails.
 
 // artifactDir is where a test's frames are kept: $TUIOS_E2E_FRAMES when that
-// is set, else tuios-e2e-artifacts under the temporary directory, in a
-// directory named for the test.
+// is set, in a directory named for the test. Without it the frames go to a
+// folder of the test's own that is removed when the test ends, so an ordinary
+// run leaves nothing in the temp dir.
 func artifactDir(t *testing.T) string {
 	t.Helper()
+	name := regexp.MustCompile(`[^A-Za-z0-9_.-]+`).ReplaceAllString(t.Name(), "_")
 	root := os.Getenv("TUIOS_E2E_FRAMES")
 	if root == "" {
-		root = filepath.Join(os.TempDir(), "tuios-e2e-artifacts")
+		return scratchArtifactDir(t, name)
 	}
-	dir := filepath.Join(root, regexp.MustCompile(`[^A-Za-z0-9_.-]+`).ReplaceAllString(t.Name(), "_"))
+	dir := filepath.Join(root, name)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("make the artifact directory: %v", err)
 	}
+	return dir
+}
+
+var (
+	scratchArtifactMu   sync.Mutex
+	scratchArtifactDirs = map[string]string{}
+)
+
+// scratchArtifactDir is the same folder for every call of one test, made once.
+func scratchArtifactDir(t *testing.T, name string) string {
+	scratchArtifactMu.Lock()
+	defer scratchArtifactMu.Unlock()
+	if dir, ok := scratchArtifactDirs[name]; ok {
+		return dir
+	}
+	dir := t.TempDir()
+	scratchArtifactDirs[name] = dir
+	t.Cleanup(func() {
+		scratchArtifactMu.Lock()
+		delete(scratchArtifactDirs, name)
+		scratchArtifactMu.Unlock()
+	})
 	return dir
 }
 

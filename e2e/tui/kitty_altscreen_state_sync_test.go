@@ -2,7 +2,6 @@ package tuie2e
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -102,7 +101,7 @@ func imageHistory(stream []byte, phase string) []string {
 func buildAltOnce(t *testing.T) string {
 	t.Helper()
 	altOnceOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "altonce")
+		dir, err := runScratchDir("altonce")
 		if err != nil {
 			altOnceErr = err
 			return

@@ -578,7 +578,7 @@ func TestDnDRealPrograms(t *testing.T) {
 func buildDnDPeer(t *testing.T) string {
 	t.Helper()
 	dndPeerOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "dndpeer")
+		dir, err := runScratchDir("dndpeer")
 		if err != nil {
 			dndPeerErr = err
 			return

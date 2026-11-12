@@ -15,7 +15,7 @@ import (
 // TestTmuxShimOpensATeammatePane failed when the check measured tuios.sock
 // alone.
 func TestRuntimeDirHoldsEverySocketTuiosBinds(t *testing.T) {
-	root, err := os.MkdirTemp("/tmp", "rt")
+	root, err := os.MkdirTemp("", "rt")
 	if err != nil {
 		t.Fatal(err)
 	}

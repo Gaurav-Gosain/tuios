@@ -96,7 +96,7 @@ func TestKittyFilesFromAPaneOnAHost(t *testing.T) {
 	// /tmp it is. On Linux icat's probe picks memory first and never needs
 	// the folder. On macOS it has no memory mode, and with the refused
 	// folder it falls back to stream.
-	tmp, err := os.MkdirTemp("/tmp", "kittylive-")
+	tmp, err := os.MkdirTemp("", "kittylive-")
 	if err != nil {
 		t.Fatal(err)
 	}

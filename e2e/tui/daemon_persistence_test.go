@@ -292,7 +292,7 @@ var (
 func restartMidBinary(t *testing.T) string {
 	t.Helper()
 	restartMidOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "tuios-e2e-restart-mid")
+		dir, err := runScratchDir("tuios-e2e-restart-mid")
 		if err != nil {
 			restartMidErr = err
 			return

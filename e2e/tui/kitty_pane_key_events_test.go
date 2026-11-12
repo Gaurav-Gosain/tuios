@@ -203,7 +203,7 @@ func waitPaneBytes(t *testing.T, term *tuitest.Terminal, log, want string) {
 func buildKeyEcho(t *testing.T) string {
 	t.Helper()
 	keyEchoOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "keyecho")
+		dir, err := runScratchDir("keyecho")
 		if err != nil {
 			keyEchoErr = err
 			return

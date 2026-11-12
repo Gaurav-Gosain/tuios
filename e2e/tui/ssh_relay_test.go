@@ -72,7 +72,7 @@ func testBinary(t *testing.T) string {
 // startSSHRelay starts the relay for one test and returns its socket.
 func startSSHRelay(t *testing.T) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("/tmp", "rl")
+	dir, err := os.MkdirTemp("", "rl")
 	if err != nil {
 		t.Fatal(err)
 	}

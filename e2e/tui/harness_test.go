@@ -154,11 +154,18 @@ func TestMain(m *testing.M) {
 	os.Exit(runE2E(m))
 }
 
-func runE2E(m *testing.M) int {
+func runE2E(m *testing.M) (code int) {
 	if os.Getenv("TUIOS_E2E") == "" {
 		fmt.Fprintln(os.Stderr, "e2e: skipping, set TUIOS_E2E=1 to run (spawns real multiplexer daemons)")
 		return 0
 	}
+	// Everything the run makes in the temp dir goes under one folder, removed at
+	// the end; a folder a test left in it fails the run. See runtemp_test.go.
+	if err := startRunTemp(); err != nil {
+		fmt.Fprintf(os.Stderr, "e2e: temp dir: %v\n", err)
+		return 1
+	}
+	defer func() { code = finishRunTemp(code) }()
 	// The runtime directories that had to be moved out of the isolation roots
 	// live under one root, removed once here rather than per test: a test's own
 	// cleanup runs while another test may still be deriving the same path.

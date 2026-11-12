@@ -17127,3 +17127,29 @@ Run on 2026-11-12 on macOS (arm64), on main 1a66047b1. The branch passes.
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
 | `userOutsideActions` reading no config (`cfg = nil`) | "the listed user actions are []", "Rex's user actions are []" and "the Rex action did not run" | **caught** |
+
+## The run leaves nothing in the temp dir
+
+`runtemp_test.go` points TMPDIR at one folder per run, `/tmp/tuios-e2e-run-PID`
+(a mark file inside says it is a run's own), and `finishRunTemp` fails the run
+and names every folder still in it when the run ends, with its size. The
+once-per-run builds are made with `runScratchDir`, and the frame folders go
+under `t.TempDir` unless `TUIOS_E2E_FRAMES` is set. `TestRunTempGuard` runs
+this binary again on `TestRunTempLeak`, which leaves a folder on purpose
+(`leak`) or one that cannot be removed (`stuck`), and checks three things: a
+child that leaves nothing exits 0, a leaking child exits non-zero and names its
+folder, and the child neither names nor removes a folder of the parent run, so
+one run does not blame another. The guard reads only its own folder, and the
+sweep at start removes only a marked folder whose pid is dead.
+
+Run on 2026-11-12 on macOS (arm64). The branch passes.
+
+| Control | Test | Result |
+|---------|------|--------|
+| `finishRunTemp` reports nothing | `TestRunTempGuard/leak`, `/stuck` | **caught**: "the guard passed a child that left a folder" |
+| The old `overlay_ground_test.go` frame folder, `tuios-e2e-artifacts` in the temp dir | any run that reaches `artifactDir` | **caught** by the guard on the first run of this branch: "tuios-e2e-artifacts (2.4 MiB)" |
+| The check that the root is gone after `RemoveAll` is turned off | `TestRunTempGuard/stuck` | not a control: the scan before the removal already lists the folder |
+
+The check of a root that is held after `RemoveAll` (a daemon still writing
+into it) has no test of its own. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRunTempGuard$' -v .`.

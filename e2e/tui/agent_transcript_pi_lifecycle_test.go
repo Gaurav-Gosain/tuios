@@ -354,7 +354,7 @@ func TestPiTranscriptExtension(t *testing.T) {
 func fakeReportSocket(t *testing.T, delay time.Duration) (path string, count func() int) {
 	t.Helper()
 	// Unix socket paths are short on macOS; a test's temp folder is too long.
-	dir, err := os.MkdirTemp("/tmp", "tsk")
+	dir, err := os.MkdirTemp("", "tsk")
 	if err != nil {
 		t.Fatal(err)
 	}

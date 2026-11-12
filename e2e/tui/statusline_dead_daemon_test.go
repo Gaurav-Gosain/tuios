@@ -23,7 +23,7 @@ import (
 func TestStatusLineWithADeadDaemonStillRenders(t *testing.T) {
 	// Socket paths have a short length limit, so the directory is in /tmp
 	// rather than under TMPDIR.
-	dir, err := os.MkdirTemp("/tmp", "i374-")
+	dir, err := os.MkdirTemp("", "i374-")
 	if err != nil {
 		t.Fatal(err)
 	}

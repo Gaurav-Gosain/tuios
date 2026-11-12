@@ -99,7 +99,7 @@ var (
 func compiledFakeSSH(t *testing.T, path string) {
 	t.Helper()
 	fakeSSHBinOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "fakessh")
+		dir, err := runScratchDir("fakessh")
 		if err != nil {
 			fakeSSHBinErr = err
 			return

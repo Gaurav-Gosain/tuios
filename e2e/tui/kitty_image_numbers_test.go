@@ -571,7 +571,7 @@ func assertOneCellSize(t *testing.T, cells map[string]map[[2]int]bool, size func
 func buildImageNumbers(t *testing.T) string {
 	t.Helper()
 	imageNumbersOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "imagenumbers")
+		dir, err := runScratchDir("imagenumbers")
 		if err != nil {
 			imageNumbersErr = err
 			return

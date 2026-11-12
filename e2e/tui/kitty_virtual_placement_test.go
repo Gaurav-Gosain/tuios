@@ -3,7 +3,6 @@ package tuie2e
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -31,7 +30,7 @@ const placeholderGuestID = 7
 func buildPlaceholders(t *testing.T) string {
 	t.Helper()
 	placeholdersOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "placeholders")
+		dir, err := runScratchDir("placeholders")
 		if err != nil {
 			placeholdersErr = err
 			return
