@@ -2566,6 +2566,7 @@ func parseUserConfigOnce(data []byte) (*UserConfig, error) {
 	fillMissingPiP(&cfg, defaultCfg)
 	fillMissingPanes(&cfg, defaultCfg)
 	fillMissingReview(&cfg, defaultCfg)
+	canonicalizeMenus(cfg.Menus)
 	cfg.foldMenus()
 	return &cfg, nil
 }

@@ -18,8 +18,9 @@ import (
 // older [keybindings.menus.NAME] spelling opens as a right-click submenu.
 //
 // It checks: the added rows sit after Zoom and before Minimize; the removed
-// row is gone; an action offered only on the desktop and an action whose when
-// names a program the pane does not run are left out; the submenu opens under
+// rows are gone, the one named by its older name (prefix_split_vertical)
+// too; an action offered only on the desktop and an action whose when names
+// a program the pane does not run are left out; the submenu opens under
 // its title and its row runs, writing the pane's name whole; leader t u opens
 // the same menu as a which-key panel whose s runs the row again; the older
 // spelling's menu opens as a submenu with its keyed row.
@@ -33,7 +34,8 @@ import (
 //
 // Negative controls: with appendUserRow not reading the action's targets, the
 // desktop-only row shows on the pane menu. With foldMenus not run, leader t u
-// opens nothing. With MenuRows not reading [keybindings.menus], the old
+// opens nothing. With canonicalizeMenus not run, the row remove names by its
+// older name stays. With MenuRows not reading [keybindings.menus], the old
 // spelling's row is left out of the pane menu.
 func TestMenusFromConfigAddRemoveAndOpenASubmenu(t *testing.T) {
 	base := t.TempDir()
@@ -66,7 +68,7 @@ action = "toggle_zoom"
 [menus.pane]
 add = ["user:keep-folder", "user:desk-only", "user:in-vim", { menu = "tools" }, { menu = "legacy" }]
 after = "toggle_zoom"
-remove = ["screenshot_window"]
+remove = ["screenshot_window", "prefix_split_vertical"]
 
 [menus.tools]
 title = "My tools"
@@ -100,7 +102,7 @@ toggle_zoom = ["z"]
 	waitMenu(t, term, "pane", "Keep this folder", "My tools", "Minimize")
 	s := term.Screen()
 	fmt.Fprintf(&log, "== pane menu\n%s\n", s.Text())
-	for _, gone := range []string{"Screenshot this window", "Desktop only row", "Only inside vim"} {
+	for _, gone := range []string{"Screenshot this window", "Split right", "Desktop only row", "Only inside vim"} {
 		if strings.Contains(s.Text(), gone) {
 			t.Errorf("ASSERTION: the pane menu shows %q:\n%s", gone, s.Text())
 		}

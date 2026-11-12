@@ -17074,3 +17074,4 @@ Run on 2026-11-12 on macOS (arm64), on main 448e9bf1d. The branch passes.
 | `appendUserRow` not reading the action's `targets` | `the pane menu shows "Desktop only row"` | **caught** |
 | `foldMenus` not run, so `[menus]` keyed rows are not which-key menus | `which-key: context menu never showed [my tools Save the pane name Cancel]` | **caught** |
 | `MenuRows` not reading `[keybindings.menus.NAME]` | `pane again: context menu never showed [Old spelling]` | **caught** |
+| `canonicalizeMenus` not run, so `remove = ["prefix_split_vertical"]` names no shipped row (run on 2026-11-12 on arch-btw, linux amd64, on main b4d6374b9) | `the pane menu shows "Split right"` | **caught** |
