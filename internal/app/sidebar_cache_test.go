@@ -236,3 +236,57 @@ func TestSidebarSignatureFollowsTheGlyphSet(t *testing.T) {
 		})
 	}
 }
+
+// TestRailCacheMovesTheCursorWithItsRow is the deterministic regression for a
+// stale rail the rail check found in CI (TestSidebarFileEditor). The draw finds
+// the cursor's row as SidebarNav[SidebarCursor], and SidebarNav is what the
+// last build wrote. This forces the order that breaks a key holding only the
+// index:
+//
+//  1. The rail has the keyboard and the cursor is on the files section's ".."
+//     row, so the frame draws the cursor there.
+//  2. The listing moves to "/", which has no "..". That build looks for ".."
+//     and finds nothing, so it draws no cursor, and it hands the cursor to the
+//     first row of the listing, which now stands at the same index.
+//  3. The next frame changes nothing the key folded. Served from the cache, it
+//     shows no cursor; built fresh, it shows the cursor on the first entry.
+//
+// Negative control, confirmed red: with sidebarSignature folding only
+// SidebarCursor, step 3 reports the first entry drawn as the cursor's row in a
+// fresh build and not in the cached rail.
+func TestRailCacheMovesTheCursorWithItsRow(t *testing.T) {
+	root := fileViewTree(t)
+	m := sidebarTestOS(t, 120, 40, "left")
+	m.Windows[0].Cwd = root
+	m.FocusedWindow = 0
+	m.loadFileViewNow(t, root)
+	m.SidebarFocused = true
+
+	railLines(t, m)
+	up := m.sidebarFirstRowOfKind(sidebarRowFileUp)
+	if up < 0 {
+		t.Fatalf("the listing of %s published no .. row", root)
+	}
+	m.SidebarCursor = up
+	railLines(t, m)
+
+	m.loadFileViewNow(t, "/")
+	railLines(t, m)
+	if m.sidebarFirstRowOfKind(sidebarRowFileUp) >= 0 {
+		t.Fatal("the listing of / still has a .. row, so the order this test needs did not happen")
+	}
+	if m.SidebarCursor != up {
+		t.Fatalf("the cursor moved from index %d to %d, so the order this test needs did not happen", up, m.SidebarCursor)
+	}
+
+	// The frame the cache serves, against a build of the same state.
+	m.sidebarPanelLines()
+	if !m.sidebarCache.valid {
+		t.Fatal("the rail was not cached")
+	}
+	cached := m.sidebarCache
+	fresh, w := m.sidebarPanelLinesForTree(m.BuildSessionTree())
+	if diff := railCacheDiff(&cached, fresh, w, m); diff != "" {
+		t.Fatalf("the cache serves a rail that a fresh build draws differently:\n%s", diff)
+	}
+}

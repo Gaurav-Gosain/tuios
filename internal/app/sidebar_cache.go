@@ -291,11 +291,20 @@ func (m *OS) sidebarSignature() uint64 {
 	// depend on it, so a focus change or a cursor move must rebuild.
 	mixB(m.sidebarRailFocused())
 	mixI(m.SidebarCursor)
-	// A row the keyboard moved to and this frame has to scroll to.
+	// The row the cursor is on, by identity, as the draw finds it. The index
+	// alone is not enough: the draw reads the row at that index from the nav
+	// rows the last build wrote, so a build that moved the rows moves the
+	// cursor to another row with the index unchanged.
+	// The draw marks that row only while the rail has the keyboard, so the
+	// target is folded only then: an unfocused rail would otherwise rebuild
+	// once after every build, as the nav rows it wrote move the target.
 	mixB(m.sidebarCursorWantSet)
-	if m.sidebarCursorWantSet {
-		mixI(int(m.sidebarCursorWant.Kind))
-		mixS(m.sidebarCursorWant.WindowID)
+	if target, ok := m.sidebarCursorTarget(); ok && m.sidebarRailFocused() {
+		mixI(int(target.Kind))
+		mixS(target.SessionID)
+		mixS(target.WindowID)
+	} else {
+		mixI(-1)
 	}
 
 	// The switch numbers are drawn state, on while show_numbers is set.

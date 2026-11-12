@@ -194,6 +194,24 @@ func (st sidebarRowState) mark(pal overlay.Palette, row string) string {
 }
 
 // railRowState reads the rail's focus once so a row site does not have to.
+// sidebarCursorTarget is the row the keyboard cursor is on, by identity: the
+// session the last action asked to follow, else a row the keyboard moved to
+// that this frame may have to scroll to, else the nav row at the cursor's
+// index. The nav rows are the ones the last build wrote, so a build that moves
+// the rows moves the target of the next one; the rail's cache key folds the
+// target, not the index, for that reason.
+func (m *OS) sidebarCursorTarget() (sidebarNavRow, bool) {
+	switch {
+	case m.sidebarFollowSession != "":
+		return sidebarNavRow{Kind: sidebarRowSession, SessionID: m.sidebarFollowSession}, true
+	case m.sidebarCursorWantSet:
+		return m.sidebarCursorWant, true
+	case m.SidebarCursor >= 0 && m.SidebarCursor < len(m.SidebarNav):
+		return m.SidebarNav[m.SidebarCursor], true
+	}
+	return sidebarNavRow{}, false
+}
+
 func (m *OS) railRowState(hover, cursor bool) sidebarRowState {
 	return sidebarRowState{Cursor: cursor, Hover: hover, Focused: m.sidebarRailFocused(), CursorBg: m.Settings.SidebarCursorBackground}
 }
@@ -1558,20 +1576,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// relayout: the target is the session the last action asked to follow, else
 	// the nav row the cursor was on last frame. Rows matching it draw the same
 	// band hover uses; the two share one cursor.
-	var cursorTarget sidebarNavRow
-	haveCursorTarget := false
-	switch {
-	case m.sidebarFollowSession != "":
-		cursorTarget = sidebarNavRow{Kind: sidebarRowSession, SessionID: m.sidebarFollowSession}
-		haveCursorTarget = true
-	case m.sidebarCursorWantSet:
-		// A row the keyboard moved to that this frame may have to scroll to.
-		cursorTarget = m.sidebarCursorWant
-		haveCursorTarget = true
-	case m.SidebarCursor >= 0 && m.SidebarCursor < len(m.SidebarNav):
-		cursorTarget = m.SidebarNav[m.SidebarCursor]
-		haveCursorTarget = true
-	}
+	cursorTarget, haveCursorTarget := m.sidebarCursorTarget()
 	isCursor := func(kind sidebarRowKind, sessionID, windowID string) bool {
 		return m.sidebarRailFocused() && haveCursorTarget &&
 			cursorTarget.Kind == kind && cursorTarget.SessionID == sessionID && cursorTarget.WindowID == windowID
