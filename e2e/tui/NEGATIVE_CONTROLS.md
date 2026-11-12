@@ -17011,3 +17011,18 @@ Run on 2026-11-12 on macOS. The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestDialogFieldTakesTheComposerKeys$' -v .`.
+
+## The keybind manager's tabs keep their place
+
+`TestKeybindManagerTabsKeepTheirPlace` writes three conflicts into the config,
+moves two rows down on the Conflicts tab, goes to Bindings and back, and checks
+the detail box still names the third conflict.
+
+Run on 2026-11-12 on macOS. The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The R7 6b tip (14494abc8), where a tab change puts the cursor back on the top row | "the Conflicts tab did not keep its place: it names select_window_1, it left on select_window_3" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestKeybindManagerTabsKeepTheirPlace$' -v .`.

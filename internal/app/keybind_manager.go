@@ -5,7 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/textedit"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
@@ -32,9 +32,10 @@ type keybindManager struct {
 	// which is the one thing this must not do.
 	report config.KeybindReport
 
-	query    textedit.Line
-	selected int
-	scroll   int
+	// lists is each tab's cursor and window, so a tab keeps its place when
+	// the person comes back to it, as the theme editor's tabs do. The
+	// Bindings tab's Query is its filter.
+	lists [keybindTabCount]listnav.State
 	// filtered memoises FilteredKeybindRows against filteredFor, the query it
 	// was computed for. Invalidated by setting filtered to nil, which is what
 	// every path that changes the query or the report does.
@@ -81,7 +82,7 @@ func (m *OS) OpenKeybindManager() { m.OpenKeybindManagerWith("") }
 func (m *OS) OpenKeybindManagerWith(query string) {
 	m.ShowKeybindManager = true
 	m.keybinds = keybindManager{report: m.buildKeybindReport()}
-	m.keybinds.query.Set(query)
+	m.keybinds.lists[KeybindTabBindings].Query.Set(query)
 	m.KeybindTab = KeybindTabBindings
 }
 
@@ -127,10 +128,13 @@ func (m *OS) buildKeybindReport() config.KeybindReport {
 func (m *OS) KeybindReport() config.KeybindReport { return m.keybinds.report }
 
 // KeybindQuery is the current filter text.
-func (m *OS) KeybindQuery() string { return m.keybinds.query.String() }
+func (m *OS) KeybindQuery() string { return m.keybinds.lists[KeybindTabBindings].Query.String() }
 
 // KeybindSelected is the selected row in the active tab's list.
-func (m *OS) KeybindSelected() int { return m.keybinds.selected }
+func (m *OS) KeybindSelected() int { return m.keybindList().Cursor }
+
+// keybindList is the list state of the tab that shows.
+func (m *OS) keybindList() *listnav.State { return &m.keybinds.lists[m.KeybindTab] }
 
 // KeybindArmed is whether the recorder is waiting for a key.
 func (m *OS) KeybindArmed() bool { return m.keybinds.armed }
@@ -156,7 +160,7 @@ func (m *OS) KeybindSelectedBinding() (config.Binding, bool) {
 		return config.Binding{}, false
 	}
 	rows := m.FilteredKeybindRows()
-	i := m.keybinds.selected
+	i := m.keybindList().Cursor
 	if i < 0 || i >= len(rows) {
 		return config.Binding{}, false
 	}
@@ -184,7 +188,7 @@ func (m *OS) keybindRowCount() int {
 // sweep over a few hundred candidates a dozen times a frame, for a list that
 // only changes when a keystroke changes the query.
 func (m *OS) FilteredKeybindRows() []config.Binding {
-	q := strings.ToLower(strings.TrimSpace(m.keybinds.query.String()))
+	q := strings.ToLower(strings.TrimSpace(m.keybinds.lists[KeybindTabBindings].Query.String()))
 	if m.keybinds.filtered != nil && m.keybinds.filteredFor == q {
 		return m.keybinds.filtered
 	}
@@ -224,22 +228,25 @@ func (m *OS) filterKeybindRows(q string) []config.Binding {
 func (m *OS) KeybindMove(delta int) {
 	count := m.keybindRowCount()
 	if count == 0 {
-		m.keybinds.selected, m.keybinds.scroll = 0, 0
+		l := m.keybindList()
+		l.Cursor, l.Scroll = 0, 0
 		return
 	}
-	m.keybinds.selected = m.listStep(m.keybinds.selected, delta, count)
+	m.keybindList().Move(delta, count, keybindVisibleRows, m.listWraps(), nil)
 }
 
-// KeybindSetTab switches tabs, resetting the list position: the tabs list
-// different things, so carrying a row index across them lands somewhere
-// arbitrary.
+// KeybindSelect puts the cursor on row i of the tab that shows.
+func (m *OS) KeybindSelect(i int) {
+	m.keybindList().Select(i, m.keybindRowCount(), keybindVisibleRows)
+}
+
+// KeybindSetTab switches tabs. Each tab keeps its own place (keybinds.lists),
+// so coming back to one finds the row it was on.
 func (m *OS) KeybindSetTab(tab int) {
 	if tab < 0 || tab >= keybindTabCount {
 		return
 	}
 	m.KeybindTab = tab
-	m.keybinds.selected = 0
-	m.keybinds.scroll = 0
 	// Leaving the Record tab disarms: an armed recorder that survived a tab
 	// switch would eat the next keystroke somewhere it is not being shown.
 	if tab != KeybindTabRecord {
@@ -255,21 +262,21 @@ func (m *OS) KeybindStepTab(delta int) {
 // KeybindSetQuery replaces the filter text and puts the selection back at the
 // top, since the row it pointed at is probably gone.
 func (m *OS) KeybindSetQuery(q string) {
-	m.keybinds.query.Set(q)
+	m.keybinds.lists[KeybindTabBindings].Query.Set(q)
 	m.keybindRefiltered()
 }
 
 // KeybindQueryKey applies one key press to the filter line (see lineKey).
 // Left and right are not here: they change the tab.
 func (m *OS) KeybindQueryKey(key, text string) {
-	if changed, _ := lineKey(&m.keybinds.query, key, text, cleanControl); changed {
+	if changed, _ := lineKey(&m.keybinds.lists[KeybindTabBindings].Query, key, text, cleanControl); changed {
 		m.keybindRefiltered()
 	}
 }
 
 // KeybindQueryPaste types a paste at the filter line's caret.
 func (m *OS) KeybindQueryPaste(s string) {
-	if lineInsert(&m.keybinds.query, s, cleanControl) {
+	if lineInsert(&m.keybinds.lists[KeybindTabBindings].Query, s, cleanControl) {
 		m.keybindRefiltered()
 	}
 }
@@ -277,8 +284,7 @@ func (m *OS) KeybindQueryPaste(s string) {
 // keybindRefiltered puts the list back at the top after the filter changed.
 func (m *OS) keybindRefiltered() {
 	m.keybinds.filtered = nil
-	m.keybinds.selected = 0
-	m.keybinds.scroll = 0
+	m.keybinds.lists[KeybindTabBindings].Refiltered(0)
 }
 
 // KeybindArm makes the next key press data rather than a command, with no bind

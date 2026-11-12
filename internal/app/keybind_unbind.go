@@ -128,7 +128,7 @@ func (m *OS) KeybindSelectedConflict() (config.Collision, bool) {
 		return config.Collision{}, false
 	}
 	all := m.keybinds.report.Collisions
-	i := m.keybinds.selected
+	i := m.keybindList().Cursor
 	if i < 0 || i >= len(all) {
 		return config.Collision{}, false
 	}

@@ -238,3 +238,86 @@ func TestKeybindManagerReadsTheLivePane(t *testing.T) {
 		t.Errorf("the pane runs a shell and the overlay must name it\n%s", term.Snapshot())
 	}
 }
+
+// TestKeybindManagerTabsKeepTheirPlace: each tab of the keybind manager keeps
+// its own cursor, as the theme editor's tabs do. The config makes three
+// conflicts. The test moves two rows down on the Conflicts tab, goes to
+// Bindings and back, and the detail box still names the third conflict.
+//
+// How this could pass wrongly, written down first:
+//   - The detail box could name the same binding on every row, so "the same
+//     after" says nothing. The test first checks that two rows down names a
+//     different binding than the top row.
+//   - The keys could fail to leave the tab, so the cursor never had a chance
+//     to reset. The test waits for the detail box to leave before it
+//     goes back.
+//   - The cursor could be read from a row that only looks selected. The detail
+//     box is drawn from the selected row alone.
+//
+// Negative control (NEGATIVE_CONTROLS.md): the R7 6b tip, where a tab change
+// puts the cursor back on the top row, names the first conflict on return.
+func TestKeybindManagerTabsKeepTheirPlace(t *testing.T) {
+	base := t.TempDir()
+	cfgDir := filepath.Join(base, "XDG_CONFIG_HOME", "tuios")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatalf("mkdir config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.toml"), []byte(
+		"[keybindings.window_management]\n"+
+			"select_window_1 = [\"1\"]\nselect_window_2 = [\"2\"]\nselect_window_3 = [\"3\"]\n"+
+			"[keybindings.layout]\n"+
+			"snap_left = [\"1\"]\nsnap_right = [\"2\"]\nsnap_fullscreen = [\"3\"]\n"), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	term := startIn(t, base, startOpts{})
+	waitBoot(t, term)
+	openKeybindManager(t, term)
+
+	sendKeys(t, term, tuitest.Tab)
+	top := waitNeverRuns(t, term, "", "the Conflicts tab")
+
+	sendKeys(t, term, tuitest.Down, tuitest.Down)
+	third := waitNeverRuns(t, term, top, "two rows down on the Conflicts tab")
+
+	sendKeys(t, term, tuitest.Key("\x1b[Z"))
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "Never runs: ")
+	}, uiTimeout); err != nil {
+		t.Fatalf("shift+tab never left the Conflicts tab: %v\n%s", err, term.Snapshot())
+	}
+	sendKeys(t, term, tuitest.Tab)
+	back := waitNeverRuns(t, term, "", "the Conflicts tab again")
+	saveArtifact(t, term, artifactDir(t), "conflicts-again")
+	if back != third {
+		t.Errorf("ASSERTION: the Conflicts tab did not keep its place: it names %q, it left on %q (the top row is %q)\n%s",
+			back, third, top, term.Snapshot())
+	}
+	alive(t, term, "after switching keybind manager tabs")
+}
+
+// waitNeverRuns waits for the keybind manager's detail box to name a dead
+// binding other than not, and returns it.
+func waitNeverRuns(t *testing.T, term *tuitest.Terminal, not, where string) string {
+	t.Helper()
+	var got string
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		got = neverRuns(s.Text())
+		return got != "" && got != not
+	}, uiTimeout); err != nil {
+		t.Fatalf("the detail box on %s named no new dead binding (last %q): %v\n%s", where, got, err, term.Snapshot())
+	}
+	return got
+}
+
+// neverRuns is the first binding the detail box says never runs.
+func neverRuns(text string) string {
+	_, after, ok := strings.Cut(text, "Never runs: ")
+	if !ok {
+		return ""
+	}
+	if f := strings.Fields(after); len(f) > 0 {
+		return f[0]
+	}
+	return ""
+}

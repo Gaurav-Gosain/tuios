@@ -17,7 +17,7 @@ func selectKeybindRow(t *testing.T, m *OS, query string, match func(config.Bindi
 	rows := m.FilteredKeybindRows()
 	for i, b := range rows {
 		if match(b) {
-			m.keybinds.selected = i
+			m.keybindList().Cursor = i
 			return b
 		}
 	}

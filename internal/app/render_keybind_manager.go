@@ -186,7 +186,7 @@ func (m *OS) keybindListBody(pal overlay.Palette, width, visible int, chrome key
 		filter := overlay.Style(bg).Foreground(pal.Fg).Render(query) + cursor
 		if m.KeybindTab == KeybindTabBindings {
 			// The filter with its caret.
-			before, at, after := m.keybinds.query.Parts()
+			before, at, after := m.keybinds.lists[KeybindTabBindings].Query.Parts()
 			filter = overlay.FieldLine(before, at, after, max(width-lipgloss.Width(prompt), 1), bg, pal.Fg)
 		}
 		lines = append(lines,
@@ -197,10 +197,9 @@ func (m *OS) keybindListBody(pal overlay.Palette, width, visible int, chrome key
 	rowYOffset := len(lines)
 
 	count := m.keybindRowCount()
-	selected := clampInt(m.KeybindSelected(), 0, max(count-1, 0))
-	m.keybinds.selected = selected
-	m.keybinds.scroll = scrollWindow(m.keybinds.scroll, selected, count, visible)
-	start := m.keybinds.scroll
+	list := m.keybindList()
+	list.Fit(count, visible)
+	selected, start := list.Cursor, list.Scroll
 	end := min(start+visible, count)
 
 	var rows []overlayRowHit

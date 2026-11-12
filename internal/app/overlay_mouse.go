@@ -208,7 +208,7 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 	case "settings":
 		m.settingsList.Cursor = idx
 	case "keybinds":
-		m.KeybindMove(idx - m.KeybindSelected())
+		m.KeybindSelect(idx)
 	case "themeeditor":
 		m.themeEditor.lists[m.themeEditor.tab].Cursor = idx
 	case "dockeditor":
@@ -413,7 +413,7 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 		// Selecting only. Every row here is a finding to read, and the detail box
 		// under the list is the thing a click is asking for; there is no action to
 		// activate and nothing a stray click could change.
-		m.KeybindMove(row.Idx - m.KeybindSelected())
+		m.KeybindSelect(row.Idx)
 	case "themeeditor":
 		m.themeEditor.lists[m.themeEditor.tab].Cursor = row.Idx
 		m.ThemeEditorPick()
