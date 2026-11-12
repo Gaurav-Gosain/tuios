@@ -135,7 +135,8 @@ func printRexCheck(w io.Writer, c *integration.RexCheck) {
 	if c == nil {
 		return
 	}
-	fmt.Fprintf(w, "The actions run %s (%s).\n", c.Tuios, strings.TrimSpace(c.Version))
+	version, _, _ := strings.Cut(strings.TrimSpace(c.Version), "\n")
+	fmt.Fprintf(w, "The actions run %s (%s).\n", c.Tuios, version)
 	if c.Agent != "" {
 		switch {
 		case c.AgentInstalled == nil:

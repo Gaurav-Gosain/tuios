@@ -232,7 +232,7 @@ M.actions = {
     run = function(ctx, args)
       local out = { tuios = M.program(), lua_version = M.version }
       local r = run({ "--version" })
-      out.version = (r.stdout or ""):match("^%s*(.-)%s*$")
+      out.version = (r.stdout or ""):match("^%s*([^\n]-)%s*\n") or (r.stdout or ""):match("^%s*(.-)%s*$")
       local ok, s, why = pcall(M.session_of, ctx)
       if ok then
         out.session, out.session_note = s, why

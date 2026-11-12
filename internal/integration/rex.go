@@ -348,6 +348,9 @@ func RexStatusOf(env Env, rex RexRunner) (RexStatus, error) {
 func RexRunCheck(rex RexRunner) (*RexCheck, string) {
 	out, err := rex("do", "tuios_check")
 	if err != nil {
+		if strings.Contains(err.Error(), "no sessions") {
+			return nil, "Rex has no session open, so tuios_check could not run yet. Open one and run tuios: Check the Rex Integration from the palette."
+		}
 		return nil, "tuios_check did not run in Rex" + rexErr(err)
 	}
 	i := strings.Index(out, "{")
