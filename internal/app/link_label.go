@@ -90,16 +90,12 @@ func (m *OS) renderLinkLabel() *lipgloss.Layer {
 	label := tooltipLabel(text, max(renderW-2, 1), pal)
 
 	// The label sits one row under the pointer so it never covers the run it is
-	// naming, and flips above when there is no room below. tooltipLayer clamps
-	// it to the screen either way, which is what keeps a link near the right
-	// edge from pushing its own label off it. The two-column inset keeps the
-	// box's corner off the pointer cell itself: a label that starts exactly
-	// under the cursor reads as part of the thing being pointed at.
-	x, y := m.LastMouseX+2, m.LastMouseY+1
-	if y >= m.viewReserve().Top+m.ViewUsableHeight() {
-		y = m.LastMouseY - 1
-	}
-	return tooltipLayer(label, x, y, renderW, "link-label")
+	// naming, and flips above when there is no room below. It is shifted onto
+	// the screen either way, which is what keeps a link near the right edge
+	// from pushing its own label off it. The two-column inset keeps the box's
+	// corner off the pointer cell itself: a label that starts exactly under
+	// the cursor reads as part of the thing being pointed at.
+	return m.pointerLabelLayer(label, "link-label")
 }
 
 // sanitizeLinkText makes an address safe to draw.

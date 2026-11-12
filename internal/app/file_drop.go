@@ -600,11 +600,7 @@ func (m *OS) renderDropLabel(text string, refused bool, id string) *lipgloss.Lay
 		pal = overlay.Palette{Surface: pal.Surface, Fg: theme.ReadableAt(pal.Warn, pal.Surface, theme.ContrastFloor)}
 	}
 	label := tooltipLabel(sanitizeLinkText(text), max(renderW-2, 1), pal)
-	x, y := m.LastMouseX+2, m.LastMouseY+1
-	if y >= m.viewReserve().Top+m.ViewUsableHeight() {
-		y = m.LastMouseY - 1
-	}
-	return tooltipLayer(label, x, y, renderW, id)
+	return m.pointerLabelLayer(label, id)
 }
 
 // applyDropRing outlines the pane a release would drop on, for whichever

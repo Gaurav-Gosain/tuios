@@ -82,11 +82,7 @@ func (m *OS) renderRailAddTooltip() *lipgloss.Layer {
 	railW, renderW := m.GetSidebarWidth(), m.GetRenderWidth()
 	label := tooltipLabel(sidebarAddWords(kind), max(renderW-railW-1, 1), theme.UI())
 
-	x := railW
-	if m.railEdge() == sidebarRight {
-		x = renderW - railW - lipgloss.Width(label)
-	}
-	return tooltipLayer(label, x, row, renderW, "sidebar-tooltip")
+	return m.railTooltipLayer(label, row)
 }
 
 // hostSignInTooltip is what the header of a machine that waits for a
@@ -113,11 +109,7 @@ func (m *OS) renderRailHostTooltip() *lipgloss.Layer {
 	}
 	railW, renderW := m.GetSidebarWidth(), m.GetRenderWidth()
 	label := tooltipLabel(hostSignInTooltip, max(renderW-railW-1, 1), theme.UI())
-	x := railW
-	if m.railEdge() == sidebarRight {
-		x = renderW - railW - lipgloss.Width(label)
-	}
-	return tooltipLayer(label, x, row, renderW, "sidebar-tooltip")
+	return m.railTooltipLayer(label, row)
 }
 
 // sidebarTooltipBadgeLabel is what the alarm badge says in words. Empty when
@@ -281,11 +273,5 @@ func (m *OS) renderRailTooltip() *lipgloss.Layer {
 	railW, renderW := m.GetSidebarWidth(), m.GetRenderWidth()
 	label := tooltipLabel(text, max(renderW-railW-1, 1), theme.UI())
 
-	x := railW
-	if m.railEdge() == sidebarRight {
-		// The rail is against the right edge, so the label opens leftward and
-		// its right edge lands flush against the rail's first column.
-		x = renderW - railW - lipgloss.Width(label)
-	}
-	return tooltipLayer(label, x, row, renderW, "sidebar-tooltip")
+	return m.railTooltipLayer(label, row)
 }

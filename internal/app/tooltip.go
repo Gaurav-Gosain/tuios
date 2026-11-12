@@ -153,13 +153,49 @@ func tooltipLabel(text string, room int, pal overlay.Palette) string {
 	return lipgloss.NewStyle().Background(pal.Surface).Foreground(pal.Fg).Render(body)
 }
 
-// tooltipLayer floats a composed label above the panes and the dock. x is where
-// the label would like to start; it is clamped so the label cannot leave the
-// screen either way, which for a control at the bar's right-hand end means the
-// label opens leftward from it.
-func tooltipLayer(label string, x, y, renderW int, id string) *lipgloss.Layer {
-	x = max(min(x, renderW-lipgloss.Width(label)), 0)
-	return lipgloss.NewLayer(label).X(x).Y(max(y, 0)).Z(config.ZIndexDock + 1).ID(id)
+// tooltipLayer floats a composed label above the panes and the dock, placed
+// against anchor on side by overlay.Place inside screen. The label starts at
+// the anchor's first column (or row) and is shifted onto the screen, which for
+// a control at the bar's right-hand end means it opens leftward from it.
+func tooltipLayer(label string, anchor overlay.Rect, side overlay.Side, screen overlay.Rect, id string) *lipgloss.Layer {
+	x, y, _ := overlay.Place(anchor, lipgloss.Width(label), lipgloss.Height(label), screen, overlay.Placement{Side: side})
+	return lipgloss.NewLayer(label).X(x).Y(y).Z(config.ZIndexDock + 1).ID(id)
+}
+
+// screenRect is the whole screen as a rectangle.
+func (m *OS) screenRect() overlay.Rect {
+	return overlay.Rect{X1: m.GetRenderWidth(), Y1: m.GetRenderHeight()}
+}
+
+// railTooltipLayer places a rail label on row beside the rail: to its right
+// when the rail is on the left edge, to its left when it is on the right, with
+// the label's edge flush against the rail.
+func (m *OS) railTooltipLayer(label string, row int) *lipgloss.Layer {
+	railW, renderW := m.GetSidebarWidth(), m.GetRenderWidth()
+	anchor, side := overlay.Rect{X0: 0, Y0: row, X1: railW, Y1: row + 1}, overlay.SideRight
+	if m.railEdge() == sidebarRight {
+		anchor, side = overlay.Rect{X0: renderW - railW, Y0: row, X1: renderW, Y1: row + 1}, overlay.SideLeft
+	}
+	return tooltipLayer(label, anchor, side, m.screenRect(), "sidebar-tooltip")
+}
+
+// dockTooltipSide is the side of the bar a dock label opens on: the panes'
+// side, on the hairline the dock owns, so the label never covers the bar.
+func (m *OS) dockTooltipSide() overlay.Side {
+	if m.Settings.DockbarPosition == "top" {
+		return overlay.SideBelow
+	}
+	return overlay.SideAbove
+}
+
+// pointerLabelLayer places a label that follows the pointer: on the row under
+// it, two columns to its right so the box's corner is off the pointer cell,
+// and above it when the row under it is the dock's. The screen ends at the
+// dock so the label never covers it.
+func (m *OS) pointerLabelLayer(label, id string) *lipgloss.Layer {
+	screen := m.screenRect()
+	screen.Y1 = m.viewReserve().Top + m.ViewUsableHeight()
+	return tooltipLayer(label, overlay.PointRect(m.LastMouseX+2, m.LastMouseY), overlay.SideBelow, screen, id)
 }
 
 // renderTooltip composes whichever surface's label is live. Nil when there is

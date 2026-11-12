@@ -184,9 +184,6 @@ func (m *OS) renderDockNotifTooltip() *lipgloss.Layer {
 	rows = append(rows, dim.Render(pad+hint+strings.Repeat(" ", max(textW-lipgloss.Width(hint), 0))+pad))
 
 	label := strings.Join(rows, "\n")
-	y := m.notifHit.Y - len(rows)
-	if m.Settings.DockbarPosition == "top" {
-		y = m.notifHit.Y + 1
-	}
-	return tooltipLayer(label, m.notifHit.X0, y, renderW, "dock-notif-tooltip")
+	h := m.notifHit
+	return tooltipLayer(label, overlay.Rect{X0: h.X0, Y0: h.Y, X1: h.X1, Y1: h.Y + 1}, m.dockTooltipSide(), m.screenRect(), "dock-notif-tooltip")
 }
