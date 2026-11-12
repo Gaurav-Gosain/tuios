@@ -37,6 +37,8 @@ type Screen struct {
 	// fullscreen fast path, the crash screen.
 	scratch uv.ScreenBuffer
 	w, h    int
+	// diffed is the rows the last diff passed to the terminal renderer.
+	diffed int
 
 	// started: the alternate screen is entered and its sequences are in
 	// pre. query: ask for synchronized output and the unicode core at
@@ -274,10 +276,15 @@ func (s *Screen) diff(buf *uv.Buffer) {
 		s.touched[i] = uv.LineData{FirstCell: 0, LastCell: w}
 		s.rb.Touched[i] = &s.touched[i]
 	}
+	s.diffed = h
 	s.scr.Render(&s.rb)
 	_ = s.scr.Flush()
 	copyCells(&s.shown, buf)
 }
+
+// DiffedRows is how many rows the last diff passed to the terminal renderer,
+// for the frame cost benchmarks and budgets.
+func (s *Screen) DiffedRows() int { return s.diffed }
 
 // sameCells reports whether a and b hold the same cells.
 func sameCells(a, b *uv.Buffer) bool {
