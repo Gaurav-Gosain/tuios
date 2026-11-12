@@ -117,6 +117,11 @@ if [[ $- == *i* && -z ${__tuios_marks+x} ]] &&
     # __tuios_precmd runs last before each prompt. It sends D with the status
     # of the command that finished and A where the prompt starts, and puts B
     # and C back when a prompt theme has set PS1 or PS0 again.
+    #
+    # A carries redraw=last (the kitty extension): on SIGWINCH bash repaints
+    # only the last line of its prompt. Without it a terminal that clears a
+    # marked prompt on resize, as libghostty-vt does, clears every prompt row
+    # and bash repaints one of them, so a narrowed pane shows the prompt twice.
     __tuios_precmd() {
         builtin local status=$? marks=${__tuios_marks-}
         if [[ -n ${__tuios_status-} ]]; then
@@ -126,7 +131,7 @@ if [[ $- == *i* && -z ${__tuios_marks+x} ]] &&
             builtin printf '\e]133;D;%s\a' "$status"
         fi
         if [[ $marks == *A* ]]; then
-            builtin printf '\e]133;A\a'
+            builtin printf '\e]133;A;redraw=last\a'
         fi
         if [[ $marks == *B* && ${PS1-} != *'133;B'* ]]; then
             PS1+='\[\e]133;B\a\]'

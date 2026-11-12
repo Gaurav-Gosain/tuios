@@ -63,7 +63,7 @@ PS1+=$'%{\e]133;B\a%}'`,
 	"bash": `# ~/.bashrc: mark commands for tuios run (OSC 133)
 # Needs bash 4.4 or newer. Older bash, such as macOS /bin/bash 3.2, ignores
 # PS0, so it marks prompts and never commands, and run refuses the pane.
-PROMPT_COMMAND='printf "\e]133;D;%s\a\e]133;A\a" "$?"'${PROMPT_COMMAND:+";$PROMPT_COMMAND"}
+PROMPT_COMMAND='printf "\e]133;D;%s\a\e]133;A;redraw=last\a" "$?"'${PROMPT_COMMAND:+";$PROMPT_COMMAND"}
 PS0='\e]133;C\a'
 PS1+='\[\e]133;B\a\]'`,
 	// fish 4 sends the marks itself, and a second set from config.fish would

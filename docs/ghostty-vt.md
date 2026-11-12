@@ -165,7 +165,12 @@ so that entry is gone. These differ by design and have no entry:
   from the history, and keeps older history at the width it was written at.
   The pure emulator does not reflow a prompt the shell marked with OSC 133
   and still shows, so a shell that repaints its prompt on SIGWINCH leaves no
-  row behind. The library does not do this.
+  row behind. The library instead clears the marked prompt on a resize, so
+  the shell can repaint it: every prompt row by default, only the last with
+  `OSC 133;A;redraw=last`. Bash repaints only the last line, so the tuios
+  bash integration and the `tuios doctor shell` lines send `redraw=last`. A
+  bash prompt theme that sends its own plain `133;A` leaves one extra prompt
+  row after a narrowing on the library backend.
 - `SetScrollbackMaxLines` after construction is a no-op on the library
   backend (the limit is a construction option).
 - The pen's open OSC 8 hyperlink is not carried across a wire snapshot
