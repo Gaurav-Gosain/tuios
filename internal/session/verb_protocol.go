@@ -1001,7 +1001,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "ready", Type: "bool", Description: "True when the agent showed it is at its prompt."},
 				{Name: "ready_by", Type: "string", Description: "The evidence: idle or done, or quiet for unknown on a harness that cannot show idle."},
 				{Name: "state", Type: "string", Description: "The pane's agent state when the wait ended."},
-				{Name: "outcome", Type: "string", Description: "How the wait ended. started is no_wait's answer: the process runs and readiness was not waited for.", Accepted: []string{string(agentStartReady), string(agentStartBlocked), string(agentStartTimeout), string(agentStartWindowClosed), string(agentStartSessionEnded), string(agentStartShutdown), string(agentStartStarted)}},
+				{Name: "outcome", Type: "string", Description: "How the wait ended. started is no_wait's answer: the process runs and readiness was not waited for. exited is no_wait's answer when the program exited within a second.", Accepted: []string{string(agentStartReady), string(agentStartBlocked), string(agentStartTimeout), string(agentStartWindowClosed), string(agentStartSessionEnded), string(agentStartShutdown), string(agentStartStarted), string(agentStartExited)}},
 				{Name: "path_from", Type: "string", Description: "Which PATH found the program: caller, the PATH in env, or daemon, the daemon's PATH, which the agent then runs with.", Accepted: []string{"caller", "daemon"}},
 				{Name: "blocked_by", Type: "string", Description: "approval or question, when the outcome is blocked."},
 				{Name: "reason", Type: "string", Description: "Why it is not ready, when it is not."},

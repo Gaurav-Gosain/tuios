@@ -53,7 +53,7 @@ func integrationTargets(env integration.Env, args []string, all, onlyPresent boo
 }
 
 func completeIntegrationHarness(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
-	return integration.HarnessIDs(), cobra.ShellCompDirectiveNoFileComp
+	return append(integration.HarnessIDs(), integration.RexID), cobra.ShellCompDirectiveNoFileComp
 }
 
 func newIntegrationCommand() *cobra.Command {
@@ -86,14 +86,18 @@ and hooks are kept in place and as written, and every file is replaced
 atomically, after all of them were worked out, so a file tuios cannot read
 leaves every file unchanged. A settings file that is a symlink stays one: the
 file it points to is rewritten. The first rewrite keeps the file as it was
-beside it with a .tuios.bak suffix, and later rewrites leave that copy alone.`,
+beside it with a .tuios.bak suffix, and later rewrites leave that copy alone.
+
+"rex" is not a harness: it adds tuios actions to the Rex terminal's command
+palette. install rex writes tuios.lua next to Rex's init.lua, adds one marked
+require line, and has Rex check and reload its config. See docs/REX.md.`,
 	}
 	cmd.AddCommand(newIntegrationInstallCommand(), newIntegrationUninstallCommand(), newIntegrationStatusCommand())
 	return cmd
 }
 
 func newIntegrationInstallCommand() *cobra.Command {
-	var all, mcp, mcpWrite, statusLine, noSkill bool
+	var all, mcp, mcpWrite, statusLine, noSkill, force bool
 	var command, then string
 	cmd := &cobra.Command{
 		Use:   "install [harness...]",
@@ -132,6 +136,15 @@ stays as it was. Uninstall puts your command back.`,
   tuios integration install --all`,
 		ValidArgsFunction: completeIntegrationHarness,
 		RunE: func(_ *cobra.Command, args []string) error {
+			args, withRex := takeRex(args)
+			if withRex {
+				if err := runRexInstall(force); err != nil {
+					return err
+				}
+				if len(args) == 0 && !all {
+					return nil
+				}
+			}
 			env := integration.SystemEnv()
 			targets, err := integrationTargets(env, args, all, true)
 			if err != nil {
@@ -214,6 +227,7 @@ stays as it was. Uninstall puts your command back.`,
 	cmd.Flags().BoolVar(&all, "all", false, "Install for every supported harness whose configuration directory exists")
 	cmd.Flags().StringVar(&command, "command", "tuios", "Program the hooks run, when tuios is not on the harness's PATH")
 	cmd.Flags().BoolVar(&noSkill, "no-skill", false, "Do not write the tuios skill for the harness")
+	cmd.Flags().BoolVar(&force, "force", false, "For rex: replace a tuios.lua with changes of your own (it is kept as tuios.lua"+integration.BackupSuffix+")")
 	cmd.Flags().BoolVar(&mcp, "mcp", false, "Also register tuios mcp, without the tools that type into panes, as an MCP server named tuios")
 	cmd.Flags().BoolVar(&mcpWrite, "mcp-write", false, "Register tuios mcp with --write, which adds the tools that type into panes. Implies --mcp")
 	cmd.Flags().BoolVar(&statusLine, "statusline", false, "Also feed the model, context use and cost to tuios from Claude Code's status line")
@@ -304,6 +318,15 @@ named, give --all.`,
 		Example:           `  tuios integration uninstall claude-code`,
 		ValidArgsFunction: completeIntegrationHarness,
 		RunE: func(_ *cobra.Command, args []string) error {
+			args, withRex := takeRex(args)
+			if withRex {
+				if err := runRexUninstall(); err != nil {
+					return err
+				}
+				if len(args) == 0 && !all {
+					return nil
+				}
+			}
 			env := integration.SystemEnv()
 			targets, err := integrationTargets(env, args, all, false)
 			if err != nil {
@@ -348,6 +371,15 @@ current install runs, for a tuios that is not on PATH.`,
 		Example:           `  tuios integration status --json`,
 		ValidArgsFunction: completeIntegrationHarness,
 		RunE: func(_ *cobra.Command, args []string) error {
+			args, withRex := takeRex(args)
+			if withRex {
+				if err := runRexStatus(os.Stdout); err != nil {
+					return err
+				}
+				if len(args) == 0 {
+					return nil
+				}
+			}
 			env := integration.SystemEnv()
 			targets, err := integrationTargets(env, args, len(args) == 0, false)
 			if err != nil {

@@ -314,6 +314,10 @@ const (
 	// was started and had not exited by startAgentEarlyExit, and readiness
 	// was not waited for.
 	agentStartStarted agentStartOutcome = "started"
+	// agentStartExited is start-agent with no_wait when the agent's program
+	// exited within startAgentEarlyExit and its pane was kept open with what
+	// it printed.
+	agentStartExited agentStartOutcome = "exited"
 )
 
 // startAgentEarlyExit is how long start-agent with no_wait watches a new agent

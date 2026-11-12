@@ -3,6 +3,7 @@ package session
 import (
 	"encoding/json"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -325,6 +326,13 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		w, outcome = d.waitAgentStart(sess, win.ID, launch.harness, startAgentEarlyExit, true, p.Protocol != "", nil)
 		if outcome == agentStartTimeout {
 			outcome = agentStartStarted
+			// A pane whose program fails at once can stay open with its
+			// output, so the program's own exit is what says it failed.
+			if pty := sess.GetPTY(win.PTYID); pty != nil {
+				if _, exited := pty.ExitStatus(); exited {
+					outcome = agentStartExited
+				}
+			}
 		}
 	} else {
 		w, outcome = d.waitAgentStart(sess, win.ID, launch.harness, timeout, true, p.Protocol != "", nil)
@@ -370,6 +378,14 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	switch outcome {
 	case agentStartStarted:
 		out["reason"] = "Started without waiting for the agent to be ready (no_wait). If it stays unready, the Inbox says so."
+	case agentStartExited:
+		reason := "The agent exited at once."
+		if pty := sess.GetPTY(win.PTYID); pty != nil {
+			if code, _ := pty.ExitStatus(); code != 0 {
+				reason = "The agent exited at once with status " + strconv.Itoa(code) + "."
+			}
+		}
+		out["reason"] = reason + " What it printed is in the pane: look at it with capture-pane."
 	case agentStartReady:
 		out["ready_by"] = readyBy(w)
 	case agentStartBlocked:

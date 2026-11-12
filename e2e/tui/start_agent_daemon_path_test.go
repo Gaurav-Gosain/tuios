@@ -184,7 +184,7 @@ func TestStartAgentNoWaitAnswersBeforeReady(t *testing.T) {
 
 	out, err = tuiosCLIEnv(t, base, []string{path}, "start-agent", "quitagent", "-s", "work", "--no-wait")
 	saveText(t, "no-wait-quit", out)
-	if err == nil {
-		t.Errorf("ASSERTION: start-agent --no-wait exited 0 for an agent that exited at once:\n%s", out)
+	if err == nil || !strings.Contains(out, "exited at once with status 3") {
+		t.Errorf("ASSERTION: start-agent --no-wait did not fail with the agent's exit status for an agent that exited at once (err %v):\n%s", err, out)
 	}
 }
