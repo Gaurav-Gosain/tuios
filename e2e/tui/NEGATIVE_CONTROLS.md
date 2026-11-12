@@ -16711,6 +16711,27 @@ branch passes 3 of 3 runs. Logs: `~/.cache/agent-tmp/vtbench/recover/` on arch-b
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestEmulatorPanicKeepsTheDaemonAndOtherPanes$' -v .`.
+
+### Fault notices out of order
+
+On train cy (2026-11-12) the test failed once at "never showed failed again".
+One send can fault twice, on the tty echo and on the next line, and each
+fault started a goroutine of its own to put its notice into the stream. When
+the "failed again" notice won the race for `streamMu`, the earlier notice's
+reset landed after it, so the frozen pane showed "failed". The e2e test cannot
+choose how a send splits into reads, so it does not catch this on demand: 200
+runs on the Mac of `origin/main` (`086c63330`) all passed. The unit test
+`TestFaultNoticesReachTheStreamInFaultOrder` in `internal/session` holds
+`streamMu` while two notices are queued.
+
+Run on 2026-11-13 on macOS, branch `untangle/emulator-panic-race`.
+
+| Control: what was cut | Where it failed | Verdict |
+| --- | --- | --- |
+| `queueFaultNotice` starts `go p.injectStream(data)` per notice, as before | `TestFaultNoticesReachTheStreamInFaultOrder` 20 of 20 runs: "the notices reached the stream as \"second\" then \"first\"" | **caught in `internal/session`** |
+
+With the fix: the unit test passes 200 of 200 under `-race`, and the e2e test
+passes 200 of 200 with the daemon built with `-race`, no race reports.
 ## The New agent sheet stops on invisible characters
 
 `TestNewAgentSheetStopsOnInvisibleCharacters` adds three cards from the CLI
