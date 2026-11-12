@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -597,10 +596,7 @@ func shq(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'
 // fish pane runs the touch in the first argument and the arguments arrive
 // changed.
 func TestHerdrFrontAgentStartQuotesForTheShell(t *testing.T) {
-	fish, err := exec.LookPath("fish")
-	if err != nil {
-		t.Skip("fish is not installed")
-	}
+	fish := needTool(t, "fish")
 	term, base := herdrFrontClient(t)
 	ids := crushPanes(t, base, "bridge", "shpane")
 	if out, err := tuiosCLI(t, base, "new-window", "fishpane", "-s", crushSession, "--no-focus", "--", fish, "--no-config"); err != nil {

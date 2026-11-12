@@ -297,10 +297,7 @@ func TestDnDBetweenPanes(t *testing.T) {
 		// the program that reads the paste. fish reads \' inside single
 		// quotes, where a POSIX shell wants '\''. Needs fish, as the other
 		// fish tests of the suite do.
-		fish, err := exec.LookPath("fish")
-		if err != nil {
-			t.Skip("fish is not installed")
-		}
+		fish := needTool(t, "fish")
 		term, base, session, left, right := dndBoard(t)
 		// A short directory: the pasted path has to fit on one line of the
 		// pane for the screen to show it whole.

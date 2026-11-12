@@ -64,11 +64,7 @@ func siEnv(base string, extra ...string) []string {
 // siShellPath finds a shell, and skips the test when it is not installed.
 func siShellPath(t *testing.T, name string) string {
 	t.Helper()
-	path, err := exec.LookPath(name)
-	if err != nil {
-		t.Skipf("%s is not installed", name)
-	}
-	return path
+	return needTool(t, name)
 }
 
 // siSession starts a daemon with one detached session whose pane runs
@@ -359,6 +355,7 @@ add-zsh-hook preexec _theme_preexec
 PS1=$'THEMED> %{\e]133;B\a%}'
 `, "THEMED>", map[string]string{".zshenv": siZshenv}},
 	}
+	requireOnCI(t, "zsh")
 	for _, tc := range cases {
 		t.Run(tc.shell, func(t *testing.T) {
 			path := siShellPath(t, tc.shell)

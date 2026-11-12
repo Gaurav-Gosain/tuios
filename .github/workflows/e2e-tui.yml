@@ -310,17 +310,28 @@ jobs:
             echo "This shard runs no tests: the change reaches none of the tests it would run." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # These tests also run their case in fish, and the drag test and the
-      # shell integration tests in zsh,
-      # and skip a shell that is not installed. Only a shard that holds one
-      # pays for the packages.
-      - name: Install fish and zsh for the shards that need them
+      # A test that needs fish or zsh is named in e2e/tui/tools.txt, which
+      # TestToolsListMatchesTheTests checks against the source, so no list of
+      # names lives here. Only a shard that holds one of those tests pays for
+      # its packages. The test step sets TUIOS_E2E_REQUIRE_TOOLS, so a tool
+      # that is still missing fails the test and does not skip it.
+      - name: Install the tools this shard's tests need
         if: env.TESTED_URL == '' && steps.plan.outputs.run == 'true'
         run: |
-          if grep -qxE 'TestDropPreviewLooks|TestDnDBetweenPanes|TestHerdrFrontAgentStartQuotesForTheShell|TestPastedPathReadsBackBehindTmux|TestRailFileDragIntoPane|TestShellIntegrationZshByDefault|TestShellIntegrationLeavesAMarkingSetupAlone' "$RUNNER_TEMP/names.txt"; then
+          set -euo pipefail
+          tools=$(awk 'NR == FNR { want[$1] = 1; next } /^#/ || NF < 2 { next } ($1 in want) { for (i = 2; i <= NF; i++) print $i }' "$RUNNER_TEMP/names.txt" e2e/tui/tools.txt | sort -u)
+          pkgs=()
+          for tool in $tools; do
+            case $tool in
+            fish) pkgs+=(fish) ;;
+            zsh) pkgs+=(zsh) ;;
+            *) echo "e2e/tui/tools.txt names the tool $tool, which this step does not know how to install" >&2; exit 1 ;;
+            esac
+          done
+          if [ "${#pkgs[@]}" -gt 0 ]; then
             start=$(date +%s)
-            .github/scripts/apt-install.sh fish zsh
-            echo "Installed fish and zsh in $(( $(date +%s) - start )) s"
+            .github/scripts/apt-install.sh "${pkgs[@]}"
+            echo "Installed ${pkgs[*]} in $(( $(date +%s) - start )) s"
           fi
 
       # TestRailQuickLookKittyPicture resizes a PDF page, the case the bug was
@@ -343,6 +354,9 @@ jobs:
         working-directory: e2e/tui
         env:
           TUIOS_E2E: "1"
+          # A tool the shard's tests need that is not installed fails the
+          # test. Without this a missing tool skips it without a word.
+          TUIOS_E2E_REQUIRE_TOOLS: "1"
           # -count=1 is enforced on the command line too, but pointing the suite
           # at an explicit binary keeps the build step's output out of the test
           # log and makes the artifact obvious.

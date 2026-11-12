@@ -2,7 +2,6 @@ package tuie2e
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -180,10 +179,7 @@ func TestDropPreviewFillWashesTheZone(t *testing.T) {
 // a picture of each frame mid-drag (TUIOS_E2E_FRAMES). Each frame is held to
 // the same checks as the other preview cases.
 func TestDropPreviewLooks(t *testing.T) {
-	fish, err := exec.LookPath("fish")
-	if err != nil {
-		t.Skip("fish is not installed")
-	}
+	fish := needTool(t, "fish")
 	cases := []struct {
 		name, theme, mode string
 		depth             int

@@ -996,6 +996,8 @@ func TestRailFileDragIntoPane(t *testing.T) {
 		}
 	}
 
+	// On CI a missing fish or zsh fails the test instead of skipping its round.
+	requireOnCI(t, "fish", "zsh")
 	for i, sh := range dropShells() {
 		if sh.start != "" {
 			if _, err := exec.LookPath(sh.name); err != nil {
@@ -1222,9 +1224,7 @@ func TestPastedPathReadsBackBehindTmux(t *testing.T) {
 	if err != nil {
 		t.Skip("tmux is not installed")
 	}
-	if _, err := exec.LookPath("fish"); err != nil {
-		t.Skip("fish is not installed")
-	}
+	needTool(t, "fish")
 	dir, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
