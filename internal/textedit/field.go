@@ -63,10 +63,15 @@ func (l *Line) Insert(s string) bool {
 //   - alt+backspace, ctrl+w and ctrl+backspace remove the word before the
 //     caret, by the rule of DropLastWord.
 //   - ctrl+u clears the field when the panel allows it.
+//   - alt+d, alt+delete and ctrl+delete remove the word after the caret.
 //   - ctrl+k removes the text from the caret to the end.
-//   - left and right move the caret a character, alt+left and alt+right a
-//     word; ctrl+a and ctrl+e move it to the start and the end. home and end
-//     are not here: a list reads them before its field does.
+//   - left and right move the caret a character; alt+left, ctrl+left and
+//     alt+b, and alt+right, ctrl+right and alt+f, a word; home and ctrl+a, and
+//     end and ctrl+e, to the start and the end. A list reads home and end
+//     before its filter does, so there they move the list.
+//
+// These are the composer's keys for the same moves, so no key that edits in
+// an agent answer field does nothing in a dialog's field.
 //   - space types a space, text types the text the key carries, and a single
 //     printable ASCII key name types itself, for a synthesized key.
 //
@@ -101,6 +106,13 @@ func (l *Line) Edit(key, text string, o LineOpts) (changed, consumed bool) {
 		l.text = kept + after
 		l.caret = len(kept)
 		return true, true
+	case key == "alt+d" || key == "alt+delete" || key == "ctrl+delete":
+		n := nextWordEnd(after)
+		if n == 0 {
+			return false, true
+		}
+		l.text = before + after[n:]
+		return true, true
 	case key == "ctrl+u":
 		if !o.AllowClear {
 			return false, false
@@ -125,16 +137,16 @@ func (l *Line) Edit(key, text string, o LineOpts) (changed, consumed bool) {
 			l.caret = c + size
 		}
 		return false, true
-	case key == "alt+left":
+	case key == "alt+left" || key == "ctrl+left" || key == "alt+b":
 		l.caret = len(DropLastWord(before))
 		return false, true
-	case key == "alt+right":
+	case key == "alt+right" || key == "ctrl+right" || key == "alt+f":
 		l.caret = c + nextWordEnd(after)
 		return false, true
-	case key == "ctrl+a":
+	case key == "home" || key == "ctrl+a":
 		l.caret = 0
 		return false, true
-	case key == "ctrl+e":
+	case key == "end" || key == "ctrl+e":
 		l.caret = len(l.text)
 		return false, true
 	case key == "space":

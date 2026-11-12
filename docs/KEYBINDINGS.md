@@ -640,12 +640,19 @@ is letters, digits and `_`, and a blank, `/`, `.` or `-` ends one. So
 field in tuios takes them, the rename, file and new worktree dialogs among them.
 
 Every short text field also has a caret. `left` and `right` move it a
-character, `alt+left` and `alt+right` a word, `ctrl+a` and `ctrl+e` to the
-start and the end; `ctrl+k` cuts from the caret to the end, `ctrl+u` clears the
-field, and typed or pasted text goes in at the caret. In a list's filter, and
-in the help and settings searches, `left` and `right` keep their own meaning
-(the section, the tab or the row's value), so there the caret moves with the
-other keys.
+character; `alt+left`, `ctrl+left` and `alt+b`, and `alt+right`, `ctrl+right`
+and `alt+f`, a word; `home` and `ctrl+a`, and `end` and `ctrl+e`, to the start
+and the end. `alt+d`, `alt+delete` and `ctrl+delete` delete the word after the
+caret, `ctrl+k` cuts from the caret to the end, `ctrl+u` clears the field, and
+typed or pasted text goes in at the caret. In a list's filter, and in the help
+and settings searches, `left` and `right` keep their own meaning (the section,
+the tab or the row's value), and `home` and `end` move the list, so there the
+caret moves with the other keys.
+
+The agents view's one-line fields (the selector line, the reason for a reject
+and the answer to a prompt) take these keys too, and have more: `ctrl+z`
+undoes, `shift` with a move key selects, and a long line wraps in place of
+scrolling sideways.
 
 The movement keys are the `[keybindings.lists]` section. Every list in tuios
 moves on them: the pickers and dialogs, the review panel, the scrollback

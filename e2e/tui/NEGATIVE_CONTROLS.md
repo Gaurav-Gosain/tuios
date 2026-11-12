@@ -16996,3 +16996,18 @@ Run on 2026-11-12 on macOS. The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCopyModeSearchEditsAtTheCaret$' -v .`.
+
+## A dialog field takes the composer's keys
+
+`TestDialogFieldTakesTheComposerKeys` opens the rename dialog, types
+"owl-lark", presses home, types "z", presses alt+d, presses end, types "s",
+and checks the window is named "z-larks".
+
+Run on 2026-11-12 on macOS. The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The R7 6b tip (14494abc8), where home, end and alt+d do nothing in a dialog field and the window is named "owl-larkzs" | "home, alt+d and end did not edit the field; the window is not named z-larks" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestDialogFieldTakesTheComposerKeys$' -v .`.
