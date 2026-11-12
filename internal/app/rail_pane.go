@@ -88,6 +88,10 @@ type railPaneState struct {
 	// gen counts output the rail has not drawn yet. The rail's render cache
 	// folds it.
 	gen uint64
+	// noted is the pane's noted writes (terminal.Window.EmulatorWrites) as
+	// the last pass read them, before it took the pane's output flag. The
+	// rail check compares it with the writes begun since. See railCacheMiss.
+	noted uint64
 	// cols and rows are the size the last rail layout gave the pane, and
 	// rect where its cells were drawn. All zero when the section was not
 	// drawn.

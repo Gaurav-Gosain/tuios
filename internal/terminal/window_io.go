@@ -113,6 +113,7 @@ func (w *Window) DiscardPendingOutput() {
 // restore has since put a whole snapshot in, and that snapshot's size is newer
 // than this.
 func (w *Window) applyStreamResize(chunk outputChunk) {
+	w.writesBegun.Add(1)
 	w.ioMu.Lock()
 	// Re-checked under the lock the restore also takes, for the same reason
 	// the batch write below re-checks it.
@@ -129,21 +130,33 @@ func (w *Window) applyStreamResize(chunk outputChunk) {
 	w.ioMu.Unlock()
 	// Dirty flags belong to the UI goroutine; the write path only says that
 	// something arrived, and MarkTerminalsWithNewContent does the rest.
-	w.noteOutput()
+	w.noteWrite(false)
 }
 
-// noteGraphicsOutput is noteOutput for a write graphicsOnly accepted: the
-// render signal goes out, so the passthrough's queued commands are drawn, but
-// the pane is not marked as having new cells.
-func (w *Window) noteGraphicsOutput() {
-	w.HasGraphicsOutput.Store(true)
-	w.coalesceSignal.Store(true)
-	if w.coalesceWake != nil {
-		select {
-		case w.coalesceWake <- struct{}{}:
-		default:
-		}
+// noteWrite is noteOutput for a change a writer made to the emulator. With
+// graphics set it is a write graphicsOnly accepted: the render signal goes
+// out, so the passthrough's queued commands are drawn, but the pane is not
+// marked as having new cells. The change is counted as noted after its flag is
+// set and before the wake, so the pass the wake asks for reads the count. See
+// EmulatorWrites.
+func (w *Window) noteWrite(graphics bool) {
+	if graphics {
+		w.HasGraphicsOutput.Store(true)
+	} else {
+		w.HasNewOutput.Store(true)
 	}
+	w.writesNoted.Add(1)
+	w.wakeCoalescer()
+}
+
+// EmulatorWrites counts the changes the pane's writers made to the emulator:
+// begun is incremented before each change, and noted after the change set its
+// output flag. A reader that reads noted before it takes HasNewOutput, and
+// later reads begun equal to that, knows the emulator holds nothing the
+// flag it took did not cover. Any other answer means a change may be in the
+// emulator that no pass has taken in yet. Safe from any goroutine.
+func (w *Window) EmulatorWrites() (begun, noted uint64) {
+	return w.writesBegun.Load(), w.writesNoted.Load()
 }
 
 // NoteRedraw asks for the pane to be drawn again although the program wrote
@@ -161,6 +174,11 @@ func (w *Window) NoteRedraw() { w.noteOutput() }
 // almost every time it looks.
 func (w *Window) noteOutput() {
 	w.HasNewOutput.Store(true)
+	w.wakeCoalescer()
+}
+
+// wakeCoalescer tells the coalescer the pane has something to draw.
+func (w *Window) wakeCoalescer() {
 	w.coalesceSignal.Store(true)
 	if w.coalesceWake != nil {
 		select {
@@ -318,6 +336,7 @@ func (w *Window) outputWriter() {
 		if f := w.modesOnly.Load(); f != nil {
 			data = f.filter(batch)
 		}
+		w.writesBegun.Add(1)
 		for off := 0; off < len(data) || off == 0; off += maxVTChunk {
 			end := min(off+maxVTChunk, len(data))
 			w.ioMu.Lock()
@@ -356,11 +375,9 @@ func (w *Window) outputWriter() {
 			// Don't signal PTYDataChan here. The renderCoalescer
 			// goroutine holds the rate cap and signals on its own,
 			// which is what prevents partial-frame renders.
-			if !resize.isResize() && graphicsOnly(ground, batch) && w.cursorHidden() {
-				w.noteGraphicsOutput()
-			} else {
-				w.noteOutput()
-			}
+			w.noteWrite(!resize.isResize() && graphicsOnly(ground, batch) && w.cursorHidden())
+		} else {
+			w.writesNoted.Add(1)
 		}
 	}
 }
@@ -673,6 +690,7 @@ func (w *Window) StartDaemonResponseReader() {
 // WriteOutput writes output data to the terminal emulator.
 // Used in daemon mode to process PTY output received from the daemon.
 func (w *Window) WriteOutput(data []byte) {
+	w.writesBegun.Add(1)
 	// Snapshot and write under ioMu so Close() nilling w.Terminal cannot
 	// slip between the check and the dereference.
 	w.ioMu.Lock()
@@ -683,9 +701,11 @@ func (w *Window) WriteOutput(data []byte) {
 	w.ioMu.Unlock()
 
 	if t == nil {
+		w.writesNoted.Add(1)
 		return
 	}
 	w.HasNewOutput.Store(true)
+	w.writesNoted.Add(1)
 	if w.PTYDataChan != nil {
 		select {
 		case w.PTYDataChan <- struct{}{}:
@@ -900,6 +920,7 @@ func (w *Window) handleIOOperations() {
 					// Terminal.Write mutates the cell buffer, so it needs the
 					// exclusive lock, not the shared read lock the renderer uses
 					// (two RLock holders do not exclude each other).
+					w.writesBegun.Add(1)
 					w.ioMu.Lock()
 					if w.Terminal != nil {
 						_, _ = w.Terminal.Write(buf[:n])
@@ -932,7 +953,7 @@ func (w *Window) handleIOOperations() {
 					// for a daemon pane. Sent here directly it was one frame
 					// composed per PTY read, about 1 KiB on macOS, during a
 					// flood.
-					w.noteOutput()
+					w.noteWrite(false)
 				}
 			}
 		}

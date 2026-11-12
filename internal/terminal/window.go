@@ -430,6 +430,11 @@ type Window struct {
 	// avoids having output from before the snapshot applied on top of it.
 	outputEpoch atomic.Uint64
 
+	// writesBegun and writesNoted count the output writer's changes to the
+	// emulator: begun before each one, noted once its output flag is set. See
+	// EmulatorWrites.
+	writesBegun, writesNoted atomic.Uint64
+
 	// streamOwnsSize is set while a daemon subscription feeds this emulator,
 	// which is when the stream is what resizes it. See SetStreamOwnsSize.
 	streamOwnsSize atomic.Bool

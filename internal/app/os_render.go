@@ -90,6 +90,9 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 			// picture-in-picture view, and it is paced like an unfocused
 			// pane below: every third pass, with the flag kept between so
 			// the last output is still drawn once the pane goes quiet.
+			if isRailPane(window) {
+				_, m.railPaneView.noted = window.EmulatorWrites()
+			}
 			out := window.HasNewOutput.Swap(false)
 			// Output on a workspace out of view marks its dock tab, once.
 			if out && !window.Minimized && m.noteWorkspaceMark(window.Workspace, workspaceMarkActivity) {
@@ -124,6 +127,9 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 
 		// Only mark dirty when the terminal actually received new output.
 		// This avoids the old unconditional dirty-marking that defeated frame skipping.
+		if isRailPane(window) {
+			_, m.railPaneView.noted = window.EmulatorWrites()
+		}
 		newOutput := window.HasNewOutput.Swap(false)
 		if !newOutput {
 			if graphics && m.KittyPassthrough != nil && m.KittyPassthrough.HasQueued() {

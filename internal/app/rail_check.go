@@ -57,6 +57,16 @@ func (m *OS) checkRailCache(ext railGens) {
 // key, which is not a key that misses an input: the generation moves when the
 // listing lands, and the frame its message asks for draws it. That case is not
 // compared.
+//
+// The rail pane's emulator moves off the UI goroutine too: its output lands on
+// the window's writer, and the key holds it once a pass takes the window's
+// output flag and moves railPaneView.gen. Output that lands before that pass
+// is in the rebuild when the pane is content dirty, as it stays after a blank
+// render, and not in the key. The pass the write asks for draws it, so that
+// case is not compared either. The pane's writes begun since the last pass
+// read its noted writes say whether there is such output. A pass that took the
+// output in without moving gen leaves the two equal, so that miss is still
+// reported.
 func (m *OS) railCacheMiss(ext railGens) string {
 	c := &m.sidebarCache
 	rails := m.tickStats.Rail
@@ -64,6 +74,11 @@ func (m *OS) railCacheMiss(ext railGens) string {
 	m.tickStats.Rail = rails
 	if m.railExternalGens() != ext {
 		return ""
+	}
+	if pane := m.railPaneWindow(); pane != nil {
+		if begun, _ := pane.EmulatorWrites(); begun != m.railPaneView.noted {
+			return ""
+		}
 	}
 	return railCacheDiff(c, lines, w, m)
 }
