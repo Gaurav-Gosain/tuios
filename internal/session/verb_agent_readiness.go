@@ -150,7 +150,10 @@ func (d *Daemon) readiness(cs *connState, p readinessParams) (readinessAnswer, *
 		var err error
 		if pathList != "" {
 			path, err = lookPathIn(cmd, pathList)
-		} else {
+		}
+		if pathList == "" || err != nil {
+			// start-agent falls back to the daemon's PATH the same way
+			// (resolveAgentLaunch), so installed means it would start.
 			path, err = exec.LookPath(cmd)
 		}
 		r.Installed = err == nil

@@ -348,9 +348,15 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 			Window string `json:"window"`
 		} `json:"parent"`
 		TaskNote string `json:"task_note"`
+		PathFrom string `json:"path_from"`
 	}
 	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return errfmt.Errorf("failed to parse response: %w", err)
+	}
+	// This command sent its PATH, and the agent was not on it. Said on
+	// stderr, so --print-id still prints one line.
+	if !jsonOutput && res.PathFrom == "daemon" && params["env"] != nil {
+		fmt.Fprintln(os.Stderr, "The agent is not on this command's PATH. It was found on the PATH the daemon gives new panes, and runs with that PATH.")
 	}
 	switch {
 	case jsonOutput:

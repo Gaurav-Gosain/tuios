@@ -336,6 +336,11 @@ func TestEveryVerbExampleReachesItsHandler(t *testing.T) {
 	for _, env := range []string{"HOME", "XDG_STATE_HOME", "XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME"} {
 		t.Setenv(env, t.TempDir())
 	}
+	// An agent not on the PATH a caller sends is looked up on the daemon's
+	// (resolveAgentLaunch), so the daemon gets a PATH with git and the shells
+	// and none of the agents installed on this machine. Without it, an
+	// example that expects no claude passes or fails by machine.
+	t.Setenv("PATH", "/usr/bin:/bin")
 	// The fixture's panes start in the test's directory. A throwaway
 	// repository there, rather than wherever the test binary runs, gives the
 	// review examples the same repository on every machine.

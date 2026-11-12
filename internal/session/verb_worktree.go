@@ -1053,7 +1053,7 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 			startedBy(win.ID)
 			go d.deliverFanPrompt(sess, win.ID, launch.harness, prompt, readyTimeout)
 		}
-		out, verr := d.createWorktreeSession(cs, root, branch, strings.TrimSpace(p.Base), "", launch.argv, env, grants, setup, func(info *WorktreeInfo) {
+		out, verr := d.createWorktreeSession(cs, root, branch, strings.TrimSpace(p.Base), "", launch.argv, launch.withPath(env), grants, setup, func(info *WorktreeInfo) {
 			info.Group = stem
 			info.FanID = fanID
 			info.LaunchedFrom = launchedFrom

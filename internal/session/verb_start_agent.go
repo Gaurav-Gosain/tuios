@@ -146,6 +146,7 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 			return nil, verr
 		}
 	}
+	env = launch.withPath(env)
 	extra, verr := d.addDirArgs(launch, p.AddDirs)
 	if verr != nil {
 		return nil, verr
@@ -333,6 +334,7 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		"state":           w.AgentState.Name(),
 		"ready":           outcome == agentStartReady,
 		"outcome":         string(outcome),
+		"path_from":       launch.pathFrom(pathList != ""),
 	}
 	if cloned {
 		out["cloned"] = true

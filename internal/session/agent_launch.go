@@ -2,6 +2,7 @@ package session
 
 import (
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -27,7 +28,11 @@ import (
 // on the daemon's otherwise. A daemon started from a login shell long ago has a
 // PATH of its own, and an agent installed since, or into a directory only the
 // caller's shell adds, was reported as not installed although the caller could
-// run it.
+// run it. The other way round, a caller started by an app, such as the Rex
+// server, sends a bare PATH with none of the person's folders on it. So a
+// program not on the caller's PATH is looked up on the daemon's, the PATH a new
+// pane gets, and the agent then runs with the daemon's PATH too: on the
+// caller's bare one it would start, then fail to find git or node.
 //
 // Being ready for a first prompt is positive evidence: the pane reads idle or
 // done, from a report, a hook, the screen or the title. unknown counts only for
@@ -61,6 +66,35 @@ type agentLaunch struct {
 	argv []string
 	// harness is the manifest id, empty for a program no manifest knows.
 	harness string
+	// daemonPath is true when the caller sent a PATH without the program on
+	// it and the daemon's PATH had it. The agent then gets the daemon's PATH
+	// (withPath).
+	daemonPath bool
+}
+
+// pathFrom names the PATH the program was found on, for the result: "caller"
+// or "daemon".
+func (l agentLaunch) pathFrom(callerSent bool) string {
+	if callerSent && !l.daemonPath {
+		return "caller"
+	}
+	return "daemon"
+}
+
+// withPath returns the environment the agent gets: env as the caller sent it,
+// with the daemon's PATH in place of the caller's when the program was found
+// only on the daemon's.
+func (l agentLaunch) withPath(env []string) []string {
+	if !l.daemonPath {
+		return env
+	}
+	out := make([]string, 0, len(env)+1)
+	for _, kv := range env {
+		if !strings.HasPrefix(kv, "PATH=") {
+			out = append(out, kv)
+		}
+	}
+	return append(out, "PATH="+os.Getenv("PATH"))
 }
 
 // command is the argv as one line, for a result a person reads.
@@ -179,6 +213,16 @@ func (d *Daemon) resolveAgentLaunch(param, spec, pathList string) (agentLaunch, 
 	var path string
 	if pathList != "" {
 		path, err = lookPathIn(name, pathList)
+		if err != nil {
+			// Not on the caller's PATH: the daemon's, the PATH a new pane
+			// gets, may have it. exec checks the name the same way at
+			// spawn, so the found path is kept and exec'd as it is.
+			if own, ownErr := exec.LookPath(name); ownErr == nil {
+				if abs, absErr := filepath.Abs(own); absErr == nil {
+					path, err, launch.daemonPath = abs, nil, true
+				}
+			}
+		}
 	} else {
 		// exec resolves the name again at spawn, on the same PATH, so the
 		// lookup only checks that it is there and the name as written is
@@ -189,7 +233,7 @@ func (d *Daemon) resolveAgentLaunch(param, spec, pathList string) (agentLaunch, 
 	if err != nil {
 		where := "the daemon's PATH"
 		if pathList != "" {
-			where = "the PATH the caller sent"
+			where = "the PATH the caller sent, nor on the daemon's PATH, which new panes get"
 		}
 		hint := &VerbHint{
 			Param:  param,
