@@ -157,8 +157,9 @@ func drawDropdown(c *ckCanvas, l ckLook, d *dropdown, x, y, w, top0, bottom, top
 		inner += noteW + 2
 	}
 	w = min(max(w, inner), c.w)
-	x = max(min(x, c.w-w), 0)
 
+	// The list shows as many rows as the roomier side holds, and
+	// overlay.Place then picks the side: below when they fit there.
 	below := bottom - (y + 1) - 2
 	above := y - top0 - 2
 	rows := min(len(d.items), max(below, above))
@@ -166,10 +167,8 @@ func drawDropdown(c *ckCanvas, l ckLook, d *dropdown, x, y, w, top0, bottom, top
 		d.x0, d.y0, d.x1, d.y1, d.rows = 0, 0, 0, 0, 0
 		return
 	}
-	y0 := y + 1
-	if rows > below {
-		y0 = y - rows - 2
-	}
+	x, y0, _ := overlay.Place(overlay.Rect{X0: x, Y0: y, X1: x + w, Y1: y + 1}, w, rows+2,
+		overlay.Rect{X0: 0, Y0: top0, X1: c.w, Y1: bottom}, overlay.Placement{Side: overlay.SideBelow})
 	// The window keeps the cursor in view, centred when it can.
 	d.list.Scroll = min(max(d.list.Cursor-rows/2, 0), len(d.items)-rows)
 	c.fill(x, y0, w, rows+2, pal.Card)
