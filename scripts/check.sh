@@ -147,8 +147,22 @@ pkgs() {
 		dir=${dir#/}
 		# A package outside the build (testdata, a folder of fixtures) is not one.
 		case "/$dir/" in */testdata/*) continue ;; esac
+		# The root e2e folder is all behind the e2e build tag, so a plain
+		# go vet or golangci-lint names it and fails with "build constraints
+		# exclude all Go files". check_vet runs it with the tag.
+		[ "$mod" = . ] && [ "$dir" = e2e ] && continue
 		echo "./${dir:-.}"
 	done | sort -u
+}
+
+# e2e_root_changed reports whether the scope reaches the root e2e folder.
+e2e_root_changed() {
+	local f
+	[ "$changed" = 0 ] && return 0
+	for f in "${changed_go[@]}"; do
+		case "$f" in e2e/*.go) return 0 ;; esac
+	done
+	return 1
 }
 
 # module_touched MODULE reports whether the scope reaches MODULE's go.mod.
@@ -274,6 +288,7 @@ ghostty_env() {
 check_vet() {
 	local rc=0
 	in_modules go vet || rc=1
+	e2e_root_changed && { go vet -tags e2e ./e2e || rc=1; }
 	if [ -n "$ghostty_pc" ]; then
 		(ghostty_env && in_modules go vet -tags ghostty) || rc=1
 	fi
@@ -284,6 +299,9 @@ check_lint() {
 	# The whole of each changed package, not only the changed lines: a change
 	# to one function can raise a finding at its callers.
 	local mod rc=0 p args=(run --timeout 20m)
+	# The root e2e folder is behind the e2e build tag, and the lint workflow
+	# does not read it either (see scripts/ci-changes.sh). vet covers it.
+	e2e_root_changed && [ "$changed" = 1 ] && echo "lint: leaving out ./e2e, which is behind the e2e build tag and not in the lint workflow; vet covers it"
 	for mod in "${modules[@]}"; do
 		# e2e/tui is not in the lint workflow, and its tests are the suite's
 		# own harness. vet and the build still cover it.
