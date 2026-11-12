@@ -18,6 +18,10 @@ import (
 // wraps it over several rows at 120 columns.
 const copyParagraph = "The retry loop gave up after the third attempt because the backoff doubled past the deadline, so the last call never ran and the error said timeout instead of the real cause from the server."
 
+// copyKnownLines are lines whose screen row must not change when copy mode
+// starts: the first and the last line of the thread.
+var copyKnownLines = []string{"Why does the retry loop stop", "Fixed: the backoff stops"}
+
 // TestCockpitThreadCopyMode runs copy mode over the agents view's thread:
 // ctrl+b [ starts it, / searches, V selects rows, y copies and Y copies as
 // Markdown, and each yank is read back with `tuios show-buffer`.
@@ -33,6 +37,8 @@ const copyParagraph = "The retry loop gave up after the third attempt because th
 //     test fails at "the paragraph's yank".
 //   - with the glyph set left empty (ckGlyphSet), the test still passes:
 //     no row it yanks holds a glyph. See NEGATIVE_CONTROLS.md.
+//   - with drawThreadCopy drawing from the top of the room (top += room -
+//     q.visible() removed), the test fails at "is on row".
 //   - with the CockpitCopyOn hook cut from handleInboxInput, the test fails
 //     at "copy mode did not start" or the keys move the view.
 //   - with the wrap flag left off ckMD.text's lines, the test fails at "the
@@ -160,7 +166,26 @@ func TestCockpitThreadCopyMode(t *testing.T) {
 		}
 	}
 
+	// The thread is shorter than its region, so the view draws it on the
+	// bottom. Copy mode starts with every line on the row it was on.
+	viewed := term.Screen()
+	saveCockpitFrames(t, term, "cockpit-copy-before-start")
+	var rowsBefore []int
+	for _, line := range copyKnownLines {
+		r := threadRowWith(viewed, line)
+		if r < 0 {
+			t.Fatalf("ASSERTION: %q is not in the thread before copy mode\n%s", line, term.Snapshot())
+		}
+		rowsBefore = append(rowsBefore, r)
+	}
 	start()
+	saveCockpitFrames(t, term, "cockpit-copy-after-start")
+	started := term.Screen()
+	for i, line := range copyKnownLines {
+		if r := threadRowWith(started, line); r != rowsBefore[i] {
+			t.Fatalf("ASSERTION: %q is on row %d in the view and on row %d after copy mode starts\n%s", line, rowsBefore[i], r, term.Snapshot())
+		}
+	}
 	if got := lineSelect("gave up after the third", "from the server.", "y"); got != copyParagraph {
 		t.Fatalf("ASSERTION: the paragraph's yank is\n%q\nwant\n%q", got, copyParagraph)
 	}

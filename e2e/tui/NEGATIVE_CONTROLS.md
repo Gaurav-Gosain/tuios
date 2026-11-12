@@ -14408,6 +14408,19 @@ The glyph set is not caught: the card edge is drawn from a field of its own
 and is never text, and no row this test yanks starts with a fold or state
 glyph. A yank of a tool line would need it.
 
+A thread shorter than its region is drawn on the region's bottom, and copy mode
+drew it from the top, so every line jumped up 7 rows when y started it. The test
+now reads the row of the thread's first and last line before and after
+ctrl+b [ and asserts they match. Run on 2026-11-13 on macOS (arm64), each
+control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The bottom shift in `drawThreadCopy` (main at 78157ef2b) | "\"Why does the retry loop stop\" is on row 22 in the view and on row 15 after copy mode starts" | **caught** |
+
+With the fix the test passes. The frames `cockpit-copy-before-start` and
+`cockpit-copy-after-start` are the same but for the copy mode notice.
+
 ## The agents view draws a long thread's newest turns first
 
 `TestCockpitThreadLongScroll` opens a thread of 40 turns, of which the view

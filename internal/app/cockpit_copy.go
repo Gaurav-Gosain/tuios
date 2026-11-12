@@ -350,13 +350,20 @@ func (m *OS) drawThreadCopy(c *ckCanvas, t *agentThread, x, w, top, room int) bo
 		m.Inbox.threads.copy = nil
 		return false
 	}
+	// A thread shorter than its view sits on the view's bottom, as the thread
+	// draws it, so copy mode starts with every line where the view had it.
+	top += room - q.visible()
 	first := q.top()
-	for y := 0; y < room && first+y < len(q.out); y++ {
+	for y := 0; y < q.visible() && first+y < len(q.out); y++ {
 		c.draw(x, top+y, w, q.out[first+y])
 	}
-	drawCopyMarks(c, m.marks(), &q.cm, x, top, q.w, q.h, first)
+	drawCopyMarks(c, m.marks(), &q.cm, x, top, q.w, q.visible(), first)
 	return true
 }
+
+// visible is the rows of the view that hold the thread: all of them, or fewer
+// when the thread is shorter than its view. The cursor stays on these rows.
+func (q *ckThreadCopy) visible() int { return min(q.h, len(q.rows)) }
 
 // top is the row at the top of the view.
 func (q *ckThreadCopy) top() int { return q.ScrollbackLen() - q.offset }
@@ -441,14 +448,14 @@ func (q *ckThreadCopy) SetScrollOffset(offset int) {
 	q.offset = max(min(offset, q.ScrollbackLen()), 0)
 }
 
-// ViewHeight is the view's rows.
-func (q *ckThreadCopy) ViewHeight() int { return q.h }
+// ViewHeight is the view's rows that hold the thread.
+func (q *ckThreadCopy) ViewHeight() int { return q.visible() }
 
-// ContentHeight is the view's rows.
-func (q *ckThreadCopy) ContentHeight() int { return q.h }
+// ContentHeight is the view's rows that hold the thread.
+func (q *ckThreadCopy) ContentHeight() int { return q.visible() }
 
-// LastContentRow is the view's last row.
-func (q *ckThreadCopy) LastContentRow() int { return q.h - 1 }
+// LastContentRow is the last row that holds the thread.
+func (q *ckThreadCopy) LastContentRow() int { return q.visible() - 1 }
 
 // LastContentCol is the thread's last column.
 func (q *ckThreadCopy) LastContentCol() int { return q.w - 1 }
