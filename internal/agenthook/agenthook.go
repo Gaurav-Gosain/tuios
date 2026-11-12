@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
@@ -123,6 +124,10 @@ type agentHookOutcome struct {
 	// it is written. MailCommitted says that was done.
 	MailLease     uint64 `json:"mail_lease,omitempty"`
 	MailCommitted bool   `json:"mail_committed,omitempty"`
+	// NameHintOff says [agents] name_hint is off, so the start hint leaves
+	// out the line that names the pane. Unread, or any failure to read it,
+	// means on.
+	NameHintOff bool `json:"name_hint_off,omitempty"`
 }
 
 // approvalTrace is the Inbox half of a hook run, for --explain.
@@ -217,7 +222,7 @@ func commitMailNotice(out agentHookOutcome, hio IO) bool {
 func writeContext(out agentHookOutcome, w io.Writer) bool {
 	var text string
 	if startHint(out) {
-		text = integration.SessionStartHint(shortWindowID(out.Window), out.Session)
+		text = integration.SessionStartHint(shortWindowID(out.Window), out.Session, !out.NameHintOff)
 	}
 	if out.MailNotice != "" {
 		text += out.MailNotice + "\n"
@@ -487,7 +492,25 @@ func agentHook(o Options, args []string, hio IO) agentHookOutcome {
 	if mayNotice(out) {
 		fetchMailNotice(&out, client)
 	}
+	if startHint(out) {
+		out.NameHintOff = nameHintOff(out, client)
+	}
 	return out
+}
+
+// nameHintOff asks the daemon for [agents] name_hint, which holds the
+// session's override and config.toml. Any failure reads as on, the default: a
+// daemon from before the option answers unknown_option, and a hook must not
+// fail for want of a line.
+func nameHintOff(out agentHookOutcome, client Caller) bool {
+	raw, err := client.Call("get-option", map[string]any{"session": out.Session, "key": "agents.name_hint"})
+	if err != nil {
+		return false
+	}
+	var res struct {
+		Value string `json:"value"`
+	}
+	return jsonx.Unmarshal(raw, &res) == nil && config.NormalizeNameHint(res.Value) == config.NameHintOff
 }
 
 // reportHookEvent sends what one hook event reports, once the pane is found.

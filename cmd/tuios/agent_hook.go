@@ -64,7 +64,8 @@ For claude-code and codex, a SessionStart prints five lines that these
 harnesses add to the agent's context: the pane and the session the agent runs
 in, the commands that reach the other agents and the person, the safety rule,
 the command that names the pane after its task, and "Run tuios --skill for
-everything else". Claude Code's SessionStart after a
+everything else". With [agents] name_hint = "off", the naming line says not to
+rename the pane or the session instead. Claude Code's SessionStart after a
 compaction prints them too, and reports no state.
 
 For the same two harnesses, SessionStart, UserPromptSubmit and PostToolUse

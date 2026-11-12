@@ -17273,3 +17273,23 @@ test passes on the branch.
 
 Repeat from the repository root with
 `go test -count=1 -run '^TestBoardSortsALongColumnByItsKeys$' -v ./internal/app`.
+
+## The start hint follows `[agents] name_hint`
+
+`agent_name_hint_test.go` runs the Claude Code SessionStart hook in the
+daemon, from inside a pane, against real daemons: one with no config, one
+with `name_hint = " OFF "` in config.toml, and one where a session override
+of `on` is set over the file. `TestSessionStartHintFollowsNameHint` checks
+that the default hint tells the agent to name its pane, that off drops that
+line and says not to rename the pane or the session, that the override
+brings the line back, and that the other lines stay in every case.
+
+Run on 2026-11-13 on macOS (arm64). The branch passes. The control is the
+branch with one change.
+
+| Control | Test | Failure | Verdict |
+| --- | --- | --- | --- |
+| The hook never reads the option (`out.NameHintOff = false` in `agentHook`) | `TestSessionStartHintFollowsNameHint` | `with name_hint off the hint still names the pane, or lacks the word not to` | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSessionStartHintFollowsNameHint$' -v .`.

@@ -78,6 +78,9 @@ when you need all of it, send its output to a file and read the file:
 
 ## Name your work
 
+Skip this section when your start hint says not to rename your pane or the
+session. The person turned the naming off.
+
 On the first request that says what the work is, name your pane after the
 task: two to four words, such as `fix login redirect`. Name it again when the
 task changes.

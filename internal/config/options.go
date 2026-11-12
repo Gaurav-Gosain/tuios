@@ -1261,6 +1261,12 @@ var optionSpecs = []Option{
 		Fallback:    AgentsViewListColumn, Normalize: trimLower,
 	},
 	{
+		Path: "agents.name_hint", Type: OptionString, Section: "agents",
+		Description: "Whether the start hint tells an agent to name its pane after its task. Off leaves that line out and tells the agent not to rename its pane or its session, so the title the program sets and the session's label stay as they are. A running agent keeps the hint it got at its start.",
+		Accepted:    NameHints,
+		Fallback:    NameHintOn, Normalize: trimLower,
+	},
+	{
 		Path: "agents.card_preview", Type: OptionString, Section: "agents",
 		Description: "Where the task board shows the focused card's preview: beside the columns, over them, beside them on a wide screen and over them otherwise, or never. Space on a card opens and closes it.",
 		Accepted:    CardPreviews,

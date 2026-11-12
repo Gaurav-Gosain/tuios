@@ -3189,6 +3189,29 @@ fold_working = true   # default false
 choice wins over `fold_working`. The settings page has this option on the
 Behavior tab, as "Fold Working".
 
+## Naming panes and sessions
+
+When an agent starts in a tuios pane, `tuios agent-hook` adds a few lines to
+the agent's context. One of them tells the agent to name its pane after its
+task, and the skill (`tuios --skill`) tells an agent that is alone in its
+session to label the session too. `name_hint` turns that off:
+
+```toml
+[agents]
+name_hint = "on"   # default; "off" leaves the naming advice out
+```
+
+With `off`, the line that names the pane is replaced by one that tells the
+agent not to rename its pane or its session, and to skip the skill's "Name
+your work" section. The title the program sets, the name you gave the pane,
+and the row a worktree session shows in the sidebar then stay as they are.
+The other lines stay, and so does agent state reporting.
+
+An agent reads the hint once, when its session starts, so a change reaches
+the agents that start after it. `tuios set-config agents.name_hint off`
+sets it in a running session and writes `config.toml`. The settings page has this option on the Behavior
+tab, as "Agents name their panes".
+
 ## The agent list
 
 On a screen 80 columns or wider, the agents view (`ctrl+b i`) shows the list

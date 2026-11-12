@@ -663,6 +663,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("shell.login"),
 			opt("agents.fold_working"),
 			opt("agents.view_list"),
+			opt("agents.name_hint"),
 			opt("agents.list_width"),
 			opt("agents.card_preview"),
 			opt("agents.card_preview_width"),

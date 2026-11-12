@@ -55,6 +55,10 @@ type AgentsConfig struct {
 	// HERDR_ENV, herdr itself included, which refuses to start inside one
 	// unless its own config allows nesting. See docs/AGENT_STATE.md.
 	HerdrProtocol string `toml:"herdr_protocol,omitempty"`
+	// NameHint says whether the start hint tells an agent to name its pane
+	// after its task: "on" (the default) or "off". Off also tells the agent
+	// not to rename its pane or its session. See NameHintOn.
+	NameHint string `toml:"name_hint,omitempty"`
 	// Presets are the [agents.presets.NAME] tables: a named start-agent,
 	// for start-agent --preset NAME. See AgentPreset.
 	Presets map[string]AgentPreset `toml:"presets,omitempty"`
@@ -225,6 +229,27 @@ func NormalizeAgentsViewList(v string) string {
 
 // ViewListMode is view_list with its default applied.
 func (a AgentsConfig) ViewListMode() string { return NormalizeAgentsViewList(a.ViewList) }
+
+// The values of [agents] name_hint.
+const (
+	NameHintOn  = "on"
+	NameHintOff = "off"
+)
+
+// NameHints is every value [agents] name_hint accepts.
+var NameHints = []string{NameHintOn, NameHintOff}
+
+// NormalizeNameHint reads an [agents] name_hint value. Empty and anything
+// unrecognised mean the default, "on".
+func NormalizeNameHint(v string) string {
+	if strings.ToLower(strings.TrimSpace(v)) == NameHintOff {
+		return NameHintOff
+	}
+	return NameHintOn
+}
+
+// NameHintOn reports whether the start hint tells the agent to name its pane.
+func (a AgentsConfig) NameHintOn() bool { return NormalizeNameHint(a.NameHint) == NameHintOn }
 
 // AgentsOffMessage is the one line a command, a verb or a key prints when it
 // is an agent feature and the agent features are off.

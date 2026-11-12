@@ -4244,6 +4244,13 @@ They tell the agent where it is, how to reach the others and the person, the
 safety rule, and to name its pane after its task. Codex runs `SessionStart` again after a compaction, so the
 agent gets them back when it may have lost what `tuios --skill` printed.
 
+`name_hint = "off"` in `[agents]` replaces the fourth line with `Do not rename
+your pane or this session: the person names them. Skip the skill's "Name your
+work" section.` The hook reads the option from the daemon with `get-option`,
+which holds the session's override and `config.toml`. When the daemon cannot
+answer, for example one from before the option, the hook keeps the default and
+prints the naming line. See [CONFIGURATION.md](CONFIGURATION.md#naming-panes-and-sessions).
+
 The session name is quoted, with control and format characters escaped, and
 cut to 64 characters. Outside tuios, when the report fails, with `--window`,
 and when the pane is not a pane id, the hook prints nothing.

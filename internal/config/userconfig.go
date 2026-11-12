@@ -1436,6 +1436,7 @@ func DefaultConfig() *UserConfig {
 		Review:       defaultReviewConfig(),
 		Agents: AgentsConfig{
 			ViewList:          AgentsViewListColumn,
+			NameHint:          NameHintOn,
 			CardPreview:       CardPreviewAuto,
 			AskWaitSeconds:    DefaultAskWaitSeconds,
 			UndoWindowSeconds: DefaultUndoWindowSeconds,

@@ -60,7 +60,7 @@ func TestSkillInlineCommandsResolve(t *testing.T) {
 // so they are held to the tree like the fenced ones.
 func TestSkillTableCommandsResolve(t *testing.T) {
 	spans := tuiosSpansIn(skills.Core())
-	spans = append(spans, tuiosSpansIn(integration.SessionStartHint("3a42ab8f", "work"))...)
+	spans = append(spans, tuiosSpansIn(integration.SessionStartHint("3a42ab8f", "work", true))...)
 	if len(spans) < 20 {
 		t.Fatalf("expected the core and the hint to show many commands in code spans, found %d", len(spans))
 	}
