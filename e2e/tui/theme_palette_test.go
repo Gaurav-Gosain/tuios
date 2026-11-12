@@ -725,3 +725,81 @@ func TestAfterThemeChangeHookFiresOncePerPick(t *testing.T) {
 	}
 	saveArtifact(t, term, artifacts, "after-latte")
 }
+
+// TestThemeEditorWrapsAndKeepsEachTabsPlace: the theme editor's list follows
+// appearance.wrap_lists like every list (on by default), so up on the first
+// row goes to the last; and each tab keeps its own cursor, so leaving a tab
+// and coming back finds the row where it was.
+//
+// How this could pass wrongly, written down first:
+//   - The cursor row could be read off another list. It is the row marked
+//     "› " between the editor's title line and its footer.
+//   - Up could seem to wrap because the cursor was not on the first row. The
+//     editor opens on the first row, and the test reads that row before the
+//     key.
+//   - A tab could seem to keep its place because tab did nothing. The cursor
+//     row must change when the next tab shows, then come back.
+//
+// Negative control (NEGATIVE_CONTROLS.md): the R7 5b tip, where the editor
+// clamps at its ends, leaves the cursor on the first row after up.
+func TestThemeEditorWrapsAndKeepsEachTabsPlace(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[appearance]\ntheme = \"nord\"\n")
+	term := startIn(t, base, startOpts{cols: 140, rows: 40, env: []string{"COLORTERM=truecolor"}})
+	waitBoot(t, term)
+	sendKeys(t, term, legacyCtrlP)
+	waitScreen(t, term, "the palette never opened", paletteTitle)
+	sendKeys(t, term, "Edit theme")
+	waitScreen(t, term, "the palette never filtered", "Edit theme")
+	sendKeys(t, term, tuitest.Enter)
+	waitScreen(t, term, "the theme editor never opened", "Edit theme: nord")
+
+	cursor := func(s tuitest.Screen) string {
+		lines := strings.Split(s.Text(), "\n")
+		in := false
+		for _, line := range lines {
+			if strings.Contains(line, "Edit theme: nord") {
+				in = true
+				continue
+			}
+			if !in {
+				continue
+			}
+			if _, after, ok := strings.Cut(line, "› "); ok {
+				return strings.TrimSpace(strings.ReplaceAll(after, "│", " "))
+			}
+		}
+		return ""
+	}
+	settle := func(what string) string {
+		t.Helper()
+		if err := term.WaitStable(uiTimeout); err != nil {
+			t.Fatalf("%s: the screen never settled: %v", what, err)
+		}
+		c := cursor(term.Screen())
+		if c == "" {
+			t.Fatalf("%s: no cursor row in the theme editor\n%s", what, term.Snapshot())
+		}
+		return c
+	}
+
+	first := settle("opened")
+	sendKeys(t, term, tuitest.Up)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { c := cursor(s); return c != "" && c != first }, uiTimeout); err != nil {
+		t.Errorf("ASSERTION: up on the first row did not wrap to the last; the cursor stayed on %q\n%s", first, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "wrapped")
+
+	sendKeys(t, term, tuitest.Home, tuitest.Down, tuitest.Down)
+	here := settle("two rows down")
+	sendKeys(t, term, tuitest.Tab)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { c := cursor(s); return c != "" && c != here }, uiTimeout); err != nil {
+		t.Fatalf("tab did not show another tab\n%s", term.Snapshot())
+	}
+	sendKeys(t, term, "[")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return cursor(s) == here }, uiTimeout); err != nil {
+		t.Errorf("ASSERTION: back on the first tab the cursor is on %q, want %q where it was\n%s", cursor(term.Screen()), here, term.Snapshot())
+	}
+	sendKeys(t, term, tuitest.Esc)
+	alive(t, term, "after moving in the theme editor")
+}

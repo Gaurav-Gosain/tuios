@@ -952,3 +952,39 @@ func navCheckMargins(t *testing.T, s tuitest.Screen) {
 			top, bottom, left, right, gap, dock, y1, s.Text())
 	}
 }
+
+// TestNavigatorSearchEditsAtTheCaret: the navigator's search line is a line
+// with a caret, like every filter line, not a string a key appends to. Typing
+// "abd", pressing left once and typing "c" reads "abcd".
+//
+// How this could pass wrongly, written down first:
+//   - The line could be read off a stale frame. The test waits for the line
+//     to read "abd" before it presses left, and for the final text after.
+//   - "abcd" could appear elsewhere on screen. No pane, title or row holds it:
+//     the sessions are home and work with shells in them.
+//   - The search could match on a fuzzy subsequence and show the same rows
+//     whichever order the letters came in. The test reads the search line's
+//     text, not the rows.
+//
+// Negative control (NEGATIVE_CONTROLS.md): the R7 5b tip, where the search
+// line only appends, ends on "abdc".
+func TestNavigatorSearchEditsAtTheCaret(t *testing.T) {
+	base, _ := navigatorSessions(t)
+	term := navClient(t, base, nil)
+	openNavigator(t, term)
+	sendKeys(t, term, "/")
+	sendKeys(t, term, "a", "b", "d")
+	waitScreen(t, term, "the search line never read abd", "abd")
+	sendKeys(t, term, tuitest.Left)
+	sendKeys(t, term, "c")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "abcd")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: left then c did not insert at the caret: %v\n%s", err, term.Snapshot())
+	}
+	if strings.Contains(term.Screen().Text(), "abdc") {
+		t.Errorf("ASSERTION: the c went to the end of the line\n%s", term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "navigator-caret")
+	alive(t, term, "after editing the navigator's search at its caret")
+}

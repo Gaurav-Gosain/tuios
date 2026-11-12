@@ -46,10 +46,7 @@ func handleNavigatorInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			// A session on another machine opens off the Update goroutine.
 			return o, o.TakeSidebarCmd()
 		default:
-			q := o.NavigatorQuery()
-			if changed, _ := editFilterQuery(msg, &q, true); changed {
-				o.NavigatorSetQuery(q)
-			}
+			o.NavigatorType(key, msg.Text)
 		}
 		return o, nil
 	}

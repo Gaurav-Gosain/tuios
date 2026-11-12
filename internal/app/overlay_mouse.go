@@ -210,7 +210,7 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 	case "keybinds":
 		m.KeybindMove(idx - m.KeybindSelected())
 	case "themeeditor":
-		m.themeEditor.cursor[m.themeEditor.tab] = idx
+		m.themeEditor.lists[m.themeEditor.tab].Cursor = idx
 	case "dockeditor":
 		m.dockList.Cursor = idx
 	case "sectioneditor":
@@ -415,7 +415,7 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 		// activate and nothing a stray click could change.
 		m.KeybindMove(row.Idx - m.KeybindSelected())
 	case "themeeditor":
-		m.themeEditor.cursor[m.themeEditor.tab] = row.Idx
+		m.themeEditor.lists[m.themeEditor.tab].Cursor = row.Idx
 		m.ThemeEditorPick()
 	case "dockeditor":
 		m.dockList.Cursor = row.Idx

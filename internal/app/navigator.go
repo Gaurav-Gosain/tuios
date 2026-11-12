@@ -18,8 +18,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
@@ -198,10 +200,9 @@ type navigatorState struct {
 	// in it has its default: the current session open, the others shut,
 	// and every workspace of an open session open.
 	expanded  map[string]bool
-	query     string
 	searching bool
-	cursor    int
-	scroll    int
+	// list is the cursor, the window and the search line's text and caret.
+	list listnav.State
 	// loading is true while the detail load is out. gen tells its answer
 	// from the answer to a navigator since closed.
 	loading bool
@@ -234,7 +235,7 @@ func (m *OS) NavigatorSearching() bool { return m.navigator.searching }
 func (m *OS) NavigatorTypeFirst() bool { return m.navigator.typeFirst }
 
 // NavigatorQuery is the search typed so far.
-func (m *OS) NavigatorQuery() string { return m.navigator.query }
+func (m *OS) NavigatorQuery() string { return m.navigator.list.Query.String() }
 
 // OpenNavigator is the choose_tree action. It opens the tree on the current
 // pane and starts the detail load.
@@ -284,7 +285,7 @@ func (m *OS) NavigatorCycleLayout() {
 	i := slices.Index(config.NavigatorLayouts, nav.layout)
 	nav.layout = config.NavigatorLayouts[(i+1)%len(config.NavigatorLayouts)]
 	m.navLayoutPick = nav.layout
-	nav.cursor, nav.scroll = 0, 0
+	nav.list.Cursor, nav.list.Scroll = 0, 0
 	switch {
 	case had && m.navigatorHasKey(before):
 		m.navigatorSelectKey(before)
@@ -328,7 +329,7 @@ func (m *OS) navigatorCursorToCurrent() {
 		}
 		s := &m.navigator.sessions[r.Session]
 		if s.Current && s.Panes[r.Pane].Focused {
-			m.navigator.cursor = i
+			m.navigator.list.Cursor = i
 			return
 		}
 	}
@@ -829,10 +830,10 @@ func (m *OS) navRowKey(r navRow) string {
 // navigatorSelectedKey is the key of the row under the cursor.
 func (m *OS) navigatorSelectedKey() (string, bool) {
 	rows := m.navigatorRows()
-	if m.navigator.cursor < 0 || m.navigator.cursor >= len(rows) {
+	if m.navigator.list.Cursor < 0 || m.navigator.list.Cursor >= len(rows) {
 		return "", false
 	}
-	return m.navRowKey(rows[m.navigator.cursor]), true
+	return m.navRowKey(rows[m.navigator.list.Cursor]), true
 }
 
 // navigatorHasKey reports whether a row with key is listed.
@@ -849,7 +850,7 @@ func (m *OS) navigatorHasKey(key string) bool {
 func (m *OS) navigatorSelectKey(key string) {
 	for i, r := range m.navigatorRows() {
 		if m.navRowKey(r) == key {
-			m.navigator.cursor = i
+			m.navigator.list.Cursor = i
 			return
 		}
 	}
@@ -923,7 +924,7 @@ func (m *OS) navigatorRows() []navRow {
 // take the cursor from the pane that shows the query whole: the joined fields
 // are long enough to hold most short queries scattered.
 func (m *OS) navigatorSearchRows() []navRow {
-	q := strings.TrimSpace(m.navigator.query)
+	q := strings.TrimSpace(m.navigator.list.Query.String())
 	lq := strings.ToLower(q)
 	type scored struct {
 		row   navRow
@@ -994,7 +995,7 @@ func (m *OS) navigatorSearchRows() []navRow {
 // navSearch reports whether a search is in force: a query with more than
 // spaces in it. Every reader of the query asks this, so the list, the folds
 // and the glyphs agree on whether the tree or the results are showing.
-func (m *OS) navSearch() bool { return strings.TrimSpace(m.navigator.query) != "" }
+func (m *OS) navSearch() bool { return strings.TrimSpace(m.navigator.list.Query.String()) != "" }
 
 // NavigatorRowCount is how many rows the list has.
 func (m *OS) NavigatorRowCount() int { return len(m.navigatorRows()) }
@@ -1005,14 +1006,14 @@ func (m *OS) NavigatorMove(delta int) {
 	if n == 0 {
 		return
 	}
-	m.moveListSelection(&m.navigator.cursor, &m.navigator.scroll, n, m.navigatorVisibleRows(), delta)
+	m.navigator.list.Move(delta, n, m.navigatorVisibleRows(), m.listWraps(), nil)
 	m.MarkAllDirty()
 }
 
 // NavigatorSelect puts the cursor on row i.
 func (m *OS) NavigatorSelect(i int) {
 	if i >= 0 && i < m.NavigatorRowCount() {
-		m.navigator.cursor = i
+		m.navigator.list.Cursor = i
 		m.MarkAllDirty()
 	}
 }
@@ -1025,10 +1026,10 @@ func (m *OS) NavigatorFold(open bool) {
 		return
 	}
 	rows := m.navigatorRows()
-	if m.navigator.cursor < 0 || m.navigator.cursor >= len(rows) {
+	if m.navigator.list.Cursor < 0 || m.navigator.list.Cursor >= len(rows) {
 		return
 	}
-	r := rows[m.navigator.cursor]
+	r := rows[m.navigator.list.Cursor]
 	s := &m.navigator.sessions[r.Session]
 	key := m.navRowKey(r)
 	switch r.Kind {
@@ -1051,10 +1052,10 @@ func (m *OS) NavigatorFold(open bool) {
 // NavigatorToggle opens a shut row and shuts an open one.
 func (m *OS) NavigatorToggle() {
 	rows := m.navigatorRows()
-	if m.navFlat() || m.navigator.cursor < 0 || m.navigator.cursor >= len(rows) {
+	if m.navFlat() || m.navigator.list.Cursor < 0 || m.navigator.list.Cursor >= len(rows) {
 		return
 	}
-	r := rows[m.navigator.cursor]
+	r := rows[m.navigator.list.Cursor]
 	if r.Kind == navRowPane {
 		return
 	}
@@ -1072,8 +1073,34 @@ func (m *OS) NavigatorSearch(on bool) {
 
 // NavigatorSetQuery changes the search. The cursor goes to the best match.
 func (m *OS) NavigatorSetQuery(q string) {
-	m.navigator.query = q
-	m.navigator.cursor, m.navigator.scroll = 0, 0
+	m.navigator.list.Query.Set(q)
+	m.navigatorRefiltered()
+}
+
+// NavigatorType edits the search line with a key, the way every filter line
+// takes one: the caret moves, word keys delete a word, ctrl+u clears. It
+// reports whether the key was the line's.
+func (m *OS) NavigatorType(key, text string) bool {
+	changed, consumed := m.navigator.list.Query.Edit(key, text, textedit.LineOpts{AllowClear: true})
+	if changed {
+		m.navigatorRefiltered()
+	} else if consumed {
+		m.MarkAllDirty()
+	}
+	return consumed
+}
+
+// NavigatorPaste types s into the search line at its caret.
+func (m *OS) NavigatorPaste(s string) {
+	if m.navigator.list.Query.Insert(s) {
+		m.navigatorRefiltered()
+	}
+}
+
+// navigatorRefiltered puts the cursor on the best match after the search
+// changed, or on the current pane when there is no search.
+func (m *OS) navigatorRefiltered() {
+	m.navigator.list.Cursor, m.navigator.list.Scroll = 0, 0
 	if !m.navSearch() {
 		m.navigatorCursorToCurrent()
 	}
@@ -1122,10 +1149,10 @@ func (m *OS) NavigatorClickFolds(i int) bool {
 	if m.navFlat() || i < 0 || i >= len(rows) || rows[i].Kind == navRowPane {
 		return false
 	}
-	m.navigator.cursor = i
+	m.navigator.list.Cursor = i
 	m.NavigatorToggle()
 	return true
 }
 
 // NavigatorActivateSelected goes to the row under the cursor.
-func (m *OS) NavigatorActivateSelected() { m.NavigatorActivate(m.navigator.cursor) }
+func (m *OS) NavigatorActivateSelected() { m.NavigatorActivate(m.navigator.list.Cursor) }

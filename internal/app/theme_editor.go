@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	tint "github.com/lrstanley/bubbletint/v2"
@@ -114,8 +115,10 @@ type themeEditorState struct {
 	// whole screen shows the draft.
 	hidden bool
 	tab    int
-	cursor [themeEditorTabCount]int
-	scroll [themeEditorTabCount]int
+	// lists is each tab's cursor and window, so a tab keeps its place when
+	// the person comes back to it. Scroll counts drawn lines, headings
+	// included, and the renderer keeps it (renderThemeEditor).
+	lists [themeEditorTabCount]listnav.State
 	// draft is the theme being edited, saved what the file held when the
 	// editor opened or last saved, and undo the drafts before each change.
 	draft, saved *theme.Draft
@@ -272,7 +275,8 @@ func (m *OS) ThemeEditorMove(delta int) {
 		return
 	}
 	st.leaving = false
-	st.cursor[st.tab] = max(0, min(st.cursor[st.tab]+delta, n-1))
+	// The list rule and appearance.wrap_lists, as every list.
+	st.lists[st.tab].Cursor = m.listStep(st.lists[st.tab].Cursor, delta, n)
 }
 
 // ThemeEditorTab moves to the next tab, or the one before for a negative
@@ -291,7 +295,7 @@ func (m *OS) ThemeEditorToggleHidden() {
 // themeEditorRowAt is the selected row of the open tab.
 func (m *OS) themeEditorRowAt() (themeEditorRow, bool) {
 	rows := m.themeEditorRows()
-	i := m.themeEditor.cursor[m.themeEditor.tab]
+	i := m.themeEditor.lists[m.themeEditor.tab].Cursor
 	if i < 0 || i >= len(rows) {
 		return themeEditorRow{}, false
 	}

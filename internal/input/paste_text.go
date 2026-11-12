@@ -103,7 +103,7 @@ func textFieldPaste(o *app.OS) func(string) tea.Cmd {
 		if !o.NavigatorSearching() {
 			return nil
 		}
-		return typed(func(s string) { o.NavigatorSetQuery(o.NavigatorQuery() + s) })
+		return typed(o.NavigatorPaste)
 	case o.BufferChooserOpen():
 		return nil
 	case o.ShowCommandPalette:

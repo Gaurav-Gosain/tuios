@@ -16842,3 +16842,36 @@ PR 2. Its footer is what the control catches there.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestReboundListKeysMoveEveryList$' -v .`.
+
+## The navigator's search edits at its caret
+
+`TestNavigatorSearchEditsAtTheCaret` types "abd" into the navigator's search
+line, presses left once and types "c", and checks the line reads "abcd".
+
+Run on 2026-11-12 on macOS. The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The R7 5b tip (b9eb7463d), where the search line is a string a key appends to | "left then c did not insert at the caret" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestNavigatorSearchEditsAtTheCaret$' -v .`.
+
+## The theme editor wraps and keeps each tab's place
+
+`TestThemeEditorWrapsAndKeepsEachTabsPlace` opens the theme editor, presses up
+on its first row and checks the cursor went to the last row
+(appearance.wrap_lists is on by default), then moves two rows down, goes to the
+next tab and back, and checks the cursor is on the row it left.
+
+Run on 2026-11-12 on macOS. The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The R7 5b tip (b9eb7463d), where the editor clamps at its ends | "up on the first row did not wrap to the last; the cursor stayed on Accent" | **caught** |
+
+The tab half passes on the control too: the editor kept a cursor per tab
+before, in an array. It is the regression half of the test.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestThemeEditorWrapsAndKeepsEachTabsPlace$' -v .`.

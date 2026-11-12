@@ -115,20 +115,15 @@ func (m *OS) renderNavigator() (string, overlay.Geometry, []overlayRowHit) {
 	itemH := m.navItemLines()
 	visible := max(lines/itemH, 1)
 	rows := m.navigatorRows()
-	if len(rows) > 0 {
-		nav.cursor = clampInt(nav.cursor, 0, len(rows)-1)
-	} else {
-		nav.cursor = 0
-	}
-	nav.scroll = scrollWindow(nav.scroll, nav.cursor, len(rows), visible)
+	nav.list.Fit(len(rows), visible)
 
 	m.navigatorSessionColors()
 
 	// The list box.
 	list := make([]string, 0, lines)
-	end := min(nav.scroll+visible, len(rows))
-	for i := nav.scroll; i < end; i++ {
-		st := overlay.RowState{Cursor: i == nav.cursor, Focused: !nav.searching}
+	end := min(nav.list.Scroll+visible, len(rows))
+	for i := nav.list.Scroll; i < end; i++ {
+		st := overlay.RowState{Cursor: i == nav.list.Cursor, Focused: !nav.searching}
 		for _, l := range m.navigatorItem(rows[i], st, listW, pal) {
 			list = append(list, pal.Row(l, listW, st, bg))
 		}
@@ -164,7 +159,7 @@ func (m *OS) renderNavigator() (string, overlay.Geometry, []overlayRowHit) {
 	if previewW > 0 {
 		var preview []string
 		if len(rows) > 0 {
-			preview = m.navigatorPreview(rows[nav.cursor], previewW, lines, bg, pal)
+			preview = m.navigatorPreview(rows[nav.list.Cursor], previewW, lines, bg, pal)
 		}
 		for len(preview) < lines {
 			preview = append(preview, "")
@@ -185,9 +180,9 @@ func (m *OS) renderNavigator() (string, overlay.Geometry, []overlayRowHit) {
 		Hints: hints,
 	}
 	content, geo := panel.Render(pal)
-	hits := make([]overlayRowHit, 0, end-nav.scroll)
-	for i := nav.scroll; i < end; i++ {
-		y := geo.BodyY + navigatorListTop + (i-nav.scroll)*itemH
+	hits := make([]overlayRowHit, 0, end-nav.list.Scroll)
+	for i := nav.list.Scroll; i < end; i++ {
+		y := geo.BodyY + navigatorListTop + (i-nav.list.Scroll)*itemH
 		hits = append(hits, overlayRowHit{
 			Rect: overlay.Rect{X0: 0, Y0: y, X1: geo.BodyX + 1 + listW, Y1: y + itemH},
 			Idx:  i,
@@ -247,13 +242,16 @@ func (m *OS) navigatorSearchLine(width int, bg color.Color, pal overlay.Palette)
 	st := overlay.Style(bg)
 	sigil := st.Render(" ") + st.Foreground(overlay.Readable(pal.AccentBright, bg)).Bold(true).Render(overlay.Sigil())
 	room := max(width-3, 1)
+	query := nav.list.Query.String()
 	switch {
-	case nav.searching && nav.query == "":
+	case nav.searching && query == "":
 		return sigil + overlay.Cursor(" ", bg, pal.Fg) + st.Foreground(pal.FgMute).Render(overlay.Truncate("Type a name, a folder, a command or screen text", max(room-1, 1)))
 	case nav.searching:
-		return sigil + st.Foreground(pal.Fg).Render(overlay.Truncate(nav.query, max(room-1, 1))) + overlay.Cursor(" ", bg, pal.Fg)
-	case nav.query != "":
-		return sigil + st.Foreground(pal.Fg).Render(overlay.Truncate(nav.query, room))
+		// The line with its caret, which the arrows and word keys move.
+		before, at, after := nav.list.Query.Parts()
+		return sigil + overlay.FieldLine(before, at, after, room, bg, pal.Fg)
+	case query != "":
+		return sigil + st.Foreground(pal.Fg).Render(overlay.Truncate(query, room))
 	}
 	return sigil + st.Foreground(pal.FgMute).Render(overlay.Truncate("Press / to search names, folders, commands and screen text", room))
 }
@@ -358,7 +356,7 @@ func (m *OS) navMatch(text string, whole bool) []int {
 	if !m.navSearch() || text == "" {
 		return nil
 	}
-	q := strings.TrimSpace(m.navigator.query)
+	q := strings.TrimSpace(m.navigator.list.Query.String())
 	if whole {
 		lower := strings.ToLower(text)
 		lq := strings.ToLower(q)

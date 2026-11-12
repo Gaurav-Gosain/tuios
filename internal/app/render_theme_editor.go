@@ -117,11 +117,11 @@ func (m *OS) renderThemeEditor() *lipgloss.Layer {
 	lines := themeEditorLines(rows)
 	cursorLine := 0
 	for i, l := range lines {
-		if l.row == st.cursor[st.tab] {
+		if l.row == st.lists[st.tab].Cursor {
 			cursorLine = i
 		}
 	}
-	scroll := &st.scroll[st.tab]
+	scroll := &st.lists[st.tab].Scroll
 	if cursorLine < *scroll {
 		*scroll = cursorLine
 		// Keep the group's heading in view with its first row.
@@ -146,7 +146,7 @@ func (m *OS) renderThemeEditor() *lipgloss.Layer {
 		default:
 			hits = append(hits, overlayRowHit{Idx: l.row})
 			hits[len(hits)-1].Rect.Y0 = len(body)
-			body = append(body, m.themeEditorRowLine(rows[l.row], l.row == st.cursor[st.tab], inner, pal))
+			body = append(body, m.themeEditorRowLine(rows[l.row], l.row == st.lists[st.tab].Cursor, inner, pal))
 		}
 	}
 	for len(body) < listRows {
