@@ -55,6 +55,12 @@ func ownTuiosOnPath() (func(), error) {
 	return cleanup, nil
 }
 
+// ownTuios is the bare tuios every child of the suite finds first: the link
+// to the build under test. tuios names itself by it where it writes its own
+// path for later, as pair's forced command does (pairTuiosPath), since it is
+// the tuios on PATH and the same binary.
+func ownTuios() string { return filepath.Join(ownTuiosDir, "tuios") }
+
 // ownTuiosGuard fails t when path, a PATH a test hands a child process, puts
 // a tuios ahead of the suite's own that the suite did not build or copy: one
 // outside the temporary folder, where every build and copy of this suite

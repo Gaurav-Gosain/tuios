@@ -415,7 +415,7 @@ func TestPairAddsAPhoneKey(t *testing.T) {
 	if err != nil || status != http.StatusOK || !reply.OK {
 		t.Fatalf("ASSERTION: the good request was refused: %d %+v %v\nstderr:\n%s", status, reply, err, run.stderr)
 	}
-	wantCommand := tuiosBin + " stdio-proxy --as phone"
+	wantCommand := ownTuios() + " stdio-proxy --as phone"
 	if reply.Device != "phone" || reply.User != me.Username || reply.Command != wantCommand {
 		t.Errorf("ASSERTION: reply %+v, want device phone, user %s, command %q", reply, me.Username, wantCommand)
 	}
@@ -842,7 +842,7 @@ func TestPairLeavesWhatIsThereAlone(t *testing.T) {
 		t.Errorf("ASSERTION: config.toml is\n%q\nwant\n%q", data, wantCfg)
 	}
 	data, _ := os.ReadFile(ak)
-	want := before + "\n" + `command="` + tuiosBin + ` stdio-proxy --as tablet",restrict ` + keyBody(newLine) + " tuios-pair:tablet\n"
+	want := before + "\n" + `command="` + ownTuios() + ` stdio-proxy --as tablet",restrict ` + keyBody(newLine) + " tuios-pair:tablet\n"
 	if string(data) != want {
 		t.Errorf("ASSERTION: authorized_keys is\n%q\nwant\n%q", data, want)
 	}
