@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"golang.org/x/image/font/sfnt"
 )
@@ -147,9 +148,45 @@ func buildFontIndex(dirs []string) *fontIndex {
 		if w.count >= maxFontFiles {
 			break
 		}
-		w.dir(dir, idx)
+		w.dir(dir)
+	}
+	// The files are read side by side and filed in the order the walk found
+	// them, so the index is the one a serial scan made.
+	for _, faces := range readFontFaces(w.files) {
+		for _, face := range faces {
+			idx.add(face)
+		}
 	}
 	return idx
+}
+
+// fontReaders is how many font files are read at once. A scan opens every
+// font on the machine and reads a few small pieces of each, so what it waits
+// on is the disk's answer to each read, and a cold disk (a fresh machine, a
+// network home, a runner that has not touched the fonts) answers one read at a
+// time slowly. Reading side by side makes those waits overlap. On one
+// machine, 1090 files took 1.1 s cold and 110 ms warm, one after the other.
+const fontReaders = 16
+
+// readFontFaces reads the faces of each file and returns them in the order of
+// files.
+func readFontFaces(files []string) [][]indexedFace {
+	out := make([][]indexedFace, len(files))
+	var next atomic.Int64
+	var wg sync.WaitGroup
+	for range min(fontReaders, len(files)) {
+		wg.Go(func() {
+			for {
+				i := int(next.Add(1)) - 1
+				if i >= len(files) {
+					return
+				}
+				out[i] = readFontNames(files[i])
+			}
+		})
+	}
+	wg.Wait()
+	return out
 }
 
 // fontWalk reads font folders the way a person means them, links included.
@@ -161,9 +198,11 @@ type fontWalk struct {
 	seenDirs  map[string]bool
 	seenFiles map[string]bool
 	count     int
+	// files are the font files found, in the order the walk met them.
+	files []string
 }
 
-func (w *fontWalk) dir(dir string, idx *fontIndex) {
+func (w *fontWalk) dir(dir string) {
 	real, err := filepath.EvalSymlinks(dir)
 	if err != nil || w.seenDirs[real] {
 		return
@@ -190,7 +229,7 @@ func (w *fontWalk) dir(dir string, idx *fontIndex) {
 		}
 		if isDir {
 			if !strings.HasPrefix(e.Name(), ".") {
-				w.dir(path, idx)
+				w.dir(path)
 			}
 			continue
 		}
@@ -205,9 +244,7 @@ func (w *fontWalk) dir(dir string, idx *fontIndex) {
 		}
 		w.seenFiles[path] = true
 		w.count++
-		for _, face := range readFontNames(path) {
-			idx.add(face)
-		}
+		w.files = append(w.files, path)
 	}
 }
 
@@ -242,7 +279,7 @@ func readFontNames(path string) []indexedFace {
 
 	// ParseCollectionReaderAt answers a plain TTF or OTF with a collection of
 	// one, so this is the single path for every container.
-	coll, err := sfnt.ParseCollectionReaderAt(f)
+	coll, err := sfnt.ParseCollectionReaderAt(newBlockReaderAt(f))
 	if err != nil {
 		return nil
 	}
