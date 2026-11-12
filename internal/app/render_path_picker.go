@@ -27,6 +27,11 @@ const (
 	pathPickerSearchGlyph = ""
 )
 
+// overlayRect is r as an overlay.Rect, for overlay.Place.
+func overlayRect(r image.Rectangle) overlay.Rect {
+	return overlay.Rect{X0: r.Min.X, Y0: r.Min.Y, X1: r.Max.X, Y1: r.Max.Y}
+}
+
 // pathPickerAnchor is the focused pane's cursor on screen, or the first cell
 // of its last row when the cursor is not on screen.
 func (m *OS) pathPickerAnchor(w *terminal.Window) (int, int) {
@@ -108,27 +113,18 @@ func (m *OS) placePathPicker(layers []*lipgloss.Layer) []*lipgloss.Layer {
 	// Above the cursor when the box fits there, as a shell's own completion
 	// menu sits next to the line being typed; below it when it does not; and
 	// on the roomier side, with fewer rows, when it fits on neither.
+	// overlay.Place picks the side; the rows are cut here first, to the
+	// roomier side, when the box fits on neither.
 	rows := max(min(len(p.matches), pathPickerRows), 1)
 	above, below := ay-room.Min.Y, room.Max.Y-ay-1
-	y := 0
-	switch need := rows + pathPickerChrome; {
-	case above >= need:
-		y = ay - need
-	case below >= need:
-		y = ay + 1
-	case above >= below:
-		rows = max(above-pathPickerChrome, 1)
-		y = ay - rows - pathPickerChrome
-	default:
-		rows = max(below-pathPickerChrome, 1)
-		y = ay + 1
+	if need := rows + pathPickerChrome; above < need && below < need {
+		rows = max(max(above, below)-pathPickerChrome, 1)
 	}
 
 	content, geo := m.renderPathPicker(p, width, rows)
 	// The filter text starts over the cursor's column: the border, the
 	// magnifier and its space come first.
-	x := clampInt(ax-3, room.Min.X, max(room.Max.X-geo.Width, room.Min.X))
-	y = clampInt(y, room.Min.Y, max(room.Max.Y-geo.Height, room.Min.Y))
+	x, y, _ := overlay.Place(overlay.PointRect(ax-3, ay), geo.Width, geo.Height, overlayRect(room), overlay.Placement{Side: overlay.SideAbove})
 
 	p.visible = true
 	p.boundsX, p.boundsY, p.boundsW, p.boundsH = x, y, geo.Width, geo.Height

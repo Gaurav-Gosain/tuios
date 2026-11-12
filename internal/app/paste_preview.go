@@ -211,13 +211,10 @@ func (m *OS) placePastePreview(layers []*lipgloss.Layer) []*lipgloss.Layer {
 
 	content, geo := overlay.Dialog{Title: "pasted image", Width: width, Body: c.render()}.Render(pal)
 
-	above, below := ay-room.Min.Y, room.Max.Y-ay-1
-	y := ay + 1
-	if above >= geo.Height || above > below {
-		y = ay - geo.Height
-	}
-	x := clampInt(ax-1, room.Min.X, max(room.Max.X-geo.Width, room.Min.X))
-	y = clampInt(y, room.Min.Y, max(room.Max.Y-geo.Height, room.Min.Y))
+	// Above the cursor, as the path picker opens, and below it when it does
+	// not fit there. The box starts a column left of the cursor, so the
+	// picture inside its border starts at the cursor's column.
+	x, y, _ := overlay.Place(overlay.PointRect(ax-1, ay), geo.Width, geo.Height, overlayRect(room), overlay.Placement{Side: overlay.SideAbove})
 
 	if pic.ok {
 		pic.x += x + 1

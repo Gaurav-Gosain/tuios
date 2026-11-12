@@ -87,8 +87,9 @@ func (m *OS) renderSetupCard() *lipgloss.Layer {
 	}
 	pal := theme.UI()
 	rows := setupCardRows(s, branch, inner, pal)
-	x := region.Max.X - (inner + 2) - 1
-	y := region.Min.Y + 1
+	// The top right corner of the panes, a cell in from each edge.
+	corner := overlay.Rect{X0: region.Max.X - 1, Y0: region.Min.Y + 1, X1: region.Max.X - 1, Y1: region.Min.Y + 1}
+	x, y, _ := overlay.Place(corner, inner+2, len(rows), overlayRect(region), overlay.Placement{Side: overlay.SideBelow, Align: overlay.AlignEnd})
 	key := fmt.Sprintf("%d:%d:%d", x, y, inner) + "\x00" + strings.Join(rows, "\n")
 	if m.setupCard.layer == nil || m.setupCard.key != key {
 		m.setupCard.key = key
