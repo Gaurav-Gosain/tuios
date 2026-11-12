@@ -8,6 +8,8 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // The rail check finds the inputs the rail's cache key misses. With
@@ -36,17 +38,46 @@ var railCheckState struct {
 // reports how the build differs from the cached rail. The build's side effects
 // on the frame's buffers are replaced by the cache's afterwards, as a cache
 // hit does, and the rebuild is not counted as a rail draw.
-func (m *OS) checkRailCache() {
+func (m *OS) checkRailCache(ext railGens) {
 	if railCheckPath == "" {
 		return
 	}
+	if diff := m.railCacheMiss(ext); diff != "" {
+		reportRailMiss(diff)
+	}
+}
+
+// railCacheMiss builds the rail again and says how it differs from the
+// cache, or "" when it does not, or when it cannot be compared. ext is what
+// railExternalGens read when this frame's key was taken.
+//
+// The daemon client's listing and a live theme change on goroutines of their
+// own, and the key reads their generations without a lock. A listing that lands
+// after the key is read and before the rebuild is in the rebuild and not in the
+// key, which is not a key that misses an input: the generation moves when the
+// listing lands, and the frame its message asks for draws it. That case is not
+// compared.
+func (m *OS) railCacheMiss(ext railGens) string {
 	c := &m.sidebarCache
 	rails := m.tickStats.Rail
 	lines, w := m.sidebarPanelLinesForTree(m.BuildSessionTree())
 	m.tickStats.Rail = rails
-	if diff := railCacheDiff(c, lines, w, m); diff != "" {
-		reportRailMiss(diff)
+	if m.railExternalGens() != ext {
+		return ""
 	}
+	return railCacheDiff(c, lines, w, m)
+}
+
+// railGens are the generations the rail's key folds that move off the UI
+// goroutine.
+type railGens struct{ daemon, theme uint64 }
+
+func (m *OS) railExternalGens() railGens {
+	g := railGens{theme: theme.Generation()}
+	if m.DaemonClient != nil {
+		g.daemon = m.DaemonClient.CacheGen()
+	}
+	return g
 }
 
 // railCacheDiff says how a fresh build differs from the cache, or "" when it

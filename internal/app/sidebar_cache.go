@@ -59,9 +59,15 @@ func (m *OS) sidebarPanel() (string, int) {
 // or an in-progress drag animates every frame, so neither is ever served cached.
 func (m *OS) sidebarPanelLines() ([]string, int) {
 	animating := m.SidebarMarqueeKey != "" || m.SidebarDrag.Dragging
+	// Read before the key, so a listing that lands between the two reads is
+	// seen as one that moved during the frame. See railCacheMiss.
+	var ext railGens
+	if railCheckPath != "" {
+		ext = m.railExternalGens()
+	}
 	sig := m.sidebarSignature()
 	if !animating && m.sidebarCache.valid && m.sidebarCache.sig == sig {
-		m.checkRailCache()
+		m.checkRailCache(ext)
 		// Restore the per-frame side effects the mouse handlers read; the model
 		// truncates and refills these buffers on a real rebuild, so hand back copies.
 		m.SidebarHits = append(m.SidebarHits[:0], m.sidebarCache.hits...)

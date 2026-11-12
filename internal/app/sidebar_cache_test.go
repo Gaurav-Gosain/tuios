@@ -290,3 +290,58 @@ func TestRailCacheMovesTheCursorWithItsRow(t *testing.T) {
 		t.Fatalf("the cache serves a rail that a fresh build draws differently:\n%s", diff)
 	}
 }
+
+// TestRailCheckIgnoresAListingThatLandsMidFrame is the deterministic
+// regression for a false report the rail check made in CI on main
+// (TestChromeLooksAndFooters, string frames): the foreign session "tests"
+// drawn errored in the check's rebuild and not in the cached rail.
+//
+// The daemon client installs a listing under its lock and moves CacheGen after
+// it, on a goroutine of its own, and the key reads CacheGen without the lock.
+// A listing that lands after this frame's key is read and before the check's
+// rebuild is in the rebuild and not in the key. That is not a key missing an
+// input: the generation has moved, and the frame the listing's message asks
+// for draws it. This test lands the listing at exactly that point.
+//
+// Negative control, confirmed red: with railCacheMiss comparing whatever the
+// generations say, the first assertion reports row 2 ("· tests" against
+// "× tests").
+func TestRailCheckIgnoresAListingThatLandsMidFrame(t *testing.T) {
+	withSidebar(t, true, "left", config.SidebarDefaultWidth)
+	client := session.NewTUIClient()
+	listing := func(state string) []session.SessionInfo {
+		return []session.SessionInfo{
+			{Name: "s", WindowCount: 1},
+			{Name: "tests", WindowCount: 1, Windows: []session.WindowSummary{{
+				ID: "t1", Title: "go", AgentState: state, AgentHarness: "codex", AgentMessage: "go test ./... failed",
+			}}},
+		}
+	}
+	client.UpdateSessionCache(listing(""))
+	m := &OS{
+		Settings: config.Global, Windows: []*terminal.Window{{ID: "w1", CustomName: "ALPHA"}},
+		Width: 120, Height: 40, SessionName: "s", DaemonClient: client,
+	}
+	before := sidebarText(t, m)
+	sidebarText(t, m) // a frame served from the cache
+
+	// The next frame reads its key here, and the listing lands before the
+	// check builds the rail again.
+	ext := m.railExternalGens()
+	client.UpdateSessionCache(listing("errored"))
+	if diff := m.railCacheMiss(ext); diff != "" {
+		t.Fatalf("the check reported a listing that landed during the frame as a key miss:\n%s", diff)
+	}
+
+	// The check still reports a difference when the key read the same
+	// generations as the rebuild, so the guard above is not a check that
+	// stopped comparing.
+	if diff := m.railCacheMiss(m.railExternalGens()); diff == "" {
+		t.Fatal("the check found no difference between the cached rail and a build of a newer listing")
+	}
+
+	// And the frame after the listing draws it.
+	if after := sidebarText(t, m); after == before {
+		t.Fatal("the frame after the listing landed still draws the old rail")
+	}
+}
