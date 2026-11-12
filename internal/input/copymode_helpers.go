@@ -134,7 +134,6 @@ func getScreenLineCells(term terminal.CopyText, y int) []uv.Cell {
 			cells[x] = *cell
 			vt.BlankSixelCell(&cells[x])
 		} else {
-			// Empty cell
 			cells[x] = uv.Cell{Content: " ", Width: 1}
 		}
 	}

@@ -91,7 +91,6 @@ func getRawKeyBytesWithMode(msg tea.KeyPressMsg, applicationCursorKeys bool) []b
 	modMask := tea.ModShift | tea.ModAlt | tea.ModCtrl
 	actualMod := key.Mod & modMask
 
-	// Handle modifier combinations first
 	if actualMod != 0 {
 		// Handle Shift+Tab (backtab): sends CSI Z
 		if actualMod&tea.ModShift != 0 && key.Code == tea.KeyTab {
@@ -129,19 +128,16 @@ func getRawKeyBytesWithMode(msg tea.KeyPressMsg, applicationCursorKeys bool) []b
 				return []byte{byte(key.Code - 'A' + 1)}
 			}
 
-			// Check the Ctrl symbol map for other combinations
 			if ctrlCode, ok := ctrlKeyMap[key.Code]; ok {
 				return []byte{ctrlCode}
 			}
 		}
 
-		// Handle Alt+letter combinations (ESC prefix)
 		if actualMod&tea.ModAlt != 0 {
 			switch key.Code {
 			case tea.KeyBackspace:
 				return []byte{0x1b, 0x7f}
 			default:
-				// Alt+character sends ESC followed by character
 				if key.Text != "" && len(key.Text) == 1 {
 					return []byte{0x1b, key.Text[0]}
 				}
@@ -206,7 +202,6 @@ func getRawKeyBytesWithMode(msg tea.KeyPressMsg, applicationCursorKeys bool) []b
 		return seq
 	}
 
-	// Handle function keys using lookup table
 	if seq, ok := functionKeyMap[key.Code]; ok {
 		return seq
 	}
@@ -216,7 +211,6 @@ func getRawKeyBytesWithMode(msg tea.KeyPressMsg, applicationCursorKeys bool) []b
 		return []byte(key.Text)
 	}
 
-	// Fallback for simple printable characters
 	if key.Code >= 32 && key.Code <= 126 {
 		return []byte{byte(key.Code)}
 	}
@@ -227,12 +221,10 @@ func getRawKeyBytesWithMode(msg tea.KeyPressMsg, applicationCursorKeys bool) []b
 // handleModifierKeysWithMod handles keys with complex modifier combinations
 // The mod parameter should already be masked to only include actual modifier bits
 func handleModifierKeysWithMod(key tea.Key, mod tea.KeyMod) []byte {
-	// Handle function keys with modifiers
 	if fnSeq := getFunctionKeySequence(key.Code, getModParam(mod)); fnSeq != nil {
 		return fnSeq
 	}
 
-	// Handle cursor keys with modifiers
 	if cursorSeq := getCursorSequence(key.Code); cursorSeq != nil {
 		modParam := getModParam(mod)
 		if modParam > 1 {
@@ -245,8 +237,7 @@ func handleModifierKeysWithMod(key tea.Key, mod tea.KeyMod) []byte {
 	}
 
 	// Insert, Delete, PgUp and PgDn carry the modifier as a second parameter
-	// (Ctrl+Delete is ESC[3;5~). Without this they fell through to the plain
-	// sequence, so the modifier was silently dropped.
+	// (Ctrl+Delete is ESC[3;5~).
 	if num, ok := tildeKeyNumbers[key.Code]; ok {
 		if modParam := getModParam(mod); modParam > 1 {
 			return buildCSISequence(num, modParam)
@@ -404,14 +395,12 @@ func getFunctionKeySequence(code rune, modParam int) []byte {
 func buildCSISequence(num, modParam int) []byte {
 	seq := []byte{0x1b, '['}
 
-	// Add number
 	if num >= 10 {
 		seq = append(seq, byte('0'+num/10), byte('0'+num%10))
 	} else {
 		seq = append(seq, byte('0'+num))
 	}
 
-	// Add modifier if present
 	if modParam > 1 {
 		seq = append(seq, ';', byte('0'+modParam))
 	}

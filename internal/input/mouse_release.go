@@ -45,8 +45,8 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// A press on the picture-in-picture view was the view's, and so is its
-	// release. Without this the release of a click that jumped to the pinned
-	// pane went on to that pane as a release it never saw pressed.
+	// release. Otherwise a click that jumped to the pinned pane would send that
+	// pane a release it never saw pressed.
 	if o.PiPPressed {
 		o.PiPPressed = false
 		return o, nil
@@ -57,10 +57,9 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// End every overlay gesture before anything else. Both a grabbed panel and
 	// the accent picker's grab on its grid or hue strip end on this button, but
-	// only a panel drag consumes the release. Ending them together matters
-	// because the picker's grab used to be cleared only when a panel happened to
-	// be under drag as well, so a press in the picker left the colour following
-	// the pointer for the rest of the dialog's life.
+	// only a panel drag consumes the release. End them together: the picker's
+	// grab must not wait for a panel drag, or the colour follows the pointer
+	// for the rest of the dialog's life.
 	// A card dragged on the task board's columns drops on the column under
 	// the pointer.
 	if mouse := msg.Mouse(); o.ShowInbox {
@@ -75,7 +74,6 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// Reset pointer shape on release
 	o.ResetPointerShape()
 
 	// The release of a drag between panes is the drop, wherever it lands: a
@@ -201,7 +199,6 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		focusedWindow := o.GetFocusedWindow()
 		if paneTakesMouse(o, focusedWindow) {
 			mouse := msg.Mouse()
-			// Convert to terminal-relative coordinates (0-based)
 			termX, termY, inContent := focusedWindow.ScreenToTerminal(mouse.X, mouse.Y)
 			// Check if release is within terminal content area
 			if inContent {
@@ -217,7 +214,6 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// Clear scrollbar drag
 	if o.ScrollbarDragging {
 		o.ScrollbarDragging = false
 		o.ScrollbarDragWindowIndex = -1
@@ -228,7 +224,6 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// Handle copy mode mouse release
 	if o.Dragging && o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
 		draggedWindow := o.Windows[o.DraggedWindowIndex]
 		// A text selection never marks its pane as being moved; a move by the
@@ -341,7 +336,6 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.DraggedWindowIndex = -1
 	}
 
-	// Clean up interaction state on mouse release
 	if o.Dragging || o.Resizing {
 		wasResizing := o.Resizing
 		// Save the dragged/resized window index before anything clears it

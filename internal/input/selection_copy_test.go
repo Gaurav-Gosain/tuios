@@ -86,7 +86,7 @@ func TestMenuReadsTheSelectionOfThePaneItWasOpenedOn(t *testing.T) {
 	}
 	o.CloseContextMenu()
 	// The drag ends on the space after "echo", and a copy keeps a printed
-	// space (#516).
+	// space.
 	if got, want := copySelection(t, o), "delta echo "; got != want {
 		t.Errorf("copy produced %q, want the targeted pane's selection %q", got, want)
 	}

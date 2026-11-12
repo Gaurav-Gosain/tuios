@@ -11,8 +11,7 @@ import (
 
 // h and l are snap_left and snap_right in window-management mode. With tiling
 // off they snap the focused window to a half of the screen. With tiling on
-// they used to do nothing at all, silently, and tiling is the default: the two
-// most reachable letters on the home row were dead keys for most users.
+// they must not be dead keys, since tiling is the default.
 //
 // Under tiling they move focus to the neighbour in that direction, which
 // completes the row the other two vim pairs already have: H and L swap that

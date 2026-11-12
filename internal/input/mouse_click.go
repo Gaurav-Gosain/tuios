@@ -245,7 +245,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			dockIndex := o.DockItemAt(X, Y)
 			if dockIndex != -1 {
 				o.RestoreWindow(dockIndex)
-				// Retile if in tiling mode
 				if o.AutoTiling {
 					o.TileAllWindows()
 				}
@@ -418,14 +417,12 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		// Forward mouse only when app explicitly requested mouse tracking (DECSET 1000-1003)
 		if paneTakesMouse(o, clickedWindow) {
-			// Convert to terminal-relative coordinates (0-based)
 			termX, termY, inContent := clickedWindow.ScreenToTerminal(X, Y)
 			// Check if click is within terminal content area
 			if inContent {
 				// Focus the window first so subsequent events work
 				o.FocusWindowFromClick(clickedWindowIndex, X, Y)
 
-				// Create adjusted mouse event with terminal-relative coordinates
 				adjustedMouse := uv.MouseClickEvent{
 					X:      termX,
 					Y:      termY,
@@ -480,10 +477,8 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// The cells are whichever ones the renderer recorded as it drew the pill:
 	// the styles differ in glyph, width and order, the pill goes to whichever
 	// end appearance.window_button_position names, and the corner glyph it
-	// stops short of is itself configurable. The offsets this used to measure
-	// from the window rectangle had drifted a column off the drawn pill, so a
-	// press on the corner closed the window and a press on the minimize glyph's
-	// own leading pad did nothing.
+	// stops short of is itself configurable. Offsets measured from the window
+	// rectangle drift off the drawn pill.
 	if mouse.Button == tea.MouseLeft {
 		if action, ok := o.WindowButtonIn(clickedWindow.ID, X, Y); ok {
 			switch action {
@@ -628,7 +623,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Set interaction mode to prevent expensive rendering during drag/resize
 	o.InteractionMode = true
 
-	// Calculate drag offset based on the clicked window
 	o.DragOffsetX = X - clickedWindow.X
 	o.DragOffsetY = Y - clickedWindow.Y
 
@@ -668,7 +662,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			}
 		}
 
-		// Set precise resize cursor based on corner
 		switch o.ResizeCorner {
 		case app.TopLeft, app.BottomRight:
 			o.SetPointerShape(app.PointerNWSEResize)

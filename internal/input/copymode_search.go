@@ -194,7 +194,6 @@ func narrowedLines(cm *terminal.CopyMode, gen uint64, sbLen int) ([]int, bool) {
 
 // executeSearch performs a search operation and updates matches
 func executeSearch(cm *terminal.CopyMode, grid terminal.CopyGrid, maxSearchMatches int) {
-	// Check cache
 	if cm.SearchQuery() != "" && cm.SearchQuery() == cm.SearchCache.Query && cm.SearchCache.Valid {
 		cm.SearchMatches = cm.SearchCache.Matches
 		jumpFromOrigin(cm, grid)
@@ -277,7 +276,6 @@ func executeSearch(cm *terminal.CopyMode, grid terminal.CopyGrid, maxSearchMatch
 		cm.SearchMatches = append(cm.SearchMatches, line...)
 	}
 
-	// Update cache
 	cm.SearchCache = terminal.SearchCache{
 		Query:         cm.SearchQuery(),
 		Matches:       cm.SearchMatches,
@@ -375,12 +373,10 @@ func jumpToMatch(cm *terminal.CopyMode, grid terminal.CopyGrid, matchIdx int) {
 	scrollbackLen := grid.ScrollbackLen()
 
 	if match.Line < scrollbackLen {
-		// Match is in scrollback
 		cm.ScrollOffset = scrollbackLen - match.Line
 		grid.SetScrollOffset(cm.ScrollOffset) // Sync for rendering
 		cm.CursorY = 0
 	} else {
-		// Match is in current screen
 		screenLine := match.Line - scrollbackLen
 		cm.ScrollOffset = 0
 		grid.SetScrollOffset(cm.ScrollOffset) // Sync for rendering

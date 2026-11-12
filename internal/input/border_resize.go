@@ -309,8 +309,8 @@ func applyBorderResize(o *app.OS, mx, my int) {
 	// The edge stays as far from the pointer as it was on the press. On a pane
 	// that draws its own border the pointer sits on the last cell the pane
 	// owns, so its far edge is one past the pointer, while a reserved divider
-	// cell is already past the pane. Without this the pane jumps on the press,
-	// before the pointer has moved at all.
+	// cell is already past the pane. Keeping the offset stops the pane jumping
+	// on the press.
 	grab := o.BorderResizeGrab
 
 	newX, newY, newW, newH := w.X, w.Y, w.Width, w.Height

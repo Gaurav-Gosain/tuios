@@ -175,7 +175,6 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		focusedWindow := o.GetFocusedWindow()
 		if paneTakesMouse(o, focusedWindow) {
 			mouse := msg.Mouse()
-			// Convert to terminal-relative coordinates (0-based)
 			termX, termY, inContent := focusedWindow.ScreenToTerminal(mouse.X, mouse.Y)
 			// Check if wheel is within terminal content area
 			if inContent {
@@ -199,14 +198,12 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// Handle scrollback in terminal mode
 	if o.Mode == app.TerminalMode {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil {
 			switch msg.Button {
 			case tea.MouseWheelUp:
 				if focusedWindow.InCopyMode() {
-					// Already in copy mode: scroll up
 					scrollCopyModeUp(focusedWindow, &o.Settings)
 				} else if o.Mode == app.TerminalMode && focusedWindow.Terminal != nil && !paneTakesMouse(o, focusedWindow) && !focusedWindow.IsAltScreen() && focusedWindow.ScrollbackLen() > 0 {
 					// No mouse tracking, not alt screen, and there is history to
@@ -221,7 +218,6 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				return o, nil
 			case tea.MouseWheelDown:
 				if focusedWindow.InCopyMode() {
-					// In copy mode, scroll down
 					scrollCopyModeDown(focusedWindow, &o.Settings)
 					leaveCopyModeAtBottom(focusedWindow)
 				}
@@ -230,7 +226,6 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// Handle scrollback in window management mode too
 	if o.Mode == app.WindowManagementMode {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil && focusedWindow.Terminal != nil && !focusedWindow.IsAltScreen() {

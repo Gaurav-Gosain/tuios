@@ -83,15 +83,12 @@ func findClickedWindow(x, y int, o *app.OS) int {
 	topZ := -1
 
 	for i, window := range o.Windows {
-		// Skip windows not in current workspace
 		if window.Workspace != o.CurrentWorkspace {
 			continue
 		}
-		// Skip minimized windows
 		if window.Minimized {
 			continue
 		}
-		// Check if click is within window bounds
 		if x >= window.X && x < window.X+window.Width &&
 			y >= window.Y && y < window.Y+window.Height {
 			// This window contains the click: check if it's the topmost so far

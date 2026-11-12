@@ -92,7 +92,6 @@ func extractVisualText(cm *terminal.CopyMode, grid terminal.CopyGrid) string {
 	}
 	start, end := cm.VisualStart, cm.VisualEnd
 
-	// Normalize selection
 	if start.Y > end.Y || (start.Y == end.Y && start.X > end.X) {
 		start, end = end, start
 	}
@@ -252,7 +251,6 @@ func writeSelectionCells(text *strings.Builder, cells []uv.Cell, lo, hi int) {
 func getLineContentBounds(_ *terminal.CopyMode, grid terminal.CopyGrid, absY int) (int, int) {
 	scrollbackLen := grid.ScrollbackLen()
 
-	// Get cells for this line
 	var cells []uv.Cell
 	if absY < scrollbackLen {
 		cells = grid.ScrollbackLine(absY)
@@ -265,7 +263,6 @@ func getLineContentBounds(_ *terminal.CopyMode, grid terminal.CopyGrid, absY int
 		return 0, 0
 	}
 
-	// Find first non-empty, non-continuation cell
 	startX := 0
 	for i, cell := range cells {
 		if cell.Width > 0 && cell.Content != "" && cell.Content != " " {
@@ -274,7 +271,6 @@ func getLineContentBounds(_ *terminal.CopyMode, grid terminal.CopyGrid, absY int
 		}
 	}
 
-	// Find last non-empty, non-continuation cell
 	endX := len(cells) - 1
 	for i := len(cells) - 1; i >= 0; i-- {
 		if cells[i].Width > 0 && cells[i].Content != "" && cells[i].Content != " " {

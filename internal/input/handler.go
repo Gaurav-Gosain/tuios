@@ -336,7 +336,6 @@ func shouldShowQuitDialog(o *app.OS) bool {
 	if o.Settings.AlwaysConfirmQuit {
 		return true
 	}
-	// Check each window for active foreground processes
 	for _, win := range o.Windows {
 		if win != nil && win.HasForegroundProcess() {
 			return true
@@ -433,9 +432,9 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// A chord that only resolved because tuios recognised the character macOS
 	// composed out of it is proof the Option key is not being sent as Alt. With
-	// option_glyphs = "type" the user composes on purpose (issue #566), with
+	// option_glyphs = "type" the user composes on purpose, with
 	// keyboard_layout = "other" the US table is off, and a bare character is
-	// text unless the config or the Mac's layout says US (issue #746): the
+	// text unless the config or the Mac's layout says US: the
 	// character went to the pane, and there is nothing to say. The chords come
 	// first, so the config is asked only for a composed character.
 	if chords := composedChords(msg, o.HostBaseCode(msg)); len(chords) > 0 &&
@@ -575,7 +574,7 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// checked ahead of both. See review_input.go.
 	// A menu opened over an overlay (open_menu in [keybindings.inbox], the
 	// rail, the review and the rest) takes the next key before that overlay
-	// does, which would otherwise read it first (issue #1590). See menus.go.
+	// does, which would otherwise read it first. See menus.go.
 	if o.Menu != "" && o.MenuState().Origin.Set {
 		return HandleMenuCommand(msg, o)
 	}
@@ -750,7 +749,6 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// Terminal mode handling
 	if o.Mode == app.TerminalMode {
 		return HandleTerminalModeKey(msg, o)
 	}
@@ -766,12 +764,10 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return out, cmd
 	}
 
-	// Handle prefix commands in window management mode
 	if o.PrefixActive {
 		return HandlePrefixCommand(msg, o)
 	}
 
-	// Handle window management mode keys
 	return HandleWindowManagementModeKey(msg, o)
 }
 
@@ -873,7 +869,6 @@ func handlePrefixKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		return o, nil
 	}
-	// Activate prefix mode
 	o.ArmLeader()
 	return o, nil
 }

@@ -20,7 +20,6 @@ func convertColumnToRuneIndex(grid terminal.CopyGrid, absY int, col int) int {
 				break
 			}
 			if cell.Width > 0 { // Skip continuation cells
-				// Count runes in this cell's content
 				for range cell.Content {
 					runeIndex++
 				}
@@ -35,7 +34,6 @@ func convertColumnToRuneIndex(grid terminal.CopyGrid, absY int, col int) int {
 			}
 			cell := grid.Text().CellAt(x, screenY)
 			if cell != nil && cell.Width > 0 { // Skip continuation cells
-				// Count runes in this cell's content
 				for range cell.Content {
 					runeIndex++
 				}
@@ -59,7 +57,6 @@ func findCharOnLine(cm *terminal.CopyMode, grid terminal.CopyGrid, char rune, di
 	maxIterations := 1000 // Prevent infinite loops
 
 	if direction > 0 {
-		// Search forward across lines
 		for lineOffset := range maxIterations {
 			absY := startAbsY + lineOffset
 			if absY >= totalLines {
@@ -71,10 +68,8 @@ func findCharOnLine(cm *terminal.CopyMode, grid terminal.CopyGrid, char rune, di
 				continue
 			}
 
-			// Convert lineText to runes
 			runes := []rune(lineText)
 
-			// Determine starting position
 			startCharIdx := 0
 			if lineOffset == 0 {
 				// On current line, get cursor's rune position and start from next rune
@@ -82,10 +77,8 @@ func findCharOnLine(cm *terminal.CopyMode, grid terminal.CopyGrid, char rune, di
 				startCharIdx = currentRuneIdx + 1
 			}
 
-			// Search this line
 			for charIdx := startCharIdx; charIdx < len(runes); charIdx++ {
 				if runes[charIdx] == char {
-					// Found it!
 					targetCharIdx := charIdx
 					if till {
 						targetCharIdx = charIdx - 1
@@ -101,14 +94,12 @@ func findCharOnLine(cm *terminal.CopyMode, grid terminal.CopyGrid, char rune, di
 						moveDown(cm, grid)
 					}
 
-					// Set cursor X position
 					cm.CursorX = convertRuneIndexToColumn(grid, absY, targetCharIdx)
 					return
 				}
 			}
 		}
 	} else {
-		// Search backward across lines
 		for lineOffset := range maxIterations {
 			absY := startAbsY - lineOffset
 			if absY < 0 {
@@ -120,10 +111,8 @@ func findCharOnLine(cm *terminal.CopyMode, grid terminal.CopyGrid, char rune, di
 				continue
 			}
 
-			// Convert lineText to runes
 			runes := []rune(lineText)
 
-			// Determine starting position
 			endCharIdx := len(runes) - 1
 			if lineOffset == 0 {
 				// On current line, get cursor's rune position and start from previous rune
@@ -131,10 +120,8 @@ func findCharOnLine(cm *terminal.CopyMode, grid terminal.CopyGrid, char rune, di
 				endCharIdx = currentRuneIdx - 1
 			}
 
-			// Search this line backward
 			for charIdx := endCharIdx; charIdx >= 0; charIdx-- {
 				if runes[charIdx] == char {
-					// Found it!
 					targetCharIdx := charIdx
 					if till {
 						targetCharIdx = charIdx + 1
@@ -150,7 +137,6 @@ func findCharOnLine(cm *terminal.CopyMode, grid terminal.CopyGrid, char rune, di
 						moveUp(cm, grid)
 					}
 
-					// Set cursor X position
 					cm.CursorX = convertRuneIndexToColumn(grid, absY, targetCharIdx)
 					return
 				}
@@ -183,7 +169,6 @@ func convertRuneIndexToColumn(grid terminal.CopyGrid, absY int, runeIndex int) i
 		return 0
 	}
 
-	// Count actual columns (accounting for wide chars)
 	col := 0
 	runeCount := 0
 
@@ -194,7 +179,6 @@ func convertRuneIndexToColumn(grid terminal.CopyGrid, absY int, runeIndex int) i
 				break
 			}
 			if cell.Width > 0 { // Skip continuation cells
-				// Count runes in this cell's content
 				for range cell.Content {
 					runeCount++
 					if runeCount > runeIndex {
@@ -210,7 +194,6 @@ func convertRuneIndexToColumn(grid terminal.CopyGrid, absY int, runeIndex int) i
 		for x := range grid.Text().Width() {
 			cell := grid.Text().CellAt(x, screenY)
 			if cell != nil && cell.Width > 0 { // Skip continuation cells
-				// Count runes in this cell's content
 				for range cell.Content {
 					runeCount++
 					if runeCount > runeIndex {

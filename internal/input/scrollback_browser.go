@@ -33,7 +33,6 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 
 	keyStr := msg.String()
 
-	// Search mode: capture text input
 	if browser.SearchActive {
 		switch keyStr {
 		case "esc":
@@ -60,7 +59,6 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		return o, nil
 	}
 
-	// Output mode: navigate lines in right pane
 	if browser.OutputMode {
 		return handleBrowserOutputModeKey(msg, keyStr, browser, o)
 	}
@@ -71,7 +69,6 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		return o, nil
 	}
 
-	// Normal mode keybindings
 	switch keyStr {
 	// Close
 	case "q", "esc":
@@ -100,12 +97,10 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		browser.ToggleSelect()
 		browser.Next()
 
-	// Search
 	case "/":
 		browser.SearchActive = true
 		browser.Search.Set("")
 
-	// Mode switching
 	case "tab":
 		browser.CycleMode()
 	case "1":
@@ -149,7 +144,6 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 			return o, nil
 		}
 
-		// Close browser first
 		o.ShowScrollbackBrowser = false
 		o.ScrollbackBrowser = nil
 
@@ -212,7 +206,6 @@ func handleBrowserOutputModeKey(msg tea.KeyPressMsg, keyStr string, browser *scr
 		return o, nil
 	}
 
-	// Search sub-mode: capture typed characters
 	if vim.Mode == scrollback.VimSearch {
 		switch keyStr {
 		case "esc":
@@ -228,7 +221,6 @@ func handleBrowserOutputModeKey(msg tea.KeyPressMsg, keyStr string, browser *scr
 		return o, nil
 	}
 
-	// Pending character search (f/F/t/T waiting for char)
 	if vim.PendingCharSearch {
 		vim.PendingCharSearch = false
 		if keyStr == "esc" {
@@ -311,7 +303,6 @@ func handleBrowserOutputModeKey(msg tea.KeyPressMsg, keyStr string, browser *scr
 	}
 
 	switch keyStr {
-	// Character search
 	case "f":
 		vim.PendingCharSearch = true
 		vim.LastCharSearchDir = 1
@@ -333,7 +324,6 @@ func handleBrowserOutputModeKey(msg tea.KeyPressMsg, keyStr string, browser *scr
 		vim.LastCharSearchTill = true
 		return o, nil
 
-	// Search
 	case "/":
 		vim.Mode = scrollback.VimSearch
 		vim.Search.Set("")
@@ -347,7 +337,6 @@ func handleBrowserOutputModeKey(msg tea.KeyPressMsg, keyStr string, browser *scr
 			vim.SearchPrev()
 		}
 
-	// Visual modes
 	case "v":
 		if vim.Mode == scrollback.VimVisualChar {
 			vim.ExitVisual()
@@ -361,7 +350,6 @@ func handleBrowserOutputModeKey(msg tea.KeyPressMsg, keyStr string, browser *scr
 			vim.EnterVisualLine()
 		}
 
-	// Yank
 	case "y":
 		if isVisual {
 			text := vim.SelectedText()
@@ -387,7 +375,6 @@ func handleBrowserOutputModeKey(msg tea.KeyPressMsg, keyStr string, browser *scr
 		}
 		o.ShowNotification("Nothing to copy", "warning", o.Settings.NotificationDuration)
 
-	// Exit
 	case "esc", "q":
 		if isVisual {
 			vim.ExitVisual()
@@ -473,7 +460,6 @@ func handleScrollbackBrowserMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.O
 	if browser.OutputMode && browser.Vim != nil {
 		vim := browser.Vim
 
-		// Click in right pane output area
 		if x >= rightPaneX && x < rightPaneX+rightPaneW && y >= rightPaneY && y < rightPaneY+rightPaneH {
 			relX := x - rightPaneX
 			relY := y - rightPaneY
@@ -488,12 +474,10 @@ func handleScrollbackBrowserMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.O
 					vim.CursorX = relX
 				}
 
-				// Exit visual mode on plain click
 				if vim.Mode == scrollback.VimVisualChar || vim.Mode == scrollback.VimVisualLine {
 					vim.ExitVisual()
 				}
 
-				// Set up drag tracking for visual selection
 				browser.DragActive = true
 				browser.DragOriginY = vim.CursorY
 				browser.DragOriginX = vim.CursorX
@@ -518,7 +502,6 @@ func handleScrollbackBrowserMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.O
 				browser.PreviewScroll = 0
 			}
 		} else if x >= rightPaneX && x < rightPaneX+rightPaneW && y >= rightPaneY {
-			// Click in right pane: enter output mode
 			browser.EnterOutputMode()
 		}
 	}
@@ -559,7 +542,6 @@ func handleScrollbackBrowserMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app
 
 	// Enter visual char mode on first drag motion (if not already visual)
 	if vim.Mode != scrollback.VimVisualChar && vim.Mode != scrollback.VimVisualLine {
-		// Set anchor at drag origin
 		vim.CursorY = browser.DragOriginY
 		vim.CursorX = browser.DragOriginX
 		vim.EnterVisualChar()

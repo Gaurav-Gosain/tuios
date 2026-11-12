@@ -150,7 +150,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("resize_height_shrink_top", handleResizeHeightShrinkTop)
 	d.Register("resize_height_grow_top", handleResizeHeightGrowTop)
 
-	// Percentage resizing of the focused pane (issue #29): one action per
+	// Percentage resizing of the focused pane: one action per
 	// ten-point step, so a user can bind exactly the percentages they use.
 	// resize_width_N sizes the width to N% of the content region,
 	// resize_height_N the height to N% of the usable height.
@@ -315,7 +315,6 @@ func (d *ActionDispatcher) registerHandlers() {
 	// Multifocus actions (see multifocus_actions.go)
 	d.registerMultifocusHandlers()
 
-	// Tape manager actions
 	d.Register("toggle_tape_manager", handleToggleTapeManager)
 	d.Register("stop_recording", handleStopRecording)
 
@@ -357,7 +356,6 @@ func (d *ActionDispatcher) Dispatch(action string, msg tea.KeyPressMsg, o *app.O
 		handler, ok = handleUserAction(action), true
 	}
 	if ok {
-		// Record the action if tape recording is active
 		if o.TapeRecorder != nil && o.TapeRecorder.IsRecording() {
 			o.TapeRecorder.RecordAction(action)
 		}
@@ -455,7 +453,6 @@ func handleRenameWorkspace(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handleRenameWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// If showing cache stats, reset them instead
 	if o.ShowCacheStats {
 		app.GetGlobalStyleCache().ResetStats()
 		o.ShowNotification("Cache statistics reset", "info", 2*time.Second)
@@ -512,13 +509,11 @@ func handleMinimizeWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handleRestoreAll(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// Restore all minimized windows in current workspace
 	for i := range o.Windows {
 		if o.Windows[i].Minimized && o.Windows[i].Workspace == o.CurrentWorkspace {
 			o.RestoreWindow(i)
 		}
 	}
-	// Retile if in tiling mode
 	if o.AutoTiling {
 		o.TileAllWindows()
 	}
@@ -1076,7 +1071,6 @@ func handleEnterTerminalMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 func handleEnterWindowMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.LogInfo("Entering window management mode")
-	// Exit terminal mode to window management mode
 	cmd := o.ExitTerminalMode()
 	o.ShowNotification("Window management mode", "info", o.Settings.NotificationDuration)
 	if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
@@ -1094,7 +1088,6 @@ func handleToggleHelp(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handleQuit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// Close help if showing
 	if o.ShowHelp {
 		o.ShowHelp = false
 		return o, nil

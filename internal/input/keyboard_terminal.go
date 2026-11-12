@@ -67,12 +67,10 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// the other panes: end it before the key is routed.
 	o.SettleMultiCopy()
 
-	// Handle copy mode (vim-style scrollback/selection)
 	if focusedWindow.InCopyMode() && !remoteKeyBypassesCopyMode(o) {
 		return HandleCopyModeKey(msg, o, focusedWindow)
 	}
 
-	// Handle scrollback browser overlay
 	if o.ShowScrollbackBrowser {
 		return HandleScrollbackBrowserKey(msg, o)
 	}
@@ -94,7 +92,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// Check for prefix key in terminal mode. A leader the prefix_mode table
 	// binds, pressed after the leader, is that binding's and goes to
-	// HandlePrefixCommand below (issue #866). A menu lock mode holds open is
+	// HandlePrefixCommand below. A menu lock mode holds open is
 	// the exception: there the leader always opens a fresh leader menu.
 	if isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) && (o.LockHeld || !leaderBoundInPrefix(msg, o)) {
 		leaderWhileHeld(o)
@@ -114,7 +112,6 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			forwardKeyToFocusedWindow(msg, o)
 			return o, nil
 		}
-		// Activate prefix mode
 		o.ArmLeader()
 		return o, nil
 	}
@@ -123,7 +120,6 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return out, cmd
 	}
 
-	// Handle prefix commands in terminal mode
 	if o.PrefixActive {
 		return HandlePrefixCommand(msg, o)
 	}
@@ -198,7 +194,6 @@ func typeIntoPane(msg tea.KeyPressMsg, o *app.OS, nvimNavigation bool) (*app.OS,
 		o.NotePaneKey()
 		return o, o.TMLKey(focusedWindow, msg.String())
 	}
-	// Normal terminal mode: pass through all keys
 	if focusedWindow != nil {
 		// The pane gets the key as the host sent it, on either encoding.
 		host := paneMsg(msg, o)

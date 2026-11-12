@@ -211,7 +211,6 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 		}
 	}
 
-	// Get count (default to 1 if no count specified)
 	count := cm.PendingCount
 	if count == 0 {
 		count = 1
@@ -231,7 +230,6 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 		fx.ShowNotification("Left copy mode", "info", s.NotificationDuration)
 		return
 	case "i":
-		// Exit copy mode and enter terminal mode
 		fx.ExitCopyMode()
 		fx.ShowNotification("Terminal mode", "info", s.NotificationDuration)
 		// Enter terminal mode and start raw input reader
@@ -251,12 +249,10 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 	case "g":
 		pressG(cm, grid, finishesGG)
 
-	// Character search (f/F/t/T)
 	case "f", "F", "t", "T":
 		armCharSearch(cm, keyStr, count, fx)
 		return
 
-	// Search
 	case "/", "?":
 		backward := keyStr == "?"
 		cm.BeginSearch(backward, grid.ScrollbackLen())
@@ -387,13 +383,11 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 		}
 	}
 
-	// Get count (default to 1 if no count specified)
 	count := cm.PendingCount
 	if count == 0 {
 		count = 1
 	}
 
-	// Clear count after reading it
 	defer func() {
 		cm.PendingCount = 0
 		if fx != nil {
@@ -420,7 +414,6 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 		fx.SetClipboard(text)
 		return
 
-	// Character search (f/F/t/T)
 	case "f", "F", "t", "T":
 		armCharSearch(cm, keyStr, count, fx)
 		return
@@ -431,7 +424,6 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 	case "ctrl+b", "^", "$", "w", "b":
 		runCopyMotion(fixedCopyMotions[keyStr], cm, grid, fx)
 
-	// Jump movement
 	case "g":
 		pressG(cm, grid, finishesGG)
 
@@ -482,10 +474,8 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 
 // HandleCopyModeMouseDrag handles mouse drag start in copy mode (initiates visual selection)
 func HandleCopyModeMouseDrag(cm *terminal.CopyMode, window *terminal.Window, startX, startY int) {
-	// Convert window-relative coordinates to terminal coordinates
 	terminalX, terminalY, inContent := window.ScreenToTerminal(startX, startY)
 
-	// Check bounds
 	if !inContent {
 		return
 	}
@@ -501,7 +491,6 @@ func HandleCopyModeMouseDrag(cm *terminal.CopyMode, window *terminal.Window, sta
 			cm.State = terminal.CopyModeNormal
 		}
 
-		// Move cursor to drag start position
 		cm.CursorX = terminalX
 		cm.CursorY = terminalY
 
@@ -515,7 +504,6 @@ func HandleCopyModeMouseDrag(cm *terminal.CopyMode, window *terminal.Window, sta
 			cm.CursorX--
 		}
 
-		// Enter visual character mode for new selection
 		enterVisualChar(cm, window)
 	}()
 
@@ -525,7 +513,6 @@ func HandleCopyModeMouseDrag(cm *terminal.CopyMode, window *terminal.Window, sta
 // HandleCopyModeMouseMotion handles mouse motion during drag in copy mode.
 // Returns the auto-scroll direction: -1 (up), 0 (none), 1 (down).
 func HandleCopyModeMouseMotion(cm *terminal.CopyMode, window *terminal.Window, mouseX, mouseY int) int {
-	// Only handle if in visual mode
 	if !cm.State.InVisual() {
 		return 0
 	}
@@ -535,10 +522,8 @@ func HandleCopyModeMouseMotion(cm *terminal.CopyMode, window *terminal.Window, m
 		window.RLockIO()
 		defer window.RUnlockIO()
 
-		// Convert window-relative coordinates to terminal coordinates
 		terminalX, terminalY, inContent := window.ScreenToTerminal(mouseX, mouseY)
 
-		// Auto-scroll when dragging outside content area
 		if !inContent {
 			borderOff := window.BorderOffset()
 			contentTop := window.Y + borderOff
@@ -560,7 +545,6 @@ func HandleCopyModeMouseMotion(cm *terminal.CopyMode, window *terminal.Window, m
 			return dir
 		}
 
-		// Update cursor position
 		cm.CursorX = terminalX
 		cm.CursorY = terminalY
 

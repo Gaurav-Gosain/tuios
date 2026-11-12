@@ -87,7 +87,6 @@ func moveWordForward(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	maxWidth := grid.LastContentCol()
 	maxIterations := 1000 // Prevent infinite loops
 
-	// Get current character type
 	cell := getCellAtCursor(cm, grid)
 	currentType := getCharType(cellContent(cell))
 
@@ -101,7 +100,6 @@ func moveWordForward(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 			break
 		}
 
-		// Move right, potentially wrapping to next line
 		if cm.CursorX >= maxWidth {
 			// Wrap to next line
 			cm.CursorX = 0
@@ -121,7 +119,6 @@ func moveWordForward(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 			break
 		}
 
-		// Move right, potentially wrapping to next line
 		if cm.CursorX >= maxWidth {
 			// Wrap to next line
 			cm.CursorX = 0
@@ -141,7 +138,6 @@ func moveWordBackward(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	if cm.CursorX > 0 {
 		cm.CursorX--
 	} else if cm.CursorY > 0 || cm.ScrollOffset > 0 {
-		// Wrap to end of previous line
 		moveUp(cm, grid)
 		cm.CursorX = maxWidth
 	} else {
@@ -153,12 +149,10 @@ func moveWordBackward(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 		cell := getCellAtCursor(cm, grid)
 		charType := getCharType(cellContent(cell))
 
-		// Found non-whitespace: move to phase 2
 		if charType != 0 {
 			break
 		}
 
-		// Move left, potentially wrapping
 		if cm.CursorX > 0 {
 			cm.CursorX--
 		} else if cm.CursorY > 0 || cm.ScrollOffset > 0 {
@@ -184,7 +178,6 @@ func moveWordBackward(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 			break
 		}
 
-		// Peek at previous character
 		prevX := cm.CursorX - 1
 		absY := getAbsoluteY(cm, grid)
 		var prevCell *uv.Cell
@@ -200,7 +193,6 @@ func moveWordBackward(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 			prevCell = grid.Text().CellAt(prevX, screenY)
 		}
 
-		// Get previous character type
 		var prevContent string
 		if prevCell != nil {
 			prevContent = prevCell.Content
@@ -212,7 +204,6 @@ func moveWordBackward(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 			break
 		}
 
-		// Previous char is same type, move back
 		cm.CursorX--
 	}
 }
@@ -226,7 +217,6 @@ func moveWordEnd(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	if cm.CursorX < maxWidth {
 		cm.CursorX++
 	} else {
-		// Wrap to next line
 		cm.CursorX = 0
 		moveDown(cm, grid)
 		return
@@ -236,12 +226,10 @@ func moveWordEnd(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	for range maxIterations {
 		cell := getCellAtCursor(cm, grid)
 
-		// Found non-whitespace: move to phase 2
 		if cell != nil && cell.Content != "" && cell.Content != " " && cell.Content != "\t" {
 			break
 		}
 
-		// Move right, potentially wrapping
 		if cm.CursorX >= maxWidth {
 			cm.CursorX = 0
 			moveDown(cm, grid)
@@ -252,10 +240,8 @@ func moveWordEnd(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 
 	// Phase 2: Move to end of word (last non-whitespace character)
 	for range maxIterations {
-		// Peek at next character
 		nextX := cm.CursorX + 1
 		if nextX > maxWidth {
-			// At end of line
 			break
 		}
 
@@ -327,7 +313,6 @@ func moveWordBackwardBig(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	maxWidth := grid.LastContentCol()
 	maxIterations := 1000
 
-	// Move left at least once
 	if cm.CursorX > 0 {
 		cm.CursorX--
 	} else if cm.CursorY > 0 || cm.ScrollOffset > 0 {
@@ -361,7 +346,6 @@ func moveWordBackwardBig(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 			break
 		}
 
-		// Peek at previous character
 		prevX := cm.CursorX - 1
 		absY := getAbsoluteY(cm, grid)
 		var prevCell *uv.Cell
@@ -391,7 +375,6 @@ func moveWordEndBig(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	maxWidth := grid.LastContentCol()
 	maxIterations := 1000
 
-	// Move right at least once
 	if cm.CursorX < maxWidth {
 		cm.CursorX++
 	} else {
@@ -500,20 +483,17 @@ func moveParagraphUp(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	foundNonBlank := false
 
 	for range maxIterations {
-		// Check if current line is blank
 		absY := getAbsoluteY(cm, grid)
 		lineText := getLineText(cm, grid, absY)
 		isBlank := len([]rune(lineText)) == 0 || isBlankLine(lineText)
 
 		if foundNonBlank && isBlank {
-			// Found the blank line separating paragraphs
 			break
 		}
 		if !isBlank {
 			foundNonBlank = true
 		}
 
-		// Move up
 		if cm.CursorY > 0 {
 			cm.CursorY--
 		} else if cm.ScrollOffset < grid.ScrollbackLen() {
@@ -524,7 +504,6 @@ func moveParagraphUp(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 		}
 	}
 
-	// Skip any additional blank lines
 	for range maxIterations {
 		absY := getAbsoluteY(cm, grid)
 		lineText := getLineText(cm, grid, absY)
@@ -532,7 +511,6 @@ func moveParagraphUp(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 			break
 		}
 
-		// Move up
 		if cm.CursorY > 0 {
 			cm.CursorY--
 		} else if cm.ScrollOffset < grid.ScrollbackLen() {
@@ -551,20 +529,17 @@ func moveParagraphDown(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	foundNonBlank := false
 
 	for range maxIterations {
-		// Check if current line is blank
 		absY := getAbsoluteY(cm, grid)
 		lineText := getLineText(cm, grid, absY)
 		isBlank := len([]rune(lineText)) == 0 || isBlankLine(lineText)
 
 		if foundNonBlank && isBlank {
-			// Found the blank line separating paragraphs
 			break
 		}
 		if !isBlank {
 			foundNonBlank = true
 		}
 
-		// Move down
 		if cm.CursorY < grid.LastContentRow() {
 			cm.CursorY++
 		} else if cm.ScrollOffset > 0 {
@@ -575,7 +550,6 @@ func moveParagraphDown(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 		}
 	}
 
-	// Skip any additional blank lines
 	for range maxIterations {
 		absY := getAbsoluteY(cm, grid)
 		lineText := getLineText(cm, grid, absY)
@@ -583,7 +557,6 @@ func moveParagraphDown(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 			break
 		}
 
-		// Move down
 		if cm.CursorY < grid.LastContentRow() {
 			cm.CursorY++
 		} else if cm.ScrollOffset > 0 {
@@ -597,7 +570,6 @@ func moveParagraphDown(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 
 // moveToMatchingBracket moves cursor to matching bracket
 func moveToMatchingBracket(cm *terminal.CopyMode, grid terminal.CopyGrid) {
-	// Get character at cursor
 	cell := getCellAtCursor(cm, grid)
 	if cell == nil || cell.Content == "" {
 		return
@@ -607,7 +579,6 @@ func moveToMatchingBracket(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	var matchChar string
 	var direction int // 1 for forward, -1 for backward
 
-	// Determine matching bracket and search direction
 	switch char {
 	case "(":
 		matchChar = ")"
@@ -637,18 +608,15 @@ func moveToMatchingBracket(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 		return // Not on a bracket
 	}
 
-	// Search for matching bracket
 	depth := 1
 	maxIterations := 10000
 
 	for i := 0; i < maxIterations && depth > 0; i++ {
-		// Move in search direction
 		if direction > 0 {
 			// Moving forward
 			if cm.CursorX < grid.LastContentCol() {
 				cm.CursorX++
 			} else {
-				// Wrap to next line
 				cm.CursorX = 0
 				if cm.CursorY < grid.LastContentRow() {
 					cm.CursorY++
@@ -660,11 +628,9 @@ func moveToMatchingBracket(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 				}
 			}
 		} else {
-			// Moving backward
 			if cm.CursorX > 0 {
 				cm.CursorX--
 			} else {
-				// Wrap to previous line
 				cm.CursorX = grid.LastContentCol()
 				if cm.CursorY > 0 {
 					cm.CursorY--
@@ -677,7 +643,6 @@ func moveToMatchingBracket(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 			}
 		}
 
-		// Check current character
 		currentCell := getCellAtCursor(cm, grid)
 		if currentCell != nil && currentCell.Content != "" {
 			currentChar := currentCell.Content

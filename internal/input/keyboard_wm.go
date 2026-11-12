@@ -47,7 +47,6 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return HandleCopyModeKey(msg, o, focusedWindow)
 	}
 
-	// Handle scrollback browser overlay
 	if o.ShowScrollbackBrowser {
 		return HandleScrollbackBrowserKey(msg, o)
 	}

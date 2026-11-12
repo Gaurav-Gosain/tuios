@@ -9,11 +9,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// Hidden titles used to veto every rename entry point, because rename once
-// edited the title bar in place. It is a centred dialog now, so it draws its own
-// frame and owes nothing to the bar. These pin the three ways in against the
-// rendered frame, since "the state says Renaming" is not the same claim as "the
-// user can see an editor".
+// Rename is a centred dialog that draws its own frame, so hidden titles must
+// not veto it. These pin the three ways in against the rendered frame, since
+// "the state says Renaming" is not the same claim as "the user can see an
+// editor".
 
 // hiddenTitlesOS is a two-pane client drawn with no window titles at all.
 func hiddenTitlesOS(t *testing.T) *app.OS {

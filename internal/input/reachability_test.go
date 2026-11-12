@@ -547,7 +547,7 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"cycle_layout":         "user binding",
 
 	// Multifocus toggles. The palette has a row for each, and a user binds
-	// them where they want them (issue #232).
+	// them where they want them.
 	"toggle_multifocus_active": "palette row, user binding",
 	"toggle_multifocus_all":    "palette row, user binding",
 	"close_workspace":          "palette row, workspace tab menu, user binding",
@@ -559,7 +559,7 @@ var actionsWithNoDefaultBinding = map[string]string{
 	// itself, so it ships unbound.
 	"clear_scrollback": "user binding and palette row",
 	// Hints on every pane at once. The plain hints key does the same with
-	// hints.all_panes on (issue #248).
+	// hints.all_panes on.
 	"hints_all_panes": "user binding and palette row",
 	// "," is open_settings, so this half of the master resize ships unbound.
 	"resize_master_shrink_left": "user binding",
@@ -573,7 +573,7 @@ var actionsWithNoDefaultBinding = map[string]string{
 	// surface; a user who wants h/l cycle binds these.
 	"next_workspace": "palette row, user binding",
 	"prev_workspace": "palette row, user binding",
-	// Machine cycling (#896). The rail and the switcher cover it by default.
+	// Machine cycling. The rail and the switcher cover it by default.
 	"next_host": "palette row, user binding",
 	"prev_host": "palette row, user binding",
 	// Session jumping ships unbound for the same reason; the switcher and the
@@ -595,7 +595,7 @@ var actionsWithNoDefaultBinding = map[string]string{
 	// BSP has one split it does not ship a key for.
 	"smart_split": "user binding",
 
-	// The tiling scheme actions (#291). No key is clearly free, so all five
+	// The tiling scheme actions. No key is clearly free, so all five
 	// ship unbound; the palette reaches every one, and cycle_tiling_scheme is
 	// the row most users want.
 	"cycle_tiling_scheme":            "palette row, user binding",
@@ -604,7 +604,7 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"set_tiling_scheme_alternate":    "palette row, user binding",
 	"set_tiling_scheme_smart_split":  "palette row, user binding",
 
-	// One master position each (#321). cycle_master_position has the key in
+	// One master position each. cycle_master_position has the key in
 	// the layout prefix; these let a user bind one side directly.
 	"set_master_position_left":   "palette row, user binding",
 	"set_master_position_right":  "palette row, user binding",

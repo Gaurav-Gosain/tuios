@@ -265,11 +265,9 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil && focusedWindow.Terminal != nil {
 			if paneWantsMotion(o, focusedWindow, mouse.Button) {
-				// Convert to terminal-relative coordinates (0-based)
 				termX, termY, inContent := focusedWindow.ScreenToTerminal(mouse.X, mouse.Y)
 				// Check if motion is within terminal content area
 				if inContent {
-					// Create adjusted mouse event with terminal-relative coordinates
 					adjustedMouse := uv.MouseMotionEvent{
 						X:      termX,
 						Y:      termY,
@@ -284,14 +282,12 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// Handle scrollbar drag
 	if o.ScrollbarDragging && o.ScrollbarDragWindowIndex >= 0 && o.ScrollbarDragWindowIndex < len(o.Windows) {
 		win := o.Windows[o.ScrollbarDragWindowIndex]
 		scrollToThumbRow(win, mouse.Y-o.ScrollbarGrabOffset, &o.Settings)
 		return o, nil
 	}
 
-	// Handle copy mode mouse motion
 	if o.Dragging && o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
 		draggedWindow := o.Windows[o.DraggedWindowIndex]
 		if draggedWindow.CopyMode != nil && draggedWindow.CopyMode.Active {
@@ -338,10 +334,8 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
 			focusedWindow = o.Windows[o.DraggedWindowIndex]
 		}
-		// The pane follows the pointer in every layout. The scrolling strip
-		// used to hold its pane still until the drop, so a drag there showed
-		// nothing until the button came up and read as doing nothing at all;
-		// the column swap on release is unchanged.
+		// The pane follows the pointer in every layout, the scrolling strip
+		// included; the column swap happens on release.
 		//
 		// The pointer has moved with the button down, so this gesture really is
 		// a move and the pane can give up its shared-border allowance now. The
@@ -366,18 +360,15 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			newX = leftMargin - (focusedWindow.Width - minVisibleX)
 		}
 
-		// Prevent window from going too far right
 		if newX > contentRight-minVisibleX {
 			newX = contentRight - minVisibleX
 		}
 
-		// Prevent window from going too far up
 		topMargin := o.PaneTop()
 		if newY < topMargin-(focusedWindow.Height-minVisibleY) {
 			newY = topMargin - (focusedWindow.Height - minVisibleY)
 		}
 
-		// Prevent window from going behind dock
 		maxY := topMargin + o.PaneHeight() - minVisibleY
 		if newY > maxY {
 			newY = maxY
@@ -448,7 +439,6 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			newHeight = o.PreResizeState.Height + yOffset
 		}
 
-		// Apply minimum size constraints
 		if newWidth < config.DefaultWindowWidth {
 			newWidth = config.DefaultWindowWidth
 			if o.ResizeCorner == app.TopLeft || o.ResizeCorner == app.BottomLeft {
@@ -490,10 +480,8 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// Right edge: prevent window from exceeding the content region
 		if newX+newWidth > contentRight {
 			if o.ResizeCorner == app.TopRight || o.ResizeCorner == app.BottomRight {
-				// Resizing from right edge: constrain width
 				newWidth = contentRight - newX
 			} else {
-				// Resizing from left edge: constrain X position
 				newX = contentRight - newWidth
 			}
 		}
@@ -503,10 +491,8 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		maxY := topMargin + o.PaneHeight()
 		if newY+newHeight > maxY {
 			if o.ResizeCorner == app.BottomLeft || o.ResizeCorner == app.BottomRight {
-				// Resizing from bottom edge: constrain height
 				newHeight = maxY - newY
 			} else {
-				// Resizing from top edge: constrain Y position
 				newY = maxY - newHeight
 			}
 		}

@@ -39,7 +39,6 @@ func selectWindowByIndex(num int, o *app.OS) {
 // them by key in HandleTerminalModeKey and HandleWindowManagementModeKey and
 // calls these directly; they are not bound actions.
 func handleLeftKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// Help menu category navigation
 	if o.ShowHelp && !o.HelpSearchMode {
 		o.HelpStepCategory(-1)
 		return o, nil
@@ -48,7 +47,6 @@ func handleLeftKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handleRightKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// Help menu category navigation
 	if o.ShowHelp && !o.HelpSearchMode {
 		o.HelpStepCategory(1)
 		return o, nil
