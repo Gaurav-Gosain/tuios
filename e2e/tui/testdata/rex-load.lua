@@ -6,6 +6,11 @@
 --   ENUM <tab> harness command
 --   EXEC <tab> argv joined by spaces
 --   LOADED (setup returned) or SETUP-ERROR <tab> message
+--   RAN <tab> name, or RUN-ERROR <tab> message, for REX_LOAD_RUN
+--
+-- With REX_LOAD_RUN=NAME and REX_LOAD_PID=PID it then runs the action NAME as
+-- Rex would from its palette, with the focused block's foreground process
+-- PID, so the action finds the session the tuios client of that pid shows.
 --
 -- TestRexActionsComeFromTuios runs it. tuios is found the way tuios.lua finds
 -- it in Rex: PATH, then the install folders under HOME.
@@ -124,12 +129,14 @@ local function quote(s)
 end
 
 local errfile = os.tmpname()
+local defined = {}
 
 rex = {
   action = function(a)
     assert(type(a.name) == "string" and a.name:match("^[a-z0-9_]+$"), "bad action name " .. tostring(a.name))
     assert(type(a.title) == "string" and a.title ~= "", "action without a title")
     assert(type(a.run) == "function", "action without run")
+    defined[a.name] = a
     print("ACTION\t" .. a.name .. "\t" .. a.title .. "\t" .. tostring(a.category))
     if a.args and a.args.properties and a.args.properties.harness and a.args.properties.harness.enum then
       for _, h in ipairs(a.args.properties.harness.enum) do
@@ -138,6 +145,12 @@ rex = {
     end
   end,
   bind = function() end,
+  block = {
+    call = function(kind, method, args)
+      assert(kind == "com.superlogical.terminal" and method == "process", "unexpected block call " .. tostring(kind) .. " " .. tostring(method))
+      return { foreground = { pid = tonumber(os.getenv("REX_LOAD_PID") or "") } }
+    end,
+  },
   exec = function(argv, o)
     print("EXEC\t" .. table.concat(argv, " "))
     local parts = {}
@@ -165,9 +178,23 @@ rex = {
 local ok, err = pcall(function()
   require("tuios").setup{}
 end)
-os.remove(errfile)
 if ok then
   print("LOADED")
 else
   print("SETUP-ERROR\t" .. tostring(err))
 end
+local want = os.getenv("REX_LOAD_RUN")
+if ok and want ~= nil and want ~= "" then
+  local a = defined[want]
+  if a == nil then
+    print("RUN-ERROR\tno action " .. want)
+  else
+    local rok, rerr = pcall(a.run, { block_id = "block:test" }, {})
+    if rok then
+      print("RAN\t" .. want)
+    else
+      print("RUN-ERROR\t" .. tostring(rerr))
+    end
+  end
+end
+os.remove(errfile)

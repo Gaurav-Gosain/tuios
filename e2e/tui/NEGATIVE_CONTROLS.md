@@ -17112,3 +17112,18 @@ Run on 2026-11-12 on arch-btw (linux amd64), `TestRailPaneSection` with
 | main 1a66047b1, `TestRailPaneSection` 60 times | 4 of 60: `the rail cache served a stale rail`, row 29 blank cached and `SZ 8 27` built | **caught** |
 | the fix, `TestRailPaneSection` 60 times, then 120 more | 0 of 60, 0 of 120 | passes |
 | `railCacheMiss` not comparing the pane's writes, `TestRailCheckIgnoresPaneOutputTheFrameHasNotTakenIn` | `the check reported output no pass has taken in as a key miss`, row 33 blank cached and `l` built: the CI shape | **caught** |
+
+## Rex offers your own actions
+
+`TestRexOffersYourOwnActions` writes `[[actions]]` into config.toml, checks
+that `tuios actions --json` lists them as `user:NAME` (and leaves out a
+card-only one), loads the real `tuios.lua` and runs `tuios_user_mark_it`
+through its own run function against a real daemon and an attached client,
+and checks the file the action writes. A broken config.toml still lists the
+built-in actions and loads, and a run with no config writes none.
+
+Run on 2026-11-12 on macOS (arm64), on main 1a66047b1. The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `userOutsideActions` reading no config (`cfg = nil`) | "the listed user actions are []", "Rex's user actions are []" and "the Rex action did not run" | **caught** |

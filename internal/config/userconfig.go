@@ -2531,6 +2531,17 @@ func clampPercent(v, lo, hi, fallback int) int {
 	return min(max(v, lo), hi)
 }
 
+// LoadExistingUserConfig is LoadUserConfig for a reader that must not write:
+// when no config file exists it returns nil and no error, and creates none.
+// A launcher such as Rex runs tuios actions --json at its own start, where a
+// new config.toml in the person's folder would be a surprise.
+func LoadExistingUserConfig() (*UserConfig, error) {
+	if _, err := xdg.SearchConfigFile("tuios/config.toml"); err != nil {
+		return nil, nil
+	}
+	return LoadUserConfig()
+}
+
 // LoadUserConfig loads the user configuration from XDG config directory
 func LoadUserConfig() (*UserConfig, error) {
 	configPath, err := xdg.SearchConfigFile("tuios/config.toml")

@@ -6455,11 +6455,16 @@ tuios actions run NAME [-s SESSION] [--dry-run [-w PANE]] [--json]
 With no subcommand, `tuios actions` lists the built-in actions a launcher
 outside tuios can offer: the rows of the command palette that run as a key
 would, each with its name, palette title and section. A launcher runs one with
-`tuios run-command -s SESSION Action NAME`. `--json` gives `actions` (`name`,
-`title`, `category`, `description`) and `harnesses` (`id`, `name`, `command`),
-the agents `tuios start-agent` knows. It reads only the binary and your
-harness manifests, with no daemon. Rex's `tuios.lua` reads it at each config
-load ([REX.md](REX.md)).
+`tuios run-command -s SESSION Action NAME`. Your own actions follow, named
+`user:NAME` in the section "Your actions"; one offered only on targets that
+are not a pane, such as `targets = ["card"]`, is left out. `--json` gives
+`actions` (`name`, `title`, `category`, `description`, and `user: true` on
+your own) and `harnesses` (`id`, `name`, `command`), the agents
+`tuios start-agent` knows. When config.toml cannot be read, the built-in
+actions are still listed and `config_note` says why. It reads only the binary,
+config.toml and your harness manifests, with no daemon, and writes no
+config.toml when there is none. Rex's `tuios.lua` reads it at each config load
+([REX.md](REX.md)).
 
 `list` prints each action's name, key, source (`actions` or `command key`) and
 what it runs; with NAME, that one action, and for an entry tuios ignores, why. `run` runs it as its key would, in the

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -26,10 +27,11 @@ func newActionsCommand() *cobra.Command {
 		Short: "List the actions a launcher can offer, and your own actions",
 		Long: `With no subcommand: the rows of tuios's command palette that run as a key
 would, for a launcher outside tuios to offer, such as Rex's palette
-(docs/REX.md). Each runs in the client that shows the session with
-tuios run-command -s SESSION Action NAME. --json adds the agent harnesses
-tuios start-agent knows. It reads only this binary and your harness
-manifests, so it needs no daemon.
+(docs/REX.md), then your own actions, user:NAME. Each runs in the client
+that shows the session with tuios run-command -s SESSION Action NAME.
+--json adds the agent harnesses tuios start-agent knows. It reads only this
+binary, config.toml and your harness manifests, so it needs no daemon, and
+it writes no config.toml when there is none.
 
 list and run: your actions, the [[actions]] and [[keybindings.command]]
 entries of config.toml, each the action user:NAME. See KEYBINDINGS.md,
@@ -41,8 +43,10 @@ entries of config.toml, each the action user:NAME. See KEYBINDINGS.md,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			list := outsideActions()
+			own, note := userOutsideActions()
+			list = append(list, own...)
 			if asJSON {
-				data, err := jsonx.Marshal(outsideList{Actions: list, Harnesses: outsideHarnesses()})
+				data, err := jsonx.Marshal(outsideList{Actions: list, Harnesses: outsideHarnesses(), ConfigNote: note})
 				if err != nil {
 					return err
 				}
@@ -53,6 +57,9 @@ entries of config.toml, each the action user:NAME. See KEYBINDINGS.md,
 			fmt.Fprintln(tw, "NAME\tCATEGORY\tTITLE")
 			for _, a := range list {
 				fmt.Fprintf(tw, "%s\t%s\t%s\n", a.Name, a.Category, a.Title)
+			}
+			if note != "" {
+				fmt.Fprintln(os.Stderr, note)
 			}
 			return tw.Flush()
 		},
@@ -66,6 +73,10 @@ entries of config.toml, each the action user:NAME. See KEYBINDINGS.md,
 type outsideList struct {
 	Actions   []outsideAction  `json:"actions"`
 	Harnesses []outsideHarness `json:"harnesses"`
+	// ConfigNote says why the person's own actions are missing: config.toml
+	// could not be read. The built-in actions are there all the same, so a
+	// launcher still loads.
+	ConfigNote string `json:"config_note,omitempty"`
 }
 
 // outsideAction is one action a launcher outside tuios offers.
@@ -75,8 +86,38 @@ type outsideAction struct {
 	// Title is the command palette's row, Category its section.
 	Title    string `json:"title"`
 	Category string `json:"category"`
-	// Description is the action table's line for it.
+	// Description is the action table's line for it, or what a user action
+	// runs.
 	Description string `json:"description"`
+	// User marks an action of the person's config.toml, named user:NAME.
+	User bool `json:"user,omitempty"`
+}
+
+// userCategory is the section the person's own actions are listed under.
+const userCategory = "Your actions"
+
+// userOutsideActions are the person's own actions, as a launcher offers
+// them: each [[actions]] and [[keybindings.command]] entry tuios uses, named
+// user:NAME. An action offered only on a card, a file or another thing that
+// is not a pane is left out, since a launcher runs it on the focused pane.
+// The labels and commands are the person's own text, so each is made one
+// plain line. note says why there are none when config.toml has an error.
+func userOutsideActions() (out []outsideAction, note string) {
+	cfg, err := config.LoadExistingUserConfig()
+	if err != nil {
+		return nil, "Your own actions are left out: " + plainLine(err.Error())
+	}
+	if cfg == nil {
+		return nil, ""
+	}
+	for _, r := range actionRows(cfg) {
+		if len(r.Targets) > 0 && !slices.Contains(r.Targets, "pane") {
+			continue
+		}
+		out = append(out, outsideAction{Name: r.Action, Title: plainLine(r.Label), Category: userCategory,
+			Description: plainLine("Your action. It runs " + r.Runs + "."), User: true})
+	}
+	return out, ""
 }
 
 // outsideHarness is one agent tuios start-agent knows by its manifest.
@@ -138,13 +179,18 @@ type actionRow struct {
 	Targets []string `json:"targets,omitempty"`
 }
 
-// loadActions is every user action of config.toml: the [[actions]] entries,
-// then the command entries no [[actions]] entry shadows.
+// loadActions reads config.toml and gives its actionRows.
 func loadActions() ([]actionRow, *config.UserConfig, error) {
 	cfg, err := config.LoadUserConfig()
 	if err != nil {
 		return nil, nil, errfmt.Errorf("failed to read config.toml: %w", err)
 	}
+	return actionRows(cfg), cfg, nil
+}
+
+// actionRows is every user action of cfg: the [[actions]] entries, then the
+// command entries no [[actions]] entry shadows.
+func actionRows(cfg *config.UserConfig) []actionRow {
 	var rows []actionRow
 	seen := map[string]bool{}
 	for _, a := range cfg.UserActions(config.IsBuiltinAction) {
@@ -160,7 +206,7 @@ func loadActions() ([]actionRow, *config.UserConfig, error) {
 		rows = append(rows, actionRow{Name: name, Action: config.UserActionPrefix + name, Label: c.Label(), Source: "command key",
 			Body: "command", Runs: c.ResolvedType() + ": " + c.Command, Key: c.Key})
 	}
-	return rows, cfg, nil
+	return rows
 }
 
 // actionRuns says what a runs, in one line.

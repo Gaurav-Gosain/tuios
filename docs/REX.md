@@ -51,6 +51,18 @@ What Needs You". `rex actions | grep tuios_` lists them all. Among them:
 | `tuios_prefix_mail` | tuios: Agents: Mail for You | Opens the agents view on your mail |
 | `tuios_prefix_next_attention` | tuios: Agents: Go to the Oldest Waiting | Moves the focus to the oldest item that needs you |
 | `tuios_new_window`, `tuios_layout_bsp`, `tuios_prefix_review`, `tuios_prefix_selection`, `tuios_screenshot`, ... | | The window, layout, review, copy mode and screenshot rows of the tuios palette |
+| `tuios_user_NAME` | tuios: your label | Your own `[[actions]]` and `[[keybindings.command]]` entries, `user:NAME` |
+
+Your own actions come from tuios's `config.toml` as Rex's server finds it
+(`$XDG_CONFIG_HOME/tuios`, else `~/.config/tuios`). A dash in the name is an
+underscore in Rex, since a Rex action name has only lowercase letters, digits
+and underscores: `user:open-in-editor` is `tuios_user_open_in_editor`. Two
+names that come out the same, such as `a-b` and `a_b`, keep the first, and
+`tuios_check` names the other. The palette title is your `label` as you wrote
+it. An action offered only on a card, a file or another target that is not a
+pane is left out, since Rex runs it on the focused pane. When tuios cannot
+read `config.toml`, Rex still gets the built-in actions and `tuios_check`
+says why. Run `rex config reload` after you add an action.
 
 Two more are written in `tuios.lua`:
 

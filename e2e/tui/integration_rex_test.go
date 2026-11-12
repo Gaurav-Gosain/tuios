@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -416,6 +417,204 @@ func TestRexActionsComeFromTuios(t *testing.T) {
 			if strings.Contains(e.Name(), "tuios") {
 				t.Errorf("ASSERTION: tuios actions --json made %s, so it reached for a daemon", e.Name())
 			}
+		}
+	})
+}
+
+// TestRexOffersYourOwnActions: the [[actions]] of the person's config.toml,
+// user:NAME, are in tuios actions --json, so tuios.lua defines a Rex action
+// for each, tuios_user_NAME, and running it from Rex runs the action in the
+// client that shows the focused pane's session.
+//
+// How it could pass wrongly, written down first:
+//   - The action could be listed and never run: it is run through tuios.lua's
+//     own run function, against a real daemon and an attached client, and
+//     checked by the file it writes.
+//   - A name with a dash has no Rex name as it is (Rex takes lowercase
+//     letters, digits and underscores): user:mark-it must be
+//     tuios_user_mark_it, and user:mark_it, which maps to the same name, is
+//     left out, not defined twice.
+//   - A label is the person's text, and could carry an escape sequence into
+//     Rex's palette: the listed title holds no control byte.
+//   - An action offered only on a card has nothing to run on from Rex: it is
+//     not listed.
+//   - A config.toml tuios cannot parse could cost Rex every tuios action, or
+//     the person's whole init.lua: the built-in actions are still listed,
+//     setup still loads, and config_note says why.
+//   - Listing could write a config.toml into a folder that has none: after
+//     the run with no config, the config folder holds no file.
+//
+// Artifact: tuios actions --json, the rex-load transcripts, and the file the
+// action wrote.
+//
+// NEGATIVE CONTROL: with userOutsideActions returning nothing, the list
+// check fails on user:mark-it. With M.rex_name mapping a user action to
+// "tuios_" .. name, Rex has no tuios_user_mark_it and the run fails.
+func TestRexOffersYourOwnActions(t *testing.T) {
+	lua, err := exec.LookPath("luajit")
+	if err != nil {
+		if lua, err = exec.LookPath("lua"); err != nil {
+			t.Skip("no luajit or lua on PATH")
+		}
+	}
+	loader, err := filepath.Abs(filepath.Join("testdata", "rex-load.lua"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	luaDir, err := filepath.Abs(filepath.Join("..", "..", "integrations", "rex"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := t.TempDir()
+	killDaemon(t, base)
+	art := artifactDir(t)
+	out := filepath.Join(base, "marked.out")
+	writeConfig(t, base, `[[actions]]
+name = "mark-it"
+label = "Mark it `+"\\u001b[31m"+`now"
+run = ["/bin/sh", "-c", "echo marked > `+out+`"]
+in = "silent"
+
+[[actions]]
+name = "mark_it"
+label = "Same Rex name"
+action = "new_window"
+
+[[actions]]
+name = "card-only"
+targets = ["card"]
+action = "new_window"
+`)
+	home := t.TempDir()
+	bin := filepath.Join(home, ".local", "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(tuiosBin, filepath.Join(bin, "tuios")); err != nil {
+		t.Fatal(err)
+	}
+	env := func(b string, extra ...string) []string {
+		var e []string
+		for _, key := range xdgKeys {
+			if key != "HOME" {
+				e = append(e, key+"="+xdgDir(b, key))
+			}
+		}
+		return append(append(e, "HOME="+home, "USER="+os.Getenv("USER"), "PATH=/usr/bin:/bin"), extra...)
+	}
+	load := func(t *testing.T, b, name string, extra ...string) []string {
+		t.Helper()
+		cmd := exec.Command(lua, loader, luaDir)
+		cmd.Dir = luaDir
+		cmd.Env = env(b, extra...)
+		o, err := cmd.CombinedOutput()
+		saveText(t, name, string(o))
+		if err != nil {
+			t.Fatalf("rex-load.lua: %v\n%s", err, o)
+		}
+		return strings.Split(strings.TrimSpace(string(o)), "\n")
+	}
+	type listed struct {
+		Actions []struct {
+			Name, Title, Category string
+			User                  bool
+		}
+		ConfigNote string `json:"config_note"`
+	}
+	list := func(t *testing.T, b, name string) listed {
+		t.Helper()
+		cmd := exec.Command(tuiosBin, "actions", "--json")
+		cmd.Env = env(b)
+		raw, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("tuios actions --json: %v", err)
+		}
+		saveText(t, name, string(raw))
+		var l listed
+		if err := json.Unmarshal(raw, &l); err != nil {
+			t.Fatalf("tuios actions --json is not JSON: %v", err)
+		}
+		return l
+	}
+
+	l := list(t, base, "actions")
+	var own []string
+	for _, a := range l.Actions {
+		if a.User {
+			own = append(own, a.Name)
+			if strings.ContainsAny(a.Title, "\x1b\x07\n") {
+				t.Errorf("ASSERTION: the title of %s holds a control byte: %q", a.Name, a.Title)
+			}
+		}
+	}
+	if strings.Join(own, " ") != "user:mark-it user:mark_it" {
+		t.Errorf("ASSERTION: the listed user actions are %v, want user:mark-it and user:mark_it, and no card-only", own)
+	}
+
+	mustCLI(t, base, "new", "S", "--detach")
+	waitForSessionInfo(t, base, "S")
+	attachIn(t, base, "S", startOpts{cols: 120, rows: 36})
+	var pid int
+	waitUntil(t, "a client of S in tuios list-clients", 15*time.Second, func() (bool, string) {
+		o, err := tuiosCLI(t, base, "list-clients", "--json")
+		if err != nil {
+			return false, err.Error()
+		}
+		var cs []struct {
+			Pid     int    `json:"pid"`
+			Session string `json:"session"`
+		}
+		if err := json.Unmarshal([]byte(o), &cs); err != nil {
+			return false, o
+		}
+		for _, c := range cs {
+			if c.Session == "S" && c.Pid > 0 {
+				pid = c.Pid
+			}
+		}
+		return pid != 0, o
+	})
+	lines := load(t, base, "rex-run", "REX_LOAD_RUN=tuios_user_mark_it", "REX_LOAD_PID="+strconv.Itoa(pid))
+	var names []string
+	for _, ln := range lines {
+		if p := strings.Split(ln, "\t"); p[0] == "ACTION" && strings.HasPrefix(p[1], "tuios_user_") {
+			names = append(names, p[1]+" "+p[2])
+		}
+	}
+	if strings.Join(names, ", ") != "tuios_user_mark_it tuios: Mark it [31mnow" {
+		t.Errorf("ASSERTION: Rex's user actions are %q, want only tuios_user_mark_it with the label as written", names)
+	}
+	if lines[len(lines)-1] != "RAN\ttuios_user_mark_it" {
+		t.Fatalf("ASSERTION: the Rex action did not run:\n%s", strings.Join(lines, "\n"))
+	}
+	got := waitForFileText(t, out, func(s string) bool { return strings.TrimSpace(s) == "marked" }, "the user action to write its file")
+	_ = os.WriteFile(filepath.Join(art, "marked.out"), []byte(got), 0o644)
+
+	t.Run("config tuios cannot read", func(t *testing.T) {
+		b := t.TempDir()
+		dir := filepath.Join(b, "XDG_CONFIG_HOME", "tuios")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("[[actions]\nname="), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		l := list(t, b, "actions-bad")
+		if l.ConfigNote == "" || len(l.Actions) < 10 {
+			t.Errorf("ASSERTION: a broken config.toml gave %d actions and note %q", len(l.Actions), l.ConfigNote)
+		}
+		lines := load(t, b, "rex-load-bad")
+		if lines[len(lines)-1] != "LOADED" {
+			t.Fatalf("ASSERTION: a broken config.toml broke the Rex config load:\n%s", strings.Join(lines, "\n"))
+		}
+	})
+
+	t.Run("no config writes none", func(t *testing.T) {
+		b := t.TempDir()
+		list(t, b, "actions-none")
+		entries, _ := os.ReadDir(filepath.Join(b, "XDG_CONFIG_HOME"))
+		for _, e := range entries {
+			t.Errorf("ASSERTION: tuios actions --json made %s in an empty config folder", e.Name())
 		}
 	})
 }

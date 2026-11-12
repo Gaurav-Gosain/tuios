@@ -1,7 +1,7 @@
 -- tuios for Rex: actions in Rex's command palette, and optional keys, that
 -- drive the tuios session shown in the focused Rex pane. The actions are the
--- rows of tuios's own command palette, read from tuios actions --json each
--- time Rex loads its config.
+-- rows of tuios's own command palette and the person's own [[actions]], read
+-- from tuios actions --json each time Rex loads its config.
 --
 -- Put this file where Rex's init.lua can require it (next to init.lua), then:
 --
@@ -15,7 +15,7 @@ local M = {}
 
 -- M.version is the version of this file. tuios integration status compares it
 -- with the one the installed tuios ships.
-M.version = 3
+M.version = 4
 
 -- The Rex block kind that runs a terminal.
 local TERMINAL = "com.superlogical.terminal"
@@ -349,6 +349,12 @@ local function check(ctx, args)
   if loaded.keys ~= nil then
     out.keys_note = loaded.keys
   end
+  if loaded.config_note ~= nil then
+    out.config_note = loaded.config_note
+  end
+  if loaded.clash ~= nil then
+    out.clash_note = loaded.clash
+  end
   local ok, s, why = pcall(M.session_of, ctx)
   if ok then
     out.session, out.session_note = s, why
@@ -373,28 +379,52 @@ local function check(ctx, args)
   return out
 end
 
+-- M.rex_name is the Rex action name of a tuios action: tuios_<action>. A
+-- user action, user:NAME, is tuios_user_<NAME> with each dash an underscore,
+-- since a Rex action name has only lowercase letters, digits and
+-- underscores. It is nil for a name Rex cannot take.
+function M.rex_name(name)
+  local own = name:match("^user:(.+)$")
+  local rexname = "tuios_" .. name
+  if own ~= nil then
+    rexname = "tuios_user_" .. own:gsub("-", "_")
+  end
+  if rexname:match("^[a-z0-9_]+$") then
+    return rexname
+  end
+  return nil
+end
+
 -- M.actions builds the actions setup defines from list, the answer of tuios
 -- actions --json, or from the fallback when list is nil: one per tuios
--- action, named tuios_<action>, then Start an Agent and the check. The
--- new_agent action is not one of its own: Start an Agent opens its sheet.
+-- action, then Start an Agent and the check. The new_agent action is not
+-- one of its own: Start an Agent opens its sheet. The second result names
+-- the actions left out because another one has their Rex name, such as
+-- user:a-b after user:a_b.
 function M.actions(list)
   local rows = fallback
   if list ~= nil then
     rows = list.actions
   end
-  local out, seen = {}, { tuios_start_agent = true, tuios_check = true }
+  local out, seen, clash = {}, { tuios_start_agent = true, tuios_check = true }, {}
   for _, a in ipairs(rows) do
     local name = type(a) == "table" and type(a.name) == "string" and a.name or ""
-    local rexname = "tuios_" .. name
-    if name ~= "" and name ~= "new_agent" and rexname:match("^[a-z0-9_]+$") and not seen[rexname] then
+    local rexname = name ~= "" and M.rex_name(name) or nil
+    if rexname ~= nil and seen[rexname] then
+      clash[#clash + 1] = name
+    elseif rexname ~= nil and name ~= "new_agent" then
       seen[rexname] = true
       local title = type(a.title) == "string" and a.title ~= "" and a.title or name
       local category = type(a.category) == "string" and a.category or ""
+      -- A user action's label is the person's own words, kept as written.
+      if a.user ~= true then
+        title = M.title_case(title)
+      end
       out[#out + 1] = {
         name = rexname,
-        title = "tuios: " .. M.title_case(title),
+        title = "tuios: " .. title,
         description = type(a.description) == "string" and a.description or title,
-        keywords = ("tuios " .. category:lower() .. " " .. name:gsub("_", " ")),
+        keywords = ("tuios " .. category:lower() .. " " .. name:gsub("[_:-]", " ")),
         run = client_action(name),
       }
     end
@@ -414,7 +444,7 @@ function M.actions(list)
     keywords = "tuios check doctor integration path",
     run = check,
   }
-  return out
+  return out, clash
 end
 
 -- M.setup defines the actions, and binds the keys given in o.keys, such as
@@ -442,8 +472,14 @@ function M.setup(o)
       end
     end
   end
+  if list ~= nil and type(list.config_note) == "string" and list.config_note ~= "" then
+    loaded.config_note = list.config_note
+  end
   local known = {}
-  local defined = M.actions(list)
+  local defined, clash = M.actions(list)
+  if #clash > 0 then
+    loaded.clash = "left out, since another action has the same Rex name: " .. table.concat(clash, ", ")
+  end
   for _, a in ipairs(defined) do
     rex.action{
       name = a.name,
