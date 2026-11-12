@@ -682,6 +682,13 @@ type OS struct {
 	// rail's and the dock's cells are still wanted on the next frame.
 	keepLayerCells bool
 	composeScratch []composedLayer
+	// kept is what the canvas was drawn from, for a frame that keeps it, and
+	// canvasKept says the last frame kept it. frameRows marks the rows composes changed since the screen was last
+	// handed a frame, and frameRowsAll says any row may have. See compose.go.
+	kept         keptCanvas
+	canvasKept   bool
+	frameRows    []bool
+	frameRowsAll bool
 	// railFit is the rail's row budget scratch, reused by every row the rail
 	// draws. See railScratch.
 	railFit railScratch

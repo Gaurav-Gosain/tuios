@@ -3,8 +3,10 @@ package app
 import (
 	"fmt"
 	"io"
+	"os"
 	"sync/atomic"
 	"testing"
+	"time"
 	"unsafe"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -81,14 +83,18 @@ type layerSeen map[string]uintptr
 func measureFrame(m *OS, seen layerSeen) keyWork {
 	var fc keyWork
 	if c := m.renderCanvas; c != nil {
-		fc.cleared = c.Width() * c.Height()
-		fc.diffed = fc.cleared * m.screen.DiffedRows() / max(c.Height(), 1)
+		if !m.canvasKept {
+			fc.cleared = c.Width() * c.Height()
+		}
+		fc.diffed = c.Width() * m.screen.DiffedRows()
 	}
 	for id, cl := range m.layerCells {
 		if cl.gen != m.composeGen {
 			continue
 		}
-		fc.blitted += cl.w * cl.h
+		if !m.canvasKept {
+			fc.blitted += cl.w * cl.h
+		}
 		p := uintptr(unsafe.Pointer(unsafe.StringData(cl.content)))
 		if seen[id] != p {
 			fc.parsed += cl.w * cl.h
@@ -130,4 +136,133 @@ func BenchmarkKeystrokeFramePane(b *testing.B) {
 	b.ReportMetric(float64(sum.blitted)/float64(n), "blitted/frame")
 	b.ReportMetric(float64(sum.parsed)/float64(n), "parsed/frame")
 	b.ReportMetric(float64(sum.diffed)/float64(n), "diffed/frame")
+}
+
+// TestKeptFrameShowsAFreshCompose checks a frame that keeps the canvas
+// (compose.go) against what a fresh compose draws, over keys typed into a
+// lone pane beside the rail and the dock, mixed with frames that change the
+// rail, the dock and an overlay. The ways it could fail: a layer whose cells
+// changed while the canvas was kept, a pass that wrote over the layers on the
+// frame before a kept one, a pane row written but not passed to the screen as
+// changed, and a frame kept after one composed afresh in between. After
+// every frame the frame check (frame_check.go) must have found nothing, and
+// the frame the screen holds as shown must be the canvas, cell for cell.
+func TestKeptFrameShowsAFreshCompose(t *testing.T) {
+	report := t.TempDir() + "/frame-check.log"
+	prev := frameCheckPath
+	frameCheckPath = report
+	t.Cleanup(func() { frameCheckPath = prev })
+
+	m := keyPaneOS(t, io.Discard)
+	m.MarkAllDirty()
+	keyFrame(m)
+	kept := 0
+	for i := range 120 {
+		switch i % 12 {
+		case 3: // the rail: the pane's name
+			m.Windows[0].CustomName = fmt.Sprintf("pane %d", i)
+		case 5: // the dock: the mode
+			if m.Mode == TerminalMode {
+				m.Mode = WindowManagementMode
+			} else {
+				m.Mode = TerminalMode
+			}
+		case 7: // an overlay over the pane
+			m.ShowCommandPalette = true
+		case 8:
+			m.ShowCommandPalette = false
+			m.Windows[0].MarkContentDirty()
+		default:
+			typeKey(m, i)
+		}
+		m.renderSkipped = false
+		keyFrame(m)
+		if m.canvasKept {
+			kept++
+		}
+		if b, err := os.ReadFile(report); err == nil && len(b) > 0 {
+			t.Fatalf("frame %d: %s", i, b)
+		}
+		shown, canvas := m.screen.Shown(), m.renderCanvas
+		for y := range canvas.Lines {
+			for x := range canvas.Lines[y] {
+				if a, b := &shown.Lines[y][x], &canvas.Lines[y][x]; !a.Equal(b) {
+					t.Fatalf("frame %d (kept %v) cell %d,%d: shown %q %+v, composed %q %+v", i, m.canvasKept, x, y, a.Content, a.Style, b.Content, b.Style)
+				}
+			}
+		}
+	}
+	if kept < 60 {
+		t.Fatalf("%d of 120 frames kept the canvas, want the typed ones", kept)
+	}
+}
+
+// TestKeystrokeFrameBudget holds the frame a key typed into a lone pane
+// beside the rail and the dock to a budget. The cells are counts and exact:
+// the frame keeps the canvas, so nothing is cleared, copied onto it or
+// parsed, and the screen diffs the one row the key changed. The bytes are the
+// echo and the cursor, and the allocations a ceiling over the measured 376.
+//
+// The time is the fastest of 5 runs of 100 frames, because load only adds
+// time, and it is skipped under -race and -short. On an Apple M3 Pro at -cpu 1
+// the frame took 1.0 to 1.35 ms before it kept the canvas, drew the pane from
+// its emulator and diffed one row, and about 0.2 ms after. The ceiling of
+// 1 ms is 5x above the second, so a shared runner can slow the frame a few
+// times without reaching it, and at the first.
+func TestKeystrokeFrameBudget(t *testing.T) {
+	// The bytes of n typed keys, from the start to the close of a screen.
+	// The first frame and the close are the same for any n, so the
+	// difference of two runs is the keys alone.
+	written := func(n int) int64 {
+		out := &countWriter{}
+		m := keyPaneOS(t, out)
+		m.MarkAllDirty()
+		keyFrame(m)
+		seen := layerSeen{}
+		measureFrame(m, seen)
+		for i := range n {
+			typeKey(m, i)
+			keyFrame(m)
+			w := measureFrame(m, seen)
+			if w.parsed != 0 || w.cleared != 0 || w.blitted != 0 || w.diffed > keyCols {
+				t.Fatalf("a typed key cleared %d cells, copied %d, parsed %d and diffed %d, want 0, 0, 0 and one row (%d)",
+					w.cleared, w.blitted, w.parsed, w.diffed, keyCols)
+			}
+		}
+		m.CloseScreen()
+		return out.n.Load()
+	}
+	if per := (written(40) - written(20)) / 20; per > 64 {
+		t.Errorf("a typed key wrote %d bytes, want at most 64", per)
+	}
+
+	m := keyPaneOS(t, io.Discard)
+	m.MarkAllDirty()
+	keyFrame(m)
+	i := 0
+	typed := func() {
+		typeKey(m, i)
+		keyFrame(m)
+		i++
+	}
+	if allocs := testing.AllocsPerRun(100, typed); allocs > 470 {
+		t.Errorf("a typed key's frame allocated %.0f times, want at most 470", allocs)
+	}
+
+	if testing.Short() || raceEnabled {
+		return
+	}
+	const ceiling = time.Millisecond
+	best := time.Duration(1<<63 - 1)
+	for range 5 {
+		start := time.Now()
+		for range 100 {
+			typed()
+		}
+		best = min(best, time.Since(start)/100)
+	}
+	t.Logf("fastest of 5 runs: %v a frame", best)
+	if best > ceiling {
+		t.Errorf("a typed key's frame took %v at best, want at most %v", best, ceiling)
+	}
 }

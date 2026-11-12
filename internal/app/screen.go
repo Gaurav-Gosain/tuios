@@ -37,7 +37,13 @@ func (m *OS) screenFrame() viewContent {
 	canvas, frame := m.composeFrameParts()
 	changed := false
 	if canvas != nil {
-		changed = m.screen.Frame(&canvas.Buffer)
+		rows := m.frameRows
+		if m.frameRowsAll {
+			rows = nil
+		}
+		changed = m.screen.FrameRows(&canvas.Buffer, rows)
+		m.frameRowsAll = false
+		clear(m.frameRows)
 		// The theme transition and the workspace slide copy the old frame
 		// from the canvas (canvasIsFrame), so there is no text to keep.
 		frame = ""

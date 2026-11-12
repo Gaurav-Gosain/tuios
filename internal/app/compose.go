@@ -109,8 +109,7 @@ func (cl *cellLayer) WidthMethod() uv.WidthMethod {
 // did (an option was switched, the theme changed, a pane moved under a clip)
 // is parsed again rather than copied with the old paint.
 func (cl *cellLayer) update(content string, w, h int, fill *layerFill) {
-	if cl.content == content && cl.w >= 0 && cl.fillRect == fill.rect &&
-		cl.fillInner == fill.inner.key && cl.fillOuter == fill.outer.key {
+	if cl.same(content, fill) {
 		return
 	}
 	cl.content = content
@@ -132,6 +131,12 @@ func (cl *cellLayer) update(content string, w, h int, fill *layerFill) {
 			}
 		}
 	}
+}
+
+// same reports whether the cells hold content painted with fill already.
+func (cl *cellLayer) same(content string, fill *layerFill) bool {
+	return cl.content == content && cl.w >= 0 && cl.fillRect == fill.rect &&
+		cl.fillInner == fill.inner.key && cl.fillOuter == fill.outer.key
 }
 
 // clearLines sets every cell to the blank cell, a row at a time, copying
@@ -260,6 +265,75 @@ type composedLayer struct {
 // screen and clipped to the view's pane area. Their bounds for the backgrounds stay the layout ones, so
 // a pane's fill lands on its own cells wherever the view puts them.
 func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, paneLayers int) {
+	m.composeLayers(canvas, layers, paneLayers, nil)
+}
+
+// A frame that changed nothing but the direct pane keeps the canvas.
+//
+// The direct pane (pane_cells.go) is copied onto the canvas after every
+// layer, and while it is drawn nothing is open over it and no effect runs.
+// So when every layer of a frame is the layer of the last frame (the same
+// cells at the same place and depth), no pass wrote over the layers on either
+// frame, and the canvas was not drawn by anything else in between, the
+// canvas already holds this frame's layers. Only the pane's cells are copied
+// again, and only the rows they change are passed to the screen as changed.
+// A key typed into a lone pane beside the rail and the dock costs a row, not
+// the screen.
+
+// keptCanvas is what the canvas holds after a frame that may be kept: the
+// layers it was drawn from, the ground it was cleared to and its size.
+type keptCanvas struct {
+	valid  bool
+	ground string
+	w, h   int
+	layers []keptLayer
+}
+
+type keptLayer struct {
+	cells  *cellLayer
+	bounds image.Rectangle
+	z      int
+}
+
+// keepRequest is how GetCanvas asks composeLayers for its frame: the ground
+// to clear the canvas to, and whether the frame may keep the canvas (a
+// direct pane is drawn and no pass outside the compositor runs).
+type keepRequest struct {
+	ground   ground
+	keepable bool
+}
+
+// matches reports whether the ordered layers, with their cells already
+// updated, are the layers the canvas was drawn from.
+func (k *keptCanvas) matches(canvas *frameCanvas, g ground, ordered []composedLayer) bool {
+	if !k.valid || k.w != canvas.Width() || k.h != canvas.Height() || k.ground != g.key || len(k.layers) != len(ordered) {
+		return false
+	}
+	for i := range ordered {
+		e, was := &ordered[i], &k.layers[i]
+		if e.cells != was.cells || e.bounds != was.bounds || layerZ(e.layer) != was.z {
+			return false
+		}
+	}
+	return true
+}
+
+// record keeps what the canvas was drawn from.
+func (k *keptCanvas) record(canvas *frameCanvas, g ground, ordered []composedLayer) {
+	k.valid = true
+	k.w, k.h, k.ground = canvas.Width(), canvas.Height(), g.key
+	k.layers = k.layers[:0]
+	for i := range ordered {
+		e := &ordered[i]
+		k.layers = append(k.layers, keptLayer{cells: e.cells, bounds: e.bounds, z: layerZ(e.layer)})
+	}
+}
+
+// composeLayers is composeLayersIn for GetCanvas, which passes keep: the
+// canvas is cleared to keep.ground and drawn, or kept as the last frame left
+// it when keep.keepable allows and nothing else changed. It reports whether
+// the canvas was kept.
+func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer, paneLayers int, keep *keepRequest) bool {
 	m.composeGen++
 	if m.layerCells == nil {
 		m.layerCells = make(map[string]*cellLayer)
@@ -327,8 +401,45 @@ func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, pane
 	fading := m.motion.fading > 0
 	shimmer := len(m.motion.rail) > 0
 
+	// Whether this frame draws its layers and nothing over them: no pass
+	// below runs, and every layer is drawn from its cells.
+	plain := keep != nil && keep.keepable && !sliding && !view.on && popup == "" && !fading && !shimmer &&
+		!m.gradient.on && m.hints == nil && m.paneLabels == nil && !m.dropZoneShown && !m.dropRingOn()
+	drawn, reparsed := ordered[:0:0], false
+	if plain {
+		drawn = ordered[1:]
+		for i := range drawn {
+			e := &drawn[i]
+			if e.layer == nil || e.cells == nil || (m.Settings.ModalDim > 0 && scrimBehind(e.layer.GetID())) {
+				plain = false
+				break
+			}
+			var fill layerFill
+			if painted {
+				fill = m.layerFill(e.layer.GetID(), e.bounds, e.layer.Width(), e.layer.Height(), &grounds)
+			}
+			if !e.cells.same(e.layer.GetContent(), &fill) {
+				// Parsed now, so the frame is drawn from the new cells
+				// and can be kept next time.
+				e.cells.update(e.layer.GetContent(), e.layer.Width(), e.layer.Height(), &fill)
+				reparsed = true
+			}
+		}
+	}
+	var ground ground
+	if keep != nil {
+		ground = keep.ground
+	}
+	kept := plain && !reparsed && m.kept.matches(canvas, ground, drawn)
+	if !kept && keep != nil {
+		canvas.ClearTo(keep.ground)
+	}
+
 	area := canvas.Bounds()
 	for _, cl := range ordered {
+		if kept {
+			break
+		}
 		if cl.layer == nil {
 			continue
 		}
@@ -430,8 +541,16 @@ func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, pane
 			}
 		}
 	}
+	switch {
+	case kept:
+	case plain:
+		m.kept.record(canvas, ground, drawn)
+	default:
+		m.kept.valid = false
+	}
 	clear(ordered)
 	m.composeScratch = ordered[:0]
+	return kept
 }
 
 // drawComposedLayer draws one layer onto the canvas: from its parsed cells

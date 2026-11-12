@@ -16,6 +16,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -38,9 +39,15 @@ type Screen struct {
 	scratch uv.ScreenBuffer
 	w, h    int
 	// rows marks the rows of the last diff that differed from the frame
-	// shown, and diffed counts them.
-	rows   []bool
-	diffed int
+	// shown, and diffed counts them. maybe marks the rows the frames staged
+	// since that diff may have changed, every row when maybeAll is set.
+	rows     []bool
+	diffed   int
+	maybe    []bool
+	maybeAll bool
+	// passed is the buffer of the frame passed last, which a frame's rows
+	// are marked against.
+	passed *uv.Buffer
 
 	// started: the alternate screen is entered and its sequences are in
 	// pre. query: ask for synchronized output and the unicode core at
@@ -170,11 +177,39 @@ func (s *Screen) start() {
 // wrote only the view it held when its flush came. buf must stay as composed
 // until Commit, or be composed again.
 func (s *Screen) Frame(buf *uv.Buffer) bool {
+	return s.FrameRows(buf, nil)
+}
+
+// FrameRows is Frame for a frame that differs from the frame passed last
+// only in the rows rows marks: the rest are the cells that frame had. nil
+// marks every row, and so does a frame in another buffer than the last.
+// Only the marked rows, and those of frames not yet written, are compared
+// with the frame shown.
+func (s *Screen) FrameRows(buf *uv.Buffer, rows []bool) bool {
 	if s.closed || s.released {
 		return false
 	}
 	s.staged = buf
-	return !sameCells(buf, &s.shown)
+	defer func() { s.passed = buf }()
+	h := buf.Height()
+	switch {
+	case rows == nil || len(rows) != h || len(s.maybe) != h || buf != s.passed:
+		s.maybeAll = true
+		s.maybe = slices.Grow(s.maybe[:0], h)[:h]
+	case !s.maybeAll:
+		for y, r := range rows {
+			s.maybe[y] = s.maybe[y] || r
+		}
+	}
+	if s.maybeAll || s.shown.Width() != buf.Width() || s.shown.Height() != h {
+		return !sameCells(buf, &s.shown)
+	}
+	for y, r := range s.maybe {
+		if r && !SameLine(buf.Lines[y], s.shown.Lines[y]) {
+			return true
+		}
+	}
+	return false
 }
 
 // FrameString is Frame for a frame drawn as a string, w by h cells.
@@ -288,12 +323,15 @@ func (s *Screen) diff(buf *uv.Buffer) {
 		s.rows = make([]bool, h)
 	}
 	changed := 0
+	all := full || s.maybeAll || len(s.maybe) != h
 	for y := range h {
-		s.rows[y] = full || !sameLine(buf.Lines[y], s.shown.Lines[y])
+		s.rows[y] = full || ((all || s.maybe[y]) && !SameLine(buf.Lines[y], s.shown.Lines[y]))
 		if s.rows[y] {
 			changed++
 		}
 	}
+	s.maybeAll = false
+	clear(s.maybe)
 	s.diffed = changed
 	if changed == 0 {
 		return
@@ -336,30 +374,30 @@ func sameCells(a, b *uv.Buffer) bool {
 		return false
 	}
 	for y := range a.Lines {
-		if !sameLine(a.Lines[y], b.Lines[y]) {
+		if !SameLine(a.Lines[y], b.Lines[y]) {
 			return false
 		}
 	}
 	return true
 }
 
-// sameLine reports whether two rows hold the same cells, by uv's Cell.Equal.
-func sameLine(a, b uv.Line) bool {
+// SameLine reports whether two rows hold the same cells, by uv's Cell.Equal.
+func SameLine(a, b uv.Line) bool {
 	if len(a) != len(b) {
 		return false
 	}
 	for x := range a {
-		if !sameCell(&a[x], &b[x]) {
+		if !SameCell(&a[x], &b[x]) {
 			return false
 		}
 	}
 	return true
 }
 
-// sameCell is uv's Cell.Equal with the colour types the compositor writes
+// SameCell is uv's Cell.Equal with the colour types the compositor writes
 // compared directly. Cell.Equal converts every colour to RGBA through its
 // interface, which made the compare of a frame cost more than its diff.
-func sameCell(a, b *uv.Cell) bool {
+func SameCell(a, b *uv.Cell) bool {
 	return a.Width == b.Width && a.Content == b.Content &&
 		a.Style.Attrs == b.Style.Attrs && a.Style.Underline == b.Style.Underline &&
 		sameColor(a.Style.Fg, b.Style.Fg) && sameColor(a.Style.Bg, b.Style.Bg) &&

@@ -8,6 +8,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/termio"
 	uv "github.com/charmbracelet/ultraviolet"
 	"tuios.dev/vt"
 )
@@ -163,7 +164,11 @@ func (m *OS) blankBody(w, h int) string {
 // copyDirectPane copies the pane's emulator cells into its content rectangle
 // on the canvas and lets go of its lock. The pane's text cache is dropped, so
 // a frame drawn the usual way reads the emulator again.
-func (m *OS) copyDirectPane(canvas *frameCanvas, d *directPane) {
+//
+// On a frame that kept the canvas the rectangle holds the cells copied last
+// time, so a cell is written only where it differs, and each row written is
+// marked in frameRows for the screen.
+func (m *OS) copyDirectPane(canvas *frameCanvas, d *directPane, kept bool) {
 	if d.w == nil {
 		return
 	}
@@ -175,7 +180,12 @@ func (m *OS) copyDirectPane(canvas *frameCanvas, d *directPane) {
 		// The cells this rectangle had in the frame the screen last wrote.
 		if shown := m.screen.Shown(); shown.Bounds().Eq(canvas.Bounds()) {
 			for y := r.Min.Y; y < r.Max.Y; y++ {
-				copy(canvas.Lines[y][r.Min.X:r.Max.X], shown.Lines[y][r.Min.X:r.Max.X])
+				dst, src := canvas.Lines[y][r.Min.X:r.Max.X], shown.Lines[y][r.Min.X:r.Max.X]
+				if kept && termio.SameLine(dst, src) {
+					continue
+				}
+				copy(dst, src)
+				m.frameRows[y] = true
 			}
 		}
 		return
@@ -184,12 +194,21 @@ func (m *OS) copyDirectPane(canvas *frameCanvas, d *directPane) {
 	rows, cols := min(r.Dy(), screen.Height()), min(r.Dx(), screen.Width())
 	for y := range rows {
 		line := canvas.Lines[r.Min.Y+y]
+		changed := false
 		for x := range cols {
-			if c := screen.CellAt(x, y); c != nil {
-				line[r.Min.X+x] = *c
-			} else {
-				line[r.Min.X+x] = uv.EmptyCell
+			src := screen.CellAt(x, y)
+			if src == nil {
+				src = &uv.EmptyCell
 			}
+			dst := &line[r.Min.X+x]
+			if kept && termio.SameCell(dst, src) {
+				continue
+			}
+			*dst = *src
+			changed = true
+		}
+		if changed {
+			m.frameRows[r.Min.Y+y] = true
 		}
 	}
 	w.RenderedCols, w.RenderedRows = w.ContentWidth(), w.ContentHeight()

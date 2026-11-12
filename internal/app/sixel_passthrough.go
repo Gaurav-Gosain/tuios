@@ -452,6 +452,19 @@ func (sp *SixelPassthrough) ImageCount() int {
 	return len(sp.images)
 }
 
+// imagesOnScreen reports whether any image is held for this client's panes.
+// Their cells are drawn and replaced on the canvas after the compositor, so a
+// frame with one cannot keep the canvas (compose.go).
+func (m *OS) imagesOnScreen() bool {
+	sp := m.SixelPassthrough
+	if sp == nil {
+		return false
+	}
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	return len(sp.images) > 0 || len(sp.byWindow) > 0
+}
+
 // WindowHasImages reports whether a window has drawn an image this
 // passthrough still holds. The fullscreen fast path does not look for image
 // cells, so such a window takes the compositor.
