@@ -39,10 +39,11 @@ type ddItem struct {
 
 // dropdown is an open list and where it was last drawn.
 type dropdown struct {
-	items  []ddItem
-	cursor int
-	hover  int
-	first  int
+	items []ddItem
+	// list is the cursor and the first row drawn; the window is placed by
+	// drawDropdown, centred on the cursor when it can be.
+	list  listnav.State
+	hover int
 	// The box as last drawn, in screen cells, and the screen row of its
 	// first item.
 	x0, y0, x1, y1 int
@@ -56,7 +57,7 @@ func newDropdown(items []ddItem) *dropdown {
 	n := 0
 	for i := range d.items {
 		if d.items[i].current {
-			d.cursor = i
+			d.list.Cursor = i
 		}
 		if d.items[i].key == "" && n < 9 {
 			n++
@@ -91,12 +92,14 @@ func (d *dropdown) Key(key string, closeOthers bool, keys *listnav.Keymap) (int,
 		return -1, ddKeyClosed
 	}
 	if delta, ok := listDelta(keys, key, listOverlayRows); ok {
-		d.cursor, d.hover = min(max(d.cursor+delta, 0), n-1), -1
+		// The list stops at its ends.
+		d.list.Move(delta, n, n, false, nil)
+		d.hover = -1
 		return -1, ddKeyMoved
 	}
 	switch key {
 	case "enter", "space":
-		return d.cursor, ddKeyPicked
+		return d.list.Cursor, ddKeyPicked
 	case "esc":
 		return -1, ddKeyClosed
 	}
@@ -118,7 +121,7 @@ func (d *dropdown) RowAt(x, y int) (int, bool) {
 		return -1, false
 	}
 	if r := y - d.rowY0; r >= 0 && r < d.rows {
-		return d.first + r, true
+		return d.list.Scroll + r, true
 	}
 	return -1, true
 }
@@ -132,7 +135,7 @@ func (d *dropdown) Hover(x, y int) bool {
 	}
 	d.hover = row
 	if row >= 0 {
-		d.cursor = row
+		d.list.Cursor = row
 	}
 	return true
 }
@@ -168,12 +171,12 @@ func drawDropdown(c *ckCanvas, l ckLook, d *dropdown, x, y, w, top0, bottom, top
 		y0 = y - rows - 2
 	}
 	// The window keeps the cursor in view, centred when it can.
-	d.first = min(max(d.cursor-rows/2, 0), len(d.items)-rows)
+	d.list.Scroll = min(max(d.list.Cursor-rows/2, 0), len(d.items)-rows)
 	c.fill(x, y0, w, rows+2, pal.Card)
 	c.hline(x, y0, w, hzGlyph(), l.edge)
 	c.hline(x, y0+rows+1, w, hzGlyph(), l.edge)
 	for r := range rows {
-		i := d.first + r
+		i := d.list.Scroll + r
 		it := d.items[i]
 		yy := y0 + 1 + r
 		ink, tone, keyInk, ground := pal.Fg, pal.FgDim, pal.Accent, pal.Card
@@ -181,7 +184,7 @@ func drawDropdown(c *ckCanvas, l ckLook, d *dropdown, x, y, w, top0, bottom, top
 			ink, tone = pal.FgDim, pal.FgMute
 		}
 		switch {
-		case i == d.cursor:
+		case i == d.list.Cursor:
 			ink, tone, keyInk, ground = pal.PillFg, pal.PillFg, pal.PillFg, pal.Accent
 		case i == d.hover:
 			ground = pal.Ground(ddHover, pal.Card)
@@ -198,7 +201,7 @@ func drawDropdown(c *ckCanvas, l ckLook, d *dropdown, x, y, w, top0, bottom, top
 		c.text(x+2, yy, x+w-2-keyW-1, segs...)
 		c.textR(x+w-2, yy, ckSeg{t: it.key, fg: keyInk, attrs: ckBold})
 		switch {
-		case i == d.cursor:
+		case i == d.list.Cursor:
 			c.mark(pal, x, yy, w, 1, ckOn)
 		case i == d.hover:
 			c.mark(pal, x, yy, w, 1, ddHover)

@@ -8,7 +8,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
@@ -279,18 +278,6 @@ func wrapPlain(s string, width int) []string {
 	}
 	flush()
 	return out
-}
-
-// moveListSelection advances a (selected, scroll) pair by delta within a list
-// of count items showing maxVisible rows under the list rule (see listWraps),
-// keeping the selection in view. Shared by the keyboard and the mouse wheel
-// for the list overlays.
-func (m *OS) moveListSelection(selected, scroll *int, count, maxVisible, delta int) {
-	if count == 0 {
-		return
-	}
-	*selected = m.listStep(*selected, delta, count)
-	*scroll = listnav.Scroll(*scroll, *selected, count, maxVisible)
 }
 
 // listOverlayRows is the page the list overlays scroll by before the renderer

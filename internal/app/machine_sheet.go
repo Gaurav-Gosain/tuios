@@ -15,6 +15,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/hostsetup"
 	"github.com/Gaurav-Gosain/tuios/internal/hostsync"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 )
 
@@ -97,7 +98,8 @@ type msPickState struct {
 
 	aliases     []string
 	aliasesRead bool
-	aliasCur    int
+	// aliasList is the cursor on the ssh aliases.
+	aliasList listnav.State
 
 	peers    *hostsetup.Prompt
 	peersErr string
@@ -592,12 +594,12 @@ func (m *OS) msPickKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		msEdit(m.msField(), msg)
 	case msTabSSH:
-		if key == "enter" && p.aliasCur < len(p.aliases) {
-			p.addr, p.name, p.tab = p.aliases[p.aliasCur], "", msTabAddress
+		if key == "enter" && p.aliasList.Cursor < len(p.aliases) {
+			p.addr, p.name, p.tab = p.aliases[p.aliasList.Cursor], "", msTabAddress
 			return m.msStart()
 		}
 		if delta, ok := listDelta(m.ListKeys, key, listOverlayRows); ok {
-			p.aliasCur = m.listStep(p.aliasCur, delta, len(p.aliases))
+			p.aliasList.Move(delta, len(p.aliases), len(p.aliases), m.listWraps(), nil)
 		}
 	case msTabTailnet:
 		switch {

@@ -11,6 +11,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sound"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -107,11 +108,10 @@ type AgentMailState struct {
 	// Inbox narrows the list to threads touching one window, when the overlay
 	// was opened from that window's row. Empty lists every thread.
 	Inbox string
-	// Selected is the cursor in the thread list.
-	Selected int
-	// Scroll is the list's scroll offset in the thread list, and the line
-	// offset of the conversation in the thread view.
-	Scroll int
+	// List is the thread list's cursor and window.
+	List listnav.State
+	// ThreadScroll is the line offset of the conversation in the thread view.
+	ThreadScroll int
 	// Thread is the open thread, zero for the list of threads.
 	Thread uint64
 	// Composing is true while the reply editor is open. Comp is the draft,
@@ -137,10 +137,9 @@ type AgentMailState struct {
 	// Sending is true between enter on a reply and the daemon answering.
 	Sending bool
 	// Picking is true while the list of agents a new message can go to is
-	// open. PickSelected is its cursor.
-	Picking      bool
-	PickSelected int
-	PickScroll   int
+	// open. Pick is its cursor and window.
+	Picking bool
+	Pick    listnav.State
 	// ComposeTo is the window a new message goes to, while the draft is a
 	// new message rather than a reply. Empty while the draft is a reply.
 	ComposeTo string
@@ -354,7 +353,7 @@ func (m *OS) noteAgentMail(p session.AgentMailPayload) {
 	// view follows it.
 	if m.ShowAgentMail && st.Thread == msg.ThreadID {
 		m.agentMailSee(msg.ID)
-		st.Scroll = agentMailBottom
+		st.ThreadScroll = agentMailBottom
 		return
 	}
 	m.considerMailAlert(msg)
@@ -442,8 +441,8 @@ func (m *OS) openAgentMailFor(inbox string) tea.Cmd {
 	m.ShowAgentMail = true
 	st.Inbox = inbox
 	st.Thread = 0
-	st.Selected = 0
-	st.Scroll = 0
+	st.List.Reset()
+	st.ThreadScroll = 0
 	st.Composing = false
 	st.Comp = nil
 	st.Error = ""
@@ -519,7 +518,7 @@ func (m *OS) OpenAgentMailThread(thread uint64) tea.Cmd {
 	st.Picking = false
 	st.ComposeTo = ""
 	st.Thread = thread
-	st.Scroll = agentMailBottom
+	st.ThreadScroll = agentMailBottom
 	m.agentMailSeeThread(thread)
 	return m.agentMailMarkRead(thread)
 }
@@ -693,27 +692,27 @@ func (m *OS) AgentMailMove(delta int) {
 	st := &m.AgentMail
 	if st.Picking {
 		if n := len(m.agentMailComposeTargets()); n > 0 {
-			st.PickSelected = m.listStep(st.PickSelected, delta, n)
+			st.Pick.Move(delta, n, listOverlayRows, m.listWraps(), nil)
 		}
 		return
 	}
 	if st.Thread != 0 {
-		st.Scroll = max(st.Scroll+delta, 0)
+		st.ThreadScroll = max(st.ThreadScroll+delta, 0)
 		return
 	}
 	n := len(m.agentMailThreads())
 	if n == 0 {
-		st.Selected = 0
+		st.List.Cursor = 0
 		return
 	}
-	st.Selected = m.listStep(st.Selected, delta, n)
+	st.List.Move(delta, n, listOverlayRows, m.listWraps(), nil)
 }
 
 // AgentMailSelect puts the list cursor on row idx.
 func (m *OS) AgentMailSelect(idx int) {
 	if m.AgentMail.Picking {
 		if n := len(m.agentMailComposeTargets()); n > 0 {
-			m.AgentMail.PickSelected = clampInt(idx, 0, n-1)
+			m.AgentMail.Pick.Select(clampInt(idx, 0, n-1), n, listOverlayRows)
 		}
 		return
 	}
@@ -721,7 +720,7 @@ func (m *OS) AgentMailSelect(idx int) {
 	if n == 0 {
 		return
 	}
-	m.AgentMail.Selected = clampInt(idx, 0, n-1)
+	m.AgentMail.List.Select(clampInt(idx, 0, n-1), n, listOverlayRows)
 }
 
 // AgentMailOpenSelected opens the thread under the cursor, scrolled to its
@@ -734,11 +733,11 @@ func (m *OS) AgentMailOpenSelected() tea.Cmd {
 		return nil
 	}
 	threads := m.agentMailThreads()
-	if st.Selected < 0 || st.Selected >= len(threads) {
+	if st.List.Cursor < 0 || st.List.Cursor >= len(threads) {
 		return nil
 	}
-	st.Thread = threads[st.Selected].ID
-	st.Scroll = agentMailBottom
+	st.Thread = threads[st.List.Cursor].ID
+	st.ThreadScroll = agentMailBottom
 	st.Error = ""
 	m.agentMailSeeThread(st.Thread)
 	return m.agentMailMarkRead(st.Thread)
@@ -797,7 +796,7 @@ func (m *OS) AgentMailBack() {
 		return
 	}
 	st.Thread = 0
-	st.Scroll = 0
+	st.ThreadScroll = 0
 	st.Composing = false
 	st.Comp = nil
 	st.Error = ""
@@ -837,7 +836,7 @@ func (m *OS) AgentMailStartReply() bool {
 	st.Composing = true
 	st.Comp = m.newMailDraft(to)
 	st.Error = ""
-	st.Scroll = agentMailBottom
+	st.ThreadScroll = agentMailBottom
 	return true
 }
 
@@ -877,11 +876,11 @@ func (m *OS) AgentMailStartNew() bool {
 		return false
 	}
 	st.Picking = true
-	st.PickSelected = 0
+	st.Pick.Cursor = 0
 	// A mailbox opened for one pane starts the list on that pane.
 	for i, w := range m.agentMailComposeTargets() {
 		if w.ID == st.Inbox {
-			st.PickSelected = i
+			st.Pick.Cursor = i
 		}
 	}
 	st.Error = ""
@@ -896,7 +895,7 @@ func (m *OS) AgentMailPick() bool {
 	if !st.Picking || len(targets) == 0 {
 		return false
 	}
-	w := targets[clampInt(st.PickSelected, 0, len(targets)-1)]
+	w := targets[clampInt(st.Pick.Cursor, 0, len(targets)-1)]
 	st.Picking = false
 	st.ComposeTo = w.ID
 	st.Composing = true
@@ -1135,8 +1134,7 @@ func (m *OS) applyAgentMailSent(msg AgentMailSentMsg) {
 	}
 	if msg.New && st.ComposeTo != "" {
 		// A new message starts the newest thread, which is the top row.
-		st.Selected = 0
-		st.Scroll = 0
+		st.List.Cursor, st.List.Scroll = 0, 0
 	}
 	st.Composing = false
 	st.Comp = nil

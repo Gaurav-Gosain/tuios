@@ -14,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/crashexit"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
@@ -71,11 +72,10 @@ type transfersState struct {
 	events chan tea.Msg
 	stop   func()
 
-	// open, selected, scroll and selectedID are the Copies panel. The
-	// cursor follows selectedID: the list is sorted again on every event.
+	// open, list and selectedID are the Copies panel. The cursor follows
+	// selectedID: the list is sorted again on every event.
 	open       bool
-	selected   int
-	scroll     int
+	list       listnav.State
 	selectedID string
 
 	// dialog is the open question: cancel, conflict, send or drop.
@@ -732,23 +732,23 @@ func (m *OS) clampTransfersSelection() {
 	st := &m.transfers
 	if st.selectedID != "" {
 		if i := m.transferRowIndex(st.selectedID); i >= 0 {
-			st.selected = i
+			st.list.Cursor = i
 			return
 		}
 	}
-	st.selected = clampInt(st.selected, 0, max(len(st.rows)-1, 0))
-	if st.selected < len(st.rows) {
-		st.selectedID = st.rows[st.selected].ID
+	st.list.Cursor = clampInt(st.list.Cursor, 0, max(len(st.rows)-1, 0))
+	if st.list.Cursor < len(st.rows) {
+		st.selectedID = st.rows[st.list.Cursor].ID
 	}
 }
 
 // selectedTransfer is the copy under the panel's cursor.
 func (m *OS) selectedTransfer() (session.TransferRow, bool) {
 	st := &m.transfers
-	if st.selected < 0 || st.selected >= len(st.rows) {
+	if st.list.Cursor < 0 || st.list.Cursor >= len(st.rows) {
 		return session.TransferRow{}, false
 	}
-	return st.rows[st.selected], true
+	return st.rows[st.list.Cursor], true
 }
 
 // TransfersOpen reports whether the Copies panel is up.
@@ -780,7 +780,7 @@ func (m *OS) TransfersOwnsKeys() bool {
 func (m *OS) OpenTransfers() tea.Cmd {
 	st := &m.transfers
 	st.open = true
-	st.selected, st.scroll, st.selectedID = 0, 0, ""
+	st.list.Cursor, st.list.Scroll, st.selectedID = 0, 0, ""
 	if len(st.rows) > 0 {
 		st.selectedID = st.rows[0].ID
 	}
@@ -807,9 +807,9 @@ func (m *OS) CloseTransfers() {
 // TransfersMove steps the panel's cursor.
 func (m *OS) TransfersMove(delta int) {
 	st := &m.transfers
-	m.moveListSelection(&st.selected, &st.scroll, len(st.rows), transfersPanelRows, delta)
-	if st.selected >= 0 && st.selected < len(st.rows) {
-		st.selectedID = st.rows[st.selected].ID
+	st.list.Move(delta, len(st.rows), transfersPanelRows, m.listWraps(), nil)
+	if st.list.Cursor >= 0 && st.list.Cursor < len(st.rows) {
+		st.selectedID = st.rows[st.list.Cursor].ID
 	}
 }
 
@@ -817,7 +817,7 @@ func (m *OS) TransfersMove(delta int) {
 func (m *OS) TransfersSelect(idx int) {
 	st := &m.transfers
 	if idx >= 0 && idx < len(st.rows) {
-		st.selected = idx
+		st.list.Cursor = idx
 		st.selectedID = st.rows[idx].ID
 	}
 }

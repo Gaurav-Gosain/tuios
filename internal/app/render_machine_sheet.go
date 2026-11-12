@@ -238,8 +238,8 @@ func (p *msPainter) pickView() {
 		if len(pk.aliases) == 0 {
 			p.put(p.x, p.y, pal.FgMute, false, "Your ssh config names no machines.")
 		}
-		for i := max(pk.aliasCur-(p.bottom-p.y-3), 0); i < len(pk.aliases) && p.y < p.bottom-2; i++ {
-			p.put(p.row(p.y, i == pk.aliasCur), p.y, pal.Fg, false, p.l.g(ckGlyphHost)+"  "+pk.aliases[i])
+		for i := max(pk.aliasList.Cursor-(p.bottom-p.y-3), 0); i < len(pk.aliases) && p.y < p.bottom-2; i++ {
+			p.put(p.row(p.y, i == pk.aliasList.Cursor), p.y, pal.Fg, false, p.l.g(ckGlyphHost)+"  "+pk.aliases[i])
 			p.y++
 		}
 	case msTabTailnet:

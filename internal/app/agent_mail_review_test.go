@@ -125,8 +125,8 @@ func TestComposeNits(t *testing.T) {
 	if !m.AgentMailStartNew() {
 		t.Fatal("n did not open the agent list")
 	}
-	if targets := m.agentMailComposeTargets(); targets[m.AgentMail.PickSelected].ID != "cccccccc3333" {
-		t.Errorf("the list starts on %q, want the pane the mailbox was opened for", targets[m.AgentMail.PickSelected].ID)
+	if targets := m.agentMailComposeTargets(); targets[m.AgentMail.Pick.Cursor].ID != "cccccccc3333" {
+		t.Errorf("the list starts on %q, want the pane the mailbox was opened for", targets[m.AgentMail.Pick.Cursor].ID)
 	}
 	frame := renderMailPlain(t, m)
 	if !strings.Contains(frame, "bbbbbbbb") || !strings.Contains(frame, "cccccccc") {

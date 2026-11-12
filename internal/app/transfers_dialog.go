@@ -15,6 +15,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/textedit"
@@ -74,8 +75,9 @@ type copyDialog struct {
 	// row is the copy a cancel or a conflict question is about.
 	row session.TransferRow
 	// rows are the answers, in drawn order.
-	rows     []string
-	selected int
+	rows []string
+	// list is the cursor on the answers.
+	list listnav.State
 	// all is the conflict question's check box: the answer is for every
 	// file of the copy.
 	all bool
@@ -152,13 +154,13 @@ func (m *OS) CopyDialogMove(delta int) {
 	if n == 0 {
 		return
 	}
-	d.selected = m.listStep(d.selected, delta, n)
+	d.list.Move(delta, n, n, m.listWraps(), nil)
 }
 
 // CopyDialogSelect puts the cursor on row idx.
 func (m *OS) CopyDialogSelect(idx int) {
 	if d := m.transfers.dialog; d != nil && idx >= 0 && idx < d.rowCount() {
-		d.selected = idx
+		d.list.Cursor = idx
 	}
 }
 
@@ -202,7 +204,7 @@ func (m *OS) CopyDialogKey(key, text string) tea.Cmd {
 			d.all = !d.all
 		}
 	case "enter":
-		return m.CopyDialogActivate(d.selected)
+		return m.CopyDialogActivate(d.list.Cursor)
 	}
 	return nil
 }
@@ -222,7 +224,7 @@ func (m *OS) CopyDialogActivate(idx int) tea.Cmd {
 	if d == nil {
 		return nil
 	}
-	d.selected = idx
+	d.list.Cursor = idx
 	switch d.kind {
 	case copyDialogCancel:
 		m.CloseCopyDialog()
@@ -809,7 +811,7 @@ func (m *OS) renderCopyDialog() (string, overlay.Geometry, []overlayRowHit) {
 // destructive answer takes the warn ink under the cursor.
 func (m *OS) copyDialogRow(d *copyDialog, idx, width int, pal overlay.Palette) string {
 	bg := pal.Canvas
-	cursor := d.selected == idx
+	cursor := d.list.Cursor == idx
 	if cursor {
 		bg = pal.Surface
 	}

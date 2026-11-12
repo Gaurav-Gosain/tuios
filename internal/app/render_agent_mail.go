@@ -113,15 +113,15 @@ func (m *OS) renderAgentMail() (string, overlay.Geometry, []overlayRowHit) {
 		return m.emptyPanel(title, agentMailWidth, agentMailEmptyRows, lines[0], lines[1:], close, hints)
 	}
 	if len(threads) > 0 {
-		st.Selected = clampInt(st.Selected, 0, len(threads)-1)
+		st.List.Cursor = clampInt(st.List.Cursor, 0, len(threads)-1)
 	}
 	return m.renderListOverlay(listOverlay{
 		Title:      title,
 		Width:      agentMailWidth,
 		MaxVisible: 10,
 		Count:      len(threads),
-		Selected:   st.Selected,
-		Scroll:     &st.Scroll,
+		Selected:   st.List.Cursor,
+		Scroll:     &st.List.Scroll,
 		EmptyMsg:   "Reading mail",
 		Pending:    st.Loading && !overlay.ShowLoading(st.LoadingSince, now),
 		Hints:      m.keyHints(config.ActionMailOpen, "open", config.ActionMailNew, "new", config.ActionMailBack, "close"),
@@ -151,15 +151,15 @@ func (m *OS) renderAgentMailPicker() (string, overlay.Geometry, []overlayRowHit)
 	st := &m.AgentMail
 	targets := m.agentMailComposeTargets()
 	if len(targets) > 0 {
-		st.PickSelected = clampInt(st.PickSelected, 0, len(targets)-1)
+		st.Pick.Cursor = clampInt(st.Pick.Cursor, 0, len(targets)-1)
 	}
 	return m.renderListOverlay(listOverlay{
 		Title:      "New message: choose an agent",
 		Width:      agentMailWidth,
 		MaxVisible: 10,
 		Count:      len(targets),
-		Selected:   st.PickSelected,
-		Scroll:     &st.PickScroll,
+		Selected:   st.Pick.Cursor,
+		Scroll:     &st.Pick.Scroll,
 		EmptyMsg:   "No agent runs in this session.",
 		Hints:      m.keyHints(config.ActionMailOpen, "write", config.ActionMailBack, "back"),
 		RenderRow: func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
@@ -460,9 +460,9 @@ func (m *OS) renderAgentMailThread() (string, overlay.Geometry, []overlayRowHit)
 	// A short conversation gets a short panel; a long one scrolls inside the
 	// rows the screen can hold.
 	rows, hints := m.panelBody(clampInt(len(lines), 6, agentMailRows), extra, width, nil, hints)
-	st.Scroll = clampInt(st.Scroll, 0, max(len(lines)-rows, 0))
-	end := min(st.Scroll+rows, len(lines))
-	body := append([]string{}, lines[st.Scroll:end]...)
+	st.ThreadScroll = clampInt(st.ThreadScroll, 0, max(len(lines)-rows, 0))
+	end := min(st.ThreadScroll+rows, len(lines))
+	body := append([]string{}, lines[st.ThreadScroll:end]...)
 	for len(body) < rows {
 		body = append(body, "")
 	}

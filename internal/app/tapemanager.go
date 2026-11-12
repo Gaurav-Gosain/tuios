@@ -50,10 +50,10 @@ type TapeFile struct {
 
 // TapeManagerState holds the state for the tape manager UI
 type TapeManagerState struct {
-	Mode           TapeManagerMode
-	Files          []TapeFile
-	SelectedIndex  int
-	ScrollOffset   int
+	Mode  TapeManagerMode
+	Files []TapeFile
+	// List is the file list's cursor and window.
+	List           listnav.State
 	NameBuffer     string // Buffer for naming new tapes
 	DeleteConfirm  bool   // Whether delete is confirmed
 	ErrorMessage   string // Error message to display
@@ -163,10 +163,8 @@ func SaveTape(name string, content string) (string, error) {
 // InitTapeManager initializes the tape manager state
 func (m *OS) InitTapeManager() {
 	m.TapeManager = &TapeManagerState{
-		Mode:          TapeManagerList,
-		Files:         []TapeFile{},
-		SelectedIndex: 0,
-		ScrollOffset:  0,
+		Mode:  TapeManagerList,
+		Files: []TapeFile{},
 	}
 }
 
@@ -185,34 +183,7 @@ func (m *OS) RefreshTapeFiles() {
 
 	m.TapeManager.Files = files
 
-	// Adjust selection if necessary
-	if m.TapeManager.SelectedIndex >= len(files) {
-		m.TapeManager.SelectedIndex = max(0, len(files)-1)
-	}
-	m.clampTapeScroll()
-}
-
-// clampTapeScroll keeps ScrollOffset positioned so the selected file stays
-// within the visible window and never scrolls past the end of the list.
-func (m *OS) clampTapeScroll() {
-	tm := m.TapeManager
-	if tm == nil {
-		return
-	}
-
-	if tm.SelectedIndex < tm.ScrollOffset {
-		tm.ScrollOffset = tm.SelectedIndex
-	} else if tm.SelectedIndex >= tm.ScrollOffset+tapeManagerVisibleRows {
-		tm.ScrollOffset = tm.SelectedIndex - tapeManagerVisibleRows + 1
-	}
-
-	maxOffset := max(len(tm.Files)-tapeManagerVisibleRows, 0)
-	if tm.ScrollOffset > maxOffset {
-		tm.ScrollOffset = maxOffset
-	}
-	if tm.ScrollOffset < 0 {
-		tm.ScrollOffset = 0
-	}
+	m.TapeManager.List.Fit(len(files), tapeManagerVisibleRows)
 }
 
 // ToggleTapeManager toggles the tape manager overlay
@@ -242,8 +213,7 @@ func (m *OS) TapeManagerMove(delta int) {
 	if m.TapeManager == nil || len(m.TapeManager.Files) == 0 {
 		return
 	}
-	m.TapeManager.SelectedIndex = m.listStep(m.TapeManager.SelectedIndex, delta, len(m.TapeManager.Files))
-	m.clampTapeScroll()
+	m.TapeManager.List.Move(delta, len(m.TapeManager.Files), tapeManagerVisibleRows, m.listWraps(), nil)
 }
 
 // TapeManagerDelete initiates delete confirmation
@@ -261,7 +231,7 @@ func (m *OS) TapeManagerConfirmDeleteAction() {
 		return
 	}
 
-	selected := m.TapeManager.Files[m.TapeManager.SelectedIndex]
+	selected := m.TapeManager.Files[m.TapeManager.List.Cursor]
 	if err := DeleteTapeFile(selected.Path); err != nil {
 		m.TapeManager.ErrorMessage = fmt.Sprintf("Failed to delete: %s", err)
 		m.TapeManager.MessageTime = time.Now()
@@ -365,7 +335,7 @@ func (m *OS) TapeManagerPlaySelected() {
 		return
 	}
 
-	selected := m.TapeManager.Files[m.TapeManager.SelectedIndex]
+	selected := m.TapeManager.Files[m.TapeManager.List.Cursor]
 
 	if m.scriptBusy() {
 		m.TapeManager.ErrorMessage = "A tape is already playing"
@@ -432,7 +402,7 @@ func (m *OS) RenderTapeManager() string {
 
 	case TapeManagerConfirmDelete:
 		if len(m.TapeManager.Files) > 0 {
-			selected := m.TapeManager.Files[m.TapeManager.SelectedIndex]
+			selected := m.TapeManager.Files[m.TapeManager.List.Cursor]
 			lines = append(lines, text(pal.Warn)("Delete "+selected.Name+"?"))
 			hints = []overlay.Hint{{Key: "y", Label: "delete"}, {Key: "n", Label: "keep"}}
 		}
@@ -463,7 +433,7 @@ func (m *OS) RenderTapeManager() string {
 
 		rows, trimmed := m.panelBody(len(m.TapeManager.Files), len(lines)+1, width, nil, hints)
 		hints = trimmed
-		startIdx := m.TapeManager.ScrollOffset
+		startIdx := m.TapeManager.List.Scroll
 		endIdx := min(startIdx+rows, len(m.TapeManager.Files))
 
 		for i := startIdx; i < endIdx; i++ {
@@ -497,7 +467,7 @@ const tapeMessageLinger = 3 * time.Second
 // the selection reads as a row rather than as a slab painted around the text.
 func (m *OS) tapeFileRow(i, width int, pal overlay.Palette) string {
 	file := m.TapeManager.Files[i]
-	selected := i == m.TapeManager.SelectedIndex
+	selected := i == m.TapeManager.List.Cursor
 
 	st := overlay.RowState{Cursor: selected, Focused: true}
 	rowBg := pal.Ground(st, pal.Surface)
