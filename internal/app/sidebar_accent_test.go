@@ -71,11 +71,11 @@ func TestSidebarSignatureFoldsWhatTheRailDraws(t *testing.T) {
 	// its own dialog and the rail draws the old name throughout, so typing must
 	// not rebuild the rail once per keystroke.
 	m.BeginRenameWindow(m.Windows[2])
-	m.RenameBuffer = "a"
+	m.SetRenameText("a")
 	if m.sidebarSignature() != withAccent {
 		t.Error("starting a rename moved the signature, so typing rebuilds the whole rail")
 	}
-	m.RenameBuffer = "ab"
+	m.SetRenameText("ab")
 	if m.sidebarSignature() != withAccent {
 		t.Error("typing into the rename buffer moved the signature")
 	}

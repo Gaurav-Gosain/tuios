@@ -57,10 +57,10 @@ func TestSessionRenameDoesNotBlockUpdate(t *testing.T) {
 
 	m := &OS{Settings: config.Global, SessionName: "work", SessionDisplayName: "old"}
 	m.BeginRenameSession("work")
-	if m.RenameBuffer != "old" {
-		t.Fatalf("editor seeded with %q, want the existing label", m.RenameBuffer)
+	if m.RenameText() != "old" {
+		t.Fatalf("editor seeded with %q, want the existing label", m.RenameText())
 	}
-	m.RenameBuffer = "Payments API"
+	m.SetRenameText("Payments API")
 
 	start := time.Now()
 	cmd := m.CommitRename()
@@ -97,8 +97,8 @@ func TestSessionRenameSeedsTheName(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	m := &OS{Settings: config.Global, SessionName: "test"}
 	m.BeginRenameSession("test")
-	if m.RenameBuffer != "test" {
-		t.Fatalf("editor seeded with %q, want the session's name test", m.RenameBuffer)
+	if m.RenameText() != "test" {
+		t.Fatalf("editor seeded with %q, want the session's name test", m.RenameText())
 	}
 	if cmd := m.CommitRename(); cmd != nil {
 		t.Error("saving the name unchanged sent a rename")
@@ -110,13 +110,13 @@ func TestSessionRenameSeedsTheName(t *testing.T) {
 func TestRenameAppendGate(t *testing.T) {
 	m := &OS{Settings: config.Global, Width: 100, Height: 30, SessionName: "work"}
 	m.BeginRenameSession("work")
-	m.RenameBuffer = ""
+	m.SetRenameText("")
 
 	for _, in := range []string{" ", "é", "日", "a"} {
-		before := m.RenameBuffer
+		before := m.RenameText()
 		m.RenameAppend(in)
-		if m.RenameBuffer != before+in {
-			t.Errorf("appending %q gave %q, want %q", in, m.RenameBuffer, before+in)
+		if m.RenameText() != before+in {
+			t.Errorf("appending %q gave %q, want %q", in, m.RenameText(), before+in)
 		}
 	}
 	// A Nerd Font icon follows the font: kept while Nerd Fonts are on,
@@ -124,26 +124,26 @@ func TestRenameAppendGate(t *testing.T) {
 	overlay.SetNerdFonts(false)
 	t.Cleanup(func() { overlay.SetNerdFonts(false) })
 	for _, in := range []string{"\x1b", "\u0301", "\U0001f600", "\ue0a0", "\u25b6"} {
-		before := m.RenameBuffer
+		before := m.RenameText()
 		m.RenameAppend(in)
-		if m.RenameBuffer != before {
-			t.Errorf("appending %q was accepted: %q", in, m.RenameBuffer)
+		if m.RenameText() != before {
+			t.Errorf("appending %q was accepted: %q", in, m.RenameText())
 		}
 	}
 	overlay.SetNerdFonts(true)
 	for _, in := range []string{"\ue0a0", "\U000f0219"} {
-		before := m.RenameBuffer
+		before := m.RenameText()
 		m.RenameAppend(in)
-		if m.RenameBuffer != before+in {
-			t.Errorf("appending %q with Nerd Fonts on gave %q, want %q", in, m.RenameBuffer, before+in)
+		if m.RenameText() != before+in {
+			t.Errorf("appending %q with Nerd Fonts on gave %q, want %q", in, m.RenameText(), before+in)
 		}
 	}
 
 	// Nothing lands anywhere once the editor is closed.
 	m.EndRename()
 	m.RenameAppend("x")
-	if m.RenameBuffer != "" {
-		t.Errorf("typing after the editor closed left %q", m.RenameBuffer)
+	if m.RenameText() != "" {
+		t.Errorf("typing after the editor closed left %q", m.RenameText())
 	}
 }
 
@@ -155,7 +155,7 @@ func TestRenameFieldKeepsWhatWasTyped(t *testing.T) {
 	m := &OS{Settings: config.Global, Width: 100, Height: 30, SessionName: "work", NumWorkspaces: 9}
 	m.BeginRenameSession("work")
 
-	m.RenameBuffer = "build "
+	m.SetRenameText("build ")
 	out, _, _, _, ok := m.renderRenameDialog()
 	if !ok {
 		t.Fatal("no dialog while a rename is open")
@@ -165,7 +165,7 @@ func TestRenameFieldKeepsWhatWasTyped(t *testing.T) {
 		t.Errorf("the trailing space is missing from the field:\n%s", out)
 	}
 
-	m.RenameBuffer = "日本語 café"
+	m.SetRenameText("日本語 café")
 	out, geo, _, _, _ := m.renderRenameDialog()
 	t.Logf("\n%s", out)
 	if !strings.Contains(out, "日本語 café") {
@@ -198,7 +198,7 @@ func TestSessionRenameThroughHostDialsTheHost(t *testing.T) {
 
 	m := &OS{Settings: config.Global, SessionName: "test", AttachedHost: "build"}
 	m.BeginRenameSession("test")
-	m.RenameBuffer = "work"
+	m.SetRenameText("work")
 	cmd := m.CommitRename()
 	if cmd == nil {
 		t.Fatal("the rename sent nothing")

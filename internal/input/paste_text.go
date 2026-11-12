@@ -73,15 +73,7 @@ func textFieldPaste(o *app.OS) func(string) tea.Cmd {
 		if o.TapeManager == nil || o.TapeManager.Mode != app.TapeManagerNaming {
 			return nil
 		}
-		// A tape's name is a file name of printable ASCII, as typed.
-		return typed(func(s string) {
-			o.TapeManager.NameBuffer += strings.Map(func(r rune) rune {
-				if r < 32 || r > 126 {
-					return -1
-				}
-				return r
-			}, s)
-		})
+		return typed(o.TapeNamePaste)
 	case o.ShowHelp:
 		if !o.HelpSearchMode {
 			return nil

@@ -16966,3 +16966,18 @@ on the branch.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'Ended$|MachineEnds$|NotEnded$|IsNotEnded$' -v .`.
+
+## The rename dialog edits at its caret
+
+`TestRenameEditsAtTheCaret` opens the rename dialog on a new window, clears
+it, types "abd", presses left once, types "c" and presses enter, and checks
+the window is named "abcd".
+
+Run on 2026-11-12 on macOS. The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The R7 5d tip (cf928fba6), where the rename field appends and left does nothing | "left then c did not type at the caret; the window is not named abcd" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRenameEditsAtTheCaret$' -v .`.

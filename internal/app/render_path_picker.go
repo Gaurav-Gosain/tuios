@@ -101,7 +101,7 @@ func (m *OS) placePathPicker(layers []*lipgloss.Layer) []*lipgloss.Layer {
 		room = image.Rect(0, 0, rw, rh)
 	}
 
-	line := p.prefix() + p.query
+	line := p.prefix() + p.query.String()
 	width := max(p.nameWidth+6, lipgloss.Width(line)+6, pathPickerMinWidth)
 	width = min(width, pathPickerMaxWidth, max(room.Dx()-2, overlay.MinDialogWidth))
 
@@ -154,9 +154,9 @@ func (m *OS) renderPathPicker(p *pathPicker, width, rows int) (string, overlay.G
 			msg = p.err
 		case p.loading:
 			msg = "Reading the folder"
-		case p.query == "" && len(p.entries) == 0:
+		case p.query.String() == "" && len(p.entries) == 0:
 			msg = "This folder is empty"
-		case p.query == "":
+		case p.query.String() == "":
 			msg = "Only hidden files. Press alt+h to show them"
 		}
 		for range rows - 1 {
@@ -280,17 +280,19 @@ func (m *OS) pathPickerFilterLine(p *pathPicker, width int, pal overlay.Palette)
 	}
 	lead := overlay.Style(base).Foreground(pal.AccentBright).Render(glyph) + overlay.Style(base).Render(" ")
 	room := max(width-lipgloss.Width(lead)-1, 1)
-	prefix, query := printableTitle(p.prefix()), printableTitle(p.query)
-	if ansi.StringWidth(prefix+query) > room {
-		cut := truncateLeft(prefix+query, room)
-		if ansi.StringWidth(query) >= room {
-			prefix, query = "", cut
-		} else {
-			prefix = strings.TrimSuffix(cut, query)
+	// The path walked so far gives way from its start before the filter does;
+	// the filter keeps its caret, and scrolls itself when it is wider than
+	// the line (overlay.FieldLine).
+	prefix := printableTitle(p.prefix())
+	before, at, after := p.query.Parts()
+	before, at, after = printableTitle(before), printableTitle(at), printableTitle(after)
+	if left := room - ansi.StringWidth(before+at+after) - 1; ansi.StringWidth(prefix) > left {
+		prefix = ""
+		if left > 0 {
+			prefix = truncateLeft(printableTitle(p.prefix()), left)
 		}
 	}
 	return lead +
 		overlay.Style(base).Foreground(pal.Accent).Bold(true).Render(prefix) +
-		overlay.Style(base).Foreground(pal.Fg).Render(query) +
-		overlay.Cursor(" ", base, pal.Fg)
+		overlay.FieldLine(before, at, after, max(room-ansi.StringWidth(prefix), 1), base, pal.Fg)
 }

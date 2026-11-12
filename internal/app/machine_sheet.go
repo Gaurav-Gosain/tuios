@@ -93,7 +93,7 @@ type msPickState struct {
 	tab int
 	// addr, name and back are the Address tab's fields: the machine, its
 	// name here, and this machine's address for it. field has the keys.
-	addr, name, back string
+	addr, name, back textedit.Line
 	field            int
 
 	aliases     []string
@@ -166,7 +166,7 @@ func (m *OS) OpenMachineSheet(dest string) tea.Cmd {
 	}
 	m.machineSheet = &machineSheet{}
 	if dest = strings.TrimSpace(dest); dest != "" {
-		m.machineSheet.pick.addr = dest
+		m.machineSheet.pick.addr.Set(dest)
 		return m.msStart()
 	}
 	return nil
@@ -250,7 +250,7 @@ func (m *OS) msBegin(names []string, work func(ctx context.Context, b *hostsetup
 	s.runs++
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &msRun{id: s.runs, ch: make(chan any), cancel: cancel}
-	*s = machineSheet{view: msViewRun, pick: s.pick, runs: s.runs, run: r, dest: strings.TrimSpace(s.pick.addr)}
+	*s = machineSheet{view: msViewRun, pick: s.pick, runs: s.runs, run: r, dest: strings.TrimSpace(s.pick.addr.String())}
 	for _, n := range names {
 		s.flows = append(s.flows, &hostsetup.Flow{Name: n})
 	}
@@ -280,12 +280,12 @@ func msListen(r *msRun) tea.Cmd {
 // choice, so nothing is agreed in advance.
 func (m *OS) msStart() tea.Cmd {
 	p := m.machineSheet.pick
-	dest := strings.TrimSpace(p.addr)
+	dest := strings.TrimSpace(p.addr.String())
 	if dest == "" {
 		m.ShowNotification("Type the address of the machine, like user@host.", "warning", m.Settings.NotificationWarningDuration)
 		return nil
 	}
-	return m.msRun([]hostsetup.Peer{{Name: strings.TrimSpace(p.name), Addr: dest}}, hostsetup.Choices{Address: strings.TrimSpace(p.back)})
+	return m.msRun([]hostsetup.Peer{{Name: strings.TrimSpace(p.name.String()), Addr: dest}}, hostsetup.Choices{Address: strings.TrimSpace(p.back.String())})
 }
 
 // msStartBulk sets up the ticked tailnet machines with one set of answers.
@@ -543,22 +543,17 @@ func (m *OS) msDoneKey(key string) tea.Cmd {
 // MachineSheetType types pasted text into the sheet's field.
 func (m *OS) MachineSheetType(text string) {
 	if f := m.msField(); f != nil {
-		*f += strings.Map(func(r rune) rune {
-			if r < 0x20 || r == 0x7f {
-				return -1
-			}
-			return r
-		}, text)
+		lineInsert(f, text, cleanControl)
 	}
 }
 
 // msField is the Address tab's field that has the keys, nil on other tabs.
-func (m *OS) msField() *string {
+func (m *OS) msField() *textedit.Line {
 	s := m.machineSheet
 	if s == nil || s.view != msViewPick || s.pick.tab != msTabAddress {
 		return nil
 	}
-	return [...]*string{&s.pick.addr, &s.pick.name, &s.pick.back}[s.pick.field]
+	return [...]*textedit.Line{&s.pick.addr, &s.pick.name, &s.pick.back}[s.pick.field]
 }
 
 func (m *OS) msPickKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -595,7 +590,9 @@ func (m *OS) msPickKey(msg tea.KeyPressMsg) tea.Cmd {
 		msEdit(m.msField(), msg)
 	case msTabSSH:
 		if key == "enter" && p.aliasList.Cursor < len(p.aliases) {
-			p.addr, p.name, p.tab = p.aliases[p.aliasList.Cursor], "", msTabAddress
+			p.addr.Set(p.aliases[p.aliasList.Cursor])
+			p.name.Set("")
+			p.tab = msTabAddress
 			return m.msStart()
 		}
 		if delta, ok := listDelta(m.ListKeys, key, listOverlayRows); ok {
@@ -616,20 +613,25 @@ func (m *OS) msPickKey(msg tea.KeyPressMsg) tea.Cmd {
 			// each of its questions.
 			peer := p.peers.Peers[p.peers.Own]
 			p.peers.Own = -1
-			p.addr, p.name, p.tab = peer.Addr, peer.Name, msTabAddress
+			p.addr.Set(peer.Addr)
+			p.name.Set(peer.Name)
+			p.tab = msTabAddress
 			return m.msStart()
 		}
 	}
 	return nil
 }
 
-// msEdit applies an editing key to f.
-func msEdit(f *string, msg tea.KeyPressMsg) {
+// msEdit applies an editing key to f (see lineKey).
+func msEdit(f *textedit.Line, msg tea.KeyPressMsg) {
+	if f == nil {
+		return
+	}
 	// A key with a modifier other than shift types nothing here, so alt+x
 	// does not add an x.
 	text := msg.Text
 	if msg.Mod&^tea.ModShift != 0 {
 		text = ""
 	}
-	textedit.EditLine(f, msg.String(), text, true)
+	lineKey(f, msg.String(), text, cleanControl)
 }

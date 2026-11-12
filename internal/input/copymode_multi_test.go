@@ -341,16 +341,16 @@ func TestMultiCopySaveToFile(t *testing.T) {
 	if s == nil {
 		t.Fatal("Y did not open the save prompt")
 	}
-	if !strings.HasPrefix(s.Path, "~/tuios-copy-") || !strings.HasSuffix(s.Path, ".txt") {
-		t.Errorf("default path %q, want ~/tuios-copy-<time>.txt", s.Path)
+	if !strings.HasPrefix(s.Path.String(), "~/tuios-copy-") || !strings.HasSuffix(s.Path.String(), ".txt") {
+		t.Errorf("default path %q, want ~/tuios-copy-<time>.txt", s.Path.String())
 	}
 	// tab changes the format and the extension with it.
 	mcPress(o, "tab")
-	if !strings.HasSuffix(s.Path, ".md") {
-		t.Errorf("after tab the path is %q, want the .md extension", s.Path)
+	if !strings.HasSuffix(s.Path.String(), ".md") {
+		t.Errorf("after tab the path is %q, want the .md extension", s.Path.String())
 	}
 	// Type a path of our own.
-	for range len(s.Path) {
+	for range len(s.Path.String()) {
 		mcPress(o, "backspace")
 	}
 	for _, r := range "~/rack.md" {
@@ -373,7 +373,7 @@ func TestMultiCopySaveToFile(t *testing.T) {
 
 	// The same path again: the file is kept and the prompt says why.
 	mcPress(o, "V", "Y")
-	for range len(o.MultiCopy.Save.Path) {
+	for range len(o.MultiCopy.Save.Path.String()) {
 		mcPress(o, "backspace")
 	}
 	for _, r := range "~/rack.md" {

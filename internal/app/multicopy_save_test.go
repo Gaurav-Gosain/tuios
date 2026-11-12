@@ -43,7 +43,7 @@ func (ff failingFile) Close() error { return ff.f.Close() }
 func TestMultiCopySaveFailureLeavesNoFile(t *testing.T) {
 	m, home := saveOS(t)
 	path := filepath.Join(home, "out.txt")
-	m.MultiCopy.Save.Path = "~/out.txt"
+	m.MultiCopy.Save.Path.Set("~/out.txt")
 
 	real := multiCopyCreate
 	t.Cleanup(func() { multiCopyCreate = real })
@@ -83,7 +83,7 @@ func TestMultiCopySavePathMessages(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.Windows[0].Cwd = cwd
-	m.MultiCopy.Save.Path = "lldp.txt"
+	m.MultiCopy.Save.Path.Set("lldp.txt")
 	if got, _ := m.MultiCopySaveResolved(); got != filepath.Join(cwd, "lldp.txt") {
 		t.Errorf("a relative path resolves to %q, want it in the pane's directory %q", got, cwd)
 	}
@@ -93,13 +93,13 @@ func TestMultiCopySavePathMessages(t *testing.T) {
 		t.Errorf("with no pane directory a relative path resolves to %q, want the home directory", got)
 	}
 
-	m.MultiCopy.Save.Path = "~/no/such/dir/x.txt"
+	m.MultiCopy.Save.Path.Set("~/no/such/dir/x.txt")
 	m.CommitMultiCopySave()
 	if got, want := m.MultiCopy.Save.Err, "The folder ~/no/such/dir does not exist."; got != want {
 		t.Errorf("missing folder: %q, want %q", got, want)
 	}
 
-	m.MultiCopy.Save.Path = "~/rack"
+	m.MultiCopy.Save.Path.Set("~/rack")
 	m.CommitMultiCopySave()
 	if got, want := m.MultiCopy.Save.Err, "~/rack is a folder. Type a file name."; got != want {
 		t.Errorf("folder path: %q, want %q", got, want)
@@ -110,7 +110,7 @@ func TestMultiCopySavePathMessages(t *testing.T) {
 	// macOS is long.
 	m.Windows[0].Width = len(home) + 80
 	m.MultiCopy.Save.Err = ""
-	m.MultiCopy.Save.Path = "~/rack/a.txt"
+	m.MultiCopy.Save.Path.Set("~/rack/a.txt")
 	layer := m.multiCopySaveLayer()
 	if layer == nil || !strings.Contains(stripANSIForTrace(layer.GetContent()), filepath.Join(home, "rack", "a.txt")) {
 		t.Errorf("the prompt does not show the full path")
@@ -119,7 +119,7 @@ func TestMultiCopySavePathMessages(t *testing.T) {
 	// A remote client is told which machine the file is on.
 	m.RemoteClient = true
 	host, _ := os.Hostname()
-	m.MultiCopy.Save.Path = "~/remote.txt"
+	m.MultiCopy.Save.Path.Set("~/remote.txt")
 	if !m.CommitMultiCopySave() {
 		t.Fatalf("save failed: %q", m.MultiCopy.Save.Err)
 	}

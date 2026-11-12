@@ -52,11 +52,7 @@ func (m *OS) renderRenameDialog() (string, overlay.Geometry, int, int, bool) {
 
 	// Sigil, a space, the field, and one cell of right pad, so the cursor never
 	// sits against the frame.
-	field := fieldTail(printableRunes(m.RenameBuffer), max(inner-4, 1))
-	body := overlay.Style(pal.Canvas).Render(" ") +
-		overlay.Style(pal.Canvas).Foreground(pal.AccentBright).Bold(true).Render(overlay.Sigil()) +
-		overlay.Style(pal.Canvas).Foreground(pal.Fg).Render(field) +
-		overlay.Cursor(" ", pal.Canvas, pal.Fg)
+	body := fieldRow(&m.rename, inner, pal.Canvas, pal)
 
 	content, geo := overlay.Dialog{
 		Title: m.RenameDialogTitle(),

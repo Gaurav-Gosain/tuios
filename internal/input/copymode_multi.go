@@ -2,13 +2,11 @@ package input
 
 import (
 	"fmt"
-	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 )
 
 // Multi copy mode key handling: one key, every pane of the mode. See
@@ -220,22 +218,9 @@ func handleMultiCopySaveKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ShowNotification("Left copy mode", "info", o.Settings.NotificationDuration)
 	case key.Code == tea.KeyTab:
 		o.CycleMultiCopyFormat()
-	case textedit.IsWordDeleteKey(msg.String()):
-		// Before backspace: Option+Backspace has the code of backspace.
-		s.Path = textedit.DropLastWord(s.Path)
-		s.Err = ""
-	case key.Code == tea.KeyBackspace:
-		if s.Path != "" {
-			_, size := utf8.DecodeLastRuneInString(s.Path)
-			s.Path = s.Path[:len(s.Path)-size]
-		}
-		s.Err = ""
-	case msg.String() == "ctrl+u":
-		s.Path = ""
-		s.Err = ""
-	case key.Text != "":
-		s.Path += key.Text
-		s.Err = ""
+	default:
+		// The path is a field like every other: caret, word keys, ctrl+u.
+		o.MultiCopySaveKey(msg.String(), key.Text)
 	}
 	return o, nil
 }

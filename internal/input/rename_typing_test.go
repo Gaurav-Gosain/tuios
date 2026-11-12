@@ -33,11 +33,11 @@ func TestRenameTakesNonASCII(t *testing.T) {
 		o := twoPaneOS(t)
 		w := o.Windows[0]
 		o.BeginRenameWindow(w)
-		o.RenameBuffer = ""
+		o.SetRenameText("")
 		o = typeInto(o, name)
 
-		if o.RenameBuffer != name {
-			t.Errorf("typing %q left buffer %q", name, o.RenameBuffer)
+		if o.RenameText() != name {
+			t.Errorf("typing %q left buffer %q", name, o.RenameText())
 		}
 		_, _ = HandleKeyPress(tea.KeyPressMsg{Code: tea.KeyEnter}, o)
 		if w.CustomName != name {
@@ -54,26 +54,26 @@ func TestRenameRefusesUnprintable(t *testing.T) {
 	t.Cleanup(func() { overlay.SetNerdFonts(false) })
 	o := twoPaneOS(t)
 	o.BeginRenameWindow(o.Windows[0])
-	o.RenameBuffer = ""
+	o.SetRenameText("")
 
 	for _, text := range []string{"\x07", "\x1b", "\u0301", "\ue0a0", "\U0001f600"} {
 		o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'x', Text: text}, o)
-		if o.RenameBuffer != "" {
-			t.Fatalf("%q reached the rename buffer: %q", text, o.RenameBuffer)
+		if o.RenameText() != "" {
+			t.Fatalf("%q reached the rename buffer: %q", text, o.RenameText())
 		}
 	}
 
 	// A control character mixed into otherwise good text is stripped, not taken.
 	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'x', Text: "a\x00b"}, o)
-	if o.RenameBuffer != "ab" {
-		t.Fatalf("buffer = %q, want the control character dropped", o.RenameBuffer)
+	if o.RenameText() != "ab" {
+		t.Fatalf("buffer = %q, want the control character dropped", o.RenameText())
 	}
 
 	// With Nerd Fonts on, the font draws the icon, so the name takes it.
 	overlay.SetNerdFonts(true)
 	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'x', Text: "\ue0a0"}, o)
-	if o.RenameBuffer != "ab\ue0a0" {
-		t.Fatalf("buffer = %q, want the Nerd Font icon taken", o.RenameBuffer)
+	if o.RenameText() != "ab\ue0a0" {
+		t.Fatalf("buffer = %q, want the Nerd Font icon taken", o.RenameText())
 	}
 }
 
@@ -117,22 +117,22 @@ func TestSessionSearchCanSpellASpacedName(t *testing.T) {
 func TestRenameBackspaceCountsRunes(t *testing.T) {
 	o := twoPaneOS(t)
 	o.BeginRenameWindow(o.Windows[0])
-	o.RenameBuffer = ""
+	o.SetRenameText("")
 	o = typeInto(o, "日本語")
 
 	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: tea.KeyBackspace}, o)
-	if o.RenameBuffer != "日本" {
-		t.Fatalf("backspace left %q, want 日本", o.RenameBuffer)
+	if o.RenameText() != "日本" {
+		t.Fatalf("backspace left %q, want 日本", o.RenameText())
 	}
-	if !utf8.ValidString(o.RenameBuffer) {
-		t.Fatalf("backspace broke the encoding: %q", o.RenameBuffer)
+	if !utf8.ValidString(o.RenameText()) {
+		t.Fatalf("backspace broke the encoding: %q", o.RenameText())
 	}
 
 	// Backspacing an empty buffer is a no-op, not a slice out of range.
 	for range 5 {
 		o, _ = HandleKeyPress(tea.KeyPressMsg{Code: tea.KeyBackspace}, o)
 	}
-	if o.RenameBuffer != "" {
-		t.Fatalf("buffer = %q after backspacing past the start", o.RenameBuffer)
+	if o.RenameText() != "" {
+		t.Fatalf("buffer = %q after backspacing past the start", o.RenameText())
 	}
 }

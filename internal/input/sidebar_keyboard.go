@@ -56,10 +56,14 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.QuickLookPromptCancel()
 		case key == "enter":
 			o.QuickLookPromptEnter()
-		case key == "backspace":
-			o.QuickLookPromptBack()
-		case msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModSuper) == 0:
-			o.QuickLookPromptType(msg.Text)
+		case msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModSuper) != 0:
+			// A chord types nothing here; only its key name can mean
+			// something (a word key, the caret).
+			o.QuickLookPromptKey(key, "")
+		default:
+			// The prompt is a field like every other: caret, word keys,
+			// ctrl+u.
+			o.QuickLookPromptKey(key, msg.Text)
 		}
 		return o, nil
 	}

@@ -405,7 +405,7 @@ type OS struct {
 	BSPIDToWindowID    map[int]string // Reverse of WindowToBSPID: BSP integer ID to window UUID (speed-up for GetWindowByIntID)
 	NextBSPWindowID    int            // Next BSP window ID to assign (starts at 1)
 	RenameKind         RenameKind     // What the open rename editor targets (RenameNone when closed)
-	RenameBuffer       string         // Buffer for new window name
+	rename             textedit.Line  // the rename editor's text and caret
 	RenameTargetID     string         // Window the rename in flight applies to
 	renameHit          overlay.Rect   // Where the dialog was drawn, in screen cells
 	renameClearHit     overlay.Rect   // Where its clear hint was drawn, in screen cells

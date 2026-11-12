@@ -33,8 +33,8 @@ func TestWorkspacePillMenuRenamesThePillItWasOpenedOn(t *testing.T) {
 		t.Fatalf("rename = {kind:%v target:%q}, want workspace 2 even though the user is on 1",
 			m.RenameKind, m.RenameTargetID)
 	}
-	if m.RenameBuffer != "review" {
-		t.Errorf("editor seeded with %q, want the pill's current name", m.RenameBuffer)
+	if m.RenameText() != "review" {
+		t.Errorf("editor seeded with %q, want the pill's current name", m.RenameText())
 	}
 	m.EndRename()
 

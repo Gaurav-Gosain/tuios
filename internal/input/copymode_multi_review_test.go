@@ -49,12 +49,12 @@ func TestMultiCopySavePromptTakesThePaste(t *testing.T) {
 	typeSearch(o, "lldp")
 	mcPress(o, "V", "Y")
 	o.Mode = app.TerminalMode
-	o.MultiCopy.Save.Path = ""
+	o.MultiCopy.Save.Path.Set("")
 	HandleInput(tea.PasteMsg{Content: "~/rack\x1b[31m\u202e.md\r\n"}, o)
 	if o.MultiCopy == nil || o.MultiCopy.Save == nil {
 		t.Fatal("the paste closed the save prompt")
 	}
-	if got := o.MultiCopy.Save.Path; got != "~/rack[31m.md" {
+	if got := o.MultiCopy.Save.Path.String(); got != "~/rack[31m.md" {
 		t.Errorf("the pasted path is %q, want it without control characters", got)
 	}
 	if !w[0].InCopyMode() {

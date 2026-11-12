@@ -79,12 +79,7 @@ func (m *OS) renderFileNamePrompt() (string, overlay.Geometry, []overlayRowHit) 
 
 	// The field windows to its tail, so a name longer than the dialog scrolls
 	// left and what you are typing stays under the cursor.
-	field := fieldTail(printableRunes(m.filePrompt.Input), max(width-4, 1))
-	body = append(body, overlay.Fill(
-		overlay.Style(bg).Render(" ")+
-			overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(overlay.Sigil())+
-			overlay.Style(bg).Foreground(pal.Fg).Render(field)+
-			overlay.Cursor(" ", bg, pal.Fg), width, bg))
+	body = append(body, overlay.Fill(fieldRow(&m.filePrompt.Input, width, bg, pal), width, bg))
 
 	// One line under the field, and it is the refusal when there is one. A
 	// prompt that both refused a name and went on explaining the trailing slash

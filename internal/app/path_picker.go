@@ -60,7 +60,7 @@ type pathPicker struct {
 	// is a step up.
 	segs []string
 	// query is the filter text typed after the path.
-	query string
+	query textedit.Line
 	// hidden lists the names that start with a dot.
 	hidden bool
 	// home is the home folder on the pane's machine, empty when it is not
@@ -273,16 +273,16 @@ func (p *pathPicker) prefix() string {
 // refilter rebuilds the matches for the query and keeps the cursor on them.
 func (p *pathPicker) refilter() {
 	p.matches = p.matches[:0]
-	showHidden := p.hidden || strings.HasPrefix(p.query, ".")
+	showHidden := p.hidden || strings.HasPrefix(p.query.String(), ".")
 	keep := func(e fileEntry) bool { return showHidden || !strings.HasPrefix(e.Name, ".") }
-	if p.query == "" {
+	if p.query.String() == "" {
 		for i, e := range p.entries {
 			if keep(e) {
 				p.matches = append(p.matches, i)
 			}
 		}
 	} else {
-		hits := p.matcher.FilterIndex(p.query, len(p.entries), func(i int) string { return p.entries[i].Name })
+		hits := p.matcher.FilterIndex(p.query.String(), len(p.entries), func(i int) string { return p.entries[i].Name })
 		for _, h := range hits {
 			if keep(p.entries[h.Index]) {
 				p.matches = append(p.matches, h.Index)
@@ -318,9 +318,10 @@ func (m *OS) PathPickerMove(delta int) {
 	p.cursor = clampInt(next, 0, n-1)
 }
 
-// PathPickerType adds typed text to the filter. A slash ends a name: after a
-// folder's name, or after "..", it walks there, and at the start of the line
-// it starts an absolute path, as "~/" starts one under the home folder.
+// PathPickerType types text at the filter's caret. A slash ends a name: after
+// a folder's name, or after "..", it walks there, and at the start of the line
+// it starts an absolute path, as "~/" starts one under the home folder. The
+// slash reads the whole filter, wherever the caret is.
 func (m *OS) PathPickerType(s string) tea.Cmd {
 	p := m.pathPicker
 	if p == nil {
@@ -332,21 +333,23 @@ func (m *OS) PathPickerType(s string) tea.Cmd {
 			continue
 		}
 		if r != '/' {
-			p.query += string(r)
+			p.query.Insert(string(r))
 			continue
 		}
+		q := p.query.String()
 		switch {
-		case p.query == "" && p.origin == "" && len(p.segs) == 0:
+		case q == "" && p.origin == "" && len(p.segs) == 0:
 			p.origin = "/"
 			cmd = m.pathPickerRead()
-		case p.query == "~" && p.origin == "" && len(p.segs) == 0:
-			p.origin, p.query = "~", ""
+		case q == "~" && p.origin == "" && len(p.segs) == 0:
+			p.origin = "~"
+			p.query.Set("")
 			cmd = m.pathPickerRead()
-		case p.query == "..":
-			p.query = ""
+		case q == "..":
+			p.query.Set("")
 			cmd = m.pathPickerUp()
-		case p.query == "." || p.query == "":
-			p.query = ""
+		case q == "." || q == "":
+			p.query.Set("")
 		default:
 			if c := m.pathPickerDescend(); c != nil {
 				cmd = c
@@ -357,33 +360,40 @@ func (m *OS) PathPickerType(s string) tea.Cmd {
 	return cmd
 }
 
-// PathPickerBackspace takes back one character of the filter, or one step of
-// the path when the filter is empty.
+// PathPickerBackspace takes back the character before the caret, or one step
+// of the path when the filter is empty.
 func (m *OS) PathPickerBackspace() tea.Cmd {
 	p := m.pathPicker
 	if p == nil {
 		return nil
 	}
-	if p.query != "" {
-		r := []rune(p.query)
-		p.query = string(r[:len(r)-1])
-		p.refilter()
-		return nil
+	if p.query.String() == "" {
+		return m.pathPickerUp()
 	}
-	return m.pathPickerUp()
+	if changed, _ := p.query.Edit("backspace", "", textedit.LineOpts{}); changed {
+		p.refilter()
+	}
+	return nil
 }
 
-// PathPickerDeleteWord drops the last word of the query, by the rule of
-// DropLastWord. On an empty query it does nothing: backspace there goes up a
-// folder, and a word key has no folder to take back.
-func (m *OS) PathPickerDeleteWord() tea.Cmd {
+// PathPickerKey applies a caret or word key to the filter (textedit.Line):
+// left and right, alt+left and alt+right, ctrl+a, ctrl+e, ctrl+k and the word
+// keys. On an empty filter the word keys do nothing: backspace there goes up
+// a folder, and a word key has no folder to take back. It reports whether the
+// key was the filter's.
+func (m *OS) PathPickerKey(key string) bool {
 	p := m.pathPicker
-	if p == nil || p.query == "" {
-		return nil
+	if p == nil {
+		return false
 	}
-	p.query = textedit.DropLastWord(p.query)
-	p.refilter()
-	return nil
+	if textedit.IsWordDeleteKey(key) && p.query.String() == "" {
+		return true
+	}
+	changed, consumed := p.query.Edit(key, "", textedit.LineOpts{})
+	if changed {
+		p.refilter()
+	}
+	return consumed
 }
 
 // PathPickerTab walks into the folder under the cursor. On a file it completes
@@ -398,7 +408,7 @@ func (m *OS) PathPickerTab() tea.Cmd {
 		return nil
 	}
 	if !e.Dir {
-		p.query = e.Name
+		p.query.Set(e.Name)
 		p.refilter()
 		return nil
 	}
@@ -421,7 +431,7 @@ func (m *OS) pathPickerDescend() tea.Cmd {
 		return nil
 	}
 	p.segs = append(p.segs, e.Name)
-	p.query = ""
+	p.query.Set("")
 	return m.pathPickerRead()
 }
 
@@ -442,7 +452,7 @@ func (m *OS) pathPickerUp() tea.Cmd {
 	default:
 		p.segs = append(p.segs, "..")
 	}
-	p.query = ""
+	p.query.Set("")
 	return m.pathPickerRead()
 }
 
@@ -477,7 +487,7 @@ func (m *OS) PathPickerAccept() {
 		return
 	}
 	m.pathPicker = nil
-	tail := p.query
+	tail := p.query.String()
 	if e, ok := p.selected(); ok {
 		tail = e.Name
 		if e.Dir {
@@ -606,8 +616,8 @@ func (m *OS) PathPickerClearQuery() tea.Cmd {
 	if p == nil {
 		return nil
 	}
-	if p.query != "" {
-		p.query = ""
+	if p.query.String() != "" {
+		p.query.Set("")
 		p.refilter()
 		return nil
 	}

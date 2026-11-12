@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
@@ -54,10 +53,10 @@ type TapeManagerState struct {
 	Files []TapeFile
 	// List is the file list's cursor and window.
 	List           listnav.State
-	NameBuffer     string // Buffer for naming new tapes
-	DeleteConfirm  bool   // Whether delete is confirmed
-	ErrorMessage   string // Error message to display
-	SuccessMessage string // Success message to display
+	Name           textedit.Line // the name a new tape is saved under
+	DeleteConfirm  bool          // Whether delete is confirmed
+	ErrorMessage   string        // Error message to display
+	SuccessMessage string        // Success message to display
 	MessageTime    time.Time
 }
 
@@ -196,7 +195,7 @@ func (m *OS) ToggleTapeManager() {
 		m.RefreshTapeFiles()
 		if m.TapeManager != nil {
 			m.TapeManager.Mode = TapeManagerList
-			m.TapeManager.NameBuffer = ""
+			m.TapeManager.Name.Set("")
 			m.TapeManager.DeleteConfirm = false
 		}
 	}
@@ -262,7 +261,7 @@ func (m *OS) TapeManagerStartRecording() {
 	}
 
 	m.TapeManager.Mode = TapeManagerNaming
-	m.TapeManager.NameBuffer = fmt.Sprintf("recording_%s", time.Now().Format("20060102_150405"))
+	m.TapeManager.Name.Set(fmt.Sprintf("recording_%s", time.Now().Format("20060102_150405")))
 }
 
 // TapeManagerConfirmRecording confirms the name and starts recording
@@ -271,7 +270,7 @@ func (m *OS) TapeManagerConfirmRecording() {
 		return
 	}
 
-	name := strings.TrimSpace(m.TapeManager.NameBuffer)
+	name := strings.TrimSpace(m.TapeManager.Name.String())
 	if name == "" {
 		name = fmt.Sprintf("recording_%s", time.Now().Format("20060102_150405"))
 	}
@@ -380,7 +379,7 @@ func (m *OS) RenderTapeManager() string {
 	text := func(fg color.Color) func(string) string {
 		return func(s string) string { return overlay.Style(bg).Foreground(fg).Render(s) }
 	}
-	dim, body := text(pal.FgDim), text(pal.Fg)
+	dim := text(pal.FgDim)
 
 	title := "tapes"
 	if m.TapeRecorder != nil && m.TapeRecorder.IsRecording() {
@@ -396,8 +395,7 @@ func (m *OS) RenderTapeManager() string {
 			dim("Name this tape"),
 			"",
 			overlay.Style(bg).Foreground(pal.Accent).Bold(true).Render(overlay.Sigil())+
-				body(truncateString(m.TapeManager.NameBuffer, max(width-4, 1)))+
-				overlay.Cursor(" ", bg, pal.Fg))
+				m.tapeNameField(max(width-4, 1), bg, pal.Fg))
 		hints = []overlay.Hint{{Key: overlay.EnterKey(), Label: "save"}, {Key: "esc", Label: "cancel"}}
 
 	case TapeManagerConfirmDelete:
@@ -503,21 +501,6 @@ func (m *OS) tapeFileRow(i, width int, pal overlay.Palette) string {
 	return pal.Row(row+overlay.Style(rowBg).Render(strings.Repeat(" ", gap))+right, width, st, pal.Surface)
 }
 
-func truncateString(s string, maxLen int) string {
-	if maxLen <= 0 {
-		return ""
-	}
-	runes := []rune(s)
-	if len(runes) <= maxLen {
-		return s
-	}
-	// Too small to fit an ellipsis: hard-truncate on a rune boundary.
-	if maxLen <= 3 {
-		return string(runes[:maxLen])
-	}
-	return string(runes[:maxLen-3]) + "..."
-}
-
 // HandleTapeManagerInput handles keyboard input for the tape manager
 func (m *OS) HandleTapeManagerInput(key string) bool {
 	if m.TapeManager == nil {
@@ -526,10 +509,6 @@ func (m *OS) HandleTapeManagerInput(key string) bool {
 
 	switch m.TapeManager.Mode {
 	case TapeManagerNaming:
-		if textedit.IsWordDeleteKey(key) {
-			m.TapeManager.NameBuffer = textedit.DropLastWord(m.TapeManager.NameBuffer)
-			return true
-		}
 		switch key {
 		case "enter":
 			m.TapeManagerConfirmRecording()
@@ -537,20 +516,11 @@ func (m *OS) HandleTapeManagerInput(key string) bool {
 		case "esc":
 			m.TapeManager.Mode = TapeManagerList
 			return true
-		case "backspace":
-			if name := m.TapeManager.NameBuffer; name != "" {
-				// By character, like every other field.
-				_, size := utf8.DecodeLastRuneInString(name)
-				m.TapeManager.NameBuffer = name[:len(name)-size]
-			}
-			return true
-		default:
-			// Add printable characters to buffer
-			if len(key) == 1 && key[0] >= 32 && key[0] <= 126 {
-				m.TapeManager.NameBuffer += key
-				return true
-			}
 		}
+		// The name is a field like every other: caret, word keys, ctrl+u.
+		// A key types its name when it is one printable ASCII character.
+		_, consumed := lineKey(&m.TapeManager.Name, key, "", cleanTapeName)
+		return consumed
 
 	case TapeManagerConfirmDelete:
 		switch key {
@@ -588,4 +558,28 @@ func (m *OS) HandleTapeManagerInput(key string) bool {
 	}
 
 	return false
+}
+
+// tapeNameField draws the tape name with its caret.
+func (m *OS) tapeNameField(width int, bg, fg color.Color) string {
+	before, at, after := m.TapeManager.Name.Parts()
+	return overlay.FieldLine(before, at, after, width, bg, fg)
+}
+
+// TapeNamePaste types a paste at the tape name's caret.
+func (m *OS) TapeNamePaste(s string) {
+	if m.TapeManager != nil && m.TapeManager.Mode == TapeManagerNaming {
+		lineInsert(&m.TapeManager.Name, s, cleanTapeName)
+	}
+}
+
+// cleanTapeName keeps what a tape's name may hold: it is a file name of
+// printable ASCII.
+func cleanTapeName(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 32 || r > 126 {
+			return -1
+		}
+		return r
+	}, s)
 }

@@ -84,11 +84,11 @@ func TestTextFieldKeepsProducedCharacter(t *testing.T) {
 	o := twoPaneOS(t)
 	w := o.Windows[0]
 	o.BeginRenameWindow(w)
-	o.RenameBuffer = ""
+	o.SetRenameText("")
 	o, _ = HandleKeyPress(ukr('ш', 'i'), o)
 	o, _ = HandleKeyPress(ukr('о', 'j'), o)
-	if o.RenameBuffer != "шо" {
-		t.Fatalf("rename buffer = %q, want %q", o.RenameBuffer, "шо")
+	if o.RenameText() != "шо" {
+		t.Fatalf("rename buffer = %q, want %q", o.RenameText(), "шо")
 	}
 }
 

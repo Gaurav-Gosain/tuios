@@ -21,11 +21,6 @@ func handleWorktreePromptInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 		o.WorktreePromptNextField()
 		return o, nil
 	}
-	promptTextKeys{
-		Backspace:  o.WorktreePromptBackspace,
-		DeleteWord: o.WorktreePromptDeleteWord,
-		Clear:      o.WorktreePromptClearInput,
-		Type:       o.WorktreePromptType,
-	}.handle(msg)
+	o.WorktreePromptKey(msg.String(), msg.Text)
 	return o, nil
 }

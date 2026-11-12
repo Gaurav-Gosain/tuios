@@ -67,8 +67,8 @@ func TestDirectRenameKeyOpensWithTitlesHidden(t *testing.T) {
 
 	// The dialog owns the keyboard from here, whatever the title bar is doing.
 	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'z', Text: "z"}, o)
-	if !strings.HasSuffix(o.RenameBuffer, "z") {
-		t.Errorf("rename buffer = %q, want the typed key appended", o.RenameBuffer)
+	if !strings.HasSuffix(o.RenameText(), "z") {
+		t.Errorf("rename buffer = %q, want the typed key appended", o.RenameText())
 	}
 }
 

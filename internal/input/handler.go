@@ -11,7 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
-	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -780,12 +779,6 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // every kind of target it can point at. The editor is deliberately the same one
 // in all three cases.
 func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// The word chords of a shell and of the composer. Option+Backspace reaches
-	// here as alt+backspace when the terminal sends Option as Alt.
-	if textedit.IsWordDeleteKey(msg.String()) {
-		o.RenameDeleteWord()
-		return o, nil
-	}
 	switch msg.String() {
 	case "enter":
 		// CommitRename is the one rename. A window name is applied here; a
@@ -793,34 +786,22 @@ func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// because the verb call must not run on this goroutine.
 		return o, o.CommitRename()
 	case "esc":
-		// Cancel renaming
 		o.EndRename()
-		return o, nil
-	case "backspace":
-		o.RenameBackspace()
-		return o, nil
-	case "ctrl+u":
-		o.RenameClear()
 		return o, nil
 	case "ctrl+c":
 		// Shell-like: ctrl+c drops the line, and on an empty line it leaves.
-		if o.RenameBuffer == "" {
+		if o.RenameText() == "" {
 			o.EndRename()
 		} else {
 			o.RenameClear()
 		}
 		return o, nil
-	case "space":
-		// A space arrives under its key name, never as a one-character string,
-		// which is why names could not hold one.
-		o.RenameAppend(" ")
-		return o, nil
-	default:
-		// Text carries the characters the keypress actually produced, so an
-		// accented or wide rune arrives whole instead of as stray bytes.
-		o.RenameAppend(msg.Text)
-		return o, nil
 	}
+	// Every other key is the editor's: the caret, the word keys, ctrl+u, and
+	// the text the key press carries, so an accented or wide rune arrives
+	// whole instead of as stray bytes.
+	o.RenameKey(msg.String(), msg.Text)
+	return o, nil
 }
 
 // isLeaderKey reports whether a key press is the configured leader. The leader

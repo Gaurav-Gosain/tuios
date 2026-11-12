@@ -4,13 +4,11 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 )
 
 // RenameKind names what an in-progress rename points at. There is one rename
@@ -46,7 +44,7 @@ func (m *OS) BeginRenameWindow(w *terminal.Window) {
 	}
 	m.RenameKind = RenameWindow
 	m.RenameTargetID = w.ID
-	m.RenameBuffer = w.CustomName
+	m.rename.Set(w.CustomName)
 	w.InvalidateCache()
 }
 
@@ -58,7 +56,7 @@ func (m *OS) BeginRenameSession(name string) {
 	}
 	m.RenameKind = RenameSession
 	m.RenameTargetID = name
-	m.RenameBuffer = m.SessionLabel(name)
+	m.rename.Set(m.SessionLabel(name))
 }
 
 // BeginEditNote opens the one-line editor on a session's return note, seeded
@@ -69,7 +67,7 @@ func (m *OS) BeginEditNote(name string) {
 	}
 	m.RenameKind = RenameNote
 	m.RenameTargetID = name
-	m.RenameBuffer = m.sessionNote(name)
+	m.rename.Set(m.sessionNote(name))
 }
 
 // BeginRenameWorkspace starts a rename of a workspace, seeded with its current
@@ -82,74 +80,58 @@ func (m *OS) BeginRenameWorkspace(ws int) {
 	}
 	m.RenameKind = RenameWorkspace
 	m.RenameTargetID = strconv.Itoa(ws)
-	m.RenameBuffer = m.WorkspaceNames[ws]
+	m.rename.Set(m.WorkspaceNames[ws])
 }
 
-// RenameAppend adds typed text to the rename buffer, keeping only what the
-// chrome will actually draw. The gate is printableRune, the same rule the rail,
-// title bar, palette and dock launder names through, so the editor can never
-// take a codepoint that would vanish or tofu the moment the name was shown.
+// RenameText is the rename editor's text.
+func (m *OS) RenameText() string { return m.rename.String() }
+
+// SetRenameText replaces the rename editor's text, the caret at its end.
+func (m *OS) SetRenameText(s string) { m.rename.Set(s) }
+
+// renameClean is cleanName, and a note takes no more than the daemon keeps.
+func (m *OS) renameClean(text string) string {
+	add := cleanName(text)
+	if add != "" && m.RenameKind == RenameNote && len(m.rename.String())+len(add) > session.NoteMaxBytes {
+		return ""
+	}
+	return add
+}
+
+// RenameAppend types text at the rename editor's caret, as a paste does.
 func (m *OS) RenameAppend(text string) {
-	if !m.Renaming() || text == "" {
-		return
-	}
-	add := printableRunes(text)
-	// A keypress that is nothing but combining marks has no base to sit on, so
-	// it would stack an accent on whatever the field already ends with, or on
-	// the cursor. Terminals send composed text as one precomposed rune.
-	if add == "" || combiningOnly(add) {
-		return
-	}
-	if m.RenameKind == RenameNote && len(m.RenameBuffer)+len(add) > session.NoteMaxBytes {
-		// The daemon keeps no more than this, so the editor takes no more.
-		return
-	}
-	m.RenameBuffer += add
-	if t := m.RenameTarget(); t != nil {
-		t.InvalidateCache()
+	if m.Renaming() && lineInsert(&m.rename, text, m.renameClean) {
+		m.renameChanged()
 	}
 }
 
-// RenameBackspace drops the last rune of the buffer.
-func (m *OS) RenameBackspace() {
-	if !m.Renaming() || m.RenameBuffer == "" {
-		return
+// RenameKey applies one key press to the rename editor (see lineKey). It
+// reports whether the key was the editor's.
+func (m *OS) RenameKey(key, text string) bool {
+	if !m.Renaming() {
+		return false
 	}
-	m.RenameBuffer = dropLastRune(m.RenameBuffer)
-	if t := m.RenameTarget(); t != nil {
-		t.InvalidateCache()
+	changed, consumed := lineKey(&m.rename, key, text, m.renameClean)
+	if changed {
+		m.renameChanged()
 	}
+	return consumed
 }
 
-// RenameClear empties the buffer, so a name can be retyped from scratch.
+// RenameClear empties the editor, so a name can be retyped from scratch.
 func (m *OS) RenameClear() {
-	if !m.Renaming() || m.RenameBuffer == "" {
+	if !m.Renaming() || m.rename.String() == "" {
 		return
 	}
-	m.RenameBuffer = ""
+	m.rename.Set("")
+	m.renameChanged()
+}
+
+// renameChanged redraws the thing being renamed, whose title shows the draft.
+func (m *OS) renameChanged() {
 	if t := m.RenameTarget(); t != nil {
 		t.InvalidateCache()
 	}
-}
-
-// RenameDeleteWord drops the last word of the buffer, with the blanks after
-// it, so a name can be taken back a word at a time.
-func (m *OS) RenameDeleteWord() {
-	if !m.Renaming() || m.RenameBuffer == "" {
-		return
-	}
-	m.RenameBuffer = textedit.DropLastWord(m.RenameBuffer)
-	if t := m.RenameTarget(); t != nil {
-		t.InvalidateCache()
-	}
-}
-
-// dropLastRune removes the last rune of s. It counts in runes because a name
-// may hold multi-byte text, and cutting one byte off é leaves the string
-// holding a broken sequence that renders as a replacement glyph.
-func dropLastRune(s string) string {
-	_, size := utf8.DecodeLastRuneInString(s)
-	return s[:len(s)-size]
 }
 
 // combiningOnly reports whether s is nothing but marks that attach to a
@@ -216,12 +198,12 @@ func (m *OS) RenameDialogTitle() string {
 // blocking round trip that must not run on the Update goroutine.
 func (m *OS) CommitRename() tea.Cmd {
 	kind, target := m.RenameKind, m.RenameTargetID
-	label := strings.TrimSpace(m.RenameBuffer)
+	label := strings.TrimSpace(m.rename.String())
 	defer m.EndRename()
 
 	if kind == RenameWindow {
 		if w := m.RenameTarget(); w != nil {
-			_ = m.RenameWindowByID(w.ID, m.RenameBuffer)
+			_ = m.RenameWindowByID(w.ID, m.rename.String())
 			w.InvalidateCache()
 		}
 		return nil
@@ -273,7 +255,7 @@ func renameVerb(kind RenameKind, target, sessionName, label string) (string, map
 func (m *OS) EndRename() {
 	m.RenameKind = RenameNone
 	m.RenameTargetID = ""
-	m.RenameBuffer = ""
+	m.rename.Set("")
 	m.renameHit = overlay.Rect{}
 	m.renameClearHit = overlay.Rect{}
 }

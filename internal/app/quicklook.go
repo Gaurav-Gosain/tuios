@@ -24,6 +24,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"tuios.dev/shot/mosaic"
 )
@@ -196,7 +197,8 @@ type quickLookState struct {
 	// none.
 	resume int64
 	prompt quickLookPromptKind
-	input  string
+	// input is the prompt's text and caret.
+	input  textedit.Line
 	query  string
 	status string
 	// statusLine says status answers a go to line, so the search row leaves the
@@ -277,6 +279,7 @@ type quickLookFrame struct {
 	inside             bool
 	prompt             quickLookPromptKind
 	input              string
+	inputAt            int
 	query              string
 	status             string
 	wrap               bool
@@ -408,7 +411,8 @@ func (m *OS) dropQuickLook() {
 	ql.jump = quickLookNoMove
 	ql.inside = false
 	ql.full = false
-	ql.prompt, ql.input, ql.query, ql.status = quickLookNoPrompt, "", "", ""
+	ql.prompt, ql.query, ql.status = quickLookNoPrompt, "", ""
+	ql.input.Set("")
 	ql.wrapSet = false
 	ql.box = overlay.Rect{}
 	ql.pic = quickLookPic{}
@@ -491,7 +495,8 @@ func (m *OS) quickLookShow(t quickLookTarget) tea.Cmd {
 	ql.scroll = 0
 	ql.jump = quickLookNoMove
 	ql.inside = false
-	ql.prompt, ql.input, ql.query, ql.status = quickLookNoPrompt, "", "", ""
+	ql.prompt, ql.query, ql.status = quickLookNoPrompt, "", ""
+	ql.input.Set("")
 	if !ql.wrapSet {
 		ql.wrap = quickLookWrapsByDefault(t.name)
 	}
@@ -941,7 +946,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 	// The border is in the key: the frame glyphs are a package global set from
 	// border_style every frame, outside the palette.
 	f := quickLookFrame{mdOpen: ql.mdOpen, view: ql.view, viewScroll: ql.viewScroll, column: ql.column, details: ql.details, ok: true, look: ql.lookKey, res: ql.res, target: ql.target, scroll: ql.scroll, inside: ql.inside,
-		prompt: ql.prompt, input: ql.input, query: ql.query, status: ql.status, wrap: ql.wrap,
+		prompt: ql.prompt, input: ql.input.String(), inputAt: ql.inputAt(), query: ql.query, status: ql.status, wrap: ql.wrap,
 		innerW: innerW, bodyH: bodyH, key: key, seekKey: seekKey, insideKey: insideKey, border: m.Settings.OverlayBorder(),
 		canvas: pal.Canvas, fgMute: pal.FgMute, frame: pal.Frame, accent: pal.Accent,
 		accentBright: pal.AccentBright, fgDim: pal.FgDim}

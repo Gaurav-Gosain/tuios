@@ -338,7 +338,7 @@ func (t *Target) Apply(a fuzz.Action) error {
 	case fuzz.Rename:
 		if w := m.GetFocusedWindow(); w != nil {
 			m.BeginRenameWindow(w)
-			m.RenameBuffer = a.S
+			m.SetRenameText(a.S)
 			m.CommitRename()
 		}
 	case fuzz.Detach:

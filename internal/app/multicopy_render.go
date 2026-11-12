@@ -116,15 +116,11 @@ func (m *OS) multiCopySaveLayer() *lipgloss.Layer {
 		info = overlay.Style(bg).Foreground(pal.FgMute).
 			Render(overlay.Truncate("File: "+full, width-2))
 	}
-	// The typed text keeps its end in view: that is where the cursor is.
-	path := mc.Save.Path
-	room := width - 2 - len("Save to: ") - 1
-	if r := []rune(path); len(r) > room && room > 1 {
-		path = "…" + string(r[len(r)-room+1:])
-	}
+	// The typed text scrolls to keep its caret in view.
+	room := width - 2 - len("Save to: ")
+	before, at, after := mc.Save.Path.Parts()
 	input := overlay.Style(bg).Foreground(pal.FgMute).Render("Save to: ") +
-		overlay.Style(bg).Foreground(pal.Fg).Render(path) +
-		overlay.Cursor(" ", bg, pal.Fg)
+		overlay.FieldLine(before, at, after, max(room, 1), bg, pal.Fg)
 
 	pad := overlay.Style(bg).Render(" ")
 	body := pad + input + pad

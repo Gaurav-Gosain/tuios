@@ -94,7 +94,8 @@ func (m *OS) worktreePromptField(field worktreeField, label string, width int, p
 		ink = pal.FgMute
 	}
 
-	text := fieldTail(printableRunes(value), max(width-4-worktreeFieldLabelW, 1))
+	room := max(width-4-worktreeFieldLabelW, 1)
+	text := fieldTail(printableRunes(value), room)
 	row := overlay.Style(bg).Render(" ") +
 		overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(marker) +
 		overlay.Style(bg).Foreground(pal.FgMute).Render(labelPad(label))
@@ -104,10 +105,13 @@ func (m *OS) worktreePromptField(field worktreeField, label string, width int, p
 	if active && quiet {
 		row += overlay.Cursor(" ", bg, pal.Fg)
 	}
-	row += overlay.Style(bg).Foreground(ink).Render(text)
 	if active && !quiet {
-		row += overlay.Cursor(" ", bg, pal.Fg)
+		// The field the keyboard is in draws its caret where it is.
+		before, at, after := m.worktreeFieldBuffer(field).Parts()
+		row += overlay.FieldLine(before, at, after, room, bg, pal.Fg)
+		return overlay.Fill(row, width, bg)
 	}
+	row += overlay.Style(bg).Foreground(ink).Render(text)
 	return overlay.Fill(row, width, bg)
 }
 

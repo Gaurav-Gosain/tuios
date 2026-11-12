@@ -82,7 +82,7 @@ type copyDialog struct {
 	// file of the copy.
 	all bool
 	// input and err are the folder field of a send, and why it was refused.
-	input string
+	input textedit.Line
 	err   string
 	// src, name and hosts are a send: what goes, its name, and the
 	// machines it can go to ("" is this machine).
@@ -185,8 +185,9 @@ func (m *OS) CopyDialogKey(key, text string) tea.Cmd {
 		case "enter":
 			return m.CopyDialogActivate(0)
 		default:
-			textedit.EditLine(&d.input, key, printableRunes(text), true)
-			d.err = ""
+			if changed, _ := lineKey(&d.input, key, text, printableRunes); changed {
+				d.err = ""
+			}
 		}
 		return nil
 	}
@@ -213,8 +214,9 @@ func (m *OS) CopyDialogKey(key, text string) tea.Cmd {
 // questions take no text, and drop it.
 func (m *OS) CopyDialogPaste(text string) {
 	if d := m.transfers.dialog; d != nil && d.kind == copyDialogSendDir {
-		d.input += printableRunes(text)
-		d.err = ""
+		if lineInsert(&d.input, text, printableRunes) {
+			d.err = ""
+		}
 	}
 }
 
@@ -250,14 +252,16 @@ func (m *OS) CopyDialogActivate(idx int) tea.Cmd {
 		if idx < 0 || idx >= len(d.hosts) {
 			return nil
 		}
-		m.transfers.dialog = &copyDialog{
+		next := &copyDialog{
 			kind: copyDialogSendDir, src: d.src, name: d.name, hosts: d.hosts,
-			host: d.hosts[idx], input: transferReceiveDir,
+			host: d.hosts[idx],
 		}
+		next.input.Set(transferReceiveDir)
+		m.transfers.dialog = next
 		m.transfersChanged()
 		return nil
 	case copyDialogSendDir:
-		dir := strings.TrimSpace(d.input)
+		dir := strings.TrimSpace(d.input.String())
 		if dir == "" {
 			d.err = "Type a folder."
 			return nil
@@ -774,12 +778,7 @@ func (m *OS) renderCopyDialog() (string, overlay.Geometry, []overlayRowHit) {
 	hints := []overlay.Hint{{Key: overlay.EnterKey(), Label: "choose"}, {Key: "esc", Label: "close"}}
 	var hits []overlayRowHit
 	if d.kind == copyDialogSendDir {
-		field := fieldTail(printableRunes(d.input), max(width-4, 1))
-		body = append(body, overlay.Fill(
-			overlay.Style(bg).Render(" ")+
-				overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(overlay.Sigil())+
-				overlay.Style(bg).Foreground(pal.Fg).Render(field)+
-				overlay.Cursor(" ", bg, pal.Fg), width, bg))
+		body = append(body, overlay.Fill(fieldRow(&d.input, width, bg, pal), width, bg))
 		note, ink := "A file that is there stays. The copy gets a new name.", pal.FgMute
 		if d.err != "" {
 			note, ink = d.err, pal.Warn

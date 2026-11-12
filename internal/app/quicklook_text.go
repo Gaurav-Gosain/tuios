@@ -593,13 +593,13 @@ func quickLookDrawSearchRow(c *ckCanvas, pal overlay.Palette, ql *quickLookState
 	dim := func(t string) ckSeg { return ckSeg{t: t, fg: pal.FgDim} }
 	switch {
 	case ql.prompt == quickLookFindPrompt:
-		c.text(1, y, w-1, key("/ "), ckSeg{t: ql.input + "█", fg: pal.Fg}, dim("   Press enter to search."))
+		c.text(1, y, w-1, append(append([]ckSeg{key("/ ")}, quickLookPromptSegs(ql, pal)...), dim("   Press enter to search."))...)
 	case ql.prompt == quickLookLinePrompt:
 		word := "line"
 		if quickLookPaged(ql.res) {
 			word = strings.ToLower(quickLookUnit(ql.res))
 		}
-		c.text(1, y, w-1, key(": "), ckSeg{t: ql.input + "█", fg: pal.Fg}, dim("   Type a "+word+" number and press enter."))
+		c.text(1, y, w-1, append(append([]ckSeg{key(": ")}, quickLookPromptSegs(ql, pal)...), dim("   Type a "+word+" number and press enter."))...)
 	case ql.status != "":
 		segs := []ckSeg{}
 		if ql.query != "" && !ql.statusLine {
@@ -737,7 +737,8 @@ func (m *OS) QuickLookPromptOpen() bool {
 func (m *OS) QuickLookFind() {
 	ql := &m.quickLook
 	if quickLookText(ql.res) && !ql.quickLookOffMain() {
-		ql.prompt, ql.input, ql.status = quickLookFindPrompt, "", ""
+		ql.prompt, ql.status = quickLookFindPrompt, ""
+		ql.input.Set("")
 	}
 }
 
@@ -745,7 +746,8 @@ func (m *OS) QuickLookFind() {
 func (m *OS) QuickLookGoTo() {
 	ql := &m.quickLook
 	if quickLookText(ql.res) || quickLookPaged(ql.res) {
-		ql.prompt, ql.input, ql.status = quickLookLinePrompt, "", ""
+		ql.prompt, ql.status = quickLookLinePrompt, ""
+		ql.input.Set("")
 	}
 }
 
@@ -757,24 +759,36 @@ func (m *OS) QuickLookWrap() {
 	}
 }
 
-// QuickLookPromptType adds typed text to the prompt. A line number takes digits
-// only.
+// QuickLookPromptType types a paste at the prompt's caret.
 func (m *OS) QuickLookPromptType(text string) {
 	ql := &m.quickLook
-	if ql.prompt == quickLookLinePrompt && strings.Trim(text, "0123456789") != "" {
-		return
-	}
-	if len(ql.input)+len(text) <= quickLookPromptMax {
-		ql.input += text
-	}
+	lineInsert(&ql.input, text, ql.promptClean)
 }
 
-// QuickLookPromptBack takes the last character off the prompt.
-func (m *OS) QuickLookPromptBack() {
+// QuickLookPromptKey applies one key press to the prompt (see lineKey).
+func (m *OS) QuickLookPromptKey(key, text string) {
 	ql := &m.quickLook
-	if _, n := utf8.DecodeLastRuneInString(ql.input); n > 0 {
-		ql.input = ql.input[:len(ql.input)-n]
+	lineKey(&ql.input, key, text, ql.promptClean)
+}
+
+// promptClean keeps what the prompt may take of typed text: a line number
+// takes digits only, and the prompt holds no more than quickLookPromptMax
+// bytes.
+func (ql *quickLookState) promptClean(text string) string {
+	text = cleanControl(text)
+	if ql.prompt == quickLookLinePrompt && strings.Trim(text, "0123456789") != "" {
+		return ""
 	}
+	if len(ql.input.String())+len(text) > quickLookPromptMax {
+		return ""
+	}
+	return text
+}
+
+// inputAt is the prompt's caret, in bytes from the start, for the frame key.
+func (ql *quickLookState) inputAt() int {
+	before, _, _ := ql.input.Parts()
+	return len(before)
 }
 
 // QuickLookPromptCancel closes the prompt.
@@ -783,8 +797,9 @@ func (m *OS) QuickLookPromptCancel() { m.quickLook.prompt = quickLookNoPrompt }
 // QuickLookPromptEnter runs what the prompt holds.
 func (m *OS) QuickLookPromptEnter() {
 	ql := &m.quickLook
-	kind, text := ql.prompt, ql.input
-	ql.prompt, ql.input = quickLookNoPrompt, ""
+	kind, text := ql.prompt, ql.input.String()
+	ql.prompt = quickLookNoPrompt
+	ql.input.Set("")
 	switch kind {
 	case quickLookFindPrompt:
 		if text == "" {
@@ -882,4 +897,13 @@ func (m *OS) quickLookGoToLine(n int64) {
 	}
 	ql.seek = session.PreviewSeek{Line: n}
 	ql.jump = quickLookSeek
+}
+
+// quickLookPromptSegs is the prompt's text with its caret drawn where it is.
+func quickLookPromptSegs(ql *quickLookState, pal overlay.Palette) []ckSeg {
+	before, at, after := ql.input.Parts()
+	if at == "" {
+		at = " "
+	}
+	return []ckSeg{{t: before, fg: pal.Fg}, {t: at, fg: pal.Canvas, bg: pal.Fg}, {t: after, fg: pal.Fg}}
 }

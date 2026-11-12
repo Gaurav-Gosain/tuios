@@ -17,6 +17,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 	"tuios.dev/vt"
 )
 
@@ -63,7 +64,8 @@ type MultiCopy struct {
 // when the prompt opens, so the file holds what was highlighted then even if a
 // pane prints more while the path is typed.
 type MultiCopySave struct {
-	Path  string
+	// Path is the typed path, with its caret.
+	Path  textedit.Line
 	Panes []MultiCopyPane
 	// Err is the last save's failure, shown under the prompt so the person can
 	// fix the path and try again.
@@ -318,8 +320,8 @@ func (m *OS) CycleMultiCopyFormat() {
 	mc.Format = nextMultiCopyFormat(mc.Format)
 	if s := mc.Save; s != nil {
 		oldExt, newExt := "."+multiCopyFormatExt(old), "."+multiCopyFormatExt(mc.Format)
-		if base, ok := strings.CutSuffix(s.Path, oldExt); ok {
-			s.Path = base + newExt
+		if base, ok := strings.CutSuffix(s.Path.String(), oldExt); ok {
+			s.Path.Set(base + newExt)
 		}
 	}
 	m.ShowNotification("Multi copy format: "+mc.Format, "info", m.Settings.NotificationDuration)
@@ -418,7 +420,8 @@ func (m *OS) OpenMultiCopySave(panes []MultiCopyPane) {
 		return
 	}
 	name := fmt.Sprintf("tuios-copy-%s.%s", time.Now().Format("20060102-150405"), multiCopyFormatExt(mc.Format))
-	mc.Save = &MultiCopySave{Path: "~/" + name, Panes: panes}
+	mc.Save = &MultiCopySave{Panes: panes}
+	mc.Save.Path.Set("~/" + name)
 }
 
 // CancelMultiCopySave closes the path prompt without writing anything.
@@ -430,13 +433,33 @@ func (m *OS) CancelMultiCopySave() {
 	m.ShowNotification("Save cancelled. Nothing was written.", "info", m.Settings.NotificationDuration)
 }
 
-// MultiCopySaveType adds text to the save prompt's path. A paste arrives
-// here: control characters and line breaks are removed, so a pasted path with
-// a newline stays a path and never reaches a shell.
+// MultiCopySaveType types text at the save prompt's caret. A paste arrives
+// here: control characters, line breaks and invisible format runes are
+// removed, so a pasted path with a newline stays a path and never reaches a
+// shell.
 func (m *OS) MultiCopySaveType(text string) {
 	if m.MultiCopy == nil || m.MultiCopy.Save == nil {
 		return
 	}
+	if lineInsert(&m.MultiCopy.Save.Path, text, cleanSavePath) {
+		m.MultiCopy.Save.Err = ""
+	}
+}
+
+// MultiCopySaveKey applies one key press to the save prompt's path (see
+// lineKey).
+func (m *OS) MultiCopySaveKey(key, text string) {
+	if m.MultiCopy == nil || m.MultiCopy.Save == nil {
+		return
+	}
+	if changed, _ := lineKey(&m.MultiCopy.Save.Path, key, text, cleanSavePath); changed {
+		m.MultiCopy.Save.Err = ""
+	}
+}
+
+// cleanSavePath keeps what a typed path may hold: no control character and no
+// invisible format rune.
+func cleanSavePath(text string) string {
 	var b strings.Builder
 	for _, r := range text {
 		if unicode.IsControl(r) || session.InvisibleFormatRune(r) {
@@ -444,8 +467,7 @@ func (m *OS) MultiCopySaveType(text string) {
 		}
 		b.WriteRune(r)
 	}
-	m.MultiCopy.Save.Path += b.String()
-	m.MultiCopy.Save.Err = ""
+	return b.String()
 }
 
 // multiCopySaveBase is the directory a relative save path is taken from: the
@@ -468,7 +490,7 @@ func (m *OS) MultiCopySaveResolved() (string, error) {
 	if m.MultiCopy == nil || m.MultiCopy.Save == nil {
 		return "", errors.New("no save prompt")
 	}
-	raw := strings.TrimSpace(m.MultiCopy.Save.Path)
+	raw := strings.TrimSpace(m.MultiCopy.Save.Path.String())
 	if raw == "" {
 		return "", errors.New("empty path")
 	}
@@ -510,7 +532,7 @@ func (m *OS) CommitMultiCopySave() bool {
 		return false
 	}
 	s := mc.Save
-	if strings.TrimSpace(s.Path) == "" {
+	if strings.TrimSpace(s.Path.String()) == "" {
 		s.Err = "Type a path."
 		return false
 	}

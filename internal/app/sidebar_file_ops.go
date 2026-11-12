@@ -97,7 +97,7 @@ type filePromptState struct {
 	// Target is the entry name a rename acts on, for the same reason.
 	Target string
 	// Input is the typed name.
-	Input string
+	Input textedit.Line
 	// Err is the last refusal, drawn under the field so a second try can see
 	// what was wrong with the first.
 	Err string
@@ -289,8 +289,8 @@ func (m *OS) SidebarFileRename() bool {
 		Kind:   filePromptRename,
 		Dir:    filepath.Dir(path),
 		Target: name,
-		Input:  name,
 	}
+	m.filePrompt.Input.Set(name)
 	return true
 }
 
@@ -585,47 +585,32 @@ func (m *OS) SidebarFilePaste() tea.Cmd {
 	}
 }
 
-// FilePromptType adds typed text to the open name prompt.
-//
-// It launders the text through printableRunes, which is the gate the rename
-// editor and every name the rail draws already pass. A codepoint the chrome
-// cannot draw is one the user cannot see they typed.
+// FilePromptType types text at the name prompt's caret, as a paste does. The
+// text goes through cleanName, the gate the rename editor and every name the
+// rail draws already pass: a codepoint the chrome cannot draw is one the user
+// cannot see they typed.
 func (m *OS) FilePromptType(s string) {
-	if m.filePrompt.Kind != filePromptCreate && m.filePrompt.Kind != filePromptRename {
+	if !m.filePromptTyping() {
 		return
 	}
-	add := printableRunes(s)
-	if add == "" || combiningOnly(add) {
-		return
+	if lineInsert(&m.filePrompt.Input, s, cleanName) {
+		m.filePrompt.Err = ""
 	}
-	m.filePrompt.Input += add
-	m.filePrompt.Err = ""
 }
 
-// FilePromptBackspace drops the last rune of the typed name.
-func (m *OS) FilePromptBackspace() {
-	if m.filePrompt.Input == "" {
+// FilePromptKey applies one key press to the name prompt (see lineKey).
+func (m *OS) FilePromptKey(key, text string) {
+	if !m.filePromptTyping() {
 		return
 	}
-	r := []rune(m.filePrompt.Input)
-	m.filePrompt.Input = string(r[:len(r)-1])
-	m.filePrompt.Err = ""
-}
-
-// FilePromptDeleteWord drops the last word of the field, by the rule of
-// DropLastWord.
-func (m *OS) FilePromptDeleteWord() {
-	if m.filePrompt.Input == "" {
-		return
+	if changed, _ := lineKey(&m.filePrompt.Input, key, text, cleanName); changed {
+		m.filePrompt.Err = ""
 	}
-	m.filePrompt.Input = textedit.DropLastWord(m.filePrompt.Input)
-	m.filePrompt.Err = ""
 }
 
-// FilePromptClearInput empties the field.
-func (m *OS) FilePromptClearInput() {
-	m.filePrompt.Input = ""
-	m.filePrompt.Err = ""
+// filePromptTyping reports whether the open prompt takes a typed name.
+func (m *OS) filePromptTyping() bool {
+	return m.filePrompt.Kind == filePromptCreate || m.filePrompt.Kind == filePromptRename
 }
 
 // FilePromptCancel shuts the dialog and changes nothing.
@@ -660,11 +645,11 @@ func (m *OS) FilePromptSubmit() tea.Cmd {
 	case filePromptConfirm:
 		return m.FileConfirmActivate(p.List.Cursor)
 	case filePromptCreate:
-		if _, err := relativeUnder(trimTrailingSeparators(p.Input)); err != nil {
+		if _, err := relativeUnder(trimTrailingSeparators(p.Input.String())); err != nil {
 			m.filePrompt.Err = fileOpError(err)
 			return nil
 		}
-		dir, raw := p.Dir, p.Input
+		dir, raw := p.Dir, p.Input.String()
 		m.closeFilePrompt()
 		m.filePrompt.Busy = true
 		return func() tea.Msg {
@@ -675,11 +660,11 @@ func (m *OS) FilePromptSubmit() tea.Cmd {
 			return fileOpMsg{OK: what + "."}
 		}
 	case filePromptRename:
-		if _, err := relativeUnder(p.Input); err != nil {
+		if _, err := relativeUnder(p.Input.String()); err != nil {
 			m.filePrompt.Err = fileOpError(err)
 			return nil
 		}
-		dir, old, next := p.Dir, p.Target, p.Input
+		dir, old, next := p.Dir, p.Target, p.Input.String()
 		m.closeFilePrompt()
 		m.filePrompt.Busy = true
 		return func() tea.Msg {

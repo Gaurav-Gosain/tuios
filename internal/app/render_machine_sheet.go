@@ -11,6 +11,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/hostsetup"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 )
 
 // The add sheet's drawing: a card over the dimmed screen on the spawn
@@ -181,18 +182,32 @@ func (p *msPainter) footer() {
 }
 
 // field draws a labelled one-line field, with a cursor when it has the keys.
-func (p *msPainter) field(y int, label, text, placeholder string, focused bool) {
+func (p *msPainter) field(y int, label string, l *textedit.Line, placeholder string, focused bool) {
 	pal, w := p.pal, min(p.w, 72)
 	p.put(p.x, y, pal.FgDim, true, label)
 	p.c.fill(p.x, y+1, w, 1, p.t.field)
 	if pal.Depth == overlay.Depth16 {
 		spawnBrackets(p.c, p.l, p.x, y+1, w, 1)
 	}
-	x := p.put(p.x+1, y+1, pal.Fg, false, text)
-	if focused {
-		x = p.c.text(x, y+1, 0, ckSeg{t: " ", bg: pal.Fg}) + 1
+	text := l.String()
+	if !focused {
+		x := p.put(p.x+1, y+1, pal.Fg, false, text)
+		if text == "" {
+			p.c.text(x, y+1, p.x+w-1, seg(placeholder, pal.FgMute))
+		}
+		return
 	}
+	// The focused field draws its caret where it is (textedit.Line).
+	before, at, after := l.Parts()
+	x := p.put(p.x+1, y+1, pal.Fg, false, before)
+	caret := at
+	if caret == "" {
+		caret = " "
+	}
+	x = p.c.text(x, y+1, 0, ckSeg{t: caret, fg: p.t.field, bg: pal.Fg})
+	x = p.put(x, y+1, pal.Fg, false, after)
 	if text == "" {
+		x++
 		p.c.text(x, y+1, p.x+w-1, seg(placeholder, pal.FgMute))
 	}
 }
@@ -227,10 +242,10 @@ func (p *msPainter) pickView() {
 	p.y += 3
 	switch pk.tab {
 	case msTabAddress:
-		name := cmpOr(strings.TrimSpace(pk.name), msNameOf(strings.TrimSpace(pk.addr)))
-		p.field(p.y, "Address", pk.addr, "user@host, or a name in your ssh config", pk.field == 0)
-		p.field(p.y+3, "Name", pk.name, cmpOr(name, "the name here"), pk.field == 1)
-		p.field(p.y+6, "This machine's address for it", pk.back, "optional. tuios tries the tailnet name, then the host name", pk.field == 2)
+		name := cmpOr(strings.TrimSpace(pk.name.String()), msNameOf(strings.TrimSpace(pk.addr.String())))
+		p.field(p.y, "Address", &pk.addr, "user@host, or a name in your ssh config", pk.field == 0)
+		p.field(p.y+3, "Name", &pk.name, cmpOr(name, "the name here"), pk.field == 1)
+		p.field(p.y+6, "This machine's address for it", &pk.back, "optional. tuios tries the tailnet name, then the host name", pk.field == 2)
 		p.wrap(p.x, p.y+9, "Next, tuios tests the connection. It installs nothing without asking.", pal.FgDim, false)
 		p.keys([][2]string{{"enter", "test and add"}, {"tab", "next field"}}, "Cancel", strings.TrimSpace("Test "+name))
 	case msTabSSH:

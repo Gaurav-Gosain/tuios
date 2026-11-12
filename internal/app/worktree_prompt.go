@@ -42,10 +42,10 @@ type worktreePromptState struct {
 	// create must act on the repository the user was looking at.
 	RepoRoot string
 	// Branch is the typed branch.
-	Branch string
+	Branch textedit.Line
 	// Name is the typed session name, empty for the derived one. Tab moves
 	// between this and the branch field.
-	Name string
+	Name textedit.Line
 	// Field is the field the keyboard is in.
 	Field worktreeField
 	// Err is the last refusal, drawn under the field so a second try can see
@@ -73,11 +73,15 @@ func (m *OS) WorktreePromptRepoRoot() string { return m.worktreePrompt.RepoRoot 
 
 // WorktreePromptBranch is the branch as typed, trimmed of the spaces the field
 // would hand the daemon, or "" when the dialog is closed.
-func (m *OS) WorktreePromptBranch() string { return strings.TrimSpace(m.worktreePrompt.Branch) }
+func (m *OS) WorktreePromptBranch() string {
+	return strings.TrimSpace(m.worktreePrompt.Branch.String())
+}
 
 // WorktreePromptSessionName is the typed session name, trimmed, or "" when the
 // dialog is closed or the field is, which is how the verb reads "derive it".
-func (m *OS) WorktreePromptSessionName() string { return strings.TrimSpace(m.worktreePrompt.Name) }
+func (m *OS) WorktreePromptSessionName() string {
+	return strings.TrimSpace(m.worktreePrompt.Name.String())
+}
 
 // BeginWorktreePromptForSession opens the dialog on the repository a session's
 // worktree record names. A session with no record — an ordinary session, whose
@@ -211,7 +215,7 @@ func (m *OS) WorktreePromptNextField() {
 // worktreeFieldBuffer is a field's buffer, or nil when the dialog is closed.
 // It is the one read on "which buffer is this field", so drawing, typing,
 // backspace and clear all agree.
-func (m *OS) worktreeFieldBuffer(field worktreeField) *string {
+func (m *OS) worktreeFieldBuffer(field worktreeField) *textedit.Line {
 	if !m.WorktreePromptOpen() {
 		return nil
 	}
@@ -223,7 +227,7 @@ func (m *OS) worktreeFieldBuffer(field worktreeField) *string {
 
 // worktreeActiveField is the buffer the keyboard is in, or nil when the dialog
 // is closed.
-func (m *OS) worktreeActiveField() *string {
+func (m *OS) worktreeActiveField() *textedit.Line {
 	return m.worktreeFieldBuffer(m.worktreePrompt.Field)
 }
 
@@ -231,7 +235,7 @@ func (m *OS) worktreeActiveField() *string {
 // closed.
 func (m *OS) worktreeFieldText(field worktreeField) string {
 	if buf := m.worktreeFieldBuffer(field); buf != nil {
-		return *buf
+		return buf.String()
 	}
 	return ""
 }
@@ -239,39 +243,19 @@ func (m *OS) worktreeFieldText(field worktreeField) string {
 // WorktreePromptType adds typed text to the field the keyboard is in, laundered
 // the way every name in this codebase is: only what the dialog will actually
 // draw survives. A branch may hold a slash, which is why there is no
-// file-prompt-style "trailing / means folder" rule here to fight.
+// WorktreePromptType types text at the active field's caret, as a paste does.
 func (m *OS) WorktreePromptType(text string) {
-	if text == "" {
-		return
+	if buf := m.worktreeActiveField(); buf != nil && lineInsert(buf, text, printableRunes) {
+		m.worktreePrompt.Err = ""
 	}
+}
+
+// WorktreePromptKey applies one key press to the active field (see lineKey).
+func (m *OS) WorktreePromptKey(key, text string) {
 	if buf := m.worktreeActiveField(); buf != nil {
-		*buf += printableRunes(text)
-		m.worktreePrompt.Err = ""
-	}
-}
-
-// WorktreePromptBackspace drops the last rune of the active field, in runes,
-// for the same reason RenameBackspace counts in runes.
-func (m *OS) WorktreePromptBackspace() {
-	if buf := m.worktreeActiveField(); buf != nil && *buf != "" {
-		*buf = dropLastRune(*buf)
-		m.worktreePrompt.Err = ""
-	}
-}
-
-// WorktreePromptDeleteWord drops the last word of the active field, by the rule
-// of DropLastWord.
-func (m *OS) WorktreePromptDeleteWord() {
-	if buf := m.worktreeActiveField(); buf != nil && *buf != "" {
-		*buf = textedit.DropLastWord(*buf)
-		m.worktreePrompt.Err = ""
-	}
-}
-
-// WorktreePromptClearInput empties the active field.
-func (m *OS) WorktreePromptClearInput() {
-	if buf := m.worktreeActiveField(); buf != nil {
-		*buf = ""
+		if changed, _ := lineKey(buf, key, text, printableRunes); changed {
+			m.worktreePrompt.Err = ""
+		}
 	}
 }
 

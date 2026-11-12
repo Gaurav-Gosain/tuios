@@ -35,11 +35,6 @@ func handleFilePromptInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if key == "enter" {
 		return o, o.FilePromptSubmit()
 	}
-	promptTextKeys{
-		Backspace:  o.FilePromptBackspace,
-		DeleteWord: o.FilePromptDeleteWord,
-		Clear:      o.FilePromptClearInput,
-		Type:       o.FilePromptType,
-	}.handle(msg)
+	o.FilePromptKey(key, msg.Text)
 	return o, nil
 }
