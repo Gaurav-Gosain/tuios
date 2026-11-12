@@ -32,6 +32,10 @@ import (
 // It is final: the caller reports it, and it does not retry into another name.
 const ErrVerbHostUnreachable = "host_unreachable"
 
+// ErrVerbPaneEnded is a pane on another machine that cannot come back: the
+// daemon there no longer has it, or the link stayed down past its grace.
+const ErrVerbPaneEnded = "pane_ended"
+
 // ErrVerbUnknownHost reports a host name that is not in the configured table.
 // Also final, and its message names every configured host.
 const ErrVerbUnknownHost = "unknown_host"

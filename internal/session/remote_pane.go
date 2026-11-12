@@ -105,6 +105,10 @@ type remotePane struct {
 	received int64
 	// pendingErr is a read error that came with bytes, kept for the next Read.
 	pendingErr error
+	// ended is why the pane cannot come back, once reconnect has given up:
+	// remoteEndedForgotten or remoteEndedGrace. Empty while it runs or
+	// retries.
+	ended string
 	// link is "reconnecting" while the link is lost and the pane is being
 	// reattached, and linkUntil is when the far machine stops keeping the
 	// process. onLinkChange tells the session, so its clients are told.
@@ -126,6 +130,28 @@ type remotePane struct {
 
 // remotePaneLinkReconnecting is the link state of a pane being reattached.
 const remotePaneLinkReconnecting = "reconnecting"
+
+// remotePaneLinkEnded is the link state of a pane that cannot come back: the
+// far daemon no longer has it, or the link stayed down past its grace. It
+// stays for as long as the window does, so every caller reads the pane as
+// ended rather than as a stream that broke.
+const remotePaneLinkEnded = "ended"
+
+// remotePaneEndedError is what a write or a resize gets on a pane that ended
+// on the other machine. It names the machine and why.
+type remotePaneEndedError struct {
+	host, why string
+}
+
+func (e *remotePaneEndedError) Error() string {
+	return "the pane on " + e.host + " ended: " + e.why
+}
+
+// The causes a pane that cannot come back is given, in words.
+const (
+	remoteEndedForgotten = "its daemon there no longer has it: it restarted, or the pane's process ended there"
+	remoteEndedGrace     = "the link stayed down past the time the machine kept the pane for"
+)
 
 // linkState is the pane's link state and, while reconnecting, when the far
 // machine's grace ends.
@@ -340,7 +366,7 @@ func (p *remotePane) readRaw(b []byte) (int, error) {
 		if p.isClosed() || p.resumeToken == "" {
 			return 0, err
 		}
-		if rerr := p.reconnect(); rerr != nil {
+		if rerr := p.reconnect(err); rerr != nil {
 			if p.isClosed() {
 				return 0, err
 			}
@@ -358,8 +384,11 @@ var errPaneReconnecting = errors.New("the link to this pane's machine is down an
 // than typing again.
 func (p *remotePane) Write(b []byte) (int, error) {
 	p.mu.Lock()
-	closed, stream, link := p.closed, p.stream, p.link
+	closed, stream, link, ended := p.closed, p.stream, p.link, p.ended
 	p.mu.Unlock()
+	if ended != "" {
+		return 0, &remotePaneEndedError{host: p.host, why: ended}
+	}
 	if closed {
 		return 0, io.ErrClosedPipe
 	}
@@ -387,10 +416,13 @@ func (p *remotePane) Resize(width, height int) error {
 // from its fallback cell.
 func (p *remotePane) SetWinsize(width, height, xpixel, ypixel int) error {
 	p.mu.Lock()
-	closed := p.closed
+	closed, ended := p.closed, p.ended
 	p.width, p.height = width, height
 	p.xpixel, p.ypixel = xpixel, ypixel
 	p.mu.Unlock()
+	if ended != "" {
+		return &remotePaneEndedError{host: p.host, why: ended}
+	}
 	if closed {
 		return io.ErrClosedPipe
 	}
@@ -462,7 +494,7 @@ const (
 // also ends when the far process exits, and then the link is up and the far
 // daemon answers unknown_pane at once: the pane closes without flashing a
 // reconnect it never needed.
-func (p *remotePane) reconnect() error {
+func (p *remotePane) reconnect(cause error) error {
 	deadline := time.Now().Add(p.grace)
 	wait := remotePaneRetryMin
 	for attempt := 0; time.Now().Before(deadline); attempt++ {
@@ -474,6 +506,7 @@ func (p *remotePane) reconnect() error {
 			LogBasic("Pane %s on %s lost its link; reattaching for up to %s", shortID(p.id), p.host, p.grace)
 		}
 		opened, stream, br, final := p.reattachOnce()
+		why := remoteEndedForgotten
 		if stream != nil {
 			p.mu.Lock()
 			old := p.stream
@@ -494,7 +527,21 @@ func (p *remotePane) reconnect() error {
 			return nil
 		}
 		if final {
-			break
+			if attempt == 0 && errors.Is(cause, io.EOF) {
+				// The far side closed the stream itself and, with the link
+				// up, said at once that it has no such pane: the process
+				// exited there, which is an ordinary end, not one to warn
+				// about. A far daemon that restarted is told apart by the
+				// stream ending with the link, or by the first attempt not
+				// being answered. One that restarted and is back before the
+				// first attempt reads as an ordinary end; a far daemon that
+				// answers "exited" apart from "unknown" would close that gap.
+				p.setLink("", time.Time{})
+				LogBasic("Pane %s on %s ended: its process exited there", shortID(p.id), p.host)
+				return errPaneGone
+			}
+			p.end(why)
+			return errPaneGone
 		}
 		select {
 		case <-p.done:
@@ -503,9 +550,26 @@ func (p *remotePane) reconnect() error {
 		}
 		wait = min(wait*2, remotePaneRetryMax)
 	}
-	p.setLink("", time.Time{})
-	LogBasic("Pane %s on %s could not be reattached, so it is closed", shortID(p.id), p.host)
+	p.end(remoteEndedGrace)
 	return errPaneGone
+}
+
+// end records that the pane cannot come back and why, and tells the session,
+// whose snapshot then shows the window as ended (host_link "ended" and
+// host_ended) to clients, list-windows, list-agents and wait-for alike.
+func (p *remotePane) end(why string) {
+	p.mu.Lock()
+	p.ended = why
+	p.mu.Unlock()
+	LogBasic("Pane %s on %s could not be reattached, so it is closed: %s", shortID(p.id), p.host, why)
+	p.setLink(remotePaneLinkEnded, time.Time{})
+}
+
+// endedWhy is why the pane cannot come back, or "" while it runs.
+func (p *remotePane) endedWhy() string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.ended
 }
 
 // errPaneGone is a pane that cannot be reattached.

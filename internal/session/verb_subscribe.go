@@ -397,6 +397,16 @@ func (d *Daemon) verbWaitFor(cs *connState, params json.RawMessage) (any, *verbE
 		return d.waitAgentStateAnySession(p.Until, deadline)
 	}
 
+	// A window whose pane ran on another machine and cannot come back has
+	// nothing left to wait for: it fails at once with the error a write gets,
+	// rather than when its timeout runs out. window-exit waits on as before,
+	// and the pane has exited, so it answers at once.
+	if p.Window != "" && p.Condition != "window-exit" && p.Condition != "session-exists" {
+		if verr := d.endedPaneRefusal(cs, p.Session, p.Window); verr != nil {
+			return nil, verr
+		}
+	}
+
 	switch p.Condition {
 	case "session-exists":
 		return d.waitSessionExists(p.Session, deadline)
@@ -1071,6 +1081,28 @@ func checkEventTypes(types []string) *verbError {
 			}
 		}
 		return invalidParam("types", "unknown event type "+echoName(t), knownEventTypes...)
+	}
+	return nil
+}
+
+// endedPaneRefusal is the pane_ended refusal when the window names a pane on
+// another machine that cannot come back, and nil otherwise, including when
+// the window does not resolve: the wait reports that itself.
+func (d *Daemon) endedPaneRefusal(cs *connState, sessionName, window string) *verbError {
+	sess, verr := d.resolveVerbSession(cs, sessionName)
+	if verr != nil {
+		return nil
+	}
+	pty, err := d.resolvePTYForTarget(sess, window)
+	if err != nil {
+		return nil
+	}
+	rp, ok := pty.pty.(*remotePane)
+	if !ok {
+		return nil
+	}
+	if why := rp.endedWhy(); why != "" {
+		return paneEndedError(&remotePaneEndedError{host: rp.host, why: why})
 	}
 	return nil
 }

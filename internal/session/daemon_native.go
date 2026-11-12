@@ -403,7 +403,14 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 	}
 	if w.HostLink != "" {
 		info["host_link"] = w.HostLink
-		info["host_link_until"] = w.HostLinkUntil
+		if w.HostLinkUntil > 0 {
+			info["host_link_until"] = w.HostLinkUntil
+		}
+		if w.HostEnded != "" {
+			// The pane cannot come back: it reads as exited, with why.
+			info["exited"] = true
+			info["host_ended"] = w.HostEnded
+		}
 	}
 	// Always report the agent state (as "none" when unset) so a consumer building
 	// an attention view can read every pane's state in one list-windows call.

@@ -16939,3 +16939,30 @@ The branch passes.
 |---------|---------------------|--------|
 | The message built with no stacks | "the message has no stack of the blocked command" and the closure case | **caught** |
 | The message built with every goroutine in it | "the message has the stack of a goroutine in other code" and "a command with no goroutine was not said to have finished" | **caught** |
+
+## A pane on another machine that cannot come back
+
+`e2e/tui/remote_pane_ended_test.go` links the daemon to a second one as
+`build` and opens a shell there. `TestAPaneWhoseDaemonRestartedReadsAsEnded`
+restarts build's daemon with no client attached and wants list-windows to show
+the pane exited with host_ended, send-text to fail with pane_ended naming
+build and why, and wait-for to fail at once with the same.
+`TestAPersonIsToldWhenAPaneOnAnotherMachineEnds` does the same with a client
+attached and wants one notice naming the pane, build and why.
+`TestAPaneWhoseMachineIsDownIsNotEnded` stops build's daemon and leaves it down,
+and wants the pane to read as reconnecting and never as ended.
+`TestAnOrdinaryExitOnAnotherMachineIsNotEnded` lets a program on build exit by
+itself and wants the plain exit note and no host_ended.
+
+Run on 2026-11-12 on macOS, branch `untangle/remote-pane-link`. All four pass
+on the branch.
+
+| Control | Test | The test fails with | Result |
+| --- | --- | --- | --- |
+| The remotePaneEndedError case taken out of ptyWriteError | `TestAPaneWhoseDaemonRestartedReadsAsEnded` | "ASSERTION: send-text does not say the pane on build ended, and why: ... {\"error\":{\"code\":\"internal\" ..." | **caught** |
+| noteHostEnded returns at once | `TestAPersonIsToldWhenAPaneOnAnotherMachineEnds` | "ASSERTION: the person was not told that far-pane on build ended" | **caught** |
+| The pane is ended on its first failed reattach | `TestAPaneWhoseMachineIsDownIsNotEnded` | "ASSERTION: far-pane says reconnecting" | **caught** |
+| The first-attempt EOF case taken out of reconnect | `TestAnOrdinaryExitOnAnotherMachineIsNotEnded` | "ASSERTION: far-pane shows its exit note" (the note names an ended pane instead) | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'Ended$|MachineEnds$|NotEnded$|IsNotEnded$' -v .`.

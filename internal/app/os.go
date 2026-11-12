@@ -950,6 +950,9 @@ type OS struct {
 	// renderer keeps.
 	SnapshotScrollback int
 	SubscribedPTYs     map[string]bool // Tracks which PTY IDs are currently subscribed (for visibility optimization)
+	// hostEndedTold is the windows whose pane on another machine ended that
+	// this client has told the person about, so each is told once.
+	hostEndedTold map[string]bool
 	// RestoredStreamSeq is the stream position each pane's snapshot was taken
 	// at, from the restore that precedes the subscribe on the attach path.
 	RestoredStreamSeq map[string]int64

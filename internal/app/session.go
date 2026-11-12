@@ -1353,6 +1353,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	adoptWindowHost(w, ws.Host)
 	m.takeDaemonCwd(w, ws)
 	m.takeDaemonDnD(w, ws)
+	m.noteHostEnded(ws)
 	w.HostLink = ws.HostLink
 	w.ScreenStopped = ws.ScreenStopped
 	w.CustomName = ws.CustomName
@@ -1571,6 +1572,7 @@ func (m *OS) newWindowFromState(ws *session.WindowState) *terminal.Window {
 	adoptWindowHost(window, ws.Host)
 	m.takeDaemonCwd(window, ws)
 	m.takeDaemonDnD(window, ws)
+	m.noteHostEnded(ws)
 	window.HostLink = ws.HostLink
 	window.ScreenStopped = ws.ScreenStopped
 
@@ -2638,4 +2640,27 @@ func (m *OS) focusedWindowID() string {
 		return m.Windows[m.FocusedWindow].ID
 	}
 	return ""
+}
+
+// noteHostEnded tells the person, once per window, that a pane on another
+// machine ended and cannot come back, with the machine and why. The daemon
+// says so in the state it pushes (HostLink "ended", HostEnded), so a client
+// that attaches after the pane ended is told too. Without this the window
+// went away, or stopped answering, with nothing said.
+func (m *OS) noteHostEnded(ws *session.WindowState) {
+	if ws.HostEnded == "" || m.hostEndedTold[ws.ID] {
+		return
+	}
+	if m.hostEndedTold == nil {
+		m.hostEndedTold = make(map[string]bool)
+	}
+	m.hostEndedTold[ws.ID] = true
+	name := ws.CustomName
+	if name == "" {
+		name = ws.Title
+	}
+	if name == "" {
+		name = "A pane"
+	}
+	m.ShowNotification(printableTitle(name)+" on "+printableTitle(ws.Host)+" ended: "+ws.HostEnded+".", "warning", m.Settings.NotificationDuration)
 }

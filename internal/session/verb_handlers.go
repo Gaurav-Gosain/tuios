@@ -1244,6 +1244,9 @@ func ptyWriteError(err error) *verbError {
 	if errors.Is(err, errPaneInputBusy) {
 		return paneBusyError(err)
 	}
+	if ended := (*remotePaneEndedError)(nil); errors.As(err, &ended) {
+		return paneEndedError(ended)
+	}
 	if errors.Is(err, errPaneReconnecting) {
 		return hintedVerbError(ErrVerbHostUnreachable, err.Error(), &VerbHint{
 			Command: "tuios list-windows",
@@ -2762,4 +2765,13 @@ func sliceCaptureLines(content string, start, end, lines int) string {
 		out += "\n"
 	}
 	return out
+}
+
+// paneEndedError is the refusal on a window whose pane ran on another machine
+// and cannot come back.
+func paneEndedError(e *remotePaneEndedError) *verbError {
+	return hintedVerbError(ErrVerbPaneEnded, e.Error(), &VerbHint{
+		Command: "tuios list-windows",
+		Detail:  "Nothing was sent. The window stays until it is closed; list-windows shows it as ended, with host_ended saying why. Close it, or open a new window on " + e.host + ".",
+	})
 }

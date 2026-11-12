@@ -140,6 +140,10 @@ type WindowState struct {
 	// snapshot and never stored. See remote_pane.go.
 	HostLink      string `json:"host_link,omitempty"`
 	HostLinkUntil int64  `json:"host_link_until,omitempty"`
+	// HostEnded is why a pane on another machine cannot come back, set with
+	// HostLink "ended". Like HostLink it is true only while it is true and
+	// is filled from the live pane on every snapshot.
+	HostEnded string `json:"host_ended,omitempty"`
 	// ScreenStopped is set while the daemon has stopped feeding the pane's
 	// terminal emulator after it failed again and again: the program runs
 	// and the clients draw its output, but a new client, capture-pane and
@@ -3157,13 +3161,14 @@ func (s *Session) fillLiveFacts(state *SessionState) {
 	// is true only while it is true, so whatever a client pushed back is
 	// cleared first.
 	for i := range state.Windows {
-		state.Windows[i].HostLink, state.Windows[i].HostLinkUntil = "", 0
+		state.Windows[i].HostLink, state.Windows[i].HostLinkUntil, state.Windows[i].HostEnded = "", 0, ""
 	}
 	for id, link := range s.liveHostLinks() {
 		for i := range state.Windows {
 			if state.Windows[i].PTYID == id {
 				state.Windows[i].HostLink = link.state
 				state.Windows[i].HostLinkUntil = link.until
+				state.Windows[i].HostEnded = link.ended
 			}
 		}
 	}
@@ -3177,6 +3182,7 @@ func (s *Session) fillLiveFacts(state *SessionState) {
 type hostLinkFact struct {
 	state string
 	until int64
+	ended string
 }
 
 // liveHostLinks is the link state of every window on another machine whose
@@ -3197,7 +3203,11 @@ func (s *Session) liveHostLinks() map[string]hostLinkFact {
 		if out == nil {
 			out = make(map[string]hostLinkFact)
 		}
-		out[id] = hostLinkFact{state: state, until: until.Unix()}
+		fact := hostLinkFact{state: state, ended: rp.endedWhy()}
+		if !until.IsZero() {
+			fact.until = until.Unix()
+		}
+		out[id] = fact
 	}
 	return out
 }

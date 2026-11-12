@@ -158,8 +158,14 @@ func exitNoteText(p *PTY) string {
 	code, _ := p.ExitStatus()
 	switch sig := p.ExitSignal(); {
 	case p.host != "":
-		// A pane on another machine reports only that its stream ended.
+		// A pane on another machine reports only that its stream ended, and
+		// why when it cannot come back.
 		msg = "The program ended."
+		if rp, ok := p.pty.(*remotePane); ok {
+			if why := rp.endedWhy(); why != "" {
+				msg = "The pane on " + p.host + " ended: " + why + "."
+			}
+		}
 	case sig > 0:
 		msg = fmt.Sprintf("The program stopped on signal %d.", sig)
 	default:

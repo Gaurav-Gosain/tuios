@@ -296,6 +296,11 @@ func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now i
 			// The pane's OSC 7501 records, the root first.
 			"program_status": programStatusList(w.ProgramStatus),
 		})
+		if w.HostEnded != "" {
+			// The pane ran on another machine and cannot come back.
+			agents[len(agents)-1]["exited"] = true
+			agents[len(agents)-1]["host_ended"] = w.HostEnded
+		}
 		if w.StartedBy != nil {
 			agents[len(agents)-1]["started_by"] = w.StartedBy
 		}

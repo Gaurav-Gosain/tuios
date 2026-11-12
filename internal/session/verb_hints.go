@@ -116,6 +116,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbProtocolMismatch, "The caller's protocol version is outside the range this daemon accepts."},
 	{ErrVerbUnknownHost, "No host by that name is configured. The hint lists the hosts that are. A host name is matched exactly, so nothing is guessed."},
 	{ErrVerbHostUnreachable, "The host is configured and is not answering. Nothing was queued. Read the host's status with list-hosts."},
+	{ErrVerbPaneEnded, "The window's pane ran on another machine and cannot come back: that machine's daemon no longer has it, or the link stayed down past the time it was kept for. Nothing was sent. list-windows shows it as ended with the reason; close the window, or open a new one there."},
 	{ErrVerbHostRefused, "The host's link is up and cannot take another connection. Close one of the connections to it and try again."},
 	{ErrVerbUnknownPane, "This daemon is not running a pane with that id. The pane was real and is gone, so drop it rather than correct it."},
 	{ErrVerbNotWorktree, "The session is not in a git worktree, so there is nothing to remove or diff."},
