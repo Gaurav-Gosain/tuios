@@ -252,9 +252,17 @@ func (c *webClient) paneSize(t *testing.T, tag int, timeout time.Duration) (cols
 }
 
 // tryPaneSize is paneSize that reports a missing answer instead of failing.
+//
+// The question goes in as one bracketed paste and one Enter: two input
+// events, so two frames. Typed key by key it was one frame per character,
+// and a frame at the 1200x208 limit (250,000 cells) costs about 110 ms on
+// arch-btw: the 45-character question took 3.2 to 4.8 s to come back, and a
+// loaded runner went past the 10 s budget (t117). Two frames leave that budget
+// a wide margin.
 func (c *webClient) tryPaneSize(t *testing.T, tag int, timeout time.Duration) (cols, rows int, err error) {
 	t.Helper()
-	c.send(t, '0', fmt.Sprintf("echo SZ$((%d+0))_$(tput cols)x$(tput lines)\r", tag))
+	c.send(t, '0', fmt.Sprintf("\x1b[200~echo SZ$((%d+0))_$(tput cols)x$(tput lines)\x1b[201~", tag))
+	c.send(t, '0', "\r")
 	deadline := time.Now().Add(timeout)
 	for {
 		c.mu.Lock()
