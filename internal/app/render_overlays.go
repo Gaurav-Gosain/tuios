@@ -596,31 +596,35 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		if room := m.ViewContentWidth(); overlayWidth+4 <= room {
 			regionX, regionW = m.viewReserve().Left, room
 		}
+		// Each corner is a point two cells in from the region's corner (one
+		// row down at the top), and the panel opens from it toward the
+		// middle, through overlay.Place. A binding list taller than the
+		// screen starts below the top dock rather than off the top, hiding
+		// the first entries with no way to reach them.
+		screen := overlay.Rect{X0: 0, Y0: m.viewReserve().Top, X1: renderWidth, Y1: renderHeight}
+		left, right := regionX+2, regionX+regionW-2
+		top, bottom := 1, renderHeight-2
+		var corner overlay.Rect
+		var place overlay.Placement
 		switch m.Settings.WhichKeyPosition {
 		case "top-left":
-			overlayX = regionX + 2
-			overlayY = 1
+			corner, place = overlay.Rect{X0: left, Y0: top, X1: left, Y1: top}, overlay.Placement{Side: overlay.SideBelow}
 		case "top-right":
-			overlayX = regionX + regionW - overlayWidth - 2
-			overlayY = 1
+			corner, place = overlay.Rect{X0: right, Y0: top, X1: right, Y1: top}, overlay.Placement{Side: overlay.SideBelow, Align: overlay.AlignEnd}
 		case "bottom-left":
-			overlayX = regionX + 2
-			overlayY = renderHeight - overlayHeight - 2
-		case "center":
-			// The screen centre, where the panels are centred.
-			overlayX = (renderWidth - overlayWidth) / 2
-			overlayY = (renderHeight - overlayHeight) / 2
+			corner, place = overlay.Rect{X0: left, Y0: bottom, X1: left, Y1: bottom}, overlay.Placement{Side: overlay.SideAbove}
 		default:
-			overlayX = regionX + regionW - overlayWidth - 2
-			overlayY = renderHeight - overlayHeight - 2
+			corner, place = overlay.Rect{X0: right, Y0: bottom, X1: right, Y1: bottom}, overlay.Placement{Side: overlay.SideAbove, Align: overlay.AlignEnd}
+		}
+		if m.Settings.WhichKeyPosition == "center" {
+			// The screen centre, where the panels are centred: no anchor.
+			overlayX, overlayY = overlay.Clamp((renderWidth-overlayWidth)/2, (renderHeight-overlayHeight)/2, overlayWidth, overlayHeight, screen)
+		} else {
+			overlayX, overlayY, _ = overlay.Place(corner, overlayWidth, overlayHeight, screen, place)
 		}
 		if regionW == renderWidth {
 			overlayX = m.railCoverX(overlayX, overlayWidth, renderWidth)
 		}
-		// A binding list taller than the screen would otherwise be positioned
-		// off the top, hiding the first entries with no way to reach them.
-		overlayX = max(min(overlayX, renderWidth-overlayWidth), 0)
-		overlayY = max(min(overlayY, renderHeight-overlayHeight), m.viewReserve().Top, 0)
 
 		// A menu opened over an overlay (the Inbox, the rail's preview, the
 		// review) is drawn above that overlay, and above every other, as its
