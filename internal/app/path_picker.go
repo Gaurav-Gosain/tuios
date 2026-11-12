@@ -380,10 +380,15 @@ func (m *OS) PathPickerBackspace() tea.Cmd {
 // left and right, alt+left and alt+right, ctrl+a, ctrl+e, ctrl+k and the word
 // keys. On an empty filter the word keys do nothing: backspace there goes up
 // a folder, and a word key has no folder to take back. It reports whether the
-// key was the filter's.
+// key was the filter's. A key that types text is not: it goes to
+// PathPickerType, which reads a slash as a step of the path. Line.Edit would
+// type it into the filter as it is, and "~/", "/" and "../" would not walk.
 func (m *OS) PathPickerKey(key string) bool {
 	p := m.pathPicker
 	if p == nil {
+		return false
+	}
+	if key == "space" || (len(key) == 1 && key[0] >= ' ' && key[0] <= '~') {
 		return false
 	}
 	if textedit.IsWordDeleteKey(key) && p.query.String() == "" {
