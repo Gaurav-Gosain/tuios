@@ -66,7 +66,11 @@ step "tuios integration install rex, before any Rex session"
 env "${xdg[@]}" PATH="/usr/bin:/bin:$(dirname "$rexbin")" REX_CONFIG="$cfg" REX_SERVER="$server" "$bin" integration install rex > "$out/install.txt" 2>&1
 echo "rc=$?"; cat "$out/install.txt"
 cp "$cfg" "$out/init-after-install.lua"
-rx actions > "$out/rex-actions.txt" 2>&1; grep tuios "$out/rex-actions.txt"
+rx actions > "$out/rex-actions.txt" 2>&1
+echo "tuios actions in Rex: $(grep -c '^tuios_' "$out/rex-actions.txt")"
+echo "tuios actions --json: $(tu actions --json | grep -o '"name":' | wc -l | tr -d ' ') entries"
+rx actions --json > "$out/rex-actions.json" 2>&1
+grep -E '^tuios_(prefix_inbox|goto_picker|start_agent|check|new_window|prefix_selection) ' "$out/rex-actions.txt"
 
 step "a Rex session whose block runs the tuios client"
 rx new --json > "$out/rex-new.json" 2>&1; cat "$out/rex-new.json"
@@ -76,25 +80,45 @@ echo "block $blk"
 for _ in $(seq 50); do tu list-clients --json 2>/dev/null | grep -q demo && break; sleep 0.2; done
 tu list-clients --json > "$out/tuios-clients.json" 2>&1
 
+n=0
 act() {
+	n=$((n + 1))
+	f=$(printf '%02d-%s' "$n" "$1")
 	step "rex do $*"
-	rx do -b "$blk" "$@" > "$out/do-$1.txt" 2>&1; echo "rc=$?"; cat "$out/do-$1.txt"
+	rx do -b "$blk" "$@" > "$out/do-$f.txt" 2>&1; echo "rc=$?"; cat "$out/do-$f.txt"
 	for _ in $(seq 10); do sleep 0.2; done
-	rx capture -b "$blk" > "$out/capture-$1.txt" 2>&1
-	tu capture-pane -s demo > "$out/tuios-$1.txt" 2>&1
+	rx capture -b "$blk" > "$out/capture-$f.txt" 2>&1
+	tu capture-pane -s demo > "$out/tuios-$f.txt" 2>&1
+	# Close what the action opened, so the next one starts from the panes.
+	rx send-key -b "$blk" escape > /dev/null 2>&1; sleep 0.3
+	rx send-key -b "$blk" escape > /dev/null 2>&1; sleep 0.3
 }
 act tuios_check
-act tuios_agents
-tu run-command -s demo Action prefix_inbox >/dev/null 2>&1
-act tuios_mail
-act tuios_next_waiting
+act tuios_prefix_inbox
+act tuios_goto_picker
+act tuios_prefix_mail
+act tuios_prefix_next_attention
+act tuios_new_window
+act tuios_layout_bsp
+act tuios_prefix_selection
+act tuios_start_agent
 act tuios_start_agent harness=standin name=rexdemo
+act tuios_start_agent harness=codex name=enumcheck prompt=hi folder=/tmp
 tu list-agents -s demo > "$out/tuios-agents.txt" 2>&1; cat "$out/tuios-agents.txt"
 act tuios_start_agent harness=nosuchagent name=missing
 if [ -x "$claudedir/claude" ]; then
-	act tuios_start_agent name=claude-from-rex
+	act tuios_start_agent harness=claude name=claude-from-rex
 	tu list-windows -s demo > "$out/tuios-windows.txt" 2>&1; cat "$out/tuios-windows.txt"
 fi
+
+step "a key by a version 2 name, and one for no action"
+printf 'require("tuios").setup{ keys = { tuios_agents = "cmd+shift+f12", tuios_nope = "cmd+shift+f11" } } -- added by tuios integration\n' > "$cfg.new"
+grep -v 'added by tuios integration' "$cfg" >> "$cfg.new"; cp "$cfg" "$out/init-before-keys.lua"; mv "$cfg.new" "$cfg"
+rx config check > "$out/config-check-keys.txt" 2>&1; cat "$out/config-check-keys.txt"
+rx config reload > /dev/null 2>&1
+rx keymap > "$out/keymap.txt" 2>&1; grep -i 'tuios' "$out/keymap.txt"
+act tuios_check
+cp "$out/init-before-keys.lua" "$cfg"; rx config reload > /dev/null 2>&1
 
 step "status"
 env "${xdg[@]}" PATH="/usr/bin:/bin:$(dirname "$rexbin")" REX_CONFIG="$cfg" REX_SERVER="$server" "$bin" integration status rex > "$out/status.txt" 2>&1

@@ -17075,3 +17075,19 @@ Run on 2026-11-12 on macOS (arm64), on main 448e9bf1d. The branch passes.
 | `foldMenus` not run, so `[menus]` keyed rows are not which-key menus | `which-key: context menu never showed [my tools Save the pane name Cancel]` | **caught** |
 | `MenuRows` not reading `[keybindings.menus.NAME]` | `pane again: context menu never showed [Old spelling]` | **caught** |
 | `canonicalizeMenus` not run, so `remove = ["prefix_split_vertical"]` names no shipped row (run on 2026-11-12 on arch-btw, linux amd64, on main b4d6374b9) | `the pane menu shows "Split right"` | **caught** |
+
+## Rex actions come from tuios actions --json
+
+`TestRexActionsComeFromTuios` loads the real `integrations/rex/tuios.lua`
+against a stand-in for Rex's Lua API whose `rex.exec` runs the real binary,
+with tuios only in `~/.local/bin` and `PATH=/usr/bin:/bin`. It checks that
+Rex gets one action per entry of the binary's `tuios actions --json`, the
+start form's harnesses are the binary's, a tuios too old for `--json` loads
+the fallback actions, and `tuios actions --json` stays under 50 ms with no
+daemon.
+
+Run on 2026-11-12 on macOS (arm64), on main 994c781fd. The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `M.setup` building the actions with `M.actions(nil)`, the fallback, whatever tuios answers | "Rex's actions are not tuios's list" and "the start form's harnesses are not tuios's" | **caught** |

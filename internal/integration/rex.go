@@ -99,6 +99,17 @@ type RexCheck struct {
 	Agent          string `json:"agent"`
 	AgentInstalled *bool  `json:"agent_installed"`
 	AgentNote      string `json:"agent_note"`
+	// Actions is how many actions Rex took from tuios actions --json at its
+	// last config load. ActionsCurrent says whether that list is the one the
+	// tuios on disk gives now, so false means Rex should reload. ActionsNote
+	// says why the list could not be read, when Rex has only the built-in
+	// fallback actions.
+	Actions        int    `json:"actions"`
+	ActionsCurrent *bool  `json:"actions_current"`
+	ActionsNote    string `json:"actions_note"`
+	// KeysNote names keys of setup{ keys = ... } that were not bound because
+	// no action has the name.
+	KeysNote string `json:"keys_note"`
 }
 
 // RexStatus is what integration status says about Rex.
@@ -336,7 +347,9 @@ func RexStatusOf(env Env, rex RexRunner) (RexStatus, error) {
 		st.LoadedNote = "rex actions failed" + rexErr(err)
 		return st, nil
 	}
-	st.Loaded = strings.Contains(out, "tuios_agents")
+	// tuios_check is in every version of tuios.lua, and in the fallback
+	// actions too.
+	st.Loaded = strings.Contains(out, "tuios_check")
 	if st.Loaded {
 		st.Check, st.CheckNote = RexRunCheck(rex)
 	}

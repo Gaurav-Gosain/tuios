@@ -137,6 +137,17 @@ func printRexCheck(w io.Writer, c *integration.RexCheck) {
 	}
 	version, _, _ := strings.Cut(strings.TrimSpace(c.Version), "\n")
 	fmt.Fprintf(w, "The actions run %s (%s).\n", c.Tuios, version)
+	switch {
+	case c.ActionsNote != "":
+		fmt.Fprintf(w, "Rex has only the built-in tuios actions: %s\n", c.ActionsNote)
+	case c.ActionsCurrent != nil && !*c.ActionsCurrent:
+		fmt.Fprintf(w, "Rex has %d tuios actions from an older tuios. Run rex config reload to load the actions of this one.\n", c.Actions)
+	case c.Actions > 0:
+		fmt.Fprintf(w, "Rex has %d tuios actions, the ones tuios actions lists.\n", c.Actions)
+	}
+	if c.KeysNote != "" {
+		fmt.Fprintf(w, "Keys: %s\n", c.KeysNote)
+	}
 	if c.Agent != "" {
 		switch {
 		case c.AgentInstalled == nil:

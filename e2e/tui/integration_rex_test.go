@@ -1,10 +1,13 @@
 package tuie2e
 
 import (
+	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestIntegrationInstallRex: tuios integration install rex puts tuios.lua next
@@ -65,8 +68,8 @@ func TestIntegrationInstallRex(t *testing.T) {
 			"'config reload') exit 0 ;;\n" +
 			"esac\n" +
 			"case \"$1\" in\n" +
-			"actions) grep -q 'require(\"tuios\")' \"$REX_CONFIG\" && echo 'tuios_agents  tuios: Open the Agents View'; exit 0 ;;\n" +
-			"do) echo '{\"tuios\":\"/opt/test/tuios\",\"version\":\"tuios version test\",\"lua_version\":2,\"agent\":\"claude\",\"agent_installed\":" + found + "}'; exit 0 ;;\n" +
+			"actions) grep -q 'require(\"tuios\")' \"$REX_CONFIG\" && echo 'tuios_check  tuios: Check the Rex Integration'; exit 0 ;;\n" +
+			"do) echo '{\"tuios\":\"/opt/test/tuios\",\"version\":\"tuios version test\",\"lua_version\":3,\"agent\":\"claude\",\"agent_installed\":" + found + "}'; exit 0 ;;\n" +
 			"esac\nexit 0\n"
 		if err := os.WriteFile(filepath.Join(bin, "rex"), []byte(script), 0o755); err != nil { //nolint:gosec // the fake rex runs
 			t.Fatal(err)
@@ -209,6 +212,210 @@ func TestIntegrationInstallRex(t *testing.T) {
 		}
 		if read(r.lua) != string(shipped) || !strings.Contains(out, "Replaced tuios.lua version 0") {
 			t.Errorf("ASSERTION: an older copy tuios wrote was not replaced, or the output does not say so:\n%s", out)
+		}
+	})
+}
+
+// TestRexActionsComeFromTuios: tuios.lua defines its Rex actions from tuios
+// actions --json, not from a list of its own. The real tuios.lua is loaded
+// against a stand-in for Rex's Lua API (testdata/rex-load.lua) whose rex.exec
+// runs the real binary, with tuios only in ~/.local/bin and a PATH without
+// it, as the Rex app gives its server. It needs a Lua (luajit, as Rex runs
+// Lua 5.1, or lua) and skips without one. The run in a real Rex server is
+// testdata/rex-real.sh.
+//
+// How it could pass wrongly, written down first:
+//   - The Lua could still hold the list: every entry of the binary's own
+//     tuios actions --json must come back as one Rex action, in its order,
+//     and nothing else but Start an Agent and the check.
+//   - The list could come from a tuios on the test machine's PATH: PATH is
+//     /usr/bin:/bin, and the first program run must be the one in
+//     ~/.local/bin.
+//   - The form could offer harnesses of its own: its choices must be the
+//     binary's harness commands.
+//   - A tuios too old for --json, or none at all, could break Rex's config
+//     load: both must load, with the fallback actions.
+//   - The list could need the daemon, so Rex start would wait on it or start
+//     one: the budget runs it with no daemon, and no socket may appear.
+//
+// NEGATIVE CONTROL: with M.setup building the actions from the fallback
+// whatever tuios answers (M.actions(nil)), the "from the binary" case fails
+// on the list of actions. Recorded in NEGATIVE_CONTROLS.md.
+func TestRexActionsComeFromTuios(t *testing.T) {
+	lua, err := exec.LookPath("luajit")
+	if err != nil {
+		if lua, err = exec.LookPath("lua"); err != nil {
+			t.Skip("no luajit or lua on PATH")
+		}
+	}
+	loader, err := filepath.Abs(filepath.Join("testdata", "rex-load.lua"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	luaDir, err := filepath.Abs(filepath.Join("..", "..", "integrations", "rex"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := t.TempDir()
+	xdg := func(home string) []string {
+		var env []string
+		for _, key := range xdgKeys {
+			if key != "HOME" {
+				env = append(env, key+"="+xdgDir(base, key))
+			}
+		}
+		return append(env, "HOME="+home, "USER="+os.Getenv("USER"), "PATH=/usr/bin:/bin")
+	}
+	load := func(t *testing.T, home, name string) []string {
+		t.Helper()
+		cmd := exec.Command(lua, loader, luaDir)
+		cmd.Dir = luaDir
+		cmd.Env = xdg(home)
+		out, err := cmd.CombinedOutput()
+		saveText(t, name, string(out))
+		if err != nil {
+			t.Fatalf("rex-load.lua: %v\n%s", err, out)
+		}
+		return strings.Split(strings.TrimSpace(string(out)), "\n")
+	}
+	field := func(lines []string, kind string, n int) []string {
+		var got []string
+		for _, l := range lines {
+			parts := strings.Split(l, "\t")
+			if parts[0] == kind && len(parts) > n {
+				got = append(got, parts[n])
+			}
+		}
+		return got
+	}
+	newHome := func(t *testing.T, tuios string) string {
+		t.Helper()
+		home := t.TempDir()
+		bin := filepath.Join(home, ".local", "bin")
+		if err := os.MkdirAll(bin, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if tuios != "" {
+			if err := os.Symlink(tuios, filepath.Join(bin, "tuios")); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return home
+	}
+	fallback := []string{"tuios_goto_picker", "tuios_prefix_inbox", "tuios_prefix_mail", "tuios_prefix_next_attention", "tuios_start_agent", "tuios_check"}
+
+	t.Run("from the binary", func(t *testing.T) {
+		home := newHome(t, tuiosBin)
+		cmd := exec.Command(tuiosBin, "actions", "--json")
+		cmd.Env = xdg(home)
+		raw, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("tuios actions --json: %v", err)
+		}
+		saveText(t, "actions", string(raw))
+		var list struct {
+			Actions []struct {
+				Name, Title, Category string
+			}
+			Harnesses []struct{ Command string }
+		}
+		if err := json.Unmarshal(raw, &list); err != nil {
+			t.Fatalf("tuios actions --json is not JSON: %v", err)
+		}
+		var want, enum []string
+		for _, a := range list.Actions {
+			if a.Name != "new_agent" {
+				want = append(want, "tuios_"+a.Name)
+			}
+		}
+		want = append(want, "tuios_start_agent", "tuios_check")
+		for _, h := range list.Harnesses {
+			enum = append(enum, h.Command)
+		}
+		lines := load(t, home, "rex-load")
+		if lines[len(lines)-1] != "LOADED" {
+			t.Fatalf("ASSERTION: setup did not load:\n%s", strings.Join(lines, "\n"))
+		}
+		if exe := field(lines, "EXEC", 1); len(exe) == 0 || exe[0] != filepath.Join(home, ".local", "bin", "tuios")+" actions --json" {
+			t.Errorf("ASSERTION: the list did not come from the tuios in ~/.local/bin: %q", exe)
+		}
+		if got := field(lines, "ACTION", 1); strings.Join(got, " ") != strings.Join(want, " ") {
+			t.Errorf("ASSERTION: Rex's actions are not tuios's list.\n got %d: %v\nwant %d: %v", len(got), got, len(want), want)
+		}
+		if got := field(lines, "ENUM", 1); strings.Join(got, " ") != strings.Join(enum, " ") {
+			t.Errorf("ASSERTION: the start form's harnesses are not tuios's: %v, want %v", got, enum)
+		}
+		for _, name := range []string{"new_window", "goto_picker", "prefix_inbox", "prefix_mail", "prefix_review", "prefix_selection", "screenshot", "layout_bsp", "new_agent"} {
+			found := false
+			for _, a := range list.Actions {
+				found = found || a.Name == name
+			}
+			if !found {
+				t.Errorf("ASSERTION: tuios actions --json leaves out %s", name)
+			}
+		}
+	})
+
+	t.Run("too old for the list", func(t *testing.T) {
+		home := newHome(t, "")
+		old := "#!/bin/sh\n[ \"$1 $2\" = 'actions --json' ] && { echo 'Error: unknown flag: --json' >&2; exit 1; }\nexit 0\n"
+		if err := os.WriteFile(filepath.Join(home, ".local", "bin", "tuios"), []byte(old), 0o755); err != nil { //nolint:gosec // the stand-in runs
+			t.Fatal(err)
+		}
+		lines := load(t, home, "rex-load-old")
+		if lines[len(lines)-1] != "LOADED" {
+			t.Fatalf("ASSERTION: an old tuios broke the config load:\n%s", strings.Join(lines, "\n"))
+		}
+		if got := field(lines, "ACTION", 1); strings.Join(got, " ") != strings.Join(fallback, " ") {
+			t.Errorf("ASSERTION: an old tuios did not give the fallback actions: %v", got)
+		}
+	})
+
+	t.Run("no tuios", func(t *testing.T) {
+		// tuios.lua looks in the install folders outside HOME too, so a tuios
+		// installed on the test machine is found, as it should be.
+		for _, d := range []string{"/opt/homebrew/bin", "/usr/local/bin", "/nix/var/nix/profiles/default/bin", "/run/current-system/sw/bin",
+			"/etc/profiles/per-user/" + os.Getenv("USER") + "/bin"} {
+			if _, err := os.Stat(filepath.Join(d, "tuios")); err == nil {
+				t.Skipf("this machine has tuios in %s, which tuios.lua finds", d)
+			}
+		}
+		lines := load(t, newHome(t, ""), "rex-load-none")
+		if lines[len(lines)-1] != "LOADED" {
+			t.Fatalf("ASSERTION: no tuios broke the config load:\n%s", strings.Join(lines, "\n"))
+		}
+		if got := field(lines, "ACTION", 1); strings.Join(got, " ") != strings.Join(fallback, " ") {
+			t.Errorf("ASSERTION: no tuios did not give the fallback actions: %v", got)
+		}
+		if got := field(lines, "EXEC", 1); len(got) != 0 {
+			t.Errorf("ASSERTION: something ran with no tuios: %v", got)
+		}
+	})
+
+	// Rex runs tuios actions --json at each config load, so it is time a
+	// person waits at Rex start. The fastest of five runs, since load only
+	// adds time.
+	t.Run("budget", func(t *testing.T) {
+		home := newHome(t, tuiosBin)
+		best := time.Hour
+		for range 5 {
+			cmd := exec.Command(tuiosBin, "actions", "--json")
+			cmd.Env = xdg(home)
+			start := time.Now()
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("tuios actions --json: %v\n%s", err, out)
+			}
+			best = min(best, time.Since(start))
+		}
+		saveText(t, "budget", best.String())
+		if best > 50*time.Millisecond {
+			t.Errorf("ASSERTION: tuios actions --json took %v at best, over the 50ms budget", best)
+		}
+		entries, _ := os.ReadDir(xdgDir(base, "XDG_RUNTIME_DIR"))
+		for _, e := range entries {
+			if strings.Contains(e.Name(), "tuios") {
+				t.Errorf("ASSERTION: tuios actions --json made %s, so it reached for a daemon", e.Name())
+			}
 		}
 	})
 }
