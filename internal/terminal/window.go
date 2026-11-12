@@ -773,7 +773,6 @@ func newWindowBase(id, title string, x, y, width, height, z int, ptyDataChan cha
 
 	applyTheme(terminal)
 
-	// Set up callbacks to track terminal state changes
 	terminal.SetCallbacks(vt.Callbacks{
 		AltScreen: func(enabled bool) {
 			// Suppress callback during state restoration to prevent race conditions
@@ -786,7 +785,6 @@ func newWindowBase(id, title string, x, y, width, height, z int, ptyDataChan cha
 			}
 		},
 		Title: func(title string) {
-			// Update window title from terminal escape sequence
 			if title != "" {
 				window.SetTitle(title)
 			}
@@ -883,7 +881,6 @@ func NewWindowInCell(dir, id, title string, x, y, width, height, z int, exitChan
 	// Get cached terminal environment (detected once on first window creation)
 	termType, colorTerm := getTerminalEnv()
 
-	// Debug logging for terminal environment
 	if debuglog.Enabled() {
 		debugMsg := fmt.Sprintf("[%s] NewWindow TERM=%s COLORTERM=%s (envTERM=%s envCOLORTERM=%s)\n",
 			time.Now().Format("15:04:05.000"), termType, colorTerm, os.Getenv("TERM"), os.Getenv("COLORTERM"))
@@ -952,7 +949,6 @@ func NewWindowInCell(dir, id, title string, x, y, width, height, z int, exitChan
 
 	_, cancel := context.WithCancel(context.Background())
 
-	// Update window with PTY and command info
 	window.Pty = ptyInstance
 	window.Cmd = cmd
 	window.cancelFunc = cancel
@@ -979,13 +975,10 @@ func NewWindowInCell(dir, id, title string, x, y, width, height, z int, exitChan
 	window.coalesceWake = make(chan struct{}, 1)
 	go window.renderCoalescer()
 
-	// Start I/O handling
 	window.handleIOOperations()
 
-	// Enable terminal features
 	window.enableTerminalFeatures()
 
-	// Monitor process lifecycle
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -997,10 +990,8 @@ func NewWindowInCell(dir, id, title string, x, y, width, height, z int, exitChan
 		// with Close() which may also wait for the process.
 		window.waitForCmd()
 
-		// Mark process as exited
 		window.SetProcessExited(true)
 
-		// Clean up
 		cancel()
 
 		// Give a small delay to ensure final output is captured

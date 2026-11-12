@@ -862,7 +862,6 @@ func (w *Window) handleIOOperations() {
 			}
 		}()
 
-		// Get buffer from pool for better memory management
 		bufPtr := pool.GetByteSlice()
 		buf := *bufPtr
 		defer pool.PutByteSlice(bufPtr)
@@ -882,20 +881,17 @@ func (w *Window) handleIOOperations() {
 		for {
 			select {
 			case <-ctx.Done():
-				// Context cancelled, exit gracefully
 				return
 			default:
 				n, err := pty.Read(buf)
 				if err != nil {
 					if err != io.EOF && !strings.Contains(err.Error(), "file already closed") &&
 						!strings.Contains(err.Error(), "input/output error") {
-						// Log unexpected errors for debugging
 						_ = err
 					}
 					return
 				}
 				if n > 0 {
-					// Debug: Log all data from PTY (applications sending queries)
 					if n >= 2 && buf[0] == '\x1b' && debugInternal() {
 						debugLogf("[%s] PTY->Terminal query: %q (hex: % x)\n",
 							time.Now().Format("15:04:05.000"), string(buf[:n]), buf[:n])
@@ -955,7 +951,6 @@ func (w *Window) handleIOOperations() {
 		for {
 			select {
 			case <-ctx.Done():
-				// Context cancelled, exit gracefully
 				return
 			default:
 				terminal := w.terminalRef()
@@ -967,7 +962,6 @@ func (w *Window) handleIOOperations() {
 				if err != nil {
 					if err != io.EOF && !strings.Contains(err.Error(), "file already closed") &&
 						!strings.Contains(err.Error(), "input/output error") {
-						// Log unexpected errors for debugging
 						_ = err
 					}
 					return
@@ -976,11 +970,9 @@ func (w *Window) handleIOOperations() {
 					data := buf[:n]
 
 					if debugInternal() {
-						// Log all data from the terminal response pipe.
 						debugLogf("[%s] Terminal->PTY [%s] ALL data (%d bytes): %q (hex: % x)\n",
 							time.Now().Format("15:04:05.000"), shortID(w.ID), len(data), string(data), data)
 
-						// Log XTWINOPS responses.
 						if len(data) >= 6 && data[0] == '\x1b' && data[1] == '[' && data[len(data)-1] == 't' {
 							debugLogf("[%s] XTWINOPS response to PTY: %q (hex: % x)\n",
 								time.Now().Format("15:04:05.000"), string(data), data)
@@ -997,7 +989,6 @@ func (w *Window) handleIOOperations() {
 					w.ioMu.RUnlock()
 					if pty != nil {
 						if _, err := pty.Write(data); err != nil {
-							// Ignore write errors during I/O operations
 							_ = err
 						}
 					}
@@ -1088,7 +1079,6 @@ func (w *Window) waitForCmd() {
 
 // Close closes the window and cleans up resources.
 func (w *Window) Close() {
-	// Nil safety check
 	if w == nil {
 		return
 	}
@@ -1101,7 +1091,6 @@ func (w *Window) Close() {
 		return
 	}
 
-	// Disable terminal features before closing
 	w.disableTerminalFeatures()
 
 	// Stop daemon output writer goroutine if running. Closing outputDone
@@ -1119,7 +1108,6 @@ func (w *Window) Close() {
 		w.outputQ.close()
 	}
 
-	// Cancel all goroutines first
 	if w.cancelFunc != nil {
 		w.cancelFunc()
 		w.cancelFunc = nil
@@ -1160,13 +1148,11 @@ func (w *Window) Close() {
 		w.waitForCmd()
 	}
 
-	// Clear caches to free memory
 	w.CachedContent = ""
 	w.CachedContentCols, w.CachedContentRows = 0, 0
 	w.SyncHoldContent = ""
 	w.CachedLayer = nil
 
-	// Clear copy mode to free memory
 	if w.CopyMode != nil {
 		w.CopyMode.SearchMatches = nil
 		w.CopyMode.SearchCache.Matches = nil

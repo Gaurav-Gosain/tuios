@@ -109,7 +109,6 @@ func (w *Window) enterCopyMode(x, y int) {
 	w.CopyMode.Pending = CopyPendingNone
 	w.CopyMode.Implicit = false
 
-	// Sync with window scrollback
 	w.ScrollbackOffset = 0
 
 	w.InvalidateCache()
@@ -198,7 +197,6 @@ func (w *Window) ExitCopyMode() {
 		w.CopyMode.State = CopyModeNormal
 		w.CopyMode.ScrollOffset = 0
 		w.CopyMode.Implicit = false
-		// Clear search state
 		w.CopyMode.Search.Set("")
 		w.CopyMode.SearchMatches = nil
 		w.CopyMode.SearchCache.Valid = false
