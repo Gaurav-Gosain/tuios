@@ -16,7 +16,8 @@ local TERMINAL = "com.superlogical.terminal"
 
 -- The default options of setup.
 local defaults = {
-  -- The tuios program. A name without a slash is looked up in PATH.
+  -- The tuios program. A name without a slash is looked up in PATH, then in
+  -- the folders tuios is installed to (see install_dirs).
   bin = "tuios",
   -- The agent start_agent starts when the action gets no harness.
   harness = "claude",
@@ -27,10 +28,82 @@ local defaults = {
 
 local opts = {}
 
+-- M.env is how program reads the environment and the file system. The test
+-- replaces it with a stub.
+M.env = {
+  getenv = os.getenv,
+  -- exists says whether a file is there and can be read.
+  exists = function(path)
+    local f = io.open(path, "r")
+    if f == nil then
+      return false
+    end
+    f:close()
+    return true
+  end,
+}
+
+-- install_dirs are the folders tuios is installed to, in the order program
+-- looks in them: scripts/install.sh, Homebrew on Apple silicon and on Intel,
+-- go install, and Nix. Rex's server starts from the app, so its PATH often
+-- has none of the folders a login shell adds.
+local function install_dirs()
+  local home = M.env.getenv("HOME") or ""
+  local dirs = {}
+  local function add(d)
+    if d ~= nil and d ~= "" then
+      dirs[#dirs + 1] = d
+    end
+  end
+  if home ~= "" then
+    add(home .. "/.local/bin")
+  end
+  add("/opt/homebrew/bin")
+  add("/usr/local/bin")
+  add(M.env.getenv("GOBIN"))
+  local gopath = M.env.getenv("GOPATH")
+  if gopath ~= nil and gopath ~= "" then
+    add(gopath:match("^[^:]+") .. "/bin")
+  end
+  if home ~= "" then
+    add(home .. "/go/bin")
+    add(home .. "/.nix-profile/bin")
+  end
+  add("/etc/profiles/per-user/" .. (M.env.getenv("USER") or "") .. "/bin")
+  add("/nix/var/nix/profiles/default/bin")
+  add("/run/current-system/sw/bin")
+  return dirs
+end
+
+-- M.program returns the tuios program to run: bin as given when it has a
+-- slash, else the first folder in PATH and then in install_dirs that holds
+-- it. When none does it raises an error that names the fix.
+function M.program()
+  local bin = opts.bin
+  if bin:find("/", 1, true) then
+    return bin
+  end
+  local looked = {}
+  for d in (M.env.getenv("PATH") or ""):gmatch("[^:]+") do
+    if M.env.exists(d .. "/" .. bin) then
+      return d .. "/" .. bin
+    end
+  end
+  for _, d in ipairs(install_dirs()) do
+    looked[#looked + 1] = d
+    if M.env.exists(d .. "/" .. bin) then
+      return d .. "/" .. bin
+    end
+  end
+  error(bin .. " is not in Rex's PATH or in " .. table.concat(looked, ", ")
+    .. ". Give its full path in init.lua: require(\"tuios\").setup{ bin = \"/full/path/tuios\" }."
+    .. " Run 'command -v tuios' in a shell to find it.", 0)
+end
+
 -- run runs the tuios CLI with args and returns its result, or raises an
 -- error with what it printed.
 local function run(args)
-  local argv = { opts.bin }
+  local argv = { M.program() }
   for _, a in ipairs(args) do
     argv[#argv + 1] = a
   end
@@ -131,7 +204,7 @@ M.actions = {
     args = { harness = "string?", prompt = "string?", name = "string?" },
     run = function(ctx, args)
       local s = session_or_error(ctx)
-      local argv = { opts.bin, "start-agent", args.harness or opts.harness, "-s", s, "--focus" }
+      local argv = { M.program(), "start-agent", args.harness or opts.harness, "-s", s, "--focus" }
       if args.name ~= nil and args.name ~= "" then
         argv[#argv + 1] = "--name"
         argv[#argv + 1] = args.name

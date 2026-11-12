@@ -126,6 +126,58 @@ exec_fail = true
 ok, err = pcall(actions.tuios_mail.run, ctx, {})
 check(not ok and tostring(err):find("no client shows the session"), "a failed tuios call reports its message")
 
+-- A bare bin when Rex's PATH lacks tuios. Rex's server starts from the app,
+-- so its PATH has none of the folders a login shell adds, such as
+-- ~/.local/bin where scripts/install.sh puts tuios.
+--
+-- How it could pass wrongly, written down first:
+--   - The lookup could find the real tuios of the machine that runs the
+--     test: the environment and the file system are the stub's, and the
+--     stub's PATH has no tuios.
+--   - A folder in PATH could lose to an install folder: the case with both
+--     wants the PATH one.
+--   - The argv could still start with the bare name: each case reads the
+--     argv rex.exec and rex.exec.start received.
+exec_fail = false
+local real_env = tuios.env
+local function stub_env(vars, files)
+  tuios.env = {
+    getenv = function(k) return vars[k] end,
+    exists = function(p) return files[p] == true end,
+  }
+end
+tuios.setup{}
+
+stub_env({ HOME = "/home/u", PATH = "/usr/bin:/bin" }, { ["/home/u/.local/bin/tuios"] = true, ["/opt/homebrew/bin/tuios"] = true })
+execs = {}
+actions.tuios_mail.run(ctx, {})
+argv_is(execs[#execs], { "/home/u/.local/bin/tuios", "run-command", "-s", "work", "Action", "prefix_mail" }, "a tuios outside PATH is found in ~/.local/bin")
+starts = {}
+actions.tuios_start_agent.run(ctx, {})
+argv_is(starts[1].argv, { "/home/u/.local/bin/tuios", "start-agent", "claude", "-s", "work", "--focus" }, "start_agent finds tuios outside PATH")
+
+stub_env({ HOME = "/home/u", PATH = "/usr/bin:/srv/bin" }, { ["/srv/bin/tuios"] = true, ["/home/u/.local/bin/tuios"] = true })
+execs = {}
+actions.tuios_agents.run(ctx, {})
+check(execs[#execs][1] == "/srv/bin/tuios", "a tuios in PATH wins over an install folder: got " .. tostring(execs[#execs][1]))
+
+stub_env({ HOME = "/home/u", USER = "u", PATH = "/usr/bin:/bin" }, {})
+execs = {}
+ok, err = pcall(actions.tuios_mail.run, ctx, {})
+check(not ok and #execs == 0, "with no tuios anywhere nothing runs")
+check(tostring(err):find("is not in Rex's PATH", 1, true) and tostring(err):find("/home/u/.local/bin", 1, true)
+  and tostring(err):find('setup{ bin = "/full/path/tuios" }', 1, true), "the message names where it looked and the fix: " .. tostring(err))
+starts = {}
+ok, err = pcall(actions.tuios_start_agent.run, ctx, {})
+check(not ok and #starts == 0 and tostring(err):find("setup{ bin", 1, true), "start_agent gives the same message")
+
+stub_env({ HOME = "/home/u", PATH = "" }, {})
+tuios.setup{ bin = "/elsewhere/tuios" }
+execs = {}
+actions.tuios_agents.run(ctx, {})
+check(execs[#execs][1] == "/elsewhere/tuios", "a bin with a slash runs as given")
+tuios.env = real_env
+
 if failed > 0 then
   io.stderr:write(failed .. " checks failed\n")
   os.exit(1)
