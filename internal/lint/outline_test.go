@@ -18,8 +18,10 @@ import (
 var outlineDirs = []string{"internal", "cmd/tuios", "pkg"}
 
 // outlineSkip are folders inside outlineDirs that are not part of the binary,
-// and the wrappers themselves.
-var outlineSkip = []string{"internal/errfmt", "internal/jsonx", "internal/harness/herdrconv", "internal/lint"}
+// and the wrappers themselves: the binary's in errfmt and jsonx, and the copy
+// in internal/acp, which imports nothing from tuios so it can become a
+// library of its own, and keeps the rest of its files under this lint.
+var outlineSkip = []string{"internal/errfmt", "internal/jsonx", "internal/harness/herdrconv", "internal/lint", "internal/acp/outline.go"}
 
 // outlined maps each standard library call the compiler inlines at every
 // call site to the out-of-line copy to call instead.
@@ -58,7 +60,7 @@ func TestInlinedCallsGoOutOfLine(t *testing.T) {
 				}
 				return nil
 			}
-			if !strings.HasSuffix(rel, ".go") || strings.HasSuffix(rel, "_test.go") {
+			if !strings.HasSuffix(rel, ".go") || strings.HasSuffix(rel, "_test.go") || slices.Contains(outlineSkip, rel) {
 				return nil
 			}
 			src, err := os.ReadFile(path)

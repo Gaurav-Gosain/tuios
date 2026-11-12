@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Gaurav-Gosain/tuios/internal/acp"
+
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
@@ -44,7 +46,7 @@ import (
 
 // Codex is a Codex app-server.
 type Codex struct {
-	conn    *Conn
+	conn    *acp.Conn
 	emit    func(Event)
 	version string
 
@@ -68,7 +70,7 @@ func NewCodex(r io.Reader, w io.Writer, version string, emit func(Event)) *Codex
 		ended:   make(map[string]TurnResult),
 		waiters: make(map[string]chan TurnResult),
 	}
-	c.conn = NewConn(r, w, ConnOptions{OmitVersion: true, OnNotify: c.onNotify, OnRequest: c.onRequest})
+	c.conn = acp.NewConn(r, w, acp.ConnOptions{OmitVersion: true, OnNotify: c.onNotify, OnRequest: c.onRequest})
 	return c
 }
 
@@ -156,7 +158,7 @@ func (c *Codex) Prompt(ctx context.Context, text string) (TurnResult, error) {
 	case r := <-ch:
 		return r, nil
 	case <-c.conn.Done():
-		return TurnResult{Stop: StopFailed, Detail: "codex exited during the turn"}, ErrClosed
+		return TurnResult{Stop: StopFailed, Detail: "codex exited during the turn"}, acp.ErrClosed
 	case <-ctx.Done():
 		return TurnResult{Stop: StopFailed, Detail: ctx.Err().Error()}, ctx.Err()
 	}
@@ -368,7 +370,7 @@ func codexStatus(s string, completed bool) string {
 	return ToolRunning
 }
 
-func (c *Codex) onRequest(r *Request) {
+func (c *Codex) onRequest(r *acp.Request) {
 	switch r.Method {
 	case "item/commandExecution/requestApproval":
 		var p struct {
@@ -380,7 +382,7 @@ func (c *Codex) onRequest(r *Request) {
 			NetworkApprovalContext json.RawMessage `json:"networkApprovalContext"`
 		}
 		if jsonx.Unmarshal(r.Params, &p) != nil {
-			r.ReplyError(codeInvalidParams, "could not read the approval request")
+			r.ReplyError(acp.CodeInvalidParams, "could not read the approval request")
 			return
 		}
 		c.mu.Lock()
@@ -420,7 +422,7 @@ func (c *Codex) onRequest(r *Request) {
 			GrantRoot *string `json:"grantRoot"`
 		}
 		if jsonx.Unmarshal(r.Params, &p) != nil {
-			r.ReplyError(codeInvalidParams, "could not read the approval request")
+			r.ReplyError(acp.CodeInvalidParams, "could not read the approval request")
 			return
 		}
 		c.mu.Lock()
@@ -456,7 +458,7 @@ func (c *Codex) onRequest(r *Request) {
 		}
 		c.emit(perm)
 	default:
-		r.ReplyError(codeMethodNotFound, "tuios does not offer "+r.Method)
+		r.ReplyError(acp.CodeMethodNotFound, "tuios does not offer "+r.Method)
 	}
 }
 
@@ -466,7 +468,7 @@ type codexOption struct {
 	label, decision, wire string
 }
 
-func codexPermission(r *Request, t Tool, opts []codexOption) *Permission {
+func codexPermission(r *acp.Request, t Tool, opts []codexOption) *Permission {
 	options := make([]Option, len(opts))
 	for i, o := range opts {
 		options[i] = Option{Label: o.label, Decision: o.decision}

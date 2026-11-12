@@ -75,6 +75,24 @@ type PlanEntry struct {
 	Status  string
 }
 
+// AgentState is the state an ACP version 2 agent reports for its foreground
+// work: running, idle or requires_action, or a state tuios does not know.
+type AgentState struct {
+	State string
+}
+
+// Line is a line of the client's own about the conversation, such as the
+// agent's slash commands or a compaction.
+type Line struct {
+	Text string
+}
+
+// Withdrawn is the agent taking back a permission it asked, which is already
+// answered cancelled: the pane drops it.
+type Withdrawn struct {
+	Permission *Permission
+}
+
 // Notice is something the client itself has to say: an error from the agent,
 // a retry, a request it refused.
 type Notice struct {
@@ -96,6 +114,8 @@ type Usage struct {
 	Cost     float64
 	HasCost  bool
 	Currency string
+	// ClearCost says the agent cleared the cost it stated.
+	ClearCost bool
 }
 
 func (Text) isEvent()        {}
@@ -104,6 +124,9 @@ func (Tool) isEvent()        {}
 func (Plan) isEvent()        {}
 func (Notice) isEvent()      {}
 func (*Permission) isEvent() {}
+func (AgentState) isEvent()  {}
+func (Line) isEvent()        {}
+func (Withdrawn) isEvent()   {}
 
 // Decisions an option maps to, the words the daemon's request-approval uses.
 // An option with no decision can only be picked in the pane.
@@ -126,20 +149,24 @@ type Option struct {
 type Permission struct {
 	Tool    Tool
 	Options []Option
+	// Title is the agent's question, when it asked one apart from the tool
+	// call (ACP version 2).
+	Title string
 	// Reason is the agent's explanation, when it gave one.
 	Reason string
 	// Detail is a line of context the pane shows under the title, such as the
 	// directory a command runs in.
 	Detail string
 
-	once   sync.Once
-	choose func(i int)
-	cancel func()
+	once     sync.Once
+	choose   func(i int)
+	cancel   func()
+	answered chan struct{}
 }
 
 // NewPermission builds a permission whose answers call choose and cancel.
 func NewPermission(tool Tool, options []Option, choose func(int), cancel func()) *Permission {
-	return &Permission{Tool: tool, Options: options, choose: choose, cancel: cancel}
+	return &Permission{Tool: tool, Options: options, choose: choose, cancel: cancel, answered: make(chan struct{})}
 }
 
 // Choose answers with option i. An index out of range is ignored.
@@ -151,13 +178,17 @@ func (p *Permission) Choose(i int) bool {
 	p.once.Do(func() {
 		answered = true
 		p.choose(i)
+		close(p.answered)
 	})
 	return answered
 }
 
 // Cancel answers that the turn is being cancelled, which approves nothing.
 func (p *Permission) Cancel() {
-	p.once.Do(func() { p.cancel() })
+	p.once.Do(func() {
+		p.cancel()
+		close(p.answered)
+	})
 }
 
 // Pick is the index of the option with decision, or -1.
@@ -193,6 +224,9 @@ type Info struct {
 	Session string
 	// Model is the model, when the agent said.
 	Model string
+	// Protocol is the protocol version the connection speaks, when the
+	// protocol has versions (ACP).
+	Protocol int
 }
 
 // Agent is a started agent process, spoken to over its protocol.

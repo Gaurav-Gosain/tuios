@@ -1,6 +1,7 @@
 package agentproto
 
 import (
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Gaurav-Gosain/tuios/internal/acp"
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
@@ -30,17 +32,75 @@ func CheckProtocol(protocol string) error {
 	return errfmt.Errorf("unknown protocol %q: use %s", protocol, strings.Join(Protocols, " or "))
 }
 
-// NewAgent makes the client for protocol over an agent whose stdout is r and
-// whose stdin is w.
-func NewAgent(protocol string, r io.Reader, w io.Writer, version string, emit func(Event)) (Agent, error) {
+// NewAgent makes the client for protocol over the agent t opens. Codex is
+// dialled here, once; ACP dials in Start, and again when it falls back to an
+// older version on a fresh connection.
+func NewAgent(protocol string, t acp.Transport, o ACPOptions, emit func(Event)) (Agent, error) {
 	switch protocol {
 	case ProtocolACP:
-		return NewACP(r, w, version, emit), nil
+		return NewACP(t, o, emit), nil
 	case ProtocolCodex:
-		return NewCodex(r, w, version, emit), nil
+		rw, err := t.Dial(context.Background())
+		if err != nil {
+			return nil, err
+		}
+		return NewCodex(rw, rw, o.Version, emit), nil
 	}
 	return nil, CheckProtocol(protocol)
 }
+
+// Command is an agent's command as a transport: each Dial starts it, with
+// pipes, after stopping the one an earlier Dial started.
+type Command struct {
+	Argv []string
+	Dir  string
+	Env  []string
+
+	mu  sync.Mutex
+	cur *Process
+}
+
+// Dial starts the agent.
+func (c *Command) Dial(context.Context) (io.ReadWriteCloser, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.cur != nil {
+		c.cur.Stop()
+		c.cur = nil
+	}
+	p, err := StartProcess(c.Argv, c.Dir, c.Env)
+	if err != nil {
+		return nil, err
+	}
+	c.cur = p
+	return processRW{p}, nil
+}
+
+// Stderr is the end of what the running agent wrote to stderr.
+func (c *Command) Stderr() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.cur == nil {
+		return ""
+	}
+	return c.cur.Stderr()
+}
+
+// Stop stops the running agent.
+func (c *Command) Stop() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.cur != nil {
+		c.cur.Stop()
+	}
+}
+
+// processRW is a started agent as one connection.
+type processRW struct{ p *Process }
+
+func (r processRW) Read(b []byte) (int, error)  { return r.p.Stdout.Read(b) }
+func (r processRW) Write(b []byte) (int, error) { return r.p.Stdin.Write(b) }
+func (r processRW) Close() error                { r.p.Stop(); return nil }
 
 // Process is an agent started with pipes for its stdin and stdout.
 //

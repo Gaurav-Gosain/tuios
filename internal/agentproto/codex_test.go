@@ -6,6 +6,8 @@ import (
 	"maps"
 	"strings"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/acp"
 )
 
 // startCodex runs the app-server handshake against the peer. It checks that
@@ -204,7 +206,7 @@ func TestCodexApprovals(t *testing.T) {
 		p.send(map[string]any{"id": 30 + i, "method": method, "params": map[string]any{}})
 		m := p.next()
 		errObj, _ := m["error"].(map[string]any)
-		if errObj["code"] != float64(codeMethodNotFound) {
+		if errObj["code"] != float64(acp.CodeMethodNotFound) {
 			t.Errorf("%s answered %v, want method not found", method, m)
 		}
 	}

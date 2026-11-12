@@ -164,6 +164,10 @@ func (r *renderer) event(ev Event) string {
 		r.tool(&b, e)
 	case Plan:
 		r.planBlock(&b, e)
+	case Line:
+		if t := oneLine(e.Text); t != "" {
+			r.block(&b, sgrDim+t+sgrReset)
+		}
 	case Notice:
 		colour, label := sgrYellow, "note"
 		if e.Error {
@@ -286,6 +290,11 @@ func (r *renderer) permission(p *Permission) string {
 	b.WriteString(" ")
 	b.WriteString(toolLabel(p.Tool))
 	b.WriteString("\n")
+	if title := oneLine(p.Title); title != "" {
+		b.WriteString("  ")
+		b.WriteString(title)
+		b.WriteString("\n")
+	}
 	if d := oneLine(p.Detail); d != "" {
 		b.WriteString("  ")
 		b.WriteString(d)

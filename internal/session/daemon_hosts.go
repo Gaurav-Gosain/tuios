@@ -75,7 +75,7 @@ func (d *Daemon) stopHostsWatch() {
 // onConfigReload runs on the watcher goroutine. It applies the [hosts] table,
 // [notify], appearance.preferred_shell, [shell] integration,
 // workspaces.return_when_empty,
-// [paste_buffers], [agents] enabled and herdr_protocol, [daemon] keep_awake,
+// [paste_buffers], [agents] enabled, herdr_protocol and acp_version, [daemon] keep_awake,
 // single_client and ssh_agent, the
 // [agents.approvals], [agents.permissions] and [agents.queue] tables and
 // [agents.recap] test_patterns, and reads nothing else out of the file. A new
@@ -131,6 +131,10 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	d.manager.SetShellIntegration(cfg.Shell.Integration)
 	d.manager.SetShellLogin(cfg.Shell.Login)
 	d.manager.SetHerdrProtocol(cfg.Agents.HerdrProtocol)
+	// The ACP version shapes only the protocol panes started from now on,
+	// and either version offers the agent nothing, so a file change applies
+	// both ways.
+	d.acpVersion.Store(int32(cfg.Agents.ACPVersionOr()))
 	d.manager.SetReturnWhenEmpty(cfg.Workspaces.ReturnsWhenEmpty())
 	d.manager.SetDragAndDrop(cfg.Panes.DragAndDrop)
 	// The history depth and where a new pane starts shape only the panes made

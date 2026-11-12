@@ -1,0 +1,25 @@
+## sent
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{},"info":{"name":"tuios","title":"tuios","version":"test"},"protocolVersion":2}}
+{"jsonrpc":"2.0","id":2,"method":"session/new","params":{"cwd":"/work"}}
+{"jsonrpc":"2.0","id":3,"method":"session/prompt","params":{"prompt":[{"type":"text","text":"long job"}],"sessionId":"s3"}}
+{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"s3"}}
+{"jsonrpc":"2.0","id":4,"method":"session/prompt","params":{"prompt":[{"type":"text","text":"again"}],"sessionId":"s3"}}
+{"jsonrpc":"2.0","id":5,"method":"session/prompt","params":{"prompt":[{"type":"text","text":"third"}],"sessionId":"s3"}}
+{"jsonrpc":"2.0","id":6,"method":"session/prompt","params":{"prompt":[{"type":"text","text":"fourth"}],"sessionId":"s3"}}
+{"jsonrpc":"2.0","id":7,"method":"session/prompt","params":{"prompt":[{"type":"text","text":"fifth"}],"sessionId":"s3"}}
+## updates
+*acp.StateUpdate session=s3 kind=state_update {"State":"idle","StopReason":"cancelled","Error":null}
+*acp.StateUpdate session=s3 kind=state_update {"State":"running","StopReason":"","Error":null}
+*acp.ToolCallUpdate session=s3 kind=tool_call_update {"ToolCallID":"c1","Created":false,"Status":"cancelled"}
+*acp.StateUpdate session=s3 kind=state_update {"State":"idle","StopReason":"cancelled","Error":null}
+*acp.StateUpdate session=s3 kind=state_update {"State":"running","StopReason":"","Error":null}
+*acp.StateUpdate session=s3 kind=state_update {"State":"requires_action","StopReason":"","Error":null}
+*acp.StateUpdate session=s3 kind=state_update {"State":"idle","StopReason":"error","Error":{"code":-32603,"message":"model overloaded"}}
+*acp.StateUpdate session=s3 kind=state_update {"State":"running","StopReason":"","Error":null}
+*acp.StateUpdate session=s3 kind=state_update {"State":"idle","StopReason":"","Error":null}
+## results
+turn={Reason:cancelled Error:<nil>} err=<nil>
+turn={Reason:error Error:model overloaded (code -32603)} error=model overloaded (code -32603) err=<nil>
+turn={Reason: Error:<nil>} err=<nil>
+turn={Reason: Error:<nil>} err=cancelled before insertion (code -32800)
+turn={Reason:end_turn Error:<nil>} err=<nil>

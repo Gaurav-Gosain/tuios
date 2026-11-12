@@ -1,0 +1,9 @@
+## sent
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{},"info":{"name":"tuios","title":"tuios","version":"test"},"protocolVersion":2}}
+{"jsonrpc":"2.0","id":2,"method":"session/list","params":{"cwd":"/work"}}
+{"jsonrpc":"2.0","id":3,"method":"session/list","params":{"cursor":"c2","cwd":"/work"}}
+{"jsonrpc":"2.0","id":4,"method":"session/resume","params":{"cwd":"/work","sessionId":"a"}}
+## updates
+## results
+sessions=[{ID:a Cwd:/work Title:A UpdatedAt:} {ID:b Cwd:/work Title: UpdatedAt:2026-11-13T00:00:00Z}]
+resumed=a

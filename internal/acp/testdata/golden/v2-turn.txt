@@ -1,0 +1,37 @@
+## sent
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{},"info":{"name":"tuios","title":"tuios","version":"test"},"protocolVersion":2}}
+{"jsonrpc":"2.0","id":2,"method":"session/new","params":{"cwd":"/work"}}
+{"jsonrpc":"2.0","id":3,"method":"session/prompt","params":{"prompt":[{"type":"text","text":"fix it"}],"sessionId":"s2"}}
+{"jsonrpc":"2.0","id":4,"method":"session/close","params":{"sessionId":"s2"}}
+## updates
+*acp.StateUpdate session=s2 kind=state_update {"State":"running","StopReason":"","Error":null}
+*acp.MessageUpdate session=s2 kind=user_message {"Role":"user","MessageID":"u1","Op":"replace","Content":[{"type":"text","text":"fix it"}]}
+*acp.MessageUpdate session=s2 kind=agent_thought_chunk {"Role":"thought","MessageID":"t1","Op":"append","Content":[{"type":"text","text":"hmm"}]}
+*acp.MessageUpdate session=s2 kind=agent_message_chunk {"Role":"agent","MessageID":"a1","Op":"append","Content":[{"type":"text","text":"Fix"}]}
+*acp.MessageUpdate session=s2 kind=agent_message {"Role":"agent","MessageID":"a1","Op":"replace","Content":[{"type":"text","text":"Fixed."}]}
+*acp.MessageUpdate session=s2 kind=agent_message {"Role":"agent","MessageID":"a0","Op":"clear","Content":null}
+*acp.MessageUpdate session=s2 kind=agent_message {"Role":"agent","MessageID":"a2","Op":"keep","Content":null}
+*acp.ToolCallUpdate session=s2 kind=tool_call_update {"ToolCallID":"c1","Created":false,"Name":"bash","Title":"go test","Kind":"execute","Status":"in_progress","Content":[{"Type":"terminal","TerminalID":"term1"}],"RawInput":{"command":"go test"}}
+*acp.ToolContentChunk session=s2 kind=tool_call_content_chunk {"ToolCallID":"c1","Item":{"Type":"content","Content":{"type":"text","text":"ok"}}}
+*acp.TerminalUpdate session=s2 kind=terminal_update {"TerminalID":"term1","Command":"go test","Output":"b2sK","Snapshot":true,"Exited":false,"ExitCode":null}
+*acp.TerminalUpdate session=s2 kind=terminal_output_chunk {"TerminalID":"term1","Command":"","Output":"UEFTUwo=","Snapshot":false,"Exited":false,"ExitCode":null}
+*acp.TerminalUpdate session=s2 kind=terminal_update {"TerminalID":"term1","Command":"","Output":null,"Snapshot":false,"Exited":true,"ExitCode":0}
+*acp.ToolCallUpdate session=s2 kind=tool_call_update {"ToolCallID":"c2","Created":false,"Title":"edit a.go","Kind":"edit","Status":"completed","Content":[{"Type":"diff","Changes":[{"operation":"modify","path":"/work/a.go","fileType":"text"}],"Patch":{"format":"git_patch","text":"diff --git /work/a.go /work/a.go\n"}}]}
+*acp.ToolCallUpdate session=s2 kind=tool_call_update {"ToolCallID":"c1","Created":false,"Title":null,"Status":"cancelled","RawInput":null}
+*acp.PlanUpdate session=s2 kind=plan_update {"PlanID":"p1","Type":"items","Entries":[{"content":"read","priority":"high","status":"cancelled"}]}
+*acp.UsageUpdate session=s2 kind=usage_update {"Used":84000,"Size":200000,"SizeKnown":true,"Cost":{"amount":0.42,"currency":"USD"}}
+*acp.UsageUpdate session=s2 kind=usage_update {"Used":85000,"Size":200000,"SizeKnown":true,"Cost":null}
+*acp.Notice session=s2 kind=notice {"Severity":"warning","Title":"Rate limited","Description":"retrying in 5s"}
+*acp.CompactionUpdate session=s2 kind=compaction_update {"CompactionID":"k1","Status":"in_progress","Error":"","Summary":null}
+*acp.CompactionUpdate session=s2 kind=compaction_summary_chunk {"CompactionID":"k1","Status":"","Error":"","Summary":{"type":"text","text":"sum"}}
+*acp.CompactionUpdate session=s2 kind=compaction_update {"CompactionID":"k1","Status":"failed","Error":"too big","Summary":null}
+*acp.ConfigUpdate session=s2 kind=config_option_update {"Options":[{"ID":"mode","Name":"Mode","Category":"mode","Type":"select","Value":"ask","ValueName":""}]}
+*acp.SessionInfoUpdate session=s2 kind=session_info_update {"Title":"Fixing"}
+*acp.UnknownUpdate session=s2 kind=_example.com/widget {"Raw":{"sessionUpdate":"_example.com/widget","x":1}}
+*acp.UnknownUpdate session=s2 kind=subagent_update {"Raw":{"sessionUpdate":"subagent_update","y":2}}
+*acp.UnknownUpdate session=s2 kind=tool_call {"Raw":{"sessionUpdate":"tool_call","toolCallId":"old"}}
+*acp.StateUpdate session=s2 kind=state_update {"State":"idle","StopReason":"end_turn","Error":null}
+## results
+version=2 agent={Name:fake Title:Fake Version:2.0} auth=[{ID:login Name:Log in Description: Type:agent}]
+session=s2 options=[{ID:model Name:Model Category:model Type:select Value:big ValueName:Big Model} {ID:fast Name:Fast Category: Type:boolean Value:true ValueName:}] commands=[{Type:command Name:review Description:Review InputHint:focus}]
+turn={Reason:end_turn Error:<nil>} err=<nil>

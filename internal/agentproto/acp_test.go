@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/acp"
 )
 
 // startACP runs the ACP handshake against the peer and returns the client.
@@ -12,7 +14,7 @@ func startACP(t *testing.T) (*ACP, *peer, *events) {
 	t.Helper()
 	r, w, p := newPeer(t)
 	ev := newEvents()
-	a := NewACP(r, w, "1.2.3", ev.emit)
+	a := NewACP(acp.Pipe(r, w), ACPOptions{Version: "1.2.3"}, ev.emit)
 	done := make(chan error, 1)
 	var info Info
 	go func() {
@@ -129,7 +131,7 @@ func TestACPRefusesWhatItDoesNotOffer(t *testing.T) {
 		p.send(map[string]any{"jsonrpc": "2.0", "id": i + 1, "method": method, "params": map[string]any{"sessionId": "s-1", "path": "/etc/passwd", "content": "x"}})
 		resp := p.next()
 		errObj, _ := resp["error"].(map[string]any)
-		if resp["id"] != float64(i+1) || errObj["code"] != float64(codeMethodNotFound) {
+		if resp["id"] != float64(i+1) || errObj["code"] != float64(acp.CodeMethodNotFound) {
 			t.Errorf("%s answered %v, want method not found", method, resp)
 		}
 	}
@@ -137,7 +139,7 @@ func TestACPRefusesWhatItDoesNotOffer(t *testing.T) {
 
 func TestACPVersionMismatch(t *testing.T) {
 	r, w, p := newPeer(t)
-	a := NewACP(r, w, "1", func(Event) {})
+	a := NewACP(acp.Pipe(r, w), ACPOptions{Version: "1"}, func(Event) {})
 	done := make(chan error, 1)
 	go func() {
 		_, err := a.Start(context.Background(), "/")

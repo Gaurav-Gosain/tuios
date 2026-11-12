@@ -1,33 +1,4 @@
-// Package agentproto runs a coding agent headless, over a structured protocol,
-// and shows it in a tuios pane.
-//
-// An agent TUI in a pane is read by its screen, its hooks and its transcript
-// file. Some agents also speak a protocol meant for exactly this: a client
-// starts the agent with pipes, sends it prompts, and gets its turns, tool calls,
-// diffs and permission requests as messages. This package is such a client for
-// two of them:
-//
-//   - ACP, the Agent Client Protocol (agentclientprotocol.com), protocol
-//     version 1, which Zed and others use and which many agents implement
-//     (opencode acp, Gemini CLI, adapters for Claude Code and Codex).
-//   - The Codex app-server protocol (codex app-server), its v2 thread and turn
-//     methods.
-//
-// Both are JSON-RPC 2.0 over the agent's stdin and stdout, one message per
-// line. The Codex app-server leaves out the "jsonrpc" member, and reads a
-// message without it.
-//
-// The client offers the agent nothing beyond the conversation: it advertises no
-// file system and no terminal capability, so the agent cannot ask tuios to read
-// a file, write one or run a command, and a request for anything the client
-// does not handle is answered with method not found. What the agent does, it
-// does itself, under its own sandbox and approval rules, exactly as it would in
-// its own TUI.
-//
-// The Session in session.go is the pane program: it renders the conversation as
-// a transcript, reads prompts from the keyboard, and reports the agent's state
-// and permission requests to the daemon through a Reporter.
-package agentproto
+package acp
 
 import (
 	"bufio"
@@ -39,9 +10,6 @@ import (
 	"io"
 	"strconv"
 	"sync"
-
-	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
-	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
 // maxMessage bounds one JSON-RPC message. A diff of a large file arrives in one
@@ -49,11 +17,20 @@ import (
 // than growing without limit.
 const maxMessage = 32 << 20
 
-// JSON-RPC error codes the client answers with.
+// JSON-RPC and ACP error codes.
 const (
-	codeMethodNotFound = -32601
-	codeInvalidParams  = -32602
+	CodeInvalidRequest             = -32600
+	CodeMethodNotFound             = -32601
+	CodeInvalidParams              = -32602
+	CodeRequestCancelled           = -32800
+	CodeAuthRequired               = -32000
+	CodeResourceNotFound           = -32002
+	CodeUnsupportedProtocolVersion = -32022
 )
+
+// methodCancelRequest is the notification either side sends to cancel a
+// request it sent.
+const methodCancelRequest = "$/cancel_request"
 
 // RPCError is an error a peer answered a request with.
 type RPCError struct {
@@ -79,14 +56,18 @@ type message struct {
 	Error   *RPCError       `json:"error,omitempty"`
 }
 
-// Request is a request the agent sent the client. Exactly one of Reply or
-// ReplyError answers it; a second answer is dropped.
+// Request is a request the peer sent. Exactly one of Reply or ReplyError
+// answers it; a second answer is dropped.
 type Request struct {
 	ID     json.RawMessage
 	Method string
 	Params json.RawMessage
 	conn   *Conn
 	once   sync.Once
+	// cancelled is closed when the peer cancels the request with
+	// $/cancel_request, or the connection ends, before it is answered.
+	cancelled chan struct{}
+	cancelOne sync.Once
 }
 
 // Reply answers the request with result.
@@ -96,13 +77,28 @@ func (r *Request) Reply(result any) {
 		// A result is required in a response, and null is the empty one.
 		raw = json.RawMessage("null")
 	}
-	r.once.Do(func() { _ = r.conn.send(message{ID: r.ID, Result: raw}) })
+	r.answer(message{ID: r.ID, Result: raw})
 }
 
 // ReplyError answers the request with an error.
 func (r *Request) ReplyError(code int, msg string) {
-	r.once.Do(func() { _ = r.conn.send(message{ID: r.ID, Error: &RPCError{Code: code, Message: msg}}) })
+	r.answer(message{ID: r.ID, Error: &RPCError{Code: code, Message: msg}})
 }
+
+func (r *Request) answer(m message) {
+	r.once.Do(func() {
+		r.conn.forget(r)
+		_ = r.conn.send(m)
+	})
+}
+
+// Cancelled is closed when the peer withdraws the request before it is
+// answered, with $/cancel_request or by ending the connection. The request
+// must still be answered: ACP wants a response for every request, even a
+// cancelled one.
+func (r *Request) Cancelled() <-chan struct{} { return r.cancelled }
+
+func (r *Request) cancel() { r.cancelOne.Do(func() { close(r.cancelled) }) }
 
 // Conn is one JSON-RPC connection over a pair of streams.
 //
@@ -113,10 +109,12 @@ type Conn struct {
 	w           io.Writer
 	wmu         sync.Mutex
 	omitVersion bool
+	cancels     bool
 
 	mu      sync.Mutex
 	nextID  int64
 	pending map[string]chan message
+	open    map[string]*Request
 	err     error
 	done    chan struct{}
 
@@ -126,9 +124,13 @@ type Conn struct {
 
 // ConnOptions configure a Conn.
 type ConnOptions struct {
-	// OmitVersion leaves the "jsonrpc" member out of what is sent, for the
-	// Codex app-server's JSON-RPC without it.
+	// OmitVersion leaves the "jsonrpc" member out of what is sent, for a peer
+	// that speaks JSON-RPC without it (the Codex app-server).
 	OmitVersion bool
+	// Cancels turns on ACP's $/cancel_request: a call whose context ends is
+	// cancelled at the peer, and a cancel from the peer closes the request's
+	// Cancelled channel. The notification is not handed to OnNotify.
+	Cancels bool
 	// OnNotify receives each notification.
 	OnNotify func(method string, params json.RawMessage)
 	// OnRequest receives each request. Nil answers every request with method
@@ -142,7 +144,9 @@ func NewConn(r io.Reader, w io.Writer, o ConnOptions) *Conn {
 	c := &Conn{
 		w:           w,
 		omitVersion: o.OmitVersion,
+		cancels:     o.Cancels,
 		pending:     make(map[string]chan message),
+		open:        make(map[string]*Request),
 		done:        make(chan struct{}),
 		onNotify:    o.OnNotify,
 		onRequest:   o.OnRequest,
@@ -187,14 +191,19 @@ func (c *Conn) Call(ctx context.Context, method string, params, out any) error {
 			return m.Error
 		}
 		if out != nil && len(m.Result) > 0 {
-			if err := jsonx.Unmarshal(m.Result, out); err != nil {
-				return errfmt.Errorf("reading the answer to %s: %w", method, err)
+			if err := unmarshal(m.Result, out); err != nil {
+				return errorf("reading the answer to %s: %w", method, err)
 			}
 		}
 		return nil
 	case <-c.done:
 		return ErrClosed
 	case <-ctx.Done():
+		if c.cancels {
+			// The caller stopped waiting: tell the peer, so it can stop
+			// the work and drop any question it shows for it.
+			_ = c.Notify(methodCancelRequest, map[string]json.RawMessage{"requestId": json.RawMessage(id)})
+		}
 		return ctx.Err()
 	}
 }
@@ -208,7 +217,7 @@ func (c *Conn) send(m message) error {
 	if !c.omitVersion {
 		m.JSONRPC = "2.0"
 	}
-	data, err := jsonx.Marshal(m)
+	data, err := marshal(m)
 	if err != nil {
 		return err
 	}
@@ -228,8 +237,14 @@ func (c *Conn) readLoop(r io.Reader) {
 		if len(line) == 0 {
 			continue
 		}
+		if line[0] == '[' {
+			// ACP uses no JSON-RPC batches: one Invalid Request answers an
+			// array, with a null id.
+			_ = c.send(message{ID: json.RawMessage("null"), Error: &RPCError{Code: CodeInvalidRequest, Message: "batches are not used"}})
+			continue
+		}
 		var m message
-		if jsonx.Unmarshal(line, &m) != nil {
+		if unmarshal(line, &m) != nil {
 			// A line that is not JSON is not a message: some agents print a
 			// banner or a log line on stdout. It is skipped.
 			continue
@@ -241,7 +256,12 @@ func (c *Conn) readLoop(r io.Reader) {
 	}
 	c.mu.Lock()
 	c.err = err
+	open := c.open
+	c.open = map[string]*Request{}
 	c.mu.Unlock()
+	for _, r := range open {
+		r.cancel()
+	}
 	close(c.done)
 }
 
@@ -249,12 +269,31 @@ func (c *Conn) dispatch(m message) {
 	hasID := len(m.ID) > 0 && string(m.ID) != "null"
 	switch {
 	case m.Method != "" && hasID:
-		req := &Request{ID: m.ID, Method: m.Method, Params: m.Params, conn: c}
+		req := &Request{ID: m.ID, Method: m.Method, Params: m.Params, conn: c, cancelled: make(chan struct{})}
 		if c.onRequest == nil {
-			req.ReplyError(codeMethodNotFound, "method not found: "+m.Method)
+			req.ReplyError(CodeMethodNotFound, "method not found: "+m.Method)
 			return
 		}
+		if c.cancels {
+			c.mu.Lock()
+			c.open[idKey(m.ID)] = req
+			c.mu.Unlock()
+		}
 		c.onRequest(req)
+	case m.Method == methodCancelRequest && c.cancels:
+		var p struct {
+			RequestID json.RawMessage `json:"requestId"`
+		}
+		if unmarshal(m.Params, &p) != nil || len(p.RequestID) == 0 {
+			return
+		}
+		// An id that is unknown or already answered is ignored.
+		c.mu.Lock()
+		req := c.open[idKey(p.RequestID)]
+		c.mu.Unlock()
+		if req != nil {
+			req.cancel()
+		}
 	case m.Method != "":
 		if c.onNotify != nil {
 			c.onNotify(m.Method, m.Params)
@@ -269,11 +308,23 @@ func (c *Conn) dispatch(m message) {
 	}
 }
 
+// forget drops an answered request from the open set.
+func (c *Conn) forget(r *Request) {
+	if !c.cancels {
+		return
+	}
+	c.mu.Lock()
+	if c.open[idKey(r.ID)] == r {
+		delete(c.open, idKey(r.ID))
+	}
+	c.mu.Unlock()
+}
+
 // idKey is an id as the pending map keys it: the number or the string, so a
 // peer that echoes 7 as "7" is still matched.
 func idKey(raw json.RawMessage) string {
 	var s string
-	if jsonx.Unmarshal(raw, &s) == nil {
+	if unmarshal(raw, &s) == nil {
 		return s
 	}
 	return string(bytes.TrimSpace(raw))
@@ -286,7 +337,7 @@ func mustJSON(v any) json.RawMessage {
 	if raw, ok := v.(json.RawMessage); ok {
 		return raw
 	}
-	data, err := jsonx.Marshal(v)
+	data, err := marshal(v)
 	if err != nil {
 		return nil
 	}

@@ -3,6 +3,8 @@ package agentproto
 import (
 	"context"
 	"io"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -89,6 +91,10 @@ type Session struct {
 	// keysHandled, when set, is called after Run has handled the keys of one
 	// read. Tests use it to know a key was handled, not only read.
 	keysHandled func()
+	// waiting is set while an ACP version 2 agent reports requires_action,
+	// and background while it works with no turn of the person's running.
+	waiting    bool
+	background bool
 }
 
 // defaultSettle is how long a permission is on screen before a key answers it,
@@ -242,7 +248,11 @@ func startedLine(info Info) string {
 	if info.Model != "" {
 		parts = append(parts, "("+info.Model+")")
 	}
-	return strings.Join(parts, " ")
+	line := strings.Join(parts, " ")
+	if info.Protocol > 0 {
+		line += ", ACP version " + strconv.Itoa(info.Protocol)
+	}
+	return line
 }
 
 // drain shows events already emitted, so the agent's last words come before
@@ -280,9 +290,76 @@ func (s *Session) onEvent(ev Event) {
 	case Tool:
 		s.toolActivity(e)
 		s.write(s.r.event(e))
+	case AgentState:
+		s.onAgentState(e.State)
+	case Withdrawn:
+		s.onWithdrawn(e.Permission)
 	default:
 		s.write(s.r.event(ev))
 	}
+}
+
+// onAgentState takes the state an ACP version 2 agent reports for its
+// foreground work. A turn of the person's ends when its Prompt call returns,
+// not here; this reports what happens between: the agent waiting for the
+// person with no question on screen, and work the agent starts on its own.
+func (s *Session) onAgentState(state string) {
+	switch state {
+	case "requires_action":
+		if s.waiting {
+			return
+		}
+		s.waiting = true
+		// A permission on screen has reported needs_input already, and says
+		// what it waits for.
+		if len(s.perms) == 0 {
+			s.report("needs_input", "", "the agent is waiting for input", "")
+		}
+	case "running":
+		if s.waiting {
+			s.waiting = false
+			if len(s.perms) == 0 {
+				s.report("working", "", "", "needs_input")
+			}
+		}
+		if !s.running && !s.background {
+			s.background = true
+			s.write(s.r.line("the agent is working on its own"))
+			s.report("working", "", "", "")
+		}
+	case "idle":
+		s.waiting = false
+		if s.background && !s.running {
+			s.background = false
+			s.write(s.r.line("the agent stopped working on its own"))
+			s.report("done", "", "", "")
+		}
+	default:
+		s.write(s.r.line("the agent reports the state " + oneLine(state)))
+	}
+}
+
+// onWithdrawn drops a permission the agent took back.
+func (s *Session) onWithdrawn(p *Permission) {
+	i := slices.Index(s.perms, p)
+	if i < 0 {
+		return
+	}
+	s.write(s.r.answered(p, -1, "the agent withdrew the question"))
+	if i > 0 {
+		s.perms = slices.Delete(s.perms, i, i+1)
+		return
+	}
+	s.endHold()
+	s.perms = s.perms[1:]
+	if len(s.perms) > 0 {
+		s.showPermission()
+		return
+	}
+	if s.waiting {
+		return
+	}
+	s.report("working", "", "", "needs_input")
 }
 
 // showPermission puts the first queued permission on screen and reports it.

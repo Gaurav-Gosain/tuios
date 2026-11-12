@@ -1250,6 +1250,11 @@ var optionSpecs = []Option{
 		Default:     "true",
 	},
 	{
+		Path: "agents.acp_version", Type: OptionInt, Section: "agents",
+		Description: "The ACP version a pane start-agent --protocol acp opens asks the agent for: 1, or 2, a draft of the spec. An agent that speaks only version 1 still works when 2 is asked for. The daemon reads it when it starts a protocol pane",
+		Min:         1, Max: 2,
+	},
+	{
 		Path: "agents.fold_working", Type: OptionBool, Section: "agents",
 		Description: "Fold the Working group of the agents view. F folds or opens a group, and the view keeps that choice.",
 		Default:     "false",

@@ -3,6 +3,7 @@ package session
 import (
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/agentproto"
@@ -96,6 +97,9 @@ func (d *Daemon) protocolArgv(protocol, harness string, agentArgv []string) ([]s
 	out := []string{exe, "agent-proto", "--protocol", protocol}
 	if harness = strings.TrimSpace(harness); harness != "" {
 		out = append(out, "--harness", harness)
+	}
+	if v := d.acpVersion.Load(); protocol == agentproto.ProtocolACP && v > 0 {
+		out = append(out, "--acp-version", strconv.Itoa(int(v)))
 	}
 	out = append(out, "--")
 	return append(out, argv...), nil

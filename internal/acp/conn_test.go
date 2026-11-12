@@ -1,4 +1,4 @@
-package agentproto
+package acp
 
 import (
 	"context"
@@ -60,7 +60,7 @@ func TestConnAnswersRequestsItHasNoHandlerFor(t *testing.T) {
 	p.send(map[string]any{"jsonrpc": "2.0", "id": 3, "method": "fs/read_text_file", "params": map[string]any{"path": "/etc/passwd"}})
 	m := p.next()
 	errObj, _ := m["error"].(map[string]any)
-	if m["id"] != float64(3) || errObj["code"] != float64(codeMethodNotFound) {
+	if m["id"] != float64(3) || errObj["code"] != float64(CodeMethodNotFound) {
 		t.Errorf("answered %v", m)
 	}
 }

@@ -89,6 +89,10 @@ func metaFromUsage(u Usage) map[string]string {
 		out[MetaContextTokens] = strconv.FormatInt(u.ContextUsed, 10)
 		out[MetaContextWindow] = strconv.FormatInt(u.ContextSize, 10)
 	}
+	if u.ClearCost {
+		// An empty value is sent as null, which removes the key.
+		out[MetaCost] = ""
+	}
 	if u.HasCost && u.Cost >= 0 && !math.IsNaN(u.Cost) && !math.IsInf(u.Cost, 0) {
 		amount := strconv.FormatFloat(u.Cost, 'f', 2, 64)
 		switch cur := strings.ToUpper(strings.TrimSpace(u.Currency)); cur {

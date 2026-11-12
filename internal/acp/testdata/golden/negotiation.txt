@@ -1,0 +1,18 @@
+## sent
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{},"info":{"name":"tuios","title":"tuios","version":"test"},"protocolVersion":2}}
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{},"info":{"name":"tuios","title":"tuios","version":"test"},"protocolVersion":2}}
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false},"clientInfo":{"name":"tuios","title":"tuios","version":"test"},"protocolVersion":1}}
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{},"info":{"name":"tuios","title":"tuios","version":"test"},"protocolVersion":2}}
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{},"info":{"name":"tuios","title":"tuios","version":"test"},"protocolVersion":2}}
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false},"clientInfo":{"name":"tuios","title":"tuios","version":"test"},"protocolVersion":1}}
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{},"info":{"name":"tuios","title":"tuios","version":"test"},"protocolVersion":2}}
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false},"clientInfo":{"name":"tuios","title":"tuios","version":"test"},"protocolVersion":1}}
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{},"info":{"name":"tuios","title":"tuios","version":"test"},"protocolVersion":2}}
+## updates
+## results
+v1 shape that echoes 2: version 1, agent echo
+unsupported, 1 listed: version 1, agent old
+unsupported, only 3: error: the agent speaks ACP version 3, and tuios speaks ACP versions 2 and 1
+exits on 2, takes 1: version 1, agent strict
+refuses both: error: the agent refused ACP version 2 (bad params (code -32602)) and version 1 (no (code -32602)), and tuios speaks ACP versions 2 and 1
+chooses 3: error: the agent chose ACP version 3, and tuios speaks ACP versions 2 and 1

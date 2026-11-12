@@ -26,9 +26,11 @@ const agentProtoHoldMax = 305 * time.Second
 
 // agentProtoOptions are the flags of tuios agent-proto.
 type agentProtoOptions struct {
-	protocol string
-	harness  string
-	cwd      string
+	protocol   string
+	harness    string
+	cwd        string
+	acpVersion int
+	resume     string
 }
 
 func newAgentProtoCommand() *cobra.Command {
@@ -58,9 +60,16 @@ The agent is offered no file system and no terminal: it reads, writes and runs
 things itself, under its own sandbox and approval settings, as it would in its
 own TUI.
 
---protocol acp speaks ACP version 1 to any agent that implements it, for
-example "opencode acp". --protocol codex speaks the Codex app-server protocol.
-start-agent adds the app-server subcommand for you.`,
+--protocol acp speaks ACP (the Agent Client Protocol) to any agent that
+implements it, for example "opencode acp". It asks for ACP version 1 unless
+--acp-version 2 or the agents.acp_version option says 2. Version 2 is a draft
+of the spec: an agent that speaks only version 1 answers with 1, or refuses,
+and the pane then speaks version 1, starting the agent again when it has to.
+The pane's first line names the version it speaks. --resume reattaches to a
+conversation the agent kept, by its session id, instead of opening a new one.
+
+--protocol codex speaks the Codex app-server protocol. start-agent adds the
+app-server subcommand for you.`,
 		Example: `  # Through start-agent, which is how it is meant to be run
   tuios start-agent --protocol acp 'opencode acp' --name helper
   tuios start-agent --protocol codex codex --prompt 'Fix the failing test.'
@@ -86,6 +95,8 @@ start-agent adds the app-server subcommand for you.`,
 	cmd.Flags().StringVar(&o.protocol, "protocol", "", "The protocol the agent speaks: acp or codex")
 	cmd.Flags().StringVar(&o.harness, "harness", "", "The harness id to report the pane's state under (default: acp or codex)")
 	cmd.Flags().StringVar(&o.cwd, "cwd", "", "The directory the conversation opens in (default: the current directory)")
+	cmd.Flags().IntVar(&o.acpVersion, "acp-version", 0, "The ACP version to ask for: 1, or 2, a draft of the spec (default 1)")
+	cmd.Flags().StringVar(&o.resume, "resume", "", "Reattach to the ACP session with this id instead of opening a new one")
 	_ = cmd.MarkFlagRequired("protocol")
 	return cmd
 }
@@ -118,12 +129,16 @@ func runAgentProto(o agentProtoOptions, argv []string) int {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	defer cancel()
 
-	proc, err := agentproto.StartProcess(argv, cwd, nil)
-	if err != nil {
-		fmt.Fprintf(os.Stdout, "could not start %s: %v\r\n", strings.Join(argv, " "), err)
-		return 1
+	if o.acpVersion != 0 && o.acpVersion != 1 && o.acpVersion != 2 {
+		fmt.Fprintf(os.Stderr, "--acp-version %d: use 1 or 2\n", o.acpVersion)
+		return 2
 	}
-	defer proc.Stop()
+	if o.resume != "" && o.protocol != agentproto.ProtocolACP {
+		fmt.Fprintln(os.Stderr, "--resume is for --protocol acp")
+		return 2
+	}
+	agentCmd := &agentproto.Command{Argv: argv, Dir: cwd}
+	defer agentCmd.Stop()
 
 	s := &agentproto.Session{
 		Events: agentproto.NewEvents(),
@@ -138,9 +153,13 @@ func runAgentProto(o agentProtoOptions, argv []string) int {
 		},
 		Header: o.protocol + ": " + strings.Join(argv, " "),
 		Cwd:    cwd,
-		Stderr: proc.Stderr,
+		Stderr: agentCmd.Stderr,
 	}
-	agent, _ := agentproto.NewAgent(o.protocol, proc.Stdout, proc.Stdin, version, s.Emit)
+	agent, err := agentproto.NewAgent(o.protocol, agentCmd, agentproto.ACPOptions{Version: version, MaxVersion: o.acpVersion, Resume: o.resume}, s.Emit)
+	if err != nil {
+		fmt.Fprintf(os.Stdout, "could not start %s: %v\r\n", strings.Join(argv, " "), err)
+		return 1
+	}
 	s.Agent = agent
 	if window := os.Getenv("TUIOS_PANE_ID"); window != "" {
 		r := &paneReporter{
@@ -264,10 +283,19 @@ func (r *paneReporter) feedCall(ctx context.Context, verb string, params map[str
 func (r *paneReporter) SetMeta(ctx context.Context, tokens map[string]string) error {
 	r.feedMu.Lock()
 	defer r.feedMu.Unlock()
+	// An empty value is a value the agent cleared: null removes the key.
+	values := make(map[string]any, len(tokens))
+	for k, v := range tokens {
+		if v == "" {
+			values[k] = nil
+			continue
+		}
+		values[k] = v
+	}
 	_, err := r.feedCall(ctx, "set-agent-meta", map[string]any{
 		"session": r.session,
 		"window":  r.window,
-		"tokens":  tokens,
+		"tokens":  values,
 		"source":  protoMetaSource,
 	})
 	return err

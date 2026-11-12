@@ -41,6 +41,7 @@ var settingLabels = map[string]string{
 	"agents.enabled":                      "Agent features",
 	"agents.fold_working":                 "Fold Working",
 	"agents.view_list":                    "Agent list",
+	"agents.acp_version":                  "ACP version",
 	"agents.name_hint":                    "Agents name their panes",
 	"agents.list_width":                   "Agent list width",
 	"agents.card_preview":                 "Task card preview",

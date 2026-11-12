@@ -124,6 +124,9 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	// The daemon spawns every pane, so it decides which are told about the
 	// herdr protocol socket.
 	cfg.HerdrProtocol = uc.Agents.HerdrProtocol
+	// The daemon starts every protocol pane, so it says which ACP version
+	// the pane asks for.
+	cfg.ACPVersion = uc.Agents.ACPVersionOr()
 	// The daemon runs when nobody is attached, which is when a phone is the
 	// way to reach the person, so it sends the push notifications.
 	cfg.Notify = uc.Notify

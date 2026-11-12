@@ -35,7 +35,7 @@ func newPeer(t *testing.T) (io.Reader, io.Writer, *peer) {
 	t.Cleanup(p.close)
 	go func() {
 		sc := bufio.NewScanner(toAgentR)
-		sc.Buffer(make([]byte, 64<<10), maxMessage)
+		sc.Buffer(make([]byte, 64<<10), 32<<20)
 		for sc.Scan() {
 			line := sc.Text()
 			var m map[string]any

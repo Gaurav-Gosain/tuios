@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/acp"
 )
 
 // TestCodexUsageAndPlan: token usage becomes the context use of the model's
@@ -89,7 +91,7 @@ func TestACPModelFromSession(t *testing.T) {
 		{"not an object", ""},
 	} {
 		r, w, p := newPeer(t)
-		a := NewACP(r, w, "1", newEvents().emit)
+		a := NewACP(acp.Pipe(r, w), ACPOptions{Version: "1"}, newEvents().emit)
 		done := make(chan Info, 1)
 		go func() {
 			info, _ := a.Start(context.Background(), "/src")

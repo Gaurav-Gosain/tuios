@@ -326,6 +326,9 @@ type Daemon struct {
 	// protocolPanes holds the windows start-agent --protocol opened, window
 	// id to protocol. See agent_protocol.go.
 	protocolPanes sync.Map
+	// acpVersion is [agents] acp_version, the ACP version a protocol pane
+	// asks for; 0 leaves it to the pane program.
+	acpVersion atomic.Int32
 	// agentProtoExe finds the binary a protocol pane runs. Nil is
 	// os.Executable; a test points it at a built tuios.
 	agentProtoExe func() (string, error)
@@ -989,6 +992,8 @@ type DaemonConfig struct {
 	// HerdrProtocol is [agents] herdr_protocol: which panes are told about
 	// the herdr protocol socket. See Manager.HerdrEnv.
 	HerdrProtocol string
+	// ACPVersion is [agents] acp_version. See Daemon.acpVersion.
+	ACPVersion int
 	// StayOnEmptyWorkspace is workspaces.return_when_empty turned off: the
 	// session stays on a workspace that loses its last pane. The zero value
 	// is the default, which returns. See empty_workspace.go.
@@ -1247,6 +1252,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.manager.SetShellIntegration(cfg.ShellIntegration)
 	d.manager.SetShellLogin(cfg.ShellLogin)
 	d.manager.SetHerdrProtocol(cfg.HerdrProtocol)
+	d.acpVersion.Store(int32(cfg.ACPVersion))
 	d.manager.SetReturnWhenEmpty(!cfg.StayOnEmptyWorkspace)
 	d.manager.SetDragAndDrop(cfg.DragAndDrop)
 	d.SetWorktreePath(cfg.WorktreePath)

@@ -59,6 +59,12 @@ type AgentsConfig struct {
 	// after its task: "on" (the default) or "off". Off also tells the agent
 	// not to rename its pane or its session. See NameHintOn.
 	NameHint string `toml:"name_hint,omitempty"`
+	// ACPVersion is the ACP version a pane start-agent --protocol acp opens
+	// asks the agent for: 1, the default, or 2. Version 2 is a draft of the
+	// spec, which asks clients not to ask for it by default until it is
+	// final. An agent that speaks only version 1 still works when 2 is
+	// asked for: the pane falls back to 1. See ACPVersionOr.
+	ACPVersion int `toml:"acp_version,omitempty"`
 	// Presets are the [agents.presets.NAME] tables: a named start-agent,
 	// for start-agent --preset NAME. See AgentPreset.
 	Presets map[string]AgentPreset `toml:"presets,omitempty"`
@@ -353,4 +359,13 @@ type AgentPreset struct {
 	AfterReady []string `toml:"after_ready,omitempty"`
 	// ReadyTimeout is --ready-timeout, in milliseconds.
 	ReadyTimeout int `toml:"ready_timeout,omitempty"`
+}
+
+// ACPVersionOr is [agents] acp_version when it is 1 or 2, and 0, the pane
+// program's own default, otherwise.
+func (a AgentsConfig) ACPVersionOr() int {
+	if a.ACPVersion == 1 || a.ACPVersion == 2 {
+		return a.ACPVersion
+	}
+	return 0
 }
