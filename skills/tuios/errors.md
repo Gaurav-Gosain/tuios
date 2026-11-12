@@ -19,7 +19,7 @@ Over the socket every failure carries a stable code in the error envelope:
 `full_screen`,
 `unsupported_harness`,
 `protocol_mismatch`, `unknown_host`, `host_unreachable`, `host_refused`,
-`unknown_pane`, `not_worktree`, `worktree_dirty`, `worktree_detached`, `worktree_nested`, `git_failed`, `fan_exists`,
+`pane_ended`, `unknown_pane`, `not_worktree`, `worktree_dirty`, `worktree_detached`, `worktree_nested`, `git_failed`, `fan_exists`,
 `repo_not_found`, `no_machine`, `branch_exists`, `not_repo`, `no_notes`, `hunk_changed`, `index_changed`,
 `whole_file_only`, `no_checkpoint`, `nothing_to_commit`,
 `merge_conflict`, `checkout_dirty`, `no_remote`, `gh_unavailable`, `queue_full`,
@@ -95,6 +95,7 @@ A retry without a change fails the same way, except for `busy`, `too_many_connec
 | `unknown_host` | No host by that name. Names are matched exactly and never guessed. |
 | `host_unreachable` | The host is not answering: its link is down or does not answer. Nothing was queued except mail. `tuios hosts` says why. |
 | `host_refused` | The link is up and cannot take another connection. Close one. |
+| `pane_ended` | The window's pane ran on another machine and is gone for good: that machine's daemon no longer has it (it restarted), or the link stayed down past the time it was kept for. Nothing was sent. Do not retry: close the window and start the program again on that machine. `list-windows` shows it exited, with `host_ended` saying why. |
 | `unknown_pane` | A pane id on the far machine is gone. Drop it. |
 | `not_worktree`, `worktree_dirty`, `worktree_detached`, `worktree_nested`, `git_failed`, `repo_not_found` | From the worktree verbs and `start-agent`. A dirty worktree is left alone until you pass `--stash` or `--force`. A worktree on a detached HEAD holding commits no branch has is refused — removing it would lose those commits; commit them onto a branch, or pass `--force` to lose them. A worktree holding a nested git repository in an ignored or untracked path is refused — removing it would delete that repository with its history, and no stash can save it; remove the nested repository first, or pass `--force` to lose it. `repo_not_found` means that machine has no checkout of the origin: pass `--clone`. |
 | `no_machine` | From `place-agent`, and `start-agent -s any:` or `fan --host any`: no machine can start the agent now. The message gives each machine's reason. Fix one machine (sign the agent in, clone the repository, wait for an agent there to finish), or name a machine. Nothing was started. |
