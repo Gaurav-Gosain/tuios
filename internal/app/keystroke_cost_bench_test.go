@@ -12,6 +12,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/termio"
 	"github.com/charmbracelet/colorprofile"
+	"tuios.dev/vt"
 )
 
 // The cost of the frame one typed key makes in a pane, on a client with a
@@ -245,8 +246,16 @@ func TestKeystrokeFrameBudget(t *testing.T) {
 		keyFrame(m)
 		i++
 	}
-	if allocs := testing.AllocsPerRun(100, typed); allocs > 470 {
-		t.Errorf("a typed key's frame allocated %.0f times, want at most 470", allocs)
+	// The libghostty-vt backend reads the changed row through cgo and
+	// allocates for each read: CI measured 567 there against 376 on the pure
+	// Go emulator. Each backend has its own ceiling, about a quarter above
+	// what it measured.
+	maxAllocs := 470.0
+	if vt.Backend == "ghostty" {
+		maxAllocs = 700
+	}
+	if allocs := testing.AllocsPerRun(100, typed); allocs > maxAllocs {
+		t.Errorf("a typed key's frame allocated %.0f times on the %s backend, want at most %.0f", allocs, vt.Backend, maxAllocs)
 	}
 
 	if testing.Short() || raceEnabled {
