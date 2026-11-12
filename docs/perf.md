@@ -2415,6 +2415,45 @@ carries no `//go:noinline`: with it the size was the same and the hash slower.
 The binary-size job would show the bytes coming back if a future compiler
 inlined method values.
 
+Inlining as a whole is the largest cost in the binary, and the one lever kept in
+reserve for when the ceiling gets near. Measured on main at 448e9bf1d (release
+flags, linux/amd64, 49,512,608 bytes): building with `-gcflags=all=-l` gives
+44,437,664 bytes, 5.0 MB less, and inlining off in tuios's own packages alone
+gives 46,411,936, 3.0 MB less. Most of that is on hot paths: internal/app
+alone is 1,052,672 bytes, and it holds the render path and Update. Inlining off
+in the packages that run cold, `cmd/tuios`, internal/config, internal/integration,
+internal/learn, internal/tmuxcompat, internal/webshell, internal/transcriptview,
+internal/harness, internal/federation, internal/agentproto, internal/herdrplugin,
+internal/mcp, `tuios.dev/sketch`, `tuios.dev/tml` and tuiffects, gives
+48,205,984 bytes: 1,306,624 less, with no feature removed and no hot path
+touched. internal/session adds 688,128 more but carries the pane output stream
+and the broadcast, so it needs the throughput and idle-cost tests first.
+
+It is not used today, because the flags would have to reach every build that
+ships (the builds in `.goreleaser.yml`, `scripts/binary-size.sh`,
+`scripts/install.sh`, the Dockerfile, the Nix package and the justfile's release
+recipes), and `go install ...@vX` cannot carry them, so that path would build a
+binary of another size and speed. If the ceiling gets near, keep the package
+list in one file that every build path reads, with a check that each does.
+
+What inlining off in one package saves, on the same build:
+
+| Package | Bytes saved | Runs on a hot path |
+|---|---|---|
+| internal/app | 1,052,672 | yes: drawing and Update |
+| internal/session | 634,880 | the stream and broadcast, not the verbs |
+| `cmd/tuios` | 266,240 | no |
+| `tuios.dev/sketch` | 266,240 | no |
+| `tuios.dev/tml` | 126,976 | no |
+| tuiffects | 122,880 | screen saver frames only |
+| internal/config | 77,824 | no |
+| `tuios.dev/loom` | 65,536 | surfaces |
+| internal/webshell | 61,440 | no |
+| internal/tmuxcompat | 53,248 | no |
+| internal/integration | 36,864 | no |
+| `tuios.dev/vt` | 32,768 | yes: the emulator |
+| each other package | 20,480 or less | |
+
 A map literal of slices compiles to code that runs at every start. A map literal
 of arrays of constants compiles to data. `verbCapabilities` uses this form.
 
