@@ -80,7 +80,6 @@ type Animation struct {
 // NewRestoreAnimation creates a restore animation for the specified window.
 // dockX and dockY specify the current dock position of the minimized window.
 func NewRestoreAnimation(w *terminal.Window, dockX, dockY int, duration time.Duration) *Animation {
-	// If duration is 0, instantly restore without animation
 	if duration == 0 {
 		w.Minimized = false
 		w.X = w.PreMinimizeX
@@ -116,7 +115,6 @@ func NewRestoreAnimation(w *terminal.Window, dockX, dockY int, duration time.Dur
 // last drawn for it. A window that already has a snap in flight should be
 // retargeted instead (see Retarget), which keeps its speed.
 func NewSnapAnimation(w *terminal.Window, targetX, targetY, targetWidth, targetHeight int, duration time.Duration) *Animation {
-	// Don't animate if already at target
 	if w.X == targetX && w.Y == targetY &&
 		w.Width == targetWidth && w.Height == targetHeight {
 		// Even if position matches, ensure PTY dimensions are synced
@@ -250,11 +248,9 @@ func (a *Animation) UpdateAt(now time.Time) bool {
 	a.Window.Width = newWidth
 	a.Window.Height = newHeight
 
-	// Mark window as dirty for re-rendering
 	a.Window.MarkPositionDirty()
 	a.Window.InvalidateCache()
 
-	// If animation is complete, finalize the state
 	if a.Complete {
 		a.Progress = 1
 		a.settle()
