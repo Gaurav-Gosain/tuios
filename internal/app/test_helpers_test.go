@@ -307,7 +307,7 @@ func (m *OS) ContextMenuSelectedActionAt(t *testing.T, action string) string {
 	cm := m.ContextMenu
 	for i, it := range cm.Items {
 		if it.Action == action {
-			cm.Selected = i
+			cm.List.Cursor = i
 			return m.ContextMenuSelectedAction()
 		}
 	}

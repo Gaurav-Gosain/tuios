@@ -12,6 +12,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/apptest"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 )
 
 // The context menu, opened with shift and a right click as a person opens it,
@@ -292,20 +293,20 @@ func TestContextMenuScrollKeepsSelectionVisible(t *testing.T) {
 }
 
 // TestContextMenuAllDimmedHasNoSelection: a menu whose rows are all
-// unavailable selects nothing rather than falling back to a dimmed row.
+// unavailable runs nothing, whichever way the arrows move it.
 func TestContextMenuAllDimmedHasNoSelection(t *testing.T) {
-	cm := &app.ContextMenu{Items: []app.ContextMenuItem{
-		{Label: "a", Dim: true},
+	f := menuFixture(t)
+	f.M.ContextMenu = &app.ContextMenu{Items: []app.ContextMenuItem{
+		{Label: "a", Action: "toggle_tiling", Dim: true},
 		{Sep: true},
-		{Label: "b", Dim: true},
-	}, Selected: -1}
+		{Label: "b", Action: "toggle_tiling", Dim: true},
+	}, List: listnav.State{Cursor: -1}, ItemH: 1}
 
-	if got := cm.Next(1); got != -1 {
-		t.Errorf("Next on an all-dimmed menu returned %d, want -1", got)
-	}
-	cm.Move(1)
-	if cm.Selected != -1 {
-		t.Errorf("Move on an all-dimmed menu selected row %d", cm.Selected)
+	for _, key := range []string{"down", "up", "up"} {
+		f.Keys(key)
+		if act := f.M.ContextMenuSelectedAction(); act != "" {
+			t.Fatalf("after %s an all-dimmed menu would run %q", key, act)
+		}
 	}
 }
 

@@ -67,7 +67,7 @@ func takeMenuRow(t *testing.T, o *app.OS, label string) (*app.OS, tea.Cmd) {
 		if it.Dim {
 			t.Fatalf("the %q row is dimmed, so it cannot be clicked", label)
 		}
-		cm.Selected = i
+		cm.List.Cursor = i
 		y := cm.FirstRowY + (i-cm.ScrollFrom)*cm.ItemH
 		x := cm.BoundsX + cm.BoundsW/2
 		return handleMouseClick(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft}, o)
@@ -225,7 +225,7 @@ func TestTheRailMenuKeyReachesAFileRow(t *testing.T) {
 
 	// Walk to Rename with the arrow keys and take it, all from the keyboard.
 	for range len(o.ContextMenu.Items) {
-		if o.ContextMenu.Items[o.ContextMenu.Selected].Label == "Rename" {
+		if o.ContextMenu.Items[o.ContextMenu.List.Cursor].Label == "Rename" {
 			break
 		}
 		o, _ = HandleKeyPress(tea.KeyPressMsg{Code: tea.KeyDown}, o)

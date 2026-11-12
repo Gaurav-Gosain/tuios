@@ -62,7 +62,6 @@ func (m *OS) OpenContextMenu(x, y int) {
 		Workspace:   workspace,
 		AnchorX:     ax,
 		AnchorY:     ay,
-		Selected:    -1,
 		ItemH:       1,
 	}
 
@@ -81,7 +80,7 @@ func (m *OS) OpenContextMenu(x, y int) {
 
 	// Start on the first runnable row rather than on row zero, which may be a
 	// dimmed action or a separator.
-	cm.Selected = cm.Next(1)
+	cm.home()
 	m.ContextMenu = cm
 }
 
@@ -368,12 +367,11 @@ func (m *OS) OpenSelectionMenu(x, y, windowIndex int) {
 		WindowIndex: windowIndex,
 		AnchorX:     x,
 		AnchorY:     y,
-		Selected:    -1,
 		ItemH:       1,
 	}
 	cm.Title = "Selection"
 	cm.Items = m.menu("selection", 0)
-	cm.Selected = cm.Next(1)
+	cm.home()
 	m.ContextMenu = cm
 }
 

@@ -6,6 +6,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
@@ -85,7 +86,7 @@ func (m *OS) renderContextMenu() (string, overlay.Geometry) {
 			lines = append(lines, overlay.Rule(width, bg, pal))
 			continue
 		}
-		lines = append(lines, m.contextMenuRow(it, i == cm.Selected, width, bg, pal))
+		lines = append(lines, m.contextMenuRow(it, i == cm.List.Cursor, width, bg, pal))
 	}
 
 	panel := overlay.Panel{
@@ -104,13 +105,26 @@ func (m *OS) renderContextMenu() (string, overlay.Geometry) {
 // the terminal discards them.
 func (m *OS) contextMenuRows(cm *ContextMenu) (start, visible int) {
 	count := len(cm.Items)
-	rh := m.GetRenderHeight()
-	if rh <= 0 {
+	if m.GetRenderHeight() <= 0 {
 		return 0, count // size not known yet; draw the lot
 	}
-	visible = min(count, max(rh-panelChromeRows, 1))
-	cm.Scroll = scrollWindow(cm.Scroll, cm.Selected, count, visible)
-	return cm.Scroll, visible
+	visible = m.contextMenuVisible(count)
+	// The screen may have changed height since the cursor last moved, so the
+	// window is fitted to it again. Fit is not used: it would put a cursor of
+	// -1 (nothing runnable) on row zero.
+	cm.List.Scroll = listnav.Scroll(cm.List.Scroll, cm.List.Cursor, count, visible)
+	return cm.List.Scroll, visible
+}
+
+// contextMenuVisible returns how many of a menu's count rows fit on the
+// screen: its height less the panel's own chrome, or all of them while the
+// size is not known.
+func (m *OS) contextMenuVisible(count int) int {
+	rh := m.GetRenderHeight()
+	if rh <= 0 {
+		return count
+	}
+	return min(count, max(rh-panelChromeRows, 1))
 }
 
 // contextMenuRow renders one runnable row, filled to the panel width so the

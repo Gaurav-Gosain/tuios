@@ -22,11 +22,6 @@ func (m *OS) listStep(cur, delta, n int) int {
 	return listnav.Step(cur, delta, n, m.listWraps())
 }
 
-// listStepSkip is listnav.StepSkip under this session's wrap rule.
-func (m *OS) listStepSkip(cur, delta, n int, rest func(int) bool) int {
-	return listnav.StepSkip(cur, delta, n, m.listWraps(), rest)
-}
-
 // listDelta reads a list movement key of [keybindings.lists], with its letter
 // keys (k, j, g and G by default) as a list with no filter reads them, and
 // returns how many rows it moves: page for a page key, further than any list

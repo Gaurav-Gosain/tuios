@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 )
 
 // ContextMenuTarget names the thing a context menu was opened on. What is under
@@ -113,8 +114,10 @@ type ContextMenu struct {
 	Title  string
 	Target ContextMenuTarget
 	Items  []ContextMenuItem
-	// Selected is the highlighted row, or -1 when nothing is selectable.
-	Selected int
+	// List is the menu's cursor and window. Its Cursor is the highlighted row,
+	// or -1 when nothing is selectable; its Scroll is the first row shown when
+	// the menu has more rows than the screen has room for.
+	List listnav.State
 	// WindowIndex is the pane or minimized window the menu was opened on, or -1
 	// for the desktop and the dock background.
 	WindowIndex int
@@ -148,11 +151,9 @@ type ContextMenu struct {
 	FirstRowY int
 	ItemH     int
 
-	// Scroll is the first item shown when the menu has more rows than the screen
-	// has room for. ScrollFrom is what the last frame actually drew from, and is
-	// what hit-testing maps against: a click has to resolve against the rows the
-	// user can see, not against a scroll offset that may have moved since.
-	Scroll     int
+	// ScrollFrom is the first row the last frame actually drew, and is what
+	// hit-testing maps against: a click has to resolve against the rows the
+	// user can see, not against a List.Scroll that may have moved since.
 	ScrollFrom int
 
 	// depth counts the submenus opened in a row to reach this menu.
@@ -164,26 +165,17 @@ func (cm *ContextMenu) selectable(i int) bool {
 	return i >= 0 && i < len(cm.Items) && !cm.Items[i].Sep && !cm.Items[i].Dim
 }
 
-// Next returns the nearest selectable row in the given direction (+1 or -1),
-// wrapping at the ends. Separators and dimmed rows are stepped over, so arrow
-// keys never land on something that cannot be run.
-func (cm *ContextMenu) Next(dir int) int {
-	if len(cm.Items) == 0 {
-		return -1
-	}
-	i := cm.Selected
-	for range cm.Items {
-		i = (i + dir + len(cm.Items)) % len(cm.Items)
+// home puts the cursor on the first runnable row, which may not be row zero
+// (a dimmed action or a separator), and the window at the top. A menu with no
+// runnable row has its cursor at -1.
+func (cm *ContextMenu) home() {
+	cm.List = listnav.State{Cursor: -1}
+	for i := range cm.Items {
 		if cm.selectable(i) {
-			return i
+			cm.List.Cursor = i
+			return
 		}
 	}
-	return cm.Selected
-}
-
-// Move highlights the next selectable row in the given direction.
-func (cm *ContextMenu) Move(dir int) {
-	cm.Selected = cm.Next(dir)
 }
 
 // selectWarn lands the selection on the menu's first destructive row, for the
@@ -193,7 +185,7 @@ func (cm *ContextMenu) Move(dir int) {
 func (cm *ContextMenu) selectWarn() {
 	for i, it := range cm.Items {
 		if it.Warn && cm.selectable(i) {
-			cm.Selected = i
+			cm.List.Cursor = i
 			return
 		}
 	}
@@ -243,11 +235,11 @@ func (m *OS) CloseContextMenu() {
 // action dispatcher; this type never runs anything itself.
 func (m *OS) ContextMenuSelectedAction() string {
 	cm := m.ContextMenu
-	if cm == nil || !cm.selectable(cm.Selected) {
+	if cm == nil || !cm.selectable(cm.List.Cursor) {
 		return ""
 	}
 	m.carryMenuTarget(cm)
-	return cm.Items[cm.Selected].Action
+	return cm.Items[cm.List.Cursor].Action
 }
 
 // carryMenuTarget hands what the menu was opened on to the dispatch of the row
@@ -290,7 +282,8 @@ func (m *OS) ContextMenuMove(delta int) {
 	// The list rule, over the rows that can be run: the menu wrapped at its
 	// ends before any other list did, and now it does so only when the lists
 	// do.
-	cm.Selected = m.listStepSkip(cm.Selected, delta, len(cm.Items), cm.selectable)
+	n := len(cm.Items)
+	cm.List.Move(delta, n, m.contextMenuVisible(n), m.listWraps(), cm.selectable)
 }
 
 // ContextMenuClick routes a click at screen (x, y) while a menu is open. It
@@ -313,7 +306,6 @@ func (m *OS) ContextMenuClick(x, y int) (action string, consumed bool) {
 		// swallow the click so it cannot reach the pane underneath.
 		return "", true
 	}
-	cm.Selected = idx
 	action = cm.Items[idx].Action
 	m.carryMenuTarget(cm)
 	m.CloseContextMenu()
@@ -328,7 +320,8 @@ func (m *OS) ContextMenuHover(x, y int) {
 		return
 	}
 	if idx := cm.HitTest(x, y); idx >= 0 {
-		cm.Selected = idx
+		n := len(cm.Items)
+		cm.List.Select(idx, n, m.contextMenuVisible(n))
 	}
 }
 

@@ -430,8 +430,7 @@ func (m *OS) OpenSubmenu(name string) {
 		cm.Title = invisible.Strip(printableTitle(title))
 	}
 	cm.Items = m.menu(name, 0)
-	cm.Scroll, cm.ScrollFrom = 0, 0
-	cm.Selected = -1
-	cm.Selected = cm.Next(1)
+	cm.ScrollFrom = 0
+	cm.home()
 	m.ContextMenu = &cm
 }

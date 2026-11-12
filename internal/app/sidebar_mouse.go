@@ -1010,10 +1010,9 @@ func (m *OS) sidebarPickWindow(hit sidebarRowHit, restore bool) (idx int, ok boo
 // desktop menu for a session row.
 func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 	cm := &ContextMenu{
-		AnchorX:  x,
-		AnchorY:  y,
-		Selected: -1,
-		ItemH:    1,
+		AnchorX: x,
+		AnchorY: y,
+		ItemH:   1,
 	}
 
 	switch hit.Kind {
@@ -1095,7 +1094,7 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 	// reachable from the thing it configures without a gear of its own.
 	cm.Items = append(cm.Items, separator(), m.railSettingsItem())
 
-	cm.Selected = cm.Next(1)
+	cm.home()
 	m.ContextMenu = cm
 }
 
@@ -1106,7 +1105,6 @@ func (m *OS) openFilesSectionMenu(x, y int, t fileMenuTarget) {
 	cm := &ContextMenu{
 		AnchorX:     x,
 		AnchorY:     y,
-		Selected:    -1,
 		ItemH:       1,
 		Target:      CtxTargetFileRow,
 		WindowIndex: -1,
@@ -1114,7 +1112,7 @@ func (m *OS) openFilesSectionMenu(x, y int, t fileMenuTarget) {
 	}
 	cm.Title, cm.Items = m.fileRowMenu(t)
 	cm.Items = append(cm.Items, separator(), m.railSettingsItem())
-	cm.Selected = cm.Next(1)
+	cm.home()
 	m.ContextMenu = cm
 }
 
@@ -1173,7 +1171,6 @@ func (m *OS) openRailSettingsMenu(x, y int) {
 	m.ContextMenu = &ContextMenu{
 		AnchorX:     x,
 		AnchorY:     y,
-		Selected:    0,
 		ItemH:       1,
 		Target:      CtxTargetDesktop,
 		WindowIndex: -1,

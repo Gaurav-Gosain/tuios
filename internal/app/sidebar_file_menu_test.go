@@ -136,8 +136,8 @@ func TestFileRowMenuOffersWhatTheRowCanDo(t *testing.T) {
 			}
 			// The menu opens on a row that can run, never on a dimmed one.
 			cm := m.ContextMenu
-			if !cm.selectable(cm.Selected) {
-				t.Errorf("the menu opened on row %d, which cannot be run", cm.Selected)
+			if !cm.selectable(cm.List.Cursor) {
+				t.Errorf("the menu opened on row %d, which cannot be run", cm.List.Cursor)
 			}
 		})
 	}
@@ -165,7 +165,7 @@ func TestFileMenuNamesTheRowThePointerWasOn(t *testing.T) {
 	// Taking the Rename row is what hands the menu's row to the action.
 	for i, it := range m.ContextMenu.Items {
 		if it.Label == "Rename" {
-			m.ContextMenu.Selected = i
+			m.ContextMenu.List.Cursor = i
 		}
 	}
 	if act := m.ContextMenuSelectedAction(); act != "file_rename" {

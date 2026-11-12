@@ -57,13 +57,13 @@ func TestRailKillKeyOpensTheCursorRowsMenu(t *testing.T) {
 			}
 			// The menu opens on the row's own destructive action, which is what is
 			// left of the key meaning "kill" once the row picks the menu.
-			if cm.Selected < 0 || cm.Selected >= len(cm.Items) {
-				t.Fatalf("selection %d is off the menu", cm.Selected)
+			if cm.List.Cursor < 0 || cm.List.Cursor >= len(cm.Items) {
+				t.Fatalf("selection %d is off the menu", cm.List.Cursor)
 			}
-			if got := cm.Items[cm.Selected].Label; got != tc.wantWarn {
+			if got := cm.Items[cm.List.Cursor].Label; got != tc.wantWarn {
 				t.Errorf("opened on %q, want %q", got, tc.wantWarn)
 			}
-			if !cm.Items[cm.Selected].Warn {
+			if !cm.Items[cm.List.Cursor].Warn {
 				t.Error("the selected row is not the destructive one")
 			}
 			// A pane menu must be about the pane the cursor named, not whichever
