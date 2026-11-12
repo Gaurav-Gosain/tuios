@@ -137,9 +137,10 @@ emulator instead with: $0 pure"
     fi
     "$ROOT/scripts/ghostty-lib.sh" native
 
-    PKG_CONFIG_PATH=$cache/native/pkgconfig
-    [ -d "$PKG_CONFIG_PATH" ] || die "no pkgconfig directory at $PKG_CONFIG_PATH"
-    export PKG_CONFIG_PATH
+    [ -d "$cache/native/pkgconfig" ] || die "no pkgconfig directory at $cache/native/pkgconfig"
+    ghostty_root=$ROOT
+    ghostty_native=$cache/native
+    . "$ROOT/scripts/ghostty-env.sh"
     export CGO_ENABLED=1
     buildtags='-tags=ghostty'
 fi
@@ -186,6 +187,16 @@ say "==> tuios ($backend backend)"
 (cd "$ROOT" && go build ${buildtags:+"$buildtags"} -trimpath \
     -ldflags "$ldflags" -o "$tmp" ./cmd/tuios)
 chmod 755 "$tmp"
+
+# The binary says which libghostty-vt it linked. Anything but the pinned one
+# means the build linked a library from another folder, and is not installed.
+if [ "$backend" = ghostty ]; then
+    linked=$("$tmp" --version 2>/dev/null | sed -n 's/^Library: //p')
+    [ "$linked" = "libghostty-vt $TUIOS_GHOSTTY_VT_PIN" ] || die "the build linked ${linked:-no libghostty-vt}, not the pinned libghostty-vt $TUIOS_GHOSTTY_VT_PIN.
+Nothing was installed. The Go build cache holds a build made against another
+libghostty-vt folder. Clear it with: go clean -cache, then run this again."
+    say "    linked libghostty-vt $TUIOS_GHOSTTY_VT_PIN"
+fi
 
 # Built before either is moved into place, so a compile error in one does not
 # leave the pair half installed and mismatched, the state this is here to

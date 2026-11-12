@@ -32,7 +32,13 @@ func formatVersion(v, commit, date, builtBy, rev, when string, dirty bool) strin
 	if date == "unknown" && when != "" {
 		date = when
 	}
-	return fmt.Sprintf("%s [%s backend]\nCommit: %s\nBuilt: %s\nBy: %s", v, vt.Backend, commit, date, builtBy)
+	report := fmt.Sprintf("%s [%s backend]\nCommit: %s\nBuilt: %s\nBy: %s", v, vt.Backend, commit, date, builtBy)
+	// The ghostty build says which library it linked: a build cache can link
+	// a library other than the one the build meant to (scripts/ghostty-lib.sh).
+	if lib := emulatorLibrary(); lib != "" {
+		report += "\nLibrary: " + lib
+	}
+	return report
 }
 
 // vcsBuildInfo reads the stamps the go command embeds in any binary built from

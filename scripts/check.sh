@@ -262,11 +262,20 @@ check_fmt() {
 	return $rc
 }
 
+# ghostty_env sets up the go command for the libghostty-vt in $ghostty_pc,
+# as install.sh and just ghostty-test do (scripts/ghostty-env.sh). Call it in
+# a subshell.
+ghostty_env() {
+	ghostty_root=$root
+	ghostty_native=$ghostty_pc/..
+	. "$root/scripts/ghostty-env.sh"
+}
+
 check_vet() {
 	local rc=0
 	in_modules go vet || rc=1
 	if [ -n "$ghostty_pc" ]; then
-		PKG_CONFIG_PATH=$ghostty_pc in_modules go vet -tags ghostty || rc=1
+		(ghostty_env && in_modules go vet -tags ghostty) || rc=1
 	fi
 	return $rc
 }
@@ -386,7 +395,7 @@ check_cross() {
 		}
 	done
 	if [ -n "$ghostty_pc" ] && [ "$changed" = 0 ]; then
-		PKG_CONFIG_PATH=$ghostty_pc in_build_modules go build -tags ghostty -o /dev/null || rc=1
+		(ghostty_env && in_build_modules go build -tags ghostty -o /dev/null) || rc=1
 	fi
 	return $rc
 }

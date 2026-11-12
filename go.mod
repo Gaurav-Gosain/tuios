@@ -27,6 +27,7 @@ require (
 	github.com/shirou/gopsutil/v4 v4.26.7
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
+	go.mitchellh.com/libghostty v0.0.0-20261107144202-b13f277ddcb2
 	golang.org/x/image v0.47.0
 	golang.org/x/sys v0.49.0
 	golang.org/x/term v0.47.0
@@ -39,7 +40,6 @@ require (
 	github.com/mattn/go-runewidth v0.0.30 // indirect
 	github.com/pires/go-proxyproto v0.15.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	go.mitchellh.com/libghostty v0.0.0-20261107144202-b13f277ddcb2 // indirect
 )
 
 require (

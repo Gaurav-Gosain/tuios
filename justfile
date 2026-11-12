@@ -318,8 +318,9 @@ ghostty-test *args:
     cd {{ quote(root) }}
     cache=${GHOSTTY_VT_CACHE:-$PWD/.ghostty-vt}
     scripts/ghostty-lib.sh native
-    PKG_CONFIG_PATH="$cache/native/pkgconfig" \
-        {{ NICE }} {{ TASKSET }} go test -tags ghostty -count=1 -short \
+    ghostty_root=$PWD ghostty_native=$cache/native
+    . scripts/ghostty-env.sh
+    {{ NICE }} {{ TASKSET }} go test -tags ghostty -count=1 -short \
         ./vt/ ./internal/session/ ./internal/terminal/ \
         ./internal/app/ ./internal/input/ ./cmd/tuios/ "$@"
 
