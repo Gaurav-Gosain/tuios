@@ -18,6 +18,7 @@ local clients_json = "CLIENTS"
 local clients = {}
 local fg_pid = 42
 local exec_fail = false
+local start_fail = false
 
 rex = {
   action = function(a)
@@ -43,6 +44,15 @@ rex = {
       end
       if argv[2] == "list-clients" then
         return { ok = true, code = 0, stdout = clients_json, stderr = "" }
+      end
+      if argv[2] == "start-agent" then
+        if start_fail then
+          return { ok = false, code = 1, stdout = "", stderr = "Claude Code is not installed: claude is not on the PATH the caller sent, nor on the daemon's PATH" }
+        end
+        return { ok = true, code = 0, stdout = "w-new\n", stderr = "" }
+      end
+      if argv[2] == "--version" then
+        return { ok = true, code = 0, stdout = "tuios version 9.9.9\n", stderr = "" }
       end
       return { ok = true, code = 0, stdout = "", stderr = "" }
     end,
@@ -80,7 +90,7 @@ local tuios = require("tuios")
 tuios.setup{ bin = "/opt/bin/tuios", keys = { tuios_agents = "cmd+shift+a" } }
 
 -- The actions and the key.
-for _, name in ipairs({ "tuios_agents", "tuios_mail", "tuios_next_waiting", "tuios_start_agent" }) do
+for _, name in ipairs({ "tuios_agents", "tuios_mail", "tuios_next_waiting", "tuios_start_agent", "tuios_check" }) do
   check(actions[name] ~= nil, "action " .. name .. " is defined")
   check(actions[name] and actions[name].category == "tuios", "action " .. name .. " is in the tuios category")
 end
@@ -105,18 +115,30 @@ for name, action in pairs({ tuios_agents = "prefix_inbox", tuios_mail = "prefix_
   argv_is(execs[#execs], { "/opt/bin/tuios", "run-command", "-s", "work", "Action", action }, name)
 end
 
--- start_agent: the default harness, then one with a name and a prompt.
-starts = {}
-actions.tuios_start_agent.run(ctx, {})
-argv_is(starts[1].argv, { "/opt/bin/tuios", "start-agent", "claude", "-s", "work", "--focus" }, "start_agent with defaults")
-check(starts[1].opts.detach == true, "start_agent runs detached")
+-- start_agent: the default harness, then one with a name and a prompt. It
+-- runs in the action, with --no-wait, so the person sees tuios's answer.
+execs, starts = {}, {}
+local res = actions.tuios_start_agent.run(ctx, {})
+argv_is(execs[#execs], { "/opt/bin/tuios", "start-agent", "claude", "-s", "work", "--focus", "--no-wait", "--print-id" }, "start_agent with defaults")
+check(res.window == "w-new", "start_agent returns the new pane: got " .. tostring(res.window))
+check(#starts == 0, "start_agent no longer runs detached")
 actions.tuios_start_agent.run(ctx, { harness = "codex", name = "review", prompt = "Review the diff." })
-argv_is(starts[2].argv, { "/opt/bin/tuios", "start-agent", "codex", "-s", "work", "--focus", "--name", "review", "--prompt", "Review the diff." }, "start_agent with args")
+argv_is(execs[#execs], { "/opt/bin/tuios", "start-agent", "codex", "-s", "work", "--focus", "--no-wait", "--print-id", "--name", "review", "--prompt", "Review the diff." }, "start_agent with args")
+start_fail = true
+local sok, serr = pcall(actions.tuios_start_agent.run, ctx, {})
+check(not sok and tostring(serr):find("nor on the daemon's PATH", 1, true), "a failed start reports tuios's own message: " .. tostring(serr))
+start_fail = false
+
+-- tuios_check names the program, its version and the session.
+local c = actions.tuios_check.run(ctx, {})
+check(c.tuios == "/opt/bin/tuios" and c.version == "tuios version 9.9.9" and c.session == "work", "tuios_check reports the program, version and session")
 
 -- A block that shows no tuios client.
 fg_pid = 1234
 local s, why = tuios.session_of(ctx)
-check(s == nil and why:find("does not show a tuios session"), "a block without a tuios client has no session")
+check(s == nil and why:find("does not show a tuios session") and why:find("run tuios in it", 1, true), "a block without a tuios client has no session, and says what to do")
+local c2 = actions.tuios_check.run(ctx, {})
+check(c2.session == nil and tostring(c2.session_note):find("does not show a tuios session"), "tuios_check says the focused pane has no session")
 local ok, err = pcall(actions.tuios_agents.run, ctx, {})
 check(not ok and tostring(err):find("does not show a tuios session"), "the action says why it cannot run")
 
@@ -152,9 +174,9 @@ stub_env({ HOME = "/home/u", PATH = "/usr/bin:/bin" }, { ["/home/u/.local/bin/tu
 execs = {}
 actions.tuios_mail.run(ctx, {})
 argv_is(execs[#execs], { "/home/u/.local/bin/tuios", "run-command", "-s", "work", "Action", "prefix_mail" }, "a tuios outside PATH is found in ~/.local/bin")
-starts = {}
+execs = {}
 actions.tuios_start_agent.run(ctx, {})
-argv_is(starts[1].argv, { "/home/u/.local/bin/tuios", "start-agent", "claude", "-s", "work", "--focus" }, "start_agent finds tuios outside PATH")
+argv_is(execs[#execs], { "/home/u/.local/bin/tuios", "start-agent", "claude", "-s", "work", "--focus", "--no-wait", "--print-id" }, "start_agent finds tuios outside PATH")
 
 stub_env({ HOME = "/home/u", PATH = "/usr/bin:/srv/bin" }, { ["/srv/bin/tuios"] = true, ["/home/u/.local/bin/tuios"] = true })
 execs = {}
@@ -167,9 +189,9 @@ ok, err = pcall(actions.tuios_mail.run, ctx, {})
 check(not ok and #execs == 0, "with no tuios anywhere nothing runs")
 check(tostring(err):find("is not in Rex's PATH", 1, true) and tostring(err):find("/home/u/.local/bin", 1, true)
   and tostring(err):find('setup{ bin = "/full/path/tuios" }', 1, true), "the message names where it looked and the fix: " .. tostring(err))
-starts = {}
+execs = {}
 ok, err = pcall(actions.tuios_start_agent.run, ctx, {})
-check(not ok and #starts == 0 and tostring(err):find("setup{ bin", 1, true), "start_agent gives the same message")
+check(not ok and #execs == 0 and tostring(err):find("setup{ bin", 1, true), "start_agent gives the same message")
 
 stub_env({ HOME = "/home/u", PATH = "" }, {})
 tuios.setup{ bin = "/elsewhere/tuios" }

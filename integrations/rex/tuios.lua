@@ -11,6 +11,10 @@
 
 local M = {}
 
+-- M.version is the version of this file. tuios integration status compares it
+-- with the one the installed tuios ships.
+M.version = 2
+
 -- The Rex block kind that runs a terminal.
 local TERMINAL = "com.superlogical.terminal"
 
@@ -150,7 +154,7 @@ function M.session_of(ctx)
       return c.session
     end
   end
-  return nil, "the focused pane does not show a tuios session on this machine"
+  return nil, "The focused Rex pane does not show a tuios session on this machine. Focus a pane that runs tuios, or run tuios in it."
 end
 
 -- session_or_error is session_of for an action: it raises the reason.
@@ -204,7 +208,7 @@ M.actions = {
     args = { harness = "string?", prompt = "string?", name = "string?" },
     run = function(ctx, args)
       local s = session_or_error(ctx)
-      local argv = { M.program(), "start-agent", args.harness or opts.harness, "-s", s, "--focus" }
+      local argv = { "start-agent", args.harness or opts.harness, "-s", s, "--focus", "--no-wait", "--print-id" }
       if args.name ~= nil and args.name ~= "" then
         argv[#argv + 1] = "--name"
         argv[#argv + 1] = args.name
@@ -213,13 +217,29 @@ M.actions = {
         argv[#argv + 1] = "--prompt"
         argv[#argv + 1] = args.prompt
       end
-      -- start-agent returns when the agent is ready, which can take longer
-      -- than the 30 seconds Rex gives an action, so it runs on its own.
-      local h, err = rex.exec.start(argv, { detach = true })
-      if h == nil then
-        error("tuios did not run: " .. tostring(err), 0)
+      -- --no-wait answers once the agent runs, well inside the 30 seconds
+      -- Rex gives an action, so a failure reaches the person as tuios's own
+      -- message. The prompt is typed once the agent is ready.
+      local r = run(argv)
+      return { session = s, window = (r.stdout or ""):match("^%s*(%S+)") }
+    end,
+  },
+  {
+    name = "tuios_check",
+    title = "tuios: Check the Rex Integration",
+    description = "Say which tuios the actions run, its version, and the session of the focused pane.",
+    keywords = "tuios check doctor integration path",
+    run = function(ctx, args)
+      local out = { tuios = M.program(), lua_version = M.version }
+      local r = run({ "--version" })
+      out.version = (r.stdout or ""):match("^%s*(.-)%s*$")
+      local ok, s, why = pcall(M.session_of, ctx)
+      if ok then
+        out.session, out.session_note = s, why
+      else
+        out.session_note = tostring(s)
       end
-      return { session = s }
+      return out
     end,
   },
 }
