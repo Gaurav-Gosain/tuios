@@ -317,7 +317,7 @@ func RenderUserConfig(cfg *UserConfig) (func() (WriteNote, error), error) {
 	// the search path. The config home is only where a missing one is made.
 	// On macOS the search ends in ~/.config while the config home is
 	// ~/Library/Application Support, so a save to the config home made a second
-	// file that hid the first from the next start (#1691).
+	// file that hid the first from the next start.
 	configPath, err := GetConfigPath()
 	if err != nil {
 		return nil, errfmt.Errorf("failed to resolve config path: %w", err)

@@ -41,7 +41,7 @@ var keySeeds = []string{
 	"shift+0", "shift+9", "shift+-", "shift+=",
 	"!", "@", "#", "$", "%", "^", "&", "*", "(", ")",
 	// The French AZERTY number row with Option, unshifted and shifted, and the
-	// US Option characters (issues #566 and #575).
+	// US Option characters.
 	"opt+&", "opt+shift+&", "opt+é", "opt+\"", "opt+'", "opt+(", "opt+§",
 	"opt+è", "opt+!", "opt+ç", "opt+à", "alt+shift+(", "alt+shift+!",
 	"•", "¡", "˜", "π", "opt+•", "alt+shift+•",
@@ -111,8 +111,8 @@ func FuzzNormalizeKey(f *testing.F) {
 		}
 
 		// The US aliases are other keys, never a spelling of the key itself:
-		// one in NormalizeKey would match on every layout, which is how opt+&
-		// ran move_and_follow_7 on AZERTY (issue #575).
+		// one in NormalizeKey would match on every layout (opt+& would run
+		// move_and_follow_7 on AZERTY).
 		aliases := kn.USAliasKeys(key)
 		if len(aliases) > maxAliases {
 			t.Fatalf("USAliasKeys(%q) returned %d aliases: %q", key, len(aliases), aliases)
@@ -227,9 +227,8 @@ func FuzzLoadConfigPipeline(f *testing.F) {
 		var cfg *UserConfig
 		done := make(chan *ValidationResult, 1)
 		go func() {
-			// The one parse function, every fill included. This used to
-			// repeat three of its seven fills, so the fuzzer never reached
-			// the other four.
+			// The one parse function, every fill included, so the fuzzer
+			// reaches all of them.
 			parsed, err := ParseUserConfig([]byte(src))
 			if err != nil {
 				// Malformed TOML is reported, not parsed. That is the contract.

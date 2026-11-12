@@ -1797,8 +1797,8 @@ func DefaultConfig() *UserConfig {
 				"snap_corner_2": {"2"},
 				"snap_corner_3": {"3"},
 				"snap_corner_4": {"4"},
-				// Percentage resizing of the focused pane (issue #29): a digit
-				// sizes the width, shift+digit the height. The action names
+				// Percentage resizing of the focused pane: a digit sizes the
+				// width, shift+digit the height. The action names
 				// carry the percent, so any of them can be rebound or bound to
 				// another key entirely; alt+1..9 are already the workspaces.
 				"resize_width_50":  {"5"},
@@ -2450,7 +2450,6 @@ func getDefaultWorkspaceKeybinds() map[string][]string {
 
 // getDefaultLayoutKeybinds returns platform-specific layout keybindings
 func getDefaultLayoutKeybinds() map[string][]string {
-	// Base layout keybindings (common to all platforms)
 	layout := map[string][]string{
 		"snap_left":  {"h"},
 		"snap_right": {"l"},
@@ -2503,7 +2502,6 @@ func getDefaultLayoutKeybinds() map[string][]string {
 		"equalize_splits":  {"="},
 	}
 
-	// Add platform-specific BSP preselect bindings
 	if isMacOS() {
 		layout["preselect_left"] = []string{"opt+h"}
 		layout["preselect_right"] = []string{"opt+l"}
@@ -2535,10 +2533,8 @@ func clampPercent(v, lo, hi, fallback int) int {
 
 // LoadUserConfig loads the user configuration from XDG config directory
 func LoadUserConfig() (*UserConfig, error) {
-	// Try to find existing config file
 	configPath, err := xdg.SearchConfigFile("tuios/config.toml")
 	if err != nil {
-		// Config doesn't exist, create default
 		return createDefaultConfig()
 	}
 
@@ -2555,13 +2551,6 @@ func LoadUserConfig() (*UserConfig, error) {
 	// A key tuios cannot read on this platform costs that key, not the file.
 	// The lines reach the TUI through ConfigWarnings.
 	cfg.LoadWarnings = append(cfg.LoadWarnings, DroppedWarnings(DropUnreadableKeys(cfg, lc))...)
-
-	// Warnings are deliberately not printed here. Loading happens before the
-	// alternate screen is entered, so anything written to stdout or stderr at
-	// this point is wiped by the first frame; the previous tea.Println call was
-	// worse than that, since its return value (a command) was discarded and it
-	// never printed anything at all. The warnings are surfaced inside the TUI
-	// instead, by ConfigWarnings below.
 
 	// Loading is pure: it never mutates package globals. Callers apply the
 	// appearance globals exactly once, on the Bubble Tea goroutine, via
@@ -2892,9 +2881,6 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 		cfg.Appearance.Background = defaultCfg.Appearance.Background
 	}
 
-	// Note: HideWindowButtons defaults to false (zero value)
-	// In borderless mode, buttons are hidden automatically regardless of this setting
-
 	// Validate and set scrollback lines (min: 100, max: 1000000)
 	if cfg.Appearance.ScrollbackLines <= 0 {
 		cfg.Appearance.ScrollbackLines = defaultCfg.Appearance.ScrollbackLines
@@ -2930,14 +2916,6 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if cfg.Appearance.WhichKeyPosition != "" {
 		s.WhichKeyPosition = cfg.Appearance.WhichKeyPosition
 	}
-	// BorderStyle defaults to rounded. Empty means "not configured", so the
-	// current value (a flag, or the default) stands.
-
-	// ZenMode only takes one of its three values, so a typo in the config lands
-	// on the default the validator warned it would fall back to.
-
-	// TilingScheme takes the same shape: a typo falls back to spiral, which is
-	// what a new workspace already defaulted to before this setting existed.
 
 	// Links takes the same shape: a typo falls back to the default rather than
 	// leaving the pointer with no policy at all.
@@ -2952,10 +2930,6 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.DropPreview = DropPreviewOutline
 	}
 	s.DropPreviewDelay, _ = ParseDropPreviewDelay(cfg.Appearance.DropPreviewDelay)
-
-	// DockbarPosition defaults to top. A typo lands on that default, which is
-	// what the validator says it falls back to; left as written, the renderer
-	// would treat it as bottom.
 
 	// Sidebar. Also runs for a config that never went through LoadUserConfig (the
 	// settings page builds one in memory), so an old flat key reaches the globals
@@ -3078,18 +3052,6 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.DockModeIconWindow = cfg.Appearance.DockModeIconWindow
 	s.DockModeIconTerminal = cfg.Appearance.DockModeIconTerminal
 	s.DockModeIconTiling = cfg.Appearance.DockModeIconTiling
-	// A typo lands on the default, as the validator says; left as written, the
-	// renderer would draw it as thin.
-	// The glyph and tint keys are assigned as written, empty included: empty is
-	// the "use the style's default" state, and the getters below resolve it. A
-	// value that does not measure one cell is rejected there too, so an edit
-	// made live in the settings page cannot slip past the file's validation.
-	// Assigned as written, for the tint's reason: ResolveBackground settles a
-	// typo to off and empty to the default for every surface, so an edit made
-	// live cannot paint a colour the file's validation would have refused.
-
-	// A pointer because zero is a real value here: it turns the repeat window
-	// off, and a plain int could not tell that from an absent key.
 
 	// The selection colours. A background that is empty falls back to the
 	// default, because a pane with no colour behind a selection shows no
@@ -3194,19 +3156,6 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.ConfirmClose = cfg.Appearance.ConfirmClose
 	}
 
-	// ConfirmQuit defaults to false (nil means use default)
-
-	// SharedBorders defaults to true (nil means use default)
-
-	// WhichKeyEnabled defaults to true (nil means use default)
-
-	// WrapLists defaults to true (nil means use default)
-
-	// WhichKeyPosition defaults to bottom-right
-
-	// WindowTitlePosition defaults to top, and a typo lands there too; left as
-	// written, the renderer would draw it at the bottom.
-
 	s.WindowTitleStyle = DefaultWindowTitleStyle
 	if slices.Contains(WindowTitleStyles, cfg.Appearance.WindowTitleStyle) {
 		s.WindowTitleStyle = cfg.Appearance.WindowTitleStyle
@@ -3216,25 +3165,10 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.WindowTitleAlign = cfg.Appearance.WindowTitleAlign
 	}
 
-	// HideClock defaults to false
-
-	// WindowTitleFormat defaults to empty, meaning the title is shown as-is.
-	// An empty string in the config also clears a previously set format on
-	// reload, which is why it is assigned unconditionally.
-
-	// HostTitle defaults to empty, which sets no title. Assigned
-	// unconditionally for the same reason as above.
-
-	// ScrollLines (lines per wheel notch)
 	if cfg.Appearance.ScrollLines > 0 {
 		s.ScrollLines = cfg.Appearance.ScrollLines
 	}
 
-	// CopyOnSelect defaults to true (nil means use default)
-
-	// FocusFollowsMouse defaults to false; a pointer so turning it off in the
-	// settings page survives a reload just as turning it on does.
-	// PastePreview defaults to true; a pointer so turning it off survives.
 	// The pause key keeps only ctrl or alt. Off, empty and a typo all leave
 	// hover focus unpaused, which is what the validator warns a typo becomes.
 	switch cfg.Appearance.FocusFollowsMousePause {
@@ -3243,12 +3177,6 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	default:
 		s.FocusFollowsMousePause = ""
 	}
-
-	// AltDrag defaults to true; a pointer so an explicit false in the config
-	// survives the default being on.
-
-	// RightClickOpensMenu defaults to false. A pointer so an explicit true in
-	// the config is what turns the plain right-click into the pane menu.
 
 	// KittyPlaceholders takes one of three words; anything else is the
 	// default, which is to decide from the host terminal.
@@ -3262,9 +3190,6 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.ImageSymbols = cfg.Appearance.ImageSymbols
 	}
 
-	// NewWindowInheritCwd defaults to true. A pointer so an explicit false in
-	// the config is what puts new windows back in the daemon's directory.
-
 	// AutoEnterTerminalOnFocus only takes one of its three values, so a typo
 	// in the config lands on the default the validator warned it would fall
 	// back to. Empty (an older file, or DefaultConfig before the key existed)
@@ -3275,13 +3200,6 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.AutoEnterTerminalOnFocus = AutoEnterTerminalOff
 	}
 
-	// ClickToType only takes one of its three values, so a typo in the config
-	// lands on the default the validator warned it would fall back to.
-
-	// WordCharacters is a pointer so an explicitly empty string can mean "no
-	// punctuation is part of a word", which is different from "unset".
-
-	// ZoomMaxWidth (0 = fullscreen)
 	if cfg.Appearance.ZoomMaxWidth > 0 {
 		s.ZoomMaxWidth = cfg.Appearance.ZoomMaxWidth
 	}
@@ -3729,7 +3647,6 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 		}
 	}
 
-	// Initialize nil maps
 	for _, t := range keybindTables {
 		if f := t.field(&cfg.Keybindings); *f == nil {
 			*f = make(map[string][]string)
@@ -3741,12 +3658,10 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	migrateCornerSnapDigits(cfg)
 	migrateInboxKeys(cfg)
 
-	// Set default leader key if not specified
 	if cfg.Keybindings.LeaderKey == "" {
 		cfg.Keybindings.LeaderKey = defaultCfg.Keybindings.LeaderKey
 	}
 
-	// Fill in missing keys with defaults
 	fillMapDefaults(cfg.Keybindings.WindowManagement, defaultCfg.Keybindings.WindowManagement)
 	// The workspaces table is part of the window-mode keymap as well, so a new
 	// workspace default yields the same way a new layout default does.
@@ -3795,8 +3710,8 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 		}
 	}
 	// A config written before the global and script sections existed has neither,
-	// so without this the palette and the launcher would come back unbound for
-	// every existing user rather than keeping the keys they already had.
+	// so existing users would get the palette and the launcher unbound instead of
+	// keeping the keys they had.
 	fillMapDefaults(cfg.Keybindings.Global, defaultCfg.Keybindings.Global)
 	fillMapDefaults(cfg.Keybindings.Script, defaultCfg.Keybindings.Script)
 	fillMapDefaults(cfg.Keybindings.Lists, defaultCfg.Keybindings.Lists)
@@ -4185,7 +4100,6 @@ func ConfigWarnings(cfg *UserConfig) []string {
 func GetConfigPath() (string, error) {
 	path, err := xdg.SearchConfigFile("tuios/config.toml")
 	if err != nil {
-		// Return where it would be created
 		return xdg.ConfigFile("tuios/config.toml")
 	}
 	return path, nil

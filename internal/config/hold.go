@@ -13,10 +13,9 @@ import (
 //
 // A save writes the difference between the config as last loaded or saved and
 // the config now (see RenderUserConfig). A held value is in the config now, so
-// without this the next save of any other setting wrote it, into config.toml
-// or into the config.d file that sets the key. The holds live on the config
-// rather than on the caller, so every path that saves it skips them: the
-// settings page, the pickers and the keybind presets alike.
+// a save skips it or it would reach config.toml or the config.d file that sets
+// the key. The holds live on the config rather than on the caller, so every
+// path that saves it skips them.
 
 // optionHolds is what a config holds without saving.
 type optionHolds struct {

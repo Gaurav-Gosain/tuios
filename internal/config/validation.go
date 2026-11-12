@@ -48,7 +48,6 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 
 	normalizer := NewKeyNormalizer()
 
-	// Validate all keybinding sections
 	validateSection := func(sectionName string, section map[string][]string) {
 		for _, keys := range section {
 			// An action with an empty list is not a mistake to report: it is the
@@ -61,7 +60,6 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 				continue
 			}
 
-			// Validate each key
 			for _, key := range keys {
 				valid, errMsg := normalizer.ValidateSectionKey(sectionName, key)
 				if !valid {
@@ -80,7 +78,6 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validateCopyModeKeys(cfg, result)
 	validateReviewKeys(cfg, result)
 
-	// Validate leader key
 	if cfg.Keybindings.LeaderKey != "" {
 		valid, errMsg := normalizer.ValidateKey(cfg.Keybindings.LeaderKey)
 		if !valid {
@@ -130,7 +127,6 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	warnEnum(result, "keybindings", "option_glyphs", cfg.Keybindings.OptionGlyphs, OptionGlyphModes, OptionGlyphsAuto)
 	validatePrefixRepeat(cfg, result)
 
-	// Validate all sections
 	for _, section := range keySections(&cfg.Keybindings) {
 		validateSection(section.name, section.keys)
 	}

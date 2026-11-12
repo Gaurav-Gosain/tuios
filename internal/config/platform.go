@@ -29,7 +29,6 @@ func platformIsMacOS() bool {
 	if runtime.GOOS == "darwin" || E2EPlatformDarwin() {
 		return true
 	}
-	// Fallback to environment variables
 	goos := strings.ToLower(os.Getenv("GOOS"))
 	ostype := strings.ToLower(os.Getenv("OSTYPE"))
 	return strings.Contains(goos, "darwin") || strings.Contains(ostype, "darwin")

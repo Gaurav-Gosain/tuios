@@ -545,7 +545,6 @@ func (kn *KeyNormalizer) NormalizeKey(key string) []string {
 
 	keyLower := strings.ToLower(key)
 
-	// Always include the normalized version
 	result := []string{normalized}
 
 	// The canonical spelling is the one a key event produces: opt+f12 arrives
@@ -561,7 +560,7 @@ func (kn *KeyNormalizer) NormalizeKey(key string) []string {
 	result = append(result, letterShiftAliases(canonical, strings.ToLower(canonical))...)
 
 	// The character macOS composes for an Option chord is not a spelling of
-	// the binding: a user who composes on purpose (issue #566) types it. The
+	// the binding: a user who composes on purpose types it. The
 	// input path reads it through MacOSOptionChord instead, into the tiers
 	// USLayoutKey, OptionGlyphKey and BareOptionGlyphKey name, which the
 	// config can turn off.
@@ -586,7 +585,6 @@ func (kn *KeyNormalizer) NormalizeKey(key string) []string {
 		}
 	}
 
-	// Remove duplicates
 	seen := make(map[string]bool)
 	unique := []string{}
 	for _, k := range result {
@@ -626,7 +624,6 @@ func (kn *KeyNormalizer) ExpandKeys(keys []string) []string {
 		expanded = append(expanded, normalized...)
 	}
 
-	// Remove duplicates from final list
 	seen := make(map[string]bool)
 	unique := []string{}
 	for _, k := range expanded {
@@ -644,14 +641,13 @@ func (kn *KeyNormalizer) ValidateKey(key string) (bool, string) {
 	key = strings.TrimSpace(key)
 	keyLower := strings.ToLower(key)
 
-	// Empty key
 	if keyLower == "" {
 		return false, "key cannot be empty"
 	}
 
 	// opt+ and option+ are valid on every platform. Off macOS they can only
 	// mean Alt, and CanonicalKey reads them as alt+, so a config.toml shared
-	// with a Mac works unchanged (issue #556).
+	// with a Mac works unchanged.
 
 	// On macOS, suggest opt+ instead of alt+ for better UX
 	// Note: We return true (valid) but will add a warning in validation
@@ -662,19 +658,15 @@ func (kn *KeyNormalizer) ValidateKey(key string) (bool, string) {
 	if keyLower == "+" {
 		return true, ""
 	}
-	// Check for invalid modifier combinations
 	parts := strings.Split(keyLower, "+")
 	if len(parts) > 1 {
-		// Extract modifiers (all but last part)
 		modifiers := parts[:len(parts)-1]
 		actualKey := parts[len(parts)-1]
 
-		// Check for empty actualKey
 		if actualKey == "" {
 			return false, "key combination incomplete (ends with +)"
 		}
 
-		// Check each modifier
 		for _, mod := range modifiers {
 			if !validModifier(mod) {
 				return false, "invalid modifier: " + mod
@@ -703,7 +695,6 @@ func (kn *KeyNormalizer) ValidateKey(key string) (bool, string) {
 		return true, ""
 	}
 
-	// Check if it's a valid special key
 	if !validSpecialKeys[actualKey] && !isFunctionKeyName(actualKey) {
 		return false, "unknown special key: " + actualKey
 	}

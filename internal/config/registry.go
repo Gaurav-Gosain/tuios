@@ -173,7 +173,7 @@ func (r *KeybindRegistry) expandInto(keyMap map[string]string, action string, ke
 	// An Option chord the terminal sent as the character a US layout composes
 	// for it is looked up by the chord. With the Alt bit it is in one tier,
 	// and with no modifier in another, which "bind" and "auto" fill: a bare
-	// character can be text on another layout (issue #746), so under "auto"
+	// character can be text on another layout, so under "auto"
 	// lookupKey answers from it only on a US Mac layout. "type" leaves both
 	// empty, so the character goes to the pane.
 	for _, key := range plain {
@@ -311,7 +311,6 @@ func (r *KeybindRegistry) GetKeys(action string) []string {
 	// The config's tables hold each action by its own name (see
 	// canonicalizeKeybindings), so an alias asks for that name.
 	action = CanonicalAction(action)
-	// Search through all sections
 	sections := []map[string][]string{
 		r.config.Keybindings.WindowManagement,
 		r.config.Keybindings.Workspaces,

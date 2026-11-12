@@ -9,9 +9,8 @@ import (
 )
 
 // The which-key menus are built from the keybind registry, the source the
-// help overlay and `tuios keybinds list` read. They used to be hand-written
-// key lists, so a rebound key went on showing its default here while the help
-// and the keymap said otherwise.
+// help overlay and `tuios keybinds list` read, so a rebound key shows the same
+// everywhere.
 //
 // What stays hand-written is the shape: which actions a menu shows, in which
 // section and order, and what each row says. The keys come from the config.
