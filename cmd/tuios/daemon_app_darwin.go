@@ -98,6 +98,10 @@ func runDaemonAppLauncher() int {
 			// The command string ends option parsing, so the tuios
 			// arguments after it are only operands: $0 and "$@".
 			_ = syscall.Exec(shell, append([]string{shell, "-l", "-c", `exec "$0" "$@"`, target}, args...), os.Environ())
+		case "fish":
+			// fish has no $0 for -c: every word after the command string
+			// is $argv, and fish never splits a list element again.
+			_ = syscall.Exec(shell, append([]string{shell, "-l", "-c", "exec $argv", target}, args...), os.Environ())
 		}
 	}
 	env := os.Environ()
