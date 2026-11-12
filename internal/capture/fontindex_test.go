@@ -20,7 +20,7 @@ func TestAnUnreadableDirectoryIsNotFatal(t *testing.T) {
 	if err := os.WriteFile(junk, []byte("not a font"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	idx := buildFontIndex([]string{
+	idx := scanFontIndex([]string{
 		filepath.Join(dir, "does-not-exist"),
 		dir,
 		"/proc/nonexistent/fonts",
@@ -85,7 +85,7 @@ func TestTheScanFilesFacesInTheOrderOfTheWalk(t *testing.T) {
 		t.Fatalf("the reference holds %d Go Mono faces, want one per file", len(want.byFamily["go mono"]))
 	}
 	for range 20 {
-		got := buildFontIndex([]string{dir})
+		got := scanFontIndex([]string{dir})
 		if !reflect.DeepEqual(got.byFamily, want.byFamily) || !reflect.DeepEqual(got.byPostScript, want.byPostScript) {
 			t.Fatalf("the parallel scan made another index than a serial one\n got  %v\n want %v", got.byFamily["go mono"], want.byFamily["go mono"])
 		}

@@ -4594,6 +4594,13 @@ terminal to ask. With none of them the capture is drawn in a built in font that
 has no icons, and a missing glyph draws as a dotted outline box rather than a
 silent blank.
 
+To find a font by its family name, the first capture on a machine reads the name
+of every font file and keeps what it found in `tuios/fonts-index.gob` in the
+cache folder (`$XDG_CACHE_HOME`, else `~/.cache`, or `~/Library/Caches` on
+macOS), which is read again only after a font file is added, removed or changes
+size or modification time; delete the file to scan again, as a font replaced in
+place with the same size and time is not noticed.
+
 `screenshot.font_file` also embeds that font in SVG and HTML output so those
 files stand alone, which makes them megabytes rather than kilobytes. Only that
 setting does: a font tuios found by asking your terminal is used to draw the

@@ -139,6 +139,19 @@ var fontFileExts = map[string]bool{
 }
 
 func buildFontIndex(dirs []string) *fontIndex {
+	return indexFonts(dirs, fontCachePath())
+}
+
+// scanFontIndex is buildFontIndex with no file kept: every font file is read.
+func scanFontIndex(dirs []string) *fontIndex {
+	return indexFonts(dirs, "")
+}
+
+// indexFonts walks the folders and files the faces of the fonts it finds into
+// an index. When cachePath names a file made from the same fonts (see
+// fontcache.go), the faces come from it and no font file is opened; otherwise
+// they are read, and the file is written.
+func indexFonts(dirs []string, cachePath string) *fontIndex {
 	idx := &fontIndex{
 		byFamily:     map[string][]indexedFace{},
 		byPostScript: map[string]indexedFace{},
@@ -150,12 +163,18 @@ func buildFontIndex(dirs []string) *fontIndex {
 		}
 		w.dir(dir)
 	}
-	// The files are read side by side and filed in the order the walk found
-	// them, so the index is the one a serial scan made.
-	for _, faces := range readFontFaces(w.files) {
-		for _, face := range faces {
-			idx.add(face)
+	fingerprint := fontFingerprint(dirs, w.stamps)
+	faces, ok := loadFontCache(cachePath, fingerprint)
+	if !ok {
+		// The files are read side by side and filed in the order the walk
+		// found them, so the index is the one a serial scan made.
+		for _, fileFaces := range readFontFaces(w.files) {
+			faces = append(faces, fileFaces...)
 		}
+		saveFontCache(cachePath, fingerprint, faces)
+	}
+	for _, face := range faces {
+		idx.add(face)
 	}
 	return idx
 }
@@ -198,8 +217,10 @@ type fontWalk struct {
 	seenDirs  map[string]bool
 	seenFiles map[string]bool
 	count     int
-	// files are the font files found, in the order the walk met them.
-	files []string
+	// files are the font files found, in the order the walk met them, and
+	// stamps their sizes and modification times in the same order.
+	files  []string
+	stamps []fontFileStamp
 }
 
 func (w *fontWalk) dir(dir string) {
@@ -245,6 +266,11 @@ func (w *fontWalk) dir(dir string) {
 		w.seenFiles[path] = true
 		w.count++
 		w.files = append(w.files, path)
+		stamp := fontFileStamp{path: path}
+		if info, err := os.Stat(path); err == nil {
+			stamp.size, stamp.mtime = info.Size(), info.ModTime().UnixNano()
+		}
+		w.stamps = append(w.stamps, stamp)
 	}
 }
 
