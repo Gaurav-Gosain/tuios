@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 )
 
@@ -126,7 +127,28 @@ func runRexStatus(w io.Writer) error {
 		}
 		printRexCheck(w, st.Check)
 	}
+	fmt.Fprintln(w, rexStatusRecords())
 	return nil
+}
+
+// rexStatusRecords says which status records tuios gives Rex's tabs:
+// [agents] host_program_status of config.toml, read without writing one.
+func rexStatusRecords() string {
+	mode := config.HostProgramStatusSession
+	cfg, err := config.LoadExistingUserConfig()
+	switch {
+	case err != nil:
+		return "Status in Rex: config.toml could not be read, so it is the default, one record for each tuios session."
+	case cfg != nil:
+		mode = config.NormalizeHostProgramStatus(cfg.Agents.HostProgramStatus)
+	}
+	switch mode {
+	case config.HostProgramStatusPanes:
+		return "Status in Rex: one record for each tuios pane with an agent (host_program_status = \"panes\")."
+	case config.HostProgramStatusOff:
+		return "Status in Rex: none (host_program_status = \"off\")."
+	}
+	return "Status in Rex: one record for each tuios session. For one per agent, set host_program_status = \"panes\" under [agents] (docs/REX.md, \"Per-pane status\")."
 }
 
 // printRexCheck says what tuios_check found inside Rex, in plain words: the

@@ -16,7 +16,7 @@ out=$(mkdir -p "$2" && cd "$2" && pwd)
 rexbin=$(command -v rex) || { echo "rex is not installed"; exit 1; }
 tmp=$(mktemp -d /tmp/rexreal.XXXXXX)
 home=$tmp/home
-mkdir -p "$home/.local/bin" "$home/.config/rex" "$tmp/state" "$tmp/run" "$tmp/agents"
+mkdir -p "$home/.local/bin" "$home/.config/rex" "$home/.config/tuios" "$tmp/state" "$tmp/run" "$tmp/agents"
 chmod 700 "$tmp/run"
 cd "$tmp"
 # tuios where scripts/install.sh puts it, and nowhere on the server's PATH.
@@ -130,7 +130,7 @@ rx events --all --json > "$out/events.jsonl" 2>&1 &
 ev=$!
 sleep 1
 rx block call -b "$blk" modes > "$out/rex-modes.txt" 2>&1
-grep -i -E 'focus|1004' "$out/rex-modes.txt"
+grep -o '"name":"focus_event"[^}]*' "$out/rex-modes.txt"
 tu list-windows -s demo --json > "$out/wait-windows.json" 2>&1
 focused=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d["focused_window_id"])' "$out/wait-windows.json")
 other=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print([w["window_id"] for w in d["windows"] if not w["focused"]][0])' "$out/wait-windows.json")
@@ -156,6 +156,25 @@ grep -o '"name":"desktop_notification","payload":{[^}]*}' "$out/events.jsonl" > 
 echo "Rex desktop notifications:"; cat "$out/notifications.txt"
 for n in 1 3; do grep -q "wait-$n " "$out/notifications.txt" && echo "wait-$n notified, as it should" || echo "wait-$n NOT notified"; done
 for n in 2 4; do grep -q "wait-$n " "$out/notifications.txt" && echo "wait-$n notified, and should not be" || echo "wait-$n not notified, as it should"; done
+
+# Per-pane status: with host_program_status = "panes" Rex holds one record
+# per tuios pane with an agent, read back through the block's program_status
+# method. The option is read when a client starts, so a second client, in a
+# Rex block of its own, starts after a config.d file sets it.
+step "per-pane status"
+rx block call -b "$blk" program_status > "$out/rex-records-session.txt" 2>&1
+mkdir -p "$home/.config/tuios/config.d"
+printf '[agents]\nhost_program_status = "panes"\n' > "$home/.config/tuios/config.d/panes.toml"
+rx run --json -- "$home/.local/bin/tuios" attach demo > "$out/rex-run-panes.json" 2>&1
+blk2=$(grep -o '"block:[^"]*"' "$out/rex-run-panes.json" | head -1 | tr -d '"')
+sleep 4
+tu set-agent-state needs_input -s demo -w "$other" --kind approval -m "panes-1 approve" >/dev/null 2>&1
+sleep 2
+rx block call -b "$blk2" program_status > "$out/rex-records-panes.txt" 2>&1
+tu set-agent-state working -s demo -w "$other" >/dev/null 2>&1
+echo "records, session mode:"; grep -o '"id": *"[^"]*"' "$out/rex-records-session.txt"
+echo "records, panes mode:"; grep -o '"id": *"[^"]*"' "$out/rex-records-panes.txt"
+env "${xdg[@]}" PATH="/usr/bin:/bin:$(dirname "$rexbin")" REX_CONFIG="$cfg" REX_SERVER="$server" "$bin" integration status rex 2>&1 | grep 'Status in Rex'
 
 step "status"
 env "${xdg[@]}" PATH="/usr/bin:/bin:$(dirname "$rexbin")" REX_CONFIG="$cfg" REX_SERVER="$server" "$bin" integration status rex > "$out/status.txt" 2>&1

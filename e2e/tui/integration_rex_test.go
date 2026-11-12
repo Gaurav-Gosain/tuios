@@ -113,6 +113,24 @@ func TestIntegrationInstallRex(t *testing.T) {
 		saveText(t, "init-after", read(r.cfg))
 	})
 
+	// status says which status records Rex's tabs get, from [agents]
+	// host_program_status, so a person can tell whether Rex shows each agent.
+	t.Run("status names the records Rex gets", func(t *testing.T) {
+		r := newRig(t, false, true)
+		if out, err := run(t, r, "install", "rex"); err != nil {
+			t.Fatalf("install rex: %v\n%s", err, out)
+		}
+		out, err := run(t, r, "status", "rex")
+		if err != nil || !strings.Contains(out, "Status in Rex: one record for each tuios session.") {
+			t.Errorf("ASSERTION: status does not say the session default: %v\n%s", err, out)
+		}
+		writeConfig(t, r.base, "[agents]\nhost_program_status = \"panes\"\n")
+		out, err = run(t, r, "status", "rex")
+		if err != nil || !strings.Contains(out, "Status in Rex: one record for each tuios pane") {
+			t.Errorf("ASSERTION: status does not say panes: %v\n%s", err, out)
+		}
+	})
+
 	t.Run("own lines survive and come back", func(t *testing.T) {
 		r := newRig(t, false, true)
 		own := "-- my Rex config\nrex.bind(\"cmd+k\", \"pane.split\")\nlocal x = 1 -- no newline at the end"

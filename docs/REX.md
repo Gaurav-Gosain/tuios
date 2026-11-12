@@ -153,8 +153,37 @@ Checked in a real Rex server (`e2e/tui/testdata/rex-real.sh`, "agents that
 wait"): another pane's question and the focused pane's question while Rex
 showed another pane each gave one `terminal.desktop_notification`; the
 focused pane's question while Rex showed tuios gave none, before and after
-Rex's focus events. What the Mac app draws for them was not checked there,
+Rex's focus events. The tuios pane in Rex has focus events on (mode 1004). What the Mac app draws for them was not checked there,
 since that server has no app attached.
+
+## Per-pane status
+
+tuios gives Rex one status record (OSC 7501) for each tuios session by
+default: the most urgent state of its agents, and a message that counts them,
+such as "1 needs input, 2 working". Rex shows one status for each Rex pane,
+so a tuios session with many agents shows as one.
+
+For one record per agent, set this in tuios's config.toml:
+
+```toml
+[agents]
+host_program_status = "panes"
+```
+
+Each tuios pane with an agent then has a record of its own, with the pane's
+name as the title and what the agent asked or is doing as the message, under
+the id `SESSION/PANE`. `"off"` sends none. A client reads the value when it
+starts and when config.toml changes. `tuios integration status rex` says which
+one is set.
+
+Checked in a real Rex server (`rex-real.sh`, "per-pane status"): by default
+the Rex pane's `program_status` holds the one record `demo`; with `"panes"`
+it holds `demo/PANE` for each pane with an agent, such as `demo/3816ea3d`,
+state blocked, kind permission, with the pane's title and the agent's
+question as the message. How the Mac app's sidebar and
+Activity view draw several records from one Rex pane, and what the iOS app
+shows, was not checked: that Rex server has no app attached, and the
+person's own Rex is not used for tests.
 
 ## Finding tuios and the agents
 
