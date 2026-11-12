@@ -75,7 +75,7 @@ func TestNewAgentSheetStopsOnInvisibleCharacters(t *testing.T) {
 		t.Fatal(err)
 	}
 	term := attachIn(t, base, "S", startOpts{cols: 200, rows: 55, shippedLooks: true,
-		env: []string{"PATH=" + dir + ":/usr/bin:/bin", "TERM=xterm-256color", "COLORTERM=truecolor", "TUIOS_KITTY_GRAPHICS=0"}})
+		env: []string{"PATH=" + dir + string(os.PathListSeparator) + agentFreePath("/usr/bin", "/bin"), "TERM=xterm-256color", "COLORTERM=truecolor", "TUIOS_KITTY_GRAPHICS=0"}})
 	sendKeys(t, term, tuitest.Ctrl('b'), "i")
 	waitText(t, term, "the agents view", "Agents", "New agent")
 	sendKeys(t, term, "b")
