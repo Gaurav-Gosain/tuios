@@ -180,29 +180,21 @@ func (m *OS) contextMenuRow(it ContextMenuItem, selected bool, width int, bg col
 	return pal.Row(left+overlay.Style(rowBg).Render(strings.Repeat(" ", gap))+hint, width, st, bg)
 }
 
-// contextMenuOrigin places the menu against its anchor.
+// contextMenuOrigin places the menu against its anchor, the pointer cell,
+// by overlay.Place.
 //
-// The menu opens down and to the right of the pointer, which is where a user
-// expects it. When that would run past an edge it flips to the other side of
-// the anchor rather than being nudged along it, so the pointer stays on a
-// corner of the menu instead of landing in the middle of a row the user did not
-// aim at. The clamp afterwards is a backstop for a menu taller or wider than
-// the screen itself, where neither side fits and drawing off the edge is the
-// only other option.
+// The menu opens down and to the right of the pointer, with its corner on the
+// pointer cell (Gap -1), which is where a person expects it. Near an edge it
+// flips to the other side of the pointer, and FlipAlign flips it across the
+// pointer column too rather than shifting it along the row: the pointer stays
+// on a corner of the menu instead of landing in the middle of a row the
+// person did not aim at. A submenu opens in its parent's place on the same
+// anchor (OpenSubmenu), so near the right edge it opens to the left of the
+// pointer as its parent did, and never covers a parent still drawn.
 func (m *OS) contextMenuOrigin(cm *ContextMenu, geo overlay.Geometry) (int, int) {
-	rw, rh := m.GetRenderWidth(), m.GetRenderHeight()
-
-	x := cm.AnchorX
-	if x+geo.Width > rw {
-		x = cm.AnchorX - geo.Width + 1
-	}
-	y := cm.AnchorY
-	if y+geo.Height > rh {
-		y = cm.AnchorY - geo.Height + 1
-	}
-
-	x = max(min(x, rw-geo.Width), 0)
-	y = max(min(y, rh-geo.Height), 0)
+	screen := overlay.Rect{X1: m.GetRenderWidth(), Y1: m.GetRenderHeight()}
+	x, y, _ := overlay.Place(overlay.PointRect(cm.AnchorX, cm.AnchorY), geo.Width, geo.Height, screen,
+		overlay.Placement{Side: overlay.SideBelow, Gap: -1, FlipAlign: true})
 	return x, y
 }
 
