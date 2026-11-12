@@ -6263,25 +6263,6 @@ all eleven tests, and every other `TestGUIBridge` test, on the same day.
 The run log is kept outside the repository:
 `~/.cache/agent-tmp/proof/v2/wave3b/e2e/negative-controls.txt`.
 
-## A link rides the ssh master a person opened
-
-`TestLinkRidesTheSharedSSHMaster` gives the hub daemon one host, `build`,
-reached through an ssh stand-in that records every argv it runs. With a
-folder `$XDG_RUNTIME_DIR/tuios/cm` of mode 0700, the link's ssh and the ssh
-of `tuios hosts test` must carry `ControlMaster=no` and
-`ControlPath=<folder>/%C`, and the link must still come up. With no folder,
-and with a folder of mode 0777, neither ssh may name the folder.
-
-Each control below was run on 2026-10-08 on branch
-`feat/link-shares-gui-ssh-master`. The log is
-`~/.cache/agent-tmp/proof/v2/wave4/e2e/negative-controls-master.txt`.
-
-| Control | How | Tests that fail | Verdict |
-| --- | --- | --- | --- |
-| A host with no path gets no sharing options | `sharingOptions`: `return reuseOptions()` replaced by `return nil` | `TestLinkRidesTheSharedSSHMaster/a_master_folder_of_the_user's_own` (the link's ssh names no master) | **caught** |
-| A folder others can write is trusted | `reuseOptions`: the mode check cut | `TestLinkRidesTheSharedSSHMaster/a_master_folder_others_can_write` (the link's ssh names the folder) | **caught** |
-| The link may open a master of its own | `reuseOptions`: `ControlMaster=auto` in place of `no` | `TestLinkRidesTheSharedSSHMaster/a_master_folder_of_the_user's_own` (`ControlMaster=no` missing) | **caught** |
-
 ## The GUI bridge, wave 4: reopen, kept emulators and machines
 
 `e2e/tui/gui_bridge_wave4_test.go` has seven tests:
@@ -6733,7 +6714,6 @@ The controls were run on 2026-10-15 on branch `refactor/vt-private-osc`.
 | A body without its number reaches the hook | `privateOSCNumber`: the prefix check cut | `TestPrivateOSC` and `TestGhosttyPrivateOSC` in `vt` (no number, empty body) | **caught in `vt`** |
 | ghostty passes the numbers it interprets to the hook | `GhosttyTerminal.handleOSC`: the `privateOSCNumber` check cut | `TestGhosttyPrivateOSC` (OSC 2, 7, 8, 9, 777 and a wrapped number) | **caught in `vt`** |
 
-## The snapshot reads across builds after it moved to vt/snapshot
 ## The snapshot reads across builds after it moved to vt/snapshot
 
 `TerminalState` and its capture, apply, pack, replay and history code moved
@@ -13627,28 +13607,6 @@ the branch head. Each control was built into its own binary.
 
 The frame is `agent-child-rows` under `TUIOS_E2E_FRAMES`. The upgrade test
 writes its answers to `handoff.json` in its artifact folder.
-## A child agent never runs wider than its parent
-
-`TestAChildAgentNeverRunsWiderThanItsParent` runs a parent agent in a pane: a
-script named claude, started with `--permission-mode plan`, that calls
-`tuios start-agent`. A child with `--dangerously-skip-permissions` must be
-refused with no window made. A child that names no mode must start with
-`--permission-mode plan` added. The same bypass child started by the test
-process, outside every pane, must start as asked.
-
-Run on 2026-11-04 on Linux. The control is the branch build with
-`clampChildMode` returning its argv unchanged (a `go build -overlay` of
-`internal/session/child_clamp.go`):
-
-| Control | Where it fails | Verdict |
-| --- | --- | --- |
-| `clampChildMode` returns argv unchanged | "a child in bypass mode from a parent in plan mode was not refused" (`WIDE_EXIT=0`), "a child that names no mode did not start in the parent's plan mode", and "the refused child has a window" | **caught** |
-
-The record is `child-mode-clamp.txt` under `TUIOS_E2E_FRAMES`. The unit tests
-`TestAChildNeverHoldsGrantsItsParentLacks` and
-`TestAChildAgentNeverRunsWiderThanItsParent` in `internal/session` fail on
-main (2c03bb3c0) for every refusal and step down they check.
-
 ## A delegated task's answer comes back by mail, or to a call that waits
 
 `TestDelegateMailsTheAnswerAndWakesTheParentOnce` delegates a task from
@@ -14062,25 +14020,6 @@ The frames and `sheet-start.txt` (argv and first prompt) are under the test's
 artifact folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestNewAgentSheetChoicesAndReadiness$' -v .`.
 
-## The New agent sheet asks each machine, and passes the agent's own flags
-
-`TestNewAgentSheetChoicesAndReadiness` opens the sheet with a fake Claude Code
-that is signed out, then one that is signed in. It steps the Effort and
-Permissions pills, checks that `bypassPermissions` shows `approvals off`,
-starts the agent with `opus`, `high` and `plan`, and reads the argv and the
-first prompt the agent got. An image pasted into the task must reach the
-agent as a stored file with the same bytes.
-
-Run on 2026-11-07 on macOS (arm64):
-
-| Removed | The test fails with | Result |
-|---------|---------------------|--------|
-| The sheet change (the 7a build, agents-view/new-agent) | "waiting for the signed-out row": the signed-out claude's row says `claude ready`, from the client's PATH lookup | **caught** |
-
-The frames and `sheet-start.txt` (argv and first prompt) are under the test's
-artifact folder. Repeat from `e2e/tui` with
-`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestNewAgentSheetChoicesAndReadiness$' -v .`.
-
 ## A task card from anywhere
 
 `TestTaskCaptureFromAnywhere` opens the capture sheet with `ctrl+b +` in
@@ -14100,38 +14039,6 @@ Run on 2026-11-07 on macOS (arm64):
 Frames `capture-filled`, `capture-plan` and `capture-cards.txt` are under the
 test's artifact folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskCaptureFromAnywhere$' -v .`.
-
-## Overlapping send-keys
-
-`TestOverlappingSendKeysDoNotAnswerAnApproval` holds a plugin approval dialog
-open on an attached client. Three rounds each start one long send-keys chain
-(400 ctrl+u, then allow and Enter) and eight one-key chains while it runs. The
-plugin must not run and the dialog must stay open. The person then types allow
-and Enter, and the plugin must run. Before the fix the first chain to end
-cleared `ProcessingRemoteKeys` while the long chain still ran, so its allow
-and Enter answered the dialog as the person.
-
-The kept race regression tests in `internal/app` (`remote_keys_overlap_test.go`)
-drive the real `Update` with the chains interleaved one message at a time:
-`TestOverlappingSendKeysDoNotAllowAPlugin` (two chains, plugin approval) and
-`TestOverlappingSendKeysDoNotAnswerAHeldApproval` (three chains, a held Inbox
-approval, then a stray end).
-
-Run on 2026-11-07 on macOS (arm64):
-
-| Removed | Test | Failure | Result |
-|---------|------|---------|--------|
-| The whole fix: `RemoteKeysDoneMsg` clears the flag for every chain, `RemoteKeyMsg` does not mark its own call, no chain count | `TestOverlappingSendKeysDoNotAnswerAnApproval`, 4 runs | "overlapping send-keys allowed the plugin: ran.code is \"0\"" in 4 of 4; the frame shows the dialog gone and the later chains' allow typed into the shell | **caught** |
-| The same | `TestOverlappingSendKeysDoNotAllowAPlugin` | "keys from the second send-keys allowed the plugin (typed \"allow\")" | **caught** |
-| The same | `TestOverlappingSendKeysDoNotAnswerAHeldApproval` | "keys from the third send-keys answered a held approval", the reply signed with the client's `human_nonce` | **caught** |
-
-The fixed build passes the e2e test 4 of 4. The fix has two parts, and each
-one alone holds the two unit tests (run with only the count, and with only the
-mark): the per-message mark covers every key a chain types, and the count
-keeps the messages between those keys (the results of the commands a key
-starts) marked until the last chain ends. Repeat from
-`e2e/tui` with
-`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=4 -run '^TestOverlappingSendKeysDoNotAnswerAnApproval$' -v .`.
 
 ## Overlapping send-keys
 
@@ -14517,28 +14424,6 @@ g and G again. Run on 2026-11-08 on macOS (arm64), each control its own binary:
 The first control of the turn label passed in an early version of the test,
 which looked at labels only after every turn was drawn. The test now checks
 the newest prompt's label first.
-
-## TestProjectCardsAreClaimedFromAnotherMachine
-
-Two daemons that link each other, home and build. build owns project cards in
-two sessions under two spellings of one origin URL, and home owns one. A pane
-on home claims build's card, retries the claim, is refused a card another
-pane holds and a session card, loses the link, claims again when it is back,
-and closes, which must let the card go on build.
-
-Run on 2026-11-08 on macOS (arm64). The branch passes. Four controls, each
-this branch with one change:
-
-| Control | The test fails with | Result |
-|---------|---------------------|--------|
-| A listing over the link asks its own links too (`hosts` sent on, the `viaLink` guard dropped) | "ASSERTION: the links never came up" (each listing asks the other machine back until the budget runs out) | **caught** |
-| A claim by the pane that holds the card is refused | "ASSERTION: a retried claim by the holder was refused: claim-task failed: on build: held." | **caught** |
-| A closed pane does not release its holds on other machines | "ASSERTION: far t1 is still held after its pane on home closed" | **caught** |
-| The holder is the window param, not the link peer's window | "ASSERTION: build says far t1 is held by \"83ebe36a-...\" on \"\", want window 83ebe36a-... on home's link name" | **caught** |
-
-The steps are in `task-project-hosts.txt` under the test's artifact folder.
-Repeat from `e2e/tui` with
-`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestProjectCardsAreClaimedFromAnotherMachine$' -v .`.
 
 ## TestProjectCardsAreClaimedFromAnotherMachine
 
@@ -15430,165 +15315,6 @@ Run on 2026-11-08 on macOS (arm64). The branch passes both.
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestStreamPaneTypesABurstOfInputInOrder|TestStreamPaneLeaseBehindBlockedInput)$' -v .`.
 
-## TestEnterLeavesCopyMode
-
-Issue 1637. `copy_mode_exit` is a new `[keybindings.copy_mode]` action, on
-enter by default. Enter must leave copy mode from navigation, and the shell
-must answer after it. From a `V` selection Enter must write the selected
-line to the clipboard (OSC 52), then leave. The dock legend must name the
-exit key. In the `?` search prompt Enter must still run the search and stay
-in copy mode.
-`TestCopyModeExitUnboundKeepsEnter` holds `copy_mode_exit = []` to the old
-behaviour, where Enter does nothing.
-
-Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
-
-| Control | The test fails with | Result |
-|---------|---------------------|--------|
-| main at 6db1de3ed | "Enter in normal navigation did not leave copy mode" | **caught** |
-| The search and f/t checks cut from the exit in `runCopyModeKey` | "Enter in the search prompt did not run the search" | **caught** |
-| The copy cut from the exit in a selection | "the gesture never produced the clipboard writes [\"back-37\"]; it wrote []" | **caught** |
-| The legend keeps "q/esc" alone | "the copy mode legend does not name the exit key" | **caught** |
-
-## TestRailToggleIsGlobal
-
-Issue 589. Two sessions, alpha and beta, both visited with the rail shown.
-`Ctrl+B b` on alpha hides the rail; on beta it must be hidden too. Shown
-again on beta, it must be shown on alpha. `TestRailTogglePerSession` holds
-`appearance.sidebar.per_session = true` to the old behaviour, where beta
-keeps its own rail.
-
-Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
-
-| Control | The test fails with | Result |
-|---------|---------------------|--------|
-| main at 6db1de3ed | "beta after the rail was hidden on alpha: the rail is not hidden" | **caught** |
-| The daemon applies the op to the sender's session only (`applySidebarEverywhere` cut) | the same | **caught** |
-
-## TestConfigApplyReloadsHooks
-
-Issue 1622. A daemon with no hooks. A file edit adds an after-new-window
-hook: it must not run yet. `tuios config apply` must load it, name it in its
-output and in `tuios list-hooks`, and a new window must run it. A file edit
-that removes the hook must apply with no `config apply`.
-
-Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
-
-| Control | The test fails with | Result |
-|---------|---------------------|--------|
-| main at 6db1de3ed | "config apply does not say the hook changed", "list-hooks does not show the hook after config apply" | **caught** |
-| The file-change check cut from `reloadHooks` (a file change arms any hook) | "a file change armed a new hook with no config apply" | **caught** |
-
-## TestTaskCaptureLateAnswerKeepsTheNextSheet
-
-State machine plan N3. The capture sheet files a card with ctrl+enter, and a
-fake claude waits eight seconds before it is ready, so the start-agent answer
-comes late. The sheet is opened again before that answer: it must be a new,
-empty sheet, enter on it must add no card and say to write the task, the next
-key must clear that notice, and the late answer must leave the sheet open with
-the text typed in it. The cards are read back from the daemon.
-
-Run on 2026-11-08 on macOS (arm64). The branch passes.
-
-| Control | The test fails with | Result |
-|---------|---------------------|--------|
-| Main (95b2da88d), where the reopened sheet is the filed draft and the answer closes whatever sheet is up | "the second sheet offers the filed draft again", "the first card's answer closed the sheet the person types in", "home holds the cards [\"t1 First task\" \"t2 First task\"]" | **caught** |
-| The branch without the notice clearing in TaskCaptureKey | "the sheet still says \"Write the task first.\" after the task was typed" | **caught** |
-
-Repeat from `e2e/tui` with
-`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskCaptureLateAnswerKeepsTheNextSheet$' -v .`.
-
-## TestALinkCopyRevokedBeforeItsVerifyStaysFailed
-
-State machine plan M16. A linked machine's copy on build is held between its
-last byte and its verify (`TUIOS_TEST_TRANSFER_HOLD_MS`, a test hold that does
-not look at the attempt's context), and build's link policy takes `files`
-away during the hold. The copy must end failed as forbidden, the file must
-not be put in place, and a new copy to the same place (with `files` given
-back) must start and end done.
-
-Main has no test hold, so the main control is main with only the hold added.
-Run on 2026-11-08 on macOS (arm64). The branch passes.
-
-| Control | The test fails with | Result |
-|---------|---------------------|--------|
-| Main (86c2a51f1) with only the test hold | "a copy revoked before its verify is done (forbidden), want failed", "the copy was put in place after its files capability was taken away" | **caught** |
-| `transferJob.to` writes a final state over (its guard off) | "a copy revoked before its verify is verifying (forbidden)", "a new copy to the revoked copy's destination was refused: busy: another copy writes this path now" | **caught** |
-| No context check before the commit | "the copy was put in place after its files capability was taken away" | **caught** |
-
-The order of the run loop's switch (a revoke read before a nil error) is not
-caught on its own: the context check before the commit already turns the
-attempt's end into an error. It stays as the second guard.
-`TestOnlyToWritesATransferState` in internal/lint holds the one writer, and
-`TestTransferStateLintCatchesADirectWrite` checks the lint on injected writes.
-
-Repeat from `e2e/tui` with
-`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestALinkCopyRevokedBeforeItsVerifyStaysFailed$' -v .`.
-
-## TestReadyToMergeAnswerStaysWithItsCard
-
-State machine plan N7. Two cards in review, each with its work in its own
-repository. The first repository has a pre-commit hook that sleeps six
-seconds. M, c on the first card, esc while the commit runs, then M on the
-second card. When the commit lands, the second card's Ready to merge must
-still be open, the toast must name the first card, and the second repository
-must have no new commit.
-
-Run on 2026-11-08 on macOS (arm64). The branch passes, and so does
-`TestTheBoardShowsTheCardLifecycle`, whose toasts now name the card.
-
-| Control | The test fails with | Result |
-|---------|---------------------|--------|
-| Main (86c2a51f1), where the answer acts on whatever Ready to merge is open | "the toast does not name the card the commit was for", "t1's answer closed Ready to merge on t2" | **caught** |
-
-Repeat from `e2e/tui` with
-`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestReadyToMergeAnswerStaysWithItsCard$' -v .`.
-
-## TestAutoDispatchFailedStartsLeaveNothingBehind
-
-State machine plan S4. On an auto board an agent errors while it holds its
-card: the card must stay with it, blocked with its last line, one attempt
-more, and no second agent may start for it. Once its pane closes, the card
-goes back to todo and auto starts it again. A start whose agent never comes
-up (a stand-in codex that sleeps, a 3 s ready timeout) must leave no session,
-worktree or agent process. The errored agent counts one failure, so the
-board is not stopped at the end. `TestPullDispatchGivesTheNextCard` and
-`TestCardLifecycleCountsOnAPullBoard` now expect the errored card blocked and
-held, and back in todo once let go.
-
-Run on 2026-11-08 on macOS (arm64). The branch passes.
-
-| Control | The test fails with | Result |
-|---------|---------------------|--------|
-| Main (95b2da88d) | "a second agent started for t1 beside the first, in api-task-fix-the-retry-2", "t1 after its agent errored is ... want held by the first agent" | **caught** |
-| No cleanup of a failed start (the remove-worktree defer in autoStart returns at once) | "the session auto made for t2 is still there", "the worktree ... is still there", "the agent auto started for t2 still runs" | **caught** |
-| The release keeps the errored block (`blockedOnErrored` branch in `release` off) | "t1 was not started again after its errored agent's pane closed" | **caught** |
-| The errored block counts a failure (the `taskBlockErrored` return in noteDispatchedOutcome off) | "the board stopped, so one errored agent counted more than one failure" | **caught** |
-
-Not covered by the e2e: the block lifting when the errored agent reports
-working again (unblockErrored).
-
-Repeat from `e2e/tui` with
-`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAutoDispatchFailedStartsLeaveNothingBehind$' -v .`.
-
-## TestLeaderTwiceClosesTheSubMenu
-
-State machine plan M2. ctrl+b w opens the workspace menu, and the leader again
-sends the leader to the pane. The key after that must be the pane's in
-terminal mode (2 2 7 reach the shell, the client stays on workspace 1) and a
-window key in window management mode (n opens a pane).
-
-Run on 2026-11-08 on macOS (arm64). The branch passes, and so do the 46 e2e
-tests whose names carry Leader, Prefix, Menu or Lock.
-
-| Control | The test fails with | Result |
-|---------|---------------------|--------|
-| Main (90d8a0400), where the leader twice clears the leader flag alone | "the keys after the leader twice did not reach the shell", "the client left workspace 1" (the dock reads 2:0) | **caught** |
-| The branch with handler.go as on main (window management mode path) | "in window management mode, n after the leader twice did not open a pane" | **caught** |
-
-Repeat from `e2e/tui` with
-`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestLeaderTwiceClosesTheSubMenu$' -v .`.
-
 ## TestDeclaredStickyMenuStaysOpenUntilAnUnboundKey (the held menu stays shown)
 
 State machine plan M2. A sticky menu that stays open after its key ran keeps
@@ -15601,25 +15327,6 @@ Run on 2026-11-08 on macOS (arm64). The branch passes 3 of 3.
 |---------|---------------------|--------|
 | HoldMenu restarting the which-key time (`setMenus(..., true, "sticky menu")`) | "the held menu's panel went away after h, as if the menu had opened again", 3 of 3 | **caught** |
 | `TestOnlyMenuStateWritesTheLeader` on main | lists the direct writes in internal/input and internal/learn | **caught** |
-
-## TestCockpitMenuClosesBeforeAClickActs and TestReadyToMergeClosesOnAnotherRow
-
-State machine plan N1. The agents view's one-key menus (group menu, Ready to
-merge, snooze, bulk sheet, confirm, search line) take the next key, and a click
-that is not on them closes them and does nothing else. The first test opens
-the group menu and clicks "+ New agent": the menu must close and no sheet
-open. The second opens Ready to merge on t1 and clicks t2's row: Ready to merge
-must close, the cursor must stay on t1, and c must commit nothing.
-
-Run on 2026-11-08 on macOS (arm64). The branch passes.
-
-| Control | The test fails with | Result |
-|---------|---------------------|--------|
-| Main (4991cfbe3), where each reader picks the top layer by its own chain and a click ignores the menus | "the group menu is still open after a click outside it"; "Ready to merge is still open after a click on another row", "the click that closed Ready to merge also moved the cursor off t1", "c after the click committed t1's work (2 commits in its repository)" | **caught** |
-| `TestCockpitLayersHaveOneDecider` on main | lists every per-layer predicate the key router, the key bar and the click handler call | **caught** |
-
-Repeat from `e2e/tui` with
-`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestCockpitMenuClosesBeforeAClickActs|TestReadyToMergeClosesOnAnotherRow)$' -v .`.
 
 ## TestCockpitPeekClosesOnAClick
 
@@ -17042,3 +16749,73 @@ is `~/.cache/agent-tmp/un-inputcfg-r26-new.log` there.
 | Control | Where it failed | Verdict |
 | --- | --- | --- |
 | origin/main 1b7900dbe, the hand-written allow list | "the bridge refused resize_width_70: resize_width_70 shows something only a screen can show" | **caught** |
+
+## A login bash sends C when a hook never does
+
+`TestLoginBashSendsCWhenAHookNeverDoes` writes the WezTerm-style prompt hooks
+into the test's own login files: a PROMPT_COMMAND function that sends D and A,
+a B in PS1, and a preexec function that names the C mark and is only listed
+in `preexec_functions`, so nothing calls it. With `[shell] login = true`,
+`tuios run` must work and the pane's raw log must hold exactly one C for the
+command. On a machine whose `/etc/profile.d` has WezTerm's script (arch-btw)
+the login bash read that script and `run` refused the pane; the case needs
+nothing from `/etc`.
+
+Run on 2026-11-12 on Linux (x86_64, arch-btw), branch `untangle/osc133-marks`.
+The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `tuios.bash` before the change (the text of the preexec hooks searched for the marks the setup already sends) | "login_shell_test.go:152: run \"echo RUN-''WORKS\": exit 1: run failed: the shell in window ... sends prompt marks only: it ran a command without the OSC 133 C mark" | **caught** |
+
+The repeated-mark cases added to `TestShellTrackFollowsMarks` (doubled A, B and
+D, C with no B, D with no C) pass on main too: the daemon already read a repeat
+as the state the shell is in, so they have no control; they hold that
+behaviour in place.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestLoginBashSendsCWhenAHookNeverDoes$' -v .`.
+
+## The refusals of a write over a link name the machine
+
+`TestALinkWriteLeavesFreeSpaceAndKeepsToItsCaps` reads the name of the machine
+in the free-space refusal, the eight-streams refusal and the 64-parts refusal,
+and `TestALinkMakesABoundedNumberOfNewFiles` in the new-file refusal. The far
+daemon says them and the person reads them on the hub, where "this machine"
+would be the hub. The name is `TUIOS_HOST`, else the hostname.
+
+Run on 2026-11-12 on Linux (x86_64, arch-btw), branches
+`untangle/transfer-test-space` and `untangle/cap-wording`. Both pass.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The binary before the free-space wording | "file_limits_test.go:302: ASSERTION: the refusal does not name the machine whose disk is short (\"arch-btw\"): disk_full: the disk on this machine would have less than 1024000000 GiB free after this file ..." | **caught** |
+| The binary with the free-space wording and the old cap wording | "file_limits_test.go:335: ASSERTION: the stream refusal does not name the machine that takes the copies (\"arch-btw\"): busy: this machine already takes 8 copies at once from arch-btw ..." | **caught** |
+| The same binary | "file_limits_test.go:360: ASSERTION: the part refusal does not name the machine that holds the copies (\"arch-btw\"): busy: arch-btw has 64 unfinished copies on this machine ..." | **caught** |
+| The same binary | "file_limits_test.go:535: ASSERTION: the refusal does not name the machine that took the files (\"arch-btw\"): busy: arch-btw made too many new files and folders on this machine ..." (`TestALinkMakesABoundedNumberOfNewFiles`) | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestALinkWriteLeavesFreeSpaceAndKeepsToItsCaps|TestALinkMakesABoundedNumberOfNewFiles)$' -v .`.
+
+## The file-transfer hub helper turns the free-space reserve off
+
+`hubWithFileHost` writes build's policy when a test wrote none, and that policy
+now carries `files_min_free = "0"`. The default reserve is 1 GiB free where a
+copy lands, and the copies of these tests land on the disk that holds the
+temp dir, so a box with less than that there (arch-btw's tmpfs `/tmp` at 96%)
+refused every copy. `TestTwoCopiesToOnePathKeepTheirParts` failed on three
+assertions that say nothing about what it checks. The tests of the reserve
+write their own policy first and are unchanged.
+
+Run on 2026-11-12 on Linux (x86_64, arch-btw), branch
+`untangle/transfer-test-space`. The branch passes, and so do the 52 e2e tests
+that call `hubWithFileHost` (115 s, no failure).
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The helper's default policy with a reserve no disk can keep (`files_min_free = "1000000TiB"`), which is what a full disk does to it | "file_transfer_journal_test.go:270: ASSERTION: the two copies did not write two parts at once: []" | **caught** |
+| The same | "file_transfer_journal_test.go:274: ASSERTION: copy ... ended failed (verified false): the disk on this machine would have less than 1024000000 GiB free after this file, so it was not written ..." | **caught** |
+| The same | "file_transfer_journal_test.go:278: ASSERTION: the file in place is neither original:" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTwoCopiesToOnePathKeepTheirParts$' -v .`.

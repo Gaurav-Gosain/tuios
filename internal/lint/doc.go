@@ -17,4 +17,9 @@
 // line or the line above:
 //
 //	//tuios:allow-quit <reason>
+//
+// The negative-controls check (negcontrols_test.go) rejects a level-2 heading
+// that e2e/tui/NEGATIVE_CONTROLS.md uses twice. The file takes merge=union,
+// which keeps both sides of a hunk two branches wrote, so a record that two
+// branches carried came out as two sections. Merge them into one.
 package lint
