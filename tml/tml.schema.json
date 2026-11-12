@@ -10629,7 +10629,8 @@
                 "idle",
                 "done",
                 "errored",
-                "unknown"
+                "unknown",
+                "limit_reached"
               ]
             },
             {

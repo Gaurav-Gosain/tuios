@@ -579,7 +579,7 @@ var table = [...]Component{
 	}},
 	{Name: "status", Group: "status", Doc: "The tuios agent state glyph and word.", Content: ContentNone, Block: true, Attrs: []AttrSpec{
 		{Name: "label", Type: TString, Bind: true, Doc: "The label."},
-		{Name: "state", Type: TEnum, Enum: []string{"working", "needs_input", "idle", "done", "errored", "unknown"}, Required: true, Bind: true, Doc: "The agent state."},
+		{Name: "state", Type: TEnum, Enum: []string{"working", "needs_input", "idle", "done", "errored", "unknown", "limit_reached"}, Required: true, Bind: true, Doc: "The agent state."},
 	}},
 	{Name: "button", Group: "input", Doc: "A button.", Content: ContentInline, Block: true, Attrs: []AttrSpec{
 		{Name: "disabled", Type: TBool, Bind: true, Doc: "The button does not take input."},
