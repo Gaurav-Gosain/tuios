@@ -443,7 +443,6 @@ func bordersOn(hostBg color.Color) borderSet {
 	} else if t == nil {
 		b.window = slotAt16(14, hostBorderInk(lipgloss.Color("#AFFFFF"), hostBg))
 	} else {
-		// Light cyan for window mode: use bright cyan
 		b.window = slotAt16(14, borderInk(chromeOr(func(c *Chrome) color.Color { return c.AccentBright }, t.BrightCyan)))
 	}
 	switch c := focusedOverride(borderFocusedTerminal); {
@@ -456,7 +455,6 @@ func bordersOn(hostBg color.Color) borderSet {
 	case t == nil:
 		b.terminal = hostBorderInk(lipgloss.Color("#AAFFAA"), hostBg)
 	default:
-		// Light green for terminal mode: use bright green
 		b.terminal = borderInk(chromeOr(func(c *Chrome) color.Color { return c.Success }, t.BrightGreen))
 	}
 	switch c := borderOverride(borderUnfocused); {
@@ -466,9 +464,8 @@ func bordersOn(hostBg color.Color) borderSet {
 		// configured tint.
 		b.unfocused, uFixed = c, true
 	case t == nil:
-		// A neutral just past the mark floor on the host's ground. The pale
-		// red this used to be read as loud as a focused border, and red says
-		// alert. Bright black is the neutral of the sixteen.
+		// A neutral just past the mark floor on the host's ground. It is not
+		// red, because red says alert. Bright black is the neutral of the sixteen.
 		b.unfocused = slotAt16(8, neutralBorderOn(hostBg))
 	default:
 		if c := chromeFurniture(RoleBorderUnfocused); c != nil {

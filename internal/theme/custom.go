@@ -181,7 +181,6 @@ func LoadCustomThemeFile(path string) (*tint.Tint, error) {
 
 // fillDefaults fills nil color pointers with xterm defaults.
 func fillDefaults(t *tint.Tint) {
-	// Default foreground/background
 	if t.Fg == nil {
 		t.Fg = tint.FromHex("#e5e5e5")
 	}
@@ -189,12 +188,10 @@ func fillDefaults(t *tint.Tint) {
 		t.Bg = tint.FromHex("#000000")
 	}
 
-	// Cursor defaults to Fg
 	if t.Cursor == nil {
 		t.Cursor = copyColor(t.Fg)
 	}
 
-	// Normal ANSI colors (xterm defaults)
 	if t.Black == nil {
 		t.Black = tint.FromHex("#000000")
 	}
@@ -220,7 +217,6 @@ func fillDefaults(t *tint.Tint) {
 		t.White = tint.FromHex("#e5e5e5")
 	}
 
-	// Bright variants default to normal if nil
 	if t.BrightBlack == nil {
 		t.BrightBlack = copyColor(t.Black)
 	}

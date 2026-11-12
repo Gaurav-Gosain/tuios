@@ -52,7 +52,6 @@ func TestLoadCustomThemeFile_Partial(t *testing.T) {
 		}
 	}
 
-	// Cursor should default to Fg color
 	if theme.Cursor.R != theme.Fg.R || theme.Cursor.G != theme.Fg.G || theme.Cursor.B != theme.Fg.B {
 		t.Error("Cursor should default to Fg color")
 	}

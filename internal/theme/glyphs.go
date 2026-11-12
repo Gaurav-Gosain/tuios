@@ -715,9 +715,7 @@ func SetActiveGlyphs(id string) {
 	glyphMu.Unlock()
 	// A set that does not resolve yet is the ordinary case at startup, not an
 	// error: the glyphs directory is read lazily, so the first thing that names
-	// a set from it is usually the config file being applied. Without this a
-	// user's own set was recorded, reported as active, and drew the built-in
-	// glyphs until something else happened to scan the directory.
+	// a set from it is usually the config file being applied.
 	//
 	// ReloadGlyphSets ends by refreshing the active set, so this is not a
 	// second resolve.
