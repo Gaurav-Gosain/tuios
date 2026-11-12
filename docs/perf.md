@@ -6226,12 +6226,15 @@ Three changes:
   A row with a cell whose width may drift was repainted on every frame,
   changed or not; it is now repainted when it changes.
 - The direct pane takes a lone pane that fills the content area beside the
-  rails, and a borderless tiled pane with no divider drawn.
-- A frame whose layers are the last frame's, with a direct pane and no pass
-  over the layers on either frame, keeps the canvas: only the pane's cells are
-  copied where they differ, and the rows they change go to the screen
-  (`Screen.FrameRows`). `TUIOS_FRAME_CHECK`, set by the e2e harness, composes
-  every kept frame afresh and fails the test on a difference.
+  rails, and a borderless tiled pane with no divider drawn. Its cells are
+  copied right after its own box layer, so a layer above it (a drag's label,
+  quick look, a menu) is drawn over them.
+- A frame whose layers are the last frame's, with a direct pane, no pass over
+  the layers on either frame and no layer over the pane, keeps the canvas:
+  only the pane's cells are copied where they differ, and the rows they change
+  go to the screen (`Screen.FrameRows`). `TUIOS_FRAME_CHECK`, set by the e2e
+  harness, composes every frame with a direct pane and no pass afresh, kept or
+  not, compares the whole screen, and fails the test on a difference.
 
 Apple M3 Pro, the box at load 6 to 7 from other work, test binaries of the
 commit that added the benchmark and of the last change, 8 interleaved rounds,
