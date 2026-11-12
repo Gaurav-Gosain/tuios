@@ -10,52 +10,21 @@ tuios session shown in the focused Rex pane.
 | `tuios_mail` | tuios: Open the Mail for You | Opens the agents view on your mail, as `Ctrl+B M` does |
 | `tuios_next_waiting` | tuios: Jump to the Agent That Waits | Moves the focus to the oldest item that needs you, as `Ctrl+B o` does |
 | `tuios_start_agent` | tuios: Start an Agent | Starts an agent in a new tuios pane and focuses it. Takes `harness`, `name` and `prompt` |
+| `tuios_check` | tuios: Check the Rex Integration | Says which tuios the actions run, its version, the focused pane's session, and whether the default agent is found |
 
 ## Install
 
-Copy `tuios.lua` next to your Rex `init.lua` (see Rex's
-[configuration file](https://www.superlogical.com/rex/docs/customize/config.md)
-page for where it lives), then add to `init.lua`:
-
-```lua
-require("tuios").setup{}
-```
-
-Run `rex config reload`. The actions are in the palette under "tuios".
-
-## Options
-
-```lua
-require("tuios").setup{
-  bin = "tuios",          -- the tuios program; a name is looked up in PATH
-  harness = "claude",     -- the agent tuios_start_agent starts by default
-  keys = {                -- no keys unless you name them
-    tuios_agents = "cmd+shift+a",
-    tuios_next_waiting = "cmd+shift+j",
-  },
-}
-```
-
-A key for an action that does not exist stops `setup` with an error, so a
-typo shows when Rex loads the file.
-
-From the command line:
-
 ```sh
-rex do tuios_start_agent harness=codex name=review prompt='Review the diff on this branch.'
+tuios integration install rex
 ```
 
-## How it finds the session
+That copies `tuios.lua` next to Rex's `init.lua`, adds the require line,
+checks and reloads Rex's config, and says which tuios the actions run. See
+[docs/REX.md](../../docs/REX.md) for the options, `status`, `uninstall`, and
+how tuios and the agents are found when Rex's `PATH` lacks them.
 
-An action asks Rex for the focused pane's foreground process. When that is a
-tuios client, `tuios list-clients --json` has its pid with the session it
-shows. A pane that runs a shell, or `ssh` to another machine, shows no tuios
-client on this machine, and the action says so and does nothing.
-
-The client actions run `tuios run-command -s SESSION Action NAME`, which the
-client that shows the session runs as its key would. `tuios_start_agent` runs
-`tuios start-agent` on its own, because an agent can take longer to be ready
-than the 30 seconds Rex gives an action.
+`internal/integration/assets/rex/tuios.lua` is a copy of this file for the
+binary. Copy a change there and run `go generate ./internal/integration`.
 
 ## Checks
 
@@ -67,11 +36,8 @@ or else `lua`.
 integrations/rex/check.sh
 ```
 
-What was run in real Rex: a script loaded with `rex do FILE --action` that
-calls the session lookup on the focused pane, which found the session its
-tuios client showed. The four actions were not run in real Rex, since each
-changes what the person sees. The key bindings were not loaded into a real
-`init.lua`.
+What runs in real Rex, and what does not, is listed in the pull request
+that changes it.
 
 ## Limits
 

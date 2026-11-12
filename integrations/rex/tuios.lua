@@ -239,6 +239,21 @@ M.actions = {
       else
         out.session_note = tostring(s)
       end
+      -- Whether Start an Agent would find its agent: the daemon answers for
+      -- the PATH start-agent looks on, its own when Rex's lacks it.
+      out.agent = opts.harness
+      local rok, r = pcall(run, { "call", "agent-readiness", rex.json.encode({ harnesses = { opts.harness } }) })
+      if not rok then
+        out.agent_note = tostring(r)
+      else
+        local ans = rex.json.decode(r.stdout)
+        for _, a in ipairs((type(ans) == "table" and ans.agents) or {}) do
+          out.agent_installed = a.installed == true
+        end
+        if out.agent_installed == nil then
+          out.agent_note = "tuios does not know a harness named " .. tostring(opts.harness)
+        end
+      end
       return out
     end,
   },

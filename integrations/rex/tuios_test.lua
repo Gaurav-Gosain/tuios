@@ -19,6 +19,7 @@ local clients = {}
 local fg_pid = 42
 local exec_fail = false
 local start_fail = false
+local agent_installed = true
 
 rex = {
   action = function(a)
@@ -51,6 +52,10 @@ rex = {
         end
         return { ok = true, code = 0, stdout = "w-new\n", stderr = "" }
       end
+      if argv[2] == "call" and argv[3] == "agent-readiness" then
+        assert(argv[4] == "ENC", "readiness params not encoded by rex.json.encode")
+        return { ok = true, code = 0, stdout = "READY", stderr = "" }
+      end
       if argv[2] == "--version" then
         return { ok = true, code = 0, stdout = "tuios version 9.9.9\n", stderr = "" }
       end
@@ -65,8 +70,15 @@ rex = {
   },
   json = {
     decode = function(text)
+      if text == "READY" then
+        return { agents = { { harness = "claude-code", command = "claude", installed = agent_installed } } }
+      end
       assert(text == clients_json, "decode of unexpected text")
       return clients
+    end,
+    encode = function(v)
+      assert(type(v) == "table" and v.harnesses and v.harnesses[1] == "claude", "unexpected encode")
+      return "ENC"
     end,
   },
 }
@@ -132,6 +144,11 @@ start_fail = false
 -- tuios_check names the program, its version and the session.
 local c = actions.tuios_check.run(ctx, {})
 check(c.tuios == "/opt/bin/tuios" and c.version == "tuios version 9.9.9" and c.session == "work", "tuios_check reports the program, version and session")
+check(c.agent == "claude" and c.agent_installed == true, "tuios_check says the default agent is found")
+agent_installed = false
+c = actions.tuios_check.run(ctx, {})
+check(c.agent_installed == false, "tuios_check says the default agent is not found")
+agent_installed = true
 
 -- A block that shows no tuios client.
 fg_pid = 1234
