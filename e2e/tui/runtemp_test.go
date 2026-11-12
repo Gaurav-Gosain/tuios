@@ -175,7 +175,7 @@ func leakedPreview(path string, e fs.DirEntry) string {
 		if len(line) > maxWidth {
 			line = line[:maxWidth] + "..."
 		}
-		out.WriteString("\n      | " + strings.ToValidUTF8(line, "?"))
+		fmt.Fprintf(&out, "\n      | %s", strings.ToValidUTF8(line, "?"))
 	}
 	return out.String()
 }
