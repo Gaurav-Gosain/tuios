@@ -24,12 +24,14 @@ import (
 // The op is the whole tree of one workspace rather than an edit, because every
 // tree mutation in the client already ends in a tree, and there are a dozen of
 // them. Two ops on one workspace are settled by the order they reach the
-// daemon: the later one stands. Nothing is refused. The daemon sends every
-// applied op to every client, the sender included, and a client drops any
-// state built before its own last op landed (see PushSeen), so every client
-// ends on the tree of whichever op landed last. Refusing an op built on an
-// older tree than another client's would make a drag lose every step after the
-// first conflict, because each step carries the same old base.
+// daemon: the later one stands. An op that names none of the session's windows
+// is also refused: it is another session's tree, sent by a client that shows
+// the wrong session, and it would delete this workspace's tree. The daemon
+// sends every applied op to every client, the sender included, and a client
+// drops any state built before its own last op landed (see PushSeen), so every
+// client ends on the tree of whichever op landed last. Refusing an op built on
+// an older tree than another client's would make a drag lose every step after
+// the first conflict, because each step carries the same old base.
 //
 // Leaves are named by window ID on the wire. The integers in a tree are each
 // client's own (GetWindowIntID hands them out locally), so an op carries the
@@ -72,10 +74,33 @@ var errLayoutTreeSame = errors.New("layout tree op changes nothing")
 // change to the same workspace. See LayoutTreePayload.BaseVersion.
 var errLayoutTreeStale = errors.New("layout tree op predates a peer's tree")
 
+// errLayoutTreeForeign refuses an op whose tree names none of the session's
+// windows. See layoutTreeForeignLocked.
+var errLayoutTreeForeign = errors.New("layout tree op names none of the session's windows")
+
+// layoutTreeForeignLocked reports whether p is a tree of another session: it
+// carries a tree and at least one leaf name, the session holds a window, and
+// no leaf names a window the session holds. It allocates nothing and stops at
+// the first held window. The caller holds stateMu.
+func layoutTreeForeignLocked(state *SessionState, p *LayoutTreePayload) bool {
+	if p.Tree == nil || len(p.Leaves) == 0 || len(state.Windows) == 0 {
+		return false
+	}
+	for _, id := range p.Leaves {
+		for i := range state.Windows {
+			if state.Windows[i].ID == id {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // ApplyLayoutTree applies one client's tree for one workspace. It reports
 // whether the tree was applied; false with a nil error means the op changed
-// nothing, and the caller answers the sender with the session's state so the
-// sender still hears that its op landed.
+// nothing or was refused as stale or as another session's tree, and the caller
+// answers the sender with the session's state so the sender still hears that
+// its op landed.
 func (s *Session) ApplyLayoutTree(p *LayoutTreePayload) (bool, error) {
 	if p == nil {
 		return false, nil
@@ -89,6 +114,22 @@ func (s *Session) ApplyLayoutTree(p *LayoutTreePayload) (bool, error) {
 		if p.BaseVersion != 0 && s.peerTreeChangedLocked(p.PushOrigin, p.Workspace, p.BaseVersion, state.Version) {
 			return errLayoutTreeStale
 		}
+		if layoutTreeForeignLocked(state, p) {
+			// A client showing another session sends a tree op on every
+			// keystroke; the line is written for the first and not again
+			// while that origin keeps slipping. It shares refusedOrigin with
+			// the refused state push.
+			if p.PushOrigin == "" || s.refusedOrigin != p.PushOrigin {
+				s.refusedOrigin = p.PushOrigin
+				LogError("Refused a layout tree for %s: it names none of the session's windows", s.Name())
+			}
+			return errLayoutTreeForeign
+		}
+		// The op is not another session's tree, so a later slip from this
+		// client is logged again.
+		if s.refusedOrigin == p.PushOrigin {
+			s.refusedOrigin = ""
+		}
 		trees, ids, next, changed := placeTree(state, p.Workspace, p.Tree, p.Leaves)
 		if !changed {
 			return errLayoutTreeSame
@@ -100,7 +141,7 @@ func (s *Session) ApplyLayoutTree(p *LayoutTreePayload) (bool, error) {
 		return nil
 	})
 	switch {
-	case errors.Is(err, errLayoutTreeSame), errors.Is(err, errLayoutTreeStale):
+	case errors.Is(err, errLayoutTreeSame), errors.Is(err, errLayoutTreeStale), errors.Is(err, errLayoutTreeForeign):
 		return false, nil
 	case err != nil:
 		return false, err
@@ -436,9 +477,9 @@ func (s *Session) missedMutationLocked(base, current int) bool {
 
 // handleLayoutTree applies a client's tree op. An op that is applied reaches
 // every client, its sender included, through the state sink. One that changes
-// nothing, or that is malformed, is answered to its sender alone with the state
-// that stands, so the sender still hears that its op landed and never keeps
-// showing a tree the session did not take.
+// nothing, or that is malformed, or that is refused, is answered to its sender
+// alone with the state that stands, so the sender still hears that its op
+// landed and never keeps showing a tree the session did not take.
 func (d *Daemon) handleLayoutTree(cs *connState, msg *Message) error {
 	if cs.sessionID == "" {
 		return d.replyError(cs, msg, ErrCodeNotAttached, "not attached to any session")

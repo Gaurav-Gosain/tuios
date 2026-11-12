@@ -3724,9 +3724,16 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 		// client is answered with the state as merged.
 		accepted = false
 	}
+	staleForeign := false
 	if prev != nil {
 		behind = state.BaseVersion != 0 && s.missedPeerTreeLocked(origin, state.BaseVersion, prev.Version)
 		if state.BaseVersion != 0 && s.missedMutationLocked(state.BaseVersion, prev.Version) {
+			// Decided on the push as it arrived, before reconcileStale rewrites
+			// its windows: a slipped client's stale pushes must not end the
+			// slip's one log line.
+			if origin != "" && s.refusedOrigin == origin {
+				staleForeign = s.foreignPushLocked(state, prev)
+			}
 			mine := focusViewOf(state)
 			reconcileStale(state, prev, s.hasLivePTY)
 			if s.pushOwnsFocusLocked(origin, state.BaseVersion, mine) {
@@ -3746,8 +3753,9 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 			return false, behind, s.changeSeq
 		}
 		// A push from this origin is taken, by either path: a later slip
-		// from it is logged again.
-		if s.refusedOrigin == origin {
+		// from it is logged again. A stale-merged push that named none of the
+		// session's windows is still the slip.
+		if s.refusedOrigin == origin && !staleForeign {
 			s.refusedOrigin = ""
 		}
 		// A push built before a renumber keys its workspace maps by the old

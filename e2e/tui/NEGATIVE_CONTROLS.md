@@ -17218,3 +17218,33 @@ is the branch with one change.
 The frames (rail, agents view as text, styled text and PNG) and the state logs
 are under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestLimitReached|TestContextSize)' -v .`.
+## A tree op naming none of the session's windows leaves the workspace's tree
+
+`TestLayoutTreeOpNamingNoneOfTheSessionsWindowsIsRefused` (internal/session)
+has a real client send a workspace's tree whose every leaf names a window the
+session does not hold, twice, on the session's own version: the session keeps
+its tree, numbering and version, both ops are counted, each is answered with a
+"reconcile" state holding the session's tree, the log names the session once,
+and the daemon logs no "Refused a layout tree from" line for the client. A nil
+tree, a tree with no leaf names, one held leaf beside an unknown one, a new
+shape of the held windows, an op on a session with no window and the held
+windows of workspace 1 laid out on workspace 2 are each handled as before,
+with no line. The second group follows the one field the tree refusal shares
+with the window list refusal: a slip is logged once whichever refusal sees it
+first, a stale op neither logs nor ends it, an op or a push naming the
+session's windows ends it, and another client's op does not.
+
+Run on 2026-11-12 on a Ryzen 5 5600 (Linux x86_64, go1.27.4), branch
+`fix/foreign-layout-tree`. The branch passes `-count=3`; each control below
+failed in all three runs.
+
+| Control | Test | The test fails with | Result |
+|---------|------|---------------------|--------|
+| Main (`layout_tree.go` and `session.go` from the base) | row a | "layout_tree_foreign_test.go:55: op 1: the session's tree is \"\", want its own \"0/0.5 (1@0.3 1c74d652-9206-4156-b1aa-c0b9aa9cb0f8 21604c06-fe64-443b-871a-a9313d4ec348)\"" | **caught** |
+| The refusal cut (the foreign op goes on to `placeTree`) | row a | "layout_tree_foreign_test.go:55: op 1: the session's tree is \"\", want its own \"0/0.5 (1@0.3 81062668-82f9-4191-9238-49859842d697 242f4eb6-7d22-4732-a58a-b2571c258d8c)\"" | **caught** |
+| Any unknown leaf refuses the op | row b2 | "layout_tree_foreign_test.go:106: the session's tree is \"0/0.5 (1@0.3 4fd62f02-d613-47ff-bc30-4aa83d3badfc 8290b2b8-3afd-4bdd-a85e-58b21eec66d3)\" after a mixed op, want \"0/0.5 4fd62f02-d613-47ff-bc30-4aa83d3badfc\"" | **caught** |
+| A line logged by each refusal (the tree refusal keeps its own field) | row c | "layout_tree_foreign_test.go:176: the log holds 2 refusal lines for the session after a foreign op and a foreign push, want 1" | **caught** |
+| The foreign decision made before the stale check | row f | "layout_tree_foreign_test.go:260: the log holds 1 lines \"Refused a layout tree for tree-stale-13: it names none of the session's windows\" after a stale foreign op, want 0" | **caught** |
+
+Repeat from the root with
+`go test -count=3 -run '^TestLayoutTreeOpNamingNoneOfTheSessionsWindowsIsRefused$' ./internal/session/`.
