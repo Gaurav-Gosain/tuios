@@ -576,7 +576,6 @@ A value is a glob, and commas between values mean any of them, as in `kind:sessi
 | `@`, `#`, `!` first | Filter to agents, sessions or workspaces. The picker's hint shows them as `@ # ! filter` |
 | `ctrl+u` | Clear the query |
 | `esc` | Close the picker |
-
 | `ctrl+r` | Rename the session or workspace on the row. The picker stays open under the rename |
 | `ctrl+d` | Delete the session on the row, after a `y`. Never the session you are on |
 
@@ -618,10 +617,11 @@ TUIOS itself.
 ## Lists and panels
 
 Every list in the TUI moves the same way: the command palette, the launcher,
-the settings page, the agents view, the mailbox, the keybind manager, the theme,
-glyph and effect pickers, the session, workspace, layout and machine pickers,
-the go-to picker, the window picker, the quit and context menus, the dock and rail editors and
-the tape manager.
+the settings page, the agents view, the mailbox, the keybind manager, the theme
+editor, the theme, glyph and effect pickers, the layout and machine pickers,
+go-to (which also lists the sessions, workspaces and panes), the navigator, the
+window picker, the quit and context menus, the dock and rail editors and the
+tape manager.
 
 | Keys | What it does |
 |---|---|
@@ -630,8 +630,17 @@ the tape manager.
 | `pgup`, `pgdown` | A page up or down, stopping at the ends |
 | `k`, `j`, `g`, `G` | Up, down, first and last, in a list with no filter to type into |
 | `ctrl+u` | Clear a typed filter (fixed) |
-| `alt+backspace`, `ctrl+w`, `ctrl+backspace` | Delete the last word of a typed filter (fixed). `alt+backspace` is `Option+Backspace` on a Mac whose terminal sends Option as Alt |
+| `alt+backspace`, `ctrl+w`, `ctrl+backspace` | Delete the word before the caret in a typed filter (fixed). `alt+backspace` is `Option+Backspace` on a Mac whose terminal sends Option as Alt |
 | wheel | Scroll the list under the pointer, stopping at the ends (fixed) |
+
+The theme editor and the keybind manager keep a cursor for each of their
+tabs. Go to another tab and back, and the cursor is on the row you left. A
+filter that changes puts its list back on the first row.
+
+A footer names the move keys as `[keybindings.lists]` binds them: `↑↓` while
+the arrows come first (`up/down` with ASCII glyphs), and otherwise the first up
+and the first down key, such as `ctrl+k/ctrl+j`. A motion with no key leaves
+its hint out.
 
 The word keys take a word the way the shell's `Option+Backspace` does: they skip
 the characters at the end that are not part of a word, then take the word. A word
@@ -727,11 +736,13 @@ One dialog renames a window, a session and a workspace. It opens holding the cur
 | `enter` | Save the name |
 | `esc` | Cancel |
 | `ctrl+u` | Clear the field |
-| `alt+backspace`, `ctrl+w`, `ctrl+backspace` | Delete the last word |
+| `alt+backspace`, `ctrl+w`, `ctrl+backspace` | Delete the word before the caret |
 | `ctrl+c` | Clear the field, or cancel when it is already empty |
 
-A click on the `clear` hint in the dialog's border clears the field too. In the help's search, `ctrl+u` clears the query.
-
+The field has a caret, and takes the caret and word keys every short field
+takes (see [Lists and panels](#lists-and-panels)): `home` and `end`, `alt+d`
+and the others. A click on the `clear` hint in the dialog's border clears the
+field too. In the help's search, `ctrl+u` clears the query.
 
 ### Mode keys in the dock
 
