@@ -64,6 +64,7 @@ func TestSettingsSearchChangesARowAndListsWrap(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("the search did not put Confirm quit, on the Behavior tab and off, under the cursor: %v\n%s", err, term.Snapshot())
 	}
+	saveFrame(t, term, "settings-search-results")
 
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("enter: %v", err)
@@ -75,15 +76,18 @@ func TestSettingsSearchChangesARowAndListsWrap(t *testing.T) {
 		t.Fatalf("enter on the result did not turn Confirm quit on in place: %v\n%s", err, term.Snapshot())
 	}
 
-	// esc clears the search and leaves the page up; the next esc closes it.
+	// esc clears the search and leaves the page up, with the cursor back on
+	// the row it was on when the search opened; the next esc closes it.
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("esc: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return !strings.Contains(s.Text(), "confirm quit") && strings.Contains(s.Text(), "Focused border color")
+		return !strings.Contains(s.Text(), "confirm quit") && strings.Contains(s.Text(), "Focused border color") &&
+			selectedSettingsRow(s, "Agent features") != ""
 	}, uiTimeout); err != nil {
-		t.Fatalf("the first esc did not clear the search back to the Appearance tab: %v\n%s", err, term.Snapshot())
+		t.Fatalf("the first esc did not clear the search back to the Appearance tab, on Agent features: %v\n%s", err, term.Snapshot())
 	}
+	saveFrame(t, term, "settings-search-back")
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("esc: %v", err)
 	}

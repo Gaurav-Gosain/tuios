@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
@@ -48,9 +49,11 @@ type settingsSearchState struct {
 	// query is the search text, with its caret.
 	query textedit.Line
 	hits  []settingsHit
-	// back is where the tab view was when the search opened, so closing the
-	// search puts the person back where they were.
-	backCat, backSel, backScroll int
+	// backCat and back are the tab and the row cursor and window the tab view
+	// had when the search opened, so closing the search puts the person back
+	// where they were.
+	backCat int
+	back    listnav.State
 }
 
 // settingsValueText is what a row shows as its value, as text a search can
@@ -174,7 +177,7 @@ func (m *OS) SettingsSearchStart(text string) {
 	st := &m.settingsSearch
 	if !st.open {
 		st.open = true
-		st.backCat, st.backSel, st.backScroll = m.SettingsCategory, m.settingsList.Cursor, m.settingsList.Scroll
+		st.backCat, st.back = m.SettingsCategory, m.settingsList
 		st.query.Set("")
 	}
 	if st.query.Insert(text) {
@@ -218,8 +221,7 @@ func (m *OS) SettingsSearchPaste(s string) {
 func (m *OS) settingsSearchRefiltered() {
 	st := &m.settingsSearch
 	st.hits = m.searchSettings(m.settingsCategories(), st.query.String())
-	m.settingsList.Cursor = 0
-	m.settingsList.Scroll = 0
+	m.settingsList.Refiltered(0)
 }
 
 // SettingsSearchBackspace removes the query's last character. The line stays
@@ -238,7 +240,7 @@ func (m *OS) SettingsSearchClose() {
 	if !st.open {
 		return
 	}
-	m.SettingsCategory, m.settingsList.Cursor, m.settingsList.Scroll = st.backCat, st.backSel, st.backScroll
+	m.SettingsCategory, m.settingsList = st.backCat, st.back
 	*st = settingsSearchState{}
 }
 
