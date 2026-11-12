@@ -4594,14 +4594,64 @@ Wired alongside an installed integration it reports every event twice;
 
 Hooks, screen rules and transcripts read an agent that draws its own TUI.
 Some agents also speak a structured protocol, and for those tuios can be the
-client: `start-agent --protocol acp` (the Agent Client Protocol, version 1) or
-`--protocol codex` (the Codex app-server) runs the agent headless, and the
-pane shows the conversation as a plain transcript with a prompt line under it.
+client: `start-agent --protocol acp` (the Agent Client Protocol, versions 1
+and 2) or `--protocol codex` (the Codex app-server) runs the agent headless,
+and the pane shows the conversation as a plain transcript with a prompt line
+under it.
 
 ```sh
 tuios start-agent --protocol acp 'opencode acp' --name helper --prompt 'List the TODOs.'
 tuios start-agent --protocol codex codex --name tests
 ```
+
+### ACP versions
+
+ACP version 2 is a [draft of the spec](https://agentclientprotocol.com/protocol/v2/overview),
+which asks clients not to ask for it by default until it is final. So a pane
+asks for version 1 unless `[agents] acp_version = 2` (or `agent-proto
+--acp-version 2`) says otherwise:
+
+```toml
+[agents]
+acp_version = 2   # 1 (default) or 2, the draft
+```
+
+Asking for 2 is safe with an agent that has only version 1. An agent picks the
+highest version it speaks at or below the one asked for, and one built before
+version 2 answers 1, as opencode 2.2.7 does: the pane speaks 1 on the same
+connection. An agent that refuses 2 instead is started again and asked for 1.
+When neither fits, the pane says which versions each side speaks, and an agent
+of version 2 only, met with the default, gets the line to turn version 2 on.
+The pane's first line names the version: `connected to opencode 2.2.7, ACP
+version 1`.
+
+In version 2 a turn ends when the agent reports its foreground work idle, not
+when it answers the prompt, so the last words of a reply come before `turn
+finished`. The rest the pane does with version 2:
+
+| Version 2 | The pane |
+|-----------|----------|
+| `state_update` `requires_action` with no question on screen | `needs_input`, "the agent is waiting for input"; `running` takes it back to `working` |
+| `state_update` `running` or `idle` with no turn of yours | `working`, then `done`: work the agent started on its own |
+| `agent_message` that replaces a streamed message | the rest, when it only adds to what was shown; otherwise the whole message again, under "the agent replaced its message:" |
+| `agent_message` with no content | "the agent removed the message above" |
+| `tool_call_update`, `tool_call_content_chunk` | the call, created by its first update; a field sent as null is cleared |
+| a diff with a `git_patch` | the patch; a change with no text names its operation |
+| `plan_update`, `usage_update` | as in version 1; a `cost` of null clears the cost |
+| `notice` | a note line, or an error line for severity error |
+| `compaction_update` | "compacting the context", then "context compacted" or why it failed |
+| `available_commands_update` | "commands: /init /review" once per change; type a command as a prompt to run it |
+| `config_option_update` | the model category's value goes to `model`; a mode change is a line |
+| a permission's `title`, `description` and `command` subject | the title under the call, the description as its reason, and the command's directory |
+| `$/cancel_request` for a permission | the question leaves the pane and the Inbox, answered cancelled |
+| an update kind tuios does not know | one line naming the kind, once |
+
+The terminal output of a version 2 agent's own terminals is not shown yet;
+the call says it has one, as in version 1. `agent-proto --resume ID`
+reattaches to a conversation the agent kept, with `session/resume`.
+
+The protocol code is `internal/acp`, which imports nothing from tuios, so it
+can become a Go library of its own.
 
 The pane's process is `tuios agent-proto`. It knows the agent's state from the
 protocol itself, not from its screen, and reports it for its own pane with
@@ -4616,6 +4666,7 @@ protocol itself, not from its screen, and reports it for its own pane with
 | The turn was cancelled | `idle` |
 | The turn failed, or the agent refused | `errored`, with why |
 | The agent asked permission | `needs_input`, kind `approval`, with the request's line |
+| An ACP version 2 agent reports `requires_action` with no question up | `needs_input`, "the agent is waiting for input" |
 | The permission was answered | `working`, only if still on `needs_input` |
 | The agent exited or did not start | `errored` |
 
@@ -4628,10 +4679,10 @@ change:
 
 | Key | Codex app-server | ACP |
 | --- | ---------------- | --- |
-| `model` | `thread/start`'s model, then `model/rerouted` | `session/new`'s `models` (the name of `currentModelId`), which ACP marks unstable |
+| `model` | `thread/start`'s model, then `model/rerouted` | `session/new`'s `models` (the name of `currentModelId`), which ACP marks unstable, or the `model` config option |
 | `context` | `thread/tokenUsage/updated`: `last.totalTokens` of `modelContextWindow`, when the window is known | `usage_update`: `used` of `size` |
 | `cost` | not sent | `usage_update`: `cost.amount` in `cost.currency` |
-| `plan` | `turn/plan/updated`: completed steps of all steps | `plan`: completed entries of all entries |
+| `plan` | `turn/plan/updated`: completed steps of all steps | `plan` (version 2: `plan_update`): completed entries of all entries |
 
 The `usage_update` shape is the ACP schema's (release 0.11: `used` and `size`
 in tokens, and an optional `cost` of `{amount, currency}` marked unstable),
@@ -4672,7 +4723,7 @@ the pane has not seen, whose files it cannot show. When it carries
 the session, the pane says so under the title.
 
 What the agent can do through tuios is nothing it could not do in its own TUI.
-`agent-proto` advertises no file system and no terminal capability, answers
+`agent-proto` advertises no file system, no terminal and no elicitation capability, answers
 every request it does not handle with method not found (which Codex reads as
 not approved), starts the agent in a session of its own with no controlling
 terminal so it cannot write to the pane directly, and removes every escape

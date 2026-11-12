@@ -1322,7 +1322,7 @@ or the Codex app-server, and show it as a transcript with a prompt line.
 
 **Usage:**
 ```bash
-tuios agent-proto --protocol acp|codex [--harness <id>] [--cwd <dir>] -- <agent> [args...]
+tuios agent-proto --protocol acp|codex [--harness <id>] [--cwd <dir>] [--acp-version 1|2] [--resume <id>] -- <agent> [args...]
 ```
 
 It starts the agent with pipes, in a session of its own with no controlling
@@ -1357,8 +1357,17 @@ now shows the turn's plan in the transcript, as an ACP pane does, and an ACP
 pane whose agent names its model shows it in the first line, `connected to
 opencode 1.2 (Claude Sonnet 4)`, as a Codex pane does.
 
+`--acp-version` is the ACP version to ask for: 1, the default, or 2, a draft
+of the spec. `start-agent` passes `[agents] acp_version` here. An agent that
+speaks only version 1 answers 1 or refuses, and the pane then speaks version
+1, starting the agent again when it has to; the first line names the version.
+In version 2 a turn ends when the agent reports it idle. `--resume` reattaches
+to a conversation the agent kept, by its session id, with `session/resume`.
+See [ACP versions](AGENT_STATE.md#acp-versions).
+
 ```bash
 tuios agent-proto --protocol acp -- opencode acp
+tuios agent-proto --protocol acp --acp-version 2 -- my-v2-agent
 ```
 
 ### `tuios agent-statusline`

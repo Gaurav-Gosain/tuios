@@ -3125,6 +3125,22 @@ the state directory, in `push/`, with mode 600.
 Run `tuios notify push ls` to see the phones and the VAPID public key. Run
 `tuios notify push rm NAME` to remove a phone.
 
+## ACP version
+
+`acp_version` in `[agents]` is the version of the Agent Client Protocol a pane
+that `start-agent --protocol acp` opens asks the agent for:
+
+```toml
+[agents]
+acp_version = 1   # 1 (default) or 2
+```
+
+Version 2 is a draft of the spec, which asks clients not to ask for it by
+default until it is final. An agent that speaks only version 1 still works
+with 2: the pane speaks 1 to it. The daemon reads the value when it starts a
+protocol pane, and a change to the file applies to the next one. See
+[ACP versions](AGENT_STATE.md#acp-versions).
+
 ## Harnesses that report to herdr
 
 Crush, and other agents that herdr lists as reporting by themselves, report
