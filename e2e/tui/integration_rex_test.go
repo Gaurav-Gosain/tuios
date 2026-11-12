@@ -2,9 +2,11 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -285,11 +287,11 @@ func TestRexActionsComeFromTuios(t *testing.T) {
 		}
 		return append(env, "HOME="+home, "USER="+os.Getenv("USER"), "PATH=/usr/bin:/bin")
 	}
-	load := func(t *testing.T, home, name string) []string {
+	load := func(t *testing.T, home, name string, extra ...string) []string {
 		t.Helper()
 		cmd := exec.Command(lua, loader, luaDir)
 		cmd.Dir = luaDir
-		cmd.Env = xdg(home)
+		cmd.Env = append(xdg(home), extra...)
 		out, err := cmd.CombinedOutput()
 		saveText(t, name, string(out))
 		if err != nil {
@@ -408,6 +410,72 @@ func TestRexActionsComeFromTuios(t *testing.T) {
 		}
 		if got := field(lines, "EXEC", 1); len(got) != 0 {
 			t.Errorf("ASSERTION: something ran with no tuios: %v", got)
+		}
+	})
+
+	// The suggested keys are off until asked for, and clear of every key
+	// Rex for Mac ships, of the macOS ctrl+cmd shortcuts, and of every key a
+	// program in the terminal could get (each holds cmd, which a Mac never
+	// sends to a terminal program). How it could pass wrongly: the list of
+	// Rex keys could fail to read and match nothing, so it must hold Rex's
+	// palette key; a key could be written in another modifier order than
+	// Rex's list, so both sides are put in one order before comparing.
+	t.Run("suggested keys", func(t *testing.T) {
+		home := newHome(t, tuiosBin)
+		if got := field(load(t, home, "rex-load-nokeys"), "BIND", 1); len(got) != 0 {
+			t.Errorf("ASSERTION: setup{} bound keys: %v", got)
+		}
+		lines := load(t, home, "rex-load-keys", "REX_LOAD_KEYS=suggested")
+		if lines[len(lines)-1] != "LOADED" {
+			t.Fatalf("ASSERTION: the suggested keys broke the config load:\n%s", strings.Join(lines, "\n"))
+		}
+		norm := func(k string) string {
+			parts := strings.Split(strings.ToLower(strings.TrimSpace(k)), "+")
+			mods := parts[:len(parts)-1]
+			slices.Sort(mods)
+			return strings.Join(append(mods, parts[len(parts)-1]), "+")
+		}
+		raw, err := os.ReadFile(filepath.Join("testdata", "rex-mac-keys.txt"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		taken := map[string]string{}
+		for l := range strings.SplitSeq(string(raw), "\n") {
+			if key, action, ok := strings.Cut(l, "\t"); ok && !strings.HasPrefix(l, "#") {
+				taken[norm(key)] = action
+			}
+		}
+		if taken[norm("shift+cmd+p")] != "client.palette.toggle" {
+			t.Fatalf("ASSERTION: testdata/rex-mac-keys.txt does not hold Rex's palette key, so it was not read")
+		}
+		for _, k := range []string{"ctrl+cmd+q", "ctrl+cmd+f", "ctrl+cmd+d", "ctrl+cmd+space"} {
+			taken[norm(k)] = "macOS"
+		}
+		binds := map[string]string{}
+		for _, l := range lines {
+			if p := strings.Split(l, "\t"); p[0] == "BIND" {
+				binds[p[2]] = p[1]
+			}
+		}
+		saveText(t, "suggested-keys", fmt.Sprint(binds))
+		for _, action := range []string{"tuios_prefix_inbox", "tuios_prefix_next_attention", "tuios_goto_picker", "tuios_prefix_mail", "tuios_start_agent"} {
+			if binds[action] == "" {
+				t.Errorf("ASSERTION: the suggested keys do not bind %s", action)
+			}
+		}
+		seen := map[string]string{}
+		for action, key := range binds {
+			n := norm(key)
+			if by, ok := taken[n]; ok {
+				t.Errorf("ASSERTION: the suggested key %s for %s is %s's", key, action, by)
+			}
+			if !strings.Contains(n, "cmd+") {
+				t.Errorf("ASSERTION: the suggested key %s for %s has no cmd, so a terminal program could need it", key, action)
+			}
+			if other, ok := seen[n]; ok {
+				t.Errorf("ASSERTION: %s binds both %s and %s", key, other, action)
+			}
+			seen[n] = action
 		}
 	})
 

@@ -3,9 +3,11 @@
 `tuios.lua` puts tuios's command palette in
 [Rex](https://www.superlogical.com/rex)'s: each time Rex loads its config, it
 asks `tuios actions --json` for the actions and defines one Rex action per
-row, named `tuios_` and the tuios action. It adds Start an Agent, which opens
-tuios's New agent sheet or takes harness, name, prompt, folder and machine,
-and a check. Keys are yours to choose. Each action works on the tuios session
+row, named `tuios_` and the tuios action, and one per action of your own
+config.toml, `tuios_user_NAME`. It adds Start an Agent, which opens tuios's
+New agent sheet or takes harness, name, prompt, folder and machine, and a
+check. Keys are off until you choose some; `keys = "suggested"` binds a set
+that no Rex for Mac key uses. Each action works on the tuios session
 shown in the focused Rex pane. [docs/REX.md](../../docs/REX.md) has the list
 and the options.
 

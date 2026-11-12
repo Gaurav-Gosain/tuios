@@ -28,9 +28,53 @@ local defaults = {
   -- The agent start_agent starts when the action gets no harness.
   harness = "claude",
   -- Keys to bind, by action name. Empty by default: Rex's own keys stay
-  -- as they are until you choose some.
+  -- as they are until you choose some. "suggested" binds M.suggested_keys,
+  -- and a table with suggested = true binds them with your own on top.
   keys = {},
 }
+
+-- M.suggested_keys is the key set setup{ keys = "suggested" } binds. Each is
+-- ctrl+cmd and a letter: a program in a terminal never sees cmd on a Mac, so
+-- no key of tuios's or a shell's is taken, and none of them is a key of Rex
+-- for Mac's own (its Mac Actions page) or a macOS shortcut (ctrl+cmd+q locks
+-- the screen, ctrl+cmd+f is full screen, ctrl+cmd+d looks a word up, and
+-- Rex has ctrl+cmd+i).
+M.suggested_keys = {
+  tuios_prefix_inbox = "ctrl+cmd+a",
+  tuios_prefix_next_attention = "ctrl+cmd+j",
+  tuios_goto_picker = "ctrl+cmd+g",
+  tuios_prefix_mail = "ctrl+cmd+m",
+  tuios_start_agent = "ctrl+cmd+n",
+}
+
+-- M.keys_of turns the keys option into the keys to bind, by action name:
+-- "suggested" is M.suggested_keys; a table is itself, on top of
+-- M.suggested_keys when it holds suggested = true. An action given false is
+-- left unbound, so a person can drop one suggested key.
+function M.keys_of(keys)
+  local out = {}
+  local function copy(from)
+    for name, key in pairs(from) do
+      if name ~= "suggested" then
+        out[name] = key
+      end
+    end
+  end
+  if keys == "suggested" then
+    copy(M.suggested_keys)
+  elseif type(keys) == "table" then
+    if keys.suggested == true then
+      copy(M.suggested_keys)
+    end
+    copy(keys)
+  end
+  for name, key in pairs(out) do
+    if type(key) ~= "string" or key == "" then
+      out[name] = nil
+    end
+  end
+  return out
+end
 
 local opts = {}
 
@@ -448,7 +492,8 @@ function M.actions(list)
 end
 
 -- M.setup defines the actions, and binds the keys given in o.keys, such as
--- { tuios_prefix_inbox = "cmd+shift+a" }. Call it from init.lua, at load.
+-- { tuios_prefix_inbox = "cmd+shift+a" }, or "suggested" (see
+-- M.suggested_keys). Call it from init.lua, at load.
 -- It does not raise when tuios is missing or old: Rex then has the fallback
 -- actions, and tuios_check says why. A key for an action Rex does not have
 -- is left unbound, and tuios_check names it.
@@ -494,7 +539,7 @@ function M.setup(o)
   end
   loaded.count = #defined
   local unbound = {}
-  for name, key in pairs(opts.keys or {}) do
+  for name, key in pairs(M.keys_of(opts.keys)) do
     local target = name
     if not known[target] and M.renamed[name] ~= nil then
       target = M.renamed[name]

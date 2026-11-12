@@ -4,9 +4,12 @@
 --
 --   ACTION <tab> name <tab> title <tab> category
 --   ENUM <tab> harness command
+--   BIND <tab> key <tab> action
 --   EXEC <tab> argv joined by spaces
 --   LOADED (setup returned) or SETUP-ERROR <tab> message
 --   RAN <tab> name, or RUN-ERROR <tab> message, for REX_LOAD_RUN
+--
+-- With REX_LOAD_KEYS=suggested, setup gets keys = "suggested".
 --
 -- With REX_LOAD_RUN=NAME and REX_LOAD_PID=PID it then runs the action NAME as
 -- Rex would from its palette, with the focused block's foreground process
@@ -144,7 +147,11 @@ rex = {
       end
     end
   end,
-  bind = function() end,
+  bind = function(key, action)
+    assert(type(key) == "string" and key ~= "", "bind without a key")
+    assert(defined[action] ~= nil, "bind to an action not defined: " .. tostring(action))
+    print("BIND\t" .. key .. "\t" .. action)
+  end,
   block = {
     call = function(kind, method, args)
       assert(kind == "com.superlogical.terminal" and method == "process", "unexpected block call " .. tostring(kind) .. " " .. tostring(method))
@@ -176,7 +183,11 @@ rex = {
 }
 
 local ok, err = pcall(function()
-  require("tuios").setup{}
+  local o = {}
+  if os.getenv("REX_LOAD_KEYS") == "suggested" then
+    o.keys = "suggested"
+  end
+  require("tuios").setup(o)
 end)
 if ok then
   print("LOADED")

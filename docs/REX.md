@@ -98,12 +98,38 @@ oldest waiting, Start an Agent and check actions. `tuios_check` says why.
 
 ### Keys
 
-Keys are off until you name them:
+Keys are off until you name them. `keys = "suggested"` binds this set:
+
+| Key | Action |
+| --- | --- |
+| `ctrl+cmd+a` | `tuios_prefix_inbox`: the agents view on what needs you |
+| `ctrl+cmd+j` | `tuios_prefix_next_attention`: jump to the agent that has waited longest |
+| `ctrl+cmd+g` | `tuios_goto_picker`: go to an agent, session, workspace or pane |
+| `ctrl+cmd+m` | `tuios_prefix_mail`: your mail |
+| `ctrl+cmd+n` | `tuios_start_agent`: the New agent sheet |
+
+Each holds `cmd`, which a Mac never sends to a program in a terminal, so no
+key of tuios's (such as `ctrl+b`) or of your shell's is taken. None is a
+default key of Rex for Mac (its Mac Actions page) or a macOS `ctrl+cmd`
+shortcut: `ctrl+cmd+q` locks the screen, `ctrl+cmd+f` is full screen,
+`ctrl+cmd+d` looks a word up, and Rex has `ctrl+cmd+i`. A key you bound in
+Rex's settings, or with `rex.bind` above the require line, is replaced by
+the newest binding, so put your own `rex.bind` lines after it.
 
 ```lua
 require("tuios").setup{
   bin = "tuios",          -- the tuios program; see "Finding tuios"
   harness = "claude",     -- the agent tuios_start_agent starts when no harness is given
+  keys = "suggested",
+}
+
+-- The set with changes: your keys on top, false to leave one unbound.
+require("tuios").setup{
+  keys = { suggested = true, tuios_prefix_mail = false, tuios_new_window = "ctrl+cmd+w" },
+}
+
+-- Only keys of your own.
+require("tuios").setup{
   keys = { tuios_prefix_inbox = "cmd+shift+a", tuios_prefix_next_attention = "cmd+shift+j" },
 }
 ```
@@ -140,8 +166,8 @@ notifies, and so does the focused one while Rex shows another pane or tab.
 cannot raise one. Once Rex shows the tuios pane, the action
 `tuios_prefix_next_attention` ("tuios: Agents: Go to the Oldest Waiting")
 moves the focus to the agent that has waited longest, and
-`tuios_prefix_inbox` opens the agents view on what needs you. Bind one to a
-key (see Keys).
+`tuios_prefix_inbox` opens the agents view on what needs you. In the
+suggested keys (see Keys) they are `ctrl+cmd+j` and `ctrl+cmd+a`.
 
 **Two notifications for one question.** With Rex in the background and both
 Rex settings above on, one question can give two macOS notifications, one

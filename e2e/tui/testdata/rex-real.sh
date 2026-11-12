@@ -121,6 +121,16 @@ rx keymap > "$out/keymap.txt" 2>&1; grep -i 'tuios' "$out/keymap.txt"
 act tuios_check
 cp "$out/init-before-keys.lua" "$cfg"; rx config reload > /dev/null 2>&1
 
+step "the suggested keys"
+printf 'require("tuios").setup{ keys = "suggested" } -- added by tuios integration\n' > "$cfg.new"
+grep -v 'added by tuios integration' "$cfg" >> "$cfg.new"; mv "$cfg.new" "$cfg"
+rx config check > "$out/config-check-suggested.txt" 2>&1; echo "config check rc=$?"; cat "$out/config-check-suggested.txt"
+rx config reload > /dev/null 2>&1
+rx keymap > "$out/keymap-suggested.txt" 2>&1; echo "keymap rc=$?"; grep -i 'tuios' "$out/keymap-suggested.txt"
+grep -i -E 'warn|error|complain|unknown' "$out/keymap-suggested.txt"
+rx keymap --json > "$out/keymap-suggested.json" 2>&1
+cp "$out/init-before-keys.lua" "$cfg"; rx config reload > /dev/null 2>&1
+
 # Agents that wait: tuios writes OSC 9 for an agent that needs the person,
 # and Rex raises terminal.desktop_notification for it. None is written for the
 # pane the person looks at: the focused tuios pane while Rex shows the tuios
