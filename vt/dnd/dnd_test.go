@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/internal/dnd"
 	"tuios.dev/vt"
+	"tuios.dev/vt/dnd"
 )
 
 // The wire layer of the drag and drop protocol is checked the way the OSC

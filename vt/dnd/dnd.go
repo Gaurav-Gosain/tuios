@@ -1,15 +1,4 @@
-package dnd
-
-import (
-	"bytes"
-	"encoding/base64"
-	"strconv"
-	"strings"
-
-	"tuios.dev/vt"
-)
-
-// The kitty drag and drop protocol, OSC 72.
+// Package dnd reads and writes the kitty drag and drop protocol, OSC 72.
 //
 // Every message of the protocol is one escape code,
 //
@@ -25,10 +14,10 @@ import (
 // at kitty 0.49 (October 2026); the page says the protocol is not yet
 // stable.
 //
-// This file is the wire layer only: it reads a message out of the OSC body
-// the emulator hands to Callbacks.PrivateOSC, puts a chunked message back
+// This package is the wire layer only: it reads a message out of the OSC body
+// an emulator hands to vt.Callbacks.PrivateOSC, puts a chunked message back
 // together, and writes a message in the form kitty writes it. What a message
-// means, and who gets it, is the host's business (internal/app).
+// means, and who gets it, is the host's business.
 //
 // Three things about the wire that the specification does not spell out, and
 // that the implementations rely on:
@@ -52,6 +41,16 @@ import (
 // A number in the metadata is a 32-bit integer by the specification. The
 // parser holds each to that range, so a value a program sends cannot
 // overflow an int on any platform.
+package dnd
+
+import (
+	"bytes"
+	"encoding/base64"
+	"strconv"
+	"strings"
+
+	"tuios.dev/vt"
+)
 
 // Code is the OSC number of the drag and drop protocol.
 const Code = 72

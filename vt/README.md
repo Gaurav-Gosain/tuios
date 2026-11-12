@@ -98,6 +98,12 @@ Sub-packages:
   captures an emulator's state, packs it for a wire or a file, and brings
   another emulator to the same state. `Replay` turns a state into the bytes
   that repaint it on any xterm-compatible terminal.
+- [`tuios.dev/vt/dnd`](https://pkg.go.dev/tuios.dev/vt/dnd) reads and writes
+  kitty's drag and drop protocol (OSC 72): the command header, base64
+  payloads, MIME lists, and chunks joined again. It is the codec for an
+  emulator that implements `Callbacks.PrivateOSC` for code 72, or for a
+  program that accepts drops. The protocol is still marked as under
+  development by kitty.
 - [`tuios.dev/vt/vtgen`](https://pkg.go.dev/tuios.dev/vt/vtgen) generates
   terminal input from a grammar, for fuzzing an emulator. A failure reduces to
   a script of named sequences a person can read.
