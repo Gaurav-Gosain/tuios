@@ -124,9 +124,8 @@ func TestAStalledConnectionDoesNotStallTheLink(t *testing.T) {
 	default:
 	}
 
-	// The link answers at once. This call is what used to hang: the read
-	// loop was parked on the full stream and the control stream's reply sat
-	// behind it.
+	// The link answers at once, though the read loop is parked on the full
+	// stream: the control stream's reply must not sit behind it.
 	t0 := time.Now()
 	if _, err := m.Call(ctx, "build", "list-sessions", nil); err != nil {
 		t.Fatalf("ASSERTION: the link stopped answering behind a stalled connection: %v", err)

@@ -280,9 +280,8 @@ func TestHubRefusesAStreamOpenedByTheRemote(t *testing.T) {
 		t.Errorf("the refusal took %v, which is not a refusal but a timeout", got.elapsed)
 	}
 
-	// The link survived the refusal. Without this the whole test is satisfied by
-	// the fixture being torn down, which is how it used to pass with the
-	// refusal deleted.
+	// The link survived the refusal. Without this check the fixture being
+	// torn down would satisfy the whole test.
 	if r := mgr.Reports(ctx)[0]; r.Status != StatusUp {
 		t.Fatalf("the link is %q after refusing one stream; refusing a stream must not cost the link", r.Status)
 	}
@@ -390,7 +389,7 @@ func TestALinkKeepsAnAttachWhileAListingTimesOut(t *testing.T) {
 		t.Fatalf("the attach did not answer before the listing: %q", line)
 	}
 
-	// The listing times out, which is the event that used to be fatal.
+	// A listing that times out must not end the link.
 	if _, err := m.Call(ctx, "build", "list-sessions", nil); err == nil {
 		t.Fatal("the listing against the hanging stub answered; the timeout cannot be forced")
 	}
