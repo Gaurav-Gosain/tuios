@@ -37,7 +37,9 @@ type Screen struct {
 	// fullscreen fast path, the crash screen.
 	scratch uv.ScreenBuffer
 	w, h    int
-	// diffed is the rows the last diff passed to the terminal renderer.
+	// rows marks the rows of the last diff that differed from the frame
+	// shown, and diffed counts them.
+	rows   []bool
 	diffed int
 
 	// started: the alternate screen is entered and its sequences are in
@@ -258,8 +260,18 @@ func (s *Screen) Commit() {
 
 // diff renders buf against what the terminal shows into body, and keeps a
 // copy of it as the frame shown.
+//
+// Only the rows that differ from the frame shown are diffed and copied. The
+// terminal renderer's scroll check hashes every row, and it keeps the hashes
+// of rows it is not told were touched from its last call, so it may only run
+// with every row touched. With one changed row it is turned off instead: a
+// scroll pairs a new row with a different old row whose line is the same, and
+// both rows of such a pair have changed, so one changed row has no scroll to
+// find and the bytes are the same without the check. With more than one
+// changed row every row is touched and the check runs, as it always did.
 func (s *Screen) diff(buf *uv.Buffer) {
 	w, h := buf.Width(), buf.Height()
+	full := s.shown.Width() != w || s.shown.Height() != h
 	if w != s.w || h != s.h {
 		if s.w != 0 {
 			s.scr.Resize(w, h)
@@ -272,18 +284,50 @@ func (s *Screen) diff(buf *uv.Buffer) {
 		s.touched = make([]uv.LineData, h)
 		s.rb.Touched = make([]*uv.LineData, h)
 	}
+	if len(s.rows) != h {
+		s.rows = make([]bool, h)
+	}
+	changed := 0
+	for y := range h {
+		s.rows[y] = full || !sameLine(buf.Lines[y], s.shown.Lines[y])
+		if s.rows[y] {
+			changed++
+		}
+	}
+	s.diffed = changed
+	if changed == 0 {
+		return
+	}
+	one := changed == 1
 	for i := range s.rb.Touched {
+		if one && !s.rows[i] {
+			s.rb.Touched[i] = nil
+			continue
+		}
 		s.touched[i] = uv.LineData{FirstCell: 0, LastCell: w}
 		s.rb.Touched[i] = &s.touched[i]
 	}
-	s.diffed = h
+	if one {
+		s.scr.SetScrollOptim(false)
+	}
 	s.scr.Render(&s.rb)
+	if one {
+		s.scr.SetScrollOptim(true)
+	}
 	_ = s.scr.Flush()
-	copyCells(&s.shown, buf)
+	if full {
+		copyCells(&s.shown, buf)
+		return
+	}
+	for y, c := range s.rows {
+		if c {
+			copy(s.shown.Lines[y], buf.Lines[y])
+		}
+	}
 }
 
-// DiffedRows is how many rows the last diff passed to the terminal renderer,
-// for the frame cost benchmarks and budgets.
+// DiffedRows is how many rows the last diff found changed and passed to the
+// terminal renderer, for the frame cost benchmarks and budgets.
 func (s *Screen) DiffedRows() int { return s.diffed }
 
 // sameCells reports whether a and b hold the same cells.
@@ -292,14 +336,68 @@ func sameCells(a, b *uv.Buffer) bool {
 		return false
 	}
 	for y := range a.Lines {
-		la, lb := a.Lines[y], b.Lines[y]
-		for x := range la {
-			if !la[x].Equal(&lb[x]) {
-				return false
-			}
+		if !sameLine(a.Lines[y], b.Lines[y]) {
+			return false
 		}
 	}
 	return true
+}
+
+// sameLine reports whether two rows hold the same cells, by uv's Cell.Equal.
+func sameLine(a, b uv.Line) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for x := range a {
+		if !sameCell(&a[x], &b[x]) {
+			return false
+		}
+	}
+	return true
+}
+
+// sameCell is uv's Cell.Equal with the colour types the compositor writes
+// compared directly. Cell.Equal converts every colour to RGBA through its
+// interface, which made the compare of a frame cost more than its diff.
+func sameCell(a, b *uv.Cell) bool {
+	return a.Width == b.Width && a.Content == b.Content &&
+		a.Style.Attrs == b.Style.Attrs && a.Style.Underline == b.Style.Underline &&
+		sameColor(a.Style.Fg, b.Style.Fg) && sameColor(a.Style.Bg, b.Style.Bg) &&
+		sameColor(a.Style.UnderlineColor, b.Style.UnderlineColor) &&
+		a.Link == b.Link
+}
+
+// sameColor is uv's colour equality: nil equals only nil, and two colours
+// are equal when their RGBA values are. Two equal values of one of the
+// common types are equal without the conversion; anything else is compared
+// by RGBA, since two palette indices can name one colour.
+func sameColor(a, b color.Color) bool {
+	switch x := a.(type) {
+	case nil:
+		return b == nil
+	case ansi.BasicColor:
+		if y, ok := b.(ansi.BasicColor); ok && x == y {
+			return true
+		}
+	case ansi.IndexedColor:
+		if y, ok := b.(ansi.IndexedColor); ok && x == y {
+			return true
+		}
+	case ansi.RGBColor:
+		if y, ok := b.(ansi.RGBColor); ok && x == y {
+			return true
+		}
+	case color.RGBA:
+		if y, ok := b.(color.RGBA); ok && x == y {
+			return true
+		}
+	}
+	if b == nil {
+		return false
+	}
+	ar, ag, ab, aa := a.RGBA()
+	br, bg, bb, ba := b.RGBA()
+	return ar == br && ag == bg && ab == bb && aa == ba
 }
 
 // copyCells makes dst a copy of src, reusing its lines where it can.
