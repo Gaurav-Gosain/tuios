@@ -52,6 +52,7 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		Focus        bool              `json:"focus"`
 		Prompt       string            `json:"prompt"`
 		ReadyTimeout int               `json:"ready_timeout"`
+		NoWait       bool              `json:"no_wait"`
 		Env          map[string]string `json:"env"`
 		Protocol     string            `json:"protocol"`
 		Grants       []string          `json:"grants"`
@@ -318,7 +319,16 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	timeout := durationOr(p.ReadyTimeout, startAgentDefaultReadyTimeout)
 	// A protocol pane is ready only on its own report: its screen is a
 	// transcript no manifest rule reads, so unknown never means quiet.
-	w, outcome := d.waitAgentStart(sess, win.ID, launch.harness, timeout, true, p.Protocol != "", nil)
+	var w WindowState
+	var outcome agentStartOutcome
+	if p.NoWait {
+		w, outcome = d.waitAgentStart(sess, win.ID, launch.harness, startAgentEarlyExit, true, p.Protocol != "", nil)
+		if outcome == agentStartTimeout {
+			outcome = agentStartStarted
+		}
+	} else {
+		w, outcome = d.waitAgentStart(sess, win.ID, launch.harness, timeout, true, p.Protocol != "", nil)
+	}
 	out := map[string]any{
 		"type":            "agent_started",
 		"session":         sess.Name(),
@@ -358,6 +368,8 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		}
 	}
 	switch outcome {
+	case agentStartStarted:
+		out["reason"] = "Started without waiting for the agent to be ready (no_wait). If it stays unready, the Inbox says so."
 	case agentStartReady:
 		out["ready_by"] = readyBy(w)
 	case agentStartBlocked:
@@ -369,6 +381,18 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		out["reason"] = "The agent's window closed before it was ready: the program exited. Look at what it printed by starting it in a shell pane."
 	default:
 		out["reason"] = "The wait ended with the " + string(outcome) + "."
+	}
+	// With no_wait the after_ready steps and the prompt go in the background,
+	// once the agent is ready, so the answer does not wait for them either.
+	if p.NoWait && (outcome == agentStartStarted || outcome == agentStartReady) && (len(p.AfterReady) > 0 || p.Prompt != "") {
+		if len(p.AfterReady) > 0 {
+			out["after_ready_status"] = PromptPending
+		}
+		if p.Prompt != "" {
+			out["prompt_status"] = PromptPending
+		}
+		go d.deliverStartAfter(sess, win.ID, launch.harness, timeout, p.Protocol != "", p.AfterReady, p.Prompt)
+		return out, nil
 	}
 	if len(p.AfterReady) > 0 {
 		if outcome != agentStartReady {
@@ -412,4 +436,22 @@ func startAgentSessionName(l agentLaunch) string {
 		}
 	}
 	return "agents"
+}
+
+// deliverStartAfter is the rest of start-agent with no_wait: it waits for the
+// agent to be ready, then sends the after_ready steps and types the prompt, as
+// start-agent does in the call when it waits. An agent that stays unready
+// raises the Inbox item waitAgentStart opens, and nothing is sent.
+func (d *Daemon) deliverStartAfter(sess *Session, windowID, harness string, timeout time.Duration, reportedOnly bool, afterReady []string, prompt string) {
+	if _, outcome := d.waitAgentStart(sess, windowID, harness, timeout, false, reportedOnly, nil); outcome != agentStartReady {
+		return
+	}
+	if len(afterReady) > 0 {
+		if status, _ := d.sendAfterReady(sess, windowID, afterReady); status != PromptSent {
+			return
+		}
+	}
+	if prompt != "" {
+		d.typeFirstPrompt(sess, windowID, prompt)
+	}
 }

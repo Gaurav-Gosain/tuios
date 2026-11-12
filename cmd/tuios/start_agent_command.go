@@ -19,7 +19,7 @@ func newStartAgentCommand() *cobra.Command {
 	var model, effort, permissionMode string
 	var env, grants []string
 	var workspace, readyTimeout int
-	var focus, clone, jsonOutput, printID bool
+	var focus, clone, jsonOutput, printID, noWait bool
 	cmd := &cobra.Command{
 		Use:   "start-agent [agent] [-- args...]",
 		Short: "Start an agent in a new pane and return once it is ready",
@@ -152,7 +152,7 @@ the id printed when the agent is not ready, and the command exits non-zero.`,
 				session: sessionName, agent: positional[0], args: extra, name: name, cwd: cwd, repo: repo, prompt: prompt, protocol: protocol,
 				env: callerEnv, explicitEnv: len(env) > 0, workspace: workspace, readyTimeout: readyTimeout, focus: focus, clone: clone,
 				grants: grants, task: task, parent: parent, model: model, effort: effort, permissionMode: permissionMode,
-				preset: preset, printID: printID,
+				preset: preset, printID: printID, noWait: noWait,
 			}, jsonOutput)
 		},
 	}
@@ -176,6 +176,7 @@ the id printed when the agent is not ready, and the command exits non-zero.`,
 	cmd.Flags().StringSliceVar(&grants, "grants", nil, "What the agent may do through tuios, comma separated: read, write, fan, files, task, respond, admin, or none (default: [agents.permissions], or the calling pane's own)")
 	cmd.Flags().StringVar(&preset, "preset", "", "Start from [agents.presets.NAME] of your config; the agent may then be left out")
 	cmd.Flags().BoolVar(&printID, "print-id", false, "Print only the new pane's full id")
+	cmd.Flags().BoolVar(&noWait, "no-wait", false, "Return once the agent has started, without waiting for it to be ready; --prompt is typed once it is")
 	addJSONFlag(cmd, &jsonOutput)
 	_ = cmd.RegisterFlagCompletionFunc("grants", completeGrantNames)
 	return cmd
@@ -206,6 +207,8 @@ type startAgentOptions struct {
 	preset string
 	// printID is --print-id.
 	printID bool
+	// noWait is --no-wait.
+	noWait bool
 }
 
 // startAgentEnv is the env start-agent sends to a target on host ("" for
@@ -349,6 +352,7 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 		} `json:"parent"`
 		TaskNote string `json:"task_note"`
 		PathFrom string `json:"path_from"`
+		Outcome  string `json:"outcome"`
 	}
 	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return errfmt.Errorf("failed to parse response: %w", err)
@@ -365,7 +369,7 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 		}
 	case o.printID:
 		fmt.Println(res.WindowID)
-		if !res.Ready {
+		if !res.Ready && res.Outcome != "started" {
 			fmt.Fprintf(os.Stderr, "%s is not ready: %s\n", shortWindowID(res.WindowID), plainLine(res.Reason))
 		}
 	default:
@@ -385,9 +389,12 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 		case res.TaskNote != "":
 			fmt.Println(plainLine(res.TaskNote))
 		}
-		if res.Ready {
+		switch {
+		case res.Outcome == "started":
+			fmt.Printf("%s started%s. Pane %s\n", who, t.on(), res.WindowID)
+		case res.Ready:
 			fmt.Printf("%s is ready: it reads %s%s. Pane %s\n", who, plainLine(res.ReadyBy), t.on(), res.WindowID)
-		} else {
+		default:
 			state := plainLine(res.State)
 			if res.BlockedBy != "" {
 				state += " (" + plainLine(res.BlockedBy) + ")"
@@ -399,13 +406,17 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 		}
 		switch res.PromptStatus {
 		case "":
+		case "pending":
+			fmt.Println("The prompt is typed once the agent is ready.")
 		case "sent":
 			fmt.Println("The prompt was typed and taken.")
 		default:
 			fmt.Printf("The prompt is %s. %s\n", plainLine(res.PromptStatus), plainLine(res.PromptNote))
 		}
 	}
-	if !res.Ready || (res.PromptStatus != "" && res.PromptStatus != "sent") || (res.AfterReady != "" && res.AfterReady != "sent") {
+	started := res.Outcome == "started" || res.Ready
+	settled := func(status string) bool { return status == "" || status == "sent" || (o.noWait && status == "pending") }
+	if !started || !settled(res.PromptStatus) || !settled(res.AfterReady) {
 		return &statusError{code: 1}
 	}
 	return nil
@@ -431,6 +442,9 @@ func startAgentParams(o startAgentOptions, host string) map[string]any {
 	}
 	if o.workspace > 0 {
 		params["workspace"] = o.workspace
+	}
+	if o.noWait {
+		params["no_wait"] = true
 	}
 	if o.readyTimeout > 0 {
 		params["ready_timeout"] = o.readyTimeout

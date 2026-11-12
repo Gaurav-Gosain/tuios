@@ -1165,7 +1165,7 @@ is ready for a prompt.
 
 **Usage:**
 ```bash
-tuios start-agent [<agent>] [--preset <name>] [-s [<host>|any:]<session>] [--name <name>] [--cwd <dir> | --repo <dir> | --clone] [--workspace <n>] [--focus] [--prompt <prompt>] [--ready-timeout <ms>] [--protocol acp|codex] [--env NAME[=VALUE]]... [--grants <grant>[,<grant>...]] [--task <id>] [--parent <window-id>] [--model <model>] [--effort <level>] [--permission-mode <mode>] [--print-id] [--json] [-- <args>...]
+tuios start-agent [<agent>] [--preset <name>] [-s [<host>|any:]<session>] [--name <name>] [--cwd <dir> | --repo <dir> | --clone] [--workspace <n>] [--focus] [--prompt <prompt>] [--ready-timeout <ms>] [--no-wait] [--protocol acp|codex] [--env NAME[=VALUE]]... [--grants <grant>[,<grant>...]] [--task <id>] [--parent <window-id>] [--model <model>] [--effort <level>] [--permission-mode <mode>] [--print-id] [--json] [-- <args>...]
 ```
 
 `--parent` names the agent pane the new agent reports to, by window id. It
@@ -1210,13 +1210,23 @@ Inbox shows it), showed nothing before `--ready-timeout` (default 120000), or
 exited. It also exits 1 when a `--prompt` was not taken. The pane is not
 focused unless `--focus` is passed.
 
+`--no-wait` returns as soon as the agent's process has started and has not
+exited within a second, without waiting for it to be ready. It exits 1 only
+when the agent could not start or exited at once, with the reason. `--prompt`
+is then typed in the background once the agent is ready. An agent that stays
+unready shows in the Inbox. A caller with a time limit of its own, such as a
+Rex action, uses it.
+
 Without `--cwd` or `--repo`, the agent starts in your directory when you run
 the command in a pane. Outside a pane it starts in the focused pane's
 directory. With `appearance.new_window_inherit_cwd` off, it starts in the
 session's directory.
 
 The command sends your `PATH` with any `--env`, as `fan` does, when the
-session is on this machine. For a session on another machine
+session is on this machine. An agent that is not on your `PATH` is looked up
+on the daemon's, the `PATH` a new pane gets, and then runs with that `PATH`.
+The command says so on stderr. This is what lets a caller with a bare `PATH`,
+such as an app, start an agent the person installed. For a session on another machine
 (`-s host:session`) it sends no `PATH`, and the agent is looked up on that
 machine's `PATH`. `--env` there is refused with `forbidden`, because
 variables do not cross machines.

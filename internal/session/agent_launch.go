@@ -310,7 +310,16 @@ const (
 	agentStartWindowClosed agentStartOutcome = "window_closed"
 	agentStartSessionEnded agentStartOutcome = "session_closed"
 	agentStartShutdown     agentStartOutcome = "shutdown"
+	// agentStartStarted is start-agent with no_wait: the agent's process
+	// was started and had not exited by startAgentEarlyExit, and readiness
+	// was not waited for.
+	agentStartStarted agentStartOutcome = "started"
 )
+
+// startAgentEarlyExit is how long start-agent with no_wait watches a new agent
+// before it answers: long enough for a program that exits at once, on a bad
+// flag or a missing file, to show it, and short of any agent's start.
+const startAgentEarlyExit = time.Second
 
 // readyBy names the evidence a ready pane showed: its state, or quiet for a
 // pane on unknown whose harness can never show more.
