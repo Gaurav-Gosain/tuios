@@ -81,6 +81,11 @@ type handoffRequest struct {
 	// pinned, when set, is the file the person confirmed binary as. A file
 	// put there since is refused, not run.
 	pinned *fileID
+	// shownExited, when not nil, is the exited panes on other machines the
+	// confirm dialog told the person the upgrade closes. Only those are
+	// closed. Nil, from a terminal outside tuios, closes every exited one
+	// and the result names them.
+	shownExited []string
 	// holdAfterWrite, inWindow and afterCheck are for tests: a wait after
 	// the manifest is written, a function run while the descriptors are
 	// exposed, and one run between the preflight's checks and its run.
@@ -111,8 +116,10 @@ type handoffRun struct {
 	// What the run measured, for the caller and for the next image.
 	panes         int
 	manifestBytes int64
-	started       time.Time
-	stats         HandoffStats
+	// closedRemote names the exited panes on other machines the run closed.
+	closedRemote []string
+	started      time.Time
+	stats        HandoffStats
 }
 
 // HandoffStats is what a live handoff measured. The image that hands off
@@ -298,6 +305,16 @@ func (r *handoffRun) prepare() error {
 	}
 	r.undo = append(r.undo, d.openHostedPanes)
 
+	// Every refusal has passed, so the exited panes on other machines go
+	// now, the last change before the sessions are written down. A pane on
+	// another machine has no master here; once its process has exited there
+	// is nothing to hand over, and its window would come back with no pane.
+	closed, err := closeExitedRemotes(d.manager.AllSessions(), r.req.shownExited)
+	if err != nil {
+		return err
+	}
+	r.closedRemote = closed
+
 	sessions := d.manager.AllSessions()
 	// Before any pane stops, so the record of each session names the colours
 	// its emulators were given.
@@ -320,7 +337,9 @@ func (r *handoffRun) prepare() error {
 				continue
 			}
 			if p.host != "" {
-				return errfmt.Errorf("window %s runs on %s, and a pane on another machine cannot be handed over. Close it first", shortID(w.ID), p.host)
+				// handoffRefusal checked before the gates shut; a pane
+				// opened on another machine since is named with the rest.
+				return remotePaneRefusal(sessions)
 			}
 			refs = append(refs, handoffPaneRef{sess: sess, pty: p, window: w.ID})
 		}

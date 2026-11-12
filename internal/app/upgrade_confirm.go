@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"image/color"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -139,6 +141,15 @@ func (m *OS) renderUpgradeConfirm() (string, overlay.Geometry, []overlayRowHit) 
 		body = append(body, dialogBodyLine("  "+l, width, pal.Warn, bg))
 	}
 	body = append(body, dialogBodyLine("", width, pal.FgDim, bg))
+	if n := len(it.Upgrade.CloseExited); n > 0 {
+		// Panes on other machines cannot be handed over; the exited ones are
+		// closed, and the person is told which before saying yes.
+		text(fmt.Sprintf("It closes %d exited %s on other machines:", n, plural.Word(n, "pane", "panes")), pal.Fg)
+		for _, label := range it.Upgrade.CloseExited {
+			text("  "+printableTitle(label), pal.Warn)
+		}
+		body = append(body, dialogBodyLine("", width, pal.FgDim, bg))
+	}
 	text("Every pane keeps running. The binary gets every pane's terminal. Say yes only if you asked for it.", pal.FgDim)
 	note := "Down moves to Yes, any other key back to No. Enter chooses."
 	if st.sent {

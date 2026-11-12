@@ -3035,6 +3035,12 @@ func (s *Session) GetPTY(id string) *PTY {
 // ClosePTY closes and removes a PTY.
 func (s *Session) ClosePTY(id string) error {
 	defer s.holdPaneLife()()
+	return s.closePTYHeld(id)
+}
+
+// closePTYHeld is ClosePTY for a caller that holds the pane lifecycle lock
+// already, as a live upgrade does while it closes exited remote panes.
+func (s *Session) closePTYHeld(id string) error {
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
 

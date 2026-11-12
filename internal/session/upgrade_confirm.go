@@ -51,6 +51,9 @@ const (
 type UpgradeAsk struct {
 	Binary  string `json:"binary"`
 	Version string `json:"version"`
+	// CloseExited names the exited panes on other machines the upgrade
+	// closes (session: name (id) on machine), so it does not happen unasked.
+	CloseExited []string `json:"close_exited,omitempty"`
 }
 
 // upgradeConfirmTimeout is upgradeConfirmWait, or a test's shorter one.
@@ -101,7 +104,7 @@ func (d *Daemon) personClients() int {
 // a sentence that says what to do next, so an agent can tell a No (stop
 // asking) from a dialog that could not be shown (ask the person to attach).
 // It returns at once when no client could answer.
-func (d *Daemon) confirmUpgrade(cs *connState, bin handoffBinary) string {
+func (d *Daemon) confirmUpgrade(cs *connState, bin handoffBinary, closeExited []string) string {
 	refuse := func(why string) string {
 		LogBasic("Live upgrade from a pane refused: %s", why)
 		return why
@@ -120,7 +123,7 @@ func (d *Daemon) confirmUpgrade(cs *connState, bin handoffBinary) string {
 		Name:    "a process inside a pane",
 		Summary: "Upgrade the daemon to " + bin.accepts.Version + "?",
 		Options: []string{upgradeAnswerNo, upgradeAnswerYes},
-		Upgrade: &UpgradeAsk{Binary: bin.path, Version: bin.accepts.Version},
+		Upgrade: &UpgradeAsk{Binary: bin.path, Version: bin.accepts.Version, CloseExited: closeExited},
 	}
 	_, window := d.peerPane(cs)
 	for _, sess := range d.manager.AllSessions() {

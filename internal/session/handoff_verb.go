@@ -69,10 +69,12 @@ func (d *Daemon) verbDaemonUpgrade(cs *connState, params json.RawMessage) (any, 
 		if bin.file != pin {
 			return nil, upgradeRefusal(errfmt.Errorf("%s was replaced while it was being checked. Run the upgrade again when the install has finished", bin.path))
 		}
-		if why := d.confirmUpgrade(cs, bin); why != "" {
+		shown := exitedRemoteLabels(d.manager.AllSessions())
+		if why := d.confirmUpgrade(cs, bin, shown); why != "" {
 			return nil, notPerson(why)
 		}
 		req.binary, req.pinned = bin.path, &bin.file
+		req.shownExited = append([]string{}, shown...)
 	}
 	clients := d.tuiClientCount()
 	run, err := d.prepareHandoff(req)
@@ -93,6 +95,7 @@ func (d *Daemon) verbDaemonUpgrade(cs *connState, params json.RawMessage) (any, 
 		"manifest_bytes": run.manifestBytes,
 		"clients":        clients,
 		"preflight_ms":   int64(run.stats.PreflightMS),
+		"closed_remote":  run.closedRemote,
 	}, nil
 }
 

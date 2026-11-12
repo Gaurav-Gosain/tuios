@@ -692,6 +692,13 @@ func scratchNameIf(opts NewWindowOptions) string {
 // by names who asked, and goes to the log with the window, so a pane that is
 // gone is one grep: "closed, asked for by" and its short ID.
 func (s *Session) CloseDaemonWindow(target, by string) (string, error) {
+	return s.closeDaemonWindow(target, by, s.ClosePTY)
+}
+
+// closeDaemonWindow is CloseDaemonWindow with the call that closes the pane
+// given, so a caller that holds the pane lifecycle lock can pass one that does
+// not take it again.
+func (s *Session) closeDaemonWindow(target, by string, closePTY func(string) error) (string, error) {
 	var closed WindowState
 	err := s.mutateState(func(state *SessionState) error {
 		idx, err := findWindowStateIndex(state.Windows, target)
@@ -718,7 +725,7 @@ func (s *Session) CloseDaemonWindow(target, by string) (string, error) {
 		shortID(closed.ID), windowLabelOf(closed), shortID(closed.PTYID), s.Name(), by)
 	// Close the PTY outside the state lock.
 	if closed.PTYID != "" {
-		_ = s.ClosePTY(closed.PTYID)
+		_ = closePTY(closed.PTYID)
 	}
 	return closed.ID, nil
 }

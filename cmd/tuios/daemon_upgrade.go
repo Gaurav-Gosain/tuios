@@ -197,15 +197,18 @@ type upgradeOutcome struct {
 	// Action is one of the upgradeAction names: upgraded live, restarted or
 	// started by --or-restart, fallback to the old binary, refused with
 	// nothing changed, or failed.
-	Action   string  `json:"action"`
-	PID      int     `json:"pid"`
-	From     string  `json:"from"`
-	To       string  `json:"to"`
-	Binary   string  `json:"binary"`
-	Panes    int     `json:"panes"`
-	Clients  int     `json:"clients"`
-	Seconds  float64 `json:"seconds"`
-	Fallback bool    `json:"fallback"`
+	Action  string  `json:"action"`
+	PID     int     `json:"pid"`
+	From    string  `json:"from"`
+	To      string  `json:"to"`
+	Binary  string  `json:"binary"`
+	Panes   int     `json:"panes"`
+	Clients int     `json:"clients"`
+	Seconds float64 `json:"seconds"`
+	// ClosedRemote names the exited panes on other machines the upgrade
+	// closed: they have no terminal here to hand over.
+	ClosedRemote []string `json:"closed_remote,omitempty"`
+	Fallback     bool     `json:"fallback"`
 	// Recovered is a new image that died before it was up, after which the
 	// keeper started the previous binary under a pid of its own.
 	Recovered bool                  `json:"recovered"`
@@ -388,14 +391,20 @@ func upgradeLive(say func(string, ...any), binary string) (upgradeOutcome, error
 		return o, err
 	}
 	var accepted struct {
-		Panes         int    `json:"panes"`
-		ManifestBytes int64  `json:"manifest_bytes"`
-		Clients       int    `json:"clients"`
-		To            string `json:"to"`
-		From          string `json:"from"`
+		Panes         int      `json:"panes"`
+		ManifestBytes int64    `json:"manifest_bytes"`
+		Clients       int      `json:"clients"`
+		To            string   `json:"to"`
+		From          string   `json:"from"`
+		ClosedRemote  []string `json:"closed_remote"`
 	}
 	_ = jsonx.Unmarshal(raw, &accepted)
 	say("ok\n")
+	if n := len(accepted.ClosedRemote); n > 0 {
+		// Said before the new binary starts, and in the outcome.
+		say("Closed %d exited %s on other machines, which cannot be handed over: %s.\n",
+			n, plural.Word(n, "pane", "panes"), strings.Join(accepted.ClosedRemote, "; "))
+	}
 	say("Paused %d %s, saved their screens (%s).\n", accepted.Panes, plural.Word(accepted.Panes, "pane", "panes"), humanBytes(accepted.ManifestBytes))
 	say("Starting %s in place (pid %d kept)...\n", accepted.To, before.PID)
 
@@ -407,7 +416,8 @@ func upgradeLive(say func(string, ...any), binary string) (upgradeOutcome, error
 		Action: upgradeActionUpgraded,
 		PID:    after.PID, From: accepted.From, To: after.Version, Binary: binary,
 		Panes: accepted.Panes, Clients: accepted.Clients, Seconds: time.Since(started).Seconds(),
-		Instance: after.Instance, Handoff: after.Upgrade,
+		ClosedRemote: accepted.ClosedRemote,
+		Instance:     after.Instance, Handoff: after.Upgrade,
 	}
 	if after.Upgrade != nil {
 		o.Fallback, o.Recovered = after.Upgrade.Fallback, after.Upgrade.Recovered
@@ -433,6 +443,9 @@ func upgradeLive(say func(string, ...any), binary string) (upgradeOutcome, error
 		return o, errfmt.Errorf("the daemon's pid changed from %d to %d: it was restarted, not upgraded", before.PID, after.PID)
 	}
 	say("Upgraded in %.2f s. %d %s and their programs kept.", o.Seconds, o.Panes, plural.Word(o.Panes, "pane", "panes"))
+	if n := len(o.ClosedRemote); n > 0 {
+		say(" %d exited %s on other machines closed.", n, plural.Word(n, "pane", "panes"))
+	}
 	if o.Clients > 0 {
 		say(" %d attached %s dropped; tuios clients on this machine reattach by themselves.", o.Clients, plural.Word(o.Clients, "client was", "clients were"))
 	}
