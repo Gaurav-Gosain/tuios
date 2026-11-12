@@ -30,7 +30,7 @@ func agentLoudness(state AgentState) int {
 	switch state {
 	case AgentStateNeedsInput, AgentStateErrored:
 		return 3
-	case AgentStateWorking:
+	case AgentStateWorking, AgentStateLimitReached:
 		return 2
 	case AgentStateIdle, AgentStateDone, AgentStateUnknown:
 		return 1

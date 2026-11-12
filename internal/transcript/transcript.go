@@ -12,7 +12,7 @@
 // every file the agent read, and the output of every command it ran. This
 // package is built so that leaking any of that is not a matter of care.
 //
-//   - Records decode into [record], a struct with eight scalar fields. Go's
+//   - Records decode into [record], a struct of scalar fields. Go's
 //     encoding/json walks an unknown field to find where it ends and never
 //     allocates a Go value for it, so message.content, toolUseResult,
 //     lastPrompt, aiTitle and the file-history snapshots are not merely
@@ -29,8 +29,9 @@
 //     would put a pointer to that page in the trace.
 //
 // The only things that leave this package are a [Turn], which is one of three
-// constants, and the offset a read stopped at, which says how far the file
-// grew.
+// constants, the offset a read stopped at, which says how far the file grew,
+// and a count of the tokens the agent's context held, which is a number the
+// API returned and says nothing of what the tokens were.
 package transcript
 
 import (
@@ -107,7 +108,31 @@ type record struct {
 	TurnOrigin   string `json:"turnOrigin"`
 	Message      struct {
 		StopReason string `json:"stop_reason"`
+		// Usage is the API's token count for the response: how much
+		// context the request carried. Four integers, never the content.
+		Usage struct {
+			Input         int64 `json:"input_tokens"`
+			CacheCreation int64 `json:"cache_creation_input_tokens"`
+			CacheRead     int64 `json:"cache_read_input_tokens"`
+		} `json:"usage"`
 	} `json:"message"`
+}
+
+// contextTokens is how many tokens the agent's context held when the record
+// was written: the input side of the response's usage, the sum Claude Code's
+// own used_percentage is computed from. It is 0 for a record that is not the
+// main agent's response, and for one with no input tokens, such as the
+// synthetic record an API error is written as, which says nothing about the
+// context.
+func (r record) contextTokens() int64 {
+	if r.Type != "assistant" || r.IsSidechain {
+		return 0
+	}
+	u := r.Message.Usage
+	if u.Input < 0 || u.CacheCreation < 0 || u.CacheRead < 0 {
+		return 0
+	}
+	return u.Input + u.CacheCreation + u.CacheRead
 }
 
 // Observation is what one read of the tail concluded. Every field is either a
@@ -126,6 +151,10 @@ type Observation struct {
 	// the string the agent wrote because nothing here compares two of them; the
 	// caller uses wall-clock arrival for staleness.
 	Timestamp string
+	// ContextTokens is the context size the newest main agent response in
+	// the read carried (see record.contextTokens), or 0 when the read held
+	// none.
+	ContextTokens int64
 }
 
 // tailWindow bounds the first read of a file this package has not seen before.
@@ -283,6 +312,7 @@ func (r *Reader) scan(buf []byte, atBoundary bool) (Observation, bool, int) {
 
 	var obs Observation
 	found := false
+	var tokens int64
 	for len(lines) > 0 {
 		line := lines
 		if i := bytes.IndexByte(lines, '\n'); i >= 0 {
@@ -300,6 +330,9 @@ func (r *Reader) scan(buf []byte, atBoundary bool) (Observation, bool, int) {
 			r.skipped++
 			continue
 		}
+		if n := rec.contextTokens(); n > 0 {
+			tokens = n
+		}
 		turn, speaks := rec.turn()
 		if !speaks {
 			continue
@@ -313,6 +346,7 @@ func (r *Reader) scan(buf []byte, atBoundary bool) (Observation, bool, int) {
 		}
 		found = true
 	}
+	obs.ContextTokens = tokens
 	return obs, found, consumed
 }
 

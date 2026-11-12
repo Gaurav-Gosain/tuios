@@ -20,7 +20,25 @@ func TestParseStatusLine(t *testing.T) {
 			name:    "claude, every field",
 			harness: "claude-code",
 			payload: `{"session_id":"s1","model":{"id":"claude-opus-4-7","display_name":"Opus 4.7"},"context_window":{"used_percentage":41.6,"context_window_size":200000},"cost":{"total_cost_usd":1.2049,"total_duration_ms":5000}}`,
-			want:    StatusLineValues{Model: "Opus 4.7", Context: "42%", Cost: "$1.20", Session: "s1"},
+			want:    StatusLineValues{Model: "Opus 4.7", Context: "42%", Cost: "$1.20", ContextWindow: "200000", Session: "s1"},
+		},
+		{
+			name:    "claude, the context's tokens are the input side of current_usage",
+			harness: "claude-code",
+			payload: `{"context_window":{"used_percentage":61,"context_window_size":1000000,"current_usage":{"input_tokens":12,"output_tokens":900,"cache_creation_input_tokens":4000,"cache_read_input_tokens":608000}}}`,
+			want:    StatusLineValues{Context: "61%", ContextTokens: "612012", ContextWindow: "1000000"},
+		},
+		{
+			name:    "claude, current_usage null after /compact",
+			harness: "claude-code",
+			payload: `{"context_window":{"context_window_size":200000,"current_usage":null}}`,
+			want:    StatusLineValues{ContextWindow: "200000"},
+		},
+		{
+			name:    "claude, a window that is not a count",
+			harness: "claude-code",
+			payload: `{"context_window":{"context_window_size":-5,"current_usage":{"input_tokens":"many"}}}`,
+			want:    StatusLineValues{},
 		},
 		{
 			name:    "claude, model id when there is no display name",

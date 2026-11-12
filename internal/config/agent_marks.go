@@ -30,6 +30,11 @@ var agentMarkDefaults = map[string]struct{ glyph, ascii string }{
 	// anything is there. It reads as the same family as idle's hollow circle,
 	// which is the nearest thing to what it means.
 	"unknown": {"□", "?"},
+	// Stopped on the harness's usage or rate limit. A down triangle: the
+	// family of needs-input's triangle, pointed the other way, because the
+	// agent is stopped and the person is not the one it waits for. Go Mono
+	// has it.
+	"limit_reached": {"▼", "="},
 	// Display only, never a pane's state: the agent is at rest and subagents
 	// it started still run. A lozenge in the working ink: a shape none of the
 	// states uses, and one Go Mono, which tuios shot draws with when no font

@@ -45,13 +45,24 @@ func TestLimitScreensToday(t *testing.T) {
 					t.Fatalf("no manifest %q", id)
 				}
 				tail := fixtureTail(strings.Split(body, "\n"), r.ScreenLines(id))
-				state, _, ok := r.Classify(id, tail)
+				state, rule, ok := r.Classify(id, tail)
 				got := "none"
 				if ok {
 					got = state
 				}
 				if got != meta["today"] {
 					t.Errorf("classified as %s, want %s", got, meta["today"])
+				}
+				if want, stated := meta["resets"]; stated {
+					reset := "none"
+					if ok {
+						if at := r.RuleLimitReset(id, rule, tail); at != "" {
+							reset = at
+						}
+					}
+					if reset != want {
+						t.Errorf("reset read as %q, want %q", reset, want)
+					}
 				}
 			})
 		}

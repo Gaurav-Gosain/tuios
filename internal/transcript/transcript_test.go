@@ -363,9 +363,20 @@ func TestRecordTypeCannotGrowAField(t *testing.T) {
 			t.Fatalf("record field %d is %q, want %q", i, got[i], want[i])
 		}
 	}
+	// usage was added for the context size a lead reads (list-agents
+	// context): four token counts the API returned, no text.
 	inner := jsonTagsOf(record{}.Message)
-	if len(inner) != 1 || inner[0] != "stop_reason" {
-		t.Fatalf("record.Message has fields %v, want exactly [stop_reason]", inner)
+	if len(inner) != 2 || inner[0] != "stop_reason" || inner[1] != "usage" {
+		t.Fatalf("record.Message has fields %v, want exactly [stop_reason usage]", inner)
+	}
+	usage := reflect.TypeOf(record{}.Message.Usage)
+	for i := range usage.NumField() {
+		if k := usage.Field(i).Type.Kind(); k != reflect.Int64 {
+			t.Fatalf("record.Message.Usage.%s is a %s; usage holds integers only", usage.Field(i).Name, k)
+		}
+	}
+	if tags := jsonTagsOf(record{}.Message.Usage); len(tags) != 3 {
+		t.Fatalf("record.Message.Usage has fields %v, want the three input-side counts", tags)
 	}
 }
 

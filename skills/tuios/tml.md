@@ -122,7 +122,7 @@ Status:
 - `badge` on-press role: holds text
 - `progress` label role value*
 - `spinner` label
-- `status` label state*=working|needs_input|idle|done|errored|unknown
+- `status` label state*=working|needs_input|idle|done|errored|unknown|limit_reached
 
 Input:
 

@@ -384,6 +384,10 @@ func sidebarAgentNeed(state string, doneSeen bool, kind, message string) (string
 		if message == "" {
 			return "errored", false
 		}
+	case "limit_reached":
+		// Always said: the message is the harness's own line, and without
+		// the word a row on a rail drawn without colour reads as at rest.
+		return sidebarStateWords(state), false
 	case "done":
 		if !doneSeen && message == "" {
 			return sidebarStateWords(state), false

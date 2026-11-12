@@ -254,8 +254,8 @@ func (d *Daemon) backName(instance string) string {
 	return ""
 }
 
-// usageLimitedHarnesses are the harnesses with a pane here that is errored
-// with a usage limit.
+// usageLimitedHarnesses are the harnesses with a pane here that stopped on a
+// usage limit.
 func (d *Daemon) usageLimitedHarnesses() map[string]bool {
 	out := map[string]bool{}
 	for _, sess := range d.manager.AllSessions() {
@@ -264,7 +264,7 @@ func (d *Daemon) usageLimitedHarnesses() map[string]bool {
 			continue
 		}
 		for _, w := range st.Windows {
-			if w.AgentState == AgentStateErrored && w.AgentHarness != "" && usageLimited(w) {
+			if w.AgentHarness != "" && usageLimited(w) {
 				out[w.AgentHarness] = true
 			}
 		}

@@ -27,13 +27,14 @@ type AgentState = agentstate.State
 
 // The states, under the names this package has always used.
 const (
-	AgentStateNone       = agentstate.None
-	AgentStateWorking    = agentstate.Working
-	AgentStateNeedsInput = agentstate.NeedsInput
-	AgentStateIdle       = agentstate.Idle
-	AgentStateDone       = agentstate.Done
-	AgentStateErrored    = agentstate.Errored
-	AgentStateUnknown    = agentstate.Unknown
+	AgentStateNone         = agentstate.None
+	AgentStateWorking      = agentstate.Working
+	AgentStateNeedsInput   = agentstate.NeedsInput
+	AgentStateIdle         = agentstate.Idle
+	AgentStateDone         = agentstate.Done
+	AgentStateErrored      = agentstate.Errored
+	AgentStateUnknown      = agentstate.Unknown
+	AgentStateLimitReached = agentstate.LimitReached
 )
 
 // AgentStateNames lists the accepted wire values in a stable order, for the
@@ -620,9 +621,6 @@ func harnessAfterReport(w *WindowState, r AgentReport) string {
 // neither leaves the kind empty, which blocked_by reports as the source not
 // having said.
 func agentKindOf(r AgentReport) string {
-	if r.State == AgentStateErrored && r.Kind == AgentKindUsageLimit {
-		return r.Kind
-	}
 	if r.State != AgentStateNeedsInput {
 		return ""
 	}
@@ -796,7 +794,17 @@ func (s *Session) promptStillShown(w WindowState) bool {
 // working while its prompt is up, so a prompt on the screen is the newer fact
 // whenever the daemon's own look sees one. paneWroteAt still has to be set,
 // which keeps the exception to the daemon's tier.
+//
+// A usage limit on the screen takes a resting claim the same way, and only a
+// resting one. A harness at its limit is back at its prompt, so its title
+// says at rest (Claude Code's ✳) and a turn-end report says done or idle; the
+// limit line is the one thing that says why, and no claim at rest describes
+// it. A working claim keeps the pane: the limit line of an earlier turn under
+// a live one is history.
 func blockerOverridesClaim(w *WindowState, r AgentReport, claim agentClaim, now time.Time) bool {
+	if r.Source == AgentSourceScreen && r.State == AgentStateLimitReached && w.AgentState != r.State {
+		return r.paneWroteAt > w.AgentStateAt && agentStateRests(w.AgentState)
+	}
 	if r.Source != AgentSourceScreen || !agentStateBlocks(r.State) || w.AgentState == r.State {
 		return false
 	}
@@ -813,10 +821,16 @@ func blockerOverridesClaim(w *WindowState, r AgentReport, claim agentClaim, now 
 	// was always too early and nothing else looked again. Done is at rest
 	// too: a turn's Stop said it, and Claude Code then draws a form (Teach
 	// auto mode about your environment?) that no hook reports.
-	if w.AgentState == AgentStateIdle || w.AgentState == AgentStateUnknown || w.AgentState == AgentStateDone {
+	if agentStateRests(w.AgentState) {
 		return true
 	}
 	return now.UnixNano()-w.AgentStateAt >= int64(agentBlockerOverrideGrace)
+}
+
+// agentStateRests reports whether a state says the agent is at its prompt with
+// nothing to say: idle, unknown or done.
+func agentStateRests(s AgentState) bool {
+	return s == AgentStateIdle || s == AgentStateUnknown || s == AgentStateDone
 }
 
 // eventClaimStale reports whether a claim read from a one-off event may be

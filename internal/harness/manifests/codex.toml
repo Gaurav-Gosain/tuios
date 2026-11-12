@@ -131,6 +131,24 @@ priority = 10
 message  = "Works on a turn."
 regex    = ['\((?:[0-9]+[hm] )*[0-9]+s • [^)\n]*to interrupt\)']
 
+# The usage limit, printed as an error line above the composer, which is back
+# at rest under it. The words are from codex-rs/protocol/src/error.rs
+# (UsageLimitReachedError); testdata/limits holds them. Above idle and below
+# working, and read only from the bottom lines, so the line a later turn
+# pushed up does not hold the pane on the limit.
+#
+#   ■ You’ve hit your usage limit. Try again at 7:20 PM.
+#
+#   › Ask Codex to do anything
+[[screen.rule]]
+state    = "limit_reached"
+priority = 6
+message  = "Stopped on the usage limit."
+region   = "bottom_non_empty_lines(5)"
+all      = ["hit your usage limit"]
+regex    = ['^›(?:\s|$)']
+not      = ["to interrupt"]
+
 # The composer at rest: its "›" marker at column zero and the footer under it.
 # An approval menu numbers its choices behind the same marker, and a turn in
 # progress shows the interrupt hint, so either refuses the rule.

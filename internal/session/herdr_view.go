@@ -177,7 +177,7 @@ func herdrStatus(s AgentState, unread bool) string {
 			return "done"
 		}
 		return "idle"
-	case AgentStateErrored:
+	case AgentStateErrored, AgentStateLimitReached:
 		return "done"
 	}
 	return "unknown"

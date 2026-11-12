@@ -363,7 +363,9 @@ func newSetAgentStateCommand() *cobra.Command {
 		Short: "Report a pane's agent state to the running TUIOS session",
 		Long: `Report the semantic state of an agent running in a pane so the daemon can
 surface which panes need attention. State is one of: none, working, needs_input,
-idle, done, errored, unknown. A pane reports its own state by running this
+idle, done, errored, unknown, limit_reached. limit_reached says the agent
+stopped on its harness's usage or rate limit; put the reset in the message
+("resets 3pm") and tuios shows it. A pane reports its own state by running this
 against the daemon socket. tuios agent-hook, which the installed harness
 integrations run, does exactly that.
 
@@ -390,7 +392,7 @@ every pane, it is about the focused pane.`,
 				setAgentStateMessage, setAgentStateSource, setAgentStateHarness, setAgentStateExtra)
 		},
 	}
-	setAgentStateCmd.Flags().StringVar(&setAgentStateExtra.kind, "kind", "", "What a needs_input state waits for: approval, question or auth; or usage_limit with errored, which stops task dispatch")
+	setAgentStateCmd.Flags().StringVar(&setAgentStateExtra.kind, "kind", "", "What a needs_input state waits for: approval, question or auth; or usage_limit with errored, which reports limit_reached")
 	setAgentStateCmd.Flags().StringVar(&setAgentStateExtra.sessionID, "agent-session-id", "", "The harness's own conversation id, stored on the pane for a later resume")
 	setAgentStateCmd.Flags().StringVar(&setAgentStateExtra.transcriptPath, "transcript-path", "", "The transcript file the harness writes, joined exactly instead of searched for")
 	setAgentStateCmd.Flags().StringVar(&setAgentStateExtra.ifState, "if-state", "", "Apply only when the pane is in one of these comma-separated states")

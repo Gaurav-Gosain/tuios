@@ -82,8 +82,14 @@ Read `--json`, not the box table. The states:
 | `done` | It finished a turn. `message` is the first line of its last reply, or the line it reported. |
 | `idle` | At rest, with nothing to report. |
 | `errored` | It reported an error. Read the pane. |
+| `limit_reached` | It stopped on its harness's usage or rate limit. `limit_resets` is the reset in the harness's words, empty when it gave none. Nothing it does moves it before then. Do not restart it or mail it to go on before the reset; after the reset, mail it. |
 | `unknown` | tuios lost track of it, or `reason` is `silent`: no report for `[agents] silent_after`. A silent worker is still working: the table says `working (silent 12m)`, `last_state` is `working`, and `--select state:working` keeps it (`state:silent` picks only those). Look at the pane. |
 | `none` | Nothing reports here. It may be a shell. |
+
+`context` is how full the worker's context is: `tokens`, and `window`,
+`percent` and `near` (80 percent or more) when a source stated the window.
+It is `null` when nothing said. A worker near its window is the one to hand
+off and start fresh.
 
 `unread` counts mail the worker has not read. `finished_unread` is true while
 a finished turn waits for someone to look at it. `list-agents --all` also

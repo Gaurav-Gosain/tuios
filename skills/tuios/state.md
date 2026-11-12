@@ -13,8 +13,11 @@ tuios set-agent-state done -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID"
 tuios set-agent-state none -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID"    # clear it
 ```
 
-The states are `none`, `working`, `needs_input`, `idle`, `done`, `errored` and
-`unknown`. `unknown` is what the daemon writes to a pane it has lost track of:
+The states are `none`, `working`, `needs_input`, `idle`, `done`, `errored`,
+`unknown` and `limit_reached`. `limit_reached` is an agent that stopped on its
+harness's usage or rate limit: report it with `set-agent-state limit_reached
+-m 'resets 3pm'`, and put the reset in the message in the harness's words.
+It does not need the person and stops all task dispatch. `unknown` is what the daemon writes to a pane it has lost track of:
 an agent is there and nothing says what it is doing, so `ask-agent` and `fan`
 do not type into it. From inside a pane, a report with no `-s` and no `-w` is
 about that pane. From outside every pane, it lands on the focused window.

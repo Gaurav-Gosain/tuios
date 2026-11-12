@@ -296,6 +296,25 @@ priority = 8
 message  = "Works on a turn."
 regex    = ['^\s*[*·✢✳✶✻✽]\s+\S.*…(?:\s+\(\d+[smh]|\s*$)']
 
+# A usage or rate limit, on the line just above the prompt box, with the box
+# back at rest under it. The words are from the Claude Code 2.1.312 binary's
+# string table; testdata/limits holds them with a plausible frame (no capture:
+# a real one needs a spent plan). Above idle and below working, and read from
+# the last line above the box only, so a limit line that a later answer
+# pushed up does not hold the pane on the limit.
+#
+#    ⎿  You've hit your session limit · resets 11:10am (Australia/Sydney)
+#
+#   ────────────────────────────────────────────
+#   ❯
+#   ────────────────────────────────────────────
+[[screen.rule]]
+state    = "limit_reached"
+priority = 6
+message  = "Stopped on the usage limit."
+region   = "last_non_empty_above_prompt_box"
+any      = ["hit your session limit", "hit your weekly limit", "hit your usage limit", "hit your opus limit", "usage limit reached", "out of extra usage", "limit will reset", "increase your usage limit"]
+
 # The empty prompt box, read inside the box and nowhere else. Measured on
 # Claude Code 2.1.280:
 #

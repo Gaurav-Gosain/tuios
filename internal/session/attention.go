@@ -700,7 +700,7 @@ func (a *attentionStore) noteAgentState(sessionName string, ev SessionEvent) {
 	// finished before it, so the finished item goes. An agent that finished
 	// and then left the pane (none) did still finish, so that one stays.
 	switch state {
-	case AgentStateWorking.Name(), AgentStateNeedsInput.Name(), AgentStateErrored.Name():
+	case AgentStateWorking.Name(), AgentStateNeedsInput.Name(), AgentStateErrored.Name(), AgentStateLimitReached.Name():
 		a.closeKeyLocked(attentionKey(AttentionFinished, sessionName, ev.Window, 0), AttentionClosedResolved)
 	}
 	// An agent at work in a restored pane is the pane in use again, by a

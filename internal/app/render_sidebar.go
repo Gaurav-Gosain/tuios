@@ -370,7 +370,7 @@ func agentGlyphColor(state string, pal overlay.Palette) color.Color {
 		return pal.FgMute
 	case "done":
 		return pal.Success
-	case "errored":
+	case "errored", "limit_reached":
 		return pal.Warn
 	case string(agentStateWaiting):
 		// The working ink, without the shimmer: work goes on, and nothing

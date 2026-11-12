@@ -229,6 +229,8 @@ func sidebarStateWords(state string) string {
 		return "done"
 	case "unknown":
 		return "unknown"
+	case "limit_reached":
+		return "limit reached"
 	case string(agentStateWaiting):
 		return "waiting"
 	default:

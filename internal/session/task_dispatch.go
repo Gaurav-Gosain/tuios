@@ -40,8 +40,9 @@ import (
 //   - A board stops after dispatchMaxFailures dispatched cards in a row end
 //     without being finished: let go (pane closed, agent left, released),
 //     blocked, or put back because the agent errored.
-//   - All dispatch stops when an agent reports a usage limit: set-agent-state
-//     errored with kind usage_limit, or an errored message that says so.
+//   - All dispatch stops when an agent reports a usage limit: the state
+//     limit_reached (set-agent-state errored with kind usage_limit lands as
+//     it), or an errored message that says so.
 //
 // v1 limits: the agent and the card are on this daemon and in one session. A
 // card is let go by its own session when its pane closes, so a pane never
@@ -82,7 +83,8 @@ const taskByDispatch = "dispatch"
 const dispatchMaxFailures = 3
 
 // AgentKindUsageLimit is the kind of an errored report that says the agent
-// hit its harness's usage limit.
+// hit its harness's usage limit: the form from before limit_reached was a
+// state. set-agent-state turns such a report into limit_reached.
 const AgentKindUsageLimit = "usage_limit"
 
 // EventTaskDispatch says a dispatch mode or switch changed. Dispatch carries
@@ -482,7 +484,7 @@ func (d *Daemon) afterTaskEvent(sess *Session, action, window, reason string, ro
 // card leaves doing only by an act that names it: tuios task done, a stage
 // move, a release, or its verify result.
 func (d *Daemon) noteDispatchAgentState(sess *Session, window, state string) {
-	if state != AgentStateErrored.Name() && state != AgentStateWorking.Name() {
+	if state != AgentStateErrored.Name() && state != AgentStateLimitReached.Name() && state != AgentStateWorking.Name() {
 		return
 	}
 	if !d.dispatch.anyMode(DispatchPull, DispatchAuto) {
@@ -514,11 +516,15 @@ func (d *Daemon) noteDispatchAgentState(sess *Session, window, state string) {
 	}()
 }
 
-// usageLimited reports whether w's errored state says the agent hit a usage
-// limit.
+// usageLimited reports whether w's state says the agent hit a usage limit:
+// limit_reached, or an errored state whose message says so (a harness whose
+// hook maps a limit to an error).
 func usageLimited(w WindowState) bool {
-	if w.AgentKind == AgentKindUsageLimit {
+	if w.AgentState == AgentStateLimitReached {
 		return true
+	}
+	if w.AgentState != AgentStateErrored {
+		return false
 	}
 	msg := strings.ToLower(w.AgentMessage)
 	return strings.Contains(msg, "usage limit") || strings.Contains(msg, "rate limit")

@@ -48,6 +48,12 @@ const (
 	MetaContext = "context"
 	MetaCost    = "cost"
 	MetaPlan    = "plan"
+	// MetaContextTokens is how many tokens the agent's context holds, and
+	// MetaContextWindow how many it can hold, both as decimal integers. The
+	// window is written only by a source that states it: the status line,
+	// an ACP usage update. The transcript writes the tokens alone.
+	MetaContextTokens = "context_tokens"
+	MetaContextWindow = "context_window"
 	// StatusLineSource is the set-agent-meta source of the wrapper's keys.
 	StatusLineSource = "statusline"
 )
@@ -61,6 +67,10 @@ type StatusLineValues struct {
 	Model   string `json:"model,omitempty"`
 	Context string `json:"context,omitempty"`
 	Cost    string `json:"cost,omitempty"`
+	// ContextTokens and ContextWindow are the context's size and its
+	// capacity in tokens, as decimal integers.
+	ContextTokens string `json:"context_tokens,omitempty"`
+	ContextWindow string `json:"context_window,omitempty"`
 	// Session is the harness's conversation id, when the payload names it.
 	// It is not written anywhere; the wrapper uses it to tell a new
 	// conversation from the last one.
@@ -70,7 +80,7 @@ type StatusLineValues struct {
 // Tokens are the values as set-agent-meta tokens, only the stated ones.
 func (v StatusLineValues) Tokens() map[string]string {
 	out := map[string]string{}
-	for k, val := range map[string]string{MetaModel: v.Model, MetaContext: v.Context, MetaCost: v.Cost} {
+	for k, val := range map[string]string{MetaModel: v.Model, MetaContext: v.Context, MetaCost: v.Cost, MetaContextTokens: v.ContextTokens, MetaContextWindow: v.ContextWindow} {
 		if val != "" {
 			out[k] = val
 		}
@@ -79,11 +89,15 @@ func (v StatusLineValues) Tokens() map[string]string {
 }
 
 // Empty reports whether the payload stated nothing the rail can show.
-func (v StatusLineValues) Empty() bool { return v.Model == "" && v.Context == "" && v.Cost == "" }
+func (v StatusLineValues) Empty() bool {
+	return v.Model == "" && v.Context == "" && v.Cost == "" && v.ContextTokens == "" && v.ContextWindow == ""
+}
 
 // ParseStatusLine reads one status line payload for harness.
 //
 // Claude Code: model.display_name, else model.id; context_window.used_percentage;
+// the context's tokens, the input side of context_window.current_usage (the
+// sum used_percentage is computed from); context_window.context_window_size;
 // cost.total_cost_usd; session_id. opencode and Kilo (from tuios's own plugin):
 // modelID, cost, session_id.
 func ParseStatusLine(harness string, payload []byte) (StatusLineValues, error) {
@@ -106,8 +120,13 @@ func ParseStatusLine(harness string, payload []byte) (StatusLineValues, error) {
 	case ClaudeCode:
 		m := p.obj("model")
 		v.Model = m.first("display_name", "id")
-		if pct, ok := p.obj("context_window").num("used_percentage"); ok {
+		cw := p.obj("context_window")
+		if pct, ok := cw.num("used_percentage"); ok {
 			v.Context = FormatPercent(pct)
+		}
+		v.ContextTokens = claudeContextTokens(cw.obj("current_usage"))
+		if size, ok := cw.num("context_window_size"); ok && size >= 1 && size <= maxContextTokens {
+			v.ContextWindow = strconv.FormatInt(int64(size), 10)
 		}
 		if usd, ok := p.obj("cost").num("total_cost_usd"); ok {
 			v.Cost = FormatCost(usd, "USD")
@@ -119,6 +138,29 @@ func ParseStatusLine(harness string, payload []byte) (StatusLineValues, error) {
 		}
 	}
 	return v, nil
+}
+
+// maxContextTokens bounds a token count the feed writes, far past any
+// window a model has, so a field that is not a count writes nothing.
+const maxContextTokens = 1e9
+
+// claudeContextTokens is the context's size from a status line's
+// current_usage: input_tokens, cache_creation_input_tokens and
+// cache_read_input_tokens. The object is null before the first response and
+// after /compact, and then nothing is written.
+func claudeContextTokens(u fields) string {
+	var sum float64
+	seen := false
+	for _, k := range []string{"input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"} {
+		if n, ok := u.num(k); ok && n >= 0 {
+			sum += n
+			seen = true
+		}
+	}
+	if !seen || sum < 1 || sum > maxContextTokens {
+		return ""
+	}
+	return strconv.FormatInt(int64(sum), 10)
 }
 
 // num reads a finite number.

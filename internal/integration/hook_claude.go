@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/oneline"
 )
 
@@ -12,7 +13,8 @@ import (
 // events, the common input fields (session_id, transcript_path, cwd,
 // hook_event_name, agent_id "only in subagent context"), Notification's
 // notification_type values, PermissionRequest's tool_name and tool_input,
-// SessionStart's source, StopFailure's error_type, SessionEnd's reason, and
+// SessionStart's source, StopFailure's error and last_assistant_message,
+// SessionEnd's reason, and
 // SubagentStart's and SubagentStop's agent_id and agent_type.
 //
 // What each event means for a pane:
@@ -28,7 +30,9 @@ import (
 //	ElicitationResult     working, only if the pane is in needs_input
 //	Notification          by notification_type, see claudeNotification
 //	Stop                  done
-//	StopFailure           errored, with the error_type
+//	StopFailure           limit_reached for error rate_limit or
+//	                      billing_error, with the harness's error text;
+//	                      errored with the error for the rest
 //	SessionEnd            none
 //	SubagentStart         no state: a subagent started, see claudeSubagent
 //	SubagentStop          no state: a subagent stopped
@@ -206,11 +210,7 @@ func translateClaude(in Input, p fields) Decision {
 		r.Extra = claudeBackgroundTasks(p)
 		return send(ClaudeCode, event, r)
 	case "StopFailure":
-		msg := "stopped on an error"
-		if t := p.str("error_type"); t != "" {
-			msg = "stopped on " + t
-		}
-		return send(ClaudeCode, event, identity(Report{State: "errored", Message: msg}, p))
+		return send(ClaudeCode, event, identity(claudeStopFailure(p), p))
 	case "SessionEnd":
 		return send(ClaudeCode, event, identity(Report{State: "none"}, p))
 	case "SubagentStart", "SubagentStop":
@@ -220,6 +220,33 @@ func translateClaude(in Input, p fields) Decision {
 	default:
 		return skip(ClaudeCode, event, "event not mapped")
 	}
+}
+
+// claudeLimitErrors are the StopFailure errors that are a usage limit: the
+// plan's or the organization's rate limit, and spent credits. overloaded is
+// the service being busy, not the person's limit, and stays errored.
+var claudeLimitErrors = []string{"rate_limit", "billing_error"}
+
+// claudeStopFailure is the report of a turn that ended on an API error. The
+// hooks reference names the field error; error_type is read too, as this
+// code read it before, in case a release sent that name. The message of a
+// limit is the first line of last_assistant_message, which the reference
+// says is the error text the conversation shows ("You've hit your session
+// limit · resets 11:10am"), so the reset is in it when Claude Code gave one.
+func claudeStopFailure(p fields) Report {
+	errType := p.first("error", "error_type")
+	if slices.Contains(claudeLimitErrors, errType) {
+		full := p.str("last_assistant_message")
+		msg := activityText(full)
+		if msg == "" {
+			msg = "Stopped on the usage limit."
+		}
+		return Report{State: "limit_reached", Message: harness.LimitMessage(msg, harness.LimitReset(full))}
+	}
+	if errType == "" {
+		return Report{State: "errored", Message: "stopped on an error"}
+	}
+	return Report{State: "errored", Message: "stopped on " + errType}
 }
 
 // claudeNotification maps a Notification by its notification_type.

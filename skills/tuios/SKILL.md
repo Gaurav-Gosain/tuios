@@ -152,7 +152,10 @@ they ask for it.
 Every listing takes `--json`. `list-agents --json` has one object per pane in
 `.agents[]`: `window_id`, `name`, `state`, `message`, `ready` (true when
 `ask-agent` can type now) and `unread`. The states are `none`, `working`,
-`needs_input`, `idle`, `done`, `errored` and `unknown`.
+`needs_input`, `idle`, `done`, `errored`, `unknown` and `limit_reached`
+(stopped on the harness's usage limit; `limit_resets` says when, in its words).
+`context` says how full the agent's context is (`tokens`, and `window`,
+`percent` and `near` when known).
 
 ```sh
 tuios list-agents -s "$TUIOS_SESSION" --json | jq -r '.agents[] | select(.state=="needs_input") | .window_id'

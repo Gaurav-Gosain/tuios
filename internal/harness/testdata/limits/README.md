@@ -10,9 +10,11 @@ tuios does with it today. The header says where the text came from:
   needs a spent plan.
 
 `today` is what `Classify` returns now: a state, or `none` for no rule matching.
-The fixtures document a gap. When a manifest learns to read limits, change
-`today` in the same commit.
+`resets` is what `LimitReset` reads from the line the rule matched: the
+harness's words for when the limit ends, or `none`. A change to a manifest's
+limit rule or to `LimitReset` changes these in the same commit.
 
-Today every fixture reads as `idle`, because the empty prompt box under the
-message matches the idle rule and no rule knows the limit text. The frame is
-not captured, so this shows the rule order, not a measured screen.
+Every fixture reads as `limit_reached`. Before the limit rules, every one read
+as `idle`, because the empty prompt box under the message matched the idle
+rule. The frame is not captured, so this shows the rule order, not a measured
+screen.

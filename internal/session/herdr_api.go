@@ -1250,7 +1250,7 @@ func herdrStatesFor(statuses []string) (string, *herdrError) {
 		case "idle", "done":
 			states = append(states, string(AgentStateIdle), string(AgentStateDone))
 			if s == "done" {
-				states = append(states, string(AgentStateErrored))
+				states = append(states, string(AgentStateErrored), string(AgentStateLimitReached))
 			}
 		case "working":
 			states = append(states, string(AgentStateWorking))

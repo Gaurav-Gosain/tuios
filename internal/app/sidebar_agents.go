@@ -121,6 +121,10 @@ func sidebarAgentPriority(state string, doneSeen bool) int {
 		return 4
 	case "working":
 		return 3
+	case "limit_reached":
+		// Nothing to do before the reset, but the work is not done: above a
+		// finished pane, below one that is moving.
+		return 2
 	case "done":
 		if doneSeen {
 			return 1

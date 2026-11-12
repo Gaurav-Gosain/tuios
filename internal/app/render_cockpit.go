@@ -13,6 +13,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/risk"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -141,6 +142,7 @@ var (
 	ckGlyphReview  = ckGlyph{"", "√", "v"}
 	ckGlyphFailed  = ckGlyph{"", "×", "x"}
 	ckGlyphIdle    = ckGlyph{"○", "○", "o"}
+	ckGlyphLimit   = ckGlyph{"\U000f051f", "▼", "="}
 	ckGlyphHost    = ckGlyph{"\U000f048b", "@", "@"}
 	ckGlyphBranch  = ckGlyph{"", "", "br"}
 	ckGlyphFold    = ckGlyph{"\ueab6", "˃", ">"}
@@ -183,6 +185,8 @@ func (l ckLook) ckMark(state string, doneSeen bool) (string, color.Color) {
 		return l.ckStateMark(state, ckGlyphNeeds), l.pal.Attention
 	case "errored":
 		return l.ckStateMark(state, ckGlyphFailed), l.pal.Warn
+	case "limit_reached":
+		return l.ckStateMark(state, ckGlyphLimit), l.pal.Warn
 	case "working":
 		return l.ckStateMark(state, ckGlyphWorking), l.pal.Busy
 	case "done":
@@ -1115,15 +1119,30 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 		rx = cx
 	}
 	if r.lines == 1 && w < 48 {
+		// Narrow: the context, when a source said, takes the place's room.
+		if ctx := ckContextSegs(l, e, true); ctx != nil && rx-2-ckWidth(ctx...) > nx+nameW {
+			rx = c.textR(rx-2, y, ctx...)
+		}
 		c.text(nx+nameW, y, rx-1, ckSeg{t: ckTrunc(place, rx-1-nx-nameW), fg: ink(pal.FgMute)})
 		return
 	}
 	hx := nx + nameW
+	// The context is a quiet column before the age, on every row that has
+	// one, so a lead sees it on agents at rest too, whose rows are one line.
+	// It takes the place's room before the harness's: the place is in the
+	// focus header too.
+	if ctx := ckContextSegs(l, e, true); ctx != nil && rx-2-ckWidth(ctx...) > hx+9 {
+		rx = c.textR(rx-2, y, ctx...)
+	}
 	if diff := ckDiffSegs(l, e); diff != nil && rx-2-ckWidth(diff...) > hx+18 {
 		rx = c.textR(rx-2, y, diff...)
 	}
 	hx = c.text(hx, y, rx-1, ckSeg{t: ckPad(harness, 9), fg: ink(pal.FgDim)})
-	c.text(hx, y, rx-1, ckSeg{t: ckTrunc(place, rx-1-hx), fg: ink(pal.FgMute)})
+	// A place cut to a letter and an ellipsis says nothing: the room goes
+	// blank, and the focus header names the place.
+	if room := rx - 1 - hx; room >= 6 || ansi.StringWidth(place) <= room {
+		c.text(hx, y, rx-1, ckSeg{t: ckTrunc(place, room), fg: ink(pal.FgMute)})
+	}
 	if r.lines < 2 {
 		return
 	}
@@ -1356,6 +1375,55 @@ func ckDiffSegs(l ckLook, e sidebarAgentEntry) []ckSeg {
 	return segs
 }
 
+// ckContextSegs is how full an agent's context is, in its row's first line
+// before the age: "ctx 612k", or "ctx 612k/1M" when a source stated the window, or the
+// percent a status line gave alone ("ctx 42%"). Past the rail's warn line
+// (config.SidebarContextWarnAt) it says "near" in the warn ink. Nil when no
+// source said anything.
+//
+// short leaves out the "ctx " lead, for the fleet column, where the column's
+// place says what the number is and the room is a name's and a harness's.
+func ckContextSegs(l ckLook, e sidebarAgentEntry, short bool) []ckSeg {
+	tokens, _ := strconv.ParseInt(ckMeta(e, "context_tokens"), 10, 64)
+	window, _ := strconv.ParseInt(ckMeta(e, "context_window"), 10, 64)
+	pct, havePct := sidebarContextPercent(ckMeta(e, "context"))
+	text := ""
+	switch {
+	case tokens > 0 && window > 0:
+		text = "ctx " + ckTokenCount(tokens) + "/" + ckTokenCount(window)
+		pct, havePct = float64(tokens)*100/float64(window), true
+	case tokens > 0:
+		text = "ctx " + ckTokenCount(tokens)
+	case havePct:
+		text = "ctx " + strconv.Itoa(int(pct+0.5)) + "%"
+	default:
+		return nil
+	}
+	if short {
+		text = strings.TrimPrefix(text, "ctx ")
+	}
+	if havePct && pct >= config.SidebarContextWarnAt {
+		return []ckSeg{{t: text + " near", fg: l.pal.Warn}}
+	}
+	return []ckSeg{{t: text, fg: l.pal.FgMute}}
+}
+
+// ckTokenCount is a token count as the agents view prints it: 940, 61k,
+// 612k, 1M, 1.2M.
+func ckTokenCount(n int64) string {
+	switch {
+	case n >= 1_000_000:
+		m := float64(n) / 1_000_000
+		if n%1_000_000 == 0 || m >= 10 {
+			return strconv.FormatInt(int64(m), 10) + "M"
+		}
+		return strconv.FormatFloat(m, 'f', 1, 64) + "M"
+	case n >= 1000:
+		return strconv.FormatInt(n/1000, 10) + "k"
+	}
+	return strconv.FormatInt(n, 10)
+}
+
 // ckRowLine2 is the second line of a row: the one thing worth reading. For
 // an item, the verb of what it asks in the attention ink and its text. For a
 // working agent, what it does now and its context. For one ready for review,
@@ -1394,9 +1462,6 @@ func (m *OS) ckRowLine2(l ckLook, r ckRow, e sidebarAgentEntry) (verb, rest stri
 		return "Form waiting", printableTitle(title), pal.Attention, nil
 	}
 	ink = pal.FgDim
-	if ctx := ckMeta(e, "context"); ctx != "" {
-		right = []ckSeg{{t: "ctx " + ctx, fg: pal.FgMute}}
-	}
 	switch {
 	case e.Reason == session.AgentReasonSilent:
 		return "", silentNote(e.StateAt, time.Now()), pal.Warn, right
@@ -1425,6 +1490,10 @@ func (m *OS) ckRowLine2(l ckLook, r ckRow, e sidebarAgentEntry) (verb, rest stri
 			rest = strings.TrimSuffix("quiet, not in the Inbox. "+rest, " ")
 		}
 		return capitalize(agentRowStateWords(e)), rest, pal.Attention, right
+	}
+	if e.State == "limit_reached" {
+		// The harness's own line says which limit and when it resets.
+		return "Limit reached", printableTitle(e.Message), pal.Warn, right
 	}
 	if e.DraftHeld {
 		// A queued message waits for the person's draft. See
@@ -2174,13 +2243,11 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 	if d := ckDiffSegs(l, e); d != nil {
 		groups = append(groups, d)
 	}
-	for _, k := range []string{"context", "cost"} {
-		if v := ckMeta(e, k); v != "" {
-			if k == "context" {
-				v = "ctx " + v
-			}
-			groups = append(groups, []ckSeg{{t: v, fg: pal.FgMute}})
-		}
+	if ctx := ckContextSegs(l, e, false); ctx != nil {
+		groups = append(groups, ctx)
+	}
+	if v := ckMeta(e, "cost"); v != "" {
+		groups = append(groups, []ckSeg{{t: v, fg: pal.FgMute}})
 	}
 	const gap = 3
 	width := func() int {
@@ -2481,6 +2548,11 @@ func (m *OS) drawStatePill(c *ckCanvas, l ckLook, r ckRow, e sidebarAgentEntry, 
 		words, bg = "ready for review", l.okTint
 	case e.State == "errored":
 		words, bg = "error", l.warnTint
+	case e.State == "limit_reached":
+		bg = l.warnTint
+		if at := harness.LimitReset(e.Message); at != "" {
+			words = "limit reached, resets " + at
+		}
 	}
 	if r.agent < 0 && !r.hasItem {
 		return right

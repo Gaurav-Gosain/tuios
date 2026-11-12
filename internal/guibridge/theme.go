@@ -94,11 +94,12 @@ func CurrentTheme() Theme {
 	t.BorderCopy = hex(theme.DockColorCopy())
 	t.BorderMultifocus = hex(overlay.Shown(theme.BorderMultifocus()))
 	t.Agent = map[string]string{
-		"working":     hex(overlay.Shown(gp.Busy)),
-		"needs_input": hex(overlay.Shown(gp.Attention)),
-		"idle":        hex(overlay.Shown(gp.FgMute)),
-		"done":        hex(overlay.Shown(gp.Success)),
-		"errored":     hex(overlay.Shown(gp.Warn)),
+		"working":       hex(overlay.Shown(gp.Busy)),
+		"needs_input":   hex(overlay.Shown(gp.Attention)),
+		"idle":          hex(overlay.Shown(gp.FgMute)),
+		"done":          hex(overlay.Shown(gp.Success)),
+		"errored":       hex(overlay.Shown(gp.Warn)),
+		"limit_reached": hex(overlay.Shown(gp.Warn)),
 	}
 	return t
 }

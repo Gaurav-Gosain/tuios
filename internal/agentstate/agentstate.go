@@ -29,6 +29,12 @@ const (
 	// nothing, in place of idle: idle says nothing needs you, and a pane that
 	// went quiet on a prompt no rule knows would be lying.
 	Unknown State = "unknown"
+	// LimitReached means the agent stopped on its harness's usage or rate
+	// limit. It is not an error and not a prompt: nothing a person types
+	// moves it before the limit resets, so it does not count as needing
+	// you. The harness's words for the reset, when it gave any, are in the
+	// pane's message.
+	LimitReached State = "limit_reached"
 )
 
 // Info is what every reader may need about a state. One row per state; a
@@ -49,7 +55,13 @@ type Info struct {
 
 // The ranks are spaced so a state can be added between two others without
 // renumbering. Only the order is meaningful: errored > needs_input >
-// done unseen > working > done seen > idle > unknown > none.
+// limit_reached unseen > done unseen > working > limit_reached seen >
+// done seen > idle > unknown > none.
+//
+// limit_reached ranks below needs_input, which a person can answer now, and
+// above done, since the agent did not finish. Once seen it drops below
+// working, as done does, and stays above done seen: the agent still has work
+// it could not do.
 //
 // unknown ranks above none: there is something in that pane, which is more
 // than none says. It ranked zero once, so a session whose only agent was in
@@ -71,13 +83,15 @@ func info(s State) (Info, bool) {
 		return Info{Name: "errored", Rank: 12, RankSeen: 12, NeedsYou: true, Activity: "resting"}, true
 	case Unknown:
 		return Info{Name: "unknown", Rank: 1, RankSeen: 1, Activity: "unknown"}, true
+	case LimitReached:
+		return Info{Name: "limit_reached", Rank: 9, RankSeen: 5, Activity: "resting"}, true
 	}
 	return Info{Name: string(s), Activity: "none"}, false
 }
 
 // names is the accepted wire values in a stable order. It is part of the
 // public protocol surface; keep the values stable.
-var names = []string{"none", "working", "needs_input", "idle", "done", "errored", "unknown"}
+var names = []string{"none", "working", "needs_input", "idle", "done", "errored", "unknown", "limit_reached"}
 
 // Info returns the row for s.
 func (s State) Info() Info {

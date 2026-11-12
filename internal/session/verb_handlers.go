@@ -1649,8 +1649,14 @@ func (d *Daemon) setAgentState(cs *connState, params json.RawMessage, ownPane bo
 			Detail:     "source says where the state came from and decides which of two competing reports wins. Omit it to report for yourself.",
 		})
 	}
-	if p.Kind == AgentKindUsageLimit && state != AgentStateErrored {
-		return nil, invalidParam("kind", "kind usage_limit describes an errored state, and this report is "+state.Name())
+	if p.Kind == AgentKindUsageLimit {
+		// errored with kind usage_limit is how a usage limit was reported
+		// before limit_reached was a state of its own. It still works, and
+		// lands as limit_reached, so every reader sees one state for a limit.
+		if state != AgentStateErrored && state != AgentStateLimitReached {
+			return nil, invalidParam("kind", "kind usage_limit describes a limit_reached or errored state, and this report is "+state.Name())
+		}
+		state, p.Kind = AgentStateLimitReached, ""
 	}
 	if p.Kind != "" && p.Kind != AgentKindUsageLimit {
 		if p.Kind != harness.PromptKindApproval && p.Kind != harness.PromptKindQuestion && p.Kind != harness.PromptKindAuth {

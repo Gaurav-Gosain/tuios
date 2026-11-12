@@ -45,6 +45,10 @@ var agentRestStates = map[string]bool{
 	AgentStateDone.Name():    true,
 	AgentStateErrored.Name(): true,
 	AgentStateNone.Name():    true,
+	// limit_reached is at rest: its prompt is back. Mail typed into it
+	// before the reset gets the limit again, and after the reset it is the
+	// lead's way to start it, so it is not held back.
+	AgentStateLimitReached.Name(): true,
 	// unknown is not in the set. It is what the silence timer writes to a pane
 	// that said nothing for the stall window when the screen showed nothing a
 	// rule knows, and silence is also what a long tool call looks like, so
@@ -228,6 +232,7 @@ func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now i
 			continue
 		}
 		claim := sess.agentClaimFor(w.ID)
+		meta := agentMetaMap(w.AgentMeta, now)
 		// An unset claim reads back as "report", because that is the default a
 		// caller naming no source gets. Reporting it for a pane nothing has
 		// claimed would say a pane at a shell prompt reported itself idle, so
@@ -276,7 +281,12 @@ func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now i
 			// The harness's own conversation id, empty until a hook reports
 			// one. It is what a resume names.
 			"agent_session_id": w.AgentSessionID,
-			"meta":             agentMetaMap(w.AgentMeta, now),
+			"meta":             meta,
+			// How full the agent's context is, null when no source said.
+			"context": agentContextOf(meta),
+			// The reset a pane on limit_reached names, in the harness's
+			// words; empty otherwise.
+			"limit_resets": agentLimitResets(&w),
 			// The fan-out group of the pane's session, empty outside one. It
 			// is what a group: selector term reads.
 			"group": group,

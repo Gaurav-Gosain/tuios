@@ -166,8 +166,33 @@
   },
   {
     "name": "StopFailure",
-    "payload": {"session_id": "sess-1", "hook_event_name": "StopFailure", "error_type": "rate_limit"},
-    "want": {"state": "errored", "message": "stopped on rate_limit", "agent_session_id": "sess-1"}
+    "payload": {"session_id": "sess-1", "hook_event_name": "StopFailure", "error": "rate_limit", "error_details": "429 Too Many Requests", "last_assistant_message": "You've hit your session limit · resets 11:10am (Australia/Sydney)"},
+    "want": {"state": "limit_reached", "message": "You've hit your session limit · resets 11:10am (Australia/Sydney)", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "StopFailure, the reference's example",
+    "payload": {"session_id": "sess-1", "hook_event_name": "StopFailure", "error": "rate_limit", "error_details": "429 Too Many Requests", "last_assistant_message": "API Error: Rate limit reached"},
+    "want": {"state": "limit_reached", "message": "API Error: Rate limit reached", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "StopFailure, out of credits",
+    "payload": {"session_id": "sess-1", "hook_event_name": "StopFailure", "error": "billing_error"},
+    "want": {"state": "limit_reached", "message": "Stopped on the usage limit.", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "StopFailure, overloaded is not a limit",
+    "payload": {"session_id": "sess-1", "hook_event_name": "StopFailure", "error": "overloaded", "last_assistant_message": "API Error: Overloaded"},
+    "want": {"state": "errored", "message": "stopped on overloaded", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "StopFailure, an error this build does not know",
+    "payload": {"session_id": "sess-1", "hook_event_name": "StopFailure", "error": "quota_exceeded_for_org"},
+    "want": {"state": "errored", "message": "stopped on quota_exceeded_for_org", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "StopFailure, no error named",
+    "payload": {"session_id": "sess-1", "hook_event_name": "StopFailure"},
+    "want": {"state": "errored", "message": "stopped on an error", "agent_session_id": "sess-1"}
   },
   {
     "name": "SessionEnd",

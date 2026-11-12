@@ -5,10 +5,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/Gaurav-Gosain/tuios/internal/transcript"
@@ -345,12 +347,33 @@ func (s *Session) readAgentTranscript(windowID string) bool {
 	// read again. Raised for bookkeeping appends too, since only the
 	// reader can tell what they hold.
 	s.noteTranscriptGrowth(windowID, j)
+	if obs.ContextTokens > 0 {
+		s.noteTranscriptContext(windowID, obs.ContextTokens)
+	}
 	if !fresh {
 		// An append that only wrote bookkeeping. A real event with no answer in
 		// it, so the pane keeps believing what it already believed.
 		return false
 	}
 	return s.applyTranscriptTurn(windowID, harnessID, obs.Turn)
+}
+
+// AgentMetaSourceTranscript is the metadata source of what the daemon reads
+// from a pane's transcript.
+const AgentMetaSourceTranscript = "transcript"
+
+// noteTranscriptContext writes the context size the transcript's newest
+// response carried to the pane's metadata, as context_tokens under the
+// transcript source. It is a number for a reader to show (list-agents, the
+// agents view); nothing decides a state from it. A size that did not move
+// writes nothing and pushes nothing.
+func (s *Session) noteTranscriptContext(windowID string, tokens int64) {
+	v := strconv.FormatInt(tokens, 10)
+	_, _ = s.SetAgentMeta(windowID, AgentMetaUpdate{
+		Keys:   []string{integration.MetaContextTokens},
+		Values: []*string{&v},
+		Source: AgentMetaSourceTranscript,
+	})
 }
 
 // readViewTranscript reads a join whose format gives no turn state: it

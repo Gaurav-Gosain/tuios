@@ -55,11 +55,23 @@ func screenVerdict(pty *PTY, hid string, reg *harness.Registry) (v agentVerdict,
 	if !ok {
 		return agentVerdict{}, true
 	}
+	msg, kind := screenRuleMessage(reg, hid, rule, tail), reg.RuleKind(hid, rule)
+	if AgentState(state) == AgentStateLimitReached {
+		// A limit is no prompt: it has no kind to front its line, and the
+		// line is the harness's own words, without the mark it is drawn
+		// under.
+		kind = ""
+		line := strings.TrimLeft(reg.RulePrompt(hid, rule, tail), "⎿ ")
+		if line == "" {
+			line = reg.RuleMessage(hid, rule)
+		}
+		msg = harness.LimitMessage(line, reg.RuleLimitReset(hid, rule, tail))
+	}
 	return agentVerdict{
 		ok:      true,
 		state:   AgentState(state),
-		message: screenRuleMessage(reg, hid, rule, tail),
-		kind:    reg.RuleKind(hid, rule),
+		message: msg,
+		kind:    kind,
 		source:  AgentSourceScreen,
 	}, true
 }

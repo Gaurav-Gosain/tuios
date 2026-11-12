@@ -192,6 +192,27 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
+**A usage limit is a state of its own.** An agent that stopped on its
+harness's usage or rate limit reads `limit_reached`. What changes for a caller:
+
+- The agent state can be `limit_reached` in `get-agent-state`, `list-agents`,
+  the synced window state, `agent-state` events and `wait-for agent-state`.
+  `needs_you` is false for it and `ready` true. An older client draws it as a
+  state it does not know.
+- `set-agent-state errored` with `kind` `usage_limit` now lands as
+  `limit_reached`, where it stayed `errored`. A reader that looked for
+  `errored` with `blocked_by` `usage_limit` reads `limit_reached` instead.
+- Claude Code's `StopFailure` hook with `error` `rate_limit` or
+  `billing_error` reports `limit_reached`. Any other error reports `errored`
+  with the error named (`stopped on overloaded`), where it said `stopped on an
+  error`.
+- Every `list-agents` entry gains `limit_resets` (the reset the harness named,
+  in its words, empty otherwise) and `context` (`tokens`, `window`, `percent`,
+  `near`, or null). See [Context size](AGENT_STATE.md#context-size).
+- The metadata keys `context_tokens` and `context_window` are written by the
+  status line feed, the transcript (tokens only, under the source
+  `transcript`) and protocol panes.
+
 **Task cards carry attachments.** `get-task` gains `attachments`, a card's row
 gains `attachment_count`, a card's history and `task-changed` gain the actions
 `attached` and `detached`, and `attach-task`, `detach-task` and
@@ -7745,7 +7766,7 @@ dispatch made the card's last claim. On a board in pull mode, an agent that
 finishes its card is given the board's next open card in the same state change
 as the claim, and mail from `tuios` tells it. A board stops after 3 dispatched
 cards in a row end without a finish; all dispatch stops when an agent reports
-`errored` with `kind` `usage_limit`. See [`tuios task`](CLI_REFERENCE.md#tuios-task).
+`limit_reached` (or `errored` with `kind` `usage_limit`, which lands as it). See [`tuios task`](CLI_REFERENCE.md#tuios-task).
 
 Every verb but `list-tasks` and `remove-task` answers with the card's row at
 the top level of the result: `id`, `session`, `title`, `preview` (the first

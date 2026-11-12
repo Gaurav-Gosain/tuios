@@ -19,15 +19,15 @@ package agentseen
 // viewed its thread at, zero for never.
 //
 // A finished agent is unseen until either the thread is viewed or the pane is
-// focused. A failed agent is unseen until the thread is viewed, even if it was
-// never opened before.
+// focused. A failed agent, or one stopped on its usage limit, is unseen until
+// the thread is viewed, even if it was never opened before.
 func Unseen(state string, doneSeen bool, stateAt, viewedAt int64) bool {
 	switch state {
 	case "done":
 		if doneSeen {
 			return false
 		}
-	case "errored":
+	case "errored", "limit_reached":
 	default:
 		return false
 	}

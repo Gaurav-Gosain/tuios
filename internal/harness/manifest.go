@@ -540,10 +540,15 @@ func compilePatterns(patterns []string) ([]*regexp.Regexp, error) {
 // narrower than the full agent-state set: a rule reading someone else's UI can
 // credibly spot that it is asking a question or showing a spinner, and cannot
 // credibly tell "finished" from "finished and errored".
+//
+// limit_reached is the one claim past those: a harness that stops on its usage
+// limit prints the limit in its own fixed words, and nothing else on its screen
+// says so (testdata/limits).
 var screenStates = map[string]struct{}{
-	"working":     {},
-	"needs_input": {},
-	"idle":        {},
+	"working":       {},
+	"needs_input":   {},
+	"idle":          {},
+	"limit_reached": {},
 }
 
 // notifyStates are the states a notify rule may assert. done is allowed here

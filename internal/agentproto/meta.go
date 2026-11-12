@@ -67,6 +67,10 @@ const (
 	MetaContext = "context"
 	MetaCost    = "cost"
 	MetaPlan    = "plan"
+	// MetaContextTokens and MetaContextWindow are the context's tokens and
+	// its window, as integration names them for the status line feed.
+	MetaContextTokens = "context_tokens"
+	MetaContextWindow = "context_window"
 )
 
 // maxActivityText bounds the text of one activity. The daemon cleans and
@@ -82,6 +86,8 @@ func metaFromUsage(u Usage) map[string]string {
 	if u.ContextSize > 0 && u.ContextUsed >= 0 {
 		pct := math.Min(100, float64(u.ContextUsed)*100/float64(u.ContextSize))
 		out[MetaContext] = strconv.Itoa(int(math.Round(pct))) + "%"
+		out[MetaContextTokens] = strconv.FormatInt(u.ContextUsed, 10)
+		out[MetaContextWindow] = strconv.FormatInt(u.ContextSize, 10)
 	}
 	if u.HasCost && u.Cost >= 0 && !math.IsNaN(u.Cost) && !math.IsInf(u.Cost, 0) {
 		amount := strconv.FormatFloat(u.Cost, 'f', 2, 64)

@@ -17153,3 +17153,34 @@ Run on 2026-11-12 on macOS (arm64). The branch passes.
 The check of a root that is held after `RemoveAll` (a daemon still writing
 into it) has no test of its own. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRunTempGuard$' -v .`.
+
+## A usage limit is its own state, and the context size is shown
+
+`agent_limit_context_test.go` runs the real Claude Code hook, the real status
+line wrapper, a real transcript join and a stand-in Claude Code with no hooks
+(through fakeclaude) against a real daemon and client.
+`TestLimitReachedReadsAsItsOwnState` checks that a `StopFailure` with `error`
+`rate_limit` reads `limit_reached` with the reset in list-agents, on the rail
+and in the agents view, that `overloaded` stays `errored`, and that the older
+`errored --kind usage_limit` lands as `limit_reached`.
+`TestLimitReachedFromTheScreen` checks that the limit line above the input box
+reads `limit_reached` from the screen over the title's at-rest claim, and that
+the pane is at rest again once a later answer sits under the old line.
+`TestContextSizeReachesListAgentsAndTheAgentsView` checks that the transcript
+gives the tokens with no window, and that the status line's window makes
+`near` true from the tokens over the window, with the agents view drawing
+`851k/1M near` on the row and `ctx 851k/1M near` in the focus header.
+
+Run on 2026-11-12 on macOS (arm64). The branch passes all three. Each control
+is the branch with one change.
+
+| Control | Test | Failure | Verdict |
+| --- | --- | --- | --- |
+| The hook reads `error_type`, as before (Claude Code sends `error`) | `TestLimitReachedReadsAsItsOwnState` | `StopFailure rate_limit: the pane is {State:errored Message:stopped on an error ...}` | **caught** |
+| A screen `limit_reached` does not take a resting claim (`blockerOverridesClaim` returns false for it) | `TestLimitReachedFromTheScreen` | `limit line above the box: the pane is {State:idle ... Source:osc ...}` | **caught** |
+| The Claude Code limit rule reads all of `above_prompt_box`, not the last line above it | `TestLimitReachedFromTheScreen` | `a later answer under the old limit line: the pane is {State:limit_reached ... Source:screen ...}, want state idle` | **caught** |
+| The transcript read does not write `context_tokens` | `TestContextSizeReachesListAgentsAndTheAgentsView` | `ASSERTION: list-agents gives the transcript's tokens` | **caught** |
+
+The frames (rail, agents view as text, styled text and PNG) and the state logs
+are under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestLimitReached|TestContextSize)' -v .`.

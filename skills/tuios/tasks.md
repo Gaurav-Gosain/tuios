@@ -198,7 +198,7 @@ card lives in the session or on the machine that made it.
 | --- | --- |
 | `tuios task dispatch` | The boards' modes and the switches |
 | `tuios task dispatch pause` | Stop all dispatch at once. Any pane may pause |
-| `tuios set-agent-state errored --kind usage_limit -m TEXT` | Say you hit a usage limit: all dispatch stops |
+| `tuios set-agent-state limit_reached -m TEXT` | Say you hit a usage limit: all dispatch stops |
 
 A mode, `resume` and quiet hours are the person's. Dispatch never answers an
 approval and never gives a card to a pane that waits for the person.

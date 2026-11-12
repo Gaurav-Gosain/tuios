@@ -40,7 +40,7 @@ The safety switches:
   quiet 22:00-07:00  give no card in these hours, local time (off to clear)
 A board stops by itself after 3 dispatched cards in a row end without being
 finished, and all dispatch stops when an agent reports a usage limit
-(tuios set-agent-state errored --kind usage_limit). Only resume starts it.
+(tuios set-agent-state limit_reached). Only resume starts it.
 
 An agent that is done with its card does not close it. The card goes to
 verify when the board has a verify command (verify "go test ./..."), and

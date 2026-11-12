@@ -875,6 +875,7 @@ var paletteStateTokens = []struct {
 	{"done", []string{"done"}},
 	{"idle", []string{"idle"}},
 	{"errored", []string{"errored"}},
+	{"limit_reached", []string{"limit_reached"}},
 }
 
 // splitPaletteQuery pulls a leading "@state" token off a query and reports the

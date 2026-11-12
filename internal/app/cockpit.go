@@ -540,7 +540,10 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 		case sidebarGroupWorking:
 			g = ckWorking
 		default:
-			if e.StateAt > 0 && now.Sub(time.Unix(0, e.StateAt)) > ckSettleAfter {
+			// An agent stopped on its usage limit rests with the idle ones
+			// and does not settle on its own: a limit lasts hours, and its
+			// work is not done.
+			if e.State != "limit_reached" && e.StateAt > 0 && now.Sub(time.Unix(0, e.StateAt)) > ckSettleAfter {
 				g = ckSettled
 			}
 		}
@@ -582,8 +585,9 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 			e = list[r.agent]
 		}
 		// An idle or settled row is one line, unless its chain has
-		// something waiting for the person: the second line says so.
-		chainWaits := r.agent >= 0 && m.childrenWaiting(e) > 0
+		// something waiting for the person, or it stopped on its usage
+		// limit: the second line says so.
+		chainWaits := r.agent >= 0 && (m.childrenWaiting(e) > 0 || e.State == "limit_reached")
 		if (g == ckIdle || g == ckSettled) && !chainWaits || g == ckSnoozed || r.kind == ckRowNote || r.attempt || !m.ckHasLine2(r, e) {
 			r.lines = 1
 		}

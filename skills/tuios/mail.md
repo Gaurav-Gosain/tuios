@@ -22,8 +22,8 @@ tuios list-agents -s work
 ```
 
 ID and NAME are exactly what `-w` takes. `ready` in `--json` is whether
-`ask-agent` would type at the pane now: true for `idle`, `done`, `errored` and
-`none`, false for `needs_input` (typing answers the prompt) and for `unknown`.
+`ask-agent` would type at the pane now: true for `idle`, `done`, `errored`,
+`limit_reached` and `none`, false for `needs_input` (typing answers the prompt) and for `unknown`.
 `--all` lists every window, which is how you find out a pane you expected is
 simply not reporting. `--all-sessions` and `--all-hosts` widen the listing.
 

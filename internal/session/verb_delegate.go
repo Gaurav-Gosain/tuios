@@ -264,13 +264,15 @@ func (d *Daemon) delegateLook(window string, closedEv bool) {
 		sess.updateDelegation(window, func(r *Delegation) {
 			r.State, r.AskedAt, r.QuestionMail = delegateAsking, now, mail
 		})
-	case w.AgentState == AgentStateIdle || w.AgentState == AgentStateDone || w.AgentState == AgentStateErrored:
+	case w.AgentState == AgentStateIdle || w.AgentState == AgentStateDone || w.AgentState == AgentStateErrored || w.AgentState == AgentStateLimitReached:
 		if w.AgentReason == AgentReasonSilent || w.AgentStateAt <= rec.StartedAt*int64(time.Millisecond) {
 			// The rest the child was in when its prompt was typed.
 			return
 		}
 		state := delegateDone
-		if w.AgentState == AgentStateErrored {
+		if w.AgentState == AgentStateErrored || w.AgentState == AgentStateLimitReached {
+			// A child stopped on its usage limit did not finish: its parent
+			// hears it stopped, with the harness's line as the answer.
 			state = delegateErrored
 		}
 		answer, source, truncated := d.delegateAnswer(sess, w, p.baseline)

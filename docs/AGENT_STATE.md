@@ -254,6 +254,34 @@ may do there; answering prompts is off by default. See
 | `done`        | Finished its task                                |
 | `errored`     | Stopped because of an error                      |
 | `unknown`     | An agent is present and nothing says what it does |
+| `limit_reached` | Stopped on its harness's usage or rate limit   |
+
+`limit_reached` is an agent that stopped because its harness hit a usage or
+rate limit: not an error, not a finished turn, and not something a person can
+answer. Nothing typed moves it before the limit resets, so `needs_you` is false
+for it, and it opens no Inbox item and sends no error alert. It is at rest, so
+`ready` is true and mail still wakes it, which after the reset is how a lead
+starts it again. Three sources report it:
+
+- Claude Code's `StopFailure` hook with `error` `rate_limit` or
+  `billing_error`. The message is the error text Claude Code showed
+  (`last_assistant_message`). Any other `error` stays `errored`, with the
+  error in the message (`stopped on overloaded`).
+- A screen rule, for Claude Code and Codex, that reads the harness's limit
+  line just above its input box at rest. The words are the harnesses' own,
+  kept in `internal/harness/testdata/limits`. A limit line that a later answer
+  pushed up does not count.
+- `set-agent-state limit_reached -m TEXT`. The older form,
+  `set-agent-state errored --kind usage_limit`, lands as `limit_reached`.
+
+`list-agents` reports `limit_resets`: the reset the harness named, in its own
+words (`11:10am (Australia/Sydney)`, `7:20 PM`, `Sep 14 at 7:20 PM`), read
+from the message. It is never turned into a time, because the harnesses give
+a clock time with no date or a date with no year. It is empty when the harness
+named none. The rail's row says `limit reached`, and the agents view's second
+line says `Limit reached` with the harness's line. An agent on the limit does
+not move to Settled by itself. All task dispatch stops while one is there (see
+[`tuios task`](CLI_REFERENCE.md#tuios-task)).
 
 `needs_input` is one state with a reason attached, not a family of states. An
 agent waiting for approval of a tool call and one asking a question are both
@@ -289,7 +317,7 @@ and it takes the place of the done the turn's Stop reported, at once, since
 done is a resting claim. It goes back when the form is gone.
 
 Both verbs report `ready`, which is whether `ask-agent` would type at the pane
-now: true for `idle`, `done`, `errored` and `none`. It is false for
+now: true for `idle`, `done`, `errored`, `limit_reached` and `none`. It is false for
 `needs_input`: an agent there is waiting on a prompt, text typed at it answers
 the prompt, and `ask-agent` refuses it with `agent_blocked`. It is false for
 `unknown` too, for the reason below. Until these changed, `ready` was true for
@@ -1823,6 +1851,7 @@ own design.
 | `idle`                    | `○`       | muted    | `o`            |
 | `errored`                 | `×`       | error    | `x`            |
 | `unknown`                 | `□`       | muted    | `?`            |
+| `limit_reached`           | `▼`       | error    | `=`            |
 | `none`                    | (nothing) |          |                |
 
 The marks are distinct shapes rather than the same shape in different colours,
@@ -1893,8 +1922,8 @@ orders: `you`, `pri` and `rec`.
 1. **Needs you**: `needs_input` (an approval or a question) and `errored`.
 2. **Done**: `done` that you have not looked at yet.
 3. **Working**: `working`.
-4. **At rest**: `idle`, `unknown`, `done` you have already looked at, and any
-   state this build does not know.
+4. **At rest**: `idle`, `unknown`, `limit_reached`, `done` you have already
+   looked at, and any state this build does not know.
 
 Inside a group the rows keep spawn order: sessions in the order the daemon made
 them (or the order you dragged them into), panes in the order they were opened.
@@ -2057,7 +2086,8 @@ tuios set-agent-meta -w "$TUIOS_PANE_ID" --source statusline --ttl 60s model=opu
 The `meta` row token draws every key on the second line, values only, in the
 order the pane first reported them, so write values that read on their own
 (`42% ctx` rather than `42`). It leaves out the keys tuios feeds itself
-(`now`, `prompt`, `model`, `context`, `cost`, `plan` and `subagents`), which
+(`now`, `prompt`, `model`, `context`, `cost`, `plan`, `subagents`,
+`context_tokens` and `context_window`), which
 have tokens of their own, so the model and the cost of every agent are not on
 every row; it drew them until the rich rows landed. `$name` places one key, and `meta` then
 leaves that key out:
@@ -2076,6 +2106,38 @@ characters with control characters removed, keys set with a TTL are dropped by
 the daemon when it runs out, and everything clears when the agent leaves the
 pane. `get-agent-state` and `list-agents` report it as a `meta` object. See
 [the protocol reference](protocol.md#set-agent-meta).
+
+#### Context size
+
+How full an agent's context is comes from what a source states, never from a
+guess:
+
+| Source | `context_tokens` | `context_window` |
+| ------ | ---------------- | ---------------- |
+| The transcript of a Claude Code pane tuios has joined | the input side of the newest response's `usage` (`input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`) | not written: the transcript does not say whether the extended window is on |
+| The status line feed (`--statusline`) | the same sum from `context_window.current_usage` | `context_window.context_window_size` |
+| A protocol pane (`start-agent --protocol`) | the usage update's `used` | its `size` |
+
+A subagent's records are not counted, and neither is a record with no input
+tokens, such as the one an API error is written as. Only the four counts are
+read from a transcript record; the reader never keeps its text.
+
+`list-agents --json` gives a `context` object per row, `null` when no source
+said anything: `tokens`, `window` (only when a source stated it), `percent`
+(tokens over the window, or the status line's own percent when it gave no
+counts) and `near`, true at 80 percent or more, the same line as the rail's
+`ctx 84%`. Without a window there is no percent and no `near`.
+
+The agents view draws it in the focus header, muted: `ctx 612k` from the
+transcript alone, `ctx 612k/1M` once the window is known, or `ctx 42%` from a
+status line that gave only the percent. Past 80 percent it says `ctx 851k/1M
+near` in the warn colour. Each row of the list shows the same before the age,
+without `ctx` (`851k/1M near`), in the room of the session's name. A row with
+nothing stated draws nothing.
+
+A pane joined to the wrong transcript (a child started in its parent's folder
+before tuios matched transcripts to the pane's own session) shows the other
+agent's size, as it shows that agent's turn state.
 
 The Claude Code and Codex hooks feed these keys from what the agent does (see
 [What the agent has been doing](#what-the-agent-has-been-doing)):
@@ -4115,7 +4177,8 @@ It writes `statusLine` in the same `settings.json` as the hooks:
 `{"type": "command", "command": "tuios agent-statusline claude-code --integration 1"}`,
 with `--then '<your command>'` at the end when chaining. The wrapper writes
 `model` (from `model.display_name`, else `model.id`), `context` (from
-`context_window.used_percentage`) and `cost` (from `cost.total_cost_usd`) to
+`context_window.used_percentage`), `context_tokens` and `context_window` (see
+[Context size](#context-size)) and `cost` (from `cost.total_cost_usd`) to
 the pane's metadata, and prints nothing of its own, so Claude Code's status
 line is empty unless it chains.
 
@@ -4199,7 +4262,7 @@ and when the pane is not a pane id, the hook prints nothing.
 | `Notification` `idle_prompt` | `idle`, only if the pane is `working` or `unknown` |
 | `Notification` `auth_success` and the rest | nothing |
 | `Stop` | `done`, with the first line of `last_assistant_message` as its message and as activity. A `Stop` without the field (older Claude Code) or with an empty one reports `done` with no message and a `turn_end` activity with no text |
-| `StopFailure` | `errored`, message `stopped on <error_type>` |
+| `StopFailure` | `limit_reached` for `error` `rate_limit` or `billing_error`, with the first line of `last_assistant_message` as its message; `errored`, message `stopped on <error>`, for any other error |
 | `SessionEnd` | `none` |
 | `SubagentStart`, `SubagentStop` with `agent_id` | no state: a `subagent_start` or `subagent_stop` activity with `agent_id` and `agent_type`, the stop with the first line of `last_assistant_message`, sent with `report-agent-activity`, which moves the pane's `subagents` count and list (see [Each subagent](#each-subagent)). An `agent_id` that is not 1 to 128 letters, digits, `_`, `.`, `:`, `@` or `-` reports nothing |
 | `PreToolUse`, `PostToolUse`, `PostToolUseFailure` with `agent_id` | a `subagent_update` with the subagent's tool call, sent with `report-agent-activity`. The two Post events also report `working`, only if the pane is `needs_input` on that subagent's prompt |

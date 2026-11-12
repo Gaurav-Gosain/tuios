@@ -88,7 +88,7 @@ const SidebarContextWarnAt = 80
 // token of its own (now, prompt, context, subagents, or $model, $cost and
 // $plan), so the model and the cost are not on every row unless a person
 // places them.
-var SidebarFeedMetaKeys = []string{"now", "prompt", "model", "context", "cost", "plan", "subagents"}
+var SidebarFeedMetaKeys = []string{"now", "prompt", "model", "context", "cost", "plan", "subagents", "context_tokens", "context_window"}
 
 // SidebarMetaTokenKey returns the metadata key a "$key" token names, and false
 // for any other token. The key rules match the daemon's set-agent-meta: 1 to 24

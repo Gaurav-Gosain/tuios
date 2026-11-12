@@ -112,7 +112,7 @@ func (m *OS) sidebarKinHeads(agents []sidebarAgentEntry) []sidebarAgentEntry {
 // how many are in each state, the ones that want the person first. A state
 // with none is left out.
 func sidebarKinHeadline(kids []sidebarAgentEntry) string {
-	order := []string{"needs_input", "errored", "working", string(agentStateWaiting), "done", "idle"}
+	order := []string{"needs_input", "errored", "limit_reached", "working", string(agentStateWaiting), "done", "idle"}
 	counts := make(map[string]int, len(order))
 	for _, k := range kids {
 		counts[sidebarKinState(k)]++
@@ -141,7 +141,7 @@ func sidebarKinHeadline(kids []sidebarAgentEntry) string {
 // anything at rest that is not done counted as idle.
 func sidebarKinState(e sidebarAgentEntry) string {
 	switch s := displayState(e.State, e.DoneSeen, e.Subagents); s {
-	case "needs_input", "errored", "working", string(agentStateWaiting):
+	case "needs_input", "errored", "limit_reached", "working", string(agentStateWaiting):
 		return s
 	}
 	if e.State == string(session.AgentStateDone) {

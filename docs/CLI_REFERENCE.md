@@ -1380,6 +1380,8 @@ terminal, then the parent processes).
 | --- | --- |
 | `model.display_name`, else `model.id` (Claude Code); `modelID` (opencode, Kilo) | `model` |
 | `context_window.used_percentage` (Claude Code) | `context`, as `42%` |
+| the input side of `context_window.current_usage` (Claude Code) | `context_tokens`, as `612012` |
+| `context_window.context_window_size` (Claude Code) | `context_window`, as `1000000` |
 | `cost.total_cost_usd` (Claude Code); `cost` (opencode, Kilo) | `cost`, as `$1.20` |
 
 Every field is optional, and one that is missing, null or of another type is
@@ -3095,8 +3097,9 @@ pause. `quiet 22:00-07:00` gives no card in those hours, local time (`off`
 clears it). A board stops after 3 dispatched cards in a row end without being
 finished (let go or blocked; a card blocked on its errored agent counts
 when it is let go). All
-dispatch stops when an agent reports a usage limit (`tuios set-agent-state
-errored --kind usage_limit`, or an errored message that says "usage limit").
+dispatch stops when an agent reports a usage limit (the state
+`limit_reached`, which `tuios set-agent-state errored --kind usage_limit` also
+reports, or an errored message that says "usage limit").
 `resume` lifts the pause and every stop. On a pull board an offer that a
 switch held is made when the switch lifts: on `resume`, when quiet hours end
 or change, and when a board is set to `pull`, each agent at rest (idle or
