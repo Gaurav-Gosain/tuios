@@ -320,7 +320,6 @@ tuios/
 │   ├── release/            # Finds published releases and verifies a downloaded binary (tuios update)
 │   ├── netutil/            # Small network helpers the servers share
 │   ├── memtrim/            # Gives the heap a burst left behind back to the OS once the process settles
-│   ├── dnd/                # The kitty drag and drop protocol (OSC 72) on the wire: parse, join chunks, write
 │   ├── harness/            # Agent harness manifests and detection
 │   ├── herdrplugin/        # herdr plugins: manifest, discovery, the command runner (the host is internal/session/plugin_host.go)
 │   ├── herdrcli/           # herdr's command line, answered by tuios
@@ -376,6 +375,7 @@ tuios/
 │   ├── parser.go           # Parser state machine
 │   ├── screen.go           # Screen buffer management
 │   ├── scrollback.go       # History ring (10,000 lines unless configured)
+│   ├── dnd/                # The kitty drag and drop protocol (OSC 72) on the wire: parse, join chunks, write
 │   ├── snapshot/           # Capture, pack, apply and replay a pane's state (the daemon's wire snapshot)
 │   └── vtgen/              # Grammar-based terminal input generator for the fuzzers
 ├── pkg/                    # Embeddable facade (tuios), applist, fuzzy
