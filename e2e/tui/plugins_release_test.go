@@ -110,7 +110,7 @@ func stampedTuios(t *testing.T, v string) string {
 	t.Helper()
 	root, _ := filepath.Abs(filepath.Join("..", ".."))
 	bin := filepath.Join(t.TempDir(), "tuios")
-	cmd := exec.Command("go", "build", "-ldflags", "-X main.version="+v, "-o", bin, "./cmd/tuios")
+	cmd := goBuild("-ldflags", "-X main.version="+v, "-o", bin, "./cmd/tuios")
 	cmd.Dir = root
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build tuios %s: %v\n%s", v, err, out)

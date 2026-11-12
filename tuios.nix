@@ -34,6 +34,11 @@ pkgs.buildGo127Module rec {
     "-X main.builtBy=nix"
   ];
 
+  # tuios:allow-build The Nix package does not read
+  # scripts/noinline-packages.txt yet, so it is the larger binary, as go
+  # install gives. Setting GOFLAGS here broke the build in CI, and the cause
+  # is not found (docs/perf.md, "Binary size budget").
+
   # go.work makes the app and the Go libraries in this repository (such as
   # progstatus/) one workspace, so this build uses the library folders, as CI
   # does. go mod vendor refuses a workspace, so the module derivation runs go

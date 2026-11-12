@@ -138,9 +138,20 @@ func (s *Source) BuildDev(platform string) (*Binary, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), syncBuildTimeout)
 	defer cancel()
+	// go env, so a GOFLAGS set with go env -w is kept beside the list.
+	env := exec.CommandContext(ctx, "go", "env", "GOFLAGS")
+	env.Dir = s.SrcDir
+	base, err := env.Output()
+	if err != nil {
+		return nil, errfmt.Errorf("read GOFLAGS: %w", err)
+	}
+	goflags, err := NoinlineGoFlags(s.SrcDir, string(base))
+	if err != nil {
+		return nil, errfmt.Errorf("read the noinline list: %w", err)
+	}
 	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-ldflags", ldflags, "-o", out, "./cmd/tuios")
 	cmd.Dir = s.SrcDir
-	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+goos, "GOARCH="+goarch)
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+goos, "GOARCH="+goarch, "GOFLAGS="+goflags)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {

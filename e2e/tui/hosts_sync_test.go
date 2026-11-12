@@ -49,7 +49,7 @@ func syncNextBinary(t *testing.T) string {
 			return
 		}
 		syncNextBin = filepath.Join(dir, "tuios")
-		build := exec.Command("go", "build", "-trimpath", "-ldflags", "-X main.version="+syncNextVersion, "-o", syncNextBin, "./cmd/tuios")
+		build := goBuild("-trimpath", "-ldflags", "-X main.version="+syncNextVersion, "-o", syncNextBin, "./cmd/tuios")
 		build.Dir = "../.."
 		out, err := build.CombinedOutput()
 		if err != nil {

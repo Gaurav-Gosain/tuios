@@ -13,7 +13,7 @@ ARG VERSION=dev
 ARG COMMIT=none
 RUN go mod download &&\
   LDFLAGS="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.builtBy=docker" &&\
-  CGO_ENABLED=0 go build -trimpath -ldflags "$LDFLAGS" -o /go/bin/tuios ./cmd/tuios &&\
+  CGO_ENABLED=0 GOFLAGS="$(scripts/goflags.sh)" go build -trimpath -ldflags "$LDFLAGS" -o /go/bin/tuios ./cmd/tuios &&\
   CGO_ENABLED=0 go build -trimpath -ldflags "$LDFLAGS" -o /go/bin/tuios-web ./cmd/tuios-web
 
 # RUN go vet -v

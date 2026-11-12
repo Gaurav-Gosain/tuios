@@ -434,7 +434,7 @@ func TestSetUpOffersNoReleaseForADevBuild(t *testing.T) {
 	const pseudo = "v0.12.2-0.20261105101010-abcdef123456"
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "tuios")
-	build := exec.Command("go", "build", "-trimpath", "-ldflags", "-X main.version="+pseudo, "-o", bin, "./cmd/tuios")
+	build := goBuild("-trimpath", "-ldflags", "-X main.version="+pseudo, "-o", bin, "./cmd/tuios")
 	build.Dir = "../.."
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build the pseudo-version tuios: %v\n%s", err, out)

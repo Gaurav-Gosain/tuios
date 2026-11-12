@@ -7,7 +7,7 @@
 // These tests are behind the "e2e" build tag because they spawn real daemons
 // and real shells. Run them with:
 //
-//	go build -o /tmp/tuios ./cmd/tuios
+//	GOFLAGS="$(scripts/goflags.sh)" go build -o /tmp/tuios ./cmd/tuios
 //	TUIOS_BIN=/tmp/tuios go test -tags e2e ./e2e/...
 //
 // When TUIOS_BIN is unset the tests build the binary themselves into a temp
@@ -31,6 +31,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/hostsync"
 )
 
 // ---------------------------------------------------------------------------
@@ -86,8 +88,15 @@ func newEnv(t *testing.T) *env {
 func buildTuios(t *testing.T) string {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), "tuios")
+	// Inlining off in the packages scripts/noinline-packages.txt lists, as
+	// the release builds it.
+	goflags, err := hostsync.NoinlineGoFlags("..", os.Getenv("GOFLAGS"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	cmd := exec.Command("go", "build", "-o", out, "./cmd/tuios")
 	cmd.Dir = ".."
+	cmd.Env = append(os.Environ(), "GOFLAGS="+goflags)
 	if b, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("building tuios: %v\n%s", err, b)
 	}

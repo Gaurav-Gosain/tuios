@@ -32,6 +32,10 @@ builds:
     main: ./cmd/tuios
     binary: tuios
     env:
+      # Inlining off in the packages scripts/noinline-packages.txt lists.
+      # release.yml sets TUIOS_GOFLAGS from scripts/goflags.sh. Every tuios
+      # build below carries the same line.
+      - GOFLAGS={{ .Env.TUIOS_GOFLAGS }}
       - CGO_ENABLED=0
     goos:
       - linux
@@ -75,6 +79,7 @@ builds:
     main: ./cmd/tuios
     binary: tuios
     env:
+      - GOFLAGS={{ .Env.TUIOS_GOFLAGS }}
       - CGO_ENABLED=0
     goos:
       - android
@@ -139,6 +144,7 @@ builds:
     tags:
       - ghostty
     env:
+      - GOFLAGS={{ .Env.TUIOS_GOFLAGS }}
       - CGO_ENABLED=1
       - CC={{ .Env.PWD }}/scripts/zigcc/x86_64-linux-gnu
       - PKG_CONFIG_PATH={{ .Env.PWD }}/.ghostty-vt/x86_64-linux-gnu/pkgconfig
@@ -161,6 +167,7 @@ builds:
     tags:
       - ghostty
     env:
+      - GOFLAGS={{ .Env.TUIOS_GOFLAGS }}
       - CGO_ENABLED=1
       - CC={{ .Env.PWD }}/scripts/zigcc/aarch64-linux-gnu
       - PKG_CONFIG_PATH={{ .Env.PWD }}/.ghostty-vt/aarch64-linux-gnu/pkgconfig
@@ -183,6 +190,7 @@ builds:
     tags:
       - ghostty
     env:
+      - GOFLAGS={{ .Env.TUIOS_GOFLAGS }}
       - CGO_ENABLED=1
       - CC={{ .Env.PWD }}/scripts/zigcc/x86_64-windows-gnu
       - PKG_CONFIG_PATH={{ .Env.PWD }}/.ghostty-vt/x86_64-windows-gnu/pkgconfig
@@ -210,6 +218,7 @@ builds:
     tags:
       - ghostty
     env:
+      - GOFLAGS={{ .Env.TUIOS_GOFLAGS }}
       - CGO_ENABLED=1
       - CC={{ .Env.PWD }}/scripts/zigcc/aarch64-windows-gnu
       - PKG_CONFIG_PATH={{ .Env.PWD }}/.ghostty-vt/aarch64-windows-gnu/pkgconfig

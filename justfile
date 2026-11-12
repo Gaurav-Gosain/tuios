@@ -86,7 +86,7 @@ build:
     fi
     ldflags="$ldflags -X main.version=$version"
     mkdir -p {{ quote(bin) }}
-    {{ NICE }} {{ TASKSET }} go build -trimpath -ldflags "$ldflags" -o {{ quote(bin / "tuios") }} ./cmd/tuios
+    GOFLAGS="$(scripts/goflags.sh)" {{ NICE }} {{ TASKSET }} go build -trimpath -ldflags "$ldflags" -o {{ quote(bin / "tuios") }} ./cmd/tuios
     {{ NICE }} {{ TASKSET }} go build -trimpath -ldflags "$ldflags" -o {{ quote(bin / "tuios-web") }} ./cmd/tuios-web
     {{ quote(bin / "tuios") }} --version | head -1
 
@@ -266,7 +266,7 @@ e2e pattern="" *args:
     set -euo pipefail
     cd {{ quote(root) }}
     mkdir -p {{ quote(out / "e2e") }}
-    go build -o {{ quote(out / "e2e/tuios") }} ./cmd/tuios
+    GOFLAGS="$(scripts/goflags.sh)" go build -o {{ quote(out / "e2e/tuios") }} ./cmd/tuios
     cd e2e/tui
     pattern=$1
     shift
@@ -281,7 +281,7 @@ e2e-flake test n="20":
     set -uo pipefail
     cd {{ quote(root) }}
     mkdir -p {{ quote(out / "e2e") }} {{ quote(out / "flake") }}
-    go build -o {{ quote(out / "e2e/tuios") }} ./cmd/tuios || exit 1
+    GOFLAGS="$(scripts/goflags.sh)" go build -o {{ quote(out / "e2e/tuios") }} ./cmd/tuios || exit 1
     cd e2e/tui
     TUIOS_E2E=1 TUIOS_E2E_BIN={{ quote(out / "e2e/tuios") }} \
         {{ NICE }} {{ TASKSET }} go test -c -o {{ quote(out / "e2e/e2e.test") }} . || exit 1

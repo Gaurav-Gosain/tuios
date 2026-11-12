@@ -336,7 +336,7 @@ jobs:
 
       - name: Build the binary under test
         if: env.TESTED_URL == '' && steps.plan.outputs.run == 'true'
-        run: go build -o "$RUNNER_TEMP/tuios" ./cmd/tuios
+        run: GOFLAGS="$(scripts/goflags.sh)" go build -o "$RUNNER_TEMP/tuios" ./cmd/tuios
 
       - name: Run this shard of the end-to-end suite
         if: env.TESTED_URL == '' && steps.plan.outputs.run == 'true'

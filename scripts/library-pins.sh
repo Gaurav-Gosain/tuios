@@ -254,7 +254,7 @@ check() {
 		run=(with_proxy env)
 	fi
 	echo "Building tuios without go.work${network:+ (libraries through the network)}"
-	"${run[@]}" GOWORK=off GOFLAGS=-mod=readonly go build -o /dev/null ./cmd/tuios ./cmd/tuios-web
+	"${run[@]}" GOWORK=off GOFLAGS=-mod=readonly go build -o /dev/null ./cmd/tuios ./cmd/tuios-web # tuios:allow-build resolves the pins; ships nothing
 	echo "ok   GOWORK=off go build ./cmd/tuios ./cmd/tuios-web"
 
 	# The workspace also holds e2e/tui, whose requirements can raise a

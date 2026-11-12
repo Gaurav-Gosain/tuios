@@ -56,7 +56,7 @@ jobs:
 
       - name: Build tuios with coverage
         run: |
-          go build -tags coverflush -cover \
+          GOFLAGS="$(scripts/goflags.sh)" go build -tags coverflush -cover \
             -coverpkg=github.com/Gaurav-Gosain/tuios/...,tuios.dev/... \
             -o "$RUNNER_TEMP/tuios" ./cmd/tuios
 

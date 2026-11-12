@@ -346,7 +346,7 @@ func buildOtherProtocol() (string, error) {
 		return "", err
 	}
 	bin := filepath.Join(dir, "tuios")
-	build := exec.Command("go", "build", "-overlay", overlayPath, "-o", bin, "./cmd/tuios")
+	build := goBuild("-overlay", overlayPath, "-o", bin, "./cmd/tuios")
 	build.Dir = "../.."
 	if out, err := build.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("%v: %s", err, out)

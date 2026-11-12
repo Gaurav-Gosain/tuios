@@ -170,7 +170,7 @@ func newerTuios(t *testing.T) string {
 		}
 		newerDir = dir
 		bin := filepath.Join(dir, "tuios")
-		build := exec.Command("go", "build", "-ldflags", "-X main.version="+newerVersion, "-o", bin, "./cmd/tuios")
+		build := goBuild("-ldflags", "-X main.version="+newerVersion, "-o", bin, "./cmd/tuios")
 		build.Dir = "../.."
 		if out, err := build.CombinedOutput(); err != nil {
 			newerErr = &buildError{err: err, out: string(out)}

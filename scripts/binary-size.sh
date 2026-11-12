@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Builds the tuios binary the way the release does (CGO_ENABLED=0, -trimpath,
-# -ldflags "-s -w") for each target given, prints its size, and fails when one
-# is larger than the ceiling.
+# -ldflags "-s -w", and inlining off in the packages scripts/goflags.sh names)
+# for each target given, prints its size, and fails when one is larger than
+# the ceiling.
 #
 #   scripts/binary-size.sh                      # linux/amd64 and darwin/arm64
 #   scripts/binary-size.sh linux/amd64          # one target
@@ -30,7 +31,7 @@ go version
 fail=0
 for target in "${targets[@]}"; do
 	bin="$out/tuios-${target%/*}-${target#*/}"
-	CGO_ENABLED=0 GOOS="${target%/*}" GOARCH="${target#*/}" \
+	CGO_ENABLED=0 GOOS="${target%/*}" GOARCH="${target#*/}" GOFLAGS="$(scripts/goflags.sh)" \
 		go build -trimpath -ldflags "-s -w" -o "$bin" ./cmd/tuios
 	size=$(wc -c <"$bin" | tr -d ' ')
 	room=$((ceiling - size))

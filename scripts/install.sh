@@ -184,7 +184,9 @@ webtmp=$prefix/.tuios-web.install.$$
 trap 'rm -f "$tmp" "$webtmp"' EXIT HUP INT TERM
 
 say "==> tuios ($backend backend)"
-(cd "$ROOT" && go build ${buildtags:+"$buildtags"} -trimpath \
+# Inlining off in the packages scripts/noinline-packages.txt lists, as the
+# release builds it.
+(cd "$ROOT" && GOFLAGS="$(scripts/goflags.sh)" go build ${buildtags:+"$buildtags"} -trimpath \
     -ldflags "$ldflags" -o "$tmp" ./cmd/tuios)
 chmod 755 "$tmp"
 

@@ -2354,7 +2354,8 @@ truecolor one.
 `.github/workflows/binary-size.yml` runs `scripts/binary-size.sh` on every push
 to main, and on every pull request that can change the binary. `ci.yml` calls
 it. It builds tuios the way the release does
-(`CGO_ENABLED=0`, `-trimpath`, `-ldflags "-s -w"`) for linux/amd64 and
+(`CGO_ENABLED=0`, `-trimpath`, `-ldflags "-s -w"`, and inlining off in the
+packages `scripts/noinline-packages.txt` lists) for linux/amd64 and
 darwin/arm64 with the Go version go.mod names, prints the size, and fails when
 a binary is over the ceiling.
 
@@ -2415,44 +2416,110 @@ carries no `//go:noinline`: with it the size was the same and the hash slower.
 The binary-size job would show the bytes coming back if a future compiler
 inlined method values.
 
-Inlining as a whole is the largest cost in the binary, and the one lever kept in
-reserve for when the ceiling gets near. Measured on main at 448e9bf1d (release
-flags, linux/amd64, 49,512,608 bytes): building with `-gcflags=all=-l` gives
-44,437,664 bytes, 5.0 MB less, and inlining off in tuios's own packages alone
-gives 46,411,936, 3.0 MB less. Most of that is on hot paths: internal/app
-alone is 1,052,672 bytes, and it holds the render path and Update. Inlining off
-in the packages that run cold, `cmd/tuios`, internal/config, internal/integration,
-internal/learn, internal/tmuxcompat, internal/webshell, internal/transcriptview,
-internal/harness, internal/federation, internal/agentproto, internal/herdrplugin,
-internal/mcp, `tuios.dev/sketch`, `tuios.dev/tml` and tuiffects, gives
-48,205,984 bytes: 1,306,624 less, with no feature removed and no hot path
-touched. internal/session adds 688,128 more but carries the pane output stream
-and the broadcast, so it needs the throughput and idle-cost tests first.
+Inlining as a whole is the largest cost in the binary. Measured on main at
+448e9bf1d (release flags, linux/amd64, 49,512,608 bytes): building with
+`-gcflags=all=-l` gives 44,437,664 bytes, 5.0 MB less, and inlining off in
+tuios's own packages alone gives 46,411,936, 3.0 MB less. Most of that is on
+hot paths: internal/app alone is 1,052,672 bytes, and it holds the render path
+and Update.
 
-It is not used today, because the flags would have to reach every build that
-ships (the builds in `.goreleaser.yml`, `scripts/binary-size.sh`,
-`scripts/install.sh`, the Dockerfile, the Nix package and the justfile's release
-recipes), and `go install ...@vX` cannot carry them, so that path would build a
-binary of another size and speed. If the ceiling gets near, keep the package
-list in one file that every build path reads, with a check that each does.
+#### Inlining off in the cold packages
 
-What inlining off in one package saves, on the same build:
+Since 2026-11-12 every shipped build turns inlining off in the packages
+`scripts/noinline-packages.txt` lists. A package is on the list only when
+nothing on a hot path calls into it: drawing a frame, key and mouse input, the
+pty read loop, and the daemon's pane streams. The list was checked against the
+compiler (`-gcflags=-m` on internal/app, internal/input, internal/session,
+internal/terminal, internal/server, internal/served, `tuios.dev/loom` and
+`tuios.dev/vt`, which prints each call those packages inline from another
+package) and against what links them:
+
+| On the list | Why it is cold |
+|---|---|
+| `cmd/tuios`, internal/cliflags, internal/fang, cobra, pflag | the command line; no hot package imports them |
+| internal/agentproto, internal/mcp, internal/learn/..., internal/service, internal/tmuxcompat, internal/webshell, plugins, rsc.io/qr/... | run on request; no hot package calls into them (the tmux pane holder shares its terminal with its child and copies no bytes) |
+| internal/herdrplugin, internal/integration | plugin and hook events, and the settings dialog |
+| `tuios.dev/sketch/core`, `sketch/text`, `sketch/internal/...` | a diagram is parsed and drawn once per source and width, then kept |
+
+| Left off | Hot path that calls into it |
+|---|---|
+| internal/config | the render path reads settings on every frame (sidebar, dock, borders, scrollbar) and input reads the keybind registry on every key |
+| `tuios.dev/tml` | loom reads TML nodes while it draws a surface |
+| tuiffects | the screen saver draws a frame with it at the frame rate |
+| internal/harness | the pty read path runs the screen and OSC rules, throttled |
+| internal/federation | remote panes stream through its mux |
+| internal/transcriptview | the cockpit view draws through it on every frame |
+| `tuios.dev/sketch/raster` | `tuios mermaid --live` draws its motion with it at 60 frames a second |
+
+Release flags, Go 1.27.4, main at 086c63330 and the list:
+
+| target | main | with the list | delta |
+|---|---:|---:|---:|
+| linux/amd64 | 49,819,808 | 48,971,936 | -847,872 (-828.0 KiB) |
+| darwin/arm64 | 46,435,282 | 45,648,050 | -787,232 (-768.8 KiB) |
+
+The hot paths are the same speed. On arch-btw (i7-10700, cores 0-7, Go
+1.27.4), with base and the list built alternately for 8 rounds: 26 benchmarks
+of internal/app (KeystrokeFrame, KeystrokeFrameCells, KeystrokeFrameTiled,
+LonePaneKeystroke, IdleTick, ClientFrame, RenderTerminalReal,
+SidebarAgentsCached, DockCrowded, PointerSweep, CockpitThreadScroll,
+InboxRender), internal/session (PTYOutputChunk, PTYBroadcast, PTYOutputScan,
+WireKeystroke, WireTerminalState, AgentDetectScanLockWait, ScreenSettleArm,
+AttentionOutputEvent) and `tuios.dev/vt` (the Emulator write and scroll
+benchmarks, PrintASCII). benchstat finds no row that changed at p<0.05 in
+sec/op, B/op or allocs/op. The geomeans moved +1.8% (app), -5.5% (session)
+and -9.3% (vt) inside a spread of up to 48% on a shared machine. The unit perf
+budgets (`-run 'Idle|Budget|Cost|Allocat'` in internal/app, internal/session
+and vt), `TestIdleCostStaysLow` and `TestDockIdleCostWithComponentsStaysLow`
+pass with and without the list. That is the expected result: no package on
+the list is in a hot package's call graph, so their machine code is the
+same.
+
+Every build of `./cmd/tuios` reads the list, because Go has no file that
+carries build flags: `.goreleaser.yml` (each tuios build takes
+`GOFLAGS={{ .Env.TUIOS_GOFLAGS }}`, which `release.yml` sets from
+`scripts/goflags.sh`), the darwin ghostty builds in `release.yml`,
+`scripts/binary-size.sh`, `scripts/install.sh`, the justfile's build and e2e
+recipes, the Dockerfile, the e2e, test map, tape and kitty builds
+in CI, `tuios hosts sync --dev` (`hostsync.NoinlineGoFlags`), and the e2e
+suite's own builds (`goBuild`). `internal/lint`
+`TestEveryTuiosBuildReadsTheNoinlineList` fails a build path that does not,
+and a pattern that names no linked package.
+
+The Nix package does not read the list yet: setting `GOFLAGS` in `tuios.nix`
+broke its build in CI, so it is the larger binary too.
+
+`go install github.com/Gaurav-Gosain/tuios/cmd/tuios@vX` cannot read the list,
+so a binary installed that way is about 0.8 MB larger than the release, and
+the same speed on every hot path. The ceiling is about the release. A plain
+`go build ./cmd/tuios` in a checkout is the same larger binary; use
+`GOFLAGS="$(scripts/goflags.sh)"` or `just build` to build the one that ships.
+
+What inlining off in one package saved, measured on 448e9bf1d before the list:
 
 | Package | Bytes saved | Runs on a hot path |
 |---|---|---|
 | internal/app | 1,052,672 | yes: drawing and Update |
 | internal/session | 634,880 | the stream and broadcast, not the verbs |
-| `cmd/tuios` | 266,240 | no |
-| `tuios.dev/sketch` | 266,240 | no |
-| `tuios.dev/tml` | 126,976 | no |
-| tuiffects | 122,880 | screen saver frames only |
-| internal/config | 77,824 | no |
+| `cmd/tuios` | 266,240 | no (on the list) |
+| `tuios.dev/sketch` | 266,240 | raster draws the live motion; the rest is on the list |
+| `tuios.dev/tml` | 126,976 | yes: loom draws surfaces through it |
+| tuiffects | 122,880 | yes: screen saver frames |
+| internal/config | 77,824 | yes: settings on every frame |
 | `tuios.dev/loom` | 65,536 | surfaces |
-| internal/webshell | 61,440 | no |
-| internal/tmuxcompat | 53,248 | no |
-| internal/integration | 36,864 | no |
+| internal/webshell | 61,440 | no (on the list) |
+| internal/tmuxcompat | 53,248 | no (on the list) |
+| internal/integration | 36,864 | no (on the list) |
 | `tuios.dev/vt` | 32,768 | yes: the emulator |
 | each other package | 20,480 or less | |
+
+The next two savings, measured but not taken: inlining off in internal/session
+too (688,128 bytes more on top of the old cold set) needs the pane output
+stream and the broadcast moved to a package of their own first, or the
+throughput and idle-cost tests passing without it. The 916 generated equality
+functions are 235,168 bytes, the largest for structs of 30 to 50 string fields
+compared with == or used as map keys; hashing the big keys would save perhaps
+100 KB, a code change per struct.
 
 A map literal of slices compiles to code that runs at every start. A map literal
 of arrays of constants compiles to data. `verbCapabilities` uses this form.

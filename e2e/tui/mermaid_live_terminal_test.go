@@ -138,7 +138,7 @@ func TestMermaidLiveGivesTheTerminalBack(t *testing.T) {
 func buildTuiosWithTags(t *testing.T, tags string) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "tuios-"+tags)
-	build := exec.Command("go", "build", "-tags", tags, "-o", bin, "./cmd/tuios")
+	build := goBuild("-tags", tags, "-o", bin, "./cmd/tuios")
 	build.Dir = "../.."
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build tuios with -tags %s: %v\n%s", tags, err, out)

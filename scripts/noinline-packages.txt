@@ -1,0 +1,40 @@
+# Packages built with inlining off (-gcflags=PATTERN=-l) in every build of
+# cmd/tuios that ships or is measured. Inlining copies a callee into each
+# caller and adds an inlining tree to the function table for each copy; in
+# these packages that buys no speed anyone sees, and turning it off takes
+# about 1 MB off the release binary. See docs/perf.md, "Binary size budget".
+#
+# A package is listed only when no hot path calls into it: drawing a frame,
+# key and mouse input, the pty read loop, and the daemon's pane streams.
+# scripts/goflags.sh turns this list into GOFLAGS, and every build path reads
+# it through that script (or, in Go, through the same file). The internal/lint
+# test TestEveryTuiosBuildReadsTheNoinlineList fails a build path that does
+# not.
+#
+# One import path pattern per line. A # starts a comment.
+
+# The command line: cobra commands, flag parsing, help.
+github.com/Gaurav-Gosain/tuios/cmd/tuios
+github.com/Gaurav-Gosain/tuios/internal/cliflags
+github.com/Gaurav-Gosain/tuios/internal/fang
+github.com/spf13/cobra
+github.com/spf13/pflag
+
+# Run on request, never per frame or per byte.
+github.com/Gaurav-Gosain/tuios/internal/agentproto
+github.com/Gaurav-Gosain/tuios/internal/herdrplugin
+github.com/Gaurav-Gosain/tuios/internal/integration
+github.com/Gaurav-Gosain/tuios/internal/learn/...
+github.com/Gaurav-Gosain/tuios/internal/mcp
+github.com/Gaurav-Gosain/tuios/internal/service
+github.com/Gaurav-Gosain/tuios/internal/tmuxcompat
+github.com/Gaurav-Gosain/tuios/internal/webshell
+github.com/Gaurav-Gosain/tuios/plugins
+rsc.io/qr/...
+
+# Mermaid parse and layout: a diagram is drawn once per source and width and
+# kept. tuios.dev/sketch/raster is left out: tuios mermaid --live draws its
+# motion with it at 60 frames a second.
+tuios.dev/sketch/core
+tuios.dev/sketch/internal/...
+tuios.dev/sketch/text

@@ -216,7 +216,7 @@ func runE2E(m *testing.M) int {
 		}
 		defer os.RemoveAll(dir)
 		tuiosBin = filepath.Join(dir, "tuios")
-		build := exec.Command("go", "build", "-o", tuiosBin, "./cmd/tuios")
+		build := goBuild("-o", tuiosBin, "./cmd/tuios")
 		build.Dir = "../.."
 		build.Stderr = os.Stderr
 		build.Stdout = os.Stderr

@@ -135,6 +135,11 @@ jobs:
         id: previous
         run: echo "tag=$(git describe --tags --abbrev=0 --match 'v[0-9]*' "refs/tags/${TAG}^")" >> "$GITHUB_OUTPUT"
 
+      # The tuios builds in .goreleaser.yml take GOFLAGS from TUIOS_GOFLAGS:
+      # inlining off in the packages scripts/noinline-packages.txt lists.
+      - name: Read the noinline list
+        run: echo "TUIOS_GOFLAGS=$(scripts/goflags.sh)" >> "$GITHUB_ENV"
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
@@ -211,7 +216,7 @@ jobs:
             label="${rest%%:*}"
             target="${rest#*:}"
             ./scripts/ghostty-lib.sh "$target"
-            CGO_ENABLED=1 GOARCH="$arch" CC=clang \
+            CGO_ENABLED=1 GOARCH="$arch" CC=clang GOFLAGS="$(scripts/goflags.sh)" \
               PKG_CONFIG_PATH="$PWD/.ghostty-vt/$target/pkgconfig" \
               go build -tags ghostty -trimpath -ldflags "$ldflags" -o tuios ./cmd/tuios
             # The runner is arm64. Rosetta runs the x86_64 binary.

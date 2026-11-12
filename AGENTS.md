@@ -157,6 +157,15 @@ reports its size delta and trims what it can.
 Raise the ceiling only on purpose, in its own commit, with `docs/perf.md`
 ("Binary size budget").
 
+A shipped tuios is built with inlining off in the packages
+`scripts/noinline-packages.txt` lists, which saves about 0.8 MB. Every build
+of `./cmd/tuios` reads that list: a shell line as
+`GOFLAGS="$(scripts/goflags.sh)" go build ...`, GoReleaser through
+`TUIOS_GOFLAGS`, Go code through the file, the e2e suite
+through `goBuild`. A package joins the list only when nothing on a hot path
+(drawing a frame, input, the pty read loop, the daemon's pane streams) calls
+into it. `go install ...@vX` and the Nix package do not read the list and build the larger binary.
+
 ### Browser build (Learn tuios)
 
 `cmd/tuios-wasm` is tuios compiled to WebAssembly for the guided tour at
@@ -483,6 +492,7 @@ the ones a change trips most often. Each test's doc comment gives the reason.
 | No colour literal in render code | `internal/lint` `TestNoHardCodedColoursInRenderCode` | `//tuios:allow-color <reason>` |
 | Daemon code starts a process with `childproc.Command`, never `exec.Command` or `os.StartProcess` | `internal/lint` `TestDaemonChildrenGoThroughChildproc` | `//tuios:allow-exec <reason>` |
 | Every `git` starts through `childproc.Git`, which turns off repository hooks and filters | `internal/lint` `TestGitGoesThroughChildprocGit` | `//tuios:allow-exec <reason>` |
+| Every build of `./cmd/tuios` reads `scripts/noinline-packages.txt` | `internal/lint` `TestEveryTuiosBuildReadsTheNoinlineList` | `tuios:allow-build <reason>` |
 | A client quits through `OS.QuitCmd`, never a bare `tea.Quit` | `internal/lint` `TestEveryClientQuitGoesThroughQuitCmd` | `//tuios:allow-quit <reason>` |
 | Lessons name real actions, overlays, events and keys | `internal/lint` `TestLessonsMatchTheApp` | none |
 | The Dockerfile's Go version equals go.mod's toolchain line | `internal/lint` `TestDockerfileGoMatchesToolchain` | none |

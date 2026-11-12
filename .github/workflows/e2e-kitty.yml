@@ -48,7 +48,7 @@ jobs:
           unzip -q "$RUNNER_TEMP/yazi-x86_64-unknown-linux-gnu.zip" -d "$RUNNER_TEMP"
           "$RUNNER_TEMP/yazi-x86_64-unknown-linux-gnu/yazi" --version
       - name: Build the binary under test
-        run: go build -o "$RUNNER_TEMP/tuios" ./cmd/tuios
+        run: GOFLAGS="$(scripts/goflags.sh)" go build -o "$RUNNER_TEMP/tuios" ./cmd/tuios
       - name: Run the bridge against kitty
         working-directory: e2e/tui
         env:
