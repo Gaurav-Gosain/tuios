@@ -6197,3 +6197,69 @@ is the snapshot of the state, which the verb takes for its own use and which
 alone is 99,104 B, 5 allocations and 33.3 us at this size, and the rest of
 the change (about 104 KB of the 204 KB). A session with a client pays what it
 paid before plus one walk of the clients.
+
+## 2026-11 a typed key costs a row, not the screen
+
+The case: a 200x60 terminal, one pane, the rail on the left and the dock at
+the bottom, on the cell path. The shell echoes a typed character, which
+changes one cell of the pane. `BenchmarkKeystrokeFramePane`
+(internal/app/keystroke_cost_bench_test.go) is View and the screen's commit,
+as the client does for a frame, and reports the cells the frame recomposed
+beside time, allocations and the bytes handed to the writer.
+
+Before, the frame paid for the whole screen in four places. The pane was not
+drawn from its emulator, because the direct pane took only a pane that fills
+the screen, and the rail and the shipped borderless tiled layout both refuse
+that: so the pane's body was built as a 72 KB styled string and parsed back
+into 10,208 cells (25% and 17.5% of the frame). The canvas was cleared and
+every layer copied back onto it (12%). The screen marked all 60 rows touched,
+so the terminal renderer compared and hashed all of them (25%), and the screen
+copied all of them into its frame shown.
+
+Three changes:
+
+- The screen compares each row with the frame shown and diffs only the rows
+  that differ. The renderer's scroll check keeps stale hashes for untouched
+  rows, so with one changed row it is off (no scroll can pair a lone changed
+  row), and with more every row is touched as before.
+  `TestRowDiffWritesWhatTheFullDiffWrites` holds the bytes to the full diff's.
+  A row with a cell whose width may drift was repainted on every frame,
+  changed or not; it is now repainted when it changes.
+- The direct pane takes a lone pane that fills the content area beside the
+  rails, and a borderless tiled pane with no divider drawn.
+- A frame whose layers are the last frame's, with a direct pane and no pass
+  over the layers on either frame, keeps the canvas: only the pane's cells are
+  copied where they differ, and the rows they change go to the screen
+  (`Screen.FrameRows`). `TUIOS_FRAME_CHECK`, set by the e2e harness, composes
+  every kept frame afresh and fails the test on a difference.
+
+Apple M3 Pro, the box at load 6 to 7 from other work, test binaries of the
+commit that added the benchmark and of the last change, 8 interleaved rounds,
+`-test.cpu 1 -test.benchtime 3000x`, benchstat:
+
+| per frame | before | after |
+|---|---|---|
+| time | 1023 us | 205 us (-80%, p=0.000) |
+| allocations | 792 | 376 |
+| bytes allocated | 70.9 KiB | 12.7 KiB |
+| bytes written | 41.53 | 41.53 |
+| cells cleared | 12,000 | 0 |
+| cells copied onto the canvas | 12,000 | 0 |
+| cells parsed | 10,208 | 0 |
+| cells diffed | 12,000 | 200 |
+
+`BenchmarkLonePaneKeystroke` (no rail, the direct pane already) is level:
+cells 222 us to 214 us, string 1.09 ms to 1.08 ms.
+
+`TestKeystrokeFrameBudget` holds the frame to 0 cells cleared, copied and
+parsed, one row diffed, 64 bytes, 470 allocations, and 1 ms for the fastest
+of 5 runs of 100 frames (skipped under -race and -short).
+
+What is left of the 205 us: the compare of the pane's 10,208 cells with the
+canvas as they are copied (about 40%; the emulator has no row damage to ask),
+the dock string built again every frame and measured by lipgloss (14%; the
+dock memo key), the scan of the pane for a bare URL (12%), and the terminal
+renderer's allocations per render (5 KB). Several panes are not covered: the
+focused pane among many still goes the string way.
+
+Binary size: +20,480 bytes linux/amd64, +16,944 darwin/arm64.
