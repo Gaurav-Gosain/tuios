@@ -1228,6 +1228,9 @@ type PTY struct {
 	// screenStopped is set when vtWriter stops feeding the emulator after
 	// repeated faults. See pane_vt_fault.go.
 	screenStopped atomic.Bool
+	// faultNotices holds the fault notices not yet put into the stream, in
+	// the order the faults happened. See pane_vt_fault.go.
+	faultNotices faultNoticeQueue
 	// focusReporting is whether the guest had focus reporting on after the
 	// last write to the emulator. Only vtWriter reads and writes it. See
 	// focus_report.go.

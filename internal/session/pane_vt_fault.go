@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"runtime/debug"
+	"sync"
 	"time"
 
 	"tuios.dev/vt"
@@ -107,8 +108,54 @@ func (p *PTY) vtFault(chunk vtChunk, fault any, stack []byte, faults []time.Time
 	}
 	// RIS and ED 3 put the new emulator and every client's at the same
 	// blank state, at the same byte of the stream.
-	go p.injectStream([]byte("\x1bc\x1b[3J\x1b[2m" + notice + "\x1b[m\r\n"))
+	p.queueFaultNotice([]byte("\x1bc\x1b[3J\x1b[2m" + notice + "\x1b[m\r\n"))
 	return recent, frozen
+}
+
+// faultNoticeQueue holds the notices of faults that are not yet in the
+// stream. Each notice starts with a reset, so the last one in the stream is
+// the one every screen shows. Two faults close together, such as on a
+// program's echo and on its next line, must put their notices in in the
+// order they happened: else the reset of the first notice can land after
+// the second, and a frozen pane shows the notice of a pane that is not.
+type faultNoticeQueue struct {
+	mu       sync.Mutex
+	pending  [][]byte
+	draining bool
+}
+
+// queueFaultNotice adds data behind the notices still waiting, and starts
+// the one goroutine that puts them into the stream if none runs. vtWriter
+// calls it, and must not wait on streamMu, so the notices go in from that
+// goroutine.
+func (p *PTY) queueFaultNotice(data []byte) {
+	q := &p.faultNotices
+	q.mu.Lock()
+	q.pending = append(q.pending, data)
+	start := !q.draining
+	q.draining = true
+	q.mu.Unlock()
+	if start {
+		go p.drainFaultNotices()
+	}
+}
+
+// drainFaultNotices puts the waiting notices into the stream one by one, in
+// order, and ends when none is left.
+func (p *PTY) drainFaultNotices() {
+	q := &p.faultNotices
+	for {
+		q.mu.Lock()
+		if len(q.pending) == 0 {
+			q.draining = false
+			q.mu.Unlock()
+			return
+		}
+		data := q.pending[0]
+		q.pending = q.pending[1:]
+		q.mu.Unlock()
+		p.injectStream(data)
+	}
 }
 
 // rebuildTerminal drops the pane's emulator for a new one of the same size,
