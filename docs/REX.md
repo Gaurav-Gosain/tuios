@@ -113,6 +113,49 @@ The names of the earlier `tuios.lua`, `tuios_agents`, `tuios_mail` and
 does not have is left unbound, and `tuios_check` names it, so a key for an
 action a later tuios drops never stops Rex loading the rest of `init.lua`.
 
+## Agents that wait
+
+When an agent needs you (a question, an approval, a login), the tuios client
+in the Rex pane tells Rex in two ways, with nothing to set up:
+
+- **A notification.** tuios writes OSC 9 with the pane's name and what the
+  agent asked, such as "review needs you · approve Bash: make". Rex raises it
+  as a desktop notification when Settings > Notifications > System
+  Notifications > Terminal notifications is on. `[notifications.agent]` in
+  tuios's config.toml says which states alert.
+- **A status record.** tuios reports its agents' state with OSC 7501, the
+  Program Status Protocol. Rex shows it on the tab and in the session picker,
+  and, with Settings > Notifications > Program Activity > Show system
+  notifications, raises a macOS notification while Rex is in the background.
+  Rex's docs say a click on that one opens the program's tab. See
+  "Per-pane status" below for one record per agent.
+
+**None for what you are looking at.** tuios asks its terminal for focus
+events, and Rex sends them when its focus moves between panes. While Rex
+shows the tuios pane, tuios writes no notification for the tuios pane that
+has the focus (`suppress_focused`, on by default). Another tuios pane still
+notifies, and so does the focused one while Rex shows another pane or tab.
+
+**Jump to it.** Rex has no notification with a button, and a Lua action
+cannot raise one. Once Rex shows the tuios pane, the action
+`tuios_prefix_next_attention` ("tuios: Agents: Go to the Oldest Waiting")
+moves the focus to the agent that has waited longest, and
+`tuios_prefix_inbox` opens the agents view on what needs you. Bind one to a
+key (see Keys).
+
+**Two notifications for one question.** With Rex in the background and both
+Rex settings above on, one question can give two macOS notifications, one
+from each. Keep one: turn off Rex's Terminal notifications, or set
+`notify = false` under `[notifications.agent]` in tuios. The status record
+still reaches Rex.
+
+Checked in a real Rex server (`e2e/tui/testdata/rex-real.sh`, "agents that
+wait"): another pane's question and the focused pane's question while Rex
+showed another pane each gave one `terminal.desktop_notification`; the
+focused pane's question while Rex showed tuios gave none, before and after
+Rex's focus events. What the Mac app draws for them was not checked there,
+since that server has no app attached.
+
 ## Finding tuios and the agents
 
 The Rex server is started by the app, so its `PATH` has none of the folders a

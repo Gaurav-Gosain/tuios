@@ -41,6 +41,7 @@ tu() { env "${xdg[@]}" PATH="$tmp/agents:$claudedir:/usr/bin:/bin" "$bin" "$@"; 
 rx() { env "${xdg[@]}" PATH="/usr/bin:/bin" REX_CONFIG="$cfg" REX_SERVER="$server" "$rexbin" -S "$server" "$@"; }
 step() { echo "== $1"; }
 cleanup() {
+	[ -n "${ev:-}" ] && kill "$ev" 2>/dev/null
 	rx server stop >/dev/null 2>&1
 	[ -n "${srv:-}" ] && kill "$srv" 2>/dev/null
 	tu kill-server >/dev/null 2>&1
@@ -119,6 +120,42 @@ rx config reload > /dev/null 2>&1
 rx keymap > "$out/keymap.txt" 2>&1; grep -i 'tuios' "$out/keymap.txt"
 act tuios_check
 cp "$out/init-before-keys.lua" "$cfg"; rx config reload > /dev/null 2>&1
+
+# Agents that wait: tuios writes OSC 9 for an agent that needs the person,
+# and Rex raises terminal.desktop_notification for it. None is written for the
+# pane the person looks at: the focused tuios pane while Rex shows the tuios
+# block, which Rex tells tuios with focus events (DECSET 1004).
+step "agents that wait"
+rx events --all --json > "$out/events.jsonl" 2>&1 &
+ev=$!
+sleep 1
+rx block call -b "$blk" modes > "$out/rex-modes.txt" 2>&1
+grep -i -E 'focus|1004' "$out/rex-modes.txt"
+tu list-windows -s demo --json > "$out/wait-windows.json" 2>&1
+focused=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d["focused_window_id"])' "$out/wait-windows.json")
+other=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print([w["window_id"] for w in d["windows"] if not w["focused"]][0])' "$out/wait-windows.json")
+echo "focused tuios pane $focused, another $other"
+mark() { echo "-- $1" >> "$out/wait-steps.txt"; tu session-info -s demo --json | grep -o '"host_focus": *"[a-z]*"' >> "$out/wait-steps.txt"; }
+ask() { tu set-agent-state needs_input -s demo -w "$1" --kind question -m "$2" >/dev/null 2>&1; sleep 3; tu set-agent-state working -s demo -w "$1" >/dev/null 2>&1; sleep 1; }
+mark "another pane asks while Rex shows tuios: a notification"
+ask "$other" "wait-1 another pane"
+mark "the focused pane asks while Rex shows tuios: none"
+ask "$focused" "wait-2 focused pane, tuios shown"
+rx split -b "$blk" --json -- /bin/sleep 600 > "$out/wait-split.json" 2>&1
+sleep 2
+mark "the focused pane asks while Rex shows another block: a notification"
+ask "$focused" "wait-3 focused pane, another block shown"
+rx focus "$blk" > /dev/null 2>&1
+sleep 2
+mark "back on the tuios block, the focused pane asks: none"
+ask "$focused" "wait-4 focused pane, tuios shown again"
+rx block call -b "$blk" program_status > "$out/rex-program-status.txt" 2>&1
+kill "$ev" 2>/dev/null; ev=
+cat "$out/wait-steps.txt"
+grep -o '"name":"desktop_notification","payload":{[^}]*}' "$out/events.jsonl" > "$out/notifications.txt"
+echo "Rex desktop notifications:"; cat "$out/notifications.txt"
+for n in 1 3; do grep -q "wait-$n " "$out/notifications.txt" && echo "wait-$n notified, as it should" || echo "wait-$n NOT notified"; done
+for n in 2 4; do grep -q "wait-$n " "$out/notifications.txt" && echo "wait-$n notified, and should not be" || echo "wait-$n not notified, as it should"; done
 
 step "status"
 env "${xdg[@]}" PATH="/usr/bin:/bin:$(dirname "$rexbin")" REX_CONFIG="$cfg" REX_SERVER="$server" "$bin" integration status rex > "$out/status.txt" 2>&1
