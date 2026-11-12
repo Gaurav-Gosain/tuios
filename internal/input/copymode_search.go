@@ -173,7 +173,7 @@ func searchPad(query string, width int) int {
 	return utf8.RuneCountInString(query)
 }
 
-// narrowedLines returns the history lines a search for cm.SearchQuery has to
+// narrowedLines returns the history lines a search for cm.SearchQuery() has to
 // read, newest first, when the last search can tell, and ok false when every
 // line has to be read. A line that holds a query holds every prefix of it.
 // So when the last search was for a prefix of this one, over the same
@@ -184,7 +184,7 @@ func narrowedLines(cm *terminal.CopyMode, gen uint64, sbLen int) ([]int, bool) {
 	c := &cm.SearchCache
 	if !c.Valid || c.Capped ||
 		c.HistoryGen != gen || c.HistoryLen != sbLen || c.CaseSensitive != cm.CaseSensitive ||
-		c.Query == "" || !strings.HasPrefix(cm.SearchQuery, c.Query) {
+		c.Query == "" || !strings.HasPrefix(cm.SearchQuery(), c.Query) {
 		return nil, false
 	}
 	var lines []int
@@ -199,20 +199,20 @@ func narrowedLines(cm *terminal.CopyMode, gen uint64, sbLen int) ([]int, bool) {
 // executeSearch performs a search operation and updates matches
 func executeSearch(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	// Check cache
-	if cm.SearchQuery != "" && cm.SearchQuery == cm.SearchCache.Query && cm.SearchCache.Valid {
+	if cm.SearchQuery() != "" && cm.SearchQuery() == cm.SearchCache.Query && cm.SearchCache.Valid {
 		cm.SearchMatches = cm.SearchCache.Matches
 		jumpFromOrigin(cm, grid)
 		return
 	}
 
 	cm.SearchMatches = nil
-	if cm.SearchQuery == "" {
+	if cm.SearchQuery() == "" {
 		restoreSearchOrigin(cm, grid)
 		return
 	}
 
 	fold := !cm.CaseSensitive
-	query := cm.SearchQuery
+	query := cm.SearchQuery()
 	if fold {
 		query = strings.ToLower(query)
 	}
@@ -283,7 +283,7 @@ func executeSearch(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 
 	// Update cache
 	cm.SearchCache = terminal.SearchCache{
-		Query:         cm.SearchQuery,
+		Query:         cm.SearchQuery(),
 		Matches:       cm.SearchMatches,
 		CacheTime:     time.Now(),
 		Valid:         true,

@@ -639,6 +639,14 @@ is letters, digits and `_`, and a blank, `/`, `.` or `-` ends one. So
 `src/dir1/dir2` becomes `src/dir1/`, then `src/`, then nothing. Every short text
 field in tuios takes them, the rename, file and new worktree dialogs among them.
 
+Every short text field also has a caret. `left` and `right` move it a
+character, `alt+left` and `alt+right` a word, `ctrl+a` and `ctrl+e` to the
+start and the end; `ctrl+k` cuts from the caret to the end, `ctrl+u` clears the
+field, and typed or pasted text goes in at the caret. In a list's filter, and
+in the help and settings searches, `left` and `right` keep their own meaning
+(the section, the tab or the row's value), so there the caret moves with the
+other keys.
+
 The movement keys are the `[keybindings.lists]` section. Every list in tuios
 moves on them: the pickers and dialogs, the review panel, the scrollback
 browser's command list, the composer's paste pager, the spawn sheet, and the

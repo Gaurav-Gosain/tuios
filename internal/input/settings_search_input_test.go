@@ -51,8 +51,8 @@ func TestSettingsTypingALetterSearches(t *testing.T) {
 	o := listKeysOS(t)
 	o.OpenSettings()
 	o, _ = handleSettingsInput(press("j"), o)
-	if o.SettingsSearchOpen() || o.SettingsSelected != 1 {
-		t.Fatalf("j searched=%v selected=%d; j moves down on the tab view", o.SettingsSearchOpen(), o.SettingsSelected)
+	if o.SettingsSearchOpen() || o.SettingsCursor() != 1 {
+		t.Fatalf("j searched=%v selected=%d; j moves down on the tab view", o.SettingsSearchOpen(), o.SettingsCursor())
 	}
 	o = typeKeys(o, "pane")
 	if !o.SettingsSearchOpen() || o.SettingsSearchQuery() != "pane" {
@@ -60,8 +60,8 @@ func TestSettingsTypingALetterSearches(t *testing.T) {
 	}
 	// Down moves through the results, and a ctrl chord does not type.
 	o, _ = handleSettingsInput(tea.KeyPressMsg{Code: tea.KeyDown}, o)
-	if o.SettingsSelected != 1 {
-		t.Errorf("down in the results left row %d", o.SettingsSelected)
+	if o.SettingsCursor() != 1 {
+		t.Errorf("down in the results left row %d", o.SettingsCursor())
 	}
 	o, _ = handleSettingsInput(tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl}, o)
 	if o.SettingsSearchQuery() != "pane" {

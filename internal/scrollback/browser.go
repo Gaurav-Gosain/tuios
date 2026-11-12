@@ -1,6 +1,10 @@
 package scrollback
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
+)
 
 // BrowserMode selects what the browser displays.
 type BrowserMode int
@@ -22,8 +26,9 @@ type Browser struct {
 	ScrollOffset  int   // left pane scroll
 	PreviewScroll int   // right pane scroll
 
-	Mode         BrowserMode
-	SearchQuery  string
+	Mode BrowserMode
+	// Search is the list's search text, with its caret.
+	Search       textedit.Line
 	SearchActive bool
 	MultiSelect  map[int]bool // selected block indices (for multi-yank)
 
@@ -86,7 +91,7 @@ func (b *Browser) extractContent() {
 func (b *Browser) rebuildFiltered() {
 	b.FilteredIdx = b.FilteredIdx[:0]
 	for i, block := range b.Blocks {
-		if b.SearchQuery == "" || containsFold(block.Command, b.SearchQuery) || containsFold(block.Output, b.SearchQuery) {
+		if b.Search.String() == "" || containsFold(block.Command, b.Search.String()) || containsFold(block.Output, b.Search.String()) {
 			b.FilteredIdx = append(b.FilteredIdx, i)
 		}
 	}
@@ -96,7 +101,7 @@ func (b *Browser) rebuildFiltered() {
 func (b *Browser) rebuildFilteredJSON() {
 	b.FilteredJSON = b.FilteredJSON[:0]
 	for i, jb := range b.JSONBlocks {
-		if b.SearchQuery == "" || containsFold(jb.Pretty, b.SearchQuery) || containsFold(jb.Raw, b.SearchQuery) {
+		if b.Search.String() == "" || containsFold(jb.Pretty, b.Search.String()) || containsFold(jb.Raw, b.Search.String()) {
 			b.FilteredJSON = append(b.FilteredJSON, i)
 		}
 	}
@@ -105,7 +110,7 @@ func (b *Browser) rebuildFilteredJSON() {
 func (b *Browser) rebuildFilteredPaths() {
 	b.FilteredPaths = b.FilteredPaths[:0]
 	for i, pb := range b.PathBlocks {
-		if b.SearchQuery == "" || containsFold(pb.Raw, b.SearchQuery) || containsFold(pb.Path, b.SearchQuery) {
+		if b.Search.String() == "" || containsFold(pb.Raw, b.Search.String()) || containsFold(pb.Path, b.Search.String()) {
 			b.FilteredPaths = append(b.FilteredPaths, i)
 		}
 	}
@@ -196,7 +201,30 @@ func (b *Browser) ToggleSelect() {
 
 // SetSearch updates the search query and rebuilds the filtered list.
 func (b *Browser) SetSearch(query string) {
-	b.SearchQuery = query
+	b.Search.Set(query)
+	b.refilter()
+}
+
+// SearchKey applies one key press to the search line (textedit.Line): the
+// caret, the word keys, ctrl+u and the text the key types. It reports whether
+// the key was the line's.
+func (b *Browser) SearchKey(key, text string) bool {
+	changed, consumed := b.Search.Edit(key, text, textedit.LineOpts{AllowClear: true})
+	if changed {
+		b.refilter()
+	}
+	return consumed
+}
+
+// SearchPaste types s at the search line's caret.
+func (b *Browser) SearchPaste(s string) {
+	if b.Search.Insert(s) {
+		b.refilter()
+	}
+}
+
+// refilter rebuilds the filtered lists after the search changed.
+func (b *Browser) refilter() {
 	b.rebuildFiltered()
 	b.rebuildFilteredJSON()
 	b.rebuildFilteredPaths()

@@ -30,7 +30,7 @@ func TestASearchMatchIsReadable(t *testing.T) {
 	searchFg := lipgloss.Color("#221100")
 
 	vim := vimLineState([]string{"find me here"})
-	vim.SearchQuery = "me"
+	vim.Search.Set("me")
 	// The cursor is parked off this line, so the only mark on it is the
 	// match: a cursor cell would split the run and make the check vacuous.
 	vim.CursorY = 5

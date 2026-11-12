@@ -9,7 +9,7 @@ import (
 // editor is modal: a key it does not use is dropped, not passed to the pane.
 func handleThemeEditorInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	key := msg.String()
-	if value, typing := o.ThemeEditorTyping(); typing {
+	if _, typing := o.ThemeEditorTyping(); typing {
 		switch key {
 		case "enter":
 			o.ThemeEditorCommitTyping()
@@ -18,9 +18,7 @@ func handleThemeEditorInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		case "tab":
 			o.ThemeEditorComplete()
 		default:
-			if changed, _ := editFilterQuery(msg, &value, true); changed {
-				o.ThemeEditorTyped(value)
-			}
+			o.ThemeEditorTypeKey(key, msg.Text)
 		}
 		return o, nil
 	}

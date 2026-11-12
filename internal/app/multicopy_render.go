@@ -21,7 +21,7 @@ func (m *OS) multiCopyPill() (string, bool) {
 	matched, total := m.MultiCopyMatched()
 	searched := len(m.MultiCopy.Parked) > 0
 	for _, w := range m.MultiCopyWindows() {
-		searched = searched || (w.CopyMode != nil && w.CopyMode.SearchQuery != "")
+		searched = searched || (w.CopyMode != nil && w.CopyMode.SearchQuery() != "")
 	}
 	if searched {
 		return fmt.Sprintf(" MULTI %d/%d ", matched, total), true

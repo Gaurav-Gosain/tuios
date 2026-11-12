@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
@@ -43,8 +44,9 @@ type settingsHit struct {
 type settingsSearchState struct {
 	// open is whether the search line is up. While it is, printable keys go to
 	// the query and the list shows the results.
-	open  bool
-	query string
+	open bool
+	// query is the search text, with its caret.
+	query textedit.Line
 	hits  []settingsHit
 	// back is where the tab view was when the search opened, so closing the
 	// search puts the person back where they were.
@@ -164,7 +166,7 @@ func (m *OS) settingsSearchRows(cats []settingsCategory) ([]settingItem, []setti
 func (m *OS) SettingsSearchOpen() bool { return m.settingsSearch.open }
 
 // SettingsSearchQuery is what the search line holds.
-func (m *OS) SettingsSearchQuery() string { return m.settingsSearch.query }
+func (m *OS) SettingsSearchQuery() string { return m.settingsSearch.query.String() }
 
 // SettingsSearchStart opens the search line, holding text to begin with. The
 // tab view's place is kept so closing the search goes back to it.
@@ -172,10 +174,12 @@ func (m *OS) SettingsSearchStart(text string) {
 	st := &m.settingsSearch
 	if !st.open {
 		st.open = true
-		st.backCat, st.backSel, st.backScroll = m.SettingsCategory, m.SettingsSelected, m.SettingsScroll
-		st.query = ""
+		st.backCat, st.backSel, st.backScroll = m.SettingsCategory, m.settingsList.Cursor, m.settingsList.Scroll
+		st.query.Set("")
 	}
-	m.SettingsSearchSetQuery(st.query + text)
+	if st.query.Insert(text) {
+		m.settingsSearchRefiltered()
+	}
 }
 
 // SettingsSearchSetQuery replaces the query and ranks the rows against it,
@@ -186,22 +190,45 @@ func (m *OS) SettingsSearchStart(text string) {
 // means its value no longer matches, so the row a person is working on does
 // not move out from under the cursor.
 func (m *OS) SettingsSearchSetQuery(query string) {
+	m.settingsSearch.query.Set(query)
+	m.settingsSearchRefiltered()
+}
+
+// SettingsSearchKey applies one key press to the search line (see lineKey):
+// the word keys delete a word, alt+left and alt+right, ctrl+a and ctrl+e move
+// the caret. Left and right are not here: in the results they change the row
+// under the cursor, as on its own tab. It reports whether the key was the
+// line's.
+func (m *OS) SettingsSearchKey(key, text string) bool {
+	changed, consumed := lineKey(&m.settingsSearch.query, key, text, cleanControl)
+	if changed {
+		m.settingsSearchRefiltered()
+	}
+	return consumed
+}
+
+// SettingsSearchPaste types a paste at the search line's caret.
+func (m *OS) SettingsSearchPaste(s string) {
+	if lineInsert(&m.settingsSearch.query, s, cleanControl) {
+		m.settingsSearchRefiltered()
+	}
+}
+
+// settingsSearchRefiltered ranks the rows against the query as it is now.
+func (m *OS) settingsSearchRefiltered() {
 	st := &m.settingsSearch
-	st.query = query
-	st.hits = m.searchSettings(m.settingsCategories(), query)
-	m.SettingsSelected = 0
-	m.SettingsScroll = 0
+	st.hits = m.searchSettings(m.settingsCategories(), st.query.String())
+	m.settingsList.Cursor = 0
+	m.settingsList.Scroll = 0
 }
 
 // SettingsSearchBackspace removes the query's last character. The line stays
 // open when it empties: backspace is also what resets a row on the tab view,
 // and a held key running out of query must not start doing that.
 func (m *OS) SettingsSearchBackspace() {
-	q := []rune(m.settingsSearch.query)
-	if len(q) == 0 {
-		return
+	if changed, _ := m.settingsSearch.query.Edit("backspace", "", textedit.LineOpts{}); changed {
+		m.settingsSearchRefiltered()
 	}
-	m.SettingsSearchSetQuery(string(q[:len(q)-1]))
 }
 
 // SettingsSearchClose closes the search line and puts the tab view back where
@@ -211,7 +238,7 @@ func (m *OS) SettingsSearchClose() {
 	if !st.open {
 		return
 	}
-	m.SettingsCategory, m.SettingsSelected, m.SettingsScroll = st.backCat, st.backSel, st.backScroll
+	m.SettingsCategory, m.settingsList.Cursor, m.settingsList.Scroll = st.backCat, st.backSel, st.backScroll
 	*st = settingsSearchState{}
 }
 
@@ -223,10 +250,10 @@ func (m *OS) SettingsSearchJump() {
 		return
 	}
 	_, hits := m.settingsSearchRows(m.settingsCategories())
-	if m.SettingsSelected < 0 || m.SettingsSelected >= len(hits) {
+	if m.settingsList.Cursor < 0 || m.settingsList.Cursor >= len(hits) {
 		return
 	}
-	h := hits[m.SettingsSelected]
+	h := hits[m.settingsList.Cursor]
 	*st = settingsSearchState{}
-	m.SettingsCategory, m.SettingsSelected, m.SettingsScroll = h.cat, h.item, 0
+	m.SettingsCategory, m.settingsList.Cursor, m.settingsList.Scroll = h.cat, h.item, 0
 }

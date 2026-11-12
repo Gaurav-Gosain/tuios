@@ -60,7 +60,7 @@ func closeHelp(o *app.OS) {
 	o.ShowHelp = false
 	o.HelpScrollOffset = 0
 	o.HelpCategory = -1
-	o.HelpSearchQuery = ""
+	o.SetHelpSearchQuery("")
 	o.HelpSearchMode = false
 }
 
@@ -83,7 +83,7 @@ func handleHelpOverlayKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case "esc":
 		if o.HelpSearchMode {
 			o.HelpSearchMode = false
-			o.HelpSearchQuery = ""
+			o.SetHelpSearchQuery("")
 			o.HelpScrollOffset = 0
 			return o, nil
 		}
@@ -119,13 +119,13 @@ func handleHelpOverlayKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.HelpSearchMode = !o.HelpSearchMode
 		o.HelpScrollOffset = 0 // Reset scroll when toggling search
 		if !o.HelpSearchMode {
-			o.HelpSearchQuery = "" // Clear query when exiting search
+			o.SetHelpSearchQuery("") // Clear query when exiting search
 		}
 		return o, nil
 	}
 
 	if o.HelpSearchMode {
-		if changed, consumed := editFilterQuery(msg, &o.HelpSearchQuery, true); consumed {
+		if changed, consumed := o.HelpSearchKey(msg.String(), msg.Text); consumed {
 			if changed {
 				o.HelpScrollOffset = 0 // Reset scroll when query changes
 			}

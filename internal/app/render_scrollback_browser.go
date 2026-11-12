@@ -11,6 +11,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/scrollback"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -129,17 +130,17 @@ func (m *OS) renderScrollbackBrowser() string {
 	headerStr := title + methodStr + modeBadge + "  " + strings.Join(tabs, "")
 	vim := browser.Vim
 	if browser.OutputMode && vim != nil && vim.Mode == scrollback.VimSearch {
-		headerStr += "  " + styled(searchBgColor, true, "/"+vim.SearchQuery+"█")
-	} else if browser.OutputMode && vim != nil && vim.SearchQuery != "" {
+		headerStr += "  " + searchFieldText(searchBgColor, "/", &vim.Search)
+	} else if browser.OutputMode && vim != nil && vim.Search.String() != "" {
 		matchInfo := ""
 		if n := len(vim.SearchMatches); n > 0 {
 			matchInfo = fmt.Sprintf(" [%d/%d]", vim.SearchCurrent+1, n)
 		}
-		headerStr += "  " + styled(searchBgColor, false, "/"+vim.SearchQuery+matchInfo)
+		headerStr += "  " + styled(searchBgColor, false, "/"+vim.Search.String()+matchInfo)
 	} else if browser.SearchActive {
-		headerStr += "  " + styled(searchBgColor, true, "/"+browser.SearchQuery+"█")
-	} else if browser.SearchQuery != "" {
-		headerStr += "  " + styled(searchBgColor, false, "["+browser.SearchQuery+"]")
+		headerStr += "  " + searchFieldText(searchBgColor, "/", &browser.Search)
+	} else if q := browser.Search.String(); q != "" {
+		headerStr += "  " + styled(searchBgColor, false, "["+q+"]")
 	}
 
 	lines := make([]string, 0, innerH)
@@ -980,4 +981,16 @@ func firstLine(s string) string {
 		return before
 	}
 	return s
+}
+
+// searchFieldText draws a search line being typed, in c: the prefix, the text
+// and its caret where it is, as a reverse-video cell.
+func searchFieldText(c color.Color, prefix string, l *textedit.Line) string {
+	before, at, after := l.Parts()
+	if at == "" {
+		at = " "
+	}
+	return styled(c, true, prefix+before) +
+		lipgloss.NewStyle().Foreground(c).Reverse(true).Render(at) +
+		styled(c, true, after)
 }

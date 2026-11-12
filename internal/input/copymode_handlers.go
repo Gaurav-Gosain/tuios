@@ -1,8 +1,6 @@
 package input
 
 import (
-	"unicode/utf8"
-
 	"fmt"
 
 	tea "charm.land/bubbletea/v2"
@@ -285,7 +283,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 		}
 	case "ctrl+l":
 		// Clear search highlighting (like vim's :noh)
-		cm.SearchQuery = ""
+		cm.Search.Set("")
 		cm.SearchMatches = nil
 		cm.CurrentMatch = 0
 		cm.SearchCache.Valid = false
@@ -314,23 +312,13 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 	fx.InvalidateCache()
 }
 
-// handleSearchInput handles keys in search mode
+// handleSearchInput handles keys in search mode. The search line is a field
+// like every other (textedit.Line): the caret moves with the arrows, the word
+// keys delete a word, ctrl+u clears, and typed or pasted text lands at the
+// caret.
 func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal.CopyGrid, fx *copyModeEffects, s *config.Settings) {
 	key := msg.Key()
-
 	searchPrefix := searchPrompt(cm.SearchBackward)
-
-	// The word chords come first: Option+Backspace has the code of backspace.
-	if textedit.IsWordDeleteKey(msg.String()) {
-		if cm.SearchQuery != "" {
-			cm.SearchQuery = textedit.DropLastWord(cm.SearchQuery)
-			executeSearch(cm, grid)
-		}
-		fx.ShowNotification(searchPrefix+cm.SearchQuery, "info", 0)
-		fx.InvalidateCache()
-		return
-	}
-
 	switch key.Code {
 	case tea.KeyEnter, tea.KeyKpEnter:
 		cm.State = terminal.CopyModeNormal
@@ -338,31 +326,36 @@ func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 		if len(cm.SearchMatches) > 0 {
 			matchInfo = fmt.Sprintf(" (%s matches)", terminal.SearchMatchCount(len(cm.SearchMatches)))
 		}
-		fx.ShowNotification(fmt.Sprintf("%s%s%s", searchPrefix, cm.SearchQuery, matchInfo), "info", s.NotificationDuration)
+		fx.ShowNotification(fmt.Sprintf("%s%s%s", searchPrefix, cm.SearchQuery(), matchInfo), "info", s.NotificationDuration)
 	case tea.KeyEscape:
 		// Esc gives up the search: the cursor goes back to where the prompt
 		// opened, as it does in vim.
 		cm.State = terminal.CopyModeNormal
-		cm.SearchQuery = ""
+		cm.Search.Set("")
 		cm.SearchMatches = nil
 		restoreSearchOrigin(cm, grid)
 		fx.ShowNotification("", "info", 0)
-	case tea.KeyBackspace:
-		if len(cm.SearchQuery) > 0 {
-			_, size := utf8.DecodeLastRuneInString(cm.SearchQuery)
-			cm.SearchQuery = cm.SearchQuery[:len(cm.SearchQuery)-size]
+	default:
+		changed, consumed := cm.Search.Edit(msg.String(), key.Text, textedit.LineOpts{AllowClear: true})
+		if changed {
 			executeSearch(cm, grid)
 		}
-		fx.ShowNotification(searchPrefix+cm.SearchQuery, "info", 0)
-	default:
-		if key.Text != "" {
-			cm.SearchQuery += key.Text
-			executeSearch(cm, grid)
-			fx.ShowNotification(searchPrefix+cm.SearchQuery, "info", 0)
+		if changed || consumed {
+			fx.ShowNotification(searchPrefix+searchLineText(&cm.Search), "info", 0)
 		}
 	}
-
 	fx.InvalidateCache()
+}
+
+// searchLineText is the search text as the prompt shows it: with a thin bar
+// at the caret when the caret is not at the end, since the prompt is drawn in
+// a notification, as text.
+func searchLineText(l *textedit.Line) string {
+	before, at, after := l.Parts()
+	if at == "" {
+		return before
+	}
+	return before + "▏" + at + after
 }
 
 // visualBlockMessage names a rectangular selection in the dock.

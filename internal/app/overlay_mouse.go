@@ -206,7 +206,7 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 	}
 	switch kind {
 	case "settings":
-		m.SettingsSelected = idx
+		m.settingsList.Cursor = idx
 	case "keybinds":
 		m.KeybindMove(idx - m.KeybindSelected())
 	case "themeeditor":
@@ -346,8 +346,8 @@ func (m *OS) setOverlayTab(kind string, i int) {
 		// search gives way to it.
 		m.settingsSearch = settingsSearchState{}
 		m.SettingsCategory = i
-		m.SettingsSelected = 0
-		m.SettingsScroll = 0
+		m.settingsList.Cursor = 0
+		m.settingsList.Scroll = 0
 	case "keybinds":
 		m.KeybindSetTab(i)
 	case "themeeditor":
@@ -378,7 +378,7 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	}
 	switch kind {
 	case "settings":
-		m.SettingsSelected = row.Idx
+		m.settingsList.Cursor = row.Idx
 		items := m.settingsCurrentItems()
 		if row.Idx < len(items) {
 			switch items[row.Idx].Control {
@@ -528,7 +528,7 @@ func (m *OS) closeOverlay(kind string) {
 		m.ShowHelp = false
 		m.HelpCategory = -1
 		m.HelpSearchMode = false
-		m.HelpSearchQuery = ""
+		m.helpSearch.Set("")
 		m.HelpScrollOffset = 0
 	case "settings":
 		m.CloseSettings()

@@ -14,6 +14,7 @@
 package explore
 
 import (
+	"image/color"
 	"slices"
 	"strings"
 	"unicode"
@@ -94,14 +95,14 @@ type model struct {
 	cfg    Config
 	w, h   int
 	group  int // 0 is All
-	query  string
+	query  textedit.Line
 	focus  focus
 	shown  []int // indexes into cfg.Items that pass the filter
 	cursor int   // index into shown
 	top    int   // first shown row on screen
 	hover  int   // shown index under the pointer, -1 for none
 	detail int   // first detail line on screen
-	input  string
+	input  textedit.Line
 	status string
 	failed bool
 
@@ -114,7 +115,8 @@ type model struct {
 }
 
 func newModel(cfg Config) *model {
-	m := &model{cfg: cfg, w: 80, h: 24, hover: -1, query: cfg.Query}
+	m := &model{cfg: cfg, w: 80, h: 24, hover: -1}
+	m.query.Set(cfg.Query)
 	m.refilter()
 	return m
 }
@@ -135,7 +137,7 @@ func (m *model) refilter() {
 	if m.cursor < len(m.shown) {
 		keep = m.cfg.Items[m.shown[m.cursor]].Name + "\x00" + m.cfg.Items[m.shown[m.cursor]].Group
 	}
-	terms := strings.Fields(strings.ToLower(m.query))
+	terms := strings.Fields(strings.ToLower(m.query.String()))
 	m.shown = m.shown[:0]
 	for i, it := range m.cfg.Items {
 		if m.group > 0 && it.Group != m.cfg.Groups[m.group-1] {
@@ -159,7 +161,7 @@ func (m *model) refilter() {
 	if len(terms) > 0 {
 		// The best matches first: a name that is the search, then one that
 		// starts with it, then one that has it, then the rest.
-		q := strings.ToLower(strings.TrimSpace(m.query))
+		q := strings.ToLower(strings.TrimSpace(m.query.String()))
 		rank := func(i int) int {
 			it := m.cfg.Items[i]
 			for _, n := range []string{it.Name, it.FullName} {
@@ -245,7 +247,8 @@ func (m *model) startEdit() {
 		m.status, m.failed = "This option cannot be set here. Set it in config.toml.", true
 		return
 	}
-	m.input, m.focus, m.status, m.failed = v, focusEdit, "", false
+	m.input.Set(v)
+	m.focus, m.status, m.failed = focusEdit, "", false
 }
 
 func (m *model) applyEdit() {
@@ -254,7 +257,7 @@ func (m *model) applyEdit() {
 	if !ok {
 		return
 	}
-	updated, msg, err := m.cfg.Edit.Apply(it, m.input)
+	updated, msg, err := m.cfg.Edit.Apply(it, m.input.String())
 	if err != nil {
 		m.status, m.failed = err.Error(), true
 		return
@@ -276,10 +279,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.PasteMsg:
 		switch m.focus {
 		case focusSearch:
-			m.query += oneLine(msg.Content)
-			m.refilter()
+			if m.query.Insert(oneLine(msg.Content)) {
+				m.refilter()
+			}
 		case focusEdit:
-			m.input += oneLine(msg.Content)
+			m.input.Insert(oneLine(msg.Content))
 		}
 	case tea.MouseClickMsg:
 		m.click(msg.Mouse())
@@ -322,18 +326,11 @@ func (m *model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := k.String()
 	switch m.focus {
 	case focusSearch:
-		if textedit.IsWordDeleteKey(s) {
-			if m.query != "" {
-				m.query = textedit.DropLastWord(m.query)
-				m.refilter()
-			}
-			return m, nil
-		}
 		switch s {
 		case "esc":
 			m.focus = focusList
-			if m.query != "" {
-				m.query = ""
+			if m.query.String() != "" {
+				m.query.Set("")
 				m.refilter()
 			}
 		case "enter", "down", "tab":
@@ -341,7 +338,9 @@ func (m *model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			return m, tea.Quit
 		default:
-			if changed, _ := textedit.EditLine(&m.query, s, k.Key().Text, true); changed {
+			// The search is a field like every other: caret, word keys,
+			// ctrl+u.
+			if changed, _ := m.query.Edit(s, k.Key().Text, textedit.LineOpts{AllowClear: true}); changed {
 				m.refilter()
 			}
 		}
@@ -356,7 +355,7 @@ func (m *model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			return m, tea.Quit
 		default:
-			textedit.EditLine(&m.input, s, k.Key().Text, true)
+			m.input.Edit(s, k.Key().Text, textedit.LineOpts{AllowClear: true})
 		}
 		return m, nil
 	}
@@ -495,9 +494,9 @@ func (m *model) View() tea.View {
 	var search string
 	switch {
 	case m.focus == focusSearch:
-		search = st().Foreground(pal.Accent).Render("Search: ") + st().Foreground(pal.Fg).Render(m.query) + st().Foreground(pal.Accent).Reverse(true).Render(" ")
-	case m.query != "":
-		search = st().Foreground(pal.FgDim).Render("Search: ") + st().Foreground(pal.Fg).Render(m.query)
+		search = st().Foreground(pal.Accent).Render("Search: ") + fieldText(&m.query, bg, pal.Fg, pal.Accent)
+	case m.query.String() != "":
+		search = st().Foreground(pal.FgDim).Render("Search: ") + st().Foreground(pal.Fg).Render(m.query.String())
 	default:
 		search = st().Foreground(pal.FgDim).Render("Press / to search")
 	}
@@ -529,7 +528,7 @@ func (m *model) View() tea.View {
 		g := pal.Ground(rs, bg)
 		rowSt := func() lipgloss.Style { return overlay.Style(g) }
 		name := strings.Repeat("  ", it.Indent) + it.Name
-		if m.query != "" && it.FullName != "" {
+		if m.query.String() != "" && it.FullName != "" {
 			name = it.FullName
 		}
 		nameInk := pal.Fg
@@ -552,7 +551,7 @@ func (m *model) View() tea.View {
 	var lines []string
 	it, ok := m.current()
 	if m.focus == focusEdit {
-		lines = append(lines, st().Foreground(pal.Accent).Render("Set "+it.Name+" to: ")+st().Foreground(pal.Fg).Render(m.input)+st().Foreground(pal.Accent).Reverse(true).Render(" "))
+		lines = append(lines, st().Foreground(pal.Accent).Render("Set "+it.Name+" to: ")+fieldText(&m.input, bg, pal.Fg, pal.Accent))
 	} else if m.status != "" {
 		ink := pal.Success
 		if m.failed {
@@ -636,4 +635,15 @@ func itoa(n int) string {
 		n /= 10
 	}
 	return string(buf[i:])
+}
+
+// fieldText draws a field's text in fg on bg with its caret, a reverse-video
+// cell in accent, where the caret is.
+func fieldText(l *textedit.Line, bg, fg, accent color.Color) string {
+	before, at, after := l.Parts()
+	if at == "" {
+		at = " "
+	}
+	st := overlay.Style(bg)
+	return st.Foreground(fg).Render(before) + st.Foreground(accent).Reverse(true).Render(at) + st.Foreground(fg).Render(after)
 }

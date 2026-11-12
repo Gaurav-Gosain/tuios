@@ -32,7 +32,7 @@ func BenchmarkCopyModeSearchKey(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		cm.SearchCache.Valid = false
-		cm.SearchQuery = "module_042/file_"
+		cm.Search.Set("module_042/file_")
 		executeSearch(cm, w)
 	}
 	if len(cm.SearchMatches) == 0 {
@@ -50,7 +50,7 @@ func BenchmarkCopyModeSearchTyping(b *testing.B) {
 	for b.Loop() {
 		cm.SearchCache = terminal.SearchCache{}
 		for i := 1; i <= len(query); i++ {
-			cm.SearchQuery = query[:i]
+			cm.Search.Set(query[:i])
 			executeSearch(cm, w)
 		}
 	}

@@ -56,7 +56,7 @@ func TestEveryListTakesTheSameMovementKeys(t *testing.T) {
 			name:    "settings",
 			open:    func(o *app.OS) { o.OpenSettings() },
 			handle:  handleSettingsInput,
-			cursor:  func(o *app.OS) int { return o.SettingsSelected },
+			cursor:  func(o *app.OS) int { return o.SettingsCursor() },
 			n:       func(o *app.OS) int { return o.SettingsRowCount() },
 			letters: true,
 		},

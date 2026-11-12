@@ -79,8 +79,9 @@ func textFieldPaste(o *app.OS) func(string) tea.Cmd {
 			return nil
 		}
 		return typed(func(s string) {
-			o.HelpSearchQuery += s
-			o.HelpScrollOffset = 0
+			if o.HelpSearchPaste(s) {
+				o.HelpScrollOffset = 0
+			}
 		})
 	}
 	if paste, ok := settingsFieldPaste(o); ok {
@@ -115,8 +116,8 @@ func textFieldPaste(o *app.OS) func(string) tea.Cmd {
 func settingsFieldPaste(o *app.OS) (paste func(string) tea.Cmd, ok bool) {
 	switch {
 	case o.ThemeEditorOpen():
-		if value, typing := o.ThemeEditorTyping(); typing {
-			return typed(func(s string) { o.ThemeEditorTyped(value + s) }), true
+		if _, typing := o.ThemeEditorTyping(); typing {
+			return typed(o.ThemeEditorTypePaste), true
 		}
 		return nil, true
 	case o.ShowThemePicker:
@@ -133,19 +134,14 @@ func settingsFieldPaste(o *app.OS) (paste func(string) tea.Cmd, ok bool) {
 		if o.KeybindArmed() || o.KeybindTab != app.KeybindTabBindings {
 			return nil, true
 		}
-		return typed(func(s string) { o.KeybindSetQuery(o.KeybindQuery() + s) }), true
+		return typed(o.KeybindQueryPaste), true
 	case o.ShowSettings:
 		switch {
-		case o.SettingsEditActive() && o.SettingsEditingNumber():
-			return typed(func(s string) {
-				if isNumberEntry(s) {
-					o.SettingsEditAppend(s)
-				}
-			}), true
 		case o.SettingsEditActive():
+			// A number field drops a paste that is not a number.
 			return typed(o.SettingsEditAppend), true
 		case o.SettingsSearchOpen():
-			return typed(func(s string) { o.SettingsSearchSetQuery(o.SettingsSearchQuery() + s) }), true
+			return typed(o.SettingsSearchPaste), true
 		}
 		return nil, true
 	case o.ShowLayoutPicker:
@@ -176,11 +172,11 @@ func scrollbackSearchPaste(o *app.OS) func(string) tea.Cmd {
 	case browser == nil:
 		return nil
 	case browser.SearchActive:
-		return typed(func(s string) { browser.SetSearch(browser.SearchQuery + s) })
+		return typed(browser.SearchPaste)
 	case !browser.ShowHelp && browser.OutputMode && browser.Vim != nil && browser.Vim.Mode == scrollback.VimSearch:
 		vim := browser.Vim
 		return typed(func(s string) {
-			vim.SearchQuery += s
+			vim.Search.Insert(s)
 			vim.EnsureVisible()
 		})
 	}

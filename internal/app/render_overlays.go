@@ -652,7 +652,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		focusedWindow.CopyMode.Active &&
 		focusedWindow.CopyMode.State == terminal.CopyModeSearch {
 
-		searchQuery := focusedWindow.CopyMode.SearchQuery
+		searchQuery := focusedWindow.CopyMode.SearchQuery()
 		matchCount := len(focusedWindow.CopyMode.SearchMatches)
 		currentMatch := focusedWindow.CopyMode.CurrentMatch
 
@@ -668,8 +668,12 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		if focusedWindow.CopyMode.SearchBackward {
 			prompt = "?"
 		}
-		body := overlay.Style(bg).Foreground(pal.Fg).Render(prompt+searchQuery) +
-			overlay.Cursor(" ", bg, pal.Fg)
+		// The query with its caret where it is, as wide as it is, up to what
+		// the pane has room for.
+		before, at, after := focusedWindow.CopyMode.Search.Parts()
+		room := min(lipgloss.Width(before+at+after)+1, max(focusedWindow.Width-24, 8))
+		body := overlay.Style(bg).Foreground(pal.Fg).Render(prompt) +
+			overlay.FieldLine(before, at, after, room, bg, pal.Fg)
 		switch {
 		case matchCount > 0:
 			body += overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).

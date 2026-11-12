@@ -352,8 +352,8 @@ func (m *OS) showAgentsTab(row int) {
 			break
 		}
 	}
-	m.SettingsSelected = row
-	m.SettingsScroll = 0
+	m.settingsList.Cursor = row
+	m.settingsList.Scroll = 0
 }
 
 // SettingsBack leaves the action rows for the list, and reports whether there

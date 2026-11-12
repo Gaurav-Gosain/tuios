@@ -1212,11 +1212,11 @@ func (m *OS) OpenSettings() {
 	theme.EnsureRegistry()
 	m.ShowSettings = true
 	m.SettingsEditing = false
-	m.SettingsEditBuffer = ""
+	m.settingsEdit.Set("")
 	if m.settingsSearch.open {
 		// Ranked again, because a value the search matched may have changed
 		// while the page was shut.
-		m.settingsSearch.hits = m.searchSettings(m.settingsCategories(), m.settingsSearch.query)
+		m.settingsSearch.hits = m.searchSettings(m.settingsCategories(), m.settingsSearch.query.String())
 	}
 }
 
@@ -1233,8 +1233,8 @@ func (m *OS) OpenSettingsAt(category string) {
 		if c.Name == category {
 			m.settingsSearch = settingsSearchState{}
 			m.SettingsCategory = i
-			m.SettingsSelected = 0
-			m.SettingsScroll = 0
+			m.settingsList.Cursor = 0
+			m.settingsList.Scroll = 0
 			return
 		}
 	}
@@ -1246,8 +1246,8 @@ func (m *OS) OpenSettingsAtRow(category, row int) {
 	m.OpenSettings()
 	m.settingsSearch = settingsSearchState{}
 	m.SettingsCategory = category
-	m.SettingsSelected = row
-	m.SettingsScroll = 0
+	m.settingsList.Cursor = row
+	m.settingsList.Scroll = 0
 }
 
 // SettingsSetCategory switches to tab i, when there is one. The number keys
@@ -1257,15 +1257,15 @@ func (m *OS) SettingsSetCategory(i int) {
 		return
 	}
 	m.SettingsCategory = i
-	m.SettingsSelected = 0
-	m.SettingsScroll = 0
+	m.settingsList.Cursor = 0
+	m.settingsList.Scroll = 0
 }
 
 // CloseSettings hides the settings overlay.
 func (m *OS) CloseSettings() {
 	m.ShowSettings = false
 	m.SettingsEditing = false
-	m.SettingsEditBuffer = ""
+	m.settingsEdit.Set("")
 }
 
 // settingsCurrentItems returns the items in the active category, clamping the
@@ -1284,9 +1284,9 @@ func (m *OS) settingsCurrentItems() []settingItem {
 		items, _ = m.settingsSearchRows(cats)
 	}
 	if len(items) > 0 {
-		m.SettingsSelected = clampInt(m.SettingsSelected, 0, len(items)-1)
+		m.settingsList.Cursor = clampInt(m.settingsList.Cursor, 0, len(items)-1)
 	} else {
-		m.SettingsSelected = 0
+		m.settingsList.Cursor = 0
 	}
 	return items
 }
@@ -1302,8 +1302,11 @@ func (m *OS) SettingsMoveDown() { m.SettingsMove(1) }
 // the selection in view.
 func (m *OS) SettingsMove(delta int) {
 	items := m.settingsCurrentItems()
-	m.SettingsSelected = m.listStep(m.SettingsSelected, delta, len(items))
+	m.settingsList.Cursor = m.listStep(m.settingsList.Cursor, delta, len(items))
 }
+
+// SettingsCursor is the settings row under the cursor.
+func (m *OS) SettingsCursor() int { return m.settingsList.Cursor }
 
 // SettingsRowCount is how many rows the list shows now.
 func (m *OS) SettingsRowCount() int { return len(m.settingsCurrentItems()) }
@@ -1335,8 +1338,8 @@ func (m *OS) settingsStepCategory(delta int) {
 		return
 	}
 	m.SettingsCategory = next
-	m.SettingsSelected = 0
-	m.SettingsScroll = 0
+	m.settingsList.Cursor = 0
+	m.settingsList.Scroll = 0
 }
 
 // SettingsAdjust changes the focused setting by dir (-1 or +1) and persists it.
@@ -1347,7 +1350,7 @@ func (m *OS) SettingsAdjust(dir int) tea.Cmd {
 	if len(items) == 0 {
 		return nil
 	}
-	item := items[m.SettingsSelected]
+	item := items[m.settingsList.Cursor]
 	if item.Control == controlString || item.adjust == nil {
 		return nil
 	}
@@ -1363,7 +1366,7 @@ func (m *OS) SettingsActivate() tea.Cmd {
 	if len(items) == 0 {
 		return nil
 	}
-	item := items[m.SettingsSelected]
+	item := items[m.settingsList.Cursor]
 	if fn := item.activate; fn != nil {
 		return fn(m)
 	}
@@ -1398,10 +1401,10 @@ func (m *OS) SettingsEditingNumber() bool {
 // settingsSelectedItem is the row the cursor is on.
 func (m *OS) settingsSelectedItem() (settingItem, bool) {
 	items := m.settingsCurrentItems()
-	if m.SettingsSelected < 0 || m.SettingsSelected >= len(items) {
+	if m.settingsList.Cursor < 0 || m.settingsList.Cursor >= len(items) {
 		return settingItem{}, false
 	}
-	return items[m.SettingsSelected], true
+	return items[m.settingsList.Cursor], true
 }
 
 // SettingsEditNumberRange is the ends the open number editor validates and
@@ -1425,7 +1428,7 @@ func (m *OS) SettingsEditNumberValue() (int, bool) {
 	if !ok {
 		return 0, false
 	}
-	v, err := strconv.Atoi(strings.TrimSpace(m.SettingsEditBuffer))
+	v, err := strconv.Atoi(strings.TrimSpace(m.settingsEdit.String()))
 	if err != nil {
 		return 0, false
 	}
@@ -1455,7 +1458,7 @@ func (m *OS) SettingsEditNumberSlide(dir int) {
 	if span := item.numMax - item.numMin; span > 200 {
 		step = span / 100
 	}
-	m.SettingsEditBuffer = strconv.Itoa(clampInt(cur+dir*step, item.numMin, item.numMax))
+	m.settingsEdit.Set(strconv.Itoa(clampInt(cur+dir*step, item.numMin, item.numMax)))
 }
 
 // settingsNumberOf reads the leading integer out of a row's rendered value,
@@ -1482,47 +1485,65 @@ func (m *OS) SettingsBeginEdit() {
 	if len(items) == 0 {
 		return
 	}
-	item := items[m.SettingsSelected]
+	item := items[m.settingsList.Cursor]
 	if item.Control != controlString && !m.settingsRowTakesANumber(item) {
 		return
 	}
 	m.SettingsEditing = true
-	m.SettingsEditBuffer = item.value(m)
+	m.settingsEdit.Set(item.value(m))
 	if item.Control == controlInt {
 		// The number alone, without the unit the row shows it with: the editor
 		// takes a number and a stray percent sign in the buffer is a value that
 		// will not parse when it is committed.
-		m.SettingsEditBuffer = strconv.Itoa(settingsNumberOf(m.SettingsEditBuffer))
+		m.settingsEdit.Set(strconv.Itoa(settingsNumberOf(m.settingsEdit.String())))
 	}
 }
 
-// SettingsEditAppend adds typed text to the edit buffer.
+// SettingsEditAppend types text at the edit field's caret, as a paste does.
+// A number field takes digits and a minus only.
 func (m *OS) SettingsEditAppend(s string) {
 	if m.SettingsEditing {
-		m.SettingsEditBuffer += s
+		lineInsert(&m.settingsEdit, s, m.settingsEditClean)
 	}
 }
 
-// SettingsEditBackspace removes the last rune from the edit buffer.
-func (m *OS) SettingsEditBackspace() {
-	if !m.SettingsEditing || m.SettingsEditBuffer == "" {
-		return
+// SettingsEditKey applies one key press to the edit field (see lineKey). A
+// number field takes digits and a minus only: a number editor that accepts
+// letters is one that refuses the value on enter for a reason the person
+// cannot see while typing it.
+func (m *OS) SettingsEditKey(key, text string) {
+	if m.SettingsEditing {
+		lineKey(&m.settingsEdit, key, text, m.settingsEditClean)
 	}
-	r := []rune(m.SettingsEditBuffer)
-	m.SettingsEditBuffer = string(r[:len(r)-1])
 }
 
-// SettingsEditClear empties the edit buffer.
+// SettingsEditClear empties the edit field.
 func (m *OS) SettingsEditClear() {
 	if m.SettingsEditing {
-		m.SettingsEditBuffer = ""
+		m.settingsEdit.Set("")
 	}
+}
+
+// SettingsEditText is the edit field's text.
+func (m *OS) SettingsEditText() string { return m.settingsEdit.String() }
+
+// settingsEditClean keeps what the field may hold of typed text.
+func (m *OS) settingsEditClean(text string) string {
+	text = cleanControl(text)
+	if m.SettingsEditingNumber() {
+		for _, r := range text {
+			if (r < '0' || r > '9') && r != '-' {
+				return ""
+			}
+		}
+	}
+	return text
 }
 
 // SettingsEditCancel abandons the edit without applying it.
 func (m *OS) SettingsEditCancel() {
 	m.SettingsEditing = false
-	m.SettingsEditBuffer = ""
+	m.settingsEdit.Set("")
 }
 
 // SettingsEditCommit applies the edited (trimmed) value to the focused text
@@ -1531,10 +1552,10 @@ func (m *OS) SettingsEditCommit() tea.Cmd {
 	if !m.SettingsEditing {
 		return nil
 	}
-	value := strings.TrimSpace(m.SettingsEditBuffer)
+	value := strings.TrimSpace(m.settingsEdit.String())
 	items := m.settingsCurrentItems()
 	if len(items) > 0 {
-		item := items[m.SettingsSelected]
+		item := items[m.settingsList.Cursor]
 		m.settingsRecord(item, func() {
 			switch {
 			case m.settingsRowTakesANumber(item):
@@ -1551,6 +1572,6 @@ func (m *OS) SettingsEditCommit() tea.Cmd {
 		})
 	}
 	m.SettingsEditing = false
-	m.SettingsEditBuffer = ""
+	m.settingsEdit.Set("")
 	return m.persistSettings()
 }

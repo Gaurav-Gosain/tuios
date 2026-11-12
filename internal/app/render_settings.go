@@ -5,10 +5,13 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Settings overlay layout constants. These are the preferred sizes; a narrower
@@ -111,9 +114,9 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 		items, hits = m.settingsSearchRows(cats)
 	}
 	if len(items) > 0 {
-		m.SettingsSelected = clampInt(m.SettingsSelected, 0, len(items)-1)
+		m.settingsList.Cursor = clampInt(m.settingsList.Cursor, 0, len(items)-1)
 	} else {
-		m.SettingsSelected = 0
+		m.settingsList.Cursor = 0
 	}
 
 	pal := m.overlayUI()
@@ -127,14 +130,14 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 	// so the strip says where a row is as the cursor moves through them.
 	activeTab := m.SettingsCategory
 	if searching && len(hits) > 0 {
-		activeTab = hits[m.SettingsSelected].cat
+		activeTab = hits[m.settingsList.Cursor].cat
 	}
 
 	width, visible, hints, descLines := m.settingsLayout(tabs, len(items))
 	// A category with more settings than fit scrolls; the selection stays in
 	// view so the arrow keys can always reach every setting.
-	m.SettingsScroll = scrollWindow(m.SettingsScroll, m.SettingsSelected, len(items), visible)
-	start := m.SettingsScroll
+	m.settingsList.Scroll = scrollWindow(m.settingsList.Scroll, m.settingsList.Cursor, len(items), visible)
+	start := m.settingsList.Scroll
 	end := min(start+visible, len(items))
 
 	var lines []string
@@ -161,12 +164,12 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 				extra.match = hits[i].pos
 			}
 		}
-		line, control, stepless := m.settingsRow(items[i], i == m.SettingsSelected, pal, width, extra)
-		lines = append(lines, pal.Row(line, width, overlay.RowState{Cursor: i == m.SettingsSelected, Focused: true}, bg))
+		line, control, stepless := m.settingsRow(items[i], i == m.settingsList.Cursor, pal, width, extra)
+		lines = append(lines, pal.Row(line, width, overlay.RowState{Cursor: i == m.settingsList.Cursor, Focused: true}, bg))
 		infos = append(infos, rowInfo{control: control, stepless: stepless, idx: i})
 	}
 	if searching && len(items) == 0 {
-		lines = append(lines, settingsSearchEmpty(m.settingsSearch.query, width, pal))
+		lines = append(lines, settingsSearchEmpty(m.settingsSearch.query.String(), width, pal))
 	}
 	for len(lines) < visible+rowsAt {
 		lines = append(lines, overlay.Style(bg).Render(" "))
@@ -179,12 +182,12 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 		} else {
 			desc := ""
 			if len(items) > 0 {
-				desc = joinSentences(items[m.SettingsSelected].Desc, m.settingsDefaultNote(items[m.SettingsSelected]))
+				desc = joinSentences(items[m.settingsList.Cursor].Desc, m.settingsDefaultNote(items[m.settingsList.Cursor]))
 			}
 			if len(items) > visible {
 				// Say where in the category the selection is, so a scrolled-off
 				// setting is discoverable rather than simply missing.
-				desc = lipgloss.Sprintf("(%d/%d) ", m.SettingsSelected+1, len(items)) + desc
+				desc = lipgloss.Sprintf("(%d/%d) ", m.settingsList.Cursor+1, len(items)) + desc
 			}
 			lines = append(lines, settingsDescription(desc, width, descLines, pal)...)
 		}
@@ -378,7 +381,7 @@ const settingsNumberEditorCells = 14
 func (m *OS) settingsNumberEditor(item settingItem, bg color.Color, pal overlay.Palette, width int) string {
 	lo, hi, ok := m.SettingsEditNumberRange()
 	if !ok {
-		return overlay.Cycler(m.SettingsEditBuffer, true, bg, pal)
+		return overlay.Cycler(m.settingsEdit.String(), true, bg, pal)
 	}
 	// The value the slider shows. An empty field is mid-edit rather than
 	// wrong, so the slider keeps showing where the setting still is.
@@ -387,11 +390,7 @@ func (m *OS) settingsNumberEditor(item settingItem, bg color.Color, pal overlay.
 		value = clampInt(settingsNumberOf(item.value(m)), lo, hi)
 	}
 
-	cursor := "▏"
-	if overlay.UseASCII() {
-		cursor = "_"
-	}
-	field := m.SettingsEditBuffer + cursor
+	field := settingsCaretText(&m.settingsEdit, width)
 
 	bracket := overlay.Style(bg).Foreground(pal.AccentBright)
 	ends := overlay.Style(bg).Foreground(pal.FgMute)
@@ -480,7 +479,7 @@ func (m *OS) settingsStringControl(item settingItem, selected bool, bg color.Col
 	editing := m.SettingsEditing && selected
 	val := item.value(m)
 	if editing {
-		val = m.SettingsEditBuffer
+		val = m.settingsEdit.String()
 	}
 
 	fg := pal.Fg
@@ -496,13 +495,10 @@ func (m *OS) settingsStringControl(item settingItem, selected bool, bg color.Col
 	}
 	// The field never takes more than half the row, so the label it sits beside
 	// keeps something to show even on a narrow panel.
-	text = overlay.Truncate(text, min(30, max(width/2, 6)))
 	if editing {
-		cursor := "▏"
-		if overlay.UseASCII() {
-			cursor = "_"
-		}
-		text += cursor
+		text = settingsCaretText(&m.settingsEdit, min(30, max(width/2, 6)))
+	} else {
+		text = overlay.Truncate(text, min(30, max(width/2, 6)))
 	}
 
 	bracketColor := pal.FgMute
@@ -568,4 +564,21 @@ func settingsMeterGlyphs() (on, off string) {
 		return "=", "-"
 	}
 	return "\u2501", "\u2500"
+}
+
+// settingsCaretText is an edited setting's text with the settings page's thin
+// caret bar where the caret is, at most room cells: a value wider than that
+// gives way from its start, so the caret stays in view.
+func settingsCaretText(l *textedit.Line, room int) string {
+	bar := "▏"
+	if overlay.UseASCII() {
+		bar = "_"
+	}
+	before, at, after := l.Parts()
+	for before != "" && ansi.StringWidth(before)+1 > room {
+		_, size := utf8.DecodeRuneInString(before)
+		before = before[size:]
+	}
+	rest := ansi.Truncate(at+after, max(room-ansi.StringWidth(before)-1, 0), "")
+	return before + bar + rest
 }

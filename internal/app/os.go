@@ -423,7 +423,7 @@ type OS struct {
 	HelpScrollOffset       int                           // Scroll offset for help menu
 	HelpCategory           int                           // Current help category index (for left/right navigation)
 	HelpSearchMode         bool                          // True when help search is active
-	HelpSearchQuery        string                        // Current search query in help menu
+	helpSearch             textedit.Line                 // the help search line, with its caret
 	CurrentWorkspace       int                           // Current active workspace (1-9)
 	NumWorkspaces          int                           // Total number of workspaces
 	WorkspaceFocus         map[int]int                   // Remembers focused window per workspace
@@ -1627,12 +1627,13 @@ type OS struct {
 	layoutSaveName textedit.Line
 
 	// Settings overlay state.
-	ShowSettings       bool
-	SettingsCategory   int    // active settings category (tab) index
-	SettingsSelected   int    // selected row within the active category
-	SettingsScroll     int    // scroll offset within the active category
-	SettingsEditing    bool   // true while a text setting is being edited inline
-	SettingsEditBuffer string // in-progress text for the setting being edited
+	ShowSettings     bool
+	SettingsCategory int // active settings category (tab) index
+	// settingsList is the row cursor and window within the active category.
+	settingsList    listnav.State
+	SettingsEditing bool // true while a text setting is being edited inline
+	// settingsEdit is the text of the setting being edited, with its caret.
+	settingsEdit textedit.Line
 	// settingsSearch is the search line over every tab. See settings_search.go.
 	settingsSearch settingsSearchState
 	// settingsUndo is the changes made on the settings page, newest last, so

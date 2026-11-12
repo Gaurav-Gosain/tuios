@@ -48,10 +48,10 @@ func TestSettingsPanelLinesMatchGeometryWidth(t *testing.T) {
 				t.Fatal("Preferred shell setting not found")
 			}
 			m.SettingsCategory = ci
-			m.SettingsSelected = ii
+			m.settingsList.Cursor = ii
 			if tc.editBuf != "" {
 				m.SettingsEditing = true
-				m.SettingsEditBuffer = tc.editBuf
+				m.settingsEdit.Set(tc.editBuf)
 			}
 
 			content, geo, _ := m.renderSettings()
@@ -73,7 +73,7 @@ func TestSettingsDescriptionStaysInsideThePanelAtEveryWidth(t *testing.T) {
 		m := newNarrowOS(t, w, 40)
 		for ci, cat := range m.settingsCategories() {
 			for ii := range cat.Items {
-				m.SettingsCategory, m.SettingsSelected = ci, ii
+				m.SettingsCategory, m.settingsList.Cursor = ci, ii
 				content, geo, _ := m.renderSettings()
 				for i, ln := range strings.Split(content, "\n") {
 					if lw := lipgloss.Width(ln); lw != geo.Width {

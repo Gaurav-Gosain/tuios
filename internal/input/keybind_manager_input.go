@@ -99,10 +99,7 @@ func handleKeybindFilterInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 	case "right":
 		o.KeybindStepTab(1)
 	default:
-		q := o.KeybindQuery()
-		if changed, _ := editFilterQuery(msg, &q, true); changed {
-			o.KeybindSetQuery(q)
-		}
+		o.KeybindQueryKey(keyStr, msg.Text)
 	}
 	return o, nil
 }

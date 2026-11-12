@@ -4,6 +4,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 )
 
 // VimMode represents the current editing mode.
@@ -42,7 +44,8 @@ type VimState struct {
 	VisualStartY int
 
 	// Search
-	SearchQuery   string
+	// Search is the output search text, with its caret.
+	Search        textedit.Line
 	SearchMatches []VimSearchMatch
 	SearchCurrent int
 
@@ -713,11 +716,11 @@ func (v *VimState) MatchBracket() {
 
 // SearchExecute runs the search query and jumps to the first match at or after cursor.
 func (v *VimState) SearchExecute() {
-	if v.SearchQuery == "" {
+	if v.Search.String() == "" {
 		v.SearchMatches = nil
 		return
 	}
-	query := strings.ToLower(v.SearchQuery)
+	query := strings.ToLower(v.Search.String())
 	v.SearchMatches = nil
 
 	for y, line := range v.Lines {

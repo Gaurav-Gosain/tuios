@@ -183,8 +183,14 @@ func (m *OS) keybindListBody(pal overlay.Palette, width, visible int, chrome key
 		cursor = ""
 	}
 	if chrome.header > 0 {
+		filter := overlay.Style(bg).Foreground(pal.Fg).Render(query) + cursor
+		if m.KeybindTab == KeybindTabBindings {
+			// The filter with its caret.
+			before, at, after := m.keybinds.query.Parts()
+			filter = overlay.FieldLine(before, at, after, max(width-lipgloss.Width(prompt), 1), bg, pal.Fg)
+		}
 		lines = append(lines,
-			prompt+overlay.Style(bg).Foreground(pal.Fg).Render(query)+cursor,
+			prompt+filter,
 			overlay.Rule(width, bg, pal),
 		)
 	}

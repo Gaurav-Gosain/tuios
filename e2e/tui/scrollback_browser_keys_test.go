@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuitest"
@@ -61,15 +62,27 @@ func TestScrollbackBrowserTakesCopyModeKeys(t *testing.T) {
 	// settled reads the cursor line once every key sent before it has run:
 	// the search prompt it opens is drawn only after them, and esc closes it
 	// again.
+	//
+	// The prompt is "/" on the browser's title row, two spaces after what is
+	// there, followed by its caret, a reverse-video cell with no glyph.
+	searchOpen := func(s tuitest.Screen) bool {
+		_, rows := s.Size()
+		for r := range rows {
+			if ln := s.Line(r); strings.Contains(ln, browserTitle) {
+				return regexp.MustCompile(`  /\s*[│|]?\s*$`).MatchString(ln)
+			}
+		}
+		return false
+	}
 	settled := func(what string) int {
 		t.Helper()
 		sendKeys(t, term, "/")
-		if err := term.WaitForText("/█", uiTimeout); err != nil {
+		if err := term.WaitFor(searchOpen, uiTimeout); err != nil {
 			t.Fatalf("%s: the search prompt did not open\n%s", what, term.Snapshot())
 		}
 		n, _ := line(term.Screen())
 		sendKeys(t, term, tuitest.Esc)
-		if err := term.WaitFor(func(s tuitest.Screen) bool { return !regexp.MustCompile(`/█`).MatchString(s.Text()) }, uiTimeout); err != nil {
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return !searchOpen(s) }, uiTimeout); err != nil {
 			t.Fatalf("%s: esc did not close the search prompt\n%s", what, term.Snapshot())
 		}
 		return n

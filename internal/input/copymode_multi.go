@@ -147,10 +147,10 @@ func handleMultiCopyKey(msg tea.KeyPressMsg, o *app.OS, focused *terminal.Window
 
 	// A search just finished: say how many panes it found something in, which
 	// is the number a person searching 32 panes at once needs.
-	if leadState == terminal.CopyModeSearch && lead.CopyMode.State == terminal.CopyModeNormal && lead.CopyMode.SearchQuery != "" {
+	if leadState == terminal.CopyModeSearch && lead.CopyMode.State == terminal.CopyModeNormal && lead.CopyMode.SearchQuery() != "" {
 		matched, total := o.MultiCopyMatched()
 		leadFx.notifications = nil
-		leadFx.ShowNotification(fmt.Sprintf("%s%s: found in %d of %d panes", searchPrompt(lead.CopyMode.SearchBackward), lead.CopyMode.SearchQuery, matched, total),
+		leadFx.ShowNotification(fmt.Sprintf("%s%s: found in %d of %d panes", searchPrompt(lead.CopyMode.SearchBackward), lead.CopyMode.SearchQuery(), matched, total),
 			"info", o.Settings.NotificationDuration)
 	}
 	return leadFx.apply(o, lead)
@@ -161,7 +161,7 @@ func multiCopySearchMisses(windows []*terminal.Window) map[string]bool {
 	var miss map[string]bool
 	for _, w := range windows {
 		cm := w.CopyMode
-		if cm == nil || !cm.Active || cm.SearchQuery == "" || len(cm.SearchMatches) > 0 {
+		if cm == nil || !cm.Active || cm.SearchQuery() == "" || len(cm.SearchMatches) > 0 {
 			continue
 		}
 		if miss == nil {

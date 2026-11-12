@@ -104,10 +104,8 @@ func handleSettingsSearchInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 	case "ctrl+u":
 		o.SettingsSearchSetQuery("")
 	default:
-		q := o.SettingsSearchQuery()
-		if changed, _ := editFilterQuery(msg, &q, false); changed {
-			o.SettingsSearchSetQuery(q)
-		}
+		// The line's caret and word keys, and the text a key types.
+		o.SettingsSearchKey(key, msg.Text)
 	}
 	return o, nil
 }
@@ -122,14 +120,20 @@ func handleSettingsEditInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 		o.SettingsEditCancel()
 	case "enter":
 		return o, o.SettingsEditCommit()
-	case "backspace":
-		o.SettingsEditBackspace()
-	case "ctrl+u":
-		o.SettingsEditClear()
-	case "left", "right", "up", "down":
+	case "up", "down":
 		// The slider half of the number editor. A text field has nothing for
-		// these to do, so they are left alone there.
+		// these to do.
+		if number {
+			dir := 1
+			if msg.String() == "down" {
+				dir = -1
+			}
+			o.SettingsEditNumberSlide(dir)
+		}
+	case "left", "right":
+		// The number editor's slider; in a text field they move the caret.
 		if !number {
+			o.SettingsEditKey(msg.String(), "")
 			return o, nil
 		}
 		dir := 1
@@ -138,29 +142,9 @@ func handleSettingsEditInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 		}
 		o.SettingsEditNumberSlide(dir)
 	default:
-		switch {
-		case number:
-			// Digits and a leading minus only. A number editor that accepts
-			// letters is one that refuses the value on Enter for a reason the
-			// user cannot see while typing it.
-			if t := msg.Text; t != "" && isNumberEntry(t) {
-				o.SettingsEditAppend(t)
-			}
-		case msg.String() == "space":
-			o.SettingsEditAppend(" ")
-		case msg.Text != "":
-			o.SettingsEditAppend(msg.Text)
-		}
+		// The field's caret, word keys, ctrl+u and the text a key types; a
+		// number field takes digits and a minus only (settingsEditClean).
+		o.SettingsEditKey(msg.String(), msg.Text)
 	}
 	return o, nil
-}
-
-// isNumberEntry reports whether typed text belongs in a number field.
-func isNumberEntry(s string) bool {
-	for _, r := range s {
-		if (r < '0' || r > '9') && r != '-' {
-			return false
-		}
-	}
-	return true
 }

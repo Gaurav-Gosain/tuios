@@ -16981,3 +16981,18 @@ Run on 2026-11-12 on macOS. The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRenameEditsAtTheCaret$' -v .`.
+
+## Copy mode's search edits at its caret
+
+`TestCopyModeSearchEditsAtTheCaret` prints "kestrel-wing" in a pane, opens
+copy mode's search, types "kstrel", moves left five times, types "e", and
+checks the prompt reads "/kestrel" with one match.
+
+Run on 2026-11-12 on macOS. The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The R7 6a tip (78cc3f405), where copy mode's search appends and left does nothing | "left then e did not type at the caret; the search is not for kestrel" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCopyModeSearchEditsAtTheCaret$' -v .`.

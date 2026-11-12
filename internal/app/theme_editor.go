@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	tint "github.com/lrstanley/bubbletint/v2"
 )
@@ -136,7 +137,7 @@ type themeEditorState struct {
 	err      error
 	// typing is the value being typed for the selected row, and typingOn
 	// whether a value is being typed.
-	typing   string
+	typing   textedit.Line
 	typingOn bool
 	// leaving is set by an esc over unsaved changes. A second esc drops them.
 	leaving bool
@@ -220,7 +221,8 @@ func (m *OS) ThemeEditorEscape() {
 	st := &m.themeEditor
 	switch {
 	case st.typingOn:
-		st.typingOn, st.typing = false, ""
+		st.typingOn = false
+		st.typing.Set("")
 	case st.hidden:
 		st.hidden = false
 	case m.themeEditorDirty() && !st.leaving:
@@ -599,28 +601,29 @@ func (m *OS) ThemeEditorStartTyping() {
 	if !ok || row.fixed || row.dark {
 		return
 	}
-	st.typingOn, st.typing = true, st.raw(row)
+	st.typingOn = true
+	st.typing.Set(st.raw(row))
 }
 
 // ThemeEditorTyped edits the value being typed.
-func (m *OS) ThemeEditorTyped(s string) { m.themeEditor.typing = s }
+func (m *OS) ThemeEditorTyped(s string) { m.themeEditor.typing.Set(s) }
 
 // ThemeEditorTyping is the value being typed, and whether one is.
 func (m *OS) ThemeEditorTyping() (string, bool) {
-	return m.themeEditor.typing, m.themeEditor.typingOn
+	return m.themeEditor.typing.String(), m.themeEditor.typingOn
 }
 
 // ThemeEditorComplete completes the value being typed to the next colour name
 // that starts with it.
 func (m *OS) ThemeEditorComplete() {
 	st := &m.themeEditor
-	prefix := strings.ToLower(st.typing)
+	prefix := strings.ToLower(st.typing.String())
 	if prefix == "" || prefix[0] == '#' {
 		return
 	}
 	for _, name := range theme.ColourNames() {
 		if strings.HasPrefix(name, prefix) && name != prefix {
-			st.typing = name
+			st.typing.Set(name)
 			return
 		}
 	}
@@ -634,7 +637,7 @@ func (m *OS) ThemeEditorCommitTyping() {
 	if !ok || !st.typingOn {
 		return
 	}
-	value := strings.TrimSpace(st.typing)
+	value := strings.TrimSpace(st.typing.String())
 	switch {
 	case value == "":
 	case row.pane >= 0:
@@ -663,7 +666,8 @@ func (m *OS) ThemeEditorCommitTyping() {
 			return
 		}
 	}
-	st.typingOn, st.typing = false, ""
+	st.typingOn = false
+	st.typing.Set("")
 	m.themeEditorSet(row, value)
 }
 
@@ -765,5 +769,20 @@ func (m *OS) endThemeEditorFlash(msg themeEditorFlashEndMsg) {
 	}
 	if st.draft.Preview() == nil {
 		m.MarkAllDirty()
+	}
+}
+
+// ThemeEditorTypeKey applies one key press to the value being typed (see
+// lineKey).
+func (m *OS) ThemeEditorTypeKey(key, text string) {
+	if m.themeEditor.typingOn {
+		lineKey(&m.themeEditor.typing, key, text, cleanControl)
+	}
+}
+
+// ThemeEditorTypePaste types a paste at the value's caret.
+func (m *OS) ThemeEditorTypePaste(s string) {
+	if m.themeEditor.typingOn {
+		lineInsert(&m.themeEditor.typing, s, cleanControl)
 	}
 }

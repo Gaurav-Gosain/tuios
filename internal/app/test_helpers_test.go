@@ -102,7 +102,7 @@ func focusSetting(t *testing.T, m *OS, category, label string) settingItem {
 		t.Fatalf("setting %q not found in category %q", label, category)
 	}
 	m.SettingsCategory = ci
-	m.SettingsSelected = ii
+	m.settingsList.Cursor = ii
 	return item
 }
 

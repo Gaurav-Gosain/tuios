@@ -29,7 +29,7 @@ func assertSolidRect(t *testing.T, name, out string) {
 // category and checks each is a solid rectangle with sane hit geometry.
 func TestSettingsPanelRendersSolid(t *testing.T) {
 	m := &OS{Settings: config.Global}
-	m.SettingsSelected = 1
+	m.settingsList.Cursor = 1
 	out, geo, rows := m.renderSettings()
 	assertSolidRect(t, "settings", out)
 	if geo.BodyY == 0 || len(rows) == 0 {
@@ -38,7 +38,7 @@ func TestSettingsPanelRendersSolid(t *testing.T) {
 
 	for i := range 4 {
 		m.SettingsCategory = i
-		m.SettingsSelected = 0
+		m.settingsList.Cursor = 0
 		s, _, _ := m.renderSettings()
 		assertSolidRect(t, "settings cat "+strconv.Itoa(i), s)
 	}

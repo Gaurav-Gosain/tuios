@@ -23,13 +23,15 @@ type settingsRowExtra struct {
 // being typed on the left, and how many rows it found on the right.
 func (m *OS) settingsSearchLine(found, width int, pal overlay.Palette) string {
 	bg := pal.Surface
-	query := m.settingsSearch.query
+	query := m.settingsSearch.query.String()
 	left := overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(overlay.Sigil())
 	if query == "" {
 		left += overlay.Cursor(" ", bg, pal.Fg) +
 			overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render(" name, key, value or description")
 	} else {
-		left += overlay.Style(bg).Foreground(pal.Fg).Render(query) + overlay.Cursor(" ", bg, pal.Fg)
+		// The query with its caret, leaving the count on the right its room.
+		before, at, after := m.settingsSearch.query.Parts()
+		left += overlay.FieldLine(before, at, after, max(width-lipgloss.Width(left)-14, 1), bg, pal.Fg)
 	}
 
 	count := ""
@@ -69,7 +71,7 @@ func (m *OS) settingsSearchDescription(items []settingItem, hits []settingsHit, 
 	if len(items) == 0 || n <= 0 {
 		return settingsDescription("", width, n, pal)
 	}
-	item, hit := items[m.SettingsSelected], hits[m.SettingsSelected]
+	item, hit := items[m.settingsList.Cursor], hits[m.settingsList.Cursor]
 	bg := pal.Surface
 
 	where := cats[hit.cat].Name + " tab"

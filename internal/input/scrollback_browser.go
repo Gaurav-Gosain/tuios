@@ -11,6 +11,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/scrollback"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 	"tuios.dev/vt"
 )
 
@@ -42,10 +43,7 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 			browser.SearchActive = false
 			return o, nil
 		default:
-			q := browser.SearchQuery
-			if changed, _ := editFilterQuery(msg, &q, false); changed {
-				browser.SetSearch(q)
-			}
+			browser.SearchKey(keyStr, msg.Text)
 			return o, nil
 		}
 	}
@@ -105,7 +103,7 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 	// Search
 	case "/":
 		browser.SearchActive = true
-		browser.SearchQuery = ""
+		browser.Search.Set("")
 
 	// Mode switching
 	case "tab":
@@ -219,12 +217,12 @@ func handleBrowserOutputModeKey(msg tea.KeyPressMsg, keyStr string, browser *scr
 		switch keyStr {
 		case "esc":
 			vim.Mode = scrollback.VimNormal
-			vim.SearchQuery = ""
+			vim.Search.Set("")
 		case "enter":
 			vim.Mode = scrollback.VimNormal
 			vim.SearchExecute()
 		default:
-			editFilterQuery(msg, &vim.SearchQuery, false)
+			vim.Search.Edit(keyStr, msg.Text, textedit.LineOpts{AllowClear: true})
 		}
 		vim.EnsureVisible()
 		return o, nil
@@ -338,7 +336,7 @@ func handleBrowserOutputModeKey(msg tea.KeyPressMsg, keyStr string, browser *scr
 	// Search
 	case "/":
 		vim.Mode = scrollback.VimSearch
-		vim.SearchQuery = ""
+		vim.Search.Set("")
 		return o, nil
 	case "n":
 		for range vCount {

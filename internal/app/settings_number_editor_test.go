@@ -20,7 +20,7 @@ func numberRowOS(t *testing.T, path string) *OS {
 		for ii, item := range cat.Items {
 			if item.Path == path {
 				m.SettingsCategory = ci
-				m.SettingsSelected = ii
+				m.settingsList.Cursor = ii
 				return m
 			}
 		}

@@ -302,7 +302,7 @@ func (m *OS) OpenHelpAtCategory(name string) {
 	m.ShowHelp = true
 	m.HelpScrollOffset = 0
 	m.HelpSearchMode = false
-	m.HelpSearchQuery = ""
+	m.helpSearch.Set("")
 	m.HelpCategory = -1
 	for i, cat := range m.HelpCategories() {
 		if cat.Name == name {
@@ -1049,7 +1049,7 @@ func (m *OS) RenderHelpMenu() (string, overlay.Geometry) {
 	var bindings []HelpBinding
 	showCategoryTag := false
 	if inSearch {
-		bindings = SearchBindings(m.HelpSearchQuery, categories)
+		bindings = SearchBindings(m.helpSearch.String(), categories)
 		showCategoryTag = true
 	} else {
 		bindings = categories[m.HelpCategory].Bindings
@@ -1100,9 +1100,9 @@ func (m *OS) renderHelpBody(bindings []HelpBinding, inSearch, showCategoryTag bo
 	var lines []string
 
 	if inSearch {
-		cursor := overlay.Style(bg).Foreground(pal.Accent).Render("█")
-		prompt := overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render("Search ") +
-			overlay.Style(bg).Foreground(pal.Fg).Render(m.HelpSearchQuery) + cursor
+		label := overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render("Search ")
+		before, at, after := m.helpSearch.Parts()
+		prompt := label + overlay.FieldLine(before, at, after, max(width-lipgloss.Width(label), 1), bg, pal.Fg)
 		lines = append(lines, prompt, overlay.Rule(width, bg, pal))
 	}
 
@@ -1239,4 +1239,21 @@ func withoutAgentHelp(cats []HelpCategory) []HelpCategory {
 		}
 	}
 	return out
+}
+
+// HelpSearchQuery is the help search line's text.
+func (m *OS) HelpSearchQuery() string { return m.helpSearch.String() }
+
+// SetHelpSearchQuery replaces the help search line's text.
+func (m *OS) SetHelpSearchQuery(q string) { m.helpSearch.Set(q) }
+
+// HelpSearchKey applies one key press to the help search line (see lineKey).
+// Left and right are not here: they change the section, as outside a search.
+func (m *OS) HelpSearchKey(key, text string) (changed, consumed bool) {
+	return lineKey(&m.helpSearch, key, text, cleanControl)
+}
+
+// HelpSearchPaste types a paste at the help search line's caret.
+func (m *OS) HelpSearchPaste(s string) bool {
+	return lineInsert(&m.helpSearch, s, cleanControl)
 }

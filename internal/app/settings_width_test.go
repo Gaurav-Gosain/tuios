@@ -61,7 +61,7 @@ func TestSettingsTabRowIsOneLineAtEveryWidth(t *testing.T) {
 		m := newNarrowOS(t, w, 40)
 		names := settingsTabNames(m)
 		for active := range names {
-			m.SettingsCategory, m.SettingsSelected = active, 0
+			m.SettingsCategory, m.settingsList.Cursor = active, 0
 			lines, geo := plainFrame(t, m)
 
 			rows := map[int]bool{}

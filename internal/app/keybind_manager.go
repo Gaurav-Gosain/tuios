@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
@@ -31,7 +32,7 @@ type keybindManager struct {
 	// which is the one thing this must not do.
 	report config.KeybindReport
 
-	query    string
+	query    textedit.Line
 	selected int
 	scroll   int
 	// filtered memoises FilteredKeybindRows against filteredFor, the query it
@@ -79,7 +80,8 @@ func (m *OS) OpenKeybindManager() { m.OpenKeybindManagerWith("") }
 // bindings is the hunting the palette row exists to avoid.
 func (m *OS) OpenKeybindManagerWith(query string) {
 	m.ShowKeybindManager = true
-	m.keybinds = keybindManager{report: m.buildKeybindReport(), query: query}
+	m.keybinds = keybindManager{report: m.buildKeybindReport()}
+	m.keybinds.query.Set(query)
 	m.KeybindTab = KeybindTabBindings
 }
 
@@ -125,7 +127,7 @@ func (m *OS) buildKeybindReport() config.KeybindReport {
 func (m *OS) KeybindReport() config.KeybindReport { return m.keybinds.report }
 
 // KeybindQuery is the current filter text.
-func (m *OS) KeybindQuery() string { return m.keybinds.query }
+func (m *OS) KeybindQuery() string { return m.keybinds.query.String() }
 
 // KeybindSelected is the selected row in the active tab's list.
 func (m *OS) KeybindSelected() int { return m.keybinds.selected }
@@ -182,7 +184,7 @@ func (m *OS) keybindRowCount() int {
 // sweep over a few hundred candidates a dozen times a frame, for a list that
 // only changes when a keystroke changes the query.
 func (m *OS) FilteredKeybindRows() []config.Binding {
-	q := strings.ToLower(strings.TrimSpace(m.keybinds.query))
+	q := strings.ToLower(strings.TrimSpace(m.keybinds.query.String()))
 	if m.keybinds.filtered != nil && m.keybinds.filteredFor == q {
 		return m.keybinds.filtered
 	}
@@ -253,7 +255,27 @@ func (m *OS) KeybindStepTab(delta int) {
 // KeybindSetQuery replaces the filter text and puts the selection back at the
 // top, since the row it pointed at is probably gone.
 func (m *OS) KeybindSetQuery(q string) {
-	m.keybinds.query = q
+	m.keybinds.query.Set(q)
+	m.keybindRefiltered()
+}
+
+// KeybindQueryKey applies one key press to the filter line (see lineKey).
+// Left and right are not here: they change the tab.
+func (m *OS) KeybindQueryKey(key, text string) {
+	if changed, _ := lineKey(&m.keybinds.query, key, text, cleanControl); changed {
+		m.keybindRefiltered()
+	}
+}
+
+// KeybindQueryPaste types a paste at the filter line's caret.
+func (m *OS) KeybindQueryPaste(s string) {
+	if lineInsert(&m.keybinds.query, s, cleanControl) {
+		m.keybindRefiltered()
+	}
+}
+
+// keybindRefiltered puts the list back at the top after the filter changed.
+func (m *OS) keybindRefiltered() {
 	m.keybinds.filtered = nil
 	m.keybinds.selected = 0
 	m.keybinds.scroll = 0

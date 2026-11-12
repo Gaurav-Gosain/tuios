@@ -26,6 +26,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/shellinteg"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 	"tuios.dev/vt"
 )
 
@@ -647,7 +648,7 @@ type CopyMode struct {
 	VisualEnd   Position // Selection end (absolute coordinates)
 
 	// Search state
-	SearchQuery    string        // Current search query
+	Search         textedit.Line // the search text being typed, with its caret
 	SearchMatches  []SearchMatch // All search results
 	CurrentMatch   int           // Index of current match
 	CaseSensitive  bool          // Case-sensitive search
@@ -717,7 +718,7 @@ type SearchOrigin struct {
 // shows none.
 func (cm *CopyMode) BeginSearch(backward bool, scrollbackLen int) {
 	cm.State = CopyModeSearch
-	cm.SearchQuery = ""
+	cm.Search.Set("")
 	cm.SearchBackward = backward
 	cm.SearchMatches = nil
 	cm.CurrentMatch = 0
@@ -1098,3 +1099,6 @@ func (w *Window) SetHost(host string) {
 // ProcessElsewhere reports whether the pane's process runs on another
 // machine. It is safe from any goroutine.
 func (w *Window) ProcessElsewhere() bool { return w.hostElsewhere.Load() }
+
+// SearchQuery is the search text.
+func (cm *CopyMode) SearchQuery() string { return cm.Search.String() }

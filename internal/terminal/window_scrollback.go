@@ -102,7 +102,7 @@ func (w *Window) enterCopyMode(x, y int) {
 	w.CopyMode.CursorX = x
 	w.CopyMode.CursorY = y
 	w.CopyMode.ScrollOffset = 0 // Start at live content
-	w.CopyMode.SearchQuery = ""
+	w.CopyMode.Search.Set("")
 	w.CopyMode.SearchMatches = nil
 	w.CopyMode.CurrentMatch = 0
 	w.CopyMode.CaseSensitive = false
@@ -199,7 +199,7 @@ func (w *Window) ExitCopyMode() {
 		w.CopyMode.ScrollOffset = 0
 		w.CopyMode.Implicit = false
 		// Clear search state
-		w.CopyMode.SearchQuery = ""
+		w.CopyMode.Search.Set("")
 		w.CopyMode.SearchMatches = nil
 		w.CopyMode.SearchCache.Valid = false
 	}

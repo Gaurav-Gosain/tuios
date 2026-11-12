@@ -40,9 +40,9 @@ func TestPaletteReachesASettingByName(t *testing.T) {
 	got := FilterCommandPalette(m.allPaletteItems(), "pane background")
 	m2, _ := got[0].Action(m)
 	cats := m2.settingsCategories()
-	if !m2.ShowSettings || cats[m2.SettingsCategory].Items[m2.SettingsSelected].Label != "Pane background" {
+	if !m2.ShowSettings || cats[m2.SettingsCategory].Items[m2.settingsList.Cursor].Label != "Pane background" {
 		t.Errorf("running the row opened settings=%v on %q", m2.ShowSettings,
-			cats[m2.SettingsCategory].Items[m2.SettingsSelected].Label)
+			cats[m2.SettingsCategory].Items[m2.settingsList.Cursor].Label)
 	}
 }
 

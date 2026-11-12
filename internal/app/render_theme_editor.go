@@ -215,7 +215,10 @@ func (m *OS) themeEditorNotes(width int, pal overlay.Palette) []string {
 		note("This client shows the colours here only.", pal.FgMute)
 	}
 	if st.typingOn {
-		field := themeEditorInk(pal.Card, pal.Fg, " "+st.typing+"█ ", false)
+		before, at, after := st.typing.Parts()
+		field := themeEditorInk(pal.Card, pal.Fg, " ", false) +
+			overlay.FieldLine(before, at, after, max(lipgloss.Width(before+at+after)+1, 1), pal.Card, pal.Fg) +
+			themeEditorInk(pal.Card, pal.Fg, " ", false)
 		out = append(out, themeEditorInk(pal.Surface, pal.FgDim, "Value: ", false)+field)
 	}
 	return out

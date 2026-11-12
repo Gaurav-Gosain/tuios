@@ -23,7 +23,7 @@ func TestCopyModeSearchKeyBudget(t *testing.T) {
 	}
 	w := &terminal.Window{Terminal: em, Width: 209, Height: 57, CopyMode: &terminal.CopyMode{Active: true}}
 	cm := w.CopyMode
-	cm.SearchQuery = "module_042/"
+	cm.Search.Set("module_042/")
 	allocated := func() uint64 {
 		var ms runtime.MemStats
 		runtime.ReadMemStats(&ms)

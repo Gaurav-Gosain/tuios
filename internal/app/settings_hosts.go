@@ -282,8 +282,8 @@ func (m *OS) removeHost(name string) {
 	delete(m.hostTests, name)
 	// The row the selection was on is gone, so the selection is pulled back
 	// onto a row that exists rather than left past the end of a shorter list.
-	if m.SettingsSelected > 0 {
-		m.SettingsSelected--
+	if m.settingsList.Cursor > 0 {
+		m.settingsList.Cursor--
 	}
 	m.ShowNotification("Host "+name+" is removed.", "success", m.Settings.NotificationDuration)
 }

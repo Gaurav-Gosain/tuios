@@ -53,10 +53,10 @@ func TestHelpKeysAgreeAcrossModes(t *testing.T) {
 				m := helpModalOS(t)
 				m.Mode = mode.mode
 				m.HelpSearchMode = tc.searching
-				m.HelpSearchQuery = tc.query
+				m.SetHelpSearchQuery(tc.query)
 
 				out, _ := mode.handle(tc.msg, m)
-				got := want{out.ShowHelp, out.HelpSearchMode, out.HelpSearchQuery}
+				got := want{out.ShowHelp, out.HelpSearchMode, out.HelpSearchQuery()}
 				if got != tc.want {
 					t.Errorf("got %+v, want %+v", got, tc.want)
 				}
