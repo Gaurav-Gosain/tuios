@@ -6,7 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 
-	"github.com/Gaurav-Gosain/tuios/internal/dnd"
+	"tuios.dev/vt/dnd"
 )
 
 // The bridge to a terminal that speaks the drag and drop protocol itself.

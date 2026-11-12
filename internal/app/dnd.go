@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/dnd"
+	"tuios.dev/vt/dnd"
 
 	tea "charm.land/bubbletea/v2"
 

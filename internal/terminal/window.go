@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/dnd"
+	"tuios.dev/vt/dnd"
 
 	uv "github.com/charmbracelet/ultraviolet"
 

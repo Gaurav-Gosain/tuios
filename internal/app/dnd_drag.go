@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/dnd"
+	"tuios.dev/vt/dnd"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"

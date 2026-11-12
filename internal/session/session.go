@@ -8,8 +8,8 @@ import (
 	"io"
 
 	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
-	"github.com/Gaurav-Gosain/tuios/internal/dnd"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"tuios.dev/vt/dnd"
 
 	"log"
 	"maps"
