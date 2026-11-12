@@ -538,7 +538,10 @@ var statusLook = map[string][4]string{
 	"idle":        {"○", "o", "mute", "idle"},
 	"done":        {"✓", "v", "success", "done"},
 	"errored":     {"✕", "x", "error", "errored"},
-	"spinner":     {"⠹", "*", "accent-bright", ""},
+	// Stopped on the harness's usage or rate limit: it waits on a clock,
+	// not on a person, so it takes the warn role and no attention.
+	"limit_reached": {"▼", "=", "warning", "limit reached"},
+	"spinner":       {"⠹", "*", "accent-bright", ""},
 }
 
 func (w *statusWidget) look() [4]string {
