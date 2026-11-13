@@ -17,9 +17,49 @@ argv_path = ["@oh-my-pi/pi-coding-agent"]
 [detect.require]
 exe_base = ["omp", "node", "nodejs", "bun", "deno"]
 
-# No screen rules: OMP's rendering differs from Pi and has not been measured
-# for a stable bottom-of-pane state marker. The installed extension reports
-# turn state and native tool approvals instead.
+# No screen rules: the installed extension reports turn state and native tool
+# approvals. The screen is read only so [prompt_box] can see the input box.
+[screen]
+enabled = true
+lines   = 4
+
+# The input box, measured on live omp 18.18.8 panes for every built-in
+# composer.shape. band is the default; setup offers the rest. An empty box
+# carries at most one right-aligned hint, from oh-my-pi's composer-hints.ts:
+# "⇧⇥ to change thinking effort" before a conversation starts, or "←← to see
+# N running agents". Each hint retires after the user has done its gesture three
+# times. It is drawn gray and italic, not faint, so the patterns allow it. Word
+# completion ghost text only extends a word ending at the cursor, so it never
+# shows in an empty box.
+#
+# A draft whose last row is empty must not read as empty. Shapes whose
+# continuation rows carry a gutter glyph (box, field, rail) draw that empty row
+# with its glyph, so their pattern also requires the row above to be the box's
+# own top (box) or something that is not another row of the box (field, rail).
+# The other shapes leave an empty continuation row blank, so it is dropped and
+# the last row holding text is what the pattern sees.
+[prompt_box]
+region = "tail"
+empty = [
+	# band: the status band, then "╰─" alone or with the hint.
+	'(?:\A|\n)╰─[ \x{00A0}]*(?:\S+ to (?:change thinking effort|see \d+ running agents?))?\z',
+	# box: the top border with the status in it, straight above the bottom
+	# border that holds the only row: "╰─ … ─╯".
+	'(?:\A|\n)╭[^\n]*╮\n╰─[ \x{00A0}]*(?:\S+ to (?:change thinking effort|see \d+ running agents?)[ \x{00A0}]*)?─╯\z',
+	# claude, borderless, rule: "❯" alone, then the rule claude draws under the
+	# box, then the status line, which starts with one space; a continuation
+	# row starts with two.
+	'(?:\A|\n)❯[ \x{00A0}]*(?:\S+ to (?:change thinking effort|see \d+ running agents?))?(?:\n─{3,}[^\n]*)?(?:\n [^ \n][^\n]*)?\z',
+	# pi: the box's two rules with nothing between them (the empty row is
+	# blank) or only the hint, then the status line.
+	'(?:\A|\n)─{3,}[^\n]*\n(?:[ \x{00A0}]*\S+ to (?:change thinking effort|see \d+ running agents?)\n)?─{3,}[^\n]*(?:\n [^ \n][^\n]*)?\z',
+	# field: one "▐ … ▌" row, with no other row of the box above it.
+	'(?:\A|\n[^▐\n][^\n]*\n)▐[ \x{00A0}]*(?:\S+ to (?:change thinking effort|see \d+ running agents?)[ \x{00A0}]*)?▌(?:\n [^ \n][^\n]*)?\z',
+	# rail: one "▎" row, with no other row of the box above it.
+	'(?:\A|\n[^▎\n][^\n]*\n)▎[ \x{00A0}]*(?:\S+ to (?:change thinking effort|see \d+ running agents?))?(?:\n [^ \n][^\n]*)?\z',
+]
+source = "measured on live omp 18.18.8 panes (80x24, isolated tuios daemon) for all eight composer.shape values, empty with and without the hint and with one-line, multi-line, leading-newline and trailing-newline drafts; hints read from oh-my-pi packages/tui/src/prompt/composer-hints.ts"
+
 [input]
 submit          = "cr"
 bracketed_paste = true
