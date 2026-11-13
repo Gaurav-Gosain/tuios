@@ -1,0 +1,105 @@
+# harness: omp
+# box: empty
+# want: none
+# how: measured on a live omp 18.18.8 pane (composer.shape = borderless), 80x24,
+# in an isolated tuios daemon. Empty, before a conversation starts: the
+# composer hint is on.
+---
+ Warning: No default model selected. Use /login, set an API key environment
+ variable, or select a local model with /model or --model.
+
+──────────────────────────────────────────────────────────────────────────────
+ Update Available
+ New version 18.20.0 is available. Run: omp update
+──────────────────────────────────────────────────────────────────────────────
+
+❯                                                 ⇧⇥ to change thinking effort
+ π-tuios-measure · ⬢ no-model · 🗑 ompbox-99636 · ◫ 8.2K/? ⟲
+=====
+# harness: omp
+# box: empty
+# want: none
+# how: measured on a live omp 18.18.8 pane (composer.shape = borderless), 80x24,
+# in an isolated tuios daemon. Empty, with the hint retired (it goes after
+# three uses of its key, or once a conversation starts).
+---
+ Warning: No default model selected. Use /login, set an API key environment
+ variable, or select a local model with /model or --model.
+
+──────────────────────────────────────────────────────────────────────────────
+ Update Available
+ New version 18.20.0 is available. Run: omp update
+──────────────────────────────────────────────────────────────────────────────
+
+❯
+ π-tuios-measure · ⬢ no-model · 🗑 ompbox-99636 · ◫ 8.2K/? ⟲
+=====
+# harness: omp
+# box: draft
+# want: none
+# how: measured on a live omp 18.18.8 pane (composer.shape = borderless), 80x24,
+# in an isolated tuios daemon. A one-line draft.
+---
+ Warning: No default model selected. Use /login, set an API key environment
+ variable, or select a local model with /model or --model.
+
+──────────────────────────────────────────────────────────────────────────────
+ Update Available
+ New version 18.20.0 is available. Run: omp update
+──────────────────────────────────────────────────────────────────────────────
+
+❯ fix the flaky test
+ π-tuios-measure · ⬢ no-model · 🗑 ompbox-99636 · ◫ 8.2K/? ⟲
+=====
+# harness: omp
+# box: draft
+# want: none
+# how: measured on a live omp 18.18.8 pane (composer.shape = borderless), 80x24,
+# in an isolated tuios daemon. A draft ending in a new empty line
+# (shift+enter): its last row is empty, and the box is still a draft.
+---
+ variable, or select a local model with /model or --model.
+
+──────────────────────────────────────────────────────────────────────────────
+ Update Available
+ New version 18.20.0 is available. Run: omp update
+──────────────────────────────────────────────────────────────────────────────
+
+❯ fix the flaky test
+
+ π-tuios-measure · ⬢ no-model · 🗑 ompbox-99636 · ◫ 8.2K/? ⟲
+=====
+# harness: omp
+# box: draft
+# want: none
+# how: measured on a live omp 18.18.8 pane (composer.shape = borderless), 80x24,
+# in an isolated tuios daemon. A draft whose first line is empty and whose
+# second holds text.
+---
+ variable, or select a local model with /model or --model.
+
+──────────────────────────────────────────────────────────────────────────────
+ Update Available
+ New version 18.20.0 is available. Run: omp update
+──────────────────────────────────────────────────────────────────────────────
+
+❯
+  push it
+ π-tuios-measure · ⬢ no-model · 🗑 ompbox-99636 · ◫ 8.2K/? ⟲
+=====
+# harness: omp
+# box: draft
+# want: none
+# how: measured on a live omp 18.18.8 pane (composer.shape = borderless), 80x24,
+# in an isolated tuios daemon. A two-line draft.
+---
+ variable, or select a local model with /model or --model.
+
+──────────────────────────────────────────────────────────────────────────────
+ Update Available
+ New version 18.20.0 is available. Run: omp update
+──────────────────────────────────────────────────────────────────────────────
+
+❯ fix the flaky test
+  and then push it
+ π-tuios-measure · ⬢ no-model · 🗑 ompbox-99636 · ◫ 8.2K/? ⟲
