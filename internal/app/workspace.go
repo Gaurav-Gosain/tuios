@@ -277,6 +277,13 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 	if workspace == m.CurrentWorkspace {
 		return
 	}
+	// A resize in flight is abandoned on the workspace it started on. It moves
+	// the held pane's neighbours as well as the pane, by ResizeVisual, and its
+	// cancel lays the layout again from the tree to put them back, which only
+	// covers the workspace on screen. Cancelled after the switch, the
+	// neighbours kept a rectangle their guests were never told, and the next
+	// PTY sync resized them for it.
+	m.CancelWindowResize()
 	// The labels are on a pane of the workspace being left.
 	m.CloseHints()
 	m.ClosePaneLabels()
