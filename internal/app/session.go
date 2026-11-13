@@ -1949,9 +1949,15 @@ func (m *OS) SyncDaemonPTYDimensions() {
 }
 
 // syncDaemonPTYDimensions is SyncDaemonPTYDimensions with the announcements already held.
+//
+// A pane sliding to its slot is left to the slide. The slide moves the
+// rectangle without telling the guest and tells it the end size once when it
+// lands (ui.Animation.settle). Its rectangle here is a frame of the slide, a
+// size the pane never rests at, and telling it cost the guest a SIGWINCH for
+// that size and a second one when the slide landed.
 func (m *OS) syncDaemonPTYDimensions() {
 	for _, w := range m.Windows {
-		if w.DaemonMode && w.DaemonResizeFunc != nil {
+		if w.DaemonMode && w.DaemonResizeFunc != nil && m.snapInFlight(w) == nil {
 			termWidth := w.ContentWidth()
 			termHeight := w.ContentHeight()
 

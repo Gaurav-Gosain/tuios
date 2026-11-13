@@ -1,0 +1,11 @@
+# spurious-winch: the space in the settings overlay turns motion on, so the
+# first new pane starts a slide. The second new pane retiled and then synced
+# the daemon PTYs from each pane's rectangle as it stood, so a pane still
+# sliding was told a frame of the slide, and told again when the slide landed.
+# The slide reads the wall clock, so before the fix this failed about one
+# replay in ten.
+overlay-open 1
+text " "
+new-pane
+tick
+new-pane
