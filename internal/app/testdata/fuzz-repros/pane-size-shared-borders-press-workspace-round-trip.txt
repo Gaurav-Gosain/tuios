@@ -1,0 +1,7 @@
+# Shared borders, layout 2, a press, tiling on, then a switch to workspace 0 and back. fuzzpane0001 was announced 52x38 and drew 50x36. The 6 steps took 13 s, so the FuzzModel worker that found it was stopped as hung. Found 2026-11-13 by a FuzzModel run at 0cf2f8b1e.
+shared-borders
+layout 2
+press 29 0 2
+tiling
+workspace 0
+workspace 1

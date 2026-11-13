@@ -129,6 +129,7 @@ func FuzzModel(f *testing.F) {
 	// campaign runs workers in other processes, which this does not see.
 	var flaky atomic.Int32
 	f.Cleanup(func() { checkFlakyRuns(f, int(flaky.Load())) })
+	f.Cleanup(func() { reportFuzzWorkerStderr(f) })
 	f.Fuzz(func(t *testing.T, in []byte) {
 		// The corpus entry decides the run; the seed is carried only so a
 		// finding can be re-run through the seeded loop as well.
