@@ -17418,3 +17418,22 @@ Run on 2026-11-13 on Linux (x86_64). The branch passes.
 The sheet after each stop is saved under `TUIOS_E2E_FRAMES`. Repeat from
 `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskCaptureStopsOnInvisibleCharacters$' -v .`.
+
+## The Inbox peek keeps a menu's columns and lists only options it can choose (#2065)
+
+`TestInboxPeekAnswersAnApproval` now checks that the peek keeps the cursor
+glyph of Claude Code's active row and that row's number sits in the column of
+the next row's. `TestInboxPeekListsOptionsOnlyWhenTheRuleChooses` loads a user
+manifest whose rule takes typed text and esc but no number, on a screen with a
+numbered list, and checks that the peek shows the dialog lines and no numbered
+option list.
+
+Run on 2026-11-13 on macOS. The branch passes both.
+
+| Control | Test | The test fails with | Result |
+|---------|------|---------------------|--------|
+| Main (a086dffc3), the title filter on dialog lines | `TestInboxPeekAnswersAnApproval` | "ASSERTION: the active row lost its cursor glyph" and "the active row starts at column 59, the next at 60" | **caught** |
+| Main (a086dffc3), the option list with no Offers(choose) test | `TestInboxPeekListsOptionsOnlyWhenTheRuleChooses` | "ASSERTION: the peek lists option 1 \"Bug fix\", which the rule cannot choose" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestInboxPeek' -v .`.

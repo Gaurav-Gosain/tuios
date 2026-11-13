@@ -85,6 +85,14 @@ func attachClientBase(t *testing.T) (*tuitest.Terminal, string) {
 func attachClientBaseOut(t *testing.T, out io.Writer) (*tuitest.Terminal, string) {
 	t.Helper()
 	base := t.TempDir()
+	return attachClientIn(t, base, out), base
+}
+
+// attachClientIn is attachClientBaseOut on a base the caller made, so it can
+// put files the daemon reads at start, such as a harness manifest, in place
+// first.
+func attachClientIn(t *testing.T, base string, out io.Writer) *tuitest.Terminal {
+	t.Helper()
 	killDaemon(t, base)
 
 	if out, err := tuiosCLI(t, base, "new", "e2e-ctrlp", "--detach"); err != nil {
@@ -107,7 +115,7 @@ func attachClientBaseOut(t *testing.T, out io.Writer) (*tuitest.Terminal, string
 		t.Fatalf("client never settled in window management mode: %v\n%s", err, term.Snapshot())
 	}
 	time.Sleep(insertGuard)
-	return term, base
+	return term
 }
 
 // attachTerminalModeClient attaches a client and puts it in terminal mode, the

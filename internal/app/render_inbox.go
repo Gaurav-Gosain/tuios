@@ -9,6 +9,8 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -159,9 +161,13 @@ func (m *OS) renderInboxPeek(p *inboxPeek, now time.Time) (string, overlay.Geome
 		}
 		for _, l := range lines {
 			body = append(body, overlay.Style(bg).Foreground(pal.FgMute).Render("  "+bar)+
-				overlay.Style(bg).Foreground(pal.FgDim).Render(overlay.Truncate(printableRunes(l), max(textW-2, 1))))
+				overlay.Style(bg).Foreground(pal.FgDim).Render(overlay.Truncate(peekBodyLine(l), max(textW-2, 1))))
 		}
-		if len(pk.Options) > 0 {
+		// The options are read from the screen's shape alone, so they are
+		// listed only when the matched rule takes a number, the same test the
+		// hint row makes. A dialog that moved into a text field still shows a
+		// numbered list, and those numbers would do nothing.
+		if pk.Offers(harness.ActionChoose) && len(pk.Options) > 0 {
 			body = append(body, "")
 			for _, o := range pk.Options {
 				key := strconv.Itoa(o.N)
@@ -216,6 +222,34 @@ func (m *OS) renderInboxPeek(p *inboxPeek, now time.Time) (string, overlay.Geome
 	}
 	content, geo := panel.Render(pal)
 	return content, geo, nil
+}
+
+// peekBodyLine is one dialog line of a peek, cleaned for the panel. It drops
+// what the title filter drops, except that it keeps a menu's cursor glyph and
+// puts spaces of the same width in place of any other dropped rune that
+// takes a cell. The title filter took the glyph and left the space after it,
+// so the active row of a menu sat a column left of the others.
+func peekBodyLine(l string) string {
+	ascii := overlay.UseASCII()
+	var b strings.Builder
+	b.Grow(len(l))
+	for _, r := range l {
+		switch {
+		case printableRune(r, ascii):
+			b.WriteRune(r)
+		case strings.ContainsRune(harness.OptionCursors, r):
+			if ascii {
+				b.WriteByte('>')
+			} else {
+				b.WriteRune(r)
+			}
+		default:
+			if w := ansi.StringWidth(string(r)); w > 0 {
+				b.WriteString(strings.Repeat(" ", w))
+			}
+		}
+	}
+	return b.String()
 }
 
 // inboxKindForPrompt is the Inbox kind a prompt kind reads as.

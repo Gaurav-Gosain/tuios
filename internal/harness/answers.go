@@ -245,10 +245,15 @@ func (r *Registry) TitlePrompt(id, title string) (Prompt, bool) {
 	}, true
 }
 
-// optionLine matches one numbered option: an optional cursor mark, the
-// number with a dot or a parenthesis after it ("1." as Claude Code draws
-// it) or in brackets ("[1]" as Kimi Code CLI draws it), and the label.
-var optionLine = lazyre.New(`^(?:[❯›>▶→*]\s*)?(?:([0-9]{1,2})[.)]|\[([0-9]{1,2})\])\s+(\S.*)$`)
+// OptionCursors are the marks a menu draws before its active option. The
+// Inbox peek keeps them when it cleans a dialog line for the panel.
+const OptionCursors = "❯›>▶→*"
+
+// optionLine matches one numbered option: an optional cursor mark (one of
+// OptionCursors), the number with a dot or a parenthesis after it ("1." as
+// Claude Code draws it) or in brackets ("[1]" as Kimi Code CLI draws it), and
+// the label.
+var optionLine = lazyre.New(`^(?:[` + OptionCursors + `]\s*)?(?:([0-9]{1,2})[.)]|\[([0-9]{1,2})\])\s+(\S.*)$`)
 
 // maxOptionGap is how many lines that are not options may sit between two
 // options of one menu: a label that wraps, or a description under it.
