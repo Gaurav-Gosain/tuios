@@ -160,6 +160,7 @@ func (m *OS) CancelWindowResize() bool {
 			win.InvalidateCache()
 		}
 	}
+	pending := m.PendingResizes
 	m.PendingResizes = make(map[string][2]int)
 	// Cleared before endLostGesture, which would otherwise read the resize as
 	// finished and write the abandoned geometry into the tree.
@@ -172,8 +173,25 @@ func (m *OS) CancelWindowResize() bool {
 		// every pane back where the tree has it.
 		m.TileAllWindows()
 	}
+	m.tellKeptDeferredSizes(pending)
 	m.SyncStateToDaemon()
 	return true
+}
+
+// tellKeptDeferredSizes tells each pane that still has the size a cancelled
+// resize deferred for it. The gesture's own steps are undone above, so a pane
+// left at its deferred size got it from something else during the gesture,
+// such as a layout switch or a shared-border toggle. That size is real and
+// its guest was not told, so it is told now. Left out, the pane kept a size
+// its guest never heard, and the next PTY sync resized it with nothing moved.
+// Resize measures against the announced size, so a pane the retile already
+// told is not told again.
+func (m *OS) tellKeptDeferredSizes(pending map[string][2]int) {
+	for _, win := range m.Windows {
+		if dims, ok := pending[win.ID]; ok && win.Width == dims[0] && win.Height == dims[1] {
+			m.resizeNow(win, dims[0], dims[1])
+		}
+	}
 }
 
 // heldPaneIDs names the panes a pointer gesture holds by index into m.Windows.
