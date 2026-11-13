@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -126,13 +127,10 @@ func TestWorktreeJJSession(t *testing.T) {
 			t.Fatal(err)
 		}
 		tr.ok("set-agent-state", "-s", session, "done", "-m", "turn")
-		deadline := time.Now().Add(20 * time.Second)
-		for checkpoints() < n+1 {
-			if time.Now().After(deadline) {
-				t.Fatalf("ASSERTION: turn %d left no checkpoint", n+1)
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
+		waitUntil(t, fmt.Sprintf("turn %d leaves a checkpoint", n+1), 20*time.Second, func() (bool, string) {
+			got := checkpoints()
+			return got >= n+1, fmt.Sprintf("%d checkpoints", got)
+		})
 	}
 	tr.ok("checkpoint", "restore", "-s", session, "1")
 	if got := readFile(t, notes); got != "first\n" {

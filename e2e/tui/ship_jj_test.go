@@ -88,22 +88,16 @@ func TestShipJJRefusals(t *testing.T) {
 	if later := commitOf(`bookmarks(exact:"feat/jj")`); later == tip {
 		t.Fatal("precondition: the second commit did not move feat/jj")
 	}
-	time.Sleep(answerSettle)
+	pause(t, "a held approval ignores an answer key until inboxAnswerSettle has passed", answerSettle)
 	if err := term.SendKeys("1"); err != nil {
 		t.Fatalf("answer: %v", err)
 	}
-	deadline := time.Now().Add(30 * time.Second)
-	for {
+	waitUntil(t, "the push refuses the moved bookmark", 30*time.Second, func() (bool, string) {
 		data, _ := os.ReadFile(pushOut)
-		if strings.Contains(string(data), "nothing was pushed") {
-			tr.log("the pane's push printed:\n%s", data)
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("ASSERTION: the push never refused the moved bookmark. It printed:\n%s\n%s", data, term.Snapshot())
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
+		return strings.Contains(string(data), "nothing was pushed"), "the push printed:\n" + string(data) + "\n" + term.Snapshot()
+	})
+	data, _ := os.ReadFile(pushOut)
+	tr.log("the pane's push printed:\n%s", data)
 	if err := exec.Command("git", "--git-dir", origin, "rev-parse", "-q", "--verify", "refs/heads/feat/jj").Run(); err == nil {
 		t.Errorf("ASSERTION: feat/jj reached origin after the bookmark moved")
 	}
