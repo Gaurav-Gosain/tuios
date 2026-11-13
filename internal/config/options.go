@@ -830,7 +830,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.dock_workspace_tab_format", Type: OptionString, Section: "dock",
-		Description: "Workspace tab template accepting {index}, {name}, {icon} and {zoom} (empty: {name})",
+		Description: "Workspace tab template accepting {index}, {name}, {icon} and {zoom} (empty: {name}). With {index} in it, an unnamed workspace shows only its number",
 	},
 	{
 		Path: "appearance.dock_workspace_tooltip", Type: OptionBool, Section: "dock",

@@ -192,7 +192,7 @@
     {
       "path": "appearance.dock_workspace_tab_format",
       "type": "string",
-      "description": "Workspace tab template accepting {index}, {name}, {icon} and {zoom} (empty: {name})",
+      "description": "Workspace tab template accepting {index}, {name}, {icon} and {zoom} (empty: {name}). With {index} in it, an unnamed workspace shows only its number",
       "default": ""
     },
     {

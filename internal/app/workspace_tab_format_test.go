@@ -16,7 +16,8 @@ func withDockWorkspaceTabFormat(t *testing.T) {
 
 // The dock strip formats each tab's label through appearance.dock_workspace_tab_format.
 // A named workspace shows "{index}: {name}" once configured, which is what the
-// "name and index on every tab" request (issue #80) asked for.
+// "name and index on every tab" request (issue #80) asked for. An unnamed one
+// shows only its number, not the number twice (issue #1841).
 func TestWorkspaceTabFormatReachesTheStrip(t *testing.T) {
 	withDockWorkspaceTabFormat(t)
 	config.Global.DockWorkspaceTabFormat = "{index}: {name}"
@@ -26,7 +27,7 @@ func TestWorkspaceTabFormatReachesTheStrip(t *testing.T) {
 	if len(tabs) < 3 {
 		t.Fatalf("the strip drew %d tabs, want at least three", len(tabs))
 	}
-	want := map[int]string{1: "1: 1", 2: "2: review", 3: "3: 3"}
+	want := map[int]string{1: "1", 2: "2: review", 3: "3"}
 	for _, tab := range tabs {
 		if tab.Add {
 			continue // the "+" tab is a control, not a workspace label

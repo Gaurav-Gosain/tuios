@@ -251,3 +251,55 @@ func TestDockIndexTabShowsTheNameOnHover(t *testing.T) {
 		})
 	}
 }
+
+// TestDockTabFormatLeavesAnUnnamedNameEmpty is issue #1841: with the format
+// "{index} {name}", an unnamed workspace's tab read "1 1", its number twice.
+// {name} is now empty for a workspace with no name when the format has
+// {index}, and the separator next to it goes too, so the unnamed tab reads
+// "1" and the named one "2 api". With no format the look is the old one: the
+// unnamed tab shows its number and the named one its name.
+//
+// Negative control: with FormatWorkspaceTab given workspacePillName (the
+// number for an unnamed workspace) again, the custom format case fails with
+// the dock row holding "1 1".
+func TestDockTabFormatLeavesAnUnnamedNameEmpty(t *testing.T) {
+	for _, tc := range []struct {
+		name, config string
+		want, never  []string
+	}{
+		{"index and name", "dock_workspace_tab_format = \"{index} {name}\"\n", []string{" 1 ", "2 api"}, []string{"1 1", "2 2"}},
+		{"default", "", []string{" 1 ", " api "}, []string{"1 1", "2 api"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base := t.TempDir()
+			writeConfig(t, base, "[appearance]\n"+tc.config)
+			if out, err := tuiosCLI(t, base, "new", "tabs", "--detach"); err != nil {
+				t.Fatalf("create session: %v: %s", err, out)
+			}
+			if out, err := tuiosCLI(t, base, "new-window", "second", "-s", "tabs", "--workspace", "2", "--no-focus"); err != nil {
+				t.Fatalf("open a window on workspace 2: %v: %s", err, out)
+			}
+			if out, err := tuiosCLI(t, base, "set-workspace-name", "2", "api", "-s", "tabs"); err != nil {
+				t.Fatalf("name workspace 2: %v: %s", err, out)
+			}
+			term := attachIn(t, base, "tabs", startOpts{cols: 120, rows: 30})
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				return strings.Contains(dockRow(s), "api")
+			}, uiTimeout); err != nil {
+				t.Fatalf("the dock never drew the named tab: %v\n%s", err, term.Snapshot())
+			}
+			saveFrame(t, term, "dock-tab-format-"+strings.ReplaceAll(tc.name, " ", "-"))
+			row := dockRow(term.Screen())
+			for _, w := range tc.want {
+				if !strings.Contains(row, w) {
+					t.Errorf("ASSERTION: the dock row lacks %q\n%s", w, row)
+				}
+			}
+			for _, n := range tc.never {
+				if strings.Contains(row, n) {
+					t.Errorf("ASSERTION: the dock row holds %q\n%s", n, row)
+				}
+			}
+		})
+	}
+}

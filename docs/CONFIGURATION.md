@@ -2246,6 +2246,11 @@ inactive_bg      = "bright_black"
 active_underline = false
 ```
 Besides `{index}` and `{name}`, the tab format takes `{icon}` and `{zoom}`.
+A workspace with no name has an empty `{name}` when the format has `{index}`,
+and the separator next to it (spaces, `:`, `-`, `·` or `|`) is dropped with
+it, so `"{index} {name}"` shows `7` for an unnamed workspace and `7 api` for
+one named `api`. In a format without `{index}`, such as the default `{name}`,
+an unnamed workspace's `{name}` is its number.
 `{index}` is the workspace's number, which is its position: dragging a tab to
 another place, or moving the workspace with `move_workspace_left` and
 `move_workspace_right`, renumbers it, and `Alt+N` goes to it by its new number.

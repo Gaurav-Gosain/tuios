@@ -178,7 +178,9 @@ func (m *OS) workspaceTabText(tabs *config.DockTabsConfig, n int) string {
 	if n == m.dockWorkspace() && tabs.ZoomMarker != "" && m.zoomedWindow() != nil {
 		zoom = tabs.ZoomMarker
 	}
-	return m.Settings.FormatWorkspaceTab(m.workspacePillName(n), n, tabs.Icon(n), zoom)
+	// An unnamed workspace passes no name, so the format can leave {name}
+	// out rather than repeat the number {index} already shows.
+	return m.Settings.FormatWorkspaceTab(printableTitle(m.WorkspaceNames[n]), n, tabs.Icon(n), zoom)
 }
 
 // workspacePillName is the whole name a pill stands for: the workspace's name

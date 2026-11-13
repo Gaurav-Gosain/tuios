@@ -17437,3 +17437,21 @@ Run on 2026-11-13 on macOS. The branch passes both.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestInboxPeek' -v .`.
+
+## An unnamed workspace's tab shows its number once (#1841)
+
+`TestDockTabFormatLeavesAnUnnamedNameEmpty` sets
+`dock_workspace_tab_format = "{index} {name}"`, opens a window on workspace 2
+and names it `api`, and reads the dock row: the unnamed tab reads `1` and the
+named one `2 api`. Its `default` case, with no format, checks the old look:
+`1` and `api`.
+
+Run on 2026-11-13 on macOS. The branch passes both cases.
+
+| Control | Case | The test fails with | Result |
+|---------|------|---------------------|--------|
+| Main (a086dffc3), where `{name}` is the number for an unnamed workspace | index and name | "ASSERTION: the dock row holds \"1 1\"" | **caught** |
+| Main (a086dffc3) | default | passes, as it must: the default look did not change | not a control |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestDockTabFormatLeavesAnUnnamedNameEmpty$' -v .`.

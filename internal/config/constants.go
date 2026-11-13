@@ -669,20 +669,69 @@ func expandTitle(format, title string, index int, cwd string, extra ...string) s
 
 // FormatWorkspaceTab renders a dock workspace tab label from the configured
 // DockWorkspaceTabFormat. Placeholders are {index} (the workspace number),
-// {name} (the workspace's name, or its number when unnamed), {icon} (the
-// [dock.tabs] number_glyphs entry for the number) and {zoom} (the [dock.tabs]
-// zoom_marker while the workspace has a zoomed pane). An empty format returns
-// the name unchanged, which is the historic rendering.
+// {name} (the workspace's name), {icon} (the [dock.tabs] number_glyphs entry
+// for the number) and {zoom} (the [dock.tabs] zoom_marker while the workspace
+// has a zoomed pane). name is empty for a workspace with no name.
+//
+// An unnamed workspace's {name} is empty when the format also has {index},
+// and the separator next to it goes too, so "{index} {name}" reads "7", not
+// "7 7". In any other format it is the number, and an empty format returns the
+// name, or the number, unchanged: the default look.
 func (s *Settings) FormatWorkspaceTab(name string, index int, icon, zoom string) string {
-	if s.DockWorkspaceTabFormat == "" {
+	number := strconv.Itoa(index)
+	format := s.DockWorkspaceTabFormat
+	if name == "" && (format == "" || !strings.Contains(format, "{index}")) {
+		name = number
+	}
+	if format == "" {
 		return name
 	}
-	return strings.NewReplacer(
-		"{name}", name,
-		"{index}", strconv.Itoa(index),
+	field := name
+	if name == "" {
+		field = emptyTabField
+	}
+	label := strings.NewReplacer(
+		"{name}", field,
+		"{index}", number,
 		"{icon}", icon,
 		"{zoom}", zoom,
-	).Replace(s.DockWorkspaceTabFormat)
+	).Replace(format)
+	if name == "" {
+		label = dropEmptyTabFields(label)
+	}
+	return label
+}
+
+// emptyTabField stands in for an empty {name} until its separators are
+// dropped. A NUL cannot come from a format, a glyph or a marker.
+const emptyTabField = "\x00"
+
+// tabFieldSeparators are the characters that separate the fields of a tab
+// format.
+const tabFieldSeparators = " :-·|"
+
+// dropEmptyTabFields removes each empty field from label with the separators
+// around it. A field at either end takes its separators with it. A field
+// between two others leaves one run of separators, the one after it when it
+// has one, so "{index} {name} {zoom}" reads "7 Z".
+func dropEmptyTabFields(label string) string {
+	for {
+		i := strings.Index(label, emptyTabField)
+		if i < 0 {
+			return label
+		}
+		left := strings.TrimRight(label[:i], tabFieldSeparators)
+		rest := label[i+len(emptyTabField):]
+		right := strings.TrimLeft(rest, tabFieldSeparators)
+		sep := ""
+		if left != "" && right != "" {
+			sep = rest[:len(rest)-len(right)]
+			if sep == "" {
+				sep = label[len(left):i]
+			}
+		}
+		label = left + sep + right
+	}
 }
 
 // PaneGapMax caps it. Past this the panes on a small terminal are further apart

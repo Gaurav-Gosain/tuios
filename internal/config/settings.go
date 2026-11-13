@@ -427,8 +427,9 @@ type Settings struct {
 
 	// DockWorkspaceTabFormat is the format string for each workspace tab in the
 	// dock strip. Placeholders: {index} (the workspace number) and {name} (the
-	// workspace name, or its number when it has no name). Empty means "{name}",
-	// the historic rendering.
+	// workspace name). For a workspace with no name, {name} is empty when the
+	// format has {index}, with the separator next to it dropped, and is the
+	// number otherwise. Empty means "{name}", the historic rendering.
 	DockWorkspaceTabFormat string `opt:"appearance.dock_workspace_tab_format"`
 
 	// DockWorkspaceTooltip pops the whole name of a workspace whose pill does not
