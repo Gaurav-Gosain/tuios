@@ -22,7 +22,9 @@ const handoffHistoryRows = 1000
 // handoffLive is a pane's live section.
 type handoffLive struct {
 	Title string
-	Place handoffPlace
+	// IconName is the name OSC 1 gave (PTY.IconName).
+	IconName string
+	Place    handoffPlace
 	// Marks are the OSC 133 marks, on the rows of the carried emulator.
 	Marks []vt.SemanticMarker
 	Shell handoffShell
@@ -98,7 +100,7 @@ type handoffCommand struct {
 // against an origin of zero, which is where the new emulator's list starts.
 func (p *PTY) handoffCapture() (*TerminalState, handoffLive) {
 	state := p.GetTerminalStatePacked(handoffHistoryRows, 0)
-	live := handoffLive{Title: p.Title(), Place: p.place.handoffState(), ProgStatus: p.progStatus.Records()}
+	live := handoffLive{Title: p.Title(), IconName: p.IconName(), Place: p.place.handoffState(), ProgStatus: p.progStatus.Records()}
 	sortx.SortFunc(live.ProgStatus, func(a, b progstatus.Record) int { return cmp.Compare(a.Seq, b.Seq) })
 
 	dropped, origin := 0, 0
@@ -138,6 +140,9 @@ func (p *PTY) restoreLive(live handoffLive) {
 	if live.Title != "" {
 		title := live.Title
 		p.title.Store(&title)
+	}
+	if live.IconName != "" {
+		p.setIconName(live.IconName)
 	}
 	p.place.restore(live.Place)
 	if p.marks != nil {
