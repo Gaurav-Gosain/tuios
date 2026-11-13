@@ -7,9 +7,16 @@ import "github.com/Gaurav-Gosain/tuios/internal/overlay"
 type hitSurface uint8
 
 const (
+	// hitRail is the rail's rows as the update loop sees them: both edges,
+	// the primary's first. A rect's ref is the row's index in m.SidebarHits.
+	hitRail hitSurface = iota
+	// hitRailSecondary is the opposite edge's rows alone, which is what
+	// m.SidebarHits holds while that edge's state is swapped in (its render,
+	// and withSecondaryRail).
+	hitRailSecondary
 	// hitMenu is the context menu. Its first rect is the whole panel with
 	// ref -1, and each drawn row follows it with the row's item index.
-	hitMenu hitSurface = iota
+	hitMenu
 	hitSurfaceCount
 )
 
@@ -37,8 +44,9 @@ type hitSlot struct {
 // ranks can.
 //
 // The slots are fixed, one per surface, and keep their capacity, so a frame
-// that puts the same targets as the last one allocates nothing, which is what
-// the frame a typed key costs needs (TestKeystrokeFrameBudget).
+// that puts the same targets as the last one allocates nothing. That holds on
+// the frame a typed key costs (TestKeystrokeFrameBudget): the rail is served
+// from its cache there and puts the cached rows again.
 type frameHits struct {
 	slots [hitSurfaceCount]hitSlot
 	seq   int
@@ -54,7 +62,8 @@ func (f *frameHits) begin() {
 }
 
 // put empties a surface's slot for the targets it is drawing now. A surface
-// that draws again in the same frame keeps its place in the draw order.
+// that draws again in the same frame (the rail, once per edge and once more
+// for both) keeps its place in the draw order.
 func (f *frameHits) put(s hitSurface) *hitSlot {
 	slot := &f.slots[s]
 	if !slot.on {

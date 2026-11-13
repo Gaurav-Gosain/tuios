@@ -3,6 +3,7 @@ package app
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -290,14 +291,35 @@ func (m *OS) SidebarBandContains(x, y int) bool {
 	return x >= secondaryX && x < secondaryX+secondary
 }
 
-// sidebarRowAt returns the recorded row hit at absolute (x, y), if any.
+// sidebarRowAt returns the rail row drawn at absolute (x, y), if any, from
+// the frame's hit record.
 func (m *OS) sidebarRowAt(x, y int) (sidebarRowHit, bool) {
-	for _, h := range m.SidebarHits {
-		if h.Contains(x, y) {
-			return h, true
-		}
+	h, ok := m.hits.in(m.railHitSurface(), x, y)
+	if !ok || h.ref >= len(m.SidebarHits) {
+		return sidebarRowHit{}, false
 	}
-	return sidebarRowHit{}, false
+	return m.SidebarHits[h.ref], true
+}
+
+// railHitSurface is the record's slot for the rows m.SidebarHits holds now:
+// the opposite edge's alone while its state is swapped in, both edges
+// otherwise.
+func (m *OS) railHitSurface() hitSurface {
+	if m.sidebarDrawing {
+		return hitRailSecondary
+	}
+	return hitRail
+}
+
+// putRailHits puts the rail's rows into the frame's hit record, a target per
+// row of m.SidebarHits with the row's index. It runs wherever the rows are
+// written (a build, the cache, the second edge), so the record always holds
+// the rows the list does.
+func (m *OS) putRailHits() {
+	slot := m.hits.put(m.railHitSurface())
+	for i, h := range m.SidebarHits {
+		slot.add(overlay.Rect{X0: h.X0, Y0: h.Y0, X1: h.X1, Y1: h.Y1}, config.ZIndexDock, i)
+	}
 }
 
 // sidebarClearPeek drops any live preview. It is called from every path that

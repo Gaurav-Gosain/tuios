@@ -1385,13 +1385,14 @@ func sidebarNameAvailIn(cw, rightW, indent int) int {
 
 // renderSidebar composes the vertical session sidebar as a single layer, the way
 // renderDock composes the dock. It returns nil when the sidebar reserves no
-// columns (off, hidden, or the screen too narrow). It also records the on-screen
-// hit geometry of every row into m.SidebarHits for the mouse handlers.
+// columns (off, hidden, or the screen too narrow). It also records every row
+// into m.SidebarHits and the frame's hit record for the mouse handlers.
 func (m *OS) renderSidebar() *lipgloss.Layer {
 	panel, w := m.sidebarPanel()
 	if docked, ok := m.sidebarSessionPanel(m.legacySidebarEdge(), w); ok {
 		panel = docked
 		m.SidebarHits = m.SidebarHits[:0]
+		m.putRailHits()
 	}
 	if panel == "" {
 		return nil
@@ -1436,6 +1437,7 @@ func (m *OS) renderSecondarySidebar() *lipgloss.Layer {
 	if docked, ok := m.sidebarSessionPanel(edge, w); ok {
 		panel = docked
 		m.SidebarHits = m.SidebarHits[:0]
+		m.putRailHits()
 	}
 	m.secondarySidebarCache = m.sidebarCache
 	m.sidebarCache = primaryCache
@@ -1445,6 +1447,7 @@ func (m *OS) renderSecondarySidebar() *lipgloss.Layer {
 	m.swapSecondaryRail()
 	m.secondarySidebarHits = append(m.secondarySidebarHits[:0], m.secondaryRailView.hits...)
 	m.SidebarHits = append(m.SidebarHits, m.secondarySidebarHits...)
+	m.putRailHits()
 	if panel == "" {
 		return nil
 	}
@@ -1481,6 +1484,8 @@ func sidebarWindowSection(scroll, rows, lines int) (start, shown, hidden int) {
 // the one-cell edge rule on the side facing the panes.
 func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	m.SidebarHits = m.SidebarHits[:0]
+	// Every return below leaves the rows it recorded in the hit record.
+	defer m.putRailHits()
 	m.motion.rail = m.motion.rail[:0]
 	m.SidebarSessionIDs = m.SidebarSessionIDs[:0]
 	// Colours are arbitrated over this machine's sessions only. A remote row
