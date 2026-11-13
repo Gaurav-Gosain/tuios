@@ -768,12 +768,8 @@ const (
 // In lock mode the badge also says unlocked, for every menu the leader
 // opens and for a menu held after a repeatable action.
 func (m *OS) statusBadge() (string, badgeKind) {
-	isRecording := m.TapeRecorder != nil && m.TapeRecorder.IsRecording()
-	unlockBadge := m.lockPillShown() && m.prefixArmed() && !m.prefixPillShown()
-	prefixBadge := (m.PrefixActive || unlockBadge) && !m.prefixPillShown()
-	// Nest mode goes on the badge when no mode pill can carry it.
-	nestBadge := m.Nested() && !m.modePillShown()
-	if !isRecording && !prefixBadge && !nestBadge {
+	kind, unlock := m.statusBadgeKind()
+	if kind == badgeNone {
 		return "", badgeNone
 	}
 	// The reading comes from the clock component, so the badge and a clock
@@ -782,13 +778,49 @@ func (m *OS) statusBadge() (string, badgeKind) {
 	// here in a string literal.
 	currentTime := m.DockClockText()
 	switch {
-	case isRecording:
-		return config.TapeRecordingIndicator + " | " + currentTime, badgeRecording
-	case unlockBadge:
-		return "PREFIX " + m.Settings.GetDockLockIcon(false) + " | " + currentTime, badgeLeader
-	case prefixBadge:
-		return "PREFIX | " + currentTime, badgeLeader
+	case kind == badgeRecording:
+		return config.TapeRecordingIndicator + " | " + currentTime, kind
+	case kind == badgeLeader && unlock:
+		return "PREFIX " + m.Settings.GetDockLockIcon(false) + " | " + currentTime, kind
+	case kind == badgeLeader:
+		return "PREFIX | " + currentTime, kind
 	default:
-		return m.nestLabel() + " | " + currentTime, badgeNest
+		return m.nestLabel() + " | " + currentTime, kind
 	}
+}
+
+// statusBadgeKind is the state the floating badge shows, without its text, and
+// whether an armed leader shows as unlocked. OwnLayoutReserve asks it after
+// every message, so it formats nothing.
+func (m *OS) statusBadgeKind() (badgeKind, bool) {
+	unlockBadge := m.lockPillShown() && m.prefixArmed() && !m.prefixPillShown()
+	switch {
+	case m.TapeRecorder != nil && m.TapeRecorder.IsRecording():
+		return badgeRecording, false
+	case (m.PrefixActive || unlockBadge) && !m.prefixPillShown():
+		return badgeLeader, unlockBadge
+	// Nest mode goes on the badge when no mode pill can carry it.
+	case m.Nested() && !m.modePillShown():
+		return badgeNest, false
+	}
+	return badgeNone, false
+}
+
+// badgeRowReserved reports whether the layout keeps the badge's row free of
+// panes. It is the one place that decides where a lasting badge may sit.
+//
+// The badge floats on the panes' outer edge row (GetTimeYPosition). A pane
+// that draws its own border has its border there, which is chrome, so the
+// badge covers nothing a guest wrote. Borderless panes (shared borders under
+// tiling) have their first or last line of output there. The recording badge
+// and the nest badge last as long as their state does, so on borderless panes
+// that row is taken from the panes while one shows. The leader badge lasts
+// only until the next key and is drawn over the panes like the which-key menu
+// of the same state, so it moves no pane.
+func (m *OS) badgeRowReserved() bool {
+	if !m.panesBorderless() {
+		return false
+	}
+	kind, _ := m.statusBadgeKind()
+	return kind == badgeRecording || kind == badgeNest
 }

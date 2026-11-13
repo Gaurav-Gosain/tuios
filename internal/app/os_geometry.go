@@ -295,11 +295,16 @@ func (m *OS) GetDockbarContentYPosition() int {
 
 // GetTimeYPosition returns the Y position of the time display
 func (m *OS) GetTimeYPosition() int {
-	if m.Settings.DockbarPosition == "top" {
+	if m.badgeOnBottomRow() {
 		return m.Height - 1
 	}
-
 	return 0
+}
+
+// badgeOnBottomRow reports whether the floating badge sits on the screen's
+// last row, which it does when the dock has the first.
+func (m *OS) badgeOnBottomRow() bool {
+	return m.Settings.DockbarPosition == "top"
 }
 
 // GetUsableHeight returns the usable height excluding the dock. Auto-hide
@@ -493,6 +498,13 @@ func (m *OS) OwnLayoutReserve() session.LayoutReserve {
 	case "hidden":
 	default:
 		r.Bottom = m.Settings.DockHeight()
+	}
+	if m.badgeRowReserved() {
+		if m.badgeOnBottomRow() {
+			r.Bottom++
+		} else {
+			r.Top++
+		}
 	}
 	return r
 }

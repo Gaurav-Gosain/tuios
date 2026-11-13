@@ -1,0 +1,5 @@
+# Shared borders, the rail collapsed and the dock hidden (setting 4 5), then ctrl+b enter for nest mode. The nest badge lasts as long as nest mode does, and it floated on the top row, which with shared borders is a pane's first line. The layout now keeps that row for the badge while it shows.
+sidebar-collapse
+shared-borders
+setting 4 5
+chord "enter"
