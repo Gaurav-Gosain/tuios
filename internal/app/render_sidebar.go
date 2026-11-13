@@ -331,6 +331,12 @@ type sidebarRowHit struct {
 	// attached session, or -1 for a window row of another session (not directly
 	// focusable without switching first) and for session rows.
 	WindowIndex int
+	// Control marks a control drawn on a row or a header line (a fold mark, a
+	// "+", a sign in label, a count chip): a part of the line with its own
+	// action. It is recorded before the line's own row, and putRailHits puts it
+	// into the hit record after the rows, so the control is the target drawn on
+	// top of the row it sits on.
+	Control bool
 }
 
 // Contains reports whether the absolute cell (x, y) falls on this row.
@@ -2175,6 +2181,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			SessionID:   sessionID,
 			WindowID:    tk.WindowID,
 			WindowIndex: -1,
+			Control:     true,
 		})
 		nav = append(nav, sidebarNavRow{Kind: tk.Kind, SessionID: sessionID, WindowID: tk.WindowID, WindowIndex: -1})
 	}

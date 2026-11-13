@@ -314,11 +314,17 @@ func (m *OS) railHitSurface() hitSurface {
 // putRailHits puts the rail's rows into the frame's hit record, a target per
 // row of m.SidebarHits with the row's index. It runs wherever the rows are
 // written (a build, the cache, the second edge), so the record always holds
-// the rows the list does.
+// the rows the list does. The rows go in first and the controls drawn on them
+// after, so a control is the top target over the row that holds it, by the
+// record's rule that the later target wins.
 func (m *OS) putRailHits() {
 	slot := m.hits.put(m.railHitSurface())
-	for i, h := range m.SidebarHits {
-		slot.add(overlay.Rect{X0: h.X0, Y0: h.Y0, X1: h.X1, Y1: h.Y1}, config.ZIndexDock, i)
+	for _, controls := range [2]bool{false, true} {
+		for i, h := range m.SidebarHits {
+			if h.Control == controls {
+				slot.add(overlay.Rect{X0: h.X0, Y0: h.Y0, X1: h.X1, Y1: h.Y1}, config.ZIndexDock, i)
+			}
+		}
 	}
 }
 
