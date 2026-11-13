@@ -1676,7 +1676,7 @@ is attached, it clears the title it set, as a client does when it detaches.
 | `{index}` | the pane's place in its workspace, from 1 |
 | `{cwd}` | the pane's working directory |
 | `{session}` | the session's name as the rail shows it, its display name if it has one, or `tuios` without a daemon |
-| `{workspace}` | the workspace's name, or its number. With a scratch group open, the workspace it is shown over |
+| `{workspace}` | the workspace's name, else the name its active pane gave with OSC 1, else its number. With a scratch group open, the workspace it is shown over |
 
 ```toml
 [appearance]
@@ -2246,6 +2246,13 @@ inactive_bg      = "bright_black"
 active_underline = false
 ```
 Besides `{index}` and `{name}`, the tab format takes `{icon}` and `{zoom}`.
+`{name}` is the name you gave the workspace. A workspace you did not name
+shows the name its active pane gave with OSC 1, and its number when the pane
+gave none. The active pane is the focused one, or the one that had the focus
+last. Only OSC 1 counts: shells and agents set the window title with OSC 0 at
+every prompt, and that title stays on the pane's border. A program names its
+workspace with `printf '\033]1;logs\007'` and clears the name with an empty
+OSC 1.
 `{index}` is the workspace's number, which is its position: dragging a tab to
 another place, or moving the workspace with `move_workspace_left` and
 `move_workspace_right`, renumbers it, and `Alt+N` goes to it by its new number.
