@@ -1080,7 +1080,16 @@ height = "80%"
 
 - `key` is the key that runs the command. A key that starts with `prefix+`
   works after the leader (`Ctrl+B`). Any other key works in window mode and
-  in terminal mode.
+  in terminal mode. With a `scope`, write a plain key inside that menu.
+- `scope` puts the command in one of the leader's submenus, so it runs on a
+  three-key chord. For example `scope = "prefix.minimize"` and `key = "g"`
+  run on `Ctrl+B m g`. The names `tuios keybinds list` shows
+  (`prefix.window`, `prefix.minimize`, `prefix.workspace`, `prefix.debug`,
+  `prefix.tape`, `prefix.layout`, `prefix.tuios`) and the config section
+  names (`window_prefix`, `minimize_prefix`, and so on) both work. `prefix`
+  is the leader's own menu, and `global` with a plain key is the same as
+  leaving `scope` out. Leave `scope` out for the two shorter forms above. A
+  `scope` and a `prefix+` key cannot be written together.
 - `type` is one of these:
   - `scratch`: a scratch terminal of its own. The key shows it and hides it,
     as `Ctrl+B g` does for the built-in one. Each entry has its own layout:
@@ -1110,6 +1119,24 @@ height = "80%"
 - `width` and `height` set the size of a scratch or popup entry, in cells
   (`100`) or percent (`80%`). The default is `80%`.
 
+A command can live inside one of the leader's submenus. This one runs on
+`Ctrl+B m g`:
+
+```toml
+[[keybindings.command]]
+scope = "prefix.minimize"
+key = "g"
+type = "shell"
+command = "git status > /tmp/tuios-status"
+description = "Write git status"
+```
+
+The key is a plain key in that menu: the leader and the menu key come from
+`scope`. A built-in keeps any key it already has there, so `f` in the minimize
+menu stays the focus-only action; `tuios keybinds doctor` shows a command
+placed on it as dead. `tuios keybinds list` shows the whole chord, and the
+which-key menu of the submenu lists the command at its end.
+
 The command gets these variables:
 
 | Variable | Value |
@@ -1128,7 +1155,9 @@ doctor shows the other as dead. To move an entry to a different key, edit its
 
 A key with no modifier and no `prefix+`, for example `g`, works in terminal
 mode too. It takes that letter from every pane, so tuios shows a warning. Use
-`prefix+g` or a key with a modifier, for example `alt+g`.
+`prefix+g` or a key with a modifier, for example `alt+g`. A bare key inside a
+`scope` is not a problem: it acts only after the chord, so it takes nothing
+from a pane.
 
 When a scratch command stops in its first moments, for example because the
 program is not installed, the dock shows its exit code. The next press starts

@@ -22,9 +22,11 @@ import (
 // The key is written as elsewhere in the config, with one addition: a key
 // that starts with "prefix+" acts after the leader (the [keybindings.prefix_mode]
 // scope), and any other key acts in window mode and terminal mode alike (the
-// [keybindings.global] scope). The entries are not written into those
-// sections. The registry reads them beside the sections, so the config file
-// keeps them in one table and a save never copies them elsewhere.
+// [keybindings.global] scope). An entry can instead name a leader submenu
+// with scope = "prefix.minimize" and a plain key, so the command runs on
+// ctrl+b m f. The entries are not written into those sections. The registry
+// reads them beside the sections, so the config file keeps them in one table
+// and a save never copies them elsewhere.
 //
 // An entry is the action "command:<name>". The name is the entry's own name
 // field, or else a slug of its description, or else of its command. A
@@ -52,8 +54,16 @@ const DefaultScratchName = "scratch"
 
 // CommandBinding is one [[keybindings.command]] entry.
 type CommandBinding struct {
+	// Scope is the leader menu the key acts in, for example "prefix.minimize"
+	// for ctrl+b m, "prefix" for the leader's own menu, or "global". The
+	// section names work as well, so "minimize_prefix" is the same scope.
+	// Empty keeps the older form: a key with "prefix+" acts after the leader
+	// and any other key acts in window mode and terminal mode. A scope and a
+	// "prefix+" key cannot be written together.
+	Scope string `toml:"scope,omitempty"`
 	// Key is the key that runs the command. "prefix+" puts it after the
-	// leader. Any other key acts in window mode and terminal mode.
+	// leader. Any other key acts in window mode and terminal mode. With a
+	// scope, the key is a plain key inside that menu.
 	Key string `toml:"key"`
 	// Type is scratch, popup, pane, shell or plugin_action. Empty means
 	// popup.
@@ -138,10 +148,59 @@ func (c CommandBinding) Label() string {
 func (c CommandBinding) WidthSpec() string  { return scratchSpec(c.Width, ScratchDefaultWidth) }
 func (c CommandBinding) HeightSpec() string { return scratchSpec(c.Height, ScratchDefaultHeight) }
 
+// commandSections maps every scope name a [[keybindings.command]] entry can
+// write to the config section its key lands in. Both the scope IDs tuios
+// keybinds list shows (prefix.minimize) and the section names config.toml
+// uses (minimize_prefix) are accepted, since a person may copy either.
+//
+// The set is the leader's own menu and its submenus, plus global: exactly the
+// tables the input side looks a command up in. A scope outside it would make
+// an entry that shows in tuios keybinds list but never runs, so commandProblem
+// rejects it instead. Built from Scopes so a new submenu is picked up here.
+var commandSections = func() map[string]string {
+	out := map[string]string{ScopeGlobal: SectionGlobal}
+	for _, s := range Scopes("") {
+		if s.Reaches != ReachChorded || len(s.Sections) != 1 {
+			continue
+		}
+		out[s.ID] = s.Sections[0]
+		out[s.Sections[0]] = s.Sections[0]
+	}
+	return out
+}()
+
+// commandSection returns the section of a scope name, and whether the name is
+// one a command entry can use. An empty scope is valid and means the older
+// prefix+/global form; callers fall through to that.
+func commandSection(scope string) (string, bool) {
+	name := strings.ToLower(strings.TrimSpace(scope))
+	if name == "" {
+		return "", true
+	}
+	section, ok := commandSections[name]
+	return section, ok
+}
+
+// commandScopeNames lists the scope names a person can write, the IDs the
+// keybinds list shows. A warning names them so a typo can be fixed in place.
+func commandScopeNames() []string {
+	var out []string
+	for _, s := range Scopes("") {
+		if s.Reaches == ReachChorded {
+			out = append(out, s.ID)
+		}
+	}
+	return append([]string{ScopeGlobal}, out...)
+}
+
 // Section and BareKey split the key into the section it acts in and the key
 // as that section writes it: "prefix+alt+g" is alt+g in prefix_mode, and
-// "alt+g" is alt+g in global.
+// "alt+g" is alt+g in global. A scope names the section instead, so the key
+// is a plain key inside that leader menu.
 func (c CommandBinding) Section() string {
+	if section, ok := commandSection(c.Scope); ok && section != "" {
+		return section
+	}
 	if _, ok := cutPrefixKey(c.Key); ok {
 		return SectionPrefixMode
 	}
@@ -204,6 +263,14 @@ func commandProblem(c CommandBinding, normalizer *KeyNormalizer) string {
 		return "The entry has no name tuios can use. Add a name with letters or digits."
 	case c.ResolvedName() == DefaultScratchName:
 		return "The name scratch belongs to the built-in scratch terminal. Use a different name."
+	}
+	if scope := strings.TrimSpace(c.Scope); scope != "" {
+		if _, ok := commandSection(scope); !ok {
+			return fmt.Sprintf("The scope %q is not a leader menu. Use one of %s, or leave scope out.", scope, strings.Join(commandScopeNames(), ", "))
+		}
+		if _, prefixed := cutPrefixKey(c.Key); prefixed {
+			return "A scope and a prefix+ key do not go together. Write the key without prefix+, for example key = \"g\"."
+		}
 	}
 	return keyAndBoxProblem(normalizer, c.BareKey(), c.Width, c.Height)
 }

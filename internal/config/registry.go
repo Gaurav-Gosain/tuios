@@ -99,7 +99,7 @@ func (r *KeybindRegistry) buildMappings() {
 	for t := range keybindTables {
 		tbl := &keybindTables[t]
 		keys := r.sectionKeyMap(*tbl.field(kb))
-		if Table(t) == TablePrefixMode || Table(t) == TableGlobal {
+		if commandTables[Table(t)] {
 			keys = r.withCommands(keys, tbl.name)
 		}
 		r.sections[t] = keys
@@ -188,6 +188,22 @@ func (r *KeybindRegistry) expandInto(keyMap map[string]string, action string, ke
 		}
 	}
 }
+
+// commandTables marks the keybinding tables a [[keybindings.command]] entry
+// can bind into: the leader's own menu, each of its submenus, and global.
+// Derived from commandSections so the scopes a person can write and the
+// tables the input side actually looks a command up in cannot drift apart.
+var commandTables = func() [tableCount]bool {
+	allowed := map[string]bool{}
+	for _, section := range commandSections {
+		allowed[section] = true
+	}
+	var out [tableCount]bool
+	for t := range keybindTables {
+		out[Table(t)] = allowed[keybindTables[t].name]
+	}
+	return out
+}()
 
 // withCommands adds the [[keybindings.command]] keys of one section to its
 // key map. A command entry never takes a key a built-in action already has:

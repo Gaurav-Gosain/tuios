@@ -17364,3 +17364,36 @@ and the capture) and `rail-recording.txt` (the client's screen while the
 pane records) are under `TUIOS_E2E_FRAMES`, in each test's folder. Repeat
 from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRecordPane' -v .`.
+
+## TestCommandKeyInsideASubmenu
+
+Issue 1723, the half the focus-only change left open: a
+`[[keybindings.command]]` entry with `scope = "prefix.minimize"` must run on
+`ctrl+b m alt+j`, inside the leader's minimize menu, and on no shorter chord.
+The config holds two entries, the scoped one writing SUBMENU and an older
+`prefix+alt+y` one writing LEADER. `ctrl+b alt+j` and a bare `alt+j` go first
+and must not create the submenu file; the three-press chord must. The old
+`prefix+` form is the fixture's positive control that this change must not
+take away. `alt+j` is a window-mode preselect motion, so a command wired
+globally by mistake is shadowed by a built-in rather than firing early and
+fooling the test.
+
+Run on 2026-11-13 on Linux (amd64, go1.27.4), branch
+`feat/submenu-command-keys` on upstream main 1bc4c5aae. One test binary was
+built from the branch and run against three binaries built the same way: the
+branch, main with no part of the change, and the branch with the submenu
+registry wiring cut back to its old two tables.
+
+| Control | The test fails with | Result |
+| --- | --- | --- |
+| main at 1bc4c5aae | `the submenu command did not write "SUBMENU" to .../submenu-ran: read ""` (command_keys_submenu_test.go:73) | **caught** |
+| `if commandTables[Table(t)]` in `internal/config/registry.go` put back to `if Table(t) == TablePrefixMode \|\| Table(t) == TableGlobal` | the same | **caught** |
+
+The branch passes in 1.29s, with both positive halves: the submenu file and
+the LEADER file. Both negative builds fail at line 73, the submenu assertion;
+the shorter chords leave the file absent in every run, so neither control is a
+false pass from a command wired into the wrong scope. On main `scope` is an
+unknown field, so the entry falls back to a global `alt+j` command and the
+minimize menu has no key for it. A failing run prints the tail of the pty
+log, from harness_test.go:489. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCommandKeyInsideASubmenu$' -v .`.
