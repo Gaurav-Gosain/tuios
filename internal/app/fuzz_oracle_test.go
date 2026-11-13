@@ -593,6 +593,18 @@ func checkGuestCellsAreNotPaintedOver(f *fuzzOS) []fuzz.Violation {
 		if coveredByAPaneAbove(m, panes, i, x, y, n) {
 			continue
 		}
+		// An armed leader with no mode pill shows the floating badge at the
+		// top of the screen. It is drawn over the panes on purpose, like the
+		// which-key menu that the same state opens after its delay: it lasts
+		// only while the leader waits for its key, and a pane region that gave
+		// it a row would resize every pane on each press of the leader. With
+		// shared borders and the dock hidden, the row it floats on is a pane's
+		// first line rather than a title border. Only the badge's own cells
+		// are excused, and only for the leader: the recording and nest badges
+		// stay up for minutes, so they are held to the rule.
+		if leaderBadgeCovers(m, x, y, n) {
+			continue
+		}
 		got := runesAt(g, x, y, n)
 		if got != marks[i] {
 			return vio("guest-cells", "%s owns (%d,%d) and wrote %q, the frame shows %q",
@@ -671,6 +683,18 @@ func bandCovers(m *OS, x, y, n int) bool {
 		}
 	}
 	return false
+}
+
+// leaderBadgeCovers reports whether the floating badge, shown for an armed
+// leader, reaches any of the n cells starting at (x,y). The badge is its text
+// with one cell of padding on each side.
+func leaderBadgeCovers(m *OS, x, y, n int) bool {
+	text, kind := m.statusBadge()
+	if kind != badgeLeader || y != m.GetTimeYPosition() {
+		return false
+	}
+	end := badgeX + ansi.StringWidth(text) + 2
+	return x < end && x+n > badgeX
 }
 
 // coveredByAPaneAbove reports whether another visible pane draws over any of the

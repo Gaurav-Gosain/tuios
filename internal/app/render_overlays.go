@@ -38,40 +38,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	m.OverlayHits = m.OverlayHits[:0]
 	m.reconcileOverlayZOrder()
 
-	isRecording := m.TapeRecorder != nil && m.TapeRecorder.IsRecording()
-
-	// The badge is the recording light and the prefix light. It used to carry
-	// the clock as well, which is why show_clock appeared to do nothing to the
-	// dock: the option drew this instead. The clock is a dock component now,
-	// placed beside the meters it behaves like, so the two cannot double up.
-	// An armed leader shows on the dock's mode pill when the dock has one.
-	// The badge stays the way to see it with the dock hidden.
-	// In lock mode the badge also says unlocked, for every menu the leader
-	// opens and for a menu held after a repeatable action.
-	unlockBadge := m.lockPillShown() && m.prefixArmed() && !m.prefixPillShown()
-	prefixBadge := (m.PrefixActive || unlockBadge) && !m.prefixPillShown()
-	// Nest mode goes on the badge when no mode pill can carry it.
-	nestBadge := m.Nested() && !m.modePillShown()
-	if isRecording || prefixBadge || nestBadge {
-		// The reading comes from the clock component, so the badge and a clock
-		// cell on the dock can never disagree, and so the format is the one
-		// [dock.clock] asked for rather than the one that used to be spelled
-		// here in a string literal.
-		currentTime := m.DockClockText()
-		var statusText string
-
-		if isRecording {
-			statusText = config.TapeRecordingIndicator + " | " + currentTime
-		} else if unlockBadge {
-			statusText = "PREFIX " + m.Settings.GetDockLockIcon(false) + " | " + currentTime
-		} else if prefixBadge {
-			statusText = "PREFIX | " + currentTime
-		} else if nestBadge {
-			statusText = m.nestLabel() + " | " + currentTime
-		} else {
-			statusText = currentTime
-		}
-
+	if statusText, kind := m.statusBadge(); kind != badgeNone {
 		// The badge rests on the same Panel step the rest of the chrome does and
 		// only lights up for a state the user is holding: the prefix is a mode
 		// waiting for a key, and recording is the one that writes to disk.
@@ -82,20 +49,19 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			Bold(true).
 			Padding(0, 1)
 
-		switch {
-		case isRecording:
+		switch kind {
+		case badgeRecording:
 			timeStyle = timeStyle.Background(pal.Warn).Foreground(theme.ContrastText(pal.Warn))
-		case prefixBadge:
+		case badgeLeader:
 			timeStyle = timeStyle.Background(pal.Warning).Foreground(theme.ContrastText(pal.Warning))
-		case nestBadge:
+		case badgeNest:
 			timeStyle = timeStyle.Background(pal.Info).Foreground(theme.ContrastText(pal.Info))
 		}
 
 		renderedTime := timeStyle.Render(statusText)
 
-		timeX := 1
 		timeLayer := lipgloss.NewLayer(renderedTime).
-			X(timeX).
+			X(badgeX).
 			Y(m.GetTimeYPosition()).
 			Z(config.ZIndexTime).
 			ID("time")
@@ -773,4 +739,56 @@ func packHints(hints []string, avail int) string {
 		cur = h
 	}
 	return strings.Join(append(rows, cur), "\n")
+}
+
+// badgeX is the column the floating badge starts at, on GetTimeYPosition's row.
+const badgeX = 1
+
+// badgeKind is the state the floating badge shows.
+type badgeKind uint8
+
+const (
+	badgeNone badgeKind = iota
+	badgeRecording
+	// badgeLeader is an armed leader with no mode pill to show it on. It lasts
+	// only while the leader waits for its key, and is drawn over the panes like
+	// the which-key menu of the same state. See checkGuestCellsAreNotPaintedOver.
+	badgeLeader
+	badgeNest
+)
+
+// statusBadge is the floating badge's text and the state it shows.
+//
+// The badge is the recording light and the prefix light. It used to carry
+// the clock as well, which is why show_clock appeared to do nothing to the
+// dock: the option drew this instead. The clock is a dock component now,
+// placed beside the meters it behaves like, so the two cannot double up.
+// An armed leader shows on the dock's mode pill when the dock has one.
+// The badge stays the way to see it with the dock hidden.
+// In lock mode the badge also says unlocked, for every menu the leader
+// opens and for a menu held after a repeatable action.
+func (m *OS) statusBadge() (string, badgeKind) {
+	isRecording := m.TapeRecorder != nil && m.TapeRecorder.IsRecording()
+	unlockBadge := m.lockPillShown() && m.prefixArmed() && !m.prefixPillShown()
+	prefixBadge := (m.PrefixActive || unlockBadge) && !m.prefixPillShown()
+	// Nest mode goes on the badge when no mode pill can carry it.
+	nestBadge := m.Nested() && !m.modePillShown()
+	if !isRecording && !prefixBadge && !nestBadge {
+		return "", badgeNone
+	}
+	// The reading comes from the clock component, so the badge and a clock
+	// cell on the dock can never disagree, and so the format is the one
+	// [dock.clock] asked for rather than the one that used to be spelled
+	// here in a string literal.
+	currentTime := m.DockClockText()
+	switch {
+	case isRecording:
+		return config.TapeRecordingIndicator + " | " + currentTime, badgeRecording
+	case unlockBadge:
+		return "PREFIX " + m.Settings.GetDockLockIcon(false) + " | " + currentTime, badgeLeader
+	case prefixBadge:
+		return "PREFIX | " + currentTime, badgeLeader
+	default:
+		return m.nestLabel() + " | " + currentTime, badgeNest
+	}
 }
