@@ -5061,6 +5061,8 @@ controls, zero-width spaces). When it removed any, it does not send and says
 Text pasted from a web page can hide instructions in them. The New agent
 sheet's Start stops the same way when its task holds any, a task filled from a
 card included: the agent starts on the next Start, with the task as shown.
+The New task sheet stops the same way on enter and on ctrl+enter: the card is
+added on the next, with the title and the prompt as shown.
 
 `esc` closes the editor and keeps the draft: `r` on the same pane opens it
 again.

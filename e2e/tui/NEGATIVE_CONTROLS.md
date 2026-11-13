@@ -17382,3 +17382,39 @@ Run on 2026-11-13 on macOS. The branch passes.
 The frames (`1-before`, `2-held`, `3-after-release`) are under
 `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestALeftPressDuringAResizeCancelsTheResize$' -v .`.
+
+## The New task sheet stops on invisible characters
+
+`TestTaskCaptureStopsOnInvisibleCharacters` files four cards from the New
+task sheet in one session, whose pane works in a folder of no repository,
+with no agent on the PATH. Each draft is pasted. A plain draft (t1) is added
+on the first enter. A title that ends in 45 Unicode tag characters, and is
+over 200 bytes only because of them (t2), stops the first enter: the sheet
+stays open, shows "Removed 45 invisible characters" once and not that the
+title is too long, and adds no card; the next enter adds the card with the
+title and the prompt as shown. A prompt that ends in a zero-width space and
+the 45 tags (t3) stops enter on the Project pill the same way, with "Removed
+46 invisible characters" shown in the task. A 198-byte title with the tags
+(t4) stops ctrl+enter on the Project pill before the sheet says no agent is
+installed; the next ctrl+enter says it, and enter adds the card. A last
+draft has no title, only a prompt that ends in a zero-width space: the first
+enter stops with "Removed 1 invisible character", the next says to write the
+task first, and no card is added. At every stop the composer's notice is the
+one notice: the sheet's own line does not also say to write the task first.
+The cards are read back with get-task, and the card count is held for a
+second after each stop.
+
+Run on 2026-11-13 on Linux (x86_64). The branch passes.
+
+| Control | Row | The test fails with | Result |
+|---------|-----|---------------------|--------|
+| Main (c0384eb9f) | title (t2) | "task_capture_invisible_test.go:168: waiting for the notice \"Removed 45 invisible characters\": tuitest: WaitForDesc timed out after 10.002s waiting for custom condition" | **caught** |
+| The check cut from taskCaptureFile | title (t2) | "task_capture_invisible_test.go:168: waiting for the notice \"Removed 45 invisible characters\": tuitest: WaitForDesc timed out after 10.002s waiting for custom condition" | **caught** |
+| The stop's result ignored (`parts, _ := s.ed.SubmitParts()` with no stop, so every stop also says to write the task first) | title (t2) | "task_capture_invisible_test.go:168: ASSERTION: the stop also says to write the task first" | **caught** |
+| The focus left on the pill at a stop | prompt (t3) | "task_capture_invisible_test.go:185: waiting for the notice \"Removed 46 invisible characters\": tuitest: WaitForDesc timed out after 10.003s waiting for custom condition" | **caught** |
+| The check placed after the title checks | title (t2) | "task_capture_invisible_test.go:168: waiting for the notice \"Removed 45 invisible characters\": tuitest: WaitForDesc timed out after 10.004s waiting for custom condition" | **caught** |
+| The check placed after the no-agent check | title (t2) | "task_capture_invisible_test.go:168: waiting for the notice \"Removed 45 invisible characters\": tuitest: WaitForDesc timed out after 10.004s waiting for custom condition" | **caught** |
+
+The sheet after each stop is saved under `TUIOS_E2E_FRAMES`. Repeat from
+`e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskCaptureStopsOnInvisibleCharacters$' -v .`.
