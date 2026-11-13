@@ -226,7 +226,7 @@ func (d *Daemon) verbRecordPane(cs *connState, params json.RawMessage) (any, *ve
 		"width":     r.cols,
 		"height":    r.rows,
 		"timestamp": r.started.Unix(),
-		"env":       map[string]string{"TERM": term},
+		"env":       map[string]string{"TERM": term, "SHELL": sess.getShell()},
 	}
 	if p.Title != "" {
 		header["title"] = p.Title
@@ -244,6 +244,9 @@ func (d *Daemon) verbRecordPane(cs *connState, params json.RawMessage) (any, *ve
 		return nil, fileError("record-pane", p.Out, err)
 	}
 	d.recordings.m[pty.ID] = r
+	// The flag is set before the answer, so a list-windows right after the
+	// start says recording. run pushes it to the clients.
+	pty.recording.Store(true)
 	go r.run(time.Duration(p.DurationMS) * time.Millisecond)
 	LogBasic("Recording pane %s to %s", shortWindowID(win.ID), p.Out)
 	return map[string]any{
@@ -439,10 +442,39 @@ func (r *paneRecorder) writeSnap(resync bool) error {
 	return r.output(body)
 }
 
-// run copies the subscription into the file until the recording ends.
+// run copies the subscription into the file until the recording ends. It
+// tells the clients at the start and the end, so the rail marks the pane
+// while it records.
 func (r *paneRecorder) run(duration time.Duration) {
+	r.publish()
 	reason := r.loop(duration)
 	r.finish(reason)
+	r.publish()
+}
+
+// publish pushes the pane's recording flag to the session's clients. A pane
+// that has left its session has no one to tell.
+func (r *paneRecorder) publish() {
+	if s := r.pty.owner(); s != nil {
+		s.PublishLiveFacts()
+	}
+}
+
+// recordedPanes is the set of panes, by PTY id, that record-pane writes to a
+// file now.
+func (s *Session) recordedPanes() map[string]bool {
+	s.ptysMu.RLock()
+	defer s.ptysMu.RUnlock()
+	var out map[string]bool
+	for id, p := range s.ptys {
+		if p.recording.Load() {
+			if out == nil {
+				out = make(map[string]bool)
+			}
+			out[id] = true
+		}
+	}
+	return out
 }
 
 // loop is run's body. It returns why the recording ended.
@@ -677,6 +709,9 @@ func (r *paneRecorder) finish(reason string) {
 	r.d.recordings.mu.Lock()
 	if r.d.recordings.m[r.pty.ID] == r {
 		delete(r.d.recordings.m, r.pty.ID)
+		// Cleared under the table's lock, so a start that takes the slot
+		// next sets it after this.
+		r.pty.recording.Store(false)
 	}
 	r.d.recordings.mu.Unlock()
 	r.reason = reason

@@ -679,6 +679,9 @@ type sidebarTerminalEntry struct {
 	// HostLink is the state of the link to Host when it is not up, such as
 	// "reconnecting", and empty otherwise. See sidebarTerminalHostLabel.
 	HostLink string
+	// Recording is set while the daemon writes the pane to an asciicast
+	// file. The row says rec.
+	Recording bool
 	// WindowIndex is the index into m.Windows, or -1 for a pane of a session
 	// this client is not attached to.
 	WindowIndex int
@@ -2767,6 +2770,7 @@ func (m *OS) sidebarTerminals(sessions []sessiontree.Node, sessionID string) []s
 			Quiet:       win.Quiet,
 			Focused:     win.IsCurrent,
 			Host:        win.Host,
+			Recording:   win.Recording,
 			WindowIndex: -1,
 		}
 		// A pane whose link is lost says so beside its machine, in words.
@@ -3425,6 +3429,18 @@ func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Pale
 		right = sidebarStyle(rowBg, pal.FgMute).Render(e.Tag)
 		rightW = lipgloss.Width(e.Tag)
 	}
+	// A pane being recorded says so before anything else in the slot: what
+	// it prints goes to a file, which the person must not miss. The machine
+	// or workspace stays beside it while the name keeps its floor.
+	if e.Recording {
+		rec := sidebarStyle(rowBg, pal.Warn).Render(sidebarRecordingTag)
+		recW := lipgloss.Width(sidebarRecordingTag)
+		if right != "" && sidebarNameAvail(cw, recW+1+rightW) >= sidebarHostTagFloor {
+			right, rightW = rec+sidebarStyle(rowBg, pal.FgMute).Render(" ")+right, recW+1+rightW
+		} else {
+			right, rightW = rec, recW
+		}
+	}
 
 	fg := pal.FgDim
 	switch {
@@ -3463,6 +3479,10 @@ func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Pale
 // stopped following after the pane's terminal emulator failed again and
 // again: its program still runs. See internal/session/pane_vt_fault.go.
 const sidebarScreenStopped = "screen stopped"
+
+// sidebarRecordingTag is the mark of a pane row while record-pane writes the
+// pane to a file. See internal/session/pane_record.go.
+const sidebarRecordingTag = "rec"
 
 // sidebarTerminalHostLabel is what a pane row says about its machine: the
 // machine, and beside it the link's state while the link is not up. When both

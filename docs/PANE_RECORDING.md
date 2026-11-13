@@ -29,6 +29,10 @@ Without `-w`, tuios records the focused pane. A relative `-o` is taken from
 the folder you run the command in. An existing file is refused unless you give
 `--overwrite`. `tuios record-pane list` shows the recordings that run.
 
+While a pane records, its row on the rail says `rec` in the warning colour,
+on every client attached to the session, and `tuios list-windows --json`
+gives the pane `"recording": true`. The mark goes when the recording ends.
+
 The daemon writes the file, so a recording runs with no client attached, in a
 detached session, and after you close the terminal you started it from.
 

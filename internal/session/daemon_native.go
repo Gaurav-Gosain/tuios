@@ -401,6 +401,10 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 	if w.ScreenStopped {
 		info["screen_stopped"] = true
 	}
+	// Set while record-pane writes the pane to a file. Omitted otherwise.
+	if w.Recording {
+		info["recording"] = true
+	}
 	if w.HostLink != "" {
 		info["host_link"] = w.HostLink
 		if w.HostLinkUntil > 0 {

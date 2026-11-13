@@ -123,6 +123,7 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 			Host:          w.Host,
 			HostLink:      w.HostLink,
 			ScreenStopped: w.ScreenStopped,
+			Recording:     w.Recording,
 		})
 	}
 	name := m.SessionName

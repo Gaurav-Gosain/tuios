@@ -229,7 +229,9 @@ tuios record-pane stop -w build      # prints events, bytes and why it ended
 ```
 
 A recording holds everything the pane prints, secrets included. Record only
-when the person asked for it, and tell them where the file is.
+when the person asked for it, and tell them where the file is. While it runs,
+the pane's rail row says `rec` and `list-windows --json` gives it
+`"recording": true`.
 
 ## Typing into a pane
 

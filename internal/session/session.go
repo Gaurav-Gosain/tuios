@@ -150,6 +150,10 @@ type WindowState struct {
 	// find see the screen from before. A live fact, like HostLink. See
 	// pane_vt_fault.go.
 	ScreenStopped bool `json:"screen_stopped,omitempty"`
+	// Recording is set while record-pane writes the pane to an asciicast
+	// file. The rail marks the pane, so a person sees that what it prints
+	// goes to a file. A live fact, like ScreenStopped. See pane_record.go.
+	Recording bool `json:"recording,omitempty"`
 	// Cwd is the working directory of the window's shell process, captured on the
 	// daemon side when saving resurrection state. On cold-start restore a fresh
 	// shell is respawned here. Empty for live state syncs (clients do not set it).
@@ -1228,6 +1232,9 @@ type PTY struct {
 	// screenStopped is set when vtWriter stops feeding the emulator after
 	// repeated faults. See pane_vt_fault.go.
 	screenStopped atomic.Bool
+	// recording is set while record-pane writes the pane to a file. See
+	// pane_record.go.
+	recording atomic.Bool
 	// faultNotices holds the fault notices not yet put into the stream, in
 	// the order the faults happened. See pane_vt_fault.go.
 	faultNotices faultNoticeQueue
@@ -3176,8 +3183,10 @@ func (s *Session) fillLiveFacts(state *SessionState) {
 		}
 	}
 	stopped := s.stoppedScreens()
+	recorded := s.recordedPanes()
 	for i := range state.Windows {
 		state.Windows[i].ScreenStopped = stopped[state.Windows[i].PTYID]
+		state.Windows[i].Recording = recorded[state.Windows[i].PTYID]
 	}
 }
 

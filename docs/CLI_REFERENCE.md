@@ -2212,6 +2212,9 @@ tuios record-pane list [--json]
 `stop` and `mark` take `-s`, `-w` and `--json`. `stop` returns when the file
 is complete and says how many events it holds and why the recording ended.
 
+While a pane records, its row on the rail says `rec`, and `list-windows
+--json` gives the pane `"recording": true`.
+
 **Examples:**
 ```bash
 # Record the pane named build for a minute

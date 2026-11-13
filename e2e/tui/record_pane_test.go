@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -267,3 +268,162 @@ func readCast(t *testing.T, path string) (map[string]any, []castEvent) {
 	}
 	return header, events
 }
+
+// How TestRecordPaneMarksTheRailAndStopsOnDemand could pass wrongly, written
+// down before the rail mark:
+//   - The rail could show the mark from a flag the client set itself, and
+//     never hear that the recording ended. The test waits for the mark to go
+//     after stop, with the pane still there.
+//   - list-windows could say recording on every pane of the session. The
+//     second pane must not say it.
+//   - stop could answer before the file is complete. The cast is read right
+//     after stop returns, and must hold the output sent just before it.
+//   - The size cap could stop nothing, or stop with no word in the file. The
+//     pane prints more than the cap; the recording must end by itself with a
+//     "size limit" marker as its last event.
+//
+// NEGATIVE CONTROL (e2e/tui/NEGATIVE_CONTROLS.md): with the
+// pty.recording.Store(true) line left out of verbRecordPane, the test fails
+// at "the rail does not mark the recorded pane".
+
+// recordRailSession is the session the rail test uses.
+const recordRailSession = "e2e-record-rail"
+
+// TestRecordPaneMarksTheRailAndStopsOnDemand records a pane with a client
+// attached: the rail marks the pane while it records and drops the mark on
+// stop, list-windows says the same, and a second recording ends by itself at
+// its size cap.
+func TestRecordPaneMarksTheRailAndStopsOnDemand(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "start-server"); err != nil {
+		t.Fatalf("start-server: %v\n%s", err, out)
+	}
+	art := artifactDir(t)
+	echo := `while read l; do printf 'got-%s\n' "$l"; done`
+	pane := newCommandWindow(t, base, recordRailSession, "taped", false, "sh", "-c", echo)
+	other := newCommandWindow(t, base, recordRailSession, "plain", false, "sh", "-c", echo)
+	cli := func(args ...string) string {
+		t.Helper()
+		out, err := tuiosCLI(t, base, args...)
+		if err != nil {
+			t.Fatalf("tuios %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+		return out
+	}
+	send := func(text string) {
+		t.Helper()
+		_ = mustCall(t, base, "send-text", map[string]any{"session": recordRailSession, "window": pane, "text": text + "\n"})
+	}
+	// railRow is the rail's row of the recorded pane, empty while the rail
+	// does not show it.
+	client := attachIn(t, base, recordRailSession, startOpts{cols: bigCols, rows: bigRows})
+	showRail(t, client)
+	railRow := func() string {
+		for line := range strings.SplitSeq(client.Screen().Text(), "\n") {
+			if strings.Contains(line, "taped") {
+				return line
+			}
+		}
+		return ""
+	}
+	marked := func(row string) bool { return strings.Contains(row, " "+sidebarRecordingTag) }
+	waitUntil(t, "the rail shows the pane", uiTimeout, func() (bool, string) {
+		row := railRow()
+		return row != "", client.Snapshot()
+	})
+	if row := railRow(); marked(row) {
+		t.Fatalf("the rail marks a pane nobody records: %q", row)
+	}
+	recorded := func() map[string]bool {
+		t.Helper()
+		out := cli("list-windows", "-s", recordRailSession, "--json")
+		var listing struct {
+			Windows []struct {
+				ID        string `json:"window_id"`
+				Recording bool   `json:"recording"`
+			} `json:"windows"`
+		}
+		if err := json.Unmarshal([]byte(out), &listing); err != nil {
+			t.Fatalf("list-windows json: %v: %s", err, out)
+		}
+		got := map[string]bool{}
+		for _, w := range listing.Windows {
+			got[w.ID] = w.Recording
+		}
+		return got
+	}
+
+	cast := filepath.Join(art, "stopped.cast")
+	_ = os.Remove(cast)
+	cli("record-pane", "start", "-s", recordRailSession, "-w", pane, "-o", cast)
+	if got := recorded(); !got[pane] || got[other] {
+		t.Errorf("list-windows: want recording on %s only, got %v", pane, got)
+	}
+	waitUntil(t, "the rail marks the recorded pane", uiTimeout, func() (bool, string) {
+		return marked(railRow()), client.Snapshot()
+	})
+	if err := os.WriteFile(filepath.Join(art, "rail-recording.txt"), []byte(client.Snapshot()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	send("hello")
+	waitHandoffPane(t, base, recordRailSession, pane, regexp.MustCompile(`^got-hello`), shellTimeout)
+	out := cli("record-pane", "stop", "-s", recordRailSession, "-w", pane, "--json")
+	var stopped struct {
+		Reason string `json:"reason"`
+		Events int    `json:"events"`
+	}
+	if err := json.Unmarshal([]byte(out), &stopped); err != nil || stopped.Reason != "stopped" {
+		t.Fatalf("record-pane stop: want reason stopped, got %v\n%s", err, out)
+	}
+	header, events := readCast(t, cast)
+	if env, _ := header["env"].(map[string]any); env == nil || env["SHELL"] == "" || env["TERM"] == "" {
+		t.Errorf("the header's env: want TERM and SHELL, got %v", header["env"])
+	}
+	if len(events) != stopped.Events {
+		t.Errorf("stop said %d events, the file holds %d", stopped.Events, len(events))
+	}
+	sawHello := false
+	for _, e := range events {
+		sawHello = sawHello || (e.code == "o" && strings.Contains(e.data, "got-hello"))
+	}
+	if !sawHello {
+		t.Errorf("the cast lacks the output sent just before stop: %v", events)
+	}
+	if last := events[len(events)-1]; last.code == "m" {
+		t.Errorf("a stop on demand writes no marker, the last event is %v", last)
+	}
+	waitUntil(t, "the rail drops the mark after stop", uiTimeout, func() (bool, string) {
+		row := railRow()
+		return row != "" && !marked(row), client.Snapshot()
+	})
+	if got := recorded(); got[pane] || got[other] {
+		t.Errorf("list-windows after stop: want no recording, got %v", got)
+	}
+
+	// The size cap: the pane prints more than the cap, and the recording
+	// ends by itself, saying why.
+	capped := filepath.Join(art, "capped.cast")
+	_ = os.Remove(capped)
+	cli("record-pane", "start", "-s", recordRailSession, "-w", pane, "-o", capped, "--max-size", "4096")
+	for i := range 4 {
+		send(strings.Repeat(strconv.Itoa(i), 2000))
+	}
+	waitUntil(t, "the recording ends at its size cap", shellTimeout, func() (bool, string) {
+		out, err := tuiosCLI(t, base, "record-pane", "list", "--json")
+		return err == nil && (strings.Contains(out, `"recordings":[]`) || strings.Contains(out, `"recordings": []`)), out
+	})
+	_, events = readCast(t, capped)
+	if last := events[len(events)-1]; last.code != "m" || last.data != "size limit" {
+		t.Errorf("the capped cast's last event: want the size limit marker, got %v", last)
+	}
+	waitUntil(t, "the rail drops the mark after the cap", uiTimeout, func() (bool, string) {
+		row := railRow()
+		return row != "" && !marked(row), client.Snapshot()
+	})
+}
+
+// sidebarRecordingTag is the rail's mark of a pane being recorded
+// (internal/app/render_sidebar.go, sidebarRecordingTag).
+const sidebarRecordingTag = "rec"

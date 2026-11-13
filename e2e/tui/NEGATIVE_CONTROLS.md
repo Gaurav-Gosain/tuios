@@ -17336,16 +17336,30 @@ parses the .cast, replays every event up to the second marker through
 tuios.dev/vt (an r event resizes the emulator), and wants the screen the
 capture holds, with the rows from before the start on it.
 
-Run on 2026-11-13 on macOS (arm64, go1.27.4), branch `untangle/cast-export`.
-The test passes on the branch. Two controls, each a one-line change to
-`internal/session/pane_record.go`:
+`TestRecordPaneMarksTheRailAndStopsOnDemand` attaches a client to a session
+of two panes, records one, and wants `rec` on that pane's rail row and
+`"recording": true` on it alone in `list-windows`. It stops the recording,
+reads the file at once for the output sent just before the stop, and wants
+the mark gone with the pane still there. A second recording with
+`--max-size 4096` must end by itself with a `size limit` marker.
+
+Run on 2026-11-13 on macOS (arm64, go1.27.4), branch `untangle/cast-export`
+rebased on origin/main 0152f166d. Both tests pass on the branch. Three
+controls, each a one-line change to `internal/session/pane_record.go`, each
+built into its own binary and run with
+`-run '^TestRecordPane'`:
 
 | Control | The test fails with | Result |
 | --- | --- | --- |
-| The `writeSnap` call left out of `verbRecordPane`, so the cast starts with live output | `the replayed screen differs from the capture` | **caught** |
-| The resize branch of `paneRecorder.take` returning before it writes the r event | `no r event for the resize to 50x12` | **caught** |
+| The `writeSnap` call left out of `verbRecordPane`, so the cast starts with live output | `the replayed screen differs from the capture` (record_pane_test.go:196) | **caught** |
+| The resize branch of `paneRecorder.take` returning before it writes the r event | `no r event for the resize to 50x12` (record_pane_test.go:166) | **caught** |
+| `pty.recording.Store(true)` left out of `verbRecordPane` | `list-windows: want recording on ... only` and `the rail marks the recorded pane` timed out | **caught** |
 
-The .cast and `transcript.txt` (header, every event, the replayed screen and
-the capture) are under `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from
-`e2e/tui` with
-`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRecordPaneWritesACastThatReplaysToTheScreen$' -v .`.
+In each control the other test still passed, so each change fails only the
+test that covers it.
+
+The .cast files, `transcript.txt` (header, every event, the replayed screen
+and the capture) and `rail-recording.txt` (the client's screen while the
+pane records) are under `TUIOS_E2E_FRAMES`, in each test's folder. Repeat
+from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRecordPane' -v .`.

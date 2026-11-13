@@ -1356,6 +1356,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	m.noteHostEnded(ws)
 	w.HostLink = ws.HostLink
 	w.ScreenStopped = ws.ScreenStopped
+	w.Recording = ws.Recording
 	w.CustomName = ws.CustomName
 	if adoptGeometry {
 		w.X = ws.X
@@ -1575,6 +1576,7 @@ func (m *OS) newWindowFromState(ws *session.WindowState) *terminal.Window {
 	m.noteHostEnded(ws)
 	window.HostLink = ws.HostLink
 	window.ScreenStopped = ws.ScreenStopped
+	window.Recording = ws.Recording
 
 	caps := m.hostCaps()
 	if caps.CellWidth > 0 && caps.CellHeight > 0 {

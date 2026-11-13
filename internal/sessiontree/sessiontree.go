@@ -155,6 +155,9 @@ type Node struct {
 	// ScreenStopped, on a window node, is set while the daemon has stopped
 	// feeding the pane's terminal emulator after repeated faults.
 	ScreenStopped bool
+	// Recording, on a window node, is set while the daemon writes the pane
+	// to an asciicast file.
+	Recording bool
 	// HostStatus is a KindHost header's link state, as the federation package
 	// names it ("up", "unreachable", "no_daemon", "no_tuios", "incompatible",
 	// "connecting"). Empty on every other node.
@@ -307,6 +310,8 @@ type WindowInput struct {
 	// ScreenStopped is set while the daemon has stopped feeding the pane's
 	// terminal emulator after repeated faults.
 	ScreenStopped bool
+	// Recording is set while the daemon writes the pane to an asciicast file.
+	Recording bool
 }
 
 // SessionInput is the caller's per-session data. Windows may be nil for a
@@ -446,6 +451,7 @@ func BuildSession(s SessionInput) Node {
 			Host:          w.Host,
 			HostLink:      w.HostLink,
 			ScreenStopped: w.ScreenStopped,
+			Recording:     w.Recording,
 		})
 		if r := AgentRank(w.AgentState, w.DoneSeen); r > bestRank {
 			node.AgentState, node.DoneSeen, node.Subagents, bestRank = w.AgentState, w.DoneSeen, w.Subagents, r

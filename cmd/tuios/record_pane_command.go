@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
 	"strings"
 	"time"
@@ -98,8 +99,8 @@ func parseRecordSize(s string) (int64, error) {
 	}{{"GiB", 1 << 30}, {"MiB", 1 << 20}, {"KiB", 1 << 10}, {"G", 1 << 30}, {"M", 1 << 20}, {"K", 1 << 10}, {"B", 1}}
 	num, mult := s, int64(1)
 	for _, u := range units {
-		if strings.HasSuffix(s, u.suffix) {
-			num, mult = strings.TrimSpace(strings.TrimSuffix(s, u.suffix)), u.mult
+		if rest, ok := strings.CutSuffix(s, u.suffix); ok {
+			num, mult = strings.TrimSpace(rest), u.mult
 			break
 		}
 	}
@@ -216,9 +217,7 @@ func runRecordPaneVerb(verb, sessionName, window string, extra map[string]any, j
 	}
 	defer t.Close()
 	params := map[string]any{"window": nil}
-	for k, v := range extra {
-		params[k] = v
-	}
+	maps.Copy(params, extra)
 	raw, err := t.client.Call(verb, t.params(params))
 	if err != nil {
 		return reportVerbError(t.explain(verb, err), jsonOutput)
