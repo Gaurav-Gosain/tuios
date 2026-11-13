@@ -1012,7 +1012,6 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 	cm := &ContextMenu{
 		AnchorX: x,
 		AnchorY: y,
-		ItemH:   1,
 	}
 
 	switch hit.Kind {
@@ -1105,7 +1104,6 @@ func (m *OS) openFilesSectionMenu(x, y int, t fileMenuTarget) {
 	cm := &ContextMenu{
 		AnchorX:     x,
 		AnchorY:     y,
-		ItemH:       1,
 		Target:      CtxTargetFileRow,
 		WindowIndex: -1,
 		File:        t,
@@ -1171,7 +1169,6 @@ func (m *OS) openRailSettingsMenu(x, y int) {
 	m.ContextMenu = &ContextMenu{
 		AnchorX:     x,
 		AnchorY:     y,
-		ItemH:       1,
 		Target:      CtxTargetDesktop,
 		WindowIndex: -1,
 		Title:       "Sidebar",

@@ -1733,8 +1733,11 @@ type OS struct {
 	// at, so a panel whose height changes while it is open stays put rather
 	// than jumping. See overlayOrigin.
 	overlayAnchors map[string]overlayAnchor
-	OverlayHits    []overlayPanelHit
-	OverlayDrag    overlayDragState
+	// hits is the frame's hit record: where each surface on it drew its
+	// mouse targets, in draw order. See frame_hits.go.
+	hits        frameHits
+	OverlayHits []overlayPanelHit
+	OverlayDrag overlayDragState
 	// OverlayZOrder is the stacking order of the currently-open draggable
 	// overlays, bottom to top. Clicking a panel moves it to the end (top).
 	OverlayZOrder []string
