@@ -128,6 +128,14 @@ jobs:
           working-directory: acp
           args: --timeout 10m
 
+      - name: golangci-lint (harness)
+        if: inputs.lint_libs == '' || inputs.lint_libs == 'all' || contains(format(' {0} ', inputs.lint_libs), ' harness ')
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.14.0
+          working-directory: harness
+          args: --timeout 10m
+
   sanity:
     name: govulncheck, BOM, goimports, gopls and modernizers
     # Small checks that each took longer to set up than to run, in one job:
@@ -221,7 +229,7 @@ jobs:
           status=0
           for goos in $(grep -v '^#' scripts/platforms.txt | grep -vx linux); do
             echo "::group::go vet (GOOS=$goos)"
-            if ! GOOS=$goos go vet ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... ./acp/...; then
+            if ! GOOS=$goos go vet ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... ./acp/... ./harness/...; then
               status=1
               echo "::error title=go vet failed::go vet failed for GOOS=$goos"
             fi

@@ -1048,7 +1048,7 @@ The screen scan runs in the daemon on every settle of every agent pane, at most
 once per 250 ms while a pane writes plus once when it goes quiet, so its cost
 times the number of agent panes is what the manifest engine spends. The engine
 gained nested groups, more regions and many more bundled rules, and was measured
-with `BenchmarkClassify` (`internal/harness/classify_bench_test.go`) on a Claude
+with `BenchmarkClassify` (now `harness/classify_bench_test.go`) on a Claude
 Code working turn and idle prompt, the bundled manifest before and after,
 through the new engine (`TUIOS_BENCH_MANIFESTS` points the benchmark at an old
 manifest). Five runs of 20000 iterations each, medians, Apple M3 Pro:
@@ -2446,7 +2446,7 @@ package) and against what links them:
 | internal/config | the render path reads settings on every frame (sidebar, dock, borders, scrollbar) and input reads the keybind registry on every key |
 | `tuios.dev/tml` | loom reads TML nodes while it draws a surface |
 | tuiffects | the screen saver draws a frame with it at the frame rate |
-| internal/harness | the pty read path runs the screen and OSC rules, throttled |
+| `tuios.dev/harness` | the pty read path runs the screen and OSC rules, throttled |
 | internal/federation | remote panes stream through its mux |
 | internal/transcriptview | the cockpit view draws through it on every frame |
 | `tuios.dev/sketch/raster` | `tuios mermaid --live` draws its motion with it at 60 frames a second |

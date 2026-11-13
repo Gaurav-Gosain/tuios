@@ -19,7 +19,7 @@ var outlineDirs = []string{"internal", "cmd/tuios", "pkg"}
 
 // outlineSkip are folders inside outlineDirs that are not part of the binary,
 // and the wrappers themselves, in errfmt and jsonx.
-var outlineSkip = []string{"internal/errfmt", "internal/jsonx", "internal/harness/herdrconv", "internal/lint"}
+var outlineSkip = []string{"internal/errfmt", "internal/jsonx", "internal/lint"}
 
 // outlined maps each standard library call the compiler inlines at every
 // call site to the out-of-line copy to call instead.

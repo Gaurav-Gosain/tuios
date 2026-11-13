@@ -78,7 +78,10 @@ jobs:
             targets: FuzzNormalizeKey FuzzExpandKeys FuzzLoadConfigPipeline FuzzConfigSaveRoundTrip
           - pkg: internal/tape
             targets: FuzzTapeParse FuzzTapeTokenize FuzzTapeRecordRoundTrip
-          - pkg: internal/harness
+          # The harness registry was internal/harness until it became the
+          # module in harness/. Its corpus name stays, as the emulator's does.
+          - pkg: harness
+            corpus: internal/harness
             targets: FuzzClassifyAgreesWithExplain FuzzManifest FuzzManifestRules
           - pkg: internal/layout
             targets: FuzzMasterLayout
@@ -135,17 +138,19 @@ jobs:
 
       # go test keeps a corpus under the package's import path, which was
       # github.com/Gaurav-Gosain/tuios/internal/vt until the emulator became
-      # tuios.dev/vt. A corpus restored under the old path is moved to the new
-      # one. Once no cache entry holds the old path, this does nothing.
-      - name: Carry the emulator's corpus across its rename
-        if: matrix.pkg == 'vt'
+      # tuios.dev/vt, and .../internal/harness until the registry became
+      # tuios.dev/harness. A corpus restored under the old path is moved to the
+      # new one. Once no cache entry holds the old path, this does nothing.
+      - name: Carry a library's corpus across its rename
+        if: matrix.pkg == 'vt' || matrix.pkg == 'harness'
         env:
           FUZZDIR: ${{ steps.gocache.outputs.dir }}
+          PKG: ${{ matrix.pkg }}
         run: |
-          old="$FUZZDIR/github.com/Gaurav-Gosain/tuios/internal/vt"
+          old="$FUZZDIR/github.com/Gaurav-Gosain/tuios/internal/$PKG"
           if [ -d "$old" ]; then
-            mkdir -p "$FUZZDIR/tuios.dev/vt"
-            cp -rn "$old/." "$FUZZDIR/tuios.dev/vt/"
+            mkdir -p "$FUZZDIR/tuios.dev/$PKG"
+            cp -rn "$old/." "$FUZZDIR/tuios.dev/$PKG/"
             rm -rf "$old"
           fi
 

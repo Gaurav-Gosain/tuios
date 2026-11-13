@@ -5,7 +5,9 @@ TUIOS can be imported and used as a library in your own Go applications. This al
 This page is about embedding the whole window manager. Smaller parts of tuios
 are Go modules of their own, such as `tuios.dev/progstatus`, or
 `tuios.dev/acp` for a client of the Agent Client Protocol (see
-[ACP_LIBRARY.md](ACP_LIBRARY.md)). See
+[ACP_LIBRARY.md](ACP_LIBRARY.md)), or
+`tuios.dev/harness` to recognise coding-agent CLIs and read their state (see
+[HARNESS_LIBRARY.md](HARNESS_LIBRARY.md)). See
 [the libraries section](https://tuios.dev/docs/libraries) on tuios.dev.
 
 ## Installation

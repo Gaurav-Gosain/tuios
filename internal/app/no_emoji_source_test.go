@@ -26,7 +26,7 @@ const emojiDataPath = "testdata/unicode/emoji-data.txt"
 var emojiSourceAllowed = map[string]string{
 	// Detection code that matches the option cursors other agents draw.
 	"internal/harness/answers.go": "matches option cursors agent CLIs draw",
-	"internal/harness/prompt.go":  "matches prompt cursors agent CLIs draw",
+	"harness/prompt.go":           "matches prompt cursors agent CLIs draw",
 	// The fuzzers feed the emulator emoji on purpose, to test widths.
 	"vt/vtgen/vtgen.go":      "emulator width input",
 	"internal/fuzz/pools.go": "emulator width input",
@@ -41,7 +41,7 @@ var emojiSourceAllowed = map[string]string{
 }
 
 // emojiSourceRoots are the trees the lint reads.
-var emojiSourceRoots = []string{"internal", "cmd", "vt"}
+var emojiSourceRoots = []string{"internal", "cmd", "vt", "harness"}
 
 // loadEmojiRunes reads the code points emoji-data.txt gives any emoji
 // property. ASCII is left out: '#', '*' and the digits are Emoji=Yes only as

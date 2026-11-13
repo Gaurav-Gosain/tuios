@@ -34,3 +34,5 @@ replace tuios.dev/tml v0.1.2-0.20261112200225-e5512e40c8da => ./tml
 replace tuios.dev/vt v0.3.3-0.20261112221328-af594e2e29a4 => ./vt
 
 replace tuios.dev/acp v0.0.0-20261113051439-2ceb1b54cbd2 => ./acp
+
+replace tuios.dev/harness v0.0.0-20261113102419-ec6e3c62c2d9 => ./harness

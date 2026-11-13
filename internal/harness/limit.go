@@ -60,7 +60,7 @@ func (r *Registry) RuleLimitReset(id string, rule int, tail []string) string {
 	if m == nil || rule < 0 || rule >= len(m.Screen.Rule) || m.Screen.Rule[rule].State != "limit_reached" {
 		return ""
 	}
-	lines := regionLines(tail, m.Screen.Rule[rule].Region)
+	lines := r.RuleLines(id, rule, tail)
 	for _, line := range slices.Backward(lines) {
 		if at := LimitReset(line); at != "" {
 			return at

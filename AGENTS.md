@@ -40,7 +40,7 @@ go run ./cmd/tuios-web --debug
 # so the libraries are named one by one. `just test` runs this line under the
 # limits below.
 go test ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... \
-  ./plot/... ./loom/... ./sketch/... ./acp/...
+  ./plot/... ./loom/... ./sketch/... ./acp/... ./harness/...
 
 # Leave the machine usable. The maintainer works on this box while the suite
 # runs, and an uncapped build or test run takes every core. taskset confines the
@@ -217,7 +217,8 @@ that points the go command at the folder in this repository. They are
 `progstatus/` (`tuios.dev/progstatus`), `vt/` (`tuios.dev/vt`), `swatch/`
 (`tuios.dev/swatch`), `shot/` (`tuios.dev/shot`), `tml/` (`tuios.dev/tml`),
 `plot/` (`tuios.dev/plot`), `loom/` (`tuios.dev/loom`), `sketch/`
-(`tuios.dev/sketch`) and `acp/` (`tuios.dev/acp`). `go.work` lists them all.
+(`tuios.dev/sketch`), `acp/` (`tuios.dev/acp`) and `harness/`
+(`tuios.dev/harness`). `go.work` lists them all.
 
 - `go.work` makes the app, `e2e/tui` and each library one workspace, so a
   change to a library and to the app lands in one pull request. Never add a
@@ -260,7 +261,8 @@ that points the go command at the folder in this repository. They are
 
 Some packages embed an archive that `go generate` packs from the files beside
 it: `skills/` (`skills/tuios.tar.gz`), `internal/learn/lessons`,
-`internal/harness` and `internal/integration`. Run `go generate` in the
+`harness/` (the bundled manifests, in the library) and
+`internal/integration`. Run `go generate` in the
 package after you edit those files. A test in each package fails when the
 archive and the files differ. Rebase with `scripts/rebase.sh origin/main`. It
 regenerates `skills/tuios.tar.gz` at each stop where that archive is the only
@@ -320,7 +322,7 @@ tuios/
 │   ├── release/            # Finds published releases and verifies a downloaded binary (tuios update)
 │   ├── netutil/            # Small network helpers the servers share
 │   ├── memtrim/            # Gives the heap a burst left behind back to the OS once the process settles
-│   ├── harness/            # Agent harness manifests and detection
+│   ├── harness/            # tuios policy over tuios.dev/harness: prompt answers, resume, launch flags, permission ladder, title label
 │   ├── herdrplugin/        # herdr plugins: manifest, discovery, the command runner (the host is internal/session/plugin_host.go)
 │   ├── herdrcli/           # herdr's command line, answered by tuios
 │   ├── integration/        # Wires harness hooks, plugins and MCP entries (tuios integration)
@@ -364,6 +366,7 @@ tuios/
 │                           #  atomicfile, lazyre, linediff, oneline, pathroot,
 │                           #  plural, sortx, units, winacl, winjob, winpath)
 ├── acp/                    # tuios.dev/acp, a Go module of its own: the Agent Client Protocol client, versions 1 and 2; the JSON-RPC peer, negotiation, typed updates
+├── harness/                # tuios.dev/harness, a Go module of its own: agent CLI detection; the manifest format, 26 bundled manifests, Identify, Classify and Explain
 ├── loom/                   # tuios.dev/loom, a Go module of its own: draws TML into cells; flex layout, retained tree, palettes per depth, keys and mouse
 ├── plot/                   # tuios.dev/plot, a Go module of its own: eleven chart kinds (bar, line, area, heatmap, pie, world map and more) as cells with theme roles
 ├── progstatus/             # tuios.dev/progstatus, a Go module of its own: OSC 7501 parser, record store, encoder
@@ -672,7 +675,7 @@ emulator ones above:
   compositor against `ansi.StringWidth`.
 - `internal/session`: the frame reader, the gob payloads (decode, bound,
   round trip), the JSON verb dispatcher, and selectors.
-- `internal/harness`: `Classify` against `Explain` over the bundled
+- `harness` (tuios.dev/harness): `Classify` against `Explain` over the bundled
   manifests and over fuzzed ones.
 - `internal/config` and `internal/tape`: key normalisation, the config
   pipeline, and the tape lexer and parser.

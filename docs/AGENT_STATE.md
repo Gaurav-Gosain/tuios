@@ -1146,7 +1146,7 @@ reliable alone:
 | `argv`  | the command line | names an interpreter, not the agent, whenever one is used |
 | `exe`   | the resolved executable | a version number rather than a name for installers that keep one binary per release |
 
-A manifest in `internal/harness/manifests` matches on any of them. `comm` and
+A manifest in `harness/manifests` matches on any of them. `comm` and
 `argv0` match a base name, `exe_glob` matches the executable path, and
 `argv_path` matches a package name in the path of the script an interpreter
 runs.
@@ -1367,13 +1367,13 @@ from its own live pane reads (Codex, Gemini CLI, Cline, Devin, Grok, Kiro,
 Maki, Qwen Code), so an unhooked pane of one of those can say it is back at its
 prompt rather than drifting to `unknown` on the silence timer. Most bundled
 rules are ported from herdr's manifests (Apache-2.0, see
-`internal/harness/manifests/LICENSE-herdr`), and each manifest names the herdr
+`harness/manifests/LICENSE-herdr`), and each manifest names the herdr
 version it follows. Aider has no screen rules: herdr has no manifest for it
 and none has been written against a live session. Crush has one, written
 against a live Crush: its permission dialog.
 
 Every bundled screen rule decides at least one captured or derived screen under
-`internal/harness/testdata/screens`, and the test suite fails for a rule that
+`harness/testdata/screens`, and the test suite fails for a rule that
 decides none. Each screen says in its header whether it was measured on a live
 pane or derived from herdr's manifest and the chrome it quotes.
 
@@ -1548,7 +1548,7 @@ already has replaces that manifest whole: its detect, screen, title, notify,
 transcript and input blocks alike, and a block the user file leaves out is gone
 rather than inherited. There is no merge, because a rule has no name to merge
 by and its priority means something only next to the rules around it. To change
-one rule, copy the bundled file from `internal/harness/manifests` and edit the
+one rule, copy the bundled file from `harness/manifests` and edit the
 copy.
 
 `tuios doctor agents` lists the manifests loaded from that directory, says which
@@ -1557,7 +1557,7 @@ replace a bundled one, and names every file there that failed to load and why.
 pane's harness.
 
 To draft a manifest from one of herdr's, run
-`go run ./internal/harness/herdrconv path/to/herdr/agent.toml`. It carries
+`go run ./harness/herdrconv path/to/herdr/agent.toml`. It carries
 herdr's nested gates and regions as they are, sends title and progress rules to
 the `[title]` block, and names every rule it drops and why: an `unknown` rule
 (tuios has no "leave the state alone" rule), a region tuios has no equivalent
@@ -4857,7 +4857,7 @@ source = "measured on Claude Code 2.1.280"
 
 `empty` matches the region's lines with the blank ones dropped, joined with
 newlines. Anchor each pattern with `\A` and `\z`. The fixtures under
-`internal/harness/testdata/screens` with a `# box:` line hold each block to
+`harness/testdata/screens` with a `# box:` line hold each block to
 an empty box and a draft.
 
 A harness whose rules cannot show working (Aider, Crush, or a pane with no

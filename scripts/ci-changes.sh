@@ -35,8 +35,8 @@
 #   lib_alone     JSON list of the "alone" library jobs: vt, sketch, small
 set -uo pipefail
 
-ALL=(./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... ./acp/...)
-LIBS=(progstatus vt swatch shot tml plot loom sketch acp)
+ALL=(./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... ./acp/... ./harness/...)
+LIBS=(progstatus vt swatch shot tml plot loom sketch acp harness)
 WINDOWS=(./internal/shimlink/ ./internal/herdrplugin/ ./internal/stopevent/ ./internal/herdrcli/ ./cmd/tuios-web/ ./internal/transcriptview/ ./internal/winacl/ ./internal/ptyspawn/ ./cmd/tuios/ ./internal/app/)
 MACOS=(./internal/transcriptview/ ./internal/herdrplugin/ ./internal/session/)
 WASM=(./cmd/tuios-wasm/... ./internal/webshell/ ./internal/learn/)
@@ -235,7 +235,7 @@ out[lint_libs]=$(list "${lint[*]:-}")
 [ -z "${f[lint_all]:-}" ] || out[lint_libs]=all
 [ -z "${f[lib_vt]:-}" ] || alone+=('"vt"')
 [ -z "${f[lib_sketch]:-}" ] || alone+=('"sketch"')
-for l in progstatus swatch shot tml plot loom acp; do
+for l in progstatus swatch shot tml plot loom acp harness; do
 	if [ -n "${f[lib_$l]:-}" ]; then alone+=('"small"'); break; fi
 done
 if $modfiles; then alone=('"vt"' '"sketch"' '"small"'); fi

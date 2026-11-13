@@ -102,7 +102,7 @@ func TestIdleGateStartupGrace(t *testing.T) {
 }
 
 // claudeIdleScreen is the measured idle Claude Code screen, trimmed to the rows
-// the rules read. See internal/harness/testdata/screens.
+// the rules read. See harness/testdata/screens.
 const claudeIdleScreen = "  \xe2\x97\x90 medium \xc2\xb7 /effort\r\n" +
 	"\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\r\n" +
 	"\xe2\x9d\xaf \r\n" +
