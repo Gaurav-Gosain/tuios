@@ -3857,8 +3857,9 @@ tuios set-session-order work notes
 ### `tuios set-workspace-name`
 
 Name a workspace so the dock and the sidebar show the label instead of the
-number. The number stays the workspace's identity, and is the label an unnamed
-workspace shows. Pass no name to clear it.
+number. The number stays the workspace's identity. An unnamed workspace shows
+the name its active pane's program gave with OSC 1 (`printf '\033]1;logs\007'`),
+else its number. Pass no name to clear it.
 
 **Usage:**
 ```bash

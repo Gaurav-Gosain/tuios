@@ -17364,3 +17364,32 @@ and the capture) and `rail-recording.txt` (the client's screen while the
 pane records) are under `TUIOS_E2E_FRAMES`, in each test's folder. Repeat
 from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRecordPane' -v .`.
+
+## An unnamed workspace takes its active pane's OSC 1 name
+
+`TestWorkspaceLabelFollowsIconName` starts a client on workspace 1 and puts a
+pane on workspace 2, which the client does not stream. That pane sends OSC 1,
+and `list-windows` must carry it as `icon_name` and the dock's pill for
+workspace 2 must show it. OSC 0 on that pane must change its title and keep
+the name, and OSC 0 on workspace 1's pane must not label workspace 1. A name
+set with `set-workspace-name` must win, clearing it must give the OSC 1 name
+back, and an empty OSC 1 must take it off the listing and the dock.
+
+Run on 2026-11-13 on macOS (darwin/arm64). The test passes on the branch. Five
+controls: a binary of main (1bc4c5aae), and this branch with one change each,
+each built into its own binary.
+
+| Control | The test fails with | Verdict |
+| --- | --- | --- |
+| Main | `list-windows carries the OSC 1 name`: no `icon_name` on the pane | **caught** |
+| The daemon's state push left out of its `ExplicitIconName` callback | `the dock labels workspace 2 with the OSC 1 name` timed out | **caught** |
+| The icon name fallback left out of `WorkspaceLabel` | `the dock labels workspace 2 with the OSC 1 name` timed out | **caught** |
+| The daemon records `IconName` instead of `ExplicitIconName`, so OSC 0 counts | `OSC 0 sets the title and keeps the OSC 1 name`: `icon_name` became `fartitle` | **caught** |
+| The icon name left out of `fillLiveFacts` | `list-windows carries the OSC 1 name`: no `icon_name` on the pane | **caught** |
+
+The second control shows the push is what reaches a client that does not
+stream the pane: the daemon recorded the name, and only the push brings it
+to the dock. The frames `workspace-icon-name-labelled`,
+`workspace-icon-name-after-osc0` and `workspace-icon-name-cleared` are under
+`TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorkspaceLabelFollowsIconName$' -v .`.

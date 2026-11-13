@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // adoptSessionLabels copies the daemon-owned labels off a state push. They are
@@ -178,12 +179,46 @@ func (m *OS) attachedAgentTitle() string {
 	return ""
 }
 
-// WorkspaceLabel is what to show for a workspace of the attached session. An
-// unnamed workspace reads back as its number, which is both its identity and
-// the label it has always shown.
+// WorkspaceLabel is what to show for a workspace of the attached session: its
+// name, else the name its active pane's program gave with OSC 1, else its
+// number, which is its identity and the label it has always shown. Only OSC
+// 1 counts, not the title OSC 0 sets along with the icon name: shells and
+// agents send OSC 0 with every prompt, so a label that took it would follow
+// whatever ran last in every workspace.
 func (m *OS) WorkspaceLabel(ws int) string {
 	if name := m.WorkspaceNames[ws]; name != "" {
 		return name
 	}
+	if w := m.workspaceActivePane(ws); w != nil {
+		if name := w.IconName(); name != "" {
+			return name
+		}
+	}
 	return strconv.Itoa(ws)
+}
+
+// workspaceActivePane is the pane that speaks for workspace ws: the focused
+// one while ws is in view, else the one it last had the focus on, else its
+// first pane, as a switch to it would choose. Minimized panes, the rail pane
+// and scratch panes never speak for it. Nil when no pane does.
+func (m *OS) workspaceActivePane(ws int) *terminal.Window {
+	speaks := func(i int) bool {
+		if i < 0 || i >= len(m.Windows) {
+			return false
+		}
+		w := m.Windows[i]
+		return w != nil && w.Workspace == ws && !w.Minimized && !hiddenFromLists(w)
+	}
+	if ws == m.CurrentWorkspace && speaks(m.FocusedWindow) {
+		return m.Windows[m.FocusedWindow]
+	}
+	if i, ok := m.WorkspaceFocus[ws]; ok && speaks(i) {
+		return m.Windows[i]
+	}
+	for i := range m.Windows {
+		if speaks(i) {
+			return m.Windows[i]
+		}
+	}
+	return nil
 }

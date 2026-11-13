@@ -97,6 +97,7 @@ func (t *GhosttyTerminal) observeTitleStack(params []byte) {
 		entry := savedTitle{
 			icon: t.iconName, hasIcon: which != 2,
 			title: title, hasTitle: which != 1,
+			explicitIcon: t.explicitIcon,
 		}
 		if len(t.titleStack) >= maxTitleStack {
 			t.titleStack = append(t.titleStack[:0], t.titleStack[1:]...)
@@ -116,6 +117,15 @@ func (t *GhosttyTerminal) observeTitleStack(params []byte) {
 					cb.IconName(icon)
 				}
 			})
+			if entry.explicitIcon != t.explicitIcon {
+				t.explicitIcon = entry.explicitIcon
+				explicit := entry.explicitIcon
+				t.queue(func(cb Callbacks) {
+					if cb.ExplicitIconName != nil {
+						cb.ExplicitIconName(explicit)
+					}
+				})
+			}
 		}
 		if entry.hasTitle && which != 1 {
 			title := entry.title
@@ -165,9 +175,9 @@ func (t *GhosttyTerminal) Titles() Titles {
 	if !t.closed.Load() {
 		out.Title, _ = t.term.Title()
 	}
-	out.Icon = t.iconName
+	out.Icon, out.ExplicitIcon = t.iconName, t.explicitIcon
 	for _, s := range t.titleStack {
-		out.Stack = append(out.Stack, TitleEntry{Title: s.title, Icon: s.icon, HasTitle: s.hasTitle, HasIcon: s.hasIcon})
+		out.Stack = append(out.Stack, s.entry())
 	}
 	return out
 }

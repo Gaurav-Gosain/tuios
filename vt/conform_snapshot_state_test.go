@@ -113,7 +113,32 @@ func TestSnapshotState_Titles(t *testing.T) {
 	}{
 		{name: "OSC 2 sets the title", in: "\x1b]2;one\x07", want: vt.Titles{Title: "one"}},
 		{name: "OSC 0 sets both", in: "\x1b]0;both\x07", want: vt.Titles{Title: "both", Icon: "both"}},
-		{name: "OSC 1 sets the icon name", in: "\x1b]1;ic\x07", want: vt.Titles{Icon: "ic"}},
+		{name: "OSC 1 sets the icon name", in: "\x1b]1;ic\x07", want: vt.Titles{Icon: "ic", ExplicitIcon: "ic"}},
+		{
+			name: "OSC 0 changes the icon name and keeps the one OSC 1 set",
+			in:   "\x1b]1;api\x07\x1b]0;fish\x07",
+			want: vt.Titles{Title: "fish", Icon: "fish", ExplicitIcon: "api"},
+		},
+		{
+			name: "an empty OSC 1 clears the explicit icon name",
+			in:   "\x1b]1;api\x07\x1b]1;\x07",
+			want: vt.Titles{},
+		},
+		{
+			name: "XTWINOPS 22;1 saves the explicit icon name with the icon name",
+			in:   "\x1b]1;api\x07\x1b[22;1t\x1b]1;main.go\x07",
+			want: vt.Titles{Icon: "main.go", ExplicitIcon: "main.go", Stack: []vt.TitleEntry{{Icon: "api", HasIcon: true, ExplicitIcon: "api"}}},
+		},
+		{
+			name: "XTWINOPS 23;1 puts the explicit icon name back",
+			in:   "\x1b]1;api\x07\x1b[22;1t\x1b]1;main.go\x07\x1b]0;fish\x07\x1b[23;1t",
+			want: vt.Titles{Title: "fish", Icon: "api", ExplicitIcon: "api"},
+		},
+		{
+			name: "XTWINOPS 23;2 leaves the explicit icon name alone",
+			in:   "\x1b]1;api\x07\x1b[22;0t\x1b]1;main.go\x07\x1b[23;2t",
+			want: vt.Titles{Icon: "main.go", ExplicitIcon: "main.go"},
+		},
 		{
 			name: "XTWINOPS 22 saves both",
 			in:   "\x1b]2;shell\x07\x1b[22;0t\x1b]2;vim\x07",
@@ -163,13 +188,24 @@ func TestSnapshotState_Titles(t *testing.T) {
 		}
 	})
 
+	// The backends differ on the icon name after RIS: libghostty clears the
+	// title, and the icon name goes with it. The explicit icon name is kept
+	// on both.
+	t.Run("RIS keeps the explicit icon name", func(t *testing.T) {
+		term := newStateEmulator(t, 20, 4)
+		feed(t, term, "\x1b]1;api\x07\x1bc")
+		if got := term.Titles().ExplicitIcon; got != "api" {
+			t.Errorf("explicit icon name after RIS %q, want api", got)
+		}
+	})
+
 	t.Run("a restore puts the stack back and a pop reads it", func(t *testing.T) {
 		term := newStateEmulator(t, 20, 4)
 		want := vt.Titles{
-			Title: "now", Icon: "nowicon",
+			Title: "now", Icon: "nowicon", ExplicitIcon: "nowexplicit",
 			Stack: []vt.TitleEntry{
 				{Title: "first", HasTitle: true},
-				{Title: "second", Icon: "secondicon", HasTitle: true, HasIcon: true},
+				{Title: "second", Icon: "secondicon", HasTitle: true, HasIcon: true, ExplicitIcon: "secondexplicit"},
 			},
 		}
 		term.RestoreTitles(want)
@@ -177,11 +213,11 @@ func TestSnapshotState_Titles(t *testing.T) {
 			t.Fatalf("titles after the restore %+v, want %+v", got, want)
 		}
 		feed(t, term, "\x1b[23t")
-		if got, w := term.Titles(), (vt.Titles{Title: "second", Icon: "secondicon", Stack: want.Stack[:1]}); !titlesEqual(got, w) {
+		if got, w := term.Titles(), (vt.Titles{Title: "second", Icon: "secondicon", ExplicitIcon: "secondexplicit", Stack: want.Stack[:1]}); !titlesEqual(got, w) {
 			t.Fatalf("titles after one pop %+v, want %+v", got, w)
 		}
 		feed(t, term, "\x1b[23t")
-		if got, w := term.Titles(), (vt.Titles{Title: "first", Icon: "secondicon"}); !titlesEqual(got, w) {
+		if got, w := term.Titles(), (vt.Titles{Title: "first", Icon: "secondicon", ExplicitIcon: "secondexplicit"}); !titlesEqual(got, w) {
 			t.Errorf("titles after two pops %+v, want %+v", got, w)
 		}
 	})
@@ -201,7 +237,7 @@ func TestSnapshotState_Titles(t *testing.T) {
 }
 
 func titlesEqual(a, b vt.Titles) bool {
-	return a.Title == b.Title && a.Icon == b.Icon && slices.Equal(a.Stack, b.Stack)
+	return a.Title == b.Title && a.Icon == b.Icon && a.ExplicitIcon == b.ExplicitIcon && slices.Equal(a.Stack, b.Stack)
 }
 
 func rgb(r, g, b uint8) color.Color { return color.RGBA{R: r, G: g, B: b, A: 0xff} }

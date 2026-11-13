@@ -50,9 +50,9 @@ func tabStopsAt(width int, cols []int) *uv.TabStops {
 
 // Titles is the window title, the icon name and the title stack.
 func (e *Emulator) Titles() Titles {
-	t := Titles{Title: e.title, Icon: e.iconName}
+	t := Titles{Title: e.title, Icon: e.iconName, ExplicitIcon: e.explicitIcon}
 	for _, s := range e.titleStack {
-		t.Stack = append(t.Stack, TitleEntry{Title: s.title, Icon: s.icon, HasTitle: s.hasTitle, HasIcon: s.hasIcon})
+		t.Stack = append(t.Stack, s.entry())
 	}
 	return t
 }
@@ -60,10 +60,10 @@ func (e *Emulator) Titles() Titles {
 // RestoreTitles puts back the titles and the newest entries of the stack, as
 // many as XTWINOPS 22 keeps.
 func (e *Emulator) RestoreTitles(t Titles) {
-	e.title, e.iconName = t.Title, t.Icon
+	e.title, e.iconName, e.explicitIcon = t.Title, t.Icon, t.ExplicitIcon
 	e.titleStack = nil
 	for _, s := range t.Stack[max(len(t.Stack)-maxTitleStack, 0):] {
-		e.titleStack = append(e.titleStack, savedTitle{title: s.Title, icon: s.Icon, hasTitle: s.HasTitle, hasIcon: s.HasIcon})
+		e.titleStack = append(e.titleStack, savedTitleOf(s))
 	}
 }
 

@@ -166,6 +166,9 @@ type Emulator struct {
 
 	// The terminal's icon name and title.
 	iconName, title string
+	// explicitIcon is the icon name as OSC 1 last set it. See
+	// Callbacks.ExplicitIconName.
+	explicitIcon string
 	// titleStack holds what XTWINOPS 22 saved, oldest first. See pushTitle.
 	titleStack []savedTitle
 	// The current reported working directory. This is not validated.

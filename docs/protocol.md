@@ -192,6 +192,27 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
+**A pane's OSC 1 name labels an unnamed workspace.** The name a pane's program
+gives with OSC 1 is the label of its workspace while the workspace has no name
+of its own and the pane is its active one. OSC 0 sets the icon name too, but
+it does not count: shells and agents send it with every prompt. What changes
+for a caller:
+
+- A `list-windows` entry, and `get-window` with no client attached, carry
+  `icon_name` when the pane gave one. The synced window state carries it as
+  `icon_name`, filled from the daemon's emulator into every snapshot and never
+  stored, so a value a client sends back is ignored.
+- The daemon pushes the session's state when a pane's OSC 1 name changes, so
+  a client labels a workspace whose panes it does not stream.
+- In the attached session's own views an unnamed workspace reads as the
+  name instead of its number: the dock, the rail's workspace tags, the go-to
+  picker, the tab menu and `{workspace}` in `appearance.host_title`. A name
+  set with `set-workspace-name` still wins. `list-workspaces`, the session
+  navigator's rows for other sessions, herdr's tab label and the tmux shim
+  are unchanged.
+- The pane snapshot carries `explicit_icon_name`, and each title stack entry
+  `explicit_icon`. An older peer leaves them out and reads as no name.
+
 **A usage limit is a state of its own.** An agent that stopped on its
 harness's usage or rate limit reads `limit_reached`. What changes for a caller:
 
