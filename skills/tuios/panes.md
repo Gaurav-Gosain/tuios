@@ -593,6 +593,12 @@ working. A rename does change it. After a rename, the old name still reaches
 the session from panes that already run, but `tuios attach` takes only the new
 name.
 
+A pane can label its own workspace without the admin grant that
+`set-workspace-name` needs: print OSC 1, `printf '\033]1;review\007'`. An
+unnamed workspace shows that name while the pane is its active one, and a
+name set with `set-workspace-name` wins over it. An empty OSC 1 clears it.
+OSC 0 does not label the workspace: it only sets the pane's title.
+
 A space is a label the person files related sessions under, such as every
 session of one project. It exists while a session is in it, and `tuios ls`
 and the sidebar list the sessions under one heading per space, the sessions
