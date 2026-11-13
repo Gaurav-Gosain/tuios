@@ -180,11 +180,11 @@ func (m *OS) workspaceTabText(tabs *config.DockTabsConfig, n int) string {
 	}
 	// An unnamed workspace passes no name, so the format can leave {name}
 	// out rather than repeat the number {index} already shows.
-	return m.Settings.FormatWorkspaceTab(printableTitle(m.WorkspaceNames[n]), n, tabs.Icon(n), zoom)
+	return m.Settings.FormatWorkspaceTab(printableTitle(m.workspaceGivenName(n)), n, tabs.Icon(n), zoom)
 }
 
-// workspacePillName is the whole name a pill stands for: the workspace's name
-// when it has one, else its number, laundered as chrome and uncapped. This is
+// workspacePillName is the whole name a pill stands for: the workspace's
+// label (WorkspaceLabel), laundered as chrome and uncapped. This is
 // what the hover label says, so the words come from state at draw time and a
 // rename is on the label the same frame it lands.
 func (m *OS) workspacePillName(n int) string {
@@ -245,7 +245,7 @@ func (m *OS) workspacePillHidesName(n int) bool {
 	if format == "" || strings.Contains(format, "{name}") {
 		return false
 	}
-	return printableTitle(m.WorkspaceNames[n]) != "" || !strings.Contains(format, "{index}")
+	return m.workspacePillName(n) != strconv.Itoa(n) || !strings.Contains(format, "{index}")
 }
 
 // occupiedWorkspaceNumbers lists the workspaces worth showing: those holding a

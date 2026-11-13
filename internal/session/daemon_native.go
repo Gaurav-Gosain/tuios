@@ -345,6 +345,11 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 	if w.CustomName != "" {
 		info["custom_name"] = w.CustomName
 	}
+	// The name the pane's program gave with OSC 1, which an unnamed
+	// workspace shows. Omitted when it gave none.
+	if w.IconName != "" {
+		info["icon_name"] = w.IconName
+	}
 	// A zoomed window fills its workspace. Omitted when it is not.
 	if w.Zoomed {
 		info["zoomed"] = true
