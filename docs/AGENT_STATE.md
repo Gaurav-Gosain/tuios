@@ -4886,7 +4886,7 @@ in the prompt box" on the agent's row, and `get-agent-state` reports
 `draft_held`. Send or clear the draft, and the message is typed 3 seconds
 after your last key. A draft that holds a message for 10 minutes opens a
 question in the Inbox, and the row moves to Needs you. Nothing is dropped for
-waiting. Claude Code and Codex have a `[prompt_box]` block. Every other
+waiting. Claude Code, Codex and omp have a `[prompt_box]` block. Every other
 harness gets the 3 second pause only. Nothing polls: while a message waits,
 output from the pane and your keys arm the next look.
 
