@@ -147,8 +147,13 @@ func (m *OS) CancelWindowResize() bool {
 	if i := m.DraggedWindowIndex; i >= 0 && i < len(m.Windows) {
 		win, pre := m.Windows[i], &m.PreResizeState
 		// A zoom that landed mid-gesture gave the pane the zoom's rectangle,
-		// which is the one it has to keep.
-		if win.ID == pre.ID && !win.Zoomed {
+		// which is the one it has to keep. So does a real resize mid-gesture,
+		// such as a host resize clamping a floating pane: the start rectangle
+		// is stale once the guest has been told another size, and putting it
+		// back would leave the pane at a size its guest was never told.
+		aw, ah := win.AnnouncedSize()
+		padW, padH := win.Width-win.ContentWidth(), win.Height-win.ContentHeight()
+		if win.ID == pre.ID && !win.Zoomed && pre.Width-padW == aw && pre.Height-padH == ah {
 			win.X, win.Y = pre.X, pre.Y
 			win.ResizeVisual(pre.Width, pre.Height)
 			win.MarkPositionDirty()
