@@ -228,6 +228,15 @@ This works with any agent, because it types at the target's keyboard. In order:
 `ask-agent` does not use the mailbox, so its reply has no message id. A finished
 ask leaves a record of kind `ask` in the ring for the person to see.
 
+Text that tuios types into an agent for you has the invisible characters that
+can hide an instruction removed first: tag characters, bidi controls,
+zero-width spaces, a joiner outside an emoji, and a run of variation selectors
+past the first. Emoji stay whole, flags and keycaps included. This holds for
+`ask-agent`, `delegate`, a card's prompt, a first prompt and the text of
+`respond`. The `--json` result of `ask-agent`, `delegate` and `respond` says how
+many it removed in `invisible_removed`. `send-text`, `send-keys` and `run` type
+what you give them, byte for byte, into any program.
+
 ```sh
 tuios ask-agent -s work -w review --timeout 900000 --lines 400 'please review the whole diff and summarise the risks'
 ```

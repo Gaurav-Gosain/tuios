@@ -12,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 )
 
 // This file implements the cross-agent verbs: who is here (list-agents), leaving
@@ -1181,6 +1182,11 @@ func (d *Daemon) askAgentSelect(cs *connState, p askAgentParams) (any, *verbErro
 // gone closes when the caller went away: an ask that is still waiting then
 // leaves the line and types nothing.
 func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, target WindowState, p askAgentParams, fromAnySession bool, gone <-chan struct{}) (map[string]any, *verbError) {
+	// The question is typed into an agent with no person reading it first,
+	// so the invisible characters that can hide words in it are removed.
+	// See invisible.StripHidden.
+	var hidden int
+	p.Text, hidden = invisible.StripHidden(p.Text)
 	from, fromLabel := "", ""
 	viaLink := cs != nil && cs.viaLink
 	switch {
@@ -1379,6 +1385,9 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 		// reply_source is where the reply was read: the agent's transcript,
 		// or the lines the pane printed after the question.
 		"reply_source": replySource,
+		// invisible_removed is how many invisible characters were taken out
+		// of the question before it was typed.
+		"invisible_removed": hidden,
 	}, nil
 }
 

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
+	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
@@ -761,6 +762,9 @@ func (d *Daemon) mailHeldCard(sess *Session, win WindowState, row TaskRow, host 
 // where is the -s flag that names the card's session, when it is not the
 // pane's own.
 func (d *Daemon) mailDispatched(sess *Session, window, label string, row TaskRow, prompt, where string) {
+	// The card's prompt is the agent's next instruction. See
+	// invisible.StripHidden.
+	prompt, _ = invisible.StripHidden(prompt)
 	text := "You now hold task card " + row.ID + ": " + row.Title + "\n\n"
 	if strings.TrimSpace(prompt) != "" {
 		text += prompt + "\n\n"

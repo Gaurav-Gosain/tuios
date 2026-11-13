@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
@@ -479,6 +480,13 @@ func (d *Daemon) typePromptGated(sess *Session, windowID string, pastes []string
 	if err != nil {
 		return PromptNotSent, "The agent's pane is gone.", 0, nil
 	}
+	// Every prompt this types goes to an agent: a first prompt, a delegated
+	// task, a card, a queued message. See invisible.StripHidden.
+	clean := make([]string, len(pastes))
+	for i, paste := range pastes {
+		clean[i], _ = invisible.StripHidden(paste)
+	}
+	pastes = clean
 	// Pasted and submitted with a carriage return, the way ask-agent types its
 	// question. See prompt_submit.go.
 	gate := d.newPromptGate(sess, windowID)

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 )
 
 // Peek and respond: read the prompt an agent is blocked on, and answer it,
@@ -506,6 +507,12 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 	if pty == nil {
 		return nil, hintedVerbError(ErrVerbPTYNotFound, "the pane's shell has exited", nil)
 	}
+	// Typed text goes into an agent's input with no person reading it first.
+	// See invisible.StripHidden.
+	hidden := 0
+	if reply.Text != "" {
+		reply.Text, hidden = invisible.StripHidden(reply.Text)
+	}
 	if reply.Text != "" {
 		if _, werr := submitPrompt(d.ctx, pty, reply.Text, d.inputProfileFor(sess, w.ID)); werr != nil {
 			return nil, promptWriteError(werr)
@@ -531,6 +538,9 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 		"settled_by": settledBy,
 		"state":      now.AgentState.Name(),
 		"message":    printableLine(now.AgentMessage),
+		// invisible_removed is how many invisible characters were taken out
+		// of a typed answer.
+		"invisible_removed": hidden,
 	}
 	// Absent when the person answered, so their result keeps its shape.
 	if byPane != "" {

@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
@@ -526,6 +527,10 @@ func (d *Daemon) verbDelegate(cs *connState, params json.RawMessage) (any, *verb
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
+	// The prompt is typed into the child agent with no person reading it
+	// first. See invisible.StripHidden.
+	var hidden int
+	p.Prompt, hidden = invisible.StripHidden(p.Prompt)
 	if strings.TrimSpace(p.Prompt) == "" {
 		return nil, invalidParam("prompt", "prompt is required: the task for the child agent")
 	}
@@ -622,6 +627,7 @@ func (d *Daemon) verbDelegate(cs *connState, params json.RawMessage) (any, *verb
 	}
 	out, _ := res.(map[string]any)
 	out["type"] = "delegated"
+	out["invisible_removed"] = hidden
 	// outcome is the wait's. How the start went is start_outcome.
 	out["start_outcome"] = out["outcome"]
 	delete(out, "outcome")

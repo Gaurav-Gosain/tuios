@@ -17455,3 +17455,22 @@ Run on 2026-11-13 on macOS. The branch passes both cases.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestDockTabFormatLeavesAnUnnamedNameEmpty$' -v .`.
+
+## Text typed into an agent loses hidden characters; send-text does not (#2076)
+
+`TestAskAgentRemovesHiddenTextAndSendTextDoesNot` asks a stand-in agent that
+prints each line it reads as hex. The question holds a sentence in tag
+characters, a zero-width space and a bidi override, and also a keycap, an
+emoji joined with a zero-width joiner and the England flag. The agent must
+read it without the hidden characters and with the emoji whole, and the
+result must give `invisible_removed` as the count. The same bytes through
+`send-text` must reach the agent unchanged.
+
+Run on 2026-11-14 on macOS. The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The `invisible.StripHidden` call taken out of `askAgent` | "ASSERTION: the agent did not read the question clean with its emoji whole" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAskAgentRemovesHiddenTextAndSendTextDoesNot$' -v .`.
