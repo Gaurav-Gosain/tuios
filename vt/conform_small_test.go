@@ -113,3 +113,38 @@ func TestConform_TitleStack(t *testing.T) {
 		}
 	})
 }
+
+// TestConform_ExplicitIconName checks which sequences announce the explicit
+// icon name: OSC 1, and a pop that puts back the one saved with the icon
+// name. OSC 0 sets the icon name too, and announcing it there would hand a
+// host every title a shell sends with its prompt. It runs on the backend the
+// test binary was built with.
+func TestConform_ExplicitIconName(t *testing.T) {
+	for _, tc := range []struct {
+		name, in string
+		want     string // what was announced, comma separated
+	}{
+		{"OSC 1 announces it", "\x1b]1;api\x07", "api"},
+		{"OSC 0 does not", "\x1b]0;fish\x07", ""},
+		{"OSC 0 after OSC 1 does not", "\x1b]1;api\x07\x1b]0;fish\x07", "api"},
+		{"an empty OSC 1 clears it", "\x1b]1;api\x07\x1b]1;\x07", "api,"},
+		{"a pop puts the saved one back", "\x1b]1;api\x07\x1b[22;1t\x1b]1;main.go\x07\x1b[23;1t", "api,main.go,api"},
+		{"a pop of the same name says nothing", "\x1b]1;api\x07\x1b[22;0t\x1b]0;vim\x07\x1b[23;0t", "api"},
+		{"a pop of the title alone says nothing", "\x1b]1;api\x07\x1b[22;0t\x1b]1;main.go\x07\x1b[23;2t", "api,main.go"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			term := vt.New(10, 3)
+			t.Cleanup(func() { _ = term.Close() })
+			var got []string
+			term.SetCallbacks(vt.Callbacks{
+				ExplicitIconName: func(s string) { got = append(got, s) },
+			})
+			if _, err := term.Write([]byte(tc.in)); err != nil {
+				t.Fatalf("write: %v", err)
+			}
+			if s := strings.Join(got, ","); s != tc.want {
+				t.Errorf("explicit icon names announced %q, want %q", s, tc.want)
+			}
+		})
+	}
+}

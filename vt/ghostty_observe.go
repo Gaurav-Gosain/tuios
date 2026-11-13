@@ -524,8 +524,21 @@ func (t *GhosttyTerminal) handleOSC(number int, payload []byte) bool {
 	case 0, 1:
 		// The icon name, which the library does not keep. OSC 0 sets the
 		// title as well, and the library takes that part.
-		if _, name, ok := bytes.Cut(payload, []byte{';'}); ok {
-			t.iconName = sanitiseTitle(name)
+		if _, raw, ok := bytes.Cut(payload, []byte{';'}); ok {
+			name := sanitiseTitle(raw)
+			t.iconName = name
+			explicit := number == 1
+			if explicit {
+				t.explicitIcon = name
+			}
+			t.queue(func(cb Callbacks) {
+				if cb.IconName != nil {
+					cb.IconName(name)
+				}
+				if explicit && cb.ExplicitIconName != nil {
+					cb.ExplicitIconName(name)
+				}
+			})
 		}
 		return true
 	case 4, 104, 10, 11, 12, 110, 111, 112:

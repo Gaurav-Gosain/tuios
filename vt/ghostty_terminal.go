@@ -126,10 +126,12 @@ type GhosttyTerminal struct {
 	// tabstops follows the library's tab stops, which it keeps where no
 	// query reaches (observeTabControl).
 	tabstops *uv.TabStops
-	// iconName and titleStack are what OSC 1 and XTWINOPS 22 set. The
-	// library keeps neither (observeTitleStack).
-	iconName   string
-	titleStack []savedTitle
+	// iconName and titleStack are what OSC 0, OSC 1 and XTWINOPS 22 set. The
+	// library keeps neither (observeTitleStack). explicitIcon is the icon
+	// name as OSC 1 last set it (Callbacks.ExplicitIconName).
+	iconName     string
+	explicitIcon string
+	titleStack   []savedTitle
 	// modifyOtherKeys mirrors the XTMODKEYS level the guest set, for the
 	// input path. libghostty keeps its own copy for its key encoder, which
 	// tuios does not use.

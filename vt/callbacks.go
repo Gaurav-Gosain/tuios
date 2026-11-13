@@ -20,8 +20,18 @@ type Callbacks struct {
 	Title func(string)
 
 	// IconName callback. When set, this function is called when the terminal
-	// icon name changes.
+	// icon name changes: by OSC 1, by OSC 0 along with the title, or by a
+	// title stack pop.
 	IconName func(string)
+
+	// ExplicitIconName callback. When set, this function is called when OSC
+	// 1 sets the icon name on its own, and when a title stack pop puts back
+	// the name OSC 1 had set before the push. OSC 0 does not change it.
+	// Shells and agents send OSC 0 with every prompt to set the window
+	// title, so the icon name follows the title, while a program sends OSC
+	// 1 when it means to name its tab. A full reset keeps it, as it keeps
+	// the icon name.
+	ExplicitIconName func(string)
 
 	// AltScreen callback. When set, this function is called when the alternate
 	// screen is activated or deactivated.
