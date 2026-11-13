@@ -672,7 +672,7 @@ file_drag = false
 
 `[pip]` sets the size (`width`, `height`, border included, default 40x12) and the first `corner` (default `bottom-right`) of the picture-in-picture view that `p` pins. See [SESSIONS.md](SESSIONS.md#picture-in-picture).
 
-`[[keybindings.command]]` binds a key to a command that you write: a scratch terminal, a popup, a pane or a command with no window. A mistake in an entry is a warning, and tuios ignores that entry. See [KEYBINDINGS.md](KEYBINDINGS.md#command-keys).
+`[[keybindings.command]]` binds a key to a command that you write: a scratch terminal, a popup, a pane or a command with no window. A `prefix+` key acts after the leader, any other key acts in both modes by default, and a `scope` such as `prefix.minimize` puts the command inside a leader submenu. A mistake in an entry is a warning, and tuios ignores that entry. See [KEYBINDINGS.md](KEYBINDINGS.md#command-keys).
 
 `[[actions]]` declares an action of your own, `user:NAME`: a built-in action, a program with its arguments (placeholders such as `{pane.cwd}` fill one argument each, and no shell reads them), or a plugin action. A key, a menu row or `tuios actions run` runs it. See [KEYBINDINGS.md](KEYBINDINGS.md#your-actions).
 
