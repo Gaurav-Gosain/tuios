@@ -470,7 +470,7 @@ func createTUIOSProgram(sess sip.Session) *tea.Program {
 		pty := sess.Pty()
 		return pty.Width, pty.Height
 	})
-	slave := sess.PtySlave()
+	slave, owned := sessionTerminal(sess)
 	// The client's frames are diffed as cells and written by the model's own
 	// screen, which needs the slave raw as Bubble Tea's renderer made it.
 	// See app.UseScreen.
@@ -496,9 +496,40 @@ func createTUIOSProgram(sess sip.Session) *tea.Program {
 	// frames were still going out.
 	go cleanupAfterProgram(program, running, func() {
 		model.CloseScreen()
+		if owned {
+			_ = slave.Close()
+		}
 		model.Cleanup()
 	})
 	return program
+}
+
+// sessionTerminal is the terminal file this server draws a session on, and
+// whether the server owns it and has to close it.
+//
+// sip closes its own slave file on the goroutine that ran the program, as soon
+// as Run returns. The screen is closed on the teardown goroutine after that,
+// and it writes the sequences that leave the alternate screen and puts the
+// slave's terminal modes back. On sip's file those two ran in either order:
+// the leave sequences could be lost, and the restore read the descriptor while
+// sip closed it, so a descriptor number already reused by another session's
+// PTY could get this session's saved modes. A descriptor of the server's own
+// stays open until the screen is closed, so the restore finishes first and the
+// browser reads the leave sequences before the PTY reports the end.
+//
+// When the descriptor cannot be had, the session draws on sip's file as it did
+// before, and the shutdown keeps the old order.
+func sessionTerminal(sess sip.Session) (*os.File, bool) {
+	slave := sess.PtySlave()
+	if slave == nil {
+		return nil, false
+	}
+	own, err := ownTerminal(slave)
+	if err != nil {
+		log.Printf("Warning: web session uses the shared terminal file: %v", err)
+		return slave, false
+	}
+	return own, true
 }
 
 // cleanupAfterProgram runs cleanup once the program has stopped for good.
