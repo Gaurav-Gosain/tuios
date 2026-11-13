@@ -1,0 +1,11 @@
+# A press on pane content in tiling mode, a workspace switch, a motion and a second press, with tiling toggled between. fuzzpane0004's drawable stayed 70x16 across tiling and still took a PTY resize. Found 2026-11-13 by a FuzzModel run at af195d555.
+resize 88 20
+workspace 0
+new-pane
+tiling
+press 87 1 1
+workspace 1
+motion 0 0 1
+tiling
+press 0 0 3
+tiling
