@@ -1,0 +1,7 @@
+# nightly run 43367280897, input c89423ac94e1743f. Three panes at 120x40: a
+# press on one pane, then a press on another pane's title bar dragged to the
+# top left corner. The release leaves two panes overlapping by 20x18.
+press 29 8 2
+press 114 1 1
+motion 0 0 1
+release 0 0 1

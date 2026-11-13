@@ -122,6 +122,55 @@ func (m *OS) CancelWindowDrag() bool {
 	return true
 }
 
+// CancelPointerGesture abandons whatever gesture the pointer holds a pane by,
+// a move or a resize, and reports whether there was one. A press of any button
+// while a pane is held calls it, so the pointer holds one gesture at a time.
+func (m *OS) CancelPointerGesture() bool {
+	return m.CancelWindowDrag() || m.CancelWindowResize()
+}
+
+// CancelWindowResize abandons a resize in flight, by a corner (the right-button
+// drag) or by a border, and reports whether there was one. The held pane goes
+// back to the rectangle the press found it at, the deferred PTY resizes are
+// dropped, and a tiled layout is laid again from the tree, which a resize only
+// changes on its release. Nothing is committed.
+//
+// Before it, a left press during a resize started a move of the pane under the
+// pointer on top of the resize. With Dragging and Resizing both set the motion
+// moved that pane, and the release took neither drop path, because the tiling
+// drop rules out a resize, and ended as a resize: the moved pane stayed where
+// the pointer left it, over the tiles, at a rectangle the tree does not hold.
+func (m *OS) CancelWindowResize() bool {
+	if !m.Resizing || m.Dragging || m.ScrollbarDragging {
+		return false
+	}
+	if i := m.DraggedWindowIndex; i >= 0 && i < len(m.Windows) {
+		win, pre := m.Windows[i], &m.PreResizeState
+		// A zoom that landed mid-gesture gave the pane the zoom's rectangle,
+		// which is the one it has to keep.
+		if win.ID == pre.ID && !win.Zoomed {
+			win.X, win.Y = pre.X, pre.Y
+			win.ResizeVisual(pre.Width, pre.Height)
+			win.MarkPositionDirty()
+			win.InvalidateCache()
+		}
+	}
+	m.PendingResizes = make(map[string][2]int)
+	// Cleared before endLostGesture, which would otherwise read the resize as
+	// finished and write the abandoned geometry into the tree.
+	m.Resizing = false
+	m.ClickToTypePending = false
+	m.endLostGesture()
+	m.ResizeStartX, m.ResizeStartY = 0, 0
+	if m.AutoTiling && !m.UseScrollingLayout {
+		// A shared-border resize nudges the neighbours too; the retile puts
+		// every pane back where the tree has it.
+		m.TileAllWindows()
+	}
+	m.SyncStateToDaemon()
+	return true
+}
+
 // heldPaneIDs names the panes a pointer gesture holds by index into m.Windows.
 type heldPaneIDs struct {
 	drag, scrollbar string

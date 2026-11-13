@@ -17364,3 +17364,21 @@ and the capture) and `rail-recording.txt` (the client's screen while the
 pane records) are under `TUIOS_E2E_FRAMES`, in each test's folder. Repeat
 from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRecordPane' -v .`.
+
+## A left press during a pane resize cancels the resize
+
+`TestALeftPressDuringAResizeCancelsTheResize` (drag_during_resize_test.go)
+holds the right button on A, presses the left button on C's title bar,
+carries it to the board's top left corner and releases both. It is the
+gesture the nightly FuzzModel run 43367280897 shrank to
+(`internal/app/testdata/fuzz-repros/layout-overlap-drag-to-the-corner.txt`).
+
+Run on 2026-11-13 on macOS. The branch passes.
+
+| Control | The test fails with | Result |
+| --- | --- | --- |
+| Main (9d9eb6adc), no `CancelWindowResize` | `the panes are where the tree has them after the left button comes up`: C at `X:-10 Y:0 60x19` overlaps A at `X:0 Y:0 60x38` | **caught** |
+
+The frames (`1-before`, `2-held`, `3-after-release`) are under
+`TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestALeftPressDuringAResizeCancelsTheResize$' -v .`.
