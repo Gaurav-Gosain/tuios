@@ -1,0 +1,10 @@
+# Found 2026-11-14 by a FuzzModel run at e5c90b2a5 on arch-btw, not fixed. A help overlay, a key, tiling, zoom and focus with tiling and the rail toggled between. fuzzpane0002 kept its 58x17 drawable across focus 0 and still took a PTY resize. It fails 3 of 3 on origin/main and passes 3 of 3 on v0.12.1. A bisect between them ends in e121e63a5..cceaa748b, where the fuzz oracle itself changed, so it is not yet known whether v0.12.1 has the bug.
+overlay-open 1
+text " "
+tiling
+zoom
+focus 7
+tiling
+sidebar
+tiling
+focus 0
