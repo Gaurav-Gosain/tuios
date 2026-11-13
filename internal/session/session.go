@@ -69,13 +69,18 @@ type WindowState struct {
 	ID         string `json:"id"`
 	Title      string `json:"title"`
 	CustomName string `json:"custom_name,omitempty"`
-	X          int    `json:"x"`
-	Y          int    `json:"y"`
-	Width      int    `json:"width"`
-	Height     int    `json:"height"`
-	Z          int    `json:"z"`
-	Workspace  int    `json:"workspace"`
-	Minimized  bool   `json:"minimized,omitempty"`
+	// IconName is the name the pane's program gave with OSC 1, the one an
+	// unnamed workspace shows while the pane is its active one. OSC 0 does
+	// not set it (vt.Callbacks.ExplicitIconName). It is a live fact, filled
+	// into every snapshot from the daemon's emulator and never stored.
+	IconName  string `json:"icon_name,omitempty"`
+	X         int    `json:"x"`
+	Y         int    `json:"y"`
+	Width     int    `json:"width"`
+	Height    int    `json:"height"`
+	Z         int    `json:"z"`
+	Workspace int    `json:"workspace"`
+	Minimized bool   `json:"minimized,omitempty"`
 	// MinimizedAt is when the window was minimized, in Unix nanoseconds, and
 	// 0 while it is not. The daemon stamps it on every write that minimizes
 	// a window and clears it on restore (stampMinimizedLocked), so every
@@ -1403,6 +1408,9 @@ type PTY struct {
 	// only sees the windows it is subscribed to, and its copy of the title stops
 	// where its subscription did.
 	title atomic.Pointer[string]
+	// iconName is the name the pane's application last gave with OSC 1, for
+	// the label of an unnamed workspace. See WindowState.IconName.
+	iconName atomic.Pointer[string]
 	// place is where the shell is: its directory from OSC 7 (seeded from the
 	// spawn directory) and the git branch there. See session_place.go.
 	place placeRecord
@@ -1444,6 +1452,24 @@ func (p *PTY) Title() string {
 		return *t
 	}
 	return ""
+}
+
+// IconName returns the name this PTY's application last gave with OSC 1, or
+// "" if it has given none.
+func (p *PTY) IconName() string {
+	if n := p.iconName.Load(); n != nil {
+		return *n
+	}
+	return ""
+}
+
+// setIconName records the name OSC 1 gave and reports whether it changed.
+func (p *PTY) setIconName(name string) bool {
+	old := p.iconName.Swap(&name)
+	if old == nil {
+		return name != ""
+	}
+	return *old != name
 }
 
 // agentExitProbeInterval bounds how often output drives an agent-exit probe, so a
@@ -1567,8 +1593,8 @@ type Session struct {
 	cwdCache   map[string]string
 	cwdReadAt  time.Time
 	cwdCacheMu sync.Mutex
-	// placePushQueued coalesces the pushes publishPlaceMove starts.
-	placePushQueued atomic.Bool
+	// liveFactsPushQueued coalesces the pushes publishLiveFactsSoon starts.
+	liveFactsPushQueued atomic.Bool
 
 	// Session state (serializable)
 	state            *SessionState
@@ -3133,6 +3159,9 @@ func (s *Session) fillLiveFacts(state *SessionState) {
 		if t := live[state.Windows[i].PTYID].title; t != "" {
 			state.Windows[i].Title = ClampDisplayText(t)
 		}
+		// The icon name is the emulator's alone, cleared ones included, so a
+		// value a client pushed back never outlives the program's own.
+		state.Windows[i].IconName = live[state.Windows[i].PTYID].iconName
 	}
 
 	// And fill the directory the same way, for the same reason. A shell that
@@ -3235,9 +3264,10 @@ type placeFact struct {
 
 // paneFact is what a pane's emulator and shell know now, for a snapshot.
 type paneFact struct {
-	title string
-	place placeFact
-	dnd   dndRegistrationFact
+	title    string
+	iconName string
+	place    placeFact
+	dnd      dndRegistrationFact
 }
 
 // livePaneFacts is each pane's live facts by PTY id, in one pass over the
@@ -3253,6 +3283,7 @@ func (s *Session) livePaneFacts() map[string]paneFact {
 	for id, pty := range s.ptys {
 		var fact paneFact
 		fact.title = pty.Title()
+		fact.iconName = pty.IconName()
 		fact.dnd = pty.dnd.fact()
 		if _, remote := pty.pty.(*remotePane); !remote {
 			fact.place = placeFact{cwd: pty.place.announcedCwd(), elsewhere: pty.place.Elsewhere()}
@@ -3260,7 +3291,7 @@ func (s *Session) livePaneFacts() map[string]paneFact {
 				fact.place.seed = pty.place.Cwd()
 			}
 		}
-		if fact.title != "" || fact.place != (placeFact{}) || fact.dnd.accepts || fact.dnd.offers {
+		if fact.title != "" || fact.iconName != "" || fact.place != (placeFact{}) || fact.dnd.accepts || fact.dnd.offers {
 			out[id] = fact
 		}
 	}
@@ -5656,6 +5687,15 @@ func (s *Session) setUpPaneTerminal(pty *PTY, terminal vt.Terminal) {
 			pty.title.Store(&title)
 			pty.emit(SessionEvent{Type: EventWindowRetitled, Title: title})
 		},
+		// Recorded, then pushed to the clients, which label an unnamed
+		// workspace with it. A client draws the dock pill of a workspace
+		// whose panes it does not stream, so it cannot read the name off
+		// its own emulator. Programs send OSC 1 rarely, unlike a title.
+		ExplicitIconName: func(name string) {
+			if pty.setIconName(ClampDisplayText(name)) {
+				pty.owner().publishLiveFactsSoon()
+			}
+		},
 		AltScreen: func(on bool) {
 			pty.emit(SessionEvent{Type: EventModeChanged, Mode: "alt-screen", Enabled: on})
 		},
@@ -5672,7 +5712,7 @@ func (s *Session) setUpPaneTerminal(pty *PTY, terminal vt.Terminal) {
 				return
 			}
 			if pty.place.announce(raw) {
-				pty.owner().publishPlaceMove()
+				pty.owner().publishLiveFactsSoon()
 			}
 		},
 		// Parked rather than applied: this fires with the terminal lock held, and

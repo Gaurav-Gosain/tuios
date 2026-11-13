@@ -1350,6 +1350,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	if !w.DaemonMode || w.PTYID == "" || !m.SubscribedPTYs[w.PTYID] {
 		w.SetTitle(ws.Title)
 	}
+	w.SetIconName(ws.IconName)
 	adoptWindowHost(w, ws.Host)
 	m.takeDaemonCwd(w, ws)
 	m.takeDaemonDnD(w, ws)
@@ -1503,6 +1504,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 // state reaches the session this client owns.
 func adoptWindowState(window *terminal.Window, ws session.WindowState) {
 	window.CustomName = ws.CustomName
+	window.SetIconName(ws.IconName)
 	window.Workspace = ws.Workspace
 	window.Minimized = ws.Minimized
 	window.MinimizedAt = ws.MinimizedAt

@@ -106,6 +106,20 @@ func (w *Window) Title() string {
 // SetTitle records the current window title.
 func (w *Window) SetTitle(t string) { w.title.Store(&t) }
 
+// IconName returns the name the window's program gave with OSC 1, the label
+// of an unnamed workspace while the window is its active one. OSC 0 does not
+// set it. A daemon window takes it from the daemon's state, which carries it
+// for every pane, streamed or not.
+func (w *Window) IconName() string {
+	if p := w.iconName.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
+// SetIconName records the name OSC 1 gave.
+func (w *Window) SetIconName(n string) { w.iconName.Store(&n) }
+
 // IsAltScreen reports whether the application is using the alternate screen buffer.
 func (w *Window) IsAltScreen() bool { return w.isAltScreen.Load() }
 
@@ -129,6 +143,7 @@ type Window struct {
 	modesOnly modesFilter
 
 	title         atomic.Pointer[string]           // Written on PTY/monitor goroutine, read on UI goroutine
+	iconName      atomic.Pointer[string]           // OSC 1 name; written like title
 	geomSnap      atomic.Pointer[GeometrySnapshot] // See PublishGeometry
 	CustomName    string                           // User-defined window name
 	Width         int
@@ -795,6 +810,13 @@ func newWindowBase(id, title string, x, y, width, height, z int, ptyDataChan cha
 		Title: func(title string) {
 			if title != "" {
 				window.SetTitle(title)
+			}
+		},
+		// A daemon window's comes with the daemon's state instead, so an
+		// older sync and this emulator never take turns setting it.
+		ExplicitIconName: func(name string) {
+			if !window.DaemonMode {
+				window.SetIconName(name)
 			}
 		},
 		ClipboardSet: func(_ string, content string) {

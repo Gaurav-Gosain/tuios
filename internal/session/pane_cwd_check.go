@@ -93,7 +93,7 @@ func (s *Session) checkPaneCwd(p *PTY) {
 	// ssh or what it runs, holds the terminal. Once the shell has it back the
 	// pane is on this machine again, whether or not this shell announces.
 	if p.place.Elsewhere() != "" && shellAtPrompt(p) && p.place.setElsewhere("") {
-		s.publishPlaceMove()
+		s.publishLiveFactsSoon()
 	}
 	if p.place.announced.Load() {
 		// The shell reports its own moves, at once and more exactly than
@@ -115,19 +115,20 @@ func (s *Session) checkPaneCwd(p *PTY) {
 	c.seen = cwd
 	c.mu.Unlock()
 	if moved {
-		s.publishPlaceMove()
+		s.publishLiveFactsSoon()
 	}
 }
 
-// publishPlaceMove pushes the session's state because a pane moved. It runs on
-// its own goroutine, because a caller can hold the emulator's lock, and moves
+// publishLiveFactsSoon pushes the session's state because a live fact of a
+// pane changed: it moved, or its program named it with OSC 1. It runs on its
+// own goroutine, because a caller can hold the emulator's lock, and changes
 // that arrive while one push is waiting to start share it.
-func (s *Session) publishPlaceMove() {
-	if !s.placePushQueued.CompareAndSwap(false, true) {
+func (s *Session) publishLiveFactsSoon() {
+	if !s.liveFactsPushQueued.CompareAndSwap(false, true) {
 		return
 	}
 	go func() {
-		s.placePushQueued.Store(false)
+		s.liveFactsPushQueued.Store(false)
 		s.PublishLiveFacts()
 	}()
 }

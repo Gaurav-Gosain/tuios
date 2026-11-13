@@ -1467,7 +1467,7 @@ func buildVerbRegistry() map[string]verbEntry {
 		"list-windows": {
 			scope:       scopeRead,
 			link:        needList,
-			description: "List the windows in a session. The list carries shell, the base name of the shell a new pane in the session runs. Each window carries a host when its process runs on another machine, and omits it when the process is on this one. A window whose shell marks its commands with OSC 133 also carries at_prompt, command_seq, marks_commands (the shell has sent a command-start mark), prompt_marks_only when it ran a command without one, running_cmdline while a command runs, and last_cmdline, last_exit_code and last_duration_ms once one has finished. A pane given grants of its own carries them as grants; a pane on the default of [agents.permissions] omits it. A pane whose process runs on this machine carries pid, the process it started, and tty, its terminal device. A zoomed window carries zoomed, and a floating window carries floating.",
+			description: "List the windows in a session. The list carries shell, the base name of the shell a new pane in the session runs. Each window carries a host when its process runs on another machine, and omits it when the process is on this one. A window whose shell marks its commands with OSC 133 also carries at_prompt, command_seq, marks_commands (the shell has sent a command-start mark), prompt_marks_only when it ran a command without one, running_cmdline while a command runs, and last_cmdline, last_exit_code and last_duration_ms once one has finished. A pane given grants of its own carries them as grants; a pane on the default of [agents.permissions] omits it. A pane whose process runs on this machine carries pid, the process it started, and tty, its terminal device. A zoomed window carries zoomed, and a floating window carries floating. A window whose program named itself with OSC 1 carries icon_name, the name an unnamed workspace shows while the window is its active one.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "rail", Type: "bool", Description: "Also list the rail pane, the pane a client draws in its rail's pane section. It carries rail, the command line it runs.", Default: "false"},
@@ -2621,7 +2621,7 @@ func buildVerbRegistry() map[string]verbEntry {
 		"set-workspace-name": {
 			scope:       scopeDeny,
 			link:        needWrite,
-			description: "Name a workspace. The workspace keeps its number for addressing. An unnamed workspace shows its number.",
+			description: "Name a workspace. The workspace keeps its number for addressing. An unnamed workspace shows the name its active pane gave with OSC 1, else its number.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "workspace", Type: "int", Required: true, Description: "Workspace number to name."},

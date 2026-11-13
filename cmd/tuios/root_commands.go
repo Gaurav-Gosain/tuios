@@ -1555,7 +1555,9 @@ func newSetWorkspaceNameCommand() *cobra.Command {
 		Use:   "set-workspace-name <workspace> [name]",
 		Short: "Name a workspace",
 		Long: `Name a workspace so the dock and the sidebar show the label instead of the
-number. The number stays the workspace's identity. Pass no name to clear it.`,
+number. The number stays the workspace's identity. An unnamed workspace shows
+the name its active pane's program gave with OSC 1, else its number. Pass no
+name to clear it.`,
 		Example: `  # Name workspace 2
   tuios set-workspace-name 2 review
 
