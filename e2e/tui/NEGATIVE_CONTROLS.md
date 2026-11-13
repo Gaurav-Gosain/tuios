@@ -17386,11 +17386,11 @@ registry wiring cut back to its old two tables.
 
 | Control | The test fails with | Result |
 | --- | --- | --- |
-| main at 1bc4c5aae | `the submenu command did not write "SUBMENU" to .../submenu-ran: read ""` (command_keys_submenu_test.go:73) | **caught** |
+| main at 1bc4c5aae | `ASSERTION: the submenu command writes "SUBMENU" to .../submenu-ran`; the last state is `read: open .../submenu-ran: no such file or directory` (command_keys_submenu_test.go:70) | **caught** |
 | `if commandTables[Table(t)]` in `internal/config/registry.go` put back to `if Table(t) == TablePrefixMode \|\| Table(t) == TableGlobal` | the same | **caught** |
 
-The branch passes in 1.29s, with both positive halves: the submenu file and
-the LEADER file. Both negative builds fail at line 73, the submenu assertion;
+The branch passes in 1.97s, with both positive halves: the submenu file and
+the LEADER file. Both negative builds fail at line 70, the submenu assertion;
 the shorter chords leave the file absent in every run, so neither control is a
 false pass from a command wired into the wrong scope. On main `scope` is an
 unknown field, so the entry falls back to a global `alt+j` command and the

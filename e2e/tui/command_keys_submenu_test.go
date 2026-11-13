@@ -3,9 +3,9 @@ package tuie2e
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -25,16 +25,13 @@ import (
 
 func waitForSubmenuFile(t *testing.T, path, want, what string) {
 	t.Helper()
-	deadline := time.Now().Add(uiTimeout)
-	var data []byte
-	for time.Now().Before(deadline) {
-		data, _ = os.ReadFile(path)
-		if strings.Contains(string(data), want) {
-			return
+	waitUntil(t, what+" writes "+strconv.Quote(want)+" to "+path, uiTimeout, func() (bool, string) {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return false, "read: " + err.Error()
 		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	t.Fatalf("%s did not write %q to %s: read %q", what, want, path, data)
+		return strings.Contains(string(data), want), "read " + strconv.Quote(string(data))
+	})
 }
 
 func TestCommandKeyInsideASubmenu(t *testing.T) {
