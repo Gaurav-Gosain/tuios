@@ -2,9 +2,9 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -57,18 +57,15 @@ func iconRows(t *testing.T, base string) []iconRow {
 // waitIconRow waits for the pane id to satisfy ok in the daemon's listing.
 func waitIconRow(t *testing.T, term *tuitest.Terminal, base, id, what string, ok func(iconRow) bool) {
 	t.Helper()
-	deadline := time.Now().Add(shellTimeout)
-	for {
-		for _, r := range iconRows(t, base) {
+	waitUntil(t, what, shellTimeout, func() (bool, string) {
+		rows := iconRows(t, base)
+		for _, r := range rows {
 			if r.ID == id && ok(r) {
-				return
+				return true, ""
 			}
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("%s: listing %+v\n%s", what, iconRows(t, base), term.Snapshot())
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+		return false, fmt.Sprintf("listing %+v\n%s", rows, term.Snapshot())
+	})
 }
 
 // sendIconPane types line into pane id and runs it.
@@ -124,15 +121,15 @@ func TestWorkspaceLabelFollowsIconName(t *testing.T) {
 	// OSC 0 alone on the workspace in view labels nothing.
 	sendIconPane(t, base, home, `printf '\033]0;hometitle\007'`)
 	waitIconRow(t, term, base, home, "OSC 0 sets the home pane's title", func(r iconRow) bool { return r.Title == "hometitle" })
-	time.Sleep(insertGuard)
-	s := term.Screen()
 	// The pane's frame draws its title on the row above the dock, so only
 	// the pill row is read.
-	_, rows := s.Size()
-	pills := s.Line(rows - 1)
-	if strings.Contains(pills, "hometitle") || strings.Contains(pills, "fartitle") || !strings.Contains(pills, "farlabel") {
-		t.Fatalf("the dock shows an OSC 0 title as a workspace label, or lost the OSC 1 one\n%s", term.Snapshot())
-	}
+	stayTrue(t, "the dock shows no OSC 0 title as a workspace label and keeps the OSC 1 one", insertGuard, func() (bool, string) {
+		s := term.Screen()
+		_, rows := s.Size()
+		pills := s.Line(rows - 1)
+		ok := !strings.Contains(pills, "hometitle") && !strings.Contains(pills, "fartitle") && strings.Contains(pills, "farlabel")
+		return ok, term.Snapshot()
+	})
 	saveFrame(t, term, "workspace-icon-name-after-osc0")
 	for _, r := range iconRows(t, base) {
 		if r.ID == home && r.IconName != "" {
