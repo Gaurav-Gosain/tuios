@@ -163,16 +163,19 @@ type State struct {
 	// sends none, reads as saying nothing, and the client keeps its own.
 	TabStops []byte `json:"tab_stops,omitempty"`
 
-	// Title, IconName and TitleStack are the window title, the icon name
-	// and what XTWINOPS 22 saved, oldest first. A program saves the shell's
-	// title when it starts and puts it back when it quits, so a client
-	// restored without the stack keeps the program's title after it has
-	// gone. TitlesKnown says the daemon reported them, so an empty title is
-	// one the guest set and not an older daemon that says nothing.
-	Title       string            `json:"title,omitempty"`
-	IconName    string            `json:"icon_name,omitempty"`    // see Title
-	TitleStack  []TitleEntryState `json:"title_stack,omitempty"`  // see Title
-	TitlesKnown bool              `json:"titles_known,omitempty"` // see Title
+	// Title, IconName, ExplicitIconName and TitleStack are the window
+	// title, the icon name, the icon name as OSC 1 last set it
+	// (vt.Titles.ExplicitIcon) and what XTWINOPS 22 saved, oldest first. A
+	// program saves the shell's title when it starts and puts it back when
+	// it quits, so a client restored without the stack keeps the program's
+	// title after it has gone. TitlesKnown says the daemon reported them, so
+	// an empty title is one the guest set and not an older daemon that says
+	// nothing.
+	Title            string            `json:"title,omitempty"`
+	IconName         string            `json:"icon_name,omitempty"`          // see Title
+	ExplicitIconName string            `json:"explicit_icon_name,omitempty"` // see Title
+	TitleStack       []TitleEntryState `json:"title_stack,omitempty"`        // see Title
+	TitlesKnown      bool              `json:"titles_known,omitempty"`       // see Title
 
 	// GuestColors is what the guest set with OSC 4, 10, 11 and 12. A palette
 	// entry decides how the guest's next SGR in that slot is painted, and
@@ -225,6 +228,8 @@ type TitleEntryState struct {
 	Icon     string `json:"icon,omitempty"`      // saved icon name
 	HasTitle bool   `json:"has_title,omitempty"` // whether the entry holds a title
 	HasIcon  bool   `json:"has_icon,omitempty"`  // whether the entry holds an icon name
+	// ExplicitIcon is the saved explicit icon name, empty from an older daemon.
+	ExplicitIcon string `json:"explicit_icon,omitempty"`
 }
 
 // GuestColorState is vt.GuestColors on the wire, each colour encoded by
@@ -243,14 +248,14 @@ type PaletteColorState struct {
 }
 
 func titlesToWire(state *State, ti vt.Titles) {
-	state.Title, state.IconName, state.TitlesKnown = ti.Title, ti.Icon, true
+	state.Title, state.IconName, state.ExplicitIconName, state.TitlesKnown = ti.Title, ti.Icon, ti.ExplicitIcon, true
 	for _, e := range ti.Stack {
 		state.TitleStack = append(state.TitleStack, TitleEntryState(e))
 	}
 }
 
 func titlesFromWire(state *State) vt.Titles {
-	ti := vt.Titles{Title: state.Title, Icon: state.IconName}
+	ti := vt.Titles{Title: state.Title, Icon: state.IconName, ExplicitIcon: state.ExplicitIconName}
 	for _, e := range state.TitleStack {
 		ti.Stack = append(ti.Stack, vt.TitleEntry(e))
 	}

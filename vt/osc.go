@@ -73,9 +73,12 @@ func (e *Emulator) handleTitle(cmd int, data []byte) {
 		}
 	case 1: // Set icon name
 		name := sanitiseTitle(parts[1])
-		e.iconName = name
+		e.iconName, e.explicitIcon = name, name
 		if e.cb.IconName != nil {
 			e.cb.IconName(name)
+		}
+		if e.cb.ExplicitIconName != nil {
+			e.cb.ExplicitIconName(name)
 		}
 	case 2: // Set window title
 		name := sanitiseTitle(parts[1])
