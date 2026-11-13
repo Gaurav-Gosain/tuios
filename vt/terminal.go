@@ -464,15 +464,18 @@ type CellRun struct {
 // Titles is the window title, the icon name and the title stack XTWINOPS 22
 // and 23 push to and pop from, oldest entry first.
 type Titles struct {
-	Title, Icon string       // window title and icon name
-	Stack       []TitleEntry // saved titles, oldest first
+	Title, Icon  string       // window title and icon name
+	ExplicitIcon string       // the icon name as OSC 1 last set it, see Callbacks.ExplicitIconName
+	Stack        []TitleEntry // saved titles, oldest first
 }
 
 // TitleEntry is one entry of the title stack. A push can save the title, the
-// icon name or both, and a pop puts back only what the entry holds.
+// icon name or both, and a pop puts back only what the entry holds. An entry
+// that holds the icon name holds ExplicitIcon too.
 type TitleEntry struct {
 	Title, Icon       string // saved title and icon name
 	HasTitle, HasIcon bool   // whether the entry holds each
+	ExplicitIcon      string // saved explicit icon name
 }
 
 // GuestColors is what a guest set with OSC 4 (Palette, by slot) and with OSC

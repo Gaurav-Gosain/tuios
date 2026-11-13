@@ -482,13 +482,13 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 		t.tabstops = uv.DefaultTabStops(t.width)
 	}
 	if r.titles != nil {
-		t.iconName = r.titles.Icon
+		t.iconName, t.explicitIcon = r.titles.Icon, r.titles.ExplicitIcon
 		t.titleStack = nil
 		for _, e := range r.titles.Stack {
-			t.titleStack = append(t.titleStack, savedTitle{title: e.Title, icon: e.Icon, hasTitle: e.HasTitle, hasIcon: e.HasIcon})
+			t.titleStack = append(t.titleStack, savedTitleOf(e))
 		}
 	} else if !extend {
-		t.iconName = ""
+		t.iconName, t.explicitIcon = "", ""
 		t.titleStack = nil
 	}
 	t.scrollRegion = uv.Rect(0, 0, t.width, t.height)
