@@ -1,0 +1,14 @@
+# harness: claude-code
+# want: working
+# how: derived. The measured idle screen with the live turn footer and the
+# spinner line herdr's claude manifest keys on. The prompt box stays on screen
+# during a turn, which is why the working rules must outrank the idle one.
+---
+⏺ Reading internal/session/agent_state.go
+
+✻ Thinking… (12s · ↑ 1.2k tokens)
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · esc to interrupt

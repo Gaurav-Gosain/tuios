@@ -1,0 +1,253 @@
+# harness: claude-code
+# want: needs_input
+# how: derived. The folder trust prompt at the start of a session somewhere
+# new.
+---
+ Do you trust the files in this folder?
+
+ /home/u/src/new-project
+
+ ❯ 1. Yes, proceed
+   2. No, exit
+=====
+# harness: claude-code
+# want: needs_input
+# how: derived. Plan mode stopped for approval.
+---
+ Would you like to proceed?
+
+ ❯ 1. Yes, and auto-accept edits
+   2. Yes, and manually approve edits
+   3. No, keep planning
+=====
+# harness: claude-code
+# want: needs_input
+# how: derived. A select form under the last rule, with its navigate hint,
+# from herdr's claude manifest (live_blocked_form).
+---
+⏺ I need to pick a base branch.
+────────────────────────────────────────────
+ Which branch should the PR target?
+ ❯ main
+   release/2.1
+ Enter to select · ↑/↓ to navigate · Esc to cancel
+=====
+# harness: claude-code
+# want: needs_input
+# how: derived. The dynamic workflow question, herdr's
+# dynamic_workflow_prompt.
+---
+ Run a dynamic workflow?
+ This runs 12 agents across the repo.
+ ❯ Yes   No
+ Esc to cancel
+=====
+# harness: claude-code
+# want: needs_input
+# how: derived. An MCP elicitation dialog, herdr's mcp_elicitation_prompt.
+---
+ MCP server "linear" requests your input
+ Which team should the issue go to?
+ ❯ Accept
+   Decline
+ Esc to cancel
+=====
+# harness: claude-code
+# want: needs_input
+# how: derived. An older prompt that only says it waits for permission,
+# herdr's legacy_no_prompt_blocker.
+---
+⏺ Bash(rm -rf build)
+  ⎿  Waiting for permission…
+=====
+# harness: claude-code
+# want: none
+# how: derived. The same phrase above an empty prompt line: the prompt was
+# answered and the agent is back at rest, which the not_regex says.
+---
+⏺ Bash(rm -rf build)
+  ⎿  Waiting for permission…
+  ⎿  Done
+❯
+=====
+# harness: claude-code
+# want: working
+# how: derived. The /btw side-question overlay, herdr's btw_overlay_working.
+---
+ /btw what does the retry flag do?
+ It retries a failed request once after 200ms.
+ Esc to close
+=====
+# harness: claude-code
+# want: working
+# how: derived. Background agents still running, on the line just above the
+# prompt box, herdr's background_agents_working.
+---
+⏺ Started 2 agents.
+✻ Waiting for 2 background agents to finish
+────────────────────────────────────────────
+❯
+────────────────────────────────────────────
+  ? for shortcuts
+=====
+# harness: claude-code
+# want: working
+# how: derived. MCP tasks still running in the activity summary, herdr's
+# background_mcp_task_working.
+---
+⏺ Filed the issue.
+✻ Churned for 3m 12s · 2 MCP tasks still running
+────────────────────────────────────────────
+❯
+────────────────────────────────────────────
+  ? for shortcuts
+=====
+# harness: claude-code
+# want: needs_input
+# how: measured on Claude Code 2.1.311, 2026-10-27, with tuios capture-pane.
+# An AskUserQuestion form in Hebrew. Claude Code draws a rule with the
+# session's name under the form, so the form is above the last rule.
+---
+❯ Use the AskUserQuestion tool exactly once. Question (in Hebrew): 'בדיקה:
+  איזה צבע?' header 'צבע', options: 'אדום', 'ירוק', 'כחול', each with a
+  one-word Hebrew description. Then stop.
+──────────────────────────────────────────────────────────────────────────────
+ ☐ צבע
+
+בדיקה: איזה צבע?
+
+❯ 1. אדום
+     חם
+  2. ירוק
+     טבעי
+  3. כחול
+     קר
+  4. Type something.
+──────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel
+───────────────────────────────────────────────── AskUserQuestion Color Test ─
+=====
+# harness: claude-code
+# want: needs_input
+# how: measured on Claude Code 2.1.311, 2026-10-27, in a pane 39 columns wide.
+# The form's footer wraps at a space, and the titled rule is under it.
+---
+אבחון (מקליט את המסך שלי): חכה 15 שניות
+לפני שתענה
+
+❯ 1. הגיע ל-Snap
+     עניתי מ-Snap
+  2. לא הגיע
+     עניתי כאן
+  3. Type something.
+───────────────────────────────────────
+  4. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc
+to cancel
+─────── Tuios cheat sheet and roadmap ─
+=====
+# harness: claude-code
+# want: needs_input
+# how: derived. The permission menu with the titled rule of Claude Code
+# 2.1.311 under it.
+---
+ Bash command
+
+   rm -rf build
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don't ask again for rm commands
+   3. No, and tell Claude what to do differently (esc)
+
+ Esc to cancel · Tab to amend · ctrl+e to explain
+───────────────────────────────────────────────── Build cleanup ─
+=====
+# harness: claude-code
+# want: none
+# how: derived. A titled rule with a line under it is a rule like any other:
+# a form's footer above it is settled output, not a form waiting.
+---
+────────────────────────────────────────────
+ Which branch should the PR target?
+ ❯ main
+   release/2.1
+ Enter to select · ↑/↓ to navigate · Esc to cancel
+──────────────────────────────── My session ─
+  ⏵⏵ accept edits on
+=====
+# harness: claude-code
+# want: idle
+# how: measured on Claude Code 2.1.311, 2026-10-28, an idle pane in a named
+# session. The titled rule is the top of the prompt box, a bare rule closes
+# it, and the status line is under it.
+---
+                                                                     new task? /clear to save 155.1k tokens
+────────────────────────────────────────────────────────────── Kanata Keyboard Recapture After Wake ─
+❯ 
+─────────────────────────────────────────────────────────────────────────────────────────────────────
+  [Opus 5.5 ◑ high] │ brain
+  Context ██░░░░░░░░ 15%
+=====
+# harness: claude-code
+# want: idle
+# how: derived. Transcript prose wraps a phrase a whole-tail rule looks for
+# ("waiting for" / "permission"), with a draft typed. Only the form under the
+# last rule is read across a wrap, so this stays idle.
+---
+⏺ The pane stops at the line that says it is waiting for
+  permission, and then nothing happens.
+──────────────────────────────────────────────────────
+❯ ok
+──────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+=====
+# harness: claude-code
+# want: none
+# how: derived. An answered form scrolled up, with a titled line at the
+# bottom and no rule above it in the tail. The region stays empty rather than
+# reading the settled form.
+---
+⏺ User answered Claude's questions:
+  ⎿ · Which branch should the PR target? → main
+     Enter to select · ↑/↓ to navigate · Esc to cancel
+⏺ Opening the PR against main.
+──────────── Showing detailed transcript · ctrl+o to toggle ─
+=====
+# harness: claude-code
+# want: needs_input
+# how: derived. A question form in a named session with a task panel under
+# the titled divider, after herdr's live_blocked_form_named_session (herdr
+# commit 9c38bbc). The divider is not the last line, so only this rule sees
+# the form.
+---
+────────────────────────────────────────────
+ Which branch should the PR target?
+ ❯ main
+   release/2.1
+ Enter to select · ↑/↓ to navigate · Esc to cancel
+──────────────────────────────── My session ─
+  3 tasks (1 done, 1 in progress, 1 open)
+  ✔ Read the config
+  ◼ Write the patch
+  ◻ Run the tests
+=====
+# harness: claude-code
+# want: none
+# how: derived. The same form with a free-form line after the task panel.
+# That line can be newer output, so the form is history (herdr's
+# live_blocked_form_named_session refuses it too).
+---
+────────────────────────────────────────────
+ Which branch should the PR target?
+ ❯ main
+ Enter to select · ↑/↓ to navigate · Esc to cancel
+──────────────────────────────── My session ─
+  3 tasks (1 done, 1 in progress, 1 open)
+  ✔ Read the config
+  ◼ Write the patch
+  ◻ Run the tests
+Opened the PR against main.

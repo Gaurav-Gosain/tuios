@@ -1,0 +1,74 @@
+# harness: codex
+# want: needs_input
+# how: derived. The directory trust prompt at start, from herdr's codex
+# manifest (trust_directory).
+---
+> You are in /home/u/src/app
+
+  Do you trust the contents of this directory? Working with untrusted
+  contents comes with higher risk of prompt injection.
+
+› 1. Yes, continue
+  2. No, quit
+
+  Press enter to continue
+=====
+# harness: codex
+# want: needs_input
+# how: measured. Live Codex 0.164.0 pane on 2026-10-24; path shortened.
+---
+  Folder access
+  /var/home/u/src/app
+
+  Trust this folder? Codex can read, edit, and run files here, subject to
+  your permission settings. Folder settings can run code automatically, even
+  without a model request. Continue only if you trust these files. Your
+  trust decision will be saved.
+
+› 1. Trust and continue
+  2. Back to Agent Command Center
+
+  enter continue · esc back
+=====
+# harness: codex
+# want: needs_input
+# how: derived. The update offer at start, herdr's startup_update.
+---
+  Update available! 0.51.0 -> 0.52.0
+
+› 1. Update now (runs `npm install -g @openai/codex`)
+  2. Skip
+  3. Skip until next version
+
+  Press enter to continue
+=====
+# harness: codex
+# want: needs_input
+# how: derived. The update chooser of Codex 0.159 and later, herdr's
+# startup_update (second form).
+---
+  Update available · 0.159.0 -> 0.160.0
+
+› 1. Update now
+  2. Skip
+
+  enter continue · esc skip
+=====
+# harness: codex
+# want: none
+# how: derived. The passive update notice in the history has neither chooser
+# footer, so it is not a prompt (herdr's startup_update refuses it too).
+---
+  Update available · 0.159.0 -> 0.160.0 · run npm install -g @openai/codex
+› 
+=====
+# harness: codex
+# want: needs_input
+# how: derived. The file mention popup, whose tab names herdr's
+# live_strong_blocker lists.
+---
+› look at @src/ma
+
+  All Results   Filesystem Only   Plugins
+  src/main.go
+  src/model.go

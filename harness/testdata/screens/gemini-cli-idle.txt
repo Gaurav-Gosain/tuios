@@ -1,0 +1,11 @@
+# harness: gemini-cli
+# want: idle
+# how: derived. The Gemini CLI input box at rest, as its README screenshots
+# show it. Gemini CLI is not installed where this was written.
+---
+✦ The tests pass.
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ >   Type your message or @path/to/file                                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+~/dev/tuios (main*)           no sandbox (see /docs)            gemini-2.5-pro (98% context left)

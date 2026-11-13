@@ -1,0 +1,91 @@
+# Rules after herdr's agent-detection manifest for copilot
+# (github.com/herdrdev/herdr, src/detect/manifests/github-copilot.toml,
+# manifest version 2026.08.29.1, Apache-2.0; see LICENSE-herdr). Regenerate a
+# draft with
+#   go run ./herdrconv
+# herdr has no idle rule for it.
+
+schema_version = 1
+id             = "copilot"
+display_name   = "GitHub Copilot"
+aliases        = ["copilot-cli"]
+priority       = 50
+
+# npm @github/copilot is a node loader that spawns a platform binary named
+# copilot out of node_modules and stays resident above it, so both shapes run:
+# a node process whose run token is the loader, and a native child. Detection
+# and the selection rule below were verified against a live pane: copilot's
+# folder-trust dialog classified needs_input end to end.
+[detect]
+comm      = ["copilot"]
+argv0     = ["copilot", "github-copilot"]
+argv_path = ["@github/copilot"]
+
+[screen]
+enabled   = true
+fold_case = true
+lines     = 8
+
+# herdr rule: selection_blocker. A selection dialog is on screen: a cancel
+# hint together with a select, confirm, submit or accept hint.
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+message  = "Waits for a choice."
+all_of   = [
+  { any = ["esc to cancel", "esc cancel"] },
+  { any = ["enter to select", "enter to confirm", "enter to submit", "enter accept"] },
+]
+
+# herdr rule: background_agents_working.
+#
+#   ◎ Waiting for background agents · 2 running
+[[screen.rule]]
+state    = "working"
+priority = 110
+message  = "Waits for background agents."
+region   = "bottom_non_empty_lines(6)"
+regex    = ['^\s*◎\s+Waiting for background agents(?:\s|·|$)']
+
+# herdr rule: working_cancel_hint. A cancel or interrupt hint while a turn
+# runs. A selection dialog carries a cancel hint too, which is why the
+# selection rule above outranks this one.
+[[screen.rule]]
+state    = "working"
+priority = 100
+message  = "Works on a turn."
+any      = ["esc to cancel", "esc cancel", "esc again to cancel", "esc interrupt"]
+
+# How a prompt is typed in. Copilot ignores a synthetic Enter after it lost
+# focus until it is told it has focus again, so a focus-in report goes first
+# when the pane has focus reporting on. From herdr src/app/api/agents.rs
+# ("Copilot ignores synthetic Enter after focus loss until it receives focus
+# gained"). Not measured here.
+# Copilot CLI writes each session's events to ~/.copilot/session-state/
+# <session id>/events.jsonl, one event per line. The hook reports its path.
+# Without the hook the daemon takes the session whose session.start names the
+# pane's directory and the start of the pane's Copilot. The file is
+# read only to show the conversation in the agent thread.
+[transcript]
+reader = "copilot-events"
+dir    = "{home}/.copilot/session-state"
+glob   = "*/events.jsonl"
+verify = ["cwd"]
+
+[input]
+submit              = "cr"
+bracketed_paste     = true
+focus_before_submit = true
+source              = "focus-in before submit per herdr src/app/api/agents.rs; Enter sends CR in raw mode; not measured"
+
+[resume]
+argv   = ["copilot", "--resume={session_id}"]
+source = "herdr src/agent_resume.rs; not measured"
+# From copilot --help (GitHub Copilot CLI 1.0.98). -p/--prompt, -i and
+# --resume are left behind.
+keep_options = ["--model", "--reasoning-effort", "--agent", "--mode"]
+keep_flags   = ["--allow-all-tools", "--allow-all-paths", "--allow-all-urls", "--allow-all", "--yolo", "--autopilot", "--plan", "--experimental"]
+keep_source  = "copilot --help, GitHub Copilot CLI 1.0.98"
+# The kept flags that turn approvals off, from copilot --help: the allow-all
+# family ("without confirmation"), --yolo, and autopilot mode.
+keep_risky   = ["--allow-all-tools", "--allow-all-paths", "--allow-all-urls", "--allow-all", "--yolo", "--autopilot", "--mode=autopilot"]

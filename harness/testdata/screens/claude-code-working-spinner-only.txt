@@ -1,0 +1,13 @@
+# harness: claude-code
+# want: working
+# how: derived. A turn whose footer does not show the interrupt hint; the
+# spinner line alone carries it.
+---
+⏺ Update(main.go)
+
+✶ Cogitating… (3s · ↓ 212 tokens)
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)

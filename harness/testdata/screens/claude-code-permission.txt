@@ -1,0 +1,17 @@
+# harness: claude-code
+# want: needs_input
+# how: derived. The resting permission layout quoted in herdr's claude
+# manifest. The dialog replaces the prompt box and marks its choice with the
+# same ❯ the box uses, so the idle rule must not read it as a prompt.
+---
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command
+
+   go test ./...
+   Run the tests
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don't ask again for: go test:*
+   3. No, and tell Claude what to do differently (esc)
+────────────────────────────────────────────────────────────────────────────────────────────────────

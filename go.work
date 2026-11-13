@@ -6,6 +6,7 @@ use (
 	.
 	./acp
 	./e2e/tui
+	./harness
 	./loom
 	./plot
 	./progstatus

@@ -1,0 +1,28 @@
+# harness: copilot
+# want: needs_input
+# how: measured. Copilot's folder trust dialog, from a live pane; the daemon
+# classified it needs_input end to end.
+---
+│ Do you trust the files in this folder?                                     │
+│                                                                            │
+│ ❯ 1. Yes                                                                   │
+│   2. Yes, and remember this folder for future sessions                     │
+│   3. No (Esc)                                                              │
+│                                                                            │
+│ ↑/↓ to navigate · enter to select · esc to cancel                          │
+╰────────────────────────────────────────────────────────────────────────────╯
+=====
+# harness: copilot
+# want: working
+# how: derived. Background agents still running, from herdr's copilot
+# manifest (background_agents_working).
+---
+● Started two agents to review the diff.
+◎ Waiting for background agents · 2 running
+=====
+# harness: copilot
+# want: working
+# how: derived. The cancel hint during a turn, herdr's working_cancel_hint.
+---
+● Reading src/main.go
+∙ Thinking (Esc to cancel)

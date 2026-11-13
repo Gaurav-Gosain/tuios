@@ -1,0 +1,86 @@
+schema_version = 1
+id             = "goose"
+display_name   = "goose"
+priority       = 50
+
+# goose's CLI is one Rust binary named goose (crates/goose-cli, [[bin]] name
+# "goose", in github.com/aaif-goose/goose). So is pressly's goose, the database
+# migration tool Homebrew installs as goose, so the name alone is not enough:
+# the executable must sit where goose's own installers put it. download_cli.sh
+# installs into $HOME/.local/bin unless GOOSE_BIN_DIR says otherwise, and
+# Homebrew's formula for this goose is block-goose-cli. Not measured.
+[detect]
+comm  = ["goose"]
+argv0 = ["goose"]
+
+[detect.require]
+exe_glob = ["**/.local/bin/goose", "**/Cellar/block-goose-cli/**/goose", "**/block-goose-cli/**/goose"]
+
+# The screen carries goose's whole state. Its hooks (plugins under
+# ~/.agents/plugins) have no event for a prompt that waits on the person
+# (github.com/aaif-goose/goose issue 12007), so tuios has no hook integration
+# for it, and a working report from a hook would outrank the screen that shows
+# the prompt.
+#
+# The rules are derived from goose's source, not measured on a live session:
+# crates/goose-cli/src/session/mod.rs (prompt_tool_confirmation),
+# output.rs (ThinkingIndicator) and paste.rs (read_paste_aware_input), at the
+# repository's main branch of 2026-09-27. goose draws its prompts with the
+# cliclack crate: an open prompt starts with the active step mark ◆ and ends
+# with └, and a prompt once answered is redrawn with ◇, which the rules below
+# never match, so an answered prompt left in the scrollback is not read as
+# waiting.
+[screen]
+enabled   = true
+fold_case = true
+lines     = 10
+
+# A tool call waiting for the person, with or without a reason from goose.
+#
+#   ◆  Goose would like to call the above tool, do you allow?
+#   │  ● Allow (Allow the tool call once)
+#   │  ○ Always Allow
+#   │  ○ Deny
+#   │  ○ Cancel
+#   └
+[[screen.rule]]
+state    = "needs_input"
+priority = 30
+kind     = "approval"
+message  = "Waits for approval of a tool call."
+region   = "bottom_non_empty_lines(8)"
+regex    = ['(?i)^\s*◆\s+(?:goose would like to call the above tool, do you allow\?|do you allow this tool call\?)\s*$']
+
+# Any other open prompt: a question an extension asks through MCP
+# elicitation, a confirm before summarising, a choice. cliclack closes an open
+# prompt with └ on the bottom line.
+[[screen.rule]]
+state    = "needs_input"
+priority = 20
+kind     = "question"
+message  = "Waits for an answer."
+region   = "bottom_non_empty_lines(8)"
+regex    = ['^\s*◆\s+\S']
+any      = ["└"]
+
+# A turn in progress: the spinner line, a message ending in an ellipsis and
+# the interrupt hint.
+#
+#   ◒  Pondering the options...  (Ctrl+C to interrupt)
+[[screen.rule]]
+state    = "working"
+priority = 10
+message  = "Works on a turn."
+region   = "bottom_non_empty_lines(2)"
+regex    = ['(?i)\.\.\.\s+\(ctrl\+c to interrupt\)\s*$']
+
+# No idle rule: goose's idle prompt is a bare "> " from rustyline, and none has
+# been measured on a live session. At rest the pane is left to the silence
+# timer and to a tool call or question that is still on screen.
+
+# How a prompt is typed in. goose reads its prompt with rustyline, which
+# reads a carriage return as Enter and turns bracketed paste on. Not measured.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "rustyline reads CR as Enter and enables bracketed paste; not measured"

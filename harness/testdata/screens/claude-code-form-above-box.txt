@@ -1,0 +1,17 @@
+# harness: claude-code
+# want: needs_input
+# how: measured. The bottom of two Claude Code panes held by this form on
+# 2026-11-08 (auto mode on), from capture-pane. The form is drawn over the input
+# box, so under the last rule there is only the empty box and the footer.
+---
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  Teach auto mode about your environment?
+  Auto mode works better when it knows your environment. Takes about a minute.
+  ❯ 1. Yes
+    2. Not now
+    3. Don't show again
+  Enter to confirm · Esc to cancel
+────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · 1 shell, 1 monitor · ↓ to manage

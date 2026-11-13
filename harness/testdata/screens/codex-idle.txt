@@ -1,0 +1,17 @@
+# harness: codex
+# box: empty
+# want: idle
+# how: derived from openai/codex rust-v0.165.0 (360319d8dee6): the composer
+# and footer as codex-rs/tui/src/bottom_pane/snapshots/
+# codex_tui__bottom_pane__chat_composer__tests__footer_collapse_empty_mode_cycle_with_context.snap
+# draw them, under a short transcript. The placeholder
+# is read as text, the way a screen with no styles shows it.
+---
+• Ran go test ./internal/harness/
+  └ ok  	github.com/Gaurav-Gosain/tuios/internal/harness	0.014s
+
+• All tests pass.
+
+› Ask Codex to do anything
+
+  ? for shortcuts                        100% context left

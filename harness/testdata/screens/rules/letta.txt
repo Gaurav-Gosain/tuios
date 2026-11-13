@@ -1,0 +1,48 @@
+# harness: letta
+# want: needs_input
+# how: derived. The command approval form, quoted in herdr's letta manifest
+# (command_approval).
+---
+  Run this command?
+  go test ./...
+  ❯ 1. Yes
+    2. No
+  Enter to select · Esc to cancel
+=====
+# harness: letta
+# want: working
+# how: derived. The status line of a turn, herdr's active_status.
+---
+> fix the flaky test
+Thinking is running… (esc to interrupt · 12s)
+› 
+=====
+# harness: letta
+# want: working
+# how: derived. A tool row that has not finished, herdr's running_tool.
+---
+> fix the flaky test
+● Bash(go test ./...)
+  └ Running...
+=====
+# harness: letta
+# want: idle
+# how: derived. The empty composer, herdr's composer_idle.
+---
+Done. The test now allocates its buffer per case.
+› 
+=====
+# harness: letta
+# want: idle
+# how: derived. The composer placeholder, herdr's composer_idle.
+---
+Done. The test now allocates its buffer per case.
+› Try "explain this codebase"
+=====
+# harness: letta
+# want: none
+# how: derived. A composer with text typed in matches no rule, as herdr's
+# composer_input holds the state there.
+---
+Done. The test now allocates its buffer per case.
+› run the tests again

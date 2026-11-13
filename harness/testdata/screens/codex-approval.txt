@@ -1,0 +1,16 @@
+# harness: codex
+# want: needs_input
+# how: derived. The Codex command approval, whose choices sit behind the same
+# "›" the composer uses. The footer on the last line is what herdr's
+# live_strong_blocker keys on, and it must win over the idle rule, which the
+# numbered "›" line refuses anyway.
+---
+  Would you like to run the following command?
+
+  $ go test ./...
+
+› 1. Yes, proceed (y)
+  2. Yes, and don't ask again for this command (a)
+  3. No, and tell Codex what to do differently (esc)
+
+  Press enter to confirm or esc to cancel

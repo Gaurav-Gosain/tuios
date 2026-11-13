@@ -1,0 +1,14 @@
+# harness: claude-code
+# want: limit_reached
+# how: derived from source. The words are in the Claude Code 2.1.312 binary's string
+# table (testdata/limits/claude-code.txt); the frame is the idle box as
+# measured on 2.1.280. Not captured: a real limit needs a spent plan.
+---
+⏺ I will run the suite next.
+
+ ⎿  You've hit your session limit · resets 11:10am (Australia/Sydney)
+
+────────────────────────────────────────────
+❯
+────────────────────────────────────────────
+  ? for shortcuts

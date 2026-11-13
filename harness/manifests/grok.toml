@@ -1,0 +1,152 @@
+# Rules after herdr's agent-detection manifest for grok
+# (github.com/herdrdev/herdr, src/detect/manifests/grok.toml, manifest version
+# 2026.10.05.1, herdr commit fabcab1, Apache-2.0; see LICENSE-herdr).
+# Regenerate a draft with
+#   go run ./herdrconv
+# herdr's evidence is Grok Build 0.2.101 source and 1.0.34 live pane reads.
+#
+# Background commands, monitors and subagents left running after Grok returns
+# to its prompt do not count as working, as for Claude and Antigravity. herdr
+# dropped its background_status_working rule for that reason in manifest
+# 2026.10.05.1, and none ships here.
+#
+# Not ported: herdr's two osc_progress rules. They read OSC 9;4 the way its
+# published meaning already does ("4;1;-1" busy, "4;0;0" idle), so the
+# daemon's own progress mapping covers them.
+
+schema_version = 1
+id             = "grok"
+display_name   = "Grok"
+aliases        = ["grok-cli"]
+priority       = 50
+
+# xAI's installer (x.ai/cli) puts a native binary at ~/.grok/bin/grok; the npm
+# trampoline (@xai-official/grok) decompresses the same binary and execs it, so
+# the running process is native either way.
+[detect]
+comm      = ["grok"]
+argv0     = ["grok", "grok-build"]
+argv_path = ["@xai-official/grok"]
+
+# "grok" is four letters and a name other software plausibly takes, so the bare
+# name only counts from grok's install layouts.
+[detect.require]
+exe_glob = ["**/.grok/**", "**/@xai-official/**"]
+
+[screen]
+enabled   = true
+fold_case = true
+lines     = 12
+
+# herdr rule: option_dialog_blocked. The "┃"-guttered option list a permission
+# or question dialog draws, e.g. `┃  2 (○) Yes, proceed`.
+[[screen.rule]]
+state    = "needs_input"
+priority = 1200
+message  = "Waits for a choice."
+regex    = ['^\s*┃\s+[0-9a-z]+\s+\([●○]\)\s']
+
+# herdr rule: permission_hints_blocked. The permission dialog's footer hints,
+# on the last two lines.
+[[screen.rule]]
+state    = "needs_input"
+priority = 1190
+kind     = "approval"
+message  = "Waits for permission."
+region   = "bottom_non_empty_lines(2)"
+all      = [":select", "ctrl+o:yolo", "ctrl+c:cancel"]
+
+# herdr rule: question_dialog_hints_blocked. The ask-user-question footer.
+[[screen.rule]]
+state    = "needs_input"
+priority = 1185
+kind     = "question"
+message  = "Asks you a question."
+region   = "bottom_non_empty_lines(2)"
+all      = ["tab:scrollback", "shift+x:dismiss"]
+
+# herdr rule: permission_scope_selector. The pre-0.2.x permission UI, kept for
+# older releases.
+[[screen.rule]]
+state    = "needs_input"
+priority = 1180
+kind     = "approval"
+message  = "Waits for permission."
+all      = ["yes, proceed", "no, reject"]
+any      = ["use ← → to choose permission whitelist scope", "←/→:scope"]
+
+# herdr rule: spinner_status_working. The live status line: a braille spinner
+# and the [stop] chip. The startup splash draws its logo in braille, which is
+# why the chip is required.
+#
+#   ⠧ Waiting on subagent… 2.8s   13s ⇣29.7k [stop]
+[[screen.rule]]
+state    = "working"
+priority = 1160
+message  = "Works on a turn."
+regex    = ['^\s*[\x{2801}-\x{28FF}]\s.*\[stop\]\s*$']
+
+# herdr rule: esc_cancel_hints_working. The footer with a cancel hint.
+[[screen.rule]]
+state    = "working"
+priority = 1155
+message  = "Works on a turn."
+region   = "bottom_non_empty_lines(2)"
+all      = ["ctrl+.:shortcuts"]
+any      = ["esc:cancel", "ctrl+c:cancel"]
+
+# herdr rule: waiting_tool_working. The pre-0.2.x working chrome.
+[[screen.rule]]
+state    = "working"
+priority = 1140
+message  = "Works on a turn."
+any_of   = [
+  { all = ["ctrl+c:cancel", "ctrl+enter:interject", "waiting"] },
+  { regex = ['^\s*[\x{2801}-\x{28FF}]\s+(Run|Read|Search|List)\b'] },
+]
+
+# herdr rule: prompt_hints_idle. The idle footer ends with the shortcuts hint
+# and offers nothing to cancel. The pattern pins the hint to the end of the
+# footer line.
+[[screen.rule]]
+state    = "idle"
+priority = 100
+message  = "Waits at its prompt."
+region   = "bottom_non_empty_lines(2)"
+regex    = ['(?i)ctrl\+\.:shortcuts\s*$']
+not      = ["esc:cancel", "ctrl+c:cancel"]
+
+# The window title: "grok" or "<session> - grok" at rest, a braille spinner
+# during a turn, and "Action Required" in front when a permission prompt waits.
+[title]
+enabled = true
+
+[[title.rule]]
+state    = "needs_input"
+priority = 10
+kind     = "approval"
+message  = "Grok says an action is required"
+all      = ["Action Required"]
+
+[[title.rule]]
+state    = "working"
+priority = 5
+message  = "Works on a turn."
+regex    = ['(?:^|\s)[\x{2801}-\x{28FF}](?:\s|$)']
+
+[[title.rule]]
+state    = "idle"
+priority = 1
+message  = "Waits at its prompt."
+regex    = ['(?:^| - )grok$']
+not_regex = ['[\x{2800}-\x{28FF}]']
+
+# How a prompt is typed in. Not measured.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "default: Enter sends CR in raw mode; not measured"
+
+[resume]
+argv   = ["grok", "--resume", "{session_id}"]
+source = "herdr src/agent_resume.rs; not measured"

@@ -1,0 +1,10 @@
+# harness: opencode
+# want: needs_input
+# how: derived. The permission request herdr's opencode manifest keys on.
+---
+             ┃  △ Permission required
+             ┃  $ go test ./...
+             ┃
+             ┃  Allow once   Allow always   Reject
+             ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+             ⇆ tab  ↑↓ select  enter confirm  esc dismiss

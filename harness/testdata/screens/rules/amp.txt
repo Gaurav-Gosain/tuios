@@ -1,0 +1,50 @@
+# harness: amp
+# want: needs_input
+# how: derived. The tool-approval prompt from the wordings in herdr's amp
+# manifest (approval_footer).
+---
+  Bash: go test ./...
+  Waiting for approval
+  [a] Allow all for this session   [d] Deny with feedback
+=====
+# harness: amp
+# want: needs_input
+# how: derived. The approval variant that leads with "approve" and offers the
+# scope options, from herdr's approval_footer.
+---
+  Edit src/main.go
+  Approve   Allow file for every session   Deny with feedback
+=====
+# harness: amp
+# want: needs_input
+# how: measured. An unauthenticated amp at start, from a live pane.
+---
+arch-btw% amp
+No API key found. Starting login flow...
+Would you like to log in to Amp? [(y)es, (n)o]:
+=====
+# harness: amp
+# want: working
+# how: derived. The status footer herdr's status_footer_working keys on.
+---
+  ┃ fix the flaky test
+╰ ⠧ streaming ─────────────────────────── esc to cancel
+=====
+# harness: amp
+# want: working
+# how: derived. The cancel hint on its own line at the bottom, which
+# herdr's esc_cancel_working keys on.
+---
+  Reading src/main.go
+  esc to cancel
+=====
+# harness: amp
+# want: none
+# how: derived. A cancel hint left in the transcript, five lines up, is not a
+# live turn: the rule reads only the bottom four lines.
+---
+  esc to cancel
+  Done. The test was racing on the shared buffer.
+  I changed the setup to allocate one per case.
+  All 14 tests pass.
+  ┃

@@ -1,0 +1,14 @@
+# harness: codex
+# want: working
+# how: derived. A turn in progress in the shape herdr's codex manifest reads:
+# the status line with its elapsed timer and interrupt hint above a composer
+# that is still on screen.
+---
+• Ran go test ./internal/harness/
+  └ ok  	github.com/Gaurav-Gosain/tuios/internal/harness	0.014s
+
+• Working (12s • esc to interrupt)
+
+› Summarize recent commits
+
+  ? for shortcuts                                                   98% context left

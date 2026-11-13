@@ -1,0 +1,16 @@
+# harness: codex
+# want: idle
+# how: derived from source, as codex-limit.txt, after the person continued: the limit
+# line is above a later turn and must not hold the pane on the limit.
+---
+■ You’ve hit your usage limit. Try again at 7:20 PM.
+
+› go on
+
+• Ran cargo test
+• All 212 tests pass.
+• The branch is ready for review.
+
+› Ask Codex to do anything
+
+  ? for shortcuts

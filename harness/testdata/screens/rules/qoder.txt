@@ -1,0 +1,19 @@
+# harness: qoder
+# want: needs_input
+# how: derived. A confirmation with its answers, from herdr's qodercli
+# manifest (confirmation_or_input_blocker).
+---
+  Waiting for user confirmation
+  Allow   Reject
+=====
+# harness: qoder
+# want: working
+# how: derived. The cancel hint with its timer, herdr's cancel_hint_working.
+---
+  Reading files (esc to cancel, 4s)
+=====
+# harness: qoder
+# want: working
+# how: derived. A braille spinner in front of words, herdr's spinner_working.
+---
+  ⠹ Reading src/main.go

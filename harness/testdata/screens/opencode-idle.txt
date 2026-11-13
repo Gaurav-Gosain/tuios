@@ -1,0 +1,26 @@
+# harness: opencode
+# want: idle
+# how: measured. opencode 1.18.30 just started, in a 100x30 pane, read with
+# tmux capture-pane.
+---
+                                                                ▄
+                               █▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█
+                               █  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀
+                               ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀
+
+
+             ┃
+             ┃  Ask anything… "Fix a TODO in the codebase"
+             ┃
+             ┃  Build · Muse Spark 1.3 Free OpenCode Zen
+             ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                                             tab agents  ctrl+p commands
+
+
+
+
+
+
+
+
+  ~/dev/tuios/.claude/worktrees/wf_db0a85e5-fac-4:worktree-wf_db0a85e5-fac-4               1.18.30

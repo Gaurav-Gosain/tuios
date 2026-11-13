@@ -1,0 +1,28 @@
+# harness: pi
+# want: working
+# how: derived. The rule pi draws over its output during a turn, from herdr's
+# pi manifest (working_border).
+---
+  read src/main.ts
+── ⠹ Working ──────────────────────────────
+>
+=====
+# harness: pi
+# want: working
+# how: derived. The status word alone near the bottom, herdr's
+# working_literal.
+---
+  read src/main.ts
+  Working...
+>
+=====
+# harness: pi
+# want: none
+# how: derived. The status word left five lines up in the transcript is not
+# a live turn: the literal rule reads the bottom four lines.
+---
+  Working...
+  Done. The loader now caches the parsed config.
+  Two call sites changed.
+  Tests pass.
+>

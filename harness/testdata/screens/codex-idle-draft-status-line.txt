@@ -1,0 +1,18 @@
+# harness: codex
+# want: idle
+# how: measured on codex-cli 0.166.0 (issue #1588): the bottom rows are
+# copied from capture-pane --ansi of an idle pane, with faint cells left out
+# as the daemon does (the dim "Ask Codex to do anything" placeholder becomes
+# the glyph alone). This release draws two rows under the composer: the
+# status line and the key-hint row.
+# box: draft
+---
+• Ran go test ./internal/harness/
+  └ ok  	github.com/Gaurav-Gosain/tuios/internal/harness	0.014s
+
+• All tests pass.
+
+› also check the windows build
+
+  GPT-6.1-Sol medium · ~ · Handshake with all agents · Main [default]
+  ← for agents · ? for shortcuts                                                ⚠ 1 warning · f2 to view

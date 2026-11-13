@@ -1,0 +1,70 @@
+# harness: kiro
+# want: needs_input
+# how: derived. The approval menu with every option and its footer on the
+# last line, from herdr's kiro manifest (tool_approval).
+---
+  fs_write src/main.go
+> Allow
+  Always allow
+  Deny
+  Always deny
+esc to close · ↑↓ to navigate · enter to select · tab to edit
+=====
+# harness: kiro
+# want: needs_input
+# how: derived. The approval with a modify-request box, herdr's
+# tool_approval_edit.
+---
+────────────────────────
+fs_write requires approval · modify request
+> make it a dry run first
+────────────────────────
+esc to close
+=====
+# harness: kiro
+# want: needs_input
+# how: derived. Approvals queued by subagents, herdr's crew_approval.
+---
+  Tool approval
+  Approve all pending
+  Configure individually (agent monitor)
+  Exit (cancel subagents)
+=====
+# harness: kiro
+# want: needs_input
+# how: derived. A question panel, herdr's question_panel.
+---
+  Which region should the stack deploy to?
+  ↑↓ to navigate · enter to submit · esc to cancel
+=====
+# harness: kiro
+# want: needs_input
+# how: derived. The older approval banner, from herdr's kiro manifest
+# version 2026.08.01.1.
+---
+Tool fs_write requires approval
+  y. Yes, single permission
+  t. Trust, always allow
+=====
+# harness: kiro
+# want: needs_input
+# how: derived. The older subagent approvals heading, from herdr's kiro
+# manifest version 2026.08.01.1.
+---
+  2 tool approvals pending from subagents
+  Approve all pending
+=====
+# harness: kiro
+# want: working
+# how: derived. The live working footer, herdr's live_working_footer.
+---
+  Reading src/main.go
+  Kiro is working · type to steer · ctrl+s to queue
+=====
+# harness: kiro
+# want: idle
+# how: derived. The empty composer with its placeholder, herdr's
+# live_prompt_idle.
+---
+  Done. The stack deploys to us-east-1.
+> Ask a question or describe a task ↵

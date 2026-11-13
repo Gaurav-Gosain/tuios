@@ -1,0 +1,113 @@
+# Rules after herdr's agent-detection manifest for kimi
+# (github.com/herdrdev/herdr, src/detect/manifests/kimi.toml, manifest version
+# 2026.06.10.1, Apache-2.0; see LICENSE-herdr). Regenerate a draft with
+#   go run ./herdrconv
+# Not verified against a live pane. herdr has no idle rule for it.
+
+schema_version = 1
+id             = "kimi"
+display_name   = "Kimi"
+aliases        = ["kimi-cli", "kimi-code"]
+priority       = 50
+
+# Moonshot ships three shapes: a self-contained native binary at
+# ~/.kimi-code/bin/kimi, npm @moonshot-ai/kimi-code run under node, and the
+# older Python kimi-cli whose console script runs as comm kimi over a python
+# executable.
+[detect]
+comm      = ["kimi", "kimi-cli"]
+argv0     = ["kimi", "kimi-cli"]
+argv_path = ["@moonshot-ai/kimi-code", "kimi_cli"]
+
+# "kimi" is four letters and a plausible personal alias, so the bare name only
+# counts backed by a runtime one of the real shapes uses or by the native
+# install layout.
+[detect.require]
+exe_base = ["node", "nodejs", "bun", "deno"]
+exe_glob = ["**/.kimi-code/**", "**/python*"]
+
+[screen]
+enabled   = true
+fold_case = true
+lines     = 8
+
+# herdr rule: current_approval_panel. The approval panel: confirm and choose
+# hints, an approve, reject or revise option, and one of the question
+# wordings or a free-form approve question.
+[[screen.rule]]
+state    = "needs_input"
+priority = 400
+kind     = "approval"
+message  = "Waits for approval."
+all      = ["↵ confirm", " choose"]
+any      = ["approve", "reject", "revise"]
+any_of   = [
+  { any = ["run this command?", "write this file?", "apply these edits?", "stop this task?", "ready to build with this plan?"] },
+  { regex = ['(?i)^\s*▶?\s*approve .*\?$'] },
+]
+
+# herdr rule: question_panel. Kimi asking the user a question: both the panel
+# heading and a question line must be on screen.
+[[screen.rule]]
+state    = "needs_input"
+priority = 390
+kind     = "question"
+message  = "Asks you a question."
+all      = ["↑↓ select", "esc cancel"]
+any      = ["↵ choose", "↵ toggle", "↵ save"]
+regex    = ['^\s*question\s*$', '^\s*\? ']
+
+# herdr rule: legacy_approval_panel, kept for older Kimi releases.
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+kind     = "approval"
+message  = "Waits for approval."
+all      = ["requesting approval", "reject"]
+any      = ["approve once", "approve for this session"]
+all_of   = [ { any = ["1/2/3/4 choose", "↵ confirm"] } ]
+
+# Kimi Code CLI's approval panel (kimi_cli/ui/shell/visualize/
+# _approval_panel.py in kimi-cli 1.52.0) lists "[1] Approve once", "[2]
+# Approve for this session", "[3] Reject" and "[4] Reject, tell the model
+# what to do instead". A digit submits its option at once, and esc rejects.
+# Each approve is bound to its label, so a panel that leaves an option out
+# or orders them otherwise is never answered by its number alone.
+[screen.rule.answers]
+approve        = { option = "approve once" }
+approve_always = { option = "approve for this session" }
+deny           = { keys = ["esc"] }
+
+# herdr rule: background_agent_status_working.
+#
+#   kimi-k2 thinking… [2 agents running]
+[[screen.rule]]
+state    = "working"
+priority = 120
+message  = "Waits for background agents."
+region   = "bottom_non_empty_lines(3)"
+regex    = ['(?i)\bkimi[-\w.]*\s+thinking\b.*\[[1-9][0-9]*\s+agents?\s+running\]']
+
+# herdr rule: moon_spinner_working. A moon phase alone on its line.
+[[screen.rule]]
+state    = "working"
+priority = 100
+message  = "Works on a turn."
+regex    = ['^\s*(?:🌕|🌖|🌗|🌘|🌑|🌒|🌓|🌔)\s*$']
+
+# herdr rule: braille_spinner_working.
+[[screen.rule]]
+state    = "working"
+priority = 90
+message  = "Works on a turn."
+regex    = ['(?i)^\s*[\x{2800}-\x{28FF}]+\s*(?:thinking\.\.\.|working\.\.\.|using )']
+
+# How a prompt is typed in. Not measured.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "default: Enter sends CR in raw mode; not measured"
+
+[resume]
+argv   = ["kimi", "--session", "{session_id}"]
+source = "herdr src/agent_resume.rs; not measured"
