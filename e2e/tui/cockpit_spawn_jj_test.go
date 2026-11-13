@@ -26,7 +26,11 @@ func TestCockpitSpawnJJBookmarks(t *testing.T) {
 	base, _ := fanFixture(t)
 	// Only the fake claude: an agent installed on this machine must never
 	// start from a test.
-	t.Setenv("PATH", strings.SplitN(os.Getenv("PATH"), string(os.PathListSeparator), 2)[0]+string(os.PathListSeparator)+"/usr/bin:/bin:"+filepath.Dir(jjPath(t)))
+	jjBin := t.TempDir()
+	if err := os.Symlink(jjPath(t), filepath.Join(jjBin, "jj")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", strings.SplitN(os.Getenv("PATH"), string(os.PathListSeparator), 2)[0]+string(os.PathListSeparator)+"/usr/bin:/bin:"+jjBin)
 	repo := testutil.JJRepo(t, false)
 	for _, name := range []string{"a", "b"} {
 		if err := os.WriteFile(filepath.Join(repo, name), []byte(name+"\n"), 0o644); err != nil {
