@@ -2953,8 +2953,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// runs, and the client before it can have left PTYs at sizes of its
 			// own: a renderer takes its insets off each pane. The daemon
 			// ignores a size a PTY already has.
+			// A sliding pane is told its size when the slide lands.
 			for _, w := range m.Windows {
-				if w.DaemonMode && w.DaemonResizeFunc != nil {
+				if w.DaemonMode && w.DaemonResizeFunc != nil && m.snapInFlight(w) == nil {
 					_ = w.DaemonResizeFunc(w.ContentWidth(), w.ContentHeight())
 				}
 			}

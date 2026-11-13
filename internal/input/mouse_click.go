@@ -20,10 +20,10 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.CancelCopyFlash()
 
 	// A press of any button while a pane is held by the pointer cancels the
-	// move: the pane goes back where it came from and the press does nothing
-	// else. The left button is still down, and its release then finds no
-	// gesture to finish. See app.OS.CancelWindowDrag.
-	if o.CancelWindowDrag() {
+	// move or resize: the pane goes back where it came from and the press does
+	// nothing else. The first button is still down, and its release then finds
+	// no gesture to finish. See app.OS.CancelPointerGesture.
+	if o.CancelPointerGesture() {
 		return o, nil
 	}
 

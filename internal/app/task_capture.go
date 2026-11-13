@@ -399,7 +399,15 @@ type tcStartedMsg struct {
 // it. The sheet closes at once; a refused file opens it again with the draft.
 func (m *OS) taskCaptureFile(start bool) tea.Cmd {
 	s := m.taskCapture
-	title, promptParts := tcSplit(s.ed.Parts())
+	parts, ok := s.ed.SubmitParts()
+	if !ok {
+		// Invisible characters are removed before any other check. The
+		// editor's notice is drawn only in the task field; the next press
+		// adds what the sheet shows.
+		s.field = tcTask
+		return nil
+	}
+	title, promptParts := tcSplit(parts)
 	switch {
 	case title == "":
 		s.notice, s.field = "Write the task first. The first line is its title.", tcTask

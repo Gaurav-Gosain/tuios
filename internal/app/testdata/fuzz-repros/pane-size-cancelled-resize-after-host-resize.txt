@@ -1,0 +1,9 @@
+# pane-size: tiling went off and a host resize clamped the floating panes while
+# a resize held one, so the guest was told 58x16. The press that cancelled the
+# resize put the held pane back to its 58x36 start rectangle by ResizeVisual,
+# a size its guest was never told.
+sidebar
+press 0 0 2
+tiling
+resize 60 20
+press 0 0 3

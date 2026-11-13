@@ -1,0 +1,11 @@
+# spurious-winch: a right-button resize moves the held pane's neighbours too,
+# by ResizeVisual, and a workspace switch mid-gesture left the cancel to retile
+# the other workspace. The cancel put back the held pane only, so the
+# neighbours kept a rectangle their guests were never told, and the attach sync
+# then resized their PTYs. Reproduces on Linux.
+sidebar
+press 38 0 2
+motion 0 0 2
+workspace 0
+press 0 0 1
+attach
