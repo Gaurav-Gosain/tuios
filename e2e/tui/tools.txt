@@ -1,11 +1,11 @@
-# The tests that need fish, zsh or Lua, and which of them. The CI workflow reads
+# The tests that need fish, zsh, Lua or jj, and which of them. The CI workflow reads
 # this file: the shard that holds one of these tests installs the tool, and the
 # test fails there when the tool is missing (TUIOS_E2E_REQUIRE_TOOLS). Without
 # the variable a missing tool skips the test.
 #
 # TestToolsListMatchesTheTests checks the file against the source. A test that
 # calls needTool, requireOnCI or siShellPath for a tool, itself or through a
-# helper, has a line here. Tools: fish, zsh, lua (Lua 5.1: luajit, lua or
+# helper, has a line here. Tools: fish, zsh, jj, lua (Lua 5.1: luajit, lua or
 # lua5.1).
 
 TestDnDBetweenPanes fish
@@ -18,3 +18,13 @@ TestShellIntegrationLeavesAMarkingSetupAlone zsh
 TestShellIntegrationZshByDefault zsh
 TestRexActionsComeFromTuios lua
 TestRexOffersYourOwnActions lua
+TestCheckpointJJRestore jj
+TestCockpitSpawnJJBookmarks jj
+TestFanCompareJJ jj
+TestRailGitJJ jj
+TestRailGitJJProblems jj
+TestRailJJRepoRow jj
+TestReviewJJConflict jj
+TestReviewJJStack jj
+TestShipJJRefusals jj
+TestWorktreeJJSession jj

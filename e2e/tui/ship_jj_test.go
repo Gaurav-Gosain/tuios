@@ -27,6 +27,7 @@ import (
 // fast-forwards main; with the commit check in jjPush cut, the later commit
 // reaches origin.
 func TestShipJJRefusals(t *testing.T) {
+	needTool(t, "jj")
 	base := t.TempDir()
 	killDaemon(t, base)
 	repo := testutil.JJRepo(t, false)

@@ -2,7 +2,6 @@ package tuie2e
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -27,7 +26,7 @@ func TestCockpitSpawnJJBookmarks(t *testing.T) {
 	// Only the fake claude: an agent installed on this machine must never
 	// start from a test.
 	jjBin := t.TempDir()
-	if err := os.Symlink(jjPath(t), filepath.Join(jjBin, "jj")); err != nil {
+	if err := os.Symlink(needTool(t, "jj"), filepath.Join(jjBin, "jj")); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", strings.SplitN(os.Getenv("PATH"), string(os.PathListSeparator), 2)[0]+string(os.PathListSeparator)+"/usr/bin:/bin:"+jjBin)
@@ -86,14 +85,4 @@ func TestCockpitSpawnJJBookmarks(t *testing.T) {
 	}
 	saveFrame(t, term, "spawn-jj-bookmarks")
 	alive(t, term, "after listing jj bookmarks")
-}
-
-// jjPath is the jj on PATH, for a test that narrows PATH.
-func jjPath(t *testing.T) string {
-	t.Helper()
-	p, err := exec.LookPath("jj")
-	if err != nil {
-		t.Skip("jj is not installed")
-	}
-	return p
 }

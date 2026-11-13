@@ -27,6 +27,7 @@ import (
 // branch row is missing or names no bookmark. It also fails on a build that
 // keeps jj's markers in the name: the row shows feat*.
 func TestRailGitJJ(t *testing.T) {
+	needTool(t, "jj")
 	repo := testutil.JJRepo(t, true)
 	for _, name := range []string{"one", "two", "three"} {
 		if err := os.WriteFile(filepath.Join(repo, name), []byte(name+"\n"), 0o644); err != nil {
@@ -77,6 +78,7 @@ func TestRailGitJJ(t *testing.T) {
 // shows neither figure. With jj's "??" kept in the name, the branch row
 // reads feat??.
 func TestRailGitJJProblems(t *testing.T) {
+	needTool(t, "jj")
 	repo := testutil.JJRepo(t, true)
 	if err := os.WriteFile(filepath.Join(repo, "one"), []byte("one\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -151,6 +153,7 @@ func TestRailGitJJProblems(t *testing.T) {
 // main workspace's row reads git's HEAD: a bare hash when colocated, nothing
 // when not.
 func TestRailJJRepoRow(t *testing.T) {
+	needTool(t, "jj")
 	for _, colocate := range []bool{false, true} {
 		name := "plain"
 		if colocate {

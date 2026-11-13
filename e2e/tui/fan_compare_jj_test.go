@@ -21,6 +21,7 @@ import (
 // the revisions worktree.WorkRevs names, the attempts are counted against
 // main's new tip: the untouched one shows 1 file, the working one 3.
 func TestFanCompareJJ(t *testing.T) {
+	needTool(t, "jj")
 	base, _ := fanFixture(t)
 	repo := testutil.JJRepo(t, false)
 	if out, err := tuiosCLI(t, base, "new", "plain", "--detach"); err != nil {

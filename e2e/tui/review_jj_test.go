@@ -23,6 +23,7 @@ import (
 // Negative control: with the jj check cut from review.IndexOptions, both
 // index modes answer with a diff of jj's exported index.
 func TestReviewJJStack(t *testing.T) {
+	needTool(t, "jj")
 	base := t.TempDir()
 	killDaemon(t, base)
 	repo := testutil.JJRepo(t, false)
@@ -92,6 +93,7 @@ func TestReviewJJStack(t *testing.T) {
 // jjMaterialize), the review lists .jjconflict-base-0/README and
 // JJ-CONFLICT-README, and README without markers.
 func TestReviewJJConflict(t *testing.T) {
+	needTool(t, "jj")
 	base := t.TempDir()
 	killDaemon(t, base)
 	repo := testutil.JJRepo(t, false)
@@ -135,6 +137,7 @@ func TestReviewJJConflict(t *testing.T) {
 // The test fails on a build whose GitEnv sets GIT_DIR alone: the restore
 // stops with "git checkout-index: fatal: this operation must be run in a work tree".
 func TestCheckpointJJRestore(t *testing.T) {
+	needTool(t, "jj")
 	base := t.TempDir()
 	killDaemon(t, base)
 	repo := testutil.JJRepo(t, false)

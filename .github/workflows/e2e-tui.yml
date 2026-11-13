@@ -310,7 +310,7 @@ jobs:
             echo "This shard runs no tests: the change reaches none of the tests it would run." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # A test that needs fish, zsh or Lua is named in e2e/tui/tools.txt, which
+      # A test that needs fish, zsh, Lua or jj is named in e2e/tui/tools.txt, which
       # TestToolsListMatchesTheTests checks against the source, so no list of
       # names lives here. Only a shard that holds one of those tests pays for
       # its packages. The test step sets TUIOS_E2E_REQUIRE_TOOLS, so a tool
@@ -321,12 +321,18 @@ jobs:
           set -euo pipefail
           tools=$(awk 'NR == FNR { want[$1] = 1; next } /^#/ || NF < 2 { next } ($1 in want) { for (i = 2; i <= NF; i++) print $i }' "$RUNNER_TEMP/names.txt" e2e/tui/tools.txt | sort -u)
           pkgs=()
+          need_jj=
           for tool in $tools; do
             case $tool in
             fish) pkgs+=(fish) ;;
             zsh) pkgs+=(zsh) ;;
             # Lua 5.1, the version Rex embeds. The package puts lua on PATH.
             lua) pkgs+=(lua5.1) ;;
+            # jj has no apt package on the runner. A release binary at the
+            # version the tests were written against, checked against its
+            # sha256 (the digest GitHub shows for the asset), so a changed
+            # jj is a change in this file. The musl build is static.
+            jj) need_jj=1 ;;
             *) echo "e2e/tui/tools.txt names the tool $tool, which this step does not know how to install" >&2; exit 1 ;;
             esac
           done
@@ -334,6 +340,17 @@ jobs:
             start=$(date +%s)
             .github/scripts/apt-install.sh "${pkgs[@]}"
             echo "Installed ${pkgs[*]} in $(( $(date +%s) - start )) s"
+          fi
+          if [ -n "$need_jj" ]; then
+            jj_version=0.47.1
+            jj_sha256=d4b657f622ee50929c8916466dfa3d6a6c17a0a32b50e7b2c793707ec9ebcad7
+            asset="jj-v${jj_version}-x86_64-unknown-linux-musl.tar.gz"
+            mkdir -p "$RUNNER_TEMP/jjbin"
+            curl -fsSL --retry 3 -o "$RUNNER_TEMP/$asset" "https://github.com/jj-vcs/jj/releases/download/v${jj_version}/${asset}"
+            echo "${jj_sha256}  $RUNNER_TEMP/$asset" | sha256sum -c -
+            tar -xzf "$RUNNER_TEMP/$asset" -C "$RUNNER_TEMP/jjbin" ./jj
+            echo "$RUNNER_TEMP/jjbin" >> "$GITHUB_PATH"
+            "$RUNNER_TEMP/jjbin/jj" --version
           fi
 
       # TestRailQuickLookKittyPicture resizes a PDF page, the case the bug was

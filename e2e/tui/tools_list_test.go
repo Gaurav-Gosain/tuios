@@ -16,7 +16,7 @@ import (
 
 // managedTools are the tools the workflow installs on the shard that holds a
 // test needing them. The rest (bash, tmux, git) are on every runner.
-var managedTools = []string{"fish", "lua", "zsh"}
+var managedTools = []string{"fish", "jj", "lua", "zsh"}
 
 // TestToolsListMatchesTheTests keeps tools.txt whole. The CI workflow reads
 // that file to decide which shard installs fish, zsh or Lua. A hand-kept list

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -39,16 +38,14 @@ import (
 // worktree.Merged, the main session reads as merged into trunk() before any
 // work, because the bookmark main is on a commit that changes something.
 func TestWorktreeJJSession(t *testing.T) {
+	needTool(t, "jj")
 	base := t.TempDir()
 	killDaemon(t, base)
 	repo := testutil.JJRepo(t, false)
 	origin := filepath.Join(filepath.Dir(repo), "origin.git")
 	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
 	// A jj in front of the real one logs every call, the daemon's included.
-	realJJ, err := exec.LookPath("jj")
-	if err != nil {
-		t.Fatal(err)
-	}
+	realJJ := needTool(t, "jj")
 	bin, jjLog := t.TempDir(), filepath.Join(t.TempDir(), "jj.log")
 	wrapper := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '" + jjLog + "'\nexec '" + realJJ + "' \"$@\"\n"
 	if err := os.WriteFile(filepath.Join(bin, "jj"), []byte(wrapper), 0o755); err != nil {
