@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/internal/acp"
+	"tuios.dev/acp"
 )
 
 // startACP runs the ACP handshake against the peer and returns the client.

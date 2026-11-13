@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Gaurav-Gosain/tuios/internal/acp"
+	"tuios.dev/acp"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"

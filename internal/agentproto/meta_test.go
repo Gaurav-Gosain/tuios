@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/acp"
+	"tuios.dev/acp"
 )
 
 // TestCodexUsageAndPlan: token usage becomes the context use of the model's

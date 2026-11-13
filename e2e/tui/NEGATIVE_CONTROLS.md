@@ -17322,7 +17322,8 @@ controls, each this branch with one change.
 
 The wire shapes of both versions, the echo of version 2 by a version 1 agent,
 `-32022`, a stale idle and an idle before the prompt answer are held by the
-golden files in `internal/acp/testdata/golden`. The frames are under
+golden files in `internal/acp/testdata/golden` (now
+`acp/testdata/golden`, since the package became `tuios.dev/acp`). The frames are under
 `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestProtocolPaneACP' -v .`.
 

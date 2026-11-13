@@ -1,7 +1,7 @@
 name: Go libraries
 
 # The Go libraries in this repository, each a module of its own under a
-# tuios.dev import path (progstatus/, vt/, swatch/, shot/, tml/, plot/, loom/ and sketch/). CI and local builds use the
+# tuios.dev import path (progstatus/, vt/, swatch/, shot/, tml/, plot/, loom/, sketch/ and acp/). CI and local builds use the
 # folders through go.work. `go install .../cmd/tuios@vX` and the release use
 # the versions go.mod pins. This workflow keeps the two in step, and tests each
 # library alone, as an importer gets it.
@@ -52,7 +52,7 @@ jobs:
         run: scripts/library-pins.sh check
 
   module:
-    name: ${{ matrix.id == 'small' && 'progstatus, swatch, shot, tml, plot and loom' || matrix.id }} alone
+    name: ${{ matrix.id == 'small' && 'progstatus, swatch, shot, tml, plot, loom and acp' || matrix.id }} alone
     if: inputs.lib_alone != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -74,14 +74,14 @@ jobs:
 
       - uses: ./.github/actions/setup-go
         with:
-          # All six small libraries ask for go 1.25, and swatch/go.mod names
+          # All seven small libraries ask for go 1.25, and swatch/go.mod names
           # 1.25.0, the oldest Go any of them allows.
           go-version-file: ${{ matrix.id == 'small' && 'swatch/go.mod' || format('{0}/go.mod', matrix.id) }}
           cache-id: lib-${{ matrix.id }}
 
       - name: Tidy, vet and test
         env:
-          DIRS: ${{ matrix.id == 'small' && 'progstatus swatch shot tml plot loom' || matrix.id }}
+          DIRS: ${{ matrix.id == 'small' && 'progstatus swatch shot tml plot loom acp' || matrix.id }}
         run: |
           status=0
           for dir in $DIRS; do

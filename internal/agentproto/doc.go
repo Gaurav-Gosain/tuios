@@ -10,8 +10,8 @@
 //   - ACP, the Agent Client Protocol (agentclientprotocol.com), versions 1 and
 //     2, which Zed and others use and which many agents implement (opencode
 //     acp, Gemini CLI, adapters for Claude Code and Codex). The protocol itself
-//     is in internal/acp, which imports nothing from tuios; this package maps
-//     what it delivers to the pane.
+//     is the library tuios.dev/acp, in the acp/ folder of this repository;
+//     this package maps what it delivers to the pane.
 //   - The Codex app-server protocol (codex app-server), its v2 thread and turn
 //     methods.
 //

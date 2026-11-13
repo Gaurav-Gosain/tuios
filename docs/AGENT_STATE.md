@@ -4650,8 +4650,8 @@ The terminal output of a version 2 agent's own terminals is not shown yet;
 the call says it has one, as in version 1. `agent-proto --resume ID`
 reattaches to a conversation the agent kept, with `session/resume`.
 
-The protocol code is `internal/acp`, which imports nothing from tuios, so it
-can become a Go library of its own.
+The protocol code is the Go library `tuios.dev/acp`, in the `acp/` folder;
+see [ACP_LIBRARY.md](ACP_LIBRARY.md).
 
 The pane's process is `tuios agent-proto`. It knows the agent's state from the
 protocol itself, not from its screen, and reports it for its own pane with

@@ -40,7 +40,7 @@ go run ./cmd/tuios-web --debug
 # so the libraries are named one by one. `just test` runs this line under the
 # limits below.
 go test ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... \
-  ./plot/... ./loom/... ./sketch/...
+  ./plot/... ./loom/... ./sketch/... ./acp/...
 
 # Leave the machine usable. The maintainer works on this box while the suite
 # runs, and an uncapped build or test run takes every core. taskset confines the
@@ -216,8 +216,8 @@ Some parts of tuios are Go modules of their own, published under
 that points the go command at the folder in this repository. They are
 `progstatus/` (`tuios.dev/progstatus`), `vt/` (`tuios.dev/vt`), `swatch/`
 (`tuios.dev/swatch`), `shot/` (`tuios.dev/shot`), `tml/` (`tuios.dev/tml`),
-`plot/` (`tuios.dev/plot`), `loom/` (`tuios.dev/loom`) and `sketch/`
-(`tuios.dev/sketch`). `go.work` lists them all.
+`plot/` (`tuios.dev/plot`), `loom/` (`tuios.dev/loom`), `sketch/`
+(`tuios.dev/sketch`) and `acp/` (`tuios.dev/acp`). `go.work` lists them all.
 
 - `go.work` makes the app, `e2e/tui` and each library one workspace, so a
   change to a library and to the app lands in one pull request. Never add a
@@ -327,7 +327,7 @@ tuios/
 │   ├── mcp/                # The MCP server behind tuios mcp
 │   ├── risk/               # Marks an approval risky by the shipped and configured rules
 │   ├── pushnotify/         # Sends Inbox items to a phone through ntfy, Pushover or a webhook
-│   ├── agentproto/         # Headless agents over ACP and the Codex app-server: the pane program of start-agent --protocol
+│   ├── agentproto/         # Headless agents over ACP (through tuios.dev/acp) and the Codex app-server: the pane program of start-agent --protocol
 │   ├── learn/              # Learn tuios: tour model, event contract, page commands, lessons/ (the tracks as data and the engine)
 │   ├── webshell/           # In-memory pty and fake shell for the browser build
 │   ├── tutor/              # tuios tutor: Learn mode in this terminal, in a sandbox, with the coach card
@@ -363,6 +363,7 @@ tuios/
 │                           #  transcript, guestenv, perf, fuzz, testutil,
 │                           #  atomicfile, lazyre, linediff, oneline, pathroot,
 │                           #  plural, sortx, units, winacl, winjob, winpath)
+├── acp/                    # tuios.dev/acp, a Go module of its own: the Agent Client Protocol client, versions 1 and 2; the JSON-RPC peer, negotiation, typed updates
 ├── loom/                   # tuios.dev/loom, a Go module of its own: draws TML into cells; flex layout, retained tree, palettes per depth, keys and mouse
 ├── plot/                   # tuios.dev/plot, a Go module of its own: eleven chart kinds (bar, line, area, heatmap, pie, world map and more) as cells with theme roles
 ├── progstatus/             # tuios.dev/progstatus, a Go module of its own: OSC 7501 parser, record store, encoder

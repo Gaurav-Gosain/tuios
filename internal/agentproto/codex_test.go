@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/internal/acp"
+	"tuios.dev/acp"
 )
 
 // startCodex runs the app-server handshake against the peer. It checks that

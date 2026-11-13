@@ -18,10 +18,8 @@ import (
 var outlineDirs = []string{"internal", "cmd/tuios", "pkg"}
 
 // outlineSkip are folders inside outlineDirs that are not part of the binary,
-// and the wrappers themselves: the binary's in errfmt and jsonx, and the copy
-// in internal/acp, which imports nothing from tuios so it can become a
-// library of its own, and keeps the rest of its files under this lint.
-var outlineSkip = []string{"internal/errfmt", "internal/jsonx", "internal/harness/herdrconv", "internal/lint", "internal/acp/outline.go"}
+// and the wrappers themselves, in errfmt and jsonx.
+var outlineSkip = []string{"internal/errfmt", "internal/jsonx", "internal/harness/herdrconv", "internal/lint"}
 
 // outlined maps each standard library call the compiler inlines at every
 // call site to the out-of-line copy to call instead.

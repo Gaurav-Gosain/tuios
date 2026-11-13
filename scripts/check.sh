@@ -33,7 +33,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 root=$PWD
 
-modules=(. e2e/tui progstatus vt swatch shot tml plot loom sketch)
+modules=(. e2e/tui progstatus vt swatch shot tml plot loom sketch acp)
 mapfile -t cross_goos < <(grep -v '^#' scripts/platforms.txt)
 
 changed=0

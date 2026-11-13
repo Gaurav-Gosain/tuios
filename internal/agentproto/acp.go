@@ -9,12 +9,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Gaurav-Gosain/tuios/internal/acp"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"tuios.dev/acp"
 )
 
-// The ACP agent: internal/acp speaks the protocol, versions 1 and 2, and this
+// The ACP agent: tuios.dev/acp speaks the protocol, versions 1 and 2, and this
 // file turns what it delivers into the pane's events.
 //
 // Version 2 is a draft of the spec, which asks clients not to ask for it by

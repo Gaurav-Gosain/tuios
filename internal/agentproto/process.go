@@ -10,9 +10,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Gaurav-Gosain/tuios/internal/acp"
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"tuios.dev/acp"
 )
 
 // Protocols the package speaks, by the name start-agent --protocol takes.
