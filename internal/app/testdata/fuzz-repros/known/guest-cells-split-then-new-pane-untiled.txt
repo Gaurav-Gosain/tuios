@@ -1,0 +1,9 @@
+# Found 2026-11-14 by a FuzzModel run at d709fd58a, not fixed. On workspace 9 at 60x20 a split (ctrl+b -) adds a pane at 22x4@11,13 that the tiler does not place, and the next new pane lands untiled at 60x20@0,0. pane 0004 keeps 44x18@0,2 at Z 3, but the frame shows blank cells where its guest wrote. It fails at 1bc4c5aae and passes at v0.12.1. A bisect between them ends in e121e63a5..cceaa748b, where the script breaks pane-size first and hides this rule.
+overlay-open 1
+resize 60 20
+workspace 0
+key "right"
+new-pane
+chord "-"
+press 0 0 1
+new-pane
