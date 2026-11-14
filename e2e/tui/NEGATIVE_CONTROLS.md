@@ -17579,3 +17579,20 @@ the test uses text, as the film's folder was.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestACopysRateIsWhatTheFarSideTook$' -v .`.
+
+## The board's header counts the agents auto starts
+
+`TestTheBoardCountsWhatAutoStarts` turns a board with two open cards and an
+ask-first card to auto, at a cap of 2. Both open cards start, none waits, so
+the run count is the only change the header can show. It must read
+"2 running". `TestTheBoardTurnsOnAuto` missed this: its cap of 1 leaves a
+card waiting, and that change publishes the counts with it.
+
+Run on 2026-11-14 on macOS. The branch passes both tests.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `autoPass` publishes only a change of waiting cards and notes, as before | "waiting for the header's run count" timed out; the header reads "Dispatch Auto  0 running" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTheBoardCountsWhatAutoStarts$' -v .`.

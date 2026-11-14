@@ -159,3 +159,57 @@ func TestTheBoardTurnsOnAuto(t *testing.T) {
 		t.Fatalf("ASSERTION: the third ctrl+t left the board in auto:\n%s", got)
 	}
 }
+
+// TestTheBoardCountsWhatAutoStarts turns a board to auto with room for every
+// open card: two cards, a cap of 2, and an ask-first card that waits for a
+// person. The daemon starts an agent for each open card, and no card waits,
+// so the only change the header can show is the run count. It must say
+// "2 running" while the two agents hold their cards. In the film of v0.13.0
+// it said "0 running" while three agents ran, until another dispatch event.
+//
+// Negative control (NEGATIVE_CONTROLS.md): with autoPass publishing only a
+// change of waiting cards and notes, as before, the header stays at
+// "0 running".
+func TestTheBoardCountsWhatAutoStarts(t *testing.T) {
+	base, origin := fanFixture(t)
+	t.Setenv("TUIOS_WORKTREE_DIR", "")
+	claudeDir, _ := poolAgentBin(t)
+	t.Setenv("PATH", claudeDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	useShippedLooks(base)
+	here := filepath.Join(base, "dev", "api")
+	cloneWithOrigin(t, origin, here, "git@github.com:acme/api.git")
+	mustCLI(t, base, "new", "home", "--detach", "--cwd", here)
+	waitForSessionInfo(t, base, "home")
+	const proj = "git@github.com:acme/api.git"
+	mustCLI(t, base, "task", "add", "-s", "home", "--project", proj, "-p", "Make the client retry on a 503.", "Fix the retry")
+	mustCLI(t, base, "task", "add", "-s", "home", "--project", proj, "-p", "Say how retries work.", "Write the retry docs")
+	mustCLI(t, base, "task", "add", "-s", "home", "--project", proj, "--ask-first", "Ship the release")
+	mustCLI(t, base, "task", "dispatch", "cap", "2")
+	term := attachIn(t, base, "home", startOpts{cols: 160, rows: 45, shippedLooks: true})
+
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the agents view", "b board")
+	if err := term.SendKeys("b"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the board's dispatch", "Dispatch Manual")
+	for _, mode := range []string{"Dispatch Pull", "Dispatch Auto"} {
+		if err := term.SendKeys(tuitest.Ctrl('t')); err != nil {
+			t.Fatal(err)
+		}
+		waitText(t, term, "the board in "+mode, mode)
+	}
+	cards, raw := waitAutoCards(t, base, "home", "auto did not start agents for t1 and t2",
+		func(c map[string]autoCard) bool { return held(c, "t1") && held(c, "t2") })
+	if !cards["t1"].Dispatched || !cards["t2"].Dispatched || held(cards, "t3") {
+		t.Fatalf("ASSERTION: want t1 and t2 held by dispatch and t3 free:\n%s", raw)
+	}
+	waitText(t, term, "the header's run count", "2 running")
+	if text := term.Snapshot(); strings.Contains(text, "waiting for a free machine") {
+		t.Fatalf("ASSERTION: a card waits, so the header changed for another reason:\n%s", text)
+	}
+	_ = term.WaitStable(uiTimeout)
+	saveCockpitFrames(t, term, "board-auto-counts-160x45")
+}

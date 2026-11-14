@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"maps"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,6 +52,10 @@ type autoState struct {
 	waiting map[string]int
 	note    map[string]string
 	quiet   *time.Timer
+	// told is each auto board's run count as the last pass published it.
+	// A run that starts or ends changes the board's "N running", so a pass
+	// that sees another count publishes, as it does for waiting and note.
+	told map[string]int
 }
 
 // autoRun is one card auto starts (starting) or started.
@@ -214,6 +219,12 @@ func (d *Daemon) autoPass() {
 		changed = changed || a.note[k] != v || a.waiting[k] != waiting[k]
 	}
 	a.waiting, a.note = waiting, note
+	running := map[string]int{}
+	for _, r := range a.runs {
+		running[r.board]++
+	}
+	changed = changed || !maps.Equal(running, a.told)
+	a.told = running
 	if quiet && a.quiet == nil {
 		a.quiet = time.AfterFunc(d.dispatch.untilQuietEnds(now), func() {
 			a.mu.Lock()
