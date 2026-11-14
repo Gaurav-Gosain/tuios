@@ -175,8 +175,8 @@ tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8 h1:zx+RE1mRYo4Mrlx85nMAurWev
 tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8/go.mod h1:YNjGUvsZUCEfRcs27dMp8Y09OYHMj7ahPdXN8jzXiKc=
 tuios.dev/progstatus v0.1.2-0.20261030111253-c0f512aa3148 h1:QViiX2hALI5Eq0mBQgaDcp6FHOH+kmtFJwHY6CYyHW8=
 tuios.dev/progstatus v0.1.2-0.20261030111253-c0f512aa3148/go.mod h1:T1xSzlBLLLwdTzerZcAq/SroDkLLCigxjxrxxy7U0Y0=
-tuios.dev/shot v0.2.2-0.20261108190511-f7dea1948570 h1:OXzPl1qIwCz/GC7oWohhX3sAyWnSOLBj7yEwO9BKaOg=
-tuios.dev/shot v0.2.2-0.20261108190511-f7dea1948570/go.mod h1:6fhIgX/x7TpDqi+LCipIZYJvegMF2jfGqzukF7B6vTM=
+tuios.dev/shot v0.2.2-0.20261114201235-1792ffc9adbd h1:b2GICebjC/8KL5GgSFCGbQysBeDXf+YiFgEOEhJVsVc=
+tuios.dev/shot v0.2.2-0.20261114201235-1792ffc9adbd/go.mod h1:6fhIgX/x7TpDqi+LCipIZYJvegMF2jfGqzukF7B6vTM=
 tuios.dev/sketch v0.4.1-0.20261111103404-69c228e9f454 h1:q2f5lod27pTVcSiiOHWDVVBXR8fzbruIRHltylRvDFM=
 tuios.dev/sketch v0.4.1-0.20261111103404-69c228e9f454/go.mod h1:h51gEbOg0IMyYHsiHYX8VkY3DxoxQCZvQaDJ7G9La90=
 tuios.dev/swatch v0.1.2-0.20261030111253-c0f512aa3148 h1:fOdsKOC/IwE0npG2NRZ5OTsP3lIDsFkEfblY7Ut7POY=
