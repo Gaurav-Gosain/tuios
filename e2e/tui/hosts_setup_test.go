@@ -455,19 +455,12 @@ func TestSetUpTailnetInAPaneDrawsTheSummaryOnce(t *testing.T) {
 		t.Fatalf("send-text failed: %v\n%s", err, out)
 	}
 	var pane string
-	deadline := time.Now().Add(90 * time.Second)
-	for time.Now().Before(deadline) {
+	waitUntil(t, "the setup did not end in the pane", 90*time.Second, func() (bool, string) {
 		pane, _ = tuiosCLI(t, here, "capture-pane", "-s", "home", "-w", ids[0])
-		if strings.Contains(pane, "SETUP_EXIT=") {
-			break
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
+		return strings.Contains(pane, "SETUP_EXIT="), pane
+	})
 	saveFrame(t, term, "tailnet-setup-in-a-pane")
 	t.Logf("the pane after the setup:\n%s", pane)
-	if !strings.Contains(pane, "SETUP_EXIT=") {
-		t.Fatalf("ASSERTION: the setup did not end in the pane")
-	}
 	if !strings.Contains(pane, "1 machine is ready.") {
 		t.Fatalf("ASSERTION: the pane does not show the summary")
 	}

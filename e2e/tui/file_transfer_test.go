@@ -223,9 +223,11 @@ func throttleUp(src io.Reader, dst io.WriteCloser, rate, depth int) {
 		if _, err := dst.Write(out); err != nil {
 			return
 		}
+		// This paces the stand-in link to its rate. It waits on no
+		// condition, so the timer is the link's clock, not a test wait.
 		next = next.Add(tick)
 		if d := time.Until(next); d > 0 {
-			time.Sleep(d)
+			<-time.After(d)
 		} else {
 			next = time.Now()
 		}

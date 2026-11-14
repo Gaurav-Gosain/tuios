@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	mrand "math/rand/v2"
 	"os"
@@ -223,12 +224,11 @@ func TestACopysRateIsWhatTheFarSideTook(t *testing.T) {
 	landed = append(landed, point{start, 0})
 	var shown, truth []float64
 	worst, worstShown, worstTrue := 0.0, 0.0, 0.0
-	deadline := start.Add(3 * time.Minute)
-	for {
+	waitUntil(t, "the copy did not end", 3*time.Minute, func() (bool, string) {
 		row = transferNow(t, base, row.ID)
 		landed = append(landed, point{time.Now(), treeBytes(dst)})
 		if row.State == "done" || row.State == "failed" || row.State == "cancelled" {
-			break
+			return true, ""
 		}
 		// The rate covers the last five seconds, or the copy so far.
 		if row.Rate > 0 && time.Since(start) > time.Second {
@@ -238,11 +238,8 @@ func TestACopysRateIsWhatTheFarSideTook(t *testing.T) {
 				worst, worstShown, worstTrue = over, row.Rate, got
 			}
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("ASSERTION: the copy did not end in %v: %+v", time.Since(start), row)
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+		return false, fmt.Sprintf("%+v", row)
+	})
 	took := time.Since(start)
 	if row.State != "done" {
 		t.Fatalf("ASSERTION: the copy ended %s: %s %s", row.State, row.Code, row.Error)
