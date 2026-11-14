@@ -39,6 +39,7 @@ var bundledNameTable = [...]struct{ name, id string }{
 	{"kiro", "kiro"},
 	{"letta", "letta"},
 	{"maki", "maki"},
+	{"mistral-vibe", "vibe"},
 	{"oh-my-pi", "omp"},
 	{"omp", "omp"},
 	{"opencode", "opencode"},
@@ -47,4 +48,7 @@ var bundledNameTable = [...]struct{ name, id string }{
 	{"qodercli", "qoder"},
 	{"qwen", "qwen"},
 	{"qwen-code", "qwen"},
+	{"vibe", "vibe"},
+	{"vibe-cli", "vibe"},
+	{"vibe-rs", "vibe"},
 }

@@ -43,6 +43,7 @@ const (
 	OMP         = "omp"
 	Qoder       = "qoder"
 	Qwen        = "qwen"
+	Vibe        = "vibe"
 )
 
 // Canonical resolves a harness name to the id this package knows it by,
@@ -60,7 +61,7 @@ func HarnessIDs() []string {
 	return []string{
 		ClaudeCode, Codex, GeminiCLI, OpenCode,
 		Amp, Antigravity, Copilot, Crush, CursorAgent, Devin, Droid, Grok,
-		Hermes, Kilo, Kimi, OMP, Pi, Qoder, Qwen,
+		Hermes, Kilo, Kimi, OMP, Pi, Qoder, Qwen, Vibe,
 	}
 }
 
@@ -394,6 +395,8 @@ func Translate(harnessName string, in Input) Decision {
 		return translateCopilot(in, p)
 	case CursorAgent:
 		return translateCursor(in, p)
+	case Vibe:
+		return translateVibe(in, p)
 	default:
 		return translateIdentity(id, in, p)
 	}

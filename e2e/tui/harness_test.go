@@ -352,7 +352,7 @@ var xdgKeys = []string{
 var harnessDirKeys = []string{
 	"CLAUDE_CONFIG_DIR", "CODEX_HOME", "COPILOT_HOME", "CURSOR_CONFIG_DIR",
 	"GROK_HOME", "HERMES_HOME", "KIMI_CODE_HOME", "PI_CODING_AGENT_DIR",
-	"QODER_CONFIG_DIR", "QWEN_HOME", "ANTIGRAVITY_CLI_CONFIG_DIR",
+	"QODER_CONFIG_DIR", "QWEN_HOME", "ANTIGRAVITY_CLI_CONFIG_DIR", "VIBE_HOME",
 	// Windows only, cleared all the same. Hermes and Devin read them there.
 	"APPDATA", "LOCALAPPDATA",
 }

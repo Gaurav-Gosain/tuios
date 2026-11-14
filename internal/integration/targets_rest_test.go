@@ -27,6 +27,7 @@ var userFiles = map[string]string{
 	Qoder:       `{"permissions": {"allow": ["Read"]}}`,
 	Qwen:        `{"general": {"checkpointing": {"enabled": true}}, "hooks": {"SessionStart": [{"matcher": "*", "hooks": [{"type": "command", "command": "qwen-log"}]}]}}`,
 	Kimi:        "default_model = \"kimi-k2\"\n\n[[hooks]]\nevent = \"PreToolUse\"\nmatcher = \"Shell\"\ncommand = \".kimi/hooks/safety-check.sh\"\ntimeout = 10\n\n[loop_control]\nmax_steps = 50 # a comment\n",
+	Vibe:        "[[hooks]]\nname = \"user-audit\"\ntype = \"pre_tool\"\ncommand = \"~/.vibe/hooks/audit.sh\"\ntimeout = 10\n",
 }
 
 // keeps says what of the user's file must survive install and uninstall.
@@ -44,6 +45,7 @@ func keeps(t *testing.T, id, got string) {
 		Qoder:       {`"Read"`},
 		Qwen:        {`"qwen-log"`, `"checkpointing"`},
 		Kimi:        {"default_model = \"kimi-k2\"", "safety-check.sh", "max_steps = 50 # a comment"},
+		Vibe:        {"name = \"user-audit\"", "audit.sh"},
 	}[id]
 	for _, w := range want {
 		if !strings.Contains(got, w) {
@@ -284,7 +286,7 @@ func TestKimiBlockKeepsTheUsersTOML(t *testing.T) {
 // stays a link through install and uninstall, for the TOML and flat JSON shapes
 // as for Claude Code's.
 func TestSharedFilesStayLinked(t *testing.T) {
-	for _, id := range []string{Kimi, Crush, Qwen} {
+	for _, id := range []string{Kimi, Vibe, Crush, Qwen} {
 		t.Run(id, func(t *testing.T) {
 			env := testEnv(t)
 			tg := mustTarget(t, id)

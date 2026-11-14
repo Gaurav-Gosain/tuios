@@ -1,0 +1,128 @@
+[
+  {
+    "name": "session_start sets idle and session metadata",
+    "payload": {
+      "hook_event_name": "session_start",
+      "session_id": "vibe-1",
+      "transcript_path": "/tmp/vibe-1.jsonl",
+      "cwd": "/work/repo",
+      "source": "startup",
+      "model": "mistral-large-latest"
+    },
+    "want": {
+      "state": "idle",
+      "agent_session_id": "vibe-1",
+      "session_start": true,
+      "transcript_path": "/tmp/vibe-1.jsonl",
+      "agent_cwd": "/work/repo",
+      "activity": {"event": "session_start", "text": "startup", "model": "mistral-large-latest"}
+    }
+  },
+  {
+    "name": "pre_agent starts working and records prompt",
+    "payload": {
+      "hook_event_name": "pre_agent",
+      "session_id": "vibe-1",
+      "prompt": "fix the parser"
+    },
+    "want": {
+      "state": "working",
+      "agent_session_id": "vibe-1",
+      "activity": {"event": "prompt", "text": "fix the parser"}
+    }
+  },
+  {
+    "name": "pre_tool ordinary tool is working",
+    "payload": {
+      "hook_event_name": "pre_tool",
+      "session_id": "vibe-1",
+      "tool_name": "bash",
+      "tool_input": {"command": "cargo test"}
+    },
+    "want": {
+      "state": "working",
+      "agent_session_id": "vibe-1",
+      "activity": {"event": "tool", "tool": "bash", "target": "cargo test"}
+    }
+  },
+  {
+    "name": "pre_tool ask_user_question reports needs_input question",
+    "payload": {
+      "hook_event_name": "pre_tool",
+      "session_id": "vibe-1",
+      "tool_name": "ask_user_question",
+      "tool_input": {"question": "Which branch?"}
+    },
+    "want": {
+      "state": "needs_input",
+      "kind": "question",
+      "message": "Which branch?",
+      "agent_session_id": "vibe-1"
+    }
+  },
+  {
+    "name": "post_tool clears block and reports tool_done",
+    "payload": {
+      "hook_event_name": "post_tool",
+      "session_id": "vibe-1",
+      "tool_name": "bash",
+      "tool_input": {"command": "cargo test"}
+    },
+    "want": {
+      "state": "working",
+      "agent_session_id": "vibe-1",
+      "if_state": "needs_input",
+      "activity": {"event": "tool_done", "tool": "bash", "target": "cargo test"}
+    }
+  },
+  {
+    "name": "notification permission_prompt is approval",
+    "payload": {
+      "hook_event_name": "notification",
+      "session_id": "vibe-1",
+      "notification_type": "permission_prompt",
+      "title": "Run bash?",
+      "message": "Allow cargo test"
+    },
+    "want": {
+      "state": "needs_input",
+      "kind": "approval",
+      "message": "Run bash?: Allow cargo test",
+      "agent_session_id": "vibe-1"
+    }
+  },
+  {
+    "name": "post_agent finishes turn as done",
+    "payload": {
+      "hook_event_name": "post_agent",
+      "session_id": "vibe-1",
+      "response": "All tests pass."
+    },
+    "want": {
+      "state": "done",
+      "agent_session_id": "vibe-1",
+      "activity": {"event": "turn_end", "text": "All tests pass."}
+    }
+  },
+  {
+    "name": "session_end clears state",
+    "payload": {
+      "hook_event_name": "session_end",
+      "session_id": "vibe-1"
+    },
+    "want": {
+      "state": "none",
+      "agent_session_id": "vibe-1"
+    }
+  },
+  {
+    "name": "subagent event is skipped so it does not overwrite parent state",
+    "payload": {
+      "hook_event_name": "post_agent",
+      "session_id": "vibe-sub-1",
+      "parent_session_id": "vibe-1",
+      "response": "Subagent finished."
+    },
+    "skip": "subagent events do not drive the parent pane's state"
+  }
+]

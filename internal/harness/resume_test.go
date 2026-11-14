@@ -25,6 +25,7 @@ func TestResumeArgvBuildsTheCommand(t *testing.T) {
 		{"opencode", []string{"opencode", "--session", "3f2a-9c"}},
 		{"pi", []string{"pi", "--session", "3f2a-9c"}},
 		{"qoder", []string{"qodercli", "--resume", "3f2a-9c"}},
+		{"vibe", []string{"vibe", "--resume", "3f2a-9c"}},
 	} {
 		got, err := r.ResumeArgv(tc.harness, "3f2a-9c", nil)
 		if err != nil || !slices.Equal(got, tc.want) {

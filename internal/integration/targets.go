@@ -514,6 +514,18 @@ var targets = []*Target{
 			{"Stop", 5000}, {"StopFailure", 5000}, {"SessionEnd", 5000},
 		},
 	},
+	{
+		ID: Vibe, Name: "Mistral Vibe", Binary: "vibe", Version: 1, Reports: ReportsState,
+		Source:    "https://github.com/mistralai/mistral-vibe ([[hooks]] tables in ~/.vibe/hooks.toml or $VIBE_HOME/hooks.toml: name, type, command, timeout in seconds)",
+		ConfigDir: func(e Env) string { return e.dirFromEnv("VIBE_HOME", ".vibe") },
+		File:      "hooks.toml",
+		format:    tomlBlock{named: true},
+		Events: []HookEvent{
+			{"session_start", 5}, {"pre_agent", 5}, {"pre_tool", 5},
+			{"post_tool", 5}, {"notification", 5}, {"post_agent", 5},
+			{"session_end", 5},
+		},
+	},
 }
 
 // Targets lists every harness with an installer, in a stable order.
