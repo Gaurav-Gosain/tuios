@@ -137,9 +137,15 @@ TFLAG=""
 # caller set, as CI does. The release tarball holds a LIB_VERSION file, which
 # is what makes zig build build the library and not the Ghostty app, and the
 # xcframework is off by default, so neither needs a flag.
+#
+# -Dversion-string names the library version outright. Without it the build
+# reads the version from git, and this source tree sits inside the tuios
+# checkout: on a release commit git describe finds the tuios tag, such as
+# v0.13.0, and the build panics because it does not match the library's own
+# version. Other commits have no exact tag, so only a release hit it.
 ZIG_CACHE="$CACHE/zig-cache-$TARGET"
 rm -rf "$ZIG_CACHE"
-(cd "$SRC" && ZIG_GLOBAL_CACHE_DIR="$ZIG_CACHE" "$ZIG" build --system "$DEPS" -Doptimize=ReleaseFast -Dcpu="$CPU" $TFLAG --prefix "$OUT/dist")
+(cd "$SRC" && ZIG_GLOBAL_CACHE_DIR="$ZIG_CACHE" "$ZIG" build --system "$DEPS" -Doptimize=ReleaseFast -Dcpu="$CPU" -Dversion-string="$GHOSTTY_VT_VERSION" $TFLAG --prefix "$OUT/dist")
 rm -rf "$ZIG_CACHE"
 
 mkdir -p "$OUT/lib" "$OUT/pkgconfig"
