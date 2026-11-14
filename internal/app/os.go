@@ -2316,6 +2316,11 @@ type NotifTarget struct {
 	// machine: the ssh target Never stores, the destination Add sets up, and
 	// the name the message shows. See machine_offer.go.
 	OfferTarget, OfferDest, OfferMachine string
+	// InboxItems is the ids of the Inbox items an alert is about, joined by
+	// spaces. The message leaves the dock when the last of them closes, so
+	// an alert does not stay after what it announced is over. See
+	// clearClosedInboxAlerts.
+	InboxItems string
 }
 
 // LogMessage represents a log entry with timestamp and level.

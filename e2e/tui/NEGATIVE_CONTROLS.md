@@ -17524,3 +17524,19 @@ Run on 2026-11-14 on Linux. The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHerdrTabMoveKeepsTabIDs$' -v .`.
+
+## A held config.toml change leaves the dock once it is applied
+
+`TestAWideningReloadSaysItWaits` widens `[agents.permissions]` from a file
+change, with `[notifications] warning_duration = 60` so no timer can take a
+message off inside the test. The dock must say "change waits" and never
+"errored", and after `tuios config apply` the message must leave the dock.
+
+Run on 2026-11-14 on macOS. The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The `clearClosedInboxAlerts` call taken out of `applyInboxEvents` | "the dock still says the change waits after tuios config apply" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAWideningReloadSaysItWaits$' -v .`.

@@ -269,10 +269,14 @@ func TestAnOpenPaneCannotReachAPromptThroughTheClient(t *testing.T) {
 
 // TestAWideningReloadSaysItWaits: a change to config.toml that gives panes
 // more, such as strict to open, waits for tuios config apply. The person sees
-// that in the Inbox, and tuios config apply says what it changed.
+// that in the dock and the Inbox, and tuios config apply says what it changed.
+// The dock says the change waits, not that something errored, and the message
+// leaves the dock once the change is applied.
 //
-// Negative control: with noteConfigWaiting cut from applyUserConfig, the
-// Inbox never shows the waiting change.
+// Negative controls: with noteConfigWaiting cut from applyUserConfig, the
+// Inbox never shows the waiting change. With the clearClosedInboxAlerts call
+// cut from applyInboxEvents, the dock keeps the message after tuios config
+// apply.
 func TestAWideningReloadSaysItWaits(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -280,7 +284,9 @@ func TestAWideningReloadSaysItWaits(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(cfg), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	strict := "[agents.permissions]\nmode = \"strict\"\ngrants = [\"read\"]\n"
+	// A warning stays a minute, so only the close of the item can take the
+	// dock message off inside the test's wait.
+	strict := "[notifications]\nwarning_duration = 60\n\n[agents.permissions]\nmode = \"strict\"\ngrants = [\"read\"]\n"
 	if err := os.WriteFile(cfg, []byte(strict), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -309,6 +315,13 @@ func TestAWideningReloadSaysItWaits(t *testing.T) {
 	if !strings.Contains(out, "Mode strict") || !strings.Contains(out, "tuios config apply") {
 		t.Fatalf("a reload to open did not wait: %s", out)
 	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "change waits") }, uiTimeout); err != nil {
+		t.Fatalf("the dock does not say the change waits: %v\n%s", err, term.Snapshot())
+	}
+	if text := term.Snapshot(); strings.Contains(text, "errored") {
+		t.Fatalf("the dock calls a change that waits errored:\n%s", text)
+	}
+	saveFrame(t, term, "config-change-waits-dock")
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the Inbox: %v", err)
 	}
@@ -319,10 +332,17 @@ func TestAWideningReloadSaysItWaits(t *testing.T) {
 		t.Fatalf("the Inbox does not say the change waits: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "config-change-waits")
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatalf("close the Inbox: %v", err)
+	}
 
 	out, err = tuiosCLI(t, base, "config", "apply")
 	if err != nil || !strings.Contains(out, "mode open") || !strings.Contains(out, "Before: mode strict") {
 		t.Fatalf("tuios config apply did not say what it changed: %v\n%s", err, out)
 	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "change waits") }, uiTimeout); err != nil {
+		t.Fatalf("the dock still says the change waits after tuios config apply: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "config-change-applied")
 	alive(t, term, "after the change was applied")
 }

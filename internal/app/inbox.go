@@ -727,6 +727,7 @@ func (m *OS) applyInboxEvents(msg InboxEventsMsg) tea.Cmd {
 				st.Items = append(st.Items[:idx], st.Items[idx+1:]...)
 			}
 			delete(st.released, it.ID)
+			m.clearClosedInboxAlerts()
 		case session.AttentionOpened, session.AttentionUpdated:
 			var prev *session.AttentionItem
 			if idx >= 0 {
@@ -966,23 +967,33 @@ func (m *OS) fireInboxAlerts(ids []string) {
 	sev := "info"
 	cue, cueState := sound.CueDone, "done"
 	for _, it := range items {
-		switch it.Kind {
-		case session.AttentionApproval, session.AttentionPlan, session.AttentionQuestion, session.AttentionMail, session.AttentionAsk:
+		switch {
+		case inboxDaemonNotice(it):
+			// A notice about the daemon, such as a config.toml change that
+			// waits, asks the person to act. It is not an error.
+			if sev != "error" {
+				sev = "warning"
+			}
+		case it.Kind == session.AttentionApproval, it.Kind == session.AttentionPlan, it.Kind == session.AttentionQuestion, it.Kind == session.AttentionMail, it.Kind == session.AttentionAsk:
 			sev, cue, cueState = "warning", sound.CueAttention, "needs_input"
-		case session.AttentionErrored:
+		case it.Kind == session.AttentionErrored:
 			if sev != "warning" {
 				sev = "error"
 			}
 			cue, cueState = sound.CueAttention, "errored"
-		case session.AttentionFinished:
+		case it.Kind == session.AttentionFinished:
 			if sev == "info" {
 				sev = "success"
 			}
 		}
 	}
 	if policy.Dock {
+		shown := make([]string, len(items))
+		for i, it := range items {
+			shown[i] = it.ID
+		}
 		m.showAgentNotification(text, sev, inboxAlertMarkState(items, sev), m.Settings.NotificationDuration,
-			NotifTarget{Host: inboxItemMachine(first), SessionID: first.Session, WindowID: first.Window})
+			NotifTarget{Host: inboxItemMachine(first), SessionID: first.Session, WindowID: first.Window, InboxItems: strings.Join(shown, " ")})
 	}
 	var seq []byte
 	if policy.Notify && !m.BrowserClient {
@@ -995,6 +1006,38 @@ func (m *OS) fireInboxAlerts(ids []string) {
 	if policy.PlaysAudio() {
 		sound.Play(sound.Request{Cue: cue, File: policy.CueFile(cueState), Cooldown: policy.SoundCooldown})
 	}
+}
+
+// inboxDaemonNotice reports whether an item is a notice about the daemon
+// itself, such as a config.toml change that waits for the person, rather
+// than about a pane.
+func inboxDaemonNotice(it session.AttentionItem) bool {
+	return it.Kind == session.AttentionErrored && it.Session == "" && it.Window == ""
+}
+
+// clearClosedInboxAlerts takes off the dock every Inbox alert whose items have
+// all closed. An error alert is sticky, so without this a notice stayed after
+// the person had done what it asked, such as tuios config apply, until esc.
+func (m *OS) clearClosedInboxAlerts() {
+	kept := m.Notifications[:0]
+	for _, n := range m.Notifications {
+		if n.Target == nil || n.Target.InboxItems == "" || m.inboxAlertOpen(n.Target.InboxItems) {
+			kept = append(kept, n)
+		}
+	}
+	clear(m.Notifications[len(kept):])
+	m.Notifications = kept
+}
+
+// inboxAlertOpen reports whether any of the space-separated item ids is still
+// open in the Inbox.
+func (m *OS) inboxAlertOpen(ids string) bool {
+	for id := range strings.FieldsSeq(ids) {
+		if m.inboxIndex(id) >= 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // inboxAlertMarkState is the agent state whose mark the dock draws for a
@@ -1033,6 +1076,9 @@ func inboxKindWords(it session.AttentionItem) string {
 	case session.AttentionQuestion, session.AttentionAsk:
 		return "has a question"
 	case session.AttentionErrored:
+		if inboxDaemonNotice(it) {
+			return "needs you"
+		}
 		return "errored"
 	case session.AttentionFinished:
 		return sidebarStateWords("done")
@@ -1083,6 +1129,14 @@ func (m *OS) inboxWhere(it session.AttentionItem) string {
 func (m *OS) inboxAlertText(items []session.AttentionItem) string {
 	if len(items) == 1 {
 		it := items[0]
+		if inboxDaemonNotice(it) {
+			// The name says what waits, and the summary what to do.
+			text := printableTitle(it.Name)
+			if note := printableTitle(it.Summary); note != "" {
+				text += agentAlertSep() + note
+			}
+			return text
+		}
 		text := m.inboxWhere(it) + ": " + inboxWho(it) + " " + inboxKindWords(it)
 		if note := printableTitle(it.Summary); note != "" {
 			text += agentAlertSep() + note

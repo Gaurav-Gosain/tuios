@@ -1573,6 +1573,9 @@ func ckItemVerb(it session.AttentionItem) (verb, rest string) {
 		}
 		return "Mail", sum
 	case session.AttentionErrored:
+		if inboxDaemonNotice(it) {
+			return "Notice", sum
+		}
 		return "Error", sum
 	case session.AttentionResume:
 		if warn := session.ResumeWarning(it.RiskyFlags); warn != "" {
