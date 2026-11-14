@@ -52,6 +52,7 @@ var skillDirs = map[string]func(t *Target, env Env) string{
 	Codex:      agentsSkillDir,
 	OpenCode:   agentsSkillDir,
 	Pi:         agentsSkillDir,
+	Vibe:       func(t *Target, env Env) string { return filepath.Join(t.ConfigDir(env), "skills") },
 }
 
 func agentsSkillDir(_ *Target, env Env) string { return filepath.Join(env.Home, ".agents", "skills") }

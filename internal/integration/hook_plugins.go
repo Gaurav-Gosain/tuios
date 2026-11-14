@@ -270,3 +270,74 @@ func translateOMP(in Input, p fields) Decision {
 	}
 	return send(OMP, event, r)
 }
+
+// The Mistral Vibe event map. Vibe reads [[hooks]] tables from
+// ~/.vibe/hooks.toml (or $VIBE_HOME/hooks.toml). Each table has name, type,
+// command, and timeout (seconds). Payloads carry hook_event_name, session_id,
+// transcript_path, cwd, and parent_session_id when a subagent fires the hook.
+// Exit 0 with empty stdout allows and adds nothing.
+//
+//	session_start   idle, and the session id / transcript / cwd
+//	pre_agent       working, with the prompt as activity
+//	pre_tool        working, except ask_user_question (needs_input, kind question)
+//	post_tool       working, clearing needs_input
+//	notification    needs_input, kind approval on permission_prompt, else question
+//	post_agent      done
+//	session_end     none
+//	subagents       skipped when parent_session_id is non-empty
+func translateVibe(in Input, p fields) Decision {
+	event := eventName(in, p)
+	if p.str("parent_session_id") != "" {
+		return skip(Vibe, event, "subagent events do not drive the parent pane's state")
+	}
+	switch event {
+	case "session_start":
+		r := identity(Report{State: "idle", SessionStart: true}, p)
+		r.Activity = &Activity{Event: ActivitySessionStart, Text: activityText(p.str("source")), Model: activityText(p.str("model"))}
+		return send(Vibe, event, r)
+	case "pre_agent":
+		r := identity(Report{State: "working"}, p)
+		r.Activity = &Activity{Event: ActivityPrompt, Text: activityText(p.str("prompt"))}
+		return send(Vibe, event, r)
+	case "pre_tool":
+		tool := p.str("tool_name")
+		input := p.obj("tool_input")
+		if tool == "ask_user_question" || tool == "AskUserQuestion" {
+			msg := oneline.Clip(input.first("question", "prompt"))
+			return send(Vibe, event, identity(Report{State: "needs_input", Kind: "question", Message: msg}, p))
+		}
+		r := identity(Report{State: "working"}, p)
+		r.Activity = &Activity{Event: ActivityTool, Tool: tool, Target: ToolTarget(tool, input)}
+		return send(Vibe, event, r)
+	case "post_tool":
+		tool := p.str("tool_name")
+		input := p.obj("tool_input")
+		r := identity(Report{State: "working", IfState: claudeClearsBlock}, p)
+		r.Activity = &Activity{Event: ActivityToolDone, Tool: tool, Target: ToolTarget(tool, input)}
+		return send(Vibe, event, r)
+	case "notification":
+		kind := "question"
+		if p.str("notification_type") == "permission_prompt" {
+			kind = "approval"
+		}
+		title := oneline.Clip(p.str("title"))
+		msg := oneline.Clip(p.str("message"))
+		switch {
+		case title != "" && msg != "":
+			msg = title + ": " + msg
+		case title != "":
+			msg = title
+		}
+		return send(Vibe, event, identity(Report{State: "needs_input", Kind: kind, Message: msg}, p))
+	case "post_agent":
+		r := identity(Report{State: "done"}, p)
+		r.Activity = &Activity{Event: ActivityTurnEnd, Text: activityText(p.first("response", "last_assistant_message"))}
+		return send(Vibe, event, r)
+	case "session_end":
+		return send(Vibe, event, identity(Report{State: "none"}, p))
+	case "":
+		return skip(Vibe, event, "the payload names no event")
+	default:
+		return skip(Vibe, event, "event not mapped")
+	}
+}

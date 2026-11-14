@@ -1,0 +1,38 @@
+schema_version = 1
+id             = "vibe"
+display_name   = "Mistral Vibe"
+aliases        = ["mistral-vibe", "vibe-cli", "vibe-rs"]
+priority       = 50
+
+# Vibe 3.x launches its bundled Rust TUI binary (`vibe/_bin/vibe-rs`) via exec
+# from the `vibe` Python entrypoint, while older releases run as a Python CLI
+# (`vibe`). Both forms are matched and guarded by [detect.require].
+[detect]
+comm      = ["vibe", "vibe-rs"]
+argv0     = ["vibe", "vibe-rs"]
+argv_path = ["mistral-vibe"]
+exe_glob  = ["**/vibe/_bin/vibe-rs", "**/mistral-vibe/**/vibe-rs", "**/mistral-vibe/**/bin/vibe", "**/mistral-vibe/**/vibe"]
+
+[detect.require]
+exe_base = ["vibe-rs"]
+exe_glob = ["**/vibe/_bin/vibe-rs", "**/mistral-vibe/**"]
+
+[input]
+submit          = "cr"
+bracketed_paste = true
+
+# Source: `vibe --help` (Mistral Vibe 3.x).
+[launch]
+model_flag        = "--model"
+permission_flag   = "--agent"
+permissions       = ["ask", "accept-edits", "smart-approve", "auto-approve"]
+risky_permissions = ["auto-approve"]
+add_dir_flag      = "--add-dir"
+
+# Source: `vibe --help`: `--resume SESSION_ID`.
+[resume]
+argv         = ["vibe", "--resume", "{session_id}"]
+keep_options = ["--model", "--agent", "--workdir", "--add-dir"]
+keep_flags   = ["--auto-approve", "--yolo", "--smart-approve", "--trust"]
+keep_risky   = ["--auto-approve", "--yolo", "--agent=auto-approve"]
+source       = "vibe --help"

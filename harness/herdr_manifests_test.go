@@ -204,6 +204,13 @@ func TestHerdrManifestsIdentifyTheirProcesses(t *testing.T) {
 		{"qoder", ProcInfo{Comm: "node", Argv: []string{"node", "/n/node_modules/@qoder-ai/qodercli/bundle/qodercli.js"}, Exe: "/usr/bin/node"}, "qoder"},
 		{"qwen from npm", ProcInfo{Comm: "node", Argv: []string{"node", "/n/node_modules/@qwen-code/qwen-code/cli-entry.js"}, Exe: "/usr/bin/node"}, "qwen"},
 		{"a static binary named qwen is not claimed", ProcInfo{Comm: "qwen", Argv: []string{"qwen"}, Exe: "/usr/local/bin/qwen"}, ""},
+		{"vibe 3.x rust binary", ProcInfo{Comm: "vibe-rs", Argv: []string{"/home/u/.local/share/uv/tools/mistral-vibe/lib/python3.15/site-packages/vibe/_bin/vibe-rs"}, Exe: "/home/u/.local/share/uv/tools/mistral-vibe/lib/python3.15/site-packages/vibe/_bin/vibe-rs"}, "vibe"},
+		{"vibe python cli", ProcInfo{Comm: "vibe", Argv: []string{"/home/u/.local/share/uv/tools/mistral-vibe/bin/python", "/home/u/.local/bin/vibe"}, Exe: "/home/u/.local/share/uv/tools/mistral-vibe/bin/python3.15"}, "vibe"},
+		{"vibe homebrew rust binary", ProcInfo{Comm: "vibe-rs", Argv: []string{"/home/linuxbrew/.linuxbrew/Cellar/mistral-vibe/3.1.2/libexec/lib/python3.15/site-packages/vibe/_bin/vibe-rs"}, Exe: "/home/linuxbrew/.linuxbrew/Cellar/mistral-vibe/3.1.2/libexec/lib/python3.15/site-packages/vibe/_bin/vibe-rs"}, "vibe"},
+		{"vibe homebrew launcher", ProcInfo{Comm: "vibe", Argv: []string{"/home/linuxbrew/.linuxbrew/Cellar/mistral-vibe/3.1.2/libexec/bin/python", "/home/linuxbrew/.linuxbrew/bin/vibe"}, Exe: "/home/linuxbrew/.linuxbrew/Cellar/mistral-vibe/3.1.2/libexec/bin/python"}, "vibe"},
+		{"a static binary named vibe is not claimed", ProcInfo{Comm: "vibe", Argv: []string{"vibe"}, Exe: "/usr/local/bin/vibe"}, ""},
+		{"a python script under a folder named vibe is not claimed", ProcInfo{Comm: "python3", Argv: []string{"python3", "/home/u/code/vibe/app.py"}, Exe: "/usr/bin/python3"}, ""},
+		{"a script named vibe outside mistral-vibe is not claimed", ProcInfo{Comm: "vibe", Argv: []string{"/usr/bin/python3", "/home/u/code/vibe/vibe"}, Exe: "/usr/bin/python3"}, ""},
 	} {
 		got, _, ok := r.IdentifyDetail(c.p)
 		if c.want == "" {

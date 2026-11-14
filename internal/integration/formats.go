@@ -343,9 +343,13 @@ func (f namedBlock) state(t *Target, have []byte, run Runner) (bool, bool, int, 
 func (namedBlock) owned() bool { return false }
 
 // tomlBlock is a run of [[hooks]] tables tuios appends to a TOML config
-// between two marker comments: Kimi Code CLI's config.toml. Everything outside
-// the markers is the user's and is kept byte for byte.
-type tomlBlock struct{}
+// between two marker comments: Kimi Code CLI's config.toml and Mistral Vibe's
+// hooks.toml. Everything outside the markers is the user's and is kept byte
+// for byte. When named is true, each entry carries name = "tuios-<event>" and
+// type = "<event>" (Mistral Vibe's schema); otherwise event = "<event>".
+type tomlBlock struct {
+	named bool
+}
 
 const (
 	tomlBlockBegin = "# >>> tuios integration: managed by tuios integration install, removed by uninstall"
@@ -380,12 +384,16 @@ func tomlString(s string) string {
 	return b.String()
 }
 
-func (tomlBlock) block(t *Target, run Runner) string {
+func (f tomlBlock) block(t *Target, run Runner) string {
 	cmd := run.command(t.ID, t.Version)
 	var b strings.Builder
 	b.WriteString(tomlBlockBegin + "\n")
 	for _, ev := range t.Events {
-		fmt.Fprintf(&b, "[[hooks]]\nevent = %s\ncommand = %s\ntimeout = %d\n\n", tomlString(ev.Name), tomlString(cmd), ev.Timeout)
+		if f.named {
+			fmt.Fprintf(&b, "[[hooks]]\nname = %s\ntype = %s\ncommand = %s\ntimeout = %d\n\n", tomlString("tuios-"+ev.Name), tomlString(ev.Name), tomlString(cmd), ev.Timeout)
+		} else {
+			fmt.Fprintf(&b, "[[hooks]]\nevent = %s\ncommand = %s\ntimeout = %d\n\n", tomlString(ev.Name), tomlString(cmd), ev.Timeout)
+		}
 	}
 	b.WriteString(tomlBlockEnd + "\n")
 	return b.String()

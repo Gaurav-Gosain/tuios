@@ -50,6 +50,7 @@ const (
 	mcpGeminiJSON                   // "mcpServers": {"tuios": {"command", "args"}}
 	mcpOpenCodeJSON                 // "mcp": {"tuios": {"type": "local", "command": [...], "enabled": true}}
 	mcpCodexTOML                    // [mcp_servers.tuios] command, args
+	mcpVibeTOML                     // [[mcp_servers]] name = "tuios", transport = "stdio", command, args
 )
 
 // mcpTarget is where one harness reads its MCP servers.
@@ -68,6 +69,7 @@ var mcpTargets = map[string]mcpTarget{
 	GeminiCLI: {shape: mcpGeminiJSON, path: func(t *Target, env Env) string { return filepath.Join(t.ConfigDir(env), "settings.json") }},
 	OpenCode:  {shape: mcpOpenCodeJSON, path: func(t *Target, env Env) string { return filepath.Join(t.ConfigDir(env), "opencode.json") }},
 	Codex:     {shape: mcpCodexTOML, path: func(t *Target, env Env) string { return filepath.Join(t.ConfigDir(env), "config.toml") }},
+	Vibe:      {shape: mcpVibeTOML, path: func(t *Target, env Env) string { return filepath.Join(t.ConfigDir(env), "config.toml") }},
 }
 
 // SupportsMCP reports whether tuios can register its MCP server with the
@@ -186,9 +188,12 @@ func (t *Target) mcpPlan(env Env, tuios string, write, install bool) (path strin
 	if !install && have == nil {
 		return path, nil, nil, false, nil
 	}
-	if m.shape == mcpCodexTOML {
+	switch m.shape {
+	case mcpCodexTOML:
 		out, err = editMCPTOML(have, tuios, write, install)
-	} else {
+	case mcpVibeTOML:
+		out, err = editMCPVibeTOML(have, tuios, write, install)
+	default:
 		out, err = editMCPJSON(m.shape, have, tuios, write, install)
 	}
 	if err != nil {
@@ -270,12 +275,12 @@ func (t *Target) MCPState(env Env, tuios string) MCPStatus {
 	var command string
 	var args []string
 	found := false
-	if m.shape == mcpCodexTOML {
+	if m.shape == mcpCodexTOML || m.shape == mcpVibeTOML {
 		_, block, err := splitBlock(string(have), mcpTOMLBegin, mcpTOMLEnd)
 		if err == nil && block != "" {
 			command, args, found = parseMCPTOMLBlock(block)
 		}
-		if !found && codexForeignTable(string(have)) {
+		if !found && ((m.shape == mcpCodexTOML && codexForeignTable(string(have))) || (m.shape == mcpVibeTOML && vibeForeignTable(string(have)))) {
 			st.Foreign = true
 		}
 	} else {
@@ -469,4 +474,52 @@ func editMCPTOML(have []byte, tuios string, write, install bool) ([]byte, error)
 		trimmed += "\n\n"
 	}
 	return []byte(trimmed + mcpTOMLBlock(tuios, write)), nil
+}
+
+var vibeServerRe = lazyre.New(`(?m)^\s*name\s*=\s*(?:"tuios"|'tuios')\s*$`)
+
+func vibeForeignTable(text string) bool {
+	outside, _, err := splitBlock(text, mcpTOMLBegin, mcpTOMLEnd)
+	if err != nil {
+		return false
+	}
+	return vibeServerRe().MatchString(outside)
+}
+
+func mcpVibeTOMLBlock(tuios string, write bool) string {
+	args := MCPArgs(write)
+	quoted := make([]string, len(args))
+	for i, a := range args {
+		quoted[i] = tomlString(a)
+	}
+	var b strings.Builder
+	b.WriteString(mcpTOMLBegin + "\n")
+	b.WriteString("[[mcp_servers]]\n")
+	b.WriteString("name = " + tomlString(MCPServerName) + "\n")
+	b.WriteString("transport = \"stdio\"\n")
+	b.WriteString("command = " + tomlString(tuios) + "\n")
+	b.WriteString("args = [" + strings.Join(quoted, ", ") + "]\n")
+	b.WriteString(mcpTOMLEnd + "\n")
+	return b.String()
+}
+
+func editMCPVibeTOML(have []byte, tuios string, write, install bool) ([]byte, error) {
+	outside, _, err := splitBlock(string(have), mcpTOMLBegin, mcpTOMLEnd)
+	if err != nil {
+		return nil, err
+	}
+	if !install {
+		if outside == string(have) {
+			return have, nil
+		}
+		return []byte(outside), nil
+	}
+	if vibeServerRe().MatchString(outside) {
+		return nil, errfmt.Errorf("it defines an [[mcp_servers]] named %s itself, so tuios leaves it alone", MCPServerName)
+	}
+	trimmed := strings.TrimRight(outside, "\n")
+	if trimmed != "" {
+		trimmed += "\n\n"
+	}
+	return []byte(trimmed + mcpVibeTOMLBlock(tuios, write)), nil
 }
