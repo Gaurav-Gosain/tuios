@@ -9599,6 +9599,7 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_HANDOFF_MEASURE=1 \
 - `TestDaemonUpgradeKeepsPaneProcesses` (PR 4) is driven by the command from this PR on.
 - `TestAttachedClientIsToldToReattach`: a real attached client exits with status 0 and prints "The daemon was upgraded to dev. Your programs are still running. Run 'tuios attach e2e-reattach' to continue."; the command reports "1 attached client was told to attach again".
 - `TestFederationLinkRedialsAfterUpgrade`: a daemon linked to a host through the ssh stand-in of `hosts_manage_test.go` has the link up after the upgrade, with one live link child, a new one, and none defunct.
+- `TestFederationLinkToAnotherMachineAfterUpgrade` (`daemon_upgrade_sshd_test.go`, opt in with `TUIOS_E2E_SSHD=1`): the far end of the link is another machine, a Docker container from `testdata/sshd` running sshd and its own daemon of a Linux build of the checkout, reached with the real `ssh` through `TUIOS_SSH` and a client config, key and known_hosts file of the test's own (`-F`, nothing in `~/.ssh`). After the upgrade the link is up, the daemon kept its pid on a new image and has one live ssh child for the link, a new one, and no defunct child, the old image's ssh pid is no longer its child, the container runs one `stdio-proxy` and not two, and the local pane kept its pid. The test skips without Docker, a Linux engine or ssh.
 - `TestDaemonUpgradeRefusalNamesTheServer`: an upgrade of a named server to `false` is refused, and the refusal says to run `tuios --server <name> kill-server`, never the bare `tuios kill-server` that stops the default daemon.
 - `TestDaemonUpgradeFromAPaneIsRefused`: a pane under the default open mode, which holds admin, runs `tuios daemon upgrade --binary <copy>` with no client attached. It must exit non-zero with "daemon-upgrade is for the person", the daemon's image must not change, and the same upgrade from outside every pane then goes through. Run on 2026-10-28 on macOS arm64 (Go 1.26.10). With a client attached the pane's upgrade asks the person; see "A pane's upgrade confirmed at a client" below.
 
@@ -9612,12 +9613,20 @@ Run on 2026-10-17 on macOS arm64, one build per control.
 | The refusal names no server | `killServerCommand` returns the bare `tuios kill-server` | `TestDaemonUpgradeRefusalNamesTheServer`: "the refusal on server e2e-upname does not say to run 'tuios --server e2e-upname kill-server'", "… says to run the bare 'tuios kill-server', which stops the default daemon" | **caught** |
 | A pane with admin may upgrade (2026-10-28) | the `mayActAsHuman` check in `verbDaemonUpgrade` made false | `TestDaemonUpgradeFromAPaneIsRefused`, 2 runs of 2: "a pane upgraded the daemon ({PID:38155 Instance:3731d834-…} then {PID:38155 Instance:bef886f4-…})" | **caught** |
 | The old image does not stop its links | `d.federation.Stop()` cut from `prepare` | none | **not caught** |
+| The old image does not stop its links | `d.federation.Stop()` cut from `prepare` | `TestFederationLinkToAnotherMachineAfterUpgrade`, 3 of 3 runs: "after the upgrade the daemon has defunct children nothing waits for: [49297 <defunct> <defunct>]", "the old image's ssh, pid 49297, is still the daemon's child after the upgrade". `TestFederationLinkRedialsAfterUpgrade` still passes, see below | **caught** |
 
-The last control is not caught by this rig. The stand-in's host is this daemon itself, so the link's relay is a client of the daemon, and the upgrade closing every client ends the relay before the exec, which the old image then reaps. A link to a real machine does not end that way; with the stop cut, its ssh child would stay this pid's child across the exec, unread and never waited for. The stop is kept on the strength of that reasoning, not of a test.
+The last control is caught only by the link to the container. In `TestFederationLinkRedialsAfterUpgrade` the stand-in's host is this daemon itself, so the link's relay is a client of the daemon, and the upgrade closing every client ends the relay before the exec, which the old image then reaps. A link to another machine is not a client of the daemon, so its ssh is still running at the exec. The exec closes the old image's ends of the ssh's pipes (Go opens them close-on-exec), ssh sees its input end, the far `stdio-proxy` exits, and ssh exits within the 10 s the test waits: the container is back to one proxy. Nothing in the new image waits for that pid (every wait in the daemon is for a pane's own pid), so it stays a defunct child of the daemon for the daemon's life, one more per link at every upgrade. The stop is needed: it closes the link and lets the old image's `cmd.Wait` reap the ssh before the exec.
+
+The container test needs Docker with a Linux engine. The first run builds the image `tuios-e2e-sshd` (one `apk add openssh-server`, so the network); later runs reuse it. `TUIOS_E2E_SSHD_IMAGE` renames the image and the containers, which are removed when the test ends. The test builds the checkout for the engine's architecture with `CGO_ENABLED=0` and copies it into the container. Run on 2026-10-17 on macOS arm64 (Darwin 27, Go 1.26.9, Docker 29.2.1, linux/arm64, `--cpus 2`) against feat/live-handoff-sshd-test.
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -run '^(TestDaemonUpgradeCommandKeepsPanes|TestAttachedClientIsToldToReattach|TestFederationLinkRedialsAfterUpgrade|TestDaemonUpgradeRefusalNamesTheServer|TestDaemonUpgradeFromAPaneIsRefused)$' .
+```
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_SSHD=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^TestFederationLinkToAnotherMachineAfterUpgrade$' .
 ```
 
 ### A pane's upgrade confirmed at a client
@@ -9712,7 +9721,7 @@ Run on 2026-10-17 on macOS arm64 (Darwin 27, Go 1.26.9) against the branch feat/
 | The keeper runs the daemon's own `/proc/self/fd/N` (Linux, 2026-10-28) | `keeperBinary` returns `prev.path`, which names the binary's descriptor in the daemon, not where the keeper holds it | every case of `TestDaemonUpgradeSurvivesACrashOfTheNewImage`, 2 runs of 2, in Docker (`golang:1.26.10`, Linux arm64): "call hello: exit status 3: The TUIOS daemon is not running, but a stale socket is left over" (the keeper could not exec the previous binary, and the panes ended) | **caught** |
 | The keeper starts with stderr on `/dev/null` (macOS, 2026-11-01) | `startKeeper` gives the keeper `null.Fd()` as descriptor 2 instead of `keeperStderr(null)` | every case of `TestDaemonUpgradeSurvivesACrashOfTheNewImage`, and only its new assertion: "the restored daemon's stderr is \"/dev/null\", want the daemon log …/XDG_STATE_HOME/tuios/daemon.log" (the first daemon's read the daemon log) | **caught** |
 
-The wait control is caught only by the exit status, which the test checks on macOS alone: on Linux a non-child's status is not known, so there the same cut would leave the exit code at -1 either way and pass. The pane's pid, its output and the restored daemon all look right under that cut, because a recorded exit does not close a window by itself.
+The wait control is caught here only by the exit status, which the test checked on macOS alone: on Linux a non-child's status was not known, so there the same cut left the exit code at -1 either way and passed. The pane's pid, its output and the restored daemon all look right under that cut, because a recorded exit does not close a window by itself. The test now also checks that the pane does not read as exited before it is told to exit, which catches the cut on Linux: see "Linux" below.
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
@@ -9922,6 +9931,68 @@ The `TUIOS_PANE_ID` case alone (without the first control) is not caught by thes
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -run '^(TestHostsSyncInAPaneUpgradesLiveAfterYes|TestHostsSyncInAPaneLeavesTheDaemonWithoutYes|TestOrRestartFromAPaneNeverRestarts)$' .
+### What a window holds outside the session state (handoff version 4)
+
+`e2e/tui/handoff_settings_test.go` covers what section 7.2 of the spec carries from version 4 on. Each test hands the panes to a new image with `test-handoff` and checks the window is still there before it checks the setting.
+`e2e/tui/handoff_settings_test.go` covers what section 7.3 of the spec carries from version 3 on. Each test hands the panes to a new image with `test-handoff` and checks the window is still there before it checks the setting.
+
+- `TestSelfExecClosesCloseOnExitWindows`: three windows made with `new-window`. "during" (`close_on_exit`) exits 2 s after it starts, inside a 3.5 s hold between the manifest and the exec, and must close once the new image is up; "after" (`close_on_exit`) exits when a line is typed after the handoff and must close; "plain" exits the same way and must stay, reading 4. The handoff must carry four panes, so "during" was not closed by the old image first.
+- `TestSelfExecKeepsWorkspaceReturn`: two sessions with a `close_on_exit` job pane alone on workspace 5, which they show. "ret" came there with `select-workspace` `return_to` 3 from workspace 1, as `xpanes` does; "trail" came from 3, which it came to from 1. When the job exits after the handoff both must show 3.
+- `TestSelfExecKeepsSessionOrder`: five sessions made in the reverse of their names' order, the second used last. After the handoff `list-sessions` lists them in the same order with the same `created` and `last_active` seconds, and `session-info` with no session names the same one. The handoff runs more than a second after the last activity, so a session stamped at the handoff reports a later second.
+- `TestSelfExecKeepsPluginPane`: a herdr plugin's split pane (fixture `panes`, entry `side`) answers `plugin.pane.focus` before and after the handoff, and its window closes when its program is sent `SIGTERM` after it.
+- `TestSelfExecKeepsProtocolPane`: `start-agent <fakeacp> --protocol acp`; `list-agents` names protocol `acp` before and after.
+- `TestSelfExecKeepsPaneCreator`: with `[agents] enabled = false`, pane A opens B with `tuios call new-window`, and both B and the control C (opened by the test) run `cat` as a job of their shell. A's `send-text` into B exits 0 and into C exits 1 before the handoff and after, and B shows A's text.
+- `TestSelfExecFollowsMovedWindow`: a window moved from alpha to beta takes `set-agent-state` naming alpha and the window before and after the handoff, and beta reads the state.
+- `TestSelfExecKeepsReportColors`: a client with the `dracula` theme behind the light stand-in host pushes the theme's colours, then closes. After the handoff, with no client attached, the pane's OSC 11, 10 and 4;1 answers are still the theme's.
+- `TestDaemonUpgradeAcrossHandoffVersions`, with `TUIOS_E2E_HANDOFF_PREV_BIN` naming a build of upstream main at 6c31c3c10 (handoff version 3): a daemon of that build hands its panes to this one, which adopts them with the same pids and a counter with no gap; this build's daemon refuses to hand over to that build ("cannot read this daemon's state. This daemon writes handoff v4, and that binary reads v2 to v3") with nothing changed; and a version 3 daemon whose new image fails to adopt (`TUIOS_TEST_HANDOFF_FAIL=error`) falls back to `tuios.prev`, the version 3 binary, with the same pids. Its far-hold case runs the far machine of a two-machine pool on that build: a pane there holds a card of home's (the manifest's `far_holds`), and that machine has dispatch settings of its own (paused, quiet hours). After a real `tuios daemon upgrade` to this build, the settings read the same and closing the pane lets the card go on home. Skipped without the variable.
+
+Run on 2026-10-17 on macOS arm64 (Darwin 27, Go 1.26.9) against feat/live-handoff-close-on-exit, one build per control, each cutting one line from the manifest writer.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| Drop `CloseOnExit` | `CloseOnExit: p.closeOnExit` cut from `handoffRecord` | `TestSelfExecClosesCloseOnExitWindows`: "the close_on_exit window whose program exited during the handoff stayed open", "the close_on_exit window whose program exited after the handoff stayed open" | **caught** |
+| Drop `ReturnTo` | `rec.ReturnTo = maps.Clone(s.returnTo)` cut from `Session.handoffRecord` | `TestSelfExecKeepsWorkspaceReturn`: "session ret shows workspace 1 after its job ended, want 3" | **caught** |
+| Drop `WorkspaceTrail` | `rec.WorkspaceTrail = ...` cut | `TestSelfExecKeepsWorkspaceReturn`: "session trail shows workspace 1 after its job ended, want 3" | **caught** |
+| Drop `Created` | `rec.Created = ...` cut | `TestSelfExecKeepsSessionOrder`: "session e2e-ord-e reports it was created at 1792210438 after the handoff, and at 1792210436 before", and the same for the other four. An earlier version of the test checked only the order and `session-info`, and passed under this control in two runs of three: five sessions in a small map come back in a rotation of the order they were made in, so the times are what is checked now | **caught** |
+| Drop `LastActive` | `rec.LastActive = ...` cut | `TestSelfExecKeepsSessionOrder`: "a call naming no session acts on \"e2e-ord-a\" after the handoff, and on \"e2e-ord-d\" before", "session e2e-ord-e reports it was last active at 1792210441 after the handoff, and at 1792210440 before" | **caught** |
+| Drop `ReportColors` | `rec.ReportColors = ...` cut | `TestSelfExecKeepsReportColors`: "after the handoff a pane's OSC 11 query was answered \"rgb:0000/0000/0000\", want the theme's \"rgb:1e1e/1f1f/2828\"", and the same for OSC 10 and 4;1 | **caught** |
+| Drop `PluginPanes` | the `dr.PluginPanes[id] = ...` line cut from `handoffWindowRecords` | `TestSelfExecKeepsPluginPane`: "after the handoff plugin.pane.focus answered map[code:plugin_pane_not_found ...], want plugin_pane_focused" | **caught** |
+| Drop `ProtocolPanes` | `dr.ProtocolPanes = ...` cut | `TestSelfExecKeepsProtocolPane`: "list-agents names protocol \"\" after the handoff, want acp" | **caught** |
+| Drop `PaneCreators` | `dr.PaneCreators = ...` cut | `TestSelfExecKeepsPaneCreator`: "after the handoff A typing into the pane it opened exited 1 (B shows it: false), want 0" | **caught** |
+| Drop `MovedWindows` | the `dr.MovedWindows[id] = rec` line cut | `TestSelfExecFollowsMovedWindow`: "after the handoff a call naming alpha did not reach the moved window: ... window_not_found" | **caught** |
+| Refuse older manifests | `MinHandoffVersion = 4` | `TestDaemonUpgradeAcrossHandoffVersions/older_to_newer_and_back` and `/fallback_to_the_older_binary`: "cannot read this daemon's state. This daemon writes handoff v3, and that binary reads v4 to v4" (run again on 2026-11-03 on macOS arm64, Go 1.27.3, with the previous build at upstream main 6c31c3c10) | **caught** |
+| Drop the far holds of a version 3 manifest | the `m.Daemon.FarHolds` loop cut from `adopt` | `TestDaemonUpgradeAcrossHandoffVersions/task_holds_and_dispatch_settings_from_the_older_build`: "t1 on home was not let go when its pane on build closed after build's upgrade from the older build"; the other two cases pass. Run on 2026-11-09 on macOS arm64 with the previous build at upstream main c29f871bf (handoff version 3, with `far_holds`), after the rebase onto it; the unchanged build passes all three cases | **caught** |
+
+Not covered by a test: a `close_on_exit` or popup pane that the old image reaped before the reap gates shut, and whose queued close had not run when the manifest was written. The window between the reap and the close is a goroutine's start, and no hook holds it open; the new image's close of such a pane is checked by reading `adopt`.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_HANDOFF_PREV_BIN=/path/to/tuios-handoff-v3 \
+  go test -count=1 -run '^(TestSelfExecClosesCloseOnExitWindows|TestSelfExecKeepsWorkspaceReturn|TestSelfExecKeepsSessionOrder|TestSelfExecKeepsPluginPane|TestSelfExecKeepsProtocolPane|TestSelfExecKeepsPaneCreator|TestSelfExecFollowsMovedWindow|TestSelfExecKeepsReportColors|TestDaemonUpgradeAcrossHandoffVersions)$' .
+```
+
+### Linux
+
+The live-handoff tests on Linux arm64: a Debian 13 container (Go 1.26.9, `CGO_ENABLED=0`, 3 CPUs, the default seccomp profile) on colima's kernel 6.8, and an Ubuntu 26.04 VM with kernel 7.0 for what depends on the kernel. Each control is a patch applied to a copy of the source for one build; the rest of the tree is the branch feat/live-handoff-linux.
+
+- `TestDaemonUpgradeRightAfterAnUpgrade`: the second upgrade is asked for the moment the first new image answers hello, and must go through with every pane's pid. Its artifact says whether the kept `tuios.prev` was a link or a copy of the binary; only a copy (the binary on another file system than the state folder, as `/out/bin` on a volume against `/tmp` in the container) leaves a span wide enough to hit. On macOS, with both on one volume, it is a link, and the test cannot catch the control there.
+- `TestDaemonUpgradeSurvivesACrashOfTheNewImage`, extended: after the recovery, a `wait-for window-exit` with a 300 ms timeout must time out while the pane's program still runs; after it is told to exit, its process must be gone, and wait-for and the kept-open window must give 9 where the kernel tells a non-parent the status (macOS; Linux 6.15 and later, read from `/proc/sys/kernel/osrelease`), and elsewhere omit `exit_code` and say "[The program ended. Its exit status is not known.]".
+
+Run on 2026-10-17, one build per control.
+
+| Control | How | Kernel | Test that fails | Verdict |
+| --- | --- | --- | --- | --- |
+| The kept binary is not waited for | the fix reverted: `prevMu` taken only inside `keepPrevBinary` | 6.8 | `TestDaemonUpgradeRightAfterAnUpgrade`: "an upgrade asked for as the first new image answered was refused (binary kept as copy): ... this daemon kept no copy of its binary to fall back to"; `TestSelfExecAdoptsPanes/fork_in_the_exposed_window`: the same refusal | **caught** |
+| No wait for a pane that is not the daemon's child | `&& false` appended to the `foreign` condition in `monitorExit`, after the peek | 6.8 | every case of `TestDaemonUpgradeSurvivesACrashOfTheNewImage`: "the pane read as exited while its program still ran: <nil>" | **caught** |
+| wait-for reports a lost status as -1 | the `exitStatusLost` check cut from `exitResult` | 6.8 | every case: "wait-for reports exit_code -1 for a pane whose status this kernel does not give a non-parent" | **caught** |
+| The window shows a lost status as -1 | the `exitStatusLost` case cut from `exitNoteText` | 6.8 | every case: "the kept-open pane says \"[The program exited with status -1.]\", want the status named as not known" | **caught** |
+| No status from the pidfd | `waitForeignExit` returns `-1, 0` after poll instead of `pidfdExitStatus` | 7.0 | every case: "the pane that exited 9 after the crash reads 0 (known false)", "the kept-open pane says \"[The program ended. Its exit status is not known.]\" after its program exited 9" | **caught** |
+| No wait for the reap | `pidfdExitStatus(fd, 0)`: one try as poll fires | 7.0 | `killed-at-start` and `killed-once-serving`: the same two messages; `panic-while-adopting` and `fallback-also-dies` passed, where init had reaped the pane before the first try | **caught** (2 of 4 cases) |
+
+A first form of the wait control, `false &&` in front of the condition, also skipped the non-reaping peek, so the old image's `monitorExit` reaped with the gate held and the first handoff hung in `reapGate.shut`. That is a broken control, not a finding: the peek is what the gate relies on, and the control kept above leaves it in.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^(TestDaemonUpgradeRightAfterAnUpgrade|TestSelfExecAdoptsPanes|TestDaemonUpgradeSurvivesACrashOfTheNewImage)$' .
 ```
 
 ## Deleting a worktree from the close-confirmation dialog

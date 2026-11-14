@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"io"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"runtime/metrics"
+	"slices"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
@@ -114,6 +116,7 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 	}
 	d.events.restore(m.Daemon.Events)
 	d.agents.restore(m.Daemon.Mail)
+	d.restoreWindowRecords(m.Daemon)
 	listeners := map[string]net.Listener{}
 	// FileListener works on a copy of each descriptor. The inherited ones
 	// stay open for the fallback, and are closed once the adoption has gone
@@ -163,7 +166,11 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 	if lines <= 0 {
 		lines = vt.DefaultScrollbackSize
 	}
-	terms, err := applyHandoffPanes(m.Panes, lines, &stats)
+	colors := make(map[string]handoffReportColors, len(m.Sessions))
+	for _, s := range m.Sessions {
+		colors[s.ID] = s.ReportColors
+	}
+	terms, err := applyHandoffPanes(m.Panes, colors, lines, &stats)
 	if err != nil {
 		return err
 	}
@@ -172,14 +179,18 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 		bySession[p.Session] = append(bySession[p.Session], adoptedPane{rec: p, terminal: terms[i]})
 	}
 	d.adopting.Store(true)
-	var started []*PTY
+	var (
+		started []*PTY
+		closes  []func()
+	)
 	for _, rec := range m.Sessions {
-		ptys, err := d.adoptSession(rec, bySession[rec.ID], fb)
+		ptys, exited, err := d.adoptSession(rec, bySession[rec.ID], fb)
 		if err != nil {
 			d.adopting.Store(false)
 			return errfmt.Errorf("session %q: %w", rec.State.Name, err)
 		}
 		started = append(started, ptys...)
+		closes = append(closes, exited...)
 	}
 	d.adopting.Store(false)
 	handoffTestCrash(crashWhileAdopting)
@@ -196,6 +207,13 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 	for _, p := range started {
 		p.startPTY()
 	}
+	// A pane the previous image reaped and wrote down as exited, in a window
+	// that closes on exit, is one whose close that image queued and never
+	// ran: the close runs on a goroutine after the reap, and it waited on
+	// the handoff until the exec ended it. It runs here.
+	for _, closeWindow := range closes {
+		closeWindow()
+	}
 	if stats.StoppedAt > 0 {
 		stats.PausedMS = float64(time.Now().UnixNano()-stats.StoppedAt) / 1e6
 	}
@@ -209,6 +227,12 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 		d.remoteHolds.note(h.Window, remoteHold{host: h.Host, session: h.Session, id: h.ID}, true)
 	}
 	d.loadStores(true)
+	// The binary a later handoff falls back to is kept below, once the keeper
+	// has stood down, since the keeper would exec it. A handoff asked for as
+	// soon as this image serves waits for it rather than being refused: a
+	// copy, where a link would cross file systems, takes a while.
+	d.prevMu.Lock()
+	defer d.prevMu.Unlock()
 	d.serve()
 	// A delegated child that finished while the daemon was handed over is
 	// still answered for.
@@ -229,7 +253,7 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 		_ = f.Close()
 	}
 	// This image is the one a later handoff falls back to.
-	d.keepPrevBinary()
+	d.keepPrevBinaryLocked()
 	// The copies the images before this one ran from are no longer needed.
 	removeOldCopies()
 	LogBasic("Live upgrade: adopted %d sessions and %d panes from %s (paused %.0f ms, apply %.0f ms, peak heap in use %d MB)",
@@ -251,7 +275,12 @@ const handoffGCPercent = 25
 
 // applyHandoffPanes rebuilds every pane's emulator from its snapshot, a few
 // at a time, under a lowered GC target. It drops each snapshot once applied.
-func applyHandoffPanes(panes []handoffPane, lines int, stats *HandoffStats) ([]vt.Terminal, error) {
+//
+// Each emulator is given its session's report colours before the snapshot
+// goes in. After it, a program that turned on mode 2031 would be sent a
+// change of scheme from the emulator's own black to the colours it was
+// already told.
+func applyHandoffPanes(panes []handoffPane, colors map[string]handoffReportColors, lines int, stats *HandoffStats) ([]vt.Terminal, error) {
 	t0 := time.Now()
 	stats.ApplyHeapStart = heapInuse()
 	prevGC := debug.SetGCPercent(handoffGCPercent)
@@ -259,6 +288,7 @@ func applyHandoffPanes(panes []handoffPane, lines int, stats *HandoffStats) ([]v
 	terms := make([]vt.Terminal, len(panes))
 	err := forEachBounded(len(panes), min(runtime.GOMAXPROCS(0), 4), func(i int) error {
 		t := vt.NewWithScrollback(panes[i].Width, panes[i].Height, lines)
+		colors[panes[i].Session].applyTo(t)
 		if st := panes[i].State; st != nil {
 			ApplyTerminalState(t, st)
 			panes[i].Live.vtSeq = st.Seq
@@ -343,8 +373,10 @@ func checkAdoptable(m *handoffManifest) error {
 }
 
 // adoptSession rebuilds one session around its adopted panes, and returns
-// the panes for the caller to start.
-func (d *Daemon) adoptSession(rec handoffSession, panes []adoptedPane, fb *adoptFallback) ([]*PTY, error) {
+// the panes for the caller to start, and the closes of the windows whose
+// process had exited and that close on exit, for the caller to run once the
+// panes have started.
+func (d *Daemon) adoptSession(rec handoffSession, panes []adoptedPane, fb *adoptFallback) ([]*PTY, []func(), error) {
 	st := rec.State
 	width, height := st.Width, st.Height
 	if width <= 0 {
@@ -353,9 +385,16 @@ func (d *Daemon) adoptSession(rec handoffSession, panes []adoptedPane, fb *adopt
 	if height <= 0 {
 		height = 24
 	}
-	sess, err := d.manager.CreateSession(st.Name, &SessionConfig{restoreID: rec.ID, Space: st.Space, Rank: st.Rank}, width, height)
+	cfg := &SessionConfig{restoreID: rec.ID, Space: st.Space, Rank: st.Rank}
+	if rec.Created > 0 {
+		cfg.restoreCreated = time.Unix(0, rec.Created)
+	}
+	if rec.LastActive > 0 {
+		cfg.restoreActive = time.Unix(0, rec.LastActive)
+	}
+	sess, err := d.manager.CreateSession(st.Name, cfg, width, height)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	sess.SetStartDir(rec.StartDir)
 	for id, dir := range rec.WindowStartDirs {
@@ -369,32 +408,59 @@ func (d *Daemon) adoptSession(rec handoffSession, panes []adoptedPane, fb *adopt
 	for _, w := range st.Windows {
 		windows[w.ID] = w
 	}
+	// Before any pane: installPTY gives each pane the session's colours,
+	// which applyHandoffPanes already gave its emulator, so nothing changes.
+	sess.applyReportColors(rec.ReportColors.Bg, rec.ReportColors.Fg, rec.ReportColors.Palette)
 	sessionID := sess.ID
-	var out []*PTY
+	var (
+		out    []*PTY
+		closes []func()
+	)
 	for _, ap := range panes {
 		p := ap.rec
 		w := windows[p.Window]
 		onExit := func(ptyID string) { d.notifyPTYClosed(sessionID, ptyID) }
+		// closeWindow is the window's own close when its process exits, as
+		// the verb that made it built it: new-window with close_on_exit and a
+		// plugin's pane close any window, a popup only a popup.
+		var closeWindow func(ptyID string)
 		switch {
 		case p.KeepOpen:
 			onExit = nil
+		case p.CloseOnExit:
+			closeWindow = func(ptyID string) { d.closeWindowOfPTY(sess, ptyID, false) }
 		case w.Popup && !w.Scratch:
-			// A popup is closed by the daemon when its command exits, as
-			// new-popup's own exit does.
+			closeWindow = func(ptyID string) { d.closeWindowOfPTY(sess, ptyID, true) }
+		}
+		if closeWindow != nil {
 			onExit = func(ptyID string) {
 				d.notifyPTYClosed(sessionID, ptyID)
-				d.closeWindowOfPTY(sess, ptyID, true)
+				closeWindow(ptyID)
+			}
+		}
+		// start-agent --protocol forgets its mark when the agent exits.
+		if d.paneProtocol(w.ID) != "" {
+			exit, window := onExit, w.ID
+			onExit = func(ptyID string) {
+				d.unmarkProtocolPane(window)
+				if exit != nil {
+					exit(ptyID)
+				}
 			}
 		}
 		pty, err := sess.adoptPTY(p, w, onExit, ap.terminal)
 		if err != nil {
-			return nil, errfmt.Errorf("pane %s: %w", shortID(p.ID), err)
+			return nil, nil, errfmt.Errorf("pane %s: %w", shortID(p.ID), err)
 		}
 		fb.keep(pty.pty)
 		out = append(out, pty)
+		if p.Exited && closeWindow != nil {
+			ptyID := p.ID
+			closes = append(closes, func() { closeWindow(ptyID) })
+		}
 	}
-	sess.adoptState(st)
-	return out, nil
+	sess.adoptState(st, rec)
+	return out, closes, nil
 }
 
 // adoptPTY enters a pane handed over by the previous image, around its
@@ -423,7 +489,7 @@ func (s *Session) adoptPTY(rec handoffPane, w WindowState, onExit func(string), 
 	// applyHandoffPanes), so nothing it set is raised as an event: none of
 	// it is new.
 	ctx, cancel := context.WithCancel(context.Background())
-	sp := ptySpawn{windowID: w.ID, onExit: onExit, workspace: w.Workspace, keepOpen: rec.KeepOpen && !rec.Exited}
+	sp := ptySpawn{windowID: w.ID, onExit: onExit, workspace: w.Workspace, keepOpen: rec.KeepOpen && !rec.Exited, closeOnExit: rec.CloseOnExit}
 	pty := s.installPTY(ctx, cancel, rec.ID, master, nil, rec.Width, rec.Height, sp, terminal)
 	pty.spawnW, pty.spawnH = rec.SpawnW, rec.SpawnH
 	pty.restoreLive(rec.Live)
@@ -440,13 +506,25 @@ func (s *Session) adoptPTY(rec handoffPane, w WindowState, onExit func(string), 
 	return pty, nil
 }
 
-// adoptState installs a session's state as its previous image held it. It
-// is not a client's push, so nothing is merged and no window event is raised:
-// every window in it was already there.
-func (s *Session) adoptState(st *SessionState) {
+// adoptState installs a session's state as its previous image held it, with
+// the workspace return the record carries. It is not a client's push, so
+// nothing is merged and no window event is raised: every window in it was
+// already there.
+func (s *Session) adoptState(st *SessionState, rec handoffSession) {
 	s.stateMu.Lock()
 	st.Name = s.Name()
 	s.state = st
+	s.returnTo = maps.Clone(rec.ReturnTo)
+	s.workspaceTrail = slices.Clone(rec.WorkspaceTrail)
 	s.noteStateChangeLocked()
 	s.stateMu.Unlock()
+}
+
+// applyTo gives an emulator the colours, before anything else is written to
+// it. Empty leaves the emulator's own.
+func (c handoffReportColors) applyTo(t vt.Terminal) {
+	fg, bg := parseReportColor(c.Fg), parseReportColor(c.Bg)
+	if fg != nil || bg != nil || c.Palette != "" {
+		t.SetReportColors(fg, bg, parseReportPalette(c.Palette))
+	}
 }

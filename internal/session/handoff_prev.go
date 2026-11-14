@@ -47,14 +47,20 @@ type prevBinary struct {
 // keepPrevBinary keeps this image's binary for a later handoff to fall back
 // to. Failure is logged: it only means a handoff from this image is refused.
 func (d *Daemon) keepPrevBinary() {
+	d.prevMu.Lock()
+	defer d.prevMu.Unlock()
+	d.keepPrevBinaryLocked()
+}
+
+// keepPrevBinaryLocked is keepPrevBinary for a caller holding prevMu, which
+// checkPrevBinary waits on.
+func (d *Daemon) keepPrevBinaryLocked() {
 	prev, err := keepRunningBinary(handoffDir())
 	if err != nil {
 		LogError("Live upgrade: the running binary could not be kept for a fallback, so this daemon cannot be upgraded live: %v", err)
 		return
 	}
-	d.prevMu.Lock()
 	d.prev = prev
-	d.prevMu.Unlock()
 }
 
 // keepRunningBinary keeps the running executable open on Linux, and links or

@@ -2967,7 +2967,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			returns: []verbParam{
 				{Name: "condition", Type: "string", Description: "The condition that matched."},
 				{Name: "window", Type: "string", Description: "The window that matched, for a condition about a window."},
-				{Name: "exit_code", Type: "int", Description: "For window-exit and command-finished: the exit status, -1 when a signal ended the process. Omitted when it is not known, such as for a window on another machine."},
+				{Name: "exit_code", Type: "int", Description: "For window-exit and command-finished: the exit status, -1 when a signal ended the process. Omitted when it is not known, such as for a window on another machine, or on Linux before 6.15 for a program whose parent died before a live upgrade's keeper brought the daemon back."},
 				{Name: "signal", Type: "int", Description: "For window-exit: the signal that ended the process. Omitted when it exited on its own."},
 				{Name: "new", Type: "bool", Description: "For window-output: true when the wait matched only output written after it started."},
 			},
@@ -4012,6 +4012,10 @@ func (d *Daemon) verbHello(cs *connState, params json.RawMessage) (any, *verbErr
 		// os is the daemon's GOOS. A client attached from another machine
 		// builds a command line for this one: sh -c here, cmd /C on Windows.
 		"os": runtime.GOOS,
+		// handoff is the live handoff manifest version this image writes,
+		// which the binary tuios daemon upgrade names must read. The CLI
+		// running the upgrade may be of another build.
+		"handoff": HandoffVersion,
 	}
 	// mail_waiting is the mail this daemon keeps for the machine a link
 	// connection named, while its own link there is down. See held_mail.go.
