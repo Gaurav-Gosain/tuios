@@ -17483,3 +17483,22 @@ Run on 2026-11-14 on macOS. The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAskAgentRemovesHiddenTextAndSendTextDoesNot$' -v .`.
+
+## worktree new --prompt types the brief into the agent (discussion #2080)
+
+`TestWorktreeNewTypesPrompt` runs `tuios worktree new feat/brief --agent
+claude --detach --prompt '...'` against the fake claude of `fanFixture`, which
+drops keys until its input box is live and prints `GOT:` and each line it
+reads. The command must say the prompt was taken, the pane must show the
+brief as soon as the command returns, the session must hold the agent's pane
+alone, and `worktree ls` must say `sent`. `--prompt` without `--agent` must
+fail and make no worktree.
+
+Run on 2026-11-14 on macOS. The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The `deliverFanPrompt` call taken out of `verbNewWorktree` | "ASSERTION: worktree new does not say the prompt was taken", "ASSERTION: the agent never received the prompt", and `worktree ls` reads `pending` | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorktreeNewTypesPrompt$' -v .`.

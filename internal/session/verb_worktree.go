@@ -425,10 +425,17 @@ func (d *Daemon) verbNewWorktree(cs *connState, params json.RawMessage) (any, *v
 		// exists, so a caller that names one from a title never lands on
 		// work of the person's.
 		NewBranch bool `json:"new_branch"`
+		// Prompt is typed into the agent once it is at its prompt, the
+		// way start-agent and fan type theirs.
+		Prompt string `json:"prompt"`
 		setupParam
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
+	}
+	prompt := strings.TrimSpace(p.Prompt)
+	if prompt != "" && len(p.Command) == 0 {
+		return nil, invalidParam("prompt", "prompt is typed into the agent, and command names none. Pass the agent in command")
 	}
 	setup, verr := d.resolveSetup(p.setupParam)
 	if verr != nil {
@@ -461,15 +468,58 @@ func (d *Daemon) verbNewWorktree(cs *connState, params json.RawMessage) (any, *v
 		}
 	}
 	startedBy := d.startedByLater(cs)
-	out, verr := d.createWorktreeSession(cs, root, branch, strings.TrimSpace(p.Base), strings.TrimSpace(p.Name), command, nil, d.childDefaultGrants(cs), setup, nil, func(_ *Session, win WindowState) {
+	var record func(*WorktreeInfo)
+	if prompt != "" {
+		record = func(info *WorktreeInfo) {
+			info.Prompt = prompt
+			info.PromptStatus = PromptPending
+		}
+	}
+	// An agent window that opens during the call gets its prompt in the
+	// call, so the answer says whether it was taken. One that opens later,
+	// after a sync setup passes, gets it in the background, and worktree ls
+	// says what became of it.
+	var (
+		promptMu  sync.Mutex
+		returned  bool
+		agentSess *Session
+		agentWin  string
+	)
+	out, verr := d.createWorktreeSession(cs, root, branch, strings.TrimSpace(p.Base), strings.TrimSpace(p.Name), command, nil, d.childDefaultGrants(cs), setup, record, func(sess *Session, win WindowState) {
 		startedBy(win.ID)
+		if prompt == "" {
+			return
+		}
+		promptMu.Lock()
+		defer promptMu.Unlock()
+		if !returned {
+			agentSess, agentWin = sess, win.ID
+			return
+		}
+		go d.deliverFanPrompt(sess, win.ID, "", prompt, fanDefaultReadyTimeout)
 	})
+	promptMu.Lock()
+	returned = true
+	sess, win := agentSess, agentWin
+	promptMu.Unlock()
 	if verr != nil {
 		return nil, verr
 	}
 	out["type"] = "worktree_created"
 	if cloned {
 		out["cloned"] = true
+	}
+	if prompt != "" {
+		out["prompt_status"] = PromptPending
+		if sess != nil {
+			d.deliverFanPrompt(sess, win, "", prompt, startAgentDefaultReadyTimeout)
+			if wt := sess.Worktree(); wt != nil {
+				out["prompt_status"] = wt.PromptStatus
+				if wt.PromptNote != "" {
+					out["prompt_note"] = wt.PromptNote
+				}
+			}
+		}
 	}
 	return out, nil
 }

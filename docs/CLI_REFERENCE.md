@@ -903,7 +903,7 @@ with a warning.
 
 **Usage:**
 ```bash
-tuios worktree new <branch> [--repo <dir>] [--base <ref>] [--name <session>] [--agent <cli>] [--setup <command> [--setup-async]] [--host <host> [--clone]] [--detach]
+tuios worktree new <branch> [--repo <dir>] [--base <ref>] [--name <session>] [--agent <cli> [--prompt <text>]] [--setup <command> [--setup-async]] [--host <host> [--clone]] [--detach]
 tuios worktree ls [--repo <name>] [--group <stem>] [--host <host>] [--fast] [--json]
 tuios worktree rm [<host>:]<session> [--stash | --force] [--keep-session]
 tuios worktree diff <session> [--stat]
@@ -914,6 +914,7 @@ tuios worktree pull <host>:<session> [--repo <dir>] [--branch <name>] [--name <s
 ```bash
 tuios worktree new feat/retry                          # A new branch from HEAD, attached
 tuios worktree new feat/retry --agent claude --detach  # Headless, running Claude Code
+tuios worktree new feat/retry --agent claude --detach --prompt 'Add a retry.'  # And give it its task
 tuios worktree new feat/retry --agent claude --setup 'pnpm i'  # Install, then start Claude Code
 tuios worktree ls                                      # Repo, branch, agent state, changes, merged
 tuios worktree rm api-feat-retry --stash               # Keep the changes in git stash
@@ -923,6 +924,14 @@ The session is named `<repo>-<branch>`, with every slash turned into a hyphen.
 Worktrees go under `$XDG_DATA_HOME/tuios/worktrees/<repo>/<branch>`, unless
 `[worktree] path` puts them elsewhere (see
 [Where worktrees go](CONFIGURATION.md#where-worktrees-go)).
+
+`--prompt` gives the `--agent` its first task. tuios types it once the agent
+is at its prompt and checks that the agent took it, the way
+`start-agent --prompt` and `fan` do, and the command returns then. It prints
+"The prompt was typed and taken.", or the prompt's status and why, and exits
+1 when the prompt was not taken. With a sync `--setup`, the agent starts after
+the setup, the prompt is typed then, and `worktree ls` shows its
+`prompt_status`. `--prompt` without `--agent` is refused.
 
 An `after-new-worktree` hook runs in the new worktree before its first window
 starts, for example to copy `.env` from the main checkout. See

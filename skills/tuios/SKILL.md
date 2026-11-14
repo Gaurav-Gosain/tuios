@@ -45,6 +45,7 @@ command. It opens the window manager.
 | Read the end of a pane | `tuios capture-pane -s "$TUIOS_SESSION" -w build --scrollback --lines 40` |
 | Type a command into a shell pane, and do not wait | `tuios send-text -s "$TUIOS_SESSION" -w build 'make test'` then `tuios send-keys -s "$TUIOS_SESSION" -w build Enter` |
 | Start an agent beside you, and give it work | `tuios start-agent claude -s "$TUIOS_SESSION" --name reviewer --cwd "$PWD" --prompt 'Review the diff on this branch.'` |
+| Start an agent in its own worktree and session, and give it work | `tuios worktree new feat/retry --base main --agent claude --detach --prompt 'Add a retry with backoff to the HTTP client.'`. `tuios --skill fleet` has `fan` and `delegate`. |
 | Press keys in a full-screen program | `tuios send-keys -s "$TUIOS_SESSION" -w menu Down --repeat 3` |
 | Wait for text in a pane | `tuios wait-for window-output -s "$TUIOS_SESSION" -w build --pattern 'BUILD OK' --timeout 600000` |
 | Wait for an agent to stop or to need input | `tuios wait-for agent-state -s "$TUIOS_SESSION" -w worker --until needs_input,idle,done --timeout 600000` |
@@ -66,7 +67,12 @@ and zsh panes it starts, and fish 4 sends them itself. Without the marks, it
 fails with `no_shell_integration` and types nothing. Then use `send-text`.
 `tuios doctor shell` says which panes send marks.
 `start-agent` returns when the agent is at its prompt. Then ask it with
-`ask-agent -w reviewer`.
+`ask-agent -w reviewer`. `-s` creates the session when it does not exist. Do
+not run `tuios new` first: it adds a shell pane beside the agent.
+
+`worktree new --agent` makes a branch, its worktree and a session with the
+agent in it, and no shell pane. With `--prompt`, it returns once the agent
+took the prompt. This is the command for one agent, one worktree, one task.
 
 `ask-human` prints the answer, or exits 2 when the time runs out. `--timeout`
 is in milliseconds. Use `wait-for`, not a loop of `sleep` and `capture-pane`.
@@ -202,10 +208,46 @@ leaves undone. Name the host when the work ran on another machine.
 
 `tuios --skill TOPIC` prints one topic, and `tuios --skill all` prints all.
 
-- Panes and state: `panes`, `state`, `events`, `stream`, `clients`
-- Leading a crew of long-lived agents across sessions and machines: `lead`
-- Agents: `mail`, `inbox`, `fleet`, `tasks`, `recipes`, `checkpoints`, `ship`
-- Rules: `grants`, `errors`, `agents-off`
-- Results, dashboards and forms for the person: `tml`
-- Other machines: `hosts`, `files`
-- Other tools: `mcp`, `tmux`, `herdr`, `plugins`, `notify`, `pair`, `config`
+Panes and state:
+
+- `panes`: sessions, splits, exit codes, waits, layouts
+- `state`: report your state to the person and to other agents
+- `events`: the verbs, the socket, watching many things at once
+- `stream`: stream one pane, the person's presence
+- `clients`: who is attached, and to what
+
+Agents:
+
+- `fleet`: worktrees, fan-out, delegate, start-agent, selectors, and which one to use
+- `lead`: lead a crew of long-lived agents across sessions and machines
+- `mail`: mail and questions between agents
+- `inbox`: the Inbox, questions and approvals for the person
+- `tasks`: task cards: hand out work from the daemon
+- `recipes`: whole jobs, end to end
+- `checkpoints`: undo an agent's turn
+- `ship`: commit, merge, push, open a pull request
+
+Rules:
+
+- `grants`: what a pane may do through tuios
+- `errors`: every error code, and a daemon that is not running
+- `agents-off`: when the agent features are off
+
+For the person:
+
+- `tml`: show results, tables, dashboards and forms
+
+Other machines:
+
+- `hosts`: sessions, agents and worktrees on other machines
+- `files`: copy files between machines
+
+Other tools:
+
+- `mcp`: tuios as MCP tools
+- `tmux`: the tmux shim, for tools that open tmux panes
+- `herdr`: herdr's command line and socket
+- `plugins`: plugins and their trust rules
+- `notify`: push notifications to the person's phone
+- `pair`: pair a phone
+- `config`: configuration, appearance, the dock, hooks and keybindings

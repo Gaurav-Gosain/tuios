@@ -140,6 +140,79 @@ func TestFanTypesPromptWhenReady(t *testing.T) {
 	t.Logf("fan-out in progress:\n%s", term.Snapshot())
 }
 
+// TestWorktreeNewTypesPrompt covers worktree new --agent --prompt, the one
+// command for "one agent, one worktree, one task". The prompt reaches the
+// agent once it is at its prompt, the command says it was taken, and the
+// session holds the agent's pane and no shell beside it.
+//
+// How it could pass wrongly, written down first:
+//   - The prompt could be dropped: the fake prints GOT: and the line it reads,
+//     so the pane must show the brief.
+//   - It could be typed before the agent's box is live: the fake drops keys
+//     until then, and the command must say the prompt was taken.
+//   - The command could return before the prompt is typed: the pane is read
+//     at once after it returns, with no wait.
+//   - A second pane could open beside the agent: the session must hold one.
+//   - --prompt with no agent could be accepted and do nothing: it must fail.
+//
+// NEGATIVE CONTROL: with the prompt delivery cut from verbNewWorktree, the
+// command does not say the prompt was taken and the pane lacks the brief.
+func TestWorktreeNewTypesPrompt(t *testing.T) {
+	base, repo := fanFixture(t)
+	if out, err := tuiosCLI(t, base, "new", "plain", "--detach"); err != nil {
+		t.Fatalf("start the daemon: %v: %s", err, out)
+	}
+
+	out, err := tuiosCLI(t, base, "worktree", "new", "feat/brief", "--repo", repo, "--agent", "claude", "--detach", "--prompt", "Add a CONTRIBUTING.md.")
+	saveText(t, "worktree-new-prompt", out)
+	if err != nil {
+		t.Fatalf("ASSERTION: worktree new --prompt failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "The prompt was typed and taken.") {
+		t.Errorf("ASSERTION: worktree new does not say the prompt was taken:\n%s", out)
+	}
+	pane, err := tuiosCLI(t, base, "capture-pane", "-s", "repo-feat-brief")
+	saveText(t, "worktree-new-prompt-pane", pane)
+	if err != nil {
+		t.Fatalf("capture-pane: %v: %s", err, pane)
+	}
+	if !strings.Contains(pane, "GOT: Add a CONTRIBUTING.md.") {
+		t.Errorf("ASSERTION: the agent never received the prompt:\n%s", pane)
+	}
+	windows, err := tuiosCLI(t, base, "list-windows", "-s", "repo-feat-brief", "--json")
+	if err != nil {
+		t.Fatalf("list-windows: %v: %s", err, windows)
+	}
+	var listing struct {
+		Windows []map[string]any `json:"windows"`
+	}
+	if err := json.Unmarshal([]byte(windows), &listing); err != nil {
+		t.Fatalf("list-windows --json did not print JSON: %v\n%s", err, windows)
+	}
+	if len(listing.Windows) != 1 {
+		t.Errorf("ASSERTION: the session holds %d panes, want the agent's alone:\n%s", len(listing.Windows), windows)
+	}
+	sent := false
+	for _, r := range worktreeRows(t, base) {
+		if r["session"] == "repo-feat-brief" {
+			sent = r["prompt_status"] == "sent"
+		}
+	}
+	if !sent {
+		t.Errorf("ASSERTION: worktree ls does not say the prompt was sent: %v", worktreeRows(t, base))
+	}
+
+	out, err = tuiosCLI(t, base, "worktree", "new", "feat/no-agent", "--repo", repo, "--detach", "--prompt", "Add a CONTRIBUTING.md.")
+	if err == nil || !strings.Contains(out, "--agent") {
+		t.Errorf("ASSERTION: worktree new --prompt with no agent did not fail and name --agent (err %v):\n%s", err, out)
+	}
+	for _, r := range worktreeRows(t, base) {
+		if r["branch"] == "feat/no-agent" {
+			t.Errorf("ASSERTION: worktree new --prompt with no agent made a worktree: %v", r)
+		}
+	}
+}
+
 // TestFanReportsAStalledPrompt covers an agent that reads the prompt and never
 // shows it took it: this fake claude echoes what it reads and keeps its title
 // at rest, the way a Claude Code that read Enter as a newline looks. The

@@ -111,7 +111,7 @@ Worktrees go under $XDG_DATA_HOME/tuios/worktrees/<repo>/<branch>, unless
   tuios worktree rm api-feat-retry --stash`,
 	}
 
-	var newRepo, newBase, newName, newAgent, newHost string
+	var newRepo, newBase, newName, newAgent, newHost, newPrompt string
 	var newDetach, newJSON, newClone bool
 	var newSetup setupFlags
 	newCmd := &cobra.Command{
@@ -129,6 +129,10 @@ stays headless with --detach.
 --agent starts an agent CLI in the session instead of a shell. Name it the
 way you type it: claude, codex, gemini. tuios recognises the agents its
 harness manifests describe.
+
+--prompt gives that agent its first task. It is typed once the agent is at
+its prompt, and checked the way start-agent --prompt checks it, and the
+command returns once the agent took it. It needs --agent.
 
 --setup runs a shell command in the worktree first, in a window named setup,
 such as 'pnpm i'. [worktree] setup in config.toml sets one for every worktree.
@@ -148,6 +152,9 @@ directory on the host instead.`,
   # A branch from main, headless, running Claude Code
   tuios worktree new feat/retry --base main --agent claude --detach
 
+  # The same, with its task typed once Claude Code is at its prompt
+  tuios worktree new feat/retry --base main --agent claude --detach --prompt 'Add a retry with backoff to the HTTP client.'
+
   # A worktree of another repository
   tuios worktree new fix/typo --repo /src/api
 
@@ -158,13 +165,14 @@ directory on the host instead.`,
   tuios worktree new feat/retry --host build --clone --detach`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runWorktreeNew(args[0], newRepo, newBase, newName, newAgent, newHost, newClone, newDetach, newJSON, &newSetup)
+			return runWorktreeNew(args[0], newRepo, newBase, newName, newAgent, newHost, newPrompt, newClone, newDetach, newJSON, &newSetup)
 		},
 	}
 	newCmd.Flags().StringVar(&newRepo, "repo", "", "A directory inside the repository (default: the current directory)")
 	newCmd.Flags().StringVar(&newBase, "base", "", "Ref a new branch starts from (default: HEAD)")
 	newCmd.Flags().StringVar(&newName, "name", "", "Session name (default: <repo>-<branch>)")
 	newCmd.Flags().StringVar(&newAgent, "agent", "", "Start this agent CLI in the session instead of a shell")
+	newCmd.Flags().StringVar(&newPrompt, "prompt", "", "With --agent, a first prompt, typed once the agent is ready")
 	newCmd.Flags().BoolVarP(&newDetach, "detach", "d", false, "Create the session headless without attaching a client")
 	addJSONFlag(newCmd, &newJSON)
 	newCmd.Flags().StringVar(&newHost, "host", "", "Make the worktree on this machine from the [hosts] table")
@@ -506,7 +514,10 @@ func resolveAgentCommand(agent string) (string, error) {
 	return command, nil
 }
 
-func runWorktreeNew(branch, repo, base, name, agent, host string, clone, detach, jsonOutput bool, setup *setupFlags) error {
+func runWorktreeNew(branch, repo, base, name, agent, host, prompt string, clone, detach, jsonOutput bool, setup *setupFlags) error {
+	if prompt != "" && agent == "" {
+		return reportVerbError(errors.New("--prompt is typed into the agent, and no agent was named. Pass --agent, such as --agent claude"), jsonOutput)
+	}
 	if err := ensureDaemon(); err != nil {
 		return err
 	}
@@ -528,6 +539,9 @@ func runWorktreeNew(branch, repo, base, name, agent, host string, clone, detach,
 		}
 		params["command"] = []string{command}
 	}
+	if prompt != "" {
+		params["prompt"] = prompt
+	}
 	setup.params(params)
 
 	t, err := dialHost(host)
@@ -541,9 +555,6 @@ func runWorktreeNew(branch, repo, base, name, agent, host string, clone, detach,
 	if err != nil {
 		return reportVerbError(explainHostedVerb(t, "new-worktree", err), jsonOutput)
 	}
-	if jsonOutput {
-		return printVerbResultOn(t, raw, true)
-	}
 	var res struct {
 		Session       string                 `json:"session"`
 		Branch        string                 `json:"branch"`
@@ -555,9 +566,23 @@ func runWorktreeNew(branch, repo, base, name, agent, host string, clone, detach,
 		HookError     string                 `json:"hook_error"`
 		Setup         *session.WorktreeSetup `json:"setup"`
 		SetupError    string                 `json:"setup_error"`
+		PromptStatus  string                 `json:"prompt_status"`
+		PromptNote    string                 `json:"prompt_note"`
 	}
 	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return errfmt.Errorf("failed to parse response: %w", err)
+	}
+	// A prompt that was not taken fails the command, as it fails
+	// start-agent. One a sync setup holds is still on its way.
+	promptFailed := res.PromptStatus != "" && res.PromptStatus != "sent" && res.PromptStatus != "pending"
+	if jsonOutput {
+		if err := printVerbResultOn(t, raw, true); err != nil {
+			return err
+		}
+		if promptFailed {
+			return &statusError{code: 1}
+		}
+		return nil
 	}
 	if res.Cloned {
 		fmt.Printf("Cloned the repository to %s%s.\n", res.RepoRoot, t.on())
@@ -576,6 +601,23 @@ func runWorktreeNew(branch, repo, base, name, agent, host string, clone, detach,
 	}
 	if line := setupStartedLine(res.Setup, res.SetupError); line != "" {
 		fmt.Println(line)
+	}
+	switch res.PromptStatus {
+	case "":
+	case "pending":
+		fmt.Println("The prompt is typed once the agent is ready.")
+	case "sent":
+		fmt.Println("The prompt was typed and taken.")
+	default:
+		fmt.Printf("The prompt is %s. %s\n", plainLine(res.PromptStatus), plainLine(res.PromptNote))
+	}
+	if promptFailed {
+		target := res.Session
+		if host != "" {
+			target = host + ":" + target
+		}
+		fmt.Printf("Look at the agent with 'tuios capture-pane -s %s'.\n", target)
+		return &statusError{code: 1}
 	}
 	if detach {
 		if host != "" {

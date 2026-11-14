@@ -3,6 +3,29 @@
 How to start several agents, give each its own checkout, address them as a
 group, and keep or drop their work.
 
+## Which one
+
+To start an agent:
+
+| You want | Run | Pick it when |
+| --- | --- | --- |
+| One agent, one worktree, one task | `tuios worktree new feat/retry --base main --agent claude --detach --prompt 'Add a retry.'` | The default. The agent gets its own branch, checkout and session, and the command returns once it took the task. |
+| The same task tried by several agents | `tuios fan 3 --agent claude 'Add a retry.'` | You want attempts to compare, and keep one. |
+| A child that reports back to you | `tuios delegate --isolation worktree --role implementation 'Add a retry.'` | You end your turn and want its answer as mail. Without `--isolation worktree` it works in your folder. |
+| A helper in your folder, beside you | `tuios start-agent claude --name reviewer --prompt 'Review the diff.'` | The work needs no checkout of its own, such as a review. |
+
+Do not make the worktree with `git worktree` and then a session with
+`tuios new`: `worktree new` does both, and `tuios new` adds a shell pane.
+
+To give an agent work:
+
+| You want | Run | Pick it when |
+| --- | --- | --- |
+| Its first task, as it starts | `--prompt` on `worktree new`, `start-agent` or `fan` | Always, for the first task. The prompt waits for the agent to be at its prompt. |
+| Its next task, once it is at rest | `tuios queue -s SESSION -w NAME 'Then run the migrations.'` | The agent is busy, and you do not wait for it. |
+| An answer, now | `tuios ask-agent -s SESSION -w NAME 'Is the retry safe?'` | You block until it answers: 5 minutes by default, more with `--timeout`. |
+| A note it reads when it can | `tuios send-agent-message -s SESSION -w NAME 'main moved, rebase'` | It types nothing. Use it for news, not for a task. |
+
 ## Many panes at once: selectors
 
 A window id names one pane. A selector names every agent pane that fits a
@@ -69,6 +92,7 @@ groups such sessions under their repository.
 ```sh
 tuios worktree new feat/retry --base main --detach
 tuios worktree new feat/retry-2 --agent claude --detach
+tuios worktree new feat/retry-3 --agent claude --detach --prompt 'Add a retry with backoff.'
 tuios worktree ls
 tuios worktree diff api-feat-retry --stat
 ```
@@ -79,7 +103,10 @@ from the result rather than guess it. A `warning` in the result says the
 folder is inside the repository and git does not ignore it. Tell the person;
 do not edit `.gitignore` for them.
 `--agent` names an agent CLI the way you type it and starts it instead of a
-shell. `worktree ls` (the `list-worktrees` verb) reports each session's rolled-up
+shell. `--prompt` is its first task: typed once the agent is at its prompt,
+checked the way `fan` checks it, and the command returns once the agent took
+it. When it did not, the command says why and exits 1. Read the pane before
+you send it again. `worktree ls` (the `list-worktrees` verb) reports each session's rolled-up
 `state` and `gone` when the directory was removed; the verb with
 `"changes": true` also counts uncommitted changes and commits ahead of the base,
 and reports `merged`: true when the branch has commits of its own and its base,

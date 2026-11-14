@@ -799,6 +799,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "name", Type: "string", Description: "Name for the session. Omit for <repo>-<branch>, with every slash in the branch turned into a hyphen."},
 				{Name: "command", Type: "[]string", Description: "Argv to exec as the first window's process instead of a shell. No shell parses it, so nothing needs quoting."},
 				{Name: "new_branch", Type: "bool", Description: "Refuse with branch_exists when the branch, its worktree folder or its session exists already, instead of checking out a branch that exists."},
+				{Name: "prompt", Type: "string", Description: "A first prompt for the agent in command, typed once it is at its prompt, as start-agent and fan type theirs. The call waits for it to be taken, unless a sync setup holds the agent."},
 			}, slices.Concat(setupParams, repoSourceParams)...),
 			returns: append([]verbParam{
 				{Name: "session", Type: "string", Description: "Name of the new session."},
@@ -812,11 +813,14 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "pty_id", Type: "string", Description: "Id of that window's PTY. Absent while a sync setup holds it."},
 				{Name: "cloned", Type: "bool", Description: "True when the repository was cloned by this call. Absent otherwise."},
 				{Name: "hook_error", Type: "string", Description: "Why the after-new-worktree hook failed, with the last lines of its stderr. The worktree, the session and the first window are kept. Absent when the hook succeeded or none is set."},
+				{Name: "prompt_status", Type: "string", Description: "With prompt: sent, stalled, not_sent, held, or pending while a sync setup holds the agent. list-worktrees reports it later too."},
+				{Name: "prompt_note", Type: "string", Description: "Why the prompt is not sent. Absent when it is."},
 			}, setupReturns...),
 			examples: []string{
 				`{"id":1,"verb":"new-worktree","params":{"repo":"/src/api","branch":"feat/retry"}}`,
 				`{"id":1,"verb":"new-worktree","params":{"repo":"/src/api","branch":"feat/retry","base":"main","command":["claude"]}}`,
 				`{"id":1,"verb":"new-worktree","params":{"repo_url":"git@github.com:acme/api.git","repos_root":"~/src","branch":"feat/retry"}}`,
+				`{"id":1,"verb":"new-worktree","params":{"repo":"/src/api","branch":"feat/retry","command":["claude"],"prompt":"Add a retry to the client."}}`,
 			},
 			handler: (*Daemon).verbNewWorktree,
 		},
