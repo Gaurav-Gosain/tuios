@@ -3,6 +3,7 @@ package app
 import (
 	"image/color"
 	"math"
+	"net/url"
 	"strings"
 	"unicode/utf8"
 
@@ -224,22 +225,27 @@ func (md *ckMD) runs(rs []markdown.Run, ink color.Color, attrs uint8) []ckSeg {
 	return out
 }
 
-// ckLinkTarget is the address a link opens: only web and mail addresses,
+// ckLinkTarget is the address a link opens: web and mail addresses or absolute paths,
 // with no control character and of a sane length. Any other link is drawn and opens nothing.
 func ckLinkTarget(u string) string {
 	if len(u) > 2048 {
 		return ""
 	}
+	path := strings.HasPrefix(u, "/")
 	lower := strings.ToLower(u)
-	if !strings.HasPrefix(lower, "https://") && !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "mailto:") {
+	if !path && !strings.HasPrefix(lower, "https://") && !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "mailto:") {
 		return ""
 	}
 	for _, r := range u {
 		// C0, space, DEL and C1: a C1 such as ST or CSI, written as UTF-8,
-		// ends the OSC 8 string on some terminals.
-		if r <= ' ' || r >= 0x7f && r < 0xa0 || r == utf8.RuneError {
+		// ends the OSC 8 string on some terminals. Spaces in paths are
+		// URL-escaped.
+		if r < ' ' || r == ' ' && !path || r >= 0x7f && r < 0xa0 || r == utf8.RuneError {
 			return ""
 		}
+	}
+	if path {
+		return (&url.URL{Scheme: "file", Path: u}).String()
 	}
 	return u
 }
