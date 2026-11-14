@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -161,8 +162,13 @@ func (o hostSetupOptions) choices() hostsetup.Choices {
 	return c
 }
 
-// setupBase is the engine's options for this process.
-func setupBase(o hostSetupOptions) (hostsetup.Options, error) {
+// setupBase is the engine's options for this process. waits is set for the
+// interactive mode, whose program owns the terminal: nothing else may write to
+// it while the program draws, or the program's next frame lands below what it
+// drew last and leaves the old lines behind. So the source's progress goes
+// nowhere (the step lines say it), and a host change the daemon keeps for the
+// person is recorded in waits for the view to say, not printed.
+func setupBase(o hostSetupOptions, waits *atomic.Bool) (hostsetup.Options, error) {
 	path, err := config.GetConfigPath()
 	if err != nil {
 		return hostsetup.Options{}, errfmt.Errorf("cannot find the config file: %w", err)
@@ -171,7 +177,11 @@ func setupBase(o hostSetupOptions) (hostsetup.Options, error) {
 	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
 		exe = resolved
 	}
-	src := hostsync.NewSource(os.Stderr)
+	var progress io.Writer = os.Stderr
+	if waits != nil {
+		progress = io.Discard
+	}
+	src := hostsync.NewSource(progress)
 	src.Kind = hostsync.KindRelease
 	src.Version = version
 	src.Releases = updateReleases{}
@@ -183,7 +193,11 @@ func setupBase(o hostSetupOptions) (hostsetup.Options, error) {
 		Executable: exe,
 		ConfigPath: path,
 		Apply: func(name string) error {
-			applyHostNow(name)
+			if waits == nil {
+				applyHostNow(name)
+			} else if !applyHost(name) {
+				waits.Store(true)
+			}
 			return nil
 		},
 	}, nil
@@ -197,7 +211,11 @@ func setupContext() (context.Context, context.CancelFunc) {
 
 // runHostSetup is the flag mode for one machine.
 func runHostSetup(dest string, o hostSetupOptions) error {
-	base, err := setupBase(o)
+	var waits *atomic.Bool
+	if setupInteractive(o) {
+		waits = new(atomic.Bool)
+	}
+	base, err := setupBase(o, waits)
 	if err != nil {
 		return err
 	}
@@ -207,8 +225,8 @@ func runHostSetup(dest string, o hostSetupOptions) error {
 		return err
 	}
 	defer s.Close()
-	if setupInteractive(o) {
-		return runHostSetupTTY(s, dest, o)
+	if waits != nil {
+		return runHostSetupTTY(s, dest, o, waits)
 	}
 	ctx, cancel := setupContext()
 	defer cancel()
@@ -350,12 +368,16 @@ func (a *flagAsker) Person(_ context.Context, p *hostsetup.PersonStep) error {
 
 // runTailnetSetup is the flag mode for a tailnet.
 func runTailnetSetup(o hostSetupOptions) error {
-	base, err := setupBase(o)
+	var waits *atomic.Bool
+	if setupInteractive(o) {
+		waits = new(atomic.Bool)
+	}
+	base, err := setupBase(o, waits)
 	if err != nil {
 		return err
 	}
-	if setupInteractive(o) {
-		return runTailnetSetupTTY(base, o)
+	if waits != nil {
+		return runTailnetSetupTTY(base, o, waits)
 	}
 	opt, _ := tailnetOptions()
 	added, err := hostsetup.ConfiguredHosts(base.ConfigPath)

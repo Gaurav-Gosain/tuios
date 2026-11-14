@@ -426,6 +426,59 @@ func TestSetUpTailnetMachines(t *testing.T) {
 	}, "the daemon here never reported buildbox up after the tailnet setup")
 }
 
+// TestSetUpTailnetInAPaneDrawsTheSummaryOnce runs tuios hosts setup --tailnet
+// on the terminal of a tuios pane. The daemon keeps a host change a pane makes
+// for the person, so the setup's own view must say that the change waits, and
+// nothing may print to the terminal while the program draws: a line printed
+// under it moved the cursor, the summary landed below the live frame, and the
+// "Your tailnet" block showed twice.
+//
+// Negative control: with setupBase printing configWaitsNote again while the
+// program runs, the pane shows "Your tailnet" twice.
+func TestSetUpTailnetInAPaneDrawsTheSummaryOnce(t *testing.T) {
+	here := remoteMachine(t)
+	far := remoteMachine(t)
+	ssh := writeTailnetSetupSSH(t, here, far)
+	tsDir := filepath.Join(here, "tsbin")
+	writeFakeTailscale(t, tsDir)
+	env := []string{"TUIOS_SSH=" + ssh, "PATH=" + tsDir + ":" + os.Getenv("PATH")}
+	if out, err := tuiosCLIEnv(t, here, env, "new", "home", "--detach"); err != nil {
+		t.Fatalf("start the daemon here: %v\n%s", err, out)
+	}
+	term := startIn(t, here, startOpts{cols: 110, rows: 34, env: env, args: []string{"attach", "home"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	ids := grantWindowIDs(t, here, "home")
+	line := tuiosBin + " hosts setup --tailnet --only buildbox --install copy --no-service --one-way; echo SETUP''_EXIT=$?\n"
+	if out, err := tuiosCLI(t, here, "send-text", "-s", "home", "-w", ids[0], line); err != nil {
+		t.Fatalf("send-text failed: %v\n%s", err, out)
+	}
+	var pane string
+	deadline := time.Now().Add(90 * time.Second)
+	for time.Now().Before(deadline) {
+		pane, _ = tuiosCLI(t, here, "capture-pane", "-s", "home", "-w", ids[0])
+		if strings.Contains(pane, "SETUP_EXIT=") {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	saveFrame(t, term, "tailnet-setup-in-a-pane")
+	t.Logf("the pane after the setup:\n%s", pane)
+	if !strings.Contains(pane, "SETUP_EXIT=") {
+		t.Fatalf("ASSERTION: the setup did not end in the pane")
+	}
+	if !strings.Contains(pane, "1 machine is ready.") {
+		t.Fatalf("ASSERTION: the pane does not show the summary")
+	}
+	if n := strings.Count(pane, "Your tailnet:"); n != 1 {
+		t.Fatalf("ASSERTION: the pane shows the Your tailnet block %d times, want 1", n)
+	}
+	if !strings.Contains(strings.Join(strings.Fields(pane), " "), "applies this change after tuios config apply") {
+		t.Fatalf("ASSERTION: the summary does not say the host change waits for tuios config apply")
+	}
+}
+
 // TestSetUpOffersNoReleaseForADevBuild is a tuios built from a checkout at a
 // Go pseudo-version. The version parses as one with a prerelease, and no
 // release of that name exists, so the setup must offer a copy and never the

@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -163,6 +164,11 @@ type setupModel struct {
 	// that ask them, which have no engine behind them.
 	own   map[string]*hostsetup.Choices
 	local map[*hostsetup.Prompt]bool
+
+	// waits is set when the running daemon kept a host change for the
+	// person. The summary says so: the program owns the terminal, so the
+	// note is not printed while it draws.
+	waits *atomic.Bool
 }
 
 func newSetupModel() (*setupModel, context.Context) {
@@ -223,8 +229,9 @@ func (m *setupModel) paint(s string) string {
 func send(prog *tea.Program) func(any) { return func(v any) { prog.Send(v) } }
 
 // runHostSetupTTY is the interactive mode for one machine.
-func runHostSetupTTY(s *hostsetup.Setup, dest string, o hostSetupOptions) error {
+func runHostSetupTTY(s *hostsetup.Setup, dest string, o hostSetupOptions, waits *atomic.Bool) error {
 	m, ctx := newSetupModel()
+	m.waits = waits
 	m.dest, m.flows, m.started = dest, []*hostsetup.Flow{{Name: s.Name()}}, true
 	prog := tea.NewProgram(m, tea.WithOutput(os.Stdout))
 	go func() {
@@ -237,13 +244,14 @@ func runHostSetupTTY(s *hostsetup.Setup, dest string, o hostSetupOptions) error 
 
 // runTailnetSetupTTY is the interactive mode for a tailnet: the checklist,
 // the shared answers, then a line for each machine and the summary.
-func runTailnetSetupTTY(base hostsetup.Options, o hostSetupOptions) error {
+func runTailnetSetupTTY(base hostsetup.Options, o hostSetupOptions, waits *atomic.Bool) error {
 	added, err := hostsetup.ConfiguredHosts(base.ConfigPath)
 	if err != nil {
 		return err
 	}
 	opt, _ := tailnetOptions()
 	m, ctx := newSetupModel()
+	m.waits = waits
 	prog := tea.NewProgram(m, tea.WithOutput(os.Stdout))
 	// The shared answers: the flags, else the same version as here, start
 	// at boot, both ways. The checklist shows them, so enter on it is the
@@ -809,6 +817,12 @@ func (m *setupModel) View() tea.View {
 	case len(m.box) > 0:
 		m.ln(0)
 		m.boxView()
+		if m.waits != nil && m.waits.Load() {
+			// configWaitsNote in two lines, so a narrow pane does not cut it.
+			m.ln(0)
+			m.ln(0, "  ", mDim, "The running daemon applies this change after tuios config apply")
+			m.ln(0, "  ", mDim, "from a terminal outside tuios, or a daemon restart.")
+		}
 		if !m.tailnet {
 			m.ln(0)
 			m.ln(0, "  ", mMute, "Open a session: ", mDim, "tuios attach --host ", m.flows[0].Name)

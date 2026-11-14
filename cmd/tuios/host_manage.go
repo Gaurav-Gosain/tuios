@@ -602,16 +602,23 @@ func completeConfiguredHosts(_ *cobra.Command, args []string, _ string) ([]strin
 // With no daemon running there is nothing to apply, and the next start reads
 // the file.
 func applyHostNow(name string) bool {
+	if applyHost(name) {
+		return true
+	}
+	fmt.Println(configWaitsNote)
+	return false
+}
+
+// applyHost is applyHostNow with nothing printed, for a caller that draws the
+// terminal itself and says the change waits in its own view.
+func applyHost(name string) bool {
 	client, err := dialVerb()
 	if err != nil {
 		return true
 	}
 	defer func() { _ = client.Close() }()
-	if _, err := client.Call("apply-config", map[string]any{"host": name}); err != nil {
-		fmt.Println(configWaitsNote)
-		return false
-	}
-	return true
+	_, err = client.Call("apply-config", map[string]any{"host": name})
+	return err == nil
 }
 
 // configWaitsNote is what a command says when the daemon keeps a change for

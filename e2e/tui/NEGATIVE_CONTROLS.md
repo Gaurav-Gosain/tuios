@@ -17540,3 +17540,19 @@ Run on 2026-11-14 on macOS. The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAWideningReloadSaysItWaits$' -v .`.
+
+## hosts setup --tailnet in a pane draws its summary once
+
+`TestSetUpTailnetInAPaneDrawsTheSummaryOnce` runs `tuios hosts setup
+--tailnet --only buildbox` in a tuios pane at 110 x 34. The daemon keeps a
+host change a pane makes, so the setup's view must say the change waits, and
+the pane must show the "Your tailnet" block once.
+
+Run on 2026-11-14 on macOS. The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `setupBase` prints `configWaitsNote` while the program runs, as `applyHostNow` did | "ASSERTION: the pane shows the Your tailnet block 2 times, want 1" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSetUpTailnetInAPaneDrawsTheSummaryOnce$' -v .`.
