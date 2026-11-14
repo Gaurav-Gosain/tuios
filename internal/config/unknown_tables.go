@@ -133,6 +133,26 @@ func tableActionNames(table string) []string {
 	return names
 }
 
+// retiredActions are action names that were deleted after an older tuios wrote
+// them into the config.toml it generated. A person's file still holds them, on
+// lines the person did not write, so naming them as unknown would put a
+// warning on the first start after an upgrade for something tuios did itself.
+// The loader skips them without a word. A name that was never an action is
+// still a typo and still warns. Add a name here only when a release wrote it
+// into a generated config before the action was deleted.
+var retiredActions = map[string]bool{
+	"nav_up":                 true, // deleted in fc6678d09, no-ops on every path
+	"nav_down":               true,
+	"nav_left":               true,
+	"nav_right":              true,
+	"extend_up":              true, // selection mode, replaced by copy mode in c13a329ee
+	"extend_down":            true,
+	"extend_left":            true,
+	"extend_right":           true,
+	"debug_prefix_keyevents": true, // key events overlay, removed in d1749a97a
+	"prefix_focus_sidebar":   true, // removed by 6e731a17d
+}
+
 // UnknownKeybindActions returns a warning for each action name in a
 // keybinding table that no action has, such as copy_mode_wrod for
 // copy_mode_word_forward. The registry skips such a name without a word, so
@@ -154,7 +174,7 @@ func UnknownKeybindActions(lc *LayeredConfig) []string {
 		}
 		var unknown []string
 		for name := range binds {
-			if !isBindableAction(table, name) {
+			if !isBindableAction(table, name) && !retiredActions[name] {
 				unknown = append(unknown, name)
 			}
 		}

@@ -61,12 +61,13 @@ func TestUnknownKeybindTableIsNamed(t *testing.T) {
 // How this could pass wrongly, written down first:
 //   - The name could be reported for another reason. The table is a real
 //     one, so only the action name can be wrong.
+//   - A retired action (nav_up, nav_down) is in the file and must stay silent.
 //   - A warning for a correct name would pass the first check. The file also
 //     binds copy_mode_word_end, a real action, and the test fails if that one
 //     is named.
 func TestUnknownKeybindActionIsNamed(t *testing.T) {
 	base := t.TempDir()
-	writeConfig(t, base, "[keybindings.copy_mode]\ncopy_mode_wrod = ['w']\ncopy_mode_word_end = ['e']\n")
+	writeConfig(t, base, "[keybindings.copy_mode]\ncopy_mode_wrod = ['w']\ncopy_mode_word_end = ['e']\n[keybindings.navigation]\nnav_up = ['up']\nnav_down = ['down']\n")
 	killDaemon(t, base)
 
 	term := startIn(t, base, startOpts{args: []string{"new", "e2e-unknown-action"}})
@@ -101,6 +102,11 @@ func TestUnknownKeybindActionIsNamed(t *testing.T) {
 	}
 	if strings.Contains(out, "copy_mode_word_end is not an action") {
 		t.Fatalf("ASSERTION: tuios config apply names copy_mode_word_end, a real action:\n%s", out)
+	}
+	// nav_up and nav_down are retired actions an older tuios wrote into the
+	// config it generated. They must not warn, and must not count.
+	if strings.Contains(out, "nav_up") || strings.Contains(out, "nav_down") {
+		t.Fatalf("ASSERTION: tuios config apply names a retired action:\n%s", out)
 	}
 	alive(t, term, "after config apply with an unknown action")
 }

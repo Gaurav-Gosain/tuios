@@ -198,6 +198,8 @@ shows the older names after the action's description, as "(also: ...)".
 | `toggle_tape_manager` | `tape_prefix_manager` |
 | `prefix_cancel` | `debug_prefix_cancel`, `layout_prefix_cancel`, `minimize_prefix_cancel`, `tape_prefix_cancel`, `window_prefix_cancel`, `workspace_prefix_cancel` |
 
+A name that is not an action, such as a typo, is reported as a config warning and its keys do nothing. The names of actions that were deleted after an older tuios wrote them into the generated `config.toml` (`nav_up`, `nav_down`, `nav_left`, `nav_right`, `extend_up`, `extend_down`, `extend_left`, `extend_right`, `debug_prefix_keyevents` and `prefix_focus_sidebar`) are skipped without a warning.
+
 A table that names one action by two names keeps the keys of both.
 
 ```sh
