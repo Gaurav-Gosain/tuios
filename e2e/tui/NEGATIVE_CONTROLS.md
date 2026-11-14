@@ -17556,3 +17556,26 @@ Run on 2026-11-14 on macOS. The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestSetUpTailnetInAPaneDrawsTheSummaryOnce$' -v .`.
+
+## A copy's rate is what the far side wrote
+
+`TestACopysRateIsWhatTheFarSideTook` copies 600 small text files and one
+48 MiB text file to build over a link held to 4 MiB/s each way, with a
+300 ms round trip and 16 MiB of buffer on the way up. Every 100 ms it reads
+the rate in the transfer list and the bytes on build's disk, part files
+included. The rate may not be more than 1.5 times, plus 1 MiB/s, what build
+wrote in the last five seconds.
+
+Run on 2026-11-14 on macOS. The branch passes three runs in a row, with the
+rate never over what landed.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `sample` records `done` (bytes handed to the link) instead of `acked` | "ASSERTION: the transfer list showed 7.5 MiB/s while build wrote 1.5 MiB/s in the last five seconds" | **caught** |
+
+The same test with random bytes passes on both builds: without compression
+the link's credit window keeps the bytes sent close to the bytes written. So
+the test uses text, as the film's folder was.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestACopysRateIsWhatTheFarSideTook$' -v .`.

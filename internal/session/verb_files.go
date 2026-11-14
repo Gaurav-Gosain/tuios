@@ -11,11 +11,13 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unicode"
@@ -775,6 +777,9 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 		PartID   string          `json:"part_id"`
 		Compress json.RawMessage `json:"compress"`
 		Sum      bool            `json:"sum"`
+		// Progress asks a write to say how many bytes it has written while
+		// they land, so the sender's rate is what this side took.
+		Progress bool `json:"progress"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -925,7 +930,13 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 			if p.Offset == 0 {
 				dst = io.MultiWriter(f, h)
 			}
+			var tell *writeProgress
+			if p.Progress {
+				tell = startWriteProgress(cs.conn)
+				dst = &landedWriter{w: dst, n: &tell.written}
+			}
 			n, cerr := io.CopyBuffer(dst, io.LimitReader(src, p.Length), make([]byte, 256<<10))
+			tell.stop()
 			if fr != nil {
 				if cerr == nil && n == p.Length {
 					cerr = flateEnd(fr)
@@ -957,6 +968,70 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 	default:
 		return nil, invalidParam("mode", "mode is read or write", "read", "write")
 	}
+}
+
+// writeProgressEvery is how often a write stream that asked for progress is
+// told how many bytes have landed.
+const writeProgressEvery = 250 * time.Millisecond
+
+// writeProgress tells the sender of a write stream, every
+// writeProgressEvery, how many of its bytes have been written to the part:
+// one line {"written": N}. It writes only when the count moved, and stops at
+// the first write that fails, which leaves the stream to end as it would.
+type writeProgress struct {
+	written atomic.Int64
+	done    chan struct{}
+	ended   chan struct{}
+}
+
+func startWriteProgress(conn net.Conn) *writeProgress {
+	p := &writeProgress{done: make(chan struct{}), ended: make(chan struct{})}
+	go func() {
+		defer close(p.ended)
+		t := time.NewTicker(writeProgressEvery)
+		defer t.Stop()
+		var told int64
+		for {
+			select {
+			case <-p.done:
+				return
+			case <-t.C:
+			}
+			n := p.written.Load()
+			if n == told {
+				continue
+			}
+			line, _ := jsonx.Marshal(map[string]any{"written": n})
+			_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if _, err := conn.Write(append(line, '\n')); err != nil {
+				return
+			}
+			told = n
+		}
+	}()
+	return p
+}
+
+// landedWriter counts into n the bytes its writer took.
+type landedWriter struct {
+	w io.Writer
+	n *atomic.Int64
+}
+
+func (l *landedWriter) Write(b []byte) (int, error) {
+	n, err := l.w.Write(b)
+	l.n.Add(int64(n))
+	return n, err
+}
+
+// stop ends the progress lines before the last reply is written, so the two
+// never interleave. A nil p is a stream that did not ask for progress.
+func (p *writeProgress) stop() {
+	if p == nil {
+		return
+	}
+	close(p.done)
+	<-p.ended
 }
 
 // commitOpts are the rest of what commitPart takes.
@@ -1560,6 +1635,7 @@ func fileVerbs() map[string]verbEntry {
 				{Name: "length", Type: "int", Description: "write only: how many bytes the caller sends."},
 				partIDParam,
 				{Name: "sum", Type: "bool", Description: "read: after the last byte, one line {sha256} with the hash of the bytes sent, or {error} when the file changed while it was read."},
+				{Name: "progress", Type: "bool", Description: "write: while the bytes land, one line {written} at most every 250 ms with the bytes written so far, before the last line."},
 				{Name: "compress", Type: "any", Description: "read: \"auto\" lets this machine compress the bytes with flate when a sample of the file compresses well, and the reply says compressed. write: true when the caller sends the bytes as one flate stream."},
 			},
 			returns: []verbParam{

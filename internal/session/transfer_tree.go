@@ -935,9 +935,13 @@ func (m *transferManager) treeCopy(ctx context.Context, j *transferJob, src, dst
 				}
 				continue
 			}
-			if _, ok := byRel[a.Rel]; !ok {
+			task, ok := byRel[a.Rel]
+			if !ok {
 				continue
 			}
+			// The ack is the write side saying the file is in place, so its
+			// bytes count for the rate now.
+			j.ack(task.e.Size)
 			m.noteFileResult(j, a.Rel, each, a.Skipped, a.SHA256)
 		}
 	}()

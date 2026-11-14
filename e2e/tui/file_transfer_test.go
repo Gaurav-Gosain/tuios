@@ -55,17 +55,19 @@ func runThrottleIfAsked() {
 	}
 	// rate:depth, or rate:depth:delay with a delay in ms that every byte
 	// from the far side waits before it is passed on: a link with that round
-	// trip.
+	// trip. rate:depth:delay:up holds the bytes to the far side to the same
+	// rate and depth too, as an upload over a slow link with deep buffers.
 	var rate, depth, delayMs int
 	parts := strings.Split(spec, ":")
-	if len(parts) < 2 || len(parts) > 3 {
+	if len(parts) < 2 || len(parts) > 4 {
 		os.Exit(2)
 	}
 	rate, _ = strconv.Atoi(parts[0])
 	depth, _ = strconv.Atoi(parts[1])
-	if len(parts) == 3 {
+	if len(parts) >= 3 {
 		delayMs, _ = strconv.Atoi(parts[2])
 	}
+	up := len(parts) == 4 && parts[3] == "up"
 	if rate <= 0 || depth <= 0 || delayMs < 0 {
 		os.Exit(2)
 	}
@@ -79,11 +81,23 @@ func runThrottleIfAsked() {
 	}
 	cmd := exec.Command("/bin/sh", "-c", cmdline)
 	cmd.Env = slicesWithout(os.Environ(), throttleEnv)
-	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
+	var toFar io.WriteCloser
+	if up {
+		w, err := cmd.StdinPipe()
+		if err != nil {
+			os.Exit(255)
+		}
+		toFar = w
+	} else {
+		cmd.Stdin = os.Stdin
+	}
 	far, err := cmd.StdoutPipe()
 	if err != nil || cmd.Start() != nil {
 		os.Exit(255)
+	}
+	if up {
+		go throttleUp(os.Stdin, toFar, rate, depth)
 	}
 	var mu sync.Mutex
 	cond := sync.NewCond(&mu)
@@ -160,6 +174,64 @@ func runThrottleIfAsked() {
 	}
 }
 
+// throttleUp passes what this side sends on to the far command at rate bytes
+// a second. It reads ahead into a buffer of depth bytes, so the sender's
+// writes return long before the far side has the bytes, the way the buffers
+// of ssh and the network take an upload.
+func throttleUp(src io.Reader, dst io.WriteCloser, rate, depth int) {
+	var mu sync.Mutex
+	cond := sync.NewCond(&mu)
+	var buf []byte
+	eof := false
+	go func() {
+		chunk := make([]byte, 64<<10)
+		for {
+			n, err := src.Read(chunk)
+			mu.Lock()
+			for len(buf) >= depth {
+				cond.Wait()
+			}
+			buf = append(buf, chunk[:n]...)
+			if err != nil {
+				eof = true
+			}
+			cond.Broadcast()
+			mu.Unlock()
+			if err != nil {
+				return
+			}
+		}
+	}()
+	const tick = 2 * time.Millisecond
+	per := max(rate*int(tick)/int(time.Second), 1)
+	next := time.Now()
+	for {
+		mu.Lock()
+		for len(buf) == 0 && !eof {
+			cond.Wait()
+		}
+		if len(buf) == 0 && eof {
+			mu.Unlock()
+			_ = dst.Close()
+			return
+		}
+		k := min(per, len(buf))
+		out := append([]byte(nil), buf[:k]...)
+		buf = buf[k:]
+		cond.Broadcast()
+		mu.Unlock()
+		if _, err := dst.Write(out); err != nil {
+			return
+		}
+		next = next.Add(tick)
+		if d := time.Until(next); d > 0 {
+			time.Sleep(d)
+		} else {
+			next = time.Now()
+		}
+	}
+}
+
 func slicesWithout(env []string, key string) []string {
 	out := env[:0:0]
 	for _, kv := range env {
@@ -182,6 +254,17 @@ func writeSlowFakeSSH(t *testing.T, dir, remoteBase string, rate, depth int) str
 // held delayMs first, which gives the link that round trip.
 func writeDelayedFakeSSH(t *testing.T, dir, remoteBase string, rate, depth, delayMs int) string {
 	t.Helper()
+	return writeThrottledFakeSSH(t, dir, remoteBase, rate, depth, delayMs, false)
+}
+
+// writeThrottledFakeSSH is writeDelayedFakeSSH, with up holding the bytes to
+// the far side to the same rate and depth.
+func writeThrottledFakeSSH(t *testing.T, dir, remoteBase string, rate, depth, delayMs int, up bool) string {
+	t.Helper()
+	spec := fmt.Sprintf("%d:%d:%d", rate, depth, delayMs)
+	if up {
+		spec += ":up"
+	}
 	self, err := os.Executable()
 	if err != nil {
 		t.Fatalf("find this test binary: %v", err)
@@ -198,7 +281,7 @@ func writeDelayedFakeSSH(t *testing.T, dir, remoteBase string, rate, depth, dela
 		b.WriteString(xdgDir(remoteBase, key))
 		b.WriteString("\n")
 	}
-	fmt.Fprintf(&b, "%s=%d:%d:%d exec %s %s %s -- \"$*\"\n", throttleEnv, rate, depth, delayMs, self, throttleMarker, dir)
+	fmt.Fprintf(&b, "%s=%s exec %s %s %s -- \"$*\"\n", throttleEnv, spec, self, throttleMarker, dir)
 	if err := os.WriteFile(path, []byte(b.String()), 0o700); err != nil {
 		t.Fatalf("write the slow ssh stand-in: %v", err)
 	}

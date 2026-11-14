@@ -29,6 +29,10 @@ type fileEnd struct {
 	// wire, when set, counts the bytes this end's streams carry over the
 	// link.
 	wire *atomic.Int64
+	// ack, when set, is told the bytes this end, as the writing side, says
+	// it holds: what reached this machine's disk, or what the far daemon
+	// reports it wrote. The copy's rate is taken from it.
+	ack func(int64)
 	// gate, for this machine's disk, is the linked machine the job runs
 	// for: each read and write is checked as that machine's file verbs
 	// would be, and each write goes through an os.Root at its root. Nil is
@@ -311,7 +315,7 @@ func (e fileEnd) openWrite(ctx context.Context, path, id string, off, length int
 			release()
 			return nil, nil, err
 		}
-		w := &partWriter{File: f, release: release}
+		w := &partWriter{File: f, release: release, ack: e.ack}
 		e.d.transfers.parts.note(filepath.Dir(part))
 		if err := f.Truncate(off); err != nil {
 			_ = w.Close()
@@ -334,7 +338,10 @@ func (e fileEnd) openWrite(ctx context.Context, path, id string, off, length int
 		return nil, nil, err
 	}
 	c.count(e.wire)
-	params := map[string]any{"path": path, "mode": "write", "offset": off, "length": length, "part_id": id}
+	// progress asks the far daemon to say how many bytes it has written
+	// while they land. A daemon from before it ignores the key and sends
+	// only the last line.
+	params := map[string]any{"path": path, "mode": "write", "offset": off, "length": length, "part_id": id, "progress": true}
 	if compress {
 		params["compress"] = true
 	}
@@ -342,17 +349,17 @@ func (e fileEnd) openWrite(ctx context.Context, path, id string, off, length int
 		_ = c.Close()
 		return nil, nil, err
 	}
+	type res struct {
+		line []byte
+		err  error
+	}
+	got := make(chan res, 1)
+	go func() {
+		line, err := readWriteReplies(c.br, e.ack)
+		got <- res{line, err}
+	}()
 	finish := func() error {
 		defer func() { _ = c.Close() }()
-		type res struct {
-			line []byte
-			err  error
-		}
-		got := make(chan res, 1)
-		go func() {
-			line, err := readBoundedLine(c.br, 64<<10)
-			got <- res{line, err}
-		}()
 		var r res
 		select {
 		case r = <-got:
@@ -369,11 +376,49 @@ func (e fileEnd) openWrite(ctx context.Context, path, id string, off, length int
 	return c, finish, nil
 }
 
+// readWriteReplies reads what the far daemon writes back on a write stream:
+// a line {"written": N} each time more of the bytes landed, when the stream
+// asked for progress, then the last line, which has part_size, and which it
+// returns. ack, when set, is told each step of written.
+func readWriteReplies(br *bufio.Reader, ack func(int64)) ([]byte, error) {
+	var told int64
+	for {
+		line, err := readBoundedLine(br, 64<<10)
+		if err != nil {
+			return nil, err
+		}
+		var r struct {
+			PartSize *int64 `json:"part_size"`
+			Written  int64  `json:"written"`
+			Error    string `json:"error"`
+		}
+		if jsonx.Unmarshal(line, &r) != nil || r.PartSize != nil || r.Error != "" {
+			if ack != nil && r.Error == "" && r.Written > told {
+				ack(r.Written - told)
+			}
+			return line, nil
+		}
+		if ack != nil && r.Written > told {
+			ack(r.Written - told)
+			told = r.Written
+		}
+	}
+}
+
 // partWriter is a part file of this machine that gives back the room its
 // write claimed (claimLinkWrite) when it closes.
 type partWriter struct {
 	*os.File
 	release func()
+	ack     func(int64)
+}
+
+func (w *partWriter) Write(b []byte) (int, error) {
+	n, err := w.File.Write(b)
+	if w.ack != nil {
+		w.ack(int64(n))
+	}
+	return n, err
 }
 
 func (w *partWriter) Close() error {

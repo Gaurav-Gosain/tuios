@@ -6745,7 +6745,12 @@ Only regular files are read: a named pipe or a device answers at once with
 `offset` (which may not be past the part's end), answers `part_size`, then
 takes `length` bytes into the part. When they are written and synced it
 writes one line, `{"part_size":N,"written":N}` or with `error`, and closes.
-Either side ending early leaves the part as it is, which is where the next
+With `progress` true it also writes `{"written":N}` lines while the bytes
+land, at most every 250 ms, before that last line; the line with `part_size`
+is always the last. A sender takes its copy's rate from these lines, since
+the bytes it has sent run ahead of what the far side has written by every
+buffer on the link. A daemon from before `progress` ignores the key and
+writes only the last line. Either side ending early leaves the part as it is, which is where the next
 attempt resumes. Over a link these streams ride bulk lanes that wait behind
 every pane and keep to a credit window (see
 [ARCHITECTURE.md](ARCHITECTURE.md)).

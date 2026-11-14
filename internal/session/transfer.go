@@ -162,6 +162,11 @@ type transferJob struct {
 	// wire counts the bytes that crossed a link, which compression makes
 	// fewer than done.
 	wire atomic.Int64
+	// acked counts the bytes of this run that the writing side said it
+	// holds: written to this machine's disk, or confirmed by the far daemon.
+	// done runs ahead of it by every buffer on the link, so the rate is
+	// taken from acked. A resume does not add to it.
+	acked atomic.Int64
 
 	mu        sync.Mutex
 	state     string
@@ -303,7 +308,7 @@ func (m *transferManager) failRevoked() {
 // end is one end of the job: this machine's disk, under the job's link
 // policy when a linked machine started it, or a host's.
 func (m *transferManager) end(j *transferJob, host string) fileEnd {
-	e := fileEnd{d: m.d, host: host, wire: &j.wire}
+	e := fileEnd{d: m.d, host: host, wire: &j.wire, ack: j.ack}
 	if host == "" {
 		e.gate = j.gate()
 		e.acc = access{cs: e.gate, pane: j.opts.PaneRoot}
@@ -312,8 +317,8 @@ func (m *transferManager) end(j *transferJob, host string) fileEnd {
 }
 
 type rateSample struct {
-	at   time.Time
-	done int64
+	at    time.Time
+	acked int64
 }
 
 // ConflictItem is a file a copy found at its destination with other bytes.
@@ -1500,7 +1505,7 @@ func (m *transferManager) copyFile(ctx context.Context, j *transferJob, src, dst
 		j.current, j.curBase, j.curSize = fc.rel, fc.base, size
 	})
 	j.done.Store(fc.base + offset)
-	j.sample(true)
+	j.sample()
 
 	sum := ""
 	known := ""
@@ -1657,9 +1662,18 @@ func (p *progressWriter) Write(b []byte) (int, error) {
 // a rate limit asks for.
 func (j *transferJob) moved(ctx context.Context, m *transferManager, n int) {
 	j.done.Add(int64(n))
-	j.sample(false)
+	j.sample()
 	m.progress(j)
 	j.limiter.wait(ctx, n)
+}
+
+// ack counts n bytes the writing side said it holds, for the rate.
+func (j *transferJob) ack(n int64) {
+	if n <= 0 {
+		return
+	}
+	j.acked.Add(n)
+	j.sample()
 }
 
 // rateLimiter holds a copy to a rate: after each write it sleeps until the
@@ -1689,18 +1703,18 @@ func (l *rateLimiter) wait(ctx context.Context, n int) {
 	}
 }
 
-// sample records the progress for the rate, at most every 200 ms.
-func (j *transferJob) sample(force bool) {
+// sample records the acknowledged bytes for the rate, at most every 200 ms.
+// The window runs across files: it used to start again at each file, and
+// the first fraction of a second of a file, while the link's buffers filled,
+// read as several times the link's speed.
+func (j *transferJob) sample() {
 	now := time.Now()
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	if force {
-		j.samples = j.samples[:0]
-	}
 	if n := len(j.samples); n > 0 && now.Sub(j.samples[n-1].at) < 200*time.Millisecond {
 		return
 	}
-	j.samples = append(j.samples, rateSample{at: now, done: j.done.Load()})
+	j.samples = append(j.samples, rateSample{at: now, acked: j.acked.Load()})
 	cut := 0
 	for cut < len(j.samples)-1 && now.Sub(j.samples[cut].at) > 6*time.Second {
 		cut++
@@ -1708,7 +1722,8 @@ func (j *transferJob) sample(force bool) {
 	j.samples = j.samples[cut:]
 }
 
-// rateLocked is the bytes per second over the last five seconds or so.
+// rateLocked is the bytes per second the writing side acknowledged over the
+// last five seconds or so of wall time.
 func (j *transferJob) rateLocked() float64 {
 	n := len(j.samples)
 	if n < 2 {
@@ -1726,7 +1741,7 @@ func (j *transferJob) rateLocked() float64 {
 	if dt <= 0 || time.Since(last.at) > 3*time.Second {
 		return 0
 	}
-	return float64(last.done-first.done) / dt
+	return float64(last.acked-first.acked) / dt
 }
 
 // abortParts removes the part a cancelled copy left, on whichever machine.
