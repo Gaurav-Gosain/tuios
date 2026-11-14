@@ -819,6 +819,9 @@ func (m *OS) composeFrameParts() (*frameCanvas, string) {
 	// background.go.
 	m.syncReportColors()
 	m.noteThemeChange()
+	// The hit record is this frame's from here: every surface drawn below
+	// puts its targets into it, and one not drawn leaves none.
+	m.hits.begin()
 
 	// The screen saver is the frame, not a layer over one.
 	//
