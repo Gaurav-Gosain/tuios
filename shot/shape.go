@@ -273,7 +273,9 @@ func morxShape(t tbl, g []int) ([]int, bool) {
 	if !ok1 || !ok2 || version < 2 || nChains == 0 {
 		return g, false
 	}
-	flags, ok1 := t.u32(8)
+	// The flags and the coverage are bit masks, read whole: u32 is for
+	// offsets and counts, and turns a mask with a high bit into a miss.
+	flags, ok1 := t.w32(8)
 	chainLen, ok2 := t.u32(12)
 	nFeat, ok3 := t.u32(16)
 	nSub, ok4 := t.u32(20)
@@ -284,8 +286,8 @@ func morxShape(t tbl, g []int) ([]int, bool) {
 	off := 16 + 12*nFeat
 	for range nSub {
 		length, ok1 := chain.u32(off)
-		cov, ok2 := chain.u32(off + 4)
-		subFlags, ok3 := chain.u32(off + 8)
+		cov, ok2 := chain.w32(off + 4)
+		subFlags, ok3 := chain.w32(off + 8)
 		if !ok1 || !ok2 || !ok3 || length < 12 || off+length > len(chain) {
 			return g, false
 		}
