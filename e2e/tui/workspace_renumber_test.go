@@ -299,6 +299,14 @@ func TestWorkspaceRenumberReachesEveryClient(t *testing.T) {
 // TestHerdrTabMoveKeepsTabIDs moves a tab through herdr's tab.move: the tab
 // list comes back in the new order with the ids it had, the tuios numbering
 // follows the move, and a tab id read before the move still names its tab.
+//
+// The move leaves every tab key apart from its workspace number. The daemon
+// then restarts, and every restored shell must start with HERDR_TAB_ID naming
+// its own tab, by the id it had before the restart. The shells start before
+// the saved state lands, so a key read from that state alone gave the
+// workspace number: another tab's id.
+//
+// Negative control: see NEGATIVE_CONTROLS.md.
 func TestHerdrTabMoveKeepsTabIDs(t *testing.T) {
 	term, base := renumberSetup(t)
 	ids := map[string]string{}
@@ -328,6 +336,33 @@ func TestHerdrTabMoveKeepsTabIDs(t *testing.T) {
 		t.Fatalf("list-windows after tab.move: %v", err)
 	}
 	alive(t, term, "after herdr's tab.move")
+
+	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
+		t.Fatalf("kill-server: %v: %s", err, out)
+	}
+	waitExit(t, term, "after kill-server")
+	if out, err := tuiosCLI(t, base, "new", renumberSession+"-trigger", "--detach"); err != nil {
+		t.Fatalf("start a fresh daemon: %v: %s", err, out)
+	}
+	waitForSessionInfo(t, base, renumberSession)
+	names := wantNumbering(t, base, map[string]string{"1": "REVW", "2": "DPLY", "3": "EDIT"}).WorkspaceNames
+	var wins daemonWindowList
+	waitUntil(t, "the restored session never listed its 6 panes", bootTimeout, func() (bool, string) {
+		var err error
+		wins, err = daemonWindows(base, renumberSession)
+		return err == nil && len(wins.Windows) == 6, fmt.Sprint(wins, err)
+	})
+	for _, w := range wins.Windows {
+		label := names[fmt.Sprint(w.Workspace)]
+		want := ids[label]
+		typeInPane(t, base, renumberSession, w.ID, `echo "TAB=$HERDR_TAB_ID:END"`)
+		// "TAB=w" is in the echo's output alone, not in the line typed.
+		screen := waitPaneScreen(t, base, renumberSession, w.ID, uiTimeout, "TAB=w")
+		if !strings.Contains(screen, "TAB="+want+":END") {
+			t.Fatalf("the restored pane on workspace %d (%s) started with the wrong HERDR_TAB_ID, want %s:\n%s", w.Workspace, label, want, screen)
+		}
+		wantHerdrTab(t, base, want, label)
+	}
 }
 
 // TestWorkspaceMoveKeyTwiceQuickly presses the move key twice in one burst.

@@ -447,6 +447,7 @@ func (s *Session) adoptState(st *SessionState) {
 	s.stateMu.Lock()
 	st.Name = s.Name()
 	s.state = st
+	s.publishTabKeys(st.WorkspaceTabKeys)
 	s.noteStateChangeLocked()
 	s.stateMu.Unlock()
 }

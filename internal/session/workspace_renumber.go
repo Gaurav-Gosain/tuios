@@ -319,10 +319,7 @@ func (s *Session) noteWorkspacesLocked() bool {
 	}
 	// Published for herdrTabFor whatever happens below. The map is never
 	// written in place, so a reader of this copy needs no lock.
-	defer func() {
-		keys := st.WorkspaceTabKeys
-		s.tabKeys.Store(&keys)
-	}()
+	defer func() { s.publishTabKeys(st.WorkspaceTabKeys) }()
 	exists := st.existingWorkspaces()
 	if s.hadPanes == nil {
 		s.hadPanes = make(map[int]bool)
@@ -576,6 +573,12 @@ func takeWorkspaceMapsFrom(incoming, canonical *SessionState) {
 		incoming.WindowToBSPID = canonical.WindowToBSPID
 		incoming.NextBSPWindowID = canonical.NextBSPWindowID
 	}
+}
+
+// publishTabKeys stores keys for herdrTabFor. keys must not be written in
+// place afterwards, so a reader of the stored map needs no lock.
+func (s *Session) publishTabKeys(keys map[int]int) {
+	s.tabKeys.Store(&keys)
 }
 
 // RestoreWorkspaceTabKeys puts saved herdr tab keys back on a session a restore

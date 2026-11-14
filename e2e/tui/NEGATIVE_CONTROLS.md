@@ -17502,3 +17502,24 @@ Run on 2026-11-14 on macOS. The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorktreeNewTypesPrompt$' -v .`.
+
+## A restored pane gets the saved tab key in HERDR_TAB_ID
+
+A restored shell started with HERDR_TAB_ID built from its workspace number,
+not the workspace's saved tab key, so `herdr tab get` on it answered
+`tab_not_found` or named another tab. The restore starts the shells before
+the saved state lands, and `herdrTabFor` read keys that only a later state
+change published. `restoreSessionOffers` now publishes the saved keys before
+the first shell starts. `TestHerdrTabMoveKeepsTabIDs` moves a tab so that no
+key equals its workspace number, restarts the daemon, and checks that every
+restored pane's HERDR_TAB_ID is the id its tab had before the restart, and
+that `tab.get` on it names that tab.
+
+Run on 2026-11-14 on Linux. The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The `publishTabKeys` call taken out of `restoreSessionOffers` | "the restored pane on workspace 3 (EDIT) started with the wrong HERDR_TAB_ID, want w...:t1" (the pane shows `TAB=w...:t3:END`) | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHerdrTabMoveKeepsTabIDs$' -v .`.

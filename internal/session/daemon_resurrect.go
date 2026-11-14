@@ -196,6 +196,10 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	// A display order saved by a build that kept one comes back as the
 	// numbering it showed. See applyLegacyWorkspaceOrder.
 	restored.applyLegacyWorkspaceOrder()
+	// The shells below start before the state lands, and herdrTabFor gives
+	// each its HERDR_TAB_ID from the published keys, so the saved ones go
+	// out first.
+	sess.publishTabKeys(maps.Clone(restored.WorkspaceTabKeys))
 
 	// A window whose shell will not start is dropped rather than kept. Keeping it
 	// left its PTYID naming the dead daemon's PTY, which nothing will ever answer
