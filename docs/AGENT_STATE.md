@@ -2912,7 +2912,7 @@ Inside the agents view:
 
 | Key | What it does |
 | --- | --- |
-| `j` / `k`, arrows | Move. Group headings are skipped. |
+| `j` / `k`, arrows | Move. Group headings are skipped. On a list too long for the screen, a group after its eighth row shows `+N more`, and `j` on its last row shown opens the rest. |
 | `g` / `G` | First and last item. |
 | `enter` | Go to the item's pane, switching session and workspace. On mail, open the thread. On a held approval, give the prompt back to the pane first, so the harness shows it there. |
 | `space` | On an approval or a question, read the prompt without leaving the agents view, and answer it from there. See [Answering a prompt without attaching](#answering-a-prompt-without-attaching). Not on a held approval, which has no prompt on the screen: answer that one with `1`, `2` or `3`. |

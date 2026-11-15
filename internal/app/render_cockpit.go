@@ -1158,6 +1158,12 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 		ck.hits = append([]ckHit{{x0: cx, y0: top + y, x1: rx - 2, y1: top + y + 1, kind: ckHitAction, action: "artrow:" + r.key}}, ck.hits...)
 		rx = cx
 	}
+	if r.inline {
+		// Short of room: what the row does takes the harness's and the
+		// place's room, which the focus header shows.
+		m.drawRowLine2(c, l, r, e, nx+nameW, y, rx-1, ink)
+		return
+	}
 	if r.lines == 1 && w < 48 {
 		// Narrow: the context, when a source said, takes the place's room.
 		if ctx := ckContextSegs(l, e, true); ctx != nil && rx-2-ckWidth(ctx...) > nx+nameW {
@@ -1186,17 +1192,29 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 	if r.lines < 2 {
 		return
 	}
+	m.drawRowLine2(c, l, r, e, nx, y+1, right, ink)
+}
+
+// drawRowLine2 draws what a row needs or does, its verb then the rest, from
+// x to right on row y, with what the line puts at its right end.
+func (m *OS) drawRowLine2(c *ckCanvas, l ckLook, r ckRow, e sidebarAgentEntry, x, y, right int, ink func(color.Color) color.Color) {
+	pal := l.pal
 	verb, rest, verbInk, rightSegs := m.ckRowLine2(l, r, e)
 	rx2 := right
 	if rightSegs != nil {
-		rx2 = c.textR(right, y+1, rightSegs...) - 2
+		rx2 = c.textR(right, y, rightSegs...) - 2
 	}
-	lx := c.text(nx, y+1, rx2, ckSeg{t: verb, fg: ink(verbInk), attrs: ckBold})
+	lx := c.text(x, y, rx2, ckSeg{t: verb, fg: ink(verbInk), attrs: ckBold})
 	if rest != "" {
 		if verb != "" {
 			lx += 2
 		}
-		c.text(lx, y+1, rx2, ckSeg{t: ckTrunc(rest, rx2-lx), fg: ink(pal.FgDim)})
+		// A path cut keeps its file's name: "…/lru.go".
+		cut := ckTrunc(rest, rx2-lx)
+		if strings.Contains(rest, "/") && !strings.ContainsAny(rest, " \t") {
+			cut = ckTruncPath(rest, rx2-lx)
+		}
+		c.text(lx, y, rx2, ckSeg{t: cut, fg: ink(pal.FgDim)})
 	}
 }
 
@@ -1371,6 +1389,27 @@ func ckTruncMid(s string, n int) string {
 	head := n - 1 - tail
 	end := ansi.TruncateLeft(s, ansi.StringWidth(s)-tail, "")
 	return ansi.Truncate(s, head, "") + overlay.Ellipsis() + end
+}
+
+// ckTruncPath is path p in at most n cells: whole when it fits, else as much
+// of its folders as fit before its file's name, which is kept whole when it
+// can be: "internal/…/lru.go", then "…/lru.go".
+func ckTruncPath(p string, n int) string {
+	if ansi.StringWidth(p) <= n {
+		return p
+	}
+	i := strings.LastIndexByte(p, '/')
+	base := p[i+1:]
+	tail := overlay.Ellipsis() + "/" + base
+	room := n - ansi.StringWidth(tail)
+	if i < 0 || room < 0 {
+		return ckTrunc(base, n)
+	}
+	if room < 4 {
+		// A folder cut to a letter or two says nothing.
+		return tail
+	}
+	return ansi.Truncate(p[:i], room, "") + tail
 }
 
 // ckLocalName is this machine's short host name, read once.

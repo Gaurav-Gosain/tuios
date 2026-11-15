@@ -114,6 +114,9 @@ type ckRow struct {
 	// rest lets the cursor rest on a heading: a column of the board's
 	// columns that shows no card.
 	rest bool
+	// inline marks a row drawn on one line for want of room whose second
+	// line goes on that line, after the name.
+	inline bool
 }
 
 // selectable reports whether the row is an agent's, an item's or a card's:
@@ -599,6 +602,7 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 		if r.agent >= 0 {
 			e = list[r.agent]
 		}
+		r.inline = false
 		// An idle or settled row is one line, unless its chain has
 		// something waiting for the person, or it stopped on its usage
 		// limit: the second line says so.
@@ -607,8 +611,11 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 			r.lines = 1
 		}
 		ck.tall += r.lines
-		if ck.oneLine {
-			r.lines = 1
+		// A row that needs the person keeps the line that says what it
+		// needs. Any other row, when the list is short of room, puts what
+		// it does on its one line, in place of the harness and the session.
+		if ck.oneLine && r.lines == 2 && g != ckNeeds {
+			r.lines, r.inline = 1, true
 		}
 		rows = append(rows, r)
 		if r.kind == ckRowAgent && !r.hasItem && !r.attempt && !ck.oneLine {
@@ -993,6 +1000,26 @@ func (m *OS) CockpitMove(delta int) {
 	if at < 0 {
 		at = 0
 	} else {
+		// j on the last row of a long group the list folds opens the
+		// group, so the rows its "+N more" stands for are a key away.
+		if delta == 1 && ck.idx+1 < len(rows) && rows[ck.idx+1].kind == ckRowMore && rows[ck.idx+1].group >= 0 && !ck.board {
+			g := rows[ck.idx+1].group
+			key := ck.key
+			m.CockpitToggleGroup(g, true)
+			rows = m.cockpitRows()
+			sel, at = sel[:0], -1
+			for i, r := range rows {
+				if r.cursorable() {
+					if r.key == key {
+						at = len(sel)
+					}
+					sel = append(sel, i)
+				}
+			}
+			if at < 0 || len(sel) == 0 {
+				return
+			}
+		}
 		at = min(max(at+delta, 0), len(sel)-1)
 	}
 	m.cockpitSetCursor(sel[at])
