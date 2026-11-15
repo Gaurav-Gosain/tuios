@@ -175,6 +175,18 @@ func worktreePathFor(template, root, branch string) (string, *verbError) {
 	return path, nil
 }
 
+// worktreeAgentName is the name of the agent's window in a worktree: the last
+// part of its branch, "add-json-flag" for agent/add-json-flag. The name is
+// set when the window opens, so the agent is never known by the title its
+// program sets ("main.go --json flag"). A shell, with no command, keeps the
+// default name.
+func worktreeAgentName(branch string, command []string) string {
+	if len(command) == 0 {
+		return ""
+	}
+	return branch[strings.LastIndex(branch, "/")+1:]
+}
+
 // createWorktreeSession is what new-worktree and fan share: the worktree, then
 // the session in it, then the record that ties them. The worktree is never
 // removed on a later failure. It exists on disk and git lists it, and taking
@@ -217,6 +229,7 @@ func (d *Daemon) createWorktreeSession(cs *connState, root, branch, base, sessio
 			Command: command,
 			Env:     env,
 			Grants:  grants,
+			Name:    worktreeAgentName(branch, command),
 		}, onExit)
 	}
 	agentFailed := func(err error) *verbError {

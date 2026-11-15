@@ -1539,6 +1539,11 @@ func (m *OS) spawnStart() tea.Cmd {
 		if m.AttachedHost == "" && m.SessionName != "" {
 			params["session"] = m.SessionName
 		}
+		// The agent is named after its task, as a worktree's is after its
+		// branch, and not by the title its program sets.
+		if name := strings.TrimPrefix(spawnBranchName(task), "agent/"); name != "" {
+			params["name"] = name
+		}
 	}
 	m.Inbox.ck.spawnLast = s.agents[s.agent].id
 	s.starting, s.notice = true, ""

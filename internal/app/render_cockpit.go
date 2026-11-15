@@ -2228,6 +2228,19 @@ func (m *OS) drawFoldFocus(c *ckCanvas, l ckLook, r ckRow, x, y, w, y1 int) {
 	}
 }
 
+// ckSameAsBranch reports whether a session's name only repeats its branch:
+// "agent-add-json-flag", "repo-agent-add-json-flag" or "add-json-flag" for
+// agent/add-json-flag.
+func ckSameAsBranch(sessionName, branch string) bool {
+	if sessionName == "" || branch == "" {
+		return false
+	}
+	dashed := strings.ReplaceAll(branch, "/", "-")
+	// A fan's session is the repository's name, then the branch.
+	return sessionName == branch || sessionName == dashed || strings.HasSuffix(sessionName, "-"+dashed) ||
+		sessionName == branch[strings.LastIndex(branch, "/")+1:]
+}
+
 // drawFocus draws the selected row's work: its header, the thread, the card
 // of what it asks, and the reply line.
 func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Time) {
@@ -2271,7 +2284,9 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 	if wt.branch != "" {
 		groups = append(groups, []ckSeg{{t: l.g(ckGlyphBranch) + " " + wt.branch, fg: pal.FgDim}})
 	}
-	if r.agent >= 0 || place != "" {
+	// A worktree's session is named after its branch: the branch says it
+	// once.
+	if (r.agent >= 0 || place != "") && !ckSameAsBranch(place, wt.branch) {
 		groups = append(groups, []ckSeg{{t: place, fg: pal.FgDim}})
 	}
 	pathAt := -1

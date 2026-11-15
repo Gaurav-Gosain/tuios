@@ -682,8 +682,10 @@ func (a *attentionStore) noteAgentState(sessionName string, ev SessionEvent) {
 		Harness:   ev.hookHarness,
 		Name:      attentionText(ev.hookTitle, attentionMaxSummary),
 	}
-	if ev.hookProgram {
-		base.Name += " [" + shortWindowID(ev.Window) + "]"
+	// A title that already holds the id, such as the default "Terminal
+	// 1a83230c", is not named twice.
+	if id := shortWindowID(ev.Window); ev.hookProgram && !strings.Contains(base.Name, id) {
+		base.Name += " [" + id + "]"
 	}
 	if ev.link.linked {
 		parent, root := ev.link.parent, ev.link.root
