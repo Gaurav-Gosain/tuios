@@ -384,6 +384,9 @@ jobs:
           # The harness forwards it to every client: 0 is Bubble Tea's
           # renderer, and empty leaves the default, cells.
           TUIOS_CELL_FRAME: ${{ matrix.frame == 'string' && '0' || '' }}
+          # tuitest records each terminal as asciicast v2 and writes the
+          # recording of a failed test here. The step below uploads them.
+          TUITEST_CAST_DIR: /tmp/tuios-e2e-casts
         # -count=1 defeats Go's test cache, which otherwise can replay a stale
         # result across a change of binary. -race is deliberately absent: the
         # program under test is a child process, so the detector would
@@ -449,6 +452,17 @@ jobs:
         with:
           name: e2e-tui-frames-shard-${{ matrix.shard }}-${{ matrix.frame }}
           path: /tmp/tuios-e2e-artifacts
+          if-no-files-found: ignore
+          retention-days: 3
+
+      # The asciicast recording of each failed test, with a mark for every
+      # wait and input. Play one with asciinema play FILE.
+      - name: Keep the recordings of the failed tests
+        if: failure() && env.TESTED_URL == '' && steps.plan.outputs.run == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-tui-casts-shard-${{ matrix.shard }}-${{ matrix.frame }}
+          path: /tmp/tuios-e2e-casts
           if-no-files-found: ignore
           retention-days: 3
 
