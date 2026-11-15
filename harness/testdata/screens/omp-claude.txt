@@ -101,3 +101,37 @@
   and then push it
 ──────────────────────────────────────────────────────────────────────────────
  π-tuios-measure · ⬢ no-model · 🗑 ompbox-99636 · ◫ 8.2K/? ⟲
+=====
+# harness: omp
+# box: draft
+# want: none
+# how: derived from the measured one-line draft above (live omp 18.18.8,
+# composer.shape = claude): its text replaced by an ordinary request that
+# ends like the composer hint (Astra's review, 2026-11-15). A draft.
+---
+──────────────────────────────────────────────────────────────────────────────
+ Update Available
+ New version 18.20.0 is available. Run: omp update
+──────────────────────────────────────────────────────────────────────────────
+
+──────────────────────────────────────────────────────────────────────────────
+❯ how to change thinking effort
+──────────────────────────────────────────────────────────────────────────────
+ π-tuios-measure · ⬢ no-model · 🗑 ompbox-99636 · ◫ 8.2K/? ⟲
+=====
+# harness: omp
+# box: draft
+# want: none
+# how: derived from the measured one-line draft above (live omp 18.18.8,
+# composer.shape = claude): its text replaced by an ordinary request that
+# ends like the composer hint (Astra's review, 2026-11-15). A draft.
+---
+──────────────────────────────────────────────────────────────────────────────
+ Update Available
+ New version 18.20.0 is available. Run: omp update
+──────────────────────────────────────────────────────────────────────────────
+
+──────────────────────────────────────────────────────────────────────────────
+❯ how to see 2 running agents
+──────────────────────────────────────────────────────────────────────────────
+ π-tuios-measure · ⬢ no-model · 🗑 ompbox-99636 · ◫ 8.2K/? ⟲
