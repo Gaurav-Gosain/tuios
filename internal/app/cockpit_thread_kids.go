@@ -3,6 +3,7 @@ package app
 import (
 	"hash/fnv"
 	"slices"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -227,14 +228,26 @@ func (m *OS) ckKidsSig(e sidebarAgentEntry, t *agentThread) uint64 {
 	for _, k := range m.ckLinkedKids(e) {
 		h.Write([]byte("\x00" + agentKey(k) + "\x00" + k.Title + "\x00" + sidebarKinState(k)))
 	}
+	if ckThreadTalks(t) {
+		// A message card names agents anywhere in the fleet.
+		h.Write([]byte("\x00" + strconv.FormatUint(m.ckPeersSig(), 10)))
+	}
 	return h.Sum64()
 }
 
-// ckOpenablePills is every pill of the thread enter can open, newest first.
+// ckOpenablePills is every stop of the pill cursor in the thread, newest
+// first: the pills enter can open, and the agents the message cards name.
 func (m *OS) ckOpenablePills(e sidebarAgentEntry, t *agentThread) []string {
 	by := m.ckChildPills(e, t.entries)
+	var peers map[string][]ckPeer
+	if ckThreadTalks(t) {
+		peers = m.ckThreadPeers(e, t)
+	}
 	var out []string
 	for _, en := range slices.Backward(t.entries) {
+		for _, p := range peers[en.ID] {
+			out = append(out, p.id)
+		}
 		for _, p := range by[en.ID] {
 			if p.open != "" {
 				out = append(out, p.id)
@@ -275,7 +288,7 @@ func (m *OS) CockpitNextChild() bool {
 	t.pill = next
 	if next != "" {
 		for j, hit := range slices.Backward(t.hits) {
-			if h, ok := strings.CutPrefix(hit, "kid:"); ok && ckHasID(h, next) {
+			if h, ok := strings.CutPrefix(hit, "kid:"); ok && ckHasID(h, next) || hit == "peer:"+next {
 				// A few lines of the thread stay under the pill.
 				t.follow.Scroll(max(len(t.hits)-1-j-3, 0) - t.follow.Up)
 				break
@@ -304,6 +317,9 @@ func (m *OS) cockpitChildGo() (tea.Cmd, bool) {
 	t := m.cockpitThread()
 	if !ok || t == nil || t.pill == "" {
 		return nil, false
+	}
+	if strings.HasPrefix(t.pill, "p:") {
+		return m.ckPeerGo(e, t, t.pill), true
 	}
 	key, isPane := strings.CutPrefix(t.pill, "a:")
 	if !isPane {
@@ -374,8 +390,14 @@ func (m *OS) ckChildHints() []overlay.Hint {
 	if t.pill != "" {
 		return m.keyHints(config.ActionInboxChild, "next agent")
 	}
-	if len(m.ckOpenablePills(e, t)) == 0 {
+	ids := m.ckOpenablePills(e, t)
+	if len(ids) == 0 {
 		return nil
+	}
+	for _, id := range ids {
+		if strings.HasPrefix(id, "p:") {
+			return m.keyHints(config.ActionInboxChild, "agents in thread")
+		}
 	}
 	return m.keyHints(config.ActionInboxChild, "child agents")
 }

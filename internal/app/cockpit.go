@@ -252,6 +252,11 @@ type cockpitState struct {
 	// back is where the cursor was when ctrl+] left for a pane, for the
 	// view to open on again. Nil once used.
 	back *ckBack
+	// jumps are the threads a jump from a message card left, newest last,
+	// for the back key; seen are the agents the fleet has listed, kept
+	// after they close so a card can name one. See cockpit_thread_mail.go.
+	jumps []ckJump
+	seen  map[string]ckSeenAgent
 	// look is the palette the frames are drawn with, and lookAt what it
 	// was built from. canvas is the grid kept from frame to frame.
 	look   ckLook
@@ -427,6 +432,7 @@ func (m *OS) cockpitRows() []ckRow {
 		return ck.rows
 	}
 	ck.agents = list
+	m.ckSeeAgents(list)
 	if sig := m.Inbox.agents.listAt.sig; ck.branches == nil || ck.branchesAt != sig {
 		ck.branches, ck.branchesAt = m.ckBranches(), sig
 	}
@@ -1470,6 +1476,9 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 			}
 			return nil
 		}
+		if id, ok := strings.CutPrefix(action, "peer:"); ok {
+			return m.cockpitPeerClick(id)
+		}
 		if ids, ok := strings.CutPrefix(action, "kid:"); ok {
 			return m.cockpitChildClick(ids)
 		}
@@ -1779,6 +1788,8 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		return nil, true
 	case config.ActionInboxChild:
 		return nil, m.CockpitNextChild()
+	case config.ActionInboxJumpBack:
+		return m.CockpitJumpBack()
 	case config.ActionInboxGo:
 		if cmd, ok := m.cockpitChildGo(); ok {
 			return cmd, true

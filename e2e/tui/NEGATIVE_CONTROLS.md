@@ -17616,3 +17616,21 @@ Run on 2026-11-15 on macOS. The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitThreadStreamsInPlace$' -v .`.
+
+## Message cards name the other agent, and a jump comes back
+
+`TestCockpitThreadMailCards` runs two scripted agents that mail each other
+through the real CLI, and a third that closes. alpha's thread must draw each
+send as a message card that names beta by its name and harness, mark gamma
+closed, open beta's thread on a click on its name, and go back with `ctrl+o`
+to the row it was read at.
+
+Run on 2026-11-15 on macOS. The branch passes the test.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| A build of origin/main, which has no message cards | "no message card in alpha's thread" | **caught** |
+| `ckPeerGo` does not push the jump | "ctrl+o did not go back to alpha" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitThreadMailCards$' -v .`.

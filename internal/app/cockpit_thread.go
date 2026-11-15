@@ -228,7 +228,9 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 				cached(key, boolInt(open), func() []ckLine { return []ckLine{m.ckTurnLine(l, tn, id, what, span, width, open)} })
 				prevText = false
 			}
-			if !open && tn.Hidden(steps, i) {
+			// A message to or from another agent stays in view in a folded
+			// turn: it is what the turn told the fleet.
+			if !open && tn.Hidden(steps, i) && !(en.Kind == "tool_call" && len(en.Calls) > 0) {
 				continue
 			}
 		}
@@ -313,6 +315,18 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 				ls = append(ls, ckLine{indent: 4, segs: []ckSeg{{t: s, fg: pal.FgDim}}})
 			}
 			add(ls...)
+		case en.Kind == "tool_call" && len(en.Calls) > 0:
+			// A message to another agent or to the person, drawn as one.
+			res := results[en.ToolID]
+			open := t.expandAll || t.folded[en.ID]
+			card := func() []ckLine { return m.ckTalkCard(l, e, t, en, res, width, open) }
+			if p := pills[en.ID]; len(p) > 0 {
+				add(append(card(), m.ckPillLines(l, p, t.pill, width)...)...)
+				break
+			}
+			key := en
+			key.sum = (en.sum*1099511628211^res.sum)*1099511628211 ^ m.ckTalkSig(e, t, en)
+			cached(key, 0, card)
 		case en.Kind == "tool_call":
 			res := results[en.ToolID]
 			open := t.expandAll || t.folded[en.ID]

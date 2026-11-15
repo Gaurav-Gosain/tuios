@@ -159,6 +159,10 @@ type Entry struct {
 	// result holds, such as a Read of a PNG, is an entry of role tool after
 	// the result, with the result's ToolID.
 	Image *Image `json:"image,omitempty"`
+	// Calls are the calls to other agents or to the person a tool call
+	// made through tuios, such as a send-agent-message in a shell command.
+	// See agentcall.go.
+	Calls []AgentCall `json:"calls,omitempty"`
 
 	// line is the byte offset of the record the entry came from, and sub its
 	// place among that record's entries. They place a page's cursor and are
@@ -189,6 +193,7 @@ type rawEntry struct {
 	plan    string
 	todos   []Todo
 	diff    *diffSrc
+	calls   []AgentCall
 }
 
 // diffSrc is what a diff is worked out from: an edit's old and new texts, or
@@ -813,6 +818,27 @@ func (r *reader) finish(e *Entry) {
 	if raw.diff != nil {
 		e.Diff = r.buildDiff(raw.diff)
 	}
+	for _, c := range raw.calls {
+		e.Calls = append(e.Calls, r.cleanCall(c))
+	}
+}
+
+// cleanCall is an agent call with each string cleaned and cut: the text to
+// TextMax, a line to targetMax.
+func (r *reader) cleanCall(c AgentCall) AgentCall {
+	line := func(s string) string {
+		s, _ = r.clean(oneLine(s), targetMax)
+		return s
+	}
+	c.Session, c.To, c.Select, c.Subject = line(c.Session), line(c.To), line(c.Select), line(c.Subject)
+	c.Harness, c.Name = line(c.Harness), line(c.Name)
+	c.Text, _ = r.clean(c.Text, TextMax)
+	opts := c.Options[:min(len(c.Options), 9)]
+	c.Options = nil
+	for _, o := range opts {
+		c.Options = append(c.Options, line(o))
+	}
+	return c
 }
 
 // buildDiff works out the diff of src once, with its colours, and returns

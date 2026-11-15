@@ -2093,6 +2093,7 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 			hints = append(hints, m.keyHints(config.ActionInboxCompare, "compare")...)
 		}
 		hints = append(hints, m.ckChildHints()...)
+		hints = append(hints, m.ckJumpHints()...)
 	}
 	board := "board"
 	if st.ck.board {

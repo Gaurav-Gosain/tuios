@@ -364,6 +364,12 @@ func (r *reader) toolCall(b *ccBlock) Entry {
 	raw.tool, _ = cutString(oneLine(b.Name), 4*toolMax)
 	raw.target, _ = cutString(oneLine(target(b.Name, in)), 4*targetMax)
 	e := Entry{Role: RoleAssistant, Kind: KindToolCall, ToolID: b.ID, raw: raw}
+	var args jobj
+	if strings.Contains(b.Name, "tuios_") {
+		// A tuios MCP tool: its input is the verb's arguments.
+		args, _ = parseObj(b.Input)
+	}
+	raw.calls = AgentCallsOf(b.Name, in.Command, args)
 	switch b.Name {
 	case "TodoWrite":
 		e.Kind = KindTodos

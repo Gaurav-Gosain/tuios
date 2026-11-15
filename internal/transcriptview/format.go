@@ -435,6 +435,7 @@ func callEntry(name, id string, class toolClass, a jobj) []Entry {
 		}
 	}
 	raw.target, _ = cutString(oneLine(targetOf(a)), 4*targetMax)
+	raw.calls = AgentCallsOf(name, commandLine(a), a)
 	return []Entry{e}
 }
 

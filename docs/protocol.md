@@ -7399,6 +7399,7 @@ Each entry has:
 | `plan` | For `ExitPlanMode`: the plan, as markdown. |
 | `todos` | For `TodoWrite`: the list, each item with `text` and `status`. |
 | `image` | On an image the person pasted, or one a tool result holds: `media_type` (`image/png`, `image/jpeg`, `image/gif` or `image/webp`), and `width` and `height` in pixels when the transcript says them. The entry's `text` is `[image]`. An image of a tool result, such as a Read of a PNG, is an entry of `role` `tool` right after the result, with its `tool_id`, at most 8 for one result. Read its bytes with the `image` param. |
+| `calls` | On a tool call that talked to another agent or to the person through tuios: a shell command that runs `send-agent-message`, `ask-agent`, `read-agent-messages`, `ask-human`, `start-agent`, `delegate` or `queue`, in a pipeline or a list too, or the MCP tool of one of those verbs. One object per command, at most 4: `verb` (`send`, `ask`, `read`, `ask-human`, `start`, `delegate` or `queue`), and what the command line or the input gave of `session`, `to`, `self` (the caller's own pane), `select`, `subject`, `text`, `reply_to`, `thread`, `options`, `harness`, `name`, `unread`, `peek`, `sent` and `json`. The command line is read with a shell's word rules and each command's own flags, so a command with a flag tuios does not know, or a subshell, has no `calls`. |
 
 #### Diff colours
 

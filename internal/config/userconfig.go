@@ -2017,8 +2017,10 @@ const (
 	// The thread's previous and next prompt, the marks on its ruler.
 	ActionInboxPromptPrev = "inbox_prompt_prev"
 	ActionInboxPromptNext = "inbox_prompt_next"
-	// The step through the agents the thread's cards started.
-	ActionInboxChild = "inbox_child"
+	// The step through the agents the thread's cards started or talked
+	// to, and the way back from a jump to one.
+	ActionInboxChild    = "inbox_child"
+	ActionInboxJumpBack = "inbox_jump_back"
 	// The view's regions: the list, the focus, the reply and the side
 	// column. tab and shift+tab step them, esc goes one step back (out of
 	// a region, then a search, then the view), and N goes to the next
@@ -2142,6 +2144,8 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxPromptPrev: {"{"},
 		ActionInboxPromptNext: {"}"},
 		ActionInboxChild:      {"."},
+		// ctrl+o is vim's jump back.
+		ActionInboxJumpBack: {"ctrl+o"},
 	}
 }
 
@@ -3852,6 +3856,8 @@ var yieldingDefaults = map[string]bool{
 	"inbox_expand":       true,
 	"inbox_fold":         true,
 	"inbox_child":        true,
+	// ctrl+o, new with the message cards.
+	"inbox_jump_back": true,
 	// ctrl+alt+N (ctrl+opt+N on macOS), the first default for
 	// send_to_workspace_N.
 	"send_to_workspace_1": true,

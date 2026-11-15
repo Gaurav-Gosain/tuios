@@ -76,6 +76,9 @@ type threadEntry struct {
 	Diff   *threadDiff `json:"diff"`
 	// Image is set on an image entry the daemon can serve.
 	Image *transcriptview.Image `json:"image"`
+	// Calls are what a tool call said to other agents or to the person
+	// through tuios, drawn as message cards.
+	Calls []transcriptview.AgentCall `json:"calls"`
 	// sum is a hash of the text and the plan, set when the entry is taken
 	// in, for the key of its card: a message written again, or still being
 	// written, keeps its id and changes its text.
