@@ -63,8 +63,20 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// Quick look keeps a press on its panel, and closes for a press anywhere
 	// else, which then goes on to what it was aimed at.
+	// In copy mode over quick look's text a press moves the cursor.
+	if quickLookCopyPress(msg, o) {
+		return o, nil
+	}
 	if o.QuickLookMouseClick(X, Y) {
 		return o, nil
+	}
+
+	// A press in the agents view's thread may start a selection. A plain
+	// click is not taken, and goes on to the view below. See cockpit_mouse.go.
+	if o.ShowInbox {
+		if taken, cmd := cockpitMousePress(msg, o); taken {
+			return o, cmd
+		}
 	}
 
 	// Floating overlay panels (help, settings, palette, theme picker) consume

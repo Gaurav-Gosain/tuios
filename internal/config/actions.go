@@ -105,6 +105,10 @@ var actionTable = [...]ActionSpec{
 	{Name: "go_to", Desc: "Preview: go to a line", Run: RunView},
 	{Name: "wrap", Desc: "Preview: wrap long lines, or cut them", Run: RunView},
 	{Name: "open_editor", Desc: "Preview: open the file in your editor, in a new pane", Run: RunView},
+	// The menu of a right click on a selection in the agents view's thread.
+	{Name: "selection_copy", Desc: "Agents view: copy the selected text"},
+	{Name: "selection_copy_markdown", Desc: "Agents view: copy the selected entries as Markdown"},
+	{Name: "selection_search", Desc: "Agents view: search the thread for the selected text"},
 	{Name: "end", Desc: "Preview: go to the end of the file", Run: RunView},
 	{Name: "file_send", Desc: "Files: send this file or folder to a host"},
 	{Name: "file_insert_path", Desc: "Files: paste the path into the focused pane"},

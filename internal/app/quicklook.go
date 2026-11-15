@@ -891,6 +891,10 @@ func (m *OS) QuickLookWheel(x, y int, up bool) bool {
 	if !ql.open || !ql.box.Contains(x, y) {
 		return false
 	}
+	// In copy mode the wheel scrolls copy mode's view, and copy mode stays.
+	if m.quickLookCopyWheel(quickLookWheelStep * wheelDelta(up)) {
+		return true
+	}
 	if up {
 		m.QuickLookScroll(-quickLookWheelStep)
 	} else {

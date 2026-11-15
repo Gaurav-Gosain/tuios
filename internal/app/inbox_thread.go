@@ -185,6 +185,9 @@ type agentThread struct {
 	lines        []ckLine
 	lineIDs      []string
 	viewW, viewH int
+	// viewX and viewY are the screen cell of the view's top left corner in
+	// the last frame, for the mouse (cockpit_mouse.go).
+	viewX, viewY int
 	// keep is how many of the newest turns the thread draws, 0 for every
 	// turn, and older says turns older than those are left out. A long
 	// conversation is drawn only as far up as the view needs: its oldest

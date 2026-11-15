@@ -60,9 +60,19 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// only a panel drag consumes the release. End them together: the picker's
 	// grab must not wait for a panel drag, or the colour follows the pointer
 	// for the rest of the dialog's life.
-	// A card dragged on the task board's columns drops on the column under
-	// the pointer.
+	// A selection in copy mode over quick look's text ends on the release,
+	// and copies.
+	if taken, cmd := quickLookCopyRelease(o); taken {
+		return o, cmd
+	}
 	if mouse := msg.Mouse(); o.ShowInbox {
+		// A selection in the thread ends on the release, and copies.
+		if taken, cmd := cockpitMouseRelease(o); taken {
+			o.OverlayMouseRelease()
+			return o, cmd
+		}
+		// A card dragged on the task board's columns drops on the column
+		// under the pointer.
 		if cmd, ok := o.CockpitRelease(mouse.X, mouse.Y); ok {
 			o.OverlayMouseRelease()
 			return o, cmd

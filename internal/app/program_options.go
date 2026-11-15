@@ -247,6 +247,14 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		return msg
 	}
 
+	// A press on quick look's text in copy mode, or in the agents view's
+	// thread, becomes a selection when the pointer moves with the button
+	// down. The agents view passes its motion for the hover anyway; quick
+	// look needs the clause. See cockpit_mouse.go.
+	if m.Inbox.ck.mouse.Armed || m.quickLook.copy != nil && m.quickLook.copy.mouse.Armed {
+		return msg
+	}
+
 	// A drag between panes over OSC 72 follows the pointer, and the press
 	// before it waits for the pointer to move. See dnd.go.
 	if m.DnDActive() {

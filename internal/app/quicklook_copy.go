@@ -46,6 +46,10 @@ type quickLookCopy struct {
 	offset int
 	// wrap is what the preview's wrap was before copy mode turned it on.
 	wrap bool
+	// x0 and y0 are where the view was drawn in the panel's body in the
+	// last frame, for the mouse, and mouse is a press on it.
+	x0, y0 int
+	mouse  CopyMouseGesture
 }
 
 // newQuickLookCopy lays the lines out as rows of width w.
@@ -237,6 +241,7 @@ func (m *OS) QuickLookCopyEnd() {
 // matches, the selection and the cursor on it.
 func (m *OS) drawQuickLookCopy(c *ckCanvas, pal overlay.Palette, dv *diffview.Theme, r *quickLookResult, q *quickLookCopy, codeX, gutter, bodyTop int) {
 	ql := &m.quickLook
+	q.x0, q.y0 = codeX, bodyTop
 	top := q.top()
 	for y := 0; y < q.h && top+y < len(q.rows); y++ {
 		row := q.rows[top+y]

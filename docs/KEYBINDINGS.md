@@ -384,7 +384,9 @@ Change these keys in `[keybindings.quick_look]` and
 
 `[` in a text file starts [copy mode](#copy-mode) on the text, with the cursor
 on the first line in view. All copy mode keys work: move, select with `v`,
-`V` or `Ctrl+V`, search with `/`, and copy with `y`. Long lines wrap while
+`V` or `Ctrl+V`, search with `/`, and copy with `y`. The mouse works as in a
+pane's copy mode: a click moves the cursor, a drag selects and copies on
+release, and the wheel scrolls. Long lines wrap while
 copy mode is on. A selection across a wrapped line copies the line whole. `q`
 or `Esc` goes back to the preview keys.
 
@@ -2269,8 +2271,9 @@ Inside it:
 | `ctrl+o` | Go back to the thread you opened another agent from, at the same place. Each `ctrl+o` goes back one more |
 | `e` | Show every line of every card in the thread |
 | `W` | Wrap the long lines of the thread's code blocks, or cut them again. A wrapped row starts with `↳`, and a cut line ends with `…`. It holds until the client ends |
-| `ctrl+b` `[` | Copy mode over the thread (`y` in the focus region too): the pane's copy mode keys, `Y` copies the selected entries as Markdown, and `gx` opens the link under the cursor |
+| `ctrl+b` `[` | Copy mode over the thread (`y` in the focus region too): the pane's copy mode keys, `Y` copies the selected entries as Markdown, and `gx` opens the link under the cursor. A click moves the cursor, a drag selects, and the wheel scrolls |
 | click on a link | Open it, as a link in a pane opens. The pointer on a link underlines it |
+| Drag over the thread | Select text and copy it on release. A double click selects a word, a path or a URL; a triple click a line; `shift+click` moves the end. A right click on the selection offers Copy, Copy as Markdown and Search for it |
 | `F` | Fold or open the group of the row under the cursor. On a folded heading, `enter` also opens it |
 | `v` | Review the agent's changes |
 | `ctrl+]` | Go to the agent's pane and zoom it. `ctrl+b i` comes back to the same agent |

@@ -52,6 +52,9 @@ type ckThreadCopy struct {
 	// w and h are the thread's width and the rows of its view.
 	w, h   int
 	offset int
+	// implicit says a mouse selection started copy mode, not the copy_mode
+	// key: the next key or plain click ends it. See cockpit_mouse.go.
+	implicit bool
 }
 
 // ckCopyOf is the copy rows of the thread's lines: each line at width w
@@ -137,6 +140,16 @@ func (m *OS) CockpitCopyOn() bool { return m.threadCopy() != nil }
 // the first row in view. It reports false when no conversation is on screen,
 // or before the thread has been drawn once.
 func (m *OS) CockpitCopyStart() bool {
+	if !m.cockpitCopyBegin(false) {
+		return false
+	}
+	m.ShowNotification("Copy mode. v selects, y copies, Y copies as Markdown, gx opens a link, esc stops.", "info", m.Settings.NotificationDuration)
+	return true
+}
+
+// cockpitCopyBegin starts copy mode over the shown thread, as the key does
+// or, implicit, for a mouse selection.
+func (m *OS) cockpitCopyBegin(implicit bool) bool {
 	if !m.ShowInbox || !m.threadShown() || m.Inbox.threads.copy != nil || m.cockpitTab() != "Thread" {
 		return false
 	}
@@ -157,10 +170,10 @@ func (m *OS) CockpitCopyStart() bool {
 		end--
 	}
 	q.SetScrollOffset(len(q.rows) - min(end, len(q.rows)))
-	q.cm = terminal.CopyMode{Active: true, State: terminal.CopyModeNormal, ScrollOffset: q.offset}
+	q.cm = terminal.CopyMode{Active: true, State: terminal.CopyModeNormal, ScrollOffset: q.offset, Implicit: implicit}
+	q.implicit = implicit
 	m.Inbox.threads.copy = q
 	m.cockpitTouch()
-	m.ShowNotification("Copy mode. v selects, y copies, Y copies as Markdown, gx opens a link, esc stops.", "info", m.Settings.NotificationDuration)
 	return true
 }
 
@@ -345,11 +358,12 @@ func ckEntryMarkdown(en *threadEntry) string {
 // row top, with the search matches, the selection and the cursor on it, and
 // reports whether copy mode is on. It also notes the thread's view, which
 // copy mode starts from.
-func (m *OS) drawThreadCopy(c *ckCanvas, t *agentThread, x, w, top, room int) bool {
+func (m *OS) drawThreadCopy(c *ckCanvas, t *agentThread, x, w, top, room, screenTop int) bool {
 	if t == nil {
 		return false
 	}
 	t.viewW, t.viewH = w, room
+	t.viewX, t.viewY = x, screenTop+top
 	q := m.threadCopy()
 	if q == nil || q.key != t.key {
 		return false

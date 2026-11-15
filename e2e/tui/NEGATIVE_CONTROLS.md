@@ -17792,6 +17792,14 @@ opener's record) and the path (quick look from line 120), and presses `e`
 there (the editor's record holds `+120` and the path).
 `TestCockpitPathsOpenInQuickLook` clicks a relative path and a `~/` path in
 the agents view's thread and waits for quick look from line 120 each time.
+## Mouse selection in the agents view, and clicks in copy mode
+
+`TestCockpitThreadMouseSelects` drags from the prompt card into the code
+block, takes Copy as Markdown from the right click menu, double clicks a
+path, triple clicks a line, and in copy mode clicks a word and copies it with
+`b v e y`. `TestCopyModeClickMovesTheCursor` clicks a word in a pane's copy
+mode and in quick look's, and drags in quick look's. Both read the clipboard
+from the host stream.
 
 Run on 2026-11-15 on macOS. The branch passes both tests.
 
@@ -17865,3 +17873,15 @@ Run on 2026-11-15 on Linux (x86_64). The branch passes the test.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestReplyEditorShowsOneOverlayAtATime$' -v .`.
+| `cockpitMousePress` not called from `handleMouseClick` | "the drag copied nothing" | **caught** |
+| `gridSelectWord` does nothing | "the double click copied nothing" | **caught** |
+| `gridPoint` does not move the cursor | "the drag copied" the wrong text | **caught** |
+| `quickLookCopyPress` not called from `handleMouseClick` | "a click in quick look's copy mode: v e y copied \"alpha\"" | **caught** |
+| The copy grid clause cut from `FilterMouseMotion` | "a drag in quick look's copy mode: nothing reached the clipboard" | **caught** |
+
+The cockpit needs no clause of its own in the filter: motion over the agents
+view already reaches Update for its hover, so cutting the clause leaves the
+cockpit drag working. The clause is for quick look.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestCockpitThreadMouseSelects|TestCopyModeClickMovesTheCursor)$' -v .`.

@@ -100,6 +100,9 @@ func NewActionDispatcher() *ActionDispatcher {
 func (d *ActionDispatcher) registerHandlers() {
 	// Window Management actions
 	d.Register("new_window", handleNewWindow)
+	d.Register("selection_copy", handleSelectionCopy)
+	d.Register("selection_copy_markdown", handleSelectionCopyMarkdown)
+	d.Register("selection_search", handleSelectionSearch)
 	d.Register("new_window_ssh", handleNewWindowSSH)
 	d.Register("close_window", handleCloseWindow)
 	d.Register("rename_window", handleRenameWindow)

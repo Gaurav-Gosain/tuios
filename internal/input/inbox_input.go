@@ -34,7 +34,16 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	top := o.CockpitTop()
 	// Copy mode over the thread takes every key, as it does over a pane.
 	if top == app.CockpitLayerCopy {
-		return handleCockpitCopyKey(msg, o)
+		if !o.CockpitCopyImplicit() {
+			return handleCockpitCopyKey(msg, o)
+		}
+		// A selection the mouse made ends on the next key, which is then
+		// the view's key as usual. esc only ends it.
+		o.CockpitCopyEnd()
+		if msg.String() == "esc" {
+			return o, nil
+		}
+		top = o.CockpitTop()
 	}
 	// The global keys (the palette, the launcher) act over the view and
 	// over every sheet and field in it, and open on top of it. A plain

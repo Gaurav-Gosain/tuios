@@ -300,6 +300,9 @@ type cockpitState struct {
 	// codeWrap wraps the long lines of the thread's code blocks, W, for as
 	// long as the client runs.
 	codeWrap bool
+	// mouse is a press in the thread and the selection it makes. See
+	// cockpit_mouse.go.
+	mouse CopyMouseGesture
 	// lastTop is the layer CockpitTop gave after the last message, for the
 	// verbose log of its changes (cockpit_layers.go).
 	lastTop CockpitLayer
@@ -1713,6 +1716,11 @@ func (m *OS) CockpitWheel(x, y int, up bool) {
 		}
 		ck.follow = false
 		m.cockpitTouch()
+		return
+	}
+	// In copy mode the wheel scrolls copy mode's view, which holds the
+	// thread still, and copy mode stays on.
+	if m.cockpitCopyWheel(x, y, -3*wheelDelta(up)) {
 		return
 	}
 	if t := m.cockpitThread(); t != nil {

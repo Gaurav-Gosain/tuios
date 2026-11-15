@@ -2560,7 +2560,7 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 		// included, so its time counts from when the thread saw it start.
 		act, acting := m.threadActivityLine(l, e, t, w, now)
 		// Copy mode draws the thread as it holds it.
-		if m.drawThreadCopy(c, t, x, w, base-room, room) {
+		if m.drawThreadCopy(c, t, x, w, base-room, room, top) {
 			return
 		}
 		// A Done card under the thread draws the recap, so the thread

@@ -2819,7 +2819,19 @@ the selection, or under the cursor, as Markdown: an answer as the agent wrote
 it, a prompt as a quote, and an edit as a `diff` block. `gx` opens the link
 under the cursor. The thread holds
 still while copy mode runs, and new entries show when it ends. `esc` ends it
-and keeps the view open. A change of width, tab or agent ends it too.
+and keeps the view open. A change of width, tab or agent ends it too. In copy
+mode a click moves the cursor, a drag selects, and the wheel scrolls.
+
+The mouse selects the thread without the key. A drag selects from the press
+to the release, across cards, and scrolls the thread when it passes the top
+or the bottom. A double click selects a word, a path or a URL whole, and a
+triple click a line; `shift+click` moves the end of the selection. The release
+copies the selection when `appearance.copy_on_select` is on, as a pane's does,
+and the dock says how many lines. The copy leaves out the card edges, the
+marks and the fold glyphs, and joins the rows of a wrapped paragraph. The
+selection stays drawn until the next key or click. A right click on it offers
+Copy, Copy as Markdown, and Search for it, which searches the thread in copy
+mode. A plain click that does not move still opens a fold or picks a row.
 
 A click on a link in the view opens it: a Markdown link, a bare URL in an
 answer, a URL in a tool's command, in the thread, the side panel and the

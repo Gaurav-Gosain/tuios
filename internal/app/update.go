@@ -1384,6 +1384,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case AutoScrollTickMsg:
+		// A drag in the agents view's thread held past its edge.
+		if m.ShowInbox && m.cockpitAutoScroll() {
+			return m, autoScrollTick()
+		}
 		if !m.AutoScrollActive || m.AutoScrollDir == 0 {
 			return m, nil
 		}

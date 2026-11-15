@@ -479,22 +479,26 @@ func TestReachabilityTableCoversEveryBindingSection(t *testing.T) {
 // later gets a default key fails too, and moves into the table above.
 var actionsWithNoDefaultBinding = map[string]string{
 	// Context menu rows. The menu hands them to the same dispatcher.
-	"clear_selection":       "context menu row",
-	"kill_session":          "context menu row",
-	"kill_session_next":     "context menu row",
-	"kill_session_quit":     "context menu row",
-	"restart_daemon":        "command palette row, rail machine menu row, settings row, version notice",
-	"paste_clipboard":       "context menu row",
-	"repo_new_worktree":     "rail repo header menu row",
-	"repo_toggle_fold":      "rail repo header menu row",
-	"session_new_worktree":  "rail session row menu row",
-	"rename_session":        "context menu row",
-	"screenshot_window":     "context menu row",
-	"set_accent":            "context menu row",
-	"set_session_accent":    "context menu row",
-	"workspace_pill_switch": "context menu row",
-	"settings_sidebar":      "rail mouse row",
-	"rename_workspace":      "user binding",
+	"clear_selection":   "context menu row",
+	"kill_session":      "context menu row",
+	"kill_session_next": "context menu row",
+	"kill_session_quit": "context menu row",
+	"restart_daemon":    "command palette row, rail machine menu row, settings row, version notice",
+	"paste_clipboard":   "context menu row",
+	// The menu of a right click on a selection in the agents view's thread.
+	"selection_copy":          "agents view selection menu row",
+	"selection_copy_markdown": "agents view selection menu row",
+	"selection_search":        "agents view selection menu row",
+	"repo_new_worktree":       "rail repo header menu row",
+	"repo_toggle_fold":        "rail repo header menu row",
+	"session_new_worktree":    "rail session row menu row",
+	"rename_session":          "context menu row",
+	"screenshot_window":       "context menu row",
+	"set_accent":              "context menu row",
+	"set_session_accent":      "context menu row",
+	"workspace_pill_switch":   "context menu row",
+	"settings_sidebar":        "rail mouse row",
+	"rename_workspace":        "user binding",
 
 	// ssh-aware splits. The palette lists each one, and a user binds a key
 	// or sets appearance.new_window_follow_ssh to make the ordinary keys follow.

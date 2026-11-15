@@ -106,6 +106,15 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// Motion does not sync, since it is too frequent. A hover that moved
 		// the focus (focus_follows_mouse) is the exception: the daemon must
 		// know, or its next state push gives the old pane the focus back.
+		if quickLookCopyMotion(msg, o) {
+			return o, nil
+		}
+		// A selection in the agents view's thread follows the pointer.
+		if o.ShowInbox {
+			if taken, cmd := cockpitMouseMotion(msg, o); taken {
+				return o, cmd
+			}
+		}
 		prev := o.FocusedWindow
 		moved, cmd := handleMouseMotion(msg, o)
 		if moved != nil && moved.IsDaemonSession && moved.FocusedWindow != prev {

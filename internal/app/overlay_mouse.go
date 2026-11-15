@@ -81,6 +81,9 @@ func (m *OS) OverlayMouseClick(x, y int, right bool) (bool, tea.Cmd) {
 	// second one goes. See cockpit.go.
 	if h.Kind == "inbox" {
 		if right {
+			// A right click on the thread's selection offers what to do
+			// with it. See cockpit_mouse.go.
+			m.OpenCockpitSelectionMenu(x, y)
 			return true, nil
 		}
 		cmd, _ := m.CockpitClick(x, y)
