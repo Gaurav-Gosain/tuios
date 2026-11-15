@@ -63,6 +63,9 @@ type inboxAgentsState struct {
 	// from.
 	list   []sidebarAgentEntry
 	listAt agentsListKey
+	// total is how many agents there are before the selector and the
+	// search, for the header's "1 of 12 agents".
+	total int
 	// inFrame is set while a frame is drawn. The list cannot change
 	// during one, so a frame reads it from list instead of hashing the
 	// rail's signature again for every caller.
@@ -187,6 +190,7 @@ func (m *OS) inboxAgentsList() []sidebarAgentEntry {
 			kept = append(kept, e)
 		}
 	}
+	a.total = len(all)
 	a.list, a.listAt = m.agentsSort(kept), key
 	return a.list
 }
@@ -386,7 +390,7 @@ func (m *OS) inboxAgentsSelectApply() {
 	st := &m.Inbox
 	sel, query := splitSelectorSearch(st.selectDraft())
 	if sel == "" {
-		st.Select, st.selector = "", nil
+		m.setInboxSelector(nil)
 	} else {
 		home, _ := os.UserHomeDir()
 		parsed, err := session.ParseSelector(sel, home)
@@ -394,7 +398,7 @@ func (m *OS) inboxAgentsSelectApply() {
 			st.selectErr = err.Error()
 			return
 		}
-		st.Select, st.selector = parsed.String(), parsed
+		m.setInboxSelector(parsed)
 	}
 	st.agents.query = query
 	st.selectEd = nil

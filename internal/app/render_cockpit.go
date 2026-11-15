@@ -571,6 +571,23 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 		}
 		ck.hits = append(ck.hits, ckHit{x0: x0, y0: top + y, x1: x - 3, y1: top + y + 1, kind: ckHitAction, action: action})
 	}
+	if m.cockpitSearched() {
+		// The list is narrowed by the search line, which may be shut, so the
+		// header says so, with how much it shows. A click shows all.
+		segs := []ckSeg{
+			{t: strconv.Itoa(len(ck.agents)) + " of " + strconv.Itoa(st.agents.total) + " agents", fg: pal.Attention, attrs: ckBold},
+			{t: " · esc shows all", fg: pal.FgDim},
+		}
+		if l.ascii {
+			segs[1].t = " - esc shows all"
+		}
+		x0 := x
+		w := ckWidth(segs...) + 2
+		c.fill(x0-1, y, w, 1, l.attnTint)
+		c.mark(pal, x0-1, y, w, 1, ckOn)
+		x = c.text(x, y, 0, segs...) + 3
+		ck.hits = append(ck.hits, ckHit{x0: x0 - 1, y0: top + y, x1: x0 - 1 + w, y1: top + y + 1, kind: ckHitAction, action: "show-all"})
+	}
 	if ck.needsOnly || st.Filter != "" {
 		what := "items only"
 		if st.Filter != "" {
@@ -899,14 +916,14 @@ func (m *OS) ckScope() string {
 func (m *OS) CockpitScope(host string) {
 	st := &m.Inbox
 	if host == "" {
-		st.Select, st.selector = "", nil
+		m.setInboxSelector(nil)
 	} else {
 		home, _ := os.UserHomeDir()
 		sel, err := session.ParseSelector("host:"+host, home)
 		if err != nil {
 			return
 		}
-		st.Select, st.selector = sel.String(), sel
+		m.setInboxSelector(sel)
 	}
 	st.ck.scroll, st.ck.follow = 0, true
 	m.cockpitTouchRows()

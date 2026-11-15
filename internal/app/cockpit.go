@@ -1404,6 +1404,8 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		m.InboxStartSelect()
 	case "needs":
 		m.CockpitCycleFilter()
+	case "show-all":
+		m.cockpitShowAll()
 	case "chip:0", "chip:1", "chip:2", "chip:3":
 		g, _ := strconv.Atoi(strings.TrimPrefix(action, "chip:"))
 		m.cockpitChip(g)

@@ -17634,3 +17634,23 @@ Run on 2026-11-15 on macOS. The branch passes the test.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitThreadMailCards$' -v .`.
+
+## A narrowed agents view says so, and esc shows every agent
+
+`TestCockpitNarrowedListSaysSoAndEscShowsAll` narrows the fleet of 12 with
+`name:scratch`. The header must say "1 of 12 agents · esc shows all". esc,
+which the key bar names "clear search", must bring every agent back, and so
+must an empty search after a second selector.
+
+Run on 2026-11-15 on macOS. The branch passes three runs in a row. On main
+the chip is missing. Without the chip check, main still fails at esc: the
+box shows its placeholder, the key bar says "esc close", and one agent is
+listed, the state the audit found.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `cockpitShowAll` empties `Select` and leaves the parsed selector, as the esc clear did | "ASSERTION: esc did not bring every agent back" | **caught** |
+| The header chip is not drawn | "ASSERTION: the narrowed list does not say how much it shows" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitNarrowedListSaysSoAndEscShowsAll$' -v .`.

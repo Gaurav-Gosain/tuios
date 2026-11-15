@@ -134,15 +134,26 @@ func (m *OS) CockpitEscape() tea.Cmd {
 		m.cockpitTouch()
 		return nil
 	case ckEscClear:
-		st.Select, st.Filter, st.agents.query, ck.needsOnly, ck.chip = "", "", "", false, 0
-		m.cockpitTouchRows()
-		m.cockpitRows()
-		m.cockpitClamp()
-		m.cockpitSync()
+		m.cockpitShowAll()
 		return nil
 	}
 	m.CloseInbox()
 	return nil
+}
+
+// cockpitShowAll drops everything that narrows the list: the selector, the
+// search, the f filter and the state chip. esc and a click on the header's
+// narrowed chip run it.
+func (m *OS) cockpitShowAll() {
+	st := &m.Inbox
+	ck := &st.ck
+	m.setInboxSelector(nil)
+	st.Filter, st.agents.query, ck.needsOnly, ck.chip = "", "", false, 0
+	ck.scroll, ck.follow = 0, true
+	m.cockpitTouchRows()
+	m.cockpitRows()
+	m.cockpitClamp()
+	m.cockpitSync()
 }
 
 // ckEscStep is what esc does in the view's base layer, from the top rung of

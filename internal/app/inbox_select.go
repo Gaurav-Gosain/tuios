@@ -100,7 +100,7 @@ func (m *OS) InboxSelectApply() {
 	st := &m.Inbox
 	text := strings.TrimSpace(st.selectDraft())
 	if text == "" {
-		st.Select, st.selector = "", nil
+		m.setInboxSelector(nil)
 	} else {
 		home, _ := os.UserHomeDir()
 		sel, err := session.ParseSelector(text, home)
@@ -108,7 +108,7 @@ func (m *OS) InboxSelectApply() {
 			st.selectErr = err.Error()
 			return
 		}
-		st.Select, st.selector = sel.String(), sel
+		m.setInboxSelector(sel)
 	}
 	st.selectEditing = false
 	st.selectEd = nil
@@ -119,6 +119,21 @@ func (m *OS) InboxSelectApply() {
 	st.Selected, st.SelectedID = 0, ""
 	st.Scroll = 0
 	m.clampInboxSelection()
+}
+
+// setInboxSelector puts sel in force, nil for none. It is the one writer of
+// the selector: Select is the text the search box, the esc ladder and the
+// list's cache key read, and selector is what the rows are matched with. The
+// esc clear set the text alone, so the box was empty, esc said close, and the
+// list stayed narrowed. A cache keyed on the text then kept the stale list
+// even after an empty search.
+func (m *OS) setInboxSelector(sel *session.Selector) {
+	st := &m.Inbox
+	if sel == nil {
+		st.Select, st.selector = "", nil
+		return
+	}
+	st.Select, st.selector = sel.String(), sel
 }
 
 // inboxItemSelected reports whether an item passes the selector in force. An
