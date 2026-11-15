@@ -57,6 +57,9 @@ type inboxApprovalState struct {
 	lastKey string
 	// plan is the plan shown in the detail.
 	plan inboxPlanView
+	// question is the prompt read for a question its pane shows
+	// (inbox_question.go).
+	question inboxQuestionView
 }
 
 // inboxPeekAsk is an answer a key in the peek asked for.

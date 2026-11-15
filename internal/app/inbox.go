@@ -593,7 +593,7 @@ func (m *OS) handleInboxWatch(msg inboxWatchMsg) tea.Cmd {
 	case nil:
 		return nil
 	}
-	return tea.Batch(cmd, m.InboxApprovalFetch(), m.InboxRecapFetch(), listenForInbox(m.inboxEvents))
+	return tea.Batch(cmd, m.InboxApprovalFetch(), m.InboxQuestionFetch(), m.InboxRecapFetch(), listenForInbox(m.inboxEvents))
 }
 
 // foreignAgentRefreshCmd refreshes the session listing when an attention event
@@ -1548,6 +1548,11 @@ type InboxApprovalRepliedMsg struct {
 func (m *OS) InboxNumber(n int) tea.Cmd {
 	if it, ok := m.inboxSelected(); ok && it.Kind == session.AttentionAsk {
 		return m.InboxAnswerAsk(n)
+	}
+	if it, ok := m.inboxSelected(); ok {
+		if cmd, handled := m.inboxQuestionChoose(it, n); handled {
+			return cmd
+		}
 	}
 	if n >= 1 && n <= len(inboxAnswerOrder) {
 		return m.InboxReplyApproval(inboxAnswerOrder[n-1].decision)

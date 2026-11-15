@@ -17654,3 +17654,21 @@ listed, the state the audit found.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitNarrowedListSaysSoAndEscShowsAll$' -v .`.
+
+## A question in the agents view shows its options as keys
+
+`TestCockpitQuestionShowsItsOptionsAsKeys` paints Claude Code's
+AskUserQuestion form in a pane and runs the PermissionRequest hook for it.
+The row must say "Asks  Which color for the test?", the card must show the
+form's options with "1-5 choose" in the key bar, 2 must ask and send
+nothing, and enter must send 2 to the pane.
+
+Run on 2026-11-15 on macOS. The branch passes three runs in a row. On main the
+row reads "Allow  approve AskUserQuestion" and the card offers only dismiss.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The card draws no option buttons | "ASSERTION: the question is not a question with its options on the card" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitQuestionShowsItsOptionsAsKeys$' -v .`.

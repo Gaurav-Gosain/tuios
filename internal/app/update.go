@@ -2784,6 +2784,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyInboxApprovalDetail(msg)
 		return m, nil
 
+	case InboxQuestionPeekMsg:
+		return m, m.applyInboxQuestionPeek(msg)
+
+	case inboxQuestionRetryMsg:
+		return m, m.applyInboxQuestionRetry(msg)
+
 	case InboxRepliedMsg:
 		echo := m.echoReplied(msg)
 		m.applyInboxReplied(msg)

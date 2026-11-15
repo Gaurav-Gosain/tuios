@@ -2088,6 +2088,11 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 		if r.hasItem && r.item.Kind == session.AttentionAsk && r.item.RequestID != "" {
 			hints = append(hints, overlay.Hint{Key: inboxAskKeys(r.item), Label: "answer"})
 		}
+		if r.hasItem {
+			if opts := m.inboxQuestionOptions(r.item); len(opts) > 0 {
+				hints = append(hints, overlay.Hint{Key: "1-" + strconv.Itoa(min(len(opts), 9)), Label: "choose"})
+			}
+		}
 		goLabel := "open pane"
 		if r.hasItem && r.item.Kind == session.AttentionMail {
 			goLabel = "open"
@@ -2693,8 +2698,17 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 	}
 	type btn struct{ key, label, action string }
 	var btns []btn
+	qopts := m.inboxQuestionOptions(it)
 	switch {
 	case st.approvals.answer.reason != nil:
+	case len(qopts) > 0:
+		// A question its pane shows: its options, as the pane lists them.
+		for _, o := range qopts {
+			if o.N < 1 || o.N > 9 {
+				continue
+			}
+			btns = append(btns, btn{strconv.Itoa(o.N), ckTrunc(printableTitle(o.Label), 24), strconv.Itoa(o.N)})
+		}
 	case it.Kind == session.AttentionAsk && it.RequestID != "":
 		for i, o := range it.Options {
 			if i == 9 {

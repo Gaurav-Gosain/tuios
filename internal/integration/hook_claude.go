@@ -169,6 +169,12 @@ func translateClaude(in Input, p fields) Decision {
 		}
 		return send(ClaudeCode, event, r)
 	case "PermissionRequest":
+		if q, ok := claudeQuestion(p); ok {
+			// AskUserQuestion asks permission to show its form. It is a
+			// question, not a call to allow: the item says the question,
+			// and the person answers it with the form's options.
+			return send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "question", Message: q, Notification: true}, p))
+		}
 		msg := "approve " + ToolSummary(p.str("tool_name"), p.obj("tool_input"))
 		if p.str("tool_name") == claudePlanTool {
 			// A plan is known by its title, not by the tool's name.
@@ -220,6 +226,23 @@ func translateClaude(in Input, p fields) Decision {
 	default:
 		return skip(ClaudeCode, event, "event not mapped")
 	}
+}
+
+// claudeQuestion is the question an AskUserQuestion PermissionRequest asks:
+// the first question's text, as the form shows it. ok is false for any other
+// tool. A call with no question text still asks, and says so by the tool.
+func claudeQuestion(p fields) (string, bool) {
+	if p.str("tool_name") != "AskUserQuestion" {
+		return "", false
+	}
+	if qs, ok := p.obj("tool_input")["questions"].([]any); ok && len(qs) > 0 {
+		if q, ok := qs[0].(map[string]any); ok {
+			if text, _ := q["question"].(string); oneline.Clip(text) != "" {
+				return oneline.Clip(text), true
+			}
+		}
+	}
+	return "AskUserQuestion", true
 }
 
 // claudeLimitErrors are the StopFailure errors that are a usage limit: the
