@@ -188,7 +188,7 @@ The guide is [docs/AGENT_STATE.md](docs/AGENT_STATE.md).
 - **Program Status (OSC 7501)**: Any program can say what it is doing with the Program Status Protocol, or with `tuios status working --app build --progress 40`. A build, a deploy script or `brew` then shows on the rail and in the Inbox like an agent. tuios also reports its panes to a terminal that reads the protocol, such as Rex ([docs](docs/PROGRAM_STATUS.md))
 - **Inbox**: <kbd>Prefix</kbd>+<kbd>i</kbd> lists everything waiting for you in every session and on every machine: approvals, questions, mail, errors, finished turns. <kbd>Prefix</kbd>+<kbd>o</kbd> jumps to the oldest. Answer a prompt from there without going to the pane, and with `[agents.approvals]` answer Claude Code, opencode, Kilo and Qwen Code permission requests with one key
 - **Questions and Messages**: `tuios ask-human` puts a question with fixed answers in your Inbox. Agents mail each other with `tuios send-agent-message`, and `tuios ask-agent` asks one and waits for its answer. It never types into a pane waiting on a prompt, and replies from you are marked verified
-- **Fleets**: `tuios fan` starts one prompt in several agents, mixed harnesses allowed, each in its own git worktree. `tuios start-agent` starts one helper beside you, in its TUI or headless over ACP or the Codex app-server. Selectors such as `group:fan/retry needs:you` address a whole group
+- **Helper Agents**: `tuios start-agent` starts a helper beside you, in its TUI or headless over ACP or the Codex app-server, and `tuios worktree new --agent` gives it a worktree of its own. `tuios fan` starts one prompt in several agents at once, to try different harnesses on the same task
 - **Resume**: After a daemon restart, the Inbox offers to resume each agent conversation that was running
 - **Pane Grants**: Say what an agent's pane may do through tuios (`read`, `write`, `fan`, `respond`, `admin`), and give a helper less with `--grants`
 - **MCP Server**: `tuios mcp` serves the same surface as MCP tools, read-only and held to the agent's own session unless you say otherwise
@@ -201,7 +201,7 @@ The guide is [docs/AGENT_STATE.md](docs/AGENT_STATE.md).
 - **Remote Sessions**: `tuios attach --host build api` draws a session on another machine in this client, and `-s HOST:SESSION` sends any command there
 - **Hosted Panes**: `tuios new-window NAME --host build` runs one pane's process on another machine, in a session here
 - **Global Sessions**: `tuios new NAME --global` holds panes from several machines ([docs](docs/SESSIONS.md))
-- **Agents on Other Machines**: `tuios fan --host build` and `tuios start-agent -s build:api` run agents there, their Inbox items show here, and `tuios worktree pull` brings their work back. Each machine's `[hosts]` policy says what the others may do
+- **Agents on Other Machines**: `tuios start-agent -s build:api` runs an agent there, its Inbox items show here, and `tuios worktree pull` brings its work back. Each machine's `[hosts]` policy says what the others may do
 
 ### Tiling
 - **BSP Tiling**: Binary Space Partitioning with spiral layout
