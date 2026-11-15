@@ -17885,3 +17885,11 @@ cockpit drag working. The clause is for quick look.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestCockpitThreadMouseSelects|TestCopyModeClickMovesTheCursor)$' -v .`.
+
+## A drag that starts on a link in the agents view selects
+
+`TestCockpitDragFromALinkSelects` presses on a bare URL in the thread and drags off it. The drag must copy the text from the URL on, and the link opener must not run for a second after. A plain click on the URL must then open it. A link opened on the press, so the drag that #2122 added could not start on one. Run on 2026-11-15 on macOS; the branch passes 3 of 3, with `TestCockpitLinksOpenOnClick`.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The branch before this change: `CockpitClick` opens the link on the press (`cockpitLinkClick`, as #2113 landed it) | "ASSERTION: a drag that starts on a link opens no link" | **caught** |

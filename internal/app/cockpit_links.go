@@ -35,6 +35,13 @@ type ckLinkRun struct {
 // cockpitLinkAt returns the link under screen cell x, y in the frame last
 // drawn, if there is one.
 func (m *OS) cockpitLinkAt(x, y int) (ckLinkRun, bool) {
+	return m.cockpitLinkFound(x, y, pathAsk)
+}
+
+// cockpitLinkFound is cockpitLinkAt with a path found as how says
+// (pathThere's): a press and its release ask the disk at once, as a press may
+// come with no motion before it.
+func (m *OS) cockpitLinkFound(x, y, how int) (ckLinkRun, bool) {
 	ck := &m.Inbox.ck
 	if !linksEnabled(&m.Settings) || ck.canvas == nil {
 		return ckLinkRun{}, false
@@ -43,7 +50,7 @@ func (m *OS) cockpitLinkAt(x, y int) (ckLinkRun, bool) {
 	if cy < 0 || cy >= ck.canvas.h {
 		return ckLinkRun{}, false
 	}
-	url, x0, x1, ok := m.cockpitLineLinkAt(ck.canvas.buf.Lines[cy], x, pathAsk)
+	url, x0, x1, ok := m.cockpitLineLinkAt(ck.canvas.buf.Lines[cy], x, how)
 	return ckLinkRun{url: url, y: y, x0: x0, x1: x1}, ok
 }
 
@@ -188,22 +195,33 @@ func (m *OS) drawCockpitLinkHover(c *ckCanvas, top int) {
 	})
 }
 
-// cockpitLinkClick opens the link under a click, if there is one.
-func (m *OS) cockpitLinkClick(x, y int) (tea.Cmd, bool) {
-	ck := &m.Inbox.ck
-	if ck.canvas == nil {
+// cockpitLinkPress takes a press on a link, if there is one under it. The
+// link opens on the release (cockpitLinkRelease), so a drag that starts on a
+// link selects text instead.
+func (m *OS) cockpitLinkPress(x, y int) bool {
+	run, ok := m.cockpitLinkFound(x, y, pathNow)
+	m.Inbox.ck.linkPress = run.url
+	return ok
+}
+
+// CockpitLinkCancel forgets the link of the last press. Every press in the
+// view starts with it, so a press the view's click never sees (one in copy
+// mode, or a drag) leaves no link to open on its release.
+func (m *OS) CockpitLinkCancel() { m.Inbox.ck.linkPress = "" }
+
+// cockpitLinkRelease opens the link a press was taken on, when the button
+// goes up on the same link. A release elsewhere opens nothing. A drag's
+// release does not reach it: the selection takes it first.
+func (m *OS) cockpitLinkRelease(x, y int) (tea.Cmd, bool) {
+	url := m.Inbox.ck.linkPress
+	if url == "" {
 		return nil, false
 	}
-	cy := y - ck.canvasTop
-	if cy < 0 || cy >= ck.canvas.h {
-		return nil, false
+	m.Inbox.ck.linkPress = ""
+	if run, ok := m.cockpitLinkFound(x, y, pathNow); !ok || run.url != url {
+		return nil, true
 	}
-	url, _, _, ok := m.cockpitLineLinkAt(ck.canvas.buf.Lines[cy], x, pathNow)
-	run := ckLinkRun{url: url}
-	if !ok {
-		return nil, false
-	}
-	return m.OpenLink(run.url), true
+	return m.OpenLink(url), true
 }
 
 // CockpitCopyLink returns the link under the copy mode cursor in the thread:

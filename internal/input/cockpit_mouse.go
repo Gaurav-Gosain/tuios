@@ -26,6 +26,7 @@ func autoScrollTickCmd() tea.Cmd {
 // selection.
 func cockpitMousePress(msg tea.MouseClickMsg, o *app.OS) (bool, tea.Cmd) {
 	x, y := msg.Mouse().X, msg.Mouse().Y
+	o.CockpitLinkCancel()
 	g := o.CockpitMouse()
 	g.Armed = false
 	if msg.Button != tea.MouseLeft || !o.CockpitThreadAt(x, y) {

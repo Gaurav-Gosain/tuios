@@ -300,6 +300,9 @@ type cockpitState struct {
 	// codeWrap wraps the long lines of the thread's code blocks, W, for as
 	// long as the client runs.
 	codeWrap bool
+	// linkPress is the link a press in the view was on, which opens when
+	// the button goes up on it. See cockpit_links.go.
+	linkPress string
 	// mouse is a press in the thread and the selection it makes. See
 	// cockpit_mouse.go.
 	mouse CopyMouseGesture
@@ -1445,8 +1448,8 @@ func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 	if m.cockpitDividerPress(x, y) || m.kanbanPreviewClick(x, y) {
 		return nil, true
 	}
-	if cmd, ok := m.cockpitLinkClick(x, y); ok {
-		return cmd, true
+	if m.cockpitLinkPress(x, y) {
+		return nil, true
 	}
 	m.cockpitFocusRegionAt(x, y)
 	for _, h := range ck.hits {

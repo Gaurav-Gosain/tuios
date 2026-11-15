@@ -7,7 +7,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -21,27 +23,16 @@ const (
 	ckLinkTool     = "https://example.com/cockpit-tool"
 )
 
-// TestCockpitLinksOpenOnClick clicks the links in the agents view's thread
-// and reads what tuios did from the link opener's record: a Markdown link
-// opens its address (not its label), a bare URL in the answer and one in a
-// tool's command open as written, and gx in copy mode opens the link under
-// the cursor. The pointer over the URL in the tool line, which is plain
-// text, underlines it before the click. The artifacts are the frames
-// cockpit-links-before (no pointer) and cockpit-links-hover (the pointer on
-// the tool line's URL).
-//
-// NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md):
-//   - with the cockpitLinkClick call cut from CockpitClick, the test fails at
-//     "a click on the Markdown link".
-//   - with drawCockpitLinkHover not called, the test fails at "the hovered
-//     URL never underlined".
-//   - with the gx branch cut from handleCockpitCopyKey, the test fails at
-//     "gx in copy mode".
-func TestCockpitLinksOpenOnClick(t *testing.T) {
+// cockpitLinksTerm starts the agents view on the thread of linksTranscript,
+// every card open, with a link opener that writes each link it is given to
+// the returned record file. out is the host stream the clipboard is read
+// from.
+func cockpitLinksTerm(t *testing.T) (term *tuitest.Terminal, record string, out *lockedBuffer) {
+	t.Helper()
 	base := t.TempDir()
 	killDaemon(t, base)
 	useShippedLooks(base)
-	record := filepath.Join(base, "opened.txt")
+	record = filepath.Join(base, "opened.txt")
 	opener := filepath.Join(base, "opener.sh")
 	if err := os.WriteFile(opener, []byte("#!/bin/sh\nprintf '%s\\n' \"$1\" >> '"+record+"'\n"), 0o755); err != nil {
 		t.Fatal(err)
@@ -75,7 +66,8 @@ func TestCockpitLinksOpenOnClick(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "set-agent-state", "done", "-s", "api", "-w", "docs-fix", "--harness", "claude-code"); err != nil {
 		t.Fatalf("set-agent-state: %v\n%s", err, out)
 	}
-	term := startIn(t, base, startOpts{args: []string{"attach", "home"}, cols: 120, rows: 40, shippedLooks: true,
+	out = &lockedBuffer{}
+	term = startIn(t, base, startOpts{args: []string{"attach", "home"}, cols: 120, rows: 40, shippedLooks: true, out: out,
 		env: []string{"TERM=xterm-256color", "COLORTERM=truecolor", "SSH_CONNECTION=", "SSH_CLIENT=", "SSH_TTY="}})
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
@@ -91,6 +83,27 @@ func TestCockpitLinksOpenOnClick(t *testing.T) {
 	}
 	waitText(t, term, "the open thread", ckLinkTool)
 	_ = term.WaitStable(uiTimeout)
+	return term, record, out
+}
+
+// TestCockpitLinksOpenOnClick clicks the links in the agents view's thread
+// and reads what tuios did from the link opener's record: a Markdown link
+// opens its address (not its label), a bare URL in the answer and one in a
+// tool's command open as written, and gx in copy mode opens the link under
+// the cursor. The pointer over the URL in the tool line, which is plain
+// text, underlines it before the click. The artifacts are the frames
+// cockpit-links-before (no pointer) and cockpit-links-hover (the pointer on
+// the tool line's URL).
+//
+// NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md):
+//   - with the cockpitLinkClick call cut from CockpitClick, the test fails at
+//     "a click on the Markdown link".
+//   - with drawCockpitLinkHover not called, the test fails at "the hovered
+//     URL never underlined".
+//   - with the gx branch cut from handleCockpitCopyKey, the test fails at
+//     "gx in copy mode".
+func TestCockpitLinksOpenOnClick(t *testing.T) {
+	term, record, _ := cockpitLinksTerm(t)
 	saveCockpitFrames(t, term, "cockpit-links-before")
 
 	// The pointer on the URL in the tool line underlines it. The line is
@@ -175,4 +188,31 @@ func linksTranscript(t *testing.T) []byte {
 		buf.WriteByte('\n')
 	}
 	return buf.Bytes()
+}
+
+// TestCockpitDragFromALinkSelects presses on a link in the thread and drags
+// off it. The drag selects and copies the text, and opens no link: a link
+// opens on the release of a click, not on the press. A plain click on the
+// same link still opens it. The artifact is the frame cockpit-link-drag.
+//
+// Negative control, recorded in NEGATIVE_CONTROLS.md: with the link opened
+// on the press, as #2113 did, the drag opens the link.
+func TestCockpitDragFromALinkSelects(t *testing.T) {
+	term, record, out := cockpitLinksTerm(t)
+	col, row := mustFind(t, term, ckLinkBare)
+	from := len(clipboardWrites(out))
+	mouseDrag(t, term, col, row, col+len(ckLinkBare)+3, row, tuitest.MouseLeft, 0)
+	got := rawWrite(t, term, out, from, "ASSERTION: the drag from the link copied nothing")
+	saveCockpitFrames(t, term, "cockpit-link-drag")
+	if !strings.HasPrefix(got, ckLinkBare) {
+		t.Fatalf("ASSERTION: the drag from the link copied %q, want it to start with %q", got, ckLinkBare)
+	}
+	stayTrue(t, "a drag that starts on a link opens no link", time.Second, func() (bool, string) {
+		got := openedLinks(record)
+		return len(got) == 0, fmt.Sprintf("the opener was started with %q", got)
+	})
+	// A plain click on the link opens it, on its release.
+	mouseClick(t, term, col+2, row, tuitest.MouseLeft, 0)
+	waitOpened(t, record, []string{ckLinkBare}, "ASSERTION: a click on the link after the drag")
+	alive(t, term, "after a drag from a link")
 }

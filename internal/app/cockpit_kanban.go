@@ -503,6 +503,9 @@ func (m *OS) CockpitRelease(x, y int) (tea.Cmd, bool) {
 	if m.cockpitDividerRelease() || m.kanbanPreviewRelease() {
 		return nil, true
 	}
+	if cmd, ok := m.cockpitLinkRelease(x, y); ok {
+		return cmd, true
+	}
 	ck := &m.Inbox.ck
 	d := ck.kb.drag
 	if d == nil {
