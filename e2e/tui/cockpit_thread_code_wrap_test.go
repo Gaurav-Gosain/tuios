@@ -181,12 +181,10 @@ func TestCockpitThreadCodeBlockWrap(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := before
-	for deadline := time.Now().Add(uiTimeout); got == before && time.Now().Before(deadline); {
+	waitUntil(t, "the yank to reach the paste buffer", uiTimeout, func() (bool, string) {
 		got = mustCLIOr(t, base, "show-buffer")
-		if got == before {
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
+		return got != before, got
+	})
 	if got != codeWrapLine {
 		t.Fatalf("ASSERTION: the yank of the wrapped line is\n%q\nwant\n%q", got, codeWrapLine)
 	}
