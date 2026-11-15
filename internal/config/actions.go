@@ -104,6 +104,7 @@ var actionTable = [...]ActionSpec{
 	{Name: "column_right", Desc: "Preview: move a column right, or 1 second on in a film", Run: RunView},
 	{Name: "go_to", Desc: "Preview: go to a line", Run: RunView},
 	{Name: "wrap", Desc: "Preview: wrap long lines, or cut them", Run: RunView},
+	{Name: "open_editor", Desc: "Preview: open the file in your editor, in a new pane", Run: RunView},
 	{Name: "end", Desc: "Preview: go to the end of the file", Run: RunView},
 	{Name: "file_send", Desc: "Files: send this file or folder to a host"},
 	{Name: "file_insert_path", Desc: "Files: paste the path into the focused pane"},

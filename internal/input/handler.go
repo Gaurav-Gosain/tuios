@@ -111,6 +111,11 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		if moved != nil && moved.IsDaemonSession && moved.FocusedWindow != prev {
 			moved.SyncStateToDaemon()
 		}
+		// A pointer that stopped on a path may have asked whether the file
+		// is there. See app/path_links.go.
+		if moved != nil {
+			cmd = tea.Batch(cmd, moved.TakePathStatCmd())
+		}
 		return moved, cmd
 	case tea.MouseReleaseMsg:
 		if o.CaptureActive() {
@@ -262,6 +267,8 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	// Quick look follows the rail's cursor, and closes when the rail lets go
 	// of the keyboard. A bool check while it is closed.
 	cmd = tea.Batch(cmd, o.QuickLookSync())
+	// A pointer over a path may have asked whether the file is there.
+	cmd = tea.Batch(cmd, o.TakePathStatCmd())
 	// A click or a key may have allowed a pane's clipboard write.
 	cmd = tea.Batch(cmd, o.ClipboardApprovalCmd())
 
@@ -625,6 +632,12 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// handlers below.
 	if o.CopyDialogOpen() {
 		return handleCopyDialogInput(msg, o)
+	}
+	// Quick look on a path a click or a hint opened has no rail row under it,
+	// so the rail does not route its keys. It takes every key but the leader
+	// while it is up. See handleFreeQuickLookKey.
+	if o.QuickLookFree() && !o.PrefixActive && !isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) {
+		return handleFreeQuickLookKey(msg, o)
 	}
 	if o.TransfersOwnsKeys() && !o.PrefixActive && !isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) {
 		return handleTransfersInput(msg, o)

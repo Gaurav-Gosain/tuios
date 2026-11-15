@@ -1468,6 +1468,9 @@ type OS struct {
 	// quickLook is the rail's preview of the file under the files cursor.
 	// See quicklook.go.
 	quickLook quickLookState
+	// paths is what the disk said about the paths the pointer stopped on.
+	// See path_links.go.
+	paths pathCache
 	// replyEditorDir is the private folder of the file $EDITOR has open for
 	// a draft, removed when it closes. See inbox_reply_history.go.
 	replyEditorDir string

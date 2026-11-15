@@ -2823,7 +2823,8 @@ and keeps the view open. A change of width, tab or agent ends it too.
 
 A click on a link in the view opens it: a Markdown link, a bare URL in an
 answer, a URL in a tool's command, in the thread, the side panel and the
-previews. The pointer on a link underlines it. The link opens the way a link
+previews. A click on a file path that is there opens it in quick look at its
+line; a relative path is taken from the agent's worktree or pane folder. The pointer on a link underlines it. The link opens the way a link
 in a pane opens: a local client starts the link opener on its machine, and a
 remote client (`tuios ssh`, `tuios-web`) copies the address to the viewer's
 clipboard instead.

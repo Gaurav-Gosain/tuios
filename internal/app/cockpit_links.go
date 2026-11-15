@@ -43,8 +43,21 @@ func (m *OS) cockpitLinkAt(x, y int) (ckLinkRun, bool) {
 	if cy < 0 || cy >= ck.canvas.h {
 		return ckLinkRun{}, false
 	}
-	url, x0, x1, ok := canvasLinkAt(ck.canvas.buf.Lines[cy], x, &m.Settings)
+	url, x0, x1, ok := m.cockpitLineLinkAt(ck.canvas.buf.Lines[cy], x, pathAsk)
 	return ckLinkRun{url: url, y: y, x0: x0, x1: x1}, ok
+}
+
+// cockpitLineLinkAt is the link covering column x of a line of the agents
+// view: a link or a URL (canvasLinkAt), or else a file path that is there,
+// relative ones taken from the agent's folder. how is pathThere's.
+func (m *OS) cockpitLineLinkAt(line uv.Line, x int, how int) (string, int, int, bool) {
+	if !linksEnabled(&m.Settings) || x < 0 || x >= len(line) {
+		return "", 0, 0, false
+	}
+	if url, x0, x1, ok := canvasLinkAt(line, x, &m.Settings); ok {
+		return url, x0, x1, true
+	}
+	return m.canvasPathAt(line, x, m.cockpitPathDir(), how)
 }
 
 // canvasLinkAt finds the link covering column x of a canvas line: an OSC 8
@@ -164,7 +177,7 @@ func (m *OS) drawCockpitLinkHover(c *ckCanvas, top int) {
 	if y < 0 || y >= c.h {
 		return
 	}
-	_, x0, x1, ok := canvasLinkAt(c.buf.Lines[y], ck.linkPointX, &m.Settings)
+	_, x0, x1, ok := m.cockpitLineLinkAt(c.buf.Lines[y], ck.linkPointX, pathPeekKnown)
 	if !ok {
 		return
 	}
@@ -177,7 +190,16 @@ func (m *OS) drawCockpitLinkHover(c *ckCanvas, top int) {
 
 // cockpitLinkClick opens the link under a click, if there is one.
 func (m *OS) cockpitLinkClick(x, y int) (tea.Cmd, bool) {
-	run, ok := m.cockpitLinkAt(x, y)
+	ck := &m.Inbox.ck
+	if ck.canvas == nil {
+		return nil, false
+	}
+	cy := y - ck.canvasTop
+	if cy < 0 || cy >= ck.canvas.h {
+		return nil, false
+	}
+	url, _, _, ok := m.cockpitLineLinkAt(ck.canvas.buf.Lines[cy], x, pathNow)
+	run := ckLinkRun{url: url}
 	if !ok {
 		return nil, false
 	}
@@ -197,6 +219,6 @@ func (m *OS) CockpitCopyLink() (string, bool) {
 	if i < 0 || i >= len(q.rows) {
 		return "", false
 	}
-	url, _, _, ok := canvasLinkAt(q.rows[i].cells, cm.CursorX, &m.Settings)
+	url, _, _, ok := m.cockpitLineLinkAt(q.rows[i].cells, cm.CursorX, pathNow)
 	return url, ok
 }

@@ -2333,6 +2333,7 @@ func getDefaultQuickLookInsideKeybinds() map[string][]string {
 		"wrap":         {"w"},
 		"filmstrip":    {"t"},
 		ActionCopyMode: {"["},
+		"open_editor":  {"e"},
 	}
 }
 

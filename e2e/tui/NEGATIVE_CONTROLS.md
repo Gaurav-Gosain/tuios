@@ -17782,3 +17782,26 @@ Run on 2026-11-15 on macOS. The branch passes the test.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitTalkedWith$' -v .`.
+
+## File paths open in quick look
+
+`TestPanePathsOpenInQuickLook` prints a path that is there, one that is not
+and a URL in a pane, from a project folder. It waits for the underline on the
+first path, checks the missing one stays plain, ctrl+clicks the URL (the link
+opener's record) and the path (quick look from line 120), and presses `e`
+there (the editor's record holds `+120` and the path).
+`TestCockpitPathsOpenInQuickLook` clicks a relative path and a `~/` path in
+the agents view's thread and waits for quick look from line 120 each time.
+
+Run on 2026-11-15 on macOS. The branch passes both tests.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The `panePathAt` fallback cut from `LinkHoverAt` | "the path never underlined" | **caught** |
+| `pathThere` takes every path as there | "the missing path is underlined" | **caught** |
+| `OpenQuickLookPath` drops the line | "ctrl+click on the path: quick look did not show os.go from line 120" | **caught** |
+| `cockpitLineLinkAt` never calls `canvasPathAt` | "a click on ~/proj/internal/app/os.go:120: quick look did not show os.go from line 120" | **caught** |
+| `cockpitPathDir` returns "" | "a click on in internal/app/os.go:120: quick look did not show" (the relative path) | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^Test(Pane|Cockpit)PathsOpenInQuickLook$' -v .`.

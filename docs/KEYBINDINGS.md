@@ -374,6 +374,7 @@ Inside the file, every key acts on the preview:
 | `:` | Go to a line number, or a page of a PDF |
 | `w` | Wrap long lines, or cut them |
 | `[` | Start copy mode on the text |
+| `e` | Open the file in your editor in a new pane, at the line at the top of the preview |
 | `f` | Fill the area of the panes, or go back |
 | `Esc` or `Tab` | Move the keyboard back to the list |
 | `Space` | Close the preview |
@@ -386,6 +387,27 @@ on the first line in view. All copy mode keys work: move, select with `v`,
 `V` or `Ctrl+V`, search with `/`, and copy with `y`. Long lines wrap while
 copy mode is on. A selection across a wrapped line copies the line whole. `q`
 or `Esc` goes back to the preview keys.
+
+### Paths in a pane or the agents view
+
+A file path in a pane's output or in the agents view works like a link: an
+absolute path, one under `~/`, `./` or `../`, or a relative one with a slash
+in it, with an optional `:line` or `:line:col`. A relative path is taken from
+the pane's folder, or in the agents view from the agent's worktree or pane
+folder. Only a path that names a file or folder that is there counts: the first
+time the pointer stops on a path, tuios checks the disk, and the path is
+underlined when the check finds it.
+
+`Ctrl+click` on a path in a pane, a click on one in the agents view, and a
+hint's `Ctrl` label open it in quick look, at its line. A folder shows its
+listing. A `file://` link opens the same way. The keyboard is inside the file
+at once: the keys above work, `e` opens your editor, and `Esc` closes the
+preview.
+
+A pane on another machine, a session reached through another host, or a pane
+that runs `ssh` shows another machine's files, so tuios finds no paths there.
+Under `tuios ssh` and `tuios-web` the files are on the machine the panes run
+on, and quick look reads them there, as the sidebar's preview does.
 
 For a listing on another machine, that machine reads the file and sends the
 preview. Its host policy must allow `files`. The binding is `file_quick_look`

@@ -69,7 +69,10 @@ func (m *OS) PointerOverLink(x, y int) bool {
 	if !inContent {
 		return false
 	}
-	_, ok := resolvePaneLink(window, termX, termY, &m.Settings)
+	if _, ok := resolvePaneLink(window, termX, termY, &m.Settings); ok {
+		return true
+	}
+	_, ok := m.panePathAt(window, termX, termY, pathPeek)
 	return ok
 }
 
@@ -138,6 +141,9 @@ func (m *OS) LinkHoverAt(x, y int) bool {
 
 	link, ok := resolvePaneLink(window, termX, termY, &m.Settings)
 	if !ok {
+		link, ok = m.panePathAt(window, termX, termY, pathAsk)
+	}
+	if !ok {
 		return m.clearLinkHover()
 	}
 	m.setLinkHover(link)
@@ -168,7 +174,10 @@ func (m *OS) LinkAt(x, y int) (PaneLink, bool) {
 	if !inContent {
 		return PaneLink{}, false
 	}
-	return resolvePaneLink(window, termX, termY, &m.Settings)
+	if link, ok := resolvePaneLink(window, termX, termY, &m.Settings); ok {
+		return link, true
+	}
+	return m.panePathAt(window, termX, termY, pathNow)
 }
 
 // hoverSuppressedByGuest applies the hover policy to a pane whose guest might

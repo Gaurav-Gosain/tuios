@@ -13,8 +13,9 @@ editor = "micro"
 Other terminal editors and arguments work too, such as `nano` or `vim -f`.
 Quote a path or an argument that contains spaces. tuios splits the command into
 arguments and runs no shell. It adds the full path of the file at the end. If
-the value is empty, tuios uses `$EDITOR`, then `$VISUAL`, then `vi`. File links
-and hints open files with the same command. tuios reads the first 512 bytes of
+the value is empty, tuios uses `$EDITOR`, then `$VISUAL`, then `vi`. File links,
+paths and hints open a file in quick look, and `e` there opens it with the same
+command, at the line on top for vi, Emacs, nano, kakoune and helix. tuios reads the first 512 bytes of
 a file to check that it is text. It refuses binary files and special files.
 
 The configuration reference lives on the docs site: https://tuios.dev/docs/configuration
@@ -263,7 +264,9 @@ tuios finds two kinds of link in a pane. An OSC 8 hyperlink is a link that a
 program marked, such as `ls --hyperlink`, `gcc`, `delta`, `gh` or an agent
 CLI. Its text and its target can be different. A bare URL is plain text that
 starts with `http://`, `https://`, `ftp://`, `ftps://`, `file://`, `ssh://` or
-`git://`. Hints mode and the pointer use the same URL detector.
+`git://`. Hints mode and the pointer use the same URL detector. With
+`links = "all"`, a file path that is there is a link too, and opens in quick
+look (see [Paths in a pane or the agents view](KEYBINDINGS.md#paths-in-a-pane-or-the-agents-view)).
 
 ```toml
 [appearance]

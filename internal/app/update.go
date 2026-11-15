@@ -1310,6 +1310,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case kbFileMsg:
 		return m, m.applyKBFile(msg)
 
+	case pathStatMsg:
+		m.applyPathStats(msg)
+		return m, nil
+
 	case quickLookMsg:
 		cmd := m.applyQuickLook(msg)
 		m.renderSkipped = false

@@ -221,6 +221,12 @@ type quickLookState struct {
 	// borrowed says the files menu's Preview took the keyboard for the rail.
 	// Closing the preview gives it back. See CloseQuickLook.
 	borrowed bool
+	// free says a click or a hint opened the preview on a path, with no rail
+	// row under it: it does not follow the rail's cursor, and it takes the
+	// keyboard itself. wantLine is the line to show once the text is read, 0
+	// for the top. See OpenQuickLookPath.
+	free     bool
+	wantLine int
 	// box is the panel on the screen in the last frame, for the mouse.
 	box overlay.Rect
 	// pic is where the picture went in the last frame.
@@ -406,6 +412,7 @@ func (m *OS) dropQuickLook() {
 	ql.copy = nil
 	ql.target = quickLookTarget{}
 	ql.borrowed = false
+	ql.free, ql.wantLine = false, 0
 	ql.res = nil
 	ql.scroll = 0
 	ql.jump = quickLookNoMove
@@ -427,7 +434,7 @@ func (m *OS) dropQuickLook() {
 // is one comparison while the preview is closed.
 func (m *OS) QuickLookSync() tea.Cmd {
 	ql := &m.quickLook
-	if !ql.open {
+	if !ql.open || ql.free {
 		return nil
 	}
 	if !m.SidebarFocused || m.SidebarFocusOnSecondary() || !m.filesOn() {
@@ -727,6 +734,10 @@ func (m *OS) applyQuickLook(msg quickLookMsg) tea.Cmd {
 			ql.quickLookHoldPage(msg.res)
 		}
 		ql.filmWant = msg.res.atMs
+		if n := ql.wantLine; n > 0 {
+			ql.wantLine = 0
+			m.quickLookGoToLine(int64(n))
+		}
 		return nil
 	}
 	return m.quickLookShow(ql.target)
@@ -1407,9 +1418,18 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 		// Copy mode over the text has the keys it has over a pane.
 		return copyModeLegend(ql.copy.cm.State, m.copyModeExitKey())
 	}
+	if ql.free && !ql.inside {
+		h := add(nil, "esc", "close")
+		return add(h, first(reg.Keys(config.TableQuickLook, "full_size")), "full size")
+	}
 	if ql.inside {
 		in := func(action string) []string { return reg.Keys(config.TableQuickLookInside, action) }
 		h := add(nil, first(in("go_back")), "back to files")
+		if ql.free {
+			// No list is behind the preview: back closes it, so the close
+			// key at the end would say the same thing twice.
+			h, closeKey = add(nil, first(in("go_back")), "close"), ""
+		}
 		if ql.quickLookOffMain() {
 			h = add(h, first(in("next_view")), "next view")
 			h = add(h, pair(in, "line_down", "line_up"), "line")
@@ -1442,6 +1462,9 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 		if quickLookText(ql.res) {
 			h = add(h, first(in("find")), "search")
 			h = add(h, first(in("go_to")), "go to line")
+			if ql.target.host == "" {
+				h = add(h, first(in("open_editor")), "editor")
+			}
 			wrap := "wrap"
 			if ql.wrap {
 				wrap = "cut lines"

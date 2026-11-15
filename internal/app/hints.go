@@ -635,7 +635,13 @@ func (m *OS) openHint(window *terminal.Window, match hintMatch) tea.Cmd {
 			return m.copyHint(window, match, "The link names a file on another machine. Copied the link")
 		}
 		m.CancelPendingCopy()
-		return m.openLocalPath(path, match.text)
+		bare, line := splitLineFragment(match.text)
+		if line > 0 {
+			if p, ok := linkFilePath(bare); ok {
+				path = p
+			}
+		}
+		return m.openLocalPath(path, line, match.text)
 	case hints.Path, hints.Diff:
 		if why := m.hintFileBlocked(window); why != "" {
 			return m.copyHint(window, match, why+" Copied the path")
@@ -644,8 +650,9 @@ func (m *OS) openHint(window *terminal.Window, match hintMatch) tea.Cmd {
 		if why != "" {
 			return m.copyHint(window, match, why+" Copied the path")
 		}
+		_, line, _ := hints.SplitLineCol(match.text)
 		m.CancelPendingCopy()
-		return m.openLocalPath(path, path)
+		return m.openLocalPath(path, line, path)
 	default:
 		return m.copyHint(window, match, fmt.Sprintf("tuios opens only links and paths. Copied %d chars", hintChars(match.text)))
 	}

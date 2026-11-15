@@ -69,8 +69,13 @@ func (m *OS) OpenLink(rawURL string) tea.Cmd {
 		return nil
 	}
 
+	if bare, line := splitLineFragment(rawURL); line > 0 {
+		if path, ok := linkFilePath(bare); ok {
+			return m.openLocalPath(path, line, rawURL)
+		}
+	}
 	if path, ok := linkFilePath(rawURL); ok {
-		return m.openLocalPath(path, rawURL)
+		return m.openLocalPath(path, 0, rawURL)
 	}
 
 	// A tuios:// address is an order to tuios itself, not a document for
@@ -337,54 +342,39 @@ func linkOpenableScheme(rawURL string) bool {
 	return hints.OpenableScheme(rawURL)
 }
 
-// openLocalPath opens a path that lives on the pane machine.
+// openLocalPath opens a path that lives on the pane machine, in quick look,
+// at line when it is more than 0. A folder shows its listing there.
 //
-// A file opens in a pane running the user's editor, which is right on every
-// deployment for the same reason the path could be stat'd at all: a pane runs
-// on the machine the file is on. A directory is handed to the rail's file view,
-// which is the surface that already knows how to show one.
+// Quick look reads the file in this process, which runs on the machine the
+// file is on in every deployment, so it is right under tuios ssh and
+// tuios-web too: the preview is drawn in the frame the viewer sees. The
+// person's editor is one key away inside it (QuickLookOpenEditor).
 //
 // A path that is gone is reported rather than guessed at. A file:// link in a
 // pane's scrollback can be minutes old, and the file it named may have been
 // built over or deleted since.
-func (m *OS) openLocalPath(path, rawURL string) tea.Cmd {
+func (m *OS) openLocalPath(path string, line int, rawURL string) tea.Cmd {
 	info, err := os.Stat(path)
 	if err != nil {
 		m.ShowNotification("That file is gone. The link is on your clipboard.",
 			"warning", m.Settings.NotificationDuration)
 		return tea.SetClipboard(rawURL)
 	}
-	if info.IsDir() {
-		return m.openDirectoryLink(path)
-	}
+	return m.OpenQuickLookPath(path, line, info.IsDir())
+}
 
+// openInEditor opens a file in a new pane running the person's editor, at
+// line when it is more than 0 and the editor takes a line (editorLineArgs).
+func (m *OS) openInEditor(path string, line int) tea.Cmd {
 	argv, err := editorArgv(m.Settings.SidebarEditor)
 	if err != nil {
 		m.LogError("Could not read the editor command: %v", err)
 		m.ShowNotification(editorCommandNote, "warning", m.Settings.NotificationDuration)
 		return nil
 	}
-	m.AddWindow(filepath.Base(path), append(argv, path)...)
+	m.AddWindow(filepath.Base(path), append(argv, editorLineArgs(argv[0], path, line)...)...)
 	m.ShowNotification("Opened the file in a new pane.", "success", m.Settings.NotificationDuration)
 	return nil
-}
-
-// openDirectoryLink shows a directory in the rail's files section, which is the
-// one surface in tuios that already knows how to list one. The rail has to be
-// on and expanded for that to be somewhere the user can see, so a rail that is
-// not falls back to the clipboard rather than putting a section nobody can see
-// into a folder nobody asked for.
-func (m *OS) openDirectoryLink(path string) tea.Cmd {
-	if m.OpenFileView(path) {
-		// The listing is read off this goroutine, so opening the section hands
-		// back the command that reads it. It is parked with the rail's other
-		// pending commands rather than returned here, because the caller of a
-		// link is not always a path that returns one.
-		return m.TakeSidebarCmd()
-	}
-	m.ShowNotification("Copied the folder path. Turn the sidebar on to browse it.",
-		"info", m.Settings.NotificationDuration)
-	return tea.SetClipboard(path)
 }
 
 const editorCommandNote = "tuios can not read the File editor command. Change it in the sidebar settings."

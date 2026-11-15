@@ -82,9 +82,14 @@ func (m *OS) renderLinkLabel() *lipgloss.Layer {
 	pal := theme.UI()
 	renderW := m.GetRenderWidth()
 
-	body := overlay.Truncate(sanitizeLinkText(linkDisplayAddress(link.URL)), linkLabelMax)
-	text := body
-	if hint := linkLabelHintFor(link.URL, &m.Settings); hint != "" {
+	addr, hint := linkDisplayAddress(link.URL), linkLabelHintFor(link.URL, &m.Settings)
+	// A file opens in quick look: the label names the path as a person
+	// writes it, and says the click previews it.
+	if p, ok := fileLinkLabel(link.URL); ok {
+		addr, hint = p, strings.Replace(hint, " to open", " to preview", 1)
+	}
+	text := overlay.Truncate(sanitizeLinkText(addr), linkLabelMax)
+	if hint != "" {
 		text += "  " + hint
 	}
 	label := tooltipLabel(text, max(renderW-2, 1), pal)

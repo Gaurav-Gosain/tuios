@@ -49,22 +49,8 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ExitSidebarFocus()
 		return o, nil
 	}
-	// A prompt in the preview takes what is typed, a space too.
 	if o.QuickLookPromptOpen() {
-		switch {
-		case key == "esc":
-			o.QuickLookPromptCancel()
-		case key == "enter":
-			o.QuickLookPromptEnter()
-		case msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModSuper) != 0:
-			// A chord types nothing here; only its key name can mean
-			// something (a word key, the caret).
-			o.QuickLookPromptKey(key, "")
-		default:
-			// The prompt is a field like every other: caret, word keys,
-			// ctrl+u.
-			o.QuickLookPromptKey(key, msg.Text)
-		}
+		quickLookPromptKey(msg, o)
 		return o, nil
 	}
 	// Copy mode over the preview takes every key, as it does over a pane.
@@ -88,47 +74,7 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if act != "" {
 			noteRailAction(o, act)
 		}
-		switch act {
-		case "line_down":
-			o.QuickLookLine(true)
-		case "line_up":
-			o.QuickLookLine(false)
-		case "half_down":
-			o.QuickLookHalfPage(true)
-		case "half_up":
-			o.QuickLookHalfPage(false)
-		case "start":
-			o.QuickLookEdge(false)
-		case "end":
-			o.QuickLookEdge(true)
-		case "full_size":
-			o.QuickLookFullSize()
-		case "go_back":
-			o.QuickLookGoBack()
-		case "find":
-			o.QuickLookFind()
-		case "find_next":
-			o.QuickLookFindMove(true)
-		case "find_prev":
-			o.QuickLookFindMove(false)
-		case "go_to":
-			o.QuickLookGoTo()
-		case "wrap":
-			o.QuickLookWrap()
-		case "filmstrip":
-			o.QuickLookFilmstrip()
-		case "open_details":
-			o.QuickLookOpenDetails()
-		case "column_left":
-			o.QuickLookColumn(false)
-		case "column_right":
-			o.QuickLookColumn(true)
-		case "next_view":
-			return o, o.QuickLookNextView()
-		case "copy_mode":
-			o.QuickLookCopyStart()
-		}
-		return o, nil
+		return o, quickLookInsideAction(o, act)
 	}
 	if key == "esc" && o.QuickLookOpen() {
 		o.CloseQuickLook()
@@ -415,4 +361,103 @@ func handleSidebarFileAction(action string, o *app.OS) tea.Cmd {
 		return o.SidebarFileOpenSystem()
 	}
 	return nil
+}
+
+// quickLookInsideAction runs an action of the preview's inside table.
+func quickLookInsideAction(o *app.OS, act string) tea.Cmd {
+	switch act {
+	case "line_down":
+		o.QuickLookLine(true)
+	case "line_up":
+		o.QuickLookLine(false)
+	case "half_down":
+		o.QuickLookHalfPage(true)
+	case "half_up":
+		o.QuickLookHalfPage(false)
+	case "start":
+		o.QuickLookEdge(false)
+	case "end":
+		o.QuickLookEdge(true)
+	case "full_size":
+		o.QuickLookFullSize()
+	case "go_back":
+		o.QuickLookGoBack()
+	case "find":
+		o.QuickLookFind()
+	case "find_next":
+		o.QuickLookFindMove(true)
+	case "find_prev":
+		o.QuickLookFindMove(false)
+	case "go_to":
+		o.QuickLookGoTo()
+	case "wrap":
+		o.QuickLookWrap()
+	case "filmstrip":
+		o.QuickLookFilmstrip()
+	case "open_details":
+		o.QuickLookOpenDetails()
+	case "column_left":
+		o.QuickLookColumn(false)
+	case "column_right":
+		o.QuickLookColumn(true)
+	case "next_view":
+		return o.QuickLookNextView()
+	case "copy_mode":
+		o.QuickLookCopyStart()
+	case "open_editor":
+		return o.QuickLookOpenEditor()
+	}
+	return nil
+}
+
+// quickLookPromptKey types a key into the preview's prompt: the search or
+// the line number.
+func quickLookPromptKey(msg tea.KeyPressMsg, o *app.OS) {
+	key := msg.String()
+	switch {
+	case key == "esc":
+		o.QuickLookPromptCancel()
+	case key == "enter":
+		o.QuickLookPromptEnter()
+	case msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModSuper) != 0:
+		// A chord types nothing here; only its key name can mean
+		// something (a word key, the caret).
+		o.QuickLookPromptKey(key, "")
+	default:
+		// The prompt is a field like every other: caret, word keys,
+		// ctrl+u.
+		o.QuickLookPromptKey(key, msg.Text)
+	}
+}
+
+// handleFreeQuickLookKey routes a key while quick look shows a path a click or
+// a hint opened, with no rail row under it (see app.OS.OpenQuickLookPath). The
+// keyboard is inside the file: the inside table's keys act on it, and esc,
+// tab or the quick look key closes it. Every other key is swallowed, so a key
+// meant for the preview cannot reach the agents view or the pane under it.
+func handleFreeQuickLookKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.QuickLookPromptOpen() {
+		quickLookPromptKey(msg, o)
+		return o, nil
+	}
+	if cm, grid := o.QuickLookCopy(); cm != nil {
+		return handleQuickLookCopyKey(msg, o, cm, grid)
+	}
+	if tableAction(o, msg, o.KeybindRegistry, config.TableSidebarFiles) == sidebarActFileQuickLook {
+		o.CloseQuickLook()
+		return o, nil
+	}
+	act := tableAction(o, msg, o.KeybindRegistry, config.TableQuickLookInside)
+	if act == "go_back" || msg.String() == "esc" {
+		o.CloseQuickLook()
+		return o, nil
+	}
+	if !o.QuickLookInside() {
+		// A folder or a file with nothing to move through: full size only.
+		if tableAction(o, msg, o.KeybindRegistry, config.TableQuickLook) == "full_size" {
+			o.QuickLookFullSize()
+		}
+		return o, nil
+	}
+	return o, quickLookInsideAction(o, act)
 }

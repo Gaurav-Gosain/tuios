@@ -358,9 +358,16 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 	// Quick look sits under every dialog: it follows the rail's cursor and
 	// takes no key, so a dialog opened from the rail has to draw over it.
+	// Opened on a path from a pane or the agents view, it has no rail under
+	// it and takes every key, so it is drawn above every panel, the agents
+	// view among them.
 	if m.quickLook.open {
 		content, x, y := m.renderQuickLook()
-		layers = append(layers, lipgloss.NewLayer(content).X(x).Y(y).Z(config.ZIndexLogs).ID(overlayKindQuickLook))
+		z := config.ZIndexLogs
+		if m.quickLook.free {
+			z = config.ZIndexOverlayBase + len(m.OverlayZOrder)
+		}
+		layers = append(layers, lipgloss.NewLayer(content).X(x).Y(y).Z(z).ID(overlayKindQuickLook))
 	}
 
 	if m.FilePromptOpen() {
