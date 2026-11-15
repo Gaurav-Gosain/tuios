@@ -8,7 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // The Inbox's selector filter: / opens a line where a selector is typed, the
@@ -79,7 +78,7 @@ func (m *OS) InboxSelectCancel() {
 
 // selectLine draws the selector line at width cells.
 func (m *OS) selectLine(width int) string {
-	pal := theme.UI()
+	pal := m.cockpitPalette()
 	bg := pal.Surface
 	label := overlay.Style(bg).Foreground(overlay.Readable(pal.FgDim, bg)).Render("select ")
 	lines := m.Inbox.selectEd.Render(max(width-7, 8), composerStyles(pal), bg)

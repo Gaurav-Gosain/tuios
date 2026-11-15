@@ -14,7 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // The body of the selected attachment in the card preview: a picture through
@@ -269,7 +268,7 @@ func (m *OS) kbPreviewPictureCmd() tea.Cmd {
 	if cw <= 0 || ch <= 0 {
 		cw, ch = 8, 16
 	}
-	img, ground := f.img, theme.UI().Card
+	img, ground := f.img, m.cockpitPalette().Card
 	return func() tea.Msg {
 		return replyPreviewMsg{pics: map[previewKey]*previewPicture{k: preparePicture(img, k, cw, ch, ground)}}
 	}

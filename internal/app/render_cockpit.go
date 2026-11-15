@@ -61,7 +61,7 @@ type ckLookKey struct {
 // cached frame.
 func (m *OS) cockpitLook() ckLook {
 	ck := &m.Inbox.ck
-	pal := theme.UI()
+	pal := m.cockpitPalette()
 	key := ckLookKey{theme: theme.Generation(), depth: pal.Depth, ascii: overlay.UseASCII(), plain: m.Settings.NoNerdFont,
 		canvas: pal.Canvas, panel: pal.Panel, fg: pal.Fg, accent: pal.Accent, glyphs: theme.Glyphs()}
 	if ck.lookAt != key || ck.look.pal.Canvas == nil {
@@ -69,6 +69,51 @@ func (m *OS) cockpitLook() ckLook {
 		ck.lookGen++
 	}
 	return ck.look
+}
+
+// cockpitPalette is the palette the agents view is drawn in. With no theme
+// on a light terminal it is the ramp the rail and the dock take from the
+// terminal's ground, so the view is light where they are: the dialogs' constant
+// ramp is a dark one, and the view fills the screen as they do. Otherwise it
+// is theme.UI, which a light theme already makes light.
+//
+// The rail's ramp keeps the accents the dark ramp was tuned for, and a bright
+// green check or yellow mark fades on a light panel: each state ink is moved
+// to read on the panel, the ground most of the view's marks sit on, as a
+// mark is held to MarkFloor rather than to text contrast so it keeps its hue.
+func (m *OS) cockpitPalette() overlay.Palette {
+	if theme.Current() == nil && m.host.bg != nil && m.host.light {
+		ck := &m.Inbox.ck
+		p := m.groundUI()
+		key := ckHostPalKey{host: m.host.gen, theme: theme.Generation(), depth: p.Depth, panel: p.Panel}
+		if hp := &ck.hostPal; hp.ok && hp.at == key {
+			return hp.pal
+		}
+		for _, c := range []*color.Color{&p.Success, &p.Warn, &p.Warning, &p.Attention, &p.Busy, &p.Info, &p.Accent, &p.AccentBright, &p.Selected} {
+			if *c != nil {
+				*c = overlay.ReadableAt(*c, p.Panel, overlay.MarkFloor)
+			}
+		}
+		ck.hostPal = ckHostPal{pal: p, at: key, ok: true}
+		return p
+	}
+	return theme.UI()
+}
+
+// ckHostPal is the agents view's palette on a light host, and what it was
+// built from.
+type ckHostPal struct {
+	pal overlay.Palette
+	at  ckHostPalKey
+	ok  bool
+}
+
+// ckHostPalKey is what the agents view's palette on a light host is built
+// from.
+type ckHostPalKey struct {
+	host, theme uint64
+	depth       overlay.Depth
+	panel       color.Color
 }
 
 // cockpitLookGen is the generation of the look in force, built now if the

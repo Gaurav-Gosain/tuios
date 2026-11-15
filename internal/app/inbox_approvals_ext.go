@@ -859,7 +859,7 @@ func (m *OS) inboxDetailExtra(it session.AttentionItem) (detail func(width int) 
 	if m.InboxReasonOpen() {
 		r := m.Inbox.approvals.answer.reason
 		return func(width int) []string {
-			pal := theme.UI()
+			pal := m.cockpitPalette()
 			bg := pal.Surface
 			st := overlay.Style(bg)
 			var lines []string

@@ -14,7 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // The image view: one picture of the draft at the largest size the screen
@@ -327,7 +326,7 @@ func (m *OS) cockpitImagePicture() tea.Cmd {
 	if cw <= 0 || ch <= 0 {
 		cw, ch = 8, 16
 	}
-	ground := theme.UI().Panel
+	ground := m.cockpitPalette().Panel
 	return func() tea.Msg {
 		return replyPreviewMsg{pics: map[previewKey]*previewPicture{k: preparePicture(img, k, cw, ch, ground)}}
 	}

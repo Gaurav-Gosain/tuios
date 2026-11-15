@@ -11,7 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // Image cards: an image in the conversation, one the person pasted into a
@@ -173,7 +172,7 @@ func (m *OS) threadPicturesCmd(t *agentThread) tea.Cmd {
 	if len(jobs) == 0 {
 		return nil
 	}
-	ground := theme.UI().Card
+	ground := m.cockpitPalette().Card
 	return func() tea.Msg {
 		out := make(map[previewKey]*previewPicture, len(jobs))
 		for _, j := range jobs {

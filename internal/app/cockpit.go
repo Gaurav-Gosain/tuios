@@ -142,6 +142,9 @@ func (ck *cockpitState) cursorOn(r ckRow, list []sidebarAgentEntry) bool {
 
 // cockpitState is the cockpit's own state, beside the Inbox's.
 type cockpitState struct {
+	// hostPal is the palette on a light host with no theme
+	// (cockpitPalette).
+	hostPal ckHostPal
 	// region has the keys (see cockpit_regions.go), and regionBox is where
 	// the last frame drew each region.
 	region    ckRegion

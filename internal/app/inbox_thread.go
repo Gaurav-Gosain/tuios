@@ -779,7 +779,7 @@ func (m *OS) threadMinute(e sidebarAgentEntry, now time.Time) int64 {
 // entry back, until room lines are drawn: the thread shows the bottom, and
 // two hundred entries wrapped and styled on every change cost milliseconds.
 func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room int, now time.Time, card bool) []string {
-	pal := theme.UI()
+	pal := m.cockpitPalette()
 	bg := pal.Canvas
 	st := overlay.Style(bg)
 	var out []string

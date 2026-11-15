@@ -125,8 +125,8 @@ func ckReadTool(tool string) string {
 // at the bottom. With changes it draws the edits
 // of the last turn alone, each whole.
 func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, changes bool, now time.Time) ([]string, []string) {
-	pal := theme.UI()
 	l := m.cockpitLook()
+	pal := l.pal
 	who := ckHarness(e.Harness)
 	if who == "" {
 		who = "agent"
