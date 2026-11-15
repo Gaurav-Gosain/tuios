@@ -73,7 +73,7 @@ func TestClientRunsOnAPipe(t *testing.T) {
 	t.Cleanup(func() { _ = keys.Close() })
 	out := &frames{wrote: make(chan struct{}, 1)}
 	resize := make(chan Size)
-	term := Terminal{
+	term := Pipe{
 		In: in, Out: out,
 		Env:   []string{"TERM=xterm-256color"},
 		Width: 80, Height: 24,
@@ -122,7 +122,6 @@ func TestClientRunsOnAPipe(t *testing.T) {
 		c.Program.Kill()
 		t.Fatal("the client did not quit in 10s")
 	}
-	c.Close()
 	c.Close()
 	if r.err != nil {
 		t.Fatalf("run: %v", r.err)
