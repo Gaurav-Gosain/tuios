@@ -1982,7 +1982,8 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// listing the refresh brought.
 		m.pruneWindowKeyedState()
 		m.renderSkipped = false
-		return m, nil
+		// An agent of another session gets its state from this listing.
+		return m, m.threadRetryOnState()
 
 	case FederationHostsMsg:
 		// Storing a snapshot is the whole handler. The network work happened in
@@ -2600,8 +2601,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				// where nothing may speak at all.
 			}
 		}
-		// Continue listening for more state syncs
-		return m, tea.Batch(listenStateSyncUntil(m.stopSignal(), m.StateSyncChan), m.refreshSidebarSessions(), m.noteStateSyncApplied(msg.arrival))
+		// Continue listening for more state syncs. An agent's state comes
+		// on this push, and an open thread with no transcript yet asks again
+		// when it changes: no key may come to ask for it.
+		return m, tea.Batch(listenStateSyncUntil(m.stopSignal(), m.StateSyncChan), m.refreshSidebarSessions(), m.noteStateSyncApplied(msg.arrival), m.threadRetryOnState())
 
 	case heldRemoteTimeoutMsg:
 		if msg.gen != m.heldRemoteGen {
@@ -2756,7 +2759,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, m.applyDropSent(msg)
 
 	case foreignListingRefreshedMsg:
-		return m, nil
+		return m, m.threadRetryOnState()
 
 	case InboxAlertDueMsg:
 		m.applyInboxAlertDue(msg)

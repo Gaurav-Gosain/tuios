@@ -382,6 +382,27 @@ func (m *OS) InboxThreadFetch() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// threadRetryOnState reads the thread on screen again when it fell back to
+// the recap because the daemon had no transcript, and the agent's state has
+// changed since: the hook that joins the pane to its file may have run. It
+// is nil otherwise, so a state push costs a few comparisons.
+func (m *OS) threadRetryOnState() tea.Cmd {
+	if !m.threadShown() {
+		return nil
+	}
+	// The rows are built again from the push before the agent is read.
+	m.cockpitSync()
+	e, ok := m.cockpitAgent()
+	if !ok {
+		return nil
+	}
+	t := m.Inbox.threads.byKey[agentKey(e)]
+	if t == nil || !t.fallback || t.loading || e.StateAt == t.fallbackAt {
+		return nil
+	}
+	return m.InboxThreadFetch()
+}
+
 // agentCaller is how the agents view reaches the daemon that holds an
 // agent's pane, for the thread and the checkpoints: the far daemon through
 // the link on a client attached through a host, else what the Inbox calls. Each call dials: a read follows a transcript event,
@@ -806,7 +827,7 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 		if t != nil {
 			// The replies sent to it, as this machine knows them, with
 			// their cancel and retry.
-			echo, hits := m.threadEchoLines(t.key, width)
+			echo, hits := m.threadEchoLines(t.key, width, e.StateAt)
 			t.hits = append(make([]string, len(out)), hits...)
 			out = append(out, echo...)
 		}
@@ -824,7 +845,7 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 		out, t.hits = m.threadCardLines(e, t, width, m.cockpitTab() == "Changes", now)
 		if m.cockpitTab() != "Changes" {
 			// The replies sent that the transcript does not hold yet.
-			echo, hits := m.threadEchoLines(t.key, width)
+			echo, hits := m.threadEchoLines(t.key, width, e.StateAt)
 			if n := len(t.lines); len(echo) > 0 && n > 0 && !t.lines[n-1].blank() {
 				// The blank line the thread puts before a prompt's card,
 				// so the card lands on the echo's rows.
@@ -841,6 +862,7 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 		}
 		return out
 	}
+	start := len(out)
 	switch {
 	case card:
 		// The Done card under the thread says the recap; the thread does
@@ -855,10 +877,22 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 	case e.Message != "":
 		note("Says: " + printableTitle(e.Message))
 	}
-	out = append(out, m.threadMail(e, width, bg, pal)...)
-	echo, hits := m.threadEchoLines(t.key, width)
-	t.hits = append(make([]string, len(out)), hits...)
-	out = append(out, echo...)
+	echo, hits := m.threadEchoLines(t.key, width, e.StateAt)
+	if m.echoesBefore(t.key, e.StateAt) {
+		// The agent's state changed after the replies were sent: what it
+		// says now answers them, so it goes under them.
+		says := append([]string(nil), out[start:]...)
+		out = append(append(out[:start], echo...), says...)
+		t.hits = append(append(make([]string, start), hits...), make([]string, len(says))...)
+		out = append(out, m.threadMail(e, width, bg, pal)...)
+		for len(t.hits) < len(out) {
+			t.hits = append(t.hits, "")
+		}
+	} else {
+		out = append(out, m.threadMail(e, width, bg, pal)...)
+		t.hits = append(make([]string, len(out)), hits...)
+		out = append(out, echo...)
+	}
 	if len(out) == 0 && !card {
 		note(threadNothingYet(e.Harness))
 	}

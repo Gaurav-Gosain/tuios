@@ -529,7 +529,9 @@ func (m *OS) applyEchoCancelled(msg echoCancelledMsg) {
 
 // threadEchoLines draws the echoes of thread key at its end: each as the
 // person's message, with its state line under it. It returns the lines and their hits.
-func (m *OS) threadEchoLines(key string, width int) ([]string, []string) {
+// stateAt is the agent's last state change, which says whether it took a
+// typed reply.
+func (m *OS) threadEchoLines(key string, width int, stateAt int64) ([]string, []string) {
 	var mine []*replyEcho
 	for _, e := range m.Inbox.echoes.list {
 		if e.key == key {
@@ -559,13 +561,15 @@ func (m *OS) threadEchoLines(key string, width int) ([]string, []string) {
 		// The state takes the row the prompt's card leaves blank, so the
 		// echo is as tall as the card that replaces it, and the lines
 		// above stay put when the transcript logs the prompt.
-		add(m.echoStateLine(l, e))
+		add(m.echoStateLine(l, e, stateAt))
 	}
 	return out, hits
 }
 
-// echoStateLine is an echo's state, under it, with its cancel or retry.
-func (m *OS) echoStateLine(l ckLook, e *replyEcho) ckLine {
+// echoStateLine is an echo's state, under it, with its cancel or retry. A
+// typed reply the agent has moved on from since (its state changed after
+// the reply was typed) is no longer waited for: it says it was sent.
+func (m *OS) echoStateLine(l ckLook, e *replyEcho, stateAt int64) ckLine {
 	pal := l.pal
 	mark, what, ink := "◌", "Sending", pal.Info
 	act, verb := "", ""
@@ -577,6 +581,9 @@ func (m *OS) echoStateLine(l ckLook, e *replyEcho) ckLine {
 		}
 	case echoTyped:
 		mark, what, ink = "◌", "Sent, waiting for "+cmp.Or(e.who, "the agent"), pal.FgDim
+		if echoTakenBy(e, stateAt) {
+			mark, what = "✓", "Sent to "+cmp.Or(e.who, "the agent")
+		}
 	case echoFailed:
 		mark, what, ink = "✕", "Not sent: "+e.why, pal.Warn
 		if !e.preview {
@@ -584,11 +591,34 @@ func (m *OS) echoStateLine(l ckLook, e *replyEcho) ckLine {
 		}
 	}
 	if l.ascii {
-		mark = map[string]string{"◌": "..", "◷": "..", "✕": "x"}[mark]
+		mark = map[string]string{"◌": "..", "◷": "..", "✕": "x", "✓": "+"}[mark]
 	}
 	segs := []ckSeg{{t: mark + " " + what, fg: overlay.Readable(ink, l.canvas)}}
 	if verb != "" {
 		segs = append(segs, ckSeg{t: "   " + verb, fg: pal.AccentBright, attrs: ckBold})
 	}
 	return ckLine{indent: 3, segs: segs, hit: act}
+}
+
+// echoTakenBy reports whether the agent changed state after e was typed, so
+// it has taken the reply. stateAt is the agent's last state change.
+func echoTakenBy(e *replyEcho, stateAt int64) bool {
+	return e.state == echoTyped && !e.typedAt.IsZero() && stateAt > e.typedAt.UnixNano()
+}
+
+// echoesBefore reports whether the agent's last state change came after
+// every echo of thread key was sent, so its message answers them and is
+// drawn under them.
+func (m *OS) echoesBefore(key string, stateAt int64) bool {
+	found := false
+	for _, e := range m.Inbox.echoes.list {
+		if e.key != key {
+			continue
+		}
+		if stateAt <= e.at.UnixNano() {
+			return false
+		}
+		found = true
+	}
+	return found
 }
