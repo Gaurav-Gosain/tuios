@@ -39,6 +39,12 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// A code block in the agents view scrolls sideways under a sideways
+	// wheel, or shift and the wheel.
+	if wm := msg.Mouse(); o.CockpitCodeWheel(wm.X, wm.Y, msg.Button, wm.Mod&tea.ModShift != 0, time.Now()) {
+		return o, nil
+	}
+
 	// Scroll the floating overlay panel under the cursor (help, settings,
 	// palette, theme picker, session/layout lists).
 	if o.OverlayActive() {

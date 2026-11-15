@@ -17728,3 +17728,22 @@ Run on 2026-11-15 on macOS. The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitThreadCodeBlockWrap$' -v .`.
+
+## Sideways scroll of a cockpit code block
+
+`TestCockpitThreadCodeBlockScroll` reads an answer with a 300-column Go block
+and a 2000-line block under it, at 120 columns: `)` scrolls the wide block,
+every line of it, with a mark in the gutter and the 2000-line block left
+alone; `)` stops at the widest line's end; shift and the wheel bring it back
+and stop at its start; a sideways wheel scrolls it.
+
+Run on 2026-11-15 on macOS. The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The branch under it, feat/cockpit-code-blocks (no scroll) | ") did not scroll the wide block" | **caught** |
+| The card key without the scroll count (the card is kept, so the scroll never shows) | ") did not scroll the wide block" | **caught** |
+| The wheel not routed to the block (`CockpitCodeWheel` never called) | "shift and the wheel did not bring the block back to its start" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitThreadCodeBlockScroll$' -v .`.

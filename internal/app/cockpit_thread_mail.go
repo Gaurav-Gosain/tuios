@@ -674,7 +674,7 @@ func (m *OS) ckTalkBody(l ckLook, subject, text, fold string, ink color.Color, w
 	}
 	text = strings.TrimSpace(text)
 	if text != "" {
-		body = append(body, m.ckMarkdownFold(l, text, bodyW, strings.TrimPrefix(fold, "fold:"), open)...)
+		body = append(body, m.ckMarkdownFold(l, text, bodyW, strings.TrimPrefix(fold, "fold:"), open, nil)...)
 	}
 	more := 0
 	if !open && len(body) > ckMailShown+1 {

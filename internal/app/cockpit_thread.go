@@ -103,6 +103,12 @@ type ckLine struct {
 	mark    string
 	markAt  int
 	markInk color.Color
+	// lmark is drawn in markInk in the cell before indent, such as the mark
+	// of a code row scrolled sideways. Copy mode leaves it out.
+	lmark string
+	// code is the code block the line is part of, "" for none: the entry's
+	// id, a slash, and the block's place in the message.
+	code string
 }
 
 // blank reports whether the line draws nothing.
@@ -184,7 +190,7 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 	gen := theme.Generation()
 	cached := func(en threadEntry, variant int, build func() []ckLine) {
 		key := ckCardKey{width: width, theme: gen, look: m.Inbox.ck.lookGen, ascii: l.ascii, nerd: l.nerd, depth: l.pal.Depth, root: t.root,
-			folded: t.folded[en.ID], expand: t.expandAll, changes: changes, variant: variant, status: en.Status, sum: en.sum}
+			folded: t.folded[en.ID], expand: t.expandAll, changes: changes, variant: variant, status: en.Status, sum: en.sum, codeX: t.codeGen[en.ID]}
 		if card, ok := t.cards[en.ID]; ok && card.key == key {
 			items = ckAddItem(items, card.item, blank)
 			return
@@ -279,7 +285,7 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 				if variant == 0 {
 					ls = append(ls, ckLine{label: true, segs: []ckSeg{{t: who, fg: pal.FgDim, attrs: ckBold}, {t: "  " + ckClock(en.At), fg: pal.FgMute}}})
 				}
-				ls = append(ls, m.ckMarkdownFold(l, en.Text, max(width-2, 8), en.ID, t.expandAll || t.folded[en.ID])...)
+				ls = append(ls, m.ckMarkdownFold(l, en.Text, max(width-2, 8), en.ID, t.expandAll || t.folded[en.ID], t)...)
 				return append(ls, ckLine{})
 			})
 			prevText = true
@@ -477,6 +483,8 @@ type ckCardKey struct {
 	sum uint64
 	// root is the folder the card's paths are shown relative to.
 	root string
+	// codeX counts the sideways scrolls of the entry's code blocks.
+	codeX int
 }
 
 // ckAddItem appends a card's lines. A card or a new speaker starts after a
@@ -1279,6 +1287,9 @@ func ckRender(c *ckCanvas, width int, ln ckLine) string {
 	}
 	if ln.mark != "" {
 		c.text(ln.markAt, 0, width, ckSeg{t: ln.mark, fg: ln.markInk})
+	}
+	if ln.lmark != "" && ln.indent > 0 {
+		c.text(ln.indent-1, 0, width, ckSeg{t: ln.lmark, fg: ln.markInk})
 	}
 	return c.render()
 }

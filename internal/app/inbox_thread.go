@@ -148,6 +148,11 @@ type agentThread struct {
 	prompts []int
 	// cards are the entries' cards as last built, by entry id.
 	cards map[string]ckCard
+	// codeX is how far each code block is scrolled sideways, in cells, by
+	// the block's key (ckLine.code), and codeMax how far it can go, written
+	// when its card is built. codeGen counts the scrolls of each entry's
+	// blocks, by entry id, for the entry's card key.
+	codeX, codeMax, codeGen map[string]int
 	// act is the activity row's text as last drawn, "" for no row, and
 	// actAt when it changed to that. actTimed says the thread saw that
 	// activity start, so actAt is when it started, to within one redraw: an

@@ -214,6 +214,9 @@ type cockpitState struct {
 	rowsAt ckRowsKey
 	// hits are the click targets of the last frame.
 	hits []ckHit
+	// code is where the last frame drew the thread's lines, for the wheel
+	// and the keys that scroll a code block sideways.
+	code ckCodeView
 	// lastClick and lastClickKey find a double-click.
 	lastClick    time.Time
 	lastClickKey string
@@ -1798,6 +1801,12 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		return nil, true
 	case config.ActionInboxCodeWrap:
 		m.CockpitCodeWrap()
+		return nil, true
+	case config.ActionInboxCodeLeft:
+		m.CockpitCodeScroll(-1)
+		return nil, true
+	case config.ActionInboxCodeRight:
+		m.CockpitCodeScroll(1)
 		return nil, true
 	case config.ActionInboxArtifact:
 		return m.CockpitArtifactOpen(), true

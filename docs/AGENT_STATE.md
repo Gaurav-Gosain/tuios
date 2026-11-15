@@ -2763,6 +2763,10 @@ conversation, read from its transcript and drawn as cards:
 - A code line wider than the thread is cut, and ends with `…` in the mute ink.
   `W` wraps the long lines of every code block, each wrapped row with `↳` in
   its gutter, and `W` again cuts them. It holds until the client ends.
+- A cut code block scrolls sideways: a sideways wheel or `shift` and the
+  wheel on the block, or `(` and `)` for the lowest such block on screen.
+  Its lines move together, and a line with text left of the view has `…` in
+  its gutter.
 - A command that failed shows the end of its output and a `failed` mark.
 - A call you declined has a `declined` mark, not `failed`, and shows what you
   said with it. Where you stopped the agent, the thread shows one quiet line,

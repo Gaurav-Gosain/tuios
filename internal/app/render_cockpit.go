@@ -341,6 +341,7 @@ func (m *OS) renderCockpit() (string, int, int, int) {
 	ck.canvasTop = top
 	c := ck.canvas
 	ck.hits = ck.hits[:0]
+	ck.code = ckCodeView{}
 	ck.fleetW = 0
 	ck.liveShown = false
 	if ck.spawn != nil {
@@ -383,6 +384,7 @@ func (m *OS) drawCockpitUnderSheet(c *ckCanvas, l ckLook, top int, now time.Time
 		}
 	}
 	ck.hits = ck.hits[:0]
+	ck.code = ckCodeView{}
 	m.drawSpawnSheet(c, l, top)
 }
 
@@ -2550,6 +2552,9 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 		if t != nil && (t.read || t.recap != nil) {
 			t.follow.Apply(threadLayout(t, len(lines), room))
 			start, end = t.follow.Window()
+		}
+		if t != nil && hits != nil {
+			st.ck.code = ckCodeView{t: t, x0: x, x1: right, top: top + base - end, start: start, end: min(end, len(lines))}
 		}
 		for i := start; i < min(end, len(lines)); i++ {
 			y := base - (end - i)
