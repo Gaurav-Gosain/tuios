@@ -678,12 +678,20 @@ func ckInRoot(root, p string) bool {
 }
 
 // ckRelPath is path p as the agent's work shows it: relative to root when p
-// is in it, else with ~ for the home folder. A relative path is kept.
+// is in it, else with ~ for the home folder. A relative path is kept. With
+// root unknown (the pane is in another session or on another machine), it is
+// the path's last three parts, so a long absolute path does not fill the line.
 func ckRelPath(root, p string) string {
 	if !filepath.IsAbs(p) {
 		return p
 	}
-	if root != "" && ckInRoot(root, p) {
+	if root == "" {
+		if parts := strings.Split(strings.TrimPrefix(p, "/"), "/"); len(parts) > 3 {
+			return strings.Join(parts[len(parts)-3:], "/")
+		}
+		return p
+	}
+	if ckInRoot(root, p) {
 		if rel := strings.TrimPrefix(p[len(strings.TrimSuffix(root, "/")):], "/"); rel != "" {
 			return rel
 		}

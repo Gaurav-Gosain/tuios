@@ -2069,6 +2069,9 @@ func TestCockpitSideColumn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The agent works in the repository: its edits are in the pane's
+	// worktree, so the last turn's files list counts them.
+	fixture = bytes.ReplaceAll(fixture, []byte("/src/api/"), []byte(repo+"/"))
 	path := filepath.Join(atProjects(base), "repo", "9a1f0c2e.jsonl")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
