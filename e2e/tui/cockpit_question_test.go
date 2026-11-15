@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -62,7 +61,7 @@ func TestCockpitQuestionShowsItsOptionsAsKeys(t *testing.T) {
 		t.Fatalf("ASSERTION: the question is not a question with its options on the card: %v\n%s", err, term.Snapshot())
 	}
 	saveCockpitFrames(t, term, "cockpit-question-card")
-	time.Sleep(answerSettle)
+	pause(t, "a held question takes an answer key only after it has been on screen for a moment", answerSettle)
 	sendKeys(t, term, "2")
 	waitText(t, term, "the ask before choosing", "Choose 2?")
 	if b, _ := os.ReadFile(got); len(b) > 0 {
