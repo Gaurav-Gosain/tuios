@@ -333,7 +333,7 @@ func (m *OS) applyEchoTick() tea.Cmd {
 // echoQueueCmd reads a pane's queue. restore makes echoes of the person's
 // queued messages the client does not show.
 func (m *OS) echoQueueCmd(host, sessionID, windowID, who string, restore bool) tea.Cmd {
-	call := m.inboxCaller()
+	call := m.queueCaller(host)
 	if call == nil {
 		return nil
 	}
@@ -475,7 +475,7 @@ func (m *OS) echoAction(action string) (tea.Cmd, bool) {
 		if e.state != echoQueued || e.id == "" {
 			return nil, true
 		}
-		call := m.inboxCaller()
+		call := m.queueCaller(e.host)
 		id, sessionID, windowID := e.id, e.session, e.window
 		params := map[string]any{"session": sessionID, "window": windowID, "id": id, "human_nonce": nonce}
 		if e.host != "" {

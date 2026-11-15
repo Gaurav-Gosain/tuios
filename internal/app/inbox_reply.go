@@ -252,8 +252,10 @@ func (m *OS) openInboxReply(sessionID, windowID, who, context string, closeAfter
 			return false
 		}
 	}
-	if !m.inboxCanMark("Replying") {
-		return false
+	// A client attached through a host replies too: the queue verbs go to
+	// that host's daemon, where the pane is (queueCaller).
+	if m.Inbox.call == nil && m.DaemonClient == nil {
+		return m.inboxCanMark("Replying")
 	}
 	if sessionID == "" {
 		sessionID = m.sidebarCurrentSessionID()
@@ -637,6 +639,18 @@ func replyPartsRefusal(parts []composer.Part) string {
 	return ""
 }
 
+// queueCaller is how a queue verb (queue-prompt, list-queued, cancel-queued)
+// and send now reach the queue of a pane. The queue lives in the daemon that
+// runs the pane: on a client attached through a host, that host's daemon,
+// over the link (agentCaller). A pane on another host than that (host set)
+// goes to this machine's daemon, which passes the verb on with host.
+func (m *OS) queueCaller(host string) inboxVerbCall {
+	if host != "" {
+		return m.inboxCaller()
+	}
+	return m.agentCaller()
+}
+
 // inboxQueueCmd sends queue-prompt as the person.
 func (m *OS) inboxQueueCmd(sessionID, windowID, who, text, nonce string, requeue bool, send uint64, parts []composer.Part) tea.Cmd {
 	return m.inboxQueueCmdOn("", sessionID, windowID, who, text, nonce, requeue, send, parts)
@@ -645,7 +659,7 @@ func (m *OS) inboxQueueCmd(sessionID, windowID, who, text, nonce string, requeue
 // inboxQueueCmdOn is inboxQueueCmd for a pane on host, empty for this
 // machine.
 func (m *OS) inboxQueueCmdOn(host, sessionID, windowID, who, text, nonce string, requeue bool, send uint64, parts []composer.Part) tea.Cmd {
-	call := m.inboxCaller()
+	call := m.queueCaller(host)
 	params := map[string]any{"session": sessionID, "window": windowID, "text": text, "human_nonce": nonce}
 	if host != "" {
 		params["host"] = host
@@ -844,7 +858,7 @@ func (m *OS) SidebarAgentCancelQueued(sessionID, windowID string) (tea.Cmd, bool
 	if who == "" {
 		who = shortWindowLabel(windowID)
 	}
-	call := m.inboxCaller()
+	call := m.queueCaller("")
 	return func() tea.Msg {
 		msg := InboxQueueDroppedMsg{Session: sessionID, Window: windowID, Who: who}
 		raw, err := call("list-queued", map[string]any{"session": sessionID, "window": windowID}, inboxReplyTimeout)
