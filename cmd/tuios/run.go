@@ -10,12 +10,12 @@ import (
 	"syscall"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
+	"github.com/Gaurav-Gosain/tuios/internal/localclient"
 	"github.com/Gaurav-Gosain/tuios/internal/server"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -27,30 +27,7 @@ import (
 // here, so standalone, daemon (tuios new), and ssh all honor the same
 // overrides instead of each wiring its own set and drifting apart.
 func loadAndApplyConfig() (*config.UserConfig, *config.Settings) {
-	userConfig, err := config.LoadUserConfig()
-	if err != nil {
-		log.Printf("Warning: Failed to load config, using defaults: %v", err)
-		userConfig = config.DefaultConfig()
-		// The log line above is wiped by the first frame. LoadWarnings reach
-		// the TUI, so the person learns why none of the file applies.
-		userConfig.LoadWarnings = append(userConfig.LoadWarnings,
-			fmt.Sprintf("tuios cannot load config.toml and uses the default settings: %v", err))
-	}
-
-	// What this terminal can draw, from its locale and TERM. It only decides
-	// the glyphs when the config chose no set and --ascii-only was not given;
-	// ApplyAppearanceConfig folds it in. See config.DetectGlyphEnv.
-	env, why := config.DetectGlyphEnv(os.Getenv)
-	seed := config.DefaultSettings()
-	seed.GlyphEnv = env
-	if why != "" {
-		log.Printf("glyphs: %s, so the chrome is drawn with %s glyphs unless a glyph set or --ascii-only is chosen", why, env)
-	}
-
-	// The file is the baseline and the CLI flags win: the option flags are laid
-	// over a copy of the file, and the rest are applied after it.
-	settings := config.ResolveFrom(seed, userConfig, flagOverrides())
-	return userConfig, &settings
+	return localclient.LoadConfig(os.Getenv, flagOverrides())
 }
 
 // flagOverrides collects every interface CLI flag into one Overrides value, so
@@ -131,9 +108,7 @@ func runLocal() error {
 
 	isDaemonSession := os.Getenv("TUIOS_SESSION") != ""
 
-	prw := app.NewPostRenderWriter(os.Stdout)
-
-	initialOS := app.NewOS(app.OSOptions{
+	c := localclient.New(localclient.Stdio(), app.OSOptions{
 		Client:          app.ClientLocal,
 		KeybindRegistry: keybindRegistry,
 		UserConfig:      userConfig,
@@ -141,42 +116,25 @@ func runLocal() error {
 		Overrides:       flagOverrides(),
 		Settings:        settings,
 		IsDaemonSession: isDaemonSession,
-		// One writer for the terminal: frames, kitty and sixel sequences all
-		// serialize on it. Left nil, the passthroughs open their own /dev/tty
-		// and nothing can order their writes against a frame.
-		GraphicsOutput: prw,
-	})
-	initialOS.PostRenderWriter = prw
-	// Sixel images follow the frame they sit on, in the same write.
-	initialOS.ConnectFrameWriter(prw)
-
-	// The shared list, then the one option that is this transport's: the
-	// writer every frame and every graphics sequence serialize on.
-	screenOpts, screenStarted, screenEnded := localScreen(initialOS, prw)
-	p := tea.NewProgram(initialOS, append(app.ProgramOptions(screenOpts...), tea.WithOutput(prw.Output()))...)
-	initialOS.BindProgram(p)
-	screenStarted(p)
+	}, nil)
 
 	// A quit the event loop cannot carry out still has to end the process: a
 	// force-killed ssh client leaves a pty nobody drains, and the frame write
 	// that fills it is what wedges the loop. finish runs once the cleanup
 	// below is done, so a Ctrl+C during it cannot leave the terminal raw. See
 	// armSignalQuit.
-	runReturned, finish := armSignalQuit(p)
+	runReturned, finish := armSignalQuit(c.Program)
 
 	// See withoutHardTabs: tmux drops the background under a tab.
 	restoreTabs := withoutHardTabs()
-	finalModel, err := p.Run()
+	finalModel, err := c.Run()
 	runReturned()
 	restoreTabs()
-	screenEnded()
+	c.Close()
 
 	if finalOS, ok := finalModel.(*app.OS); ok {
 		finalOS.DumpTickStats()
-		finalOS.Cleanup()
-		// The OSC 7501 records this client left on the terminal.
-		_, _ = os.Stdout.WriteString(finalOS.HostProgramStatusClear())
-		_, _ = os.Stdout.WriteString(finalOS.DnDHostClear())
+		c.Finish(finalOS)
 	}
 
 	terminal.ResetTerminal()

@@ -17,8 +17,10 @@
 github.com/Gaurav-Gosain/tuios/cmd/tuios
 github.com/Gaurav-Gosain/tuios/internal/cliflags
 github.com/Gaurav-Gosain/tuios/internal/fang
-# The setup main runs once at start.
+# The setup main runs once at start, and the client entry it builds the
+# client with.
 github.com/Gaurav-Gosain/tuios/internal/procsetup
+github.com/Gaurav-Gosain/tuios/internal/localclient
 github.com/spf13/cobra
 github.com/spf13/pflag
 

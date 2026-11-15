@@ -108,6 +108,13 @@ func TestEveryProgramTakesTheSharedOptions(t *testing.T) {
 			if path == "internal/tutor/tutor.go" && (name == "WithInput" || name == "WithFilter") {
 				return true
 			}
+			// A client on a terminal that is not this process's, such as a
+			// test's pipe, takes its input, environment and colour profile
+			// from the terminal value, as wish and sip supply a session's.
+			if path == "internal/localclient/localclient.go" &&
+				(name == "WithInput" || name == "WithEnvironment" || name == "WithColorProfile") {
+				return true
+			}
 			// The GUI bridge is a transport with no terminal at all: its
 			// input is frames from a renderer, its size is the renderer's
 			// grid, and nothing is drawn.

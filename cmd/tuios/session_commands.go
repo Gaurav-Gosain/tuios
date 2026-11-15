@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
@@ -19,6 +18,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/localclient"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -539,9 +539,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	clientLogf("[CLIENT] Starting read loop")
 	client.StartReadLoop()
 
-	prw := app.NewPostRenderWriter(os.Stdout)
-
-	initialOS := app.NewOS(app.OSOptions{
+	c := localclient.New(localclient.Stdio(), app.OSOptions{
 		Client:          app.ClientLocal,
 		KeybindRegistry: keybindRegistry,
 		UserConfig:      userConfig,
@@ -562,41 +560,21 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		AfterUpgrade:        afterUpgradeFor(host),
 		FollowUpgrades:      host == "",
 		AttachedHost:        host,
-		// One writer for the terminal: frames, kitty and sixel sequences all
-		// serialize on it. Left nil, the passthroughs open their own /dev/tty
-		// and nothing can order their writes against a frame.
-		GraphicsOutput: prw,
-	})
-	initialOS.PostRenderWriter = prw
-	// Sixel images follow the frame they sit on, in the same write.
-	initialOS.ConnectFrameWriter(prw)
-
-	// Everything the daemon sends an attached client, queued for Update. The
-	// same call the SSH server and tuios-web make.
-	initialOS.WireDaemonClient(client)
-
-	initialOS.RestoreAttachedSession(state)
-
-	// The shared list, then the one option that is this transport's: the
-	// writer every frame and every graphics sequence serialize on.
-	screenOpts, screenStarted, screenEnded := localScreen(initialOS, prw)
-	p := tea.NewProgram(initialOS, append(app.ProgramOptions(screenOpts...), tea.WithOutput(prw.Output()))...)
-	initialOS.BindProgram(p)
-	screenStarted(p)
+	}, state)
 
 	// A quit the event loop cannot carry out still has to end the process: a
 	// force-killed ssh client leaves a pty nobody drains, and the frame write
 	// that fills it is what wedges the loop. finish runs once the cleanup
 	// below is done, so a Ctrl+C during it cannot leave the terminal raw. See
 	// armSignalQuit.
-	runReturned, finish := armSignalQuit(p)
+	runReturned, finish := armSignalQuit(c.Program)
 
 	// See withoutHardTabs: tmux drops the background under a tab.
 	restoreTabs := withoutHardTabs()
-	finalModel, err := p.Run()
+	finalModel, err := c.Run()
 	runReturned()
 	restoreTabs()
-	screenEnded()
+	c.Close()
 
 	reason := app.ExitNormal
 	// The client may have switched sessions since it attached, so the name to
@@ -631,10 +609,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		if reason == app.ExitNormal && !killed {
 			finalOS.SyncStateToDaemon()
 		}
-		finalOS.Cleanup()
-		// The OSC 7501 records this client left on the terminal.
-		_, _ = os.Stdout.WriteString(finalOS.HostProgramStatusClear())
-		_, _ = os.Stdout.WriteString(finalOS.DnDHostClear())
+		c.Finish(finalOS)
 	}
 
 	_ = client.Close()
