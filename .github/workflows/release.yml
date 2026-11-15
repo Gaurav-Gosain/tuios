@@ -161,7 +161,7 @@ jobs:
   # hacks, so the ghostty-tagged darwin artifacts build natively on a mac
   # runner and attach to the same release.
   ghostty-darwin:
-    runs-on: macos-14
+    runs-on: macos-15
     needs: [library-pins, goreleaser]
     # Runs after GoReleaser, or alone when a dispatch skipped it. Never when
     # the library pins failed: GoReleaser is then skipped too, and its skipped
