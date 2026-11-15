@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -247,17 +248,28 @@ func (f *streamFrames) until(step string, cond func(string) bool) {
 	}
 }
 
-// settle records frames until the screen has not changed for a while.
+// settle records frames until the screen has not changed for 600 ms. Each
+// wait returns on the next change, and one that times out has seen the screen
+// hold still for the whole window. A wait re-checks its condition only when
+// the screen can change, so a condition that read the clock would never see
+// the window end.
 func (f *streamFrames) settle(step string) {
 	f.t.Helper()
-	last, since := "", time.Now()
-	_ = f.term.WaitFor(func(s tuitest.Screen) bool {
-		text := f.record(step, s)
-		if text != last {
-			last, since = text, time.Now()
+	deadline := time.Now().Add(uiTimeout)
+	last := f.record(step, f.term.Screen())
+	for time.Now().Before(deadline) {
+		err := f.term.WaitFor(func(s tuitest.Screen) bool {
+			return f.record(step, s) != last
+		}, 600*time.Millisecond)
+		if errors.Is(err, tuitest.ErrTimeout) {
+			return
 		}
-		return time.Since(since) > 600*time.Millisecond
-	}, uiTimeout)
+		if err != nil {
+			f.write()
+			f.t.Fatalf("settling after %s: %v", step, err)
+		}
+		last = f.term.Screen().Text()
+	}
 }
 
 // write saves the frame strip into the test's artifact folder: every frame

@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -252,14 +253,16 @@ func TestSubagentHideTimer(t *testing.T) {
 	}
 	waitCapture(t, base, "e2e-sub", "0", "FAKE-AT two-ended")
 	ended := time.Now()
-	// The rows of the two that ended stay, muted, until the hide is due.
-	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return time.Since(ended) >= 4*time.Second
-	}, 10*time.Second); err != nil {
-		t.Fatal(err)
-	}
-	if l := railText(term.Screen(), w, false); !finished(l) {
+	// The rows of the two that ended stay, muted, until the hide is due: a
+	// wait for them to go must run out 4 seconds after the end.
+	err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !finished(railText(s, w, false))
+	}, time.Until(ended.Add(4*time.Second)))
+	if err == nil {
 		t.Fatalf("the finished rows went %.1fs after the end, before the 8s hide:\n%s", time.Since(ended).Seconds(), term.Snapshot())
+	}
+	if !errors.Is(err, tuitest.ErrTimeout) {
+		t.Fatal(err)
 	}
 	saveFrame(t, term, "subagent-hide-timer-before")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
