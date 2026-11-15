@@ -92,22 +92,28 @@ func NewPostRenderWriter(out io.Writer) *PostRenderWriter {
 func (w *PostRenderWriter) File() *os.File { return w.file }
 
 // Output is the writer a program renders to. On a file it is a term.File
-// whose Write is this writer's, as the writer once was by embedding the
-// file, so Bubble Tea reads the size and sets the modes through it.
+// whose Write is this writer's, so Bubble Tea reads the size and sets the
+// modes through it.
 func (w *PostRenderWriter) Output() io.Writer {
 	if w.file == nil {
 		return w
 	}
-	return postRenderFile{File: w.file, w: w}
+	return &postRenderFile{f: w.file, w: w}
 }
 
 // postRenderFile is the terminal file with its writes taken by the writer.
+// It has the term.File methods only: embedding the *os.File would add a
+// wrapper for each of its methods to the binary, and a WriteString that
+// goes round the writer.
 type postRenderFile struct {
-	*os.File
+	f *os.File
 	w *PostRenderWriter
 }
 
-func (f postRenderFile) Write(p []byte) (int, error) { return f.w.Write(p) }
+func (f *postRenderFile) Read(p []byte) (int, error)  { return f.f.Read(p) }
+func (f *postRenderFile) Write(p []byte) (int, error) { return f.w.Write(p) }
+func (f *postRenderFile) Close() error                { return f.f.Close() }
+func (f *postRenderFile) Fd() uintptr                 { return f.f.Fd() }
 
 // writeOut writes buf to the terminal, straight to the file when it is one.
 func (w *PostRenderWriter) writeOut(buf []byte) (int, error) {
