@@ -222,7 +222,10 @@ func (p *inline) emphasis(s string, i, n, depth int, miss *misses) (end int, add
 	if miss.delim[ci][k] != 0 && i >= miss.delim[ci][k] {
 		return 0, 0, false
 	}
-	for j := i + n + 1; j < len(s); j++ {
+	// From the byte after the run: a code span can start right after the
+	// opener, as in **`main.go`:**, and has to be seen whole so its
+	// backticks hide what is inside it and nothing outside it.
+	for j := i + n; j < len(s); j++ {
 		switch s[j] {
 		case '\\':
 			j++

@@ -1,0 +1,2 @@
+go test fuzz v1
+string("- **`main.go`:** moved the logic into a `run(args, out)` function.\n- **`main_test.go`:** covers `--json` and `-json`.\n")
