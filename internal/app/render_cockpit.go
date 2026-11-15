@@ -574,12 +574,30 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 	if m.cockpitSearched() {
 		// The list is narrowed by the search line, which may be shut, so the
 		// header says so, with how much it shows. A click shows all.
+		// The count is of agents: rows that are only an item (a pane with
+		// a state and no agent entry) leave it at 0 of 0, which says
+		// nothing, so the chip then says only that the list is filtered.
+		count := "Filtered"
+		if st.agents.total > 0 {
+			count = strconv.Itoa(len(ck.agents)) + " of " + strconv.Itoa(st.agents.total) + " agents"
+		}
 		segs := []ckSeg{
-			{t: strconv.Itoa(len(ck.agents)) + " of " + strconv.Itoa(st.agents.total) + " agents", fg: pal.Attention, attrs: ckBold},
+			{t: count, fg: pal.Attention, attrs: ckBold},
 			{t: " · esc shows all", fg: pal.FgDim},
 		}
 		if l.ascii {
 			segs[1].t = " - esc shows all"
+		}
+		// The search box shows the text that narrows the list, which says
+		// more than the chip's words: the words go first when the box would
+		// cut its text.
+		q := strings.TrimSpace(st.Select + " " + st.agents.query)
+		rest := ckWidth(ckSeg{t: "Board  "}) + 3 + ckWidth(ckSeg{t: " + New agent "}) + 2 + min(38, ckWidth(ckSeg{t: q})+5)
+		if !ck.board {
+			rest += ckWidth(ckSeg{t: "Group: " + m.ckGroupingName() + "  "}) + 3
+		}
+		if x+ckWidth(segs...)+3+rest > c.w-2 {
+			segs = segs[:1]
 		}
 		x0 := x
 		w := ckWidth(segs...) + 2
