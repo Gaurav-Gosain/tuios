@@ -134,6 +134,7 @@ func TestCockpitThreadMailCards(t *testing.T) {
 	waitText(t, term, "gamma in the fleet", "gamma")
 	cli("close-window", "-s", "api", gamma)
 	scrollUntil(t, term, "K", "retest please")
+	scrollToCardHead(t, term, "retest please", "Sent to")
 	_ = term.WaitStable(uiTimeout)
 	saveCockpitFrames(t, term, "mail-cards-alpha", hostPictures(t, []byte(host.String()))...)
 
@@ -141,7 +142,7 @@ func TestCockpitThreadMailCards(t *testing.T) {
 	if !strings.Contains(text, "Sent to") {
 		t.Fatalf("ASSERTION: no message card in alpha's thread\n%s", term.Snapshot())
 	}
-	sent, _ := findText(t, term, "retest please")
+	sent := scrollToCardHead(t, term, "retest please", "Sent to")
 	if line := term.Screen().Line(sent - 1); !strings.Contains(line, "Sent to") || !strings.Contains(line, "beta") || !strings.Contains(line, "claude") || strings.Contains(line, beta[:8]) {
 		t.Fatalf("ASSERTION: the card does not name beta by its name and harness: %q\n%s", line, term.Snapshot())
 	}
@@ -169,9 +170,7 @@ func TestCockpitThreadMailCards(t *testing.T) {
 	waitText(t, term, "the jump to a closed agent", "gamma is closed.")
 
 	// A click on beta's name selects beta.
-	scrollUntil(t, term, "K", "retest please")
-	_ = term.WaitStable(uiTimeout)
-	sent, _ = findText(t, term, "retest please")
+	sent = scrollToCardHead(t, term, "retest please", "Sent to")
 	headRow := sent - 1
 	col := strings.Index(term.Screen().Line(headRow), "beta")
 	if col < 0 {
@@ -270,4 +269,25 @@ func mailFirstID(t *testing.T, out string) string {
 		t.Fatalf("the send printed no message id: %q", out)
 	}
 	return f[1]
+}
+
+// scrollToCardHead presses K until the card whose text has want shows its
+// head line, the line above want, and returns want's row.
+func scrollToCardHead(t *testing.T, term *tuitest.Terminal, want, head string) int {
+	t.Helper()
+	for range 15 {
+		s := term.Screen()
+		_, rows := s.Size()
+		for r := 1; r < rows; r++ {
+			if strings.Contains(s.Line(r), want) && strings.Contains(s.Line(r-1), head) {
+				return r
+			}
+		}
+		if err := term.SendKeys("K"); err != nil {
+			t.Fatal(err)
+		}
+		_ = term.WaitStable(uiTimeout)
+	}
+	t.Fatalf("ASSERTION: the card head %q over %q never showed while pressing K\n%s", head, want, term.Snapshot())
+	return 0
 }
