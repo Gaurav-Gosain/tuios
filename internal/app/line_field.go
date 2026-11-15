@@ -14,6 +14,12 @@ import (
 // through clean first, which keeps what the field may hold; a key whose text
 // clean drops entirely is spent and changes nothing. clean may be nil.
 func lineKey(l *textedit.Line, key, text string, clean func(string) string) (changed, consumed bool) {
+	return lineKeyWith(l, key, text, clean, textedit.LineOpts{AllowClear: true})
+}
+
+// lineKeyWith is lineKey with the field's options, for a field that draws a
+// selection (LineOpts.Select).
+func lineKeyWith(l *textedit.Line, key, text string, clean func(string) string, o textedit.LineOpts) (changed, consumed bool) {
 	if key == "space" {
 		text = " "
 	}
@@ -22,7 +28,7 @@ func lineKey(l *textedit.Line, key, text string, clean func(string) string) (cha
 			return false, true
 		}
 	}
-	return l.Edit(key, text, textedit.LineOpts{AllowClear: true})
+	return l.Edit(key, text, o)
 }
 
 // lineInsert types s at a one-line field's caret, as a paste does, after
@@ -49,10 +55,16 @@ func cleanName(text string) string {
 // with its caret (overlay.FieldLine) in the rest of width, less one cell of
 // right pad so the caret never sits against the frame.
 func fieldRow(l *textedit.Line, width int, bg color.Color, pal overlay.Palette) string {
+	head := overlay.Style(bg).Render(" ") +
+		overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(overlay.Sigil())
+	if lo, hi, ok := l.Selection(); ok {
+		// The selection wears the palette's selection ground, the one the
+		// composer's selected text wears.
+		return head + overlay.FieldLineSelect(l.String(), l.Caret(), lo, hi, max(width-4, 1), bg, pal.Fg,
+			pal.Selected, overlay.Readable(pal.Fg, pal.Selected))
+	}
 	before, at, after := l.Parts()
-	return overlay.Style(bg).Render(" ") +
-		overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(overlay.Sigil()) +
-		overlay.FieldLine(before, at, after, max(width-4, 1), bg, pal.Fg)
+	return head + overlay.FieldLine(before, at, after, max(width-4, 1), bg, pal.Fg)
 }
 
 // cleanControl drops the control characters from typed or pasted text, for a

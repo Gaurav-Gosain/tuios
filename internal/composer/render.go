@@ -216,14 +216,13 @@ func (m *Model) renderRow(b *strings.Builder, row vline, hasCursor bool, textW i
 		if hasCursor && i == m.cur {
 			flush()
 			if inSpan {
-				// The cursor at the start of a selection is drawn over
-				// the selection's colours; at 16 colours, where the
-				// selection is reversed, it is the one cell that is not.
-				if in.st.Plain {
-					b.WriteString(on(in.field).Foreground(in.text).Underline(true).Render(cursorText(c)))
-				} else {
-					b.WriteString(cursor(cursorText(c), in.span, in.spanText))
-				}
+				// The cursor at the start of a selection, a selection
+				// grown to the left, keeps the selection's colours like
+				// every selected cell, and is marked as the caret the way
+				// the caret after a selection grown to the right is: bold
+				// and underlined. Drawn reversed it read as a dim cell, and
+				// the selection as one cell short.
+				b.WriteString(spanStyle.Bold(true).Underline(true).Render(cursorText(c)))
 			} else {
 				b.WriteString(m.caretAt(cursorText(c), selecting, in))
 			}
@@ -442,12 +441,13 @@ func (o Options) hints(k hintsKey) []Hint {
 	)
 }
 
-// caretAt draws the cursor cell outside a selection. At 16 colours, where the
-// selection is reversed, a cursor at its edge is underlined: two reversed
-// spans side by side read as one bar with no cursor in it.
+// caretAt draws the cursor cell outside a selection. While a selection is up
+// the caret is bold and underlined in the field's colours, the look it has on
+// a selected cell, so it reads the same whichever way the selection grew. With
+// none it is the block.
 func (m *Model) caretAt(ch string, selecting bool, in inks) string {
-	if selecting && in.st.Plain {
-		return on(in.field).Foreground(in.text).Underline(true).Render(ch)
+	if selecting {
+		return on(in.field).Foreground(in.text).Bold(true).Underline(true).Render(ch)
 	}
 	return cursor(ch, in.field, in.text)
 }

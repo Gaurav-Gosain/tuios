@@ -809,6 +809,9 @@ func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Every other key is the editor's: the caret, the word keys, ctrl+u, and
 	// the text the key press carries, so an accented or wide rune arrives
 	// whole instead of as stray bytes.
+	if cmd, ok := o.RenameClipboard(msg.String()); ok {
+		return o, cmd
+	}
 	o.RenameKey(msg.String(), msg.Text)
 	return o, nil
 }

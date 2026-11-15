@@ -9,6 +9,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 )
 
 // RenameKind names what an in-progress rename points at. There is one rename
@@ -111,11 +112,31 @@ func (m *OS) RenameKey(key, text string) bool {
 	if !m.Renaming() {
 		return false
 	}
-	changed, consumed := lineKey(&m.rename, key, text, m.renameClean)
+	// The rename dialog draws a selection (fieldRow), so shift with a move
+	// selects in it.
+	changed, consumed := lineKeyWith(&m.rename, key, text, m.renameClean, textedit.LineOpts{AllowClear: true, Select: true})
 	if changed {
 		m.renameChanged()
 	}
 	return consumed
+}
+
+// RenameClipboard copies the selected text of the rename field on super+c,
+// and cuts it on super+x, as the composer does. handled is false for any
+// other key, and for those keys with nothing selected.
+func (m *OS) RenameClipboard(key string) (tea.Cmd, bool) {
+	if !m.Renaming() || (key != "super+c" && key != "super+x") {
+		return nil, false
+	}
+	text := m.rename.SelectedText()
+	if text == "" {
+		return nil, false
+	}
+	if key == "super+x" {
+		m.rename.Edit("delete", "", textedit.LineOpts{Select: true})
+		m.renameChanged()
+	}
+	return m.CopyToClipboard(text), true
 }
 
 // RenameClear empties the editor, so a name can be retyped from scratch.

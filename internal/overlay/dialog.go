@@ -284,6 +284,62 @@ func FieldLine(before, at, after string, width int, bg, fg color.Color) string {
 	return text.Render(before) + Cursor(caret, bg, fg) + text.Render(after)
 }
 
+// FieldLineSelect is FieldLine for a field with text selected: text, the
+// caret's byte offset into it, and the selection's byte offsets [lo, hi). Every
+// selected cell wears selBg with selFg, at 16 colours (selBg NoColor) in
+// reverse. While a selection is up the caret is the cell at its moving end,
+// bold and underlined in that cell's own colours, so it looks the same
+// whichever way the selection grew, and never covers a selected cell's colour.
+func FieldLineSelect(text string, caret, lo, hi, width int, bg, fg, selBg, selFg color.Color) string {
+	if width <= 0 {
+		return ""
+	}
+	caret = min(max(caret, 0), len(text))
+	// The caret's cell, " " past the end.
+	at := " "
+	if caret < len(text) {
+		at, _ = firstRune(text[caret:])
+	}
+	start := 0
+	room := width - ansi.StringWidth(at)
+	for room >= 0 && ansi.StringWidth(text[start:caret]) > room && start < caret {
+		_, size := firstRune(text[start:])
+		start += size
+	}
+	plain := Style(bg).Foreground(fg)
+	sel := Style(selBg).Foreground(selFg)
+	if selBg == nil || isNoColor(selBg) {
+		sel = Style(bg).Foreground(fg).Reverse(true)
+	}
+	var b strings.Builder
+	used := 0
+	for i := start; i < len(text) || i == caret; {
+		ch := " "
+		size := 1
+		if i < len(text) {
+			ch, size = firstRune(text[i:])
+		}
+		w := ansi.StringWidth(ch)
+		if used+w > width {
+			break
+		}
+		style := plain
+		if i >= lo && i < hi {
+			style = sel
+		}
+		if i == caret {
+			style = style.Bold(true).Underline(true)
+		}
+		b.WriteString(style.Render(ch))
+		used += w
+		if i >= len(text) {
+			break
+		}
+		i += size
+	}
+	return b.String()
+}
+
 // firstRune is the first character of s and its size in bytes.
 func firstRune(s string) (string, int) {
 	for i := range s {

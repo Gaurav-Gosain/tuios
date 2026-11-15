@@ -17805,3 +17805,22 @@ Run on 2026-11-15 on macOS. The branch passes both tests.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^Test(Pane|Cockpit)PathsOpenInQuickLook$' -v .`.
+
+## The rename field selects, and a selection looks the same both ways
+
+`TestRenameFieldSelects` selects "gamma" right to left and "alpha" left to
+right in the window rename, reading the cells: one ground for the selected
+cells, and the caret as the underlined cell at the moving end.
+`TestComposerSelectionLooksTheSameBothWays` does the same in the new agent
+sheet's task box, and no selected cell may be reversed.
+`TestRenameFieldWordKeys` moves by words with each terminal's bytes.
+
+Run on 2026-11-15 on macOS. The branch passes all three, three runs in a row.
+On main `TestRenameFieldSelects` and `TestComposerSelectionLooksTheSameBothWays`
+fail: shift with an arrow selects nothing in the field, and right to left the
+composer draws the first selected cell reversed. `TestRenameFieldWordKeys`
+passes on main too: those four spellings already moved by words in the window
+rename, so it guards them and is not a negative control.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^Test(RenameField|ComposerSelection)' -v .`.
