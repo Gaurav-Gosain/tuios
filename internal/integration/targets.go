@@ -745,6 +745,11 @@ type Status struct {
 	// program status was asked about: an install made with --command. It is
 	// not out of date.
 	OtherProgram bool `json:"other_program,omitempty"`
+	// Differs says, in words, how an install of this build's version differs
+	// from the one this tuios writes: a hook missing, a hook too many, or a
+	// command of another shape. It is empty when the install is current or
+	// carries another version, which the version itself explains.
+	Differs []string `json:"differs,omitempty"`
 	// Unreadable says a file of the integration could not be read or parsed,
 	// so the rest of the status is not known. Notes says which file.
 	Unreadable  bool     `json:"unreadable,omitempty"`
@@ -831,6 +836,9 @@ func (t *Target) Status(env Env, tuios string) Status {
 				break
 			}
 		}
+		if !st.OtherProgram && st.Version == st.WantVersion {
+			st.Differs = t.differences(env, files, tuios)
+		}
 	}
 	st.Notes = append(st.Notes, t.notes(env)...)
 	return st
@@ -853,6 +861,31 @@ func (t *Target) stateOf(env Env, files [][]byte, tuios string) (installed, curr
 		allCurrent = allCurrent && cur
 	}
 	return installed, installed && allCurrent, version, nil
+}
+
+// differences asks each hook file how it differs from what tuios would
+// write. A file whose format cannot say is named whole.
+func (t *Target) differences(env Env, files [][]byte, tuios string) []string {
+	run := t.runner(env, tuios)
+	var out []string
+	for i, f := range t.files(env) {
+		if _, cur, _, err := f.format.state(t, files[i], run); err != nil || cur {
+			continue
+		}
+		path := filepath.Join(t.ConfigDir(env), f.file)
+		d, ok := f.format.(hookDiffer)
+		if !ok || files[i] == nil {
+			out = append(out, path+" is not the file this tuios writes")
+			continue
+		}
+		words, err := d.differs(t, files[i], run)
+		if err != nil || len(words) == 0 {
+			out = append(out, path+" is not the file this tuios writes")
+			continue
+		}
+		out = append(out, words...)
+	}
+	return out
 }
 
 // installedPrograms lists the programs the integration's files name for its

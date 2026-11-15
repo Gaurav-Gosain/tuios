@@ -1,6 +1,9 @@
 package integration
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // The report tuios doctor agents prints and the settings page's Agents tab
 // draws. Both read it from here, so the two can never disagree about what is
@@ -117,6 +120,9 @@ func (s Status) Verdict() string {
 		}
 		return fmt.Sprintf("installed, current (v%d)", s.Version)
 	case StateOutOfDate:
+		if s.Version == s.WantVersion && len(s.Differs) > 0 {
+			return "installed, out of date: " + strings.Join(s.Differs, "; ") + ": run tuios integration install " + s.Harness
+		}
 		return fmt.Sprintf("installed, out of date (v%d, this tuios installs v%d): run tuios integration install %s", s.Version, s.WantVersion, s.Harness)
 	case StateNotRun:
 		return "not installed; " + s.Name + " has not run here"
