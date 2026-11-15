@@ -17765,3 +17765,20 @@ Run on 2026-11-15 on macOS. The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitThreadCodeBlockCopy$' -v .`.
+
+## The Talked with line names who an agent mailed, newest first
+
+`TestCockpitTalkedWith` has alpha mail four agents through the real CLI and
+beta reply last. alpha's header must show a chip per agent with its count,
+newest exchange first, fold what does not fit at 80 columns into a "+N" chip
+that opens the rest, and show no line for an agent with no mail.
+
+Run on 2026-11-15 on macOS. The branch passes the test.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| A build of origin/main, which has no Talked with line | "no Talked with line in alpha's header" | **caught** |
+| `ckTalkedWith` keeps the ring's order and does not sort by the newest exchange | "the chips are not newest first" (beta, gamma, delta, eps) | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitTalkedWith$' -v .`.

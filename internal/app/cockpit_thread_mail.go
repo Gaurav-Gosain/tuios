@@ -813,6 +813,12 @@ func (m *OS) ckPeerGo(e sidebarAgentEntry, t *agentThread, id string) tea.Cmd {
 		m.cockpitTouch()
 		return nil
 	}
+	return m.ckGoPeer(e, t, p)
+}
+
+// ckGoPeer selects the agent p, and leaves the thread of e on the jump
+// list. A closed agent, or one the fleet does not show, is said so.
+func (m *OS) ckGoPeer(e sidebarAgentEntry, t *agentThread, p ckPeer) tea.Cmd {
 	if p.key == "" {
 		if p.closed {
 			m.ShowNotification(p.name+" is closed. Its thread is gone.", "info", m.Settings.NotificationDuration)
@@ -821,7 +827,10 @@ func (m *OS) ckPeerGo(e sidebarAgentEntry, t *agentThread, id string) tea.Cmd {
 		}
 		return nil
 	}
-	jump := ckJump{key: agentKey(e), up: t.follow.Up, pill: t.pill}
+	jump := ckJump{key: agentKey(e)}
+	if t != nil {
+		jump.up, jump.pill = t.follow.Up, t.pill
+	}
 	cmd, found := m.cockpitOpenAgentOK(p.key)
 	if !found {
 		m.ShowNotification(p.name+" is not in the list now. Clear the filter or the search to see it.", "info", m.Settings.NotificationDuration)

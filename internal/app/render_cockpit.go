@@ -2439,12 +2439,20 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 	}
 	// The third line: the pane's return note, else its session's, dim. The
 	// rule moves down to make room for it when the header is tight.
+	line := y + 2
 	if note := m.cockpitNote(r, e); note != "" {
 		c.text(x, y+2, right, ckSeg{t: overlay.Truncate(printableTitle(note), max(w, 1)), fg: pal.FgDim})
 		rule = max(rule, y+3)
 		if c.h >= 30 {
 			// The gap under the header stays, one line lower.
 			rule = y + 4
+		}
+		line = y + 3
+	}
+	if r.agent >= 0 && m.drawTalkedWith(c, l, e, x, line, w, top) {
+		rule = max(rule, line+1)
+		if c.h >= 30 {
+			rule = max(rule, line+2)
 		}
 	}
 	rule = m.drawFocusTabs(c, l, m.cockpitTabs(e, r), x, w, rule, top)

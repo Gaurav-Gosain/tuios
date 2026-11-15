@@ -4,6 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
 // The agents view's header menus. The Board, Group and machine controls each
@@ -26,7 +27,7 @@ type ckMenu struct {
 type ckAnchor struct{ x, y, w int }
 
 // ckMenuControls are the header controls that open a menu, by action.
-var ckMenuControls = map[string]bool{"board": true, "group": true, "scope": true}
+var ckMenuControls = map[string]bool{"board": true, "group": true, "scope": true, "talked": true}
 
 // CockpitMenuOpen reports whether a header menu is open.
 func (m *OS) CockpitMenuOpen() bool { return m.Inbox.ck.menu != nil }
@@ -85,6 +86,20 @@ func (m *OS) cockpitMenuItems(action string) ([]ddItem, []func(m *OS) tea.Cmd) {
 			m.cockpitTouchRows()
 			return nil
 		})
+	case "talked":
+		// The agents the Talked with line had no room for.
+		e, ok := m.cockpitAgent()
+		if !ok {
+			break
+		}
+		for _, tp := range m.ckTalkedWith(e)[ck.talkShown:] {
+			note := plural.Count(tp.n, "message")
+			if tp.peer.closed {
+				note += sepWord() + "closed"
+			}
+			window := tp.window
+			add(ddItem{label: tp.peer.name, note: note, muted: tp.peer.key == ""}, func(m *OS) tea.Cmd { return m.cockpitTalkClick(window) })
+		}
 	case "scope":
 		scope := m.ckScope()
 		one := func(label, host string) {

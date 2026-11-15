@@ -2260,6 +2260,8 @@ Inside it:
 | `w` | Hide the side column, or show it again |
 | `Z` | Show the focused region alone. `Z` or `esc` gives the whole view back |
 
+The focus header has a Talked with line when the agent has sent or got mail or asks: a chip for each agent, the newest exchange first, with how many messages went between them. A click on a chip opens that agent's thread, and `ctrl+o` comes back. The agents the line has no room for are in a `+N` chip, which opens them as a menu. An agent with no mail has no line.
+
 The region that has the keys wears an accent rule along its top edge, and
 the key bar names it at the left and shows its keys. In the focus, `j` `k`
 scroll the thread a line, the page keys a screen, and `g` `G` go to its ends;

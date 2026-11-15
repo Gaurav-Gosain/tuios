@@ -278,6 +278,11 @@ type cockpitState struct {
 	// after they close so a card can name one. See cockpit_thread_mail.go.
 	jumps []ckJump
 	seen  map[string]ckSeenAgent
+	// talk is the Talked with line's agents as last worked out, and
+	// talkShown how many chips the header had room for. See
+	// cockpit_talked.go.
+	talk      ckTalkCache
+	talkShown int
 	// look is the palette the frames are drawn with, and lookAt what it
 	// was built from. canvas is the grid kept from frame to frame.
 	look   ckLook
@@ -1449,7 +1454,7 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 	switch action {
 	case "new":
 		return m.CockpitNewAgent()
-	case "group", "board", "scope":
+	case "group", "board", "scope", "talked":
 		m.cockpitOpenMenu(action)
 		return nil
 	case "dispatch-mode":
@@ -1536,6 +1541,9 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 				return m.replyMentionCmd()
 			}
 			return nil
+		}
+		if id, ok := strings.CutPrefix(action, "talk:"); ok {
+			return m.cockpitTalkClick(id)
 		}
 		if id, ok := strings.CutPrefix(action, "peer:"); ok {
 			return m.cockpitPeerClick(id)
