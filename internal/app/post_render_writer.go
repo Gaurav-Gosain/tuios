@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// PostRenderWriter wraps *os.File (stdout) to intercept bubbletea's
+// PostRenderWriter wraps the client's terminal (stdout) to intercept bubbletea's
 // frame output and append queued graphics data (OSC 66 text sizing)
 // after each write. This ensures OSC 66 multicell characters are written
 // AFTER bubbletea's cell-based rendering, preventing overwrites.
@@ -17,17 +17,22 @@ import (
 // renderer, the kitty and sixel passthroughs, and the text-sizing and
 // cursor-shape paths all write to the terminal from different goroutines,
 // and what keeps one from landing inside another's escape sequence is that
-// they share this *os.File: the runtime takes a per-file write lock, so
-// each Write is delivered whole even when the terminal takes it in pieces.
-// A second, private open of /dev/tty would be a different file with a
-// different lock and therefore no ordering at all against a frame. Callers
-// must hand a whole sequence to one Write; a sequence emitted in parts can
-// still be split at the seams between them.
+// they share this writer: its lock is held across each write, and on a
+// file the runtime also takes a per-file write lock, so each Write is
+// delivered whole even when the terminal takes it in pieces. A second,
+// private open of /dev/tty would be a different file with a different lock
+// and therefore no ordering at all against a frame. Callers must hand a
+// whole sequence to one Write; a sequence emitted in parts can still be
+// split at the seams between them.
 //
-// It fully satisfies the term.File interface (io.ReadWriteCloser + Fd)
-// by embedding *os.File and only overriding Write.
+// The terminal is any io.Writer: a test hands it a pipe. Output is what the
+// program writes to; on a real file it is also a term.File, so Bubble Tea
+// sees a terminal.
 type PostRenderWriter struct {
-	*os.File
+	out io.Writer
+	// file is out when out is a file, nil otherwise. A write to it is a
+	// direct call, not one through the interface.
+	file    *os.File
 	mu      sync.Mutex
 	pending []byte
 	// frameHook edits each frame and returns output that must follow it:
@@ -77,8 +82,39 @@ func (w *PostRenderWriter) AddEraseHook(fn func(kept bool) []byte) {
 	w.mu.Unlock()
 }
 
-func NewPostRenderWriter(f *os.File) *PostRenderWriter {
-	return &PostRenderWriter{File: f}
+// NewPostRenderWriter wraps out, the terminal the client draws on.
+func NewPostRenderWriter(out io.Writer) *PostRenderWriter {
+	f, _ := out.(*os.File)
+	return &PostRenderWriter{out: out, file: f}
+}
+
+// File is the terminal file under the writer, or nil when it is not a file.
+func (w *PostRenderWriter) File() *os.File { return w.file }
+
+// Output is the writer a program renders to. On a file it is a term.File
+// whose Write is this writer's, as the writer once was by embedding the
+// file, so Bubble Tea reads the size and sets the modes through it.
+func (w *PostRenderWriter) Output() io.Writer {
+	if w.file == nil {
+		return w
+	}
+	return postRenderFile{File: w.file, w: w}
+}
+
+// postRenderFile is the terminal file with its writes taken by the writer.
+type postRenderFile struct {
+	*os.File
+	w *PostRenderWriter
+}
+
+func (f postRenderFile) Write(p []byte) (int, error) { return f.w.Write(p) }
+
+// writeOut writes buf to the terminal, straight to the file when it is one.
+func (w *PostRenderWriter) writeOut(buf []byte) (int, error) {
+	if w.file != nil {
+		return w.file.Write(buf)
+	}
+	return w.out.Write(buf)
 }
 
 // frameSyncBegin and frameSyncEnd bracket a synchronized update (DEC private
@@ -220,7 +256,7 @@ func (w *PostRenderWriter) write(p []byte, frame bool) (n int, err error) {
 		buf = appendInsideSync(buf, out, pending)
 	}
 
-	if _, err = w.File.Write(buf); err != nil {
+	if _, err = w.writeOut(buf); err != nil {
 		return 0, err
 	}
 	if bytes.Contains(pending, kittyGraphicsStart) || (!frame && bytes.Contains(out, kittyGraphicsStart)) {
@@ -237,7 +273,7 @@ func (w *PostRenderWriter) write(p []byte, frame bool) (n int, err error) {
 func (w *PostRenderWriter) writeRepaint() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	_, _ = w.File.Write(emptySyncUpdate)
+	_, _ = w.writeOut(emptySyncUpdate)
 }
 
 // QueuePostRender queues data to be written after bubbletea's next Write.

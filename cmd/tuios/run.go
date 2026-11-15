@@ -155,7 +155,7 @@ func runLocal() error {
 	// The shared list, then the one option that is this transport's: the
 	// writer every frame and every graphics sequence serialize on.
 	screenOpts, screenStarted, screenEnded := localScreen(initialOS, prw)
-	p := tea.NewProgram(initialOS, append(app.ProgramOptions(screenOpts...), tea.WithOutput(prw))...)
+	p := tea.NewProgram(initialOS, append(app.ProgramOptions(screenOpts...), tea.WithOutput(prw.Output()))...)
 	initialOS.BindProgram(p)
 	screenStarted(p)
 

@@ -19,8 +19,8 @@ import "os/exec"
 // (SSH, whose output is the SSH session) keeps Bubble Tea's default, since
 // os.Stdout there is the server's.
 func (m *OS) editorCommand(c *exec.Cmd) *exec.Cmd {
-	if prw := m.PostRenderWriter; prw != nil {
-		c.Stdout = prw.File
+	if prw := m.PostRenderWriter; prw != nil && prw.File() != nil {
+		c.Stdout = prw.File()
 	}
 	return c
 }
