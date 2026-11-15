@@ -94,14 +94,17 @@ func TestNewAgentIsNamedFromItsBranchOrTask(t *testing.T) {
 	saveFrame(t, term, "agent-names")
 	// The worktree agent's focus names its branch once: the session, named
 	// after the branch, is not beside it.
+	// The view drops a key in the moment after it opens, so a move can
+	// be lost: wait for the focus after each one, then move again.
 	found := false
-	for range 4 {
-		if strings.Contains(term.Screen().Text(), "agent/add-json-flag") {
+	for range 5 {
+		if term.WaitFor(func(s tuitest.Screen) bool {
+			return strings.Contains(s.Text(), "agent/add-json-flag")
+		}, 2*time.Second) == nil {
 			found = true
 			break
 		}
 		sendKeys(t, term, "j")
-		_ = term.WaitStable(time.Second)
 	}
 	if !found {
 		t.Fatalf("the worktree agent's focus never showed its branch:\n%s", term.Snapshot())
