@@ -412,8 +412,9 @@ func TestHintCustomPattern(t *testing.T) {
 }
 
 // TestHintCtrlOpensAPath opens a path with Ctrl and its label. A path opens in
-// a new pane running $EDITOR, the way a file link does; here the editor is
-// tail, so the file's text on screen is the proof it opened.
+// quick look, the way a file link does, and e there opens it in a new pane
+// running $EDITOR; here the editor is tail, so the file's text in the new
+// pane is the proof it opened.
 func TestHintCtrlOpensAPath(t *testing.T) {
 	out := &lockedBuffer{}
 	base := t.TempDir()
@@ -444,7 +445,16 @@ func TestHintCtrlOpensAPath(t *testing.T) {
 	if err := term.SendKeys(keys...); err != nil {
 		t.Fatalf("type ctrl+%s: %v", label, err)
 	}
-	waitWindowCount(t, term, 2, "opening the path in a new pane")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "OPENED-BY-HINTS") && strings.Contains(s.Text(), "Inside the file")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the path did not open in quick look: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "hints-quick-look")
+	if err := term.SendKeys("e"); err != nil {
+		t.Fatalf("e: %v", err)
+	}
+	waitWindowCount(t, term, 2, "opening the path in a new pane from quick look")
 	if err := term.WaitForText("OPENED-BY-HINTS", shellTimeout); err != nil {
 		t.Fatalf("the file did not open in the editor pane: %v\n%s", err, term.Snapshot())
 	}

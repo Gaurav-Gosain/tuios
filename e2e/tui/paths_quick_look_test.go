@@ -132,13 +132,9 @@ func TestPanePathsOpenInQuickLook(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !cellUnderlined(s, mid, row) }, uiTimeout); err != nil {
 		t.Fatalf("the underline did not leave the path: %v\n%s", err, term.Snapshot())
 	}
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
-		if cellUnderlined(term.Screen(), mcol+5, mrow) {
-			t.Fatalf("ASSERTION: the missing path is underlined\n%s", term.Snapshot())
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
+	stayTrue(t, "the missing path is not underlined", time.Second, func() (bool, string) {
+		return !cellUnderlined(term.Screen(), mcol+5, mrow), term.Snapshot()
+	})
 
 	// The URL in the same output still opens with the link opener.
 	ucol, urow := mustFind(t, term, pathsURL)
@@ -153,17 +149,11 @@ func TestPanePathsOpenInQuickLook(t *testing.T) {
 	if err := term.SendKeys("e"); err != nil {
 		t.Fatal(err)
 	}
-	deadline = time.Now().Add(uiTimeout)
-	for {
+	waitUntil(t, "ASSERTION: e in quick look starts the editor with +120 and the path", uiTimeout, func() (bool, string) {
 		data, _ := os.ReadFile(edited)
-		if got := strings.Fields(string(data)); len(got) == 2 && got[0] == "+120" && got[1] == filepath.Join(proj, pathsFile) {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("ASSERTION: e in quick look: the editor was started with %q\n%s", data, term.Snapshot())
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
+		got := strings.Fields(string(data))
+		return len(got) == 2 && got[0] == "+120" && got[1] == filepath.Join(proj, pathsFile), fmt.Sprintf("the editor was started with %q\n%s", data, term.Snapshot())
+	})
 	waitWindowCount(t, term, 2, "the editor pane")
 	alive(t, term, "after the path clicks")
 }
