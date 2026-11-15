@@ -17,6 +17,8 @@
 github.com/Gaurav-Gosain/tuios/cmd/tuios
 github.com/Gaurav-Gosain/tuios/internal/cliflags
 github.com/Gaurav-Gosain/tuios/internal/fang
+# The setup main runs once at start.
+github.com/Gaurav-Gosain/tuios/internal/procsetup
 github.com/spf13/cobra
 github.com/spf13/pflag
 

@@ -18,7 +18,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
-	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
@@ -425,8 +424,6 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	}
 
 	userConfig, settings := loadAndApplyConfig()
-
-	app.SetInputHandler(input.HandleInput)
 
 	keybindRegistry := config.NewKeybindRegistry(userConfig)
 

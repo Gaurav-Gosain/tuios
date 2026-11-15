@@ -18,6 +18,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrcli"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
+	"github.com/Gaurav-Gosain/tuios/internal/procsetup"
 	"github.com/spf13/cobra"
 )
 
@@ -59,15 +60,7 @@ func pluginsConfigPath() (string, error) {
 
 // discoverPlugins lists the plugins as config.toml says.
 func discoverPlugins() ([]herdrplugin.Entry, string, error) {
-	path, err := pluginsConfigPath()
-	if err != nil {
-		return nil, "", err
-	}
-	cfg, err := config.PluginsInFile(path)
-	if err != nil {
-		return nil, path, err
-	}
-	return herdrplugin.Discover(herdrplugin.DefaultDirs(path, cfg.Dirs), cfg.Enabled), path, nil
+	return procsetup.Plugins()
 }
 
 // inPane reports whether this command runs inside a tuios pane.
@@ -665,39 +658,4 @@ func newPluginsStatsCommand() *cobra.Command {
 	}
 	addJSONFlag(cmd, &asJSON)
 	return cmd
-}
-
-// pluginThemeFiles lists the theme files of the enabled plugins that may run,
-// for internal/theme. It reads the plugin files each time the themes load.
-func pluginThemeFiles() []string {
-	entries, _, err := discoverPlugins()
-	if err != nil {
-		return nil
-	}
-	var out []string
-	for _, e := range entries {
-		if e.Runnable() {
-			out = append(out, e.Plugin.Themes...)
-		}
-	}
-	return out
-}
-
-// pluginSaverFiles maps each screen saver of the enabled plugins that may run,
-// by its name plugin/ID/SAVER, to its frames file, for internal/app.
-func pluginSaverFiles() map[string]string {
-	entries, _, err := discoverPlugins()
-	if err != nil {
-		return nil
-	}
-	out := map[string]string{}
-	for _, e := range entries {
-		if !e.Runnable() {
-			continue
-		}
-		for _, s := range e.Plugin.Savers {
-			out[config.ScreensaverPluginPrefix+e.ID+"/"+s.ID] = s.File
-		}
-	}
-	return out
 }

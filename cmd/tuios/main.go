@@ -17,6 +17,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/fang"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
+	"github.com/Gaurav-Gosain/tuios/internal/procsetup"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -57,23 +58,13 @@ func main() {
 	if isDaemonAppLauncher() {
 		os.Exit(runDaemonAppLauncher())
 	}
-	session.PluginReaper = pluginReaper()
 	// The build identity, handed to every package that reports it before
 	// anything can crash or open a pane. A crash report that cannot say which
 	// build produced it cannot be placed against a commit.
 	applyBuildIdentity()
-	theme.ExtraFiles = pluginThemeFiles
-	app.PluginSavers = pluginSaverFiles
-	// The add sheet installs the release of this version with the helpers
-	// tuios update and hosts sync use.
-	app.MachineReleases = updateReleases{}
-	app.SketchProgram = func() string {
-		prog, err := sketchPluginProgram()
-		if err != nil {
-			return ""
-		}
-		return prog
-	}
+	// The process globals a client reads. A test that runs a client in
+	// process makes the same call.
+	procsetup.Setup(procsetup.Options{Reaper: procsetup.Reaper(), Releases: updateReleases{}})
 
 	// The server a pane's daemon was started for reaches every tuios run in
 	// that pane through TUIOS_SERVER, the tmux and herdr links included, so it

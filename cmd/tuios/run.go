@@ -122,8 +122,6 @@ func runLocal() error {
 
 	startPprofServer()
 
-	app.SetInputHandler(input.HandleInput)
-
 	keybindRegistry := config.NewKeybindRegistry(userConfig)
 
 	if debugMode {

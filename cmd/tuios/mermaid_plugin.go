@@ -5,12 +5,11 @@ import (
 	"errors"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
-	"github.com/Gaurav-Gosain/tuios/internal/release"
+	"github.com/Gaurav-Gosain/tuios/internal/procsetup"
 	sketch "tuios.dev/sketch/core"
 )
 
@@ -36,19 +35,15 @@ func notBuiltIn(sources []string) string {
 // sketchPluginProgram is the program of the sketch plugin, or why there is
 // none.
 func sketchPluginProgram() (string, error) {
-	entries, _, err := discoverPlugins()
-	if err != nil {
-		return "", err
-	}
-	e := herdrplugin.Find(entries, herdrplugin.SketchID)
+	prog, e, err := procsetup.FindSketch()
 	switch {
-	case e == nil || e.Plugin == nil:
+	case e == nil && err != nil:
+		return "", err
+	case e == nil:
 		return "", &callError{status: 3, err: errors.New(errNeedsSketchPlugin)}
 	case !e.Runnable():
 		return "", &callError{status: 3, err: errfmt.Errorf("the sketch plugin is installed and does not run: %s. Run tuios plugins list to see why", entryState(*e))}
-	}
-	prog := filepath.Join(e.Plugin.PluginRoot, "bin", release.ExecutableName("sketch"))
-	if _, err := os.Stat(prog); err != nil {
+	case err != nil:
 		return "", &callError{status: 3, err: errfmt.Errorf("the sketch plugin has no program at %s. Run tuios plugins update %s", prog, herdrplugin.SketchID)}
 	}
 	return prog, nil
