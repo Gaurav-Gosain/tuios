@@ -123,15 +123,15 @@ func Bundle(path, branch, exclude, dest string) error {
 // The patch is read through a temporary index, so the worktree's own index
 // is not touched: what the agent staged stays staged, and nothing is added.
 func WorkingPatch(path, dest string) (int, error) {
-	tmp, err := os.CreateTemp("", "tuios-index-*")
+	dir, err := os.MkdirTemp("", "tuios-index-*")
 	if err != nil {
 		return 0, err
 	}
-	index := tmp.Name()
-	_ = tmp.Close()
-	// git refuses an empty file as an index, so it starts from nothing.
-	_ = os.Remove(index)
-	defer func() { _ = os.Remove(index) }()
+	// git writes index.lock beside the index, and leaves it when it is
+	// stopped mid-write, so the whole folder goes, not only the index.
+	defer func() { _ = os.RemoveAll(dir) }()
+	// The index does not exist yet: git refuses an empty file as an index.
+	index := filepath.Join(dir, "index")
 	env := []string{"GIT_INDEX_FILE=" + index}
 	if _, err := runEnv(path, env, "read-tree", "HEAD"); err != nil {
 		return 0, err

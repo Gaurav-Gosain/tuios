@@ -107,14 +107,14 @@ func jjMaterialize(ctx context.Context, root, tree string) (string, error) {
 	if len(drop) == 0 {
 		return tree, nil
 	}
-	tmp, err := os.CreateTemp("", "tuios-index-*")
+	dir, err := os.MkdirTemp("", "tuios-index-*")
 	if err != nil {
 		return "", err
 	}
-	index := tmp.Name()
-	_ = tmp.Close()
-	_ = os.Remove(index)
-	defer func() { _ = os.Remove(index) }()
+	// git writes index.lock beside the index, and leaves it when it is
+	// stopped mid-write, so the whole folder goes, not only the index.
+	defer func() { _ = os.RemoveAll(dir) }()
+	index := filepath.Join(dir, "index")
 	env := []string{"GIT_INDEX_FILE=" + index}
 	if _, err := runCtx(ctx, root, env, "read-tree", tree); err != nil {
 		return "", err
@@ -134,13 +134,14 @@ func jjMaterialize(ctx context.Context, root, tree string) (string, error) {
 // snapshotTreeExcluding is SnapshotTree with the paths in exclude, relative
 // to path, left out. They are never read, so a large file costs nothing.
 func snapshotTreeExcluding(ctx context.Context, path string, exclude []string) (string, error) {
-	tmp, err := os.CreateTemp("", "tuios-index-*")
+	dir, err := os.MkdirTemp("", "tuios-index-*")
 	if err != nil {
 		return "", err
 	}
-	index := tmp.Name()
-	_ = tmp.Close()
-	defer func() { _ = os.Remove(index) }()
+	// git writes index.lock beside the index, and leaves it when it is
+	// stopped mid-write, so the whole folder goes, not only the index.
+	defer func() { _ = os.RemoveAll(dir) }()
+	index := filepath.Join(dir, "index")
 	env := []string{"GIT_INDEX_FILE=" + index}
 	if copyIndex(ctx, path, index) {
 		if tree, err := addAndWriteTree(ctx, path, env, exclude); err == nil {
