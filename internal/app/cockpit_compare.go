@@ -16,7 +16,7 @@ import (
 
 // The fan comparison of the agents view (DESIGN.md 3.4, frame g): every
 // attempt of a fan side by side, with the judge's verdict on top. c on an
-// attempt opens it, j asks an agent to judge, k twice keeps one attempt and
+// attempt opens it, J asks an agent to judge, K twice keeps one attempt and
 // removes the others with their changes stashed, and esc goes back.
 //
 // Cost: compare-fan runs when the view opens and after j and r, never on a
@@ -222,7 +222,7 @@ func (m *OS) applyCompare(msg ckCompareMsg) tea.Cmd {
 		return nil
 	}
 	if sig := ckKeepSig(msg.res.Rows, cp.focus); sig != cp.keepSig {
-		cp.note = "The attempts changed since the list was read. Read the list again, then press k to keep."
+		cp.note = "The attempts changed since the list was read. Read the list again, then press K to keep."
 		cp.keepSig, cp.warnScroll = sig, 0
 		return nil
 	}
@@ -292,12 +292,13 @@ func (m *OS) CockpitCompareKey(key string) tea.Cmd {
 		n = len(cp.res.Rows)
 	}
 	// This view keeps its own keys rather than the list keys of
-	// [keybindings.lists]: j and k are its judge and keep answers, left and
-	// right move between attempts, and up and down scroll the warnings. Only
-	// the page keys come from the list keymap, and they page by listPage rows.
+	// [keybindings.lists]: J and K are its judge and keep answers, left and
+	// right move between attempts, and j, k, up and down scroll the warnings
+	// as they move everywhere else in the view. Only the page keys come from
+	// the list keymap, and they page by listPage rows.
 	motion := m.ListKeys.Keys(key, false)
 	switch {
-	case key == "k", key == "up", key == "down", motion == listnav.PageUp, motion == listnav.PageDown:
+	case key == "K", key == "up", key == "down", key == "j", key == "k", motion == listnav.PageUp, motion == listnav.PageDown:
 	default:
 		cp.armed = ""
 	}
@@ -312,9 +313,9 @@ func (m *OS) CockpitCompareKey(key string) tea.Cmd {
 	switch key {
 	case "esc", "q", "backspace":
 		m.CockpitCompareClose()
-	case "down":
+	case "down", "j":
 		cp.warnScroll++
-	case "up":
+	case "up", "k":
 		cp.warnScroll = max(cp.warnScroll-1, 0)
 	case "left", "h", "shift+tab":
 		cp.focus = max(cp.focus-1, 0)
@@ -322,9 +323,9 @@ func (m *OS) CockpitCompareKey(key string) tea.Cmd {
 		cp.focus = min(cp.focus+1, max(n-1, 0))
 	case "r":
 		return m.ckCompareFetch()
-	case "j":
+	case "J":
 		return m.ckJudge()
-	case "k":
+	case "K":
 		return m.ckKeep()
 	case "enter":
 		return m.ckCompareGo()

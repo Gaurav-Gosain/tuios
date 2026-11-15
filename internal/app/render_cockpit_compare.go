@@ -132,7 +132,7 @@ func (m *OS) drawCompare(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.T
 			// No keep on a list that could not be read.
 			add("tuios could not list the files git ignores, so nothing is kept. "+failed, pal.Warn, ckBold)
 		default:
-			words := "Press k again to keep " + ckLetter(cp.focus) + ". " + ckJoin(others) + " are removed. Their branches stay, and their changes go to git stash."
+			words := "Press K again to keep " + ckLetter(cp.focus) + ". " + ckJoin(others) + " are removed. Their branches stay, and their changes go to git stash."
 			if len(others) == 1 {
 				words = strings.Replace(words, " are removed. Their branches stay, and their", " is removed. Its branch stays, and its", 1)
 			}
@@ -279,11 +279,11 @@ func (m *OS) drawJudgeCard(c *ckCanvas, l ckLook, x, y, w, top int, now time.Tim
 			}
 		}
 		if a, ok := cp.ckFocused(); ok && letter != "" && a.Session == v.Pick {
-			btns = append(btns, [3]string{"k", "Keep " + letter, "cmp:keep"})
+			btns = append(btns, [3]string{"K", "Keep " + letter, "cmp:keep"})
 		} else if ok {
-			btns = append(btns, [3]string{"k", "Keep " + ckLetter(cp.focus), "cmp:keep"})
+			btns = append(btns, [3]string{"K", "Keep " + ckLetter(cp.focus), "cmp:keep"})
 		}
-		btns = append(btns, [3]string{"j", "Judge again", "cmp:judge"})
+		btns = append(btns, [3]string{"J", "Judge again", "cmp:judge"})
 	} else {
 		words := "No verdict yet. A judge is an agent that reads every attempt and picks one. Through tuios it can only read them: their diffs, screens and scrollback."
 		if m.ckFanJudge() {
@@ -293,9 +293,9 @@ func (m *OS) drawJudgeCard(c *ckCanvas, l ckLook, x, y, w, top int, now time.Tim
 		for _, s := range wrapPlain(words, w-6) {
 			lines = append(lines, line{segs: []ckSeg{{t: s, fg: pal.FgDim}}})
 		}
-		btns = append(btns, [3]string{"j", "Ask a judge", "cmp:judge"})
+		btns = append(btns, [3]string{"J", "Ask a judge", "cmp:judge"})
 		if _, ok := cp.ckFocused(); ok {
-			btns = append(btns, [3]string{"k", "Keep " + ckLetter(cp.focus), "cmp:keep"})
+			btns = append(btns, [3]string{"K", "Keep " + ckLetter(cp.focus), "cmp:keep"})
 		}
 	}
 	h := len(lines) + 4

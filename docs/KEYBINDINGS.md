@@ -697,9 +697,9 @@ The movement keys are the `[keybindings.lists]` section. Every list in tuios
 moves on them: the pickers and dialogs, the review panel, the scrollback
 browser's command list, the composer's paste pager, the spawn sheet, and the
 explorers behind `tuios keybinds browse`, `tuios config browse` and
-`tuios help -i`. The agents view's compare keeps `j` and `k` for its judge and
-keep answers and moves with left and right; only its page keys come from this
-section. Each action takes the keys that do it:
+`tuios help -i`. The agents view's compare answers with `J` (judge) and `K`
+(keep), moves between attempts with left and right, and scrolls with `j` and
+`k`; only its page keys come from this section. Each action takes the keys that do it:
 
 | Action | Default keys |
 |---|---|
@@ -2285,14 +2285,15 @@ here: the card says so, and `enter` answers it in the pane.
 
 `c` on an attempt of a fan compares every attempt side by side: its agent,
 how long it took, its diff, its check from `tuios fan verify`, its first
-changed lines and its files. `j` asks a judge: an agent that reads the
+changed lines and its files. `J` asks a judge: an agent that reads the
 attempts and reports which one to keep. Through tuios it can only read the
 attempts: their diffs, screens and scrollback. Its verdict shows on top, with its reasons, and its
 pick is marked recommended. `1` to `9` and the arrows pick an attempt, and
-`k` twice keeps it: the other worktrees are removed, their changes go to git
-stash and their branches stay. The first `k` names every file git ignores in
-the other worktrees, such as `.env`: they are deleted, not stashed. `up` and
-`down` scroll that list. The second `k` reads the attempts again and keeps
+`K` twice keeps it: the other worktrees are removed, their changes go to git
+stash and their branches stay. The first `K` names every file git ignores in
+the other worktrees, such as `.env`: they are deleted, not stashed. `j` and
+`k`, or `up` and `down`, scroll that list, as they move everywhere else in
+the view. The second `K` reads the attempts again and keeps
 only when nothing changed. When the list grew, or could not be read, it says
 so and keeps nothing. `enter` goes
 to the attempt's pane, `r` reads the attempts again and `esc` goes back.

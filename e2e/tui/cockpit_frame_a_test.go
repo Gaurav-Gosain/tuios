@@ -445,9 +445,9 @@ var frameGDiffs = map[string]map[string]string{
 }
 
 // TestCockpitFanCompare is frame (g): c on an attempt compares the fan's
-// three attempts side by side with their diffs, j starts the judge, whose
-// verdict picks B, and k twice keeps B and removes A and C, their branches
-// kept.
+// three attempts side by side with their diffs, j moves and starts nothing,
+// J starts the judge, whose verdict picks B, and K twice keeps B and removes
+// A and C, their branches kept.
 //
 // Negative controls, recorded in NEGATIVE_CONTROLS.md: with the judge's
 // reach to the attempts cut, the verdict never shows; with keep-fan sent
@@ -541,8 +541,21 @@ func TestCockpitFanCompare(t *testing.T) {
 		t.Fatalf("the comparison did not open again: %v\n%s", err, term.Snapshot())
 	}
 
-	// j: the judge reads the attempts and picks B.
+	// The key bar names the answers by their keys.
+	if s := term.Screen(); screenLineHolds(s, "K keep", "J judge") == "" {
+		t.Errorf("ASSERTION: the key bar does not name K keep and J judge:\n%s", term.Snapshot())
+	}
+	// j moves, as it does everywhere else in the view: it starts no judge.
 	if err := term.SendKeys("j"); err != nil {
+		t.Fatal(err)
+	}
+	stayTrue(t, "j in the comparison starts no judge", time.Second, func() (bool, string) {
+		s := term.Snapshot()
+		return !strings.Contains(s, "A judge reads the attempts"), s
+	})
+
+	// J: the judge reads the attempts and picks B.
+	if err := term.SendKeys("J"); err != nil {
 		t.Fatal(err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -555,11 +568,11 @@ func TestCockpitFanCompare(t *testing.T) {
 	_ = term.WaitStable(uiTimeout)
 	saveCockpitFrames(t, term, "frame-g-200x55")
 
-	// k once says what it does, k again keeps B.
-	if err := term.SendKeys("k"); err != nil {
+	// K once says what it does, K again keeps B.
+	if err := term.SendKeys("K"); err != nil {
 		t.Fatal(err)
 	}
-	if err := term.WaitForText("Press k again to keep B", uiTimeout); err != nil {
+	if err := term.WaitForText("Press K again to keep B", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the first k did not say what a keep does: %v\n%s", err, term.Snapshot())
 	}
 	// C's .env is ignored by git: the warning names it before the keep.
@@ -581,7 +594,7 @@ func TestCockpitFanCompare(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(cPath, "build.log"), []byte("x\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := term.SendKeys("k"); err != nil {
+	if err := term.SendKeys("K"); err != nil {
 		t.Fatal(err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -616,13 +629,13 @@ func TestCockpitFanCompare(t *testing.T) {
 	if err := os.Rename(gitFile, gitFile+".off"); err != nil {
 		t.Fatal(err)
 	}
-	if err := term.SendKeys("k"); err != nil {
+	if err := term.SendKeys("K"); err != nil {
 		t.Fatal(err)
 	}
 	if err := term.WaitForText("tuios could not list the files git ignores, so nothing is kept.", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: a list git could not read did not stop the keep: %v\n%s", err, term.Snapshot())
 	}
-	if err := term.SendKeys("k"); err != nil {
+	if err := term.SendKeys("K"); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(2 * time.Second)
@@ -633,15 +646,15 @@ func TestCockpitFanCompare(t *testing.T) {
 		t.Fatal(err)
 	}
 	// k reads the list again; then k keeps.
-	if err := term.SendKeys("k"); err != nil {
+	if err := term.SendKeys("K"); err != nil {
 		t.Fatal(err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "Press k again to keep B") && !strings.Contains(s.Text(), "could not list")
+		return strings.Contains(s.Text(), "Press K again to keep B") && !strings.Contains(s.Text(), "could not list")
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: k did not read the list again: %v\n%s", err, term.Snapshot())
 	}
-	if err := term.SendKeys("k"); err != nil {
+	if err := term.SendKeys("K"); err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(uiTimeout)
@@ -735,4 +748,19 @@ func fanIgnoredHashes(t *testing.T, base, session string) map[string]string {
 		}
 	}
 	return hashes
+}
+
+// screenLineHolds is the first line of s that holds every marker, "" when no
+// line does.
+func screenLineHolds(s tuitest.Screen, markers ...string) string {
+	for line := range strings.SplitSeq(s.Text(), "\n") {
+		ok := true
+		for _, m := range markers {
+			ok = ok && strings.Contains(line, m)
+		}
+		if ok {
+			return line
+		}
+	}
+	return ""
 }

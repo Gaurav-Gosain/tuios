@@ -2059,7 +2059,7 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 		if res := st.ck.cmp.res; res != nil && len(res.Rows) > 1 {
 			n = "1-" + strconv.Itoa(min(len(res.Rows), 9))
 		}
-		hints := []overlay.Hint{{Key: "k", Label: "keep"}, {Key: "j", Label: "judge"}, {Key: n, Label: "focus"},
+		hints := []overlay.Hint{{Key: "K", Label: "keep"}, {Key: "J", Label: "judge"}, {Key: n, Label: "focus"},
 			{Key: overlay.EnterKey(), Label: "open pane"}, {Key: "r", Label: "read again"}, {Key: "esc", Label: "back"}}
 		if st.ck.cmp.armed != "" {
 			hints = append([]overlay.Hint{{Key: "up down", Label: "scroll the list"}}, hints...)
