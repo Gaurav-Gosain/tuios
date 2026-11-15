@@ -206,6 +206,7 @@ func (m *Model) Drag(line, col int) {
 		m.anchor = -1
 	}
 	m.joinTyping = false
+	m.syncMention()
 }
 
 // selectionKey handles the keys that make, use or drop a selection. done is

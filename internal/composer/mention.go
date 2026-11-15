@@ -104,7 +104,7 @@ func (m *Model) mentionQuery() string {
 // open while the cursor is in a word that starts with an @ at the start of the
 // draft or after a space.
 func (m *Model) syncMention() {
-	if m.completer == nil {
+	if m.completer == nil || m.hsearch != nil {
 		m.mention = nil
 		return
 	}

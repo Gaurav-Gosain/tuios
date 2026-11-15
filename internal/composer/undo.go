@@ -77,6 +77,8 @@ func (m *Model) change(pos, n int, ins []cell, after int) {
 	}
 	del := m.splice(pos, n, ins)
 	m.cur = after
+	// The list's position is an index into the draft, so a change re-derives it.
+	m.syncMention()
 	m.push(edit{pos: pos, del: del, ins: ins, before: before, after: after, anchor: m.anchor, size: editSize(del, ins)})
 }
 

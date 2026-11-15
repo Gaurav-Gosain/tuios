@@ -527,6 +527,9 @@ func (m *Model) Update(msg tea.KeyPressMsg, remote bool) Event {
 	key := msg.String()
 	if m.hsearch != nil {
 		m.historyKey(msg)
+		if m.hsearch == nil {
+			m.syncMention()
+		}
 		return EventNone
 	}
 	if m.mention != nil && m.mentionKey(key) {

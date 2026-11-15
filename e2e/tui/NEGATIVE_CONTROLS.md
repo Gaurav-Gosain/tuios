@@ -17842,3 +17842,26 @@ no row says it.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitWarnsWhenAgentsShareAFolder$' -v .`.
+## The reply editor shows one overlay at a time
+
+`TestReplyEditorShowsOneOverlayAtATime` sends one reply from the agents
+view's reply editor, so its history holds "hi", then opens the two overlays
+the editor has over the draft. With the @ list open on "hello @", ctrl+r
+must show the history search alone, and enter must load "hi" with no list
+left over the shorter draft and no crash screen. esc in the search must give
+the list back while the cursor is still in the @ word, and a list closed with
+esc must stay closed after the search opens and closes. Last, ctrl+g with the
+list open runs an external editor that writes "hi", and the draft must take
+it with no list drawn over it and no crash screen.
+
+Run on 2026-11-15 on Linux (x86_64). The branch passes the test.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (row H) | "composer_overlays_test.go:205: ASSERTION: the @ list is drawn with the history search" | **caught** |
+| The search guard in syncMention cut (row H) | "composer_overlays_test.go:205: ASSERTION: the @ list is drawn with the history search" | **caught** |
+| The re-sync in change cut (row E) | "composer_overlays_test.go:257: ASSERTION: the client crashed while waiting for the draft hi"; the frame shows "runtime error: slice bounds out of range [7:2]" | **caught** |
+| The re-sync when the search closes cut (row X) | "composer_overlays_test.go:228: ASSERTION: the search closes and the @ list is open again" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestReplyEditorShowsOneOverlayAtATime$' -v .`.
