@@ -225,13 +225,23 @@ func TestRailCursorShowsWithoutItsGround(t *testing.T) {
 				}
 			}
 			// Walk down to P1's row. The headers' add controls sit between
-			// the rows, so the number of steps is read off the screen.
+			// the rows, so the number of steps is read off the screen, once
+			// the rail shows the renamed rows.
+			if err := term.WaitFor(func(s tuitest.Screen) bool { return railRowOf(s, "P1") >= 0 && railRowOf(s, "P2") >= 0 }, uiTimeout); err != nil {
+				t.Fatalf("the rail never showed the renamed rows P1 and P2: %v\n%s", err, term.Snapshot())
+			}
 			for range 6 {
 				if r := railRowOf(term.Screen(), "P1"); r >= 0 && railBandRow(term.Screen()) == r {
 					break
 				}
+				band := railBandRow(term.Screen())
 				if err := term.SendKeys("j"); err != nil {
 					t.Fatalf("move the cursor: %v", err)
+				}
+				// The loop reads the screen to know when to stop, so it reads
+				// it only once the band has moved.
+				if err := term.WaitFor(func(s tuitest.Screen) bool { b := railBandRow(s); return b >= 0 && b != band }, uiTimeout); err != nil {
+					t.Fatalf("j did not move the cursor off row %d: %v\n%s", band, err, term.Snapshot())
 				}
 			}
 			err := term.WaitFor(on("P1"), uiTimeout)

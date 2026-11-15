@@ -144,11 +144,15 @@ func TestEmptyWorkspaceReturnsAfterXpanesSpeedy(t *testing.T) {
 			t.Fatalf("client %d does not show the three held panes: %v\n%s", i+1, err, c.Snapshot())
 		}
 	}
+	// In speedy mode a pane can be held before xpanes turns multifocus on, and
+	// the Enter below reaches all three panes only once it is on. The two
+	// panes without the focus then wear the multifocus border.
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return multifocusCorners(s) >= 2 }, uiTimeout); err != nil {
+		t.Fatalf("multifocus never showed on the held panes: %v\n%s", err, term.Snapshot())
+	}
 
 	// The client may still be in terminal mode from typing the xpanes line.
-	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
-		t.Fatalf("send alt+esc: %v", err)
-	}
+	leaveTerminalMode(t, term)
 	enterTerminalMode(t, term)
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("press Enter: %v", err)
@@ -198,9 +202,7 @@ func TestEmptyWorkspaceWalksBackAChain(t *testing.T) {
 			t.Fatalf("new-window on %d: %v\n%s", ws, err, out)
 		}
 		waitPanesOn(t, term, base, "ew", ws, 1, "the pane on the new workspace")
-		if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
-			t.Fatalf("send alt+esc: %v", err)
-		}
+		leaveTerminalMode(t, term)
 		enterTerminalMode(t, term)
 		runInShell(t, term, line, want, shellTimeout)
 	}
@@ -260,4 +262,20 @@ func TestEmptyWorkspaceReturnsWhereXpanesRan(t *testing.T) {
 	waitPanesOn(t, term, base, "ew", 2, 1, "the pane from workspace 3 after close-workspace 2")
 	waitShowing(t, base, "ew", 1, "HOME-42", term)
 	alive(t, term, "after the return")
+}
+
+// multifocusCorners counts the panes whose top left corner wears the
+// multifocus border: ANSI colour 3, which theme.BorderMultifocus gives with no
+// theme set. The focused pane keeps its focus colour, multifocus or not.
+func multifocusCorners(s tuitest.Screen) int {
+	w, h := s.Size()
+	n := 0
+	for y := range h {
+		for x := range w {
+			if c := s.Cell(x, y); c.Content == "╭" && c.Fg.Kind == tuitest.ColorIndexed && c.Fg.Index == 3 {
+				n++
+			}
+		}
+	}
+	return n
 }

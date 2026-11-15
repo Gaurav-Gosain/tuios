@@ -509,9 +509,19 @@ func TestStreamPaneLeaseOnTheDesktop(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return screenHas(s, "RELEASED-END") }, uiTimeout); err != nil {
 		t.Fatalf("the desktop never drew the released pane: %v\n%s", err, term.Snapshot())
 	}
-	if got := spSize(t, ctl, w1, "BACK-"); got == "6x30" {
-		t.Fatalf("the pane stayed at the leased size after the stream closed")
-	}
+	// The lease ends a moment after the stream closes, so the size is read
+	// again until it changes.
+	tries := 0
+	waitUntil(t, "the pane leaves the leased size after the stream closed", uiTimeout, func() (bool, string) {
+		prefix := "BACK-"
+		if tries > 0 {
+			prefix = fmt.Sprintf("BACK%d-", tries)
+			spType(t, ctl, w1, "clear; echo "+prefix+"$(stty size | tr ' ' x)\n")
+		}
+		tries++
+		got := spSize(t, ctl, w1, prefix)
+		return got != "6x30", "the pane is " + got
+	})
 	saveFrame(t, term, "stream-lease-released")
 	alive(t, term, "after the lease")
 }

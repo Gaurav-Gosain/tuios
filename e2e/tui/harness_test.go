@@ -112,8 +112,11 @@ const (
 	welcomeText = "Terminal UI Operating System"
 	welcomeHint = "new window"
 
-	// insertGuard is tuios's post-terminal-mode suppression window for
-	// unmodified single-character keys (internal/input/keyboard_terminal.go).
+	// insertGuard was tuios's window after entering terminal mode in which it
+	// dropped unmodified single-character keys. tuios lost it in 815cb8a02,
+	// and the tests no longer wait it out. sendKeys still uses the span as the
+	// gap between keys, so that each key is its own read and a lone esc is
+	// not read as alt and the next key.
 	insertGuard = 150 * time.Millisecond
 
 	// bootTimeout is generous because the first run also starts the daemon.
@@ -714,8 +717,6 @@ func windowManagementMode(t *testing.T, term *tuitest.Terminal) {
 		t.Fatalf("never settled in window management mode: %v\n%s\n%s", err,
 			keyEvidence(term, "Alt+Esc (bytes \\x1b\\x1b)", sentAt), term.Snapshot())
 	}
-	// The mode switch re-arms input handling; give it the same beat a mode
-	// change gets everywhere else.
 }
 
 // killDaemonNow shuts the daemon under base down immediately rather than at the
@@ -848,17 +849,13 @@ func waitWindowCount(t *testing.T, term *tuitest.Terminal, n int, what string) {
 	}
 }
 
-// enterTerminalMode switches the focused window into terminal mode and waits out
-// the 150ms single-character suppression guard, after which typed text reaches
-// the shell instead of being eaten as a window-manager binding.
+// enterTerminalMode switches the focused window into terminal mode and waits
+// for tuios to say so, after which typed text reaches the shell instead of
+// being read as a window-manager binding.
 //
-// The "i" is retried because a single one is not reliably delivered: tuios
-// suppresses unmodified single-character keys for a window after several mode
-// transitions, and a keystroke that lands inside one of those windows is
-// silently dropped with no feedback. Retrying is what a user does, and it keeps
-// the tests from failing for a reason that has nothing to do with what they are
-// asserting. Terminal mode is idempotent, so a duplicate "i" that does arrive
-// costs nothing.
+// The "i" is retried, as a person would. tuios once dropped plain keys for a
+// moment after a mode switch, and the retry dates from then. Terminal mode is
+// idempotent, so a duplicate "i" that does arrive costs nothing.
 func enterTerminalMode(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	const attempts = 4
@@ -885,7 +882,6 @@ func leaveTerminalMode(t *testing.T, term *tuitest.Terminal) {
 	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("did not return to window management mode: %v", err)
 	}
-	// The mode switch also re-arms input handling; give it the same beat.
 }
 
 // runInShell types a command into the focused pane's shell and waits for a

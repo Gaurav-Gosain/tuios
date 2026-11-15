@@ -98,7 +98,6 @@ func TestCycleAgentsWalksTheRailOrder(t *testing.T) {
 		}
 		fmt.Fprintf(&log, "%d. %s -> %s/%s\n", step, what, want.sess, want.name)
 		saveArtifact(t, term, dir, fmt.Sprintf("step-%02d", step))
-		// The next chord must not land inside the single-key guard.
 	}
 	next := []any{tuitest.Alt('J')}
 	prev := []any{tuitest.Alt('K')}

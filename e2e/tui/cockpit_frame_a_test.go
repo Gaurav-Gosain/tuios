@@ -516,7 +516,11 @@ func TestCockpitFanCompare(t *testing.T) {
 	if text := term.Screen().Text(); strings.Contains(text, "is not in the list") {
 		t.Fatalf("ASSERTION: enter in the comparison did not find B's row:\n%s", term.Snapshot())
 	}
-	// Back to the comparison, from B's row.
+	// Back to the comparison, from B's row. The client lands on the pane a
+	// moment after the daemon says so, and the mode switch waits for that.
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "fan of 3") }, uiTimeout); err != nil {
+		t.Fatalf("enter did not leave the comparison for B's pane: %v\n%s", err, term.Snapshot())
+	}
 	windowManagementMode(t, term)
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatal(err)

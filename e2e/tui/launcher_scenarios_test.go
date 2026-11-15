@@ -754,11 +754,6 @@ func TestLauncherLeavesTheRightModeBehind(t *testing.T) {
 		t.Fatalf("tab: %v", err)
 	}
 	waitForPaneShell(t, term)
-	// Tab entered terminal mode on the launcher's behalf, and for insertGuard
-	// after that entry tuios swallows unmodified text keys as possible mouse
-	// fragments. A fast shell can put the prompt up inside that window, so the
-	// guard is waited out; it is a fixed span from a moment already past, not
-	// a race.
 	if err := term.SendKeys("EXTRA"); err != nil {
 		t.Fatalf("type an argument: %v", err)
 	}

@@ -59,6 +59,9 @@ func TestWhichKeyOnATinyClient(t *testing.T) {
 		if err := term.SendKeys(tuitest.Esc); err != nil {
 			t.Fatalf("close the menu: %v", err)
 		}
+		// The next leader must not follow the lone esc at once, or it reads
+		// as alt and the leader.
+		waitGone(t, term, "the leader menu after esc", "prefix")
 	}
 	logs, _ := filepath.Glob(filepath.Join(base, "*", "tuios", "crash-*.log"))
 	more, _ := filepath.Glob(filepath.Join(base, "*", "*", "tuios", "crash-*.log"))

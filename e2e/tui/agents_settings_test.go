@@ -855,8 +855,14 @@ func TestAgentsSettingsAbsentOverSSH(t *testing.T) {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	if err := term.SendKeys(tuitest.Esc); err != nil {
-		t.Fatal(err)
+	// A key the menu does not bind can leave it open. Esc closes it, and the
+	// leader goes only once it is gone: a key sent at once after a lone esc
+	// reads as alt and that key.
+	if strings.Contains(term.Screen().Text(), "Toggle tiling") {
+		if err := term.SendKeys(tuitest.Esc); err != nil {
+			t.Fatal(err)
+		}
+		waitGone(t, term, "the prefix menu after esc", "Toggle tiling")
 	}
 
 	if err := term.SendKeys(tuitest.Ctrl('b'), "P"); err != nil {
@@ -878,6 +884,7 @@ func TestAgentsSettingsAbsentOverSSH(t *testing.T) {
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatal(err)
 	}
+	waitGone(t, term, "the palette after esc", paletteTitle)
 
 	if err := term.SendKeys(tuitest.Ctrl('b'), ","); err != nil {
 		t.Fatal(err)

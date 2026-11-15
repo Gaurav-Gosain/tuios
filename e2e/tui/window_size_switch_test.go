@@ -50,8 +50,6 @@ func switchClient(t *testing.T, base string, term *tuitest.Terminal, session str
 					t.Fatalf("switch-session: %v\n%s", err, out)
 				}
 			} else if c.ID == id && c.Session == session {
-				// The switch re-arms input handling, and the first keys after
-				// it are dropped without the wait.
 				return
 			}
 		}

@@ -103,9 +103,7 @@ func TestXpanesOpensTiledPanesWithMultifocus(t *testing.T) {
 	// One typed line runs in every pane. The client may still be in terminal
 	// mode from typing the xpanes line, so it goes to window management first,
 	// and an "i" typed into three shells cannot spoil the line.
-	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
-		t.Fatalf("send alt+esc: %v", err)
-	}
+	leaveTerminalMode(t, term)
 	enterTerminalMode(t, term)
 	if err := term.SendKeys("echo SYNC-$((6*7))", tuitest.Enter); err != nil {
 		t.Fatalf("type into multifocus: %v", err)
@@ -130,9 +128,7 @@ func TestXpanesOpensTiledPanesWithMultifocus(t *testing.T) {
 		}
 	}
 	showWorkspace("1", "Opened 3 panes")
-	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
-		t.Fatalf("send alt+esc: %v", err)
-	}
+	leaveTerminalMode(t, term)
 	enterTerminalMode(t, term)
 	runInShell(t, term, "echo LEAK-$((5*5))", "LEAK-25", shellTimeout)
 	showWorkspace("2", "ITEM-c-42")
@@ -203,9 +199,7 @@ func TestXpanesSpeedyIntervalAndCloseWorkspace(t *testing.T) {
 	if err := term.WaitForText("Opened 2 panes", uiTimeout); err != nil {
 		t.Fatalf("workspace 1 is not showing: %v\n%s", err, term.Snapshot())
 	}
-	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
-		t.Fatalf("send alt+esc: %v", err)
-	}
+	leaveTerminalMode(t, term)
 	enterTerminalMode(t, term)
 	if err := term.SendKeys(tuiosBin+" xpanes --no-sync -s --interval 0.5 -c 'date +%s%N > "+stamp+"{}; echo HELD-{}' p q r", tuitest.Enter); err != nil {
 		t.Fatalf("type xpanes -s: %v", err)

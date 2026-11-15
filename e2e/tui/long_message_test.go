@@ -383,8 +383,6 @@ func TestLongNoSpaceMessageKeepsTheClientResponsive(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "go to source") }, 3*time.Second); err != nil {
 		t.Fatalf("esc did not close the view in time: %v\n%s", err, term.Snapshot())
 	}
-	// The beat every mode change gets here before typing: closing the view
-	// hands the keyboard back to the pane.
 	runInShell(t, term, `echo $((6*7))ANS`, "42ANS", 3*time.Second)
 }
 

@@ -56,8 +56,6 @@ func switchSession(t *testing.T, term *tuitest.Terminal, want string) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("%s never settled at one window: %v\n%s", want, err, term.Snapshot())
 	}
-	// A switch re-arms input handling the same way a mode change does, and the
-	// first keystrokes after it are dropped without it.
 }
 
 // TestSessionSwitchKeepsPaneContent is the reported bug: a pane that printed

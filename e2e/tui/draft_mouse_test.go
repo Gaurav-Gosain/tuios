@@ -91,9 +91,10 @@ func TestDraftMouseInEveryEditor(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitGone(t, term, "the New agent sheet after esc", "What should the agent do?")
-	if err := term.SendKeys(tuitest.Esc); err != nil {
-		t.Fatal(err)
-	}
+	// Nothing on screen changes with this esc, so it goes as its own press,
+	// apart from the leader after it, as a person types it. Sent at once, the
+	// two read as alt and the leader.
+	sendKeys(t, term, tuitest.Esc)
 
 	// The task capture sheet floats over the screen.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "+"); err != nil {

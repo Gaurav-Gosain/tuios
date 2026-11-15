@@ -103,14 +103,6 @@ func pause(t *testing.T, why string, d time.Duration) {
 	time.Sleep(scaled(d))
 }
 
-// afterModeSwitch waits out the window in which tuios ignores unmodified
-// single-character keys after the terminal mode starts (insertGuard). The end
-// of the window is not on screen, so it is a pause by design, kept here and
-// not in two hundred tests.
-func afterModeSwitch(t *testing.T) {
-	t.Helper()
-}
-
 // fakeT records the first failure and stops the wait, as t.Fatalf does.
 type fakeT struct{ msg string }
 

@@ -171,8 +171,6 @@ func TestRailMarksAFinishedTurnUnread(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "New agent") }, uiTimeout); err != nil {
 		t.Fatalf("esc did not close the Inbox: %v\n%s", err, term.Snapshot())
 	}
-	// A lone esc followed at once by another key reads as alt and that key.
-
 	// The rail: ctrl+b e takes the keyboard, G goes to its last row, the
 	// footer's collapse control, and two rows up over the footer's files
 	// control is the agent's row, since the agents section is pinned to the
@@ -180,6 +178,7 @@ func TestRailMarksAFinishedTurnUnread(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
 		t.Fatal(err)
 	}
+	waitText(t, term, "the rail takes the keyboard", railPill)
 	if err := term.SendKeys("G", "k", "k", "u"); err != nil {
 		t.Fatal(err)
 	}

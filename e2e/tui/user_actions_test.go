@@ -104,8 +104,10 @@ grants = ["read"]
 		t.Errorf("ASSERTION: the dry run does not show the title as one argument: %v\n%s", err, dry)
 	}
 
-	// The key runs the command action.
-	windowManagementMode(t, term)
+	// The key runs the command action. attachIn left the client in window
+	// management mode, and only CLI calls came since. A second alt+esc there
+	// changes nothing on screen, so the leader would follow it at once and
+	// read as alt and the leader.
 	if err := term.SendKeys(tuitest.Ctrl('b'), tuitest.Alt('u')); err != nil {
 		t.Fatalf("press the key: %v", err)
 	}

@@ -84,6 +84,7 @@ func TestRichRowReplyAndRecap(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
 		t.Fatal(err)
 	}
+	waitText(t, term, "the rail takes the keyboard", railPill)
 	if err := term.SendKeys("G", "k", "k", "r"); err != nil {
 		t.Fatal(err)
 	}
@@ -141,6 +142,10 @@ func TestRichRowReplyAndRecap(t *testing.T) {
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatal(err)
 	}
+	// Esc gives the keyboard back from the rail. The leader goes once the
+	// pill says so: a key sent at once after a lone esc reads as alt and that
+	// key.
+	waitGone(t, term, "the rail's keyboard after esc", railPill)
 
 	// A second window takes the focus, so the person is away from the
 	// agent's pane from here.
@@ -299,6 +304,7 @@ func TestReplyWithALargePasteGoesAsAFile(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
 		t.Fatal(err)
 	}
+	waitText(t, term, "the rail takes the keyboard", railPill)
 	if err := term.SendKeys("G", "k", "k", "r"); err != nil {
 		t.Fatal(err)
 	}
@@ -405,6 +411,7 @@ func TestReplyWithAnImageGoesAsAFile(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
 		t.Fatal(err)
 	}
+	waitText(t, term, "the rail takes the keyboard", railPill)
 	if err := term.SendKeys("G", "k", "k", "r"); err != nil {
 		t.Fatal(err)
 	}

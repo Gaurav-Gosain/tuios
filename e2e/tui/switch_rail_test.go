@@ -21,8 +21,6 @@ func switchToNext(t *testing.T, term *tuitest.Terminal, to string) {
 	if err := term.WaitForText("Session: "+to, uiTimeout); err != nil {
 		t.Fatalf("the switch to %s never landed: %v\n%s", to, err, term.Snapshot())
 	}
-	// The first keys after a switch are dropped without this. See
-	// switchSession.
 }
 
 // TestSwitchedSessionTakesItsOwnRail is the report: after the rail was

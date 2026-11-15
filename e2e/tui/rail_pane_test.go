@@ -159,9 +159,9 @@ func TestRailPaneSection(t *testing.T) {
 	snap("rail-pane-typed")
 
 	// alt+esc gives the keyboard back: what is typed next is not the pane's.
-	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
-		t.Fatalf("leave the rail pane: %v", err)
-	}
+	// Nothing on screen says the rail pane let go, so alt+esc goes as its own
+	// press, apart from the keys after it, as a person types it.
+	sendKeys(t, term, tuitest.Alt(tuitest.Esc))
 	if err := term.SendKeys("i", "zzz", tuitest.Enter); err != nil {
 		t.Fatalf("type into the main pane: %v", err)
 	}
@@ -173,9 +173,7 @@ func TestRailPaneSection(t *testing.T) {
 	// Hiding the rail leaves the program running. Shown again, the counter
 	// goes on from where it was.
 	before := railTick(term.Screen())
-	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
-		t.Fatalf("back to window mode: %v", err)
-	}
+	leaveTerminalMode(t, term)
 	if err := term.SendKeys(tuitest.Ctrl('b'), "b"); err != nil {
 		t.Fatalf("hide the rail: %v", err)
 	}
