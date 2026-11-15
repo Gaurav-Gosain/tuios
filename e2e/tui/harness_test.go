@@ -717,6 +717,10 @@ func windowManagementMode(t *testing.T, term *tuitest.Terminal) {
 		t.Fatalf("never settled in window management mode: %v\n%s\n%s", err,
 			keyEvidence(term, "Alt+Esc (bytes \\x1b\\x1b)", sentAt), term.Snapshot())
 	}
+	// A client that just booted can still lose the next keys, and nothing on
+	// screen says when it is ready for them. Phase 2 replaces this with a
+	// readiness signal or an exact settle under the in-process backend.
+	pause(t, "no sign on screen says a client that just booted is ready for keys", insertGuard)
 }
 
 // killDaemonNow shuts the daemon under base down immediately rather than at the
@@ -864,6 +868,10 @@ func enterTerminalMode(t *testing.T, term *tuitest.Terminal) {
 			t.Fatalf("send 'i': %v", err)
 		}
 		if err := term.WaitForText("Terminal mode", terminalModeProbe); err == nil {
+			// A tiling animation can still be resizing the pane, and nothing
+			// on screen says when it is done. Phase 2 replaces this with an
+			// exact settle under the in-process backend.
+			pause(t, "no sign on screen says the tiling animation is done", insertGuard+150*time.Millisecond)
 			return
 		}
 		if _, exited := term.ExitCode(); exited {
