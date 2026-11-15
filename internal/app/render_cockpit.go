@@ -1255,7 +1255,11 @@ func (m *OS) drawRowLine2(c *ckCanvas, l ckLook, r ckRow, e sidebarAgentEntry, x
 	pal := l.pal
 	verb, rest, verbInk, rightSegs := m.ckRowLine2(l, r, e)
 	rx2 := right
-	if rightSegs != nil {
+	// What the row asks or does comes first. The marks at the right end
+	// ("shared folder", the chain's waits) go in only when the verb and a
+	// readable part of the rest still fit, so at 80 columns the row keeps
+	// its words and the focus header says the rest.
+	if rightSegs != nil && right-ckWidth(rightSegs...)-2-x >= ckLine2Need(verb, rest) {
 		rx2 = c.textR(right, y, rightSegs...) - 2
 	}
 	lx := c.text(x, y, rx2, ckSeg{t: verb, fg: ink(verbInk), attrs: ckBold})
@@ -1270,6 +1274,23 @@ func (m *OS) drawRowLine2(c *ckCanvas, l ckLook, r ckRow, e sidebarAgentEntry, x
 		}
 		c.text(lx, y, rx2, ckSeg{t: cut, fg: ink(pal.FgDim)})
 	}
+}
+
+// ckLine2MinRest is the least of a row's rest that its line keeps before the
+// marks at the line's end may take room.
+const ckLine2MinRest = 16
+
+// ckLine2Need is the room the verb and the start of the rest take on a row's
+// line: the verb, its gap, and the rest up to ckLine2MinRest cells.
+func ckLine2Need(verb, rest string) int {
+	n := ansi.StringWidth(verb)
+	if rest != "" {
+		if verb != "" {
+			n += 2
+		}
+		n += min(ansi.StringWidth(rest), ckLine2MinRest)
+	}
+	return n
 }
 
 // ckRuleWords is the short form of an always rule for a button: what the
