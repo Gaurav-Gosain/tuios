@@ -528,7 +528,7 @@ func (m *OS) applyEchoCancelled(msg echoCancelledMsg) {
 }
 
 // threadEchoLines draws the echoes of thread key at its end: each as the
-// person's message, with its state line. It returns the lines and their hits.
+// person's message, with its state line under it. It returns the lines and their hits.
 func (m *OS) threadEchoLines(key string, width int) ([]string, []string) {
 	var mine []*replyEcho
 	for _, e := range m.Inbox.echoes.list {
@@ -556,8 +556,10 @@ func (m *OS) threadEchoLines(key string, width int) ([]string, []string) {
 			add(ckLine{bg: l.panel, bar: "▎", barInk: pal.FgMute, indent: 3, segs: []ckSeg{{t: s, fg: pal.FgDim}}})
 		}
 		add(ckLine{bg: l.panel, bar: "▎", barInk: pal.FgMute})
+		// The state takes the row the prompt's card leaves blank, so the
+		// echo is as tall as the card that replaces it, and the lines
+		// above stay put when the transcript logs the prompt.
 		add(m.echoStateLine(l, e))
-		add(ckLine{})
 	}
 	return out, hits
 }

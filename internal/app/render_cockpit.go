@@ -2367,13 +2367,10 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 		if t != nil {
 			up = max(t.follow.Up, 0)
 		}
-		// The live activity row sits under the newest line, where the
-		// thread's last line would be, while the agent works.
 		base := cardTop - 1
-		if room > 2 && m.drawThreadActivity(c, l, e, t, x, base-1, w, now) {
-			room--
-			base--
-		}
+		// The live activity row is computed on every frame, copy mode
+		// included, so its time counts from when the thread saw it start.
+		act, acting := m.threadActivityLine(l, e, t, w, now)
 		// Copy mode draws the thread as it holds it.
 		if m.drawThreadCopy(c, t, x, w, base-room, room) {
 			return
@@ -2384,6 +2381,18 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 		var hits []string
 		if t != nil && len(t.hits) == len(lines) {
 			hits = t.hits
+		}
+		if t != nil {
+			t.actRow = acting
+		}
+		if acting {
+			// The row is the thread's newest line, where the call's card
+			// lands, so the card takes its row when the transcript has
+			// the call. Clipped, so the kept body is never written into.
+			lines = append(slices.Clip(lines), act)
+			if hits != nil {
+				hits = append(slices.Clip(hits), "")
+			}
 		}
 		start, end := max(len(lines)-room, 0), len(lines)
 		if t != nil && (t.read || t.recap != nil) {

@@ -1177,17 +1177,21 @@ func ckRender(c *ckCanvas, width int, ln ckLine) string {
 	return c.render()
 }
 
-// drawThreadActivity draws the live activity row at row y, under the
-// thread's newest line, and reports whether it drew one. The row says what
-// the agent does now ("Running go test ./... · 3m"), from the daemon's now
-// key, which a hook or a protocol pane sets, or from a working program's OSC
-// 7501 message. transcriptview.ActivityShown decides when it shows. The time
-// is how long the activity has run as of this frame, drawn only when the
-// thread saw it start. It rides the redraws the cockpit already makes,
-// the minute tick among them, and no timer of its own.
-func (m *OS) drawThreadActivity(c *ckCanvas, l ckLook, e sidebarAgentEntry, t *agentThread, x, y, w int, now time.Time) bool {
+// threadActivityLine is the live activity row: the card of the call the
+// agent runs now, drawn as the thread's newest line before the transcript
+// has the call. It says what the agent does ("Bash  go test ./...  2m
+// running"), from the daemon's now key, which a hook or a protocol pane
+// sets, or from a working program's OSC 7501 message.
+// transcriptview.ActivityShown decides when it shows. It is the first line
+// the call's own card draws, so when the transcript catches up the card
+// takes its row and nothing on screen moves. A read the newest read group
+// will join draws no row: the group's line counts it once the call lands.
+// The time is how long the activity has run as of this frame, drawn from
+// the first minute and only when the thread saw it start. It rides the redraws the cockpit already
+// makes, the minute tick among them, and no timer of its own.
+func (m *OS) threadActivityLine(l ckLook, e sidebarAgentEntry, t *agentThread, width int, now time.Time) (string, bool) {
 	if e.Host != "" {
-		return false
+		return "", false
 	}
 	tool, target := "", ""
 	if v := ckMeta(e, "now"); v != "" {
@@ -1196,10 +1200,12 @@ func (m *OS) drawThreadActivity(c *ckCanvas, l ckLook, e sidebarAgentEntry, t *a
 		target = printableTitle(firstNonEmptyStr(sum.Msg, sum.Title))
 	}
 	var last *transcriptview.Entry
+	reads := false
 	if t != nil && m.threadReadsTranscript(e) {
 		for i := len(t.entries) - 1; i >= 0; i-- {
 			if en := &t.entries[i]; en.Kind == transcriptview.KindToolCall {
 				last = &transcriptview.Entry{Kind: en.Kind, Tool: en.Tool, Target: en.Target}
+				reads = ckReadTool(en.Tool) != "" && ckJoinsReads(t.entries[i+1:])
 				break
 			}
 		}
@@ -1213,22 +1219,39 @@ func (m *OS) drawThreadActivity(c *ckCanvas, l ckLook, e sidebarAgentEntry, t *a
 		// so it has no time. Every later change is a start the thread saw.
 		t.act, t.actAt, t.actTimed, t.actSeen = text, now, t.actSeen, true
 	}
-	if text == "" {
-		return false
+	if text == "" || reads && ckReadTool(tool) != "" {
+		return "", false
 	}
-	pal := l.pal
-	verb, rest, _ := strings.Cut(text, " ")
-	var right []ckSeg
+	if tool == "" {
+		tool = transcriptview.ActivityWorking
+	}
+	en := threadEntry{Kind: transcriptview.KindToolCall, Tool: tool, Target: target, Status: "running"}
+	var ln ckLine
+	if ckReadTool(tool) != "" {
+		ln = m.ckReadGroup(l, "", []threadEntry{en}, 0, width, false)[0]
+	} else {
+		ln = m.ckToolCard(l, en, "", width, false, false)[0]
+	}
+	// The row is not the card yet: it opens nothing.
+	ln.hit = ""
+	ln = ckFoldMark(l, ln, false, false)
 	if t != nil && t.actTimed {
-		if age := agentElapsed("working", t.actAt.UnixNano(), now); age != "" {
-			right = []ckSeg{{t: " · " + age, fg: pal.FgMute}}
+		// Under a minute the time says nothing the running mark does not.
+		if age := agentElapsed("working", t.actAt.UnixNano(), now); age != "" && !strings.HasPrefix(age, "<") {
+			ln.right = append([]ckSeg{{t: age + "  ", fg: l.pal.FgMute}}, ln.right...)
 		}
 	}
-	room := max(w-ansi.StringWidth(verb)-ckWidth(right...)-5, 4)
-	segs := []ckSeg{{t: l.g(ckGlyphWorking) + " ", fg: pal.Busy}, {t: verb, fg: pal.FgDim, attrs: ckBold}}
-	if rest != "" {
-		segs = append(segs, ckSeg{t: " " + ckTrunc(rest, room), fg: pal.FgMute})
+	return ckRender((*ckCanvas)(nil).reset(width, 1, l.canvas), width, ln), true
+}
+
+// ckJoinsReads reports whether a read that comes after a read call and then
+// entries joins that call's group: only results and the images reads gave
+// come between.
+func ckJoinsReads(entries []threadEntry) bool {
+	for _, en := range entries {
+		if en.Kind != "tool_result" && (en.Role != "tool" || en.Image != nil) {
+			return false
+		}
 	}
-	c.text(c.text(x+2, y, x+w, segs...), y, x+w, right...)
 	return true
 }

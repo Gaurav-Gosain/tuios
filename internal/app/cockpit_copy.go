@@ -150,6 +150,10 @@ func (m *OS) CockpitCopyStart() bool {
 	q.rows = ckCopyOf(m.cockpitLook(), t.lines, t.lineIDs, q.w)
 	// The view copy mode starts at is the one on screen.
 	_, end := t.follow.Window()
+	if t.actRow {
+		// The activity row is drawn past the body copy mode holds.
+		end--
+	}
 	q.SetScrollOffset(len(q.rows) - min(end, len(q.rows)))
 	q.cm = terminal.CopyMode{Active: true, State: terminal.CopyModeNormal, ScrollOffset: q.offset}
 	m.Inbox.threads.copy = q

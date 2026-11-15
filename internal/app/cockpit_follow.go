@@ -7,9 +7,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
 )
 
-// The thread's scroll: it follows the newest line, puts a new prompt at the
-// top, and holds still once the person scrolls up (transcriptview.Follow has
-// the rules). A held thread says how many entries arrived under it, and G
+// The thread's scroll: it follows the newest line, a new prompt among them,
+// and holds still once the person scrolls up (transcriptview.Follow has the
+// rules). A held thread says how many entries arrived under it, and G
 // shows them. The ruler in the thread's right column marks each prompt, and
 // { and } jump between them. Nothing here runs on a timer: the view moves on
 // a frame drawn for a delivery, a key or a send.
@@ -63,7 +63,8 @@ func (m *OS) CockpitPromptJump(next bool) {
 }
 
 // threadFollowOnSend makes the thread of the agent a reply went to follow
-// again, so the prompt goes to the top when its transcript shows it.
+// again, so the reply's echo, and then the prompt the transcript logs in its
+// place, show at the bottom.
 func (m *OS) threadFollowOnSend(host, sess, window string) {
 	if t := m.Inbox.threads.byKey[host+"\x00"+sess+"\x00"+window]; t != nil {
 		t.follow.Bottom()

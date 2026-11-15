@@ -150,6 +150,9 @@ type agentThread struct {
 	act               string
 	actAt             time.Time
 	actTimed, actSeen bool
+	// actRow says the last frame drew the row as the thread's newest line,
+	// one line past the body, which Follow counts.
+	actRow bool
 	// pill is the child pill under the pill cursor, "" for none. See
 	// cockpit_thread_kids.go.
 	pill string
@@ -803,6 +806,12 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 		if m.cockpitTab() != "Changes" {
 			// The replies sent that the transcript does not hold yet.
 			echo, hits := m.threadEchoLines(t.key, width)
+			if n := len(t.lines); len(echo) > 0 && n > 0 && !t.lines[n-1].blank() {
+				// The blank line the thread puts before a prompt's card,
+				// so the card lands on the echo's rows.
+				c := (*ckCanvas)(nil).reset(width, 1, m.cockpitLook().canvas)
+				echo, hits = append([]string{c.render()}, echo...), append([]string{""}, hits...)
+			}
 			out, t.hits = append(out, echo...), append(t.hits, hits...)
 			for range echo {
 				t.lines, t.lineIDs = append(t.lines, ckLine{}), append(t.lineIDs, "")

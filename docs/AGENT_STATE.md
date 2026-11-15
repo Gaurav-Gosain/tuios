@@ -2809,7 +2809,10 @@ still while copy mode runs, and new entries show when it ends. `esc` ends it
 and keeps the view open. A change of width, tab or agent ends it too.
 
 The thread follows the newest card while it shows the bottom. A new prompt
-goes to the top of the thread, and the reply fills the space under it. When
+shows at the bottom like any new line and pushes the older lines up. While
+the agent works, the call it runs now shows as the newest line before the
+transcript has it, and its card takes that line's place when it lands, so
+lines move only up, by the lines added under them. When
 you scroll up, the thread stays where it is. A line at the bottom counts the
 entries that arrived, such as `3 new entries ↓`. `G`, a click on that line,
 or a scroll back to the bottom shows them and follows again. Each agent keeps

@@ -17596,3 +17596,23 @@ Run on 2026-11-14 on macOS. The branch passes both tests.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTheBoardCountsWhatAutoStarts$' -v .`.
+
+## The cockpit thread streams in place
+
+`TestCockpitThreadStreamsInPlace` streams one Claude Code turn into a followed
+thread: a prompt sent from the reply area, a thought, three commands named by
+the hooks before the transcript has them, results that land late (one fails
+and its card grows), and a long reply. It records every frame and holds each
+pair to the follow rules: a line keeps its row or moves up by the lines added
+under it, and no band of blank rows is left under the newest line.
+
+Run on 2026-11-15 on macOS. The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (a new prompt anchored at the top) | 8 of 15 frames: "20 blank rows under the newest line, 3 at rest" when the prompt lands, and "a line moved down 1 rows" when each call lands under the activity row | **caught** |
+| The echo keeps a blank line under its state line | "frame 2 (prompt): a line moved down 1 rows" | **caught** |
+| The activity row drawn under the thread as before, with no anchor | passes: once the anchor is gone, the old row and the card it gives way to take the same row | not a control of this test; `TestCockpitThreadCards` (cockpitActivityRow) checks the card lands on the row's row |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitThreadStreamsInPlace$' -v .`.

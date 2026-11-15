@@ -636,9 +636,15 @@ func fleetRowWith(s tuitest.Screen, want string) int {
 // cells as the host draws them.
 func saveCockpitFrames(t *testing.T, term *tuitest.Terminal, name string, pics ...shot.Image) {
 	t.Helper()
+	saveArtifact(t, term, artifactDir(t), name)
+	saveScreenPNG(t, term.Screen(), name, pics...)
+}
+
+// saveScreenPNG draws screen s as name.png in the test's artifact folder,
+// in the window frame and font saveCockpitFrames uses.
+func saveScreenPNG(t *testing.T, s tuitest.Screen, name string, pics ...shot.Image) {
+	t.Helper()
 	dir := artifactDir(t)
-	saveArtifact(t, term, dir, name)
-	s := term.Screen()
 	p := shot.XTermPalette()
 	cols, rows := s.Size()
 	g := shot.NewGrid(cols, rows, p.FG, p.BG)
@@ -876,9 +882,10 @@ func TestCockpitThreadCards(t *testing.T) {
 }
 
 // threadFollowAndRuler appends to the transcript of TestCockpitThreadCards
-// and checks the thread's three scroll rules and its prompt ruler: a new
-// prompt goes to the top of the thread while it follows; once its reply fills
-// the thread, the bottom is followed; the ruler marks each prompt and { and }
+// and checks the thread's two scroll rules and its prompt ruler: a new
+// prompt shows at the bottom like any new line, with no blank rows under its
+// reply, while the thread follows; a long reply keeps the bottom in view; the
+// ruler marks each prompt and { and }
 // put the previous and next prompt at the top; a thread scrolled up holds
 // still while entries arrive and counts them on its last row; G shows them
 // and follows again.
@@ -933,7 +940,8 @@ func threadFollowAndRuler(t *testing.T, base, path string) {
 		t.Fatalf("no focus tabs\n%s", term.Snapshot())
 	}
 	first := tabs + 3
-	// 1. A new prompt goes to the top, and the reply fills under it.
+	// 1. A new prompt shows at the bottom, and its reply under it is the
+	// newest line: no band of blank rows is left under it.
 	appendEntries([2]string{"user", "Now cover the boundary at exactly 30 s."},
 		[2]string{"assistant", "Adding a table test for the boundary."})
 	if err := term.WaitForText("Adding a table test for the boundary.", uiTimeout); err != nil {
@@ -947,14 +955,17 @@ func threadFollowAndRuler(t *testing.T, base, path string) {
 	if rowWith(s, "2 of 5 done") == first {
 		first = rowWith(s, "Update the changelog") + 3
 	}
-	if r := rowWith(s, "turn 2"); r != first {
-		t.Fatalf("ASSERTION: the new prompt is not at the top of the thread: its label is on row %d, the thread starts on row %d\n%s", r, first, term.Snapshot())
-	}
-	if rowWith(s, "Adding a table test") <= rowWith(s, "Now cover the boundary") {
+	reply := rowWith(s, "Adding a table test")
+	if reply <= rowWith(s, "Now cover the boundary") {
 		t.Fatalf("ASSERTION: the reply is not under the prompt\n%s", term.Snapshot())
 	}
-	saveCockpitFrames(t, term, "follow-anchor")
-	// Once the reply fills the thread, the bottom is followed.
+	// Under the reply: the blank line that ends its card and the gap over
+	// the reply area, then the reply area's rule.
+	if under := threadRows(s, cellColumnOf(s, tabs, "Thread"), reply+1, reply+4); strings.TrimSpace(strings.Join(under, "")) == "" {
+		t.Fatalf("ASSERTION: the new prompt went to the top and left blank rows under its reply\n%s", term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "follow-new-prompt")
+	// A reply taller than the thread keeps the bottom in view.
 	appendEntries([2]string{"assistant", notes("boundary", 40)})
 	if err := term.WaitForText("boundary note 40", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the thread did not follow the reply past its height: %v\n%s", err, term.Snapshot())
@@ -1070,12 +1081,13 @@ func threadRows(s tuitest.Screen, x0, y0, y1 int) []string {
 	return out
 }
 
-// cockpitActivityRow checks the live activity row under the thread of the
-// agent TestCockpitThreadCards joined to cockpit-auth.jsonl. A PreToolUse
-// hook for a command the transcript does not have yet shows the row with the
-// command. When the transcript gains the call's card, the row goes, so the
-// row never repeats a card. A second tool shows the row again, and at rest
-// there is no row.
+// cockpitActivityRow checks the live activity row at the end of the thread
+// of the agent TestCockpitThreadCards joined to cockpit-auth.jsonl. A
+// PreToolUse hook for a command the transcript does not have yet shows the
+// row: the first line of the call's card, as the newest line. When the
+// transcript gains the call, its card takes the row's place, so the row never
+// repeats a card and nothing moves. A second tool shows the row again, and at
+// rest there is no row.
 func cockpitActivityRow(t *testing.T, base, path string) {
 	t.Helper()
 	hook := func(payload map[string]any) {
@@ -1105,12 +1117,13 @@ func cockpitActivityRow(t *testing.T, base, path string) {
 		t.Fatalf("the thread never showed: %v\n%s", err, term.Snapshot())
 	}
 	const cmdText = "go test -run TestRefreshSkew ./internal/auth/"
-	row := "Running " + cmdText
+	row := "Bash  " + cmdText
 	hook(map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": map[string]any{"command": cmdText}})
 	if err := term.WaitForText(row, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the thread shows no activity row while the agent runs a command: %v\n%s", err, term.Snapshot())
 	}
 	saveCockpitFrames(t, term, "activity-row-200x55")
+	at := rowWith(term.Screen(), row)
 
 	// The transcript catches up: the call's card shows, and the row goes.
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
@@ -1120,30 +1133,38 @@ func cockpitActivityRow(t *testing.T, base, path string) {
 	rec, _ := json.Marshal(map[string]any{
 		"type": "assistant", "uuid": "c18", "timestamp": "2026-10-18T09:52:05.000Z", "sessionId": "9a1f0c2e-0000-4000-8000-00000000c0c0",
 		"message": map[string]any{"role": "assistant", "stop_reason": "tool_use",
-			"content": []any{map[string]any{"type": "tool_use", "id": "b2", "name": "Bash", "input": map[string]any{"command": cmdText}}}},
+			"content": []any{map[string]any{"type": "text", "text": "Checking the skew test once more."},
+				map[string]any{"type": "tool_use", "id": "b2", "name": "Bash", "input": map[string]any{"command": cmdText}}}},
 	})
 	if _, err := f.Write(append(rec, '\n')); err != nil {
 		t.Fatal(err)
 	}
 	_ = f.Close()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		text := s.Text()
-		return strings.Contains(text, "Bash  "+cmdText) && !strings.Contains(text, row)
+		// The words before the call say the transcript has it. The row
+		// and the card look the same, so the line shows once.
+		return strings.Contains(s.Text(), "Checking the skew test once more.")
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the activity row stays when the transcript shows the call's card: %v\n%s", err, term.Snapshot())
+	}
+	if n := strings.Count(term.Screen().Text(), row); n != 1 {
+		t.Fatalf("ASSERTION: the call shows %d times once the transcript has it, not once\n%s", n, term.Snapshot())
+	}
+	if got := rowWith(term.Screen(), row); got != at {
+		t.Fatalf("ASSERTION: the call's card landed on row %d, not on the activity row's row %d\n%s", got, at, term.Snapshot())
 	}
 	saveCockpitFrames(t, term, "activity-caught-up-200x55")
 
 	// The next tool shows the row again, and a pane at rest has none.
 	hook(map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": map[string]any{"file_path": "internal/auth/refresh.go"}})
-	if err := term.WaitForText("Reading internal/auth/refresh.go", uiTimeout); err != nil {
+	if err := term.WaitForText("Read 1  refresh.go", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the thread shows no activity row for the next tool: %v\n%s", err, term.Snapshot())
 	}
 	if out, err := tuiosCLI(t, base, "set-agent-state", "idle", "-s", "api", "-w", "api-auth", "--harness", "claude-code"); err != nil {
 		t.Fatalf("set-agent-state idle: %v\n%s", err, out)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return !strings.Contains(s.Text(), "Reading internal/auth/refresh.go")
+		return !strings.Contains(s.Text(), "Read 1  refresh.go")
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the activity row stays when the agent rests: %v\n%s", err, term.Snapshot())
 	}
