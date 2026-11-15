@@ -1549,6 +1549,12 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		if cmd, ok := m.echoAction(action); ok {
 			return cmd
 		}
+		if key, ok := strings.CutPrefix(action, ckCodeCopyHit); ok {
+			if t := m.cockpitThread(); t != nil {
+				return m.cockpitCopyCode(t, key)
+			}
+			return nil
+		}
 		if id, ok := strings.CutPrefix(action, "fold:"); ok {
 			if t := m.cockpitThread(); t != nil {
 				if t.folded == nil {
@@ -1808,6 +1814,8 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 	case config.ActionInboxCodeRight:
 		m.CockpitCodeScroll(1)
 		return nil, true
+	case config.ActionInboxCodeCopy:
+		return m.CockpitCodeCopy(), true
 	case config.ActionInboxArtifact:
 		return m.CockpitArtifactOpen(), true
 	case config.ActionInboxDetailDown, config.ActionInboxDetailUp:

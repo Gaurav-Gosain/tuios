@@ -79,6 +79,8 @@ type threadEntry struct {
 	// Calls are what a tool call said to other agents or to the person
 	// through tuios, drawn as message cards.
 	Calls []transcriptview.AgentCall `json:"calls"`
+	// Truncated says the daemon cut the entry's text.
+	Truncated bool `json:"truncated"`
 	// sum is a hash of the text and the plan, set when the entry is taken
 	// in, for the key of its card: a message written again, or still being
 	// written, keeps its id and changes its text.
@@ -153,6 +155,9 @@ type agentThread struct {
 	// when its card is built. codeGen counts the scrolls of each entry's
 	// blocks, by entry id, for the entry's card key.
 	codeX, codeMax, codeGen map[string]int
+	// code is each code block's code as the thread holds it, by key, for
+	// a copy of the block.
+	code map[string]ckCode
 	// act is the activity row's text as last drawn, "" for no row, and
 	// actAt when it changed to that. actTimed says the thread saw that
 	// activity start, so actAt is when it started, to within one redraw: an

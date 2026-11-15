@@ -455,6 +455,13 @@ func (md *ckMD) code(b markdown.Block, first, rest []ckSeg, avail int) {
 	if b.Lang != "" {
 		head.right = []ckSeg{{t: ckTrunc(b.Lang, 16), fg: pal.FgMute}, {t: " "}}
 	}
+	if md.t != nil {
+		// A click on the header copies the block.
+		head.right = append([]ckSeg{{t: "copy", fg: pal.FgMute}, {t: "  "}}, head.right...)
+		if b.Lang == "" {
+			head.right = append(head.right, ckSeg{t: " "})
+		}
+	}
 	start := len(md.lines)
 	md.lines = append(md.lines, head)
 	more := 0
@@ -463,6 +470,13 @@ func (md *ckMD) code(b markdown.Block, first, rest []ckSeg, avail int) {
 	}
 	shown := texts[:len(texts)-more]
 	key, xOff := md.codeScroll(shown, codeW)
+	if key != "" {
+		md.lines[start].hit = ckCodeCopyHit + key
+		if md.t.code == nil {
+			md.t.code = make(map[string]ckCode)
+		}
+		md.t.code[key] = ckCode{text: strings.Join(b.Lines, "\n"), open: b.Open}
+	}
 	for i, t := range shown {
 		var sp []diffview.Span
 		if i < len(spans) {

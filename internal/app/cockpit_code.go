@@ -5,8 +5,13 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
+// A click on a code block's header, or C for the lowest block on screen,
+// copies the block's code as the agent wrote it.
+//
 // A code line wider than the thread is cut at the block's edge. The block
 // scrolls sideways under a sideways wheel or shift and the wheel, and under
 // ( and ) for the lowest such block on screen. Its lines move together, and
@@ -43,14 +48,14 @@ func (m *OS) cockpitCodeAt(x, y int) (*agentThread, string) {
 }
 
 // cockpitCodeLowest is the thread and the key of the lowest code block on
-// screen that is wider than the thread, "" for none.
-func (m *OS) cockpitCodeLowest() (*agentThread, string) {
+// screen, wider than the thread when wide, "" for none.
+func (m *OS) cockpitCodeLowest(wide bool) (*agentThread, string) {
 	v := m.Inbox.ck.code
 	if v.t == nil {
 		return nil, ""
 	}
 	for i := min(v.end, len(v.t.lines)) - 1; i >= v.start; i-- {
-		if key := v.t.lines[i].code; key != "" && v.t.codeMax[key] > 0 {
+		if key := v.t.lines[i].code; key != "" && (!wide || v.t.codeMax[key] > 0) {
 			return v.t, key
 		}
 	}
@@ -110,7 +115,7 @@ func (m *OS) CockpitCodeWheel(x, y int, button tea.MouseButton, shift bool, now 
 // CockpitCodeScroll is ( and ): the lowest code block on screen that is
 // wider than the thread moves left (dir -1) or right.
 func (m *OS) CockpitCodeScroll(dir int) {
-	t, key := m.cockpitCodeLowest()
+	t, key := m.cockpitCodeLowest(true)
 	if key == "" {
 		m.ShowNotification("No code block on screen is wider than the thread.", "info", m.Settings.NotificationDuration)
 		return
@@ -118,4 +123,59 @@ func (m *OS) CockpitCodeScroll(dir int) {
 	if t.scrollCode(key, dir*ckCodeKeyStep) {
 		m.cockpitTouch()
 	}
+}
+
+// ckCodeCopyHit is the start of the hit of a code block's header: a click
+// copies the block whose key follows it.
+const ckCodeCopyHit = "code-copy:"
+
+// ckCode is a code block's code as the thread holds it. open says its fence
+// was never closed.
+type ckCode struct {
+	text string
+	open bool
+}
+
+// CockpitCodeCopy is C: the lowest code block on screen goes to the
+// clipboard.
+func (m *OS) CockpitCodeCopy() tea.Cmd {
+	t, key := m.cockpitCodeLowest(false)
+	if key == "" {
+		m.ShowNotification("No code block on screen.", "info", m.Settings.NotificationDuration)
+		return nil
+	}
+	return m.cockpitCopyCode(t, key)
+}
+
+// cockpitCopyCode puts the code of block key of t on the clipboard and in
+// the paste buffers, the way a yank in copy mode does, and says how many
+// lines it copied. A block whose message the daemon cut, and whose fence
+// was not closed before the cut, is copied as far as the thread holds it,
+// and the status line says so.
+func (m *OS) cockpitCopyCode(t *agentThread, key string) tea.Cmd {
+	c, ok := t.code[key]
+	if !ok {
+		return nil
+	}
+	n := strings.Count(c.text, "\n") + 1
+	word := "Copied " + plural.CountAs(n, "line", "lines") + "."
+	if c.open && t.entryCut(key[:max(strings.LastIndexByte(key, '/'), 0)]) {
+		word += " The thread has only part of this block."
+	}
+	m.ShowNotification(word, "success", m.Settings.NotificationDuration)
+	if m.Settings.CopyCommand != "" {
+		// Yank keeps the paste buffer itself.
+		return m.Yank(c.text)
+	}
+	return tea.Batch(tea.SetClipboard(c.text), m.SaveToPasteBuffers(c.text))
+}
+
+// entryCut reports whether the daemon cut the text of entry id.
+func (t *agentThread) entryCut(id string) bool {
+	for i := range t.entries {
+		if t.entries[i].ID == id {
+			return t.entries[i].Truncated
+		}
+	}
+	return false
 }

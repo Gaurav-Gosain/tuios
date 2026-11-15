@@ -2020,6 +2020,8 @@ const (
 	// block on screen that is wider than the thread.
 	ActionInboxCodeLeft  = "inbox_code_left"
 	ActionInboxCodeRight = "inbox_code_right"
+	// ActionInboxCodeCopy copies the lowest code block on screen.
+	ActionInboxCodeCopy = "inbox_code_copy"
 	// The thread's previous and next prompt, the marks on its ruler.
 	ActionInboxPromptPrev = "inbox_prompt_prev"
 	ActionInboxPromptNext = "inbox_prompt_next"
@@ -2149,6 +2151,7 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxCodeWrap:      {"W"},
 		ActionInboxCodeLeft:      {"("},
 		ActionInboxCodeRight:     {")"},
+		ActionInboxCodeCopy:      {"C"},
 		// [ and ] step the tabs, so the prompt jumps take the braces.
 		ActionInboxPromptPrev: {"{"},
 		ActionInboxPromptNext: {"}"},
@@ -3867,6 +3870,7 @@ var yieldingDefaults = map[string]bool{
 	"inbox_code_wrap":    true,
 	"inbox_code_left":    true,
 	"inbox_code_right":   true,
+	"inbox_code_copy":    true,
 	"inbox_child":        true,
 	// ctrl+o, new with the message cards.
 	"inbox_jump_back": true,

@@ -2767,6 +2767,11 @@ conversation, read from its transcript and drawn as cards:
   wheel on the block, or `(` and `)` for the lowest such block on screen.
   Its lines move together, and a line with text left of the view has `…` in
   its gutter.
+- A click on `copy` in a code block's header, or `C` for the lowest block on
+  screen, copies the block's code as the agent wrote it, to the clipboard
+  and the paste buffers, and the status line says how many lines. When the
+  agent's message was longer than the thread keeps, the copy ends where the
+  thread's text ends, and the status line says so.
 - A command that failed shows the end of its output and a `failed` mark.
 - A call you declined has a `declined` mark, not `failed`, and shows what you
   said with it. Where you stopped the agent, the thread shows one quiet line,

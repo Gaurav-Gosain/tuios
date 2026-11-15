@@ -443,7 +443,7 @@ func (m *OS) kanbanKey(action string) (tea.Cmd, bool) {
 		case r.kind == ckRowCard:
 			return m.cockpitCardGo(r, ck.cards[r.card]), true
 		}
-	case config.ActionInboxTabPrev, config.ActionInboxTabNext, config.ActionInboxExpand, config.ActionInboxCodeWrap, config.ActionInboxCodeLeft, config.ActionInboxCodeRight,
+	case config.ActionInboxTabPrev, config.ActionInboxTabNext, config.ActionInboxExpand, config.ActionInboxCodeWrap, config.ActionInboxCodeLeft, config.ActionInboxCodeRight, config.ActionInboxCodeCopy,
 		config.ActionInboxDetailDown, config.ActionInboxDetailUp:
 		// The columns have no focus area for these to act on.
 	default:

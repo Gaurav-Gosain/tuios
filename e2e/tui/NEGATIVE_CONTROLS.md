@@ -17747,3 +17747,21 @@ Run on 2026-11-15 on macOS. The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitThreadCodeBlockScroll$' -v .`.
+
+## Copy a cockpit code block
+
+`TestCockpitThreadCodeBlockCopy` copies the 300-column Go block by a click on
+`copy` in its header, and the 2000-line block, which the daemon cuts at
+8 KiB, with `C`: the paste buffer holds the code (not the drawn rows), and
+the status line gives the line count and says when the thread has only part
+of the block.
+
+Run on 2026-11-15 on macOS. The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The branch under it, feat/cockpit-code-scroll (no copy) | "the Go block's header has no copy" | **caught** |
+| The header drawn with `copy` but without its hit | "the click copied" (the old buffer) | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitThreadCodeBlockCopy$' -v .`.
