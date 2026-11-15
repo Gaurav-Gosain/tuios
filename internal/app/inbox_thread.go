@@ -99,6 +99,9 @@ func threadSum(e *threadEntry) uint64 {
 
 // agentThread is one agent's thread.
 type agentThread struct {
+	// root is the folder the agent works in, which the thread shows paths
+	// relative to (ckAgentRoot), set each time the thread is drawn.
+	root    string
 	key     string
 	session string
 	window  string

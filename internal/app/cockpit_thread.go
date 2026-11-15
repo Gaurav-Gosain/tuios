@@ -3,6 +3,7 @@ package app
 import (
 	"image/color"
 	"path"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -130,6 +131,8 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 	if who == "" {
 		who = "agent"
 	}
+	// Paths show relative to the folder the agent works in.
+	t.root = m.ckAgentRoot(e)
 	entries := t.entries
 	if changes {
 		last := 0
@@ -172,7 +175,7 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 	// thread that grows by one entry draws only that one.
 	gen := theme.Generation()
 	cached := func(en threadEntry, variant int, build func() []ckLine) {
-		key := ckCardKey{width: width, theme: gen, look: m.Inbox.ck.lookGen, ascii: l.ascii, nerd: l.nerd, depth: l.pal.Depth,
+		key := ckCardKey{width: width, theme: gen, look: m.Inbox.ck.lookGen, ascii: l.ascii, nerd: l.nerd, depth: l.pal.Depth, root: t.root,
 			folded: t.folded[en.ID], expand: t.expandAll, changes: changes, variant: variant, status: en.Status, sum: en.sum}
 		if card, ok := t.cards[en.ID]; ok && card.key == key {
 			items = ckAddItem(items, card.item, blank)
@@ -211,10 +214,12 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 	// thread, so in the thread it is folded to its count.
 	pinned := !changes && t.pinned
 	for i := from; i < len(entries); i++ {
-		en := entries[i]
+		en := ckEntryIn(t.root, entries[i])
 		cur = en.ID
 		isEdit := en.Kind == "tool_call" && en.Diff != nil
-		if changes && !isEdit {
+		// The Changes tab is the agent's work: an edit outside its folder,
+		// such as Claude Code's plan file, is in the thread only.
+		if changes && (!isEdit || !ckInRoot(t.root, entries[i].Diff.File)) {
 			continue
 		}
 		if turnOf != nil {
@@ -298,7 +303,7 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 					}
 					continue
 				}
-				calls = append(calls, entries[j])
+				calls = append(calls, ckEntryIn(t.root, entries[j]))
 			}
 			i = j - 1
 			key := threadEntry{ID: en.ID}
@@ -462,6 +467,8 @@ type ckCardKey struct {
 	status string
 	// sum is the entry's text hash: a message written again keeps its id.
 	sum uint64
+	// root is the folder the card's paths are shown relative to.
+	root string
 }
 
 // ckAddItem appends a card's lines. A card or a new speaker starts after a
@@ -645,14 +652,65 @@ func ckWorse(a, b string) string {
 	return a
 }
 
-// ckShortPath is the end of a long path: its last three parts, which tell
-// files apart.
-func ckShortPath(p string) string {
-	parts := strings.Split(strings.TrimPrefix(p, "/"), "/")
-	if len(parts) > 3 && strings.HasPrefix(p, "/") {
-		return strings.Join(parts[len(parts)-3:], "/")
+// ckAgentRoot is the folder an agent works in: its worktree, else its pane's
+// folder when this client holds the pane. "" when neither is known.
+func (m *OS) ckAgentRoot(e sidebarAgentEntry) string {
+	if p := m.ckWorktreeOf(e).path; p != "" {
+		return p
 	}
-	return p
+	if e.Host != "" {
+		return ""
+	}
+	if w := m.windowByID(e.WindowID); w != nil {
+		return firstNonEmptyStr(w.DaemonCwd, w.Cwd)
+	}
+	return ""
+}
+
+// ckInRoot reports whether path p is in folder root. Every path is in an
+// unknown root.
+func ckInRoot(root, p string) bool {
+	if root == "" || !filepath.IsAbs(p) {
+		return true
+	}
+	root = strings.TrimSuffix(root, "/")
+	return p == root || strings.HasPrefix(p, root+"/")
+}
+
+// ckRelPath is path p as the agent's work shows it: relative to root when p
+// is in it, else with ~ for the home folder. A relative path is kept.
+func ckRelPath(root, p string) string {
+	if !filepath.IsAbs(p) {
+		return p
+	}
+	if root != "" && ckInRoot(root, p) {
+		if rel := strings.TrimPrefix(p[len(strings.TrimSuffix(root, "/")):], "/"); rel != "" {
+			return rel
+		}
+		return "."
+	}
+	return ckHomePath(p)
+}
+
+// ckRelTarget is a tool call's target with a path in it made relative to
+// root. A shell command is kept as written.
+func ckRelTarget(root, tool, target string) string {
+	if transcriptview.ShellTool(tool) || !filepath.IsAbs(strings.TrimSpace(target)) {
+		return target
+	}
+	return ckRelPath(root, strings.TrimSpace(target))
+}
+
+// ckEntryIn is en with its target and its diff's file relative to root. The
+// thread's own entry is not changed: copy mode yanks what the agent wrote.
+func ckEntryIn(root string, en threadEntry) threadEntry {
+	en.Target = ckRelTarget(root, en.Tool, en.Target)
+	if en.Diff != nil {
+		d := *en.Diff
+		d.File = ckRelPath(root, d.File)
+		en.Diff = &d
+	}
+	return en
 }
 
 // ckClock is a transcript time as the label shows it: hours and minutes.
@@ -1003,13 +1061,13 @@ func (m *OS) ckDiffCard(l ckLook, t *agentThread, en threadEntry, width int, who
 	if !open {
 		mark = ckGlyphFold
 	}
-	file := ckShortPath(printableTitle(d.File))
+	file := ckTruncMid(printableTitle(d.File), max(width-24, 8))
 	right := ckDiffCounts(l, d.Added, d.Removed)
 	st := m.ckToolLine(l, "", "", en.Status, width)
 	right = append(right, st.right...)
 	head := ckLine{bg: l.panel, indent: 1, hit: "fold:" + en.ID, right: right,
 		segs: []ckSeg{{t: l.g(mark) + " ", fg: pal.FgDim}, {t: printableTitle(en.Tool), fg: pal.FgDim, attrs: ckBold},
-			{t: "   " + ckTrunc(file, width-24), fg: pal.Fg}}}
+			{t: "   " + file, fg: pal.Fg}}}
 	if !open {
 		return []ckLine{head, {}}
 	}
@@ -1225,6 +1283,7 @@ func (m *OS) threadActivityLine(l ckLook, e sidebarAgentEntry, t *agentThread, w
 	tool, target := "", ""
 	if v := ckMeta(e, "now"); v != "" {
 		tool, target, _ = strings.Cut(v, ": ")
+		target = ckRelTarget(m.ckAgentRoot(e), tool, target)
 	} else if sum, ok := programSummary(e.Program); ok && sum.State == "working" {
 		target = printableTitle(firstNonEmptyStr(sum.Msg, sum.Title))
 	}

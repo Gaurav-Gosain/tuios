@@ -302,6 +302,7 @@ func (m *OS) cockpitLastTurn(e sidebarAgentEntry) []ckTurnFile {
 	}
 	var out []ckTurnFile
 	at := map[string]int{}
+	root := m.ckAgentRoot(e)
 	for _, en := range slices.Backward(t.entries) {
 		if en.Kind == "text" && en.Role == "user" {
 			break
@@ -309,7 +310,11 @@ func (m *OS) cockpitLastTurn(e sidebarAgentEntry) []ckTurnFile {
 		if en.Kind != "tool_call" || en.Diff == nil {
 			continue
 		}
-		p := ckShortPath(printableTitle(en.Diff.File))
+		if !ckInRoot(root, en.Diff.File) {
+			// Not the agent's work, such as its plan file.
+			continue
+		}
+		p := ckRelPath(root, printableTitle(en.Diff.File))
 		j, ok := at[p]
 		if !ok {
 			j = len(out)

@@ -1503,7 +1503,7 @@ func (m *OS) ckRowLine2(l ckLook, r ckRow, e sidebarAgentEntry) (verb, rest stri
 	case e.State == "working":
 		if now := ckMeta(e, "now"); now != "" {
 			if tool, target, ok := strings.Cut(toolLineLabel(now), ": "); ok {
-				return tool, target, ink, right
+				return tool, ckRelTarget(m.ckAgentRoot(e), tool, target), ink, right
 			}
 			return now, "", ink, right
 		}
@@ -2533,11 +2533,12 @@ func (m *OS) cockpitTabs(e sidebarAgentEntry, r ckRow) []string {
 		return append([]string{"Thread"}, side...)
 	}
 	n := 0
+	root := m.ckAgentRoot(e)
 	for _, en := range slices.Backward(t.entries) {
 		if en.Kind == "text" && en.Role == "user" {
 			break
 		}
-		if en.Kind == "tool_call" && en.Diff != nil {
+		if en.Kind == "tool_call" && en.Diff != nil && ckInRoot(root, en.Diff.File) {
 			n++
 		}
 	}
