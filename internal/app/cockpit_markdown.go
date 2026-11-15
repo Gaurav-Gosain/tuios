@@ -45,6 +45,10 @@ type ckMD struct {
 	// shows every line, and open says the message's blocks are open.
 	fold string
 	open bool
+	// wrap breaks a code line wider than the block onto more rows, each
+	// after the first with a continuation mark. Without it the line is cut,
+	// with a cut mark at the block's right edge.
+	wrap bool
 }
 
 // ckCodeFold is how many lines of a code block a closed message shows.
@@ -54,7 +58,7 @@ const ckCodeFold = 12
 // than ckCodeFold lines shows that many and a line that opens it, unless
 // open.
 func (m *OS) ckMarkdownFold(l ckLook, text string, width int, id string, open bool) []ckLine {
-	return (&ckMD{m: m, l: l, fold: "fold:" + id, open: open}).layout(text, width, markdown.Options{})
+	return (&ckMD{m: m, l: l, fold: "fold:" + id, open: open, wrap: m.Inbox.ck.codeWrap}).layout(text, width, markdown.Options{})
 }
 
 // ckMarkdown lays out an agent's message as card lines of at most width
@@ -414,8 +418,10 @@ func ckWrapSegs(segs []ckSeg, width int) [][]ckSeg {
 }
 
 // code lays out a code block on the card ground, highlighted when the fence
-// names a language the lexers know. Lines are cut at the width, not
-// wrapped: wrapped code reads as other code.
+// names a language the lexers know. A line wider than the block is cut, with
+// a cut mark in the mute ink in its last cell, or, with wrap on (W in the
+// thread), broken onto more rows, each with a continuation mark in the
+// gutter, so a wrapped row does not read as another line.
 func (md *ckMD) code(b markdown.Block, first, rest []ckSeg, avail int) {
 	l := md.l
 	pal := l.pal
@@ -451,14 +457,92 @@ func (md *ckMD) code(b markdown.Block, first, rest []ckSeg, avail int) {
 		if i < len(spans) {
 			sp = spans[i]
 		}
-		raw := dv.Code(t, sp, diffview.Range{}, diffview.Context, false, 0, codeW)
-		md.lines = append(md.lines, ckLine{bg: l.panel, bgAt: at, indent: at + 2, raw: raw})
+		md.codeLine(dv, t, sp, at, codeW)
 	}
 	if more > 0 {
 		md.lines = append(md.lines, ckLine{bg: l.panel, bgAt: at, indent: at + 2, hit: md.fold,
 			segs: []ckSeg{{t: l.g(ckGlyphFold) + " " + plural.CountAs(more, "more line", "more lines"), fg: pal.FgMute}}})
 	}
 	md.lines = append(md.lines, ckLine{bg: l.panel, bgAt: at, segs: slicesClone(rest)})
+}
+
+// CockpitCodeWrap is W: the long lines of the thread's code blocks wrap, or
+// are cut again. It holds for every thread until the client ends.
+func (m *OS) CockpitCodeWrap() {
+	ck := &m.Inbox.ck
+	ck.codeWrap = !ck.codeWrap
+	// The cards are kept by look: a new one draws every card again.
+	ck.lookGen++
+	word := "Code lines are cut at the edge."
+	if ck.codeWrap {
+		word = "Code lines wrap."
+	}
+	m.ShowNotification(word, "info", m.Settings.NotificationDuration)
+	m.cockpitTouch()
+}
+
+// ckCodeCutMark and ckCodeWrapMark are a code row's marks: the line goes on
+// past the block's edge, and the row goes on with the line above.
+var (
+	ckCodeCutMark  = ckGlyph{"…", "…", ">"}
+	ckCodeWrapMark = ckGlyph{"↳", "↳", "+"}
+)
+
+// codeLine lays out one line of a code block at column at, in codeW cells:
+// whole, cut with the cut mark, or wrapped.
+func (md *ckMD) codeLine(dv *diffview.Theme, text string, spans []diffview.Span, at, codeW int) {
+	l := md.l
+	// The ink of the block's language label, on the same ground.
+	ink := l.pal.FgMute
+	if ckTextWidth(text) <= codeW {
+		md.lines = append(md.lines, ckLine{bg: l.panel, bgAt: at, indent: at + 2,
+			raw: dv.Code(text, spans, diffview.Range{}, diffview.Context, false, 0, codeW)})
+		return
+	}
+	if !md.wrap {
+		mark := l.g(ckCodeCutMark)
+		mw := ckTextWidth(mark)
+		n := len(ckCutText(text, max(codeW-mw, 1)))
+		md.lines = append(md.lines, ckLine{bg: l.panel, bgAt: at, indent: at + 2, mark: mark, markAt: at + 2 + codeW - mw, markInk: ink,
+			raw: dv.Code(text[:n], ckSpansIn(spans, 0, n), diffview.Range{}, diffview.Context, false, 0, codeW)})
+		return
+	}
+	for a, first := 0, true; a < len(text); first = false {
+		b := a + len(ckCutText(text[a:], codeW))
+		if b == a {
+			// A character wider than the block: it goes alone.
+			_, size := utf8.DecodeRuneInString(text[a:])
+			b = a + size
+		}
+		if b < len(text) {
+			// A row never ends on a space, so copy mode, which trims
+			// each row's end, joins the rows back to the line.
+			k := len(strings.TrimRight(text[a:b], " "))
+			if k > 0 {
+				b = a + k
+			}
+		}
+		ln := ckLine{bg: l.panel, bgAt: at, indent: at + 2, cont: !first,
+			raw: dv.Code(text[a:b], ckSpansIn(spans, a, b), diffview.Range{}, diffview.Context, false, 0, codeW)}
+		if !first {
+			ln.mark, ln.markAt, ln.markInk = l.g(ckCodeWrapMark), at+1, ink
+		}
+		md.lines = append(md.lines, ln)
+		a = b
+	}
+}
+
+// ckSpansIn is the spans of bytes a to b of a line, moved to start at 0.
+func ckSpansIn(spans []diffview.Span, a, b int) []diffview.Span {
+	var out []diffview.Span
+	for _, sp := range spans {
+		if sp.End <= a || sp.Start >= b {
+			continue
+		}
+		sp.Start, sp.End = max(sp.Start, a)-a, min(sp.End, b)-a
+		out = append(out, sp)
+	}
+	return out
 }
 
 // table lays out a table: the header bold over a rule, columns set off by

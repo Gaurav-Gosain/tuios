@@ -174,6 +174,7 @@ var actionTable = [...]ActionSpec{
 	{Name: "inbox_tab_prev", Desc: "Agents view: the focus's tab to the left", Run: RunView},
 	{Name: "inbox_tab_next", Desc: "Agents view: the focus's tab to the right", Run: RunView},
 	{Name: "inbox_expand", Desc: "Agents view: show every line of every card in the thread, or fold them again", Run: RunView},
+	{Name: "inbox_code_wrap", Desc: "Agents view: wrap the long lines of the thread's code blocks, or cut them again", Run: RunView},
 	{Name: "inbox_fold", Desc: "Agents view: fold or open the group of the row under the cursor", Run: RunView},
 	{Name: "inbox_prompt_prev", Desc: "Agents view: show the thread's previous prompt at the top", Run: RunView},
 	{Name: "inbox_prompt_next", Desc: "Agents view: show the thread's next prompt at the top", Run: RunView},

@@ -316,6 +316,9 @@ func (m *OS) cockpitFocusHints() []overlay.Hint {
 	hints = append(hints, pair(config.ActionInboxTabPrev, config.ActionInboxTabNext, "tabs")...)
 	hints = append(hints, m.keyHints(config.ActionInboxExpand, "expand")...)
 	if m.cockpitTab() == "Thread" {
+		hints = append(hints, m.keyHints(config.ActionInboxCodeWrap, "wrap code")...)
+	}
+	if m.cockpitTab() == "Thread" {
 		hints = append(hints, m.keyHints(config.ActionInboxResume, "copy")...)
 	}
 	if m.inboxReplySupported() {

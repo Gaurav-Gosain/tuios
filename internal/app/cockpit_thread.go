@@ -95,6 +95,14 @@ type ckLine struct {
 	// wrap says the next line goes on with the same paragraph, so copy mode
 	// joins them.
 	wrap bool
+	// cont says the line goes on with the line above with nothing between,
+	// as a wrapped code row does, so copy mode joins them that way.
+	cont bool
+	// mark is drawn at column markAt in markInk over what the line draws,
+	// such as a code row's cut mark. Copy mode leaves it out.
+	mark    string
+	markAt  int
+	markInk color.Color
 }
 
 // blank reports whether the line draws nothing.
@@ -1268,6 +1276,9 @@ func ckRender(c *ckCanvas, width int, ln ckLine) string {
 		c.draw(ln.indent, 0, width-ln.indent, ln.raw)
 	} else {
 		c.text(ln.indent, 0, right, ln.segs...)
+	}
+	if ln.mark != "" {
+		c.text(ln.markAt, 0, width, ckSeg{t: ln.mark, fg: ln.markInk})
 	}
 	return c.render()
 }

@@ -2014,6 +2014,8 @@ const (
 	ActionInboxTabNext = "inbox_tab_next"
 	ActionInboxExpand  = "inbox_expand"
 	ActionInboxFold    = "inbox_fold"
+	// Wrap the long lines of the thread's code blocks, or cut them again.
+	ActionInboxCodeWrap = "inbox_code_wrap"
 	// The thread's previous and next prompt, the marks on its ruler.
 	ActionInboxPromptPrev = "inbox_prompt_prev"
 	ActionInboxPromptNext = "inbox_prompt_next"
@@ -2140,6 +2142,7 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxTabNext:       {"]"},
 		ActionInboxExpand:        {"e"},
 		ActionInboxFold:          {"F"},
+		ActionInboxCodeWrap:      {"W"},
 		// [ and ] step the tabs, so the prompt jumps take the braces.
 		ActionInboxPromptPrev: {"{"},
 		ActionInboxPromptNext: {"}"},
@@ -3855,6 +3858,7 @@ var yieldingDefaults = map[string]bool{
 	"inbox_tab_next":     true,
 	"inbox_expand":       true,
 	"inbox_fold":         true,
+	"inbox_code_wrap":    true,
 	"inbox_child":        true,
 	// ctrl+o, new with the message cards.
 	"inbox_jump_back": true,

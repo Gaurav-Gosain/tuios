@@ -34,8 +34,10 @@ import (
 // ckCopyRow is one row of the thread for copy mode.
 type ckCopyRow struct {
 	cells []uv.Cell
-	// more says the next row goes on with the same paragraph.
-	more bool
+	// more says the next row goes on with the same paragraph, and cont
+	// that the row goes on with the one above with nothing between, as a
+	// wrapped code row does.
+	more, cont bool
 	// id is the entry the row belongs to, "" for a row of no entry.
 	id string
 }
@@ -94,7 +96,7 @@ func ckCopyOf(l ckLook, lines []ckLine, ids []string, w int) []ckCopyRow {
 			}
 		}
 		rows[i].cells = cells
-		rows[i].more = ln.wrap
+		rows[i].more, rows[i].cont = ln.wrap, ln.cont
 		if i < len(ids) {
 			rows[i].id = ids[i]
 		}
@@ -196,8 +198,8 @@ func (m *OS) CockpitCopyEnd() {
 }
 
 // CockpitCopyText is the text of the selection as the agent wrote it: rows
-// that wrap one paragraph joined with a space, and the indent the rows share
-// taken off. block takes the columns from x0 to x1 of each row.
+// that wrap one paragraph joined with a space, the rows of a wrapped code
+// line joined with nothing, and the indent the rows share taken off. block takes the columns from x0 to x1 of each row.
 func (m *OS) CockpitCopyText(start, end terminal.Position, line, block bool) string {
 	q := m.threadCopy()
 	if q == nil {
@@ -208,8 +210,8 @@ func (m *OS) CockpitCopyText(start, end terminal.Position, line, block bool) str
 	}
 	x0, x1 := min(start.X, end.X), max(start.X, end.X)
 	type piece struct {
-		text string
-		more bool
+		text       string
+		more, cont bool
 	}
 	var parts []piece
 	for y := max(start.Y, 0); y <= min(end.Y, len(q.rows)-1); y++ {
@@ -226,7 +228,7 @@ func (m *OS) CockpitCopyText(start, end terminal.Position, line, block bool) str
 				b = end.X
 			}
 		}
-		parts = append(parts, piece{text: ckCellsText(r.cells, a, b), more: r.more && !block && y < end.Y})
+		parts = append(parts, piece{text: ckCellsText(r.cells, a, b), more: r.more && !block && y < end.Y, cont: r.cont && !block && y > start.Y})
 	}
 	// The indent the rows share is chrome: a card's, a list's.
 	indent := -1
@@ -247,7 +249,10 @@ func (m *OS) CockpitCopyText(start, end terminal.Position, line, block bool) str
 			s = s[indent:]
 		}
 		sep := "\n"
-		if p.more {
+		switch {
+		case i+1 < len(parts) && parts[i+1].cont:
+			sep = ""
+		case p.more:
 			sep = " "
 		}
 		out = append(out, s, sep)

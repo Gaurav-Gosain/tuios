@@ -17712,3 +17712,19 @@ Main fails both: the refusal was a toast only. The hand back on its own fails on
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpit(AnswerKeysNeverFailInSilence|PlanCardSaysWhyItIsNotApproved)$' -v .`.
+
+## Long code lines in the cockpit thread
+
+`TestCockpitThreadCodeBlockWrap` reads an answer with a 300-column Go line at
+120 columns: the cut line ends in a cut mark in the mute ink, `W` wraps it
+with a continuation mark on each later row, copy mode yanks the wrapped rows
+as the one line, and `W` again cuts it.
+
+Run on 2026-11-15 on macOS. The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (the line cut by diffview, its ellipsis in the code's ink) | "the cut mark is drawn in {2 0 255 250 241}, not in the mute ink" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitThreadCodeBlockWrap$' -v .`.

@@ -2246,6 +2246,7 @@ Inside it:
 | `.` | Select the next agent a card in the thread names: one it started, or one it sent mail to, asked or read mail from. `enter` or a click on the name opens that agent's thread |
 | `ctrl+o` | Go back to the thread you opened another agent from, at the same place. Each `ctrl+o` goes back one more |
 | `e` | Show every line of every card in the thread |
+| `W` | Wrap the long lines of the thread's code blocks, or cut them again. A wrapped row starts with `↳`, and a cut line ends with `…`. It holds until the client ends |
 | `ctrl+b` `[` | Copy mode over the thread (`y` in the focus region too): the pane's copy mode keys, `Y` copies the selected entries as Markdown, and `gx` opens the link under the cursor |
 | click on a link | Open it, as a link in a pane opens. The pointer on a link underlines it |
 | `F` | Fold or open the group of the row under the cursor. On a folded heading, `enter` also opens it |
@@ -2387,7 +2388,7 @@ These keys are in three sections of their own, rebindable like any other:
 `inbox_write`, `inbox_sort`, `inbox_view_pane`, `inbox_new_agent`,
 `inbox_allow`, `inbox_allow_always`, `inbox_open`, `inbox_back`,
 `inbox_help`, `inbox_mark`, `inbox_mark_all`, `inbox_tab_prev`,
-`inbox_tab_next`, `inbox_expand`, `inbox_fold`, `inbox_prompt_prev`,
+`inbox_tab_next`, `inbox_expand`, `inbox_code_wrap`, `inbox_fold`, `inbox_prompt_prev`,
 `inbox_prompt_next`, `inbox_child`, `inbox_jump_back`, `inbox_compare`, `inbox_artifact`, `inbox_board`,
 `inbox_board_layout`, `inbox_dispatch_mode`, `inbox_dispatch_pause`, `inbox_view_list`, `inbox_take`, `inbox_ship`, `inbox_stage_prev`, `inbox_stage_next`,
 `inbox_region_next`, `inbox_region_prev`, `inbox_escape`, `inbox_next_needs`),

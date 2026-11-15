@@ -289,6 +289,9 @@ type cockpitState struct {
 	canvasTop              int
 	linkHover              ckLinkRun
 	linkPointX, linkPointY int
+	// codeWrap wraps the long lines of the thread's code blocks, W, for as
+	// long as the client runs.
+	codeWrap bool
 	// lastTop is the layer CockpitTop gave after the last message, for the
 	// verbose log of its changes (cockpit_layers.go).
 	lastTop CockpitLayer
@@ -1792,6 +1795,9 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 			t.gen++
 			m.cockpitTouch()
 		}
+		return nil, true
+	case config.ActionInboxCodeWrap:
+		m.CockpitCodeWrap()
 		return nil, true
 	case config.ActionInboxArtifact:
 		return m.CockpitArtifactOpen(), true

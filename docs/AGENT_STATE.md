@@ -2760,6 +2760,9 @@ conversation, read from its transcript and drawn as cards:
   code highlighted, and the part of a changed line that changed lit. A card
   shows its first 8 lines. `e` shows every line of every card, and a click on
   a card's header folds it.
+- A code line wider than the thread is cut, and ends with `…` in the mute ink.
+  `W` wraps the long lines of every code block, each wrapped row with `↳` in
+  its gutter, and `W` again cuts them. It holds until the client ends.
 - A command that failed shows the end of its output and a `failed` mark.
 - A call you declined has a `declined` mark, not `failed`, and shows what you
   said with it. Where you stopped the agent, the thread shows one quiet line,
