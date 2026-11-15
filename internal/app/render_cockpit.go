@@ -547,7 +547,8 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 	sx := c.w - 2 - btnW - 2 - sw
 	fits := func(segs ...ckSeg) bool { return x+ckWidth(segs...) <= sx-3 }
 	// The counts say their words when the row has room for them beside the
-	// search and the button, and only their marks otherwise.
+	// search and the button, and only their marks otherwise. Needs you keeps
+	// its words: it is the count the person acts on.
 	full := x
 	for i, k := range cnts {
 		if k.n > 0 || i == 0 {
@@ -561,7 +562,7 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 			continue
 		}
 		segs := []ckSeg{{t: k.g + " ", fg: k.ink}, {t: strconv.Itoa(k.n), fg: pal.Fg, attrs: ckBold}}
-		if !compact {
+		if !compact || i == 0 {
 			segs = append(segs, ckSeg{t: " " + k.words, fg: pal.FgDim})
 		}
 		x0 := x
