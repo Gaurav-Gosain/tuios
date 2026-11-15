@@ -2581,6 +2581,7 @@ func (m *OS) ckApprovalLines(it session.AttentionItem, where string, width int, 
 		}
 	}
 	detail = append(detail, inboxRiskLines(it, width)...)
+	detail = append(detail, m.inboxRefusalLines(it, width)...)
 	if line, ok := m.inboxConfirmLine(it); ok {
 		for _, l := range wrapPlain(line, width) {
 			detail = append(detail, "  "+l)

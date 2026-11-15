@@ -1515,20 +1515,32 @@ func (m *OS) InboxActivate() tea.Cmd {
 		}
 		return nil
 	}
-	var cmd tea.Cmd
 	if it.RequestID != "" {
 		// A held prompt shows nothing in its pane. Going there is choosing to
 		// answer it there, so the hold ends first and the harness shows it.
-		cmd = m.inboxReplyCmd(it, session.ApprovalAsk)
+		// The jump waits for the hand back: a jump to another session
+		// attaches it, the attach gets a new nonce, and the hand back signed
+		// with the old one was refused as not_human. The hold then ran on
+		// with nothing in the pane to answer.
+		if cmd := m.inboxReplyCmd(it, session.ApprovalAsk); cmd != nil {
+			return tea.Sequence(cmd, func() tea.Msg { return inboxJumpMsg{item: it} })
+		}
 	}
 	m.inboxJump(it)
-	return cmd
+	return nil
+}
+
+// inboxJumpMsg lands on an item's pane once the call before it is done.
+type inboxJumpMsg struct {
+	item session.AttentionItem
 }
 
 // InboxApprovalRepliedMsg is the answer to a reply-approval.
 type InboxApprovalRepliedMsg struct {
-	Name     string
-	Decision string
+	Name string
+	// RequestID is the hold the answer was for.
+	RequestID string
+	Decision  string
 	// From is where the agents view's cursor was when the answer was sent:
 	// the item answered and the row and agent under the cursor.
 	From ckAnswerFrom
@@ -1697,19 +1709,24 @@ func (m *OS) InboxReplyApproval(decision string) tea.Cmd {
 		m.ShowNotification(inboxNotHeldWords, "warning", m.Settings.NotificationDuration)
 		return nil
 	}
+	// A new key drops what the last one was refused for.
+	m.clearAnswerRefusal()
 	if !slices.Contains(it.Options, decision) {
-		m.ShowNotification("This prompt does not offer "+inboxDecisionWords(decision), "warning", m.Settings.NotificationDuration)
+		m.refuseAnswer(it, "Not answered: this prompt does not offer "+inboxDecisionWords(decision), "warning")
 		return nil
 	}
 	if !inboxShowsWhole(it) || m.inboxCut(it) {
-		m.ShowNotification("This prompt cannot be shown whole here. Enter answers it in the pane", "warning", m.Settings.NotificationDuration)
+		m.refuseAnswer(it, "This prompt cannot be shown whole here. Enter answers it in the pane", "warning")
 		return nil
 	}
 	if m.inboxTypingRefused(it) {
 		return nil
 	}
 	if !m.inboxAnswerSettled(it, time.Now()) {
-		m.ShowNotification("This prompt just changed. Read it, then answer", "warning", m.Settings.NotificationDuration)
+		// The key came before the card had been on screen long enough to
+		// be read. It answers nothing, and the card says so: the person
+		// presses it again once they have read it.
+		m.refuseAnswer(it, "Not answered: "+m.inboxUnsettledWhy(it)+". Read it, then press "+m.answerPressName(decision)+" again", "warning")
 		return nil
 	}
 	// A plan is approved only once it has been read to its end. See
@@ -1792,6 +1809,15 @@ func (m *OS) inboxAnswerSettled(it session.AttentionItem, now time.Time) bool {
 	return st.shown.key != "" && st.shown.key == inboxShownKey(it) && now.Sub(st.shown.since) >= inboxAnswerSettle
 }
 
+// inboxUnsettledWhy says why a held approval is not settled: it came on
+// screen just now, or it changed since it was drawn.
+func (m *OS) inboxUnsettledWhy(it session.AttentionItem) string {
+	if m.Inbox.shown.key == inboxShownKey(it) {
+		return "this prompt just came on screen"
+	}
+	return "this prompt just changed"
+}
+
 // inboxReplyCmd is the reply-approval call, with this client's attach nonce,
 // which is what lets the daemon take the answer as the person's.
 func (m *OS) inboxReplyCmd(it session.AttentionItem, decision string) tea.Cmd {
@@ -1833,7 +1859,7 @@ func (m *OS) inboxReplyCmdWith(it session.AttentionItem, decision, message strin
 	return func() tea.Msg {
 		raw, err := call("reply-approval", params, 5*time.Second)
 		if err != nil {
-			return InboxApprovalRepliedMsg{Name: name, Decision: decision, From: from, Err: err}
+			return InboxApprovalRepliedMsg{Name: name, RequestID: it.RequestID, Decision: decision, From: from, Err: err}
 		}
 		var res struct {
 			Decision string `json:"decision"`
@@ -1841,9 +1867,9 @@ func (m *OS) inboxReplyCmdWith(it session.AttentionItem, decision, message strin
 			Reason   string `json:"reason"`
 		}
 		if err := jsonx.Unmarshal(raw, &res); err != nil {
-			return InboxApprovalRepliedMsg{Name: name, Decision: decision, From: from, Err: err}
+			return InboxApprovalRepliedMsg{Name: name, RequestID: it.RequestID, Decision: decision, From: from, Err: err}
 		}
-		return InboxApprovalRepliedMsg{Name: name, Decision: decision, From: from, Standing: res.Decision, Applied: res.Applied, Reason: res.Reason}
+		return InboxApprovalRepliedMsg{Name: name, RequestID: it.RequestID, Decision: decision, From: from, Standing: res.Decision, Applied: res.Applied, Reason: res.Reason}
 	}
 }
 
@@ -1851,14 +1877,16 @@ func (m *OS) inboxReplyCmdWith(it session.AttentionItem, decision, message strin
 // enter says nothing when it worked: the pane in front of the person is the
 // answer.
 func (m *OS) applyInboxApprovalReplied(msg InboxApprovalRepliedMsg) {
+	it := session.AttentionItem{RequestID: msg.RequestID}
 	switch {
+	case msg.Err != nil && msg.Decision == session.ApprovalAsk:
+		// The hold runs on, so the pane shows nothing to answer. Say so,
+		// or the person waits on an empty pane.
+		m.refuseAnswer(it, "The prompt did not go back to the pane: "+msg.Err.Error()+". Answer it in the agents view", "error")
 	case msg.Err != nil:
-		if msg.Decision == session.ApprovalAsk {
-			return
-		}
-		m.ShowNotification("The answer did not go through: "+msg.Err.Error()+". Answer in the pane", "error", m.Settings.NotificationDuration*2)
+		m.refuseAnswer(it, "Not answered: "+msg.Err.Error(), "error")
 	case !msg.Applied && msg.Reason == inboxReplyChanged:
-		m.ShowNotification(msg.Name+" is asking about something else now, so nothing was answered. Read it again", "warning", m.Settings.NotificationDuration*2)
+		m.refuseAnswer(it, "Not answered: "+msg.Name+" is asking about something else now. Read it again", "warning")
 	case !msg.Applied:
 		m.ShowNotification(msg.Name+" was already answered: "+inboxDecisionWords(msg.Standing), "warning", m.Settings.NotificationDuration)
 	case msg.Decision != session.ApprovalAsk:

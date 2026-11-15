@@ -17691,3 +17691,24 @@ Run on 2026-11-15 on macOS. The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitLinksOpenOnClick$' -v .`.
+
+## Answer keys in the agents view say why they did nothing
+
+`TestCockpitAnswerKeysNeverFailInSilence` presses a on a held approval the
+moment its card is drawn. The card must say "Not answered ... press a again".
+Then enter, from a client attached to another session, must end the hold.
+`TestCockpitPlanCardSaysWhyItIsNotApproved` holds a 61-line plan. a before the
+end must say on the card that it did not approve, and how many lines are left.
+After the rebase onto the train (#2104 rewrote the plan hint, which no longer
+names a key to approve) its check of the hint was dropped.
+
+Run on 2026-11-15 on macOS. The branch passes both tests three runs in a row.
+Main fails both: the refusal was a toast only. The hand back on its own fails on main three runs of three.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `refuseAnswer` shows the toast and records no note | "ASSERTION: a pressed before the card was read did nothing the card shows" and "ASSERTION: a on a plan not read to its end did not say why on the card" | **caught** |
+| `InboxActivate` jumps before the hand back is sent, as before | "ASSERTION: the hold ends when enter hands the approval back to its pane" (still 1 held; the daemon refused the hand back as not_human) | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpit(AnswerKeysNeverFailInSilence|PlanCardSaysWhyItIsNotApproved)$' -v .`.

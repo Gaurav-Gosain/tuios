@@ -506,7 +506,7 @@ func TestCockpitAllowIsAskThenEnter(t *testing.T) {
 		tr.mu.Lock()
 		refused := false
 		for _, e := range tr.ev[before:] {
-			if e.Type == "notification" && strings.Contains(strings.ToLower(str(data(e, "message"))), "just changed") {
+			if msg := strings.ToLower(str(data(e, "message"))); e.Type == "notification" && (strings.Contains(msg, "not answered") || strings.Contains(msg, "just changed")) {
 				refused = true
 			}
 		}

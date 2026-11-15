@@ -60,6 +60,59 @@ type inboxApprovalState struct {
 	// question is the prompt read for a question its pane shows
 	// (inbox_question.go).
 	question inboxQuestionView
+	// refusal is why the last answer key did nothing, for the card of the
+	// prompt it was pressed on.
+	refusal inboxRefusal
+}
+
+// inboxRefusal is why an answer key did not answer the held prompt under
+// requestID. The card draws it next to its buttons, where the person looks
+// after the key. A toast alone was missed: the card did not change, so the
+// key read as lost.
+type inboxRefusal struct {
+	requestID string
+	text      string
+}
+
+// refuseAnswer says why an answer key on it did nothing, on its card and as
+// a toast.
+func (m *OS) refuseAnswer(it session.AttentionItem, text, level string) {
+	m.Inbox.approvals.refusal = inboxRefusal{requestID: it.RequestID, text: text}
+	// The agents view reuses its last frame until something in it changes.
+	m.cockpitTouch()
+	m.ShowNotification(text, level, m.Settings.NotificationDuration)
+}
+
+// clearAnswerRefusal drops the note of the last refused answer key.
+func (m *OS) clearAnswerRefusal() {
+	if m.Inbox.approvals.refusal != (inboxRefusal{}) {
+		m.Inbox.approvals.refusal = inboxRefusal{}
+		m.cockpitTouch()
+	}
+}
+
+// inboxRefusalLines are the card lines that say why the last answer key on
+// it did nothing, if it was the last one refused.
+func (m *OS) inboxRefusalLines(it session.AttentionItem, width int) []string {
+	r := m.Inbox.approvals.refusal
+	if r.text == "" || it.RequestID == "" || r.requestID != it.RequestID {
+		return nil
+	}
+	var lines []string
+	for _, l := range wrapPlain(r.text, max(width, 8)) {
+		lines = append(lines, "  "+l)
+	}
+	return lines
+}
+
+// answerPressName is the key the person pressed to answer, as the keyboard
+// spells it, for "press it again". A key the Inbox did not see falls back to
+// the letter of the decision.
+func (m *OS) answerPressName(decision string) string {
+	if k := m.Inbox.approvals.lastKey; k != "" {
+		return k
+	}
+	return inboxDecisionKey(decision)
 }
 
 // inboxPeekAsk is an answer a key in the peek asked for.
@@ -144,7 +197,11 @@ func (m *OS) InboxConfirmKey(key string) tea.Cmd {
 	}
 	it, ok := m.inboxSelected()
 	if !ok || it.ID != c.itemID || inboxShownKey(it) != c.shown {
-		m.ShowNotification("This prompt just changed. Read it, then answer", "warning", m.Settings.NotificationDuration)
+		if ok {
+			m.refuseAnswer(it, "Not answered: this prompt changed after the key. Read it, then answer", "warning")
+		} else {
+			m.ShowNotification("This prompt just changed. Read it, then answer", "warning", m.Settings.NotificationDuration)
+		}
 		return nil
 	}
 	return m.inboxReplyCmd(it, c.decision)
@@ -310,11 +367,11 @@ func (m *OS) inboxApprovalGate(it session.AttentionItem, decision string) (stop 
 	}
 	if it.Kind == session.AttentionPlan && !m.inboxPlanReadToEnd(it) {
 		more := m.inboxPlanMoreBelow(it)
-		msg := "Read the plan to its end before approving it: " + m.inboxKeyOr(config.ActionInboxLast, "G") + " goes to the end"
+		msg := "Not approved. Read the plan to its end first: " + m.inboxKeyOr(config.ActionInboxLast, "G") + " goes to the end"
 		if more > 0 {
-			msg += ", " + strconv.Itoa(more) + " more below"
+			msg += ", " + strconv.Itoa(more) + " lines are left to read"
 		}
-		m.ShowNotification(msg, "info", m.Settings.NotificationDuration)
+		m.refuseAnswer(it, msg, "info")
 		return true
 	}
 	return false
@@ -716,7 +773,7 @@ func (m *OS) inboxPlanDetail(it session.AttentionItem, width int) []string {
 	}
 	if more := len(body) - end; more > 0 {
 		add("  ", plural.Count(more, "more line")+". Read to the end to approve: "+m.inboxKeyOr(config.ActionInboxDetailDown, "J")+" "+m.inboxKeyOr(config.ActionInboxDetailUp, "K")+" page, "+m.inboxKeyOr(config.ActionInboxLast, "G")+" end, "+m.inboxKeyOr(config.ActionInboxZoom, "Z")+" zoom.")
-		return lines
+		return append(lines, m.inboxRefusalLines(it, width-2)...)
 	}
 	// The window holds the last line. It has been read only if the panel
 	// fits the screen: on one too short, the panel is squeezed past its
@@ -729,7 +786,7 @@ func (m *OS) inboxPlanDetail(it session.AttentionItem, width int) []string {
 		pv.seenEnd = make(map[string]bool)
 	}
 	pv.seenEnd[inboxPlanKey(it)] = true
-	return lines
+	return append(lines, m.inboxRefusalLines(it, width-2)...)
 }
 
 // inboxDetailFits reports whether the Inbox panel, with n detail lines under
@@ -828,6 +885,7 @@ func (m *OS) inboxDetailExtra(it session.AttentionItem) (detail func(width int) 
 				return lines
 			}
 			lines = append(lines, inboxRiskLines(it, max(width-2, 8))...)
+			lines = append(lines, m.inboxRefusalLines(it, max(width-2, 8))...)
 			if line, ok := m.inboxConfirmLine(it); ok {
 				for _, l := range wrapPlain(line, max(width-2, 8)) {
 					lines = append(lines, "  "+l)
