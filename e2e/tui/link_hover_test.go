@@ -164,7 +164,9 @@ func TestPlainTextIsNotUnderlined(t *testing.T) {
 	enterTerminalMode(t, term)
 	// A sentence with a scheme-shaped word, a bare host name and a path in it.
 	// None of the three is a link, and all three have caught naive detectors.
-	const prose = "the https protocol on example.com under /usr/local"
+	// The path is not on disk: a path that is there is a link, which
+	// paths_quick_look_test.go checks.
+	const prose = "the https protocol on example.com under /usr/no-such-dir"
 	// Two quoted halves that the shell joins, so the marker is only in the
 	// output.
 	head, tail, _ := strings.Cut(prose, " on ")
