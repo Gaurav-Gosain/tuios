@@ -17824,3 +17824,21 @@ rename, so it guards them and is not a negative control.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^Test(RenameField|ComposerSelection)' -v .`.
+
+## The agents view marks agents that work in one folder
+
+`TestCockpitWarnsWhenAgentsShareAFolder` starts two agents at work in one
+folder, an idle agent in it too, and a third working agent in a folder of its
+own. The two rows must say "shared folder", and the idle and the lone ones must
+not. The new agent sheet, opened in the shared folder, must say "2 agents work
+here. A worktree is safer."
+
+Run on 2026-11-15 on macOS. The branch passes three runs in a row. Main fails:
+no row says it.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The row's mark is not drawn | "ASSERTION: the two agents in one folder are not marked" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitWarnsWhenAgentsShareAFolder$' -v .`.

@@ -522,6 +522,20 @@ func (m *OS) drawSpawnFields(c *ckCanvas, l ckLook, t spawnTone, p spawnLayout, 
 		hit(x0, y+1, rx, y+2, "where:"+strconv.Itoa(i))
 		rx += 4
 	}
+	if n := m.ckFolderAgents(s.folder); n > 0 && s.host() == "" {
+		// The folder already has agents at work: a second one edits the
+		// same files, and a worktree keeps it apart.
+		words := strconv.Itoa(n) + " agents work here. A worktree is safer."
+		if n == 1 {
+			words = "1 agent works here. A worktree is safer."
+		}
+		if p.gap > 0 {
+			// The line under the options is free: the whole sentence.
+			c.text(x, y+2, x+w, ckSeg{t: words, fg: pal.Warn})
+		} else {
+			c.text(rx, y+1, x+w, ckSeg{t: strconv.Itoa(n) + " at work here", fg: pal.Warn})
+		}
+	}
 	y += step
 
 	// The branch and the base, for a new worktree.

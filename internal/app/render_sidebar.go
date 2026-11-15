@@ -590,6 +590,9 @@ type sidebarAgentEntry struct {
 	// Subagents is how many subagents the pane's agent is running, which the
 	// subagents row token draws.
 	Subagents int
+	// Cwd is the folder the pane works in, empty when it is not known. The
+	// agents view marks agents that work in one folder at once.
+	Cwd string
 	// Program is the pane's OSC 7501 records, the root first. The harness
 	// token falls back to the summary record's app, and the progress token
 	// draws its progress.
@@ -2893,6 +2896,7 @@ func (m *OS) agentEntries(sessions []sessiontree.Node) []sidebarAgentEntry {
 				DraftHeld:    win.DraftHeld,
 				Settled:      win.Settled,
 				Quiet:        win.Quiet,
+				Cwd:          win.Cwd,
 				Subagents:    win.Subagents,
 				Children:     win.SubagentList,
 				Parent:       win.Parent,

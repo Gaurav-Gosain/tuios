@@ -311,6 +311,9 @@ type cockpitState struct {
 	// cutKey is the held approval or question the card could not show
 	// whole, by inboxShownKey. Its keys are refused with a word.
 	cutKey string
+	// folders counts the agents at work in each folder, by machine and
+	// path, from the list the rows were built from (ckActiveFolders).
+	folders map[string]int
 	// spawn is the open spawn sheet, and spawnDraft a closed one kept for
 	// the next n. spawnGen counts openings, and spawnLast is the agent the
 	// last Start used. See cockpit_spawn.go.
@@ -468,6 +471,7 @@ func (m *OS) cockpitRows() []ckRow {
 	}
 	ck.agents = list
 	m.ckSeeAgents(list)
+	ck.folders = ckActiveFolders(list)
 	if sig := m.Inbox.agents.listAt.sig; ck.branches == nil || ck.branchesAt != sig {
 		ck.branches, ck.branchesAt = m.ckBranches(), sig
 	}
@@ -488,6 +492,46 @@ func (m *OS) cockpitRows() []ckRow {
 	ck.rowsAt = key
 	m.cockpitClamp()
 	return ck.rows
+}
+
+// ckFolderKey names a folder on a machine.
+func ckFolderKey(host, cwd string) string { return host + "\x00" + cwd }
+
+// ckActive reports whether an agent is at work in its folder: working, or
+// waiting on the person in the middle of a turn.
+func ckActive(state string) bool { return state == "working" || state == "needs_input" }
+
+// ckActiveFolders counts the agents at work in each folder. Two agents that
+// edit one folder at once step on each other's files, and nothing else on
+// screen says they share it.
+func ckActiveFolders(list []sidebarAgentEntry) map[string]int {
+	out := map[string]int{}
+	for _, e := range list {
+		if e.Cwd != "" && ckActive(e.State) {
+			out[ckFolderKey(e.Host, e.Cwd)]++
+		}
+	}
+	return out
+}
+
+// ckSharesFolder reports whether another agent is at work in the folder an
+// agent at work runs in.
+func (m *OS) ckSharesFolder(e sidebarAgentEntry) bool {
+	return e.Cwd != "" && ckActive(e.State) && m.Inbox.ck.folders[ckFolderKey(e.Host, e.Cwd)] > 1
+}
+
+// ckFolderAgents is how many agents are at work in folder on this machine.
+func (m *OS) ckFolderAgents(folder string) int {
+	if folder == "" {
+		return 0
+	}
+	n := 0
+	for _, e := range m.cockpitList() {
+		if e.Host == "" && ckActive(e.State) && e.Cwd == folder {
+			n++
+		}
+	}
+	return n
 }
 
 // buildCockpitRows groups the agents and the Inbox's items.

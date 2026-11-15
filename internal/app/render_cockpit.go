@@ -1572,6 +1572,11 @@ func (m *OS) ckRowLine2(l ckLook, r ckRow, e sidebarAgentEntry) (verb, rest stri
 		if words := childrenWaitingWords(m.childrenWaiting(e)); words != "" {
 			defer func() { right = append([]ckSeg{{t: words, fg: pal.Attention}}, right...) }()
 		}
+		// Another agent is at work in the same folder: their edits can
+		// collide, so the row says so.
+		if m.ckSharesFolder(e) {
+			defer func() { right = append([]ckSeg{{t: "shared folder", fg: pal.Warn}}, right...) }()
+		}
 	}
 	if r.hasItem && r.group != ckReview {
 		verb, rest = ckItemVerb(r.item)

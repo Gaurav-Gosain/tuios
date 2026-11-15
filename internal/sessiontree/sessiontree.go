@@ -109,6 +109,8 @@ type Node struct {
 	Settled bool
 	// Quiet marks a pane that keeps out of the Inbox. The row says so.
 	Quiet bool
+	// Cwd is the folder the pane works in, empty when it is not known.
+	Cwd string
 	// Subagents is how many subagents the pane's agent is running. On a
 	// session node it belongs to the window that won the roll-up, like
 	// DoneSeen, so the session's mark says "waiting" when that pane is at
@@ -284,6 +286,8 @@ type WindowInput struct {
 	Settled bool
 	// Quiet marks a pane that keeps out of the Inbox. The row says so.
 	Quiet bool
+	// Cwd is the folder the pane works in, empty when it is not known.
+	Cwd string
 	// Subagents is how many subagents the pane's agent is running.
 	Subagents int
 	// SubagentList is the pane's subagents themselves, in start order. Nil
@@ -442,6 +446,7 @@ func BuildSession(s SessionInput) Node {
 			DraftHeld:     w.DraftHeld,
 			Settled:       w.Settled,
 			Quiet:         w.Quiet,
+			Cwd:           w.Cwd,
 			Subagents:     w.Subagents,
 			SubagentList:  w.SubagentList,
 			Program:       w.Program,

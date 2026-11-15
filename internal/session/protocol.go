@@ -668,6 +668,10 @@ type WindowSummary struct {
 	// another session can draw the child under its parent. Additive and
 	// omitted when nil, which is what an older peer sends.
 	AgentParent *PaneRef `json:"agent_parent,omitempty"`
+	// Cwd is the folder the pane works in, as WindowState.Cwd has it. The
+	// agents view warns when two working agents share one. Additive and
+	// omitted when empty.
+	Cwd string `json:"cwd,omitempty"`
 }
 
 // ClientInfo describes one daemon connection for listing.

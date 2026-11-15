@@ -4267,10 +4267,12 @@ func (s *Session) Info() SessionInfo {
 }
 
 // windowSummaries builds the lightweight per-window listing for Info() from the
-// cached window states, titled from the live emulators. It does no PTY work, so
-// it stays cheap enough to run on every session list.
+// cached window states, titled from the live emulators. Each pane's folder is
+// the one liveCwds read, which caches its process reads, so it stays cheap
+// enough to run on every session list.
 func (s *Session) windowSummaries() []WindowSummary {
 	live := s.liveTitles()
+	cwds := s.liveCwds()
 
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()
@@ -4322,6 +4324,7 @@ func (s *Session) windowSummaries() []WindowSummary {
 			Scratch:     w.Scratch || w.Rail != "",
 			Note:        w.Note,
 			AgentParent: agentParentRef(*w),
+			Cwd:         firstNonEmpty(cwds[w.PTYID], w.Cwd),
 		})
 	}
 	return out

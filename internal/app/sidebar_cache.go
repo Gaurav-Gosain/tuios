@@ -531,6 +531,9 @@ func (m *OS) sidebarSignature() uint64 {
 		if w.AgentQuiet {
 			mixS("quiet")
 		}
+		// The folder decides the agents view's shared folder mark.
+		mixS(w.Cwd)
+		mixS(w.DaemonCwd)
 		if w.AgentSubagents > 0 {
 			mixI(w.AgentSubagents)
 		}
