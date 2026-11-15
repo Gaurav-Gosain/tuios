@@ -12,7 +12,8 @@
 //   - every time.Sleep statement inside enterTerminalMode, leaveTerminalMode
 //     and afterModeSwitch.
 //
-// It deletes nothing else. Comments stay, and so do sleeps that only scale
+// It deletes nothing else. The gap between keys in sendKeys stays: it is
+// pacing, not a guard wait (see keep). Comments stay, and so do sleeps that only scale
 // insertGuard (2 * insertGuard) and pause calls, which state a reason of their
 // own. A "time" import the deletions leave unused goes, because the file
 // would not compile with it. Each change prints as file:line: statement. A
@@ -37,6 +38,13 @@ import (
 	"strconv"
 	"strings"
 )
+
+// keep are helpers whose insertGuard sleep is no guard wait. sendKeys sends
+// each key as its own write a moment apart, as a person types: without the gap
+// two keys arrive in one read, and esc, esc decodes as alt+esc.
+var keep = map[string]bool{
+	"sendKeys": true,
+}
 
 // helpers are the mode-switch helpers whose fixed sleeps all go.
 var helpers = map[string]bool{
@@ -110,7 +118,7 @@ func rewrite(name string, src []byte) ([]byte, []string, error) {
 	var sites []string
 	for _, decl := range f.Decls {
 		fd, ok := decl.(*ast.FuncDecl)
-		if !ok || fd.Body == nil {
+		if !ok || fd.Body == nil || (fd.Recv == nil && keep[fd.Name.Name]) {
 			continue
 		}
 		inHelper := fd.Recv == nil && helpers[fd.Name.Name]

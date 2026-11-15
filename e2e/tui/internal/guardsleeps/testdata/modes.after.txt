@@ -23,3 +23,9 @@ func TestA(t *testing.T) {
 	pause(t, "why", insertGuard)
 	time.Sleep(time.Second)
 }
+
+func sendKeys(t *testing.T, keys ...any) {
+	for range keys {
+		time.Sleep(insertGuard)
+	}
+}
