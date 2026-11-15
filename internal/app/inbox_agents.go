@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -247,9 +248,61 @@ func (m *OS) agentsKeep(e sidebarAgentEntry) bool {
 		}
 	}
 	if a.query != "" {
-		return fuzzy.Match(a.query, e.Title+" "+agentSessionWords(e)+" "+e.Message)
+		return agentSearchTier(a.query, e) >= 0
 	}
 	return true
+}
+
+// agentSearchTier is how well an agent matches a search, the best 0 and -1
+// for no match: its name exactly, its name holding the words, its name or
+// session holding the letters in order, then its message holding each word
+// at a word's start. A message is matched by words only, so "fib" does not
+// find "The push failed with exit code 128 because".
+func agentSearchTier(query string, e sidebarAgentEntry) int {
+	q := strings.ToLower(strings.TrimSpace(query))
+	name := strings.ToLower(printableTitle(e.Title))
+	switch {
+	case q == "":
+		return 0
+	case name == q:
+		return 0
+	case strings.Contains(name, q):
+		return 1
+	case fuzzy.Match(q, e.Title+" "+agentSessionWords(e)):
+		return 2
+	case agentWordsMatch(q, e.Message):
+		return 3
+	}
+	return -1
+}
+
+// agentWordsMatch reports whether every word of q starts a word of text.
+func agentWordsMatch(q, text string) bool {
+	words := strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' && r != '.' && r != '/'
+	})
+	for w := range strings.FieldsSeq(q) {
+		if !slices.ContainsFunc(words, func(t string) bool { return strings.HasPrefix(t, w) }) {
+			return false
+		}
+	}
+	return true
+}
+
+// inboxAgentsBest is the agent the search finds best, the first in the list
+// of the best tier. ok is false with no search or no match.
+func (m *OS) inboxAgentsBest() (sidebarAgentEntry, bool) {
+	q := m.Inbox.agents.query
+	if q == "" {
+		return sidebarAgentEntry{}, false
+	}
+	best, tier := sidebarAgentEntry{}, -1
+	for _, e := range m.inboxAgentsList() {
+		if t := agentSearchTier(q, e); t >= 0 && (tier < 0 || t < tier) {
+			best, tier = e, t
+		}
+	}
+	return best, tier >= 0
 }
 
 // agentsSort orders the rows by the sort in force, into a new slice. Ties keep
@@ -262,8 +315,15 @@ func (m *OS) agentsSort(rows []sidebarAgentEntry) []sidebarAgentEntry {
 	for i := range idx {
 		idx[i] = i
 	}
+	q := m.Inbox.agents.query
 	slices.SortStableFunc(idx, func(i, j int) int {
 		x, y := &rows[i], &rows[j]
+		// A search puts its better matches first, in each group.
+		if q != "" {
+			if c := cmp.Compare(agentSearchTier(q, *x), agentSearchTier(q, *y)); c != 0 {
+				return c
+			}
+		}
 		switch by {
 		case agentsSortName:
 			return strings.Compare(strings.ToLower(x.Title), strings.ToLower(y.Title))
@@ -405,5 +465,14 @@ func (m *OS) inboxAgentsSelectApply() {
 	st.selectEditing = false
 	st.selectErr = ""
 	st.ck.scroll, st.ck.follow = 0, true
+	// The cursor goes to the agent the search finds best, which an exact
+	// name is, wherever its state group puts it.
+	if best, ok := m.inboxAgentsBest(); ok {
+		st.ck.key, st.ck.akey, st.ck.pending = "", agentKey(best), ""
+		m.cockpitTouchRows()
+		m.cockpitRows()
+		m.cockpitClamp()
+		m.cockpitSync()
+	}
 	m.cockpitTouch()
 }

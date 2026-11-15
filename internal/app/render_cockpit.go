@@ -539,6 +539,13 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 		{l.ckStateMark("done", ckGlyphReview), pal.Success, counts[ckReview], "to review", ckReview},
 		{l.ckStateMark("idle", ckGlyphIdle), pal.FgMute, counts[ckIdle] + counts[ckSettled], "idle", ckIdle},
 	}
+	// The search box has a width of its own, set by the screen alone, so it
+	// never moves or goes as the counts change, and what is left of the row
+	// goes to the controls before it: each one that does not fit gives way.
+	btnW := ckWidth(ckSeg{t: " + New agent "})
+	sw := min(38, max(18, (c.w-2-btnW)/3))
+	sx := c.w - 2 - btnW - 2 - sw
+	fits := func(segs ...ckSeg) bool { return x+ckWidth(segs...) <= sx-3 }
 	// The counts say their words when the row has room for them beside the
 	// search and the button, and only their marks otherwise.
 	full := x
@@ -547,7 +554,7 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 			full += ckWidth(ckSeg{t: k.g + " " + strconv.Itoa(k.n) + " " + k.words}) + 3
 		}
 	}
-	compact := full > c.w-2-ckWidth(ckSeg{t: " + New agent "})-16
+	compact := full > sx-3
 	for i, k := range cnts {
 		on := !ck.board && ck.chip == k.group+1
 		if k.n == 0 && i > 0 && !on {
@@ -616,9 +623,9 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 		if st.Filter != "" {
 			what = strings.ToLower(inboxGroupTitle(st.Filter)) + " only"
 		}
-		x = c.text(x, y, 0, ckSeg{t: what, fg: pal.FgDim}) + 3
+		x = c.text(x, y, sx-3, ckSeg{t: what, fg: pal.FgDim}) + 3
 	}
-	if n := m.markedShown(); n > 0 {
+	if n := m.markedShown(); n > 0 && fits(ckSeg{t: strconv.Itoa(n) + " marked"}) {
 		x = c.text(x, y, 0, ckSeg{t: strconv.Itoa(n) + " marked", fg: pal.AccentBright, attrs: ckBold}) + 3
 	}
 	// The board's switch: the word names the view a click opens, as the
@@ -627,20 +634,22 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 	if ck.board {
 		view = "Agents"
 	}
-	bx0 := x
-	x = c.text(x, y, 0, ckSeg{t: view + " ", fg: pal.FgDim}, ckSeg{t: l.g(ckGlyphExpand), fg: pal.FgMute})
-	ck.hits = append(ck.hits, ckHit{x0: bx0, y0: top + y, x1: x, y1: top + y + 1, kind: ckHitAction, action: "board"})
-	ck.anchors["board"] = ckAnchor{x: bx0, y: y, w: x - bx0}
-	x += 3
-	if !ck.board {
+	if viewSegs := []ckSeg{{t: view + " ", fg: pal.FgDim}, {t: l.g(ckGlyphExpand), fg: pal.FgMute}}; fits(viewSegs...) {
+		bx0 := x
+		x = c.text(x, y, 0, viewSegs...)
+		ck.hits = append(ck.hits, ckHit{x0: bx0, y0: top + y, x1: x, y1: top + y + 1, kind: ckHitAction, action: "board"})
+		ck.anchors["board"] = ckAnchor{x: bx0, y: y, w: x - bx0}
+		x += 3
+	}
+	if groupSegs := []ckSeg{{t: "Group: " + m.ckGroupingName() + " ", fg: pal.FgDim}, {t: l.g(ckGlyphExpand), fg: pal.FgMute}}; !ck.board && fits(groupSegs...) {
 		// The list's grouping, which a click or s changes.
 		gx0 := x
-		x = c.text(x, y, 0, ckSeg{t: "Group: " + m.ckGroupingName() + " ", fg: pal.FgDim}, ckSeg{t: l.g(ckGlyphExpand), fg: pal.FgMute})
+		x = c.text(x, y, 0, groupSegs...)
 		ck.hits = append(ck.hits, ckHit{x0: gx0, y0: top + y, x1: x, y1: top + y + 1, kind: ckHitAction, action: "group"})
 		ck.anchors["group"] = ckAnchor{x: gx0, y: y, w: x - gx0}
 		x += 3
 	}
-	if ck.board && ck.dispatch != nil && ck.dispatch.Board != nil {
+	if ck.board && ck.dispatch != nil && ck.dispatch.Board != nil && fits(ckSeg{t: "Dispatch Manual"}) {
 		// The board's dispatch: its mode, a click turns it, and what holds
 		// it, a click pauses or starts it again (cockpit_dispatch.go).
 		mode, ink := "Manual", pal.FgDim
@@ -665,7 +674,9 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 		x += 3
 	}
 	if !st.Live {
-		x = c.text(x, y, 0, ckSeg{t: "not connected", fg: pal.Warning}) + 3
+		// The word that matters most when it shows: it may take the room
+		// of what came before it.
+		x = c.text(min(x, sx-3-ckWidth(ckSeg{t: "not connected"})), y, sx-3, ckSeg{t: "not connected", fg: pal.Warning}) + 3
 	}
 	right := c.w - 2
 	btn := " + New agent "
@@ -675,11 +686,6 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 	bx := c.textR(right, y, ckSeg{t: btn, fg: pal.PillFg, bg: pal.Accent, attrs: ckBold})
 	c.mark(pal, bx, y, right-bx, 1, ckOn)
 	ck.hits = append(ck.hits, ckHit{x0: bx, y0: top + y, x1: right, y1: top + y + 1, kind: ckHitAction, action: "new"})
-	sw := min(38, bx-x-2)
-	if sw < 12 {
-		return
-	}
-	sx := bx - 2 - sw
 	c.fill(sx, y, sw, 1, l.panel)
 	switch {
 	case st.selectErr != "":

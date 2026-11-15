@@ -53,7 +53,7 @@ import (
 //	PreToolUse            tool: tool_name, and what tool_input names
 //	PostToolUse           tool_done, ok: the files an edit tool wrote
 //	PostToolUseFailure    tool_failed: the first line of error
-//	Stop                  turn_end: the first line of last_assistant_message,
+//	Stop                  turn_end: the line of last_assistant_message SaidLine picks,
 //	                      which is also the done report's message, or no
 //	                      text when the field is missing or empty
 //	SubagentStart         subagent_start: agent_id and agent_type
@@ -485,15 +485,15 @@ func claudeBackgroundTasks(p fields) []Activity {
 	return out
 }
 
-// turnEnd adds a Stop event's activity to its done report: the first line of
-// last_assistant_message, which also becomes the report's message, so a
-// finished pane says what it finished with. Claude Code and Codex both send
+// turnEnd adds a Stop event's activity to its done report: the line of
+// last_assistant_message SaidLine picks, which also becomes the report's
+// message, so a finished pane says what it finished with. Claude Code and Codex both send
 // the field. A Stop without it, from an older Claude Code or a turn that
 // ended with no text, still reports turn_end, with no text and no message, so
 // the ring records the end of the turn and the daemon clears what the agent
 // was doing.
 func turnEnd(r Report, p fields) Report {
-	text := activityText(p.str("last_assistant_message"))
+	text := oneline.Clip(SaidLine(p.str("last_assistant_message")))
 	if text != "" {
 		r.Message = text
 	}

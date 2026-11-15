@@ -43,6 +43,50 @@ func FirstLine(s string) string {
 	return strings.TrimSpace(s)
 }
 
+// SaidLine is the line of what an agent said that a one-line preview shows:
+// the first line with words in it, its inline Markdown taken off (backticks,
+// stars, a heading's #, a list's mark). A line that ends with a colon leads
+// into what follows it, "The command printed one line:", so the next line goes
+// on after it, the first line of a code block when that is what follows.
+func SaidLine(s string) string {
+	var lines []string
+	fence := false
+	for l := range strings.SplitSeq(s, "\n") {
+		l = strings.TrimSpace(strings.TrimRight(l, "\r"))
+		if strings.HasPrefix(l, "```") || strings.HasPrefix(l, "~~~") {
+			fence = !fence
+			continue
+		}
+		if l = plainLine(l, fence); l != "" {
+			lines = append(lines, l)
+		}
+		if len(lines) == 2 {
+			break
+		}
+	}
+	switch {
+	case len(lines) == 0:
+		return ""
+	case len(lines) == 2 && strings.HasSuffix(lines[0], ":"):
+		return lines[0] + " " + lines[1]
+	}
+	return lines[0]
+}
+
+// plainLine is one line of Markdown as plain words. A line in a code block is
+// kept as written.
+func plainLine(l string, code bool) string {
+	if code {
+		return l
+	}
+	l = strings.TrimLeft(l, "#>")
+	for _, mark := range []string{"- ", "* ", "+ "} {
+		l = strings.TrimPrefix(strings.TrimSpace(l), mark)
+	}
+	l = strings.NewReplacer("`", "", "**", "", "__", "").Replace(l)
+	return strings.TrimSpace(l)
+}
+
 // activityText is agent text as an activity entry carries it: the first
 // line, redacted and clipped.
 func activityText(s string) string {

@@ -131,6 +131,15 @@ func (r ckRow) cursorable() bool {
 	return r.selectable() || r.kind == ckRowHead && (r.folded || r.rest)
 }
 
+// cursorOn reports whether r is the row the cursor is on, by its key or its
+// agent.
+func (ck *cockpitState) cursorOn(r ckRow, list []sidebarAgentEntry) bool {
+	if ck.key != "" && r.key == ck.key {
+		return true
+	}
+	return ck.akey != "" && r.agent >= 0 && r.agent < len(list) && agentKey(list[r.agent]) == ck.akey
+}
+
 // cockpitState is the cockpit's own state, beside the Inbox's.
 type cockpitState struct {
 	// region has the keys (see cockpit_regions.go), and regionBox is where
@@ -668,7 +677,9 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 			if itemsOnly && !r.hasItem && r.kind != ckRowNote {
 				continue
 			}
-			if r.selectable() && g != ckNeeds && ck.oneLine && !ck.opened[g] && shown >= ckFoldAt {
+			// The fold never hides the cursor's row: a search cleared, or a
+			// row the person went to, stays where the cursor is.
+			if r.selectable() && g != ckNeeds && ck.oneLine && !ck.opened[g] && shown >= ckFoldAt && !ck.cursorOn(r, list) {
 				continue
 			}
 			if r.selectable() {
