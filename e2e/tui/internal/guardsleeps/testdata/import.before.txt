@@ -1,0 +1,7 @@
+package tui
+
+import "time"
+
+func f() {
+	time.Sleep(insertGuard)
+}

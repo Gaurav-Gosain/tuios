@@ -1,0 +1,28 @@
+package tui
+
+import (
+	"testing"
+	"time"
+)
+
+func enterTerminalMode(t *testing.T) {
+	t.Helper()
+	if ok() {
+		time.Sleep(insertGuard + 150*time.Millisecond)
+		return
+	}
+	t.Fatalf("no")
+}
+
+func afterModeSwitch(t *testing.T) {
+	t.Helper()
+	time.Sleep(scaled(insertGuard))
+}
+
+func TestA(t *testing.T) {
+	// A comment the codemod keeps.
+	time.Sleep(insertGuard)
+	time.Sleep(2 * insertGuard)
+	pause(t, "why", insertGuard)
+	time.Sleep(time.Second)
+}
