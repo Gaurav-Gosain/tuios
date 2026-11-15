@@ -38,6 +38,17 @@ func handleCockpitCopyKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		return fx.applyOver(o, o.CockpitCopyEnd)
 	}
+	// gx opens the link under the cursor, as it does in vim. The g before
+	// it is pending, so the x never reaches the copy mode keys.
+	if msg.String() == "x" && cm.Pending == terminal.CopyPendingG {
+		cm.Pending = terminal.CopyPendingNone
+		url, ok := o.CockpitCopyLink()
+		if !ok {
+			o.ShowNotification("No link under the cursor.", "info", o.Settings.NotificationDuration)
+			return o, nil
+		}
+		return o, o.OpenLink(url)
+	}
 	state := cm.State
 	runCopyModeKey(msg, copyModeAction(msg, o), cm, grid, fx, &o.Settings)
 	if fx.setClipboard && state.InVisual() {

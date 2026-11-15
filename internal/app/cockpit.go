@@ -268,6 +268,12 @@ type cockpitState struct {
 	// one.
 	lookGen uint64
 	canvas  *ckCanvas
+	// canvasTop is the screen row of the canvas's first row. linkHover is
+	// the link under the pointer, and linkPointX, linkPointY where the
+	// pointer was. See cockpit_links.go.
+	canvasTop              int
+	linkHover              ckLinkRun
+	linkPointX, linkPointY int
 	// lastTop is the layer CockpitTop gave after the last message, for the
 	// verbose log of its changes (cockpit_layers.go).
 	lastTop CockpitLayer
@@ -1340,6 +1346,9 @@ func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 	if m.cockpitDividerPress(x, y) || m.kanbanPreviewClick(x, y) {
 		return nil, true
 	}
+	if cmd, ok := m.cockpitLinkClick(x, y); ok {
+		return cmd, true
+	}
 	m.cockpitFocusRegionAt(x, y)
 	for _, h := range ck.hits {
 		if x < h.x0 || x >= h.x1 || y < h.y0 || y >= h.y1 {
@@ -1529,6 +1538,7 @@ func (m *OS) cockpitReply() tea.Cmd {
 func (m *OS) CockpitHover(x, y int) {
 	ck := &m.Inbox.ck
 	if s := ck.spawn; s != nil {
+		m.cockpitClearLinkHover()
 		// The sheet's open list lights the row under the pointer.
 		if s.list && s.dd != nil && s.dd.Hover(x, y) {
 			m.cockpitTouch()
@@ -1536,6 +1546,7 @@ func (m *OS) CockpitHover(x, y int) {
 		return
 	}
 	if m.cockpitMenuHover(x, y) {
+		m.cockpitClearLinkHover()
 		return
 	}
 	if m.cockpitDividerMotion(x, y) || m.kanbanPreviewMotion(x, y) {
@@ -1544,6 +1555,7 @@ func (m *OS) CockpitHover(x, y int) {
 	if m.kanbanDragTo(x, y) {
 		return
 	}
+	m.cockpitLinkHover(x, y)
 	key := ""
 	for _, h := range ck.hits {
 		if h.kind == ckHitRow && x >= h.x0 && x < h.x1 && y >= h.y0 && y < h.y1 {

@@ -2804,9 +2804,17 @@ and `y` to copy. A copy is the text as the agent wrote it: a paragraph the
 thread wraps is one line, and the card edges, the marks and the indent of the
 card are left out. Code keeps its own indent. `Y` copies the entries under
 the selection, or under the cursor, as Markdown: an answer as the agent wrote
-it, a prompt as a quote, and an edit as a `diff` block. The thread holds
+it, a prompt as a quote, and an edit as a `diff` block. `gx` opens the link
+under the cursor. The thread holds
 still while copy mode runs, and new entries show when it ends. `esc` ends it
 and keeps the view open. A change of width, tab or agent ends it too.
+
+A click on a link in the view opens it: a Markdown link, a bare URL in an
+answer, a URL in a tool's command, in the thread, the side panel and the
+previews. The pointer on a link underlines it. The link opens the way a link
+in a pane opens: a local client starts the link opener on its machine, and a
+remote client (`tuios ssh`, `tuios-web`) copies the address to the viewer's
+clipboard instead.
 
 The thread follows the newest card while it shows the bottom. A new prompt
 shows at the bottom like any new line and pushes the older lines up. While

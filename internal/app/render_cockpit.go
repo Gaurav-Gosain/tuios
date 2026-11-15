@@ -242,6 +242,8 @@ type ckFrameKey struct {
 	// tml moves with every repaint of a surface, which the Artifacts tab
 	// may draw, and art with the tab's own state.
 	tml, art uint64
+	// link is the link under the pointer, which the frame underlines.
+	link ckLinkRun
 }
 
 // renderCockpit draws the cockpit over the screen between the dock's rows,
@@ -270,6 +272,7 @@ func (m *OS) renderCockpit() (string, int, int, int) {
 		open: st.threads.open, daemon: m.IsDaemonSession, keys: m.KeybindRegistry, hosts: m.federationGen,
 		depth: l.pal.Depth, ascii: l.ascii, nerd: l.nerd, snoozes: st.life.ShowSnoozed,
 		tml: m.tml.gen + m.tml.setGen<<32, art: ck.art.gen,
+		link: ck.linkHover,
 	}
 	if e, ok := m.cockpitAgent(); ok {
 		if t := st.threads.byKey[agentKey(e)]; t != nil {
@@ -290,6 +293,7 @@ func (m *OS) renderCockpit() (string, int, int, int) {
 	}
 	m.tickStats.Cockpit++
 	ck.canvas = ck.canvas.reset(w, h, l.canvas)
+	ck.canvasTop = top
 	c := ck.canvas
 	ck.hits = ck.hits[:0]
 	ck.fleetW = 0
@@ -299,6 +303,7 @@ func (m *OS) renderCockpit() (string, int, int, int) {
 	} else {
 		m.drawCockpit(c, l, top, now)
 		m.drawCockpitMenu(c, l, top)
+		m.drawCockpitLinkHover(c, top)
 	}
 	ck.frame, ck.frameAt = c.render(), key
 	if transient {

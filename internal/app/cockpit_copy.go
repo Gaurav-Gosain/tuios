@@ -62,7 +62,7 @@ func ckCopyOf(l ckLook, lines []ckLine, ids []string, w int) []ckCopyRow {
 		for x := range cells {
 			cells[x] = uv.Cell{Content: " ", Width: 1}
 		}
-		put := func(x int, s string) int {
+		put := func(x int, s, link string) int {
 			for len(s) > 0 && x < w {
 				g, gw := ansi.FirstGraphemeCluster(s, ansi.GraphemeWidth)
 				if g == "" {
@@ -73,7 +73,7 @@ func ckCopyOf(l ckLook, lines []ckLine, ids []string, w int) []ckCopyRow {
 				if x+gw > w {
 					break
 				}
-				cells[x] = uv.Cell{Content: g, Width: gw}
+				cells[x] = uv.Cell{Content: g, Width: gw, Link: uv.Link{URL: link}}
 				for k := 1; k < gw; k++ {
 					cells[x+k] = uv.Cell{}
 				}
@@ -82,7 +82,7 @@ func ckCopyOf(l ckLook, lines []ckLine, ids []string, w int) []ckCopyRow {
 			return x
 		}
 		if ln.raw != "" {
-			put(ln.indent, ansi.Strip(ln.raw))
+			put(ln.indent, ansi.Strip(ln.raw), "")
 		} else {
 			x := ln.indent
 			for _, sg := range ln.segs {
@@ -90,7 +90,7 @@ func ckCopyOf(l ckLook, lines []ckLine, ids []string, w int) []ckCopyRow {
 					x += ckTextWidth(sg.t)
 					continue
 				}
-				x = put(x, sg.t)
+				x = put(x, sg.t, sg.link)
 			}
 		}
 		rows[i].cells = cells
@@ -158,7 +158,7 @@ func (m *OS) CockpitCopyStart() bool {
 	q.cm = terminal.CopyMode{Active: true, State: terminal.CopyModeNormal, ScrollOffset: q.offset}
 	m.Inbox.threads.copy = q
 	m.cockpitTouch()
-	m.ShowNotification("Copy mode. v selects, y copies, Y copies as Markdown, esc stops.", "info", m.Settings.NotificationDuration)
+	m.ShowNotification("Copy mode. v selects, y copies, Y copies as Markdown, gx opens a link, esc stops.", "info", m.Settings.NotificationDuration)
 	return true
 }
 

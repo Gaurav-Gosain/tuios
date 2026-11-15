@@ -17672,3 +17672,22 @@ row reads "Allow  approve AskUserQuestion" and the card offers only dismiss.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitQuestionShowsItsOptionsAsKeys$' -v .`.
+
+## Links in the cockpit open on a click
+
+`TestCockpitLinksOpenOnClick` clicks a Markdown link, a bare URL in an answer
+and a URL in a tool's command in the agents view's thread, and opens the
+Markdown link again with `gx` in copy mode. It reads the link opener's record.
+Before the clicks it puts the pointer on the tool line's URL, which is plain
+text, and waits for the underline.
+
+Run on 2026-11-15 on macOS. The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `cockpitLinkClick` not called from `CockpitClick` | "a click on the Markdown link: the opener was started with []" | **caught** |
+| `drawCockpitLinkHover` not called | "the hovered URL never underlined" | **caught** |
+| The `gx` branch cut from `handleCockpitCopyKey` | "gx in copy mode: the opener was started with" the three clicked links only | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitLinksOpenOnClick$' -v .`.
