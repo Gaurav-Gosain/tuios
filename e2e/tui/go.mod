@@ -5,7 +5,7 @@ go 1.26.8
 toolchain go1.27.4
 
 require (
-	github.com/Gaurav-Gosain/tuitest v0.3.1
+	github.com/Gaurav-Gosain/tuitest v0.3.2
 	tuios.dev/vt v0.3.3-0.20261112221328-af594e2e29a4
 )
 

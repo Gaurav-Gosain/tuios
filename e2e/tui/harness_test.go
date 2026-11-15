@@ -515,6 +515,11 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 		tuitest.WithEnv(env...),
 		tuitest.WithLog(logFile),
 		tuitest.WithDir(clientDir),
+		// The terminal the suite was written against says it draws sixel in
+		// its answer to DA1, as tuitest v0.1.0 did on its own. The
+		// tuios.dev/vt emulator does not unless it is told.
+		tuitest.WithSixel(),
+		tuitest.WithCellSize(hostCellSize(o.env)),
 	}
 	if o.out != nil {
 		opts = append(opts, tuitest.WithOutputMirror(o.out))
@@ -522,6 +527,26 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 	term := tuitest.StartT(t, argv, opts...)
 	clientStarts.Store(term, clientStart{at: time.Now(), events: eventsLog})
 	return term
+}
+
+// hostCellSize is the cell, in pixels, of the terminal the client runs in. A
+// test that tells tuios the cell with TUIOS_CELL_SIZE gets a terminal with that
+// cell, so the PTY size, the answers to CSI 14 t and 16 t, and the size the
+// terminal gives a sixel image all agree with what tuios was told. Any other
+// test gets 8 by 16, the cell tuitest v0.1.0 reported.
+func hostCellSize(env []string) (int, int) {
+	w, h := 8, 16
+	for _, kv := range env {
+		v, ok := strings.CutPrefix(kv, "TUIOS_CELL_SIZE=")
+		if !ok {
+			continue
+		}
+		var cw, ch int
+		if n, _ := fmt.Sscanf(v, "%dx%d", &cw, &ch); n == 2 && cw > 0 && ch > 0 {
+			w, h = cw, ch
+		}
+	}
+	return w, h
 }
 
 // clientStart is when startIn started a client and where it logs its keys.
