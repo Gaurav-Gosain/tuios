@@ -103,3 +103,39 @@
 ╭── π-tuios-measure > ⬢ no-model > 🗑 ompbox-99636 > ◫ 8.2K/? ⟲ ▶─────────────╮
 │  fix the flaky test                                                        │
 ╰─ and then push it                                                         ─╯
+=====
+# harness: omp
+# box: draft
+# want: none
+# how: derived from the measured one-line draft above (live omp 18.18.8,
+# composer.shape = box): its text replaced by an ordinary request that
+# ends like the composer hint (Astra's review, 2026-11-15). A draft.
+---
+ Warning: No default model selected. Use /login, set an API key environment
+ variable, or select a local model with /model or --model.
+
+──────────────────────────────────────────────────────────────────────────────
+ Update Available
+ New version 18.20.0 is available. Run: omp update
+──────────────────────────────────────────────────────────────────────────────
+
+╭── π-tuios-measure > ⬢ no-model > 🗑 ompbox-99636 > ◫ 8.2K/? ⟲ ▶─────────────╮
+╰─ how to change thinking effort                                            ─╯
+=====
+# harness: omp
+# box: draft
+# want: none
+# how: derived from the measured one-line draft above (live omp 18.18.8,
+# composer.shape = box): its text replaced by an ordinary request that
+# ends like the composer hint (Astra's review, 2026-11-15). A draft.
+---
+ Warning: No default model selected. Use /login, set an API key environment
+ variable, or select a local model with /model or --model.
+
+──────────────────────────────────────────────────────────────────────────────
+ Update Available
+ New version 18.20.0 is available. Run: omp update
+──────────────────────────────────────────────────────────────────────────────
+
+╭── π-tuios-measure > ⬢ no-model > 🗑 ompbox-99636 > ◫ 8.2K/? ⟲ ▶─────────────╮
+╰─ how to see 2 running agents                                              ─╯
