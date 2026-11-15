@@ -192,7 +192,7 @@ func TestPlanApprovesOnlyOnceReadToTheEnd(t *testing.T) {
 	r.plan, r.sha = text, it.PlanSHA
 	fetchPlan(t, m)
 	plain := drawn(m)
-	if !strings.Contains(plain, "lines 1-5 of 30") || !strings.Contains(plain, "25 more below") {
+	if !strings.Contains(plain, "Lines 1-") || !strings.Contains(plain, " of 30") || !strings.Contains(plain, "more lines. Read to the end to approve") {
 		t.Fatalf("a long plan at 80x24 is not windowed:\n%s", plain)
 	}
 	settleShown(m)
@@ -207,7 +207,7 @@ func TestPlanApprovesOnlyOnceReadToTheEnd(t *testing.T) {
 		m.InboxDetailScroll(1)
 	}
 	plain = drawn(m)
-	if !strings.Contains(plain, "lines 26-30 of 30") || !strings.Contains(plain, "29. step 29") {
+	if !strings.Contains(plain, "-30 of 30") || !strings.Contains(plain, "29. step 29") {
 		t.Fatalf("scrolling did not reach the end:\n%s", plain)
 	}
 	settleShown(m)

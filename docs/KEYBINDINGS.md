@@ -2241,7 +2241,7 @@ Inside it:
 | `1` `3` with marks | Allow every marked approval once, after a sheet that lists them, or reject them |
 | `y` with marks | Resume every marked Resume row. `*` then `y` resumes them all |
 | `[` `]` | Switch the focus tabs: Card on the board, Thread, Changes, Artifacts, Checkpoints and Pane |
-| `J` `K` | Scroll the thread, or a long plan waiting for a yes. On the Artifacts tab, move between the artifacts |
+| `J` `K` | Scroll the thread, or a long plan waiting for a yes a page at a time. On the Artifacts tab, move between the artifacts |
 | `{` `}` | Show the thread's previous or next prompt at the top. The ruler at the right of the thread marks each prompt |
 | `.` | Select the next agent a card in the thread names: one it started, or one it sent mail to, asked or read mail from. `enter` or a click on the name opens that agent's thread |
 | `ctrl+o` | Go back to the thread you opened another agent from, at the same place. Each `ctrl+o` goes back one more |
@@ -2483,7 +2483,7 @@ not offered and do what an unbound key does: after `ctrl+b` in terminal mode,
 | `R` | agents view | Reject a held approval, or keep a plan planning, with a reason you type (`r` and `3` stay the plain reject) |
 | `n` | agents view | Start a new agent |
 | `c` | agents view | Compare the attempts of the fan under the cursor |
-| `J`, `K`, `ctrl+d`, `ctrl+u` | agents view | Scroll the card, such as a long plan |
+| `J`, `K`, `ctrl+d`, `ctrl+u` | agents view | Scroll the card a page, such as a long plan. On a plan, `pgdown`, `pgup`, `g` and `G` read the plan before they move the list |
 | `u` | rail agent row | Mark the pane's finished turn unread, for every client (not the pane in front of you) |
 | `z` | rail agent row | Snooze what needs you in the pane: the agents view opens on it with the four lengths |
 | `enter` | rail `+N at rest` line | Show the agent rows folded as at rest, settled agents included, until the rail lets go of the keyboard (after a click with the rail not focused, until a click outside the rail or a pane is focused) |

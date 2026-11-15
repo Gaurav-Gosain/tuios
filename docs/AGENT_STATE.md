@@ -2912,7 +2912,7 @@ Inside the agents view:
 | `a` / `A` / `r` | Answer the held approval under the cursor, as its card's buttons do: allow once, always allow, reject. The same rules as `1`, `2` and `3`. |
 | `R` | On a held approval or plan whose harness takes a reason: reject, or keep planning, with a reason you type on the `Reason:` line. `enter` sends it, `esc` drops it. See [Reject with a reason](#reject-with-a-reason). |
 | `n` | Open the New agent sheet. |
-| `J` / `K`, `ctrl+d` / `ctrl+u` | Scroll a plan on the card. The wheel over the card does the same. |
+| `J` / `K`, `ctrl+d` / `ctrl+u` | Scroll a plan on the card a page at a time. `pgdown` and `pgup` do the same, and `g` and `G` go to the plan's first and last lines, before they move the list. `Z` gives the card the whole focus, where `j` and `k` scroll the plan a line. The wheel over the card scrolls it too. |
 | `1` to `9` | On a question put with `ask-human`, pick that answer. The question and its numbered answers are shown on its card, and the keys work once it has been on screen as it is for 0.4 seconds. See [Questions an agent asks you](#questions-an-agent-asks-you). |
 | `r`, `i` | With no approval waiting: reply to the agent, or to mail, whose thread opens with its reply line. `tab` steps the regions: the list, the focus, the reply, the side column. |
 | `y` | On a Resume row: type the conversation's resume command into its pane. The view stays open, and the row says `Resuming` until the agent is back. With marks, resume every marked Resume row. `enter` goes to the pane. |
@@ -3689,8 +3689,9 @@ With approvals on for Claude Code, a plan it asks you to approve when it leaves
 plan mode (its `ExitPlanMode` tool) is held too, under its own group, Plans,
 between Approvals and the questions. The row is the plan's title and length,
 `Refactor the retry loop (14 lines)`, and the rail's need word is `plan`. With
-the cursor on it the plan is shown whole under the list, scrolled with `J` and
-`K`:
+the cursor on it the plan is drawn as Markdown under the list, as the thread
+draws an agent's words. `J` and `K` scroll it a page, `G` goes to its end and
+`Z` shows it in the whole focus:
 
 | Key | What it does |
 | --- | --- |

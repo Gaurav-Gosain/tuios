@@ -953,14 +953,23 @@ func (m *OS) ckPlanCard(l ckLook, en threadEntry, width int, whole bool) []ckLin
 // expanded.
 func (m *OS) ckPlanText(l ckLook, t *agentThread, en threadEntry, width int) []ckLine {
 	pal := l.pal
-	lines := threadWrap(en.Plan, max(width-6, 8))
-	open := !t.folded[en.ID]
+	// The plan is Markdown, drawn as the agent's words are. A plan the
+	// transcript does not carry, such as one kept in a file, is its header
+	// alone, with no count of no lines.
+	var lines []ckLine
+	if strings.TrimSpace(en.Plan) != "" {
+		lines = m.ckMarkdown(l, en.Plan, max(width-6, 8))
+	}
+	open := !t.folded[en.ID] && len(lines) > 0
 	mark := ckGlyphOpen
 	if !open {
 		mark = ckGlyphFold
 	}
-	ls := []ckLine{{bg: l.panel, indent: 1, hit: "fold:" + en.ID, segs: []ckSeg{{t: l.g(mark) + " ", fg: pal.FgDim}, {t: "Plan", fg: pal.FgDim, attrs: ckBold},
-		{t: "   " + strconv.Itoa(len(lines)) + " lines", fg: pal.FgMute}}}}
+	head := []ckSeg{{t: l.g(mark) + " ", fg: pal.FgDim}, {t: "Plan", fg: pal.FgDim, attrs: ckBold}}
+	if len(lines) > 0 {
+		head = append(head, ckSeg{t: "   " + plural.Count(len(lines), "line"), fg: pal.FgMute})
+	}
+	ls := []ckLine{{bg: l.panel, indent: 1, hit: "fold:" + en.ID, segs: head}}
 	if !open {
 		return append(ls, ckLine{})
 	}
@@ -968,8 +977,14 @@ func (m *OS) ckPlanText(l ckLook, t *agentThread, en threadEntry, width int) []c
 	if !t.expandAll && len(shown) > ckDiffShown {
 		shown = shown[:ckDiffShown]
 	}
-	for _, s := range shown {
-		ls = append(ls, ckLine{bg: l.panel, indent: 3, segs: []ckSeg{{t: s, fg: pal.Fg}}})
+	for _, ln := range shown {
+		if ln.bg == nil {
+			ln.bg, ln.bgAt = l.panel, 0
+		} else {
+			ln.bgAt += 3
+		}
+		ln.indent += 3
+		ls = append(ls, ln)
 	}
 	if len(shown) < len(lines) {
 		ls = append(ls, ckLine{bg: l.panel, indent: 3, segs: []ckSeg{{t: strconv.Itoa(len(lines)-len(shown)) + " more lines   ", fg: pal.FgMute}, {t: "e", fg: pal.AccentBright, attrs: ckBold}, {t: " expand all", fg: pal.FgMute}}})

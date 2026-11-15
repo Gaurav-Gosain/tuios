@@ -14,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/risk"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -217,12 +218,22 @@ type inboxPlanView struct {
 	loading   bool
 	err       string
 	text      string
-	// scroll is the first line shown, and window how many the card showed
-	// last, 0 before it was drawn.
-	scroll, window int
+	// scroll is the first line shown, window how many the card showed
+	// last and total how many lines the plan drew, 0 before it was drawn.
+	scroll, window, total int
+	// body is the plan drawn as Markdown, one styled line each, for the
+	// width, theme and look in bodyKey.
+	body    []string
+	bodyKey inboxPlanBodyKey
 	// seenEnd holds the plans, by request id and digest, whose last line has
 	// been on screen. 1 and 2 approve only such a plan.
 	seenEnd map[string]bool
+}
+
+// inboxPlanBodyKey names what a drawn plan body depends on besides its text.
+type inboxPlanBodyKey struct {
+	width       int
+	theme, look uint64
 }
 
 // InboxApprovalDetailMsg is a get-approval reply.
@@ -296,7 +307,7 @@ func (m *OS) inboxApprovalGate(it session.AttentionItem, decision string) (stop 
 	}
 	if it.Kind == session.AttentionPlan && !m.inboxPlanReadToEnd(it) {
 		more := m.inboxPlanMoreBelow(it)
-		msg := "Read the plan to its end before approving it: " + m.inboxKeyOr(config.ActionInboxDetailDown, "J") + " scrolls"
+		msg := "Read the plan to its end before approving it: " + m.inboxKeyOr(config.ActionInboxLast, "G") + " goes to the end"
 		if more > 0 {
 			msg += ", " + strconv.Itoa(more) + " more below"
 		}
@@ -427,7 +438,8 @@ func (m *OS) InboxReasonSend() tea.Cmd {
 }
 
 // InboxDetailScroll scrolls the detail under the list, such as a long plan,
-// by delta lines.
+// by delta pages: a page is the card's window less one line, so the last
+// line of one page is the first of the next.
 func (m *OS) InboxDetailScroll(delta int) (tea.Cmd, bool) {
 	m.cockpitTouch()
 	it, ok := m.inboxSelected()
@@ -438,8 +450,76 @@ func (m *OS) InboxDetailScroll(delta int) (tea.Cmd, bool) {
 	if pv.requestID != it.RequestID || pv.text == "" {
 		return nil, true
 	}
-	pv.scroll = max(pv.scroll+delta, 0)
+	m.inboxPlanScrollTo(pv.scroll + delta*m.inboxPlanPage())
 	return nil, true
+}
+
+// inboxPlanPage is how far a page key scrolls a plan.
+func (m *OS) inboxPlanPage() int {
+	return max(m.inboxPlanWindow()-1, 1)
+}
+
+// inboxPlanScrollTo puts line at the top of the plan's window, kept in the
+// plan, and reports whether the window moved.
+func (m *OS) inboxPlanScrollTo(line int) bool {
+	pv := &m.Inbox.approvals.plan
+	limit := line
+	if pv.total > 0 {
+		limit = max(pv.total-m.inboxPlanWindow(), 0)
+	}
+	to := clampInt(line, 0, limit)
+	if to == pv.scroll {
+		return false
+	}
+	pv.scroll = to
+	m.cockpitTouch()
+	return true
+}
+
+// inboxPlanMove takes a move key while the selected item is a plan the card
+// shows: the page keys scroll it a page, g and G go to its first and last
+// lines, and with lines (the keys are in the focus) j and k scroll it a line.
+// It reports false when no plan is shown, or the plan is already where the
+// key would take it, so the key moves the list or the thread as before.
+func (m *OS) inboxPlanMove(action string, lines bool) bool {
+	it, ok := m.inboxSelected()
+	if !ok || it.Kind != session.AttentionPlan || it.RequestID == "" {
+		return false
+	}
+	pv := &m.Inbox.approvals.plan
+	if pv.requestID != it.RequestID || pv.text == "" || pv.total == 0 {
+		return false
+	}
+	to := pv.scroll
+	switch action {
+	case config.ActionInboxPageDown:
+		to += m.inboxPlanPage()
+	case config.ActionInboxPageUp:
+		to -= m.inboxPlanPage()
+	case config.ActionInboxFirst:
+		to = 0
+	case config.ActionInboxLast:
+		to = pv.total
+	case config.ActionInboxDown:
+		if !lines {
+			return false
+		}
+		to++
+	case config.ActionInboxUp:
+		if !lines {
+			return false
+		}
+		to--
+	default:
+		return false
+	}
+	return m.inboxPlanScrollTo(to)
+}
+
+// inboxPlanSelected reports whether the selected item is a held plan.
+func (m *OS) inboxPlanSelected() bool {
+	it, ok := m.inboxSelected()
+	return ok && it.Kind == session.AttentionPlan && inboxHeld(it)
 }
 
 // InboxApprovalFetch reads the selected plan's text when the view does not
@@ -521,13 +601,43 @@ func (m *OS) inboxPlanWindow() int {
 	return n
 }
 
-// inboxPlanLines is the plan's text wrapped to width, each line as drawn.
-func inboxPlanLines(text string, width int) []string {
-	var out []string
-	for l := range strings.SplitSeq(strings.TrimRight(text, "\n"), "\n") {
-		l = strings.ReplaceAll(l, "\t", "    ")
-		out = append(out, wrapPlain(printableRunes(l), width)...)
+// inboxPlanBody is the plan's text drawn as Markdown at width, the way the
+// thread draws an agent's words: headings, lists, code and emphasis styled,
+// and the lines of a paragraph the agent broke at its own width joined
+// before they are wrapped at this one. Each line is a styled string on the
+// card's ground, kept until the text, the width or the look changes.
+//
+// A line is the plan's bar, which marks it as the agent's text, then the
+// Markdown, width cells in all.
+func (m *OS) inboxPlanBody(width int) []string {
+	pv := &m.Inbox.approvals.plan
+	l := m.cockpitLook()
+	key := inboxPlanBodyKey{width: width, theme: theme.Generation(), look: m.Inbox.ck.lookGen}
+	if pv.body != nil && pv.bodyKey == key {
+		return pv.body
 	}
+	bar := "│ "
+	if overlay.UseASCII() {
+		bar = "| "
+	}
+	inner := max(width-4, 8)
+	// Each line loses what the terminal would read as a control, as the
+	// plain lines did, before the Markdown is read.
+	src := strings.Split(strings.ReplaceAll(pv.text, "\t", "    "), "\n")
+	for i, s := range src {
+		src[i] = printableRunes(s)
+	}
+	md := m.ckMarkdown(l, strings.Join(src, "\n"), inner)
+	var c, row *ckCanvas
+	out := make([]string, len(md))
+	for i, ln := range md {
+		c = c.reset(inner, 1, l.panel)
+		row = row.reset(inner+4, 1, l.panel)
+		row.text(2, 0, 0, ckSeg{t: bar, fg: l.pal.FgMute})
+		row.draw(4, 0, inner, ckRender(c, inner, ln))
+		out[i] = row.render()
+	}
+	pv.body, pv.bodyKey = out, key
 	return out
 }
 
@@ -537,8 +647,7 @@ func (m *OS) inboxPlanMoreBelow(it session.AttentionItem) int {
 	if pv.requestID != it.RequestID || pv.text == "" {
 		return 0
 	}
-	lines := inboxPlanLines(pv.text, max(m.panelWidth(inboxWidth)-6, 8))
-	return max(len(lines)-(pv.scroll+m.inboxPlanWindow()), 0)
+	return max(pv.total-(pv.scroll+m.inboxPlanWindow()), 0)
 }
 
 // inboxPlanDetail is the plan under the cursor: who asks, the plan's lines
@@ -558,22 +667,24 @@ func (m *OS) inboxPlanDetail(it session.AttentionItem, width int) []string {
 			lines = append(lines, indent+l)
 		}
 	}
-	// The plan's title and length first: the card's title only asks.
-	add("  ", inboxPlanRowText(it))
+	// Until the plan is read, its title stands for it: the card's title
+	// only asks. Once read, the plan's own heading is its first line.
 	switch {
 	case pv.requestID != it.RequestID || pv.loading:
+		add("  ", inboxPlanTitle(it))
 		add("  ", head+", "+strconv.Itoa(it.PlanLines)+" lines. Reading the plan...")
 		return lines
 	case pv.err != "":
+		add("  ", inboxPlanTitle(it))
 		add("  ", head+". "+pv.err+". Enter answers it in the pane.")
 		return lines
 	}
-	bar := "│ "
-	if overlay.UseASCII() {
-		bar = "| "
-	}
-	body := inboxPlanLines(pv.text, max(width-4, 8))
+	body := m.inboxPlanBody(width)
 	window := min(max(m.GetRenderHeight()/3, 3), 16)
+	if m.Inbox.ck.zoom {
+		// Zoomed, the card has the whole focus.
+		window = len(body)
+	}
 	if room := m.Inbox.ck.cardRoom; room > 0 {
 		// The card holds the title, the head, the window, what always
 		// sets and the line under it, which can wrap once.
@@ -583,25 +694,25 @@ func (m *OS) inboxPlanDetail(it session.AttentionItem, width int) []string {
 		}
 		window = max(min(window, room-fixed), 1)
 	}
-	pv.window = window
+	pv.window, pv.total = window, len(body)
 	pv.scroll = clampInt(pv.scroll, 0, max(len(body)-window, 0))
 	end := min(pv.scroll+window, len(body))
+	// Where the window is, in lines as the card draws them. The card's
+	// title names who asks.
 	if len(body) <= window {
-		head += ", " + strconv.Itoa(len(body)) + " lines, all shown"
+		head = plural.Count(len(body), "line") + ", all shown"
 	} else {
-		head += ", lines " + strconv.Itoa(pv.scroll+1) + "-" + strconv.Itoa(end) + " of " + strconv.Itoa(len(body))
+		head = "Lines " + strconv.Itoa(pv.scroll+1) + "-" + strconv.Itoa(end) + " of " + strconv.Itoa(len(body))
 	}
 	add("  ", head)
-	for _, l := range body[pv.scroll:end] {
-		lines = append(lines, "  "+bar+l)
-	}
+	lines = append(lines, body[pv.scroll:end]...)
 	if slices.Contains(it.Options, session.ApprovalAlways) {
 		for _, rule := range it.AlwaysScope {
-			add("  ", "2 also sets: "+printableTitle(rule))
+			add("  ", m.inboxKeyOr(config.ActionInboxAllowAlways, "A")+" also sets: "+printableTitle(rule))
 		}
 	}
 	if more := len(body) - end; more > 0 {
-		add("  ", m.inboxKeyOr(config.ActionInboxDetailDown, "J")+"/"+m.inboxKeyOr(config.ActionInboxDetailUp, "K")+" scroll, "+strconv.Itoa(more)+" more below. 1 approves once the end has been shown.")
+		add("  ", plural.Count(more, "more line")+". Read to the end to approve: "+m.inboxKeyOr(config.ActionInboxDetailDown, "J")+" "+m.inboxKeyOr(config.ActionInboxDetailUp, "K")+" page, "+m.inboxKeyOr(config.ActionInboxLast, "G")+" end, "+m.inboxKeyOr(config.ActionInboxZoom, "Z")+" zoom.")
 		return lines
 	}
 	// The window holds the last line. It has been read only if the panel
@@ -662,12 +773,19 @@ func inboxDecisionKey(decision string) string {
 	return decision
 }
 
-// inboxPlanRowText is a plan's row: its title and how long it is.
-func inboxPlanRowText(it session.AttentionItem) string {
+// inboxPlanTitle is a plan's title, without the Markdown of a heading.
+func inboxPlanTitle(it session.AttentionItem) string {
 	title := strings.TrimPrefix(printableTitle(it.Summary), "plan: ")
+	title = strings.TrimSpace(strings.TrimLeft(title, "#"))
 	if title == "" {
 		title = "a plan"
 	}
+	return title
+}
+
+// inboxPlanRowText is a plan's row: its title and how long it is.
+func inboxPlanRowText(it session.AttentionItem) string {
+	title := inboxPlanTitle(it)
 	if it.PlanLines > 0 {
 		title += " (" + strconv.Itoa(it.PlanLines) + " lines)"
 	}

@@ -125,8 +125,7 @@ func (m *OS) CockpitEscape() tea.Cmd {
 	ck := &st.ck
 	switch step, _ := m.cockpitEscapeStep(); step {
 	case ckEscUnzoom:
-		ck.zoom = false
-		m.cockpitTouch()
+		m.cockpitUnzoom()
 		return nil
 	case ckEscBack:
 		return m.CockpitOpenFocus(false)
@@ -234,6 +233,10 @@ func (m *OS) cockpitRegionKey(action string) (tea.Cmd, bool) {
 // keys a screen, g G the ends. y starts copy mode over the thread.
 func (m *OS) cockpitFocusKey(action string) (tea.Cmd, bool) {
 	if action == config.ActionInboxResume && m.CockpitCopyStart() {
+		return nil, true
+	}
+	// A plan on the card is what the focus reads: the moves scroll it.
+	if m.inboxPlanMove(action, true) {
 		return nil, true
 	}
 	t := m.cockpitThread()

@@ -150,7 +150,10 @@ type cockpitState struct {
 	// ship is Ready to merge on a card in review, nil when it is closed.
 	ship *ckShip
 	zoom bool
-	div  ckDivider
+	// zoomTook says the zoom moved the keys from the list to the focus,
+	// for a plan, so the end of the zoom gives them back.
+	zoomTook bool
+	div      ckDivider
 	// key is the selected row, and akey its agent, so the cursor stays on
 	// an agent whose approval was answered and whose row key changed.
 	key, akey string
@@ -1805,6 +1808,10 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		return m.CockpitGo(), true
 	case config.ActionInboxUp, config.ActionInboxDown, config.ActionInboxPageUp, config.ActionInboxPageDown,
 		config.ActionInboxFirst, config.ActionInboxLast:
+		// On a plan the page keys, g and G read the plan first, then move.
+		if m.inboxPlanMove(action, false) {
+			return nil, true
+		}
 		d := 1
 		switch action {
 		case config.ActionInboxUp:

@@ -111,9 +111,29 @@ func (m *OS) CockpitToggleSide() {
 }
 
 // CockpitToggleZoom shows the focused region alone, or the whole view again.
+// On a plan with the keys in the list, the zoom is the focus, where the card
+// has every row for the plan.
 func (m *OS) CockpitToggleZoom() {
 	ck := &m.Inbox.ck
-	ck.zoom = !ck.zoom
+	if ck.zoom {
+		m.cockpitUnzoom()
+		return
+	}
+	ck.zoom = true
+	if m.CockpitRegion() == ckRegionList && m.inboxPlanSelected() && ck.regionBox[ckRegionFocus].shown() {
+		ck.region, ck.zoomTook = ckRegionFocus, true
+	}
+	m.cockpitTouch()
+}
+
+// cockpitUnzoom gives the layout back as it was before the zoom, the keys
+// with it.
+func (m *OS) cockpitUnzoom() {
+	ck := &m.Inbox.ck
+	if ck.zoomTook && ck.region == ckRegionFocus {
+		ck.region = ckRegionList
+	}
+	ck.zoom, ck.zoomTook = false, false
 	m.cockpitTouch()
 }
 
