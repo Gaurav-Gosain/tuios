@@ -2491,8 +2491,12 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 	// prompt is refused, so the area is not drawn for one: the card answers
 	// the prompt.
 	foot := y1
+	// The Changes and Checkpoints tabs are for what they list: a card that
+	// asks nothing and a closed reply give them their rows, each folded to
+	// one line.
+	fold := m.ckTabFolds()
 	if st.reply.editor != nil || (r.agent >= 0 && e.State != "needs_input") || (r.hasItem && r.item.Kind == session.AttentionMail) {
-		foot = m.drawReplyArea(c, l, e, name, x, w, bodyTop, y1, top)
+		foot = m.drawReplyArea(c, l, e, name, x, w, bodyTop, y1, top, fold)
 	}
 	bodyBot := foot - 1
 	if foot == y1 {
@@ -2520,7 +2524,7 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 	// an approval the keys still answer.
 	cardTop := bodyBot
 	if r.hasItem {
-		cardTop = m.drawItemCard(c, l, r, x, w, bodyTop, bodyBot, top, now)
+		cardTop = m.drawItemCard(c, l, r, x, w, bodyTop, bodyBot, top, now, fold)
 	}
 	// The side column's pieces as focus tabs, narrower than it, above the
 	// card.
@@ -2585,6 +2589,10 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 		start, end := max(len(lines)-room, 0), len(lines)
 		if t != nil && (t.read || t.recap != nil) {
 			t.follow.Apply(threadLayout(t, len(lines), room))
+			if t.fromTop && m.cockpitTab() == "Changes" {
+				t.fromTop = false
+				t.follow.Scroll(len(lines))
+			}
 			start, end = t.follow.Window()
 		}
 		if t != nil && hits != nil {
@@ -2773,7 +2781,7 @@ func (m *OS) drawStatePill(c *ckCanvas, l ckLook, r ckRow, e sidebarAgentEntry, 
 // drawItemCard draws the card of what the row's item asks, at the bottom of
 // the body, and returns its top row. A held approval or plan is answered from
 // its buttons, a question from its numbered answers.
-func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int, now time.Time) int {
+func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int, now time.Time, fold bool) int {
 	st := &m.Inbox
 	pal := l.pal
 	it := r.item
@@ -2872,6 +2880,11 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 		if it.DenyMessage {
 			btns = append(btns, btn{m.inboxKeyOr(config.ActionInboxDenyReason, "R"), labels[3], "R"})
 		}
+	}
+	if fold && !held && len(qopts) == 0 && !(it.Kind == session.AttentionAsk && it.RequestID != "") {
+		// A card that asks nothing is its title line on a tab that lists
+		// something: the recap is on the Thread tab.
+		detail, inset, btns, base = nil, nil, nil, 1
 	}
 	size := func() int {
 		h := base + len(detail)

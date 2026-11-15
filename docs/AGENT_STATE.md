@@ -2807,7 +2807,10 @@ conversation, read from its transcript and drawn as cards:
 
 The newest card is at the bottom. The wheel over the thread, or `J` and `K`,
 scrolls it. `[` and `]` switch between the Thread and Changes tabs: Changes
-shows every edit of the last turn whole.
+shows every edit of the last turn whole, from the first file. On Changes and
+Checkpoints the focus gives its rows to the list: a card that asks nothing,
+such as Done, is its title line, and the closed reply is one line (`r` opens
+it). A card that asks something stays whole on every tab.
 
 `ctrl+b` `[` starts copy mode over the thread, and so does `y` in the focus
 region. It has the keys of a pane's copy

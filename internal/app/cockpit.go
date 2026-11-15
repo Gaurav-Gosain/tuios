@@ -1760,6 +1760,17 @@ func (m *OS) cockpitTab() string {
 	return name
 }
 
+// ckTabFolds reports whether the tab in force lists something the focus
+// gives its rows to: the Changes and Checkpoints tabs fold a card that asks
+// nothing and the closed reply to one line each.
+func (m *OS) ckTabFolds() bool {
+	switch m.cockpitTab() {
+	case "Changes", "Checkpoints":
+		return true
+	}
+	return false
+}
+
 // cockpitTabIndex is the place of the tab in force among the row's tabs.
 func (m *OS) cockpitTabIndex() int {
 	e, _ := m.cockpitAgent()
@@ -1785,6 +1796,8 @@ func (m *OS) CockpitTab(delta int) {
 	m.Inbox.ck.tab, _, _ = strings.Cut(tabs[i], " ")
 	if t := m.cockpitThread(); t != nil {
 		t.follow.Bottom()
+		// The Changes tab opens at its first file, as a diff is read.
+		t.fromTop = m.Inbox.ck.tab == "Changes"
 	}
 	m.cockpitTouch()
 }

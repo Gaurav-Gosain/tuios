@@ -148,6 +148,9 @@ type agentThread struct {
 	follow  transcriptview.Follow
 	taken   int
 	prompts []int
+	// fromTop is set when the Changes tab opens: its next layout shows the
+	// first line, not the newest.
+	fromTop bool
 	// cards are the entries' cards as last built, by entry id.
 	cards map[string]ckCard
 	// codeX is how far each code block is scrolled sideways, in cells, by

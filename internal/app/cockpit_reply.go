@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
@@ -17,7 +18,11 @@ import (
 
 // drawReplyArea draws the reply area over rows up to y1 and returns its top
 // row. name is who the reply is for.
-func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name string, x, w, bodyTop, y1, top int) int {
+//
+// fold draws the closed area as one line, for a tab that lists something
+// and wants the rows: who the reply is for, the key that opens it, and when
+// it is typed.
+func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name string, x, w, bodyTop, y1, top int, fold bool) int {
 	st := &m.Inbox
 	st.ck.edW = w
 	pal := l.pal
@@ -62,6 +67,21 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 			// The editor is not drawn, so nothing may be placed by
 			// where it was last.
 			ed.at.ok, ed.at.drawn = false, false
+		}
+		if fold {
+			y := y1 - 1
+			c.hline(x, y-1, w, hzGlyph(), l.edge)
+			c.fill(x, y, w, 1, l.panel)
+			rx := c.textR(right-2, y, ckSeg{t: when, fg: label})
+			segs := []ckSeg{{t: "Reply to ", fg: label}, {t: name, fg: pal.Fg, attrs: ckBold}, {t: "   "},
+				{t: m.inboxKeyOr(config.ActionInboxReply, "r"), fg: key, attrs: ckBold}, {t: " write", fg: label}}
+			if d := st.reply.drafts[inboxDraftKey(e.SessionID, e.WindowID)]; d != nil && !d.Empty() {
+				segs[4].t = " draft: "
+				segs = append(segs, ckSeg{t: ansi.Truncate(ckDraftLine(d), max(rx-tx-ckWidth(segs...)-2, 1), "…"), fg: pal.Fg})
+			}
+			c.text(tx, y, rx-2, segs...)
+			st.ck.hits = append(st.ck.hits, ckHit{x0: x, y0: top + y, x1: right, y1: top + y1, kind: ckHitAction, action: "reply"})
+			return y - 1
 		}
 		// A row of air above the hints, when the screen has rows to spare.
 		h := 3
