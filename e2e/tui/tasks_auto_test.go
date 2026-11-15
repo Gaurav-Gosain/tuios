@@ -67,7 +67,7 @@ const planHookPayload = `{"hook_event_name":"PermissionRequest","session_id":"e2
 // answer, and waits for the hook to return with it.
 func answerPlan(t *testing.T, base string, term *tuitest.Terminal, hook *heldHook, key, want string) {
 	t.Helper()
-	if err := term.WaitFor(func(s tuitest.Screen) bool { return screenHas(s, "Approve the plan?", "a approve", "r keep planning") }, uiTimeout); err != nil {
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return screenHas(s, "Approve the plan?", "a approve", "X keep planning") }, uiTimeout); err != nil {
 		t.Fatalf("the Inbox never showed the plan: %v\n%s", err, term.Snapshot())
 	}
 	// The Inbox takes no answer until the item has been shown a moment.
@@ -129,7 +129,7 @@ func TestTaskFollowsAPlanHoldAndItsAnswer(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the Inbox: %v", err)
 	}
-	answerPlan(t, base, term, hook, "r", `"behavior":"deny"`)
+	answerPlan(t, base, term, hook, "X", `"behavior":"deny"`)
 	kept := stillIn(t, base, sess, "t1", "plan", "the plan was kept planning")
 	if strings.Contains(kept, "plan approved") {
 		t.Fatalf("ASSERTION: t1 reads an approval after a plan kept planning:\n%s", kept)
