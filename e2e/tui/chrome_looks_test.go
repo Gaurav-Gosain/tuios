@@ -417,7 +417,7 @@ func checkFooter(t *testing.T, term *tuitest.Terminal, name string, s tuitest.Sc
 		t.Errorf("%s: the footer has no labelled way out: %q\n%s", name, line, term.Snapshot())
 	}
 	if name == "inbox" {
-		for _, want := range []string{"a allow", "r reject", "d dismiss", "esc close"} {
+		for _, want := range []string{"a allow", "X reject", "d dismiss", "esc close"} {
 			if !strings.Contains(line, want) {
 				t.Errorf("inbox: the footer lost %q: %q\n%s", want, line, term.Snapshot())
 			}

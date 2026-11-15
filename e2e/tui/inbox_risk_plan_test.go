@@ -180,7 +180,7 @@ func TestInboxKeepsAPlanPlanningWithAReason(t *testing.T) {
 		t.Fatalf("open the Inbox: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenHas(s, "1 needs you", "Approve the plan?", "Refactor the retry loop (3 lines)", "Move backoff into api/retry.go.", "r keep planning")
+		return screenHas(s, "1 needs you", "Approve the plan?", "Refactor the retry loop (3 lines)", "Move backoff into api/retry.go.", "X keep planning")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the Inbox never showed the plan: %v\n%s", err, term.Snapshot())
 	}

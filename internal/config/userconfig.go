@@ -2004,11 +2004,14 @@ const (
 	// narrow screen, help, and the bulk marks.
 	ActionInboxAllow       = "inbox_allow"
 	ActionInboxAllowAlways = "inbox_allow_always"
-	ActionInboxOpen        = "inbox_open"
-	ActionInboxBack        = "inbox_back"
-	ActionInboxHelp        = "inbox_help"
-	ActionInboxMark        = "inbox_mark"
-	ActionInboxMarkAll     = "inbox_mark_all"
+	// ActionInboxReject rejects the held approval, or keeps a plan
+	// planning. It took the reject from inbox_reply, so r always replies.
+	ActionInboxReject  = "inbox_reject"
+	ActionInboxOpen    = "inbox_open"
+	ActionInboxBack    = "inbox_back"
+	ActionInboxHelp    = "inbox_help"
+	ActionInboxMark    = "inbox_mark"
+	ActionInboxMarkAll = "inbox_mark_all"
 	// The focus\'s tabs, every line of every thread card, and the group fold.
 	ActionInboxTabPrev = "inbox_tab_prev"
 	ActionInboxTabNext = "inbox_tab_next"
@@ -2113,10 +2116,10 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxViewPane:     {"ctrl+]"},
 		// Review, triage and approvals. z snoozes and waits for a digit; u
 		// undoes a dismiss or snooze made a moment ago; S shows what is
-		// snoozed; R rejects with a reason, after the a A r R of the
+		// snoozed; R rejects with a reason, after the a A X R of the
 		// approval card, where 3 stays the plain reject; n starts a new
-		// agent; J and K scroll a long detail such as a plan. On a held
-		// approval r rejects: inbox_reply answers it.
+		// agent; J and K scroll a long detail such as a plan. r always
+		// replies: on a held approval it says which keys answer.
 		ActionInboxReview:        {"v"},
 		ActionInboxSnooze:        {"z"},
 		ActionInboxUndo:          {"u"},
@@ -2139,6 +2142,7 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxDetailUp:      {"K", "ctrl+u"},
 		ActionInboxAllow:         {"a"},
 		ActionInboxAllowAlways:   {"A"},
+		ActionInboxReject:        {"X"},
 		ActionInboxOpen:          {"l", "right"},
 		ActionInboxBack:          {"h", "left"},
 		ActionInboxHelp:          {"?"},
@@ -3859,20 +3863,22 @@ var yieldingDefaults = map[string]bool{
 	"inbox_write":        true,
 	"inbox_allow":        true,
 	"inbox_allow_always": true,
-	"inbox_open":         true,
-	"inbox_back":         true,
-	"inbox_help":         true,
-	"inbox_mark":         true,
-	"inbox_mark_all":     true,
-	"inbox_tab_prev":     true,
-	"inbox_tab_next":     true,
-	"inbox_expand":       true,
-	"inbox_fold":         true,
-	"inbox_code_wrap":    true,
-	"inbox_code_left":    true,
-	"inbox_code_right":   true,
-	"inbox_code_copy":    true,
-	"inbox_child":        true,
+	// X, new when reject left r.
+	"inbox_reject":     true,
+	"inbox_open":       true,
+	"inbox_back":       true,
+	"inbox_help":       true,
+	"inbox_mark":       true,
+	"inbox_mark_all":   true,
+	"inbox_tab_prev":   true,
+	"inbox_tab_next":   true,
+	"inbox_expand":     true,
+	"inbox_fold":       true,
+	"inbox_code_wrap":  true,
+	"inbox_code_left":  true,
+	"inbox_code_right": true,
+	"inbox_code_copy":  true,
+	"inbox_child":      true,
 	// ctrl+o, new with the message cards.
 	"inbox_jump_back": true,
 	// ctrl+alt+N (ctrl+opt+N on macOS), the first default for

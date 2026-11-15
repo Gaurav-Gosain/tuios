@@ -1350,14 +1350,14 @@ func (m *OS) cockpitUnheldApproval() bool {
 }
 
 // CockpitAnswerLetter answers the held approval under the cursor with a
-// letter: a allows once, A always, r rejects. handled is false when no
+// letter: a allows once, A always, X rejects. handled is false when no
 // approval waits, and the key then does what it does on any row.
 func (m *OS) CockpitAnswerLetter(key string) (tea.Cmd, bool) {
 	if _, ok := m.cockpitHeldItem(); !ok {
 		// An approval with no hold behind it is answered in its pane. a and
-		// A say so, as the digits do, instead of doing nothing in silence.
-		// r keeps its other meaning there: it replies.
-		if key != "r" && m.cockpitUnheldApproval() {
+		// A and X say so, as the digits do, instead of doing nothing in
+		// silence.
+		if m.cockpitUnheldApproval() {
 			m.ShowNotification(inboxNotHeldWords, "warning", m.Settings.NotificationDuration)
 			return nil, true
 		}
@@ -1520,11 +1520,11 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		return m.InboxDismiss()
 	case "follow":
 		m.CockpitThreadBottom()
-	case "a", "A", "r":
+	case "a", "A", "X":
 		// A click on the card's button is no typed text: it answers at
 		// once. On a risky call it asks, as a key does, and a second click
 		// on the same button (or enter) answers.
-		decision := map[string]string{"a": session.ApprovalOnce, "A": session.ApprovalAlways, "r": session.ApprovalDeny}[action]
+		decision := map[string]string{"a": session.ApprovalOnce, "A": session.ApprovalAlways, "X": session.ApprovalDeny}[action]
 		if m.InboxConfirmOpen() && m.Inbox.approvals.answer.confirm.decision == decision {
 			return m.InboxConfirmKey("enter")
 		}
@@ -1624,6 +1624,17 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+// cockpitHeldReplyWords is what r says on a held approval or plan: the keys
+// that answer it.
+func (m *OS) cockpitHeldReplyWords(it session.AttentionItem) string {
+	allow := m.inboxKeyOr(config.ActionInboxAllow, "a")
+	reject := m.inboxKeyOr(config.ActionInboxReject, "X")
+	if it.Kind == session.AttentionPlan {
+		return "Answer the plan first. Press " + allow + " to approve or " + reject + " to keep planning."
+	}
+	return "Answer first. Press " + allow + " to allow or " + reject + " to reject."
 }
 
 // cockpitReply opens the reply editor for the row under the cursor: mail
@@ -1808,21 +1819,24 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 	case config.ActionInboxNextNeeds:
 		m.CockpitNextNeeds()
 		return nil, true
-	case config.ActionInboxAllow, config.ActionInboxAllowAlways, config.ActionInboxReply:
-		letter := "r"
+	case config.ActionInboxAllow, config.ActionInboxAllowAlways, config.ActionInboxReject:
+		letter := "X"
 		switch action {
 		case config.ActionInboxAllow:
 			letter = "a"
 		case config.ActionInboxAllowAlways:
 			letter = "A"
 		}
-		if cmd, ok := m.CockpitAnswerLetter(letter); ok {
-			return cmd, true
+		cmd, _ := m.CockpitAnswerLetter(letter)
+		return cmd, true
+	case config.ActionInboxReply:
+		// r only replies. An agent held on an approval reads no reply
+		// until the approval is answered, so r names the keys that answer.
+		if it, held := m.cockpitHeldItem(); held {
+			m.ShowNotification(m.cockpitHeldReplyWords(it), "info", m.Settings.NotificationDuration)
+			return nil, true
 		}
-		if action == config.ActionInboxReply {
-			return m.cockpitReply(), true
-		}
-		return nil, true
+		return m.cockpitReply(), true
 	case config.ActionInboxOpen:
 		if !m.cockpitWideFocus() && !m.Inbox.threads.open {
 			return m.CockpitOpenFocus(true), true

@@ -2236,8 +2236,8 @@ Inside it:
 | `j` `k`, arrows | Move between agents. The focus area shows the selected one |
 | `g` `G` | Go to the first or last agent. When the thread is scrolled up, `G` first shows its newest lines and follows it again |
 | `enter` | Go to the agent's pane and close the view. On mail, open the thread |
-| `a` `A` `r` `R` | On a held approval: allow once, always allow, reject, reject and say why. `1` `2` `3` still work |
-| `r`, `i` | With no approval waiting: write a reply to the agent, or to the mail |
+| `a` `A` `X` `R` | On a held approval: allow once, always allow, reject, reject and say why. `1` `2` `3` still work |
+| `r`, `i` | Write a reply to the agent, or to the mail. On a held approval, `r` names the keys that answer it |
 | `tab` `shift+tab` | Give the keys to the next or the previous region: the list, the focus, the reply, the side column. A region the screen does not show is skipped. See below |
 | `N` | Go to the next agent that needs you, and from the top again after the last |
 | `space` | Read an approval's or a question's prompt and answer it here. On a card of the board's columns: show the card whole, its prompt, attachments and history, beside the columns or over them. It follows the cursor; `J` `K` scroll it, `[` `]` step its attachments and show the selected one, `o` shows a picture whole, `Z` zooms it, and `space` or `esc` closes it |
@@ -2410,7 +2410,7 @@ These keys are in three sections of their own, rebindable like any other:
 `inbox_dismiss`, `inbox_reply`, `inbox_resume`, `inbox_pass_on`,
 `inbox_filter`, `inbox_select`, `inbox_mailbox`, `inbox_close`,
 `inbox_write`, `inbox_sort`, `inbox_view_pane`, `inbox_new_agent`,
-`inbox_allow`, `inbox_allow_always`, `inbox_open`, `inbox_back`,
+`inbox_allow`, `inbox_allow_always`, `inbox_reject`, `inbox_open`, `inbox_back`,
 `inbox_help`, `inbox_mark`, `inbox_mark_all`, `inbox_tab_prev`,
 `inbox_tab_next`, `inbox_expand`, `inbox_code_wrap`, `inbox_code_left`, `inbox_code_right`, `inbox_code_copy`, `inbox_fold`, `inbox_prompt_prev`,
 `inbox_prompt_next`, `inbox_child`, `inbox_jump_back`, `inbox_compare`, `inbox_artifact`, `inbox_board`,
@@ -2507,7 +2507,7 @@ not offered and do what an unbound key does: after `ctrl+b` in terminal mode,
 | `u` | agents view | Undo the last dismiss, snooze or settle, within 10 seconds |
 | `D` | agents view | Settle the agent, or every marked one. Put away until it needs you |
 | `S` | agents view | Show or hide snoozed items |
-| `R` | agents view | Reject a held approval, or keep a plan planning, with a reason you type (`r` and `3` stay the plain reject) |
+| `R` | agents view | Reject a held approval, or keep a plan planning, with a reason you type (`X` and `3` stay the plain reject) |
 | `n` | agents view | Start a new agent |
 | `c` | agents view | Compare the attempts of the fan under the cursor |
 | `J`, `K`, `ctrl+d`, `ctrl+u` | agents view | Scroll the card a page, such as a long plan. On a plan, `pgdown`, `pgup`, `g` and `G` read the plan before they move the list |

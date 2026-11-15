@@ -2198,7 +2198,7 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 				hints = append(hints, m.keyHints(config.ActionInboxAllowAlways, words[1])...)
 			}
 			if slices.Contains(it.Options, session.ApprovalDeny) {
-				hints = append(hints, m.keyHints(config.ActionInboxReply, words[2])...)
+				hints = append(hints, m.keyHints(config.ActionInboxReject, words[2])...)
 			}
 			if it.DenyMessage {
 				hints = append(hints, m.keyHints(config.ActionInboxDenyReason, words[3])...)
@@ -2865,8 +2865,8 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 			}
 			// The button names the key the config binds; its action is the
 			// letter the click answers with.
-			action := [3]string{"a", "A", "r"}[i]
-			key := m.inboxKeyOr([3]string{config.ActionInboxAllow, config.ActionInboxAllowAlways, config.ActionInboxReply}[i], action)
+			action := [3]string{"a", "A", "X"}[i]
+			key := m.inboxKeyOr([3]string{config.ActionInboxAllow, config.ActionInboxAllowAlways, config.ActionInboxReject}[i], action)
 			btns = append(btns, btn{key, labels[i], action})
 		}
 		if it.DenyMessage {

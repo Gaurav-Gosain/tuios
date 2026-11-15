@@ -2443,7 +2443,7 @@ Needs you  1 ──────────────────────�
      Allow Bash  go test ./internal/auth/   ─────────────────────────────────────────
 Ready for review  3 ─────────────────────   ▌ ● Allow Bash?   api-auth waits 4m
   ✓  docs-cli      codex   docs   2m        ▌   $ go test ./internal/auth/...
-Working  6 ──────────────────────────────   ▌   a  Allow once   r  Reject
+Working  6 ──────────────────────────────   ▌   a  Allow once   X  Reject
   ◐  bench-idle    claude  cache  6m
      Bash  go test -bench Idle    ctx 31%
 ```
@@ -2485,7 +2485,7 @@ The focus area beside the list shows the selected agent: its name, harness,
 model and state, its branch, session, diff, context and cost, then its thread,
 and at the bottom the card of what it asks. A held approval's card shows the
 command whole, where it runs, and the buttons that answer it: `a` allows once,
-`A` always, `r` rejects and `R` rejects with a reason. `1`, `2` and `3` still
+`A` always, `X` rejects and `R` rejects with a reason. `r` writes a reply, and on a held approval it names these keys. `1`, `2` and `3` still
 work. A key does nothing until the card has been on screen for a moment, a key
 only asks and `enter` answers, and a plan is approved only once its last
 line was on screen. A command too long for the card is never answered there:
@@ -2930,7 +2930,7 @@ Inside the agents view:
 | `enter` | Go to the item's pane, switching session and workspace. On mail, open the thread. On a held approval, give the prompt back to the pane first, so the harness shows it there. |
 | `space` | On an approval or a question, read the prompt without leaving the agents view, and answer it from there. See [Answering a prompt without attaching](#answering-a-prompt-without-attaching). Not on a held approval, which has no prompt on the screen: answer that one with `1`, `2` or `3`. |
 | `1` / `2` / `3` | Answer the held approval under the cursor: allow once, always allow, reject. The same order as the harness's own menu. Only the keys the prompt offers work, and only once the prompt has been on screen as it is for 0.4 seconds. The whole prompt, and what `2` adds, is shown under the list. Each key asks first: the card says what will happen, and `enter` answers. Any other key cancels. On a plan they are approve and approve with accept edits, and work once the plan's last line has been shown; `3` keeps it planning. See [Approvals from the Inbox](#approvals-from-the-inbox), [Risk rules](#risk-rules) and [Plans](#plans). |
-| `a` / `A` / `r` | Answer the held approval under the cursor, as its card's buttons do: allow once, always allow, reject. The same rules as `1`, `2` and `3`. |
+| `a` / `A` / `X` | Answer the held approval under the cursor, as its card's buttons do: allow once, always allow, reject. The same rules as `1`, `2` and `3`. |
 | `R` | On a held approval or plan whose harness takes a reason: reject, or keep planning, with a reason you type on the `Reason:` line. `enter` sends it, `esc` drops it. See [Reject with a reason](#reject-with-a-reason). |
 | `n` | Open the New agent sheet. |
 | `J` / `K`, `ctrl+d` / `ctrl+u` | Scroll a plan on the card a page at a time. `pgdown` and `pgup` do the same, and `g` and `G` go to the plan's first and last lines, before they move the list. `Z` gives the card the whole focus, where `j` and `k` scroll the plan a line. The wheel over the card scrolls it too. |

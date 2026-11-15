@@ -166,7 +166,7 @@ func (m *OS) cockpitCloseOneKey(l CockpitLayer) {
 func (l CockpitLayer) ownsAction(action string) bool {
 	switch l {
 	case CockpitLayerConfirm:
-		return action == "a" || action == "A" || action == "r"
+		return action == "a" || action == "A" || action == "X"
 	case CockpitLayerMenu:
 		return ckMenuControls[action]
 	case CockpitLayerSelect:
