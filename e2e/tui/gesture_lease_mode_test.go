@@ -2,7 +2,6 @@ package tuie2e
 
 import (
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -37,7 +36,6 @@ func dividerPanes(t *testing.T, config string) *tuitest.Terminal {
 func TestDividerDragHandsBackTerminalMode(t *testing.T) {
 	term := dividerPanes(t, "")
 	mouseDrag(t, term, 80, 20, 68, 20, tuitest.MouseLeft, 0)
-	time.Sleep(insertGuard)
 	saveArtifact(t, term, artifactDir(t), "dropped")
 	runInShell(t, term, "echo back-$((3+4))", "back-7", shellTimeout)
 }
@@ -54,7 +52,6 @@ func TestHoldReleasedDuringADividerDragHandsBackTerminalMode(t *testing.T) {
 	holdKeys(t, term, "2-released", kittyLeftAltRelease)
 	mouseMotion(t, term, 68, 20, tuitest.MouseLeft, 0)
 	mouseRelease(t, term, 68, 20, tuitest.MouseLeft, 0)
-	time.Sleep(insertGuard)
 	saveArtifact(t, term, artifactDir(t), "3-dropped")
 	runInShell(t, term, "echo back-$((3+4))", "back-7", shellTimeout)
 }
@@ -66,7 +63,6 @@ func TestCtrlDragHandsBackTerminalMode(t *testing.T) {
 	term := dividerPanes(t, "")
 	before := term.Screen().Text()
 	mouseDrag(t, term, 120, 12, 40, 12, tuitest.MouseLeft, tuitest.ModCtrl)
-	time.Sleep(insertGuard)
 	saveArtifact(t, term, artifactDir(t), "dropped")
 	if term.Screen().Text() == before {
 		t.Fatalf("the ctrl-drag moved nothing, so it proves nothing about the mode\n%s", term.Snapshot())

@@ -534,7 +534,6 @@ func TestQwenApprovalFromTheInbox(t *testing.T) {
 	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("client never settled in window management mode: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 
 	hook := exec.Command(tuiosBin, "agent-hook", "qwen", "--session", "e2e-agent", "--window", "0")
 	hook.Dir = workDirIn(t, base)

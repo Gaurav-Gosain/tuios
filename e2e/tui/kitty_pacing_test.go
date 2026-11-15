@@ -135,7 +135,6 @@ func startPacedGuest(t *testing.T, transport string) (base string, first *pacing
 		t.Fatalf("create the session: %v: %s", err, out)
 	}
 	first = attachPacingClient(t, base, "pacing")
-	time.Sleep(insertGuard + 150*time.Millisecond)
 	runInShell(t, first.term, "echo PACE\"\"PANE", "PACEPANE", shellTimeout)
 
 	bin := buildFrameloop(t)

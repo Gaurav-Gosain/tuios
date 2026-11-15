@@ -31,7 +31,6 @@ func TestSwitcherCreateAppliesStartup(t *testing.T) {
 	waitTilingMode(t, base, "home", "tiling")
 
 	// start_in_terminal_mode is off, so the client is in window mode already.
-	time.Sleep(insertGuard)
 
 	// The switcher, with a name that matches no session.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "S"); err != nil {
@@ -43,7 +42,6 @@ func TestSwitcherCreateAppliesStartup(t *testing.T) {
 	if err := term.SendKeys("fresh"); err != nil {
 		t.Fatalf("type the new name: %v", err)
 	}
-	time.Sleep(insertGuard)
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("create the session: %v", err)
 	}

@@ -208,7 +208,6 @@ func TestDockCompactPillClickSwitchesWorkspace(t *testing.T) {
 				t.Fatalf("switch to workspace 1: %v", err)
 			}
 			waitDockStatus(t, term, pos, 1, 1, "back on workspace 1")
-			time.Sleep(insertGuard)
 
 			row := dockRowAt(pos)
 			line := term.Screen().Line(row)

@@ -105,7 +105,6 @@ func leaveRail(t *testing.T, term *tuitest.Terminal, base, session, from, key, w
 	}, uiTimeout); err != nil {
 		t.Fatalf("%s did not leave the rail: %v\n%s", key, err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 	if err := term.SendKeys("echo "+word+"-$((6*7))", tuitest.Enter); err != nil {
 		t.Fatal(err)
 	}

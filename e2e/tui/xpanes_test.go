@@ -106,7 +106,6 @@ func TestXpanesOpensTiledPanesWithMultifocus(t *testing.T) {
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("send alt+esc: %v", err)
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 	enterTerminalMode(t, term)
 	if err := term.SendKeys("echo SYNC-$((6*7))", tuitest.Enter); err != nil {
 		t.Fatalf("type into multifocus: %v", err)
@@ -134,7 +133,6 @@ func TestXpanesOpensTiledPanesWithMultifocus(t *testing.T) {
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("send alt+esc: %v", err)
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 	enterTerminalMode(t, term)
 	runInShell(t, term, "echo LEAK-$((5*5))", "LEAK-25", shellTimeout)
 	showWorkspace("2", "ITEM-c-42")
@@ -208,7 +206,6 @@ func TestXpanesSpeedyIntervalAndCloseWorkspace(t *testing.T) {
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("send alt+esc: %v", err)
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 	enterTerminalMode(t, term)
 	if err := term.SendKeys(tuiosBin+" xpanes --no-sync -s --interval 0.5 -c 'date +%s%N > "+stamp+"{}; echo HELD-{}' p q r", tuitest.Enter); err != nil {
 		t.Fatalf("type xpanes -s: %v", err)

@@ -76,7 +76,6 @@ func TestOpenMenuInTheInboxAndTheRail(t *testing.T) {
 		if err := term.SendKeys(keys...); err != nil {
 			t.Fatalf("press %v: %v", keys, err)
 		}
-		time.Sleep(insertGuard)
 	}
 	inboxOpen := func() bool { return strings.Contains(term.Screen().Text(), "1 needs you") }
 	openInbox := func() {

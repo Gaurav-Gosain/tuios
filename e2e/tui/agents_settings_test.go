@@ -673,7 +673,6 @@ func TestAgentsSettingsTabBeforeTape(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Toggle tiling") }, uiTimeout); err != nil {
 		t.Fatalf("the prefix menu did not close: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 	if err := term.SendKeys(tuitest.Ctrl('b'), ","); err != nil {
 		t.Fatal(err)
 	}
@@ -859,7 +858,6 @@ func TestAgentsSettingsAbsentOverSSH(t *testing.T) {
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(insertGuard)
 
 	if err := term.SendKeys(tuitest.Ctrl('b'), "P"); err != nil {
 		t.Fatal(err)
@@ -880,7 +878,6 @@ func TestAgentsSettingsAbsentOverSSH(t *testing.T) {
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(insertGuard)
 
 	if err := term.SendKeys(tuitest.Ctrl('b'), ","); err != nil {
 		t.Fatal(err)

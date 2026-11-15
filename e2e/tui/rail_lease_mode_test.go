@@ -51,7 +51,6 @@ func TestRailEscHandsBackWindowMode(t *testing.T) {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	time.Sleep(insertGuard)
 	if err := term.SendKeys(","); err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +89,6 @@ func TestRailEscKeepsAChoiceMadeWhileItWasOpen(t *testing.T) {
 		if out, err := tuiosCLI(t, base, "run-command", "-s", "home", "TerminalMode"); err != nil {
 			t.Fatalf("run-command TerminalMode: %v\n%s", err, out)
 		}
-		time.Sleep(insertGuard)
 	}
 	// The run-command chooses terminal mode: with no rail, a line reaches
 	// the shell.
@@ -109,7 +107,6 @@ func TestRailEscKeepsAChoiceMadeWhileItWasOpen(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 	choose()
 	sendKeys(t, term, tuitest.Esc)
-	time.Sleep(insertGuard)
 	if err := term.SendKeys("echo kept-$((2+3))", tuitest.Enter); err != nil {
 		t.Fatal(err)
 	}

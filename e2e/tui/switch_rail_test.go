@@ -3,7 +3,6 @@ package tuie2e
 import (
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -24,7 +23,6 @@ func switchToNext(t *testing.T, term *tuitest.Terminal, to string) {
 	}
 	// The first keys after a switch are dropped without this. See
 	// switchSession.
-	time.Sleep(insertGuard + 150*time.Millisecond)
 }
 
 // TestSwitchedSessionTakesItsOwnRail is the report: after the rail was

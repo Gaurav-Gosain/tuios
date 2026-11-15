@@ -78,7 +78,6 @@ rename_workspace = ["f6"]
 		t.Fatalf("switch_session_3 never landed on charlie: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "switch-session-3")
-	time.Sleep(insertGuard + 150*time.Millisecond)
 
 	if err := term.SendKeys(tuitest.Alt('Z')); err != nil {
 		t.Fatalf("send switch_session_9: %v", err)
@@ -186,7 +185,6 @@ switch_session_5 = ["alt+shift+e"]
 		if err := term.WaitForText("Session: "+want, uiTimeout); err != nil {
 			t.Fatalf("%s never landed on %s: %v\n%s", what, want, err, term.Snapshot())
 		}
-		time.Sleep(insertGuard + 150*time.Millisecond)
 	}
 	press(tuitest.Alt('A'), "switch_session_1", "filed")
 	press(tuitest.Alt('N'), "next_session from filed", "loose")

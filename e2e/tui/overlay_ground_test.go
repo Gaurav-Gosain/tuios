@@ -521,7 +521,6 @@ func waitGone(t *testing.T, term *tuitest.Terminal, what, text string) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), text) }, uiTimeout); err != nil {
 		t.Fatalf("%s did not close: %v\n%s", what, err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 }
 
 // descriptionsAligned fails unless which-key's descriptions start on one

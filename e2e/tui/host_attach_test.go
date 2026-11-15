@@ -7,7 +7,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -290,7 +289,6 @@ func TestRailAttachesARemoteSessionInThisClient(t *testing.T) {
 		panesBefore = len(wl.Windows)
 	}
 
-	time.Sleep(insertGuard)
 	before := railRows(term.Screen(), rows...)
 	if !(before[rows[0]] < before[rows[1]] && before[rows[1]] < before[rows[2]] && before[rows[2]] < before[rows[3]]) {
 		t.Fatalf("ASSERTION: the rail is not laid out local first (%v):\n%s", before, term.Snapshot())
@@ -329,7 +327,6 @@ func TestRailAttachesARemoteSessionInThisClient(t *testing.T) {
 
 	// A click on the machine's header folds its group: far-shell leaves the
 	// rail, the header wears the shut mark and says how many it holds.
-	time.Sleep(insertGuard)
 	mouseClick(t, term, 3, after[hostOpen+" build"], tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		r := railRowOf(s, hostShut+" build")
@@ -348,7 +345,6 @@ func TestRailAttachesARemoteSessionInThisClient(t *testing.T) {
 	railShows(t, term, "far-shell")
 
 	// And back: the local session row under this machine's header.
-	time.Sleep(insertGuard)
 	mouseClick(t, term, 3, before["home"], tuitest.MouseLeft, 0)
 	waitRailCurrent(t, term, "home")
 	back := railRows(term.Screen(), rows...)

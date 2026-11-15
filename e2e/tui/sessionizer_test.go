@@ -366,7 +366,6 @@ func TestSwitchToAnEmptySessionTakesItsLayout(t *testing.T) {
 	if err := term.SendKeys(tuitest.Alt('2')); err != nil {
 		t.Fatalf("press alt+2: %v", err)
 	}
-	time.Sleep(insertGuard)
 	waitWorkspace(t, base, "blank", 1)
 	if info := sessionInfoOf(t, base, "blank"); info.LayoutMode != "master-stack" {
 		t.Fatalf("ASSERTION: blank has layout mode %q after the switch from home, want master-stack", info.LayoutMode)

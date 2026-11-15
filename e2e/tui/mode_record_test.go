@@ -40,7 +40,6 @@ func TestTapeRecordingKeepsEveryModeChoice(t *testing.T) {
 	if err := term.WaitForText("Recording started", uiTimeout); err != nil {
 		t.Fatalf("the recording never started: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 	runInShell(t, term, "echo rec-$((2+3))", "rec-5", shellTimeout)
 	leaveTerminalMode(t, term)
 	for _, k := range []any{leader, "T", "s"} {
@@ -78,7 +77,6 @@ func TestTapeRecordingKeepsEveryModeChoice(t *testing.T) {
 	if out, errOut, err := splitCLI(t, base, "tape", "exec", "-s", "modes", path); err != nil {
 		t.Fatalf("tape exec of the recording: %v\n%s%s", err, out, errOut)
 	}
-	time.Sleep(insertGuard)
 	if err := term.SendKeys(","); err != nil {
 		t.Fatal(err)
 	}

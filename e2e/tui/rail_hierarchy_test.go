@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -311,7 +310,6 @@ func TestAMachineHeaderOffersItsMoveRows(t *testing.T) {
 
 	// Dragging this machine says why it will not move.
 	local := railRowOf(term.Screen(), hostOpen+" local")
-	time.Sleep(insertGuard)
 	mouseDrag(t, term, 3, local, 3, local+3, tuitest.MouseLeft, 0)
 	if err := term.WaitForText("This machine stays first", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: dragging this machine said nothing at all: %v\n%s", err, term.Snapshot())
@@ -320,7 +318,6 @@ func TestAMachineHeaderOffersItsMoveRows(t *testing.T) {
 
 	// The menu on another machine's header, and its move row.
 	build := railRowOf(term.Screen(), hostOpen+" build")
-	time.Sleep(insertGuard)
 	mouseClick(t, term, 3, build, tuitest.MouseRight, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
@@ -332,7 +329,6 @@ func TestAMachineHeaderOffersItsMoveRows(t *testing.T) {
 
 	down := screenRowOf(term.Screen(), "Move down")
 	col := strings.Index(term.Screen().Line(down), "Move down")
-	time.Sleep(insertGuard)
 	mouseClick(t, term, col, down, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		b, o := railRowOf(s, hostOpen+" build"), railRowOf(s, hostOpen+" offline")

@@ -82,9 +82,7 @@ func TestCockpitFoldedGroupsKeepTheirHeadings(t *testing.T) {
 	for _, h := range foldedHeads {
 		row, col := findText(t, term, h.title)
 		mouseClick(t, term, col, row+1, tuitest.MouseLeft, 0)
-		time.Sleep(insertGuard)
 		sendKeys(t, term, "F")
-		time.Sleep(insertGuard)
 	}
 	check := func(when string) {
 		t.Helper()
@@ -109,7 +107,6 @@ func TestCockpitFoldedGroupsKeepTheirHeadings(t *testing.T) {
 	railShot(t, term, "folded")
 
 	sendKeys(t, term, tuitest.Esc)
-	time.Sleep(insertGuard)
 	open("the agents view again")
 	check("opened again with the folds from the state file")
 	railShot(t, term, "folded-again")

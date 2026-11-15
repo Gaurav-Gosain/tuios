@@ -58,7 +58,6 @@ func startTwoWorkspaces(t *testing.T, base string, far int) *tuitest.Terminal {
 	}, uiTimeout); err != nil {
 		t.Fatalf("the dock never showed both named tabs: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 	if ws := currentWorkspace(t, base, wsCloseSession); ws != 1 {
 		t.Fatalf("the session shows workspace %d, want 1", ws)
 	}
@@ -215,7 +214,6 @@ func TestCloseWorkspaceFromThePaletteClosesTheCurrentOne(t *testing.T) {
 		t.Fatalf("dismiss the menu: %v", err)
 	}
 	waitMenuGone(t, term, "Switch to", "the dismissed tab menu")
-	time.Sleep(insertGuard)
 
 	// "close works" matches the one row: "Close window" ranks above "Close
 	// workspace" for the row's full name.

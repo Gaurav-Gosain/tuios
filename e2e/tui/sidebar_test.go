@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 	"github.com/Gaurav-Gosain/tuitest"
@@ -141,7 +140,6 @@ func TestSidebarClickSwitchesSession(t *testing.T) {
 	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("client never settled in window management mode: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 
 	toggleSidebarViaPalette(t, term)
 	waitForAll(t, term, uiTimeout, "sidebar with both session rows", sidebarHeader, "bravo")
@@ -212,7 +210,6 @@ func TestSidebarDragReordersSessions(t *testing.T) {
 	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("client never settled in window management mode: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 
 	toggleSidebarViaPalette(t, term)
 	waitForAll(t, term, uiTimeout, "sidebar with both session rows", sidebarHeader, "bravo")
@@ -325,7 +322,6 @@ func sidebarDragMovesGroups(t *testing.T, base, repo, away string, term *tuitest
 		mouseMotion(t, term, col+1, to, tuitest.MouseLeft, 0)
 		mouseRelease(t, term, col+1, to, tuitest.MouseLeft, 0)
 	}
-	time.Sleep(insertGuard)
 	wantOrder("a session stopped over the middle of a group", "bravo", "alpha", "mainsess", "f/two", "f/one", "zulu")
 	drag("mainsess", "bravo")
 	wantOrder("the group's row dragged up", "mainsess", "f/two", "f/one", "bravo", "alpha", "zulu")
@@ -353,7 +349,6 @@ func sidebarDragMovesGroups(t *testing.T, base, repo, away string, term *tuitest
 	if err := term.SendKeys("J"); err != nil {
 		t.Fatalf("reorder a worktree row past its group: %v", err)
 	}
-	time.Sleep(insertGuard)
 	wantOrder("J on the last worktree row", "bravo", "mainsess", "f/one", "f/two", "alpha", "zulu")
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("leave the rail: %v", err)

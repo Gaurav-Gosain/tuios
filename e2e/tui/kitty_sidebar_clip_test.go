@@ -96,7 +96,6 @@ func TestKittyImageStaysOutOfTheRail(t *testing.T) {
 			if err := term.SendKeys("\x15"); err != nil {
 				t.Fatalf("clear prompt line: %v", err)
 			}
-			time.Sleep(insertGuard)
 			rows, cols := reportedPaneSize(t, term, "A")
 
 			// A guest that renders at exactly the pane it was told it has, the
@@ -215,7 +214,6 @@ func TestKittyImageStaysOutOfTheRailWhenPaneOverlapsIt(t *testing.T) {
 			if err := term.SendKeys("\x15"); err != nil {
 				t.Fatalf("clear prompt line: %v", err)
 			}
-			time.Sleep(insertGuard)
 			rows, cols := reportedPaneSize(t, term, "A")
 
 			frame := kittyFrameFile(t, t.TempDir(), cols*9, rows*20)
@@ -332,7 +330,6 @@ func TestKittyImageStaysOutOfTheDock(t *testing.T) {
 	if err := term.SendKeys("\x15"); err != nil {
 		t.Fatalf("clear prompt line: %v", err)
 	}
-	time.Sleep(insertGuard)
 	rows, cols := reportedPaneSize(t, term, "A")
 
 	frame := kittyFrameFile(t, t.TempDir(), cols*9, rows*20)
@@ -418,7 +415,6 @@ func TestKittyImageStopsAtAShortPaneBottom(t *testing.T) {
 	if err := term.SendKeys("\x15"); err != nil {
 		t.Fatalf("clear prompt line: %v", err)
 	}
-	time.Sleep(insertGuard)
 	rows, cols := reportedPaneSize(t, term, "A")
 
 	frame := kittyFrameFile(t, t.TempDir(), cols*9, rows*20)
@@ -561,7 +557,6 @@ func TestKittyImageStaysUnderPopovers(t *testing.T) {
 			if err := term.SendKeys("\x15"); err != nil {
 				t.Fatalf("clear prompt line: %v", err)
 			}
-			time.Sleep(insertGuard)
 			rows, cols := reportedPaneSize(t, term, "A")
 			frame := kittyFrameFile(t, t.TempDir(), cols*cellW, rows*cellH)
 			typeLine(t, term, "clear; cat "+frame)

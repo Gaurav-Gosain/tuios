@@ -24,7 +24,6 @@ func sheetStep(t *testing.T, term *tuitest.Terminal, name string, markers ...str
 			t.Fatalf("ASSERTION: the sheet never showed %q at %s: %v\n%s", want, name, err, term.Snapshot())
 		}
 	}
-	time.Sleep(insertGuard)
 	railShot(t, term, name)
 }
 
@@ -57,7 +56,6 @@ func openAddSheet(t *testing.T, term *tuitest.Terminal) {
 	if err := term.WaitForText("Add a machine", uiTimeout); err != nil {
 		t.Fatalf("the palette has no Add a machine row: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 	sendKeys(t, term, tuitest.Enter)
 }
 

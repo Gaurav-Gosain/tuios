@@ -113,7 +113,6 @@ func TestTMLSurfaceEventFollowsEachChange(t *testing.T) {
 	}
 	wait("the close", func(ev surfaceEvent) bool { return ev.TMLSurface.Closed })
 
-	time.Sleep(insertGuard)
 	for _, l := range all() {
 		if strings.Contains(l, `"tml-surface"`) {
 			t.Fatalf("ASSERTION: a subscriber that named no types got a tml-surface event: %s", l)

@@ -57,7 +57,6 @@ func TestInboxAnswersAHeldApproval(t *testing.T) {
 	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("client never settled in window management mode: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 
 	// The hook, run the way Claude Code runs it, for the agent's pane.
 	hook := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", "e2e-agent", "--window", "0")

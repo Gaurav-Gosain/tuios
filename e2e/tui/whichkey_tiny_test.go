@@ -39,7 +39,6 @@ func TestWhichKeyOnATinyClient(t *testing.T) {
 		}, uiTimeout); err != nil {
 			t.Fatalf("the client never drew at %dx%d: %v\n%s", sz.w, sz.h, err, term.Snapshot())
 		}
-		time.Sleep(insertGuard)
 		if err := term.SendKeys(tuitest.Ctrl('b')); err != nil {
 			t.Fatalf("press the leader at %dx%d: %v", sz.w, sz.h, err)
 		}
@@ -60,7 +59,6 @@ func TestWhichKeyOnATinyClient(t *testing.T) {
 		if err := term.SendKeys(tuitest.Esc); err != nil {
 			t.Fatalf("close the menu: %v", err)
 		}
-		time.Sleep(insertGuard)
 	}
 	logs, _ := filepath.Glob(filepath.Join(base, "*", "tuios", "crash-*.log"))
 	more, _ := filepath.Glob(filepath.Join(base, "*", "*", "tuios", "crash-*.log"))

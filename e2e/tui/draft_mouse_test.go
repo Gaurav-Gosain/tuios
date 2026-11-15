@@ -94,7 +94,6 @@ func TestDraftMouseInEveryEditor(t *testing.T) {
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(insertGuard)
 
 	// The task capture sheet floats over the screen.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "+"); err != nil {

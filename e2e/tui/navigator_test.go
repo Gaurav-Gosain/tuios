@@ -845,7 +845,6 @@ func TestNavigatorOpensOverTheFocusedRail(t *testing.T) {
 	waitText(t, term, "the mode pill after ctrl+b e", "SIDEBAR")
 
 	openNavigator(t, term, "home", "work")
-	time.Sleep(insertGuard)
 	saveFrame(t, term, "navigator-over-rail")
 	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), "navigator-over-rail")
 	navCheckMargins(t, term.Screen())

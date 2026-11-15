@@ -184,7 +184,6 @@ func TestBareAttachFollowsASwitchFromTheSessionBrowser(t *testing.T) {
 	if err := term.SendKeys("second"); err != nil {
 		t.Fatalf("type the filter: %v", err)
 	}
-	time.Sleep(insertGuard)
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("switch: %v", err)
 	}
@@ -264,7 +263,6 @@ func switchWorkspaceIn(t *testing.T, base, session string, ws int) {
 	t.Helper()
 	term := attachIn(t, base, session, startOpts{})
 	clientShows(t, base, session)
-	time.Sleep(insertGuard)
 	if err := term.SendKeys(tuitest.Alt(rune('0' + ws))); err != nil {
 		t.Fatalf("press alt+%d: %v", ws, err)
 	}

@@ -964,7 +964,6 @@ func (p *ptyTarget) windowMode() {
 	}
 	_ = p.term.SendKeys(tuitest.Alt(tuitest.Esc))
 	_ = p.term.WaitForText("Window management mode", uiTimeout)
-	time.Sleep(insertGuard)
 }
 
 // attachedSession reports which session the client is now showing, by asking the

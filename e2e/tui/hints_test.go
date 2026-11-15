@@ -705,7 +705,6 @@ func TestHintsAllPanesLabelEveryPane(t *testing.T) {
 	if err := term.SendKeys("h"); err != nil {
 		t.Fatalf("focus the left pane: %v", err)
 	}
-	time.Sleep(insertGuard)
 	enterTerminalMode(t, term)
 	runInShell(t, term, "printf 'deadbee%s\\n' 42; echo LEFT-\"\"READY", "LEFT-READY", shellTimeout)
 	if err := term.SendKeys("echo TYPED-"); err != nil {

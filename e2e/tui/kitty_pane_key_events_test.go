@@ -37,7 +37,6 @@ func TestPaneGetsReleaseTheHostCannotSend(t *testing.T) {
 
 	// Disambiguate, alternate keys and all keys: no event types.
 	sendRaw(t, term, hostAnswer(13))
-	time.Sleep(insertGuard)
 	sendRaw(t, term, "x")
 	waitPaneBytes(t, term, log, "\x1b[120u\x1b[120;1:3u")
 }
@@ -49,7 +48,6 @@ func TestPaneGetsRepeatAsRepeat(t *testing.T) {
 	term, log := startKeyEcho(t, 15)
 
 	sendRaw(t, term, hostAnswer(31))
-	time.Sleep(insertGuard)
 	sendRaw(t, term, "\x1b[97u", "\x1b[97;1:2u", "\x1b[97;1:2u", "\x1b[97;1:3u")
 	waitPaneBytes(t, term, log, "\x1b[97u\x1b[97;1:2u\x1b[97;1:2u\x1b[97;1:3u")
 }
@@ -64,7 +62,6 @@ func TestPaneGetsLockState(t *testing.T) {
 	term, log := startKeyEcho(t, 15)
 
 	sendRaw(t, term, hostAnswer(31))
-	time.Sleep(insertGuard)
 	// Num Lock on: a letter, then keypad 1.
 	sendRaw(t, term, "\x1b[97;129u", "\x1b[97;129:3u", "\x1b[57400;129u", "\x1b[57400;129:3u")
 	waitPaneBytes(t, term, log, "\x1b[97;129u\x1b[97;129:3u\x1b[57400;129u\x1b[57400;129:3u")
@@ -77,7 +74,6 @@ func TestLeaderTwiceGetsItsRelease(t *testing.T) {
 	term, log := startKeyEcho(t, 15)
 
 	sendRaw(t, term, hostAnswer(13))
-	time.Sleep(insertGuard)
 	if err := term.SendKeys(tuitest.Ctrl('b'), tuitest.Ctrl('b')); err != nil {
 		t.Fatalf("send the leader twice: %v", err)
 	}
@@ -112,7 +108,6 @@ func TestMultifocusPeerGetsItsOwnEncoding(t *testing.T) {
 	// A host that is not reporting releases: tuios sends one with each press
 	// to the kitty pane, and must not send it to the shell.
 	sendRaw(t, term, hostAnswer(5))
-	time.Sleep(insertGuard)
 	// Typed in pane B, run by the shell in pane A. The marker is split so
 	// only the shell's output can match.
 	if err := term.SendKeys("echo PE''ER-$((40+2))", tuitest.Enter); err != nil {
@@ -140,7 +135,6 @@ func TestNoReleaseForEnterWithoutAllKeys(t *testing.T) {
 	term, log := startKeyEcho(t, 3)
 
 	sendRaw(t, term, hostAnswer(5))
-	time.Sleep(insertGuard)
 	sendRaw(t, term, "\r", "\t", "\x7f", "x")
 	waitPaneBytes(t, term, log, "\r\t\x7fx\x1b[120;1:3u")
 }

@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -201,7 +200,6 @@ func waitPanes(t *testing.T, term *tuitest.Terminal, n int, what string) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("%s: never %d panes: %v\n%s", what, n, err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 }
 
 // cellsOutside is every cell outside the box and above the dock.

@@ -45,7 +45,6 @@ func startPasteBufferClient(t *testing.T, base, extraConfig string) *tuitest.Ter
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 	return term
 }
 
@@ -177,7 +176,6 @@ func TestPasteBuffersKeepYanksAndPasteThem(t *testing.T) {
 	if err := term.SendKeys("echo PASTED-"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(insertGuard)
 	if err := term.SendKeys(tuitest.Ctrl('b'), "]"); err != nil {
 		t.Fatalf("send prefix+]: %v", err)
 	}
@@ -195,7 +193,6 @@ func TestPasteBuffersKeepYanksAndPasteThem(t *testing.T) {
 	if err := term.SendKeys("echo CHOSEN-"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(insertGuard)
 	if err := term.SendKeys(tuitest.Ctrl('b'), "#"); err != nil {
 		t.Fatalf("send prefix+#: %v", err)
 	}
@@ -209,7 +206,6 @@ func TestPasteBuffersKeepYanksAndPasteThem(t *testing.T) {
 	if err := term.SendKeys("j"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(insertGuard)
 	// The client reads the chosen buffer from the daemon after the chooser
 	// closes. An Enter typed right after the chooser's Enter must still come
 	// after the paste, as in tmux (#1016). The daemon is stopped across both
@@ -447,7 +443,6 @@ func TestPasteBuffersWithoutADaemon(t *testing.T) {
 	if err := term.SendKeys("echo LOCAL-"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(insertGuard)
 	if err := term.SendKeys(tuitest.Ctrl('b'), "]"); err != nil {
 		t.Fatal(err)
 	}

@@ -662,7 +662,6 @@ func TestLauncherTypesOutIntoADaemonPane(t *testing.T) {
 	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("never reached window management mode: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 
 	queryProbe(t, term)
 	if err := term.SendKeys(tuitest.Tab); err != nil {
@@ -760,7 +759,6 @@ func TestLauncherLeavesTheRightModeBehind(t *testing.T) {
 	// fragments. A fast shell can put the prompt up inside that window, so the
 	// guard is waited out; it is a fixed span from a moment already past, not
 	// a race.
-	time.Sleep(insertGuard)
 	if err := term.SendKeys("EXTRA"); err != nil {
 		t.Fatalf("type an argument: %v", err)
 	}

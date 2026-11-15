@@ -82,7 +82,6 @@ func TestDockPillsAndRestoreNAgree(t *testing.T) {
 		if out, err := tuiosCLI(t, base, "focus-window", "-s", "dk", n); err != nil {
 			t.Fatalf("focus %s: %v\n%s", n, err, out)
 		}
-		time.Sleep(insertGuard)
 		sendKeys(t, a, tuitest.Ctrl('b'), "m", "m")
 		if err := a.WaitFor(func(s tuitest.Screen) bool { return len(dockOrder(s, n)) == 1 }, uiTimeout); err != nil {
 			t.Fatalf("%s never reached the dock: %v\n%s", n, err, a.Snapshot())
@@ -93,7 +92,6 @@ func TestDockPillsAndRestoreNAgree(t *testing.T) {
 	if err := b.WaitFor(func(s tuitest.Screen) bool { return len(dockOrder(s, "alpha", "gamma")) == 2 }, bootTimeout); err != nil {
 		t.Fatalf("the second client never showed both pills: %v\n%s", err, b.Snapshot())
 	}
-	time.Sleep(insertGuard)
 	first, second := dockOrder(a.Screen(), "alpha", "gamma"), dockOrder(b.Screen(), "alpha", "gamma")
 	railShot(t, a, "dock-first-client")
 	railShot(t, b, "dock-second-client")

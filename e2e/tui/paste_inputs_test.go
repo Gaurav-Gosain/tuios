@@ -102,7 +102,6 @@ func TestPasteIntoInputBoxes(t *testing.T) {
 	toTerminalMode := func(t *testing.T) {
 		t.Helper()
 		sendKeys(t, term, tuitest.Alt(tuitest.Esc))
-		time.Sleep(insertGuard)
 		enterTerminalMode(t, term)
 	}
 	settle := func(t *testing.T) {
@@ -110,7 +109,6 @@ func TestPasteIntoInputBoxes(t *testing.T) {
 			return
 		}
 		_ = term.SendKeys(tuitest.Esc)
-		time.Sleep(insertGuard)
 		_ = term.SendKeys(tuitest.Esc)
 		_, _ = tuiosCLI(t, base, "send-keys", "-s", renameClearSession, "-w", win, "C-u")
 		time.Sleep(time.Second)

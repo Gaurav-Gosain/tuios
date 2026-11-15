@@ -119,7 +119,6 @@ func TestReattachCarriesSnapshotState(t *testing.T) {
 	first := attach("the first client")
 	windowManagementMode(t, first)
 	enterTerminalMode(t, first)
-	time.Sleep(insertGuard + 150*time.Millisecond)
 	if err := first.SendKeys("sh "+scriptPath, tuitest.Enter); err != nil {
 		t.Fatalf("start the script: %v", err)
 	}

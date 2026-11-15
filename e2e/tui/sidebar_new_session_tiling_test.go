@@ -3,7 +3,6 @@ package tuie2e
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -30,7 +29,6 @@ func TestRailNewSessionComesUpTiled(t *testing.T) {
 	}
 	// start_in_terminal_mode is off, so the client is already in window mode and
 	// the rail's controls are clickable without a mode switch.
-	time.Sleep(insertGuard)
 
 	toggleSidebarViaPalette(t, term)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {

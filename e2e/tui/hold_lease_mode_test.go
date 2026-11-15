@@ -86,6 +86,5 @@ func TestHoldOutlastsADividerDrag(t *testing.T) {
 	holdKeys(t, term, "2-n-held", kittyAltN)
 	waitWindowCount(t, term, 3, "n struck while held after the drag ended")
 	holdKeys(t, term, "3-release", kittyLeftAltRelease)
-	time.Sleep(insertGuard)
 	runInShell(t, term, "echo back-$((3+4))", "back-7", shellTimeout)
 }

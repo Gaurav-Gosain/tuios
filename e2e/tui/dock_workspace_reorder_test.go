@@ -3,7 +3,6 @@ package tuie2e
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -100,7 +99,6 @@ func TestDockWorkspacePillsDragIntoANewOrder(t *testing.T) {
 	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("client never settled in window management mode: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 
 	// Three occupied workspaces, named so the pills can be told apart on screen.
 	//

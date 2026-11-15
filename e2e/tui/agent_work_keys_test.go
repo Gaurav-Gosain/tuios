@@ -44,7 +44,6 @@ func TestAgentWorkKeysWaitForAnAgent(t *testing.T) {
 		}, uiTimeout); err != nil {
 			t.Fatalf("the prefix menu did not close: %v\n%s", err, term.Snapshot())
 		}
-		time.Sleep(insertGuard)
 	}
 
 	text := openMenu()
@@ -84,7 +83,6 @@ func TestAgentWorkKeysWaitForAnAgent(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("ctrl+b v left the prefix menu open: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 	alive(t, term, "after ctrl+b v")
 
 	// The Inbox's new keys leave it open on the same list.
@@ -99,7 +97,6 @@ func TestAgentWorkKeysWaitForAnAgent(t *testing.T) {
 			t.Fatalf("press %s: %v", key, err)
 		}
 	}
-	time.Sleep(insertGuard)
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("the Inbox never settled: %v\n%s", err, term.Snapshot())
 	}
@@ -133,7 +130,6 @@ func TestPendingPrefixKeysReachThePane(t *testing.T) {
 	if err := term.SendKeys("echo PEND"); err != nil {
 		t.Fatalf("type the command: %v", err)
 	}
-	time.Sleep(insertGuard)
 	if err := term.SendKeys(tuitest.Ctrl('b'), "v"); err != nil {
 		t.Fatalf("press ctrl+b v: %v", err)
 	}
@@ -145,7 +141,6 @@ func TestPendingPrefixKeysReachThePane(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "O"); err != nil {
 		t.Fatalf("press ctrl+b O: %v", err)
 	}
-	time.Sleep(insertGuard)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "No finished turns you have not seen")
 	}, uiTimeout); err != nil {
@@ -154,7 +149,6 @@ func TestPendingPrefixKeysReachThePane(t *testing.T) {
 	if err := term.SendKeys("O"); err != nil {
 		t.Fatalf("press O again: %v", err)
 	}
-	time.Sleep(insertGuard)
 	if err := term.SendKeys("Z", tuitest.Enter); err != nil {
 		t.Fatalf("finish the command: %v", err)
 	}

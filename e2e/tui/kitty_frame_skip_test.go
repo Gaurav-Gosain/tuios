@@ -30,7 +30,6 @@ func TestKittySkippedFrameKeepsTheScroll(t *testing.T) {
 	fast := attachPacingClient(t, base, "scroll")
 	slow := attachPacingClient(t, base, "scroll")
 	t.Cleanup(slow.resume)
-	time.Sleep(insertGuard + 150*time.Millisecond)
 	runInShell(t, fast.term, "echo SCR\"\"OLL", "SCROLL", shellTimeout)
 
 	dir := t.TempDir()
@@ -96,7 +95,6 @@ func startMpvGuest(t *testing.T, clients int) (base string, cs []*pacingClient, 
 	for range clients {
 		cs = append(cs, attachPacingClient(t, base, "mpv"))
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 	runInShell(t, cs[0].term, "echo MP\"\"V", "MPV", shellTimeout)
 	bin := buildFrameloop(t)
 	dir := t.TempDir()

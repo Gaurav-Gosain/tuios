@@ -58,7 +58,6 @@ func switchSession(t *testing.T, term *tuitest.Terminal, want string) {
 	}
 	// A switch re-arms input handling the same way a mode change does, and the
 	// first keystrokes after it are dropped without it.
-	time.Sleep(insertGuard + 150*time.Millisecond)
 }
 
 // TestSessionSwitchKeepsPaneContent is the reported bug: a pane that printed

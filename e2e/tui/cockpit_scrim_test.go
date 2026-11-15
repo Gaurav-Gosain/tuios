@@ -2,7 +2,6 @@ package tuie2e
 
 import (
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -90,14 +89,12 @@ func TestAgentsViewLeavesTheChromeLit(t *testing.T) {
 	}
 	windowManagementMode(t, term)
 	_ = term.WaitStable(uiTimeout)
-	time.Sleep(insertGuard)
 	railShot(t, term, "chrome-before")
 	before := chromeCells(term.Screen())
 
 	sendKeys(t, term, tuitest.Ctrl('b'), "i")
 	waitText(t, term, "the agents view", "Reply to docs-cli")
 	_ = term.WaitStable(uiTimeout)
-	time.Sleep(insertGuard)
 	railShot(t, term, "chrome-agents-view")
 	after := chromeCells(term.Screen())
 

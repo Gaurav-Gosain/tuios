@@ -239,7 +239,6 @@ func TestAttachedClientIsToldToReattach(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("never attached: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 
 	text, err := handoffCLI(t, base, 90*time.Second, "daemon", "upgrade", "--binary", other)
 	if err != nil {

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"regexp"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -89,7 +88,6 @@ func TestReplyRowsGrowTheEditor(t *testing.T) {
 				}
 			}
 			waitText(t, term, "the last typed line", "row-20")
-			time.Sleep(insertGuard)
 			waitCount("after typing", tc.want)
 			railShot(t, term, "reply-"+tc.name)
 

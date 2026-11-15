@@ -159,7 +159,6 @@ func TestDraggingAMachineHeaderReordersTheRail(t *testing.T) {
 	t.Logf("before the drag:\n%s", term.Snapshot())
 	saveFrame(t, term, "rail-machine-order-before")
 
-	time.Sleep(insertGuard)
 	s := term.Screen()
 	from, to := railRowOf(s, hostOpen+" offline"), railRowOf(s, hostOpen+" build")
 	mouseDrag(t, term, 3, from, 3, to, tuitest.MouseLeft, 0)

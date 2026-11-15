@@ -69,7 +69,6 @@ func openOverSettings(query string) func(t *testing.T, term *tuitest.Terminal) {
 		time.Sleep(500 * time.Millisecond)
 		col, row := screenCell(t, term, "Settings")
 		mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
-		time.Sleep(insertGuard)
 		mouseClick(t, term, 1, 20, tuitest.MouseLeft, 0)
 		if err := term.WaitFor(func(s tuitest.Screen) bool {
 			return !strings.Contains(s.Text(), settingsFooter)
@@ -123,7 +122,6 @@ func TestPanelsDrawOverALoneFullscreenPane(t *testing.T) {
 			}, uiTimeout); err != nil {
 				t.Fatalf("esc did not close the %s: %v\n%s", tc.name, err, term.Snapshot())
 			}
-			time.Sleep(insertGuard)
 			shellHasKeys(t, term, "BACK")
 			waitFillsScreen(t, term, "after "+tc.name)
 			alive(t, term, "after the "+tc.name)
@@ -182,7 +180,6 @@ func TestDropDialogDrawsOverALoneFullscreenPane(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('c')); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(insertGuard)
 	shellHasKeys(t, term, "FARBACK")
 	alive(t, term, "after the drop question")
 }

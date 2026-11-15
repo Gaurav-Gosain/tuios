@@ -123,7 +123,6 @@ func TestHoldKeyBorrowsWindowMode(t *testing.T) {
 
 	// Back in the mode the hold interrupted, with the same pane focused: the
 	// shell answers again with no mode switch of any kind in between.
-	time.Sleep(insertGuard)
 	runInShell(t, term, "echo back-$((3+4))", "back-7", shellTimeout)
 }
 
@@ -142,7 +141,6 @@ func TestHoldKeyIsInertWhenUnbound(t *testing.T) {
 	if err := term.SendKeys(tuitest.Key(kittyLeftAltPress)); err != nil {
 		t.Fatalf("send the modifier key press: %v", err)
 	}
-	time.Sleep(insertGuard)
 	if text := term.Screen().Text(); strings.Contains(text, "HOLD") {
 		t.Fatalf("an unbound hold key still borrowed window mode:\n%s", term.Snapshot())
 	}

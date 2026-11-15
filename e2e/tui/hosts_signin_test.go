@@ -237,7 +237,6 @@ func signInNewPage(t *testing.T, keyboard bool) {
 		if err := term.SendKeys("j"); err != nil {
 			t.Fatalf("move cursor: %v", err)
 		}
-		time.Sleep(insertGuard)
 		asked = time.Now()
 		if err := term.SendKeys(tuitest.Enter); err != nil {
 			t.Fatalf("activate the header: %v", err)

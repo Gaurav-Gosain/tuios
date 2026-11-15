@@ -174,7 +174,6 @@ func TestReplyPreviewInScreenCapture(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitText(t, term, "window management mode", "Window management mode")
-	time.Sleep(insertGuard)
 
 	hook := func(payload string) {
 		t.Helper()
@@ -196,7 +195,6 @@ func TestReplyPreviewInScreenCapture(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(insertGuard)
 	if err := term.SendKeys("G", "k", "k", "r"); err != nil {
 		t.Fatal(err)
 	}

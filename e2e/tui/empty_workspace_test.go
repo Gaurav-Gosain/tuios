@@ -149,7 +149,6 @@ func TestEmptyWorkspaceReturnsAfterXpanesSpeedy(t *testing.T) {
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("send alt+esc: %v", err)
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 	enterTerminalMode(t, term)
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("press Enter: %v", err)
@@ -202,7 +201,6 @@ func TestEmptyWorkspaceWalksBackAChain(t *testing.T) {
 		if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 			t.Fatalf("send alt+esc: %v", err)
 		}
-		time.Sleep(insertGuard + 150*time.Millisecond)
 		enterTerminalMode(t, term)
 		runInShell(t, term, line, want, shellTimeout)
 	}

@@ -64,7 +64,6 @@ func stripClient(t *testing.T, base string) *tuitest.Terminal {
 		if err := a.SendKeys(tuitest.Alt(tuitest.Left)); err != nil {
 			t.Fatalf("step left: %v", err)
 		}
-		time.Sleep(insertGuard)
 	}
 	if err := a.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "ALPHA") && !strings.Contains(s.Text(), "CHARLIE")

@@ -60,7 +60,6 @@ func TestRichRowReplyAndRecap(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitText(t, term, "window management mode", "Window management mode")
-	time.Sleep(insertGuard)
 
 	hook := func(payload string) {
 		t.Helper()
@@ -85,7 +84,6 @@ func TestRichRowReplyAndRecap(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(insertGuard)
 	if err := term.SendKeys("G", "k", "k", "r"); err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +141,6 @@ func TestRichRowReplyAndRecap(t *testing.T) {
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(insertGuard)
 
 	// A second window takes the focus, so the person is away from the
 	// agent's pane from here.
@@ -282,7 +279,6 @@ func TestReplyWithALargePasteGoesAsAFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitText(t, term, "window management mode", "Window management mode")
-	time.Sleep(insertGuard)
 	hook := func(payload string) {
 		t.Helper()
 		cmd := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", "e2e-big", "--window", "0", "--timeout", "10s")
@@ -303,7 +299,6 @@ func TestReplyWithALargePasteGoesAsAFile(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(insertGuard)
 	if err := term.SendKeys("G", "k", "k", "r"); err != nil {
 		t.Fatal(err)
 	}
@@ -385,7 +380,6 @@ func TestReplyWithAnImageGoesAsAFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitText(t, term, "window management mode", "Window management mode")
-	time.Sleep(insertGuard)
 	hook := func(payload string) {
 		t.Helper()
 		cmd := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", "e2e-img", "--window", "0", "--timeout", "10s")
@@ -411,7 +405,6 @@ func TestReplyWithAnImageGoesAsAFile(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(insertGuard)
 	if err := term.SendKeys("G", "k", "k", "r"); err != nil {
 		t.Fatal(err)
 	}

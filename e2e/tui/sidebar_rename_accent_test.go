@@ -3,7 +3,6 @@ package tuie2e
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -24,7 +23,6 @@ func TestRailRenamesAndAccentsAWindow(t *testing.T) {
 	}, bootTimeout); err != nil {
 		t.Fatalf("the window never appeared: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 
 	toggleSidebarViaPalette(t, term)
 	if err := term.WaitForText(sidebarHeader, uiTimeout); err != nil {
@@ -42,7 +40,6 @@ func TestRailRenamesAndAccentsAWindow(t *testing.T) {
 	if err := term.SendKeys("l"); err != nil {
 		t.Fatalf("move the rail cursor: %v", err)
 	}
-	time.Sleep(insertGuard)
 
 	if err := term.SendKeys("r"); err != nil {
 		t.Fatalf("start the rename: %v", err)

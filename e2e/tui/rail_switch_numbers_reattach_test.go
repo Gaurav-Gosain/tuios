@@ -4,7 +4,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -47,7 +46,6 @@ func TestRailSwitchNumbersSurviveReattach(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("first client never attached: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 	if out, err := tuiosCLI(t, base, "new", "e2e-beta", "--detach"); err != nil {
 		t.Fatalf("create second session: %v: %s", err, out)
 	}
@@ -79,7 +77,6 @@ func TestRailSwitchNumbersSurviveReattach(t *testing.T) {
 	if err := second.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("the reattached client never came up: %v\n%s", err, second.Snapshot())
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 	expectNumber(second, "e2e-alpha", "after the reattach")
 	expectNumber(second, "e2e-beta", "after the reattach")
 }

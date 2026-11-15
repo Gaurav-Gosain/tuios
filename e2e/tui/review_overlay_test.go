@@ -121,14 +121,12 @@ func TestReviewOverlayNotesSendCompareAndKeep(t *testing.T) {
 	if err := term.SendKeys("say why three"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(insertGuard)
 	sendKeys(t, term, tuitest.Enter)
 	waitScreen(t, term, "the note never showed under its line", "note: say why three", "1 note")
 	sendKeys(t, term, "C")
 	if err := term.SendKeys("add a test"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(insertGuard)
 	sendKeys(t, term, tuitest.Enter)
 	waitScreen(t, term, "the hunk note never showed", "note (hunk): add a test", "S send 2 notes")
 	saveFrame(t, term, "review-overlay-notes")
@@ -169,7 +167,6 @@ func TestReviewOverlayNotesSendCompareAndKeep(t *testing.T) {
 	if err := term.SendKeys("grep -q three README"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(insertGuard)
 	sendKeys(t, term, tuitest.Enter)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()

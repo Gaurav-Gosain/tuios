@@ -52,7 +52,6 @@ func switchClient(t *testing.T, base string, term *tuitest.Terminal, session str
 			} else if c.ID == id && c.Session == session {
 				// The switch re-arms input handling, and the first keys after
 				// it are dropped without the wait.
-				time.Sleep(insertGuard + 150*time.Millisecond)
 				return
 			}
 		}

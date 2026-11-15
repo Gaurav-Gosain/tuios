@@ -191,7 +191,6 @@ func TestScratchGroupSurvivesADaemonRestart(t *testing.T) {
 	if err := first.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("the client never attached: %v\n%s", err, first.Snapshot())
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 
 	// Wait for each pane of the group before typing into it. Typed at once,
 	// the text can reach the pane the focus was on before.

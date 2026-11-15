@@ -415,7 +415,6 @@ func TestTwoClientsSeeConsistentState(t *testing.T) {
 	// already has a window, so the pane is reachable immediately. Exercise the
 	// content path first, while that is still true: driving output through one
 	// client must reach the other.
-	time.Sleep(insertGuard + 150*time.Millisecond)
 	if err := c1.SendKeys("echo SHAREDMARK-$((7*8))", tuitest.Enter); err != nil {
 		t.Fatalf("c1 echo: %v", err)
 	}
@@ -434,7 +433,6 @@ func TestTwoClientsSeeConsistentState(t *testing.T) {
 	if err := c1.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("c1 never entered window management mode: %v\n%s", err, c1.Snapshot())
 	}
-	time.Sleep(insertGuard)
 
 	// A window created on client one must show up on client two.
 	if err := c1.SendKeys("n"); err != nil {

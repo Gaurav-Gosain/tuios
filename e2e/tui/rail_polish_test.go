@@ -40,7 +40,6 @@ func railClient(t *testing.T, session, config string, o startOpts) (*tuitest.Ter
 	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("client never settled in window management mode: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 	return term, base
 }
 

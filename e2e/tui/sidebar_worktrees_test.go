@@ -304,7 +304,6 @@ switch_session_3 = ["alt+shift+z"]
 	if err := term.WaitForText("Session: mainsess", uiTimeout); err != nil {
 		t.Fatalf("the key numbered 2 did not open the row numbered 2: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 	if err := term.SendKeys(tuitest.Alt('Z')); err != nil {
 		t.Fatalf("send switch_session_3: %v", err)
 	}

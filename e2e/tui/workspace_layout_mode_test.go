@@ -2,7 +2,6 @@ package tuie2e
 
 import (
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -80,7 +79,6 @@ func TestPerWorkspaceLayoutModesSurviveSwitchAndReattach(t *testing.T) {
 	second := attachIn(t, base, "e2e-perws", startOpts{cols: 120, rows: 40})
 	clientShows(t, base, "e2e-perws")
 	waitForSettledGeometryIn(t, base, "e2e-perws", 1)
-	time.Sleep(insertGuard)
 	waitLayoutMode(t, base, "e2e-perws", "scrolling")
 
 	if err := second.SendKeys(tuitest.Alt('2')); err != nil {

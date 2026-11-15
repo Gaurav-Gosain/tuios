@@ -41,7 +41,6 @@ func readProbeKeys(t *testing.T, term *tuitest.Terminal, name, out string) strin
 		t.Fatalf("the %s probe never got ready: %v\n%s", name, err, term.Snapshot())
 	}
 	sendRaw(t, term, "\x1b[97;5u")
-	time.Sleep(insertGuard)
 	if err := term.WaitForText("PROBEDONE"+name, shellTimeout); err != nil {
 		t.Fatalf("the %s probe never finished: %v\n%s", name, err, term.Snapshot())
 	}

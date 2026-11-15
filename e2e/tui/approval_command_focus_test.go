@@ -72,7 +72,6 @@ func TestApprovalHoldOutlastsACommandFocusMove(t *testing.T) {
 	cli("focus-window", "-s", "e2e-agent", "other")
 	other := windowIDByName(t, base, "e2e-agent", "other")
 	focusOn(other, "focus-window other")
-	time.Sleep(insertGuard)
 
 	hook := startHeldHook(t, base, `{"hook_event_name":"PermissionRequest","session_id":"e2e-cmd-focus","tool_name":"Bash","tool_input":{"command":"go test ./..."}}`)
 	select {
@@ -96,7 +95,6 @@ func TestApprovalHoldOutlastsACommandFocusMove(t *testing.T) {
 	// The person turns to the pane with tab: the hold ends there.
 	cli("focus-window", "-s", "e2e-agent", "other")
 	focusOn(other, "focus-window other again")
-	time.Sleep(insertGuard)
 	if err := term.SendKeys(tuitest.Tab); err != nil {
 		t.Fatal(err)
 	}

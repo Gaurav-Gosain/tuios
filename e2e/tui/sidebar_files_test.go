@@ -3308,7 +3308,6 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("the short rail lost the section's place: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 	opened := railText(term.Screen())
 	if filesHeaderClose(term.Screen()) < 0 {
 		t.Errorf("the section the switch opened has no close control:\n%s", term.Snapshot())
@@ -3344,7 +3343,6 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("the section left its place after the layout came back: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 
 	clickFiles()
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return railRowOf(s, "alpha/") < 0 }, uiTimeout); err != nil {

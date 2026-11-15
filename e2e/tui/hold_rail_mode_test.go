@@ -43,7 +43,6 @@ func TestHoldThenRailHandsBackTerminalMode(t *testing.T) {
 				time.Sleep(300 * time.Millisecond)
 				saveArtifact(t, term, art, "step-"+string(rune('1'+i)))
 			}
-			time.Sleep(insertGuard)
 			runInShell(t, term, "echo back-$((3+4))", "back-7", shellTimeout)
 		})
 	}

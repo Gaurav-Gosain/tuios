@@ -88,7 +88,6 @@ func closeThemePicker(t *testing.T, term *tuitest.Terminal, name string, key tui
 	}, uiTimeout); err != nil {
 		t.Fatalf("the theme picker did not close: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 }
 
 // TestThemeOffLeavesThePaletteToTheTerminal is the on-screen form of the rule.
@@ -155,7 +154,6 @@ func TestPickerShowsTheUsersOwnSixteen(t *testing.T) {
 	if err := term.SendKeys("l"); err != nil {
 		t.Fatalf("move the rail cursor: %v", err)
 	}
-	time.Sleep(insertGuard)
 	if err := term.SendKeys("c"); err != nil {
 		t.Fatalf("open the accent picker: %v", err)
 	}

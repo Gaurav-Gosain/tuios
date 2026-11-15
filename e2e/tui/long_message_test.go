@@ -385,7 +385,6 @@ func TestLongNoSpaceMessageKeepsTheClientResponsive(t *testing.T) {
 	}
 	// The beat every mode change gets here before typing: closing the view
 	// hands the keyboard back to the pane.
-	time.Sleep(insertGuard + 150*time.Millisecond)
 	runInShell(t, term, `echo $((6*7))ANS`, "42ANS", 3*time.Second)
 }
 

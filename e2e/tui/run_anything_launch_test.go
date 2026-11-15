@@ -237,7 +237,6 @@ func TestRunAnythingExecsDaemonPane(t *testing.T) {
 			if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
 				t.Fatalf("client never reached window management mode: %v\n%s", err, term.Snapshot())
 			}
-			time.Sleep(insertGuard)
 			if !r.exits {
 				launchProbe(t, term)
 				return

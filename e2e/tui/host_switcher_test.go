@@ -12,7 +12,6 @@ import (
 // Enter, once the row want is on screen.
 func openSwitcherOn(t *testing.T, term *tuitest.Terminal, want, query string) {
 	t.Helper()
-	time.Sleep(insertGuard)
 	if err := term.SendKeys(tuitest.Ctrl('b'), "S"); err != nil {
 		t.Fatalf("open the session switcher: %v", err)
 	}

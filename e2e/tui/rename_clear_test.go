@@ -51,7 +51,6 @@ func TestRenameDialogClears(t *testing.T) {
 	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("client never settled in window management mode: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 
 	// ctrl+u: the field opens holding the old name and empties.
 	openRenameOn(t, term, "oldname")
@@ -127,7 +126,6 @@ func TestRenameDialogClears(t *testing.T) {
 // its field to hold the name it is seeded with.
 func openRenameOn(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
-	time.Sleep(insertGuard)
 	sendKeys(t, term, "r")
 	waitRenameField(t, term, "the rename dialog opened on the window's name", name)
 }

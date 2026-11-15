@@ -716,7 +716,6 @@ func windowManagementMode(t *testing.T, term *tuitest.Terminal) {
 	}
 	// The mode switch re-arms input handling; give it the same beat a mode
 	// change gets everywhere else.
-	time.Sleep(insertGuard)
 }
 
 // killDaemonNow shuts the daemon under base down immediately rather than at the
@@ -868,7 +867,6 @@ func enterTerminalMode(t *testing.T, term *tuitest.Terminal) {
 			t.Fatalf("send 'i': %v", err)
 		}
 		if err := term.WaitForText("Terminal mode", terminalModeProbe); err == nil {
-			time.Sleep(insertGuard + 150*time.Millisecond)
 			return
 		}
 		if _, exited := term.ExitCode(); exited {
@@ -888,7 +886,6 @@ func leaveTerminalMode(t *testing.T, term *tuitest.Terminal) {
 		t.Fatalf("did not return to window management mode: %v", err)
 	}
 	// The mode switch also re-arms input handling; give it the same beat.
-	time.Sleep(insertGuard)
 }
 
 // runInShell types a command into the focused pane's shell and waits for a
@@ -1274,7 +1271,6 @@ func clickToType(t *testing.T, term *tuitest.Terminal, col, row int) {
 	if err := term.WaitForText("Terminal mode", uiTimeout); err != nil {
 		t.Fatalf("a click at %d,%d did not start typing in the pane: %v\n%s", col, row, err, term.Snapshot())
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 }
 
 // mouseClick is one complete click: press then release at the same cell.

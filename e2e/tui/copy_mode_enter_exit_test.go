@@ -45,7 +45,6 @@ func TestEnterLeavesCopyMode(t *testing.T) {
 	enterCopyModeHere(t, term, "copy mode from the leader")
 	sendKeys(t, term, tuitest.Enter)
 	waitCopyModeLeft(t, term, "Enter in normal navigation")
-	time.Sleep(insertGuard)
 	runInShell(t, term, "echo back-$((16+21))", "back-37", shellTimeout)
 
 	// Enter from a selection copies it first, as tmux's copy-mode-vi does:
@@ -63,7 +62,6 @@ func TestEnterLeavesCopyMode(t *testing.T) {
 	sendKeys(t, term, tuitest.Enter)
 	waitCopyModeLeft(t, term, "Enter in a selection")
 	waitClipboardSequence(t, term, out, from, "back-37")
-	time.Sleep(insertGuard)
 
 	enterCopyModeHere(t, term, "copy mode for the search")
 	sendKeys(t, term, "?")

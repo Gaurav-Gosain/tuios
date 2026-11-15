@@ -116,7 +116,6 @@ func TestKittyImageStopsAtPaneBorder(t *testing.T) {
 			if err := term.SendKeys("\x15"); err != nil {
 				t.Fatalf("clear prompt line: %v", err)
 			}
-			time.Sleep(insertGuard)
 			rows, cols := reportedPaneSize(t, term, "A")
 
 			// terminal-browser renders at the pane's own pixel size, which is

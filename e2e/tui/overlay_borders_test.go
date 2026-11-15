@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -169,7 +168,6 @@ func startOverlaySession(t *testing.T, appearance string, env []string) (*tuites
 	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("client never settled in window management mode: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 	return term, base
 }
 
@@ -239,7 +237,6 @@ func closeRename(t *testing.T, term *tuitest.Terminal) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !renameDialogUp(s) }, uiTimeout); err != nil {
 		t.Fatalf("the rename dialog never closed: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 }
 
 // openPaletteFrame opens the command palette and finds its frame cells. The

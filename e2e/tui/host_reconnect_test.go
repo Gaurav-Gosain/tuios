@@ -44,7 +44,6 @@ func attachOnBuild(t *testing.T, base string, env []string, farSession string) *
 	waitBoot(t, term)
 	toggleSidebarViaPalette(t, term)
 	railShows(t, term, farSession)
-	time.Sleep(insertGuard)
 	clickRailSession(t, term, farSession)
 	// The rail marks the far session as the one this client is on. It used to
 	// name this machine "@ local" in a group of its own; the section is laid
@@ -52,7 +51,6 @@ func attachOnBuild(t *testing.T, base string, env []string, farSession string) *
 	waitRailCurrent(t, term, farSession)
 	// The switch lands with the pane focused and the client in terminal mode,
 	// so a caller types straight into the far session's shell.
-	time.Sleep(insertGuard)
 	return term
 }
 
@@ -419,7 +417,6 @@ func TestASilentLinkIsFoundAndTheRailStillOpensItsSessions(t *testing.T) {
 	waitBoot(t, term)
 	toggleSidebarViaPalette(t, term)
 	railShows(t, term, "far-quiet")
-	time.Sleep(insertGuard)
 	art := artifactDir(t)
 	save := func(name string) {
 		if err := os.WriteFile(filepath.Join(art, name), []byte(term.Snapshot()), 0o644); err != nil {
@@ -431,7 +428,6 @@ func TestASilentLinkIsFoundAndTheRailStillOpensItsSessions(t *testing.T) {
 	// frozen host, then a session here. The dial for the first click lands
 	// when the link is back, and it must not pull them off the second.
 	railShows(t, term, "elsewhere")
-	time.Sleep(insertGuard)
 	freezeTheLink(t)
 	clickRailSession(t, term, "far-quiet")
 	if err := term.WaitForText("Connecting to build", uiTimeout); err != nil {
@@ -474,10 +470,8 @@ func TestASilentLinkIsFoundAndTheRailStillOpensItsSessions(t *testing.T) {
 	}
 	t.Logf("the navigator opened the session on a frozen link after %v", time.Since(start).Round(100*time.Millisecond))
 	save("navigator-opened.txt")
-	time.Sleep(insertGuard)
 	clickRailSession(t, term, "elsewhere")
 	waitRailCurrent(t, term, "elsewhere")
-	time.Sleep(insertGuard)
 
 	freezeTheLink(t)
 	start = time.Now()
@@ -494,7 +488,6 @@ func TestASilentLinkIsFoundAndTheRailStillOpensItsSessions(t *testing.T) {
 	}
 	t.Logf("a click on a frozen link opened the session after %v", time.Since(start).Round(100*time.Millisecond))
 	save("click-opened.txt")
-	time.Sleep(insertGuard)
 	runInShell(t, term, "echo AFTER-CL\"\"ICK-7", "AFTER-CLICK-7", shellTimeout)
 
 	toggleSidebarViaPalette(t, term)
@@ -522,7 +515,6 @@ func TestASilentLinkIsFoundAndTheRailStillOpensItsSessions(t *testing.T) {
 	// click waits for spare, which is down, then lands when spare is back.
 	toggleSidebarViaPalette(t, term)
 	railShows(t, term, "spare")
-	time.Sleep(insertGuard)
 	drops := hostDrops(t, base, "build")
 	if err := os.WriteFile(spareDown, nil, 0o600); err != nil {
 		t.Fatal(err)
@@ -551,7 +543,6 @@ func TestASilentLinkIsFoundAndTheRailStillOpensItsSessions(t *testing.T) {
 		t.Fatalf("ASSERTION: the click never landed once spare was back: %v\n%s", err, term.Snapshot())
 	}
 	save("click-landed-after-drop.txt")
-	time.Sleep(insertGuard)
 	runInShell(t, term, "echo AFTER-SP\"\"ARE-9", "AFTER-SPARE-9", shellTimeout)
 	alive(t, term, "after the click landed")
 }

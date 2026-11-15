@@ -99,7 +99,6 @@ func TestCycleAgentsWalksTheRailOrder(t *testing.T) {
 		fmt.Fprintf(&log, "%d. %s -> %s/%s\n", step, what, want.sess, want.name)
 		saveArtifact(t, term, dir, fmt.Sprintf("step-%02d", step))
 		// The next chord must not land inside the single-key guard.
-		time.Sleep(insertGuard + 150*time.Millisecond)
 	}
 	next := []any{tuitest.Alt('J')}
 	prev := []any{tuitest.Alt('K')}
@@ -135,7 +134,6 @@ func TestCycleAgentsWalksTheRailOrder(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
 		t.Fatalf("focus the rail: %v", err)
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 	press("next with the rail focused", next, rail[2])
 	press("leader K with the rail focused", []any{tuitest.Ctrl('b'), "K"}, rail[1])
 	if err := os.WriteFile(filepath.Join(dir, "cycle-agents.txt"), []byte(log.String()), 0o644); err != nil {

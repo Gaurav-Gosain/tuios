@@ -3,7 +3,6 @@ package tuie2e
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -86,7 +85,6 @@ func TestPopupsShareTheScreenCentre(t *testing.T) {
 
 	check := func(name, title string) {
 		t.Helper()
-		time.Sleep(insertGuard)
 		s := term.Screen()
 		railShot(t, term, name)
 		x0, y0, x1, y1 := popupBox(t, s, cols, rows, title)

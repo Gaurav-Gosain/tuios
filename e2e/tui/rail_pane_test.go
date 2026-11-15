@@ -152,7 +152,6 @@ func TestRailPaneSection(t *testing.T) {
 
 	// A click gives the pane the keyboard, and a typed line reaches it.
 	mouseClick(t, term, 5, size+1, tuitest.MouseLeft, 0)
-	time.Sleep(insertGuard)
 	if err := term.SendKeys("hello", tuitest.Enter); err != nil {
 		t.Fatalf("type into the rail pane: %v", err)
 	}
@@ -163,7 +162,6 @@ func TestRailPaneSection(t *testing.T) {
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("leave the rail pane: %v", err)
 	}
-	time.Sleep(insertGuard)
 	if err := term.SendKeys("i", "zzz", tuitest.Enter); err != nil {
 		t.Fatalf("type into the main pane: %v", err)
 	}
@@ -178,7 +176,6 @@ func TestRailPaneSection(t *testing.T) {
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("back to window mode: %v", err)
 	}
-	time.Sleep(insertGuard)
 	if err := term.SendKeys(tuitest.Ctrl('b'), "b"); err != nil {
 		t.Fatalf("hide the rail: %v", err)
 	}

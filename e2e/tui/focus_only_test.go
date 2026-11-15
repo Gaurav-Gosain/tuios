@@ -63,7 +63,6 @@ func TestFocusOnlyHidesTheOtherPanes(t *testing.T) {
 	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("never in window mode: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 	for i, name := range []string{"ONE", "TWO", "THREE", "FOUR"} {
 		if name != "ONE" {
 			newWindow(t, term)

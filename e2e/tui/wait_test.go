@@ -109,7 +109,6 @@ func pause(t *testing.T, why string, d time.Duration) {
 // not in two hundred tests.
 func afterModeSwitch(t *testing.T) {
 	t.Helper()
-	time.Sleep(scaled(insertGuard))
 }
 
 // fakeT records the first failure and stops the wait, as t.Fatalf does.

@@ -304,7 +304,6 @@ func TestEmptyWorkspaceOpensOnePaneForTwoClients(t *testing.T) {
 	// The second client takes an input that changes nothing, so the next
 	// GetSessionInfo goes to it, and it must have asked for nothing.
 	sendKeys(t, second, tuitest.Esc)
-	time.Sleep(insertGuard)
 	exactlyPanesOn(t, second, base, sess, 2, 1, "the second client after the switch")
 	// The second client draws the pane the first one opened.
 	if err := second.WaitFor(func(s tuitest.Screen) bool {
@@ -523,7 +522,6 @@ func TestEmptyWorkspaceTwoClientsSwitchAtOnce(t *testing.T) {
 	}
 	exactlyPanesOn(t, term, base, sess, 2, 1, "two clients ask for one workspace")
 	sendKeys(t, second, tuitest.Esc)
-	time.Sleep(insertGuard)
 	exactlyPanesOn(t, second, base, sess, 2, 1, "the second client's request")
 	saveWindowList(t, base, sess, filepath.Join(artifactDir(t), "list-windows.json"))
 	alive(t, term, "after two requests")

@@ -7,7 +7,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -82,7 +81,6 @@ func TestRestoredPaneShowsItsHistoryAboveTheDivider(t *testing.T) {
 		if err := first.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 			t.Fatalf("the client never attached: %v\n%s", err, first.Snapshot())
 		}
-		time.Sleep(insertGuard + 150*time.Millisecond)
 		runInShell(t, first, `cd '`+gone+`' && echo "IN-$((1+1))-GONE"`, "IN-2-GONE", shellTimeout)
 		runInShell(t, first,
 			fmt.Sprintf(`i=1; while [ $i -le %d ]; do echo "HIST-$i-END"; i=$((i+1)); done`, last),
@@ -122,7 +120,6 @@ func TestRestoredPaneShowsItsHistoryAboveTheDivider(t *testing.T) {
 	}, bootTimeout); err != nil {
 		t.Fatalf("the restored pane does not show its history and the divider: %v\n%s", err, second.Snapshot())
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 
 	// A live shell under the divider.
 	runInShell(t, second, `echo "AFTER-$((40+2))-RESTORE"`, "AFTER-42-RESTORE", shellTimeout)

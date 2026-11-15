@@ -94,7 +94,6 @@ func TestReadyToMergeAnswerStaysWithItsCard(t *testing.T) {
 	}
 	ready("t1")
 	sendKeys(t, term, "c")
-	time.Sleep(insertGuard)
 	sendKeys(t, term, tuitest.Esc)
 	ready("t2")
 	if commits(api) != "1" {

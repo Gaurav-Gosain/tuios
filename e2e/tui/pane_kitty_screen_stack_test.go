@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -76,7 +75,6 @@ func TestPaneKittyFlagsPerScreen(t *testing.T) {
 					t.Fatalf("the %s probe never started: %v\n%s", step.name, err, term.Snapshot())
 				}
 				sendRaw(t, term, ctrlA)
-				time.Sleep(insertGuard)
 				if err := term.WaitForText("PROBEDONE"+step.name, shellTimeout); err != nil {
 					t.Fatalf("the %s probe never finished: %v\n%s", step.name, err, term.Snapshot())
 				}

@@ -323,7 +323,6 @@ func TestNotifyHoldsWhileAPersonTypesAtAClient(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 	// An attached client starts in terminal mode, so this goes to the shell.
 	if err := term.SendKeys("echo typed-at-the-desk", tuitest.Enter); err != nil {
 		t.Fatalf("type: %v", err)
@@ -409,7 +408,6 @@ func TestNotifySendsAHeldItemWhenThePersonStaysAway(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 	if err := term.SendKeys("echo typed-then-left", tuitest.Enter); err != nil {
 		t.Fatalf("type: %v", err)
 	}

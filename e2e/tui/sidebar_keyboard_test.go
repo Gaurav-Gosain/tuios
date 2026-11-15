@@ -4,7 +4,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -41,7 +40,6 @@ func TestSidebarKeyboardSwitchAndExit(t *testing.T) {
 	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("client never settled in window management mode: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 
 	toggleSidebarViaPalette(t, term)
 	waitForAll(t, term, uiTimeout, "sidebar with both session rows", sidebarHeader, "bravo")
@@ -235,7 +233,6 @@ func TestRailCursorShowsWithoutItsGround(t *testing.T) {
 				if err := term.SendKeys("j"); err != nil {
 					t.Fatalf("move the cursor: %v", err)
 				}
-				time.Sleep(insertGuard)
 			}
 			err := term.WaitFor(on("P1"), uiTimeout)
 			savePNG(t, term.Screen(), host, dir, "cursor-"+tc.name+"-p1")

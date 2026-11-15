@@ -228,7 +228,6 @@ func TestScratchTerminalShowsOneShell(t *testing.T) {
 		t.Fatalf("after the bare attach the daemon lists %s, want only work", out)
 	}
 	t.Logf("after the reattach:\n%s", term.Snapshot())
-	time.Sleep(insertGuard)
 	toggleScratch(t, term)
 	waitGone(t, term, "hide after the reattach", "AGAIN-56")
 	assertHiddenEverywhere(t, term, base, first.ID)

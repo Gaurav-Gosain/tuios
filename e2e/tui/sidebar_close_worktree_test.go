@@ -456,7 +456,6 @@ func TestQuitMenuDeletesWorktree(t *testing.T) {
 	}, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 
 	// leader q opens the quit menu; the worktree session's menu carries the
 	// delete row after the kill-and-quit row.
@@ -524,7 +523,6 @@ func TestQuitMenuDeletesWorktree(t *testing.T) {
 	}, bootTimeout); err != nil {
 		t.Fatalf("second client never attached: %v\n%s", err, second.Snapshot())
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 	if err := second.SendKeys(tuitest.Ctrl('b'), "q"); err != nil {
 		t.Fatalf("send leader q on the plain session: %v", err)
 	}

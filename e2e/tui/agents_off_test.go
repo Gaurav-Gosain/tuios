@@ -678,7 +678,6 @@ func helpFinds(t *testing.T, term *tuitest.Terminal, query, want string) bool {
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(insertGuard)
 	if err := term.SendKeys(tuitest.Ctrl('b'), "?"); err != nil {
 		t.Fatal(err)
 	}

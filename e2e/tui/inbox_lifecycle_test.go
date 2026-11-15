@@ -172,7 +172,6 @@ func TestRailMarksAFinishedTurnUnread(t *testing.T) {
 		t.Fatalf("esc did not close the Inbox: %v\n%s", err, term.Snapshot())
 	}
 	// A lone esc followed at once by another key reads as alt and that key.
-	time.Sleep(insertGuard)
 
 	// The rail: ctrl+b e takes the keyboard, G goes to its last row, the
 	// footer's collapse control, and two rows up over the footer's files
@@ -181,7 +180,6 @@ func TestRailMarksAFinishedTurnUnread(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(insertGuard)
 	if err := term.SendKeys("G", "k", "k", "u"); err != nil {
 		t.Fatal(err)
 	}

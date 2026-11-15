@@ -120,7 +120,6 @@ func macSessionOn(t *testing.T, base, session, config, source string) *tuitest.T
 			t.Fatalf("a pane on workspace %d: %v\n%s", ws, err, out)
 		}
 	}
-	time.Sleep(insertGuard)
 	return term
 }
 
@@ -400,7 +399,6 @@ func TestAzertyKittyReportsPickTheRightWorkspace(t *testing.T) {
 	wantPaneOn(t, term, base, session, 1, "Option, Shift and the 1 key on AZERTY")
 	saveFrame(t, term, "option-kitty-azerty")
 
-	time.Sleep(insertGuard)
 	press(t, term, "alt+& with no layout report", kittyAltAmp)
 	waitWorkspace(t, base, session, 7)
 	waitPaneOn(t, term, base, session, 7, "alt+& with no layout report")

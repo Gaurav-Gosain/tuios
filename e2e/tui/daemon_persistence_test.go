@@ -43,7 +43,6 @@ func TestDetachAndReattachKeepsLayoutAndPaneContent(t *testing.T) {
 	if err := first.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("first client never attached: %v\n%s", err, first.Snapshot())
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 
 	// Printed by the shell, so the typed command line cannot be mistaken for the
 	// output and every hit on screen is a real paint.
@@ -62,7 +61,6 @@ func TestDetachAndReattachKeepsLayoutAndPaneContent(t *testing.T) {
 	if err := first.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("never entered window management mode: %v\n%s", err, first.Snapshot())
 	}
-	time.Sleep(insertGuard)
 	newWindow(t, first)
 
 	if err := first.SendKeys(tuitest.Ctrl('b'), "d"); err != nil {
@@ -124,7 +122,6 @@ func TestDetachAndReattachKeepsScrollback(t *testing.T) {
 	if err := first.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("first client never attached: %v\n%s", err, first.Snapshot())
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 
 	runInShell(t, first, fmt.Sprintf("for i in $(seq 1 %d); do echo \"RS-$i-END\"; done", last),
 		fmt.Sprintf("RS-%d-END", last), bulkTimeout)
@@ -145,7 +142,6 @@ func TestDetachAndReattachKeepsScrollback(t *testing.T) {
 	if err := second.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("never entered window management mode: %v\n%s", err, second.Snapshot())
 	}
-	time.Sleep(insertGuard)
 
 	if err := second.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
 		t.Fatalf("enter copy mode: %v", err)
@@ -182,14 +178,12 @@ func TestSessionSurvivesTheDaemonAndSaysItWasRestored(t *testing.T) {
 	if err := first.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("first client never attached: %v\n%s", err, first.Snapshot())
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 	if err := first.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("to window mode: %v", err)
 	}
 	if err := first.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("never entered window management mode: %v\n%s", err, first.Snapshot())
 	}
-	time.Sleep(insertGuard)
 	newWindow(t, first)
 
 	// kill-server is synchronous and saves every session on the way out.

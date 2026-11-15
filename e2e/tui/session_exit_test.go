@@ -80,7 +80,6 @@ func TestLeaderQuitKillsSession(t *testing.T) {
 	}, bootTimeout); err != nil {
 		t.Fatalf("never attached: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 
 	// leader q opens the quit menu; x runs the kill row (the only session, so
 	// the row is "Kill and quit").
@@ -142,7 +141,6 @@ func TestLeaderQuitConfirm(t *testing.T) {
 	}, bootTimeout); err != nil {
 		t.Fatalf("never attached: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 
 	// leader q raises the quit menu, with detach first as the safe default.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "q"); err != nil {
@@ -201,7 +199,6 @@ func TestLeaderDetachKeepsSession(t *testing.T) {
 	}, bootTimeout); err != nil {
 		t.Fatalf("never attached: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 
 	if err := term.SendKeys(tuitest.Ctrl('b'), "d"); err != nil {
 		t.Fatalf("send leader d: %v", err)
@@ -236,7 +233,6 @@ func TestExitMessageNamesCurrentSession(t *testing.T) {
 	}, bootTimeout); err != nil {
 		t.Fatalf("never attached: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 
 	// Open session switcher (leader S), type myproj, enter.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "S"); err != nil {
@@ -257,7 +253,6 @@ func TestExitMessageNamesCurrentSession(t *testing.T) {
 	if err := term.WaitForText("Session: myproj", uiTimeout); err != nil {
 		t.Fatalf("never switched to myproj: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 
 	// Detach now.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "d"); err != nil {

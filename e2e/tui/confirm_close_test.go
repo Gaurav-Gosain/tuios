@@ -30,7 +30,6 @@ func busyPanes(t *testing.T, config string) *tuitest.Terminal {
 	// The daemon names the foreground program on its detector poll.
 	time.Sleep(2500 * time.Millisecond)
 	leaveTerminalMode(t, term)
-	time.Sleep(insertGuard)
 	return term
 }
 
@@ -130,7 +129,6 @@ func TestConfirmCloseAsksForABusyPane(t *testing.T) {
 	waitWindowCount(t, term, 1, "the Close pane row closes it")
 
 	// The other pane is at its prompt: it closes at once.
-	time.Sleep(insertGuard)
 	sendKeys(t, term, "x")
 	noDialogFor(t, term, 500*time.Millisecond, "x on a pane at its prompt")
 	waitWindowCount(t, term, 0, "a pane at its prompt closes at once")
@@ -145,7 +143,6 @@ func TestConfirmCloseAlwaysAsks(t *testing.T) {
 	waitBoot(t, term)
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "one pane")
-	time.Sleep(insertGuard)
 	sendKeys(t, term, "x")
 	if err := term.WaitForText(closeQuestion, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: x on a pane at its prompt did not ask: %v\n%s", err, term.Snapshot())

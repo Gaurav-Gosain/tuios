@@ -145,7 +145,6 @@ func TestReattachKeepsSnapshotRowsWhenRingRolled(t *testing.T) {
 	if err := first.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("first client never attached: %v\n%s", err, first.Snapshot())
 	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
 
 	// Draw the header once at absolute rows, then flood forever. printf writes
 	// the header straight to the tty, so it is in the daemon's emulator before

@@ -248,7 +248,6 @@ func TestPasteBuffersWithAnOldDaemon(t *testing.T) {
 	if err := term.SendKeys("echo OLD-"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(insertGuard)
 	if err := term.SendKeys(tuitest.Ctrl('b'), "]"); err != nil {
 		t.Fatal(err)
 	}

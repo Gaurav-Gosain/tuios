@@ -131,7 +131,6 @@ func TestThePersonsNewestIsNeverAPanes(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 
 	mustCLI(t, base, "set-buffer", "persons-text")
 	agent := onlyPaneOf(t, base, "work")
@@ -156,7 +155,6 @@ func TestThePersonsNewestIsNeverAPanes(t *testing.T) {
 	if err := term.SendKeys("echo GOT-"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(insertGuard)
 	mustCLI(t, base, "paste-buffer", "-s", "home")
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatal(err)
@@ -173,7 +171,6 @@ func TestThePersonsNewestIsNeverAPanes(t *testing.T) {
 	if err := term.SendKeys("echo KEY-"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(insertGuard)
 	if err := term.SendKeys(tuitest.Ctrl('b'), "]"); err != nil {
 		t.Fatal(err)
 	}

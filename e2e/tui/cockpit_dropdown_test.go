@@ -6,7 +6,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -76,7 +75,6 @@ func TestCockpitHeaderDropdowns(t *testing.T) {
 	windowManagementMode(t, term)
 	sendKeys(t, term, tuitest.Ctrl('b'), "i")
 	waitText(t, term, "the agents view", "Group: state", "docs-cli")
-	time.Sleep(insertGuard)
 
 	openMenu := func(control string, want ...string) (header, x int) {
 		t.Helper()
@@ -147,7 +145,6 @@ func TestCockpitHeaderDropdowns(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !sortRowShown(s) }, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: a click outside the menu did not close it: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 	if strings.Contains(term.Screen().Text(), "Start agent") {
 		t.Fatalf("ASSERTION: the click that closed the menu also opened the New agent sheet\n%s", term.Snapshot())
 	}
@@ -200,7 +197,6 @@ func TestSpawnSheetListIsTheDropdown(t *testing.T) {
 	nr, nc := findText(t, term, "New agent")
 	mouseClick(t, term, nc+2, nr, tuitest.MouseLeft, 0)
 	waitText(t, term, "the New agent sheet", "Start agent", " more ")
-	time.Sleep(insertGuard)
 
 	open := func() int {
 		t.Helper()
@@ -236,7 +232,6 @@ func TestSpawnSheetListIsTheDropdown(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { r, _ := menuRow(s, mr, "aider"); return r < 0 }, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: a click outside the list did not close it: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(insertGuard)
 	if !strings.Contains(term.Screen().Text(), "Start agent") {
 		t.Fatalf("ASSERTION: the click that closed the list also cancelled the sheet\n%s", term.Snapshot())
 	}

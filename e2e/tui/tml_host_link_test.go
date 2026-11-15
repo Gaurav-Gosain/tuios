@@ -139,7 +139,6 @@ func TestTMLSurfacesCrossAHostLink(t *testing.T) {
 	waitBoot(t, term)
 	toggleSidebarViaPalette(t, term)
 	railShows(t, term, "far-tasks")
-	time.Sleep(insertGuard)
 	clickRailSession(t, term, "far-tasks")
 	waitRailCurrent(t, term, "far-tasks")
 	// The panes tile, so the sidebar is a column of its own. The far daemon

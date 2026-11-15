@@ -32,11 +32,9 @@ func TestScratchShownDuringAHoldHandsBackTerminalMode(t *testing.T) {
 	runInShell(t, term, "echo ready-$((1+1))", "ready-2", shellTimeout)
 	holdKeys(t, term, "1-show", kittyLeftAltPress, kittyCtrlAltB, kittyAltG, kittyLeftAltRelease)
 	waitScratch(t, term, base, false, false, "shown during a hold")
-	time.Sleep(insertGuard)
 	runInShell(t, term, "echo scratch-$((2+3))", "scratch-5", shellTimeout)
 	toggleScratch(t, term)
 	time.Sleep(500 * time.Millisecond)
 	saveArtifact(t, term, artifactDir(t), "2-hidden")
-	time.Sleep(insertGuard)
 	runInShell(t, term, "echo back-$((3+4))", "back-7", shellTimeout)
 }

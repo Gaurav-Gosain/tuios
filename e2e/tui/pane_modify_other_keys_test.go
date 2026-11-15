@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -87,7 +86,6 @@ func TestPaneModifyOtherKeys(t *testing.T) {
 				}
 				for _, k := range []string{ctrlEnter, ctrlSemi, ctrlA} {
 					sendRaw(t, term, k)
-					time.Sleep(insertGuard)
 				}
 				if err := term.WaitForText("PROBEDONE"+step.name, shellTimeout); err != nil {
 					t.Fatalf("the %s probe never finished: %v\n%s", step.name, err, term.Snapshot())
