@@ -1260,6 +1260,11 @@ var optionSpecs = []Option{
 		Default:     "false",
 	},
 	{
+		Path: "agents.answer_advance", Type: OptionBool, Section: "agents",
+		Description: "After an answer in the agents view, move the cursor to the next agent that needs you. Off keeps the cursor on the agent you answered.",
+		Default:     "true",
+	},
+	{
 		Path: "agents.view_list", Type: OptionString, Section: "agents",
 		Description: "How the agents view shows its list on a wide screen: a column beside the focus, a strip of chips above it, or a strip for two agents or fewer. The \\ key switches it, and the view keeps that choice.",
 		Accepted:    AgentsViewLists,

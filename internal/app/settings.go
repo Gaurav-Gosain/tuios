@@ -662,6 +662,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("shell.integration"),
 			opt("shell.login"),
 			opt("agents.fold_working"),
+			opt("agents.answer_advance"),
 			opt("agents.view_list"),
 			opt("agents.name_hint"),
 			opt("agents.acp_version"),

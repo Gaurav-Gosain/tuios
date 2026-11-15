@@ -86,6 +86,10 @@ type AgentsConfig struct {
 	// opens it. Nil means off. A fold or an open the person made with F or a
 	// click wins over it, and is kept in the client's state file.
 	FoldWorking *bool `toml:"fold_working,omitempty"`
+	// AnswerAdvance moves the agents view's cursor, after an answer, to the
+	// next row that needs the person, when one does. Nil means on. See
+	// AnswerAdvanceOn.
+	AnswerAdvance *bool `toml:"answer_advance,omitempty"`
 	// ViewList is how the agents view shows its list of agents on a screen
 	// wide enough for two columns: "column" (the default) keeps the list
 	// column beside the focus, "strip" folds the list into a row of chips
@@ -209,6 +213,10 @@ func (a AgentsConfig) SilentAfterDuration() time.Duration {
 // On reports whether the agent features are on. They are unless the file
 // says enabled = false.
 func (a AgentsConfig) On() bool { return a.Enabled == nil || *a.Enabled }
+
+// AnswerAdvanceOn reports whether an answer in the agents view moves the
+// cursor to the next row that needs the person.
+func (a AgentsConfig) AnswerAdvanceOn() bool { return a.AnswerAdvance == nil || *a.AnswerAdvance }
 
 // FoldWorkingOn reports whether the agents view folds Working by default.
 func (a AgentsConfig) FoldWorkingOn() bool { return a.FoldWorking != nil && *a.FoldWorking }

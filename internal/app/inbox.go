@@ -1529,6 +1529,9 @@ func (m *OS) InboxActivate() tea.Cmd {
 type InboxApprovalRepliedMsg struct {
 	Name     string
 	Decision string
+	// From is where the agents view's cursor was when the answer was sent:
+	// the item answered and the row and agent under the cursor.
+	From ckAnswerFrom
 	// Standing is the decision that stands, which is an earlier reply's
 	// when Applied is false.
 	Standing string
@@ -1593,6 +1596,8 @@ func (m *OS) InboxAnswerAsk(n int) tea.Cmd {
 type InboxAskAnsweredMsg struct {
 	Name   string
 	Answer string
+	// From is where the agents view's cursor was when the answer was sent.
+	From ckAnswerFrom
 	// Standing is the answer that stands, an earlier one's when Applied is
 	// false.
 	Standing string
@@ -1619,10 +1624,11 @@ func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string, upgradeD
 	m.Inbox.replied[it.RequestID] = true
 	build := m.DaemonClient.ClientVersion()
 	name := inboxWho(it)
+	from := m.ckAnswerFromNow(it)
 	return func() tea.Msg {
 		client, err := session.DialVerbClientAs(build)
 		if err != nil {
-			return InboxAskAnsweredMsg{Name: name, Answer: answer, Err: err}
+			return InboxAskAnsweredMsg{Name: name, Answer: answer, From: from, Err: err}
 		}
 		defer func() { _ = client.Close() }()
 		params := map[string]any{
@@ -1638,7 +1644,7 @@ func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string, upgradeD
 		}
 		raw, err := client.CallWithTimeout("answer-ask", params, 5*time.Second)
 		if err != nil {
-			return InboxAskAnsweredMsg{Name: name, Answer: answer, Err: err}
+			return InboxAskAnsweredMsg{Name: name, Answer: answer, From: from, Err: err}
 		}
 		var res struct {
 			Answer  string `json:"answer"`
@@ -1646,9 +1652,9 @@ func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string, upgradeD
 			Reason  string `json:"reason"`
 		}
 		if err := jsonx.Unmarshal(raw, &res); err != nil {
-			return InboxAskAnsweredMsg{Name: name, Answer: answer, Err: err}
+			return InboxAskAnsweredMsg{Name: name, Answer: answer, From: from, Err: err}
 		}
-		return InboxAskAnsweredMsg{Name: name, Answer: answer, Standing: res.Answer, Applied: res.Applied, Reason: res.Reason}
+		return InboxAskAnsweredMsg{Name: name, Answer: answer, From: from, Standing: res.Answer, Applied: res.Applied, Reason: res.Reason}
 	}
 }
 
@@ -1664,7 +1670,8 @@ func (m *OS) applyInboxAskAnswered(msg InboxAskAnsweredMsg) {
 	case !msg.Applied:
 		m.ShowNotification(msg.Name+"'s question ended before the answer: "+strings.ReplaceAll(msg.Reason, "_", " "), "warning", m.Settings.NotificationDuration)
 	default:
-		m.ShowNotification(msg.Name+": "+printableTitle(msg.Answer), "success", m.Settings.NotificationDuration)
+		left := m.cockpitAnswerAdvance(msg.From)
+		m.ShowNotification(msg.Name+": "+printableTitle(msg.Answer)+ckMoreNeedYou(left), "success", m.Settings.NotificationDuration)
 	}
 }
 
@@ -1805,6 +1812,7 @@ func (m *OS) inboxReplyCmdWith(it session.AttentionItem, decision, message strin
 	m.Inbox.replied[it.RequestID] = true
 	call := m.inboxCaller()
 	name := inboxWho(it)
+	from := m.ckAnswerFromNow(it)
 	params := map[string]any{
 		"request_id":  it.RequestID,
 		"decision":    decision,
@@ -1820,7 +1828,7 @@ func (m *OS) inboxReplyCmdWith(it session.AttentionItem, decision, message strin
 	return func() tea.Msg {
 		raw, err := call("reply-approval", params, 5*time.Second)
 		if err != nil {
-			return InboxApprovalRepliedMsg{Name: name, Decision: decision, Err: err}
+			return InboxApprovalRepliedMsg{Name: name, Decision: decision, From: from, Err: err}
 		}
 		var res struct {
 			Decision string `json:"decision"`
@@ -1828,9 +1836,9 @@ func (m *OS) inboxReplyCmdWith(it session.AttentionItem, decision, message strin
 			Reason   string `json:"reason"`
 		}
 		if err := jsonx.Unmarshal(raw, &res); err != nil {
-			return InboxApprovalRepliedMsg{Name: name, Decision: decision, Err: err}
+			return InboxApprovalRepliedMsg{Name: name, Decision: decision, From: from, Err: err}
 		}
-		return InboxApprovalRepliedMsg{Name: name, Decision: decision, Standing: res.Decision, Applied: res.Applied, Reason: res.Reason}
+		return InboxApprovalRepliedMsg{Name: name, Decision: decision, From: from, Standing: res.Decision, Applied: res.Applied, Reason: res.Reason}
 	}
 }
 
@@ -1849,7 +1857,8 @@ func (m *OS) applyInboxApprovalReplied(msg InboxApprovalRepliedMsg) {
 	case !msg.Applied:
 		m.ShowNotification(msg.Name+" was already answered: "+inboxDecisionWords(msg.Standing), "warning", m.Settings.NotificationDuration)
 	case msg.Decision != session.ApprovalAsk:
-		m.ShowNotification(msg.Name+": "+inboxDecisionWords(msg.Decision), "success", m.Settings.NotificationDuration)
+		left := m.cockpitAnswerAdvance(msg.From)
+		m.ShowNotification(msg.Name+": "+inboxDecisionWords(msg.Decision)+ckMoreNeedYou(left), "success", m.Settings.NotificationDuration)
 	}
 }
 

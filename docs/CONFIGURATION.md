@@ -3210,6 +3210,23 @@ fold_working = true   # default false
 choice wins over `fold_working`. The settings page has this option on the
 Behavior tab, as "Fold Working".
 
+## Next after an answer
+
+An answer sent from the agents view (`ctrl+b i`), such as an allow, a reject,
+a plan approved or a question answered, moves the cursor to the next agent
+that needs you, so a queue of approvals takes the answer keys alone. The note
+after the answer says how many more need you. The cursor moves only when it
+is still on the agent you answered: a row you moved to while the answer was
+on its way keeps the cursor.
+
+```toml
+[agents]
+answer_advance = false   # default true
+```
+
+Off keeps the cursor on the agent you answered. The settings page has this
+option on the Behavior tab, as "Next after an answer".
+
 ## Naming panes and sessions
 
 When an agent starts in a tuios pane, `tuios agent-hook` adds a few lines to
