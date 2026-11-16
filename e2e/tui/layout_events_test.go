@@ -215,13 +215,10 @@ func TestSplitWindowFromAZoomedPaneAnswersAtOnce(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "zoom-window", "-s", sess, "-w", first, "--on"); err != nil {
 		t.Fatalf("zoom-window --on: %v\n%s", err, out)
 	}
-	deadline := time.Now().Add(uiTimeout)
-	for !byID()[first].Zoomed {
-		if time.Now().After(deadline) {
-			t.Fatalf("the pane never showed as zoomed")
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
+	waitUntil(t, "the pane never showed as zoomed", uiTimeout, func() (bool, string) {
+		rows := byID()
+		return rows[first].Zoomed, fmt.Sprint(rows)
+	})
 	saveArtifact(t, term, dir, "zoomed")
 
 	// The split from the zoomed pane.
