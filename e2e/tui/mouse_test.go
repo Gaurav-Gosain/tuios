@@ -339,6 +339,11 @@ func TestTypingWhileScrolledSnapsBackToLiveOutput(t *testing.T) {
 //
 // NEGATIVE CONTROL: measured on the tree before the fix, the pane is back at
 // REMOTE-200-END the moment the first remote key lands.
+//
+// The watch also catches a frame drawn between output landing and the next
+// Update, at an offset derived from a shorter history: the view jumps forward
+// by the lines that just arrived. NEGATIVE_CONTROLS.md has the run that
+// widens that window with HoldScrollAnchorAt left out of renderTerminal.
 func TestARemoteSendKeysLeavesAScrolledPaneScrolled(t *testing.T) {
 	// A daemon session, because send-keys is a verb and needs a daemon to
 	// route it to this client.

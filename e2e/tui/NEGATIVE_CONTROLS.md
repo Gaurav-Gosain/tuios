@@ -18051,3 +18051,21 @@ Run on 2026-11-16 on Linux (x86_64). The branch passes both. The exec line after
 
 The transcript of the restart case is `exec-after-restart.txt` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestDaemonChildrenDoNotInheritTheAgentThatStartedTheDaemon|TestExecAfterARestartFromAPaneIsNotThatPane)$' -v .`.
+
+## A scrolled pane holds its place in the frame that draws new output
+
+`TestARemoteSendKeysLeavesAScrolledPaneScrolled` in `mouse_test.go` scrolls a daemon pane up ten wheel notches, then types a command into it with `tuios send-keys`. For 1.5 s the newest marker line on screen must stay where the wheel left it. The command's output must not move the view.
+
+The reader goroutine writes output into the emulator at any time. `OS.Update` moves the offset to the anchor, but output can land after the last Update and before the frame. The frame then draws a longer history at the old offset, and the view jumps forward by the lines that just arrived. The next message puts it back. CI saw this once: "a remote key moved the view from REMOTE-171-END to REMOTE-173-END". The fix is `HoldScrollAnchorAt` in `renderTerminal`, which takes the offset from the anchor and the history length the frame reads.
+
+The window is narrow, so each control adds a 40 ms delay before the frame takes the I/O lock while a pane is scrolled. The delay is in a local build only.
+
+Run on 2026-11-16 on Linux (x86_64), with `nice -n 19`, `taskset -c 2,3` and GOMAXPROCS=4.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main, with the delay | "a remote key moved the view from REMOTE-171-END to REMOTE-173-END", 4 of 10 runs | **caught** |
+| The branch, with the delay | passes 10 of 10 runs | fixed |
+
+Without the delay, main passes 30 of 30 runs on this machine, under four busy loops on the same two cores. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=10 -run '^TestARemoteSendKeysLeavesAScrolledPaneScrolled$' -v .`.

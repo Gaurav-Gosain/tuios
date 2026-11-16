@@ -392,6 +392,9 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	maxX := min(contentW, screen.Width())
 
 	scrollbackLen := window.ScrollbackLen()
+	// The offset follows the anchor against the history this frame draws,
+	// not the one the last Update read. See HoldScrollAnchorAt.
+	window.HoldScrollAnchorAt(scrollbackLen)
 	inScrollbackMode := window.ScrollbackOffset > 0
 
 	marks := m.marks()
