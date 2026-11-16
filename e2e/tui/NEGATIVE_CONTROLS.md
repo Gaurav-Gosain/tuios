@@ -2626,6 +2626,7 @@ same client reports BSP there.
 | The released behaviour | build origin/main (`b23b1cd6`) with this branch's e2e directory | `TestRemoteCreateAppliesStartup` ("far-new on build is \"floating\""), `TestSwitchToAnEmptySessionTakesItsLayout` ("blank has layout mode \"bsp\"") | **caught** |
 | The empty session keeps the tiling of the session left | `adoptEmptySessionVersion`: the `m.AutoTiling = state.AutoTiling` line cut | `TestRemoteCreateAppliesStartup` (the same assertion). `TestSwitchToAnEmptySessionTakesItsLayout` passes, which is correct: tiling is on in both sessions | **caught** |
 | The empty session keeps the layout mode of the session left | `adoptEmptySessionVersion`: the `ApplyLayoutModeName` call cut | `TestSwitchToAnEmptySessionTakesItsLayout` ("blank has layout mode \"bsp\""). `TestRemoteCreateAppliesStartup` passes, which is correct: [startup] sets the mode there | **caught** |
+| The new window reaches the client before alt+2 | the test runs `new-window` before alt+2 and has no palette wait | `TestSwitchToAnEmptySessionTakesItsLayout` ("blank is tiling bsp"), 10 of 10: workspace 1 holds the pane, so alt+2 opens a new workspace 2 with [startup] layout. This was the CI failure the pause hid. The palette wait after alt+2 closes it | **caught** |
 
 ## A popup that switches the session (#479)
 

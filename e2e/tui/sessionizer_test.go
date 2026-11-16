@@ -361,15 +361,21 @@ func TestSwitchToAnEmptySessionTakesItsLayout(t *testing.T) {
 		t.Fatalf("the client never showed blank: %v\n%s", err, term.Snapshot())
 	}
 	// A workspace switch in the client sends its layout to the daemon before
-	// the daemon sends blank's state again. Workspace 1 held the closed pane,
-	// so it goes when the switch leaves it, and workspace 2 becomes 1.
+	// the daemon sends blank's state again. Workspace 1 is empty, so alt+2
+	// stays on it (see newWorkspaceSlot) and the screen does not change.
 	if err := term.SendKeys(tuitest.Alt('2')); err != nil {
 		t.Fatalf("press alt+2: %v", err)
 	}
-	// Without this, blank comes back as bsp on CI after the new window below:
-	// the client can still send home's layout after the switch, and nothing
-	// on screen or in the daemon says when it is done.
-	pause(t, "no sign says the client has sent its last layout for the switch", insertGuard)
+	// The client reads keys in order, so the palette on screen says alt+2 was
+	// handled. The new window below must not reach the client first: then
+	// workspace 1 holds a pane, alt+2 opens a new workspace 2, and workspace
+	// 2 takes [startup] layout, bsp. That was the CI failure, when tuitest
+	// sent alt+2 as ESC 2 and the client read it late.
+	if err := term.SendKeys(tuitest.Ctrl('p')); err != nil {
+		t.Fatalf("open palette: %v", err)
+	}
+	waitPaletteOpen(t, term, "after alt+2")
+	closePalette(t, term, "after alt+2")
 	waitWorkspace(t, base, "blank", 1)
 	if info := sessionInfoOf(t, base, "blank"); info.LayoutMode != "master-stack" {
 		t.Fatalf("ASSERTION: blank has layout mode %q after the switch from home, want master-stack", info.LayoutMode)
