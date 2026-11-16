@@ -107,8 +107,8 @@ const (
 
 	// maxConnsPerPane is the most connections on the daemon's own socket that
 	// one pane holds at once, counted for every process that may not act as
-	// the person. The processes of one pane share its terminal and count
-	// together. A process with no terminal counts on its own. An agent and its
+	// the person. The processes of one pane count together, also those that
+	// left its terminal or session. See peerConnKey. An agent and its
 	// tools take a few; this leaves room for many and stops one pane from
 	// taking the slots of the others.
 	maxConnsPerPane = 64
@@ -347,12 +347,14 @@ const errPaneConnections = "This pane already holds the most connections to the 
 // hooks and plugins together hold every slot that is not kept for the person.
 const errPanesConnections = "Programs in panes already hold every connection to the tuios daemon that is not kept for the person. Close some, then try again."
 
-// peerConnKey is what maxConnsPerPane counts by: the controlling terminal of
-// the process, which every process of one pane shares, or the process itself
-// when it has none.
+// peerConnKey is what maxConnsPerPane counts by: the pane the kernel's
+// record placed the process in, which holds for its children also when they
+// leave its terminal or its session; else its controlling terminal; else the
+// process itself.
 type peerConnKey struct {
-	tty int64
-	pid int
+	window string
+	tty    int64
+	pid    int
 }
 
 // admitPeer counts a connection on the daemon's own socket against the caps
@@ -363,9 +365,9 @@ type peerConnKey struct {
 // maxConnsPerPane of its pane. A refused connection is told why and closed.
 // The caller runs release when an admitted connection ends.
 //
-// The placing is done already (connFromPane at accept), so this adds one
-// read of the process record for a caller in a pane, and nothing for the
-// person.
+// The person costs nothing here. A caller in a pane is placed in its pane
+// once (placePaneWindow, which the grant checks need anyway and which caches
+// the answer), and read for its terminal only when no pane is found.
 func (d *Daemon) admitPeer(cs *connState) (release func(), ok bool) {
 	if d.manager == nil || d.mayActAsHuman(cs) {
 		return func() {}, true
@@ -377,7 +379,12 @@ func (d *Daemon) admitPeer(cs *connState) (release func(), ok bool) {
 		return nil, false
 	}
 	key := peerConnKey{pid: cs.peerPID}
-	if _, tty, _, ok := d.procLink()(cs.peerPID); ok && tty != 0 {
+	// The pane by its token or by the process tree, never by an environment
+	// variable the process could set to charge another pane. The answer is
+	// cached on cs, so the grant checks that follow do not read it again.
+	if win, via := d.placePaneWindow(cs); win != "" && via != "env" {
+		key = peerConnKey{window: win}
+	} else if _, tty, _, ok := d.procLink()(cs.peerPID); ok && tty != 0 {
 		key = peerConnKey{tty: tty}
 	}
 	d.peerConnsMu.Lock()

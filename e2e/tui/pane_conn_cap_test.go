@@ -17,7 +17,8 @@ import (
 //     slots are gone, so the person's own tuios commands are refused;
 //   - one pane takes the slots every other pane needs;
 //   - a pane that forks children, each in a session of its own with no
-//     terminal, gets around a cap per pane and fills the pool;
+//     terminal, gets around the cap per pane;
+//   - enough panes together fill the pool;
 //   - the caps refuse the person, or a pane that holds a few connections.
 
 // connHolderScript writes a python3 program that opens n connections to the
@@ -85,10 +86,10 @@ func heldCount(t *testing.T, out, tag string) int {
 	return n
 }
 
-// TestPanesCannotTakeThePersonsConnections runs three holders in panes of a
-// real daemon: one pane asks for 100 connections, a second pane for 10, and
-// 16 children with no terminal for 64 each. The person's tuios commands must
-// still work.
+// TestPanesCannotTakeThePersonsConnections runs holders in panes of a real
+// daemon: one pane asks for 100 connections, then four of its children in
+// sessions of their own for 64 each, a second pane for 10, and 14 more panes
+// for 64 each. The person's tuios commands must still work.
 func TestPanesCannotTakeThePersonsConnections(t *testing.T) {
 	needPython(t)
 	base := t.TempDir()
@@ -124,6 +125,18 @@ func TestPanesCannotTakeThePersonsConnections(t *testing.T) {
 		t.Errorf("ASSERTION: one pane holds %d connections, want 64", got)
 	}
 
+	// Children of that pane in sessions of their own, with no terminal, are
+	// still that pane's, and it is full.
+	escaped := filepath.Join(base, "escaped")
+	run(ids[0], escaped, 64, 4)
+	for i := range 4 {
+		n := heldCount(t, escaped, "c"+strconv.Itoa(i))
+		tr.add("setsid child %d of pane 1 asked for 64 connections and holds %d", i, n)
+		if n != 0 {
+			t.Errorf("ASSERTION: a setsid child of a full pane holds %d connections, want 0", n)
+		}
+	}
+
 	// Another pane still gets what it asks for.
 	second := filepath.Join(base, "second")
 	run(ids[1], second, 10, 0)
@@ -133,14 +146,30 @@ func TestPanesCannotTakeThePersonsConnections(t *testing.T) {
 		t.Errorf("ASSERTION: a second pane holds %d connections, want 10", got)
 	}
 
-	// Children with no terminal fill what panes may hold, and no more.
-	forked := filepath.Join(base, "forked")
-	run(ids[1], forked, 64, 16)
-	total := 64 + 10
-	for i := range 16 {
-		total += heldCount(t, forked, "c"+strconv.Itoa(i))
+	// 14 more panes ask for 64 each: more than panes may hold in all.
+	for i := range 14 {
+		name := "more" + strconv.Itoa(i)
+		if o, err := tuiosCLI(t, base, "new-window", "-s", "conns", name, "--no-focus"); err != nil {
+			t.Fatalf("open pane %s: %v\n%s", name, err, o)
+		}
 	}
-	tr.add("panes and their children hold %d connections in all", total)
+	all := grantWindowIDs(t, base, "conns")
+	if len(all) != 16 {
+		t.Fatalf("want 16 panes, got %d", len(all))
+	}
+	more := filepath.Join(base, "more")
+	for i, id := range all {
+		if id != ids[0] && id != ids[1] {
+			run(id, more+strconv.Itoa(i), 64, 0)
+		}
+	}
+	total := 64 + 10
+	for i, id := range all {
+		if id != ids[0] && id != ids[1] {
+			total += heldCount(t, more+strconv.Itoa(i), "main")
+		}
+	}
+	tr.add("16 panes hold %d connections in all", total)
 	if total > 1024-128 {
 		t.Errorf("ASSERTION: programs in panes hold %d connections, want at most %d", total, 1024-128)
 	}
