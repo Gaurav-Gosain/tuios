@@ -613,6 +613,23 @@ when a fresh file still leaves lanes within a minute of the limit.
 A test that claims to cover a bug must fail on a build with the fix removed.
 `e2e/tui/NEGATIVE_CONTROLS.md` records those runs and the rules for them.
 
+`TUIOS_E2E_BACKEND` picks how a test runs the tuios client. `real`, the
+default, runs the built binary on a PTY. `sim` runs the client and the daemon
+in the test process (`e2e/tui/backend_test.go`). The CLI calls and hooks still
+run the built binary. A test keeps the same `*tuitest.Terminal` on both.
+
+```bash
+cd e2e/tui && TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios TUIOS_E2E_BACKEND=sim go test -count=1 -run '^TestX$' .
+```
+
+Under `sim` the tests of a package share one process environment, so a test
+has one isolation root and its knobs go through `testknob.Set`. A test that
+needs something only a process of its own gives (real ssh, another tuios
+binary, a live upgrade, pids or signals) calls `requireReal(t, why)` first,
+which skips it under `sim`. `TUITEST_TRACE=FILE` writes the observation trace
+of each test, on either backend: every `tuiosCLI` call and every wait and
+input of each client. The same test has the same trace on both backends.
+
 ### Kept Unit Tests
 
 ```bash

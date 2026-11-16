@@ -155,6 +155,7 @@ func TestMain(m *testing.M) {
 	runRelayClientIfAsked()
 	runThrottleIfAsked()
 	runStandInIfAsked()
+	runAsTuiosIfAsked()
 	os.Exit(runE2E(m))
 }
 
@@ -162,6 +163,10 @@ func runE2E(m *testing.M) (code int) {
 	if os.Getenv("TUIOS_E2E") == "" {
 		fmt.Fprintln(os.Stderr, "e2e: skipping, set TUIOS_E2E=1 to run (spawns real multiplexer daemons)")
 		return 0
+	}
+	if err := setupBackend(); err != nil {
+		fmt.Fprintf(os.Stderr, "e2e: %v\n", err)
+		return 1
 	}
 	// Everything the run makes in the temp dir goes under one folder, removed at
 	// the end; a folder a test left in it fails the run. See runtemp_test.go.
@@ -235,6 +240,10 @@ func runE2E(m *testing.M) (code int) {
 			fmt.Fprintf(os.Stderr, "e2e: build tuios: %v\n", err)
 			return 1
 		}
+	}
+
+	if simOn {
+		_ = os.Setenv(simBinEnv, tuiosBin)
 	}
 
 	// A bare tuios in a pane or a stand-in's script is the build under test
@@ -525,7 +534,15 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 	if o.out != nil {
 		opts = append(opts, tuitest.WithOutputMirror(o.out))
 	}
-	term := tuitest.StartT(t, argv, opts...)
+	opts = append(opts, traceOptions(t)...)
+	var term *tuitest.Terminal
+	if simOn {
+		term = simStart(t, base, o, argv[len(o.wrap)+1:], env, clientDir, opts)
+	}
+	if term == nil {
+		term = tuitest.StartT(t, argv, opts...)
+	}
+	traceClient(t, term)
 	clientStarts.Store(term, clientStart{at: time.Now(), events: eventsLog})
 	return term
 }
@@ -651,6 +668,10 @@ func logSurvivors(t *testing.T, base string) {
 		if argv := procArgv(pid); len(argv) > 1 && filepath.Base(argv[0]) == filepath.Base(tuiosBin) && argv[1] == "daemon" {
 			daemons[pid] = true
 		}
+	}
+	if simOn {
+		// The in-process daemon's shells are this process's children.
+		daemons[os.Getpid()] = true
 	}
 	underDaemon := func(pid int) bool {
 		for seen := 0; pid > 1 && seen < 64; seen++ {
@@ -1072,6 +1093,22 @@ func resolvedPath(t *testing.T, p string) string {
 // living under an isolation root, and returns its combined output.
 func tuiosCLI(t *testing.T, base string, args ...string) (string, error) {
 	t.Helper()
+	traceCLI(t, args)
+	if simOn {
+		if len(args) == 1 && args[0] == "kill-server" {
+			return simKillServer(base), nil
+		}
+		if len(args) > 0 && simStartsDaemon[args[0]] {
+			simEnsureDaemon(t, base)
+		}
+	}
+	return tuiosCLIRun(t, base, args...)
+}
+
+// tuiosCLIRun is tuiosCLI without the trace and the sim daemon: the
+// teardown's own calls.
+func tuiosCLIRun(t *testing.T, base string, args ...string) (string, error) {
+	t.Helper()
 	// A subcommand that loads the config writes the default file when there
 	// is none, and a file written with the shipped values would read as the
 	// test's own choice when the client starts. So the pins go in first here
@@ -1137,6 +1174,13 @@ func killDaemon(t *testing.T, base string) {
 	if _, already := registeredKills.LoadOrStore(daemonKey{t, base}, true); already {
 		return
 	}
+	if simOn {
+		// The in-process daemon stops in its own cleanup, and here for a
+		// daemon started after this was registered. kill-server would find
+		// no pid file: the daemon's process is this one.
+		t.Cleanup(func() { simStopDaemon(base) })
+		return
+	}
 	t.Cleanup(func() {
 		if log, err := os.ReadFile(filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "daemon.log")); err == nil {
 			for line := range strings.SplitSeq(string(log), "\n") {
@@ -1145,12 +1189,12 @@ func killDaemon(t *testing.T, base string) {
 				}
 			}
 		}
-		if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
+		if out, err := tuiosCLIRun(t, base, "kill-server"); err != nil {
 			t.Logf("kill-server (best effort): %v: %s", err, strings.TrimSpace(out))
 		}
 		deadline := time.Now().Add(5 * time.Second)
 		for {
-			out, err := tuiosCLI(t, base, "ls", "--json")
+			out, err := tuiosCLIRun(t, base, "ls", "--json")
 			var sessions []struct {
 				Name string `json:"name"`
 			}
@@ -1697,6 +1741,7 @@ func mustMkdir(dir string) {
 // Negative control: dropping XDG_CONFIG_DIRS from xdgKeys fails this on macOS
 // and passes on Linux, which is exactly how it went unnoticed.
 func TestTheSuiteReadsNoConfigButItsOwn(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 
 	// Every directory the child is told about has to be inside the root this
