@@ -665,11 +665,11 @@ const (
 // without a read. With no B it is empty.
 func captureCommandText(list *SemanticMarkerList, r markerGridReader, cLine int) string {
 	b, prevC := list.commandStartForCapture()
-	if b == nil {
-		return ""
-	}
 	if prevC != nil {
 		return prevC.CapturedText
+	}
+	if b == nil {
+		return ""
 	}
 	return extractCommandTextFrom(r, b.AbsLine, b.Col, cLine)
 }

@@ -153,11 +153,12 @@ func (l *SemanticMarkerList) Last(t SemanticMarkerType) *SemanticMarker {
 	return nil
 }
 
-// commandStartForCapture is what a new C marker captures its command from:
-// the most recent B marker, and the C marker that already follows that B,
-// if one does. A shell sends one C per B, so prevC is nil in normal use. A
-// second C after the same B reuses prevC's text and reads nothing, so a run
-// of C markers costs no more than one.
+// commandStartForCapture is what a new C marker captures its command from.
+// Walking back, the first B or C met decides: a B is returned as b, to read
+// from, and a C as prevC, whose text the new C reuses (empty when that C had
+// no B). A shell sends one C per B, so b is the answer in normal use. A run
+// of C markers stops at the one before it, so each costs one step and reads
+// nothing.
 func (l *SemanticMarkerList) commandStartForCapture() (b, prevC *SemanticMarker) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -167,14 +168,11 @@ func (l *SemanticMarkerList) commandStartForCapture() (b, prevC *SemanticMarker)
 		}
 		switch m.Type {
 		case MarkerCommandExecuted:
-			if prevC == nil {
-				c := m
-				c.AbsLine -= l.trimmed
-				prevC = &c
-			}
+			m.AbsLine -= l.trimmed
+			return nil, &m
 		case MarkerCommandStart:
 			m.AbsLine -= l.trimmed
-			return &m, prevC
+			return &m, nil
 		}
 	}
 	return nil, nil

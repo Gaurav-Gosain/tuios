@@ -132,6 +132,19 @@ func TestCommandCaptureBytesAreBounded(t *testing.T) {
 	}
 }
 
+// BenchmarkCommandCaptureCRun writes one B, a command line and 10000 C marks,
+// the marker cap, as one write. Each C must cost the same however many came
+// before it.
+func BenchmarkCommandCaptureCRun(b *testing.B) {
+	tail := strings.Repeat("\x1b]133;C\x07", 10000)
+	for b.Loop() {
+		term := vt.NewWithScrollback(80, 24, 1000)
+		if _, err := term.Write([]byte("\x1b]133;A\x07$ \x1b]133;B\x07make test\r\n" + tail)); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 // TestCommandCaptureKeepsShortCommands holds normal shell use to what it was:
 // one B and one C per command, captured whole.
 func TestCommandCaptureKeepsShortCommands(t *testing.T) {
