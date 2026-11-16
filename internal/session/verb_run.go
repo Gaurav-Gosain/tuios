@@ -40,6 +40,16 @@ const defaultRunTimeout = defaultWaitTimeout
 // it" fail for no reason but timing.
 var runFirstPromptWait = 3 * time.Second
 
+// shellStarting reports whether a pane's shell has not drawn its first
+// prompt yet: it has sent no mark, or only marks that put it nowhere. A
+// bash whose PROMPT_COMMAND sends D before A sends that D first, and a D
+// with no command running does not put the shell at a prompt. run waits for
+// the prompt there too, and a refusal with not_at_prompt would send the
+// caller to wait for a command that is not running.
+func shellStarting(f ShellFacts) bool {
+	return !f.Seen || (!f.AtPrompt && f.Running == "" && !f.PromptOnly && f.CommandSeq == 0)
+}
+
 // resolveWindowPTY resolves a window target, the focused window when empty,
 // to the window and its PTY.
 func (d *Daemon) resolveWindowPTY(sess *Session, target string) (WindowState, *PTY, *verbError) {
@@ -292,13 +302,14 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 	// A shell that has sent nothing yet may be one still starting. Give it
 	// a moment to draw its first prompt before deciding it has no marks.
 	facts := pty.ShellFacts()
-	if !facts.Seen {
+	if shellStarting(facts) {
 		first := time.NewTimer(runFirstPromptWait)
 		defer first.Stop()
 	waitFirst:
-		for !facts.Seen {
+		for shellStarting(facts) {
 			select {
 			case <-first.C:
+				facts = pty.ShellFacts()
 				break waitFirst
 			case <-gone:
 				return nil, newVerbError(ErrVerbInternal, "the caller went away")
