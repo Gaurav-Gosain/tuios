@@ -661,16 +661,51 @@ func (d *Daemon) splitTarget(cs *connState, sess *Session, p *newWindowParams, a
 }
 
 // splitDone finishes split-window's answer. With a client attached it waits,
-// bounded, until the state holds the client's rectangles for the two panes:
-// a caller that reads the layout straight after the answer (herdr's pane
-// swap) otherwise reads the old one.
+// bounded, until the state holds the client's layout of the split (see
+// splitShown): a caller that reads the layout straight after the answer
+// (herdr's pane swap) otherwise reads the old one. A client that leaves
+// mid-wait will report nothing more, so the wait ends with it.
 func (d *Daemon) splitDone(sess *Session, out map[string]any, placed *SplitPlacement, created string, ask *splitAsk) {
 	out["type"] = "window_split"
 	out["direction"] = splitAxis(ask.side)
 	out["side"] = ask.side
 	if !placed.Place {
-		sess.WaitState(routedVerbTimeout, func(st *SessionState) bool { return splitSettled(st, placed.Target, created) })
+		sess.waitChange(routedVerbTimeout, func() bool {
+			if !d.hasTUIClient(sess) {
+				return true
+			}
+			sess.stateMu.RLock()
+			defer sess.stateMu.RUnlock()
+			return splitShown(sess.state, placed.Target, created)
+		})
 	}
+}
+
+// splitShown reports whether the state holds a client's layout of the split
+// that cut created from from. A created pane that is gone already (its
+// program exited) has no layout to wait for. On a workspace with a zoomed
+// pane the client draws that pane over the whole region, so no two panes sit
+// side by side: there the client's placement of the created pane, with the
+// zoom kept, is the layout. Elsewhere the two panes sit side by side.
+func splitShown(st *SessionState, from, created string) bool {
+	b, ok := findWindowState(st, created)
+	if !ok {
+		return true
+	}
+	if workspaceZoomed(st, b.Workspace) {
+		return !b.Unplaced && b.Width > 0 && b.Height > 0
+	}
+	return splitSettled(st, from, created)
+}
+
+// workspaceZoomed reports whether a pane of workspace ws is zoomed.
+func workspaceZoomed(st *SessionState, ws int) bool {
+	for i := range st.Windows {
+		if w := &st.Windows[i]; w.Workspace == ws && w.Zoomed {
+			return true
+		}
+	}
+	return false
 }
 
 // layoutWindow is the pane a layout verb acts on: the one named, else the

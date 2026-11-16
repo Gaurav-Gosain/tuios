@@ -298,6 +298,10 @@ func (d *Daemon) notifyClientLeft(sessionID string, leavingClientID string, inpu
 	}
 
 	d.broadcastToSession(sessionID, MsgClientLeft, payload, leavingClientID)
+	// A verb can be waiting on what this client would have reported.
+	if sess := d.manager.GetSessionByID(sessionID); sess != nil {
+		sess.wakeStateWaiters()
+	}
 
 	// Recalculate effective size and broadcast if changed
 	if clientCount > 0 {

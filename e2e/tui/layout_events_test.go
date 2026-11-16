@@ -28,6 +28,9 @@ import (
 //   - TestLayoutChangedFollowsASplit: the layoutChanges call cut from
 //     diffLifecycle. The subscription is live and never sees a
 //     layout-changed, and the wait for it times out.
+//   - TestSplitWindowFromAZoomedPaneAnswersAtOnce: main before #2180. The
+//     split from the zoomed pane, and each split whose pane exits at once,
+//     answers after the 10 s limit, and the budget checks fail.
 //   - TestAgentArrangesPanesWithNoClient: one control per layout verb, and
 //     two for the attached client. See NEGATIVE_CONTROLS.md.
 
@@ -143,6 +146,109 @@ func TestSplitWindowTakesTheNamedSide(t *testing.T) {
 	log.WriteString("$ tuios call split-window side=middle\n" + out + "\n")
 	if err == nil || !strings.Contains(out, "unknown split side") {
 		t.Errorf("side middle was not refused: %v\n%s", err, out)
+	}
+}
+
+// splitTimed runs split-window with args and returns the new pane's id and
+// how long the command took to answer.
+func splitTimed(t *testing.T, base string, log *strings.Builder, args ...string) (string, time.Duration) {
+	t.Helper()
+	start := time.Now()
+	out, err := tuiosCLI(t, base, append([]string{"split-window", "--json"}, args...)...)
+	took := time.Since(start)
+	fmt.Fprintf(log, "$ tuios split-window --json %s\n%s\n# answered in %s\n", strings.Join(args, " "), out, took.Round(time.Millisecond))
+	if err != nil {
+		t.Fatalf("split-window %v: %v\n%s", args, err, out)
+	}
+	var res struct {
+		WindowID string `json:"window_id"`
+	}
+	if err := json.Unmarshal([]byte(out), &res); err != nil || res.WindowID == "" {
+		t.Fatalf("split-window %v gave no pane id: %v\n%s", args, err, out)
+	}
+	return res.WindowID, took
+}
+
+// splitAnswerBudget is how long split-window may take to answer with a client
+// attached. The daemon gives up waiting on the client after 10 s
+// (routedVerbTimeout), and a split that rides that out is the bug.
+const splitAnswerBudget = 5 * time.Second
+
+// TestSplitWindowFromAZoomedPaneAnswersAtOnce holds #2180. With a client
+// attached, split-window waits until the client reports the new layout. A
+// zoomed pane fills the region, so the two panes never sit side by side, and
+// the wait rode out its 10 s limit. A pane whose program exits at once leaves
+// the state before it settles, and did the same.
+func TestSplitWindowFromAZoomedPaneAnswersAtOnce(t *testing.T) {
+	term, base := attachClientBase(t)
+	const sess = "e2e-ctrlp"
+	dir := artifactDir(t)
+	var log strings.Builder
+	defer func() { _ = os.WriteFile(filepath.Join(dir, "commands.txt"), []byte(log.String()), 0o644) }()
+
+	tileOn(t, base, sess)
+	var first string
+	for id := range listRects(t, base, sess) {
+		first = id
+	}
+	_, took := splitTimed(t, base, &log, "-s", sess, "-w", first, "right", "--", "sh", "-c", "exec sleep 600")
+	waitWindowCount(t, term, 2, "after the tiled split")
+	if took > splitAnswerBudget {
+		t.Errorf("ASSERTION: a split from a tiled pane answered in %s, want under %s", took, splitAnswerBudget)
+	}
+
+	// A pane whose program exits at once.
+	_, took = splitTimed(t, base, &log, "-s", sess, "-w", first, "down", "--", "sh", "-c", "exit 0")
+	if took > splitAnswerBudget {
+		t.Errorf("ASSERTION: a split whose pane exits at once answered in %s, want under %s", took, splitAnswerBudget)
+	}
+	waitWindowCount(t, term, 2, "after the split pane exited")
+
+	// layoutPanes keys by name, and these panes keep the names tuios gave.
+	byID := func() map[string]layoutPane {
+		rows := map[string]layoutPane{}
+		for _, r := range layoutPanes(t, base, sess) {
+			rows[r.ID] = r
+		}
+		return rows
+	}
+	if out, err := tuiosCLI(t, base, "zoom-window", "-s", sess, "-w", first, "--on"); err != nil {
+		t.Fatalf("zoom-window --on: %v\n%s", err, out)
+	}
+	deadline := time.Now().Add(uiTimeout)
+	for !byID()[first].Zoomed {
+		if time.Now().After(deadline) {
+			t.Fatalf("the pane never showed as zoomed")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	saveArtifact(t, term, dir, "zoomed")
+
+	// The split from the zoomed pane.
+	created, took := splitTimed(t, base, &log, "-s", sess, "-w", first, "down", "--", "sh", "-c", "echo ZOOM-SPLIT; exec sleep 600")
+	if took > splitAnswerBudget {
+		t.Errorf("ASSERTION: a split from a zoomed pane answered in %s, want under %s", took, splitAnswerBudget)
+	}
+	rows := byID()
+	log.WriteString(rectLine("after the zoomed split", listRects(t, base, sess)))
+	if _, ok := rows[created]; !ok || len(rows) != 3 {
+		t.Errorf("ASSERTION: after the zoomed split the session has %d panes, want 3 with %s: %v", len(rows), created, rows)
+	}
+	zoomed := 0
+	for _, r := range rows {
+		if r.Zoomed {
+			zoomed++
+		}
+	}
+	if zoomed != 1 {
+		t.Errorf("ASSERTION: after the zoomed split %d panes are zoomed, want the zoom kept on one: %v", zoomed, rows)
+	}
+	saveArtifact(t, term, dir, "after-zoomed-split")
+
+	// A pane that exits at once, split from the zoomed pane.
+	_, took = splitTimed(t, base, &log, "-s", sess, "-w", first, "right", "--", "sh", "-c", "exit 0")
+	if took > splitAnswerBudget {
+		t.Errorf("ASSERTION: a split from a zoomed pane whose pane exits at once answered in %s, want under %s", took, splitAnswerBudget)
 	}
 }
 

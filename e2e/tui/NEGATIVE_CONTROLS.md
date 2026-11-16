@@ -5957,6 +5957,20 @@ mirrors a session's layout uses both.
 | This branch | the change | both pass: left puts the new pane at x=0 and the old one at x=60; up puts it at y=0 over y=19; one `layout-changed` for workspace 1 | **guard** |
 | `SplitToward` maps left and up to right and down | mutant | `TestSplitWindowTakesTheNamedSide` fails: the new pane is at x=60 and at y=19 | **caught** |
 | `layoutChanges` call cut from `diffLifecycle` | mutant | `TestLayoutChangedFollowsASplit` fails: no `layout-changed` within 10s on a live subscription | **caught** |
+
+### TestSplitWindowFromAZoomedPaneAnswersAtOnce (#2180)
+
+With a client attached, `split-window` waits until the client reports the
+new layout. The test times four splits: from a tiled pane, a pane that exits
+at once, from a zoomed pane, and a pane that exits at once from a zoomed pane.
+Each must answer within 5 s. The daemon gives up after 10 s.
+
+Run on 2026-11-16 on Linux.
+
+| Control | Build | Result | Verdict |
+| --- | --- | --- | --- |
+| This branch | the change | passes: the four splits answer in 280 ms, 277 ms, 25 ms and 25 ms. The new pane is zoomed and is the only zoomed pane | **guard** |
+| Main | 3f63a347a | fails: the tiled split answers in 287 ms. The other three answer in 10.28 s, 10.03 s and 10.03 s | **caught** |
 ### BSP drop preview default
 
 Run on 2026-10-31 on Linux. The default for `appearance.drop_preview` is now `outline`.
