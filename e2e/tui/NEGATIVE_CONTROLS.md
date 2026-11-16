@@ -18069,3 +18069,10 @@ Run on 2026-11-16 on Linux (x86_64), with `nice -n 19`, `taskset -c 2,3` and GOM
 
 Without the delay, main passes 30 of 30 runs on this machine, under four busy loops on the same two cores. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=10 -run '^TestARemoteSendKeysLeavesAScrolledPaneScrolled$' -v .`.
+## The settings panel holds its place across tabs
+
+`TestSettingsPanelHoldsItsPlaceAcrossTabs` reads the rows of the section strip and the footer on Appearance, moves to Backgrounds, and reads them again. Run on Linux on 2026-11-15.
+
+| Control | Test that fails | Verdict |
+| --- | --- | --- |
+| `settingsLayout` sizes the body to the section showing (main before this change) | `TestSettingsPanelHoldsItsPlaceAcrossTabs` (the section strip and the footer move rows on a tab change) | **caught** |
