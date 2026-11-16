@@ -97,6 +97,11 @@ type Report struct {
 	// TranscriptLeaf is Pi's selected tree entry. A present empty string
 	// means the empty branch; nil means an older hook did not report it.
 	TranscriptLeaf *string `json:"transcript_leaf,omitempty"`
+	// ThreadToken is the conversation token the harness's own extension
+	// reports, if it has one. The daemon stamps it as a Thread trailer on
+	// commits a pane makes through ship-commit, whose git runs without
+	// hooks. See childproc in internal/childproc.
+	ThreadToken string `json:"thread_token,omitempty"`
 	// Cwd is the folder the harness names in the hook payload. The daemon
 	// keeps the first one of a session as the agent's start folder.
 	Cwd string `json:"agent_cwd,omitempty"`

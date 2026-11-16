@@ -134,7 +134,7 @@ func translateKimi(in Input, p fields) Decision {
 
 // piTurnStart maps the two events Pi and OMP share.
 func piTurnStart(id, event string, p fields) (Decision, bool) {
-	r := Report{SessionID: p.str("session_id")}
+	r := Report{SessionID: p.str("session_id"), ThreadToken: p.str("thread_token")}
 	switch event {
 	case "session_start":
 		r.State = "idle"

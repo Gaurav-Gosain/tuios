@@ -17,12 +17,23 @@ import (
 // the log file TUIOS_TEST_LOG names, one JSON object per line.
 const recorderScript = `#!/usr/bin/env node
 import { appendFileSync } from "node:fs";
-const argv = process.argv.slice(2).join(" ");
+const argv = process.argv.slice(2);
+// Verb calls the lineage footer makes are answered here, not logged: the
+// self-resolve names a fixed pane and list-agents reports no children, so
+// the log stays the agent-hook report sequence the assertions read.
+if (argv[0] === "call") {
+  const verb = argv[1] || "";
+  process.stdout.write(verb === "resolve-pane"
+    ? JSON.stringify({ session: "session-1", window_id: "resolved-self", by: "tty", pid: 1 })
+    : JSON.stringify({ agents: [] }));
+  process.exit(0);
+}
+const rest = argv.join(" ");
 let stdin = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", d => { stdin += d; });
 process.stdin.on("end", () => {
-  appendFileSync(process.env.TUIOS_TEST_LOG, JSON.stringify({ argv, stdin: stdin.trim() }) + "\n");
+  appendFileSync(process.env.TUIOS_TEST_LOG, JSON.stringify({ argv: rest, stdin: stdin.trim() }) + "\n");
   process.exit(0);
 });
 `

@@ -142,3 +142,22 @@ func TestClipAndRedact(t *testing.T) {
 		t.Errorf("a long message was not cut to %d runes: %q", oneline.MaxMessage, got)
 	}
 }
+
+// TestTranslateCarriesTheThreadToken checks the pi shim's thread_token reaches
+// the report, which ship-commit stamps on a pane's commits.
+func TestTranslateCarriesTheThreadToken(t *testing.T) {
+	got := Translate(Pi, Input{
+		Event:   "session_start",
+		Payload: []byte(`{"session_id":"s-1","transcript_path":"/tmp/s-1.jsonl","thread_token":"tok-1"}`),
+	})
+	if got.Report == nil || got.Report.ThreadToken != "tok-1" {
+		t.Fatalf("report = %+v, want a thread_token of tok-1", got.Report)
+	}
+	got = Translate(Pi, Input{
+		Event:   "session_start",
+		Payload: []byte(`{"session_id":"s-1"}`),
+	})
+	if got.Report == nil || got.Report.ThreadToken != "" {
+		t.Fatalf("report = %+v, want no thread_token", got.Report)
+	}
+}
