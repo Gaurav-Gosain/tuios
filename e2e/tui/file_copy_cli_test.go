@@ -632,3 +632,75 @@ func TestCopyPauseResumeAndCancel(t *testing.T) {
 	}
 	saveTransferArtifact(t, "cp-pause-resume-cancel", artifact)
 }
+
+// TestAMoveOntoItsOwnFileKeepsTheFile is issue #2136. A move copies, then
+// removes the source. When the destination names the source file through a
+// symbolic link (or another case on a case-insensitive disk), the copy finds
+// the same bytes there and writes nothing, and the move then removed the only
+// copy. The paths are compared as strings, so they looked apart.
+//
+// It runs each case on this machine and on a host over the link, where the far
+// daemon is the one that can tell the two paths are one file:
+//   - a file moved onto its own name through a linked folder;
+//   - a folder moved into a linked name of itself.
+//
+// How this could pass wrongly, written down first:
+//   - The move could fail for some other reason before the remove, such as a
+//     path that is not there. Each case reads the file's bytes back after the
+//     move, and the run must say why it refused.
+//   - The far daemon could be on this machine's disk view by accident. The far
+//     case names the paths with ~, which only the far daemon expands to its
+//     home.
+//
+// NEGATIVE CONTROL: on main the file case exits 0 with "Nothing was copied"
+// and work/file.txt is gone.
+func TestAMoveOntoItsOwnFileKeepsTheFile(t *testing.T) {
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	hubWithFileHost(t, base, remote, writeFakeSSHTo(t, base, remote))
+	const body = "IMPORTANT ORIGINAL DATA\n"
+	// setup makes work/file.txt and the link link -> work under root.
+	setup := func(root string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Join(root, "work"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "work", "file.txt"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink("work", filepath.Join(root, "link")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runs := map[string]cpRun{}
+	defer func() { saveTransferArtifact(t, "move-onto-itself", runs) }()
+	check := func(name, root string, r cpRun) {
+		t.Helper()
+		runs[name] = r
+		got, err := os.ReadFile(filepath.Join(root, "work", "file.txt"))
+		if err != nil || string(got) != body {
+			t.Fatalf("ASSERTION: %s: work/file.txt is lost (%v, %q)\nstdout: %s\nstderr: %s", name, err, got, r.Stdout, r.Stderr)
+		}
+		if r.Code == 0 {
+			t.Fatalf("ASSERTION: %s exited 0, want a refusal\nstdout: %s\nstderr: %s", name, r.Stdout, r.Stderr)
+		}
+		if out := r.Stdout + r.Stderr; !strings.Contains(out, "one file") && !strings.Contains(out, "into itself") {
+			t.Fatalf("ASSERTION: %s does not say the two paths are one file\nstdout: %s\nstderr: %s", name, r.Stdout, r.Stderr)
+		}
+		if _, err := os.Lstat(filepath.Join(root, "work", "work")); err == nil {
+			t.Fatalf("ASSERTION: %s copied the folder into itself", name)
+		}
+	}
+
+	here := filepath.Join(base, "here")
+	setup(here)
+	check("this machine, file", here, runTuios(t, base, "cp", "-m",
+		filepath.Join(here, "work", "file.txt"), filepath.Join(here, "link", "file.txt")))
+	check("this machine, folder", here, runTuios(t, base, "cp", "-m",
+		filepath.Join(here, "work"), filepath.Join(here, "link")))
+
+	far := farHome(remote)
+	setup(far)
+	check("over the link, file", far, runTuios(t, base, "cp", "-m", "build:~/work/file.txt", "build:~/link/file.txt"))
+	check("over the link, folder", far, runTuios(t, base, "cp", "-m", "build:~/work", "build:~/link"))
+}

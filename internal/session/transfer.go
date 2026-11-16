@@ -787,6 +787,19 @@ func (m *transferManager) resolveTarget(ctx context.Context, j *transferJob, dst
 		if info.isDir && pathUnder(t, s) {
 			return "", permanent(ErrVerbInvalidParams, "a folder cannot be copied into itself: "+j.dst.String())
 		}
+		// Two strings can name one file: through a link, with ~, or in
+		// another case on a disk that ignores case. The machine that holds
+		// both paths tells (#2136).
+		rel, _, err := dst.relation(ctx, j.src.Path, target)
+		if err != nil {
+			return "", err
+		}
+		switch {
+		case rel == relSame:
+			return "", permanent(ErrVerbInvalidParams, j.src.String()+" and "+Endpoint{Host: j.dst.Host, Path: target}.String()+" are one file, so the copy would land on the file it copies")
+		case rel == relInside && info.isDir:
+			return "", permanent(ErrVerbInvalidParams, "a folder cannot be copied into itself: "+j.dst.String())
+		}
 	}
 	// Another copy that writes the same place would replace this one's
 	// files, or this one its.
@@ -851,6 +864,9 @@ func (m *transferManager) attemptFile(ctx context.Context, j *transferJob, src, 
 				j.done.Store(info.size)
 				m.fileEvent(j, name, "same", sum, "", "")
 				if j.opts.Move {
+					if err := m.checkMoveApart(ctx, j, src, target, true); err != nil {
+						return err
+					}
 					if err := src.remove(ctx, j.src.Path, false); err != nil {
 						return classify(err)
 					}
@@ -902,9 +918,39 @@ func (m *transferManager) attemptFile(ctx context.Context, j *transferJob, src, 
 	j.set(func(j *transferJob) { j.final = got; j.filesDone = 1 })
 	m.fileEvent(j, name, "done", sum, "", "")
 	if j.opts.Move {
+		if err := m.checkMoveApart(ctx, j, src, got, false); err != nil {
+			return err
+		}
 		if err := src.remove(ctx, j.src.Path, false); err != nil {
 			return classify(err)
 		}
+	}
+	return nil
+}
+
+// checkMoveApart is the last check before a move removes its source: the
+// source and the copy must be two files on the disk. When they are one, the
+// remove would delete the only copy (#2136), so the move stops and the file
+// stays. resolveTarget refuses such a copy first; this holds when a link
+// appeared during the copy.
+//
+// A host too old to say whether two paths are one file is trusted for a copy
+// that wrote bytes, which two names of one file cannot need. sameBytes is a
+// copy that found the bytes there and wrote nothing, which is what a move onto
+// itself looks like, so there the source stays.
+func (m *transferManager) checkMoveApart(ctx context.Context, j *transferJob, src fileEnd, target string, sameBytes bool) error {
+	if j.src.Host != j.dst.Host {
+		return nil
+	}
+	rel, known, err := src.relation(ctx, j.src.Path, target)
+	if err != nil {
+		return classify(err)
+	}
+	switch {
+	case !known && sameBytes:
+		return permanent(ErrVerbInvalidParams, j.src.Host+" runs an older tuios that cannot tell whether "+j.src.Path+" and "+target+" are one file. The copy is there, and the original stays. Update tuios on "+j.src.Host+" to move it.")
+	case known && rel != relApart:
+		return permanent(ErrVerbInvalidParams, j.src.String()+" and "+Endpoint{Host: j.dst.Host, Path: target}.String()+" are one file. The move keeps it.")
 	}
 	return nil
 }
@@ -1163,7 +1209,11 @@ func (m *transferManager) attemptDir(ctx context.Context, j *transferJob, src, d
 				carried = append(carried, e)
 			}
 		}
+		same := j.same > 0
 		j.mu.Unlock()
+		if err := m.checkMoveApart(ctx, j, src, dstPath, same); err != nil {
+			return err
+		}
 		left, err := removeMoved(ctx, src, j.src.Path, carried)
 		if err != nil {
 			return classify(err)

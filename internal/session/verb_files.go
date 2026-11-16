@@ -302,9 +302,10 @@ func partPath(dst, id string) string {
 // verbFileStat describes one path.
 func (d *Daemon) verbFileStat(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Path   string `json:"path"`
-		Part   bool   `json:"part"`
-		PartID string `json:"part_id"`
+		Path       string `json:"path"`
+		Part       bool   `json:"part"`
+		PartID     string `json:"part_id"`
+		RelationTo string `json:"relation_to"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -321,22 +322,41 @@ func (d *Daemon) verbFileStat(cs *connState, params json.RawMessage) (any, *verb
 	if verr := d.checkLinkRead(cs, path); verr != nil {
 		return nil, verr
 	}
+	out := map[string]any{"path": path}
+	if p.RelationTo != "" {
+		// A copy between two paths of this machine asks here, where both
+		// are, whether they are one file. Only this machine can tell.
+		src, verr := expandPath(p.RelationTo)
+		if verr != nil {
+			return nil, verr
+		}
+		if verr := d.checkLinkRead(cs, src); verr != nil {
+			return nil, verr
+		}
+		rel, err := pathRelation(src, path)
+		if err != nil {
+			return nil, fileError("stat", src, err)
+		}
+		out["relation"] = rel
+	}
 	target := path
 	if p.Part {
 		target = partPath(path, p.PartID)
 	}
 	fi, err := os.Lstat(target)
 	if err != nil {
-		if p.Part && errors.Is(err, fs.ErrNotExist) {
-			return map[string]any{"path": path, "exists": false, "size": 0}, nil
-		}
 		if errors.Is(err, fs.ErrNotExist) {
-			return map[string]any{"path": path, "exists": false}, nil
+			out["exists"] = false
+			if p.Part {
+				out["size"] = 0
+			}
+			return out, nil
 		}
 		return nil, fileError("stat", path, err)
 	}
 	info := describe(target, fi)
-	return map[string]any{"path": path, "exists": true, "info": info, "size": info.Size}, nil
+	out["exists"], out["info"], out["size"] = true, info, info.Size
+	return out, nil
 }
 
 // verbFileList lists a folder a page at a time: folders first, then names in
@@ -1497,12 +1517,14 @@ func fileVerbs() map[string]verbEntry {
 				pathParam("The path."),
 				{Name: "part", Type: "bool", Description: "Describe the part file of a copy to this path instead."},
 				partIDParam,
+				{Name: "relation_to", Type: "string", Description: "Another path on this machine. The reply says how path stands to it, with links followed."},
 			},
 			returns: []verbParam{
 				{Name: "path", Type: "string", Description: "The path, made absolute."},
 				{Name: "exists", Type: "bool", Description: "False when nothing is there."},
 				{Name: "size", Type: "int", Description: "The size in bytes. 0 for a part that is not there."},
 				infoReturn,
+				{Name: "relation", Type: "string", Description: "With relation_to: same when the two paths are one file, inside when path is in the folder relation_to, apart otherwise."},
 			},
 			examples: []string{`{"id":1,"verb":"file-stat","params":{"path":"~/notes.md"}}`},
 			handler:  (*Daemon).verbFileStat,

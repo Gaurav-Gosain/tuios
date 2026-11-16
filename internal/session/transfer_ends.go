@@ -121,6 +121,75 @@ func (e fileEnd) stat(ctx context.Context, path string) (statResult, error) {
 	return statResult{exists: r.Exists, isDir: r.Info.isDirLike(), size: r.Size, perm: r.Info.Perm, mtime: r.Info.MTime}, nil
 }
 
+// How a copy's target stands to its source on one machine. See pathRelation.
+const (
+	relApart  = "apart"
+	relSame   = "same"
+	relInside = "inside"
+)
+
+// pathRelation says how target stands to src on this machine: one file with
+// it (relSame), a path inside the folder src (relInside), or neither
+// (relApart). It asks the file system with os.SameFile rather than comparing
+// the strings, so a symbolic link, a hard link, a bind mount, or a name in
+// another case on a case-insensitive disk is seen through (#2136). Both paths
+// are absolute and clean. A target that is not there yet is checked by the
+// folders above it.
+func pathRelation(src, target string) (string, error) {
+	si, err := os.Stat(src)
+	if errors.Is(err, fs.ErrNotExist) {
+		return relApart, nil
+	}
+	if err != nil {
+		return "", err
+	}
+	for p := target; ; {
+		if ti, err := os.Stat(p); err == nil && os.SameFile(si, ti) {
+			if p == target {
+				return relSame, nil
+			}
+			return relInside, nil
+		}
+		// Only a folder holds other paths.
+		parent := filepath.Dir(p)
+		if !si.IsDir() || parent == p {
+			return relApart, nil
+		}
+		p = parent
+	}
+}
+
+// relation is pathRelation, asked of the machine that holds both paths: this
+// one, or the host over the link. known is false when the host runs a tuios
+// too old to answer.
+func (e fileEnd) relation(ctx context.Context, src, target string) (rel string, known bool, err error) {
+	if e.local() {
+		s, verr := expandPath(src)
+		if verr != nil {
+			return "", false, callError(verr)
+		}
+		t, verr := expandPath(target)
+		if verr != nil {
+			return "", false, callError(verr)
+		}
+		if err := e.readable(s); err != nil {
+			return "", false, err
+		}
+		if err := e.readable(t); err != nil {
+			return "", false, err
+		}
+		rel, err := pathRelation(s, t)
+		return rel, err == nil, err
+	}
+	var r struct {
+		Relation string `json:"relation"`
+	}
+	if err := e.call(ctx, "file-stat", map[string]any{"path": target, "relation_to": src}, &r); err != nil {
+		return "", false, err
+	}
+	return r.Relation, r.Relation != "", nil
+}
+
 func (e fileEnd) partSize(ctx context.Context, path, id string) (int64, error) {
 	if e.local() {
 		fsys, err := e.writeFS(partPath(path, id))
