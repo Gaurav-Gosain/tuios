@@ -355,7 +355,7 @@ func linkForbidden(d *Daemon, cs *connState, what string, missing []string, reas
 	if p, orphan := d.pinnedWithoutTable(cs); orphan {
 		LogBasic("Link %s (peer %q, pinned) refused %s: the config has no [hosts.%s] table", cs.clientID, p, what, p)
 		return hintedVerbError(ErrVerbForbidden, what+" is refused: the ssh key of "+p+" is pinned to a name that has no [hosts."+p+"] table on "+here, &VerbHint{
-			Detail: "Nothing was done. Run 'tuios hosts remove " + p + "' on " + here + " to remove the key, or pair the device again.",
+			Detail: "Nothing was done. To allow it, add a [hosts." + p + "] table to the config on " + here + ". To remove the key, run 'tuios hosts remove " + p + "' there.",
 		})
 	}
 	if reason == "" {
