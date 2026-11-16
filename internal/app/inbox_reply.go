@@ -912,7 +912,7 @@ func (m *OS) applyInboxQueueDropped(msg InboxQueueDroppedMsg) {
 	st.forgetSent(msg.ID)
 	st.dropped = &inboxReplyDrop{session: msg.Session, window: msg.Window, who: msg.Who, reply: sent, at: time.Now()}
 	key := m.sidebarAgentKeyOr(config.ActionAgentUnread, "u")
-	m.ShowNotification("Dropped 1 queued message to "+msg.Who+". "+key+" undoes.", "info", inboxUndoNotice)
+	m.showUndoOffer("Dropped 1 queued message to " + msg.Who + ". " + key + " undoes.")
 }
 
 // sidebarAgentUndoDrop queues again the message x dropped from this row a

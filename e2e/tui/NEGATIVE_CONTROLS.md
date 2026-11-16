@@ -17960,3 +17960,22 @@ Run on Linux on 2026-11-16. The real binary, `nice -n 19`.
 | Every byte counts as use | `usedReader` as on main | `TestRelayCountsOnlyThePersonsInput`: "a client's own pushes" and "a split frame header" | **caught** |
 | Resize frames count as use | `MsgResize` counted with `MsgInput` | `TestSSHAgentHostLinkFollowsOnlyThatHostsClients` ("after C attached through the link"), 3 of 20 one at a time, 9 of 18 on two cores | **caught** |
 | The relay as it was | origin/main, three runs of `-count=6` on two cores | `TestSSHAgentHostLinkFollowsOnlyThatHostsClients` ("after C attached through the link"), 5 of 18. A trace showed A's deferred use firing 12 ms after C attached, from frames A's client sent on its own (`MsgUpdateState`) | **caught** |
+
+## The undo offer ends with the undo window
+
+`TestUndoOfferEndsWithTheUndoWindow` sets `agents.undo_window_seconds = 1` and `notifications.duration = 15`, turns the dock's agent alerts off, and waits for the dock to hold no message. In the agents view it dismisses one of two errored items and then snoozes the last one. After each, the offer ("Dismissed ", "Snoozed ") must be on the dock first and then leave it within four seconds, on a frame with no message on the dock that still lists the other item or says "1 snoozed". Last, u must show "Nothing to undo in the last 1s." with the item still snoozed.
+
+Run on 2026-11-16 on Linux (x86_64). The branch passes the test, 3 of 3 in one process.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (row D) | "inbox_undo_window_test.go:102: ASSERTION: the dismiss offer leaves the dock with the undo window", waited 4.001s with "Dismissed Terminal f18bfd0d. u undoes." still on the dock | **caught** |
+| The limit in showNotification cut (row D) | "inbox_undo_window_test.go:102: ASSERTION: the dismiss offer leaves the dock with the undo window", waited 4.001s | **caught** |
+| The dismiss offer back on `ShowNotification` with `inboxUndoNotice` (row D) | "inbox_undo_window_test.go:102: ASSERTION: the dismiss offer leaves the dock with the undo window", waited 4s | **caught** |
+| The snooze offer back on `ShowNotification` with `inboxUndoNotice` (row Z) | "inbox_undo_window_test.go:114: ASSERTION: the snooze offer leaves the dock with the undo window", waited 4s with "Snoozed Terminal b991bbf6 for an hour. u in the agents…  more" still on the dock | **caught** |
+| The old warning text put back (row W) | "inbox_undo_window_test.go:121: waiting for the warning naming the undo window, with the item still snoozed: tuitest: WaitForDesc timed out after 10.001s waiting for custom condition"; the dock drew "Nothing to undo: a dismiss, a snooze or a settle can be…  more" | **caught** |
+
+Row D is the dismiss offer's check, row Z the snooze offer's and row W the warning's; the test stops at the first row that fails, so rows Z and W run only after row D passes.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestUndoOfferEndsWithTheUndoWindow$' -v .`.

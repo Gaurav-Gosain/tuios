@@ -202,23 +202,26 @@ func notificationLifetime(notifType string, requested time.Duration, s *config.S
 //
 //go:noinline
 func (m *OS) ShowNotification(message, notifType string, duration time.Duration) {
-	m.showNotification(message, notifType, "", duration, nil)
+	m.showNotification(message, notifType, "", duration, nil, 0)
 }
 
 // ShowNotificationFrom is ShowNotification for a message that came from a pane.
 // The message becomes clickable and gains a keyboard jump; everything else about
 // it is identical.
 func (m *OS) ShowNotificationFrom(message, notifType string, duration time.Duration, target NotifTarget) {
-	m.showNotification(message, notifType, "", duration, &target)
+	m.showNotification(message, notifType, "", duration, &target, 0)
 }
 
 // showAgentNotification is ShowNotificationFrom for a message announcing an
 // agent state: the dock marks it with that state's own mark.
 func (m *OS) showAgentNotification(message, notifType, agentState string, duration time.Duration, target NotifTarget) {
-	m.showNotification(message, notifType, agentState, duration, &target)
+	m.showNotification(message, notifType, agentState, duration, &target, 0)
 }
 
-func (m *OS) showNotification(message, notifType, agentState string, duration time.Duration, target *NotifTarget) {
+// showNotification is the one way a message reaches the dock. A limit above
+// zero caps the lifetime of a message that is not sticky, below the floor
+// notificationLifetime applies.
+func (m *OS) showNotification(message, notifType, agentState string, duration time.Duration, target *NotifTarget, limit time.Duration) {
 	// A pane writes the text of its own notifications, so it is held to the
 	// size the daemon holds a pane's notification to before anything wraps,
 	// logs or keeps it.
@@ -256,6 +259,9 @@ func (m *OS) showNotification(message, notifType, agentState string, duration ti
 	}
 
 	effective, sticky := notificationLifetime(notifType, duration, &m.Settings)
+	if limit > 0 && !sticky {
+		effective = min(effective, limit)
+	}
 	shown := effective > 0 || sticky
 
 	// Calm mode keeps a message from a pane, an agent or mail off the dock

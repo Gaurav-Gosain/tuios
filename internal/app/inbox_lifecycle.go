@@ -12,6 +12,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // The Inbox's lifecycle beyond answering and dismissing: snoozing an item,
@@ -31,9 +32,15 @@ func (m *OS) inboxUndoWindow() time.Duration {
 	return time.Duration(cmp.Or(max(m.Settings.UndoWindowSeconds, 0), config.DefaultUndoWindowSeconds)) * time.Second
 }
 
-// inboxUndoNotice is how long, at least, the dock says a dismiss or a snooze
-// can be undone. The dock's own floor may keep it up longer.
+// inboxUndoNotice is how long an undo offer stays on the dock, raised to
+// notifications.duration when that is longer, and never past the undo window.
 const inboxUndoNotice = 5 * time.Second
+
+// showUndoOffer tells the person an undo is on offer. The offer leaves the dock
+// no later than the undo it offers ends.
+func (m *OS) showUndoOffer(message string) {
+	m.showNotification(message, "info", "", inboxUndoNotice, nil, m.inboxUndoWindow())
+}
 
 // inboxUndoMax bounds the closes kept for u.
 const inboxUndoMax = 16
@@ -315,7 +322,7 @@ func (m *OS) applyInboxMarked(msg InboxMarkedMsg) {
 	switch msg.Action {
 	case "snooze":
 		m.rememberInboxUndo(msg.ID, msg.Who)
-		m.ShowNotification("Snoozed "+msg.Who+" "+msg.Words+". "+m.inboxKeyOr(config.ActionInboxUndo, "u")+" in the agents view undoes.", "info", inboxUndoNotice)
+		m.showUndoOffer("Snoozed " + msg.Who + " " + msg.Words + ". " + m.inboxKeyOr(config.ActionInboxUndo, "u") + " in the agents view undoes.")
 	case "wake":
 		m.ShowNotification(capitalize(msg.Who)+" needs you again", "info", m.Settings.NotificationDuration)
 	case "restore":
@@ -383,7 +390,7 @@ func (m *OS) noteInboxDismissed(id, kind, who string) {
 		return
 	}
 	m.rememberInboxUndo(id, who)
-	m.ShowNotification("Dismissed "+who+". "+m.inboxKeyOr(config.ActionInboxUndo, "u")+" undoes.", "info", inboxUndoNotice)
+	m.showUndoOffer("Dismissed " + who + ". " + m.inboxKeyOr(config.ActionInboxUndo, "u") + " undoes.")
 }
 
 // InboxSnooze starts a snooze of the selected item: the footer offers the
@@ -477,14 +484,14 @@ func inboxSnoozeHints() []overlay.Hint {
 	return append(hints, overlay.Hint{Key: "esc", Label: "cancel"})
 }
 
-// InboxUndo reopens the item dismissed or snoozed last, within 10 seconds.
+// InboxUndo reopens the item dismissed or snoozed last, within the undo window.
 // Pressed again it reopens the one before.
 func (m *OS) InboxUndo() (tea.Cmd, bool) {
 	life := &m.Inbox.life
 	now := time.Now()
 	life.undo = slices.DeleteFunc(life.undo, func(u inboxUndoEntry) bool { return now.Sub(u.at) >= m.inboxUndoWindow() })
 	if len(life.undo) == 0 {
-		m.ShowNotification("Nothing to undo: a dismiss, a snooze or a settle can be undone for 10 seconds", "warning", m.Settings.NotificationDuration)
+		m.ShowNotification("Nothing to undo in the last "+units.Duration(m.inboxUndoWindow())+".", "warning", m.Settings.NotificationDuration)
 		return nil, true
 	}
 	if !m.inboxCanMark("Undoing") {

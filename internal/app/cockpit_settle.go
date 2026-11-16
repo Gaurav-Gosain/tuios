@@ -118,7 +118,7 @@ func (m *OS) noteSettled(msg InboxMarkedMsg) {
 		u := &m.Inbox.life.undo[n-1]
 		u.session, u.window, u.item = msg.Session, msg.Window, msg.ID
 	}
-	m.ShowNotification("Settled "+msg.Who+". "+m.inboxKeyOr(config.ActionInboxUndo, "u")+" undoes.", "info", inboxUndoNotice)
+	m.showUndoOffer("Settled " + msg.Who + ". " + m.inboxKeyOr(config.ActionInboxUndo, "u") + " undoes.")
 }
 
 // settleLabel is what D does on the row, as its hint and its button say it:
