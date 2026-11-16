@@ -16,7 +16,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
@@ -200,12 +199,39 @@ func (m *OS) ckStageShows(stage string) bool {
 	return m.UserConfig == nil || m.UserConfig.Tasks.Shows(stage)
 }
 
-// boardShortSort is the longest column sorted by insertion over whole rows.
-const boardShortSort = 24
+// boardPick is a card the board shows, with what its column sorts by: the
+// rank, the stage time, then the card's place in the cards. The place breaks
+// every tie, so the order is total and an unstable sort in place keeps it.
+type boardPick struct {
+	g, rank int
+	at      int64
+	card    int
+	agent   int
+}
+
+// ckCardKeys is each card's row key, built once per change of the cards.
+func (m *OS) ckCardKeys() []string {
+	ck := &m.Inbox.ck
+	if ck.cardKeys == nil || ck.cardKeysGen != ck.cardsGen || len(ck.cardKeys) != len(ck.cards) {
+		ck.cardKeys, ck.cardKeysGen = make([]string, len(ck.cards)), ck.cardsGen
+		for i, c := range ck.cards {
+			if c.Host != "" {
+				ck.cardKeys[i] = "t:" + c.Host + ":" + c.Session + "/" + c.ID
+			} else {
+				ck.cardKeys[i] = "t:" + c.Session + "/" + c.ID
+			}
+		}
+	}
+	return ck.cardKeys
+}
 
 // boardStageItems groups the cards by stage, each stage in its order. A card
 // shows when its holder is in list, which the selector and the search have
 // narrowed, or with no selector when the search matches its own words.
+//
+// The order is blocked first, then a holder that needs the person, then the
+// oldest. A row is large (it holds an item and a subagent by value), so the
+// sort runs on small picks, and each row is built once, in its place.
 func (m *OS) boardStageItems(list []sidebarAgentEntry) [][]ckRow {
 	ck := &m.Inbox.ck
 	st := &m.Inbox
@@ -216,7 +242,7 @@ func (m *OS) boardStageItems(list []sidebarAgentEntry) [][]ckRow {
 		}
 	}
 	searching := st.agents.query != "" || st.Select != ""
-	stages := make([][]ckRow, len(session.TaskStages))
+	picks := make([]boardPick, 0, len(ck.cards))
 	for i, c := range ck.cards {
 		g := slices.Index(session.TaskStages, c.Stage)
 		if g < 0 || !m.ckStageShows(c.Stage) {
@@ -237,55 +263,37 @@ func (m *OS) boardStageItems(list []sidebarAgentEntry) [][]ckRow {
 				continue
 			}
 		}
-		key := "t:" + c.Session + "/" + c.ID
-		if c.Host != "" {
-			key = "t:" + c.Host + ":" + c.Session + "/" + c.ID
-		}
-		stages[g] = append(stages[g], ckRow{kind: ckRowCard, group: g, card: i, agent: idx, key: key})
-	}
-	// Blocked first, then a holder that needs the person, then the oldest.
-	rank := func(r ckRow) int {
-		c := ck.cards[r.card]
 		state := ""
 		switch {
-		case r.agent >= 0:
-			state = list[r.agent].State
+		case idx >= 0:
+			state = list[idx].State
 		case c.Holder != nil:
 			state = c.Holder.State
 		}
+		rank := 2
 		switch {
 		case c.Blocked != nil:
-			return 0
+			rank = 0
 		case sidebarAttention(state):
-			return 1
+			rank = 1
 		}
-		return 2
+		picks = append(picks, boardPick{g: g, rank: rank, at: c.StageAt, card: i, agent: idx})
 	}
-	// A long column sorts small keys and moves each row once.
-	type boardKey struct {
-		rank int
-		at   int64
-		i    int
-	}
-	for g, items := range stages {
-		if len(items) <= boardShortSort {
-			sortx.ShortStableFunc(items, func(a, b ckRow) int {
-				return cmp.Or(cmp.Compare(rank(a), rank(b)), cmp.Compare(ck.cards[a.card].StageAt, ck.cards[b.card].StageAt))
-			})
-			continue
+	slices.SortFunc(picks, func(a, b boardPick) int {
+		return cmp.Or(cmp.Compare(a.g, b.g), cmp.Compare(a.rank, b.rank), cmp.Compare(a.at, b.at), cmp.Compare(a.card, b.card))
+	})
+	keys := m.ckCardKeys()
+	stages := make([][]ckRow, len(session.TaskStages))
+	for lo := 0; lo < len(picks); {
+		g, hi := picks[lo].g, lo+1
+		for hi < len(picks) && picks[hi].g == g {
+			hi++
 		}
-		keys := make([]boardKey, len(items))
-		for i, r := range items {
-			keys[i] = boardKey{rank(r), ck.cards[r.card].StageAt, i}
+		rows := make([]ckRow, hi-lo)
+		for k, p := range picks[lo:hi] {
+			rows[k] = ckRow{kind: ckRowCard, group: g, card: p.card, agent: p.agent, key: keys[p.card]}
 		}
-		slices.SortStableFunc(keys, func(a, b boardKey) int {
-			return cmp.Or(cmp.Compare(a.rank, b.rank), cmp.Compare(a.at, b.at))
-		})
-		sorted := make([]ckRow, len(items))
-		for k, key := range keys {
-			sorted[k] = items[key.i]
-		}
-		stages[g] = sorted
+		stages[g], lo = rows, hi
 	}
 	return stages
 }

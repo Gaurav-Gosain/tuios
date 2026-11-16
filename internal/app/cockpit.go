@@ -359,10 +359,14 @@ type cockpitState struct {
 	// held indexes the cards by their holder, session and window, built
 	// once per cardsGen (heldGen). stages is [tasks] stages joined, once
 	// per config (stagesCfg).
-	held      map[string][]session.TaskRow
-	heldGen   uint64
-	stages    string
-	stagesCfg *config.UserConfig
+	held    map[string][]session.TaskRow
+	heldGen uint64
+	// cardKeys is each card's row key, built once per cardsGen
+	// (cardKeysGen).
+	cardKeys    []string
+	cardKeysGen uint64
+	stages      string
+	stagesCfg   *config.UserConfig
 	// boardList says the person chose the board's list over its columns.
 	// kb is the columns' own state. See cockpit_kanban.go.
 	boardList bool

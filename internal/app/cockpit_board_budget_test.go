@@ -23,18 +23,19 @@ import (
 // go1.27.4 on a Ryzen 5 5600, sorting the rows in place by insertion took
 // 22 to 25 ms at 1000 rows and 91 to 93 ms at 2000; sorting small keys and
 // placing each row once took 0.4 to 0.6 ms at 1000 rows and 1.3 to 2.4 ms at
-// 2000.
+// 2000, and on CI up to 10.04 ms, most of it copying the large rows as the
+// columns grew and once more into their order. Sorting small picks and
+// building each row once, in its place, took 1.0 to 1.5 ms at 2000 rows on
+// an i7-10700 under load, and does not allocate per row.
 // The ceiling of 10 ms is about 4x above the second and 9x under the first.
 //
 // The order is worked out here by its own rule: a blocked card first, then a
 // card whose holder needs the person, then the rest; within each, the oldest
 // stage time first; on equal stage times, the order the cards were given.
-// Size 24 takes the short path, 25 and 1000 the long one.
 //
-// A column of 24 rows or fewer keeps the sort it had, with no added
-// allocation, so the long path must start at 25: one more row there costs at
-// least two more allocations (its keys and the sorted rows) than the row
-// itself costs, which is one.
+// The allocations do not grow with the rows: a row is built once, in its
+// place, and its key once per change of the cards, so a column of 1000 rows
+// allocates as often as one of 25.
 //
 // How this test could pass wrongly, and what stops it:
 //   - A fixture already in order: the cards are given out of id order, their
@@ -94,9 +95,8 @@ func TestBoardSortsALongColumnByItsKeys(t *testing.T) {
 		}
 	})
 
-	t.Run("long path from 25 rows", func(t *testing.T) {
+	t.Run("allocations do not grow with the rows", func(t *testing.T) {
 		skipAllocCountsUnderRace(t)
-		cards := boardSortCards("s", 25, 7)
 		allocs := func(cards []session.TaskRow) float64 {
 			m, done := boardSortOS(t, cards)
 			list := m.cockpitList()
@@ -105,11 +105,10 @@ func TestBoardSortsALongColumnByItsKeys(t *testing.T) {
 			}
 			return testing.AllocsPerRun(20, func() { _ = m.boardStageItems(list) })
 		}
-		at24, at25 := allocs(cards[:24]), allocs(cards)
-		t.Logf("boardStageItems allocates %v times at 24 rows and %v at 25", at24, at25)
-		if at25-at24 < 2 {
-			t.Errorf("a Done column of 25 rows allocates %v times and one of 24 rows %v: want at least 2 more at 25, "+
-				"where the sort by keys starts", at25, at24)
+		at25, at1000 := allocs(boardSortCards("s", 25, 7)), allocs(boardSortCards("s", 1000, 7))
+		t.Logf("boardStageItems allocates %v times at 25 rows and %v at 1000", at25, at1000)
+		if at1000 > at25 {
+			t.Errorf("a Done column of 1000 rows allocates %v times and one of 25 rows %v: want no more at 1000", at1000, at25)
 		}
 	})
 }
