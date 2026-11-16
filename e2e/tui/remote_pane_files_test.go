@@ -153,7 +153,7 @@ func TestFilesFollowAWindowOnAHost(t *testing.T) {
 	remote := remoteMachine(t)
 	ssh := writeFakeSSHTo(t, base, remote)
 	writeOneHostConfig(t, base, tuiosBin)
-	env := []string{"TUIOS_SSH=" + ssh, "TUIOS_E2E=1", "TUIOS_E2E_WATCH_START_DELAY_MS=1500"}
+	env := []string{"TUIOS_SSH=" + ssh, "TUIOS_E2E=1", knob("watch_start_delay_ms=1500")}
 	_, inner := farFolders(t, remote)
 
 	if out, err := tuiosCLI(t, remote, "new", "far-shell", "--detach"); err != nil {

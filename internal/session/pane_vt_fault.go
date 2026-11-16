@@ -3,11 +3,11 @@ package session
 import (
 	"bytes"
 	"log"
-	"os"
 	"runtime/debug"
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 	"tuios.dev/vt"
 )
 
@@ -29,10 +29,10 @@ const (
 	vtFaultWindow = time.Minute
 )
 
-// vtTestPanic, read once from TUIOS_TEST_VT_PANIC, makes feedVT panic on a
+// vtTestPanic, read once from the vt_panic knob, makes feedVT panic on a
 // chunk that holds it, so the end-to-end tests can drive a fault. Empty in
 // every daemon not started for such a test, and then nothing is checked.
-var vtTestPanic = []byte(os.Getenv("TUIOS_TEST_VT_PANIC"))
+var vtTestPanic = []byte(testknob.String("vt_panic"))
 
 // vtFaultNotice and vtFrozenNotice are the line a pane shows after a fault.
 const (
@@ -70,7 +70,7 @@ func (p *PTY) feedVT(chunk vtChunk, frozen bool) (focusOn bool, fault any, stack
 	defer p.chunkGroup.Store(0)
 	if p.terminal != nil && (!frozen || chunk.notice) {
 		if len(vtTestPanic) > 0 && bytes.Contains(chunk.data, vtTestPanic) {
-			panic("TUIOS_TEST_VT_PANIC: a chunk held the marker")
+			panic("vt_panic: a chunk held the marker")
 		}
 		_, _ = p.terminal.Write(chunk.data)
 	}

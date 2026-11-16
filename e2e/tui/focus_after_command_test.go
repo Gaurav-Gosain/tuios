@@ -28,15 +28,15 @@ import (
 //     because each comes through a listener of its own;
 //   - a command that waits for its state never runs.
 //
-// TUIOS_TEST_STATE_PUSH_HOLD_MS holds each state push in the daemon, and
-// TUIOS_TEST_STATE_SYNC_HOLD_MS holds each state in the client before Update
+// knob state_push_hold_ms holds each state push in the daemon, and
+// knob state_sync_hold_ms holds each state in the client before Update
 // takes it, so each of the first two goes wrong on every round, not only on a
 // loaded machine. The rounds go under artifactDir as rounds.txt.
 func TestFocusKeyRightAfterACommandFocus(t *testing.T) {
 	const session = "cmdfocus"
 	base := t.TempDir()
 	term := startIn(t, base, startOpts{cols: 160, rows: 48, args: []string{"new", session},
-		env: []string{"TUIOS_TEST_STATE_PUSH_HOLD_MS=300", "TUIOS_TEST_STATE_SYNC_HOLD_MS=700"}})
+		env: []string{knob("state_push_hold_ms=300", "state_sync_hold_ms=700")}})
 	killDaemon(t, base)
 	waitBoot(t, term)
 	for range 4 {

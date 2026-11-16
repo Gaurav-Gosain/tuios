@@ -983,14 +983,14 @@ func TestImageSymbolsAutoPicksByTerminal(t *testing.T) {
 //     sent nothing for a second. And a draw on this machine costs a few
 //     milliseconds, which the budget pays back before the shell's last
 //     frames anyway, so each draw is made to cost 300 ms
-//     (TUIOS_E2E_SYMBOL_DRAW_COST). The debt at the end of the flood then
+//     (knob symbol_draw_cost_ms). The debt at the end of the flood then
 //     takes over a second to pay back, and only the wake asks for the frame
 //     that draws the last picture.
 //   - The last picture could be read before the flood ends: the read waits
 //     for the line printed after it.
 func TestImageSymbolsFlood(t *testing.T) {
 	host := newSixelHost(false, false)
-	term, _ := startSymbolPane(t, host, "octant", "truecolor", false, "TUIOS_DEBUG_INTERNAL=1", "TUIOS_E2E_SYMBOL_DRAW_COST=300ms")
+	term, _ := startSymbolPane(t, host, "octant", "truecolor", false, "TUIOS_DEBUG_INTERNAL=1", knob("symbol_draw_cost_ms=300"))
 	waitHostQuiet(t, host, time.Second, 20*time.Second)
 	logFrom := debugLogSize()
 	const cols, rows = 100, 30

@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 	"tuios.dev/vt"
 )
 
@@ -245,7 +245,7 @@ func (d *Daemon) verbListBuffers(cs *connState, params json.RawMessage) (any, *v
 // had none, the way a daemon from before them does. Only the e2e suite asks
 // for it, to drive a client's fallback to its own store.
 func buffersOff() *verbError {
-	if os.Getenv("TUIOS_E2E") == "1" && os.Getenv("TUIOS_E2E_NO_BUFFER_VERBS") == "1" {
+	if testknob.String("no_buffer_verbs") == "1" {
 		return newVerbError(ErrVerbUnknownVerb, "unknown verb (the e2e suite turned the paste buffer verbs off)")
 	}
 	return nil

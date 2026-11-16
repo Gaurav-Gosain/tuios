@@ -96,7 +96,7 @@ func TestTmuxPresetDrivesWorkspaces(t *testing.T) {
 // on workspace 2.
 func TestScreenPresetLeaderTwiceAndSend(t *testing.T) {
 	hold := filepath.Join(t.TempDir(), "hold-new-window")
-	t.Setenv("TUIOS_E2E_HOLD_NEW_WINDOW", hold)
+	setKnobs(t, "hold_new_window="+hold)
 	term, base := panesSession(t, "screenkeys", "\n[keybindings]\npreset = \"screen\"\n")
 	waitForSettledGeometryIn(t, base, "screenkeys", 1)
 	setHold(t, hold, "1000")

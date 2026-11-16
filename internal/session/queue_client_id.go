@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
 // queueClientIDMax bounds a queue-prompt client_id, in bytes.
@@ -83,16 +85,14 @@ func (q *queueDedup) once(key queueDedupKey, now time.Time, queue func() (queued
 }
 
 // queueDedupNow is the time the dedupe reads, moved by the hours in the file
-// TUIOS_E2E_QUEUE_DEDUP_SKEW names, so an E2E test can pass the age without
+// the queue_dedup_skew knob names, so an E2E test can pass the age without
 // waiting for it.
 func queueDedupNow() time.Time {
 	now := time.Now()
-	if os.Getenv("TUIOS_E2E") == "1" {
-		if path := os.Getenv("TUIOS_E2E_QUEUE_DEDUP_SKEW"); path != "" {
-			if b, err := os.ReadFile(path); err == nil {
-				if h, err := strconv.Atoi(string(b)); err == nil {
-					return now.Add(time.Duration(h) * time.Hour)
-				}
+	if path := testknob.String("queue_dedup_skew"); path != "" {
+		if b, err := os.ReadFile(path); err == nil {
+			if h, err := strconv.Atoi(string(b)); err == nil {
+				return now.Add(time.Duration(h) * time.Hour)
 			}
 		}
 	}

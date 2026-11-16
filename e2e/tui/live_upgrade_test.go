@@ -412,8 +412,8 @@ func TestDaemonUpgradeFallsBackToPreviousBinary(t *testing.T) {
 		name string
 		env  []string
 	}{
-		{"error", []string{"TUIOS_TEST_HANDOFF_FAIL=error"}},
-		{"hang", []string{"TUIOS_TEST_HANDOFF_FAIL=hang", "TUIOS_TEST_HANDOFF_WATCHDOG_MS=1500"}},
+		{"error", []string{knob("handoff_fail=error")}},
+		{"hang", []string{knob("handoff_fail=hang", "handoff_watchdog_ms=1500")}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			base := t.TempDir()
@@ -555,7 +555,7 @@ func TestDaemonUpgradeQueuesCLICallsDuringSwap(t *testing.T) {
 // its status. The upgrade must be refused, and the check's result must still
 // arrive.
 func TestDaemonUpgradeRefusesWhileVerifyFanRuns(t *testing.T) {
-	t.Setenv("TUIOS_TEST_HANDOFF", "1")
+	setKnobs(t, "handoff=1")
 	base, repo := fanFixture(t)
 	if out, err := tuiosCLI(t, base, "new", "plain", "--detach"); err != nil {
 		t.Fatalf("start the daemon: %v: %s", err, out)
@@ -792,7 +792,7 @@ func TestDaemonUpgradeEndsWhenFallbackExecFails(t *testing.T) {
 		t.Skip("on Linux the fallback is a descriptor the daemon holds, not a file a test can remove, so its exec cannot be made to fail from outside; the exit after a failed fallback is the same code on every system")
 	}
 	base := t.TempDir()
-	startHandoffDaemon(t, base, "TUIOS_TEST_HANDOFF_FAIL=hang", "TUIOS_TEST_HANDOFF_WATCHDOG_MS=1500")
+	startHandoffDaemon(t, base, knob("handoff_fail=hang", "handoff_watchdog_ms=1500"))
 	second := copyTuios(t)
 	win := newCommandWindow(t, base, "e2e-fallback-fails", "counter", false, "sh", "-c",
 		`echo pid-$$; while :; do echo x; sleep 0.05; done`)
@@ -1407,11 +1407,11 @@ func TestDaemonUpgradeFallsBackAfterInstallerReplacesBinary(t *testing.T) {
 	installed := copyTuios(t)
 	killDaemon(t, base)
 	cmd := exec.Command(installed, "start-server")
-	cmd.Env = append(os.Environ(), "SHELL=/bin/sh", "TUIOS_TEST_HANDOFF_FAIL=error")
+	cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
 	for _, key := range xdgKeys {
 		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
 	}
-	cmd.Env = append(cmd.Env, handoffTestEnv...)
+	cmd.Env = append(cmd.Env, knob("handoff=1", "handoff_fail=error"))
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("start-server from %s: %v\n%s", installed, err, out)
 	}

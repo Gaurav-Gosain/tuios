@@ -669,7 +669,7 @@ func TestADarwinLinkCannotReadThroughTheDataVolume(t *testing.T) {
 //
 // Negative controls (NEGATIVE_CONTROLS.md, TestALinkCopyRevokedBeforeItsVerifyStaysFailed).
 func TestALinkCopyRevokedBeforeItsVerifyStaysFailed(t *testing.T) {
-	t.Setenv("TUIOS_TEST_TRANSFER_HOLD_MS", "3000")
+	setKnobs(t, "transfer_hold_ms=3000")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	farHome := xdgDir(remote, "HOME")

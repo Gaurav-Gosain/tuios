@@ -12,13 +12,13 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"sync"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/dirwatch"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
 // Watching a listed folder for a client that cannot watch it itself.
@@ -135,15 +135,11 @@ func (d *Daemon) handleWatchDir(cs *connState, msg *Message) error {
 }
 
 // watchStartDelayForTest holds back the start of a far watch, so the end-to-end
-// test can make a change land before it with no race. It holds only with
-// TUIOS_E2E=1, and ordinary runs never set it.
-var watchStartDelayForTest = sync.OnceValue(func() time.Duration {
-	if os.Getenv("TUIOS_E2E") != "1" {
-		return 0
-	}
-	ms, _ := strconv.Atoi(os.Getenv("TUIOS_E2E_WATCH_START_DELAY_MS"))
-	return time.Duration(ms) * time.Millisecond
-})
+// test can make a change land before it with no race: the
+// watch_start_delay_ms knob, which ordinary runs never set.
+func watchStartDelayForTest() time.Duration {
+	return testknob.Millis("watch_start_delay_ms")
+}
 
 // runLocalDirWatch reports each settled change to dir's names until done.
 func (d *Daemon) runLocalDirWatch(dir string, done <-chan struct{}, notify func()) {

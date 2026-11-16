@@ -34,7 +34,7 @@ import (
 // message is typed into the draft and the test fails on that.
 func TestQueuedMessageIsTypedWhenTheAgentRests(t *testing.T) {
 	// The draft's move to Needs you takes ten minutes in use.
-	t.Setenv("TUIOS_E2E_DRAFT_SURFACE_MS", "9000")
+	setKnobs(t, "draft_surface_ms=9000")
 	term, base := attachClientBase(t)
 	const marker = "queued-reply-7f3a"
 
@@ -293,7 +293,7 @@ func TestQueuedMessageWithAClientIDIsQueuedOnce(t *testing.T) {
 	if err := os.WriteFile(skew, []byte("0"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("TUIOS_E2E_QUEUE_DEDUP_SKEW", skew)
+	setKnobs(t, "queue_dedup_skew="+skew)
 	moveClock := func(hours int) {
 		t.Helper()
 		if err := os.WriteFile(skew, []byte(strconv.Itoa(hours)), 0o600); err != nil {

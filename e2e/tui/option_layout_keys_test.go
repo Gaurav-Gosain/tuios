@@ -14,7 +14,7 @@ import (
 //
 // Each sequence below is byte for byte what a terminal writes for the key, so
 // the tests run the same decoder and the same key path as the reports.
-// TUIOS_E2E_PLATFORM=darwin puts tuios on its macOS defaults (opt+N switches workspace N,
+// knob platform=darwin puts tuios on its macOS defaults (opt+N switches workspace N,
 // opt+shift+N moves the pane there) and turns on its macOS key paths on the
 // Linux machine that runs the suite.
 //
@@ -96,10 +96,11 @@ func macSessionOn(t *testing.T, base, session, config, source string) *tuitest.T
 	if config != "" {
 		writeConfig(t, base, config)
 	}
-	env := []string{"TUIOS_E2E_PLATFORM=darwin"}
+	knobs := []string{"platform=darwin"}
 	if source != "" {
-		env = append(env, "TUIOS_E2E_MAC_INPUT_SOURCE="+source)
+		knobs = append(knobs, "mac_input_source="+source)
 	}
+	env := []string{knob(knobs...)}
 	term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"new", session}, env: env})
 	waitBoot(t, term)
 	newWindow(t, term)

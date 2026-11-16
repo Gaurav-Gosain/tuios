@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -26,7 +25,7 @@ import (
 // wait-for for its exit status. Each test writes what it measured to a JSON
 // file under artifactDir.
 //
-// The daemon runs with TUIOS_TEST_HANDOFF=1, which registers two test-only
+// The daemon runs with knob handoff=1, which registers two test-only
 // verbs: test-quiesce stops and restarts one pane's reader, and test-handoff
 // hands every pane to a new image of the same binary. Neither exists in a
 // daemon started without the variable.
@@ -34,14 +33,14 @@ import (
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Live handoff").
 
 // handoffTestEnv makes the daemon register the test-only handoff verbs.
-var handoffTestEnv = []string{"TUIOS_TEST_HANDOFF=1"}
+func handoffTestEnv() []string { return []string{knob("handoff=1")} }
 
 // startHandoffDaemon starts a scratch daemon under base with the test verbs,
 // and env, which the daemon and so every image it execs inherits.
 func startHandoffDaemon(t *testing.T, base string, env ...string) {
 	t.Helper()
 	killDaemon(t, base)
-	if out, err := tuiosCLIEnv(t, base, append(slices.Clone(handoffTestEnv), env...), "start-server"); err != nil {
+	if out, err := tuiosCLIEnv(t, base, withKnobs(append(handoffTestEnv(), env...)), "start-server"); err != nil {
 		t.Fatalf("start-server: %v\n%s", err, out)
 	}
 }
@@ -58,7 +57,7 @@ func handoffCLI(t *testing.T, base string, timeout time.Duration, args ...string
 	for _, key := range xdgKeys {
 		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
 	}
-	cmd.Env = append(cmd.Env, handoffTestEnv...)
+	cmd.Env = append(cmd.Env, handoffTestEnv()...)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
@@ -451,7 +450,7 @@ func TestSelfExecAdoptsPanes(t *testing.T) {
 		if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
 			t.Fatalf("kill-server: %v\n%s", err, out)
 		}
-		if out, err := tuiosCLIEnv(t, base, handoffTestEnv, "start-server"); err != nil {
+		if out, err := tuiosCLIEnv(t, base, handoffTestEnv(), "start-server"); err != nil {
 			t.Fatalf("ASSERTION: start-server after kill-server failed, so something kept the start lock: %v\n%s", err, out)
 		}
 	})
@@ -474,7 +473,7 @@ func callVerbWithin(t *testing.T, base string, within time.Duration, verb string
 	for _, key := range xdgKeys {
 		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
 	}
-	cmd.Env = append(cmd.Env, handoffTestEnv...)
+	cmd.Env = append(cmd.Env, handoffTestEnv()...)
 	cmd.WaitDelay = time.Second
 	out, err := cmd.CombinedOutput()
 	if ctx.Err() != nil {

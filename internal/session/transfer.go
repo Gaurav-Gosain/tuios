@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -24,6 +23,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
 // Transfers: copies between machines that the daemon runs.
@@ -456,12 +456,12 @@ func (j *transferJob) reopen() {
 }
 
 // transferTestHold holds an attempt between its last byte and its verify
-// for TUIOS_TEST_TRANSFER_HOLD_MS, without looking at its context, so an e2e
+// for the transfer_hold_ms knob, without looking at its context, so an e2e
 // test can land a stop where the attempt has not yet seen it.
 func transferTestHold(id string) {
-	if ms, _ := strconv.Atoi(os.Getenv("TUIOS_TEST_TRANSFER_HOLD_MS")); ms > 0 {
+	if d := testknob.Millis("transfer_hold_ms"); d > 0 {
 		LogBasic("Transfer %s holds before its verify", id)
-		time.Sleep(time.Duration(min(ms, 60000)) * time.Millisecond)
+		time.Sleep(min(d, time.Minute))
 	}
 }
 

@@ -3,13 +3,13 @@ package app
 import (
 	"image"
 	"image/color"
-	"os"
 	"strings"
 	"sync"
 	"time"
 	"unsafe"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/charmbracelet/colorprofile"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -154,13 +154,12 @@ func fidelityRegion(rows, cols int) image.Rectangle {
 const fidelityCells = 5000
 
 // symbolDrawCost is time added to every glyph draw, read once from
-// TUIOS_E2E_SYMBOL_DRAW_COST (a Go duration). It exists for the end-to-end
+// the symbol_draw_cost_ms knob, in milliseconds. It exists for the end-to-end
 // tests alone: a draw on a fast machine costs too little to spend the drawing
 // budget the way a slow one does, and the test of the budget needs it spent.
 // Ordinary runs never set it.
 var symbolDrawCost = sync.OnceValue(func() time.Duration {
-	d, _ := time.ParseDuration(os.Getenv("TUIOS_E2E_SYMBOL_DRAW_COST"))
-	return max(d, 0)
+	return testknob.Millis("symbol_draw_cost_ms")
 })
 
 // symbolView is the part of an image a pane shows when the image arrives: the

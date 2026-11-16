@@ -270,10 +270,10 @@ func TestPaneUpgradeRefusesAFileChangedAfterTheDialog(t *testing.T) {
 }
 
 // TestPaneUpgradeTimesOut: nobody answers, and once the wait (3 s here, under
-// TUIOS_TEST_UPGRADE_CONFIRM_MS) runs out the upgrade is refused and the
+// knob upgrade_confirm_ms) runs out the upgrade is refused and the
 // dialog closes on the client.
 func TestPaneUpgradeTimesOut(t *testing.T) {
-	r := newConfirmRig(t, "e2e-confirm-wait", "TUIOS_TEST_UPGRADE_CONFIRM_MS=3000")
+	r := newConfirmRig(t, "e2e-confirm-wait", knob("upgrade_confirm_ms=3000"))
 	term := r.attach(t)
 	done := r.paneUpgrade(t)
 	r.waitDialog(t, term, "waiting")

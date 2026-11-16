@@ -29,7 +29,7 @@ func runtimeIsDarwin() bool {
 // the macOS-only paths under test on the machine that runs CI.
 // It is runtime.GOOS and nothing else from the environment, so a GOOS or
 // OSTYPE exported for some other reason cannot turn on the macOS key handling.
-// The end-to-end suite alone asks for it with TUIOS_E2E_PLATFORM=darwin.
+// The end-to-end suite alone asks for it with the knob platform=darwin.
 var darwinHost = runtime.GOOS == "darwin" || config.E2EPlatformDarwin()
 
 // Ctrl key combinations mapping

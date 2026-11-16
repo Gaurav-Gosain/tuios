@@ -1,13 +1,13 @@
 package app
 
 import (
-	"os"
 	"slices"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 	"github.com/Gaurav-Gosain/tuios/pkg/applist"
 )
 
@@ -51,22 +51,18 @@ func (m *OS) ScanPathApps() tea.Cmd {
 // behaviour, but a test driving a separate tuios process cannot reach the scan
 // with a Go-level fake, and racing it with keystrokes loses on machines whose
 // scan is faster than their PTY: CI proved that both ways. So the seam is a
-// file. TUIOS_E2E_HOLD_SCAN names a path, and while that file exists a scan
+// file. The hold_scan knob names a path, and while that file exists a scan
 // waits here before reading anything; the test removes the file when it wants
-// the scan to land. Ordinary runs never set the variable, pay one Getenv per
+// the scan to land. Ordinary runs never set the knob, pay one map read per
 // scan, and the wait sits in the scan's own goroutine, so the input loop and
 // the idle path cost nothing.
 func holdScanForTest() {
-	hold := os.Getenv("TUIOS_E2E_HOLD_SCAN")
+	hold := testknob.String("hold_scan")
 	if hold == "" {
 		return
 	}
-	for {
-		if _, err := os.Stat(hold); err != nil {
-			return
-		}
-		time.Sleep(2 * time.Millisecond)
-	}
+	// An hour stands for "until the test lifts it".
+	testknob.WaitWhile(hold, 2*time.Millisecond, time.Hour)
 }
 
 // knownPathApps is the last merged scan.

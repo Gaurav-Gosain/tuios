@@ -12,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
 // daemonOwnedCommands are the commands the daemon executes itself whether or not
@@ -483,27 +484,23 @@ func (d *Daemon) handleGetLogs(cs *connState, msg *Message) error {
 // request waits, as a slow daemon would, or refuse it, as a failed request
 // would be.
 //
-// It does anything only with TUIOS_E2E=1 and TUIOS_E2E_HOLD_PANE naming a
-// file, which ordinary runs never set. A file that holds a number of
+// It does anything only with the hold_pane knob naming a file, which ordinary runs never set. A file that holds a number of
 // milliseconds makes each request wait that long, ten seconds at most. A file
 // that holds "refuse" makes each request fail. Messages are read one at a time
 // per connection, so the client's later messages wait behind a held request.
 func paneHoldForTest() error {
-	return holdForTest("TUIOS_E2E_HOLD_PANE")
+	return holdForTest("hold_pane")
 }
 
 // newWindowHoldForTest is paneHoldForTest for the window a client's
-// new-window key asks for, read from TUIOS_E2E_HOLD_NEW_WINDOW.
+// new-window key asks for, read from the hold_new_window knob.
 func newWindowHoldForTest() error {
-	return holdForTest("TUIOS_E2E_HOLD_NEW_WINDOW")
+	return holdForTest("hold_new_window")
 }
 
-// holdForTest is paneHoldForTest with the variable that names the hold file.
-func holdForTest(variable string) error {
-	if os.Getenv("TUIOS_E2E") != "1" {
-		return nil
-	}
-	path := os.Getenv(variable)
+// holdForTest is paneHoldForTest with the knob that names the hold file.
+func holdForTest(knob string) error {
+	path := testknob.String(knob)
 	if path == "" {
 		return nil
 	}

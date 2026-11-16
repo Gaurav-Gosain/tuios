@@ -1,11 +1,10 @@
 package session
 
 import (
-	"os"
-	"strconv"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
 // Child agents in the Inbox.
@@ -45,13 +44,11 @@ import (
 // parent agent before the person is asked.
 const childQuestionHold = 10 * time.Minute
 
-// childQuestionHoldFor is childQuestionHold, or the TUIOS_E2E_CHILD_HOLD_MS an
+// childQuestionHoldFor is childQuestionHold, or the child_hold_ms knob an
 // E2E test sets, so the release can be shown without ten minutes.
 func childQuestionHoldFor() time.Duration {
-	if os.Getenv("TUIOS_E2E") == "1" {
-		if ms, err := strconv.Atoi(os.Getenv("TUIOS_E2E_CHILD_HOLD_MS")); err == nil && ms > 0 {
-			return time.Duration(ms) * time.Millisecond
-		}
+	if d := testknob.Millis("child_hold_ms"); d > 0 {
+		return d
 	}
 	return childQuestionHold
 }

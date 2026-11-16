@@ -3,9 +3,10 @@ package session
 import (
 	"errors"
 	"os"
-	"strconv"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
 // The fallback of a live handoff.
@@ -150,28 +151,28 @@ func withoutEnv(env []string, key string) []string {
 
 // adoptWatchdogTimeout is adoptWatchdogDefault, or the test's override.
 func adoptWatchdogTimeout() time.Duration {
-	if os.Getenv(handoffTestEnv) == "1" {
-		if ms, err := strconv.Atoi(os.Getenv("TUIOS_TEST_HANDOFF_WATCHDOG_MS")); err == nil && ms > 0 {
-			return time.Duration(ms) * time.Millisecond
+	if handoffTestOn() {
+		if d := testknob.Millis("handoff_watchdog_ms"); d > 0 {
+			return d
 		}
 	}
 	return adoptWatchdogDefault
 }
 
 // handoffTestFailure fails an adoption on purpose when a test asks, in the
-// image a handoff execs but never in its fallback: TUIOS_TEST_HANDOFF_FAIL is
+// image a handoff execs but never in its fallback: the handoff_fail knob is
 // error, hang or panic.
 func handoffTestFailure() error {
-	if os.Getenv(handoffTestEnv) != "1" || os.Getenv(handoffFallbackEnv) != "" {
+	if !handoffTestOn() || os.Getenv(handoffFallbackEnv) != "" {
 		return nil
 	}
-	switch os.Getenv("TUIOS_TEST_HANDOFF_FAIL") {
+	switch testknob.String("handoff_fail") {
 	case "error":
-		return errors.New("adoption failed on purpose (TUIOS_TEST_HANDOFF_FAIL=error)")
+		return errors.New("adoption failed on purpose (handoff_fail=error)")
 	case "hang":
 		select {}
 	case "panic":
-		panic("adoption panicked on purpose (TUIOS_TEST_HANDOFF_FAIL=panic)")
+		panic("adoption panicked on purpose (handoff_fail=panic)")
 	}
 	return nil
 }
@@ -192,24 +193,24 @@ const (
 
 // handoffTestCrash ends this image hard when a test asks, as a fatal runtime
 // error or the out-of-memory killer would, with no recover and no fallback
-// able to run: TUIOS_TEST_HANDOFF_CRASH names the point, start, adopt or
-// serve, and TUIOS_TEST_HANDOFF_CRASH_MODE is kill (SIGKILL, the default) or
+// able to run: the handoff_crash knob names the point, start, adopt or
+// serve, and handoff_crash_mode is kill (SIGKILL, the default) or
 // panic (in a goroutine of its own). It fires in the image a handoff execs;
 // fallback fires at the adopt point of the fallback image instead. It never
 // fires in an image a keeper started.
 func handoffTestCrash(point string) {
-	if os.Getenv(handoffTestEnv) != "1" || startedByKeeper {
+	if !handoffTestOn() || startedByKeeper {
 		return
 	}
-	want := os.Getenv("TUIOS_TEST_HANDOFF_CRASH")
+	want := testknob.String("handoff_crash")
 	here := want == point && !startedAsFallback
 	inTheFallback := want == "fallback" && point == crashWhileAdopting && startedAsFallback
 	if !here && !inTheFallback {
 		return
 	}
-	LogError("Live upgrade: crashing on purpose at %s (TUIOS_TEST_HANDOFF_CRASH=%s)", point, want)
-	if os.Getenv("TUIOS_TEST_HANDOFF_CRASH_MODE") == "panic" {
-		go func() { panic("the new image crashed on purpose (TUIOS_TEST_HANDOFF_CRASH)") }()
+	LogError("Live upgrade: crashing on purpose at %s (handoff_crash=%s)", point, want)
+	if testknob.String("handoff_crash_mode") == "panic" {
+		go func() { panic("the new image crashed on purpose (handoff_crash)") }()
 		select {}
 	}
 	if self, err := os.FindProcess(os.Getpid()); err == nil {

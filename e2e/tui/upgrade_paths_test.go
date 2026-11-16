@@ -395,7 +395,7 @@ func TestHostsSyncInAPaneLeavesADaemonItCannotUpgrade(t *testing.T) {
 
 // TestHostsSyncReportsAFallbackAndDoesNotRestart syncs a host whose daemon
 // takes the live upgrade and then cannot adopt its panes in the new image
-// (TUIOS_TEST_HANDOFF_FAIL=error), so it goes back to the binary it ran, with
+// (knob handoff_fail=error), so it goes back to the binary it ran, with
 // every program. --restart asked for the daemon to move, but a restart now
 // would end programs that are still running for a failure that needs reading:
 // sync must not restart it, and must fail the host saying the daemon went back.
@@ -404,7 +404,7 @@ func TestHostsSyncReportsAFallbackAndDoesNotRestart(t *testing.T) {
 	f := newSyncFleet(t, []string{"old"}, nil)
 	old := f.hosts["old"]
 	old.install(t, tuiosBin)
-	failing := []string{"TUIOS_TEST_HANDOFF=1", "TUIOS_TEST_HANDOFF_FAIL=error", "TUIOS_PANE_ID="}
+	failing := []string{knob("handoff=1", "handoff_fail=error"), "TUIOS_PANE_ID="}
 	for _, args := range [][]string{{"new", "work", "--detach"}, {"new-window", "sleeper", "-s", "work", "--", "sleep", "600"}} {
 		if out, err := runBinaryIn(t, old.base, old.bin, failing, args...); err != nil {
 			t.Fatalf("%v: %v\n%s", args, err, out)

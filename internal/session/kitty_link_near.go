@@ -17,6 +17,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
 // Kitty images named by a path, from a pane on another machine: the near
@@ -348,15 +349,11 @@ type readCloser struct {
 }
 
 // kittyLinkStallForTest lets the end-to-end tests play an owner that stops
-// reading an image: with TUIOS_E2E=1 and TUIOS_E2E_KITTY_LINK_STALL naming a
-// file that holds a byte count, the fetch of an image larger than that waits
+// reading an image: with the kitty_link_stall knob naming a file that holds a byte count, the fetch of an image larger than that waits
 // while the file exists, a minute at most, before it reads a byte. Ordinary
 // runs never set it.
 func kittyLinkStallForTest(size int64) {
-	if os.Getenv("TUIOS_E2E") != "1" {
-		return
-	}
-	path := os.Getenv("TUIOS_E2E_KITTY_LINK_STALL")
+	path := testknob.String("kitty_link_stall")
 	if path == "" {
 		return
 	}
@@ -368,11 +365,5 @@ func kittyLinkStallForTest(size int64) {
 	if err != nil || size <= over {
 		return
 	}
-	deadline := time.Now().Add(time.Minute)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(path); err != nil {
-			return
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	testknob.WaitWhile(path, 100*time.Millisecond, time.Minute)
 }

@@ -418,7 +418,7 @@ func uploadSizes(uploads [][]byte) []int {
 // other pane's image on that machine waited until the owner read again.
 //
 // Now a slot covers one read of the file and each write has a budget. The
-// owner's stall is played by TUIOS_E2E_KITTY_LINK_STALL, which holds the
+// owner's stall is played by knob kitty_link_stall, which holds the
 // owner's fetch of any image over 1 MB while a file exists.
 //
 // How this could pass wrongly, written down first:
@@ -442,7 +442,7 @@ func TestKittyFilesStalledOwnerHoldsOnlyItsPane(t *testing.T) {
 	if err := os.WriteFile(stall, []byte("1000000"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	env := []string{"TUIOS_SSH=" + ssh, "TUIOS_SIXEL_GRAPHICS=0", "TUIOS_E2E=1", "TUIOS_E2E_KITTY_LINK_STALL=" + stall}
+	env := []string{"TUIOS_SSH=" + ssh, "TUIOS_SIXEL_GRAPHICS=0", "TUIOS_E2E=1", knob("kitty_link_stall=" + stall)}
 	load := filepath.Join(t.TempDir(), "linkload")
 	if out, err := exec.Command("go", "build", "-o", load, "./linkload").CombinedOutput(); err != nil {
 		t.Fatalf("build linkload: %v\n%s", err, out)

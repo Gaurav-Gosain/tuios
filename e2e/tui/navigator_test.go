@@ -708,7 +708,7 @@ func TestNavigatorDropsAStaleLoad(t *testing.T) {
 	if err := os.WriteFile(hold, []byte("1"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	term := navClient(t, base, []string{"TUIOS_E2E_HOLD_NAV=" + hold})
+	term := navClient(t, base, []string{knob("hold_nav=" + hold)})
 	openNavigator(t, term, "work")
 	sendKeys(t, term, tuitest.Esc)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Press / to search") }, uiTimeout); err != nil {
@@ -731,7 +731,7 @@ func TestNavigatorDropsAStaleLoad(t *testing.T) {
 func TestNavigatorSaysWhatItDidNotRead(t *testing.T) {
 	t.Run("cap", func(t *testing.T) {
 		base, _ := navigatorSessions(t)
-		term := navClient(t, base, []string{"TUIOS_E2E_NAV_CAPTURES=1"})
+		term := navClient(t, base, []string{knob("nav_captures=1")})
 		openWorkLogs(t, term)
 		waitScreen(t, term, "the pane past the cap does not say it was not read", "Not read. The navigator reads the screens of the first 1 panes.")
 		if strings.Contains(term.Screen().Text(), navMarker) {
@@ -744,7 +744,7 @@ func TestNavigatorSaysWhatItDidNotRead(t *testing.T) {
 		if err := os.WriteFile(hold, nil, 0o644); err != nil {
 			t.Fatal(err)
 		}
-		term := navClient(t, base, []string{"TUIOS_E2E_HOLD_NAV=" + hold})
+		term := navClient(t, base, []string{knob("hold_nav=" + hold)})
 		openNavigator(t, term, "work")
 		if err := term.WaitFor(func(s tuitest.Screen) bool {
 			return strings.Contains(s.Text(), "Did not answer in time")

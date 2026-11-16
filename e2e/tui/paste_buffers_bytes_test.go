@@ -228,7 +228,7 @@ func TestPasteBufferChooserPastesWhereItOpened(t *testing.T) {
 // Negative control: with the local save cut from handlePasteBufferSaveFailed,
 // prefix ] says there are no paste buffers.
 func TestPasteBuffersWithAnOldDaemon(t *testing.T) {
-	t.Setenv("TUIOS_E2E_NO_BUFFER_VERBS", "1")
+	setKnobs(t, "no_buffer_verbs=1")
 	base := t.TempDir()
 	term := startPasteBufferClient(t, base, "")
 	if out, err := tuiosCLI(t, base, "list-buffers"); err == nil || !strings.Contains(out, "does not know list-buffers") {

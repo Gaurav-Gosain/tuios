@@ -12,7 +12,7 @@ import (
 )
 
 // holdScan plants the file that makes the tuios under test hold its $PATH scan
-// open (TUIOS_E2E_HOLD_SCAN in internal/app/run_anything.go). It returns the
+// open (knob hold_scan in internal/app/run_anything.go). It returns the
 // environment entry to start tuios with and the release that lets the scan
 // land.
 //
@@ -28,7 +28,7 @@ func holdScan(t *testing.T) (env string, release func()) {
 	if err := os.WriteFile(hold, nil, 0o644); err != nil {
 		t.Fatalf("hold-scan file: %v", err)
 	}
-	return "TUIOS_E2E_HOLD_SCAN=" + hold, func() { _ = os.Remove(hold) }
+	return knob("hold_scan=" + hold), func() { _ = os.Remove(hold) }
 }
 
 // The launcher's icons are kitty placements, and a placement outlives the
@@ -360,7 +360,7 @@ func TestLauncherIconsClosedDuringScan(t *testing.T) {
 	if err := os.WriteFile(hold, nil, 0o644); err != nil {
 		t.Fatalf("hold-scan file: %v", err)
 	}
-	f := newLauncherFixture(t, 20, "TUIOS_E2E_HOLD_SCAN="+hold)
+	f := newLauncherFixture(t, 20, knob("hold_scan="+hold))
 	for i := range 6 {
 		if err := os.WriteFile(hold, nil, 0o644); err != nil {
 			t.Fatalf("rearm hold-scan: %v", err)

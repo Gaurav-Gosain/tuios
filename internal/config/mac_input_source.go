@@ -2,13 +2,13 @@ package config
 
 import (
 	"context"
-	"os"
 	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
 // macInputSourceTimeout bounds one detection, both defaults calls together.
@@ -92,10 +92,10 @@ func macLayoutIsUS() bool {
 
 // readMacInputSource returns what macOS says about the selected keyboard
 // layout, or "" when it cannot be read. The end-to-end suite fakes it with
-// TUIOS_E2E_MAC_INPUT_SOURCE, alongside TUIOS_E2E_PLATFORM=darwin.
+// the mac_input_source knob, alongside the knob platform=darwin.
 func readMacInputSource() string {
 	if E2EPlatformDarwin() {
-		return os.Getenv("TUIOS_E2E_MAC_INPUT_SOURCE")
+		return testknob.String("mac_input_source")
 	}
 	if runtime.GOOS != "darwin" {
 		return ""

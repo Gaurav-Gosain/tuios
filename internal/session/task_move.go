@@ -1,10 +1,11 @@
 package session
 
 import (
-	"os"
 	"slices"
 	"strings"
 	"sync"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
 // The task card lifecycle as one transition function. A card's lifecycle
@@ -15,7 +16,7 @@ import (
 // A verb keeps its own checks (who may touch the card, the pane refusals, the
 // verify command rules) and asks for a move; Session.moveCard makes it,
 // counts a dispatched card's outcome on its board in the same state change,
-// logs it at debug level, and under TUIOS_TEST_CARD_CHECK checks the card's
+// logs it at debug level, and under the card_check knob checks the card's
 // rules after it (cardRulesBroken).
 
 // cardMoveKind is what a move does.
@@ -222,7 +223,7 @@ func (tk *TaskState) apply(m cardMove, now int64) (action, holder string, verr *
 // and does what follows from it in the same change: the outcome of a
 // dispatched card counts on its board, so two cards of one board count in
 // the order their moves land; a debug line names the move; and under
-// TUIOS_TEST_CARD_CHECK the card's rules are checked.
+// the card_check knob the card's rules are checked.
 func (s *Session) moveCard(tk *TaskState, m cardMove, now int64) (action, holder string, verr *verbError) {
 	from := tk.Stage
 	action, holder, verr = tk.apply(m, now)
@@ -273,8 +274,8 @@ func (s *Session) SetTaskOutcomeSink(fn func(board string, finished bool)) {
 	s.taskOutcome.Store(&fn)
 }
 
-// cardCheckOn reports whether TUIOS_TEST_CARD_CHECK asks for the checks.
-var cardCheckOn = sync.OnceValue(func() bool { return os.Getenv("TUIOS_TEST_CARD_CHECK") != "" })
+// cardCheckOn reports whether the card_check knob asks for the checks.
+var cardCheckOn = sync.OnceValue(func() bool { return testknob.String("card_check") != "" })
 
 // cardRulesBroken is every rule of the lifecycle tk breaks after m.
 func cardRulesBroken(tk *TaskState, m cardMove) []string {

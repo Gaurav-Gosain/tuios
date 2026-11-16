@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
 // The roots the folder is chosen from. They are variables so a test can move
@@ -103,19 +104,17 @@ func systemRuntimeDir() string {
 	return filepath.Join(run, strconv.Itoa(os.Getuid()))
 }
 
-// roots returns the two roots. The end-to-end suite moves them with
-// TUIOS_E2E_RUN_USER and TUIOS_E2E_TMP, only under TUIOS_E2E=1, so it can
+// roots returns the two roots. The end-to-end suite moves them with the
+// run_user and tmp knobs, so it can
 // test a missing XDG_RUNTIME_DIR without reaching the real daemons of the
 // person who runs it.
 func roots() (run, tmp string) {
 	run, tmp = runUserRoot, tmpRoot
-	if os.Getenv("TUIOS_E2E") == "1" {
-		if v := os.Getenv("TUIOS_E2E_RUN_USER"); v != "" {
-			run = v
-		}
-		if v := os.Getenv("TUIOS_E2E_TMP"); v != "" {
-			tmp = v
-		}
+	if v := testknob.String("run_user"); v != "" {
+		run = v
+	}
+	if v := testknob.String("tmp"); v != "" {
+		tmp = v
 	}
 	return run, tmp
 }

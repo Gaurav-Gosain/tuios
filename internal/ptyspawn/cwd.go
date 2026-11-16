@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
 // ProcessCwd returns the working directory of process pid, and says whether
@@ -63,8 +65,8 @@ func homeSpelled(path string) string {
 
 // processCwdOffForTest makes every process read fail, as it does on native
 // Windows, so the end-to-end tests can prove on Linux that a pane's folder
-// still comes from OSC 7 there. It holds only with TUIOS_E2E=1 and
-// TUIOS_E2E_NO_PROCESS_CWD=1, which ordinary runs never set.
+// still comes from OSC 7 there. It holds only with the knob
+// no_process_cwd=1, which ordinary runs never set.
 var processCwdOffForTest = sync.OnceValue(func() bool {
-	return os.Getenv("TUIOS_E2E") == "1" && os.Getenv("TUIOS_E2E_NO_PROCESS_CWD") == "1"
+	return testknob.String("no_process_cwd") == "1"
 })

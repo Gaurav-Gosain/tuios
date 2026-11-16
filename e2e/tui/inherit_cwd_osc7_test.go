@@ -18,7 +18,7 @@ const computerName = "TUIOS-E2E-PC"
 // started in the daemon's own folder, even with the focused pane's shell
 // reporting its folder over OSC 7 at every prompt.
 //
-// TUIOS_E2E_NO_PROCESS_CWD makes every process read fail, as it does on
+// knob no_process_cwd makes every process read fail, as it does on
 // Windows. The pane's shell is /bin/sh, which reports nothing by itself, so
 // the only thing that says where it is is the OSC 7 report the test prints.
 // Four reports are checked, each from the pane that has the focus:
@@ -55,7 +55,7 @@ func TestNewWindowInheritsTheOSC7Folder(t *testing.T) {
 	}
 	host = strings.ToUpper(host)
 
-	env := []string{"TUIOS_E2E=1", "TUIOS_E2E_NO_PROCESS_CWD=1", "COMPUTERNAME=" + computerName}
+	env := []string{"TUIOS_E2E=1", knob("no_process_cwd=1"), "COMPUTERNAME=" + computerName}
 	if out, err := tuiosCLIEnv(t, base, env, "new", "osc", "--detach", "--cwd", start); err != nil {
 		t.Fatalf("create osc: %v: %s", err, out)
 	}

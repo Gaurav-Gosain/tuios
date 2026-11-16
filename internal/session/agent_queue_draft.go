@@ -1,11 +1,10 @@
 package session
 
 import (
-	"os"
-	"strconv"
 	"time"
 	"unsafe"
 
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 	uv "github.com/charmbracelet/ultraviolet"
 
 	"tuios.dev/vt"
@@ -50,13 +49,11 @@ const queueDraftLook = screenSettleDelay
 // queueDraftSurface. The agents view shows it as "Waits: ...".
 const DraftHeldSummary = "your draft is in the prompt box"
 
-// draftSurfaceFor is queueDraftSurface, or the TUIOS_E2E_DRAFT_SURFACE_MS an
+// draftSurfaceFor is queueDraftSurface, or the draft_surface_ms knob an
 // E2E test sets, so the move to Needs you can be shown without ten minutes.
 func draftSurfaceFor() time.Duration {
-	if os.Getenv("TUIOS_E2E") == "1" {
-		if ms, err := strconv.Atoi(os.Getenv("TUIOS_E2E_DRAFT_SURFACE_MS")); err == nil && ms > 0 {
-			return time.Duration(ms) * time.Millisecond
-		}
+	if d := testknob.Millis("draft_surface_ms"); d > 0 {
+		return d
 	}
 	return queueDraftSurface
 }

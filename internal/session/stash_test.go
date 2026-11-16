@@ -55,7 +55,6 @@ func TestStashHasNoPermanentFallback(t *testing.T) {
 	t.Cleanup(func() { _ = os.RemoveAll(tmp) })
 	defer sockpath.SetRootsForTest(filepath.Join(tmp, "no-run-user"), tmp)()
 	t.Setenv("XDG_RUNTIME_DIR", "")
-	t.Setenv("TUIOS_E2E", "")
 
 	sock, err := GetSocketPath()
 	if err != nil {

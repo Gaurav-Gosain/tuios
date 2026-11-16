@@ -8,23 +8,26 @@ import (
 	"os/exec"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
 // Test-only verbs for the live handoff, registered only when the daemon starts
-// with TUIOS_TEST_HANDOFF=1. The end-to-end tests drive the primitives through
+// with the knob handoff=1. The end-to-end tests drive the primitives through
 // them before the user-facing command exists, and drive the controls through
 // them after: a hold between writing the manifest and the exec, and a fork in
 // the span where the descriptors are exposed. No build is meant to ship with
-// the variable set, and a daemon without it does not know these verbs.
+// the knob set, and a daemon without it does not know these verbs.
 
-// handoffTestEnv enables the verbs.
-const handoffTestEnv = "TUIOS_TEST_HANDOFF"
+// handoffTestOn reports whether the handoff knob turns on the verbs, and the
+// other handoff knobs with them.
+func handoffTestOn() bool { return testknob.String("handoff") == "1" }
 
-// registerHandoffTestVerbs adds the verbs, once, when the variable asks. It
+// registerHandoffTestVerbs adds the verbs, once, when the knob asks. It
 // runs from NewDaemon: the registry is built by an init of its own, which an
 // init here could run before.
 func registerHandoffTestVerbs() {
-	if os.Getenv(handoffTestEnv) != "1" {
+	if !handoffTestOn() {
 		return
 	}
 	handoffTestOnce.Do(addHandoffTestVerbs)

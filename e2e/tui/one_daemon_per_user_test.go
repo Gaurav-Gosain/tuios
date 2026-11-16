@@ -21,8 +21,8 @@ import (
 // sessions.
 //
 // The real /run/user and /tmp hold the daemons of whoever runs the suite, so
-// both roots are moved into the test with TUIOS_E2E_RUN_USER and
-// TUIOS_E2E_TMP. /run/user/<uid> becomes <run>/<uid>, made 0700 the way
+// both roots are moved into the test with knob run_user and
+// knob tmp. /run/user/<uid> becomes <run>/<uid>, made 0700 the way
 // pam_systemd makes it.
 //
 // Negative control: with sockpath.RuntimeDir going straight to "" when
@@ -84,8 +84,7 @@ func (m *oneMachine) env(runtimeDir, runUser string) []string {
 	return append(env,
 		"XDG_RUNTIME_DIR="+runtimeDir,
 		"TUIOS_E2E=1",
-		"TUIOS_E2E_RUN_USER="+runUser,
-		"TUIOS_E2E_TMP="+m.tmp)
+		knob("run_user="+runUser, "tmp="+m.tmp))
 }
 
 // desktopEnv is a desktop session: XDG_RUNTIME_DIR=/run/user/<uid>. /run/user

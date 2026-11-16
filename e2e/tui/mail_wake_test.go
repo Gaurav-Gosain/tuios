@@ -829,7 +829,7 @@ func (l routeList) itemOf(window, kind string) *routeItem {
 }
 
 // childHold is the test's wait before a child's question is the person's, in
-// place of ten minutes (TUIOS_E2E_CHILD_HOLD_MS).
+// place of ten minutes (knob child_hold_ms).
 const childHold = 20 * time.Second
 
 // TestDelegatedChildrenRouteTheirAttention delegates two tasks from a
@@ -857,7 +857,7 @@ const childHold = 20 * time.Second
 // the held check fails; with the release timer doing nothing the release
 // check fails.
 func TestDelegatedChildrenRouteTheirAttention(t *testing.T) {
-	t.Setenv("TUIOS_E2E_CHILD_HOLD_MS", strconv.Itoa(int(childHold/time.Millisecond)))
+	setKnobs(t, "child_hold_ms="+strconv.Itoa(int(childHold/time.Millisecond)))
 	base := t.TempDir()
 	killDaemon(t, base)
 	const session = "e2e-route"

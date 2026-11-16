@@ -73,7 +73,6 @@ func TestDirUsesRunUserOnlyWhenItIsPrivate(t *testing.T) {
 	run, tmp := t.TempDir(), t.TempDir()
 	defer SetRootsForTest(run, tmp)()
 	t.Setenv("XDG_RUNTIME_DIR", "")
-	t.Setenv("TUIOS_E2E", "")
 	legacy := filepath.Join(tmp, "tuios-"+strconv.Itoa(os.Getuid()))
 	mine := filepath.Join(run, strconv.Itoa(os.Getuid()))
 

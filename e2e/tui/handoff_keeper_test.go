@@ -20,9 +20,9 @@ import (
 // internal/session/handoff_keeper.go. The tests build on the helpers of
 // live_handoff_test.go and live_upgrade_test.go.
 //
-// The daemon runs with TUIOS_TEST_HANDOFF=1, and TUIOS_TEST_HANDOFF_CRASH
+// The daemon runs with knob handoff=1, and knob handoff_crash
 // makes the new image end itself hard at a chosen point: SIGKILL, or with
-// TUIOS_TEST_HANDOFF_CRASH_MODE=panic a panic in a goroutine of its own, which
+// knob handoff_crash_mode=panic a panic in a goroutine of its own, which
 // no recover covers and which leaves the in-place fallback no chance to run.
 //
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Live handoff").
@@ -221,10 +221,10 @@ func TestDaemonUpgradeSurvivesACrashOfTheNewImage(t *testing.T) {
 		env    []string
 		gapsOK bool
 	}{
-		{"killed-at-start", []string{"TUIOS_TEST_HANDOFF_CRASH=start"}, false},
-		{"panic-while-adopting", []string{"TUIOS_TEST_HANDOFF_CRASH=adopt", "TUIOS_TEST_HANDOFF_CRASH_MODE=panic"}, false},
-		{"killed-once-serving", []string{"TUIOS_TEST_HANDOFF_CRASH=serve"}, true},
-		{"fallback-also-dies", []string{"TUIOS_TEST_HANDOFF_FAIL=error", "TUIOS_TEST_HANDOFF_CRASH=fallback"}, false},
+		{"killed-at-start", []string{knob("handoff_crash=start")}, false},
+		{"panic-while-adopting", []string{knob("handoff_crash=adopt", "handoff_crash_mode=panic")}, false},
+		{"killed-once-serving", []string{knob("handoff_crash=serve")}, true},
+		{"fallback-also-dies", []string{knob("handoff_fail=error", "handoff_crash=fallback")}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			base := t.TempDir()

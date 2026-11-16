@@ -21,6 +21,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
@@ -640,13 +641,13 @@ func navCallTimeoutFor(ctx context.Context) time.Duration {
 
 // navHoldForTest lets the end-to-end tests decide when a load reads.
 //
-// TUIOS_E2E_HOLD_NAV names a file. While it exists, a load that started while
+// The hold_nav knob names a file. While it exists, a load that started while
 // it existed waits before it reads anything, until the file goes or the
 // load's deadline passes. A number in the file holds only that many loads, counted from
 // the start of the process, so a test can hold one load and let the next run.
-// Ordinary runs never set the variable.
+// Ordinary runs never set the knob.
 func navHoldForTest() func(context.Context) {
-	path := os.Getenv("TUIOS_E2E_HOLD_NAV")
+	path := testknob.String("hold_nav")
 	if path == "" {
 		return func(context.Context) {}
 	}
@@ -678,9 +679,9 @@ func navHoldForTest() func(context.Context) {
 var navHeldLoads atomic.Int64
 
 // navMaxCapturesInForce is navMaxCaptures, or the number the end-to-end
-// tests set in TUIOS_E2E_NAV_CAPTURES to reach the cap with a few panes.
+// tests set in the nav_captures knob to reach the cap with a few panes.
 func navMaxCapturesInForce() int {
-	if v, err := strconv.Atoi(os.Getenv("TUIOS_E2E_NAV_CAPTURES")); err == nil && v >= 0 {
+	if v, err := strconv.Atoi(testknob.String("nav_captures")); err == nil && v >= 0 {
 		return v
 	}
 	return navMaxCaptures

@@ -122,7 +122,6 @@ func TestOtherDaemonInAnOpenFolderIsNotUsed(t *testing.T) {
 	run, tmp := short(), short()
 	defer sockpath.SetRootsForTest(run, tmp)()
 	t.Setenv("XDG_RUNTIME_DIR", "")
-	t.Setenv("TUIOS_E2E", "")
 	uid := strconv.Itoa(os.Getuid())
 	if err := os.Mkdir(filepath.Join(run, uid), 0o700); err != nil {
 		t.Fatal(err)

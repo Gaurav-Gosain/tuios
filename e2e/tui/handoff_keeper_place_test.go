@@ -33,7 +33,7 @@ func TestAPaneProcessStaysInItsPaneAfterTheKeeperTakesOver(t *testing.T) {
 		t.Skip("setsid(1) and the keeper path are checked on Linux")
 	}
 	base := t.TempDir()
-	startHandoffDaemon(t, base, "TUIOS_TEST_HANDOFF_CRASH=start")
+	startHandoffDaemon(t, base, knob("handoff_crash=start"))
 	second := copyTuios(t)
 	const sess = "e2e-keeper-place"
 	target := newCommandWindow(t, base, sess, "target", false, "sh", "-c", "echo pid-$$; sleep 600")

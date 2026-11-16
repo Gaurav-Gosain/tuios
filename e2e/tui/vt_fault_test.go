@@ -10,7 +10,7 @@ import (
 )
 
 // A panic in one pane's emulator must not end the daemon. The daemon here is
-// started with TUIOS_TEST_VT_PANIC, so its emulator loop panics on a chunk
+// started with knob vt_panic, so its emulator loop panics on a chunk
 // that holds the marker (internal/session/pane_vt_fault.go). The failure
 // modes this checks are in the untangle notes, design/vt-loop-recover.md.
 //
@@ -24,7 +24,7 @@ var vtFaultNoticeRE = regexp.MustCompile(`terminal emulator of this pane failed`
 
 func TestEmulatorPanicKeepsTheDaemonAndOtherPanes(t *testing.T) {
 	base := t.TempDir()
-	startHandoffDaemon(t, base, "TUIOS_TEST_VT_PANIC="+vtPanicMarker)
+	startHandoffDaemon(t, base, knob("vt_panic="+vtPanicMarker))
 	const sess = "vtfault"
 	echo := `while read l; do printf 'got-%s\n' "$l"; done`
 	a := newCommandWindow(t, base, sess, "a", false, "sh", "-c", echo)

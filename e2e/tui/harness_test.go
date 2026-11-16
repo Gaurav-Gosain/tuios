@@ -104,6 +104,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -193,7 +194,7 @@ func runE2E(m *testing.M) (code int) {
 	// Every daemon checks each task card after each move and logs a broken
 	// rule (internal/session/task_move.go); killDaemon fails the test that
 	// left such a line.
-	_ = os.Setenv("TUIOS_TEST_CARD_CHECK", "1")
+	_ = os.Setenv(testknob.Env, testknob.Merge(os.Getenv(testknob.Env), "card_check=1"))
 	// No test reaches a real agent CLI (agent_stubs_test.go).
 	unstub, err := installAgentStubs()
 	if err != nil {
@@ -1128,7 +1129,7 @@ var registeredKills sync.Map
 // one test ends up running against another's daemon, and a suite where that can
 // happen cannot claim its tests are isolated.
 // cardInvariantLine starts the daemon's log line for a task card that broke
-// a rule of its lifecycle, under TUIOS_TEST_CARD_CHECK.
+// a rule of its lifecycle, under knob card_check.
 const cardInvariantLine = "Task invariant broken"
 
 func killDaemon(t *testing.T, base string) {

@@ -229,7 +229,7 @@ func TestSpawnSheetIgnoresAReportedFolder(t *testing.T) {
 
 // TestCheckpointIgnoresAReportedFolderWithoutProcessCwd is a security
 // boundary for a daemon that cannot read a shell's folder, as on native
-// Windows (TUIOS_E2E_NO_PROCESS_CWD). The pane starts in one repository and
+// Windows (knob no_process_cwd). The pane starts in one repository and
 // prints an OSC 7 report for a second one, which holds probes. The checkpoint
 // on its state change is taken in the folder the pane started in, and runs
 // none of the second repository's programs.
@@ -257,7 +257,7 @@ func TestCheckpointIgnoresAReportedFolderWithoutProcessCwd(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	env := []string{"TUIOS_E2E=1", "TUIOS_E2E_NO_PROCESS_CWD=1"}
+	env := []string{"TUIOS_E2E=1", knob("no_process_cwd=1")}
 	if out, err := tuiosCLIEnv(t, base, env, "new", "osc", "--detach", "--cwd", repo); err != nil {
 		t.Fatalf("create session: %v: %s", err, out)
 	}

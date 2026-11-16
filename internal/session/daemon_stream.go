@@ -2,12 +2,12 @@ package session
 
 import (
 	"log"
-	"os"
 	"runtime/debug"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
 // streamFrameInterval and streamFloodBytes gate how often a flooding pane is
@@ -468,12 +468,11 @@ func (d *Daemon) broadcastEncodedToSession(sessionID string, msg *Message, exclu
 var broadcastSendHeld atomic.Pointer[func()]
 
 // statePushTestHold is how long each state push waits, in its turn, before it
-// is written: TUIOS_TEST_STATE_PUSH_HOLD_MS, at most a minute. It lets an e2e
+// is written: the state_push_hold_ms knob, at most a minute. It lets an e2e
 // test send a routed command while the state before it is still on its way,
 // which a loaded machine does now and then (see sendInBroadcastOrder).
 var statePushTestHold = sync.OnceValue(func() time.Duration {
-	ms, _ := strconv.Atoi(os.Getenv("TUIOS_TEST_STATE_PUSH_HOLD_MS"))
-	return time.Duration(min(max(ms, 0), 60000)) * time.Millisecond
+	return min(testknob.Millis("state_push_hold_ms"), time.Minute)
 })
 
 // sendInBroadcastOrder writes a message to one client after every broadcast

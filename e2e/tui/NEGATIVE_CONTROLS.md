@@ -458,7 +458,7 @@ passes 2 runs of 2.
 ## A far folder's change before its watch starts
 
 `TestFilesFollowAWindowOnAHost` holds the far watch back for 1.5 s with
-`TUIOS_E2E_WATCH_START_DELAY_MS`, so the file is removed after the list shows it and
+`knob watch_start_delay_ms`, so the file is removed after the list shows it and
 before the watch is up. Without the hold the race failed five CI runs in three days.
 
 Run on 2026-10-31 on Linux. The fixed build passes 3 runs of 3. With no read when
@@ -864,7 +864,7 @@ With `TUIOS_E2E_FRAMES` set, the run writes `paste-buffers-chooser`,
 `paste-buffers-own-only`, `paste-buffers-planted`, `paste-buffers-escapes`,
 `paste-buffers-no-takeover` and `paste-buffers-line-feeds`.
 
-`TestPasteBuffersWithAnOldDaemon` sets `TUIOS_E2E_NO_BUFFER_VERBS=1`. With
+`TestPasteBuffersWithAnOldDaemon` sets `knob no_buffer_verbs=1`. With
 `TUIOS_E2E=1` as well, the daemon answers every buffer verb with
 `unknown_verb`, as a daemon from before them does. Nothing else reads it.
 
@@ -2468,8 +2468,8 @@ session's text.
 
 `TestNavigatorTakesPastes` sets one known prompt in the shell and shows
 first, with the navigator closed, that a paste reaches it. The stale-load,
-cap and deadline tests use two seams: `TUIOS_E2E_HOLD_NAV` holds a load
-until a file goes, and `TUIOS_E2E_NAV_CAPTURES` lowers the cap to one pane.
+cap and deadline tests use two seams: `knob hold_nav` holds a load
+until a file goes, and `knob nav_captures` lowers the cap to one pane.
 The verb client tests are unit tests of the deterministic race kind, in
 `internal/session/verb_client_step_test.go`. The listing test is a unit test
 of the security boundary kind, in `cmd/tuios/list_every_pane_test.go`.
@@ -2724,7 +2724,7 @@ pane's shell, read by this client), and the settings page row.
 ### Review fixes: fast switches
 
 `TestEmptyWorkspaceFastSwitches` sends Alt+2 Alt+1, then Alt+2 Alt+1 Alt+2,
-then Alt+2 Alt+3, each as one write. `TUIOS_E2E_HOLD_PANE` makes the daemon
+then Alt+2 Alt+3, each as one write. `knob hold_pane` makes the daemon
 hold each pane request for a second, so the pushes the later keys make queue
 behind it. Once no request is in flight it checks the workspace the session
 and the client show (1, 2, 3) and the panes on each workspace (one each).
@@ -2735,7 +2735,7 @@ and the client show (1, 2, 3) and the panes on each workspace (one each).
 | The daemon focuses the pane and moves the session to it | `handleExecuteCommand`: `FocusIfShown: true` changed to `Focus: true` | `TestEmptyWorkspaceFastSwitches` ("Alt+2 Alt+1: the session shows workspace 2, want 1") | **caught** |
 | A switch back asks for a second pane | `openPaneOnEmptyWorkspace`: the `paneRequests` check cut | `TestEmptyWorkspaceFastSwitches` ("Alt+2 Alt+1 Alt+2: workspace 2 has 2 panes, want 1") | **caught** |
 | The request holds back the client's pushes | `openPaneOnEmptyWorkspace`: `m.daemonWindowIntent = true` put back after the request | none: `TestEmptyWorkspaceFastSwitches` passes. With the pane focus neutral, the session still ends on workspace 1 | **not caught** |
-| The build before the review | `fe57ce01` | none: it has no `TUIOS_E2E_HOLD_PANE`, so its daemon answers before the next key, and it has no `pane_requests` | **not caught** |
+| The build before the review | `fe57ce01` | none: it has no `knob hold_pane`, so its daemon answers before the next key, and it has no `pane_requests` | **not caught** |
 
 Not covered end to end: the version check (`EmptyWorkspacePanes` in the
 welcome) against a daemon from before this change, and a switch from a
@@ -2743,7 +2743,7 @@ scratch terminal.
 
 ### Second review: one pane per workspace at the daemon
 
-`TUIOS_E2E_HOLD_PANE` now acts only with `TUIOS_E2E=1`, and a file that holds
+`knob hold_pane` now acts only with `TUIOS_E2E=1`, and a file that holds
 `refuse` makes the daemon fail the request.
 `TestEmptyWorkspaceSlowRequestOpensOnePane` holds the first request for 7 s,
 waits 5.5 s, and sends Alt+1 Alt+2, so the client asks again after its 5 s
@@ -2827,7 +2827,7 @@ fill the bad values fall back to. `TestDockTabsConfigWarnings` has it in
 ## A new window ignores the OSC 7 folder on Windows (#491)
 
 `TestNewWindowInheritsTheOSC7Folder` in `inherit_cwd_osc7_test.go` starts the
-daemon with `TUIOS_E2E=1` and `TUIOS_E2E_NO_PROCESS_CWD=1`, which makes every
+daemon with `TUIOS_E2E=1` and `knob no_process_cwd=1`, which makes every
 process read fail, as it does on Windows, and with
 `COMPUTERNAME=TUIOS-E2E-PC`. The pane's shell is `/bin/sh`, which reports
 nothing, and the test prints each report. The session starts in
@@ -3616,7 +3616,7 @@ the budget coming back, and the last picture must be drawn after the flood.
 The test first waits until tuios has sent the host nothing for a second: its
 startup hint draws a frame every 300 ms for about six seconds, and one of
 those frames drew the waiting picture, which hid a cut wake. Each draw is made
-to cost 300 ms (`TUIOS_E2E_SYMBOL_DRAW_COST`), so the debt at the end of the
+to cost 300 ms (`knob symbol_draw_cost_ms`), so the debt at the end of the
 flood takes over a second to pay back on any machine.
 
 `TestImageSymbolsKeepAPictureOnScreen` draws picture A (20x10 cells), then
@@ -4005,10 +4005,10 @@ and the pane kept its old palette.
 terminal writes for the key: WezTerm with a composing right Option key,
 Terminal.app with Option on "Normal", iTerm2 with Esc+ on US and on French
 AZERTY, and Kitty protocol reports for AZERTY and for a composing Option key.
-`TUIOS_E2E_PLATFORM=darwin` puts tuios on its macOS defaults and its macOS key
+`knob platform=darwin` puts tuios on its macOS defaults and its macOS key
 paths. The default was `option_glyphs = "bind"` when these controls ran. Since
 #746 the default is `"auto"`, which reads the Mac's keyboard layout.
-`TUIOS_E2E_MAC_INPUT_SOURCE` fakes that layout. The other tests that send a
+`knob mac_input_source` fakes that layout. The other tests that send a
 bare composed character set `"bind"` themselves. `"type"` is the opt-in for
 #566. Every test
 that says a key does nothing also presses a key that does something, in the
@@ -4037,7 +4037,7 @@ ran the named test against it, on 2026-10-08 on branch
 Against main at `797ea69e`, the four AZERTY and alias tests fail as
 expected, and `TestEscPlusOptionChordsOnAUSLayout` passes, as the positive
 half should. The tests that need the macOS key paths cannot be judged on a
-build of main, because main does not read `TUIOS_E2E_PLATFORM`. The controls
+build of main, because main does not read `knob platform`. The controls
 above are the evidence for those.
 
 Against the previous head of this branch, `6a4af01e`, run in macOS mode, the
@@ -9479,7 +9479,7 @@ Repeat with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1
 from `e2e/tui`.
 ## Live handoff
 
-`e2e/tui/live_handoff_test.go` drives the daemon live upgrade of `docs/design/live-handoff.md` against real daemons. The daemon runs with `TUIOS_TEST_HANDOFF=1`, which registers the test-only verbs `test-quiesce` and `test-handoff`. Each test writes what it measured to `handoff.json` under `artifactDir`.
+`e2e/tui/live_handoff_test.go` drives the daemon live upgrade of `docs/design/live-handoff.md` against real daemons. The daemon runs with `knob handoff=1`, which registers the test-only verbs `test-quiesce` and `test-handoff`. Each test writes what it measured to `handoff.json` under `artifactDir`.
 
 ### PR 2: quiesce, gated exit wait, adopted pane
 
@@ -9563,13 +9563,13 @@ go test -count=1 -run '^TestWireCarriesAnOpenCluster$' ./internal/session/
 
 - `TestDaemonUpgradeKeepsPaneProcesses` (section 1.4 of the spec): the daemon is upgraded to a second copy of the binary with four panes running: a counter printing `tick-N` every 10 ms, a fake agent that answers `got-<line>` and reports `working` through `tuios set-agent-state`, a program on the alternate screen with bracketed paste and SGR mouse on behind `cat -v`, and `yes` writing as fast as it can. The daemon keeps its pid and runs the copy (`ps -o comm=`, or `/proc/<pid>/exe` on Linux), every pane keeps its pid, the counter has no gap or repeat across the upgrade, the agent answers and reports, a paste reaches the alternate-screen program bracketed, and the agent's `exit 7` afterwards reads 7. Its artifact has the pids, the counter's range, the end-to-end time, and the handoff's own measurements, among them the most bytes one pane's kernel buffer held when the panes stopped (1024 on macOS, from `yes`).
 - `TestDaemonUpgradeRefusesAndChangesNothing`: upgrades to `false`, and to an older tuios when `TUIOS_E2E_BASELINE_BIN` names one, are refused by the preflight; the daemon's image, every pane's pid and an open pane stream are unchanged. Run on 2026-10-17 with a build of upstream main at 72c1c367 as the baseline: refused with "does not run as a tuios that can take this daemon's state", since that build has no `daemon handoff-accepts` and refuses to start a second daemon.
-- `TestDaemonUpgradeFallsBackToPreviousBinary`: with `TUIOS_TEST_HANDOFF_FAIL=error`, and with `TUIOS_TEST_HANDOFF_FAIL=hang` and a 1.5 s watchdog, the new image cannot adopt the panes. The daemon comes back on `handoff/tuios.prev`, the binary it kept at start, with the same pid and every pane's pid, says it is the fallback, and the counter has no gap.
+- `TestDaemonUpgradeFallsBackToPreviousBinary`: with `knob handoff_fail=error`, and with `knob handoff_fail=hang` and a 1.5 s watchdog, the new image cannot adopt the panes. The daemon comes back on `handoff/tuios.prev`, the binary it kept at start, with the same pid and every pane's pid, says it is the fallback, and the counter has no gap.
 - `TestDaemonUpgradeQueuesCLICallsDuringSwap`: `tuios call hello` in a loop through an upgrade held for a second between the manifest write and the exec. None of 70-odd calls fails; calls are answered by each image, and some that started while the daemon was stopped waited in the backlog and were answered by the new one.
 - `TestDaemonUpgradeRefusesWhileVerifyFanRuns`: an upgrade asked for while `fan verify` runs a 4 s check is refused with "a fan check is running", the image is unchanged, and the check's result still arrives as `2 of 2 passed`.
 - `TestDaemonUpgradeRefusesWhileHookOrPluginRuns`: an upgrade asked for while an `after-new-window` hook runs `sleep 4` is refused with "the after-new-window hook is running", and while a plugin action runs `sleep 4` with "a command of plugin e2e.slow is running"; the image is unchanged, and once the command has finished the same upgrade goes through.
-- `TestDaemonUpgradeEndsWhenFallbackExecFails`: the new image hangs in adoption (`TUIOS_TEST_HANDOFF_FAIL=hang`, a 1.5 s watchdog), and `handoff/tuios.prev` is removed during a 1.5 s hold before the exec, so the fallback exec fails. The daemon must exit, and the pane's process with it, within 20 s.
+- `TestDaemonUpgradeEndsWhenFallbackExecFails`: the new image hangs in adoption (`knob handoff_fail=hang`, a 1.5 s watchdog), and `handoff/tuios.prev` is removed during a 1.5 s hold before the exec, so the fallback exec fails. The daemon must exit, and the pane's process with it, within 20 s.
 - `TestDaemonUpgradePreflightRefusals`: a copy of tuios with mode 0775 is refused with "can be written by its group or by others (mode 0775) ... chmod go-w"; a script that prints `hello` with "so it is not a tuios this daemon can upgrade to. Check the path names a tuios binary"; a script that answers for `plan9` with "is built for plan9, and this daemon runs on darwin. Upgrade to a tuios built for darwin". The image is unchanged each time. The `owned by another user` subtest runs only as root: it gives a copy of tuios to uid 65534 and expects "is owned by user 65534, not by you or root, so this daemon will not run it". Since 2026-10-30 two fake tuios builds that read only handoff v1, and only the version after this one, are refused with "cannot read this daemon's state" and a pointer to `restart-server`, and the anchor pane keeps its pid.
-- `TestDaemonUpgradeFallsBackAfterInstallerReplacesBinary` (Linux only): the daemon runs a copy of tuios, a new file is renamed over that path as `install.sh` does, and the upgrade to that path fails to adopt on purpose (`TUIOS_TEST_HANDOFF_FAIL=error`). The fallback must exec the old, now nameless, inode through the descriptor of `/proc/self/exe` kept at start: same daemon pid and pane pids, `fallback` set, `/proc/<pid>/exe` reading `<path> (deleted)`, and no gap in the pane's counter. On Linux `TestDaemonUpgradeFallsBackToPreviousBinary` also goes through the descriptor, and checks the image runs the binary it ran before; `TestDaemonUpgradeEndsWhenFallbackExecFails` skips there, since a held descriptor cannot be taken away from outside.
+- `TestDaemonUpgradeFallsBackAfterInstallerReplacesBinary` (Linux only): the daemon runs a copy of tuios, a new file is renamed over that path as `install.sh` does, and the upgrade to that path fails to adopt on purpose (`knob handoff_fail=error`). The fallback must exec the old, now nameless, inode through the descriptor of `/proc/self/exe` kept at start: same daemon pid and pane pids, `fallback` set, `/proc/<pid>/exe` reading `<path> (deleted)`, and no gap in the pane's counter. On Linux `TestDaemonUpgradeFallsBackToPreviousBinary` also goes through the descriptor, and checks the image runs the binary it ran before; `TestDaemonUpgradeEndsWhenFallbackExecFails` skips there, since a held descriptor cannot be taken away from outside.
 
 Run on 2026-10-17 on macOS arm64, one build per control; the rows dated 2026-10-28 were run on macOS arm64 (Darwin 27, Go 1.26.10), each control built once and run twice, with every source file restored and checked byte for byte with sha256. The Linux rows were run on 2026-10-28 in Docker (`golang:1.26.10`, Linux arm64, as root, `--cpus 4 --memory 8g`) with binaries built in the container; there the targeted run `^(TestDaemonUpgrade|TestSelfExec|TestHandoff|TestQuiesce|TestExitDuringQuiesce)` plus the installer test ran 17 tests (15 passed, 2 skipped) and 9 subtests (all passed).
 
@@ -9637,7 +9637,7 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
 - `TestPaneUpgradeConfirmedAtTheClient`: the dialog names the pane (`agent`), the copy's full path and its version; Down then Enter at the client upgrades the daemon to the copy with its pid kept, and the pane's command exits 0.
 - `TestPaneUpgradeRefusedWithoutYes`: Enter on the default row, Esc, Down, Up, Enter, and Up, Enter each refuse with "daemon-upgrade is for the person" and "The person answered No", close the dialog and leave the image as it was. Up then Enter is what a shell takes for "run the last command again".
 - `TestPaneUpgradeRefusesAFileChangedAfterTheDialog`: while the dialog is open the copy's last byte is written over in place with the same byte and its modification time set back, so only its change time moves; Yes is refused with "was changed after the upgrade to it was confirmed".
-- `TestPaneUpgradeTimesOut`: with `TUIOS_TEST_UPGRADE_CONFIRM_MS=3000` and no answer, the upgrade is refused no sooner than 3 s, saying "Nobody answered the dialog", and the dialog closes.
+- `TestPaneUpgradeTimesOut`: with `knob upgrade_confirm_ms=3000` and no answer, the upgrade is refused no sooner than 3 s, saying "Nobody answered the dialog", and the dialog closes.
 - `TestDaemonUpgradeFromAPaneIsRefused` (PR 5): with no client attached the pane's upgrade is refused in under 30 s, not after the 60 s wait.
 - `TestPaneUpgradeTakesOnlyKeysAtTheClient`: with the dialog up, the other pane printing `j`, Enter, Down and `Yes`; `tuios send-keys -s <session> "j Enter"`; a tape's `Press j Enter`; a bracketed paste of `j` and Enter; and `tuios call answer-ask` with Yes from the other pane each leave the dialog open and the image unchanged. Each ends in Enter, so any one of them that got through would answer the dialog and close it (the controls below ran when `j` still moved to Yes, and so upgraded the daemon). Esc then refuses.
 - `TestPaneUpgradeFirstAnswerWins`: two clients show the dialog. Esc on the first closes it on the second, and Down, Enter typed there right after upgrades nothing.
@@ -9704,10 +9704,10 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -run '^(TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge|TestPaneUpgradeRefusedWithoutYes|TestPaneUpgradeRunsNoFileWithoutADialog)$' .
 ### The keeper: a crash of the new image after the swap
 
-`e2e/tui/handoff_keeper_test.go`, for section 7.1 of the spec. The daemon runs with `TUIOS_TEST_HANDOFF=1`; `TUIOS_TEST_HANDOFF_CRASH` ends the image a handoff execs at `start` (SIGKILL first thing in `RunAdopted`), `adopt` (with every pane rebuilt, before the fallback is disarmed), `serve` (after it serves, before it releases the keeper) or `fallback` (in the in-place fallback image), and `TUIOS_TEST_HANDOFF_CRASH_MODE=panic` makes it a panic in a goroutine of its own instead of SIGKILL.
+`e2e/tui/handoff_keeper_test.go`, for section 7.1 of the spec. The daemon runs with `knob handoff=1`; `knob handoff_crash` ends the image a handoff execs at `start` (SIGKILL first thing in `RunAdopted`), `adopt` (with every pane rebuilt, before the fallback is disarmed), `serve` (after it serves, before it releases the keeper) or `fallback` (in the in-place fallback image), and `knob handoff_crash_mode=panic` makes it a panic in a goroutine of its own instead of SIGKILL.
 
 - `TestDaemonUpgradeKeeperStandsDown`: an upgrade held 1.5 s between the manifest write and the exec. During the hold exactly one keeper runs, as the daemon's child (the positive half, which shows the `ps` search finds one). After the new image answers no keeper is left (the first `ps` already finds none) and the daemon has no defunct child; the pane keeps its pid.
-- `TestDaemonUpgradeSurvivesACrashOfTheNewImage`, four cases: `killed-at-start`, `panic-while-adopting`, `killed-once-serving`, and `fallback-also-dies` (`TUIOS_TEST_HANDOFF_FAIL=error` with the fallback image killed). `tuios daemon upgrade --json` reports `recovered` and "died before it was up" and exits 1; the daemon answers from the kept `tuios.prev` (on Linux, from the binary it ran, through the descriptor the keeper holds) under a new pid, the old pid is gone; every pane keeps its pid; a 20 ms counter goes on past where it stood, with no gap except in `killed-once-serving`, where the dead image had read some (one gap in the recorded run); a pane told to exit 9 afterwards reads 9 on macOS; the restored daemon's descriptor 2 is the daemon log, as the first daemon's is (the positive half), read through `lsof` on macOS and `/proc/<pid>/fd/2` on Linux; no keeper is left. Each case writes `handoff.json` with the pids, the command's output, the image's stats, the counter and the exit status.
+- `TestDaemonUpgradeSurvivesACrashOfTheNewImage`, four cases: `killed-at-start`, `panic-while-adopting`, `killed-once-serving`, and `fallback-also-dies` (`knob handoff_fail=error` with the fallback image killed). `tuios daemon upgrade --json` reports `recovered` and "died before it was up" and exits 1; the daemon answers from the kept `tuios.prev` (on Linux, from the binary it ran, through the descriptor the keeper holds) under a new pid, the old pid is gone; every pane keeps its pid; a 20 ms counter goes on past where it stood, with no gap except in `killed-once-serving`, where the dead image had read some (one gap in the recorded run); a pane told to exit 9 afterwards reads 9 on macOS; the restored daemon's descriptor 2 is the daemon log, as the first daemon's is (the positive half), read through `lsof` on macOS and `/proc/<pid>/fd/2` on Linux; no keeper is left. Each case writes `handoff.json` with the pids, the command's output, the image's stats, the counter and the exit status.
 
 Run on 2026-10-17 on macOS arm64 (Darwin 27, Go 1.26.9) against the branch feat/live-handoff-keeper, one build per control. Each control was run against the regex below plus `TestDaemonUpgradeFallsBackToPreviousBinary`.
 
@@ -9737,7 +9737,7 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
 - `TestHostsSyncLocalUpgradesTheNamedServerLive`: `tuios --server e2e-lhsync hosts sync --local --restart --yes`, the shape of `just deploy`, with a default daemon and a named one, each running `sleep 600`. The PATH holds only a copy of the old tuios under the isolation root, so the local probe installs there. The named daemon is upgraded live with its pid and panes; the default daemon keeps its image, version and panes.
 - `TestHostsSyncRestartsADaemonThatPredatesLiveUpgrades`: the host's daemon is `TUIOS_E2E_BASELINE_BIN`, upstream main at 72c1c367. It answers `unknown_verb`, so sync restarts it with the new binary; the row says `daemon restarted` with the note "The daemon could not be upgraded live, so it was restarted: the daemon (e2e-baseline-72c1c367, pid N) predates live upgrades.", and the session comes back on a new daemon of `e2e-sync-next`. Skipped without the variable.
 - `TestHostsSyncInAPaneLeavesADaemonItCannotUpgrade`: the same baseline daemon on this machine, with `hosts sync --local --restart --yes` run as if from one of its panes (`TUIOS_PANE_ID` set), so sync may only upgrade it live. The baseline has no live upgrades and no dialog to ask the person in, and answers `unknown_verb`. The binary is installed, the daemon is neither upgraded nor restarted, its image and panes are unchanged, and the row's note says it predates live upgrades and was not restarted. A daemon with live upgrades, asked from a real pane, is covered by "hosts sync from a pane, confirmed at a client" below. Skipped without the variable.
-- `TestHostsSyncReportsAFallbackAndDoesNotRestart`: the host's daemon runs with `TUIOS_TEST_HANDOFF_FAIL=error`, so the new image cannot adopt the panes and the daemon goes back to `tuios.prev`. sync fails the host with "the new binary could not take the panes over", exits 1, and the daemon keeps its pid, the old version and both pane pids.
+- `TestHostsSyncReportsAFallbackAndDoesNotRestart`: the host's daemon runs with `knob handoff_fail=error`, so the new image cannot adopt the panes and the daemon goes back to `tuios.prev`. sync fails the host with "the new binary could not take the panes over", exits 1, and the daemon keeps its pid, the old version and both pane pids.
 - `TestDaemonUpgradeOrRestartStartsTheNamedServer`: `tuios --server e2e-lhstart daemon upgrade --binary <copy> --or-restart --json` with no daemon reports `started` with the reason "no daemon is running", the named server runs the copy as the reported pid, and `kill-server` on the default server finds nothing running.
 - `TestInstallScriptUpgradesTheDaemonLive`: `scripts/install.sh --prefix <root>/prefix --upgrade-server`, with the isolation root's XDG folders (the test refuses to run when its runtime folder is not the root's own) and the real Go caches. The script builds the checkout, installs it, prints `==> upgrading the daemon live` and the command's report, and the daemon keeps its pid and panes on a new image of the installed `dev+COMMIT-dirty`.
 
@@ -9769,7 +9769,7 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_BASELINE_BIN=/path/to/older/t
 - `TestHostsSyncLocalUpgradesTheNamedServerLive`: `tuios --server e2e-lhsync hosts sync --local --restart --yes`, the shape of `just deploy`, with a default daemon and a named one, each running `sleep 600`. The PATH holds only a copy of the old tuios under the isolation root, so the local probe installs there. The named daemon is upgraded live with its pid and panes; the default daemon keeps its image, version and panes.
 - `TestHostsSyncRestartsADaemonThatPredatesLiveUpgrades`: the host's daemon is `TUIOS_E2E_BASELINE_BIN`, upstream main at 72c1c367. It answers `unknown_verb`, so sync restarts it with the new binary; the row says `daemon restarted` with the note "The daemon could not be upgraded live, so it was restarted: the daemon (e2e-baseline-72c1c367, pid N) predates live upgrades.", and the session comes back on a new daemon of `e2e-sync-next`. Skipped without the variable.
 - `TestHostsSyncInAPaneLeavesADaemonItCannotUpgrade`: the same baseline daemon on this machine, with `hosts sync --local --restart --yes` run as if from one of its panes (`TUIOS_PANE_ID` set), so sync may only upgrade it live. The baseline has no live upgrades and no dialog to ask the person in, and answers `unknown_verb`. The binary is installed, the daemon is neither upgraded nor restarted, its image and panes are unchanged, and the row's note says it predates live upgrades and was not restarted. A daemon with live upgrades, asked from a real pane, is covered by "hosts sync from a pane, confirmed at a client" below. Skipped without the variable.
-- `TestHostsSyncReportsAFallbackAndDoesNotRestart`: the host's daemon runs with `TUIOS_TEST_HANDOFF_FAIL=error`, so the new image cannot adopt the panes and the daemon goes back to `tuios.prev`. sync fails the host with "the new binary could not take the panes over", exits 1, and the daemon keeps its pid, the old version and both pane pids.
+- `TestHostsSyncReportsAFallbackAndDoesNotRestart`: the host's daemon runs with `knob handoff_fail=error`, so the new image cannot adopt the panes and the daemon goes back to `tuios.prev`. sync fails the host with "the new binary could not take the panes over", exits 1, and the daemon keeps its pid, the old version and both pane pids.
 - `TestDaemonUpgradeOrRestartStartsTheNamedServer`: `tuios --server e2e-lhstart daemon upgrade --binary <copy> --or-restart --json` with no daemon reports `started` with the reason "no daemon is running", the named server runs the copy as the reported pid, and `kill-server` on the default server finds nothing running.
 - `TestInstallScriptUpgradesTheDaemonLive`: `scripts/install.sh --prefix <root>/prefix --upgrade-server`, with the isolation root's XDG folders (the test refuses to run when its runtime folder is not the root's own) and the real Go caches. The script builds the checkout, installs it, prints `==> upgrading the daemon live` and the command's report, and the daemon keeps its pid and panes on a new image of the installed `dev+COMMIT-dirty`.
 
@@ -10276,7 +10276,7 @@ Not covered end to end: the terminals row scrolled out of a short rail, and a pe
 | The owner check skipped | `refused` ("a file of another user (/etc/passwd) crossed the link"). The reply alone was an error (the owner's emulator answered EBADPNG), which is why the host stream is checked | **caught** |
 | kitty's sensitive path check (`vt.KittySensitivePath`) skipped | none: /proc is also in the link's read deny list, so both /proc cases are still refused | **not caught** (covered twice) |
 
-After review, on 2026-10-24 on Linux. The `refused` run gained three shared memory objects that must survive (Linux only): one named by an a=q, a symlink in /dev/shm whose target must survive, and an object one byte larger than the frame. `split-marker` prints a marker prefix in two parts 0.3 s apart, then a real t=f command with no other escape between them; the pane must go on at once and the host must get the image. `TestKittyFilesStalledOwnerHoldsOnlyItsPane` stalls the owner's fetch of two 4.8 MB images with `TUIOS_E2E_KITTY_LINK_STALL`; a small image from a third pane must answer OK in a few seconds, and each stalled one must get an error reply with no path in it while the stall lasts. With the fixes the small image answered in 107 ms and the stalled ones EIO after 15 s.
+After review, on 2026-10-24 on Linux. The `refused` run gained three shared memory objects that must survive (Linux only): one named by an a=q, a symlink in /dev/shm whose target must survive, and an object one byte larger than the frame. `split-marker` prints a marker prefix in two parts 0.3 s apart, then a real t=f command with no other escape between them; the pane must go on at once and the host must get the image. `TestKittyFilesStalledOwnerHoldsOnlyItsPane` stalls the owner's fetch of two 4.8 MB images with `knob kitty_link_stall`; a small image from a third pane must answer OK in a few seconds, and each stalled one must get an error reply with no path in it while the stall lasts. With the fixes the small image answered in 107 ms and the stalled ones EIO after 15 s.
 
 | Control: what was cut | Tests that fail | Verdict |
 | --- | --- | --- |
@@ -10746,7 +10746,7 @@ and `tuios worktree diff` each run, and the marker must stay empty.
 `TestSpawnSheetIgnoresAReportedFolder` prints an OSC 7 report for a second
 repository with the same probes, opens the New agent sheet and starts an
 agent from it. `TestCheckpointIgnoresAReportedFolderWithoutProcessCwd` does
-the same with `TUIOS_E2E_NO_PROCESS_CWD=1`, as on native Windows, and takes a
+the same with `knob no_process_cwd=1`, as on native Windows, and takes a
 checkpoint. Run on 2026-10-26 on Linux.
 
 | Control: what was cut | Where it fails | Verdict |
@@ -13180,7 +13180,7 @@ cuts one call site from the branch head:
 ## A switch made before the new pane arrives
 
 `TestScreenPresetLeaderTwiceAndSend` holds the pane that ctrl+a c asks for
-in the daemon for one second (`TUIOS_E2E_HOLD_NEW_WINDOW`). ctrl+a ctrl+a
+in the daemon for one second (`knob hold_new_window`). ctrl+a ctrl+a
 then reaches the daemon before the client has seen the pane, as on a slow CI
 runner. The control was run on 2026-11-05 on Linux on the branch
 fix/workspace-switch-during-new-pane.
@@ -14166,7 +14166,7 @@ artifact folder. Repeat from `e2e/tui` with
 ## TestTMLInputKeepsTypingOverALatePush
 
 The daemon holds each TML push back one second after it builds it
-(`TUIOS_E2E_TML_PUSH_DELAY`), so the push for the first key typed into a field
+(`knob tml_push_delay_ms`), so the push for the first key typed into a field
 lands after the client has the tml-input answers for all the others. The test
 types "draft", reads the screen every 20 ms for three seconds, types "!",
 submits, and checks the agent's --wait prints "draft!".
@@ -15137,7 +15137,7 @@ Repeat from `e2e/tui` with
 ## TestALinkCopyRevokedBeforeItsVerifyStaysFailed
 
 State machine plan M16. A linked machine's copy on build is held between its
-last byte and its verify (`TUIOS_TEST_TRANSFER_HOLD_MS`, a test hold that does
+last byte and its verify (`knob transfer_hold_ms`, a test hold that does
 not look at the attempt's context), and build's link policy takes `files`
 away during the hold. The copy must end failed as forbidden, the file must
 not be put in place, and a new copy to the same place (with `files` given
@@ -15279,7 +15279,7 @@ Repeat from `e2e/tui` with
 
 State machine plan S3, PR 2 (notes/sm2/design-S3.md). Every write of a task
 card's lifecycle fields goes through `Session.moveCard` in
-`internal/session/task_move.go`. Under `TUIOS_TEST_CARD_CHECK`, which the e2e
+`internal/session/task_move.go`. Under `knob card_check`, which the e2e
 harness sets for every daemon, each move checks the card's rules and logs
 `Task invariant broken`; `killDaemon`'s cleanup fails the test whose daemon
 logged one. A dispatched card's outcome now counts in the state change that
@@ -16054,8 +16054,8 @@ TestDirectionalFocusWrapBSP failure on a loaded Linux runner (run
 42679841917). A stress loop of the same press failed about 4 times in 100 at
 one CPU with three busy loops, and passed 300 of 300 with the fix.
 
-The test sets TUIOS_TEST_STATE_PUSH_HOLD_MS=300 (the daemon holds each state
-push before it writes it) and TUIOS_TEST_STATE_SYNC_HOLD_MS=700 (the client
+The test sets knob state_push_hold_ms=300 (the daemon holds each state
+push before it writes it) and knob state_sync_hold_ms=700 (the client
 holds each state before Update takes it), so each half of the race happens
 on every round.
 
@@ -16727,7 +16727,7 @@ and
 
 ## A panic in a pane's emulator
 
-`e2e/tui/vt_fault_test.go` starts a daemon with `TUIOS_TEST_VT_PANIC=VTZPANIC`,
+`e2e/tui/vt_fault_test.go` starts a daemon with `knob vt_panic=VTZPANIC`,
 so the emulator loop panics on a chunk that holds the marker. Two panes and an
 attached client; one pane prints the marker. `TestEmulatorPanicKeepsTheDaemonAndOtherPanes`
 wants the daemon's pid unchanged, the notice in that pane and on the client, both

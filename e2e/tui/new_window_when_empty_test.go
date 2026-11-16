@@ -364,7 +364,7 @@ func TestEmptyWorkspacePaneSettingReloads(t *testing.T) {
 //   - Alt+2 Alt+3: one pane on each, and the session ends on 3.
 //
 // A local daemon can answer before the next key is read, which hides both
-// races. TUIOS_E2E_HOLD_PANE holds each pane request in the daemon for a
+// races. knob hold_pane holds each pane request in the daemon for a
 // second, as a slow daemon or a slow link would, so the pushes the later keys
 // make queue behind it.
 func TestEmptyWorkspaceFastSwitches(t *testing.T) {
@@ -446,7 +446,7 @@ func TestEmptyWorkspaceFastSwitches(t *testing.T) {
 // holdEnv is the environment that lets the daemon hold or refuse pane
 // requests through the file hold. See paneHoldForTest.
 func holdEnv(hold string) []string {
-	return []string{"TUIOS_E2E=1", "TUIOS_E2E_HOLD_PANE=" + hold}
+	return []string{"TUIOS_E2E=1", knob("hold_pane=" + hold)}
 }
 
 // setHold writes value to the hold file: milliseconds to hold each request,

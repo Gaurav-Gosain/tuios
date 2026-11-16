@@ -2,9 +2,9 @@ package session
 
 import (
 	"fmt"
-	"os"
-	"strconv"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
 // A live upgrade asked for from inside a pane.
@@ -58,9 +58,9 @@ type UpgradeAsk struct {
 
 // upgradeConfirmTimeout is upgradeConfirmWait, or a test's shorter one.
 func upgradeConfirmTimeout() time.Duration {
-	if os.Getenv(handoffTestEnv) == "1" {
-		if ms, err := strconv.Atoi(os.Getenv("TUIOS_TEST_UPGRADE_CONFIRM_MS")); err == nil && ms > 0 {
-			return time.Duration(ms) * time.Millisecond
+	if handoffTestOn() {
+		if d := testknob.Millis("upgrade_confirm_ms"); d > 0 {
+			return d
 		}
 	}
 	return upgradeConfirmWait

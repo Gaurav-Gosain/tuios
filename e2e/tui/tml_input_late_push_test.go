@@ -19,7 +19,7 @@ import (
 // applied it: the field went back to an older text, and the next input sent
 // that older text over the daemon's. That is how the CI run of
 // TestTMLInputTyping lost "y: " after End and a paste. Here the daemon holds
-// each push back one second after it is built (TUIOS_E2E_TML_PUSH_DELAY), so
+// each push back one second after it is built (knob tml_push_delay_ms), so
 // the push for the first key lands after the answers to all the others.
 //
 // How this could pass wrongly, written down first:
@@ -32,7 +32,7 @@ import (
 //     form is submitted after one more key, and the agent's --wait must print
 //     all of it.
 func TestTMLInputKeepsTypingOverALatePush(t *testing.T) {
-	t.Setenv("TUIOS_E2E_TML_PUSH_DELAY", "1s")
+	setKnobs(t, "tml_push_delay_ms=1000")
 	base := t.TempDir()
 	killDaemon(t, base)
 	useShippedLooks(base)

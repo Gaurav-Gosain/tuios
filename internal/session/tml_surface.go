@@ -19,6 +19,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 	"tuios.dev/tml"
 )
 
@@ -1095,13 +1096,12 @@ func (d *Daemon) tmlDrain(cs *connState) {
 }
 
 // tmlPushDelay holds each TML push back after it is built, by
-// TUIOS_E2E_TML_PUSH_DELAY (a Go duration), as a loaded machine or a slow
+// the tml_push_delay_ms knob, in milliseconds, as a loaded machine or a slow
 // link does. It exists for the end-to-end test of a push that lands after
 // inputs the client already had answered (TestTMLInputKeepsTypingOverALatePush).
 // Ordinary runs never set it.
 var tmlPushDelay = sync.OnceValue(func() time.Duration {
-	d, _ := time.ParseDuration(os.Getenv("TUIOS_E2E_TML_PUSH_DELAY"))
-	return max(d, 0)
+	return testknob.Millis("tml_push_delay_ms")
 })
 
 // sendTMLSurfaces sends a client that just attached every open surface of

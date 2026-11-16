@@ -1,12 +1,11 @@
 package app
 
 import (
-	"os"
-	"strconv"
 	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
 // A routed command runs after every state the daemon sent before it.
@@ -29,12 +28,11 @@ import (
 // back for ever.
 
 // stateSyncTestHold is how long the listener keeps each state before Update
-// takes it: TUIOS_TEST_STATE_SYNC_HOLD_MS, at most a minute. It lets an e2e
+// takes it: the state_sync_hold_ms knob, at most a minute. It lets an e2e
 // test deliver a routed command to Update while the state the daemon sent
 // before it is still on its way, which a loaded machine does now and then.
 var stateSyncTestHold = sync.OnceValue(func() time.Duration {
-	ms, _ := strconv.Atoi(os.Getenv("TUIOS_TEST_STATE_SYNC_HOLD_MS"))
-	return time.Duration(min(max(ms, 0), 60000)) * time.Millisecond
+	return min(testknob.Millis("state_sync_hold_ms"), time.Minute)
 })
 
 // heldRemoteLimit is the longest a routed command waits for the states the

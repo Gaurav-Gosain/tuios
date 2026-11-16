@@ -34,6 +34,8 @@ github.com/Gaurav-Gosain/tuios/internal/mcp
 github.com/Gaurav-Gosain/tuios/internal/service
 github.com/Gaurav-Gosain/tuios/internal/tmuxcompat
 github.com/Gaurav-Gosain/tuios/internal/webshell
+# The test knobs: read once, then by holds a test sets.
+github.com/Gaurav-Gosain/tuios/internal/testknob
 github.com/Gaurav-Gosain/tuios/plugins
 rsc.io/qr/...
 

@@ -663,7 +663,7 @@ The fallback and the watchdog are code in the new image, so they cannot help whe
 | Idle cost | None after the release: the keeper has exited and been reaped. Before it, one process blocked in `read` |
 | An older new binary that knows no keeper | It would never release it, and a later kill-server would look like a crash. The keeper record moved `HandoffVersion` to 3, so the preflight refuses such a binary |
 
-**Tested.** `TestDaemonUpgradeSurvivesACrashOfTheNewImage` ends the new image with `TUIOS_TEST_HANDOFF_CRASH`: `SIGKILL` at the top of `RunAdopted`; a panic in a goroutine of its own after every pane is rebuilt and before the fallback is disarmed; `SIGKILL` after it serves and before the release; and a failed adoption whose in-place fallback is killed too. `TestDaemonUpgradeKeeperStandsDown` covers the keeper's life when nothing goes wrong. `e2e/tui/NEGATIVE_CONTROLS.md` records a control per piece. Only macOS was run; the Linux path (pidfd wait, memfd manifest copy held by the keeper) is built and vetted, not run.
+**Tested.** `TestDaemonUpgradeSurvivesACrashOfTheNewImage` ends the new image with `knob handoff_crash`: `SIGKILL` at the top of `RunAdopted`; a panic in a goroutine of its own after every pane is rebuilt and before the fallback is disarmed; `SIGKILL` after it serves and before the release; and a failed adoption whose in-place fallback is killed too. `TestDaemonUpgradeKeeperStandsDown` covers the keeper's life when nothing goes wrong. `e2e/tui/NEGATIVE_CONTROLS.md` records a control per piece. Only macOS was run; the Linux path (pidfd wait, memfd manifest copy held by the keeper) is built and vetted, not run.
 
 ## Appendix A: measurements made for this spec
 
