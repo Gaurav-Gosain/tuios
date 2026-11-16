@@ -18222,3 +18222,11 @@ The test stops at the first row that fails, so rows O1, N2 and Z1 run only after
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAgentsViewLayoutKeysSayWhyWhenNarrow$' -v .`.
+## A note row in the agents view names no agent
+
+`TestAgentsViewSnoozedNoteWithNoAgentListed` in `cockpit_note_row_test.go`. Two plain sessions are set errored from the command line, so the agents view lists their items under Needs you and no agent. z, 2 snoozes the first, and the view draws "1 snoozed. S shows it." beside the other item. The client must keep running, with the note and the item on screen, for two seconds. Run on Linux on 2026-11-16. With the change, 3 of 3 pass.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | origin/main | `TestAgentsViewSnoozedNoteWithNoAgentListed` ("tuios exited with code 1 after the snooze", the client's panic) | **caught** |
+| The note row reads agent 0 | `buildCockpitRows`: the note row's `agent: -1` written as `agent: 0` | `TestAgentsViewSnoozedNoteWithNoAgentListed` ("tuios exited with code 1 after the snooze") | **caught** |

@@ -310,7 +310,7 @@ func (m *OS) buildBoardRows(list []sidebarAgentEntry) []ckRow {
 		}
 		stage := session.TaskStages[g]
 		if len(rows) > 0 {
-			rows = append(rows, ckRow{kind: ckRowGap, group: g, lines: 1, key: "bg:" + stage})
+			rows = append(rows, ckRow{kind: ckRowGap, group: g, lines: 1, agent: -1, key: "bg:" + stage})
 		}
 		head := ckRow{kind: ckRowHead, group: g, agent: -1, count: len(items), lines: 1, key: "bh:" + stage}
 		if ck.stageFolded(g) {
@@ -333,7 +333,7 @@ func (m *OS) buildBoardRows(list []sidebarAgentEntry) []ckRow {
 			rows = append(rows, r)
 		}
 		if hidden := len(items) - shown; hidden > 0 {
-			rows = append(rows, ckRow{kind: ckRowMore, group: g, count: hidden, lines: 1, key: "bm:" + stage})
+			rows = append(rows, ckRow{kind: ckRowMore, group: g, count: hidden, lines: 1, agent: -1, key: "bm:" + stage})
 		}
 	}
 	return rows

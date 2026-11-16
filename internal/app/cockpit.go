@@ -90,7 +90,7 @@ type ckRow struct {
 	// count is a heading's count, and how many rows a "more" row stands
 	// for.
 	count int
-	// agent indexes the cockpit's agents, -1 for an item with no agent. A
+	// agent indexes the cockpit's agents, -1 for a row with no agent. A
 	// card's agent is its holder.
 	agent int
 	// card indexes the cockpit's cards, for a card row.
@@ -573,7 +573,7 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 	for _, r := range m.inboxRows() {
 		if r.item == nil {
 			if r.note != "" && len(groups[ckNeeds]) > 0 {
-				groups[ckNeeds] = append(groups[ckNeeds], ckRow{kind: ckRowNote, group: ckNeeds, note: r.note, lines: 1, key: "n:" + r.note})
+				groups[ckNeeds] = append(groups[ckNeeds], ckRow{kind: ckRowNote, group: ckNeeds, note: r.note, lines: 1, agent: -1, key: "n:" + r.note})
 			}
 			continue
 		}
@@ -732,7 +732,7 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 			continue
 		}
 		if len(rows) > 0 {
-			rows = append(rows, ckRow{kind: ckRowGap, group: g, lines: 1, key: "g:" + strconv.Itoa(g)})
+			rows = append(rows, ckRow{kind: ckRowGap, group: g, lines: 1, agent: -1, key: "g:" + strconv.Itoa(g)})
 		}
 		head := ckRow{kind: ckRowHead, group: g, agent: -1, count: n, lines: 1, key: "h:" + strconv.Itoa(g)}
 		if m.ckGroupFolded(g) {
@@ -764,12 +764,12 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 			add(g, r)
 		}
 		if hidden := n - shown; hidden > 0 {
-			rows = append(rows, ckRow{kind: ckRowMore, group: g, count: hidden, lines: 1, key: "m:" + strconv.Itoa(g)})
+			rows = append(rows, ckRow{kind: ckRowMore, group: g, count: hidden, lines: 1, agent: -1, key: "m:" + strconv.Itoa(g)})
 		}
 	}
 	for _, b := range bands {
 		if len(rows) > 0 {
-			rows = append(rows, ckRow{kind: ckRowGap, group: ckIdle, lines: 1, key: "bg:" + b.key})
+			rows = append(rows, ckRow{kind: ckRowGap, group: ckIdle, lines: 1, agent: -1, key: "bg:" + b.key})
 		}
 		rows = append(rows, ckRow{kind: ckRowBand, group: ckIdle, agent: -1, count: b.count, title: b.title, lines: 1, key: "b:" + b.key})
 		for _, br := range b.rows {
@@ -946,10 +946,10 @@ func ckChildRows(e sidebarAgentEntry, g int) []ckRow {
 	var rows []ckRow
 	for i, c := range e.Children {
 		if i == ckChildMax {
-			rows = append(rows, ckRow{kind: ckRowMore, group: -1, count: len(e.Children) - i, lines: 1, key: "c:" + agentKey(e) + ":more"})
+			rows = append(rows, ckRow{kind: ckRowMore, group: -1, count: len(e.Children) - i, lines: 1, agent: -1, key: "c:" + agentKey(e) + ":more"})
 			break
 		}
-		rows = append(rows, ckRow{kind: ckRowChild, group: g, child: c, lines: 1, key: "c:" + agentKey(e) + ":" + c.ID})
+		rows = append(rows, ckRow{kind: ckRowChild, group: g, child: c, lines: 1, agent: -1, key: "c:" + agentKey(e) + ":" + c.ID})
 	}
 	if n := len(rows); n > 0 {
 		rows[n-1].last = true
