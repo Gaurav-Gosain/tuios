@@ -385,8 +385,6 @@ func (m *OS) adoptEmptySessionVersion(state *session.SessionState) {
 	// builds from here on is news.
 	m.treeSeen = nil
 	m.treeDerived = nil
-	m.sessionTreeOpsOff = state != nil && !state.LayoutTreeOps
-	m.sessionScratchWSOff = state != nil && !state.ScratchWorkspaces
 	// The tiling and the layout mode are the session's too, and
 	// RestoreFromState, which takes them for a session with windows, does not
 	// run for one without. Kept from the session just left, a tiled client

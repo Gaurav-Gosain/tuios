@@ -32,9 +32,6 @@ const (
 	// wsMark is the text of the mark a client shows over a view of a larger
 	// session.
 	wsMark = "Part of session"
-	// wsLegacyEnv makes a client behave as a build from before window_size.
-	// TUIOS_E2E_OLD_CLIENT names such a build to use instead.
-	wsLegacyEnv = "TUIOS_WINDOW_SIZE_LEGACY=1"
 )
 
 // wsSize is the size the daemon settled on, and the policy it used.
@@ -117,15 +114,7 @@ func windowSizePair(t *testing.T, policy, extraConfig string, smallEnv []string,
 	newWindow(t, big)
 	waitWindowCount(t, big, 2, "two windows on the big client")
 	enableTiling(t, big)
-	attach := func() {
-		small = attachSmall(t, base, wsSession, startOpts{cols: wsSmallCols, rows: wsSmallRows, env: smallEnv})
-	}
-	if slices.Contains(smallEnv, wsLegacyEnv) {
-		// A real build from before window_size, when one is named.
-		withBinary("TUIOS_E2E_OLD_CLIENT", attach)
-	} else {
-		attach()
-	}
+	small = attachSmall(t, base, wsSession, startOpts{cols: wsSmallCols, rows: wsSmallRows, env: smallEnv})
 	return big, small, base
 }
 
@@ -568,32 +557,6 @@ func sideBySide(t *testing.T, base string) (left, right string) {
 		t.Fatalf("the panes are not side by side: x %d and %d", a.X, b.X)
 	}
 	return a.ID, b.ID
-}
-
-// TestWindowSizeLegacyClient attaches a small client that says nothing about
-// window_size, as a build from before it would. TUIOS_E2E_OLD_CLIENT runs a
-// real older build as that client. The session then keeps the
-// smallest client's size whoever types, and that client draws the whole
-// session with no mark.
-//
-// NEGATIVE CONTROL: with effectiveWindowSize ignoring the capability, the
-// big client's input grows the session to 200x50 and the old client, which
-// lays its panes out in its own 80 columns, draws them cut off.
-func TestWindowSizeLegacyClient(t *testing.T) {
-	big, small, base := windowSizePair(t, "latest", "", []string{wsLegacyEnv})
-	waitWSSize(t, base, wsSmallCols, wsSmallRows, "with an old client attached")
-	if _, _, policy := wsSize(t, base); policy != "smallest" {
-		t.Fatalf("with an old client attached the policy in force is %q, want smallest", policy)
-	}
-	time.Sleep(wsHoldGap)
-	activity(t, big)
-	time.Sleep(wsHoldGap)
-	if w, h, _ := wsSize(t, base); w != wsSmallCols || h != wsSmallRows {
-		t.Fatalf("an old client is attached and the session moved to %dx%d", w, h)
-	}
-	waitSpanRight(t, small, wsSmallCols, "the old client's own frame")
-	waitMark(t, small, false, "the old client")
-	saveArtifact(t, small, artifactDir(t), "legacy-small")
 }
 
 // TestWindowSizeRailStaysWhole shows a small client a session larger than

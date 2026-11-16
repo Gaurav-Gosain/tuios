@@ -231,20 +231,6 @@ const (
 	captureDefaultCommands = 3
 )
 
-// errStaleCommands is what capture-pane --commands says when the daemon does
-// not know the commands parameter, worded like errStaleCapture.
-var errStaleCommands = errors.New("the running daemon is older than this tuios and does not know --commands. Run 'tuios restart-server' to update it")
-
-// errStaleCapture is what capture-pane says when the daemon does not know
-// unwrap or trim. Since v0.8.0 a daemon refuses a parameter it does not know,
-// and its own wording ("fix the name") points at the caller instead of at the
-// daemon.
-var errStaleCapture = errors.New("the running daemon is older than this tuios and does not know --unwrap or --trim. Run 'tuios restart-server' to update it")
-
-// errStaleWaitNew is what wait-for --new says when the daemon does not know
-// the new parameter, worded like errStaleCapture.
-var errStaleWaitNew = errors.New("the running daemon is older than this tuios and does not know --new. Run 'tuios restart-server' to update it")
-
 // windowRow is the subset of a listed window both the table and the single
 // window view render.
 type windowRow struct {

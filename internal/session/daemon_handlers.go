@@ -24,24 +24,12 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	cs.goodbye = payload.Goodbye
 	cs.tmlSurfaces = payload.TMLSurfaces
 	cs.pluginAsks = payload.PluginApprovals
-	changed := cs.treeOps != payload.LayoutTreeOps || cs.scratchWS != payload.ScratchWorkspaces
-	cs.treeOps = payload.LayoutTreeOps
-	cs.scratchWS = payload.ScratchWorkspaces
-	sizeCapChanged := cs.windowSizeCap != payload.WindowSize
-	cs.windowSizeCap = payload.WindowSize
 	cs.holdOptions = payload.HoldOptions
 	cs.machine, cs.kind = helloMachine(payload.Machine), helloKind(payload.ClientKind)
-	cs.viewChrome = payload.ViewChrome
-	attachedTo := cs.sessionID
 	cs.mu.Unlock()
-	// A second hello on an attached connection can change what the client
-	// sends, and with it what the session can run.
-	if changed && attachedTo != "" {
-		d.refreshTreeOps(attachedTo)
-	}
-	if sizeCapChanged && attachedTo != "" {
-		d.recalculateAndBroadcastSize(attachedTo, "")
-	}
+	// The layout tree ops, scratch workspaces, window_size and ViewChrome
+	// fields of the hello are not read: every TUI client this build serves
+	// (v0.12 and later) sets them.
 
 	// Refuse a client this daemon cannot serve before it can attach to anything.
 	if protocolMismatch(payload.Protocol) {
@@ -69,8 +57,6 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 			cs.clientID, payload.CellWidth, payload.CellHeight, payload.KittyGraphics, payload.SixelGraphics, payload.TerminalName)
 	}
 
-	// gob is the only payload codec. PreferredCodec stays in the handshake
-	// for wire stability but cannot select anything else.
 	sessions := d.manager.ListSessions()
 	names := make([]string, len(sessions))
 	for i, s := range sessions {
@@ -80,7 +66,6 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	return d.sendMessage(cs, MsgWelcome, &WelcomePayload{
 		Version:      d.version,
 		SessionNames: names,
-		Codec:        wireCodecName,
 		Protocol:     ProtocolVersion,
 		ClientFocus:  true,
 		// See client_graphics.go.
@@ -341,9 +326,9 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// Whether the session's clients send their trees as ops, with this client
 	// counted. Settled before the snapshot, so the reply says what is in force.
 	// A client that moved here without a detach no longer counts where it was.
-	d.refreshTreeOps(session.ID)
+	d.recountTUIClients(session.ID)
 	if previousSession != "" && previousSession != session.ID {
-		d.refreshTreeOps(previousSession)
+		d.recountTUIClients(previousSession)
 	}
 	session.forgetBroadcast()
 	state := session.GetState()
@@ -858,32 +843,26 @@ func (d *Daemon) forgetPushes(cs *connState, sessionID string) {
 	if session := d.manager.GetSessionByID(sessionID); session != nil {
 		session.ForgetPush(origin)
 	}
-	// A client that leaves may have been the one holding the ops off.
-	d.refreshTreeOps(sessionID)
+	// A client that leaves may have been the one holding the animation off.
+	d.recountTUIClients(sessionID)
 }
 
-// refreshTreeOps turns the session's tree ops on while every TUI client
-// attached to it sends them, and off while any does not. A client too old for
-// ops sends its trees in its pushes and reads trees only from those, so a
-// current client beside it has to do the same, or the two keep two trees.
-// A client still attaching is counted: it is about to be handed a snapshot
-// that has to say what is in force.
-//
-// The same count settles whether the session's hosts make kitty frame edits:
-// only while every attached TUI client's host does, and never with none
-// attached. It runs on every attach, detach and disconnect, so a client that
+// recountTUIClients counts the TUI clients attached to the session, and
+// settles from them whether the session's hosts make kitty frame edits: only
+// while every attached TUI client's host does, and never with none attached.
+// It also settles which image protocols the session advertises. A client
+// still attaching is counted: it is about to be handed a snapshot that has to
+// say what is in force. It runs on every attach, detach and disconnect, so a client that
 // leaves hands the answer back to the ones that stay. See SetKittyAnimation.
-func (d *Daemon) refreshTreeOps(sessionID string) {
+func (d *Daemon) recountTUIClients(sessionID string) {
 	session := d.manager.GetSessionByID(sessionID)
 	if session == nil {
 		return
 	}
-	// Held from the count to the change. A detach that counted "no older
-	// client" and then applied it after an older client's attach had applied
-	// "off" left the ops on beside a client that cannot send them.
-	session.treeOpsMu.Lock()
-	defer session.treeOpsMu.Unlock()
-	on, scratchWS := true, true
+	// Held from the count to the change, so a detach and an attach that
+	// count at the same time apply their answers in the order they counted.
+	session.recountMu.Lock()
+	defer session.recountMu.Unlock()
 	animate, tuiClients := true, 0
 	images, kittyImages := false, false
 	d.clientsMu.RLock()
@@ -891,12 +870,6 @@ func (d *Daemon) refreshTreeOps(sessionID string) {
 		cs.mu.Lock()
 		if cs.sessionID == sessionID && cs.isTUIClient {
 			tuiClients++
-			if !cs.treeOps {
-				on = false
-			}
-			if !cs.scratchWS {
-				scratchWS = false
-			}
 			if !cs.kittyAnimation {
 				animate = false
 			}
@@ -922,12 +895,10 @@ func (d *Daemon) refreshTreeOps(sessionID string) {
 	if hook := treeOpsCounted.Load(); hook != nil {
 		(*hook)()
 	}
-	session.SetLayoutTreeOps(on)
-	session.SetScratchWorkspaces(scratchWS)
 	session.noteTUIClients(tuiClients)
 }
 
-// treeOpsCounted runs in refreshTreeOps between the count and the change. It
+// treeOpsCounted runs in recountTUIClients between the count and the change. It
 // is unset outside tests, which use it to widen that window on purpose.
 var treeOpsCounted atomic.Pointer[func()]
 

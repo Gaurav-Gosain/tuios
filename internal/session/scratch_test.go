@@ -381,34 +381,3 @@ func TestSelectWorkspaceLeavesTheScratch(t *testing.T) {
 		t.Fatalf("focus = %q, want b on workspace 2", got)
 	}
 }
-
-// With a client too old for scratch workspaces attached, a new scratch
-// terminal is a popup on the current workspace, and neither a push nor a
-// focus-window puts the focus on a scratch workspace.
-func TestScratchWorkspacesOffForAnOldClient(t *testing.T) {
-	sess := newTestSession(t)
-	group, err := sess.AddDaemonWindowWith(NewWindowOptions{Scratch: true, ScratchName: "logs", Command: []string{"sleep", "30"}}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = sess.mutateState(func(s *SessionState) error { s.FocusedWindowID = group.ID; return nil })
-	sess.SetScratchWorkspaces(false)
-	st := sess.GetState()
-	if st.ScratchWorkspaces || st.FocusedWindowID == group.ID {
-		t.Fatalf("flag=%v focus=%s, want off and the focus moved", st.ScratchWorkspaces, st.FocusedWindowID)
-	}
-	popup, err := sess.AddDaemonWindowWith(NewWindowOptions{Popup: true, Scratch: true, Command: []string{"sleep", "30"}}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !popup.Popup || !popup.Scratch || IsScratchWorkspace(popup.Workspace) {
-		t.Fatalf("scratch with an old client = %+v, want a popup on the current workspace", popup)
-	}
-	if err := sess.FocusDaemonWindow(group.ID); err == nil {
-		t.Fatal("focus-window put the focus on a scratch workspace")
-	}
-	sess.SetScratchWorkspaces(true)
-	if !sess.GetState().ScratchWorkspaces {
-		t.Fatal("the flag did not come back on")
-	}
-}

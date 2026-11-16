@@ -2,6 +2,7 @@ package session
 
 import (
 	"maps"
+	"net"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -115,7 +116,7 @@ func checkNoStepBack(t *testing.T, who string, seen []int, want int) {
 func TestAttachRepairDoesNotFollowAPeerPush(t *testing.T) {
 	d, socketPath := startTestDaemon(t)
 
-	a, _ := dialTreeOpsClient(t, socketPath, "order", true)
+	a, _ := dialTreeOpsClient(t, socketPath, "order")
 	// A's own attach repair, if it has one, is over before the hook is armed.
 	pingClient(t, a)
 	sess := d.manager.GetSession("order")
@@ -146,9 +147,19 @@ func TestAttachRepairDoesNotFollowAPeerPush(t *testing.T) {
 	stateResendSnapshotTaken.Store(&hook)
 	t.Cleanup(func() { stateResendSnapshotTaken.Store(nil) })
 
-	// B has tree ops off, so its attach turns them off for the session while
-	// B is not yet in the broadcast set. B misses that state and is repaired.
-	b, _ := dialTreeOpsClient(t, socketPath, "order", false)
+	// A rename lands between B's attach snapshot and its reply, while B is
+	// not yet in the broadcast set. B misses that state and is repaired.
+	var renamed sync.Once
+	rename := func() {
+		renamed.Do(func() {
+			if err := sess.SetDisplayName("renamed while B attaches"); err != nil {
+				t.Errorf("SetDisplayName: %v", err)
+			}
+		})
+	}
+	attachSnapshotTaken.Store(&rename)
+	t.Cleanup(func() { attachSnapshotTaken.Store(nil) })
+	b, _ := dialTreeOpsClient(t, socketPath, "order")
 	select {
 	case <-repairing:
 	case <-time.After(10 * time.Second * testDeadlineScale):
@@ -183,9 +194,9 @@ func TestAttachRepairDoesNotFollowAPeerPush(t *testing.T) {
 func TestConcurrentPushesForwardInOrder(t *testing.T) {
 	d, socketPath := startTestDaemon(t)
 
-	a, _ := dialTreeOpsClient(t, socketPath, "order", true)
-	b, _ := dialTreeOpsClient(t, socketPath, "order", true)
-	c, _ := dialTreeOpsClient(t, socketPath, "order", true)
+	a, _ := dialTreeOpsClient(t, socketPath, "order")
+	b, _ := dialTreeOpsClient(t, socketPath, "order")
+	c, _ := dialTreeOpsClient(t, socketPath, "order")
 	for _, cl := range []*boundsClient{a, b, c} {
 		pingClient(t, cl)
 	}
@@ -257,8 +268,8 @@ func TestConcurrentPushesForwardInOrder(t *testing.T) {
 func TestReconcileReplyDoesNotOvertakeAQueuedState(t *testing.T) {
 	d, socketPath := startTestDaemon(t)
 
-	a, _ := dialTreeOpsClient(t, socketPath, "order", true)
-	b, _ := dialTreeOpsClient(t, socketPath, "order", true)
+	a, _ := dialTreeOpsClient(t, socketPath, "order")
+	b, _ := dialTreeOpsClient(t, socketPath, "order")
 	for _, cl := range []*boundsClient{a, b} {
 		pingClient(t, cl)
 	}
@@ -342,8 +353,8 @@ func TestReconcileReplyDoesNotOvertakeAQueuedState(t *testing.T) {
 func TestReconcileReplySurvivesASuppressedForward(t *testing.T) {
 	d, socketPath := startTestDaemon(t)
 
-	a, _ := dialTreeOpsClient(t, socketPath, "order", true)
-	b, _ := dialTreeOpsClient(t, socketPath, "order", true)
+	a, _ := dialTreeOpsClient(t, socketPath, "order")
+	b, _ := dialTreeOpsClient(t, socketPath, "order")
 	for _, cl := range []*boundsClient{a, b} {
 		pingClient(t, cl)
 	}
@@ -441,4 +452,24 @@ func TestReconcileReplySurvivesASuppressedForward(t *testing.T) {
 	if seen == 0 {
 		t.Fatal("A's push was reconciled, and A read no state that counts it before the next change")
 	}
+}
+
+// dialTreeOpsClient attaches a raw client that sends tree ops, and returns it
+// with the state the attach handed it.
+func dialTreeOpsClient(t *testing.T, socketPath, session string) (*boundsClient, *SessionState) {
+	t.Helper()
+	conn, err := net.DialTimeout("unix", socketPath, 5*time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	c := &boundsClient{conn: conn}
+	c.send(t, MsgHello, &HelloPayload{Version: "test", Protocol: ProtocolVersion, LayoutTreeOps: true})
+	c.await(t, MsgWelcome)
+	c.send(t, MsgAttach, &AttachPayload{SessionName: session, CreateNew: true, Width: 120, Height: 40})
+	var attached AttachedPayload
+	if err := c.await(t, MsgAttached).ParsePayload(&attached); err != nil {
+		t.Fatalf("parse attach reply: %v", err)
+	}
+	return c, attached.State
 }

@@ -78,7 +78,6 @@ func TestClientConnectLeavesTheConfigAlone(t *testing.T) {
 				_ = msg.ParsePayload(&hello)
 				hellos <- hello
 				resp, _ := NewMessage(MsgWelcome, &WelcomePayload{
-					Codec:    "gob",
 					Protocol: ProtocolVersion,
 				})
 				_ = WriteMessage(conn, resp)

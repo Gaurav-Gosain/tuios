@@ -55,10 +55,9 @@ import (
 // screen's edge, which reads as a bug.
 
 // windowSizeAware reports whether the daemon may hand this client a session
-// larger than its terminal. Against a daemon that predates the policy the
-// session is never larger, and this keeps the client drawing as it did.
+// larger than its terminal: every daemon session may.
 func (m *OS) windowSizeAware() bool {
-	return m.IsDaemonSession && m.DaemonClient != nil && m.DaemonClient.WindowSizeAware()
+	return m.IsDaemonSession && m.DaemonClient != nil
 }
 
 // cropsWidth reports whether the session is wider than this client.
@@ -121,7 +120,7 @@ func (m *OS) reserveDiffers() (own, agreed session.LayoutReserve, ok bool) {
 	// With no size from the daemon yet (an empty session's attach carries
 	// none), there is no agreed box to lay out around, and the floor stays.
 	if m.DaemonClient == nil || m.DaemonClient.SessionWindowSize() != config.WindowSizeLatest ||
-		!m.DaemonClient.ViewChrome() || !m.DaemonClient.SessionSizedByOther() ||
+		!m.DaemonClient.SessionSizedByOther() ||
 		m.EffectiveWidth <= 0 || m.EffectiveHeight <= 0 {
 		return own, agreed, false
 	}

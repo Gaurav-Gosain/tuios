@@ -74,8 +74,7 @@ func windowSizePolicy(v string) string {
 const optionWindowSize = "daemon.window_size"
 
 // sessionWindowSize is the policy the session is set to: its own override, or
-// the daemon's configured one. It says nothing about the gate; see
-// effectiveWindowSize.
+// the daemon's configured one.
 func (d *Daemon) sessionWindowSize(s *Session) string {
 	if s != nil {
 		if v, ok := s.GetOption(optionWindowSize); ok {
@@ -123,7 +122,6 @@ func (l *latestState) get(sessionID string) *sessionLatest {
 type sizedClient struct {
 	id       string
 	w, h     int
-	capable  bool
 	viewOnly bool
 	activity time.Time
 	seq      uint64
@@ -141,7 +139,7 @@ func (d *Daemon) sessionSizedClients(sessionID string) []sizedClient {
 		match := cs.sessionID == sessionID && cs.isTUIClient && !cs.passive
 		c := sizedClient{
 			id: cs.clientID, w: cs.width, h: cs.height,
-			capable: cs.windowSizeCap, viewOnly: cs.viewOnly,
+			viewOnly: cs.viewOnly,
 			activity: cs.lastActivity, seq: cs.attachSeq,
 		}
 		cs.mu.Unlock()
@@ -286,18 +284,6 @@ func (d *Daemon) forgetLatest(sessionID string) {
 		}
 		delete(d.latest.sessions, sessionID)
 	}
-}
-
-// effectiveWindowSize is the policy in force for a session with these
-// clients: its own policy, or smallest while a client that cannot draw a
-// larger session is attached.
-func (d *Daemon) effectiveWindowSize(s *Session, clients []sizedClient) string {
-	for _, c := range clients {
-		if !c.capable {
-			return config.WindowSizeSmallest
-		}
-	}
-	return d.sessionWindowSize(s)
 }
 
 // sizingClients is the clients whose size the policy reads. Under smallest

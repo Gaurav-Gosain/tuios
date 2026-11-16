@@ -16,7 +16,7 @@ func dialGraphicsClient(t *testing.T, socketPath, session string, sixel, kitty b
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 	c := &boundsClient{conn: conn}
-	c.send(t, MsgHello, &HelloPayload{Version: "test", PreferredCodec: "gob", Protocol: ProtocolVersion,
+	c.send(t, MsgHello, &HelloPayload{Version: "test", Protocol: ProtocolVersion,
 		SixelGraphics: sixel, KittyGraphics: kitty})
 	c.await(t, MsgWelcome)
 	c.send(t, MsgAttach, &AttachPayload{SessionName: session, CreateNew: true, Width: 120, Height: 40})

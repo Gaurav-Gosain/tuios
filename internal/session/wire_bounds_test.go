@@ -250,7 +250,7 @@ func dialBoundsClient(t *testing.T, socketPath, session string) *boundsClient {
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 	c := &boundsClient{conn: conn}
-	c.send(t, MsgHello, &HelloPayload{Version: "test", PreferredCodec: "gob", Protocol: ProtocolVersion})
+	c.send(t, MsgHello, &HelloPayload{Version: "test", Protocol: ProtocolVersion})
 	c.await(t, MsgWelcome)
 	c.send(t, MsgAttach, &AttachPayload{SessionName: session, CreateNew: true, Width: 200, Height: 60})
 	c.await(t, MsgAttached)

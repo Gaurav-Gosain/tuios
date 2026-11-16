@@ -214,9 +214,8 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 
 		// A frame edit in a daemon pane is refused, when it is, by the
 		// daemon: its answer is in order with the rest, and this one would
-		// come a round trip later. See session.Session.SetKittyAnimation. A
-		// daemon too old to refuse it leaves the refusal to this client.
-		answer := clientAnswersKittyCommand(win.DaemonMode, cmd.Action, m.DaemonClient.DaemonRefusesKittyAnimation())
+		// come a round trip later. See session.Session.SetKittyAnimation.
+		answer := clientAnswersKittyCommand(win.DaemonMode, cmd.Action)
 
 		// On a host without graphics a kitty picture is drawn as glyphs,
 		// as a sixel one is (kitty_symbols.go). The passthrough below then
@@ -264,7 +263,7 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 
 // clientAnswersKittyCommand reports whether this client writes its own answer
 // to a guest's kitty command into the pane. In a daemon pane a frame edit is
-// the daemon's to refuse, unless the daemon is too old to do it.
-func clientAnswersKittyCommand(daemonPane bool, action vt.KittyGraphicsAction, daemonRefuses bool) bool {
-	return !(daemonPane && daemonRefuses && vt.IsKittyAnimationAction(action))
+// the daemon's to refuse.
+func clientAnswersKittyCommand(daemonPane bool, action vt.KittyGraphicsAction) bool {
+	return !daemonPane || !vt.IsKittyAnimationAction(action)
 }

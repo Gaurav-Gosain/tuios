@@ -19,7 +19,7 @@ func dialPaneMarkClient(t *testing.T, socketPath, session string, asks bool) (*b
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 	c := &boundsClient{conn: conn}
-	c.send(t, MsgHello, &HelloPayload{Version: "test", PreferredCodec: "gob", Protocol: ProtocolVersion, PaneMarks: asks})
+	c.send(t, MsgHello, &HelloPayload{Version: "test", Protocol: ProtocolVersion, PaneMarks: asks})
 	var welcome WelcomePayload
 	if err := c.await(t, MsgWelcome).ParsePayload(&welcome); err != nil {
 		t.Fatalf("parse welcome: %v", err)

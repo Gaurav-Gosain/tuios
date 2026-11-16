@@ -99,12 +99,6 @@ func openHostConnectionAgent(conn net.Conn, br *bufio.Reader, host, agent string
 		return HostConnectionInfo{}, errfmt.Errorf("the daemon on this machine sent a reply this build cannot read: %w", err)
 	}
 	if resp.Error != nil {
-		// A daemon from before ssh_agent follow refuses the parameter it does
-		// not know, and refuses before it touches the connection. The same
-		// request without it is what that daemon always took.
-		if agent != "" && refusesParam(resp.Error, "ssh_auth_sock") {
-			return openHostConnectionAgent(conn, br, host, "")
-		}
 		e := &HostConnectError{Host: host, Code: resp.Error.Code, Message: resp.Error.Message, Hint: resp.Error.Hint}
 		if resp.Error.Code == ErrVerbUnknownVerb {
 			e.Message = "The daemon on this machine is older than this tuios and cannot open a connection to " + host + ". Restart it with 'tuios kill-server'."

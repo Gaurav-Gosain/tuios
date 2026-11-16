@@ -826,7 +826,7 @@ type SessionsChangedMsg struct{}
 // A daemon that pushes listing changes is not polled, so nothing is armed.
 func (m *OS) foreignSessionRefreshTick(after time.Duration) tea.Cmd {
 	m.foreignTickGen++
-	if m.DaemonClient != nil && m.DaemonClient.ListingPush() {
+	if m.DaemonClient != nil {
 		return nil
 	}
 	gen := m.foreignTickGen

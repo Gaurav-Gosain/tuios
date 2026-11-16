@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"strings"
 	"sync"
 	"time"
 
@@ -219,47 +218,13 @@ type paneOpened struct {
 // openPaneReply sends open-pane on a fresh connection to the far daemon and
 // reads its whole reply. On success the connection is the pty from here on,
 // and the reader that is returned is the only one that may read it.
-//
-// A far daemon from before reports from hosted panes refuses the window param
-// with invalid_params, because every verb line is checked against the verb's
-// schema, and one from before resumable panes refuses resumable the same way.
-// That refusal comes before anything is spawned and leaves the stream reading
-// verb lines, so the request is sent again on the same stream without the
-// param it named. The pane then opens as it did on that daemon: with no calls
-// token and no report channel without window, and ending with the link
-// without resumable.
 func openPaneReply(stream io.ReadWriteCloser, spec hostedPaneSpec) (paneOpened, *bufio.Reader, error) {
 	br := bufio.NewReader(stream)
-	droppedWindow := false
-	var resp openPaneResponse
-	var err error
-	// At most one retry per optional param: the far daemon names one unknown
-	// param per refusal.
-	for range 4 {
-		if resp, err = sendOpenPane(stream, br, spec); err != nil {
-			return paneOpened{}, nil, err
-		}
-		switch {
-		case spec.Resumable && refusesParam(resp.Error, "resumable"):
-			spec.Resumable = false
-			continue
-		case spec.KittyMedia && refusesParam(resp.Error, "kitty_media"):
-			spec.KittyMedia = false
-			continue
-		case spec.Window != "" && refusesParam(resp.Error, "window"):
-			spec.Window = ""
-			droppedWindow = true
-			continue
-		}
-		break
+	resp, err := sendOpenPane(stream, br, spec)
+	if err != nil {
+		return paneOpened{}, nil, err
 	}
 	if resp.Result != nil {
-		if droppedWindow {
-			// A token from a daemon that did not take the window would
-			// promise a channel with no window behind it. Such a daemon sends
-			// none, and one that did is not believed.
-			resp.Result.CallsToken = ""
-		}
 		if !spec.Resumable && spec.Resume == nil {
 			resp.Result.ResumeToken, resp.Result.Grace = "", 0
 		}
@@ -312,19 +277,6 @@ func sendOpenPane(stream io.Writer, br *bufio.Reader, spec hostedPaneSpec) (open
 		return openPaneResponse{}, errfmt.Errorf("the reply cannot be read by this build: %w", err)
 	}
 	return resp, nil
-}
-
-// refusesParam reports whether verr is a far daemon's schema check refusing
-// open-pane's param name, which is how a daemon from before that param
-// answers it.
-func refusesParam(verr *verbError, name string) bool {
-	if verr == nil || verr.Code != ErrVerbInvalidParams {
-		return false
-	}
-	if verr.Hint != nil && verr.Hint.Param != "" {
-		return verr.Hint.Param == name
-	}
-	return strings.Contains(verr.Message, "no parameter") && strings.Contains(verr.Message, name)
 }
 
 // Read returns the process's output. The stream ends when the far side closes

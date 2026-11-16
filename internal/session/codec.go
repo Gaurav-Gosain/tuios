@@ -28,10 +28,6 @@ const wireCodecGobTagged byte = 2
 // reqIDLen is the size of the request id in a tagged frame.
 const reqIDLen = 8
 
-// wireCodecName is what the welcome reports in WelcomePayload.Codec. Older
-// peers inside the same protocol version still read that field.
-const wireCodecName = "gob"
-
 // encodePayload serializes a message payload with gob.
 func encodePayload(v any) ([]byte, error) {
 	var buf bytes.Buffer

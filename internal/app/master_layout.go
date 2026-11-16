@@ -65,7 +65,7 @@ func (m *OS) inMasterStack() bool {
 
 // masterOpsOn reports whether master layout changes go to the daemon as ops.
 func (m *OS) masterOpsOn() bool {
-	return m.IsDaemonSession && m.DaemonClient != nil && m.DaemonClient.MasterLayoutOps()
+	return m.IsDaemonSession && m.DaemonClient != nil
 }
 
 // setMasterLayout records a new shape for the current workspace, tells the

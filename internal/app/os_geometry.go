@@ -529,8 +529,7 @@ func (m *OS) OwnLayoutReserve() session.LayoutReserve {
 func (m *OS) paneReserve() session.LayoutReserve {
 	own := m.OwnLayoutReserve()
 	r := own.Max(m.SessionReserve)
-	if m.DaemonClient == nil || m.DaemonClient.SessionWindowSize() != config.WindowSizeLatest ||
-		!m.DaemonClient.ViewChrome() {
+	if m.DaemonClient == nil || m.DaemonClient.SessionWindowSize() != config.WindowSizeLatest {
 		return r
 	}
 	if m.widthDiffers() {

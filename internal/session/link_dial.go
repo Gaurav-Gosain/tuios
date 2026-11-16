@@ -87,11 +87,6 @@ func dialLinkSocket(path, peer string, pinned bool, agent string) (net.Conn, err
 		return nil, err
 	}
 	token, verr, err := linkHandshake(conn, linkPeerParams(peer, pinned, agent))
-	if err == nil && agent != "" && refusesParam(verr, "ssh_auth_sock") {
-		// A daemon from before ssh_agent follow. It refused before it
-		// named the peer, so the handshake is sent again without the socket.
-		token, verr, err = linkHandshake(conn, linkPeerParams(peer, pinned, ""))
-	}
 	switch {
 	case err != nil:
 		_ = conn.Close()
@@ -182,8 +177,7 @@ func (c *linkConn) CloseWrite() error {
 }
 
 // linkPeerParams are the link-peer parameters. ssh_auth_sock is left out when
-// there is none. A daemon older than ssh_agent follow refuses it with
-// invalid_params, and dialLinkSocket sends the handshake again without it.
+// there is none.
 func linkPeerParams(peer string, pinned bool, agent string) map[string]any {
 	p := map[string]any{"peer": peer, "pinned": pinned}
 	if agent != "" {

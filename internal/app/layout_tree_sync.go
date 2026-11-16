@@ -38,31 +38,10 @@ import (
 // The panes are laid out from the tree this client holds, never from another
 // client's rectangles. See bspRectsOffTree.
 
-// treeOpsOn reports whether this client sends its trees as ops. Against a
-// daemon that predates them it sends them in its pushes, as before.
-//
-// The session can turn them off too: it does while a client too old for them
-// is attached (see SessionState.LayoutTreeOps).
+// treeOpsOn reports whether this client sends its trees as ops: every client
+// of a daemon session does. Without a daemon there is nobody to send them to.
 func (m *OS) treeOpsOn() bool {
-	return m.IsDaemonSession && m.DaemonClient != nil && m.DaemonClient.LayoutTreeOps() && !m.sessionTreeOpsOff
-}
-
-// adoptTreeOpsFlag takes the session's word on whether tree ops are in force.
-// Switching them on starts the record of what the session holds from the trees
-// this client holds, so none of them reads as an unsent change: the session's
-// trees came from pushes while the ops were off, and the state that switches
-// them on carries those trees, which adoptSessionTrees then takes.
-func (m *OS) adoptTreeOpsFlag(state *session.SessionState) {
-	if state == nil {
-		return
-	}
-	wasOn := m.treeOpsOn()
-	m.sessionTreeOpsOff = !state.LayoutTreeOps
-	m.sessionScratchWSOff = !state.ScratchWorkspaces
-	if !wasOn && m.treeOpsOn() {
-		m.treeSeen = m.treeKeys()
-		m.treeDerived = nil
-	}
+	return m.IsDaemonSession && m.DaemonClient != nil
 }
 
 // localLeafNames names this client's leaf numbers by window ID.
@@ -260,41 +239,6 @@ func (m *OS) bspRectsOffTree() bool {
 		}
 	}
 	return false
-}
-
-// adoptTreesByWindow replaces this client's trees with a state's, on the terms
-// the trees used before the op existed (the whole set, from a newer state or a
-// peer), but with each leaf read through the state's numbering to a window ID
-// and then to this client's number. It is for a session whose ops are off
-// because an older client is attached. The trees then come from that client's
-// pushes, numbered its own way; taking them raw put panes in each other's
-// places on this client, since its own numbering is never replaced. The
-// daemon of this build always sends a state's numbering with its trees.
-func (m *OS) adoptTreesByWindow(state *session.SessionState) {
-	present := make(map[string]bool, len(m.Windows))
-	for _, w := range m.Windows {
-		present[w.ID] = true
-	}
-	name := session.SessionTreeNames(state)
-	toLocal := func(n int) (int, bool) {
-		id := name(n)
-		if id == "" || !present[id] {
-			return 0, false
-		}
-		return m.GetWindowIntID(id), true
-	}
-	m.WorkspaceTrees = make(map[int]*layout.BSPTree, len(state.WorkspaceTrees))
-	for ws, tree := range state.WorkspaceTrees {
-		wire := session.RemapTree(tree, toLocal)
-		if wire == nil {
-			continue
-		}
-		m.WorkspaceTrees[ws] = (&layout.SerializedBSPTree{
-			Root:         convertSessionBSPNode(wire.Root),
-			AutoScheme:   wire.AutoScheme,
-			DefaultRatio: wire.DefaultRatio,
-		}).Deserialize()
-	}
 }
 
 // adoptSessionTrees takes the session's trees from a state the daemon sent,

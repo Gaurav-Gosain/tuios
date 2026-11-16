@@ -1,14 +1,11 @@
 package session
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net"
-	"slices"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -135,54 +132,6 @@ func TestClosingAResumablePaneEndsItAtOnce(t *testing.T) {
 	}
 	_ = p.Close()
 	waitGone(t, d, p.id, 10*time.Second)
-}
-
-// TestAFarDaemonFromBeforeResumablePanesStillOpensAPane: a far daemon whose
-// open-pane has no resumable refuses it by name, and the owner asks again
-// without it and gets the pane that ends with the link, as before.
-func TestAFarDaemonFromBeforeResumablePanesStillOpensAPane(t *testing.T) {
-	old := verbRegistry()["open-pane"]
-	old.params = slices.DeleteFunc(slices.Clone(old.params), func(p verbParam) bool { return p.Name == "resumable" || p.Name == "resume" })
-
-	owner, far := net.Pipe()
-	t.Cleanup(func() { _ = owner.Close(); _ = far.Close() })
-	var seen []string
-	farDone := make(chan struct{})
-	go func() {
-		defer close(farDone)
-		br := bufio.NewReader(far)
-		for {
-			line, err := br.ReadBytes('\n')
-			if err != nil {
-				return
-			}
-			var req verbRequest
-			if err := json.Unmarshal(line, &req); err != nil {
-				return
-			}
-			seen = append(seen, string(req.Params))
-			verr := checkParamNames(req.Verb, old, req.Params)
-			reply := []byte(`{"id":1,"result":{"type":"pane","pane":"p1","resume_token":"ignored","grace":600}}`)
-			if verr != nil {
-				reply, _ = json.Marshal(verbResponse{ID: req.ID, Error: verr})
-			}
-			if _, err := far.Write(append(reply, '\n')); err != nil || verr == nil {
-				return
-			}
-		}
-	}()
-
-	opened, _, err := openPaneReply(owner, hostedPaneSpec{Width: 80, Height: 24, Resumable: true})
-	if err != nil {
-		t.Fatalf("a far daemon from before resumable panes refused the pane: %v", err)
-	}
-	<-farDone
-	if opened.Pane != "p1" || opened.ResumeToken != "" || opened.Grace != 0 {
-		t.Errorf("opened %+v, want p1 with no resume token", opened)
-	}
-	if len(seen) != 2 || !strings.Contains(seen[0], `"resumable"`) || strings.Contains(seen[1], `"resumable"`) {
-		t.Errorf("the requests were %q, want one with resumable and a retry without it", seen)
-	}
 }
 
 // TestReplayIsWhatWasMissedOrTheWholeRing covers the ring's arithmetic.

@@ -185,34 +185,6 @@ func TestWindowSizeActivityFrameLimit(t *testing.T) {
 	}
 }
 
-// TestWindowSizeAttachNoticeNamesThePolicyInForce attaches a third client
-// while an old client holds the session at smallest under a latest config.
-// The notice it prints names smallest.
-//
-// NEGATIVE CONTROL: with attachWindowSize reading the configured value
-// (get-option) instead of session-info, the notice says latest.
-func TestWindowSizeAttachNoticeNamesThePolicyInForce(t *testing.T) {
-	_, _, base := windowSizePair(t, "latest", "", []string{wsLegacyEnv})
-	waitWSSize(t, base, wsSmallCols, wsSmallRows, "with an old client attached")
-	var logPath string
-	third := attachSmall(t, base, wsSession, startOpts{cols: 100, rows: 30, logPath: &logPath})
-	_ = third
-	deadline := time.Now().Add(uiTimeout)
-	var raw []byte
-	for time.Now().Before(deadline) {
-		raw, _ = os.ReadFile(logPath)
-		if strings.Contains(string(raw), "already has a client attached") {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	text := string(raw)
-	if !strings.Contains(text, "(window_size smallest)") || strings.Contains(text, "(window_size latest)") {
-		i := strings.Index(text, "already has")
-		t.Fatalf("the attach notice does not name smallest, the policy in force: %q", text[max(i-40, 0):min(i+260, len(text))])
-	}
-}
-
 // TestWindowSizeViewersDoNotSize attaches a client marked as a viewer, which
 // sends no input, beside one that types. Under largest the viewer does not
 // count, so the session keeps the typing client's size. Under smallest it

@@ -397,36 +397,11 @@ func runCapturePane(o captureOptions) error {
 		params["commands"] = o.commands
 	}
 	raw, err := t.client.Call("capture-pane", t.params(params))
-	staleCommands := false
-	if call, ok := errors.AsType[*session.VerbCallError](err); ok && o.commands > 0 && call.Code == session.ErrVerbInvalidParams &&
-		call.Hint != nil && call.Hint.Param == "commands" && strings.Contains(call.Message, "has no parameter") {
-		if o.explicitCommands {
-			return reportVerbError(errStaleCommands, o.jsonOut)
-		}
-		// The default asked for commands, not the caller: fall back to the
-		// line cap, and say why in the note.
-		delete(params, "commands")
-		staleCommands = true
-		raw, err = t.client.Call("capture-pane", t.params(params))
-	}
 	if err != nil {
-		if call, ok := errors.AsType[*session.VerbCallError](err); ok && call.Code == session.ErrVerbInvalidParams &&
-			call.Hint != nil && (call.Hint.Param == "unwrap" || call.Hint.Param == "trim") {
-			return reportVerbError(errStaleCapture, o.jsonOut)
-		}
 		return reportVerbError(t.explain("capture-pane", err), o.jsonOut)
 	}
-	// A daemon older than v0.8.0 ignores unknown parameters and omits the
-	// fields that say unwrap and trim were used.
-	var echo struct {
-		Unwrapped bool `json:"unwrapped"`
-		Trimmed   bool `json:"trimmed"`
-	}
-	if jsonx.Unmarshal(raw, &echo) == nil && ((o.unwrap && !echo.Unwrapped) || (o.trim && !echo.Trimmed)) {
-		fmt.Fprintln(os.Stderr, "warning: "+errStaleCapture.Error()+".")
-	}
 	if (o.capped || o.explicitCommands) && !o.jsonOut {
-		if note := captureCapNote(raw, o.explicitCommands, staleCommands); note != "" {
+		if note := captureCapNote(raw, o.explicitCommands); note != "" {
 			fmt.Fprintln(os.Stderr, note)
 		}
 	}
@@ -440,7 +415,7 @@ func runCapturePane(o captureOptions) error {
 // or --commands shortened, or "" when it left nothing out. A daemon from
 // before lines_omitted does not say how many lines it left out, so a capture
 // of exactly the cap is reported without a count.
-func captureCapNote(raw json.RawMessage, explicit, stale bool) string {
+func captureCapNote(raw json.RawMessage, explicit bool) string {
 	var res struct {
 		Content           string            `json:"content"`
 		LinesOmitted      *int              `json:"lines_omitted"`
@@ -481,11 +456,6 @@ func captureCapNote(raw json.RawMessage, explicit, stale bool) string {
 			note += fmt.Sprintf(" It left out %s older lines.", commas(omitted))
 		}
 		return note + " Run 'tuios doctor shell' to turn the marks on." + tail
-	case stale:
-		if omitted == 0 && !(res.LinesOmitted == nil && full) {
-			return ""
-		}
-		return fmt.Sprintf("note: the running daemon is older than this tuios, so capture-pane shows the last %s lines. Run 'tuios restart-server' to update it.", commas(captureScrollbackCap)) + tail
 	case omitted > 0:
 		return fmt.Sprintf("note: capture-pane shows the last %s lines. It left out %s older lines.", commas(captureScrollbackCap), commas(omitted)) + tail
 	case res.LinesOmitted == nil && full:

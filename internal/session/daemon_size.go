@@ -70,7 +70,7 @@ func (d *Daemon) calculateSessionSize(sessionID string) (width, height int, poli
 func (d *Daemon) settleSessionSize(sessionID string) (width, height int, policy, owner string, kept bool) {
 	session := d.manager.GetSessionByID(sessionID)
 	clients := d.sessionSizedClients(sessionID)
-	policy = d.effectiveWindowSize(session, clients)
+	policy = d.sessionWindowSize(session)
 	clients = sizingClients(policy, clients)
 	latest := ""
 	if policy == config.WindowSizeLatest {
@@ -131,11 +131,7 @@ func sizeOwner(clients []sizedClient, latest string, width, height int) string {
 // between its panes and its rail. A client of another size draws the session
 // as a view inside its own chrome (see pane_view.go in internal/app), so it
 // needs no room in the session for its chrome. A client of the same size has
-// no room to spare, so it still counts, as under smallest. So does a client
-// whose hello did not offer ViewChrome, such as a build from before this
-// rule: it lays the panes out around its own chrome whatever the session
-// says, and pushes that layout, so a box without its chrome is a box it
-// would not use.
+// no room to spare, so it still counts, as under smallest.
 func (d *Daemon) calculateSessionReserve(sessionID, policy, owner string, width, height int) LayoutReserve {
 	d.clientsMu.RLock()
 	defer d.clientsMu.RUnlock()
@@ -147,13 +143,12 @@ func (d *Daemon) calculateSessionReserve(sessionID, policy, owner string, width,
 		match := cs.sessionID == sessionID && cs.isTUIClient
 		r := cs.reserve
 		id := cs.clientID
-		view := cs.viewChrome
 		cw, ch := clampClientSize(cs.width, cs.height)
 		cs.mu.Unlock()
 		if !match {
 			continue
 		}
-		if latest && view && id != owner {
+		if latest && id != owner {
 			if cw != width {
 				r.Left, r.Right = 0, 0
 			}

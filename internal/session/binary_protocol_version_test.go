@@ -72,7 +72,6 @@ func fakeDaemonReplying(t *testing.T, replyType MessageType, welcome *WelcomePay
 func TestClientRefusesADaemonSpeakingAnotherProtocol(t *testing.T) {
 	seen := fakeDaemon(t, &WelcomePayload{
 		Version:  "9.9.9",
-		Codec:    "gob",
 		Protocol: ProtocolVersion + 1,
 	})
 
@@ -115,7 +114,6 @@ func TestClientRefusesADaemonSpeakingAnotherProtocol(t *testing.T) {
 func TestClientRefusesADaemonThatPredatesTheVersionField(t *testing.T) {
 	fakeDaemon(t, &WelcomePayload{
 		Version:      "0.7.0",
-		Codec:        "gob",
 		SessionNames: []string{"work"},
 	})
 
@@ -148,7 +146,7 @@ func TestClientRefusesTheRealV070Numbering(t *testing.T) {
 	if MsgWelcome == v070Welcome {
 		t.Fatalf("vacuous: this build's welcome is also %d, so nothing is being told apart", v070Welcome)
 	}
-	fakeDaemonReplying(t, v070Welcome, &WelcomePayload{Version: "0.7.0", Codec: "gob"})
+	fakeDaemonReplying(t, v070Welcome, &WelcomePayload{Version: "0.7.0"})
 
 	c := NewTUIClient()
 	err := c.Connect("0.8.0", 80, 24)
@@ -205,7 +203,7 @@ func TestDaemonAnswersAHello(t *testing.T) {
 	}
 
 	t.Run("refuses a protocol it does not serve", func(t *testing.T) {
-		resp := say(t, &HelloPayload{Version: "99.0.0", PreferredCodec: "gob", Protocol: ProtocolVersion + 1})
+		resp := say(t, &HelloPayload{Version: "99.0.0", Protocol: ProtocolVersion + 1})
 		if resp.Type == MsgWelcome {
 			t.Fatalf("the daemon welcomed a client speaking protocol %d while it speaks %d", ProtocolVersion+1, ProtocolVersion)
 		}
@@ -222,7 +220,7 @@ func TestDaemonAnswersAHello(t *testing.T) {
 	})
 
 	t.Run("refuses a client that predates the version field", func(t *testing.T) {
-		resp := say(t, &HelloPayload{Version: "0.7.0", PreferredCodec: "gob"})
+		resp := say(t, &HelloPayload{Version: "0.7.0"})
 		if resp.Type != MsgError {
 			t.Fatalf("a client announcing no protocol version was not refused (reply type %d)", resp.Type)
 		}
@@ -236,7 +234,7 @@ func TestDaemonAnswersAHello(t *testing.T) {
 	})
 
 	t.Run("announces its own version to a client it serves", func(t *testing.T) {
-		resp := say(t, &HelloPayload{Version: "0.8.0", PreferredCodec: "gob", Protocol: ProtocolVersion})
+		resp := say(t, &HelloPayload{Version: "0.8.0", Protocol: ProtocolVersion})
 		if resp.Type != MsgWelcome {
 			t.Fatalf("a current client was refused by this daemon (reply type %d)", resp.Type)
 		}
@@ -248,27 +246,4 @@ func TestDaemonAnswersAHello(t *testing.T) {
 			t.Fatalf("the daemon announced protocol %d, want %d", welcome.Protocol, ProtocolVersion)
 		}
 	})
-}
-
-// TestLegacyProbeReadsAProtocol2Welcome covers the one thing still worth reading
-// from a daemon this build cannot talk to: which version it is and how many
-// sessions restarting it would move. Both live in the welcome payload, which
-// still decodes even though its type byte is the old one.
-func TestLegacyProbeReadsAProtocol2Welcome(t *testing.T) {
-	fakeDaemonReplying(t, LegacyWelcomeType, &WelcomePayload{
-		Version:      "0.7.0",
-		Codec:        "gob",
-		SessionNames: []string{"work", "notes"},
-	})
-
-	welcome, err := probeLegacyDaemon("0.8.0")
-	if err != nil {
-		t.Fatalf("the probe could not read a protocol-2 welcome: %v", err)
-	}
-	if welcome.Version != "0.7.0" {
-		t.Fatalf("daemon version = %q, want 0.7.0", welcome.Version)
-	}
-	if len(welcome.SessionNames) != 2 {
-		t.Fatalf("session count = %d, want 2", len(welcome.SessionNames))
-	}
 }

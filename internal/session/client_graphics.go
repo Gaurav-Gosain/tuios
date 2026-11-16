@@ -36,17 +36,13 @@ func (d *Daemon) handleClientGraphics(cs *connState, msg *Message) error {
 		s.SetGraphicsCapabilities(p.KittyGraphics, p.SixelGraphics)
 	}
 	d.manager.noteHostGraphics(p.KittyGraphics, p.SixelGraphics)
-	d.refreshTreeOps(sessionID)
+	d.recountTUIClients(sessionID)
 	return nil
 }
 
 // ReportGraphics tells the daemon what this client's terminal draws, when
-// that is learned after the hello. It does nothing on a daemon that did not
-// offer MsgClientGraphics.
+// that is learned after the hello.
 func (c *TUIClient) ReportGraphics(sixel, kitty, symbols bool) error {
-	if !c.graphicsSupported {
-		return nil
-	}
 	msg, err := NewMessage(MsgClientGraphics, &ClientGraphicsPayload{SixelGraphics: sixel, KittyGraphics: kitty, SymbolImages: symbols})
 	if err != nil {
 		return err

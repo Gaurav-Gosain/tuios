@@ -259,13 +259,12 @@ type Message struct {
 
 // HelloPayload is sent by client on initial connection.
 type HelloPayload struct {
-	Version        string `json:"version"`                   // Client version
-	Term           string `json:"term"`                      // TERM environment variable
-	ColorTerm      string `json:"color_term"`                // COLORTERM environment variable
-	Shell          string `json:"shell"`                     // Preferred shell
-	Width          int    `json:"width"`                     // Terminal width
-	Height         int    `json:"height"`                    // Terminal height
-	PreferredCodec string `json:"preferred_codec,omitempty"` // Always "gob"; kept for older daemons
+	Version   string `json:"version"`    // Client version
+	Term      string `json:"term"`       // TERM environment variable
+	ColorTerm string `json:"color_term"` // COLORTERM environment variable
+	Shell     string `json:"shell"`      // Preferred shell
+	Width     int    `json:"width"`      // Terminal width
+	Height    int    `json:"height"`     // Terminal height
 	// Graphics capabilities from client's terminal
 	PixelWidth    int    `json:"pixel_width,omitempty"`    // Terminal width in pixels
 	PixelHeight   int    `json:"pixel_height,omitempty"`   // Terminal height in pixels
@@ -287,22 +286,16 @@ type HelloPayload struct {
 	// gob ignores a field the peer does not know, so silence here is age, not
 	// disagreement.
 	Protocol int `json:"protocol,omitempty"`
-	// LayoutTreeOps says the client sends BSP trees as MsgLayoutTree ops. A
-	// client that predates the op leaves it false, and while such a client is
-	// attached to a session the daemon turns the ops off for every client
-	// there. See Session.SetLayoutTreeOps.
-	LayoutTreeOps bool `json:"layout_tree_ops,omitempty"`
-	// ScratchWorkspaces says the client shows a scratch group from its own
-	// workspace (see scratch_workspace.go). A client that predates it leaves
-	// it false, and while such a client is attached the session makes the
-	// scratch terminal a popup, as that client expects. See
-	// Session.SetScratchWorkspaces.
+	// LayoutTreeOps says the client sends BSP trees as MsgLayoutTree ops, and
+	// ScratchWorkspaces that it shows a scratch group from its own workspace.
+	// Every client sets both, and a v0.12 daemon reads them, so they stay on
+	// the wire. This daemon does not read them.
+	LayoutTreeOps     bool `json:"layout_tree_ops,omitempty"`
 	ScratchWorkspaces bool `json:"scratch_workspaces,omitempty"`
 	// WindowSize says the client reports input with MsgClientActivity and
 	// can draw a session larger than its own terminal, as a view that
-	// follows the cursor. While a client without it is attached, the
-	// session takes the smallest client's size whatever window_size says,
-	// which is what that client expects. See window_size.go.
+	// follows the cursor. Every client sets it and a v0.12 daemon reads it.
+	// This daemon does not. See window_size.go.
 	WindowSize bool `json:"window_size,omitzero"`
 	// HoldOptions says the client applies a set_config with ConfigNoSave
 	// and keeps the value out of its config file. A client that predates it
@@ -333,9 +326,9 @@ type HelloPayload struct {
 	// ViewChrome says the client draws a session of another size, or one
 	// whose agreed reserve is less than its own chrome, as a view inside its
 	// own chrome. Under latest the daemon leaves the chrome of such a client
-	// out of the agreed reserve when it is not the session's size. A client
-	// without it lays the panes out around its own chrome whatever the
-	// session says, so its chrome always counts. See calculateSessionReserve.
+	// out of the agreed reserve when it is not the session's size. Every
+	// client sets it and a v0.12 daemon reads it. This daemon does not. See
+	// calculateSessionReserve.
 	ViewChrome bool `json:"view_chrome,omitzero"`
 	// ListingPush says the client reads MsgSessionsChanged. The daemon sends
 	// it to no other client. See daemon_listing_push.go.
@@ -360,7 +353,6 @@ type HelloPayload struct {
 type WelcomePayload struct {
 	Version      string   `json:"version"`       // Server version
 	SessionNames []string `json:"session_names"` // Available sessions
-	Codec        string   `json:"codec"`         // Always "gob"; kept for older clients
 	// Protocol is the wire protocol version the daemon speaks. Zero means a
 	// daemon that predates the field; see HelloPayload.Protocol.
 	Protocol int `json:"protocol,omitempty"`
@@ -379,7 +371,7 @@ type WelcomePayload struct {
 	// KittyAnimationRefusal says the daemon refuses a kitty frame edit in a
 	// pane itself when not every attached client's host can make it. A client
 	// that does not see it (a daemon that predates it) refuses the edit
-	// itself, as every client did before. See Daemon.refreshTreeOps.
+	// itself, as every client did before. See Daemon.recountTUIClients.
 	KittyAnimationRefusal bool `json:"kitty_animation_refusal,omitempty"`
 	// MasterLayoutOps says the daemon reads MsgMasterLayout. A client that
 	// does not see it keeps a master layout change to itself.

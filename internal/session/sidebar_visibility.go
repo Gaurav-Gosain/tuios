@@ -2,7 +2,6 @@ package session
 
 import (
 	"errors"
-	"os"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
@@ -178,21 +177,6 @@ func (s *Session) SetSidebarVisibility(visibility string) {
 		return
 	}
 	s.publishState(snap)
-}
-
-// legacySidebar makes this client behave as a build from before the sidebar
-// was session state: it ignores SidebarOps in the daemon's welcome, keeps its
-// rail to itself, and ignores the session's value. It is
-// TUIOS_SIDEBAR_LEGACY=1, and it exists so the mixed-version promise can be
-// tested without an old build.
-func legacySidebar() bool {
-	return os.Getenv("TUIOS_SIDEBAR_LEGACY") == "1"
-}
-
-// SidebarOps reports whether the daemon takes MsgSidebarVisibility. When it
-// does not, showing or hiding the rail stays on this client.
-func (c *TUIClient) SidebarOps() bool {
-	return c != nil && c.sidebarOps.Load()
 }
 
 // SendSidebarVisibility sends whether the rail is shown to the daemon as an

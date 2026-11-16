@@ -216,7 +216,7 @@ func (fw *fileWatcher) retarget(target fileWatchSpec, ch chan struct{}) {
 		// The daemon keeps one watch per connection, so a new remote target
 		// replaces the old one by itself. Only a move off that daemon has to
 		// end it.
-		_, _ = fw.remote.WatchDir("", "")
+		_ = fw.remote.WatchDir("", "")
 	}
 	fw.dir, fw.remote = "", nil
 	dir := target.dir
@@ -224,7 +224,7 @@ func (fw *fileWatcher) retarget(target fileWatchSpec, ch chan struct{}) {
 		return
 	}
 	if target.remote != nil {
-		if offered, err := target.remote.WatchDir(target.origin, dir); offered && err == nil {
+		if err := target.remote.WatchDir(target.origin, dir); err == nil {
 			fw.dir, fw.remote = dir, target.remote
 		}
 		return
@@ -260,7 +260,7 @@ func (m *OS) stopFileWatch() {
 		fw.w, fw.dir = nil, ""
 	}
 	if fw.remote != nil {
-		_, _ = fw.remote.WatchDir("", "")
+		_ = fw.remote.WatchDir("", "")
 		fw.remote, fw.dir = nil, ""
 	}
 	if fw.set != nil {

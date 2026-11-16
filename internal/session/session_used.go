@@ -28,12 +28,11 @@ const usedInterval = time.Second
 // regular write.
 const usedSaveGap = 30 * time.Second
 
-// ReportUsed tells the daemon the person at this client used its session. It
-// sends nothing to a daemon that did not offer SessionUsed, and for one
-// session at most one message per usedInterval.
+// ReportUsed tells the daemon the person at this client used its session,
+// for one session at most one message per usedInterval.
 func (c *TUIClient) ReportUsed(now time.Time) {
 	// A view-only client's input reaches no pane, so it is not use either.
-	if c == nil || !c.sessionUsed.Load() || c.viewOnly() {
+	if c == nil || c.viewOnly() {
 		return
 	}
 	name := c.SessionName()

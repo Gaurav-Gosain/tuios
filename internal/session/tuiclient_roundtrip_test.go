@@ -41,7 +41,7 @@ func TestSendAndWaitResponseSerializesSharedTypes(t *testing.T) {
 				return
 			}
 			arrived <- inFlight.Add(1)
-			go func(reqType MessageType) {
+			go func(reqType MessageType, reqID uint64) {
 				<-release
 				marker := "list"
 				if reqType == MsgKill {
@@ -50,11 +50,13 @@ func TestSendAndWaitResponseSerializesSharedTypes(t *testing.T) {
 				resp, _ := NewMessage(MsgSessionList, &SessionListPayload{
 					Sessions: []SessionInfo{{Name: marker}},
 				})
+				// A daemon tags its reply with the request's id.
+				resp.ReqID = reqID
 				writeMu.Lock()
 				_ = WriteMessage(server, resp)
 				writeMu.Unlock()
 				inFlight.Add(-1)
-			}(m.Type)
+			}(m.Type, m.ReqID)
 		}
 	}()
 

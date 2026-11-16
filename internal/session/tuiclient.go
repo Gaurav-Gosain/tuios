@@ -238,46 +238,17 @@ type TUIClient struct {
 	// See BuildMismatch.
 	clientBuild string
 	daemonBuild string
-	// focusSupported says the daemon's welcome offered MsgClientFocus, and
 	// hostFocus is the focus to report: 0 unreported, 1 in, 2 out. focusMu
 	// keeps two reports from going out of order. See ReportHostFocus.
-	focusSupported bool
-	hostFocus      atomic.Int32
-	focusMu        sync.Mutex
-	// treeOps says the daemon's welcome offered MsgLayoutTree. See
-	// LayoutTreeOps.
-	treeOps atomic.Bool
-	// masterOps says the daemon's welcome offered MsgMasterLayout. See
-	// master_layout.go.
-	masterOps atomic.Bool
-	// sidebarOps says the daemon's welcome offered MsgSidebarVisibility. See
-	// sidebar_visibility.go.
-	sidebarOps atomic.Bool
-	// listingPush says the daemon's welcome offered ListingPush: it sends
-	// MsgSessionsChanged, and the listing needs no poll. See
-	// daemon_listing_push.go.
-	listingPush atomic.Bool
-	// sessionUsed says the daemon's welcome offered MsgSessionUsed, and
-	// usedMu, usedAt and usedSession throttle it. See session_used.go.
-	sessionUsed atomic.Bool
+	hostFocus atomic.Int32
+	focusMu   sync.Mutex
+	// usedMu, usedAt and usedSession throttle MsgSessionUsed. See
+	// session_used.go.
 	usedMu      sync.Mutex
 	usedAt      time.Time
 	usedSession string
-	// daemonRefusesAnimation says the daemon's welcome offered
-	// KittyAnimationRefusal. See DaemonRefusesKittyAnimation.
-	daemonRefusesAnimation atomic.Bool
 	// attachGen counts attaches. See AttachGeneration.
 	attachGen atomic.Uint64
-	// typeAtPromptSupported says the daemon's welcome offered
-	// MsgTypeAtPrompt. See TypeAtPrompt.
-	typeAtPromptSupported bool
-	// graphicsSupported says the daemon's welcome offered MsgClientGraphics.
-	graphicsSupported bool
-	// windowSize says the daemon's welcome offered WindowSize, and this
-	// client offered it too. See tuiclient_window_size.go.
-	// daemonDetachOthers says the daemon's welcome offered DetachOthers.
-	daemonDetachOthers bool
-	windowSize         bool
 	// activityMu and lastActivity throttle MsgClientActivity.
 	activityMu   sync.Mutex
 	lastActivity time.Time
@@ -288,18 +259,11 @@ type TUIClient struct {
 	// the attach reply.
 	sizedBy atomic.Pointer[sessionSizer]
 	selfID  atomic.Pointer[string]
-	// viewChrome is what this client's hello said as ViewChrome.
-	viewChrome bool
 	// attachClients is the session's client count from the last attach
 	// reply, 0 from a daemon that does not say.
 	attachClients atomic.Int64
-	// dirWatchSupported says the daemon's welcome offered MsgWatchDir. See
-	// WatchDir.
-	dirWatchSupported bool
 	// tmlLink says the daemon's welcome set TMLLink. See DrawsTML.
 	tmlLink bool
-	// emptyWorkspacePanes says the daemon's welcome set EmptyWorkspacePanes.
-	emptyWorkspacePanes atomic.Bool
 	// dirChangedHandler takes the daemon's MsgDirChanged push. Guarded by
 	// multiClientMu like the other push handlers.
 	dirChangedHandler func(dir string)
@@ -356,18 +320,15 @@ type TUIClient struct {
 	multiClientMu  sync.RWMutex
 
 	// Request/response handling for synchronous calls after readLoop starts.
-	// pendingByID holds the round trip waiting on each request id, for a
-	// daemon that tags its replies (requestIDs). pendingResponses holds a
-	// waiter by reply type: every round trip to a daemon that does not tag,
-	// and the detach of a session switch, which is not tagged either way.
+	// pendingByID holds the round trip waiting on each request id (see
+	// Message.ReqID). pendingResponses holds a waiter by reply type: the
+	// detach of a session switch, which is not tagged.
 	pendingResponses   map[MessageType]*pendingReply
 	pendingByID        map[uint64]*pendingReply
 	pendingResponsesMu sync.Mutex
 
-	// requestIDs is set when the daemon's welcome said it tags replies (see
-	// Message.ReqID). nextReqID numbers this client's requests from 1.
-	requestIDs atomic.Bool
-	nextReqID  atomic.Uint64
+	// nextReqID numbers this client's requests from 1.
+	nextReqID atomic.Uint64
 
 	// roundTripMu keeps at most one sendAndWaitResponse outstanding at a time.
 	// To a daemon that does not tag replies, the read loop demuxes them by
@@ -470,13 +431,13 @@ func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, c
 func (c *TUIClient) handshake(version string, width, height int, caps *ClientCapabilities) error {
 	// Build hello payload with capabilities
 	hello := &HelloPayload{
-		Version:        version,
-		Width:          width,
-		Height:         height,
-		PreferredCodec: "gob",
-		Protocol:       ProtocolVersion,
-		Machine:        localHostLabel(),
-		ClientKind:     c.Kind,
+		Version: version,
+		Width:   width,
+		Height:  height,
+
+		Protocol:   ProtocolVersion,
+		Machine:    localHostLabel(),
+		ClientKind: c.Kind,
 		// Every daemon reads these two fields, so an older one gives a
 		// session this client makes the caller's terminal too. A daemon
 		// drops a value that is not a short printable name.
@@ -522,9 +483,9 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	hello.LayoutTreeOps = true
 	hello.ScratchWorkspaces = true
 	hello.HoldOptions = true
-	hello.WindowSize = !legacyWindowSize()
-	hello.ViewChrome = hello.WindowSize && !legacyViewChrome()
-	c.viewChrome = hello.ViewChrome
+	// A v0.12 daemon reads these two, so they stay on the wire.
+	hello.WindowSize = true
+	hello.ViewChrome = true
 
 	// Send hello with capabilities
 	msg, err := NewMessage(MsgHello, hello)
@@ -583,21 +544,9 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	// Recorded rather than refused: the two builds can talk, and refusing would
 	// turn a note into an outage.
 	c.noteDaemonBuild(version, welcome.Version)
-	c.focusSupported = welcome.ClientFocus
-	c.treeOps.Store(welcome.LayoutTreeOps)
-	c.masterOps.Store(welcome.MasterLayoutOps)
-	c.sidebarOps.Store(welcome.SidebarOps && !legacySidebar())
-	c.sessionUsed.Store(welcome.SessionUsed)
-	c.listingPush.Store(welcome.ListingPush)
-	c.typeAtPromptSupported = welcome.TypeAtPrompt
-	c.graphicsSupported = welcome.ClientGraphics
-	c.windowSize = welcome.WindowSize && hello.WindowSize
-	c.daemonDetachOthers = welcome.DetachOthers
-	c.dirWatchSupported = welcome.DirWatch
+	// Every daemon this build talks to (v0.12 and later) offers the
+	// welcome's other capabilities, so only TMLLink, new in v0.13, is read.
 	c.tmlLink = welcome.TMLLink
-	c.emptyWorkspacePanes.Store(welcome.EmptyWorkspacePanes)
-	c.daemonRefusesAnimation.Store(welcome.KittyAnimationRefusal)
-	c.requestIDs.Store(welcome.RequestIDs)
 
 	// Seed the cache name-only; window summaries fill in on the first refresh.
 	infos := make([]SessionInfo, 0, len(welcome.SessionNames))
@@ -1286,14 +1235,6 @@ func (c *TUIClient) OnSessionEnded(handler SessionEndedHandler) {
 	}
 }
 
-// DaemonDetachesOthers reports whether the daemon's welcome said it reads
-// AttachPayload.DetachOthers. An older daemon ignores tuios attach -d.
-func (c *TUIClient) DaemonDetachesOthers() bool {
-	c.multiClientMu.RLock()
-	defer c.multiClientMu.RUnlock()
-	return c.daemonDetachOthers
-}
-
 // AgentMailHandler takes one MsgAgentMail push: a message from the session's
 // agent ring as the daemon stores it, or a read receipt for messages an inbox
 // read just marked. It runs on the read-loop goroutine, so it only queues.
@@ -1396,23 +1337,15 @@ func (c *TUIClient) OnTMLSurface(handler func(*TMLSurfacePayload)) {
 	}
 }
 
-// ListingPush reports whether the daemon pushes listing changes, so the
-// listing needs no poll.
-func (c *TUIClient) ListingPush() bool { return c.listingPush.Load() }
-
 // WatchDir asks the daemon to push MsgDirChanged when the names in dir change,
 // for the folder listed for windowID. It replaces the last watch, and an empty
-// dir ends it. It reports whether the daemon offers the watch at all, so a
-// caller can tell an older daemon from a sent request.
-func (c *TUIClient) WatchDir(windowID, dir string) (bool, error) {
-	if !c.dirWatchSupported {
-		return false, nil
-	}
+// dir ends it.
+func (c *TUIClient) WatchDir(windowID, dir string) error {
 	msg, err := NewMessage(MsgWatchDir, &WatchDirPayload{WindowID: windowID, Dir: dir})
 	if err != nil {
-		return true, err
+		return err
 	}
-	return true, c.send(msg)
+	return c.send(msg)
 }
 
 // OnDirChanged registers the handler for MsgDirChanged. It runs on the
@@ -1529,9 +1462,6 @@ func (c *TUIClient) ReportHostFocus(focused bool) error {
 		v = 1
 	}
 	c.hostFocus.Store(v)
-	if !c.focusSupported {
-		return nil
-	}
 	c.focusMu.Lock()
 	defer c.focusMu.Unlock()
 	msg, err := NewMessage(MsgClientFocus, &ClientFocusPayload{Focused: c.hostFocus.Load() == 1})
@@ -1639,12 +1569,6 @@ func (c *TUIClient) SendNewWindowFrom(workspace, tabKey, cols, rows int, cwdFrom
 	})
 }
 
-// EmptyWorkspacePanes reports whether the daemon takes SendNewWindowFrom.
-// See WelcomePayload.EmptyWorkspacePanes.
-func (c *TUIClient) EmptyWorkspacePanes() bool {
-	return c != nil && c.emptyWorkspacePanes.Load()
-}
-
 // sendNewWindow sends an execute-command payload for this client's session.
 func (c *TUIClient) sendNewWindow(payload *ExecuteCommandPayload) error {
 	payload.SessionName = c.SessionName()
@@ -1682,20 +1606,6 @@ func (c *TUIClient) UpdateState(state *SessionState) error {
 	// client refuse every state it is sent.
 	c.pushSeq.Store(seq)
 	return nil
-}
-
-// DaemonRefusesKittyAnimation reports whether the daemon answers a kitty frame
-// edit in a pane itself. When it does not (a daemon that predates it), the
-// client refuses an edit its host cannot make, as it did before.
-func (c *TUIClient) DaemonRefusesKittyAnimation() bool {
-	return c != nil && c.daemonRefusesAnimation.Load()
-}
-
-// LayoutTreeOps reports whether the daemon takes BSP trees as ops
-// (SendLayoutTree). When it does not, the trees travel in the state push, as
-// they did before the op existed.
-func (c *TUIClient) LayoutTreeOps() bool {
-	return c != nil && c.treeOps.Load()
 }
 
 // SendLayoutTree sends one workspace's tree to the daemon as an op. leaves names
@@ -2983,10 +2893,7 @@ func (c *TUIClient) sendAndWaitMatching(msg *Message, accept func(*Message) bool
 	c.roundTripMu.Lock()
 	defer c.roundTripMu.Unlock()
 
-	tagged := c.requestIDs.Load()
-	if tagged {
-		msg.ReqID = c.nextReqID.Add(1)
-	}
+	msg.ReqID = c.nextReqID.Add(1)
 
 	// If readLoop isn't running, use simple recv
 	if !c.readLoopRunning {
@@ -3013,28 +2920,13 @@ func (c *TUIClient) sendAndWaitMatching(msg *Message, accept func(*Message) bool
 	p := &pendingReply{ch: respChan, accept: accept}
 
 	c.pendingResponsesMu.Lock()
-	if tagged {
-		c.pendingByID[msg.ReqID] = p
-	} else {
-		// Register for all expected response types
-		for _, t := range expectedTypes {
-			c.pendingResponses[t] = p
-		}
-	}
+	c.pendingByID[msg.ReqID] = p
 	c.pendingResponsesMu.Unlock()
 
 	// Clean up when done
 	defer func() {
 		c.pendingResponsesMu.Lock()
-		if tagged {
-			delete(c.pendingByID, msg.ReqID)
-		} else {
-			for _, t := range expectedTypes {
-				if c.pendingResponses[t] == p {
-					delete(c.pendingResponses, t)
-				}
-			}
-		}
+		delete(c.pendingByID, msg.ReqID)
 		c.pendingResponsesMu.Unlock()
 	}()
 

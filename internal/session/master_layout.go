@@ -177,12 +177,6 @@ func (d *Daemon) handleMasterLayout(cs *connState, msg *Message) error {
 	})
 }
 
-// MasterLayoutOps reports whether the daemon takes MsgMasterLayout. When it
-// does not, a master layout change stays on this client.
-func (c *TUIClient) MasterLayoutOps() bool {
-	return c != nil && c.masterOps.Load()
-}
-
 // SendMasterLayout sends one workspace's master-stack shape to the daemon as an
 // op, numbered in the same sequence as the state pushes. See SendLayoutTree.
 func (c *TUIClient) SendMasterLayout(ws int, st MasterLayoutState, ifAbsent bool) error {

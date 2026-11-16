@@ -460,8 +460,6 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	}
 	// The trees just taken are the session's, so none of them is news to send
 	// back. See layout_tree_sync.go.
-	m.sessionTreeOpsOff = !state.LayoutTreeOps
-	m.sessionScratchWSOff = !state.ScratchWorkspaces
 	m.noteSessionTrees()
 
 	// A client joining a scrolling session starts where the session is looking,
@@ -592,9 +590,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	m.syncAnswerOwed = false
 	m.turnsWithinSync = nil
 	// The trees are held to the same rule: a tree this sync reworks is a local
-	// display decision unless the sync owes an answer. See treeDerived. The
-	// session says first whether its trees travel as ops at all.
-	m.adoptTreeOpsFlag(state)
+	// display decision unless the sync owes an answer. See treeDerived.
 	treeOps := m.treeOpsOn()
 	var unsentBefore map[int]bool
 	if treeOps {
@@ -848,11 +844,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// With tree ops the session's numbering is never taken: adoptSessionTrees
 	// reads each leaf through it to a window ID and gives the window this
 	// client's own number.
-	//
-	// A current daemon with the ops off does not take this path either: the
-	// trees are read by window ID below (see adoptTreesByWindow).
-	gatedOff := !treeOps && m.DaemonClient != nil && m.DaemonClient.LayoutTreeOps()
-	if !treeOps && !gatedOff && adoptTopology && state.WindowToBSPID != nil {
+	if !treeOps && adoptTopology && state.WindowToBSPID != nil {
 		if m.WindowToBSPID == nil {
 			m.WindowToBSPID = make(map[string]int, len(state.WindowToBSPID))
 		}
@@ -899,10 +891,6 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 		// BSP resize sets the flag, but it moves the tree, and the tree it
 		// moved is the one that just arrived.
 		treeRetile = m.adoptSessionTrees(state) && m.UseBSPLayout && !m.UseScrollingLayout
-	} else if gatedOff {
-		if adoptTopology && state.WorkspaceTrees != nil && state.AutoTiling {
-			m.adoptTreesByWindow(state)
-		}
 	} else if adoptTopology && state.WorkspaceTrees != nil && state.AutoTiling {
 		m.WorkspaceTrees = make(map[int]*layout.BSPTree)
 		for ws, serialized := range state.WorkspaceTrees {

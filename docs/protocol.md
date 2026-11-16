@@ -110,6 +110,13 @@ The protocol carries a version integer. Bump it only on an incompatible change
 to the envelope or to an existing verb; adding a new verb is backward compatible
 and does not bump it.
 
+### Support window
+
+A client and a daemon one minor release apart work together, in both
+directions. A live upgrade works from the previous minor release too. Code
+that serves only an older peer is removed. The CI job `mixed-versions` pairs
+this build with the previous minor release (`scripts/e2e-mixed-versions.sh`).
+
 ### The hello handshake
 
 `hello` is the first call a client should make. It reports the protocol range the
@@ -172,17 +179,9 @@ a command entry with `sh -c` or `cmd /C`. It is absent from an older daemon.
 A client may also send `term` and `color_term`, its `TERM` and `COLORTERM`. A session the connection later creates, with `new-session`, `switch-session`'s `create` or `start-agent`, gives its panes that terminal, as a session made by attaching or by `tuios new` gets the client's. A caller with no terminal of its own (a script, CI, an agent) sends them empty or leaves them out, and its sessions get the daemon's fallback, `xterm-256color` and `truecolor`. The `tuios` CLI sends both.
 
 The handshake is optional, not a gate: a daemon serves every other verb whether
-or not `hello` was called, and a daemon older than the handshake answers
-`unknown_verb`, which a client should treat as "older but usable" rather than as
-a failure.
-
-There is one case the handshake cannot answer on this protocol, because the
-daemon predates the protocol entirely. Such a daemon reads the leading `{` of a
-request line as the high byte of a binary length prefix, fails its frame check,
-and closes the connection. A client that sees the connection die with no response
-line should read that as a version mismatch, not as a transport fault; the
-`tuios` CLI confirms it by asking over the older binary handshake, which every
-daemon has always answered, and reports both versions along with the
+or not `hello` was called. A daemon that answers `hello` with `unknown_verb`,
+or closes the connection with no response line, is older than the support
+window. The `tuios` CLI reports it as a version mismatch, with the
 `tuios kill-server` command that resolves it.
 
 ### Changes to existing verbs

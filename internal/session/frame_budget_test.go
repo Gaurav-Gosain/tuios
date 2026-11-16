@@ -527,7 +527,6 @@ func TestPasteKeepsItsPlaceWhenRetried(t *testing.T) {
 	defer func() { _ = clientEnd.Close(); _ = daemonEnd.Close() }()
 	c := NewTUIClient()
 	c.conn = clientEnd
-	c.requestIDs.Store(true)
 	c.StartReadLoop()
 	defer func() { _ = c.Close() }()
 
@@ -720,7 +719,6 @@ func TestPasteHoldIsASafetyNet(t *testing.T) {
 	defer func() { _ = clientEnd.Close(); _ = daemonEnd.Close() }()
 	c := NewTUIClient()
 	c.conn = clientEnd
-	c.requestIDs.Store(true)
 	c.StartReadLoop()
 	defer func() { _ = c.Close() }()
 

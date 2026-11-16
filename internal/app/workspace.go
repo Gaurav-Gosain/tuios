@@ -143,11 +143,6 @@ func (m *OS) openPaneOnEmptyWorkspace(from, workspace int, fromPane *terminal.Wi
 		}
 	}
 	if m.IsDaemonSession && m.DaemonClient != nil {
-		// A daemon too old for the request would open the pane on the
-		// workspace the person left, or pull the session over to it.
-		if !m.DaemonClient.EmptyWorkspacePanes() {
-			return
-		}
 		// A pane already asked for and not yet here: a switch back and
 		// forth asks for nothing more. This only saves a shell. The daemon
 		// opens one pane per workspace whatever reaches it (see

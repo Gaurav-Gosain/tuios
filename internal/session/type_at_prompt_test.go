@@ -60,11 +60,3 @@ func TestTypeAtPromptTypesOnlyAtAShellPrompt(t *testing.T) {
 		t.Fatalf("TypeAtPrompt under a program = %v, %v; want not typed", typed, err)
 	}
 }
-
-// A daemon that did not offer the request gets none, and nothing is typed.
-func TestTypeAtPromptFailsClosedOnAnOlderDaemon(t *testing.T) {
-	c := NewTUIClient()
-	if typed, err := c.CdAtPrompt("pty", "/", false); typed || err != ErrTypeAtPromptUnsupported {
-		t.Fatalf("TypeAtPrompt on an older daemon = %v, %v", typed, err)
-	}
-}

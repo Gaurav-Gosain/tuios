@@ -254,9 +254,6 @@ func (m *OS) ToggleScratch() tea.Cmd {
 // toggleScratch is ToggleScratch for any scratch: the built-in one or a
 // command entry's.
 func (m *OS) toggleScratch(spec scratchSpec) tea.Cmd {
-	if !m.scratchWorkspaces() || m.legacyScratchIndex(spec.Name) >= 0 {
-		return m.legacyScratchToggle(spec)
-	}
 	plan := m.planScratch(spec.Name)
 	switch plan.action {
 	case scratchHide:
@@ -399,7 +396,7 @@ func (m *OS) leaveEmptyScratchView() {
 // that focuses a scratch pane makes every client of the session show its
 // group, and a focus back on an ordinary pane takes every client out.
 func (m *OS) syncScratchView() {
-	if !m.hasFocusedWindow() || !m.scratchWorkspaces() {
+	if !m.hasFocusedWindow() {
 		return
 	}
 	w := m.Windows[m.FocusedWindow]
@@ -725,10 +722,6 @@ func (m *OS) maybeFocusScratch() {
 	m.scratchPending = ""
 	// Always, even when the daemon's push already focused it: the show is
 	// also what enters terminal mode.
-	if isLegacyScratch(m.Windows[i]) {
-		m.legacyShowScratch(i)
-		return
-	}
 	m.showScratch(i)
 }
 
@@ -801,10 +794,6 @@ func (m *OS) windowMoveNotice(state *session.SessionState, before map[string]str
 // HideShownScratch hides the scratch group when it is on the screen, and
 // gives the focus back as the key does. It reports whether it hid one.
 func (m *OS) HideShownScratch() bool {
-	if i := m.shownLegacyScratch(); i >= 0 {
-		m.legacyHideScratch(i)
-		return true
-	}
 	if !m.InScratchView() {
 		return false
 	}

@@ -247,54 +247,6 @@ func TestHiddenRailSurvivesADaemonRestart(t *testing.T) {
 	saveArtifact(t, second, artifactDir(t), "hidden-after-restart")
 }
 
-// TestOldClientKeepsItsOwnRail runs a client that does not take the rail as
-// session state (TUIOS_SIDEBAR_LEGACY=1 makes this build behave as one from
-// before it) beside a current client. Each keeps its own rail, as before: a
-// toggle on either reaches only that client, and both still draw one box.
-//
-// NEGATIVE CONTROL: with the capability gate removed (the client taking
-// SidebarOps from the welcome whatever TUIOS_SIDEBAR_LEGACY says), it fails at
-// "the old client after the new one hid its rail": the old client hides its
-// rail too. On main it fails at "the daemon with both rails hidden", the stale
-// rectangles TestHidingTheRailGrowsThePanes is about.
-func TestOldClientKeepsItsOwnRail(t *testing.T) {
-	base := t.TempDir()
-	const name = "railold"
-	cur := railSession(t, base, name, "bsp", startOpts{})
-	rail := spanOf(waitSpan(t, base, name, "the daemon with the rail shown", func(s paneSpan) bool {
-		return s.left > 0 && s.right == bigCols
-	})).left
-
-	home := t.TempDir()
-	writeConfigIn(t, home, sessionRailConfig("bsp", true))
-	old := attachIn(t, base, name, startOpts{cols: bigCols, rows: bigRows,
-		env: []string{"XDG_CONFIG_HOME=" + home, "TUIOS_SIDEBAR_LEGACY=1"}})
-	waitRail(t, old, true, rail, "the old client attaching")
-
-	toggleRail(t, cur)
-	if err := cur.WaitFor(func(s tuitest.Screen) bool { return !railShown(s) }, uiTimeout); err != nil {
-		t.Fatalf("the current client never hid its rail\n%s", cur.Snapshot())
-	}
-	time.Sleep(2 * time.Second)
-	// The old client still draws its rail, so the session keeps the rail's
-	// columns, and the current client leaves them blank.
-	waitRail(t, old, true, rail, "the old client after the new one hid its rail")
-	waitPaneBox(t, cur, paneBox(old.Screen()), "the current client's panes against the old client's")
-	dir := artifactDir(t)
-	saveArtifact(t, cur, dir, "current-hidden")
-	saveArtifact(t, old, dir, "old-shown")
-
-	// The old client's own toggle still works, and reaches only it. Both rails
-	// are now hidden, so the panes take the whole width.
-	toggleRail(t, old)
-	waitRail(t, old, false, 0, "the old client after it hid its own rail")
-	waitRail(t, cur, false, 0, "the current client after the old one hid its rail")
-	waitSpan(t, base, name, "the daemon with both rails hidden", func(s paneSpan) bool {
-		return s.left == 0 && s.right == bigCols
-	})
-	saveArtifact(t, old, dir, "old-hidden")
-}
-
 // TestChromeSetFromTheCommandLineRetilesThePanes moves the chrome with
 // set-config, which reaches the client as a command rather than as a key, so
 // no input path notices it. Hiding the dock gives its rows to the panes, and

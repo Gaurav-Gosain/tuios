@@ -332,8 +332,6 @@ func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idl
 	if commandSeq != nil {
 		params["command_seq"] = *commandSeq
 	}
-	// Sent only when asked for, so a wait against an older daemon keeps
-	// working: it would refuse a parameter it does not know.
 	if fresh {
 		params["new"] = true
 	}
@@ -341,21 +339,7 @@ func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idl
 	grace := time.Duration(timeout)*time.Millisecond + 10*time.Second
 	raw, err := t.client.CallWithTimeout("wait-for", t.params(params), grace)
 	if err != nil {
-		if call, ok := errors.AsType[*session.VerbCallError](err); ok && fresh && call.Code == session.ErrVerbInvalidParams &&
-			call.Hint != nil && call.Hint.Param == "new" && strings.Contains(call.Message, "has no parameter") {
-			return reportVerbError(errStaleWaitNew, jsonOutput)
-		}
 		return reportVerbError(t.explain("wait-for", err), jsonOutput)
-	}
-	// A daemon older than v0.8.0 ignores unknown parameters, so it matched
-	// old output too. It omits the field that says new was used.
-	if fresh {
-		var echo struct {
-			New bool `json:"new"`
-		}
-		if jsonx.Unmarshal(raw, &echo) == nil && !echo.New {
-			fmt.Fprintln(os.Stderr, "warning: "+errStaleWaitNew.Error()+". The match can be old output.")
-		}
 	}
 	if jsonOutput {
 		return printVerbResultOn(t, raw, jsonOutput)

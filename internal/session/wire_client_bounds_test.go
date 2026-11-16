@@ -289,7 +289,7 @@ func (h *hostileDaemon) serve(t *testing.T, fn func(conn net.Conn)) {
 			t.Errorf("read hello: %v", err)
 			return
 		}
-		h.write(t, conn, MsgWelcome, &WelcomePayload{Version: "test", Codec: wireCodecName, Protocol: ProtocolVersion})
+		h.write(t, conn, MsgWelcome, &WelcomePayload{Version: "test", Protocol: ProtocolVersion})
 		_ = conn.SetDeadline(time.Time{})
 		fn(conn)
 	}()

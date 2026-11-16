@@ -7,46 +7,23 @@ import (
 	"net"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
-// This file detects the one failure that has no good error message anywhere
-// else: a newly upgraded CLI talking to a daemon that is still running the old
-// binary.
-//
-// The JSON verb protocol distinguishes itself from the binary protocol by its
-// first byte (see detectJSONClient). A daemon that predates the JSON protocol
-// has no such detection: it reads the '{' of the first request line as the high
-// byte of a big-endian length prefix, computes an absurd frame length, gives up,
-// and closes the connection. The client sees "connection reset by peer" or a
-// bare EOF, which explains nothing and suggests nothing.
-//
-// So the client opens with a hello handshake. Three outcomes tell it everything:
-//
-//   - a hello result: the daemon speaks this protocol, and reports its version.
-//   - unknown_verb: a JSON-speaking daemon from before the handshake existed.
-//     Usable, but old; its version comes from the legacy binary handshake.
-//   - the connection dies with nothing read: a daemon from before the JSON
-//     protocol. Its version also comes from the legacy binary handshake, which
-//     every daemon since the beginning answers.
-//
-// Only the last case is fatal, and it is reported as a ProtocolMismatchError
-// carrying both versions and the command that fixes it.
-
-// clientHandshakeTimeout bounds the handshake exchange. It is short because the
-// daemon is a local process on a unix socket: anything slower is a hang, and a
-// hang here would stall every CLI command.
-const clientHandshakeTimeout = 5 * time.Second
+// This file is the hello handshake of the JSON verb protocol: the client
+// opens with it, and the daemon answers with its protocol and version, or
+// refuses a client outside the range it serves with protocol_mismatch. Every
+// daemon this build talks to (v0.12 and later) answers it. A daemon that
+// closes the connection instead, or answers unknown_verb, is older than that
+// and is reported as a ProtocolMismatchError with the command that fixes it.
 
 // DaemonHandshake is what a daemon reports about itself during the hello
 // exchange.
 type DaemonHandshake struct {
-	// Protocol is the verb protocol version the daemon speaks. Zero means the
-	// daemon answered unknown_verb, i.e. it predates the handshake verb.
+	// Protocol is the verb protocol version the daemon speaks.
 	Protocol int `json:"protocol"`
 	// MinProtocol is the oldest protocol version the daemon still serves.
 	MinProtocol int `json:"min_protocol"`
@@ -71,8 +48,7 @@ type DaemonHandshake struct {
 type ProtocolMismatchError struct {
 	// ClientVersion is this binary's version, when the caller supplied one.
 	ClientVersion string
-	// DaemonVersion is the running daemon's version, when it could be learned
-	// from the legacy handshake. Empty when even that failed.
+	// DaemonVersion is the running daemon's version, when it is known.
 	DaemonVersion string
 	// DaemonPID identifies the process to restart, when known.
 	DaemonPID int
@@ -125,12 +101,7 @@ func (e *ProtocolMismatchError) Error() string {
 func (e *ProtocolMismatchError) Unwrap() error { return e.Cause }
 
 // handshake performs the hello exchange on a freshly dialed verb connection.
-//
-// It returns a *ProtocolMismatchError only when the daemon cannot speak the JSON
-// protocol at all. A daemon that answers unknown_verb is older than the
-// handshake but still fully usable, so that returns a zero-protocol handshake
-// and no error: refusing to talk to it would break the compatibility the verb
-// protocol promises.
+// It returns a *ProtocolMismatchError for a daemon it cannot talk to.
 func (c *VerbClient) handshake(clientVersion string) (*DaemonHandshake, error) {
 	// The caller's terminal, as the binary protocol's hello sends it, so a
 	// session this connection creates (new-session, switch-session's create)
@@ -144,15 +115,6 @@ func (c *VerbClient) handshake(clientVersion string) (*DaemonHandshake, error) {
 		"color_term": colorTerm,
 	}
 	raw, err := c.Call("hello", params)
-	// A daemon from before term and color_term refuses a parameter it does
-	// not know. Asked again without them it answers, and its sessions get its
-	// fallback terminal, as they always did. Any other refusal stands.
-	if callErr, ok := errors.AsType[*VerbCallError](err); ok && callErr.Code == ErrVerbInvalidParams &&
-		callErr.Hint != nil && (callErr.Hint.Param == "term" || callErr.Hint.Param == "color_term") {
-		delete(params, "term")
-		delete(params, "color_term")
-		raw, err = c.Call("hello", params)
-	}
 	if err == nil {
 		var hs DaemonHandshake
 		if uerr := jsonx.Unmarshal(raw, &hs); uerr != nil {
@@ -163,12 +125,9 @@ func (c *VerbClient) handshake(clientVersion string) (*DaemonHandshake, error) {
 
 	if callErr, ok := errors.AsType[*VerbCallError](err); ok {
 		switch callErr.Code {
-		case ErrVerbUnknownVerb:
-			// A JSON daemon from before the handshake verb. Usable as-is.
-			return &DaemonHandshake{}, nil
-		case ErrVerbProtocolMismatch:
-			// The daemon understood us and refused: it already knows both
-			// versions, so report exactly what it said.
+		case ErrVerbUnknownVerb, ErrVerbProtocolMismatch:
+			// The daemon refused the hello, or is from before it. Either
+			// way it cannot serve this client, so report what it said.
 			return nil, &ProtocolMismatchError{
 				ClientVersion:  clientVersion,
 				ClientProtocol: VerbProtocolVersion,
@@ -183,21 +142,14 @@ func (c *VerbClient) handshake(clientVersion string) (*DaemonHandshake, error) {
 	if !isConnectionGone(err) {
 		return nil, err
 	}
-
-	// The connection died without a response line, which is exactly what a
-	// pre-JSON daemon does with a request line. Learn its version over the
-	// legacy binary handshake, which every daemon has always answered.
-	mismatch := &ProtocolMismatchError{
+	// The connection died without a response line: a daemon from before the
+	// JSON protocol.
+	return nil, &ProtocolMismatchError{
 		ClientVersion:  clientVersion,
 		ClientProtocol: VerbProtocolVersion,
 		DaemonPID:      GetDaemonPID(),
 		Cause:          err,
 	}
-	if legacy, lerr := probeLegacyDaemon(clientVersion); lerr == nil {
-		mismatch.DaemonVersion = legacy.Version
-		mismatch.Sessions = len(legacy.SessionNames)
-	}
-	return nil, mismatch
 }
 
 // isConnectionGone reports whether err means the peer hung up or reset the
@@ -219,58 +171,4 @@ func isConnectionGone(err error) bool {
 		strings.Contains(msg, "connection reset") ||
 		strings.Contains(msg, "broken pipe") ||
 		strings.Contains(msg, "closed network connection")
-}
-
-// probeLegacyDaemon opens a second connection and performs the binary hello
-// handshake, which every daemon version understands, to learn the running
-// daemon's version. It is only used to enrich a mismatch error, so any failure
-// simply means the version stays unknown.
-func probeLegacyDaemon(clientVersion string) (*WelcomePayload, error) {
-	socketPath, err := GetSocketPath()
-	if err != nil {
-		return nil, err
-	}
-	conn, err := net.DialTimeout("unix", socketPath, clientHandshakeTimeout)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = conn.Close() }()
-
-	msg, err := NewMessage(MsgHello, &HelloPayload{
-		Version:        clientVersion,
-		Term:           "dumb",
-		Width:          80,
-		Height:         24,
-		PreferredCodec: "gob",
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	_ = conn.SetWriteDeadline(time.Now().Add(clientHandshakeTimeout))
-	if err := WriteMessage(conn, msg); err != nil {
-		return nil, err
-	}
-
-	_ = conn.SetReadDeadline(time.Now().Add(clientHandshakeTimeout))
-	resp, err := ReadMessage(conn)
-	if err != nil {
-		return nil, err
-	}
-	// The legacy welcome type is accepted alongside the current one. This probe
-	// exists to name the version of a daemon too old to speak the verb protocol,
-	// and such a daemon is old enough to number its messages differently: the
-	// insertion of MsgCapturePane moved MsgWelcome from 22 to 23. Insisting on
-	// the current number lost the version and the session count from the one
-	// message that needed them. The payload decodes either way, since gob leaves
-	// a field the sender did not know at its zero value.
-	if resp.Type != MsgWelcome && resp.Type != LegacyWelcomeType {
-		return nil, errfmt.Errorf("expected welcome, got message type %d", resp.Type)
-	}
-
-	var welcome WelcomePayload
-	if err := resp.ParsePayload(&welcome); err != nil {
-		return nil, err
-	}
-	return &welcome, nil
 }

@@ -1102,13 +1102,6 @@ type OS struct {
 	// applying a state, which it shows and does not send. See
 	// layout_tree_sync.go.
 	treeDerived map[int]string
-	// sessionTreeOpsOff is set while the session has tree ops turned off. See
-	// treeOpsOn.
-	sessionTreeOpsOff bool
-	// sessionScratchWSOff is set while the session has scratch workspaces
-	// off: an older daemon, or an older client attached. The scratch
-	// terminal is then a popup, as before. See scratch_legacy.go.
-	sessionScratchWSOff bool
 
 	// daemonLayoutSeen is the newest SessionState.DaemonLayout this client
 	// has applied: the last layout change the daemon made itself that this

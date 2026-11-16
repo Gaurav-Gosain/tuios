@@ -714,26 +714,14 @@ type connState struct {
 	// isTUIClient indicates this is a full TUI client (vs a control client)
 	// TUI clients can receive and execute remote commands
 	isTUIClient bool
-	// treeOps says the client's hello offered MsgLayoutTree. Set once, at
-	// hello. See Daemon.refreshTreeOps.
-	treeOps bool
-	// scratchWS says the client's hello offered scratch workspaces. See
-	// Daemon.refreshTreeOps.
-	scratchWS bool
-	// windowSizeCap says the client's hello offered WindowSize: it reports
-	// activity and can draw a session larger than itself. Set at hello,
-	// read under mu. See window_size.go.
-	windowSizeCap bool
 	// holdOptions says the client's hello offered HoldOptions: it applies a
 	// set_config with ConfigNoSave without saving it. Guarded by mu.
 	holdOptions bool
 	// machine is the host name the client's hello gave, a label for the
-	// leftover hint, and kind its ClientKind. viewChrome is the hello's
-	// ViewChrome. Guarded by mu. See Daemon.clientLabel and
-	// calculateSessionReserve.
-	machine    string
-	kind       string
-	viewChrome bool
+	// leftover hint, and kind its ClientKind. Guarded by mu. See
+	// Daemon.clientLabel.
+	machine string
+	kind    string
 	// lastActivity is when the person at this client last gave input, from
 	// MsgClientActivity. Guarded by mu.
 	lastActivity time.Time

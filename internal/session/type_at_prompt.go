@@ -42,10 +42,6 @@ type PromptTypedPayload struct {
 	Refused string `json:"refused,omitempty"`
 }
 
-// ErrTypeAtPromptUnsupported is what TypeAtPrompt returns for a daemon that
-// does not answer MsgTypeAtPrompt. The caller types nothing.
-var ErrTypeAtPromptUnsupported = errors.New("the daemon cannot check a pane's prompt")
-
 // shellAtPrompt reports whether the pane's own shell holds its terminal: the
 // kernel's foreground process group is the shell's. It fails closed. A pane
 // whose shell has exited, or a platform where the kernel does not say, is not
@@ -115,12 +111,8 @@ func (d *Daemon) handleTypeAtPrompt(cs *connState, msg *Message) error {
 }
 
 // CdAtPrompt asks the daemon to type a cd to dir into a pane only if the
-// pane's shell is at its prompt, and reports whether it did. A daemon that
-// predates the request gets none, and the answer is ErrTypeAtPromptUnsupported.
+// pane's shell is at its prompt, and reports whether it did.
 func (c *TUIClient) CdAtPrompt(ptyID, dir string, clear bool) (bool, error) {
-	if !c.typeAtPromptSupported {
-		return false, ErrTypeAtPromptUnsupported
-	}
 	msg, err := NewMessage(MsgTypeAtPrompt, &TypeAtPromptPayload{PTYID: ptyID, Dir: dir, Clear: clear})
 	if err != nil {
 		return false, err

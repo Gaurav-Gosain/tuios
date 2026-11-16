@@ -153,7 +153,7 @@ func (m *OS) applySidebarFlag(on bool) bool {
 // sidebarOpsOn reports whether showing the rail is session state:
 // the daemon keeps it, and a toggle goes to the daemon as an op.
 func (m *OS) sidebarOpsOn() bool {
-	return !m.NoRail && m.IsDaemonSession && m.DaemonClient != nil && m.DaemonClient.SidebarOps()
+	return !m.NoRail && m.IsDaemonSession && m.DaemonClient != nil
 }
 
 // sidebarVisibility is the session's word for a rail that is shown or not.

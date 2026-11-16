@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"tuios.dev/vt"
 )
 
@@ -31,27 +30,22 @@ func TestEndsInsideSequence(t *testing.T) {
 	}
 }
 
-// A frame edit in a daemon pane is refused by a daemon that says it refuses
-// them, and by the client otherwise, so a web view beside an older daemon
-// still gets its refusal. Everything else is answered as before.
+// A frame edit in a daemon pane is the daemon's to refuse. Everything else is
+// answered as before.
 func TestClientAnswersKittyCommand(t *testing.T) {
 	cases := []struct {
-		daemon, refuses bool
-		action          vt.KittyGraphicsAction
-		want            bool
+		daemon bool
+		action vt.KittyGraphicsAction
+		want   bool
 	}{
-		{true, true, vt.KittyActionFrame, false},
-		{true, false, vt.KittyActionFrame, true},
-		{false, true, vt.KittyActionFrame, true},
-		{true, true, vt.KittyActionTransmit, true},
-		{true, true, vt.KittyActionCompose, false},
+		{true, vt.KittyActionFrame, false},
+		{false, vt.KittyActionFrame, true},
+		{true, vt.KittyActionTransmit, true},
+		{true, vt.KittyActionCompose, false},
 	}
 	for _, c := range cases {
-		if got := clientAnswersKittyCommand(c.daemon, c.action, c.refuses); got != c.want {
-			t.Errorf("daemon=%v refuses=%v action=%c: answers = %v, want %v", c.daemon, c.refuses, c.action, got, c.want)
+		if got := clientAnswersKittyCommand(c.daemon, c.action); got != c.want {
+			t.Errorf("daemon=%v action=%c: answers = %v, want %v", c.daemon, c.action, got, c.want)
 		}
-	}
-	if (*session.TUIClient)(nil).DaemonRefusesKittyAnimation() {
-		t.Error("no daemon client counts as a daemon that refuses")
 	}
 }

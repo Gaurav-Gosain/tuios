@@ -864,19 +864,13 @@ type SessionState struct {
 	// TUIClient.PredatesOwnPush. Wire only: it is about connections, which do
 	// not survive a restart, so it is never saved.
 	PushSeen map[string]uint64 `json:"-"`
-	// LayoutTreeOps says whether the session's clients send their BSP trees as
-	// ops (true) or inside their pushes, as before the op existed (false). The
-	// daemon turns the ops off while a client too old for them is attached
-	// and on again when it leaves, and it changes the flag as a mutation, so
-	// every client switches at one Version. A daemon that predates the ops
-	// never sets it; a client reads it only from a daemon whose welcome
-	// offered them. Wire only.
+	// LayoutTreeOps says the session's clients send their BSP trees as ops.
+	// Wire only: this daemon always sets it, because a v0.12 client reads it
+	// and sends its trees in its pushes without it.
 	LayoutTreeOps bool `json:"-"`
 	// ScratchWorkspaces says every attached client shows a scratch group
-	// from its own workspace. While a client that predates it is attached it
-	// is false, a new scratch terminal is a popup again, and no focus goes
-	// to a pane on a scratch workspace. See Session.SetScratchWorkspaces. A
-	// daemon that predates it never sets it. Wire only.
+	// from its own workspace. This daemon always sets it, because a v0.12
+	// client reads it. Wire only.
 	ScratchWorkspaces bool `json:"-"`
 	// SnapshotSeq numbers the copies of the state the session hands out, in
 	// the order they were taken. A copy is taken under the state lock and sent
@@ -1558,7 +1552,7 @@ type Session struct {
 	reportsHeld bool
 	reportHeld  *heldReportColors
 	// tuiClients is how many TUI clients show the session, as
-	// Daemon.refreshTreeOps last counted. viewers are the streams that
+	// Daemon.recountTUIClients last counted. viewers are the streams that
 	// show a pane on their own. See pane_viewers.go.
 	tuiClients atomic.Int32
 	viewers    sessionViewers
@@ -1664,17 +1658,10 @@ type Session struct {
 	// stateMu. A fixed ring, so it never grows. See missedMutationLocked and
 	// missedPeerTreeLocked.
 	treeOps [1024]treeOpRecord
-	// treeOpsOff is set while a client too old for tree ops is attached.
-	// Guarded by stateMu. See SetLayoutTreeOps.
-	treeOpsOff bool
-	// scratchWSOff is set while a client too old for scratch workspaces is
-	// attached. Guarded by stateMu. See SetScratchWorkspaces.
-	scratchWSOff bool
-	// treeOpsMu is held across working out whether the session's tree ops
-	// should be on and applying the answer, so two refreshes cannot apply
-	// their answers in the opposite order to the one they worked them out
-	// in. See Daemon.refreshTreeOps.
-	treeOpsMu sync.Mutex
+	// recountMu is held across counting the session's clients and applying
+	// the answer, so two recounts cannot apply their answers in the opposite
+	// order to the one they worked them out in. See Daemon.recountTUIClients.
+	recountMu sync.Mutex
 	// focusIntent is set by a focus verb inside mutateState, so the mutation
 	// counts as a focus move even when the focus it names is the one already
 	// held: the verb is a later intent than any push in flight.
@@ -1940,7 +1927,7 @@ func (s *Session) SetGraphicsCapabilities(kitty, sixel bool) {
 
 // SetKittyAnimation records whether the hosts of the session's attached
 // clients make kitty frame edits: true only while every one of them does.
-// Daemon.refreshTreeOps counts it on every attach, detach and disconnect.
+// Daemon.recountTUIClients counts it on every attach, detach and disconnect.
 //
 // A frame edit the host cannot make is refused by the daemon, from the pane's
 // own emulator, so the refusal reaches the guest in the order the guest asked
@@ -1957,7 +1944,7 @@ func (s *Session) dragAndDrop() bool {
 // SetSixelAdvertised records whether a sixel image a pane draws will be shown:
 // true while any attached client's terminal draws sixel or kitty graphics,
 // since a client with kitty and no sixel is sent the picture as a kitty image.
-// Daemon.refreshTreeOps counts it with SetKittyAnimation.
+// Daemon.recountTUIClients counts it with SetKittyAnimation.
 //
 // It is what the pane's DA1 answer lists. The daemon's emulator is the one that
 // answers a guest's queries, so this is where a program such as chafa, lsix or
@@ -1967,7 +1954,7 @@ func (s *Session) SetSixelAdvertised(ok bool) { s.sixelAdvertised.Store(ok) }
 
 // SetKittyAdvertised records whether a kitty image a pane draws will be
 // shown: true while any attached client's terminal draws kitty graphics.
-// Daemon.refreshTreeOps counts it with SetSixelAdvertised, by the same rule.
+// Daemon.recountTUIClients counts it with SetSixelAdvertised, by the same rule.
 //
 // It decides whether the daemon answers a guest's kitty graphics query (see
 // kittyQueryResponse). A client whose terminal has no kitty graphics drops
@@ -3404,8 +3391,10 @@ func (s *Session) snapshotStateLocked() *SessionState {
 		stateCopy.WorkspaceLayoutModes = maps.Clone(s.state.WorkspaceLayoutModes)
 	}
 	stateCopy.PushSeen = maps.Clone(s.pushSeen)
-	stateCopy.LayoutTreeOps = !s.treeOpsOff
-	stateCopy.ScratchWorkspaces = !s.scratchWSOff
+	// A v0.12 client reads both and falls back to its old paths without
+	// them, so they stay on the wire, always on.
+	stateCopy.LayoutTreeOps = true
+	stateCopy.ScratchWorkspaces = true
 	// Taken under the state lock, so a copy with a higher number shows the
 	// state at least as late as one with a lower number.
 	stateCopy.SnapshotSeq = s.snapSeq.Add(1)
@@ -3779,23 +3768,10 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 			accepted = false
 		}
 		retainDaemonExclusive(state, prev)
-		// While a client too old for scratch workspaces is attached, a push
-		// cannot put the focus on one: that client would draw it nowhere.
-		if s.scratchWSOff {
-			unfocusScratchLocked(state)
-		}
 		// Version counts daemon-side mutations only, so converging on a client
 		// snapshot carries it forward unchanged: the client is not telling the
 		// daemon anything the daemon did not already know.
 		state.Version = prev.Version
-		// A push from a client too old for tree ops carries its trees and is
-		// taken as sent, without a version, as before. It is not answered to
-		// the other clients. Counting it as a tree op (a version, or a reply
-		// owed to every other client) was measured: with a v0.8.0 client the
-		// pair ended on different screens in 60 to 76 rounds of 150, against
-		// 0 without it, because the reply handed the current client the older
-		// client's tree after the older client had already taken the current
-		// one. A pair with a v0.8.0 client stays last-writer-wins.
 	}
 	if moves := s.askedFocusMoved[origin]; moves != nil && state.BaseVersion != 0 {
 		moves.seen(state.BaseVersion)

@@ -354,7 +354,7 @@ func addSizedClient(d *Daemon, id, sessionID string, w, h int) *connState {
 
 // TestEffectiveSizeHasAFloor pins the floor on one client's size.
 func TestEffectiveSizeHasAFloor(t *testing.T) {
-	d := NewDaemon(&DaemonConfig{Version: "test"})
+	d := NewDaemon(&DaemonConfig{Version: "test", WindowSize: config.WindowSizeSmallest})
 	addSizedClient(d, "big", "s", 120, 40)
 	addSizedClient(d, "tiny", "s", 1, 1)
 	if w, h, _ := d.calculateSessionSize("s"); w != 20 || h != 6 {

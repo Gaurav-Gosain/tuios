@@ -20,9 +20,6 @@ func TestListingPushReplacesThePoll(t *testing.T) {
 	other := makeSessionWithWindow(t, d, "other")
 
 	c := dialTUI(t, sp)
-	if !c.ListingPush() {
-		t.Fatal("the daemon's welcome did not offer ListingPush")
-	}
 	var pushes atomic.Int64
 	c.OnSessionsChanged(func() { pushes.Add(1) })
 	if _, err := c.AttachSession("mine", false, 80, 24); err != nil {

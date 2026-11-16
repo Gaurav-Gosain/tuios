@@ -5,42 +5,11 @@ import (
 	"time"
 )
 
-// legacyWindowSize makes this client behave as a build from before the
-// window_size policy: its hello leaves WindowSize out, it reports no
-// activity, and it never draws a session larger than its own terminal. It is
-// TUIOS_WINDOW_SIZE_LEGACY=1, and it exists so the mixed-version promise can
-// be tested without an old build. See window_size.go.
-func legacyWindowSize() bool {
-	return os.Getenv("TUIOS_WINDOW_SIZE_LEGACY") == "1"
-}
-
-// legacyViewChrome makes this client behave as a build from before
-// HelloPayload.ViewChrome: its hello leaves ViewChrome out, and it lays the
-// panes out around its own chrome whatever the session agreed. It is
-// TUIOS_VIEW_CHROME_LEGACY=1, so the mixed-version case can be tested without
-// an old build.
-func legacyViewChrome() bool {
-	return os.Getenv("TUIOS_VIEW_CHROME_LEGACY") == "1"
-}
-
-// ViewChrome reports whether this client's hello offered ViewChrome: it may
-// lay the panes out around an agreed reserve smaller than its own chrome.
-func (c *TUIClient) ViewChrome() bool {
-	return c != nil && c.viewChrome
-}
-
 // activityInterval is the shortest gap between two MsgClientActivity sends.
 // The daemon holds the latest client for a second after its last input (see
 // latestHold), so a report at most this stale costs nothing, and a person
 // typing sends a few small messages a second rather than one per key.
 const activityInterval = 100 * time.Millisecond
-
-// WindowSizeAware reports whether the daemon sizes the session by its
-// window_size policy and reads activity, so this client may be handed a
-// session larger than its terminal and must draw it as a view.
-func (c *TUIClient) WindowSizeAware() bool {
-	return c != nil && c.windowSize
-}
 
 // SessionWindowSize is the window_size policy the session's size was last
 // settled under, or "" when the daemon has not said.
@@ -129,13 +98,12 @@ func (c *TUIClient) noteSizePolicy(policy string) {
 	c.sizePolicy.Store(&policy)
 }
 
-// ReportActivity tells the daemon the person at this client gave input. It
-// sends nothing to a daemon that did not offer WindowSize, and at most one
-// message per activityInterval: the first input of a burst goes at once, so
+// ReportActivity tells the daemon the person at this client gave input, at
+// most one message per activityInterval: the first input of a burst goes at once, so
 // a switch is never delayed, and the rest of the burst is folded into it. It
 // arms no timer.
 func (c *TUIClient) ReportActivity(now time.Time) {
-	if !c.WindowSizeAware() {
+	if c == nil {
 		return
 	}
 	c.activityMu.Lock()

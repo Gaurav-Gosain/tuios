@@ -224,13 +224,13 @@ func (c *Client) sendHello() error {
 	termType, colorTerm := helloTerm()
 
 	msg, err := NewMessage(MsgHello, &HelloPayload{
-		Version:        c.version,
-		Term:           termType,
-		ColorTerm:      colorTerm,
-		Width:          c.width,
-		Height:         c.height,
-		PreferredCodec: "gob", // Request gob (default)
-		Protocol:       ProtocolVersion,
+		Version:   c.version,
+		Term:      termType,
+		ColorTerm: colorTerm,
+		Width:     c.width,
+		Height:    c.height,
+
+		Protocol: ProtocolVersion,
 	})
 	if err != nil {
 		return err

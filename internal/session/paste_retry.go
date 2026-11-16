@@ -105,9 +105,9 @@ func refusalMessage(code int) string {
 
 // isLargeInput reports whether input of n bytes goes out as a paste: one
 // whose frame payload, the pane id and the data, the daemon may refuse as
-// busy. Only to a daemon that tags replies.
+// busy.
 func (c *TUIClient) isLargeInput(n int) bool {
-	return 36+n > largeFrame && c.requestIDs.Load()
+	return 36+n > largeFrame
 }
 
 // writeInputLocked sends input to a pane, or holds it behind a paste to the

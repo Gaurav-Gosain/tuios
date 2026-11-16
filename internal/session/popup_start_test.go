@@ -86,7 +86,7 @@ func dialAnimationClient(t *testing.T, socketPath, session string, animates bool
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 	c := &boundsClient{conn: conn}
-	c.send(t, MsgHello, &HelloPayload{Version: "test", PreferredCodec: "gob", Protocol: ProtocolVersion,
+	c.send(t, MsgHello, &HelloPayload{Version: "test", Protocol: ProtocolVersion,
 		LayoutTreeOps: true, KittyAnimation: animates})
 	var welcome WelcomePayload
 	if err := c.await(t, MsgWelcome).ParsePayload(&welcome); err != nil {

@@ -64,35 +64,6 @@ func errNoScratchGroup(ws int) error {
 	return errfmt.Errorf("scratch workspace %d has no panes. Press the scratch key to start it again", ws)
 }
 
-// SetScratchWorkspaces turns scratch workspaces on or off for the session:
-// off while a client that predates them is attached, since such a client
-// draws a pane on workspace 1000 nowhere and would drop every key while the
-// focus sits there. Turning them off moves a focus on a scratch pane to the
-// session's workspace. A change is a mutation, so every client hears of it
-// at one Version.
-func (s *Session) SetScratchWorkspaces(on bool) {
-	s.stateMu.RLock()
-	same := s.scratchWSOff == !on
-	s.stateMu.RUnlock()
-	if same {
-		return
-	}
-	_ = s.mutateState(func(state *SessionState) error {
-		s.scratchWSOff = !on
-		if !on {
-			unfocusScratchLocked(state)
-		}
-		return nil
-	})
-}
-
-// scratchWorkspacesOn reports whether new scratch terminals get a workspace.
-func (s *Session) scratchWorkspacesOn() bool {
-	s.stateMu.RLock()
-	defer s.stateMu.RUnlock()
-	return !s.scratchWSOff
-}
-
 // unfocusScratchLocked moves a focus on a pane of a scratch workspace to the
 // session's workspace: its recorded focus, or its first window, or none.
 func unfocusScratchLocked(state *SessionState) {

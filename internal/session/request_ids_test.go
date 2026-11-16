@@ -9,8 +9,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // A client used to match the daemon's replies by message type alone. The
@@ -142,7 +140,7 @@ func TestRequestIDsAcrossPeerVintages(t *testing.T) {
 		}
 		// An old client: a hello in its own words, which name no request ids,
 		// and untagged requests.
-		send(MsgHello, &HelloPayload{Version: "old", PreferredCodec: "gob", Protocol: ProtocolVersion})
+		send(MsgHello, &HelloPayload{Version: "old", Protocol: ProtocolVersion})
 		send(MsgAttach, &AttachPayload{SessionName: "vintage", CreateNew: true, Width: 80, Height: 24})
 		send(MsgGetTerminalState, &GetTerminalStatePayload{PTYID: "no-such-pane"})
 		send(MsgList, nil)
@@ -183,9 +181,6 @@ func TestRequestIDsAcrossPeerVintages(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer func() { _ = c.Close() }()
-		if !c.requestIDs.Load() {
-			t.Fatal("a client of this build did not take request ids from a daemon of this build")
-		}
 		if _, err := c.AttachSession("vintage", true, 80, 24); err != nil {
 			t.Fatalf("attach before the read loop: %v", err)
 		}
@@ -199,87 +194,6 @@ func TestRequestIDsAcrossPeerVintages(t *testing.T) {
 		}
 	})
 
-	t.Run("new client, old daemon", func(t *testing.T) {
-		requests := oldDaemon(t, func(req *Message, write func(*Message)) {
-			if req.Type != MsgGetTerminalState {
-				return
-			}
-			var p GetTerminalStatePayload
-			_ = req.ParsePayload(&p)
-			// First the answer to a request that gave up long ago, about
-			// another pane, then the answer to this one.
-			for _, id := range []string{"stale-pane", p.PTYID} {
-				msg, _ := NewMessage(MsgTerminalState, &TerminalStatePayload{PTYID: id, State: &TerminalState{Width: len(id)}})
-				write(msg)
-			}
-		})
-		c := NewTUIClient()
-		if err := c.Connect("new", 80, 24); err != nil {
-			t.Fatal(err)
-		}
-		defer func() { _ = c.Close() }()
-		if c.requestIDs.Load() {
-			t.Fatal("the client took request ids from a daemon that never offered them")
-		}
-		c.StartReadLoop()
-		st, err := c.GetTerminalState("pane-b", 0, 0)
-		if err != nil {
-			t.Fatalf("state request to an old daemon: %v", err)
-		}
-		if st.Width != len("pane-b") {
-			t.Fatalf("the client took the state of another pane (width %d)", st.Width)
-		}
-		if codec := <-requests; codec != wireCodecGob {
-			t.Fatalf("the client wrote codec byte %d to a daemon that does not read request ids", codec)
-		}
-	})
-}
-
-// oldDaemon is a daemon from before request ids: it welcomes without
-// RequestIDs and answers each request through answer. It reports the codec
-// byte of every request after the hello.
-func oldDaemon(t *testing.T, answer func(req *Message, write func(*Message))) (requests chan byte) {
-	t.Helper()
-	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
-	socketPath, err := GetSocketPath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	ln, err := net.Listen("unix", socketPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = ln.Close() })
-	requests = make(chan byte, 16)
-	go func() {
-		conn, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		defer func() { _ = conn.Close() }()
-		if _, err := ReadMessage(conn); err != nil {
-			return
-		}
-		welcome, _ := NewMessage(MsgWelcome, &WelcomePayload{Version: "old", Codec: "gob", Protocol: ProtocolVersion})
-		_ = WriteMessage(conn, welcome)
-		for {
-			var hdr [4]byte
-			if _, err := io.ReadFull(conn, hdr[:]); err != nil {
-				return
-			}
-			body := make([]byte, binary.BigEndian.Uint32(hdr[:]))
-			if _, err := io.ReadFull(conn, body); err != nil {
-				return
-			}
-			select {
-			case requests <- body[1]:
-			default:
-			}
-			// An old daemon ignores the codec byte and decodes what follows.
-			answer(&Message{Type: MessageType(body[0]), Payload: body[2:]}, func(m *Message) { _ = WriteMessage(conn, m) })
-		}
-	}()
-	return requests
 }
 
 // TestSubscribeErrorDoesNotAnswerAStateRequest is the restore race. A
@@ -331,7 +245,6 @@ func TestLateReplyIsNotTakenByTheNextRequest(t *testing.T) {
 	server, client := net.Pipe()
 	defer func() { _ = server.Close() }()
 	c := newTestTUIClient(client)
-	c.requestIDs.Store(true)
 	c.StartReadLoop()
 	defer func() { _ = c.Close() }()
 

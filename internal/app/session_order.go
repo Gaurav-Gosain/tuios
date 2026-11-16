@@ -1,9 +1,7 @@
 package app
 
 import (
-	"os"
 	"slices"
-	"sync"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
@@ -50,21 +48,13 @@ type SessionOrderAppliedMsg struct {
 	Err   error
 }
 
-// legacySessionOrder makes this client behave as a build from before the
-// daemon's session order: it keeps its own order, applies it over the
-// listing, and never sends one. It is TUIOS_SESSION_ORDER_LEGACY=1, so the
-// mixed-version case can be tested without an old build.
-var legacySessionOrder = sync.OnceValue(func() bool {
-	return os.Getenv("TUIOS_SESSION_ORDER_LEGACY") == "1"
-})
-
 // commitSessionOrder shows order on the rail and hands it to the daemon that
 // holds the attached session, now or after the move that is out.
 func (m *OS) commitSessionOrder(order []string) {
 	host := m.attachedMachine()
 	m.setSidebarSessionOrder(host, order)
 	m.saveSidebarState()
-	if m.DaemonClient == nil || m.sessionOrderIsLocal(host) || legacySessionOrder() {
+	if m.DaemonClient == nil || m.sessionOrderIsLocal(host) {
 		return
 	}
 	if m.sessionOrderPush == nil {
@@ -178,5 +168,5 @@ func (m *OS) applySessionOrderResult(msg SessionOrderAppliedMsg) tea.Cmd {
 // sessions keeps an order its listing carries, in which case it is the order
 // the rail shows once no move of this client's is on its way to it.
 func (m *OS) sessionOrderFromDaemon(host string) bool {
-	return m.DaemonClient != nil && !m.sessionOrderIsLocal(host) && !legacySessionOrder() && m.DaemonClient.SessionOrderSet()
+	return m.DaemonClient != nil && !m.sessionOrderIsLocal(host) && m.DaemonClient.SessionOrderSet()
 }
