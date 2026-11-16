@@ -165,7 +165,7 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// A terminal focus key pointing back at the panes leaves the rail, so
 		// the key that walked into it from the outermost pane walks back out.
 		focus := tableAction(o, msg, o.KeybindRegistry, config.TableTerminalMode)
-		if dir, ok := strings.CutPrefix(focus, "terminal_focus_"); ok && o.LeaveRailToward(dir) {
+		if dir, ok := terminalFocusDirection(focus); ok && o.LeaveRailToward(dir) {
 			return o, nil
 		}
 

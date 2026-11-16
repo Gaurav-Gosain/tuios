@@ -142,8 +142,8 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// It depends on the key and the registry alone.
 	terminalAction := sectionAction(msg, o, config.TableTerminalMode)
 	nvimNavigation := false
-	if isTerminalFocusAction(terminalAction) {
-		nvimNavigation = o.NvimNavigationForwarding(nvimNavigationDirection(terminalAction))
+	if dir, ok := terminalFocusDirection(terminalAction); ok {
+		nvimNavigation = o.NvimNavigationForwarding(dir)
 	}
 
 	// alt+left/right used to navigate the scrolling layout's columns from here,

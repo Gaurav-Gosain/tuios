@@ -1,8 +1,6 @@
 package input
 
 import (
-	"strings"
-
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -167,7 +165,7 @@ func runTerminalModeBinds(msg tea.KeyPressMsg, o *app.OS) (tea.Cmd, bool) {
 		return nil, false
 	}
 	action := tableAction(o, msg, o.KeybindRegistry, config.TableTerminalMode)
-	if o.Mode == app.TerminalMode && isTerminalFocusAction(action) && o.ArmNvimNavigation(nvimNavigationDirection(action)) {
+	if dir, ok := terminalFocusDirection(action); ok && o.Mode == app.TerminalMode && o.ArmNvimNavigation(dir) {
 		return nil, false
 	}
 	if _, cmd, ok := dispatchAction(action, msg, o); ok {
@@ -190,13 +188,29 @@ func runTerminalModeBinds(msg tea.KeyPressMsg, o *app.OS) (tea.Cmd, bool) {
 	return cmd, ok
 }
 
-func isTerminalFocusAction(action string) bool {
-	return action == "terminal_focus_left" || action == "terminal_focus_right" ||
-		action == "focus_up" || action == "focus_down"
+// terminalFocusDirection is the direction a pane focus action moves, and
+// whether action is one. The four actions do not share a name pattern: up and
+// down are focus_up and focus_down since one name per action, and their older
+// names terminal_focus_up and terminal_focus_down are aliases. Cutting a prefix
+// off the name gave "focus_up" as the direction, which matched no reply from
+// the Neovim navigator, so up and down did nothing in a Neovim pane (#2158).
+func terminalFocusDirection(action string) (string, bool) {
+	switch config.CanonicalAction(action) {
+	case "terminal_focus_left":
+		return "left", true
+	case "terminal_focus_right":
+		return "right", true
+	case "focus_up":
+		return "up", true
+	case "focus_down":
+		return "down", true
+	}
+	return "", false
 }
 
-func nvimNavigationDirection(action string) string {
-	return strings.TrimPrefix(action, "terminal_focus_")
+func isTerminalFocusAction(action string) bool {
+	_, ok := terminalFocusDirection(action)
+	return ok
 }
 
 // isReservedTerminalChord reports whether a key press is a chord the shell will
