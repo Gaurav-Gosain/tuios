@@ -1094,13 +1094,8 @@ func resolvedPath(t *testing.T, p string) string {
 func tuiosCLI(t *testing.T, base string, args ...string) (string, error) {
 	t.Helper()
 	traceCLI(t, args)
-	if simOn {
-		if len(args) == 1 && args[0] == "kill-server" {
-			return simKillServer(base), nil
-		}
-		if len(args) > 0 && simStartsDaemon[args[0]] {
-			simEnsureDaemon(t, base)
-		}
+	if out, done := simBeforeCLI(t, base, args); done {
+		return out, nil
 	}
 	return tuiosCLIRun(t, base, args...)
 }
@@ -1178,7 +1173,10 @@ func killDaemon(t *testing.T, base string) {
 		// The in-process daemon stops in its own cleanup, and here for a
 		// daemon started after this was registered. kill-server would find
 		// no pid file: the daemon's process is this one.
-		t.Cleanup(func() { simStopDaemon(base) })
+		t.Cleanup(func() {
+			simStopDaemon(base)
+			simRealDaemonCheck(t, base)
+		})
 		return
 	}
 	t.Cleanup(func() {

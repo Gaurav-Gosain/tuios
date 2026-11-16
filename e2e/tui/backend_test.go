@@ -28,6 +28,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -150,7 +151,14 @@ type probeInput struct {
 	results chan probeRead
 	pending bool
 	left    []byte
+	// stopped closes when the client is asked to stop. A read then
+	// returns io.EOF at once, so Bubble Tea's reader ends with the program
+	// and not when tuitest closes the pipe after its grace.
+	stopped  chan struct{}
+	stopOnce sync.Once
 }
+
+func (p *probeInput) stop() { p.stopOnce.Do(func() { close(p.stopped) }) }
 
 type probeRead struct {
 	b   []byte
@@ -158,7 +166,7 @@ type probeRead struct {
 }
 
 func newProbeInput(in io.Reader) *probeInput {
-	return &probeInput{in: in, results: make(chan probeRead, 1)}
+	return &probeInput{in: in, results: make(chan probeRead, 1), stopped: make(chan struct{})}
 }
 
 // next waits up to timeout for the next chunk.
@@ -199,20 +207,29 @@ func (p *probeInput) probe(timeout time.Duration, done func(string) bool) string
 }
 
 func (p *probeInput) Read(b []byte) (int, error) {
-	if len(p.left) == 0 && p.pending {
-		r := <-p.results
-		p.pending = false
-		if r.err != nil && len(r.b) == 0 {
-			return 0, r.err
+	if len(p.left) == 0 {
+		if !p.pending {
+			p.pending = true
+			go func() {
+				buf := make([]byte, 4096)
+				n, err := p.in.Read(buf)
+				p.results <- probeRead{buf[:n], err}
+			}()
 		}
-		p.left = r.b
+		select {
+		case r := <-p.results:
+			p.pending = false
+			if r.err != nil && len(r.b) == 0 {
+				return 0, r.err
+			}
+			p.left = r.b
+		case <-p.stopped:
+			return 0, io.EOF
+		}
 	}
-	if len(p.left) > 0 {
-		n := copy(b, p.left)
-		p.left = p.left[n:]
-		return n, nil
-	}
-	return p.in.Read(b)
+	n := copy(b, p.left)
+	p.left = p.left[n:]
+	return n, nil
 }
 
 // simEnv makes env the process environment for the rest of the test, as the
@@ -314,6 +331,7 @@ func simEnsureDaemon(t *testing.T, base string) {
 	}
 	s := &simDaemon{t: t, base: base, d: d}
 	simDaemons.Store(base, s)
+	simKilledRoots.Delete(base)
 	// Registered after the environment, so the daemon stops while the
 	// test's directories are still the ones it writes to.
 	t.Cleanup(s.stop)
@@ -321,7 +339,9 @@ func simEnsureDaemon(t *testing.T, base string) {
 
 // simStartsDaemon names the commands that start a daemon when none runs
 // (ensureDaemon in cmd/tuios). Under sim tuiosCLI starts the in-process
-// daemon for them, and leaves every other command to find what runs.
+// daemon before any call, so the binary never starts one of its own. After
+// the test's own kill-server only these start it again, and every other
+// command finds no daemon, as it does with the binary.
 var simStartsDaemon = map[string]bool{
 	"new": true, "attach": true, "start-server": true, "start-agent": true,
 	"delegate": true, "gui-bridge": true, "cp": true, "worktree": true,
@@ -336,8 +356,49 @@ func simKillServer(base string) string {
 	if !ok {
 		return "TUIOS daemon is not running.\n"
 	}
+	simKilledRoots.Store(base, true)
 	v.(*simDaemon).stop()
 	return fmt.Sprintf("Sent SIGTERM to daemon (PID %d)\n", os.Getpid())
+}
+
+// simBeforeCLI is the sim backend's part of a CLI call against base, for
+// tuiosCLI and the helpers like it: it starts the in-process daemon, so the
+// binary never starts a daemon of its own. kill-server it answers itself
+// (done).
+func simBeforeCLI(t *testing.T, base string, args []string) (out string, done bool) {
+	t.Helper()
+	if !simOn {
+		return "", false
+	}
+	if len(args) == 1 && args[0] == "kill-server" {
+		return simKillServer(base), true
+	}
+	if len(args) > 0 && (simStartsDaemon[args[0]] || !simKilled(base)) {
+		simEnsureDaemon(t, base)
+	}
+	return "", false
+}
+
+// simKilledRoots holds the roots whose daemon the test stopped with
+// kill-server. simEnsureDaemon clears it.
+var simKilledRoots sync.Map
+
+func simKilled(base string) bool {
+	_, ok := simKilledRoots.Load(base)
+	return ok
+}
+
+// simRealDaemonCheck stops a daemon process that serves base after the
+// in-process one stopped, and fails the test: a helper that runs the binary
+// outside tuiosCLI started it, so the test did not run in process. Left
+// running, it writes the sessions back into the test's folder after
+// t.TempDir removed it.
+func simRealDaemonCheck(t *testing.T, base string) {
+	out, _ := tuiosCLIRun(t, base, "kill-server")
+	if strings.Contains(out, "not running") {
+		return
+	}
+	t.Errorf("sim backend: a daemon process served %s, so this test did not run in process; kill-server: %s", base, strings.TrimSpace(out))
 }
 
 // simStopDaemon stops the in-process daemon of base, if one runs.
@@ -396,9 +457,11 @@ type simClient struct {
 	base string
 
 	resize chan localclient.Size
+	ended  chan struct{}
 
 	mu   sync.Mutex
 	prog *tea.Program
+	in   *probeInput
 	quit bool
 }
 
@@ -412,10 +475,13 @@ func (c *simClient) Resize(cols, rows int) {
 func (c *simClient) Stop() {
 	c.mu.Lock()
 	c.quit = true
-	p := c.prog
+	p, in := c.prog, c.in
 	c.mu.Unlock()
 	if p != nil {
 		p.Quit()
+	}
+	if in != nil {
+		in.stop()
 	}
 }
 
@@ -455,9 +521,17 @@ func (c *simClient) connect(out io.Writer, settings *config.Settings, caps *app.
 // Run is runLocal or runDaemonSessionOn of cmd/tuios on a Pipe. It does not
 // print the notices the binary prints after the TUI has ended.
 func (c *simClient) Run(in io.Reader, out io.Writer, cols, rows int) int {
+	defer close(c.ended)
 	ov := c.args.flags.Overrides()
 	userConfig, settings := localclient.LoadConfig(c.getenv, ov)
 	pin := newProbeInput(in)
+	c.mu.Lock()
+	c.in = pin
+	stopNow := c.quit
+	c.mu.Unlock()
+	if stopNow {
+		pin.stop()
+	}
 	caps := simProbe(pin, out, cols, rows)
 	// Code that reads the process's terminal and not the model's finds this
 	// client's.
@@ -547,7 +621,19 @@ func simStart(t *testing.T, base string, o startOpts, argv, env []string, dir st
 	env = lastWins(append([]string{"LANG=C.UTF-8", "TERM=xterm-256color"}, env...))
 	simEnv(t, env)
 	t.Chdir(dir)
-	return tuitest.StartProgramT(t, &simClient{args: args, env: env, dir: dir, base: base, resize: make(chan localclient.Size, 16)}, opts...)
+	c := &simClient{args: args, env: env, dir: dir, base: base, resize: make(chan localclient.Size, 16), ended: make(chan struct{})}
+	// Registered after the root folder, so it runs before t.TempDir removes
+	// it, and after tuitest's Close has asked the client to stop.
+	t.Cleanup(func() {
+		select {
+		case <-c.ended:
+		case <-time.After(10 * time.Second):
+			buf := make([]byte, 1<<20)
+			n := runtime.Stack(buf, true)
+			t.Errorf("sim backend: the client did not return from Run within 10s of Stop, and it writes into the test's folders while it runs:\n%s", buf[:n])
+		}
+	})
+	return tuitest.StartProgramT(t, c, opts...)
 }
 
 // lastWins keeps the last entry of each name in env, in the order the names

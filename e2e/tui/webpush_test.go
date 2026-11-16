@@ -333,6 +333,9 @@ func (k phoneKeys) subJSON(endpoint string) string {
 func tuiosCLIStdin(t *testing.T, base, stdin string, args ...string) (string, error) {
 	t.Helper()
 	pinPreV080Looks(t, base)
+	if out, done := simBeforeCLI(t, base, args); done {
+		return out, nil
+	}
 	cmd := exec.Command(tuiosBin, args...)
 	cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
 	for _, key := range xdgKeys {
