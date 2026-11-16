@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -142,11 +143,11 @@ func TestPhoneStreamsAPaneAndAnswersTheInbox(t *testing.T) {
 
 	// --- Live output, numbered by seq with no hole and no overlap.
 	spType(t, ctl, w1, "echo LIVE-$((40+2))\n")
-	seq = ps.readUntil(t, tr, emu, seq, "\nLIVE-42")
+	seq = ps.readUntil(t, tr, emu, seq, "LIVE-42")
 
 	// --- Input typed from the phone.
 	ps.send(t, 'I', []byte("echo TYPED-$((6*7))\r"))
-	seq = ps.readUntil(t, tr, emu, seq, "\nTYPED-42")
+	seq = ps.readUntil(t, tr, emu, seq, "TYPED-42")
 	spWait(t, ctl, w1, "TYPED-42")
 	settleAndCompare(t, ps, tr, emu, &seq, ctl, w1, "after live output and input")
 
@@ -179,7 +180,7 @@ func TestPhoneStreamsAPaneAndAnswersTheInbox(t *testing.T) {
 	ps.send(t, 'L', []byte{0, 40, 0, 10})
 	seq = ps.readResize(t, tr, emu, seq, 40, 10)
 	ps.send(t, 'I', []byte("echo SZ-$(stty size | tr ' ' x)\r"))
-	seq = ps.readUntil(t, tr, emu, seq, "\nSZ-10x40")
+	seq = ps.readUntil(t, tr, emu, seq, "SZ-10x40")
 	spType(t, ctl, w2, "clear; echo SZ2-$(stty size | tr ' ' x)\n")
 	if got := spSize(t, ctl, w2, "SZ2-"); got != w2Size {
 		t.Fatalf("the lease on one pane changed another pane from %s to %s", w2Size, got)
@@ -189,7 +190,7 @@ func TestPhoneStreamsAPaneAndAnswersTheInbox(t *testing.T) {
 	}
 	call(ctl, "resize", map[string]any{"session": streamSession, "window": w1, "width": 100, "height": 30})
 	ps.send(t, 'I', []byte("echo RS-$(stty size | tr ' ' x)\r"))
-	seq = ps.readUntil(t, tr, emu, seq, "\nRS-")
+	seq = ps.readUntil(t, tr, emu, seq, "RS-")
 	if !strings.Contains(spAll(emu), "RS-10x40") {
 		t.Fatalf("a resize under the lease changed the leased pane:\n%s", spScreen(emu))
 	}
@@ -707,15 +708,24 @@ func spApply(t *testing.T, emu *vt.Emulator, seq int64, typ byte, payload []byte
 	return seq
 }
 
-// readUntil applies frames until the emulator shows marker.
+// readUntil applies frames until a line of the emulator starts with marker,
+// the output of a command typed into the pane. The shell's prompt may come
+// first on that line: input typed before the shell prints its prompt is
+// echoed by the terminal at once, so the prompt lands in front of the
+// output, as in "$ TYPED-42".
 func (s *linkStream) readUntil(t *testing.T, tr *spTranscript, emu *vt.Emulator, seq int64, marker string) int64 {
 	t.Helper()
+	line := regexp.MustCompile(`(?m)^(?:\$ )?` + regexp.QuoteMeta(marker))
 	deadline := time.Now().Add(uiTimeout)
-	for !strings.Contains(spAll(emu), marker) {
+	for !line.MatchString(spAll(emu)) {
 		if time.Now().After(deadline) {
 			t.Fatalf("%q never arrived on the stream:\n%s", marker, spScreen(emu))
 		}
-		typ, payload := s.frame(t, tr)
+		typ, payload, err := s.tryFrame()
+		if err != nil {
+			t.Fatalf("read a pane frame: %v, waiting for %q\n%s", err, marker, spScreen(emu))
+		}
+		tr.frame(typ, payload)
 		seq = spApply(t, emu, seq, typ, payload)
 	}
 	return seq
