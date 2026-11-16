@@ -1295,6 +1295,17 @@ func slideRun(t *testing.T, level string) string {
 	// seam across most of the pane area in one frame.
 	if slides {
 		back := runSlide(t, term, tape, '2', slideOldMark, func() {
+			// A kitty key reaches tuios at once, where the legacy ESC 1
+			// waited out the escape timeout. Pressed on the slide's first
+			// frame, it turns the slide before the seam has moved, and the
+			// turn cannot be seen. So the press waits until the seam is a
+			// fifth of the pane in.
+			if err := term.WaitForDesc("the slide to cross a fifth of the pane", func(s tuitest.Screen) bool {
+				_, first := slideMarks(s.Line(slideRows/2), 0, slideCols)
+				return first >= 0 && first <= pane.Max.X-pane.Dx()/5
+			}, 2*time.Second); err != nil {
+				t.Fatalf("back: %v", err)
+			}
 			if err := term.SendKeys(tuitest.Alt('1')); err != nil {
 				t.Fatalf("press alt+1 mid-slide: %v", err)
 			}
