@@ -29,10 +29,6 @@ func (m *OS) rebuildPaletteItems() {
 	if !m.agentsSeen() {
 		static = slices.DeleteFunc(static, func(it CommandPaletteItem) bool { return it.Category == paletteCategoryAgents })
 	}
-	// The review waits for a daemon that can review a pane's changes.
-	if !m.reviewSupported() {
-		static = slices.DeleteFunc(static, func(it CommandPaletteItem) bool { return it.Name == paletteReviewName })
-	}
 	// The Agents tab is not there with the agent features off, or on a client
 	// that cannot change this machine's integrations.
 	if !m.agentsPageAvailable() {

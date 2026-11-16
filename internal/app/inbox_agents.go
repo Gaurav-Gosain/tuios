@@ -380,7 +380,7 @@ func (m *OS) InboxAgentsGo() tea.Cmd {
 // InboxAgentsReply opens the reply editor for the selected agent.
 func (m *OS) InboxAgentsReply() tea.Cmd {
 	e, ok := m.cockpitAgent()
-	if !ok || !m.inboxReplySupported() {
+	if !ok {
 		return nil
 	}
 	who := printableTitle(e.Title)

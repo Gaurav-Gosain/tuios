@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/charmbracelet/x/ansi"
@@ -318,80 +317,6 @@ func TestReviewCompareRunsOneRefreshChain(t *testing.T) {
 	m.Update(m.ReviewCompareConfirm(true)())
 	if m.review.compare.tickGen == gen2 {
 		t.Error("the read after a keep did not start a new chain")
-	}
-}
-
-// TestReviewKeysOnAnOlderDaemon: a daemon whose list-verbs, probed as the
-// Inbox watch starts, leaves review-diff out gets no review keys: ctrl+b v, v
-// in the Inbox and v on a rail row do what an unbound key does, and the
-// prefix menu, the help and the palette leave the review out. A review that
-// comes back unknown_verb does the same from then on.
-func TestReviewKeysOnAnOlderDaemon(t *testing.T) {
-	offered := func(m *OS) (menu, help, palette bool) {
-		for _, b := range m.prefixMenuBindings() {
-			if b.Description == "Review changes" {
-				menu = true
-			}
-		}
-		for _, c := range m.HelpCategories() {
-			for _, b := range c.Bindings {
-				if isReviewHelpBinding(b) {
-					help = true
-				}
-			}
-		}
-		m.PaletteItems = nil
-		for _, it := range m.allPaletteItems() {
-			if it.Name == paletteReviewName {
-				palette = true
-			}
-		}
-		return menu, help, palette
-	}
-	for _, how := range []string{"probe", "unknown_verb"} {
-		t.Run(how, func(t *testing.T) {
-			m, f := reviewOS(t)
-			m.KeybindRegistry = config.NewKeybindRegistry(config.DefaultConfig())
-			m.Windows[0].AgentState = "working"
-			done := item("1", session.AttentionFinished, "work", "w-7", "done", time.Now().UnixNano())
-			m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{done}})
-			if menu, help, palette := offered(m); !menu || !help || !palette {
-				t.Fatalf("a newer daemon is not offered the review: menu %v, help %v, palette %v", menu, help, palette)
-			}
-			switch how {
-			case "probe":
-				m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{done}, NoReview: true})
-			case "unknown_verb":
-				f.diffErr = &session.VerbCallError{Code: session.ErrVerbUnknownVerb, Message: "unknown verb"}
-				cmd, _ := m.ReviewFocusedPane()
-				runMsg(t, m, cmd)
-				if m.ReviewOpen() {
-					t.Fatal("a refused review opened")
-				}
-			}
-			if menu, help, palette := offered(m); menu || help || palette {
-				t.Errorf("an older daemon is offered the review: menu %v, help %v, palette %v", menu, help, palette)
-			}
-			calls := len(f.calls)
-			if _, handled := m.ReviewFocusedPane(); handled {
-				t.Error("ctrl+b v is handled on a daemon that cannot review")
-			}
-			m.OpenInbox("")
-			if _, handled := m.InboxReview(); handled {
-				t.Error("v in the Inbox is handled on a daemon that cannot review")
-			}
-			if _, handled := m.SidebarAgentReview("here", "w-2"); handled {
-				t.Error("v on a rail row is handled on a daemon that cannot review")
-			}
-			if len(f.calls) != calls {
-				t.Errorf("the review keys asked an older daemon %v", f.calls[calls:])
-			}
-			// A newer daemon after a restart is probed again.
-			m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{done}})
-			if _, handled := m.ReviewFocusedPane(); !handled {
-				t.Error("ctrl+b v is not handled once the daemon can review again")
-			}
-		})
 	}
 }
 

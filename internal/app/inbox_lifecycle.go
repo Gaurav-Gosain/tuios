@@ -84,27 +84,6 @@ type inboxLifecycle struct {
 	// unread) this client just asked the daemon to open, with when, so their
 	// open raises no alert.
 	asked map[string]time.Time
-	// noMark is set when the daemon holding the Inbox was found without
-	// mark-attention: its list-verbs, probed once per watch, did not list
-	// it, or a mark came back unknown_verb. The keys that need the verb are
-	// then not offered and do what an unbound key does, and a dismiss does
-	// not offer an undo it could not make. False means supported or not yet
-	// known, which is what a client with a newer daemon, or a test with a
-	// fake caller, should see.
-	noMark bool
-}
-
-// inboxMarkSupported reports whether the daemon holding the Inbox can take
-// mark-attention, as far as this client knows.
-func (m *OS) inboxMarkSupported() bool {
-	return !m.Inbox.life.noMark
-}
-
-// probeMarkAttention asks a daemon's list-verbs whether it has
-// mark-attention. known is false when the probe itself failed for a reason
-// that says nothing about the verb, and the caller then assumes nothing.
-func probeMarkAttention(call func(verb string, params map[string]any) ([]byte, error)) (supported, known bool) {
-	return probeVerb(call, "mark-attention")
 }
 
 // probeVerb asks a daemon's list-verbs whether it has the verb name. known is
@@ -327,11 +306,6 @@ func (m *OS) inboxMarkCmd(params map[string]any, who, words string) tea.Cmd {
 // applyInboxMarked says what happened, and keeps a snooze for u.
 func (m *OS) applyInboxMarked(msg InboxMarkedMsg) {
 	if msg.Err != nil {
-		if session.VerbErrCode(msg.Err) == session.ErrVerbUnknownVerb {
-			m.Inbox.life.noMark = true
-			m.ShowNotification("This daemon cannot snooze or mark items. "+m.restartHint(), "error", m.Settings.NotificationDuration*2)
-			return
-		}
 		m.ShowNotification(inboxMarkFailWords(msg.Action)+": "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
 		if msg.Action == "unread" {
 			m.settleInboxUnreadAsk(msg.Window, "")
@@ -405,7 +379,7 @@ func (m *OS) rememberInboxUndo(id, who string) {
 // machine was discarded and a question put with ask-human was answered as
 // dismissed, so neither comes back.
 func (m *OS) noteInboxDismissed(id, kind, who string) {
-	if kind == session.AttentionOutbox || kind == session.AttentionAsk || !m.inboxMarkSupported() {
+	if kind == session.AttentionOutbox || kind == session.AttentionAsk {
 		return
 	}
 	m.rememberInboxUndo(id, who)
@@ -415,9 +389,6 @@ func (m *OS) noteInboxDismissed(id, kind, who string) {
 // InboxSnooze starts a snooze of the selected item: the footer offers the
 // four lengths and the next digit picks one. On a snoozed item it wakes it.
 func (m *OS) InboxSnooze() (tea.Cmd, bool) {
-	if !m.inboxMarkSupported() {
-		return nil, false
-	}
 	it, ok := m.inboxSelected()
 	if !ok {
 		return nil, true
@@ -509,9 +480,6 @@ func inboxSnoozeHints() []overlay.Hint {
 // InboxUndo reopens the item dismissed or snoozed last, within 10 seconds.
 // Pressed again it reopens the one before.
 func (m *OS) InboxUndo() (tea.Cmd, bool) {
-	if !m.inboxMarkSupported() {
-		return nil, false
-	}
 	life := &m.Inbox.life
 	now := time.Now()
 	life.undo = slices.DeleteFunc(life.undo, func(u inboxUndoEntry) bool { return now.Sub(u.at) >= m.inboxUndoWindow() })
@@ -532,9 +500,6 @@ func (m *OS) InboxUndo() (tea.Cmd, bool) {
 
 // InboxToggleSnoozed shows or hides the snoozed items under the list.
 func (m *OS) InboxToggleSnoozed() (tea.Cmd, bool) {
-	if !m.inboxMarkSupported() {
-		return nil, false
-	}
 	life := &m.Inbox.life
 	if !life.ShowSnoozed && len(life.Snoozed) == 0 {
 		m.ShowNotification("Nothing is snoozed", "warning", m.Settings.NotificationDuration)
@@ -713,9 +678,7 @@ func (m *OS) SidebarAgentUnread(sessionID, windowID string) (tea.Cmd, bool) {
 	who := printableTitle(label)
 	// The daemon is asked whenever there is one: it holds the pane's turn
 	// count, which this client's copy of another session can trail.
-	// A daemon without mark-attention has no unread to set; the marks this
-	// client cleared are the whole of it there.
-	if !m.IsDaemonSession || !m.inboxMarkSupported() || (m.Inbox.call == nil && (m.DaemonClient == nil || m.AttachedHost != "")) {
+	if !m.IsDaemonSession || (m.Inbox.call == nil && (m.DaemonClient == nil || m.AttachedHost != "")) {
 		m.ShowNotification("Marked "+who+" unread", "info", m.Settings.NotificationDuration)
 		return nil, true
 	}
@@ -726,9 +689,6 @@ func (m *OS) SidebarAgentUnread(sessionID, windowID string) (tea.Cmd, bool) {
 // Inbox opens on the item with the four lengths in its footer, and closes
 // again once one is picked.
 func (m *OS) SidebarAgentSnooze(sessionID, windowID string) (tea.Cmd, bool) {
-	if !m.inboxMarkSupported() {
-		return nil, false
-	}
 	var found *session.AttentionItem
 	for i := range m.Inbox.Items {
 		it := &m.Inbox.Items[i]

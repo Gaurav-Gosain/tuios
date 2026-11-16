@@ -80,14 +80,11 @@ func (m *OS) prefixMenuGroups() []config.KeybindingGroup {
 		Spotlight: m.spotlight.on,
 		Minimized: -1,
 	})
-	seen, review, agentsTab := m.agentsSeen(), m.reviewSupported(), m.agentsPageAvailable()
+	seen, agentsTab := m.agentsSeen(), m.agentsPageAvailable()
 	out := groups[:0]
 	for _, g := range groups {
 		if !seen {
 			g.Bindings = slices.DeleteFunc(g.Bindings, config.IsAgentPrefixKeybinding)
-		}
-		if !review {
-			g.Bindings = slices.DeleteFunc(g.Bindings, config.IsReviewPrefixKeybinding)
 		}
 		if !agentsTab {
 			g.Bindings = slices.DeleteFunc(g.Bindings, config.IsAgentsSettingsPrefixKeybinding)

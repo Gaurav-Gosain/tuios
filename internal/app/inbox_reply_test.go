@@ -141,33 +141,6 @@ func TestReplyTypedBySendKeysIsNotSent(t *testing.T) {
 	}
 }
 
-// TestReplyOnAnOlderDaemon: a daemon without queue-prompt answers
-// unknown_verb, and r then does what it did before it was bound.
-func TestReplyOnAnOlderDaemon(t *testing.T) {
-	done := item("1", session.AttentionFinished, "here", "w-2", "done", 1)
-	m, q := replyOS(t, done)
-	q.err = &session.VerbCallError{Code: session.ErrVerbUnknownVerb, Message: "queue-prompt"}
-	m.OpenInbox("")
-	m.InboxReply()
-	m.InboxReplyType("more")
-	runMsg(t, m, m.InboxReplySend())
-	if msg := lastNotice(m).Message; !strings.Contains(msg, "Restart the daemon") && !strings.Contains(msg, "tuios restart-server") {
-		t.Errorf("the dock said %q", lastNotice(m).Message)
-	}
-	m.InboxReply()
-	if m.InboxReplyOpen() {
-		t.Error("r opened the editor on a daemon that has no queue")
-	}
-	if _, handled := m.SidebarAgentReply("here", "w-2"); handled {
-		t.Error("the rail's r did not fall through to rename")
-	}
-	for _, h := range m.cockpitHints(time.Now()) {
-		if h.Label == "reply" {
-			t.Error("the footer offers reply on a daemon with no queue")
-		}
-	}
-}
-
 // TestQueueKeysFromSendKeysAreRefused: x and u act on the queue as the
 // person, with the attach nonce, so a key from send-keys or a tape does
 // neither, and the drop stays for the person's own u.

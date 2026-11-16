@@ -1575,9 +1575,6 @@ type OS struct {
 	// client with no daemon. See paste_buffers.go.
 	buffers   bufferChooser
 	pasteBufs *pastebuf.Store
-	// buffersDaemonOld is set when the daemon answered unknown_verb to a
-	// buffer verb: it is too old, and pasteBufs keeps the buffers instead.
-	buffersDaemonOld bool
 	// pasteHold holds the keys typed while a paste reads its buffer from
 	// the daemon. See holdKeyForPaste.
 	pasteHold pasteHold

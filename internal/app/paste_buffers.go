@@ -125,26 +125,9 @@ func (m *OS) localBuffers() *pastebuf.Store {
 }
 
 // buffersInDaemon reports whether this client keeps its buffers in the
-// daemon: it has one, and the daemon has the buffer verbs.
+// daemon: it has one.
 func (m *OS) buffersInDaemon() bool {
-	return m.IsDaemonSession && !m.buffersDaemonOld
-}
-
-// isUnknownVerb reports whether err is a daemon's unknown_verb: a daemon from
-// before the buffer verbs.
-func isUnknownVerb(err error) bool {
-	var coded interface{ ErrorCode() string }
-	return errors.As(err, &coded) && coded.ErrorCode() == "unknown_verb"
-}
-
-// noteOldDaemon switches this client to its own store, for a daemon that
-// answered unknown_verb. It says so once.
-func (m *OS) noteOldDaemon() {
-	if m.buffersDaemonOld {
-		return
-	}
-	m.buffersDaemonOld = true
-	m.LogInfo("The daemon has no paste buffers. This client keeps its own until the daemon restarts on this version.")
+	return m.IsDaemonSession
 }
 
 // bufferCall makes one buffer verb call to this machine's daemon.
@@ -221,14 +204,8 @@ func (m *OS) saveLocalBuffer(text string) {
 	}
 }
 
-// handlePasteBufferSaveFailed logs a yank the daemon did not keep, and keeps
-// it here when the daemon is too old to keep it.
+// handlePasteBufferSaveFailed logs a yank the daemon did not keep.
 func (m *OS) handlePasteBufferSaveFailed(msg PasteBufferSaveFailedMsg) {
-	if isUnknownVerb(msg.Err) {
-		m.noteOldDaemon()
-		m.saveLocalBuffer(msg.Text)
-		return
-	}
 	m.LogInfo("Paste buffer not kept: %v", msg.Err)
 }
 
@@ -347,10 +324,6 @@ func (m *OS) releasePasteHold() tea.Cmd {
 func (m *OS) handlePasteBufferFetched(msg PasteBufferFetchedMsg) tea.Cmd {
 	d := m.Settings.NotificationDuration
 	if msg.Err != nil {
-		if isUnknownVerb(msg.Err) && m.buffersInDaemon() {
-			m.noteOldDaemon()
-			return m.pasteBufferNamed(msg.asked, msg.Window, msg.version)
-		}
 		if isChangedErr(msg.Err) {
 			m.ShowNotification("Buffer "+msg.Name+" changed after the list showed it. Nothing was pasted.", "warning", d)
 			return nil
@@ -488,10 +461,6 @@ func bufferItems(list []pastebuf.Buffer) []PasteBufferItem {
 func (m *OS) handlePasteBuffersLoaded(msg PasteBuffersLoadedMsg) {
 	if !m.buffers.open || msg.Gen != m.buffers.gen {
 		return
-	}
-	if msg.Err != nil && isUnknownVerb(msg.Err) && m.buffersInDaemon() {
-		m.noteOldDaemon()
-		msg = PasteBuffersLoadedMsg{Gen: msg.Gen, Items: bufferItems(m.localBuffers().List(nil))}
 	}
 	m.buffers.loading = false
 	m.buffers.err = ""

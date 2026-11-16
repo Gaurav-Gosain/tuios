@@ -65,7 +65,7 @@ func (m *OS) cockpitRegionShown(r ckRegion) bool {
 	case ckRegionReply:
 		// The reply is drawn in the focus. It takes the step only when a
 		// reply can go to the agent under the cursor.
-		if !ck.regionBox[ckRegionFocus].shown() || !m.inboxReplySupported() {
+		if !ck.regionBox[ckRegionFocus].shown() {
 			return false
 		}
 		_, held := m.cockpitHeldItem()
@@ -321,9 +321,7 @@ func (m *OS) cockpitFocusHints() []overlay.Hint {
 	if m.cockpitTab() == "Thread" {
 		hints = append(hints, m.keyHints(config.ActionInboxResume, "copy")...)
 	}
-	if m.inboxReplySupported() {
-		hints = append(hints, m.keyHints(config.ActionInboxWrite, "reply")...)
-	}
+	hints = append(hints, m.keyHints(config.ActionInboxWrite, "reply")...)
 	hints = append(hints, m.keyHints(config.ActionInboxRegionNext, "next region")...)
 	hints = append(hints, overlay.Hint{Key: "?", Label: "all keys"})
 	return append(hints, m.cockpitEscHints()...)

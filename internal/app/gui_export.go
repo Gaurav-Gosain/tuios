@@ -24,9 +24,6 @@ func (m *OS) BridgePaletteItems() []CommandPaletteItem {
 	if !m.agentsSeen() {
 		items = slices.DeleteFunc(items, func(it CommandPaletteItem) bool { return it.Category == paletteCategoryAgents })
 	}
-	if !m.reviewSupported() {
-		items = slices.DeleteFunc(items, func(it CommandPaletteItem) bool { return it.Name == paletteReviewName })
-	}
 	if !m.agentsPageAvailable() {
 		items = slices.DeleteFunc(items, func(it CommandPaletteItem) bool { return it.Name == paletteAgentsSettingsName })
 	}

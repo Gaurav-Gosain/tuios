@@ -142,13 +142,6 @@ func (m *OS) HelpCategories() []HelpCategory {
 	if !m.agentsSeen() {
 		return slices.DeleteFunc(cats, func(c HelpCategory) bool { return c.Name == HelpCategoryAgents })
 	}
-	if !m.reviewSupported() {
-		for i := range cats {
-			if cats[i].Name == HelpCategoryAgents {
-				cats[i].Bindings = slices.DeleteFunc(slices.Clone(cats[i].Bindings), isReviewHelpBinding)
-			}
-		}
-	}
 	// The Agents settings key is left out where the tab is. See
 	// agentsPageAvailable.
 	if !m.agentsPageAvailable() {
@@ -170,13 +163,6 @@ const (
 	helpInboxReview  = "Agents view: review the changes in the agent's pane"
 	helpReviewPrefix = "Review: "
 )
-
-// isReviewHelpBinding reports whether a help line is one of the review's.
-func isReviewHelpBinding(b HelpBinding) bool {
-	return b.Description == config.ActionDescriptions[config.ActionPrefixReview] ||
-		b.Description == helpRailReview || b.Description == helpInboxReview ||
-		strings.HasPrefix(b.Description, helpReviewPrefix)
-}
 
 // HelpCategoryAgents is the section gathering every key that deals with
 // agents: the prefix chords that reach the Inbox, the rail's agent controls,

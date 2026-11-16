@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -80,72 +79,10 @@ func TestNoFoldClockWithoutAgents(t *testing.T) {
 	}
 }
 
-// TestOlderDaemonHidesTheLifecycleKeys: against a daemon whose list-verbs has
-// no mark-attention, the footer offers no snooze, z, u and S do what an
-// unbound key does, a dismiss that went through says nothing and keeps no
-// undo, rail z falls through to the rail, and rail u clears only this
-// client's marks.
-func TestOlderDaemonHidesTheLifecycleKeys(t *testing.T) {
-	m, r := lifecycleOS(t)
-	m.applyInboxSnapshot(InboxSnapshotMsg{
-		Items:  []session.AttentionItem{item("1", session.AttentionFinished, "here", "w-1", "done", 10)},
-		NoMark: true,
-	})
-	m.OpenInbox("")
-	m.inboxSelected()
-	for _, h := range m.cockpitHints(time.Now()) {
-		if h.Label == "snooze" || h.Label == "wake" {
-			t.Errorf("the footer offers %q on a daemon without mark-attention", h.Label)
-		}
-	}
-	for name, act := range map[string]func() (tea.Cmd, bool){
-		"z": m.InboxSnooze, "u": m.InboxUndo, "S": m.InboxToggleSnoozed,
-	} {
-		if cmd, handled := act(); cmd != nil || handled {
-			t.Errorf("%s was handled on a daemon without mark-attention", name)
-		}
-	}
-	m.Notifications = nil
-	m.applyInboxDismissed(InboxDismissedMsg{ID: "4", Kind: session.AttentionErrored, Who: "api"})
-	if len(m.Notifications) != 0 || len(m.Inbox.life.undo) != 0 {
-		t.Errorf("a dismiss promised an undo: %q, %d kept", lastNotice(m).Message, len(m.Inbox.life.undo))
-	}
-	if _, handled := m.SidebarAgentSnooze("here", "w-1"); handled {
-		t.Error("rail z was handled on a daemon without mark-attention")
-	}
-
-	m.Windows[1].AgentState, m.Windows[1].AgentCompletionSeq = "idle", 3
-	m.SidebarAgentSeenSeq = map[string]uint64{"w-2": 3}
-	m.FocusWindow(0)
-	cmd, handled := m.SidebarAgentUnread("here", "w-2")
-	if !handled || cmd != nil || len(r.calls) != 0 {
-		t.Errorf("rail u sent mark-attention to a daemon without it (cmd %v, calls %v)", cmd != nil, r.calls)
-	}
-	if m.SidebarAgentSeenSeq["w-2"] != 0 {
-		t.Error("rail u did not clear this client's marks")
-	}
-
-	// A newer daemon on the next watch brings the keys back.
-	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{item("1", session.AttentionFinished, "here", "w-1", "done", 10)}})
-	if !m.inboxMarkSupported() {
-		t.Error("a listing from a daemon with mark-attention left the keys hidden")
-	}
-}
-
-// TestAnUnknownMarkHidesTheKeys: a mark that comes back unknown_verb is the
-// same finding as the probe's, so the keys go too.
-func TestAnUnknownMarkHidesTheKeys(t *testing.T) {
-	m, _ := lifecycleOS(t)
-	m.applyInboxMarked(InboxMarkedMsg{Action: "snooze", Err: &session.VerbCallError{Code: session.ErrVerbUnknownVerb, Message: "unknown verb"}})
-	if m.inboxMarkSupported() {
-		t.Error("an unknown_verb answer left mark-attention looking supported")
-	}
-}
-
-// TestProbeMarkAttention: the probe reads list-verbs. A listing with the verb
+// TestProbeVerb: the probe reads list-verbs. A listing with the verb
 // is supported, unknown_verb is an older daemon, and a failure that says
 // nothing about the verb leaves it unknown.
-func TestProbeMarkAttention(t *testing.T) {
+func TestProbeVerb(t *testing.T) {
 	listing := func(verbs ...string) func(string, map[string]any) ([]byte, error) {
 		return func(verb string, params map[string]any) ([]byte, error) {
 			if verb != "list-verbs" || params["verb"] != "mark-attention" {
@@ -158,20 +95,20 @@ func TestProbeMarkAttention(t *testing.T) {
 			return json.Marshal(map[string]any{"verbs": docs})
 		}
 	}
-	if s, k := probeMarkAttention(listing("mark-attention")); !s || !k {
+	if s, k := probeVerb(listing("mark-attention"), "mark-attention"); !s || !k {
 		t.Errorf("a listing with the verb read as supported=%v known=%v", s, k)
 	}
-	if s, k := probeMarkAttention(listing()); s || !k {
+	if s, k := probeVerb(listing(), "mark-attention"); s || !k {
 		t.Errorf("a listing without the verb read as supported=%v known=%v", s, k)
 	}
 	unknown := func(string, map[string]any) ([]byte, error) {
 		return nil, &session.VerbCallError{Code: session.ErrVerbUnknownVerb}
 	}
-	if s, k := probeMarkAttention(unknown); s || !k {
+	if s, k := probeVerb(unknown, "mark-attention"); s || !k {
 		t.Errorf("unknown_verb read as supported=%v known=%v", s, k)
 	}
 	broken := func(string, map[string]any) ([]byte, error) { return nil, errors.New("connection reset") }
-	if _, k := probeMarkAttention(broken); k {
+	if _, k := probeVerb(broken, "mark-attention"); k {
 		t.Error("a broken connection read as an answer")
 	}
 }

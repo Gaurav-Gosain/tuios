@@ -79,10 +79,6 @@ type inboxReplyState struct {
 	sentBytes int
 	// dropped is the last message x dropped, for u on the same row.
 	dropped *inboxReplyDrop
-	// noQueue is set once the daemon answered queue-prompt with
-	// unknown_verb: it is older than the queue, and the reply keys then do
-	// what they did before they were bound.
-	noQueue bool
 	// drafts are the drafts esc closed, by pane, so r on the same pane
 	// opens them again. draftOrder is their keys, oldest first, for the
 	// bound.
@@ -209,12 +205,6 @@ type InboxQueueDroppedMsg struct {
 	Err  error
 }
 
-// inboxReplySupported reports whether the daemon holding the Inbox can take
-// queue-prompt, as far as this client knows.
-func (m *OS) inboxReplySupported() bool {
-	return !m.Inbox.reply.noQueue
-}
-
 // inboxReplyKind reports whether an Inbox item is one r replies to with the
 // editor: a finished turn or an error, of a pane on this machine.
 func inboxReplyKind(it session.AttentionItem) bool {
@@ -224,7 +214,7 @@ func inboxReplyKind(it session.AttentionItem) bool {
 // inboxReplyAgent opens the reply editor for a finished or errored item. ok
 // is false when it did not, and InboxReply then answers as it always has.
 func (m *OS) inboxReplyAgent(it session.AttentionItem) (cmd tea.Cmd, ok bool) {
-	if !inboxReplyKind(it) || !m.inboxReplySupported() {
+	if !inboxReplyKind(it) {
 		return nil, false
 	}
 	context := "done"
@@ -372,9 +362,6 @@ func (m *OS) restoreInboxDraft(sessionID, windowID string, comp *composer.Model)
 // Inbox opens under it on the pane's item, when it has one, and closes again
 // when the reply is sent or cancelled.
 func (m *OS) SidebarAgentReply(sessionID, windowID string) (tea.Cmd, bool) {
-	if !m.inboxReplySupported() {
-		return nil, false
-	}
 	state, _, label, ok := m.railPane(sessionID, windowID)
 	if !ok {
 		m.ShowNotification("That pane is on another machine. Attach there to reply", "warning", m.Settings.NotificationDuration)
@@ -731,10 +718,6 @@ func (m *OS) applyInboxReplied(msg InboxRepliedMsg) {
 	if msg.Err != nil {
 		if callErr, ok := errors.AsType[*session.VerbCallError](msg.Err); ok {
 			switch callErr.Code {
-			case session.ErrVerbUnknownVerb:
-				m.Inbox.reply.noQueue = true
-				m.ShowNotification("This daemon cannot queue a reply. "+m.restartHint(), "error", m.Settings.NotificationDuration*2)
-				return
 			case session.ErrVerbInvalidParams:
 				if msg.Parts != nil && msg.Text == "" && strings.Contains(callErr.Message, "text is required") {
 					// A daemon older than parts read no message: the reply
@@ -832,7 +815,7 @@ func (m *OS) railQueued(sessionID, windowID string) int {
 // row's pane. A row with nothing queued answers false, and x does what it
 // does on the rail.
 func (m *OS) SidebarAgentCancelQueued(sessionID, windowID string) (tea.Cmd, bool) {
-	if !m.inboxReplySupported() || m.railQueued(sessionID, windowID) == 0 {
+	if m.railQueued(sessionID, windowID) == 0 {
 		return nil, false
 	}
 	// Dropping a message cancels it as the person, with the attach nonce,
@@ -912,11 +895,6 @@ func (m *OS) applyInboxQueueDropped(msg InboxQueueDroppedMsg) {
 		m.echoDropped(msg.Session, msg.Window, msg.ID)
 	}
 	if msg.Err != nil {
-		if session.VerbErrCode(msg.Err) == session.ErrVerbUnknownVerb {
-			m.Inbox.reply.noQueue = true
-			m.ShowNotification("This daemon has no queue. "+m.restartHint(), "error", m.Settings.NotificationDuration*2)
-			return
-		}
 		m.ShowNotification("Nothing was dropped: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
 		return
 	}

@@ -356,13 +356,6 @@ func IsAgentsSettingsPrefixKeybinding(k Keybinding) bool {
 	return k.Action == "prefix_agents_settings"
 }
 
-// IsReviewPrefixKeybinding reports whether a prefix menu line is the review
-// of the focused pane. The client leaves it out of the menu on a daemon that
-// cannot review.
-func IsReviewPrefixKeybinding(k Keybinding) bool {
-	return k.Action == "prefix_review"
-}
-
 // prefixMenuScopes maps a which-key menu to the keyboard scope its keys are
 // read from.
 var prefixMenuScopes = map[string]string{

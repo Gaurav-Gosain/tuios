@@ -2232,7 +2232,7 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 			hints = append(hints, m.keyHints(config.ActionInboxPeek, "peek")...)
 		}
 		blocked := r.agent >= 0 && m.Inbox.ck.agents[r.agent].State == "needs_input"
-		if _, held := m.cockpitHeldItem(); !held && (!blocked || r.item.Kind == session.AttentionMail) && m.inboxReplySupported() {
+		if _, held := m.cockpitHeldItem(); !held && (!blocked || r.item.Kind == session.AttentionMail) {
 			hints = append(hints, m.keyHints(config.ActionInboxReply, "reply")...)
 		}
 		if r.hasItem {
@@ -2243,7 +2243,6 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 				hints = append(hints, m.keyHints(config.ActionInboxResume, "resume")...)
 			}
 			switch {
-			case !m.inboxMarkSupported():
 			case r.item.SnoozedUntil != 0:
 				hints = append(hints, m.keyHints(config.ActionInboxSnooze, "wake")...)
 			case inboxSnoozeRefusal(r.item) == "":

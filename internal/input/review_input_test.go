@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -41,36 +40,4 @@ func reviewInputOS(t *testing.T) (*app.OS, *[]byte, *[]string) {
 		return nil, &session.VerbCallError{Code: session.ErrVerbInvalidParams, Message: "no"}
 	}, func() string { return "nonce" })
 	return o, &typed, &verbs
-}
-
-// TestReviewKeyOnAnOlderDaemonReachesThePane: once a daemon has answered
-// review-diff with unknown_verb, ctrl+b v in terminal mode does what an
-// unbound key does: v is typed into the pane and nothing more is asked of the
-// daemon. (The list-verbs probe that finds the same as the Inbox watch starts
-// is tested in the app package.)
-func TestReviewKeyOnAnOlderDaemonReachesThePane(t *testing.T) {
-	o, typed, _ := reviewInputOS(t)
-	var verbs []string
-	o.SetInboxVerbCaller(func(verb string, _ map[string]any, _ time.Duration) (json.RawMessage, error) {
-		verbs = append(verbs, verb)
-		return nil, &session.VerbCallError{Code: session.ErrVerbUnknownVerb, Message: "unknown verb " + verb}
-	}, func() string { return "nonce" })
-	o.Mode = app.TerminalMode
-	k := config.DefaultConfig().Keybindings
-	o = pressRun(t, o, k.LeaderKey)
-	o = pressRun(t, o, "v")
-	if o.ReviewOpen() || len(*typed) != 0 || len(verbs) != 1 {
-		t.Fatalf("the first ctrl+b v: open %v, typed %q, verbs %v", o.ReviewOpen(), *typed, verbs)
-	}
-	o = pressRun(t, o, k.LeaderKey)
-	o = pressRun(t, o, "v")
-	if o.ReviewOpen() {
-		t.Fatal("ctrl+b v opened a review on a daemon that cannot review")
-	}
-	if len(verbs) != 1 {
-		t.Fatalf("ctrl+b v asked an older daemon again: %v", verbs)
-	}
-	if string(*typed) != "v" {
-		t.Fatalf("ctrl+b v on an older daemon typed %q into the pane, want v", *typed)
-	}
 }

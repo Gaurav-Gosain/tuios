@@ -207,7 +207,7 @@ func (m *OS) refuseBulkRemote() bool {
 
 // InboxAgentsBulkReply opens one reply editor for the marked agents.
 func (m *OS) InboxAgentsBulkReply() tea.Cmd {
-	if m.refuseBulkRemote() || !m.inboxReplySupported() {
+	if m.refuseBulkRemote() {
 		return nil
 	}
 	var targets []replyTarget

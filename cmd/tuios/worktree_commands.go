@@ -1186,10 +1186,6 @@ func runFanKeep(target string, stash, force, jsonOutput bool, merge fanKeepMerge
 	}
 	raw, err := t.client.CallWithTimeout("keep-fan", params, 5*time.Minute)
 	t.Close()
-	var call *session.VerbCallError
-	if err != nil && errors.As(err, &call) && call.Code == session.ErrVerbUnknownVerb && !merge.on {
-		return runFanKeepLoop(host, winner, stash, force, jsonOutput)
-	}
 	if err != nil {
 		if merge.on {
 			return shipFailed(t, "keep-fan", err, jsonOutput)
@@ -1259,64 +1255,6 @@ func reportFanKeep(t *verbTarget, winner, branch, group string, outcomes []fanKe
 		return &statusError{code: 1}
 	}
 	return nil
-}
-
-// runFanKeepLoop is fan keep for a daemon without keep-fan: remove-worktree
-// over every sibling but the kept one.
-func runFanKeepLoop(host, winner string, stash, force, jsonOutput bool) error {
-	rows, err := listWorktreesOn(host, "", "", false)
-	if err != nil {
-		return reportVerbError(err, jsonOutput)
-	}
-	var kept *worktreeRow
-	for i := range rows {
-		if rows[i].Session == winner {
-			kept = &rows[i]
-		}
-	}
-	if kept == nil {
-		return reportVerbError(&diagnosticError{
-			What:  fmt.Sprintf("session %q is not a worktree session.", winner),
-			Cause: "it is not in the worktree listing.",
-			Fix:   "run 'tuios worktree ls'.",
-		}, jsonOutput)
-	}
-	if kept.Group == "" {
-		return reportVerbError(&diagnosticError{
-			What:  fmt.Sprintf("session %q is not part of a fan-out.", winner),
-			Cause: "it has no siblings to remove.",
-			Fix:   "run 'tuios worktree rm <session>' to remove one worktree.",
-		}, jsonOutput)
-	}
-
-	t, err := dialHost(host)
-	if err != nil {
-		return err
-	}
-	defer t.Close()
-	client := t.client
-
-	var outcomes []fanKeepOutcome
-	left := 0
-	for _, r := range rows {
-		if r.Group != kept.Group || r.FanID != kept.FanID || r.Repo != kept.Repo || r.Session == winner {
-			continue
-		}
-		raw, err := client.CallWithTimeout("remove-worktree", map[string]any{
-			"session": r.Session, "stash": stash, "force": force,
-		}, 60*time.Second)
-		if err != nil {
-			left++
-			outcomes = append(outcomes, fanKeepOutcome{Session: r.Session, Note: t.explain("remove-worktree", err).Error()})
-			continue
-		}
-		var res removedWorktree
-		if err := jsonx.Unmarshal(raw, &res); err != nil {
-			return errfmt.Errorf("failed to parse response: %w", err)
-		}
-		outcomes = append(outcomes, fanKeepOutcome{Session: r.Session, Removed: true, Note: res.sentences()})
-	}
-	return reportFanKeep(t, winner, kept.Branch, kept.Group, outcomes, left, nil, jsonOutput)
 }
 
 // completeWorktreeSessions offers the worktree session names to the shell.

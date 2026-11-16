@@ -13,7 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
-	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 	"tuios.dev/vt"
 )
 
@@ -209,9 +208,6 @@ func (d *Daemon) paneLabel(id string) string {
 // verbListBuffers lists the paste buffers the caller may see, newest first.
 // Every total is over those buffers alone.
 func (d *Daemon) verbListBuffers(cs *connState, params json.RawMessage) (any, *verbError) {
-	if verr := buffersOff(); verr != nil {
-		return nil, verr
-	}
 	var p struct {
 		SampleWidth int `json:"sample_width"`
 	}
@@ -241,22 +237,9 @@ func (d *Daemon) verbListBuffers(cs *connState, params json.RawMessage) (any, *v
 	}, nil
 }
 
-// buffersOff reports whether this daemon answers the buffer verbs as if it
-// had none, the way a daemon from before them does. Only the e2e suite asks
-// for it, to drive a client's fallback to its own store.
-func buffersOff() *verbError {
-	if testknob.String("no_buffer_verbs") == "1" {
-		return newVerbError(ErrVerbUnknownVerb, "unknown verb (the e2e suite turned the paste buffer verbs off)")
-	}
-	return nil
-}
-
 // verbShowBuffer returns one buffer's content: as text in data, and as
 // base64 in data_b64, which keeps every byte.
 func (d *Daemon) verbShowBuffer(cs *connState, params json.RawMessage) (any, *verbError) {
-	if verr := buffersOff(); verr != nil {
-		return nil, verr
-	}
 	var p struct {
 		Name     string `json:"name"`
 		Version  uint64 `json:"version"`
@@ -396,9 +379,6 @@ var errNotBase64 = errors.New("data_b64 is not base64")
 // parts: every part but the last has more, and the buffer is set once, from
 // the whole content, when the last part arrives.
 func (d *Daemon) verbSetBuffer(cs *connState, params json.RawMessage) (any, *verbError) {
-	if verr := buffersOff(); verr != nil {
-		return nil, verr
-	}
 	var p struct {
 		Name    string   `json:"name"`
 		Data    string   `json:"data"`
@@ -452,9 +432,6 @@ func (d *Daemon) verbSetBuffer(cs *connState, params json.RawMessage) (any, *ver
 
 // verbDeleteBuffer removes a buffer.
 func (d *Daemon) verbDeleteBuffer(cs *connState, params json.RawMessage) (any, *verbError) {
-	if verr := buffersOff(); verr != nil {
-		return nil, verr
-	}
 	var p struct {
 		Name    string `json:"name"`
 		Version uint64 `json:"version"`
@@ -475,9 +452,6 @@ func (d *Daemon) verbDeleteBuffer(cs *connState, params json.RawMessage) (any, *
 // program turned bracketed paste on. With delete it removes the buffer it
 // pasted, and not a newer content set under the same name meanwhile.
 func (d *Daemon) verbPasteBuffer(cs *connState, params json.RawMessage) (any, *verbError) {
-	if verr := buffersOff(); verr != nil {
-		return nil, verr
-	}
 	var p struct {
 		Session string `json:"session"`
 		Window  string `json:"window"`

@@ -19,12 +19,8 @@ import (
 // from the state's time (cockpit.go, ckSettleAfter).
 
 // InboxSettle settles the selected agent, or the marked ones, or takes a
-// settled one off the shelf. handled is false on a daemon without
-// mark-attention, and with nothing selected. A row with no agent says why.
+// settled one off the shelf. handled is false with nothing selected. A row with no agent says why.
 func (m *OS) InboxSettle() (tea.Cmd, bool) {
-	if !m.inboxMarkSupported() {
-		return nil, false
-	}
 	if m.InboxAgentsMarks() > 0 {
 		return m.bulkSettleCmd(), true
 	}
@@ -128,7 +124,7 @@ func (m *OS) noteSettled(msg InboxMarkedMsg) {
 // settleLabel is what D does on the row, as its hint and its button say it:
 // settle, unsettle, or empty when it does nothing there.
 func (m *OS) settleLabel(r ckRow) string {
-	if r.agent < 0 || !m.inboxMarkSupported() {
+	if r.agent < 0 {
 		return ""
 	}
 	e := m.Inbox.ck.agents[r.agent]

@@ -131,13 +131,6 @@ type InboxState struct {
 	// its user about, so a restore is announced once and not on every
 	// fresh listing.
 	announcedResume map[string]bool
-	// noReview is set when the daemon holding the Inbox was found without
-	// review-diff: its list-verbs, probed once per watch, did not list it,
-	// or a review came back unknown_verb. The review keys are then not
-	// offered and do what an unbound key does. False means supported or not
-	// yet known. It lives here and not in the review's state, which each
-	// review starts afresh. See reviewSupported.
-	noReview bool
 	// life is the snoozed items, the snooze picker, undo and the walk of
 	// finished turns. See inbox_lifecycle.go.
 	life inboxLifecycle
@@ -165,13 +158,6 @@ type InboxState struct {
 // InboxSnapshotMsg is a fresh listing from the watcher.
 type InboxSnapshotMsg struct {
 	Items []session.AttentionItem
-	// NoMark says the daemon's list-verbs, probed as the watch started, did
-	// not list mark-attention: an older daemon. False when it did, or when
-	// the probe could not tell.
-	NoMark bool
-	// NoReview says the same of review-diff: the daemon is older than the
-	// review overlay.
-	NoReview bool
 	// Cards are every session's task cards. NoBoard says the daemon is
 	// older than the board, and BoardErr why it refused to list them
 	// otherwise; either way the attention list goes on without the board.
@@ -383,17 +369,7 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 	}, 5*time.Second); err != nil {
 		return false, err
 	}
-	// Once per watch, which is once per attach and once per reconnect, so a
-	// daemon restarted with a newer tuios is noticed: whether the person's
-	// snooze, undo and unread can be sent to it.
-	probe := func(verb string, params map[string]any) ([]byte, error) {
-		return client.CallWithTimeout(verb, params, 5*time.Second)
-	}
-	supported, known := probeMarkAttention(probe)
-	// And whether it can review a pane's changes, so the review keys are
-	// not offered by a daemon that would refuse every one of them.
-	reviewOK, reviewKnown := probeVerb(probe, "review-diff")
-	if !inboxSend(ctx, out, InboxSnapshotMsg{Items: listing.Items, NoMark: known && !supported, NoReview: reviewKnown && !reviewOK, Cards: cards, NoBoard: noBoard, BoardErr: boardErr}) {
+	if !inboxSend(ctx, out, InboxSnapshotMsg{Items: listing.Items, Cards: cards, NoBoard: noBoard, BoardErr: boardErr}) {
 		return true, ctx.Err()
 	}
 
@@ -643,8 +619,6 @@ func (m *OS) applyInboxSnapshot(msg InboxSnapshotMsg) {
 	session.SortAttention(st.Items)
 	st.Live = true
 	st.Unsupported = false
-	st.life.noMark = msg.NoMark
-	st.noReview = msg.NoReview
 	m.applyBoardSnapshot(msg)
 	m.inboxChanged()
 	m.announceResumes(st.Items)
