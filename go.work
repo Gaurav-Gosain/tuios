@@ -35,4 +35,4 @@ replace tuios.dev/shot v0.2.2-0.20261114201235-1792ffc9adbd => ./shot
 
 replace tuios.dev/vt v0.3.3-0.20261116115716-ecee8719f995 => ./vt
 
-replace tuios.dev/harness v0.0.0-20261116132719-8c70ee0c27d1 => ./harness
+replace tuios.dev/harness v0.0.0-20261116195009-c8f480cad105 => ./harness
