@@ -17944,3 +17944,19 @@ Run on Linux on 2026-11-16. The real binary, `nice -n 19`, GOMAXPROCS=4.
 | run takes any mark as a started shell | origin/main | `TestRunWaitsForTheFirstPromptAfterADMark` ("the shell in window sh is not at its prompt"), 3 of 3 | **caught** |
 | The smoothed frame cost | `tooSlow` as `s.cost > frame`, with `cost += (d - cost) / 4` | `TestASlowFrameDoesNotTurnTheNextSwitchIntoACut`: "one frame descheduled" and "two slow frames" | **caught** |
 | The same, end to end | origin/main, two runs of `-count=10` side by side | `TestWorkspaceSwitchSlides`, 5 to 8 of 20 per batch, among them "nothing was typed mid-slide". A trace showed one frame of 155 ms before the key, a cost of 43 ms, and the switch drawn as a cut | **caught** |
+
+## A lease that ends, and the input a host link follows
+
+Run on Linux on 2026-11-16. The real binary, `nice -n 19`.
+
+`TestPhoneStreamsAPaneAndAnswersTheInbox` in `stream_pane_test.go` now waits for the pane to be 100x30, as a stream with no lease reads it, before the shell reads its size. A lease ends when the daemon sees the stream close, and at most `leaseInterval` after the last resize a lease made.
+
+`TestRelayCountsOnlyThePersonsInput` in `internal/session/relay_use_test.go`. The relay to a host counts only `MsgInput` frames as the person using the host.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The test reads the size before the lease ends | The wait cut, and a lease frame (L 40x10) sent just before the close | `TestPhoneStreamsAPaneAndAnswersTheInbox` ("the pane did not go back to the size asked for", BACK-10x40), 5 of 5. With the wait and the same lease frame, 5 of 5 pass | **caught** |
+| The test as it was | origin/main | Same failure, 2 of 10 | **caught** |
+| Every byte counts as use | `usedReader` as on main | `TestRelayCountsOnlyThePersonsInput`: "a client's own pushes" and "a split frame header" | **caught** |
+| Resize frames count as use | `MsgResize` counted with `MsgInput` | `TestSSHAgentHostLinkFollowsOnlyThatHostsClients` ("after C attached through the link"), 3 of 20 one at a time, 9 of 18 on two cores | **caught** |
+| The relay as it was | origin/main, three runs of `-count=6` on two cores | `TestSSHAgentHostLinkFollowsOnlyThatHostsClients` ("after C attached through the link"), 5 of 18. A trace showed A's deferred use firing 12 ms after C attached, from frames A's client sent on its own (`MsgUpdateState`) | **caught** |

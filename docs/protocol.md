@@ -2413,7 +2413,7 @@ socket, because the caller's hello goes to the host and not to this daemon.
 While `ssh_agent` is `"follow"`, this daemon keeps one link for each host
 whose link forwards the agent, `agent-link-<host>-<hash>.sock`. It points at the
 socket of the client that opened a connection to that host, or sent input
-through one, last. Input counts at most once a second. The link ssh to such a
+through one, last. Input is the keys, pastes and mouse events a client sends. A state push or a pane resize that a client sends on its own is not input. Input counts at most once a second. The link ssh to such a
 host starts with `SSH_AUTH_SOCK` naming that host's link. The link ssh to any
 other host starts with the daemon's environment, unchanged. A daemon too old to know `ssh_auth_sock` refuses it with
 `invalid_params`, and the client asks again without it.

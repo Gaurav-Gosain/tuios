@@ -3,6 +3,7 @@ package session
 import (
 	"bufio"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"io"
@@ -134,9 +135,11 @@ func hostConnectionError(host string, err error) *verbError {
 // own, a megabyte per frame and a dropped stream for a reader that stalls, and
 // the client's, which caps a message at what it caps a local daemon's at.
 //
-// onInput runs when bytes cross from the client, at most once a second: the
-// client sends only what the person does (keys, a paste, a resize), so it is
-// the person using the host, and the host's agent link follows them.
+// onInput runs when the client sends what the person types (keys, a paste,
+// the mouse), at most once a second: that is the person using the host, and
+// the host's agent link follows them. A client also sends on its own, such as
+// a state push or a resize when the far session changes, and that is not the
+// person. See usedReader.
 func (d *Daemon) relayHostConnection(cs *connState, br *bufio.Reader, remote io.ReadWriteCloser, onInput func()) {
 	conn := cs.conn
 	// Both deadlines are cleared, and the write one is the whole reason this
@@ -198,21 +201,35 @@ func (d *Daemon) relayHostConnection(cs *connState, br *bufio.Reader, remote io.
 	<-done
 }
 
-// usedReader calls used when bytes are read through it, at most once per
-// every. Input inside the window is not dropped: one more call is made when
-// the window ends, so the last keystroke always counts. A nil used is never
-// called.
+// usedReader calls used when a frame of the person's input is read through
+// it, at most once per every. Input inside the window is not dropped: one more
+// call is made when the window ends, so the last keystroke always counts. A
+// nil used is never called.
+//
+// It reads the frame headers of the binary protocol and nothing else: a frame
+// of MsgInput is the person, any other frame is the client's own. Counting
+// every byte moved a host's link to a client that only pushed its state or
+// sent its size again, after another client had attached and taken the link. A stream that
+// speaks the JSON protocol counts every read, as before.
 type usedReader struct {
 	r       io.Reader
 	every   time.Duration
 	used    func()
 	last    time.Time
 	pending atomic.Bool
+
+	// The scan of the stream's frames: whether the first byte was read and
+	// said JSON, the header read so far, and the bytes of the current
+	// frame's body still to pass.
+	started, json bool
+	head          [6]byte
+	have          int
+	skip          uint32
 }
 
 func (u *usedReader) Read(b []byte) (int, error) {
 	n, err := u.r.Read(b)
-	if n > 0 && u.used != nil {
+	if n > 0 && u.used != nil && u.scan(b[:n]) {
 		now := time.Now()
 		if wait := u.every - now.Sub(u.last); wait <= 0 {
 			u.last = now
@@ -225,4 +242,41 @@ func (u *usedReader) Read(b []byte) (int, error) {
 		}
 	}
 	return n, err
+}
+
+// scan walks the frames that p continues and reports whether one of them is
+// the person's input. Wire format: [4 bytes BE length][1 byte type][1 byte
+// codec][body], the length counting the type, the codec and the body. A
+// binary stream cannot start with '{': its first frame would be 2 GB long.
+func (u *usedReader) scan(p []byte) bool {
+	if !u.started {
+		u.started = true
+		u.json = p[0] == '{'
+	}
+	if u.json {
+		return true
+	}
+	found := false
+	for len(p) > 0 {
+		if u.skip > 0 {
+			k := min(uint32(len(p)), u.skip)
+			p = p[k:]
+			u.skip -= k
+			continue
+		}
+		k := copy(u.head[u.have:], p)
+		u.have += k
+		p = p[k:]
+		if u.have < len(u.head) {
+			break
+		}
+		u.have = 0
+		if MessageType(u.head[4]) == MsgInput {
+			found = true
+		}
+		if length := binary.BigEndian.Uint32(u.head[:4]); length > 2 {
+			u.skip = length - 2
+		}
+	}
+	return found
 }
