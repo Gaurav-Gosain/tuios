@@ -1336,12 +1336,7 @@ func (m *OS) SettingsRowCount() int { return len(m.settingsCurrentItems()) }
 // SettingsPageRows is how many rows a page key moves the settings list by:
 // the rows the panel shows.
 func (m *OS) SettingsPageRows() int {
-	cats := m.settingsCategories()
-	tabs := make([]string, len(cats))
-	for i, c := range cats {
-		tabs[i] = c.Name
-	}
-	_, rows, _, _ := m.settingsLayout(tabs, len(m.settingsCurrentItems()))
+	_, _, rows, _, _ := m.settingsLayout(m.settingsCategories())
 	return max(rows, 1)
 }
 

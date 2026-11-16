@@ -18051,3 +18051,10 @@ Run on 2026-11-16 on Linux (x86_64). The branch passes both. The exec line after
 
 The transcript of the restart case is `exec-after-restart.txt` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestDaemonChildrenDoNotInheritTheAgentThatStartedTheDaemon|TestExecAfterARestartFromAPaneIsNotThatPane)$' -v .`.
+## The settings panel holds its place across tabs
+
+`TestSettingsPanelHoldsItsPlaceAcrossTabs` reads the rows of the section strip and the footer on Appearance, moves to Backgrounds, and reads them again. Run on Linux on 2026-11-15.
+
+| Control | Test that fails | Verdict |
+| --- | --- | --- |
+| `settingsLayout` sizes the body to the section showing (main before this change) | `TestSettingsPanelHoldsItsPlaceAcrossTabs` (the section strip and the footer move rows on a tab change) | **caught** |

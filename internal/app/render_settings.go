@@ -68,16 +68,27 @@ func (m *OS) currentSettingsHints() []overlay.Hint {
 	return settingsHints
 }
 
-// settingsLayout returns the fitted inner width, the number of setting rows that
-// fit, the footer, and how many lines the description box gets.
+// settingsLayout returns the section names, the fitted inner width, the number
+// of setting rows that fit, the footer, and how many lines the description box
+// gets.
+//
+// The body is sized to the longest section, not the one showing, so the panel
+// keeps its height and its place on screen as tab moves from section to
+// section. Sized to the section, the centred panel jumped up and down with
+// every tab, and the section strip the eye follows went with it.
 //
 // On a screen too short to hold the minimum body, the footer goes first
 // (panelBody), then the description box loses a line at a time and finally goes
 // altogether: it restates the selected row, whereas a body below three rows
 // stops being a list.
-func (m *OS) settingsLayout(tabs []string, itemCount int) (width, rows int, hints []overlay.Hint, descLines int) {
+func (m *OS) settingsLayout(cats []settingsCategory) (tabs []string, width, rows int, hints []overlay.Hint, descLines int) {
+	tabs = make([]string, len(cats))
+	preferred := settingsVisibleRows
+	for i, c := range cats {
+		tabs[i] = c.Name
+		preferred = max(preferred, len(c.Items))
+	}
 	width = m.panelWidth(settingsMaxInnerWidth)
-	preferred := max(itemCount, settingsVisibleRows)
 	rh := m.GetRenderHeight()
 	footer := m.currentSettingsHints()
 	// The search line is a body line above the rows.
@@ -92,11 +103,11 @@ func (m *OS) settingsLayout(tabs []string, itemCount int) (width, rows int, hint
 		extra := n + 1 + search
 		rows, hints = m.panelBody(preferred, extra, width, tabs, footer)
 		if rh <= 0 || rows+extra+panelChrome(0, width, tabs, hints) <= rh {
-			return width, rows, hints, n
+			return tabs, width, rows, hints, n
 		}
 	}
 	rows, hints = m.panelBody(preferred, search, width, tabs, footer)
-	return width, rows, hints, 0
+	return tabs, width, rows, hints, 0
 }
 
 // renderSettings draws the settings overlay and returns the rendered panel, its
@@ -122,10 +133,6 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 	pal := m.overlayUI()
 	bg := pal.Surface
 
-	tabs := make([]string, len(cats))
-	for i, c := range cats {
-		tabs[i] = c.Name
-	}
 	// While searching, the strip lights the tab the selected result lives on,
 	// so the strip says where a row is as the cursor moves through them.
 	activeTab := m.SettingsCategory
@@ -133,7 +140,7 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 		activeTab = hits[m.settingsList.Cursor].cat
 	}
 
-	width, visible, hints, descLines := m.settingsLayout(tabs, len(items))
+	tabs, width, visible, hints, descLines := m.settingsLayout(cats)
 	// A category with more settings than fit scrolls; the selection stays in
 	// view so the arrow keys can always reach every setting.
 	m.settingsList.Scroll = scrollWindow(m.settingsList.Scroll, m.settingsList.Cursor, len(items), visible)
