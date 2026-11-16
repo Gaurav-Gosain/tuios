@@ -87,6 +87,24 @@ func waitShowing(t *testing.T, base, sess string, ws int, text string, clients .
 	}
 }
 
+// waitXpanesDone waits for the file a test's xpanes line touches once
+// tuios xpanes has returned. xpanes returns after the attached client has
+// answered each command it routed, the last focus-window included, so no
+// routed command from it can reach the client after this.
+func waitXpanesDone(t *testing.T, term *tuitest.Terminal, done string) {
+	t.Helper()
+	deadline := time.Now().Add(shellTimeout)
+	for {
+		if _, err := os.Stat(done); err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("xpanes never finished\n%s", term.Snapshot())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 // startHome starts a client on a new session with one shell on workspace 1,
 // which prints HOME-42.
 func startHome(t *testing.T, base, sess string) *tuitest.Terminal {
@@ -111,16 +129,7 @@ func TestEmptyWorkspaceReturnsAfterXpanesSuperSpeedy(t *testing.T) {
 	if err := term.SendKeys(tuiosBin+" xpanes -ss -c 'true' a b c; touch "+done, tuitest.Enter); err != nil {
 		t.Fatalf("type xpanes: %v", err)
 	}
-	deadline := time.Now().Add(shellTimeout)
-	for {
-		if _, err := os.Stat(done); err == nil {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("xpanes never finished\n%s", term.Snapshot())
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	waitXpanesDone(t, term, done)
 	waitPanesOn(t, term, base, "ew", 2, 0, "the -ss panes close")
 	waitShowing(t, base, "ew", 1, "HOME-42", term)
 	t.Logf("after the -ss panes closed:\n%s", term.Snapshot())
@@ -134,7 +143,8 @@ func TestEmptyWorkspaceReturnsAfterXpanesSpeedy(t *testing.T) {
 	term := startHome(t, base, "ew")
 	second := attachIn(t, base, "ew", startOpts{cols: 120, rows: 40})
 
-	if err := term.SendKeys(tuiosBin+" xpanes -s -c 'echo HELD-{}' a b c", tuitest.Enter); err != nil {
+	done := filepath.Join(base, "xpanes-done")
+	if err := term.SendKeys(tuiosBin+" xpanes -s -c 'echo HELD-{}' a b c; touch "+done, tuitest.Enter); err != nil {
 		t.Fatalf("type xpanes: %v", err)
 	}
 	for i, c := range []*tuitest.Terminal{term, second} {
@@ -151,7 +161,13 @@ func TestEmptyWorkspaceReturnsAfterXpanesSpeedy(t *testing.T) {
 		t.Fatalf("multifocus never showed on the held panes: %v\n%s", err, term.Snapshot())
 	}
 
-	// The client may still be in terminal mode from typing the xpanes line.
+	// xpanes focuses the first pane last, through the client. Its
+	// "Remote: FocusWindow" notice is the newest in the dock when it lands, so
+	// one that lands after Alt+Esc covers "Window management mode" before
+	// leaveTerminalMode reads it. Wait for xpanes to return first.
+	waitXpanesDone(t, term, done)
+
+	// The client is still in terminal mode from typing the xpanes line.
 	leaveTerminalMode(t, term)
 	enterTerminalMode(t, term)
 	if err := term.SendKeys(tuitest.Enter); err != nil {

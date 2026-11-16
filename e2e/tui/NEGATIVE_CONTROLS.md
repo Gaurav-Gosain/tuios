@@ -1879,6 +1879,17 @@ was the second client about half the time. Multifocus is the client's own, so
 Enter at the client that ran xpanes reached one pane. `findTUIClient` now
 takes the client the person used last.
 
+It failed again on #2162 and #2166 (jobs 133269840130 and 133303854228), this
+time in `leaveTerminalMode`: "Window management mode" never showed. The client
+had switched mode, and the dock pill had the window mode colour. xpanes routes
+its last `focus-window` to the client after multifocus is on. When that landed
+just after Alt+Esc, its "Remote: FocusWindow" notice became the newest in the
+dock and covered the mode notice before the test read the screen. The test now
+waits for xpanes to return before it presses Alt+Esc. On two cores, 3 of 60
+runs failed before the wait and 0 of 60 after it. A 700 ms delay before the
+`focus-window` did not force the failure, because the notice then lands after
+the test has read the mode notice. So no control row is recorded.
+
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | A routed command goes to any client | origin/main (946add0f), where `findTUIClient` returns the first match in the map | `TestEmptyWorkspaceReturnsAfterXpanesSpeedy` ("Enter closes the held panes: workspace 2 has 2 panes, want 0"), 9 of 30 runs on two cores. With the fix: 30 of 30 pass | **caught** |
