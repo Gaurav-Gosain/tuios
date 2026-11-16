@@ -173,8 +173,47 @@ type linkPolicyTable = map[string]config.HostConfig
 // SetLinkPolicies replaces the table link policies are resolved from. A call
 // in flight keeps the policy it resolved; the next call reads the new one.
 func (d *Daemon) SetLinkPolicies(hosts map[string]config.HostConfig) {
-	t := maps.Clone(hosts)
+	d.storeLinkPolicies(hosts, hosts)
+}
+
+// storeLinkPolicies stores the table policies are resolved from and the
+// names that have a table of their own in the config file. The two differ
+// after a reload: the policy table keeps a narrowed entry for a name whose
+// table was removed, and file does not have it.
+func (d *Daemon) storeLinkPolicies(policies, file map[string]config.HostConfig) {
+	t := maps.Clone(policies)
+	names := make(map[string]bool, len(file))
+	for k := range file {
+		if k != config.LinkPolicyDefaultName {
+			names[strings.ToLower(k)] = true
+		}
+	}
+	d.linkTableNames.Store(&names)
 	d.linkPolicies.Store(&t)
+}
+
+// pinnedWithoutTable reports whether cs is a link whose peer name was pinned
+// with --as and the config has no [hosts.PEER] table for that name.
+//
+// A pinned name comes from a forced command in authorized_keys, which tuios
+// pair writes only after the device's table. A pinned name with no table is a
+// key that outlived its table: a device the person removed, by hand or with a
+// tuios older than the one that removes the key line too. Without its table
+// it would get [hosts."*"] or the built-in default, which can type into panes
+// and start programs, so it gets nothing instead. This holds on a link that
+// is already open, because the policy is resolved again on every call.
+func (d *Daemon) pinnedWithoutTable(cs *connState) (string, bool) {
+	if cs == nil {
+		return "", false
+	}
+	cs.mu.Lock()
+	peer, pinned := cs.linkPeer, cs.linkPinned
+	cs.mu.Unlock()
+	if !pinned || peer == "" {
+		return "", false
+	}
+	t := d.linkTableNames.Load()
+	return peer, t == nil || !(*t)[strings.ToLower(peer)]
 }
 
 // linkPolicy is the policy for the machine at the other end of cs. It is only
@@ -190,11 +229,18 @@ func (d *Daemon) linkPolicy(cs *connState) config.LinkPolicy {
 		peer = cs.linkPeer
 		cs.mu.Unlock()
 	}
+	if p, orphan := d.pinnedWithoutTable(cs); orphan {
+		return config.LinkPolicy{Peer: p, Allow: []string{}, FilesRoots: []string{}}
+	}
 	return config.LinkPolicyFor(hosts, peer)
 }
 
 // linkPolicyPointer keeps the atomic type in one place.
 type linkPolicyPointer = atomic.Pointer[linkPolicyTable]
+
+// linkTableNamesPointer holds the lowered names with a [hosts] table of
+// their own in the config file. See pinnedWithoutTable.
+type linkTableNamesPointer = atomic.Pointer[map[string]bool]
 
 // checkLinkVerb refuses a verb the peer may not call. It returns nil for a
 // connection that is not a link.
@@ -305,6 +351,12 @@ func linkForbidden(d *Daemon, cs *connState, what string, missing []string, reas
 	// but a grant added to [hosts."*"] while [hosts.PEER] holds it would not.
 	if policy.AllowSource != "" {
 		table = policy.AllowSource
+	}
+	if p, orphan := d.pinnedWithoutTable(cs); orphan {
+		LogBasic("Link %s (peer %q, pinned) refused %s: the config has no [hosts.%s] table", cs.clientID, p, what, p)
+		return hintedVerbError(ErrVerbForbidden, what+" is refused: the ssh key of "+p+" is pinned to a name that has no [hosts."+p+"] table on "+here, &VerbHint{
+			Detail: "Nothing was done. Run 'tuios hosts remove " + p + "' on " + here + " to remove the key, or pair the device again.",
+		})
 	}
 	if reason == "" {
 		words := make([]string, 0, len(missing))

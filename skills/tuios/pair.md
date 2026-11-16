@@ -42,9 +42,10 @@ that a `[hosts]` table has, that another paired key uses, or that is this
 machine's name, is refused. Case does not matter.
 
 To see the paired devices, look for lines that end in `tuios-pair:` in
-`~/.ssh/authorized_keys`. To remove one, the person deletes that line and the
-`[hosts.DEVICE]` table. Do not edit either file for them: both decide what
-another machine may do here.
+`~/.ssh/authorized_keys`. To remove one, the person runs
+`tuios hosts remove DEVICE`. It removes the key line and then the table. A
+paired key with no `[hosts.DEVICE]` table may do nothing. Do not edit either
+file for them: both decide what another machine may do here.
 
 The flags, the addresses in the code and the protocol the phone speaks are in
 `docs/CLI_REFERENCE.md` under `tuios pair`. What a linked machine may do is in

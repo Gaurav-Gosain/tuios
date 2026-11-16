@@ -350,7 +350,7 @@ func (d *Daemon) reloadLinkPolicies(next map[string]config.HostConfig) (waits bo
 		h.FilesReadRoots, h.FilesMinFree, h.FilesMaxEntries = readRoots, strconv.FormatInt(minFree, 10), &maxEntries
 		merged[key] = h
 	}
-	d.SetLinkPolicies(merged)
+	d.storeLinkPolicies(merged, next)
 	// A machine that lost relay or files stops the copies it started here.
 	if d.transfers != nil {
 		d.transfers.failRevoked()

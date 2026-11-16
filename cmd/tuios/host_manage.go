@@ -271,25 +271,39 @@ func probeAddedHost(name string) {
 	}
 }
 
-// runHostRemove deletes one [hosts.NAME] table.
+// runHostRemove deletes one [hosts.NAME] table, and the authorized_keys
+// lines tuios added for NAME: a key that tuios hosts setup --both-ways
+// allowed, and the key of a device that tuios pair added.
+//
+// The key lines go first. A key whose name has no table gets [hosts."*"] or
+// the built-in default, so the table is never removed while its key stays:
+// when the key cannot be removed, the table stays too and the command fails.
+// A name with key lines and no table, a device removed before this order
+// existed, gets its lines removed.
 func runHostRemove(name string) error {
 	path, err := config.GetConfigPath()
 	if err != nil {
 		return errfmt.Errorf("cannot find the config file: %w", err)
+	}
+	keys := hostsetup.AuthorizedKeysPath()
+	n, err := hostsetup.RemoveAuthorizedKeys(keys, name)
+	if err != nil {
+		return errfmt.Errorf("cannot remove the ssh key of %s from %s: %w. Nothing was removed. Fix the file, then run 'tuios hosts remove %s' again", name, keys, err, name)
+	}
+	if n > 0 {
+		fmt.Printf("The ssh key of %s that tuios added is removed from ~/.ssh/authorized_keys.\n", name)
 	}
 	removed, err := config.RemoveHostFromFile(path, name)
 	if err != nil {
 		return err
 	}
 	if !removed {
+		if n > 0 {
+			return nil
+		}
 		return errfmt.Errorf("no host is named %q. Run 'tuios hosts' to see the names", name)
 	}
 	fmt.Printf("Host %s is removed. A running daemon closes the link now.\n", name)
-	// A key that tuios hosts setup --both-ways allowed for this machine goes
-	// with it.
-	if n, err := hostsetup.RemoveAuthorizedKeys(hostsetup.AuthorizedKeysPath(), name); err == nil && n > 0 {
-		fmt.Printf("The ssh key of %s that tuios added is removed from ~/.ssh/authorized_keys.\n", name)
-	}
 	return nil
 }
 

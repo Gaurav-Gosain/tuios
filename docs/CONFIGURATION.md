@@ -3907,7 +3907,9 @@ command="tuios stdio-proxy --as laptop",restrict ssh-ed25519 AAAA...
 ```
 
 Only a pinned name is a boundary: a key that may run any command can run a
-shell, and can claim any name. A table with a policy and no `addr` is not
+shell, and can claim any name. A pinned name needs a table of its own. A key
+pinned to a name with no `[hosts.NAME]` table may do nothing here, so a key
+that outlives its table does not get `[hosts."*"]` or the default. A table with a policy and no `addr` is not
 dialled and not listed by `tuios hosts`, and `[hosts."*"]` never is.
 
 The daemon follows the file. A change that gives a machine less applies to the

@@ -17979,3 +17979,19 @@ Row D is the dismiss offer's check, row Z the snooze offer's and row W the warni
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestUndoOfferEndsWithTheUndoWindow$' -v .`.
+
+## A removed device loses its key and its link
+
+`TestRemovedPairedDeviceLosesItsLink` in `pair_remove_test.go` pairs a phone into a real sshd, links a hub daemon through the phone's key, and checks a listing works. It then deletes the `[hosts.phone]` table by hand and leaves the key line, as `tuios hosts remove` did before. On the open link the next listing must be refused, and after a restart of the far daemon `send-text` must be refused too. `tuios hosts remove phone` must then remove the `tuios-pair:phone` line, leave the person's own key byte for byte with mode 0600, and a new ssh login with the phone key must fail. `TestHostRemoveKeepsTheTableWhenTheKeyStays` makes `authorized_keys` unreadable (mode 000) and then `~/.ssh` unwritable (mode 0500). Each time `tuios hosts remove build` must fail, keep `[hosts.build]`, and leave the file whole.
+
+Run on 2026-11-16 on Linux (x86_64), OpenSSH sshd. The branch passes both tests.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main | `TestRemovedPairedDeviceLosesItsLink`: "the open link still lists panes after its table went", waited 20s. `TestHostRemoveKeepsTheTableWhenTheKeyStays`: "authorized_keys mode 000: hosts remove reported success", "the table went while the key stayed" | **caught** |
+| No refusal of a pinned name with no table (`pinnedWithoutTable` returns false) | `TestRemovedPairedDeviceLosesItsLink`: "the open link still lists panes after its table went", waited 20s | **caught** |
+| `RemoveAuthorizedKeys` matches only `tuios-host=` lines | `TestRemovedPairedDeviceLosesItsLink`: "hosts remove of a device with only its key line left failed", "authorized_keys is not the person's own key alone", "the removed key still opens the link" | **caught** |
+| A read error returns success and the file is written in place (`os.WriteFile`) | `TestHostRemoveKeepsTheTableWhenTheKeyStays`: "authorized_keys mode 000: hosts remove reported success", "~/.ssh mode 0500: the table went while the key stayed", "a failed rewrite changed authorized_keys" | **caught** |
+
+The transcripts are `pair-remove.txt` and `hosts-remove-keys.txt` under `TUIOS_E2E_FRAMES`, in each test's folder. Both tests skip when ssh or ssh-keygen is missing, and the first skips when sshd is missing. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestRemovedPairedDeviceLosesItsLink|TestHostRemoveKeepsTheTableWhenTheKeyStays)$' -v .`.

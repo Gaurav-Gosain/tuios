@@ -260,6 +260,10 @@ type Daemon struct {
 	// this one is resolved from. Nil means no table: every link gets the
 	// built-in default. See link_policy.go.
 	linkPolicies linkPolicyPointer
+	// linkTableNames is the names with a [hosts] table of their own in the
+	// config file, so a pinned name whose table is gone gets nothing. See
+	// pinnedWithoutTable.
+	linkTableNames linkTableNamesPointer
 
 	// agents is the cross-agent mailbox: the bounded per-session message rings
 	// and the in-flight ask graph. It is held here rather than on a Session

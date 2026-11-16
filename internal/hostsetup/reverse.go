@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"net"
 	"os"
 	"os/user"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/hostsync"
 	"golang.org/x/crypto/ssh"
@@ -316,19 +318,44 @@ func AppendAuthorizedKey(path, line string) error {
 	return f.Close()
 }
 
+// PairTag ends an authorized_keys line that tuios pair added for the device
+// called name.
+func PairTag(name string) string { return "tuios-pair:" + name }
+
 // RemoveAuthorizedKeys takes out of the authorized_keys file at path every
-// line that the both-ways step added for the machine called name, and
-// reports how many. A missing file removes nothing.
+// line that tuios added for the machine or device called name: the both-ways
+// key (KeyTag) and a paired device's key (PairTag). The tag is the last field
+// of the line and is matched without regard to case, as host names are. It
+// reports how many lines went. A missing file removes nothing.
+//
+// The file is replaced in one step (atomicfile), so a failed write leaves it
+// as it was and never cuts the person's own keys short. A symlinked file is
+// written through to its target, and the target keeps its mode. Every read
+// or write error is returned: the caller must not report the key as gone.
 func RemoveAuthorizedKeys(path, name string) (int, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // this user's own file
-	if err != nil {
+	if path == "" {
+		return 0, errors.New("tuios cannot find the home folder, so it cannot read authorized_keys")
+	}
+	real, err := filepath.EvalSymlinks(path)
+	if errors.Is(err, fs.ErrNotExist) {
 		return 0, nil
 	}
-	tag := " " + KeyTag(name)
+	if err != nil {
+		return 0, err
+	}
+	info, err := os.Stat(real)
+	if err != nil {
+		return 0, err
+	}
+	data, err := os.ReadFile(real) //nolint:gosec // this user's own file
+	if err != nil {
+		return 0, err
+	}
+	tags := []string{KeyTag(name), PairTag(name)}
 	var keep []string
 	n := 0
 	for l := range strings.SplitSeq(string(data), "\n") {
-		if strings.HasSuffix(strings.TrimSpace(l), tag) {
+		if lineHasTag(l, tags) {
 			n++
 		} else {
 			keep = append(keep, l)
@@ -337,7 +364,26 @@ func RemoveAuthorizedKeys(path, name string) (int, error) {
 	if n == 0 {
 		return 0, nil
 	}
-	return n, os.WriteFile(path, []byte(strings.Join(keep, "\n")), 0o600)
+	if err := atomicfile.Write(real, []byte(strings.Join(keep, "\n")), info.Mode().Perm(), true); err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
+// lineHasTag reports whether the last field of an authorized_keys line is one
+// of tags. A comment line never matches.
+func lineHasTag(line string, tags []string) bool {
+	f := strings.Fields(line)
+	if len(f) < 2 || strings.HasPrefix(f[0], "#") {
+		return false
+	}
+	last := f[len(f)-1]
+	for _, t := range tags {
+		if strings.EqualFold(last, t) {
+			return true
+		}
+	}
+	return false
 }
 
 // decodeFirst decodes the first JSON value in out.

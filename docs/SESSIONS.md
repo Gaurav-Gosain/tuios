@@ -1174,8 +1174,11 @@ The phone cannot start programs, type into panes or answer prompts. To allow
 more, give `--allow`, for example `--allow list,mail,open,write`. See
 [`tuios pair`](CLI_REFERENCE.md#tuios-pair) for each flag and the protocol.
 
-To remove the phone, delete the line that ends in `tuios-pair:phone` from
-`~/.ssh/authorized_keys`, and the `[hosts.phone]` table from `config.toml`.
+To remove the phone, run `tuios hosts remove phone`. It removes the line that
+ends in `tuios-pair:phone` from `~/.ssh/authorized_keys`, and then the
+`[hosts.phone]` table from `config.toml`. A paired key whose table is gone
+may do nothing here: the daemon refuses every call from it, also on a link
+that is already open.
 
 ## Machines on a Tailnet
 
