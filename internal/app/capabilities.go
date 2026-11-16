@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -183,7 +184,20 @@ func (m *OS) hostCellSize() (w, h int) {
 }
 
 func DetectHostCapabilities() *HostCapabilities {
-	caps := &HostCapabilities{Term: os.Getenv("TERM")}
+	// Query terminal size (cols/rows)
+	var seed HostCapabilities
+	queryTerminalSize(&seed)
+	// Pixel geometry and graphics support, in one round trip
+	return DetectHostCapabilitiesWith(seed, probeTerminal)
+}
+
+// DetectHostCapabilitiesWith is DetectHostCapabilities for a terminal the
+// probe reaches: seed holds the size known of it, and probe asks it the rest
+// (probeTerminal for this process's terminal). A client the e2e suite runs in
+// its own process probes the terminal it is given through ProbeTerminal.
+func DetectHostCapabilitiesWith(seed HostCapabilities, probe func(*HostCapabilities)) *HostCapabilities {
+	caps := &seed
+	caps.Term = os.Getenv("TERM")
 
 	// Detect terminal name from environment
 	detectTerminalName(caps)
@@ -191,11 +205,7 @@ func DetectHostCapabilities() *HostCapabilities {
 	// Detect truecolor from environment
 	detectTrueColor(caps)
 
-	// Query terminal size (cols/rows)
-	queryTerminalSize(caps)
-
-	// Pixel geometry and graphics support, in one round trip
-	probeTerminal(caps)
+	probe(caps)
 
 	// Apply environment overrides
 	applyEnvironmentOverrides(caps)
@@ -367,6 +377,15 @@ func probeTerminal(caps *HostCapabilities) {
 	}
 	defer func() { _ = term.Restore(int(tty.in.Fd()), oldState) }()
 
+	ProbeTerminal(caps, tty.out, func(timeout time.Duration, done func(string) bool) string {
+		return readTTYResponse(tty.in, timeout, done)
+	})
+}
+
+// ProbeTerminal writes the probe's queries to out and reads the replies with
+// read, which returns what arrived once done reports the reply complete or
+// the timeout runs out. See probeTerminal.
+func ProbeTerminal(caps *HostCapabilities, out io.Writer, read func(timeout time.Duration, done func(string) bool) string) {
 	// Probe direct transmission (i=1) and, if we can stage a file for it,
 	// file transmission (i=2). The ids let the two answers be told apart; the
 	// spec requires a terminal to echo the id it was asked about.
@@ -392,9 +411,9 @@ func probeTerminal(caps *HostCapabilities) {
 	// placeholders are drawn or dropped.
 	q.WriteString(xtversionQuery)
 	q.WriteString("\x1b[c") // DA1 last, so its reply closes the whole batch
-	_, _ = tty.out.WriteString(q.String())
+	_, _ = io.WriteString(out, q.String())
 
-	response := readTTYResponse(tty.in, probeTimeout, da1Response().MatchString)
+	response := read(probeTimeout, da1Response().MatchString)
 	caps.DA1Late = !da1Response().MatchString(response)
 
 	parsePixelGeometry(caps, response)
