@@ -25,8 +25,8 @@ const (
 
 // HandleScrollbackBrowserKey handles keyboard input when the scrollback browser is open.
 func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	browser, ok := o.ScrollbackBrowser.(*scrollback.Browser)
-	if browser == nil || !ok {
+	browser := o.ScrollbackBrowser
+	if browser == nil {
 		o.ShowScrollbackBrowser = false
 		return o, nil
 	}
@@ -394,8 +394,8 @@ func handleBrowserOutputModeKey(msg tea.KeyPressMsg, keyStr string, browser *scr
 
 // handleScrollbackBrowserMouseWheel handles mouse wheel events when the scrollback browser is open.
 func handleScrollbackBrowserMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	browser, ok := o.ScrollbackBrowser.(*scrollback.Browser)
-	if browser == nil || !ok {
+	browser := o.ScrollbackBrowser
+	if browser == nil {
 		return o, nil
 	}
 
@@ -432,8 +432,8 @@ func handleScrollbackBrowserMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.O
 
 // handleScrollbackBrowserMouseClick handles mouse click events when the scrollback browser is open.
 func handleScrollbackBrowserMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	browser, ok := o.ScrollbackBrowser.(*scrollback.Browser)
-	if browser == nil || !ok {
+	browser := o.ScrollbackBrowser
+	if browser == nil {
 		return o, nil
 	}
 
@@ -511,8 +511,8 @@ func handleScrollbackBrowserMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.O
 
 // handleScrollbackBrowserMouseMotion handles mouse motion (drag) events.
 func handleScrollbackBrowserMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	browser, ok := o.ScrollbackBrowser.(*scrollback.Browser)
-	if browser == nil || !ok || !browser.DragActive {
+	browser := o.ScrollbackBrowser
+	if browser == nil || !browser.DragActive {
 		return o, nil
 	}
 
@@ -562,8 +562,8 @@ func handleScrollbackBrowserMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app
 
 // handleScrollbackBrowserMouseRelease handles mouse release events.
 func handleScrollbackBrowserMouseRelease(o *app.OS) (*app.OS, tea.Cmd) {
-	browser, ok := o.ScrollbackBrowser.(*scrollback.Browser)
-	if browser == nil || !ok {
+	browser := o.ScrollbackBrowser
+	if browser == nil {
 		return o, nil
 	}
 	browser.DragActive = false

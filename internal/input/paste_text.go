@@ -167,7 +167,7 @@ func listPickerPaste(o *app.OS) func(string) tea.Cmd {
 // scrollbackSearchPaste is the scrollback browser's search line, in either of
 // its two places, or nil when neither is open.
 func scrollbackSearchPaste(o *app.OS) func(string) tea.Cmd {
-	browser, _ := o.ScrollbackBrowser.(*scrollback.Browser)
+	browser := o.ScrollbackBrowser
 	switch {
 	case browser == nil:
 		return nil

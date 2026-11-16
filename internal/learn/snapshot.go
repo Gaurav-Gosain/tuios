@@ -7,7 +7,6 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/scrollback"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -300,7 +299,7 @@ func take(o *app.OS) Snapshot {
 	ov[OverlayThemeEditor] = o.ThemeEditorOpen()
 	ov[OverlayGlyphPicker] = o.ShowGlyphPicker
 	s.ThemeEdited = o.ThemeEditorDirty()
-	if b, ok := o.ScrollbackBrowser.(*scrollback.Browser); ok && o.ShowScrollbackBrowser && b != nil && b.SearchActive {
+	if b := o.ScrollbackBrowser; o.ShowScrollbackBrowser && b != nil && b.SearchActive {
 		ov[OverlaySearch] = true
 	}
 	// Leaving copy mode keeps the CopyMode struct and clears Active.

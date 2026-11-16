@@ -17,8 +17,8 @@ import (
 
 // renderScrollbackBrowser renders the scrollback browser as a full-screen overlay.
 func (m *OS) renderScrollbackBrowser() string {
-	browser, ok := m.ScrollbackBrowser.(*scrollback.Browser)
-	if browser == nil || !ok {
+	browser := m.ScrollbackBrowser
+	if browser == nil {
 		return ""
 	}
 

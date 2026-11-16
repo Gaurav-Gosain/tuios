@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/dockengine"
+	"github.com/Gaurav-Gosain/tuios/internal/scrollback"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/agentseen"
@@ -1406,7 +1407,7 @@ type OS struct {
 	hostFocus hostFocusState
 	// Scrollback browser overlay
 	ShowScrollbackBrowser bool
-	ScrollbackBrowser     any // *scrollback.Browser, typed as any to avoid import cycle
+	ScrollbackBrowser     *scrollback.Browser
 	// Command palette overlay
 	ShowCommandPalette  bool
 	fileSearch          bool
