@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -289,6 +290,20 @@ func TestFrameBudgetReadsLargeFramesInTurn(t *testing.T) {
 		}
 		if hosted := d.readBudgetFor(&connState{paneOnly: true}); hosted == person {
 			t.Fatal("a hosted pane call draws on the person's budget")
+		}
+	})
+
+	// A pane holds admin under the default open mode, and admin reads as the
+	// person's buffer access. It must still not draw on the person's budget.
+	t.Run("a pane draws on the other budget", func(t *testing.T) {
+		d := testFrameDaemon(t)
+		person := d.readBudgetFor(&connState{})
+		// The test's own pid never reads as changed, so the caller is placed
+		// in no pane and holds the open default, admin.
+		pane := &connState{peerPID: os.Getpid()}
+		pane.fromPaneOnce.Do(func() { pane.fromPane, pane.fromPaneWhy = true, paneOriginAncestor })
+		if d.readBudgetFor(pane) == person {
+			t.Fatal("a caller inside a pane draws on the person's budget")
 		}
 	})
 }

@@ -125,6 +125,12 @@ type Daemon struct {
 	peerBudget     *memBudget
 	openConns      atomic.Int64
 	openLinkConns  atomic.Int64
+	// openPeerConns counts the connections on the daemon's own socket from
+	// callers that may not act as the person, and peerConns the same per
+	// pane. See admitPeer.
+	openPeerConns atomic.Int64
+	peerConnsMu   sync.Mutex
+	peerConns     map[peerConnKey]int
 	// refusalsTold counts the refused connections being told why now.
 	refusalsTold atomic.Int64
 	// connRefusals counts the connections refused over maxConnections since
@@ -2396,6 +2402,15 @@ func (d *Daemon) handleConnectionOn(conn net.Conn, viaLink, linkHuman bool) {
 	// names. A process that hands the connection to another and exits
 	// leaves its pid free for reuse; see peerChanged.
 	d.pinPeer(cs)
+	// A link has its own cap at accept. On the daemon's own socket, a caller
+	// that may not act as the person is held to the pane caps here.
+	if !viaLink {
+		release, ok := d.admitPeer(cs)
+		if !ok {
+			return
+		}
+		defer release()
+	}
 
 	if viaLink {
 		LogBasic("Client %s connected over a link", clientID)

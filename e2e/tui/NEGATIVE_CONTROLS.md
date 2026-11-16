@@ -18020,3 +18020,18 @@ Run on 2026-11-16 on Linux (x86_64), pure Go backend. The branch passes all thre
 | No byte bound (`capBytes` and the loop bound cut) | `TestCommandCaptureBytesAreBounded`: "a C mark on a 400 column pane kept 47819 bytes, want at most 16384" | **caught** |
 
 The ghostty backend was not run: libghostty-vt is not built on this machine. Both backends call the same `captureCommandText`. Repeat from `vt` with `go test -count=1 -run '^TestCommandCapture' -v .`, and with `-tags ghostty` where libghostty-vt is built.
+## Panes cannot take the person's connections
+
+`TestPanesCannotTakeThePersonsConnections` in `pane_conn_cap_test.go` starts a real daemon with two panes. A python3 holder in a pane opens connections to the daemon's own socket, sends `{` on each and holds them. A refused connection is told why and closed, so it turns readable, and the holder counts the ones that stay open. Pane 1 asks for 100 and must hold 64. Pane 2 asks for 10 and must hold 10. Then 16 children in pane 2, each in a new session with no terminal, ask for 64 each: programs in panes must hold at most 896 (1024 less the 128 kept for the person). Last, `tuios ls` and `tuios list-windows` from outside every pane must work. The unit subtest `TestFrameBudgetReadsLargeFramesInTurn/a_pane_draws_on_the_other_budget` holds a caller inside a pane, with admin, to the read budget that is not the person's.
+
+Run on 2026-11-16 on Linux (x86_64). The branch passes both: one pane holds 64, pane 2 holds 10, all panes hold 896, and both commands work.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main | "one pane holds 100 connections, want 64", "programs in panes hold 988 connections, want at most 896", "tuios ls was refused while panes hold their connections" | **caught** |
+| No person reserve (the pane pool is all 1024) | "programs in panes hold 1024 connections, want at most 896", "tuios ls was refused", "tuios list-windows -s conns was refused" | **caught** |
+| No cap per pane | "one pane holds 100 connections, want 64" | **caught** |
+| `readBudgetFor` as on main | `a_pane_draws_on_the_other_budget`: "a caller inside a pane draws on the person's budget" | **caught** |
+
+The transcript is `pane-conns.txt` under `TUIOS_E2E_FRAMES`. The test skips when python3 is missing. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPanesCannotTakeThePersonsConnections$' -v .`.

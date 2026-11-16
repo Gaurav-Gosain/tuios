@@ -99,6 +99,20 @@ const (
 	// cost about 30 MB.
 	maxConnections = 1024
 
+	// humanReserve is how many of the maxConnections slots only a caller
+	// that may act as the person takes: the person's own client and CLI. A
+	// pane, a hook or a plugin cannot take them, so programs in panes that
+	// open connections and hold them cannot shut the person out.
+	humanReserve = 128
+
+	// maxConnsPerPane is the most connections on the daemon's own socket that
+	// one pane holds at once, counted for every process that may not act as
+	// the person. The processes of one pane share its terminal and count
+	// together. A process with no terminal counts on its own. An agent and its
+	// tools take a few; this leaves room for many and stops one pane from
+	// taking the slots of the others.
+	maxConnsPerPane = 64
+
 	// maxLinkConnections is the most it serves on its two link sockets
 	// together. A peer with link rights cannot take the slots the person
 	// needs on the main socket.
@@ -163,7 +177,10 @@ func (d *Daemon) readBudgetFor(cs *connState) *memBudget {
 		}
 		return d.peerBudget
 	}
-	if d.manager != nil && !d.bufferAccess(cs).person() {
+	// A caller that may not act as the person shares the other budget. A
+	// pane holds admin under the default open mode, so its buffer access
+	// alone reads as the person's.
+	if d.manager != nil && (!d.mayActAsHuman(cs) || !d.bufferAccess(cs).person()) {
 		return d.peerBudget
 	}
 	return d.personBudget
@@ -292,6 +309,11 @@ const maxRefusalsTold = 32
 // speaks, and closes it. It waits a short time for the first byte: a JSON
 // client gets an error line and a binary client an error frame.
 func (d *Daemon) refuseConnection(conn net.Conn) {
+	d.refuseConnectionWith(conn, errTooManyConnections)
+}
+
+// refuseConnectionWith is refuseConnection with the message the client reads.
+func (d *Daemon) refuseConnectionWith(conn net.Conn, why string) {
 	if d.refusalsTold.Add(1) > maxRefusalsTold {
 		d.refusalsTold.Add(-1)
 		_ = conn.Close()
@@ -305,17 +327,90 @@ func (d *Daemon) refuseConnection(conn net.Conn) {
 		n, _ := conn.Read(first[:])
 		_ = conn.SetWriteDeadline(time.Now().Add(time.Second))
 		if n == 1 && isJSONStart(first[0]) {
-			line, err := jsonx.Marshal(verbResponse{Error: newVerbError(ErrVerbTooManyConnections, errTooManyConnections)})
+			line, err := jsonx.Marshal(verbResponse{Error: newVerbError(ErrVerbTooManyConnections, why)})
 			if err == nil {
 				_, _ = conn.Write(append(line, '\n'))
 			}
 			return
 		}
-		msg, err := NewMessage(MsgError, &ErrorPayload{Code: ErrCodeBusy, Message: errTooManyConnections})
+		msg, err := NewMessage(MsgError, &ErrorPayload{Code: ErrCodeBusy, Message: why})
 		if err == nil {
 			_ = WriteMessage(conn, msg)
 		}
 	}()
+}
+
+// errPaneConnections is what a connection over maxConnsPerPane is told.
+const errPaneConnections = "This pane already holds the most connections to the tuios daemon that one pane may hold. Close some, then try again."
+
+// errPanesConnections is what a connection from a pane is told when panes,
+// hooks and plugins together hold every slot that is not kept for the person.
+const errPanesConnections = "Programs in panes already hold every connection to the tuios daemon that is not kept for the person. Close some, then try again."
+
+// peerConnKey is what maxConnsPerPane counts by: the controlling terminal of
+// the process, which every process of one pane shares, or the process itself
+// when it has none.
+type peerConnKey struct {
+	tty int64
+	pid int
+}
+
+// admitPeer counts a connection on the daemon's own socket against the caps
+// for callers that may not act as the person, once pinPeer has placed it. A
+// caller that may act as the person passes with nothing counted: the accept
+// cap is its only bound, so the humanReserve slots stay its own. Any other
+// caller takes a slot of maxConnections less humanReserve, and one of the
+// maxConnsPerPane of its pane. A refused connection is told why and closed.
+// The caller runs release when an admitted connection ends.
+//
+// The placing is done already (connFromPane at accept), so this adds one
+// read of the process record for a caller in a pane, and nothing for the
+// person.
+func (d *Daemon) admitPeer(cs *connState) (release func(), ok bool) {
+	if d.manager == nil || d.mayActAsHuman(cs) {
+		return func() {}, true
+	}
+	if d.openPeerConns.Add(1) > maxConnections-humanReserve {
+		d.openPeerConns.Add(-1)
+		d.logPeerRefusal("Refused a connection from a pane: panes, hooks and plugins already hold %d connections, every slot not kept for the person.", maxConnections-humanReserve)
+		d.refuseConnectionWith(cs.conn, errPanesConnections)
+		return nil, false
+	}
+	key := peerConnKey{pid: cs.peerPID}
+	if _, tty, _, ok := d.procLink()(cs.peerPID); ok && tty != 0 {
+		key = peerConnKey{tty: tty}
+	}
+	d.peerConnsMu.Lock()
+	if d.peerConns[key] >= maxConnsPerPane {
+		d.peerConnsMu.Unlock()
+		d.openPeerConns.Add(-1)
+		d.logPeerRefusal("Refused a connection from a pane: that pane already holds %d connections, the most one pane may hold.", maxConnsPerPane)
+		d.refuseConnectionWith(cs.conn, errPaneConnections)
+		return nil, false
+	}
+	if d.peerConns == nil {
+		d.peerConns = make(map[peerConnKey]int)
+	}
+	d.peerConns[key]++
+	d.peerConnsMu.Unlock()
+	return func() {
+		d.peerConnsMu.Lock()
+		if d.peerConns[key]--; d.peerConns[key] <= 0 {
+			delete(d.peerConns, key)
+		}
+		d.peerConnsMu.Unlock()
+		d.openPeerConns.Add(-1)
+	}, true
+}
+
+// logPeerRefusal logs a refusal of admitPeer at most once in
+// connRefusedLogEvery, sharing the throttle of admitConnection.
+func (d *Daemon) logPeerRefusal(format string, limit int) {
+	now := time.Now().UnixNano()
+	last := d.connRefusedLog.Load()
+	if now-last >= int64(connRefusedLogEvery) && d.connRefusedLog.CompareAndSwap(last, now) {
+		log.Printf(format, limit)
+	}
 }
 
 // connRefusedLogEvery is the least time between two log lines about refused
