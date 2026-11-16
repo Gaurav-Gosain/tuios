@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# e2e-mixed-versions.sh NEW OLD
+# e2e-mixed-versions.sh NEW OLD [GROUP]
 #
 # Runs the end-to-end tests that pair this build with the previous minor
 # release. The support window is one minor release: a client and a daemon
@@ -10,6 +10,8 @@
 #     attach an OLD client beside NEW ones (TUIOS_E2E_OLD_BIN).
 #   - TestMixedVersionsReshapeOneTree runs twice: an OLD daemon with NEW
 #     clients, and a NEW daemon with one OLD client and one NEW one.
+#
+# GROUP is old-client or tree for one of the two, and both by default.
 #
 # Run it from the repository root. The logs go to $MIXED_LOGS (default
 # .dev/mixed-versions).
@@ -27,18 +29,25 @@ run() { # NAME PATTERN ENV...
 	shift 2
 	if env "$@" go test -count=1 -timeout 15m -v -run "$pattern" . >"$logs/$name.log" 2>&1; then
 		echo "pass: $name"
-	elif env "$@" go test -count=1 -timeout 15m -v -run "$pattern" . >"$logs/$name-retry.log" 2>&1; then
-		# TestMixedVersionsReshapeOneTree loses the split it sends while the
-		# other client resizes in about 1 run of 11 with a mixed pair. The
-		# first log is kept.
-		echo "pass on the second run: $name (first log: $logs/$name.log)"
 	else
 		echo "FAIL: $name (log: $logs/$name.log)"
 		grep -E '^\s*--- FAIL|^\s+\S+_test\.go:[0-9]+:' "$logs/$name.log" | head -40 || true
 		status=1
 	fi
 }
-run old-client '^(TestSubagentListFromHooks|TestPaneUpgradeRunsNoFileWithoutADialog)$' TUIOS_E2E_OLD_BIN="$old"
-run old-daemon '^TestMixedVersionsReshapeOneTree$' TUIOS_E2E_MIX_DAEMON="$old" TUIOS_E2E_MIX_A="$new" TUIOS_E2E_MIX_B="$new"
-run old-and-new-client '^TestMixedVersionsReshapeOneTree$' TUIOS_E2E_MIX_DAEMON="$new" TUIOS_E2E_MIX_A="$old" TUIOS_E2E_MIX_B="$new"
+group=${3:-all}
+case $group in all | old-client | tree) ;; *) echo "unknown group $group: use old-client or tree" >&2; exit 2 ;; esac
+if [ "$group" != tree ]; then
+	run old-client '^(TestSubagentListFromHooks|TestPaneUpgradeRunsNoFileWithoutADialog)
+exit $status
+ TUIOS_E2E_OLD_BIN="$old"
+fi
+if [ "$group" != old-client ]; then
+	run old-daemon '^TestMixedVersionsReshapeOneTree
+exit $status
+ TUIOS_E2E_MIX_DAEMON="$old" TUIOS_E2E_MIX_A="$new" TUIOS_E2E_MIX_B="$new"
+	run old-and-new-client '^TestMixedVersionsReshapeOneTree
+exit $status
+ TUIOS_E2E_MIX_DAEMON="$new" TUIOS_E2E_MIX_A="$old" TUIOS_E2E_MIX_B="$new"
+fi
 exit $status
