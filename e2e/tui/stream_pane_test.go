@@ -1011,16 +1011,11 @@ func (tr *spTranscript) save() {
 // the pane takes its size back a moment after the phone lets go.
 func spWaitPaneSize(t *testing.T, link *phoneLink, tr *spTranscript, window string, cols, rows int) {
 	t.Helper()
-	got := ""
-	for deadline := time.Now().Add(uiTimeout); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+	waitUntil(t, fmt.Sprintf("the pane goes back to %dx%d when the stream closes", cols, rows), uiTimeout, func() (bool, string) {
 		look := link.open(t, true)
 		reply := look.streamPane(t, tr, map[string]any{"session": streamSession, "window": window})
 		look.close()
 		c, r := int(reply["cols"].(float64)), int(reply["rows"].(float64))
-		if c == cols && r == rows {
-			return
-		}
-		got = fmt.Sprintf("%dx%d", c, r)
-	}
-	t.Fatalf("the pane did not go back to %dx%d when the stream closed: it is %s", cols, rows, got)
+		return c == cols && r == rows, fmt.Sprintf("the pane is %dx%d", c, r)
+	})
 }
