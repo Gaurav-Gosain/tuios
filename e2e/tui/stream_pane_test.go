@@ -194,6 +194,11 @@ func TestPhoneStreamsAPaneAndAnswersTheInbox(t *testing.T) {
 		t.Fatalf("a resize under the lease changed the leased pane:\n%s", spScreen(emu))
 	}
 	ps.close()
+	// NEGATIVE CONTROL: cut this wait and send ps a lease frame (L 40x10)
+	// just before the close above. The release then waits out
+	// leaseInterval, the shell reads its size before it, and the check below
+	// fails every run with BACK-10x40.
+	spWaitPaneSize(t, link, tr, w1, 100, 30)
 	spType(t, ctl, w1, "echo BACK-$(stty size | tr ' ' x)\n")
 	if !spShows(t, ctl, w1, "BACK-30x100") {
 		t.Fatalf("the pane did not go back to the size asked for when the stream closed:\n%s", strings.Join(spLines(t, ctl, w1), "\n"))
@@ -998,4 +1003,24 @@ func (tr *spTranscript) save() {
 		return
 	}
 	tr.t.Logf("transcript: %s", path)
+}
+
+// spWaitPaneSize waits until the pane is cols by rows, as a stream that
+// holds no lease reads it. A lease ends when the daemon sees its stream
+// close, and at most leaseInterval after the last resize a lease made, so
+// the pane takes its size back a moment after the phone lets go.
+func spWaitPaneSize(t *testing.T, link *phoneLink, tr *spTranscript, window string, cols, rows int) {
+	t.Helper()
+	got := ""
+	for deadline := time.Now().Add(uiTimeout); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		look := link.open(t, true)
+		reply := look.streamPane(t, tr, map[string]any{"session": streamSession, "window": window})
+		look.close()
+		c, r := int(reply["cols"].(float64)), int(reply["rows"].(float64))
+		if c == cols && r == rows {
+			return
+		}
+		got = fmt.Sprintf("%dx%d", c, r)
+	}
+	t.Fatalf("the pane did not go back to %dx%d when the stream closed: it is %s", cols, rows, got)
 }
