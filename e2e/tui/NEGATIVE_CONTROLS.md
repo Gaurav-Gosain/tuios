@@ -17914,3 +17914,11 @@ Repeat from `e2e/tui` with
 | A shared process is no root | `spawnRootFrom`: `!d.sharedProcess && cur == d.selfPID` made `cur == d.selfPID` | `TestASharedProcessDaemonPlacesOnlyWhatItStarted` ("a child of the shared process is placed inside a pane") | **caught** |
 
 The positive half of the e2e test is the probe before the upgrade, refused while the pane shell is the daemon's child, and the same call from the test process, served. On origin/main the test fails on the probe after the takeover: the hole was there before this change.
+
+## A move while the pane announces folders
+
+`TestMoveKeepsItsWorkspaceWhileThePaneAnnouncesFolders` in `workspace_move_facts_test.go`. The pane's shell reports a new folder every 20 ms, and the move key sends the pane to another workspace. The move must stand.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | origin/main with this branch's e2e directory, which is the `noteTreeOpLocked` call in `PublishLiveFacts` cut | `TestMoveKeepsItsWorkspaceWhileThePaneAnnouncesFolders` ("the session shows workspace 1, want 2"), 11 of 20 | **caught** |

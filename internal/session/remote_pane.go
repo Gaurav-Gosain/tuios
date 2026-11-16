@@ -885,6 +885,13 @@ func (p *remotePane) refreshCwd() {
 // with it. The push is skipped for a version already sent, so a bump is what
 // makes it a push at all, and a version is the honest record anyway: what
 // clients hold afterwards is not what they held before.
+//
+// The version is recorded with the ops that change no tree, so a client push
+// built before it is not stale (see missedMutationLocked). The change is empty,
+// so there is nothing in it a push could undo. Counted as a mutation, it made
+// the stale merge take each window's workspace from the daemon, and a pane
+// moved by a key while its shell reported a new folder went back to the
+// workspace it left.
 func (s *Session) PublishLiveFacts() {
 	// The cached read goes first. liveCwds holds its answer for a second so
 	// the render path does not ask the operating system per frame, and the
@@ -893,7 +900,10 @@ func (s *Session) PublishLiveFacts() {
 	// that same empty answer again, which is the whole reason this was still
 	// broken after the push itself was fixed.
 	s.forgetCwdCache()
-	_ = s.mutateState(func(*SessionState) error { return nil })
+	_ = s.mutateState(func(state *SessionState) error {
+		s.noteTreeOpLocked(state.Version+1, "", treeOpNoWorkspace)
+		return nil
+	})
 }
 
 // remoteForeground is what the far machine says this pane is running, for a
