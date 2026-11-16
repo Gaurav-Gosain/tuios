@@ -448,6 +448,7 @@ func readerPane(out string) string {
 // switch, the switch-off subtest fails: tuios registers. See
 // NEGATIVE_CONTROLS.md.
 func TestDnDDesktopBridge(t *testing.T) {
+	requireReal(t, "real kitty under Xvfb")
 	desk := startDesk(t)
 	kitten := desk.kitten
 
@@ -705,6 +706,7 @@ func osc72(body string) string { return "\x1b]72;" + body + "\x1b\\" }
 // from dndHostWanted, the ssh subtest fails: the client asks. See
 // NEGATIVE_CONTROLS.md.
 func TestDnDBridgeWithAnEmulatedTerminal(t *testing.T) {
+	requireReal(t, "real kitty under Xvfb")
 	file := filepath.Join(t.TempDir(), "dropped.txt")
 	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)

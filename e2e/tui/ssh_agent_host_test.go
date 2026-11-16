@@ -233,6 +233,7 @@ func agentRelay(t *testing.T, agentPath string) string {
 //
 // Negative controls: see NEGATIVE_CONTROLS.md, "The ssh agent link".
 func TestSSHAgentFollowsThroughAHost(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	agent := testAgent(t, "hk549")
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -344,6 +345,7 @@ func farKey(t *testing.T, remote string, term *tuitest.Terminal, want, what stri
 //
 // Negative controls: see NEGATIVE_CONTROLS.md, "The ssh agent link".
 func TestSSHAgentHostLinkFollowsOnlyThatHostsClients(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	agentA := testAgent(t, "ka549")
 	agentB := testAgent(t, "kb549")
 	agentC := testAgent(t, "kc549")
@@ -397,6 +399,7 @@ func TestSSHAgentHostLinkFollowsOnlyThatHostsClients(t *testing.T) {
 // Negative control: with hostForwardsAgent answering yes for every host,
 // plain's ssh starts with its host link.
 func TestSSHAgentLinkLeavesANonForwardingHostAlone(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	own := fakeAgent(t, 0o700)
 	hosts := "\n[hosts.cfg]\naddr = \"fwd@cfgbox\"\ncommand = \"" + tuiosBin + "\"\nconnect_timeout = 5\n" +
 		"\n[hosts.plain]\naddr = \"someone@plainbox\"\ncommand = \"" + tuiosBin + "\"\nconnect_timeout = 5\n"
@@ -433,6 +436,7 @@ func TestSSHAgentLinkLeavesANonForwardingHostAlone(t *testing.T) {
 //
 // Negative controls: see NEGATIVE_CONTROLS.md, "The ssh agent link".
 func TestSSHAgentHostLinkNames(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	own := fakeAgent(t, 0o700)
 	long := strings.Repeat("longhost", 8) + "abcdef"
 	base := t.TempDir()

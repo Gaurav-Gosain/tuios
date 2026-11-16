@@ -168,6 +168,7 @@ func dropAt(t *testing.T, term *tuitest.Terminal, col, row int) {
 }
 
 func TestDnDBetweenPanes(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	bin := buildDnDPeer(t)
 
 	t.Run("source to target over the protocol", func(t *testing.T) {
@@ -413,6 +414,7 @@ func TestDnDBetweenPanes(t *testing.T) {
 // never shows, the crash overlay does, and the desktop drag never starts.
 // See NEGATIVE_CONTROLS.md.
 func TestDnDLabelNamesEachPathOfALine(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	bin := buildDnDPeer(t)
 
 	for _, tc := range []struct {
@@ -511,6 +513,7 @@ func TestDnDLabelNamesEachPathOfALine(t *testing.T) {
 // suite. The kitten copies a dropped text/uri-list into its directory, which is
 // the artifact: the file exists on the other side, made by the kitten alone.
 func TestDnDRealPrograms(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	yazi, kitten := os.Getenv("TUIOS_E2E_YAZI"), os.Getenv("TUIOS_E2E_KITTEN")
 	if yazi == "" {
 		t.Skip("TUIOS_E2E_YAZI is not set")
@@ -619,6 +622,7 @@ var (
 // the two-client subtest fails: the peers get two answers to t=q and an EPERM
 // from the client that did not make the drag. See NEGATIVE_CONTROLS.md.
 func TestDnDRegistrationOutlivesTheClient(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	bin := buildDnDPeer(t)
 
 	// peers starts a target in the right pane and a source in the left one.
@@ -719,6 +723,7 @@ func TestDnDRegistrationOutlivesTheClient(t *testing.T) {
 // Negative control: with dndPaneLocal reporting true for every pane, the
 // source is offered the drag and the test fails. See NEGATIVE_CONTROLS.md.
 func TestDnDRefusesPanesOnAnotherMachine(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	bin := buildDnDPeer(t)
 	base := t.TempDir()
 	remote := remoteMachine(t)
@@ -792,6 +797,7 @@ func TestDnDRefusesPanesOnAnotherMachine(t *testing.T) {
 // the hosted pane is sent the drag and the test fails. See
 // NEGATIVE_CONTROLS.md.
 func TestDnDRefusesAPaneHostedElsewhere(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	bin := buildDnDPeer(t)
 	base := t.TempDir()
 	remote := remoteMachine(t)
@@ -893,6 +899,7 @@ func TestDnDRefusesAPaneHostedElsewhere(t *testing.T) {
 // check in the daemon's fact() cut, the second fails the same way. See
 // NEGATIVE_CONTROLS.md.
 func TestDnDRegistrationEndsWithItsProgram(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	bin := buildDnDPeer(t)
 
 	// doomed starts a target peer in pane whose pid is written to a file, so

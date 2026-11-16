@@ -147,6 +147,7 @@ func daemonLogOf(t *testing.T, base string) string {
 // no keeper afterwards would say nothing, since a search that matched nothing
 // would pass too.
 func TestDaemonUpgradeKeeperStandsDown(t *testing.T) {
+	requireReal(t, "live upgrade execs a new binary")
 	base := t.TempDir()
 	startHandoffDaemon(t, base)
 	second := copyTuios(t)
@@ -216,6 +217,7 @@ func TestDaemonUpgradeKeeperStandsDown(t *testing.T) {
 // the restored image's stderr is the daemon log, as the first daemon's is, so
 // a panic in it leaves a trace; and no keeper is left.
 func TestDaemonUpgradeSurvivesACrashOfTheNewImage(t *testing.T) {
+	requireReal(t, "live upgrade execs a new binary")
 	for _, tc := range []struct {
 		name   string
 		env    []string

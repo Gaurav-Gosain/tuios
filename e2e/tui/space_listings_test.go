@@ -82,6 +82,7 @@ func savedListing(t *testing.T, base string, args ...string) string {
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Spaces in the saved and
 // --all-hosts listings").
 func TestSavedLsGroupsSessionsBySpace(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	base := t.TempDir()
 	killDaemon(t, base)
 
@@ -213,6 +214,7 @@ func hostSections(out string, hosts []string) map[string][]string {
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Spaces in the saved and
 // --all-hosts listings").
 func TestAllHostsLsGroupsEachHostBySpace(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	ssh := writeFakeSSHTo(t, base, remote)
@@ -303,6 +305,7 @@ func TestAllHostsLsGroupsEachHostBySpace(t *testing.T) {
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Spaces in the saved and
 // --all-hosts listings").
 func TestSpacelessListingsAreUnchanged(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	baseline := os.Getenv("TUIOS_E2E_BASELINE_BIN")
 	if baseline == "" {
 		t.Skip("TUIOS_E2E_BASELINE_BIN is not set: build tuios from upstream main and name it there")

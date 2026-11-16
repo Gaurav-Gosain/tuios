@@ -236,6 +236,7 @@ func pacingLog(t *testing.T, base string) []string {
 // rate. The stopped client skips the frames it missed, and when it reads again
 // it gets whole frames: no image data printed as text, and no image deleted.
 func TestKittyStuckClientDoesNotSlowTheOthers(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base, fast, count := startPacedGuest(t, "b64")
 	stuck := attachPacingClient(t, base, "pacing")
 	t.Cleanup(stuck.resume)
@@ -312,6 +313,7 @@ func TestKittyStuckClientDoesNotSlowTheOthers(t *testing.T) {
 // that is not: a pane that is not held is held for none of it, and this is well
 // under the least seen and well over the 123 ms of a reading client.
 func TestKittySlowClientHoldsTheGuest(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base, client, count := startPacedGuest(t, "b64")
 
 	const window = 3 * time.Second
@@ -353,6 +355,7 @@ const pacingReportWait = 2500 * time.Millisecond
 // floods text and draws no graphics. A text pane is read as before: the guest
 // is never held, whatever its clients do.
 func TestTextFloodPaneIsNeverHeld(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base, client, count := startPacedGuest(t, "text")
 
 	const window = 3 * time.Second
@@ -400,6 +403,7 @@ func dutyCycle(c *pacingClient, stopped, running time.Duration, done <-chan stru
 // client printed the image data into the pane as text. A gapped stream resumes
 // the same way. Each attach lands at a new point in the stream.
 func TestKittyAttachDuringAStreamPrintsNoImageData(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base, _, count := startPacedGuest(t, "b64")
 	const attaches = 16
 	for i := range attaches {

@@ -47,6 +47,7 @@ import (
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "The new-session verb gives
 // its session the caller's terminal").
 func TestVerbNewSessionGivesItsPaneTheCallersTerm(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	const session = "e2e-verb-term"
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -83,6 +84,7 @@ func TestVerbNewSessionGivesItsPaneTheCallersTerm(t *testing.T) {
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "An attached tuios new
 // gives its session the caller's terminal").
 func TestAttachedNewGivesItsPaneTheCallersTerm(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	const session = "e2e-attach-term"
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -165,6 +167,7 @@ func readPaneTerm(t *testing.T, base string, env []string, session string) (pane
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "The new-session verb gives
 // its session the caller's terminal").
 func TestStartAgentGivesItsSessionTheCallersTerm(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	const session = "e2e-agent-term"
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -225,6 +228,7 @@ func TestStartAgentGivesItsSessionTheCallersTerm(t *testing.T) {
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "The new-session verb gives
 // its session the caller's terminal").
 func TestWorktreeNewGivesItsSessionTheCallersTerm(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	base := t.TempDir()
 	killDaemon(t, base)
 	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
@@ -280,6 +284,7 @@ func TestWorktreeNewGivesItsSessionTheCallersTerm(t *testing.T) {
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "The new-session verb gives
 // its session the caller's terminal").
 func TestVerbCommandsReachAnOlderDaemon(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	baseline := os.Getenv("TUIOS_E2E_BASELINE_BIN")
 	if baseline == "" {
 		t.Skip("TUIOS_E2E_BASELINE_BIN is not set: build tuios from upstream main, before hello took term, and name it there")

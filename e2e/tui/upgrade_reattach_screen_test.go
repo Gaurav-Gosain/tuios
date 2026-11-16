@@ -80,6 +80,7 @@ while True:
 //   - a handler that never ran would record nothing either way. The
 //     negative control records the sizes it logged on a build that resized.
 func TestUpgradeReattachLeavesAltScreenPaneAlone(t *testing.T) {
+	requireReal(t, "live upgrade execs a new binary")
 	base := t.TempDir()
 	startHandoffDaemon(t, base)
 	second := copyTuios(t)

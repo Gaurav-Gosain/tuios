@@ -333,6 +333,7 @@ func checkRailReads(t *testing.T, term *tuitest.Terminal, ground color.Color, wh
 // the rail's names measure about 1.1:1 on the light ground, and the test
 // fails on both.
 func TestHostColorsReachPanesAndChrome(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	for _, depth := range []hostDepth{
 		{name: "truecolor", env: []string{"COLORTERM=truecolor"}, contrast: true, ramp: true},
 		{name: "256", contrast: true},
@@ -524,6 +525,7 @@ func hostColorsAt(t *testing.T, depth hostDepth) {
 // This guards a fallback rather than a fix: a build without the host colour
 // work passes it too, and that is the point.
 func TestHostColorsSilentTerminal(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	killDaemon(t, base)
 	host := buildHostTerm(t)
@@ -575,6 +577,7 @@ func TestHostColorsSilentTerminal(t *testing.T) {
 // answer is the emulator's own (rgb:0000/0000/0000 for OSC 11), and the test
 // fails.
 func TestThemedDaemonPaneReportsTheTheme(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	killDaemon(t, base)
 	host := buildHostTerm(t)
@@ -728,6 +731,7 @@ func omarchySwitch(t *testing.T, base, id string) {
 // notice arrives. With the notice sent only on a dark and light flip, the
 // Gruvbox step gets no notice.
 func TestOmarchyThemeSwitchIsFollowed(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	killDaemon(t, base)
 	host := buildHostTerm(t)
@@ -854,6 +858,7 @@ func TestOmarchyThemeSwitchIsFollowed(t *testing.T) {
 // dialog surface came from the host. The empty-theme run is the control in
 // the same test: the same host, the same dialog, and no green.
 func TestThemeNoneMatchesTheTerminal(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	const hostBg, hostFg = "#0f2a14", "#d0e8d0"
 	green := func(c tuitest.Color) bool {
 		return c.Kind == tuitest.ColorRGB && int(c.G) > int(c.R)+8 && int(c.G) > int(c.B)+8
@@ -905,6 +910,7 @@ func TestThemeNoneMatchesTheTerminal(t *testing.T) {
 // tuios theme export reports for that theme, so a red from the wrong theme,
 // or the terminal's own, fails.
 func TestThemePairFollowsTheTerminal(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	host := buildHostTerm(t)
 	writeConfig(t, base, "[appearance]\ntheme = \"nord\"\ntheme_light = \"catppuccin_latte\"\n")

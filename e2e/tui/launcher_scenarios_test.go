@@ -207,6 +207,7 @@ func (f *launcherFixture) waitClosed(t *testing.T, what string) {
 // --- close paths -----------------------------------------------------------
 
 func TestLauncherIconsCloseByEscape(t *testing.T) {
+	requireReal(t, "real kitty under Xvfb")
 	f := newLauncherFixture(t, 20)
 	f.openWithQuery(t, "zzapp", 3)
 	f.nudgeSelection()
@@ -220,6 +221,7 @@ func TestLauncherIconsCloseByEscape(t *testing.T) {
 }
 
 func TestLauncherIconsCloseByEnter(t *testing.T) {
+	requireReal(t, "real kitty under Xvfb")
 	f := newLauncherFixture(t, 20)
 	f.openWithQuery(t, "zzapp", 3)
 	f.nudgeSelection()
@@ -233,6 +235,7 @@ func TestLauncherIconsCloseByEnter(t *testing.T) {
 }
 
 func TestLauncherIconsCloseByTab(t *testing.T) {
+	requireReal(t, "real kitty under Xvfb")
 	f := newLauncherFixture(t, 20)
 	f.openWithQuery(t, "zzapp", 3)
 	f.nudgeSelection()
@@ -249,6 +252,7 @@ func TestLauncherIconsCloseByTab(t *testing.T) {
 // mouse rather than a key, which is a different function and so a different
 // chance to skip the cleanup.
 func TestLauncherIconsCloseByClickAway(t *testing.T) {
+	requireReal(t, "real kitty under Xvfb")
 	f := newLauncherFixture(t, 20)
 	f.openWithQuery(t, "zzapp", 3)
 	f.nudgeSelection()
@@ -264,6 +268,7 @@ func TestLauncherIconsCloseByClickAway(t *testing.T) {
 // once, so the pane the launch created goes away in the same breath as the
 // panel that launched it.
 func TestLauncherIconsCloseByShortLivedProgram(t *testing.T) {
+	requireReal(t, "real kitty under Xvfb")
 	f := newLauncherFixture(t, 20)
 	plantExitingApp(t, f.base)
 
@@ -293,6 +298,7 @@ func TestLauncherIconsCloseByShortLivedProgram(t *testing.T) {
 // TestLauncherIconsEmptyQuery is the launcher as it opens, with every program
 // on offer and no query at all.
 func TestLauncherIconsEmptyQuery(t *testing.T) {
+	requireReal(t, "real kitty under Xvfb")
 	f := newLauncherFixture(t, 20)
 	f.openWithQuery(t, "", 0)
 	// With no query there is no row to wait for by name, so the scan landing
@@ -316,6 +322,7 @@ func TestLauncherIconsEmptyQuery(t *testing.T) {
 // TestLauncherIconsNoMatchQuery narrows to nothing, which replaces every row
 // with one line of prose. Every icon that was under those rows has to go.
 func TestLauncherIconsNoMatchQuery(t *testing.T) {
+	requireReal(t, "real kitty under Xvfb")
 	f := newLauncherFixture(t, 20)
 	f.openWithQuery(t, "zzapp", 3)
 	f.nudgeSelection()
@@ -356,6 +363,7 @@ func TestLauncherIconsNoMatchQuery(t *testing.T) {
 // in flight, which the varied sleep is for: it widens the churn and gates no
 // assertion.
 func TestLauncherIconsClosedDuringScan(t *testing.T) {
+	requireReal(t, "real kitty under Xvfb")
 	hold := filepath.Join(t.TempDir(), "hold-scan")
 	if err := os.WriteFile(hold, nil, 0o644); err != nil {
 		t.Fatalf("hold-scan file: %v", err)
@@ -392,6 +400,7 @@ func TestLauncherIconsClosedDuringScan(t *testing.T) {
 // scroll in and out repeatedly, then closes. Every row that leaves has to take
 // its picture with it.
 func TestLauncherIconsSurviveQueryChanges(t *testing.T) {
+	requireReal(t, "real kitty under Xvfb")
 	f := newLauncherFixture(t, 20)
 	f.openWithQuery(t, "zzapp", 3)
 	f.nudgeSelection()
@@ -447,6 +456,7 @@ func TestLauncherIconsSurviveQueryChanges(t *testing.T) {
 // TestLauncherIconsSurviveScrolling walks the selection far enough that the
 // scroll window moves repeatedly, placing and unplacing icons as it goes.
 func TestLauncherIconsSurviveScrolling(t *testing.T) {
+	requireReal(t, "real kitty under Xvfb")
 	f := newLauncherFixture(t, 40)
 	f.openWithQuery(t, "zzapp", 3)
 	f.nudgeSelection()
@@ -474,6 +484,7 @@ func TestLauncherIconsSurviveScrolling(t *testing.T) {
 // be left standing between runs, and the image ids may not climb without bound:
 // an upload is meant to be reused, not repeated per open.
 func TestLauncherIconsDoNotAccumulate(t *testing.T) {
+	requireReal(t, "real kitty under Xvfb")
 	f := newLauncherFixture(t, 20)
 	for i := range 5 {
 		f.openWithQuery(t, "zzapp", 3)
@@ -499,6 +510,7 @@ func TestLauncherIconsDoNotAccumulate(t *testing.T) {
 // check: with kitty graphics off there is no icon column and no escape at all,
 // and every close path still has to leave the screen clean.
 func TestLauncherDrawsNoIconsWithoutGraphics(t *testing.T) {
+	requireReal(t, "real kitty under Xvfb")
 	f := newLauncherFixture(t, 20, "TUIOS_KITTY_GRAPHICS=0")
 	for _, closer := range []struct {
 		name string
@@ -587,6 +599,7 @@ func heldShell(t *testing.T, hold string) string {
 // before the shell exists, and the shell's line editor still has to pick it
 // up when it arrives.
 func TestLauncherTypesOutIntoASpawningPane(t *testing.T) {
+	requireReal(t, "real kitty under Xvfb")
 	dir := writeProbe(t)
 	hold := filepath.Join(t.TempDir(), "hold-shell")
 	if err := os.WriteFile(hold, nil, 0o644); err != nil {
@@ -632,6 +645,7 @@ func TestLauncherTypesOutIntoASpawningPane(t *testing.T) {
 // and its naming as two separate states, so the client adopted it unnamed and
 // nothing ever matched.
 func TestLauncherTypesOutIntoADaemonPane(t *testing.T) {
+	requireReal(t, "real kitty under Xvfb")
 	dir := writeProbe(t)
 	// The daemon spawns the pane's shell from its own environment, and this
 	// path types a bare name for that shell to resolve, so the probe has to be
@@ -683,6 +697,7 @@ func TestLauncherTypesOutIntoADaemonPane(t *testing.T) {
 // panel. The launcher's own icons are drawn over that, and every open has to
 // take its own pictures down again whatever the panes below are doing.
 func TestLauncherIconsWithABusyNeighbour(t *testing.T) {
+	requireReal(t, "real kitty under Xvfb")
 	stream := &hostStream{}
 	base := t.TempDir()
 	plantApps(t, base, 20)
@@ -740,6 +755,7 @@ func TestLauncherIconsWithABusyNeighbour(t *testing.T) {
 // it says nothing about a switch made on the launcher's behalf, and waiting for
 // it fails against a build where the mode is perfectly correct.
 func TestLauncherLeavesTheRightModeBehind(t *testing.T) {
+	requireReal(t, "real kitty under Xvfb")
 	dir := writeArgProbe(t)
 	term, _ := start(t, startOpts{
 		args: []string{"--standalone"},
@@ -828,6 +844,7 @@ func openAndRace(t *testing.T, term *tuitest.Terminal, query string, key tuitest
 // rightly closed. Held, the ordering is guaranteed on any machine, however
 // fast its filesystem or slow its PTY.
 func TestVerbBeforeTheScanLands(t *testing.T) {
+	requireReal(t, "real kitty under Xvfb")
 	for _, verb := range []struct {
 		name string
 		key  tuitest.Key
@@ -896,6 +913,7 @@ func TestVerbBeforeTheScanLands(t *testing.T) {
 // landed and the query matches none of it. Dismissing the panel there throws
 // away a query the user is part way through typing, so it stays up and says so.
 func TestVerbOnAQueryThatMatchesNothing(t *testing.T) {
+	requireReal(t, "real kitty under Xvfb")
 	dir := writeProbe(t)
 	term, _ := start(t, startOpts{
 		cols: 160, rows: 45,
@@ -934,6 +952,7 @@ func TestVerbOnAQueryThatMatchesNothing(t *testing.T) {
 // screen and the placements go with it. The real pixels were checked in a kitty
 // under Xvfb: see NEGATIVE_CONTROLS.md.
 func TestLauncherIconsSurviveAResize(t *testing.T) {
+	requireReal(t, "real kitty under Xvfb")
 	f := newLauncherFixture(t, 4, "TUIOS_CELL_SIZE=10x20")
 	f.openWithQuery(t, "zzapp", 4)
 	f.nudgeSelection()

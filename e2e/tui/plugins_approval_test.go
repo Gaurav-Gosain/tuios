@@ -164,6 +164,7 @@ run approve "$T" plugins approve e2e.writer --deny --yes
 // type admin for a plugin that asks for it, are refused. A changed grant in
 // the manifest asks again.
 func TestNativePluginApproval(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	ids := approvalSession(t, base, 5)
 	shellW, promptW, raceW, raceAskW, raceRunW := ids[0], ids[1], ids[2], ids[3], ids[4]
@@ -394,6 +395,7 @@ func TestNativePluginApproval(t *testing.T) {
 // it. It cannot act as the person, so it approves and disables nothing. A
 // token that does not prove the plugin fails the CLI.
 func TestPluginTokenHoldsTheCaller(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	approvalSession(t, base, 1)
 	approvalPlugin(t, base, "e2e.tok", "Token probe", `"read"`, `printf '%s\n%s\n' "$TUIOS_PLUGIN_ID" "$TUIOS_PLUGIN_TOKEN" >"$HERDR_PLUGIN_STATE_DIR/token"
@@ -455,6 +457,7 @@ sleep 120
 // daemon it starts, nor under a --server that names no daemon. Every daemon
 // that runs is asked whether the caller is the person.
 func TestPluginApprovalAsksEveryDaemon(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	ids := approvalSession(t, base, 1)
 	approvalPlugin(t, base, "e2e.victim", "Victim", `"admin"`, "sleep 1\n")
@@ -488,6 +491,7 @@ func TestPluginApprovalAsksEveryDaemon(t *testing.T) {
 // the grants and the answers off the screen. Control characters are dropped
 // and the name line is cut, on a 24-row terminal.
 func TestPluginApprovalDialogFits(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	approvalSession(t, base, 1)
 	long := strings.Repeat("It can use tuios only for what every pane may do. ", 30)
@@ -558,6 +562,7 @@ open(os.path.join(d, mode + ".out"), "w").write(call(2, "list-sessions"))
 // token cut from their environment, so only the kernel's answer at connect
 // places them.
 func TestPluginStopHoldsItsProcesses(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	approvalSession(t, base, 1)
 	sock := filepath.Join(xdgDir(base, "XDG_RUNTIME_DIR"), "tuios", "tuios.sock")

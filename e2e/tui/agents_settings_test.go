@@ -234,6 +234,7 @@ func openAgentsTab(t *testing.T, term *tuitest.Terminal) {
 // key, reads the out of date Claude Code integration off it, updates it with a
 // click and enter, and then uninstalls it, reading the file on disk after each.
 func TestAgentsSettingsUpdatesAndUninstalls(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base, settings := agentsPageFixture(t, false)
 	term := attachIn(t, base, "agents", startOpts{cols: 120, rows: 40, shippedLooks: true})
 	want := claudeIntegrationVersion(t, base).WantVersion
@@ -369,6 +370,7 @@ const integrationNotice = "Claude Code integration is out of date."
 // nothing, Install writes the hooks, and the toast does not come back for a
 // second pane.
 func TestAgentsIntegrationNoticeOncePerRun(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base, _ := agentsPageFixture(t, false)
 	term := attachIn(t, base, "agents", startOpts{cols: 120, rows: 40, shippedLooks: true})
 
@@ -621,6 +623,7 @@ func installFromTheNotice(t *testing.T) {
 // tab. The positive half is TestAgentsSettingsUpdatesAndUninstalls, the same
 // fixture with the switch on.
 func TestAgentsSettingsHiddenWithAgentsOff(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base, _ := agentsPageFixture(t, true)
 	term := attachIn(t, base, "agents", startOpts{cols: 120, rows: 40, shippedLooks: true})
 	if err := term.SendKeys(tuitest.Ctrl('b'), "A"); err != nil {
@@ -653,6 +656,7 @@ func TestAgentsSettingsHiddenWithAgentsOff(t *testing.T) {
 // TestAgentsSettingsHiddenWithAgentsOff: with the features on, the same two
 // steps back from the first tab land on the Agents tab.
 func TestAgentsSettingsTabBeforeTape(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base, _ := agentsPageFixture(t, false)
 	term := attachIn(t, base, "agents", startOpts{cols: 120, rows: 40, shippedLooks: true})
 	// The prefix menu lists the key. This is the positive half of the SSH
@@ -696,6 +700,7 @@ func TestAgentsSettingsTabBeforeTape(t *testing.T) {
 // the fix the update wrote a bare "tuios", which need not be on the
 // harness's PATH.
 func TestAgentsSettingsKeepsTheCommandPath(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	t.Run("current", func(t *testing.T) {
 		base, _ := agentsFixtureWith(t, agentsFixture{command: tuiosBin})
 		term := attachIn(t, base, "agents", startOpts{cols: 120, rows: 40, shippedLooks: true})
@@ -815,6 +820,7 @@ func sshTUI(t *testing.T, base string) *tuitest.Terminal {
 // (menu and tab) and TestAgentsIntegrationNoticeOncePerRun (palette), with a
 // local client on the same fixture.
 func TestAgentsSettingsAbsentOverSSH(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	if _, err := exec.LookPath("ssh"); err != nil {
 		t.Skip("no ssh client")
 	}
@@ -959,6 +965,7 @@ func clickNoticeDismiss(t *testing.T, term *tuitest.Terminal, text string) {
 // TestAgentsIntegrationNoticeOncePerRun: a new client shows the toast when no
 // click stored its dismissal.
 func TestAgentsNoticeOutlastsAnEsc(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base, _ := agentsPageFixture(t, false)
 	term := attachIn(t, base, "agents", startOpts{cols: 120, rows: 40, shippedLooks: true})
 	enterTerminalMode(t, term)

@@ -90,6 +90,7 @@ func childCommands(t *testing.T, pid int) []string {
 // the daemon kept its pid and runs the copy, every pane kept its process, and
 // the command's own report names the panes and the new image.
 func TestDaemonUpgradeCommandKeepsPanes(t *testing.T) {
+	requireReal(t, "live upgrade execs a new binary")
 	base := t.TempDir()
 	startHandoffDaemon(t, base)
 	second := copyTuios(t)
@@ -155,6 +156,7 @@ func TestDaemonUpgradeCommandKeepsPanes(t *testing.T) {
 // draws the pane as it was. A line typed at the client then reaches the shell,
 // whose pid the upgrade kept.
 func TestAttachedClientFollowsDaemonUpgrade(t *testing.T) {
+	requireReal(t, "live upgrade execs a new binary")
 	base := t.TempDir()
 	startHandoffDaemon(t, base)
 	second := copyTuios(t)
@@ -230,6 +232,7 @@ func TestAttachedClientFollowsDaemonUpgrade(t *testing.T) {
 // running and how to attach again, with status 0 and not the daemon-lost
 // failure.
 func TestAttachedClientIsToldToReattach(t *testing.T) {
+	requireReal(t, "live upgrade execs a new binary")
 	base := t.TempDir()
 	startHandoffDaemon(t, base)
 	other := otherProtocolTuios(t)
@@ -362,6 +365,7 @@ func buildOtherProtocol() (string, error) {
 // the link is up after the upgrade, and the daemon has exactly one ssh child
 // for it, none left over from the old image, alive or not.
 func TestFederationLinkRedialsAfterUpgrade(t *testing.T) {
+	requireReal(t, "live upgrade execs a new binary")
 	base := t.TempDir()
 	ssh := writeFakeSSH(t, base)
 	env := []string{"TUIOS_SSH=" + ssh}
@@ -415,6 +419,7 @@ func TestFederationLinkRedialsAfterUpgrade(t *testing.T) {
 // it has to carry --server, because a bare `tuios restart-server` restarts
 // the default daemon and stops every program running in it.
 func TestDaemonUpgradeRefusalNamesTheServer(t *testing.T) {
+	requireReal(t, "live upgrade execs a new binary")
 	base := t.TempDir()
 	const server = "e2e-upname"
 	if out, err := handoffCLI(t, base, 30*time.Second, "--server", server, "start-server"); err != nil {
@@ -447,6 +452,7 @@ func TestDaemonUpgradeRefusalNamesTheServer(t *testing.T) {
 // half: the same script, writable only by its owner, is run (its marker
 // exists) and refused as no tuios.
 func TestDaemonUpgradeCommandChecksTheBinaryFirst(t *testing.T) {
+	requireReal(t, "live upgrade execs a new binary")
 	base := t.TempDir()
 	startHandoffDaemon(t, base)
 	bin := filepath.Join(t.TempDir(), "tuios")
@@ -493,6 +499,7 @@ func TestDaemonUpgradeCommandChecksTheBinaryFirst(t *testing.T) {
 // The daemon's image must not change, and the same upgrade from outside every
 // pane must go through.
 func TestDaemonUpgradeFromAPaneIsRefused(t *testing.T) {
+	requireReal(t, "live upgrade execs a new binary")
 	base := t.TempDir()
 	startHandoffDaemon(t, base)
 	const sess = "e2e-upgrade-from-pane"
@@ -590,6 +597,7 @@ func writeChainAgent(t *testing.T, base string) string {
 // live upgrade, a closed parent must read gone, and the links must hold
 // across a restart that restores the session.
 func TestAgentParentLinkSurvivesUpgradeAndRestart(t *testing.T) {
+	requireReal(t, "live upgrade execs a new binary")
 	base := t.TempDir()
 	startHandoffDaemon(t, base)
 	const sess = "e2e-link"

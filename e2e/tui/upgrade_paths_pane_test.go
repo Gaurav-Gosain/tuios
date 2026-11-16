@@ -115,6 +115,7 @@ func (r *paneSyncRig) waitDialog(t *testing.T, term *tuitest.Terminal, name stri
 // client says Yes, and the daemon is upgraded live: the same pid, the new
 // version, running the binary sync installed, and every pane's program kept.
 func TestHostsSyncInAPaneUpgradesLiveAfterYes(t *testing.T) {
+	requireReal(t, "live upgrade execs a new binary")
 	r := newPaneSyncRig(t)
 	term := r.attach(t)
 	done := r.sync(t)
@@ -151,6 +152,7 @@ func TestHostsSyncInAPaneUpgradesLiveAfterYes(t *testing.T) {
 // still runs the old version, and how to move it. The first run installs the
 // binary, so the second takes sync's restart-only path.
 func TestHostsSyncInAPaneLeavesTheDaemonWithoutYes(t *testing.T) {
+	requireReal(t, "live upgrade execs a new binary")
 	r := newPaneSyncRig(t)
 	runs := map[string]paneSyncRun{}
 	runs["no client"] = r.sync(t)()
@@ -196,6 +198,7 @@ func TestHostsSyncInAPaneLeavesTheDaemonWithoutYes(t *testing.T) {
 // says the daemon was not restarted, and the daemon and its panes are as
 // they were.
 func TestOrRestartFromAPaneNeverRestarts(t *testing.T) {
+	requireReal(t, "live upgrade execs a new binary")
 	r := newConfirmRig(t, "e2e-or-restart-pane")
 	panes := panePIDs(t, r.base, r.sess)
 	_ = mustCall(t, r.base, "send-text", map[string]any{"session": r.sess, "window": r.agent,
@@ -221,6 +224,7 @@ func TestOrRestartFromAPaneNeverRestarts(t *testing.T) {
 // daemon as it is for any refusal from a pane: the command fails, says the
 // daemon was not restarted, and the daemon and its panes are as they were.
 func TestOrRestartFromAPaneNeverRestartsForABinaryItCannotUpgradeTo(t *testing.T) {
+	requireReal(t, "live upgrade execs a new binary")
 	r := newConfirmRig(t, "e2e-or-restart-pane-binary")
 	bin := writeTuiosScript(t, `if [ "$1 $2" = "daemon handoff-accepts" ]; then echo "no handoff here" >&2; exit 1; fi
 exec '`+tuiosBin+`' "$@"

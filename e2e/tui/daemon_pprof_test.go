@@ -14,6 +14,7 @@ import (
 // the process a memory question is about; --pprof was a persistent flag that
 // "tuios daemon" accepted and ignored.
 func TestDaemonServesPprof(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	base := t.TempDir()
 	env := os.Environ()
 	for _, key := range xdgKeys {
@@ -55,6 +56,7 @@ func TestDaemonServesPprof(t *testing.T) {
 // the flag has to be handed on: the process it was given to is gone by the
 // time anyone asks for a profile.
 func TestStartServerPassesPprofToTheDaemon(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	base := t.TempDir()
 	killDaemon(t, base)
 	addr := fmt.Sprintf("127.0.0.1:%d", freePort(t))

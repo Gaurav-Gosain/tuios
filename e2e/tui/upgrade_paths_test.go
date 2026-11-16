@@ -111,6 +111,7 @@ func changedPIDs(before, after map[string]int) []string {
 // The tuios this machine's PATH finds is a copy under the isolation root, and
 // PATH holds nothing else that has one, so the local probe can only find it.
 func TestHostsSyncLocalUpgradesTheNamedServerLive(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	next := syncNextBinary(t)
 	f := newSyncFleet(t, nil, nil)
 	const server = "e2e-lhsync"
@@ -181,6 +182,7 @@ func TestHostsSyncLocalUpgradesTheNamedServerLive(t *testing.T) {
 // predates live upgrades. The session comes back on a new daemon of the new
 // version.
 func TestHostsSyncRestartsADaemonThatPredatesLiveUpgrades(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	baseline := os.Getenv("TUIOS_E2E_BASELINE_BIN")
 	if baseline == "" {
 		t.Skip("TUIOS_E2E_BASELINE_BIN is not set: build tuios from upstream main, which has no live upgrades, and name it there")
@@ -239,6 +241,7 @@ func TestHostsSyncRestartsADaemonThatPredatesLiveUpgrades(t *testing.T) {
 // person's own /tmp/tuios-<uid>, so the test refuses to run unless the
 // variable it passes is the isolation root's.
 func TestInstallScriptUpgradesTheDaemonLive(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	base := remoteMachine(t)
 	runtimeDir := xdgDir(base, "XDG_RUNTIME_DIR")
 	if !strings.HasPrefix(runtimeDir, base+string(filepath.Separator)) && !strings.HasPrefix(runtimeDir, shortRuntimeRoot+string(filepath.Separator)) {
@@ -315,6 +318,7 @@ func firstOutputLine(s string) string {
 // with the binary, say so, and leave the default server alone: no daemon may
 // be running there afterwards.
 func TestDaemonUpgradeOrRestartStartsTheNamedServer(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	base := remoteMachine(t)
 	const server = "e2e-lhstart"
 	stopServerAtEnd(t, base, server)
@@ -348,6 +352,7 @@ func TestDaemonUpgradeOrRestartStartsTheNamedServer(t *testing.T) {
 // live, and that daemon refuses. sync must install the binary, leave the
 // daemon running with its pane, and say why.
 func TestHostsSyncInAPaneLeavesADaemonItCannotUpgrade(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	baseline := os.Getenv("TUIOS_E2E_BASELINE_BIN")
 	if baseline == "" {
 		t.Skip("TUIOS_E2E_BASELINE_BIN is not set: build tuios from upstream main, which has no live upgrades, and name it there")
@@ -400,6 +405,7 @@ func TestHostsSyncInAPaneLeavesADaemonItCannotUpgrade(t *testing.T) {
 // would end programs that are still running for a failure that needs reading:
 // sync must not restart it, and must fail the host saying the daemon went back.
 func TestHostsSyncReportsAFallbackAndDoesNotRestart(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	next := syncNextBinary(t)
 	f := newSyncFleet(t, []string{"old"}, nil)
 	old := f.hosts["old"]
@@ -441,6 +447,7 @@ func TestHostsSyncReportsAFallbackAndDoesNotRestart(t *testing.T) {
 // must never run (its marker must not exist), the running daemon must keep
 // its pid and instance, and where none ran none may be started.
 func TestOrRestartNeverRunsABinaryOthersCanWrite(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	const want = "can be written by its group or by others (mode 0777), so this daemon will not run it"
 	bin := filepath.Join(t.TempDir(), "tuios")
 	marks := t.TempDir()
@@ -539,6 +546,7 @@ func orRestartJSON(t *testing.T, base, bin string) (map[string]any, string, erro
 // The other stops nothing and starts nothing, so the old daemon still
 // answers. Each run must fail, and say so: never action "restarted".
 func TestOrRestartSaysRestartedOnlyWhenANewDaemonAnswers(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	fake := func(kill string) string {
 		return writeTuiosScript(t, `case "$1" in
 --version) echo "tuios version v99.0.0" ;;
@@ -581,6 +589,7 @@ esac
 // writes a marker when it runs. The restart must refuse before kill-server:
 // the marker must not exist, and the daemon must keep its pid and instance.
 func TestOrRestartNeverRunsAFileSwappedInBetweenItsRuns(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	marker := filepath.Join(t.TempDir(), "swapped-ran")
 	swap := writeTuiosScript(t, `echo ran >>'`+marker+`'
 exit 0

@@ -121,6 +121,7 @@ func breakTheLink(t *testing.T) {
 // The wait is longer than that window on purpose. A session that survives
 // twenty-five seconds of a pane printing has passed the deadline twice over.
 func TestAHostSessionStaysAttached(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	ssh := writeFakeSSHTo(t, base, remote)
@@ -162,6 +163,7 @@ func TestAHostSessionStaysAttached(t *testing.T) {
 // in one line, and when the link is back the pane is live: a command typed
 // after the reconnect runs on the far machine and its output is drawn here.
 func TestALinkThatDropsIsDialedAgainAndThePaneComesBack(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	ssh := writeFakeSSHTo(t, base, remote)
@@ -230,6 +232,7 @@ func TestALinkThatDropsIsDialedAgainAndThePaneComesBack(t *testing.T) {
 // history, which is the same as losing their place. Coming back on the pane
 // they already had, with only the missing rows asked for, keeps it.
 func TestAScrolledPaneIsStillScrolledAfterAReconnect(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	ssh := writeFakeSSHTo(t, base, remote)
@@ -279,6 +282,7 @@ func TestAScrolledPaneIsStillScrolledAfterAReconnect(t *testing.T) {
 // environment so the test watches the real give-up rather than a shorter code
 // path.
 func TestAHostThatNeverComesBackGivesUpAndSaysWhy(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	ssh := writeFakeSSHTo(t, base, remote)
@@ -331,6 +335,7 @@ func TestAHostThatNeverComesBackGivesUpAndSaysWhy(t *testing.T) {
 // to end a link with the same sentence, so nobody could tell which of the three
 // fixes to reach for. The listing now carries the count and the reason.
 func TestTheDaemonSaysWhyALinkDropped(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	ssh := writeFakeSSHTo(t, base, remote)
@@ -393,6 +398,7 @@ func TestTheDaemonSaysWhyALinkDropped(t *testing.T) {
 // listing is polled. The times are logged and the frames saved under
 // artifactDir.
 func TestASilentLinkIsFoundAndTheRailStillOpensItsSessions(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	// Two hosts reach the same far daemon. The second, spare, can be made

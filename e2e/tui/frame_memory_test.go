@@ -70,6 +70,7 @@ func readReply(conn net.Conn) (byte, []byte, error) {
 // NEGATIVE CONTROL: on a build before frame_budget.go, the daemon allocates
 // each announced body whole and the stalled frames take about 520 MB.
 func TestDaemonBoundsStalledFrames(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	if runtime.GOOS != "linux" {
 		t.Skip("reads the daemon's memory from /proc")
 	}

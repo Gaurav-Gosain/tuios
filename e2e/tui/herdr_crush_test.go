@@ -69,6 +69,7 @@ func typeIn(t *testing.T, base, window, text string) {
 // wait fails; with the herdr claim lapse taken out of detectionPass, the
 // crashed pane stays working and the crash wait fails.
 func TestHerdrCrushPanesInParallel(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	term, base := crushClient(t)
 	crush := buildFakeCrush(t)
 	log := &stateLog{name: "herdr-crush-parallel"}
@@ -151,6 +152,7 @@ func TestHerdrCrushPanesInParallel(t *testing.T) {
 // needs_input, since tuios reads the dialog when Crush reports working (see
 // crushScreenWins), so any Crush passes.
 func TestRealCrushInParallelPanes(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	crushBin := os.Getenv("TUIOS_E2E_CRUSH")
 	if crushBin == "" {
 		t.Skip("set TUIOS_E2E_CRUSH to a crush binary to run a real Crush")

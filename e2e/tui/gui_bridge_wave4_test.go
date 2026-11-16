@@ -143,6 +143,7 @@ func (b *guiBridge) position(pty string) int64 {
 // does not change, and with no id or name the session the person used
 // last, never the first one listed.
 func TestGUIBridgeAttachesByIDThenLastUsed(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	killDaemon(t, base)
 	for _, name := range []string{"alpha", "zeta"} {
@@ -201,6 +202,7 @@ func TestGUIBridgeAttachesByIDThenLastUsed(t *testing.T) {
 // behind, and a snapshot when the daemon is another one or the ring has
 // moved on.
 func TestGUIBridgeResumesKeptEmulators(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	b := startBridge(t, base, "kept", 100, 30)
 	b.mustCall(map[string]any{"cmd": "action", "name": "new_window"})
@@ -286,6 +288,7 @@ func TestGUIBridgeResumesKeptEmulators(t *testing.T) {
 // A bridge killed as a crash kills it leaves the session as it was: a new
 // bridge attaches the same session by id.
 func TestGUIBridgeKilledLeavesTheSession(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	b := startBridge(t, base, "crash", 100, 30)
 	b.mustCall(map[string]any{"cmd": "action", "name": "new_window"})
@@ -312,6 +315,7 @@ func TestGUIBridgeKilledLeavesTheSession(t *testing.T) {
 // A session on another machine through the local daemon's link (--host),
 // and the hosts event with that machine, its round trip and its sessions.
 func TestGUIBridgeOnAHostAndItsLink(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	ssh := writeFakeSSHTo(t, base, remote)
@@ -379,6 +383,7 @@ func TestGUIBridgeOnAHostAndItsLink(t *testing.T) {
 // panes moved down two rows and the renderer drew them short. Writing an
 // option or adding a host reloads the file.
 func TestGUIBridgeKeepsItsChromeAcrossAReload(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	b := startBridge(t, base, "chrome", 100, 30)
 	b.mustCall(map[string]any{"cmd": "action", "name": "new_window"})
@@ -477,6 +482,7 @@ func signalFarProxies(t *testing.T, remoteBase string, sig syscall.Signal) []int
 // stalled within seconds, and the moment the far side answers again the
 // row is good, with a round trip that does not count the stall.
 func TestGUIBridgeHostStallAndRecovery(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	ssh := writeFakeSSHTo(t, base, remote)
@@ -563,6 +569,7 @@ func TestGUIBridgeHostStallAndRecovery(t *testing.T) {
 // --scrollback sets how much history each snapshot carries: a renderer that
 // keeps 3000 rows gets 3000 on a reopen, not the daemon's default 1000.
 func TestGUIBridgeSnapshotCarriesTheRenderersHistory(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	b := startBridge(t, base, "deep", 100, 30)
 	b.mustCall(map[string]any{"cmd": "action", "name": "new_window"})
@@ -607,6 +614,7 @@ func TestGUIBridgeSnapshotCarriesTheRenderersHistory(t *testing.T) {
 // attached on the pane the daemon last heard of, and in the app the focus
 // jumped to the first pane when a long `seq` ended.
 func TestGUIBridgeKeepsTheRenderersFocus(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	b := startBridge(t, base, "focus", 100, 30)
 	for range 3 {
@@ -637,6 +645,7 @@ func TestGUIBridgeKeepsTheRenderersFocus(t *testing.T) {
 // factor) is "signin" in the hosts event, so the renderer offers to sign in
 // again. A host that does not answer at all stays "down".
 func TestGUIBridgeHostThatNeedsASignIn(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	cases := []struct {
 		name, stderr, want string
 	}{
@@ -689,6 +698,7 @@ func TestGUIBridgeHostThatNeedsASignIn(t *testing.T) {
 // link came back was lost ("use of closed network connection"), while the
 // renderer showed the pane as attached.
 func TestGUIBridgeTypesAfterTheLinkComesBack(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	ssh := writeFakeSSHTo(t, base, remote)
@@ -759,6 +769,7 @@ func TestGUIBridgeTypesAfterTheLinkComesBack(t *testing.T) {
 // both, and a pending wrap and a half-parsed sequence; it now uses the one
 // stream-pane uses (session.SnapshotVT).
 func TestGUIBridgeSnapshotCarriesTabsAndTitle(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	b := startBridge(t, base, "tabs", 100, 30)
 	b.mustCall(map[string]any{"cmd": "action", "name": "new_window"})
@@ -811,6 +822,7 @@ func procPeakKB(t *testing.T, pid int) int64 {
 // the whole flood), and a writer that drops output and never resyncs (the
 // pane's last line never reaches the renderer).
 func TestGUIBridgeResyncsARendererThatFellBehind(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	b := startBridgeWith(t, base, bridgeOpts{args: []string{"--session", "stall"}, env: []string{"TUIOS_GUI_BRIDGE_QUEUE_MAX=1048576"}, cols: 100, rows: 30, name: "stall"})
 	b.mustCall(map[string]any{"cmd": "action", "name": "new_window"})
@@ -848,6 +860,7 @@ func TestGUIBridgeResyncsARendererThatFellBehind(t *testing.T) {
 // tuios-gpui does when it drops a pane's backlog under a flood. That pane gets
 // a fresh snapshot and streams on from it; the other pane gets none.
 func TestGUIBridgeResyncsOnePaneOnRequest(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	b := startBridge(t, base, "one", 120, 40)
 	ids := b.tiledPanes(2)

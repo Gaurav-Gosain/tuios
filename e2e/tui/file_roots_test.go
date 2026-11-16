@@ -25,6 +25,7 @@ import (
 // into the home folder is refused and the refusal says where writes may land
 // and how to allow more. A copy into the receive folder works.
 func TestALinkWritesOnlyInItsRoots(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	farHome := xdgDir(remote, "HOME")
@@ -74,6 +75,7 @@ func TestALinkWritesOnlyInItsRoots(t *testing.T) {
 // name, and rename it back. build has a wide root, so only the deny list
 // stands between the link and the start file.
 func TestALinkCannotWriteThroughARenamedAncestor(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	farHome := xdgDir(remote, "HOME")
@@ -106,6 +108,7 @@ func TestALinkCannotWriteThroughARenamedAncestor(t *testing.T) {
 // kept as a symlink into a plain folder (GNU stow, chezmoi, yadm) must not be
 // writable through its target. build has a wide root.
 func TestALinkCannotWriteAStowedDotfile(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	farHome := xdgDir(remote, "HOME")
@@ -150,6 +153,7 @@ func TestALinkCannotWriteAStowedDotfile(t *testing.T) {
 // confined too. A link may read an ordinary file in the home folder and may
 // not read a private key or the tuios state. A .pub key stays readable.
 func TestALinkCannotReadKeys(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	farHome := xdgDir(remote, "HOME")
@@ -256,6 +260,7 @@ func TestALinkCannotReadKeys(t *testing.T) {
 // misses, such as the long s, still opens the real folder, so it must be
 // refused too. build has a wide root.
 func TestADarwinCaseFoldedDenyNameIsRefused(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	if runtime.GOOS != "darwin" {
 		t.Skip("the fold is the APFS one; this runs on macOS")
 	}
@@ -308,6 +313,7 @@ func TestADarwinCaseFoldedDenyNameIsRefused(t *testing.T) {
 // stash. build has a wide root that also covers its runtime folder, so only
 // the deny lists stand between the link and those files.
 func TestALinkCannotReadProcOrTheDaemonFolder(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	if runtime.GOOS != "linux" {
 		t.Skip("/proc/self/environ is a Linux file")
 	}

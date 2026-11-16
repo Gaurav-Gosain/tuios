@@ -31,6 +31,7 @@ import (
 // TUIOS_E2E_LINK_RUNS the rounds. The results are written to link-impact.json in the artifact
 // directory and logged.
 func TestKittyFilesLinkImpact(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	if os.Getenv("TUIOS_E2E_LINK_IMPACT") == "" {
 		t.Skip("set TUIOS_E2E_LINK_IMPACT=1 to measure")
 	}

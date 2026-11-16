@@ -20,6 +20,7 @@ import (
 // host's pixels. This test holds the two rules that kitty's and ghostty's own
 // cores were replayed against. It does not stand in for the Xvfb run.
 func TestPanePictureSurvivesAResize(t *testing.T) {
+	requireReal(t, "real kitty under Xvfb")
 	out := &lockedBuffer{}
 	term, _ := start(t, startOpts{cols: 140, rows: 40, out: out,
 		env: []string{"TUIOS_KITTY_GRAPHICS=1", "TUIOS_CELL_SIZE=10x20", "TERM=xterm-kitty", "COLORTERM=truecolor"}})

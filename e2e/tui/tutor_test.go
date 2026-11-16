@@ -52,6 +52,7 @@ import (
 //
 // Frames go under artifactDir as PNGs in the frame font.
 func TestTutorBasics(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	frames := artifactDir(t)
 	useShippedLooks(base)

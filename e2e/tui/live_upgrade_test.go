@@ -114,6 +114,7 @@ func saveUpgradeArtifact(t *testing.T, v any) {
 // pause, the manifest's size, the heap the new image peaked at while it
 // rebuilt the panes, and the most bytes one pane's kernel buffer held.
 func TestDaemonUpgradeKeepsPaneProcesses(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	base := t.TempDir()
 	startHandoffDaemon(t, base)
 	second := copyTuios(t)
@@ -235,6 +236,7 @@ func screenLinesHave(lines []string, s string) bool {
 //
 // Negative control in NEGATIVE_CONTROLS.md.
 func TestDaemonUpgradeKeepsOpenPrompts(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	base := t.TempDir()
 	startHandoffDaemon(t, base)
 	second := copyTuios(t)
@@ -320,6 +322,7 @@ func TestDaemonUpgradeKeepsOpenPrompts(t *testing.T) {
 // the same image, the same pane processes, and a client that was streaming a
 // pane still streaming it.
 func TestDaemonUpgradeRefusesAndChangesNothing(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	base := t.TempDir()
 	startHandoffDaemon(t, base)
 	const sess = "e2e-refuse"
@@ -408,6 +411,7 @@ func TestDaemonUpgradeRefusesAndChangesNothing(t *testing.T) {
 // and the same pid. The failure is an error, and in the second case a hang
 // that only the watchdog ends.
 func TestDaemonUpgradeFallsBackToPreviousBinary(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	for _, tc := range []struct {
 		name string
 		env  []string
@@ -474,6 +478,7 @@ func TestDaemonUpgradeFallsBackToPreviousBinary(t *testing.T) {
 // fail. The positive half: some calls were answered by each image, and some
 // started while the daemon was stopped.
 func TestDaemonUpgradeQueuesCLICallsDuringSwap(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	base := t.TempDir()
 	startHandoffDaemon(t, base)
 	second := copyTuios(t)
@@ -555,6 +560,7 @@ func TestDaemonUpgradeQueuesCLICallsDuringSwap(t *testing.T) {
 // its status. The upgrade must be refused, and the check's result must still
 // arrive.
 func TestDaemonUpgradeRefusesWhileVerifyFanRuns(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	setKnobs(t, "handoff=1")
 	base, repo := fanFixture(t)
 	if out, err := tuiosCLI(t, base, "new", "plain", "--detach"); err != nil {
@@ -613,6 +619,7 @@ func TestDaemonUpgradeRefusesWhileVerifyFanRuns(t *testing.T) {
 // manifest's size, and the heap the new image peaked at while it rebuilt the
 // panes.
 func TestDaemonUpgradeMeasuresABusyDaemon(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	if os.Getenv("TUIOS_E2E_HANDOFF_MEASURE") == "" {
 		t.Skip("set TUIOS_E2E_HANDOFF_MEASURE=1 to measure a busy daemon's upgrade")
 	}
@@ -674,6 +681,7 @@ func TestDaemonUpgradeMeasuresABusyDaemon(t *testing.T) {
 // The positive half: once the command has finished, the same upgrade goes
 // through.
 func TestDaemonUpgradeRefusesWhileHookOrPluginRuns(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	startupLog := filepath.Join(t.TempDir(), "startup.log")
 	for _, tc := range []struct {
 		name    string
@@ -788,6 +796,7 @@ func TestDaemonUpgradeRefusesWhileHookOrPluginRuns(t *testing.T) {
 // the fallback exec fails, and the daemon must then exit, so every pane hangs
 // up, rather than hold the panes and serve nothing.
 func TestDaemonUpgradeEndsWhenFallbackExecFails(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	if runtime.GOOS == "linux" {
 		t.Skip("on Linux the fallback is a descriptor the daemon holds, not a file a test can remove, so its exec cannot be made to fail from outside; the exit after a failed fallback is the same code on every system")
 	}
@@ -844,6 +853,7 @@ func TestDaemonUpgradeEndsWhenFallbackExecFails(t *testing.T) {
 // version than this daemon writes. The daemon's image and every pane's process
 // must not change.
 func TestDaemonUpgradePreflightRefusals(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	script := func(t *testing.T, body string) string {
 		path := filepath.Join(t.TempDir(), "fake-tuios")
 		if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body+"\n"), 0o600); err != nil {
@@ -1111,6 +1121,7 @@ func awaitSettled(t *testing.T, base string, pid int) bool {
 // Each case first checks the swap happened. Linux only: elsewhere the daemon
 // runs the path, as the docs say.
 func TestDaemonUpgradeRunsTheFileItChecked(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	if runtime.GOOS != "linux" {
 		t.Skip("only Linux runs the checked binary by its descriptor; TestDaemonUpgradeRunsAPrivateCopy covers the copy route other systems take")
 	}
@@ -1197,6 +1208,7 @@ func TestDaemonUpgradeRunsTheFileItChecked(t *testing.T) {
 // darwin it is the route the daemon takes anyway. The swaps are the ones of
 // TestDaemonUpgradeRunsTheFileItChecked.
 func TestDaemonUpgradeRunsAPrivateCopy(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	if runtime.GOOS == "windows" {
 		t.Skip("no live upgrade on Windows")
 	}
@@ -1301,6 +1313,7 @@ func TestDaemonUpgradeRunsAPrivateCopy(t *testing.T) {
 // from an unreadable file cannot be read through /proc, so nothing is read
 // there after the last upgrade. Linux only, as the descriptor route is.
 func TestDaemonUpgradeRunsExecuteOnlyAndWrapperBinaries(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	if runtime.GOOS != "linux" {
 		t.Skip("only Linux runs the checked binary by its descriptor; TestDaemonUpgradeRunsAPrivateCopy covers the copy route other systems take")
 	}
@@ -1400,6 +1413,7 @@ func resolvedTuios(t *testing.T) string {
 // daemon kept at start: the daemon keeps its pid and every pane, says it is
 // the fallback, and runs the old, now nameless, inode.
 func TestDaemonUpgradeFallsBackAfterInstallerReplacesBinary(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	if runtime.GOOS != "linux" {
 		t.Skip("elsewhere the fallback is the kept file tuios.prev, which TestDaemonUpgradeFallsBackToPreviousBinary covers")
 	}

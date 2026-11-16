@@ -95,6 +95,7 @@ type idleBudget struct {
 // Negative controls are in NEGATIVE_CONTROLS.md. In-process, tick work at idle
 // is guarded by BenchmarkIdleTick and TestIdleTickSkipsScans. See docs/perf.md.
 func TestIdleCostStaysLow(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	t.Run("clock off", func(t *testing.T) {
 		runIdleWindow(t, "[appearance.selection]\nosc52_write = \"on\"\n", idleBudget{
 			wire: idleWireBudget,
@@ -718,6 +719,7 @@ func readTickStats(t *testing.T, path string) (ticks, work, render uint64) {
 // at one second the open window counts ten ticks of the view, and the check
 // fails.
 func TestAgentsViewOpenAddsNoIdleCost(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	wire := &wireRecorder{}
 	statsPath := filepath.Join(base, "tickstats")

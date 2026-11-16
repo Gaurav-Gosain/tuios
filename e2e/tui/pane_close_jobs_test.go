@@ -40,6 +40,7 @@ import (
 //     an interactive shell with job control, which puts each in a process
 //     group of its own, and the shell gets no chance to hang them up.
 func TestPaneCloseEndsItsJobs(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	if os.Getenv("TUIOS_E2E") == "" {
 		t.Skip("set TUIOS_E2E=1 to run")
 	}

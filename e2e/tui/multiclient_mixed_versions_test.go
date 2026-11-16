@@ -65,6 +65,7 @@ func waitEqualSplit(t *testing.T, base, name string) {
 }
 
 func TestMixedVersionsReshapeOneTree(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	if os.Getenv("TUIOS_E2E_MIX_DAEMON") == "" {
 		t.Skip("TUIOS_E2E_MIX_DAEMON is not set")
 	}

@@ -24,6 +24,7 @@ import (
 // The frame of the restored layout is saved as PNG when TUIOS_E2E_FRAMES names
 // a directory.
 func TestLayoutSurvivesAnOSShutdown(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	for _, attached := range []bool{false, true} {
 		name := "detached"
 		if attached {

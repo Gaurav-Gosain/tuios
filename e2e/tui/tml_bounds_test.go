@@ -60,6 +60,7 @@ func tmlHWM(pid int) int64 {
 // Negative control, in NEGATIVE_CONTROLS.md: every push queued on its own
 // with the whole state (the daemon grew by about 700 MB).
 func TestTMLStalledClientKeepsDaemonMemoryBounded(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	if _, err := os.Stat("/proc/self/status"); err != nil {
 		t.Skip("reads memory from /proc")
 	}
@@ -143,6 +144,7 @@ func TestTMLStalledClientKeepsDaemonMemoryBounded(t *testing.T) {
 // Negative control, in NEGATIVE_CONTROLS.md: tml-get without the reach check
 // (the alpha pane read the secret).
 func TestTMLSurfaceReadsStayInScope(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	killDaemon(t, base)
 	for _, n := range []string{"alpha", "beta"} {
@@ -210,6 +212,7 @@ func TestTMLSurfaceReadsStayInScope(t *testing.T) {
 // Negative control, in NEGATIVE_CONTROLS.md: the client only logs a refused
 // input (no message on the screen).
 func TestTMLEmitOverTheLimitIsShown(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	killDaemon(t, base)
 	const sess = "e2e-tmlemit"

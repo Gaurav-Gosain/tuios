@@ -101,6 +101,7 @@ func waitConfigHas(t *testing.T, base, want string) {
 // list says what the option takes, and the settings row shows the value in
 // force. With no display to ask, which is how the suite runs, auto is 60.
 func TestMaxFPSLoadsAndShows(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	base := spotlightConfigFile(t, maxFPSConfig("240"))
 	if out, err := tuiosCLI(t, base, "new", "e2e-fps", "--detach"); err != nil {
 		t.Fatalf("new session: %v\n%s", err, out)
@@ -163,6 +164,7 @@ func TestMaxFPSLoadsAndShows(t *testing.T) {
 // draws at 60, because the displays on this machine are not the ones the
 // person sees. The hyprctl here is a stand-in that prints two monitors.
 func TestMaxFPSAutoReadsTheDisplay(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	base := spotlightConfigFile(t, maxFPSConfig(`"auto"`))
 	if out, err := tuiosCLI(t, base, "new", "e2e-fps-auto", "--detach"); err != nil {
 		t.Fatalf("new session: %v\n%s", err, out)
@@ -265,6 +267,7 @@ func measureFrameRate(t *testing.T, value string, displayHz ...string) float64 {
 // auto on a 240 Hz display is the third case. The rate arrives after the
 // program has started, so it measures the ticker moving while tuios runs.
 func TestMaxFPS240DrawsPastTheOldClamp(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	if os.Getenv("TUIOS_E2E_PERF") == "" {
 		t.Skip("set TUIOS_E2E_PERF=1 to measure frame rates")
 	}

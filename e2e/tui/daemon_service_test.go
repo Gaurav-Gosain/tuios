@@ -34,6 +34,7 @@ import (
 // It never touches the person's tuios-daemon unit or daemon. Each step is
 // written to transcript.txt in the artifact directory.
 func TestDaemonRunsAsAService(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	runtimeDir := fmt.Sprintf("/run/user/%d", os.Getuid())
 	systemctl := func(args ...string) (string, error) {
 		cmd := exec.Command("systemctl", append([]string{"--user"}, args...)...)

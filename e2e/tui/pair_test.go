@@ -351,6 +351,7 @@ func (tr *transcript) save(t *testing.T, name string) {
 // refusal first, while the code is still good, then the request that pairs,
 // then the same code again.
 func TestPairAddsAPhoneKey(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	needTools(t, "ssh-keygen")
 	base := t.TempDir()
 	keys := filepath.Join(base, "keys")
@@ -478,6 +479,7 @@ func TestPairAddsAPhoneKey(t *testing.T) {
 // good request after it still pairs: one wrong request does not spend the
 // code.
 func TestPairRefusesWrongRequests(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	needTools(t, "ssh-keygen")
 	base := t.TempDir()
 	keys := filepath.Join(base, "keys")
@@ -555,6 +557,7 @@ func TestPairRefusesWrongRequests(t *testing.T) {
 // The good request after it still pairs, so the refusal did not spend the
 // code. The exchange goes under artifactDir as pair-late-body.txt.
 func TestPairOversizeBodySentLateGetsItsReply(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	needTools(t, "ssh-keygen")
 	base := t.TempDir()
 	keys := filepath.Join(base, "keys")
@@ -605,6 +608,7 @@ func TestPairOversizeBodySentLateGetsItsReply(t *testing.T) {
 // refused without --listen-all, and warned about with it. Without --listen,
 // every listener is on an address the code names, never 0.0.0.0 or [::].
 func TestPairListensOnlyWhereTheCodeSays(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	needTools(t, "ssh-keygen")
 	base := t.TempDir()
 	keys := filepath.Join(base, "keys")
@@ -681,6 +685,7 @@ func TestPairListensOnlyWhereTheCodeSays(t *testing.T) {
 // device name and the key fingerprint and asks. "n" adds nothing and ends
 // the pairing. "y" adds the key.
 func TestPairAsksBeforeItAddsTheKey(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	needTools(t, "ssh-keygen")
 	base := t.TempDir()
 	keys := filepath.Join(base, "keys")
@@ -730,6 +735,7 @@ func TestPairAsksBeforeItAddsTheKey(t *testing.T) {
 // TestPairCodeExpires: a code nobody uses stops working at its time, and the
 // command says so and exits with an error.
 func TestPairCodeExpires(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	needTools(t, "ssh-keygen")
 	base := t.TempDir()
 	keys := filepath.Join(base, "keys")
@@ -756,6 +762,7 @@ func TestPairCodeExpires(t *testing.T) {
 // TestPairStopsAfterTooManyWrongRequests: three requests with a wrong MAC end
 // the pairing, so a good one after them is not answered.
 func TestPairStopsAfterTooManyWrongRequests(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	needTools(t, "ssh-keygen")
 	base := t.TempDir()
 	keys := filepath.Join(base, "keys")
@@ -790,6 +797,7 @@ func TestPairStopsAfterTooManyWrongRequests(t *testing.T) {
 // Neither refusal changes a file or spends the code. The file's last line has
 // no newline, which the new line must not join.
 func TestPairLeavesWhatIsThereAlone(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	needTools(t, "ssh-keygen")
 	base := t.TempDir()
 	keys := filepath.Join(base, "keys")
@@ -925,6 +933,7 @@ func qrPNG(t *testing.T, grid [][]bool, path string) {
 // TestPairQRCodeHoldsTheLink decodes the code tuios pair draws, in colour and
 // without, with zbarimg, and compares it with the link printed under it.
 func TestPairQRCodeHoldsTheLink(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	needTools(t, "ssh-keygen", "zbarimg")
 	base := t.TempDir()
 	keys := filepath.Join(base, "keys")
@@ -1047,6 +1056,7 @@ func startScratchSSHD(t *testing.T, dir, hostKey, ak, port, remote string) strin
 // the one the policy is resolved for, whatever the dialling machine calls
 // itself.
 func TestPairedKeyOpensOnlyTheLink(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	needTools(t, "ssh", "ssh-keygen")
 	base := t.TempDir()
 	remote := remoteMachine(t)
@@ -1196,6 +1206,7 @@ func pairSetup(t *testing.T) (base, hostPub, phoneLine string) {
 // must still get the reply with the host key and its MAC. Without it the key
 // is added, the terminal says paired, and the phone has no host key to pin.
 func TestPairReplyReachesAPhoneAfterASlowAnswer(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base, hostPub, phoneLine := pairSetup(t)
 	ak := filepath.Join(base, "authorized_keys")
 	// An *os.File, so exec does not copy it and Wait does not wait for it.
@@ -1243,6 +1254,7 @@ func TestPairReplyReachesAPhoneAfterASlowAnswer(t *testing.T) {
 // after that must not add the key, or the file changes after tuios said it
 // would not.
 func TestPairStopDuringTheQuestionWritesNothing(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base, hostPub, phoneLine := pairSetup(t)
 	ak := filepath.Join(base, "authorized_keys")
 	// An *os.File, so exec does not copy it and Wait does not wait for it.
@@ -1297,6 +1309,7 @@ func TestPairStopDuringTheQuestionWritesNothing(t *testing.T) {
 // byte. A port scan does the same. These are not wrong requests, so five of
 // them must not stop the pairing before the phone's request arrives.
 func TestPairIgnoresConnectionsClosedUnused(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base, hostPub, phoneLine := pairSetup(t)
 	ak := filepath.Join(base, "authorized_keys")
 	run := startPair(t, base, nil, "--yes", "--authorized-keys", ak, "--listen", "127.0.0.1:0",
@@ -1327,6 +1340,7 @@ func TestPairIgnoresConnectionsClosedUnused(t *testing.T) {
 // to. Pairing into one ends with a key that does not log in, so tuios stops
 // before it shows a code. A file the group can write gets a warning.
 func TestPairRefusesAKeysFileAnyoneCanWrite(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base, hostPub, _ := pairSetup(t)
 	common := []string{"--yes", "--listen", "127.0.0.1:0", "--host-key", hostPub,
 		"--advertise-ssh", "127.0.0.1:2222", "--timeout", "1s"}
@@ -1367,6 +1381,7 @@ func TestPairRefusesAKeysFileAnyoneCanWrite(t *testing.T) {
 // TestPairMachineNameInTheCode: --machine sets the m field the phone shows,
 // and a name that is not a machine name is refused before the code shows.
 func TestPairMachineNameInTheCode(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base, hostPub, _ := pairSetup(t)
 	common := []string{"--yes", "--authorized-keys", filepath.Join(base, "ak"), "--listen", "127.0.0.1:0",
 		"--host-key", hostPub, "--advertise-ssh", "127.0.0.1:2222", "--timeout", "1s"}
@@ -1392,6 +1407,7 @@ func pairArgs(ak, hostPub string, more ...string) []string {
 // [hosts."*"] or the default policy, which can start processes and type into
 // panes. The config folder and file are read-only, so the table write fails.
 func TestPairWritesThePolicyBeforeTheKey(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base, hostPub, phoneLine := pairSetup(t)
 	ak := filepath.Join(base, "authorized_keys")
 	cfgDir := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios")
@@ -1432,6 +1448,7 @@ func TestPairWritesThePolicyBeforeTheKey(t *testing.T) {
 // name, is refused in any case, and the code stays good. --name with such a
 // name is refused before the code shows.
 func TestPairRefusesANameInUse(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base, hostPub, phoneLine := pairSetup(t)
 	keys := filepath.Join(base, "keys")
 	_, oldLine := keygen(t, keys, "old", "-t", "ed25519")
@@ -1490,6 +1507,7 @@ func TestPairRefusesANameInUse(t *testing.T) {
 // nothing is written. --accept-local lets this machine through and never a
 // host.
 func TestPairRefusesRequestsFromThisMachine(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base, hostPub, phoneLine := pairSetup(t)
 
 	// An address of this machine that is not loopback, when it has one.
@@ -1556,6 +1574,7 @@ func TestPairRefusesRequestsFromThisMachine(t *testing.T) {
 // such as a browser, a scanner or a probe sends, are refused and do not count
 // toward the three wrong requests. After six of them the phone still pairs.
 func TestPairCountsOnlyPairingRequests(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base, hostPub, phoneLine := pairSetup(t)
 	ak := filepath.Join(base, "authorized_keys")
 	run := startPair(t, base, nil, pairArgs(ak, hostPub)...)
@@ -1608,6 +1627,7 @@ func TestPairCountsOnlyPairingRequests(t *testing.T) {
 // the link points to today, which an upgrade replaces. A tuios on PATH that
 // is another binary is not used, and tuios says so.
 func TestPairForcedCommandUsesTheTuiosOnPath(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base, hostPub, phoneLine := pairSetup(t)
 	bin := filepath.Join(base, "profile", "bin")
 	mustMkdir(bin)
@@ -1646,6 +1666,7 @@ func TestPairForcedCommandUsesTheTuiosOnPath(t *testing.T) {
 // anyone can write to, so tuios refuses it before the code shows, for the
 // default ~/.ssh/authorized_keys. A home the group can write gets a warning.
 func TestPairChecksTheHomeFolder(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	_, hostPub, _ := pairSetup(t)
 	for _, c := range []struct {
 		name string

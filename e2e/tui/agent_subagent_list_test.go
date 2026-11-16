@@ -270,6 +270,7 @@ func waitSubagents(t *testing.T, base, session string, log *stateLog, step strin
 //
 // Negative controls are in NEGATIVE_CONTROLS.md, "Subagent list".
 func TestSubagentListFromHooks(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	log := &stateLog{name: "subagent-list"}
 	defer log.save(t)
 	base := t.TempDir()

@@ -50,6 +50,7 @@ import (
 // and in the refused run the host terminal is handed the paths, the key's
 // among them. See NEGATIVE_CONTROLS.md.
 func TestKittyFilesFromAPaneOnAHost(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	ssh := writeFakeSSHTo(t, base, remote)
@@ -431,6 +432,7 @@ func uploadSizes(uploads [][]byte) []int {
 // Negative control: with the far side as it was before this fix, the small
 // image waits for the whole stall, and the large ones never answer in it.
 func TestKittyFilesStalledOwnerHoldsOnlyItsPane(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("the stand-ins are unix programs")
 	}
@@ -535,6 +537,7 @@ func TestKittyFilesStalledOwnerHoldsOnlyItsPane(t *testing.T) {
 // Negative control: with pane streams opened without a window, new-window
 // or a listing of the machine fails with an i/o timeout.
 func TestKittyStreamHoldsOnlyItsPane(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("the stand-ins are unix programs")
 	}

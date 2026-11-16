@@ -43,6 +43,7 @@ func defunctChildren(t *testing.T, pid int) []string {
 // whose hook is its own child and is waited for. The test checks the old
 // image answered it.
 func TestHandoffHoldsHooks(t *testing.T) {
+	requireReal(t, "live upgrade execs a new binary")
 	for _, tc := range []struct {
 		name    string
 		putBack bool

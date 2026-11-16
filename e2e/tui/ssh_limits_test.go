@@ -124,6 +124,7 @@ func sshKeyArgs(key string, port int, user string) []string {
 // The descriptor counts and the resident size of the server are logged at
 // each step.
 func TestSSHServerLimits(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	if runtime.GOOS != "linux" {
 		t.Skip("reads the server's descriptors from /proc")
 	}

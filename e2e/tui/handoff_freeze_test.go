@@ -155,6 +155,7 @@ func answeredBy(t *testing.T, c *session.VerbClient) string {
 // have been answered by the old image's instance. The handoff could have
 // failed: the image must change and the daemon keep its pid.
 func TestSelfExecFreezesPaneDuringHandoff(t *testing.T) {
+	requireReal(t, "live upgrade execs a new binary")
 	base := t.TempDir()
 	startHandoffDaemon(t, base)
 	const sess = "e2e-freeze"
@@ -256,6 +257,7 @@ func replaceWithNonTuios(t *testing.T, path string) {
 // How it could pass wrongly: the handoff could have gone through, to an image
 // that applied the calls itself. The daemon must answer from the same image.
 func TestHandoffPutBackAppliesWhatWasHeld(t *testing.T) {
+	requireReal(t, "live upgrade execs a new binary")
 	base := t.TempDir()
 	startHandoffDaemon(t, base)
 	const sess = "e2e-putback"

@@ -30,6 +30,7 @@ import (
 // the workspace-switch bug painted a pane's output twice; the same mistake on
 // this path would show here as a second copy.
 func TestDetachAndReattachKeepsLayoutAndPaneContent(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	const marker = "REATTACHMARK-3182"
 
 	base := t.TempDir()
@@ -109,6 +110,7 @@ func TestDetachAndReattachKeepsLayoutAndPaneContent(t *testing.T) {
 // behind the screen has to be rebuilt from the daemon as well as the screen
 // itself. Counted from the oldest line the scrollback viewer can reach.
 func TestDetachAndReattachKeepsScrollback(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	const last = 300
 
 	base := t.TempDir()
@@ -167,6 +169,7 @@ func TestDetachAndReattachKeepsScrollback(t *testing.T) {
 // scrolls away, so a session that had lost every process looked exactly like one
 // that had been running for days.
 func TestSessionSurvivesTheDaemonAndSaysItWasRestored(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	killDaemon(t, base)
 
@@ -348,6 +351,7 @@ func copyExecutable(t *testing.T, src, dst string) {
 // Frames of the notice, the dialog and the success line are saved as PNG
 // when TUIOS_E2E_FRAMES is set. See NEGATIVE_CONTROLS.md for the controls.
 func TestRestartTheDaemonFromTheVersionNotice(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	const name = "e2e-restart-ui"
 	const last = 40
 	next := syncNextBinary(t)
@@ -553,6 +557,7 @@ func TestRestartTheDaemonFromTheVersionNotice(t *testing.T) {
 // Negative control, recorded in NEGATIVE_CONTROLS.md: with the client deaf to
 // the goodbye, it waits, attaches to the new daemon and does not quit.
 func TestPlainKillServerEndsClientsAtOnce(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	const name = "e2e-plain-stop"
 	base := t.TempDir()
 	killDaemon(t, base)

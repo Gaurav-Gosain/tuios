@@ -58,6 +58,7 @@ func openOnBuild(t *testing.T, base string, env []string, session, name, script 
 // exited pane as running in remotePaneRefusal, and the upgrade is refused
 // naming gone-far.
 func TestUpgradeClosesAnExitedPaneOnAnotherMachine(t *testing.T) {
+	requireReal(t, "live upgrade execs a new binary")
 	base, env, second, anchor := upgradeRemoteRig(t)
 	openOnBuild(t, base, env, "near", "gone-far", "echo FAR-RAN; exit 3")
 	waitUntil(t, "the pane on build records its exit", uiTimeout*2, func() (bool, string) {
@@ -94,6 +95,7 @@ func TestUpgradeClosesAnExitedPaneOnAnotherMachine(t *testing.T) {
 // name, in one answer, and nothing changes. Negative control: return at the
 // first pane in remotePaneRefusal, and only one name is in the refusal.
 func TestUpgradeRefusalNamesEveryPaneOnAnotherMachine(t *testing.T) {
+	requireReal(t, "live upgrade execs a new binary")
 	base, env, second, anchor := upgradeRemoteRig(t)
 	newCommandWindow(t, base, "other", "anchor2", false, "sh", "-c", "exec sleep 600")
 	openOnBuild(t, base, env, "near", "far-a", "exec sleep 600")

@@ -108,6 +108,7 @@ func exitedDetached(t *testing.T, term *tuitest.Terminal, logPath, session, reas
 // Negative control: with the DetachOthers check cut from handleAttach, the
 // first two clients stay attached and the test fails waiting for them to exit.
 func TestAttachDetachOthersEndsTheOtherClients(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	killDaemon(t, base)
 	const sess = "e2e-solo"
@@ -148,6 +149,7 @@ func TestAttachDetachOthersEndsTheOtherClients(t *testing.T) {
 // Negative control: with the single_client check cut from handleAttach, the
 // first client stays attached and the test fails waiting for it to exit.
 func TestSingleClientOptionDetachesOnEveryAttach(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	killDaemon(t, base)
 	writeConfig(t, base, "[daemon]\nsingle_client = true\n")
@@ -177,6 +179,7 @@ func TestSingleClientOptionDetachesOnEveryAttach(t *testing.T) {
 // read-write-fan pane detaches the client and DC_EXIT=1 never appears. With detach-client taken out of the shim's command table, the
 // shim answers "unknown command" and the last client stays.
 func TestDetachClientByIDAndSession(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	killDaemon(t, base)
 	const sess = "e2e-detach"
@@ -261,6 +264,7 @@ func startDetaching(t *testing.T, base, session string) (*tuitest.Terminal, stri
 // swept inside the attach with no session lock and no check that a client had
 // its reply, rounds end with two clients attached or one that exits 1.
 func TestConcurrentAttachDetachLeavesOneClient(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	killDaemon(t, base)
 	for round := range 6 {
@@ -326,6 +330,7 @@ func TestConcurrentAttachDetachLeavesOneClient(t *testing.T) {
 // Negative control: with the ViewOnly test cut from exclusiveAttach, the
 // owner exits when the viewer attaches.
 func TestSingleClientIgnoresAViewOnlyClient(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	killDaemon(t, base)
 	writeConfig(t, base, "[daemon]\nsingle_client = true\n")
@@ -356,6 +361,7 @@ func TestSingleClientIgnoresAViewOnlyClient(t *testing.T) {
 // Negative control: with all_other read as false in verbDetachClient, the
 // kept client exits too.
 func TestDetachClientAllOther(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	killDaemon(t, base)
 	const sess = "e2e-allother"

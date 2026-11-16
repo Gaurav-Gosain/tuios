@@ -218,6 +218,7 @@ func wantArgs(t *testing.T, term *tuitest.Terminal, what string, got, want []str
 // command, the forward and -N gone. The new pane is beside the old one, and a
 // new window from the ssh pane does the same.
 func TestSSHSplitRunsTheSameSSH(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	term, _, runs := startSSHSplit(t, "")
 	sshIn(t, term, "ssh -p 2222 -i /tmp/key -o ServerAliveInterval=5 -L 8080:localhost:80 -N pollen@fakehost tail -f /var/log/x", 0)
 	wantArgs(t, term, "the typed ssh", sshRunArgs(t, term, runs, 0),
@@ -245,6 +246,7 @@ func TestSSHSplitRunsTheSameSSH(t *testing.T) {
 // the pane into ssh. The positive half: the same key in a pane with no ssh
 // opens a shell.
 func TestSSHSplitFollowOption(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	term, _, runs := startSSHSplit(t, "\n[appearance]\nnew_window_follow_ssh = true\n")
 
 	// No ssh yet: the ordinary split is a shell.
@@ -266,6 +268,7 @@ func TestSSHSplitFollowOption(t *testing.T) {
 // A remote shell that reports its folder with OSC 7 puts the new pane in that
 // folder: ssh gets -t and a cd in the remote shell, quoted.
 func TestSSHSplitKeepsTheRemoteFolder(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	term, _, runs := startSSHSplit(t, "")
 	sshIn(t, term, "ssh pollen@fakehost", 0)
 
@@ -290,6 +293,7 @@ func TestSSHSplitKeepsTheRemoteFolder(t *testing.T) {
 // A shell in a UNC folder reports file://HOST//srv/share. That is no folder
 // sh can cd to either, so it gets no cd as well.
 func TestSSHSplitIntoWindowsSendsNoDriveFolder(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	for _, tc := range []struct{ name, url string }{
 		{"drive", "file://fakehost/C:/Users/pollen/my%%20app"},
 		{"unc", "file://fakehost//srv/share"},
@@ -312,6 +316,7 @@ func TestSSHSplitIntoWindowsSendsNoDriveFolder(t *testing.T) {
 
 // The ssh actions in a pane with no ssh open an ordinary pane with a shell.
 func TestSSHSplitFallsBackToAShell(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	term, _, runs := startSSHSplit(t, "")
 	pressAndCount(t, term, 2, "split_ssh_vertical with no ssh", tuitest.Alt('v'))
 	enterTerminalMode(t, term)
@@ -331,6 +336,7 @@ func TestSSHSplitFallsBackToAShell(t *testing.T) {
 // is followed. Through a helper tuios does not know (discussion #468), only
 // an interactive login is, and the dock says why a split did not follow.
 func TestSSHSplitFindsSSHUnderANestedShell(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	for _, tc := range []struct {
 		name, cmd string
 		want      []string // nil: not followed
@@ -369,6 +375,7 @@ func TestSSHSplitFindsSSHUnderANestedShell(t *testing.T) {
 // A compiled ssh run from the project folder (./ssh) is followed with the ssh
 // on the daemon's PATH, never with the binary the pane ran.
 func TestSSHSplitRunsTheSSHOnPath(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	var pathSSH string
 	term, _, runs := startSSHSplitWith(t, "", func(base, bin string) {
 		pathSSH = filepath.Join(bin, "ssh")
@@ -391,6 +398,7 @@ func TestSSHSplitRunsTheSSHOnPath(t *testing.T) {
 // An ssh line with an option that runs code on this machine is not followed:
 // the split is an ordinary shell.
 func TestSSHSplitRefusesAProxyCommand(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	term, _, runs := startSSHSplit(t, "")
 	sshIn(t, term, "ssh -o ProxyCommand='nc %h %p' pollen@fakehost", 0)
 	pressAndCount(t, term, 2, "split_ssh_vertical with a ProxyCommand", tuitest.Alt('v'))
@@ -405,6 +413,7 @@ func TestSSHSplitRefusesAProxyCommand(t *testing.T) {
 // ssh started by scp is a transfer, not a login: the split is an ordinary
 // shell.
 func TestSSHSplitIgnoresTheSSHOfATransfer(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	term, _, runs := startSSHSplit(t, "")
 	sshIn(t, term, "scp pollen@fakehost", 0)
 	wantArgs(t, term, "the transfer's ssh", sshRunArgs(t, term, runs, 0),
@@ -422,6 +431,7 @@ func TestSSHSplitIgnoresTheSSHOfATransfer(t *testing.T) {
 // ProxyCommand can hide behind it. Such a line is not followed: the split is
 // an ordinary shell.
 func TestSSHSplitRefusesALineBreakInAnOption(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	term, _, runs := startSSHSplit(t, "")
 	sshIn(t, term, `ssh -o "$(printf 'User=pollen\nProxyCommand=echo PWNED')" fakehost`, 0)
 	pressAndCount(t, term, 2, "split_ssh_vertical with a line break", tuitest.Alt('v'))
@@ -436,6 +446,7 @@ func TestSSHSplitRefusesALineBreakInAnOption(t *testing.T) {
 // A destination that is an alias keeps the remote folder when the reported
 // host is the host name ssh -G resolves the alias to.
 func TestSSHSplitKeepsTheFolderOfAnAlias(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	term, _, runs := startSSHSplit(t, "")
 	sshIn(t, term, "ssh -o HostName=fakehost.example.com pollen@prod", 0)
 	enterTerminalMode(t, term)
@@ -452,6 +463,7 @@ func TestSSHSplitKeepsTheFolderOfAnAlias(t *testing.T) {
 // shell started that agent itself. An ordinary pane starts with the daemon's
 // environment, which has no such socket.
 func TestSSHSplitPassesTheAgentSocket(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	if _, err := exec.LookPath("ssh-agent"); err != nil {
 		t.Skip("no ssh-agent on PATH")
 	}
@@ -494,6 +506,7 @@ func TestSSHSplitPassesTheAgentSocket(t *testing.T) {
 // -E makes ssh append its log to a file the line names, so a line with it is
 // not followed: the split is an ordinary shell.
 func TestSSHSplitRefusesALogFile(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	term, base, runs := startSSHSplit(t, "")
 	sshIn(t, term, "ssh -E "+filepath.Join(base, "ssh.log")+" pollen@fakehost", 0)
 	pressAndCount(t, term, 2, "split_ssh_vertical with -E", tuitest.Alt('v'))

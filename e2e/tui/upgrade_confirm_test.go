@@ -160,6 +160,7 @@ func (r *confirmRig) refused(t *testing.T, code, what string) []string {
 // The upgrade goes through: the daemon keeps its pid, runs the copy, and the
 // pane's command exits 0.
 func TestPaneUpgradeConfirmedAtTheClient(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	r := newConfirmRig(t, "e2e-confirm-yes")
 	term := r.attach(t)
 	done := r.paneUpgrade(t)
@@ -197,6 +198,7 @@ func TestPaneUpgradeConfirmedAtTheClient(t *testing.T) {
 // with the refusal for the person, close the dialog, and leave the daemon as
 // it was.
 func TestPaneUpgradeRefusedWithoutYes(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	r := newConfirmRig(t, "e2e-confirm-no")
 	term := r.attach(t)
 	results := map[string]string{}
@@ -235,6 +237,7 @@ func TestPaneUpgradeRefusedWithoutYes(t *testing.T) {
 // moved. Yes must then refuse the upgrade, since the file the person
 // confirmed is not the one that would run.
 func TestPaneUpgradeRefusesAFileChangedAfterTheDialog(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	r := newConfirmRig(t, "e2e-confirm-changed")
 	term := r.attach(t)
 	done := r.paneUpgrade(t)
@@ -273,6 +276,7 @@ func TestPaneUpgradeRefusesAFileChangedAfterTheDialog(t *testing.T) {
 // knob upgrade_confirm_ms) runs out the upgrade is refused and the
 // dialog closes on the client.
 func TestPaneUpgradeTimesOut(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	r := newConfirmRig(t, "e2e-confirm-wait", knob("upgrade_confirm_ms=3000"))
 	term := r.attach(t)
 	done := r.paneUpgrade(t)
@@ -298,6 +302,7 @@ func TestPaneUpgradeTimesOut(t *testing.T) {
 // attempt ends in Enter, so a single one that got through would answer the
 // dialog and close it.
 func TestPaneUpgradeTakesOnlyKeysAtTheClient(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	r := newConfirmRig(t, "e2e-confirm-keys")
 	term := r.attach(t)
 	done := r.paneUpgrade(t)
@@ -372,6 +377,7 @@ func TestPaneUpgradeTakesOnlyKeysAtTheClient(t *testing.T) {
 // and the bridge refuses the verb. The dialog stays, the daemon is
 // unchanged, and Esc at the client then refuses.
 func TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	r := newConfirmRig(t, "e2e-confirm-bridge")
 	term := r.attach(t)
 	b := startBridgeWith(t, r.base, bridgeOpts{args: []string{"--session", r.sess}, cols: 120, rows: 40, keepDaemon: true, name: r.sess})
@@ -433,6 +439,7 @@ func TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge(t *testing.T) {
 // script as its own child. The call goes straight to the verb, since the CLI
 // runs the binary itself first, in the pane, where it may.
 func TestPaneUpgradeRunsNoFileWithoutADialog(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	const noClient = "No client is attached to show the dialog"
 	for _, tc := range []struct {
 		name, refusal string
@@ -511,6 +518,7 @@ func TestPaneUpgradeRunsNoFileWithoutADialog(t *testing.T) {
 // the dialog closes on the other at once, and a yes typed there right after
 // upgrades nothing.
 func TestPaneUpgradeFirstAnswerWins(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	r := newConfirmRig(t, "e2e-confirm-two")
 	first := r.attach(t)
 	second := r.attach(t)
@@ -532,6 +540,7 @@ func TestPaneUpgradeFirstAnswerWins(t *testing.T) {
 // upgrade with a client attached. It is refused at once, with the refusal for
 // the person, and no dialog opens.
 func TestPluginUpgradeRefusedWithoutADialog(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	base := t.TempDir()
 	dir := filepath.Join(t.TempDir(), "upgrader")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -595,6 +604,7 @@ func TestPluginUpgradeRefusedWithoutADialog(t *testing.T) {
 // outside every pane goes through, and the client never shows the dialog
 // before it is told to attach again.
 func TestOutsideUpgradeNeedsNoDialog(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	r := newConfirmRig(t, "e2e-confirm-outside")
 	term := r.attach(t)
 	stop := make(chan struct{})

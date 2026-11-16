@@ -232,6 +232,7 @@ func killByArg(t *testing.T, arg string) {
 // log grows past the limit and this fails. A log that drops every write past
 // the limit fails it too: the newest bytes are missing.
 func TestPtyLogStaysBounded(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	const limit = 256 << 10
 	var logPath string
 	_, host, geom := startStream(t, startOpts{logPath: &logPath, logLimit: limit}, "b64")
@@ -280,6 +281,7 @@ func TestPtyLogStaysBounded(t *testing.T) {
 // NEGATIVE CONTROL: with the cleanup in standInShmPrefix not registered, the
 // object of the killed stand-in stays in /dev/shm and this fails.
 func TestKittyStandInShmRemovedAfterTest(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	requireDevShm(t)
 	var prefix string
 	t.Run("stream", func(t *testing.T) {

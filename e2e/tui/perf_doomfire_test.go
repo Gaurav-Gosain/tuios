@@ -48,6 +48,7 @@ func synthDoomFireE2E(cols, rows, frames int) []byte {
 }
 
 func TestPerfDoomFireStream(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	perfGate(t)
 
 	data := synthDoomFireE2E(doomCols, doomRows, doomFrames)
@@ -91,6 +92,7 @@ func TestPerfDoomFireStream(t *testing.T) {
 // is on the frame path. Point TUIOS_PERF_DOOMFIRE_BIN at a DOOM-fire-zig
 // binary to enable it.
 func TestPerfDoomFireGame(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	perfGate(t)
 	game := os.Getenv("TUIOS_PERF_DOOMFIRE_BIN")
 	if game == "" {

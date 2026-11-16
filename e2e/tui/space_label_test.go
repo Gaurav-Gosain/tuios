@@ -93,6 +93,7 @@ func newInSpace(t *testing.T, base, name, space string) {
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Spaces as a session
 // label").
 func TestNewSpaceFilesTheSession(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	base := t.TempDir()
 	killDaemon(t, base)
 
@@ -163,6 +164,7 @@ func TestNewSpaceFilesTheSession(t *testing.T) {
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Spaces as a session
 // label").
 func TestSetSessionSpaceSetsAndClears(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	base := t.TempDir()
 	killDaemon(t, base)
 
@@ -231,6 +233,7 @@ func TestSetSessionSpaceSetsAndClears(t *testing.T) {
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Spaces as a session
 // label").
 func TestAGlobalSessionIsInNoSpace(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	base := t.TempDir()
 	killDaemon(t, base)
 
@@ -283,6 +286,7 @@ func TestAGlobalSessionIsInNoSpace(t *testing.T) {
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Spaces as a session
 // label").
 func TestSpaceSurvivesTheDaemon(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	base := t.TempDir()
 	killDaemon(t, base)
 
@@ -338,6 +342,7 @@ func TestSpaceSurvivesTheDaemon(t *testing.T) {
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Spaces as a session
 // label").
 func TestLsGroupsSessionsBySpace(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	base := t.TempDir()
 	killDaemon(t, base)
 
@@ -418,6 +423,7 @@ func TestLsGroupsSessionsBySpace(t *testing.T) {
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Spaces as a session
 // label").
 func TestLsWithoutSpacesIsUnchanged(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	baseline := os.Getenv("TUIOS_E2E_BASELINE_BIN")
 	if baseline == "" {
 		t.Skip("TUIOS_E2E_BASELINE_BIN is not set: build tuios from upstream main, which has no spaces, and name it there")

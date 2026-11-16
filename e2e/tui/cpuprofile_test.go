@@ -32,6 +32,7 @@ import (
 // Negative controls: see NEGATIVE_CONTROLS.md, "Long-running commands write
 // --cpuprofile".
 func TestCPUProfileWrittenByLongRunningCommands(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	// launch starts tuios with args in workDirIn(base), stdin an open pipe,
 	// and returns the process, its stdin, its stdout lines and a channel
 	// closed once it has exited.

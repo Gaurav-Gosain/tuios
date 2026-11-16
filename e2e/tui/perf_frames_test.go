@@ -575,6 +575,7 @@ func runFrameCase(t *testing.T, fc frameCase) frameReport {
 // TestPerfFrames measures the frame pacing cases. TUIOS_PERF_CASES narrows
 // them to the names that contain one of its comma-separated words.
 func TestPerfFrames(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	perfGate(t)
 	cases := []frameCase{
 		{name: "text-240guest/max120", maxFPS: "120", mode: "text", fps: 240, panes: 1},
@@ -615,6 +616,7 @@ func TestPerfFrames(t *testing.T) {
 // max_fps 120 with a p95 interval of 17 ms and a p50 latency of 11 to 15 ms,
 // and max_fps 240 drew 124.
 func TestFramePacingKeepsTheGuestsRate(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	if os.Getenv("TUIOS_E2E_PERF") == "" {
 		t.Skip("set TUIOS_E2E_PERF=1 to measure frame pacing")
 	}
@@ -648,6 +650,7 @@ func TestFramePacingKeepsTheGuestsRate(t *testing.T) {
 // falls behind its pane paints the flood after the program is gone, so the
 // time is the drain as much as the flood.
 func TestPerfFloodDrain(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	perfGate(t)
 	took, frames, st := floodDrain(t)
 	t.Logf("PERF flood-drain: 1500000 lines of 190 columns in %v, %d host frames (%.0f a second), interval p50 %v p95 %v max %v",
@@ -704,6 +707,7 @@ func floodDrain(t *testing.T) (time.Duration, int, perf.Stats) {
 // that fell behind was drawn every 250 ms or at the 96 ms cost ceiling: 13 to
 // 37 frames a second, with a p95 gap of 100 ms.
 func TestFloodStaysSmooth(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	if os.Getenv("TUIOS_E2E_PERF") == "" {
 		t.Skip("set TUIOS_E2E_PERF=1 to measure frame pacing")
 	}
@@ -727,6 +731,7 @@ func TestFloodStaysSmooth(t *testing.T) {
 // Before, the 240 Hz stream cost the client 206 ms of CPU a second (344 with
 // max_fps 240 drawing every compose), and an edit took 4.8 ms at p95.
 func TestKittyStreamCostsLittle(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	if os.Getenv("TUIOS_E2E_PERF") == "" {
 		t.Skip("set TUIOS_E2E_PERF=1 to measure frame pacing")
 	}

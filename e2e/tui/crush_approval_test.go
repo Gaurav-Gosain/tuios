@@ -154,6 +154,7 @@ func refusedFromAPane(t *testing.T, base, window string) {
 // With the cap on the name's width taken out of inboxItemRow, the long name
 // fills the row and the summary wait fails.
 func TestCrushPermissionAnsweredFromTheInbox(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	term, base := crushClient(t)
 	crush := buildFakeCrush(t)
 	log := &stateLog{name: "crush-inbox-approval"}
@@ -228,6 +229,7 @@ func realCrushCommand(dir, bin string) string {
 // Inbox makes Crush run the command, so the marker file is the proof that
 // the answer reached Crush.
 func TestRealCrushAnsweredFromTheInbox(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	crushBin := os.Getenv("TUIOS_E2E_CRUSH")
 	if crushBin == "" {
 		t.Skip("set TUIOS_E2E_CRUSH to a crush binary to run a real Crush")
@@ -312,6 +314,7 @@ func TestRealCrushAnsweredFromTheInbox(t *testing.T) {
 // Negative control: with the PartialSuffix check taken out of riskOfLine,
 // the item carries no risk and the first press allows the call.
 func TestCrushRiskyCommandTakesTwoPresses(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	term, base := crushClient(t)
 	win := crushHomeWindow(t, base)
 	tileCrushPane(t, base)
@@ -341,6 +344,7 @@ func TestCrushRiskyCommandTakesTwoPresses(t *testing.T) {
 // Negative control: with the dialog check taken out of Classify, the quoted
 // words put the pane on needs_input.
 func TestCrushQuotedDialogIsNotAPrompt(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	_, base := crushClient(t)
 	win := crushHomeWindow(t, base)
 	tileCrushPane(t, base)
@@ -374,6 +378,7 @@ func TestCrushQuotedDialogIsNotAPrompt(t *testing.T) {
 // Negative control: with the herdr fields left off the blocker claim in
 // applyAgentReport, the pane stays on needs_input at the shell.
 func TestCrushCrashAtItsDialogClearsThePane(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	_, base := crushClient(t)
 	win := crushHomeWindow(t, base)
 	// A tall pane, so what the shell prints after the crash leaves the
@@ -414,6 +419,7 @@ func TestCrushCrashAtItsDialogClearsThePane(t *testing.T) {
 // Negative control: with the paneRunsHarness check taken out of
 // lookAtPrompt, notcrush's dialog is answerable.
 func TestOnlyCrushGetsCrushAnswers(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	_, base := crushClient(t)
 	win := crushHomeWindow(t, base)
 	tileCrushPane(t, base)
@@ -462,6 +468,7 @@ func TestOnlyCrushGetsCrushAnswers(t *testing.T) {
 // marked risky and that allowing takes two presses. It runs only with
 // TUIOS_E2E_CRUSH set.
 func TestRealCrushRiskyCommandTakesTwoPresses(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	crushBin := os.Getenv("TUIOS_E2E_CRUSH")
 	if crushBin == "" {
 		t.Skip("set TUIOS_E2E_CRUSH to a crush binary to run a real Crush")
@@ -505,6 +512,7 @@ func TestRealCrushRiskyCommandTakesTwoPresses(t *testing.T) {
 // with a real Crush, whose answer quotes the dialog's words. It runs only
 // with TUIOS_E2E_CRUSH set.
 func TestRealCrushQuotedDialogIsNotAPrompt(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	crushBin := os.Getenv("TUIOS_E2E_CRUSH")
 	if crushBin == "" {
 		t.Skip("set TUIOS_E2E_CRUSH to a crush binary to run a real Crush")

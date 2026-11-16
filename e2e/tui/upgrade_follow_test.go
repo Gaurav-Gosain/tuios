@@ -38,6 +38,7 @@ const newerVersion = "v99.1.0"
 // The command lines before and after go under artifactDir as
 // upgrade-follow.json.
 func TestAttachedClientRunsTheUpgradedBuild(t *testing.T) {
+	requireReal(t, "live upgrade execs a new binary")
 	newer := newerTuios(t)
 	for _, follow := range []bool{true, false} {
 		t.Run("follow="+strconv.FormatBool(follow), func(t *testing.T) {

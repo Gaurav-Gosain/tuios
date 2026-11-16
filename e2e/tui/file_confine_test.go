@@ -97,6 +97,7 @@ func streamCode(reply map[string]any, err error) string {
 // write would land in the other file. A linked machine must not rename a file
 // onto a part name or off one either, so it cannot make such a part itself.
 func TestALinkCannotWriteThroughAHardLinkedPart(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	farHome := xdgDir(remote, "HOME")
@@ -172,6 +173,7 @@ func TestALinkCannotWriteThroughAHardLinkedPart(t *testing.T) {
 // the path before the open alone races the swap. The dummy key must never be
 // returned.
 func TestALinkReadCannotRaceARename(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	farHome := xdgDir(remote, "HOME")
@@ -257,6 +259,7 @@ func TestALinkReadCannotRaceARename(t *testing.T) {
 // taken when together they do not. Nothing is written: the claim is made when
 // a stream opens.
 func TestOpenLinkWritesCountAgainstTheFreeSpaceReserve(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	farHome := xdgDir(remote, "HOME")
@@ -338,6 +341,7 @@ func startFarBigCopy(t *testing.T, far *fileVerbConn, farHome string) transferRo
 // resumes it from the journal, and after a policy reload while it waits.
 // The machine keeps relay both times; only files is taken away.
 func TestALinkCopyStopsWhenItsFilesCapabilityGoes(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	t.Run("on resume after a restart", func(t *testing.T) {
 		base := t.TempDir()
 		remote := remoteMachine(t)
@@ -470,6 +474,7 @@ func binaryReadDir(t *testing.T, c *fileVerbConn, dir string) dirListing {
 // link they keep to the read rules file-list keeps to. A machine that may
 // list panes may not list ~/.ssh or /proc this way.
 func TestALinkListsNoDeniedFolderOutsideTheFileVerbs(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	farHome := xdgDir(remote, "HOME")
@@ -531,6 +536,7 @@ func TestALinkListsNoDeniedFolderOutsideTheFileVerbs(t *testing.T) {
 // its path sees that. A linked machine must not read, hash, stream or copy
 // a regular file that has more than one name.
 func TestALinkCannotReadAFileWithTwoNames(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	farHome := xdgDir(remote, "HOME")
@@ -606,6 +612,7 @@ func TestALinkCannotReadAFileWithTwoNames(t *testing.T) {
 // through it. F_GETPATH names an open file by its short path, and realPath
 // now does too, so both checks see ~/.ssh.
 func TestADarwinLinkCannotReadThroughTheDataVolume(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	if runtime.GOOS != "darwin" {
 		t.Skip("/System/Volumes/Data is a macOS folder")
 	}
@@ -669,6 +676,7 @@ func TestADarwinLinkCannotReadThroughTheDataVolume(t *testing.T) {
 //
 // Negative controls (NEGATIVE_CONTROLS.md, TestALinkCopyRevokedBeforeItsVerifyStaysFailed).
 func TestALinkCopyRevokedBeforeItsVerifyStaysFailed(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	setKnobs(t, "transfer_hold_ms=3000")
 	base := t.TempDir()
 	remote := remoteMachine(t)

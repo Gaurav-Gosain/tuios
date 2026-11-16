@@ -155,6 +155,7 @@ func writeLinkSSH(t *testing.T, dir string, m *oneMachine) string {
 // daemon runs with XDG_RUNTIME_DIR set. A command over ssh without it, and a
 // host link's stdio-proxy, must reach that same daemon and see its sessions.
 func TestOneDaemonWithAndWithoutXDGRuntimeDir(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	m := newOneMachine(t)
 	m.mustCLI(t, m.desktopEnv(), "new", "desk", "--detach")
 
@@ -198,6 +199,7 @@ func TestOneDaemonWithAndWithoutXDGRuntimeDir(t *testing.T) {
 // /run/user. When both daemons run, the one in /run/user wins, and a person
 // at a terminal is told once about the other.
 func TestADaemonAnOlderLinkStartedIsFoundNotSplit(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	m := newOneMachine(t)
 	m.mustCLI(t, m.oldLinkEnv(), "new", "old", "--detach")
 	if _, err := os.Stat(m.legacySocket()); err != nil {
@@ -268,6 +270,7 @@ func TestADaemonAnOlderLinkStartedIsFoundNotSplit(t *testing.T) {
 // Then the /tmp daemon stops, with /run/user/<uid> present now, and must clean
 // its own folder and stop at once.
 func TestAPaneOfTheTmpDaemonStaysWithIt(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	m := newOneMachine(t)
 	if err := os.Remove(m.sys); err != nil {
 		t.Fatal(err)

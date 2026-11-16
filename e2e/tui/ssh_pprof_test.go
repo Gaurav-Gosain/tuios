@@ -162,6 +162,7 @@ func tcpListenPorts(t *testing.T, pid int) []int {
 // Once the profile is served, the process listens on the SSH port and the
 // profile port and nothing else.
 func TestSSHServesPprof(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	if runtime.GOOS != "linux" {
 		t.Skip("reads the server's listeners from /proc")
 	}
@@ -206,6 +207,7 @@ func TestSSHServesPprof(t *testing.T) {
 // listener is opened only when asked for. TestSSHServesPprof is the positive
 // half: the same fixture and listener probe, with the flag.
 func TestSSHWithoutPprofOpensNoProfileListener(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	if runtime.GOOS != "linux" {
 		t.Skip("reads the server's listeners from /proc")
 	}

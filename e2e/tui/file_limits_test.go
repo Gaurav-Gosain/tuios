@@ -52,6 +52,7 @@ func farTransfer(t *testing.T, c *fileVerbConn, id string, within time.Duration)
 // linked machine that calls them is held to the rules its own file verbs
 // keep. build keeps the default write root, the receive folder.
 func TestALinkTransferStartKeepsToTheLinkPolicy(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	farHome := xdgDir(remote, "HOME")
@@ -139,6 +140,7 @@ func TestALinkTransferStartKeepsToTheLinkPolicy(t *testing.T) {
 // so the destination is outside them, and the daemon starts again. The
 // resumed copy must end forbidden, with nothing in place.
 func TestALinkJobKeepsItsPolicyAcrossARestart(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	farHome := xdgDir(remote, "HOME")
@@ -232,6 +234,7 @@ func code(err error) string {
 // a drop file-drop-dir made, and a write that would take the folder past
 // 256 MiB is refused before a byte moves.
 func TestTheDropFolderTakesOnlyDropsWithinItsBudget(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	writeRemoteConfig(t, remote, "[hosts.\"*\"]\nallow = [\"list\", \"files\"]\n")
@@ -284,6 +287,7 @@ func TestTheDropFolderTakesOnlyDropsWithinItsBudget(t *testing.T) {
 // finding 3: a write over a link must leave files_min_free on its disk, and
 // one linked machine has at most 8 write streams and 64 part files open.
 func TestALinkWriteLeavesFreeSpaceAndKeepsToItsCaps(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	farHome := xdgDir(remote, "HOME")
@@ -366,6 +370,7 @@ func TestALinkWriteLeavesFreeSpaceAndKeepsToItsCaps(t *testing.T) {
 // files_read_roots set, a linked machine reads only there and in the folders
 // it may write, and the refusal names the setting.
 func TestALinkReadsOnlyItsReadRoots(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	farHome := xdgDir(remote, "HOME")
@@ -411,6 +416,7 @@ func TestALinkReadsOnlyItsReadRoots(t *testing.T) {
 // open files and folders of every process in /proc, and a shell history is
 // not read.
 func TestALinkCannotLookInsideDeniedFolders(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	farHome := xdgDir(remote, "HOME")
@@ -487,6 +493,7 @@ func toJSON(v any) string {
 // files in 30 folders lands whole. The copy's files and folders count too:
 // with the bound back at 1000, the next new file is refused.
 func TestALinkMakesABoundedNumberOfNewFiles(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	farHome := xdgDir(remote, "HOME")

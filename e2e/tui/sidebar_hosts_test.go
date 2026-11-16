@@ -101,6 +101,7 @@ func writeHostsConfig(t *testing.T, base, tuiosPath string) {
 // shows a group for the host that answers, its sessions under it, and a row for
 // the host that does not answer marked offline.
 func TestSidebarGroupsSessionsByHost(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base := t.TempDir()
 	ssh := writeFakeSSH(t, base)
 	writeHostsConfig(t, base, tuiosBin)
@@ -141,6 +142,7 @@ func TestSidebarGroupsSessionsByHost(t *testing.T) {
 // rail for one frame and is then overwritten by the next host poll, which
 // rebuilds the section from the daemon's own order.
 func TestDraggingAMachineHeaderReordersTheRail(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base := t.TempDir()
 	ssh := writeFakeSSH(t, base)
 	writeHostsConfig(t, base, tuiosBin)
@@ -196,6 +198,7 @@ func TestDraggingAMachineHeaderReordersTheRail(t *testing.T) {
 // good on the daemon's first answer. The daemon has to tell it, and the wait
 // below is what proves it did.
 func TestRailShowsAHostAddedWhileAttached(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base := t.TempDir()
 	ssh := writeFakeSSH(t, base)
 	env := []string{"TUIOS_SSH=" + ssh}
@@ -237,6 +240,7 @@ func TestRailShowsAHostAddedWhileAttached(t *testing.T) {
 // TestHostsCommandReportsALinkEndToEnd drives `tuios hosts` against the same
 // daemon, so the CLI half is proved on the same link.
 func TestHostsCommandReportsALinkEndToEnd(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
 	base := t.TempDir()
 	ssh := writeFakeSSH(t, base)
 	writeHostsConfig(t, base, tuiosBin)

@@ -131,6 +131,7 @@ func waitTextAt(t *testing.T, term *tuitest.Terminal, start time.Time, substr st
 // exec, daemon spawn, socket handshake, first frame. This is the slowest path a
 // user ever takes and the first impression the program makes.
 func TestPerfStartupCold(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	perfGate(t)
 	var boot dist
 	for i := range perfStartRuns {
@@ -180,6 +181,7 @@ func (w *da1Watcher) Write(p []byte) (int, error) {
 // for the probe on the wire and answering it, which is the difference between
 // measuring a timeout and measuring a round trip.
 func TestPerfStartupAnsweringHost(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	perfGate(t)
 	var boot dist
 	for i := range perfStartRuns {
@@ -216,6 +218,7 @@ func TestPerfStartupAnsweringHost(t *testing.T) {
 // up, which is every launch after the first. The gap between this and the cold
 // number is what starting the daemon costs.
 func TestPerfStartupWarm(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	perfGate(t)
 	base := t.TempDir()
 
@@ -246,6 +249,7 @@ func TestPerfStartupWarm(t *testing.T) {
 // shell having printed its prompt. Forking a PTY and a shell is in here, so it
 // is a floor set partly by the OS.
 func TestPerfFirstPane(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	perfGate(t)
 	var pane dist
 	for i := range perfStartRuns {
@@ -272,6 +276,7 @@ func TestPerfFirstPane(t *testing.T) {
 // because what the daemon sends on attach scales with the session and this is
 // where that shows up.
 func TestPerfAttach(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	perfGate(t)
 	for _, panes := range []int{1, 8} {
 		t.Run(fmt.Sprintf("panes%d", panes), func(t *testing.T) {
@@ -370,6 +375,7 @@ func typeLatencyEvery(t *testing.T, term *tuitest.Terminal, gap time.Duration) d
 // pane is work the compositor does on the frame that carries the keystroke, and
 // if that cost is on the critical path it shows up as a slower echo.
 func TestPerfInputLatency(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	perfGate(t)
 	for _, panes := range []int{1, 4, 8} {
 		t.Run(fmt.Sprintf("panes%d", panes), func(t *testing.T) {
@@ -408,6 +414,7 @@ const typingGap = 60 * time.Millisecond
 // written on a timer could go out before Bubble Tea stored it, and the key then
 // waited a whole tick: p99 13 to 20 ms against 7.3 to 7.5 ms on main.
 func TestTypingLatencyStaysLow(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	if os.Getenv("TUIOS_E2E_PERF") == "" {
 		t.Skip("set TUIOS_E2E_PERF=1 to measure typing latency")
 	}
@@ -453,6 +460,7 @@ const floodCmd = "yes tuiosflood"
 // it shows up here as a latency far worse than the idle number from
 // TestPerfInputLatency, which is the comparison this test exists to make.
 func TestPerfTypeWhileFlooding(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	perfGate(t)
 	for _, floods := range []int{1, 3} {
 		t.Run(fmt.Sprintf("flooding%d", floods), func(t *testing.T) {
@@ -567,6 +575,7 @@ func rssOf(t *testing.T, pid int) int {
 // Panes are created headlessly through the CLI, so no TUI client's own memory
 // is in the figure and the growth per pane is the honest marginal cost.
 func TestPerfMemoryPanes(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	perfGate(t)
 	base := perfBase(t)
 	if out, err := tuiosCLI(t, base, "new", "mem", "--detach"); err != nil {
@@ -601,6 +610,7 @@ func TestPerfMemoryPanes(t *testing.T) {
 // emulator reaches a plateau and stays there; a resident size still climbing
 // after the ring is full is a leak rather than a buffer filling up.
 func TestPerfMemorySoak(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	perfGate(t)
 	base := perfBase(t)
 	if out, err := tuiosCLI(t, base, "new", "soak", "--detach"); err != nil {
@@ -701,6 +711,7 @@ func windowIDs(t *testing.T, base, session string) []string {
 // because the runtime lets the heap double between collections and hands
 // pages back slowly.
 func TestPerfMemoryClientAndDaemon(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
 	perfGate(t)
 	base := perfBase(t)
 	daemonAddr := startDaemonWithPprof(t, base)

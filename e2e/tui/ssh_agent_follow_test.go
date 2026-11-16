@@ -172,6 +172,7 @@ func agentClient(t *testing.T, base, session, sock string) *tuitest.Terminal {
 //
 // Negative controls: see NEGATIVE_CONTROLS.md, "The ssh agent link".
 func TestSSHAgentLinkFollowsTheNewestClient(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	base := t.TempDir()
 	killDaemon(t, base)
 	// No socket of the daemon's own, so the link is removed, not moved to a
@@ -307,6 +308,7 @@ func TestSSHAgentLinkFollowsTheNewestClient(t *testing.T) {
 //
 // Negative controls: see NEGATIVE_CONTROLS.md, "The ssh agent link".
 func TestSSHAgentLinkFallsBackToTheDaemonsSocket(t *testing.T) {
+	requireReal(t, "OS process or perf topic")
 	base := t.TempDir()
 	killDaemon(t, base)
 	own := fakeAgent(t, 0o700)

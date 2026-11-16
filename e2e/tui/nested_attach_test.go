@@ -199,6 +199,7 @@ func assertRefused(t *testing.T, outer *tuitest.Terminal, base, cmd, marker stri
 
 // TestNestedBareTuiosIsRefused is #235 as reported: a bare tuios in a pane.
 func TestNestedBareTuiosIsRefused(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	outer, base := nestedSetup(t)
 	// The trailing flag marks this client's command line for the process scan.
 	assertRefused(t, outer, base, tuiosBin+" --no-animations", "--no-animations")
@@ -215,6 +216,7 @@ func TestNestedBareTuiosIsRefused(t *testing.T) {
 // pane's environment removed, so the daemon has to place the client by its
 // process and terminal alone.
 func TestNestedAttachIsRefused(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	outer, base := nestedSetup(t)
 	cmd := "env -u TUIOS_PANE_ID -u TUIOS_WINDOW_ID -u TUIOS_SESSION -u TUIOS_PANE_TOKEN " +
 		tuiosBin + " attach " + nestSession + " --no-animations"
@@ -225,6 +227,7 @@ func TestNestedAttachIsRefused(t *testing.T) {
 // gives it a terminal of its own inside the pane. Its output still lands in
 // the pane, so it is refused.
 func TestNestedAttachThroughScriptIsRefused(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	if _, err := exec.LookPath("script"); err != nil {
 		t.Skip("script is not installed")
 	}
@@ -256,6 +259,7 @@ func buildUnplaced(t *testing.T) string {
 // of its own, with no pane variables. Its probe reaches the pane through the
 // relay, and it is refused.
 func TestUnplacedNestedClientIsRefused(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	unplaced := buildUnplaced(t)
 	outer, base := nestedSetup(t)
 	cmd := unplaced + " -- " + tuiosBin + " attach " + nestSession + " --no-animations"
@@ -266,6 +270,7 @@ func TestUnplacedNestedClientIsRefused(t *testing.T) {
 // allowed: a pane of one session shows another session. The other session's
 // size does not depend on this one's panes, so there is no loop.
 func TestAttachFromPaneToOtherSessionWorks(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	outer, base := nestedSetup(t)
 	const other = "e2e-nest-other"
 	if out, err := tuiosCLI(t, base, "new", other, "--detach"); err != nil {
@@ -298,6 +303,7 @@ func TestAttachFromPaneToOtherSessionWorks(t *testing.T) {
 // pane: the person asked for it, so it attaches, and the floor keeps the
 // session at 20x6 or more. The size is read until it stops changing.
 func TestForcedNestedAttachSettles(t *testing.T) {
+	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	outer, base := nestedSetup(t)
 	if w, h := waitSessionSize(t, base); w < 100 || h < 30 {
 		t.Fatalf("the session never reached the client's size: %dx%d", w, h)

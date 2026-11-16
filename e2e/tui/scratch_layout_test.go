@@ -118,6 +118,7 @@ func noneOnScreen(t *testing.T, term *tuitest.Terminal, what string, markers ...
 }
 
 func TestScratchGroupLayout(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	base := t.TempDir()
 	writeConfig(t, base, "[[keybindings.command]]\nkey = \"prefix+alt+y\"\ntype = \"scratch\"\nname = \"second\"\n")
 	term := startIn(t, base, startOpts{cols: 140, rows: 44, args: []string{"new", "work"}})
@@ -180,6 +181,7 @@ func TestScratchGroupLayout(t *testing.T) {
 // fresh shells with their own saved history, in the group's layout, and the
 // scratch key shows them.
 func TestScratchGroupSurvivesADaemonRestart(t *testing.T) {
+	requireReal(t, "runs an older tuios binary")
 	const session = "e2e-scratch-restart"
 	base := t.TempDir()
 	killDaemon(t, base)
