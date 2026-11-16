@@ -128,6 +128,12 @@ runs:
 CHANGES_BASE=origin/main scripts/ci-changes.sh
 ```
 
+The mixed-versions job pairs this build with the v0.12.1 release, the
+previous minor (`scripts/e2e-mixed-versions.sh NEW OLD`). A client and a
+daemon one minor release apart must work together. The job runs when a change
+reaches the packages `internal/session` builds from, and on main. Move its
+release with each minor release.
+
 A test that fails now and then on code that cannot reach it goes in
 `.github/flaky-tests.txt`. A failed run whose failures are all on that list
 retries them once. Any other failure fails the job.

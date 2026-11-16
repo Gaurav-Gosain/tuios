@@ -1,0 +1,72 @@
+# Runs the end-to-end tests that pair this build with the previous minor
+# release, v0.12.1 (scripts/e2e-mixed-versions.sh). A client and a daemon one
+# minor release apart must work together. The old binary is the release
+# archive, checked against the release's checksums and against the sum pinned
+# here, and cached. ci.yml calls this workflow when a change reaches the
+# session or wire code, and on every push to main.
+name: mixed-versions
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# No concurrency group here: ci.yml holds the one for pull requests.
+
+env:
+  OLD_VERSION: 0.12.1
+  # sha256 of tuios_0.12.1_Linux_x86_64.tar.gz, from the release's checksums.txt.
+  OLD_SHA256: 4f68bac6e05d826b8c59b671b565c61b859dacedcb5d889160ba6d8624589b50
+
+jobs:
+  mixed-versions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-go
+        with:
+          # The suite runs from e2e/tui, whose go directive is the higher one.
+          go-version-file: e2e/tui/go.mod
+          cache-id: mixed-versions
+
+      - name: Cache the old release
+        id: old
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/old
+          key: tuios-${{ env.OLD_VERSION }}-linux-amd64-${{ env.OLD_SHA256 }}
+
+      - name: Download the old release
+        if: steps.old.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/old"
+          mkdir -p "$dir"
+          cd "$dir"
+          url="https://github.com/Gaurav-Gosain/tuios/releases/download/v$OLD_VERSION"
+          archive="tuios_${OLD_VERSION}_Linux_x86_64.tar.gz"
+          curl -fsSL --retry 3 -o "$archive" "$url/$archive"
+          curl -fsSL --retry 3 -o checksums.txt "$url/checksums.txt"
+          grep " $archive\$" checksums.txt | sha256sum -c -
+          echo "$OLD_SHA256  $archive" | sha256sum -c -
+          tar -xzf "$archive" tuios
+
+      - name: Build the binary under test
+        run: GOFLAGS="$(scripts/goflags.sh)" go build -o "$RUNNER_TEMP/tuios" ./cmd/tuios
+
+      - name: Run the mixed-version tests
+        env:
+          MIXED_LOGS: ${{ runner.temp }}/mixed-logs
+        run: scripts/e2e-mixed-versions.sh "$RUNNER_TEMP/tuios" "$RUNNER_TEMP/old/tuios"
+
+      - name: Upload the logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mixed-versions-logs
+          path: ${{ runner.temp }}/mixed-logs
+          retention-days: 7

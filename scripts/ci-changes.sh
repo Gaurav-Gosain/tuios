@@ -30,7 +30,7 @@
 #                 and govulncheck too. They do not read the e2e module.
 #   lint_libs     library folders to lint, "all", or "none"
 #   unit app_session isolation windows macos sketch_fma pins ghostty
-#   learn_web clienttests docker nix binary_size
+#   learn_web clienttests docker nix binary_size mixed_versions
 #                 "true" or "false", one per job
 #   lib_alone     JSON list of the "alone" library jobs: vt, sketch, small
 set -uo pipefail
@@ -43,7 +43,7 @@ WASM=(./cmd/tuios-wasm/... ./internal/webshell/ ./internal/learn/)
 SELF=$(dirname "$0")
 
 declare -A out=()
-order=(pkgs ghostty_pkgs go vet lint_libs unit app_session isolation windows macos sketch_fma pins lib_alone ghostty learn_web clienttests docker nix binary_size)
+order=(pkgs ghostty_pkgs go vet lint_libs unit app_session isolation windows macos sketch_fma pins lib_alone ghostty learn_web clienttests docker nix binary_size mixed_versions)
 emit() {
 	local k
 	for k in "${order[@]}"; do
@@ -118,6 +118,7 @@ while IFS= read -r p; do
 	scripts/binary-size.sh | scripts/binary-size-report.sh) f[binary_size]=1 pkg=no ;;
 	scripts/check.sh | scripts/platforms.txt) f[go]=1 pkg=no ;;
 	scripts/ghostty-lib.sh | scripts/minisign/*) f[ghostty]=1 pkg=no ;;
+	scripts/e2e-mixed-versions.sh) f[mixed]=1 pkg=no ;;
 	scripts/e2e-*.sh | scripts/fuzz-target.sh | scripts/contributors*.sh | scripts/contributors-mosaic.go | scripts/star-history.sh | scripts/rebase.sh | scripts/vt-rename.sh | scripts/install.sh | scripts/zigcc/*) pkg=no ;;
 	scripts/*) everything "$p is a script no rule names" ;;
 	Dockerfile | .dockerignore) f[docker]=1 pkg=no ;;
@@ -134,6 +135,8 @@ while IFS= read -r p; do
 		;;
 	# The end-to-end module: only its Go code is formatted, vetted and tidied
 	# here. e2e-tui.yml selects its tests.
+	# The mixed-version tests also run against the previous minor release.
+	e2e/tui/multiclient_mixed_versions_test.go | e2e/tui/agent_subagent_list_test.go | e2e/tui/upgrade_confirm_test.go) f[go]=1 f[mixed]=1 pkg=no ;;
 	e2e/*.go) f[go]=1 pkg=no ;;
 	e2e/*) pkg=no ;;
 	examples/*.tape) f[unit]=1 pkg=may ;;
@@ -222,6 +225,17 @@ out[learn_web]=$(tf "$wasm")
 out[clienttests]=$(tf "${f[clienttests]:-}")
 out[docker]=$(tf "${f[docker]:-}")
 out[nix]=$(tf "${f[nix]:-}")
+# The previous minor release talks to this build over the session package's
+# wire, and the pane snapshot crosses it as vt/snapshot. The job runs when a
+# changed Go file, not a test, is in a package the two build from.
+wire=""
+dirs=$(grep -E '\.go$' <<<"$changed" | grep -v '_test\.go$' | xargs -r -n1 dirname | sort -u | sed 's|^|./|')
+if [ -n "$dirs" ]; then
+	chpk=$(go list $dirs 2>/dev/null | sort -u)
+	wdeps=$(go list -deps ./internal/session ./vt/snapshot 2>/dev/null | sort -u) || everything "go list failed for the wire packages"
+	wire=$(comm -12 <(grep . <<<"$chpk") <(grep . <<<"$wdeps"))
+fi
+out[mixed_versions]=$(tf "${f[mixed]:-}$wire")
 out[binary_size]=$(tf "${f[binary_size]:-}${f[bin_src]:+$bin$bindarwin}$($modfiles && echo y)")
 
 # A library is linted, and tested alone, when one of its packages changed or

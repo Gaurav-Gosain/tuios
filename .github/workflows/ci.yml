@@ -53,6 +53,7 @@ jobs:
       docker: ${{ steps.changes.outputs.docker }}
       nix: ${{ steps.changes.outputs.nix }}
       binary_size: ${{ steps.changes.outputs.binary_size }}
+      mixed_versions: ${{ steps.changes.outputs.mixed_versions }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -149,6 +150,12 @@ jobs:
     needs: changes
     if: needs.changes.outputs.docker == 'true'
     uses: ./.github/workflows/docker-build.yml
+
+  mixed-versions:
+    name: mixed-versions
+    needs: changes
+    if: needs.changes.outputs.mixed_versions == 'true'
+    uses: ./.github/workflows/mixed-versions.yml
 
   nix-vendor-hash:
     name: nix-vendor-hash
