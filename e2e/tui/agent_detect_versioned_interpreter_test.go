@@ -135,7 +135,10 @@ func TestAVersionedPythonRunsADetectedAgent(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "send-text", "-s", session, "-w", "0", line); err != nil {
 		t.Fatalf("start python3-config: %v\n%s", err, out)
 	}
-	waitUntil(t, "the detector reads python3-config", 20*time.Second, func() (bool, string) {
+	// The pane keeps the label of the program before until the detector has
+	// read the new one, so the wait is for the new process and the label
+	// both. A python3-config taken for an interpreter keeps hermes and fails.
+	waitUntil(t, "the detector reads python3-config and the pane leaves hermes", 20*time.Second, func() (bool, string) {
 		out, err := tuiosCLI(t, base, "explain-agent-detect", "-s", session, "-w", "0", "--json")
 		if err != nil {
 			return false, err.Error() + ": " + out
@@ -144,7 +147,7 @@ func TestAVersionedPythonRunsADetectedAgent(t *testing.T) {
 		if err := json.Unmarshal([]byte(out), &res); err != nil {
 			return false, "not JSON: " + out
 		}
-		return res.Process.Comm == "python3-config", out
+		return res.Process.Comm == "python3-config" && res.HarnessID != "hermes", out
 	})
 	if res.Process.Interpreter || res.Process.RunToken != "" || res.HarnessID == "hermes" {
 		t.Errorf("ASSERTION: python3-config counts as an interpreter (run token %q, harness %q): %s", res.Process.RunToken, res.HarnessID, raw)
