@@ -50,6 +50,20 @@ func attachWith(t *testing.T, base, name, env string) (term *tuitest.Terminal) {
 	return term
 }
 
+// waitEqualSplit waits until the session's two panes are the same size, give
+// or take a cell.
+func waitEqualSplit(t *testing.T, base, name string) {
+	t.Helper()
+	var g []winRect
+	for deadline := time.Now().Add(uiTimeout); time.Now().Before(deadline); {
+		g = waitForSettledGeometryIn(t, base, name, 2)
+		if len(g) == 2 && abs(g[0].Width-g[1].Width) <= 1 && abs(g[0].Height-g[1].Height) <= 1 {
+			return
+		}
+	}
+	t.Fatalf("the equalize did not reach the session: the panes are %v", g)
+}
+
 func TestMixedVersionsReshapeOneTree(t *testing.T) {
 	if os.Getenv("TUIOS_E2E_MIX_DAEMON") == "" {
 		t.Skip("TUIOS_E2E_MIX_DAEMON is not set")
@@ -108,6 +122,23 @@ func TestMixedVersionsReshapeOneTree(t *testing.T) {
 		}
 	}
 	t.Logf("rounds with different screens: %d of 15", differ)
+
+	// The rounds leave the split wherever the order of the keys put it. A
+	// resize and a rotation pressed at the same moment do not commute, and a
+	// mixed pair is last-writer-wins, so the focused pane can end up narrower
+	// than two of the smallest panes. The split below is then refused with
+	// "This pane is too small to split", and the window count stays at 2.
+	// Equalized first, the pane stays wide enough to split through the three
+	// resize steps the other client sends with it.
+	//
+	// NEGATIVE CONTROL: after the equalize, press "<<<<<<" on the second client
+	// and wait for the screens to agree. The focused pane is then too narrow,
+	// and the split fails every run with "window count never reached 3".
+	if err := a.SendKeys("="); err != nil {
+		t.Fatalf("equalize: %v", err)
+	}
+	withBinary("TUIOS_E2E_MIX_DAEMON", func() { waitEqualSplit(t, base, name) })
+	requireSameScreens(t, a, b, "after the equalize")
 
 	// A split on one client while the other resizes.
 	together(t, a, "|", b, ">>>")

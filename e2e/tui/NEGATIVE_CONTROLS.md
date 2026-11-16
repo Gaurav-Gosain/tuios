@@ -17922,3 +17922,12 @@ The positive half of the e2e test is the probe before the upgrade, refused while
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The released behaviour | origin/main with this branch's e2e directory, which is the `noteTreeOpLocked` call in `PublishLiveFacts` cut | `TestMoveKeepsItsWorkspaceWhileThePaneAnnouncesFolders` ("the session shows workspace 1, want 2"), 11 of 20 | **caught** |
+
+## A split after the reshape rounds
+
+`TestMixedVersionsReshapeOneTree` in `multiclient_mixed_versions_test.go`. The 15 rounds of resize and rotate keys pressed at the same moment leave the split ratio where the order of the keys put it. At 0.70 the focused pane is 36 cells wide, so the split is refused with "This pane is too small to split". The test now equalizes the split before the final split. Run on Linux on 2026-11-16 against v0.12.1 and a build of main.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The pane is too narrow to split | After the equalize, `<<<<<<` on the second client, and a wait for one layout | `TestMixedVersionsReshapeOneTree` ("the new pane on the first client: window count never reached 3"), 7 of 7: 3 with two new clients, 2 with a v0.12.1 first client, 2 with a v0.12.1 daemon | **caught** |
+| The test before this change | origin/main | Same failure, 1 of 4 with a v0.12.1 first client. With two new clients and 60 rounds in place of 15, 2 of 6 | **caught** |
