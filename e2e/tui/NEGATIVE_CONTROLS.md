@@ -2628,6 +2628,15 @@ same client reports BSP there.
 | The empty session keeps the layout mode of the session left | `adoptEmptySessionVersion`: the `ApplyLayoutModeName` call cut | `TestSwitchToAnEmptySessionTakesItsLayout` ("blank has layout mode \"bsp\""). `TestRemoteCreateAppliesStartup` passes, which is correct: [startup] sets the mode there | **caught** |
 | The new window reaches the client before alt+2 | the test runs `new-window` before alt+2 and has no palette wait | `TestSwitchToAnEmptySessionTakesItsLayout` ("blank is tiling bsp"), 10 of 10: workspace 1 holds the pane, so alt+2 opens a new workspace 2 with [startup] layout. This was the CI failure the pause hid. The palette wait after alt+2 closes it | **caught** |
 
+## A new workspace takes the mode it was opened from
+
+`TestNewWorkspaceTakesTheModeItWasOpenedFrom` in `workspace_layout_mode_test.go`. [startup] says bsp, workspace 1 chooses master-stack, and alt+2 opens workspace 2. Workspace 2 must be master-stack, and it must stay master-stack after workspace 1 changes to scrolling.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | origin/main with this branch's e2e directory | `TestNewWorkspaceTakesTheModeItWasOpenedFrom` ("e2e-newws has layout mode \"bsp\", want \"master-stack\""), 3 of 3 | **caught** |
+| No branch for a daemon session | `RestoreWorkspaceLayout`: the `IsDaemonSession` branch cut | the same assertion, 2 of 2 | **caught** |
+
 ## A popup that switches the session (#479)
 
 `TestPopupThatSwitchesSessionCloses` in `popup_test.go` opens a popup whose

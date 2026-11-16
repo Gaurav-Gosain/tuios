@@ -3,6 +3,7 @@ package app
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -560,14 +561,22 @@ func (m *OS) RestoreWorkspaceLayout(workspace int) {
 	// The layout mode is per workspace. A workspace that chose a layout goes
 	// back to it on every visit; one that never chose follows the mode the
 	// session was created with, which adoptSessionLayoutMode records for the
-	// workspaces a session brought with it. Only a session with no state at all
-	// falls back to [startup] layout, which is this client's own default for a
-	// session of its own. The retile that follows the switch is what puts the
-	// mode on screen, so this only sets the flags.
+	// workspaces a session brought with it. A workspace past those, in a
+	// daemon session, takes the mode of the workspace it was opened from: the
+	// flags still hold that mode here, and the entry keeps it on later visits.
+	// Only a session with no state at all falls back to [startup] layout, which
+	// is this client's own default for a session of its own. The retile that
+	// follows the switch is what puts the mode on screen, so this only sets the
+	// flags.
 	if name, ok := m.WorkspaceLayoutMode[workspace]; ok {
 		m.ApplyLayoutModeName(name)
 	} else if m.sessionLayoutMode != "" {
 		m.ApplyLayoutModeName(m.sessionLayoutMode)
+	} else if m.IsDaemonSession && !session.IsScratchWorkspace(workspace) {
+		if m.WorkspaceLayoutMode == nil {
+			m.WorkspaceLayoutMode = make(map[int]string)
+		}
+		m.WorkspaceLayoutMode[workspace] = m.LayoutModeName()
 	} else if m.UserConfig != nil && m.UserConfig.Startup.Layout != "" {
 		m.ApplyLayoutModeName(m.UserConfig.Startup.Layout)
 	}

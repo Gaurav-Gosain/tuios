@@ -120,3 +120,49 @@ func TestLayoutModeMovesWithItsWorkspace(t *testing.T) {
 	waitLayoutMode(t, base, renumberSession, "scrolling")
 	alive(t, term, "after moving a workspace with a layout mode")
 }
+
+// TestNewWorkspaceTakesTheModeItWasOpenedFrom: a new workspace in a session
+// takes the layout mode of the workspace it was opened from. [startup] layout
+// is for a session with no state. Here [startup] says bsp and workspace 1
+// chooses master-stack, so a workspace 2 that took [startup] layout is bsp.
+// The mode must also stay on workspace 2 after a visit to workspace 1.
+//
+// Negative control: in RestoreWorkspaceLayout (internal/app/tiling.go), cut
+// the branch for a daemon session. Workspace 2 is bsp.
+func TestNewWorkspaceTakesTheModeItWasOpenedFrom(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	writeConfig(t, base, "[startup]\nopen_default_window = true\ntiled = true\nlayout = \"bsp\"\n")
+	if out, err := tuiosCLI(t, base, "new", "e2e-newws", "--detach"); err != nil {
+		t.Fatalf("create session: %v\n%s", err, out)
+	}
+	term := attachIn(t, base, "e2e-newws", startOpts{cols: 120, rows: 40})
+	clientShows(t, base, "e2e-newws")
+	waitForSettledGeometryIn(t, base, "e2e-newws", 1)
+	waitLayoutMode(t, base, "e2e-newws", "bsp")
+
+	runPaletteEntry(t, term, "Layout: master-stack")
+	waitLayoutMode(t, base, "e2e-newws", "master-stack")
+
+	if err := term.SendKeys(tuitest.Alt('2')); err != nil {
+		t.Fatalf("press alt+2: %v", err)
+	}
+	waitWorkspace(t, base, "e2e-newws", 2)
+	waitLayoutMode(t, base, "e2e-newws", "master-stack")
+
+	// Workspace 1 changes its mode. Workspace 2 keeps the mode it took.
+	if err := term.SendKeys(tuitest.Alt('1')); err != nil {
+		t.Fatalf("press alt+1: %v", err)
+	}
+	waitWorkspace(t, base, "e2e-newws", 1)
+	runPaletteEntry(t, term, "Layout: scrolling (niri)")
+	waitLayoutMode(t, base, "e2e-newws", "scrolling")
+	if err := term.SendKeys(tuitest.Alt('2')); err != nil {
+		t.Fatalf("press alt+2 again: %v", err)
+	}
+	waitWorkspace(t, base, "e2e-newws", 2)
+	waitLayoutMode(t, base, "e2e-newws", "master-stack")
+
+	saveFrame(t, term, "new-workspace-takes-mode")
+	alive(t, term, "after the switches to a new workspace")
+}
