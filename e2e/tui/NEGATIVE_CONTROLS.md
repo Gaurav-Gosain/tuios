@@ -17995,3 +17995,17 @@ Run on 2026-11-16 on Linux (x86_64), OpenSSH sshd. The branch passes both tests.
 
 The transcripts are `pair-remove.txt` and `hosts-remove-keys.txt` under `TUIOS_E2E_FRAMES`, in each test's folder. Both tests skip when ssh or ssh-keygen is missing, and the first skips when sshd is missing. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestRemovedPairedDeviceLosesItsLink|TestHostRemoveKeepsTheTableWhenTheKeyStays)$' -v .`.
+## The command text an OSC 133 C mark captures is bounded
+
+`TestCommandCaptureIsBounded`, `TestCommandCaptureBytesAreBounded` and `TestCommandCaptureKeepsShortCommands` in `vt/semantic_capture_bound_test.go` are kept unit tests of a resource bound. They count the bytes the C marks keep and the bytes their writing allocates, and time nothing. The bound test writes one B, 9000 lines (past the line bound) or 60 lines (under it), and 300 C marks. The C marks must keep at most 16 KiB between them, and writing them must allocate at most 4 MiB. The bytes test writes 60 lines of 398 two-byte runes on a 400 column pane. One C must keep at most 16 KiB, cut at a rune boundary. The short command test holds normal shell use: one command per prompt, a command of three lines, a long command that soft-wraps, and a second C after one B.
+
+Run on 2026-11-16 on Linux (x86_64), pure Go backend. The branch passes all three tests and the `vt` suite with `-short`.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main | `TestCommandCaptureIsBounded/9000_lines`: "300 C marks keep 213299700 bytes of command text, want at most 16384", "writing 300 C marks allocated 38518192864 bytes", 35.7s | **caught** |
+| No line bound in `extractCommandTextFrom` | `TestCommandCaptureIsBounded/9000_lines`: "300 C marks keep 4915200 bytes", "allocated 5335864 bytes" | **caught** |
+| A second C after one B reads again (`prevC` not reused) | `TestCommandCaptureIsBounded/60_lines`: "300 C marks keep 1421700 bytes", "allocated 94049520 bytes" | **caught** |
+| No byte bound (`capBytes` and the loop bound cut) | `TestCommandCaptureBytesAreBounded`: "a C mark on a 400 column pane kept 47819 bytes, want at most 16384" | **caught** |
+
+The ghostty backend was not run: libghostty-vt is not built on this machine. Both backends call the same `captureCommandText`. Repeat from `vt` with `go test -count=1 -run '^TestCommandCapture' -v .`, and with `-tags ghostty` where libghostty-vt is built.

@@ -153,6 +153,33 @@ func (l *SemanticMarkerList) Last(t SemanticMarkerType) *SemanticMarker {
 	return nil
 }
 
+// commandStartForCapture is what a new C marker captures its command from:
+// the most recent B marker, and the C marker that already follows that B,
+// if one does. A shell sends one C per B, so prevC is nil in normal use. A
+// second C after the same B reuses prevC's text and reads nothing, so a run
+// of C markers costs no more than one.
+func (l *SemanticMarkerList) commandStartForCapture() (b, prevC *SemanticMarker) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, m := range slices.Backward(l.markers) {
+		if m.AbsLine < l.trimmed {
+			continue
+		}
+		switch m.Type {
+		case MarkerCommandExecuted:
+			if prevC == nil {
+				c := m
+				c.AbsLine -= l.trimmed
+				prevC = &c
+			}
+		case MarkerCommandStart:
+			m.AbsLine -= l.trimmed
+			return &m, prevC
+		}
+	}
+	return nil, nil
+}
+
 // RemoveOnScreen removes markers whose AbsLine >= scrollbackLen, i.e. markers
 // that reference visible screen content. Used when the screen is cleared (CSI 2J)
 // so that stale on-screen markers don't cause output extraction to read

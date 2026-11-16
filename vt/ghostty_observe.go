@@ -680,9 +680,7 @@ func (t *GhosttyTerminal) handleSemanticZoneOSC(payload []byte) {
 		ExitCode: exitCode,
 	}
 	if subCmd == 'C' {
-		if bMarker := t.semanticMarkers.Last(MarkerCommandStart); bMarker != nil {
-			marker.CapturedText = extractCommandTextFrom(ghosttyMarkReader{t}, bMarker.AbsLine, bMarker.Col, absLine)
-		}
+		marker.CapturedText = captureCommandText(t.semanticMarkers, ghosttyMarkReader{t}, absLine)
 	}
 	t.semanticMarkers.Add(marker)
 	// Queued like every other callback of this backend, so it runs in order

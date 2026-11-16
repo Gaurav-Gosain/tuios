@@ -647,10 +647,31 @@ func (e *Emulator) SemanticMarkers() *SemanticMarkerList {
 	return e.semanticMarkers
 }
 
-// extractCommandText extracts the command text between a B marker position
-// and a C marker position, for OSC 133 command capture.
-func (e *Emulator) extractCommandText(bLine, bCol, cLine, _ int) string {
-	return extractCommandTextFrom(e, bLine, bCol, cLine)
+// Bounds of the command text one OSC 133 C marker captures. Without them a
+// program that prints one B, a long output and then many C markers made each
+// C read every line from B to the cursor and keep the text, so time and
+// memory grew with lines times markers.
+const (
+	// maxCommandLines is the most lines from B to C that are read. A span
+	// longer than this is output, not a typed command, and captures nothing.
+	maxCommandLines = 64
+	// maxCommandBytes is the most bytes of command text one marker keeps.
+	maxCommandBytes = 16 << 10
+)
+
+// captureCommandText is the command text for a C marker at cLine: the text
+// from the last B marker to cLine, bounded by maxCommandLines and
+// maxCommandBytes. A second C after the same B gets the first one's text
+// without a read. With no B it is empty.
+func captureCommandText(list *SemanticMarkerList, r markerGridReader, cLine int) string {
+	b, prevC := list.commandStartForCapture()
+	if b == nil {
+		return ""
+	}
+	if prevC != nil {
+		return prevC.CapturedText
+	}
+	return extractCommandTextFrom(r, b.AbsLine, b.Col, cLine)
 }
 
 // markerGridReader is the read surface extractCommandTextFrom needs. Both
@@ -680,7 +701,14 @@ func (e *Emulator) lineSoftWrapped(absLine int) bool {
 
 // extractCommandTextFrom extracts the command text between a B marker
 // position and a C marker position.
+//
+// It reads at most maxCommandLines lines and keeps at most maxCommandBytes:
+// a span of more lines captures nothing, and longer text is cut at a rune
+// boundary.
 func extractCommandTextFrom(e markerGridReader, bLine, bCol, cLine int) string {
+	if cLine-bLine > maxCommandLines || cLine < bLine {
+		return ""
+	}
 	sbLen := e.ScrollbackLen()
 	width := e.Width()
 	height := e.Height()
@@ -732,28 +760,46 @@ func extractCommandTextFrom(e markerGridReader, bLine, bCol, cLine int) string {
 		if bCol >= len(runes) {
 			return ""
 		}
-		return strings.TrimSpace(string(runes[bCol:]))
+		return capBytes(strings.TrimSpace(string(runes[bCol:])))
 	}
 
 	// Multi-line command. A line that soft-wraps runs on into the next one
 	// with nothing between them: the shell drew one long line, and the
 	// newline is the terminal's, not the person's. Only a line the shell
 	// ended (a continuation prompt after a typed newline) starts a new part.
-	var parts []string
-	cur := ""
+	var out, cur strings.Builder
+	parts := 0
 	if runes := []rune(readLine(bLine)); bCol < len(runes) {
-		cur = strings.TrimLeft(string(runes[bCol:]), " ")
+		cur.WriteString(strings.TrimLeft(string(runes[bCol:]), " "))
 	}
-	for line := bLine + 1; line < cLine; line++ {
-		if e.lineSoftWrapped(line - 1) {
-			cur += readLine(line)
-			continue
+	endPart := func() {
+		if parts > 0 {
+			out.WriteByte('\n')
 		}
-		parts = append(parts, strings.TrimRight(cur, " "))
-		cur = readLine(line)
+		parts++
+		out.WriteString(strings.TrimRight(cur.String(), " "))
+		cur.Reset()
 	}
-	parts = append(parts, strings.TrimRight(cur, " "))
-	return strings.Join(parts, "\n")
+	for line := bLine + 1; line < cLine && out.Len()+cur.Len() <= maxCommandBytes; line++ {
+		if !e.lineSoftWrapped(line - 1) {
+			endPart()
+		}
+		cur.WriteString(readLine(line))
+	}
+	endPart()
+	return capBytes(out.String())
+}
+
+// capBytes cuts s to at most maxCommandBytes, at a rune boundary.
+func capBytes(s string) string {
+	if len(s) <= maxCommandBytes {
+		return s
+	}
+	n := maxCommandBytes
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return strings.Clone(s[:n])
 }
 
 // ScrollbackLine returns a line from the scrollback buffer at the given index.

@@ -134,13 +134,16 @@ func parseWithMarkers(term vt.Terminal, markers []vt.SemanticMarker) []CommandBl
 			command = cMarker.CapturedText
 		} else {
 			// Fallback: extract from terminal buffer (may be overwritten by TUI programs)
-			command = extractTextFromCol(term, bMarker.AbsLine, bMarker.Col)
-			if bMarker.AbsLine < cmdEndLine(cMarker, dMarker, bMarker) {
-				for line := bMarker.AbsLine + 1; line <= cmdEndLine(cMarker, dMarker, bMarker)-1; line++ {
-					command += "\n" + extractAbsLineText(term, line)
-				}
+			// At most maxFallbackCommandLines lines: a long span from B is
+			// output, and reading all of it grew with the output.
+			var sb strings.Builder
+			sb.WriteString(extractTextFromCol(term, bMarker.AbsLine, bMarker.Col))
+			end := min(cmdEndLine(cMarker, dMarker, bMarker), bMarker.AbsLine+maxFallbackCommandLines)
+			for line := bMarker.AbsLine + 1; line < end; line++ {
+				sb.WriteByte('\n')
+				sb.WriteString(extractAbsLineText(term, line))
 			}
-			command = cleanCommandText(command)
+			command = cleanCommandText(sb.String())
 		}
 		command = strings.TrimSpace(command)
 		if command == "" {
@@ -215,6 +218,10 @@ func parseWithMarkers(term vt.Terminal, markers []vt.SemanticMarker) []CommandBl
 	reverseBlocks(blocks)
 	return blocks
 }
+
+// maxFallbackCommandLines is the most lines read for a command whose C
+// marker captured no text. It matches the bound in vt.
+const maxFallbackCommandLines = 64
 
 func cmdEndLine(c, d, b *vt.SemanticMarker) int {
 	if c != nil {

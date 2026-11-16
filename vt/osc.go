@@ -225,9 +225,7 @@ func (e *Emulator) handleSemanticZone(data []byte) {
 		// terminal buffer before the program's output overwrites it.
 		// This is the only reliable time to read the command text.
 		if subCmd == 'C' {
-			if bMarker := e.semanticMarkers.Last(MarkerCommandStart); bMarker != nil {
-				marker.CapturedText = e.extractCommandText(bMarker.AbsLine, bMarker.Col, absLine, curX)
-			}
+			marker.CapturedText = captureCommandText(e.semanticMarkers, e, absLine)
 		}
 
 		e.semanticMarkers.Add(marker)
