@@ -126,7 +126,7 @@ func TestMailCrossesTheLink(t *testing.T) {
 		t.Fatalf("type the reply: %v", err)
 	}
 	if err := farTerm.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "ship it") && !strings.Contains(s.Text(), "reply:")
+		return replySent(s, "ship it")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the reply never came back into the thread: %v\n%s", err, farTerm.Snapshot())
 	}
@@ -457,6 +457,15 @@ func TestAFileCrossesTheLinkThroughTheStash(t *testing.T) {
 	}
 }
 
+// replySent says the reply line closed on text: the daemon that holds the
+// ring answered the send. The line says "sending:" while the call is out,
+// so a screen without "reply:" alone can still be before the ring has the
+// reply.
+func replySent(s tuitest.Screen, text string) bool {
+	screen := s.Text()
+	return strings.Contains(screen, text) && !strings.Contains(screen, "reply:") && !strings.Contains(screen, "sending:")
+}
+
 // TestMailboxFollowsTheSessionAcrossTheLink is the overlay in the other
 // direction: a client here attached to a session on build opens its mailbox
 // and reads build's ring, not this machine's, and its reply lands on build
@@ -516,7 +525,7 @@ func TestMailboxFollowsTheSessionAcrossTheLink(t *testing.T) {
 		t.Fatalf("type the reply: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "hello from here") && !strings.Contains(s.Text(), "reply:")
+		return replySent(s, "hello from here")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the reply never came back: %v\n%s", err, term.Snapshot())
 	}
