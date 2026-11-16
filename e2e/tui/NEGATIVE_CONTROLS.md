@@ -17931,3 +17931,16 @@ The positive half of the e2e test is the probe before the upgrade, refused while
 | --- | --- | --- | --- |
 | The pane is too narrow to split | After the equalize, `<<<<<<` on the second client, and a wait for one layout | `TestMixedVersionsReshapeOneTree` ("the new pane on the first client: window count never reached 3"), 7 of 7: 3 with two new clients, 2 with a v0.12.1 first client, 2 with a v0.12.1 daemon | **caught** |
 | The test before this change | origin/main | Same failure, 1 of 4 with a v0.12.1 first client. With two new clients and 60 rounds in place of 15, 2 of 6 | **caught** |
+## run at the first prompt, and a slide after a slow frame
+
+Run on Linux on 2026-11-16. The real binary, `nice -n 19`, GOMAXPROCS=4.
+
+`TestRunWaitsForTheFirstPromptAfterADMark` in `run_first_prompt_test.go`. The shell's first PROMPT_COMMAND sends D, prints a line, waits a second, then sends A. The test waits for the line and calls run. This is the gap `TestFindPortsAndStartedBy` hit now and then at its first run.
+
+`TestASlowFrameDoesNotTurnTheNextSwitchIntoACut` in `internal/app/workspace_slide_cost_test.go`. One or two slow frames among quick ones must not stop the next slide. This is why `TestWorkspaceSwitchSlides` failed at the slide back ("nothing was typed mid-slide").
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| run takes any mark as a started shell | origin/main | `TestRunWaitsForTheFirstPromptAfterADMark` ("the shell in window sh is not at its prompt"), 3 of 3 | **caught** |
+| The smoothed frame cost | `tooSlow` as `s.cost > frame`, with `cost += (d - cost) / 4` | `TestASlowFrameDoesNotTurnTheNextSwitchIntoACut`: "one frame descheduled" and "two slow frames" | **caught** |
+| The same, end to end | origin/main, two runs of `-count=10` side by side | `TestWorkspaceSwitchSlides`, 5 to 8 of 20 per batch, among them "nothing was typed mid-slide". A trace showed one frame of 155 ms before the key, a cost of 43 ms, and the switch drawn as a cut | **caught** |

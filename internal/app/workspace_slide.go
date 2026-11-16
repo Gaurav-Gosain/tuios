@@ -52,7 +52,8 @@ import (
 // command (MotionAllows), the screen saver, a first frame not yet drawn, a
 // scratch group shown or hidden, and a client too slow to draw the slide: one
 // whose frame rate gives the slide fewer than slideMinFrames frames, or whose
-// frames take longer to compose, on average, than a slide frame lasts. An SSH or web
+// frames take longer to compose than a slide frame lasts, three of the last five
+// (tooSlow). An SSH or web
 // client runs it at slideRemoteFPS, since each frame repaints the pane area
 // over the network.
 
@@ -63,6 +64,10 @@ const (
 	// slideMinFrames is the fewest frames a slide may be drawn in. Fewer
 	// reads as a stutter, and a cut is better.
 	slideMinFrames = 4
+	// slideCostFrames is how many recent frames decide whether the client is
+	// too slow to slide, and slideSlowFrames how many of them must be slow.
+	slideCostFrames = 5
+	slideSlowFrames = 3
 )
 
 // workspaceSlide is this client's running slide. The zero value is idle.
@@ -87,9 +92,11 @@ type workspaceSlide struct {
 	fade bool
 	// still turns the slide pass off while a snapshot is composed.
 	still bool
-	// cost is how long a frame takes to compose, smoothed over the last few
-	// so one slow frame does not turn the next switch into a cut.
-	cost time.Duration
+	// costs are how long the last frames took to compose, a ring that next
+	// writes into. Frames are timed on the wall clock, so a frame the system
+	// descheduled is slow without the client being slow: see tooSlow.
+	costs [slideCostFrames]time.Duration
+	next  int
 }
 
 // running reports whether a slide is drawing.
@@ -137,9 +144,26 @@ func (m *OS) slideFrameInterval() time.Duration {
 	return frame
 }
 
-// noteFrameCost folds one frame's compose time into the smoothed cost.
+// noteFrameCost records one frame's compose time.
 func (s *workspaceSlide) noteFrameCost(d time.Duration) {
-	s.cost += (d - s.cost) / 4
+	s.costs[s.next] = d
+	s.next = (s.next + 1) % slideCostFrames
+}
+
+// tooSlow reports whether this client composes its frames slower than one
+// frame of a slide lasts: slideSlowFrames of the last slideCostFrames frames
+// took longer than frame. One or two late frames are a process the system
+// descheduled for a moment, and the slide still has its frames. A smoothed
+// cost read them as a slow client: one frame of 155 ms after quick ones gave
+// 43 ms, and the next switch was a cut.
+func (s *workspaceSlide) tooSlow(frame time.Duration) bool {
+	slow := 0
+	for _, d := range s.costs {
+		if d > frame {
+			slow++
+		}
+	}
+	return slow >= slideSlowFrames
 }
 
 // slideRemote reports whether the client draws across a network.
@@ -168,7 +192,7 @@ func (m *OS) slideAllowed() bool {
 	}
 	// A client whose frames already take longer than a slide frame would
 	// draw the slide as a few jumps.
-	return m.wsSlide.cost <= frame
+	return !m.wsSlide.tooSlow(frame)
 }
 
 // slideArea is the part of the screen the panes are drawn in.
