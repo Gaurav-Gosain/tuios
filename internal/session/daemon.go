@@ -2734,7 +2734,7 @@ func (d *Daemon) cleanupLoop() {
 func (d *Daemon) cleanupOnce() bool {
 	const pendingRequestTTL = 2 * time.Minute
 
-	d.releaseAltScreens()
+	d.releaseEmulatorBuffers()
 	// Expire stale pending requests whose TUI result never arrived so
 	// they do not pin the requester's connState forever.
 	now := time.Now()
@@ -2750,7 +2750,6 @@ func (d *Daemon) cleanupOnce() bool {
 	}
 	waiting := len(d.pendingRequests) > 0
 	d.pendingRequestsMu.Unlock()
-	d.releaseReflowScratch()
 	// A flood of output that has ended leaves its garbage and its
 	// peak heap goal behind, and an idle daemon runs no collection to
 	// lower either. memtrim trims only when the daemon is quiet.

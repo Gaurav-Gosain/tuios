@@ -270,24 +270,37 @@ func isOwnDisplayLink(socketPath, name string) bool {
 	if !ok {
 		return false
 	}
-	_, err := uuid.Parse(rest)
-	return err == nil && len(rest) == 36
+	return isSessionID(rest)
 }
 
 // sweepDisplayLinks removes every Wayland link of this daemon in the socket
 // folder. Only symlinks are removed.
 func (d *Daemon) sweepDisplayLinks() {
+	d.sweepOwnLinks(isOwnDisplayLink)
+}
+
+// sweepOwnLinks removes every symlink in the socket folder that own says is
+// this daemon's. The display and ssh agent links share the folder and the
+// rule; only the names differ.
+func (d *Daemon) sweepOwnLinks(own func(socketPath, name string) bool) {
 	sock := d.manager.SocketPath()
 	entries, err := os.ReadDir(filepath.Dir(sock))
 	if err != nil {
 		return
 	}
 	for _, e := range entries {
-		if e.Type()&os.ModeSymlink == 0 || !isOwnDisplayLink(sock, e.Name()) {
+		if e.Type()&os.ModeSymlink == 0 || !own(sock, e.Name()) {
 			continue
 		}
 		_ = os.Remove(filepath.Join(filepath.Dir(sock), e.Name()))
 	}
+}
+
+// isSessionID reports whether s is a whole session id, the part of a link
+// name between its prefix and .sock.
+func isSessionID(s string) bool {
+	_, err := uuid.Parse(s)
+	return err == nil && len(s) == 36
 }
 
 // startDisplayFollow sweeps the links an earlier daemon left and warns when a

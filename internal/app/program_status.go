@@ -120,20 +120,12 @@ func programStatusLines(recs []sessiontree.ProgramRecord) []string {
 // paneProgramStatus is the records a pane of this machine reported, as this
 // client holds them.
 func (m *OS) paneProgramStatus(sessionID, windowID string) []sessiontree.ProgramRecord {
-	if sessionID == "" || sessionID == m.sidebarCurrentSessionID() {
-		for _, w := range m.Windows {
-			if w != nil && w.ID == windowID {
-				return w.ProgramStatus
-			}
-		}
-	}
-	if m.DaemonClient == nil || m.AttachedHost != "" {
-		return nil
-	}
-	for _, w := range m.DaemonClient.SessionWindows(sessionID) {
-		if w.ID == windowID {
-			return programStatusFromWire(nil, w.ProgramStatus)
-		}
+	w, sum := m.findPane(sessionID, windowID)
+	switch {
+	case w != nil:
+		return w.ProgramStatus
+	case sum != nil:
+		return programStatusFromWire(nil, sum.ProgramStatus)
 	}
 	return nil
 }

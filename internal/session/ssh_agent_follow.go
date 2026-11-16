@@ -16,7 +16,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 	"github.com/Gaurav-Gosain/tuios/internal/sockpath"
-	"github.com/google/uuid"
 )
 
 // Following the attached client's ssh agent.
@@ -163,25 +162,14 @@ func isOwnAgentLink(socketPath, name string) bool {
 	if strings.HasPrefix(rest, "link-") {
 		return hostLinkPattern().MatchString(rest)
 	}
-	_, err := uuid.Parse(rest)
-	return err == nil && len(rest) == 36
+	return isSessionID(rest)
 }
 
 // sweepAgentLinks removes every agent link of this daemon in the socket
 // folder: the ones a killed daemon left, at start, and its own, at stop.
 // Only symlinks are removed.
 func (d *Daemon) sweepAgentLinks() {
-	sock := d.manager.SocketPath()
-	entries, err := os.ReadDir(filepath.Dir(sock))
-	if err != nil {
-		return
-	}
-	for _, e := range entries {
-		if e.Type()&os.ModeSymlink == 0 || !isOwnAgentLink(sock, e.Name()) {
-			continue
-		}
-		_ = os.Remove(filepath.Join(filepath.Dir(sock), e.Name()))
-	}
+	d.sweepOwnLinks(isOwnAgentLink)
 }
 
 // stopSSHAgent runs at the end of shutdown, once every client is gone: no

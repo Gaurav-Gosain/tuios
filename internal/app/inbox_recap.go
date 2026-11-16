@@ -267,23 +267,39 @@ func recapTestName(cmdline string) string {
 	return strings.Join(keep, " ")
 }
 
-// agentPaneMeta is the metadata a pane of this machine reported, as this
-// client holds it.
-func (m *OS) agentPaneMeta(sessionID, windowID string) []sessiontree.MetaToken {
+// findPane finds a pane of this machine as this client holds it: the window
+// when the pane is in the session on screen, else the daemon's summary of
+// it. Both are nil for a pane it does not find, and for a client attached to
+// another machine.
+func (m *OS) findPane(sessionID, windowID string) (*terminal.Window, *session.WindowSummary) {
 	if sessionID == "" || sessionID == m.sidebarCurrentSessionID() {
 		for _, w := range m.Windows {
 			if w != nil && w.ID == windowID {
-				return w.AgentMeta
+				return w, nil
 			}
 		}
 	}
 	if m.DaemonClient == nil || m.AttachedHost != "" {
-		return nil
+		return nil, nil
 	}
-	for _, w := range m.DaemonClient.SessionWindows(sessionID) {
-		if w.ID == windowID {
-			return agentMetaFromWire(nil, w.AgentMeta)
+	sums := m.DaemonClient.SessionWindows(sessionID)
+	for i := range sums {
+		if sums[i].ID == windowID {
+			return nil, &sums[i]
 		}
+	}
+	return nil, nil
+}
+
+// agentPaneMeta is the metadata a pane of this machine reported, as this
+// client holds it.
+func (m *OS) agentPaneMeta(sessionID, windowID string) []sessiontree.MetaToken {
+	w, sum := m.findPane(sessionID, windowID)
+	switch {
+	case w != nil:
+		return w.AgentMeta
+	case sum != nil:
+		return agentMetaFromWire(nil, sum.AgentMeta)
 	}
 	return nil
 }

@@ -198,20 +198,12 @@ func subagentsWaitText(n int) string {
 // paneSubagentList is the subagents a pane of this machine reported, as this
 // client holds them.
 func (m *OS) paneSubagentList(sessionID, windowID string) []sessiontree.Subagent {
-	if sessionID == "" || sessionID == m.sidebarCurrentSessionID() {
-		for _, w := range m.Windows {
-			if w != nil && w.ID == windowID {
-				return w.AgentSubagentList
-			}
-		}
-	}
-	if m.DaemonClient == nil || m.AttachedHost != "" {
-		return nil
-	}
-	for _, w := range m.DaemonClient.SessionWindows(sessionID) {
-		if w.ID == windowID {
-			return subagentsFromWire(nil, w.SubagentList)
-		}
+	w, sum := m.findPane(sessionID, windowID)
+	switch {
+	case w != nil:
+		return w.AgentSubagentList
+	case sum != nil:
+		return subagentsFromWire(nil, sum.SubagentList)
 	}
 	return nil
 }
