@@ -1246,7 +1246,9 @@ predicate that is gated. A process that names itself is described by its own
 name; only a stand-in for another program has any reason for its arguments to be
 treated as identity. So `argv_path` is consulted only when `comm` or `exe` is a
 known interpreter (`node`, `python3`, `npx`, `bun`, a shell, and so on), and even
-then it sees a single token: the first non-flag argument, skipping a runner
+then it sees a single token. A versioned name of `python`, `node` or `nodejs`
+counts as that interpreter when the rest is a version only: `python3.14`,
+`python3.13t` and `node22` count, `python3-config` does not. The token is the first non-flag argument, skipping a runner
 subcommand so `bun run x` names `x`.
 
 Anything looser mislabels panes. Scanning every argument for the substring

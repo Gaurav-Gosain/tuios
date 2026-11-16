@@ -44,10 +44,43 @@ var interpreters = map[string]struct{}{
 	"sh": {}, "bash": {}, "zsh": {}, "fish": {}, "env": {},
 }
 
-// IsInterpreter reports whether a base name is an interpreter or launcher.
+// versionedInterpreters are the interpreters whose executable can carry its
+// version in its name: python3.14 and python2.7 beside python3, node22 and
+// nodejs22 beside node. A bundled Python (uv, pyenv, a vendored runtime such
+// as Hermes's) runs as python3.14, with python3 only a link to it, so the
+// kernel names the process python3.14 (#2125).
+var versionedInterpreters = []string{"python", "node", "nodejs"}
+
+// IsInterpreter reports whether a base name is an interpreter or launcher. A
+// versioned name counts only when what follows the family is a version and
+// nothing else, so python3.14 and node22 count and python3-config and
+// node-gyp do not.
 func IsInterpreter(base string) bool {
-	_, ok := interpreters[base]
-	return ok
+	if _, ok := interpreters[base]; ok {
+		return true
+	}
+	for _, family := range versionedInterpreters {
+		if v, ok := strings.CutPrefix(base, family); ok && isVersion(v) {
+			return true
+		}
+	}
+	return false
+}
+
+// isVersion reports whether s is a version as an executable name carries it:
+// groups of digits joined by dots (3, 3.14, 22), with the t that marks a
+// free-threaded Python build (3.13t).
+func isVersion(s string) bool {
+	s = strings.TrimSuffix(s, "t")
+	if s == "" {
+		return false
+	}
+	for part := range strings.SplitSeq(s, ".") {
+		if part == "" || strings.Trim(part, "0123456789") != "" {
+			return false
+		}
+	}
+	return true
 }
 
 // launchers are programs that stay resident above the program they run, so the
