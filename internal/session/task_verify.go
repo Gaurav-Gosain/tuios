@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -355,6 +356,8 @@ func runVerify(ctx context.Context, dir, command string, timeout time.Duration) 
 		cmd = childproc.CommandContext(rctx, "/bin/sh", "-c", command)
 	}
 	cmd.Dir = dir
+	// The environment a pane gets, not the raw one: see guestenv.DaemonChild.
+	cmd.Env = guestenv.DaemonChild()
 	childproc.OwnGroup(cmd)
 	cmd.WaitDelay = verifyWaitDelay
 	out := &tailBuffer{max: verifyKeepBytes}

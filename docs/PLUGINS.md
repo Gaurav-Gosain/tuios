@@ -238,6 +238,9 @@ Every process of a tuios plugin gets these variables.
 | `TUIOS_PLUGIN_CONTEXT_JSON` | All of the above context as JSON, with the agent and the selected text. |
 | `TUIOS_PLUGIN_ID`, `TUIOS_PLUGIN_TOKEN` | Who the process is. A pane of the plugin does not get these. Do not print the token. |
 
+A plugin process starts from the daemon's environment less the pane, session
+and agent variables of the command that started the daemon, as a pane does.
+
 A background process runs in the plugin folder, with no terminal and stdin
 closed. tuios keeps the first 64 KiB of its output. `tuios plugins log` shows it.
 A pane starts in the plugin folder too.

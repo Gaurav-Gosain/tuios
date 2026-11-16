@@ -15,6 +15,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 )
 
 // Bounds on what plugins run, as herdr has them where herdr has one.
@@ -475,6 +477,10 @@ func (r *Runner) Resume() {
 // command does not belong to. The daemon's own environment can carry them
 // when the daemon was started from a pane.
 func cleanEnv(env []string) []string {
+	// The filter a pane gets first: a daemon started from a pane or by an
+	// agent's tool call keeps that caller's variables, which name its pane,
+	// session and credential.
+	env = guestenv.WithoutHostMultiplexer(slices.Clone(env))
 	out := env[:0:0]
 	for _, kv := range env {
 		k, _, _ := strings.Cut(kv, "=")

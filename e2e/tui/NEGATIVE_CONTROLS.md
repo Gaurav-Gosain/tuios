@@ -18035,3 +18035,19 @@ Run on 2026-11-16 on Linux (x86_64). The branch passes both: pane 1 holds 64, it
 
 The transcript is `pane-conns.txt` under `TUIOS_E2E_FRAMES`. The test skips when python3 is missing. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPanesCannotTakeThePersonsConnections$' -v .`.
+
+## Daemon children get the environment a pane gets
+
+`TestDaemonChildrenDoNotInheritTheAgentThatStartedTheDaemon` in `daemon_child_env_test.go` starts the daemon with `tuios new --detach` from the environment of an agent's tool call: `CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_MESSAGING_TOKEN`, `CODEX_THREAD_ID`, `TUIOS_PANE_ID`, `TUIOS_PANE_TOKEN`, `NO_COLOR` and one ordinary variable. An after-new-window hook, a plugin action and an `exec` line each write `env` to a file. None may keep the agent and pane variables, and each must keep the ordinary one. `TestExecAfterARestartFromAPaneIsNotThatPane` starts the daemon as `restart-server` in pane X does, with `TUIOS_PANE_ID=X` and X restored with its id. An `exec` line that runs `tuios pane-grants --json` must not be placed in X.
+
+Run on 2026-11-16 on Linux (x86_64). The branch passes both. The exec line after the restart reads `"window": "unknown"`.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main | "the hook kept CLAUDECODE=[1] ... TUIOS_PANE_ID=[outer-pane] TUIOS_PANE_TOKEN=[outer-pane-token] NO_COLOR=[1]", the same for the plugin (less the pane variables) and the exec line, and "after a restart from pane X, an exec line is placed in that pane" | **caught** |
+| Hooks start from `os.Environ()` | "the hook kept CLAUDECODE=[1] ... NO_COLOR=[1]" | **caught** |
+| `cleanEnv` without the pane filter | "the plugin kept CLAUDECODE=[1] ... NO_COLOR=[1]" | **caught** |
+| `runExecLine` with no `cmd.Env` | "the exec line kept ...", and "after a restart from pane X, an exec line is placed in that pane" | **caught** |
+
+The transcript of the restart case is `exec-after-restart.txt` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestDaemonChildrenDoNotInheritTheAgentThatStartedTheDaemon|TestExecAfterARestartFromAPaneIsNotThatPane)$' -v .`.

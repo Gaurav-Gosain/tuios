@@ -170,6 +170,8 @@ When the file changes, the daemon applies the `[hooks]` table only if it removes
 
 A hook the daemon runs gets the daemon's environment, not your shell's. A daemon started by `tuios new` keeps the environment of that first shell. Put full paths in the command when in doubt.
 
+A daemon hook does not get the pane, session and agent variables of the command that started the daemon, the same ones a pane does not get. So `TUIOS_PANE_ID`, `TUIOS_SESSION`, `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID` and `NO_COLOR` from that command are not set. The `TUIOS_*` variables of the event are set.
+
 ## When a hook does not fire
 
 ```sh

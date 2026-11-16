@@ -16,10 +16,12 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
@@ -139,8 +141,11 @@ type Context struct {
 
 // Manager manages hook registrations and execution.
 type Manager struct {
-	mu    sync.RWMutex
-	hooks map[Event][]string // event -> list of shell commands
+	// daemonEnv makes each hook start from guestenv.DaemonChild, not the raw
+	// environment. See SetDaemonEnv.
+	daemonEnv atomic.Bool
+	mu        sync.RWMutex
+	hooks     map[Event][]string // event -> list of shell commands
 	// run executes one hook command and reports what it did. timeout bounds
 	// it, and zero leaves it unbounded. It is a field so tests can observe
 	// which hooks fired, with what context, without spawning a shell per event.
@@ -167,6 +172,15 @@ func NewManager() *Manager {
 	m := &Manager{hooks: make(map[Event][]string)}
 	m.run = m.executeHook
 	return m
+}
+
+// SetDaemonEnv makes every hook start from guestenv.DaemonChild, the
+// environment a pane gets, instead of the raw one. The daemon sets it: its
+// environment is the one of the command that started it, and a hook that
+// kept that command's TUIOS_PANE_ID would be placed in that pane. A client
+// leaves it off, so its hooks keep the terminal's variables.
+func (m *Manager) SetDaemonEnv(on bool) {
+	m.daemonEnv.Store(on)
 }
 
 // HookStart reports whether pid is the shell of a hook running now, and the
@@ -466,8 +480,13 @@ func (m *Manager) executeHook(cmdStr string, ctx Context, timeout time.Duration)
 		cmd.WaitDelay = time.Second
 	}
 
-	// Set environment variables
-	cmd.Env = append(os.Environ(),
+	// Set environment variables. A hook the daemon runs starts from the
+	// filtered environment a pane gets (see SetDaemonEnv).
+	base := os.Environ()
+	if m.daemonEnv.Load() {
+		base = guestenv.DaemonChild()
+	}
+	cmd.Env = append(base,
 		fmt.Sprintf("TUIOS_EVENT=%s", ctx.EventType),
 		fmt.Sprintf("TUIOS_WINDOW_ID=%s", ctx.WindowID),
 		fmt.Sprintf("TUIOS_WINDOW_NAME=%s", ctx.WindowName),

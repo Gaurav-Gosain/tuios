@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 )
 
 // exec runs one shell line on this machine and answers with what it printed,
@@ -22,7 +23,8 @@ import (
 // because a window runs any command too.
 //
 // The line runs under sh -c (cmd /c on Windows) in a process group of its
-// own, with no stdin and the daemon's environment. The group ends at the
+// own, with no stdin and the environment a pane gets (guestenv.DaemonChild).
+// The group ends at the
 // timeout, when the caller goes away and when the daemon stops, so nothing
 // it started is left running on this machine. Each stream keeps its last
 // execMaxOutput bytes.
@@ -43,7 +45,7 @@ func execVerbs() map[string]verbEntry {
 		"exec": {
 			scope:       scopeDeny,
 			link:        needOpen,
-			description: "Run one shell line on this machine and return its stdout, its stderr and how it ended. No window is opened. The line runs under sh -c (cmd /c on Windows) in a process group of its own, with no stdin and the daemon's environment. The group is stopped at the timeout, when the caller goes away, and when the daemon stops. Each stream keeps its last 1 MiB. At most 8 run at once. Over a link it needs open, as new-window does.",
+			description: "Run one shell line on this machine and return its stdout, its stderr and how it ended. No window is opened. The line runs under sh -c (cmd /c on Windows) in a process group of its own, with no stdin and the daemon's environment less the pane, session and agent variables of the command that started the daemon, as a pane gets it. The group is stopped at the timeout, when the caller goes away, and when the daemon stops. Each stream keeps its last 1 MiB. At most 8 run at once. Over a link it needs open, as new-window does.",
 			params: []verbParam{
 				{Name: "line", Type: "string", Required: true, Description: "The command line, parsed by the shell, at most 16384 bytes."},
 				{Name: "cwd", Type: "string", Description: "Directory to run in. It must exist. Omit for the daemon's home directory."},
@@ -157,6 +159,8 @@ func runExecLine(ctx context.Context, line, dir string, timeout time.Duration) e
 		cmd = childproc.CommandContext(rctx, "/bin/sh", "-c", line)
 	}
 	cmd.Dir = dir
+	// The environment a pane gets, not the raw one: see guestenv.DaemonChild.
+	cmd.Env = guestenv.DaemonChild()
 	childproc.OwnGroup(cmd)
 	cmd.WaitDelay = execWaitDelay
 	stdout, stderr := &execTail{max: execMaxOutput}, &execTail{max: execMaxOutput}

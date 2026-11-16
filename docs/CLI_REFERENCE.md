@@ -2686,7 +2686,8 @@ tuios run --host build -- uname -a
 **On another machine:** `--host <name>` runs the line on that linked machine
 instead, with no pane. Its daemon runs it under `sh -c` (`cmd /c` on Windows),
 with no input and the daemon's environment, in a process group of its own.
-tuios prints what it wrote to stdout and stderr on its own stdout and stderr,
+The environment does not hold the pane, session and agent variables of the
+command that started the daemon. tuios prints what it wrote to stdout and stderr on its own stdout and stderr,
 and exits with its status. `--timeout` stops the command and everything it
 started, and tuios exits `124`. A command stopped by a signal exits 128 plus
 the signal's number. Each stream keeps its last 1 MiB, and a note on stderr

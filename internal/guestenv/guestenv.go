@@ -4,6 +4,7 @@
 package guestenv
 
 import (
+	"os"
 	"strings"
 	"sync/atomic"
 )
@@ -215,6 +216,17 @@ func WithoutHostMultiplexer(env []string) []string {
 		kept = append(kept, kv)
 	}
 	return kept
+}
+
+// DaemonChild is the environment for a process the daemon starts outside
+// every pane: a hook, a plugin command, an exec line or a verify command. It
+// is the daemon's environment less hostMultiplexerVars, the same filter a
+// pane's environment gets. A daemon started from a tuios pane or by an
+// agent's tool call keeps that caller's TUIOS_PANE_ID and session variables,
+// and a child that carried them would be placed in that pane and act as it.
+// The caller adds its own variables after.
+func DaemonChild() []string {
+	return WithoutHostMultiplexer(os.Environ())
 }
 
 func isHostMultiplexerVar(kv string) bool {

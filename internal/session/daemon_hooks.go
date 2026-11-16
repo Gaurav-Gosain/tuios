@@ -173,6 +173,7 @@ func (d *Daemon) loadHooks(cfg *DaemonConfig) {
 // describes, without touching the daemon.
 func buildHookTable(cfg *DaemonConfig) (*hooks.Manager, config.AgentAlertPolicy) {
 	m := hooks.NewManager()
+	m.SetDaemonEnv(true)
 	if len(cfg.Hooks) > 0 {
 		m.LoadFromConfig(cfg.Hooks)
 	}
