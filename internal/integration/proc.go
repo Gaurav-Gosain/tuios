@@ -33,6 +33,19 @@ func ProcessOf(pid int) (sid int, ancestors []int) {
 	return sid, ancestorsFrom(parentPID(pid))
 }
 
+// ProcessAt is ProcessOf for a hook that runs inside the harness: a plugin
+// that reports over the daemon's socket. The harness is pid itself, so the
+// ancestors start at pid, and HarnessPID names it, as it names the parent of
+// a tuios agent-hook process. Starting at the parent named the process above
+// the pane's shell instead (#2160).
+func ProcessAt(pid int) (sid int, ancestors []int) {
+	if pid <= 1 {
+		return 0, nil
+	}
+	sid, _ = procinfo.SessionID(pid)
+	return sid, ancestorsFrom(pid)
+}
+
 // ancestorsFrom walks up from pid, nearest first, to the first process at or
 // below init.
 func ancestorsFrom(pid int) []int {

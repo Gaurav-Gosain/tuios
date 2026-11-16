@@ -72,7 +72,12 @@ func decodeHookCall(params json.RawMessage, what string) (hookCall, *verbError) 
 // for where it runs, the call's env for the variables the mapping reads,
 // the caller's process for its session and ancestors, and this connection
 // for every verb the run calls.
-func (d *Daemon) peerHookIO(cs *connState, env map[string]string) (agenthook.IO, *verbError) {
+//
+// self is the process the hook stands in for. A plugin reports from inside
+// its harness (forwarder false), so the peer is the harness itself, and its
+// ancestry starts at the peer. A forwarder is a line of shell the harness ran
+// as a hook, as tuios agent-hook is, so its ancestry starts at its parent.
+func (d *Daemon) peerHookIO(cs *connState, env map[string]string, forwarder bool) (agenthook.IO, *verbError) {
 	pid := cs.peerPID
 	if pid <= 1 {
 		return agenthook.IO{}, newVerbError(ErrVerbInvalidParams, "the daemon cannot see the process that sent this event, so it cannot find its pane")
@@ -101,7 +106,12 @@ func (d *Daemon) peerHookIO(cs *connState, env map[string]string) (agenthook.IO,
 		Dial: func() (agenthook.Caller, error) {
 			return inProcessCaller{d: d, cs: cs}, nil
 		},
-		Self:       func() (int, []int) { return integration.ProcessOf(pid) },
+		Self: func() (int, []int) {
+			if forwarder {
+				return integration.ProcessOf(pid)
+			}
+			return integration.ProcessAt(pid)
+		},
 		HarnessPID: integration.HarnessPID,
 		StampDir: func() (string, error) {
 			return filepath.Dir(d.manager.SocketPath()), nil
@@ -128,7 +138,7 @@ func (d *Daemon) verbAgentHookEvent(cs *connState, params json.RawMessage) (any,
 	if verr != nil {
 		return nil, verr
 	}
-	hio, verr := d.peerHookIO(cs, p.Env)
+	hio, verr := d.peerHookIO(cs, p.Env, p.Forwarder)
 	if verr != nil {
 		return nil, verr
 	}
@@ -172,7 +182,7 @@ func (d *Daemon) verbAgentStatusLineEvent(cs *connState, params json.RawMessage)
 	if p.Event != "" {
 		return nil, invalidParam("event", "a status line run names no event")
 	}
-	hio, verr := d.peerHookIO(cs, p.Env)
+	hio, verr := d.peerHookIO(cs, p.Env, p.Forwarder)
 	if verr != nil {
 		return nil, verr
 	}

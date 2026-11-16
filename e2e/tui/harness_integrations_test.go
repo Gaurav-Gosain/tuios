@@ -668,6 +668,20 @@ func startPlugin(t *testing.T, base, harness, session, window string, reportComm
 // than the daemon's socket.
 func startPluginWith(t *testing.T, base, harness, session, window string, driverEnv []string, reportCommand ...string) *pluginDriver {
 	t.Helper()
+	return startPluginAs(t, base, harness, session, window, pluginRun{}, driverEnv, reportCommand...)
+}
+
+// pluginRun says how startPluginAs starts the driver.
+type pluginRun struct {
+	// name, when not empty, runs node under that name: a link to node
+	// called name. The process is then named name, as the harness's own
+	// binary is, and the agent detector takes the pane for that harness.
+	name string
+}
+
+// startPluginAs is startPluginWith with the driver started as run says.
+func startPluginAs(t *testing.T, base, harness, session, window string, run pluginRun, driverEnv []string, reportCommand ...string) *pluginDriver {
+	t.Helper()
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node is not installed")
 	}
@@ -725,6 +739,13 @@ func startPluginWith(t *testing.T, base, harness, session, window string, driver
 	driver, _ := filepath.Abs(filepath.Join("testdata", "plugindriver.mjs"))
 	dir := filepath.Join(base, "plugin-driver-"+harness)
 	mustMkdir(dir)
+	if run.name != "" {
+		link := filepath.Join(dir, run.name)
+		if err := os.Symlink(node, link); err != nil {
+			t.Fatalf("link node as %s: %v", run.name, err)
+		}
+		node = link
+	}
 	events, outFile, errFile := filepath.Join(dir, "events"), filepath.Join(dir, "stdout"), filepath.Join(dir, "stderr")
 	if err := syscall.Mkfifo(events, 0o600); err != nil {
 		t.Fatalf("make the driver's event fifo: %v", err)
