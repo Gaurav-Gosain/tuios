@@ -4543,7 +4543,8 @@ with a host-qualified session, and names the repository by `repo_url`.
 Params: `session`, `agent` (required, written as for `fan`), `args` (more
 argv after the agent's own words), `name` (the window's name, which
 `list-agents` shows and `-w` and `name:` take), `cwd`, `repo`, `repo_url`,
-`repos_root`, `clone`, `workspace`, `focus` (default false), `prompt`,
+`repos_root`, `clone`, `workspace` (omit for the calling pane's workspace,
+else the one the session shows), `focus` (default false), `prompt`,
 `ready_timeout` (milliseconds, default 120000), `env` (the rules of `fan`),
 `protocol` (`acp` or `codex`; see below).
 The agent is checked before a clone, so a missing agent does not cost one. A

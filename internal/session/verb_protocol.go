@@ -966,7 +966,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "name", Type: "string", Description: "The window's name, which list-agents shows and -w takes, so the caller can address the agent as, say, reviewer."},
 				{Name: "cwd", Type: "string", Description: "The directory the agent starts in. Omit to use the calling pane's directory, or outside a pane the focused pane's. Pass cwd or a repository, not both."},
 				{Name: "repo", Type: "string", Description: "A directory inside a repository: the agent starts in its main checkout."},
-				{Name: "workspace", Type: "int", Description: "The workspace to open the pane on. Omit for the current one."},
+				{Name: "workspace", Type: "int", Description: "The workspace to open the pane on. Omit for the calling pane's workspace, else the one the session shows."},
 				{Name: "focus", Type: "bool", Description: "Focus the new pane.", Default: "false"},
 				{Name: "prompt", Type: "string", Description: "A first prompt, typed once the agent is ready and checked the way fan checks it."},
 				{Name: "ready_timeout", Type: "int", Description: "Milliseconds to wait for the agent to be ready.", Default: "120000"},

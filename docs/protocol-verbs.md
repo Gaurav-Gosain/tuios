@@ -5227,7 +5227,7 @@ Start an agent in a new pane of a session and answer once it is ready for a prom
 | `name` | string |  |  | The window's name, which list-agents shows and -w takes, so the caller can address the agent as, say, reviewer. |
 | `cwd` | string |  |  | The directory the agent starts in. Omit to use the calling pane's directory, or outside a pane the focused pane's. Pass cwd or a repository, not both. |
 | `repo` | string |  |  | A directory inside a repository: the agent starts in its main checkout. |
-| `workspace` | int |  |  | The workspace to open the pane on. Omit for the current one. |
+| `workspace` | int |  |  | The workspace to open the pane on. Omit for the calling pane's workspace, else the one the session shows. |
 | `focus` | bool |  | `false` | Focus the new pane. |
 | `prompt` | string |  |  | A first prompt, typed once the agent is ready and checked the way fan checks it. |
 | `ready_timeout` | int |  | `120000` | Milliseconds to wait for the agent to be ready. |

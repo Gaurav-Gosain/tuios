@@ -83,6 +83,84 @@ func TestNewWindowFromAPaneOpensOnThatPanesWorkspace(t *testing.T) {
 	}
 }
 
+// An agent in a pane on workspace 3 starts another agent while the person
+// looks at workspace 1. The new agent's pane opens on workspace 3, beside the
+// agent that started it, as a window from new-window does (#1494). The same
+// call from outside every pane still opens on the workspace the session
+// shows.
+//
+// How this could pass wrongly, written down first:
+//   - The session could show workspace 3 when the call runs. The test checks
+//     that it shows 1 before and after.
+//   - The probe could be read before it exists. The test waits for the row.
+//   - The default could move for every caller. The call from outside every
+//     pane must still land on workspace 1.
+//
+// Negative control: with the callerWorkspaceIn call cut from verbStartAgent,
+// the probe opens on workspace 1 and the test fails.
+func TestStartAgentFromAPaneOpensOnThatPanesWorkspace(t *testing.T) {
+	base := t.TempDir()
+	const sess = "saws"
+	term := startHome(t, base, sess)
+
+	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "caller", "--workspace", "3", "--no-focus"); err != nil {
+		t.Fatalf("new-window caller: %v\n%s", err, out)
+	}
+	rowNamed := func(name string) (xpanesRow, bool) {
+		for _, r := range xpanesRowsIn(t, base, sess) {
+			if r.Name == name {
+				return r, true
+			}
+		}
+		return xpanesRow{}, false
+	}
+	waitRow := func(name string) xpanesRow {
+		t.Helper()
+		deadline := time.Now().Add(shellTimeout)
+		for {
+			if r, ok := rowNamed(name); ok {
+				return r
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("no window named %s: %v\n%s", name, xpanesRowsIn(t, base, sess), term.Snapshot())
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	caller := waitRow("caller")
+	if caller.Workspace != 3 {
+		t.Fatalf("caller is on workspace %d, want 3", caller.Workspace)
+	}
+	if ws := currentWorkspace(t, base, sess); ws != 1 {
+		t.Fatalf("the session shows workspace %d before the call, want 1", ws)
+	}
+
+	// The agent is a program no harness knows, so --no-wait: the call returns
+	// once the pane exists.
+	if out, err := tuiosCLI(t, base, "send-text", "-s", sess, "-w", caller.ID, tuiosBin+" start-agent 'sleep 600' -s "+sess+" --name probe --no-wait\n"); err != nil {
+		t.Fatalf("send-text into caller: %v\n%s", err, out)
+	}
+	probe := waitRow("probe")
+	saveFrame(t, term, "start-agent-from-pane")
+	for _, r := range xpanesRowsIn(t, base, sess) {
+		t.Logf("window %s on workspace %d", r.Name, r.Workspace)
+	}
+	if probe.Workspace != 3 {
+		t.Fatalf("ASSERTION: the agent a pane on workspace 3 started is on workspace %d, want 3", probe.Workspace)
+	}
+	if ws := currentWorkspace(t, base, sess); ws != 1 {
+		t.Fatalf("the session shows workspace %d after the call, want 1", ws)
+	}
+
+	// Outside every pane the default is still the shown workspace.
+	if out, err := tuiosCLI(t, base, "start-agent", "sleep 600", "-s", sess, "--name", "outside", "--no-wait"); err != nil {
+		t.Fatalf("start-agent outside: %v\n%s", err, out)
+	}
+	if outside := waitRow("outside"); outside.Workspace != 1 {
+		t.Fatalf("an agent started outside every pane is on workspace %d, want 1", outside.Workspace)
+	}
+}
+
 // An agent in a pane opens a window and starts an agent with no --cwd, while
 // the person's focus is on a pane in another folder. Both start in the
 // agent's folder. The same new-window from outside every pane still starts in

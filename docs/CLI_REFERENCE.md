@@ -1217,7 +1217,8 @@ prints the pane and the evidence. It exits 1 when the agent is not ready: it
 stopped on a question of its own (the pane is kept for you to answer, and the
 Inbox shows it), showed nothing before `--ready-timeout` (default 120000), or
 exited. It also exits 1 when a `--prompt` was not taken. The pane is not
-focused unless `--focus` is passed.
+focused unless `--focus` is passed. Without `--workspace` it opens on the
+calling pane's workspace, or outside every pane on the one the session shows.
 
 `--no-wait` returns as soon as the agent's process has started and has not
 exited within a second, without waiting for it to be ready. It exits 1 only

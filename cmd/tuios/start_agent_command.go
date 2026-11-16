@@ -161,7 +161,7 @@ the id printed when the agent is not ready, and the command exits non-zero.`,
 	cmd.Flags().StringVar(&cwd, "cwd", "", "The directory the agent starts in (default: the calling pane's, else the focused pane's)")
 	cmd.Flags().StringVar(&repo, "repo", "", "A directory inside a repository: the agent starts in its main checkout")
 	cmd.Flags().BoolVar(&clone, "clone", false, "On another machine, clone this repository there when it has no checkout")
-	cmd.Flags().IntVar(&workspace, "workspace", 0, "The workspace to open the pane on (default: the current one)")
+	cmd.Flags().IntVar(&workspace, "workspace", 0, "The workspace to open the pane on (default: the calling pane's workspace, else the one the session shows)")
 	cmd.Flags().BoolVar(&focus, "focus", false, "Focus the new pane")
 	cmd.Flags().StringVar(&prompt, "prompt", "", "A first prompt, typed once the agent is ready")
 	cmd.Flags().StringVar(&parent, "parent", "", "The agent pane the new agent reports to, by window id (default: the agent pane this runs in)")

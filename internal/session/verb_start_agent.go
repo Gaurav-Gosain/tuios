@@ -105,7 +105,7 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		return nil, invalidParam("agent", "agent is required: the harness or program to start, with its arguments, such as claude or \"codex --model o5\"")
 	}
 	if p.Workspace < 0 {
-		return nil, invalidParam("workspace", "workspace is a workspace number, e.g. 2. Omit it for the current one")
+		return nil, invalidParam("workspace", "workspace is a workspace number, e.g. 2. Omit it for the calling pane's workspace, else the one the session shows")
 	}
 	if p.Cwd != "" && p.named() {
 		return nil, invalidParam("cwd", "pass cwd or a repository, not both: the agent starts in the repository's main checkout")
@@ -225,6 +225,13 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 			})
 		}
 		created = true
+	}
+
+	// From inside a pane of this session, the default is the pane's own
+	// workspace, as for new-window (#1494). Outside every pane, and for
+	// another session, it stays the one the session shows.
+	if p.Workspace == 0 {
+		p.Workspace = d.callerWorkspaceIn(cs, sess)
 	}
 
 	sessionID := sess.ID
