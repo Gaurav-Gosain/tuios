@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strconv"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -87,7 +88,14 @@ func ckClampList(want, w int) int {
 // and the focus keeps ckFocusMin beside it. A wide list hides the side
 // column before it squeezes the focus.
 func (m *OS) cockpitSideShown(w, focusW int) bool {
-	return w >= ckWide && !m.Inbox.ck.sideHidden && focusW-ckSideWidth-1 >= ckFocusMin
+	return cockpitSideRoom(w, focusW) && !m.Inbox.ck.sideHidden
+}
+
+// cockpitSideRoom reports whether the side column has room on a view w cells
+// wide with a focus focusW cells wide: the view is ckWide or wider and the
+// focus keeps ckFocusMin beside the column.
+func cockpitSideRoom(w, focusW int) bool {
+	return w >= ckWide && focusW-ckSideWidth-1 >= ckFocusMin
 }
 
 // CockpitListWider moves the list's edge by d cells and keeps the width.
@@ -102,9 +110,15 @@ func (m *OS) CockpitListWider(d int) {
 	m.saveSidebarState()
 }
 
-// CockpitToggleSide hides the side column, or shows it again.
+// CockpitToggleSide hides the side column, or shows it again. With no room
+// for the column the key changes nothing and says why.
 func (m *OS) CockpitToggleSide() {
 	ck := &m.Inbox.ck
+	if !ck.sideRoom {
+		ck.layoutRefused = config.ActionInboxSide
+		m.cockpitTouch()
+		return
+	}
 	ck.sideHidden = !ck.sideHidden
 	m.cockpitTouch()
 	m.saveSidebarState()
@@ -112,11 +126,17 @@ func (m *OS) CockpitToggleSide() {
 
 // CockpitToggleZoom shows the focused region alone, or the whole view again.
 // On a plan with the keys in the list, the zoom is the focus, where the card
-// has every row for the plan.
+// has every row for the plan. Under ckOneColumn the key changes nothing and
+// says why, unless a selected plan's card is drawn, which reads the zoom.
 func (m *OS) CockpitToggleZoom() {
 	ck := &m.Inbox.ck
 	if ck.zoom {
 		m.cockpitUnzoom()
+		return
+	}
+	if m.cockpitZoomRefused() {
+		ck.layoutRefused = config.ActionInboxZoom
+		m.cockpitTouch()
 		return
 	}
 	ck.zoom = true
@@ -240,4 +260,36 @@ func (m *OS) cockpitLayoutHints() []overlay.Hint {
 		return []overlay.Hint{{Key: "drag", Label: "to resize", Priority: overlay.HintEssential}}
 	}
 	return nil
+}
+
+// cockpitZoomRefused reports whether Z has nothing to zoom on this frame: the
+// view is under ckOneColumn, except a selected plan whose card is drawn, which
+// shows the whole plan.
+func (m *OS) cockpitZoomRefused() bool {
+	return m.GetRenderWidth() < ckOneColumn && !(m.inboxPlanSelected() && m.Inbox.ck.focusShown)
+}
+
+// cockpitLayoutNote is the key bar's reason for the layout key just refused.
+// It is the zero Hint once the refusal no longer holds on this frame.
+func (m *OS) cockpitLayoutNote() overlay.Hint {
+	ck := &m.Inbox.ck
+	switch {
+	case ck.layoutRefused == config.ActionInboxSide && !ck.sideRoom:
+		label := "the side column needs a narrower list"
+		if m.GetRenderWidth() < ckWide {
+			label = "the side column needs " + strconv.Itoa(ckWide) + " columns"
+		}
+		return overlay.Hint{Key: m.inboxKey(config.ActionInboxSide), Label: label, Priority: overlay.HintEssential}
+	case ck.layoutRefused == config.ActionInboxZoom && m.cockpitZoomRefused():
+		return overlay.Hint{Key: m.inboxKey(config.ActionInboxZoom), Label: "zoom needs " + strconv.Itoa(ckOneColumn) + " columns", Priority: overlay.HintEssential}
+	}
+	return overlay.Hint{}
+}
+
+// clearLayoutRefusal drops the note of a refused layout key.
+func (m *OS) clearLayoutRefusal() {
+	if ck := &m.Inbox.ck; ck.layoutRefused != "" {
+		ck.layoutRefused = ""
+		m.cockpitTouch()
+	}
 }

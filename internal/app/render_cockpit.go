@@ -396,6 +396,8 @@ func (m *OS) drawCockpit(c *ckCanvas, l ckLook, top int, now time.Time) {
 	ck.stripShown = false
 	ck.regionBox = [ckRegions]ckRegionBox{}
 	ck.div.x0, ck.div.x1 = 0, 0
+	// A frame that returns before the layout is known leaves the keys free.
+	ck.sideRoom, ck.focusShown = true, true
 	hdrY := 0
 	if c.h >= 32 {
 		hdrY = 1
@@ -472,6 +474,7 @@ func (m *OS) drawCockpit(c *ckCanvas, l ckLook, top int, now time.Time) {
 	case c.w < ckOneColumn:
 		focusW = 0
 	}
+	ck.sideRoom, ck.focusShown = cockpitSideRoom(c.w, focusW), focusW > 0
 	// A zoom shows the focused region alone over the body.
 	zoom := ckRegionList
 	if ck.zoom && c.w >= ckOneColumn && !strip {
@@ -2054,7 +2057,13 @@ func (m *OS) drawCockpitEmpty(c *ckCanvas, l ckLook, y0, y1, top int, lines []st
 // on the right.
 func (m *OS) drawCockpitHints(c *ckCanvas, l ckLook, y int, now time.Time) {
 	pal := l.pal
-	hints := append(m.cockpitLayoutHints(), m.cockpitHints(now)...)
+	hints := m.cockpitLayoutHints()
+	if m.CockpitTop() == CockpitBase {
+		if note := m.cockpitLayoutNote(); note.Label != "" {
+			hints = append(hints, note)
+		}
+	}
+	hints = append(hints, m.cockpitHints(now)...)
 	right := ""
 	if n := len(m.Inbox.ck.agents); n > 0 {
 		right = strconv.Itoa(n) + " agent"

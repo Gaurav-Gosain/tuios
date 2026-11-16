@@ -1357,6 +1357,7 @@ func (m *OS) OpenInbox(filter string) {
 	st.ck.back = nil
 	// Rows open in their groups; a hold is for a flip seen while open.
 	st.ck.placed, st.ck.holdUntil = nil, time.Time{}
+	st.ck.layoutRefused = ""
 	st.threads.open = false
 	m.cockpitTouch()
 	m.cockpitRows()

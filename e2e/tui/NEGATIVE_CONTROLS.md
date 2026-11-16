@@ -18202,3 +18202,23 @@ Run on 2026-11-18 on macOS (arm64), against a build of main (c7d644bc8), the bra
 
 The frames are `frames.txt` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorkspaceArrivalLandsAtOnce$' -v .`.
+## w and Z in the agents view say why on a narrow view
+
+`TestAgentsViewLayoutKeysSayWhyWhenNarrow` in `cockpit_layout_narrow_test.go`. The agents view opens at 120x40 on the cockpit fleet. Row N1: with the cursor on bench-idle and sidebar.json holding the client's claim of the file (its socket), w must put "the side column needs 170 columns" on the key bar, and sidebar.json must keep its bytes, size and time (or stay absent) for a second while the note stays. Row O1: a double-click on bench-idle closes the view, and ctrl+b i opens it again at 120x40 with no side note on the key bar for a second; w then puts the note back. Row N2: widened to 200x50 the side column ("Last turn") is drawn with no side note, and w hides it and shows it again. Row Z1: at 70x40 the list is drawn alone with no side note on the key bar, Z must put "zoom needs 80 columns" there with no "unzoom", and widened to 120x40 the list and the focus are both drawn with no "unzoom" and no zoom note for a second; Z at 120 then offers the unzoom.
+
+Run on Linux on 2026-11-16. The branch passes the test, 3 of 3 in one process.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (row N1) | "cockpit_layout_narrow_test.go:109: ASSERTION: w at 120 columns says in the key bar that the side column needs 170 columns", waited 10s | **caught** |
+| The room check in `CockpitToggleSide` cut (row N1) | "cockpit_layout_narrow_test.go:109: ASSERTION: w at 120 columns says in the key bar that the side column needs 170 columns", waited 10.001s | **caught** |
+| The width check in `CockpitToggleZoom` cut (row Z1) | "cockpit_layout_narrow_test.go:178: ASSERTION: Z at 70 columns says in the key bar that the zoom needs 80 columns, and offers no unzoom", waited 10s with "esc unzoom" on the key bar | **caught** |
+| The note cut from `drawCockpitHints` (row N1) | "cockpit_layout_narrow_test.go:109: ASSERTION: w at 120 columns says in the key bar that the side column needs 170 columns", waited 10.001s | **caught** |
+| The reset of the note cut from `OpenInbox` (row O1) | "cockpit_layout_narrow_test.go:136: ASSERTION: the agents view opened again holds no side note in the key bar", with "w the side column needs 170 columns" on the key bar of the view opened again | **caught** |
+| The clear cut from `CockpitKey` (row Z1) | "cockpit_layout_narrow_test.go:175: ASSERTION: the side note outlived the presses of w at 200 columns: the key bar at 70 columns is \"w the side column needs 170 columns   esc close          12 agents\"" | **caught** |
+| The zoom note drawn after the width allows a zoom (row Z1) | "cockpit_layout_narrow_test.go:186: ASSERTION: at 120 columns after Z at 70 the list and the focus are both drawn", waited 10s with "Z zoom needs 80 columns" on the key bar | **caught** |
+
+The test stops at the first row that fails, so rows O1, N2 and Z1 run only after row N1 passes.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAgentsViewLayoutKeysSayWhyWhenNarrow$' -v .`.

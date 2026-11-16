@@ -2285,8 +2285,8 @@ Inside it:
 | `esc` | Go back one step: on a narrow screen from the focus to the list, then from a region to the list, then clear the search and the filter, then close the view. The key bar says what the next `esc` does |
 | `q` | Close the view at once |
 | `<` `>` | Make the list narrower or wider by 4 cells. A drag on the edge of the list sets it, and a double click there resets it. tuios keeps the width. See `list_width` in [CONFIGURATION.md](CONFIGURATION.md) |
-| `w` | Hide the side column, or show it again |
-| `Z` | Show the focused region alone. `Z` or `esc` gives the whole view back |
+| `w` | Hide the side column, or show it again. The column needs 170 columns and room for the focus beside it; without that room w says why in the key bar and changes nothing |
+| `Z` | Show the focused region alone. `Z` or `esc` gives the whole view back. Under 80 columns Z says so in the key bar and changes nothing, except on a plan whose card is open, which it still zooms |
 
 The focus header has a Talked with line when the agent has sent or got mail or asks: a chip for each agent, the newest exchange first, with how many messages went between them. A click on a chip opens that agent's thread, and `ctrl+o` comes back. The agents the line has no room for are in a `+N` chip, which opens them as a menu. An agent with no mail has no line.
 

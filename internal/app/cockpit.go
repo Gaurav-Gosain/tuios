@@ -384,6 +384,14 @@ type cockpitState struct {
 	// frame folded the list into the strip, which the key turns around.
 	listMode   string
 	stripShown bool
+	// sideRoom and focusShown are the last frame's room for the side column
+	// and whether it laid out the focus, read by the keys. focusShown stays
+	// true when a region is zoomed. Both are true on a frame that returns
+	// before the room is measured (the board, the empty view, the image view).
+	sideRoom, focusShown bool
+	// layoutRefused is the layout action whose key was just refused, "" for
+	// none. The key bar says why until the next action.
+	layoutRefused string
 }
 
 // ckBack is the cursor and the scroll to open the view on again.
@@ -1820,6 +1828,7 @@ func (m *OS) cockpitGroupHides(g int) bool {
 // approval answers, the focus on a narrow screen, help, n, and tab. handled
 // is false for any other action.
 func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
+	m.clearLayoutRefusal()
 	if cmd, ok := m.kanbanKey(action); ok {
 		return cmd, true
 	}
