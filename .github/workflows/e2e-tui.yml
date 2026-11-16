@@ -217,8 +217,18 @@ jobs:
       matrix:
         shard: ${{ fromJSON(needs.shard-plan.outputs.shards) }}
         frame: ${{ fromJSON(needs.shard-plan.outputs.frames) }}
+        # real runs the built binary. sim runs the client and the daemon in
+        # the test process (e2e/tui/backend_test.go), on the cells path only,
+        # and only the tests in e2e/tui/shardplan/sim.txt: the ones that pass
+        # there. A pull request runs real only: a red sim shard would block
+        # every landing. A push to main and a run by hand add sim, so main
+        # builds the record of three green days that makes sim a check.
+        backend: ${{ fromJSON(github.event_name == 'pull_request' && '["real"]' || '["real","sim"]') }}
+        exclude:
+          - frame: string
+            backend: sim
     # The default path keeps the name the checks have always had.
-    name: e2e-tui (shard ${{ matrix.shard }} of ${{ needs.shard-plan.outputs.total }})${{ matrix.frame == 'string' && ', string frames' || '' }}
+    name: e2e-tui (shard ${{ matrix.shard }} of ${{ needs.shard-plan.outputs.total }})${{ matrix.frame == 'string' && ', string frames' || '' }}${{ matrix.backend == 'sim' && ', sim' || '' }}
     needs: [tested, shard-plan]
     # tested is skipped on a pull request, so the shards must not wait for its
     # success. A draft skips the shards.
@@ -226,8 +236,9 @@ jobs:
     timeout-minutes: 20
     env:
       # A pull request runs only the cells path, so a pass there says nothing
-      # about the string path.
-      TESTED_URL: ${{ matrix.frame == 'cells' && needs.tested.outputs.url || '' }}
+      # about the string path. The sim shards always run on main: their record
+      # there is what decides when sim becomes the default.
+      TESTED_URL: ${{ matrix.frame == 'cells' && matrix.backend == 'real' && needs.tested.outputs.url || '' }}
 
     steps:
       - name: Already passed on the pull request
@@ -276,6 +287,7 @@ jobs:
           TUIOS_E2E: "1"
           GH_TOKEN: ${{ github.token }}
           SHARD: ${{ matrix.shard }}
+          BACKEND: ${{ matrix.backend }}
         run: |
           set -euo pipefail
           SHARDS=$E2E_SHARDS
@@ -295,9 +307,15 @@ jobs:
               "$RUNNER_TEMP/shardplan" -shards "$lanes" -shard "$v" -fill "$E2E_LANE_FILL" < "$RUNNER_TEMP/selected.txt" > "$RUNNER_TEMP/names-$lane.txt"
             fi
             sed -i '/^$/d' "$RUNNER_TEMP/names-$lane.txt"
+            # The sim shard keeps the tests of its lanes that pass in process.
+            if [ "$BACKEND" = sim ]; then
+              grep -xF -f <(grep -v '^#' shardplan/sim.txt | grep .) "$RUNNER_TEMP/names-$lane.txt" > "$RUNNER_TEMP/sim-$lane.txt" || true
+              mv "$RUNNER_TEMP/sim-$lane.txt" "$RUNNER_TEMP/names-$lane.txt"
+            fi
           done
           cat "$RUNNER_TEMP"/names-*.txt > "$RUNNER_TEMP/names.txt"
-          if grep -q '^mode=all$' "$GITHUB_OUTPUT" && [ ! -s "$RUNNER_TEMP/names.txt" ]; then
+          # A sim shard may hold no test of sim.txt. A real one must hold some.
+          if [ "$BACKEND" = real ] && grep -q '^mode=all$' "$GITHUB_OUTPUT" && [ ! -s "$RUNNER_TEMP/names.txt" ]; then
             echo "shard $SHARD of $SHARDS matched no tests, which means the split is broken" >&2
             exit 1
           fi
@@ -384,6 +402,7 @@ jobs:
           # The harness forwards it to every client: 0 is Bubble Tea's
           # renderer, and empty leaves the default, cells.
           TUIOS_CELL_FRAME: ${{ matrix.frame == 'string' && '0' || '' }}
+          TUIOS_E2E_BACKEND: ${{ matrix.backend }}
           # tuitest records each terminal as asciicast v2 and writes the
           # recording of a failed test here. The step below uploads them.
           TUITEST_CAST_DIR: /tmp/tuios-e2e-casts
@@ -450,7 +469,7 @@ jobs:
         if: failure() && env.TESTED_URL == '' && steps.plan.outputs.run == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: e2e-tui-frames-shard-${{ matrix.shard }}-${{ matrix.frame }}
+          name: e2e-tui-frames-shard-${{ matrix.shard }}-${{ matrix.frame }}-${{ matrix.backend }}
           path: /tmp/tuios-e2e-artifacts
           if-no-files-found: ignore
           retention-days: 3
@@ -461,7 +480,7 @@ jobs:
         if: failure() && env.TESTED_URL == '' && steps.plan.outputs.run == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: e2e-tui-casts-shard-${{ matrix.shard }}-${{ matrix.frame }}
+          name: e2e-tui-casts-shard-${{ matrix.shard }}-${{ matrix.frame }}-${{ matrix.backend }}
           path: /tmp/tuios-e2e-casts
           if-no-files-found: ignore
           retention-days: 3
