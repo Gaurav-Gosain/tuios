@@ -322,9 +322,14 @@ type Daemon struct {
 	// and the start time it had, for hookOfPeer. Nil asks d.hooks
 	// (hooks.Manager.HookStart); a test sets it.
 	hookStarts func(pid int) (uint64, bool)
-	// hookProc reads a process's parent and start time for hookOfPeer. Nil
-	// reads the process table; a test sets it.
+	// hookProc reads a process's parent and start time for the walk to a
+	// spawn root (spawn_trust.go). Nil reads the process table; a test sets
+	// it.
 	hookProc func(pid int) (ppid int, start uint64, ok bool)
+	// selfPID is this process, and sharedProcess is DaemonConfig.SharedProcess:
+	// when it is false, selfPID is a spawn root. See spawn_trust.go.
+	selfPID       int
+	sharedProcess bool
 
 	// protocolPanes holds the windows start-agent --protocol opened, window
 	// id to protocol. See agent_protocol.go.
@@ -966,6 +971,14 @@ type DaemonConfig struct {
 	// manifestFD. The tuios binary sets it. A daemon run inside another
 	// program leaves it nil, and refuses to hand off. See handoff.go.
 	HandoffArgs func(manifestFD int) []string
+	// SharedProcess says the daemon runs in a process that also runs other
+	// code which starts processes of its own: the in-process test backend.
+	// The daemon then places a caller by the processes it recorded starting
+	// (pane shells, hosted panes, hooks), and not by the daemon's own pid,
+	// which is the host's. It writes no pid file, so kill-server cannot
+	// signal the host. A program that embeds the daemon as its server
+	// (tuios-web, the ssh server) leaves it false. See spawn_trust.go.
+	SharedProcess bool
 	// Foreground is true for `tuios daemon`, which owns a terminal. A foreground
 	// daemon echoes its log to stderr; a background one does not, because its
 	// stderr belongs to the process that spawned it.
@@ -1191,6 +1204,8 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 		events:               newEventHub(),
 		agents:               newAgentBus(),
 		version:              cfg.Version,
+		selfPID:              os.Getpid(),
+		sharedProcess:        cfg.SharedProcess,
 		disableAutoRestore:   cfg.DisableAutoRestore,
 		foreground:           cfg.Foreground,
 		logFile:              cfg.LogFile,
@@ -3079,6 +3094,10 @@ func isDaemonRunningAt(socketPath string) bool {
 }
 
 func (d *Daemon) writePidFile() error {
+	if d.sharedProcess {
+		// The pid is the host's. kill-server signals the pid in this file.
+		return nil
+	}
 	pidPath := d.manager.SocketPath() + ".pid"
 	return os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())), 0600)
 }

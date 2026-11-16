@@ -32,6 +32,23 @@ func readProcLineage(pid int) (ppid int, tty int64, ok bool) {
 	return int(kp.Eproc.Ppid), dev, true
 }
 
+// readProcLink returns a process's parent pid, its controlling terminal and
+// its start time, from one kinfo_proc. The start time is in microseconds
+// since the epoch, as procinfo.StartTime gives it. ok is false when the
+// process cannot be read.
+func readProcLink(pid int) (ppid int, tty int64, start uint64, ok bool) {
+	kp, err := unix.SysctlKinfoProc("kern.proc.pid", pid)
+	if err != nil || kp == nil || int(kp.Proc.P_pid) != pid {
+		return 0, 0, 0, false
+	}
+	dev := int64(kp.Eproc.Tdev)
+	if dev == -1 { // NODEV
+		dev = 0
+	}
+	tv := kp.Proc.P_starttime
+	return int(kp.Eproc.Ppid), dev, uint64(tv.Sec)*1_000_000 + uint64(tv.Usec), true //nolint:gosec // a start time is not negative
+}
+
 // peerUID returns the uid of the process on the other end of a unix socket,
 // from LOCAL_PEERCRED. ok is false when conn is not a unix socket or the
 // kernel does not say.

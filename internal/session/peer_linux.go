@@ -4,6 +4,8 @@ package session
 
 import (
 	"net"
+	"strconv"
+	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 	"golang.org/x/sys/unix"
@@ -51,4 +53,34 @@ func readProcLineage(pid int) (ppid int, tty int64, ok bool) {
 	}
 	nr, _ := procinfo.StatField(stat, 7)
 	return parent, int64(nr), true
+}
+
+// readProcLink returns a process's parent pid, its controlling terminal and
+// its start time, fields 4, 7 and 22 of one read of /proc/<pid>/stat, split
+// once. ok is false when the process cannot be read.
+func readProcLink(pid int) (ppid int, tty int64, start uint64, ok bool) {
+	stat, ok := procinfo.Stat(pid)
+	if !ok {
+		return 0, 0, 0, false
+	}
+	// The comm field (2) may hold spaces and parentheses, so the fields are
+	// counted from after the last ')': field n is at index n-3.
+	rparen := strings.LastIndexByte(stat, ')')
+	if rparen < 0 {
+		return 0, 0, 0, false
+	}
+	f := strings.Fields(stat[rparen+1:])
+	if len(f) < 22-2 {
+		return 0, 0, 0, false
+	}
+	parent, err := strconv.Atoi(f[4-3])
+	if err != nil {
+		return 0, 0, 0, false
+	}
+	nr, _ := strconv.ParseInt(f[7-3], 10, 64)
+	st, err := strconv.ParseUint(f[22-3], 10, 64)
+	if err != nil {
+		return 0, 0, 0, false
+	}
+	return parent, nr, st, true
 }

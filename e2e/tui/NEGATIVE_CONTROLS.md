@@ -17893,3 +17893,14 @@ Repeat from `e2e/tui` with
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
 | The branch before this change: `CockpitClick` opens the link on the press (`cockpitLinkClick`, as #2113 landed it) | "ASSERTION: a drag that starts on a link opens no link" | **caught** |
+
+## A process the daemon started (B3)
+
+`internal/session/spawn_trust.go` places a caller by the nearest process the daemon recorded starting: the daemon itself, a pane shell, a hosted pane's process or a hook shell, each but the daemon matched by its start time. Each control cut one line, built, and ran the named test on Linux on 2026-11-16.
+
+| Control | Cut | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| The adopted shell is recorded | `adoptPTY`: the `pty.procStart = processStart(pty.proc)` line cut | `TestAPaneProcessStaysInItsPaneAfterTheKeeperTakesOver` (the probe after the takeover exits 0, and `probe-after` is in the ring as `claimed_human`) | **caught** |
+| A shared process is no root | `spawnRootFrom`: `!d.sharedProcess && cur == d.selfPID` made `cur == d.selfPID` | `TestASharedProcessDaemonPlacesOnlyWhatItStarted` ("a child of the shared process is placed inside a pane") | **caught** |
+
+The positive half of the e2e test is the probe before the upgrade, refused while the pane shell is the daemon's child, and the same call from the test process, served. On origin/main the test fails on the probe after the takeover: the hole was there before this change.

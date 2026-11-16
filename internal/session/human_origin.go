@@ -132,27 +132,22 @@ func (d *Daemon) paneOriginWith(pid int, env procinfo.Env, envOK bool) (bool, st
 		// process is: tests, and embedders that run both in one binary.
 		return false, ""
 	}
-	ppid, tty, ok := readProcLineage(pid)
+	ppid, tty, start, ok := d.procLink()(pid)
 	if !ok {
 		return true, paneOriginUnreadable
 	}
 	if tty != 0 && d.paneTTYs()[tty] {
 		return true, paneOriginTTY
 	}
-	// The comparison comes before the stop at init, because in a container
-	// the daemon can be pid 1 itself, and then every orphan is its child too.
-	for range paneOriginMaxDepth {
-		if ppid == self {
-			return true, paneOriginAncestor
-		}
-		if ppid <= 1 {
-			break
-		}
-		next, _, ok := readProcLineage(ppid)
-		if !ok {
-			break
-		}
-		ppid = next
+	walk := d.spawnRootFrom(pid, start, ppid, false)
+	// A process the daemon started, or one below it. See spawn_trust.go.
+	if walk.found {
+		return true, paneOriginAncestor
+	}
+	if walk.broken {
+		// The chain changed under the walk, so where the caller runs is
+		// not known. Fail closed.
+		return true, paneOriginUnreadable
 	}
 	// TUIOS_WINDOW_ID is also what the client's hooks are started with, so a
 	// hook command, which is automation and not the person, is placed the same

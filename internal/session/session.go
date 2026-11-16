@@ -1091,6 +1091,9 @@ type PTY struct {
 	// found by its pid for a pane adopted across an exec, which has no
 	// exec.Cmd. Nil for a pane on another machine. See monitorExit.
 	proc *os.Process
+	// procStart is proc's start time, read when it was started or adopted,
+	// 0 when unknown. It makes the shell a spawn root. See spawn_trust.go.
+	procStart uint64
 	// reap holds back the reap of a process that has exited while a handoff
 	// writes the panes down. See pty_reap.go.
 	reap reapGate
@@ -2841,6 +2844,7 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 	pty := s.installPTY(ctx, cancel, id, ptyInstance, cmd, width, height, sp, terminal)
 	if cmd != nil {
 		pty.proc = cmd.Process
+		pty.procStart = processStart(cmd.Process)
 	}
 	pty.startPTY()
 	s.TouchActive()

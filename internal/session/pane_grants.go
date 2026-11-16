@@ -3,7 +3,6 @@ package session
 import (
 	"encoding/json"
 	"log"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -500,35 +499,27 @@ func (d *Daemon) hostedPaneOfPeer(cs *connState) string {
 	if d.approvalPeer.Load() != nil || cs.peerPID <= 0 || !d.connFromPane(cs) {
 		return ""
 	}
-	pids := make(map[int]string)
 	d.hostedPanesMu.Lock()
-	for id, hp := range d.hostedPanes {
-		if hp.cmd != nil && hp.cmd.Process != nil {
-			pids[hp.cmd.Process.Pid] = id
-		}
-	}
+	none := len(d.hostedPanes) == 0
 	d.hostedPanesMu.Unlock()
-	if len(pids) == 0 {
+	if none {
 		return ""
 	}
-	for cur, depth := cs.peerPID, 0; depth < paneOriginMaxDepth && cur > 1; depth++ {
-		if id, ok := pids[cur]; ok {
-			return id
-		}
-		ppid, _, ok := readProcLineage(cur)
-		if !ok {
-			break
-		}
-		cur = ppid
+	start := uint64(0)
+	if cs.peerStartOK {
+		start = cs.peerStart
+	}
+	if w := d.spawnRootOf(cs.peerPID, start, true); w.found && w.root.kind == spawnHosted {
+		return w.root.id
 	}
 	return ""
 }
 
 // hookOfPeer reports whether the caller on cs is a daemon hook: the shell of a
-// hook running now, or a process that shell started. It walks the caller's
-// parents as hostedPaneOfPeer does, and takes a pid for a hook only when its
-// start time is the one the hook's shell had, so a pid reused after a hook
-// exits is never a hook. It is asked only for a caller placed in no pane.
+// hook running now, or a process that shell started. Its nearest spawn root
+// (spawn_trust.go) is a hook shell, matched by the start time it had, so a
+// pid reused after a hook exits is never a hook. It is asked only for a
+// caller placed in no pane.
 func (d *Daemon) hookOfPeer(cs *connState) bool {
 	if cs == nil || cs.viaLink || cs.peerPID <= 0 || !cs.peerStartOK || d.approvalPeer.Load() != nil {
 		return false
@@ -536,49 +527,8 @@ func (d *Daemon) hookOfPeer(cs *connState) bool {
 	if !d.connFromPane(cs) || cs.fromPaneWhy == paneOriginEnv || d.peerChanged(cs) {
 		return false
 	}
-	starts := d.hookStarts
-	if starts == nil {
-		starts = d.hooks.HookStart
-	}
-	proc := d.hookProc
-	if proc == nil {
-		proc = readHookProc
-	}
-	below := cs.peerStart
-	self := os.Getpid()
-	for cur, depth := cs.peerPID, 0; depth < paneOriginMaxDepth && cur > 1; depth++ {
-		// A hook's shell is a child of this daemon, so nothing from here up is one.
-		if cur == self {
-			return false
-		}
-		ppid, start, ok := proc(cur)
-		if !ok {
-			return false
-		}
-		if depth == 0 {
-			start = cs.peerStart
-		} else if start > below {
-			// A parent that started after its child is not the process that
-			// started the child: the child's parent exited and its pid went
-			// to another process. Nothing past it is the caller's.
-			return false
-		}
-		if st, ok := starts(cur); ok && st == start {
-			return true
-		}
-		cur, below = ppid, start
-	}
-	return false
-}
-
-// readHookProc reads pid's parent and start time from the process table.
-func readHookProc(pid int) (ppid int, start uint64, ok bool) {
-	ppid, _, ok = readProcLineage(pid)
-	if !ok {
-		return 0, 0, false
-	}
-	start, ok = procinfo.StartTime(pid)
-	return ppid, start, ok
+	w := d.spawnRootOf(cs.peerPID, cs.peerStart, false)
+	return w.found && w.root.kind == spawnHook
 }
 
 // paneWriteReach reports why the pane may not type into session target, or ""

@@ -49,6 +49,9 @@ type hostedPane struct {
 	id  string
 	pty xpty.Pty
 	cmd *exec.Cmd
+	// procStart is cmd's start time, which makes it a spawn root. See
+	// spawn_trust.go.
+	procStart uint64
 
 	// closeOnce makes teardown idempotent. Three separate events end a hosted
 	// pane and any of them can be first: the process exits, the owning daemon
@@ -232,6 +235,7 @@ func (d *Daemon) registerHostedPane(spec hostedPaneSpec, grace time.Duration) (*
 	releaseSlave(pty)
 
 	hp.pty, hp.cmd = pty, cmd
+	hp.procStart = processStart(cmd.Process)
 	id := hp.id
 	hp.onEnd = func() {
 		d.hostedPanesMu.Lock()

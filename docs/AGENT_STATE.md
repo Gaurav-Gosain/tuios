@@ -5760,8 +5760,13 @@ The daemon reads the pid of every caller from the socket when it connects
 (`SO_PEERCRED` on Linux, `LOCAL_PEERPID` on macOS), which nothing the caller
 sends can change. The caller is inside a pane of this daemon when:
 
-- the daemon is one of its ancestors: every pane shell, hook command and popup
-  is a child of the daemon;
+- a process the daemon started is the caller or one of its ancestors: the
+  daemon itself, a pane shell, a hosted pane's process, or a hook shell. A
+  pane shell or hook shell counts only with the start time it had when the
+  daemon started it, so a pid that a new process took does not count. A pane
+  shell still counts after a live upgrade whose new image died: the previous
+  binary comes back as a daemon with a new pid, and the pane shells are no
+  longer its children;
 - its controlling terminal is one of the daemon's pane terminals, which still
   holds for a process orphaned out of a pane;
 - or its environment names one of the daemon's windows in `TUIOS_PANE_ID` or

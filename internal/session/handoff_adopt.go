@@ -436,6 +436,10 @@ func (s *Session) adoptPTY(rec handoffPane, w WindowState, onExit func(string), 
 		// On unix FindProcess always succeeds. The process is still this
 		// pid's child, so it can be waited on: see monitorExit.
 		pty.proc, _ = os.FindProcess(rec.PID)
+		// After a keeper's takeover the shell is not this process's child,
+		// so this record is what places the pane's processes. See
+		// spawn_trust.go.
+		pty.procStart = processStart(pty.proc)
 	}
 	return pty, nil
 }
