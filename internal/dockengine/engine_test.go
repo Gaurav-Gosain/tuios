@@ -12,6 +12,71 @@ import (
 // design was shaped around and is the reason the engine parks on a channel
 // receive instead of holding a ticker.
 
+// idleDock is a dock made only of once, push and event components.
+func idleDock() []*Component {
+	return []*Component{
+		{Name: "custom/static", Command: "echo static", Refresh: config.DockRefresh{Kind: config.DockRefreshOnce}},
+		{Name: "custom/silent", Command: "sleep 30", Refresh: config.DockRefresh{Kind: config.DockRefreshPush}},
+		{
+			Name: "custom/onevent", Command: "echo x",
+			Refresh: config.DockRefresh{Kind: config.DockRefreshEvent, Events: []string{"agent-state"}},
+		},
+	}
+}
+
+// drainStartup waits for the n updates a started engine owes: one for each
+// component that runs at startup.
+func drainStartup(t *testing.T, e *Engine, n int) {
+	t.Helper()
+	deadline := time.After(10 * time.Second)
+	for got := range n {
+		select {
+		case <-e.Updates():
+		case <-deadline:
+			t.Fatalf("the engine sent %d startup updates, want %d", got, n)
+		}
+	}
+}
+
+// TestDockEngineArmsNoTimerWhenNothingPolls is the idle wakeup budget: a dock
+// made only of once, push and event components must not wake at all once its
+// startup runs are done. Not "wake cheaply": not wake. The scheduler parks on
+// a receive exactly when earliest has nothing, so no due component means no
+// timer exists.
+func TestDockEngineArmsNoTimerWhenNothingPolls(t *testing.T) {
+	engine := New(idleDock(), nil)
+	t.Cleanup(engine.Stop)
+	engine.Start()
+
+	// The once and event components each run at startup, one wake apiece.
+	drainStartup(t, engine, 2)
+
+	if c, due := engine.earliest(); c != nil {
+		t.Fatalf("an idle dock has %q due at %v; with no interval component there must be no timer", c.Name, due)
+	}
+	if got := engine.Wakes(); got != 2 {
+		t.Fatalf("an idle dock took %d wakes; want the 2 startup runs", got)
+	}
+}
+
+// TestDockEngineArmsATimerForAnIntervalComponent is the negative control for
+// the idle budget: one interval component is enough for earliest to report a
+// deadline, so the check above can fail.
+func TestDockEngineArmsATimerForAnIntervalComponent(t *testing.T) {
+	comps := append(idleDock(), &Component{
+		Name: "custom/tick", Command: "echo tick",
+		Refresh: config.DockRefresh{Kind: config.DockRefreshInterval, Interval: time.Hour},
+	})
+	engine := New(comps, nil)
+	t.Cleanup(engine.Stop)
+	engine.Start()
+	drainStartup(t, engine, 3)
+
+	if c, _ := engine.earliest(); c == nil || c.Name != "custom/tick" {
+		t.Fatalf("earliest = %v; want custom/tick due, since it polls", c)
+	}
+}
+
 // TestDockEngineUnchangedValueDrawsNothing is the render gate: a component that
 // polls a value that has not moved costs an execution and no frame. A one
 // second cell watching a number that changes every five minutes is meant to be
