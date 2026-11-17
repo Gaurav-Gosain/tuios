@@ -4,6 +4,9 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/spf13/cobra"
 )
 
 // TestCLIReferenceNamesEveryCommandAndFlag walks the real command tree, the one
@@ -84,4 +87,174 @@ func TestCLIReferenceNamesEveryCommandAndFlag(t *testing.T) {
 			}
 		}
 	}
+}
+
+// cliReferenceSection is one heading of docs/CLI_REFERENCE.md and the text
+// under it, up to the next heading.
+type cliReferenceSection struct {
+	heading string
+	// commands are the commands the heading names, and the ones the usage
+	// lines in its code blocks run, such as the paste-buffer line under the
+	// list-buffers heading.
+	commands []*cobra.Command
+	// lines are the section's lines outside code blocks, with their line
+	// numbers in the file.
+	lines []cliReferenceLine
+}
+
+type cliReferenceLine struct {
+	n    int
+	text string
+}
+
+// cliReferenceSections splits docs/CLI_REFERENCE.md at its headings and
+// resolves the commands each one documents against root. A heading that
+// names a command root does not have is reported through bad.
+func cliReferenceSections(t *testing.T, root *cobra.Command, bad func(line int, msg string)) []*cliReferenceSection {
+	t.Helper()
+	span := regexp.MustCompile("`(tuios(?: [^`]*)?)`")
+	// find resolves the command words at the start of a command line, up to
+	// the first flag or placeholder.
+	find := func(line string) (*cobra.Command, bool) {
+		var words []string
+		for _, w := range strings.Fields(line)[1:] {
+			if strings.HasPrefix(w, "-") || strings.ContainsAny(w, "<[|(\"'$=") {
+				break
+			}
+			words = append(words, w)
+		}
+		c, _, err := root.Find(words)
+		return c, err == nil
+	}
+	var out []*cliReferenceSection
+	var cur *cliReferenceSection
+	fenced := false
+	for i, line := range strings.Split(readDoc(t, "CLI_REFERENCE.md"), "\n") {
+		if strings.HasPrefix(line, "```") {
+			fenced = !fenced
+			continue
+		}
+		if !fenced && strings.HasPrefix(line, "#") {
+			cur = &cliReferenceSection{heading: line}
+			out = append(out, cur)
+			for _, m := range span.FindAllStringSubmatch(line, -1) {
+				c, ok := find(m[1])
+				if !ok || c == root && m[1] != "tuios" {
+					bad(i+1, "the heading names "+m[1]+", which is not a command")
+					continue
+				}
+				cur.commands = append(cur.commands, c)
+			}
+			continue
+		}
+		if cur == nil {
+			continue
+		}
+		if fenced {
+			if strings.HasPrefix(line, "tuios ") {
+				if c, ok := find(line); ok && c != root {
+					cur.commands = append(cur.commands, c)
+				}
+			}
+			continue
+		}
+		cur.lines = append(cur.lines, cliReferenceLine{n: i + 1, text: line})
+	}
+	return out
+}
+
+// TestCLIReferenceDocumentsOnlyRealCommandsAndFlags is the other direction of
+// TestCLIReferenceNamesEveryCommandAndFlag. It fails on a heading that names a
+// command the tree does not have, and on a flag that a command's section
+// lists, as "- `--name`" or "| `--name` |", that the command does not
+// take. A command or a flag that was removed or renamed keeps its text
+// otherwise.
+//
+// It also holds a default the section states, "(default: v)", to the flag's
+// default in the code, when the code has one and the page gives a value
+// rather than a description such as "the focused pane".
+func TestCLIReferenceDocumentsOnlyRealCommandsAndFlags(t *testing.T) {
+	root := newRootCommand()
+	// cobra adds these two at Execute.
+	root.InitDefaultHelpCmd()
+	root.InitDefaultCompletionCmd()
+	bad := func(line int, msg string) { t.Errorf("CLI_REFERENCE.md:%d: %s", line, msg) }
+	listed := regexp.MustCompile(`^\s*(?:[-*] |\| )` + "`" + `(?:-[a-zA-Z], )?--([a-z][a-z0-9-]*)`)
+	stated := regexp.MustCompile(`\(default:? ([^)]*)\)`)
+	flags, defaults := 0, 0
+	for _, s := range cliReferenceSections(t, root, bad) {
+		if len(s.commands) == 0 {
+			continue
+		}
+		for _, l := range s.lines {
+			m := listed.FindStringSubmatch(l.text)
+			if m == nil || m[1] == "help" {
+				continue
+			}
+			flags++
+			var defValue string
+			found := false
+			for _, c := range s.commands {
+				if f := c.Flags().Lookup(m[1]); f != nil {
+					defValue, found = f.DefValue, true
+					break
+				}
+			}
+			if !found {
+				bad(l.n, "--"+m[1]+" is not a flag of "+s.heading)
+				continue
+			}
+			if d := stated.FindStringSubmatch(l.text); d != nil {
+				if claim, ok := literalDefault(d[1]); ok && !zeroDefault(defValue) {
+					defaults++
+					if !sameDefault(claim, defValue) {
+						bad(l.n, "--"+m[1]+": the page says the default is "+claim+", the code has "+defValue)
+					}
+				}
+			}
+		}
+	}
+	if flags < 100 || defaults < 5 {
+		t.Fatalf("found %d listed flags and %d defaults, want the whole page", flags, defaults)
+	}
+}
+
+// literalDefault returns the value a "(default: ...)" states when it is a
+// value: a number, or a quoted or code-span word. A description, such as
+// "this pane's session", is not one.
+func literalDefault(text string) (string, bool) {
+	first, _, _ := strings.Cut(strings.TrimSpace(text), ",")
+	first = strings.TrimSpace(first)
+	if v, ok := strings.CutPrefix(first, "`"); ok {
+		v, _, _ = strings.Cut(v, "`")
+		return strings.Trim(v, `"`), true
+	}
+	if strings.HasPrefix(first, `"`) {
+		return strings.Trim(first, `"`), true
+	}
+	if regexp.MustCompile(`^[0-9][0-9a-z.]*$`).MatchString(first) {
+		return first, true
+	}
+	return "", false
+}
+
+// zeroDefault reports whether a flag default is the zero value, which a
+// command often reads as "use the built-in value" that the page names.
+func zeroDefault(v string) bool {
+	switch v {
+	case "", "0", "0s", "false", "[]":
+		return true
+	}
+	return false
+}
+
+// sameDefault compares a stated default with the code's, reading durations
+// such as 2m and 2m0s as the same.
+func sameDefault(claim, code string) bool {
+	if claim == code {
+		return true
+	}
+	a, errA := time.ParseDuration(claim)
+	b, errB := time.ParseDuration(code)
+	return errA == nil && errB == nil && a == b
 }
