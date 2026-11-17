@@ -151,6 +151,29 @@ func analyzeGoFile(root, base, head, dir string, c change, initFuncs []string) g
 	return out
 }
 
+// stripComments drops the comments the printer would print with a node:
+// those of fields, specs and declarations. A comment inside a body is the
+// file's, and a node printed alone does not print it.
+func stripComments(n ast.Node) {
+	ast.Inspect(n, func(x ast.Node) bool {
+		switch x := x.(type) {
+		case *ast.Field:
+			x.Doc, x.Comment = nil, nil
+		case *ast.TypeSpec:
+			x.Doc, x.Comment = nil, nil
+		case *ast.ValueSpec:
+			x.Doc, x.Comment = nil, nil
+		case *ast.ImportSpec:
+			x.Doc, x.Comment = nil, nil
+		case *ast.FuncDecl:
+			x.Doc = nil
+		case *ast.GenDecl:
+			x.Doc = nil
+		}
+		return true
+	})
+}
+
 // declText is one top-level declaration, printed without comments.
 type declText struct {
 	ident  string
@@ -168,7 +191,10 @@ func declTexts(fset *token.FileSet, f *ast.File) (map[string]declText, string) {
 	if f == nil {
 		return out, ""
 	}
-	print := func(n any) string {
+	print := func(n ast.Node) string {
+		// The printer prints the comments of a field or a spec with it, so
+		// a changed field comment read as a changed type.
+		stripComments(n)
 		var b bytes.Buffer
 		_ = (&printer.Config{Mode: printer.RawFormat}).Fprint(&b, fset, n)
 		return b.String()
@@ -210,13 +236,15 @@ func declTexts(fset *token.FileSet, f *ast.File) (map[string]declText, string) {
 				case *ast.TypeSpec:
 					out["type "+s.Name.Name] = declText{ident: s.Name.Name, typ: true, text: print(s)}
 				case *ast.ValueSpec:
+					// Read before print, which drops the comments.
+					embed := embedDirective(x.Doc) || embedDirective(s.Doc)
 					text := print(s)
 					// In a const block an implicit value repeats the one above
 					// with the next iota, so a spec's place is part of it.
 					if x.Tok == token.CONST {
 						text += "#" + strconv.Itoa(i)
 					}
-					if embedDirective(x.Doc) || embedDirective(s.Doc) {
+					if embed {
 						text += " embed"
 					}
 					for _, n := range s.Names {

@@ -16,7 +16,9 @@ func parseAt(root, rev, p string) (*token.FileSet, *ast.File, error) {
 		return nil, nil, err
 	}
 	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, p, src, parser.SkipObjectResolution)
+	// The comments are parsed so a doc comment counts as part of its
+	// declaration (see testFileChange).
+	f, err := parser.ParseFile(fset, p, src, parser.ParseComments|parser.SkipObjectResolution)
 	return fset, f, err
 }
 
@@ -93,9 +95,13 @@ func testFileChange(root, base, head string, c change, sg *suiteGraph) ([]string
 		for _, d := range f.Decls {
 			// The doc comment counts as part of the declaration: a change
 			// there changes no code, and treating it as code only runs more.
+			// A //go:embed line is in the doc of its declaration.
 			start := fset.Position(d.Pos()).Line
 			if fn, ok := d.(*ast.FuncDecl); ok && fn.Doc != nil {
 				start = fset.Position(fn.Doc.Pos()).Line
+			}
+			if g, ok := d.(*ast.GenDecl); ok && g.Doc != nil {
+				start = fset.Position(g.Doc.Pos()).Line
 			}
 			end := fset.Position(d.End()).Line
 			if to < start || from > end {
@@ -128,6 +134,15 @@ func testFileChange(root, base, head string, c change, sg *suiteGraph) ([]string
 			}
 		}
 	}
+	// The lines above the package clause hold the build constraints, which
+	// decide whether the file is in the suite at all.
+	oldPkg := oldSet.Position(oldFile.Package).Line
+	newPkg := newSet.Position(newFile.Package).Line
+	for _, h := range hs {
+		if (h.oldLen > 0 && h.oldStart <= oldPkg) || (h.newLen > 0 && h.newStart <= newPkg) {
+			return nil, "changes the lines above the package clause"
+		}
+	}
 	for _, h := range hs {
 		touch(oldSet, oldFile, h.oldStart, h.oldLen, "old")
 		touch(newSet, newFile, h.newStart, h.newLen, "new")
@@ -153,9 +168,15 @@ func testFileChange(root, base, head string, c change, sg *suiteGraph) ([]string
 		}
 		why = append(why, fmt.Sprintf("changes the imports all %d tests in the file share", len(all)))
 	}
-	out := slices.Sorted(maps.Keys(tests))
+	// Never nil: nil asks for every test. A change between declarations,
+	// such as a comment, selects none.
+	out := append([]string{}, slices.Sorted(maps.Keys(tests))...)
 	if len(why) == 0 {
-		why = append(why, "changes "+listNames(out))
+		if len(out) == 0 {
+			why = append(why, "changes no declaration")
+		} else {
+			why = append(why, "changes "+listNames(out))
+		}
 	}
 	return out, strings.Join(why, "; ")
 }

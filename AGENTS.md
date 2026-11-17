@@ -587,6 +587,8 @@ What the selector does with a change:
   no test ran selects nothing, and the selector reports no error. When your
   change needs e2e cover, add to a test that reaches the code. A changed test
   file selects the tests it changes.
+- A changed comment selects no test. The doc comment of a test selects that
+  test. A change above the package clause of a test file runs the whole suite.
 - A test newer than the map runs on every change that reaches the binary,
   until the next night's map knows it.
 - A draft pull request skips the shards. Mark it ready for review to run them.
