@@ -12,3 +12,6 @@ internal/learn/lessons/lessons.tar.gz binary linguist-generated=true
 internal/integration/assets.tar.gz binary linguist-generated=true
 # Written by the e2e-tui test map workflow.
 e2e/tui/testselect/testmap.txt linguist-generated=true -diff
+# Written by a test from the verb registry. Never merge it by hand: write it
+# again with go test ./internal/session -run TestProtocolVerbsDocMatchesRegistry -update.
+docs/protocol-verbs.md linguist-generated=true

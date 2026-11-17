@@ -1988,10 +1988,11 @@ mapping, the method table and the event table.
 
 ## Verbs
 
-This catalog is deliberately partial: it documents the verbs whose semantics
-need prose. `tuios list-verbs` is the authoritative, always-current list of
-every verb the daemon registers, generated from the same tables the request
-validator uses.
+This catalog documents the verbs that need prose.
+[protocol-verbs.md](protocol-verbs.md) lists every verb, with its params,
+its result fields and an example. A test writes that page from the verb
+registry, so it always matches the code. `tuios list-verbs` prints the same
+data from the running daemon.
 
 ### hello
 
