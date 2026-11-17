@@ -55,7 +55,7 @@ func TestCLIReferenceNamesEveryCommandAndFlag(t *testing.T) {
 		return "", false
 	}
 
-	docs := commandDocs(newRootCommand())
+	docs := commandDocs(newRootCommand(), false)
 	owners := map[string]int{}
 	for _, d := range docs {
 		for _, f := range d.Flags {

@@ -175,7 +175,8 @@ Local Network. When the app is installed, tuios starts each new daemon through i
 
 Do not install the app again after you allow it. The permission is tied to
 the app's signature. An update of tuios does not change the app.`,
-		Hidden: runtime.GOOS != "darwin",
+		Hidden:      runtime.GOOS != "darwin",
+		Annotations: map[string]string{platformAnnotation: "darwin"},
 	}
 	cmd.AddCommand(newDaemonAppInstallCommand(), newDaemonAppUninstallCommand(), newDaemonAppStatusCommand())
 	return cmd

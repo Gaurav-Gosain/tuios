@@ -43,7 +43,16 @@ type commandDoc struct {
 	Aliases []string  `json:"aliases,omitempty"`
 	Flags   []flagDoc `json:"flags,omitempty"`
 	Depth   int       `json:"depth"`
+	// Platform is the one GOOS the command runs on, such as darwin, for a
+	// command that platformAnnotation marks. Empty means every platform.
+	Platform string `json:"platform,omitempty"`
 }
+
+// platformAnnotation marks a command that help hides on every platform but
+// one, and names that GOOS. help --json lists such a command on every
+// platform, with its platform, so the reference of each platform is the
+// same.
+const platformAnnotation = "tuios.platform"
 
 // flagDoc is one flag of a command.
 type flagDoc struct {
@@ -55,20 +64,25 @@ type flagDoc struct {
 }
 
 // commandDocs lists c and every command under it that help lists, in the
-// order help lists them.
-func commandDocs(c *cobra.Command) []commandDoc {
+// order help lists them. With allPlatforms it also lists a command that is
+// hidden here only because platformAnnotation names another platform.
+func commandDocs(c *cobra.Command, allPlatforms bool) []commandDoc {
 	var out []commandDoc
 	base := strings.Count(c.CommandPath(), " ")
-	var walk func(*cobra.Command)
-	walk = func(c *cobra.Command) {
+	var walk func(c *cobra.Command, platform string)
+	walk = func(c *cobra.Command, platform string) {
+		if p := c.Annotations[platformAnnotation]; p != "" {
+			platform = p
+		}
 		d := commandDoc{
-			Path:    c.CommandPath(),
-			Use:     c.UseLine(),
-			Short:   c.Short,
-			Long:    c.Long,
-			Example: c.Example,
-			Aliases: c.Aliases,
-			Depth:   strings.Count(c.CommandPath(), " ") - base,
+			Path:     c.CommandPath(),
+			Use:      c.UseLine(),
+			Short:    c.Short,
+			Long:     c.Long,
+			Example:  c.Example,
+			Aliases:  c.Aliases,
+			Depth:    strings.Count(c.CommandPath(), " ") - base,
+			Platform: platform,
 		}
 		c.LocalFlags().VisitAll(func(f *pflag.Flag) {
 			if f.Hidden || f.Name == "help" {
@@ -82,12 +96,13 @@ func commandDocs(c *cobra.Command) []commandDoc {
 		})
 		out = append(out, d)
 		for _, sub := range c.Commands() {
-			if sub.IsAvailableCommand() || sub.Name() == "help" {
-				walk(sub)
+			otherPlatform := allPlatforms && sub.Hidden && sub.Annotations[platformAnnotation] != ""
+			if sub.IsAvailableCommand() || sub.Name() == "help" || otherPlatform {
+				walk(sub, platform)
 			}
 		}
 	}
-	walk(c)
+	walk(c, "")
 	return out
 }
 
@@ -102,7 +117,9 @@ func newHelpCommand() *cobra.Command {
 		Long: `Help prints the help of any command.
 Type tuios help [path to command] for full details.
 
---json prints the command and every command under it, with each flag.
+--json prints the command and every command under it, with each flag. It
+also lists a command of another platform, such as daemon-app on macOS,
+with its platform.
 -i opens the same list in an explorer you can search. Press q or esc to leave it.`,
 		Example: `  tuios help checkpoint
   tuios help --json
@@ -143,7 +160,7 @@ Type tuios help [path to command] for full details.
 				cobra.CheckErr(errfmt.Errorf("no command %q. Run tuios help to list the commands", strings.Join(args, " ")))
 				return
 			}
-			docs := commandDocs(target)
+			docs := commandDocs(target, jsonOut)
 			if jsonOut {
 				out, err := json.MarshalIndent(map[string]any{"type": "command_tree", "commands": docs}, "", "  ")
 				cobra.CheckErr(err)
