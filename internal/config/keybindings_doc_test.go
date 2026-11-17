@@ -19,8 +19,17 @@ func TestKeybindingsDocNamesRealTablesAndActions(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixed := map[string]bool{}
+	// defaults holds the actions each table binds by default. A table such
+	// as [keybindings.sidebar] has actions of its own, such as cursor_down,
+	// that LookupAction does not list.
+	defaults := map[string]map[string]bool{}
+	defaultKeys := DefaultConfig().Keybindings
 	for _, tb := range keybindTables {
 		fixed[tb.name] = true
+		defaults[tb.name] = map[string]bool{}
+		for action := range *tb.field(&defaultKeys) {
+			defaults[tb.name][action] = true
+		}
 	}
 	kbType := reflect.TypeFor[KeybindingsConfig]()
 	// tableKind says what a [keybindings.NAME...] table holds: actions, the
@@ -28,6 +37,7 @@ func TestKeybindingsDocNamesRealTablesAndActions(t *testing.T) {
 	type tableKind struct {
 		known   bool
 		actions bool
+		table   string
 		fields  reflect.Type
 	}
 	kindOf := func(path []string) tableKind {
@@ -35,7 +45,7 @@ func TestKeybindingsDocNamesRealTablesAndActions(t *testing.T) {
 		case len(path) == 0:
 			return tableKind{known: true, fields: kbType}
 		case fixed[path[0]] && len(path) == 1:
-			return tableKind{known: true, actions: true}
+			return tableKind{known: true, actions: true, table: path[0]}
 		case path[0] == "menus" && len(path) == 2:
 			return tableKind{known: true, actions: true}
 		case len(path) == 1:
@@ -101,7 +111,7 @@ func TestKeybindingsDocNamesRealTablesAndActions(t *testing.T) {
 		keys++
 		switch {
 		case current.actions:
-			if _, ok := LookupAction(m[1]); !ok {
+			if _, ok := LookupAction(m[1]); !ok && !defaults[current.table][m[1]] && scopedDescriptions[current.table][m[1]] == "" {
 				t.Errorf("KEYBINDINGS.md:%d: %q is not an action: %s", i+1, m[1], text)
 			}
 		case current.fields != nil:
