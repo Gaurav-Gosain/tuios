@@ -415,11 +415,6 @@ func contextOnlyScope(scope string) bool {
 	return false
 }
 
-// HasAction checks if an action exists in the registry
-func (r *KeybindRegistry) HasAction(action string) bool {
-	return len(r.GetKeys(action)) > 0
-}
-
 // Reload reloads the keybind mappings from the config
 func (r *KeybindRegistry) Reload(cfg *UserConfig) {
 	r.config = cfg

@@ -254,12 +254,6 @@ const (
 	DockModeIconLockedASCII   = "LOCK"
 	DockModeIconUnlockedASCII = "UNLOCK"
 
-	// DockIconTerminalCountASCII is the ASCII fallback for terminal count
-	DockIconTerminalCountASCII = "win"
-
-	// DockIconWorkspaceCountASCII is the ASCII fallback for workspace count
-	DockIconWorkspaceCountASCII = "ws"
-
 	// DockIconLeaveRunningASCII is the ASCII fallback for the leave-running
 	// control. One cell, like the glyph it stands in for, so the strip's columns
 	// do not move with the font.
@@ -775,9 +769,6 @@ func (s *Settings) MasterRatioFraction() float64 {
 // xmonad's ThreeColMid and Hyprland's center orientation do.
 const (
 	MasterPositionLeft   = layout.MasterPositionLeft
-	MasterPositionRight  = layout.MasterPositionRight
-	MasterPositionTop    = layout.MasterPositionTop
-	MasterPositionBottom = layout.MasterPositionBottom
 	MasterPositionCenter = layout.MasterPositionCenter
 )
 

@@ -145,12 +145,9 @@ const (
 // WorkspaceTransitions is what motion.workspace accepts.
 var WorkspaceTransitions = []string{WorkspaceTransitionSlide, WorkspaceTransitionFade, WorkspaceTransitionNone}
 
-// WorkspaceTransitionMsDefault and Max bound motion.workspace_ms, in
+// WorkspaceTransitionMsDefault is the default of motion.workspace_ms, in
 // milliseconds. Zero is a cut.
-const (
-	WorkspaceTransitionMsDefault = 200
-	WorkspaceTransitionMsMax     = 1000
-)
+const WorkspaceTransitionMsDefault = 200
 
 // WorkspaceTransitionStyle is the transition a workspace switch made now is
 // shown with. It is none whenever motion is: appearance.motion = "none", calm

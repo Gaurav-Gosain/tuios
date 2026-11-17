@@ -262,9 +262,6 @@ func NormalizeNameHint(v string) string {
 	return NameHintOn
 }
 
-// NameHintOn reports whether the start hint tells the agent to name its pane.
-func (a AgentsConfig) NameHintOn() bool { return NormalizeNameHint(a.NameHint) == NameHintOn }
-
 // AgentsOffMessage is the one line a command, a verb or a key prints when it
 // is an agent feature and the agent features are off.
 const AgentsOffMessage = "Agent features are off. Set agents.enabled = true in the config to use this command."
