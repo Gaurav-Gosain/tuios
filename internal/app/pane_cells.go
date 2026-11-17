@@ -29,8 +29,9 @@ import (
 
 // directPane is a lone pane being drawn from its emulator this frame. Its IO
 // read lock is held from the choice until its cells are copied. held says the
-// guest has a synchronized update open: the cells copied last time are drawn
-// again, so a half-drawn screen is never shown.
+// guest has a synchronized update open, or its output holds the lock: the
+// cells copied last time are drawn again, so a half-drawn screen is never
+// shown. A held pane may have no lock, since it does not read the emulator.
 type directPane struct {
 	w      *terminal.Window
 	locked bool
@@ -92,6 +93,14 @@ func (m *OS) chooseDirectPane() directPane {
 	// placed; paneCursor takes the pane's read lock, so it is asked first.
 	native, _ := m.paneCursor()
 	if !w.TryRLockIO() {
+		// The guest's output is being read into the emulator. The frame the
+		// screen shows is drawn again, as for an open update: the pane drawn
+		// the usual way has no text of its own to shed to (copyDirectPane
+		// dropped it), so it would wait for the lock, or show the text it
+		// had before this path drew it.
+		if m.directHeld(w) {
+			return directPane{w: w, held: true}
+		}
 		return directPane{}
 	}
 	d := directPane{w: w, locked: true}
@@ -103,14 +112,20 @@ func (m *OS) chooseDirectPane() directPane {
 	}
 	if screen.IsSyncActive() {
 		// Mid-update: draw the last complete frame, if this path drew it.
-		h := &m.directHold
-		if !h.drawn || h.id != w.ID || h.rect != paneContentRect(w) || m.screen.Shown() == nil {
+		if !m.directHeld(w) {
 			d.release()
 			return directPane{}
 		}
 		d.held = true
 	}
 	return d
+}
+
+// directHeld reports whether the frame the screen shows holds w's cells as
+// this path last drew them, so a frame can draw them again.
+func (m *OS) directHeld(w *terminal.Window) bool {
+	h := &m.directHold
+	return h.drawn && h.id == w.ID && h.rect == paneContentRect(w) && m.screen.Shown() != nil
 }
 
 func (d *directPane) release() {
@@ -183,6 +198,10 @@ func (m *OS) copyDirectPane(canvas *frameCanvas, d *directPane, kept bool) {
 	w.CachedContent = ""
 	w.CachedContentCols, w.CachedContentRows = 0, 0
 	w.CachedLayer = nil
+	// The text a frame drawn the usual way holds while the guest has an
+	// update open is older than these cells. Shown after them it put the
+	// pane back to what it held before this path drew it (#2157).
+	w.SyncHoldContent = ""
 }
 
 // paneCells writes the direct pane's cells into its content rectangle on

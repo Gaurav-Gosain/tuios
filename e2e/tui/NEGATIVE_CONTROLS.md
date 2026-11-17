@@ -18127,3 +18127,20 @@ to the dock. The frames `workspace-icon-name-labelled`,
 | --- | --- | --- |
 | Main (the Inbox follows this machine's daemon, and every act on it is refused while attached through a host) | both tests: the agents view never lists alpha's item under "Agents on alpha" | **caught** |
 | The branch, with `inboxDismissCmd` sending to this machine's daemon (`inboxCaller`) | `TestInboxActsOnTheAttachedHost` ("the dismissed item is gone from alpha's own Inbox") | **caught** |
+
+## A scrolling guest never shows an old or half-drawn pane
+
+`TestScrollingGuestPresentsWholeFrames` in `cell_frame_scroll_test.go` runs a guest that scrolls as Neovim does (#2157): each frame is one synchronized update with a scroll region, an SU, a new bottom line and a status line. It writes 10 bursts of 1500 frames into a lone tiled pane and replays the host stream one presented frame at a time. Every presented frame must hold 20 consecutive lines that match its status. It runs on both frame paths, `TUIOS_CELL_FRAME=1` and `0`.
+
+Run on 2026-11-17 on Linux (x86_64), with `nice -n 19` and GOMAXPROCS=4, against the pure Go and the ghostty (`-tags ghostty`, libghostty-vt 1.0.1) builds.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main, pure Go | cells: "no status line: the pane shows something the guest did not draw" (the shell prompt from before the guest ran), 5 of 5 runs | **caught** |
+| Main, ghostty | cells: the same, 5 of 5 runs. string: "status STEP ... but the lines are ...", 1 of 5 runs | **caught** |
+| `chooseDirectPane` without the hold on a busy lock | cells: "status STEP ... but the lines are ...", 3 of 3 runs | **caught** |
+| `renderTerminal` without the check after the lock | string: "status STEP ... but the lines are ...", 3 of 6 runs | **caught** |
+| The branch | passes 5 of 5 runs on pure Go and 5 of 5 on ghostty, both paths | fixed |
+
+The host streams are `scroll-cells.ansi` and `scroll-string.ansi` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestScrollingGuestPresentsWholeFrames$' -v .`.
