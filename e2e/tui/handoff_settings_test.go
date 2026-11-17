@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"net"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -611,8 +612,8 @@ func sessionAttached(t *testing.T, base, session string) bool {
 //   - newer to older: this build's daemon asks the older one to take over,
 //     and the preflight refuses with nothing changed;
 //   - the fallback: the older daemon hands over to this build, which fails
-//     to adopt on purpose, and the older binary, kept as tuios.prev, adopts
-//     the manifest it wrote;
+//     to adopt on purpose, and the older binary (the tuios.prev copy on
+//     macOS, its own file on Linux) adopts the manifest it wrote;
 //   - task holds and dispatch settings: a pane of the older build holds a
 //     card on another machine (far_holds in its manifest), and this build
 //     lets the card go there when the pane closes after the upgrade.
@@ -685,7 +686,12 @@ func TestDaemonUpgradeAcrossHandoffVersions(t *testing.T) {
 		if after.PID != older.PID {
 			t.Fatalf("ASSERTION: the daemon's pid changed from %d to %d", older.PID, after.PID)
 		}
-		if fb, _ := stats["fallback"].(bool); !fb || !strings.HasSuffix(exe, "tuios.prev") {
+		// macOS runs the copy the older image kept, tuios.prev. Linux keeps
+		// the running image as an open descriptor and writes no copy, so the
+		// process names the older build's own file.
+		prevAbs, _ := filepath.Abs(prev)
+		ranOlder := strings.HasSuffix(exe, "tuios.prev") || sameFile(exe, prevAbs)
+		if fb, _ := stats["fallback"].(bool); !fb || !ranOlder {
 			t.Errorf("ASSERTION: the older binary did not take the panes back: runs %s, stats %v", exe, stats)
 		}
 		for id, pid := range pidsBefore {
