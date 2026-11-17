@@ -76,8 +76,6 @@ type (
 	ProcReport   = harness.ProcReport
 	Transcript   = harness.Transcript
 	Launch       = harness.Launch
-	Input        = harness.Input
-	Answers      = harness.Answers
 	Answer       = harness.Answer
 )
 
@@ -95,7 +93,6 @@ const (
 	ReaderJSONL         = harness.ReaderJSONL
 	ImagesNone          = harness.ImagesNone
 	ImagesPathPaste     = harness.ImagesPathPaste
-	ImagesPathText      = harness.ImagesPathText
 	PartialSuffix       = harness.PartialSuffix
 	DefaultScreenLines  = harness.DefaultScreenLines
 	MaxResumeSessionID  = harness.MaxResumeSessionID

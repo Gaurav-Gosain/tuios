@@ -532,9 +532,6 @@ func (s *Stream) makeWindowed(opener bool) {
 	}
 }
 
-// Bulk reports whether the stream is a bulk stream.
-func (s *Stream) Bulk() bool { return s.bulk }
-
 // WindowSize is a bulk stream's window now, zero for any other stream.
 func (s *Stream) WindowSize() uint64 {
 	if s.win == nil {

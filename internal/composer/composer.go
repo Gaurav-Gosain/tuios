@@ -882,9 +882,6 @@ func (m *Model) SetMaxRows(n int) {
 	m.opt.MaxRows = n
 }
 
-// MaxRows is how many rows the editor grows to before it scrolls.
-func (m *Model) MaxRows() int { return m.opt.MaxRows }
-
 // SetRoom tells the editor how many lines its frame may take this frame: its
 // rows, the strip of blocks above them, and the line under them. The rows
 // are held to it, so a MaxRows larger than the view never pushes the
@@ -894,14 +891,6 @@ func (m *Model) SetRoom(lines int) { m.room = max(lines, 0) }
 
 // Full reports whether the editor takes the whole room (alt+m).
 func (m *Model) Full() bool { return m.full }
-
-// SetFull sets whether the editor takes the whole room.
-func (m *Model) SetFull(on bool) {
-	if m.opt.SingleLine {
-		return
-	}
-	m.full = on
-}
 
 // textRows is how many text rows the frame shows, given the lines the strip
 // above them takes: MaxRows held to the room, or all of the room when full.

@@ -81,16 +81,6 @@ func NewACP(t acp.Transport, o ACPOptions, emit func(Event)) *ACP {
 // Done is closed when the agent's connection ends, once Start has made one.
 func (a *ACP) Done() <-chan struct{} { return a.done }
 
-// Protocol is the ACP version the connection speaks, 0 before Start.
-func (a *ACP) Protocol() int {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.client == nil {
-		return 0
-	}
-	return a.client.Version()
-}
-
 // Start connects, negotiates the version and opens the session.
 func (a *ACP) Start(ctx context.Context, cwd string) (Info, error) {
 	max := a.opts.MaxVersion

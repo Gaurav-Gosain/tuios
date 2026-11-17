@@ -58,13 +58,6 @@ func (s *Set) Remove(dir string) {
 	}
 }
 
-// Dirs is how many directories the set watches.
-func (s *Set) Dirs() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return len(s.byDir)
-}
-
 // Close stops every watch. It is safe to call more than once.
 func (s *Set) Close() {
 	s.mu.Lock()

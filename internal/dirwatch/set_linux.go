@@ -100,13 +100,6 @@ func (s *Set) Remove(dir string) {
 	_, _ = unix.InotifyRmWatch(s.fd, uint32(wd))
 }
 
-// Dirs is how many directories the set watches.
-func (s *Set) Dirs() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return len(s.byID)
-}
-
 func (s *Set) run() {
 	defer close(s.done)
 	buf := make([]byte, 4096)

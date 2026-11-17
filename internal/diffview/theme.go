@@ -93,9 +93,6 @@ const (
 // and the cursor is left to the caller, which reverses the gutter.
 type Theme struct {
 	pal Palette
-	// bg is the ground of a line's code, by kind, cursor and whether the
-	// run is inside the part of the line that changed.
-	bg [numKinds][2][2]color.Color
 	// code is the sequence a run of each class starts with.
 	code [numKinds][2][2][NumClasses]string
 	// gutterBg and gutter are the line number column's ground and sequence.
@@ -146,7 +143,6 @@ func NewTheme(p Palette) *Theme {
 	for k := range numKinds {
 		for c := range 2 {
 			l, w, gut := g[k][c].line, g[k][c].word, g[k][c].gutter
-			t.bg[k][c][0], t.bg[k][c][1] = l, w
 			t.gutterBg[k][c] = gut
 			for wi, bg := range []color.Color{l, w} {
 				for class := range NumClasses {
@@ -272,7 +268,6 @@ func newTheme16(p Palette) *Theme {
 			num, sign = p.Delete, p.Delete
 		}
 		for c := range 2 {
-			t.bg[k][c] = [2]color.Color{overlay.NoColor, overlay.NoColor}
 			t.gutterBg[k][c] = overlay.NoColor
 			t.gutter[k][c] = seq(num, nil, 0)
 			t.sign[k][c] = seq(sign, nil, attrBold)
@@ -310,21 +305,10 @@ func (t *Theme) classSeq(class Class, bg color.Color) string {
 	return seq(overlay.ReadableAt(solid(fg), bg, floor), bg, classAttrs(class))
 }
 
-// Bg is the ground of a line's code: of the part that changed with word.
-func (t *Theme) Bg(kind Kind, cursor, word bool) color.Color {
-	return t.bg[kind][b2i(cursor)][b2i(word)]
-}
-
 // GutterBg is the ground of a line's number column.
 func (t *Theme) GutterBg(kind Kind, cursor bool) color.Color {
 	return t.gutterBg[kind][b2i(cursor)]
 }
-
-// Ground is the ground the theme was built on.
-func (t *Theme) Ground() color.Color { return t.pal.Ground }
-
-// Fg is the colour of plain text, as the theme draws it on its ground.
-func (t *Theme) Fg() color.Color { return t.pal.Fg }
 
 // SyntaxFromANSI maps a terminal theme's sixteen colours onto the classes,
 // the way most editor themes built on a terminal palette do: keywords in

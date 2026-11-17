@@ -31,11 +31,6 @@ type Target struct {
 	Window  string
 }
 
-// Remote reports whether the target names another machine.
-func (t Target) Remote() bool {
-	return t.Host != "" && t.Host != LocalHostName
-}
-
 // IsHostName reports whether s could be a host name: what the [hosts] table
 // accepts, plus the reserved name for this machine.
 func IsHostName(s string) bool {

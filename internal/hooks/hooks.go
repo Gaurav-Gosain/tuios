@@ -451,13 +451,6 @@ func (m *Manager) ReplaceFrom(src *Manager) {
 	m.clearStatus()
 }
 
-// HasHooks returns true if any hooks are registered.
-func (m *Manager) HasHooks() bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return len(m.hooks) > 0
-}
-
 // executeHook runs a shell command with context as environment variables. It
 // reports the exit code, how long the command took, and the tail of its stderr,
 // which is what makes a failing hook visible instead of silent. While the shell
