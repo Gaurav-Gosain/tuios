@@ -158,13 +158,6 @@ func (s *Store) Limits() (limit, maxBytes int) {
 	return s.limit, s.maxBytes
 }
 
-// Bytes reports how many bytes the buffers hold together.
-func (s *Store) Bytes() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.bytes
-}
-
 // trim drops buffers until the limits hold: the oldest automatic buffers
 // past the count limit, the oldest named ones past MaxNamed, and past the
 // byte cap the oldest automatic buffer, or the oldest named one when no

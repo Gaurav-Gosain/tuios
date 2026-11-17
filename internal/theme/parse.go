@@ -205,10 +205,6 @@ type ColorSpec struct {
 // IsZero reports whether c is unset.
 func (c ColorSpec) IsZero() bool { return c.kind == kindNone }
 
-// Follows reports whether c follows the theme: a role or a slot, which
-// resolve to a different colour on each theme. A fixed colour does not.
-func (c ColorSpec) Follows() bool { return c.kind == kindSlot || c.kind == kindRole }
-
 // Role is the chrome role c names, or RoleNone.
 func (c ColorSpec) Role() Role {
 	if c.kind == kindRole {

@@ -19,10 +19,6 @@ const (
 	// MarkFloor is the ratio a non-text mark has to clear: a cap, a glyph, a
 	// cursor block.
 	MarkFloor = overlay.MarkFloor
-	// StructureTarget is what a decorative rule aims at: an edge, a separator,
-	// a divider. The one class with no floor under it, and the reason there is
-	// no floor is that taking the rule away leaves the layout readable.
-	StructureTarget = overlay.StructureTarget
 )
 
 // ContrastRatio returns the WCAG 2.1 contrast ratio between two colours.
@@ -85,11 +81,6 @@ func RailRuleOn(bg color.Color) color.Color {
 // ContrastText picks a foreground that reads on the given (usually saturated)
 // background: near-white on a dark or mid accent, near-black on a light one.
 func ContrastText(bg color.Color) color.Color { return overlay.ContrastText(bg) }
-
-// UIPalette is the chrome color set for TUIOS floating overlays. It is an alias
-// for overlay.Palette so the overlay package stays free of any tuios
-// dependency and could be published on its own.
-type UIPalette = overlay.Palette
 
 // chromeRamp is the constant ramp stated as the ratios between its steps,
 // which is what a theme that names its own Surface is held to. The four

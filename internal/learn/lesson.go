@@ -25,9 +25,6 @@ const (
 	EventLessonFinish = "lesson.finish"
 )
 
-// LessonCommands are the names Lessons.Command takes.
-var LessonCommands = []string{"start", "showMe", "skip", "next", "back", "stop", "log"}
-
 // The lesson's pacing.
 const (
 	// doneHold is the least time a finished step's card stays up.

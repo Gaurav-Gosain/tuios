@@ -303,10 +303,6 @@ func PaneScript() string {
 	}, "; ")
 }
 
-// FindBinaryArg is what CommandArg returns for "look the way the link does":
-// "-".
-const FindBinaryArg = "-"
-
 // CommandArg is how a configured command reaches the probe: "-" when
 // there is none, so the probe looks the way the link does. A command that is
 // not one plain path cannot be read as a file, and is reported as such.

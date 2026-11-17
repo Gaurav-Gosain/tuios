@@ -10,8 +10,6 @@ const (
 	TokenEOF TokenType = "EOF"
 	// TokenIllegal represents an illegal token.
 	TokenIllegal TokenType = "ILLEGAL"
-	// TokenComment represents a comment token.
-	TokenComment TokenType = "COMMENT"
 	// TokenNewline represents a newline token.
 	TokenNewline TokenType = "NEWLINE"
 	// TokenString represents a string literal token.
@@ -176,15 +174,6 @@ func (tt TokenType) IsCommand() bool {
 		TokenWait, TokenWaitUntilRegex,
 		TokenSet, TokenOutput, TokenSource,
 		TokenEnableAnimations, TokenDisableAnimations, TokenToggleAnimations:
-		return true
-	}
-	return false
-}
-
-// IsModifier returns true if the token is a modifier key
-func (tt TokenType) IsModifier() bool {
-	switch tt {
-	case TokenCtrl, TokenAlt, TokenShift:
 		return true
 	}
 	return false

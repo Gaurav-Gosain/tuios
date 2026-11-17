@@ -128,9 +128,6 @@ func largeUntracked(ctx context.Context, root string, limit int64) ([]string, er
 	return large, nil
 }
 
-// ErrNoCheckpoint reports a checkpoint number the pane has no ref for.
-var ErrNoCheckpoint = errors.New("no such checkpoint")
-
 // checkpointLabelMax bounds the label kept in a checkpoint's message.
 const checkpointLabelMax = 120
 

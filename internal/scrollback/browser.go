@@ -199,12 +199,6 @@ func (b *Browser) ToggleSelect() {
 	}
 }
 
-// SetSearch updates the search query and rebuilds the filtered list.
-func (b *Browser) SetSearch(query string) {
-	b.Search.Set(query)
-	b.refilter()
-}
-
 // SearchKey applies one key press to the search line (textedit.Line): the
 // caret, the word keys, ctrl+u and the text the key types. It reports whether
 // the key was the line's.

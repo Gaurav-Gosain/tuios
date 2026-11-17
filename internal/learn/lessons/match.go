@@ -145,10 +145,6 @@ type valueOps struct {
 	differs        string
 }
 
-// Compile checks the rule and readies it to match. Load does it for every
-// rule in the lessons.
-func (r *Rule) Compile() error { return r.compile() }
-
 func (r *Rule) compile() error { return r.compileAt("r") }
 
 func (r *Rule) compileAt(slot string) error {

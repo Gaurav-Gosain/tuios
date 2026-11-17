@@ -144,11 +144,6 @@ func (n *TileNode) IsLeaf() bool {
 	return n.SplitType == SplitNone
 }
 
-// IsRoot returns true if this is the root node
-func (n *TileNode) IsRoot() bool {
-	return n.Parent == nil
-}
-
 // Sibling returns the sibling node (other child of parent)
 func (n *TileNode) Sibling() *TileNode {
 	if n.Parent == nil {
