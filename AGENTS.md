@@ -589,6 +589,9 @@ What the selector does with a change:
   file selects the tests it changes.
 - A changed comment selects no test. The doc comment of a test selects that
   test. A change above the package clause of a test file runs the whole suite.
+- A change to the unexported fields of a struct selects the tests that ran a
+  function that names one of those fields. Any other change to a type
+  selects the tests that ran a function that names the type.
 - A test newer than the map runs on every change that reaches the binary,
   until the next night's map knows it.
 - A draft pull request skips the shards. Mark it ready for review to run them.

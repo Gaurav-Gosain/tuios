@@ -35,6 +35,7 @@ type goChange struct {
 	bodies []string // functions whose body alone changed, as funcKey names them
 	funcs  []string // the same functions, as go tool cover names them
 	names  []name   // declarations that changed, were added or were removed
+	fields []string // struct fields that changed, as Type.field, for the reason
 }
 
 // The CI build: linux/amd64 with cgo and no tags.
@@ -140,6 +141,17 @@ func analyzeGoFile(root, base, head, dir string, c change, initFuncs []string) g
 			if slices.Contains(initFuncs, d.ident) {
 				add(name{dir, d.ident, false, ""})
 			}
+		case inOld && inNew && d.typ:
+			fields, ok := changedFields(o, n)
+			if !ok {
+				add(name{dir, d.ident, true, ""})
+				break
+			}
+			// Only code that names a changed field can observe it.
+			for _, f := range fields {
+				add(name{dir, f, false, ""})
+				out.fields = append(out.fields, d.ident+"."+f)
+			}
 		case d.recv != "":
 			// The caller decides whether the method can change which
 			// interfaces the type satisfies (see methodNames).
@@ -182,6 +194,71 @@ type declText struct {
 	isFunc bool
 	text   string // the declaration without a function's body
 	body   string // a function's body
+	// For a struct type: the declaration with its field list left empty,
+	// and each field by name in order. An embedded field is named by its
+	// type after embeddedPrefix.
+	shape  string
+	fields []fieldText
+}
+
+// embeddedPrefix starts the name of an embedded field. No identifier holds
+// a space.
+const embeddedPrefix = "embedded "
+
+// fieldText is one field of a struct type, printed without comments.
+type fieldText struct {
+	name string
+	text string // the type and the tag
+}
+
+// changedFields compares two versions of a struct type. When the only
+// change is to unexported named fields, it returns those fields' names: no
+// code outside the package can name them, the encoders that read fields by
+// reflection skip them, and code in the package that reads or writes one
+// names it. The fields both versions hold must keep their order, so an
+// unkeyed literal cannot shift a value into another field. ok is false for
+// any other change, which counts as a change to the type.
+func changedFields(o, n declText) (fields []string, ok bool) {
+	if o.shape == "" || o.shape != n.shape {
+		return nil, false
+	}
+	index := func(fs []fieldText) map[string]string {
+		m := map[string]string{}
+		for _, f := range fs {
+			m[f.name] = f.text
+		}
+		return m
+	}
+	om, nm := index(o.fields), index(n.fields)
+	var common []string
+	for _, f := range o.fields {
+		if _, in := nm[f.name]; in {
+			common = append(common, f.name)
+		}
+	}
+	var order []string
+	for _, f := range n.fields {
+		if _, in := om[f.name]; in {
+			order = append(order, f.name)
+		}
+	}
+	if !slices.Equal(common, order) {
+		return nil, false
+	}
+	seen := map[string]bool{}
+	for _, fs := range [][]fieldText{o.fields, n.fields} {
+		for _, f := range fs {
+			if seen[f.name] || om[f.name] == nm[f.name] {
+				continue
+			}
+			seen[f.name] = true
+			if strings.HasPrefix(f.name, embeddedPrefix) || ast.IsExported(f.name) {
+				return nil, false
+			}
+			fields = append(fields, f.name)
+		}
+	}
+	return fields, len(fields) > 0
 }
 
 // declTexts keys every top-level declaration of a file, and sums up what
@@ -234,7 +311,26 @@ func declTexts(fset *token.FileSet, f *ast.File) (map[string]declText, string) {
 			for i, s := range x.Specs {
 				switch s := s.(type) {
 				case *ast.TypeSpec:
-					out["type "+s.Name.Name] = declText{ident: s.Name.Name, typ: true, text: print(s)}
+					dt := declText{ident: s.Name.Name, typ: true, text: print(s)}
+					if st, ok := s.Type.(*ast.StructType); ok && st.Fields != nil {
+						for _, f := range st.Fields.List {
+							text := print(f.Type)
+							if f.Tag != nil {
+								text += " " + f.Tag.Value
+							}
+							if len(f.Names) == 0 {
+								dt.fields = append(dt.fields, fieldText{embeddedPrefix + text, text})
+							}
+							for _, n := range f.Names {
+								dt.fields = append(dt.fields, fieldText{n.Name, text})
+							}
+						}
+						list := st.Fields.List
+						st.Fields.List = nil
+						dt.shape = print(s)
+						st.Fields.List = list
+					}
+					out["type "+s.Name.Name] = dt
 				case *ast.ValueSpec:
 					// Read before print, which drops the comments.
 					embed := embedDirective(x.Doc) || embedDirective(s.Doc)
@@ -390,11 +486,18 @@ func reach(root string, g *graph, start []name) (funcs map[funcRef]bool, ok bool
 // refers reports whether a node names ident: as a plain identifier in its
 // own package, or as the selector of x.ident from another. Any identifier or
 // selector of that name counts, a local one included, which only selects
-// more.
+// more. The name of a field or a parameter declares it and is no reference:
+// a struct with a field named ident does not depend on ident.
 func refers(n ast.Node, ident string, qualified bool) bool {
 	found := false
-	ast.Inspect(n, func(x ast.Node) bool {
+	var visit func(ast.Node) bool
+	visit = func(x ast.Node) bool {
 		switch x := x.(type) {
+		case *ast.Field:
+			if x.Type != nil {
+				ast.Inspect(x.Type, visit)
+			}
+			return false
 		case *ast.SelectorExpr:
 			if x.Sel.Name == ident {
 				found = true
@@ -405,7 +508,8 @@ func refers(n ast.Node, ident string, qualified bool) bool {
 			}
 		}
 		return !found
-	})
+	}
+	ast.Inspect(n, visit)
 	return found
 }
 

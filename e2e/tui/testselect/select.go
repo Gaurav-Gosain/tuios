@@ -188,12 +188,24 @@ func choose(root, base, head, mapFile string, m *testMap, testNames []string) *s
 						parts = append(parts, "inside "+strings.Join(gc.bodies, ", "))
 					}
 					if len(gc.names) > 0 {
+						fields := map[string]bool{}
+						for _, f := range gc.fields {
+							_, fn, _ := strings.Cut(f, ".")
+							fields[fn] = true
+						}
 						var ids []string
 						for _, n := range gc.names {
-							ids = append(ids, n.ident)
+							if !fields[n.ident] {
+								ids = append(ids, n.ident)
+							}
 						}
 						names = append(names, gc.names...)
-						parts = append(parts, "declares "+strings.Join(ids, ", "))
+						if len(ids) > 0 {
+							parts = append(parts, "declares "+strings.Join(ids, ", "))
+						}
+						if len(gc.fields) > 0 {
+							parts = append(parts, "changes the unexported fields "+strings.Join(gc.fields, ", "))
+						}
 					}
 					if len(parts) == 0 {
 						parts = append(parts, "comments only")
