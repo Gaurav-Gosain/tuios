@@ -100,10 +100,11 @@ jobs:
           # HEAD^1 is the base and HEAD^1..HEAD is exactly the change.
           fetch-depth: 2
 
+      # The same cache as the shards: this job builds what they used to.
       - uses: ./.github/actions/setup-go
         with:
           go-version-file: e2e/tui/go.mod
-          cache-id: e2e-plan
+          cache-id: e2e
 
       - name: Check that every shard fits its time
         working-directory: e2e/tui
@@ -113,10 +114,10 @@ jobs:
           set -euo pipefail
           go test -list '^Test' ./... | grep '^Test' | go run ./shardplan -shards "$((E2E_SHARDS * E2E_LANES))" -max "$E2E_LANE_LIMIT"
 
-      # The shards make the same choice on their own. This copy says on the
-      # run what was chosen and why. Its notice "mode=all" is how
-      # scripts/e2e-tested.sh knows that every test ran, so the push to main
-      # skips the suite only after a pull request run of the whole suite.
+      # The only selection of the run: the shards read its lists. Its notice
+      # "mode=all" is how scripts/e2e-tested.sh knows that every test ran, so
+      # the push to main skips the suite only after a pull request run of the
+      # whole suite.
       - name: Select the tests this change can reach
         working-directory: e2e/tui
         env:
@@ -127,10 +128,6 @@ jobs:
           GITHUB_OUTPUT="$RUNNER_TEMP/select.out" ../../scripts/e2e-select.sh > "$RUNNER_TEMP/selected.txt"
           echo "::notice title=e2e-tui selection::$(grep '^mode=' "$RUNNER_TEMP/select.out")"
 
-      # The shards that get a test, by the same plan each shard makes for
-      # itself below. A shard with no test does not start, so a small change
-      # takes two or three runners instead of sixteen. When the plan finds no
-      # shard for a selection that holds tests, every shard starts.
       # The frame paths the shards run on (appearance.cell_frames). A pull
       # request runs the default path, cells. A push to main, and a run by
       # hand, also run every shard on Bubble Tea's renderer, the other path,
@@ -144,6 +141,14 @@ jobs:
             echo 'frames=["cells","string"]' >> "$GITHUB_OUTPUT"
           fi
 
+      # The tests of each lane of each shard, packed by measured time
+      # (shardplan). shardplan packs E2E_SHARDS times E2E_LANES lanes, and
+      # shard N takes lanes (N-1)*E2E_LANES+1 to N*E2E_LANES. A test that is
+      # not in the durations file yet counts as the mean. A partial selection
+      # fills as few lanes as it needs, and a shard with no test does not
+      # start, so a small change takes two or three runners instead of
+      # sixteen. When the fill gives no shard a test, the selection spreads
+      # over every shard instead.
       - name: Choose the shards that run
         id: shards
         working-directory: e2e/tui
@@ -152,28 +157,79 @@ jobs:
           mode=$(sed -n 's/^mode=//p' "$RUNNER_TEMP/select.out")
           go build -o "$RUNNER_TEMP/shardplan" ./shardplan
           lanes=$((E2E_SHARDS * E2E_LANES))
-          shards=()
-          for shard in $(seq 1 "$E2E_SHARDS"); do
-            case $mode in
-            all) shards+=("$shard"); continue ;;
-            none) continue ;;
-            esac
-            n=0
-            for lane in $(seq 1 "$E2E_LANES"); do
-              v=$(( (shard - 1) * E2E_LANES + lane ))
-              c=$("$RUNNER_TEMP/shardplan" -shards "$lanes" -shard "$v" -fill "$E2E_LANE_FILL" < "$RUNNER_TEMP/selected.txt" | grep -c . || true)
-              n=$((n + c))
+          mkdir -p "$RUNNER_TEMP/suite"
+          # pack FILL: write every lane's list, and print the shards that got a test.
+          pack() {
+            local shard lane v n f
+            for shard in $(seq 1 "$E2E_SHARDS"); do
+              n=0
+              for lane in $(seq 1 "$E2E_LANES"); do
+                v=$(( (shard - 1) * E2E_LANES + lane ))
+                f="$RUNNER_TEMP/suite/names-$shard-$lane.txt"
+                if [ "$mode" = none ]; then
+                  : > "$f"
+                else
+                  "$RUNNER_TEMP/shardplan" -shards "$lanes" -shard "$v" "$@" < "$RUNNER_TEMP/selected.txt" | grep . > "$f" || true
+                fi
+                n=$((n + $(grep -c . "$f" || true)))
+              done
+              if [ "$n" -gt 0 ]; then
+                echo "$shard"
+              elif [ "$mode" = all ]; then
+                echo "shard $shard of $E2E_SHARDS matched no tests, which means the split is broken" >&2
+                exit 1
+              fi
             done
-            [ "$n" -eq 0 ] || shards+=("$shard")
-          done
-          if [ "$mode" = some ] && [ "${#shards[@]}" -eq 0 ]; then
-            echo "::warning title=Shard plan::The selection holds tests but no shard got one, so every shard runs."
-            mapfile -t shards < <(seq 1 "$E2E_SHARDS")
+          }
+          if [ "$mode" = some ]; then
+            pack -fill "$E2E_LANE_FILL" > "$RUNNER_TEMP/shards.txt"
+            if [ ! -s "$RUNNER_TEMP/shards.txt" ]; then
+              echo "::warning title=Shard plan::The selection holds tests but no shard got one, so they spread over every shard."
+              pack > "$RUNNER_TEMP/shards.txt"
+            fi
+          else
+            pack > "$RUNNER_TEMP/shards.txt"
           fi
+          mapfile -t shards < "$RUNNER_TEMP/shards.txt"
           list=$(IFS=,; echo "${shards[*]:-}")
           echo "shards=[$list]" >> "$GITHUB_OUTPUT"
           echo "total=$E2E_SHARDS" >> "$GITHUB_OUTPUT"
           echo "Shards that run: ${list:-none} of $E2E_SHARDS" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # The binary under test and a test binary for each package of the
+      # suite, built once here. Each shard used to list and compile the
+      # suite itself, about 50 seconds of its runner. The test listing above
+      # built the packages, so this step mostly links. A draft starts no
+      # shard, so it builds nothing.
+      - name: Build the binary under test and the suite
+        if: steps.shards.outputs.shards != '[]' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
+        run: |
+          set -euo pipefail
+          out=$RUNNER_TEMP/suite
+          GOFLAGS="$(scripts/goflags.sh)" go build -o "$out/tuios" ./cmd/tuios
+          cd e2e/tui
+          # packages.txt: the test binary, the package's folder under
+          # e2e/tui, and its import path, one package a line.
+          : > "$out/packages.txt"
+          go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}} {{.Dir}}{{end}}' ./... | while read -r pkg dir; do
+            rel=$(realpath --relative-to=. "$dir")
+            bin=$(echo "$rel" | tr ./ __).test
+            go test -c -o "$out/$bin" "./$rel"
+            echo "$bin $rel $pkg" >> "$out/packages.txt"
+          done
+          cat "$out/packages.txt"
+          du -sh "$out"
+
+      - name: Keep the build and the lists for the shards
+        if: steps.shards.outputs.shards != '[]' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-suite
+          path: ${{ runner.temp }}/suite
+          if-no-files-found: error
+          # A rerun of a failed shard reads it again.
+          retention-days: 3
+          overwrite: true
 
   e2e-tui:
     runs-on: ubuntu-latest
@@ -211,7 +267,8 @@ jobs:
     # fourteen until 2026-11-12, when the lanes were within seconds of the limit).
     #
     # The shard plan job names the shards that get a test, and only those
-    # start. Each one still selects and packs its own tests.
+    # start. It also selects and packs the tests and builds the binaries, so
+    # a shard downloads them and runs its lanes.
     strategy:
       fail-fast: false
       matrix:
@@ -265,48 +322,28 @@ jobs:
           go-version-file: e2e/tui/go.mod
           cache-id: e2e
 
-      # Every shard computes the same plan from the same test list, diff and
-      # durations file, so together they run each selected test once. A test
-      # that is not in the durations file yet counts as the mean. shardplan
-      # packs E2E_SHARDS times E2E_LANES lanes, and shard N takes lanes
-      # (N-1)*E2E_LANES+1 to N*E2E_LANES.
-      #
-      # On a pull request, scripts/e2e-select.sh keeps only the tests the
-      # change can reach (see e2e/tui/testselect). Main, the nightly and a
-      # manual run always select every test. A partial selection is packed
-      # into as few lanes as it needs, and the shards with none stop here.
-      #
-      # Listing needs TUIOS_E2E as well: without it the suite's TestMain
-      # returns before it can print a name, and the shard would silently be
-      # empty.
+      # The shard plan job selected the tests, packed them into lanes, and
+      # built the binary under test and the suite. This shard reads its own
+      # lanes' lists from that build.
+      - uses: actions/download-artifact@v8
+        if: env.TESTED_URL == ''
+        with:
+          name: e2e-suite
+          path: ${{ runner.temp }}/suite
+
       - name: Choose this shard's tests
         id: plan
         if: env.TESTED_URL == ''
         working-directory: e2e/tui
         env:
-          TUIOS_E2E: "1"
-          GH_TOKEN: ${{ github.token }}
           SHARD: ${{ matrix.shard }}
           BACKEND: ${{ matrix.backend }}
         run: |
           set -euo pipefail
-          SHARDS=$E2E_SHARDS
-          ../../scripts/e2e-select.sh > "$RUNNER_TEMP/selected.txt" 2> "$RUNNER_TEMP/select.log"
-          cat "$RUNNER_TEMP/select.log" >&2
-          lanes=$((SHARDS * E2E_LANES))
-          go build -o "$RUNNER_TEMP/shardplan" ./shardplan
+          # An artifact keeps no file modes.
+          chmod +x "$RUNNER_TEMP/suite/tuios" "$RUNNER_TEMP"/suite/*.test
           for lane in $(seq 1 "$E2E_LANES"); do
-            v=$(( (SHARD - 1) * E2E_LANES + lane ))
-            if grep -q '^mode=all$' "$GITHUB_OUTPUT"; then
-              "$RUNNER_TEMP/shardplan" -shards "$lanes" -shard "$v" < "$RUNNER_TEMP/selected.txt" > "$RUNNER_TEMP/names-$lane.txt"
-            elif grep -q '^mode=none$' "$GITHUB_OUTPUT"; then
-              # The change reaches no e2e test, so the list is empty and
-              # shardplan would refuse it. Every shard stops here.
-              : > "$RUNNER_TEMP/names-$lane.txt"
-            else
-              "$RUNNER_TEMP/shardplan" -shards "$lanes" -shard "$v" -fill "$E2E_LANE_FILL" < "$RUNNER_TEMP/selected.txt" > "$RUNNER_TEMP/names-$lane.txt"
-            fi
-            sed -i '/^$/d' "$RUNNER_TEMP/names-$lane.txt"
+            grep . "$RUNNER_TEMP/suite/names-$SHARD-$lane.txt" > "$RUNNER_TEMP/names-$lane.txt" || true
             # The sim shard keeps the tests of its lanes that pass in process.
             if [ "$BACKEND" = sim ]; then
               grep -xF -f <(grep -v '^#' shardplan/sim.txt | grep .) "$RUNNER_TEMP/names-$lane.txt" > "$RUNNER_TEMP/sim-$lane.txt" || true
@@ -314,14 +351,9 @@ jobs:
             fi
           done
           cat "$RUNNER_TEMP"/names-*.txt > "$RUNNER_TEMP/names.txt"
-          # A sim shard may hold no test of sim.txt. A real one must hold some.
-          if [ "$BACKEND" = real ] && grep -q '^mode=all$' "$GITHUB_OUTPUT" && [ ! -s "$RUNNER_TEMP/names.txt" ]; then
-            echo "shard $SHARD of $SHARDS matched no tests, which means the split is broken" >&2
-            exit 1
-          fi
           if [ -s "$RUNNER_TEMP/names.txt" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
-            wc -l < "$RUNNER_TEMP/names.txt" | xargs printf 'shard %s of %s runs %s tests\n' "$SHARD" "$SHARDS"
+            wc -l < "$RUNNER_TEMP/names.txt" | xargs printf 'shard %s of %s runs %s tests\n' "$SHARD" "$E2E_SHARDS"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
             echo "::notice title=No e2e tests in this shard::The change reaches no test this shard would run."
@@ -382,10 +414,6 @@ jobs:
             pdftoppm -v 2>&1 | head -1
           fi
 
-      - name: Build the binary under test
-        if: env.TESTED_URL == '' && steps.plan.outputs.run == 'true'
-        run: GOFLAGS="$(scripts/goflags.sh)" go build -o "$RUNNER_TEMP/tuios" ./cmd/tuios
-
       - name: Run this shard of the end-to-end suite
         if: env.TESTED_URL == '' && steps.plan.outputs.run == 'true'
         working-directory: e2e/tui
@@ -397,7 +425,7 @@ jobs:
           # -count=1 is enforced on the command line too, but pointing the suite
           # at an explicit binary keeps the build step's output out of the test
           # log and makes the artifact obvious.
-          TUIOS_E2E_BIN: ${{ runner.temp }}/tuios
+          TUIOS_E2E_BIN: ${{ runner.temp }}/suite/tuios
           SHARD: ${{ matrix.shard }}
           # The harness forwards it to every client: 0 is Bubble Tea's
           # renderer, and empty leaves the default, cells.
@@ -419,8 +447,24 @@ jobs:
           # How busy the runner is while the lanes run, for tuning E2E_LANES.
           vmstat -n 5 > "$RUNNER_TEMP/vmstat.log" &
           vmstat_pid=$!
-          # The test listing in the step before built the suite's packages, so
-          # the lanes find them in the build cache and only link.
+          # Each lane runs the test binaries the shard plan job built, each in
+          # its package's folder as go test would, and prints go test's
+          # summary line after each, which scripts/retry-flaky.sh reads.
+          suite() { # NAMES: run the tests named by the pattern in every package.
+            local bin rel pkg t s status=0
+            while read -r bin rel pkg; do
+              t=$SECONDS
+              s=0
+              (cd "$rel" && "$RUNNER_TEMP/suite/$bin" -test.count=1 -test.timeout 12m -test.v -test.run "^($1)$") || s=$?
+              if [ "$s" -eq 0 ]; then
+                printf 'ok  \t%s\t%ds\n' "$pkg" "$((SECONDS - t))"
+              else
+                printf 'FAIL\t%s\t%ds\n' "$pkg" "$((SECONDS - t))"
+                status=1
+              fi
+            done < "$RUNNER_TEMP/suite/packages.txt"
+            return "$status"
+          }
           pids=()
           for lane in $(seq 1 "$E2E_LANES"); do
             [ -s "$RUNNER_TEMP/names-$lane.txt" ] || continue
@@ -428,7 +472,7 @@ jobs:
             (
               lstart=$SECONDS
               lstatus=0
-              go test -count=1 -timeout 12m -v -run "^($names)$" ./... > "$RUNNER_TEMP/e2e-$lane.log" 2>&1 || lstatus=$?
+              suite "$names" > "$RUNNER_TEMP/e2e-$lane.log" 2>&1 || lstatus=$?
               echo "$lstatus" > "$RUNNER_TEMP/status-$lane"
               echo "$((SECONDS - lstart))" > "$RUNNER_TEMP/took-$lane"
             ) &
@@ -490,4 +534,4 @@ jobs:
         # can leave one behind, and a leaked daemon would poison a self-hosted
         # runner. Never fail the job on this.
         if: always() && env.TESTED_URL == '' && steps.plan.outputs.run == 'true'
-        run: pkill -f "$RUNNER_TEMP/tuios" || true
+        run: pkill -f "$RUNNER_TEMP/suite/tuios" || true
