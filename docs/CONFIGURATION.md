@@ -1,5 +1,9 @@
 # Configuration
 
+[config-options.md](config-options.md) lists every option, with its type, its
+default and what it does. A test writes that page from the code. This page
+tells more about the options that need it.
+
 ## Sidebar file editor
 
 Settings, Sidebar, File editor sets `appearance.sidebar.editor`, the terminal

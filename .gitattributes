@@ -15,3 +15,6 @@ e2e/tui/testselect/testmap.txt linguist-generated=true -diff
 # Written by a test from the verb registry. Never merge it by hand: write it
 # again with go test ./internal/session -run TestProtocolVerbsDocMatchesRegistry -update.
 docs/protocol-verbs.md linguist-generated=true
+# Written by a test from the option registry. Never merge it by hand: write it
+# again with go test ./internal/config -run TestConfigOptionsDocMatchesRegistry -update.
+docs/config-options.md linguist-generated=true
