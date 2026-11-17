@@ -49,6 +49,9 @@ func (m *OS) checkFrame(canvas *frameCanvas, ordered []composedLayer, painted bo
 		s.scratch = &frameCanvas{Buffer: *uv.NewBuffer(canvas.Width(), canvas.Height())}
 	}
 	fresh := s.scratch
+	// A held pane draws the cells its rectangle had (heldSource), which the
+	// canvas still has when it was kept.
+	held := m.heldSource(canvas, kept)
 	fresh.ClearTo(desktop)
 	area := fresh.Bounds()
 	paneDrawn := false
@@ -58,12 +61,12 @@ func (m *OS) checkFrame(canvas *frameCanvas, ordered []composedLayer, painted bo
 		}
 		m.drawComposedLayer(fresh, cl, painted, grounds, area)
 		if !paneDrawn && cl.layer.GetID() == pane.w.ID {
-			m.paneCells(fresh, pane, false, nil)
+			m.paneCells(fresh, pane, false, nil, held)
 			paneDrawn = true
 		}
 	}
 	if !paneDrawn {
-		m.paneCells(fresh, pane, false, nil)
+		m.paneCells(fresh, pane, false, nil, held)
 	}
 	for y := range canvas.Lines {
 		for x := range canvas.Lines[y] {

@@ -61,6 +61,11 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 	var direct directPane
 	if render {
 		direct = m.chooseDirectPane()
+		if direct.w == nil {
+			// This frame draws no pane from its emulator, so what it leaves
+			// in the canvas is not a pane's cells to hold.
+			m.directHold.drawn = false
+		}
 	}
 	defer direct.release()
 

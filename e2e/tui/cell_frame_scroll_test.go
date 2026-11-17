@@ -182,3 +182,74 @@ func TestScrollingGuestPresentsWholeFrames(t *testing.T) {
 		})
 	}
 }
+
+// TestHeldPaneIsNotTheOverlayAboveIt: a lone pane whose guest has an update
+// open is held, drawn with the cells its last frame left. Those must be the
+// pane's own. The hold used to draw the pane's rectangle of the frame the
+// terminal showed last, which can hold an overlay that has since closed. Here
+// the guest fills its pane with A and opens an update, and the go-to picker
+// opens over the pane and closes. The first frame after the picker closes
+// must show only A in the pane, while the update is still open.
+func TestHeldPaneIsNotTheOverlayAboveIt(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[startup]\nopen_default_window = true\ntiled = true\nstart_in_terminal_mode = true\n")
+	tape := &hostTape{}
+	const cols, rows = 100, 30
+	term := startIn(t, base, startOpts{cols: cols, rows: rows, out: tape})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("boot: %v\n%s", err, term.Snapshot())
+	}
+	pipe := filepath.Join(base, "guest")
+	if err := syscall.Mkfifo(pipe, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.SendKeys("exec cat '"+pipe+"'", tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	w := openFifo(t, pipe)
+	t.Cleanup(func() { _ = w.Close() })
+	// The pane's content is 98 by 26 cells at this size.
+	const paneCols, paneRows = 98, 26
+	fill := strings.Repeat("A", paneCols)
+	var frame strings.Builder
+	frame.WriteString("\x1b[?2026h\x1b[?25l\x1b[2J")
+	for y := range paneRows {
+		fmt.Fprintf(&frame, "\x1b[%d;1H%s", y+1, fill)
+	}
+	frame.WriteString("\x1b[?2026l")
+	if _, err := w.WriteString(frame.String()); err != nil {
+		t.Fatal(err)
+	}
+	full := func(s tuitest.Screen) bool { return strings.Count(s.Text(), fill) == paneRows }
+	if err := term.WaitFor(full, uiTimeout); err != nil {
+		t.Fatalf("the guest frame was not drawn: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatal(err)
+	}
+	// The update stays open while the picker opens and closes, well inside
+	// the second the emulator honours it.
+	if _, err := w.WriteString("\x1b[?2026h"); err != nil {
+		t.Fatal(err)
+	}
+	openGotoPicker(t, term)
+	from := tape.len()
+	sendKeys(t, term, tuitest.Esc)
+	waitUntil(t, "a frame after the picker closed", uiTimeout, func() (bool, string) {
+		b, _ := tape.bytes()
+		return len(presentedScreens(b, cols, rows, from)) > 0, ""
+	})
+	b, _ := tape.bytes()
+	if _, err := w.WriteString("\x1b[?2026l"); err != nil {
+		t.Fatal(err)
+	}
+	if dir := os.Getenv("TUIOS_E2E_FRAMES"); dir != "" {
+		if err := os.WriteFile(filepath.Join(dir, "held-overlay.ansi"), b, 0o600); err != nil {
+			t.Error(err)
+		}
+	}
+	first := presentedScreens(b, cols, rows, from)[0]
+	if !full(first) {
+		t.Fatalf("the first frame after the picker closed does not show the pane's own cells:\n%s", first.Text())
+	}
+}

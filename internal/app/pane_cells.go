@@ -40,12 +40,22 @@ type directPane struct {
 
 // paneHold is what the direct pane keeps between frames: the layer of its
 // blank box, and the rectangle its cells were last drawn in, for a frame
-// composed while its guest has a synchronized update open (DEC 2026). Those
-// cells are read back from the frame the screen last wrote.
+// composed while its guest has a synchronized update open (DEC 2026) or its
+// output holds the lock. A held frame draws the cells the last frame left in
+// that rectangle of the canvas: a kept canvas still has them, and one that is
+// cleared has them saved first (saved).
+//
+// drawn says the last frame composed drew this pane from its emulator or
+// held it, and pure that nothing was drawn over its rectangle in that frame,
+// so the rectangle holds the pane's cells and nothing else. Any other frame
+// drops the hold: a frame of another layout, or one with a layer over the
+// pane, left other cells there.
 type paneHold struct {
 	id    string
 	rect  image.Rectangle
 	drawn bool
+	pure  bool
+	saved *uv.Buffer
 
 	box      string
 	boxLayer *lipgloss.Layer
@@ -93,8 +103,8 @@ func (m *OS) chooseDirectPane() directPane {
 	// placed; paneCursor takes the pane's read lock, so it is asked first.
 	native, _ := m.paneCursor()
 	if !w.TryRLockIO() {
-		// The guest's output is being read into the emulator. The frame the
-		// screen shows is drawn again, as for an open update: the pane drawn
+		// The guest's output is being read into the emulator. The cells the
+		// last frame drew are drawn again, as for an open update: the pane drawn
 		// the usual way has no text of its own to shed to (copyDirectPane
 		// dropped it), so it would wait for the lock, or show the text it
 		// had before this path drew it.
@@ -121,11 +131,34 @@ func (m *OS) chooseDirectPane() directPane {
 	return d
 }
 
-// directHeld reports whether the frame the screen shows holds w's cells as
-// this path last drew them, so a frame can draw them again.
+// directHeld reports whether the canvas holds w's cells as the last frame
+// left them, so this frame can draw them again.
 func (m *OS) directHeld(w *terminal.Window) bool {
 	h := &m.directHold
-	return h.drawn && h.id == w.ID && h.rect == paneContentRect(w) && m.screen.Shown() != nil
+	return h.drawn && h.pure && h.id == w.ID && h.rect == paneContentRect(w)
+}
+
+// saveHeldPane keeps the held pane's rectangle before the canvas is cleared,
+// for paneCells to write back.
+func (m *OS) saveHeldPane(canvas *frameCanvas, r image.Rectangle) {
+	r = r.Intersect(canvas.Bounds())
+	h := &m.directHold
+	if h.saved == nil || h.saved.Width() != canvas.Width() || h.saved.Height() != canvas.Height() {
+		h.saved = uv.NewBuffer(canvas.Width(), canvas.Height())
+	}
+	for y := r.Min.Y; y < r.Max.Y; y++ {
+		copy(h.saved.Lines[y][r.Min.X:r.Max.X], canvas.Lines[y][r.Min.X:r.Max.X])
+	}
+}
+
+// heldSource is where a held pane's cells come from this frame: the canvas
+// itself when it was kept, the rectangle saved before it was cleared
+// otherwise.
+func (m *OS) heldSource(canvas *frameCanvas, kept bool) *uv.Buffer {
+	if kept {
+		return &canvas.Buffer
+	}
+	return m.directHold.saved
 }
 
 func (d *directPane) release() {
@@ -188,7 +221,11 @@ func (m *OS) copyDirectPane(canvas *frameCanvas, d *directPane, kept bool) {
 	if d.w == nil {
 		return
 	}
-	m.paneCells(canvas, d, kept, m.frameRows)
+	m.paneCells(canvas, d, kept, m.frameRows, m.heldSource(canvas, kept))
+	// The pane's layer is its blank box. A frame that draws the pane the
+	// usual way while the guest has an update open holds the cached layer,
+	// and that would draw the pane blank.
+	d.w.CachedLayer = nil
 	if d.held {
 		return
 	}
@@ -197,7 +234,6 @@ func (m *OS) copyDirectPane(canvas *frameCanvas, d *directPane, kept bool) {
 	w.RenderedCols, w.RenderedRows = w.ContentWidth(), w.ContentHeight()
 	w.CachedContent = ""
 	w.CachedContentCols, w.CachedContentRows = 0, 0
-	w.CachedLayer = nil
 	// The text a frame drawn the usual way holds while the guest has an
 	// update open is older than these cells. Shown after them it put the
 	// pane back to what it held before this path drew it (#2157).
@@ -205,11 +241,11 @@ func (m *OS) copyDirectPane(canvas *frameCanvas, d *directPane, kept bool) {
 }
 
 // paneCells writes the direct pane's cells into its content rectangle on
-// canvas: the emulator's, or for a held pane the ones the screen last wrote.
+// canvas: the emulator's, or for a held pane the ones in held (heldSource).
 // With kept a cell is written only where it differs. Each row written is
 // marked in rows when rows is not nil. It changes nothing else, so the frame
 // check (frame_check.go) draws the pane with it too.
-func (m *OS) paneCells(canvas *frameCanvas, d *directPane, kept bool, rows []bool) {
+func (m *OS) paneCells(canvas *frameCanvas, d *directPane, kept bool, rows []bool, held *uv.Buffer) {
 	w, screen := d.w, d.w.Terminal
 	r := paneContentRect(w).Intersect(canvas.Bounds())
 	mark := func(y int) {
@@ -218,10 +254,10 @@ func (m *OS) paneCells(canvas *frameCanvas, d *directPane, kept bool, rows []boo
 		}
 	}
 	if d.held {
-		// The cells this rectangle had in the frame the screen last wrote.
-		if shown := m.screen.Shown(); shown.Bounds().Eq(canvas.Bounds()) {
+		// The cells the last frame left in this rectangle.
+		if held != nil && held.Bounds().Eq(canvas.Bounds()) {
 			for y := r.Min.Y; y < r.Max.Y; y++ {
-				dst, src := canvas.Lines[y][r.Min.X:r.Max.X], shown.Lines[y][r.Min.X:r.Max.X]
+				dst, src := canvas.Lines[y][r.Min.X:r.Max.X], held.Lines[y][r.Min.X:r.Max.X]
 				if kept && termio.SameLine(dst, src) {
 					continue
 				}

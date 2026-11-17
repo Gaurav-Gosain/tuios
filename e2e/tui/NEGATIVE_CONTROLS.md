@@ -18144,3 +18144,21 @@ Run on 2026-11-17 on Linux (x86_64), with `nice -n 19` and GOMAXPROCS=4, against
 
 The host streams are `scroll-cells.ansi` and `scroll-string.ansi` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestScrollingGuestPresentsWholeFrames$' -v .`.
+
+## A held pane shows its own cells, not the overlay that was over it
+
+`TestHeldPaneIsNotTheOverlayAboveIt` in `cell_frame_scroll_test.go` fills a lone pane with A, opens a synchronized update and leaves it open, then opens the go-to picker over the pane and closes it with esc. The first frame presented after esc must show the pane full of A while the update is still open. CI saw the same fault as a frame check miss in `TestGotoPickerGoesAnywhere`: "frame differs from a fresh compose at cell 59,1 (kept true): drawn │, fresh space".
+
+The held pane copied its rectangle from the frame the terminal showed last, which held the picker, and the hold was never dropped by a frame that drew no direct pane. A held frame also left the pane's blank box as its cached layer, which the frames drawn the usual way during the update then held.
+
+Run on 2026-11-17 on Linux (x86_64), with `nice -n 19` and GOMAXPROCS=4.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main | the pane is blank in the first frame after esc, 3 of 3 runs | **caught** |
+| A held frame keeps the blank box as the cached layer | the pane is blank, 2 of 3 runs | **caught** |
+| A frame with no direct pane leaves the hold | the picker's rows are drawn inside the pane, 3 of 3 runs | **caught** |
+| The branch | passes 5 of 5 runs, and 4 of 4 with `TestGotoPickerGoesAnywhere` on pure Go and on ghostty | fixed |
+
+The host stream is `held-overlay.ansi` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHeldPaneIsNotTheOverlayAboveIt$' -v .`.

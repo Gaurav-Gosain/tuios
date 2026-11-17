@@ -462,6 +462,9 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer, paneLa
 	}
 	kept := plain && !reparsed && m.kept.matches(canvas, ground, drawn)
 	if !kept && keep != nil {
+		if pane != nil && pane.held {
+			m.saveHeldPane(canvas, paneRect)
+		}
 		canvas.ClearTo(keep.ground)
 	}
 
@@ -576,6 +579,12 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer, paneLa
 	}
 	if quiet {
 		m.checkFrame(canvas, ordered, painted, &grounds, ground, pane, kept)
+	}
+	if pane != nil {
+		// The pane's rectangle holds its cells alone only when no layer
+		// above it covered them and no pass ran over the canvas.
+		m.directHold.pure = plain
+		m.directHold.saved = nil
 	}
 
 	// A cached layer that was not on this frame is dropped. A pane on another
