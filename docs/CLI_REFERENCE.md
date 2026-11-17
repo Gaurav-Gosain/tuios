@@ -7294,7 +7294,8 @@ TUIOS_AGENT=claude-code docker run -it sandbox claude
 ### Variables tuios sets in a pane
 
 `TUIOS_ENV`, `TUIOS_SOCKET`, `TUIOS_PANE_ID`, `TUIOS_WINDOW_ID`,
-`TUIOS_SESSION`, `TUIOS_HOST`, `TUIOS_PANE_TOKEN` and `TUIOS_PANE_GRANTS`. See
+`TUIOS_SESSION`, `TUIOS_HOST`, `TUIOS_PANE_TOKEN`, `TUIOS_PANE_GRANTS` and
+`TUIOS_PANE_TTY`. See
 [Environment](AGENT_STATE.md#environment) for what each one means.
 
 ### Agent detection
@@ -7323,6 +7324,20 @@ The daemon's log level from the start: `off`, `errors`, `basic`, `messages`,
 
 Any value silences the agent alert sounds, whatever
 `notifications.agent.sound` says. For a CI job or a recording.
+
+### Debug logs
+
+These variables turn on a log for one bug report. Each one is off when it is
+unset. Set it before the process starts.
+
+- `TUIOS_PTY_LOG`: a folder. The daemon writes every byte that the program of a
+  pane writes, as it writes it, to one file for each pane in that folder.
+- `TUIOS_RENDER_TRACE`: `1` writes a trace of the pane renders to
+  `tuios-render-trace.PID.log` in `$XDG_STATE_HOME/tuios`. When
+  `XDG_STATE_HOME` is unset, the file goes in the temp folder. A file path
+  writes the trace to that file.
+- `TUIOS_DEBUG_CAPS`: `1` makes the client write what it found out about the
+  terminal to `$XDG_STATE_HOME/tuios/tuios-caps.PID.log`.
 
 ### `TUIOS_EVENTS_LOG`
 

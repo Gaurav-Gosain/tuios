@@ -2179,6 +2179,10 @@ default list. `[dock.session]` takes `format` (`{session}`, `{workspace}`,
 `cap_right`, which `[dock.custom.NAME]` takes too. Colours take any [colour value](#colour-values).
 A custom component's first line of stdout becomes its cell, it is hidden when
 the command fails, and `tuios list-dock-components` says which and why.
+The `command` and the `on-click` command get `TUIOS_SESSION`, `TUIOS_SOCKET`
+and `TUIOS_DOCK_COMPONENT`, the name of the component. The `on-click` command
+also gets `TUIOS_CLICK_BUTTON`, the mouse button: `1` for left, `2` for middle
+and `3` for right.
 tuios runs one copy of the command at a time. When an event arrives while the
 command runs, tuios runs the command one more time when it ends. An interval
 that comes due while the command runs is skipped.

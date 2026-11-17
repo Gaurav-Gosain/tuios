@@ -472,6 +472,10 @@ command, a flag it does not take, a format variable it could not fill, a
 refused command. That file is the list of what to add next. `--log-all`
 records every call.
 
+The shim reads the two flags from `TUIOS_TMUX_SHIM_LOG`, the log file, and
+`TUIOS_TMUX_SHIM_LOG_ALL=1`. `tuios tmux-shim` sets them for the programs it
+starts. You can also set them yourself.
+
 ```json
 {"time":"2026-09-23T16:19:27Z","argv":["tmux","bind-key","<2 redacted>"],"outcome":"unsupported","detail":["unknown command: bind-key"]}
 ```

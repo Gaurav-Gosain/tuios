@@ -5564,6 +5564,7 @@ When tuios spawns a pane it exports the environment a state-reporting shim needs
 | `TUIOS_SESSION`   | The session name                                 |
 | `TUIOS_PANE_TOKEN` | Proves `TUIOS_PANE_ID` to `restrict-connection` and `pane-grants` where the kernel cannot name the caller's pane. Good for one pane of one daemon start |
 | `TUIOS_PANE_GRANTS` | What the pane may do through tuios as it starts, comma separated (`read,write,fan`, `admin`, `none`). `tuios pane-grants` gives the current answer. See [What a pane may do](#what-a-pane-may-do) |
+| `TUIOS_PANE_TTY` | The path of the pane's terminal. `tuios attach` reads it to tell a pane of tuios from a program that only has the pane's variables |
 
 A shim guards on these and no-ops when they are unset, so it is safe to leave
 wired up outside tuios. `tuios agent-hook` uses `TUIOS_PANE_ID` and
