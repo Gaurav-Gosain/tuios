@@ -58,6 +58,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// The return note is written only by set-note, so canonical wins
 	// unconditionally: a sync can neither set it nor clear it.
 	incoming.Note = canonical.Note
+	// The OSC 1 names are the emulators', filled into each snapshot as it
+	// leaves (fillLiveFacts), so the stored state never holds any.
+	incoming.IconNames = nil
 	// Restored is set by the restore and cleared by the first attach, both
 	// daemon-side. A bool cannot say "not sent", so canonical simply wins: no
 	// client can either raise the mark or clear it by syncing.

@@ -108,8 +108,8 @@ func (w *Window) SetTitle(t string) { w.title.Store(&t) }
 
 // IconName returns the name the window's program gave with OSC 1, the label
 // of an unnamed workspace while the window is its active one. OSC 0 does not
-// set it. A daemon window takes it from the daemon's state, which carries it
-// for every pane, streamed or not.
+// set it. Only a standalone window records it: a daemon window's comes with
+// the daemon's state (app.OS.paneIconName).
 func (w *Window) IconName() string {
 	if p := w.iconName.Load(); p != nil {
 		return *p

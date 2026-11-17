@@ -119,16 +119,33 @@ func (s *Session) checkPaneCwd(p *PTY) {
 	}
 }
 
+// liveFactsPushGap is the shortest time between two pushes that
+// publishLiveFactsSoon starts. A pane can send OSC 1 or OSC 7 in a loop, and
+// each push sends the session's whole state to every client, so the pane's
+// rate must not become the push rate.
+const liveFactsPushGap = 100 * time.Millisecond
+
+// liveFactsEpoch is the monotonic origin of Session.liveFactsPushedAt.
+var liveFactsEpoch = time.Now()
+
 // publishLiveFactsSoon pushes the session's state because a live fact of a
 // pane changed: it moved, or its program named it with OSC 1. It runs on its
 // own goroutine, because a caller can hold the emulator's lock, and changes
-// that arrive while one push is waiting to start share it.
+// that arrive while one push is waiting to start share it. A push starts at
+// least liveFactsPushGap after the one before it. A change inside the gap
+// waits for the end of the gap, so the last change always goes out.
 func (s *Session) publishLiveFactsSoon() {
 	if !s.liveFactsPushQueued.CompareAndSwap(false, true) {
 		return
 	}
 	go func() {
+		if last := s.liveFactsPushedAt.Load(); last != 0 {
+			if wait := liveFactsPushGap - (time.Since(liveFactsEpoch) - time.Duration(last)); wait > 0 {
+				time.Sleep(wait)
+			}
+		}
 		s.liveFactsPushQueued.Store(false)
+		s.liveFactsPushedAt.Store(int64(max(time.Since(liveFactsEpoch), 1)))
 		s.PublishLiveFacts()
 	}()
 }

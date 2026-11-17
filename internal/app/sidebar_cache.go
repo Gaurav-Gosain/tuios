@@ -524,7 +524,7 @@ func (m *OS) sidebarSignature() uint64 {
 		mixS(w.ID)
 		mixS(m.railTitleShown(w))
 		// An unnamed workspace's tag is its active pane's icon name.
-		mixS(w.IconName())
+		mixS(m.paneIconName(w))
 		mixS(w.AgentState)
 		// A finished turn changes how the row is drawn with no state change of
 		// its own once the user has looked, so the count is folded in too.

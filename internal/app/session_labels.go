@@ -31,6 +31,11 @@ func (m *OS) adoptSessionLabels(state *session.SessionState) {
 	// adoptWorkspaceRenumbering.
 	m.workspaceTabKeys = maps.Clone(state.WorkspaceTabKeys)
 	m.workspaceTabKeysKnown = true
+	// The OSC 1 names change rarely, and a push carries them every time, so
+	// an unchanged set is not copied again.
+	if !maps.Equal(m.paneIconNames, state.IconNames) {
+		m.paneIconNames = maps.Clone(state.IconNames)
+	}
 	if len(state.WorkspaceNames) == 0 {
 		m.WorkspaceNames = nil
 		return
@@ -201,9 +206,19 @@ func (m *OS) workspaceGivenName(ws int) string {
 		return name
 	}
 	if w := m.workspaceActivePane(ws); w != nil {
-		return w.IconName()
+		return m.paneIconName(w)
 	}
 	return ""
+}
+
+// paneIconName is the name w's program gave with OSC 1. A daemon window's
+// comes with the daemon's state, which carries it for every pane, streamed or
+// not. A standalone window's comes from its own emulator.
+func (m *OS) paneIconName(w *terminal.Window) string {
+	if w.DaemonMode {
+		return m.paneIconNames[w.ID]
+	}
+	return w.IconName()
 }
 
 // workspaceActivePane is the pane that speaks for workspace ws: the focused

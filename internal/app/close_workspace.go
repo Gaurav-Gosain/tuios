@@ -40,11 +40,11 @@ func (m *OS) workspaceToll(ws int) sessionToll {
 	return t
 }
 
-// workspaceLabel names a workspace in the dialog: "workspace 2", or its name
-// after it when it has one.
+// workspaceLabel names a workspace in the dialog: "workspace 2", or the name
+// it shows after it when it has one, its own or its active pane's OSC 1 name.
 func (m *OS) workspaceLabel(ws int) string {
 	label := fmt.Sprintf("workspace %d", ws)
-	if name := m.WorkspaceNames[ws]; name != "" {
+	if name := m.workspaceGivenName(ws); name != "" {
 		label += " (" + printableTitle(name) + ")"
 	}
 	return label

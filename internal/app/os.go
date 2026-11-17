@@ -928,6 +928,9 @@ type OS struct {
 	// unnamed workspace shows its number, so an absent entry is not a missing
 	// label but the normal case.
 	WorkspaceNames map[int]string
+	// paneIconNames maps a daemon window's ID to the name its program gave
+	// with OSC 1 (session.SessionState.IconNames). See paneIconName.
+	paneIconNames map[string]string
 	// pendingWorkspaceOrder is the order a drag of the dock's pills dropped
 	// them in, shown until the daemon's renumber arrives, so the strip does
 	// not snap back for the length of the round trip. See workspace_order.go.

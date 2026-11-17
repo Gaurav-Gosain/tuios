@@ -69,18 +69,13 @@ type WindowState struct {
 	ID         string `json:"id"`
 	Title      string `json:"title"`
 	CustomName string `json:"custom_name,omitempty"`
-	// IconName is the name the pane's program gave with OSC 1, the one an
-	// unnamed workspace shows while the pane is its active one. OSC 0 does
-	// not set it (vt.Callbacks.ExplicitIconName). It is a live fact, filled
-	// into every snapshot from the daemon's emulator and never stored.
-	IconName  string `json:"icon_name,omitempty"`
-	X         int    `json:"x"`
-	Y         int    `json:"y"`
-	Width     int    `json:"width"`
-	Height    int    `json:"height"`
-	Z         int    `json:"z"`
-	Workspace int    `json:"workspace"`
-	Minimized bool   `json:"minimized,omitempty"`
+	X          int    `json:"x"`
+	Y          int    `json:"y"`
+	Width      int    `json:"width"`
+	Height     int    `json:"height"`
+	Z          int    `json:"z"`
+	Workspace  int    `json:"workspace"`
+	Minimized  bool   `json:"minimized,omitempty"`
 	// MinimizedAt is when the window was minimized, in Unix nanoseconds, and
 	// 0 while it is not. The daemon stamps it on every write that minimizes
 	// a window and clears it on restore (stampMinimizedLocked), so every
@@ -718,6 +713,14 @@ type SessionState struct {
 	// sees it. A workspace's number is its position, and a move renumbers the
 	// name with the rest of the workspace (see workspace_renumber.go).
 	WorkspaceNames map[int]string `json:"workspace_names,omitempty"`
+	// IconNames maps a window ID to the name its program gave with OSC 1, the
+	// one an unnamed workspace shows while the window is its active one. OSC 0
+	// does not set it (vt.Callbacks.ExplicitIconName). It is a live fact,
+	// filled into every snapshot from the daemon's emulators and never stored,
+	// so a value a client sends back is dropped. It is a map on the session
+	// and not a field of WindowState because the daemon copies WindowState by
+	// value in hundreds of places, and a field there grew each one.
+	IconNames map[string]string `json:"icon_names,omitempty"`
 	// WorkspaceOrder is a display order saved by a build that arranged the
 	// workspaces without renumbering them. It is read so such a state still
 	// loads, applied once as a renumber when the session is restored, and never
@@ -1592,6 +1595,9 @@ type Session struct {
 	cwdCacheMu sync.Mutex
 	// liveFactsPushQueued coalesces the pushes publishLiveFactsSoon starts.
 	liveFactsPushQueued atomic.Bool
+	// liveFactsPushedAt is when the last of them started, as time since
+	// liveFactsEpoch, and 0 before the first. See liveFactsPushGap.
+	liveFactsPushedAt atomic.Int64
 
 	// Session state (serializable)
 	state            *SessionState
@@ -3146,13 +3152,20 @@ func (s *Session) fillLiveFacts(state *SessionState) {
 	// snapshot built from the stored value alone brings back a title the window
 	// stopped having. Taken outside stateMu: the PTY map is a different lock.
 	live := s.livePaneFacts()
+	// The icon names are the emulators' alone, so a value a client pushed
+	// back never outlives the program's own.
+	state.IconNames = nil
 	for i := range state.Windows {
-		if t := live[state.Windows[i].PTYID].title; t != "" {
-			state.Windows[i].Title = ClampDisplayText(t)
+		fact := live[state.Windows[i].PTYID]
+		if fact.title != "" {
+			state.Windows[i].Title = ClampDisplayText(fact.title)
 		}
-		// The icon name is the emulator's alone, cleared ones included, so a
-		// value a client pushed back never outlives the program's own.
-		state.Windows[i].IconName = live[state.Windows[i].PTYID].iconName
+		if fact.iconName != "" {
+			if state.IconNames == nil {
+				state.IconNames = make(map[string]string)
+			}
+			state.IconNames[state.Windows[i].ID] = fact.iconName
+		}
 	}
 
 	// And fill the directory the same way, for the same reason. A shell that

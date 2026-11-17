@@ -198,11 +198,13 @@ it does not count: shells and agents send it with every prompt. What changes
 for a caller:
 
 - A `list-windows` entry, and `get-window` with no client attached, carry
-  `icon_name` when the pane gave one. The synced window state carries it as
-  `icon_name`, filled from the daemon's emulator into every snapshot and never
-  stored, so a value a client sends back is ignored.
+  `icon_name` when the pane gave one. The synced session state carries
+  `icon_names`, a map from window ID to the name, filled from the daemon's
+  emulators into every snapshot and never stored, so a value a client sends
+  back is ignored.
 - The daemon pushes the session's state when a pane's OSC 1 name changes, so
-  a client labels a workspace whose panes it does not stream.
+  a client labels a workspace whose panes it does not stream. Pushes for OSC 1
+  and OSC 7 changes start at least 100 ms apart.
 - In the attached session's own views an unnamed workspace reads as the
   name instead of its number: the dock, the rail's workspace tags, the go-to
   picker, the tab menu and `{workspace}` in `appearance.host_title`. A name
