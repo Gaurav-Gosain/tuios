@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -106,26 +107,20 @@ func TestStartAgentFromAPaneOpensOnThatPanesWorkspace(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "caller", "--workspace", "3", "--no-focus"); err != nil {
 		t.Fatalf("new-window caller: %v\n%s", err, out)
 	}
-	rowNamed := func(name string) (xpanesRow, bool) {
-		for _, r := range xpanesRowsIn(t, base, sess) {
-			if r.Name == name {
-				return r, true
-			}
-		}
-		return xpanesRow{}, false
-	}
 	waitRow := func(name string) xpanesRow {
 		t.Helper()
-		deadline := time.Now().Add(shellTimeout)
-		for {
-			if r, ok := rowNamed(name); ok {
-				return r
+		var row xpanesRow
+		waitUntil(t, "a window named "+name+" opens", shellTimeout, func() (bool, string) {
+			rows := xpanesRowsIn(t, base, sess)
+			for _, r := range rows {
+				if r.Name == name {
+					row = r
+					return true, ""
+				}
 			}
-			if time.Now().After(deadline) {
-				t.Fatalf("no window named %s: %v\n%s", name, xpanesRowsIn(t, base, sess), term.Snapshot())
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
+			return false, fmt.Sprintf("%v\n%s", rows, term.Snapshot())
+		})
+		return row
 	}
 	caller := waitRow("caller")
 	if caller.Workspace != 3 {
