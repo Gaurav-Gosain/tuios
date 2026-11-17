@@ -192,10 +192,6 @@ func Get(name string) Status {
 	return st
 }
 
-// Lingering is always true on Windows: the task runs while the user is
-// logged on, and there is no setting for more.
-func Lingering(string) bool { return true }
-
 // UsesLinger reports whether this system has the linger setting.
 func UsesLinger() bool { return false }
 

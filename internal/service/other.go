@@ -12,7 +12,6 @@ func Uninstall(string) error                 { return nil }
 func Serves(string, string) bool             { return false }
 func Start(string) error                     { return ErrUnsupported }
 func Get(name string) Status                 { return Status{Name: name, Linger: true} }
-func Lingering(string) bool                  { return true }
 func UsesLinger() bool                       { return false }
 
 func unescapeMarker(s string) string { return s }
