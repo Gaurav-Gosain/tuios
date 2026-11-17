@@ -335,6 +335,15 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		window.RLockIO()
 	}
 	defer window.RUnlockIO()
+	// The guest may have opened an update after the check above and before
+	// the lock was taken: its output is read under this lock. Read now, the
+	// pane would show the update half done.
+	if window.SyncHoldContent != "" && screen.IsSyncActive() {
+		if renderTraceEnabled {
+			traceRender(window, isFocused, inTerminalMode, entryDirty, "sync-hold-locked", window.SyncHoldContent)
+		}
+		return window.SyncHoldContent
+	}
 
 	// Fast path for unfocused windows: use the emulator's built-in Render()
 	// which is faster than cell-by-cell iteration. The focused window uses
