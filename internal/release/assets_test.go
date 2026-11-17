@@ -37,6 +37,7 @@ func TestAssetName(t *testing.T) {
 		{"tuios", "v0.7.0", "windows", "amd64", "tuios_0.7.0_Windows_x86_64.tar.gz"},
 		{"tuios", "v0.7.0", "linux", "386", "tuios_0.7.0_Linux_i386.tar.gz"},
 		{"tuios", "v0.7.0", "freebsd", "arm64", "tuios_0.7.0_Freebsd_arm64.tar.gz"},
+		{"tuios", "v0.7.0", "linux", "riscv64", "tuios_0.7.0_Linux_riscv64.tar.gz"},
 		{"tuios-web", "v0.7.0", "linux", "amd64", "tuios-web_0.7.0_Linux_x86_64.tar.gz"},
 		{"tuios-web", "v1.2.3-rc1", "darwin", "amd64", "tuios-web_1.2.3-rc1_Darwin_x86_64.tar.gz"},
 	}

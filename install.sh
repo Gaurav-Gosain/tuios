@@ -59,6 +59,7 @@ detect_arch() {
         armv7l|armv8l)  echo "armv7";;
         armv6l)  echo "armv6";;
         i386|i686) echo "i386";;
+        riscv64) echo "riscv64";;
         *)       echo "unknown";;
     esac
 }

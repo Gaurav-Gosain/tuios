@@ -71,6 +71,28 @@ builds:
     flags:
       - -trimpath
 
+  # linux/riscv64, for RISC-V boards and for unkernel (Linux in wasm, which
+  # runs riscv64 programs). Its own build, so that the BSD and Windows riscv64
+  # targets are not built too. Same flags as the tuios build above.
+  - id: tuios-linux-riscv64
+    main: ./cmd/tuios
+    binary: tuios
+    env:
+      - GOFLAGS={{ .Env.TUIOS_GOFLAGS }}
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - riscv64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -X main.builtBy=goreleaser
+    flags:
+      - -trimpath
+
   # Termux on Android. A linux build stops there with SIGSYS: Go's linux
   # os/exec calls faccessat2, and Android's seccomp policy for apps traps it.
   # Go leaves that call out when GOOS is android. android/arm needs cgo, so
@@ -311,6 +333,7 @@ archives:
       {{- if .Arm }}v{{ .Arm }}{{ end }}
     ids:
       - tuios
+      - tuios-linux-riscv64
     files:
       - README.md
       - LICENSE*
