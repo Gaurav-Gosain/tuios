@@ -86,9 +86,6 @@ type pluginApprovalDoneMsg struct {
 // PluginApprovalOpen reports whether the dialog owns the keyboard.
 func (m *OS) PluginApprovalOpen() bool { return m.pluginApproval.open != nil }
 
-// PluginApprovalAsks is how many plugins wait for an answer.
-func (m *OS) PluginApprovalAsks() int { return len(m.pluginApproval.asks) }
-
 func pluginAskKey(a session.PluginApprovalAsk) string { return a.ID + "\x00" + a.Trust }
 
 func pluginAskAdmin(a *session.PluginApprovalAsk) bool {

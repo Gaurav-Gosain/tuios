@@ -1313,12 +1313,6 @@ func (m *OS) settingsCurrentItems() []settingItem {
 	return items
 }
 
-// SettingsMoveUp moves the row selection up within the active category.
-func (m *OS) SettingsMoveUp() { m.SettingsMove(-1) }
-
-// SettingsMoveDown moves the row selection down within the active category.
-func (m *OS) SettingsMoveDown() { m.SettingsMove(1) }
-
 // SettingsMove moves the row selection by delta under the list rule: one step
 // off either end wraps, a page or a jump stops at the end. The renderer keeps
 // the selection in view.
@@ -1540,9 +1534,6 @@ func (m *OS) SettingsEditClear() {
 		m.settingsEdit.Set("")
 	}
 }
-
-// SettingsEditText is the edit field's text.
-func (m *OS) SettingsEditText() string { return m.settingsEdit.String() }
 
 // settingsEditClean keeps what the field may hold of typed text.
 func (m *OS) settingsEditClean(text string) string {

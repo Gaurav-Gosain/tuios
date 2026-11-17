@@ -130,9 +130,6 @@ func (m *OS) KeybindReport() config.KeybindReport { return m.keybinds.report }
 // KeybindQuery is the current filter text.
 func (m *OS) KeybindQuery() string { return m.keybinds.lists[KeybindTabBindings].Query.String() }
 
-// KeybindSelected is the selected row in the active tab's list.
-func (m *OS) KeybindSelected() int { return m.keybindList().Cursor }
-
 // keybindList is the list state of the tab that shows.
 func (m *OS) keybindList() *listnav.State { return &m.keybinds.lists[m.KeybindTab] }
 

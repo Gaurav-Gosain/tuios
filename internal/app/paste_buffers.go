@@ -483,9 +483,6 @@ func (m *OS) CloseBufferChooser() {
 // BufferChooserSelected is the chooser's selected row.
 func (m *OS) BufferChooserSelected() int { return m.buffers.list.Cursor }
 
-// BufferChooserItems is the chooser's rows.
-func (m *OS) BufferChooserItems() []PasteBufferItem { return m.buffers.items }
-
 // BufferChooserMove steps the chooser's selection.
 func (m *OS) BufferChooserMove(delta int) {
 	m.buffers.list.Move(delta, len(m.buffers.items), bufferChooserRows, m.listWraps(), nil)

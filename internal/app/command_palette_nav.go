@@ -83,10 +83,6 @@ func (m *OS) OpenCommandPalette() tea.Cmd {
 	return nil
 }
 
-// PaletteMove moves the command-palette selection by delta and keeps the scroll
-// window in view.
-func (m *OS) PaletteMove(delta int) { _ = palettePicker().move(m, delta) }
-
 // paletteRescroll keeps the cursor's row in view. The window counts list rows,
 // headings included, so it is kept against the rows the renderer lays out
 // rather than against the commands alone.

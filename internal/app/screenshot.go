@@ -39,18 +39,6 @@ const (
 	shotCopyImage        = "copy image"
 )
 
-// CaptureTarget is what a capture-mode gesture is aiming at.
-type CaptureTarget int
-
-const (
-	// CaptureWindow captures one window's pane.
-	CaptureWindow CaptureTarget = iota
-	// CaptureRegion captures a rectangle of the composed screen.
-	CaptureRegion
-	// CaptureScreen captures the whole composed screen.
-	CaptureScreen
-)
-
 // captureState is capture mode. Every field is zero when the mode is off, so
 // entering and leaving it is one assignment either way.
 type captureState struct {

@@ -759,12 +759,6 @@ func (m *OS) QuickLookWrap() {
 	}
 }
 
-// QuickLookPromptType types a paste at the prompt's caret.
-func (m *OS) QuickLookPromptType(text string) {
-	ql := &m.quickLook
-	lineInsert(&ql.input, text, ql.promptClean)
-}
-
 // QuickLookPromptKey applies one key press to the prompt (see lineKey).
 func (m *OS) QuickLookPromptKey(key, text string) {
 	ql := &m.quickLook

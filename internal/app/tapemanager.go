@@ -201,12 +201,6 @@ func (m *OS) ToggleTapeManager() {
 	}
 }
 
-// TapeManagerSelectNext moves selection down
-func (m *OS) TapeManagerSelectNext() { m.TapeManagerMove(1) }
-
-// TapeManagerSelectPrev moves selection up
-func (m *OS) TapeManagerSelectPrev() { m.TapeManagerMove(-1) }
-
 // TapeManagerMove moves the selection by delta under the list rule.
 func (m *OS) TapeManagerMove(delta int) {
 	if m.TapeManager == nil || len(m.TapeManager.Files) == 0 {

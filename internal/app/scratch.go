@@ -201,15 +201,6 @@ func (m *OS) InScratchView() bool {
 	return session.IsScratchWorkspace(m.CurrentWorkspace)
 }
 
-// ShownScratch is the index of the focused scratch pane while a group is on
-// the screen, or -1.
-func (m *OS) ShownScratch() int {
-	if !m.InScratchView() || !m.hasFocusedWindow() || !isScratch(m.Windows[m.FocusedWindow]) {
-		return -1
-	}
-	return m.FocusedWindow
-}
-
 // scratchAction is what one press of the toggle does.
 type scratchAction int
 

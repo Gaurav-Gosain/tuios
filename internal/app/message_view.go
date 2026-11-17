@@ -57,9 +57,6 @@ type messageViewState struct {
 	scroll int
 }
 
-// MessageViewOpen reports whether the message view is on screen.
-func (m *OS) MessageViewOpen() bool { return m.msgView.open }
-
 // openMessageView shows one message in full.
 func (m *OS) openMessageView(e messageEntry) {
 	m.msgView = messageViewState{open: true, entry: e}

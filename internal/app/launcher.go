@@ -217,10 +217,6 @@ func (m *OS) filteredLauncherItems() []LauncherItem {
 	return FilterLauncherItems(m.launcherItems(), m.launcherList.Query.String(), m.launchHistory)
 }
 
-// LauncherMove moves the selection by delta and keeps the scroll window in
-// view.
-func (m *OS) LauncherMove(delta int) { _ = launcherPicker().move(m, delta) }
-
 // LauncherPageRows is how many rows a page key moves the launcher by.
 func (m *OS) LauncherPageRows() int {
 	_, visible, _ := m.launcherLayout()

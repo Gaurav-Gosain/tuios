@@ -426,9 +426,6 @@ func NewFrameHookFile(f *os.File) *FrameHookFile {
 	return &FrameHookFile{File: f, hw: NewFrameHookWriter(f)}
 }
 
-// SetHook installs the function whose output follows each frame.
-func (f *FrameHookFile) SetHook(fn FrameHook) { f.hw.SetHook(fn) }
-
 func (f *FrameHookFile) Write(p []byte) (int, error) { return f.hw.Write(p) }
 
 // FrameWriter is the renderer's writer seen from the graphics side: it runs a

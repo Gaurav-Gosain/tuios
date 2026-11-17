@@ -67,10 +67,6 @@ const (
 // WorktreePromptOpen reports whether the worktree dialog owns the keyboard.
 func (m *OS) WorktreePromptOpen() bool { return m.worktreePrompt.RepoRoot != "" }
 
-// WorktreePromptRepoRoot is the repository the open dialog branches from, or
-// "" when it is closed.
-func (m *OS) WorktreePromptRepoRoot() string { return m.worktreePrompt.RepoRoot }
-
 // WorktreePromptBranch is the branch as typed, trimmed of the spaces the field
 // would hand the daemon, or "" when the dialog is closed.
 func (m *OS) WorktreePromptBranch() string {

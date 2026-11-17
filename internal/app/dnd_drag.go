@@ -200,12 +200,6 @@ func (m *OS) DnDActive() bool {
 	return m.dndPress != nil || m.dndDrag != nil
 }
 
-// DnDDragging reports whether a drag follows the pointer, which is when the
-// label is drawn and the pointer belongs to the drag.
-func (m *OS) DnDDragging() bool {
-	return m.dndDrag != nil && m.dndDrag.phase >= dndStarted
-}
-
 // DnDMotion takes a pointer motion in layout cells. It reports whether the
 // drag consumed it, in which case no pane gets it.
 func (m *OS) DnDMotion(x, y int, button tea.MouseButton) bool {

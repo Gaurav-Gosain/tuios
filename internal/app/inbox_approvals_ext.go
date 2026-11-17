@@ -429,13 +429,6 @@ func (m *OS) InboxReasonOpen() bool {
 	return true
 }
 
-// InboxReasonType types text into the reason at the cursor.
-func (m *OS) InboxReasonType(text string) {
-	if r := m.Inbox.approvals.answer.reason; r != nil && text != "" {
-		r.ed.Insert(text, m.ProcessingRemoteKeys)
-	}
-}
-
 // InboxReasonPaste puts a paste into the reason, on one line.
 func (m *OS) InboxReasonPaste(text string) {
 	if r := m.Inbox.approvals.answer.reason; r != nil && text != "" {

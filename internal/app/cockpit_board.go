@@ -353,9 +353,6 @@ func (m *OS) CockpitToggleBoard() tea.Cmd {
 	return nil
 }
 
-// CockpitBoardOn reports whether the fleet column shows the board.
-func (m *OS) CockpitBoardOn() bool { return m.Inbox.ck.board }
-
 // cockpitCard is the card of the row under the cursor.
 func (m *OS) cockpitCard() (ckRow, session.TaskRow, bool) {
 	r, ok := m.cockpitSelected()

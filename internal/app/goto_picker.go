@@ -179,17 +179,6 @@ func (m *OS) SetGotoPickerQuery(q string) {
 	g.list.Refiltered(0)
 }
 
-// GotoPickerCount is how many rows the query keeps.
-func (m *OS) GotoPickerCount() int { return len(m.gotoFiltered()) }
-
-// GotoPickerMove steps the cursor by delta.
-func (m *OS) GotoPickerMove(delta int) { _ = gotoPicker().move(m, delta) }
-
-// GotoPickerSelect puts the cursor on row idx of the filtered list.
-func (m *OS) GotoPickerSelect(idx int) {
-	m.gotoPicker.list.Select(idx, len(m.gotoFiltered()), m.gotoVisible())
-}
-
 // GotoPickerActivate goes to the selected row and closes the picker.
 func (m *OS) GotoPickerActivate() {
 	rows := m.gotoFiltered()

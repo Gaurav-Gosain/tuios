@@ -296,9 +296,6 @@ func (m *OS) NavigatorCycleLayout() {
 	m.MarkAllDirty()
 }
 
-// NavigatorLayout is the layout the list is drawn in.
-func (m *OS) NavigatorLayout() string { return m.navigator.layout }
-
 // navFlat reports whether the list is a list of panes rather than a tree:
 // a search is in force, or the layout is flat or cards. A flat list has no
 // folds.

@@ -605,9 +605,6 @@ func (m *OS) ThemeEditorStartTyping() {
 	st.typing.Set(st.raw(row))
 }
 
-// ThemeEditorTyped edits the value being typed.
-func (m *OS) ThemeEditorTyped(s string) { m.themeEditor.typing.Set(s) }
-
 // ThemeEditorTyping is the value being typed, and whether one is.
 func (m *OS) ThemeEditorTyping() (string, bool) {
 	return m.themeEditor.typing.String(), m.themeEditor.typingOn
