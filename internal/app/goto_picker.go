@@ -90,6 +90,7 @@ type gotoRow struct {
 	group        string
 	ws           int
 	wsLabel      string
+	wsNumber     string
 	window       string
 	title        string
 	// dir is a pane's working directory with the home folder as ~, for a
@@ -371,6 +372,7 @@ func (m *OS) gotoRows() []gotoRow {
 		for _, w := range s.Children {
 			if w.ID == e.WindowID {
 				r.ws, r.wsLabel = w.Workspace, m.gotoWsLabel(s, w.Workspace)
+				r.wsNumber = strconv.Itoa(m.workspaceDisplayNumber(r.ws))
 			}
 		}
 		agents = append(agents, r)
@@ -415,6 +417,7 @@ func (m *OS) gotoRows() []gotoRow {
 			r := gotoSessionRow(s)
 			r.kind = gotoWorkspace
 			r.ws, r.wsLabel, r.panes = n, m.gotoWsLabel(s, n), count[n]
+			r.wsNumber = strconv.Itoa(m.workspaceDisplayNumber(r.ws))
 			r.current = s.IsCurrent && n == m.dockWorkspace()
 			workspaces = append(workspaces, r)
 		}
@@ -461,7 +464,7 @@ func (m *OS) gotoWsLabel(s sessiontree.Node, ws int) string {
 	if s.IsCurrent {
 		return m.WorkspaceLabel(ws)
 	}
-	return strconv.Itoa(ws)
+	return strconv.Itoa(m.workspaceDisplayNumber(ws))
 }
 
 // gotoTerm is one kind:, space: or ws: term: any of its globs may match.
@@ -565,7 +568,7 @@ func (q gotoQuery) match(r gotoRow) bool {
 			if r.kind == gotoSession {
 				return false
 			}
-			if !globAny(t.values, r.wsLabel) && !globAny(t.values, strconv.Itoa(r.ws)) {
+			if !globAny(t.values, r.wsLabel) && !globAny(t.values, r.wsNumber) {
 				return false
 			}
 			continue

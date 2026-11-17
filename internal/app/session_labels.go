@@ -184,6 +184,17 @@ func (m *OS) attachedAgentTitle() string {
 	return ""
 }
 
+// workspaceDisplayNumber is the number a person sees and presses for the
+// daemon's workspace ws. The daemon numbers workspaces from 1; base_index
+// moves the label and every workspace digit key down by the same offset.
+// Scratch groups keep their own high numbering.
+func (m *OS) workspaceDisplayNumber(ws int) int {
+	if session.IsScratchWorkspace(ws) {
+		return ws
+	}
+	return ws - m.Settings.WorkspaceIndexOffset
+}
+
 // WorkspaceLabel is what to show for a workspace of the attached session: its
 // name, else the name its active pane's program gave with OSC 1, else its
 // number, which is its identity and the label it has always shown. Only OSC
@@ -194,7 +205,7 @@ func (m *OS) WorkspaceLabel(ws int) string {
 	if name := m.workspaceGivenName(ws); name != "" {
 		return name
 	}
-	return strconv.Itoa(ws)
+	return strconv.Itoa(m.workspaceDisplayNumber(ws))
 }
 
 // workspaceGivenName is the name workspace ws has been given: its own name,

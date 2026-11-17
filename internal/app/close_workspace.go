@@ -43,7 +43,7 @@ func (m *OS) workspaceToll(ws int) sessionToll {
 // workspaceLabel names a workspace in the dialog: "workspace 2", or the name
 // it shows after it when it has one, its own or its active pane's OSC 1 name.
 func (m *OS) workspaceLabel(ws int) string {
-	label := fmt.Sprintf("workspace %d", ws)
+	label := fmt.Sprintf("workspace %d", m.workspaceDisplayNumber(ws))
 	if name := m.workspaceGivenName(ws); name != "" {
 		label += " (" + printableTitle(name) + ")"
 	}
@@ -83,7 +83,7 @@ func (m *OS) OpenWorkspaceClose() {
 		ws = m.CurrentWorkspace
 	}
 	if len(m.workspacePanes(ws)) == 0 {
-		m.ShowNotification(fmt.Sprintf("Workspace %d has no panes to close.", ws), "info", m.Settings.NotificationDuration)
+		m.ShowNotification(fmt.Sprintf("Workspace %d has no panes to close.", m.workspaceDisplayNumber(ws)), "info", m.Settings.NotificationDuration)
 		return
 	}
 	// The workspace is set first, so the dialog opens as a workspace one: it
@@ -105,7 +105,7 @@ func (m *OS) CloseWorkspacePanes(ws int) {
 		m.FireHook(hooks.AfterCloseWindow, w.ID, w.Title())
 		m.DeleteWindow(idx)
 	}
-	m.ShowNotification(fmt.Sprintf("Closed %s on workspace %d.", countOf(len(panes), "pane"), ws), "info", m.Settings.NotificationDuration)
+	m.ShowNotification(fmt.Sprintf("Closed %s on workspace %d.", countOf(len(panes), "pane"), m.workspaceDisplayNumber(ws)), "info", m.Settings.NotificationDuration)
 }
 
 // windowIndex is the index of w in m.Windows, or -1.

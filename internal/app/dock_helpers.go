@@ -190,7 +190,7 @@ func (m *OS) workspaceTabText(tabs *config.DockTabsConfig, n int) string {
 func (m *OS) workspacePillName(n int) string {
 	label := printableTitle(m.WorkspaceLabel(n))
 	if label == "" {
-		label = strconv.Itoa(n)
+		label = strconv.Itoa(m.workspaceDisplayNumber(n))
 	}
 	return label
 }
@@ -245,7 +245,7 @@ func (m *OS) workspacePillHidesName(n int) bool {
 	if format == "" || strings.Contains(format, "{name}") {
 		return false
 	}
-	return m.workspacePillName(n) != strconv.Itoa(n) || !strings.Contains(format, "{index}")
+	return m.workspacePillName(n) != strconv.Itoa(m.workspaceDisplayNumber(n)) || !strings.Contains(format, "{index}")
 }
 
 // occupiedWorkspaceNumbers lists the workspaces worth showing: those holding a

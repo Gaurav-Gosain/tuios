@@ -135,7 +135,7 @@ func (m *OS) MoveWorkspaceBy(delta int) tea.Cmd {
 	}
 	cmd := m.RenumberWorkspaces(order)
 	if cmd != nil || !m.IsDaemonSession {
-		m.ShowNotification(fmt.Sprintf("Workspace %d moved to %d", from, to), "info", m.Settings.NotificationDuration)
+		m.ShowNotification(fmt.Sprintf("Workspace %d moved to %d", m.workspaceDisplayNumber(from), m.workspaceDisplayNumber(to)), "info", m.Settings.NotificationDuration)
 	}
 	return cmd
 }

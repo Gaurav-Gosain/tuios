@@ -2,7 +2,6 @@ package app
 
 import (
 	"image/color"
-	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -181,7 +180,7 @@ func gotoRowLabel(r gotoRow) string {
 // after it when it has one.
 func gotoWsWords(r gotoRow) string {
 	n := r.wsLabel
-	if num := strconv.Itoa(r.ws); n != num {
+	if num := r.wsNumber; n != num {
 		return num + " · " + n
 	}
 	return n

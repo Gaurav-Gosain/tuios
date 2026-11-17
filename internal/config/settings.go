@@ -425,6 +425,12 @@ type Settings struct {
 	// dock exactly as it was before the strip existed.
 	DockWorkspaceTabs bool `opt:"appearance.dock_workspace_tabs,keep"`
 
+	// WorkspaceIndexOffset is how far a workspace's displayed number sits
+	// below the number the daemon uses: 0 for the shipped one-based numbering,
+	// 1 when [workspaces] base_index = 0. Keys and labels use it together, so
+	// its zero value is the default. Set from the config in ApplyAppearanceConfig.
+	WorkspaceIndexOffset int
+
 	// DockWorkspaceTabFormat is the format string for each workspace tab in the
 	// dock strip. Placeholders: {index} (the workspace number) and {name} (the
 	// workspace name). For a workspace with no name, {name} is empty when the

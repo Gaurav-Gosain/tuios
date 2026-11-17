@@ -681,7 +681,7 @@ func expandTitle(format, title string, index int, cwd string, extra ...string) s
 // "7 7". In any other format it is the number, and an empty format returns the
 // name, or the number, unchanged: the default look.
 func (s *Settings) FormatWorkspaceTab(name string, index int, icon, zoom string) string {
-	number := strconv.Itoa(index)
+	number := strconv.Itoa(index - s.WorkspaceIndexOffset)
 	format := s.DockWorkspaceTabFormat
 	if name == "" && (format == "" || !strings.Contains(format, "{index}")) {
 		name = number

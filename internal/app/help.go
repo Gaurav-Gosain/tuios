@@ -350,7 +350,7 @@ func generateWorkspaceBindings(registry *config.KeybindRegistry, s *config.Setti
 			bindings = append(bindings, HelpBinding{
 				Action:      action,
 				Keys:        keys,
-				Description: fmt.Sprintf("Switch to workspace %d", i),
+				Description: fmt.Sprintf("Switch to workspace %d", i-s.WorkspaceIndexOffset),
 				Category:    "Workspaces",
 			})
 		}
@@ -364,7 +364,7 @@ func generateWorkspaceBindings(registry *config.KeybindRegistry, s *config.Setti
 			bindings = append(bindings, HelpBinding{
 				Action:      action,
 				Keys:        keys,
-				Description: fmt.Sprintf("Move to workspace %d and follow", i),
+				Description: fmt.Sprintf("Move to workspace %d and follow", i-s.WorkspaceIndexOffset),
 				Category:    "Workspaces",
 			})
 		}
@@ -377,7 +377,7 @@ func generateWorkspaceBindings(registry *config.KeybindRegistry, s *config.Setti
 			bindings = append(bindings, HelpBinding{
 				Action:      action,
 				Keys:        keys,
-				Description: fmt.Sprintf("Send the focused pane to workspace %d", i),
+				Description: fmt.Sprintf("Send the focused pane to workspace %d", i-s.WorkspaceIndexOffset),
 				Category:    "Workspaces",
 			})
 		}

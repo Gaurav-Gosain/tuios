@@ -161,6 +161,7 @@ var settingLabels = map[string]string{
 	"scratch.height":                      "Scratch height",
 	"launcher.gui_command":                "Launcher GUI command",
 	"launcher.keep_open":                  "Keep launched panes open",
+	"workspaces.base_index":               "Start workspace numbers at",
 	"workspaces.return_when_empty":        "Go back from an empty workspace",
 	"shell.integration":                   "Shell integration",
 	"shell.login":                         "Login shell",

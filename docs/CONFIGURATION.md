@@ -1249,6 +1249,29 @@ number stays on it. A pane put directly on a higher number, with
 `tuios new-window --workspace 7` or `send_to_workspace_7`, keeps that number
 until the numbers below it close up.
 
+### Starting at zero
+
+Workspaces are numbered from 1 by default. To number them from 0, like tmux's
+`base-index`, set:
+
+```toml
+[workspaces]
+base_index = 0
+```
+
+The first workspace is then shown as 0 and the one after it as 1, up to 8.
+Every workspace digit key moves with the number: `Alt+0` reaches the first
+workspace, `Alt+1` the second, and the same shift applies to
+`move_and_follow`, `send_to_workspace`, the workspace prefix chords and the
+GUI keys. The settings page and `tuios list-options` show the option, and
+`tuios set-config workspaces.base_index 0` changes it while tuios runs.
+
+This only changes the number a person sees and presses. tuios, its daemon and
+tape scripts still number workspaces from 1 internally, so a command such as
+`tuios new-window --workspace 7` keeps using that internal numbering.
+A binding you set yourself is left alone; only the shipped workspace digit
+bindings move.
+
 ## When a workspace becomes empty
 
 When the last pane on the workspace on screen closes, tuios shows the

@@ -153,8 +153,10 @@ func (s *navSession) keepAgentMarks(from *navSession) {
 }
 
 // workspaceLabel is a workspace's number, with its name when it has one.
-func (s *navSession) workspaceLabel(ws int) string {
-	n := strconv.Itoa(ws)
+// indexOffset is the client's base-index shift, applied to the number so the
+// navigator reads the same as the dock and the digit keys.
+func (s *navSession) workspaceLabel(ws, indexOffset int) string {
+	n := strconv.Itoa(ws - indexOffset)
 	if name := s.WorkspaceNames[ws]; name != "" {
 		return n + " " + name
 	}

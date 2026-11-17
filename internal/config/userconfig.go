@@ -2950,6 +2950,9 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 // keep winning where they are set.
 func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	applyOptionFields(cfg, s)
+	// base_index shifts the number shown and the digit keys by the same
+	// amount. Keep the offset in Settings so every renderer reads one value.
+	s.WorkspaceIndexOffset = cfg.Workspaces.IndexOffset()
 	if cfg.Appearance.WhichKeyPosition != "" {
 		s.WhichKeyPosition = cfg.Appearance.WhichKeyPosition
 	}
@@ -3818,6 +3821,11 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 		return cmp.Or(cmp.Compare(a.Section, b.Section), cmp.Compare(a.Action, b.Action), cmp.Compare(a.Keys[0], b.Keys[0])) < 0
 	})
 	cfg.RetiredKeybinds = append(cfg.RetiredKeybinds, dropped...)
+
+	// base_index shifts the digit keys of the workspace actions with the
+	// numbers they show. It runs after the defaults are filled, on the final
+	// maps, so both default and written-out bindings agree with the labels.
+	applyWorkspaceBaseIndex(cfg, defaultCfg)
 }
 
 // yieldingDefaults are the actions whose default key arrived after users could

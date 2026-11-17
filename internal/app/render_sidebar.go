@@ -3505,10 +3505,11 @@ const sidebarHostTagFloor = 8
 // it to be recognised by; an unnamed one keeps the "w4" form, where the bare
 // digit would read as a session row's window count on the line above.
 func (m *OS) workspaceTag(ws int) string {
-	if label := printableTitle(m.WorkspaceLabel(ws)); label != strconv.Itoa(ws) && label != "" {
+	num := m.workspaceDisplayNumber(ws)
+	if label := printableTitle(m.WorkspaceLabel(ws)); label != strconv.Itoa(num) && label != "" {
 		return overlay.Truncate(label, sidebarWorkspaceTagMax)
 	}
-	return "w" + strconv.Itoa(ws)
+	return "w" + strconv.Itoa(num)
 }
 
 // sidebarWorkspaceTagMax caps a named workspace's tag so the name it fronts can

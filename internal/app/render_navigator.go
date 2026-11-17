@@ -543,7 +543,7 @@ func (m *OS) navSessionFacts(s *navSession) string {
 
 // navWorkspaceLabel is "workspace 2" and the workspace's name, if it has one.
 func (m *OS) navWorkspaceLabel(s *navSession, ws int, k navInks) string {
-	out := k.ink(k.mute).Render("workspace ") + k.ink(k.dim).Bold(true).Render(strconv.Itoa(ws))
+	out := k.ink(k.mute).Render("workspace ") + k.ink(k.dim).Bold(true).Render(strconv.Itoa(m.workspaceDisplayNumber(ws)))
 	if name := printableTitle(s.WorkspaceNames[ws]); name != "" {
 		out += k.ink(k.mute).Render(" · ") + k.ink(k.dim).Render(name)
 	}
@@ -646,7 +646,7 @@ func (m *OS) navBreadcrumb(s *navSession, ws int, k navInks) string {
 	if s.Host != "" {
 		out += k.ink(k.mute).Render(" @ ") + k.ink(k.dim).Render(printableTitle(s.Host))
 	}
-	label := printableTitle(s.workspaceLabel(ws))
+	label := printableTitle(s.workspaceLabel(ws, m.Settings.WorkspaceIndexOffset))
 	return out + k.ink(k.mute).Render(" › ") + k.lit(label, k.ink(k.mute), m.navMatch(label, false))
 }
 
