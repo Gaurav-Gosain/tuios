@@ -2,7 +2,6 @@ package app
 
 import (
 	"encoding/json"
-	"fmt"
 	"maps"
 	"net/url"
 	"os"
@@ -19,6 +18,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/textedit"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // The questions a copy asks: cancel a copy, answer a file that is there,
@@ -650,29 +650,6 @@ func parseDroppedPaths(s string) ([]string, bool) {
 	return words, true
 }
 
-// transferBytes writes a size in the binary units, as tuios cp does: 2.00
-// GiB.
-func transferBytes(n int64) string {
-	const unit = 1024
-	if n < unit {
-		return fmt.Sprintf("%d B", n)
-	}
-	div, exp := int64(unit), 0
-	for q := n / unit; q >= unit && exp < 4; q /= unit {
-		div *= unit
-		exp++
-	}
-	v := float64(n) / float64(div)
-	units := "KMGTP"[exp : exp+1]
-	switch {
-	case v >= 100:
-		return fmt.Sprintf("%.0f %siB", v, units)
-	case v >= 10:
-		return fmt.Sprintf("%.1f %siB", v, units)
-	}
-	return fmt.Sprintf("%.2f %siB", v, units)
-}
-
 // copyDialogTitle is the word in the dialog's top border.
 func (d *copyDialog) title() string {
 	switch d.kind {
@@ -707,7 +684,7 @@ func (d *copyDialog) lines() []string {
 		a := d.drop
 		what := printableTitle(dropName(a.paths))
 		return []string{
-			"Send " + what + " (" + transferBytes(a.size) + ") to " + transferPlace(a.host) + "?",
+			"Send " + what + " (" + units.Bytes(a.size) + ") to " + transferPlace(a.host) + "?",
 			"The path on " + transferPlace(a.host) + " is pasted when the copy is checked.",
 		}
 	}
@@ -733,9 +710,9 @@ func conflictLines(row session.TransferRow) []string {
 	var size string
 	switch diff := c.DstSize - c.SrcSize; {
 	case diff > 0:
-		size = transferBytes(diff) + " larger"
+		size = units.Bytes(diff) + " larger"
 	case diff < 0:
-		size = transferBytes(-diff) + " smaller"
+		size = units.Bytes(-diff) + " smaller"
 	default:
 		size = "the same size"
 	}

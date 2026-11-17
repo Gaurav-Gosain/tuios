@@ -281,7 +281,7 @@ func transferRoute(row session.TransferRow) string {
 func transferStatus(row session.TransferRow, pal overlay.Palette, bg color.Color) string {
 	st := func(c color.Color) lipgloss.Style { return overlay.Style(bg).Foreground(c) }
 	pct := transferPercent(row.Done, row.Size)
-	bytes := transferBytes(row.Done) + "/" + transferBytes(row.Size)
+	bytes := units.Bytes(row.Done) + "/" + units.Bytes(row.Size)
 	switch row.State {
 	case "running", "verifying", "queued", "paused":
 		bar := transferBar(pct, transferPanelBarCells, pal.Accent, pal.FgMute, bg)
@@ -289,7 +289,7 @@ func transferStatus(row session.TransferRow, pal overlay.Palette, bg color.Color
 		switch row.State {
 		case "running":
 			if row.Rate > 0 {
-				text += "  " + transferBytes(int64(row.Rate)) + "/s"
+				text += "  " + units.Bytes(int64(row.Rate)) + "/s"
 			}
 			if row.ETAms > 0 {
 				text += "  " + units.Duration(time.Duration(row.ETAms)*time.Millisecond)
