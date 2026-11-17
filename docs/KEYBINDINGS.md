@@ -153,6 +153,9 @@ shows `NEST F12`.
 
 ## The full list
 
+[keybindings-defaults.md](keybindings-defaults.md) lists every action and its
+default keys. A test writes that page from the code.
+
 `tuios keybinds list` shows every action and the keys that run it, as your
 `config.toml` sets them. It has one table for each scope: global, window mode,
 terminal mode, the sidebar and its files and agent rows, the agents view, its prompt,

@@ -18,3 +18,6 @@ docs/protocol-verbs.md linguist-generated=true
 # Written by a test from the option registry. Never merge it by hand: write it
 # again with go test ./internal/config -run TestConfigOptionsDocMatchesRegistry -update.
 docs/config-options.md linguist-generated=true
+# Written by a test from the default keymaps. Never merge it by hand: write it
+# again with go test ./cmd/tuios -run TestKeybindingDefaultsDocMatchesKeymaps -update.
+docs/keybindings-defaults.md linguist-generated=true
