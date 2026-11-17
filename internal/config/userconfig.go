@@ -3696,6 +3696,12 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 		}
 	}
 
+	if cfg.Workspaces.IndexOffset() == 1 {
+		defaults := *defaultCfg
+		defaults.Keybindings = zeroBasedWorkspaceDefaults(defaults.Keybindings)
+		defaultCfg = &defaults
+	}
+
 	for _, t := range keybindTables {
 		if f := t.field(&cfg.Keybindings); *f == nil {
 			*f = make(map[string][]string)
@@ -3822,10 +3828,6 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	})
 	cfg.RetiredKeybinds = append(cfg.RetiredKeybinds, dropped...)
 
-	// base_index shifts the digit keys of the workspace actions with the
-	// numbers they show. It runs after the defaults are filled, on the final
-	// maps, so both default and written-out bindings agree with the labels.
-	applyWorkspaceBaseIndex(cfg, defaultCfg)
 }
 
 // yieldingDefaults are the actions whose default key arrived after users could

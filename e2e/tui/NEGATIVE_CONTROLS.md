@@ -18345,3 +18345,17 @@ Run on Linux on 2026-11-19. The branch passes both.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestCockpitThreadDrawsRichBlocks|TestQuickLookReadsRichMarkdown)$' -v .`.
+## base_index = 0 shifts the workspace numbers and keys together (#2151)
+
+`TestWorkspaceBaseIndexZeroShiftsKeysAndNumbers` in `workspace_base_index_test.go` names two workspaces, waits for the dock to draw both numbers, presses one workspace key that must leave slot 1 and one that must reach the expected slot, then filters the go-to picker by the shown number. Its cases cover `base_index = 0`, explicit workspace keys at both bases, and a user key that is also a default key, which must resolve the same way at both bases.
+
+Run on 2026-11-18 on Linux (x86_64), with GOMAXPROCS=4. Each control cuts one call site on the branch and runs the `zero-based` case.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `fillMissingKeybinds` without its `zeroBasedWorkspaceDefaults` call | `ASSERTION: alt+1 left the client on workspace 1, want 2` | **caught** |
+| `Settings.WorkspaceIndexOffset` left at 0 when the config is applied | `the dock never drew [0·EDIT 1·REVW]` | **caught** |
+| The branch | all six cases pass | fixed |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorkspaceBaseIndexZeroShiftsKeysAndNumbers$' -v .`.

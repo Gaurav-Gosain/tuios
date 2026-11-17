@@ -12,6 +12,7 @@ import (
 // for a reason a reader can check, so the walk below cannot quietly grow a
 // hole.
 var optionWalkSkips = map[string]string{
+	"workspaces.base_index":            "file configuration resolved together with default keybindings at load time",
 	"keybindings":                      "maps of action to keys, not scalar paths",
 	"hooks":                            "a free-form map of event to command",
 	"actions":                          "user actions run as the person, so set-option, a verb any pane can call, must not be able to add or change one",

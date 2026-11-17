@@ -2,6 +2,8 @@ package app
 
 import (
 	"slices"
+	"strconv"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -23,6 +25,13 @@ func (m *OS) allPaletteItems() []CommandPaletteItem {
 // never per frame.
 func (m *OS) rebuildPaletteItems() {
 	static := GetCommandPaletteItems()
+	for i, it := range static {
+		if ws, ok := strings.CutPrefix(it.Bind, "workspace_prefix_switch_"); ok {
+			if n, err := strconv.Atoi(ws); err == nil {
+				static[i].Name = "Workspace " + strconv.Itoa(m.workspaceDisplayNumber(n))
+			}
+		}
+	}
 	m.liveShortcuts(static)
 	// The agent entries wait until an agent has been seen, like the prefix
 	// menu's Inbox lines. Their prefix keys work either way.

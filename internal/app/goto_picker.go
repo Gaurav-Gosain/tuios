@@ -410,6 +410,7 @@ func (m *OS) gotoRows() []gotoRow {
 			r.kind = gotoPane
 			r.window, r.title, r.dir = w.ID, w.Title, dirOf[w.ID]
 			r.ws, r.wsLabel = w.Workspace, m.gotoWsLabel(s, w.Workspace)
+			r.wsNumber = strconv.Itoa(m.workspaceDisplayNumber(r.ws))
 			r.current = s.IsCurrent && w.IsCurrent
 			panes = append(panes, r)
 		}

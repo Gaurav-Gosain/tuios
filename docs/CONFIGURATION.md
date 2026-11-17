@@ -1263,8 +1263,8 @@ The first workspace is then shown as 0 and the one after it as 1, up to 8.
 Every workspace digit key moves with the number: `Alt+0` reaches the first
 workspace, `Alt+1` the second, and the same shift applies to
 `move_and_follow`, `send_to_workspace`, the workspace prefix chords and the
-GUI keys. The settings page and `tuios list-options` show the option, and
-`tuios set-config workspaces.base_index 0` changes it while tuios runs.
+GUI keys. Edit the configuration file and reload it or restart tuios to change
+this option; it is resolved together with the default keybindings when loaded.
 
 This only changes the number a person sees and presses. tuios, its daemon and
 tape scripts still number workspaces from 1 internally, so a command such as

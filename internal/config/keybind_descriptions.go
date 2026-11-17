@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -80,7 +81,10 @@ var numberedDescriptions = map[string]map[string]string{
 // ScopedDescription is the description of action as it acts in scope: the
 // scope's own text when it has one, then ActionDescriptions, then the action
 // name with its underscores opened.
-func ScopedDescription(scope, action string) string {
+func ScopedDescription(scope, action string, workspaceOffset int) string {
+	if number, ok := workspaceActionNumber(action); ok && workspaceOffset != 0 {
+		return strings.Replace(ScopedDescription(scope, action, 0), strconv.Itoa(number), strconv.Itoa(number-workspaceOffset), 1)
+	}
 	if d := scopedDescriptions[scope][action]; d != "" {
 		return d
 	}

@@ -72,7 +72,7 @@ func KeybindRows(cfg *config.UserConfig) []KeybindRow {
 		id := b.Scope + "\x00" + b.Section + "\x00" + b.Action
 		i, ok := index[id]
 		if !ok {
-			desc := config.ScopedDescription(b.Scope, b.Action)
+			desc := config.ScopedDescription(b.Scope, b.Action, cfg.Workspaces.IndexOffset())
 			if b.Section == config.SectionCommand || b.Section == config.SectionAction {
 				desc = b.Desc
 			}

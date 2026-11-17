@@ -1,7 +1,7 @@
 package config
 
 import (
-	"slices"
+	"maps"
 	"strings"
 )
 
@@ -116,34 +116,17 @@ func shiftedWorkspaceKeys(keys []string, number int) []string {
 	return out
 }
 
-// applyWorkspaceBaseIndex keeps the digit keys of the workspace actions in
-// step with base_index. It runs after the defaults are filled in, and only
-// rewrites keys that are still exactly the shipped default (or exactly the
-// shifted default when returning to base_index 1), so a binding the person
-// chose of their own is never moved. It is driven by the action's number, not
-// by the key's current digit, so a reload or a save cannot shift twice.
-func applyWorkspaceBaseIndex(cfg, defaultCfg *UserConfig) {
-	def := defaultCfg.Keybindings
-	offset := cfg.Workspaces.IndexOffset()
+// zeroBasedWorkspaceDefaults shifts defaults before user bindings are merged,
+// so explicit bindings and the usual collision rules keep their precedence.
+func zeroBasedWorkspaceDefaults(kb KeybindingsConfig) KeybindingsConfig {
 	for _, table := range keybindTables {
-		target := *table.field(&cfg.Keybindings)
-		if target == nil {
-			continue
-		}
-		defaults := *table.field(&def)
+		target := maps.Clone(*table.field(&kb))
 		for action, keys := range target {
-			number, ok := workspaceActionNumber(action)
-			if !ok {
-				continue
-			}
-			defKeys := defaults[action]
-			shifted := shiftedWorkspaceKeys(defKeys, number)
-			switch {
-			case offset == 1 && slices.Equal(keys, defKeys):
-				target[action] = shifted
-			case offset == 0 && slices.Equal(keys, shifted):
-				target[action] = slices.Clone(defKeys)
+			if number, ok := workspaceActionNumber(action); ok {
+				target[action] = shiftedWorkspaceKeys(keys, number)
 			}
 		}
+		*table.field(&kb) = target
 	}
+	return kb
 }

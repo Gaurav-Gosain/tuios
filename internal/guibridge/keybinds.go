@@ -122,7 +122,7 @@ func exportKeybinds(o *app.OS) *Keybinds {
 		}
 		kb.Bindings = append(kb.Bindings, Binding{
 			Scope: b.Scope, Action: b.Action, Key: b.Key, Press: b.Press,
-			Description: config.ScopedDescription(b.Scope, b.Action),
+			Description: config.ScopedDescription(b.Scope, b.Action, cfg.Workspaces.IndexOffset()),
 			Command:     b.Section == config.SectionCommand,
 		})
 		if b.Section == config.SectionCommand {

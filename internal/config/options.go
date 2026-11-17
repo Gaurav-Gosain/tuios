@@ -2004,11 +2004,6 @@ var optionSpecs = []Option{
 	// [workspaces]. The daemon reads it when it starts and when the file
 	// changes.
 	{
-		Path: "workspaces.base_index", Type: OptionInt, Section: "workspaces",
-		Description: "Number workspaces from 0 instead of 1, as tmux's base-index does. The workspace digit keys move with the numbers: with 0, opt+0 reaches the first workspace and the dock shows 0. 1 keeps the shipped numbering",
-		Default:     "1", Min: 0, Max: 1,
-	},
-	{
 		Path: "workspaces.return_when_empty", Type: OptionBool, Section: "workspaces",
 		Description: "When the last pane on the workspace on screen closes, show the workspace you came from. Off shows the splash screen",
 		Default:     "true",

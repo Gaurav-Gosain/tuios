@@ -2596,7 +2596,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				// Workspace change notification. A scratch group shown or
 				// hidden is not a workspace the user switched to.
 				if oldWorkspace != newWorkspace && !session.IsScratchWorkspace(oldWorkspace) && !session.IsScratchWorkspace(newWorkspace) {
-					m.ShowNotification(fmt.Sprintf("Switched to workspace %d", newWorkspace), "info", 2*time.Second)
+					m.ShowNotification(fmt.Sprintf("Switched to workspace %d", m.workspaceDisplayNumber(newWorkspace)), "info", 2*time.Second)
 				}
 				// After the count note, so the dock draws this one.
 				m.flushPiPNote()

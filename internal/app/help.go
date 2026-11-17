@@ -444,7 +444,7 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 		return HelpBinding{
 			Action:      action,
 			Keys:        registry.Keys(config.TableSidebar, action),
-			Description: config.ScopedDescription(config.ScopeSidebar, action),
+			Description: config.ScopedDescription(config.ScopeSidebar, action, s.WorkspaceIndexOffset),
 			Category:    cat,
 		}
 	}
