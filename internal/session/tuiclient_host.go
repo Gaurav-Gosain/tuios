@@ -59,10 +59,6 @@ func (c *TUIClient) ConnectThroughHost(host, version string, width, height int, 
 	return info, nil
 }
 
-// Host is the host this client reached its daemon through, or "" for the
-// daemon on this machine.
-func (c *TUIClient) Host() string { return c.viaHost }
-
 // HostHandshakeError reports a host whose daemon answered the connection and
 // then refused the binary handshake, or could not be understood. It is the
 // version skew case for an attach: the link is up, the control protocol

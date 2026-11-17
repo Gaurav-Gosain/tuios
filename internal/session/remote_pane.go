@@ -594,9 +594,6 @@ func (p *remotePane) setLink(state string, until time.Time) {
 	}
 }
 
-// Host is the machine the process runs on.
-func (p *remotePane) Host() string { return p.host }
-
 // SetFederation gives the session the links a window on another machine is
 // opened over. The daemon installs it as each session is created; a session
 // without one can hold only windows of its own, which is what every session

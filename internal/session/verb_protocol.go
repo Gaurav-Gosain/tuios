@@ -3904,9 +3904,6 @@ var verbEnvelopeDoc = map[string]any{
 // VerbDoc is one verb as list-verbs describes it.
 type VerbDoc = verbDoc
 
-// VerbParamDoc is one parameter or result field of a VerbDoc.
-type VerbParamDoc = verbParam
-
 // VerbDocs returns every verb as list-verbs describes it, sorted by name. It
 // is read from the table the daemon dispatches from, so a program in this
 // binary that builds a schema from it (tuios mcp) describes the same verbs,

@@ -214,19 +214,6 @@ func (s *Selector) String() string {
 	return s.text
 }
 
-// Has reports whether the selector has a term on key.
-func (s *Selector) Has(key string) bool {
-	if s == nil {
-		return false
-	}
-	for _, t := range s.terms {
-		if t.key == key {
-			return true
-		}
-	}
-	return false
-}
-
 // mapValues rewrites every value of the terms on key. The daemon uses it to
 // turn a program name into the harness id it names, and this machine's own
 // name into local.

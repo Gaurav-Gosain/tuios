@@ -210,9 +210,6 @@ func DialVerbClientThroughHost(host, clientVersion string) (*VerbClient, HostCon
 	return c, info, nil
 }
 
-// Host is the host this client's verbs run on, or "" for this machine.
-func (c *VerbClient) Host() string { return c.host }
-
 // Daemon returns what the daemon reported during the handshake. Its Protocol is
 // zero when the daemon predates the handshake verb. It is nil only for a client
 // built without dialing.

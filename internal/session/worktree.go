@@ -154,9 +154,6 @@ const (
 	VerifyFailed  = "failed"
 )
 
-// VerifyStateNames lists the verify states.
-var VerifyStateNames = []string{VerifyRunning, VerifyPassed, VerifyFailed}
-
 // Prompt statuses, as the wire carries them.
 const (
 	PromptPending = "pending"

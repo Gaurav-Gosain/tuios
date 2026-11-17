@@ -2621,19 +2621,14 @@ func (s *Session) CreatePTY(windowID string, width, height int, onExit func(ptyI
 	return s.createPTY(width, height, ptySpawn{windowID: windowID, onExit: onExit})
 }
 
-// RestorePTY creates a fresh PTY for a resurrected window. It behaves like
-// CreatePTY but starts the shell in cwd (when that directory still exists) and
-// marks the shell as restored: the shell's environment carries TUIOS_RESTORED=1
-// and a one-line banner is written to the terminal so the user can see the
-// process is a freshly respawned shell, not the original long-lived one.
-func (s *Session) RestorePTY(windowID string, width, height int, cwd string, onExit func(ptyID string)) (*PTY, error) {
-	return s.createPTY(width, height, ptySpawn{windowID: windowID, cwd: cwd, restored: &restoreSpec{savedCwd: cwd}, onExit: onExit})
-}
-
-// restorePTYWithGrants is RestorePTY for a window that was saved with grants
-// of its own, which the new process holds from its first instruction.
-// history, when not nil, is the pane's saved history, which the new emulator
-// shows above the banner.
+// restorePTYWithGrants creates a fresh PTY for a resurrected window. It
+// behaves like CreatePTY but starts the shell in cwd (when that directory
+// still exists) and marks the shell as restored: the shell's environment
+// carries TUIOS_RESTORED=1 and a one-line banner is written to the terminal so
+// the user can see the process is a freshly respawned shell, not the original
+// long-lived one. grants are the window's saved grants, which the new process
+// holds from its first instruction. history, when not nil, is the pane's saved
+// history, which the new emulator shows above the banner.
 func (s *Session) restorePTYWithGrants(windowID string, width, height int, cwd string, grants *Grants, history *savedHistory, workspace int, onExit func(ptyID string)) (*PTY, error) {
 	return s.createPTY(width, height, ptySpawn{windowID: windowID, cwd: cwd, restored: &restoreSpec{history: history, savedCwd: cwd}, onExit: onExit, grants: grants, workspace: workspace})
 }
@@ -4146,13 +4141,6 @@ func (s *Session) Stop() {
 	}
 }
 
-// WindowCount returns the number of windows in state.
-func (s *Session) WindowCount() int {
-	s.stateMu.RLock()
-	defer s.stateMu.RUnlock()
-	return len(s.state.Windows)
-}
-
 // Size returns the current session dimensions.
 func (s *Session) Size() (width, height int) {
 	s.sizeMu.RLock()
@@ -5207,19 +5195,6 @@ func (p *PTY) CaptureContent(scrollback, ansi bool) string {
 	return vt.StripKittyPlaceholders(p.captureContent(scrollback, ansi))
 }
 
-// CaptureContentResolved is CaptureContent with styling on, plus the SGR index
-// colours rewritten to 24-bit RGB against the given palette. The daemon still
-// knows nothing about themes: the palette is an explicit parameter, the
-// client's theme palette, so the capture matches what the client paints. A
-// bare reset stays a bare reset. Indices 0-15 come from the palette, the
-// standard 256-colour cube and grey ramp resolve through their fixed
-// formulas, and only true colour passes through untouched.
-func (p *PTY) CaptureContentResolved(scrollback bool, palette [16]color.Color) string {
-	p.terminalMu.RLock()
-	defer p.terminalMu.RUnlock()
-	return ResolveSGR(vt.StripKittyPlaceholders(p.captureContent(scrollback, true)), palette)
-}
-
 // paneMeta is what a capture reports about a pane beside its content.
 type paneMeta struct {
 	// HistoryRows is how many scrollback lines the pane holds above its
@@ -5264,8 +5239,14 @@ func (p *PTY) CaptureContentMeta(scrollback, ansi, unwrap bool) (string, paneMet
 	return content, p.metaLocked()
 }
 
-// CaptureContentResolvedMeta is CaptureContentResolved plus the pane's
-// paneMeta, read under the same lock.
+// CaptureContentResolvedMeta is CaptureContent with styling on, plus the SGR
+// index colours rewritten to 24-bit RGB against the given palette, and the
+// pane's paneMeta, read under the same lock. The daemon still knows nothing
+// about themes: the palette is an explicit parameter, the client's theme
+// palette, so the capture matches what the client paints. A bare reset stays
+// a bare reset. Indices 0-15 come from the palette, the standard 256-colour
+// cube and grey ramp resolve through their fixed formulas, and only true
+// colour passes through untouched.
 func (p *PTY) CaptureContentResolvedMeta(scrollback bool, palette [16]color.Color, unwrap bool) (string, paneMeta) {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()

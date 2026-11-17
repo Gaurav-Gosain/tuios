@@ -11,13 +11,10 @@ import (
 // TerminalState under its old name (codec.go), so an older peer and saved
 // history read it as before.
 type (
-	TerminalState     = snapshot.State
-	CellState         = snapshot.CellState
-	StyleState        = snapshot.StyleState
-	SavedCursorState  = snapshot.SavedCursorState
-	TitleEntryState   = snapshot.TitleEntryState
-	GuestColorState   = snapshot.GuestColorState
-	PaletteColorState = snapshot.PaletteColorState
+	TerminalState    = snapshot.State
+	CellState        = snapshot.CellState
+	StyleState       = snapshot.StyleState
+	SavedCursorState = snapshot.SavedCursorState
 )
 
 // DefaultStateScrollback is how many scrollback lines a state request carries
