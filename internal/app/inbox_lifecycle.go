@@ -264,14 +264,7 @@ func (m *OS) applySnoozedEvent(action string, it session.AttentionItem) bool {
 // inboxCanMark reports whether this client can send the person's acts to the
 // daemon holding the Inbox, and says why not when it cannot.
 func (m *OS) inboxCanMark(what string) bool {
-	if m.Inbox.call != nil {
-		return true
-	}
-	if m.DaemonClient == nil || m.AttachedHost != "" {
-		m.ShowNotification(what+" needs a client attached to this machine's daemon", "warning", m.Settings.NotificationDuration)
-		return false
-	}
-	return true
+	return m.inboxCanAct(what)
 }
 
 // inboxMarkCmd sends mark-attention with this client's attach nonce.
@@ -299,7 +292,7 @@ func (m *OS) inboxMarkCmd(params map[string]any, who, words string) tea.Cmd {
 	}
 	window, _ := params["window"].(string)
 	sessionName, _ := params["session"].(string)
-	call := m.inboxCaller()
+	call := m.inboxActCaller()
 	return func() tea.Msg {
 		raw, err := call("mark-attention", params, 5*time.Second)
 		msg := InboxMarkedMsg{Action: action, Who: who, Words: words, Window: window, Session: sessionName, Err: err}
@@ -313,7 +306,7 @@ func (m *OS) inboxMarkCmd(params map[string]any, who, words string) tea.Cmd {
 // applyInboxMarked says what happened, and keeps a snooze for u.
 func (m *OS) applyInboxMarked(msg InboxMarkedMsg) {
 	if msg.Err != nil {
-		m.ShowNotification(inboxMarkFailWords(msg.Action)+": "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
+		m.ShowNotification(inboxMarkFailWords(msg.Action)+": "+inboxActErr(msg.Err, m.AttachedHost), "error", m.Settings.NotificationDuration*2)
 		if msg.Action == "unread" {
 			m.settleInboxUnreadAsk(msg.Window, "")
 		}
@@ -685,7 +678,7 @@ func (m *OS) SidebarAgentUnread(sessionID, windowID string) (tea.Cmd, bool) {
 	who := printableTitle(label)
 	// The daemon is asked whenever there is one: it holds the pane's turn
 	// count, which this client's copy of another session can trail.
-	if !m.IsDaemonSession || (m.Inbox.call == nil && (m.DaemonClient == nil || m.AttachedHost != "")) {
+	if !m.IsDaemonSession || (m.Inbox.call == nil && m.DaemonClient == nil) {
 		m.ShowNotification("Marked "+who+" unread", "info", m.Settings.NotificationDuration)
 		return nil, true
 	}

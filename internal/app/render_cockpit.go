@@ -557,7 +557,13 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 	st := &m.Inbox
 	ck := &st.ck
 	pal := l.pal
-	x := c.text(2, y, 0, ckSeg{t: "Agents", fg: pal.Fg, attrs: ckBold}) + 3
+	x := c.text(2, y, 0, ckSeg{t: "Agents", fg: pal.Fg, attrs: ckBold})
+	if m.AttachedHost != "" {
+		// The view is the attached machine's daemon's (inbox_route.go), so
+		// this machine's own agents are not in it. The title says whose it is.
+		x = c.text(x, y, 0, ckSeg{t: " on " + ckHostLabel(m.AttachedHost), fg: pal.Fg, attrs: ckBold})
+	}
+	x += 3
 	// The controls with a dropdown say where they are drawn this frame; one
 	// not drawn has no place to open its menu from.
 	clear(ck.anchors)

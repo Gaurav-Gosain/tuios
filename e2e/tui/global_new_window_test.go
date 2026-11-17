@@ -137,8 +137,9 @@ func startGlobalFleet(t *testing.T) *globalFleet {
 
 // startGlobalFleetWith is startGlobalFleet with alpha's own [hosts] table
 // given, name to address. someone@herebox is this machine, so alpha can name
-// this machine whatever a test needs.
-func startGlobalFleetWith(t *testing.T, alphaHosts map[string]string) *globalFleet {
+// this machine whatever a test needs. alphaConfig is more TOML for alpha's
+// config file, such as a link policy, read when alpha's daemon starts.
+func startGlobalFleetWith(t *testing.T, alphaHosts map[string]string, alphaConfig ...string) *globalFleet {
 	t.Helper()
 	f := &globalFleet{here: t.TempDir(), alpha: remoteMachine(t), beta: remoteMachine(t)}
 	ssh := writeFakeSSHMulti(t, f.here, map[string]string{
@@ -153,6 +154,16 @@ func startGlobalFleetWith(t *testing.T, alphaHosts map[string]string) *globalFle
 		filepath.Base(f.beta):  "beta",
 	}
 	writeHostAddrs(t, f.alpha, alphaHosts)
+	if len(alphaConfig) > 0 {
+		path := filepath.Join(f.alpha, "XDG_CONFIG_HOME", "tuios", "config.toml")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read alpha's config: %v", err)
+		}
+		if err := os.WriteFile(path, append(data, strings.Join(alphaConfig, "\n")...), 0o600); err != nil {
+			t.Fatalf("write alpha's config: %v", err)
+		}
+	}
 	for _, r := range []string{f.beta, f.alpha} {
 		if out, err := tuiosCLIEnv(t, r, f.env, "new", "far", "--detach"); err != nil {
 			t.Fatalf("start a far daemon: %v\n%s", err, out)

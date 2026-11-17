@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"image/color"
 	"slices"
@@ -410,20 +409,7 @@ func (m *OS) threadRetryOnState() tea.Cmd {
 // agent's pane, for the thread and the checkpoints: the far daemon through
 // the link on a client attached through a host, else what the Inbox calls. Each call dials: a read follows a transcript event,
 // and the events are already coalesced into one read in flight.
-func (m *OS) agentCaller() inboxVerbCall {
-	if m.Inbox.call != nil || m.AttachedHost == "" {
-		return m.inboxCaller()
-	}
-	dial := m.verbDialer()
-	return func(verb string, params map[string]any, timeout time.Duration) (json.RawMessage, error) {
-		client, err := dial()
-		if err != nil {
-			return nil, err
-		}
-		defer func() { _ = client.Close() }()
-		return client.CallWithTimeout(verb, params, timeout)
-	}
-}
+func (m *OS) agentCaller() inboxVerbCall { return m.inboxActCaller() }
 
 // threadPageCmd reads a transcript page: the newest entries, or those after
 // cursor.

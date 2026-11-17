@@ -278,6 +278,12 @@ func (m *OS) openHostReply(host, sessionID, windowID, who, context string) bool 
 	if !m.inboxCanMark("Replying") {
 		return false
 	}
+	if m.AttachedHost != "" {
+		// The reply would go through this machine's daemon, which does not
+		// take the nonce of the host this client is attached to.
+		m.ShowNotification("Replying to a third machine needs a client attached to this machine's daemon", "warning", m.Settings.NotificationDuration)
+		return false
+	}
 	m.answerEnd(answerArmed, "reply")
 	comp := m.takeInboxDraft(sessionID, windowID)
 	if comp == nil {

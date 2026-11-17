@@ -203,7 +203,7 @@ func (m *OS) InboxPeek() tea.Cmd {
 		m.ShowNotification("tuios holds this approval: answer it with "+inboxAnswerKeys(it)+", or enter to answer in the pane", "info", m.Settings.NotificationDuration)
 		return nil
 	}
-	if it.Host != "" || m.AttachedHost != "" {
+	if it.Host != "" {
 		m.ShowNotification("That prompt is on another machine: tuios peek-prompt -w HOST:SESSION:WINDOW reads it", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
@@ -225,7 +225,7 @@ func (m *OS) inboxPeekRead() tea.Cmd {
 	p.Loading = true
 	p.LoadingSince = time.Now()
 	p.Err = ""
-	call, gen := m.inboxCaller(), p.gen
+	call, gen := m.inboxActCaller(), p.gen
 	params := map[string]any{"session": p.Item.Session, "window": p.Item.Window}
 	return func() tea.Msg {
 		raw, err := call("peek-prompt", params, inboxPeekTimeout)
@@ -338,7 +338,7 @@ func (m *OS) inboxAnswer(action, value string, confirmed bool) tea.Cmd {
 	if len(ack) > 0 {
 		params["risk_ack"] = ack
 	}
-	call, gen := m.inboxCaller(), p.gen
+	call, gen := m.inboxActCaller(), p.gen
 	return func() tea.Msg {
 		raw, err := call("respond", params, inboxRespondTimeout)
 		if err != nil {
@@ -401,7 +401,7 @@ func (m *OS) applyInboxResponded(msg InboxRespondedMsg) tea.Cmd {
 			p.Composing, p.Answer = false, nil
 			return m.inboxPeekRead()
 		}
-		p.Err = "The answer did not go through: " + msg.Err.Error()
+		p.Err = "The answer did not go through: " + inboxActErr(msg.Err, m.AttachedHost)
 		return nil
 	}
 	who := inboxWho(p.Item)

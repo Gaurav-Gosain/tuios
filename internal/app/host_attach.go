@@ -280,9 +280,14 @@ func (m *OS) adoptClient(client *session.TUIClient, state *session.SessionState,
 	savedWidth, savedHeight := m.Width, m.Height
 	m.DaemonClient = client
 	m.WireDaemonClient(client)
+	leftHost := m.AttachedHost
 	m.AttachedHost = host
 	if host == federation.LocalHostName {
 		m.AttachedHost = ""
+	}
+	if m.AttachedHost != leftHost {
+		// The Inbox is the attached machine's (inbox_route.go).
+		m.QueueClientEvent(ClientEvent{Type: "inbox-rewatch"})
 	}
 	// The host list belongs to the machine left behind. The new machine's is
 	// read now, so a window picker opened next has it.

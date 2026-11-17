@@ -18118,3 +18118,12 @@ to the dock. The frames `workspace-icon-name-labelled`,
 `workspace-icon-name-after-osc0` and `workspace-icon-name-cleared` are under
 `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorkspaceLabelFollowsIconName$' -v .`.
+
+## The Inbox of a client attached through a host (#2093)
+
+`inbox_attached_host_test.go` attaches a client to alpha's session through the link, opens the agents view, dismisses an errored item and answers an `ask-human` question, and checks both on alpha's daemon. The second test leaves `respond` out of alpha's link policy and checks the refusal names it. Run on Linux on 2026-11-17.
+
+| Control | Test that fails | Verdict |
+| --- | --- | --- |
+| Main (the Inbox follows this machine's daemon, and every act on it is refused while attached through a host) | both tests: the agents view never lists alpha's item under "Agents on alpha" | **caught** |
+| The branch, with `inboxDismissCmd` sending to this machine's daemon (`inboxCaller`) | `TestInboxActsOnTheAttachedHost` ("the dismissed item is gone from alpha's own Inbox") | **caught** |

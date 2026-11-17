@@ -143,7 +143,7 @@ func (m *OS) InboxRecapFetch() tea.Cmd {
 	}
 	pending := v.pending
 	*v = inboxRecapView{key: key, loading: true, since: since, pending: pending}
-	call, sessionID, windowID := m.inboxCaller(), it.Session, it.Window
+	call, sessionID, windowID := m.inboxActCaller(), it.Session, it.Window
 	return func() tea.Msg {
 		rc, err := agentActivityRecapCall(call, sessionID, windowID, since)
 		return InboxRecapMsg{Key: key, Recap: rc, Err: err}

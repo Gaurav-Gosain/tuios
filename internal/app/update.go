@@ -222,7 +222,7 @@ type PasteRefusedMsg struct{ Message string }
 // event loop so the work happens on the program goroutine instead of the daemon
 // read-loop goroutine.
 type ClientEvent struct {
-	Type        string // "joined", "left", "resize", "refresh", "agent-mail", "agent-mail-load", "hosts-changed" or "paste-refused"
+	Type        string // "joined", "left", "resize", "refresh", "agent-mail", "agent-mail-load", "inbox-rewatch", "hosts-changed" or "paste-refused"
 	ClientID    string
 	ClientCount int
 	Width       int    // "joined" and "resize"
@@ -593,6 +593,8 @@ func clientEventMsg(event ClientEvent) tea.Msg {
 		return AgentMailMsg{Payload: event.Mail, Attach: event.Attach}
 	case "agent-mail-load":
 		return AgentMailLoadMsg{}
+	case "inbox-rewatch":
+		return InboxRewatchMsg{}
 	case "hosts-changed":
 		return HostsChangedMsg{}
 	case "sessions-changed":
@@ -2719,6 +2721,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case agentsActionMsg:
 		return m, m.applyAgentAction(msg)
+
+	case InboxRewatchMsg:
+		// The client moved to another machine's daemon, which holds the
+		// Inbox now (inbox_route.go).
+		return m, tea.Batch(m.restartInboxWatch(), listenClientEventsUntil(m.stopSignal(), m.ClientEventChan))
 
 	case AgentMailLoadMsg:
 		// A session switch asked for the new session's ring. The read runs in

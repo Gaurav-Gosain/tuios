@@ -237,8 +237,8 @@ func (m *OS) watchesInbox() bool {
 }
 
 // startInboxWatch starts the watcher and returns the command that waits for
-// its first delivery. The queue is this machine's daemon's, whichever session
-// the client is attached to.
+// its first delivery. The queue is the daemon's that holds the Inbox
+// (inboxDialer): this machine's, or the host's the client is attached to.
 func (m *OS) startInboxWatch() tea.Cmd {
 	if !m.watchesInbox() || m.inboxEvents != nil || !m.agentsOn() {
 		return nil
@@ -246,8 +246,7 @@ func (m *OS) startInboxWatch() tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	ch := make(chan tea.Msg, inboxQueue)
 	m.inboxEvents, m.stopInbox = ch, cancel
-	build := m.DaemonClient.ClientVersion()
-	go runInboxWatch(ctx, func() (*session.VerbClient, error) { return session.DialVerbClientAs(build) }, ch)
+	go runInboxWatch(ctx, m.inboxDialer(), ch)
 	return listenForInbox(ch)
 }
 
@@ -1600,8 +1599,7 @@ type InboxAskAnsweredMsg struct {
 // inboxAnswerAskCmd is the answer-ask call, with this client's attach nonce,
 // which is what lets the daemon take the answer as the person's.
 func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string, upgradeDialog bool) tea.Cmd {
-	if m.DaemonClient == nil || m.AttachedHost != "" || it.Host != "" {
-		m.ShowNotification("Answering needs a client attached to this machine's daemon", "warning", m.Settings.NotificationDuration)
+	if !m.inboxCanAct("Answering") || m.inboxElsewhere(it, "The answer") {
 		return nil
 	}
 	nonce := m.inboxNonce()
@@ -1613,15 +1611,10 @@ func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string, upgradeD
 		m.Inbox.replied = make(map[string]bool)
 	}
 	m.Inbox.replied[it.RequestID] = true
-	build := m.DaemonClient.ClientVersion()
+	call := m.inboxActCaller()
 	name := inboxWho(it)
 	from := m.ckAnswerFromNow(it)
 	return func() tea.Msg {
-		client, err := session.DialVerbClientAs(build)
-		if err != nil {
-			return InboxAskAnsweredMsg{Name: name, Answer: answer, From: from, Err: err}
-		}
-		defer func() { _ = client.Close() }()
 		params := map[string]any{
 			"request_id":  it.RequestID,
 			"answer":      answer,
@@ -1633,7 +1626,7 @@ func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string, upgradeD
 		if upgradeDialog {
 			params["upgrade_dialog"] = true
 		}
-		raw, err := client.CallWithTimeout("answer-ask", params, 5*time.Second)
+		raw, err := call("answer-ask", params, 5*time.Second)
 		if err != nil {
 			return InboxAskAnsweredMsg{Name: name, Answer: answer, From: from, Err: err}
 		}
@@ -1653,7 +1646,7 @@ func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string, upgradeD
 func (m *OS) applyInboxAskAnswered(msg InboxAskAnsweredMsg) {
 	switch {
 	case msg.Err != nil:
-		m.ShowNotification("The answer did not go through: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
+		m.ShowNotification("The answer did not go through: "+inboxActErr(msg.Err, m.AttachedHost), "error", m.Settings.NotificationDuration*2)
 	case !msg.Applied && msg.Reason == inboxReplyChanged:
 		m.ShowNotification(msg.Name+" is asking something else now, so nothing was answered. Read it again", "warning", m.Settings.NotificationDuration*2)
 	case !msg.Applied && msg.Standing != "":
@@ -1802,8 +1795,7 @@ func (m *OS) inboxReplyCmd(it session.AttentionItem, decision string) tea.Cmd {
 // a risky call carries the rules the person saw, and an allow of a plan the
 // digest of the plan they read (inboxReplyExtras).
 func (m *OS) inboxReplyCmdWith(it session.AttentionItem, decision, message string) tea.Cmd {
-	if (m.DaemonClient == nil && m.Inbox.call == nil) || m.AttachedHost != "" {
-		m.ShowNotification("Answering needs a client attached to this machine's daemon", "warning", m.Settings.NotificationDuration)
+	if !m.inboxCanAct("Answering") || m.inboxElsewhere(it, "The answer") {
 		return nil
 	}
 	nonce := m.inboxNonce()
@@ -1815,7 +1807,7 @@ func (m *OS) inboxReplyCmdWith(it session.AttentionItem, decision, message strin
 		m.Inbox.replied = make(map[string]bool)
 	}
 	m.Inbox.replied[it.RequestID] = true
-	call := m.inboxCaller()
+	call := m.inboxActCaller()
 	name := inboxWho(it)
 	from := m.ckAnswerFromNow(it)
 	params := map[string]any{
@@ -1858,7 +1850,7 @@ func (m *OS) applyInboxApprovalReplied(msg InboxApprovalRepliedMsg) {
 		// or the person waits on an empty pane.
 		m.refuseAnswer(it, "The prompt did not go back to the pane: "+msg.Err.Error()+". Answer it in the agents view", "error")
 	case msg.Err != nil:
-		m.refuseAnswer(it, "Not answered: "+msg.Err.Error(), "error")
+		m.refuseAnswer(it, "Not answered: "+inboxActErr(msg.Err, m.AttachedHost), "error")
 	case !msg.Applied && msg.Reason == inboxReplyChanged:
 		m.refuseAnswer(it, "Not answered: "+msg.Name+" is asking about something else now. Read it again", "warning")
 	case !msg.Applied:
@@ -2058,9 +2050,9 @@ func (m *OS) InboxDismiss() tea.Cmd {
 // marks a dismiss the client sends on its own, which shows nothing when it
 // cannot be sent or fails.
 func (m *OS) inboxDismissCmd(id string, silent bool) tea.Cmd {
-	if (m.DaemonClient == nil && m.Inbox.call == nil) || m.AttachedHost != "" {
+	if m.DaemonClient == nil && m.Inbox.call == nil {
 		if !silent {
-			m.ShowNotification("Dismissing needs a client attached to this machine's daemon", "info", m.Settings.NotificationDuration)
+			m.ShowNotification("Dismissing needs a client attached to a daemon", "info", m.Settings.NotificationDuration)
 		}
 		return nil
 	}
@@ -2071,7 +2063,7 @@ func (m *OS) inboxDismissCmd(id string, silent bool) tea.Cmd {
 		}
 		return nil
 	}
-	call := m.inboxCaller()
+	call := m.inboxActCaller()
 	return func() tea.Msg {
 		_, err := call("dismiss-attention", map[string]any{"id": id, "human_nonce": nonce}, 5*time.Second)
 		return InboxDismissedMsg{Err: err, Silent: silent}
@@ -2095,8 +2087,11 @@ func (m *OS) InboxRelease() tea.Cmd {
 	if m.refuseRemoteAnswer("A release") {
 		return nil
 	}
-	if it.Host != "" || m.AttachedHost != "" || m.DaemonClient == nil {
+	if it.Host != "" {
 		m.ShowNotification("That mail is held on another machine; attach there to pass it on", "info", m.Settings.NotificationDuration)
+		return nil
+	}
+	if !m.inboxCanAct("Passing on mail") {
 		return nil
 	}
 	nonce := m.inboxNonce()
@@ -2104,15 +2099,10 @@ func (m *OS) InboxRelease() tea.Cmd {
 		m.ShowNotification(m.noNonceText(), "error", m.Settings.NotificationDuration*2)
 		return nil
 	}
-	build := m.DaemonClient.ClientVersion()
+	call := m.inboxActCaller()
 	sessionName, id, heldFor := it.Session, it.HeldID, it.HeldFor
 	return func() tea.Msg {
-		client, err := session.DialVerbClientAs(build)
-		if err != nil {
-			return InboxReleasedMsg{Err: err}
-		}
-		defer func() { _ = client.Close() }()
-		_, err = client.CallWithTimeout("release-agent-message", map[string]any{"session": sessionName, "id": id, "human_nonce": nonce}, 5*time.Second)
+		_, err := call("release-agent-message", map[string]any{"session": sessionName, "id": id, "human_nonce": nonce}, 5*time.Second)
 		return InboxReleasedMsg{To: heldFor, Err: err}
 	}
 }
@@ -2126,7 +2116,7 @@ type InboxReleasedMsg struct {
 // applyInboxReleased says where the mail went, or why it did not.
 func (m *OS) applyInboxReleased(msg InboxReleasedMsg) {
 	if msg.Err != nil {
-		m.ShowNotification("The mail was not passed on: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
+		m.ShowNotification("The mail was not passed on: "+inboxActErr(msg.Err, m.AttachedHost), "error", m.Settings.NotificationDuration*2)
 		return
 	}
 	m.ShowNotification("Passed on to "+printableTitle(msg.To), "success", m.Settings.NotificationDuration)
@@ -2184,7 +2174,7 @@ func (m *OS) applyInboxDismissed(msg InboxDismissedMsg) {
 	if msg.Err == nil || msg.Silent || inboxDismissGone(msg.Err) {
 		return
 	}
-	m.ShowNotification("The dismiss did not go through: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
+	m.ShowNotification("The dismiss did not go through: "+inboxActErr(msg.Err, m.AttachedHost), "error", m.Settings.NotificationDuration*2)
 }
 
 // inboxNeedsYou reports whether an item is something a person has to act on,

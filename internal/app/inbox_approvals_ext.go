@@ -602,7 +602,7 @@ func (m *OS) InboxApprovalFetch() tea.Cmd {
 	}
 	seen := pv.seenEnd
 	*pv = inboxPlanView{requestID: it.RequestID, sha: it.PlanSHA, loading: true, seenEnd: seen}
-	call, id, sessName := m.inboxCaller(), it.RequestID, it.Session
+	call, id, sessName := m.inboxActCaller(), it.RequestID, it.Session
 	return func() tea.Msg {
 		raw, err := call("get-approval", map[string]any{"request_id": id, "session": sessName}, inboxApprovalFetchTimeout)
 		if err != nil {

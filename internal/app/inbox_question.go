@@ -43,7 +43,7 @@ func inboxAsksInPane(it session.AttentionItem) bool {
 // InboxQuestionFetch reads the prompt of the question under the cursor, once
 // per item and question.
 func (m *OS) InboxQuestionFetch() tea.Cmd {
-	if !m.ShowInbox || m.Inbox.Peek != nil || m.AttachedHost != "" {
+	if !m.ShowInbox || m.Inbox.Peek != nil {
 		return nil
 	}
 	it, ok := m.inboxSelected()
@@ -58,7 +58,7 @@ func (m *OS) InboxQuestionFetch() tea.Cmd {
 		return nil
 	}
 	*qv = inboxQuestionView{itemID: it.ID, summary: it.Summary, loading: true}
-	call, id, sum := m.inboxCaller(), it.ID, it.Summary
+	call, id, sum := m.inboxActCaller(), it.ID, it.Summary
 	params := map[string]any{"session": it.Session, "window": it.Window}
 	return func() tea.Msg {
 		raw, err := call("peek-prompt", params, inboxPeekTimeout)
