@@ -38,7 +38,7 @@ func TestStdlibLogReachesRing(t *testing.T) {
 	log.SetOutput(&ringWriter{})
 	log.Printf("harness manifest %s: %v", "demo.toml", os.ErrNotExist)
 
-	entries := GetLogEntries(0)
+	entries := ringEntriesWith("harness manifest demo.toml")
 	if len(entries) != 1 {
 		t.Fatalf("stdlib log produced %d ring entries, want 1", len(entries))
 	}
@@ -61,7 +61,7 @@ func TestStdlibLogKeepsPercentSigns(t *testing.T) {
 	log.SetOutput(&ringWriter{})
 	log.Printf("disk is 90%% full")
 
-	entries := GetLogEntries(0)
+	entries := ringEntriesWith("disk is 90")
 	if len(entries) != 1 {
 		t.Fatalf("got %d entries, want 1", len(entries))
 	}
@@ -154,6 +154,20 @@ func TestFileSinkSilentWithoutADaemon(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "tuios", "daemon.log")); !os.IsNotExist(err) {
 		t.Fatalf("a process that never installed the sink wrote a log file (err %v)", err)
 	}
+}
+
+// ringEntriesWith is the ring's entries whose message holds text. The ring is
+// the process's own, so a daemon another test left stopping can add a line
+// of its own between the clear and the read; counting every entry failed
+// then (a "[recv] Resize" line from a shutting-down daemon).
+func ringEntriesWith(text string) []LogEntry {
+	var out []LogEntry
+	for _, e := range GetLogEntries(0) {
+		if strings.Contains(e.Message, text) {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // restoreStdlibLogger puts the process-wide standard logger back after a test
