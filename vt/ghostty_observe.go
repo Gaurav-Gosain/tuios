@@ -125,7 +125,9 @@ func (t *GhosttyTerminal) resetShadowState() {
 	t.modifyOtherKeys.Store(0)
 	t.semanticMarkers.Clear()
 	// The library puts the default tab stops back and clears the title.
-	// The title stack and the icon name are kept here, so they go too.
+	// The title stack and the icon name are kept here, so they go too. The
+	// OSC 1 name (explicitIcon) stays, as it does on the pure Go emulator,
+	// so a reset does not take a workspace's label away.
 	t.tabstops = uv.DefaultTabStops(t.width)
 	t.iconName = ""
 	t.titleStack = nil
