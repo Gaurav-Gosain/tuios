@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // How much a linked machine may write here.
@@ -264,7 +265,7 @@ func (d *Daemon) claimLinkWriteIn(cs *connState, path, part string, offset, leng
 		}
 		if free := diskFree(dir); free >= 0 && free-u.fsClaimed[fs]-grow < policy.FilesMinFree {
 			me := thisMachineName()
-			return none, newVerbError(ErrVerbDiskFull, "the disk on "+me+" would have less than "+sizeWords(policy.FilesMinFree)+" free after this file, so it was not written. Free space there, or lower files_min_free in the config of "+me+".")
+			return none, newVerbError(ErrVerbDiskFull, "the disk on "+me+" would have less than "+units.Bytes(policy.FilesMinFree)+" free after this file, so it was not written. Free space there, or lower files_min_free in the config of "+me+".")
 		}
 	}
 
@@ -322,15 +323,4 @@ func peerName(peer string) string {
 		return "the linked machine"
 	}
 	return peer
-}
-
-// sizeWords writes n bytes as a person reads them: "1 GiB", "500 MiB".
-func sizeWords(n int64) string {
-	switch {
-	case n >= 1<<30 && n%(1<<30) == 0:
-		return strconv.FormatInt(n>>30, 10) + " GiB"
-	case n >= 1<<20:
-		return strconv.FormatInt(n>>20, 10) + " MiB"
-	}
-	return strconv.FormatInt(n, 10) + " bytes"
 }

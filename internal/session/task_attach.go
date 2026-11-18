@@ -25,6 +25,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/ghpr"
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // Attachments on task cards: a picture, a text, a diff or a link an agent or
@@ -376,18 +377,10 @@ func cmpOrString(a, b string) string {
 
 // tooLarge is the refusal of a file or a session over a limit.
 func tooLarge(what string, size, limit int64, option string) *verbError {
-	return hintedVerbError(ErrVerbAttachmentTooLarge, what+" is "+attachMiB(size)+", over the limit of "+attachMiB(limit), &VerbHint{
+	return hintedVerbError(ErrVerbAttachmentTooLarge, what+" is "+units.Bytes(size)+", over the limit of "+units.Bytes(limit), &VerbHint{
 		Param:  "content",
 		Detail: "Nothing was attached. The limit is [tasks] " + option + ". Attach a smaller file, or detach one first.",
 	})
-}
-
-// attachMiB is n bytes as a person reads a size.
-func attachMiB(n int64) string {
-	if n < 1<<20 {
-		return strconv.FormatInt((n+1023)>>10, 10) + " KiB"
-	}
-	return strconv.FormatFloat(float64(n)/(1<<20), 'f', 1, 64) + " MiB"
 }
 
 // attachItem is one attachment an attach-task call puts on a card, with its

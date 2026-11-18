@@ -12,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -288,8 +289,8 @@ func (m *OS) applyImageProbe(msg imageProbeMsg) tea.Cmd {
 // deliverImageCmd has the image written where window's process runs.
 func (m *OS) deliverImageCmd(window string, data []byte) tea.Cmd {
 	if len(data) > session.PasteImageMaxBytes {
-		m.ShowNotification(fmt.Sprintf("The image is %.1f MB. The limit is %d MB. Nothing was pasted.",
-			float64(len(data))/(1<<20), session.PasteImageMaxBytes>>20), "warning", m.Settings.NotificationDuration*2)
+		m.ShowNotification("The image is "+units.Bytes(int64(len(data)))+". The limit is "+units.Bytes(session.PasteImageMaxBytes)+". Nothing was pasted.",
+			"warning", m.Settings.NotificationDuration*2)
 		return nil
 	}
 	if m.imagePaste.call == nil && (m.DaemonClient == nil || !m.IsDaemonSession) {

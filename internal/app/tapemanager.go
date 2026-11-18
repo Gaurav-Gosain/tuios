@@ -475,7 +475,7 @@ func (m *OS) tapeFileRow(i, width int, pal overlay.Palette) string {
 
 	// The name gives way first, then the timestamp: a row that keeps its whole
 	// name at the cost of the panel's edge is not a row anyone can read.
-	size := units.ShortBytes(file.Size)
+	size := units.Bytes(file.Size)
 	stamp := file.Modified.Format("Jan 02 15:04")
 	nameW := max(width-lipgloss.Width(size)-lipgloss.Width(stamp)-6, 6)
 	if width < 40 {

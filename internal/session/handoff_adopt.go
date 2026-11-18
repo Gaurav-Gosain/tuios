@@ -14,6 +14,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"tuios.dev/vt"
 )
 
@@ -232,8 +233,8 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 	d.keepPrevBinary()
 	// The copies the images before this one ran from are no longer needed.
 	removeOldCopies()
-	LogBasic("Live upgrade: adopted %d sessions and %d panes from %s (paused %.0f ms, apply %.0f ms, peak heap in use %d MB)",
-		len(m.Sessions), len(m.Panes), stats.From, stats.PausedMS, stats.ApplyMS, stats.ApplyPeakHeapInuse>>20)
+	LogBasic("Live upgrade: adopted %d sessions and %d panes from %s (paused %.0f ms, apply %.0f ms, peak heap in use %s)",
+		len(m.Sessions), len(m.Panes), stats.From, stats.PausedMS, stats.ApplyMS, units.Bytes(int64(stats.ApplyPeakHeapInuse)))
 	return nil
 }
 

@@ -14,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // The image view: one picture of the draft at the largest size the screen
@@ -183,7 +184,7 @@ func (m *OS) drawImageView(c *ckCanvas, l ckLook, top int) {
 	x0, x1 := margin, c.w-margin
 	y := 1
 	head := []ckSeg{{t: l.g(ckGlyphImage) + " ", fg: pal.FgMute}, {t: ckImageName(img, v.idx), fg: pal.Fg, attrs: ckBold},
-		{t: "   " + ckImageSize(img), fg: pal.FgDim}, {t: "   " + ckBytes(len(img.Data)), fg: pal.FgDim}}
+		{t: "   " + ckImageSize(img), fg: pal.FgDim}, {t: "   " + units.Bytes(int64(len(img.Data))), fg: pal.FgDim}}
 	if v.from != "" {
 		head = append(head, ckSeg{t: "   " + v.from, fg: pal.FgMute})
 	} else if v.who != "" {
@@ -274,17 +275,6 @@ func (m *OS) CockpitImagePicture() tea.Cmd {
 	res := m.viewReserve()
 	m.cockpitImageLayout(m.GetRenderWidth(), m.GetRenderHeight()-res.Top-res.Bottom, res.Top)
 	return m.cockpitImagePicture()
-}
-
-// ckBytes is a byte count in words: "79 KB".
-func ckBytes(n int) string {
-	switch {
-	case n >= 1<<20:
-		return strconv.FormatFloat(float64(n)/(1<<20), 'f', 1, 64) + " MB"
-	case n >= 1<<10:
-		return strconv.Itoa(n>>10) + " KB"
-	}
-	return strconv.Itoa(n) + " B"
 }
 
 // ckFitBox is the largest box of at most maxCols by maxRows cells that holds

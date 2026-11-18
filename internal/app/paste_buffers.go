@@ -19,6 +19,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // Paste buffers: the yanks tuios keeps to paste again, after tmux's.
@@ -583,7 +584,7 @@ func (m *OS) renderBufferChooser() (string, overlay.Geometry, []overlayRowHit) {
 // cut to bufferPaneTagCells. A pane's title is the pane's to choose, so it
 // can never push the buffer's own fields off the row.
 func bufferChooserRow(b PasteBufferItem, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
-	size := byteSize(b.Bytes)
+	size := units.Bytes(int64(b.Bytes))
 	nameColor, sampleColor := pal.FgMute, pal.FgDim
 	if selected {
 		nameColor, sampleColor = pal.Accent, pal.Fg
@@ -622,17 +623,4 @@ const (
 // space or control characters made one space.
 func paneTagTitle(title string) string {
 	return strings.Join(strings.Fields(printableTitle(title)), " ")
-}
-
-// byteSize is a buffer size as a short label.
-func byteSize(n int) string {
-	switch {
-	case n >= 1<<20:
-		return fmt.Sprintf("%.1f MiB", float64(n)/(1<<20))
-	case n >= 1<<10:
-		return fmt.Sprintf("%.1f KiB", float64(n)/(1<<10))
-	case n == 1:
-		return "1 byte"
-	}
-	return fmt.Sprintf("%d bytes", n)
 }

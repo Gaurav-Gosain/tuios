@@ -12,6 +12,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/hostsetup"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/textedit"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // The add sheet's drawing: a card over the dimmed screen on the spawn
@@ -350,7 +351,7 @@ func (p *msPainter) lines() {
 				bw := min(40, p.w/3)
 				lit := int(int64(bw) * ln.Done / ln.Total)
 				p.put(p.x+5, p.y, pal.AccentBright, false, "["+strings.Repeat("#", lit)+strings.Repeat("-", bw-lit)+"]  "+
-					strconv.FormatInt(ln.Done>>20, 10)+" of "+strconv.FormatInt(ln.Total>>20, 10)+" MB")
+					units.Bytes(ln.Done)+" of "+units.Bytes(ln.Total))
 				p.y++
 			}
 			if ln.State == hostsetup.StateFailed {

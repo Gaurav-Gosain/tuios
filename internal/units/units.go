@@ -31,17 +31,6 @@ func Bytes(n int64) string {
 	return fmt.Sprintf("%.2f %siB", v, units)
 }
 
-// ShortBytes writes a size with no space and one decimal: 512B, 1.5KB, 3.2MB.
-func ShortBytes(n int64) string {
-	switch {
-	case n < 1024:
-		return fmt.Sprintf("%dB", n)
-	case n < 1024*1024:
-		return fmt.Sprintf("%.1fKB", float64(n)/1024)
-	}
-	return fmt.Sprintf("%.1fMB", float64(n)/(1024*1024))
-}
-
 // Duration writes a time span to the second: 17s, 3m 05s, 1h 02m.
 func Duration(d time.Duration) string {
 	switch {

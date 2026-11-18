@@ -600,7 +600,7 @@ func ckAttachWhat(a session.TaskAttachment) string {
 		}
 		return "link"
 	}
-	return a.Kind + sepWord() + ckBytes(int(a.Size))
+	return a.Kind + sepWord() + units.Bytes(a.Size)
 }
 
 // ckCardWorktree is the work tree of the session a card's work is in, as the

@@ -209,7 +209,7 @@ func TestThePersonsNewestIsNeverAPanes(t *testing.T) {
 			row = line
 		}
 	}
-	if !strings.Contains(row, "planted") || !strings.Contains(row, "7 bytes") || strings.Contains(row, strings.Repeat("x", 20)) {
+	if !strings.Contains(row, "planted") || !strings.Contains(row, "7 B") || strings.Contains(row, strings.Repeat("x", 20)) {
 		t.Fatalf("a long pane name pushed the buffer's text or size off its row, or was not cut:\n%q", row)
 	}
 	saveFrame(t, term, "paste-buffers-planted")

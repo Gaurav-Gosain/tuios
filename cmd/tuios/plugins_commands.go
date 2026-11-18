@@ -19,6 +19,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/herdrcli"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/procsetup"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/spf13/cobra"
 )
 
@@ -645,7 +646,7 @@ func newPluginsStatsCommand() *cobra.Command {
 				}
 				mem := "-"
 				if known, _ := m["rss_known"].(bool); known {
-					mem = humanBytes(num("rss_bytes"))
+					mem = units.Bytes(num("rss_bytes"))
 				}
 				last := "never"
 				if ms := num("last_unix_ms"); ms > 0 {

@@ -18,6 +18,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // The other views of a file in quick look.
@@ -477,7 +478,7 @@ func quickLookDrawArchive(c *ckCanvas, pal overlay.Palette, ql *quickLookState, 
 		}
 		right := w - 1
 		if !e.dir {
-			right = c.textR(w-1, top+i, ckSeg{t: quickLookSize(e.size), fg: pal.FgMute}) - 1
+			right = c.textR(w-1, top+i, ckSeg{t: units.Bytes(e.size), fg: pal.FgMute}) - 1
 		}
 		c.text(1+e.depth*2, top+i, right, ckSeg{t: e.name, fg: ink})
 	}
@@ -497,21 +498,21 @@ func quickLookViewMeta(r *quickLookResult) []string {
 	switch r.kind {
 	case "table":
 		t := r.table
-		parts := []string{"CSV", plural.Count(len(t.rows)-1, "row"), plural.Count(len(t.widths), "column"), quickLookSize(r.size)}
+		parts := []string{"CSV", plural.Count(len(t.rows)-1, "row"), plural.Count(len(t.widths), "column"), units.Bytes(r.size)}
 		if t.cut {
 			parts[1] = "The first " + parts[1]
 		}
 		return parts
 	case "archive":
-		parts := []string{"Archive", plural.Count(r.archiveItems, "item"), quickLookSize(r.size) + ", " + quickLookSize(r.unpacked) + " unpacked"}
+		parts := []string{"Archive", plural.Count(r.archiveItems, "item"), units.Bytes(r.size) + ", " + units.Bytes(r.unpacked) + " unpacked"}
 		if r.capped {
 			parts[1] = "More than " + parts[1]
 		}
 		return parts
 	case "hex":
-		parts := []string{r.mime, quickLookSize(r.size)}
+		parts := []string{r.mime, units.Bytes(r.size)}
 		if int64(len(r.lines))*16 < r.size {
-			parts = append(parts, "Showing the first "+quickLookSize(int64(len(r.lines))*16)+".")
+			parts = append(parts, "Showing the first "+units.Bytes(int64(len(r.lines))*16)+".")
 		}
 		return parts
 	}

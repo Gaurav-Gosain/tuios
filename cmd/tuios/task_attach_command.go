@@ -12,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/spf13/cobra"
 )
 
@@ -289,7 +290,7 @@ func attachWhat(a taskAttachment) string {
 	if a.URL != "" {
 		return plainLine(a.Kind) + ", " + plainLine(a.URL)
 	}
-	return plainLine(a.Kind) + ", " + humanBytes(a.Size)
+	return plainLine(a.Kind) + ", " + units.Bytes(a.Size)
 }
 
 // newTaskAttachmentsCommand builds `tuios task attachments`.
@@ -338,7 +339,7 @@ func writeAttachments(w io.Writer, list []taskAttachment) error {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "NAME\tKIND\tSIZE\tBY\tADDED\tNOTE")
 	for _, a := range list {
-		size := humanBytes(a.Size)
+		size := units.Bytes(a.Size)
 		if a.URL != "" {
 			size = "-"
 		}
@@ -356,7 +357,7 @@ func describeAttachments(b *strings.Builder, list []taskAttachment) {
 	var rows strings.Builder
 	tw := tabwriter.NewWriter(&rows, 0, 0, 2, ' ', 0)
 	for _, a := range list {
-		what := plainLine(a.Kind) + ", " + humanBytes(a.Size)
+		what := plainLine(a.Kind) + ", " + units.Bytes(a.Size)
 		if a.URL != "" {
 			what = plainLine(a.Kind) + ", " + plainLine(a.URL)
 		}
@@ -455,7 +456,7 @@ prints its address. An existing FILE is not written over.`,
 			if err := fh.Close(); err != nil {
 				return errfmt.Errorf("failed to write %s: %w", out, err)
 			}
-			fmt.Printf("Saved %s of %s%s to %s (%s).\n", plainLine(res.Attachment.Name), plainLine(args[0]), t.on(), out, humanBytes(int64(len(data))))
+			fmt.Printf("Saved %s of %s%s to %s (%s).\n", plainLine(res.Attachment.Name), plainLine(args[0]), t.on(), out, units.Bytes(int64(len(data))))
 			return nil
 		},
 	}

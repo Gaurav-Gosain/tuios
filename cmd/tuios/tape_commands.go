@@ -207,7 +207,7 @@ func listTapeFiles(asJSON bool) error {
 	dateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 
 	for _, file := range files {
-		sizeStr := units.ShortBytes(file.Size)
+		sizeStr := units.Bytes(file.Size)
 		dateStr := file.Modified.Format("2006-01-02 15:04")
 		fmt.Printf("  %s  %s  %s\n",
 			nameStyle.Render(fmt.Sprintf("%-30s", file.Name)),

@@ -27,6 +27,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/hostsetup"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // The interactive mode of `tuios hosts setup`: on a terminal, a choice the
@@ -771,7 +772,7 @@ func (m *setupModel) line(l hostsetup.Line, label string, w int) {
 	if l.Total > 0 {
 		n := int(20 * l.Done / l.Total)
 		bar = mAccent + strings.Repeat("━", n) + mTrack + strings.Repeat("─", 20-n) + "  "
-		text = strconv.FormatFloat(float64(l.Done)/1e6, 'f', 1, 64) + " of " + strconv.FormatFloat(float64(l.Total)/1e6, 'f', 1, 64) + " MB"
+		text = units.Bytes(l.Done) + " of " + units.Bytes(l.Total)
 	}
 	m.ln(0, "  ", m.mark(l.State), " ", name, pad(label, w), bar, mMute, text)
 }

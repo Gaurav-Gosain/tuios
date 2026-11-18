@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -181,7 +182,7 @@ func (m *Model) renderStrip(width int, in inks) []string {
 				out = append(out, fill(pad+dim.Render("+"+strconv.Itoa(len(imgs)-maxThumbs)+" more"), width, in.surface))
 				break
 			}
-			line := "Image #" + strconv.Itoa(b.n) + " · " + b.img.measureWords() + " · " + byteWords(len(b.img.Data))
+			line := "Image #" + strconv.Itoa(b.n) + " · " + b.img.measureWords() + " · " + units.Bytes(int64(len(b.img.Data)))
 			out = append(out, fill(pad+dim.Render(ansi.Truncate(line, width-gutter, "…")), width, in.surface))
 		}
 		return out
@@ -235,17 +236,6 @@ func (m *Model) renderStrip(width int, in inks) []string {
 	return out
 }
 
-// byteWords is a size in bytes as people read it: 412 KB, 1.5 MB.
-func byteWords(n int) string {
-	switch {
-	case n >= 1<<20:
-		return strconv.FormatFloat(float64(n)/(1<<20), 'f', 1, 64) + " MB"
-	case n >= 1<<10:
-		return strconv.Itoa(n>>10) + " KB"
-	}
-	return strconv.Itoa(n) + " bytes"
-}
-
 // renderImageView draws the open image: a heading that says what it is, and
 // the picture as large as the view holds, or a line that says it cannot be
 // shown.
@@ -255,7 +245,7 @@ func (m *Model) renderImageView(width int, in inks) []string {
 	head := on(in.surface).Foreground(in.st.readable(in.st.Text, in.surface)).Bold(true).
 		Render("Image #" + strconv.Itoa(p.block.n))
 	head += on(in.surface).Foreground(in.st.readable(in.st.Dim, in.surface)).
-		Render(" · " + img.measureWords() + " · " + byteWords(len(img.Data)))
+		Render(" · " + img.measureWords() + " · " + units.Bytes(int64(len(img.Data))))
 	out := []string{fill(ansi.Truncate(head, width, "…"), width, in.surface)}
 	dim := on(in.surface).Foreground(in.st.readable(in.st.Dim, in.surface))
 	pad := on(in.surface).Render(strings.Repeat(" ", gutter))

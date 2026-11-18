@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
@@ -373,7 +374,7 @@ func stashGetJSON(path string, size int, host, stored string) map[string]any {
 // stdout carries only the path.
 func printStashGet(out, notes io.Writer, path string, size int64, on string) {
 	fmt.Fprintln(out, path)
-	fmt.Fprintf(notes, "copied %s%s\n", stashBytes(size), on)
+	fmt.Fprintf(notes, "copied %s%s\n", units.Bytes(size), on)
 }
 
 // printStashPut prints the stored path to out and the note about what the put
@@ -391,9 +392,9 @@ func printStashPut(out, notes io.Writer, raw json.RawMessage) error {
 		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	fmt.Fprintln(out, res.Path)
-	note := fmt.Sprintf("stored %s", stashBytes(res.Bytes))
+	note := fmt.Sprintf("stored %s", units.Bytes(res.Bytes))
 	if res.Deduped {
-		note = fmt.Sprintf("already stored, %s", stashBytes(res.Bytes))
+		note = fmt.Sprintf("already stored, %s", units.Bytes(res.Bytes))
 	}
 	if res.Evicted > 0 {
 		note += fmt.Sprintf(", dropped %s to make room", plural.Count(res.Evicted, "older file"))
@@ -451,7 +452,7 @@ func printStashList(w io.Writer, raw json.RawMessage) error {
 		}
 		rows = append(rows, []string{
 			e.Name[:min(12, len(e.Name))],
-			stashBytes(e.Bytes),
+			units.Bytes(e.Bytes),
 			e.MediaType,
 			used,
 			e.Source,
@@ -479,22 +480,10 @@ func printStashList(w io.Writer, raw json.RawMessage) error {
 
 	lipgloss.Fprintln(w, t.Render())
 	fmt.Fprintf(w, "\n%s, %s of %s, in %s\n",
-		plural.Count(res.Total, "file"), stashBytes(res.Bytes), stashBytes(res.MaxBytes), res.Dir)
+		plural.Count(res.Total, "file"), units.Bytes(res.Bytes), units.Bytes(res.MaxBytes), res.Dir)
 	if res.Evicted > 0 {
 		fmt.Fprintf(w, "%s %s dropped to make room. USED marks the ones a message still points at.\n", plural.Count(res.Evicted, "file"), plural.Word(res.Evicted, "was", "were"))
 	}
 	fmt.Fprintln(w, "Every file here is deleted when the session is killed or the daemon stops.")
 	return nil
-}
-
-// stashBytes renders a size the way a person reads one.
-func stashBytes(n int64) string {
-	switch {
-	case n >= 1<<20:
-		return fmt.Sprintf("%.1f MB", float64(n)/float64(1<<20))
-	case n >= 1<<10:
-		return fmt.Sprintf("%.1f KB", float64(n)/float64(1<<10))
-	default:
-		return fmt.Sprintf("%d B", n)
-	}
 }

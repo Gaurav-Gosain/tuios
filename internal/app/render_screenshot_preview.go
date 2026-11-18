@@ -7,6 +7,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"tuios.dev/shot"
 )
 
@@ -197,7 +198,7 @@ func (m *OS) shotPreviewHeader() string {
 	// The size is a fact about a file, so it waits until there is one rather
 	// than showing a zero the panel would have to correct a moment later.
 	if p.Bytes > 0 {
-		line += fmt.Sprintf("  %d KB", max(1, p.Bytes/1024))
+		line += "  " + units.Bytes(int64(p.Bytes))
 	}
 	return line
 }

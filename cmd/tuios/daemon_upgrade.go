@@ -22,6 +22,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/spf13/cobra"
 )
 
@@ -405,7 +406,7 @@ func upgradeLive(say func(string, ...any), binary string) (upgradeOutcome, error
 		say("Closed %d exited %s on other machines, which cannot be handed over: %s.\n",
 			n, plural.Word(n, "pane", "panes"), strings.Join(accepted.ClosedRemote, "; "))
 	}
-	say("Paused %d %s, saved their screens (%s).\n", accepted.Panes, plural.Word(accepted.Panes, "pane", "panes"), humanBytes(accepted.ManifestBytes))
+	say("Paused %d %s, saved their screens (%s).\n", accepted.Panes, plural.Word(accepted.Panes, "pane", "panes"), units.Bytes(accepted.ManifestBytes))
 	say("Starting %s in place (pid %d kept)...\n", accepted.To, before.PID)
 
 	after, err := awaitUpgradedDaemon(before.Instance, daemonUpgradeWait)
@@ -653,15 +654,4 @@ func handoffAcceptsOf(binary string) (session.HandoffAccepts, error) {
 		return acc, errfmt.Errorf("it reads handoff v%d to v%d, and this daemon writes v%d", acc.Handoff[0], acc.Handoff[1], session.HandoffVersion)
 	}
 	return acc, nil
-}
-
-// humanBytes is n bytes for a person.
-func humanBytes(n int64) string {
-	switch {
-	case n >= 1<<20:
-		return strconv.FormatFloat(float64(n)/(1<<20), 'f', 1, 64) + " MB"
-	case n >= 1<<10:
-		return strconv.FormatFloat(float64(n)/(1<<10), 'f', 1, 64) + " KB"
-	}
-	return strconv.FormatInt(n, 10) + " bytes"
 }

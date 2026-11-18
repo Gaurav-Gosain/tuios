@@ -26,6 +26,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"tuios.dev/shot/mosaic"
 )
 
@@ -1267,7 +1268,7 @@ func quickLookMeta(r *quickLookResult) string {
 	var parts []string
 	switch r.kind {
 	case "text":
-		parts = append(parts, quickLookSize(r.size))
+		parts = append(parts, units.Bytes(r.size))
 		switch {
 		case r.older:
 			parts = append(parts, "This machine runs an older tuios. It sends only the start of the file.")
@@ -1283,7 +1284,7 @@ func quickLookMeta(r *quickLookResult) string {
 			parts = append(parts, "Long lines are cut.")
 		}
 	case "markdown":
-		parts = append(parts, "Markdown", quickLookSize(r.size))
+		parts = append(parts, "Markdown", units.Bytes(r.size))
 		if r.more {
 			parts = append(parts, "Showing the start of the file.")
 		}
@@ -1302,13 +1303,13 @@ func quickLookMeta(r *quickLookResult) string {
 		} else if r.img != nil {
 			parts = append(parts, strconv.Itoa(r.img.Width)+" x "+strconv.Itoa(r.img.Height))
 		}
-		parts = append(parts, quickLookSize(r.size))
+		parts = append(parts, units.Bytes(r.size))
 	case "pdf":
 		parts = append(parts, "PDF")
 		if r.pages == 1 {
 			parts = append(parts, plural.Count(r.pages, "page"))
 		}
-		parts = append(parts, quickLookSize(r.size))
+		parts = append(parts, units.Bytes(r.size))
 	case "video":
 		parts = append(parts, "Film")
 		if r.width > 0 && r.height > 0 {
@@ -1317,7 +1318,7 @@ func quickLookMeta(r *quickLookResult) string {
 			s := r.durationMs / 1000
 			parts = append(parts, strconv.FormatInt(s/60, 10)+":"+pad2(s%60))
 		}
-		parts = append(parts, quickLookSize(r.size))
+		parts = append(parts, units.Bytes(r.size))
 	case "error":
 		return "No preview"
 	default:
@@ -1325,17 +1326,9 @@ func quickLookMeta(r *quickLookResult) string {
 			mime, _, _ := strings.Cut(r.mime, ";")
 			parts = append(parts, mime)
 		}
-		parts = append(parts, quickLookSize(r.size))
+		parts = append(parts, units.Bytes(r.size))
 	}
 	return strings.Join(parts, " · ")
-}
-
-// quickLookSize is a file size in words.
-func quickLookSize(n int64) string {
-	if n >= 1<<30 {
-		return strconv.FormatFloat(float64(n)/(1<<30), 'f', 1, 64) + " GB"
-	}
-	return ckBytes(int(n))
 }
 
 // pad2 is n in two digits.
