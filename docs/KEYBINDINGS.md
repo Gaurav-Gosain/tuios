@@ -3368,7 +3368,7 @@ new_window = ["n", "ctrl+t"]
 close_window = []          # unbind: the key goes back to the pane
 ```
 
-An empty list and a missing line are different. A missing action gets its default back at the next load. An empty list stays empty. Key syntax and every section are on the [Configuration](#keybindings) page.
+An empty list and a missing line are different. A missing action gets its default back at the next load. An empty list stays empty. Key syntax and every section are on the [Configuration](CONFIGURATION.md#keybindings-the-keybindings-table) page.
 
 The `[keybindings]` sections can also be in a file that `config.toml` includes, or in a file in `config.d`. The tables merge key by key. A `[[keybindings.command]]` entry in a later file changes the earlier entry with the same `name`, or with the same `key` when one of them has no name. Add `disabled = true` to an entry to remove the earlier entry that it matches. The keybind manager and `tuios keybinds unbind` write a change to the file that sets the action. See [Split the Config](https://tuios.dev/docs/config-files).
 
