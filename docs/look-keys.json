@@ -23,7 +23,7 @@
     {
       "path": "appearance.border_focused_color",
       "type": "string",
-      "description": "Colour overriding the focused pane's border: #89b4fa, a slot name such as bright_cyan, or a role such as accent",
+      "description": "Colour overriding the focused pane's border in both modes: #89b4fa, a slot name such as bright_cyan, or a role such as accent",
       "default": "",
       "color": true
     },
@@ -44,13 +44,13 @@
     {
       "path": "appearance.border_focused_gradient",
       "type": "string",
-      "description": "Two or more colours, separated by spaces, that the focused pane's border steps through. Empty draws one colour",
+      "description": "Two or more colours, separated by spaces or commas, that the focused pane's border steps through. Empty draws one colour",
       "default": ""
     },
     {
       "path": "appearance.border_gradient_angle",
       "type": "int",
-      "description": "Direction of the focused border's gradient in degrees: 0 runs left to right, 90 top to bottom",
+      "description": "Direction of the focused border's gradient in degrees: 0 runs left to right, 90 top to bottom, 45 from the top left corner to the bottom right one",
       "default": "45",
       "max": 359
     },
@@ -88,7 +88,7 @@
     {
       "path": "appearance.desktop_background",
       "type": "string",
-      "description": "Background behind and between panes, including gaps and an empty workspace: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background",
+      "description": "Background behind and between panes: the gaps between tiled panes, the space around floating ones, and an empty workspace with its welcome splash. off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background",
       "default": "",
       "accepted": [
         "off",
@@ -263,7 +263,7 @@
     {
       "path": "appearance.master_position",
       "type": "string",
-      "description": "Side the master panes take in the master-stack layout. Center puts the stack on both sides.",
+      "description": "Side the master panes take in the master-stack layout. With center, the stack panes go to the right and the left in turn.",
       "default": "left",
       "accepted": [
         "left",
@@ -309,7 +309,7 @@
     {
       "path": "appearance.pane_background",
       "type": "string",
-      "description": "Background behind pane content: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background",
+      "description": "Background behind pane content, the thin scrollbar over it and the scrollback browser: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background",
       "default": "",
       "accepted": [
         "off",
@@ -702,7 +702,7 @@
     {
       "path": "appearance.window_chrome_background",
       "type": "string",
-      "description": "Background under pane borders, title bars and the lines between shared-border panes: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background",
+      "description": "Background under pane borders and title bars, the lines between shared-border panes and the capture marquee: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background",
       "default": "",
       "accepted": [
         "off",
@@ -713,7 +713,7 @@
     {
       "path": "appearance.window_title_align",
       "type": "string",
-      "description": "Where a pane's title sits on its row. auto keeps it away from the window buttons",
+      "description": "Where a pane's title sits on its row. auto is the end away from the window buttons on the top row, and the middle on the bottom row. left, center and right are that place in the room the buttons leave",
       "default": "auto",
       "accepted": [
         "auto",
@@ -742,7 +742,7 @@
     {
       "path": "appearance.window_title_style",
       "type": "string",
-      "description": "Shape of a pane's title: pill has rounded caps, tab is a plain fill, plain is the text on the border",
+      "description": "Shape of a pane's title: pill is the name on a fill in the border's colour, with rounded caps; tab is the fill with no caps; plain is the name in the border's colour, with no fill",
       "default": "pill",
       "accepted": [
         "pill",

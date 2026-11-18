@@ -215,12 +215,12 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.links", Type: OptionString, Section: "appearance",
-		Description: "Links the pointer picks up: off, only marked links, or plain URLs too",
+		Description: "Links the pointer picks up: off, only marked links (OSC 8), or plain URLs too",
 		Accepted:    LinkModes,
 	},
 	{
 		Path: "appearance.link_click", Type: OptionString, Section: "appearance",
-		Description: "The click that opens a link: ctrl or shift, ctrl only, shift only, or none",
+		Description: "The click that opens a link: ctrl or shift, ctrl only, shift only, or none. Ctrl+click also works on macOS in Ghostty, kitty, WezTerm and Terminal.app. Cmd+click does not open a link there",
 		Accepted:    LinkClickModes,
 	},
 	{
@@ -235,12 +235,12 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.drop_preview_delay", Type: OptionString, Section: "appearance",
-		Description: "How long the pointer rests on a drop zone before it shows: a duration such as 120ms, or 0 for at once",
+		Description: "How long the pointer rests on a drop zone before it shows: a duration such as 120ms, or 0 for at once. A zone you leave before the delay is never drawn",
 		Check:       checkDropPreviewDelay,
 	},
 	{
 		Path: "appearance.link_opener", Type: OptionString, Section: "appearance",
-		Description: "The command that opens a web link. If this is empty, tuios uses $BROWSER, then the system opener.",
+		Description: "The command that opens a web link. tuios puts the URL where %s is, or at the end. If this is empty, tuios uses $BROWSER, then the system opener.",
 	},
 	{
 		Path: "appearance.hide_window_buttons", Type: OptionBool, Section: "appearance",
@@ -415,12 +415,12 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.window_title_style", Type: OptionString, Section: "appearance",
-		Description: "Shape of a pane's title: pill has rounded caps, tab is a plain fill, plain is the text on the border",
+		Description: "Shape of a pane's title: pill is the name on a fill in the border's colour, with rounded caps; tab is the fill with no caps; plain is the name in the border's colour, with no fill",
 		Accepted:    WindowTitleStyles,
 	},
 	{
 		Path: "appearance.window_title_align", Type: OptionString, Section: "appearance",
-		Description: "Where a pane's title sits on its row. auto keeps it away from the window buttons",
+		Description: "Where a pane's title sits on its row. auto is the end away from the window buttons on the top row, and the middle on the bottom row. left, center and right are that place in the room the buttons leave",
 		Accepted:    WindowTitleAligns,
 	},
 	{
@@ -441,7 +441,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.border_focused_color", Type: OptionString, Section: "appearance",
-		Description: "Colour overriding the focused pane's border: #89b4fa, a slot name such as bright_cyan, or a role such as accent",
+		Description: "Colour overriding the focused pane's border in both modes: #89b4fa, a slot name such as bright_cyan, or a role such as accent",
 		Color:       true,
 	},
 	{
@@ -456,12 +456,12 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.border_focused_gradient", Type: OptionString, Section: "appearance",
-		Description: "Two or more colours, separated by spaces, that the focused pane's border steps through. Empty draws one colour",
+		Description: "Two or more colours, separated by spaces or commas, that the focused pane's border steps through. Empty draws one colour",
 	},
 	{
 		Path: "appearance.border_gradient_angle", Type: OptionInt, Section: "appearance",
 		Unit:        "degrees",
-		Description: "Direction of the focused border's gradient in degrees: 0 runs left to right, 90 top to bottom",
+		Description: "Direction of the focused border's gradient in degrees: 0 runs left to right, 90 top to bottom, 45 from the top left corner to the bottom right one",
 		Default:     "45", Min: 0, Max: 359,
 	},
 	{
@@ -562,7 +562,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.master_position", Type: OptionString, Section: "appearance",
-		Description: "Side the master panes take in the master-stack layout. Center puts the stack on both sides.",
+		Description: "Side the master panes take in the master-stack layout. With center, the stack panes go to the right and the left in turn.",
 		Accepted:    MasterPositions,
 	},
 	{
@@ -639,7 +639,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "motion.workspace", Type: OptionString, Section: "motion",
-		Description: "How tuios shows a workspace switch: slide, fade or none",
+		Description: "How tuios shows a workspace switch: slide, fade or none. With 16 colours, fade is a cut",
 		Accepted:    WorkspaceTransitions,
 	},
 	{
@@ -669,7 +669,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "motion.overlays", Type: OptionString, Section: "motion",
-		Description: "A palette or dialog fades in as it opens: on or off",
+		Description: "A palette or dialog fades in as it opens: on or off. It needs appearance.motion = \"full\" and truecolor",
 		Accepted:    MotionSwitches,
 	},
 	{
@@ -679,7 +679,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "motion.sidebar", Type: OptionString, Section: "motion",
-		Description: "The shimmer on a working agent row of the sidebar: on or off",
+		Description: "The shimmer on a working agent row of the sidebar: on or off. It needs appearance.motion = \"full\"",
 		Accepted:    MotionSwitches,
 	},
 	{
@@ -699,7 +699,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "motion.confetti", Type: OptionString, Section: "motion",
-		Description: "The confetti burst: on or off",
+		Description: "The confetti burst: on or off. It needs appearance.motion = \"full\"",
 		Accepted:    MotionSwitches,
 	},
 	{
@@ -752,17 +752,17 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.pane_background", Type: OptionString, Section: "appearance",
-		Description: "Background behind pane content: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background",
+		Description: "Background behind pane content, the thin scrollbar over it and the scrollback browser: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background",
 		Accepted:    Backgrounds, Color: true,
 	},
 	{
 		Path: "appearance.desktop_background", Type: OptionString, Section: "appearance",
-		Description: "Background behind and between panes, including gaps and an empty workspace: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background",
+		Description: "Background behind and between panes: the gaps between tiled panes, the space around floating ones, and an empty workspace with its welcome splash. off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background",
 		Accepted:    Backgrounds, Color: true,
 	},
 	{
 		Path: "appearance.window_chrome_background", Type: OptionString, Section: "appearance",
-		Description: "Background under pane borders, title bars and the lines between shared-border panes: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background",
+		Description: "Background under pane borders and title bars, the lines between shared-border panes and the capture marquee: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background",
 		Accepted:    Backgrounds, Color: true,
 	},
 	{
@@ -1037,7 +1037,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.sidebar.marquee_pause_ms", Type: OptionInt, Section: "sidebar",
-		Description: "Milliseconds a hovered row holds still before its overflowing title starts to move",
+		Description: "Milliseconds a hovered row holds still before its overflowing title starts to move. 0 starts at once",
 		Min:         MarqueePauseMSMin, Max: MarqueePauseMSMax,
 	},
 	{
@@ -1048,7 +1048,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.sidebar.git_refresh_ms", Type: OptionInt, Section: "sidebar",
-		Description: "Milliseconds between the git section's looks at a directory it is showing. Raise it for a very large repository.",
+		Description: "Milliseconds between the git section's looks at a directory it is showing. git runs only when the commits have moved. Raise it for a very large repository.",
 		Min:         SidebarGitRefreshMSMin, Max: SidebarGitRefreshMSMax,
 		Zero: ZeroIsDefault,
 	},
@@ -1191,7 +1191,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.sidebar.subagent_fields", Type: OptionString, Section: "sidebar",
-		Description: "What each subagent row shows, a comma list of mark, name, type, time and note",
+		Description: "What each subagent row shows, a comma list of mark, name, type, time and note. type is the agent type, such as Explore. note is the second line",
 		Check:       CheckSubagentFields,
 	},
 	{
@@ -1235,11 +1235,11 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "startup.session", Type: OptionString, Section: "startup",
-		Description: "Session a bare \"tuios\" attaches to. tuios makes it when it is gone. Empty attaches to the most recent session.",
+		Description: "Session a bare \"tuios\" attaches to. tuios makes it when it is gone, as tuios attach NAME -c does. Empty attaches to the most recent session.",
 	},
 	{
 		Path: "startup.window", Type: OptionString, Section: "startup",
-		Description: "Pane, by name or id, that a bare \"tuios\" focuses in startup.session. When no pane has that name, the focus does not change.",
+		Description: "Pane, by name or id, that a bare \"tuios\" focuses in startup.session before it attaches. It needs startup.session. When no pane has that name, the focus does not change.",
 	},
 
 	// [agents]. Only enabled is a scalar; the rest of the table is lists and
@@ -1369,7 +1369,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "daemon.subagent_fade_seconds", Type: OptionInt, Section: "daemon",
-		Description: "Seconds a finished subagent stays in the list. 0 uses 60.",
+		Description: "Seconds a finished subagent stays in the list. A failed one stays five times as long. 0 uses 60.",
 		Zero:        ZeroIsDefault,
 		Env:         "TUIOS_SUBAGENT_FADE_SECONDS",
 	},
@@ -1632,7 +1632,7 @@ var optionSpecs = []Option{
 
 	{
 		Path: "appearance.copy_search_max_matches", Type: OptionInt, Section: "appearance",
-		Description: "Matches one copy mode search keeps. The renderer walks every match on every frame, so a very high value slows a one-letter query over a long scrollback.",
+		Description: "Matches one copy mode search keeps. The renderer walks every match on every frame, so a very high value slows a one-letter query over a long scrollback. A search that stops at the limit shows 1000+.",
 		Min:         SearchMaxMatchesMin, Max: SearchMaxMatchesMax,
 		Zero: ZeroIsDefault,
 	},
@@ -1643,7 +1643,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.idle_fps", Type: OptionInt, Section: "appearance",
-		Description: "Polls per second while nothing is moving. Lower saves power; higher notices background work sooner.",
+		Description: "Polls per second while nothing is moving. Lower saves power; higher notices background work sooner. appearance.max_fps sets the rate while something moves.",
 		Min:         IdleFPSMin, Max: IdleFPSMax,
 		Zero: ZeroIsDefault,
 	},
@@ -1678,13 +1678,13 @@ var optionSpecs = []Option{
 	// [mouse]
 	{
 		Path: "mouse.double_click_ms", Type: OptionInt, Section: "mouse",
-		Description: "Milliseconds after a click in which a second one counts as a double click, in a pane, on the rail divider and in the Agents list",
+		Description: "Milliseconds after a click in which a second one counts as a double click: in a pane, on the rail divider, in the Agents list and in the draft editor",
 		Min:         MouseDoubleClickMin, Max: MouseDoubleClickMax,
 		Zero: ZeroIsDefault,
 	},
 	{
 		Path: "mouse.drag_threshold", Type: OptionInt, Section: "mouse",
-		Description: "Cells the pointer moves before a press is a drag and not a click",
+		Description: "Cells the pointer moves before a press is a drag and not a click. It applies to the right button, to click-to-type and to Ctrl drag",
 		Min:         MouseDragThresholdMin, Max: MouseDragThresholdMax,
 		Zero: ZeroIsDefault,
 	},
@@ -1736,7 +1736,7 @@ var optionSpecs = []Option{
 	// [debug]
 	{
 		Path: "debug.show_key_count", Type: OptionInt, Section: "debug",
-		Description: "How many recent keypresses the showkeys overlay keeps",
+		Description: "How many recent keypresses the showkeys overlay keeps, for a screencast",
 		Min:         ShowKeyCountMin, Max: ShowKeyCountMax,
 		Zero: ZeroIsDefault,
 	},
@@ -2038,7 +2038,7 @@ var optionSpecs = []Option{
 	// config apply from outside tuios, or a daemon restart.
 	{
 		Path: "worktree.setup", Type: OptionString, Section: "worktree",
-		Description: "A shell command to run in every new worktree before the agent starts, such as pnpm i. Empty runs nothing",
+		Description: "A shell command to run in every new worktree before the agent starts, such as pnpm i. It runs with sh -c in the worktree, in a window named setup, with no grants. Empty runs nothing",
 	},
 	{
 		Path: "worktree.setup_async", Type: OptionBool, Section: "worktree",

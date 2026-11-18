@@ -38,11 +38,11 @@ The defaults are the ones on Linux. Some defaults are different on macOS.
 | <a id="appearance.animations_enabled"></a>`appearance.animations_enabled` | bool | `true` | Animate UI transitions instead of applying them instantly Deprecated: folded into appearance.motion on load (false is none); set appearance.motion |
 | <a id="appearance.auto_enter_terminal_on_focus"></a>`appearance.auto_enter_terminal_on_focus` | string | `off` | Type in a pane when a keyboard focus command moves to it: off, targeted (select and arrows), or all (including Tab) Values: `off`, `targeted`, `all`. |
 | <a id="appearance.background"></a>`appearance.background` | string | `off` | Background painted on every surface not set on its own (panes, desktop, window chrome, dock, rail): off (your terminal shows through), theme, or a colour (#rrggbb, 0-255, a slot name or a role name) |
-| <a id="appearance.border_focused_color"></a>`appearance.border_focused_color` | string | empty | Colour overriding the focused pane's border: #89b4fa, a slot name such as bright_cyan, or a role such as accent |
+| <a id="appearance.border_focused_color"></a>`appearance.border_focused_color` | string | empty | Colour overriding the focused pane's border in both modes: #89b4fa, a slot name such as bright_cyan, or a role such as accent |
 | <a id="appearance.border_focused_color_terminal"></a>`appearance.border_focused_color_terminal` | string | empty | Colour of the focused pane's border in terminal mode. It wins over border_focused_color |
 | <a id="appearance.border_focused_color_window"></a>`appearance.border_focused_color_window` | string | empty | Colour of the focused pane's border in window mode. It wins over border_focused_color |
-| <a id="appearance.border_focused_gradient"></a>`appearance.border_focused_gradient` | string | empty | Two or more colours, separated by spaces, that the focused pane's border steps through. Empty draws one colour |
-| <a id="appearance.border_gradient_angle"></a>`appearance.border_gradient_angle` | int | `45` | Direction of the focused border's gradient in degrees: 0 runs left to right, 90 top to bottom Range: 0 to 359. |
+| <a id="appearance.border_focused_gradient"></a>`appearance.border_focused_gradient` | string | empty | Two or more colours, separated by spaces or commas, that the focused pane's border steps through. Empty draws one colour |
+| <a id="appearance.border_gradient_angle"></a>`appearance.border_gradient_angle` | int | `45` | Direction of the focused border's gradient in degrees: 0 runs left to right, 90 top to bottom, 45 from the top left corner to the bottom right one Range: 0 to 359. |
 | <a id="appearance.border_style"></a>`appearance.border_style` | string | `rounded` | Border style drawn around every pane Values: `rounded`, `normal`, `thick`, `double`, `block`, `outer-half-block`, `inner-half-block`, `ascii`, `hidden`, `glyphs`. `--border-style` sets it for one run. |
 | <a id="appearance.border_unfocused_color"></a>`appearance.border_unfocused_color` | string | empty | Colour overriding an unfocused pane's border: #585b70, a slot name such as bright_black, or a role such as muted |
 | <a id="appearance.calm"></a>`appearance.calm` | bool | `false` | Calm mode: nothing moves or blinks, and only messages that need you show in the dock |
@@ -52,13 +52,13 @@ The defaults are the ones on Linux. Some defaults are different on macOS.
 | <a id="appearance.confirm_close"></a>`appearance.confirm_close` | string | `never` | When closing a pane by hand (a key, its menu or its close control) asks first: never, busy (the pane runs something besides its shell) or always Values: `never`, `busy`, `always`. |
 | <a id="appearance.confirm_quit"></a>`appearance.confirm_quit` | bool | `false` | Always confirm on quit, not only when processes are running `--confirm-quit` sets it for one run. |
 | <a id="appearance.copy_on_select"></a>`appearance.copy_on_select` | bool | `true` | Copy a mouse selection to the clipboard on release |
-| <a id="appearance.copy_search_max_matches"></a>`appearance.copy_search_max_matches` | int | `1000` | Matches one copy mode search keeps. The renderer walks every match on every frame, so a very high value slows a one-letter query over a long scrollback. Range: 100 to 100000. |
-| <a id="appearance.desktop_background"></a>`appearance.desktop_background` | string | empty | Background behind and between panes, including gaps and an empty workspace: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background |
+| <a id="appearance.copy_search_max_matches"></a>`appearance.copy_search_max_matches` | int | `1000` | Matches one copy mode search keeps. The renderer walks every match on every frame, so a very high value slows a one-letter query over a long scrollback. A search that stops at the limit shows 1000+. Range: 100 to 100000. |
+| <a id="appearance.desktop_background"></a>`appearance.desktop_background` | string | empty | Background behind and between panes: the gaps between tiled panes, the space around floating ones, and an empty workspace with its welcome splash. off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background |
 | <a id="appearance.dim_foreground"></a>`appearance.dim_foreground` | bool | `true` | Let dim_unfocused dim a pane's text too, not only its background |
 | <a id="appearance.dim_multifocus"></a>`appearance.dim_multifocus` | bool | `false` | Dim the panes in the multifocus set like other panes you are not in |
 | <a id="appearance.dim_unfocused"></a>`appearance.dim_unfocused` | int | `0` | How much tuios fades a pane you are not in, as a percent. 0 is off. Range: 0 to 90. |
 | <a id="appearance.drop_preview"></a>`appearance.drop_preview` | string | `outline` | What a BSP drag shows where the pane would land: a frame with a tint inside, the frame only, or nothing Values: `fill`, `outline`, `off`. |
-| <a id="appearance.drop_preview_delay"></a>`appearance.drop_preview_delay` | string | `120ms` | How long the pointer rests on a drop zone before it shows: a duration such as 120ms, or 0 for at once |
+| <a id="appearance.drop_preview_delay"></a>`appearance.drop_preview_delay` | string | `120ms` | How long the pointer rests on a drop zone before it shows: a duration such as 120ms, or 0 for at once. A zone you leave before the delay is never drawn |
 | <a id="appearance.focus_follows_mouse"></a>`appearance.focus_follows_mouse` | bool | `false` | Focus the pane under the cursor as the mouse moves |
 | <a id="appearance.focus_follows_mouse_pause"></a>`appearance.focus_follows_mouse_pause` | string | `off` | Hold this key to keep the focus on the current pane as the mouse moves: off, ctrl, alt Values: `off`, `ctrl`, `alt`. |
 | <a id="appearance.focus_wrap"></a>`appearance.focus_wrap` | bool | `false` | A focus key at the edge of a tiled layout moves to the pane on the far side |
@@ -69,16 +69,16 @@ The defaults are the ones on Linux. Some defaults are different on macOS.
 | <a id="appearance.hide_scrollbar"></a>`appearance.hide_scrollbar` | bool | `false` | Hide the scrollbar thumb on the pane border `--hide-scrollbar` sets it for one run. |
 | <a id="appearance.hide_window_buttons"></a>`appearance.hide_window_buttons` | bool | `false` | Hide the minimize, maximize and close buttons `--hide-window-buttons` sets it for one run. |
 | <a id="appearance.host_title"></a>`appearance.host_title` | string | empty | Title of the terminal tuios runs in, from the focused pane: accepts {title}, {index}, {cwd}, {session} and {workspace}. Empty sets no title |
-| <a id="appearance.idle_fps"></a>`appearance.idle_fps` | int | `10` | Polls per second while nothing is moving. Lower saves power; higher notices background work sooner. Range: 1 to 60. |
+| <a id="appearance.idle_fps"></a>`appearance.idle_fps` | int | `10` | Polls per second while nothing is moving. Lower saves power; higher notices background work sooner. appearance.max_fps sets the rate while something moves. Range: 1 to 60. |
 | <a id="appearance.image_symbols"></a>`appearance.image_symbols` | string | `auto` | Draw pane images as block glyphs when the terminal has no graphics: auto, octant, sextant, quadrant, half, off Values: `auto`, `octant`, `sextant`, `quadrant`, `half`, `off`. |
 | <a id="appearance.kitty_placeholders"></a>`appearance.kitty_placeholders` | string | `auto` | Draw images an app positions with kitty Unicode placeholders: auto, on, off Values: `auto`, `on`, `off`. |
-| <a id="appearance.link_click"></a>`appearance.link_click` | string | `both` | The click that opens a link: ctrl or shift, ctrl only, shift only, or none Values: `both`, `ctrl`, `shift`, `off`. |
+| <a id="appearance.link_click"></a>`appearance.link_click` | string | `both` | The click that opens a link: ctrl or shift, ctrl only, shift only, or none. Ctrl+click also works on macOS in Ghostty, kitty, WezTerm and Terminal.app. Cmd+click does not open a link there Values: `both`, `ctrl`, `shift`, `off`. |
 | <a id="appearance.link_hover"></a>`appearance.link_hover` | string | `safe` | The hover highlight: safe skips a pane whose guest tracks the mouse, always draws it everywhere Values: `safe`, `always`. |
-| <a id="appearance.link_opener"></a>`appearance.link_opener` | string | empty | The command that opens a web link. If this is empty, tuios uses $BROWSER, then the system opener. |
-| <a id="appearance.links"></a>`appearance.links` | string | `all` | Links the pointer picks up: off, only marked links, or plain URLs too Values: `off`, `marked`, `all`. |
+| <a id="appearance.link_opener"></a>`appearance.link_opener` | string | empty | The command that opens a web link. tuios puts the URL where %s is, or at the end. If this is empty, tuios uses $BROWSER, then the system opener. |
+| <a id="appearance.links"></a>`appearance.links` | string | `all` | Links the pointer picks up: off, only marked links (OSC 8), or plain URLs too Values: `off`, `marked`, `all`. |
 | <a id="appearance.master_count"></a>`appearance.master_count` | int | `1` | How many panes are master panes in the master-stack layout Range: 1 to 9. |
 | <a id="appearance.master_grid"></a>`appearance.master_grid` | bool | `true` | With one master on the left, show four or more panes as a grid |
-| <a id="appearance.master_position"></a>`appearance.master_position` | string | `left` | Side the master panes take in the master-stack layout. Center puts the stack on both sides. Values: `left`, `right`, `top`, `bottom`, `center`. |
+| <a id="appearance.master_position"></a>`appearance.master_position` | string | `left` | Side the master panes take in the master-stack layout. With center, the stack panes go to the right and the left in turn. Values: `left`, `right`, `top`, `bottom`, `center`. |
 | <a id="appearance.master_ratio"></a>`appearance.master_ratio` | int | `50` | Width of the master pane in the master-stack layout, as a percent of the screen Range: 10 to 90. |
 | <a id="appearance.max_fps"></a>`appearance.max_fps` | int | `0` | Highest frame rate tuios draws at. Your terminal and monitor can show fewer frames. A value above what they can show does not make tuios smoother. 0 uses 60. auto uses the refresh rate of your display. The range is 10 to 240. Range: 0 to 240. |
 | <a id="appearance.modal_dim"></a>`appearance.modal_dim` | int | `30` | How much the screen behind a modal panel is darkened, as a percent. 0 is off. Range: 0 to 90. |
@@ -93,7 +93,7 @@ The defaults are the ones on Linux. Some defaults are different on macOS.
 | <a id="appearance.niri_scroll_snap"></a>`appearance.niri_scroll_snap` | bool | `false` | Snap the strip to the nearest column when a scroll stops |
 | <a id="appearance.nvim_navigation"></a>`appearance.nvim_navigation` | bool | `false` | Let the Neovim navigator plugin hand terminal focus keys back to TUIOS |
 | <a id="appearance.overlay_border_color"></a>`appearance.overlay_border_color` | string | empty | Colour of every overlay's frame: #89b4fa, a slot name such as bright_cyan, or a role such as accent. Empty keeps the overlay's own, or the focused pane's border under pane_overlays |
-| <a id="appearance.pane_background"></a>`appearance.pane_background` | string | empty | Background behind pane content: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background |
+| <a id="appearance.pane_background"></a>`appearance.pane_background` | string | empty | Background behind pane content, the thin scrollbar over it and the scrollback browser: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background |
 | <a id="appearance.pane_overlays"></a>`appearance.pane_overlays` | bool | `false` | Draw dialogs and panels like pane windows: framed in the focused pane's border colour, on the pane's background |
 | <a id="appearance.panel_padding"></a>`appearance.panel_padding` | int | `2` | Columns of padding each side of an overlay panel's content Range: 1 to 6. |
 | <a id="appearance.paste_preview"></a>`appearance.paste_preview` | bool | `true` | Show a pasted image in a card at the cursor for a few seconds |
@@ -127,11 +127,11 @@ The defaults are the ones on Linux. Some defaults are different on macOS.
 | <a id="appearance.window_button_position"></a>`appearance.window_button_position` | string | `left` | Which end of the title bar the window controls sit on Values: `right`, `left`. `--window-button-position` sets it for one run. |
 | <a id="appearance.window_button_style"></a>`appearance.window_button_style` | string | `dots` | Window controls as a filled pill or as macOS traffic lights Values: `pill`, `dots`. `--window-button-style` sets it for one run. |
 | <a id="appearance.window_button_zoom"></a>`appearance.window_button_zoom` | bool | `true` | Carry the third title bar control on a tiled pane, where it toggles the zoom |
-| <a id="appearance.window_chrome_background"></a>`appearance.window_chrome_background` | string | empty | Background under pane borders, title bars and the lines between shared-border panes: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background |
-| <a id="appearance.window_title_align"></a>`appearance.window_title_align` | string | `auto` | Where a pane's title sits on its row. auto keeps it away from the window buttons Values: `auto`, `left`, `center`, `right`. |
+| <a id="appearance.window_chrome_background"></a>`appearance.window_chrome_background` | string | empty | Background under pane borders and title bars, the lines between shared-border panes and the capture marquee: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background |
+| <a id="appearance.window_title_align"></a>`appearance.window_title_align` | string | `auto` | Where a pane's title sits on its row. auto is the end away from the window buttons on the top row, and the middle on the bottom row. left, center and right are that place in the room the buttons leave Values: `auto`, `left`, `center`, `right`. |
 | <a id="appearance.window_title_format"></a>`appearance.window_title_format` | string | empty | Title template accepting {title}, {index} and {cwd} |
 | <a id="appearance.window_title_position"></a>`appearance.window_title_position` | string | `top` | Edge of the pane the title is drawn on Values: `bottom`, `top`, `hidden`. `--window-title-position` sets it for one run. |
-| <a id="appearance.window_title_style"></a>`appearance.window_title_style` | string | `pill` | Shape of a pane's title: pill has rounded caps, tab is a plain fill, plain is the text on the border Values: `pill`, `tab`, `plain`. |
+| <a id="appearance.window_title_style"></a>`appearance.window_title_style` | string | `pill` | Shape of a pane's title: pill is the name on a fill in the border's colour, with rounded caps; tab is the fill with no caps; plain is the name in the border's colour, with no fill Values: `pill`, `tab`, `plain`. |
 | <a id="appearance.word_characters"></a>`appearance.word_characters` | string | `@-./_~?&=%+#` | Punctuation that counts as part of a word for double-click selection |
 | <a id="appearance.workspace_transition"></a>`appearance.workspace_transition` | string | empty | Old name of motion.workspace Deprecated: folded into motion.workspace on load; set motion.workspace |
 | <a id="appearance.workspace_transition_ms"></a>`appearance.workspace_transition_ms` | int | empty | Old name of motion.workspace_ms Range: 0 to 1000. Deprecated: folded into motion.workspace_ms on load; set motion.workspace_ms |
@@ -190,12 +190,12 @@ The defaults are the ones on Linux. Some defaults are different on macOS.
 | <a id="appearance.sidebar.file_icons"></a>`appearance.sidebar.file_icons` | bool | `true` | Draw a nerd font icon per file type in the files section |
 | <a id="appearance.sidebar.files_style"></a>`appearance.sidebar.files_style` | string | `list` | How the files section draws: list shows one folder at a time, tree opens folders in place under one root Values: `list`, `tree`. |
 | <a id="appearance.sidebar.folder_click"></a>`appearance.sidebar.folder_click` | string | `navigate` | What a click on a folder row does Values: `navigate`, `cd`, `both`. |
-| <a id="appearance.sidebar.git_refresh_ms"></a>`appearance.sidebar.git_refresh_ms` | int | `2000` | Milliseconds between the git section's looks at a directory it is showing. Raise it for a very large repository. Range: 500 to 60000. |
+| <a id="appearance.sidebar.git_refresh_ms"></a>`appearance.sidebar.git_refresh_ms` | int | `2000` | Milliseconds between the git section's looks at a directory it is showing. git runs only when the commits have moved. Raise it for a very large repository. Range: 500 to 60000. |
 | <a id="appearance.sidebar.group_main"></a>`appearance.sidebar.group_main` | bool | `false` | Give each repository a row of its own, with the main checkout under it. When off, the main checkout's row is the repository's row |
 | <a id="appearance.sidebar.header_case"></a>`appearance.sidebar.header_case` | string | `lowercase` | How the rail's section headers read: lowercase keeps the quiet furniture look, uppercase draws them as headings Values: `lowercase`, `uppercase`. |
 | <a id="appearance.sidebar.header_style"></a>`appearance.sidebar.header_style` | string | `auto` | How a rail section header is drawn: auto, plain, rule, pill, or icon with the section's icon Values: `auto`, `plain`, `rule`, `pill`, `icon`. |
 | <a id="appearance.sidebar.marquee"></a>`appearance.sidebar.marquee` | bool | `true` | Scroll a hovered row's overflowing title |
-| <a id="appearance.sidebar.marquee_pause_ms"></a>`appearance.sidebar.marquee_pause_ms` | int | `900` | Milliseconds a hovered row holds still before its overflowing title starts to move Range: 0 to 10000. |
+| <a id="appearance.sidebar.marquee_pause_ms"></a>`appearance.sidebar.marquee_pause_ms` | int | `900` | Milliseconds a hovered row holds still before its overflowing title starts to move. 0 starts at once Range: 0 to 10000. |
 | <a id="appearance.sidebar.marquee_step_ms"></a>`appearance.sidebar.marquee_step_ms` | int | `220` | Milliseconds each one-cell step of the rail's marquee is held. Larger is slower. Range: 20 to 2000. |
 | <a id="appearance.sidebar.peek"></a>`appearance.sidebar.peek` | bool | `true` | Show a session's panes in the terminals section while the pointer or the rail cursor is on its row |
 | <a id="appearance.sidebar.per_session"></a>`appearance.sidebar.per_session` | bool | `false` | Each session keeps its own shown or hidden rail. Off, showing or hiding the rail applies to every session |
@@ -208,7 +208,7 @@ The defaults are the ones on Linux. Some defaults are different on macOS.
 | <a id="appearance.sidebar.show_numbers"></a>`appearance.sidebar.show_numbers` | bool | `false` | Show the switch number ahead of each session name |
 | <a id="appearance.sidebar.show_windows"></a>`appearance.sidebar.show_windows` | bool | `true` | Show the terminals section Deprecated: folded into appearance.sidebar.sections on load; leave terminals out of the layout |
 | <a id="appearance.sidebar.subagent_collapse"></a>`appearance.sidebar.subagent_collapse` | string | `off` | A heading line over each agent's subagents that opens and shuts their rows: off, or on and expanded or collapsed at the start Values: `off`, `expanded`, `collapsed`. |
-| <a id="appearance.sidebar.subagent_fields"></a>`appearance.sidebar.subagent_fields` | string | `mark,name,time,note` | What each subagent row shows, a comma list of mark, name, type, time and note |
+| <a id="appearance.sidebar.subagent_fields"></a>`appearance.sidebar.subagent_fields` | string | `mark,name,time,note` | What each subagent row shows, a comma list of mark, name, type, time and note. type is the agent type, such as Explore. note is the second line |
 | <a id="appearance.sidebar.subagent_hide_finished"></a>`appearance.sidebar.subagent_hide_finished` | string | `off` | How long a finished subagent's row stays after it ends: a duration such as 30s, or off to keep it until the daemon drops it |
 | <a id="appearance.sidebar.subagent_max_rows"></a>`appearance.sidebar.subagent_max_rows` | int | `0` | The most lines one agent's subagents take, the +N more line included. 0 is no limit. Range: 0 to 16. |
 | <a id="appearance.sidebar.subagent_rows"></a>`appearance.sidebar.subagent_rows` | string | `rows` | How an agent row shows its subagents: a row for each under it, the rows on tree lines, or the count alone Values: `rows`, `tree`, `count`. |
@@ -272,7 +272,7 @@ The defaults are the ones on Linux. Some defaults are different on macOS.
 | <a id="daemon.reconnect_seconds"></a>`daemon.reconnect_seconds` | int | `15` | Seconds a client waits for a restarted daemon before it gives up. 0 uses 15 Range: 0 to 300. |
 | <a id="daemon.resume_agents"></a>`daemon.resume_agents` | string | `ask` | After a daemon restart, ask to resume each pane's agent conversation, resume it, or do neither Values: `ask`, `auto`, `off`. |
 | <a id="daemon.save_seconds"></a>`daemon.save_seconds` | int | `30` | Most seconds a session whose panes printed waits to be saved, which keeps each pane's folder current for a restore Range: 10 to 600. |
-| <a id="daemon.subagent_fade_seconds"></a>`daemon.subagent_fade_seconds` | int | `60` | Seconds a finished subagent stays in the list. 0 uses 60. The `TUIOS_SUBAGENT_FADE_SECONDS` environment variable sets it too, and wins over the file. |
+| <a id="daemon.subagent_fade_seconds"></a>`daemon.subagent_fade_seconds` | int | `60` | Seconds a finished subagent stays in the list. A failed one stays five times as long. 0 uses 60. The `TUIOS_SUBAGENT_FADE_SECONDS` environment variable sets it too, and wins over the file. |
 | <a id="daemon.transfer_keep_seconds"></a>`daemon.transfer_keep_seconds` | int | `1800` | Seconds a finished file transfer stays in the list. 0 uses 1800. The `TUIOS_TRANSFER_KEEP_SECONDS` environment variable sets it too, and wins over the file. |
 | <a id="daemon.window_size"></a>`daemon.window_size` | string | `latest` | The size of a session with more than one client: the client that last had input, the smallest client, or the largest client Values: `smallest`, `largest`, `latest`. |
 
@@ -280,7 +280,7 @@ The defaults are the ones on Linux. Some defaults are different on macOS.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| <a id="debug.show_key_count"></a>`debug.show_key_count` | int | `5` | How many recent keypresses the showkeys overlay keeps Range: 1 to 20. |
+| <a id="debug.show_key_count"></a>`debug.show_key_count` | int | `5` | How many recent keypresses the showkeys overlay keeps, for a screencast Range: 1 to 20. |
 | <a id="debug.show_key_events"></a>`debug.show_key_events` | bool | `false` | Show the on-screen keycast of recent keypresses |
 
 ## files
@@ -321,16 +321,16 @@ The defaults are the ones on Linux. Some defaults are different on macOS.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| <a id="motion.confetti"></a>`motion.confetti` | string | `on` | The confetti burst: on or off Values: `on`, `off`. |
+| <a id="motion.confetti"></a>`motion.confetti` | string | `on` | The confetti burst: on or off. It needs appearance.motion = "full" Values: `on`, `off`. |
 | <a id="motion.copy"></a>`motion.copy` | string | `on` | A sweep crosses the cells a copy took: on or off Values: `on`, `off`. |
 | <a id="motion.layout"></a>`motion.layout` | string | `on` | Panes slide when they open, close, split, swap, snap, minimize or restore: on or off Values: `on`, `off`. |
 | <a id="motion.layout_ms"></a>`motion.layout_ms` | int | `300` | Milliseconds the layout motion takes at animation speed 100. 0 is a cut. Range: 0 to 1000. |
-| <a id="motion.overlays"></a>`motion.overlays` | string | `on` | A palette or dialog fades in as it opens: on or off Values: `on`, `off`. |
+| <a id="motion.overlays"></a>`motion.overlays` | string | `on` | A palette or dialog fades in as it opens: on or off. It needs appearance.motion = "full" and truecolor Values: `on`, `off`. |
 | <a id="motion.overlays_ms"></a>`motion.overlays_ms` | int | `120` | Milliseconds the overlays motion takes at animation speed 100. 0 is a cut. Range: 0 to 1000. |
 | <a id="motion.scroll"></a>`motion.scroll` | string | `on` | The scrolling layout slides when the view moves: on or off Values: `on`, `off`. |
 | <a id="motion.scroll_ms"></a>`motion.scroll_ms` | int | `300` | Milliseconds the scroll motion takes at animation speed 100. 0 is a cut. Range: 0 to 1000. |
-| <a id="motion.sidebar"></a>`motion.sidebar` | string | `on` | The shimmer on a working agent row of the sidebar: on or off Values: `on`, `off`. |
-| <a id="motion.workspace"></a>`motion.workspace` | string | `slide` | How tuios shows a workspace switch: slide, fade or none Values: `slide`, `fade`, `none`. |
+| <a id="motion.sidebar"></a>`motion.sidebar` | string | `on` | The shimmer on a working agent row of the sidebar: on or off. It needs appearance.motion = "full" Values: `on`, `off`. |
+| <a id="motion.workspace"></a>`motion.workspace` | string | `slide` | How tuios shows a workspace switch: slide, fade or none. With 16 colours, fade is a cut Values: `slide`, `fade`, `none`. |
 | <a id="motion.workspace_ms"></a>`motion.workspace_ms` | int | `200` | Milliseconds the workspace motion takes at animation speed 100. 0 is a cut. Range: 0 to 1000. |
 | <a id="motion.zoom"></a>`motion.zoom` | string | `on` | A pane slides between its tile and the zoom box: on or off Values: `on`, `off`. |
 | <a id="motion.zoom_ms"></a>`motion.zoom_ms` | int | `200` | Milliseconds the zoom motion takes at animation speed 100. 0 is a cut. Range: 0 to 1000. |
@@ -339,8 +339,8 @@ The defaults are the ones on Linux. Some defaults are different on macOS.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| <a id="mouse.double_click_ms"></a>`mouse.double_click_ms` | int | `300` | Milliseconds after a click in which a second one counts as a double click, in a pane, on the rail divider and in the Agents list Range: 100 to 1000. |
-| <a id="mouse.drag_threshold"></a>`mouse.drag_threshold` | int | `5` | Cells the pointer moves before a press is a drag and not a click Range: 1 to 50. |
+| <a id="mouse.double_click_ms"></a>`mouse.double_click_ms` | int | `300` | Milliseconds after a click in which a second one counts as a double click: in a pane, on the rail divider, in the Agents list and in the draft editor Range: 100 to 1000. |
+| <a id="mouse.drag_threshold"></a>`mouse.drag_threshold` | int | `5` | Cells the pointer moves before a press is a drag and not a click. It applies to the right button, to click-to-type and to Ctrl drag Range: 1 to 50. |
 
 ## notifications
 
@@ -458,10 +458,10 @@ The defaults are the ones on Linux. Some defaults are different on macOS.
 | <a id="startup.daemon"></a>`startup.daemon` | bool | `true` | Make a bare "tuios" attach to a daemon-backed session instead of running standalone. TUIOS_NO_DAEMON=1 or --standalone overrides it. False when the config file has no [startup] table. |
 | <a id="startup.layout"></a>`startup.layout` | string | `bsp` | Tiling scheme a new session starts in. An existing session keeps its own. Values: `bsp`, `master-stack`, `scrolling`. |
 | <a id="startup.open_default_window"></a>`startup.open_default_window` | bool | `false` | Open one terminal automatically when a session starts empty |
-| <a id="startup.session"></a>`startup.session` | string | empty | Session a bare "tuios" attaches to. tuios makes it when it is gone. Empty attaches to the most recent session. |
+| <a id="startup.session"></a>`startup.session` | string | empty | Session a bare "tuios" attaches to. tuios makes it when it is gone, as tuios attach NAME -c does. Empty attaches to the most recent session. |
 | <a id="startup.start_in_terminal_mode"></a>`startup.start_in_terminal_mode` | bool | `false` | Start focused in terminal mode, when a window is present |
 | <a id="startup.tiled"></a>`startup.tiled` | bool | `true` | Start a new session tiled instead of floating. False when the config file has no [startup] table. |
-| <a id="startup.window"></a>`startup.window` | string | empty | Pane, by name or id, that a bare "tuios" focuses in startup.session. When no pane has that name, the focus does not change. |
+| <a id="startup.window"></a>`startup.window` | string | empty | Pane, by name or id, that a bare "tuios" focuses in startup.session before it attaches. It needs startup.session. When no pane has that name, the focus does not change. |
 
 ## tape
 
@@ -485,7 +485,7 @@ The defaults are the ones on Linux. Some defaults are different on macOS.
 | Option | Type | Default | Description |
 |---|---|---|---|
 | <a id="worktree.path"></a>`worktree.path` | string | empty | Where new worktrees go, as a template of {{ repo_path }}, {{ repo }} and {{ branch }}, with \| slug to make one folder name. A relative path starts at repo_path. Empty puts them under $XDG_DATA_HOME/tuios/worktrees |
-| <a id="worktree.setup"></a>`worktree.setup` | string | empty | A shell command to run in every new worktree before the agent starts, such as pnpm i. Empty runs nothing |
+| <a id="worktree.setup"></a>`worktree.setup` | string | empty | A shell command to run in every new worktree before the agent starts, such as pnpm i. It runs with sh -c in the worktree, in a window named setup, with no grants. Empty runs nothing |
 | <a id="worktree.setup_async"></a>`worktree.setup_async` | bool | `false` | Start the agent at once while the setup runs. A failed setup then keeps the worktree and the branch |
 
 ## Keys set in the file only

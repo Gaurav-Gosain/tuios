@@ -314,12 +314,7 @@ link_hover = "safe"    # safe, always
 link_opener = ""       # for example "firefox --new-tab" or "open -a Safari %s"
 ```
 
-| Key | Default | What it does |
-|---|---|---|
-| `links` | `all` | The links that tuios finds. `marked` finds only OSC 8 links. |
-| `link_click` | `both` | The click that opens a link. `both` is `Ctrl+click` and `Shift+click`. `Ctrl+click` also works on macOS, in Ghostty, kitty, WezTerm and Terminal.app. `Cmd+click` does not open a link there. |
-| `link_hover` | `safe` | The hover underline and label. `safe` skips a pane whose program tracks the mouse. `always` draws them in every pane. |
-| `link_opener` | empty | The command that opens a web link. tuios puts the URL where `%s` is, or at the end. If this is empty, tuios uses `$BROWSER`, then the system opener. |
+These options are in the [option reference](config-options.md): [`appearance.links`](config-options.md#appearance.links), [`appearance.link_click`](config-options.md#appearance.link_click), [`appearance.link_hover`](config-options.md#appearance.link_hover), [`appearance.link_opener`](config-options.md#appearance.link_opener).
 
 The system opener is `open` on macOS, `rundll32` on Windows, `wslview` under
 WSL, and `xdg-open` on other systems. tuios runs no shell. It gives the URL to
@@ -493,15 +488,7 @@ The daemon's timings are in `[daemon]` as whole seconds. `0` is the default.
 The daemon reads them when it starts, and each has an environment variable,
 read at the same time, that wins over the file:
 
-| Option | Default | Variable | What it sets |
-|--------|---------|----------|--------------|
-| `agent_detect_seconds` | 2 | `TUIOS_AGENT_DETECT_SECONDS` | How often agent detection checks each pane. A negative value turns it off. |
-| `agent_stall_seconds` | 30 | `TUIOS_AGENT_STALL_SECONDS` | How long a working agent may print nothing before it shows as unknown. A negative value turns it off. |
-| `subagent_fade_seconds` | 60 | `TUIOS_SUBAGENT_FADE_SECONDS` | How long a finished subagent stays in the list. A failed one stays five times as long. |
-| `cleanup_seconds` | 30 | `TUIOS_CLEANUP_SECONDS` | How often the daemon releases the memory pane output leaves behind. |
-| `pr_poll_seconds` | 60 | `TUIOS_PR_POLL_SECONDS` | How often the daemon checks the pull requests the sidebar shows. |
-| `transfer_keep_seconds` | 1800 | `TUIOS_TRANSFER_KEEP_SECONDS` | How long a finished file transfer stays in the list. |
-| `dispatch_ready_seconds` | the start-agent wait | `TUIOS_DISPATCH_READY_SECONDS` | How long a dispatched task waits for its agent to be ready, at most 600. |
+These options are in the [option reference](config-options.md): [`daemon.agent_detect_seconds`](config-options.md#daemon.agent_detect_seconds), [`daemon.agent_stall_seconds`](config-options.md#daemon.agent_stall_seconds), [`daemon.subagent_fade_seconds`](config-options.md#daemon.subagent_fade_seconds), [`daemon.cleanup_seconds`](config-options.md#daemon.cleanup_seconds), [`daemon.pr_poll_seconds`](config-options.md#daemon.pr_poll_seconds), [`daemon.transfer_keep_seconds`](config-options.md#daemon.transfer_keep_seconds), [`daemon.dispatch_ready_seconds`](config-options.md#daemon.dispatch_ready_seconds).
 
 `agent_autodetect` reads `TUIOS_AGENT_AUTODETECT` the same way. A client reads
 `TUIOS_CLEANUP_SECONDS` too, for its own buffers.
@@ -760,16 +747,7 @@ takes. [`appearance.motion`](config-options.md#appearance.motion) and [`appearan
 `appearance.motion = "none"` and calm mode stop every motion below. The speed
 divides every length.
 
-| Key | Values | Motion |
-|-----|--------|--------|
-| `workspace` | `slide`, `fade`, `none` | The switch between workspaces. `fade` is a cut at 16 colors. |
-| `layout` | `on`, `off` | A pane that opens, closes, splits, swaps, snaps, minimizes or restores. |
-| `zoom` | `on`, `off` | A pane growing to the zoom box and back. |
-| `overlays` | `on`, `off` | A palette or dialog fading in. Needs `appearance.motion = "full"` and truecolor. |
-| `sidebar` | `on`, `off` | The shimmer on a working agent row. Needs `appearance.motion = "full"`. |
-| `scroll` | `on`, `off` | The slide of the scrolling layout. |
-| `copy` | `on`, `off` | The sweep over the cells a copy took. |
-| `confetti` | `on`, `off` | The confetti burst. Needs `appearance.motion = "full"`. |
+These options are in the [option reference](config-options.md): [`motion.workspace`](config-options.md#motion.workspace), [`motion.layout`](config-options.md#motion.layout), [`motion.zoom`](config-options.md#motion.zoom), [`motion.overlays`](config-options.md#motion.overlays), [`motion.sidebar`](config-options.md#motion.sidebar), [`motion.scroll`](config-options.md#motion.scroll), [`motion.copy`](config-options.md#motion.copy), [`motion.confetti`](config-options.md#motion.confetti).
 
 `workspace`, `layout`, `zoom`, `overlays` and `scroll` also take `<name>_ms`,
 the length in milliseconds at speed 100, from 0 to 1000. 0 is a cut. The
@@ -1128,14 +1106,7 @@ a program left on the default background, the space between panes, the
 borders, the dock and the rail. The background options paint those cells
 instead, one surface at a time or all at once.
 
-| Option | Surface | Values | Default |
-|---|---|---|---|
-| [`appearance.background`](config-options.md#appearance.background) | Every surface below that is not set on its own | `off`, `theme`, a [colour](#colour-values) | `off` |
-| [`appearance.pane_background`](config-options.md#appearance.pane_background) | Pane content, the thin scrollbar over it and the scrollback browser | `off`, `theme`, a colour, or empty | empty (follows `background`) |
-| [`appearance.desktop_background`](config-options.md#appearance.desktop_background) | Behind and between panes: gaps between tiled panes, the space around floating ones, an empty workspace and its welcome splash | `off`, `theme`, a colour, or empty | empty (follows `background`) |
-| [`appearance.window_chrome_background`](config-options.md#appearance.window_chrome_background) | Pane borders and title bars, the lines between shared-border panes, the capture marquee | `off`, `theme`, a colour, or empty | empty (follows `background`) |
-| [`appearance.dock_background`](config-options.md#appearance.dock_background) | The dock | `off`, `theme`, a colour, or empty | empty (follows `background`) |
-| [`appearance.sidebar.background`](config-options.md#appearance.sidebar.background) | The rail | `off`, `theme`, a colour, or empty | empty (follows `background`) |
+These options are in the [option reference](config-options.md): [`appearance.background`](config-options.md#appearance.background), [`appearance.pane_background`](config-options.md#appearance.pane_background), [`appearance.desktop_background`](config-options.md#appearance.desktop_background), [`appearance.window_chrome_background`](config-options.md#appearance.window_chrome_background), [`appearance.dock_background`](config-options.md#appearance.dock_background), [`appearance.sidebar.background`](config-options.md#appearance.sidebar.background).
 
 A theme can name a ground for the dock and the rail (`chrome.dock.ground` and
 `chrome.rail.ground`, see [THEMES.md](THEMES.md#roles-for-one-piece-of-chrome)).
@@ -1432,12 +1403,7 @@ These options shape the master-stack layout. Each workspace starts with them.
 The layout keys change the workspace on screen, and the workspace keeps the
 change. See [LAYOUT_MODES.md](LAYOUT_MODES.md#master-stack-layout).
 
-| Option | What it does | Values | Default |
-|---|---|---|---|
-| [`appearance.master_position`](config-options.md#appearance.master_position) | The side the master panes take. With `center`, the stack panes go to the right and the left in turn | `left`, `right`, `top`, `bottom`, `center` | `left` |
-| [`appearance.master_count`](config-options.md#appearance.master_count) | How many panes are master panes | 1-9 | 1 |
-| [`appearance.master_ratio`](config-options.md#appearance.master_ratio) | The share of the screen the master panes take, as a percent | 10-90 | 50 |
-| [`appearance.master_grid`](config-options.md#appearance.master_grid) | With one master on the left, show four or more panes as a grid | `true`, `false` | `true` |
+These options are in the [option reference](config-options.md): [`appearance.master_position`](config-options.md#appearance.master_position), [`appearance.master_count`](config-options.md#appearance.master_count), [`appearance.master_ratio`](config-options.md#appearance.master_ratio), [`appearance.master_grid`](config-options.md#appearance.master_grid).
 
 This example puts an editor in the middle with terminals on both sides. It
 keeps that layout at every pane count:
@@ -1462,10 +1428,7 @@ press `Ctrl+B L Enter`.
 Two `[startup]` options choose where a plain `tuios` opens. Both are empty by
 default.
 
-| Option | What it does | Default |
-|---|---|---|
-| [`startup.session`](config-options.md#startup.session) | The session that `tuios` attaches to. tuios makes the session if it is gone, as `tuios attach NAME -c` does. Empty attaches to the most recent session | empty |
-| [`startup.window`](config-options.md#startup.window) | The pane, by name or id, that `tuios` focuses in [`startup.session`](config-options.md#startup.session) before it attaches. When no pane has that name, the focus does not change. It needs [`startup.session`](config-options.md#startup.session) | empty |
+These options are in the [option reference](config-options.md): [`startup.session`](config-options.md#startup.session), [`startup.window`](config-options.md#startup.window).
 
 ```toml
 [startup]
@@ -1507,10 +1470,7 @@ does not show this option. Edit it in `config.toml`.
 
 While you drag a tiled pane in BSP, tuios shows where the pane would land if you let go. See [LAYOUT_MODES.md](LAYOUT_MODES.md). The preview is a frame in the accent colour, drawn with the same border characters as the panes. With `fill`, the area inside the frame gets one tint, and the text under it fades into that tint. On a 16-colour terminal the frame is reverse video and the area inside stays as it is. Two options shape that preview:
 
-| Option | What it does | Values | Default |
-|---|---|---|---|
-| [`appearance.drop_preview`](config-options.md#appearance.drop_preview) | What the preview draws. `fill` draws the frame and tints the area inside it, `outline` draws only the frame, and `off` draws nothing | `fill`, `outline`, `off` | `outline` |
-| [`appearance.drop_preview_delay`](config-options.md#appearance.drop_preview_delay) | How long the pointer stays on one drop zone before its preview shows. A zone you leave before the delay is never drawn, so carrying a pane across the screen does not flash a zone over every pane on the way | a duration such as `120ms`, or `0` to show it at once | `120ms` |
+These options are in the [option reference](config-options.md): [`appearance.drop_preview`](config-options.md#appearance.drop_preview), [`appearance.drop_preview_delay`](config-options.md#appearance.drop_preview_delay).
 
 ```toml
 [appearance]
@@ -1540,11 +1500,7 @@ change with this option.
 The mode pill at the start of the dock shows an icon for the mode. Three
 options set the icons:
 
-| Option | Mode |
-| --- | --- |
-| [`appearance.dock_mode_icon_window`](config-options.md#appearance.dock_mode_icon_window) | Window mode |
-| [`appearance.dock_mode_icon_terminal`](config-options.md#appearance.dock_mode_icon_terminal) | Terminal mode |
-| [`appearance.dock_mode_icon_tiling`](config-options.md#appearance.dock_mode_icon_tiling) | Window mode and terminal mode while tiling is on |
+These options are in the [option reference](config-options.md): [`appearance.dock_mode_icon_window`](config-options.md#appearance.dock_mode_icon_window), [`appearance.dock_mode_icon_terminal`](config-options.md#appearance.dock_mode_icon_terminal), [`appearance.dock_mode_icon_tiling`](config-options.md#appearance.dock_mode_icon_tiling).
 
 ```toml
 [appearance]
@@ -1663,10 +1619,7 @@ case.
 
 A pane's title sits on its border. Two options set its shape and its place:
 
-| Option | Values | Default |
-|---|---|---|
-| [`appearance.window_title_style`](config-options.md#appearance.window_title_style) | `pill`: the name on a fill in the border's colour, with rounded caps. `tab`: the fill with no caps. `plain`: the name in the border's colour, with no fill | `pill` |
-| [`appearance.window_title_align`](config-options.md#appearance.window_title_align) | `auto`: on the top row, the end away from the window buttons; on the bottom row, the middle. `left`, `center`, `right`: that place in the room the buttons leave | `auto` |
+These options are in the [option reference](config-options.md): [`appearance.window_title_style`](config-options.md#appearance.window_title_style), [`appearance.window_title_align`](config-options.md#appearance.window_title_align).
 
 ```toml
 [appearance]
@@ -1734,11 +1687,7 @@ Appearance section, and `tuios set-config` applies it at once.
 The focused pane's border shows the mode. By default it is the theme's cyan
 in window mode and its green in terminal mode. Three keys set it.
 
-| Option | Values | Default |
-|---|---|---|
-| [`appearance.border_focused_color`](config-options.md#appearance.border_focused_color) | a [colour](#colour-values). It sets the border in both modes | empty |
-| [`appearance.border_focused_color_window`](config-options.md#appearance.border_focused_color_window) | a [colour](#colour-values). It sets the border in window mode | empty |
-| [`appearance.border_focused_color_terminal`](config-options.md#appearance.border_focused_color_terminal) | a [colour](#colour-values). It sets the border in terminal mode | empty |
+These options are in the [option reference](config-options.md): [`appearance.border_focused_color`](config-options.md#appearance.border_focused_color), [`appearance.border_focused_color_window`](config-options.md#appearance.border_focused_color_window), [`appearance.border_focused_color_terminal`](config-options.md#appearance.border_focused_color_terminal).
 
 ```toml
 [appearance]
@@ -1774,10 +1723,7 @@ border_focused_color_terminal = "#ff9e64"
 or more colours that blend from one to the next.
 [`appearance.border_gradient_angle`](config-options.md#appearance.border_gradient_angle) sets the direction in degrees.
 
-| Option | Values | Default |
-|---|---|---|
-| [`appearance.border_focused_gradient`](config-options.md#appearance.border_focused_gradient) | two or more [colours](#colour-values), separated by spaces or commas. Empty draws one colour | empty |
-| [`appearance.border_gradient_angle`](config-options.md#appearance.border_gradient_angle) | `0` to `359`. `0` runs left to right, `90` top to bottom, `45` from the top left corner to the bottom right one | `45` |
+These options are in the [option reference](config-options.md): [`appearance.border_focused_gradient`](config-options.md#appearance.border_focused_gradient), [`appearance.border_gradient_angle`](config-options.md#appearance.border_gradient_angle).
 
 ```toml
 [appearance]
@@ -1821,12 +1767,7 @@ The option is off by default. Then a dialog or a panel keeps its own shaded back
 
 [`appearance.overlay_border_color`](config-options.md#appearance.overlay_border_color) sets a colour for every dialog and panel frame, and for the scrollback browser's, with or without `pane_overlays`.
 
-| Option | Values | Default |
-|---|---|---|
-| [`appearance.border_style`](config-options.md#appearance.border_style) | `rounded`, `normal`, `thick`, `double`, `hidden`, `block`, `ascii`, `outer-half-block`, `inner-half-block`, `glyphs` | `rounded` |
-| [`appearance.frame_panels`](config-options.md#appearance.frame_panels) | `true` frames every panel in the border style, `false` leaves the panels without a frame | `false` |
-| [`appearance.pane_overlays`](config-options.md#appearance.pane_overlays) | `true` draws dialogs and panels like pane windows, `false` keeps their own shaded background | `false` |
-| [`appearance.overlay_border_color`](config-options.md#appearance.overlay_border_color) | A colour for every dialog and panel frame: `#89b4fa`, a slot name such as `bright_cyan`, or a role such as `accent`. Empty keeps the frame's own colour, or the focused pane's border under `pane_overlays` | empty |
+These options are in the [option reference](config-options.md): [`appearance.border_style`](config-options.md#appearance.border_style), [`appearance.frame_panels`](config-options.md#appearance.frame_panels), [`appearance.pane_overlays`](config-options.md#appearance.pane_overlays), [`appearance.overlay_border_color`](config-options.md#appearance.overlay_border_color).
 
 ```toml
 [appearance]
@@ -1868,13 +1809,7 @@ at once.
 
 ## Limits and banners
 
-| Option | Default | Range | What it does |
-|--------|---------|-------|--------------|
-| [`notifications.rate_limit_ms`](config-options.md#notifications.rate_limit_ms) | `500` | 0 to 10000 | A second desktop notification from a pane within this many milliseconds is dropped, so a pane that spams OSC 9 cannot flood the stack. `0` keeps every one. |
-| [`notifications.bell_rate_limit_ms`](config-options.md#notifications.bell_rate_limit_ms) | `200` | 0 to 10000 | The same for the bell. `0` keeps every one. |
-| [`appearance.copy_search_max_matches`](config-options.md#appearance.copy_search_max_matches) | `1000` | 100 to 100000 | Matches one copy mode search keeps. The renderer walks every match on every frame, so a very high value slows a one-letter query over a long scrollback. A search that stops at the limit shows `1000+`. |
-| [`tape.banner_ms`](config-options.md#tape.banner_ms) | `8000` | 1000 to 60000 | How long the "project tape found" banner stays on screen. |
-| [`tape.done_linger_ms`](config-options.md#tape.done_linger_ms) | `2000` | 500 to 30000 | How long the DONE indicator stays after a tape finishes. |
+These options are in the [option reference](config-options.md): [`notifications.rate_limit_ms`](config-options.md#notifications.rate_limit_ms), [`notifications.bell_rate_limit_ms`](config-options.md#notifications.bell_rate_limit_ms), [`appearance.copy_search_max_matches`](config-options.md#appearance.copy_search_max_matches), [`tape.banner_ms`](config-options.md#tape.banner_ms), [`tape.done_linger_ms`](config-options.md#tape.done_linger_ms).
 
 ```toml
 [notifications]
@@ -1893,12 +1828,7 @@ All five are on the settings page and apply at once.
 
 ## More display options
 
-| Option | Default | Range | What it does |
-|--------|---------|-------|--------------|
-| [`appearance.multi_copy_dim`](config-options.md#appearance.multi_copy_dim) | `45` | 0 to 90 | Percent a pane is dimmed when multi copy mode's search found nothing in it, so the panes that take part in the selection stand out. `0` leaves it undimmed. |
-| [`appearance.sidebar.marquee_pause_ms`](config-options.md#appearance.sidebar.marquee_pause_ms) | `900` | 0 to 10000 | Milliseconds a hovered rail row holds still before its overflowing title starts to move. `0` starts at once. |
-| [`appearance.sidebar.marquee_step_ms`](config-options.md#appearance.sidebar.marquee_step_ms) | `220` | 20 to 2000 | Milliseconds each one-cell step of the marquee is held. Larger is slower. |
-| [`dock.meter_interval_ms`](config-options.md#dock.meter_interval_ms) | `2000` | 500 to 60000 | Milliseconds between measurements of the dock's CPU and RAM readouts. |
+These options are in the [option reference](config-options.md): [`appearance.multi_copy_dim`](config-options.md#appearance.multi_copy_dim), [`appearance.sidebar.marquee_pause_ms`](config-options.md#appearance.sidebar.marquee_pause_ms), [`appearance.sidebar.marquee_step_ms`](config-options.md#appearance.sidebar.marquee_step_ms), [`dock.meter_interval_ms`](config-options.md#dock.meter_interval_ms).
 
 ```toml
 [appearance]
@@ -1918,11 +1848,7 @@ the settings page and apply at once.
 
 ## Display options
 
-| Option | Default | Range | What it does |
-|--------|---------|-------|--------------|
-| [`appearance.idle_fps`](config-options.md#appearance.idle_fps) | `10` | 1 to 60 | How often tuios polls, per second, while nothing is moving. A lower number saves power on a laptop, and a higher one notices background work sooner. It sits beside `max_fps`, which sets the rate while something is moving. |
-| [`appearance.sidebar.git_refresh_ms`](config-options.md#appearance.sidebar.git_refresh_ms) | `2000` | 500 to 60000 | Milliseconds between the rail's git section's looks at a directory it is already showing. The look is cheap, because git is run only when the commits have moved; raise it for a very large repository. |
-| [`debug.show_key_count`](config-options.md#debug.show_key_count) | `5` | 1 to 20 | How many recent keypresses the showkeys overlay keeps, for a screencast. |
+These options are in the [option reference](config-options.md): [`appearance.idle_fps`](config-options.md#appearance.idle_fps), [`appearance.sidebar.git_refresh_ms`](config-options.md#appearance.sidebar.git_refresh_ms), [`debug.show_key_count`](config-options.md#debug.show_key_count).
 
 ```toml
 [appearance]
@@ -1943,13 +1869,7 @@ nearest end of the range. All three are on the settings page and apply at once.
 These `[appearance]` options set how long the interface waits before it acts.
 Each is in milliseconds, applies at once, and is on the settings page.
 
-| Option | Default | Range | What it does |
-|--------|---------|-------|--------------|
-| [`appearance.whichkey_delay_ms`](config-options.md#appearance.whichkey_delay_ms) | `500` | 0 to 5000 | The pause after the leader key before the which-key panel opens. `0` opens it at once. |
-| [`appearance.tooltip_delay_ms`](config-options.md#appearance.tooltip_delay_ms) | `350` | 0 to 5000 | How long the pointer rests on a control before its tooltip shows. `0` shows it at once. |
-| [`appearance.zen_reveal_ms`](config-options.md#appearance.zen_reveal_ms) | `2000` | 200 to 30000 | How long the pointer may sit still before zen mode (`mouse`) hides the borders again. |
-| [`appearance.paste_preview_ms`](config-options.md#appearance.paste_preview_ms) | `6000` | 500 to 60000 | How long the paste card stays up with nothing pressed. |
-| [`appearance.chord_timeout_ms`](config-options.md#appearance.chord_timeout_ms) | `500` | 100 to 3000 | How long the first key of a two-key chord (`gg` in copy mode and in the scrollback browser) waits for the second. |
+These options are in the [option reference](config-options.md): [`appearance.whichkey_delay_ms`](config-options.md#appearance.whichkey_delay_ms), [`appearance.tooltip_delay_ms`](config-options.md#appearance.tooltip_delay_ms), [`appearance.zen_reveal_ms`](config-options.md#appearance.zen_reveal_ms), [`appearance.paste_preview_ms`](config-options.md#appearance.paste_preview_ms), [`appearance.chord_timeout_ms`](config-options.md#appearance.chord_timeout_ms).
 
 ```toml
 [appearance]
@@ -1964,10 +1884,7 @@ as the default, and a value out of range moves to the nearest end of the range.
 
 The `[mouse]` table sets how tuios reads the pointer's gestures.
 
-| Option | Default | Range | What it does |
-|--------|---------|-------|--------------|
-| [`mouse.double_click_ms`](config-options.md#mouse.double_click_ms) | `300` | 100 to 1000 | Milliseconds after a click in which a second click counts as a double click. A pane's text selection, the rail divider, the Agents list and the draft editor all read it. |
-| [`mouse.drag_threshold`](config-options.md#mouse.drag_threshold) | `5` | 1 to 50 | Cells the pointer moves before a press is a drag and not a click. It applies to the right button, to click-to-type and to Ctrl drag. |
+These options are in the [option reference](config-options.md): [`mouse.double_click_ms`](config-options.md#mouse.double_click_ms), [`mouse.drag_threshold`](config-options.md#mouse.drag_threshold).
 
 ```toml
 [mouse]
@@ -2556,10 +2473,7 @@ setup = "pnpm i"
 setup_async = false
 ```
 
-| Key | What it does | Default |
-|---|---|---|
-| `setup` | The command. It runs with `sh -c` in the worktree, in a window named `setup`, with no grants. Empty runs nothing. | `""` |
-| `setup_async` | Start the agent at once, while the setup runs. | `false` |
+These options are in the [option reference](config-options.md): [`worktree.setup`](config-options.md#worktree.setup), [`worktree.setup_async`](config-options.md#worktree.setup_async).
 
 The new session shows a card at the top right with three stages: the
 checkout, the setup with its last four lines, and the agent. The rail row
@@ -3557,12 +3471,7 @@ shows the option on its Sidebar tab once an agent has been seen. See
 Four more rail options change how the subagent rows look. Each default draws
 the rows as described above.
 
-| Option | Values | Default | What it does |
-| --- | --- | --- | --- |
-| `subagent_collapse` | `off`, `expanded`, `collapsed` | `off` | `expanded` and `collapsed` draw a heading line, `▾ 4 subagents`, over each agent's subagent rows. The value is the state at the start. |
-| `subagent_fields` | a comma list of `mark`, `name`, `type`, `time`, `note` | `mark,name,time,note` | The parts each subagent row shows. `type` is the agent type, such as `Explore`. `note` is the second line. |
-| `subagent_max_rows` | `0` to `16` | `0` | The most lines one agent's subagents use, the `+N more` line included. `0` means no limit. |
-| `subagent_hide_finished` | a duration such as `30s`, or `off` | `off` | Removes the row of a finished subagent this long after it ends. |
+These options are in the [option reference](config-options.md): [`appearance.sidebar.subagent_collapse`](config-options.md#appearance.sidebar.subagent_collapse), [`appearance.sidebar.subagent_fields`](config-options.md#appearance.sidebar.subagent_fields), [`appearance.sidebar.subagent_max_rows`](config-options.md#appearance.sidebar.subagent_max_rows), [`appearance.sidebar.subagent_hide_finished`](config-options.md#appearance.sidebar.subagent_hide_finished).
 
 A click on the heading, or `enter` on it, opens or closes the rows. `space`
 does the same with the rail cursor on the agent row or on its heading. The
