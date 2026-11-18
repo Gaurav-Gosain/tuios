@@ -33,6 +33,6 @@ replace tuios.dev/acp v0.0.0-20261113051439-2ceb1b54cbd2 => ./acp
 
 replace tuios.dev/shot v0.2.2-0.20261114201235-1792ffc9adbd => ./shot
 
-replace tuios.dev/harness v0.0.0-20261116195009-c8f480cad105 => ./harness
-
 replace tuios.dev/vt v0.3.4-0.20261117042519-2f2d93c6ac72 => ./vt
+
+replace tuios.dev/harness v0.0.0-20261118102828-066550f827f5 => ./harness
