@@ -40,7 +40,7 @@ go run ./cmd/tuios-web --debug
 # so the libraries are named one by one. `just test` runs this line under the
 # limits below.
 go test ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... \
-  ./plot/... ./loom/... ./sketch/... ./acp/... ./harness/...
+  ./plot/... ./loom/... ./sketch/... ./acp/... ./harness/... ./nitpick/...
 
 # Leave the machine usable. The maintainer works on this box while the suite
 # runs, and an uncapped build or test run takes every core. taskset confines the

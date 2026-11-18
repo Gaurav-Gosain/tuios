@@ -1,7 +1,7 @@
 name: Go libraries
 
 # The Go libraries in this repository, each a module of its own under a
-# tuios.dev import path (progstatus/, vt/, swatch/, shot/, tml/, plot/, loom/, sketch/, acp/ and harness/). CI and local builds use the
+# tuios.dev import path (progstatus/, vt/, swatch/, shot/, tml/, plot/, loom/, sketch/, acp/, harness/ and nitpick/). CI and local builds use the
 # folders through go.work. `go install .../cmd/tuios@vX` and the release use
 # the versions go.mod pins. This workflow keeps the two in step, and tests each
 # library alone, as an importer gets it.
@@ -15,9 +15,9 @@ on:
         type: string
         default: "true"
       lib_alone:
-        description: A JSON list of the alone jobs to run, of "vt", "sketch" and "small".
+        description: A JSON list of the alone jobs to run, of "vt", "sketch", "nitpick" and "small".
         type: string
-        default: '["vt","sketch","small"]'
+        default: '["vt","sketch","nitpick","small"]'
   workflow_dispatch:
 
 permissions:
@@ -63,7 +63,7 @@ jobs:
         # The small libraries share one, since each tests in seconds and a job
         # of its own spent longer on setup than on the library. ci.yml passes
         # only the jobs whose library changed.
-        id: ${{ fromJSON(inputs.lib_alone || '["vt","sketch","small"]') }}
+        id: ${{ fromJSON(inputs.lib_alone || '["vt","sketch","nitpick","small"]') }}
     env:
       # The module as an importer builds it: no workspace, and the oldest Go
       # its go.mod allows.
