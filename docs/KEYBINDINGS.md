@@ -2729,6 +2729,38 @@ To type `[ ] { } |` with Option, set the right Option key to compose. See
 [One Option key for typing](#one-option-key-for-typing). With
 `keyboard_layout = "other"`, tuios sends those characters to the pane.
 
+#### French AZERTY on macOS
+
+Set the left Option key to send Alt. In iTerm2 this is "Esc+". In WezTerm it is `send_composed_key_when_left_alt_is_pressed = false`. Then:
+
+- <kbd>Option</kbd> and <kbd>Shift</kbd> with a number key types the digit. The default `opt+1` to `opt+9` switch workspaces with it.
+- The default `opt+shift+1` to `opt+shift+9` need <kbd>Shift</kbd> and a digit together, which AZERTY cannot type. Bind the move to the unshifted keys:
+
+```toml
+[keybindings]
+keyboard_layout = "other"
+
+[keybindings.workspaces]
+move_and_follow_1 = ["opt+&"]
+move_and_follow_2 = ["opt+é"]
+move_and_follow_3 = ['opt+"']
+move_and_follow_4 = ["opt+'"]
+move_and_follow_5 = ["opt+("]
+move_and_follow_6 = ["opt+§"]
+move_and_follow_7 = ["opt+è"]
+move_and_follow_8 = ["opt+!"]
+move_and_follow_9 = ["opt+ç"]
+```
+
+To type `[ ] { } |` with Option, set the right Option key to compose. See [One Option key for typing](#one-option-key-for-typing). With `keyboard_layout = "other"`, TUIOS sends those characters to the pane.
+
+#### A character that Option types, after the leader
+
+On a German Mac layout, `|` is <kbd>Option</kbd>+<kbd>7</kbd> and `\` is <kbd>Option</kbd>+<kbd>Shift</kbd>+<kbd>7</kbd>. After the leader, Ghostty and other terminals with the Kitty keyboard protocol report that key as <kbd>Alt</kbd>+<kbd>7</kbd> with the text `|`. TUIOS now tries that character too, so <kbd>Ctrl</kbd>+<kbd>B</kbd> then <kbd>Option</kbd>+<kbd>7</kbd> runs the binding on `|`, the split.
+
+- TUIOS tries the character last, when the chord is <kbd>Alt</kbd> or <kbd>Alt</kbd>+<kbd>Shift</kbd> and the character is printable ASCII that the key does not give by itself or with <kbd>Shift</kbd> on a US layout.
+- A binding on the chord still wins. <kbd>Option</kbd>+<kbd>7</kbd> still goes to workspace 7 in window mode.
+
 ### Characters typed with Option
 
 Some layouts type ASCII characters with Option. On a German Mac, `|` is
@@ -2932,3 +2964,445 @@ US or ABC keyboard layout. It also works in a terminal that reports Alt with
 the character, such as Ghostty and kitty. On other layouts in Terminal.app
 and iTerm2, Option+1 types its character and does not switch. Set the
 terminal to send Option as Alt.
+
+## Modes
+
+Section: `[keybindings.mode_control]`. These keys work in window mode.
+
+The default keys of this section are in [Default keys: Window mode](keybindings-defaults.md#window-mode).
+
+To leave terminal mode, press <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>Esc</kbd>, or the direct key from [Terminal mode](#terminal-mode).
+
+`hold_window_mode` needs a terminal that speaks the Kitty keyboard protocol (Ghostty, kitty, WezTerm, foot, Alacritty), because only that protocol reports key releases. Bind it to an ordinary spare key, such as an unused function key from `f1` to `f12`. Binding a modifier such as `leftalt` also works, but then every keystroke in the session arrives as an escape code.
+
+## Window mode
+
+### Windows
+
+Section: `[keybindings.window_management]`.
+
+The default keys of this section are in [Default keys: Window mode](keybindings-defaults.md#window-mode).
+
+Section `[keybindings.restore_minimized]` restores one minimized window by position:
+
+The default keys of this section are in [Default keys: Window mode](keybindings-defaults.md#window-mode).
+
+Section `[keybindings.system]` has one binding: <kbd>B</kbd> is `toggle_spotlight`, which lights one part of the screen and dims the rest. See [Spotlight](#spotlight).
+
+### Workspaces
+
+Section: `[keybindings.workspaces]`. There are nine workspaces. The modifier is <kbd>Option</kbd> on macOS and <kbd>Alt</kbd> elsewhere.
+
+The default keys of this section are in [Default keys: Window mode](keybindings-defaults.md#window-mode).
+
+`rename_workspace` opens the rename editor on the current workspace. It has no default key. <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>w</kbd> <kbd>r</kbd> does the same from the prefix.
+
+### Layout and snapping
+
+Section: `[keybindings.layout]`.
+
+The default keys of this section are in [Default keys: Window mode](keybindings-defaults.md#window-mode).
+
+`resize_master_shrink_left` has no default because <kbd>,</kbd> opens settings. Bind it to a free key if you want it.
+
+Corner snapping is on the [layout prefix](#layout-prefix), not on the bare digits.
+
+### BSP splits
+
+Also in `[keybindings.layout]`. See [BSP Tiling](https://tuios.dev/docs/bsp-tiling).
+
+The default keys of this section are in [Default keys: Window mode](keybindings-defaults.md#window-mode).
+
+The preselect keys use <kbd>Option</kbd> on macOS. The prefix menu has its own copies of the four split actions, and rebinding one set does not change the other.
+
+## Terminal mode
+
+Section: `[keybindings.terminal_mode]`. These keys work in terminal mode with no prefix. Everything else goes to the pane.
+
+**Linux, others:**
+
+
+The default keys of this section are in [Default keys: Terminal mode](keybindings-defaults.md#terminal-mode).
+
+**macOS:**
+
+
+The default keys of this section are in [Default keys: Terminal mode](keybindings-defaults.md#terminal-mode).
+
+
+> **Alt+Left and Alt+Right cost you word motions.** Readline, fish and zsh use <kbd>Alt</kbd>+<kbd>←</kbd> and <kbd>Alt</kbd>+<kbd>→</kbd> to move a word at a time. To give them back, run `tuios keybinds free alt+left` and `tuios keybinds free alt+right`. <kbd>Ctrl</kbd>+<kbd>B</kbd> then an arrow still moves focus.
+
+Plain <kbd>Ctrl</kbd>+<kbd>V</kbd> is not bound. It reaches the pane, so vim's visual block mode works.
+
+<kbd>Shift</kbd>+<kbd>↑</kbd> and <kbd>Shift</kbd>+<kbd>↓</kbd> scroll the pane into its history only when the program is on the main screen and did not turn on a mouse mode. In other panes, TUIOS sends the keys to the program, so nvim, less and htop get them. In copy mode the keys scroll. This is the same rule as for the mouse wheel, and the same rule as in kitty. <kbd>Shift</kbd>+<kbd>PgUp</kbd> and <kbd>Shift</kbd>+<kbd>PgDn</kbd> follow the same rule, and scroll one page of the pane at a time.
+
+### Middle-click paste
+
+In terminal mode, a middle click pastes from the clipboard. It does not paste the primary selection. A program that uses the mouse, such as vim with `mouse=a`, lazygit or tmux, gets a plain middle press. In `[keybindings.terminal_mode]`, `middle` names the middle button. It takes `ctrl`, `alt` and `shift`, such as `ctrl+middle`. A binding with a modifier works over a program that uses the mouse too. Other tables do not accept `middle`.
+
+```toml
+[keybindings.terminal_mode]
+# Paste only on ctrl+middle, and give the plain middle click to every program
+terminal_paste_host = ["ctrl+shift+v", "super+v", "shift+super+v", "ctrl+middle"]
+```
+
+## Send files to another machine
+
+- In the files list of the rail, the menu of a file has Send to machine. It copies the file to the receive folder of the machine you pick.
+- When you drop files on a pane whose program runs on another machine, the terminal pastes their paths. TUIOS asks whether to send the files to that machine. Send copies them to a private drop folder there. When the copy is checked, TUIOS pastes the path on that machine. Paste the text pastes the paths as they are. A paste into a pane on this machine does not change.
+
+See [`tuios cp`](CLI_REFERENCE.md#tuios-cp) and [Copy files between machines](https://tuios.dev/docs/remote-hosts#copy-files-between-machines).
+
+## Global keys
+
+Section: `[keybindings.global]`. These keys work in window mode and terminal mode.
+
+The default keys of this section are in [Default keys: Global](keybindings-defaults.md#global).
+
+The **command palette** searches commands, sessions and windows. Start the query with `@` to filter panes by agent state (`@n` for needs input), or with `#` to search actions to rebind. Each row shows the key you bound to its action, such as `prefix+a`, and no key when the action has none. A change to the config shows the next time you open the palette.
+
+The **app launcher** lists every executable on `$PATH`, ranked by use. <kbd>Enter</kbd> runs the selection in a new pane with no shell in between. <kbd>Tab</kbd> types the command into the focused shell instead, so you can add arguments.
+
+These two keys take <kbd>Ctrl</kbd>+<kbd>P</kbd> from fish and vim and <kbd>Alt</kbd>+<kbd>Space</kbd> from readline. Set an action to `[]` to give its key back. On macOS, <kbd>Option</kbd>+<kbd>Space</kbd> types a non-breaking space, so use <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>a</kbd> for the launcher.
+
+## Prefix commands
+
+Press <kbd>Ctrl</kbd>+<kbd>B</kbd>, then the key. Section: `[keybindings.prefix_mode]`.
+
+The default keys of this section are in [Default keys: Prefix (ctrl+b)](keybindings-defaults.md#prefix-ctrlb).
+
+In terminal mode, pressing the leader twice sends one literal <kbd>Ctrl</kbd>+<kbd>B</kbd> to the pane.
+
+The which-key popup that opens after the leader shows the keys of your config. A key that you rebind shows in its new place. An action that you unbind has no row. A row for a range of keys, such as `1-9`, shows only the keys that are bound. For example, if you unbind the key for workspace 5, the row shows `1-4/6-9`. Set `appearance.whichkey_enabled = false` to turn the popup off.
+
+After a command worth repeating, such as an arrow, <kbd>o</kbd> or <kbd>O</kbd>, the prefix stays armed for 500 ms. <kbd>Ctrl</kbd>+<kbd>B</kbd> then <kbd>←</kbd> <kbd>←</kbd> <kbd>←</kbd> moves three panes. Change this with `appearance.prefix_repeat_time`. `0` turns it off.
+
+### Window prefix
+
+<kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>t</kbd>, then the key. Section: `[keybindings.window_prefix]`.
+
+The default keys of this section are in [Default keys: Window prefix (ctrl+b t)](keybindings-defaults.md#window-prefix-ctrlb-t).
+
+### Minimize prefix
+
+<kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>m</kbd>, then the key. Section: `[keybindings.minimize_prefix]`.
+
+The default keys of this section are in [Default keys: Minimize prefix (ctrl+b m)](keybindings-defaults.md#minimize-prefix-ctrlb-m).
+
+### Workspace prefix
+
+<kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>w</kbd>, then the key. Section: `[keybindings.workspace_prefix]`.
+
+The default keys of this section are in [Default keys: Workspace prefix (ctrl+b w)](keybindings-defaults.md#workspace-prefix-ctrlb-w).
+
+### Layout prefix
+
+<kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>L</kbd>, then the key. Section: `[keybindings.layout_prefix]`.
+
+The default keys of this section are in [Default keys: Layout prefix (ctrl+b L)](keybindings-defaults.md#layout-prefix-ctrlb-l).
+
+Actions `resize_width_10` to `resize_width_40` and `resize_height_10` to `resize_height_40` also exist, with no default key.
+
+Loading a layout moves the existing windows into place. It does not close any. Extra windows are minimized. `tuios layout` manages saved templates from the shell.
+
+### Tape prefix
+
+<kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>T</kbd>, then the key. Section: `[keybindings.tape_prefix]`. See [Tape Recording](https://tuios.dev/docs/tape-recording).
+
+The default keys of this section are in [Default keys: Tape prefix (ctrl+b T)](keybindings-defaults.md#tape-prefix-ctrlb-t).
+
+While a tape plays, section `[keybindings.script]` is active: <kbd>Ctrl</kbd>+<kbd>P</kbd> is `script_pause` and pauses or resumes playback.
+
+### Debug prefix
+
+<kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>D</kbd>, then the key. Section: `[keybindings.debug_prefix]`.
+
+The default keys of this section are in [Default keys: Debug prefix (ctrl+b D)](keybindings-defaults.md#debug-prefix-ctrlb-d).
+
+## Session rail
+
+Section: `[keybindings.sidebar]`. Active while the rail has the keyboard: press <kbd>s</kbd> in window mode, or <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>e</kbd>.
+
+The default keys of this section are in [Default keys: Sidebar](keybindings-defaults.md#sidebar).
+
+When the cursor is on a row in the files section, section `[keybindings.sidebar_files]` answers first:
+
+The default keys of this section are in [Default keys: Sidebar files](keybindings-defaults.md#sidebar-files).
+
+See [The files section](CONFIGURATION.md#the-files-section).
+
+When the cursor is on an agent row, section `[keybindings.sidebar_agents]` answers first. So <kbd>r</kbd> and <kbd>x</kbd> act on the agent there, and keep their rail meaning on every other row:
+
+The default keys of this section are in [Default keys: Sidebar agents](keybindings-defaults.md#sidebar-agents).
+
+<kbd>Enter</kbd> on the `+N at rest` line shows the agent rows folded there.
+
+## Inbox and mailbox
+
+The [agents view](https://tuios.dev/docs/agent-inbox#the-agents-view) shows every agent, and the Inbox items are its Needs you group. Open it with <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>i</kbd>. Its keys are in `[keybindings.inbox]`:
+
+The default keys of this section are in [Default keys: Inbox](keybindings-defaults.md#inbox).
+
+With marks, <kbd>r</kbd> replies to each marked agent, <kbd>1</kbd> lists the approvals to allow, <kbd>3</kbd> rejects them, <kbd>d</kbd> dismisses and <kbd>z</kbd> snoozes. See [Many agents at once](https://tuios.dev/docs/agent-inbox#many-agents-at-once).
+
+A key new in the agents view yields to your own: when your `[keybindings.inbox]` already gives <kbd>n</kbd>, <kbd>R</kbd>, <kbd>a</kbd>, <kbd>x</kbd> or another new key to an action, that action keeps it. `tuios keybinds doctor` lists each one. A config that kept the old default `inbox_deny_reason = ["n"]` moves it to <kbd>R</kbd>, so <kbd>n</kbd> starts a new agent.
+
+On an approval the Inbox holds for you, <kbd>1</kbd> allows it once, <kbd>2</kbd> always allows it and <kbd>3</kbd> rejects it. On a question put with `ask-human`, a digit picks that answer. The digits are not bindings.
+
+The prompt that <kbd>Space</kbd> opens has its own section, `[keybindings.inbox_peek]`:
+
+The default keys of this section are in [Default keys: Inbox prompt](keybindings-defaults.md#inbox-prompt).
+
+A digit chooses that numbered option of the prompt.
+
+The mailbox (<kbd>m</kbd> in the Inbox) uses `[keybindings.mail]`: <kbd>j</kbd>/<kbd>k</kbd> (`mail_down`, `mail_up`), <kbd>PgDn</kbd>/<kbd>PgUp</kbd> (`mail_page_down`, `mail_page_up`), <kbd>Enter</kbd> opens a thread (`mail_open`), <kbd>r</kbd> replies (`mail_reply`), <kbd>o</kbd> goes to the pane (`mail_focus_pane`), <kbd>n</kbd> writes a new message to an agent (`mail_new`) and <kbd>Esc</kbd> or <kbd>q</kbd> goes back (`mail_back`).
+
+The reply editor and the message editor take every key. <kbd>Enter</kbd> sends, <kbd>Ctrl</kbd>+<kbd>J</kbd> or <kbd>Shift</kbd>+<kbd>Enter</kbd> adds a line, <kbd>Ctrl</kbd>+<kbd>V</kbd> attaches the clipboard image, <kbd>@</kbd> names an agent, a pane or a file, <kbd>↑</kbd> and <kbd>Ctrl</kbd>+<kbd>R</kbd> bring back an earlier reply, and <kbd>Ctrl</kbd>+<kbd>G</kbd> opens `$EDITOR`. These keys are not bindings. The full list is in [The reply editor](https://tuios.dev/docs/agent-inbox#the-reply-editor).
+
+The footers name whatever key your config binds. Until an agent has been seen, the prefix menu, the help and the palette leave out the agent keys and entries, so a person who runs no agents is not shown them. The keys work before that too, except <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>O</kbd>, which types <kbd>O</kbd> into the pane until then.
+
+### Next and previous agent
+
+`next_agent` and `prev_agent` go to the next or previous agent pane, in the order the rail's agents section lists them. They wrap at the ends. From a pane with no agent, they go to the first and the last. An agent in another session or workspace is switched to.
+
+The default keys are <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>J</kbd> and <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> (with <kbd>Option</kbd> on macOS), and <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>J</kbd> and <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>K</kbd>. The chords also work in terminal mode and while the rail has the keyboard.
+
+## Lists and the settings page
+
+Every list moves the same way: the palette, the launcher, the settings page, the Inbox, the mailbox, the keybind manager, the theme editor, the pickers, go-to, the navigator, the menus and the tape manager. The keys are the `[keybindings.lists]` section, and a list's footer names the keys that section binds.
+
+The default keys of this section are in [Default keys: Lists](keybindings-defaults.md#lists).
+
+Set `appearance.wrap_lists = false` to stop at the ends instead of wrapping. The theme editor and the keybind manager keep a cursor for each tab, so a tab you come back to is on the row you left.
+
+Every short text field, such as a filter, a search or the rename dialog, has a caret and takes the same keys as the agent answer fields:
+
+The default keys of this section are in [Default keys: Lists](keybindings-defaults.md#lists).
+
+In a list's filter, <kbd>Home</kbd> and <kbd>End</kbd> move the list, and in the settings and help searches <kbd>←</kbd> <kbd>→</kbd> keep their own meaning, so there the caret moves on the other keys. The agents view's answer fields also undo with <kbd>Ctrl</kbd>+<kbd>Z</kbd>, select with <kbd>Shift</kbd> and a move key, and wrap a long line.
+
+### List keys
+
+The movement keys are in the `[keybindings.lists]` section. Each action takes the keys that do it:
+
+| Action | Default keys |
+|---|---|
+| `list_up` | `up`, `ctrl+p`, `k` |
+| `list_down` | `down`, `ctrl+n`, `j` |
+| `list_page_up` | `pgup` |
+| `list_page_down` | `pgdown` |
+| `list_first` | `home`, `g` |
+| `list_last` | `end`, `G` |
+
+A key that is one printable character is a letter key. Only a list with no filter to type into reads it. A list with a filter keeps its letters for the filter. To move on <kbd>Ctrl</kbd>+<kbd>J</kbd> and <kbd>Ctrl</kbd>+<kbd>K</kbd> as well as the arrows:
+
+```toml
+[keybindings.lists]
+list_down = ["down", "ctrl+j"]
+list_up   = ["up", "ctrl+k"]
+```
+
+An action that you set replaces its default keys. The example above gives `ctrl+n`, `ctrl+p`, `j` and `k` back to the pane or the filter. An action that you leave out keeps its defaults. `list_page_down = []` unbinds it.
+
+The settings page (<kbd>,</kbd> in window mode, or <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>,</kbd>) reopens on the tab, row and search you left it on:
+
+The default keys of this section are in [Default keys: Lists](keybindings-defaults.md#lists).
+
+A row whose value differs from its default has a dot after its name, including the hand-drawn rows such as the theme and shared borders, which have no reset. See [The in-app settings page](CONFIGURATION.md#the-in-app-settings-page) for the search.
+
+The key hints at the foot of a panel stay on one row. When they do not fit, they get shorter in steps. First, `ctrl+` becomes `^`, `alt+` becomes `M-` and `shift+` becomes `S-`. Then the least important hints go, one whole hint at a time. The way out, such as `esc`, stays. Only when the most important hints still do not fit do their labels go, from the last hint back. A hint is never cut in the middle of a word.
+
+### Delete a word
+
+<kbd>Alt</kbd>+<kbd>Backspace</kbd>, <kbd>Ctrl</kbd>+<kbd>W</kbd> and <kbd>Ctrl</kbd>+<kbd>Backspace</kbd> delete the last word of a short text field, such as a filter or the rename dialog. The keys skip the characters at the end that are not part of a word, then take the word. A word is letters, digits and `_`. So `src/dir1/dir2` becomes `src/dir1/`, then `src/`, then nothing.
+
+## Leave copy mode, and other keys
+
+- <kbd>Enter</kbd> leaves copy mode and gives the pane the keyboard back. From a selection it copies the selection first, as <kbd>y</kbd> does and as tmux's copy-mode-vi does. In the search prompt and after <kbd>f</kbd> or <kbd>t</kbd>, <kbd>Enter</kbd> still runs the search. The action is `copy_mode_exit`. Set `copy_mode_exit = []` in `[keybindings.copy_mode]` to give <kbd>Enter</kbd> its old meaning, which was nothing.
+- <kbd>Ctrl</kbd>+<kbd>C</kbd> leaves copy mode from normal mode, a selection, the search prompt or <kbd>f</kbd>/<kbd>t</kbd>. Nothing is copied.
+- In a <kbd>v</kbd> or <kbd>V</kbd> selection, <kbd>o</kbd> moves the copy cursor to the other end of the selection. The selected text does not change. If the other end is outside the pane, the pane scrolls to show it.
+- `terminal_focus_left`, `terminal_focus_right`, `terminal_focus_up` and `terminal_focus_down` also work in copy mode. In window mode, the window mode focus keys work. Focus moves to the next pane, and the old pane stays in copy mode. A focus key that copy mode also uses keeps its copy mode action. A key under the leader does not work in copy mode, because copy mode uses <kbd>Ctrl</kbd>+<kbd>B</kbd> for page up.
+
+## Search in copy mode
+
+The prompt shows `/` or `?` for the direction. The search starts at the copy cursor. When no match is found in that direction, the search continues from the other end of the buffer. <kbd>n</kbd> and <kbd>N</kbd> also start at the copy cursor. After you move the cursor, they find the nearest match. When a search finds more than 1000 matches, the prompt shows `1000+`.
+
+Two actions start copy mode and open the search prompt with one key. They have no default key.
+
+| Action | Palette entry | Does |
+|--------|---------------|------|
+| `copy_mode_search_forward` | `Copy mode: search forward` | Start copy mode and open the `/` prompt |
+| `copy_mode_search_backward` | `Copy mode: search backward` | Start copy mode and open the `?` prompt |
+
+They do the same as tmux `bind-key b copy-mode \; send-keys ?`. Bind one in any section. This example puts the backward search on <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>/</kbd>:
+
+```toml
+[keybindings.prefix_mode]
+copy_mode_search_backward = ["/"]
+```
+
+If the pane is already in copy mode, the action opens the prompt and does not move the cursor. In multi copy mode, the prompt opens in each pane of the mode.
+
+In copy mode, only a key in the `global`, `terminal_mode` or `window_management` section starts the action. A key after the leader does not, because copy mode uses <kbd>Ctrl</kbd>+<kbd>B</kbd> for page up. In copy mode, <kbd>/</kbd> and <kbd>?</kbd> open the same prompts.
+
+TUIOS cannot put two actions on one key. `tuios send-keys` cannot do it either, because a key from `send-keys` does not go to copy mode.
+
+## Mouse
+
+| Gesture | Does |
+|---------|------|
+| Click a pane | Focus it |
+| Double-click a pane | In window mode, also start typing in it. `appearance.click_to_type` makes it a single click, or turns it off |
+| Drag a title bar | Move the window. In tiling, drop it on the middle of a pane to swap the two. In BSP, drop it on the edge of a pane to split that pane. See [Moving a window with the mouse](https://tuios.dev/docs/bsp-tiling#moving-a-window-with-the-mouse) |
+| <kbd>Alt</kbd> + drag | Move the window from anywhere inside it (`appearance.alt_drag`) |
+| Right-drag | Resize the window |
+| Right-click | In window mode, open the menu for the pane, the dock or the desktop |
+| <kbd>Shift</kbd> or <kbd>Ctrl</kbd> + right-click | Open the pane menu even when the program in the pane uses the mouse |
+| Title bar buttons | Minimize, zoom or close |
+| Click a dock item | Restore a minimized window |
+| Wheel up | Enter copy mode and scroll, when the program is not using the mouse |
+| Middle click | In terminal mode, paste from the clipboard. See [Middle-click paste](#middle-click-paste) |
+| Drag the right border | Scroll with the scrollbar |
+| Hover a link | Show where it goes. The label shows the real target, also when the text on the screen is different |
+| <kbd>Ctrl</kbd> + click a link | Open it. <kbd>Shift</kbd>+click also opens it, but most terminals keep it for their own selection. See [Links](https://tuios.dev/docs/links) |
+
+In floating mode, drop a window on a screen edge to snap it: the left or right edge for a half, a corner for a quarter, the top center for the full screen.
+
+In copy mode, a click moves the cursor and a drag selects. Dragging past the top or bottom of the pane scrolls.
+
+<kbd>Ctrl</kbd>+drag still moves the pane. A link opens only when the pointer does not move. `appearance.link_click` sets which click opens a link.
+
+## Menus over the rail, the Inbox and other overlays
+
+`open_menu:NAME` also works in the sections of an overlay: `sidebar`,
+`sidebar_files`, `sidebar_agents`, `quick_look`, `quick_look_inside`, `inbox`,
+`inbox_peek`, `mail`, `transfers` and `review`. The menu opens over the
+overlay, and its keys run that overlay's own actions, so name actions of the
+same section.
+
+```toml
+[keybindings.inbox]
+"open_menu:triage" = ["x"]
+
+[menus.triage]
+title = "Triage"
+items = [
+  { action = "inbox_dismiss", key = "d" },
+  { action = "inbox_snooze", key = "s" },
+  { action = "inbox_close", key = "c" },
+]
+```
+
+In the Inbox, `x d` dismisses the selected item and `x c` closes the Inbox.
+`esc` closes the menu and leaves the overlay open, and the next key is the
+overlay's own again. A menu that the overlay's menu opens runs over the same
+overlay. A sticky menu stays open while the overlay does. Copy mode is not one
+of these sections: bind its menus in `terminal_mode` or under the leader.
+
+## Keybind presets
+
+`keybindings.preset` gives the keys of tmux, GNU screen or zellij after the leader:
+
+```toml
+[keybindings]
+preset = "tmux"
+```
+
+Or press <kbd>U</kbd> in window mode, or pick "Keybind preset" in the command palette. The picker shows each preset with three of its keys, and the keys that the program in your pane loses to it. Press <kbd>Enter</kbd> to use the preset. Or run `tuios keybinds preset tmux`. `tuios keybinds preset` shows the preset in use, and `tuios keybinds preset list` shows them all.
+
+| Preset | Leader | What it does |
+|--------|--------|--------------|
+| `tuios` | <kbd>Ctrl</kbd>+<kbd>B</kbd> | The TUIOS keys. This is the default |
+| `tmux` | <kbd>Ctrl</kbd>+<kbd>B</kbd> | tmux 3.8's keys after the leader |
+| `screen` | <kbd>Ctrl</kbd>+<kbd>A</kbd> | GNU screen's keys after the leader |
+| `zellij` | <kbd>Ctrl</kbd>+<kbd>G</kbd> | zellij's unlock-first keys. After the leader, <kbd>p</kbd> opens the window menu, <kbd>t</kbd> the workspace menu, <kbd>s</kbd> copy mode and <kbd>o</kbd> go-to on the sessions. The next key runs one action. It turns on [lock mode](#lock-mode) |
+
+- A preset changes the leader, the keys after the leader and the terminal-mode keys. Window mode, the rail, copy mode and the agents view keep the TUIOS keys.
+- A TUIOS feature whose key the preset uses moves to the TUIOS menu. Press the leader, then <kbd>Ctrl</kbd>+<kbd>T</kbd>, then the key it had.
+- Your own bindings win over the preset. `tuios keybinds doctor` lists each preset key that your bindings take.
+- `tuios keybinds cheatsheet tmux` shows the keys that work as in tmux, the TUIOS keys that moved, and what tmux has that TUIOS does not.
+
+## Palette commands you can bind
+
+Every row of the command palette runs an action, so you can bind any of them, and name them in a tape. These have no default key:
+
+| Action | Does |
+|---|---|
+| `new_window_on_host` | Open a new window on another machine |
+| `toggle_shared_borders` | Toggle shared borders between neighbouring panes |
+| `next_saved_layout`, `prev_saved_layout` | Load the next or the previous saved layout |
+| `layout_bsp`, `layout_master_stack`, `layout_scrolling`, `layout_off` | Tile the workspace as a BSP tree, as master and stack, or as scrolling columns, or turn tiling off |
+| `clear_multifocus` | Take every pane out of multifocus |
+| `multi_copy_mode` | Copy mode in every pane of the multifocus set |
+| `all_windows` | Show every window of every workspace |
+| `theme_picker`, `look_picker` | Choose a theme, or a look: a theme with its borders and dock |
+| `edit_theme` | Edit the current theme |
+| `share_look` | Share my look |
+| `toggle_focus_follows_mouse` | Toggle focus follows mouse |
+| `add_machine` | Add a machine |
+| `open_mailbox` | Open the agents' mailbox |
+| `dispatch_pause`, `dispatch_resume` | Pause all task dispatch, or start it again |
+
+Put the key in a section where it should work, such as `window_management` or `global`:
+
+```toml
+[keybindings.window_management]
+layout_bsp = ["alt+b"]
+
+[keybindings.global]
+theme_picker = ["alt+t"]
+```
+
+The palette shows each row's key once you bind it.
+
+## Customizing
+
+Bindings live in the sections under `[keybindings]` in `config.toml`, listed below. Each action takes a list of keys.
+
+```toml
+[keybindings]
+leader_key = "ctrl+a"
+
+[keybindings.window_management]
+new_window = ["n", "ctrl+t"]
+close_window = []          # unbind: the key goes back to the pane
+```
+
+An empty list and a missing line are different. A missing action gets its default back at the next load. An empty list stays empty. Key syntax and every section are on the [Configuration](#keybindings) page.
+
+The `[keybindings]` sections can also be in a file that `config.toml` includes, or in a file in `config.d`. The tables merge key by key. A `[[keybindings.command]]` entry in a later file changes the earlier entry with the same `name`, or with the same `key` when one of them has no name. Add `disabled = true` to an entry to remove the earlier entry that it matches. The keybind manager and `tuios keybinds unbind` write a change to the file that sets the action. See [Split the Config](https://tuios.dev/docs/config-files).
+
+### Keys TUIOS cannot read
+
+TUIOS ignores a key that it cannot read, such as `ctrl+nope`, and loads the rest of the file. `tuios keybinds doctor` reads the config the same way as the running app. The leader, the conflicts and the keys taken from the pane in the report are the ones that TUIOS uses.
+
+The doctor lists the ignored keys under `KEYS TUIOS CANNOT READ`, grouped by file. Each line names the key, the problem, the section and the action. It also says what TUIOS does instead. This report is for a file with a bad leader, a bad `new_window` key and an `opt+1` key:
+
+```
+tuios keybinds: 2 keys tuios cannot read, 7 keys a guest wants
+leader: ctrl+b
+
+KEYS TUIOS CANNOT READ (certain)
+  tuios ignores these keys.
+  Correct them in config.toml.
+    hyper+a                invalid modifier: hyper [keybindings.leader_key]. The leader is ctrl+b until you correct it.
+    ctrl+nope              unknown special key: nope [window_management.new_window]. new_window uses its default key, n.
+
+OPT KEYS READ AS ALT (certain)
+  For information. tuios reads opt+ as alt+ on this system. Nothing needs a change.
+  opt+1                  read as alt+1 [workspaces.switch_workspace_1]
+```
+
+An action with no other key gets its default key. If another action already has that default key, the line says so, and the action has no key. Correct each key in the file that the doctor names.
+
+Keys spelled with `opt+` are under `OPT KEYS READ AS ALT`. They are for information. You do not need to change them.
+
+See [When a key is wrong](CONFIGURATION.md#when-a-key-is-wrong).
+
+`tuios keybinds browse` opens the rows of `tuios keybinds list --json` in an explorer. Press <kbd>/</kbd> to search, and <kbd>Tab</kbd> or a click on a tab to show one scope. The detail pane shows the keys, the action, the scope and the description. <kbd>q</kbd> or <kbd>Esc</kbd> leaves it. Add a search to start with it: `tuios keybinds browse spotlight`. `tuios keybinds list` prints plain text, on a terminal too.
+
+The **keybind manager** (<kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>k</kbd>) shows the same analysis in four tabs: Bindings, Conflicts, Guests and Record. Each tab keeps its place. Record captures the next key you press. On a binding, <kbd>Ctrl</kbd>+<kbd>D</kbd> removes it and <kbd>Ctrl</kbd>+<kbd>X</kbd> takes its key off every action.
+
+> **Keybinding edits apply at once.** A keybinding saved in `config.toml` works at the next key press in the running client. You do not need to restart TUIOS or attach again. Changes made with the keybind manager also apply at once.
+
+> **keybinds list-custom does not report leader_key.** `tuios keybinds list-custom` compares every keybinding section. It does not report `leader_key`. Use `tuios keybinds doctor` or read the file for that.
