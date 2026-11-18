@@ -18267,6 +18267,13 @@ the path." note. It shift+clicks `notes.md` and waits for that note with no
 preview. It then presses `main.go`, moves six rows down inside the rail,
 releases, and presses space. Space opens a preview only when the drag opened
 none, so the wait for a preview fails when the drag opened one.
+## The restart dialog scrolls a long plan
+
+`TestRestartTheDaemonFromTheVersionNotice` now runs `sleep` in 40 panes of a
+second session before it opens the dialog, on a terminal of 100 x 40. The plan
+then has 49 lines. The dialog must show "Scroll to see more.", the Cancel row and
+the hints, and page down must bring the last program and "These come back" into
+view with the answers still on screen.
 
 Run on 2026-11-18 on Linux (arch-btw, under heavy.sh):
 
@@ -18274,3 +18281,4 @@ Run on 2026-11-18 on Linux (arch-btw, under heavy.sh):
 |---------|---------------------|--------|
 | The fix: the binary built from origin/main | "a click on main.go did not open quick look" | **caught** |
 | Only the threshold rule in `FileDragMotion`, back to "a press is a click until the pointer leaves the rail" | "a drag in the rail opened quick look, so space closed it" | **caught** |
+| The fix: `render_daemon_restart.go`, `daemon_restart.go` and `overlay_mouse.go` from origin/main | "the dialog does not say \"Cancel\"", "... \"esc cancel\"" and "page down did not show the end of the plan with the answers"; the frame shows the dialog running off the bottom of the screen | **caught** |
