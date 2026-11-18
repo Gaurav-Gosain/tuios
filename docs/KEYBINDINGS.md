@@ -1501,7 +1501,8 @@ A dialog shows the daemon's version now and after the restart, and this
 window's version when it moves too. It lists the programs that stop, by pane
 and session, and what comes back, with the agents that can resume. The text
 is the text `tuios restart-server` prints. Press `r` to restart, or `esc` to cancel. A click on a row
-does the same. The dialog then shows each step: stop the daemon, start the new
+does the same. When the list is taller than the screen, it scrolls and the
+answers stay at the bottom. Use `PgUp`, `PgDn`, `Home`, `End` or the wheel. The dialog then shows each step: stop the daemon, start the new
 one, attach again. tuios then starts again on the new build, in the same
 session, and says "The daemon restarted on 0.10.2. Your session is back."
 
