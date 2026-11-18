@@ -1,22 +1,27 @@
 # Precision
 
-Each nitpick rule carries a precision: the share of its findings that a
-person judged worth a change. The command shows it with each finding, and
+Each nitpick rule carries a precision: the share of its findings that the
+labeller judged worth a change. The command shows it with each finding, and
 `--gate` uses it. This file gives the method and the numbers.
 [precision/labels.tsv](precision/labels.tsv) holds every label.
+
+## Defaults
+
+A rule is on by default when its precision is 50% or more on a sample of 10
+or more. A new measurement moves a default by the same rule.
 
 ## Numbers
 
 | Rule | Default | Sample | Correct | Precision | 95% interval | Findings in the corpus |
 |------|---------|--------|---------|-----------|--------------|------------------------|
-| `swallowed_error` | on | 40 | 4 | 10% | 4% to 23% | 310 |
+| `swallowed_error` | off | 40 | 4 | 10% | 4% to 23% | 310 |
 | `error_to_empty_success` | on | 11 | 6 | 55% | 28% to 79% | 11 |
-| `config_fallback` | on | 1 | 0 | 0% | 0% to 79% | 1 |
+| `config_fallback` | off | 1 | 0 | 0% | 0% to 79% | 1 |
 | `narrator_comment` | on | 20 | 17 | 85% | 64% to 95% | 1509 |
 | `deep_nesting` | on | 40 | 26 | 65% | 50% to 78% | 762 |
 | `elision_comment` | off | 4 | 3 | 75% | 30% to 95% | 4 |
 | `junk_identifier` | off | 6 | 2 | 33% | 10% to 70% | 6 |
-| `commented_out_code` | off | 36 | 22 | 61% | 45% to 75% | 61 |
+| `commented_out_code` | on | 36 | 22 | 61% | 45% to 75% | 61 |
 | `nolint_without_reason` | off | 20 | 4 | 20% | 8% to 42% | 107 |
 
 The interval is the Wilson score interval. A sample under 20 gives a wide
@@ -48,8 +53,8 @@ interval, so read those numbers as a first estimate:
 3. A random sample was drawn per rule: up to 40 findings, spread evenly over
    tuios, the standard library and the modules, with at most 2 findings from
    one file. A rule with fewer findings has all of them in the sample.
-4. A person read each finding in its source and labelled it. A finding is
-   worth a change when a reviewer of new code would ask for that change:
+4. The author of this change, as the one labeller, read each finding in its
+   source and labelled it. A finding is worth a change when a reviewer of new code would ask for that change:
    - `swallowed_error`: the dropped error can hide a failure that matters
      (lost data, wrong state, a silent no-op). Cleanup on a path that already
      returns an error, output to a terminal and a hash write are not.

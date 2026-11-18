@@ -87,6 +87,19 @@ type runOut struct {
 func nitpickIn(t *testing.T, dir string, args ...string) runOut {
 	t.Helper()
 	cmd := exec.Command(bin, args...)
+	return runIn(t, cmd, dir)
+}
+
+// withSwallowed runs nitpick with swallowed_error, the opt-in rule that the
+// fixtures trip, on as well.
+func withSwallowed(t *testing.T, dir string, args ...string) runOut {
+	t.Helper()
+	args = append([]string{args[0], "--enable", "swallowed_error"}, args[1:]...)
+	return nitpickIn(t, dir, args...)
+}
+
+func runIn(t *testing.T, cmd *exec.Cmd, dir string) runOut {
+	t.Helper()
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=-mod=mod")
 	var stdout, stderr bytes.Buffer
@@ -121,7 +134,7 @@ func lines(res result) []int {
 func TestCheckReportsEveryFinding(t *testing.T) {
 	dir := newRepo(t)
 	writeFile(t, dir, "a.go", fileB)
-	r := nitpickIn(t, dir, "check", "--json")
+	r := withSwallowed(t, dir, "check", "--json")
 	if r.code != 0 {
 		t.Fatalf("exit %d, want 0\n%s", r.code, r.stderr)
 	}
@@ -142,12 +155,12 @@ func TestDiffReportsChangedLinesOnly(t *testing.T) {
 	base := snapshot(t, dir)
 	writeFile(t, dir, "a.go", fileB)
 
-	res := findings(t, nitpickIn(t, dir, "diff", "--base", base, "--json"))
+	res := findings(t, withSwallowed(t, dir, "diff", "--base", base, "--json"))
 	if got := lines(res); !slices.Equal(got, []int{11}) {
 		t.Fatalf("diff finding lines %v, want [11]", got)
 	}
 
-	r := nitpickIn(t, dir, "diff", "--base", base)
+	r := withSwallowed(t, dir, "diff", "--base", base)
 	if !strings.HasPrefix(r.stdout, "a.go:11:2: swallowed_error: the error from os.Chdir is dropped") {
 		t.Errorf("text output:\n%s", r.stdout)
 	}
@@ -164,11 +177,11 @@ func TestDiffStagedLeavesOutTheWorkingTree(t *testing.T) {
 	gitRun(t, dir, "add", "a.go")
 	writeFile(t, dir, "a.go", fileC)
 
-	staged := findings(t, nitpickIn(t, dir, "diff", "--staged", "--base", base, "--json"))
+	staged := findings(t, withSwallowed(t, dir, "diff", "--staged", "--base", base, "--json"))
 	if got := lines(staged); !slices.Equal(got, []int{11}) {
 		t.Errorf("staged finding lines %v, want [11]", got)
 	}
-	all := findings(t, nitpickIn(t, dir, "diff", "--base", base, "--json"))
+	all := findings(t, withSwallowed(t, dir, "diff", "--base", base, "--json"))
 	if got := lines(all); !slices.Equal(got, []int{11, 16}) {
 		t.Errorf("working tree finding lines %v, want [11 16]", got)
 	}
@@ -177,7 +190,7 @@ func TestDiffStagedLeavesOutTheWorkingTree(t *testing.T) {
 func TestDiffCountsUntrackedFilesAsNew(t *testing.T) {
 	dir := newRepo(t)
 	writeFile(t, dir, "a.go", fileB) // untracked, and HEAD has no commit
-	res := findings(t, nitpickIn(t, dir, "diff", "--json"))
+	res := findings(t, withSwallowed(t, dir, "diff", "--json"))
 	if got := lines(res); !slices.Equal(got, []int{6, 11}) {
 		t.Fatalf("finding lines %v, want [6 11]", got)
 	}
@@ -188,7 +201,7 @@ func TestDiffWithNoGoChange(t *testing.T) {
 	writeFile(t, dir, "a.go", fileB)
 	base := snapshot(t, dir)
 	writeFile(t, dir, "notes.txt", "x\n")
-	r := nitpickIn(t, dir, "diff", "--base", base)
+	r := withSwallowed(t, dir, "diff", "--base", base)
 	if r.code != 0 || r.stdout != "" || !strings.Contains(r.stderr, "no findings on changed lines") {
 		t.Fatalf("exit %d\nstdout:\n%s\nstderr:\n%s", r.code, r.stdout, r.stderr)
 	}
@@ -198,18 +211,18 @@ func TestGate(t *testing.T) {
 	dir := newRepo(t)
 	writeFile(t, dir, "a.go", fileA)
 
-	r := nitpickIn(t, dir, "check", "--gate", "0", "--json")
+	r := withSwallowed(t, dir, "check", "--gate", "0", "--json")
 	if r.code != 1 || !findings(t, r).GateFailed {
 		t.Errorf("--gate 0: exit %d, want 1 and gate_failed\n%s", r.code, r.stdout)
 	}
 	rule, _ := nitpick.Lookup("swallowed_error")
 	if rule.Precision < 0.99 {
 		above := fmt.Sprintf("%d%%", int(rule.Precision*100)+1)
-		if r := nitpickIn(t, dir, "check", "--gate", above); r.code != 0 {
+		if r := withSwallowed(t, dir, "check", "--gate", above); r.code != 0 {
 			t.Errorf("--gate %s: exit %d, want 0\n%s", above, r.code, r.stderr)
 		}
 	}
-	if r := nitpickIn(t, dir, "check", "--gate", "2x"); r.code != 2 {
+	if r := withSwallowed(t, dir, "check", "--gate", "2x"); r.code != 2 {
 		t.Errorf("--gate 2x: exit %d, want 2", r.code)
 	}
 }

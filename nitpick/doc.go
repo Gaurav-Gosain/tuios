@@ -7,7 +7,7 @@
 // which can limit the report to the lines a change touched.
 //
 // Each rule also carries a measured precision: the share of its findings
-// that a person judged worth a change, on a labelled sample of real Go code.
+// that the labeller judged worth a change, on a labelled sample of real Go code.
 // PRECISION.md gives the method and the numbers. [Rules] lists the rules
 // with their precision and whether they are on by default.
 package nitpick

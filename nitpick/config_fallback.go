@@ -31,7 +31,8 @@ that the read replaces, a call such as cmp.Or(os.Getenv("X"), "localhost"),
 and a function of the package that takes the name and the default. Test files
 are skipped, and so are packages for tests and examples (a folder named
 e2e, example, examples, testutil or testenv, or a package name that starts
-or ends with test), where a development value is the right default.`,
+or ends with test), where a development value is the right default. The rule is off by
+default.`,
 	URL: "https://pkg.go.dev/tuios.dev/nitpick#ConfigFallback",
 	Run: runConfigFallback,
 }

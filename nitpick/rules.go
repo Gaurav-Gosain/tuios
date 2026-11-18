@@ -11,7 +11,7 @@ type Rule struct {
 	Analyzer *analysis.Analyzer
 	// Default is true for a rule that runs when no rule is named.
 	Default bool
-	// Precision is the share of findings that a person judged worth a
+	// Precision is the share of findings that the labeller judged worth a
 	// change, from 0 to 1, on the sample that PRECISION.md describes.
 	Precision float64
 	// Sample is the number of labelled findings behind Precision.
@@ -22,16 +22,17 @@ type Rule struct {
 func (r Rule) Name() string { return r.Analyzer.Name }
 
 // Rules lists every rule, the default ones first. PRECISION.md holds the
-// same numbers, and a test keeps the two equal.
+// same numbers, and a test keeps the two equal. A rule is on by default
+// when its precision is 50% or more on a sample of 10 or more.
 var Rules = []Rule{
-	{Analyzer: SwallowedError, Default: true, Precision: 4.0 / 40, Sample: 40},
 	{Analyzer: ErrorToEmptySuccess, Default: true, Precision: 6.0 / 11, Sample: 11},
-	{Analyzer: ConfigFallback, Default: true, Precision: 0.0 / 1, Sample: 1},
 	{Analyzer: NarratorComment, Default: true, Precision: 17.0 / 20, Sample: 20},
 	{Analyzer: DeepNesting, Default: true, Precision: 26.0 / 40, Sample: 40},
+	{Analyzer: CommentedOutCode, Default: true, Precision: 22.0 / 36, Sample: 36},
+	{Analyzer: SwallowedError, Precision: 4.0 / 40, Sample: 40},
+	{Analyzer: ConfigFallback, Precision: 0.0 / 1, Sample: 1},
 	{Analyzer: ElisionComment, Precision: 3.0 / 4, Sample: 4},
 	{Analyzer: JunkIdentifier, Precision: 2.0 / 6, Sample: 6},
-	{Analyzer: CommentedOutCode, Precision: 22.0 / 36, Sample: 36},
 	{Analyzer: NolintWithoutReason, Precision: 4.0 / 20, Sample: 20},
 }
 

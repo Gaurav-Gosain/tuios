@@ -29,7 +29,7 @@ it drops an error on purpose. A comment on the line, or on the line above, gives
 the finding. Some calls are not reported: calls that cannot fail, such as the
 Write methods of bytes.Buffer and strings.Builder, output with fmt.Fprint
 and its kin, and cleanup (Close, os.Remove, os.RemoveAll, Kill, Signal,
-Release and the Set*Deadline methods).`,
+Release and the Set*Deadline methods). The rule is off by default.`,
 	URL:      "https://pkg.go.dev/tuios.dev/nitpick#SwallowedError",
 	Requires: []*analysis.Analyzer{inspect.Analyzer},
 	Run:      runSwallowedError,

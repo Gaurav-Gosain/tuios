@@ -12,18 +12,19 @@ change touched.
 
 | Rule | Default | Precision | What it reports |
 |------|---------|-----------|-----------------|
-| `swallowed_error` | on | 10% | `_ = f()` that drops an error in a function that returns an error, and an empty `if err != nil {}` |
+| `swallowed_error` | off | 10% | `_ = f()` that drops an error in a function that returns an error, and an empty `if err != nil {}` |
 | `error_to_empty_success` | on | 55% | `if err != nil { return nil, nil }` and other empty returns with a nil error |
-| `config_fallback` | on | 0% | an environment variable that falls back to a development value, such as localhost |
+| `config_fallback` | off | 0% | an environment variable that falls back to a development value, such as localhost |
 | `narrator_comment` | on | 85% | a comment that says what the next line says |
 | `deep_nesting` | on | 65% | control nesting of 5 or more in one function |
 | `elision_comment` | off | 75% | a comment that stands in for missing code: "rest of implementation" |
 | `junk_identifier` | off | 33% | a name such as foo, stuff or data2 |
-| `commented_out_code` | off | 61% | Go code kept in a comment |
+| `commented_out_code` | on | 61% | Go code kept in a comment |
 | `nolint_without_reason` | off | 20% | a `//nolint` directive with no reason |
 
-Precision is the share of findings that a person judged worth a change, on
-a labelled sample of real Go code. [PRECISION.md](PRECISION.md) gives the
+Precision is the share of findings that the labeller judged worth a change,
+on a labelled sample of real Go code. A rule is on by default when its
+precision is 50% or more on a sample of 10 or more. [PRECISION.md](PRECISION.md) gives the
 method and the numbers. A comment with a reason silences most rules: write
 why the error is dropped, and the finding goes away.
 

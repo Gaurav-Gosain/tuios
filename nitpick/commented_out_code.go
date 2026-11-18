@@ -19,8 +19,7 @@ marks (a parenthesis, a brace, := or =, or a statement keyword) and the group
 parses as Go statements or declarations. A group with prose in it, an
 indented example, a comment at the end of a line of code and a doc comment
 are skipped: they show an example or a formula on purpose. An expression
-must be a call to count as a statement, so "0 <= i && i < n" is prose. The
-rule is off by default.`,
+must be a call to count as a statement, so "0 <= i && i < n" is prose.`,
 	URL: "https://pkg.go.dev/tuios.dev/nitpick#CommentedOutCode",
 	Run: runCommentedOutCode,
 }
