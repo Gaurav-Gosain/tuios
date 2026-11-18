@@ -8,6 +8,7 @@ use (
 	./e2e/tui
 	./harness
 	./loom
+	./nitpick
 	./plot
 	./progstatus
 	./shot
