@@ -492,15 +492,13 @@ func mcpVibeTOMLBlock(tuios string, write bool) string {
 	for i, a := range args {
 		quoted[i] = tomlString(a)
 	}
-	var b strings.Builder
-	b.WriteString(mcpTOMLBegin + "\n")
-	b.WriteString("[[mcp_servers]]\n")
-	b.WriteString("name = " + tomlString(MCPServerName) + "\n")
-	b.WriteString("transport = \"stdio\"\n")
-	b.WriteString("command = " + tomlString(tuios) + "\n")
-	b.WriteString("args = [" + strings.Join(quoted, ", ") + "]\n")
-	b.WriteString(mcpTOMLEnd + "\n")
-	return b.String()
+	return mcpTOMLBegin + "\n" +
+		"[[mcp_servers]]\n" +
+		"name = " + tomlString(MCPServerName) + "\n" +
+		"transport = \"stdio\"\n" +
+		"command = " + tomlString(tuios) + "\n" +
+		"args = [" + strings.Join(quoted, ", ") + "]\n" +
+		mcpTOMLEnd + "\n"
 }
 
 func editMCPVibeTOML(have []byte, tuios string, write, install bool) ([]byte, error) {
