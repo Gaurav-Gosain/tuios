@@ -266,10 +266,7 @@ keyboard_layout = "us"   # us, other
 option_glyphs = "auto"   # auto, alt, bind, type
 ```
 
-| Key | Default | What it does |
-|---|---|---|
-| `keyboard_layout` | `us` | `us` lets a binding on `opt+shift+7` also match `opt+&`, as on a US keyboard. Set `other` for AZERTY, QWERTZ and other layouts. A key that the terminal reports through the Kitty keyboard protocol uses that report. |
-| `option_glyphs` | `auto` | What a character that macOS Option typed does. `auto` reads the keyboard layout of the Mac when tuios starts. It reads it again when such a character arrives and the last read is more than 30 seconds old. On a US or ABC layout it runs the Option binding for the character. On other layouts the character goes to the pane. A `keyboard_layout` that you set overrides the layout of the Mac. `alt` runs the binding only when the terminal also reports Alt. `bind` always runs it. `type` always sends the character to the pane. A tuios that serves SSH or web clients uses the layout of the Mac it runs on. |
+These options are in the [option reference](config-options.md): [`keybindings.keyboard_layout`](config-options.md#keybindings.keyboard_layout), [`keybindings.option_glyphs`](config-options.md#keybindings.option_glyphs).
 
 See [Shifted digits and AZERTY](KEYBINDINGS.md#shifted-digits-and-azerty) and
 [One Option key for typing](KEYBINDINGS.md#one-option-key-for-typing).
@@ -281,9 +278,7 @@ See [Shifted digits and AZERTY](KEYBINDINGS.md#shifted-digits-and-azerty) and
 lock = true
 ```
 
-| Key | Default | What it does |
-|---|---|---|
-| `lock` | `false` | `true` gives every key to the pane in terminal mode, except the leader. The leader unlocks for one action, and then tuios locks again. A repeatable action keeps its menu open until you press `esc`. That menu takes only repeatable keys, and any other key goes to the pane. The zellij preset sets `true`. |
+This option is in the [option reference](config-options.md): [`keybindings.lock`](config-options.md#keybindings.lock).
 
 See [Lock mode](KEYBINDINGS.md#lock-mode).
 
@@ -297,9 +292,7 @@ nest_exit_key = "f12"
 nest = ["enter"]
 ```
 
-| Key | Default | What it does |
-|---|---|---|
-| `nest_exit_key` | `"f12"` | The key that ends nest mode. A key that cannot be read goes back to `"f12"`, and a key programs type is reported as a problem. The `nest` action (the leader, then `enter`) turns nest mode on: every key goes to the pane, the leader too, until this key. |
+This option is in the [option reference](config-options.md): [`keybindings.nest_exit_key`](config-options.md#keybindings.nest_exit_key).
 
 See [Nest mode](KEYBINDINGS.md#nest-mode).
 
@@ -1491,11 +1484,7 @@ See [SESSIONS.md](SESSIONS.md#start-session-and-start-pane).
 These options shape the scrolling layout. See
 [LAYOUT_MODES.md](LAYOUT_MODES.md#scrolling-layout).
 
-| Option | What it does | Values | Default |
-|---|---|---|---|
-| [`appearance.scroll_column_width`](config-options.md#appearance.scroll_column_width) | The width of a new column, as a percent of the screen | 20 to `scroll_column_max` | 55 |
-| [`appearance.scroll_column_max`](config-options.md#appearance.scroll_column_max) | The largest width a column can have, as a percent of the screen | 20-100 | 90 |
-| `appearance.scroll_column_presets` | The widths that `scroll_cycle_width` steps through, as percents of the screen | a list of 1-100 | empty (33, 50, 55, 67, 90 and 100) |
+These options are in the [option reference](config-options.md): [`appearance.scroll_column_width`](config-options.md#appearance.scroll_column_width), [`appearance.scroll_column_max`](config-options.md#appearance.scroll_column_max), [`appearance.scroll_column_presets`](config-options.md#appearance.scroll_column_presets).
 
 `scroll_cycle_width` sets the focused column to the next width in the list
 that is larger than the current width. After the largest width, it goes back
@@ -2833,11 +2822,7 @@ command = "agent-brief render"
 refresh = "event:window-focused,agent-state"
 ```
 
-| Key | Meaning |
-|---|---|
-| `title` | The section's heading. Defaults to `Custom`. |
-| `command` | Run through `sh -c`, as dock commands are. Every line of stdout is a row. |
-| `refresh` | `once` (the default), a duration such as `"30s"` with a one-second floor, or `event:TYPE[,TYPE...]` with the dock's event types. `push` is refused: a command that stays running cannot see the focus or the section's size change. |
+These options are in the [option reference](config-options.md): [`appearance.sidebar.custom.title`](config-options.md#appearance.sidebar.custom.title), [`appearance.sidebar.custom.command`](config-options.md#appearance.sidebar.custom.command), [`appearance.sidebar.custom.refresh`](config-options.md#appearance.sidebar.custom.refresh).
 
 The command is a dock component that draws on the rail, so the dock's rules
 apply: it runs in the client, under a three second timeout, with bounded
@@ -2885,11 +2870,7 @@ command = "tuiostv-helper view"
 height  = 12
 ```
 
-| Key | Meaning |
-|---|---|
-| `title` | The section's heading. Defaults to `pane`. |
-| `command` | The program the pane runs, through `sh -c` (`cmd /C` on Windows). |
-| `height` | The most rows the pane takes. `0` or unset takes the section's share, such as `pane:30` in the layout. |
+These options are in the [option reference](config-options.md): [`appearance.sidebar.pane.title`](config-options.md#appearance.sidebar.pane.title), [`appearance.sidebar.pane.command`](config-options.md#appearance.sidebar.pane.command), [`appearance.sidebar.pane.height`](config-options.md#appearance.sidebar.pane.height).
 
 The program runs in a real terminal in the session, so it survives a detach.
 The pane is not one of your panes: tiling, layouts, the terminals section and
@@ -3070,15 +3051,7 @@ url = "https://hooks.example.com/tuios"
 token_env = "TUIOS_HOOK_TOKEN"              # optional, sent as a bearer token
 ```
 
-| Key | Default | What it does |
-| --- | --- | --- |
-| `enabled` | `true` | Turns every notification off when `false`. Nothing is sent without a provider. |
-| `web_url` | empty | The address of tuios-web. Each notification links to `web_url/inbox?item=ID`, which opens the agents view on the item. See [WEB.md](WEB.md#open-the-agents-view-from-a-notification). |
-| `content` | `summary` | `summary` sends the kind, the pane name and the one line the Inbox shows. `title` sends only the kind and the session. |
-| `quiet_active_seconds` | `120` | Holds a notification while you typed into a pane at an attached client in this many seconds. When you stay away that long and the item is still open, tuios sends it. `0` sends at once. |
-| `cooldown_seconds` | `60` | The shortest time between two notifications for the same pane and kind. |
-| `max_per_hour` | `30` | The most notifications in one hour. `0` sets no limit. |
-| `allow_http_redirects` | `false` | Lets a provider redirect to a plain `http` address. |
+These options are in the [option reference](config-options.md): [`notify.enabled`](config-options.md#notify.enabled), [`notify.web_url`](config-options.md#notify.web_url), [`notify.content`](config-options.md#notify.content), [`notify.quiet_active_seconds`](config-options.md#notify.quiet_active_seconds), [`notify.cooldown_seconds`](config-options.md#notify.cooldown_seconds), [`notify.max_per_hour`](config-options.md#notify.max_per_hour), [`notify.allow_http_redirects`](config-options.md#notify.allow_http_redirects).
 
 `[notify.triggers]` selects the Inbox kinds that send a notification. The
 kinds that wait for you are on by default: `approval`, `plan`, `question` and
@@ -3156,10 +3129,7 @@ subject = "https://example.com/tuios-contact"   # optional
 allow_insecure = false
 ```
 
-| Key | Default | What it does |
-| --- | --- | --- |
-| `subject` | `https://tuios.dev/push` | The VAPID subject: a URL that a push service can use to contact you. It must be an `https` URL or a `mailto:` URI. The push service reads it, so the default names no machine. |
-| `allow_insecure` | `false` | Lets tuios send to a push service on a loopback or private address, by `https` or `http`, for a push service on your own network. A change to `true` waits for `tuios config apply`. |
+These options are in the [option reference](config-options.md): [`notify.webpush.subject`](config-options.md#notify.webpush.subject), [`notify.webpush.allow_insecure`](config-options.md#notify.webpush.allow_insecure).
 
 When `allow_insecure` is `false`, tuios does not send to a loopback or
 private address. This applies also to a host name that resolves to one. tuios
@@ -4487,11 +4457,7 @@ command = "agent-brief render"
 refresh = "event:window-focused,agent-state"
 ```
 
-| Key | What it does |
-|-----|--------------|
-| `title` | The section's heading. Defaults to `Custom` |
-| `command` | Run with `sh -c`. Every line of stdout is a row |
-| `refresh` | `once` (the default), a duration such as `"30s"` (one second at least), or `event:TYPE[,TYPE...]` with the dock's event types. `push` is refused |
+These options are in the [option reference](config-options.md): [`appearance.sidebar.custom.title`](config-options.md#appearance.sidebar.custom.title), [`appearance.sidebar.custom.command`](config-options.md#appearance.sidebar.custom.command), [`appearance.sidebar.custom.refresh`](config-options.md#appearance.sidebar.custom.refresh).
 
 The command follows the rules of a [dock component](#custom-components). It runs in the client, under a three second timeout, with bounded output. SGR colour stays, and every other control sequence is removed. A command that fails, times out or prints nothing leaves the title over an empty section. Five failures in a row stop it until the config reloads or you run `tuios refresh-dock rail/custom`. `tuios list-dock-components` lists it as `rail/custom`. Rows are cut to the rail's width and to the section's lines, with `… +N` for the rows below.
 
@@ -4513,11 +4479,7 @@ command = "watch -t git status -sb"
 height  = 12
 ```
 
-| Key | What it does |
-|-----|--------------|
-| `title` | The heading of the section. The default is `pane` |
-| `command` | The program the pane runs, through `sh -c` (`cmd /C` on Windows) |
-| `height` | The most rows the pane takes. `0` or unset takes the share of the section, such as `pane:30` |
+These options are in the [option reference](config-options.md): [`appearance.sidebar.pane.title`](config-options.md#appearance.sidebar.pane.title), [`appearance.sidebar.pane.command`](config-options.md#appearance.sidebar.pane.command), [`appearance.sidebar.pane.height`](config-options.md#appearance.sidebar.pane.height).
 
 See [The pane section](https://tuios.dev/docs/session-rail#the-pane-section).
 
@@ -4550,11 +4512,7 @@ sections = "sessions,files,custom"
 command = "left-summary"
 ```
 
-| Key | What it does |
-|-----|--------------|
-| `custom` | A table with the `command` of this edge's custom section |
-| `session` | The name of a daemon session to show in this rail. Its panes stack top to bottom in place of the sections. Empty shows the sections. See [A daemon session in a rail](https://tuios.dev/docs/session-rail#a-daemon-session-in-a-rail) |
-| `session_workspace` | Show the session rail only on this workspace, `1` to `9`. `0`, the default, shows it on every workspace |
+These options are in the [option reference](config-options.md): [`appearance.sidebar.left`](config-options.md#appearance.sidebar.left), [`appearance.sidebar.right`](config-options.md#appearance.sidebar.right).
 
 These options are in the [option reference](config-options.md): [`appearance.sidebar.enabled`](config-options.md#appearance.sidebar.enabled), [`appearance.sidebar.width`](config-options.md#appearance.sidebar.width), [`appearance.sidebar.sections`](config-options.md#appearance.sidebar.sections).
 
@@ -4806,9 +4764,7 @@ Lock mode gives every key in terminal mode to the pane, except the leader.
 lock = true
 ```
 
-| Key | Default | What it does |
-|-----|---------|--------------|
-| `lock` | `false` | `true` gives every key to the pane in terminal mode, except the leader. The leader unlocks for one action, and then TUIOS locks again. A repeatable action keeps its menu open until you press <kbd>Esc</kbd>. That menu takes only repeatable keys. Any other key goes to the pane. The `zellij` preset sets `true` |
+This option is in the [option reference](config-options.md): [`keybindings.lock`](config-options.md#keybindings.lock).
 
 See [Lock mode](KEYBINDINGS.md#lock-mode).
 
@@ -4873,13 +4829,7 @@ On macOS, the workspace and preselect defaults use `opt+`, and `terminal_mode` a
 
 ## The `[daemon]` table
 
-| Key | Default | What it does |
-|-----|---------|--------------|
-| `agent_binaries` | `[]` | Extra program names to treat as agents, added to the built-in list |
-| `single_client` | `false` | Keep one client for each session. Each attach detaches the other clients of the session, as `tuios attach -d` does. See [One client for each session](https://tuios.dev/docs/sessions#one-client-for-each-session) |
-| `ssh_agent` | `"off"` | `"follow"` gives each session a stable link to the ssh agent of the client used last. New panes get `SSH_AUTH_SOCK` set to the link. See [SSH Agent](https://tuios.dev/docs/ssh-agent) |
-| `display` | `"follow"` | `"follow"` gives the new panes of a daemon with no display the display of the local client. `"off"` gives them none. See [The display of the client](#the-display-of-the-client) |
-| `respond_from_shell` | `false` | Let `tuios respond`, run from a shell outside every pane, answer an agent's prompt. A caller inside a pane is refused either way. Not settable with `set-config` |
+These options are in the [option reference](config-options.md): [`daemon.agent_binaries`](config-options.md#daemon.agent_binaries), [`daemon.single_client`](config-options.md#daemon.single_client), [`daemon.ssh_agent`](config-options.md#daemon.ssh_agent), [`daemon.display`](config-options.md#daemon.display), [`daemon.respond_from_shell`](config-options.md#daemon.respond_from_shell).
 
 These options are in the [option reference](config-options.md): [`daemon.log_level`](config-options.md#daemon.log_level), [`daemon.agent_autodetect`](config-options.md#daemon.agent_autodetect), [`daemon.agent_detect_seconds`](config-options.md#daemon.agent_detect_seconds), [`daemon.agent_stall_seconds`](config-options.md#daemon.agent_stall_seconds), [`daemon.subagent_fade_seconds`](config-options.md#daemon.subagent_fade_seconds), [`daemon.resume_agents`](config-options.md#daemon.resume_agents), [`daemon.persist_scrollback`](config-options.md#daemon.persist_scrollback), [`daemon.persist_scrollback_lines`](config-options.md#daemon.persist_scrollback_lines), [`daemon.persist_scrollback_kb`](config-options.md#daemon.persist_scrollback_kb), [`daemon.keep_awake`](config-options.md#daemon.keep_awake), [`daemon.window_size`](config-options.md#daemon.window_size), [`daemon.client_follows_upgrade`](config-options.md#daemon.client_follows_upgrade).
 
@@ -5054,9 +5004,7 @@ There are 36 effects. `tuios list-options screensaver.effect` prints them. A plu
 
 `[hints]` sets what [hints mode](HINTS.md) (<kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>F</kbd>) labels.
 
-| Key | Default | Values | What it does |
-|-----|---------|--------|--------------|
-| `patterns` | `[]` | list of Go regular expressions | Your own patterns. A group named `match` sets the part that is copied |
+This option is in the [option reference](config-options.md): [`hints.patterns`](config-options.md#hints.patterns).
 
 These options are in the [option reference](config-options.md): [`hints.builtins`](config-options.md#hints.builtins), [`hints.alphabet`](config-options.md#hints.alphabet), [`hints.open`](config-options.md#hints.open), [`hints.dim`](config-options.md#hints.dim), [`hints.all_panes`](config-options.md#hints.all_panes).
 
@@ -5119,9 +5067,7 @@ Both keys are on the settings page, in the Behavior section. `tuios set-config r
 
 `[tasks]` sets how the [task board](https://tuios.dev/docs/task-boards) works.
 
-| Key | Default | What it does |
-|-----|---------|--------------|
-| `stages` | every stage | The stages the board shows. The order stays `todo`, `plan`, `doing`, `verify`, `review`, `shipped`, `done` |
+This option is in the [option reference](config-options.md): [`tasks.stages`](config-options.md#tasks.stages).
 
 These options are in the [option reference](config-options.md): [`tasks.auto_stage`](config-options.md#tasks.auto_stage), [`tasks.attachment_max_mib`](config-options.md#tasks.attachment_max_mib), [`tasks.attachments_per_card`](config-options.md#tasks.attachments_per_card), [`tasks.attachment_session_mib`](config-options.md#tasks.attachment_session_mib), [`tasks.machine_cap`](config-options.md#tasks.machine_cap).
 
@@ -5236,14 +5182,7 @@ The built-in components are `mode`, `workspaces`, `trail`, `tape`, `windows`, `t
 
 `[dock.custom.NAME]` defines a cell. Put `custom/NAME` in a list to place it.
 
-| Key | Default | What it does |
-|-----|---------|--------------|
-| `command` | required | Run with `sh -c`. The first line of output is the cell text |
-| `refresh` | `"once"` | `once`, a duration such as `"30s"`, `push`, or `event:TYPE[,TYPE]` |
-| `on-click` | `""` | Run with `sh -c` when the cell is clicked |
-| `max-width` | `24` | Widest the cell may be, in cells |
-| `fg`, `bg`, `bold` | unset | The text colour, the ground colour and bold text of the cell. Colours are `#rrggbb` |
-| `cap_left`, `cap_right` | unset | Text drawn before and after the cell, in the colour of its ground |
+These options are in the [option reference](config-options.md): [`dock.custom.NAME.command`](config-options.md#dock.custom.NAME.command), [`dock.custom.NAME.refresh`](config-options.md#dock.custom.NAME.refresh), [`dock.custom.NAME.on-click`](config-options.md#dock.custom.NAME.on-click), [`dock.custom.NAME.max-width`](config-options.md#dock.custom.NAME.max-width), [`dock.custom.NAME.fg`](config-options.md#dock.custom.NAME.fg), [`dock.custom.NAME.bg`](config-options.md#dock.custom.NAME.bg), [`dock.custom.NAME.bold`](config-options.md#dock.custom.NAME.bold), [`dock.custom.NAME.cap_left`](config-options.md#dock.custom.NAME.cap_left), [`dock.custom.NAME.cap_right`](config-options.md#dock.custom.NAME.cap_right).
 
 With `push`, the command keeps running and each line it prints replaces the cell. With `event:`, the command runs again when the daemon reports one of those [hook events](HOOKS.md).
 
@@ -5263,12 +5202,7 @@ max_handshakes = 32        # connections that log in at the same time; 0 is no l
 max_sessions = 64          # sessions open at the same time; 0 is no limit
 ```
 
-| Key | Default | What it does |
-|-----|---------|--------------|
-| `handshake_timeout` | `"120s"` | Close a connection that does not log in within this time, as `LoginGraceTime` does in OpenSSH. The limit ends when the login is complete |
-| `idle_timeout` | `"0"` | Close a connection after this time with no traffic in either direction. A session that shows a clock stays open |
-| `max_handshakes` | `32` | When this many connections are logging in, close a new connection at once. A connection that is logged in does not count |
-| `max_sessions` | `64` | When this many sessions are open, over all connections, refuse a new session. The client sees a message |
+These options are in the [option reference](config-options.md): [`ssh.handshake_timeout`](config-options.md#ssh.handshake_timeout), [`ssh.idle_timeout`](config-options.md#ssh.idle_timeout), [`ssh.max_handshakes`](config-options.md#ssh.max_handshakes), [`ssh.max_sessions`](config-options.md#ssh.max_sessions).
 
 A duration is a value such as `90s`, `30m` or `2h`. A value that does not parse, or a negative value, gives a warning and the default. `tuios ssh --handshake-timeout`, `--idle-timeout`, `--max-handshakes` and `--max-sessions` replace these values for one run. The server writes the limits it uses to its log when it starts. `tuios set-config` cannot change this table.
 
@@ -5285,13 +5219,7 @@ addr = "workstation"
 connect_timeout = 5
 ```
 
-| Key | Default | What it does |
-|-----|---------|--------------|
-| `addr` | required | Anything ssh accepts, including an `ssh_config` alias. A host with no `addr`, or with one that starts with `-`, is ignored and logged |
-| `connect_timeout` | `10` | Seconds one dial may take before the host counts as unreachable |
-| `command` | `""` | The `tuios` binary on the host. Empty means the link finds it on the `PATH`, at the usual install paths, or through a login shell |
-| `ssh_options` | `[]` | Extra ssh arguments, placed before the address. Only safe options are accepted. See [Rules for ssh_options](#rules-for-ssh_options). `-A` forwards your ssh agent to the host. See [SSH Agent](https://tuios.dev/docs/ssh-agent#remote-hosts) |
-| `repos_root` | `""` | Where the host keeps its checkouts, as the host reads it, such as `~/src`. `fan --host`, `worktree new --host` and `start-agent` look for a repository there by its origin URL |
+These options are in the [option reference](config-options.md): [`hosts.NAME.addr`](config-options.md#hosts.NAME.addr), [`hosts.NAME.connect_timeout`](config-options.md#hosts.NAME.connect_timeout), [`hosts.NAME.command`](config-options.md#hosts.NAME.command), [`hosts.NAME.ssh_options`](config-options.md#hosts.NAME.ssh_options), [`hosts.NAME.repos_root`](config-options.md#hosts.NAME.repos_root).
 
 You can also manage the table from the shell. These commands edit the file:
 
@@ -5337,12 +5265,7 @@ files_read_roots = ["~/share"]                 # where it may read
 files_min_free = "5GiB"                        # the space a write must leave free
 ```
 
-| Key | Default | What it does |
-|-----|---------|--------------|
-| `files_roots` | one receive folder | The folders the machine may write in. The default is `~/Downloads/tuios` on macOS and Windows, and `$XDG_DOWNLOAD_DIR/tuios` (or `~/Downloads/tuios`) on other systems. tuios makes it on first use |
-| `files_read_roots` | not set | The folders the machine may read. Not set means every file you can read, apart from the read deny list. When set, the machine also reads the folders of `files_roots` |
-| `files_min_free` | `"1GiB"` | The free space a write must leave on its disk. A whole number with `B`, `KB`, `MB`, `GB`, `TB`, `KiB`, `MiB`, `GiB` or `TiB`. `"0"` turns the check off |
-| `files_max_entries` | `20000` | The most new files and folders the machine may make here in ten minutes. Past the bound, a new file or folder is `busy`, and a copy waits and goes on. `0` turns the bound off |
+These options are in the [option reference](config-options.md): [`hosts.NAME.files_roots`](config-options.md#hosts.NAME.files_roots), [`hosts.NAME.files_read_roots`](config-options.md#hosts.NAME.files_read_roots), [`hosts.NAME.files_min_free`](config-options.md#hosts.NAME.files_min_free), [`hosts.NAME.files_max_entries`](config-options.md#hosts.NAME.files_max_entries).
 
 A path is absolute or starts with `~`. Some places are always closed, whatever the roots say:
 
@@ -5404,19 +5327,7 @@ ssh still decides who may connect: the tunnel only carries bytes to sshd, which 
 
 `[tailscale]` changes which tailnet machines `tuios hosts add` and `tuios hosts tailnet` offer as addresses. It never adds a host by itself.
 
-| Key | Default | What it does |
-|-----|---------|--------------|
-| `enabled` | `true` | Offer tailnet machines. Empty on a machine that is not on a tailnet |
-| `addr` | `"dns"` | Address form: `dns` (MagicDNS name), `name` (short name) or `ip` |
-| `user` | `""` | ssh login to put before every address |
-| `users` | none | Per-machine logins, keyed by short name. Wins over `user` |
-| `os` | platforms that run TUIOS | Operating systems to offer. An empty list offers every machine |
-| `offline` | `false` | Also offer machines that are offline |
-| `self` | `false` | Also offer this machine |
-| `shared` | `false` | Also offer machines shared into your tailnet |
-| `include`, `exclude` | `[]` | Glob patterns on the short name and the MagicDNS name. `exclude` wins |
-| `max` | built in | Most machines to offer |
-| `socket` | `""` | Path to the tailscaled socket, if it is not in the usual place |
+These options are in the [option reference](config-options.md): [`tailscale.enabled`](config-options.md#tailscale.enabled), [`tailscale.addr`](config-options.md#tailscale.addr), [`tailscale.user`](config-options.md#tailscale.user), [`tailscale.users`](config-options.md#tailscale.users), [`tailscale.os`](config-options.md#tailscale.os), [`tailscale.offline`](config-options.md#tailscale.offline), [`tailscale.self`](config-options.md#tailscale.self), [`tailscale.shared`](config-options.md#tailscale.shared), [`tailscale.include`](config-options.md#tailscale.include), [`tailscale.exclude`](config-options.md#tailscale.exclude), [`tailscale.max`](config-options.md#tailscale.max), [`tailscale.socket`](config-options.md#tailscale.socket).
 
 ```toml
 [tailscale]
@@ -5492,26 +5403,7 @@ keep = 50                               # at most 1000
 max_untracked_mb = 50                   # a negative value means no limit
 ```
 
-| Key | Default | What it does |
-|-----|---------|--------------|
-| `approvals.enabled` | `[]` | Harnesses whose permission prompts wait for an answer from the Inbox: `claude-code` (or `claude`), `opencode` and `kilo`. Empty turns it off |
-| `approvals.hold_seconds` | `120` | How long a prompt waits for your answer before the harness asks in its own pane |
-| `approvals.hold_plans` | `true` | Also hold a plan an agent asks you to approve when it leaves plan mode |
-| `approvals.risk.builtin` | `true` | Keep the shipped [risk rules](https://tuios.dev/docs/agent-inbox#risk-rules) |
-| `approvals.risk.panes_may_allow` | `false` | Let a pane holding the `respond` grant allow a risky call |
-| `approvals.risk.rule` | none | Your own rules: a `name`, the `tools` it applies to, and an RE2 `pattern` |
-| `permissions.mode` | `"open"` | `open` gives a pane started with no grants of its own `admin`. `strict` gives it `grants`. Any other value reads as `strict` |
-| `permissions.grants` | `["read", "write", "fan"]` | What such a pane holds under `strict`. An empty list gives nothing. Add `files` to let a pane copy files near its work. See [Copying files with the files grant](https://tuios.dev/docs/agents#copying-files-with-the-files-grant) |
-| `recap.mode` | `"toast"` | Where the away recap shows: `toast` in the dock and the Inbox, `inbox` only in the Inbox, `off` only in `tuios agent-log --recap` |
-| `recap.away` | `"10m"` | How long you must have been away from a pane for the dock to show its recap |
-| `recap.test_patterns` | built in | Commands that count as a test run in the recap, such as `go test` and `npm test` |
-| `queue.max` | `8` | Messages one pane's [queue](https://tuios.dev/docs/agent-inbox#replying-and-the-queue) holds |
-| `mail.wake` | `true` | Type one line into an agent at rest that has unread mail, so that it reads the mail. `false` stops it. A change to `false` applies at once. A change to `true` waits for `tuios config apply` from outside TUIOS, or a restart. See [Agent Messaging](https://tuios.dev/docs/agent-messaging) |
-| `mail.questions_to_parent` | `true` | A question from a delegated child goes to its parent agent by mail first, and the Inbox holds it for 10 minutes before it alerts. `false` sends every such question to the Inbox at once. See [Hand a task to a child agent](https://tuios.dev/docs/agent-messaging#delegate) |
-| `checkpoints.enabled` | `true` | Save the git work tree of an agent's pane each time the agent finishes a turn that changed a file. See [Checkpoints](https://tuios.dev/docs/checkpoints) |
-| `checkpoints.keep` | `50` | How many checkpoints one pane keeps, at most 1000 |
-| `checkpoints.max_untracked_mb` | `50` | Leave an untracked file larger than this many megabytes out of a checkpoint. `tuios checkpoint list` names the files left out, and a restore does not change them |
-| `presets.NAME` | none | A way to start one kind of agent: `tuios start-agent --preset NAME`. It names the `agent` and any of `args`, `add_dirs`, `grants`, `model`, `effort`, `permission_mode`, `env`, `after_ready` and `ready_timeout`. See [Presets](https://tuios.dev/docs/new-agent#presets) |
+These options are in the [option reference](config-options.md): [`agents.approvals.enabled`](config-options.md#agents.approvals.enabled), [`agents.approvals.hold_seconds`](config-options.md#agents.approvals.hold_seconds), [`agents.approvals.hold_plans`](config-options.md#agents.approvals.hold_plans), [`agents.approvals.risk.builtin`](config-options.md#agents.approvals.risk.builtin), [`agents.approvals.risk.panes_may_allow`](config-options.md#agents.approvals.risk.panes_may_allow), [`agents.approvals.risk.rule`](config-options.md#agents.approvals.risk.rule), [`agents.permissions.mode`](config-options.md#agents.permissions.mode), [`agents.permissions.grants`](config-options.md#agents.permissions.grants), [`agents.recap.mode`](config-options.md#agents.recap.mode), [`agents.recap.away`](config-options.md#agents.recap.away), [`agents.recap.test_patterns`](config-options.md#agents.recap.test_patterns), [`agents.queue.max`](config-options.md#agents.queue.max), [`agents.mail.wake`](config-options.md#agents.mail.wake), [`agents.mail.questions_to_parent`](config-options.md#agents.mail.questions_to_parent), [`agents.checkpoints.enabled`](config-options.md#agents.checkpoints.enabled), [`agents.checkpoints.keep`](config-options.md#agents.checkpoints.keep), [`agents.checkpoints.max_untracked_mb`](config-options.md#agents.checkpoints.max_untracked_mb), [`agents.presets.NAME`](config-options.md#agents.presets.NAME).
 
 After turning on `approvals.enabled`, run `tuios integration install` for that harness again, so its hook is the version that waits. The grants are `read`, `write`, `fan`, `respond`, `files` and `admin`. See [What a pane may do](AGENT_STATE.md#what-a-pane-may-do).
 
@@ -5530,15 +5422,7 @@ url = "https://ntfy.sh/a-long-random-topic"
 token_file = "~/.config/tuios/ntfy-token"   # optional
 ```
 
-| Key | Default | What it does |
-|-----|---------|--------------|
-| `enabled` | `true` | `false` turns every notification off. Nothing is sent without a provider |
-| `web_url` | `""` | The address of `tuios-web`. Each notification links to `web_url/inbox?item=ID` |
-| `content` | `"summary"` | `summary` sends the kind, the pane name and the line the Inbox shows. `title` sends only the kind and the session |
-| `quiet_active_seconds` | `120` | Hold a notification while you typed at an attached client in this many seconds. `0` sends at once |
-| `cooldown_seconds` | `60` | The shortest time between two notifications for the same pane and kind |
-| `max_per_hour` | `30` | The most notifications in one hour. `0` sets no limit |
-| `allow_http_redirects` | `false` | Let a provider redirect to a plain `http` address |
+These options are in the [option reference](config-options.md): [`notify.enabled`](config-options.md#notify.enabled), [`notify.web_url`](config-options.md#notify.web_url), [`notify.content`](config-options.md#notify.content), [`notify.quiet_active_seconds`](config-options.md#notify.quiet_active_seconds), [`notify.cooldown_seconds`](config-options.md#notify.cooldown_seconds), [`notify.max_per_hour`](config-options.md#notify.max_per_hour), [`notify.allow_http_redirects`](config-options.md#notify.allow_http_redirects).
 
 `[notify.triggers]` selects the Inbox kinds: `approval`, `plan`, `question` and `ask` are on by default, `mail`, `errored` and `finished` are off. Like `[hosts]`, `[notify]` is not in `list-options`, and `tuios set-config` cannot change it. A new address or a new source for a secret waits for `tuios config apply` from a terminal outside TUIOS. `tuios notify test` sends a test notification through each provider. See [Push Notifications](https://tuios.dev/docs/push-notifications) for the providers and the secrets.
 
@@ -5552,10 +5436,7 @@ subject = "https://example.com/tuios-contact"   # optional
 allow_insecure = false
 ```
 
-| Key | Default | What it does |
-|-----|---------|--------------|
-| `subject` | `https://tuios.dev/push` | The VAPID subject: an `https` URL or a `mailto:` address that a push service can use to contact you |
-| `allow_insecure` | `false` | Let tuios send to a push service on a loopback or private address, by `https` or `http`. A change to `true` waits for `tuios config apply` |
+These options are in the [option reference](config-options.md): [`notify.webpush.subject`](config-options.md#notify.webpush.subject), [`notify.webpush.allow_insecure`](config-options.md#notify.webpush.allow_insecure).
 
 See [Push Notifications](https://tuios.dev/docs/push-notifications#web-push-to-a-phone).
 
@@ -5579,9 +5460,6 @@ rule, and an earlier rule wins over a later one. See [Link rules](#link-rules).
 
 `[plugins]` says which plugins tuios runs.
 
-| Key | What it does |
-|-----|--------------|
-| `enabled` | The ids of the plugins tuios runs. `tuios plugins enable` and `disable` change it |
-| `dirs` | More plugin folders, or manifests, to list. `tuios plugins link` adds to it |
+These options are in the [option reference](config-options.md): [`plugins.enabled`](config-options.md#plugins.enabled), [`plugins.dirs`](config-options.md#plugins.dirs).
 
 See [PLUGINS.md](PLUGINS.md).

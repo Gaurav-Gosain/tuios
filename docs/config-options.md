@@ -487,3 +487,232 @@ The defaults are the ones on Linux. Some defaults are different on macOS.
 | <a id="worktree.path"></a>`worktree.path` | string | empty | Where new worktrees go, as a template of {{ repo_path }}, {{ repo }} and {{ branch }}, with \| slug to make one folder name. A relative path starts at repo_path. Empty puts them under $XDG_DATA_HOME/tuios/worktrees |
 | <a id="worktree.setup"></a>`worktree.setup` | string | empty | A shell command to run in every new worktree before the agent starts, such as pnpm i. Empty runs nothing |
 | <a id="worktree.setup_async"></a>`worktree.setup_async` | bool | `false` | Start the agent at once while the setup runs. A failed setup then keeps the worktree and the branch |
+
+## Keys set in the file only
+
+These keys are read from `config.toml` only. `tuios set-config` and the settings page cannot change them.
+NAME stands for a name that you choose, such as the name of a host.
+The description of a table names its keys.
+
+### keybindings
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| <a id="keybindings.preset"></a>`keybindings.preset` | string | empty | The keys of another multiplexer, put over the tuios defaults. Empty is tuios. See KEYBINDINGS.md. Values: `tuios`, `tmux`, `screen`, `zellij`. |
+| <a id="keybindings.leader_key"></a>`keybindings.leader_key` | string | `ctrl+b` | The leader key, which starts the prefix commands. A preset can change it. |
+| <a id="keybindings.leader_twice"></a>`keybindings.leader_twice` | string | `send` | What the leader does when you press it two times. send sends the leader to the pane in terminal mode. last_workspace goes back to the last workspace, as in screen. Values: `send`, `last_workspace`. |
+| <a id="keybindings.keyboard_layout"></a>`keybindings.keyboard_layout` | string | `us` | The keyboard layout for a key that the terminal does not describe. With us, a binding on opt+shift+7 also matches opt+&. Set other for AZERTY, QWERTZ and other layouts. Values: `us`, `other`. |
+| <a id="keybindings.option_glyphs"></a>`keybindings.option_glyphs` | string | `auto` | What a character that the macOS Option key typed does. bind runs the Option binding, type sends the character to the pane, and alt runs the binding only when the terminal also reports Alt. auto reads the layout of the Mac. Values: `auto`, `alt`, `bind`, `type`. |
+| <a id="keybindings.lock"></a>`keybindings.lock` | bool | `false` | Give every key to the pane in terminal mode, except the leader. The leader unlocks for one action. The zellij preset sets it. |
+| <a id="keybindings.nest_exit_key"></a>`keybindings.nest_exit_key` | string | `f12` | The key that ends nest mode. In nest mode every key goes to the pane, the leader too. |
+| <a id="keybindings.repeat"></a>`keybindings.repeat` | list | built in | The actions that stay armed after the leader, as tmux bind -r does. The same key again runs the action again. An empty list turns repeat off. |
+
+### daemon
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| <a id="daemon.agent_binaries"></a>`daemon.agent_binaries` | list | `[]` | More program names to treat as agents, added to the built-in list. |
+| <a id="daemon.single_client"></a>`daemon.single_client` | bool | `false` | Keep one client for each session. Each attach detaches the other clients of the session, as tuios attach -d does. |
+| <a id="daemon.ssh_agent"></a>`daemon.ssh_agent` | string | `off` | follow gives each session a link to the ssh agent of the client used last. New panes get SSH_AUTH_SOCK set to the link. Values: `off`, `follow`. |
+| <a id="daemon.display"></a>`daemon.display` | string | `follow` | follow gives the new panes of a daemon with no display the display of the local client. off gives them none. Values: `follow`, `off`. |
+| <a id="daemon.respond_from_shell"></a>`daemon.respond_from_shell` | bool | `false` | Let tuios respond, run from a shell outside every pane, answer the prompt of an agent. tuios refuses a caller inside a pane either way. |
+
+### hosts
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| <a id="hosts.NAME.addr"></a>`hosts.NAME.addr` | string | required | The address of the machine: anything ssh accepts, an ssh_config alias too. tuios ignores and logs a host with no addr, or with one that starts with -. |
+| <a id="hosts.NAME.connect_timeout"></a>`hosts.NAME.connect_timeout` | int | `10` | The seconds one dial may take before the host counts as unreachable. 0 uses the default. |
+| <a id="hosts.NAME.command"></a>`hosts.NAME.command` | string | empty | The tuios binary on the host. Empty finds it on the PATH, at the usual install paths, or through a login shell. |
+| <a id="hosts.NAME.ssh_options"></a>`hosts.NAME.ssh_options` | list | `[]` | More ssh arguments, put before the address. tuios accepts only safe options. -A forwards your ssh agent to the host. |
+| <a id="hosts.NAME.repos_root"></a>`hosts.NAME.repos_root` | string | empty | The folder on the host that holds its checkouts, such as ~/src. fan --host, worktree new --host and start-agent look there for a repository by its origin URL. |
+| <a id="hosts.NAME.tailscale_login"></a>`hosts.NAME.tailscale_login` | string | empty | The origin of a Headscale server that sends the Tailscale SSH check of this host. tuios shows a sign-in link only for the Tailscale origins and this one. |
+| <a id="hosts.NAME.allow"></a>`hosts.NAME.allow` | list | `["list", "mail", "open", "write", "files", "transcripts"]` | What the machine may do here over the link. An empty list allows nothing. Unset takes the value of [hosts."*"], then the default. Values: `list`, `mail`, `open`, `write`, `respond`, `files`, `transcripts`. |
+| <a id="hosts.NAME.hold_mail"></a>`hosts.NAME.hold_mail` | bool | `false` | Hold mail from the machine in the Inbox until you pass it on. Unset takes the value of [hosts."*"]. |
+| <a id="hosts.NAME.hosted_grace"></a>`hosts.NAME.hosted_grace` | string | `1` | How long a pane that this machine runs for the other machine waits after the link drops, as a Go duration. 0 ends the pane with the link. |
+| <a id="hosts.NAME.files_roots"></a>`hosts.NAME.files_roots` | list | the receive folder | The folders the machine may write in, with the files capability. The receive folder is ~/Downloads/tuios, or $XDG_DOWNLOAD_DIR/tuios on Linux. An empty list allows only the drop folder. |
+| <a id="hosts.NAME.files_read_roots"></a>`hosts.NAME.files_read_roots` | list | not set | The folders the machine may read. Not set allows every file you can read, apart from the read deny list. A list also allows the folders of files_roots. |
+| <a id="hosts.NAME.files_min_free"></a>`hosts.NAME.files_min_free` | string | `1GiB` | The free space a write must leave on its disk: a whole number with B, KB, MB, GB, TB, KiB, MiB, GiB or TiB. 0 turns the check off. |
+| <a id="hosts.NAME.files_max_entries"></a>`hosts.NAME.files_max_entries` | int | `20000` | The most new files and folders the machine may make here in ten minutes. Past it, a copy waits. 0 turns the bound off. |
+
+### tailscale
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| <a id="tailscale.enabled"></a>`tailscale.enabled` | bool | `true` | Offer the machines of your tailnet as addresses. The list is empty on a machine that is not on a tailnet. |
+| <a id="tailscale.addr"></a>`tailscale.addr` | string | `dns` | The form of the address: dns for the MagicDNS name, name for the short name, ip for the 100.x address. Values: `dns`, `name`, `ip`. |
+| <a id="tailscale.user"></a>`tailscale.user` | string | empty | The ssh login to put before every address. |
+| <a id="tailscale.users"></a>`tailscale.users` | map | none | A login for each machine, by its short name. It wins over user. |
+| <a id="tailscale.os"></a>`tailscale.os` | list | the systems that run tuios | The operating systems to offer. An empty list offers every machine. |
+| <a id="tailscale.offline"></a>`tailscale.offline` | bool | `false` | Also offer machines that are offline. |
+| <a id="tailscale.self"></a>`tailscale.self` | bool | `false` | Also offer this machine. |
+| <a id="tailscale.shared"></a>`tailscale.shared` | bool | `false` | Also offer machines that other people shared into your tailnet. |
+| <a id="tailscale.include"></a>`tailscale.include` | list | `[]` | Glob patterns on the short name and the MagicDNS name. Empty offers every machine. |
+| <a id="tailscale.exclude"></a>`tailscale.exclude` | list | `[]` | Glob patterns of machines not to offer. exclude wins over include. |
+| <a id="tailscale.max"></a>`tailscale.max` | int | built in | The most machines to offer. 0 uses the default. |
+| <a id="tailscale.socket"></a>`tailscale.socket` | string | empty | The path to the tailscaled socket, when it is not in the usual place. |
+
+### agents
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| <a id="agents.herdr_protocol"></a>`agents.herdr_protocol` | string | `always` | Which panes learn about the socket for the herdr pane state protocol: always for every pane, agents for a pane that starts such a harness, off for none. Values: `always`, `agents`, `off`. |
+| <a id="agents.host_program_status"></a>`agents.host_program_status` | string | `session` | How tuios reports the agent states of its panes to your terminal, with OSC 7501. session sends one record for the session, panes one for each pane. Values: `session`, `panes`, `off`. |
+| <a id="agents.silent_after"></a>`agents.silent_after` | string | `1` | How long a pane whose hooks reported working may stay silent before it shows as unknown, as a Go duration. 0 or off turns it off. |
+| <a id="agents.approvals.enabled"></a>`agents.approvals.enabled` | list | `[]` | The harnesses whose permission prompts wait for an answer from the Inbox: claude-code (or claude), opencode, kilo and qwen. Empty turns it off. |
+| <a id="agents.approvals.hold_seconds"></a>`agents.approvals.hold_seconds` | int | `120` | How long a prompt waits for your answer before the harness asks in its own pane, from 10 to 300 seconds. 0 uses the default. |
+| <a id="agents.approvals.hold_plans"></a>`agents.approvals.hold_plans` | bool | `true` | Also hold a plan that an agent asks you to approve when it leaves plan mode. |
+| <a id="agents.approvals.risk.builtin"></a>`agents.approvals.risk.builtin` | bool | `true` | Keep the risk rules that tuios ships. |
+| <a id="agents.approvals.risk.panes_may_allow"></a>`agents.approvals.risk.panes_may_allow` | bool | `false` | Let a pane that holds the respond grant allow a call that matched a risk rule. Without it, such a pane may only deny the call. |
+| <a id="agents.approvals.risk.rule"></a>`agents.approvals.risk.rule` | tables | none | Your own risk rules, added to the shipped ones. Each has a name, the tools it applies to (empty for every tool) and an RE2 pattern. |
+| <a id="agents.permissions.mode"></a>`agents.permissions.mode` | string | `open` | open gives a pane started with no grants of its own the admin grant. strict gives it grants. Any other value reads as strict. Values: `open`, `strict`. |
+| <a id="agents.permissions.grants"></a>`agents.permissions.grants` | list | `["read", "write", "fan"]` | What such a pane holds under strict. An empty list gives nothing. Add files to let a pane copy files near its work. |
+| <a id="agents.recap.mode"></a>`agents.recap.mode` | string | `toast` | Where the away recap shows: toast in the dock and the Inbox, inbox only in the Inbox, off only in tuios agent-log --recap. Values: `toast`, `inbox`, `off`. |
+| <a id="agents.recap.away"></a>`agents.recap.away` | string | `1` | How long you must be away from a pane before the dock shows its recap, as a Go duration. |
+| <a id="agents.recap.test_patterns"></a>`agents.recap.test_patterns` | list | built in | The commands that count as a test run in the recap, such as go test and npm test. A list replaces the built-in one. |
+| <a id="agents.queue.max"></a>`agents.queue.max` | int | `8` | The messages that the queue of one pane holds, at most 64. 0 uses the default. |
+| <a id="agents.mail.wake"></a>`agents.mail.wake` | bool | `true` | Type one line into an agent at rest that has unread mail, so that it reads the mail. |
+| <a id="agents.mail.questions_to_parent"></a>`agents.mail.questions_to_parent` | bool | `true` | Send a question from a delegated child agent to its parent by mail first. The Inbox holds it for 10 minutes before it alerts you. |
+| <a id="agents.checkpoints.enabled"></a>`agents.checkpoints.enabled` | bool | `true` | Save the git work tree of the pane of an agent each time the agent ends a turn that changed a file. |
+| <a id="agents.checkpoints.keep"></a>`agents.checkpoints.keep` | int | `50` | How many checkpoints one pane keeps, at most 1000. 0 uses the default. |
+| <a id="agents.checkpoints.max_untracked_mb"></a>`agents.checkpoints.max_untracked_mb` | int | `50` | Leave an untracked file larger than this many megabytes out of a checkpoint. A negative value sets no limit. |
+| <a id="agents.presets.NAME"></a>`agents.presets.NAME` | table | none | A way to start one kind of agent: tuios start-agent --preset NAME. It names the agent and any of args, add_dirs, grants, model, effort, permission_mode, env, after_ready and ready_timeout. |
+
+### notify
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| <a id="notify.enabled"></a>`notify.enabled` | bool | `true` | Send notifications to your phone. false turns every notification off. tuios sends nothing without a provider. |
+| <a id="notify.web_url"></a>`notify.web_url` | string | empty | The address of tuios-web. Each notification links to web_url/inbox?item=ID. |
+| <a id="notify.content"></a>`notify.content` | string | `summary` | summary sends the kind, the pane name and the line that the Inbox shows. title sends only the kind and the session. Values: `summary`, `title`. |
+| <a id="notify.quiet_active_seconds"></a>`notify.quiet_active_seconds` | int | `120` | Hold a notification while you typed at an attached client in this many seconds. 0 sends at once. |
+| <a id="notify.cooldown_seconds"></a>`notify.cooldown_seconds` | int | `60` | The shortest time between two notifications for the same pane and kind. |
+| <a id="notify.max_per_hour"></a>`notify.max_per_hour` | int | `30` | The most notifications in one hour. 0 sets no limit. |
+| <a id="notify.allow_http_redirects"></a>`notify.allow_http_redirects` | bool | `false` | Let a provider redirect to a plain http address. |
+| <a id="notify.triggers.approval"></a>`notify.triggers.approval` | bool | `true` | Notify for a permission prompt that waits for you. |
+| <a id="notify.triggers.plan"></a>`notify.triggers.plan` | bool | `true` | Notify for a plan to approve. |
+| <a id="notify.triggers.question"></a>`notify.triggers.question` | bool | `true` | Notify for an agent that asks a question in its pane. |
+| <a id="notify.triggers.ask"></a>`notify.triggers.ask` | bool | `true` | Notify for tuios ask-human. |
+| <a id="notify.triggers.mail"></a>`notify.triggers.mail` | bool | `false` | Notify for agent mail to you. |
+| <a id="notify.triggers.errored"></a>`notify.triggers.errored` | bool | `false` | Notify for an agent that stopped on an error. |
+| <a id="notify.triggers.finished"></a>`notify.triggers.finished` | bool | `false` | Notify for an agent that finished a turn. |
+| <a id="notify.ntfy"></a>`notify.ntfy` | table | none | Send with ntfy: url (the topic), priority (1 to 5), and token, token_env or token_file. |
+| <a id="notify.pushover"></a>`notify.pushover` | table | none | Send with Pushover: user and token, each also as _env or _file, and url for a relay. |
+| <a id="notify.webhook"></a>`notify.webhook` | table | none | Send a JSON POST to url. token, token_env or token_file adds an Authorization: Bearer header. |
+| <a id="notify.webpush.subject"></a>`notify.webpush.subject` | string | `https://tuios.dev/push` | The VAPID subject: an https URL or a mailto: address that a push service can use to contact you. |
+| <a id="notify.webpush.allow_insecure"></a>`notify.webpush.allow_insecure` | bool | `false` | Let tuios send to a push service on a loopback or private address, by https or http. |
+
+### dock
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| <a id="dock.left"></a>`dock.left` | list | `["mode", "workspaces", "trail", "tape"]` | The built-in cells on the left end of the dock, in order. An empty list draws nothing there. A look can set it. Values: `clock`, `copy-help`, `cpu`, `mode`, `notifications`, `ram`, `session`, `session-controls`, `tape`, `trail`, `transfers`, `windows`, `workspaces`. |
+| <a id="dock.center"></a>`dock.center` | list | `["windows"]` | The built-in cells in the middle of the dock, in order. An empty list draws nothing there. A look can set it. Values: `clock`, `copy-help`, `cpu`, `mode`, `notifications`, `ram`, `session`, `session-controls`, `tape`, `trail`, `transfers`, `windows`, `workspaces`. |
+| <a id="dock.right"></a>`dock.right` | list | `["transfers", "notifications", "copy-help", "cpu", "ram", "clock", "session-controls"]` | The built-in cells on the right end of the dock, in order. An empty list draws nothing there. A look can set it. Values: `clock`, `copy-help`, `cpu`, `mode`, `notifications`, `ram`, `session`, `session-controls`, `tape`, `trail`, `transfers`, `windows`, `workspaces`. |
+| <a id="dock.custom.NAME.command"></a>`dock.custom.NAME.command` | string | required | The command of your own dock cell, run with sh -c. The first line of its output is the text of the cell. |
+| <a id="dock.custom.NAME.refresh"></a>`dock.custom.NAME.refresh` | string | `once` | When the command runs: once, a duration such as 30s, push (it stays running and each line is an update), or event:TYPE[,TYPE]. |
+| <a id="dock.custom.NAME.on-click"></a>`dock.custom.NAME.on-click` | string | empty | A command to run with sh -c when you click the cell. |
+| <a id="dock.custom.NAME.max-width"></a>`dock.custom.NAME.max-width` | int | `24` | The widest the cell may be, in cells. 0 uses the default. |
+| <a id="dock.custom.NAME.fg"></a>`dock.custom.NAME.fg` | string | empty | The text colour of the cell, as #rrggbb. |
+| <a id="dock.custom.NAME.bg"></a>`dock.custom.NAME.bg` | string | empty | The ground colour of the cell, as #rrggbb. |
+| <a id="dock.custom.NAME.bold"></a>`dock.custom.NAME.bold` | bool | `false` | Draw the text of the cell in bold. |
+| <a id="dock.custom.NAME.cap_left"></a>`dock.custom.NAME.cap_left` | string | empty | Text drawn before the cell, in the colour of its ground. |
+| <a id="dock.custom.NAME.cap_right"></a>`dock.custom.NAME.cap_right` | string | empty | Text drawn after the cell, in the colour of its ground. |
+| <a id="dock.session"></a>`dock.session` | table | none | The session cell: format, with {session}, {workspace} and {pane} (default {session} {workspace}:{pane}), and fg, bg, bold, cap_left and cap_right as a custom cell has them. |
+| <a id="dock.tabs.style"></a>`dock.tabs.style` | string | empty | How the workspace strip draws its tabs: pill, or flat for coloured runs of text. A look can set it. Values: `pill`, `flat`. |
+| <a id="dock.tabs.separator"></a>`dock.tabs.separator` | string | empty | Text between two flat tabs. Empty is one blank column. A look can set it. |
+| <a id="dock.tabs.separator_fg"></a>`dock.tabs.separator_fg` | string | empty | Colour of the text between two flat tabs. A look can set it. |
+| <a id="dock.tabs.active_fg"></a>`dock.tabs.active_fg` | string | empty | Text colour of the tab of the current workspace. A look can set it. |
+| <a id="dock.tabs.active_bg"></a>`dock.tabs.active_bg` | string | empty | Background colour of the tab of the current workspace. A look can set it. |
+| <a id="dock.tabs.active_bold"></a>`dock.tabs.active_bold` | bool | `false` | Draw the flat tab of the current workspace in bold. A pill is always bold. A look can set it. |
+| <a id="dock.tabs.active_underline"></a>`dock.tabs.active_underline` | bool | empty | Underline the tab of the current workspace. Unset underlines a pill and not a flat tab. A look can set it. |
+| <a id="dock.tabs.inactive_fg"></a>`dock.tabs.inactive_fg` | string | empty | Text colour of the tabs of the other workspaces. A look can set it. |
+| <a id="dock.tabs.inactive_bg"></a>`dock.tabs.inactive_bg` | string | empty | Background colour of the tabs of the other workspaces. A look can set it. |
+| <a id="dock.tabs.inactive_bold"></a>`dock.tabs.inactive_bold` | bool | `false` | Draw the tabs of the other workspaces in bold. A look can set it. |
+| <a id="dock.tabs.caps"></a>`dock.tabs.caps` | bool | `false` | Draw rounded ends on each flat tab, in the colour of the tab. A look can set it. |
+| <a id="dock.tabs.number_glyphs"></a>`dock.tabs.number_glyphs` | list | `[]` | What {icon} in appearance.dock_workspace_tab_format shows for each workspace, the first item for workspace 1. A workspace past the end shows its number. A look can set it. |
+| <a id="dock.tabs.zoom_marker"></a>`dock.tabs.zoom_marker` | string | empty | What {zoom} shows on the tab of the current workspace while a pane in it is zoomed. A look can set it. |
+| <a id="dock.tabs.show_add"></a>`dock.tabs.show_add` | bool | `false` | Keep the + tab in the flat style. A look can set it. |
+| <a id="dock.tabs.attention_fg"></a>`dock.tabs.attention_fg` | string | empty | Text colour of the tab of a workspace with a pane that waits for you. A look can set it. |
+| <a id="dock.tabs.bell_marker"></a>`dock.tabs.bell_marker` | string | empty | Text after the label of a workspace whose pane rang the bell. Empty shows none. A look can set it. |
+| <a id="dock.tabs.activity_marker"></a>`dock.tabs.activity_marker` | string | empty | Text after the label of a workspace whose pane printed since you looked. Empty shows none. A look can set it. |
+
+### sidebar
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| <a id="appearance.sidebar.custom.title"></a>`appearance.sidebar.custom.title` | string | `Custom` | The heading of the custom section of the rail. |
+| <a id="appearance.sidebar.custom.command"></a>`appearance.sidebar.custom.command` | string | empty | The command of the custom section, run with sh -c. Each line of its output is a row. |
+| <a id="appearance.sidebar.custom.refresh"></a>`appearance.sidebar.custom.refresh` | string | `once` | When the command runs: once, a duration such as 30s (one second at least), or event:TYPE[,TYPE]. tuios refuses push. |
+| <a id="appearance.sidebar.pane.title"></a>`appearance.sidebar.pane.title` | string | `pane` | The heading of the pane section of the rail. |
+| <a id="appearance.sidebar.pane.command"></a>`appearance.sidebar.pane.command` | string | empty | The program that the pane section runs, with sh -c (cmd /C on Windows). |
+| <a id="appearance.sidebar.pane.height"></a>`appearance.sidebar.pane.height` | int | `0` | The most rows the pane takes. 0 takes the share of the section in appearance.sidebar.sections, such as pane:30. |
+| <a id="appearance.sidebar.left"></a>`appearance.sidebar.left` | table | none | A rail on the left edge, apart from the main rail. Its keys: enabled, width, sections, session, session_workspace (1 to 9, or 0 for every workspace), custom, and the subagent keys of [appearance.sidebar]. |
+| <a id="appearance.sidebar.right"></a>`appearance.sidebar.right` | table | none | A rail on the right edge, with the same keys as appearance.sidebar.left. |
+| <a id="appearance.sidebar.agent_row"></a>`appearance.sidebar.agent_row` | table | built in | What an agent row of the rail shows, and the rules that colour its parts. See CONFIGURATION.md. |
+
+### appearance
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| <a id="appearance.scroll_column_presets"></a>`appearance.scroll_column_presets` | list | `[33, 50, 55, 67, 90, 100]` | The widths that scroll_cycle_width steps through in the scrolling layout, in percent of the screen. |
+
+### notifications
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| <a id="notifications.agent.sounds.done"></a>`notifications.agent.sounds.done` | string | built in | A sound file to play when an agent stops. |
+| <a id="notifications.agent.sounds.needs_input"></a>`notifications.agent.sounds.needs_input` | string | built in | A sound file to play when an agent waits for you or fails. |
+
+### hints
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| <a id="hints.patterns"></a>`hints.patterns` | list | `[]` | Your own hint patterns, as Go regular expressions. A group named match sets the part that is copied. |
+
+### links
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| <a id="links.rules"></a>`links.rules` | tables | none | Your own links: a regex in Go syntax, and the url a match opens. $0 is the whole match, and $1 or ${name} is a group. |
+
+### files
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| <a id="files.open"></a>`files.open` | tables | none | The program that opens a file from the rail: a match glob and a command (a list). The first rule that matches wins. With no match, the system opener runs. |
+
+### tasks
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| <a id="tasks.stages"></a>`tasks.stages` | list | every stage | The stages that the task board shows. The order stays todo, plan, doing, verify, review, shipped, done. |
+
+### ssh
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| <a id="ssh.handshake_timeout"></a>`ssh.handshake_timeout` | string | `2m0s` | Close a connection that does not log in within this time, as a Go duration. 0 turns it off. |
+| <a id="ssh.idle_timeout"></a>`ssh.idle_timeout` | string | `0` | Close a connection after this time with no traffic in either direction, as a Go duration. 0 turns it off. |
+| <a id="ssh.max_handshakes"></a>`ssh.max_handshakes` | int | `32` | The most connections that may log in at the same time. tuios closes a new connection past it. 0 sets no limit. |
+| <a id="ssh.max_sessions"></a>`ssh.max_sessions` | int | `64` | The most sessions open at the same time, over all connections. tuios refuses a new session past it. 0 sets no limit. |
+
+### actions and menus
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| <a id="actions"></a>`actions` | tables | none | Actions of your own: a name, and a label, icon, key, targets, when and trusted. See CONFIGURATION.md. |
+| <a id="menus.NAME"></a>`menus.NAME` | table | none | A menu of your own, or a change to a shipped menu: title, sticky, items, add, after and remove. |
+
+### scratch
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| <a id="scratch.session"></a>`scratch.session` | string | empty | No longer used. The scratch popup runs a plain shell. tuios names the key when it loads a config that has it. |
+
+### plugins
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| <a id="plugins.enabled"></a>`plugins.enabled` | list | `[]` | The ids of the plugins that tuios runs. tuios plugins enable and disable change it. |
+| <a id="plugins.dirs"></a>`plugins.dirs` | list | `[]` | More plugin folders, or manifests, to list. tuios plugins link adds to it. |

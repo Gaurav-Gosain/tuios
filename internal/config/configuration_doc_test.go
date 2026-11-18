@@ -272,6 +272,24 @@ func renderConfigOptionsDoc() string {
 			w("| <a id=\"", o.Path, "\"></a>`", o.Path, "` | ", o.Type, " | ", optionDefaultCell(o), " | ", optionText(o), " |\n")
 		}
 	}
+	w("\n## Keys set in the file only\n\n",
+		"These keys are read from `config.toml` only. `tuios set-config` and the settings page cannot change them.\n",
+		"NAME stands for a name that you choose, such as the name of a host.\n",
+		"The description of a table names its keys.\n")
+	sections = nil
+	byFileSection := map[string][]FileKey{}
+	for _, k := range FileKeys() {
+		if _, ok := byFileSection[k.Section]; !ok {
+			sections = append(sections, k.Section)
+		}
+		byFileSection[k.Section] = append(byFileSection[k.Section], k)
+	}
+	for _, s := range sections {
+		w("\n### ", s, "\n\n| Key | Type | Default | Description |\n|---|---|---|---|\n")
+		for _, k := range byFileSection[s] {
+			w("| <a id=\"", k.Path, "\"></a>`", k.Path, "` | ", k.Type, " | ", fileKeyDefaultCell(k), " | ", fileKeyText(k), " |\n")
+		}
+	}
 	return b.String()
 }
 
@@ -313,6 +331,33 @@ func optionText(o Option) string {
 		parts = append(parts, "Deprecated: "+docCell(o.Deprecated))
 	}
 	return strings.Join(parts, " ")
+}
+
+// fileKeyWords are the defaults written in words, not as a value.
+var fileKeyWords = []string{"none", "required", "built in", "not set", "every stage", "the receive folder", "the systems that run tuios"}
+
+// fileKeyDefaultCell is a file key's default as the page shows it.
+func fileKeyDefaultCell(k FileKey) string {
+	switch {
+	case k.Default == "":
+		return "empty"
+	case slices.Contains(fileKeyWords, k.Default):
+		return k.Default
+	}
+	return "`" + docCell(k.Default) + "`"
+}
+
+// fileKeyText is a file key's description with its values.
+func fileKeyText(k FileKey) string {
+	text := docCell(k.Description)
+	if len(k.Accepted) > 0 {
+		vals := make([]string, len(k.Accepted))
+		for i, v := range k.Accepted {
+			vals[i] = "`" + docCell(v) + "`"
+		}
+		text += " Values: " + strings.Join(vals, ", ") + "."
+	}
+	return text
 }
 
 // docCell makes s safe inside a table cell.
