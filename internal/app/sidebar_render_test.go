@@ -9,11 +9,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// wideRail widens the rail past sidebarCompactWidth, for a test about the
-// terminals section's own rows whose fixture panes run agents: on a compact
-// rail those panes are listed in the agents section alone.
+// wideRail widens the rail to 34 columns, for a test whose frame needs room
+// for a listing's names.
 func wideRail(m *OS) {
-	m.SidebarWidthPref = sidebarCompactWidth + 4
+	m.SidebarWidthPref = 34
 }
 
 // TestSidebarFitsNarrowScreens renders the sidebar at a range of sizes and

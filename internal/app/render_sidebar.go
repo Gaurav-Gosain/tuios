@@ -1601,10 +1601,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	terminals := m.sidebarTerminals(sessions, shown)
 	agents, agentsTotal := m.sidebarFilterAgents(m.sidebarAgents(sessions))
 	m.sidebarSortAgents(agents)
-	// Rows long at rest fold into one line at the end. The compact rule below
-	// reads every agent pane, folded or not, since a folded pane is still one
-	// the agents section lists.
-	allAgents := agents
+	// Rows long at rest fold into one line at the end.
 	agents = m.sidebarKinHeads(sidebarNestAgents(m.sidebarFoldAgents(agents, time.Now())))
 	// The one section whose order moves on its own, so the one whose viewport is
 	// anchored to a row rather than to an index. Before the cursor's auto-scroll
@@ -1620,33 +1617,15 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	files := m.sidebarFileRows()
 
 	// A peeked session with no panes says so, or the section would read as "the
-	// attached session has no panes". Decided before the compact rule below
-	// takes the agent panes out, which leaves a session of agents with no
-	// terminal rows but not with no panes.
+	// attached session has no panes".
 	emptyPeek := peeking && len(terminals) == 0
-	// A peek is a request to see that session's panes, so it lists them all.
-	compactAgents := sidebarCompactAgents(w, height, len(agents), &m.Settings)
-	// movedToAgents counts the panes the compact rule took out of terminals
-	// when it took them all. The section then keeps its header, with its "+",
-	// and one row that says where the panes are. Without it a session whose
-	// panes all run agents had no terminals section and no way to open a
-	// plain terminal from the rail.
-	movedToAgents := 0
-	if !peeking && compactAgents {
-		listed := len(terminals)
-		terminals = sidebarTerminalsWithoutAgents(terminals, allAgents)
-		if len(terminals) == 0 {
-			movedToAgents = listed
-		}
-	}
-
 	nS := len(sessionRows)
 	nT := len(terminals)
 	nA := len(agents)
 	if emptyFilter {
 		nA = 1
 	}
-	if emptyPeek || movedToAgents > 0 {
+	if emptyPeek {
 		nT = 1
 	}
 	// The layout: which sections are stacked, in what order, and the share each
@@ -1673,9 +1652,6 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	peekRows := nT
 	if peeking {
 		resting := m.sidebarTerminals(sessions, m.sidebarCurrentSessionID())
-		if compactAgents {
-			resting = sidebarTerminalsWithoutAgents(resting, allAgents)
-		}
 		if len(resting) > 0 {
 			nT = len(resting)
 		}
@@ -2036,11 +2012,10 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// Whether this frame draws the focused pane's terminals row, which is the
 	// row that carries the focus mark. When it does not, the agents row of that
 	// pane carries the mark instead, so the rail never loses the pane you are
-	// in: the layout may leave terminals out, the compact rule may take the
-	// pane out of it, a short rail may scroll the row away, and a peek shows
-	// another session's panes in its place.
+	// in: the layout may leave terminals out, a short rail may scroll the row
+	// away, and a peek shows another session's panes in its place.
 	focusDrawn := false
-	if !peeking && !emptyPeek && movedToAgents == 0 {
+	if !peeking && !emptyPeek {
 		for i := range count[sidebarSectionTerminals] {
 			if terminals[start[sidebarSectionTerminals]+i].Focused {
 				focusDrawn = true
@@ -2316,15 +2291,6 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				lines = append(lines, compose(sidebarFit(
 					sidebarStyle(nil, nil).Render(" ")+sidebarQuietDot(nil, pal, &m.Settings)+
 						sidebarStyle(nil, nil).Render(" ")+
-						sidebarStyle(nil, pal.FgMute).Render(overlay.Truncate(hint, sidebarNameAvail(cw, 0))), cw, nil)))
-			}
-			return
-		}
-		if movedToAgents > 0 {
-			if count[sidebarSectionTerminals] > 0 {
-				hint := strconv.Itoa(movedToAgents) + " in agents"
-				lines = append(lines, compose(sidebarFit(
-					strings.Repeat(" ", sidebarNameCol())+
 						sidebarStyle(nil, pal.FgMute).Render(overlay.Truncate(hint, sidebarNameAvail(cw, 0))), cw, nil)))
 			}
 			return
@@ -2861,38 +2827,6 @@ func (m *OS) scrollStripRanks() map[string]int {
 		}
 	}
 	return ranks
-}
-
-// sidebarCompactWidth is the widest rail the compact rule applies to. The
-// shipped rail is 24 columns, and at that width a pane running an agent was
-// listed three times: its terminals row, its agents row, and that row's note
-// line, which was the only one of the three with room to say what it wanted.
-const sidebarCompactWidth = 30
-
-// sidebarCompactAgents reports whether a rail of width w lists each agent pane
-// once, in the agents section, and leaves it out of the terminals section.
-// Only when both sections are in the layout and the agents section will be
-// drawn: a rail too short for it (under 8 lines) keeps every pane in
-// terminals, so a pane never drops off the rail altogether.
-func sidebarCompactAgents(w, height, agents int, s *config.Settings) bool {
-	return w <= sidebarCompactWidth && height >= 8 && agents > 0 &&
-		sidebarLayoutHas(sidebarSectionAgents, s) && sidebarLayoutHas(sidebarSectionTerminals, s)
-}
-
-// sidebarTerminalsWithoutAgents is the terminals list less the panes the
-// agents section lists.
-func sidebarTerminalsWithoutAgents(terminals []sidebarTerminalEntry, agents []sidebarAgentEntry) []sidebarTerminalEntry {
-	listed := make(map[string]bool, len(agents))
-	for _, a := range agents {
-		listed[a.WindowID] = true
-	}
-	out := terminals[:0:0]
-	for _, t := range terminals {
-		if !listed[t.WindowID] {
-			out = append(out, t)
-		}
-	}
-	return out
 }
 
 // sidebarAgents flattens every pane running an agent, across every session.

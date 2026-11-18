@@ -1999,15 +1999,9 @@ before that the age is left off, because a fresh `<1m` on every row said nothing
 the mark did not. The row under the keyboard cursor or the pointer shows its
 age at any size, and so does the hover tooltip.
 
-On a rail 30 columns wide or narrower (the shipped rail is 24), a pane running
-an agent is listed once, in the agents section, where its note line has room
-to say what it wants. The terminals section keeps the panes that run no agent,
-and the focused pane's focus mark moves to its agents row. Before this an
-agent at 24 columns was listed three times: its terminals row, its agents row,
-and that row's note line. A wider rail lists agent panes in both sections as
-before, and so does a peek at another session, which asks to see its panes. A
-rail too short to draw the agents section (under 8 lines) keeps every pane in
-terminals.
+The terminals section lists every pane of the session at every rail width.
+A pane that runs an agent also has a row in the agents section, which shows
+its state and its note line.
 
 Every in-flight state draws the one working glyph, `●`, whichever source
 reported it (a hook, an OSC 9;4 progress report, a screen rule or the process
