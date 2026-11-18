@@ -55,9 +55,14 @@ func TestQuickLookTakesTheMouse(t *testing.T) {
 	}
 	// Put the pointer on the right pane, so the focus is there.
 	mouseHover(t, term, 120, 20)
-	waitUntil(t, "the focus on the right pane", uiTimeout, func() (bool, string) { return focused() != "", term.Snapshot() })
-	time.Sleep(500 * time.Millisecond)
-	right := focused()
+	// The focus has settled once two reads in a row name the same pane.
+	right := ""
+	waitUntil(t, "the focus settles on the right pane", uiTimeout, func() (bool, string) {
+		cur := focused()
+		same := cur != "" && cur == right
+		right = cur
+		return same, term.Snapshot()
+	})
 
 	enterTerminalMode(t, term)
 	runInShell(t, term, "cd ~/proj && clear && echo CD''DONE", "CDDONE", uiTimeout)
