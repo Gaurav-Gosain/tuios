@@ -21,7 +21,15 @@ const (
 	// Link is the text of a link, an autolink or a bare URL. The run's URL
 	// is its target.
 	Link
+	// Marker is a reply marker an agent writes, [[Done]] or [[Failed: 3
+	// tests]]. The run's text is the label inside the brackets. A surface
+	// draws it as a pill.
+	Marker
 )
+
+// MarkerMax is the longest label, in runes, that a marker holds. A longer
+// one is read as the text it is.
+const MarkerMax = 32
 
 // Run is a stretch of text with one style. Text holds "\n" only for a hard
 // line break.
@@ -101,6 +109,12 @@ func (p *inline) parse(s string, st Style, url string, depth int) {
 				p.flush(st, url)
 				p.buf.WriteByte('\n')
 				p.flush(st, url)
+			} else if treeRow(strings.TrimLeft(s[i+1:], " ")) {
+				// A row of a tree an agent draws, ├── or └──, goes on a
+				// line of its own under the row before it.
+				p.flush(st, url)
+				p.buf.WriteByte('\n')
+				p.flush(st, url)
 			} else {
 				p.buf.WriteByte(' ')
 			}
@@ -145,6 +159,15 @@ func (p *inline) parse(s string, st Style, url string, depth int) {
 			i += n
 			continue
 		case c == '[' || c == '!' && i+1 < len(s) && s[i+1] == '[':
+			if c == '[' && url == "" {
+				if label, n := marker(s[i:]); n > 0 {
+					p.flush(st, url)
+					p.buf.WriteString(label)
+					p.flush(st|Marker, url)
+					i += n
+					continue
+				}
+			}
 			open := i
 			if c == '!' {
 				open++
@@ -247,6 +270,31 @@ func (p *inline) emphasis(s string, i, n, depth int, miss *misses) (end int, add
 	}
 	miss.delim[ci][k] = i + 1
 	return 0, 0, false
+}
+
+// treeRow reports a line that starts with a tree glyph: ├, └ or │.
+func treeRow(s string) bool {
+	return strings.HasPrefix(s, "├") || strings.HasPrefix(s, "└") || strings.HasPrefix(s, "│")
+}
+
+// marker reads a reply marker at the start of s: [[label]], where the label
+// is text of 1 to MarkerMax runes on one line, with no bracket or backtick in
+// it and no space at either end. It returns the label and the marker's
+// length in bytes, or 0.
+func marker(s string) (label string, n int) {
+	if !strings.HasPrefix(s, "[[") {
+		return "", 0
+	}
+	// MarkerMax runes are at most 4 bytes each.
+	end := strings.Index(s[2:min(len(s), 2+4*MarkerMax+2)], "]]")
+	if end <= 0 {
+		return "", 0
+	}
+	label = s[2 : 2+end]
+	if strings.ContainsAny(label, "[]`\n\\") || strings.TrimSpace(label) != label || utf8.RuneCountInString(label) > MarkerMax {
+		return "", 0
+	}
+	return label, end + 4
 }
 
 // run is the length of the run of c at s[i].

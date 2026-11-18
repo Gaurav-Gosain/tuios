@@ -3154,6 +3154,34 @@ fold_working = true   # default false
 choice wins over `fold_working`. The settings page has this option on the
 Behavior tab, as "Fold Working".
 
+## Reply markers
+
+An agent can mark its reply with a short label in double square brackets,
+such as `[[Done]]`, `[[Failed: 3 tests]]` or `[[Needs you]]`. The agents
+view (`ctrl+b i`) shows each marker as a coloured label:
+
+| Colour | Labels |
+|--------|--------|
+| Red | Failed, Blocked, Broken, Rejected, Unsafe, Down |
+| Yellow | Needs you, Unverified, Pending, Review, Partial, Skipped, In progress, At risk, Decision, Todo, Stale, Draft |
+| Green | Done, Passed, Fixed, Verified, Merged, Shipped, Approved, Ready, Healthy |
+| Accent | Any other label |
+
+Complete, Completed, Finished and OK show as Done. Fail, Failing and Error
+show as Failed. A label has at most 32 characters. A marker in a code span or
+a code block stays as text. With Nerd Fonts on, a label has an icon. The view
+also colours ✓, ✗ and →, and dims the lines of a tree (`├──`, `└──`). The
+stored reply and a Markdown copy (`Y` in copy mode) keep the marker as the
+agent wrote it.
+
+`tuios start-agent` can tell Claude Code about the markers. It passes the
+guidance with `--append-system-prompt`. This is off by default:
+
+```toml
+[agents]
+reply_markers = true   # default false
+```
+
 ## Next after an answer
 
 An answer sent from the agents view (`ctrl+b i`), such as an allow, a reject,

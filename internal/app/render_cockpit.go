@@ -39,7 +39,9 @@ type ckLook struct {
 	add, del               color.Color
 	attnTint, busyTint     color.Color
 	okTint, warnTint       color.Color
-	nerd, ascii            bool
+	// accTint is the ground of a reply marker the list does not know.
+	accTint     color.Color
+	nerd, ascii bool
 }
 
 // ckLookKey is what a look was built from.
@@ -137,6 +139,7 @@ func (m *OS) buildCockpitLook(pal overlay.Palette) ckLook {
 	l.del = overlay.MixColors(pal.Warn, pal.FgDim, 0.4)
 	tint := func(c color.Color) color.Color { return overlay.MixColors(c, pal.Canvas, 0.8) }
 	l.attnTint, l.busyTint, l.okTint, l.warnTint = tint(pal.Attention), tint(pal.Busy), tint(pal.Success), tint(pal.Warn)
+	l.accTint = tint(pal.Accent)
 	switch pal.Depth {
 	case overlay.Depth256:
 		l.cursor = overlay.Apart256(l.cursor, pal.Panel)
@@ -144,15 +147,17 @@ func (m *OS) buildCockpitLook(pal overlay.Palette) ckLook {
 		l.add, l.del = overlay.To256(l.add), overlay.To256(l.del)
 		l.attnTint, l.busyTint = overlay.To256(l.attnTint), overlay.To256(l.busyTint)
 		l.okTint, l.warnTint = overlay.To256(l.okTint), overlay.To256(l.warnTint)
+		l.accTint = overlay.To256(l.accTint)
 	case overlay.Depth16:
 		l.cursor, l.hover = overlay.NoColor, overlay.NoColor
 		l.attnTint, l.busyTint, l.okTint, l.warnTint = overlay.NoColor, overlay.NoColor, overlay.NoColor, overlay.NoColor
+		l.accTint = overlay.NoColor
 		l.add, l.del = pal.Success, pal.Warn
 		l.edge, l.edgePanel = pal.Edge, pal.Edge
 	}
 	p := &l.pal
 	for _, c := range []*color.Color{&l.canvas, &l.panel, &l.cursor, &l.hover, &l.edge, &l.edgePanel, &l.add, &l.del,
-		&l.attnTint, &l.busyTint, &l.okTint, &l.warnTint, &p.Canvas, &p.Panel, &p.Surface, &p.Card, &p.Fg, &p.FgDim,
+		&l.attnTint, &l.busyTint, &l.okTint, &l.warnTint, &l.accTint, &p.Canvas, &p.Panel, &p.Surface, &p.Card, &p.Fg, &p.FgDim,
 		&p.FgMute, &p.Accent, &p.AccentBright, &p.PillFg, &p.Warn, &p.Success, &p.Warning, &p.Attention, &p.Busy, &p.Edge} {
 		*c = ckFlat(*c)
 	}

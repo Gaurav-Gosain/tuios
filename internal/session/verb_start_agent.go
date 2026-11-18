@@ -153,6 +153,7 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	if verr != nil {
 		return nil, verr
 	}
+	extra = append(extra, d.replyMarkerArgs(launch.harness, p.Protocol)...)
 	extra = append(extra, p.Args...)
 	argv := append(append([]string{}, launch.argv...), extra...)
 	if p.Protocol != "" {

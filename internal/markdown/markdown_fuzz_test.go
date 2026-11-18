@@ -21,6 +21,9 @@ func FuzzParse(f *testing.F) {
 		strings.Repeat("*a _b [c `d ", 400),
 		strings.Repeat("> - ", 50) + "deep",
 		"~~~\nunclosed fence",
+		// Reply markers: plain, with detail, in a code span, past the
+		// length bound, unclosed and escaped.
+		"[[Done]] ok\n- [[Failed: 3 tests]] `[[Done]]`\n[[" + strings.Repeat("x", 40) + "]] [[open \\[[Done]] [[ Done ]]\n",
 		// A wide header and many one-pipe rows: padded, these were
 		// millions of cells.
 		strings.Repeat("|a", 4000) + "\n" + strings.Repeat("|-", 4000) + "\n" + strings.Repeat("|\n", 8000),

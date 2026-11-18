@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -135,5 +136,43 @@ grants = ["admin"]
 	}
 	if strings.Contains(mustCLI(t, base, "list-agents", "-s", "crew"), "w4") {
 		t.Errorf("ASSERTION: the refused start opened a pane")
+	}
+}
+
+// TestStartAgentReplyMarkers starts Claude Code with [agents] reply_markers
+// on. start-agent passes the reply marker guidance with
+// --append-system-prompt, before the caller's args.
+//
+// Negative control: on main the option is unknown and the agent starts with
+// the caller's args alone.
+func TestStartAgentReplyMarkers(t *testing.T) {
+	base, _ := fanFixture(t)
+	t.Cleanup(func() { dumpDaemonLogOnFail(t, base) })
+	fake, err := exec.LookPath("claude")
+	if err != nil {
+		t.Fatalf("the fixture's claude is not on PATH: %v", err)
+	}
+	argv := filepath.Join(base, "claude-argv")
+	wrap := filepath.Join(base, "wrapbin")
+	if err := os.MkdirAll(wrap, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > '" + argv + "'\nexec '" + fake + "' \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(wrap, "claude"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", wrap+string(os.PathListSeparator)+os.Getenv("PATH"))
+	writeConfig(t, base, "[agents]\nreply_markers = true\n")
+	if out, err := tuiosCLI(t, base, "new", "crew", "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "start-agent", "claude", "-s", "crew", "--name", "m1", "--", "--verbose"); err != nil {
+		t.Fatalf("ASSERTION: start-agent claude failed: %v\n%s", err, out)
+	}
+	got, _ := os.ReadFile(argv)
+	lines := strings.Split(strings.TrimSpace(string(got)), "\n")
+	flag, verbose := slices.Index(lines, "--append-system-prompt"), slices.Index(lines, "--verbose")
+	if flag < 0 || flag+1 >= len(lines) || !strings.Contains(lines[flag+1], "[[Done]]") || verbose < flag {
+		t.Errorf("ASSERTION: the agent was started with %q, want --append-system-prompt and the guidance before --verbose", got)
 	}
 }

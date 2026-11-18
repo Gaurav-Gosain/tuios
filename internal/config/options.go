@@ -1260,6 +1260,11 @@ var optionSpecs = []Option{
 		Default:     "false",
 	},
 	{
+		Path: "agents.reply_markers", Type: OptionBool, Section: "agents",
+		Description: "Ask the agents that start-agent starts to write reply markers, such as [[Done]] and [[Failed: 3 tests]]. The agents view shows each marker as a coloured label. It applies to Claude Code, which takes an added system prompt.",
+		Default:     "false",
+	},
+	{
 		Path: "agents.answer_advance", Type: OptionBool, Section: "agents",
 		Description: "After an answer in the agents view, move the cursor to the next agent that needs you. Off keeps the cursor on the agent you answered.",
 		Default:     "true",

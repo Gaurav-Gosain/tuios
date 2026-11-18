@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/diffview"
@@ -210,6 +211,14 @@ func (md *ckMD) runs(rs []markdown.Run, ink color.Color, attrs uint8) []ckSeg {
 	pal := l.pal
 	out := make([]ckSeg, 0, len(rs))
 	for _, r := range rs {
+		if ckMarkerRun(r) {
+			var a uint8
+			if r.Style&markdown.Emphasis != 0 {
+				a = ckItalic
+			}
+			out = append(out, md.pill(r.Text, attrs|a)...)
+			continue
+		}
 		s := ckSeg{t: r.Text, fg: ink, attrs: attrs}
 		if r.Style&markdown.Strong != 0 {
 			s.attrs |= ckBold
@@ -230,6 +239,10 @@ func (md *ckMD) runs(rs []markdown.Run, ink color.Color, attrs uint8) []ckSeg {
 		if r.Style&markdown.Link != 0 {
 			s.fg = pal.Accent
 			s.link = ckLinkTarget(r.URL)
+		}
+		if r.Style&(markdown.CodeSpan|markdown.Link|markdown.Strike) == 0 {
+			out = append(out, md.marks(s)...)
+			continue
 		}
 		out = append(out, s)
 	}
@@ -399,7 +412,9 @@ func ckWrapSegs(segs []ckSeg, width int) [][]ckSeg {
 				endWord()
 				endLine()
 				space = false
-			case r == ' ' && s.bg == nil:
+			case r == ' ' && s.bg == nil && s.attrs&uv.AttrReverse == 0:
+				// A space on a ground of its own, or in reverse as a pill
+				// is at 16 colours, is part of the word.
 				endWord()
 				space = true
 			default:

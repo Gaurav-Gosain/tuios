@@ -410,6 +410,10 @@ type Daemon struct {
 	// for none. See agent_presets.go.
 	agentPresets atomic.Pointer[map[string]config.AgentPreset]
 
+	// replyMarkers is [agents] reply_markers: start-agent passes the reply
+	// marker guidance to the agents it starts. See reply_markers.go.
+	replyMarkers atomic.Bool
+
 	// shipMu runs one commit, merge or push of the ship verbs at a time,
 	// shipAsks remembers the Inbox questions the outbound ones put, and prs
 	// polls the open pull requests. All three zero values are ready. See
@@ -1173,6 +1177,8 @@ type DaemonConfig struct {
 	// AgentPresets is [agents.presets]: named start-agent params. See
 	// agent_presets.go.
 	AgentPresets map[string]config.AgentPreset
+	// ReplyMarkers is [agents] reply_markers. See reply_markers.go.
+	ReplyMarkers bool
 	// AgentsOff is [agents] enabled = false: the daemon starts with every
 	// agent feature off. See agents_switch.go.
 	AgentsOff bool
@@ -1251,6 +1257,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.openedKeep = cfg.OpenedCopyKeep
 	d.SetCheckpoints(cfg.Checkpoints)
 	d.SetAgentPresets(cfg.AgentPresets)
+	d.replyMarkers.Store(cfg.ReplyMarkers)
 	d.outbox = newHostOutbox(d)
 	// The socket path is read through a closure rather than copied, because the
 	// line below may still change it and the stash root is derived from it.

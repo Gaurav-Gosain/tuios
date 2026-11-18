@@ -204,6 +204,17 @@ Then report in the person's words: "Opened a logs pane below the editor on
 workspace 2", not the commands you ran. Say what did not work and what that
 leaves undone. Name the host when the work ran on another machine.
 
+## Reply markers
+
+The agents view shows a marker in double square brackets as a coloured label.
+Put a marker beside the thing it marks:
+
+- `[[Done]]`, `[[Failed]]`, `[[Blocked]]`, `[[Needs you]]`, `[[Unverified]]`
+- A detail after a colon: `[[Failed: 3 tests]]`
+
+Red is a problem, yellow needs the person, and green is settled. Keep a
+marker under 32 characters. A marker in code stays as text.
+
 ## Topics
 
 `tuios --skill TOPIC` prints one topic, and `tuios --skill all` prints all.

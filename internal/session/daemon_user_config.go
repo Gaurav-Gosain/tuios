@@ -119,6 +119,9 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	// The daemon takes every checkpoint, so it reads whether to.
 	cfg.Checkpoints = uc.Agents.Checkpoints
 	cfg.AgentPresets = uc.Agents.Presets
+	// The daemon starts the agents start-agent names, so it reads whether
+	// to pass them the reply marker guidance.
+	cfg.ReplyMarkers = uc.Agents.ReplyMarkersOn()
 	// The daemon runs the herdr plugins, so it reads which ones.
 	cfg.Plugins = uc.Plugins
 	// The daemon spawns every pane, so it decides which are told about the
