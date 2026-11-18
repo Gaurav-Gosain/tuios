@@ -486,6 +486,125 @@ func TestAPaneInAGlobalSessionRunsOnThePickedMachine(t *testing.T) {
 	t.Logf("%d of %d picks landed on the picked machine", loops, loops)
 }
 
+// sessionIsGlobal reads whether ls --json marks the named session global, and
+// whether it is listed as restored. It fails when the session is not listed.
+func sessionIsGlobal(t *testing.T, base string, env []string, name string) (global, restored bool) {
+	t.Helper()
+	var found bool
+	waitUntil(t, fmt.Sprintf("session %q never appeared in ls --json", name), bootTimeout, func() (bool, string) {
+		out, err := tuiosCLIEnv(t, base, env, "ls", "--json")
+		if err != nil {
+			return false, out
+		}
+		var rows []struct {
+			Name     string `json:"name"`
+			Global   bool   `json:"global"`
+			Restored bool   `json:"restored"`
+		}
+		if json.Unmarshal([]byte(out), &rows) != nil {
+			return false, out
+		}
+		for _, r := range rows {
+			if r.Name == name {
+				found, global, restored = true, r.Global, r.Restored
+			}
+		}
+		return found, out
+	})
+	return global, restored
+}
+
+// newWindowAsksForAMachine attaches to sess, presses prefix c and reports
+// whether the machine picker opened. It saves the frame as name.
+func newWindowAsksForAMachine(t *testing.T, base string, env []string, sess string, windows int, name string) bool {
+	t.Helper()
+	term := startIn(t, base, startOpts{args: []string{"attach", sess}, env: env})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == windows }, bootTimeout); err != nil {
+		t.Fatalf("the client never showed the %d windows of %s: %v\n%s", windows, sess, err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Ctrl('b'), "c"); err != nil {
+		t.Fatal(err)
+	}
+	asked := term.WaitFor(func(s tuitest.Screen) bool {
+		return pickerOpen(s, pickerWindowTitle) || countWindows(s) > windows
+	}, uiTimeout) == nil && pickerOpen(term.Screen(), pickerWindowTitle)
+	saveFrame(t, term, name)
+	if asked {
+		if err := term.SendKeys(tuitest.Esc); err != nil {
+			t.Fatal(err)
+		}
+		waitPickerClosed(t, term, pickerWindowTitle)
+	}
+	if out, err := tuiosCLIEnv(t, base, env, "detach-client", "-s", sess); err != nil {
+		t.Logf("detach-client: %v: %s", err, out)
+	}
+	return asked
+}
+
+// TestAGlobalSessionStaysGlobalAcrossARestart (#2203): a session made with
+// --global, holding a pane here and a pane on alpha, is still global after
+// the daemon restarts and restores it. ls --json says so, and prefix c in it
+// still asks which machine the new window runs on.
+//
+// How it could pass wrongly, and what stops it:
+//   - the session read from a daemon that never restarted: it must be listed
+//     as restored.
+//   - the picker never shown in this fixture at all: it must open before the
+//     restart, with the same session, keys and hosts.
+//   - the mark kept for one restart only (restored, then saved without it):
+//     the daemon restarts twice.
+//   - the mark never written to the state file, or written and not read
+//     back: either way the first restart drops it.
+//   - the hosts not back up after the restart, so the picker has one machine
+//     and stays shut: the test waits for alpha and beta up each time.
+//
+// NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "A global session stays
+// global across a restart").
+func TestAGlobalSessionStaysGlobalAcrossARestart(t *testing.T) {
+	f := startGlobalFleet(t)
+	if out, err := tuiosCLIEnv(t, f.here, f.env, "new", "work", "--global"); err != nil {
+		t.Fatalf("create the global session: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLIEnv(t, f.here, f.env, "new-window", "local", "-s", "work"); err != nil {
+		t.Fatalf("open a pane here: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLIEnv(t, f.here, f.env, "new-window", "far", "-s", "work", "--host", "alpha"); err != nil {
+		t.Fatalf("open a pane on alpha: %v\n%s", err, out)
+	}
+	if global, _ := sessionIsGlobal(t, f.here, f.env, "work"); !global {
+		t.Fatalf("ASSERTION: the session made with --global is not listed as global before any restart")
+	}
+	if !newWindowAsksForAMachine(t, f.here, f.env, "work", 2, "global-restore-before") {
+		t.Fatalf("ASSERTION: prefix c in the global session did not ask for a machine before any restart")
+	}
+
+	for round := 1; round <= 2; round++ {
+		// kill-server is synchronous and saves every session on the way out.
+		if out, err := tuiosCLIEnv(t, f.here, f.env, "kill-server"); err != nil {
+			t.Fatalf("restart %d: kill-server: %v: %s", round, err, out)
+		}
+		// Starting any session starts a daemon, and a daemon restores on start.
+		if out, err := tuiosCLIEnv(t, f.here, f.env, "new", fmt.Sprintf("trigger-%d", round), "--detach"); err != nil {
+			t.Fatalf("restart %d: start a fresh daemon: %v: %s", round, err, out)
+		}
+		waitForHostListing(t, f.here, func(s string) bool {
+			return hostLineUp(s, "alpha") && hostLineUp(s, "beta")
+		}, "alpha and beta never came back up after the restart")
+		global, restored := sessionIsGlobal(t, f.here, f.env, "work")
+		if !restored {
+			t.Fatalf("restart %d: work is listed but not as restored, so the restart did not happen", round)
+		}
+		if !global {
+			t.Fatalf("ASSERTION: restart %d: the global session came back as a plain local one (ls --json has no global mark)", round)
+		}
+		// The pane on alpha comes back as a shell here, so the session has
+		// the same two windows.
+		if !newWindowAsksForAMachine(t, f.here, f.env, "work", 2, fmt.Sprintf("global-restore-after-%d", round)) {
+			t.Fatalf("ASSERTION: restart %d: prefix c in the restored global session opened a pane without asking for a machine", round)
+		}
+	}
+}
+
 // TestAHostHoldsManyPanes opens more panes on one machine than a link used to
 // carry. Every pane on another machine holds two streams on the link (its
 // terminal and its report channel), and the link refused its 33rd stream, so

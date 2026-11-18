@@ -148,7 +148,10 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	// (a phone bridge, a script) still finds it. State from before ids were
 	// saved has none and gets a new one.
 	d.sessionOrderMu.Lock()
-	sess, err := d.manager.CreateSession(state.Name, &SessionConfig{restoreID: state.SessionID, Space: state.Space, Rank: d.restoredRankLocked(state.Rank)}, width, height)
+	// The global mark goes in here, at creation, because the UpdateState
+	// below keeps the new session's own value for it (state_merge.go), so a
+	// session restored without it came back as a plain local one (#2203).
+	sess, err := d.manager.CreateSession(state.Name, &SessionConfig{restoreID: state.SessionID, Space: state.Space, Rank: d.restoredRankLocked(state.Rank), Global: state.Global}, width, height)
 	d.sessionOrderMu.Unlock()
 	if err != nil {
 		return nil, nil, err

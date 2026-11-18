@@ -18162,3 +18162,19 @@ Run on 2026-11-17 on Linux (x86_64), with `nice -n 19` and GOMAXPROCS=4.
 
 The host stream is `held-overlay.ansi` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHeldPaneIsNotTheOverlayAboveIt$' -v .`.
+
+## A global session stays global across a restart
+
+`TestAGlobalSessionStaysGlobalAcrossARestart` in `global_new_window_test.go` starts this machine, alpha and beta, makes `work` with `tuios new --global`, and opens a pane here and a pane on alpha in it (#2203). It requires `ls --json` to mark `work` global, and prefix c in it to open the machine picker. Then it restarts this machine's daemon twice. After each restart it waits for alpha and beta up, requires `work` listed as restored and global, and requires prefix c to open the picker again.
+
+Run on 2026-11-18 on macOS (arm64) through the Mac pool.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (the restore creates the session without `Global: state.Global`) | "restart 1: the global session came back as a plain local one (ls --json has no global mark)" | **caught** |
+| `SessionState.Global` tagged `json:"-"` (the mark never reaches the state file) | the same line | **caught** |
+| The branch | passes | fixed |
+| The positive half | none: the picker must open in `work` before any restart, in the same fixture | **guard** |
+
+The frames are `global-restore-before.txt`, `global-restore-after-1.txt` and `global-restore-after-2.txt` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 go test -count=1 -run '^TestAGlobalSessionStaysGlobalAcrossARestart$' -v .`.
