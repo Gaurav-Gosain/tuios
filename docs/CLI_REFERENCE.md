@@ -16,7 +16,13 @@ This document provides a complete reference for TUIOS command-line interface.
   - [Daemon Mode (Session Persistence)](#daemon-mode-session-persistence)
   - [Remote Control Commands](#remote-control-commands)
   - [Inspection Commands](#inspection-commands)
-  - [More Commands](#more-commands)
+  - [Session Commands](#session-commands)
+  - [Window and Workspace Commands](#window-and-workspace-commands)
+  - [Agent Commands](#agent-commands)
+  - [Plugin Commands](#plugin-commands)
+  - [Configuration and Appearance Commands](#configuration-and-appearance-commands)
+  - [Tape Commands](#tape-commands)
+  - [Commands for Other Machines](#commands-for-other-machines)
     - [tuios hosts test](#tuios-hosts-test)
     - [tuios cp](#tuios-cp)
     - [tuios transfers](#tuios-transfers)
@@ -4735,23 +4741,41 @@ in the TUI and drag, or press `f`.
 
 ---
 
-## More Commands
-
-These commands have no section of their own here. Each one's `--help` lists
-its flags and examples, and `tuios --skill` shows how an agent in a pane uses
-them.
-
-**Sessions:**
-
-| Command | What it does |
-|---------|--------------|
-| `tuios resurrect [session-name]` | List the sessions saved on disk, or restore one and attach (also `tuios restore`). `--json` lists them for a script: `name`, `windows`, `status` (`restorable` or `live`) and `saved_at` |
+## Session Commands
 
 Some commands also answer to a short name: `attach` to `a`, `new` to `n`,
 `ls` to `list-sessions`, `resurrect` to `restore`, `hosts remove` to `rm`, and
 `keybinds` to `keys` or `kb`.
 
-**Windows and workspaces:**
+### `tuios resurrect`
+
+Restore a session that was saved before a daemon restart, a crash or a reboot
+(also `tuios restore`).
+
+```bash
+tuios resurrect [session-name] [flags]
+```
+
+With no argument, the command lists the sessions saved on disk. A session that
+the daemon holds now is marked `live`. With a session name, the daemon restores
+that session and the command attaches to it. Each window gets a new shell in its
+saved working directory. Running programs and scrollback do not come back.
+
+The daemon restores every saved session when it starts. Use this command when
+the daemon started with `--no-restore`, or to bring back one session.
+
+- `--json`: list the saved sessions for a script, with `name`, `windows`,
+  `status` (`restorable` or `live`) and `saved_at`.
+
+```bash
+# List the sessions that can be restored
+tuios resurrect
+
+# Restore one and attach to it
+tuios resurrect work
+```
+
+## Window and Workspace Commands
 
 The layout commands (`split-window`, `zoom-window`, `swap-window`,
 `resize-window` and `move-window --beside`) work with no client attached. The
@@ -4759,66 +4783,635 @@ daemon changes the layout, and a client that attaches later shows it. Without
 `-w`, a layout command run in a pane acts on that pane, and one run outside
 every pane acts on the focused pane.
 
+Each command in this part takes `-s, --session` to name the session and
+`--json` to print JSON.
+
+### `tuios focus-window`
+
+Move the focus to a pane and print the pane that has it.
+
+```bash
+tuios focus-window [window] [flags]
+```
+
+Give exactly one of a window, `--relative` or `--direction`:
+
+- `[window]`: a pane by name or id. The client switches to the workspace of the
+  pane.
+- `--relative next|prev`: the next or the previous pane on this workspace.
+- `--direction left|right|up|down`: the pane on that side. It needs an attached
+  client. With `appearance.focus_wrap` on, it wraps at the edge of a tiled
+  layout to the pane on the far side.
+
+The window and `--relative` forms work on a detached session.
+
+```bash
+tuios focus-window build
+tuios focus-window --relative next
+tuios focus-window --direction left
+```
+
+### `tuios move-window`
+
+Move a window to another workspace, to another session, or next to another
+pane, and say where it came from.
+
+```bash
+tuios move-window [workspace] [flags]
+```
+
+- `-w, --window`: the window to move. The default is the focused one.
+- `--follow`: switch to the workspace after the move.
+- `--to-session NAME`: move the window to another session. The program in it
+  keeps running, and the window keeps its id and its scrollback. The workspace
+  is optional then: without it, the window goes to the workspace that session
+  shows. A popup, a scratch pane, a TML pane and a pane on another machine
+  cannot move.
+- `--beside PANE`: put the window next to that pane, on its workspace.
+  `--side left|right|up|down` names the side (default: right). `--ratio
+  PERCENT` is the share of the space it gets. Without `-w`, this moves the pane
+  you run it in, or the focused pane outside every pane.
+
+It works on a detached session.
+
+```bash
+tuios move-window 3
+tuios move-window 2 -w build --follow
+tuios move-window -s work -w build --to-session review
+tuios move-window -w logs --beside editor --side down --ratio 30
+```
+
+### `tuios select-workspace`
+
+Show a workspace, as the workspace keys do.
+
+```bash
+tuios select-workspace 2
+tuios select-workspace 2 -s work
+```
+
+To name a workspace, use [`tuios set-workspace-name`](#tuios-set-workspace-name).
+To move a window to one, use [`tuios move-window`](#tuios-move-window).
+
+### `tuios list-workspaces`
+
+List the workspaces of a session, with the name of each, how many windows it
+holds and which one shows.
+
+```bash
+tuios list-workspaces
+tuios list-workspaces --json | jq '.workspaces[] | select(.window_count == 0)'
+```
+
+### `tuios set-window`
+
+Rename a window, or minimize and restore it. Give only the flags you want to
+change. The command leaves the rest as it is.
+
+- `-w, --window`: the window. The default is the focused one.
+- `--name NAME`: the custom name. `--name ""` clears it, and the window shows
+  the title its shell sets.
+- `--minimize`: minimize the window.
+- `--restore`: restore a minimized window.
+
+```bash
+tuios set-window --name "api tests"
+tuios set-window -w build --name ""
+tuios set-window -w build --minimize
+tuios set-window -w build --restore
+```
+
+### `tuios split-window`
+
+Divide a pane, open a new pane beside it, and print the id of the new pane.
+
+```bash
+tuios split-window <left|right|up|down|horizontal|vertical> [command...] [flags]
+```
+
+The side names where the new pane goes. `horizontal` puts it below and
+`vertical` puts it to the right. Words after the side are the command the new
+pane runs, as for `new-window`. The command turns tiling on when it is off.
+
+- `-w, --window`: the pane to divide. The default is the pane you run it in, or
+  the focused pane outside every pane.
+- `--ratio PERCENT`: the share of the new pane. The default is half.
+- `--no-focus`: keep the focus where it is.
+- `--cwd DIR`: the directory to start in. The default is your directory in a
+  pane, or the directory of the focused pane.
+- `--name NAME`: a name for the new pane.
+- `--keep-open`: keep the pane after its program exits.
+
+```bash
+tuios split-window right
+tuios split-window down -w build --ratio 30 --no-focus -- tail -f app.log
+```
+
+### `tuios zoom-window`
+
+Zoom a pane so that it fills its workspace, or end the zoom. Without `--on` or
+`--off`, the command toggles the zoom. A zoom of a pane on the workspace you see
+also focuses it.
+
+```bash
+tuios zoom-window -w build --on
+tuios zoom-window -w build --off
+```
+
+### `tuios swap-window`
+
+Swap two tiled panes of one workspace. Each pane takes the place of the other.
+The focus stays where it is.
+
+```bash
+tuios swap-window -w build logs
+```
+
+### `tuios resize-window`
+
+Move a border of a tiled pane by a percent of the layout, from 1 to 50. The
+default is 5.
+
+```bash
+tuios resize-window <left|right|up|down> [percent] [flags]
+tuios resize-window up 10 -w logs
+```
+
+`right` and `down` move a border right or down. `left` and `up` move it left or
+up. The border is the one on that side of the pane, or the other one when the
+pane is at the edge there.
+
+### `tuios set-layout`
+
+Turn tiling on or off, reset the splits, flip a split, and shape the
+master-stack layout. It needs an attached client.
+
+- `--tiling true|false`: tile the panes, or stop.
+- `--equalize`: reset the splits of the layout on screen. In BSP, every split
+  goes back to half. In master-stack, the master ratio goes back to its
+  configured value, and the other panes share the rest evenly.
+- `--rotate`: flip the axis of the split that holds the focused pane.
+- `--master-position left|right|top|bottom|center`: the side the master panes
+  take.
+- `--masters N`: how many panes are master panes, from 1 to 9.
+
+`--master-position` and `--masters` apply to the current workspace, which keeps
+them until you change them. Tiling applies first, so `--equalize` and
+`--rotate` work in the same call. See
+[LAYOUT_MODES.md](LAYOUT_MODES.md#master-stack-layout).
+
+```bash
+tuios set-layout --tiling true
+tuios set-layout --equalize
+tuios set-layout --rotate
+tuios set-layout --master-position center --masters 2
+```
+
+## Agent Commands
+
+These agent commands have a section of their own elsewhere in this file:
+
 | Command | What it does |
 |---------|--------------|
-| `tuios focus-window [window]` | Move the focus to a pane, by name, id, `--relative next` or `--direction left`. With `appearance.focus_wrap` on, `--direction` wraps at the edge of a tiled layout |
-| `tuios move-window [workspace]` | Move a window to another workspace (`--follow` goes with it). `--to-session NAME` moves it to another session, and its program keeps running. `--beside PANE` puts it next to that pane, on the side `--side left\|right\|up\|down` names (default: right), with `--ratio PERCENT` as its share |
-| `tuios select-workspace <workspace>` | Show a workspace |
-| `tuios list-workspaces` | List the workspaces in a session and how many windows each holds |
-| `tuios set-window` | Rename a window (`--name`), minimize it (`--minimize`) or restore it (`--restore`) |
-| `tuios set-agent-quiet` | Keep a window's finished turns, questions and failures out of the Inbox. `--off` clears the mark. Needs an agent in the pane and the admin grant |
-| `tuios split-window <left\|right\|up\|down\|horizontal\|vertical> [command...]` | Divide a pane and open a new one beside it. A side names where the new pane goes. Words after the side are the command the new pane runs. `--ratio PERCENT` is the new pane's share, `--no-focus` keeps the focus, and `--cwd`, `--name` and `--keep-open` work as for `new-window`. Turns tiling on when it is off |
-| `tuios zoom-window` | Zoom a pane to fill its workspace (`--on`), end the zoom (`--off`), or toggle it. Zooming a pane on the workspace you see focuses it |
-| `tuios swap-window <other>` | Swap two tiled panes of one workspace. The focus stays where it is |
-| `tuios resize-window <left\|right\|up\|down> [percent]` | Move a border of a tiled pane by a share of the layout (default 5 percent). The border is the one on that side of the pane, or the other one at the edge |
-| `tuios set-layout` | Turn tiling on or off (`--tiling`), reset the splits (`--equalize`: every split to half in BSP, and in master-stack the configured master ratio with even shares for the other panes), flip the focused split (`--rotate`), or shape the master-stack layout of the current workspace (`--master-position left\|right\|top\|bottom\|center`, `--masters N`). See [LAYOUT_MODES.md](LAYOUT_MODES.md#master-stack-layout) |
-
-**Agents:**
-
-| Command | What it does |
-|---------|--------------|
-| `tuios list-agents` | List the agent panes in a session and what each is doing. `--all-sessions` lists every session on this machine, each row named `session/name`; `--all-hosts` lists every session on every host, with a SESSION column, and a host that is down shows the rows it last gave. `--select` lists the panes a [selector](AGENT_STATE.md#selectors) matches, in every session, and prints the `--confirm` token for them. Each row carries `identity`, `confidence` and `evidence_age_ms` (see [AGENT_STATE.md](AGENT_STATE.md#confidence)), `subagents`, how many subagents the pane's agent is running, and with `--json` `subagent_list`, each subagent with its description, state (`running`, `done`, `failed`, `stopped`), the tool it runs and how it ended (see [AGENT_STATE.md](AGENT_STATE.md#each-subagent)) |
 | `tuios list-attention` | List the Inbox: what is waiting for you in every session, on this machine and on every linked host (see below). `--host` narrows it to one machine, `--select` to what a selector matches |
 | `tuios peek-prompt` | Show the prompt an agent is blocked on, its options and the answers it takes, without attaching |
 | `tuios respond <action> [value]` | Answer the prompt an agent is blocked on. Only from the person: an attached client's Inbox, or a shell outside every pane with `[daemon] respond_from_shell`, or from a pane the person gave the `respond` grant |
-| `tuios get-agent-state` | Read a pane's reported agent state. `--json` carries `identity`, `confidence` and `evidence_age_ms`: the milliseconds since the last evidence about the state arrived, or `null` for a pane that never had a state, and `subagents`, how many subagents the pane's agent is running (see [Agent metadata](AGENT_STATE.md#agent-metadata)) |
 | `tuios set-agent-meta [key=value ...]` | Record display metadata about a pane's agent (model, context, a summary) for the rail |
 | `tuios set-agent-session <id> --harness <h>` | Record which conversation a pane's agent runs, for a later resume, without changing its state |
 | `tuios resume-agent [-w pane] [--dry-run]` | Type the pane's recorded conversation's resume command into its shell, after a daemon restart |
-| `tuios send-agent-message <text>` | Leave a message in another agent's inbox, or post a notice to the session. `--from` names the sender, and defaults to the pane the command runs in. `--from human` from inside a pane is refused with `forbidden`: only the person at an attached client can send as `human` (see [Who can act as the person](AGENT_STATE.md#who-can-act-as-the-person)). With `-s HOST:SESSION` and that host's link down, the message waits on this machine and goes when the link is back; the Inbox shows it under Waiting to send. `--select` sends one message to every agent pane a selector matches, after listing them: it asks at a terminal, and takes `--yes` or `--confirm TOKEN` otherwise. `--subject` gives it a one-line subject (at most 120 characters), `--reply-to ID` joins that message's thread, and `--attach PATH` (absolute, repeatable, at most 8) attaches files |
-| `tuios read-agent-messages` | Read the messages agents have left in this session. Each body prints inside the untrusted fence, and every body line starts with `│ `, as in `ask-agent` replies and `peek-prompt`. Reading `-w human` from inside a pane is always a peek. `--unread` shows only unread messages, `--peek` reads without marking anything read, except that a peek by a pane of its own inbox (`-w "$TUIOS_PANE_ID"`) marks its unread messages seen, so the sender can tell they were looked at. A peek of another pane's inbox marks nothing, `--notices` includes the session-wide notices. `--sent -w WINDOW` shows the other side: the mail that window sent, in every session and on every linked machine, each as delivered and unread, seen, read with when, or undeliverable, and the mail still waiting for a link. It marks nothing, and names a linked machine it cannot ask now |
-| `tuios ask-agent <text>` | Ask another agent a question and wait for its answer. The answer is the agent's own text since the question, from its transcript, for an agent whose transcript tuios reads (Claude Code and the harnesses `agent-transcript` reads); for any other pane it is what the pane printed after the question. `--json` says which in `reply_source` (`transcript` or `screen`). `--from` names the asking pane, and defaults to the pane the command runs in. Fails with `prompt_stalled` when the target shows no sign of taking the question within `--stall-timeout` (5000 ms) of Enter. `--select` asks every agent pane a selector matches, at most 16 at once, after the same confirmation as `send-agent-message --select`; a pane on `needs_input` is refused in its own row. `--settle MS` (2000) is the silence that counts as finished for a pane that reports no state; `--allow-blocked` types at a target on `needs_input`, answering its prompt |
 | `tuios queue <text>` | Leave a message for an agent that is typed as a prompt when it comes to rest, never over a prompt it waits on and never twice. `queue ls` lists what waits, `queue rm ID` or `queue rm --all -w PANE` drops it. See [`tuios queue`](#tuios-queue) |
 | `tuios review [SESSION]` | Show what the agent in a pane changed against its base, with the notes left on it. `review note FILE:LINE TEXT` leaves one, `review notes` lists them, `review send` sends the unsent ones to the agent as one queued message. See [`tuios review`](#tuios-review) |
 | `tuios start-agent <agent>` | Start an agent in a new pane and return once it shows it is at its prompt, optionally typing a first `--prompt`. `-s HOST:SESSION` starts it on another machine, in its checkout of the repository you are in. `--protocol acp\|codex` runs it headless as a transcript. See [above](#tuios-start-agent) |
 | `tuios agent-proto --protocol P -- <agent>` | The pane program of `start-agent --protocol`: run an agent headless over ACP or the Codex app-server and show it as a transcript. See [above](#tuios-agent-proto) |
-| `tuios explain-agent-detect` | Show what the agent detector sees in a pane |
-| `tuios explain-agent-screen` | Show what a harness's screen and title rules make of a pane: the tail, each rule's region and the text it read there, why each refusal refused (strings, patterns, nested groups), the title and last OSC 9;4 progress report, and which manifest file is in force |
-| `tuios integration install [harness...]` | Write tuios's managed hook entries or plugin into a harness's configuration: claude-code, codex, copilot, cursor-agent, gemini-cli, opencode, kilo, amp, kimi, pi, omp and qwen report state; antigravity, crush, devin, droid, grok, hermes and qoder report the session id only (`--all` for every harness that has run here, `--command` for a tuios not on PATH). `--mcp` also registers `tuios mcp` as an MCP server named tuios with claude-code, codex, gemini-cli and opencode, without the tools that type into panes. `--mcp-write` registers it with `--write`. `--statusline` points Claude Code's status line at `tuios agent-statusline`, which feeds the model, context use and cost to the rail; a status line of your own is never replaced, and `--then CMD` (which implies `--statusline`) chains to it. For claude-code, codex, opencode and pi it also writes a short tuios skill that tells the agent to run `tuios --skill`; a tuios skill you wrote, changed or linked is left alone, and `--no-skill` writes none. See [Agent state](AGENT_STATE.md#harness-integrations) |
-| `tuios integration uninstall [harness...]` | Remove the hook entries tuios wrote, the MCP server entry it wrote and the Claude Code status line it wrote (putting back the command it chained to), and nothing else |
-| `tuios integration status [harness...]` | Say whether each integration is installed and current, and whether it reports state or the session id, for the four harnesses with an MCP registration whether `tuios mcp` is registered, and for Claude Code whether the status line feed is installed (`--json`, with `reports`, `mcp` and `status_line`) |
 | `tuios mcp` | Serve tuios to an agent harness as an MCP server over stdio. By default it cannot type into a pane, and it is held to the session of the pane it runs in. Its default tools still set your own agent state and meta and send and read mail. `--write` adds the tools that type into panes. `--scope all` reaches every session. See [tuios mcp](#tuios-mcp) |
-| `tuios doctor shell` | Per pane: whether its shell marks its commands with OSC 133, which `tuios run`, `wait-for command-finished` and `capture-pane --last-command` need. It says when tuios sets up the marks for the shell new panes run (bash 4.4 or newer and zsh, with `[shell] integration` on), and that fish 4 and nushell send them themselves. With the integration off, or when a pane has no marks, it prints the lines that turn the marks on for that shell. A pane that marks its prompts and ran a command without marking it is flagged as prompt marks only, and one that has not run a command yet is said to mark its prompts (`-s`, `--json`, with `integration`, `set_up_by_tuios`, `command_mark_seen` and `prompt_marks_only`) |
-| `tuios doctor agents` | Per harness: on PATH or not, integration installed and current or not, what it reports, the recognised harnesses with no integration and why, the running agent panes whose integration is missing or out of date with the command that fixes each, and the harness manifests loaded from the user manifest directory, which of them replace a bundled one, and the files there that failed to load (`--json`) |
-| `tuios doctor keep-awake` | Whether this machine has the program the daemon holds it awake with (`systemd-inhibit` that logind answers, `caffeinate`, or `SetThreadExecutionState`), and, when a daemon runs, `keep_awake` in `[daemon]`, the hold and the working agents |
-| `tuios agent-hook <harness> [event]` | What an installed hook runs: read the hook payload on stdin and report the pane's state, or for a session integration only its conversation id (`set-agent-session`). For Claude Code and Codex the prompt, tool and Stop events also carry the event as activity for [`tuios agent-log`](#tuios-agent-log), and a `Stop` reports `done` with the first line of what the agent said last. Claude Code's `SubagentStart` and `SubagentStop` report no state: they send the subagent with `report-agent-activity`, which moves the pane's `subagents` count, and a `SessionStart` sends a `session_start` there after its state report, which clears it. A report that ends a turn also sends what the pane's `agent-statusline` feed held back (`set-agent-meta`). For Claude Code and Codex, `SessionStart`, `UserPromptSubmit` and `PostToolUse` also add one line about the pane's unread mail to the agent's context, once per message: the count, the senders and the `read-agent-messages` command. It never holds a subject or a body. `--explain` prints the decision to stderr. With `[agents.approvals]` naming the harness, a permission prompt (Claude Code `PermissionRequest`, including an `ExitPlanMode` plan unless `hold_plans = false`, Qwen Code `PermissionRequest`, opencode or Kilo `permission.asked`) then waits for an answer from the Inbox and prints the harness's decision, or nothing when there is none. See [Agent state](AGENT_STATE.md#harness-integrations) and [Approvals from the Inbox](AGENT_STATE.md#approvals-from-the-inbox) |
 | `tuios agent-statusline <harness>` | What the Claude Code status line `integration install --statusline` writes runs, and what the opencode and Kilo plugins run for the model and cost: write the model, context use and cost on stdin to the pane's agent metadata. `--then CMD` chains to your own status line. See [above](#tuios-agent-statusline) |
-| `tuios tmux-shim [-- command]` | Run a command (your shell when none is given) with a `tmux` on PATH that answers in this tuios session, so a tool that drives tmux, such as Claude Code agent teams (`tuios tmux-shim -- env CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude`), opens its panes here. Off until you run it. `--log FILE` moves the log of calls the shim could not answer from `$XDG_STATE_HOME/tuios/tmux-shim.log`; `--log-all` records every call. Not on Windows. See [The tmux shim](TMUX_SHIM.md) |
-| `tuios tmux <tmux arguments>` | The shim asked for by name: answer one tmux command line (`tuios tmux display-message -p '#{pane_id}'`). In a pane, it answers in the caller's session. Outside a pane, every tuios session is a tmux session. A tmux session is a tuios session, a window `@N` is workspace N, a pane `%N` is a tuios window. See [The tmux shim](TMUX_SHIM.md#commands) for the commands it answers |
 | `herdr <herdr arguments>` | tuios run through the `herdr` link that the daemon makes beside its socket, which every pane gets as `HERDR_BIN_PATH`. It answers herdr's command line (`pane`, `tab`, `workspace`, `agent`, `worktree`, `notification show`, `api snapshot`), so tools built for herdr work in a tuios pane: `"$HERDR_BIN_PATH" pane split --pane "$HERDR_PANE_ID" --direction right`. It prints herdr's JSON and uses herdr's exit codes. `tuios pane ...` and `tuios notification ...` answer the same two groups. See [herdr's command line](AGENT_STATE.md#herdrs-command-line) |
-| `tuios pane-grants` | Show the pane this runs in and what it may do through tuios. See [below](#tuios-pane-grants) |
 | `tuios whoami` | Show the pane, session, grants, daemon and host this runs in, as the daemon sees them now, with the focused pane, the workspace shown and the attached clients, and the `TUIOS_*` variables that are out of date (`--json`). See [below](#tuios-whoami) |
-| `tuios set-pane-grants` | Give a pane grants (`--grants read,write`), or the default back (`--reset`). See [below](#tuios-pane-grants) |
-| `tuios stash put <file>` | Copy a file into the session store and print the stored path |
-| `tuios stash get <stored-path> [file]` | Copy a stashed file out of the session store, across a link |
-| `tuios stash list` | List the files in the session store |
 
-**Plugins:**
+### `tuios list-agents`
+
+List the agent panes of a session and what each one does: the state, the
+harness, how tuios recognised it, the unread mail, and whether it is ready for a
+question.
+
+- `--all`: list every window, also the ones with no agent.
+- `--all-sessions`: list every session on this machine. Each row is named
+  `session/name`.
+- `--all-hosts`: list every session on every host, with a SESSION column. A
+  host that is down shows the rows it last gave.
+- `--host NAME`: list one machine. `local` means this one.
+- `--select SELECTOR`: list the panes a [selector](AGENT_STATE.md#selectors)
+  matches, in every session unless `-s` is given, and print the `--confirm`
+  token for them.
+- `--json`: print JSON.
+
+`--session` does not work with `--all-hosts` or `--host`.
+
+```bash
+tuios list-agents --select 'harness:codex state:idle,done'
+tuios list-agents --json | jq -r '.agents[] | select(.state=="needs_input") | .window_id'
+```
+
+The states are `needs_input`, `errored`, `done`, `idle`, `working`, `unknown`
+and `limit_reached`. Each row carries `identity`, `confidence` and
+`evidence_age_ms` (see [AGENT_STATE.md](AGENT_STATE.md#confidence)), and
+`subagents`, how many subagents the agent of the pane runs. With `--json`,
+each row also has `subagent_list`: each subagent with its description, its
+state (`running`, `done`, `failed`, `stopped`), the tool it runs and how it
+ended (see [AGENT_STATE.md](AGENT_STATE.md#each-subagent)). The `ID` and `NAME`
+columns work with `-w`.
+
+### `tuios send-agent-message`
+
+Leave a message in the inbox of another agent, or post a notice to the
+session. It does not type into the pane.
+
+```bash
+tuios send-agent-message <text> [flags]
+```
+
+- `-w, --window`: the recipient. Without it, the message is a notice to the
+  whole session.
+- `--from ID`: the sender. The default is the pane the command runs in.
+  `--from human` from inside a pane is refused with `forbidden`: only the person
+  at an attached client can send as `human` (see
+  [Who can act as the person](AGENT_STATE.md#who-can-act-as-the-person)).
+- `--subject TEXT`: a one-line subject, at most 120 characters.
+- `--reply-to ID`: join the thread of that message.
+- `--attach PATH`: attach a file by its absolute path. Repeat it, at most 8
+  times.
+- `--select SELECTOR`: send one message to every agent pane a selector
+  matches, after it lists them. It asks at a terminal. Otherwise give `--yes`,
+  or `--confirm TOKEN` with the token `list-agents --select` printed.
+- `--json`: print JSON.
+
+With `-s HOST:SESSION` and the link to that host down, the message waits on
+this machine and goes when the link is back. The Inbox shows it under Waiting
+to send.
+
+```bash
+tuios send-agent-message -w build 'rebased onto main, please retest'
+tuios send-agent-message -w build --reply-to 12 'retested, still green'
+```
+
+### `tuios read-agent-messages`
+
+Read the messages that agents left in this session.
+
+- `-w, --window`: read the inbox of this window, normally `"$TUIOS_PANE_ID"`,
+  and mark what it returns as read. Without `-w`, the command reads every
+  message and marks nothing.
+- `--unread`: only the messages nobody has read yet.
+- `--peek`: mark nothing as read. A peek of your own inbox
+  (`-w "$TUIOS_PANE_ID"`) marks the unread messages seen, so the sender can see
+  that you looked. A peek of the inbox of another pane marks nothing. A read of
+  `-w human` from inside a pane is always a peek.
+- `--notices`: include the notices to the whole session.
+- `--thread ID`: only one thread. Any message id in the thread works.
+- `--limit N`: at most this many messages, newest last. The default is 20.
+- `--sent`: with `-w WINDOW`, the mail that window sent, in every session and on
+  every linked machine. Each message shows as unread, seen, read with the time,
+  or undeliverable, and mail that waits for a link shows too. It marks nothing,
+  and names a linked machine it cannot ask now.
+
+Each body prints inside the untrusted fence, and every line of a body starts
+with `│ `, as in the replies of `ask-agent` and in `peek-prompt`.
+
+```bash
+tuios read-agent-messages -w "$TUIOS_PANE_ID" --unread
+tuios read-agent-messages --thread 12
+```
+
+### `tuios ask-agent`
+
+Ask another agent a question and wait for its answer.
+
+```bash
+tuios ask-agent -w review 'does the retry path look right to you?'
+```
+
+The command waits until the agent is not busy, types the question into its
+pane, and waits for the turn to end. The answer is the text of the agent since
+the question, from its transcript, for an agent whose transcript tuios reads
+(Claude Code and the harnesses `agent-transcript` reads). For any other pane,
+it is what the pane printed after the question. `--json` says which in
+`reply_source` (`transcript` or `screen`).
+
+- `-w, --window`: the agent to ask. `list-agents` finds it.
+- `--from ID`: the asking pane. The default is the pane the command runs in.
+  Outside a pane, without it, there is no loop check.
+- `--ready-timeout MS`: how long to wait for the agent to stop working. The
+  default is 30000.
+- `--settle MS`: for a pane that reports no state, the silence that counts as
+  finished. The default is 2000.
+- `--timeout MS`: how long to wait for the answer in all. The default is
+  300000.
+- `--stall-timeout MS`: how long after Enter the agent has to show that it took
+  the question. The default is 5000. After that, the call fails with
+  `prompt_stalled`.
+- `--lines N`: cap the reply. The default is 200.
+- `--force`: send without a wait for the agent to be ready. An agent on
+  `needs_input` is still refused.
+- `--allow-blocked`: type at an agent on `needs_input`. The text answers its
+  prompt, so read the prompt first.
+- `--select SELECTOR`, `--yes`, `--confirm TOKEN`: ask every agent pane a
+  selector matches, at most 16 at once, after the same confirmation as
+  `send-agent-message --select`. A pane on `needs_input` is refused in its own
+  row.
+
+Asks of one agent take turns, first come first served. A second ask waits for
+its turn, up to `--timeout`. The JSON reply has `queued_behind` and
+`waited_turn_ms`. The command refuses to type at an agent on `needs_input`
+(`agent_blocked`), because the question would answer its prompt. It also
+refuses an ask that closes a loop with an ask already in flight, so two agents
+cannot wait on each other.
+
+### `tuios set-agent-quiet`
+
+Mark a pane quiet, for an agent that works in the background.
+
+A quiet pane opens no finished, question or errored item in the Inbox, and it
+raises no alert. Its open items of those kinds close. The agent state, the rail
+mark, the events and `list-agents` do not change. An approval or a login still
+reaches you. The rail row says `quiet`, and `list-agents` reports
+`quiet: true`.
+
+```bash
+tuios set-agent-quiet -w worker-1
+tuios set-agent-quiet -w worker-1 --off
+```
+
+The mark stays until you clear it with `--off`, the agent leaves the pane, or
+the pane closes. A pane that tuios restores after a restart is not quiet.
+`--off` does not open the old items again, but a question the pane waits on now
+opens at once. The command needs an agent in the pane and the `admin` grant. A
+pane that runs it leaves an open question open, so mark workers before they
+ask.
+
+### `tuios explain-agent-detect`
+
+Show what the agent detector sees in a pane, and what each harness manifest
+makes of it.
+
+It prints what the daemon read (`comm`, `argv`, the executable), which manifest
+matched and on which of `comm`, `argv0`, `argv_path` or `exe_glob`. For each
+manifest that did not match, it prints what it compared.
+
+```bash
+tuios explain-agent-detect
+tuios explain-agent-detect -w build --json
+```
+
+### `tuios explain-agent-screen`
+
+Show what the screen and title rules of a harness make of a pane. Use it to
+write or debug a screen rule.
+
+It prints the tail of the screen as the rules read it, then what each rule made
+of it and which one fired. For a rule that did not match, it names the strings,
+patterns and nested groups that were the reason. A rule that reads a smaller
+region shows the text it read there. The title rules follow, with the title of
+the pane and its last OSC 9;4 progress report. When a manifest of your own is in
+force, it names the file and says whether it replaces a bundled one.
+
+- `--harness ID`: run the rules of this harness instead of the harness of the
+  pane.
+- `--lines N`: read this many lines from the bottom instead of the number in
+  the manifest.
+
+```bash
+tuios explain-agent-screen
+tuios explain-agent-screen -w build --harness codex --lines 20
+```
+
+### `tuios integration`
+
+Install, remove and check the hooks that report the state of a harness to the
+tuios pane it runs in.
 
 | Command | What it does |
 |---------|--------------|
-| `tuios plugin-cell set ID TEXT [--action ACTION]`, `tuios plugin-cell clear ID` | From a plugin with the `ui` grant: set or clear a dock cell its manifest names. A click runs `ACTION` |
-| `tuios plugin-notify TEXT [--level LEVEL]` | From a plugin with the `ui` grant: show a notification under the plugin's name |
+| `tuios integration install [harness...]` | Write tuios's managed hook entries or plugin into a harness's configuration: claude-code, codex, copilot, cursor-agent, gemini-cli, opencode, kilo, amp, kimi, pi, omp and qwen report state; antigravity, crush, devin, droid, grok, hermes and qoder report the session id only (`--all` for every harness that has run here, `--command` for a tuios not on PATH). `--mcp` also registers `tuios mcp` as an MCP server named tuios with claude-code, codex, gemini-cli and opencode, without the tools that type into panes. `--mcp-write` registers it with `--write`. `--statusline` points Claude Code's status line at `tuios agent-statusline`, which feeds the model, context use and cost to the rail; a status line of your own is never replaced, and `--then CMD` (which implies `--statusline`) chains to it. For claude-code, codex, opencode and pi it also writes a short tuios skill that tells the agent to run `tuios --skill`; a tuios skill you wrote, changed or linked is left alone, and `--no-skill` writes none. See [Agent state](AGENT_STATE.md#harness-integrations) |
+| `tuios integration uninstall [harness...]` | Remove the hook entries tuios wrote, the MCP server entry it wrote and the Claude Code status line it wrote (putting back the command it chained to), and nothing else. `--all` removes them from every harness |
+| `tuios integration status [harness...]` | Say whether each integration is installed and current, and whether it reports state or the session id, for the four harnesses with an MCP registration whether `tuios mcp` is registered, and for Claude Code whether the status line feed is installed (`--json`, with `reports`, `mcp` and `status_line`) |
+
+For Rex, `--force` replaces a `tuios.lua` that has changes of your own. The
+old file stays as `tuios.lua.tuios.bak`.
+
+```bash
+tuios integration install claude-code
+tuios integration install --all
+tuios integration install claude-code --statusline --then '~/.claude/statusline.sh'
+tuios integration status
+tuios integration uninstall codex
+```
+
+Each entry that tuios writes runs `tuios agent-hook` and carries a version
+mark. So `install` replaces an older entry, `uninstall` removes only what tuios
+wrote, and `status` says whether the entry is current. Your own settings and
+hooks stay as you wrote them. The first rewrite of a file keeps the old file
+beside it with a `.tuios.bak` suffix.
+
+`rex` is not a harness. `tuios integration install rex` adds the tuios actions
+to the command palette of the Rex terminal. See [REX.md](REX.md).
+
+### `tuios doctor`
+
+Check that parts of tuios are set up and work. `tuios keybinds doctor` checks
+the keys.
+
+| Command | What it does |
+|---------|--------------|
+| `tuios doctor shell` | Per pane: whether its shell marks its commands with OSC 133, which `tuios run`, `wait-for command-finished` and `capture-pane --last-command` need. It says when tuios sets up the marks for the shell new panes run (bash 4.4 or newer and zsh, with `[shell] integration` on), and that fish 4 and nushell send them themselves. With the integration off, or when a pane has no marks, it prints the lines that turn the marks on for that shell. A pane that marks its prompts and ran a command without marking it is flagged as prompt marks only, and one that has not run a command yet is said to mark its prompts (`-s`, `--json`, with `integration`, `set_up_by_tuios`, `command_mark_seen` and `prompt_marks_only`) |
+| `tuios doctor agents` | Per harness: on PATH or not, integration installed and current or not, what it reports, the recognised harnesses with no integration and why, the running agent panes whose integration is missing or out of date with the command that fixes each, and the harness manifests loaded from the user manifest directory, which of them replace a bundled one, and the files there that failed to load (`--json`) |
+| `tuios doctor keep-awake` | Whether this machine has the program the daemon holds it awake with (`systemd-inhibit` that logind answers, `caffeinate`, or `SetThreadExecutionState`), and, when a daemon runs, `keep_awake` in `[daemon]`, the hold and the working agents |
+
+`doctor agents --command PATH` names the program a current install runs, for
+hooks that `integration install --command` wrote.
+
+```bash
+tuios doctor agents
+tuios doctor shell -s work --json
+```
+
+### `tuios agent-hook`
+
+What an installed hook runs: read the hook payload on stdin and report the pane's state, or for a session integration only its conversation id (`set-agent-session`). For Claude Code and Codex the prompt, tool and Stop events also carry the event as activity for [`tuios agent-log`](#tuios-agent-log), and a `Stop` reports `done` with the first line of what the agent said last. Claude Code's `SubagentStart` and `SubagentStop` report no state: they send the subagent with `report-agent-activity`, which moves the pane's `subagents` count, and a `SessionStart` sends a `session_start` there after its state report, which clears it. A report that ends a turn also sends what the pane's `agent-statusline` feed held back (`set-agent-meta`). For Claude Code and Codex, `SessionStart`, `UserPromptSubmit` and `PostToolUse` also add one line about the pane's unread mail to the agent's context, once per message: the count, the senders and the `read-agent-messages` command. It never holds a subject or a body. `--explain` prints the decision to stderr. With `[agents.approvals]` naming the harness, a permission prompt (Claude Code `PermissionRequest`, including an `ExitPlanMode` plan unless `hold_plans = false`, Qwen Code `PermissionRequest`, opencode or Kilo `permission.asked`) then waits for an answer from the Inbox and prints the harness's decision, or nothing when there is none. See [Agent state](AGENT_STATE.md#harness-integrations) and [Approvals from the Inbox](AGENT_STATE.md#approvals-from-the-inbox)
+
+```bash
+tuios agent-hook <harness> [event] [flags]
+```
+
+- `--explain`: print the decision to stderr.
+- `--timeout DURATION`: give up after this long. The default is `500ms`.
+- `-s, --session`: the session of the pane. The default is `TUIOS_SESSION`.
+- `-w, --window`: the pane to report for. The default is `TUIOS_PANE_ID`, then
+  the controlling terminal, then the parent processes.
+
+You do not run it by hand: `tuios integration install` writes the hooks that
+run it.
+
+### `tuios tmux-shim` and `tuios tmux`
+
+Run a command (your shell when none is given) with a `tmux` on PATH that answers in this tuios session, so a tool that drives tmux, such as Claude Code agent teams (`tuios tmux-shim -- env CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude`), opens its panes here. Off until you run it. `--log FILE` moves the log of calls the shim could not answer from `$XDG_STATE_HOME/tuios/tmux-shim.log`; `--log-all` records every call. Not on Windows. See [The tmux shim](TMUX_SHIM.md)
+
+The shim asked for by name: answer one tmux command line (`tuios tmux display-message -p '#{pane_id}'`). In a pane, it answers in the caller's session. Outside a pane, every tuios session is a tmux session. A tmux session is a tuios session, a window `@N` is workspace N, a pane `%N` is a tuios window. See [The tmux shim](TMUX_SHIM.md#commands) for the commands it answers
+
+```bash
+tuios tmux-shim -- env CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude
+tuios tmux display-message -p '#{pane_id} #{window_id}'
+tuios tmux list-panes -F '#{pane_id} #{pane_title}'
+```
+
+### `tuios stash`
+
+Store files for the session, so that another agent can read them after you
+delete yours.
+
+| Command | What it does |
+|---------|--------------|
+| `tuios stash put <file>` | Copy a file into the session store and print the stored path |
+| `tuios stash list` | List the files in the session store, oldest first. `USED` marks the files a message still points to |
+| `tuios stash get <stored-path> [file]` | Copy a stashed file out of the session store, across a link |
+
+`stash put` needs an absolute path that the user of the daemon can read. The
+daemon opens the file itself, on its own host. The store keeps a file by its
+content, so the same bytes give the same path. One file can be at most 16 MB,
+and one session at most 256 MB. A put that goes over the session limit removes
+the oldest files that no message points to, and prints how many it removed.
+
+`stash get` is for a session on another machine, where the stored path is not a
+file here. It copies at most 8 MB. On this machine, open the stored path. The
+copy goes to the file you name, or to the name of the stored file in the
+current directory.
+
+Stored files last until the session is killed or the daemon stops.
+
+```bash
+path=$(tuios stash put /tmp/flame.png)
+tuios send-agent-message -w review --attach "$path" 'the hot path is in decode'
+tuios stash list
+tuios stash get -s build:api <stored-path> flame.png
+```
+
+### `tuios get-agent-state`
+
+Read the agent state a pane last reported. It prints the name of the state, or
+the whole result with `--json`. To report a state, use
+[`tuios set-agent-state`](#tuios-set-agent-state).
+
+`--json` carries `identity`, `confidence` and `evidence_age_ms`: the milliseconds since the last evidence about the state arrived, or `null` for a pane that never had a state, and `subagents`, how many subagents the pane's agent is running (see [Agent metadata](AGENT_STATE.md#agent-metadata)).
+
+```bash
+tuios get-agent-state
+tuios get-agent-state -w build --json
+```
+
+### `tuios set-pane-grants`
+
+Give a pane grants, or give it the default back. See
+[`tuios pane-grants`](#tuios-pane-grants) for what each grant allows.
+
+- `--grants LIST`: the grants, from `read`, `write`, `fan`, `files`, `task`,
+  `respond`, `admin`, or `none`.
+- `--reset`: give the pane the default of `[agents.permissions]` again. The
+  pane then follows the config.
+
+From outside every pane, you can give any grant. From inside a pane, a pane can
+change only its own grants unless it holds `admin`, and it can never give more
+than it holds. So a script can drop the grants of its pane before it starts an
+agent, and no agent can raise its own. The change applies to the next call of
+the pane. The `TUIOS_PANE_GRANTS` that its process started with does not
+change.
+
+```bash
+tuios set-pane-grants -w reviewer --grants read
+tuios set-pane-grants --grants read,write && exec claude
+tuios set-pane-grants -w reviewer --reset
+```
+
+### `tuios pane-grants`
+
+Show what the pane this command runs in may do through tuios.
+
+**Usage:**
+```bash
+tuios pane-grants [--json]
+tuios set-pane-grants [-s <session>] [-w <window>] (--grants <grant>[,<grant>...] | --reset) [--json]
+```
+
+Every pane holds grants, and the daemon checks every call from a pane against
+them, however it was made:
+
+| Grant | What the pane may do |
+|-------|----------------------|
+| `read` | Read its own session and its fan group, with `list-windows`, `get-window`, `capture-pane` and the rest |
+| `write` | Type into the panes of its own session that hold nothing it does not, and leave mail there |
+| `fan` | Write in its fan group and start agents with `fan` and `start-agent` |
+| `respond` | Answer another pane's prompt with `respond`, without the person, and type into a pane waiting on a prompt |
+| `files` | Copy files with `tuios cp`: a copy whose ends on this machine are inside the folder of the pane, and whose ends on a host are under its home folder or are its receive folder. It sees and controls only its own copies |
+| `task` | Add, claim, finish, stage, block and release the task cards of its own session with `tuios task`. It claims only for itself and changes only the card it holds |
+| `admin` | Everything else, as every pane could before grants, such as `run-command`, `attach` and `tuios task rm`. Includes `read`, `write`, `fan`, `files` and `task`, never `respond` |
+
+A pane without `admin` types (`send-text`, `send-keys`, `run`, `ask-agent`,
+`queue`) into another pane only when that pane holds nothing it does not,
+since what it types runs with the target's grants, and into a pane on
+`needs_input` only when it holds `respond`. A message it queues is checked
+again against its grants as they are when the message is typed, and dropped
+if they no longer cover the target. Its `send-keys` go to the target's
+terminal, never through an attached client, so they cannot drive the window
+manager.
+
+A pane holds the grants it was started with (`--grants` on `start-agent`,
+`fan` and `new-window`), the ones `set-pane-grants` gave it, or else the
+default of `[agents.permissions]` (see
+[CONFIGURATION.md](CONFIGURATION.md#what-a-pane-may-do)): `admin` under
+`mode = "open"`, the default, and the `grants` list under `mode = "strict"`.
+A call the grants do not cover fails with `forbidden`, and the message names
+the grant it needed.
+
+`set-pane-grants` from outside every pane may give anything. From a pane it
+may change only that pane's own grants unless the pane holds `admin`, and
+never give more than the pane holds, so an agent cannot widen itself, and it
+cannot type into a pane that holds more to have that pane do it.
+
+**Output:**
+```
+Pane a1b2c3d4 in session work holds read, write, fan (the default of [agents.permissions], mode strict).
+```
+
+**Examples:**
+```bash
+# From inside an agent's pane
+tuios pane-grants
+
+# Let the reviewer only read
+tuios set-pane-grants -w reviewer --grants read
+
+# Drop this pane's grants, then start an agent in it
+tuios set-pane-grants --grants read,write && exec claude
+```
+
+---
+
+## Plugin Commands
+
+An enabled plugin runs with your rights. Grants are not a sandbox. See
+[PLUGINS.md](PLUGINS.md).
+
+### `tuios plugins`
+
+Install, list and run plugins (also `tuios plugin`). A plugin is a folder with a
+manifest: `tuios-plugin.toml` for a tuios plugin, or `herdr-plugin.toml` for a
+herdr plugin.
+
+tuios finds plugins in five places: the folders `[plugins] dirs` names, the
+tuios plugins folder, `plugins.lock`, the `plugins.json` of herdr and the
+managed checkouts of herdr. To find a plugin runs nothing. A plugin runs only
+after you enable it.
+
+| Command | What it does |
+|---------|--------------|
 | `tuios plugins install SOURCE [--ref REF] [--subdir DIR] [--yes] [--no-enable] [--no-build] [--replace] [--grant admin]` | Get a plugin with git, build it, pin its commit in `plugins.lock` and enable it. `SOURCE` is the name of a plugin of the tuios release, such as `pr-status` (give a folder of that name as `./pr-status`), `owner/repo[/dir][@ref]` on github.com, a git URL (`https://`, `ssh://`, `git@host:path`, `file://`) with an optional `@ref`, or a local folder. tuios shows the plan and asks first. A native plugin that asks for `admin` needs `--grant admin`. Each install builds into a new folder. A failed build changes nothing that runs. Needs `git`. Refused inside a pane |
 | `tuios plugins update [ID...] [--check] [--yes] [--grant admin]` | Move installed plugins to the newest commit of their ref. tuios shows the commits and asks. It asks again, also with `--yes`, on a change to what the plugin runs or asks for, a rewritten history or a tag that moved or is gone. `--check` changes nothing. Exits 3 when a source cannot be reached. Refused inside a pane |
 | `tuios plugins uninstall ID [--yes]` | Undo `tuios plugins install`. Disable the plugin, stop its processes and close its panes. Remove it from `plugins.lock`, remove its folder in `$XDG_DATA_HOME/tuios/plugins/` and remove its approval. `ID` can also be the source you installed from. The config and state folders of the plugin stay. Refused for a plugin that `install` did not install: use `unlink` for a linked folder. Refused inside a pane |
@@ -4839,10 +5432,182 @@ every pane acts on the focused pane.
 | `tuios plugins stats [--json]` | Show each plugin's processes and memory now, and its runs and run time since the daemon started. No memory on macOS. Needs the daemon |
 | `tuios plugins log [ID] [--limit N] [--json]` | Show the last runs of plugin commands, with their exit codes and output |
 
-An enabled plugin runs with your rights. Grants are not a sandbox. See
-[PLUGINS.md](PLUGINS.md).
+Run `install`, `update`, `uninstall`, `approve`, `enable`, `disable`, `link`,
+`unlink` and `build` from a terminal outside tuios. To write a plugin, read
+[PLUGINS.md](PLUGINS.md) or run `tuios --skill plugins`.
 
-**Other machines:**
+### `tuios plugin-cell` and `tuios plugin-notify`
+
+Two commands for a plugin with the `ui` grant. They run from the commands of the
+plugin.
+
+| Command | What it does |
+|---------|--------------|
+| `tuios plugin-cell set ID TEXT [--action ACTION]`, `tuios plugin-cell clear ID` | From a plugin with the `ui` grant: set or clear a dock cell its manifest names. A click runs `ACTION` |
+| `tuios plugin-notify TEXT [--level LEVEL]` | From a plugin with the `ui` grant: show a notification under the plugin's name. `LEVEL` is `info`, `warning` or `error` |
+
+The manifest names each cell in `[[cell]]`. The daemon keeps the text of a
+cell, so the command can exit.
+
+## Configuration and Appearance Commands
+
+The `keybinds` commands are in [`tuios keybinds`](#tuios-keybinds). Two of them
+in short:
+
+| Command | What it does |
+|---------|--------------|
+| `tuios keybinds preset [name]` | Show or set the keybind preset (`tuios`, `tmux`, `screen`, `zellij`). `list` shows every preset, `show NAME` prints its file |
+| `tuios keybinds cheatsheet [preset]` | Show the keys a preset keeps, the tuios keys it moved, and what it does not have. `--json` |
+
+### `tuios list-options`
+
+List every option `set-config` takes, with its type, its default, the values
+or the range it accepts, the unit of a number (`ms`, `cells`, `%`) and a
+description.
+
+```bash
+tuios list-options                        # every option
+tuios list-options --section sidebar      # one group
+tuios list-options appearance.sidebar.    # a path prefix
+tuios list-options --search "pane bg"     # a fuzzy search, best match first
+tuios list-options --json | jq -r '.options[].path'
+```
+
+`--search` ranks every option by its path, its value and its description, the
+same search as the settings page. A session override shows next to the
+default. The default of `startup.daemon` and `startup.tiled` is the one for
+this machine. Each JSON row has `path`, `type`, `section`, `description` and
+`default`, and `accepted`, `min`, `max`, `deprecated` and `session_value` when
+they apply.
+
+### `tuios get-config`
+
+Read an option from a running session. It works with or without an attached
+client.
+
+```bash
+tuios get-config border_style
+tuios get-config appearance.sidebar.position --json
+```
+
+An option with no session override reads as the value in `config.toml`. An
+option that `config.toml` does not set reads as its default. `--json` adds
+`source` (`session`, `config` or `default`) and `default`. `agents.enabled` is
+the switch of the daemon, so it reads as the value for every session. Run
+`tuios list-options` to see every path.
+
+### `tuios list-themes`
+
+List the themes, or show the colours of one theme with the contrast of each
+colour against the background of that theme.
+
+```bash
+tuios list-themes --filter catppuccin
+tuios list-themes catppuccin_mocha
+tuios list-themes --json | jq -r .active
+```
+
+`--filter TEXT` lists only the ids that contain it. The command reads the
+themes directory again on each call, so a new `<id>.json` there shows at once.
+
+### `tuios import-theme`
+
+Convert a kitty, Ghostty, Alacritty or WezTerm colour scheme into a tuios
+theme, and write it to the themes directory.
+
+```bash
+tuios import-theme ~/.config/kitty/current-theme.conf
+tuios import-theme ~/gruvbox.toml --name gruvbox
+tuios set-config appearance.theme gruvbox
+```
+
+The command reads the format from the content of the file, not from its name.
+The colours that the scheme does not set take the xterm defaults. `--name` sets
+the theme id. The default is the name of the file. You can select the theme at
+once, with no restart.
+
+### `tuios theme`
+
+Work with theme files.
+
+| Command | What it does |
+|---------|--------------|
+| `tuios theme export <theme>` | Print a theme as a theme file, with only the colours that are different from its built-in base. `--full` writes all the colours. `--format base16` writes a base16 scheme |
+| `tuios theme share <theme>` | Print a theme as one line that starts with `tuios-theme:v1:`, to paste in a message |
+| `tuios theme reload` | Read the theme and glyph files again in every tuios client on this machine, and ask each terminal for its colours again. Clients also read the files when a file in the themes or glyphs directory changes |
+
+`theme export` writes a theme from your themes directory against the built-in
+theme it starts from. A built-in theme is written with all its colours.
+
+```bash
+tuios theme export mine > mine.json
+tuios theme export dracula --format base16
+```
+
+### `tuios list-glyphs`
+
+List the glyph sets, or show, role by role, what one set asks for and what
+tuios draws.
+
+```bash
+tuios list-glyphs
+tuios list-glyphs heavy
+tuios set-config appearance.glyphs heavy
+tuios list-glyphs mine --json | jq -r '.problems[]?'
+```
+
+The two columns can differ. A set names only the roles it changes. A glyph with
+the wrong width for its place falls back to the default, so a window button
+stays where the pointer finds it. The second column is what tuios draws. A new
+`<id>.json` in the glyphs directory is a new set, and `"inherits"` starts it
+from a built-in set.
+
+### `tuios logs`
+
+Print the log of the daemon.
+
+- `-n, --lines N`: how many entries to show. The default is 50. `0` shows all.
+- `--all`: show every stored entry.
+- `-f, --follow`: keep printing new entries.
+- `--clear`: empty the log after printing it.
+
+The daemon keeps the last 1000 entries in memory. It also appends errors and
+basic events to `$XDG_STATE_HOME/tuios/daemon.log`, so a crash leaves a record.
+To log more, run `tuios set-config daemon.log_level messages`. The levels
+`verbose` and `trace` also record pane content, window titles and paths.
+
+## Tape Commands
+
+### `tuios tape`
+
+Run and manage tape scripts. See [TAPE_SCRIPTING.md](TAPE_SCRIPTING.md).
+
+| Command | What it does |
+|---------|--------------|
+| `tuios tape play <file.tape>` | Run a tape file in interactive mode |
+| `tuios tape exec <file.tape>` | Execute a tape file in a running session |
+| `tuios tape validate <file.tape>` | Validate a tape file without running it |
+| `tuios tape list` | List all saved tape recordings (`--json` for a script: `dir`, and `tapes` with `name`, `path`, `size` and `modified`) |
+| `tuios tape show <name>` | Display the contents of a tape file |
+| `tuios tape delete <name>` | Delete a tape recording |
+| `tuios tape dir` | Show the tape recordings directory path |
+
+`tape play` takes the interface flags of the root command.
+
+`tape exec` sends the tape to a running session. The session needs an attached
+client, which plays the tape. The command returns when the tape ends. It exits
+non-zero, with the file and the line, when the tape has an error or a command
+fails, such as a `WaitFor` that times out. `--timeout` sets how long it waits.
+The default is 30 minutes. For one command, use
+[`tuios run-command`](#tuios-run-command).
+
+```bash
+tuios tape play demo.tape
+tuios tape exec --session work demo.tape
+tuios tape validate demo.tape
+```
+
+## Commands for Other Machines
 
 | Command | What it does |
 |---------|--------------|
@@ -4864,35 +5629,6 @@ A call over a link that the far machine's policy does not allow fails with
 that machine that grants it. By default a linked machine may not answer
 prompts: `tuios respond -w HOST:SESSION:WINDOW` needs `"respond"` in `allow`
 there.
-
-**Configuration and appearance:**
-
-| Command | What it does |
-|---------|--------------|
-| `tuios list-options [prefix]` | List every settable configuration option, with its type, default and accepted values or range, and the unit of a number (`ms`, `cells`, `%`). `--section NAME` lists one group, such as `sidebar` or `dock` |
-| `tuios list-options --search <query>` | The options matching a fuzzy query on path, value or description, best first, as the settings page searches |
-| `tuios get-config <path>` | Read a configuration option from a running session. `-s` names the session. `--json` adds the source: `session`, `config` or `default` |
-| `tuios list-themes [theme]` | List the themes, and describe one. `--filter TEXT` lists only the ids that contain it, such as `gruvbox` |
-| `tuios import-theme <file>` | Convert a terminal colour scheme into a tuios theme |
-| `tuios theme reload` | Read the theme and glyph files again in every tuios client on this machine, and ask each terminal for its colours again. Clients also read the files when a file in the themes or glyphs directory changes |
-| `tuios theme export <theme>` | Print a theme as a theme file, with only the colours that are different from its built-in base. `--full` writes all the colours. `--format base16` writes a base16 scheme |
-| `tuios theme share <theme>` | Print a theme as one line that starts with `tuios-theme:v1:`, to paste in a message |
-| `tuios keybinds preset [name]` | Show or set the keybind preset (`tuios`, `tmux`, `screen`, `zellij`). `list` shows every preset, `show NAME` prints its file |
-| `tuios keybinds cheatsheet [preset]` | Show the keys a preset keeps, the tuios keys it moved, and what it does not have. `--json` |
-| `tuios list-glyphs [set]` | List the glyph sets, and describe one |
-| `tuios logs` | View daemon logs |
-
-**Tape scripts:**
-
-| Command | What it does |
-|---------|--------------|
-| `tuios tape play <file.tape>` | Run a tape file in interactive mode |
-| `tuios tape exec <file.tape>` | Execute a tape file in a running session |
-| `tuios tape validate <file.tape>` | Validate a tape file without running it |
-| `tuios tape list` | List all saved tape recordings (`--json` for a script: `dir`, and `tapes` with `name`, `path`, `size` and `modified`) |
-| `tuios tape show <name>` | Display the contents of a tape file |
-| `tuios tape delete <name>` | Delete a tape recording |
-| `tuios tape dir` | Show the tape recordings directory path |
 
 ### `tuios pair`
 
@@ -5595,70 +6331,6 @@ tuios transfers cancel 3f9a1c2b7d00
 tuios transfers wait 3f9a1c2b7d00 --json
 tuios transfers clear
 ```
-
-### `tuios pane-grants`
-
-Show what the pane this command runs in may do through tuios.
-
-**Usage:**
-```bash
-tuios pane-grants [--json]
-tuios set-pane-grants [-s <session>] [-w <window>] (--grants <grant>[,<grant>...] | --reset) [--json]
-```
-
-Every pane holds grants, and the daemon checks every call from a pane against
-them, however it was made:
-
-| Grant | What the pane may do |
-|-------|----------------------|
-| `read` | Read its own session and its fan group, with `list-windows`, `get-window`, `capture-pane` and the rest |
-| `write` | Type into the panes of its own session that hold nothing it does not, and leave mail there |
-| `fan` | Write in its fan group and start agents with `fan` and `start-agent` |
-| `respond` | Answer another pane's prompt with `respond`, without the person, and type into a pane waiting on a prompt |
-| `files` | Copy files with `tuios cp`: a copy whose ends on this machine are inside the folder of the pane, and whose ends on a host are under its home folder or are its receive folder. It sees and controls only its own copies |
-| `task` | Add, claim, finish, stage, block and release the task cards of its own session with `tuios task`. It claims only for itself and changes only the card it holds |
-| `admin` | Everything else, as every pane could before grants, such as `run-command`, `attach` and `tuios task rm`. Includes `read`, `write`, `fan`, `files` and `task`, never `respond` |
-
-A pane without `admin` types (`send-text`, `send-keys`, `run`, `ask-agent`,
-`queue`) into another pane only when that pane holds nothing it does not,
-since what it types runs with the target's grants, and into a pane on
-`needs_input` only when it holds `respond`. A message it queues is checked
-again against its grants as they are when the message is typed, and dropped
-if they no longer cover the target. Its `send-keys` go to the target's
-terminal, never through an attached client, so they cannot drive the window
-manager.
-
-A pane holds the grants it was started with (`--grants` on `start-agent`,
-`fan` and `new-window`), the ones `set-pane-grants` gave it, or else the
-default of `[agents.permissions]` (see
-[CONFIGURATION.md](CONFIGURATION.md#what-a-pane-may-do)): `admin` under
-`mode = "open"`, the default, and the `grants` list under `mode = "strict"`.
-A call the grants do not cover fails with `forbidden`, and the message names
-the grant it needed.
-
-`set-pane-grants` from outside every pane may give anything. From a pane it
-may change only that pane's own grants unless the pane holds `admin`, and
-never give more than the pane holds, so an agent cannot widen itself, and it
-cannot type into a pane that holds more to have that pane do it.
-
-**Output:**
-```
-Pane a1b2c3d4 in session work holds read, write, fan (the default of [agents.permissions], mode strict).
-```
-
-**Examples:**
-```bash
-# From inside an agent's pane
-tuios pane-grants
-
-# Let the reviewer only read
-tuios set-pane-grants -w reviewer --grants read
-
-# Drop this pane's grants, then start an agent in it
-tuios set-pane-grants --grants read,write && exec claude
-```
-
----
 
 ## Scripting Examples
 
