@@ -68,9 +68,12 @@ func takeMenuRow(t *testing.T, o *app.OS, label string) (*app.OS, tea.Cmd) {
 			t.Fatalf("the %q row is dimmed, so it cannot be clicked", label)
 		}
 		cm.List.Cursor = i
-		y := cm.FirstRowY + (i-cm.ScrollFrom)*cm.ItemH
-		x := cm.BoundsX + cm.BoundsW/2
-		return handleMouseClick(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft}, o)
+		r, ok := o.ContextMenuRowRect(i)
+		if !ok {
+			t.Fatalf("the %q row was not drawn", label)
+		}
+		x := (r.X0 + r.X1) / 2
+		return handleMouseClick(tea.MouseClickMsg{X: x, Y: r.Y0, Button: tea.MouseLeft}, o)
 	}
 	t.Fatalf("the menu has no %q row", label)
 	return o, nil

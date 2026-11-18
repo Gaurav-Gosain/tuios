@@ -198,8 +198,9 @@ func (m *OS) contextMenuOrigin(cm *ContextMenu, geo overlay.Geometry) (int, int)
 	return x, y
 }
 
-// placeContextMenu draws the menu as a layer and records where it landed, so
-// the mouse handlers can map a screen cell to a row without redoing the layout.
+// placeContextMenu draws the menu as a layer and puts the panel and its rows
+// into the frame's hit record, so the mouse handlers map a screen cell to a
+// row without redoing the layout.
 func (m *OS) placeContextMenu(layers []*lipgloss.Layer) []*lipgloss.Layer {
 	cm := m.ContextMenu
 	if cm == nil {
@@ -211,13 +212,20 @@ func (m *OS) placeContextMenu(layers []*lipgloss.Layer) []*lipgloss.Layer {
 	}
 	x, y := m.contextMenuOrigin(cm, geo)
 
-	cm.BoundsX, cm.BoundsY = x, y
-	cm.BoundsW, cm.BoundsH = geo.Width, geo.Height
-	cm.FirstRowY = y + geo.BodyY
-	cm.ItemH = 1
+	// The panel first, then a row per item drawn over it, so a cell on a
+	// row finds the row and any other cell of the panel finds the panel.
+	z := config.ZIndexContextMenu
+	hits := m.hits.put(hitMenu)
+	cm.drawn = true
+	hits.add(overlay.Rect{X0: x, Y0: y, X1: x + geo.Width, Y1: y + geo.Height}, z, -1)
+	_, visible := m.contextMenuRows(cm)
+	for i := range visible {
+		row := y + geo.BodyY + i
+		hits.add(overlay.Rect{X0: x, Y0: row, X1: x + geo.Width, Y1: row + 1}, z, cm.ScrollFrom+i)
+	}
 
 	return append(layers, lipgloss.NewLayer(content).
-		X(x).Y(y).Z(config.ZIndexContextMenu).ID("context-menu"))
+		X(x).Y(y).Z(z).ID("context-menu"))
 }
 
 // chevron is the mark of the cursor in a menu, and of a row that opens a

@@ -5,6 +5,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
 // ContextMenuTarget names the thing a context menu was opened on. What is under
@@ -106,10 +107,9 @@ type ContextMenuItem struct {
 // ContextMenu is an open context menu: its rows, the selection, the screen cell
 // it was anchored at, and where it actually landed after placement.
 //
-// BoundsX/Y/W/H, FirstRowY and ItemH are written by the renderer each frame.
-// Together they let HitTest map a screen Y to a row index by arithmetic instead
-// of walking rows, and let the click handler tell a click on the menu from a
-// click away from it.
+// Where it was drawn is not kept here: the renderer puts the panel and each
+// row it drew into the frame's hit record (placeContextMenu), and the mouse
+// asks the record (contextMenuRowAt, contextMenuContains).
 type ContextMenu struct {
 	Title  string
 	Target ContextMenuTarget
@@ -144,17 +144,17 @@ type ContextMenu struct {
 	AnchorX int
 	AnchorY int
 
-	BoundsX   int
-	BoundsY   int
-	BoundsW   int
-	BoundsH   int
-	FirstRowY int
-	ItemH     int
-
-	// ScrollFrom is the first row the last frame actually drew, and is what
-	// hit-testing maps against: a click has to resolve against the rows the
-	// user can see, not against a List.Scroll that may have moved since.
+	// ScrollFrom is the first row the last frame actually drew. The rows the
+	// hit record holds are the ones drawn, so a click resolves against the
+	// rows the user can see, not against a List.Scroll that may have moved
+	// since.
 	ScrollFrom int
+
+	// drawn is set when a frame has put this menu into the hit record. A
+	// menu that replaces another (a submenu) is not drawn yet, and the
+	// record still holds the rows of the one before it, which are not its
+	// rows.
+	drawn bool
 
 	// depth counts the submenus opened in a row to reach this menu.
 	depth int
@@ -191,33 +191,35 @@ func (cm *ContextMenu) selectWarn() {
 	}
 }
 
-// HitTest returns the row index at screen (x, y), or -1 when the point is not
-// on a runnable row: outside the menu, on its chrome, or on a separator or
-// dimmed row. Coordinates are absolute screen cells.
-func (cm *ContextMenu) HitTest(x, y int) int {
-	if !cm.Contains(x, y) {
+// contextMenuRowAt returns the menu row drawn at screen (x, y), or -1 when
+// the point is not on a runnable row: outside the menu, on its chrome, or on
+// a separator or dimmed row.
+func (m *OS) contextMenuRowAt(x, y int) int {
+	cm := m.ContextMenu
+	s, h, ok := m.hits.at(x, y)
+	if cm == nil || !cm.drawn || !ok || s != hitMenu || !cm.selectable(h.ref) {
 		return -1
 	}
-	if cm.ItemH <= 0 {
-		return -1
-	}
-	// The first drawn row is item ScrollFrom, not item zero, whenever the menu
-	// is taller than the screen and has scrolled.
-	idx := cm.ScrollFrom + (y-cm.FirstRowY)/cm.ItemH
-	if y < cm.FirstRowY || idx < 0 || idx >= len(cm.Items) {
-		return -1
-	}
-	if !cm.selectable(idx) {
-		return -1
-	}
-	return idx
+	return h.ref
 }
 
-// Contains reports whether a screen cell falls anywhere on the menu, chrome
-// included. A click outside is what dismisses the menu.
-func (cm *ContextMenu) Contains(x, y int) bool {
-	return x >= cm.BoundsX && x < cm.BoundsX+cm.BoundsW &&
-		y >= cm.BoundsY && y < cm.BoundsY+cm.BoundsH
+// contextMenuContains reports whether a screen cell falls anywhere on the
+// menu as drawn, chrome included. A click outside is what dismisses the menu.
+func (m *OS) contextMenuContains(x, y int) bool {
+	if m.ContextMenu == nil || !m.ContextMenu.drawn {
+		return false
+	}
+	s, _, ok := m.hits.at(x, y)
+	return ok && s == hitMenu
+}
+
+// ContextMenuRowRect returns where row i of the open menu was drawn on the
+// last frame, in screen cells, and false when it was not drawn.
+func (m *OS) ContextMenuRowRect(i int) (overlay.Rect, bool) {
+	if m.ContextMenu == nil || !m.ContextMenu.drawn || i < 0 {
+		return overlay.Rect{}, false
+	}
+	return m.hits.rect(hitMenu, i)
 }
 
 // ContextMenuActive reports whether a context menu is on screen.
@@ -296,11 +298,11 @@ func (m *OS) ContextMenuClick(x, y int) (action string, consumed bool) {
 	if cm == nil {
 		return "", false
 	}
-	if !cm.Contains(x, y) {
+	if !m.contextMenuContains(x, y) {
 		m.CloseContextMenu()
 		return "", true
 	}
-	idx := cm.HitTest(x, y)
+	idx := m.contextMenuRowAt(x, y)
 	if idx < 0 {
 		// On the menu but not on a runnable row (chrome, separator, dimmed):
 		// swallow the click so it cannot reach the pane underneath.
@@ -319,7 +321,7 @@ func (m *OS) ContextMenuHover(x, y int) {
 	if cm == nil {
 		return
 	}
-	if idx := cm.HitTest(x, y); idx >= 0 {
+	if idx := m.contextMenuRowAt(x, y); idx >= 0 {
 		n := len(cm.Items)
 		cm.List.Select(idx, n, m.contextMenuVisible(n))
 	}

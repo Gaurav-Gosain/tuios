@@ -206,8 +206,8 @@ func selectedLabel(t *testing.T, f *apptest.Fixture) string {
 
 // TestContextMenuClickRunsTheRowUnderThePointer: a click on a row runs that
 // row and closes the menu; one on a separator, a dimmed row or the title
-// runs nothing and leaves it open. Negative control: make HitTest return the
-// row above the one under the pointer.
+// runs nothing and leaves it open. Negative control: make contextMenuRowAt
+// return the row above the one under the pointer.
 func TestContextMenuClickRunsTheRowUnderThePointer(t *testing.T) {
 	f := menuFixture(t)
 	hoverEveryRow(t, f)
@@ -257,8 +257,8 @@ func TestContextMenuClickOutsideClosesWithoutFiring(t *testing.T) {
 // TestContextMenuHitTestWhileScrolled: on a screen too short for the pane
 // menu, the menu scrolls, and a row drawn at the top of it is not item 0. A
 // cell must still resolve to the row drawn there, or a click runs something
-// the person did not point at. Negative control: drop ScrollFrom from
-// HitTest.
+// the person did not point at. Negative control: drop ScrollFrom from the
+// row refs placeContextMenu puts into the hit record.
 func TestContextMenuHitTestWhileScrolled(t *testing.T) {
 	f := apptest.New(t, apptest.Panes(1), apptest.Size(120, 12),
 		apptest.Config(func(c *config.UserConfig) { c.Appearance.FramePanels = true }))
@@ -300,7 +300,7 @@ func TestContextMenuAllDimmedHasNoSelection(t *testing.T) {
 		{Label: "a", Action: "toggle_tiling", Dim: true},
 		{Sep: true},
 		{Label: "b", Action: "toggle_tiling", Dim: true},
-	}, List: listnav.State{Cursor: -1}, ItemH: 1}
+	}, List: listnav.State{Cursor: -1}}
 
 	for _, key := range []string{"down", "up", "up"} {
 		f.Keys(key)

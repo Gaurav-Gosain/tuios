@@ -77,6 +77,7 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 		m.sidebarSectionY = m.sidebarCache.sections
 		m.sidebarStripRows = append(m.sidebarStripRows[:0], m.sidebarCache.stripRows...)
 		m.motion.rail = append(m.motion.rail[:0], m.sidebarCache.shimmer...)
+		m.putRailHits()
 		return m.sidebarCache.lines, m.sidebarCache.w
 	}
 

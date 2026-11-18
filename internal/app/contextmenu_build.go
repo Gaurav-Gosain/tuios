@@ -62,7 +62,6 @@ func (m *OS) OpenContextMenu(x, y int) {
 		Workspace:   workspace,
 		AnchorX:     ax,
 		AnchorY:     ay,
-		ItemH:       1,
 	}
 
 	switch target {
@@ -367,7 +366,6 @@ func (m *OS) OpenSelectionMenu(x, y, windowIndex int) {
 		WindowIndex: windowIndex,
 		AnchorX:     x,
 		AnchorY:     y,
-		ItemH:       1,
 	}
 	cm.Title = "Selection"
 	cm.Items = m.menu("selection", 0)
