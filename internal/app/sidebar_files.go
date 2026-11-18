@@ -79,11 +79,11 @@ type fileEntry struct {
 // has navigated to, not a preference, so it is not saved and a fresh client
 // starts on the focused pane's own directory.
 type fileViewState struct {
-	// Show is this client's own switch for the section: zero follows the
-	// layout, positive forces it on, negative forces it off. Three states
-	// rather than a bool because the layout already decides whether the
-	// section is there, and the footer control has to be able to disagree with
-	// it in both directions without writing to the config file.
+	// Show is positive while a link or a file search shows the section for
+	// this client, and zero otherwise, when the layout alone decides. The
+	// files switch writes the layout instead, so a section the person hid
+	// stays hidden after a reattach and a daemon restart. A link or a search
+	// shows the section for the moment and never turns the saved layout on.
 	Show int8
 	// Dir is the directory the entries below belong to, absolute and cleaned.
 	// Empty until the first reply lands.
@@ -201,14 +201,7 @@ func (m *OS) FileViewOpen() bool { return m.filesOn() }
 
 // filesOn folds this client's switch together with the rail's layout.
 func (m *OS) filesOn() bool {
-	switch {
-	case m.filesView.Show > 0:
-		return true
-	case m.filesView.Show < 0:
-		return false
-	default:
-		return sidebarLayoutHas(sidebarSectionFiles, &m.Settings)
-	}
+	return m.filesView.Show > 0 || sidebarLayoutHas(sidebarSectionFiles, &m.Settings)
 }
 
 // FileViewDir is the directory being listed, for tests and for anything that
@@ -798,11 +791,24 @@ func filesClearElsewhere(w *terminal.Window) {
 	}
 }
 
-// ToggleFileView turns the files section on or off for this client.
+// ToggleFileView is the files switch. It puts the section in this rail's saved
+// layout or takes it out, so the choice holds on every client and after a
+// restart. A section that a link or a file search put up for the moment is
+// taken down, and the saved layout is left as it is.
 func (m *OS) ToggleFileView() tea.Cmd {
-	if m.filesOn() {
+	inLayout := sidebarLayoutHas(sidebarSectionFiles, &m.Settings)
+	if m.filesView.Show > 0 && !inLayout {
 		m.CloseFileView()
 		return nil
+	}
+	if inLayout {
+		if sectionCount(config.ParseSidebarSections(m.Settings.SidebarSections), m.agentsOn()) <= 1 {
+			m.ShowNotification("The rail keeps one section. Add another first.",
+				"info", m.Settings.NotificationDuration)
+			return nil
+		}
+		m.CloseFileView()
+		return m.saveFilesInLayout(false)
 	}
 	if !m.SidebarActive() || sidebarVariant(m.GetSidebarWidth()) == sidebarVariantGlyph {
 		return nil
@@ -819,8 +825,24 @@ func (m *OS) ToggleFileView() tea.Cmd {
 			"info", m.Settings.NotificationDuration)
 		return nil
 	}
-	m.filesView.Show = 1
-	return m.requestFileList(dir, window.ID, false)
+	return tea.Batch(m.saveFilesInLayout(true), m.requestFileList(dir, window.ID, false))
+}
+
+// saveFilesInLayout writes this rail's layout with the files section in it or
+// out of it, and saves the config. The rail on the other edge has a layout of
+// its own, in its own table.
+func (m *OS) saveFilesInLayout(on bool) tea.Cmd {
+	layout := config.SidebarSectionsWithout(m.Settings.SidebarSections, "files")
+	if on {
+		layout = sidebarLayoutWithFiles(m.Settings.SidebarSections)
+	}
+	if m.sidebarDrawing && m.sidebarDrawingEdge != m.legacySidebarEdge() {
+		m.editableSidebarEdge(m.sidebarDrawingEdge).Sections = layout
+		m.Settings.SidebarSections = layout
+		m.MarkAllDirty()
+		return m.persistSettings()
+	}
+	return m.commitSectionString(layout)
 }
 
 // OpenFileView shows dir in the files section and reports whether it could.
@@ -840,12 +862,12 @@ func (m *OS) OpenFileView(dir string) bool {
 	return true
 }
 
-// CloseFileView takes the section off the rail and drops the listing, which is
-// the only state here worth any memory. The switch is left at "off" rather than
-// at "follow the layout", or a rail whose layout names the section would draw
-// it again on the next frame and the control would look broken.
+// CloseFileView drops the listing, which is the only state here worth any
+// memory, and ends a show that a link or a file search started. A layout that
+// names the section still draws it: the files switch takes it out of the
+// layout.
 func (m *OS) CloseFileView() {
-	m.filesView = fileViewState{Show: -1}
+	m.filesView = fileViewState{}
 	m.syncFileWatch()
 	// A dialog asking about a file in a listing that is no longer on screen has
 	// nothing to point at. It is dropped with the listing, and an operation

@@ -344,6 +344,11 @@ func (m *OS) commitSectionLayout(entries []config.SidebarSectionShare) tea.Cmd {
 // the shipped one.
 func (m *OS) commitSectionString(layout string) tea.Cmd {
 	m.setOption("appearance.sidebar.sections", layout)
+	// The person chose the layout, so a show that a link or a file search
+	// started ends when the layout leaves files out.
+	if !sidebarLayoutHas(sidebarSectionFiles, &m.Settings) {
+		m.filesView.Show = 0
+	}
 	m.MarkAllDirty()
 	return m.persistSettings()
 }

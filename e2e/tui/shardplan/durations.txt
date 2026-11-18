@@ -1356,7 +1356,7 @@ TestRailFilesRefreshIsPaced 16.9
 TestRailFilesSectionFollowsTheDisk 3.6
 TestRailFilesSectionListsThePanesFolder 1.0
 TestRailFilesSectionScrollsWithTheCursor 36.8
-TestRailFilesSwitchShowsItsState 0.6
+TestRailFilesSwitchIsSaved 4.0
 TestRailGitJJ 0.0
 TestRailGitJJProblems 0.0
 TestRailGitOneLineOwnsUpToItsRows 1.9

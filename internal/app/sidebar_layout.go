@@ -134,23 +134,27 @@ func (m *OS) sidebarPlans() []sidebarSectionPlan {
 	return sidebarLayoutPlans(&m.Settings)
 }
 
-// sidebarPlansWithFiles is a layout with the files section added where the
+// sidebarLayoutWithFiles is a layout with the files section added where the
 // default layout has it, at the default layout's share: after terminals, or
 // after sessions when the layout has no terminals, or above agents when it has
 // neither. A layout with none of the three gets it at the end, above a trailing
 // spacer, because that spacer is the gap the person asked for at the bottom.
-func sidebarPlansWithFiles(plans []sidebarSectionPlan) []sidebarSectionPlan {
-	index := func(section sidebarSection) int {
-		return slices.IndexFunc(plans, func(p sidebarSectionPlan) bool { return p.Section == section })
+func sidebarLayoutWithFiles(source string) string {
+	entries := config.ParseSidebarSections(source)
+	index := func(name string) int {
+		return slices.IndexFunc(entries, func(e config.SidebarSectionShare) bool { return e.Name == name })
 	}
-	at := len(plans)
-	if i := index(sidebarSectionTerminals); i >= 0 {
+	if index("files") >= 0 {
+		return config.SidebarSectionsString(entries)
+	}
+	at := len(entries)
+	if i := index("terminals"); i >= 0 {
 		at = i + 1
-	} else if i := index(sidebarSectionSessions); i >= 0 {
+	} else if i := index("sessions"); i >= 0 {
 		at = i + 1
-	} else if i := index(sidebarSectionAgents); i >= 0 {
+	} else if i := index("agents"); i >= 0 {
 		at = i
-	} else if at > 0 && plans[at-1].Spacer {
+	} else if at > 0 && entries[at-1].IsSpacer() {
 		at--
 	}
 	share := 0
@@ -159,7 +163,7 @@ func sidebarPlansWithFiles(plans []sidebarSectionPlan) []sidebarSectionPlan {
 			share = e.Share
 		}
 	}
-	return slices.Insert(slices.Clone(plans), at, sidebarSectionPlan{Section: sidebarSectionFiles, Share: share})
+	return config.SidebarSectionsString(slices.Insert(entries, at, config.SidebarSectionShare{Name: "files", Share: share}))
 }
 
 // sidebarLayoutHas reports whether the layout names a section at all.
@@ -212,30 +216,36 @@ func sidebarLayoutEntry(source string) ([]sidebarSectionPlan, []sidebarSectionPl
 	layoutMu.Lock()
 	defer layoutMu.Unlock()
 	if !layoutValid || layoutSource != source {
-		var has [sidebarSectionCount]bool
-		entries := config.ParseSidebarSections(source)
-		plans := make([]sidebarSectionPlan, 0, len(entries))
-		for _, e := range entries {
-			if e.IsSpacer() {
-				plans = append(plans, sidebarSectionPlan{
-					Section: sidebarSectionCount, Share: e.Share, Spacer: true,
-				})
-				continue
-			}
-			section, ok := sidebarSectionByName[e.Name]
-			if !ok {
-				continue
-			}
-			has[section] = true
-			plans = append(plans, sidebarSectionPlan{Section: section, Share: e.Share})
-		}
+		plans, has := sidebarPlansOf(source)
 		open := plans
 		if !has[sidebarSectionFiles] {
-			open = sidebarPlansWithFiles(plans)
+			open, _ = sidebarPlansOf(sidebarLayoutWithFiles(source))
 		}
 		layoutSource, layoutParsed, layoutOpen, layoutHas, layoutValid = source, plans, open, has, true
 	}
 	return layoutParsed, layoutOpen, layoutHas
+}
+
+// sidebarPlansOf parses a layout into its plans and the sections it names.
+func sidebarPlansOf(source string) ([]sidebarSectionPlan, [sidebarSectionCount]bool) {
+	var has [sidebarSectionCount]bool
+	entries := config.ParseSidebarSections(source)
+	plans := make([]sidebarSectionPlan, 0, len(entries))
+	for _, e := range entries {
+		if e.IsSpacer() {
+			plans = append(plans, sidebarSectionPlan{
+				Section: sidebarSectionCount, Share: e.Share, Spacer: true,
+			})
+			continue
+		}
+		section, ok := sidebarSectionByName[e.Name]
+		if !ok {
+			continue
+		}
+		has[section] = true
+		plans = append(plans, sidebarSectionPlan{Section: section, Share: e.Share})
+	}
+	return plans, has
 }
 
 // sidebarBudgetLines divides avail lines between the sections of a layout.

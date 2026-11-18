@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/charmbracelet/x/ansi"
@@ -158,23 +159,33 @@ func TestFileViewRowsFitTheRail(t *testing.T) {
 // never opened.
 func TestFilesSectionReachableFromTheKeyboard(t *testing.T) {
 	root := fileViewTree(t)
+	// The layout leaves the files section out, so the footer control is the
+	// thing that turns it on.
+	withSections(t, "sessions:25,terminals,agents:34")
 	m := sidebarTestOS(t, 120, 40, "left")
 	m.Windows[0].Cwd = root
 	m.FocusedWindow = 0
-	// The layout names the files section, so this starts it off and lets the
-	// footer control be the thing that turns it on.
-	m.filesView.Show = -1
 
 	// enter runs the cursor's row and then the read it scheduled, which is what
 	// the loop does one message later.
 	enter := func() {
 		t.Helper()
 		m.SidebarActivateCursor()
-		if cmd := m.TakeSidebarCmd(); cmd != nil {
-			if msg, ok := cmd().(fileListMsg); ok {
+		var run func(cmd tea.Cmd)
+		run = func(cmd tea.Cmd) {
+			if cmd == nil {
+				return
+			}
+			switch msg := cmd().(type) {
+			case fileListMsg:
 				m.HandleFileList(msg)
+			case tea.BatchMsg:
+				for _, c := range msg {
+					run(c)
+				}
 			}
 		}
+		run(m.TakeSidebarCmd())
 	}
 	land := func(kind sidebarRowKind, what string) {
 		t.Helper()

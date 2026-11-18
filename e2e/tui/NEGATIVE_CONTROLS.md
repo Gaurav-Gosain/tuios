@@ -12248,27 +12248,26 @@ has a close control in its header that a section the layout names does not. The
 line-for-line comparison leaves the header out, and the test checks the close
 control on its own: there on the opened section, absent on the named one.
 
-## The files control shows that it is on
+## The files switch is saved
 
-`TestRailFilesSwitchShowsItsState` uses the layout `sessions:20,terminals,agents`
-on a rail 28 columns wide. Before the fix the footer's `files` control drew the
-same muted word whether the section was on or off, so one stray click put the
-files section on the rail with no sign of why. The test clicks the control and
-waits for three things: the files header, every cell of the footer's `files`
-underlined, and an `x` at the right end of the header. A second click must take
-the section off and the underline away. A third click turns it on again, and a
-click on the header's `x` must take it off.
+`TestRailFilesSwitchIsSaved` uses the shipped layout on a rail 28 columns wide.
+Before the fix the footer's `files` control was this client's switch alone and
+was not saved. A section the person hid came back on the next client and after a
+daemon restart, because the layout still named it. The test hides the section,
+attaches a second client, restarts the daemon and attaches a third. The section
+must stay hidden on each, and the config file must name a layout without files.
+A second click must put the section back and save `files:25`. A section the
+layout names draws the control plain and has no close control.
 
-Run on 2026-11-07 on macOS (arm64), each control its own binary:
+Run on 2026-11-18 on macOS (arm64):
 
 | Removed | The test fails with | Result |
 |---------|---------------------|--------|
-| The whole fix (a build of `284853b80`) | "after the first click on the footer control: the section, the on control or the close control is missing" | **caught** |
-| Only the on state in `sidebarFooter` (`filesOn` forced false), the close control kept | The same line | **caught** |
+| The fix: the binary built from origin/main | "on a second client: want the files section on=false"; the frame shows the files section on the second client | **caught** |
 
-The frames are `rail-files-switch-off` and `rail-files-switch-on` under
-`TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
-`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRailFilesSwitchShowsItsState$' -v .`.
+The frames are `rail-files-switch-shown`, `rail-files-switch-hidden`,
+`rail-files-switch-hidden-second-client` and
+`rail-files-switch-hidden-after-restart` under `TUIOS_E2E_FRAMES`.
 
 ## The files menu's Preview from any focus
 

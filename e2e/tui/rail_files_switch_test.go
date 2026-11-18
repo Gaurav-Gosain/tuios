@@ -76,26 +76,38 @@ func filesHeaderClose(s tuitest.Screen) int {
 	return len([]rune(line)) - 1
 }
 
-// TestRailFilesSwitchShowsItsState clicks the footer's files control on a
-// rail whose layout leaves files out. While the section is on, the control
-// draws as on and the header offers a close control. A second click on the
-// control, and a click on the close control, each take the section off and
-// put the control back to off.
+// railFilesDefaultConfig is the person's rail: the shipped layout, which has
+// the files section, on the left at 28 columns.
+const railFilesDefaultConfig = "[appearance.sidebar]\nenabled = true\nposition = \"left\"\nwidth = 28\n"
+
+// TestRailFilesSwitchIsSaved: the footer's files control is a switch the
+// person sets, so it is saved in the layout. Before, it was this client's
+// alone and not saved: a section hidden with it came back on the next client
+// and after a daemon restart, because the layout still named it. The test
+// hides the section, then attaches a second client, then restarts the daemon
+// and attaches again, and the section stays hidden each time. The control
+// then puts it back. A section the layout names draws the control plain and
+// has no close control, because the switch is not a moment's show.
 //
-// Negative control, confirmed red: with the on state in sidebarFooter drawn
-// as the plain muted label again, the wait for the on state times out.
-func TestRailFilesSwitchShowsItsState(t *testing.T) {
-	term, _ := railClient(t, "e2e", railFilesSwitchConfig, startOpts{cols: 120, rows: 40})
+// Negative control, confirmed red: on origin/main, where the switch is this
+// client's alone, the second client draws the files section again.
+func TestRailFilesSwitchIsSaved(t *testing.T) {
+	requireReal(t, "restarts the daemon")
+	term, base := railClient(t, "e2e", railFilesDefaultConfig, startOpts{cols: 120, rows: 40})
+	cfg := configPathIn(base)
 
-	if filesHeaderRow(term.Screen()) >= 0 {
-		t.Fatalf("the files section is on the rail before any click:\n%s", term.Snapshot())
+	waitSection := func(term *tuitest.Terminal, on bool, why string) {
+		t.Helper()
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			_, _, ok := footerFilesAt(s)
+			return ok && (filesHeaderRow(s) >= 0) == on && !footerFilesOn(s) && filesHeaderClose(s) < 0
+		}, uiTimeout); err != nil {
+			copiesFrame(t, term, "rail-files-switch-failed")
+			t.Fatalf("ASSERTION: %s: want the files section on=%v, a plain control and no close control: %v\n%s",
+				why, on, err, term.Snapshot())
+		}
 	}
-	if footerFilesOn(term.Screen()) {
-		t.Fatalf("the files control draws as on before any click:\n%s", term.Snapshot())
-	}
-	copiesFrame(t, term, "rail-files-switch-off")
-
-	clickFooterFiles := func(why string) {
+	clickFooterFiles := func(term *tuitest.Terminal, why string) {
 		t.Helper()
 		col, row, ok := footerFilesAt(term.Screen())
 		if !ok {
@@ -103,39 +115,42 @@ func TestRailFilesSwitchShowsItsState(t *testing.T) {
 		}
 		mouseClick(t, term, col+1, row, tuitest.MouseLeft, 0)
 	}
-	waitOn := func(why string) {
+	attach := func(why string) *tuitest.Terminal {
 		t.Helper()
-		if err := term.WaitFor(func(s tuitest.Screen) bool {
-			return filesHeaderRow(s) >= 0 && footerFilesOn(s) && filesHeaderClose(s) >= 0
-		}, uiTimeout); err != nil {
-			t.Fatalf("ASSERTION: %s: the section, the on control or the close control is missing: %v\n%s",
-				why, err, term.Snapshot())
-		}
-	}
-	waitOff := func(why string) {
-		t.Helper()
-		if err := term.WaitFor(func(s tuitest.Screen) bool {
+		next := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"attach", "e2e"}})
+		if err := next.WaitFor(func(s tuitest.Screen) bool {
 			_, _, ok := footerFilesAt(s)
-			return ok && filesHeaderRow(s) < 0 && !footerFilesOn(s)
-		}, uiTimeout); err != nil {
-			t.Fatalf("ASSERTION: %s: the section or the on control is still there: %v\n%s",
-				why, err, term.Snapshot())
+			return ok && strings.Contains(s.Text(), sidebarHeader)
+		}, bootTimeout); err != nil {
+			t.Fatalf("%s: the client never attached with the rail up: %v\n%s", why, err, next.Snapshot())
 		}
+		return next
 	}
 
-	clickFooterFiles("first click")
-	waitOn("after the first click on the footer control")
-	copiesFrame(t, term, "rail-files-switch-on")
+	waitSection(term, true, "on the shipped layout")
+	copiesFrame(t, term, "rail-files-switch-shown")
 
-	clickFooterFiles("second click")
-	waitOff("after the second click on the footer control")
+	clickFooterFiles(term, "hide")
+	waitSection(term, false, "after a click on the files control")
+	copiesFrame(t, term, "rail-files-switch-hidden")
 
-	// The close control in the header is the other way out.
-	clickFooterFiles("third click")
-	waitOn("after the footer control turned the section on again")
-	s := term.Screen()
-	mouseClick(t, term, filesHeaderClose(s), filesHeaderRow(s), tuitest.MouseLeft, 0)
-	waitOff("after a click on the header's close control")
+	second := attach("second client")
+	waitSection(second, false, "on a second client")
+	copiesFrame(t, second, "rail-files-switch-hidden-second-client")
+	waitFileHas(t, cfg, "the layout without files", uiTimeout, func(s string) bool {
+		return strings.Contains(s, "sections") && strings.Contains(s, "terminals") && !strings.Contains(s, "files:")
+	})
 
-	alive(t, term, "after turning the files section on and off")
+	mustCLI(t, base, "restart-server", "--yes")
+	third := attach("after the restart")
+	waitSection(third, false, "after a daemon restart")
+	copiesFrame(t, third, "rail-files-switch-hidden-after-restart")
+
+	clickFooterFiles(third, "show")
+	waitSection(third, true, "after a second click on the files control")
+	waitFileHas(t, cfg, "the layout with files", uiTimeout, func(s string) bool {
+		return strings.Contains(s, "files:25")
+	})
+
+	alive(t, third, "after hiding and showing the files section")
 }
