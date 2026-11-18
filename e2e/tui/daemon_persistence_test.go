@@ -375,16 +375,24 @@ func TestRestartTheDaemonFromTheVersionNotice(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "send-text", "-s", name, "-w", "sleeper", "sleep 300\n"); err != nil {
 		t.Fatalf("start a program: %v\n%s", err, out)
 	}
-	// Many more programs, as a person with an agent in every pane has. The
-	// plan is then taller than the screen: it has to scroll, and the answers
-	// have to stay on screen.
+	// Many more programs in a second session, as a person with an agent in
+	// every pane has. The restart stops them too, so the plan is taller than
+	// the screen: it has to scroll, and the answers have to stay on screen.
 	const busy = 25
+	const busySession = name + "-busy"
+	if out, err := tuiosCLI(t, base, "new", busySession, "--detach"); err != nil {
+		t.Fatalf("create the busy session: %v\n%s", err, out)
+	}
 	for i := 1; i <= busy; i++ {
 		pane := fmt.Sprintf("busy-%02d", i)
-		if out, err := tuiosCLI(t, base, "new-window", "-s", name, pane); err != nil {
+		if i == 1 {
+			if out, err := tuiosCLI(t, base, "set-window", "-s", busySession, "--name", pane); err != nil {
+				t.Fatalf("name %s: %v\n%s", pane, err, out)
+			}
+		} else if out, err := tuiosCLI(t, base, "new-window", "-s", busySession, pane); err != nil {
 			t.Fatalf("open %s: %v\n%s", pane, err, out)
 		}
-		if out, err := tuiosCLI(t, base, "send-text", "-s", name, "-w", pane, "sleep 300\n"); err != nil {
+		if out, err := tuiosCLI(t, base, "send-text", "-s", busySession, "-w", pane, "sleep 300\n"); err != nil {
 			t.Fatalf("start a program in %s: %v\n%s", pane, err, out)
 		}
 	}
