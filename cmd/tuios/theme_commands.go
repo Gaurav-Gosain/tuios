@@ -92,19 +92,13 @@ type themePalette struct {
 // the theme in a picker, and it is the part that says whether the palette is
 // going to be readable.
 func runListThemes(sessionName, themeName, filter string, jsonOutput bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
-
-	raw, err := client.Call("list-themes", map[string]any{
+	raw, err := localVerb("list-themes", map[string]any{
 		"session": sessionName,
 		"theme":   themeName,
 		"filter":  filter,
-	})
+	}, 0, jsonOutput)
 	if err != nil {
-		return reportVerbError(explainVerbError("list-themes", err), jsonOutput)
+		return err
 	}
 	if jsonOutput {
 		return printVerbResult(raw, jsonOutput)

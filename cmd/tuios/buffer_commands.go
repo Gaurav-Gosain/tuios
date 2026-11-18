@@ -251,14 +251,9 @@ func completeBufferNames(_ *cobra.Command, _ []string, _ string) ([]string, cobr
 
 // callBufferVerb makes one buffer verb call on this machine's daemon.
 func callBufferVerb(verb string, params map[string]any) (json.RawMessage, error) {
-	client, err := dialVerb()
+	raw, err := localVerb(verb, params, 0, false)
 	if err != nil {
 		return nil, err
-	}
-	defer func() { _ = client.Close() }()
-	raw, err := client.Call(verb, params)
-	if err != nil {
-		return nil, explainVerbError(verb, err)
 	}
 	return raw, nil
 }

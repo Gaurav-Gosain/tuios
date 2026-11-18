@@ -46,18 +46,13 @@ leaves an open question open, so mark workers before they ask.`,
   tuios set-agent-quiet -w worker-1 --off`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			client, err := dialVerb()
-			if err != nil {
-				return err
-			}
-			defer func() { _ = client.Close() }()
-			raw, err := client.Call("set-agent-quiet", map[string]any{
+			raw, err := localVerb("set-agent-quiet", map[string]any{
 				"session": sessionName,
 				"window":  window,
 				"quiet":   !off,
-			})
+			}, 0, jsonOutput)
 			if err != nil {
-				return reportVerbError(explainVerbError("set-agent-quiet", err), jsonOutput)
+				return err
 			}
 			if jsonOutput {
 				return printVerbResult(raw, jsonOutput)
@@ -157,27 +152,18 @@ func runSetAgentState(sessionName, windowTarget, state, message, source, harness
 // runSetAgentSession stores a pane's conversation id without touching its
 // state. A refused report is said on stderr, as set-agent-state does.
 func runSetAgentSession(sessionName, windowTarget, harness, sessionID string) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
-	raw, err := client.Call("set-agent-session", map[string]any{
-		"session":          sessionName,
-		"window":           windowTarget,
-		"harness":          harness,
-		"agent_session_id": sessionID,
-	})
-	if err != nil {
-		return explainVerbError("set-agent-session", err)
-	}
 	var res struct {
 		Applied bool   `json:"applied"`
 		ID      string `json:"agent_session_id"`
 		Reason  string `json:"reason"`
 	}
-	if err := jsonx.Unmarshal(raw, &res); err != nil {
-		return errfmt.Errorf("failed to parse response: %w", err)
+	if err := localVerbInto("set-agent-session", map[string]any{
+		"session":          sessionName,
+		"window":           windowTarget,
+		"harness":          harness,
+		"agent_session_id": sessionID,
+	}, 0, false, &res); err != nil {
+		return err
 	}
 	if !res.Applied {
 		fmt.Fprintf(os.Stderr, "Not applied: %s The pane keeps %q.\n", agentRefusalText(res.Reason), res.ID)
@@ -238,11 +224,6 @@ func runSetAgentMeta(sessionName, windowTarget string, args []string, source str
 	if err != nil {
 		return err
 	}
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
 
 	params := map[string]any{
 		"session": sessionName,
@@ -254,9 +235,9 @@ func runSetAgentMeta(sessionName, windowTarget string, args []string, source str
 	if len(args) > 0 {
 		params["tokens"] = tokens
 	}
-	raw, err := client.Call("set-agent-meta", params)
+	raw, err := localVerb("set-agent-meta", params, 0, false)
 	if err != nil {
-		return explainVerbError("set-agent-meta", err)
+		return err
 	}
 	if jsonOutput {
 		var pretty any
@@ -388,19 +369,14 @@ func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idl
 // on this machine. The call names no session, whatever TUIOS_SESSION says: a
 // selector reaches every session.
 func runWaitForSelect(condition, until, selector string, every bool, timeout int, jsonOutput bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
 	params := map[string]any{"condition": condition, "until": until, "select": selector, "timeout": timeout}
 	if every {
 		params["every"] = true
 	}
 	grace := time.Duration(timeout)*time.Millisecond + 10*time.Second
-	raw, err := client.CallWithTimeout("wait-for", params, grace)
+	raw, err := localVerb("wait-for", params, grace, jsonOutput)
 	if err != nil {
-		return reportVerbError(explainVerbError("wait-for", err), jsonOutput)
+		return err
 	}
 	if jsonOutput {
 		return printVerbResult(raw, true)
@@ -461,18 +437,12 @@ func runGetAgentState(sessionName, windowTarget string, jsonOutput bool) error {
 // runExplainAgentDetect prints what the detector saw in a pane and what every
 // manifest made of it.
 func runExplainAgentDetect(sessionName, windowTarget string, jsonOutput bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
-
-	raw, err := client.Call("explain-agent-detect", map[string]any{
+	raw, err := localVerb("explain-agent-detect", map[string]any{
 		"session": sessionName,
 		"window":  windowTarget,
-	})
+	}, 0, jsonOutput)
 	if err != nil {
-		return reportVerbError(explainVerbError("explain-agent-detect", err), jsonOutput)
+		return err
 	}
 	if jsonOutput {
 		return printVerbResult(raw, jsonOutput)
@@ -591,20 +561,14 @@ func orNone(s string) string {
 
 // runExplainAgentScreen prints what a harness's screen rules make of a pane.
 func runExplainAgentScreen(sessionName, windowTarget, harnessID string, lines int, jsonOutput bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
-
-	raw, err := client.Call("explain-agent-screen", map[string]any{
+	raw, err := localVerb("explain-agent-screen", map[string]any{
 		"session": sessionName,
 		"window":  windowTarget,
 		"harness": harnessID,
 		"lines":   lines,
-	})
+	}, 0, jsonOutput)
 	if err != nil {
-		return reportVerbError(explainVerbError("explain-agent-screen", err), jsonOutput)
+		return err
 	}
 	if jsonOutput {
 		return printVerbResult(raw, jsonOutput)

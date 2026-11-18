@@ -111,14 +111,9 @@ func completeGrantNames(_ *cobra.Command, _ []string, _ string) ([]string, cobra
 }
 
 func runPaneGrants(jsonOutput bool) error {
-	client, err := dialVerb()
+	raw, err := localVerb("pane-grants", nil, 0, jsonOutput)
 	if err != nil {
 		return err
-	}
-	defer func() { _ = client.Close() }()
-	raw, err := client.Call("pane-grants", nil)
-	if err != nil {
-		return reportVerbError(explainVerbError("pane-grants", err), jsonOutput)
 	}
 	if jsonOutput {
 		return printVerbResult(raw, true)
@@ -177,11 +172,6 @@ func grantList(names []string) string {
 }
 
 func runSetPaneGrants(sessionName, window string, grants []string, reset, jsonOutput bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
 	params := map[string]any{}
 	if sessionName != "" {
 		params["session"] = sessionName
@@ -194,9 +184,9 @@ func runSetPaneGrants(sessionName, window string, grants []string, reset, jsonOu
 	} else {
 		params["grants"] = grants
 	}
-	raw, err := client.Call("set-pane-grants", params)
+	raw, err := localVerb("set-pane-grants", params, 0, jsonOutput)
 	if err != nil {
-		return reportVerbError(explainVerbError("set-pane-grants", err), jsonOutput)
+		return err
 	}
 	if jsonOutput {
 		return printVerbResult(raw, true)

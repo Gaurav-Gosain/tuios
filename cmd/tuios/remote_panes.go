@@ -251,11 +251,6 @@ func runFocusWindow(sessionName, windowTarget, relative, direction string, jsonO
 // runMoveWindow moves a window to another workspace, or with toSession to
 // another session.
 func runMoveWindow(sessionName, windowTarget, toSession string, workspace int, follow, jsonOutput bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
 
 	params := map[string]any{
 		"session": sessionName,
@@ -268,9 +263,9 @@ func runMoveWindow(sessionName, windowTarget, toSession string, workspace int, f
 	if toSession != "" {
 		params["to_session"] = toSession
 	}
-	raw, err := client.Call("move-window", params)
+	raw, err := localVerb("move-window", params, 0, jsonOutput)
 	if err != nil {
-		return reportVerbError(explainVerbError("move-window", err), jsonOutput)
+		return err
 	}
 	if jsonOutput {
 		return printVerbResult(raw, jsonOutput)
@@ -297,11 +292,6 @@ func runMoveWindow(sessionName, windowTarget, toSession string, workspace int, f
 // pointers because an unset one is left alone, and an empty name is a request
 // to clear it rather than a request to do nothing.
 func runSetWindow(sessionName, windowTarget string, name *string, minimized *bool, jsonOutput bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
 
 	params := map[string]any{
 		"session": sessionName,
@@ -314,9 +304,9 @@ func runSetWindow(sessionName, windowTarget string, name *string, minimized *boo
 		params["minimized"] = *minimized
 	}
 
-	raw, err := client.Call("set-window", params)
+	raw, err := localVerb("set-window", params, 0, jsonOutput)
 	if err != nil {
-		return reportVerbError(explainVerbError("set-window", err), jsonOutput)
+		return err
 	}
 	if jsonOutput {
 		return printVerbResult(raw, jsonOutput)

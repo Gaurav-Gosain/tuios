@@ -2,6 +2,7 @@ package main
 
 import (
 	"cmp"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,11 +10,14 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/fang"
 	"github.com/Gaurav-Gosain/tuios/internal/hostsync"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/charmbracelet/colorprofile"
@@ -251,6 +255,40 @@ func dialVerb() (*session.VerbClient, error) {
 		return nil, explainDialError(err)
 	}
 	return client, nil
+}
+
+// localVerb dials the local daemon, calls verb with params and closes the
+// connection. A dial error comes back as dialVerb gives it. A call error is
+// explained by explainVerbError, and with jsonOutput it is reported the --json
+// way (see reportVerbError). A zero timeout is the client's default.
+func localVerb(verb string, params any, timeout time.Duration, jsonOutput bool) (json.RawMessage, error) {
+	client, err := dialVerb()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = client.Close() }()
+	var raw json.RawMessage
+	if timeout > 0 {
+		raw, err = client.CallWithTimeout(verb, params, timeout)
+	} else {
+		raw, err = client.Call(verb, params)
+	}
+	if err != nil {
+		return nil, reportVerbError(explainVerbError(verb, err), jsonOutput)
+	}
+	return raw, nil
+}
+
+// localVerbInto is localVerb, then the result decoded into out.
+func localVerbInto(verb string, params any, timeout time.Duration, jsonOutput bool, out any) error {
+	raw, err := localVerb(verb, params, timeout, jsonOutput)
+	if err != nil {
+		return err
+	}
+	if err := jsonx.Unmarshal(raw, out); err != nil {
+		return errfmt.Errorf("failed to parse response: %w", err)
+	}
+	return nil
 }
 
 // explainDialError turns a verb-client dial failure into an actionable message.

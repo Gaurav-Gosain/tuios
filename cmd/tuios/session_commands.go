@@ -360,10 +360,6 @@ func runNewSessionInSpace(sessionName, space string, detach bool) error {
 	if err := ensureDaemon(); err != nil {
 		return err
 	}
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
 	params := map[string]any{"space": space, "window": detach}
 	if sessionName != "" {
 		params["name"] = sessionName
@@ -371,10 +367,9 @@ func runNewSessionInSpace(sessionName, space string, detach bool) error {
 	if newSessionDir != "" {
 		params["cwd"] = newSessionDir
 	}
-	raw, err := client.Call("new-session", params)
-	_ = client.Close()
+	raw, err := localVerb("new-session", params, 0, false)
 	if err != nil {
-		return explainVerbError("new-session", err)
+		return err
 	}
 	var res struct {
 		Session string `json:"session"`
@@ -746,15 +741,9 @@ func printServerLine(socketPath string) {
 
 // runListClients prints the daemon's current client connections.
 func runListClients(jsonOutput bool) error {
-	client, err := dialVerb()
+	raw, err := localVerb("list-clients", nil, 0, false)
 	if err != nil {
 		return err
-	}
-	defer func() { _ = client.Close() }()
-
-	raw, err := client.Call("list-clients", nil)
-	if err != nil {
-		return explainVerbError("list-clients", err)
 	}
 	var listed struct {
 		Clients []session.ClientInfo `json:"clients"`
@@ -795,15 +784,9 @@ func runListSessions(jsonOutput bool) error {
 		return listSavedSessions(diag, jsonOutput)
 	}
 
-	client, err := dialVerb()
+	raw, err := localVerb("list-sessions", nil, 0, false)
 	if err != nil {
 		return err
-	}
-	defer func() { _ = client.Close() }()
-
-	raw, err := client.Call("list-sessions", nil)
-	if err != nil {
-		return explainVerbError("list-sessions", err)
 	}
 	var listed struct {
 		Sessions []session.SessionInfo `json:"sessions"`

@@ -39,15 +39,9 @@ type dockComponentRow struct {
 
 // queryDockComponents lists the dock's components over the verb protocol.
 func queryDockComponents(sessionName string, jsonOutput bool) error {
-	client, err := dialVerb()
+	raw, err := localVerb("list-dock-components", map[string]any{"session": sessionName}, 0, jsonOutput)
 	if err != nil {
 		return err
-	}
-	defer func() { _ = client.Close() }()
-
-	raw, err := client.Call("list-dock-components", map[string]any{"session": sessionName})
-	if err != nil {
-		return reportVerbError(explainVerbError("list-dock-components", err), jsonOutput)
 	}
 	if jsonOutput {
 		return printVerbResult(raw, jsonOutput)
@@ -57,19 +51,14 @@ func queryDockComponents(sessionName string, jsonOutput bool) error {
 
 // runRefreshDock re-runs one component, or all of them.
 func runRefreshDock(sessionName, component string, jsonOutput bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
 
 	params := map[string]any{"session": sessionName}
 	if component != "" {
 		params["component"] = component
 	}
-	raw, err := client.Call("refresh-dock", params)
+	raw, err := localVerb("refresh-dock", params, 0, jsonOutput)
 	if err != nil {
-		return reportVerbError(explainVerbError("refresh-dock", err), jsonOutput)
+		return err
 	}
 	if jsonOutput {
 		return printVerbResult(raw, jsonOutput)

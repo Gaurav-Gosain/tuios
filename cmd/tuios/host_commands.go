@@ -54,15 +54,9 @@ type hostReport struct {
 
 // runListHosts prints the configured hosts and the state of each link.
 func runListHosts(jsonOutput bool) error {
-	client, err := dialVerb()
+	raw, err := localVerb("list-hosts", nil, 0, jsonOutput)
 	if err != nil {
 		return err
-	}
-	defer func() { _ = client.Close() }()
-
-	raw, err := client.Call("list-hosts", nil)
-	if err != nil {
-		return reportVerbError(explainVerbError("list-hosts", err), jsonOutput)
 	}
 	if jsonOutput {
 		return printVerbResult(raw, jsonOutput)
@@ -253,19 +247,14 @@ type hostSessionsEntry struct {
 // host's line, as ls on that host groups them. A space is a label on one
 // machine, so two hosts' spaces of the same name are two groups.
 func runListSessionsAllHosts(host string, jsonOutput bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
 
 	params := map[string]any{}
 	if host != "" {
 		params["host"] = host
 	}
-	raw, err := client.Call("list-host-sessions", params)
+	raw, err := localVerb("list-host-sessions", params, 0, jsonOutput)
 	if err != nil {
-		return reportVerbError(explainVerbError("list-host-sessions", err), jsonOutput)
+		return err
 	}
 	if jsonOutput {
 		return printVerbResult(markHostRows(raw), jsonOutput)
@@ -354,11 +343,6 @@ type hostAgentsEntry struct {
 
 // runListAgentsAllHosts is `tuios list-agents --all-hosts`.
 func runListAgentsAllHosts(host string, all bool, selector string, jsonOutput bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
 
 	params := map[string]any{"all": all}
 	if host != "" {
@@ -367,9 +351,9 @@ func runListAgentsAllHosts(host string, all bool, selector string, jsonOutput bo
 	if selector != "" {
 		params["select"] = selector
 	}
-	raw, err := client.Call("list-host-agents", params)
+	raw, err := localVerb("list-host-agents", params, 0, jsonOutput)
 	if err != nil {
-		return reportVerbError(explainVerbError("list-host-agents", err), jsonOutput)
+		return err
 	}
 	if jsonOutput {
 		return printVerbResult(markHostRows(raw), jsonOutput)

@@ -46,18 +46,13 @@ func runReadSentMessages(window string, limit int, jsonOutput bool) error {
 	if window == "" {
 		return errors.New("--sent needs the sending window: run it in a pane, or pass -w with the window id")
 	}
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
 	params := map[string]any{"window": window}
 	if limit > 0 {
 		params["limit"] = limit
 	}
-	raw, err := client.CallWithTimeout("agent-message-receipts", params, 15*time.Second)
+	raw, err := localVerb("agent-message-receipts", params, 15*time.Second, jsonOutput)
 	if err != nil {
-		return reportVerbError(explainVerbError("agent-message-receipts", err), jsonOutput)
+		return err
 	}
 	if jsonOutput {
 		return printVerbResult(raw, true)

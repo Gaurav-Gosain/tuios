@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
-	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/spf13/cobra"
 )
 
@@ -47,24 +46,14 @@ with -s. The command fails when ssh_agent is not "follow".`,
 }
 
 func runSSHAgentPath(name string, jsonOut bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
-
-	raw, err := client.Call("ssh-agent-path", map[string]any{"session": name})
-	if err != nil {
-		return explainVerbError("ssh-agent-path", err)
-	}
 	var res struct {
 		Session string `json:"session"`
 		Path    string `json:"path"`
 		Follow  bool   `json:"follow"`
 		Target  string `json:"target,omitempty"`
 	}
-	if err := jsonx.Unmarshal(raw, &res); err != nil {
-		return errfmt.Errorf("failed to parse response: %w", err)
+	if err := localVerbInto("ssh-agent-path", map[string]any{"session": name}, 0, false, &res); err != nil {
+		return err
 	}
 	if jsonOut {
 		return printJSON(res)

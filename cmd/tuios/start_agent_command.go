@@ -460,20 +460,11 @@ func startAgentParams(o startAgentOptions, host string) map[string]any {
 
 // expandAgentPreset asks this machine's daemon to merge a preset into params.
 func expandAgentPreset(preset string, params map[string]any) (map[string]any, error) {
-	client, err := dialVerb()
-	if err != nil {
-		return nil, err
-	}
-	defer client.Close()
-	raw, err := client.Call("agent-preset", map[string]any{"preset": preset, "params": params})
-	if err != nil {
-		return nil, explainVerbError("agent-preset", err)
-	}
 	var res struct {
 		Params map[string]any `json:"params"`
 	}
-	if err := jsonx.Unmarshal(raw, &res); err != nil {
-		return nil, errfmt.Errorf("failed to parse response: %w", err)
+	if err := localVerbInto("agent-preset", map[string]any{"preset": preset, "params": params}, 0, false, &res); err != nil {
+		return nil, err
 	}
 	return res.Params, nil
 }

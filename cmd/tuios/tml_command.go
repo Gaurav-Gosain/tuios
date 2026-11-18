@@ -252,14 +252,9 @@ it from the person's answer. Without VALUE it prints null.`,
 				}
 				params["value"] = json.RawMessage(args[1])
 			}
-			client, err := dialVerb()
+			raw, err := localVerb("tml-close", params, 0, jsonOut)
 			if err != nil {
 				return err
-			}
-			defer func() { _ = client.Close() }()
-			raw, err := client.Call("tml-close", params)
-			if err != nil {
-				return reportVerbError(explainVerbError("tml-close", err), jsonOut)
 			}
 			if jsonOut {
 				fmt.Println(string(raw))
@@ -316,14 +311,9 @@ func streamTMLEvents(client *session.VerbClient, raw json.RawMessage, stdout io.
 
 // tmlCall runs one verb and prints its result as JSON.
 func tmlCall(verb string, params map[string]any) error {
-	client, err := dialVerb()
+	raw, err := localVerb(verb, params, 0, false)
 	if err != nil {
 		return err
-	}
-	defer func() { _ = client.Close() }()
-	raw, err := client.Call(verb, params)
-	if err != nil {
-		return explainVerbError(verb, err)
 	}
 	fmt.Println(string(raw))
 	return nil

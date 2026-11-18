@@ -20,19 +20,13 @@ import (
 // answers "what can I set", so the human form prints the whole contract of each
 // option rather than a bare path a caller would still have to look up.
 func runListOptions(sessionName, section, prefix, search string, jsonOutput bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
-
-	raw, err := client.Call("list-options", map[string]any{
+	raw, err := localVerb("list-options", map[string]any{
 		"session": sessionName,
 		"section": section,
 		"prefix":  prefix,
-	})
+	}, 0, jsonOutput)
 	if err != nil {
-		return reportVerbError(explainVerbError("list-options", err), jsonOutput)
+		return err
 	}
 	if search != "" {
 		return printOptionSearch(os.Stdout, raw, search, jsonOutput)
@@ -192,11 +186,6 @@ func setConfigOption(sessionName, path, value string) (json.RawMessage, error) {
 
 // setConfigOptionWith is setConfigOption, with noSave for set-config --no-save.
 func setConfigOptionWith(sessionName, path, value string, noSave bool) (json.RawMessage, error) {
-	client, err := dialVerb()
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = client.Close() }()
 
 	params := map[string]any{
 		"session": sessionName,
@@ -208,27 +197,21 @@ func setConfigOptionWith(sessionName, path, value string, noSave bool) (json.Raw
 	if noSave {
 		params["no_save"] = true
 	}
-	raw, err := client.Call("set-option", params)
+	raw, err := localVerb("set-option", params, 0, false)
 	if err != nil {
-		return nil, explainVerbError("set-option", err)
+		return nil, err
 	}
 	return raw, nil
 }
 
 // runGetConfig reads a session option over the verb protocol.
 func runGetConfig(sessionName, path string, jsonOutput bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
-
-	raw, err := client.Call("get-option", map[string]any{
+	raw, err := localVerb("get-option", map[string]any{
 		"session": sessionName,
 		"key":     path,
-	})
+	}, 0, false)
 	if err != nil {
-		return explainVerbError("get-option", err)
+		return err
 	}
 	// The bare value stays the default output: it is what a shell substitution
 	// wants, and printing anything else there would break every script using it.

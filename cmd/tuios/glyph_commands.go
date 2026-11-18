@@ -32,18 +32,12 @@ type glyphSetDetail struct {
 // whose glyph was the wrong width for its slot is dropped back to the default
 // without anything on screen saying so.
 func runListGlyphs(sessionName, setName string, jsonOutput bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
-
-	raw, err := client.Call("list-glyphs", map[string]any{
+	raw, err := localVerb("list-glyphs", map[string]any{
 		"session": sessionName,
 		"glyphs":  setName,
-	})
+	}, 0, jsonOutput)
 	if err != nil {
-		return reportVerbError(explainVerbError("list-glyphs", err), jsonOutput)
+		return err
 	}
 	if jsonOutput {
 		return printVerbResult(raw, jsonOutput)

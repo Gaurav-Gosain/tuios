@@ -93,14 +93,9 @@ func newConfigApplyCommand() *cobra.Command {
 The daemon applies a change to the file at once only where it gives less. A change that gives more waits for this command or a daemon restart. Run it from a terminal outside tuios. It is refused from inside a pane.`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			client, err := dialVerb()
+			raw, err := localVerb("apply-config", nil, 0, false)
 			if err != nil {
 				return err
-			}
-			defer func() { _ = client.Close() }()
-			raw, err := client.Call("apply-config", nil)
-			if err != nil {
-				return explainVerbError("apply-config", err)
 			}
 			fmt.Print(describeConfigApplied(raw))
 			askClientsToApply()

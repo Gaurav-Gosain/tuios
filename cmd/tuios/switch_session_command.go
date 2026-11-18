@@ -85,12 +85,6 @@ directory its windows start in.`,
 }
 
 func runSwitchSession(name, host, fromSession, clientID string, create bool, cwd string, jsonOut bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
-
 	params := map[string]any{"name": name}
 	if host != "" {
 		params["host"] = host
@@ -107,9 +101,9 @@ func runSwitchSession(name, host, fromSession, clientID string, create bool, cwd
 	if clientID != "" {
 		params["client"] = clientID
 	}
-	raw, err := client.Call("switch-session", params)
+	raw, err := localVerb("switch-session", params, 0, false)
 	if err != nil {
-		return explainVerbError("switch-session", err)
+		return err
 	}
 	if jsonOut {
 		var pretty any

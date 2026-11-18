@@ -24,19 +24,13 @@ import (
 // entry point the daemon's own error hints point at, so it must work whenever
 // the daemon does, and say why when it does not.
 func runListVerbs(verb string, jsonOutput bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
-
 	var params any
 	if verb != "" {
 		params = map[string]any{"verb": verb}
 	}
-	raw, err := client.Call("list-verbs", params)
+	raw, err := localVerb("list-verbs", params, 0, false)
 	if err != nil {
-		return explainVerbError("list-verbs", err)
+		return err
 	}
 
 	if jsonOutput {
@@ -497,13 +491,7 @@ type screenshotRequest struct {
 // process is on the user's own machine, which is the rule an image copy has to
 // obey.
 func runScreenshot(req screenshotRequest) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
-
-	raw, err := client.Call("screenshot", map[string]any{
+	raw, err := localVerb("screenshot", map[string]any{
 		"session":    req.session,
 		"window":     req.window,
 		"format":     req.format,
@@ -513,9 +501,9 @@ func runScreenshot(req screenshotRequest) error {
 		"lines":      req.lines,
 		"cursor":     req.cursor,
 		"out":        req.out,
-	})
+	}, 0, req.jsonOutput)
 	if err != nil {
-		return reportVerbError(explainVerbError("screenshot", err), req.jsonOutput)
+		return err
 	}
 
 	var res struct {
@@ -630,11 +618,6 @@ func runPopup(o popupOptions) error {
 	if len(o.command) == 0 {
 		return errfmt.Errorf("popup needs a command to run, e.g. tuios popup -- fzf")
 	}
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
 
 	params := map[string]any{
 		"session": o.session,
@@ -678,9 +661,9 @@ func runPopup(o popupOptions) error {
 			callTimeout = time.Duration(o.timeout)*time.Millisecond + 10*time.Second
 		}
 	}
-	raw, err := client.CallWithTimeout("popup", params, callTimeout)
+	raw, err := localVerb("popup", params, callTimeout, o.jsonOut)
 	if err != nil {
-		return reportVerbError(explainVerbError("popup", err), o.jsonOut)
+		return err
 	}
 	if o.jsonOut {
 		return printVerbResult(raw, o.jsonOut)

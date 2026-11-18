@@ -8,7 +8,6 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
-	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
 )
@@ -62,22 +61,13 @@ SetThreadExecutionState.`,
 }
 
 func runKeepAwake(w io.Writer, args []string, jsonOut bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
 	verb, params := "get-keep-awake", map[string]any{}
 	if len(args) == 1 {
 		verb, params = "set-keep-awake", map[string]any{"mode": args[0]}
 	}
-	raw, err := client.Call(verb, params)
-	if err != nil {
-		return explainVerbError(verb, err)
-	}
 	var st keepAwakeStatus
-	if err := jsonx.Unmarshal(raw, &st); err != nil {
-		return errfmt.Errorf("failed to parse response: %w", err)
+	if err := localVerbInto(verb, params, 0, false, &st); err != nil {
+		return err
 	}
 	if jsonOut {
 		return printJSON(st)
@@ -135,18 +125,9 @@ func runDoctorKeepAwake(w io.Writer) error {
 		fmt.Fprintln(w, "Daemon:   not running. Start tuios to see the hold")
 		return nil
 	}
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
-	raw, err := client.Call("get-keep-awake", map[string]any{})
-	if err != nil {
-		return explainVerbError("get-keep-awake", err)
-	}
 	var st keepAwakeStatus
-	if err := jsonx.Unmarshal(raw, &st); err != nil {
-		return errfmt.Errorf("failed to parse response: %w", err)
+	if err := localVerbInto("get-keep-awake", map[string]any{}, 0, false, &st); err != nil {
+		return err
 	}
 	writeKeepAwake(w, st)
 	if st.Mode == config.KeepAwakeOff {

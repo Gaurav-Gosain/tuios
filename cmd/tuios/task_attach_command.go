@@ -272,15 +272,10 @@ func attachForward(f taskFlags, host, sess string, params map[string]any) error 
 	if sess == "" {
 		return errfmt.Errorf("name the session of the card on %s: -s %s:SESSION (tuios task ls --project . --hosts lists them)", host, host)
 	}
-	client, err := dialVerb()
+	params["host"], params["session"] = host, sess
+	raw, err := localVerb("attach-task", params, 0, f.json)
 	if err != nil {
 		return err
-	}
-	defer client.Close()
-	params["host"], params["session"] = host, sess
-	raw, err := client.Call("attach-task", params)
-	if err != nil {
-		return reportVerbError(explainVerbError("attach-task", err), f.json)
 	}
 	if f.json {
 		_, err := os.Stdout.Write(append(raw, '\n'))

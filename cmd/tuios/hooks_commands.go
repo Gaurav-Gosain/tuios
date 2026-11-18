@@ -34,19 +34,14 @@ type hookRow struct {
 
 // runListHooks prints the hook table and what each command last did.
 func runListHooks(sessionName, event string, jsonOutput bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
 
 	params := map[string]any{"session": sessionName}
 	if event != "" {
 		params["event"] = event
 	}
-	raw, err := client.Call("list-hooks", params)
+	raw, err := localVerb("list-hooks", params, 0, jsonOutput)
 	if err != nil {
-		return reportVerbError(explainVerbError("list-hooks", err), jsonOutput)
+		return err
 	}
 	if jsonOutput {
 		return printVerbResult(raw, jsonOutput)

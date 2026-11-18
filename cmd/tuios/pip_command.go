@@ -51,11 +51,6 @@ client, and a detach forgets it. Set its size and corner in the [pip] table.`,
 
 // runPiP calls the pip verb and says what is pinned now.
 func runPiP(sessionName, window string, off, jsonOutput bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
 
 	params := map[string]any{"session": sessionName}
 	if window != "" {
@@ -64,9 +59,9 @@ func runPiP(sessionName, window string, off, jsonOutput bool) error {
 	if off {
 		params["off"] = true
 	}
-	raw, err := client.Call("pip", params)
+	raw, err := localVerb("pip", params, 0, jsonOutput)
 	if err != nil {
-		return reportVerbError(explainVerbError("pip", err), jsonOutput)
+		return err
 	}
 	if jsonOutput {
 		return printVerbResult(raw, jsonOutput)

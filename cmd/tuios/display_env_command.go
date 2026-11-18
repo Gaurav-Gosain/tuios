@@ -8,7 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/shquote"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
-	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/spf13/cobra"
 )
 
@@ -56,16 +55,6 @@ with -s.`,
 }
 
 func runDisplayEnv(name string, jsonOut bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
-
-	raw, err := client.Call("display-env", map[string]any{"session": name})
-	if err != nil {
-		return explainVerbError("display-env", err)
-	}
 	var res struct {
 		Session string            `json:"session"`
 		Follow  bool              `json:"follow"`
@@ -74,8 +63,8 @@ func runDisplayEnv(name string, jsonOut bool) error {
 		Target  string            `json:"target,omitempty"`
 		Env     map[string]string `json:"env"`
 	}
-	if err := jsonx.Unmarshal(raw, &res); err != nil {
-		return errfmt.Errorf("failed to parse response: %w", err)
+	if err := localVerbInto("display-env", map[string]any{"session": name}, 0, false, &res); err != nil {
+		return err
 	}
 	if jsonOut {
 		return printJSON(res)

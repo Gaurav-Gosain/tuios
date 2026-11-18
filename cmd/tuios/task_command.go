@@ -178,15 +178,10 @@ func forwardTaskCall(f taskFlags, host, sess, verb string, params map[string]any
 	if sess == "" {
 		return errfmt.Errorf("name the session of the card on %s: -s %s:SESSION (tuios task ls --project . --hosts lists them)", host, host)
 	}
-	client, err := dialVerb()
+	params["host"], params["session"] = host, sess
+	raw, err := localVerb(verb, params, 0, f.json)
 	if err != nil {
 		return err
-	}
-	defer client.Close()
-	params["host"], params["session"] = host, sess
-	raw, err := client.Call(verb, params)
-	if err != nil {
-		return reportVerbError(explainVerbError(verb, err), f.json)
 	}
 	if f.json {
 		_, err := os.Stdout.Write(append(raw, '\n'))
@@ -376,11 +371,6 @@ func runTaskList(w io.Writer, f taskFlags, stage string, open, allSessions bool)
 // runProjectTaskList lists one project's cards from every session here, and
 // with hosts from every linked machine.
 func runProjectTaskList(w io.Writer, f taskFlags, project, stage string, open, hosts bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer client.Close()
 	params := map[string]any{"project": project}
 	if stage != "" {
 		params["stage"] = stage
@@ -391,9 +381,9 @@ func runProjectTaskList(w io.Writer, f taskFlags, project, stage string, open, h
 	if hosts {
 		params["hosts"] = true
 	}
-	raw, err := client.Call("list-tasks", params)
+	raw, err := localVerb("list-tasks", params, 0, f.json)
 	if err != nil {
-		return reportVerbError(explainVerbError("list-tasks", err), f.json)
+		return err
 	}
 	if f.json {
 		_, err := w.Write(append(raw, '\n'))

@@ -16,18 +16,12 @@ import (
 
 // runSelectWorkspace shows a workspace.
 func runSelectWorkspace(sessionName string, workspace int, jsonOutput bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
-
-	raw, err := client.Call("select-workspace", map[string]any{
+	raw, err := localVerb("select-workspace", map[string]any{
 		"session":   sessionName,
 		"workspace": workspace,
-	})
+	}, 0, jsonOutput)
 	if err != nil {
-		return reportVerbError(explainVerbError("select-workspace", err), jsonOutput)
+		return err
 	}
 	if jsonOutput {
 		return printVerbResult(raw, jsonOutput)
@@ -45,15 +39,9 @@ func runSelectWorkspace(sessionName string, workspace int, jsonOutput bool) erro
 
 // runListWorkspaces lists every workspace with what is on it.
 func runListWorkspaces(sessionName string, jsonOutput bool) error {
-	client, err := dialVerb()
+	raw, err := localVerb("list-workspaces", map[string]any{"session": sessionName}, 0, jsonOutput)
 	if err != nil {
 		return err
-	}
-	defer func() { _ = client.Close() }()
-
-	raw, err := client.Call("list-workspaces", map[string]any{"session": sessionName})
-	if err != nil {
-		return reportVerbError(explainVerbError("list-workspaces", err), jsonOutput)
 	}
 	if jsonOutput {
 		return printVerbResult(raw, jsonOutput)
@@ -143,11 +131,6 @@ func masterCountNames() []string {
 // runSetLayout turns tiling on or off and tidies the splits. tiling is a
 // pointer so a call that only equalizes leaves the tiling mode alone.
 func runSetLayout(sessionName string, tiling *bool, equalize, rotate bool, masterPosition string, masters int, jsonOutput bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
 
 	params := map[string]any{
 		"session":  sessionName,
@@ -164,9 +147,9 @@ func runSetLayout(sessionName string, tiling *bool, equalize, rotate bool, maste
 		params["master_count"] = masters
 	}
 
-	raw, err := client.Call("set-layout", params)
+	raw, err := localVerb("set-layout", params, 0, jsonOutput)
 	if err != nil {
-		return reportVerbError(explainVerbError("set-layout", err), jsonOutput)
+		return err
 	}
 	if jsonOutput {
 		return printVerbResult(raw, jsonOutput)

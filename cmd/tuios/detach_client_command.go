@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
-	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/spf13/cobra"
 )
 
@@ -58,12 +57,6 @@ From a pane, this command needs the admin grant.`,
 }
 
 func runDetachClient(clientID, fromSession string, allOther, jsonOut bool) error {
-	client, err := dialVerb()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
-
 	params := map[string]any{}
 	if clientID != "" {
 		params["client"] = clientID
@@ -74,15 +67,11 @@ func runDetachClient(clientID, fromSession string, allOther, jsonOut bool) error
 	if allOther {
 		params["all_other"] = true
 	}
-	raw, err := client.Call("detach-client", params)
-	if err != nil {
-		return explainVerbError("detach-client", err)
-	}
 	var res struct {
 		Detached []string `json:"detached"`
 	}
-	if err := jsonx.Unmarshal(raw, &res); err != nil {
-		return errfmt.Errorf("failed to parse response: %w", err)
+	if err := localVerbInto("detach-client", params, 0, false, &res); err != nil {
+		return err
 	}
 	if jsonOut {
 		return printJSON(res)
