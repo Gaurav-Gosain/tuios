@@ -1,6 +1,8 @@
 package app
 
 import (
+	"strconv"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
@@ -44,6 +46,14 @@ const (
 	// session is the first thing anybody does and the last thing that was
 	// visible.
 	DockSessionNew
+	// DockSessionAgents opens the agents view. It is drawn only while the
+	// session holds an agent pane, and it carries the count of agents that
+	// wait on the person.
+	//
+	// The view was reachable only through ctrl+b i, the palette and the rail,
+	// and a person who did not know the key had no control on screen that
+	// led there. The dock is the one row that is always up.
+	DockSessionAgents
 )
 
 // dockSessionHit is where a session control was drawn on the last frame.
@@ -80,6 +90,7 @@ const (
 	dockSessionLeaveLabel = "Leave running"
 	dockSessionCloseLabel = "Close session"
 	dockSessionNewLabel   = "New session"
+	dockSessionAgentLabel = "Agents view"
 )
 
 // dockSessionIcon is a control's glyph, following the configured glyph set.
@@ -91,6 +102,8 @@ func dockSessionIcon(a DockSessionAction, s *config.Settings) string {
 	switch a {
 	case DockSessionNew:
 		return s.GetRailAddGlyph()
+	case DockSessionAgents:
+		return s.GetDockIconAgents()
 	case DockSessionLeave:
 		return s.GetDockIconLeaveRunning()
 	default:
@@ -103,11 +116,63 @@ func dockSessionLabel(a DockSessionAction) string {
 	switch a {
 	case DockSessionNew:
 		return dockSessionNewLabel
+	case DockSessionAgents:
+		return dockSessionAgentLabel
 	case DockSessionLeave:
 		return dockSessionLeaveLabel
 	default:
 		return dockSessionCloseLabel
 	}
+}
+
+// dockAgents reports whether the session holds an agent pane, which is when
+// the agents control is drawn, and how many of its agents wait on the person.
+// A pane counts as an agent the way agentsPresent counts one: it has an agent
+// state or a named harness. Waiting is the rail's own predicate, read through
+// windowMarkState, so the dock, the title bars and the rail agree.
+//
+// It reads only the panes the client holds, which is a short loop per dock
+// frame and nothing on an idle screen.
+func (m *OS) dockAgents() (present bool, waiting int) {
+	if !m.agentsOn() {
+		return false, 0
+	}
+	for _, w := range m.Windows {
+		if w == nil || (w.AgentState == "" && w.AgentHarness == "") {
+			continue
+		}
+		present = true
+		if sidebarAttention(m.windowMarkState(w)) {
+			waiting++
+		}
+	}
+	return present, waiting
+}
+
+// dockSessionTooltipText is what a control's tooltip says. The agents control
+// also names its key, so a person who finds the view with the pointer learns
+// the way to it without one, and says how many agents wait.
+func (m *OS) dockSessionTooltipText(a DockSessionAction) string {
+	if a != DockSessionAgents {
+		return dockSessionLabel(a)
+	}
+	text := dockSessionAgentLabel
+	if _, waiting := m.dockAgents(); waiting > 0 {
+		text += ", " + strconv.Itoa(waiting) + " " + agentNeedsYou(waiting)
+	}
+	return text + " (" + m.sidebarAgentKeyOr("prefix_inbox", "ctrl+b i") + ")"
+}
+
+// OpenAgentsFromDock opens the agents view from the dock's agents control. The
+// control's hover and label go first: the pointer is still on the control, and
+// its label would otherwise stay up over the view's header until the pointer
+// moves.
+func (m *OS) OpenAgentsFromDock() {
+	m.dockSessionHover = DockSessionNone
+	if m.Tooltip.Source == tooltipDockSession {
+		m.tooltipClear()
+	}
+	m.OpenInbox("")
 }
 
 // CanCreateSession reports whether there is a daemon to create a session on.

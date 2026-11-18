@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -37,7 +38,13 @@ func (m *OS) buildDockSessionStrip() (string, []dockSessionCell) {
 	}
 
 	pal := m.groundUI()
-	cells := make([]dockSessionCell, 0, 3)
+	cells := make([]dockSessionCell, 0, 4)
+	// The agents control opens the strip. It is the one control here that
+	// comes and goes, so it sits furthest from the destructive one, and the
+	// controls that stay put keep their columns from the right-hand end.
+	if present, waiting := m.dockAgents(); present {
+		cells = append(cells, m.dockAgentsCell(waiting, pal))
+	}
 	// Creating comes first, at the far end from closing. The two most
 	// different things the strip does are the two furthest apart, and the one
 	// that cannot be undone keeps its place at the edge.
@@ -65,6 +72,25 @@ func (m *OS) buildDockSessionStrip() (string, []dockSessionCell) {
 func (m *OS) dockSessionStripWidth() int {
 	strip, _ := m.buildDockSessionStrip()
 	return lipgloss.Width(strip)
+}
+
+// dockAgentsCell styles the agents control. At rest it is drawn as the new
+// and leave controls are. While agents wait on the person it carries their
+// count, and the glyph and the count take the look's attention colour, the
+// colour the rail and the agents view give the same state.
+func (m *OS) dockAgentsCell(waiting int, pal overlay.Palette) dockSessionCell {
+	body := " " + dockSessionIcon(DockSessionAgents, &m.Settings) + " "
+	st := lipgloss.NewStyle().Bold(true)
+	switch {
+	case waiting > 0:
+		body += strconv.Itoa(min(waiting, 99)) + " "
+		st = st.Foreground(theme.Readable(pal.Attention, pal.Canvas))
+	case m.dockSessionHover == DockSessionAgents:
+		st = st.Foreground(theme.Readable(pal.AccentBright, pal.Canvas))
+	default:
+		st = st.Foreground(pal.Fg)
+	}
+	return dockSessionCell{Text: st.Render(body), Width: lipgloss.Width(body), Action: DockSessionAgents}
 }
 
 // dockSessionCell styles one control.

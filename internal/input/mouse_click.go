@@ -194,6 +194,9 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		case app.DockSessionNew:
 			o.OpenNewSessionPicker()
 			return o, nil
+		case app.DockSessionAgents:
+			o.OpenAgentsFromDock()
+			return o, nil
 		}
 		// The message block owns its own columns at the bar's right-hand end,
 		// ahead of the dock items: its body jumps to the pane the message came

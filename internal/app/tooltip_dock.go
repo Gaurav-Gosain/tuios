@@ -61,7 +61,7 @@ func (m *OS) renderDockSessionTooltip() *lipgloss.Layer {
 			continue
 		}
 		renderW := m.GetRenderWidth()
-		label := tooltipLabel(dockSessionLabel(h.Action), renderW, theme.UI())
+		label := tooltipLabel(m.dockSessionTooltipText(h.Action), renderW, theme.UI())
 		return tooltipLayer(label, overlay.Rect{X0: h.X0, Y0: h.Y, X1: h.X1, Y1: h.Y + 1}, m.dockTooltipSide(), m.screenRect(), "dock-session-tooltip")
 	}
 	return nil

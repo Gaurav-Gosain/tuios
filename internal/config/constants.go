@@ -188,6 +188,10 @@ var (
 	// everything in it (Nerd Font: nf-fa-power_off).
 	DockIconCloseSession string
 
+	// DockIconAgents is the icon for the control that opens the agents view
+	// (Nerd Font: nf-fa-robot, the rail's agents section icon).
+	DockIconAgents string
+
 	// DockSeparator is the separator between dock sections
 	DockSeparator = "  " // Two spaces for breathing room
 
@@ -217,6 +221,7 @@ func init() {
 	DockIconWorkspaceCount = fa.ThLarge.String()
 	DockIconLeaveRunning = fa.SignOut.String()
 	DockIconCloseSession = fa.PowerOff.String()
+	DockIconAgents = fa.Robot.String()
 	WindowPillLeft = ple.LeftHalfCircleThick.String()
 	WindowPillRight = ple.RightHalfCircleThick.String()
 	NotificationGlyphError = fa.TimesCircle.String()
@@ -267,6 +272,10 @@ const (
 	// DockIconCloseSessionASCII is the ASCII fallback for the close-session
 	// control, which is also the letter prefix-X ends a session with.
 	DockIconCloseSessionASCII = "X"
+
+	// DockIconAgentsASCII is the ASCII fallback for the agents control: the
+	// letter prefix-i opens the agents view with.
+	DockIconAgentsASCII = "i"
 
 	// DockSeparatorASCII is the ASCII fallback separator
 	DockSeparatorASCII = " | "
@@ -1150,6 +1159,14 @@ func (s *Settings) GetDockIconLeaveRunning() string {
 		return DockIconLeaveRunningASCII
 	}
 	return DockIconLeaveRunning
+}
+
+// GetDockIconAgents returns the agents control's icon for the current glyph set.
+func (s *Settings) GetDockIconAgents() string {
+	if s.NerdFontsOff() {
+		return DockIconAgentsASCII
+	}
+	return DockIconAgents
 }
 
 // GetDockIconCloseSession returns the close-session icon for the current glyph set.
