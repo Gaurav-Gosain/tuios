@@ -375,6 +375,19 @@ func TestRestartTheDaemonFromTheVersionNotice(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "send-text", "-s", name, "-w", "sleeper", "sleep 300\n"); err != nil {
 		t.Fatalf("start a program: %v\n%s", err, out)
 	}
+	// Many more programs, as a person with an agent in every pane has. The
+	// plan is then taller than the screen: it has to scroll, and the answers
+	// have to stay on screen.
+	const busy = 25
+	for i := 1; i <= busy; i++ {
+		pane := fmt.Sprintf("busy-%02d", i)
+		if out, err := tuiosCLI(t, base, "new-window", "-s", name, pane); err != nil {
+			t.Fatalf("open %s: %v\n%s", pane, err, out)
+		}
+		if out, err := tuiosCLI(t, base, "send-text", "-s", name, "-w", pane, "sleep 300\n"); err != nil {
+			t.Fatalf("start a program in %s: %v\n%s", pane, err, out)
+		}
+	}
 
 	// The client runs from a path of its own, which the update replaces.
 	client := filepath.Join(base, "bin", "tuios")
@@ -419,7 +432,7 @@ func TestRestartTheDaemonFromTheVersionNotice(t *testing.T) {
 		"Daemon now      dev",
 		"After restart   " + syncNextVersion + "   (from ",
 		"This window     " + restartMidVersion + "   (moves to " + syncNextVersion + " too)",
-		"These come back", "Restart the daemon", "Cancel", "r restart", "esc cancel",
+		"Scroll to see more.", "Cancel", "r restart", "esc cancel",
 	} {
 		if !strings.Contains(term.Screen().Text(), want) {
 			t.Errorf("ASSERTION: the dialog does not say %q\n%s", want, term.Snapshot())
@@ -427,6 +440,24 @@ func TestRestartTheDaemonFromTheVersionNotice(t *testing.T) {
 	}
 	if frames != "" {
 		savePNG(t, term.Screen(), shot.XTermPalette(), frames, "restart-confirm")
+	}
+	// Page down to the end of the plan: the last program and the line after
+	// the list come into view, and the answers are still there.
+	lastBusy := fmt.Sprintf(`sleep in "busy-%02d"`, busy)
+	for range 4 {
+		if err := term.SendKeys(tuitest.PageDown); err != nil {
+			t.Fatalf("page down: %v", err)
+		}
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, lastBusy) && strings.Contains(text, "These come back") &&
+			strings.Contains(text, "Cancel") && strings.Contains(text, "r restart")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: page down did not show the end of the plan with the answers: %v\n%s", err, term.Snapshot())
+	}
+	if frames != "" {
+		savePNG(t, term.Screen(), shot.XTermPalette(), frames, "restart-confirm-end")
 	}
 
 	// The notice and the dialog had to fit 100 columns. The success line is

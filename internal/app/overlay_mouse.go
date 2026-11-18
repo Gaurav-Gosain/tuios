@@ -306,7 +306,11 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 	case "sessionclose":
 		m.SessionCloseMove(wheelDelta(up))
 	case overlayKindRestart:
-		m.DaemonRestartMove(wheelDelta(up))
+		if m.restart.scrollMax > 0 {
+			m.DaemonRestartScroll(3 * wheelDelta(up))
+		} else {
+			m.DaemonRestartMove(wheelDelta(up))
+		}
 	case "filedialog":
 		m.FileConfirmMove(wheelDelta(up))
 	case "accent":

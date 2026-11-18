@@ -101,6 +101,10 @@ type daemonRestart struct {
 	// list is the cursor on the two answers.
 	list listnav.State
 	plan restartReport
+	// scroll is the first plan line shown when the plan is taller than the
+	// screen. scrollMax and scrollPage are what the last frame could show:
+	// the largest scroll, and the lines in view.
+	scroll, scrollMax, scrollPage int
 	// done is the restart's result, once the command wrote it.
 	done *restartReport
 	// err and fix are what a failure says.
@@ -206,12 +210,27 @@ func (m *OS) CloseDaemonRestart() tea.Cmd {
 	return nil
 }
 
-// DaemonRestartMove moves the cursor between the two answers.
+// DaemonRestartMove moves the cursor between the two answers. A move of a
+// page or more (page down, page up, home, end) scrolls the plan instead.
 func (m *OS) DaemonRestartMove(delta int) {
 	if m.restart.phase != restartConfirm {
 		return
 	}
+	if delta > 1 || delta < -1 {
+		m.DaemonRestartScroll(delta / max(abs(delta), 1) * max(m.restart.scrollPage, 1))
+		return
+	}
 	m.restart.list.Move(delta, restartRowCount, restartRowCount, false, nil)
+}
+
+// DaemonRestartScroll scrolls the plan by delta lines, when it is taller than
+// the screen.
+func (m *OS) DaemonRestartScroll(delta int) {
+	r := &m.restart
+	if r.phase != restartConfirm || r.scrollMax == 0 {
+		return
+	}
+	r.scroll = max(min(r.scroll+delta, r.scrollMax), 0)
 }
 
 // DaemonRestartActivate runs the row at idx: in the question, restart or

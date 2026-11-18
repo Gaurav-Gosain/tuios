@@ -2,6 +2,7 @@ package app
 
 import (
 	"image/color"
+	"strconv"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -69,6 +70,19 @@ func (m *OS) renderDaemonRestart() (string, overlay.Geometry, []overlayRowHit) {
 			dialogAnswerRow("Restart the daemon", r.list.Cursor == RestartRowRestart, true, width, pal),
 			dialogAnswerRow("Cancel", r.list.Cursor == RestartRowCancel, false, width, pal))
 		hints = []overlay.Hint{{Key: "r", Label: "restart"}, cancel}
+		// A daemon with many programs has a plan taller than the screen. The
+		// plan scrolls, and the rule, the answers and the hints stay on screen:
+		// two frame rows, the rule and the answers.
+		r.scrollMax, r.scrollPage = 0, 0
+		if room := m.panelRoomHeight() - 3 - len(rows); room > 0 && len(body) > room {
+			view := max(room-1, 1)
+			r.scrollMax, r.scrollPage = len(body)-view, view
+			top := min(r.scroll, r.scrollMax)
+			at := pad + base.Foreground(pal.FgMute).Render("Lines "+strconv.Itoa(top+1)+" to "+
+				strconv.Itoa(top+view)+" of "+strconv.Itoa(len(body))+". Scroll to see more.")
+			body = append(body[top:top+view:top+view], overlay.Fill(at, width, bg))
+			hints = []overlay.Hint{{Key: "pgup pgdn", Label: "scroll"}, {Key: "r", Label: "restart"}, cancel}
+		}
 
 	case restartStopping, restartStarting, restartReattaching:
 		steps := [...]string{"Stop the daemon", "Start the daemon " + r.plan.Version, "Attach to session " + m.SessionLabel(m.SessionName)}
