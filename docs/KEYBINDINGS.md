@@ -260,8 +260,10 @@ binding is `file_insert_path` in `[keybindings.sidebar_files]`.
 
 ### Drag a file into a pane
 
-You can also drag a row with the mouse. Press a row, move the pointer out of
-the sidebar, and release the button over a pane. The pane gets the path.
+You can also drag a row with the mouse. Press a row, move the pointer, and
+release the button over a pane. The pane gets the path. A press becomes a
+drag when the pointer moves more than the drag threshold
+(`mouse.drag_threshold`, 5 cells by default).
 
 - While you drag, the row in the sidebar looks picked up.
 - A heavy frame in the accent colour shows the pane under the pointer. A pane
@@ -269,7 +271,11 @@ the sidebar, and release the button over a pane. The pane gets the path.
 - A label at the pointer shows the name, the pane and the program in the pane.
 - `Esc` cancels the drag.
 - A release over the sidebar, the dock or an empty area does nothing.
-- A click that stays in the sidebar does what a click on the row did before.
+- A drag never opens quick look and never copies, also when you release it
+  over the sidebar.
+- A click on a file opens it in quick look. A click on a folder opens the
+  folder.
+- `Ctrl`+click or `Shift`+click on a row copies its path.
 
 After the drop, the pane has the focus and the mode does not change.
 
