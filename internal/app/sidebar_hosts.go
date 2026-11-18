@@ -835,7 +835,7 @@ func (m *OS) drawHostRow(
 			// The "sign in" label is a control of its own, as the "+" is on
 			// a host that is up: it opens the sign-in page, and the rest of
 			// the header still folds the group.
-			figure, _ := hostDownFigure(node, lipgloss.Width(printableTitle(node.Title)), cw)
+			figure, _ := hostDownFigure(node, lipgloss.Width(printableTitle(node.Title)), cw, m.railClock())
 			if w := lipgloss.Width(figure); w > 0 && cw-1-w > 0 {
 				span := sidebarTokenSpan{Kind: sidebarRowHostSignIn, X0: cw - 1 - w, X1: cw - 1}
 				lit = isCursor(sidebarRowHostSignIn, node.Host, "") || (headerHoverX >= span.X0 && headerHoverX < span.X1)
@@ -964,8 +964,8 @@ func hostDownMark() string {
 // name's cost: the mail count when there is mail, since it is the one thing on
 // the row that changes when the link is back, and hostDownMark when there is
 // none, so the row still says the machine is down without its colour.
-func hostDownFigure(node sessiontree.Node, nameW, cw int) (figure string, nameRoom int) {
-	label := hostDownLabel(node.HostStatus, node.HostLastOK, time.Now())
+func hostDownFigure(node sessiontree.Node, nameW, cw int, now time.Time) (figure string, nameRoom int) {
+	label := hostDownLabel(node.HostStatus, node.HostLastOK, now)
 	forms := []string{label}
 	last := hostDownMark()
 	switch federation.Status(node.HostStatus) {
@@ -1032,7 +1032,7 @@ func (m *OS) sidebarHostRowLit(node sessiontree.Node, cw int, pal overlay.Palett
 		// An unreachable machine has nothing to add a session to. See
 		// hostDownFigure for how the word gives way on a narrow rail.
 		var label string
-		label, nameRoom = hostDownFigure(node, lipgloss.Width(title), cw)
+		label, nameRoom = hostDownFigure(node, lipgloss.Width(title), cw, m.railClock())
 		ink := pal.FgMute
 		if node.HostStatus == string(federation.StatusApproval) {
 			// A sign-in waits for the person, so it wears the colour of an

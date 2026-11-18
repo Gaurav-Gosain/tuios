@@ -58,6 +58,11 @@ func (m *OS) sidebarPanel() (string, int) {
 // nothing that affects it has changed since the last frame. A scrolling marquee
 // or an in-progress drag animates every frame, so neither is ever served cached.
 func (m *OS) sidebarPanelLines() ([]string, int) {
+	// One clock for the key, the build and the rail check, so a label that
+	// moves with the clock ("seen 3s ago") reads the same second in all three.
+	// Three reads of the clock let a second turn between the key and the draw.
+	m.railNow = railTimeNow()
+	defer func() { m.railNow = time.Time{} }()
 	animating := m.SidebarMarqueeKey != "" || m.SidebarDrag.Dragging
 	// Read before the key, so a listing that lands between the two reads is
 	// seen as one that moved during the frame. See railCacheMiss.
@@ -105,6 +110,19 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 // foreign-session data is summarised by the client's cache generation so the
 // daemon mutex is not taken per frame. A changed signature forces a rebuild; an
 // unchanged one guarantees identical rows.
+// railTimeNow is the rail's clock. A test steps it to put a second's turn at
+// an exact point of a frame.
+var railTimeNow = time.Now
+
+// railClock is the time the rail being keyed and built is drawn for: the
+// clock sidebarPanelLines read for this frame, or now outside a frame.
+func (m *OS) railClock() time.Time {
+	if m.railNow.IsZero() {
+		return railTimeNow()
+	}
+	return m.railNow
+}
+
 func (m *OS) sidebarSignature() uint64 {
 	const prime = 1099511628211
 	h := uint64(1469598103934665603)
@@ -474,7 +492,7 @@ func (m *OS) sidebarSignature() uint64 {
 	// same. The label is folded as the header draws it, so the key moves
 	// exactly when the words do.
 	if len(m.FederationHosts) > 0 {
-		now := time.Now()
+		now := m.railClock()
 		for _, h := range m.FederationHosts {
 			mixS(hostDownLabel(h.Status, h.LastOK, now))
 		}

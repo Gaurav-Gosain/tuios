@@ -2100,6 +2100,9 @@ type OS struct {
 	// input that changes the rows, so a frame drawn for an unrelated reason (a
 	// pane printing output) does not rebuild and restyle the whole rail.
 	sidebarCache sidebarRenderCache
+	// railNow is the clock of the rail being keyed and built, set for the
+	// length of sidebarPanelLines. See railClock.
+	railNow time.Time
 	// The second edge keeps its render cache and recorded hits separate from
 	// the original rail. sidebarDrawing is set only during the synchronous
 	// render pass for that edge, never across an Update or background run.
