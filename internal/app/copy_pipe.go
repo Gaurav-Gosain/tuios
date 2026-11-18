@@ -12,6 +12,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // Copy pipes: a yank piped through a command, after tmux's copy-pipe.
@@ -138,7 +139,7 @@ func copyPipeFailure(label string, err error) string {
 	case errors.Is(err, errCopyPipeTimeout):
 		return fmt.Sprintf("%s did not stop in %d seconds. tuios stopped it.", label, int(CopyPipeTimeout/time.Second))
 	case errors.Is(err, errCopyPipeTooLarge):
-		return fmt.Sprintf("%s wrote more than %d MB.", label, copyPipeMaxOutput>>20)
+		return label + " wrote more than " + units.Bytes(int64(copyPipeMaxOutput)) + "."
 	case errors.As(err, &exit):
 		if exit.stderr != "" {
 			return fmt.Sprintf("%s failed with exit code %d: %s.", label, exit.code, strings.TrimSuffix(exit.stderr, "."))

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
@@ -581,7 +582,7 @@ func readCapped(r io.Reader) ([]byte, error) {
 		return nil, errfmt.Errorf("failed to read the look: %w", err)
 	}
 	if len(data) > config.MaxLookBytes {
-		return nil, errfmt.Errorf("the look is larger than %d KiB", config.MaxLookBytes>>10)
+		return nil, errfmt.Errorf("the look is larger than %s", units.Bytes(config.MaxLookBytes))
 	}
 	return data, nil
 }

@@ -236,14 +236,14 @@ func openFarCopies(t *testing.T, term *tuitest.Terminal, base string, env []stri
 	bigCopy := farCopyPath(base, big, "zbig.bin")
 	open("zbig.bin")
 	takeOffer(t, term, "zbig.bin is on build. Click to open a copy here.")
-	waitForAll(t, term, uiTimeout, "the size ask", "zbig.bin on build is 2.00 MiB. Click to copy it here and open it.")
+	waitForAll(t, term, uiTimeout, "the size ask", "zbig.bin on build is 2 MiB. Click to copy it here and open it.")
 	copiesFrame(t, term, "open-far-copy-size-ask")
 	time.Sleep(500 * time.Millisecond)
 	waitOpenRecord(t, term, record, want, "the size ask opened the file before the second yes")
 	if _, err := os.Stat(bigCopy); err == nil {
 		t.Fatalf("the size ask copied the file before the second yes")
 	}
-	takeOffer(t, term, "zbig.bin on build is 2.00 MiB.")
+	takeOffer(t, term, "zbig.bin on build is 2 MiB.")
 	want = append(want, systemOpener+" "+bigCopy)
 	waitOpenRecord(t, term, record, want, "the open of a file over the ask limit")
 	sameCopyBytes(t, bigCopy, big, "the copy of a file over the ask limit")

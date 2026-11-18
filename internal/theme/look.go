@@ -10,6 +10,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // A look (see config.ParseLook) may carry a theme and a glyph set. A stranger
@@ -28,7 +29,7 @@ const MaxLookAssetBytes = 32 << 10
 // write under id.
 func CheckLookTheme(id string, data []byte) ([]byte, error) {
 	if len(data) > MaxLookAssetBytes {
-		return nil, errfmt.Errorf("the theme is larger than %d KiB", MaxLookAssetBytes>>10)
+		return nil, errfmt.Errorf("the theme is larger than %s", units.Bytes(MaxLookAssetBytes))
 	}
 	if !ValidThemeID(id) {
 		return nil, errfmt.Errorf("theme name %q cannot be a file name. Use a-z, 0-9, '-', '_' and '.'", id)
@@ -81,7 +82,7 @@ func CheckLookTheme(id string, data []byte) ([]byte, error) {
 // file to write under id, with one line for each glyph it drops.
 func CheckLookGlyphs(id string, data []byte) ([]byte, []string, error) {
 	if len(data) > MaxLookAssetBytes {
-		return nil, nil, errfmt.Errorf("the glyph set is larger than %d KiB", MaxLookAssetBytes>>10)
+		return nil, nil, errfmt.Errorf("the glyph set is larger than %s", units.Bytes(MaxLookAssetBytes))
 	}
 	if !ValidThemeID(id) {
 		return nil, nil, errfmt.Errorf("glyph set name %q cannot be a file name. Use a-z, 0-9, '-', '_' and '.'", id)

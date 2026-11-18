@@ -318,7 +318,7 @@ var afterTransferStat func(*os.File)
 // transferTooLarge is the refusal for a file over the transfer cap. size is
 // what was seen, which for a growing file is only a lower bound.
 func transferTooLarge(path string, size int64) error {
-	return errfmt.Errorf("%s is at least %d bytes. A file sent to another machine is capped at %d MB", path, size, stashTransferMaxBytes>>20)
+	return errfmt.Errorf("%s is at least %d bytes. A file sent to another machine is capped at %s", path, size, units.Bytes(int64(stashTransferMaxBytes)))
 }
 
 // runStashGet copies a stashed file out of a session store to a path here.

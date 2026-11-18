@@ -389,7 +389,7 @@ func TestAnImageOverTheLimitIsNotSent(t *testing.T) {
 	if len(*calls) != 0 || typed.Len() != 0 {
 		t.Error("an image over the limit was sent")
 	}
-	if msg := lastMessage(m); !strings.Contains(msg, "8 MB") {
+	if msg := lastMessage(m); !strings.Contains(msg, "8 MiB") {
 		t.Errorf("the message does not name the limit: %q", msg)
 	}
 }
@@ -537,7 +537,7 @@ func TestAnEndlessClipboardIsCutOffAtTheLimit(t *testing.T) {
 	m.Mode = TerminalMode
 	m.SetImagePasteSeams(&env, nil, func([]byte) (string, error) { return "/x.png", nil })
 	driveImagePaste(t, m, m.RequestImagePaste())
-	if typed.Len() != 0 || !strings.Contains(lastMessage(m), "8 MB") {
+	if typed.Len() != 0 || !strings.Contains(lastMessage(m), "8 MiB") {
 		t.Errorf("an endless image typed %q and said %q", typed.String(), lastMessage(m))
 	}
 }

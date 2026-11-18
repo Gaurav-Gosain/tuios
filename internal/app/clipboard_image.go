@@ -18,6 +18,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // Reading an image from the system clipboard.
@@ -106,7 +107,7 @@ const (
 
 // errClipboardTooLarge is a clipboard image over the paste limit. The tool
 // that was writing it is killed, and nothing past the limit is read.
-var errClipboardTooLarge = errfmt.Errorf("the image is larger than %d MB", session.PasteImageMaxBytes>>20)
+var errClipboardTooLarge = errfmt.Errorf("the image is larger than %s", units.Bytes(session.PasteImageMaxBytes))
 
 // runClipTool runs one helper and returns at most limit bytes of its output.
 //

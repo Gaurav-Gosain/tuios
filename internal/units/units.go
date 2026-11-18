@@ -5,11 +5,12 @@ package units
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 )
 
-// Bytes writes a size in the binary units: 512 B, 1.50 KiB, 12.3 MiB,
-// 2.00 GiB.
+// Bytes writes a size in the binary units, to three significant digits at
+// most, with no trailing zeros: 512 B, 1.5 KiB, 12.3 MiB, 2 GiB.
 func Bytes(n int64) string {
 	const unit = 1024
 	if n < unit {
@@ -22,13 +23,19 @@ func Bytes(n int64) string {
 	}
 	v := float64(n) / float64(div)
 	units := "KMGTP"[exp : exp+1]
+	prec := 2
 	switch {
 	case v >= 100:
-		return fmt.Sprintf("%.0f %siB", v, units)
+		prec = 0
 	case v >= 10:
-		return fmt.Sprintf("%.1f %siB", v, units)
+		prec = 1
 	}
-	return fmt.Sprintf("%.2f %siB", v, units)
+	s := strconv.FormatFloat(v, 'f', prec, 64)
+	if prec > 0 {
+		// 8 MiB and 1.5 MiB, not 8.00 MiB and 1.50 MiB.
+		s = strings.TrimSuffix(strings.TrimRight(s, "0"), ".")
+	}
+	return s + " " + units + "iB"
 }
 
 // Duration writes a time span to the second: 17s, 3m 05s, 1h 02m.

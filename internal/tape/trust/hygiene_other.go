@@ -3,8 +3,9 @@
 package trust
 
 import (
-	"fmt"
 	"os"
+
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // The tape hygiene preconditions model a POSIX threat (owner and group/other
@@ -22,7 +23,7 @@ func hygieneReason(info os.FileInfo) (string, bool) {
 		return "not a regular file", false
 	}
 	if info.Size() > MaxTapeSize {
-		return fmt.Sprintf("larger than %d KiB", MaxTapeSize/1024), false
+		return "larger than " + units.Bytes(int64(MaxTapeSize)), false
 	}
 	return "", true
 }

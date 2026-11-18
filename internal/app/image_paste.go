@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -275,7 +274,7 @@ func (m *OS) applyImageProbe(msg imageProbeMsg) tea.Cmd {
 		case errors.Is(msg.err, errNoClipboardImage):
 			m.ShowNotification("The clipboard holds no image.", "info", m.Settings.NotificationDuration)
 		case errors.Is(msg.err, errClipboardTooLarge):
-			m.ShowNotification(fmt.Sprintf("The image is larger than %d MB. Nothing was pasted.", session.PasteImageMaxBytes>>20), "warning", m.Settings.NotificationDuration*2)
+			m.ShowNotification("The image is larger than "+units.Bytes(session.PasteImageMaxBytes)+". Nothing was pasted.", "warning", m.Settings.NotificationDuration*2)
 		case errors.Is(msg.err, errClipTypesUnsupported):
 			m.ShowNotification("The clipboard tool cannot read the clipboard here. Nothing was pasted.", "warning", m.Settings.NotificationDuration*2)
 		default:

@@ -17,6 +17,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // Looks.
@@ -358,7 +359,7 @@ var lookMeta = map[string]bool{"look": true, "name": true, "author": true, "desc
 // and named in Left. A value that fails its check fails the whole look.
 func ParseLook(data []byte) (*Look, error) {
 	if len(data) > MaxLookBytes {
-		return nil, errfmt.Errorf("the look is larger than %d KiB", MaxLookBytes>>10)
+		return nil, errfmt.Errorf("the look is larger than %s", units.Bytes(MaxLookBytes))
 	}
 	raw := map[string]any{}
 	if err := toml.Unmarshal(data, &raw); err != nil {

@@ -255,7 +255,7 @@ func (d *Daemon) claimLinkWriteIn(cs *connState, path, part string, offset, leng
 		inDrop = true
 		held := dirBytes(realPath(drop))
 		if held+u.dropClaimed+grow > d.dropKeepBytes {
-			return none, newVerbError(ErrVerbDiskFull, "the drop folder holds at most "+strconv.FormatInt(d.dropKeepBytes>>20, 10)+" MiB, and this file does not fit. Nothing was written.")
+			return none, newVerbError(ErrVerbDiskFull, "the drop folder holds at most "+units.Bytes(d.dropKeepBytes)+", and this file does not fit. Nothing was written.")
 		}
 	} else if policy.FilesMinFree > 0 {
 		dir := filepath.Dir(realParent(path))

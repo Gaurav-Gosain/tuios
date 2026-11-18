@@ -15,6 +15,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -135,7 +136,7 @@ is yours. A buffer a pane without admin sets is that pane's own.
 					return errfmt.Errorf("read the standard input: %w", err)
 				}
 				if len(data) > maxSetBufferInput {
-					return errfmt.Errorf("set-buffer: the standard input is longer than %d MiB. Nothing was stored", maxSetBufferInput>>20)
+					return errfmt.Errorf("set-buffer: the standard input is longer than %s. Nothing was stored", units.Bytes(int64(maxSetBufferInput)))
 				}
 				text = string(data)
 			}

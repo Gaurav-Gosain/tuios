@@ -3,9 +3,10 @@
 package trust
 
 import (
-	"fmt"
 	"os"
 	"syscall"
+
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // ownedByCurrentUser reports whether info's owner is the current user. A tape
@@ -43,7 +44,7 @@ func hygieneReason(info os.FileInfo) (string, bool) {
 		return "group- or world-writable", false
 	}
 	if info.Size() > MaxTapeSize {
-		return fmt.Sprintf("larger than %d KiB", MaxTapeSize/1024), false
+		return "larger than " + units.Bytes(int64(MaxTapeSize)), false
 	}
 	return "", true
 }

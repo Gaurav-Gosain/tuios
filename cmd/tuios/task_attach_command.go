@@ -211,7 +211,7 @@ func readAttachFile(path string) ([]byte, error) {
 		return nil, errfmt.Errorf("failed to read %s: %w", path, err)
 	}
 	if len(data) > attachMaxFileBytes {
-		return nil, errfmt.Errorf("%s is larger than %d MiB, the most one attachment can be", path, attachMaxFileBytes>>20)
+		return nil, errfmt.Errorf("%s is larger than %s, the most one attachment can be", path, units.Bytes(int64(attachMaxFileBytes)))
 	}
 	return data, nil
 }

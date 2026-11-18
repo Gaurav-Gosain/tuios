@@ -7,7 +7,8 @@ import (
 	"errors"
 	"io"
 	"os"
-	"strconv"
+
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // This file holds the stash verbs: put bytes in, list what is in, and get
@@ -75,7 +76,7 @@ func (d *Daemon) verbStashPut(cs *connState, params json.RawMessage) (any, *verb
 		if len(content) > base64.StdEncoding.EncodedLen(stashTransferMaxBytes) {
 			return nil, hintedVerbError(ErrVerbInvalidParams, "stash put "+echoName(p.Path)+": the content is larger than the transfer cap", &VerbHint{
 				Param:  "content",
-				Detail: "A file that crosses the socket as bytes is capped at " + strconv.Itoa(stashTransferMaxBytes>>20) + " MB.",
+				Detail: "A file that crosses the socket as bytes is capped at " + units.Bytes(int64(stashTransferMaxBytes)) + ".",
 			})
 		}
 		data, derr := base64.StdEncoding.DecodeString(content)
@@ -87,7 +88,7 @@ func (d *Daemon) verbStashPut(cs *connState, params json.RawMessage) (any, *verb
 		if len(data) > stashTransferMaxBytes {
 			return nil, hintedVerbError(ErrVerbInvalidParams, "stash put "+echoName(p.Path)+": the content is larger than the transfer cap", &VerbHint{
 				Param:  "content",
-				Detail: "A file that crosses the socket as bytes is capped at " + strconv.Itoa(stashTransferMaxBytes>>20) + " MB.",
+				Detail: "A file that crosses the socket as bytes is capped at " + units.Bytes(int64(stashTransferMaxBytes)) + ".",
 			})
 		}
 		res, err = d.stash.putFrom(sess.ID, p.Path, bytes.NewReader(data), referenced)
@@ -211,7 +212,7 @@ func (d *Daemon) verbStashGet(cs *connState, params json.RawMessage) (any, *verb
 	if entry.Bytes > stashTransferMaxBytes {
 		return nil, hintedVerbError(ErrVerbInvalidParams, "stash get "+echoName(p.Path)+": the file is larger than the transfer cap", &VerbHint{
 			Param:  "path",
-			Detail: "A file that crosses the socket as bytes is capped at " + strconv.Itoa(stashTransferMaxBytes>>20) + " MB. Copy it another way.",
+			Detail: "A file that crosses the socket as bytes is capped at " + units.Bytes(int64(stashTransferMaxBytes)) + ". Copy it another way.",
 		})
 	}
 	data, err := io.ReadAll(io.LimitReader(f, stashTransferMaxBytes+1))
@@ -273,7 +274,7 @@ func stashPutError(path string, err error) *verbError {
 	}
 	return hintedVerbError(ErrVerbInvalidParams, "stash put "+echoName(path)+": "+err.Error(), &VerbHint{
 		Param: "path",
-		Detail: "One file is capped at " + strconv.Itoa(stashMaxFileBytes>>20) + " MB and a session at " +
-			strconv.Itoa(stashMaxSessionBytes>>20) + " MB. Attach the file by its own path instead: an attachment is never copied.",
+		Detail: "One file is capped at " + units.Bytes(int64(stashMaxFileBytes)) + " and a session at " +
+			units.Bytes(int64(stashMaxSessionBytes)) + ". Attach the file by its own path instead: an attachment is never copied.",
 	})
 }

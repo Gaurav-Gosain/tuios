@@ -27,6 +27,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/adrg/xdg"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -305,7 +306,7 @@ func (s *Store) Check(tapePath string) (Result, error) {
 		return Result{
 			Status: StatusIneligible,
 			Path:   real,
-			Reason: fmt.Sprintf("larger than %d KiB", MaxTapeSize/1024),
+			Reason: "larger than " + units.Bytes(int64(MaxTapeSize)),
 			Size:   int64(len(content)),
 		}, nil
 	}

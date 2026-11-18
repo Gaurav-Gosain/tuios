@@ -7,6 +7,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // A queued message in parts.
@@ -126,7 +127,7 @@ func checkParts(parts []queuePart, typedMax int) (string, int, *verbError) {
 				return "", 0, queuePartsError("part " + strconv.Itoa(i+1) + " is an image and carries text: an image carries data")
 			}
 			if len(p.Data) > pasteImageMaxBytes {
-				return "", 0, queuePartsError("part " + strconv.Itoa(i+1) + " is an image larger than " + strconv.Itoa(pasteImageMaxBytes>>20) + " MiB")
+				return "", 0, queuePartsError("part " + strconv.Itoa(i+1) + " is an image larger than " + units.Bytes(int64(pasteImageMaxBytes)))
 			}
 			if sniffImage(p.Data) == "" {
 				return "", 0, queuePartsError("part " + strconv.Itoa(i+1) + ": " + errPasteNotImage.Error())

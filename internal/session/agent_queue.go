@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // The delivery queue: messages for the agent in a pane, typed as a prompt the
@@ -335,7 +336,7 @@ func queueFullError(sess *Session, target WindowState, limit int) *verbError {
 // queueBytesError is the refusal for a message that would take a pane's queue,
 // or every queue together, past its bound in bytes.
 func queueBytesError(sess *Session, target WindowState) *verbError {
-	return hintedVerbError(ErrVerbQueueFull, "the queue for window "+shortWindowID(target.ID)+" holds as many bytes as it may: "+strconv.Itoa(queuePaneMaxBytes>>20)+" MiB a pane and "+strconv.Itoa(queueDaemonMaxBytes>>20)+" MiB in all", &VerbHint{
+	return hintedVerbError(ErrVerbQueueFull, "the queue for window "+shortWindowID(target.ID)+" holds as many bytes as it may: "+units.Bytes(int64(queuePaneMaxBytes))+" a pane and "+units.Bytes(int64(queueDaemonMaxBytes))+" in all", &VerbHint{
 		Verb:    "list-queued",
 		Command: "tuios queue ls " + paneArgs(sess, target.ID),
 		Detail:  "Nothing was queued. Wait for the agents to take what is queued, or drop an entry with tuios queue rm.",

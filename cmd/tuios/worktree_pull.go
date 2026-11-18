@@ -13,6 +13,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
@@ -317,7 +318,7 @@ func checkTransferShape(r bundleReply) error {
 		return errfmt.Errorf("the base commit %q is not a commit hash", r.BaseCommit)
 	}
 	if r.Size < 0 || r.Size > pullMaxBytes || r.BundleBytes < 0 || r.PatchBytes < 0 || r.BundleBytes+r.PatchBytes != r.Size {
-		return errfmt.Errorf("the sizes %d, %d and %d do not add up or are past the %d MB cap", r.BundleBytes, r.PatchBytes, r.Size, pullMaxBytes>>20)
+		return errfmt.Errorf("the sizes %d, %d and %d do not add up or are past the %s cap", r.BundleBytes, r.PatchBytes, r.Size, units.Bytes(int64(pullMaxBytes)))
 	}
 	if r.Token == "" && !r.Done {
 		return errfmt.Errorf("there is no token to read the rest with")

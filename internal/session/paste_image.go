@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +22,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // Pasting an image into a pane.
@@ -476,7 +476,7 @@ func decodePasteContent(verb, content string) ([]byte, *verbError) {
 	}
 	tooBig := hintedVerbError(ErrVerbInvalidParams, verb+": the image is larger than the limit", &VerbHint{
 		Param:  "content",
-		Detail: "A pasted image is limited to " + strconv.Itoa(pasteImageMaxBytes>>20) + " MB. Save a smaller image and paste it again.",
+		Detail: "A pasted image is limited to " + units.Bytes(int64(pasteImageMaxBytes)) + ". Save a smaller image and paste it again.",
 	})
 	if len(content) > base64.StdEncoding.EncodedLen(pasteImageMaxBytes) {
 		return nil, tooBig

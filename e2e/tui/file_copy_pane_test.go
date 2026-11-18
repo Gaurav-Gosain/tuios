@@ -304,7 +304,7 @@ func TestCopyOnATerminalAsksAndKeepsRunning(t *testing.T) {
 	want := randomFile(t, big, 24<<20)
 	codeFile = filepath.Join(base, "keep.code")
 	typeInPane(t, base, "work", pane, "clear; "+tuiosBin+" cp build:big.bin ./; echo $? >"+codeFile)
-	screens["progress"] = waitPaneScreen(t, base, "work", pane, 30*time.Second, "big.bin", "  to /", "MiB of 24.0 MiB", "[#", "left")
+	screens["progress"] = waitPaneScreen(t, base, "work", pane, 30*time.Second, "big.bin", "  to /", "MiB of 24 MiB", "[#", "left")
 	pressInPane(t, base, "work", pane, "ctrl+c")
 	screens["ctrl_c"] = waitPaneScreen(t, base, "work", pane, 10*time.Second, "Cancel the copy, or keep it running? [c/k]")
 	pressInPane(t, base, "work", pane, "k")
