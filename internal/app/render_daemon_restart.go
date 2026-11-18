@@ -78,8 +78,11 @@ func (m *OS) renderDaemonRestart() (string, overlay.Geometry, []overlayRowHit) {
 			view := max(room-1, 1)
 			r.scrollMax, r.scrollPage = len(body)-view, view
 			top := min(r.scroll, r.scrollMax)
-			at := pad + base.Foreground(pal.FgMute).Render("Lines "+strconv.Itoa(top+1)+" to "+
-				strconv.Itoa(top+view)+" of "+strconv.Itoa(len(body))+". Scroll to see more.")
+			where := "Lines " + strconv.Itoa(top+1) + " to " + strconv.Itoa(top+view) + " of " + strconv.Itoa(len(body)) + "."
+			if top < r.scrollMax {
+				where += " Scroll to see more."
+			}
+			at := pad + base.Foreground(pal.FgMute).Render(where)
 			body = append(body[top:top+view:top+view], overlay.Fill(at, width, bg))
 			hints = []overlay.Hint{{Key: "pgup pgdn", Label: "scroll"}, {Key: "r", Label: "restart"}, cancel}
 		}

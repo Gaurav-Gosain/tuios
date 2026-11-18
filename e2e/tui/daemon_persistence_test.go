@@ -378,7 +378,7 @@ func TestRestartTheDaemonFromTheVersionNotice(t *testing.T) {
 	// Many more programs in a second session, as a person with an agent in
 	// every pane has. The restart stops them too, so the plan is taller than
 	// the screen: it has to scroll, and the answers have to stay on screen.
-	const busy = 25
+	const busy = 40
 	const busySession = name + "-busy"
 	if out, err := tuiosCLI(t, base, "new", busySession, "--detach"); err != nil {
 		t.Fatalf("create the busy session: %v\n%s", err, out)
