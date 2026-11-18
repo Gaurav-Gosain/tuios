@@ -222,7 +222,7 @@ func (m *OS) sidebarWantCursor(row sidebarNavRow) {
 
 // isFileListRow reports whether a row kind is a row of the files listing.
 func isFileListRow(kind sidebarRowKind) bool {
-	return kind == sidebarRowFileUp || kind == sidebarRowFileEntry
+	return kind == sidebarRowFileUp || kind == sidebarRowFileBack || kind == sidebarRowFileEntry
 }
 
 // fileNavRow is the nav row a row of the files section publishes.
@@ -364,7 +364,7 @@ func sidebarSectionOfKind(kind sidebarRowKind) sidebarSection {
 		return sidebarSectionTerminals
 	case sidebarRowAgent, sidebarRowAgentFilter, sidebarRowAgentSort, sidebarRowAgentMail, sidebarRowAgentFold, sidebarRowSubagentToggle, sidebarRowAgentKin:
 		return sidebarSectionAgents
-	case sidebarRowFileUp, sidebarRowFileEntry, sidebarRowFileCd, sidebarRowFileClose:
+	case sidebarRowFileUp, sidebarRowFileBack, sidebarRowFileEntry, sidebarRowFileCd, sidebarRowFileClose:
 		return sidebarSectionFiles
 	default:
 		return sidebarSectionCount
@@ -465,6 +465,8 @@ func (m *OS) SidebarActivateCursor() bool {
 		m.FileViewCd()
 	case sidebarRowFileUp:
 		m.queueSidebarCmd(m.FileViewUp())
+	case sidebarRowFileBack:
+		m.queueSidebarCmd(m.FileViewBack())
 	case sidebarRowFileEntry:
 		m.queueSidebarCmd(m.fileViewEnterRow(row.WindowIndex, row.WindowID))
 	case sidebarRowDivider:
@@ -629,7 +631,7 @@ func sidebarRowHasMenu(row sidebarNavRow) bool {
 		return row.SessionID != ""
 	case sidebarRowWindow, sidebarRowAgent:
 		return row.WindowID != "" || row.WindowIndex >= 0
-	case sidebarRowFileCd, sidebarRowFileClose, sidebarRowFileUp, sidebarRowFileEntry:
+	case sidebarRowFileCd, sidebarRowFileClose, sidebarRowFileUp, sidebarRowFileBack, sidebarRowFileEntry:
 		// Every row of the files section points at the section, which is a
 		// thing the menu is about: the header and the ".." row still offer the
 		// two actions that need no name. See fileRowMenu.

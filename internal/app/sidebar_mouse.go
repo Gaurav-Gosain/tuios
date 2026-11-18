@@ -491,6 +491,8 @@ func (m *OS) sidebarClick(x, y int, right bool) bool {
 		m.FileViewCd()
 	case sidebarRowFileUp:
 		m.queueSidebarCmd(m.FileViewUp())
+	case sidebarRowFileBack:
+		m.queueSidebarCmd(m.FileViewBack())
 	case sidebarRowFileEntry:
 		// A press arms the drag of the row into a pane. The release does
 		// what a click does when the pointer never left the rail.
@@ -687,6 +689,8 @@ func (m *OS) sidebarActivateRow(hit sidebarRowHit) {
 		m.FileViewCd()
 	case sidebarRowFileUp:
 		m.queueSidebarCmd(m.FileViewUp())
+	case sidebarRowFileBack:
+		m.queueSidebarCmd(m.FileViewBack())
 	case sidebarRowFileEntry:
 		m.queueSidebarCmd(m.fileViewEnterRow(hit.WindowIndex, hit.WindowID))
 	case sidebarRowDivider:
@@ -1052,7 +1056,7 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 		// session menu for a name that is not a local session.
 		m.openRailSettingsMenu(x, y)
 		return
-	case sidebarRowFileCd, sidebarRowFileClose, sidebarRowFileUp, sidebarRowFileEntry:
+	case sidebarRowFileCd, sidebarRowFileClose, sidebarRowFileUp, sidebarRowFileBack, sidebarRowFileEntry:
 		// A listing row's menu is about the row the pointer is on, and the
 		// pointer does not have to take the keyboard cursor there first: the
 		// name rides on the menu and is handed to whatever row runs. See

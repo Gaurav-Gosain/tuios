@@ -92,6 +92,10 @@ const (
 	sidebarRowFileClose
 	// sidebarRowFileUp is the ".." row, drawn everywhere but at the root.
 	sidebarRowFileUp
+	// sidebarRowFileBack is the row that takes the listing back to the
+	// focused pane's folder. It is drawn only while the listing shows another
+	// folder.
+	sidebarRowFileBack
 	// sidebarRowFileEntry is one name in the listing. It carries the entry's
 	// index in the WindowIndex field, which is the only integer a row hit has;
 	// nothing in this section points at a window, so the field is free.
@@ -2680,7 +2684,7 @@ func sidebarFileFallback(nav []sidebarNavRow, target sidebarNavRow) sidebarNavRo
 func sidebarFileRowIndex(nav []sidebarNavRow, name string) (int, bool) {
 	first := -1
 	for i, r := range nav {
-		if r.Kind != sidebarRowFileUp && r.Kind != sidebarRowFileEntry {
+		if !isFileListRow(r.Kind) {
 			continue
 		}
 		if first < 0 {
@@ -2961,7 +2965,7 @@ func (m *OS) sidebarCursorIndex(target sidebarNavRow, sessions []sessiontree.Nod
 				return sidebarSectionAgents, i, true
 			}
 		}
-	case sidebarRowFileUp, sidebarRowFileEntry:
+	case sidebarRowFileUp, sidebarRowFileBack, sidebarRowFileEntry:
 		// By name, not by index: the listing is re-read whenever the pane cds or
 		// the user walks somewhere, and an index into the previous directory
 		// points at whatever happens to be in that slot now.

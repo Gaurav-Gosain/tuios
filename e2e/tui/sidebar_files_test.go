@@ -51,10 +51,13 @@ func fileViewFixture(t *testing.T) string {
 	return dir
 }
 
-// TestRailFilesSectionListsThePanesFolder.
+// TestRailFilesSectionListsThePanesFolder. After a click walks the listing
+// into a subfolder, a "back to pane folder" row is on top of the listing. A
+// click on it lists the pane's folder again, and the row goes.
 //
 // Negative control, confirmed red: skip the files section in the layout draw
 // loop of sidebarPanelLinesForTree and the wait for the listing times out.
+// Without the back row (origin/main), the wait for it times out.
 func TestRailFilesSectionListsThePanesFolder(t *testing.T) {
 	dir := fileViewFixture(t)
 
@@ -75,6 +78,8 @@ func TestRailFilesSectionListsThePanesFolder(t *testing.T) {
 	runInShell(t, term, "cd "+dir+" && printf 'in-the-%s\\n' dir", "in-the-dir", uiTimeout)
 	runInShell(t, term,
 		`printf '\033]7;file://%s\033\\%s\n' "$PWD" mar""ked`, "marked", uiTimeout)
+	// A clear screen, so the frames show no scratch path in the pane.
+	runInShell(t, term, "clear; printf 'rea%s\\n' dy", "ready", uiTimeout)
 	leaveTerminalMode(t, term)
 
 	toggleSidebarViaPalette(t, term)
@@ -136,6 +141,23 @@ func TestRailFilesSectionListsThePanesFolder(t *testing.T) {
 	if strings.Contains(term.Screen().Text(), "cd "+filepath.Join(dir, "alpha")) {
 		t.Errorf("clicking a folder typed a cd at the pane:\n%s", term.Snapshot())
 	}
+
+	// The listing is not the pane's folder now, so the back row is on top.
+	const backRow = "back to pane folder"
+	if err := term.WaitForText(backRow, uiTimeout); err != nil {
+		copiesFrame(t, term, "rail-files-back-missing")
+		t.Fatalf("ASSERTION: a listing away from the pane's folder has no back row: %v\n%s", err, term.Snapshot())
+	}
+	copiesFrame(t, term, "rail-files-back-row")
+	bCol, bRow, _ := findOnGrid(term.Screen(), backRow)
+	mouseClick(t, term, bCol, bRow, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		txt := s.Text()
+		return strings.Contains(txt, "brief.txt") && !strings.Contains(txt, backRow)
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the back row did not list the pane's folder again, or it stayed: %v\n%s", err, term.Snapshot())
+	}
+	copiesFrame(t, term, "rail-files-back-done")
 
 	// The footer control is the switch, and it is the way off as well as on: a
 	// section the user cannot take off the rail is one they are stuck with.

@@ -99,8 +99,11 @@ func (m *OS) sidebarFileRows() []fileRowSpec {
 type fileRowsKey struct {
 	want, dir, elsewhere, err string
 	spoofed, loading, capped  bool
-	tree, ascii               bool
-	gen, treeGen              uint64
+	// away is whether the listing shows a folder other than the focused
+	// pane's, which is when the back row is drawn.
+	away         bool
+	tree, ascii  bool
+	gen, treeGen uint64
 	// The root's names by identity as well: a listing replaced by one of the
 	// same generation (a section closed and opened again starts its count
 	// over) is still a new listing.
@@ -122,6 +125,7 @@ func (m *OS) fileRowsBuilt() []fileRowSpec {
 	key := fileRowsKey{
 		want: v.Want, dir: v.Dir, elsewhere: v.Elsewhere, err: v.Err,
 		spoofed: v.Spoofed, loading: v.Loading, capped: v.Capped,
+		away: m.fileViewAway(),
 		tree: m.filesTreeOn(), ascii: m.Settings.UseASCIIOnly,
 		gen: v.Gen, treeGen: m.filesTree.gen,
 		n: len(v.Entries),
@@ -183,6 +187,9 @@ func (m *OS) buildFileRows() []fileRowSpec {
 		// that says what to do arrives when a file action is pressed. See
 		// fileSpoofRefusal.
 		rows = append(rows, fileRowSpec{Note: true, Warn: true, Name: fileSpoofRow})
+	}
+	if m.fileViewAway() {
+		rows = append(rows, fileRowSpec{Kind: sidebarRowFileBack, Index: -1, Key: fileBackKey, Name: fileBackLabel, Dir: true, Tree: m.filesTreeOn()})
 	}
 	if filepath.Dir(m.filesView.Dir) != m.filesView.Dir {
 		rows = append(rows, fileRowSpec{Kind: sidebarRowFileUp, Index: -1, Key: "..", Name: "..", Dir: true, Tree: m.filesTreeOn()})
@@ -364,7 +371,7 @@ func (m *OS) sidebarFileRow(row fileRowSpec, cw int, pal overlay.Palette, st sid
 		// The ".." row is already spelled the way every shell spells it, so a
 		// slash on it would be one character of decoration on the one row that
 		// needs none.
-		if row.Kind != sidebarRowFileUp {
+		if row.Kind != sidebarRowFileUp && row.Kind != sidebarRowFileBack {
 			shown += "/"
 		}
 		ink = pal.Fg
@@ -379,7 +386,7 @@ func (m *OS) sidebarFileRow(row fileRowSpec, cw int, pal overlay.Palette, st sid
 	// row actually draws on before it is burned; with the colour off, and on
 	// every row the table has nothing to say about, the mark wears the row's own
 	// ink like every other glyph on the rail.
-	mark := fileRowMark(row.Icon, row.Dir, row.Kind == sidebarRowFileUp, &m.Settings)
+	mark := fileRowMark(row.Icon, row.Dir, row.Kind == sidebarRowFileUp || row.Kind == sidebarRowFileBack, &m.Settings)
 	glyphInk := ink
 	if mark.Hex != "" {
 		glyphInk = theme.FileIconInkOn(mark.Hex, m.sidebarGroundOr(bg))
@@ -423,7 +430,7 @@ func (m *OS) sidebarFileTreeRow(row fileRowSpec, cw int, pal overlay.Palette, st
 	if shown == "" {
 		shown = row.Name
 	}
-	up := row.Kind == sidebarRowFileUp
+	up := row.Kind == sidebarRowFileUp || row.Kind == sidebarRowFileBack
 	ink := pal.FgDim
 	if row.Dir {
 		if !up {

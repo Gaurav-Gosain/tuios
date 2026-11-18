@@ -18230,6 +18230,12 @@ a pane, moves 16 cells away, moves back to the press cell and releases there.
 Before the fix the release measured only its own distance from the press, read
 the gesture as a click and opened the pane menu. The test then presses n and
 waits for a new pane: an open menu takes the key, so the pane never appears.
+## The files section offers a way back to the pane's folder
+
+`TestRailFilesSectionListsThePanesFolder` clicks `alpha/`, which walks the
+listing away from the pane's folder. The test then waits for the row
+"back to pane folder" on top of the listing, clicks it, and waits for the pane's
+folder (`brief.txt`) with no back row.
 
 Run on 2026-11-18 on macOS (arm64):
 
@@ -18251,3 +18257,4 @@ Run on macOS on 2026-11-18. The branch passes the test, and the 26 other quick l
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestQuickLookTakesTheMouse$' -v .`.
+| The feature: the binary built from origin/main | "a listing away from the pane's folder has no back row" | **caught** |

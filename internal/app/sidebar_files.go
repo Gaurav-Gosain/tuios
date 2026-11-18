@@ -874,6 +874,43 @@ func (m *OS) RefreshFileView() tea.Cmd {
 	return m.requestFileList(m.filesView.Want, m.filesView.Origin, m.filesView.Pinned)
 }
 
+// fileBackLabel is the back row's text, and fileBackKey the key it is found by.
+const (
+	fileBackLabel = "back to pane folder"
+	fileBackKey   = "\x00back"
+)
+
+// fileViewAway reports whether the listing shows a folder other than the
+// focused pane's own: the person walked somewhere, or a link opened a folder.
+// The back row is drawn only then.
+func (m *OS) fileViewAway() bool {
+	if !m.filesView.Pinned || m.filesView.Dir == "" || m.filesView.Elsewhere != "" {
+		return false
+	}
+	w := m.GetFocusedWindow()
+	if w == nil || w.CwdHost != "" {
+		return false
+	}
+	dir := m.paneDir(w)
+	return dir != "" && !sameDir(dir, m.filesView.Dir)
+}
+
+// FileViewBack takes the listing back to the focused pane's folder, and the
+// listing follows the pane again from there.
+func (m *OS) FileViewBack() tea.Cmd {
+	w := m.GetFocusedWindow()
+	if !m.filesOn() || w == nil {
+		return nil
+	}
+	dir := m.paneDir(w)
+	if dir == "" {
+		return nil
+	}
+	cmd := m.requestFileList(dir, w.ID, false)
+	m.followFileRow("")
+	return cmd
+}
+
 // FileViewUp walks to the parent directory. At the root there is no parent and
 // nothing happens, which is why the row is not drawn there.
 func (m *OS) FileViewUp() tea.Cmd { return m.fileViewUpFrom(m.filesView.Dir) }
