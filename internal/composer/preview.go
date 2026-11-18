@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -182,7 +181,7 @@ func (m *Model) renderStrip(width int, in inks) []string {
 				out = append(out, fill(pad+dim.Render("+"+strconv.Itoa(len(imgs)-maxThumbs)+" more"), width, in.surface))
 				break
 			}
-			line := "Image #" + strconv.Itoa(b.n) + " · " + b.img.measureWords() + " · " + units.Bytes(int64(len(b.img.Data)))
+			line := "Image #" + strconv.Itoa(b.n) + " · " + b.img.measureWords() + " · " + byteSize(int64(len(b.img.Data)))
 			out = append(out, fill(pad+dim.Render(ansi.Truncate(line, width-gutter, "…")), width, in.surface))
 		}
 		return out
@@ -245,7 +244,7 @@ func (m *Model) renderImageView(width int, in inks) []string {
 	head := on(in.surface).Foreground(in.st.readable(in.st.Text, in.surface)).Bold(true).
 		Render("Image #" + strconv.Itoa(p.block.n))
 	head += on(in.surface).Foreground(in.st.readable(in.st.Dim, in.surface)).
-		Render(" · " + img.measureWords() + " · " + units.Bytes(int64(len(img.Data))))
+		Render(" · " + img.measureWords() + " · " + byteSize(int64(len(img.Data))))
 	out := []string{fill(ansi.Truncate(head, width, "…"), width, in.surface)}
 	dim := on(in.surface).Foreground(in.st.readable(in.st.Dim, in.surface))
 	pad := on(in.surface).Render(strings.Repeat(" ", gutter))
@@ -287,4 +286,33 @@ func (m *Model) OpenedImage() *Image {
 		return m.pager.block.img
 	}
 	return nil
+}
+
+// byteSize writes a size the way tuios's internal/units.Bytes does: binary
+// units, three significant digits at most, no trailing zeros (512 B, 1.5 KiB,
+// 12.3 MiB). The composer keeps its own copy because it imports no tuios
+// package, so it can move out as a library by a rename.
+func byteSize(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return strconv.FormatInt(n, 10) + " B"
+	}
+	div, exp := int64(unit), 0
+	for m := n / unit; m >= unit && exp < 4; m /= unit {
+		div *= unit
+		exp++
+	}
+	v := float64(n) / float64(div)
+	prec := 2
+	switch {
+	case v >= 100:
+		prec = 0
+	case v >= 10:
+		prec = 1
+	}
+	s := strconv.FormatFloat(v, 'f', prec, 64)
+	if prec > 0 {
+		s = strings.TrimSuffix(strings.TrimRight(s, "0"), ".")
+	}
+	return s + " " + "KMGTP"[exp:exp+1] + "iB"
 }
