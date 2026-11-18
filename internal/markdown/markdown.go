@@ -57,6 +57,9 @@ const (
 	Rule
 	// Table is a pipe table. Header, Rows and Align hold its cells.
 	Table
+	// Image is a picture alone in its paragraph, read with Options.Images.
+	// Text holds its words and URL where it is.
+	Image
 )
 
 // Align is the alignment of a table column.
@@ -97,6 +100,8 @@ type Block struct {
 	Lang  string
 	Lines []string
 	Open  bool
+	// URL is where an Image is, as the text wrote it.
+	URL string
 	// Header, Rows and Align are a table's cells, as inline source.
 	Header []string
 	Rows   [][]string
@@ -132,7 +137,24 @@ func ParseWith(src string, opt Options) (blocks []Block, cut bool) {
 			lines[i] = expandTabs(l)
 		}
 	}
-	return parseBlocks(lines, 0), cut
+	blocks = parseBlocks(lines, 0)
+	if opt.Images {
+		imageBlocks(blocks)
+	}
+	return blocks, cut
+}
+
+// imageBlocks turns each paragraph that is one image alone into an Image block.
+func imageBlocks(bs []Block) {
+	for i := range bs {
+		b := &bs[i]
+		if b.Kind == Paragraph {
+			if g := rx().imageLine.FindStringSubmatch(strings.TrimSpace(b.Text)); g != nil {
+				*b = Block{Kind: Image, Text: g[1], URL: g[2]}
+			}
+		}
+		imageBlocks(b.Children)
+	}
 }
 
 // expandTabs turns tabs into spaces to the next stop of four, which is how

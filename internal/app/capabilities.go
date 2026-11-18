@@ -53,7 +53,12 @@ type HostCapabilities struct {
 	// version; see kitty_placeholder_caps.go for why, and for why guessing
 	// wrong here costs nothing.
 	KittyPlaceholders bool
-	SixelGraphics     bool
+	// TextSizing is whether the host draws OSC 66 text sizing: text at twice
+	// the size, as kitty does. The probe writes a scaled space and asks where
+	// the cursor went; only a host that moved it two cells has it. See
+	// writeTextSizingProbe.
+	TextSizing    bool
+	SixelGraphics bool
 	// SixelPinned says SixelGraphics was set by TUIOS_SIXEL_GRAPHICS, or by a
 	// host that stores images in its cells, so no later answer from the
 	// terminal changes it.
@@ -410,6 +415,7 @@ func ProbeTerminal(caps *HostCapabilities, out io.Writer, read func(timeout time
 	// Who the terminal says it is, which is what decides whether Unicode
 	// placeholders are drawn or dropped.
 	q.WriteString(xtversionQuery)
+	writeTextSizingProbe(&q)
 	q.WriteString("\x1b[c") // DA1 last, so its reply closes the whole batch
 	_, _ = io.WriteString(out, q.String())
 
@@ -421,9 +427,30 @@ func ProbeTerminal(caps *HostCapabilities, out io.Writer, read func(timeout time
 	parseHostFont(caps, response)
 	parseHostPalette(caps, response)
 	caps.KittyPlaceholders = caps.KittyGraphics && hostDrawsPlaceholders(response)
+	caps.TextSizing = parseTextSizing(response)
 	// A host that stores images in its cells cannot have them moved or
 	// cleared; see cell_bound_images.go.
 	dropCellBoundGraphics(caps, response, os.Getenv)
+}
+
+// writeTextSizingProbe appends the text sizing question to the probe batch:
+// at the start of the line, a space at twice the size (OSC 66), then a cursor
+// position report, then the line cleared again. A host that draws OSC 66
+// moves the cursor two cells for the space. A host that does not ignores the
+// OSC, and the cursor stays in the first column. Nothing is guessed from the
+// terminal's name.
+func writeTextSizingProbe(q *strings.Builder) {
+	q.WriteString("\r\x1b]66;s=2; \x07\x1b[6n\r\x1b[2K")
+}
+
+// cursorReport matches a cursor position report: CSI row ; column R.
+var cursorReport = lazyre.New(`\x1b\[\d+;(\d+)R`)
+
+// parseTextSizing reads the text sizing probe's answer: the cursor two cells
+// on, in column 3.
+func parseTextSizing(response string) bool {
+	m := cursorReport().FindStringSubmatch(response)
+	return m != nil && m[1] == "3"
 }
 
 // writePaletteQuery appends the colour questions to the probe batch: the
@@ -780,6 +807,13 @@ func applyEnvironmentOverrides(caps *HostCapabilities) {
 	case "0":
 		caps.KittyGraphics = false
 		caps.KittyPinned = true
+	}
+
+	switch os.Getenv("TUIOS_TEXT_SIZING") {
+	case "1":
+		caps.TextSizing = true
+	case "0":
+		caps.TextSizing = false
 	}
 
 	switch os.Getenv("TUIOS_KITTY_PLACEHOLDERS") {

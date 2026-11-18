@@ -8063,6 +8063,13 @@ as VS Code or Netcatty. That terminal cannot clear an image, so tuios draws
 images as block glyphs. Set `TUIOS_KITTY_GRAPHICS=1` or
 `TUIOS_SIXEL_GRAPHICS=1` to turn a protocol on again.
 
+### `TUIOS_TEXT_SIZING`
+
+`1` or `0` overrides what tuios detected about OSC 66 text sizing on the host
+terminal. At start, tuios writes a space at twice the size and asks where the
+cursor went. The terminal has text sizing only when the cursor moved two cells.
+With text sizing, quick look draws the top headings of a Markdown file larger.
+
 ### `$SHELL`
 
 TUIOS uses your default shell from this variable. If not set, it attempts to detect the appropriate shell for your platform.

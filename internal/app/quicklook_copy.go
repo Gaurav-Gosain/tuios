@@ -2,6 +2,7 @@ package app
 
 import (
 	"strconv"
+	"strings"
 
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -233,7 +234,16 @@ func (m *OS) quickLookCopyBegin(implicit bool) bool {
 	case r.kind == "text" && len(r.lines) > 0 && (implicit || ql.inside):
 		q = newQuickLookCopy(r.lines, ql.textW, ql.bodyRows, implicit && !ql.wrap)
 	case r.kind == "markdown" && implicit && len(ql.mdLines) > 0:
-		q = newQuickLookMDCopy(ckCopyOf(ql.look, ql.mdLines, nil, ql.textW), ql.textW, ql.bodyRows)
+		rows := ckCopyOf(ql.look, ql.mdLines, nil, ql.textW)
+		// A picture's rows hold no text.
+		for i, ln := range ql.mdLines {
+			if strings.HasPrefix(ln.hit, "qimg:") {
+				for x := range rows[i].cells {
+					rows[i].cells[x] = uv.Cell{Content: " ", Width: 1}
+				}
+			}
+		}
+		q = newQuickLookMDCopy(rows, ql.textW, ql.bodyRows)
 	default:
 		return false
 	}
@@ -315,6 +325,7 @@ func (m *OS) drawQuickLookMDCopy(c *ckCanvas, q *quickLookCopy, x, bodyTop int) 
 		drawCkLineAt(c, x, bodyTop+y, q.w, lines[top+y])
 	}
 	drawCopyMarks(c, m.marks(), &q.cm, x, bodyTop, q.w, q.h, top)
+	m.quickLookMDMarks(lines, top, q.h, bodyTop)
 }
 
 // drawCopyMarks draws copy mode's search matches, selection and cursor over

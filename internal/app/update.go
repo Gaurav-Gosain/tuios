@@ -1302,6 +1302,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case replyPreviewMsg:
 		m.applyReplyPreview(msg)
+		// A picture of the Markdown in quick look may be one of them.
+		if ql := &m.quickLook; ql.open && len(ql.mdImgs) > 0 {
+			ql.mdGen++
+		}
 		if m.kbPreviewShown() {
 			// The card preview draws pictures too, and its frame is kept
 			// until the board changes: a picture that came in is a change.
@@ -1335,6 +1339,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyQuickLookDetails(msg)
 		m.renderSkipped = false
 		return m, nil
+
+	case quickLookMDImageMsg:
+		cmd := m.applyQuickLookMDImage(msg)
+		m.renderSkipped = false
+		return m, cmd
 
 	case quickLookFilmMsg:
 		cmd := m.applyQuickLookFilm(msg)

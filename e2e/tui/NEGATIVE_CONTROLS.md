@@ -18282,3 +18282,18 @@ Run on 2026-11-18 on Linux (arch-btw, under heavy.sh):
 | The fix: the binary built from origin/main | "a click on main.go did not open quick look" | **caught** |
 | Only the threshold rule in `FileDragMotion`, back to "a press is a click until the pointer leaves the rail" | "a drag in the rail opened quick look, so space closed it" | **caught** |
 | The fix: `render_daemon_restart.go`, `daemon_restart.go` and `overlay_mouse.go` from origin/main | "the dialog does not say \"Cancel\"", "... \"esc cancel\"" and "page down did not show the end of the plan with the answers"; the frame shows the dialog running off the bottom of the screen | **caught** |
+## Quick look draws pictures, whole tables and large headings
+
+`TestQuickLookDrawsPicturesTablesAndHeadings` in `quicklook_markdown_test.go`. A Markdown file with two headings, a table whose long cell is too wide for its column, an image beside the file and one that is not there opens in quick look at full size. The long cell must wrap so its last word is on screen, the image must be drawn in block glyphs with its words under it, and the missing one must say it could not be read. On the test terminal, which does not move the cursor for an OSC 66 space, no heading may go out as OSC 66. A second client with TUIOS_TEXT_SIZING=1 must send the first heading as OSC 66 at scale 2 and the second at scale 2 with n=3 and d=4.
+
+Run on Linux on 2026-11-19. The branch passes the test.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main | "ASSERTION: the table cut its long cell: want [\"LASTWORD\" \"team one\" \"team two\"] on screen" | **caught** |
+| `whole` off in `quickLookMDLayout` | "ASSERTION: the table cut its long cell" | **caught** |
+| The image hook in `quickLookMDLayout` declines every block | "ASSERTION: the images: want [\"the gradient\" \"Image: a missing picture\" \"could not be read\"] on screen" | **caught** |
+| `big` off in `quickLookMDLayout` | "ASSERTION: the headings go to the host as OSC 66" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestQuickLookDrawsPicturesTablesAndHeadings$' -v .`.

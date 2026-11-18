@@ -61,6 +61,9 @@ func (m *OS) flushReplyPreviewForFrame() {
 		want = append(want, pl)
 		want = m.quickLookStripPlacements(want)
 	}
+	if m.replyPixelsReady() {
+		want = m.quickLookMDPlacements(want)
+	}
 	if pl, ok := m.pastePreviewPlacement(); ok && m.replyPixelsReady() {
 		want = append(want, pl)
 	}

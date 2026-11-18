@@ -344,6 +344,10 @@ time. There is no playback. Press `t` to show 7 small frames from across the fil
 At 16 colours the preview shows the facts of the film.
 
 Markdown shows HTML as formatted text, with alerts, footnotes and reference links.
+An image alone on its line shows as a picture when the terminal can draw one. A
+table keeps every cell: a long cell wraps in its column. A table with too many
+columns shows each row as a list of names and values. On a terminal with OSC 66
+text sizing, such as kitty, the top two levels of heading show larger.
 A `<details>` block starts closed, and `Enter` inside the file opens it. A Mermaid
 block shows as a diagram in text.
 

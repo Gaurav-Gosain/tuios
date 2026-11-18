@@ -57,6 +57,18 @@ type ckMD struct {
 	t     *agentThread
 	id    string
 	codes int
+	// hook lays out a block kind a reader draws itself, such as a picture,
+	// and reports whether it did. A reader plugs a kind in here; nil draws
+	// every block the usual way. See quicklook_markdown.go.
+	hook func(md *ckMD, b markdown.Block, first, rest []ckSeg, width int) bool
+	// whole keeps every cell of a table: a cell wraps in its column, and a
+	// table too wide for any column wraps as one record a row. Without it the
+	// widest cells are cut.
+	whole bool
+	// big marks the lines of a top heading for a host that draws text at a
+	// larger size: each line of it is followed by a blank line the larger
+	// text covers. See ckLine.big.
+	big bool
 }
 
 // ckCodeFold is how many lines of a code block a closed message shows.
@@ -136,6 +148,9 @@ func (md *ckMD) block(b markdown.Block, first, rest []ckSeg, width int, ink colo
 	l := md.l
 	pal := l.pal
 	avail := max(width-ckSegsWidth(rest), 4)
+	if md.hook != nil && md.hook(md, b, first, rest, width) {
+		return
+	}
 	switch b.Kind {
 	case markdown.Paragraph:
 		md.text(md.runs(markdown.Inline(b.Text), ink, 0), first, rest, avail)
@@ -146,6 +161,19 @@ func (md *ckMD) block(b markdown.Block, first, rest []ckSeg, width int, ink colo
 			hink = pal.AccentBright
 		case b.Level > 2:
 			hink = pal.FgDim
+		}
+		if md.big && b.Level <= 2 && avail >= 8 {
+			// Drawn twice the size: half the cells hold a line of it, and the
+			// blank line under each is the lower half.
+			n := len(md.lines)
+			md.text(md.runs(markdown.Inline(b.Text), hink, ckBold), first, rest, avail/2)
+			heads := append([]ckLine(nil), md.lines[n:]...)
+			md.lines = md.lines[:n]
+			for _, ln := range heads {
+				ln.big, ln.wrap = uint8(b.Level), false
+				md.lines = append(md.lines, ln, ckLine{segs: slicesClone(rest)})
+			}
+			return
 		}
 		md.text(md.runs(markdown.Inline(b.Text), hink, ckBold), first, rest, avail)
 	case markdown.Item:
@@ -202,6 +230,9 @@ func (md *ckMD) block(b markdown.Block, first, rest []ckSeg, width int, ink colo
 		md.code(b, first, rest, avail)
 	case markdown.Table:
 		md.table(b, first, rest, avail)
+	case markdown.Image:
+		// A reader with no hook for pictures shows the words.
+		md.text([]ckSeg{{t: "Image: " + b.Text, fg: pal.FgMute}}, first, rest, avail)
 	}
 }
 
@@ -645,6 +676,10 @@ func (md *ckMD) table(b markdown.Block, first, rest []ckSeg, avail int) {
 			widths[i] = max(widths[i], ckSegsWidth(c))
 		}
 	}
+	if md.whole {
+		md.tableWhole(b, rows, widths, first, rest, avail)
+		return
+	}
 	// The widest columns give way first: every column is cut to one cap,
 	// the largest cap that fits, found by halving. No column goes under
 	// three cells.
@@ -698,6 +733,124 @@ func (md *ckMD) table(b markdown.Block, first, rest []ckSeg, avail int) {
 				segs = append(segs, ckSeg{t: strings.Repeat(horiz, w), fg: l.edge})
 			}
 			md.lines = append(md.lines, ckLine{segs: segs})
+		}
+	}
+}
+
+// ckTableMinCol is the narrowest column a whole table wraps its cells in.
+// Narrower than that, the table is drawn as one record a row.
+const ckTableMinCol = 6
+
+// tableWhole lays out a table and keeps every cell. A table that fits is
+// drawn as table does. A wider one gives its widest columns one cap, the
+// largest that fits, and a cell wraps in its column. A row of more than one
+// line has a rule under it, so the rows stay apart. A table that does not fit
+// at ckTableMinCol cells a column is drawn as records: each row its cells
+// under the header's names.
+func (md *ckMD) tableWhole(b markdown.Block, rows [][][]ckSeg, widths []int, first, rest []ckSeg, avail int) {
+	l := md.l
+	cols := len(widths)
+	fits := func(cap int) bool {
+		n := 3 * (cols - 1)
+		for _, w := range widths {
+			n += min(w, cap)
+		}
+		return n <= avail
+	}
+	if !fits(ckTableMinCol) {
+		md.tableRecords(rows, first, rest, avail)
+		return
+	}
+	if !fits(math.MaxInt) {
+		lo, hi := ckTableMinCol, 0
+		for _, w := range widths {
+			hi = max(hi, w)
+		}
+		for lo < hi {
+			mid := (lo + hi + 1) / 2
+			if fits(mid) {
+				lo = mid
+			} else {
+				hi = mid - 1
+			}
+		}
+		for i := range widths {
+			widths[i] = min(widths[i], lo)
+		}
+	}
+	vert, cross, horiz := " │ ", "─┼─", "─"
+	if l.ascii {
+		vert, cross, horiz = " | ", "-+-", "-"
+	}
+	rule := func() {
+		segs := slicesClone(rest)
+		for i, w := range widths {
+			if i > 0 {
+				segs = append(segs, ckSeg{t: cross, fg: l.edge})
+			}
+			segs = append(segs, ckSeg{t: strings.Repeat(horiz, w), fg: l.edge})
+		}
+		md.lines = append(md.lines, ckLine{segs: segs})
+	}
+	wrapped := make([][][][]ckSeg, len(rows))
+	tall := false
+	for ri, r := range rows {
+		wrapped[ri] = make([][][]ckSeg, cols)
+		for i, c := range r {
+			wrapped[ri][i] = ckWrapSegs(c, widths[i])
+			tall = tall || len(wrapped[ri][i]) > 1
+		}
+	}
+	for ri, r := range wrapped {
+		h := 1
+		for _, c := range r {
+			h = max(h, len(c))
+		}
+		for k := range h {
+			pre := rest
+			if ri == 0 && k == 0 {
+				pre = first
+			}
+			segs := slicesClone(pre)
+			for i, c := range r {
+				if i > 0 {
+					segs = append(segs, ckSeg{t: vert, fg: l.edge})
+				}
+				var part []ckSeg
+				if k < len(c) {
+					part = c[k]
+				}
+				segs = append(segs, ckAlignSegs(part, widths[i], b.Align[i])...)
+			}
+			md.lines = append(md.lines, ckLine{segs: segs})
+		}
+		if ri == 0 || tall && ri < len(wrapped)-1 {
+			rule()
+		}
+	}
+}
+
+// tableRecords lays out a table too wide for its columns as records: for
+// each row, each header's name and the row's cell under it, and a blank line
+// between the rows.
+func (md *ckMD) tableRecords(rows [][][]ckSeg, first, rest []ckSeg, avail int) {
+	pal := md.l.pal
+	for ri, r := range rows[1:] {
+		if ri > 0 {
+			md.lines = append(md.lines, ckLine{segs: slicesClone(rest)})
+		}
+		for i, c := range r {
+			name := make([]ckSeg, 0, len(rows[0][i])+1)
+			for _, s := range rows[0][i] {
+				s.fg = pal.FgDim
+				name = append(name, s)
+			}
+			name = append(name, ckSeg{t: ": ", fg: pal.FgDim})
+			pre := rest
+			if ri == 0 && i == 0 {
+				pre = first
+			}
+			md.text(append(name, c...), pre, rest, avail)
 		}
 	}
 }

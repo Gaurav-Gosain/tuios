@@ -3060,7 +3060,7 @@ The secret body.
 	quickLookFocusRail(t, term, "zrich.md")
 	sendKeys(t, term, " ")
 	railLists(t, term, "the document did not read as Markdown",
-		[]string{"Rich title", "bold", "Warning", "Mind the step.", "[1]", "1. The note text.", "More words", "[Image: a logo]", "PLUGIN-DREW"},
+		[]string{"Rich title", "bold", "Warning", "Mind the step.", "[1]", "1. The note text.", "More words", "Image: a logo", "PLUGIN-DREW"},
 		[]string{"<h2", "<b>", "</", "[!WARNING]", "[^one]", "[site]", "hidden", "The secret body.", "```", "flowchart", "-->"})
 	saveCockpitFrames(t, term, "quick-look-rich-markdown")
 	sendKeys(t, term, tuitest.Tab, tuitest.Enter)

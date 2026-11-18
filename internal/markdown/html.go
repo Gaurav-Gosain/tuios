@@ -15,12 +15,15 @@ type Options struct {
 	// CloseDetails shows a <details> block as its summary alone. A text may ask for
 	// that with its own open attribute.
 	CloseDetails bool
+	// Images reads an image that stands alone in its paragraph as an Image
+	// block, for a reader that can draw it. Every other image is its words.
+	Images bool
 }
 
 // htmlExprs is the expressions of this file, compiled on first use: a client that
 // never meets HTML does not pay for them at startup.
 type htmlExprs struct {
-	htmlComment, htmlDropped, htmlDetails, htmlLink, htmlImage, htmlAlt, htmlHeading, htmlTag, refDefLine, noteDefLine, noteMark, refFull, alertLine, imageMark *regexp.Regexp
+	htmlComment, htmlDropped, htmlDetails, htmlLink, htmlImage, htmlAlt, htmlSrc, htmlHeading, htmlTag, refDefLine, noteDefLine, noteMark, refFull, alertLine, imageMark, imageLine *regexp.Regexp
 }
 
 var rx = sync.OnceValue(func() *htmlExprs {
@@ -31,6 +34,7 @@ var rx = sync.OnceValue(func() *htmlExprs {
 		htmlLink:    regexp.MustCompile(`(?is)<a\b[^>]*\bhref\s*=\s*["']([^"']*)["'][^>]*>(.*?)</a\s*>`),
 		htmlImage:   regexp.MustCompile(`(?is)<img\b[^>]*>`),
 		htmlAlt:     regexp.MustCompile(`(?is)\balt\s*=\s*["']([^"']*)["']`),
+		htmlSrc:     regexp.MustCompile(`(?is)\bsrc\s*=\s*["']([^"'\s)<>]+)["']`),
 		htmlHeading: regexp.MustCompile(`(?is)<h([1-6])\b[^>]*>(.*?)</h[1-6]\s*>`),
 		htmlTag:     regexp.MustCompile(`(?s)</?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^<>]*)?/?>`),
 		refDefLine:  regexp.MustCompile(`(?m)^ {0,3}\[([^\]^][^\]]*)\]:[ ]+(\S+)[^\n]*$`),
@@ -39,6 +43,7 @@ var rx = sync.OnceValue(func() *htmlExprs {
 		refFull:     regexp.MustCompile(`\[([^\[\]]+)\]\[([^\[\]]*)\]`),
 		alertLine:   regexp.MustCompile(`(?i)^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*`),
 		imageMark:   regexp.MustCompile(`!\[([^\]]*)\]\([^)]*\)`),
+		imageLine:   regexp.MustCompile(`^!\[([^\]\n]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"\n]*")?\s*\)$`),
 	}
 })
 
@@ -104,7 +109,7 @@ func clean(src string, opt Options) string {
 		}
 	}
 	for i := 0; i < len(parts); i += 2 {
-		parts[i] = plainImages(parts[i])
+		parts[i] = plainImages(parts[i], opt.Images)
 	}
 	out := strings.Join(parts, "")
 	if len(order) > 0 {
@@ -171,6 +176,10 @@ func cleanHTML(s string, opt Options) string {
 		if g := rx().htmlAlt.FindStringSubmatch(m); g != nil && g[1] != "" {
 			alt = g[1]
 		}
+		// A reader that draws pictures gets the image as a paragraph of its own.
+		if g := rx().htmlSrc.FindStringSubmatch(m); opt.Images && g != nil {
+			return "\n\n![" + strings.ReplaceAll(alt, "]", "") + "](" + g[1] + ")\n\n"
+		}
 		return "\\[Image: " + alt + "\\]"
 	})
 	return rx().htmlTag.ReplaceAllStringFunc(s, func(m string) string {
@@ -213,10 +222,21 @@ func alert(text string) (kind, rest string) {
 	return strings.ToUpper(rx().alertLine.FindStringSubmatch(text)[1]), text[len(m):]
 }
 
-// plainImages shows a Markdown image as its words.
-func plainImages(s string) string {
+// plainImages shows a Markdown image as its words. keep leaves a line that is
+// one image alone, which the parser reads as an Image block.
+func plainImages(s string, keep bool) string {
 	if !strings.Contains(s, "![") {
 		return s
+	}
+	if keep {
+		lines := strings.SplitAfter(s, "\n")
+		for i, l := range lines {
+			if body := strings.TrimSpace(l); rx().imageLine.MatchString(body) {
+				continue
+			}
+			lines[i] = plainImages(l, false)
+		}
+		return strings.Join(lines, "")
 	}
 	return rx().imageMark.ReplaceAllStringFunc(s, func(m string) string {
 		alt := rx().imageMark.FindStringSubmatch(m)[1]
