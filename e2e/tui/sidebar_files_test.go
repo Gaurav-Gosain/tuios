@@ -3276,8 +3276,11 @@ func pictureColours(s tuitest.Screen) int {
 
 // TestRailFilesOpenOnDemand is #1385: a layout that leaves files out keeps the
 // section hidden by default, and the footer control and file search open it. It
-// lands where the default layout puts it, after terminals and above agents, and
-// the layout string does not change. The controls are in NEGATIVE_CONTROLS.md.
+// lands where the default layout puts it, after terminals and above agents. The
+// footer control is the person's switch, so it saves the layout with files and
+// later without. File search shows the section for the moment, with a close
+// control, and leaves the layout as it is. The controls are in
+// NEGATIVE_CONTROLS.md.
 func TestRailFilesOpenOnDemand(t *testing.T) {
 	const layout = "sessions:25,terminals,agents:34"
 	dir := fileViewFixture(t)
@@ -3352,9 +3355,22 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 		t.Fatalf("a click on files did not open the section between terminals and agents: %v\n%s", err, term.Snapshot())
 	}
 	railShot(t, term, "files-open")
-	if out, err := tuiosCLI(t, base, "get-config", "appearance.sidebar.sections", "-s", "e2e"); err != nil || !strings.Contains(out, layout) {
-		t.Errorf("get-config after the click: %v\n%s", err, out)
+	const withFiles = "sessions:25,terminals,files:25,agents:34"
+	// The switch saves config.toml, as the section editor does. The file is
+	// read and not get-config: the set-config calls below make a session
+	// override, which get-config reports first.
+	sectionsAre := func(want, why string) {
+		t.Helper()
+		waitFileHas(t, configPathIn(base), why, uiTimeout, func(s string) bool {
+			for line := range strings.SplitSeq(s, "\n") {
+				if k, v, ok := strings.Cut(line, "="); ok && strings.TrimSpace(k) == "sections" {
+					return strings.Trim(strings.TrimSpace(v), "'\"") == want
+				}
+			}
+			return false
+		})
 	}
+	sectionsAre(withFiles, "the click on files did not save the layout with files")
 
 	// On a rail short enough that the sections compete for lines, the opened
 	// section draws what the same section draws when the layout names it. That
@@ -3369,8 +3385,8 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 		t.Fatalf("the short rail lost the section's place: %v\n%s", err, term.Snapshot())
 	}
 	opened := railText(term.Screen())
-	if filesHeaderClose(term.Screen()) < 0 {
-		t.Errorf("the section the switch opened has no close control:\n%s", term.Snapshot())
+	if filesHeaderClose(term.Screen()) >= 0 {
+		t.Errorf("the section the switch saved offers a close control:\n%s", term.Snapshot())
 	}
 	railShot(t, term, "files-open-short")
 	setLayout := func(sections string) {
@@ -3385,14 +3401,13 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return railRowOf(s, "terminals") < 0 }, uiTimeout); err != nil {
 		t.Fatalf("the rail never took the layout with no terminals: %v\n%s", err, term.Snapshot())
 	}
-	setLayout("sessions:25,terminals,files:25,agents:34")
+	setLayout(withFiles)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return railText(s) == opened }, uiTimeout); err != nil {
 		t.Fatalf("the opened section differs from a section the layout names: %v\nopened:\n%s\nnamed:\n%s", err, opened, railText(term.Screen()))
 	}
 	if filesHeaderClose(term.Screen()) >= 0 {
 		t.Errorf("a section the layout names offers a close control:\n%s", term.Snapshot())
 	}
-	setLayout(layout)
 	if err := term.Resize(120, 40); err != nil {
 		t.Fatalf("resize: %v", err)
 	}
@@ -3408,6 +3423,7 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return railRowOf(s, "alpha/") < 0 }, uiTimeout); err != nil {
 		t.Fatalf("a second click did not hide the section: %v\n%s", err, term.Snapshot())
 	}
+	sectionsAre(layout, "the second click did not save the layout without files")
 
 	// File search reaches the section the same way.
 	enterTerminalMode(t, term)
@@ -3432,6 +3448,10 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 		t.Fatalf("file search did not open the section: %v\n%s", err, term.Snapshot())
 	}
 	railShot(t, term, "files-search")
+	if filesHeaderClose(term.Screen()) < 0 {
+		t.Errorf("the section file search opened has no close control:\n%s", term.Snapshot())
+	}
+	sectionsAre(layout, "file search changed the saved layout")
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatal(err)
 	}

@@ -12224,7 +12224,10 @@ reads the rail with files shut, clicks the footer's `files`, and reads the secti
 between `terminals` and `agents`. On a short rail it then compares the rail with
 the same rail under the layout `sessions:25,terminals,files:25,agents:34`, which
 must match line for line. A second click hides the section, file search opens it,
-and a layout with no `terminals` has it after `sessions`.
+and a layout with no `terminals` has it after `sessions`. Since 2026-11-18 the
+clicks save the layout with files and then without, and file search leaves it as
+it is. `sidebarPlansWithFiles` is now `sidebarLayoutWithFiles`, which works on
+the layout string.
 
 Run on 2026-10-31 on Linux, each with a Go overlay on one build:
 
