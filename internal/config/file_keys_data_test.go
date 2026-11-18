@@ -22,6 +22,11 @@ import (
 // hand-written tables in docs/CONFIGURATION.md can go.
 // TestFileKeysCannotBeSetAtRunTime fails if a later change lets one of them
 // through.
+//
+// This is a test file on purpose: nothing in tuios reads fileKeys at run
+// time, so the shipped binary does not carry the table. The tests and the
+// generator of docs/config-options.md read it. internal/app's settings test
+// reads the same paths from that generated page.
 type FileKey struct {
 	// Path is the dotted path. NAME stands for a name the person chooses,
 	// such as the name of a host.
