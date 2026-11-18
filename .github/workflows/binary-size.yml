@@ -1,8 +1,8 @@
 name: Binary size
 
 # Builds the tuios binary the way the release does (CGO_ENABLED=0, -trimpath,
-# -ldflags "-s -w") for linux/amd64 and darwin/arm64, prints its size, and
-# fails when it is over the ceiling in scripts/binary-size.sh. On a pull
+# -ldflags "-s -w") for linux/amd64, darwin/arm64 and windows/amd64, prints its
+# size, and fails when it is over the ceiling in scripts/binary-size.sh. On a pull
 # request it also compares each size with main's last measured size, in the
 # job summary and in one comment on the pull request. docs/perf.md, "Binary
 # size budget", says how the ceiling was set.
@@ -33,6 +33,8 @@ jobs:
             id: linux-amd64
           - target: darwin/arm64
             id: darwin-arm64
+          - target: windows/amd64
+            id: windows-amd64
     steps:
       - uses: actions/checkout@v7
 

@@ -4,7 +4,7 @@
 # for each target given, prints its size, and fails when one is larger than
 # the ceiling.
 #
-#   scripts/binary-size.sh                      # linux/amd64 and darwin/arm64
+#   scripts/binary-size.sh                      # linux/amd64, darwin/arm64, windows/amd64
 #   scripts/binary-size.sh linux/amd64          # one target
 #
 # There is one ceiling for every target, set in docs/perf.md, "Binary size
@@ -21,7 +21,7 @@ ceiling=50000000
 cd "$(dirname "$0")/.."
 targets=("$@")
 if [ ${#targets[@]} -eq 0 ]; then
-	targets=(linux/amd64 darwin/arm64)
+	targets=(linux/amd64 darwin/arm64 windows/amd64)
 fi
 
 out=$(mktemp -d)

@@ -2355,9 +2355,10 @@ truecolor one.
 to main, and on every pull request that can change the binary. `ci.yml` calls
 it. It builds tuios the way the release does
 (`CGO_ENABLED=0`, `-trimpath`, `-ldflags "-s -w"`, and inlining off in the
-packages `scripts/noinline-packages.txt` lists) for linux/amd64 and
-darwin/arm64 with the Go version go.mod names, prints the size, and fails when
-a binary is over the ceiling.
+packages `scripts/noinline-packages.txt` lists) for linux/amd64, darwin/arm64
+and windows/amd64 with the Go version go.mod names, prints the size, and fails
+when a binary is over the ceiling. windows/amd64 joined on 2026-11-18, after
+the cuts below brought it under the ceiling.
 
 Since 2026-10-22 the ceiling is the only limit. On 2026-11-02 it went down to
 47,000,000 bytes after the rare diagram types moved to the sketch plugin. Since
