@@ -1,8 +1,10 @@
 package tuie2e
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -201,6 +203,7 @@ func TestDropPreviewLooks(t *testing.T) {
 				}
 				return lines
 			})
+			waitFishPrompts(t, term, p)
 			d := carry(t, term, p, p.a.X+1, p.a.Y+p.a.Height/2)
 			savePNG(t, term.Screen(), hostPalette(t, tc.theme), d.artifactAt, "drop-preview-"+tc.name)
 			got := d.drop(t, base)
@@ -208,6 +211,56 @@ func TestDropPreviewLooks(t *testing.T) {
 			d.checkPreview(t, &c, tc.depth == 0, tc.mode == "fill")
 		})
 	}
+}
+
+// waitFishPrompts waits until each of the three panes shows fish's prompt,
+// which fish draws only after config.fish has printed both listings, and the
+// tiled region then stays the same for half a second. The frame read before
+// the drag is the ground every later frame is held to, so a shell still
+// printing, or fish redrawing its prompt for a late resize, would show as a
+// cell outside the landing rectangle that changed mid-drag.
+func waitFishPrompts(t *testing.T, term *tuitest.Terminal, p dropPanes) {
+	t.Helper()
+	row := func(s tuitest.Screen, r winRect, y int) string {
+		var b strings.Builder
+		for x := r.X + 1; x < r.X+r.Width-1; x++ {
+			b.WriteString(s.Cell(x, y).Content)
+		}
+		return b.String()
+	}
+	prompted := func(s tuitest.Screen, r winRect) bool {
+		for y := r.Y + 2; y < r.Y+r.Height-1; y++ {
+			if strings.HasPrefix(row(s, r, y), "> ") && strings.Contains(row(s, r, y-1), "gaurav") {
+				return true
+			}
+		}
+		return false
+	}
+	waitUntil(t, "each pane shows the fish prompt", 3*uiTimeout, func() (bool, string) {
+		s := term.Screen()
+		for _, r := range []winRect{p.a, p.b, p.c} {
+			if !prompted(s, r) {
+				return false, term.Snapshot()
+			}
+		}
+		return true, ""
+	})
+	var last string
+	var since time.Time
+	waitUntil(t, "the panes stop changing", 3*uiTimeout, func() (bool, string) {
+		s := term.Screen()
+		var b strings.Builder
+		for y := p.box.Y; y < p.box.Y+p.box.Height; y++ {
+			for x := p.box.X; x < p.box.X+p.box.Width; x++ {
+				fmt.Fprint(&b, s.Cell(x, y))
+			}
+		}
+		if cur := b.String(); cur != last {
+			last, since = cur, time.Now()
+			return false, term.Snapshot()
+		}
+		return time.Since(since) >= 500*time.Millisecond, ""
+	})
 }
 
 // fishLooks gives fish a busy prompt (segments on grounds of their own, a
