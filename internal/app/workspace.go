@@ -413,7 +413,11 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 	// retile lays the custom layout out again in the new box.
 	if m.AutoTiling && (!m.WorkspaceHasCustom[workspace] || m.tiledLayoutStale()) {
 		m.LogInfo("Auto-tiling workspace %d (no custom layout)", workspace)
+		// Nobody saw the workspace change while it was off screen, so the
+		// panes land where the layout puts them, slide or no slide.
+		m.arriving = true
 		m.TileVisibleWorkspaceWindows()
+		m.arriving = false
 	} else {
 		m.settleBorderMode(workspace)
 	}

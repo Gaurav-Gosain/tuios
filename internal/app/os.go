@@ -611,6 +611,9 @@ type OS struct {
 	// wsSlide is the running workspace slide, if any. See
 	// workspace_slide.go.
 	wsSlide workspaceSlide
+	// arriving is set while a workspace switch lays out the workspace it
+	// lands on. See animateWindow.
+	arriving bool
 	// lastInteractionRender is when a motion event last produced a frame.
 	// Motion events arrive faster than a frame can be composed, so this
 	// bounds how often they are allowed to redraw.

@@ -72,7 +72,9 @@ func (m *OS) snapInFlight(w *terminal.Window) *ui.Animation {
 func (m *OS) animateWindow(w *terminal.Window, x, y, width, height int, dur time.Duration) *ui.Animation {
 	// While the workspace slides in, the slide is its motion: a pane laid
 	// out now lands at once, so the workspace slides in as it will settle.
-	if m.wsSlide.running() {
+	// The layout a switch lays out on arrival lands at once too, when there
+	// is no slide.
+	if m.wsSlide.running() || m.arriving {
 		dur = 0
 	}
 	if a := m.snapInFlight(w); a != nil {

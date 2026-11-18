@@ -18187,3 +18187,18 @@ The test then takes the `global` key out of the saved file, as an older daemon l
 
 The frames are `global-restore-before.txt`, `global-restore-after-1.txt`, `global-restore-after-2.txt` and `global-set-again.txt` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 go test -count=1 -run '^TestAGlobalSessionStaysGlobalAcrossARestart$' -v .`.
+## A workspace that changed off screen is drawn settled on arrival
+
+`TestWorkspaceArrivalLandsAtOnce` in `workspace_arrival_test.go` opens two panes on workspace 1 while the client shows workspace 2, switches back, and reads every frame the render trace records after the switch. Each pane has to be at its final rectangle from the first frame. It runs once with the workspace slide and once with `workspace_transition = "none"`. Its positive half, in the same fixture: a pane opened on the workspace on screen first, and the first pane has to slide to make room, one way, through at least three widths in between.
+
+Run on 2026-11-18 on macOS (arm64), against a build of main (c7d644bc8), the branch with one line cut, and the branch.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main, `transition-none` | "frame 1 of 70 drew pane ... at {60 0 60 38}, want it at {60 0 60 19} from the first frame": the old pane starts at the two-pane layout and the new ones grow from 15x9 boxes, 5 of 5 runs | **caught** |
+| `m.arriving = true` cut from `switchToWorkspaceHeld`, `transition-none` | the same, 5 of 5 runs | **caught** |
+| Main and the cut, `slide` | pass: the running slide already lands the panes | not a control |
+| The branch | passes 5 of 5 runs, both cases, and the positive half slides in every run | fixed |
+
+The frames are `frames.txt` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorkspaceArrivalLandsAtOnce$' -v .`.
