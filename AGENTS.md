@@ -223,8 +223,9 @@ that points the go command at the folder in this repository. They are
 `progstatus/` (`tuios.dev/progstatus`), `vt/` (`tuios.dev/vt`), `swatch/`
 (`tuios.dev/swatch`), `shot/` (`tuios.dev/shot`), `tml/` (`tuios.dev/tml`),
 `plot/` (`tuios.dev/plot`), `loom/` (`tuios.dev/loom`), `sketch/`
-(`tuios.dev/sketch`), `acp/` (`tuios.dev/acp`) and `harness/`
-(`tuios.dev/harness`). `go.work` lists them all.
+(`tuios.dev/sketch`), `acp/` (`tuios.dev/acp`), `harness/`
+(`tuios.dev/harness`) and `nitpick/` (`tuios.dev/nitpick`). `go.work` lists
+them all.
 
 - `go.work` makes the app, `e2e/tui` and each library one workspace, so a
   change to a library and to the app lands in one pull request. Never add a
@@ -374,6 +375,7 @@ tuios/
 ├── acp/                    # tuios.dev/acp, a Go module of its own: the Agent Client Protocol client, versions 1 and 2; the JSON-RPC peer, negotiation, typed updates
 ├── harness/                # tuios.dev/harness, a Go module of its own: agent CLI detection; the manifest format, 26 bundled manifests, Identify, Classify and Explain
 ├── loom/                   # tuios.dev/loom, a Go module of its own: draws TML into cells; flex layout, retained tree, palettes per depth, keys and mouse
+├── nitpick/                # tuios.dev/nitpick, a Go module of its own: go/analysis hygiene rules with a measured precision; cmd/nitpick checks changed lines
 ├── plot/                   # tuios.dev/plot, a Go module of its own: eleven chart kinds (bar, line, area, heatmap, pie, world map and more) as cells with theme roles
 ├── progstatus/             # tuios.dev/progstatus, a Go module of its own: OSC 7501 parser, record store, encoder
 ├── shot/                   # tuios.dev/shot, a Go module of its own: a cell grid to PNG, SVG, HTML, ANSI or text; mosaic turns pictures into cells
