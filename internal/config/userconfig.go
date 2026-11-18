@@ -3605,6 +3605,15 @@ func migrateInboxKeys(cfg *UserConfig) {
 			})
 		}
 	}
+	// v0.12 wrote ctrl+p and ctrl+n into these two as defaults. The palette
+	// owns ctrl+p now, so the exact old lists are stale defaults: dropped, and
+	// the fill gives the current keys. Any other list is the user's own.
+	if slices.Equal(t[ActionInboxUp], []string{"k", "up", "ctrl+p"}) {
+		delete(t, ActionInboxUp)
+	}
+	if slices.Equal(t[ActionInboxDown], []string{"j", "down", "ctrl+n"}) {
+		delete(t, ActionInboxDown)
+	}
 	if slices.Equal(t[ActionInboxDenyReason], []string{"n"}) {
 		delete(t, ActionInboxDenyReason)
 		cfg.RetiredKeybinds = append(cfg.RetiredKeybinds, RetiredKeybind{
