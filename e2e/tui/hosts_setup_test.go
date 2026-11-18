@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuitest"
 	"tuios.dev/shot"
 )
@@ -66,7 +67,28 @@ func writeSetupSSH(t *testing.T, here, far string) string {
 	if err := os.WriteFile(ssh, []byte(b.String()), 0o700); err != nil { //nolint:gosec // an ssh stand-in this test runs
 		t.Fatalf("write the ssh stand-in: %v", err)
 	}
+	skipOnOutsideTuios(t, ssh, far)
 	return ssh
+}
+
+// skipOnOutsideTuios skips the test when the far machine finds a tuios that
+// is not under the test's own folder. The far machine is this one with a
+// temp HOME, and the link also looks in fixed places such as
+// /opt/homebrew/bin and /usr/local/bin, which no HOME hides. A tuios found
+// there is the person's own install, an older release: the setup would run
+// it, and its install-service would write the person's real service, as one
+// run once did. The lookup is the link's own (federation.FindBinaryScript).
+func skipOnOutsideTuios(t *testing.T, ssh, far string) {
+	t.Helper()
+	out, err := exec.Command(ssh, "someone@buildbox", federation.FindBinaryScript()+`; echo "found=$p"`).Output() //nolint:gosec // the test's own ssh stand-in
+	if err != nil {
+		t.Fatalf("look for tuios on the far machine: %v", err)
+	}
+	_, found, _ := strings.Cut(string(out), "found=")
+	found = strings.TrimSpace(found)
+	if found != "" && !strings.HasPrefix(found, far) {
+		t.Skipf("the far machine finds %s, a tuios outside this test. The setup would run it, and it could change your real services. Remove it, or run this test on a machine without it", found)
+	}
 }
 
 // setupResult is the part of the setup JSON the test reads.

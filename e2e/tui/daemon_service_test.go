@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
 // TestDaemonRunsAsAService installs the daemon as a systemd user unit and
@@ -33,8 +35,19 @@ import (
 // with every XDG folder and HOME under the test's root, carried in the unit.
 // It never touches the person's tuios-daemon unit or daemon. Each step is
 // written to transcript.txt in the artifact directory.
+//
+// It still writes a unit into the real user manager's folder and runs it.
+// So it runs only where the run may change that manager: a machine or a
+// container kept for tests, which says so with
+// TUIOS_E2E_OWN_USER_MANAGER=1. There it sets the service_manager_home
+// knob, which lets a tuios with a temp HOME use the account's unit folder.
+// Without the knob, internal/service refuses (checkHome).
 func TestDaemonRunsAsAService(t *testing.T) {
 	requireReal(t, "OS process or perf topic")
+	if os.Getenv("TUIOS_E2E_OWN_USER_MANAGER") != "1" {
+		t.Skip("changes the real systemd user manager; set TUIOS_E2E_OWN_USER_MANAGER=1 on a machine kept for tests")
+	}
+	t.Setenv(testknob.Env, testknob.Merge(os.Getenv(testknob.Env), "service_manager_home=1"))
 	runtimeDir := fmt.Sprintf("/run/user/%d", os.Getuid())
 	systemctl := func(args ...string) (string, error) {
 		cmd := exec.Command("systemctl", append([]string{"--user"}, args...)...)

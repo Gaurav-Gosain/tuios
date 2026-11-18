@@ -16,8 +16,15 @@ import (
 // label is the agent's launchd label.
 func label(name string) string { return "dev.tuios." + name }
 
+// plistPath is the agent's file under this process's home. A process with a
+// home of its own, such as a test, never reads or writes the agents of the
+// person's login (see checkHome).
 func plistPath(name string) string {
-	return filepath.Join(passwdHome(), "Library", "LaunchAgents", label(name)+".plist")
+	home := ownHome()
+	if useManagerHome() {
+		home = passwdHome()
+	}
+	return filepath.Join(home, "Library", "LaunchAgents", label(name)+".plist")
 }
 
 func domain() string { return fmt.Sprintf("gui/%d", os.Getuid()) }
@@ -93,6 +100,9 @@ func ManagerEnv() (map[string]string, error) { return map[string]string{}, nil }
 // A daemon that already runs makes that one exit 0, so start changes
 // nothing here.
 func Install(s Spec, _ bool) error {
+	if err := checkHome(); err != nil {
+		return err
+	}
 	path, text, err := Render(s)
 	if err != nil {
 		return err
@@ -129,6 +139,9 @@ func Serves(name, socket string) bool {
 
 // Start starts the agent's program.
 func Start(name string) error {
+	if err := checkHome(); err != nil {
+		return err
+	}
 	if err := launchctl("kickstart", domain()+"/"+label(name)); err == nil {
 		return nil
 	}
@@ -147,6 +160,11 @@ func Get(name string) Status {
 	}
 	st.File, st.Installed, st.Enabled = path, true, true
 	st.Socket, st.Binary = readMarkers(path)
+	// launchd's state is of the agent of the login, not of this file, when
+	// this process has a home of its own.
+	if checkHome() != nil {
+		return st
+	}
 	out, err := childproc.Command("/bin/launchctl", "print", domain()+"/"+label(name)).Output()
 	if err == nil {
 		for l := range strings.SplitSeq(string(out), "\n") {

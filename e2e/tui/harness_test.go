@@ -255,7 +255,15 @@ func runE2E(m *testing.M) (code int) {
 	}
 	defer unown()
 
-	return m.Run()
+	// No test may change the person's own user services
+	// (user_services_guard_test.go).
+	before := snapshotUserServices()
+	code = m.Run()
+	if diff := before.changes(); diff != "" {
+		fmt.Fprintf(os.Stderr, "e2e: the run changed the user services of the person who ran it. Restore them by hand:\n%s", diff)
+		code = 1
+	}
+	return code
 }
 
 // startOpts configures a tuios instance for a test.

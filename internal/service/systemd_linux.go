@@ -16,9 +16,24 @@ import (
 // unitFile is the unit's file name.
 func unitFile(name string) string { return name + ".service" }
 
-// unitDirs are the folders a user unit of tuios may be in: the manager's
-// usual one first, and the one this process's XDG_CONFIG_HOME names.
+// ownUnitDir is the folder of user units under this process's config home:
+// XDG_CONFIG_HOME, or HOME/.config. tuios writes, finds and removes its unit
+// there only, so a process with a home of its own never touches the units of
+// the person's login.
+func ownUnitDir() string {
+	if x := os.Getenv("XDG_CONFIG_HOME"); x != "" {
+		return filepath.Join(x, "systemd", "user")
+	}
+	return filepath.Join(ownHome(), ".config", "systemd", "user")
+}
+
+// unitDirs are the folders a user unit of tuios may be in. With the
+// manager-home knob of a test, they are the account's folder and this
+// process's, as before.
 func unitDirs() []string {
+	if !useManagerHome() {
+		return []string{ownUnitDir()}
+	}
 	dirs := []string{filepath.Join(passwdHome(), ".config", "systemd", "user")}
 	if x := os.Getenv("XDG_CONFIG_HOME"); x != "" {
 		if d := filepath.Join(x, "systemd", "user"); d != dirs[0] {
@@ -47,9 +62,10 @@ func enabled(path string) bool {
 }
 
 // managerRuntimeDir is where the user's service manager listens:
-// /run/user/UID. systemctl finds it through XDG_RUNTIME_DIR, and a process
-// that moved that variable, as a test or an isolated server does, would
-// find no manager at all.
+// /run/user/UID. systemctl finds it through XDG_RUNTIME_DIR. A process that
+// moved that variable, as a test or an isolated server does, finds no
+// manager, and that is right: it must not change the person's services.
+// Only the manager-home knob of a test points systemctl back at it.
 func managerRuntimeDir() string {
 	dir := filepath.Join("/run/user", strconv.Itoa(os.Getuid()))
 	if _, err := os.Stat(dir); err != nil {
@@ -60,7 +76,7 @@ func managerRuntimeDir() string {
 
 func systemctl(args ...string) (string, error) {
 	cmd := childproc.Command("systemctl", append([]string{"--user"}, args...)...)
-	if dir := managerRuntimeDir(); dir != "" && os.Getenv("XDG_RUNTIME_DIR") != dir {
+	if dir := managerRuntimeDir(); useManagerHome() && dir != "" && os.Getenv("XDG_RUNTIME_DIR") != dir {
 		cmd.Env = append(os.Environ(), "XDG_RUNTIME_DIR="+dir)
 	}
 	out, err := cmd.CombinedOutput()
@@ -74,6 +90,10 @@ func systemctl(args ...string) (string, error) {
 // ManagerEnv is the environment of the user's service manager. It fails
 // when there is no systemd user manager to talk to.
 func ManagerEnv() (map[string]string, error) {
+	// A process with a home of its own asks the person's manager nothing.
+	if err := checkHome(); err != nil {
+		return nil, err
+	}
 	if _, err := exec.LookPath("systemctl"); err != nil {
 		return nil, ErrUnsupported
 	}
@@ -150,17 +170,40 @@ WantedBy=default.target
 `
 }
 
+// managerDir is the folder the user's manager reads units from, when it is
+// the folder of this process's config home too. A process with a home of
+// its own, or a config home the manager does not read, gets an error, so
+// it writes no unit the manager would miss and changes no service of the
+// person.
+func managerDir() (string, error) {
+	if err := checkHome(); err != nil {
+		return "", err
+	}
+	env, err := ManagerEnv()
+	if err != nil {
+		return "", err
+	}
+	dir := managerUnitDir(env)
+	if useManagerHome() {
+		return dir, nil
+	}
+	if own := ownUnitDir(); !samePath(own, dir) {
+		return "", errfmt.Errorf("the systemd user manager reads units from %s, and this tuios keeps its config in %s, so the manager would not find the service. Unset XDG_CONFIG_HOME, or set it as the manager has it", dir, own)
+	}
+	return dir, nil
+}
+
 // Render returns the file a service of s is written to, and its text. It
 // asks the service manager where its units go.
 func Render(s Spec) (string, string, error) {
 	if err := s.check(); err != nil {
 		return "", "", err
 	}
-	env, err := ManagerEnv()
+	dir, err := managerDir()
 	if err != nil {
 		return "", "", err
 	}
-	return filepath.Join(managerUnitDir(env), unitFile(s.Name)), unit(s), nil
+	return filepath.Join(dir, unitFile(s.Name)), unit(s), nil
 }
 
 // Install writes the unit, enables it, and with start starts it. A unit that
@@ -203,11 +246,18 @@ func Uninstall(name string) error {
 	if path == "" {
 		return nil
 	}
-	_, _ = systemctl("disable", unitFile(name))
+	// The manager is told only when it reads this folder. Otherwise a unit
+	// of the same name in the person's own folder would be disabled.
+	_, managed := managerDir()
+	if managed == nil {
+		_, _ = systemctl("disable", unitFile(name))
+	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	_, _ = systemctl("daemon-reload")
+	if managed == nil {
+		_, _ = systemctl("daemon-reload")
+	}
 	return nil
 }
 
@@ -224,6 +274,9 @@ func Serves(name, socket string) bool {
 
 // Start starts the service.
 func Start(name string) error {
+	if _, err := managerDir(); err != nil {
+		return err
+	}
 	_, err := systemctl("start", unitFile(name))
 	return err
 }
@@ -243,6 +296,11 @@ func Get(name string) Status {
 	}
 	st.File, st.Installed, st.Enabled = path, true, enabled(path)
 	st.Socket, st.Binary = readMarkers(path)
+	// The manager's state is of its own unit of this name, which is not this
+	// file when the manager does not read this folder.
+	if _, err := managerDir(); err != nil {
+		return st
+	}
 	if out, _ := systemctl("is-active", unitFile(name)); out != "" {
 		st.Detail = out
 		st.Running = out == "active"
