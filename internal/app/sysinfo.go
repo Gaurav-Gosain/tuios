@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/shirou/gopsutil/v4/mem"
 )
 
 // GetCPUGraph returns a formatted string with CPU usage graph and percentage.
@@ -84,7 +83,7 @@ func (m *OS) GetCPUGraph() string {
 }
 
 // GetRAMUsage returns RAM usage as a formatted string.
-// Cached to avoid expensive gopsutil calls on every render.
+// Cached to avoid a system call on every render.
 func (m *OS) GetRAMUsage() string {
 	if m.ramUnavailable {
 		return "RAM: n/a"
@@ -101,13 +100,9 @@ func (m *OS) UpdateRAMUsage() {
 	}
 
 	m.LastRAMUpdate = now
-	v, err := mem.VirtualMemory()
-	m.ramUnavailable = err != nil
-	if err != nil {
-		m.RAMUsage = 0
-		return
-	}
-	m.RAMUsage = v.UsedPercent
+	used, ok := readRAMPercent()
+	m.ramUnavailable = !ok
+	m.RAMUsage = used
 }
 
 // UpdateCPUHistory samples CPU usage at most once per config.CPUUpdateInterval
