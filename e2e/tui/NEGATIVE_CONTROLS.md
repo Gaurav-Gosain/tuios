@@ -18258,3 +18258,17 @@ Run on macOS on 2026-11-18. The branch passes the test, and the 26 other quick l
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestQuickLookTakesTheMouse$' -v .`.
 | The feature: the binary built from origin/main | "a listing away from the pane's folder has no back row" | **caught** |
+## A click on a file opens quick look, and a drag never does
+
+`TestRailQuickLook` clicks `main.go` and waits for quick look with no "Copied
+the path." note. It shift+clicks `notes.md` and waits for that note with no
+preview. It then presses `main.go`, moves six rows down inside the rail,
+releases, and presses space. Space opens a preview only when the drag opened
+none, so the wait for a preview fails when the drag opened one.
+
+Run on 2026-11-18 on Linux (arch-btw, under heavy.sh):
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The fix: the binary built from origin/main | "a click on main.go did not open quick look" | **caught** |
+| Only the threshold rule in `FileDragMotion`, back to "a press is a click until the pointer leaves the rail" | "a drag in the rail opened quick look, so space closed it" | **caught** |
