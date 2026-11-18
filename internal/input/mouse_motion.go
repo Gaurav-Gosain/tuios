@@ -388,6 +388,12 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	if o.Resizing && o.InteractionMode {
+		// A right press that has moved past the threshold is a resize, wherever
+		// the release lands. The release alone cannot tell: a drag that came back
+		// to where it started read as a click there and opened the pane menu.
+		if o.RightClickPending && abs(mouse.X-o.RightPressX)+abs(mouse.Y-o.RightPressY) >= o.DragThreshold() {
+			o.RightClickPending = false
+		}
 		// A pane-border drag moves a single edge to the pointer, not a corner.
 		if o.BorderResizing {
 			applyBorderResize(o, mouse.X, mouse.Y)

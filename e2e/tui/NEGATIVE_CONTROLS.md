@@ -18222,3 +18222,17 @@ Repeat from `e2e/tui` with
 | --- | --- | --- | --- |
 | The released behaviour | origin/main | `TestAgentsViewSnoozedNoteWithNoAgentListed` ("tuios exited with code 1 after the snooze", the client's panic) | **caught** |
 | The note row reads agent 0 | `buildCockpitRows`: the note row's `agent: -1` written as `agent: 0` | `TestAgentsViewSnoozedNoteWithNoAgentListed` ("tuios exited with code 1 after the snooze") | **caught** |
+
+## A right-drag that comes back to its start opens no menu
+
+`TestPlainRightClickOpensMenuAndRightDragResizes` presses the right button on
+a pane, moves 16 cells away, moves back to the press cell and releases there.
+Before the fix the release measured only its own distance from the press, read
+the gesture as a click and opened the pane menu. The test then presses n and
+waits for a new pane: an open menu takes the key, so the pane never appears.
+
+Run on 2026-11-18 on macOS (arm64):
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The fix: the binary built from origin/main, with no `RightClickPending` reset in `handleMouseMotion` | "a right-drag that came back to its start opened a context menu"; the frame shows the pane menu | **caught** |

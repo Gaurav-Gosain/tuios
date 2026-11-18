@@ -258,8 +258,14 @@ func assertNoLineOverflow(t *testing.T, s tuitest.Screen, cols int, what string)
 // TestPlainRightClickOpensMenuAndRightDragResizes pins the right button's
 // click-vs-drag split over a pane running a plain shell. A right-CLICK opens the
 // pane menu, decided on release; a right-DRAG resizes without ever showing one.
-// Ctrl+right-click opens the menu on the press, the path that also works over an
-// app holding the mouse.
+// A drag that goes past the threshold and comes back to where it started is a
+// drag too: it opened the menu on release, because the release read only its
+// own distance from the press. Ctrl+right-click opens the menu on the press,
+// the path that also works over an app holding the mouse.
+//
+// Negative control, confirmed red: without the RightClickPending reset in
+// handleMouseMotion, the drag that comes back opens the menu and the new pane
+// never appears.
 func TestPlainRightClickOpensMenuAndRightDragResizes(t *testing.T) {
 	term, _ := start(t, startOpts{})
 	waitBoot(t, term)
@@ -291,13 +297,33 @@ func TestPlainRightClickOpensMenuAndRightDragResizes(t *testing.T) {
 	waitMenuGone(t, term, "Close pane", "after esc on the ctrl+right-click menu")
 
 	// A right-drag past the threshold resizes and must show no menu at all.
+	// The new pane is the barrier: input is handled in order, and an open menu
+	// would take the key, so the pane appears only when no menu opened.
+	noMenuAfter := func(what string) {
+		t.Helper()
+		before := countWindows(term.Screen())
+		if err := term.SendKeys("n"); err != nil {
+			t.Fatalf("send n: %v", err)
+		}
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			return countWindows(s) == before+1
+		}, uiTimeout); err != nil || strings.Contains(term.Screen().Text(), "Close pane") {
+			copiesFrame(t, term, "right-drag-menu-failed")
+			t.Fatalf("ASSERTION: %s opened a context menu; a drag is a resize: %v\n%s", what, err, term.Snapshot())
+		}
+	}
 	mousePress(t, term, 20, 10, tuitest.MouseRight, 0)
 	mouseMotion(t, term, 30, 16, tuitest.MouseRight, 0)
 	mouseRelease(t, term, 30, 16, tuitest.MouseRight, 0)
-	time.Sleep(500 * time.Millisecond)
-	if text := term.Screen().Text(); strings.Contains(text, "Close pane") {
-		t.Fatalf("a right-drag opened a context menu; a drag is a resize\n%s", term.Snapshot())
-	}
+	noMenuAfter("a right-drag")
+
+	// The same drag, brought back to where it started before the release.
+	mousePress(t, term, 20, 10, tuitest.MouseRight, 0)
+	mouseMotion(t, term, 30, 16, tuitest.MouseRight, 0)
+	mouseMotion(t, term, 20, 10, tuitest.MouseRight, 0)
+	mouseRelease(t, term, 20, 10, tuitest.MouseRight, 0)
+	noMenuAfter("a right-drag that came back to its start")
+	copiesFrame(t, term, "right-drag-back-no-menu")
 	alive(t, term, "after a right-drag resize")
 }
 
