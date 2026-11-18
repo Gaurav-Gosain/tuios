@@ -14,7 +14,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -24,6 +23,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
 // The file verbs: what an explorer needs from the machine the files are on.
@@ -415,8 +415,9 @@ func (d *Daemon) verbFileList(cs *connState, params json.RawMessage) (any, *verb
 		entries = append(entries, describe(full, fi))
 	}
 	// Names in one folder are unique, so the sort need not be stable, and an
-	// unstable one is several times faster on a large folder.
-	slices.SortFunc(entries, func(a, b FileInfo) int {
+	// unstable one is several times faster on a large folder. It runs once per
+	// file-list call, so it sorts through the shared sortx copy.
+	sortx.SortFunc(entries, func(a, b FileInfo) int {
 		da, db := a.isDirLike(), b.isDirLike()
 		switch {
 		case da != db && da:

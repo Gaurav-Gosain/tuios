@@ -2440,6 +2440,9 @@ package) and against what links them:
 | internal/agentproto, internal/mcp, internal/learn/..., internal/service, internal/tmuxcompat, internal/webshell, plugins, rsc.io/qr/... | run on request; no hot package calls into them (the tmux pane holder shares its terminal with its child and copies no bytes) |
 | internal/herdrplugin, internal/integration | plugin and hook events, and the settings dialog |
 | `tuios.dev/sketch/core`, `sketch/text`, `sketch/internal/...` | a diagram is parsed and drawn once per source and width, then kept |
+| internal/hostsync, internal/herdrcli, internal/worktree, internal/risk, internal/agenthook, internal/tutor | run once per command, verb, approval or hook event |
+| internal/capture, internal/explore, internal/release, internal/restartplan, internal/pushnotify, internal/mermaid | a screenshot, an explorer, a release lookup, a restart, a phone notification, a diagram |
+| `tuios.dev/swatch/omarchy`, `swatch/termconfig`, internal/tape/trust, internal/sound, internal/diffview/lexers | read once per theme load, tape, alert cue or reviewed file |
 
 | Left off | Hot path that calls into it |
 |---|---|
@@ -2449,6 +2452,7 @@ package) and against what links them:
 | `tuios.dev/harness` | the pty read path runs the screen and OSC rules, throttled |
 | internal/federation | remote panes stream through its mux |
 | internal/transcriptview | the cockpit view draws through it on every frame |
+| internal/review, `pkg/applist`, internal/hostsetup, internal/gitstate | mostly cold, but the review view, the launcher, the machine sheet and the sidebar draw through small accessors that the compiler inlines |
 | `tuios.dev/sketch/raster` | `tuios mermaid --live` draws its motion with it at 60 frames a second |
 
 Release flags, Go 1.27.4, main at 086c63330 and the list:
@@ -3759,6 +3763,32 @@ Both tuios rows stay under the 50,000,000 ceiling. `GODEBUG=inittrace=1` on
 `tuios --version` shows the engine's init going from 1,472 bytes, 230
 allocations and 0.016 to 0.021 ms to 592 bytes, 9 allocations and about
 0.015 ms; the sketch packages together go from 561 to 340 init allocations.
+
+windows/amd64 was over the ceiling on main at 89ae8eb65 (go1.27.4-X:nodwarf5, release flags):
+50,158,592 bytes, 158,592 over. Its machine code is smaller than linux/amd64's,
+but a PE file carries two tables an ELF file does not: `.pdata` (the unwind
+table, 12 bytes per function, 411 KB) and `.reloc` (the base relocations
+for ASLR, 404 KB). Both are needed, so the cut came from code. Three changes
+take 193,536 bytes off windows/amd64:
+
+- 17 more cold packages on the noinline list (the table above). The compiler
+  check (`-gcflags=-m` on the hot packages) finds their calls inlined only
+  into verbs, approvals, hook events and setup. A per-function size diff of
+  internal/app, internal/session, internal/input, internal/terminal,
+  internal/server, internal/served, loom and vt against main changes 28
+  functions, all on those cold paths, and no render, input or stream function.
+- The RAM reading on Windows calls GlobalMemoryStatusEx itself
+  (`internal/app/sysinfo_windows.go`). gopsutil's mem package linked WMI
+  and OLE there, about 18 KB. The figure is the same: under wine both read 80%.
+  Other platforms still read it through gopsutil.
+- Two more cold struct sorts go through internal/sortx: the path cache trim
+  and the file-list verb's listing.
+
+| target | main | change | delta |
+|---|---:|---:|---:|
+| linux/amd64 | 49,709,216 | 49,524,896 | -184,320 |
+| darwin/arm64 | 46,309,426 | 46,145,378 | -164,048 |
+| windows/amd64 | 50,158,592 | 49,965,056 | -193,536 |
 
 To raise the ceiling, do it on purpose in its own commit: change `ceiling` in
 `scripts/binary-size.sh`, record the new value and the reason here, and say in

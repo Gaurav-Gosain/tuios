@@ -14,6 +14,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hints"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -145,7 +146,9 @@ func (m *OS) trimPathCache() {
 	for p, st := range c.known {
 		all = append(all, aged{p, st.at})
 	}
-	slices.SortFunc(all, func(a, b aged) int { return a.at.Compare(b.at) })
+	// The trim runs once per pathStatMax answers, so it sorts through the
+	// shared sortx copy rather than a slices.SortFunc of its own.
+	sortx.SortFunc(all, func(a, b aged) int { return a.at.Compare(b.at) })
 	for _, a := range all[:len(all)/2] {
 		delete(c.known, a.p)
 	}
