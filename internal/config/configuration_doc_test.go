@@ -2,6 +2,7 @@ package config
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"reflect"
 	"regexp"
@@ -268,7 +269,7 @@ func renderConfigOptionsDoc() string {
 	for _, s := range sections {
 		w("\n## ", s, "\n\n| Option | Type | Default | Description |\n|---|---|---|---|\n")
 		for _, o := range bySection[s] {
-			w("| `", o.Path, "` | ", o.Type, " | ", optionDefaultCell(o), " | ", optionText(o), " |\n")
+			w("| <a id=\"", o.Path, "\"></a>`", o.Path, "` | ", o.Type, " | ", optionDefaultCell(o), " | ", optionText(o), " |\n")
 		}
 	}
 	return b.String()
@@ -298,6 +299,9 @@ func optionText(o Option) string {
 			vals[i] = "`" + docCell(v) + "`"
 		}
 		parts = append(parts, "Values: "+strings.Join(vals, ", ")+".")
+	}
+	if o.Max != 0 {
+		parts = append(parts, fmt.Sprintf("Range: %d to %d.", o.Min, o.Max))
 	}
 	if o.Env != "" {
 		parts = append(parts, "The `"+o.Env+"` environment variable sets it too, and wins over the file.")

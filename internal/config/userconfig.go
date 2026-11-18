@@ -628,7 +628,7 @@ type AppearanceConfig struct {
 	SidebarGitDirty        *bool    `toml:"git_dirty"`                 // Count changed and untracked paths in the rail's git section (default: true)
 	Glyphs                 string   `toml:"glyphs"`                    // Chrome glyph set: default, unicode, heavy, ascii, or one from ~/.config/tuios/glyphs
 	Gap                    int      `toml:"gap"`                       // Cells of empty space kept between neighbouring tiled panes (default: 0)
-	DropPreview            string   `toml:"drop_preview"`              // What a BSP drag shows where the pane would land: fill, outline, off (default: fill)
+	DropPreview            string   `toml:"drop_preview"`              // What a BSP drag shows where the pane would land: fill, outline, off (default: outline)
 	DropPreviewDelay       string   `toml:"drop_preview_delay"`        // How long the pointer rests on a drop zone before it shows: a duration such as 120ms, or 0 (default: 120ms)
 	// TilingScheme is the BSP insertion scheme a workspace starts with the
 	// first time it is tiled: spiral, longest_side, alternate or smart_split.
