@@ -76,7 +76,7 @@ func TestPluginPRStatus(t *testing.T) {
 
 	// Nothing stays: the hook exits, so the plugin holds no process, and stats
 	// says so with the runs counted.
-	if out, err := tuiosCLI(t, base, "plugins", "stats"); err != nil || !regexp.MustCompile(`tuios\.pr-status\s+0\s+0 bytes\s+[2-9]`).MatchString(out) {
+	if out, err := tuiosCLI(t, base, "plugins", "stats"); err != nil || !regexp.MustCompile(`tuios\.pr-status\s+0\s+0 B\s+[2-9]`).MatchString(out) {
 		t.Errorf("plugins stats for a hook plugin: %v, want no process and two runs or more\n%s", err, out)
 	}
 	if out, _ := tuiosCLI(t, base, "plugins", "log", "tuios.pr-status", "--limit", "20"); strings.Contains(out, "running\n") {

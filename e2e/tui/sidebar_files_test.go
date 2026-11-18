@@ -2861,7 +2861,7 @@ func TestQuickLookShowsEachKindOfFile(t *testing.T) {
 	shut()
 
 	open("eblob.dat")
-	railLists(t, term, "the binary file is not in hex", []string{"00000000  00 01 02 03", "Showing the first 16 KB."}, nil)
+	railLists(t, term, "the binary file is not in hex", []string{"00000000  00 01 02 03", "Showing the first 16 KiB."}, nil)
 	sendKeys(t, term, "J", "J", "J")
 	railLists(t, term, "J did not move in the hex", []string{"eblob.dat "}, []string{"00000000  00 01"})
 	saveCockpitFrames(t, term, "quick-look-hex")
