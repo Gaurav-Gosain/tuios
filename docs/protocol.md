@@ -19,11 +19,51 @@ with jq, no client library required.
   client's first byte is `{` (or leading whitespace); a binary client's first
   byte is the high byte of a length prefix, which is always `0x00` or `0x01` for
   frames under the 16MB cap, so the two never collide.
-- A single request line is capped at 16MB. Requests are processed in order on a
+- A single request line is capped at 12 MiB. Requests are processed in order on a
   connection; issue one request, read one response, then send the next. Run
   independent requests concurrently by opening more than one connection.
 - The socket is protected by filesystem permissions (mode 0700). There is no
   application level auth token; use SSH for remote access.
+
+## Connecting
+
+The protocol shares the socket the TUIOS client uses. There is no separate port and no handshake to negotiate: connect and write JSON. The daemon tells the two apart by the first byte, since a JSON request starts with `{` and a binary client frame never does.
+
+```bash
+if [ -n "$XDG_RUNTIME_DIR" ]; then
+  SOCK="$XDG_RUNTIME_DIR/tuios/tuios.sock"
+elif [ -S "/run/user/$(id -u)/tuios/tuios.sock" ]; then
+  SOCK="/run/user/$(id -u)/tuios/tuios.sock"
+else
+  SOCK="/tmp/tuios-$(id -u)/tuios.sock"
+fi
+
+printf '{"id":1,"verb":"list-sessions"}\n' | nc -U "$SOCK" | jq .
+```
+
+`socat - UNIX-CONNECT:"$SOCK"` works in place of `nc -U "$SOCK"`. The socket path for Windows is in [Sessions](https://tuios.dev/docs/sessions#daemon-location).
+
+You can send several requests on one connection. They are answered in order, one response line per request line. To run requests in parallel, open more connections.
+
+The socket is only accessible to your user: its directory is created with mode `0700`, and TUIOS refuses a directory that another user owns or that is a symlink. There is no token or password on top of that. What a program inside a pane may do over the socket is limited by the pane's [grants](AGENT_STATE.md#what-a-pane-may-do).
+
+### Limits
+
+The daemon limits the connections and the memory that clients can use.
+
+| Limit | Value | What happens past it |
+|-------|-------|----------------------|
+| Connections on the main socket | 1024 | The daemon sends a `too_many_connections` error and closes the connection. |
+| Connections from panes, hooks and plugins, together | 896: 128 of the 1024 are kept for you | The daemon refuses the connection and says why. A program in a pane cannot take the connections that your own client and commands need. |
+| Connections from the programs of one pane | 64 | The daemon refuses the connection and says why. One pane cannot take the connections of the others. |
+| Connections on the link sockets, together | 256 | The same. Other machines cannot take the connections that your own clients need. |
+| Memory for requests over 64 KiB | One budget for your own clients, and a smaller one for links and panes without the `admin` grant | The request waits up to 2 seconds. Then the daemon refuses it with `busy` and closes the connection. |
+| Length of one request line | 12 MiB | The daemon refuses the request with `invalid_request` and closes the connection. |
+| Large writes to one pane | One at a time | A queued write waits for the write ahead of it. When the write ahead has held the pane for 5 seconds and the pane still does not read, the daemon refuses the queued write with `busy`. |
+
+A TUIOS client takes a few connections. A command takes one connection while it runs. A request of 64 KiB or less, such as a key press, never waits for the memory budget.
+
+`busy` and `too_many_connections` are the only errors that can clear without a change to the request. When you get `busy`, the daemon did nothing. Wait a short time and send the request again. If the connection closed, open a new one first. When you get `too_many_connections`, close some clients or commands, then connect again.
 
 ## Request envelope
 
@@ -1812,6 +1852,115 @@ such a call.
 
 From the shell, `tuios list-verbs` and `tuios list-verbs --json` render the same
 catalog.
+
+## Calling a verb from a command
+
+A program that can start a process but cannot write to the socket uses `tuios call`. It sends one verb and prints the reply as JSON.
+
+```bash
+tuios call list-sessions
+tuios call list-windows '{"session":"work"}'
+```
+
+The daemon checks the call as it checks any request on the socket. `call` refuses the verbs that hold the connection open. See [`call`](CLI_REFERENCE.md#tuios-call) in the CLI reference.
+
+## Verbs by topic
+
+The verbs, grouped by what they do. [protocol-verbs.md](protocol-verbs.md) lists each verb with its parameters, its reply and an example. `tuios list-verbs` lists the verbs of the binary you talk to.
+
+### Discovery
+
+[`hello`](protocol-verbs.md#hello), [`list-verbs`](protocol-verbs.md#list-verbs).
+
+### Sessions
+
+[`list-sessions`](protocol-verbs.md#list-sessions), [`list-clients`](protocol-verbs.md#list-clients), [`new-session`](protocol-verbs.md#new-session), [`switch-session`](protocol-verbs.md#switch-session), [`detach-client`](protocol-verbs.md#detach-client), [`ssh-agent-path`](protocol-verbs.md#ssh-agent-path), [`display-env`](protocol-verbs.md#display-env), [`session-info`](protocol-verbs.md#session-info), [`kill-session`](protocol-verbs.md#kill-session), [`rename-session`](protocol-verbs.md#rename-session), [`set-session-name`](protocol-verbs.md#set-session-name), [`set-session-accent`](protocol-verbs.md#set-session-accent), [`set-session-space`](protocol-verbs.md#set-session-space).
+
+### Windows
+
+[`list-windows`](protocol-verbs.md#list-windows), [`get-window`](protocol-verbs.md#get-window), [`new-window`](protocol-verbs.md#new-window), [`close-window`](protocol-verbs.md#close-window), [`close-workspace`](protocol-verbs.md#close-workspace), [`focus-window`](protocol-verbs.md#focus-window), [`move-window`](protocol-verbs.md#move-window), [`set-window`](protocol-verbs.md#set-window), [`split-window`](protocol-verbs.md#split-window), [`resize`](protocol-verbs.md#resize), [`popup`](protocol-verbs.md#popup), [`screenshot`](protocol-verbs.md#screenshot), [`pip`](protocol-verbs.md#pip).
+
+### Workspaces and layout
+
+[`list-workspaces`](protocol-verbs.md#list-workspaces), [`select-workspace`](protocol-verbs.md#select-workspace), [`set-workspace-name`](protocol-verbs.md#set-workspace-name), [`set-workspace-order`](protocol-verbs.md#set-workspace-order), [`set-layout`](protocol-verbs.md#set-layout), [`layout-template`](protocol-verbs.md#layout-template), [`run-command`](protocol-verbs.md#run-command).
+
+### Input and output
+
+[`send-text`](protocol-verbs.md#send-text), [`paste-image`](protocol-verbs.md#paste-image), [`send-keys`](protocol-verbs.md#send-keys), [`list-keys`](protocol-verbs.md#list-keys), [`capture-pane`](protocol-verbs.md#capture-pane), [`run`](protocol-verbs.md#run).
+
+### Search
+
+[`search-panes`](protocol-verbs.md#search-panes), [`command-history`](protocol-verbs.md#command-history), [`list-ports`](protocol-verbs.md#list-ports).
+
+Over a link, these verbs need `list`.
+
+### Options, themes and the dock
+
+[`list-options`](protocol-verbs.md#list-options), [`get-option`](protocol-verbs.md#get-option), [`apply-config`](protocol-verbs.md#apply-config), [`set-option`](protocol-verbs.md#set-option), [`list-themes`](protocol-verbs.md#list-themes), [`list-glyphs`](protocol-verbs.md#list-glyphs), [`list-hooks`](protocol-verbs.md#list-hooks), [`list-dock-components`](protocol-verbs.md#list-dock-components), [`refresh-dock`](protocol-verbs.md#refresh-dock).
+
+### Agents and messages
+
+[`list-agents`](protocol-verbs.md#list-agents), [`get-agent-state`](protocol-verbs.md#get-agent-state), [`set-agent-state`](protocol-verbs.md#set-agent-state), [`explain-agent-detect`](protocol-verbs.md#explain-agent-detect), [`agent-hook-event`](protocol-verbs.md#agent-hook-event), [`agent-statusline-event`](protocol-verbs.md#agent-statusline-event), [`explain-agent-screen`](protocol-verbs.md#explain-agent-screen), [`send-agent-message`](protocol-verbs.md#send-agent-message), [`read-agent-messages`](protocol-verbs.md#read-agent-messages), [`ask-agent`](protocol-verbs.md#ask-agent), [`ask-human`](protocol-verbs.md#ask-human), [`set-agent-meta`](protocol-verbs.md#set-agent-meta), [`set-agent-session`](protocol-verbs.md#set-agent-session), [`report-agent-activity`](protocol-verbs.md#report-agent-activity), [`agent-mail-notice`](protocol-verbs.md#agent-mail-notice), [`artifact-list`](protocol-verbs.md#artifact-list), [`agent-transcript`](protocol-verbs.md#agent-transcript), [`start-agent`](protocol-verbs.md#start-agent), [`resume-agent`](protocol-verbs.md#resume-agent), [`agent-activity`](protocol-verbs.md#agent-activity), [`resolve-pane`](protocol-verbs.md#resolve-pane), [`pane-grants`](protocol-verbs.md#pane-grants), [`set-pane-grants`](protocol-verbs.md#set-pane-grants), [`restrict-connection`](protocol-verbs.md#restrict-connection).
+
+### The Inbox, the queue and review
+
+[`list-attention`](protocol-verbs.md#list-attention), [`peek-prompt`](protocol-verbs.md#peek-prompt), [`respond`](protocol-verbs.md#respond), [`get-approval`](protocol-verbs.md#get-approval), [`request-approval`](protocol-verbs.md#request-approval), [`reply-approval`](protocol-verbs.md#reply-approval), [`answer-ask`](protocol-verbs.md#answer-ask), [`dismiss-attention`](protocol-verbs.md#dismiss-attention), [`mark-attention`](protocol-verbs.md#mark-attention), [`release-agent-message`](protocol-verbs.md#release-agent-message), [`queue-prompt`](protocol-verbs.md#queue-prompt), [`reply-history`](protocol-verbs.md#reply-history), [`add-reply-history`](protocol-verbs.md#add-reply-history), [`list-queued`](protocol-verbs.md#list-queued), [`cancel-queued`](protocol-verbs.md#cancel-queued), [`review-diff`](protocol-verbs.md#review-diff), [`review-stage`](protocol-verbs.md#review-stage), [`review-note`](protocol-verbs.md#review-note), [`send-review`](protocol-verbs.md#send-review), [`list-checkpoints`](protocol-verbs.md#list-checkpoints), [`checkpoint-diff`](protocol-verbs.md#checkpoint-diff), [`restore-checkpoint`](protocol-verbs.md#restore-checkpoint).
+
+The verbs that act as the person need the nonce a client receives when it attaches, or the nonce of [`attach-presence`](#attach-presence). They refuse a caller inside a pane even when it has a copy.
+
+### Task cards
+
+The verbs behind `tuios task` and the [task board](https://tuios.dev/docs/task-boards). A pane needs the `task` grant to change a card, and changes only the card it holds unless it holds `admin`.
+
+[`add-task`](protocol-verbs.md#add-task), [`list-tasks`](protocol-verbs.md#list-tasks), [`get-task`](protocol-verbs.md#get-task), [`claim-task`](protocol-verbs.md#claim-task), [`finish-task`](protocol-verbs.md#finish-task), [`set-task-stage`](protocol-verbs.md#set-task-stage), [`block-task`](protocol-verbs.md#block-task), [`release-task`](protocol-verbs.md#release-task), [`remove-task`](protocol-verbs.md#remove-task), [`attach-task`](protocol-verbs.md#attach-task), [`detach-task`](protocol-verbs.md#detach-task), [`get-task-attachment`](protocol-verbs.md#get-task-attachment), [`get-task-dispatch`](protocol-verbs.md#get-task-dispatch).
+
+A pane attaches to the card it holds, and to the card it finished while that card waits in `verify` or `review`. A name already on the card with other content is `invalid_params` unless `replace` is set. With the same content it is left as it is and named in `unchanged`, so a retry succeeds. A state push never carries a card's attachments.
+
+### Files and worktrees
+
+[`stash-put`](protocol-verbs.md#stash-put), [`stash-get`](protocol-verbs.md#stash-get), [`stash-list`](protocol-verbs.md#stash-list), [`file-preview`](protocol-verbs.md#file-preview), [`new-worktree`](protocol-verbs.md#new-worktree), [`list-worktrees`](protocol-verbs.md#list-worktrees), [`remove-worktree`](protocol-verbs.md#remove-worktree), [`fan`](protocol-verbs.md#fan), [`compare-fan`](protocol-verbs.md#compare-fan), [`verify-fan`](protocol-verbs.md#verify-fan), [`keep-fan`](protocol-verbs.md#keep-fan), [`bundle-worktree`](protocol-verbs.md#bundle-worktree), [`ship-commit`](protocol-verbs.md#ship-commit), [`ship-merge`](protocol-verbs.md#ship-merge), [`ship-push`](protocol-verbs.md#ship-push), [`ship-pr`](protocol-verbs.md#ship-pr), [`ship-status`](protocol-verbs.md#ship-status).
+
+`ship-push` and `ship-pr` send nothing on the first call. They answer `confirm_required`: the hint's `available` lists what would be sent, and `confirm` carries a token. Call again with that token. A caller inside a pane or on a restricted connection also needs the person's `allow` in the Inbox, and the call waits for it (`wait`, default 120000 ms). See [Ship](https://tuios.dev/docs/ship) and [Checkpoints](https://tuios.dev/docs/checkpoints).
+
+### Other machines
+
+[`list-hosts`](protocol-verbs.md#list-hosts), [`list-host-sessions`](protocol-verbs.md#list-host-sessions), [`list-host-agents`](protocol-verbs.md#list-host-agents), [`open-host-connection`](protocol-verbs.md#open-host-connection), [`stream-pane`](protocol-verbs.md#stream-pane), [`attach-presence`](protocol-verbs.md#attach-presence), [`register-push`](protocol-verbs.md#register-push).
+
+### File transfers
+
+These verbs act on the files of the machine whose daemon answers them. To reach the files of another machine, send them on a connection from `open-host-connection`. That machine's [`files` policy](CONFIGURATION.md#files-over-a-link) then decides. Every path is absolute or starts with `~`. A pane needs the `admin` grant to use them.
+
+[`file-stat`](protocol-verbs.md#file-stat), [`file-list`](protocol-verbs.md#file-list), [`file-read`](protocol-verbs.md#file-read), [`file-hash`](protocol-verbs.md#file-hash), [`file-walk`](protocol-verbs.md#file-walk), [`file-mkdir`](protocol-verbs.md#file-mkdir), [`file-rename`](protocol-verbs.md#file-rename), [`file-remove`](protocol-verbs.md#file-remove), [`open-file-stream`](protocol-verbs.md#open-file-stream), [`file-commit`](protocol-verbs.md#file-commit), [`file-drop-dir`](protocol-verbs.md#file-drop-dir), [`transfer-start`](protocol-verbs.md#transfer-start), [`transfer-list`](protocol-verbs.md#transfer-list), [`transfer-pause`](protocol-verbs.md#transfer-pause).
+
+A copy goes on after the client exits, after a dropped link and after a daemon restart. Each file is checked with sha256 before it is put in place, and keeps the permission bits and modification time of the original. A destination that exists answers `file_exists` unless the call passes `conflict`: `replace`, `keep-both`, `merge` (a folder into a folder) or `fail`. With `move`, the original is removed after every file is checked. Links, named pipes, sockets and devices in a folder are not copied. The row counts them in `skipped`. See [Remote Hosts](https://tuios.dev/docs/remote-hosts#copy-files-between-machines).
+
+More verbs, `open-pane`, `pane-agent`, `pane-cwd`, `resize-pane`, `read-dir`, `wait-dir`, `close-pane`, `pane-calls`, `paste-pane-image` and `link-peer`, are what one daemon calls on another to run a window's process on a different machine. You do not normally call them yourself.
+
+With `[agents] enabled = false`, every agent verb fails with `agents_disabled`, and so do the agent conditions of `wait-for`. See [Turn off agent features](https://tuios.dev/docs/agents-off).
+
+### Events and waiting
+
+[`subscribe`](protocol-verbs.md#subscribe), [`unsubscribe`](protocol-verbs.md#unsubscribe), [`wait-for`](protocol-verbs.md#wait-for).
+
+### Other verbs
+
+[`agent-message-receipts`](protocol-verbs.md#agent-message-receipts), [`agent-preset`](protocol-verbs.md#agent-preset), [`agent-readiness`](protocol-verbs.md#agent-readiness), [`clear-history`](protocol-verbs.md#clear-history), [`close-pane`](protocol-verbs.md#close-pane), [`daemon-upgrade`](protocol-verbs.md#daemon-upgrade), [`delegate`](protocol-verbs.md#delegate), [`delete-buffer`](protocol-verbs.md#delete-buffer), [`drop-files`](protocol-verbs.md#drop-files), [`exec`](protocol-verbs.md#exec), [`file-abort`](protocol-verbs.md#file-abort), [`file-check`](protocol-verbs.md#file-check), [`get-keep-awake`](protocol-verbs.md#get-keep-awake), [`get-note`](protocol-verbs.md#get-note), [`host-speed-test`](protocol-verbs.md#host-speed-test), [`judge-fan`](protocol-verbs.md#judge-fan), [`link-peer`](protocol-verbs.md#link-peer), [`list-buffers`](protocol-verbs.md#list-buffers), [`list-push`](protocol-verbs.md#list-push), [`list-recordings`](protocol-verbs.md#list-recordings), [`list-routes`](protocol-verbs.md#list-routes), [`mark-recording`](protocol-verbs.md#mark-recording), [`open-pane`](protocol-verbs.md#open-pane), [`open-tree-stream`](protocol-verbs.md#open-tree-stream), [`pane-agent`](protocol-verbs.md#pane-agent), [`pane-calls`](protocol-verbs.md#pane-calls), [`pane-cwd`](protocol-verbs.md#pane-cwd), [`pane-kitty-medium`](protocol-verbs.md#pane-kitty-medium), [`paste-buffer`](protocol-verbs.md#paste-buffer), [`paste-pane-image`](protocol-verbs.md#paste-pane-image), [`place-agent`](protocol-verbs.md#place-agent), [`plugin-cell`](protocol-verbs.md#plugin-cell), [`plugin-notify`](protocol-verbs.md#plugin-notify), [`rail-pane`](protocol-verbs.md#rail-pane), [`read-dir`](protocol-verbs.md#read-dir), [`record-pane`](protocol-verbs.md#record-pane), [`remove-push`](protocol-verbs.md#remove-push), [`report-program-status`](protocol-verbs.md#report-program-status), [`resize-pane`](protocol-verbs.md#resize-pane), [`resize-window`](protocol-verbs.md#resize-window), [`retry-host`](protocol-verbs.md#retry-host), [`run-task-verify`](protocol-verbs.md#run-task-verify), [`set-agent-quiet`](protocol-verbs.md#set-agent-quiet), [`set-buffer`](protocol-verbs.md#set-buffer), [`set-fan-verdict`](protocol-verbs.md#set-fan-verdict), [`set-keep-awake`](protocol-verbs.md#set-keep-awake), [`set-note`](protocol-verbs.md#set-note), [`set-session-order`](protocol-verbs.md#set-session-order), [`set-task-dispatch`](protocol-verbs.md#set-task-dispatch), [`show-buffer`](protocol-verbs.md#show-buffer), [`speed-test`](protocol-verbs.md#speed-test), [`stop-recording`](protocol-verbs.md#stop-recording), [`swap-window`](protocol-verbs.md#swap-window), [`tml-close`](protocol-verbs.md#tml-close), [`tml-get`](protocol-verbs.md#tml-get), [`tml-input`](protocol-verbs.md#tml-input), [`tml-list`](protocol-verbs.md#tml-list), [`tml-open`](protocol-verbs.md#tml-open), [`tml-patch`](protocol-verbs.md#tml-patch), [`tml-place`](protocol-verbs.md#tml-place), [`tml-replace`](protocol-verbs.md#tml-replace), [`tml-validate`](protocol-verbs.md#tml-validate), [`transfer-answer`](protocol-verbs.md#transfer-answer), [`transfer-cancel`](protocol-verbs.md#transfer-cancel), [`transfer-clear`](protocol-verbs.md#transfer-clear), [`transfer-resume`](protocol-verbs.md#transfer-resume), [`wait-dir`](protocol-verbs.md#wait-dir), [`zoom-window`](protocol-verbs.md#zoom-window).
+
+## Examples
+
+```bash
+# Create a headless session and run a build in it
+printf '{"verb":"new-session","params":{"name":"ci"}}\n' | nc -U "$SOCK"
+printf '{"verb":"send-text","params":{"session":"ci","text":"make test\\n"}}\n' | nc -U "$SOCK"
+
+# Block until it finishes, then read the last 20 lines
+printf '{"verb":"wait-for","params":{"condition":"window-output","session":"ci","pattern":"(PASS|FAIL)","timeout":600000}}\n' | nc -U "$SOCK"
+printf '{"verb":"capture-pane","params":{"session":"ci","source":"recent","lines":20}}\n' \
+  | nc -U "$SOCK" | jq -r .result.content
+
+# Watch for bells and exits in every session
+printf '{"verb":"subscribe","params":{"types":["bell","window-exit"]}}\n' | nc -U "$SOCK" | jq -c .
+```
 
 ## Error codes
 
@@ -4543,8 +4692,7 @@ with a host-qualified session, and names the repository by `repo_url`.
 Params: `session`, `agent` (required, written as for `fan`), `args` (more
 argv after the agent's own words), `name` (the window's name, which
 `list-agents` shows and `-w` and `name:` take), `cwd`, `repo`, `repo_url`,
-`repos_root`, `clone`, `workspace` (omit for the calling pane's workspace,
-else the one the session shows), `focus` (default false), `prompt`,
+`repos_root`, `clone`, `workspace`, `focus` (default false), `prompt`,
 `ready_timeout` (milliseconds, default 120000), `env` (the rules of `fan`),
 `protocol` (`acp` or `codex`; see below).
 The agent is checked before a clone, so a missing agent does not cost one. A
