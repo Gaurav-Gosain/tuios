@@ -205,6 +205,9 @@ func (m *OS) RenameDialogTitle() string {
 		}
 		return "rename session"
 	case RenameWorkspace:
+		if slot, err := strconv.Atoi(m.RenameTargetID); err == nil {
+			return "rename workspace " + strconv.Itoa(m.workspaceDisplayNumber(slot))
+		}
 		return "rename workspace " + m.RenameTargetID
 	case RenameNote:
 		return "note for " + m.SessionLabel(m.RenameTargetID)

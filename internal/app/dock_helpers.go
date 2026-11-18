@@ -848,7 +848,8 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 	// of the current workspace, which the e2e harness reads as its source of
 	// truth for how many panes exist. Cutting it too is a separate change that
 	// needs that harness to grow another way to ask.
-	trail = fmt.Sprintf(" %d:%d ", m.dockWorkspace(), m.GetWorkspaceWindowCount(m.dockWorkspace()))
+	ws := m.dockWorkspace()
+	trail = fmt.Sprintf(" %d:%d ", m.workspaceDisplayNumber(ws), m.GetWorkspaceWindowCount(ws))
 
 	// Passive project-tape badge: when the focused window is inside a directory
 	// carrying a .tuios.tape, a small status marker rides in the dock. It is

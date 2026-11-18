@@ -2770,7 +2770,7 @@ func (m *OS) sidebarTerminals(sessions []sessiontree.Node, sessionID string) []s
 			} else {
 				// Another session's workspace names are not on the wire, so its
 				// panes get the numbered form.
-				e.Tag = "w" + strconv.Itoa(win.Workspace)
+				e.Tag = "w" + strconv.Itoa(m.workspaceDisplayNumber(win.Workspace))
 			}
 		}
 		out = append(out, e)

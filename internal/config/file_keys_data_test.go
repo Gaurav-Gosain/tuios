@@ -86,6 +86,9 @@ func dockLookKey(path string) FileKey {
 // fileKeys is every config.toml key outside optionSpecs, but for the two
 // kinds of table that have a reference of their own (see fileKeysSkipped).
 var fileKeys = []FileKey{
+	{Path: "workspaces.base_index", Type: OptionInt, Section: "workspaces", Default: "1", Accepted: []string{"0", "1"},
+		Description: "Number workspaces and their default digit keys from 0 or 1. The daemon's workspace IDs stay one-based."},
+
 	// [keybindings]: the keys that are not a section of bindings.
 	{Path: "keybindings.preset", Type: OptionString, Section: "keybindings", Accepted: []string{"tuios", "tmux", "screen", "zellij"},
 		Description: "The keys of another multiplexer, put over the tuios defaults. Empty is tuios. See KEYBINDINGS.md."},

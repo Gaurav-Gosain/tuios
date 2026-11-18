@@ -68,6 +68,10 @@ func (m *OS) sidebarSetEdgeWidth(edge sidebarEdge, width int) {
 
 func (m *OS) sidebarSessionSettingItems() []settingItem {
 	var rows []settingItem
+	workspaces := []string{"all"}
+	for slot := 1; slot <= 9; slot++ {
+		workspaces = append(workspaces, strconv.Itoa(m.workspaceDisplayNumber(slot)))
+	}
 	for _, side := range []struct {
 		edge sidebarEdge
 		name string
@@ -110,10 +114,10 @@ func (m *OS) sidebarSessionSettingItems() []settingItem {
 			},
 			settingItem{
 				Label: name + " workspaces", Desc: "Show the assigned session on every center workspace, or only on the numbered workspace.",
-				Control: controlEnum, Options: []string{"all", "1", "2", "3", "4", "5", "6", "7", "8", "9"},
+				Control: controlEnum, Options: workspaces,
 				value: func(m *OS) string {
 					if cfg := m.sidebarSessionConfig(edge); cfg != nil && cfg.SessionWorkspace > 0 {
-						return strconv.Itoa(cfg.SessionWorkspace)
+						return strconv.Itoa(m.workspaceDisplayNumber(cfg.SessionWorkspace))
 					}
 					return "all"
 				},

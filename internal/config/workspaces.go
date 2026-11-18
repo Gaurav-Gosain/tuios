@@ -63,13 +63,6 @@ var workspaceDigitPrefixes = [...]string{
 	"workspace_prefix_move_",
 }
 
-// digitToShiftedSpell is the character shift+digit makes on a US keyboard.
-// The workspace prefix's move keys use those characters rather than "shift+N".
-var digitToShiftedSpell = map[byte]byte{
-	'0': ')', '1': '!', '2': '@', '3': '#', '4': '$',
-	'5': '%', '6': '^', '7': '&', '8': '*', '9': '(',
-}
-
 // workspaceActionNumber is the workspace number named by an action such as
 // switch_workspace_3.
 func workspaceActionNumber(action string) (int, bool) {
@@ -97,10 +90,8 @@ func shiftWorkspaceDigitKey(key string, want byte) (string, bool) {
 		if key[0] >= '0' && key[0] <= '9' {
 			return string(want), true
 		}
-		for _, shifted := range digitToShiftedSpell {
-			if key[0] == shifted {
-				return string(digitToShiftedSpell[want]), true
-			}
+		if _, ok := shiftedDigitsReverse[key]; ok {
+			return shiftedDigits[string(want)], true
 		}
 	}
 	return key, false

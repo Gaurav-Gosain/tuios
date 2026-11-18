@@ -37,6 +37,37 @@ func TestUnknownWorkspaceTagsNothing(t *testing.T) {
 	}
 }
 
+func TestZeroBasedWorkspaceLabels(t *testing.T) {
+	m, _ := sectionsTestOS(t, 120, 30)
+	m.Settings.WorkspaceIndexOffset = 1
+	tree := sessiontree.Build([]sessiontree.SessionInput{
+		{Name: "api", CurrentWorkspace: 1, Windows: []sessiontree.WindowInput{
+			{ID: "aaaaaaaa1111", Title: "worker", Workspace: 2},
+		}},
+	})
+	if tag := m.sidebarTerminals(tree.Sessions, "api")[0].Tag; tag != "w1" {
+		t.Errorf("other session's workspace tag = %q, want w1", tag)
+	}
+	m.BeginRenameWorkspace(1)
+	if title := m.RenameDialogTitle(); title != "rename workspace 0" {
+		t.Errorf("rename dialog title = %q, want rename workspace 0", title)
+	}
+	for _, item := range m.sidebarSessionSettingItems() {
+		if item.Label != "Left workspaces" {
+			continue
+		}
+		item.adjust(m, 1)
+		if got := item.value(m); got != "0" || item.Options[1] != "0" {
+			t.Errorf("first workspace displays as %q (option %q), want 0", got, item.Options[1])
+		}
+		if slot := m.sidebarSessionConfig(sidebarLeft).SessionWorkspace; slot != 1 {
+			t.Errorf("saved workspace slot = %d, want 1", slot)
+		}
+		return
+	}
+	t.Fatal("missing left workspace setting")
+}
+
 // TestTerminalsFollowStripOrder: in the tiled scrolling layout the terminals
 // section lists a workspace's panes in the order the strip draws them, not in
 // the order they were created. Moving a column changes the strip and nothing

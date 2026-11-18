@@ -294,7 +294,7 @@ func (m *OS) dockSessionText() string {
 	if w := m.GetFocusedWindow(); w != nil {
 		pane = m.workspacePosition(w)
 	}
-	return config.FormatDockSession(format, m.SessionName, m.dockWorkspace(), pane)
+	return config.FormatDockSession(format, m.SessionName, m.workspaceDisplayNumber(m.dockWorkspace()), pane)
 }
 
 // dockCustomCells renders the custom components on one side, in list order,

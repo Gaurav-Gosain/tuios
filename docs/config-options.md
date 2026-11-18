@@ -495,6 +495,12 @@ These keys are read from `config.toml` only. `tuios set-config` and the settings
 NAME stands for a name that you choose, such as the name of a host.
 The description of a table names its keys.
 
+### workspaces
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| <a id="workspaces.base_index"></a>`workspaces.base_index` | int | `1` | Number workspaces and their default digit keys from 0 or 1. The daemon's workspace IDs stay one-based. Values: `0`, `1`. |
+
 ### keybindings
 
 | Key | Type | Default | Description |

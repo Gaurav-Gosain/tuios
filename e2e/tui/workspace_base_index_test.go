@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"os"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuitest"
@@ -20,9 +21,8 @@ import (
 //     opt+1 first (which must leave slot 1) and opt+0 after (which must come
 //     back), so a no-op fails one of the two.
 //
-// Negative control: make zeroBasedWorkspaceDefaults return its input unchanged
-// and the alt presses land on the wrong slot; make FormatWorkspaceTab ignore
-// the offset and the pill assertion fails.
+// Negative controls: remove the call that shifts default bindings or the call
+// that loads WorkspaceIndexOffset. See NEGATIVE_CONTROLS.md.
 func TestWorkspaceBaseIndexZeroShiftsKeysAndNumbers(t *testing.T) {
 	for _, tc := range []struct {
 		name, config, first, second string
@@ -61,6 +61,12 @@ func TestWorkspaceBaseIndexZeroShiftsKeysAndNumbers(t *testing.T) {
 			term := attachIn(t, base, sess, startOpts{})
 			// Slot 1 shows 0 and slot 2 shows 1, not 1 and 2.
 			waitPills(t, term, tc.first, tc.second)
+			if tc.name == "zero-based" {
+				waitPills(t, term, "0:1")
+			}
+			if tc.name == "zero-based" && os.Getenv("TUIOS_E2E_FRAMES") != "" {
+				savePNG(t, term.Screen(), hostPalette(t, ""), artifactDir(t), "workspace-0")
+			}
 
 			// secondKey must leave slot 1 for slot 2; firstKey must then reach firstSlot.
 			if err := term.SendKeys(tuitest.Alt(tc.secondKey)); err != nil {
@@ -68,6 +74,15 @@ func TestWorkspaceBaseIndexZeroShiftsKeysAndNumbers(t *testing.T) {
 			}
 			if got := waitClientWorkspace(t, base, 2); got != 2 {
 				t.Fatalf("ASSERTION: alt+%c left the client on workspace %d, want 2\n%s", tc.secondKey, got, term.Snapshot())
+			}
+			if tc.name == "zero-based" {
+				waitPills(t, term, "1:1")
+			}
+			if tc.name == "zero-based" && os.Getenv("TUIOS_E2E_FRAMES") != "" {
+				if err := term.WaitFor(func(s tuitest.Screen) bool { return screenHas(s, "REVWPANE") }, uiTimeout); err != nil {
+					t.Fatalf("workspace 1 pane did not appear: %v", err)
+				}
+				savePNG(t, term.Screen(), hostPalette(t, ""), artifactDir(t), "workspace-1-after-alt-1")
 			}
 
 			if err := term.SendKeys(tuitest.Alt(tc.firstKey)); err != nil {
@@ -82,6 +97,16 @@ func TestWorkspaceBaseIndexZeroShiftsKeysAndNumbers(t *testing.T) {
 			gotoWaitRows(t, term, "numeric workspace filter must find panes in named workspaces", []string{"REVWPANE"}, nil)
 			saveArtifact(t, term, artifactDir(t), "workspace-number-filter")
 			sendKeys(t, term, tuitest.Esc)
+			if tc.name == "zero-based" {
+				sendKeys(t, term, tuitest.Ctrl('b'), "w", "1")
+				if got := waitClientWorkspace(t, base, 2); got != 2 {
+					t.Fatalf("workspace prefix 1 left the client on slot %d, want 2", got)
+				}
+				sendKeys(t, term, tuitest.Ctrl('b'), "w", "0")
+				if got := waitClientWorkspace(t, base, 1); got != 1 {
+					t.Fatalf("workspace prefix 0 left the client on slot %d, want 1", got)
+				}
+			}
 			alive(t, term, "after base-index workspace switches")
 		})
 	}
