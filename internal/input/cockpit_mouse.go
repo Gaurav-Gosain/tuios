@@ -117,21 +117,45 @@ func cockpitMouseRelease(o *app.OS) (bool, tea.Cmd) {
 	return true, o.CockpitCopyFinish(g.Clicks)
 }
 
-// quickLookCopyPress handles a left press in copy mode over quick look's
-// text: the cursor goes to the cell, or a double or triple click selects, or
-// shift moves the selection's end. It reports whether the press was taken.
+// quickLookCopyPress handles a left press on quick look's text. Outside copy
+// mode a plain press waits for the pointer to move, and a double or triple
+// click selects. In copy mode the cursor goes to the cell, and shift moves
+// the selection's end. A plain press ends a selection the mouse made. It
+// reports whether the press was on the text.
 func quickLookCopyPress(msg tea.MouseClickMsg, o *app.OS) bool {
 	x, y := msg.Mouse().X, msg.Mouse().Y
 	g := o.QuickLookMouse()
-	if g == nil || msg.Button != tea.MouseLeft || !o.QuickLookCopyOnText(x, y) {
+	if g == nil {
 		return false
 	}
-	cm, grid := o.QuickLookCopy()
-	cx, cy, rows, _ := o.QuickLookCopyCell(x, y)
+	g.Armed = false
+	if msg.Button != tea.MouseLeft || !o.QuickLookCopyOnText(x, y) {
+		return false
+	}
 	o.CancelPendingCopy()
 	clicks := g.Register(x, y, o.DoubleClickWindow())
-	g.X, g.Y, g.Dragged, g.Armed = x, y, false, true
-	if msg.Mod&tea.ModShift != 0 {
+	g.X, g.Y, g.Dragged = x, y, false
+	shift := msg.Mod&tea.ModShift != 0
+	cm, grid := o.QuickLookCopy()
+	if cm != nil && cm.Implicit && clicks == 1 && !shift {
+		o.QuickLookCopyEnd()
+		cm = nil
+	}
+	if cm == nil && clicks == 1 {
+		// A plain press, or shift with nothing selected: the first move
+		// starts the selection here.
+		g.Armed = !shift
+		return true
+	}
+	if cm == nil {
+		var ok bool
+		if cm, grid, ok = o.QuickLookMouseCopy(); !ok {
+			return true
+		}
+	}
+	cx, cy, rows, _ := o.QuickLookCopyCell(x, y)
+	g.Armed = true
+	if shift {
 		gridDrag(cm, grid, cx, cy, rows)
 		g.Dragged = true
 		return true
@@ -151,8 +175,18 @@ func quickLookCopyMotion(msg tea.MouseMotionMsg, o *app.OS) bool {
 		return true
 	}
 	cm, grid := o.QuickLookCopy()
+	if cm == nil {
+		// The first move of a plain press starts the selection at the press.
+		var ok bool
+		if cm, grid, ok = o.QuickLookMouseCopy(); !ok {
+			g.Armed = false
+			return false
+		}
+		px, py, rows, _ := o.QuickLookCopyCell(g.X, g.Y)
+		gridPress(cm, grid, px, py, rows, 1, &o.Settings)
+	}
 	cx, cy, rows, ok := o.QuickLookCopyCell(x, y)
-	if cm == nil || !ok {
+	if !ok {
 		g.Armed = false
 		return false
 	}
@@ -171,9 +205,16 @@ func quickLookCopyRelease(o *app.OS) (bool, tea.Cmd) {
 	g.Armed = false
 	cm, grid := o.QuickLookCopy()
 	if cm == nil || !cm.State.InVisual() || !g.Dragged && g.Clicks < 2 {
+		if cm != nil && cm.Implicit {
+			o.QuickLookCopyEnd()
+		}
 		return true, nil
 	}
-	return true, o.QuickLookCopyFinish(extractVisualText(cm, grid))
+	text, ok := o.QuickLookCopyText()
+	if !ok {
+		text = extractVisualText(cm, grid)
+	}
+	return true, o.QuickLookCopyFinish(text)
 }
 
 // handleSelectionCopy copies the thread's selection, the menu's Copy.

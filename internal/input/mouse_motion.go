@@ -47,6 +47,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if mouse.Button == tea.MouseNone {
 		o.EndPointerGrabs()
 		o.QuickLookBarRelease()
+		o.QuickLookLetGo()
 	}
 	if o.QuickLookBarDrag(o.LastMouseX) {
 		return o, nil
@@ -118,6 +119,11 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// A press in a draft selects as the pointer moves, over the panel or
 	// past it.
 	if o.DraftDrag(mouse.X, mouse.Y) {
+		return o, nil
+	}
+	// Quick look is on top: the pointer over it is its own, so nothing under
+	// it hovers, takes the focus or hears the motion.
+	if o.QuickLookTakesMotion(mouse.X, mouse.Y) {
 		return o, nil
 	}
 	if !o.Dragging && !o.Resizing && !o.ScrollbarDragging {

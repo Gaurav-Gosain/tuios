@@ -210,11 +210,17 @@ type quickLookState struct {
 	// rowSpans is the syntax spans of the wrapped or cut row being drawn, kept so
 	// a frame allocates no spans slice per row.
 	rowSpans []diffview.Span
-	// copy is copy mode over the text, nil when it is off. codeW and bodyRows
-	// are the code column and the rows of the last text drawn, where copy
-	// mode lays the text out. See quicklook_copy.go.
-	copy            *quickLookCopy
-	codeW, bodyRows int
+	// copy is copy mode over the text, nil when it is off. textX, textY,
+	// textW and bodyRows are where the last text or Markdown was drawn in
+	// the body, its width and its rows, where copy mode lays the text out.
+	// textW is 0 when the body holds neither. See quicklook_copy.go.
+	copy                          *quickLookCopy
+	textX, textY, textW, bodyRows int
+	// mouse is a press on the text, and held says the left or another
+	// button went down on the panel: the pointer is the panel's until it
+	// comes up. See quicklook_copy_mouse.go.
+	mouse CopyMouseGesture
+	held  bool
 	// hostOlder holds the machines whose file-preview verb has no windows, and
 	// hostAsked those it was asked of, once per link.
 	hostOlder map[string]bool
@@ -411,6 +417,7 @@ func (m *OS) dropQuickLook() {
 	ql := &m.quickLook
 	ql.open = false
 	ql.copy = nil
+	ql.mouse, ql.held, ql.textW = CopyMouseGesture{}, false, 0
 	ql.target = quickLookTarget{}
 	ql.borrowed = false
 	ql.free, ql.wantLine = false, 0
@@ -879,6 +886,11 @@ func (m *OS) QuickLookMouseClick(x, y int) bool {
 		return false
 	}
 	if ql.box.Contains(x, y) {
+		ql.held = true
+		// A press on the panel off the text ends a selection the mouse made.
+		if q := ql.copy; q != nil && q.cm.Implicit && !m.QuickLookCopyOnText(x, y) {
+			m.QuickLookCopyEnd()
+		}
 		m.quickLookBarClick(x, y)
 		return true
 	}
@@ -1015,6 +1027,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 // below it the content. It returns the picture's box in the body.
 func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) quickLookPic {
 	ql := &m.quickLook
+	ql.textW = 0
 	pal := l.pal
 	t := ql.target
 	// center draws a sentence in the middle of the body, wrapped: a refusal
@@ -1130,7 +1143,7 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 		if ql.scroll < 0 && (r.startOff == 0 || r.older || r.stopped) {
 			ql.scroll = 0
 		}
-		ql.codeW, ql.bodyRows = codeW, bodyRows
+		ql.textX, ql.textY, ql.textW, ql.bodyRows = codeX, bodyTop, codeW, bodyRows
 		if q := ql.copy; q != nil {
 			if q.w == codeW && q.h == bodyRows {
 				m.drawQuickLookCopy(c, pal, dv, r, q, codeX, gutter, bodyTop)
@@ -1181,6 +1194,16 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 		mk := quickLookMDKey{res: r, width: width, look: ql.lookKey, open: ql.mdOpen}
 		if ql.mdKey != mk || ql.mdLines == nil {
 			ql.mdLines, ql.mdKey = m.ckMarkdownWith(l, r.md, width, markdown.Options{Max: quickLookMarkdownMax, CloseDetails: !ql.mdOpen}), mk
+		}
+		ql.textX, ql.textY, ql.textW, ql.bodyRows = 1, bodyTop, width, bodyRows
+		if q := ql.copy; q != nil && q.md != nil {
+			if q.w == width && q.h == bodyRows {
+				m.drawQuickLookMDCopy(c, q, 1, bodyTop)
+				break
+			}
+			// The panel changed size under the selection: its rows no
+			// longer fit, and it ends.
+			m.QuickLookCopyEnd()
 		}
 		from := scrollTo(len(ql.mdLines))
 		for i := 0; i < bodyRows && from+i < len(ql.mdLines); i++ {
@@ -1411,8 +1434,10 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 		}
 		return keys[0]
 	}
-	if ql.copy != nil {
-		// Copy mode over the text has the keys it has over a pane.
+	if ql.copy != nil && !ql.copy.cm.Implicit {
+		// Copy mode over the text has the keys it has over a pane. A
+		// selection the mouse made keeps the panel's own keys: the next key
+		// ends it.
 		return copyModeLegend(ql.copy.cm.State, m.copyModeExitKey())
 	}
 	if ql.free && !ql.inside {

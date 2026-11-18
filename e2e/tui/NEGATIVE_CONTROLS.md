@@ -18236,3 +18236,18 @@ Run on 2026-11-18 on macOS (arm64):
 | Removed | The test fails with | Result |
 |---------|---------------------|--------|
 | The fix: the binary built from origin/main, with no `RightClickPending` reset in `handleMouseMotion` | "a right-drag that came back to its start opened a context menu"; the frame shows the pane menu | **caught** |
+## Quick look takes the mouse
+
+`TestQuickLookTakesTheMouse` in `quicklook_mouse_test.go`. Two tiled panes with focus_follows_mouse on. A ctrl+click on a path in the right pane opens quick look, and a hover over the panel where the left pane lies under it must leave the focus on the right pane for a second. A drag over a line of text in the panel must copy the words it crossed, with no copy mode key first. The same drag over a paragraph of a Markdown file must copy its words.
+
+Run on macOS on 2026-11-18. The branch passes the test, and the 26 other quick look and copy mode tests pass.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main | "quicklook_mouse_test.go:72: ASSERTION: a hover over quick look moved the focus to the pane under it" | **caught** |
+| `QuickLookTakesMotion` not called from `handleMouseMotion` | "quicklook_mouse_test.go:71: ASSERTION: a hover over quick look moved the focus to the pane under it" | **caught** |
+| `quickLookCopyPress` not called from `handleMouseClick` | "quicklook_mouse_test.go:81: ASSERTION: a drag over the text in quick look: nothing reached the clipboard" | **caught** |
+| The Markdown case cut from `quickLookCopyBegin` | "quicklook_mouse_test.go:104: ASSERTION: a drag over Markdown in quick look: nothing reached the clipboard" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestQuickLookTakesTheMouse$' -v .`.

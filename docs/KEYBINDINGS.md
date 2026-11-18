@@ -349,6 +349,12 @@ the frames of a GIF.
 shows that row. `Space` or `Esc` closes the preview. A click outside it closes
 it too. When the sidebar loses keyboard focus, the preview closes.
 
+The mouse over the preview stays in the preview. A pane under it does not get
+the focus or the mouse. Drag over the text or the Markdown to select it. A
+double click selects a word, and a triple click selects a line. The selection
+goes to the clipboard when you release the button. The next click or key
+removes the selection.
+
 These keys move inside the file. The preview shows the keys that work now. All
 other keys go to the sidebar.
 

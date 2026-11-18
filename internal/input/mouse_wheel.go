@@ -34,8 +34,12 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// Quick look scrolls its text under the pointer.
-	if wm := msg.Mouse(); !horizontal && o.QuickLookWheel(wm.X, wm.Y, msg.Button == tea.MouseWheelUp) {
+	// Quick look scrolls its text under the pointer. A sideways wheel over
+	// it is its own too, so the pane under it does not scroll.
+	if wm := msg.Mouse(); o.QuickLookContains(wm.X, wm.Y) {
+		if !horizontal {
+			o.QuickLookWheel(wm.X, wm.Y, msg.Button == tea.MouseWheelUp)
+		}
 		return o, nil
 	}
 

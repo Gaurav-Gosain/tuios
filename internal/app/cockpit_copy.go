@@ -218,6 +218,11 @@ func (m *OS) CockpitCopyText(start, end terminal.Position, line, block bool) str
 	if q == nil {
 		return ""
 	}
+	return ckCopyRowsText(q.rows, q.w, start, end, line, block)
+}
+
+// ckCopyRowsText is CockpitCopyText over rows of width w.
+func ckCopyRowsText(rows []ckCopyRow, w int, start, end terminal.Position, line, block bool) string {
 	if start.Y > end.Y || start.Y == end.Y && start.X > end.X {
 		start, end = end, start
 	}
@@ -227,9 +232,9 @@ func (m *OS) CockpitCopyText(start, end terminal.Position, line, block bool) str
 		more, cont bool
 	}
 	var parts []piece
-	for y := max(start.Y, 0); y <= min(end.Y, len(q.rows)-1); y++ {
-		r := q.rows[y]
-		a, b := 0, q.w-1
+	for y := max(start.Y, 0); y <= min(end.Y, len(rows)-1); y++ {
+		r := rows[y]
+		a, b := 0, w-1
 		switch {
 		case block:
 			a, b = x0, x1

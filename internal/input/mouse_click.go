@@ -49,7 +49,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// tracking, where the right button belongs to that app; elsewhere a plain
 	// right-click reaches the menu too, decided on release once it is clear the
 	// gesture was not a resize drag (handleMouseRelease).
-	if msg.Button == tea.MouseRight && msg.Mod&(tea.ModShift|tea.ModCtrl) != 0 {
+	if msg.Button == tea.MouseRight && msg.Mod&(tea.ModShift|tea.ModCtrl) != 0 && !o.QuickLookContains(X, Y) {
 		o.OpenContextMenu(X, Y)
 		return o, nil
 	}
@@ -62,12 +62,10 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// Quick look keeps a press on its panel, and closes for a press anywhere
-	// else, which then goes on to what it was aimed at.
-	// In copy mode over quick look's text a press moves the cursor.
-	if quickLookCopyPress(msg, o) {
-		return o, nil
-	}
+	// else, which then goes on to what it was aimed at. A press on its text
+	// may start a selection, or in copy mode moves the cursor.
 	if o.QuickLookMouseClick(X, Y) {
+		quickLookCopyPress(msg, o)
 		return o, nil
 	}
 

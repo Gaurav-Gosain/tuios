@@ -47,15 +47,22 @@ type quickLookCopy struct {
 	// wrap is what the preview's wrap was before copy mode turned it on.
 	wrap bool
 	// x0 and y0 are where the view was drawn in the panel's body in the
-	// last frame, for the mouse, and mouse is a press on it.
+	// last frame, for the mouse.
 	x0, y0 int
-	mouse  CopyMouseGesture
+	// md is the rows of a Markdown file as the panel draws it, nil over
+	// text. Each row is one laid-out line, and rows holds its number.
+	md []ckCopyRow
 }
 
-// newQuickLookCopy lays the lines out as rows of width w.
-func newQuickLookCopy(lines []string, w, h int) *quickLookCopy {
+// newQuickLookCopy lays the lines out as rows of width w. cut gives each
+// line one row, cut at the edge, as the panel draws it with wrap off.
+func newQuickLookCopy(lines []string, w, h int, cut bool) *quickLookCopy {
 	q := &quickLookCopy{lines: lines, w: max(w, 1), h: max(h, 1)}
 	for n, line := range lines {
+		if cut {
+			q.rows = append(q.rows, quickLookCopyRow{line: n, end: quickLookCutEnd(line, q.w)})
+			continue
+		}
 		at := 0
 		for {
 			end, _ := quickLookWrapNext(line, at, q.w)
@@ -71,11 +78,25 @@ func newQuickLookCopy(lines []string, w, h int) *quickLookCopy {
 	return q
 }
 
+// newQuickLookMDCopy is copy mode over the laid-out lines of a Markdown
+// file, one row each.
+func newQuickLookMDCopy(rows []ckCopyRow, w, h int) *quickLookCopy {
+	q := &quickLookCopy{md: rows, w: max(w, 1), h: max(h, 1)}
+	q.rows = make([]quickLookCopyRow, len(rows))
+	for i := range q.rows {
+		q.rows[i] = quickLookCopyRow{line: i, more: rows[i].more}
+	}
+	return q
+}
+
 // rowCells is row i as w cells: a cluster's cell, a blank cell after it for
 // each column more it takes, and spaces to the edge.
 func (q *quickLookCopy) rowCells(i int) []uv.Cell {
 	if i < 0 || i >= len(q.rows) {
 		return nil
+	}
+	if q.md != nil {
+		return q.md[i].cells
 	}
 	if q.cells[i] != nil {
 		return q.cells[i]
@@ -193,22 +214,46 @@ func (q *quickLookCopy) LastContentCol() int { return q.w - 1 }
 // cursor on the first row in view. It reports false when the keyboard is not
 // inside a text preview, or before the text has been drawn once.
 func (m *OS) QuickLookCopyStart() bool {
+	return m.quickLookCopyBegin(false)
+}
+
+// quickLookCopyBegin starts copy mode over the text in view, as the key does
+// or, implicit, for a mouse selection. A mouse selection keeps the rows as
+// the panel draws them, so nothing moves under the pointer, and it runs over
+// a Markdown file too. The key wraps long lines, so every character is on a
+// row it can reach.
+func (m *OS) quickLookCopyBegin(implicit bool) bool {
 	ql := &m.quickLook
 	r := ql.res
-	if !ql.open || !ql.inside || ql.copy != nil || r == nil || r.kind != "text" || len(r.lines) == 0 || ql.codeW <= 0 || ql.bodyRows <= 0 {
+	if !ql.open || ql.copy != nil || r == nil || ql.textW <= 0 || ql.bodyRows <= 0 {
 		return false
 	}
-	q := newQuickLookCopy(r.lines, ql.codeW, ql.bodyRows)
+	var q *quickLookCopy
+	switch {
+	case r.kind == "text" && len(r.lines) > 0 && (implicit || ql.inside):
+		q = newQuickLookCopy(r.lines, ql.textW, ql.bodyRows, implicit && !ql.wrap)
+	case r.kind == "markdown" && implicit && len(ql.mdLines) > 0:
+		q = newQuickLookMDCopy(ckCopyOf(ql.look, ql.mdLines, nil, ql.textW), ql.textW, ql.bodyRows)
+	default:
+		return false
+	}
 	q.res, q.wrap = r, ql.wrap
-	line := max(min(ql.scroll, len(r.lines)-1), 0)
+	q.x0, q.y0 = ql.textX, ql.textY
+	line := max(min(ql.scroll, len(q.rows)-1), 0)
+	if q.md == nil {
+		line = max(min(ql.scroll, len(r.lines)-1), 0)
+	}
 	top := 0
 	for top < len(q.rows) && q.rows[top].line < line {
 		top++
 	}
 	q.SetScrollOffset(q.ScrollbackLen() - top)
-	q.cm = terminal.CopyMode{Active: true, State: terminal.CopyModeNormal, ScrollOffset: q.offset}
+	q.cm = terminal.CopyMode{Active: true, State: terminal.CopyModeNormal, ScrollOffset: q.offset, Implicit: implicit}
 	q.cm.CursorY = max(top-q.top(), 0)
-	ql.copy, ql.wrap = q, true
+	ql.copy = q
+	if !implicit {
+		ql.wrap = true
+	}
 	return true
 }
 
@@ -258,6 +303,18 @@ func (m *OS) drawQuickLookCopy(c *ckCanvas, pal overlay.Palette, dv *diffview.Th
 		c.draw(codeX, bodyTop+y, q.w, dv.Code(line[row.at:row.end], ql.rowSpans, diffview.Range{}, diffview.Context, false, 0, q.w))
 	}
 	drawCopyMarks(c, m.marks(), &q.cm, codeX, bodyTop, q.w, q.h, top)
+}
+
+// drawQuickLookMDCopy draws the Markdown from copy mode's top row, with the
+// selection on it.
+func (m *OS) drawQuickLookMDCopy(c *ckCanvas, q *quickLookCopy, x, bodyTop int) {
+	q.x0, q.y0 = x, bodyTop
+	lines := m.quickLook.mdLines
+	top := q.top()
+	for y := 0; y < q.h && top+y < len(lines); y++ {
+		drawCkLineAt(c, x, bodyTop+y, q.w, lines[top+y])
+	}
+	drawCopyMarks(c, m.marks(), &q.cm, x, bodyTop, q.w, q.h, top)
 }
 
 // drawCopyMarks draws copy mode's search matches, selection and cursor over

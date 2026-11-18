@@ -55,7 +55,15 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	// Copy mode over the preview takes every key, as it does over a pane.
 	if cm, grid := o.QuickLookCopy(); cm != nil {
-		return handleQuickLookCopyKey(msg, o, cm, grid)
+		if !cm.Implicit {
+			return handleQuickLookCopyKey(msg, o, cm, grid)
+		}
+		// A selection the mouse made ends on the next key, which then acts
+		// as usual. esc only ends it.
+		o.QuickLookCopyEnd()
+		if msg.String() == "esc" {
+			return o, nil
+		}
 	}
 	// Quick look first. Its key opens the preview on a row of the listing and
 	// closes it from any row, and esc closes it before esc leaves the rail.
@@ -441,7 +449,15 @@ func handleFreeQuickLookKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 	if cm, grid := o.QuickLookCopy(); cm != nil {
-		return handleQuickLookCopyKey(msg, o, cm, grid)
+		if !cm.Implicit {
+			return handleQuickLookCopyKey(msg, o, cm, grid)
+		}
+		// A selection the mouse made ends on the next key, which then acts
+		// as usual. esc only ends it.
+		o.QuickLookCopyEnd()
+		if msg.String() == "esc" {
+			return o, nil
+		}
 	}
 	if tableAction(o, msg, o.KeybindRegistry, config.TableSidebarFiles) == sidebarActFileQuickLook {
 		o.CloseQuickLook()

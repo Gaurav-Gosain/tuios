@@ -62,7 +62,9 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// for the rest of the dialog's life.
 	// A selection in copy mode over quick look's text ends on the release,
 	// and copies.
-	if taken, cmd := quickLookCopyRelease(o); taken {
+	// A press on quick look keeps its release, so the pane under the panel
+	// never hears a release it did not see pressed.
+	if taken, cmd := quickLookCopyRelease(o); o.QuickLookLetGo() || taken {
 		return o, cmd
 	}
 	if mouse := msg.Mouse(); o.ShowInbox {
