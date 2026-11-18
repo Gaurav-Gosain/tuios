@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -558,6 +559,12 @@ func newWindowAsksForAMachine(t *testing.T, base string, env []string, sess stri
 //   - the hosts not back up after the restart, so the picker has one machine
 //     and stays shut: the test waits for alpha and beta up each time.
 //
+// Then it takes the mark out of the saved file, as an older daemon lost it,
+// and restarts. The session must come back plain, and set-session-space
+// --global must mark it again: ls --json says so, and prefix c in a client
+// attached before the call asks for a machine. --global=false with a space
+// takes the mark off and files it, and --global takes it out of the space.
+//
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "A global session stays
 // global across a restart").
 func TestAGlobalSessionStaysGlobalAcrossARestart(t *testing.T) {
@@ -578,10 +585,16 @@ func TestAGlobalSessionStaysGlobalAcrossARestart(t *testing.T) {
 		t.Fatalf("ASSERTION: prefix c in the global session did not ask for a machine before any restart")
 	}
 
-	for round := 1; round <= 2; round++ {
+	// restart stops this machine's daemon, runs edit on the saved state while
+	// no daemon holds it, and starts a daemon, which restores the session.
+	restart := func(round int, edit func()) {
+		t.Helper()
 		// kill-server is synchronous and saves every session on the way out.
 		if out, err := tuiosCLIEnv(t, f.here, f.env, "kill-server"); err != nil {
 			t.Fatalf("restart %d: kill-server: %v: %s", round, err, out)
+		}
+		if edit != nil {
+			edit()
 		}
 		// Starting any session starts a daemon, and a daemon restores on start.
 		if out, err := tuiosCLIEnv(t, f.here, f.env, "new", fmt.Sprintf("trigger-%d", round), "--detach"); err != nil {
@@ -590,6 +603,9 @@ func TestAGlobalSessionStaysGlobalAcrossARestart(t *testing.T) {
 		waitForHostListing(t, f.here, func(s string) bool {
 			return hostLineUp(s, "alpha") && hostLineUp(s, "beta")
 		}, "alpha and beta never came back up after the restart")
+	}
+	for round := 1; round <= 2; round++ {
+		restart(round, nil)
 		global, restored := sessionIsGlobal(t, f.here, f.env, "work")
 		if !restored {
 			t.Fatalf("restart %d: work is listed but not as restored, so the restart did not happen", round)
@@ -602,6 +618,83 @@ func TestAGlobalSessionStaysGlobalAcrossARestart(t *testing.T) {
 		if !newWindowAsksForAMachine(t, f.here, f.env, "work", 2, fmt.Sprintf("global-restore-after-%d", round)) {
 			t.Fatalf("ASSERTION: restart %d: prefix c in the restored global session opened a pane without asking for a machine", round)
 		}
+	}
+
+	// A session that lost the mark, as one restored by an older daemon did:
+	// its saved file has no global key. set-session-space --global marks it
+	// again, and a client attached at the time asks for a machine at once.
+	saved := filepath.Join(xdgDir(f.here, "XDG_STATE_HOME"), "tuios", "sessions", "work.json")
+	restart(3, func() {
+		data, err := os.ReadFile(saved)
+		if err != nil {
+			t.Fatalf("read the saved state: %v", err)
+		}
+		// UseNumber keeps the nanosecond times exact through the rewrite.
+		var st map[string]any
+		dec := json.NewDecoder(bytes.NewReader(data))
+		dec.UseNumber()
+		if err := dec.Decode(&st); err != nil {
+			t.Fatalf("parse the saved state: %v", err)
+		}
+		if st["global"] != true {
+			t.Fatalf("ASSERTION: the saved state of the global session has no global mark: %s", data)
+		}
+		delete(st, "global")
+		if data, err = json.Marshal(st); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(saved, data, 0o600); err != nil {
+			t.Fatalf("write the saved state: %v", err)
+		}
+	})
+	if global, restored := sessionIsGlobal(t, f.here, f.env, "work"); global || !restored {
+		t.Fatalf("the session restored from a file with no mark is listed global=%v restored=%v, want a restored plain session", global, restored)
+	}
+	term := startIn(t, f.here, startOpts{args: []string{"attach", "work"}, env: f.env})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 2 }, bootTimeout); err != nil {
+		t.Fatalf("the client never showed the 2 windows of work: %v\n%s", err, term.Snapshot())
+	}
+	out, err := tuiosCLIEnv(t, f.here, f.env, "set-session-space", "-s", "work", "--global")
+	if err != nil || !strings.Contains(out, "Session work is global.") {
+		t.Fatalf("ASSERTION: set-session-space --global did not mark work global: %v: %s", err, out)
+	}
+	if global, _ := sessionIsGlobal(t, f.here, f.env, "work"); !global {
+		t.Fatalf("ASSERTION: set-session-space --global said so, but ls --json does not list work as global")
+	}
+	if err := term.SendKeys(tuitest.Ctrl('b'), "c"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return pickerOpen(s, pickerWindowTitle) || countWindows(s) > 2
+	}, uiTimeout); err != nil || !pickerOpen(term.Screen(), pickerWindowTitle) {
+		saveFrame(t, term, "global-set-again")
+		t.Fatalf("ASSERTION: after set-session-space --global, prefix c in the attached client did not ask for a machine: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "global-set-again")
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatal(err)
+	}
+	waitPickerClosed(t, term, pickerWindowTitle)
+
+	// --global=false takes the mark off and files the session in one call,
+	// and --global takes it back out of the space.
+	if out, err := tuiosCLIEnv(t, f.here, f.env, "set-session-space", "-s", "work", "--global=false", "payments"); err != nil || !strings.Contains(out, "is in space payments") {
+		t.Fatalf("ASSERTION: set-session-space --global=false payments: %v: %s", err, out)
+	}
+	if global, _ := sessionIsGlobal(t, f.here, f.env, "work"); global {
+		t.Fatalf("ASSERTION: --global=false left work global")
+	}
+	if sp := sessionSpaces(t, f.here)["work"]; sp != "payments" {
+		t.Fatalf("ASSERTION: after --global=false payments, work is in space %q, want payments", sp)
+	}
+	if out, err := tuiosCLIEnv(t, f.here, f.env, "set-session-space", "-s", "work", "--global", "payments"); err == nil || !strings.Contains(out, globalSpaceRefusal) {
+		t.Fatalf("ASSERTION: --global with a space was not refused with %q: %v: %s", globalSpaceRefusal, err, out)
+	}
+	if out, err := tuiosCLIEnv(t, f.here, f.env, "set-session-space", "-s", "work", "--global"); err != nil {
+		t.Fatalf("set-session-space --global from a space: %v: %s", err, out)
+	}
+	if sp := sessionSpaces(t, f.here)["work"]; sp != "" {
+		t.Fatalf("ASSERTION: marking work global left it in space %q", sp)
 	}
 }
 

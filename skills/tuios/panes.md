@@ -584,6 +584,7 @@ tuios set-session-accent cyan
 tuios set-workspace-name 2 review
 tuios set-session-space payments          # file the session under the space payments
 tuios set-session-space                   # take it out of any space
+tuios set-session-space -s work --global  # mark work global
 tuios set-session-order work notes        # work, then notes, on every client
 tuios new --detach pay-api --space payments
 ```
@@ -605,3 +606,4 @@ and the sidebar list the sessions under one heading per space, the sessions
 in no space last. Over the control protocol it is `set-session-space` and the
 `space` param of `new-session`. A space name follows the session name rules
 and is at most 64 bytes. A global session cannot be in a space.
+`--global` marks a session global, and `--global=false` takes the mark off.

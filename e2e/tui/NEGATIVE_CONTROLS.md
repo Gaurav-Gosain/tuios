@@ -18176,5 +18176,14 @@ Run on 2026-11-18 on macOS (arm64) through the Mac pool.
 | The branch | passes | fixed |
 | The positive half | none: the picker must open in `work` before any restart, in the same fixture | **guard** |
 
-The frames are `global-restore-before.txt`, `global-restore-after-1.txt` and `global-restore-after-2.txt` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
+The test then takes the `global` key out of the saved file, as an older daemon lost it, and restarts. `work` must come back plain. A client attaches. `tuios set-session-space -s work --global` must mark `work` global in `ls --json`, and prefix c in the attached client must open the picker. `--global=false payments` must take the mark off and file `work` in payments, `--global` with a space must be refused, and `--global` must take `work` out of its space.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The #2223 branch (no `--global` flag) | "set-session-space --global did not mark work global: ... unknown flag: --global" | **caught** |
+| `SetGlobal` writes the mark under the lock, with no state push | "after set-session-space --global, prefix c in the attached client did not ask for a machine" | **caught** |
+| `SetGlobal` leaves the space as it is | "marking work global left it in space \"payments\"" | **caught** |
+| The branch | passes | fixed |
+
+The frames are `global-restore-before.txt`, `global-restore-after-1.txt`, `global-restore-after-2.txt` and `global-set-again.txt` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 go test -count=1 -run '^TestAGlobalSessionStaysGlobalAcrossARestart$' -v .`.

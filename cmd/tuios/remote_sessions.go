@@ -152,12 +152,23 @@ func runSetSessionAccent(sessionName, accent string) error {
 }
 
 // runSetSessionSpace files a session under a space, or takes it out of any
-// when space is empty.
-func runSetSessionSpace(sessionName, space string) error {
-	return callAndReport("set-session-space", map[string]any{
+// when space is empty. A non-nil global sets or clears the global mark.
+func runSetSessionSpace(sessionName, space string, global *bool) error {
+	params := map[string]any{
 		"session": sessionName,
 		"space":   space,
-	}, func(res map[string]any) {
+	}
+	if global != nil {
+		params["global"] = *global
+	}
+	return callAndReport("set-session-space", params, func(res map[string]any) {
+		if res["global"] == true {
+			fmt.Printf("Session %v is global.\n", res["session"])
+			return
+		}
+		if global != nil {
+			fmt.Printf("Session %v is not global.\n", res["session"])
+		}
 		if res["space"] == "" {
 			fmt.Printf("Session %v is in no space.\n", res["session"])
 			return

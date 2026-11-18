@@ -4402,7 +4402,13 @@ Response:
 
 File a session under a space, a named group of related sessions, or take it out of any. A space is only a label on its sessions: it has no record of its own, exists while at least one session is in it, and is saved and restored with each session. `list-sessions` carries `space` on every session that is in one.
 
-Params: `session` (the most recently active when omitted), `space`. An empty or omitted `space` takes the session out of any space.
+Params: `session` (the most recently active when omitted), `space`, `global`. An empty or omitted `space` takes the session out of any space.
+
+`global` sets or clears the session's global mark. `true` marks the session global and takes it out of its space. With a `space` as well, it is refused with `invalid_params`. `false` takes the mark off before the space is set, so one call can move a global session into a space. An omitted `global` leaves the mark as it is.
+
+```json
+{"verb": "set-session-space", "params": {"session": "work", "global": true}}
+```
 
 Request:
 
@@ -4413,10 +4419,10 @@ Request:
 Response:
 
 ```json
-{"result": {"type": "session_space_set", "session": "work", "space": "payments"}}
+{"result": {"type": "session_space_set", "session": "work", "space": "payments", "global": false}}
 ```
 
-Surrounding whitespace is trimmed first. A space name then follows the session name rules and is at most 64 bytes. Any other is refused with `invalid_params` on `space`. A global session cannot be in a space, so filing one is refused with `invalid_params` (`a global session cannot be in a space`) and nothing changes. `new-session` takes the same `space` param, refused the same way, and files the session as it is made, so it never exists in no space. Its result echoes `space`. Only these two verbs write a session's space: a client's state sync never moves it. A pane needs the `admin` grant, and over a link the verb needs `write`.
+Surrounding whitespace is trimmed first. A space name then follows the session name rules and is at most 64 bytes. Any other is refused with `invalid_params` on `space`. A global session cannot be in a space, so filing one without `global: false` is refused with `invalid_params` (`a global session cannot be in a space`) and nothing changes. `new-session` takes the same `space` param, refused the same way, and files the session as it is made, so it never exists in no space. Its result echoes `space`. Only these two verbs write a session's space: a client's state sync never moves it. A pane needs the `admin` grant, and over a link the verb needs `write`.
 
 ### set-session-order
 

@@ -1496,16 +1496,21 @@ survives a reattach. Pass no accent to clear it.`,
 
 func newSetSessionSpaceCommand() *cobra.Command {
 	var setSessionSpaceSession string
+	var setSessionSpaceGlobal bool
 	setSessionSpaceCmd := &cobra.Command{
 		Use:   "set-session-space [space]",
-		Short: "File a session under a space",
+		Short: "File a session under a space, or mark it global",
 		Long: `File a session under a space, a named group of related sessions that
 'tuios ls' and the sidebar list together, under the space's name. A space
 exists while at least one session is in it. Pass no space to take the session
 out of any.
 
 A space name follows the session name rules and is at most 64 bytes. A
-global session cannot be in a space.`,
+global session cannot be in a space.
+
+--global marks the session global. A global session holds panes from more
+than one machine, and a new window in it asks which machine to use. The
+session leaves its space. --global=false takes the mark off.`,
 		Example: `  # File the current session under the space payments
   tuios set-session-space payments
 
@@ -1513,17 +1518,28 @@ global session cannot be in a space.`,
   tuios set-session-space -s work payments
 
   # Take the session out of any space
-  tuios set-session-space`,
+  tuios set-session-space
+
+  # Mark the session work global
+  tuios set-session-space -s work --global
+
+  # Take the global mark off and file the session under payments
+  tuios set-session-space -s work --global=false payments`,
 		Args: cobra.MaximumNArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			space := ""
 			if len(args) > 0 {
 				space = args[0]
 			}
-			return runSetSessionSpace(setSessionSpaceSession, space)
+			var global *bool
+			if cmd.Flags().Changed("global") {
+				global = &setSessionSpaceGlobal
+			}
+			return runSetSessionSpace(setSessionSpaceSession, space, global)
 		},
 	}
 	addSessionFlag(setSessionSpaceCmd, &setSessionSpaceSession)
+	setSessionSpaceCmd.Flags().BoolVar(&setSessionSpaceGlobal, "global", false, "Mark the session global. Use --global=false to take the mark off")
 	return setSessionSpaceCmd
 }
 

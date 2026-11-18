@@ -4823,18 +4823,20 @@ Put the sessions in an order. Every client lists them in it: the rail, go-to, tu
 
 ### `set-session-space`
 
-File a session under a space, a named group of related sessions that tuios ls and the sidebar list together. A space exists while at least one session is in it. It survives a daemon restart with the session. A global session is in no space, and filing one is refused.
+File a session under a space, a named group of related sessions that tuios ls and the sidebar list together, or mark it global. A space exists while at least one session is in it. It survives a daemon restart with the session. A global session is in no space, and filing one is refused unless global is false.
 
 | Param | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `session` | string |  |  | Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one. |
 | `space` | string |  |  | The space's name. Surrounding whitespace is trimmed, and the rest follows the session name rules (no slash, backslash or control character) and is at most 64 bytes. Omit or pass an empty string to take the session out of any space. |
+| `global` | bool |  |  | True marks the session global: it holds panes from more than one machine, is listed in its own group, and a new window in it asks which machine to run on. It takes the session out of its space, and is refused with a space. False takes the mark off before the space is set. Omit to leave the mark as it is. |
 
 | Result field | Type | Description |
 |---|---|---|
 | `type` | string | Always session_space_set. |
 | `session` | string | The session's name. |
 | `space` | string | The space the session is in now, empty for none. |
+| `global` | bool | Whether the session is global now. |
 
 ```json
 {"id":1,"verb":"set-session-space","params":{"session":"work","space":"payments"}}
@@ -4842,6 +4844,10 @@ File a session under a space, a named group of related sessions that tuios ls an
 
 ```json
 {"id":1,"verb":"set-session-space","params":{"session":"work","space":""}}
+```
+
+```json
+{"id":1,"verb":"set-session-space","params":{"session":"work","global":true}}
 ```
 
 ### `set-task-dispatch`

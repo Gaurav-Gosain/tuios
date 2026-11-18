@@ -2606,19 +2606,22 @@ func buildVerbRegistry() map[string]verbEntry {
 		"set-session-space": {
 			scope:       scopeDeny,
 			link:        needWrite,
-			description: "File a session under a space, a named group of related sessions that tuios ls and the sidebar list together. A space exists while at least one session is in it. It survives a daemon restart with the session. A global session is in no space, and filing one is refused.",
+			description: "File a session under a space, a named group of related sessions that tuios ls and the sidebar list together, or mark it global. A space exists while at least one session is in it. It survives a daemon restart with the session. A global session is in no space, and filing one is refused unless global is false.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "space", Type: "string", Description: "The space's name. Surrounding whitespace is trimmed, and the rest follows the session name rules (no slash, backslash or control character) and is at most 64 bytes. Omit or pass an empty string to take the session out of any space."},
+				{Name: "global", Type: "bool", Description: "True marks the session global: it holds panes from more than one machine, is listed in its own group, and a new window in it asks which machine to run on. It takes the session out of its space, and is refused with a space. False takes the mark off before the space is set. Omit to leave the mark as it is."},
 			},
 			returns: []verbParam{
 				{Name: "type", Type: "string", Description: "Always session_space_set."},
 				{Name: "session", Type: "string", Description: "The session's name."},
 				{Name: "space", Type: "string", Description: "The space the session is in now, empty for none."},
+				{Name: "global", Type: "bool", Description: "Whether the session is global now."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"set-session-space","params":{"session":"work","space":"payments"}}`,
 				`{"id":1,"verb":"set-session-space","params":{"session":"work","space":""}}`,
+				`{"id":1,"verb":"set-session-space","params":{"session":"work","global":true}}`,
 			},
 			handler: (*Daemon).verbSetSessionSpace,
 		},

@@ -616,8 +616,9 @@ type SessionState struct {
 	// the clients where to file it, which is its own group in the rail rather
 	// than under the machine whose daemon happens to be holding it.
 	//
-	// Daemon-owned: it is set when the session is created and never changes,
-	// so a client sync that omits it must not clear it. False is what every
+	// Daemon-owned: it is set when the session is created, or later by
+	// set-session-space with global, so a client sync that omits it must not
+	// clear it. False is what every
 	// older client and every state file written before this reads back as.
 	Global bool `json:"global,omitempty"`
 	// Space is the name of the group of related sessions this one is filed
@@ -3520,6 +3521,19 @@ func (s *Session) RestoreNotes(sessionNote string, windowNotes map[string]string
 func (s *Session) SetSpace(space string) error {
 	return s.mutateState(func(st *SessionState) error {
 		st.Space = space
+		return nil
+	})
+}
+
+// SetGlobal sets or clears the session's global mark (SessionState.Global),
+// propagated and persisted exactly as SetSpace is. A global session is in no
+// space, so setting the mark also takes the session out of its space.
+func (s *Session) SetGlobal(global bool) error {
+	return s.mutateState(func(st *SessionState) error {
+		st.Global = global
+		if global {
+			st.Space = ""
+		}
 		return nil
 	})
 }

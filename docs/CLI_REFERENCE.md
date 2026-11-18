@@ -3834,6 +3834,8 @@ File a session under a space, a named group of related sessions that `tuios ls` 
 
 Surrounding whitespace is trimmed. A space name then follows the session name rules (no slash, backslash or control character) and is at most 64 bytes. A global session cannot be in a space.
 
+`--global` marks the session global. A global session holds panes from more than one machine, and a new window in it asks which machine to use. The session leaves its space. `--global=false` takes the mark off. Use it for a session that lost the mark, or that was made without `--global`.
+
 **Usage:**
 ```bash
 tuios set-session-space [space] [flags]
@@ -3841,6 +3843,7 @@ tuios set-session-space [space] [flags]
 
 **Flags:**
 - `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
+- `--global`: Mark the session global. Use `--global=false` to take the mark off
 
 **Examples:**
 ```bash
@@ -3852,6 +3855,12 @@ tuios set-session-space -s work payments
 
 # Take the session out of any space
 tuios set-session-space
+
+# Mark the session work global
+tuios set-session-space -s work --global
+
+# Take the global mark off and file the session under payments
+tuios set-session-space -s work --global=false payments
 ```
 
 ### `tuios set-session-order`

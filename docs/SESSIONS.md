@@ -693,7 +693,7 @@ layout mode, and each window's working directory. It does not hold anything
 about the processes that were running. Each pane's history is saved in a
 separate file. See [Pane history](#pane-history).
 
-A session filed under a space (`tuios new --space`, or [`tuios set-session-space`](CLI_REFERENCE.md#tuios-set-session-space)) has the space's name in its state file, and a restore puts the session back in that space. A space's name is at most 64 bytes. A global session cannot be in a space: `set-session-space` refuses to file one. A daemon from before spaces ignores the `space` key.
+A session filed under a space (`tuios new --space`, or [`tuios set-session-space`](CLI_REFERENCE.md#tuios-set-session-space)) has the space's name in its state file, and a restore puts the session back in that space. A space's name is at most 64 bytes. A global session cannot be in a space: `set-session-space` refuses to file one unless `--global=false` takes the mark off in the same call. A daemon from before spaces ignores the `space` key.
 
 The order of the sessions is the daemon's, not each client's. A session moved
 up or down on the sidebar, by key or by drag, or put in place with
@@ -1087,6 +1087,16 @@ tuios new deploy --global
 
 A global session is created with no windows, since the first pane is the one you
 pick a machine for.
+
+A global session stays global across a daemon restart. To mark a session that
+already exists as global, run this command. It also brings the mark back on a
+session that an older daemon restored as a plain one.
+
+```bash
+tuios set-session-space -s deploy --global
+```
+
+`--global=false` takes the mark off.
 
 The group holds as many sessions as you make. It is drawn above the machines
 because a global session is not any machine's: it is held by a daemon, the way
