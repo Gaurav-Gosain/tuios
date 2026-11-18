@@ -1393,7 +1393,7 @@ TestRailScrollbarOnAPeek 4.4
 TestRailShowsAHostAddedWhileAttached 2.2
 TestRailSignInAsksForANewPage 111.1
 TestRailSwitchNumbersSurviveReattach 0.9
-TestRailTerminalsKeepsItsHeaderWhenAllPanesAreAgents 0.7
+TestRailTerminalsListsEveryPane 0.7
 TestRailToggleIsGlobal 6.6
 TestRailTogglePerSession 4.3
 TestRailWorktreeRefusals 6.4
