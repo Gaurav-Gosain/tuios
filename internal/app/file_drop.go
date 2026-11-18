@@ -65,13 +65,19 @@ type dropVerdict struct {
 }
 
 // fileDragState is the press-and-drag gesture on a row of the files section.
-// The press arms it. While the pointer stays in the rail it is still a click,
-// and the release does what a click on the row does. Once the pointer leaves
-// the rail it is a drag, and the release over a pane drops the row there.
+// The press arms it. Until the pointer moves past the drag threshold it is a
+// click, and the release does what a click on the row does. Past the threshold
+// it is a drag, and the release over a pane drops the row there. Movement
+// decides, not time, so a slow click is still a click and a drag never opens
+// quick look.
 type fileDragState struct {
 	Pressed bool
-	// Dragging is set when the pointer first leaves the rail.
+	// Dragging is set when the pointer first moves past the drag threshold.
 	Dragging bool
+	// PressX and PressY are where the press was.
+	PressX, PressY int
+	// Copy is ctrl or shift held at the press: the click copies the path.
+	Copy bool
 	// Canceled is set by esc. The gesture then swallows its own release, so a
 	// pane under the pointer does not get a release for a press it never saw.
 	Canceled bool
@@ -91,9 +97,10 @@ type fileDragState struct {
 // FileDragActive reports whether a press on a files row owns the pointer.
 func (m *OS) FileDragActive() bool { return m.fileDrag.Pressed }
 
-// armFileDrag starts the gesture on a listing row, or reports false when the
-// row cannot be dragged and the press must act as a click now.
-func (m *OS) armFileDrag(hit sidebarRowHit) bool {
+// armFileDrag starts the gesture on a listing row pressed at (x, y), or
+// reports false when the row cannot be dragged and the press must act as a
+// click now.
+func (m *OS) armFileDrag(hit sidebarRowHit, x, y int) bool {
 	if !m.Settings.SidebarFileDrag || m.learnFiles() {
 		return false
 	}
@@ -103,6 +110,9 @@ func (m *OS) armFileDrag(hit sidebarRowHit) bool {
 	}
 	m.fileDrag = fileDragState{
 		Pressed:   true,
+		PressX:    x,
+		PressY:    y,
+		Copy:      m.sidebarPressCopy,
 		Secondary: m.sidebarDrawing,
 		Hit:       hit,
 		Src: dropSource{
@@ -127,7 +137,7 @@ func (m *OS) FileDragMotion(x, y int, alt bool) {
 		return
 	}
 	if !d.Dragging {
-		if m.inAnyRail(x, y) {
+		if abs(x-d.PressX)+abs(y-d.PressY) < m.DragThreshold() {
 			return // still a click
 		}
 		d.Dragging = true
@@ -145,9 +155,9 @@ func (m *OS) FileDragMotion(x, y int, alt bool) {
 }
 
 // FileDragRelease ends the gesture. A drag drops the row on the pane under
-// the pointer, and over anything else does nothing. A press that never left
-// the rail is a click on the row. alt held on a folder types a cd instead of
-// the path.
+// the pointer, and over anything else does nothing. A press that never moved
+// past the drag threshold is a click on the row. alt held on a folder types a
+// cd instead of the path.
 func (m *OS) FileDragRelease(x, y int, alt bool) {
 	d := m.fileDrag
 	m.fileDrag = fileDragState{}
@@ -156,7 +166,7 @@ func (m *OS) FileDragRelease(x, y int, alt bool) {
 	}
 	if !d.Dragging {
 		click := func() bool {
-			m.queueSidebarCmd(m.fileViewEnterRow(d.Hit.WindowIndex, d.Hit.WindowID))
+			m.fileRowClick(d.Hit, d.Copy)
 			return true
 		}
 		if d.Secondary {
@@ -174,6 +184,23 @@ func (m *OS) FileDragRelease(x, y int, alt bool) {
 	// pointer rested on it.
 	v := m.judgeDrop(w, d.Src)
 	m.deliverDrop(v, d.Src, alt && d.Src.Dir)
+}
+
+// fileRowClick is a click on a listing row. With ctrl or shift held it copies
+// the row's path. Otherwise a file opens in quick look, and a folder does what
+// taking it does (see fileViewOpen).
+func (m *OS) fileRowClick(hit sidebarRowHit, copyPath bool) {
+	t := m.fileMenuTargetFor(hit)
+	switch {
+	case t.Name == "" || t.Dir == "":
+		m.queueSidebarCmd(m.fileViewEnterRow(hit.WindowIndex, hit.WindowID))
+	case copyPath:
+		m.queueSidebarCmd(m.copyFilePath(filepath.Join(t.Dir, t.Name)))
+	case t.IsDir || m.learnFiles():
+		m.queueSidebarCmd(m.fileViewEnterRow(hit.WindowIndex, hit.WindowID))
+	default:
+		m.queueSidebarCmd(m.quickLookMenu(t))
+	}
 }
 
 // CancelFileDrag is esc while a row is held. Nothing is dropped.

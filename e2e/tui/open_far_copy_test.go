@@ -158,7 +158,7 @@ func openFarCopies(t *testing.T, term *tuitest.Terminal, base string, env []stri
 		if !ok {
 			t.Fatalf("no %s row:\n%s", name, term.Snapshot())
 		}
-		mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+		mouseClick(t, term, col, row, tuitest.MouseLeft, tuitest.ModCtrl)
 		clickNoteGone(t, term)
 		sendKeys(t, term, "o")
 	}

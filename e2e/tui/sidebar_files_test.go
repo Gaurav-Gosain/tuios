@@ -262,8 +262,10 @@ func TestSidebarFileEditor(t *testing.T) {
 			col, row, _ := findOnGrid(term.Screen(), "alpha/")
 			mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 			waitForAll(t, term, uiTimeout, "folder navigation", "binary.bin", "note $(touch")
+			// ctrl+click puts the cursor on the row without quick look.
 			col, row, _ = findOnGrid(term.Screen(), "binary.bin")
-			mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+			mouseClick(t, term, col, row, tuitest.MouseLeft, tuitest.ModCtrl)
+			clickNoteGone(t, term)
 			if err := term.SendKeys(tuitest.Enter); err != nil {
 				t.Fatal(err)
 			}
@@ -279,7 +281,7 @@ func TestSidebarFileEditor(t *testing.T) {
 			}
 			waitWindowCount(t, term, 1, "refusing a binary file")
 			col, row, _ = findOnGrid(term.Screen(), "note $(touch")
-			mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+			mouseClick(t, term, col, row, tuitest.MouseLeft, tuitest.ModCtrl)
 			if err := term.SendKeys("\x1b[13;2u"); err != nil {
 				t.Fatal(err)
 			}
@@ -1811,6 +1813,42 @@ func TestRailQuickLook(t *testing.T) {
 	sendKeys(t, term, " ")
 	railLists(t, term, "after Preview and esc the rail lost the keyboard", []string{"Quick look notes"}, nil)
 
+	// A click on a file opens quick look. Shift+click copies the path and opens
+	// nothing. A press that moves past the drag threshold is a drag, even when
+	// it ends in the rail, and its release opens nothing.
+	sendKeys(t, term, tuitest.Esc)
+	railLists(t, term, "esc did not close the preview", nil, []string{"Quick look notes"})
+	mcol, mrow, ok := findOnGrid(term.Screen(), "main.go")
+	if !ok {
+		t.Fatalf("no main.go row:\n%s", term.Snapshot())
+	}
+	mouseClick(t, term, mcol, mrow, tuitest.MouseLeft, 0)
+	quickLookShows(t, term, "quick-look-click", "a click on main.go did not open quick look",
+		[]string{"main.go ", "package main"}, []string{"Copied the path."})
+	sendKeys(t, term, tuitest.Esc)
+	railLists(t, term, "esc did not close the preview", nil, []string{"package main"})
+	ncol, nrow, ok := findOnGrid(term.Screen(), "notes.md")
+	if !ok {
+		t.Fatalf("no notes.md row:\n%s", term.Snapshot())
+	}
+	mouseClick(t, term, ncol, nrow, tuitest.MouseLeft, tuitest.ModShift)
+	clickNoteGone(t, term)
+	railLists(t, term, "shift+click on notes.md opened quick look", nil, []string{"Quick look notes"})
+	mousePress(t, term, mcol, mrow, tuitest.MouseLeft, 0)
+	// Six rows down: past the drag threshold of five cells, still in the rail.
+	mouseMotion(t, term, mcol, mrow+6, tuitest.MouseLeft, 0)
+	mouseRelease(t, term, mcol, mrow+6, tuitest.MouseLeft, 0)
+	// space toggles the preview on the cursor's row. It opens one only when
+	// the drag opened none, and keys are read in order.
+	sendKeys(t, term, " ")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		txt := s.Text()
+		return strings.Contains(txt, "package main") || strings.Contains(txt, "Quick look notes")
+	}, uiTimeout); err != nil {
+		copiesFrame(t, term, "quick-look-drag-failed")
+		t.Fatalf("ASSERTION: a drag in the rail opened quick look, so space closed it: %v\n%s", err, term.Snapshot())
+	}
+
 	// The preview takes no key from the pane: once the rail lets go, keys
 	// reach the shell, and the preview is gone.
 	sendKeys(t, term, tuitest.Esc, tuitest.Esc)
@@ -1957,7 +1995,7 @@ func quickLookFocusRail(t *testing.T, term *tuitest.Terminal, first string) {
 	if !ok {
 		t.Fatalf("no %s row:\n%s", first, term.Snapshot())
 	}
-	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	mouseClick(t, term, col, row, tuitest.MouseLeft, tuitest.ModCtrl)
 	clickNoteGone(t, term)
 }
 
@@ -3196,8 +3234,8 @@ func hostHeldPictures(stream string) int {
 	return len(held)
 }
 
-// clickNoteGone waits out the note a click on a file row leaves: the click
-// copies the row's path. The frames start clean, and a note seen after
+// clickNoteGone waits out the note a ctrl+click on a file row leaves: the
+// click copies the row's path. The frames start clean, and a note seen after
 // that comes from the key under test, not from the click.
 func clickNoteGone(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()

@@ -27,6 +27,10 @@ type draftPress struct {
 // a shift click in a draft extends its selection.
 func (m *OS) NoteClickShift(shift bool) { m.draftMouse.shift = shift }
 
+// NoteSidebarPressCopy records whether ctrl or shift was held at a press, for a
+// click on a row of the files section: it copies the path then.
+func (m *OS) NoteSidebarPressCopy(copyPath bool) { m.sidebarPressCopy = copyPath }
+
 // draftAt maps screen x, y onto the open draft drawn in the panel of kind: the
 // line of its last frame and the column in it. inside says the point is on a
 // line the panel shows. ok is false when no draft of that panel is on screen.

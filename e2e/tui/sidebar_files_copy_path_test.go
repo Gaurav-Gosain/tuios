@@ -226,7 +226,7 @@ func TestSidebarFileOpenSystem(t *testing.T) {
 	if !ok {
 		t.Fatalf("no brief.txt row:\n%s", term.Snapshot())
 	}
-	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	mouseClick(t, term, col, row, tuitest.MouseLeft, tuitest.ModCtrl)
 	clickNoteGone(t, term)
 	sendKeys(t, term, "o")
 	waitOpenRecord(t, term, record, []string{
@@ -241,7 +241,7 @@ func TestSidebarFileOpenSystem(t *testing.T) {
 	if !ok {
 		t.Fatalf("no paper.pdf row:\n%s", term.Snapshot())
 	}
-	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	mouseClick(t, term, col, row, tuitest.MouseLeft, tuitest.ModCtrl)
 	clickNoteGone(t, term)
 	sendKeys(t, term, "o")
 	waitOpenRecord(t, term, record, []string{

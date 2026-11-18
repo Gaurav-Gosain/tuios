@@ -137,6 +137,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// The sidebar is a reserved-region panel like the dock: a click anywhere in
 	// its band is the sidebar's (focus a window, switch or expand a session, or,
 	// on right-click, open the context menu), never the pane it sits in front of.
+	o.NoteSidebarPressCopy(msg.Mod&(tea.ModCtrl|tea.ModShift) != 0)
 	if o.SidebarActive() && o.SidebarClick(X, Y, msg.Button == tea.MouseRight) {
 		// Two rows of the rail's file view answer with a command rather than
 		// with a state change: copying a path is a clipboard write. SidebarClick

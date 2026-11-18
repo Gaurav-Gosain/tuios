@@ -363,7 +363,7 @@ func TestQuickLookOnAFarFile(t *testing.T) {
 	if !ok {
 		t.Fatalf("no far.go row:\n%s", term.Snapshot())
 	}
-	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	mouseClick(t, term, col, row, tuitest.MouseLeft, tuitest.ModCtrl)
 	clickNoteGone(t, term)
 
 	// o on a far row: the path is on build, so the opener here must not run
@@ -398,7 +398,7 @@ func TestQuickLookOnAFarFile(t *testing.T) {
 	}
 	sendKeys(t, term, " ")
 	railLists(t, term, "space did not close the far preview", nil, []string{"on build"})
-	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	mouseClick(t, term, col, row, tuitest.MouseLeft, tuitest.ModCtrl)
 	clickNoteGone(t, term)
 	sendKeys(t, term, " ")
 	railLists(t, term, "space did not show the far log", []string{"zlong.log ", "on build", "row 1 x"}, nil)
@@ -419,7 +419,7 @@ func TestQuickLookOnAFarFile(t *testing.T) {
 		if !ok {
 			t.Fatalf("no zbook.pdf row:\n%s", term.Snapshot())
 		}
-		mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+		mouseClick(t, term, col, row, tuitest.MouseLeft, tuitest.ModCtrl)
 		clickNoteGone(t, term)
 		sendKeys(t, term, " ")
 		railLists(t, term, "space did not show the far PDF", []string{"zbook.pdf ", "on build", "Page 1 of 3"}, nil)
@@ -436,7 +436,7 @@ func TestQuickLookOnAFarFile(t *testing.T) {
 		if !ok {
 			t.Fatalf("no zfilm.mp4 row:\n%s", term.Snapshot())
 		}
-		mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+		mouseClick(t, term, col, row, tuitest.MouseLeft, tuitest.ModCtrl)
 		clickNoteGone(t, term)
 		sendKeys(t, term, " ")
 		railLists(t, term, "space did not show the far film", []string{"zfilm.mp4 ", "on build"}, nil)

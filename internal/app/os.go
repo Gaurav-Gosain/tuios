@@ -909,6 +909,9 @@ type OS struct {
 	// fileDrag is a row of the rail's files section held by the pointer, on
 	// its way to a pane. See file_drop.go.
 	fileDrag fileDragState
+	// sidebarPressCopy is ctrl or shift held at the last left press, which a
+	// click on a files row reads to copy the path. See NoteSidebarPressCopy.
+	sidebarPressCopy bool
 	// dropLayout is the map the landing rectangle of an edge drop is laid out
 	// into, kept so that working one out does not allocate a map each time.
 	dropLayout map[int]layout.Rect
