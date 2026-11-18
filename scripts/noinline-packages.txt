@@ -63,6 +63,15 @@ github.com/Gaurav-Gosain/tuios/internal/testknob
 github.com/Gaurav-Gosain/tuios/plugins
 rsc.io/qr/...
 
+# Read once per request or per load: a tape script's steps, the hosts setup
+# flow, a screenshot or capture-pane render, the config and plugin TOML, and an
+# agent transcript decoded into the entries the thread keeps.
+github.com/Gaurav-Gosain/tuios/internal/tape
+github.com/Gaurav-Gosain/tuios/internal/hostsetup
+tuios.dev/shot
+github.com/pelletier/go-toml/v2
+github.com/Gaurav-Gosain/tuios/internal/transcriptview
+
 # Mermaid parse and layout: a diagram is drawn once per source and width and
 # kept. tuios.dev/sketch/raster is left out: tuios mermaid --live draws its
 # motion with it at 60 frames a second.
