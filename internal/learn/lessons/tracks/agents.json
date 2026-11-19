@@ -93,10 +93,10 @@
     {
       "id": "jump",
       "title": "Jump to the question",
-      "note": "The rail turns orange and the dock rings. ctrl+b j takes you there.",
+      "note": "The rail turns orange and the dock rings. ctrl+b o takes you to it.",
       "keys": [
         "ctrl+b",
-        "j"
+        "o"
       ],
       "after": [
         {
@@ -112,7 +112,7 @@
           }
         }
       },
-      "hint": "Wait for the orange mark, then ctrl+b, then j.",
+      "hint": "Wait for the orange mark, then ctrl+b, then o.",
       "learned": "jump to alert"
     },
     {

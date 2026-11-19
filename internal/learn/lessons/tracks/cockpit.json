@@ -157,7 +157,7 @@
     {
       "id": "allow",
       "title": "Allow the edit",
-      "note": "Press a to ask to allow it once, then enter to send it. shift+a asks to always allow it. r asks to reject it, and shift+r to give a reason. Any key but enter drops the ask.",
+      "note": "Press a to ask to allow it once, then enter to send it. shift+a asks to always allow it. shift+x asks to reject it, and shift+r asks to reject it with a reason. Any key but enter drops the ask.",
       "keys": [
         "a",
         "enter"
