@@ -33,6 +33,9 @@ const (
 	// the focused pane's place in it, "main 2:1" by default. It is a cell, so
 	// it goes wherever it is listed, and it is in no default list.
 	DockComponentSession = "session"
+	// DockComponentButtons is a row of buttons that run actions: New, Split,
+	// Close, Help and Settings. It is drawn on the right.
+	DockComponentButtons = "buttons"
 )
 
 // DockCustomPrefix marks a name in one of the dock lists as referring to a
@@ -61,6 +64,7 @@ var dockBuiltins = []string{
 	DockComponentSessionControls,
 	DockComponentTransfers,
 	DockComponentSession,
+	DockComponentButtons,
 }
 
 // DockBuiltinComponents returns the built-in component names, sorted. Used by
@@ -91,6 +95,7 @@ var dockFixedSides = map[string]string{
 	DockComponentNotifications:   "right",
 	DockComponentCopyHelp:        "right",
 	DockComponentSessionControls: "right",
+	DockComponentButtons:         "right",
 }
 
 // DockFixedSide is the side a component is always drawn on, or "" when it goes

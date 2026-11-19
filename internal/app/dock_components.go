@@ -175,6 +175,8 @@ func dockRefreshableComponents(cfg *config.UserConfig, plan dockPlan, showClock 
 type dockCustomHit struct {
 	X0, X1, Y int
 	Name      string
+	// Button is a button of the "buttons" row plus one, or 0. See dock_buttons.go.
+	Button int
 }
 
 // DockCustomComponentAt returns the custom component covering the absolute cell
@@ -485,13 +487,18 @@ func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, 
 		custom bool // yields first when room runs out
 		hit    bool // records a hit rectangle
 		meters bool // stands for whatever is left of the CPU and RAM readouts
+		// buttons stands for the button row, drawn at whatever fit is left.
+		buttons bool
 	}
 
 	meters := m.dockMeterParts()
 	var segs []segment
 	placedMeters := false
+	fit := dockButtonsFit{shown: len(dockButtons)}
 	for _, name := range m.dockPlan.Right {
 		switch name {
+		case config.DockComponentButtons:
+			segs = append(segs, segment{buttons: true})
 		case config.DockComponentCPU, config.DockComponentRAM:
 			if placedMeters || len(meters) == 0 {
 				continue
@@ -526,6 +533,15 @@ func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, 
 				text = meterStyle.Render(strings.Join(meters, " "))
 				width = lipgloss.Width(text)
 			}
+			if seg.buttons {
+				var bh []dockCustomHit
+				text, bh = m.renderDockButtons(fit)
+				width = lipgloss.Width(text)
+				for _, h := range bh {
+					h.X0, h.X1 = h.X0+x, h.X1+x
+					hits = append(hits, h)
+				}
+			}
 			if seg.hit {
 				hits = append(hits, dockCustomHit{X0: x, X1: x + width, Name: seg.name})
 			}
@@ -552,6 +568,20 @@ func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, 
 			meters = nil
 			if i := lastSegmentMatching(len(segs), func(i int) bool { return segs[i].meters }); i >= 0 {
 				segs = append(segs[:i], segs[i+1:]...)
+			}
+			continue
+		}
+		// The buttons go last, and they leave a sign as they go: the words
+		// first, then a button at a time into the more button.
+		if i := lastSegmentMatching(len(segs), func(i int) bool { return segs[i].buttons }); i >= 0 {
+			switch {
+			case !fit.compact:
+				fit.compact = true
+			case fit.shown > 0:
+				fit.shown--
+			default:
+				segs = append(segs[:i], segs[i+1:]...)
+				m.dockButtonsShown = 0
 			}
 			continue
 		}

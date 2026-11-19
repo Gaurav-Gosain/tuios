@@ -163,6 +163,9 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// tick is held only across the delay window of a live gesture.
 	o.DockSessionHoverAt(mouse.X, mouse.Y)
 
+	// The button row lights the button under the pointer and names it.
+	o.DockButtonHoverAt(mouse.X, mouse.Y)
+
 	// The workspace strip is timed off the same arriving motion, for the pills
 	// that had to cut a name short. It runs after the session controls so a
 	// pointer crossing from one to the other hands the label over in one pass:

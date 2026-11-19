@@ -2153,6 +2153,8 @@ middle of the terminal. A notification does not move it or shorten its
 minimized pane labels. On a crowded bar, the center moves left to keep the
 right-hand cells on the screen. Click a cut notification to read the full
 message.
+`buttons` shows five buttons: New, Split, Close, Help and Settings. Click a button to run its action. New opens a terminal. Split divides the pane side by side. Close closes the pane. Help shows the help. Settings opens the settings. Point at a button to read what it does. The buttons are always on the right. On a narrow dock, the buttons show icons instead of words. When the icons do not fit, the last buttons go into a more button at the end of the row. Click it to see them.
+
 `transfers` shows the copies between machines. It shows nothing while no copy
 exists. One copy is a bar and a percent, `[####--] 61%`. More copies are a
 count and a percent, `3 copies 42%`. `waiting` means a link is down, and
@@ -5180,9 +5182,11 @@ on-click = "tuios new-window log -- git log --oneline -20"
 
 These lists are the default. A missing list uses the default. An empty list (`left = []`) draws nothing on that side.
 
-The built-in components are `mode`, `workspaces`, `trail`, `tape`, `windows`, `transfers`, `notifications`, `copy-help`, `cpu`, `ram`, `clock`, `session-controls` and `session`. Listing one lets it draw. It still needs its own condition, so `cpu` still needs `show_cpu`. `copy-help` shows the keys of copy mode, multi copy mode and hints mode while the mode is open. See [Mode keys in the dock](KEYBINDINGS.md#mode-keys-in-the-dock).
+The built-in components are `mode`, `workspaces`, `trail`, `tape`, `windows`, `transfers`, `notifications`, `copy-help`, `cpu`, `ram`, `clock`, `session-controls`, `session` and `buttons`. Listing one lets it draw. It still needs its own condition, so `cpu` still needs `show_cpu`. `copy-help` shows the keys of copy mode, multi copy mode and hints mode while the mode is open. See [Mode keys in the dock](KEYBINDINGS.md#mode-keys-in-the-dock).
 
 `session-controls` shows an agents button when the session has an agent pane. The button opens the agents view, the same as `Ctrl+B i`. When agents wait for you, the button shows how many in the attention colour.
+
+`buttons` shows five buttons: New, Split, Close, Help and Settings. Click a button to run its action. New opens a terminal. Split divides the pane side by side. Close closes the pane. Help shows the help. Settings opens the settings. Point at a button to read what it does. The buttons are always on the right. On a narrow dock, the buttons show icons instead of words. When the icons do not fit, the last buttons go into a more button at the end of the row. Click it to see them.
 
 `transfers` shows the copies between machines. It shows nothing while no copy exists. One copy is a bar and a percent, `[####--] 61%`. More copies are a count and a percent, `3 copies 42%`. `waiting` means a link is down. `1 failed` stays until you open the Copies panel. A click opens the [Copies panel](KEYBINDINGS.md#copies-between-machines).
 

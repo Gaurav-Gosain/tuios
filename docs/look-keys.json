@@ -781,6 +781,7 @@
       "description": "The built-in cells in the middle of the dock, in order. An empty list draws nothing there.",
       "default": "[\"windows\"]",
       "items": [
+        "buttons",
         "clock",
         "copy-help",
         "cpu",
@@ -795,7 +796,7 @@
         "windows",
         "workspaces"
       ],
-      "max_items": 26,
+      "max_items": 28,
       "max_bytes": 32
     },
     {
@@ -810,6 +811,7 @@
       "description": "The built-in cells on the left end of the dock, in order. An empty list draws nothing there.",
       "default": "[\"mode\", \"workspaces\", \"trail\", \"tape\"]",
       "items": [
+        "buttons",
         "clock",
         "copy-help",
         "cpu",
@@ -824,7 +826,7 @@
         "windows",
         "workspaces"
       ],
-      "max_items": 26,
+      "max_items": 28,
       "max_bytes": 32
     },
     {
@@ -833,6 +835,7 @@
       "description": "The built-in cells on the right end of the dock, in order. An empty list draws nothing there.",
       "default": "[\"transfers\", \"notifications\", \"copy-help\", \"cpu\", \"ram\", \"clock\", \"session-controls\"]",
       "items": [
+        "buttons",
         "clock",
         "copy-help",
         "cpu",
@@ -847,7 +850,7 @@
         "windows",
         "workspaces"
       ],
-      "max_items": 26,
+      "max_items": 28,
       "max_bytes": 32
     },
     {

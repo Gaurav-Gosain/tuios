@@ -61,6 +61,9 @@ const (
 	// tooltipDockNotif is the dock's message block holding a message it had to
 	// cut. See notification_hover.go.
 	tooltipDockNotif
+	// tooltipDockButton is a button of the dock's button row. Key is the
+	// button's index. See dock_buttons.go.
+	tooltipDockButton
 )
 
 // tooltipState is the live hover. Runtime only, gesture-scoped like the marquee
@@ -226,6 +229,8 @@ func (m *OS) renderTooltipOnRail() *lipgloss.Layer {
 		return m.renderDockWorkspaceTooltip()
 	case tooltipDockNotif:
 		return m.renderDockNotifTooltip()
+	case tooltipDockButton:
+		return m.renderDockButtonTooltip()
 	}
 	return nil
 }

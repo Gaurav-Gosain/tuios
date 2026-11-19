@@ -32,7 +32,8 @@ func (m *OS) dockSessionTooltipTrack(a DockSessionAction) {
 // control or a pill. The motion filter passes one more event while it is, so
 // the pointer leaving the band is the event that clears it.
 func (m *OS) DockHoverActive() bool {
-	return m.dockSessionHover != DockSessionNone ||
+	return m.dockSessionHover != DockSessionNone || m.dockButtonHover != 0 ||
+		m.Tooltip.Source == tooltipDockButton ||
 		m.Tooltip.Source == tooltipDockSession || m.Tooltip.Source == tooltipDockWorkspace ||
 		m.notifPaused() || m.Tooltip.Source == tooltipDockNotif
 }
@@ -141,6 +142,12 @@ func (m *OS) dockHoverChangesAt(x, y int) bool {
 	if m.notifHoverChangesAt(x, y) {
 		return true
 	}
+	// A button of the button row lights up and arms its own label.
+	if i := m.DockButtonAt(x, y); i+1 != m.dockButtonHover {
+		return true
+	} else if i >= 0 {
+		return m.Tooltip.Source != tooltipDockButton || m.Tooltip.Key != i
+	}
 	a := m.DockSessionActionAt(x, y)
 	if a != m.dockSessionHover {
 		return true
@@ -157,7 +164,8 @@ func (m *OS) dockHoverChangesAt(x, y int) bool {
 		return false
 	case src == tooltipNone:
 		// Nothing to arm: the handler drops a dock label and leaves any other.
-		return m.Tooltip.Source == tooltipDockSession || m.Tooltip.Source == tooltipDockWorkspace
+		return m.Tooltip.Source == tooltipDockSession || m.Tooltip.Source == tooltipDockWorkspace ||
+			m.Tooltip.Source == tooltipDockButton
 	case !m.tooltipsEnabled(src):
 		// tooltipTrack clears whatever label is pending or up.
 		return m.Tooltip.Source != tooltipNone

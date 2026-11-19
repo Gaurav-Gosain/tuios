@@ -663,7 +663,9 @@ func (m *OS) CalculateDockLayout() DockLayout {
 	if yields {
 		if dockItemsWidth(allItems) > max(room-want, 0) &&
 			!shortenDockItemNames(max(room-want, 0), allItems) {
-			want = 0
+			// The button row keeps its more button, so every button stays
+			// one click away.
+			want = m.dockButtonsWidth(dockButtonsFit{compact: true})
 		}
 		room = max(room-dockItemsWidth(allItems), 0)
 	}
@@ -961,7 +963,7 @@ func (m *OS) calculateDockRightWidth() int {
 	// never turned on is the same inversion in its purest form: it was the
 	// single largest claim on the bar and it drew nothing at all.
 	parts := m.dockMeterParts()
-	custom := m.dockCustomWidth(m.dockPlan.Right)
+	custom := m.dockCustomWidth(m.dockPlan.Right) + m.dockButtonsWidth(dockButtonsFit{shown: len(dockButtons)})
 	if len(parts) == 0 {
 		return custom
 	}

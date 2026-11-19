@@ -209,6 +209,18 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			save, _ := o.TurnOffSpotlight()
 			return o, save
 		}
+		// A button of the button row runs its action through the dispatcher,
+		// as its key would. The more button opens a menu of the buttons that
+		// did not fit.
+		if i := o.DockButtonAt(X, Y); i >= 0 {
+			if msg.Button == tea.MouseLeft {
+				if action := o.PressDockButton(i, X, Y); action != "" {
+					_, cmd := RunActionByName(action, o)
+					return o, cmd
+				}
+			}
+			return o, nil
+		}
 		// A custom component's cell runs its on-click command, the way a hook
 		// runs. It is tested here, after the blocks that own their columns
 		// unconditionally and before the ones whose columns move with the

@@ -463,6 +463,8 @@ type OS struct {
 	notifDrawn             notifDrawn                    // what the last frame showed of the live message
 	dockSessionHover       DockSessionAction             // which session control the pointer is on, DockSessionNone for neither
 	dockCustomHits         []dockCustomHit               // where the custom components were drawn last frame
+	dockButtonHover        int                           // the dock button under the pointer, plus one; 0 for none
+	dockButtonsShown       int                           // how many dock buttons the last frame drew before the more button
 	dockPlan               dockPlan                      // which components are on which side, in draw order
 	diagramsTold           map[string]bool               // the diagram types the person heard need the sketch plugin, this session
 	pluginCells            map[string]session.PluginCell // what plugins show on the dock, by name, nil until one does

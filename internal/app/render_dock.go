@@ -727,7 +727,7 @@ func (m *OS) renderDockString() (string, int) {
 	rightBlockX := notifX0 + rightWidth - lipgloss.Width(rightInfo)
 	for _, h := range rightCustom {
 		m.dockCustomHits = append(m.dockCustomHits, dockCustomHit{
-			X0: rightBlockX + h.X0, X1: rightBlockX + h.X1, Y: itemY, Name: h.Name,
+			X0: rightBlockX + h.X0, X1: rightBlockX + h.X1, Y: itemY, Name: h.Name, Button: h.Button,
 		})
 	}
 
