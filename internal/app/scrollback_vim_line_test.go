@@ -37,7 +37,7 @@ func TestASearchMatchIsReadable(t *testing.T) {
 	vim.SearchMatches = []scrollback.VimSearchMatch{{Line: 0, StartX: 5, EndX: 7}}
 
 	out := renderVimLine(vim, 0, 40,
-		lipgloss.Color("#112233"), lipgloss.Color("#445566"), searchBg, searchFg,
+		lipgloss.Color("#112233"), lipgloss.Color("#cccccc"), lipgloss.Color("#445566"), lipgloss.Color("#cccccc"), searchBg, searchFg,
 		lipgloss.Color("#cccccc"))
 
 	// The match has to be painted at all, or this proves nothing.

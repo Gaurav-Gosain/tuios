@@ -5424,6 +5424,16 @@ the selection ground. The dark run is the positive half.
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The fix is absent | build `origin/main` | `TestCopySelectionTextIsReadable/light` ("selected \"S\" at column 26 is 1.14:1 ... under 4.5") | **caught** |
+## Scrollback browser selection
+
+`TestScrollbackBrowserSelectionIsReadable` selects a line in the scrollback
+browser's output view under the dark default and under catppuccin_latte. It
+measures each selected glyph against the selection ground, and the cursor
+cell after them against the cursor ground.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The fix is absent | build `origin/main` | `/light` ("selected \"P\" at column 24 is 1.09:1"), `/dark` (the cursor cell, "selected \"e\" at column 47 is 2.67:1") | **caught** |
 
 ## An image paste on another machine
 

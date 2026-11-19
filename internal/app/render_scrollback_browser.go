@@ -482,6 +482,11 @@ func buildRightPane(
 	visualBg := marks.visualBg
 	searchBg := marks.searchBg
 	normalTextFg := marks.normalFg
+	// The selection ground is a setting and may be as dark as the text, as
+	// the default is on a light theme: the selected text is lifted until it
+	// reads. Once a frame, not once a span.
+	visualFg := overlay.Readable(normalTextFg, visualBg)
+	cursorFg := overlay.Readable(normalTextFg, cursorBg)
 
 	for i := range availH {
 		pIdx := scroll + i
@@ -492,7 +497,7 @@ func buildRightPane(
 
 		if browser.OutputMode && vim != nil {
 			out[i+1] = renderVimLine(vim, pIdx, width,
-				cursorBg, visualBg, searchBg, marks.searchFg, normalTextFg)
+				cursorBg, cursorFg, visualBg, visualFg, searchBg, marks.searchFg, normalTextFg)
 		} else {
 			truncated := ansi.Truncate(previewLines[pIdx], width, "")
 			out[i+1] = padANSI(truncated, width)
@@ -523,7 +528,7 @@ func buildRightPane(
 
 // renderVimLine renders a single line with character-level cursor, visual, and search highlighting.
 func renderVimLine(vim *scrollback.VimState, lineIdx, width int,
-	cursorBg, visualBg, searchBg, searchFg, normalFg color.Color,
+	cursorBg, cursorFg, visualBg, visualFg, searchBg, searchFg, normalFg color.Color,
 ) string {
 	// Whether this whole line is selected, which decides whether the padding
 	// past the last character carries the selection too.
@@ -649,14 +654,14 @@ func renderVimLine(vim *scrollback.VimState, lineIdx, width int,
 		case 3: // cursor
 			result.WriteString("\x1b[0m")
 			result.WriteString(lipgloss.NewStyle().
-				Foreground(normalFg).
+				Foreground(cursorFg).
 				Bold(true).
 				Background(cursorBg).
 				Render(span))
 		case 2: // visual
 			result.WriteString("\x1b[0m")
 			result.WriteString(lipgloss.NewStyle().
-				Foreground(normalFg).
+				Foreground(visualFg).
 				Background(visualBg).
 				Render(span))
 		case 1: // search
