@@ -75,6 +75,27 @@ Every table of `config.toml` has a section on this page. [Tables](#tables) lists
 
 `tuios list-options` describes every settable path with its type, default, and accepted values or range, straight from the registry the validator uses. A number that counts something says what: `200 ms`, `2 cells`, `45%` (the `unit` field of `list-options --json`), and the settings page shows the same unit after the value. The in-app settings page (`Ctrl+B ,`) edits and persists the same options, and its rows are derived from that same registry: an option an agent can set is an option a person can reach, and a test fails the build if one is not.
 
+## Language
+
+Settings, Appearance, Language sets `appearance.language`, the language the
+settings page is written in. The page's category names, row labels,
+descriptions, hints and notifications come from a dictionary embedded in
+the binary, one TOML file per language under `internal/i18n/locales/`. The
+binary ships English and Russian:
+
+```toml
+[appearance]
+language = "en"   # the default; "ru" for Russian
+```
+
+When a locale file joins the binary, its code joins the accepted values on
+its own: there is no second list to keep in step, and the row in Settings
+offers the codes as they are. A change applies to the settings page at
+once, also to one that is already open, and `tuios set-config
+appearance.language ru` changes it while tuios runs. An unknown code reads
+as the default, with a warning when the config loads, and `tuios
+set-config` refuses it.
+
 ## Sidebar peek
 
 When you put the pointer on a session row in the sidebar, the terminals
