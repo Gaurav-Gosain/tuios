@@ -113,6 +113,18 @@ func drawFit(d *sketch.Diagram, opt Options) (*canvas, error) {
 		return nil, ErrUnsupported
 	}
 	c, err := draw(d, opt, sketch.RenderOptions{}, false)
+	// across is a flowchart drawn in the direction its source gives, with
+	// the columns that hold only gaps and lines dropped, when that fits.
+	// Asked for a narrower layout, pele turns a chart that runs across to run
+	// down, which is far taller: seven boxes in a row take three rows across
+	// and over thirty down. The shorter of the two drawings is kept. A back
+	// edge routes around the boxes either way.
+	var across *canvas
+	if err == ErrTooWide && d.Type == "flowchart" {
+		if a, aerr := draw(d, opt, sketch.RenderOptions{}, true); aerr == nil {
+			across = a
+		}
+	}
 	if err == ErrTooWide {
 		// pele draws narrower when it is told the width there is: a flowchart
 		// that runs across turns to run down, and spacing tightens. A cell is
@@ -140,6 +152,9 @@ func drawFit(d *sketch.Diagram, opt Options) (*canvas, error) {
 			w := float64(opt.Cols) * units
 			c, err = draw(d, opt, sketch.RenderOptions{MaxWidth: &w, AutoDirection: &turn, DirectionBreakpoint: &[]float64{w + 1}[0]}, true)
 		}
+	}
+	if across != nil && (err != nil || across.h < c.h) {
+		return across, nil
 	}
 	return c, err
 }
