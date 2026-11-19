@@ -87,7 +87,7 @@ func TestPaneWithoutAUserManagerStartsAsBefore(t *testing.T) {
 	for {
 		// Sent again until it runs, as paneScope does.
 		mustCLI(t, base, "send-text", "-s", sess, "cat /proc/$$/cgroup > "+out+".tmp && mv "+out+".tmp "+out+"\n")
-		time.Sleep(100 * time.Millisecond)
+		pause(t, "poll again until the state it waits for shows", 100*time.Millisecond)
 		if raw, err := os.ReadFile(out); err == nil {
 			if strings.Contains(string(raw), "tuios-pane-") {
 				t.Fatalf("ASSERTION: a pane got a scope with no user manager: %s", raw)
@@ -106,7 +106,7 @@ func TestPaneWithoutAUserManagerStartsAsBefore(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatalf("ASSERTION: the daemon did not say why the panes have no scope:\n%s", raw)
 		}
-		time.Sleep(50 * time.Millisecond)
+		pause(t, "poll again until the state it waits for shows", 50*time.Millisecond)
 	}
 }
 
@@ -129,7 +129,7 @@ func paneScope(t *testing.T, base string) {
 		if time.Now().After(deadline) {
 			t.Fatalf("ASSERTION: the pane's shell is not in a scope of its own: %q", line)
 		}
-		time.Sleep(50 * time.Millisecond)
+		pause(t, "poll again until the state it waits for shows", 50*time.Millisecond)
 		// The scope is made just after the shell starts: read again.
 		mustCLI(t, base, "send-text", "-s", sess, "cat /proc/$$/cgroup > "+out+".tmp && mv "+out+".tmp "+out+"\n")
 	}
@@ -146,6 +146,6 @@ func paneScope(t *testing.T, base string) {
 		if time.Now().After(deadline) {
 			t.Fatalf("ASSERTION: the scope %s stayed after its pane closed:\n%s", scope, show())
 		}
-		time.Sleep(100 * time.Millisecond)
+		pause(t, "poll again until the state it waits for shows", 100*time.Millisecond)
 	}
 }
