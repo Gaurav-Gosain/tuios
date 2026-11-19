@@ -86,3 +86,11 @@ tuios.dev/sketch/internal/...
 tuios.dev/sketch/text
 # The tuios side of a diagram: find, colour and write it, once per source.
 github.com/Gaurav-Gosain/tuios/internal/mermaid
+# Standard packages run on request only: the --pprof server, the tar archives
+# of the bundled skills, harness manifests and release assets, read once, and
+# the archive listing of a file preview; the help templates of the command
+# line; and the XML a syntax definition is read from, once per file.
+runtime/pprof
+archive/tar
+text/template/...
+encoding/xml
