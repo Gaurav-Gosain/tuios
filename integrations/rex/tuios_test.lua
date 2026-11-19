@@ -25,6 +25,7 @@
 package.path = "./?.lua;" .. package.path
 
 local actions, order, binds, execs = {}, {}, {}, {}
+local bind_args, modes = {}, {}
 local clients_json = "CLIENTS"
 local clients = {}
 local fg_pid = 42
@@ -110,7 +111,7 @@ end
 list_tbl = base_list()
 
 local function reset_rex()
-  actions, order, binds = {}, {}, {}
+  actions, order, binds, bind_args, modes = {}, {}, {}, {}, {}
 end
 
 rex = {
@@ -122,9 +123,19 @@ rex = {
     actions[a.name] = a
     order[#order + 1] = a.name
   end,
-  bind = function(key, name)
-    assert(actions[name], "bind to an undefined action " .. tostring(name))
+  -- A client action, such as client.mode.enter, has a dot and needs no
+  -- definition. A key in a mode is MODE/KEY, the mode name in lowercase
+  -- letters, digits, underscores and hyphens.
+  bind = function(key, name, args)
+    assert(actions[name] or (type(name) == "string" and name:find(".", 1, true)), "bind to an undefined action " .. tostring(name))
+    local mode = key:match("^(.-)/")
+    assert(mode == nil or mode:match("^[a-z0-9_-]+$"), "bad mode name in " .. key)
     binds[key] = name
+    bind_args[key] = args
+  end,
+  mode = function(name, o)
+    assert(type(name) == "string" and name:match("^[a-z0-9_-]+$"), "bad mode name " .. tostring(name))
+    modes[name] = o
   end,
   exec = function(argv, o)
     execs[#execs + 1] = argv
@@ -716,6 +727,59 @@ argv_is(rex_windows[1] and rex_windows[1].layout.block.options.command or {}, { 
 fg_pid = 42
 tuios.env = env_before
 ui_strict = false
+
+-- The tuios key mode: keys = "suggested" binds one key that enters it.
+--
+-- How it could pass wrongly, written down first:
+--   - A suggested key could still sit outside the mode and take a Rex key:
+--     every binding but the one that enters must start with tuios/.
+--   - The mode could stay on after a key, or let a stray key reach the
+--     terminal: it must be entered with once and declared exclusive.
+--   - An older Rex without rex.mode could fail the config load: setup must
+--     load and still bind the keys.
+reset_rex()
+tuios.setup{ bin = "/opt/bin/tuios", keys = "suggested" }
+local outside = {}
+for key, name in pairs(binds) do
+  if key:sub(1, 6) ~= "tuios/" then
+    outside[#outside + 1] = key .. "=" .. name
+  end
+end
+check(#outside == 1 and binds["ctrl+cmd+t"] == "client.mode.enter", "one key outside the mode, and it enters the mode: " .. table.concat(outside, " "))
+local ea = bind_args["ctrl+cmd+t"] or {}
+check(ea.name == "tuios" and ea.once == true, "the mode is entered once")
+check(modes.tuios ~= nil and modes.tuios.exclusive == true, "the mode is exclusive")
+for key, name in pairs({ a = "tuios_prefix_inbox", j = "tuios_prefix_next_attention", g = "tuios_goto_picker", m = "tuios_prefix_mail",
+  n = "tuios_start_agent", r = "tuios_answer", s = "tuios_switch_session" }) do
+  check(binds["tuios/" .. key] == name, "tuios/" .. key .. " is " .. name .. ": " .. tostring(binds["tuios/" .. key]))
+end
+c = actions.tuios_check.run(ctx, {})
+check(c.keys_note == nil, "every suggested key binds: " .. tostring(c.keys_note))
+
+reset_rex()
+tuios.setup{ bin = "/opt/bin/tuios", keys = { suggested = true, mode = "cmd+shift+t", tuios_prefix_mail = false, tuios_new_window = "ctrl+cmd+w" } }
+check(binds["cmd+shift+t"] == "client.mode.enter" and binds["ctrl+cmd+t"] == nil, "mode = KEY moves the key that enters")
+check(binds["tuios/m"] == nil and binds["tuios/a"] == "tuios_prefix_inbox", "false drops one key from the mode")
+check(binds["ctrl+cmd+w"] == "tuios_new_window", "a key of your own binds outside the mode")
+
+reset_rex()
+tuios.setup{ bin = "/opt/bin/tuios", keys = { suggested = true, mode = false } }
+check(binds["ctrl+cmd+t"] == nil and binds["tuios/a"] == "tuios_prefix_inbox", "mode = false binds the mode keys and no key to enter")
+
+reset_rex()
+tuios.setup{ bin = "/opt/bin/tuios", keys = { tuios_prefix_inbox = "cmd+shift+a" } }
+check(next(modes) == nil and binds["cmd+shift+a"] == "tuios_prefix_inbox" and binds["ctrl+cmd+t"] == nil, "keys of your own make no mode")
+
+reset_rex()
+tuios.setup{ bin = "/opt/bin/tuios", keys = { tuios_goto_picker = "tuios/x" } }
+check(modes.tuios ~= nil and binds["tuios/x"] == "tuios_goto_picker" and binds["ctrl+cmd+t"] == nil, "a key of your own in the mode makes the mode")
+
+local rex_mode = rex.mode
+rex.mode = nil
+reset_rex()
+ok = pcall(tuios.setup, { bin = "/opt/bin/tuios", keys = "suggested" })
+check(ok and binds["tuios/a"] == "tuios_prefix_inbox" and binds["ctrl+cmd+t"] == "client.mode.enter", "a Rex without rex.mode still loads and binds")
+rex.mode = rex_mode
 
 if failed > 0 then
   io.stderr:write(failed .. " checks failed\n")

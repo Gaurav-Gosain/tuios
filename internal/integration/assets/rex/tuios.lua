@@ -15,7 +15,7 @@ local M = {}
 
 -- M.version is the version of this file. tuios integration status compares it
 -- with the one the installed tuios ships.
-M.version = 6
+M.version = 7
 
 -- The Rex block kind that runs a terminal.
 local TERMINAL = "com.superlogical.terminal"
@@ -33,38 +33,54 @@ local defaults = {
   keys = {},
 }
 
--- M.suggested_keys is the key set setup{ keys = "suggested" } binds. Each is
--- ctrl+cmd and a letter: a program in a terminal never sees cmd on a Mac, so
--- no key of tuios's or a shell's is taken, and none of them is a key of Rex
--- for Mac's own (its Mac Actions page) or a macOS shortcut (ctrl+cmd+q locks
--- the screen, ctrl+cmd+f is full screen, ctrl+cmd+d looks a word up, and
--- Rex has ctrl+cmd+i).
+-- M.mode is the Rex key mode the suggested keys live in, and M.mode_key
+-- the one key that enters it. ctrl+cmd+t holds cmd, which a Mac never sends
+-- to a program in a terminal, so no key of tuios's or a shell's is taken.
+-- It is not a key of Rex for Mac's own (its Mac Actions page) or a macOS
+-- shortcut. The mode is entered once: it leaves after one tuios key, and
+-- Escape leaves it too. It is exclusive, so a key it does not bind does
+-- nothing, and nothing is typed into the terminal by mistake.
+M.mode = "tuios"
+M.mode_key = "ctrl+cmd+t"
+
+-- M.suggested_keys is the key set setup{ keys = "suggested" } binds, each
+-- inside M.mode: one letter after M.mode_key.
 M.suggested_keys = {
-  tuios_prefix_inbox = "ctrl+cmd+a",
-  tuios_prefix_next_attention = "ctrl+cmd+j",
-  tuios_goto_picker = "ctrl+cmd+g",
-  tuios_prefix_mail = "ctrl+cmd+m",
-  tuios_start_agent = "ctrl+cmd+n",
+  tuios_prefix_inbox = M.mode .. "/a",
+  tuios_prefix_next_attention = M.mode .. "/j",
+  tuios_goto_picker = M.mode .. "/g",
+  tuios_prefix_mail = M.mode .. "/m",
+  tuios_start_agent = M.mode .. "/n",
+  tuios_answer = M.mode .. "/r",
+  tuios_switch_session = M.mode .. "/s",
 }
 
 -- M.keys_of turns the keys option into the keys to bind, by action name:
 -- "suggested" is M.suggested_keys; a table is itself, on top of
 -- M.suggested_keys when it holds suggested = true. An action given false is
--- left unbound, so a person can drop one suggested key.
+-- left unbound, so a person can drop one suggested key. The second result
+-- is the key that enters M.mode, or nil: M.mode_key with the suggested
+-- keys, else the table's mode entry (false for none).
 function M.keys_of(keys)
   local out = {}
+  local mode_key
   local function copy(from)
     for name, key in pairs(from) do
-      if name ~= "suggested" then
+      if name ~= "suggested" and name ~= "mode" then
         out[name] = key
       end
     end
   end
   if keys == "suggested" then
     copy(M.suggested_keys)
+    mode_key = M.mode_key
   elseif type(keys) == "table" then
     if keys.suggested == true then
       copy(M.suggested_keys)
+      mode_key = M.mode_key
+    end
+    if keys.mode ~= nil then
+      mode_key = keys.mode
     end
     copy(keys)
   end
@@ -73,7 +89,10 @@ function M.keys_of(keys)
       out[name] = nil
     end
   end
-  return out
+  if type(mode_key) ~= "string" or mode_key == "" then
+    mode_key = nil
+  end
+  return out, mode_key
 end
 
 local opts = {}
@@ -1033,7 +1052,7 @@ end
 
 -- M.setup defines the actions, and binds the keys given in o.keys, such as
 -- { tuios_prefix_inbox = "cmd+shift+a" }, or "suggested" (see
--- M.suggested_keys). Call it from init.lua, at load.
+-- M.suggested_keys and M.mode). Call it from init.lua, at load.
 -- It does not raise when tuios is missing or old: Rex then has the fallback
 -- actions, and tuios_check says why. A key for an action Rex does not have
 -- is left unbound, and tuios_check names it.
@@ -1080,7 +1099,22 @@ function M.setup(o)
   end
   loaded.count = #defined
   local unbound = {}
-  for name, key in pairs(M.keys_of(opts.keys)) do
+  local keys, mode_key = M.keys_of(opts.keys)
+  local in_mode = false
+  for _, key in pairs(keys) do
+    in_mode = in_mode or key:sub(1, #M.mode + 1) == M.mode .. "/"
+  end
+  if in_mode then
+    -- Rex before key modes has no rex.mode; the keys still bind.
+    pcall(rex.mode, M.mode, { exclusive = true })
+  end
+  if mode_key ~= nil then
+    local ok, err = pcall(rex.bind, mode_key, "client.mode.enter", { name = M.mode, once = true })
+    if not ok then
+      unbound[#unbound + 1] = "mode (" .. tostring(err) .. ")"
+    end
+  end
+  for name, key in pairs(keys) do
     local target = name
     if not known[target] and M.renamed[name] ~= nil then
       target = M.renamed[name]

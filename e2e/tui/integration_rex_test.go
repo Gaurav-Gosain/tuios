@@ -408,13 +408,16 @@ func TestRexActionsComeFromTuios(t *testing.T) {
 		}
 	})
 
-	// The suggested keys are off until asked for, and clear of every key
-	// Rex for Mac ships, of the macOS ctrl+cmd shortcuts, and of every key a
-	// program in the terminal could get (each holds cmd, which a Mac never
-	// sends to a terminal program). How it could pass wrongly: the list of
-	// Rex keys could fail to read and match nothing, so it must hold Rex's
-	// palette key; a key could be written in another modifier order than
-	// Rex's list, so both sides are put in one order before comparing.
+	// The suggested keys are off until asked for. They are one key that
+	// enters the tuios key mode once, and the tuios actions inside the mode.
+	// The key that enters is clear of every key Rex for Mac ships, of the
+	// macOS ctrl+cmd shortcuts, and of every key a program in the terminal
+	// could get (it holds cmd, which a Mac never sends to a terminal
+	// program). How it could pass wrongly: the list of Rex keys could fail to
+	// read and match nothing, so it must hold Rex's palette key; a key could
+	// be written in another modifier order than Rex's list, so both sides are
+	// put in one order before comparing; a suggested key could still sit
+	// outside the mode, so every other binding must start with tuios/.
 	t.Run("suggested keys", func(t *testing.T) {
 		home := newHome(t, tuiosBin)
 		if got := field(load(t, home, "rex-load-nokeys"), "BIND", 1); len(got) != 0 {
@@ -447,30 +450,45 @@ func TestRexActionsComeFromTuios(t *testing.T) {
 			taken[norm(k)] = "macOS"
 		}
 		binds := map[string]string{}
+		var enter []string
 		for _, l := range lines {
-			if p := strings.Split(l, "\t"); p[0] == "BIND" {
-				binds[p[2]] = p[1]
+			p := strings.Split(l, "\t")
+			if p[0] != "BIND" || len(p) < 3 {
+				continue
 			}
+			if p[2] == "client.mode.enter" {
+				enter = append(enter, p[1])
+				if len(p) < 4 || p[3] != "name=tuios once=true" {
+					t.Errorf("ASSERTION: %s enters the mode with %q, want name=tuios once=true", p[1], strings.Join(p[3:], " "))
+				}
+				continue
+			}
+			binds[p[2]] = p[1]
 		}
-		saveText(t, "suggested-keys", fmt.Sprint(binds))
-		for _, action := range []string{"tuios_prefix_inbox", "tuios_prefix_next_attention", "tuios_goto_picker", "tuios_prefix_mail", "tuios_start_agent"} {
+		saveText(t, "suggested-keys", fmt.Sprint(enter, binds))
+		if len(enter) != 1 {
+			t.Fatalf("ASSERTION: want one key that enters the tuios mode, got %v", enter)
+		}
+		if n := norm(enter[0]); taken[n] != "" || !strings.Contains(n, "cmd+") {
+			t.Errorf("ASSERTION: the key %s that enters the mode is %q's, or has no cmd", enter[0], taken[n])
+		}
+		if got := field(lines, "MODE", 2); len(got) != 1 || got[0] != "exclusive=true" {
+			t.Errorf("ASSERTION: the tuios mode is not declared exclusive: %v", got)
+		}
+		for _, action := range []string{"tuios_prefix_inbox", "tuios_prefix_next_attention", "tuios_goto_picker", "tuios_prefix_mail", "tuios_start_agent", "tuios_answer", "tuios_switch_session"} {
 			if binds[action] == "" {
 				t.Errorf("ASSERTION: the suggested keys do not bind %s", action)
 			}
 		}
 		seen := map[string]string{}
 		for action, key := range binds {
-			n := norm(key)
-			if by, ok := taken[n]; ok {
-				t.Errorf("ASSERTION: the suggested key %s for %s is %s's", key, action, by)
+			if !strings.HasPrefix(key, "tuios/") {
+				t.Errorf("ASSERTION: the suggested key %s for %s is outside the tuios mode", key, action)
 			}
-			if !strings.Contains(n, "cmd+") {
-				t.Errorf("ASSERTION: the suggested key %s for %s has no cmd, so a terminal program could need it", key, action)
-			}
-			if other, ok := seen[n]; ok {
+			if other, ok := seen[key]; ok {
 				t.Errorf("ASSERTION: %s binds both %s and %s", key, other, action)
 			}
-			seen[n] = action
+			seen[key] = action
 		}
 	})
 

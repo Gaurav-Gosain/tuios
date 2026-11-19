@@ -160,6 +160,9 @@ rx config check > "$out/config-check-suggested.txt" 2>&1; echo "config check rc=
 rx config reload > /dev/null 2>&1
 rx keymap > "$out/keymap-suggested.txt" 2>&1; echo "keymap rc=$?"; grep -i 'tuios' "$out/keymap-suggested.txt"
 grep -i -E 'warn|error|complain|unknown' "$out/keymap-suggested.txt"
+grep -qE '^ctrl\+cmd\+t +client\.mode\.enter +\{"name":"tuios","once":true\}' "$out/keymap-suggested.txt" && echo "ctrl+cmd+t enters the tuios mode once" || echo "NO key enters the tuios mode once"
+grep -qE '^tuios +yes' "$out/keymap-suggested.txt" && echo "the tuios mode is exclusive" || echo "the tuios mode is NOT exclusive"
+echo "keys outside the mode: $(grep -E '^[^ ]+ +tuios_' "$out/keymap-suggested.txt" | grep -vc '^tuios/')"
 rx keymap --json > "$out/keymap-suggested.json" 2>&1
 cp "$out/init-before-keys.lua" "$cfg"; rx config reload > /dev/null 2>&1
 

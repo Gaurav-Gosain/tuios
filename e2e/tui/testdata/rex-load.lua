@@ -4,7 +4,8 @@
 --
 --   ACTION <tab> name <tab> title <tab> category
 --   ENUM <tab> harness command
---   BIND <tab> key <tab> action
+--   BIND <tab> key <tab> action <tab> its args as k=v, sorted
+--   MODE <tab> name <tab> exclusive=true|false
 --   EXEC <tab> argv joined by spaces
 --   LOADED (setup returned) or SETUP-ERROR <tab> message
 --   RAN <tab> name, or RUN-ERROR <tab> message, for REX_LOAD_RUN
@@ -147,10 +148,20 @@ rex = {
       end
     end
   end,
-  bind = function(key, action)
+  -- A client action such as client.mode.enter has a dot and needs no
+  -- definition.
+  bind = function(key, action, args)
     assert(type(key) == "string" and key ~= "", "bind without a key")
-    assert(defined[action] ~= nil, "bind to an action not defined: " .. tostring(action))
-    print("BIND\t" .. key .. "\t" .. action)
+    assert(defined[action] ~= nil or tostring(action):find(".", 1, true), "bind to an action not defined: " .. tostring(action))
+    local kv = {}
+    for k, v in pairs(args or {}) do
+      kv[#kv + 1] = tostring(k) .. "=" .. tostring(v)
+    end
+    table.sort(kv)
+    print("BIND\t" .. key .. "\t" .. action .. "\t" .. table.concat(kv, " "))
+  end,
+  mode = function(name, o)
+    print("MODE\t" .. name .. "\texclusive=" .. tostring(o and o.exclusive == true))
   end,
   block = {
     call = function(kind, method, args)

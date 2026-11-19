@@ -194,23 +194,31 @@ and check actions. `tuios_check` says why.
 
 ### Keys
 
-Keys are off until you name them. `keys = "suggested"` binds this set:
+Keys are off until you name them. `keys = "suggested"` binds one key,
+`ctrl+cmd+t`, that enters the `tuios` key mode. In the mode, one letter
+runs a tuios action:
 
 | Key | Action |
 | --- | --- |
-| `ctrl+cmd+a` | `tuios_prefix_inbox`: the agents view on what needs you |
-| `ctrl+cmd+j` | `tuios_prefix_next_attention`: jump to the agent that has waited longest |
-| `ctrl+cmd+g` | `tuios_goto_picker`: go to an agent, session, workspace or pane |
-| `ctrl+cmd+m` | `tuios_prefix_mail`: your mail |
-| `ctrl+cmd+n` | `tuios_start_agent`: start an agent |
+| `ctrl+cmd+t`, then `a` | `tuios_prefix_inbox`: the agents view on what needs you |
+| `ctrl+cmd+t`, then `j` | `tuios_prefix_next_attention`: jump to the agent that has waited longest |
+| `ctrl+cmd+t`, then `r` | `tuios_answer`: answer an agent |
+| `ctrl+cmd+t`, then `g` | `tuios_goto_picker`: go to an agent, session, workspace or pane |
+| `ctrl+cmd+t`, then `s` | `tuios_switch_session`: switch or attach a session |
+| `ctrl+cmd+t`, then `m` | `tuios_prefix_mail`: your mail |
+| `ctrl+cmd+t`, then `n` | `tuios_start_agent`: start an agent |
 
-Each holds `cmd`, which a Mac never sends to a program in a terminal, so no
-key of tuios's (such as `ctrl+b`) or of your shell's is taken. None is a
-default key of Rex for Mac (its Mac Actions page) or a macOS `ctrl+cmd`
-shortcut: `ctrl+cmd+q` locks the screen, `ctrl+cmd+f` is full screen,
-`ctrl+cmd+d` looks a word up, and Rex has `ctrl+cmd+i`. A key you bound in
-Rex's settings, or with `rex.bind` above the require line, is replaced by
-the newest binding, so put your own `rex.bind` lines after it.
+The mode ends after one of these keys. `Escape` also ends it. In the mode,
+a key that is not in the table does nothing, so you cannot type into the
+terminal by mistake. Outside the mode, the letters do what they did before.
+
+`ctrl+cmd+t` holds `cmd`, which a Mac never sends to a program in a
+terminal, so no key of tuios's (such as `ctrl+b`) or of your shell's is
+taken. It is not a default key of Rex for Mac (its Mac Actions page) or a
+macOS `ctrl+cmd` shortcut. A key you bound in Rex's settings, or with
+`rex.bind` above the require line, is replaced by the newest binding, so
+put your own `rex.bind` lines after it. `rex keymap` lists the mode and
+its keys.
 
 ```lua
 require("tuios").setup{
@@ -219,16 +227,26 @@ require("tuios").setup{
   keys = "suggested",
 }
 
--- The set with changes: your keys on top, false to leave one unbound.
+-- The set with changes: another key to enter the mode, false to leave a
+-- key out, tuios/KEY for a key in the mode, and a key outside the mode.
 require("tuios").setup{
-  keys = { suggested = true, tuios_prefix_mail = false, tuios_new_window = "ctrl+cmd+w" },
+  keys = {
+    suggested = true,
+    mode = "cmd+shift+t",
+    tuios_prefix_mail = false,
+    tuios_new_window = "tuios/w",
+    tuios_prefix_inbox = "cmd+shift+a",
+  },
 }
 
--- Only keys of your own.
+-- Only keys of your own, with no mode.
 require("tuios").setup{
   keys = { tuios_prefix_inbox = "cmd+shift+a", tuios_prefix_next_attention = "cmd+shift+j" },
 }
 ```
+
+`mode = false` binds the keys in the mode and no key to enter it. Bind
+`client.mode.enter` with `{ name = "tuios", once = true }` yourself then.
 
 The names of the earlier `tuios.lua`, `tuios_agents`, `tuios_mail` and
 `tuios_next_waiting`, still bind the same actions. A key for an action Rex
@@ -265,7 +283,8 @@ moves the focus to the agent that has waited longest, and
 `tuios_prefix_inbox` opens the agents view on what needs you.
 `tuios_answer` answers the agent from Rex, with no need to show the tuios
 pane (see "Answer an agent"). In the
-suggested keys (see Keys) they are `ctrl+cmd+j` and `ctrl+cmd+a`.
+suggested keys (see Keys) they are `ctrl+cmd+t` then `j`, and `ctrl+cmd+t`
+then `a`.
 
 **Two notifications for one question.** With Rex in the background and both
 Rex settings above on, one question can give two macOS notifications, one
