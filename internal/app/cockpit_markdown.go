@@ -64,6 +64,9 @@ type ckMD struct {
 	// heads draws a second level heading in the accent too, and a third in
 	// the body ink, for a document read as a page: quick look's Markdown.
 	heads bool
+	// lead says the next runs start a paragraph, whose first bold run is
+	// its lead label. See runs.
+	lead bool
 	// whole keeps every cell of a table: a cell wraps in its column, and a
 	// table too wide for any column wraps as one record a row. Without it the
 	// widest cells are cut.
@@ -152,6 +155,8 @@ func (md *ckMD) block(b markdown.Block, first, rest []ckSeg, width int, ink colo
 	}
 	switch b.Kind {
 	case markdown.Paragraph:
+		// A bold label at the start of a paragraph is its lead label.
+		md.lead = true
 		md.text(md.runs(markdown.Inline(b.Text), ink, 0), first, rest, avail)
 	case markdown.Heading:
 		hink := pal.Fg
@@ -163,7 +168,11 @@ func (md *ckMD) block(b markdown.Block, first, rest []ckSeg, width int, ink colo
 		case b.Level > 2 && !md.heads, b.Level > 3:
 			hink = pal.FgDim
 		}
-		md.text(md.runs(markdown.Inline(b.Text), hink, ckBold), first, rest, avail)
+		segs := md.runs(markdown.Inline(b.Text), hink, ckBold)
+		if icon := ckIconFor(ckLabelIcons, ckSegsText(segs)); icon != "" && l.nerd {
+			segs = append([]ckSeg{{t: icon, fg: hink, attrs: ckBold}, {t: " "}}, segs...)
+		}
+		md.text(segs, first, rest, avail)
 	case markdown.Item:
 		var mark string
 		switch {
@@ -174,7 +183,8 @@ func (md *ckMD) block(b markdown.Block, first, rest []ckSeg, width int, ink colo
 		default:
 			mark = l.g(ckBullets[list%len(ckBullets)])
 		}
-		markInk := pal.FgMute
+		// A list's marks take the accent, so its items stand out.
+		markInk := pal.Accent
 		if b.Task == 2 {
 			markInk = pal.Success
 		}
@@ -229,7 +239,9 @@ func (md *ckMD) runs(rs []markdown.Run, ink color.Color, attrs uint8) []ckSeg {
 	l := md.l
 	pal := l.pal
 	out := make([]ckSeg, 0, len(rs))
-	for _, r := range rs {
+	lead := md.lead
+	md.lead = false
+	for i, r := range rs {
 		if ckMarkerRun(r) {
 			var a uint8
 			if r.Style&markdown.Emphasis != 0 {
@@ -241,6 +253,25 @@ func (md *ckMD) runs(rs []markdown.Run, ink color.Color, attrs uint8) []ckSeg {
 		s := ckSeg{t: r.Text, fg: ink, attrs: attrs}
 		if r.Style&markdown.Strong != 0 {
 			s.attrs |= ckBold
+			if attrs&ckBold == 0 {
+				// Bold in running text is an anchor term, in the link ink.
+				s.fg = pal.Accent
+			}
+			// A bold lead label the list knows, at the start of a
+			// paragraph, takes its icon in the bright accent. A lead-in
+			// that names an action takes its icon with its colon anywhere.
+			icon := ""
+			if lead && i == 0 {
+				if icon = ckIconFor(ckLabelIcons, r.Text); icon != "" {
+					s.fg = pal.AccentBright
+				}
+			}
+			if icon == "" && strings.HasSuffix(strings.TrimSpace(r.Text), ":") {
+				icon = ckIconFor(ckActionIcons, r.Text)
+			}
+			if icon != "" && l.nerd && r.Style&markdown.CodeSpan == 0 {
+				out = append(out, ckSeg{t: icon, fg: s.fg, attrs: s.attrs}, ckSeg{t: " "})
+			}
 		}
 		if r.Style&markdown.Emphasis != 0 {
 			s.attrs |= ckItalic

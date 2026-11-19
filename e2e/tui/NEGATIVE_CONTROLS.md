@@ -18315,3 +18315,18 @@ Run on Linux on 2026-11-19. The branch passes all three.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestQuickLookReadsTheReadme|TestQuickLookPicksThePictureForItsGround|TestCockpitThreadReplyMarkers)$' -v .`.
+## Reply markers in the pi-emphasis look
+
+`TestCockpitThreadMarkerLook` in `cockpit_reply_markers_test.go`. An agent's reply written as the guidance asks, with lead labels, a pill of each group, a numbered list, a bold anchor term and a tree, is read in the agents view at truecolor and at 16 colours. With Nerd Fonts, the Done pill must have a rounded cap before its icon, and the Finding lead label must have an icon. The bold anchor term and the list's number must not be in the plain text's ink. At truecolor the Destructive pill must not look like the Failed one.
+
+Run on Linux on 2026-11-19. The branch passes the test.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The branch under it (#2247) | "ASSERTION: the Done pill has no rounded cap before its icon", "the Finding lead label has no icon", "the bold anchor term is in the plain ink" | **caught** |
+| The caps drawn as spaces | "ASSERTION: the Done pill has no rounded cap before its icon" | **caught** |
+| No icon for a lead label | "ASSERTION: the Finding lead label has no icon" | **caught** |
+| Bold left in the plain ink | "ASSERTION: the bold anchor term is in the plain ink" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitThreadMarkerLook$' -v .`.

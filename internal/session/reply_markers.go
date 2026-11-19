@@ -9,12 +9,13 @@ package session
 
 // replyMarkerGuidance is what an agent is told. It is plain text, the same for
 // every harness.
-const replyMarkerGuidance = "Mark the state of your work with a reply marker in double square brackets: " +
-	"[[Done]], [[Failed]], [[Blocked]], [[Needs you]] or [[Unverified]]. " +
-	"Add a short detail after a colon, as in [[Failed: 3 tests]]. " +
-	"Keep a marker under 32 characters and put it beside the thing it marks. " +
-	"Do not put a marker inside code. " +
-	"The tuios agents view shows each marker as a coloured label."
+const replyMarkerGuidance = "Mark the state of your work with a reply marker in double square brackets, beside the thing it marks. " +
+	"Use these words. A problem: [[Failed]], [[Blocked]], [[Broken]]. For the person: [[Needs you]], [[Unverified]], [[Skipped]], [[Pending]]. " +
+	"Settled: [[Done]], [[Passed]], [[Observed]], [[Recommended]]. A consequence: [[Destructive]], [[Irreversible]], [[Costs money]]. " +
+	"The kind of work: [[Investigate]], [[Implement]]. Ownership: [[Owned]], [[Shared]]. Context: [[New]], [[Changed]], [[Inferred]], [[Decision]]. " +
+	"Add a short detail after a colon, as in [[Failed: 3 tests]]. Keep a marker under 32 characters. Do not put a marker inside code. " +
+	"Start a reply, and each part of a long one, with a bold lead label such as **Finding:**, **Result:**, **Cause:**, **Evidence:**, **Risk:**, **Plan:** or **Next:**. " +
+	"Do not type icons. The tuios agents view draws each marker as a coloured pill and adds the icons."
 
 // replyMarkerFlags are the flags that add to a harness's system prompt, by
 // harness id. Only a flag that appends is listed: one that replaces the

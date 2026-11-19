@@ -3158,19 +3158,26 @@ Behavior tab, as "Fold Working".
 
 An agent can mark its reply with a short label in double square brackets,
 such as `[[Done]]`, `[[Failed: 3 tests]]` or `[[Needs you]]`. The agents
-view (`ctrl+b i`) shows each marker as a coloured label:
+view (`ctrl+b i`) shows each marker as a coloured pill:
 
-| Colour | Labels |
-|--------|--------|
-| Red | Failed, Blocked, Broken, Rejected, Unsafe, Down |
-| Yellow | Needs you, Unverified, Pending, Review, Partial, Skipped, In progress, At risk, Decision, Todo, Stale, Draft |
-| Green | Done, Passed, Fixed, Verified, Merged, Shipped, Approved, Ready, Healthy |
-| Accent | Any other label |
+| Colour | Group | Labels |
+|--------|-------|--------|
+| Red | A problem | Failed, Blocked, Broken, Rejected, Unsafe, Down |
+| Yellow | For the person | Needs you, Unverified, Pending, Review, Partial, Skipped, In progress, At risk, Todo, Stale, Draft |
+| Green | Settled | Done, Passed, Observed, Fixed, Live, Recommended, Keep, Verified, Merged, Shipped, Approved, Ready, Safe, Healthy |
+| Solid red | A consequence | Costs money, Destructive, Irreversible |
+| Cyan | The kind of work | Brainstorm, Investigate, Preview, Implement, Qualify |
+| Solid blue | Ownership | Owned, Shared, Foreign |
+| Blue | Context | New, Changed, Inferred, Optional, Decision, and any other label |
 
 Complete, Completed, Finished and OK show as Done. Fail, Failing and Error
 show as Failed. A label has at most 32 characters. A marker in a code span or
-a code block stays as text. With Nerd Fonts on, a label has an icon. The view
-also colours ✓, ✗ and →, and dims the lines of a tree (`├──`, `└──`). The
+a code block stays as text. With Nerd Fonts on, a pill has rounded ends and an
+icon. A bold lead label at the start of a paragraph, such as **Finding:**,
+**Risk:** or **Next:**, and a heading such as Plan or Result, get an icon too.
+Bold text takes the link colour, and the marks of a list take the accent. The
+view colours ✓, ✗ and →, and dims the lines of a tree (`├──`, `└──`). The
+look follows pi-emphasis by John Lindquist (MIT). The
 stored reply and a Markdown copy (`Y` in copy mode) keep the marker as the
 agent wrote it.
 
