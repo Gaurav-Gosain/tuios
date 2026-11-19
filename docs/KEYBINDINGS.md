@@ -1747,6 +1747,69 @@ overlay's own again. A menu that the overlay's menu opens runs over the same
 overlay. A sticky menu stays open while the overlay does. Copy mode is not one
 of these sections: bind its menus in `terminal_mode` or under the leader.
 
+## Key modes
+
+A key mode is a set of keys that stays on until you turn it off. While a mode
+is on, its keys run their actions with no leader. You declare a mode as a
+`[keybindings.modes.NAME]` table, then bind the action `enter_mode:NAME` to
+the key that turns it on. tuios has no modes until you declare one, and it
+binds no new key for them.
+
+```toml
+[keybindings.prefix_mode]
+"enter_mode:resize" = ["y"]
+
+[keybindings.modes.resize]
+title = "Resize"
+exclusive = true
+
+[keybindings.modes.resize.keys]
+resize_pane_left_5 = ["h"]
+resize_pane_down_5 = ["j"]
+resize_pane_up_5 = ["k"]
+resize_pane_right_5 = ["l"]
+"enter_mode:split" = ["s"]
+
+[keybindings.modes.split]
+title = "Split"
+once = true
+
+[keybindings.modes.split.keys]
+split_vertical = ["v"]
+split_horizontal = ["x"]
+```
+
+`Ctrl+B y` turns on the resize mode. Then `h h h` narrows the pane by three
+steps, and `esc` turns the mode off. In the resize mode, `s v` splits the
+pane once and goes back to the resize mode.
+
+- The dock shows a chip after the mode pill while a mode is on. The chip
+  names the modes that are on and the key that turns off the top one. With
+  the dock hidden, the badge shows the modes.
+- `exclusive = true` drops every key that the mode does not bind. Without it,
+  such a key goes on as if the mode were off: to the pane in terminal mode,
+  and to the window keys in window mode.
+- `once = true` turns the mode off after one key it runs. An exclusive once
+  mode also turns off after a key it drops.
+- Modes stack. `enter_mode:NAME` in a mode turns on the new mode on top. The
+  top mode reads a key first. A mode that is not exclusive gives a key it does
+  not bind to the mode under it. Up to 8 modes can be on.
+- `esc` turns off the top mode, unless a mode that is on binds `esc`. The
+  action `leave_mode` also turns off the top mode, so you can put it on any
+  key.
+- The leader, its menus, the overlays, copy mode and nest mode keep their
+  keys while a mode is on. `Ctrl+B` always works.
+- A mode key can run any action: a built-in action, `command:NAME`,
+  `user:NAME`, `open_menu:NAME` or `enter_mode:NAME`.
+- The modes are for one client. Another client on the same session keeps its
+  keys, and a client that attaches starts with no mode on.
+- `title` names the mode on the chip and defaults to the name. A mode name
+  has lowercase letters, digits, `-` and `_`.
+- `tuios keybinds list`, `doctor`, `unbind` and `free` read the modes as
+  they read any other section, named `modes.NAME`. A config warning names a
+  key that turns on a mode that is not declared, and a mode that nothing
+  turns on.
+
 ## Split into the same ssh
 
 These actions open a pane on the machine that the focused pane is connected to

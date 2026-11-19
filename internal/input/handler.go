@@ -772,6 +772,12 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
+	// The key modes that are on read the key before the mode does, in
+	// either mode. See key_modes.go.
+	if m, cmd, ok := routeKeyMode(msg, o); ok {
+		return m, cmd
+	}
+
 	if o.Mode == app.TerminalMode {
 		return HandleTerminalModeKey(msg, o)
 	}

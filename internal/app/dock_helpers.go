@@ -894,6 +894,7 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 	// lists the mode: it is the way out of a dimmed screen, not a component.
 	width += m.spotlightChipWidth()
 	width += lipgloss.Width(m.calmChip())
+	width += lipgloss.Width(m.keyModeChip())
 	width += 4
 
 	return modeLabel, trail, tape, width, modeInfo

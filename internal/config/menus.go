@@ -130,6 +130,9 @@ func (k *KeybindingsConfig) SectionNamesFor() []string {
 	for _, name := range k.MenuNames() {
 		names = append(names, MenuSectionPrefix+name)
 	}
+	for _, name := range k.ModeNames() {
+		names = append(names, ModeSectionPrefix+name)
+	}
 	return names
 }
 

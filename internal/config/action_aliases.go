@@ -26,6 +26,11 @@ func canonicalizeKeybindings(kb *KeybindingsConfig) {
 			canonicalizeTable(menu.Keys)
 		}
 	}
+	for _, mode := range kb.Modes {
+		if mode.Keys != nil {
+			canonicalizeTable(mode.Keys)
+		}
+	}
 	for i, name := range kb.Repeat {
 		kb.Repeat[i] = CanonicalAction(name)
 	}

@@ -327,7 +327,8 @@ func ScopesFor(kb *KeybindingsConfig) []Scope {
 			}
 		}
 	}
-	return append(scopes, menuScopes(kb, scopes)...)
+	scopes = append(scopes, menuScopes(kb, scopes)...)
+	return append(scopes, modeScopes(kb, scopes)...)
 }
 
 // section returns the config table with the given name, or nil.
@@ -338,6 +339,9 @@ func (k *KeybindingsConfig) section(name string) map[string][]string {
 		}
 	}
 	if table, ok := k.menuSection(name); ok {
+		return table
+	}
+	if table, ok := k.modeSection(name); ok {
 		return table
 	}
 	return nil
@@ -580,6 +584,9 @@ func lookupForm(key string) string {
 func describeAction(action string) string {
 	if name, ok := MenuNameOf(action); ok {
 		return "Open the " + name + " menu"
+	}
+	if name, ok := ModeNameOf(action); ok {
+		return "Turn on the " + name + " key mode"
 	}
 	if desc := ActionDescriptions[action]; desc != "" {
 		return desc

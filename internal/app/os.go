@@ -423,7 +423,10 @@ type OS struct {
 	nest bool
 	// windowModeNoted is set once the client has said that window mode is
 	// off. See window_mode_off.go.
-	windowModeNoted        bool
+	windowModeNoted bool
+	// keyModes are the key modes that are on, the top one last. See
+	// key_modes.go.
+	keyModes               []string
 	HelpScrollOffset       int                           // Scroll offset for help menu
 	HelpCategory           int                           // Current help category index (for left/right navigation)
 	HelpSearchMode         bool                          // True when help search is active

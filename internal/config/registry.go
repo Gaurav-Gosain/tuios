@@ -38,6 +38,9 @@ type KeybindRegistry struct {
 	// menus holds each declared menu (see MenuConfig), resolved the same
 	// way, by name.
 	menus map[string]map[string]string
+	// modes holds each declared key mode (see ModeConfig), resolved the
+	// same way, by name.
+	modes map[string]map[string]string
 
 	// presses is PressesByAction's answer, kept until the next buildMappings.
 	// The help overlay asks for it four times a frame while it is open, and
@@ -107,6 +110,10 @@ func (r *KeybindRegistry) buildMappings() {
 	r.menus = make(map[string]map[string]string, len(kb.Menus))
 	for _, name := range kb.MenuNames() {
 		r.menus[name] = r.sectionKeyMap(kb.Menus[name].Keys)
+	}
+	r.modes = make(map[string]map[string]string, len(kb.Modes))
+	for _, name := range kb.ModeNames() {
+		r.modes[name] = r.sectionKeyMap(kb.Modes[name].Keys)
 	}
 }
 
@@ -228,6 +235,12 @@ func (r *KeybindRegistry) PrefixRepeats(action string) bool {
 // with the given name (see MenuConfig).
 func (r *KeybindRegistry) GetMenuAction(name, key string) string {
 	return r.lookupKey(key, r.menus[name])
+}
+
+// GetModeAction returns the action name for a given key in the declared key
+// mode with the given name (see ModeConfig).
+func (r *KeybindRegistry) GetModeAction(name, key string) string {
+	return r.lookupKey(key, r.modes[name])
 }
 
 // GetInboxKeys is GetKeys for the Inbox, its peek and the mailbox, whose

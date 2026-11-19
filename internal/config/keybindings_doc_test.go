@@ -48,6 +48,10 @@ func TestKeybindingsDocNamesRealTablesAndActions(t *testing.T) {
 			return tableKind{known: true, actions: true, table: path[0]}
 		case path[0] == "menus" && len(path) == 2:
 			return tableKind{known: true, actions: true}
+		case path[0] == "modes" && len(path) == 2:
+			return tableKind{known: true, fields: reflect.TypeFor[ModeConfig]()}
+		case path[0] == "modes" && len(path) == 3 && path[2] == "keys":
+			return tableKind{known: true, actions: true}
 		case len(path) == 1:
 			f, ok := kbStructField(kbType, path[0])
 			if !ok {

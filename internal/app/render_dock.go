@@ -561,6 +561,8 @@ func (m *OS) renderDockString() (string, int) {
 	m.recordSpotlightChip(0, 0, dockY)
 	// The calm mark rides after it on the same terms. See calm.go.
 	calm := m.calmChip()
+	// The key mode chip rides after the calm mark. See key_modes.go.
+	calm += m.keyModeChip()
 	if !m.dockPlan.Has(config.DockComponentMode) {
 		if chip != "" {
 			m.recordSpotlightChip(leftX, chipW, dockY)

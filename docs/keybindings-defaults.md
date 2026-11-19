@@ -812,6 +812,7 @@ Run `tuios keybinds list` to see the keys that your config sets.
 |  | `layout_master_stack` | Tile the workspace as master and stack |
 |  | `layout_off` | Turn tiling off on the workspace |
 |  | `layout_scrolling` | Tile the workspace as scrolling columns |
+|  | `leave_mode` | Turn off the key mode on top |
 |  | `look_picker` | Choose a look: a theme with its borders and dock |
 |  | `mark_pane` | Mark the focused pane, or clear the mark |
 |  | `move_workspace_left` | Swap this workspace with the one before it |

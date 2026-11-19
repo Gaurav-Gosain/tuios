@@ -101,7 +101,7 @@ var knownActionNames = sync.OnceValue(func() []string {
 // name only that table knows, such as the rail's "exit" and jump_1 (see
 // scopedDescriptions).
 func isBindableAction(table, name string) bool {
-	if strings.HasPrefix(name, CommandActionPrefix) || strings.HasPrefix(name, OpenMenuPrefix) {
+	if strings.HasPrefix(name, CommandActionPrefix) || strings.HasPrefix(name, OpenMenuPrefix) || strings.HasPrefix(name, EnterModePrefix) {
 		return true
 	}
 	if _, found := slices.BinarySearch(knownActionNames(), name); found {

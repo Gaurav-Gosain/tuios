@@ -62,7 +62,7 @@ func skipped(path string, t reflect.Type) bool {
 		if path != prefix && !strings.HasPrefix(path, prefix+".") {
 			continue
 		}
-		if t.Kind() == reflect.Map || t.Kind() == reflect.Slice || strings.HasPrefix(path, "keybindings.menus.") {
+		if t.Kind() == reflect.Map || t.Kind() == reflect.Slice || strings.HasPrefix(path, "keybindings.menus.") || strings.HasPrefix(path, "keybindings.modes.") {
 			return true
 		}
 	}

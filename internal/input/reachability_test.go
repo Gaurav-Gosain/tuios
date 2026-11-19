@@ -438,6 +438,9 @@ var notTerminalSections = map[string]string{
 	// key to press from here. TestDeclaredMenusNest presses them through the
 	// real entry point.
 	"menus": "user-declared prefix menus, none ship",
+	// Declared by the user, like the menus. TestKeyModeStaysOnStacksAndLeavesOnEsc
+	// (e2e) presses their keys through the real entry point.
+	"modes": "user-declared key modes, none ship",
 }
 
 // TestReachabilityTableCoversEveryBindingSection stops the table from going
@@ -479,7 +482,10 @@ func TestReachabilityTableCoversEveryBindingSection(t *testing.T) {
 // later gets a default key fails too, and moves into the table above.
 var actionsWithNoDefaultBinding = map[string]string{
 	// Context menu rows. The menu hands them to the same dispatcher.
-	"clear_selection":   "context menu row",
+	"clear_selection": "context menu row",
+	// Turns off a user-declared key mode. esc does the same while a mode is
+	// on, and no mode ships, so it has no default key.
+	"leave_mode":        "esc in a key mode, or a key the user binds",
 	"kill_session":      "context menu row",
 	"kill_session_next": "context menu row",
 	"kill_session_quit": "context menu row",

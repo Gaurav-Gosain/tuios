@@ -18396,3 +18396,24 @@ Run on Linux on 2026-11-19. The branch passes the test.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRailCustomRowLinkOpensOnClickAndEnter$' -v .`.
+## Key modes
+
+`key_modes_test.go` declares three `[keybindings.modes.NAME]` tables and
+drives them from terminal mode with real keys. `TestKeyModeStaysOnStacksAndLeavesOnEsc`
+checks that an exclusive mode stays on through the keys it runs, drops a key
+it does not bind, stacks a once mode that ends after one key, and turns off
+on esc. `TestKeyModeNotExclusivePassesKeysToThePane` checks that text typed
+in a mode that is not exclusive reaches the shell while the mode's own key
+runs.
+
+Run on 2026-11-19 on Linux. The branch passes both tests. The control is this
+branch with the `routeKeyMode` call in `routeKey` (`internal/input/handler.go`)
+deleted, so the modes still turn on and show their chip but read no key.
+
+| Test | Failure | Verdict |
+| --- | --- | --- |
+| `TestKeyModeStaysOnStacksAndLeavesOnEsc` | `the first h: pane b is still 60 wide, want less than 60` | **caught** |
+| `TestKeyModeNotExclusivePassesKeysToThePane` | `daemon never reported 2 windows with settled geometry` after alt+y | **caught** |
+
+The frames are under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestKeyMode' -v .`.

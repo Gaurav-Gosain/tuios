@@ -97,6 +97,8 @@ func (m *OS) ApplyReloadedConfig(cfg *config.UserConfig) tea.Cmd {
 		m.keybinds.report = m.buildKeybindReport()
 		m.keybinds.filtered = nil
 	}
+	// A key mode the new file no longer declares is off.
+	m.PruneKeyModes()
 	// The beam is client-local, so nothing else carries it: without this the
 	// screen and the config disagree about whether it is on, and the next
 	// toggle writes the disagreement back to the file.

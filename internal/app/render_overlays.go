@@ -56,6 +56,8 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			timeStyle = timeStyle.Background(pal.Warning).Foreground(theme.ContrastText(pal.Warning))
 		case badgeNest:
 			timeStyle = timeStyle.Background(pal.Info).Foreground(theme.ContrastText(pal.Info))
+		case badgeKeyMode:
+			timeStyle = timeStyle.Background(pal.Accent).Foreground(theme.ContrastText(pal.Accent))
 		}
 
 		renderedTime := timeStyle.Render(statusText)
@@ -762,6 +764,8 @@ const (
 	// the which-key menu of the same state. See checkGuestCellsAreNotPaintedOver.
 	badgeLeader
 	badgeNest
+	// badgeKeyMode is a key mode that is on, with no dock to draw its chip.
+	badgeKeyMode
 )
 
 // statusBadge is the floating badge's text and the state it shows.
@@ -791,6 +795,8 @@ func (m *OS) statusBadge() (string, badgeKind) {
 		return "PREFIX " + m.Settings.GetDockLockIcon(false) + " | " + currentTime, kind
 	case kind == badgeLeader:
 		return "PREFIX | " + currentTime, kind
+	case kind == badgeKeyMode:
+		return m.keyModeLabel() + " | " + currentTime, kind
 	default:
 		return m.nestLabel() + " | " + currentTime, kind
 	}
@@ -809,6 +815,9 @@ func (m *OS) statusBadgeKind() (badgeKind, bool) {
 	// Nest mode goes on the badge when no mode pill can carry it.
 	case m.Nested() && !m.modePillShown():
 		return badgeNest, false
+	// A key mode goes on the badge when there is no dock to draw its chip.
+	case m.Settings.DockbarPosition == "hidden" && m.KeyModeOn():
+		return badgeKeyMode, false
 	}
 	return badgeNone, false
 }
@@ -829,5 +838,5 @@ func (m *OS) badgeRowReserved() bool {
 		return false
 	}
 	kind, _ := m.statusBadgeKind()
-	return kind == badgeRecording || kind == badgeNest
+	return kind == badgeRecording || kind == badgeNest || kind == badgeKeyMode
 }

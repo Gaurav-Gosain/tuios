@@ -371,6 +371,7 @@ var actionTable = [...]ActionSpec{
 	{Name: "pick_path", Desc: "Pick a file or folder and type its path at the cursor"},
 	{Name: "toggle_scratch", Desc: "Show or hide the scratch terminal", GUI: true},
 	{Name: "toggle_calm", Desc: "Calm mode"},
+	{Name: ActionLeaveMode, Desc: "Turn off the key mode on top"},
 	{Name: "hints_all_panes", Desc: "Label the text on all panes to copy it"},
 
 	// The scrollback in the editor (prefix E, ctrl+g in copy mode)

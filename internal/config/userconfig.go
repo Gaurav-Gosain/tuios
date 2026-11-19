@@ -1221,7 +1221,10 @@ type KeybindingsConfig struct {
 	// does. None ships: see menus.go. The loader adds the [menus.NAME]
 	// tables with keyed rows (menus_config.go); [keybindings.menus.NAME] is
 	// the older spelling of a menu, read as it was.
-	Menus        map[string]MenuConfig `toml:"menus,omitempty"`
+	Menus map[string]MenuConfig `toml:"menus,omitempty"`
+	// Modes are the key modes, each turned on by binding the action
+	// enter_mode:NAME in any section. None ships: see key_modes.go.
+	Modes        map[string]ModeConfig `toml:"modes,omitempty"`
 	TerminalMode map[string][]string   `toml:"terminal_mode"` // Direct keybinds in terminal mode (no prefix required)
 	// Global binds are consulted in window mode and in terminal mode alike, so
 	// the palette and the launcher answer to one key wherever the user is. They

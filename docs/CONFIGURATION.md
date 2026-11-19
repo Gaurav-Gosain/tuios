@@ -737,6 +737,8 @@ file_drag = false
 
 `[menus.NAME]` declares a menu: a title and a list of rows, each an action or a submenu with an optional `key`, `label` and `when`. `open_menu:NAME` opens it, as a which-key panel from a key and in place from a right-click menu. The target names (`pane`, `session`, `file` and the others) are the shipped right-click menus: `add` puts rows after the row `after` names, `remove` takes rows out, and `items` replaces them. An action's `targets` and `when` decide where its row shows. The which-key panel shows the rows in the order you write them, and a `"---"` row starts a new group. The panel title is the `title` as you write it. tuios ships one menu of its own, `start`: a short menu in plain words with New terminal, Split, Close, Find a file, Select and copy text, All commands, Settings and Help. Bind `open_menu:start` to a key to open it. A `[menus.start]` of your own replaces it. See [KEYBINDINGS.md](KEYBINDINGS.md#your-menus).
 
+`[keybindings.modes.NAME]` declares a key mode: a set of keys that stays on until `esc` or `leave_mode`. `enter_mode:NAME` turns it on. `exclusive` drops the keys the mode does not bind, and `once` turns the mode off after one key. Modes stack, and the dock shows a chip while one is on. See [Key modes](KEYBINDINGS.md#key-modes).
+
 ## Animation speed
 
 [`appearance.animation_speed`](config-options.md#appearance.animation_speed) is the percent window animations run at: minimize
@@ -5186,6 +5188,8 @@ A smaller limit removes the oldest buffers at once. A yank larger than `max_kb` 
 `[[actions]]` declares an action of your own, `user:NAME`: a built-in action, a program with its arguments (placeholders such as `{pane.cwd}` fill one argument each, and no shell reads them), or a plugin action. A key, a menu row or `tuios actions run` runs it. See [Your actions](KEYBINDINGS.md#your-actions).
 
 `[menus.NAME]` declares a menu: a title and a list of rows, each an action or a submenu with an optional `key`, `label` and `when`. `open_menu:NAME` opens it, as a which-key panel from a key and in place from a right-click menu. The target names (`pane`, `session`, `file` and the others) are the shipped right-click menus: `add` puts rows after the row `after` names, `remove` takes rows out, and `items` replaces them. An action's `targets` and `when` decide where its row shows. The which-key panel shows the rows in the order you write them, and a `"---"` row starts a new group. The panel title is the `title` as you write it. tuios ships one menu of its own, `start`: a short menu in plain words with New terminal, Split, Close, Find a file, Select and copy text, All commands, Settings and Help. Bind `open_menu:start` to a key to open it. A `[menus.start]` of your own replaces it. See [Your menus](KEYBINDINGS.md#your-menus).
+
+`[keybindings.modes.NAME]` declares a key mode: a set of keys that stays on until `esc` or `leave_mode`. `enter_mode:NAME` turns it on. `exclusive` drops the keys the mode does not bind, and `once` turns the mode off after one key. Modes stack, and the dock shows a chip while one is on. See [Key modes](KEYBINDINGS.md#key-modes).
 
 ## The `[spotlight]` table
 

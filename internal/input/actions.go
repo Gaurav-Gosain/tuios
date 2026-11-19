@@ -320,6 +320,7 @@ func (d *ActionDispatcher) registerHandlers() {
 
 	d.Register("toggle_tape_manager", handleToggleTapeManager)
 	d.Register("stop_recording", handleStopRecording)
+	d.Register(config.ActionLeaveMode, handleLeaveMode)
 
 	// Restore minimized by index (shift+1-9)
 	for i := range 9 {
@@ -353,6 +354,10 @@ func (d *ActionDispatcher) Dispatch(action string, msg tea.KeyPressMsg, o *app.O
 	// open_menu:NAME opens a declared menu, named in the action the same way.
 	if !ok && strings.HasPrefix(action, config.OpenMenuPrefix) {
 		handler, ok = handleOpenMenu(action), true
+	}
+	// enter_mode:NAME turns on a declared key mode.
+	if !ok && strings.HasPrefix(action, config.EnterModePrefix) {
+		handler, ok = handleEnterMode(action), true
 	}
 	// user:NAME runs an [[actions]] entry, or the command entry of that name.
 	if !ok && strings.HasPrefix(action, config.UserActionPrefix) {
@@ -388,7 +393,7 @@ func (d *ActionDispatcher) Dispatch(action string, msg tea.KeyPressMsg, o *app.O
 func (d *ActionDispatcher) HasAction(action string) bool {
 	_, ok := d.handlers.Lookup(action)
 	return ok || strings.HasPrefix(action, config.CommandActionPrefix) || strings.HasPrefix(action, config.OpenMenuPrefix) ||
-		strings.HasPrefix(action, config.UserActionPrefix)
+		strings.HasPrefix(action, config.EnterModePrefix) || strings.HasPrefix(action, config.UserActionPrefix)
 }
 
 // handleUserAction runs the user action behind action, with the selection of

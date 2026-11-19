@@ -131,6 +131,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 		validateSection(section.name, section.keys)
 	}
 	validateMenus(cfg, result)
+	validateModes(cfg, result)
 
 	// Every option's closed set and range, from its entry in the registry.
 	validateOptions(cfg, result)
@@ -766,12 +767,15 @@ type keySection struct {
 
 // keySections are the keybinding tables ValidateConfig checks key by key.
 func keySections(kb *KeybindingsConfig) []keySection {
-	sections := make([]keySection, 0, len(keybindTables)+len(kb.Menus))
+	sections := make([]keySection, 0, len(keybindTables)+len(kb.Menus)+len(kb.Modes))
 	for _, t := range keybindTables {
 		sections = append(sections, keySection{t.name, *t.field(kb)})
 	}
 	for _, name := range kb.MenuNames() {
 		sections = append(sections, keySection{MenuSectionPrefix + name, kb.Menus[name].Keys})
+	}
+	for _, name := range kb.ModeNames() {
+		sections = append(sections, keySection{ModeSectionPrefix + name, kb.Modes[name].Keys})
 	}
 	return sections
 }
