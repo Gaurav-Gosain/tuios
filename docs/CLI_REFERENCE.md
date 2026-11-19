@@ -8063,11 +8063,6 @@ as VS Code or Netcatty. That terminal cannot clear an image, so tuios draws
 images as block glyphs. Set `TUIOS_KITTY_GRAPHICS=1` or
 `TUIOS_SIXEL_GRAPHICS=1` to turn a protocol on again.
 
-### `TUIOS_TEXT_SIZING`
-
-`1` tells tuios that the host terminal draws OSC 66 text sizing. tuios does not
-detect it. With text sizing, quick look draws the top headings of a Markdown
-file larger.
 
 ### `$SHELL`
 

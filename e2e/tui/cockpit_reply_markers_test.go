@@ -27,9 +27,12 @@ const replyMarkersAnswer = "[[Done]] The parser reads markers.\n\n" +
 	"- [[Complete]] docs updated\n" +
 	"- [[Owned]] by the team\n\n" +
 	"✓ unit tests pass ✗ lint fails → fix lint next\n\n" +
-	"Layout:\n├── cmd\n└── internal\n\n" +
+	"Layout:\n├── cmd\n│   └── " + treeLongRow + "\n└── internal\n\n" +
 	"In code it stays: `[[Done]]`\n\n" +
 	"```\n[[Failed]] in a block\n```"
+
+// treeLongRow is a tree row longer than the thread is wide.
+const treeLongRow = "tuios: the command line, with its flags, its help and every subcommand a person or an agent runs, and the WRAPEND"
 
 // TestCockpitThreadReplyMarkers reads an agent's answer with reply markers in
 // the agents view's thread, at truecolor and at 16 colours. Each marker is a
@@ -91,11 +94,25 @@ func TestCockpitThreadReplyMarkers(t *testing.T) {
 				t.Errorf("ASSERTION: the check is in the ink of the text after it\n%s", term.SnapshotStyled())
 			}
 			// Each tree row is a line of its own, under the line before it.
-			if r1, _ := findText(t, term, "├── cmd"); func() bool { r2, _ := findText(t, term, "└── internal"); return r2 != r1+1 }() {
+			if r1, _ := findText(t, term, "├── cmd"); func() bool { r2, _ := findText(t, term, "└── tuios:"); return r2 != r1+1 }() {
 				t.Errorf("ASSERTION: the tree rows are not on lines of their own:\n%s", term.Snapshot())
 			}
 			if tree, word := cell("├── cmd", 0), cell("├── cmd", 4); tree.Fg == word.Fg {
 				t.Errorf("ASSERTION: the tree line is in the ink of its item\n%s", term.SnapshotStyled())
+			}
+			// A tree row that wraps goes on under its text, after the
+			// branch, with the guide of the row above beside it.
+			if r, c := findText(t, term, "└── tuios:"); r >= 0 {
+				line := []rune(s.Line(r + 1))
+				_, gc := findText(t, term, "├── cmd")
+				if len(line) <= c+4 || line[gc] != '│' || strings.TrimSpace(string(line[gc+1:c+4])) != "" || line[c+4] == ' ' {
+					t.Errorf("ASSERTION: the wrapped tree row does not go on under its text after the branch: %q\n%s", string(line), term.Snapshot())
+				}
+				if !strings.Contains(text, "WRAPEND") {
+					t.Errorf("ASSERTION: the long tree row lost its end\n%s", term.Snapshot())
+				}
+			} else {
+				t.Errorf("ASSERTION: the long tree row is not on screen\n%s", term.Snapshot())
 			}
 			alive(t, term, "after a thread with reply markers")
 		})

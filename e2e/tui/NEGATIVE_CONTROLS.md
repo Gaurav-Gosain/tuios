@@ -18297,3 +18297,21 @@ Run on Linux on 2026-11-19. The branch passes the test.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestQuickLookDrawsPicturesTablesAndHeadings$' -v .`.
+## Quick look reads a README
+
+`TestQuickLookReadsTheReadme` and `TestQuickLookPicksThePictureForItsGround` in `quicklook_readme_test.go`, and the wrapped tree row in `TestCockpitThreadReplyMarkers`. The first opens the repository's own README.md, with its assets beside it, in quick look at full size. The banner must be drawn, the badges must be one link each with the image's words and no address on screen, the shots on the web in the feature table must be one short line of their words with no Markdown source, the contributors SVG must be one line of its words, and no heading may go out as OSC 66 with text. The second opens a `<picture>` whose dark source is beside the file and whose light source is not: on the tests' dark ground the dark source must be drawn, and a WebP must be its words. The third needs a tree row longer than the thread to go on under its text, after the branch, with the guide of the row above beside it.
+
+Run on Linux on 2026-11-19. The branch passes all three.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (README) | "ASSERTION: the badges: want [\"[Image: Latest Release]\" \"[Image: GoDoc]\"] on screen" | **caught** |
+| Main (picture) | "ASSERTION: the dark source and the WebP are drawn" | **caught** |
+| Main (tree row) | "ASSERTION: the wrapped tree row does not go on under its text after the branch" | **caught** |
+| `picture` takes the `<img>` always | "ASSERTION: the dark source is drawn and the WebP is its words" | **caught** |
+| `Drawable` takes every address and every extension | "ASSERTION: an SVG is one short line" | **caught** |
+| The indent of an HTML line kept | "ASSERTION: a shot on the web is one short line" | **caught** |
+| The tree wrap in `text` turned off | "ASSERTION: the wrapped tree row does not go on under its text after the branch" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestQuickLookReadsTheReadme|TestQuickLookPicksThePictureForItsGround|TestCockpitThreadReplyMarkers)$' -v .`.

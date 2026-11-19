@@ -1473,10 +1473,6 @@ func (m *OS) flushGraphicsForView() {
 	// The reply's image previews belong to the Inbox, the same way. A nil
 	// check when no reply has shown a picture.
 	m.flushReplyPreviewForFrame()
-	// Quick look's large headings go after the frame that drew their place.
-	if b := m.quickLookTextSizing(); b != nil && m.PostRenderWriter != nil {
-		m.PostRenderWriter.QueuePostRender(b)
-	}
 	// The preview's picture belongs to the panel that is doing the hiding, the
 	// same as the launcher's icons, so it runs past hideImages rather than
 	// through it.

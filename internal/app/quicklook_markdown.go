@@ -11,7 +11,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
+	"charm.land/lipgloss/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
@@ -146,13 +146,13 @@ func (m *OS) QuickLookOpenDetails() {
 	}
 }
 
-// Pictures and large headings in a Markdown file. The file is laid out by the
-// renderer the agents thread uses (cockpit_markdown.go), with two block kinds
+// Pictures and whole tables in a Markdown file. The file is laid out by the
+// renderer the agents thread uses (cockpit_markdown.go), with a block kind
 // plugged in here through ckMD.hook: an image alone in its paragraph is drawn
 // as a picture, read from beside the file on the machine that has it, through
-// the previews' pipeline (inbox_reply_preview.go). A top heading is drawn
-// twice the size on a host that said it draws OSC 66 text sizing, and in bold
-// elsewhere. Tables keep every cell (ckMD.whole).
+// the previews' pipeline (inbox_reply_preview.go). An image on the web is one
+// line of its words: quick look reads no address. Tables keep every cell
+// (ckMD.whole).
 
 const (
 	// quickLookMDImagesMax bounds the pictures one file reads.
@@ -161,6 +161,8 @@ const (
 	quickLookMDImageRows = 20
 	// quickLookMDImageIndent is where a picture starts in the body.
 	quickLookMDImageIndent = 2
+	// quickLookMDWordsMax bounds the words shown for an image, in cells.
+	quickLookMDWordsMax = 48
 )
 
 // quickLookMDImageMsg carries a picture of a Markdown file back to the loop.
@@ -171,17 +173,9 @@ type quickLookMDImageMsg struct {
 	note string
 }
 
-// quickLookBigHead is a heading line drawn twice the size: where in the body,
-// its words and how they look.
-type quickLookBigHead struct {
-	x, y, cols int
-	level      uint8
-	text, sgr  string
-}
-
 // quickLookMDLayout lays out the Markdown on the panel at width.
 func (m *OS) quickLookMDLayout(l ckLook, r *quickLookResult, width int, open bool) []ckLine {
-	md := &ckMD{m: m, l: l, whole: true, big: m.hostCaps().TextSizing}
+	md := &ckMD{m: m, l: l, whole: true, heads: true}
 	md.hook = func(md *ckMD, b markdown.Block, first, rest []ckSeg, width int) bool {
 		if b.Kind != markdown.Image {
 			return false
@@ -189,7 +183,20 @@ func (m *OS) quickLookMDLayout(l ckLook, r *quickLookResult, width int, open boo
 		m.quickLookMDImage(md, r, b, first, rest, width)
 		return true
 	}
-	return md.layout(r.md, width, markdown.Options{Max: quickLookMarkdownMax, CloseDetails: !open, Images: true})
+	return md.layout(r.md, width, markdown.Options{Max: quickLookMarkdownMax, CloseDetails: !open, Images: true, Dark: quickLookDark(l)})
+}
+
+// quickLookDark reports whether the panel's ground is dark, for the <picture>
+// source to show. A ground the terminal keeps for itself is taken as dark.
+func quickLookDark(l ckLook) bool {
+	c := l.pal.Canvas
+	if c == nil {
+		return true
+	}
+	if _, none := c.(lipgloss.NoColor); none {
+		return true
+	}
+	return hostLuminance(c) < 128
 }
 
 // quickLookMDSource is where an image of the file is: a path on the file's
@@ -225,7 +232,9 @@ func quickLookMDSource(t quickLookTarget, src string) (string, bool) {
 func (m *OS) quickLookMDImage(md *ckMD, r *quickLookResult, b markdown.Block, first, rest []ckSeg, width int) {
 	ql := &m.quickLook
 	pal := md.l.pal
-	words := strings.TrimSpace(b.Text)
+	avail := max(width-ckSegsWidth(rest), 4)
+	// The words are one short line: an image's words can be a paragraph.
+	words := ckTrunc(strings.Join(strings.Fields(b.Text), " "), quickLookMDWordsMax)
 	if words == "" {
 		words = "image"
 	}
@@ -234,15 +243,13 @@ func (m *OS) quickLookMDImage(md *ckMD, r *quickLookResult, b markdown.Block, fi
 		if why != "" {
 			segs = append(segs, ckSeg{t: "   " + why, fg: pal.FgMute})
 		}
-		md.text(segs, first, rest, max(width-ckSegsWidth(rest), 4))
+		md.text(segs, first, rest, avail)
 	}
 	key, ok := quickLookMDSource(r.target, b.URL)
-	if !ok {
-		segs := []ckSeg{{t: "Image: " + words, fg: pal.FgDim, attrs: ckBold}}
-		if link := ckLinkTarget(b.URL); link != "" {
-			segs = append(segs, ckSeg{t: "   "}, ckSeg{t: b.URL, fg: pal.Accent, link: link})
-		}
-		md.text(segs, first, rest, max(width-ckSegsWidth(rest), 4))
+	if !ok || !markdown.Drawable(b.URL, "") {
+		// Quick look reads no address on the web, and draws no SVG or AVIF:
+		// the words stand in, and open the address when it is one.
+		md.text([]ckSeg{{t: "Image: " + words, fg: pal.FgDim, attrs: ckBold, link: ckLinkTarget(b.URL)}}, first, rest, avail)
 		return
 	}
 	if ql.mdImgsFor != r {
@@ -300,7 +307,8 @@ func (m *OS) quickLookMDImage(md *ckMD, r *quickLookResult, b markdown.Block, fi
 		md.lines = append(md.lines, ln)
 	}
 	if b.Text != "" {
-		md.text([]ckSeg{{t: b.Text, fg: pal.FgMute, attrs: ckItalic}}, rest, rest, max(width-ckSegsWidth(rest), 4))
+		// The caption is one line: the words can be a paragraph.
+		md.text([]ckSeg{{t: ckTrunc(strings.Join(strings.Fields(b.Text), " "), avail), fg: pal.FgMute, attrs: ckItalic}}, rest, rest, avail)
 	}
 }
 
@@ -393,19 +401,15 @@ func (m *OS) applyQuickLookMDImage(msg quickLookMDImageMsg) tea.Cmd {
 }
 
 // quickLookMDMarks notes, for the lines of the Markdown on the body from line
-// from, where the frame drew pictures and large headings: the pictures the
-// host places after the frame, and the headings it draws larger.
+// from, where the frame drew pictures: the host places them after the frame.
 func (m *OS) quickLookMDMarks(lines []ckLine, from, rows, top int) {
 	ql := &m.quickLook
-	ql.mdPics, ql.bigHeads = ql.mdPics[:0], ql.bigHeads[:0]
+	ql.mdPics = ql.mdPics[:0]
 	virtual := m.threadPlaceholders()
 	var cur *previewPlacement
 	var curKey string
 	for i := 0; i < rows && from+i < len(lines); i++ {
 		ln := &lines[from+i]
-		if ln.big > 0 && i+1 < rows && from+i+1 < len(lines) {
-			ql.bigHeads = append(ql.bigHeads, m.quickLookBigHead(ln, 1+ln.indent, top+i))
-		}
 		row, n, cols, key, ok := quickLookMDImageHit(ln.hit)
 		if !ok {
 			cur = nil
@@ -441,66 +445,4 @@ func quickLookMDImageHit(action string) (row, rows, cols int, key string, ok boo
 	rows, e2 := strconv.Atoi(parts[1])
 	cols, e3 := strconv.Atoi(parts[2])
 	return row, rows, cols, parts[3], e1 == nil && e2 == nil && e3 == nil
-}
-
-// quickLookBigHead is a heading line as the host draws it larger: its words,
-// and the colour and weight of the first of them.
-func (m *OS) quickLookBigHead(ln *ckLine, x, y int) quickLookBigHead {
-	var b strings.Builder
-	for _, s := range ln.segs {
-		b.WriteString(s.t)
-	}
-	text := strings.TrimSpace(b.String())
-	// The words go inside an OSC string: no control character may end it.
-	text = strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f || r >= 0x80 && r < 0xa0 {
-			return -1
-		}
-		return r
-	}, text)
-	lead := len(b.String()) - len(strings.TrimLeft(b.String(), " "))
-	st := ansi.Style{}.Bold()
-	for _, s := range ln.segs {
-		if strings.TrimSpace(s.t) != "" {
-			if s.fg != nil {
-				st = st.ForegroundColor(s.fg)
-			}
-			break
-		}
-	}
-	if bg := m.overlayUI().Canvas; bg != nil {
-		st = st.BackgroundColor(bg)
-	}
-	return quickLookBigHead{x: x + lead, y: y, cols: 2 * ckTextWidth(text), level: ln.big, text: text, sgr: st.String()}
-}
-
-// quickLookTextSizing is the large headings of the panel the last frame drew,
-// as the OSC 66 sequences that draw them, or nil. The host keeps a heading
-// until a cell of it is written, so each frame draws them again: a frame that
-// wrote over one has taken it away. They are left off while anything is over
-// the panel, and while a selection is on the text, which is drawn plain.
-func (m *OS) quickLookTextSizing() []byte {
-	ql := &m.quickLook
-	if !ql.open || len(ql.bigHeads) == 0 || ql.copy != nil || m.AnyOverlayOpen() || m.ContextMenu != nil || ql.res == nil || ql.res.kind != "markdown" {
-		return nil
-	}
-	var buf []byte
-	for _, h := range ql.bigHeads {
-		scale := "s=2"
-		if h.level > 1 {
-			// A second heading is drawn at one and a half times the size,
-			// in the same two rows.
-			scale = "s=2:n=3:d=4"
-		}
-		buf = append(buf, "\x1b7\x1b["...)
-		buf = strconv.AppendInt(buf, int64(ql.box.Y0+1+h.y+1), 10)
-		buf = append(buf, ';')
-		buf = strconv.AppendInt(buf, int64(ql.box.X0+1+h.x+1), 10)
-		buf = append(buf, 'H')
-		buf = append(buf, h.sgr...)
-		buf = append(buf, "\x1b]66;"+scale+";"...)
-		buf = append(buf, h.text...)
-		buf = append(buf, "\x07\x1b[m\x1b8"...)
-	}
-	return buf
 }
