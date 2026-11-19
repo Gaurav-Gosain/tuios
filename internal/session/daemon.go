@@ -730,6 +730,10 @@ type connState struct {
 	// prompts says the client's hello set Prompts: it shows prompts in its
 	// palette and reads MsgPrompt. Guarded by mu. See prompt.go.
 	prompts bool
+	// promptShown is the id of the prompt this client was sent the open of
+	// and not yet the close. A detach clears it. Guarded by mu. See
+	// pushPrompt.
+	promptShown string
 	// tmlOut holds the TML pushes not yet written to this client: one per
 	// surface, the newest. See tml_surface.go.
 	tmlOut tmlOutbox

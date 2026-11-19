@@ -518,6 +518,7 @@ func (d *Daemon) detachClientFrom(cs *connState, want string) bool {
 	cs.height = 0
 	cs.reserve = LayoutReserve{}
 	cs.attached = false
+	cs.promptShown = ""
 	cs.mu.Unlock()
 	d.events.publish(streamEvent{
 		Type:     EventClientSessionChanged,

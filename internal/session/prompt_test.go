@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"sync"
 	"testing"
 	"time"
 )
@@ -239,6 +240,65 @@ func TestPromptEndsWithAReason(t *testing.T) {
 	result(t, answerPromptCall(t, c, map[string]any{"request_id": p.Prompt.ID, "human_nonce": tui.HumanNonce(), "value": "x"}))
 	if got := promptDone(t, done); got["status"] != PromptAnswered {
 		t.Fatalf("a prompt after the timeout: %v, want answered", got)
+	}
+}
+
+// TestPromptOpenReachesAnAttachingClientOnce: a prompt that opens while a
+// client attaches reaches that client once, before its close. The attach
+// handler sends the open prompt to the client it admits, and the push of a
+// prompt that opened after the admission reached the client as well, so it
+// read two opens and took the second one for the close.
+func TestPromptOpenReachesAnAttachingClientOnce(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	twoWindowSession(t, d, "work")
+	c := dialVerb(t, sp)
+
+	// The attach handler waits after its reply, with the client admitted to
+	// the pushes, until the prompt below has reached the client.
+	release := make(chan struct{})
+	var once sync.Once
+	hook := func() {
+		once.Do(func() {
+			select {
+			case <-release:
+			case <-time.After(10 * time.Second):
+			}
+		})
+	}
+	attachReplied.Store(&hook)
+	t.Cleanup(func() { attachReplied.Store(nil) })
+	var released sync.Once
+	letGo := func() { released.Do(func() { close(release) }) }
+	t.Cleanup(letGo)
+
+	tui, pushes := attachPromptTUI(t, sp, "work", true)
+	done := promptAsync(t, sp, map[string]any{"kind": "input", "title": "Name?", "timeout": 20000})
+	p := nextPush(t, pushes, "open")
+	if p.Prompt == nil {
+		t.Fatalf("push %+v, want the open prompt", p)
+	}
+	// The attach goes on and sends the client what is open now. The daemon
+	// reads this client's next request once the attach handler returns.
+	letGo()
+	if _, err := tui.RefreshSessionList(); err != nil {
+		t.Fatalf("session list: %v", err)
+	}
+	result(t, answerPromptCall(t, c, map[string]any{"request_id": p.Prompt.ID, "human_nonce": tui.HumanNonce(), "cancel": true}))
+	if got := promptDone(t, done); got["status"] != PromptCancelled {
+		t.Fatalf("after a cancel: %v, want cancelled", got)
+	}
+	if cl := nextPush(t, pushes, "close"); cl.Prompt != nil || cl.Closed != p.Prompt.ID || cl.Reason != PromptCancelled {
+		t.Fatalf("push %+v, want the close with reason cancelled", cl)
+	}
+	// Nothing follows the close: the next push opens the next prompt.
+	done = promptAsync(t, sp, map[string]any{"kind": "input", "title": "Again?", "timeout": 20000})
+	o := nextPush(t, pushes, "open of the next prompt")
+	if o.Prompt == nil || o.Prompt.Title != "Again?" {
+		t.Fatalf("push %+v, want the open of the next prompt", o)
+	}
+	result(t, answerPromptCall(t, c, map[string]any{"request_id": o.Prompt.ID, "human_nonce": tui.HumanNonce(), "value": "x"}))
+	if got := promptDone(t, done); got["status"] != PromptAnswered {
+		t.Fatalf("the next prompt: %v, want answered", got)
 	}
 }
 

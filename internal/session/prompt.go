@@ -110,6 +110,10 @@ type promptStore struct {
 	mu   sync.Mutex
 	open *PromptRequest
 	done chan PromptResult
+	// pushMu orders the prompt pushes. The open and the close of a prompt,
+	// and the open an attaching client is sent, each take their place in a
+	// client's broadcast order under it. See pushPrompt.
+	pushMu sync.Mutex
 }
 
 // start opens req, or reports false when a prompt is open.
@@ -225,8 +229,17 @@ func promptReader(cs *connState) bool {
 }
 
 // pushPrompt sends p to every client that shows prompts, and reports how
-// many of them could answer.
+// many of them could answer. A nil p sends nothing.
+//
+// Each client is sent one open and one close of a prompt, in that order. An
+// attaching client is admitted to the pushes before sendPrompt sends it the
+// open prompt, so the open can reach it both ways: the open goes only to a
+// client whose promptShown is another prompt, and the close only to one whose
+// promptShown is this prompt. Under pushMu, and on the broadcast order, a
+// close cannot pass the open it closes.
 func (d *Daemon) pushPrompt(p *PromptPayload) int {
+	d.prompts.pushMu.Lock()
+	defer d.prompts.pushMu.Unlock()
 	var readers []*connState
 	d.clientsMu.RLock()
 	for _, cs := range d.clients {
@@ -241,7 +254,7 @@ func (d *Daemon) pushPrompt(p *PromptPayload) int {
 	}
 	n := 0
 	for _, cs := range readers {
-		if msg != nil {
+		if msg != nil && cs.markPromptShown(p) {
 			d.queueBroadcast(cs, msg, "pushPrompt")
 		}
 		if d.mayActAsHuman(cs) {
@@ -251,11 +264,38 @@ func (d *Daemon) pushPrompt(p *PromptPayload) int {
 	return n
 }
 
-// sendPrompt sends a client that just attached the open prompt.
+// sendPrompt sends a client that just attached the open prompt, unless the
+// push of it reached the client already. See pushPrompt.
 func (d *Daemon) sendPrompt(cs *connState) {
-	if req := d.prompts.current(); req != nil && promptReader(cs) {
-		_ = d.sendMessage(cs, MsgPrompt, &PromptPayload{Prompt: req})
+	d.prompts.pushMu.Lock()
+	defer d.prompts.pushMu.Unlock()
+	req := d.prompts.current()
+	if req == nil || !promptReader(cs) {
+		return
 	}
+	p := &PromptPayload{Prompt: req}
+	if !cs.markPromptShown(p) {
+		return
+	}
+	if msg, err := NewMessage(MsgPrompt, p); err == nil {
+		d.queueBroadcast(cs, msg, "sendPrompt")
+	}
+}
+
+// markPromptShown records that p goes to cs, and reports whether it should:
+// an open that cs was not sent yet, or the close of the prompt cs shows.
+func (cs *connState) markPromptShown(p *PromptPayload) bool {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	switch {
+	case p.Prompt != nil && cs.promptShown != p.Prompt.ID:
+		cs.promptShown = p.Prompt.ID
+		return true
+	case p.Prompt == nil && cs.promptShown != "" && cs.promptShown == p.Closed:
+		cs.promptShown = ""
+		return true
+	}
+	return false
 }
 
 // promptFrom says who asks, for the palette: the pane, the plugin, or a
