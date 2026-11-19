@@ -72,6 +72,12 @@ tuios.dev/shot
 github.com/pelletier/go-toml/v2
 github.com/Gaurav-Gosain/tuios/internal/transcriptview
 
+# Syntax highlighting: a code block, a diff or a file is lexed once when it
+# is read or laid out, and its spans are kept (thread cards, the review's
+# hunks, quick look, the board's card preview). No frame lexes.
+github.com/alecthomas/chroma/v2/...
+github.com/dlclark/regexp2/v2/...
+
 # Mermaid parse and layout: a diagram is drawn once per source and width and
 # kept. tuios.dev/sketch/raster is left out: tuios mermaid --live draws its
 # motion with it at 60 frames a second.
