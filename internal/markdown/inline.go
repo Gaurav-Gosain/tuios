@@ -28,8 +28,10 @@ const (
 )
 
 // MarkerMax is the longest label, in runes, that a marker holds. A longer
-// one is read as the text it is.
-const MarkerMax = 32
+// one is read as the text it is. It is well above what a pill shows: the
+// drawer cuts a long label with an ellipsis, so a marker with a detail such as
+// [[Unverified: helpers on guard, chat UI]] still draws as a pill.
+const MarkerMax = 96
 
 // Run is a stretch of text with one style. Text holds "\n" only for a hard
 // line break.

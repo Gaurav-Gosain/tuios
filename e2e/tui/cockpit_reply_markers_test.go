@@ -23,7 +23,7 @@ const replyMarkersAnswer = "[[Done]] The parser reads markers.\n\n" +
 	"- [[Failed: 3 tests]] in the store package\n" +
 	"- [[Blocked]] on the CI runner\n" +
 	"- [[Needs you]] pick the release name\n" +
-	"- [[Unverified]] on Windows\n" +
+	"- [[Unverified: helpers on guard, chat UI]] on Windows\n" +
 	"- [[Complete]] docs updated\n" +
 	"- [[Owned]] by the team\n\n" +
 	"✓ unit tests pass ✗ lint fails → fix lint next\n\n" +
