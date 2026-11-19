@@ -161,6 +161,9 @@ UnsetEnvironment=DISPLAY WAYLAND_DISPLAY XAUTHORITY
 # a program started with nohup in a pane or the keeper of a live upgrade,
 # must outlive it.
 KillMode=process
+# An OOM kill of one pane's process leaves the daemon and the other panes
+# running. The daemon also starts each pane in a scope of its own.
+OOMPolicy=continue
 # kill-server exits 0 and the daemon stays stopped. A crash restarts it.
 Restart=on-failure
 RestartSec=2

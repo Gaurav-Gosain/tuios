@@ -3,6 +3,7 @@ package session
 import (
 	"bufio"
 	"io"
+	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -13,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
+	"github.com/Gaurav-Gosain/tuios/internal/panescope"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 )
 
@@ -231,6 +233,7 @@ func (d *Daemon) registerHostedPane(spec hostedPaneSpec, grace time.Duration) (*
 	if err != nil {
 		return nil, err
 	}
+	panescope.Place(cmd.Process.Pid, log.Printf)
 
 	releaseSlave(pty)
 

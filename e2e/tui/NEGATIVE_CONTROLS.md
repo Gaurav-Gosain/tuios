@@ -5434,6 +5434,16 @@ cell after them against the cursor ground.
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The fix is absent | build `origin/main` | `/light` ("selected \"P\" at column 24 is 1.09:1"), `/dark` (the cursor cell, "selected \"e\" at column 47 is 2.67:1") | **caught** |
+## A pane's own scope
+
+`TestPaneRunsInItsOwnScope` runs a scratch daemon with the `pane_scope` knob,
+which skips the check that the daemon is a systemd service. The person's own
+user manager makes the scope, through the bus and through its private socket.
+A third case has no manager to ask, and the pane must start as before.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A pane gets no scope | `createPTY`: the `panescope.Place` call cut | `TestPaneRunsInItsOwnScope/bus` ("the pane's shell is not in a scope of its own: \"0::/user.slice/.../tuios-daemon.service\"") | **caught** |
 
 ## An image paste on another machine
 

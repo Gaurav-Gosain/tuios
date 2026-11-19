@@ -31,6 +31,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
+	"github.com/Gaurav-Gosain/tuios/internal/panescope"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/Gaurav-Gosain/tuios/internal/shellinteg"
@@ -2833,6 +2834,9 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 			cancel()
 			return nil, err
 		}
+		// Under a systemd user service, the pane gets a scope of its own, so
+		// its OOM kill does not stop the daemon. See internal/panescope.
+		panescope.Place(cmd.Process.Pid, log.Printf)
 	}
 
 	// Create VT emulator for persistent terminal state

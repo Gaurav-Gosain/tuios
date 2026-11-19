@@ -659,6 +659,12 @@ How the service and the daemon work together:
   `setsid` in a pane), the `restart-server` worker started from a pane, and
   the keeper of a live upgrade stay in the unit. `KillMode=control-group`
   would kill each of them when the daemon stops.
+- **A pane that runs out of memory does not stop the daemon.** The unit has
+  `OOMPolicy=continue`. With systemd, each pane also runs in a scope of its
+  own, `tuios-pane-<pid>.scope`, so `systemctl --user status` shows the
+  memory of each pane. When there is no user manager, the panes stay in the
+  daemon's unit. Run `install-service` again to add `OOMPolicy=continue` to
+  a unit that an older tuios wrote.
 - **A crash starts the daemon again. A stop does not.** The unit has
   `Restart=on-failure`. `kill-server` and `restart-server` stop the daemon
   with exit status 0, and it stays stopped until a client starts it.

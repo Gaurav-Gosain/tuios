@@ -104,3 +104,4 @@ encoding/xml
 net/http/...
 crypto/tls
 crypto/x509
+github.com/Gaurav-Gosain/tuios/internal/panescope

@@ -18,6 +18,11 @@
 //     and the keeper of a live upgrade (internal/session/handoff_keeper_unix.go)
 //     all sit in the unit's cgroup. control-group would kill each of them
 //     when the main process ends.
+//   - OOMPolicy=continue. systemd's default, stop, stops the whole unit when
+//     the OOM killer takes any process in it, so one pane's runaway command
+//     ended the daemon and every pane. The daemon also starts each pane in a
+//     scope of its own (internal/panescope), so a pane's memory and OOM stay
+//     its own.
 //   - Restart=on-failure. kill-server and restart-server stop the daemon with
 //     exit status 0, and the manager leaves it stopped. A crash restarts it.
 //   - A live upgrade execs the new image in the same process, so the manager
