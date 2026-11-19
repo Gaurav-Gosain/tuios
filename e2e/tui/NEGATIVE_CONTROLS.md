@@ -7599,6 +7599,17 @@ Run on 2026-10-16.
 |---|---|---|---|---|
 | The gradient was never drawn | yes | `gradientOn` always returns false | `TestBorderGradientSteps` ("floating: the focused border never stepped through the gradient: 1 steps") | **caught** |
 
+`TestBorderGradientKeepsPillCaps` sets the boreal theme, the gradient
+`"#7cf2c5 #b69cff"`, a pill title and pill controls on two panes, at 16, 256
+and truecolor. Each round cap must be drawn in its pill's fill, on a floating
+and a tiled layout.
+
+Run on 2026-11-19.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The gradient recoloured the pill caps | yes | `applyBorderGradient` paints the cap cells | `TestBorderGradientKeepsPillCaps/256` and `/truecolor` ("floating: 12 cap pairs, ... caps off their pill: [(33,8) ink ... fill ...]") | **caught** |
+
 ## Window title style and place
 
 `TestLiveAppearanceKeepsTheScreen` gains `window_title_style=plain` and

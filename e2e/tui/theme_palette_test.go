@@ -430,6 +430,111 @@ func TestBorderGradientSteps(t *testing.T) {
 	check("tiled")
 }
 
+// TestBorderGradientKeepsPillCaps: with a focused border gradient, the round
+// caps of each pill on a pane's border (the title and the window controls)
+// keep the pill's own fill. The gradient recoloured every cell drawn in the
+// border colour, the caps too, so a mint title pill on boreal had violet caps.
+// It runs at every colour depth, on a focused and an unfocused pane, floating
+// and tiled.
+//
+// How this could pass wrongly: a frame with no pills or no gradient checks
+// nothing, so the test requires eight cap pairs, a title pill and a control
+// pill on each pane, and, above 16 colours, a
+// border in three colours or more.
+// Negative control in NEGATIVE_CONTROLS.md.
+func TestBorderGradientKeepsPillCaps(t *testing.T) {
+	for _, d := range chromeDepths {
+		t.Run(d.name, func(t *testing.T) {
+			base := t.TempDir()
+			writeConfig(t, base, "[appearance]\ntheme = \"boreal\"\nborder_focused_gradient = \"#7cf2c5 #b69cff\"\nborder_gradient_angle = 0\nwindow_title_style = \"pill\"\nwindow_button_style = \"pill\"\n")
+			term := startIn(t, base, startOpts{cols: 120, rows: 30, env: d.env})
+			waitBoot(t, term)
+			// Each pane sets its title, as an editor does, so each carries a
+			// title pill beside its control pill.
+			// The shell builds the title, so "main.go" on screen is the
+			// title and never the echo of the typed line.
+			for range 2 {
+				newWindow(t, term)
+				enterTerminalMode(t, term)
+				typeLine(t, term, `printf '\033]2;%s.go\007' main`)
+				if err := term.WaitForText("main.go", uiTimeout); err != nil {
+					t.Fatalf("the pane title never showed: %v\n%s", err, term.Snapshot())
+				}
+				leaveTerminalMode(t, term)
+			}
+			pal := hostPalette(t, "boreal")
+			check := func(name string) {
+				t.Helper()
+				var pairs int
+				var bad []string
+				var inks int
+				err := term.WaitFor(func(s tuitest.Screen) bool {
+					pairs, bad = pillCapPairs(s)
+					inks = borderInks(s)
+					return pairs >= 8 && len(bad) == 0 && (d.name == "16" || inks >= 3)
+				}, uiTimeout)
+				// The frame is saved before the verdict, so a failing run
+				// leaves the frame that shows the fault.
+				dir := artifactDir(t)
+				saveArtifact(t, term, dir, name)
+				savePNG(t, term.Screen(), pal, dir, name)
+				if err != nil {
+					t.Fatalf("%s: %d cap pairs, %d border colours, caps off their pill: %v\n%s", name, pairs, inks, bad, term.SnapshotStyled())
+				}
+			}
+			check("floating")
+			sendKeys(t, term, "t")
+			check("tiled")
+		})
+	}
+}
+
+// pillCapPairs finds each round pill cap on screen whose inner neighbour has a
+// fill, and returns how many there are and the ones whose ink is not that
+// fill.
+func pillCapPairs(s tuitest.Screen) (pairs int, bad []string) {
+	cols, rows := s.Size()
+	for y := range rows {
+		for x := range cols {
+			c := s.Cell(x, y)
+			in := -1
+			switch c.Content {
+			case "\ue0b6":
+				in = x + 1
+			case "\ue0b4":
+				in = x - 1
+			}
+			if in < 0 || in >= cols {
+				continue
+			}
+			fill := s.Cell(in, y).Bg
+			if fill.Kind == tuitest.ColorDefault {
+				continue
+			}
+			pairs++
+			if c.Fg != fill {
+				bad = append(bad, fmt.Sprintf("(%d,%d) ink %+v fill %+v", x, y, c.Fg, fill))
+			}
+		}
+	}
+	return pairs, bad
+}
+
+// borderInks counts the colours the horizontal border cells on screen are
+// drawn in.
+func borderInks(s tuitest.Screen) int {
+	cols, rows := s.Size()
+	seen := map[tuitest.Color]bool{}
+	for y := range rows {
+		for x := range cols {
+			if c := s.Cell(x, y); c.Content == "─" {
+				seen[c.Fg] = true
+			}
+		}
+	}
+	return len(seen)
+}
+
 // TestThemeEditorEditsAndSaves drives the theme editor the way a person does:
 // the palette opens it on the theme in use, a value typed for the unfocused
 // border shows at once on the pane without focus, ctrl+s writes a sparse

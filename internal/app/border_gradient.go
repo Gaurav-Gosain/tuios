@@ -15,7 +15,10 @@ import (
 // (appearance.border_focused_gradient). The frame is drawn in one colour as
 // before, and a pass over the canvas, right after the focused pane's layer is
 // drawn, recolours the border cells that carry that colour. Cells in another
-// colour, the title badge's ink and the window buttons, keep theirs.
+// colour, the title badge's ink and the window buttons, keep theirs. So do the
+// round caps of a pill on the border (the title and the controls): a cap is
+// the pill's fill drawn as ink, and a recoloured cap split the pill from its
+// body.
 //
 // The colours step: a cell takes one of gradientLevels colours, so a run of
 // border cells shares one SGR and a full redraw over SSH grows by a few
@@ -142,12 +145,13 @@ func (m *OS) applyBorderGradient(canvas *frameCanvas, region image.Rectangle, of
 		i := int(math.Round(t * float64(gradientLevels-1)))
 		return g.levels[max(0, min(i, gradientLevels-1))]
 	}
+	capL, capR := m.Settings.GetWindowPillLeft(), m.Settings.GetWindowPillRight()
 	paint := func(x, y int) {
 		if !(image.Point{x, y}).In(region) {
 			return
 		}
 		cell := canvas.CellAt(x, y)
-		if cell == nil || !same(cell.Style.Fg) {
+		if cell == nil || !same(cell.Style.Fg) || cell.Content == capL || cell.Content == capR {
 			return
 		}
 		cell.Style.Fg = level(x, y)
