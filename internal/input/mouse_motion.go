@@ -49,7 +49,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.QuickLookBarRelease()
 		o.QuickLookLetGo()
 	}
-	if o.QuickLookBarDrag(o.LastMouseX) {
+	if o.QuickLookBarDrag(o.LastMouseX, o.LastMouseY) {
 		return o, nil
 	}
 

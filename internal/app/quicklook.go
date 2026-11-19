@@ -230,8 +230,18 @@ type quickLookState struct {
 	mdGen     int
 	mdPics    []previewPlacement
 	// mdFrom is the line of the Markdown at the top of the body in the
-	// last frame, for a click.
-	mdFrom int
+	// last frame, for a click. mdHeadAt and mdHeadLevel are the line and
+	// the level of each heading in mdLines, for the ruler's marks.
+	mdFrom                int
+	mdHeadAt, mdHeadLevel []int
+	// ruler is the ruler in the last frame, rulerDrag says a press on it is
+	// held, and rulerGrab is the row of the thumb the press took. atOff is
+	// the byte of a text a move of the ruler asked for, read by a
+	// quickLookAt window. See quicklook_ruler.go.
+	ruler     quickLookRuler
+	rulerDrag bool
+	rulerGrab int
+	atOff     int64
 	// hostOlder holds the machines whose file-preview verb has no windows, and
 	// hostAsked those it was asked of, once per link.
 	hostOlder map[string]bool
@@ -910,8 +920,10 @@ func (m *OS) QuickLookMouseClick(x, y int) bool {
 		if q := ql.copy; q != nil && q.cm.Implicit && !m.QuickLookCopyOnText(x, y) {
 			m.QuickLookCopyEnd()
 		}
-		m.quickLookBarClick(x, y)
-		m.quickLookBlockClick(y)
+		if !m.quickLookRulerClick(x, y) {
+			m.quickLookBarClick(x, y)
+			m.quickLookBlockClick(y)
+		}
 		return true
 	}
 	m.CloseQuickLook()
@@ -1063,6 +1075,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) quickLookPic {
 	ql := &m.quickLook
 	ql.textW = 0
+	ql.ruler = quickLookRuler{}
 	ql.mdPics = ql.mdPics[:0]
 	pal := l.pal
 	t := ql.target
@@ -1189,7 +1202,7 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 			// fit. It ends, and the text is drawn as before.
 			m.QuickLookCopyEnd()
 		}
-		quickLookBar(c, pal, w-1, bodyTop, bodyRows, r, from)
+		m.drawQuickLookRuler(c, l, quickLookTextRuler(r, from), w-1, bodyTop, bodyRows)
 		row := 0
 		for n := from; row < bodyRows && n < len(r.lines); n++ {
 			if r.firstLine > 0 {
@@ -1247,6 +1260,8 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 		for i := 0; i < bodyRows && from+i < len(ql.mdLines); i++ {
 			drawCkLineAt(c, 1, bodyTop+i, width, ql.mdLines[from+i])
 		}
+		marks := quickLookMDHeadMarks(ql.mdHeadAt, ql.mdHeadLevel, len(ql.mdLines), bodyRows)
+		m.drawQuickLookRuler(c, l, quickLookRuler{r: ckRuler{lines: len(ql.mdLines), start: from, marks: marks, track: true}}, w-1, bodyTop, bodyRows)
 		m.quickLookMDMarks(ql.mdLines, from, bodyRows, bodyTop)
 		ql.mdFrom = from
 	case "table":

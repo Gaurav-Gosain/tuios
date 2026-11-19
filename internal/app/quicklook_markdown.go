@@ -68,7 +68,28 @@ func (m *OS) quickLookMDLayout(l ckLook, r *quickLookResult, width int, open boo
 		m.quickLookMDImage(md, r, b, first, rest, width)
 		return true
 	}
-	return md.layout(r.md, width, markdown.Options{Max: quickLookMarkdownMax, CloseDetails: !open, Images: true, Dark: quickLookDark(l)})
+	lines := md.layout(r.md, width, markdown.Options{Max: quickLookMarkdownMax, CloseDetails: !open, Images: true, Dark: quickLookDark(l)})
+	m.quickLook.mdHeadAt, m.quickLook.mdHeadLevel = md.headAt, md.headLevel
+	return lines
+}
+
+// quickLookMDHeadMarks are the lines of the headings the ruler marks, on a
+// ruler rows high for lines lines: every heading to the third level, or
+// fewer levels when their marks would take too many rows, or none.
+func quickLookMDHeadMarks(at, level []int, lines, rows int) []int {
+	var marks []int
+	for top := 3; top >= 1; top-- {
+		marks = marks[:0]
+		for i, n := range at {
+			if level[i] <= top {
+				marks = append(marks, n)
+			}
+		}
+		if (ckRuler{lines: lines, marks: marks}).markRows(rows) != nil {
+			return marks
+		}
+	}
+	return nil
 }
 
 // quickLookDark reports whether the panel's ground is dark, for the <picture>

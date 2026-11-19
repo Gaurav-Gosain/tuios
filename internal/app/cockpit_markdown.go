@@ -64,6 +64,9 @@ type ckMD struct {
 	// heads draws a second level heading in the accent too, and a third in
 	// the body ink, for a document read as a page: quick look's Markdown.
 	heads bool
+	// headAt is the line each heading starts on, and headLevel its level,
+	// for a layout with heads: quick look marks them on its ruler.
+	headAt, headLevel []int
 	// lead says the next runs start a paragraph, whose first bold run is
 	// its lead label. See runs.
 	lead bool
@@ -176,6 +179,9 @@ func (md *ckMD) block(b markdown.Block, first, rest []ckSeg, width int, ink colo
 		segs := md.runs(markdown.Inline(b.Text), hink, ckBold)
 		if icon := ckIconFor(ckLabelIcons, ckSegsText(segs)); icon != "" && l.nerd {
 			segs = append([]ckSeg{{t: icon, fg: hink, attrs: ckBold}, {t: " "}}, segs...)
+		}
+		if md.heads {
+			md.headAt, md.headLevel = append(md.headAt, len(md.lines)), append(md.headLevel, b.Level)
 		}
 		md.text(segs, first, rest, avail)
 	case markdown.Item:

@@ -393,6 +393,11 @@ double click selects a word, and a triple click selects a line. The selection
 goes to the clipboard when you release the button. The next click or key
 removes the selection.
 
+A text or a Markdown file that is longer than the preview has a scroll bar on
+its right edge. Click the bar to move the view to that place. Drag the thumb to
+scroll. In Markdown, a mark on the bar shows each heading. When the headings are
+too many for the bar, it marks fewer levels.
+
 These keys move inside the file. The preview shows the keys that work now. All
 other keys go to the sidebar.
 

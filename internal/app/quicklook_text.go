@@ -61,6 +61,9 @@ const (
 	quickLookStart
 	quickLookEnd
 	quickLookSeek
+	// quickLookAt replaces the held text with the window at ql.atOff, where
+	// the ruler was moved to.
+	quickLookAt
 )
 
 // quickLookPromptKind is what the row at the bottom of a text is asking for.
@@ -151,29 +154,6 @@ func quickLookPercent(r *quickLookResult, scroll int) int64 {
 	}
 	off := r.startOff + (r.endOff-r.startOff)*int64(scroll)/int64(len(r.lines))
 	return off * 100 / r.size
-}
-
-// quickLookBar draws the bar on the panel's edge that says where the top of the
-// panel is in the file, when the file does not fit.
-func quickLookBar(c *ckCanvas, pal overlay.Palette, x, top, rows int, r *quickLookResult, scroll int) {
-	if rows < 3 || r.size <= 0 || (!r.more && r.startOff == 0 && len(r.lines) <= rows) {
-		return
-	}
-	at := int(quickLookPercent(r, scroll)) * rows / 100
-	if !r.more && scroll+rows >= len(r.lines) {
-		at = rows - 1
-	}
-	glyph, thumb := "│", "┃"
-	if overlay.UseASCII() {
-		glyph, thumb = "|", "#"
-	}
-	for i := range rows {
-		seg := ckSeg{t: glyph, fg: pal.FgMute}
-		if i == min(at, rows-1) {
-			seg = ckSeg{t: thumb, fg: pal.AccentBright}
-		}
-		c.text(x, top+i, 0, seg)
-	}
 }
 
 // quickLookPage is how many lines half a page is.
@@ -325,6 +305,8 @@ func (m *OS) quickLookWindow() tea.Cmd {
 		limit = int(r.startOff - offset)
 	case quickLookEnd:
 		offset = max(r.size-int64(limit), 0)
+	case quickLookAt:
+		offset = min(max(ql.atOff, 0), r.size)
 	}
 	seek := ql.seek
 	ql.fetching = true

@@ -333,11 +333,14 @@ func (m *OS) quickLookBarMove(x int) {
 	m.quickLookFilmTo(at * ql.res.durationMs / span)
 }
 
-// QuickLookBarDrag follows the pointer while a press on the bar is held. It reports
-// whether one is. The next read goes to where the pointer is when the last read ends,
+// QuickLookBarDrag follows the pointer while a press on the bar or the ruler is
+// held. It reports whether one is. The next read goes to where the pointer is when the last read ends,
 // so a drag runs one read at a time.
-func (m *OS) QuickLookBarDrag(x int) bool {
+func (m *OS) QuickLookBarDrag(x, y int) bool {
 	ql := &m.quickLook
+	if m.quickLookRulerDrag(y) {
+		return true
+	}
 	if !ql.open || !ql.barDrag || !ql.pageBar.ok {
 		return false
 	}
@@ -348,8 +351,8 @@ func (m *OS) QuickLookBarDrag(x int) bool {
 // QuickLookBarRelease ends a drag. It reports whether one was going on.
 func (m *OS) QuickLookBarRelease() bool {
 	ql := &m.quickLook
-	drag := ql.barDrag
-	ql.barDrag = false
+	drag := ql.barDrag || ql.rulerDrag
+	ql.barDrag, ql.rulerDrag = false, false
 	return drag
 }
 

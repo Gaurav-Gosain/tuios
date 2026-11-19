@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -16,8 +18,12 @@ import (
 // panel's: a hover over it where the left pane lies under it keeps the focus
 // on the right pane. A drag over the text in the panel selects and the
 // release copies, with no copy mode key first, in a text file and in a
-// Markdown file. The artifacts are the frames quick-look-hover and
-// quick-look-drag-markdown.
+// Markdown file. The ruler on the panel's right edge marks the Markdown
+// file's headings, a drag of its thumb moves the view to the end, and a
+// click on its track moves the view there. In a log read in windows, a
+// click on the track reads the window at that place. The artifacts are the
+// frames quick-look-hover, quick-look-drag-markdown, quick-look-ruler-marks,
+// quick-look-ruler-drag, quick-look-ruler-click and quick-look-ruler-log.
 //
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md):
 //   - on main, the test fails at "a hover over quick look moved the focus
@@ -27,12 +33,34 @@ import (
 //     fails at "a drag over the text in quick look".
 //   - with the Markdown case cut from quickLookCopyBegin, the test fails at
 //     "a drag over Markdown in quick look".
+//   - with quickLookRulerClick not called from QuickLookMouseClick, the
+//     test fails at "a drag of the ruler's thumb".
+//   - with the quickLookAt case cut from quickLookWindow, the test fails at
+//     "a click on the log's ruler".
 func TestQuickLookTakesTheMouse(t *testing.T) {
 	const session = "qlmouse"
 	base := t.TempDir()
 	pathsProject(t, base)
-	md := "# Notes heading\n\nThe first paragraph of the notes.\n\n- one item\n- two item\n"
-	if err := os.WriteFile(filepath.Join(xdgDir(base, "HOME"), "proj", "notes.md"), []byte(md), 0o644); err != nil {
+	// Six parts under the title: longer than the panel, so the ruler shows,
+	// with a heading for each part to mark.
+	var md strings.Builder
+	md.WriteString("# Notes heading\n\nThe first paragraph of the notes.\n\n- one item\n- two item\n")
+	for part := 1; part <= quickLookRulerParts; part++ {
+		fmt.Fprintf(&md, "\n## Part %d\n", part)
+		for p := 1; p <= 6; p++ {
+			fmt.Fprintf(&md, "\nParagraph %d of part %d.\n", p, part)
+		}
+	}
+	md.WriteString("\nThe end of the notes.\n")
+	if err := os.WriteFile(filepath.Join(xdgDir(base, "HOME"), "proj", "notes.md"), []byte(md.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A log far longer than the window quick look reads at a time.
+	var log strings.Builder
+	for i := range quickLookRulerLogRows {
+		fmt.Fprintf(&log, "big row %06d %s\n", i, strings.Repeat(".", 48))
+	}
+	if err := os.WriteFile(filepath.Join(xdgDir(base, "HOME"), "proj", "big.log"), []byte(log.String()), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	writeConfig(t, base, "[appearance]\nfocus_follows_mouse = true\n")
@@ -66,7 +94,7 @@ func TestQuickLookTakesTheMouse(t *testing.T) {
 
 	enterTerminalMode(t, term)
 	runInShell(t, term, "cd ~/proj && clear && echo CD''DONE", "CDDONE", uiTimeout)
-	runInShell(t, term, "printf 'at %s:%s\\nmd %s\\n' "+pathsFile+" 120 ./notes.md", "md ./notes.md", uiTimeout)
+	runInShell(t, term, "printf 'at %s:%s\\nmd %s\\nlog %s\\n' "+pathsFile+" 120 ./notes.md ./big.log", "log ./big.log", uiTimeout)
 	leaveTerminalMode(t, term)
 	_ = term.WaitStable(uiTimeout)
 	col, row := mustFind(t, term, pathsFile+":120")
@@ -121,5 +149,125 @@ func TestQuickLookTakesTheMouse(t *testing.T) {
 	if !strings.Contains(term.Screen().Text(), "Notes heading") {
 		t.Fatalf("ASSERTION: quick look closed after the drag\n%s", term.Snapshot())
 	}
+
+	// The ruler. esc ends the selection, which leaves the ruler to the mouse.
+	sendEach(t, term, tuitest.Esc)
+	var g quickLookRulerCells
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		g = quickLookRulerRight(s, pc, pr)
+		return g.rows > 0 && strings.Count(g.cells, "━") == 1+quickLookRulerParts
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the ruler does not mark the title and the %d parts: %q: %v\n%s", quickLookRulerParts, g.cells, err, term.Snapshot())
+	}
+	if !strings.HasPrefix(g.cells, "━") {
+		t.Fatalf("ASSERTION: the title on the first line has no mark on the ruler's first row: %q", g.cells)
+	}
+	saveCockpitFrames(t, term, "quick-look-ruler-marks")
+
+	// A drag of the thumb to the ruler's last row shows the end of the file.
+	thumb := strings.Index(g.cells, "┃")
+	if thumb < 0 {
+		t.Fatalf("no thumb on the ruler: %q", g.cells)
+	}
+	mouseDrag(t, term, g.x, g.top+thumb, g.x, g.top+g.rows-1, tuitest.MouseLeft, 0)
+	railLists(t, term, "a drag of the ruler's thumb did not show the end", []string{"The end of the notes."}, []string{"Notes heading"})
+	saveCockpitFrames(t, term, "quick-look-ruler-drag")
+
+	// A click on the track's first row shows the start again, and a click in
+	// its middle takes the thumb there: neither end is on screen.
+	mouseClick(t, term, g.x, g.top, tuitest.MouseLeft, 0)
+	railLists(t, term, "a click on the top of the ruler did not show the start", []string{"Notes heading"}, []string{"The end of the notes."})
+	mid := g.top + g.rows*2/3
+	mouseClick(t, term, g.x, mid, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		g = quickLookRulerRight(s, pc, pr)
+		at := mid - g.top
+		return !strings.Contains(text, "Notes heading") && !strings.Contains(text, "The end of the notes.") &&
+			at < len([]rune(g.cells)) && []rune(g.cells)[at] != '│'
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: a click in the ruler's middle did not take the thumb there: %q: %v\n%s", g.cells, err, term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "quick-look-ruler-click")
+
+	// The log: a click on the middle of its ruler reads the window there.
+	sendKeys(t, term, tuitest.Esc)
+	waitQuickLookClosed(t, term)
+	lc, lr := mustFind(t, term, "log ./big.log")
+	mouseClick(t, term, lc+6, lr, tuitest.MouseLeft, tuitest.ModCtrl)
+	railLists(t, term, "ctrl+click on big.log", []string{"big row 000000"}, nil)
+	rc, rr := mustFind(t, term, "big row 000001")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		g = quickLookRulerRight(s, rc, rr)
+		return g.rows > 0
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the log has no ruler: %v\n%s", err, term.Snapshot())
+	}
+	mouseClick(t, term, g.x, g.top+g.rows/2, tuitest.MouseLeft, 0)
+	var shown int
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		m := quickLookBigRow.FindStringSubmatch(s.Text())
+		if m == nil {
+			return false
+		}
+		shown, _ = strconv.Atoi(m[1])
+		return shown > quickLookRulerLogRows/4 && shown < quickLookRulerLogRows*3/4
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: a click on the log's ruler did not read the middle of the log: the top row is %d: %v\n%s", shown, err, term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "quick-look-ruler-log")
 	alive(t, term, "after the quick look mouse")
+}
+
+const (
+	// quickLookRulerParts is the parts of the notes, each under a heading.
+	quickLookRulerParts = 6
+	// quickLookRulerLogRows is the rows of big.log, about 2.5 MB.
+	quickLookRulerLogRows = 40000
+)
+
+// quickLookBigRow is the number of the first row of big.log on screen.
+var quickLookBigRow = regexp.MustCompile(`big row (\d{6})`)
+
+// quickLookRulerCells is quick look's ruler on screen: its column, its first
+// row and its rows, and its cells top to bottom.
+type quickLookRulerCells struct {
+	x, top, rows int
+	cells        string
+}
+
+// quickLookRulerRight finds the ruler right of col on row: the first cell
+// past the text there that is a track, thumb or mark glyph, and the run of
+// them above and below it.
+func quickLookRulerRight(s tuitest.Screen, col, row int) quickLookRulerCells {
+	ruler := func(x, y int) bool {
+		switch s.Cell(x, y).Content {
+		case "│", "┃", "━":
+			return true
+		}
+		return false
+	}
+	cols, rows := s.Size()
+	x := col
+	for x < cols && s.Cell(x, row).Content != " " && s.Cell(x, row).Content != "" {
+		x++
+	}
+	for x < cols && !ruler(x, row) {
+		x++
+	}
+	if x >= cols {
+		return quickLookRulerCells{}
+	}
+	top, bottom := row, row
+	for top > 0 && ruler(x, top-1) {
+		top--
+	}
+	for bottom+1 < rows && ruler(x, bottom+1) {
+		bottom++
+	}
+	var b strings.Builder
+	for y := top; y <= bottom; y++ {
+		b.WriteString(s.Cell(x, y).Content)
+	}
+	return quickLookRulerCells{x: x, top: top, rows: bottom - top + 1, cells: b.String()}
 }

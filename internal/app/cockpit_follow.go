@@ -93,29 +93,88 @@ func (m *OS) drawThreadUnseen(c *ckCanvas, l ckLook, t *agentThread, x, w, y, to
 
 // drawThreadRuler draws the thread's ruler in column x, rows y to y+rows,
 // for a thread of lines lines shown from line start: where the view is, and
-// a mark for each prompt while the marks leave most rows clear. A thread that
-// fits has none.
+// a mark for each prompt. A thread that fits has none.
 func drawThreadRuler(c *ckCanvas, l ckLook, t *agentThread, x, y, rows, lines, start int) {
-	if lines <= rows || rows < 2 {
-		return
+	ckRuler{lines: lines, start: start, marks: t.prompts}.draw(c, l, x, y, rows)
+}
+
+// ckRuler is a scroll ruler: a column as high as the view, with a thumb that
+// says where a view of lines lines, shown from line start, is, and a mark at
+// each line of marks. The agents thread marks its prompts on one, and quick
+// look the headings of a Markdown file.
+type ckRuler struct {
+	lines, start int
+	marks        []int
+	// track draws the whole column under the thumb, for a ruler the mouse
+	// moves: the column is where a click goes.
+	track bool
+}
+
+// ckRulerMarksShare is the share of the rows marks may take: marks on more
+// rows than one in three point at nothing in particular. A thread of many
+// short turns, or of mail an agent got, would fill the ruler, and then the
+// thumb alone shows where the view is.
+const ckRulerMarksShare = 3
+
+// shows reports whether a ruler rows high has anything to say: the view does
+// not fit.
+func (r ckRuler) shows(rows int) bool { return r.lines > rows && rows >= 2 }
+
+// rows are the ruler's mark rows, nil when there are too many.
+func (r ckRuler) markRows(rows int) []int {
+	marks := transcriptview.RulerMarks(r.marks, r.lines, rows)
+	if len(marks)*ckRulerMarksShare > rows {
+		return nil
 	}
-	thumb, mark := "┃", "━"
+	return marks
+}
+
+// draw draws the ruler in column x, rows y to y+rows. It reports whether it
+// drew one.
+func (r ckRuler) draw(c *ckCanvas, l ckLook, x, y, rows int) bool {
+	if !r.shows(rows) {
+		return false
+	}
+	thumb, mark, track := "┃", "━", "│"
 	if l.ascii {
-		thumb, mark = "|", "-"
+		thumb, mark, track = "|", "-", "|"
 	}
-	if top, size, ok := sidebarScrollThumb(start, lines, rows); ok {
-		for r := top; r < top+size; r++ {
-			c.text(x, y+r, x+1, ckSeg{t: thumb, fg: l.pal.FgMute})
+	thumbInk := l.pal.FgMute
+	if r.track {
+		for i := range rows {
+			c.text(x, y+i, x+1, ckSeg{t: track, fg: l.pal.FgMute})
+		}
+		// The thumb stands out from the track.
+		thumbInk = l.pal.Fg
+		if l.ascii {
+			thumb = "#"
 		}
 	}
-	marks := transcriptview.RulerMarks(t.prompts, lines, rows)
-	if len(marks)*3 > rows {
-		// Marks on most rows point at no prompt in particular: a thread of
-		// many short turns, or of mail an agent got, would fill the ruler.
-		// The thumb alone shows where the view is.
-		return
+	if top, size, ok := sidebarScrollThumb(r.start, r.lines, rows); ok {
+		for i := top; i < top+size; i++ {
+			c.text(x, y+i, x+1, ckSeg{t: thumb, fg: thumbInk})
+		}
 	}
-	for _, r := range marks {
-		c.text(x, y+r, x+1, ckSeg{t: mark, fg: l.pal.AccentBright, attrs: ckBold})
+	for _, i := range r.markRows(rows) {
+		c.text(x, y+i, x+1, ckSeg{t: mark, fg: l.pal.AccentBright, attrs: ckBold})
 	}
+	return true
+}
+
+// thumb is the thumb's first row and its rows, on a ruler rows high.
+func (r ckRuler) thumb(rows int) (top, size int) {
+	top, size, _ = sidebarScrollThumb(r.start, r.lines, rows)
+	return top, size
+}
+
+// startFor is the start of the view that puts the thumb's first row at row
+// top of a ruler rows high: the way back from a thumb the mouse moved.
+func (r ckRuler) startFor(top, rows int) int {
+	_, size := r.thumb(rows)
+	travel := rows - size
+	if travel <= 0 {
+		return 0
+	}
+	top = min(max(top, 0), travel)
+	return roundDiv(top*(r.lines-rows), travel)
 }
