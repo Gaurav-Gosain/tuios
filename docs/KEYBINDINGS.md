@@ -1784,7 +1784,7 @@ steps, and `esc` turns the mode off. In the resize mode, `s v` splits the
 pane once and goes back to the resize mode.
 
 - The dock shows a chip after the mode pill while a mode is on. The chip
-  names the modes that are on and the key that turns off the top one. With
+  names the modes that are on and says that `esc` turns off the top one. With
   the dock hidden, the badge shows the modes.
 - `exclusive = true` drops every key that the mode does not bind. Without it,
   such a key goes on as if the mode were off: to the pane in terminal mode,
@@ -1794,8 +1794,8 @@ pane once and goes back to the resize mode.
 - Modes stack. `enter_mode:NAME` in a mode turns on the new mode on top. The
   top mode reads a key first. A mode that is not exclusive gives a key it does
   not bind to the mode under it. Up to 8 modes can be on.
-- `esc` turns off the top mode, unless a mode that is on binds `esc`. The
-  action `leave_mode` also turns off the top mode, so you can put it on any
+- `esc` turns off the top mode. A mode cannot bind `esc`. The action
+  `leave_mode` also turns off the top mode, so you can put it on another
   key.
 - The leader, its menus, the overlays, copy mode and nest mode keep their
   keys while a mode is on. `Ctrl+B` always works.
@@ -1807,8 +1807,7 @@ pane once and goes back to the resize mode.
   has lowercase letters, digits, `-` and `_`.
 - `tuios keybinds list`, `doctor`, `unbind` and `free` read the modes as
   they read any other section, named `modes.NAME`. A config warning names a
-  key that turns on a mode that is not declared, and a mode that nothing
-  turns on.
+  key that turns on a mode that is not declared.
 
 ## Split into the same ssh
 

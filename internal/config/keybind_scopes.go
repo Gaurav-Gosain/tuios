@@ -328,7 +328,7 @@ func ScopesFor(kb *KeybindingsConfig) []Scope {
 		}
 	}
 	scopes = append(scopes, menuScopes(kb, scopes)...)
-	return append(scopes, modeScopes(kb, scopes)...)
+	return append(scopes, modeScopes(kb)...)
 }
 
 // section returns the config table with the given name, or nil.

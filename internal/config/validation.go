@@ -131,7 +131,6 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 		validateSection(section.name, section.keys)
 	}
 	validateMenus(cfg, result)
-	validateModes(cfg, result)
 
 	// Every option's closed set and range, from its entry in the registry.
 	validateOptions(cfg, result)

@@ -24,71 +24,49 @@ func handleEnterMode(action string) ActionHandler {
 
 // handleLeaveMode turns off the key mode on top.
 func handleLeaveMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.LeaveKeyMode()
+	o.LeaveKeyMode(-1)
 	return o, nil
 }
 
-// keyModeReads reports whether the key modes read msg: a mode is on, and
-// nothing that owns the keyboard ahead of them is up. The leader, its menus,
-// the overlays, copy mode and nest mode keep their keys, so a person can
-// always reach the leader from inside a mode, and an exclusive mode cannot
-// take the keys of a panel opened over it.
-func keyModeReads(msg tea.KeyPressMsg, o *app.OS) bool {
-	if !o.KeyModeOn() || o.MenuOpen() || o.PanelOwnsKeyboard() || o.Nested() {
-		return false
-	}
-	if w := o.GetFocusedWindow(); w != nil && w.CopyModeVisible() {
-		return false
-	}
-	return !isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg))
-}
-
-// routeKeyMode gives msg to the key modes that are on, top first. The top
-// mode runs the action it binds to the key. A mode that is not exclusive
-// passes a key it does not bind to the mode under it, and past the last one
-// the key goes on to the window keys or the pane. An exclusive mode drops it.
+// routeKeyMode gives msg to the key modes that are on, top first. It reads
+// no key while the leader, a menu, an overlay, copy mode or nest mode owns
+// the keyboard, and never the leader, so the leader works in every mode.
 //
-// esc, when no mode on the stack binds it, turns off the top mode. A once
-// mode turns off after one key it reads: before its action runs, so an
-// action that turns on another mode puts it on the stack that is left.
+// esc turns off the top mode. Otherwise the top mode runs the action it
+// binds to the key. A mode that is not exclusive passes a key it does not
+// bind to the mode under it, and past the last one the key goes on to the
+// window keys or the pane. An exclusive mode drops it. A once mode turns off
+// after one key it reads: before its action runs, so an action that turns
+// on another mode puts it on the stack that is left.
 //
 // ok is false when the key goes on.
 func routeKeyMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, bool) {
-	if !keyModeReads(msg, o) {
+	if !o.KeyModeOn() || o.MenuOpen() || o.PanelOwnsKeyboard() || o.Nested() ||
+		isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) {
 		return o, nil, false
 	}
-	kb := &o.KeybindRegistry.GetConfig().Keybindings
-	modes := o.KeyModes()
-	for i, name := range slices.Backward(modes) {
-		mode, ok := kb.Mode(name)
-		if !ok {
-			continue
-		}
-		action := lookupAction(o, msg, func(key string) string { return o.KeybindRegistry.GetModeAction(name, key) })
-		if action != "" {
-			if mode.Once {
-				o.LeaveKeyModeAt(i)
-				if action == config.ActionLeaveMode {
-					return o, nil, true
-				}
-			}
-			m, cmd, _ := dispatchAction(action, msg, o)
-			return m, cmd, true
-		}
-		if mode.Exclusive {
-			break
-		}
+	if w := o.GetFocusedWindow(); w != nil && w.CopyModeVisible() {
+		return o, nil, false
 	}
 	if msg.String() == "esc" {
-		o.LeaveKeyMode()
+		o.LeaveKeyMode(-1)
 		return o, nil, true
 	}
-	top, _ := kb.Mode(modes[len(modes)-1])
-	if top.Exclusive {
-		if top.Once {
-			o.LeaveKeyMode()
+	kb := &o.UserConfig.Keybindings
+	for i, name := range slices.Backward(o.KeyModes()) {
+		mode, _ := kb.Mode(name)
+		action := lookupAction(o, msg, func(key string) string { return o.KeybindRegistry.GetModeAction(name, key) })
+		if action == "" && !mode.Exclusive {
+			continue
 		}
-		return o, nil, true
+		if mode.Once {
+			o.LeaveKeyMode(i)
+		}
+		if action == "" || (mode.Once && action == config.ActionLeaveMode) {
+			return o, nil, true
+		}
+		m, cmd, _ := dispatchAction(action, msg, o)
+		return m, cmd, true
 	}
 	return o, nil, false
 }

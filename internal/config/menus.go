@@ -290,8 +290,22 @@ func validateMenus(cfg *UserConfig, result *ValidationResult) {
 	opened := map[string]bool{}
 	check := func(section string, table map[string][]string) {
 		for _, action := range sortedActions(table) {
+			if len(table[action]) == 0 {
+				continue
+			}
+			// A key that turns on a key mode (key_modes.go) is checked here
+			// too, so the two kinds of name share one walk of the tables.
+			if mode, ok := ModeNameOf(action); ok {
+				if _, declared := kb.Mode(mode); !declared {
+					result.Warnings = append(result.Warnings, ValidationError{
+						Field: section, Key: action,
+						Message: action + " turns on a mode that is not declared, so the key does nothing. Add a [keybindings.modes." + mode + "] table with keys.",
+					})
+				}
+				continue
+			}
 			target, ok := MenuNameOf(action)
-			if !ok || len(table[action]) == 0 {
+			if !ok {
 				continue
 			}
 			if _, declared := kb.Menu(target); !declared {
