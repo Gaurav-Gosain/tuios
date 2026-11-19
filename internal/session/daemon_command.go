@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/testknob"
@@ -79,8 +80,9 @@ func resolveCommandName(name string, args []string) (string, []string, bool) {
 			return query, args, true
 		}
 	}
-	if tape.IsActionName(name) && len(args) == 0 {
-		return string(tape.CommandTypeAction), []string{name}, true
+	if tape.IsActionName(name) && (len(args) == 0 || strings.HasPrefix(name, config.UserActionPrefix)) {
+		// A user action takes its arguments, key=value, after its name.
+		return string(tape.CommandTypeAction), append([]string{name}, args...), true
 	}
 	return "", nil, false
 }

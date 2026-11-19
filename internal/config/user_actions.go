@@ -109,6 +109,10 @@ type UserAction struct {
 	Height string `toml:"height,omitempty"`
 	// Plugin is a herdr plugin action, bare or qualified with the plugin id.
 	Plugin string `toml:"plugin,omitempty"`
+	// Args are typed arguments, and Ask the steps that ask the person for a
+	// value. Each name is a placeholder of Run. See user_action_args.go.
+	Args []ActionArg `toml:"args,omitempty"`
+	Ask  []ActionAsk `toml:"ask,omitempty"`
 }
 
 // ActionName is the entry's action name.
@@ -165,7 +169,7 @@ func (a UserAction) AsCommand() CommandBinding {
 var userActionNameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 
 // placeholderRE finds {name} in an argument.
-var placeholderRE = regexp.MustCompile(`\{([a-z][a-z.]*)\}`)
+var placeholderRE = regexp.MustCompile(`\{([a-z][a-z0-9._]*)\}`)
 
 // shells are the programs whose -c script a placeholder may not stand in.
 var shells = []string{"sh", "bash", "zsh", "dash", "ksh", "fish", "nu", "pwsh", "powershell", "cmd", "cmd.exe"}
@@ -206,11 +210,14 @@ func userActionProblem(a UserAction, normalizer *KeyNormalizer, builtin func(str
 		if !slices.Contains(UserActionIns, a.ResolvedIn()) {
 			return fmt.Sprintf("The value in = %q is not known. Use popup, pane, scratch or silent.", a.In)
 		}
-		if msg := runPlaceholderProblem(a.Run); msg != "" {
+		if msg := runPlaceholderProblem(a.Run, a.ArgNames()); msg != "" {
 			return msg
 		}
 	} else if a.In != "" {
 		return "The value in is only for run. Remove it."
+	}
+	if p := argsProblem(a); p != "" {
+		return p
 	}
 	if p := whenProblem(a.When); p != "" {
 		return p
@@ -229,11 +236,11 @@ func userActionProblem(a UserAction, normalizer *KeyNormalizer, builtin func(str
 
 // runPlaceholderProblem refuses an unknown placeholder, and a placeholder in
 // the script of a shell's -c.
-func runPlaceholderProblem(run []string) string {
+func runPlaceholderProblem(run, args []string) string {
 	shell := slices.Contains(shells, strings.ToLower(filepath.Base(run[0])))
 	for i, arg := range run {
 		for _, m := range placeholderRE.FindAllStringSubmatch(arg, -1) {
-			if !slices.Contains(UserActionPlaceholders, m[1]) {
+			if !slices.Contains(UserActionPlaceholders, m[1]) && !slices.Contains(args, m[1]) {
 				return fmt.Sprintf("The placeholder {%s} is not known. Use one of {%s}.", m[1], strings.Join(UserActionPlaceholders, "}, {"))
 			}
 			if shell && i > 0 && (run[i-1] == "-c" || strings.EqualFold(run[i-1], "/c")) {

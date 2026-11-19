@@ -81,7 +81,7 @@ var argSpecs = map[CommandType]argSpec{
 	}},
 	CommandTypeSource: {1, 1, "a tape file to include", nil},
 
-	CommandTypeAction:  {1, 1, "an action name, as in Action toggle_spotlight", checkEach(checkAction)},
+	CommandTypeAction:  {1, unlimited, "an action name, as in Action toggle_spotlight, then key=value for a user action", checkActionArgs},
 	CommandTypePress:   {1, unlimited, `keys, as in Press "ctrl+b q"`, nil},
 	CommandTypeRun:     {1, 1, `a command line, as in Run "make test"`, nil},
 	CommandTypeWaitFor: {1, unlimited, `a condition, as in WaitFor text "ready" 10s`, checkCondition(CommandTypeWaitFor)},
@@ -117,6 +117,23 @@ func checkOneOf(values ...string) func(string) error {
 		}
 		return errfmt.Errorf("%q is not one of %s", s, strings.Join(values, ", "))
 	}
+}
+
+// checkActionArgs checks Action: an action name, then key=value arguments,
+// which only a user action takes.
+func checkActionArgs(args []string) (int, error) {
+	if err := checkAction(args[0]); err != nil {
+		return 0, err
+	}
+	for i, a := range args[1:] {
+		if !strings.HasPrefix(args[0], config.UserActionPrefix) {
+			return i + 1, errfmt.Errorf("only a user action takes arguments, and %s is not one", args[0])
+		}
+		if k, _, ok := strings.Cut(a, "="); !ok || k == "" {
+			return i + 1, errfmt.Errorf("%q is not key=value", a)
+		}
+	}
+	return 0, nil
 }
 
 // checkAction accepts the name of a keybinding action, or of a

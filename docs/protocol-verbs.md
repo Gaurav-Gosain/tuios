@@ -4242,7 +4242,7 @@ Run one tape command, or any keybinding action by the name config.toml binds it 
 | Param | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `session` | string |  |  | Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one. |
-| `command` | string |  |  | Tape command name, e.g. "ToggleZoom" or "SnapLeft", or a keybinding action name, e.g. "toggle_spotlight" (tuios keybinds list prints them). An action runs on an attached client and takes no args. |
+| `command` | string |  |  | Tape command name, e.g. "ToggleZoom" or "SnapLeft", or a keybinding action name, e.g. "toggle_spotlight" (tuios keybinds list prints them). An action runs on an attached client. Only a user action (user:NAME) takes args, each key=value. |
 | `args` | []string |  |  | Arguments for the command. |
 
 | Result field | Type | Description |

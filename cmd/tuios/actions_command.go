@@ -1,13 +1,16 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"strconv"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -319,13 +322,21 @@ func newActionsRunCommand() *cobra.Command {
 	var window string
 	var dry bool
 	cmd := &cobra.Command{
-		Use:   "run NAME [-w PANE] [--dry-run]",
+		Use:   "run NAME [key=value...] [-w PANE] [--dry-run]",
 		Short: "Run an action in the session's client",
 		Long: `Run an action as its key would, in the client attached to the session, on
 the focused pane. A process inside a pane needs the respond grant, as
 run-command does. --dry-run prints what the action would run, with the
-placeholders filled from the pane -w names (default: the focused pane).`,
-		Args: cobra.ExactArgs(1),
+placeholders filled from the pane -w names (default: the focused pane).
+
+key=value gives a value to an argument of the action. An ask step with no
+value asks the person in the palette, as tuios prompt does. --json prints
+the values the action ran with, typed. When an ask step gets no answer, the
+exit status is that of tuios prompt: 1 cancelled, 2 timeout, 3 no client,
+4 another prompt is open.`,
+		Example: `  tuios actions run deploy env=staging replicas=3
+  tuios actions run deploy --json`,
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			rows, cfg, err := loadActions()
 			if err != nil {
@@ -335,20 +346,52 @@ placeholders filled from the pane -w names (default: the focused pane).`,
 			if !ok {
 				return actionNotFound(cfg, args[0])
 			}
+			given := map[string]string{}
+			for _, kv := range args[1:] {
+				k, v, ok := strings.Cut(kv, "=")
+				if !ok || k == "" {
+					return errfmt.Errorf("%q is not key=value", kv)
+				}
+				given[k] = v
+			}
+			a, user := cfg.UserActionFor(r.Action)
 			if dry {
-				return dryRunAction(f, window, cfg, r)
+				return dryRunAction(f, window, cfg, r, given)
+			}
+			if !user && len(given) > 0 {
+				return errfmt.Errorf("the action %s takes no arguments", r.Name)
 			}
 			t, err := dialSessionTarget(f.session)
 			if err != nil {
 				return err
 			}
 			defer t.Close()
-			raw, err := t.client.Call("run-command", t.params(map[string]any{"command": r.Action}))
-			if err != nil {
+			params := map[string]any{"command": r.Action}
+			var values map[string]string
+			if user && (len(a.Args) > 0 || len(a.Ask) > 0) {
+				values, err = a.ResolveArgs(given, func(s config.ActionAsk) (string, error) {
+					return app.AskActionStep(func(verb string, p map[string]any, d time.Duration) (json.RawMessage, error) {
+						return t.client.CallWithTimeout(verb, p, d)
+					}, s)
+				})
+				if ended, ok := errors.AsType[*config.ErrActionAskEnded](err); ok {
+					return actionAskEnded(ended, r, f.json)
+				}
+				if err != nil {
+					return err
+				}
+				var kv []string
+				for _, k := range a.ArgNames() {
+					kv = append(kv, k+"="+values[k])
+				}
+				params["args"] = kv
+			}
+			if _, err := t.client.Call("run-command", t.params(params)); err != nil {
 				return reportVerbError(t.explain("run-command", err), f.json)
 			}
 			if f.json {
-				return printVerbResultOn(t, raw, true)
+				outputJSON(map[string]any{"success": true, "action": r.Action, "status": "ran", "args": typedArgs(a, values)})
+				return nil
 			}
 			fmt.Printf("Ran %s%s.\n", plainLine(r.Label), t.on())
 			return nil
@@ -360,8 +403,37 @@ placeholders filled from the pane -w names (default: the focused pane).`,
 	return cmd
 }
 
-// dryRunAction prints what r would run on the pane window names.
-func dryRunAction(f taskFlags, window string, cfg *config.UserConfig, r actionRow) error {
+// typedArgs are values as JSON takes them: a number as a number, a bool as
+// a bool.
+func typedArgs(a config.UserAction, values map[string]string) map[string]any {
+	out := map[string]any{}
+	for k, v := range values {
+		out[k] = v
+		switch a.ArgType(k) {
+		case config.ArgNumber:
+			out[k], _ = strconv.ParseFloat(v, 64)
+		case config.ArgBool:
+			out[k] = v == "true"
+		}
+	}
+	return out
+}
+
+// actionAskEnded reports an ask step that got no answer, with the exit
+// status tuios prompt gives.
+func actionAskEnded(ended *config.ErrActionAskEnded, r actionRow, jsonOut bool) error {
+	if jsonOut {
+		outputJSON(map[string]any{"success": false, "action": r.Action, "status": ended.Status, "arg": ended.Name})
+	} else {
+		fmt.Fprintf(os.Stderr, "The action %s did not run. %s\n", plainLine(r.Label), promptNoAnswerText(ended.Status))
+	}
+	return &statusError{code: promptExitCode(ended.Status)}
+}
+
+// dryRunAction prints what r would run on the pane window names, with the
+// values given, else the defaults. A value an ask step would ask for shows
+// as <NAME>.
+func dryRunAction(f taskFlags, window string, cfg *config.UserConfig, r actionRow, given map[string]string) error {
 	a, ok := cfg.UserActionFor(r.Action)
 	if !ok || a.Body() != "run" {
 		fmt.Printf("%s runs %s.\n", plainLine(r.Label), r.Runs)
@@ -403,6 +475,15 @@ func dryRunAction(f taskFlags, window string, cfg *config.UserConfig, r actionRo
 	}
 	// The selection is the client's; a dry run shows where it would go.
 	facts["selection"] = "<selection>"
+	for _, n := range a.ArgNames() {
+		facts[n] = "<" + n + ">"
+	}
+	for _, g := range a.Args {
+		if g.Default != nil {
+			facts[g.Name] = config.ArgDefault(g)
+		}
+	}
+	maps.Copy(facts, given)
 	argv, err := config.ExpandRun(a.Run, facts)
 	if err != nil {
 		return err

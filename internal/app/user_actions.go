@@ -28,10 +28,11 @@ import (
 // runs a user action. Reloading config.toml runs nothing.
 
 // RunUserAction runs the user action behind action (user:NAME). extra holds
-// facts the caller read and this file cannot, such as the selection. A name
-// no [[actions]] entry has runs the [[keybindings.command]] entry of that
-// name, so user:NAME names every command a person wrote.
-func (m *OS) RunUserAction(action string, extra map[string]string) tea.Cmd {
+// facts the caller read and this file cannot, such as the selection, and
+// given the values of its arguments the caller gave. A name no [[actions]]
+// entry has runs the [[keybindings.command]] entry of that name, so
+// user:NAME names every command a person wrote.
+func (m *OS) RunUserAction(action string, extra, given map[string]string) tea.Cmd {
 	if m.UserConfig == nil {
 		return nil
 	}
@@ -55,21 +56,38 @@ func (m *OS) RunUserAction(action string, extra map[string]string) tea.Cmd {
 	case "plugin":
 		return m.runPluginActionKey(a.AsCommand())
 	case "run":
-		dir := m.commandDir()
-		args, err := config.ExpandRun(a.Run, m.userActionFacts(dir, extra))
+		if a.AsksFor(given) {
+			// The ask steps wait for the person, so they run off the
+			// Update loop. See userActionAsked.
+			return m.askUserAction(a, extra, given)
+		}
+		values, err := a.ResolveArgs(given, nil)
 		if err != nil {
 			m.userActionFailed(a, err.Error())
 			return nil
 		}
-		// A silent command runs on this machine, the others on the
-		// session's: the command entry rule.
-		goos := m.sessionGOOS()
-		if a.ResolvedIn() == config.UserActionInSilent {
-			goos = runtime.GOOS
-		}
-		return m.runCommandEntry(a.AsCommand(), dir, userActionArgv(goos, args, m.commandEnv(dir)))
+		return m.runUserActionWith(a, extra, values)
 	}
 	return nil
+}
+
+// runUserActionWith runs a run action with the values of its arguments.
+func (m *OS) runUserActionWith(a config.UserAction, extra, values map[string]string) tea.Cmd {
+	dir := m.commandDir()
+	facts := m.userActionFacts(dir, extra)
+	maps.Copy(facts, values)
+	args, err := config.ExpandRun(a.Run, facts)
+	if err != nil {
+		m.userActionFailed(a, err.Error())
+		return nil
+	}
+	// A silent command runs on this machine, the others on the session's:
+	// the command entry rule.
+	goos := m.sessionGOOS()
+	if a.ResolvedIn() == config.UserActionInSilent {
+		goos = runtime.GOOS
+	}
+	return m.runCommandEntry(a.AsCommand(), dir, userActionArgv(goos, args, m.commandEnv(dir)))
 }
 
 // userActionFailed says on the dock that a did not run, and why.

@@ -132,9 +132,7 @@ func printPrompt(out, errs io.Writer, raw json.RawMessage, jsonOut bool) error {
 			_, _ = fmt.Fprintln(out, jsonSafe(string(b)))
 		}
 	}
-	code := 0
-	switch res.Status {
-	case session.PromptAnswered:
+	if res.Status == session.PromptAnswered {
 		if jsonOut {
 			return nil
 		}
@@ -148,21 +146,25 @@ func printPrompt(out, errs io.Writer, raw json.RawMessage, jsonOut bool) error {
 			fmt.Fprintln(out, res.Value)
 		}
 		return nil
-	case session.PromptCancelled:
-		code = promptExitCancelled
-	case session.PromptTimeout:
-		code = promptExitTimeout
-	case session.PromptNoClient:
-		code = promptExitNoClient
-	case session.PromptBusy:
-		code = promptExitBusy
-	default:
-		code = 1
 	}
 	if !jsonOut {
 		fmt.Fprintln(errs, promptNoAnswerText(res.Status))
 	}
-	return &statusError{code: code}
+	return &statusError{code: promptExitCode(res.Status)}
+}
+
+// promptExitCode is the exit status of a prompt that ended with status and
+// no answer.
+func promptExitCode(status string) int {
+	switch status {
+	case session.PromptTimeout:
+		return promptExitTimeout
+	case session.PromptNoClient:
+		return promptExitNoClient
+	case session.PromptBusy:
+		return promptExitBusy
+	}
+	return promptExitCancelled
 }
 
 // promptNoAnswerText says why a prompt got no answer and what to do next.

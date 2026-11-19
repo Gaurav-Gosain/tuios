@@ -18376,3 +18376,16 @@ Run on Linux on 2026-11-19. The branch passes all of them.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^Test(Prompt|PluginPrompts)' -v .`.
+
+## Actions that ask
+
+`TestUserActionAsksAndTakesTypedArgs` in `user_action_args_test.go`. The key of an action with an ask step must ask in the palette, and run with the answer and the defaults. The CLI must check each value against its type, ask only for what it was not given, and print the values typed.
+
+Run on Linux on 2026-11-19. The branch passes it.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `UserAction.AsksFor` reports false | "the prompt never showed" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestUserActionAsksAndTakesTypedArgs$' -v .`.
