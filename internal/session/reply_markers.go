@@ -15,7 +15,8 @@ const replyMarkerGuidance = "Mark the state of your work with a reply marker in 
 	"The kind of work: [[Investigate]], [[Implement]]. Ownership: [[Owned]], [[Shared]]. Context: [[New]], [[Changed]], [[Inferred]], [[Decision]]. " +
 	"Add a short detail after a colon, as in [[Failed: 3 tests]]. Keep a marker under 32 characters. Do not put a marker inside code. " +
 	"Start a reply, and each part of a long one, with a bold lead label such as **Finding:**, **Result:**, **Cause:**, **Evidence:**, **Risk:**, **Plan:** or **Next:**. " +
-	"Do not type icons. The tuios agents view draws each marker as a coloured pill and adds the icons."
+	"Do not type icons. The tuios agents view draws each marker as a coloured pill and adds the icons. " +
+	"It draws a fenced mermaid block as a diagram and a fenced tml block as a static TML picture."
 
 // replyMarkerFlags are the flags that add to a harness's system prompt, by
 // harness id. Only a flag that appends is listed: one that replaces the

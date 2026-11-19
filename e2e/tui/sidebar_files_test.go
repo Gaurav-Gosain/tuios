@@ -3001,8 +3001,11 @@ func TestQuickLookShowsADiff(t *testing.T) {
 // How this could pass wrongly: the words would be there as raw source too. So the test
 // also checks that no tag, no marker and no fence reaches the panel.
 //
-// The diagram is drawn by the sketch plugin, so the renderer stays out of the
-// tuios binary. A stand-in plugin answers with fakeCells, which spell PLUGIN-DREW.
+// The diagram is a flowchart, which loom draws in tuios through the block
+// renderer the agents thread shares: its two nodes are on the panel under a
+// header that offers the source. A stand-in sketch plugin is installed and
+// answers with fakeCells, which spell PLUGIN-DREW, for a type tuios does not
+// draw itself; a flowchart never reaches it.
 func TestQuickLookReadsRichMarkdown(t *testing.T) {
 	term, dir, base := quickLookListedBase(t, nil, nil)
 	plug := t.TempDir()
@@ -3060,9 +3063,17 @@ The secret body.
 	quickLookFocusRail(t, term, "zrich.md")
 	sendKeys(t, term, " ")
 	railLists(t, term, "the document did not read as Markdown",
-		[]string{"Rich title", "bold", "Warning", "Mind the step.", "[1]", "1. The note text.", "More words", "Image: a logo", "PLUGIN-DREW"},
-		[]string{"<h2", "<b>", "</", "[!WARNING]", "[^one]", "[site]", "hidden", "The secret body.", "```", "flowchart", "-->"})
+		[]string{"Rich title", "bold", "Warning", "Mind the step.", "[1]", "1. The note text.", "More words", "Image: a logo", "Start", "Stop", "show the source"},
+		[]string{"<h2", "<b>", "</", "[!WARNING]", "[^one]", "[site]", "hidden", "The secret body.", "```", "flowchart", "-->", "PLUGIN-DREW"})
 	saveCockpitFrames(t, term, "quick-look-rich-markdown")
+	// A click on the diagram's header shows its source, as in the thread.
+	row := rowWith(term.Screen(), "show the source")
+	if row < 0 {
+		t.Fatalf("ASSERTION: the diagram has no header that offers its source\n%s", term.Snapshot())
+	}
+	col := strings.Index(term.Screen().Line(row), "show the source")
+	mouseClick(t, term, len([]rune(term.Screen().Line(row)[:col]))+1, row, tuitest.MouseLeft, 0)
+	railLists(t, term, "ASSERTION: a click on the header shows the source", []string{"flowchart LR", "show the picture"}, nil)
 	sendKeys(t, term, tuitest.Tab, tuitest.Enter)
 	railLists(t, term, "enter did not open the section", []string{"The secret body."}, nil)
 	alive(t, term, "after rich Markdown")

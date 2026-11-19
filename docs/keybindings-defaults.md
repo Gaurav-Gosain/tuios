@@ -250,6 +250,7 @@ Run `tuios keybinds list` to see the keys that your config sets.
 | `A` | `inbox_allow_always` | Agents view: always allow the held approval |
 | `o` | `inbox_artifact` | Agents view: open what the agent has shown, such as a TML form, and use it |
 | `h`, `left` | `inbox_back` | Agents view: go back from the focus on a narrow screen |
+| `P` | `inbox_block_source` | Agents view: show the lowest diagram on screen as its source, or as the diagram again |
 | `b` | `inbox_board` | Agents view: show the task board, or the agents again |
 | `B` | `inbox_board_layout` | Agents view: show the board as columns or as a list |
 | `.` | `inbox_child` | Agents view: select the next agent a card in the thread started or sent mail to. Enter opens its thread |

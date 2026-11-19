@@ -184,6 +184,7 @@ var actionTable = [...]ActionSpec{
 	{Name: "inbox_code_left", Desc: "Agents view: scroll the lowest wide code block on screen to the left", Run: RunView},
 	{Name: "inbox_code_right", Desc: "Agents view: scroll the lowest wide code block on screen to the right", Run: RunView},
 	{Name: "inbox_code_copy", Desc: "Agents view: copy the code of the lowest code block on screen", Run: RunView},
+	{Name: "inbox_block_source", Desc: "Agents view: show the lowest diagram on screen as its source, or as the diagram again", Run: RunView},
 	{Name: "inbox_fold", Desc: "Agents view: fold or open the group of the row under the cursor", Run: RunView},
 	{Name: "inbox_prompt_prev", Desc: "Agents view: show the thread's previous prompt at the top", Run: RunView},
 	{Name: "inbox_prompt_next", Desc: "Agents view: show the thread's next prompt at the top", Run: RunView},

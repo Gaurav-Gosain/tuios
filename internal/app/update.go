@@ -2062,8 +2062,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case sketchDrawnMsg:
-		// A surface's diagram came in from the sketch plugin: draw the
-		// surfaces again, which take it from loom's cache.
+		// A diagram came in from the sketch plugin: the rich blocks are drawn
+		// again, which take it from loom's cache, and so are the surfaces.
+		m.blockGen++
+		m.blocksChanged()
 		for id, v := range m.tml.views {
 			if v.surface != nil {
 				v.surface.Invalidate()

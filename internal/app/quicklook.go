@@ -229,6 +229,9 @@ type quickLookState struct {
 	mdNeed    bool
 	mdGen     int
 	mdPics    []previewPlacement
+	// mdFrom is the line of the Markdown at the top of the body in the
+	// last frame, for a click.
+	mdFrom int
 	// hostOlder holds the machines whose file-preview verb has no windows, and
 	// hostAsked those it was asked of, once per link.
 	hostOlder map[string]bool
@@ -652,7 +655,6 @@ func quickLookDecode(t quickLookTarget, raw json.RawMessage, err error, ascii bo
 				cut := strings.LastIndexByte(res.md[:quickLookMarkdownMax], '\n')
 				res.md, res.more = res.md[:max(cut, 0)], true
 			}
-			res.md = quickLookDrawMermaid(res.md, ascii)
 			return res
 		}
 		res.kind = "text"
@@ -907,6 +909,7 @@ func (m *OS) QuickLookMouseClick(x, y int) bool {
 			m.QuickLookCopyEnd()
 		}
 		m.quickLookBarClick(x, y)
+		m.quickLookBlockClick(y)
 		return true
 	}
 	m.CloseQuickLook()
@@ -1241,6 +1244,7 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 			drawCkLineAt(c, 1, bodyTop+i, width, ql.mdLines[from+i])
 		}
 		m.quickLookMDMarks(ql.mdLines, from, bodyRows, bodyTop)
+		ql.mdFrom = from
 	case "table":
 		quickLookDrawTable(c, pal, ql, r.table, bodyTop, bodyRows, w)
 	case "archive":

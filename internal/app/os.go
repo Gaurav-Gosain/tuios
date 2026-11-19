@@ -1339,8 +1339,15 @@ type OS struct {
 	SixelPassthrough *SixelPassthrough
 	// kittySymbols draws kitty images as glyphs on a host without
 	// graphics; see kitty_symbols.go.
-	kittySymbols     kittySymbols
-	TextSizingState  *TextSizingState
+	kittySymbols    kittySymbols
+	TextSizingState *TextSizingState
+	// richSource holds the rich blocks shown as their source, by key, and
+	// blocks the drawings of rich blocks, made again when blockGen moves.
+	// See cockpit_blocks.go.
+	richSource       map[string]bool
+	blocks           map[ckBlockKey]*ckBlockDrawing
+	blockGen         int
+	blockView        int
 	PostRenderWriter *PostRenderWriter
 	// cursorPark keeps the host cursor hidden where tuios parks it for
 	// input methods, nil when the writer has no frame hook. See

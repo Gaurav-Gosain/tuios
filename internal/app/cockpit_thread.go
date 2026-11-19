@@ -190,7 +190,7 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 	gen := theme.Generation()
 	cached := func(en threadEntry, variant int, build func() []ckLine) {
 		key := ckCardKey{width: width, theme: gen, look: m.Inbox.ck.lookGen, ascii: l.ascii, nerd: l.nerd, depth: l.pal.Depth, root: t.root,
-			folded: t.folded[en.ID], expand: t.expandAll, changes: changes, variant: variant, status: en.Status, sum: en.sum, codeX: t.codeGen[en.ID]}
+			folded: t.folded[en.ID], expand: t.expandAll, changes: changes, variant: variant, status: en.Status, sum: en.sum, codeX: t.codeGen[en.ID], blocks: m.blockGen + m.blockView}
 		if card, ok := t.cards[en.ID]; ok && card.key == key {
 			items = ckAddItem(items, card.item, blank)
 			return
@@ -485,6 +485,9 @@ type ckCardKey struct {
 	root string
 	// codeX counts the sideways scrolls of the entry's code blocks.
 	codeX int
+	// blocks counts the drawings of rich blocks that came in and the
+	// switches between a picture and its source. See cockpit_blocks.go.
+	blocks int
 }
 
 // ckAddItem appends a card's lines. A card or a new speaker starts after a

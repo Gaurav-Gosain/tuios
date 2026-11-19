@@ -18330,3 +18330,18 @@ Run on Linux on 2026-11-19. The branch passes the test.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitThreadMarkerLook$' -v .`.
+## Mermaid and TML blocks in the thread and quick look
+
+`TestCockpitThreadDrawsRichBlocks` in `cockpit_rich_blocks_test.go`, and the diagram's header in `TestQuickLookReadsRichMarkdown`. An agent's reply holds a TML block, a TML block that is not valid and a Mermaid block. The TML block must be drawn as its badge and progress label with no tag on screen, the broken one must show its source under "Not drawn" and the reason, and the Mermaid block must be drawn as its two nodes with no source on screen. A click on the diagram's header must show the source, a second click the diagram, P the same, and C must copy the source. In quick look, a click on a diagram's header must show its source.
+
+Run on Linux on 2026-11-19. The branch passes both.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The branch under it (#2251) | "ASSERTION: the blocks are drawn" | **caught** |
+| `richBlock` declines every block | "ASSERTION: the blocks are drawn" | **caught** |
+| `ToggleBlock` does not make the thread's cards again | "ASSERTION: a click on the header shows the source" | **caught** |
+| `quickLookBlockClick` finds no header | "ASSERTION: a click on the header shows the source" (quick look) | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestCockpitThreadDrawsRichBlocks|TestQuickLookReadsRichMarkdown)$' -v .`.

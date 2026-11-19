@@ -1613,6 +1613,10 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		if ids, ok := strings.CutPrefix(action, "kid:"); ok {
 			return m.cockpitChildClick(ids)
 		}
+		if key, ok := strings.CutPrefix(action, ckBlockHit); ok {
+			m.ToggleBlock(key)
+			return nil
+		}
 		if img, ok := strings.CutPrefix(action, "timg:"); ok {
 			return m.cockpitOpenThreadImage(img)
 		}
@@ -1919,6 +1923,9 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		return nil, true
 	case config.ActionInboxCodeCopy:
 		return m.CockpitCodeCopy(), true
+	case config.ActionInboxBlockSource:
+		m.CockpitBlockToggle()
+		return nil, true
 	case config.ActionInboxArtifact:
 		return m.CockpitArtifactOpen(), true
 	case config.ActionInboxDetailDown, config.ActionInboxDetailUp:

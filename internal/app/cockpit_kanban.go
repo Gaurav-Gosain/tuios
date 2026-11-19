@@ -444,7 +444,7 @@ func (m *OS) kanbanKey(action string) (tea.Cmd, bool) {
 			return m.cockpitCardGo(r, ck.cards[r.card]), true
 		}
 	case config.ActionInboxTabPrev, config.ActionInboxTabNext, config.ActionInboxExpand, config.ActionInboxCodeWrap, config.ActionInboxCodeLeft, config.ActionInboxCodeRight, config.ActionInboxCodeCopy,
-		config.ActionInboxDetailDown, config.ActionInboxDetailUp:
+		config.ActionInboxBlockSource, config.ActionInboxDetailDown, config.ActionInboxDetailUp:
 		// The columns have no focus area for these to act on.
 	default:
 		return nil, false

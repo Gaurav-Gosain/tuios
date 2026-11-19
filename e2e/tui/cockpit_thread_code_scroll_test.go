@@ -31,6 +31,13 @@ var codeBlocksAnswer = "Here it is:\n\n```go\npackage words\n\n" + codeWrapLine 
 // thread on an agent whose answer is text, and focuses the thread.
 func openCodeThread(t *testing.T, text string) (string, *tuitest.Terminal) {
 	t.Helper()
+	return openTextThread(t, text, "package words", "var table", "line 0001")
+}
+
+// openTextThread is openCodeThread for any reply text: it waits for want in
+// the thread.
+func openTextThread(t *testing.T, text string, want ...string) (string, *tuitest.Terminal) {
+	t.Helper()
 	base := t.TempDir()
 	killDaemon(t, base)
 	useShippedLooks(base)
@@ -87,7 +94,7 @@ func openCodeThread(t *testing.T, text string) (string, *tuitest.Terminal) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the agents view: %v", err)
 	}
-	waitText(t, term, "the thread", "package words", "var table", "line 0001")
+	waitText(t, term, "the thread", want...)
 	_ = term.WaitStable(uiTimeout)
 	ckPress(t, term, tuitest.Tab)
 	_ = term.WaitStable(uiTimeout)

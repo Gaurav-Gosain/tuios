@@ -71,6 +71,11 @@ type ckMD struct {
 	// table too wide for any column wraps as one record a row. Without it the
 	// widest cells are cut.
 	whole bool
+	// blockScope names the layout's rich blocks: the thread and entry, or the
+	// file, "" for a layout that draws them as code. nblocks counts them so
+	// far, for each block's key. See cockpit_blocks.go.
+	blockScope string
+	nblocks    int
 }
 
 // ckCodeFold is how many lines of a code block a closed message shows.
@@ -81,7 +86,11 @@ const ckCodeFold = 12
 // open.
 // The thread t keeps the sideways scroll of its code blocks.
 func (m *OS) ckMarkdownFold(l ckLook, text string, width int, id string, open bool, t *agentThread) []ckLine {
-	return (&ckMD{m: m, l: l, fold: "fold:" + id, open: open, wrap: m.Inbox.ck.codeWrap, t: t, id: id}).layout(text, width, markdown.Options{})
+	md := &ckMD{m: m, l: l, fold: "fold:" + id, open: open, wrap: m.Inbox.ck.codeWrap, t: t, id: id}
+	if t != nil {
+		md.blockScope = t.key + "#" + id
+	}
+	return md.layout(text, width, markdown.Options{})
 }
 
 // ckMarkdown lays out an agent's message as card lines of at most width
@@ -225,7 +234,9 @@ func (md *ckMD) block(b markdown.Block, first, rest []ckSeg, width int, ink colo
 	case markdown.Rule:
 		md.lines = append(md.lines, ckLine{segs: append(slicesClone(first), ckSeg{t: strings.Repeat(hzGlyph(), avail), fg: l.edge})})
 	case markdown.Code:
-		md.code(b, first, rest, avail)
+		if !md.richBlock(b, first, rest, avail) {
+			md.code(b, first, rest, avail)
+		}
 	case markdown.Table:
 		md.table(b, first, rest, avail)
 	case markdown.Image:

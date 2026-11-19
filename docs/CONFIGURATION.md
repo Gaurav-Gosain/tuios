@@ -3181,6 +3181,14 @@ look follows pi-emphasis by John Lindquist (MIT). The
 stored reply and a Markdown copy (`Y` in copy mode) keep the marker as the
 agent wrote it.
 
+The view draws a fenced `mermaid` block as a diagram and a fenced `tml` block
+as a static TML picture. Quick look draws them the same way in a Markdown file.
+Click the line above a picture to see its source, and click it again to see the
+picture. In the agents view, `P` does the same for the lowest picture on the
+screen. `C` copies the source. A block that is not valid shows its source
+under a line that says why. With `reply_markers` on, the agents hear of these
+blocks too.
+
 `tuios start-agent` can tell Claude Code about the markers. It passes the
 guidance with `--append-system-prompt`. This is off by default:
 

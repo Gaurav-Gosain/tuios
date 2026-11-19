@@ -2025,6 +2025,9 @@ const (
 	ActionInboxCodeRight = "inbox_code_right"
 	// ActionInboxCodeCopy copies the lowest code block on screen.
 	ActionInboxCodeCopy = "inbox_code_copy"
+	// ActionInboxBlockSource shows the lowest picture on screen, a drawn
+	// Mermaid or TML block, as its source, or its source as the picture.
+	ActionInboxBlockSource = "inbox_block_source"
 	// The thread's previous and next prompt, the marks on its ruler.
 	ActionInboxPromptPrev = "inbox_prompt_prev"
 	ActionInboxPromptNext = "inbox_prompt_next"
@@ -2156,6 +2159,7 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxCodeLeft:      {"("},
 		ActionInboxCodeRight:     {")"},
 		ActionInboxCodeCopy:      {"C"},
+		ActionInboxBlockSource:   {"P"},
 		// [ and ] step the tabs, so the prompt jumps take the braces.
 		ActionInboxPromptPrev: {"{"},
 		ActionInboxPromptNext: {"}"},
@@ -3888,6 +3892,8 @@ var yieldingDefaults = map[string]bool{
 	"inbox_code_right": true,
 	"inbox_code_copy":  true,
 	"inbox_child":      true,
+	// P, new with the rich blocks.
+	"inbox_block_source": true,
 	// ctrl+o, new with the message cards.
 	"inbox_jump_back": true,
 	// ctrl+alt+N (ctrl+opt+N on macOS), the first default for
