@@ -35,6 +35,7 @@ import (
 //	look = 1                       # required: the format version
 //	name = "Tokyo Night, powerline" # optional, shown in the preview
 //	author = "someone"              # optional
+//	requires = "0.14.0"             # optional: the lowest tuios the look works on
 //
 //	[appearance]                    # any option in lookKeys, in its own table
 //	theme = "tokyo"
@@ -324,6 +325,9 @@ func LookKeysJSON() ([]byte, error) {
 type Look struct {
 	Name   string
 	Author string
+	// Requires is the lowest tuios version the look works on, as the file
+	// gives it, or "" when the file sets none.
+	Requires string
 	// Settings are the options the look sets, sorted by path, with the theme
 	// and glyph set ids already renamed to their installed ids.
 	Settings []LookSetting
@@ -353,7 +357,7 @@ type LookAsset struct {
 }
 
 // lookMeta are the top-level keys a look file has besides its options.
-var lookMeta = map[string]bool{"look": true, "name": true, "author": true, "description": true, "theme": true, "glyphs": true}
+var lookMeta = map[string]bool{"look": true, "name": true, "author": true, "description": true, "requires": true, "theme": true, "glyphs": true}
 
 // ParseLook reads and checks a look file. A key a look may not set is left out
 // and named in Left. A value that fails its check fails the whole look.
@@ -388,6 +392,9 @@ func ParseLook(data []byte) (*Look, error) {
 		return nil, err
 	}
 	if _, err = lookText(raw, "description"); err != nil {
+		return nil, err
+	}
+	if lk.Requires, err = lookRequires(raw); err != nil {
 		return nil, err
 	}
 
@@ -453,6 +460,57 @@ func ParseLook(data []byte) (*Look, error) {
 		return nil, errfmt.Errorf("%s: %s", e.Key, e.Message)
 	}
 	return lk, nil
+}
+
+// lookVersionText reports whether s is a version a look may require:
+// 0.14.0, v0.14 or 0.14.0-rc1. It keeps the value to plain characters, since
+// the gallery card and the error print it.
+func lookVersionText(s string) bool {
+	s = strings.TrimPrefix(s, "v")
+	core, pre, hasPre := strings.Cut(s, "-")
+	if hasPre && (pre == "" || len(pre) > 32 || strings.IndexFunc(pre, func(r rune) bool {
+		return !(r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r == '.')
+	}) >= 0) {
+		return false
+	}
+	parts := strings.Split(core, ".")
+	if len(parts) > 3 {
+		return false
+	}
+	for _, p := range parts {
+		if p == "" || len(p) > 9 || strings.IndexFunc(p, func(r rune) bool { return r < '0' || r > '9' }) >= 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// lookRequires reads the optional requires key: the lowest tuios version the
+// look works on.
+func lookRequires(raw map[string]any) (string, error) {
+	v, ok := raw["requires"]
+	if !ok {
+		return "", nil
+	}
+	s, ok := v.(string)
+	if !ok || !lookVersionText(s) {
+		return "", errors.New(`requires must be a tuios version, such as requires = "0.14.0"`)
+	}
+	return s, nil
+}
+
+// LookRequires returns the requires value of a look file, or "" when the file
+// sets none. It reads that one key, so a look made for a newer tuios gets its
+// reason before a key or a value this tuios does not know fails the parse.
+func LookRequires(data []byte) (string, error) {
+	if len(data) > MaxLookBytes {
+		return "", nil
+	}
+	raw := map[string]any{}
+	if toml.Unmarshal(data, &raw) != nil {
+		return "", nil // ParseLook names the TOML error
+	}
+	return lookRequires(raw)
 }
 
 // lookText reads an optional one-line string at key.

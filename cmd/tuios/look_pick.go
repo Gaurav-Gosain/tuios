@@ -19,6 +19,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/pelletier/go-toml/v2"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
@@ -88,6 +89,9 @@ type galleryLook struct {
 	// the foreground, then the accent colours. Empty when the look has no
 	// theme tuios can read.
 	Colors []string `json:"colors,omitempty"`
+	// Requires is the lowest tuios version the look works on, or "" when
+	// the look sets none or sets a value that is not a version.
+	Requires string `json:"requires,omitempty"`
 }
 
 // errLookList is the one sentence a person sees when the list does not come.
@@ -168,6 +172,7 @@ func parseLookFeed(data []byte) ([]galleryLook, error) {
 		for _, f := range e.Files {
 			if f.Label == "toml" {
 				l.Colors = lookColors(f.Text)
+				l.Requires, _ = config.LookRequires([]byte(f.Text))
 				break
 			}
 		}
@@ -340,10 +345,18 @@ func (p *lookPicker) View() tea.View {
 			marker = "> "
 			text = lipgloss.NewStyle().Reverse(true).Bold(true).Render(text)
 		}
-		fmt.Fprintf(&b, "%s%s %s\n", marker, text, lookSwatches(l.Colors))
+		fmt.Fprintf(&b, "%s%s %s%s\n", marker, text, lookSwatches(l.Colors), lookNeeds(l))
 	}
 	fmt.Fprintf(&b, "\n%d of %d. Up and down move.", p.cur+1, len(p.looks))
 	return tea.NewView(b.String())
+}
+
+// lookNeeds is the note on a look that needs a newer tuios, or "".
+func lookNeeds(l galleryLook) string {
+	if !lookTooNew(l.Requires, version) {
+		return ""
+	}
+	return lipgloss.NewStyle().Faint(true).Render("  Needs tuios " + strings.TrimPrefix(l.Requires, "v") + " or later")
 }
 
 // lookSwatches draws each colour as two cells of that background.

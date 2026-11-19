@@ -19,6 +19,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/release"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -63,6 +64,9 @@ or a local file. Each look on tuios.dev/gallery shows the command with its id.
 tuios shows the changes and asks first. Use --yes to skip the question. A run
 with no terminal needs --yes. tuios leaves out every key that a look cannot set
 and names it. A running tuios reloads the config, so you do not restart.
+
+A look with requires = "0.14.0" needs that tuios or later. An older release
+refuses the look and writes nothing.
 
 A key that config.toml or a later config.d file sets hides the look's value.
 tuios names these keys and asks a second question: let the look set them? A yes
@@ -225,6 +229,11 @@ func runLookApply(w io.Writer, source string, prompt lookPrompt) error {
 	if err != nil {
 		return err
 	}
+	// A look for a newer tuios stops here, before anything is written, and
+	// before a key this tuios does not know can fail the parse.
+	if err := checkLookRequires(data, version); err != nil {
+		return err
+	}
 	lk, err := config.ParseLook(data)
 	if err != nil {
 		return errfmt.Errorf("tuios cannot use the look: %w", err)
@@ -282,6 +291,31 @@ func runLookApply(w io.Writer, source string, prompt lookPrompt) error {
 		fmt.Fprintln(w, `Run "tuios look remove" to remove it and put your values back.`)
 	} else {
 		fmt.Fprintln(w, `Run "tuios look remove" to remove it.`)
+	}
+	return nil
+}
+
+// lookTooNew reports whether a look that requires want is too new for the
+// running tuios. A build with no release version, such as a source build,
+// applies every look: it is newer than the release it came from.
+func lookTooNew(want, running string) bool {
+	need, ok := release.ParseVersion(want)
+	if want == "" || !ok {
+		return false
+	}
+	have, ok := release.ParseVersion(running)
+	return ok && release.Compare(have, need) < 0
+}
+
+// checkLookRequires refuses a look that needs a newer tuios than running,
+// before anything is written.
+func checkLookRequires(data []byte, running string) error {
+	want, err := config.LookRequires(data)
+	if err != nil {
+		return err
+	}
+	if lookTooNew(want, running) {
+		return errfmt.Errorf("this look needs tuios %s or later. You have %s. Run tuios update first", strings.TrimPrefix(want, "v"), strings.TrimPrefix(strings.TrimSpace(running), "v"))
 	}
 	return nil
 }

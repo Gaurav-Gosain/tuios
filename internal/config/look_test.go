@@ -57,6 +57,11 @@ func TestParseLookBoundary(t *testing.T) {
 		{name: "sidebar custom command", body: "[appearance.sidebar.custom]\ncommand = \"evil\"", left: "appearance.sidebar.custom"},
 		{name: "behaviour option", body: "[appearance]\nfocus_follows_mouse = true", left: "appearance.focus_follows_mouse"},
 		{name: "unknown appearance key", body: "[appearance]\nmade_up = 1", left: "appearance.made_up"},
+		{name: "requires escape", body: "requires = \"0.14.0-\\u001b[31m\"", err: "requires must be a tuios version"},
+		{name: "requires number", body: "requires = 14", err: "requires must be a tuios version"},
+		{name: "requires words", body: "requires = \"the next one\"", err: "requires must be a tuios version"},
+		{name: "requires build metadata", body: "requires = \"0.14.0+abc\"", err: "requires must be a tuios version"},
+		{name: "requires empty part", body: "requires = \"0..14\"", err: "requires must be a tuios version"},
 
 		{name: "no version", body: "[appearance]\ngap = 1", err: "look = 1"},
 		{name: "startup layout", body: "[startup]\nlayout = \"x\"", err: "startup.layout"},
@@ -669,4 +674,42 @@ func TestSetLookValue(t *testing.T) {
 	if cfg.Appearance.Sidebar.Sections != "sessions,files" {
 		t.Errorf("a refused set changed the sections to %q", cfg.Appearance.Sidebar.Sections)
 	}
+}
+
+// A look file that a person puts in config.d/look.toml by hand keeps its
+// top-level requires key. The config load must take it with no warning, the
+// way it takes look, name and author.
+func TestLookRequiresLoadsWithoutWarning(t *testing.T) {
+	dir := t.TempDir()
+	main := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(main, []byte("[appearance]\ngap = 0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	look := "# A tuios look. \"tuios look apply\" wrote this file.\nlook = 1\nname = \"Fjord\"\nrequires = \"0.14.0\"\n\n[appearance]\nborder_style = \"rounded\"\n"
+	if err := os.MkdirAll(filepath.Join(dir, DropInDirName), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(LookPath(main), []byte(look), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := loadEffective(t, main)
+	cfg.LoadWarnings = append(cfg.LoadWarnings, DroppedWarnings(DropUnreadableKeys(cfg, mustLayered(t, main)))...)
+	if w := ConfigWarnings(cfg); len(w) > 0 {
+		t.Fatalf("a look.toml with requires loads with warnings: %q", w)
+	}
+	if cfg.Appearance.BorderStyle != "rounded" {
+		t.Fatalf("the look.toml was not read: border_style is %q", cfg.Appearance.BorderStyle)
+	}
+	if got := mustParseLook(t, look).Requires; got != "0.14.0" {
+		t.Fatalf("ParseLook read requires as %q", got)
+	}
+}
+
+func mustLayered(t *testing.T, main string) *LayeredConfig {
+	t.Helper()
+	lc, err := LoadLayered(main)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return lc
 }

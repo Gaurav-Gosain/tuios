@@ -86,3 +86,33 @@ func TestCleanLookTextDropsFormatCharacters(t *testing.T) {
 		}
 	}
 }
+
+// lookTooNew decides the refusal and the gallery note. A source build has no
+// release version and applies every look.
+func TestLookTooNew(t *testing.T) {
+	for _, c := range []struct {
+		want, running string
+		tooNew        bool
+	}{
+		{"0.14.0", "0.13.3", true},
+		{"0.14.0", "v0.13.3", true},
+		{"v0.14", "0.13.9", true},
+		{"0.14.0", "0.14.0-rc1", true},
+		{"0.14.0", "0.14.0", false},
+		{"0.14.0", "v0.15.2", false},
+		{"0.1.0", "0.13.3", false},
+		{"0.14.0", "dev", false},
+		{"0.14.0", "dev+abc123", false},
+		{"0.14.0", "", false},
+		{"", "0.13.3", false},
+		{"soon", "0.13.3", false},
+	} {
+		if got := lookTooNew(c.want, c.running); got != c.tooNew {
+			t.Errorf("lookTooNew(%q, %q) = %v, want %v", c.want, c.running, got, c.tooNew)
+		}
+	}
+	if err := checkLookRequires([]byte("look = 1\nrequires = \"0.14.0\"\n"), "0.13.3"); err == nil ||
+		err.Error() != "this look needs tuios 0.14.0 or later. You have 0.13.3. Run tuios update first" {
+		t.Fatalf("checkLookRequires: %v", err)
+	}
+}

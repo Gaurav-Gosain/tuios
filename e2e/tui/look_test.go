@@ -666,3 +666,121 @@ func TestLookShareRoundTrip(t *testing.T) {
 	saveSyncArtifact(t, "look-share-transcript.txt", transcript.String()+"--- comment\n"+printed)
 	alive(t, term, "after the share")
 }
+
+// TestLookApplyRequires covers the requires key: the lowest tuios a look
+// works on. A release build older than that refuses the look and writes
+// nothing, a look that requires an older release applies, and a source build
+// applies every look. The gallery list marks the look that needs a newer
+// tuios, and Enter on it gives the same refusal.
+//
+// How this could pass wrongly, written down first:
+//   - The refusal could come from some other error. The test checks the whole
+//     sentence, with both versions in it.
+//   - "Nothing written" could hold because the look has nothing to write. The
+//     far look carries a theme and a border, and the old look, which writes,
+//     shows the same command writes when it is allowed to.
+//   - The test binary is a source build, which applies every look. The
+//     refusal runs a build stamped as release 0.13.3.
+func TestLookApplyRequires(t *testing.T) {
+	const stamped = "0.13.3"
+	release := stampedTuios(t, stamped)
+	far := `look = 1
+name = "Far"
+requires = "99.0.0"
+
+[appearance]
+border_style = "rounded"
+
+[theme]
+id = "far"
+base = "nord"
+bg = "#101820"
+`
+	old := "look = 1\nname = \"Old\"\nrequires = \"0.1.0\"\n\n[appearance]\nborder_style = \"thick\"\n"
+	mainBody := "[appearance]\ngap = 0\n"
+	c := newLookCase(t, mainBody, map[string]string{"far": far, "old": old})
+	asRelease := func(fn func()) {
+		t.Helper()
+		prev := tuiosBin
+		tuiosBin = release
+		defer func() { tuiosBin = prev }()
+		fn()
+	}
+	var transcript strings.Builder
+	lookFile := c.dropIn("look.toml")
+	themeFile := filepath.Join(configDirIn(c.base), "themes", "look-far.json")
+
+	asRelease(func() {
+		out, err := tuiosCLI(t, c.base, "look", "apply", c.looks["far"], "--yes")
+		fmt.Fprintf(&transcript, "$ tuios look apply far.look.toml --yes   (release %s)\n%s\n", stamped, out)
+		want := "look needs tuios 99.0.0 or later. You have 0.13.3. Run tuios update first"
+		if err == nil || !strings.Contains(out, want) {
+			t.Fatalf("ASSERTION: release %s did not refuse a look that requires 99.0.0 with %q: %v\n%s", stamped, want, err, out)
+		}
+		if _, err := os.Stat(lookFile); err == nil {
+			t.Fatal("ASSERTION: the refused look wrote config.d/look.toml")
+		}
+		if _, err := os.Stat(themeFile); err == nil {
+			t.Fatal("ASSERTION: the refused look installed its theme")
+		}
+		if got := c.main(); got != mainBody {
+			t.Fatalf("ASSERTION: the refused look changed config.toml:\n%s", got)
+		}
+
+		out, err = tuiosCLI(t, c.base, "look", "apply", c.looks["old"], "--yes")
+		fmt.Fprintf(&transcript, "$ tuios look apply old.look.toml --yes   (release %s)\n%s\n", stamped, out)
+		if err != nil || !strings.Contains(out, "The look is applied") {
+			t.Fatalf("ASSERTION: release %s did not apply a look that requires 0.1.0: %v\n%s", stamped, err, out)
+		}
+		if got := readFileString(t, lookFile); !strings.Contains(got, `border_style = 'thick'`) {
+			t.Fatalf("ASSERTION: the old look is not in config.d/look.toml:\n%s", got)
+		}
+	})
+
+	// A source build has no release version, so it applies the far look.
+	out := c.run("look", "apply", c.looks["far"], "--yes")
+	fmt.Fprintf(&transcript, "$ tuios look apply far.look.toml --yes   (source build)\n%s\n", out)
+	if got := readFileString(t, lookFile); !strings.Contains(got, `border_style = 'rounded'`) {
+		t.Fatalf("ASSERTION: a source build did not apply the far look:\n%s", got)
+	}
+	c.run("look", "remove", "--yes")
+
+	// The gallery list marks the far look, and Enter on it is refused.
+	srv, _ := fakeGallery(t, []galleryFeedLook{
+		{id: "101", title: "Old", login: "ann", text: old},
+		{id: "202", title: "Far", login: "bob", text: far},
+	})
+	env := []string{"TUIOS_LOOK_GALLERY=" + srv.URL}
+	var cli *tuitest.Terminal
+	asRelease(func() {
+		cli = startIn(t, c.base, startOpts{cols: 100, rows: 30, shippedLooks: true, animations: true, env: env,
+			args: []string{"look", "pick", "--hold"}})
+	})
+	if err := cli.WaitForText("Needs tuios 99.0.0 or later", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the gallery list does not mark the far look: %v\n%s", err, cli.Snapshot())
+	}
+	list := cli.Snapshot()
+	if strings.Count(list, "Needs tuios") != 1 {
+		t.Fatalf("ASSERTION: the gallery list marks a look other than the far one:\n%s", list)
+	}
+	saveArtifact(t, cli, artifactDir(t), "look-pick-requires")
+	savePNG(t, cli.Screen(), shot.XTermPalette(), artifactDir(t), "look-pick-requires")
+	if err := cli.Type("j"); err != nil {
+		t.Fatalf("move down: %v", err)
+	}
+	if err := cli.WaitForText("2 of 2", uiTimeout); err != nil {
+		t.Fatalf("the cursor did not move to Far: %v\n%s", err, cli.Snapshot())
+	}
+	if err := cli.Type("\r"); err != nil {
+		t.Fatalf("choose Far: %v", err)
+	}
+	if err := cli.WaitForText("Run tuios update first", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the pick did not refuse the far look: %v\n%s", err, cli.Snapshot())
+	}
+	saveArtifact(t, cli, artifactDir(t), "look-pick-requires-refused")
+	savePNG(t, cli.Screen(), shot.XTermPalette(), artifactDir(t), "look-pick-requires-refused")
+	if _, err := os.Stat(lookFile); err == nil {
+		t.Fatal("ASSERTION: the refused pick wrote config.d/look.toml")
+	}
+	saveSyncArtifact(t, "look-requires.txt", transcript.String()+"--- the list\n"+list+"\n--- after Enter\n"+cli.Snapshot())
+}

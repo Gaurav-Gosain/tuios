@@ -377,6 +377,8 @@ tuios look share --print
 - A running tuios reloads the config. You do not restart.
 - A look can set only look keys. tuios leaves out every other key and names
   it. A value that is not correct stops the look.
+- A look with `requires` needs that tuios version or later. An older release
+  refuses the look and writes nothing. A tuios built from source applies it.
 - `config.toml` wins over `config.d`. tuios names each key that `config.toml`
   or a later `config.d` file sets, because the look does not change that key.
 - tuios then asks: "Let the look set these keys?" A yes is a take-over. tuios
@@ -390,7 +392,8 @@ tuios look share --print
 - A config folder that tuios cannot write stops the command.
 
 `tuios look pick` shows the looks of the gallery, each with its name, its
-author and the colours of its theme. `tuios look` with no command does the
+author and the colours of its theme. A look that needs a newer tuios shows
+"Needs tuios 0.14.0 or later". `tuios look` with no command does the
 same in a terminal. The command palette has it as "Choose a look", which
 opens it in a new pane.
 

@@ -383,6 +383,7 @@ the commands.
 look = 1                        # the format version, required
 name = "Tokyo blocks"           # optional
 author = "someone"              # optional
+requires = "0.14.0"             # optional: the lowest tuios version for the look
 
 [appearance]
 border_style = "rounded"
@@ -415,6 +416,14 @@ close = "x"
 
 - `look = 1` is the format version. A tuios that reads an older version
   refuses a newer look and tells you to update.
+- `requires` is the lowest tuios version that the look works on. Set it when
+  the look uses a key or a value that an older release does not have. An
+  older tuios refuses the look, writes nothing and tells you to run
+  `tuios update`. A tuios that you built from source applies the look. The
+  gallery marks the look with "Needs tuios 0.14.0 or later". The value is a
+  version such as `"0.14.0"`. Any other value stops the look. tuios 0.13.3
+  and earlier do not read `requires`. They leave the key out and apply the
+  look.
 - The option tables take the look keys only. `tuios look keys` lists them.
   The keys set colour, theme, glyphs, borders, gaps, titles, the dock, the
   rail, the scrollbar, selection colours and the spotlight. They also set the
@@ -479,6 +488,8 @@ tuios look export -o my.look.toml --name "Neon 84" # write it to a file
 - An item that a look cannot carry, such as a `custom/` dock cell, is left out.
   tuios names it on stderr.
 - The author is your GitHub login when `gh` is signed in. `--author` sets it.
+- The file has no `requires` key. If the look needs a newer tuios than the
+  last release, add `requires` by hand. See [Looks](#looks).
 
 `tuios look share` puts your look in
 [Show us your tuios setup](https://github.com/Gaurav-Gosain/tuios/discussions/849),
