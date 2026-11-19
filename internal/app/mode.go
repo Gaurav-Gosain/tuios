@@ -199,7 +199,13 @@ func (m *OS) settleMode() {
 // ChooseMode makes a choice of mode. The tape recorder hears it when it
 // changes the mode, so a replay ends where the recording did. A choice of
 // window management ends nest mode, which is valid only in terminal mode.
+//
+// With window mode off and a pane in focus, a choice of window management is
+// a choice of terminal mode. See window_mode_off.go.
 func (m *OS) ChooseMode(to Mode, cause ModeCause) {
+	if to == WindowManagementMode && m.windowModeRefused() {
+		to = TerminalMode
+	}
 	m.setChoice(to, cause, true)
 }
 

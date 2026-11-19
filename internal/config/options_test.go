@@ -60,6 +60,12 @@ var optionWalkSkips = map[string]string{
 	"agents.host_program_status": "file-plane config a client reads from the file when it starts, like [hosts]",
 }
 
+// optionWalkInsideSkips are the paths inside a table optionWalkSkips skips
+// that the registry carries all the same, each with the reason.
+var optionWalkInsideSkips = map[string]string{
+	"keybindings.window_mode": "one switch, not a key map, which the settings page turns off (discussion #2249)",
+}
+
 // TestOptionRegistryCoversEveryScalarField is the guard that keeps the
 // hand-written table and the config structs in step: a field added to
 // UserConfig without an entry fails here rather than being silently unreachable
@@ -106,6 +112,13 @@ func walkScalarPaths(t *testing.T, structType reflect.Type, prefix string) []str
 			path = prefix + "." + name
 		}
 		if _, skip := optionWalkSkips[path]; skip {
+			// A path inside a skipped table that the registry carries on
+			// purpose is still a field the walk has to find.
+			for inside := range optionWalkInsideSkips {
+				if strings.HasPrefix(inside, path+".") {
+					paths = append(paths, inside)
+				}
+			}
 			continue
 		}
 
@@ -191,7 +204,7 @@ func TestOptionSpecsAreWellFormed(t *testing.T) {
 		"appearance", "motion", "sidebar", "dock", "scrollbar", "selection",
 		"startup", "daemon", "notifications", "tape", "debug",
 		"screenshot", "screensaver", "spotlight", "hints", "panes", "scratch", "pip", "mermaid", "launcher",
-		"agents", "workspaces", "worktree", "review", "files", "mouse",
+		"agents", "workspaces", "worktree", "review", "files", "mouse", "keybindings",
 	}
 	for _, opt := range Options() {
 		if opt.Description == "" {

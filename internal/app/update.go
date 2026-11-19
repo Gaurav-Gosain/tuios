@@ -916,6 +916,10 @@ type foreignSessionsChangedMsg struct{}
 func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Nest mode does not outlive a window mode a message left the client in.
 	defer m.settleNest()
+	// With window mode off, a client left in window mode goes back to the
+	// pane. Deferred after settleNest, so it runs first and nest mode sees
+	// the mode it leaves.
+	defer m.settleWindowModeOff()
 	// The frame the last View composed is stored now: write it. Nothing
 	// else changes, so the View after this message serves the same frame.
 	if _, ok := msg.(flushMsg); ok {

@@ -420,7 +420,10 @@ type OS struct {
 	LockHeld bool
 	// nest is true while nest mode gives the focused pane every key, the
 	// leader too. See nest_mode.go.
-	nest                   bool
+	nest bool
+	// windowModeNoted is set once the client has said that window mode is
+	// off. See window_mode_off.go.
+	windowModeNoted        bool
 	HelpScrollOffset       int                           // Scroll offset for help menu
 	HelpCategory           int                           // Current help category index (for left/right navigation)
 	HelpSearchMode         bool                          // True when help search is active

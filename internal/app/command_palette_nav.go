@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 )
 
@@ -49,6 +50,10 @@ func (m *OS) rebuildPaletteItems() {
 	}
 	if len(m.MultifocusSet) == 0 {
 		static = slices.DeleteFunc(static, func(it CommandPaletteItem) bool { return it.Name == paletteMultiCopyName })
+	}
+	// With window mode off, the row that enters it would only say it is off.
+	if m.WindowModeOff() {
+		static = slices.DeleteFunc(static, func(it CommandPaletteItem) bool { return config.IsWindowModeAction(it.Bind) })
 	}
 	items := make([]CommandPaletteItem, 0,
 		len(static)+len(m.PaletteSessionItems)+len(m.PaletteKeybindItems)+len(m.PaletteSettingItems))

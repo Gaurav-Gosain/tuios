@@ -18362,3 +18362,18 @@ Run on 2026-11-18 on Linux (x86_64), with GOMAXPROCS=4. Each control cuts one ca
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorkspaceBaseIndexZeroShiftsKeysAndNumbers$' -v .`.
+
+## Window mode off
+
+`TestWindowModeOffKeepsTheClientInThePane` in `lock_mode_test.go`. With `[keybindings] window_mode = false`, alt+esc must show the notice and keep terminal mode, the leader menu must list no window mode row, leader `t` `H` must swap the pane and keep terminal mode, and a click on a title bar must focus that pane and keep terminal mode.
+
+Run on Linux on 2026-11-19. The branch passes.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main | "ASSERTION: alt+esc showed no notice" | **caught** |
+| `leaveTerminalMode` does not check window mode | "ASSERTION: alt+esc showed no notice" | **caught** |
+| `settleWindowModeOff` does nothing | "ASSERTION: after a click on a title bar: the client is in terminal mode" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWindowModeOffKeepsTheClientInThePane$' -v .`.

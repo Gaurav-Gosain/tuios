@@ -120,6 +120,33 @@ shows `LOCK` and `UNLOCK`. When the dock is hidden, or
 `appearance.dock_prefix_indicator` is `"badge"`, the floating badge shows
 `PREFIX` and the open lock while a menu waits for a key.
 
+## Window mode off
+
+Turn window mode off to type into a pane at all times, as in tmux. You do
+every action with the leader, the palette, the mouse or the dock.
+
+```toml
+[keybindings]
+window_mode = false
+```
+
+You can also turn it off on the settings page, in the Behavior section.
+
+- While a pane has the focus, tuios stays in terminal mode. After a leader
+  action, you type into the pane again.
+- The keys that go to window mode do nothing: the leader then `esc`, and
+  `alt+esc`. The first of these keys shows a notice that window mode is off.
+- A click on a pane focuses it. You can type into it at once.
+- A drag on a title bar or a border moves or resizes the pane, as before.
+- To swap or resize a pane with keys, open the window menu: press the leader,
+  then `t`. `H`, `J`, `K` and `L` swap the pane. `<` and `>` change its
+  width. `{` and `}` change its height.
+- The hold key (`hold_window_mode`) goes to the pane.
+- The help, the palette and the which-key panel do not show the window mode
+  keys.
+- When no pane is open, the welcome screen shows. Its keys work. When a pane
+  opens, you type into it.
+
 ## Nest mode
 
 Nest mode gives every key to the program in the pane, the leader too, until

@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -403,4 +404,164 @@ lock = true
 		t.Fatalf("ASSERTION: the key the held menu refused reached the attached session's pane: %v\n%s", err, out)
 	}
 	railShot(t, term, "locked-rail")
+}
+
+// TestWindowModeOffKeepsTheClientInThePane is keybindings.window_mode = false
+// (discussion #2249), the tmux user's switch: tuios never enters window mode
+// while a pane has the focus, and every action goes through the leader.
+//
+//  1. alt+esc, the terminal_exit_mode key, says once that window mode is off.
+//     The client stays in terminal mode, and the next line reaches cat -v.
+//  2. The leader menu lists no window mode row. Leader then esc does nothing,
+//     and the next line reaches cat -v.
+//  3. Leader t H, the swap key of the window menu, moves pane b to the left.
+//     The client is in terminal mode after it, and a line reaches cat -v.
+//  4. A click on pane a's title bar, which borrows window mode for the
+//     gesture, focuses a and leaves the client in terminal mode.
+//  5. The settings search finds Window mode, off, on the Behavior tab. enter
+//     turns it on at once, and alt+esc then enters window mode.
+//
+// The frames "window-mode-off-notice", "window-mode-off-leader",
+// "window-mode-off-window-menu" and "window-mode-off-settings" show each
+// state, under TUIOS_E2E_FRAMES.
+//
+// Negative controls: on main, and with leaveTerminalMode not checking
+// window mode, alt+esc shows no notice and step 1 fails. With
+// settleWindowModeOff doing nothing, the click leaves the client in window
+// mode and step 4 fails. See NEGATIVE_CONTROLS.md.
+func TestWindowModeOffKeepsTheClientInThePane(t *testing.T) {
+	const sess = "nowm"
+	term, base := lockedSession(t, sess, "\n[keybindings]\nwindow_mode = false\n")
+	a := waitForSettledGeometryIn(t, base, sess, 1)[0].ID
+	b := newWindowIn(t, base, sess)
+	waitForSettledGeometryIn(t, base, sess, 2)
+	if out, err := tuiosCLI(t, base, "focus-window", "-s", sess, b); err != nil {
+		t.Fatalf("focus b: %v\n%s", err, out)
+	}
+	waitUntil(t, "focus on b", uiTimeout, func() (bool, string) {
+		got := focusedIn(t, base, sess)
+		return got == b, got
+	})
+
+	send := func(keys ...any) {
+		t.Helper()
+		if err := term.SendKeys(keys...); err != nil {
+			t.Fatalf("send %v: %v", keys, err)
+		}
+	}
+	inTerminal := func(what string) {
+		t.Helper()
+		waitUntil(t, what+": the client is in terminal mode", uiTimeout, func() (bool, string) {
+			m := clientMode(t, base)
+			return m == "terminal", m
+		})
+	}
+	// typed sends a line to cat -v and waits for it on screen.
+	typed := func(line, what string) {
+		t.Helper()
+		send(line, tuitest.Enter)
+		if err := term.WaitForText(line, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: %s: %q never reached the pane: %v\n%s", what, line, err, term.Snapshot())
+		}
+	}
+	rectOf := func(id string) winRect {
+		t.Helper()
+		for _, r := range waitForSettledGeometryIn(t, base, sess, 2) {
+			if r.ID == id {
+				return r
+			}
+		}
+		t.Fatalf("no pane %s", id)
+		return winRect{}
+	}
+
+	send("cat -v", tuitest.Enter)
+	pause(t, "cat -v prints no prompt to wait for", 500*time.Millisecond)
+	typed("ready0", "cat -v")
+
+	// 1. alt+esc says window mode is off, once, and leaves the pane typing.
+	send(tuitest.Alt(tuitest.Esc))
+	if err := term.WaitForText("Window mode is off", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: alt+esc showed no notice: %v\n%s", err, term.Snapshot())
+	}
+	railShot(t, term, "window-mode-off-notice")
+	inTerminal("after alt+esc")
+	typed("line1", "after alt+esc")
+
+	// 2. The leader menu has no window mode row, and leader esc stays put.
+	send(tuitest.Ctrl('b'))
+	if err := term.WaitForText("Nest mode", uiTimeout); err != nil {
+		t.Fatalf("the leader menu never opened: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the leader menu never settled: %v\n%s", err, term.Snapshot())
+	}
+	if snap := term.Snapshot(); strings.Contains(snap, "Window mode") || strings.Contains(snap, "Window/nest") {
+		t.Fatalf("ASSERTION: the leader menu lists window mode\n%s", snap)
+	}
+	railShot(t, term, "window-mode-off-leader")
+	send(tuitest.Esc)
+	inTerminal("after leader esc")
+	typed("line2", "after leader esc")
+
+	// 3. Leader t H swaps b to the left, from the window menu.
+	before := rectOf(b)
+	send(tuitest.Ctrl('b'), "t")
+	if err := term.WaitForText("Swap pane", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the window menu has no swap row: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the window menu never settled: %v\n%s", err, term.Snapshot())
+	}
+	railShot(t, term, "window-mode-off-window-menu")
+	send("H")
+	waitUntil(t, "b moves left", uiTimeout, func() (bool, string) {
+		r := rectOf(b)
+		return r.X < before.X, fmt.Sprintf("b at x=%d, was %d", r.X, before.X)
+	})
+	inTerminal("after leader t H")
+	typed("line3", "after leader t H")
+
+	// 4. A click on a's title bar focuses a and keeps terminal mode.
+	ra := rectOf(a)
+	mouseClick(t, term, ra.X+ra.Width/2, ra.Y, tuitest.MouseLeft, 0)
+	waitUntil(t, "focus on a after the click", uiTimeout, func() (bool, string) {
+		got := focusedIn(t, base, sess)
+		return got == a, got
+	})
+	inTerminal("after a click on a title bar")
+	typed("echo clicked4", "after a click on a title bar")
+
+	// 5. The settings page has the row. enter turns window mode on at once,
+	// and then alt+esc enters window mode.
+	send(tuitest.Ctrl('b'), ",")
+	if err := term.WaitForText("Focused border color", uiTimeout); err != nil {
+		t.Fatalf("the settings page never opened: %v\n%s", err, term.Snapshot())
+	}
+	send("/", "window mode")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		row := selectedSettingsRow(s, "Window mode")
+		return row != "" && strings.Contains(row, "Behavior") && strings.Contains(row, "off")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the settings search did not find Window mode, off, on the Behavior tab: %v\n%s", err, term.Snapshot())
+	}
+	railShot(t, term, "window-mode-off-settings")
+	send(tuitest.Enter)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		row := selectedSettingsRow(s, "Window mode")
+		return row != "" && strings.Contains(row, "on ]")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: enter did not turn Window mode on: %v\n%s", err, term.Snapshot())
+	}
+	send(tuitest.Esc, tuitest.Esc)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "Focused border color")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the settings page never closed: %v\n%s", err, term.Snapshot())
+	}
+	send(tuitest.Alt(tuitest.Esc))
+	waitUntil(t, "alt+esc enters window mode once it is on", uiTimeout, func() (bool, string) {
+		m := clientMode(t, base)
+		return m == "window_management", m
+	})
 }

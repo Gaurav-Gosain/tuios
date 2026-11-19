@@ -796,6 +796,10 @@ type Settings struct {
 	// Lock is keybindings.lock: terminal mode gives every key but the leader
 	// to the focused pane.
 	Lock bool
+	// NoWindowMode is keybindings.window_mode set to false: the client never
+	// enters window-management mode while a pane has the focus. Kept as the
+	// negation so a Settings built in code has window mode on.
+	NoWindowMode bool
 	// NestExitKey is keybindings.nest_exit_key, the key that ends nest mode.
 	// Empty is DefaultNestExitKey. See GetNestExitKey.
 	NestExitKey string

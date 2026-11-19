@@ -1738,6 +1738,15 @@ var optionSpecs = []Option{
 			"); a layout without seconds refreshes once a minute",
 	},
 
+	// [keybindings]. The rest of the table is maps of action to keys and is
+	// set in the file only. window_mode is one switch, so the settings page
+	// can turn it off.
+	{
+		Path: "keybindings.window_mode", Type: OptionBool, Section: "keybindings",
+		Description: "Off: you always type into a pane, and the leader runs every action",
+		Default:     "true",
+	},
+
 	// [debug]
 	{
 		Path: "debug.show_key_count", Type: OptionInt, Section: "debug",

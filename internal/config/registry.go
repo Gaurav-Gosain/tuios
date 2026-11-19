@@ -387,6 +387,9 @@ func buildPressesByAction(r *KeybindRegistry) map[string][]string {
 		if contextOnlyScope(b.Scope) {
 			continue
 		}
+		if r.hidesWithoutWindowMode(b) {
+			continue
+		}
 		id := b.Action + "\x00" + b.Press
 		if seen[id] {
 			continue

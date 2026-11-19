@@ -424,8 +424,9 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// so holding it cannot type anything into a pane; every other key struck
 	// while it is held loses the trigger's own modifier, so holding Option and
 	// tapping n runs the window-mode action bound to n.
-	// Lock mode gives the hold key to the pane like every other key.
-	if !o.Locked() && o.PressHoldKey(msg) {
+	// Lock mode gives the hold key to the pane like every other key, and so
+	// does a client with window mode off, which has no window mode to hold.
+	if !o.Locked() && !o.WindowModeOff() && o.PressHoldKey(msg) {
 		return o, nil
 	}
 	msg = o.StripHoldModifier(msg)

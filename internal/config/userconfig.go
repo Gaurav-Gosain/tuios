@@ -1177,6 +1177,12 @@ type KeybindingsConfig struct {
 	// Repeat) keeps its menu open until esc, and that menu takes only the
 	// repeatable actions. Unset is false, or the preset's.
 	Lock *bool `toml:"lock,omitempty"`
+	// WindowMode false turns window-management mode off (discussion #2249).
+	// The client stays in terminal mode with a pane in focus: every action
+	// goes through the leader, the palette, the mouse and the dock, and the
+	// keys that enter window mode only say once that it is off. Unset is
+	// true. See WindowModeOn and app/window_mode_off.go.
+	WindowMode *bool `toml:"window_mode,omitempty"`
 	// NestExitKey is the key that ends nest mode, the mode the nest
 	// action turns on, in which the focused pane gets every key, the leader
 	// included, as tmux-matryoshka's prefix Enter does. Empty is
@@ -1735,6 +1741,18 @@ func DefaultConfig() *UserConfig {
 				"toggle_tiling":        {"t"},
 				"window_prefix_float":  {"f"},
 				"prefix_cancel":        {"esc"},
+				// The swap and resize keys of window mode, under the leader,
+				// so a config with window mode off (keybindings.window_mode)
+				// can still move and size a pane from the keyboard. The same
+				// letters as in window mode.
+				"swap_left":            {"H"},
+				"swap_down":            {"J"},
+				"swap_up":              {"K"},
+				"swap_right":           {"L"},
+				"resize_master_shrink": {"<", "shift+,"},
+				"resize_master_grow":   {">", "shift+."},
+				"resize_height_shrink": {"{", "shift+["},
+				"resize_height_grow":   {"}", "shift+]"},
 			},
 			MinimizePrefix: map[string][]string{
 				"minimize_prefix_focused":    {"m"},
@@ -3169,6 +3187,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.KeyboardLayout = cfg.Keybindings.KeyboardLayout
 	s.OptionGlyphs = cfg.Keybindings.OptionGlyphs
 	s.Lock = cfg.Keybindings.Lock != nil && *cfg.Keybindings.Lock
+	s.NoWindowMode = !cfg.Keybindings.WindowModeOn()
 	s.NestExitKey = cfg.Keybindings.NestExitKey
 
 	// The motion level. A config that was not run through the load path (one

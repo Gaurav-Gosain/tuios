@@ -101,6 +101,9 @@ var windowMenuRows = []menuRow{
 	{parts: []menuPart{{"split_horizontal", "Split down"}}, desc: "Split down"},
 	{parts: []menuPart{{"prefix_fullscreen", "Toggle zoom"}}, desc: "Toggle zoom"},
 	{parts: []menuPart{{"terminal_focus_left", "Focus pane left"}, {"focus_down", "Focus pane down"}, {"focus_up", "Focus pane up"}, {"terminal_focus_right", "Focus pane right"}}, desc: "Focus pane"},
+	{parts: []menuPart{{"swap_left", "Swap pane left"}, {"swap_down", "Swap pane down"}, {"swap_up", "Swap pane up"}, {"swap_right", "Swap pane right"}}, desc: "Swap pane"},
+	{parts: []menuPart{{"resize_master_shrink", "Narrower"}, {"resize_master_grow", "Wider"}}, desc: "Pane width"},
+	{parts: []menuPart{{"resize_height_shrink", "Shorter"}, {"resize_height_grow", "Taller"}}, desc: "Pane height"},
 	{parts: []menuPart{{"prefix_cancel", "Cancel"}}, desc: "Cancel"},
 }
 
@@ -630,7 +633,7 @@ func (r *KeybindRegistry) liveScope(scope string) *liveScope {
 	}
 	ls := &liveScope{keys: map[string][]string{}}
 	for _, b := range r.Bindings() {
-		if b.Scope != scope || b.Unbound || b.Shadowed || b.Key == "" {
+		if b.Scope != scope || b.Unbound || b.Shadowed || b.Key == "" || r.hidesWithoutWindowMode(b) {
 			continue
 		}
 		ls.keys[b.Action] = append(ls.keys[b.Action], b.Key)

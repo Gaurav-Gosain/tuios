@@ -282,6 +282,17 @@ This option is in the [option reference](config-options.md): [`keybindings.lock`
 
 See [Lock mode](KEYBINDINGS.md#lock-mode).
 
+## Window mode off
+
+```toml
+[keybindings]
+window_mode = false
+```
+
+This option is in the [option reference](config-options.md): [`keybindings.window_mode`](config-options.md#keybindings.window_mode).
+
+See [Window mode off](KEYBINDINGS.md#window-mode-off).
+
 ## Nest mode
 
 ```toml
@@ -4005,7 +4016,7 @@ tuios config browse                      # search the options and set one, in an
 
 `tuios config browse` shows each option with its type, default, current value and source. Press <kbd>/</kbd> to search. Press <kbd>Enter</kbd> on an option to set it the same way as `set-config`. <kbd>q</kbd> or <kbd>Esc</kbd> leaves it. It needs a running daemon. See [Explorers](CLI_REFERENCE.md#tuios-config).
 
-`set-config` changes a running session. With a client attached, the client applies the value and writes it to the config. With no client attached, the daemon keeps the value for this session. The next client that attaches applies it and writes it to the config. A path the registry does not know is refused. An `[appearance]` option also answers to its bare name, so `border_style` and [`appearance.border_style`](config-options.md#appearance.border_style) are the same path. `set-config` cannot reach `[keybindings]`, `[hooks]`, `[hosts]`, `[tailscale]`, `[agents]` or the `[dock]` lists, because those are maps and lists rather than single values. For `[agents]` this is also a safeguard: a program in a pane cannot loosen it through TUIOS. [`dock.clock.format`](config-options.md#dock.clock.format) is the one `[dock]` key it can set.
+`set-config` changes a running session. With a client attached, the client applies the value and writes it to the config. With no client attached, the daemon keeps the value for this session. The next client that attaches applies it and writes it to the config. A path the registry does not know is refused. An `[appearance]` option also answers to its bare name, so `border_style` and [`appearance.border_style`](config-options.md#appearance.border_style) are the same path. `set-config` cannot reach `[keybindings]`, `[hooks]`, `[hosts]`, `[tailscale]`, `[agents]` or the `[dock]` lists, because those are maps and lists rather than single values. For `[agents]` this is also a safeguard: a program in a pane cannot loosen it through TUIOS. [`dock.clock.format`](config-options.md#dock.clock.format) is the one `[dock]` key it can set. [`keybindings.window_mode`](config-options.md#keybindings.window_mode) is the one `[keybindings]` key it can set.
 
 ### The in-app settings page
 
@@ -4742,6 +4753,21 @@ lock = true
 This option is in the [option reference](config-options.md): [`keybindings.lock`](config-options.md#keybindings.lock).
 
 See [Lock mode](KEYBINDINGS.md#lock-mode).
+
+### window_mode
+
+Set `window_mode = false` to turn window mode off. You then always type into a pane, and you do every action with the leader, the palette, the mouse or the dock. The default is `true`.
+
+```toml
+[keybindings]
+window_mode = false
+```
+
+You can also turn it off on the settings page, in the Behavior section, or with `tuios set-config keybindings.window_mode false`. The change applies at once.
+
+This option is in the [option reference](config-options.md): [`keybindings.window_mode`](config-options.md#keybindings.window_mode).
+
+See [Window mode off](KEYBINDINGS.md#window-mode-off).
 
 ### nest_exit_key
 

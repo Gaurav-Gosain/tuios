@@ -1073,6 +1073,10 @@ func handleEnterTerminalMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handleEnterWindowMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.WindowModeOff() && o.GetFocusedWindow() != nil {
+		o.NoteWindowModeOff()
+		return o, nil
+	}
 	o.LogInfo("Entering window management mode")
 	cmd := o.ExitTerminalMode()
 	o.ShowNotification("Window management mode", "info", o.Settings.NotificationDuration)

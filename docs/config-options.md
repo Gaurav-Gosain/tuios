@@ -304,6 +304,12 @@ The defaults are the ones on Linux. Some defaults are different on macOS.
 | <a id="hints.dim"></a>`hints.dim` | int | `60` | Percent of its light the text around the hints loses Range: 10 to 90. |
 | <a id="hints.open"></a>`hints.open` | bool | `true` | Ctrl and a label opens the URL or path. It does not open on a remote client |
 
+## keybindings
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| <a id="keybindings.window_mode"></a>`keybindings.window_mode` | bool | `true` | Off: you always type into a pane, and the leader runs every action |
+
 ## launcher
 
 | Option | Type | Default | Description |

@@ -493,6 +493,14 @@ Run `tuios keybinds list` to see the keys that your config sets.
 | `ctrl+b t esc` | `prefix_cancel` | Cancel the window prefix |
 | `ctrl+b t tab` | `prefix_next_window` | Next window |
 | `ctrl+b t shift+tab` | `prefix_prev_window` | Previous window |
+| `ctrl+b t }`, `ctrl+b t shift+]` | `resize_height_grow` | Increase focused window height |
+| `ctrl+b t {`, `ctrl+b t shift+[` | `resize_height_shrink` | Decrease focused window height |
+| `ctrl+b t >`, `ctrl+b t shift+.` | `resize_master_grow` | Increase pane width |
+| `ctrl+b t <`, `ctrl+b t shift+,` | `resize_master_shrink` | Decrease pane width |
+| `ctrl+b t J` | `swap_down` | Swap down |
+| `ctrl+b t H` | `swap_left` | Swap left |
+| `ctrl+b t L` | `swap_right` | Swap right |
+| `ctrl+b t K` | `swap_up` | Swap up |
 | `ctrl+b t t` | `toggle_tiling` | Toggle tiling mode |
 | `ctrl+b t f` | `window_prefix_float` | Float or tile the pane |
 | `ctrl+b t r` | `window_prefix_rename` | Rename window |

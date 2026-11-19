@@ -480,8 +480,14 @@ func handlePrefixWorkspaceSwitcher(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 
 // leaveTerminalMode returns to window-management mode and says so. No-op when
 // already there.
+//
+// With window mode off it only says, once, that window mode is off.
 func leaveTerminalMode(o *app.OS) {
 	if o.Mode != app.TerminalMode {
+		return
+	}
+	if o.WindowModeOff() {
+		o.NoteWindowModeOff()
 		return
 	}
 	o.ChooseMode(app.WindowManagementMode, app.ModeCauseKey)
