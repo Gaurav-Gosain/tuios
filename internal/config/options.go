@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/i18n"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -175,6 +176,12 @@ const (
 	DefaultBorderGradientAngle = 45
 	DefaultWindowTitleStyle    = "pill"
 	DefaultWindowTitleAlign    = "auto"
+	// DefaultLanguage is the locale code tuios ships with: the language the
+	// settings page is written in when appearance.language is unset, and the
+	// one a typo or an unknown code falls back to. Named for the same reason
+	// as the edges above: DefaultConfig, DefaultSettings, the registry and
+	// the fallback in ApplyAppearanceConfig all have to agree on it.
+	DefaultLanguage = "en"
 )
 
 // optionSpecs is the registry, hand-written so each entry can say what the
@@ -352,6 +359,11 @@ var optionSpecs = []Option{
 	{
 		Path: "appearance.preferred_shell", Type: OptionString, Section: "appearance",
 		Description: "Shell that new panes run. Empty picks one for your platform.",
+	},
+	{
+		Path: "appearance.language", Type: OptionString, Section: "appearance",
+		Description: "The language the settings page is written in.",
+		Accepted:    i18n.Codes(), Default: DefaultLanguage,
 	},
 	{
 		Path: "appearance.motion", Type: OptionString, Section: "appearance",

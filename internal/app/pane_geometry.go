@@ -152,8 +152,8 @@ func (m *OS) adoptPaneGeometry(state *session.SessionState) bool {
 // using, and its first toggle would appear to do nothing.
 func (m *OS) sharedBordersItem() settingItem {
 	item := boolItem(
-		settingLabel("appearance.shared_borders"),
-		registryDescription("appearance.shared_borders"),
+		m.loc().Label("appearance.shared_borders"),
+		m.loc().Desc("appearance.shared_borders"),
 		func() bool { return m.SharedBorders },
 		func(m *OS, v bool) {
 			m.SetSharedBordersSetting(v)
@@ -167,8 +167,8 @@ func (m *OS) sharedBordersItem() settingItem {
 // reason as sharedBordersItem.
 func (m *OS) paneGapItem() settingItem {
 	return settingItem{
-		Label:   settingLabel("appearance.gap"),
-		Desc:    registryDescription("appearance.gap"),
+		Label:   m.loc().Label("appearance.gap"),
+		Desc:    m.loc().Desc("appearance.gap"),
 		Control: controlInt,
 		value:   func(m *OS) string { return strconv.Itoa(m.PaneGap) },
 		adjust: func(m *OS, dir int) {
@@ -188,7 +188,7 @@ func (m *OS) paneGapItem() settingItem {
 // for the same reason sharedBordersItem is: the value in force is the session's
 // and not this client's config, and the resize keys move it under the row.
 func (m *OS) masterRatioItem() settingItem {
-	return percentItem("appearance.master_ratio",
+	return m.percentItem("appearance.master_ratio",
 		config.MasterRatioMin, config.MasterRatioMax,
 		(*OS).MasterRatioPercent,
 		(*OS).SetMasterRatioSetting)
@@ -196,7 +196,7 @@ func (m *OS) masterRatioItem() settingItem {
 
 // scrollColumnWidthItem is the settings row for a scrolling column's width.
 func (m *OS) scrollColumnWidthItem() settingItem {
-	return percentItem("appearance.scroll_column_width",
+	return m.percentItem("appearance.scroll_column_width",
 		config.ScrollColumnWidthMin, m.scrollColumnMax(),
 		func(m *OS) int {
 			return clampInt(m.ScrollColumnWidth, config.ScrollColumnWidthMin, m.scrollColumnMax())
@@ -208,10 +208,10 @@ func (m *OS) scrollColumnWidthItem() settingItem {
 // model and writes through a setter that pushes the change to the session's
 // other clients. The meter fills against the option's own range rather than
 // against 100, so the whole travel of the control is the travel of the setting.
-func percentItem(path string, lo, hi int, get func(*OS) int, set func(*OS, int)) settingItem {
+func (m *OS) percentItem(path string, lo, hi int, get func(*OS) int, set func(*OS, int)) settingItem {
 	return settingItem{
-		Label:   settingLabel(path),
-		Desc:    registryDescription(path),
+		Label:   m.loc().Label(path),
+		Desc:    m.loc().Desc(path),
 		Control: controlInt,
 		value:   func(m *OS) string { return strconv.Itoa(get(m)) + "%" },
 		adjust:  func(m *OS, dir int) { set(m, get(m)+dir) },
@@ -226,13 +226,4 @@ func percentItem(path string, lo, hi int, get func(*OS) int, set func(*OS, int))
 		},
 		differs: differsFromDefault(path, func(m *OS) string { return strconv.Itoa(get(m)) }),
 	}
-}
-
-// registryDescription is the registry's own description for a path, so a
-// hand-written row reads exactly as the derived row it stands in for did.
-func registryDescription(path string) string {
-	if o, ok := config.LookupOption(path); ok {
-		return o.Description
-	}
-	return ""
 }

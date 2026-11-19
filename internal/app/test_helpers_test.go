@@ -82,7 +82,7 @@ func defaultSaverSettings() *config.Settings {
 // category/item indices and the item itself.
 func findSetting(m *OS, category, label string) (catIdx, itemIdx int, item settingItem, ok bool) {
 	for ci, cat := range m.settingsCategories() {
-		if cat.Name != category {
+		if cat.Key != category {
 			continue
 		}
 		for ii, it := range cat.Items {

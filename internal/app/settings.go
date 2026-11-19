@@ -9,7 +9,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -112,8 +111,11 @@ type settingItem struct {
 	resetShown string
 }
 
-// settingsCategory groups related settings under a tab.
+// settingsCategory groups related settings under a tab. Key is the tab's
+// stable English name, the name the page's entry points address it by; Name
+// is the key as the session's language spells it.
 type settingsCategory struct {
+	Key   string
 	Name  string
 	Items []settingItem
 }
@@ -249,13 +251,13 @@ func (m *OS) persistSettings() tea.Cmd {
 		// change would read as something going wrong.
 		if !m.configReadOnlyTold && !m.LearnMode {
 			m.configReadOnlyTold = true
-			m.ShowNotification("Settings apply to this session only. The config file is not changed.", "warning", 0)
+			m.ShowNotification(m.loc().Notify("session_only"), "warning", 0)
 		}
 		return cmd
 	}
 	write, err := config.RenderUserConfig(m.UserConfig)
 	if err != nil {
-		m.ShowNotification("Could not save settings: "+err.Error(), "error", 0)
+		m.ShowNotification(m.loc().Notifyf("save_failed", "err", err.Error()), "error", 0)
 		return nil
 	}
 	apply := m.applyHostsCmd()
@@ -336,14 +338,6 @@ func (m *OS) ToggleFocusFollowsMouse() tea.Cmd {
 
 const themeNone = "none"
 
-// fpsOptions are the frame caps the settings row offers: auto, then the rates
-// displays are sold at. A rate configured in the file that is not here (75,
-// say) still shows as itself, and the next step goes to the first entry.
-var fpsOptions = []string{fpsAutoLabel, "30", "60", "90", "120", "144", "165", "240"}
-
-// fpsAutoLabel is how the row spells max_fps = "auto".
-const fpsAutoLabel = "Auto"
-
 // enumItem builds an enum setting bound to a string config global via getters
 // and a setter that updates the global, mirrors to the persisted config, and
 // applies the change live.
@@ -382,144 +376,138 @@ func boolItem(label, desc string, get func() bool, set func(m *OS, v bool)) sett
 // cannot describe, and it names the path it stands in for so the coverage test
 // can see it.
 func (m *OS) settingsCategories() []settingsCategory {
-	appearance := settingsCategory{
-		Name: "Appearance",
-		Items: m.resolveRows([]settingsRow{
-			// First on the page, where a person who wants only the
-			// multiplexer looks for it. See agents_off.go.
-			opt("agents.enabled"),
-			custom("appearance.theme", m.themeItem()),
-			custom("", m.themeEditItem()),
-			opt("appearance.theme_light"),
-			custom("appearance.glyphs", m.glyphItem()),
-			custom("", m.shareLookItem()),
-			opt("appearance.border_style"),
-			opt("appearance.frame_panels"),
-			opt("appearance.pane_overlays"),
-			opt("appearance.overlay_border_color"),
-			opt("appearance.window_title_position"),
-			opt("appearance.window_title_style"),
-			opt("appearance.window_title_align"),
-			opt("appearance.window_title_format"),
-			opt("appearance.host_title"),
-			// Hand-written: the value in force is the session's pane geometry,
-			// not this client's config. See sharedBordersItem.
-			custom("appearance.shared_borders", m.sharedBordersItem()),
-			opt("appearance.hide_window_buttons"),
-			opt("appearance.window_button_style"),
-			opt("appearance.window_button_position"),
-			opt("appearance.hide_scrollbar"),
-			opt("appearance.scrollbar.style"),
-			opt("appearance.scrollbar.tint"),
-			opt("appearance.scrollbar.thumb"),
-			opt("appearance.scrollbar.track"),
-			opt("appearance.border_focused_color"),
-			opt("appearance.border_focused_color_window"),
-			opt("appearance.border_focused_color_terminal"),
-			opt("appearance.border_unfocused_color"),
-			opt("appearance.border_focused_gradient"),
-			opt("appearance.border_gradient_angle"),
-			custom("appearance.gap", m.paneGapItem()),
-			opt("appearance.tiling_scheme"),
-			opt("appearance.drop_preview"),
-			opt("appearance.drop_preview_delay"),
-			// Hand-written for the reason sharedBordersItem is: both are session
-			// state and a row reading the config would show a value the layout
-			// is not using.
-			custom("appearance.master_ratio", m.masterRatioItem()),
-			opt("appearance.master_position"),
-			opt("appearance.master_count"),
-			opt("appearance.master_grid"),
-			custom("appearance.scroll_column_width", m.scrollColumnWidthItem()),
-			opt("appearance.scroll_column_max"),
-			opt("appearance.dim_unfocused"),
-			opt("appearance.multi_copy_dim"),
-			opt("appearance.copy_search_max_matches"),
-			opt("appearance.dim_foreground"),
-			opt("appearance.dim_multifocus"),
-			opt("appearance.modal_dim"),
-			opt("appearance.popup_dim"),
-			opt("appearance.panel_padding"),
-			opt("appearance.zen_mode"),
-			opt("appearance.zen_reveal_ms"),
-			opt("appearance.links"),
-			opt("appearance.link_click"),
-			opt("appearance.link_hover"),
-			opt("appearance.link_opener"),
-			opt("appearance.session_colors"),
-			opt("appearance.session_border"),
-		}),
-	}
+	appearance := m.settingsCat("Appearance", m.resolveRows([]settingsRow{
+		// The page's own language, first on the page: it is the one setting
+		// that redraws every row under it.
+		opt("appearance.language"),
+		// Close behind it, where a person who wants only the multiplexer
+		// looks for it. See agents_off.go.
+		opt("agents.enabled"),
+		custom("appearance.theme", m.themeItem()),
+		custom("", m.themeEditItem()),
+		opt("appearance.theme_light"),
+		custom("appearance.glyphs", m.glyphItem()),
+		custom("", m.shareLookItem()),
+		opt("appearance.border_style"),
+		opt("appearance.frame_panels"),
+		opt("appearance.pane_overlays"),
+		opt("appearance.overlay_border_color"),
+		opt("appearance.window_title_position"),
+		opt("appearance.window_title_style"),
+		opt("appearance.window_title_align"),
+		opt("appearance.window_title_format"),
+		opt("appearance.host_title"),
+		// Hand-written: the value in force is the session's pane geometry,
+		// not this client's config. See sharedBordersItem.
+		custom("appearance.shared_borders", m.sharedBordersItem()),
+		opt("appearance.hide_window_buttons"),
+		opt("appearance.window_button_style"),
+		opt("appearance.window_button_position"),
+		opt("appearance.hide_scrollbar"),
+		opt("appearance.scrollbar.style"),
+		opt("appearance.scrollbar.tint"),
+		opt("appearance.scrollbar.thumb"),
+		opt("appearance.scrollbar.track"),
+		opt("appearance.border_focused_color"),
+		opt("appearance.border_focused_color_window"),
+		opt("appearance.border_focused_color_terminal"),
+		opt("appearance.border_unfocused_color"),
+		opt("appearance.border_focused_gradient"),
+		opt("appearance.border_gradient_angle"),
+		custom("appearance.gap", m.paneGapItem()),
+		opt("appearance.tiling_scheme"),
+		opt("appearance.drop_preview"),
+		opt("appearance.drop_preview_delay"),
+		// Hand-written for the reason sharedBordersItem is: both are session
+		// state and a row reading the config would show a value the layout
+		// is not using.
+		custom("appearance.master_ratio", m.masterRatioItem()),
+		opt("appearance.master_position"),
+		opt("appearance.master_count"),
+		opt("appearance.master_grid"),
+		custom("appearance.scroll_column_width", m.scrollColumnWidthItem()),
+		opt("appearance.scroll_column_max"),
+		opt("appearance.dim_unfocused"),
+		opt("appearance.multi_copy_dim"),
+		opt("appearance.copy_search_max_matches"),
+		opt("appearance.dim_foreground"),
+		opt("appearance.dim_multifocus"),
+		opt("appearance.modal_dim"),
+		opt("appearance.popup_dim"),
+		opt("appearance.panel_padding"),
+		opt("appearance.zen_mode"),
+		opt("appearance.zen_reveal_ms"),
+		opt("appearance.links"),
+		opt("appearance.link_click"),
+		opt("appearance.link_hover"),
+		opt("appearance.link_opener"),
+		opt("appearance.session_colors"),
+		opt("appearance.session_border"),
+	}))
 
 	// The backgrounds painted on cells that have none of their own: the
 	// default for every surface first, then each surface's own, which follows
 	// it until it is set. A tab of their own because six colour rows would
 	// have put the rest of Appearance under a scroll at a desktop height, and
 	// because they read as one control with one precedence rule.
-	backgrounds := settingsCategory{
-		Name: "Backgrounds",
-		Items: m.resolveRows([]settingsRow{
-			opt("appearance.background"),
-			opt("appearance.pane_background"),
-			opt("appearance.desktop_background"),
-			opt("appearance.window_chrome_background"),
-			opt("appearance.dock_background"),
-			opt("appearance.sidebar.background"),
-		}),
-	}
+	backgrounds := m.settingsCat("Backgrounds", m.resolveRows([]settingsRow{
+		opt("appearance.background"),
+		opt("appearance.pane_background"),
+		opt("appearance.desktop_background"),
+		opt("appearance.window_chrome_background"),
+		opt("appearance.dock_background"),
+		opt("appearance.sidebar.background"),
+	}))
 
 	// The sidebar rows were appended to Appearance while there were six of them,
 	// to keep the tab strip on one row. There are thirteen now, which buried the rest
 	// of Appearance under a scroll; a tab of their own costs the strip a second
 	// row, and panelBody already budgets the body against TabRowCount, so that
 	// row comes out of the scrolling list rather than out of the viewport.
-	sidebar := settingsCategory{
-		Name: "Sidebar",
-		Items: m.resolveRows([]settingsRow{
-			opt("appearance.sidebar.enabled"),
-			opt("appearance.sidebar.per_session"),
-			opt("appearance.sidebar.position"),
-			opt("appearance.sidebar.width"),
-			custom("appearance.sidebar.sections", m.sectionLayoutItem()),
-			opt("appearance.sidebar.header_case"),
-			opt("appearance.sidebar.row_style"),
-			opt("appearance.sidebar.header_style"),
-			opt("appearance.sidebar.cursor_background"),
-			opt("appearance.sidebar.density"),
-			opt("appearance.sidebar.show_glyphs"),
-			opt("appearance.sidebar.show_counts"),
-			opt("appearance.sidebar.show_numbers"),
-			opt("appearance.sidebar.file_icons"),
-			opt("appearance.sidebar.file_icon_colors"),
-			opt("appearance.sidebar.folder_click"),
-			opt("appearance.sidebar.file_drag"),
-			opt("appearance.sidebar.files_style"),
-			opt("appearance.sidebar.editor"),
-			opt("appearance.sidebar.file_actions"),
-			opt("appearance.sidebar.file_delete"),
-			opt("files.open_copy_ask_mb"),
-			opt("files.open_copy_max_mb"),
-			opt("files.open_copy_keep_days"),
-			opt("files.drop_keep_hours"),
-			opt("files.drop_keep_mb"),
-			opt("appearance.sidebar.group_main"),
-			opt("appearance.sidebar.marquee"),
-			opt("appearance.sidebar.marquee_pause_ms"),
-			opt("appearance.sidebar.marquee_step_ms"),
-			opt("appearance.sidebar.peek"),
-			opt("appearance.sidebar.tooltips"),
-			opt("appearance.sidebar.git_refresh_ms"),
-			// Filed here rather than under Appearance, which is where it used to
-			// sit: the registry already calls it a sidebar option, it counts paths
-			// for the rail's git section, and Appearance had no room for it.
-			opt("appearance.git_dirty"),
-			// Moved here from Appearance when the pane background row joined it,
-			// which would otherwise have made Appearance scroll at a desktop
-			// height. It decides which sessions the rail offers, so it is a rail
-			// option in all but its key, like git_dirty above.
-			opt("appearance.global_session"),
-		}),
-	}
+	sidebar := m.settingsCat("Sidebar", m.resolveRows([]settingsRow{
+		opt("appearance.sidebar.enabled"),
+		opt("appearance.sidebar.per_session"),
+		opt("appearance.sidebar.position"),
+		opt("appearance.sidebar.width"),
+		custom("appearance.sidebar.sections", m.sectionLayoutItem()),
+		opt("appearance.sidebar.header_case"),
+		opt("appearance.sidebar.row_style"),
+		opt("appearance.sidebar.header_style"),
+		opt("appearance.sidebar.cursor_background"),
+		opt("appearance.sidebar.density"),
+		opt("appearance.sidebar.show_glyphs"),
+		opt("appearance.sidebar.show_counts"),
+		opt("appearance.sidebar.show_numbers"),
+		opt("appearance.sidebar.file_icons"),
+		opt("appearance.sidebar.file_icon_colors"),
+		opt("appearance.sidebar.folder_click"),
+		opt("appearance.sidebar.file_drag"),
+		opt("appearance.sidebar.files_style"),
+		opt("appearance.sidebar.editor"),
+		opt("appearance.sidebar.file_actions"),
+		opt("appearance.sidebar.file_delete"),
+		opt("files.open_copy_ask_mb"),
+		opt("files.open_copy_max_mb"),
+		opt("files.open_copy_keep_days"),
+		opt("files.drop_keep_hours"),
+		opt("files.drop_keep_mb"),
+		opt("appearance.sidebar.group_main"),
+		opt("appearance.sidebar.marquee"),
+		opt("appearance.sidebar.marquee_pause_ms"),
+		opt("appearance.sidebar.marquee_step_ms"),
+		opt("appearance.sidebar.peek"),
+		opt("appearance.sidebar.tooltips"),
+		opt("appearance.sidebar.git_refresh_ms"),
+		// Filed here rather than under Appearance, which is where it used to
+		// sit: the registry already calls it a sidebar option, it counts paths
+		// for the rail's git section, and Appearance had no room for it.
+		opt("appearance.git_dirty"),
+		// Moved here from Appearance when the pane background row joined it,
+		// which would otherwise have made Appearance scroll at a desktop
+		// height. It decides which sessions the rail offers, so it is a rail
+		// option in all but its key, like git_dirty above.
+		opt("appearance.global_session"),
+	}))
 	// The agent row's tokens, under the sections they belong to. With the
 	// agent features off the rail has no agent rows, so the row goes.
 	if m.agentsOn() {
@@ -558,130 +546,121 @@ func (m *OS) settingsCategories() []settingsCategory {
 	// A tab of their own for the reason the sidebar rows have one: Appearance
 	// was already at the height of the panel, and nine more rows would have
 	// put the rest of it under a scroll.
-	selection := settingsCategory{
-		Name: "Selection",
-		Items: m.resolveRows([]settingsRow{
-			opt("appearance.selection.bg"),
-			opt("appearance.selection.fg"),
-			opt("appearance.selection.bold"),
-			opt("appearance.selection.search_bg"),
-			opt("appearance.selection.search_fg"),
-			opt("appearance.selection.match_bg"),
-			opt("appearance.selection.match_fg"),
-			opt("appearance.selection.cursor_bg"),
-			opt("appearance.selection.cursor_fg"),
-			opt("appearance.selection.flash"),
-			opt("appearance.selection.flash_ms"),
-			opt("appearance.selection.flash_style"),
-			opt("appearance.selection.flash_color"),
-			opt("appearance.selection.multi_format"),
-			opt("appearance.selection.copy_entry"),
-			opt("appearance.selection.osc52_write"),
-			opt("paste_buffers.limit"),
-			opt("paste_buffers.max_kb"),
-			opt("hints.builtins"),
-			opt("hints.alphabet"),
-			opt("hints.open"),
-			opt("hints.dim"),
-			opt("hints.all_panes"),
-			opt("panes.label_keys"),
-			opt("panes.navigator_layout"),
-			opt("panes.navigator_search"),
-			opt("panes.drag_and_drop"),
-			opt("panes.drag_and_drop_desktop"),
-			opt("path_picker.show_hidden"),
-		}),
-	}
+	selection := m.settingsCat("Selection", m.resolveRows([]settingsRow{
+		opt("appearance.selection.bg"),
+		opt("appearance.selection.fg"),
+		opt("appearance.selection.bold"),
+		opt("appearance.selection.search_bg"),
+		opt("appearance.selection.search_fg"),
+		opt("appearance.selection.match_bg"),
+		opt("appearance.selection.match_fg"),
+		opt("appearance.selection.cursor_bg"),
+		opt("appearance.selection.cursor_fg"),
+		opt("appearance.selection.flash"),
+		opt("appearance.selection.flash_ms"),
+		opt("appearance.selection.flash_style"),
+		opt("appearance.selection.flash_color"),
+		opt("appearance.selection.multi_format"),
+		opt("appearance.selection.copy_entry"),
+		opt("appearance.selection.osc52_write"),
+		opt("paste_buffers.limit"),
+		opt("paste_buffers.max_kb"),
+		opt("hints.builtins"),
+		opt("hints.alphabet"),
+		opt("hints.open"),
+		opt("hints.dim"),
+		opt("hints.all_panes"),
+		opt("panes.label_keys"),
+		opt("panes.navigator_layout"),
+		opt("panes.navigator_search"),
+		opt("panes.drag_and_drop"),
+		opt("panes.drag_and_drop_desktop"),
+		opt("path_picker.show_hidden"),
+	}))
 
-	dock := settingsCategory{
-		Name: "Dock",
-		Items: m.resolveRows([]settingsRow{
-			opt("appearance.dockbar_position"),
-			custom("", m.dockComponentsItem()),
-			opt("appearance.show_clock"),
-			opt("appearance.clock_format"),
-			opt("dock.clock.format"),
-			opt("appearance.show_cpu"),
-			opt("appearance.show_ram"),
-			opt("dock.meter_interval_ms"),
-			opt("appearance.dock_workspace_tabs"),
-			opt("appearance.dock_workspace_tab_format"),
-			opt("appearance.dock_workspace_tooltip"),
-			opt("appearance.tooltip_delay_ms"),
-			opt("appearance.dock_workspace_label_max"),
-			opt("appearance.dock_pill_caps"),
-			opt("appearance.dock_prefix_indicator"),
-			opt("appearance.dock_mode_icon_window"),
-			opt("appearance.dock_mode_icon_terminal"),
-			opt("appearance.dock_mode_icon_tiling"),
-			opt("appearance.dock_mode_pill"),
-			opt("appearance.dock_mode_split_letter"),
-			opt("appearance.dock_compact"),
-		}),
-	}
+	dock := m.settingsCat("Dock", m.resolveRows([]settingsRow{
+		opt("appearance.dockbar_position"),
+		custom("", m.dockComponentsItem()),
+		opt("appearance.show_clock"),
+		opt("appearance.clock_format"),
+		opt("dock.clock.format"),
+		opt("appearance.show_cpu"),
+		opt("appearance.show_ram"),
+		opt("dock.meter_interval_ms"),
+		opt("appearance.dock_workspace_tabs"),
+		opt("appearance.dock_workspace_tab_format"),
+		opt("appearance.dock_workspace_tooltip"),
+		opt("appearance.tooltip_delay_ms"),
+		opt("appearance.dock_workspace_label_max"),
+		opt("appearance.dock_pill_caps"),
+		opt("appearance.dock_prefix_indicator"),
+		opt("appearance.dock_mode_icon_window"),
+		opt("appearance.dock_mode_icon_terminal"),
+		opt("appearance.dock_mode_icon_tiling"),
+		opt("appearance.dock_mode_pill"),
+		opt("appearance.dock_mode_split_letter"),
+		opt("appearance.dock_compact"),
+	}))
 
-	behavior := settingsCategory{
-		Name: "Behavior",
-		Items: m.resolveRows([]settingsRow{
-			custom("", m.profileItem()),
-			custom("appearance.calm", m.calmItem()),
-			opt("appearance.motion"),
-			opt("appearance.animation_speed"),
-			opt("appearance.theme_transition"),
-			opt("appearance.theme_transition_duration"),
-			opt("appearance.confirm_close"),
-			opt("appearance.confirm_quit"),
-			opt("appearance.whichkey_enabled"),
-			opt("appearance.whichkey_position"),
-			opt("appearance.whichkey_delay_ms"),
-			opt("appearance.wrap_lists"),
-			opt("appearance.focus_follows_mouse"),
-			opt("appearance.focus_follows_mouse_pause"),
-			opt("appearance.paste_preview"),
-			opt("appearance.paste_preview_ms"),
-			opt("keybindings.window_mode"),
-			opt("appearance.click_to_type"),
-			opt("appearance.auto_enter_terminal_on_focus"),
-			opt("appearance.nvim_navigation"),
-			opt("appearance.focus_wrap"),
-			opt("appearance.alt_drag"),
-			opt("appearance.right_click_opens_menu"),
-			opt("mouse.double_click_ms"),
-			opt("mouse.drag_threshold"),
-			opt("appearance.new_window_inherit_cwd"),
-			opt("appearance.new_window_follow_ssh"),
-			opt("appearance.niri_reverse_scroll"),
-			opt("appearance.niri_scroll_cells"),
-			opt("appearance.niri_scroll_snap"),
-			opt("appearance.niri_click_reveals"),
-			opt("appearance.niri_hover_reveals"),
-			opt("appearance.prefix_repeat_time"),
-			opt("appearance.chord_timeout_ms"),
-			custom("appearance.max_fps", m.maxFPSItem()),
-			opt("appearance.cell_frames"),
-			opt("appearance.idle_fps"),
-			opt("appearance.preferred_shell"),
-			opt("shell.integration"),
-			opt("shell.login"),
-			opt("agents.fold_working"),
-			opt("agents.answer_advance"),
-			opt("agents.view_list"),
-			opt("agents.name_hint"),
-			opt("agents.reply_markers"),
-			opt("agents.acp_version"),
-			opt("agents.list_width"),
-			opt("agents.card_preview"),
-			opt("agents.card_preview_width"),
-			opt("agents.reply_rows"),
-			opt("agents.ask_wait_seconds"),
-			opt("agents.undo_window_seconds"),
-			opt("review.focus"),
-			opt("review.scope"),
-			opt("pip.width"),
-			opt("pip.height"),
-			opt("pip.corner"),
-		}),
-	}
+	behavior := m.settingsCat("Behavior", m.resolveRows([]settingsRow{
+		custom("", m.profileItem()),
+		custom("appearance.calm", m.calmItem()),
+		opt("appearance.motion"),
+		opt("appearance.animation_speed"),
+		opt("appearance.theme_transition"),
+		opt("appearance.theme_transition_duration"),
+		opt("appearance.confirm_close"),
+		opt("appearance.confirm_quit"),
+		opt("appearance.whichkey_enabled"),
+		opt("appearance.whichkey_position"),
+		opt("appearance.whichkey_delay_ms"),
+		opt("appearance.wrap_lists"),
+		opt("appearance.focus_follows_mouse"),
+		opt("appearance.focus_follows_mouse_pause"),
+		opt("appearance.paste_preview"),
+		opt("appearance.paste_preview_ms"),
+		opt("keybindings.window_mode"),
+		opt("appearance.click_to_type"),
+		opt("appearance.auto_enter_terminal_on_focus"),
+		opt("appearance.nvim_navigation"),
+		opt("appearance.focus_wrap"),
+		opt("appearance.alt_drag"),
+		opt("appearance.right_click_opens_menu"),
+		opt("mouse.double_click_ms"),
+		opt("mouse.drag_threshold"),
+		opt("appearance.new_window_inherit_cwd"),
+		opt("appearance.new_window_follow_ssh"),
+		opt("appearance.niri_reverse_scroll"),
+		opt("appearance.niri_scroll_cells"),
+		opt("appearance.niri_scroll_snap"),
+		opt("appearance.niri_click_reveals"),
+		opt("appearance.niri_hover_reveals"),
+		opt("appearance.prefix_repeat_time"),
+		opt("appearance.chord_timeout_ms"),
+		custom("appearance.max_fps", m.maxFPSItem()),
+		opt("appearance.cell_frames"),
+		opt("appearance.idle_fps"),
+		opt("appearance.preferred_shell"),
+		opt("shell.integration"),
+		opt("shell.login"),
+		opt("agents.fold_working"),
+		opt("agents.answer_advance"),
+		opt("agents.view_list"),
+		opt("agents.name_hint"),
+		opt("agents.reply_markers"),
+		opt("agents.acp_version"),
+		opt("agents.list_width"),
+		opt("agents.card_preview"),
+		opt("agents.card_preview_width"),
+		opt("agents.reply_rows"),
+		opt("agents.ask_wait_seconds"),
+		opt("agents.undo_window_seconds"),
+		opt("review.focus"),
+		opt("review.scope"),
+		opt("pip.width"),
+		opt("pip.height"),
+		opt("pip.corner"),
+	}))
 
 	// [notifications] is nineteen options and was none of the page. An alert
 	// that fires when it should not is the setting people go looking for first,
@@ -715,10 +694,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 		alertRows = append(alertRows, agentAlertRows...)
 		alertRows = append(alertRows, m.mailAlertRows()...)
 	}
-	notifications := settingsCategory{
-		Name:  "Alerts",
-		Items: m.resolveRows(alertRows),
-	}
+	notifications := m.settingsCat("Alerts", m.resolveRows(alertRows))
 
 	var motionRows []settingsRow
 	for _, path := range []string{
@@ -727,82 +703,70 @@ func (m *OS) settingsCategories() []settingsCategory {
 	} {
 		motionRows = append(motionRows, opt("motion."+path))
 	}
-	motion := settingsCategory{Name: "Motion", Items: m.resolveRows(motionRows)}
+	motion := m.settingsCat("Motion", m.resolveRows(motionRows))
 
-	startup := settingsCategory{
-		Name: "Startup",
-		Items: m.resolveRows([]settingsRow{
-			opt("startup.open_default_window"),
-			opt("startup.tiled"),
-			opt("startup.layout"),
-			opt("startup.start_in_terminal_mode"),
-			opt("startup.daemon"),
-			opt("startup.session"),
-			opt("startup.window"),
-		}),
-	}
+	startup := m.settingsCat("Startup", m.resolveRows([]settingsRow{
+		opt("startup.open_default_window"),
+		opt("startup.tiled"),
+		opt("startup.layout"),
+		opt("startup.start_in_terminal_mode"),
+		opt("startup.daemon"),
+		opt("startup.session"),
+		opt("startup.window"),
+	}))
 
-	advanced := settingsCategory{
-		Name: "Advanced",
-		Items: m.resolveRows([]settingsRow{
-			opt("appearance.scrollback_lines"),
-			opt("appearance.scroll_lines"),
-			opt("appearance.copy_on_select"),
-			opt("appearance.word_characters"),
-			opt("appearance.zoom_size"),
-			opt("appearance.zoom_borderless"),
-			opt("appearance.zoom_follows_focus"),
-			opt("appearance.window_button_zoom"),
-			opt("appearance.zoom_max_width"),
-			opt("appearance.kitty_placeholders"),
-			opt("appearance.image_symbols"),
-			custom("debug.show_key_events", m.showKeysItem()),
-			opt("debug.show_key_count"),
-		}),
-	}
+	advanced := m.settingsCat("Advanced", m.resolveRows([]settingsRow{
+		opt("appearance.scrollback_lines"),
+		opt("appearance.scroll_lines"),
+		opt("appearance.copy_on_select"),
+		opt("appearance.word_characters"),
+		opt("appearance.zoom_size"),
+		opt("appearance.zoom_borderless"),
+		opt("appearance.zoom_follows_focus"),
+		opt("appearance.window_button_zoom"),
+		opt("appearance.zoom_max_width"),
+		opt("appearance.kitty_placeholders"),
+		opt("appearance.image_symbols"),
+		custom("debug.show_key_events", m.showKeysItem()),
+		opt("debug.show_key_count"),
+	}))
 
-	spotlight := settingsCategory{
-		Name: "Spotlight",
-		Items: m.resolveRows([]settingsRow{
-			custom("spotlight.enabled", m.spotlightItem()),
-			opt("spotlight.follow"),
-			opt("spotlight.radius"),
-			opt("spotlight.dim"),
-			opt("spotlight.edge"),
-			opt("spotlight.shake"),
-		}),
-	}
+	spotlight := m.settingsCat("Spotlight", m.resolveRows([]settingsRow{
+		custom("spotlight.enabled", m.spotlightItem()),
+		opt("spotlight.follow"),
+		opt("spotlight.radius"),
+		opt("spotlight.dim"),
+		opt("spotlight.edge"),
+		opt("spotlight.shake"),
+	}))
 
-	daemon := settingsCategory{
-		Name: "Daemon",
-		Items: m.resolveRows([]settingsRow{
-			opt("daemon.log_level"),
-			opt("daemon.window_size"),
-			opt("daemon.keep_awake"),
-			opt("daemon.client_follows_upgrade"),
-			opt("daemon.persist_scrollback"),
-			opt("daemon.persist_scrollback_lines"),
-			opt("daemon.persist_scrollback_kb"),
-			opt("daemon.cleanup_seconds"),
-			opt("daemon.pr_poll_seconds"),
-			opt("daemon.transfer_keep_seconds"),
-			opt("daemon.save_seconds"),
-			opt("daemon.exec_timeout_seconds"),
-			opt("daemon.reconnect_seconds"),
-			opt("daemon.host_heartbeat_seconds"),
-			opt("daemon.host_heartbeat_timeout_seconds"),
-			opt("daemon.host_call_timeout_seconds"),
-			opt("scratch.width"),
-			opt("scratch.height"),
-			opt("launcher.gui_command"),
-			opt("launcher.keep_open"),
-			opt("workspaces.return_when_empty"),
-			opt("workspaces.new_window_when_empty"),
-			opt("worktree.path"),
-			opt("worktree.setup"),
-			opt("worktree.setup_async"),
-		}),
-	}
+	daemon := m.settingsCat("Daemon", m.resolveRows([]settingsRow{
+		opt("daemon.log_level"),
+		opt("daemon.window_size"),
+		opt("daemon.keep_awake"),
+		opt("daemon.client_follows_upgrade"),
+		opt("daemon.persist_scrollback"),
+		opt("daemon.persist_scrollback_lines"),
+		opt("daemon.persist_scrollback_kb"),
+		opt("daemon.cleanup_seconds"),
+		opt("daemon.pr_poll_seconds"),
+		opt("daemon.transfer_keep_seconds"),
+		opt("daemon.save_seconds"),
+		opt("daemon.exec_timeout_seconds"),
+		opt("daemon.reconnect_seconds"),
+		opt("daemon.host_heartbeat_seconds"),
+		opt("daemon.host_heartbeat_timeout_seconds"),
+		opt("daemon.host_call_timeout_seconds"),
+		opt("scratch.width"),
+		opt("scratch.height"),
+		opt("launcher.gui_command"),
+		opt("launcher.keep_open"),
+		opt("workspaces.return_when_empty"),
+		opt("workspaces.new_window_when_empty"),
+		opt("worktree.path"),
+		opt("worktree.setup"),
+		opt("worktree.setup_async"),
+	}))
 
 	// The agent rows of the daemon mean nothing with the agent features
 	// off, so they go with them. The rows below them move up.
@@ -827,47 +791,38 @@ func (m *OS) settingsCategories() []settingsCategory {
 		daemon.Items = append([]settingItem{m.restartDaemonItem()}, daemon.Items...)
 	}
 
-	tape := settingsCategory{
-		Name: "Tape",
-		Items: m.resolveRows([]settingsRow{
-			opt("tape.autorun"),
-			opt("tape.auto_review"),
-			opt("tape.show_status"),
-			opt("tape.banner_ms"),
-			opt("tape.done_linger_ms"),
-		}),
-	}
+	tape := m.settingsCat("Tape", m.resolveRows([]settingsRow{
+		opt("tape.autorun"),
+		opt("tape.auto_review"),
+		opt("tape.show_status"),
+		opt("tape.banner_ms"),
+		opt("tape.done_linger_ms"),
+	}))
 
 	// The two path options, screenshot.directory and screenshot.font_file, have
 	// no row here. See settingsUIExcluded for why.
-	screenshot := settingsCategory{
-		Name: "Screenshot",
-		Items: m.resolveRows([]settingsRow{
-			opt("screenshot.format"),
-			opt("screenshot.frame"),
-			opt("screenshot.background"),
-			opt("screenshot.controls"),
-			opt("screenshot.title_format"),
-			opt("screenshot.padding"),
-			opt("screenshot.radius"),
-			opt("screenshot.shadow"),
-			opt("screenshot.scale"),
-			opt("screenshot.font_family"),
-			opt("screenshot.cursor"),
-			opt("screenshot.copy"),
-			opt("screenshot.preview"),
-		}),
-	}
+	screenshot := m.settingsCat("Screenshot", m.resolveRows([]settingsRow{
+		opt("screenshot.format"),
+		opt("screenshot.frame"),
+		opt("screenshot.background"),
+		opt("screenshot.controls"),
+		opt("screenshot.title_format"),
+		opt("screenshot.padding"),
+		opt("screenshot.radius"),
+		opt("screenshot.shadow"),
+		opt("screenshot.scale"),
+		opt("screenshot.font_family"),
+		opt("screenshot.cursor"),
+		opt("screenshot.copy"),
+		opt("screenshot.preview"),
+	}))
 
-	screensaver := settingsCategory{
-		Name: "Saver",
-		Items: m.resolveRows([]settingsRow{
-			opt("screensaver.enabled"),
-			opt("screensaver.idle_minutes"),
-			custom("screensaver.effect", m.screensaverEffectItem()),
-			opt("screensaver.while_busy"),
-		}),
-	}
+	screensaver := m.settingsCat("Saver", m.resolveRows([]settingsRow{
+		opt("screensaver.enabled"),
+		opt("screensaver.idle_minutes"),
+		custom("screensaver.effect", m.screensaverEffectItem()),
+		opt("screensaver.while_busy"),
+	}))
 
 	cats := []settingsCategory{
 		appearance, backgrounds, sidebar, selection, dock, behavior, motion,
@@ -888,16 +843,16 @@ func (m *OS) settingsCategories() []settingsCategory {
 // previews rather than stepping to a next theme nobody can name in advance.
 func (m *OS) themeItem() settingItem {
 	options := append([]string{themeNone}, theme.AvailableThemes()...)
-	desc := "Color theme. Press enter to open the picker."
+	descKey := "theme.desc"
 	// The theme is still one per process. Everything else on this page is this
 	// session's own, so a served client that changes the theme changes it for
 	// every other client attached to the same server, and the row says so
 	// rather than letting them find out from somebody else's screen. Only on a
 	// served session, because a local attach is the only client there is.
 	if m.ConfigReadOnly {
-		desc = "Color theme. Press enter to open the picker. Shared with every client on this server."
+		descKey = "theme.desc_shared"
 	}
-	item := enumItem("Theme", desc, options,
+	item := enumItem(m.loc().Label("appearance.theme"), m.loc().Row(descKey), options,
 		func() string {
 			if id := theme.CurrentThemeID(); id != "" {
 				return id
@@ -909,6 +864,15 @@ func (m *OS) themeItem() settingItem {
 			m.setThemeSelection(v)
 		})
 	item.activate = func(m *OS) tea.Cmd { m.OpenThemePicker(); return nil }
+	// The drawn value spells an unset theme the way the page's language
+	// spells it; the options stay in the config's own spelling, which is
+	// what a step writes.
+	item.value = func(m *OS) string {
+		if id := theme.CurrentThemeID(); id != "" {
+			return id
+		}
+		return m.loc().Value("none")
+	}
 	// The configured name, not the active id: with no theme set, tuios
 	// follows Omarchy, and that is the default rather than a change.
 	item.differs = differsFromDefault("appearance.theme", func(m *OS) string {
@@ -926,7 +890,7 @@ func (m *OS) themeItem() settingItem {
 // shapes.
 func (m *OS) glyphItem() settingItem {
 	options := theme.AvailableGlyphSets()
-	item := enumItem("Glyph set", "Shapes for the border, controls, rules and rail marks. Press enter to open the picker.",
+	item := enumItem(m.loc().Label("appearance.glyphs"), m.loc().Row("glyphs.desc"),
 		options,
 		func() string { return theme.ActiveGlyphSetID() },
 		func(m *OS, v string) { m.setOption("appearance.glyphs", v) })
@@ -945,8 +909,8 @@ func (m *OS) glyphItem() settingItem {
 // runs each effect over the screen as you move through it, because the names
 // alone say nothing about what lands on screen.
 func (m *OS) screensaverEffectItem() settingItem {
-	item := enumItem("Effect",
-		"The animation the screen saver runs. Press enter to open the picker.",
+	item := enumItem(m.loc().Label("screensaver.effect"),
+		m.loc().Row("saver.effect.desc"),
 		config.ScreensaverEffects,
 		func() string { return m.screensaverConfig().EffectName() },
 		func(m *OS, v string) { m.setOption("screensaver.effect", v) })
@@ -961,14 +925,14 @@ func (m *OS) screensaverEffectItem() settingItem {
 // themeEditItem opens the theme editor on the theme in use.
 func (m *OS) themeEditItem() settingItem {
 	return settingItem{
-		Label:   "Edit theme",
-		Desc:    "Change the colours of the theme in use, and see them on the whole screen. Press enter to open the editor.",
+		Label:   m.loc().Row("theme.edit.label"),
+		Desc:    m.loc().Row("theme.edit.desc"),
 		Control: controlEnum,
 		value: func(m *OS) string {
 			if id := theme.CurrentThemeID(); id != "" {
 				return id
 			}
-			return themeNone
+			return m.loc().Value("none")
 		},
 		activate: func(m *OS) tea.Cmd {
 			m.CloseSettings()
@@ -983,10 +947,11 @@ func (m *OS) themeEditItem() settingItem {
 // screenshot shows the screen and not the page.
 func (m *OS) shareLookItem() settingItem {
 	return settingItem{
-		Label:   "Share my look",
-		Desc:    "Put your look and a screenshot in the setups discussion on GitHub. Press enter to start.",
+		Label:   m.loc().Row("share_look.label"),
+		Desc:    m.loc().Row("share_look.desc"),
 		Control: controlEnum,
-		value:   func(*OS) string { return "GitHub" },
+		// GitHub is the site's own name, not a word to translate.
+		value: func(*OS) string { return "GitHub" },
 		activate: func(m *OS) tea.Cmd {
 			m.CloseSettings()
 			return m.ShareLook("", "", "")
@@ -996,17 +961,17 @@ func (m *OS) shareLookItem() settingItem {
 
 func (m *OS) dockComponentsItem() settingItem {
 	return settingItem{
-		Label:   "Components",
-		Desc:    "The parts of the dock, in the order they draw. Press enter to edit.",
+		Label:   m.loc().Row("dock_components.label"),
+		Desc:    m.loc().Row("dock_components.desc"),
 		Control: controlEnum,
 		value: func(m *OS) string {
 			if m.UserConfig == nil {
-				return "default"
+				return m.loc().Value("default")
 			}
 			n := len(m.UserConfig.Dock.DockList("left")) +
 				len(m.UserConfig.Dock.DockList("center")) +
 				len(m.UserConfig.Dock.DockList("right"))
-			return strconv.Itoa(n) + " placed"
+			return m.loc().ValueN("n_placed", n)
 		},
 		activate: func(m *OS) tea.Cmd { m.OpenDockEditor(); return nil },
 	}
@@ -1020,15 +985,12 @@ func (m *OS) dockComponentsItem() settingItem {
 func (m *OS) sectionLayoutItem() settingItem {
 	return settingItem{
 		Path:    "appearance.sidebar.sections",
-		Label:   "Sections",
-		Desc:    "The rail's sections, in the order it stacks them. Press enter to edit.",
+		Label:   m.loc().Label("appearance.sidebar.sections"),
+		Desc:    m.loc().Row("section_layout.desc"),
 		Control: controlEnum,
 		value: func(m *OS) string {
 			n := sectionCount(m.sectionEntries(), m.agentsOn())
-			if n == 1 {
-				return "1 section"
-			}
-			return strconv.Itoa(n) + " sections"
+			return m.loc().ValueN("n_sections", n)
 		},
 		activate: func(m *OS) tea.Cmd { m.OpenSectionEditor(); return nil },
 		differs: differsFromDefault("appearance.sidebar.sections", func(m *OS) string {
@@ -1044,17 +1006,17 @@ func (m *OS) sectionLayoutItem() settingItem {
 // the file.
 func (m *OS) agentRowItem() settingItem {
 	return settingItem{
-		Label:   "Agent row",
-		Desc:    "The tokens an agent row shows, and the value rules that colour them. Set them in config.toml under [appearance.sidebar.agent_row].",
+		Label:   m.loc().Row("agent_row.label"),
+		Desc:    m.loc().Row("agent_row.desc"),
 		Control: controlEnum,
 		value: func(m *OS) string {
 			spec := m.sidebarAgentRowSpec()
 			if !spec.Custom() {
-				return "default"
+				return m.loc().Value("default")
 			}
-			tokens := plural.Count(len(spec.Tokens), "token")
+			tokens := m.loc().ValueN("n_tokens", len(spec.Tokens))
 			if n := spec.RuleCount(); n > 0 {
-				return tokens + ", " + plural.Count(n, "rule")
+				return tokens + ", " + m.loc().ValueN("n_rules", n)
 			}
 			return tokens
 		},
@@ -1063,7 +1025,7 @@ func (m *OS) agentRowItem() settingItem {
 			if err != nil {
 				path = "config.toml"
 			}
-			m.ShowNotification("Edit [appearance.sidebar.agent_row] in "+path, "info", m.Settings.NotificationDuration*2)
+			m.ShowNotification(m.loc().Notifyf("agent_row_edit", "path", path), "info", m.Settings.NotificationDuration*2)
 			return nil
 		},
 	}
@@ -1078,24 +1040,24 @@ func (m *OS) maxFPSItem() settingItem {
 	// the cap reads as the cap.
 	current := func(m *OS) string {
 		if strings.EqualFold(m.optionValue("appearance.max_fps"), config.FPSAuto) {
-			return fpsAutoLabel
+			return config.FPSAuto
 		}
 		return strconv.Itoa(m.Settings.NormalFPS)
 	}
-	item := enumItem("Max FPS", "Highest frame rate tuios draws at. Your terminal and monitor can show fewer frames. A value above that is not smoother.", fpsOptions,
+	// The caps the row offers: auto, then the rates displays are sold at. A
+	// rate configured in the file that is not here (75, say) still shows as
+	// itself, and the next step goes to the first entry. The drawn value
+	// spells the auto cap out of the page's dictionary; the options stay in
+	// the config's own spelling, which is what a step writes.
+	options := []string{config.FPSAuto, "30", "60", "90", "120", "144", "165", "240"}
+	item := enumItem(m.loc().Label("appearance.max_fps"), m.loc().Row("max_fps.desc"), options,
 		func() string { return current(m) },
-		func(m *OS, v string) {
-			if v == fpsAutoLabel {
-				v = config.FPSAuto
-			}
-			m.setOption("appearance.max_fps", v)
-		})
+		func(m *OS, v string) { m.setOption("appearance.max_fps", v) })
 	item.value = func(m *OS) string {
-		v := current(m)
-		if v == fpsAutoLabel {
-			return fpsAutoLabel + " (" + strconv.Itoa(m.Settings.NormalFPS) + ")"
+		if v := current(m); v != config.FPSAuto {
+			return v
 		}
-		return v
+		return m.loc().Value("auto") + " (" + strconv.Itoa(m.Settings.NormalFPS) + ")"
 	}
 	item.differs = differsFromDefault("appearance.max_fps", func(m *OS) string { return m.optionValue("appearance.max_fps") })
 	return item
@@ -1105,7 +1067,7 @@ func (m *OS) maxFPSItem() settingItem {
 // state is a model field the renderer reads directly, so the row has to move
 // both it and the config.
 func (m *OS) showKeysItem() settingItem {
-	item := boolItem("Show keys", "Show each key you press in the bottom right corner.",
+	item := boolItem(m.loc().Label("debug.show_key_events"), m.loc().Row("show_keys.desc"),
 		func() bool { return m.ShowKeys },
 		func(m *OS, v bool) {
 			m.ShowKeys = v
@@ -1141,33 +1103,31 @@ var agentAlertRows = []settingsRow{
 // change writes the mail key, which from then on stands on its own.
 func (m *OS) mailAlertRows() []settingsRow {
 	return []settingsRow{
-		custom("notifications.mail.enabled", m.mailAlertItem("notifications.mail.enabled", "Mail alerts",
-			"Alert when an agent writes to you or sends a notice.",
+		custom("notifications.mail.enabled", m.mailAlertItem("notifications.mail.enabled", "mail_alert.enabled.desc",
 			func(p config.MailAlertPolicy) bool { return p.Enabled })),
-		custom("notifications.mail.notify", m.mailAlertItem("notifications.mail.notify", "Mail alert on the desktop",
-			"Send a desktop notification for mail.",
+		custom("notifications.mail.notify", m.mailAlertItem("notifications.mail.notify", "mail_alert.notify.desc",
 			func(p config.MailAlertPolicy) bool { return p.Notify })),
-		custom("notifications.mail.dock", m.mailAlertItem("notifications.mail.dock", "Mail alert in the dock",
-			"Show mail in the dock. Click it to open the thread.",
+		custom("notifications.mail.dock", m.mailAlertItem("notifications.mail.dock", "mail_alert.dock.desc",
 			func(p config.MailAlertPolicy) bool { return p.Dock })),
-		custom("notifications.mail.sound", m.mailAlertItem("notifications.mail.sound", "Mail alert sound",
-			"Make a mail alert audible. The agent sound settings say how.",
+		custom("notifications.mail.sound", m.mailAlertItem("notifications.mail.sound", "mail_alert.sound.desc",
 			func(p config.MailAlertPolicy) bool { return p.Sound })),
 		opt("notifications.mail.between_agents"),
 	}
 }
 
 // mailAlertItem is one hand-written [notifications.mail] toggle. It shows
-// the value in force and writes the mail key.
-func (m *OS) mailAlertItem(path, label, desc string, get func(config.MailAlertPolicy) bool) settingItem {
-	item := boolItem(label, desc+" Unset follows the agent row.",
+// the value in force and writes the mail key. descKey names the row's whole
+// description in the page's dictionary, which ends with what an unset mail
+// key does.
+func (m *OS) mailAlertItem(path, descKey string, get func(config.MailAlertPolicy) bool) settingItem {
+	item := boolItem(m.loc().Label(path), m.loc().Row(descKey),
 		func() bool { return get(m.mailAlertPolicy()) },
 		func(m *OS, v bool) { m.setOption(path, strconv.FormatBool(v)) })
 	// Changed means the mail key is set, so the row no longer follows the
 	// agent row. Reset clears the key, and the row follows it again.
 	item.differs = func(m *OS) bool { return m.optionValue(path) != "" }
 	item.reset = func(m *OS) { m.setOption(path, "") }
-	item.resetShown = "the agent row"
+	item.resetShown = m.loc().Row("mail_alert.reset_shown")
 	return item
 }
 
@@ -1185,14 +1145,14 @@ func (m *OS) agentAlertsOpen() bool {
 // group and folds or unfolds it. It is not an option; nothing is written.
 func (m *OS) agentAlertsGroupItem() settingItem {
 	return settingItem{
-		Label:   "Agents",
-		Desc:    "Alerts about agents: which states alert, and how. Folded until an agent has run here; change this row to show or hide them.",
+		Label:   m.loc().Row("agent_alerts.label"),
+		Desc:    m.loc().Row("agent_alerts.desc"),
 		Control: controlEnum,
 		value: func(m *OS) string {
 			if m.agentAlertsOpen() {
-				return "shown"
+				return m.loc().Value("shown")
 			}
-			return strconv.Itoa(len(agentAlertRows)+len(m.mailAlertRows())) + " hidden"
+			return m.loc().ValueN("n_hidden", len(agentAlertRows)+len(m.mailAlertRows()))
 		},
 		adjust: func(m *OS, _ int) {
 			open := !m.agentAlertsOpen()
@@ -1205,7 +1165,7 @@ func (m *OS) agentAlertsGroupItem() settingItem {
 // model field the render path reads directly, so the row has to move both it
 // and the config. The keycast row is hand-written for the same reason.
 func (m *OS) spotlightItem() settingItem {
-	item := boolItem("Spotlight", "Light the area around the cursor and dim the rest.",
+	item := boolItem(m.loc().Label("spotlight.enabled"), m.loc().Row("spotlight.desc"),
 		func() bool { return m.SpotlightOn() },
 		func(m *OS, v bool) {
 			m.SetSpotlight(v)
@@ -1218,7 +1178,7 @@ func (m *OS) spotlightItem() settingItem {
 // calmItem is the calm mode switch. Hand-written, as the spotlight row is,
 // because turning calm off also reports and resets the held messages.
 func (m *OS) calmItem() settingItem {
-	item := boolItem("Calm mode", "Stop motion and blinking. Show only messages that need you.",
+	item := boolItem(m.loc().Label("appearance.calm"), m.loc().Row("calm.desc"),
 		func() bool { return m.CalmOn() },
 		func(m *OS, v bool) { m.SetCalm(v) })
 	item.differs = differsFromDefault("appearance.calm", func(m *OS) string { return strconv.FormatBool(m.CalmOn()) })
@@ -1247,15 +1207,16 @@ func (m *OS) OpenSettings() {
 
 // OpenSettingsAt opens the settings overlay on the named category, for the
 // entry points that already know which part of the app the user is pointing at.
-// The name is resolved against the live category list rather than an index: the
-// list is built per call, so a hardcoded index would rot the moment a tab moves.
+// The name is a category's key, its stable English name (see settingsCategory),
+// resolved against the live category list rather than an index: the list is
+// built per call, so a hardcoded index would rot the moment a tab moves.
 //
 // An entry point that names a tab wants that tab, so a remembered search or
 // row gives way to it.
 func (m *OS) OpenSettingsAt(category string) {
 	m.OpenSettings()
 	for i, c := range m.settingsCategories() {
-		if c.Name == category {
+		if c.Key == category {
 			m.settingsSearch = settingsSearchState{}
 			m.SettingsCategory = i
 			m.settingsList.Cursor = 0

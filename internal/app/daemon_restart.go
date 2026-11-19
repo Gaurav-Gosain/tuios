@@ -467,17 +467,17 @@ func (m *OS) DaemonRestartSelected() int { return m.restart.list.Cursor }
 // the restart dialog.
 func (m *OS) restartDaemonItem() settingItem {
 	return settingItem{
-		Label:   "Restart the daemon",
-		Desc:    "Stop the daemon and start it with the newest tuios installed. The dialog lists what stops before it asks.",
+		Label:   m.loc().Row("daemon.restart.label"),
+		Desc:    m.loc().Row("daemon.restart.desc"),
 		Control: controlStatus,
 		value: func(m *OS) string {
 			if m.DaemonClient == nil {
 				return ""
 			}
 			if c, d := m.DaemonClient.BuildMismatch(); c != "" {
-				return "runs " + d + ", this window " + c
+				return m.loc().Valuef("daemon.runs_mismatch", "daemon", d, "window", c)
 			}
-			return "runs " + m.DaemonClient.DaemonVersion()
+			return m.loc().Valuef("daemon.runs", "version", m.DaemonClient.DaemonVersion())
 		},
 		ink: func(pal overlay.Palette) color.Color {
 			if m.DaemonClient != nil {

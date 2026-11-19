@@ -241,6 +241,13 @@ type Settings struct {
 	// Set via --dockbar-position flag or appearance.dockbar_position config
 	DockbarPosition string `opt:"appearance.dockbar_position,keep"`
 
+	// Language is the code of the locale the settings page is written in: one
+	// of the codes the binary carries a locale file for (i18n.Codes()). Set
+	// via appearance.language; the settings page reads it through i18n.For.
+	// It keeps: a file that names no language leaves the language the session
+	// already has.
+	Language string `opt:"appearance.language,keep"`
+
 	// SidebarEnabled turns the sidebar on. Default on since v0.8.0. It has
 	// no opt tag: ApplyAppearanceConfig folds an explicit left or right edge
 	// into it first, so it is not the file's appearance.sidebar.enabled.
@@ -1096,6 +1103,7 @@ func DefaultSettings() Settings {
 		DropPreview:                 DropPreviewOutline,
 		DropPreviewDelay:            DefaultDropPreviewDelay,
 		DockbarPosition:             DefaultDockbarPosition,
+		Language:                    DefaultLanguage,
 		SidebarEnabled:              true,
 		SidebarPosition:             DefaultSidebarPosition,
 		SidebarWidth:                SidebarDefaultWidth,

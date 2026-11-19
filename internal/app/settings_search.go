@@ -63,9 +63,9 @@ func (m *OS) settingsValueText(item settingItem) string {
 	switch {
 	case item.Control == controlBool && item.boolVal != nil:
 		if item.boolVal(m) {
-			return "on"
+			return m.loc().Value("on")
 		}
-		return "off"
+		return m.loc().Value("off")
 	case item.value != nil:
 		if v := item.value(m); v != "" {
 			return v

@@ -70,7 +70,7 @@ func TestSettingsMeterBoundsAndNaN(t *testing.T) {
 }
 
 func TestPercentItemEqualBounds(t *testing.T) {
-	item := percentItem("test.path", 20, 20, func(m *OS) int { return 20 }, func(m *OS, v int) {})
+	item := (&OS{}).percentItem("test.path", 20, 20, func(m *OS) int { return 20 }, func(m *OS, v int) {})
 	if item.meter == nil {
 		t.Fatal("expected item.meter to be non-nil")
 	}

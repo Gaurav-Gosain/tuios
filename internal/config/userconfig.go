@@ -558,6 +558,7 @@ type AppearanceConfig struct {
 	WordCharacters           *string                 `toml:"word_characters"`              // Punctuation that counts as part of a word for double-click selection (default: "@-./_~?&=%+#")
 	DockbarPosition          string                  `toml:"dockbar_position"`             // Dockbar position: bottom, top, hidden (default: top)
 	PreferredShell           string                  `toml:"preferred_shell"`              // Preferred shell: if empty, auto-detect based on platform.
+	Language                 string                  `toml:"language"`                     // Language the settings page is written in: a code from i18n.Codes(), such as en (default: en)
 	AnimationsEnabled        *bool                   `toml:"animations_enabled,omitempty"` // Deprecated: folded into motion on load (false is none)
 	Motion                   string                  `toml:"motion"`                       // How much moves: none, basic (window slides, copy sweep), full (also fades and the working shimmer) (default: full)
 	Calm                     *bool                   `toml:"calm"`                         // Calm mode: no motion or blinking, and only messages that need you reach the dock (default: false)
@@ -1335,6 +1336,7 @@ func DefaultConfig() *UserConfig {
 			WindowTitleStyle:         DefaultWindowTitleStyle,
 			WindowTitleAlign:         DefaultWindowTitleAlign,
 			PreferredShell:           "",
+			Language:                 DefaultLanguage,
 			ClickToType:              ClickToTypeDouble,
 			FocusFollowsMousePause:   FocusFollowsMousePauseOff,
 			KittyPlaceholders:        KittyPlaceholdersAuto,

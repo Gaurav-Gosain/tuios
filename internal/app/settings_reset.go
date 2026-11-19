@@ -46,9 +46,9 @@ func (m *OS) settingDefault(item settingItem) (value, shown string, ok bool) {
 	switch {
 	case o.Type == config.OptionBool:
 		on := (value == "true") != settingInverted[item.Path]
-		shown = "off"
+		shown = m.loc().Value("off")
 		if on {
-			shown = "on"
+			shown = m.loc().Value("on")
 		}
 	case o.Type == config.OptionInt && o.Percent:
 		shown = value + "%"
@@ -57,7 +57,7 @@ func (m *OS) settingDefault(item settingItem) (value, shown string, ok bool) {
 	case value == "":
 		shown = item.Unset
 		if shown == "" {
-			shown = "unset"
+			shown = m.loc().Value("unset")
 		}
 	}
 	return value, shown, true
@@ -96,7 +96,7 @@ func (m *OS) settingsDefaultNote(item settingItem) string {
 		if m.settingsSearch.open {
 			key = "delete"
 		}
-		return "Default " + item.resetShown + ", " + key + " resets."
+		return m.loc().Rowf("reset.note", "shown", item.resetShown, "key", key)
 	}
 	if !item.derived || !m.settingDiffers(item) {
 		return ""
@@ -106,7 +106,7 @@ func (m *OS) settingsDefaultNote(item settingItem) string {
 	if m.settingsSearch.open {
 		key = "delete"
 	}
-	return "Default " + shown + ", " + key + " resets."
+	return m.loc().Rowf("reset.note", "shown", shown, "key", key)
 }
 
 // settingsRecord runs change against a derived row and, when the value moved,
@@ -135,29 +135,29 @@ func (m *OS) SettingsResetSelected() tea.Cmd {
 	}
 	if item.reset != nil {
 		if !m.settingDiffers(item) {
-			m.ShowNotification(item.Label+" is already at its default.", "info", m.Settings.NotificationDuration)
+			m.ShowNotification(m.loc().Notifyf("reset.notify.already", "label", item.Label), "info", m.Settings.NotificationDuration)
 			return nil
 		}
 		before := m.optionValue(item.Path)
 		item.reset(m)
 		m.settingsUndo = append(m.settingsUndo, settingsUndoEntry{path: item.Path, label: item.Label, before: before})
-		m.ShowNotification(item.Label+" follows "+item.resetShown+" again. ctrl+z undoes it.", "info", m.Settings.NotificationDuration)
+		m.ShowNotification(m.loc().Notifyf("reset.notify.follows", "label", item.Label, "shown", item.resetShown), "info", m.Settings.NotificationDuration)
 		return m.persistSettings()
 	}
 	def, shown, derived := m.settingDefault(item)
 	switch {
 	case !derived && m.settingDiffers(item):
-		m.ShowNotification(item.Label+" has no reset here. Change it with its control.", "info", m.Settings.NotificationDuration)
+		m.ShowNotification(m.loc().Notifyf("reset.notify.no_reset", "label", item.Label), "info", m.Settings.NotificationDuration)
 		return nil
 	case !derived:
-		m.ShowNotification(item.Label+" has no single default to go back to here.", "info", m.Settings.NotificationDuration)
+		m.ShowNotification(m.loc().Notifyf("reset.notify.no_default", "label", item.Label), "info", m.Settings.NotificationDuration)
 		return nil
 	case !m.settingDiffers(item):
-		m.ShowNotification(item.Label+" is already at its default.", "info", m.Settings.NotificationDuration)
+		m.ShowNotification(m.loc().Notifyf("reset.notify.already", "label", item.Label), "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	m.settingsRecord(item, func() { m.setOption(item.Path, def) })
-	m.ShowNotification(item.Label+" is back to "+shown+". ctrl+z undoes it.", "info", m.Settings.NotificationDuration)
+	m.ShowNotification(m.loc().Notifyf("reset.notify.back_to", "label", item.Label, "shown", shown), "info", m.Settings.NotificationDuration)
 	return m.persistSettings()
 }
 
@@ -165,7 +165,7 @@ func (m *OS) SettingsResetSelected() tea.Cmd {
 func (m *OS) SettingsUndo() tea.Cmd {
 	n := len(m.settingsUndo)
 	if n == 0 {
-		m.ShowNotification("Nothing to undo on the settings page.", "info", m.Settings.NotificationDuration)
+		m.ShowNotification(m.loc().Notify("reset.notify.nothing_to_undo"), "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	e := m.settingsUndo[n-1]
@@ -179,7 +179,7 @@ func (m *OS) SettingsUndo() tea.Cmd {
 	if err := m.setConfigFromRegistry(e.path, e.before); err != nil {
 		m.setOption(e.path, m.optionEffectiveOf(e.path, e.before))
 	}
-	m.ShowNotification("Undid the change to "+e.label+".", "info", m.Settings.NotificationDuration)
+	m.ShowNotification(m.loc().Notifyf("reset.notify.undid", "label", e.label), "info", m.Settings.NotificationDuration)
 	return m.persistSettings()
 }
 

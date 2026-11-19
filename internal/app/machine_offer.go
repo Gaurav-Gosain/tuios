@@ -117,12 +117,12 @@ func (m *OS) machineOfferNeverItems() []settingsRow {
 	for _, target := range slices.Sorted(maps.Keys(m.machineOffersNever)) {
 		rows = append(rows, custom("", settingItem{
 			Label:   target,
-			Desc:    "tuios does not offer to add this machine. Press enter to remove it from the list.",
+			Desc:    m.loc().Row("offer.never.desc"),
 			Control: controlStatus,
-			value:   func(*OS) string { return "never offered" },
+			value:   func(m *OS) string { return m.loc().Value("offer.never_offered") },
 			activate: func(m *OS) tea.Cmd {
 				m.setMachineOfferNever(target, false)
-				m.ShowNotification(target+" is off the list. tuios can offer it again.", "info", m.Settings.NotificationDuration)
+				m.ShowNotification(m.loc().Notifyf("offer.notify.removed", "target", target), "info", m.Settings.NotificationDuration)
 				return nil
 			},
 		}))

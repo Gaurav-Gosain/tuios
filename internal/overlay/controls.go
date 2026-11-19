@@ -124,13 +124,24 @@ func Cycler(value string, selected bool, bg color.Color, pal Palette) string {
 }
 
 // Toggle renders a boolean as an [ on ] / [ off ] control on the given row
-// background.
+// background, in the built-in words.
 func Toggle(on, selected bool, bg color.Color, pal Palette) string {
-	label := "off"
-	fg := pal.FgMute
+	return ToggleWords(on, "on", "off", selected, bg, pal)
+}
+
+// ToggleWords renders a boolean as an [ on ] / [ off ] control with the words
+// for its two states given by the caller, on the given row background. Empty
+// words fall back to the built-in pair.
+func ToggleWords(on bool, onWord, offWord string, selected bool, bg color.Color, pal Palette) string {
+	if onWord == "" {
+		onWord = "on"
+	}
+	if offWord == "" {
+		offWord = "off"
+	}
+	label, fg := offWord, pal.FgMute
 	if on {
-		label = "on"
-		fg = pal.Success
+		label, fg = onWord, pal.Success
 	}
 	bracketColor := pal.FgMute
 	if selected {

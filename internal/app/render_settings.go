@@ -36,36 +36,40 @@ const (
 
 // settingsHints is the settings footer, shared by the renderer and the sizing
 // helper so both measure the same panel.
-var settingsHints = []overlay.Hint{
-	{Key: hintListMove, Label: "move"},
-	{Key: "←→", Label: "change"},
-	{Key: "tab", Label: "section"},
-	{Key: "/", Label: "search"},
-	{Key: "esc", Label: "close"},
+func (m *OS) settingsHints() []overlay.Hint {
+	return []overlay.Hint{
+		{Key: hintListMove, Label: m.loc().Hint("move")},
+		{Key: "←→", Label: m.loc().Hint("change")},
+		{Key: "tab", Label: m.loc().Hint("section")},
+		{Key: "/", Label: m.loc().Hint("search")},
+		{Key: "esc", Label: m.loc().Hint("close")},
+	}
 }
 
 // settingsSearchHints is the footer while the search line is open. Tab goes to
 // the row's own tab rather than the next one, and esc clears the search before
 // it closes anything.
-var settingsSearchHints = []overlay.Hint{
-	{Key: hintListMove, Label: "move"},
-	{Key: "←→", Label: "change"},
-	{Key: "tab", Label: "go to tab"},
-	{Key: "esc", Label: "clear search"},
+func (m *OS) settingsSearchHints() []overlay.Hint {
+	return []overlay.Hint{
+		{Key: hintListMove, Label: m.loc().Hint("move")},
+		{Key: "←→", Label: m.loc().Hint("change")},
+		{Key: "tab", Label: m.loc().Hint("go_to_tab")},
+		{Key: "esc", Label: m.loc().Hint("clear_search")},
+	}
 }
 
 // currentSettingsHints is the footer for the panel as it is now.
 func (m *OS) currentSettingsHints() []overlay.Hint {
 	if m.settingsSearch.open {
-		return settingsSearchHints
+		return m.settingsSearchHints()
 	}
 	if m.onAgentsTab() {
 		if m.agentsPage.action != "" {
-			return agentsActionHints
+			return m.agentsActionHints()
 		}
-		return agentsHints
+		return m.agentsHints()
 	}
-	return settingsHints
+	return m.settingsHints()
 }
 
 // settingsLayout returns the section names, the fitted inner width, the number
@@ -176,7 +180,7 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 		infos = append(infos, rowInfo{control: control, stepless: stepless, idx: i})
 	}
 	if searching && len(items) == 0 {
-		lines = append(lines, settingsSearchEmpty(m.settingsSearch.query.String(), width, pal))
+		lines = append(lines, m.settingsSearchEmpty(width, pal))
 	}
 	for len(lines) < visible+rowsAt {
 		lines = append(lines, overlay.Style(bg).Render(" "))
@@ -203,9 +207,9 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 	// A session that cannot write the config file says so in the title rather
 	// than only in a notification, which is gone by the time the second setting
 	// is changed.
-	title := "Settings"
+	title := m.loc().Row("settings.title")
 	if m.ConfigReadOnly {
-		title = "Settings (this session only)"
+		title = m.loc().Row("settings.title_session_only")
 	}
 
 	panel := overlay.Panel{
@@ -303,7 +307,7 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, w
 		control = overlay.Style(bg).Foreground(theme.ReadableAt(ink, bg, theme.ContrastFloor)).Bold(selected).
 			Render(overlay.Truncate(item.value(m), max(width/2, 6)))
 	case controlBool:
-		control = overlay.Toggle(item.boolVal(m), selected, bg, pal)
+		control = overlay.ToggleWords(item.boolVal(m), m.loc().Value("on"), m.loc().Value("off"), selected, bg, pal)
 	case controlString:
 		control = m.settingsStringControl(item, selected, bg, pal, width)
 	case controlColor:
