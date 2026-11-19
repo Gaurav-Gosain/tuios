@@ -8065,10 +8065,9 @@ images as block glyphs. Set `TUIOS_KITTY_GRAPHICS=1` or
 
 ### `TUIOS_TEXT_SIZING`
 
-`1` or `0` overrides what tuios detected about OSC 66 text sizing on the host
-terminal. At start, tuios writes a space at twice the size and asks where the
-cursor went. The terminal has text sizing only when the cursor moved two cells.
-With text sizing, quick look draws the top headings of a Markdown file larger.
+`1` tells tuios that the host terminal draws OSC 66 text sizing. tuios does not
+detect it. With text sizing, quick look draws the top headings of a Markdown
+file larger.
 
 ### `$SHELL`
 
