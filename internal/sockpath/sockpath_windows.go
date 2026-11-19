@@ -8,3 +8,6 @@ func RuntimeDir() string { return "" }
 
 // SetRootsForTest does nothing on Windows, which has neither root.
 func SetRootsForTest(runUser, tmp string) (restore func()) { return func() {} }
+
+// PersonDirs: on Windows the daemon's pipe has no folder to compare.
+func PersonDirs() []string { return nil }

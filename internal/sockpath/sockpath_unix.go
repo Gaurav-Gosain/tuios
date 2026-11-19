@@ -59,6 +59,18 @@ func RuntimeDir() string {
 	return ""
 }
 
+// PersonDirs are the socket folders of this user's own daemons, whatever
+// XDG_RUNTIME_DIR says: /run/user/<uid>/tuios where that exists, and
+// /tmp/tuios-<uid>. A docs rig (internal/session/rig.go) must not listen in
+// either.
+func PersonDirs() []string {
+	var dirs []string
+	if sys := systemRuntimeDir(); sys != "" {
+		dirs = append(dirs, filepath.Join(sys, "tuios"))
+	}
+	return append(dirs, LegacyDir())
+}
+
 // LegacyDir is the folder used without a runtime folder: /tmp/tuios-<uid>.
 func LegacyDir() string {
 	_, tmp := roots()

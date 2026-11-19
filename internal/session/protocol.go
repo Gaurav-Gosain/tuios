@@ -530,6 +530,10 @@ type AttachedPayload struct {
 	// Empty from an older daemon, which verifies nothing; a client then sends
 	// no nonce and its mail is stored as claimed_human.
 	HumanNonce string `json:"human_nonce,omitempty"`
+	// Rig says the daemon is a docs rig (rig.go). A client started with
+	// TUIOS_RIG=1 then lets a tape's keys act for the person. False from an
+	// older daemon.
+	Rig bool `json:"rig,omitempty"`
 	// Policy is the window_size policy the size above was settled under. A
 	// client reports input only under latest, and a resize broadcast is not
 	// sent to the client it answers, so the reply has to say it. Empty from

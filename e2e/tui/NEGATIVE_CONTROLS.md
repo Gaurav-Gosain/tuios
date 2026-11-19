@@ -5447,6 +5447,21 @@ has no manager to ask and runs everywhere: the pane must start as before.
 | --- | --- | --- | --- |
 | A pane gets no scope | `createPTY`: the `panescope.Place` call cut | `TestPaneRunsInItsOwnScope/bus` ("the pane's shell is not in a scope of its own: \"0::/user.slice/.../tuios-daemon.service\"") | **caught** |
 
+## The docs rig
+
+`TestRigLetsATapeActForThePerson` plays a tape that picks a row of a TML
+surface, and reads the daemon's live state of the surface (`tml get`). The
+client draws the pick in every case, so the screen does not decide. With no
+rig, and with a rig daemon and a client with no `TUIOS_RIG`, the tape must be
+refused (the positive halves). In a rig, `send-keys` must stay refused.
+`TestRigRefusal` in `internal/session` covers the daemons that may not be a
+rig.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The rig is absent | build `origin/main` | `TestRigLetsATapeActForThePerson/rig` ("a tape in a rig: the surface's state holds \"none\", want \"TestAttachReplay\"") | **caught** |
+| The client does not check its own TUIOS_RIG | `inRig`: the `rigClient` test cut | `TestRigLetsATapeActForThePerson/rig_daemon,_plain_client` ("the tape was not refused") | **caught** |
+
 ## An image paste on another machine
 
 `TestAnImagePasteNeedsFilesOnTheFarMachine` pastes into a pane on a host by

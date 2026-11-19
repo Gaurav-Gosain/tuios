@@ -565,6 +565,8 @@ type Daemon struct {
 	// the Inbox has loaded its saved items and they can be opened without
 	// taking ids the saved items already hold. See agent_resume.go.
 	pendingResumes []resumeOffer
+	// rig is set at start for a docs rig. See rig.go.
+	rig bool
 }
 
 // defaultAgentStallTimeout is the conservative default silence window before a
@@ -1711,6 +1713,7 @@ func (d *Daemon) onSessionDeleted(s *Session) {
 // Start starts the daemon.
 func (d *Daemon) Start() error {
 	socketPath := d.manager.SocketPath()
+	d.startRig(socketPath)
 	// Pinned: the path is resolved once. Resolved again at shutdown, it can
 	// name another folder (/run/user/<uid> made after this daemon started in
 	// /tmp), and the stop would then clean that folder and leave this one.

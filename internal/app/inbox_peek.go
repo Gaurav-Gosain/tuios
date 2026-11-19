@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -134,9 +135,20 @@ func (m *OS) inboxNonce() string {
 }
 
 // notThePersonsKey reports whether the key being handled came from send-keys
-// or a tape's Press, not from the person's keyboard.
+// or a tape's Press, not from the person's keyboard. In a docs rig a tape's
+// Press counts as the person's; send-keys never does. See
+// internal/session/rig.go.
 func (m *OS) notThePersonsKey() bool {
-	return m.ProcessingRemoteKeys || m.pressingTapeKeys
+	return m.ProcessingRemoteKeys || (m.pressingTapeKeys && !m.inRig())
+}
+
+// rigClient is TUIOS_RIG=1 in this client's environment, read once.
+var rigClient = os.Getenv("TUIOS_RIG") == "1"
+
+// inRig reports whether this client and the daemon it is attached to are a
+// docs rig: both must say so.
+func (m *OS) inRig() bool {
+	return rigClient && m.DaemonClient != nil && m.DaemonClient.Rig()
 }
 
 // noNonceText is why a call that must be signed as the person's was not sent:

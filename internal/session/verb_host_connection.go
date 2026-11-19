@@ -73,7 +73,7 @@ func (d *Daemon) verbOpenHostConnection(cs *connState, params json.RawMessage) (
 	// the relayed bytes and not this daemon's view of who sent them, so this
 	// is the only way a check made here reaches it. It rides in the stream's
 	// open frame, which the caller cannot write. See human_origin.go.
-	conn, err := d.federation.OpenConnectionAs(ctx, p.Host, federation.StreamOpen{Human: d.mayActAsHuman(cs)})
+	conn, err := d.federation.OpenConnectionAs(ctx, p.Host, federation.StreamOpen{Human: d.mayActAsHuman(cs) && !d.rig})
 	if err != nil {
 		return nil, hostConnectionError(p.Host, err)
 	}

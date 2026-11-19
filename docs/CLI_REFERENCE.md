@@ -8104,6 +8104,19 @@ The ssh program to run instead of `ssh` on `PATH`: for the daemon's links to
 the `[hosts]` machines (set it where the daemon starts), and for `--ssh`,
 `tuios hosts test` and `tuios hosts sync`.
 
+### `TUIOS_RIG`
+
+`1` makes a throwaway daemon and its client a docs rig. In a rig, the keys that a
+tape presses act for you, as keys from your keyboard do. Keys from `send-keys`
+still do not.
+
+Set it for the daemon and for the client. The daemon is a rig only when
+`XDG_CONFIG_HOME` and `XDG_STATE_HOME` name folders of the rig's own, and its
+socket is not in your own socket folder. Otherwise the daemon logs why and
+starts as a normal daemon. A rig does not act for you over a host link.
+
+Use a rig to make screenshots. Do not use it for real work.
+
 ### `TUIOS_HOST_RECONNECT_BUDGET`
 
 How long a client attached to a session on another machine keeps dialing a

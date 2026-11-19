@@ -142,6 +142,8 @@ type TUIClient struct {
 	// store the reply as verified_human. Empty before an attach and after one
 	// to a daemon that issues none.
 	humanNonce atomic.Pointer[string]
+	// rig is the attach reply's Rig. See rig.go.
+	rig atomic.Bool
 
 	// pushOrigin names this client's state pushes to the session it is
 	// attached to, and pushSeq counts the ones sent there. Both start over on
@@ -668,6 +670,7 @@ func (c *TUIClient) takeAttachReply(resp *Message) (*SessionState, error) {
 	c.sessionID = payload.SessionID
 	c.setSessionName(payload.SessionName)
 	c.humanNonce.Store(&payload.HumanNonce)
+	c.rig.Store(payload.Rig)
 	// With the read loop running, routeReply counted this attach as it read
 	// the reply. See AttachGeneration.
 	if !c.readLoopRunning {
@@ -2375,6 +2378,10 @@ func (c *TUIClient) SessionName() string {
 func (c *TUIClient) setSessionName(name string) {
 	c.sessionName.Store(&name)
 }
+
+// Rig reports whether the daemon said, at the last attach, that it is a docs
+// rig. See rig.go.
+func (c *TUIClient) Rig() bool { return c != nil && c.rig.Load() }
 
 // HumanNonce returns the secret the daemon issued for the current attach, or
 // "" when there is none. Pass it as human_nonce on send-agent-message from

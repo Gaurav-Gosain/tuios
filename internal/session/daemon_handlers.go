@@ -362,6 +362,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 		Reserve:       effectiveReserve,
 		Generation:    session.LayoutGeneration(),
 		HumanNonce:    humanNonce,
+		Rig:           d.rig,
 		Policy:        session.WindowSizePolicy(),
 		SizedBy:       sizedBy.Machine,
 		SizedByClient: sizedBy.Client,
