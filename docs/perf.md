@@ -2519,6 +2519,10 @@ What inlining off in one package saved, measured on 448e9bf1d before the list:
 | `tuios.dev/vt` | 32,768 | yes: the emulator |
 | each other package | 20,480 or less | |
 
+On 2026-11-19 four standard packages joined the list: `runtime/pprof`,
+`archive/tar`, `text/template` and `encoding/xml`. Each runs on request only.
+Together they saved 41,472 bytes on windows/amd64.
+
 The next two savings, measured but not taken: inlining off in internal/session
 too (688,128 bytes more on top of the old cold set) needs the pane output
 stream and the broadcast moved to a package of their own first, or the
