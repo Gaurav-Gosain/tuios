@@ -87,7 +87,7 @@ func TestRigLetsATapeActForThePerson(t *testing.T) {
 					if time.Now().After(deadline) {
 						t.Fatalf("ASSERTION: %s: the surface's state holds %q, want %q\n%s", what, picked(), want, term.Snapshot())
 					}
-					time.Sleep(50 * time.Millisecond)
+					pause(t, "poll again until the state it waits for shows", 50*time.Millisecond)
 				}
 			}
 			tape := filepath.Join(base, "pick.tape")
