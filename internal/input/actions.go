@@ -406,7 +406,7 @@ func handleUserAction(action string) ActionHandler {
 				extra["selection"] = text
 			}
 		}
-		return o, o.RunUserAction(action, extra)
+		return o, o.RunUserAction(action, extra, nil)
 	}
 }
 

@@ -91,6 +91,8 @@ type Executor interface {
 
 	// RunAction runs a keybinding action by its registry name.
 	RunAction(name string) error
+	// RunUserActionArgs runs a user action with its arguments, key=value.
+	RunUserActionArgs(name string, args []string) error
 	// PressKeys presses keys through the app's own key handling. Each
 	// argument is one key or a sequence of them split by spaces or commas.
 	PressKeys(keys []string) error
@@ -425,6 +427,9 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 	case CommandTypeAction:
 		if len(cmd.Args) == 0 {
 			return errMissingArg("Action", "an action name")
+		}
+		if len(cmd.Args) > 1 {
+			return ce.executor.RunUserActionArgs(cmd.Args[0], cmd.Args[1:])
 		}
 		return ce.executor.RunAction(cmd.Args[0])
 

@@ -2065,6 +2065,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// a time, so the listener is armed again here.
 		return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
 
+	case userActionAskedMsg:
+		return m, m.userActionAsked(msg)
+
 	case PromptMsg:
 		m.setPrompt(msg.Payload)
 		return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)

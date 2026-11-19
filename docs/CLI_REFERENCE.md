@@ -7260,8 +7260,14 @@ Your actions: the `[[actions]]` entries of config.toml and the
 ```
 tuios actions [--json]
 tuios actions list [NAME] [--json]
-tuios actions run NAME [-s SESSION] [--dry-run [-w PANE]] [--json]
+tuios actions run NAME [key=value...] [-s SESSION] [--dry-run [-w PANE]] [--json]
 ```
+
+`key=value` gives a value to an argument of the action. An `ask` step with no
+value asks the person in the palette, as `tuios prompt` does. `--json` prints
+`action`, `status` and `args`, the values the action ran with, as numbers,
+bools and strings. When a question gets no answer, the exit status is the one
+`tuios prompt` gives: `1` cancelled, `2` timeout, `3` no client, `4` busy.
 
 With no subcommand, `tuios actions` lists the built-in actions a launcher
 outside tuios can offer: the rows of the command palette that run as a key

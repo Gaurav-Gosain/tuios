@@ -1348,6 +1348,33 @@ run = ["/bin/sh", "-c", "printf '%s\\n' \"$1\" >> ~/titles.txt", "save-title", "
 in = "silent"
 ```
 
+#### Arguments and questions
+
+A `run` action can take arguments. Each one has a name, which is also a
+placeholder, a type and an optional default. An `ask` step asks you for a
+value in the palette when nobody gave it.
+
+```toml
+[[actions]]
+name = "deploy"
+key = "prefix+alt+d"
+run = ["./deploy.sh", "{env}", "--replicas", "{replicas}"]
+in = "silent"
+args = [{ name = "replicas", type = "number", default = 2 }]
+ask = [{ name = "env", kind = "pick", title = "Deploy to?", items = ["staging", "prod=Production"] }]
+```
+
+| Field | Is |
+|---|---|
+| `args` | The arguments: `name`, `type` (`string`, `number` or `bool`, default `string`) and `default` |
+| `ask` | The questions: `name`, `kind` (`input` for a text field, the default, or `pick` for a list), `title`, `placeholder`, `items` and `allow_other` |
+
+A pick item is `"id"` or `"id=title"`. The id is the value. A value comes
+from `tuios actions run NAME key=value` first, then from the question, then
+from the default. tuios checks each value against its type. When an argument
+has no value, the action does not run, and the message names the argument.
+When you press Esc at a question, the action does not run.
+
 A command runs where a command key does: a popup, a pane and a scratch pane on
 the session's machine, a silent command on this one. It has the command key
 variables too (`TUIOS_SESSION`, `TUIOS_ACTIVE_PANE_ID` and the others).

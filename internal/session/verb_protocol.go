@@ -2049,7 +2049,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			description: "Run one tape command, or any keybinding action by the name config.toml binds it to. Prefer a verb where one exists: a verb reports what changed, this reports only that the command ran.",
 			params: []verbParam{
 				sessionParam,
-				{Name: "command", Type: "string", Description: `Tape command name, e.g. "ToggleZoom" or "SnapLeft", or a keybinding action name, e.g. "toggle_spotlight" (tuios keybinds list prints them). An action runs on an attached client and takes no args.`},
+				{Name: "command", Type: "string", Description: `Tape command name, e.g. "ToggleZoom" or "SnapLeft", or a keybinding action name, e.g. "toggle_spotlight" (tuios keybinds list prints them). An action runs on an attached client. Only a user action (user:NAME) takes args, each key=value.`},
 				{Name: "args", Type: "[]string", Description: "Arguments for the command."},
 			},
 			returns: []verbParam{
