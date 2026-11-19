@@ -3,6 +3,7 @@ package session
 import (
 	"log"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 
@@ -24,7 +25,8 @@ import (
 //
 //   - The daemon is a rig when it starts with TUIOS_RIG=1 and rigRefusal
 //     finds nothing: XDG_CONFIG_HOME and XDG_STATE_HOME are set to absolute
-//     folders that are not the home's defaults, and its socket is outside
+//     folders that are not the defaults of the account's home (accountHome,
+//     not HOME, which the rig may move), and its socket is outside
 //     the person's socket folders (sockpath.PersonDirs). So a rig never
 //     restores the person's sessions, reads their config or their hosts, or
 //     serves the socket their client attaches to. A refusal is logged and
@@ -80,11 +82,25 @@ func (d *Daemon) startRig(socketPath string) {
 	if os.Getenv("TUIOS_RIG") != "1" {
 		return
 	}
-	home, _ := os.UserHomeDir()
-	if why := rigRefusal(socketPath, os.Getenv, home, sockpath.PersonDirs()); why != "" {
+	if why := rigRefusal(socketPath, os.Getenv, accountHome(), sockpath.PersonDirs()); why != "" {
 		log.Printf("Warning: TUIOS_RIG is set, and this daemon is not a rig: %s. A tape's keys do not act for the person here.", why)
 		return
 	}
 	d.rig = true
 	log.Printf("This daemon is a docs rig: a tape's keys act for the person in a client started with TUIOS_RIG=1. Do not use it for real work.")
+}
+
+// accountHome is the home folder the account database names, where the
+// person's own config and state are. HOME does not decide it: a docs rig
+// with a home of its own (the docs site's short_home scenes) runs with HOME
+// at a throwaway folder and the XDG folders inside it, and those are the
+// rig's, not the person's. A HOME moved the other way, to a throwaway folder
+// with XDG_CONFIG_HOME at the person's ~/.config, is refused. Only when the
+// database has no entry does HOME stand in, which is the rule as it was.
+func accountHome() string {
+	if u, err := user.Current(); err == nil && u.HomeDir != "" {
+		return u.HomeDir
+	}
+	home, _ := os.UserHomeDir()
+	return home
 }

@@ -8112,8 +8112,11 @@ still do not.
 
 Set it for the daemon and for the client. The daemon is a rig only when
 `XDG_CONFIG_HOME` and `XDG_STATE_HOME` name folders of the rig's own, and its
-socket is not in your own socket folder. Otherwise the daemon logs why and
-starts as a normal daemon. A rig does not act for you over a host link.
+socket is not in your own socket folder. Your own folders are the defaults
+under the home that your account names, even when `HOME` is set to another
+folder. So a rig can set `HOME` to a throwaway folder and keep its config and
+state in that folder. Otherwise the daemon logs why and starts as a normal
+daemon. A rig does not act for you over a host link.
 
 Use a rig to make screenshots. Do not use it for real work.
 

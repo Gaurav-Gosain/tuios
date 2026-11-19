@@ -5462,6 +5462,18 @@ rig.
 | The rig is absent | build `origin/main` | `TestRigLetsATapeActForThePerson/rig` ("a tape in a rig: the surface's state holds \"none\", want \"TestAttachReplay\"") | **caught** |
 | The client does not check its own TUIOS_RIG | `inRig`: the `rigClient` test cut | `TestRigLetsATapeActForThePerson/rig_daemon,_plain_client` ("the tape was not refused") | **caught** |
 
+`TestRigTapeOpensTheAgentThread` opens the agents view with a tape, on a pane
+joined to a Claude Code transcript. In a rig the thread must show the agent's
+answer. With no rig, and with a rig daemon and a client with no `TUIOS_RIG`,
+the thread must say that the daemon did not accept the client as the person
+(the positive halves). "rig with its own home" runs the daemon with its config
+and state at the defaults under a throwaway `HOME`, as the docs site's
+`short_home` scenes do.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The rig check compares with `HOME` | `startRig`: `accountHome()` replaced by `os.UserHomeDir()` (`origin/main`) | `TestRigTapeOpensTheAgentThread/rig_with_its_own_home` ("the thread in a rig did not show the conversation"; the thread says the daemon did not accept the client as the person) | **caught** |
+
 ## An image paste on another machine
 
 `TestAnImagePasteNeedsFilesOnTheFarMachine` pastes into a pane on a host by
