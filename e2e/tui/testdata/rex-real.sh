@@ -49,6 +49,38 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# A stand-in agent with an approval prompt, and the harness rule that reads
+# it and answers y or n, for "answer an agent". respond_from_shell lets the
+# Rex server, a process outside every pane, answer for the person; the
+# daemon reads it at start.
+mkdir -p "$home/.config/tuios/harnesses"
+printf '[daemon]\nrespond_from_shell = true\n' > "$home/.config/tuios/config.toml"
+cat > "$home/.config/tuios/harnesses/rexapprove.toml" <<'EOS'
+schema_version = 1
+id = "rexapprove"
+[detect]
+comm  = ["rexapprove"]
+argv0 = ["rexapprove"]
+[screen]
+enabled = true
+[[screen.rule]]
+state    = "needs_input"
+priority = 30
+message  = "Run make?"
+all      = ["Allow?"]
+[screen.rule.answers]
+approve = { keys = ["y"] }
+deny = { keys = ["n"] }
+EOS
+cat > "$tmp/agents/approve.sh" <<'EOS'
+#!/bin/sh
+stty raw -echo
+printf 'make\r\nAllow?\r\n'
+c=$(dd bs=1 count=1 2>/dev/null)
+printf 'ANSWER=%s\r\n' "$c"
+exec sleep 600
+EOS
+
 step "the person's own init.lua"
 printf -- '-- a line of the person'"'"'s own\n' > "$cfg"
 cp "$cfg" "$out/init-before.lua"
@@ -185,6 +217,29 @@ tu set-agent-state working -s demo -w "$other" >/dev/null 2>&1
 echo "records, session mode:"; grep -o '"id": *"[^"]*"' "$out/rex-records-session.txt"
 echo "records, panes mode:"; grep -o '"id": *"[^"]*"' "$out/rex-records-panes.txt"
 env "${xdg[@]}" PATH="/usr/bin:/bin:$(dirname "$rexbin")" REX_CONFIG="$cfg" REX_SERVER="$server" "$bin" integration status rex 2>&1 | grep 'Status in Rex'
+
+# Answer an agent: tuios_answer lists what waits, reads the prompt and
+# sends the answer with tuios respond. This server has no Rex app, so a run
+# with no args gets no_client from rex.ui.pick and sends nothing. A run with
+# args asks nothing: a stale prompt id is refused, the current one answers.
+step "answer an agent"
+tu new-window -s demo approver --no-focus -- sh "$tmp/agents/approve.sh" > /dev/null 2>&1
+for _ in $(seq 50); do tu capture-pane -s demo -w approver 2>/dev/null | grep -q 'Allow?' && break; sleep 0.1; done
+tu set-agent-state needs_input -s demo -w approver --kind approval --harness rexapprove -m "Run make?" > /dev/null 2>&1
+tu peek-prompt --json -s demo -w approver > "$out/answer-peek.json" 2>&1
+pid=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["prompt_id"])' "$out/answer-peek.json")
+echo "prompt id $pid, actions: $(python3 -c 'import json,sys; print(",".join(json.load(open(sys.argv[1]))["actions"]))' "$out/answer-peek.json")"
+timeout 30 env "${xdg[@]}" PATH="/usr/bin:/bin" REX_CONFIG="$cfg" REX_SERVER="$server" "$rexbin" -S "$server" do -b "$blk" tuios_answer > "$out/answer-no-app.txt" 2>&1
+echo "no app: rc=$?"; cat "$out/answer-no-app.txt"
+rx do -b "$blk" tuios_answer window=approver session=demo answer=approve prompt_id=0000000000000000 > "$out/answer-stale.txt" 2>&1
+echo "stale prompt id: rc=$?"; cat "$out/answer-stale.txt"
+tu capture-pane -s demo -w approver > "$out/answer-before.txt" 2>&1
+rx do -b "$blk" tuios_answer window=approver session=demo answer=approve prompt_id="$pid" > "$out/answer-sent.txt" 2>&1
+echo "answer: rc=$?"; cat "$out/answer-sent.txt"
+for _ in $(seq 50); do tu capture-pane -s demo -w approver 2>/dev/null | grep -q 'ANSWER=' && break; sleep 0.1; done
+tu capture-pane -s demo -w approver > "$out/answer-after.txt" 2>&1
+grep -q 'ANSWER=' "$out/answer-before.txt" && echo "the agent had an answer before Rex sent one" || echo "no answer before Rex sent one, as it should"
+grep -o 'ANSWER=.' "$out/answer-after.txt" || echo "the agent got NO answer"
 
 step "status"
 env "${xdg[@]}" PATH="/usr/bin:/bin:$(dirname "$rexbin")" REX_CONFIG="$cfg" REX_SERVER="$server" "$bin" integration status rex > "$out/status.txt" 2>&1

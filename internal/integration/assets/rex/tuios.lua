@@ -15,7 +15,7 @@ local M = {}
 
 -- M.version is the version of this file. tuios integration status compares it
 -- with the one the installed tuios ships.
-M.version = 4
+M.version = 5
 
 -- The Rex block kind that runs a terminal.
 local TERMINAL = "com.superlogical.terminal"
@@ -375,6 +375,283 @@ local function start_agent(ctx, args)
   return { session = s, window = (r.stdout or ""):match("^%s*(%S+)") }
 end
 
+-- answer_kinds are the Inbox kinds tuios_answer offers: a prompt on a pane
+-- that respond can answer. Mail, finished turns and the rest have no prompt.
+local answer_kinds = { "approval", "plan", "question" }
+
+-- kind_icon is the rex.ui icon of an Inbox kind.
+local kind_icon = { approval = "terminal", plan = "document", question = "person" }
+
+-- M.no_answer is what each no-answer reason of rex.ui.input and rex.ui.pick
+-- tells the person. cancelled is not here: the person closed the question,
+-- so the action stops and says nothing.
+M.no_answer = {
+  timeout = "Nobody answered the question in time.",
+  no_client = "No Rex app is connected to show the question.",
+  unsupported = "No connected Rex app can show a question. Update the Rex app.",
+  busy = "Each Rex app already shows another question. Answer that one, then run this again.",
+  failed = "Rex could not show the question.",
+}
+
+-- unanswered raises the message for a no-answer reason, with the reason in
+-- brackets so a script can tell them apart. how names the args that skip the
+-- question, for a run with nobody there.
+local function unanswered(why, detail, how)
+  local msg = M.no_answer[why] or ("Rex gave no answer: " .. tostring(why) .. ".")
+  if why == "failed" and detail ~= nil and detail ~= "" then
+    msg = msg .. " " .. tostring(detail)
+  end
+  if how ~= nil and why ~= "busy" then
+    msg = msg .. " " .. how
+  end
+  error(msg .. " (" .. tostring(why) .. ")", 0)
+end
+
+-- one_line keeps text from another program to one short line for a title.
+local function one_line(s, n)
+  s = tostring(s or ""):gsub("[%c]+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+  if #s > n then
+    s = s:sub(1, n - 3) .. "..."
+  end
+  return s
+end
+
+-- waited says how long ago since, in unix nanoseconds, was: "3m", "2h".
+function M.waited(since, now)
+  local s = math.max(0, (now or os.time()) - math.floor((tonumber(since) or 0) / 1e9))
+  if s < 60 then
+    return s .. "s"
+  elseif s < 3600 then
+    return math.floor(s / 60) .. "m"
+  elseif s < 86400 then
+    return math.floor(s / 3600) .. "h"
+  end
+  return math.floor(s / 86400) .. "d"
+end
+
+-- json_call runs a tuios command that takes --json and returns its decoded
+-- answer. A failure raises tuios's own error line: with --json tuios prints
+-- it as the error field on stdout.
+local function json_call(argv)
+  local full = { M.program() }
+  for _, a in ipairs(argv) do
+    full[#full + 1] = a
+  end
+  local r, err = rex.exec(full, { timeout = 20 })
+  if r == nil then
+    error("tuios did not run: " .. tostring(err), 0)
+  end
+  local ok, v = pcall(rex.json.decode, r.stdout or "")
+  if not r.ok then
+    local why = ok and type(v) == "table" and type(v.error) == "string" and v.error or r.stderr
+    if why == nil or why == "" then
+      why = r.stdout
+    end
+    error((tostring(why):gsub("%s+$", "")), 0)
+  end
+  if not ok or type(v) ~= "table" then
+    error("tuios " .. argv[1] .. " gave no JSON.", 0)
+  end
+  return v
+end
+
+-- prompt_target is the -w and -s of a waiting item: HOST:SESSION:WINDOW for
+-- an item of a linked machine, else the window and its session.
+local function prompt_target(item)
+  if type(item.host) == "string" and item.host ~= "" then
+    return { "-w", item.host .. ":" .. item.session .. ":" .. item.window }
+  end
+  if type(item.session) == "string" and item.session ~= "" then
+    return { "-w", item.window, "-s", item.session }
+  end
+  return { "-w", item.window }
+end
+
+-- with appends the items of more to argv.
+local function with(argv, more)
+  for _, a in ipairs(more) do
+    argv[#argv + 1] = a
+  end
+  return argv
+end
+
+-- M.waiting lists the agents that wait on an answer, oldest first, from
+-- tuios list-attention.
+function M.waiting()
+  local argv = { "list-attention", "--json" }
+  for _, k in ipairs(answer_kinds) do
+    argv[#argv + 1] = "--kind"
+    argv[#argv + 1] = k
+  end
+  local list = json_call(argv)
+  local out = {}
+  for _, it in ipairs(type(list.items) == "table" and list.items or {}) do
+    if type(it) == "table" and type(it.window) == "string" and it.window ~= "" then
+      out[#out + 1] = it
+    end
+  end
+  return out
+end
+
+-- M.answer_choices turns a peek into rex.ui.pick items, each id an answer:
+-- the numbered options as the prompt shows them when it takes a number,
+-- else allow, allow always and deny, then a typed answer when it takes one.
+function M.answer_choices(peek)
+  local offers = {}
+  for _, a in ipairs(type(peek.actions) == "table" and peek.actions or {}) do
+    offers[a] = true
+  end
+  local items = {}
+  local options = type(peek.options) == "table" and peek.options or {}
+  if offers.choose and #options > 0 then
+    for _, o in ipairs(options) do
+      items[#items + 1] = { id = "choose:" .. tostring(o.n), title = one_line(o.label, 80), detail = tostring(o.n) }
+    end
+  else
+    if offers.approve then
+      items[#items + 1] = { id = "approve", title = "Allow" }
+    end
+    if offers.approve_always then
+      items[#items + 1] = { id = "approve_always", title = "Allow always" }
+    end
+    if offers.deny then
+      items[#items + 1] = { id = "deny", title = "Deny" }
+    end
+  end
+  if offers.text then
+    items[#items + 1] = { id = "text", title = "Type an answer", icon = "plus" }
+  end
+  return items
+end
+
+-- answer_how is the hint for a run with nobody there to answer.
+local answer_how = "Give the answer as args: window, answer and prompt_id (from tuios peek-prompt --json)."
+
+-- answer is tuios_answer: pick an agent that waits, read its prompt, pick an
+-- answer, and send it with tuios respond. It answers only what the person
+-- picked: the answer goes with the prompt id of the prompt it showed, so
+-- tuios refuses it when the prompt changed in between. With args it asks
+-- only what they leave out, and an answer in args needs its prompt_id.
+local function answer(ctx, args)
+  args = args or {}
+  if filled(args.answer) and not (filled(args.window) and filled(args.prompt_id)) then
+    error("An answer in args needs the window and the prompt_id that tuios peek-prompt --json prints.", 0)
+  end
+  local item
+  if filled(args.window) then
+    item = { window = args.window, session = args.session }
+    if args.window:find(":", 1, true) then
+      item.session = nil
+    end
+  else
+    local waiting = M.waiting()
+    if #waiting == 0 then
+      error("No agent waits for an answer.", 0)
+    end
+    local items = {}
+    for i, it in ipairs(waiting) do
+      local where = it.session or ""
+      if type(it.host) == "string" and it.host ~= "" then
+        where = it.host .. ":" .. where
+      end
+      items[#items + 1] = {
+        id = tostring(i),
+        title = one_line(it.name ~= nil and it.name ~= "" and it.name or it.window, 60),
+        subtitle = one_line(it.summary, 120),
+        icon = kind_icon[it.kind],
+        detail = where .. "  " .. M.waited(it.since),
+      }
+    end
+    local id, why, detail = rex.ui.pick{
+      title = "Answer an agent",
+      placeholder = "Filter the agents that wait",
+      confirm = "Read the prompt",
+      items = items,
+    }
+    if id == nil then
+      if why == "cancelled" then
+        return { answered = false, reason = why }
+      end
+      unanswered(why, detail, answer_how)
+    end
+    item = waiting[tonumber(id)]
+  end
+  local target = prompt_target(item)
+  local peek = json_call(with({ "peek-prompt", "--json" }, target))
+  local who = one_line(peek.name ~= nil and peek.name ~= "" and peek.name or item.window, 40)
+  if peek.blocked ~= true then
+    error(who .. " no longer waits for an answer. Its state is " .. tostring(peek.state) .. ".", 0)
+  end
+  if peek.found ~= true or peek.answerable ~= true then
+    error(who .. ": " .. one_line(peek.reason, 160) .. ". Answer it in tuios.", 0)
+  end
+  local action, value, prompt_id = args.answer, args.value, peek.prompt_id
+  if filled(action) then
+    prompt_id = args.prompt_id
+  else
+    local question = who .. ": " .. one_line(peek.message ~= "" and peek.message or peek.kind, 100)
+    local id, why, detail = rex.ui.pick{
+      title = question,
+      placeholder = "Filter the answers",
+      confirm = "Send",
+      items = M.answer_choices(peek),
+    }
+    if id == nil then
+      if why == "cancelled" then
+        return { answered = false, reason = why }
+      end
+      unanswered(why, detail, answer_how)
+    end
+    if id == "text" then
+      local text
+      text, why, detail = rex.ui.input{ title = question, placeholder = "Your answer", confirm = "Send" }
+      if text == nil then
+        if why == "cancelled" then
+          return { answered = false, reason = why }
+        end
+        unanswered(why, detail, answer_how)
+      end
+      if text == "" then
+        return { answered = false, reason = "empty" }
+      end
+      action, value = "text", text
+    else
+      action, value = id:match("^(choose):(%d+)$")
+      if action == nil then
+        action = id
+      end
+    end
+  end
+  local argv = { "respond", action }
+  if filled(value) then
+    argv[#argv + 1] = value
+  end
+  with(argv, target)
+  with(argv, { "--prompt-id", prompt_id, "--json" })
+  local ok, res = pcall(json_call, argv)
+  if not ok then
+    local why = tostring(res)
+    if why:find("respond is for the person", 1, true) then
+      error("tuios takes answers from Rex only with respond_from_shell = true under [daemon] in tuios's config.toml. Nothing was sent.", 0)
+    end
+    error(why, 0)
+  end
+  return { answered = true, window = peek.window, sent = res.sent, state = res.state }
+end
+
+-- answer_args is the form of tuios_answer. Each field skips the question
+-- that would ask it.
+local answer_args = {
+  type = "object",
+  properties = {
+    window = { type = "string", description = "The waiting pane, by name or ID, or HOST:SESSION:WINDOW." },
+    session = { type = "string", description = "The pane's session." },
+    answer = { type = "string", enum = { "approve", "approve_always", "deny", "choose", "text" }, description = "The answer. Needs window and prompt_id." },
+    value = { type = "string", description = "The option number for choose, or the text for text." },
+    prompt_id = { type = "string", description = "The prompt id tuios peek-prompt --json prints. tuios refuses the answer when the prompt changed." },
+  },
+}
+
 -- check is tuios_check: which tuios the actions run, its version, the
 -- focused pane's session, whether Start an Agent finds its agent, and
 -- whether the actions Rex loaded are the ones that tuios lists now.
@@ -450,7 +727,7 @@ function M.actions(list)
   if list ~= nil then
     rows = list.actions
   end
-  local out, seen, clash = {}, { tuios_start_agent = true, tuios_check = true }, {}
+  local out, seen, clash = {}, { tuios_start_agent = true, tuios_answer = true, tuios_check = true }, {}
   for _, a in ipairs(rows) do
     local name = type(a) == "table" and type(a.name) == "string" and a.name or ""
     local rexname = name ~= "" and M.rex_name(name) or nil
@@ -480,6 +757,14 @@ function M.actions(list)
     keywords = "tuios agent start new claude codex",
     args = start_args(list and list.harnesses),
     run = start_agent,
+  }
+  out[#out + 1] = {
+    name = "tuios_answer",
+    title = "tuios: Answer an Agent",
+    description = "Pick an agent that waits on an approval or a question, read its prompt, and send the answer you pick.",
+    keywords = "tuios agent answer approve allow deny respond question waiting",
+    args = answer_args,
+    run = answer,
   }
   out[#out + 1] = {
     name = "tuios_check",

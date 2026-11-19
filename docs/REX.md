@@ -64,11 +64,12 @@ pane is left out, since Rex runs it on the focused pane. When tuios cannot
 read `config.toml`, Rex still gets the built-in actions and `tuios_check`
 says why. Run `rex config reload` after you add an action.
 
-Two more are written in `tuios.lua`:
+Three more are written in `tuios.lua`:
 
 | Action | Palette title | What it does |
 | --- | --- | --- |
 | `tuios_start_agent` | tuios: Start an Agent | With no field given, opens tuios's New agent sheet. With fields, starts the agent in a new tuios pane and focuses it |
+| `tuios_answer` | tuios: Answer an Agent | Lists the agents that wait on an approval or a question, shows the answers of the one you pick, and sends the answer you pick. See "Answer an agent" |
 | `tuios_check` | tuios: Check the Rex Integration | Says which tuios the actions run, its version, the focused pane's session, whether the default agent is found, and whether Rex has the actions this tuios lists |
 
 Start an Agent takes `harness`, `name`, `prompt`, `folder` and `machine` (a
@@ -85,6 +86,64 @@ focused pane. A Lua action in Rex has no picker or form of its own to open,
 and a list made when Rex loads its config is out of date by the time it is
 used, while tuios's own are always current.
 
+### Answer an agent
+
+`tuios_answer` answers an agent that waits on an approval or a question:
+
+1. It lists the agents that wait, oldest first, from `tuios list-attention`.
+   Each row shows the pane's name, the question, the session and how long
+   the agent has waited. Pick one.
+2. It reads the prompt with `tuios peek-prompt` and shows the answers the
+   prompt takes. An approval shows Allow, Allow always and Deny. A question
+   shows its numbered options. Type an answer opens a text field when the
+   prompt takes text.
+3. It sends the answer you pick with `tuios respond`, with the id of the
+   prompt it showed you. When the prompt changed in between, tuios refuses
+   the answer and presses nothing.
+
+It sends only the answer you pick. It works from any Rex pane, also a pane
+that does not show tuios. Rex shows each question in every connected Rex
+app, and the first answer wins.
+
+tuios takes an answer from Rex only when you allow it. Add this to tuios's
+`config.toml`, then restart the tuios daemon, which reads it when it starts:
+
+```toml
+[daemon]
+respond_from_shell = true
+```
+
+This lets each program that runs outside a tuios pane answer for you, Rex's
+server too. A program in a tuios pane is refused either way. Without the
+setting, the action says what to add and sends nothing. An approval that
+matches a rule of `[agents.approvals.risk]` is refused too. Answer it in the
+tuios agents view.
+
+When nobody answers a question, the action stops and sends nothing:
+
+| Reason | What the action says |
+| --- | --- |
+| `cancelled` | Nothing. You closed the question. |
+| `timeout` | Nobody answered the question in time. |
+| `no_client` | No Rex app is connected to show the question. |
+| `unsupported` | No connected Rex app can show a question. Update the Rex app. |
+| `busy` | Each Rex app already shows another question. Answer that one, then run this again. |
+| `failed` | Rex could not show the question, and Rex's reason. |
+
+Each message ends with the reason in brackets, such as `(no_client)`, for a
+script.
+
+With arguments, the action asks only what they leave out. `window` (with
+`session`, or as `HOST:SESSION:WINDOW`) skips the list of agents.
+`answer` skips both questions, and needs `window` and the `prompt_id` that
+`tuios peek-prompt --json` prints. `choose` takes the option number in
+`value`, and `text` takes the text in `value`.
+
+```sh
+tuios peek-prompt -w review --json     # prints the prompt_id
+rex do tuios_answer window=review answer=approve prompt_id=75f8b9fadb5b5dfc
+```
+
 ### When tuios is updated
 
 `tuios.lua` reads the list at each config load, so `rex config reload` picks
@@ -94,7 +153,7 @@ the tuios on disk gives, and to reload.
 
 When tuios cannot give the list (none is found, or one older than this
 `tuios.lua`), Rex still loads the config, with the go-to, agents view, mail,
-oldest waiting, Start an Agent and check actions. `tuios_check` says why.
+oldest waiting, Start an Agent, Answer an Agent and check actions. `tuios_check` says why.
 
 ### Keys
 
@@ -166,7 +225,9 @@ notifies, and so does the focused one while Rex shows another pane or tab.
 cannot raise one. Once Rex shows the tuios pane, the action
 `tuios_prefix_next_attention` ("tuios: Agents: Go to the Oldest Waiting")
 moves the focus to the agent that has waited longest, and
-`tuios_prefix_inbox` opens the agents view on what needs you. In the
+`tuios_prefix_inbox` opens the agents view on what needs you.
+`tuios_answer` answers the agent from Rex, with no need to show the tuios
+pane (see "Answer an agent"). In the
 suggested keys (see Keys) they are `ctrl+cmd+j` and `ctrl+cmd+a`.
 
 **Two notifications for one question.** With Rex in the background and both
