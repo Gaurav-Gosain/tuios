@@ -650,6 +650,12 @@ The description of a table names its keys.
 | <a id="dock.tabs.bell_marker"></a>`dock.tabs.bell_marker` | string | empty | Text after the label of a workspace whose pane rang the bell. Empty shows none. A look can set it. |
 | <a id="dock.tabs.activity_marker"></a>`dock.tabs.activity_marker` | string | empty | Text after the label of a workspace whose pane printed since you looked. Empty shows none. A look can set it. |
 
+### profile
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| <a id="profile"></a>`profile` | string | `keyboard` | A set of defaults. simple turns window mode off, puts the dock at the bottom with a row of buttons, and calls a workspace a tab. A key you set wins Values: `keyboard`, `simple`. |
+
 ### sidebar
 
 | Key | Type | Default | Description |

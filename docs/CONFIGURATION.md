@@ -282,6 +282,26 @@ This option is in the [option reference](config-options.md): [`keybindings.lock`
 
 See [Lock mode](KEYBINDINGS.md#lock-mode).
 
+## Profile
+
+`profile` is a set of defaults. It goes at the top of the file, before the first table.
+
+```toml
+profile = "simple"   # simple or keyboard (default)
+```
+
+`keyboard` is the default. It changes nothing.
+
+`simple` is for a person who is new to terminals:
+
+- Every key goes to the pane. Window mode is off (`[keybindings] window_mode = false`).
+- The dock is at the bottom. It shows the tabs on the left and a row of buttons on the right: Menu, New, Split, Close, Help and Settings.
+- The Menu button opens the short menu. A right-click on a pane opens the pane menu.
+- The window controls are a pill on the right of the title bar.
+- The UI calls a workspace a "tab".
+
+The leader key, the which-key panel, the command palette and every action still work. A key that you set in the file wins over the profile. The profile does not write to the file.
+
 ## Window mode off
 
 ```toml

@@ -29,8 +29,11 @@ func (m *OS) rebuildPaletteItems() {
 	for i, it := range static {
 		if ws, ok := strings.CutPrefix(it.Bind, "workspace_prefix_switch_"); ok {
 			if n, err := strconv.Atoi(ws); err == nil {
-				static[i].Name = "Workspace " + strconv.Itoa(m.workspaceDisplayNumber(n))
+				static[i].Name = m.WorkspaceWordTitle() + " " + strconv.Itoa(m.workspaceDisplayNumber(n))
 			}
+		}
+		if it.Bind == "close_workspace" {
+			static[i].Name = "Close " + m.workspaceWord()
 		}
 	}
 	m.liveShortcuts(static)

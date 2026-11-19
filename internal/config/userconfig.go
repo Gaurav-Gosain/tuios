@@ -65,6 +65,10 @@ type UserConfig struct {
 	// view that toggle_pip pins. Client-local, like the spotlight. See pip.go.
 	PiP PiPConfig `toml:"pip"`
 
+	// Profile is a set of defaults: "simple" or "keyboard", the default. See
+	// profile.go.
+	Profile string `toml:"profile,omitempty"`
+
 	// SSH is the [ssh] table: the limits of the tuios ssh server. See ssh.go.
 	SSH SSHConfig `toml:"ssh"`
 
@@ -2636,6 +2640,7 @@ func ParseUserConfig(data []byte) (*UserConfig, error) {
 			cfg = again
 		}
 	}
+	applyProfile(cfg, data)
 	cfg.baseline, _ = MarshalUserConfig(cfg)
 	return cfg, nil
 }
@@ -3188,6 +3193,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.OptionGlyphs = cfg.Keybindings.OptionGlyphs
 	s.Lock = cfg.Keybindings.Lock != nil && *cfg.Keybindings.Lock
 	s.NoWindowMode = !cfg.Keybindings.WindowModeOn()
+	s.Simple = cfg.Simple()
 	s.NestExitKey = cfg.Keybindings.NestExitKey
 
 	// The motion level. A config that was not run through the load path (one

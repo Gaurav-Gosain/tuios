@@ -35,11 +35,29 @@ type dockButton struct {
 
 // dockButtons is the row, in the order it is drawn.
 var dockButtons = [...]dockButton{
+	{"Menu", config.OpenMenuPrefix + "start", fa.Bars.String(), "=", "Open the menu"},
 	{"New", "new_window", fa.Plus.String(), "+", "Open a new terminal"},
 	{"Split", "split_vertical", fa.Columns.String(), "|", "Split this pane side by side"},
 	{"Close", "close_window", fa.Times.String(), "x", "Close this pane"},
 	{"Help", "toggle_help", fa.Question.String(), "?", "Show help"},
 	{"Settings", "open_settings", fa.Cog.String(), "*", "Open settings"},
+}
+
+// dockButtonMenu is the Menu button. Only the Simple profile shows it: the
+// short menu is the way in for a person who knows no key.
+const dockButtonMenu = 0
+
+// dockButtonRow is the buttons the row shows, as indexes into dockButtons.
+func (m *OS) dockButtonRow() []int {
+	first := dockButtonMenu + 1
+	if m.Settings.Simple {
+		first = dockButtonMenu
+	}
+	row := make([]int, 0, len(dockButtons))
+	for i := first; i < len(dockButtons); i++ {
+		row = append(row, i)
+	}
+	return row
 }
 
 // dockButtonMore is the button index the more button records. It is past the
@@ -98,14 +116,15 @@ func (m *OS) renderDockButtons(fit dockButtonsFit) (string, []dockCustomHit) {
 		b.WriteString(cell)
 		x += w
 	}
-	for i := range min(fit.shown, len(dockButtons)) {
+	row := m.dockButtonRow()
+	for _, i := range row[:min(fit.shown, len(row))] {
 		if fit.compact {
 			draw(i, m.dockButtonIcon(i))
 		} else {
 			draw(i, dockButtons[i].label)
 		}
 	}
-	if fit.shown < len(dockButtons) {
+	if fit.shown < len(row) {
 		draw(dockButtonMore, m.dockButtonIcon(dockButtonMore))
 	}
 	m.dockButtonsShown = fit.shown
@@ -138,6 +157,15 @@ func (m *OS) DockButtonAt(x, y int) int {
 // PressDockButton answers a click on button i. It returns the action to run,
 // or "" when the click opened the more menu instead.
 func (m *OS) PressDockButton(i, x, y int) string {
+	if i == dockButtonMenu {
+		// A click opens the short menu where the pointer is, as a menu the
+		// pointer can use, not as a panel of keys.
+		cm := &ContextMenu{Title: "Menu", Target: CtxTargetDock, WindowIndex: -1, AnchorX: x, AnchorY: y, ItemH: 1}
+		cm.Items = m.menu("start", 0)
+		cm.home()
+		m.ContextMenu = cm
+		return ""
+	}
 	if i >= 0 && i < len(dockButtons) {
 		return dockButtons[i].action
 	}
@@ -145,7 +173,8 @@ func (m *OS) PressDockButton(i, x, y int) string {
 		return ""
 	}
 	cm := &ContextMenu{Title: "More", Target: CtxTargetDock, WindowIndex: -1, AnchorX: x, AnchorY: y, ItemH: 1}
-	for j := m.dockButtonsShown; j < len(dockButtons); j++ {
+	row := m.dockButtonRow()
+	for _, j := range row[min(m.dockButtonsShown, len(row)):] {
 		cm.Items = append(cm.Items, m.item(m.dockButtonIcon(j), dockButtons[j].label, dockButtons[j].action, false))
 	}
 	cm.home()

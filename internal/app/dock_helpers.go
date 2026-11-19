@@ -963,7 +963,7 @@ func (m *OS) calculateDockRightWidth() int {
 	// never turned on is the same inversion in its purest form: it was the
 	// single largest claim on the bar and it drew nothing at all.
 	parts := m.dockMeterParts()
-	custom := m.dockCustomWidth(m.dockPlan.Right) + m.dockButtonsWidth(dockButtonsFit{shown: len(dockButtons)})
+	custom := m.dockCustomWidth(m.dockPlan.Right) + m.dockButtonsWidth(dockButtonsFit{shown: len(m.dockButtonRow())})
 	if len(parts) == 0 {
 		return custom
 	}

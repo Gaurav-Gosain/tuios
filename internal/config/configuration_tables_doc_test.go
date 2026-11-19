@@ -39,6 +39,10 @@ func TestConfigurationHasASectionPerTable(t *testing.T) {
 		if name == "" || name == "-" {
 			continue
 		}
+		// A top-level key such as profile is not a table.
+		if k := field.Type.Kind(); k == reflect.String || k == reflect.Bool || k == reflect.Int {
+			continue
+		}
 		if !covered[name] {
 			t.Errorf("CONFIGURATION.md has no heading for the [%s] table. Add a section named \"The `[%s]` table\"", name, name)
 		}

@@ -800,6 +800,9 @@ type Settings struct {
 	// enters window-management mode while a pane has the focus. Kept as the
 	// negation so a Settings built in code has window mode on.
 	NoWindowMode bool
+	// Simple is profile = "simple": the UI calls a workspace a tab, and the
+	// dock's button row opens with a Menu button. See profile.go.
+	Simple bool
 	// NestExitKey is keybindings.nest_exit_key, the key that ends nest mode.
 	// Empty is DefaultNestExitKey. See GetNestExitKey.
 	NestExitKey string

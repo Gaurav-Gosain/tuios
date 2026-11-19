@@ -90,7 +90,7 @@ func (m *OS) PrevWorkspace() { m.cycleWorkspace(-1) }
 // current one, as tmux's last-window does. Two presses go back and forth.
 func (m *OS) LastWorkspace() {
 	if m.lastWorkspace < 1 || m.lastWorkspace == m.CurrentWorkspace {
-		m.ShowNotification("No last workspace", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("No last "+m.workspaceWord(), "info", m.Settings.NotificationDuration)
 		return
 	}
 	m.SwitchToWorkspace(m.lastWorkspace)
@@ -104,7 +104,7 @@ func (m *OS) BreakPane() {
 	case m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows):
 		return
 	case ws == 0:
-		m.ShowNotification("Every workspace has a pane", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("Every "+m.workspaceWord()+" has a pane", "info", m.Settings.NotificationDuration)
 		return
 	}
 	m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, ws)

@@ -494,7 +494,7 @@ func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, 
 	meters := m.dockMeterParts()
 	var segs []segment
 	placedMeters := false
-	fit := dockButtonsFit{shown: len(dockButtons)}
+	fit := dockButtonsFit{shown: len(m.dockButtonRow())}
 	for _, name := range m.dockPlan.Right {
 		switch name {
 		case config.DockComponentButtons:

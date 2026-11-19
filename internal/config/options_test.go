@@ -58,6 +58,9 @@ var optionWalkSkips = map[string]string{
 	"agents.silent_after":   "file-plane config the daemon reads from the file, like [hosts]",
 	// Read by a client when it starts, which is when it asks its terminal.
 	"agents.host_program_status": "file-plane config a client reads from the file when it starts, like [hosts]",
+	// A set of defaults applied when the file is parsed, so the value a
+	// running session holds is the defaults it gave, not the one string.
+	"profile": "a set of defaults the parse applies; the welcome screen and the palette write it to the file",
 }
 
 // optionWalkInsideSkips are the paths inside a table optionWalkSkips skips

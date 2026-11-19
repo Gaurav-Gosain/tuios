@@ -281,7 +281,11 @@ func (m *OS) dockItemMenu(windowIndex int) (string, []ContextMenuItem) {
 // tab's workspace, Close included: it raises close_workspace's confirmation for
 // this workspace, and is dimmed when the workspace has no pane to close.
 func (m *OS) workspacePillMenu(ws int) (string, []ContextMenuItem) {
-	return printableTitle(m.WorkspaceLabel(ws)), m.menu("workspace", is(ws == m.CurrentWorkspace, mfWsCurrent)|is(len(m.workspacePanes(ws)) == 0, mfWsEmpty))
+	title := printableTitle(m.WorkspaceLabel(ws))
+	if m.Settings.Simple && m.workspaceGivenName(ws) == "" {
+		title = m.WorkspaceWordTitle() + " " + title
+	}
+	return title, m.menu("workspace", is(ws == m.CurrentWorkspace, mfWsCurrent)|is(len(m.workspacePanes(ws)) == 0, mfWsEmpty))
 }
 
 // dockMenu is the menu for the dock away from any of its entries.
