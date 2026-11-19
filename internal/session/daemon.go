@@ -232,6 +232,8 @@ type Daemon struct {
 	// plugin_approval.go.
 	pluginAsksMu sync.Mutex
 	pluginAsks   []PluginApprovalAsk
+	// prompts holds the open prompt. See prompt.go.
+	prompts promptStore
 	// notify sends the Inbox's push notifications ([notify]). See
 	// daemon_notify.go.
 	notify *pushNotifier
@@ -722,6 +724,9 @@ type connState struct {
 	// pluginAsks says the client's hello set PluginApprovals: it reads
 	// MsgPluginApprovals. Guarded by mu. See plugin_approval.go.
 	pluginAsks bool
+	// prompts says the client's hello set Prompts: it shows prompts in its
+	// palette and reads MsgPrompt. Guarded by mu. See prompt.go.
+	prompts bool
 	// tmlOut holds the TML pushes not yet written to this client: one per
 	// surface, the newest. See tml_surface.go.
 	tmlOut tmlOutbox

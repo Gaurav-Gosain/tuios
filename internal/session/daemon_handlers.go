@@ -24,6 +24,7 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	cs.goodbye = payload.Goodbye
 	cs.tmlSurfaces = payload.TMLSurfaces
 	cs.pluginAsks = payload.PluginApprovals
+	cs.prompts = payload.Prompts
 	cs.holdOptions = payload.HoldOptions
 	cs.machine, cs.kind = helloMachine(payload.Machine), helloKind(payload.ClientKind)
 	cs.mu.Unlock()
@@ -388,6 +389,8 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	d.sendTMLSurfaces(cs, session.ID)
 	// The native plugins that wait for the person. See plugin_approval.go.
 	d.sendPluginAsks(cs)
+	// The open prompt. See prompt.go.
+	d.sendPrompt(cs)
 	// The options set while no client was attached. On its own goroutine:
 	// each waits for the client's answer, which this connection's read loop
 	// delivers once this handler returns. The goroutine runs on every attach,

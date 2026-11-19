@@ -19,6 +19,7 @@ It also has more about the verbs that need it.
 - [`agent-statusline-event`](#agent-statusline-event)
 - [`agent-transcript`](#agent-transcript)
 - [`answer-ask`](#answer-ask)
+- [`answer-prompt`](#answer-prompt)
 - [`apply-config`](#apply-config)
 - [`artifact-list`](#artifact-list)
 - [`ask-agent`](#ask-agent)
@@ -129,6 +130,7 @@ It also has more about the verbs that need it.
 - [`plugin-cell`](#plugin-cell)
 - [`plugin-notify`](#plugin-notify)
 - [`popup`](#popup)
+- [`prompt`](#prompt)
 - [`queue-prompt`](#queue-prompt)
 - [`rail-pane`](#rail-pane)
 - [`read-agent-messages`](#read-agent-messages)
@@ -514,6 +516,29 @@ Answer an ask-human question for the person. Only a client attached right now ca
 
 ```json
 {"id":1,"verb":"answer-ask","params":{"request_id":"9f86d081884c7d65","answer":"yes","human_nonce":"<from the attach reply>"}}
+```
+
+### `answer-prompt`
+
+Answer the open prompt for the person. Only a client attached right now can, with the nonce from its attach reply: an agent, a plugin or a script never can. The first answer wins.
+
+| Param | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `request_id` | string |  |  | The id of the prompt the client shows. |
+| `human_nonce` | string |  |  | The nonce the daemon issued in an attach reply, for a client attached now. The TUI sends its own. |
+| `cancel` | bool |  |  | The person cancelled the prompt. It takes no value, ids or other. |
+| `value` | string |  |  | For input: the text, one line, at most 4096 bytes. |
+| `ids` | []string |  |  | For pick: the ids of the rows chosen. One, unless the prompt takes multiple. |
+| `other` | string |  |  | For pick with allow_other: typed text that is not a row. |
+
+| Result field | Type | Description |
+|---|---|---|
+| `request_id` | string | The prompt answered. |
+| `applied` | bool | True when this answer ended the prompt. |
+| `status` | string | answered or cancelled. |
+
+```json
+{"id":1,"verb":"answer-prompt","params":{"request_id":"9f86d081884c7d65","value":"main","human_nonce":"<from the attach reply>"}}
 ```
 
 ### `apply-config`
@@ -3362,6 +3387,38 @@ Open a popup: a floating pane that runs one command and closes when the command 
 
 ```json
 {"id":1,"verb":"popup","params":{"session":"work","command":["fzf"],"wait":true,"capture_stdout":true}}
+```
+
+### `prompt`
+
+Show a text field or a list in the command palette of every client attached on this machine, and wait for the answer. The first answer from any client wins, and the prompt closes on the others. One prompt shows at a time. Plugins, actions and scripts call it; only the person at a client can answer. It works with the agent features off. Refused over a link.
+
+| Param | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `kind` | string |  |  | input (a text field) or pick (a list). |
+| `title` | string |  |  | The question: one line of printable text, at most 160 bytes. |
+| `placeholder` | string |  |  | Text that shows in the empty field. |
+| `default` | string |  |  | For input: the text the field starts with. |
+| `items` | []object |  |  | For pick: 1 to 1000 rows, each {id, title, subtitle, icon}. id and title are required, and no two ids are the same. The filter matches the title. |
+| `multiple` | bool |  | `false` | For pick: Tab marks more than one row. |
+| `allow_other` | bool |  | `false` | For pick: the person may send typed text that is not a row. |
+| `timeout` | int |  | `120000` | Milliseconds to wait for the answer, at most one hour. The prompt closes when it runs out. |
+
+| Result field | Type | Description |
+|---|---|---|
+| `status` | string | answered, cancelled (Esc at a client), timeout, no_client (no attached client could show it, so nothing was shown), busy (another prompt is open) or shutdown. |
+| `request_id` | string | The prompt's id, when it was shown. |
+| `value` | string | For input, when answered: the text the person sent. |
+| `ids` | []string | For pick, when answered: the ids of the rows chosen, in list order. |
+| `other` | string | For pick with allow_other: the typed text the person sent, when it is not a row. |
+| `answered_by` | string | The id of the client the answer came from. |
+
+```json
+{"id":1,"verb":"prompt","params":{"kind":"input","title":"Branch name?","placeholder":"feature/..."}}
+```
+
+```json
+{"id":1,"verb":"prompt","params":{"kind":"pick","title":"Deploy to?","items":[{"id":"stg","title":"Staging"},{"id":"prod","title":"Production","subtitle":"needs review"}]}}
 ```
 
 ### `queue-prompt`

@@ -374,6 +374,7 @@ var messageTypeNames = [...]string{
 	MsgDaemonUpgrading:   "DaemonUpgrading",
 	MsgPluginApprovals:   "PluginApprovals",
 	MsgPluginUI:          "PluginUI",
+	MsgPrompt:            "Prompt",
 }
 
 // MessageTypeName returns a human-readable name for a message type.

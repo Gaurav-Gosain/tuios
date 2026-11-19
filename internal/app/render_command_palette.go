@@ -9,6 +9,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -54,6 +55,9 @@ const (
 // manager's footer spells its keys. A file search has no actions to search, so
 // it shows neither.
 func (m *OS) paletteFooter() []overlay.Hint {
+	if m.prompt.req != nil {
+		return m.promptFooter()
+	}
 	hints := slices.Clone(paletteHints)
 	if !m.agentsSeen() {
 		hints = slices.Delete(hints, paletteStateHint, paletteStateHint+1)
@@ -74,7 +78,17 @@ func (m *OS) paletteLayout() (width, rows int, hints []overlay.Hint) {
 	width = m.panelWidth(paletteInnerWidth)
 	// Body lines that are not command rows: the search input and its rule. The
 	// match count rides the search line.
-	rows, hints = m.panelBody(paletteMaxVisible, 2, width, nil, m.paletteFooter())
+	// A prompt's question rides above the search line.
+	preferred := paletteMaxVisible
+	if req := m.prompt.req; req != nil {
+		// A pick is as tall as its rows, up to the palette's height, and
+		// keeps that height while the filter narrows it.
+		preferred = min(paletteMaxVisible, max(len(req.Items), 1))
+		if req.AllowOther {
+			preferred = min(paletteMaxVisible, len(req.Items)+1)
+		}
+	}
+	rows, hints = m.panelBody(preferred, 2+len(m.promptHead(width)), width, nil, m.paletteFooter())
 	return width, rows, hints
 }
 
@@ -151,7 +165,7 @@ func paletteMetaWidth(filtered []CommandPaletteItem, grouped bool, width int) in
 func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) {
 	items := m.allPaletteItems()
 	filtered := m.filteredPaletteItems()
-	grouped := paletteGrouped(m.paletteList.Query.String()) && !m.fileSearch
+	grouped := paletteGrouped(m.paletteList.Query.String()) && !m.fileSearch && m.prompt.req == nil
 
 	pal := m.overlayUI()
 	bg := pal.Surface
@@ -162,8 +176,15 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 	metaW := paletteMetaWidth(filtered, grouped, width)
 
 	var lines []string
+	head := m.promptHead(width)
+	for _, l := range head {
+		lines = append(lines, overlay.Style(bg).Foreground(pal.Fg).Bold(true).Render(l))
+	}
 
 	search := palettePicker().searchLine(m, width)
+	if req := m.prompt.req; req != nil && req.Placeholder != "" && m.paletteList.Query.String() == "" {
+		search += overlay.Style(bg).Foreground(pal.FgMute).Render(overlay.Truncate(printableTitle(req.Placeholder), max(width-lipgloss.Width(search), 0)))
+	}
 	count := ""
 	if len(filtered) > 0 && len(list) > visible {
 		// Counted against the rows this query could reach, not against every
@@ -171,21 +192,33 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 		// and the command rows are hidden with it, so a denominator that added
 		// both would say "65 of 289" over a list that can only ever hold 65.
 		kind := "commands"
-		if m.fileSearch {
+		switch {
+		case m.fileSearch:
 			kind = "files"
+		case m.prompt.req != nil:
+			kind = "items"
 		}
 		total := paletteReachable(items, m.paletteList.Query.String())
-		if m.fileSearch {
+		if m.fileSearch || m.prompt.req != nil {
 			total = len(items)
 		}
 		count = fmt.Sprintf("%d of %d %s", len(filtered), total, kind)
 	}
-	lines = append(lines, searchWithCount(search, count, width, bg, pal), overlay.Rule(width, bg, pal))
+	lines = append(lines, searchWithCount(search, count, width, bg, pal))
+	if req := m.prompt.req; req != nil && req.Kind == session.PromptInput {
+		// A field and nothing under it: the question, the line and the keys.
+		content, geo := overlay.Panel{Title: promptPanelTitle(req), Width: width, Body: strings.Join(lines, "\n"), Hints: hints}.Render(pal)
+		return content, geo, nil
+	}
+	lines = append(lines, overlay.Rule(width, bg, pal))
 
 	start := m.paletteList.Scroll
 	end := min(start+visible, len(list))
 	if len(filtered) == 0 {
 		empty := overlay.Empty{Message: "No matching commands", Hint: overlay.Hint{Key: "esc", Label: "close"}}
+		if m.prompt.req != nil {
+			empty = overlay.Empty{Message: "No matching items", Hint: overlay.Hint{Key: "esc", Label: "cancel"}}
+		}
 		if m.fileSearch {
 			switch {
 			case m.fileSearchScanning:
@@ -199,7 +232,7 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 		// A "#" search that found nothing needs to say it was a search over
 		// actions. "No matching commands" under a token the user has just been
 		// taught reads as the token not working.
-		if keybinds, rest := splitPaletteKeybinds(m.paletteList.Query.String()); keybinds && !m.fileSearch {
+		if keybinds, rest := splitPaletteKeybinds(m.paletteList.Query.String()); keybinds && !m.fileSearch && m.prompt.req == nil {
 			empty.Message = keybindPaletteHint(rest)
 		}
 		// The empty state takes the rows the list would have, so the panel
@@ -215,7 +248,7 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 			st := overlay.RowState{Cursor: l.item == m.paletteList.Cursor, Focused: true}
 			lines = append(lines, pal.Row(paletteRow(filtered[l.item], st.Cursor, pal, width, metaW), width, st, bg))
 		}
-		for len(lines) < visible+2 {
+		for len(lines) < visible+2+len(head) {
 			lines = append(lines, overlay.Style(bg).Render(" "))
 		}
 	}
@@ -225,6 +258,9 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 		Width: width,
 		Body:  strings.Join(lines, "\n"),
 		Hints: hints,
+	}
+	if m.prompt.req != nil {
+		panel.Title = promptPanelTitle(m.prompt.req)
 	}
 	if m.fileSearch {
 		panel.Title = "Search files"
@@ -242,7 +278,7 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 			if l.item < 0 {
 				continue
 			}
-			rowY := geo.BodyY + i + 2 // +2 for the search line and rule
+			rowY := geo.BodyY + i + 2 + len(head) // +2 for the search line and rule
 			rows = append(rows, overlayRowHit{
 				Rect: overlay.Rect{X0: 0, Y0: rowY, X1: geo.Width, Y1: rowY + 1},
 				Idx:  l.item,
@@ -281,8 +317,19 @@ func paletteRow(item CommandPaletteItem, selected bool, pal overlay.Palette, wid
 	if selected {
 		marker = overlay.Sigil()
 	}
-	name := overlay.Truncate(printableTitle(item.Name), max(width-2-rightW-1, 1))
-	left := overlay.Style(bg).Foreground(theme.Readable(pal.Accent, bg)).Bold(true).Render(marker) +
+	mark, markW := "", 0
+	if item.promptMark != promptMarkNone {
+		// A pick that takes more than one row: the row's mark after the
+		// cursor's.
+		on, off := promptMarks()
+		text, ink := off+" ", pal.FgMute
+		if item.promptMark == promptMarkOn {
+			text, ink = on+" ", theme.Readable(pal.Accent, bg)
+		}
+		mark, markW = overlay.Style(bg).Foreground(ink).Bold(true).Render(text), lipgloss.Width(text)
+	}
+	name := overlay.Truncate(printableTitle(item.Name), max(width-2-markW-rightW-1, 1))
+	left := overlay.Style(bg).Foreground(theme.Readable(pal.Accent, bg)).Bold(true).Render(marker) + mark +
 		paletteRowName(name, item.AgentState, item.AgentSeen, item.AgentSubagents, item.Match, bg, nameColor, selected, pal)
 
 	gap := max(width-lipgloss.Width(left)-rightW, 1)

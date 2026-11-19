@@ -241,6 +241,8 @@ type ClientEvent struct {
 	PluginAsks []session.PluginApprovalAsk
 	// PluginUI is the push behind a "plugin-ui" event.
 	PluginUI session.PluginUIPayload
+	// Prompt is the push behind a "prompt" event.
+	Prompt session.PromptPayload
 	// Attach is the client's attach generation when a session's own event
 	// arrived: "joined", "left", "resize" and "agent-mail". Zero is an event
 	// with no stamp. See TUIClient.AttachGeneration and staleAttach.
@@ -605,6 +607,8 @@ func clientEventMsg(event ClientEvent) tea.Msg {
 		return PluginApprovalsMsg{Asks: event.PluginAsks}
 	case "plugin-ui":
 		return PluginUIMsg{Payload: event.PluginUI}
+	case "prompt":
+		return PromptMsg{Payload: event.Prompt}
 	case "paste-refused":
 		return PasteRefusedMsg{Message: event.Reason}
 	case "agent-mail-mark":
@@ -2055,6 +2059,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.setPluginAsks(msg.Asks)
 		// It came off the client event channel, which is read one event at
 		// a time, so the listener is armed again here.
+		return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
+
+	case PromptMsg:
+		m.setPrompt(msg.Payload)
 		return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
 
 	case missingDiagramMsg:
