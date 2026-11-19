@@ -21,8 +21,8 @@ import (
 // the key.
 //
 // Negative control, confirmed red: with the key, the header and the rebuild
-// each reading railTimeNow, the check reports row 5, "seen 3s ago" against
-// "seen 4s ago".
+// each reading railTimeNow, the check reports row 3, "seen 3s ago" against
+// "seen 4s ago", the report CI showed.
 func TestRailCheckOneClockPerFrame(t *testing.T) {
 	m, _ := shippedRailOS(t, federation.StatusUnreachable, "idle")
 	t0 := time.Unix(1_800_000_000, 0)

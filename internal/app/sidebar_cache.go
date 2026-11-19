@@ -54,6 +54,19 @@ func (m *OS) sidebarPanel() (string, int) {
 	return panel, w
 }
 
+// railTimeNow is the rail's clock. A test steps it to put a second's turn at
+// an exact point of a frame.
+var railTimeNow = time.Now
+
+// railClock is the time the rail being keyed and built is drawn for: the
+// clock sidebarPanelLines read for this frame, or now outside a frame.
+func (m *OS) railClock() time.Time {
+	if m.railNow.IsZero() {
+		return railTimeNow()
+	}
+	return m.railNow
+}
+
 // sidebarPanelLines builds the sidebar's rows, reusing the cached rail when
 // nothing that affects it has changed since the last frame. A scrolling marquee
 // or an in-progress drag animates every frame, so neither is ever served cached.
@@ -110,19 +123,6 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 // foreign-session data is summarised by the client's cache generation so the
 // daemon mutex is not taken per frame. A changed signature forces a rebuild; an
 // unchanged one guarantees identical rows.
-// railTimeNow is the rail's clock. A test steps it to put a second's turn at
-// an exact point of a frame.
-var railTimeNow = time.Now
-
-// railClock is the time the rail being keyed and built is drawn for: the
-// clock sidebarPanelLines read for this frame, or now outside a frame.
-func (m *OS) railClock() time.Time {
-	if m.railNow.IsZero() {
-		return railTimeNow()
-	}
-	return m.railNow
-}
-
 func (m *OS) sidebarSignature() uint64 {
 	const prime = 1099511628211
 	h := uint64(1469598103934665603)
